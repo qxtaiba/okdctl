@@ -140,8 +140,8 @@ func (p *Phase) PrintSetupCompletionSummary(cfg *config.Config, opts Options) {
 	clusterDir := paths.ClusterConfigDir(opts.WorkDir)
 	tfEnv := paths.GetTerraformEnv(cfg)
 
-	p.Log.Info(fmt.Sprintf("setup: cluster config saved to %s", clusterDir))
-	p.Log.Info(fmt.Sprintf("setup: terraform environment set to %s", tfEnv))
+	p.LogInfo(fmt.Sprintf("setup: cluster config saved to %s", clusterDir))
+	p.LogInfo(fmt.Sprintf("setup: terraform environment set to %s", tfEnv))
 }
 
 // dnsFunctions returns DNS function implementations for the DNS step.

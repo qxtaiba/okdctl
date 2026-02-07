@@ -43,7 +43,7 @@ func (p *Phase) NewVerifyHealthStep(cfg *config.Config, opts Options, pctx *dist
 			pctx.Update(func(c *PostInstallContext) {
 				c.ClusterHealth = result
 			})
-			p.Log.Info(fmt.Sprintf("cluster: health check passed (%d/%d nodes ready)", result.ReadyNodes, result.TotalNodes))
+			p.LogInfo(fmt.Sprintf("cluster: health check passed (%d/%d nodes ready)", result.ReadyNodes, result.TotalNodes))
 			return nil
 		}).
 		MustBuild()
@@ -64,7 +64,7 @@ func (p *Phase) NewVerifyKubeVIPStep(cfg *config.Config, opts Options, pctx *dis
 		}).
 		SkipReason("kube-vip verification skipped by user").
 		OnError(func(err error) {
-			p.Log.Warn(fmt.Sprintf("kubevip: verification failed: %v", err))
+			p.LogWarn(fmt.Sprintf("kubevip: verification failed: %v", err))
 		}).
 		Execute(func(ctx context.Context) error {
 			kubeVipIP, err := p.VerifyKubeVIP(ctx, cfg, opts)
@@ -75,7 +75,7 @@ func (p *Phase) NewVerifyKubeVIPStep(cfg *config.Config, opts Options, pctx *dis
 				c.KubeVIPVerified = true
 				c.KubeVipIP = kubeVipIP
 			})
-			p.Log.Info(fmt.Sprintf("kubevip: vip %s is responding on port 6443", kubeVipIP))
+			p.LogInfo(fmt.Sprintf("kubevip: vip %s is responding on port 6443", kubeVipIP))
 			return nil
 		}).
 		MustBuild()
@@ -98,7 +98,7 @@ func (p *Phase) NewRemoveBastionVIPStep(cfg *config.Config, opts Options, pctx *
 		}).
 		SkipReason("kube-vip not verified - keeping VIP on bastion").
 		OnError(func(err error) {
-			p.Log.Warn(fmt.Sprintf("kubevip: bastion cleanup failed (non-fatal): %v", err))
+			p.LogWarn(fmt.Sprintf("kubevip: bastion cleanup failed (non-fatal): %v", err))
 		}).
 		Execute(func(ctx context.Context) error {
 			vip := netutil.DeriveVIPFromStaticIP(cfg.Networking.StaticIP.Start)
@@ -112,12 +112,12 @@ func (p *Phase) NewRemoveBastionVIPStep(cfg *config.Config, opts Options, pctx *
 				return utils.WrapError("failed to detect network interface", err)
 			}
 
-			p.Log.Info(fmt.Sprintf("kubevip: removing %s from bastion interface %s", vip, iface))
+			p.LogInfo(fmt.Sprintf("kubevip: removing %s from bastion interface %s", vip, iface))
 			if err := system.RemoveSecondaryIP(ctx, vip, iface); err != nil {
 				return utils.WrapError("failed to remove VIP from interface", err)
 			}
 
-			p.Log.Info("kubevip: bastion vip removed (kube-vip now owns the vip)")
+			p.LogInfo("kubevip: bastion vip removed (kube-vip now owns the vip)")
 			return nil
 		}).
 		MustBuild()
@@ -139,13 +139,13 @@ func (p *Phase) NewRemoveHAProxyStep(cfg *config.Config, opts Options, pctx *dis
 		}).
 		SkipReason("kube-vip not verified - keeping HAProxy as fallback").
 		OnError(func(err error) {
-			p.Log.Warn(fmt.Sprintf("haproxy: removal failed: %v", err))
+			p.LogWarn(fmt.Sprintf("haproxy: removal failed: %v", err))
 		}).
 		Execute(func(ctx context.Context) error {
 			if err := p.RemoveHAProxy(ctx); err != nil {
 				return utils.WrapError("haproxy removal failed", err)
 			}
-			p.Log.Info("haproxy: service stopped and disabled on bastion")
+			p.LogInfo("haproxy: service stopped and disabled on bastion")
 			return nil
 		}).
 		MustBuild()
@@ -163,7 +163,7 @@ func (p *Phase) NewInstallAddonsStep(cfg *config.Config, opts Options, pctx *dis
 		Description("installing enabled cluster addons").
 		Fatal(false).
 		OnError(func(err error) {
-			p.Log.Warn(fmt.Sprintf("addons: installation failed: %v", err))
+			p.LogWarn(fmt.Sprintf("addons: installation failed: %v", err))
 		}).
 		Execute(func(ctx context.Context) error {
 			if err := mgr.InstallAll(ctx); err != nil {
@@ -187,7 +187,7 @@ func (p *Phase) NewDeployProductionDNSStep(cfg *config.Config, opts Options, pct
 		Description("updating apps wildcard dns for ingress load balancer").
 		Fatal(false).
 		OnError(func(err error) {
-			p.Log.Warn(fmt.Sprintf("dns: apps dns update failed: %v", err))
+			p.LogWarn(fmt.Sprintf("dns: apps dns update failed: %v", err))
 		}).
 		Execute(func(ctx context.Context) error {
 			state := pctx.Get()
@@ -196,9 +196,9 @@ func (p *Phase) NewDeployProductionDNSStep(cfg *config.Config, opts Options, pct
 				return utils.WrapError("apps dns update failed", err)
 			}
 			if appsIP != "" {
-				p.Log.Info(fmt.Sprintf("dns: apps.* wildcard now points to %s", appsIP))
+				p.LogInfo(fmt.Sprintf("dns: apps.* wildcard now points to %s", appsIP))
 			} else {
-				p.Log.Info("dns: production config deployed (apps ip pending metallb assignment)")
+				p.LogInfo("dns: production config deployed (apps ip pending metallb assignment)")
 			}
 			return nil
 		}).

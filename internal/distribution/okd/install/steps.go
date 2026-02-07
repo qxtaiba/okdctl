@@ -57,7 +57,6 @@ func (p *Phase) newWaitBootstrapStep(cfg *config.Config, opts Options) distribut
 			if err := p.WaitForBootstrap(ctx, clusterDir, opts); err != nil {
 				return utils.WrapError("bootstrap failed", err)
 			}
-			p.LogInfo("bootstrap: control plane is ready")
 			return nil
 		}).
 		MustBuild()
@@ -143,7 +142,7 @@ func (p *Phase) newSetupAccessStep(opts Options) distribution.ProvisioningStep {
 			return p.SetupClusterAccess(ctx, clusterDir)
 		}).
 		OnError(func(err error) {
-			p.Log.Warn(fmt.Sprintf("kubeconfig: failed to setup persistent access: %v", err))
+			p.LogWarn(fmt.Sprintf("kubeconfig: failed to setup persistent access: %v", err))
 		}).
 		MustBuild()
 }

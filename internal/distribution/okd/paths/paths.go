@@ -96,3 +96,8 @@ func (b *BasePhase) LogWarn(msg string) {
 func (b *BasePhase) LogError(msg string) {
 	b.Log.Error(msg)
 }
+
+// LogDebug logs a debug message.
+func (b *BasePhase) LogDebug(msg string) {
+	b.Log.Debug(msg)
+}

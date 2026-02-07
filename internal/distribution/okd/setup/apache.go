@@ -148,7 +148,7 @@ func (p *Phase) DeployToWebServer(ctx context.Context, cfg *config.Config, clust
 	if system.FileExists(authSrc) {
 		authDest := filepath.Join(webRoot, "auth")
 		if result, err := p.Exec.Run(ctx, "sudo", "cp", "-r", authSrc, authDest); err != nil || result.ExitCode != 0 {
-			p.Log.Warn("apache: could not copy auth directory to web root")
+			p.LogWarn("apache: could not copy auth directory to web root")
 		}
 	}
 

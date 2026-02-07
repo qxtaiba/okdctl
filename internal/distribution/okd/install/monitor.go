@@ -32,7 +32,7 @@ func (p *Phase) WaitForBootstrap(ctx context.Context, clusterDir string, opts Op
 		return utils.WrapError("bootstrap failed", err)
 	}
 
-	p.Log.Info("bootstrap: completed - control plane is ready")
+	p.LogInfo("bootstrap: completed - control plane is ready")
 	return nil
 }
 

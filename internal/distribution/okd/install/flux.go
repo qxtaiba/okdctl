@@ -65,9 +65,9 @@ func (p *Phase) SetupClusterAccess(ctx context.Context, clusterDir string) error
 	if system.FileExists(destKubeconfig) {
 		backupPath := destKubeconfig + ".backup." + time.Now().Format("20060102-150405")
 		if err := system.CopyFile(destKubeconfig, backupPath); err != nil {
-			p.Log.Warn(fmt.Sprintf("kubeconfig: could not backup existing file: %v", err))
+			p.LogWarn(fmt.Sprintf("kubeconfig: could not backup existing file: %v", err))
 		} else {
-			p.Log.Info(fmt.Sprintf("kubeconfig: backed up existing file to %s", backupPath))
+			p.LogInfo(fmt.Sprintf("kubeconfig: backed up existing file to %s", backupPath))
 		}
 	}
 
@@ -80,7 +80,7 @@ func (p *Phase) SetupClusterAccess(ctx context.Context, clusterDir string) error
 	}
 
 	if err := p.addKubeconfigToBashrc(homeDir, destKubeconfig); err != nil {
-		p.Log.Warn(fmt.Sprintf("kubeconfig: could not update .bashrc: %v", err))
+		p.LogWarn(fmt.Sprintf("kubeconfig: could not update .bashrc: %v", err))
 	}
 
 	return nil

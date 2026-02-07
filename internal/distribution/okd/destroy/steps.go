@@ -119,8 +119,7 @@ func (p *Phase) newPrintSummaryStep(opts Options) distribution.ProvisioningStep 
 		Fatal(false). // Non-fatal
 		OnStart(func() {}).
 		Execute(func(ctx context.Context) error {
-			p.Log.Info("destroy: cluster teardown completed successfully")
-			p.Log.Info("destroy: all vms and generated files have been removed")
+			p.LogInfo("destroy: cluster teardown completed")
 			return nil
 		}).
 		MustBuild()

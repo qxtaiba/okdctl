@@ -65,7 +65,7 @@ func (p *Phase) installHAProxyConfig(ctx context.Context, tmpPath string) error 
 
 	if system.FileExists(haproxyConfig) {
 		if err := system.CopyFileWithElevation(ctx, haproxyConfig, haproxyConfig+".backup", "haproxy.cfg backup"); err != nil {
-			p.Log.Warn("haproxy: could not backup existing haproxy.cfg")
+			p.LogWarn("haproxy: could not backup existing haproxy.cfg")
 		}
 	}
 

@@ -86,7 +86,7 @@ func (p *Phase) GenerateManifests(ctx context.Context, clusterDir string) error 
 
 		newContent := strings.Replace(string(content), "mastersSchedulable: true", "mastersSchedulable: false", 1)
 		if newContent == string(content) {
-			p.Log.Warn("manifests: mastersSchedulable setting not found in scheduler config")
+			p.LogWarn("manifests: mastersSchedulable setting not found in scheduler config")
 		}
 		if err := system.AtomicWriteString(schedulerConfig, newContent, 0644); err != nil {
 			return utils.WrapError("failed to write scheduler config", err)
