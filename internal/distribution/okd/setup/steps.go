@@ -34,7 +34,6 @@ const (
 	StepUploadISOs        distribution.StepID = "upload-isos"
 	StepGenerateTfvars    distribution.StepID = "generate-tfvars"
 	StepConfigureHAProxy  distribution.StepID = "configure-haproxy"
-	StepConfigureBastionVIP distribution.StepID = "configure-bastion-vip"
 	StepConfigureFirewall distribution.StepID = "configure-firewall"
 	StepConfigureDNS      distribution.StepID = "configure-dns"
 )
@@ -50,7 +49,6 @@ func systemPackages() []string {
 		"haproxy",
 		"httpd",
 		"dnsmasq",
-		"iputils", // provides arping for gratuitous ARP announcements
 	}
 }
 
@@ -507,48 +505,3 @@ func (p *Phase) newConfigureDNSStep(cfg *config.Config, opts Options) distributi
 		MustBuild()
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// CONFIGURE BASTION VIP STEP
-// ═══════════════════════════════════════════════════════════════════════════════
-
-// newConfigureBastionVIPStep creates a step that assigns the kube-vip VIP to the
-// bastion's network interface. This allows the bastion to hold the VIP during
-// bootstrap. When kube-vip starts on the control plane nodes, it will take over
-// the VIP via gratuitous ARP announcement.
-func (p *Phase) newConfigureBastionVIPStep(cfg *config.Config, opts Options) distribution.ProvisioningStep {
-	return distribution.NewStepBuilder(StepConfigureBastionVIP, "Configure Bastion VIP").
-		Description("assigning kube-vip VIP to bastion interface for bootstrap").
-		Fatal(true). // VIP is required - DNS points api.* to the VIP, so bootstrap fails without it
-		SkipWhen(func() bool { return opts.SkipHAProxy }). // Skip if HAProxy is skipped (no load balancing)
-		SkipReason("HAProxy disabled - VIP not needed on bastion").
-		Execute(func(ctx context.Context) error {
-			vip := netutil.DeriveVIPFromStaticIP(cfg.Networking.StaticIP.Start)
-			if vip == "" {
-				return fmt.Errorf("failed to derive VIP from static IP start: %s", cfg.Networking.StaticIP.Start)
-			}
-
-			// Detect the bastion's actual interface rather than using cfg.Networking.StaticIP.Interface,
-			// which is the VM interface name (e.g., ens18 for virtio) and may differ from the bastion's
-			// interface (e.g., enp6s18).
-			iface, err := system.GetDefaultInterface(ctx)
-			if err != nil {
-				return utils.WrapError("failed to detect network interface", err)
-			}
-			p.LogInfo(fmt.Sprintf("kubevip: detected bastion interface %s", iface))
-
-			p.LogInfo(fmt.Sprintf("kubevip: adding %s to interface %s", vip, iface))
-			if err := system.AddSecondaryIP(ctx, vip, iface); err != nil {
-				return utils.WrapError("failed to add VIP to interface", err)
-			}
-
-			p.LogInfo(fmt.Sprintf("kubevip: sending gratuitous ARP for %s", vip))
-			if err := system.SendGratuitousARP(ctx, vip, iface); err != nil {
-				// Non-fatal - IP is still bound, just ARP announcement failed
-				p.LogWarn(fmt.Sprintf("kubevip: gratuitous ARP failed (non-fatal): %v", err))
-			}
-
-			p.LogInfo(fmt.Sprintf("kubevip: bastion now holds VIP %s (kube-vip will take over after bootstrap)", vip))
-			return nil
-		}).
-		MustBuild()
-}

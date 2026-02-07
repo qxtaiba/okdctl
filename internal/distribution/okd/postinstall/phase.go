@@ -79,12 +79,11 @@ func (p *Phase) Execute(ctx context.Context, cfg *config.Config, opts Options) (
 	addonMgr := addon.NewManager(cfg, p.Exec, p.Log, opts.ProjectRoot)
 	pctx := distribution.NewPhaseContext(PostInstallContext{})
 
-	// Order matters: kube-vip verification must come before bastion VIP/HAProxy removal,
+	// Order matters: kube-vip verification must come before HAProxy removal,
 	// and DNS deployment needs AppsIP from addon outputs.
 	orchestrator := distribution.NewOrchestrator(
 		p.NewVerifyHealthStep(cfg, opts, pctx),
 		p.NewVerifyKubeVIPStep(cfg, opts, pctx),
-		p.NewRemoveBastionVIPStep(cfg, opts, pctx), // Clean up bastion VIP after kube-vip takes over
 		p.NewRemoveHAProxyStep(cfg, opts, pctx),
 		p.NewInstallAddonsStep(cfg, opts, pctx, addonMgr),
 		p.NewDeployProductionDNSStep(cfg, opts, pctx, addonMgr),
