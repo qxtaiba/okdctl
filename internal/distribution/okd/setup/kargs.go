@@ -52,8 +52,8 @@ func ExtractNetworkConfig(cfg *config.Config) (gateway, netmask, dns, iface stri
 	}
 
 	dns = staticCfg.DNS
-	if dns == "" && len(cfg.Networking.DNS) > 0 {
-		dns = cfg.Networking.DNS[0]
+	if dns == "" {
+		dns = cfg.Networking.Bastion.IP
 	}
 
 	iface = staticCfg.Interface
