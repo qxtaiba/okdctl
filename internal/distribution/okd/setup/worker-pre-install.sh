@@ -2,6 +2,8 @@
 set -euo pipefail
 
 # Disk serials assigned in terraform (proxmox-okd/main.tf).
+# If either serial is missing the VM is misconfigured — fail loudly
+# so coreos-installer aborts rather than silently wiping the wrong disk.
 OS_SERIAL="OS-DISK"
 DATA_SERIAL="CEPH-DATA"
 OS_DISK=""
@@ -17,40 +19,19 @@ for dev in /dev/sd?; do
   esac
 done
 
-# fallback: if only one disk found by serial, the other is the remaining /dev/sd?
-all_disks=()
-for dev in /dev/sd?; do
-  [ -b "$dev" ] && all_disks+=("$dev")
-done
-
-if [ -z "$OS_DISK" ] && [ -n "$DATA_DISK" ] && [ "${#all_disks[@]}" -eq 2 ]; then
-  for dev in "${all_disks[@]}"; do
-    if [ "$dev" != "$DATA_DISK" ]; then
-      OS_DISK="$dev"
-    fi
-  done
-fi
-if [ -z "$DATA_DISK" ] && [ -n "$OS_DISK" ] && [ "${#all_disks[@]}" -eq 2 ]; then
-  for dev in "${all_disks[@]}"; do
-    if [ "$dev" != "$OS_DISK" ]; then
-      DATA_DISK="$dev"
-    fi
-  done
-fi
-
-# last resort: single-disk VM, use it as OS disk
-if [ -z "$OS_DISK" ] && [ -z "$DATA_DISK" ] && [ "${#all_disks[@]}" -eq 1 ]; then
-  OS_DISK="${all_disks[0]}"
+if [ -z "$OS_DISK" ]; then
+  echo "FATAL: no disk with serial '$OS_SERIAL' found" >&2
+  exit 1
 fi
 
 # write dest-device for coreos-installer
-if [ -n "$OS_DISK" ]; then
-  mkdir -p /etc/coreos/installer.d
-  echo "--dest-device ${OS_DISK}" > /etc/coreos/installer.d/50-dest-device.conf
-fi
+mkdir -p /etc/coreos/installer.d
+echo "--dest-device ${OS_DISK}" > /etc/coreos/installer.d/50-dest-device.conf
 
 # wipe data disk so stale partition labels don't confuse the installed system
 if [ -n "$DATA_DISK" ]; then
   sgdisk --zap-all "$DATA_DISK"
   wipefs --all "$DATA_DISK"
+else
+  echo "WARNING: no disk with serial '$DATA_SERIAL' found, skipping wipe" >&2
 fi
