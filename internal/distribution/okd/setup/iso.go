@@ -59,7 +59,7 @@ func writePreInstallScript() (string, error) {
 		return "", fmt.Errorf("failed to create pre-install script: %w", err)
 	}
 
-	if _, err := f.WriteString(BuildWorkerPreInstallScript()); err != nil {
+	if _, err := f.WriteString(WorkerPreInstallScript()); err != nil {
 		_ = f.Close()
 		_ = os.Remove(f.Name())
 		return "", fmt.Errorf("failed to write pre-install script: %w", err)
