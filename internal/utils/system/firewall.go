@@ -97,7 +97,6 @@ func ConfigureFirewall(ctx context.Context, ports []FirewallPort, permanent bool
 	return nil
 }
 
-// validateFirewallPort validates that a FirewallPort has valid port number and protocol.
 func validateFirewallPort(port FirewallPort) error {
 	if port.Port < 1 || port.Port > 65535 {
 		return fmt.Errorf("invalid port number: %d", port.Port)

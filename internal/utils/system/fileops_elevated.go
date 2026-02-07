@@ -11,7 +11,6 @@ import (
 // criticalPaths are system directories that should never be removed.
 var criticalPaths = []string{"/", "/etc", "/var", "/usr", "/bin", "/sbin", "/lib", "/home", "/root", "/boot", "/dev", "/proc", "/sys"}
 
-// isCriticalPath checks if a path is a critical system directory.
 func isCriticalPath(path string) bool {
 	cleanPath := filepath.Clean(path)
 	for _, p := range criticalPaths {
@@ -125,8 +124,6 @@ func MkdirAll(ctx context.Context, path, description string) error {
 func RemoveAll(ctx context.Context, path, description string) error {
 	return ExecuteFileOperation(ctx, OpRemove, path, description)
 }
-
-// Helper functions
 
 func runCommand(name string, args ...string) error {
 	cmd := exec.Command(name, args...)

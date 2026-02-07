@@ -34,7 +34,6 @@ func isElevationNeeded(err error) bool {
 		return true
 	}
 
-	// Check for specific permission-related error messages
 	errStr := strings.ToLower(err.Error())
 	return strings.Contains(errStr, "permission denied") ||
 		strings.Contains(errStr, "operation not permitted")
@@ -44,18 +43,15 @@ func isElevationNeeded(err error) bool {
 // then falls back to sudo if the operation fails with a permission error.
 // Note: sudo may prompt for a password interactively if passwordless sudo is not configured.
 func ExecuteWithElevation(ctx context.Context, operation func() error, sudoOperation func() error, description string) error {
-	// Try without elevation first
 	err := operation()
 	if err == nil {
 		return nil
 	}
 
-	// Check if it's a permission/elevation error
 	if !isElevationNeeded(err) {
 		return err
 	}
 
-	// Try with sudo (may prompt for password if passwordless sudo is not configured)
 	if err := sudoOperation(); err != nil {
 		return utils.WrapErrorf(err, "%s failed even with sudo", description)
 	}

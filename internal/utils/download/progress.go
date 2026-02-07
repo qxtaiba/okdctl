@@ -40,7 +40,6 @@ func (pw *progressWriter) stop() {
 	atomic.StoreInt32(&pw.stopped, 1)
 }
 
-// isStopped returns true if progress output has been stopped.
 func (pw *progressWriter) isStopped() bool {
 	return atomic.LoadInt32(&pw.stopped) != 0
 }

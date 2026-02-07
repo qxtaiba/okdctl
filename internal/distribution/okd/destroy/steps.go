@@ -51,7 +51,7 @@ func (p *Phase) newDestroyInfraStep(cfg *config.Config, opts Options) distributi
 func (p *Phase) newCleanupFilesStep(cfg *config.Config, opts Options) distribution.ProvisioningStep {
 	return distribution.NewStepBuilder(StepCleanupFiles, "Cleanup Files").
 		Description("performing comprehensive cleanup").
-		Fatal(false). // Non-fatal - we want to continue even if cleanup fails
+		Fatal(false).
 		SkipWhen(func() bool { return opts.SkipCleanup || opts.CleanupType == "" }).
 		SkipReason(cleanupFilesSkipReason(opts)).
 		Execute(func(ctx context.Context) error {
@@ -93,7 +93,7 @@ func cleanupFilesSkipReason(opts Options) string {
 func (p *Phase) newCleanupFirewallStep(opts Options) distribution.ProvisioningStep {
 	return distribution.NewStepBuilder(StepCleanupFirewall, "Cleanup Firewall").
 		Description("removing firewall rules").
-		Fatal(false). // Non-fatal
+		Fatal(false).
 		SkipWhen(func() bool { return opts.SkipFirewall }).
 		SkipReason("Firewall cleanup disabled").
 		Execute(func(ctx context.Context) error {
@@ -116,7 +116,7 @@ func (p *Phase) newCleanupFirewallStep(opts Options) distribution.ProvisioningSt
 func (p *Phase) newPrintSummaryStep(opts Options) distribution.ProvisioningStep {
 	return distribution.NewStepBuilder(StepPrintSummary, "Print Summary").
 		Description("printing destruction summary").
-		Fatal(false). // Non-fatal
+		Fatal(false).
 		OnStart(func() {}).
 		Execute(func(ctx context.Context) error {
 			p.LogInfo("destroy: cluster teardown completed")

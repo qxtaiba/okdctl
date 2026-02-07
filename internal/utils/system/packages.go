@@ -54,7 +54,6 @@ func RemovePackages(ctx context.Context, packages []string, logger logging.Logge
 	return nil
 }
 
-// filterInstalledPackages returns only packages that are currently installed.
 func filterInstalledPackages(packages []string) []string {
 	var installed []string
 	for _, pkg := range packages {
@@ -65,7 +64,6 @@ func filterInstalledPackages(packages []string) []string {
 	return installed
 }
 
-// isPackageInstalled checks if a package is installed via rpm query.
 func isPackageInstalled(pkg string) bool {
 	cmd := exec.Command("rpm", "-q", pkg)
 	return cmd.Run() == nil
