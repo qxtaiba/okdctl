@@ -58,7 +58,6 @@ func canSkipDownload(opts Options) (bool, error) {
 		return true, nil
 	}
 
-	// Validate checksum of existing file
 	utils.GetLogger().Info(fmt.Sprintf("download: validating existing file %s", filename))
 
 	actualChecksum, err := CalculateChecksum(opts.OutputPath)
@@ -71,7 +70,6 @@ func canSkipDownload(opts Options) (bool, error) {
 		return true, nil
 	}
 
-	// Checksum mismatch, need to re-download
 	utils.GetLogger().Warn(fmt.Sprintf("download: checksum mismatch, re-downloading %s", filename))
 	if err := os.Remove(opts.OutputPath); err != nil && !os.IsNotExist(err) {
 		utils.GetLogger().Warn(fmt.Sprintf("download: failed to remove mismatched file %s: %v", filename, err))

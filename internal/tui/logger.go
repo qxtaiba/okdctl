@@ -108,10 +108,7 @@ func (log *Logger) format(msg string, fields []LogField) string {
 	return fmt.Sprintf("%s [%s]", msg, strings.Join(parts, " "))
 }
 
-// Default logger instance for package-level convenience functions.
 var defaultLogger = NewLogger()
-
-// Package-level convenience functions for logging with the default logger.
 
 // Debug logs a debug message using the default logger.
 func Debug(msg string, fields ...LogField) {

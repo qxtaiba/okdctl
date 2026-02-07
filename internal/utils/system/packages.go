@@ -36,7 +36,6 @@ func RemovePackages(ctx context.Context, packages []string, logger logging.Logge
 		return nil
 	}
 
-	// Filter to only installed packages
 	installed := filterInstalledPackages(packages)
 	if len(installed) == 0 {
 		logger.Info("packages: none to remove (none installed)")
@@ -68,7 +67,6 @@ func filterInstalledPackages(packages []string) []string {
 
 // isPackageInstalled checks if a package is installed via rpm query.
 func isPackageInstalled(pkg string) bool {
-	// Use rpm -q to check if the package is installed
 	cmd := exec.Command("rpm", "-q", pkg)
 	return cmd.Run() == nil
 }

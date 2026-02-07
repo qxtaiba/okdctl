@@ -86,7 +86,6 @@ func ConfigureFirewall(ctx context.Context, ports []FirewallPort, permanent bool
 		}
 	}
 
-	// Reload firewall if using firewalld
 	if backend == FirewallFirewalld && permanent {
 		if err := runSudo("firewall-cmd", "--reload"); err != nil {
 			return utils.WrapError("failed to reload firewall", err)
@@ -165,7 +164,6 @@ func RemoveFirewallRules(ctx context.Context, ports []FirewallPort, permanent bo
 		}
 	}
 
-	// Reload firewall if using firewalld
 	if backend == FirewallFirewalld && permanent {
 		_ = runSudo("firewall-cmd", "--reload")
 	}

@@ -16,7 +16,6 @@ type K8sClient struct {
 	// CLI is the command to use (kubectl, oc)
 	CLI string
 
-	// Kubeconfig is the path to the kubeconfig file
 	Kubeconfig string
 
 	exec *executor.Executor
@@ -41,24 +40,20 @@ func NewK8sClient(opts ...Option) *K8sClient {
 		CLI: "kubectl", // Default CLI
 	}
 
-	// Check for KUBECONFIG environment variable as default
 	if envKubeconfig := os.Getenv("KUBECONFIG"); envKubeconfig != "" {
 		c.Kubeconfig = envKubeconfig
 	}
 
-	// Apply options
 	for _, opt := range opts {
 		opt(c)
 	}
 
-	// Auto-detect CLI if not explicitly set or set to default
 	if c.CLI == "kubectl" {
 		if executor.CommandExists("oc") {
 			c.CLI = "oc"
 		}
 	}
 
-	// Create executor with kubeconfig environment if not already set
 	if c.exec == nil {
 		cmdRunner := executor.New()
 		if c.Kubeconfig != "" {
