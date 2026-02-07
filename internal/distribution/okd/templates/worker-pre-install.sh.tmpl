@@ -9,10 +9,14 @@ DATA_SERIAL="{{ .DataSerial }}"
 OS_DISK=""
 DATA_DISK=""
 
+echo "pre-install: enumerating block devices"
+lsblk -o NAME,SIZE,TYPE,SERIAL,MODEL 2>&1 || true
+
 # discover disks by serial number
-for dev in /dev/sd?; do
+for dev in /dev/sd? /dev/vd? /dev/nvme?n?; do
   [ -b "$dev" ] || continue
   serial=$(lsblk -ndo SERIAL "$dev" 2>/dev/null) || continue
+  echo "pre-install: $dev serial='$serial'"
   case "$serial" in
     "$OS_SERIAL")   OS_DISK="$dev" ;;
     "$DATA_SERIAL") DATA_DISK="$dev" ;;
@@ -24,6 +28,8 @@ if [ -z "$OS_DISK" ]; then
   exit 1
 fi
 
+echo "pre-install: OS_DISK=$OS_DISK DATA_DISK=$DATA_DISK"
+
 # write dest-device for coreos-installer (YAML format required by --config-file)
 mkdir -p /etc/coreos/installer.d
 cat > /etc/coreos/installer.d/50-dest-device.yaml <<INSTALLER_EOF
@@ -32,8 +38,11 @@ INSTALLER_EOF
 
 # wipe data disk so stale partition labels don't confuse the installed system
 if [ -n "$DATA_DISK" ]; then
+  echo "pre-install: wiping data disk $DATA_DISK"
   sgdisk --zap-all "$DATA_DISK"
   wipefs --all "$DATA_DISK"
 else
   echo "WARNING: no disk with serial '$DATA_SERIAL' found, skipping wipe" >&2
 fi
+
+echo "pre-install: done"

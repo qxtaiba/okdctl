@@ -2,9 +2,11 @@ package setup
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/qxtaiba/okd-proxmox-cli/internal/config"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/paths"
@@ -79,6 +81,54 @@ func writePreInstallScript(script string) (string, error) {
 	return f.Name(), nil
 }
 
+// writeInstallerTriggerIgnition creates a temp Ignition config that writes a
+// minimal file to /etc/coreos/installer.d/ so the directory is non-empty when
+// systemd evaluates ConditionDirectoryNotEmpty on coreos-installer.service.
+// If sshKey is non-empty it is added to the core user so the live environment
+// is reachable via SSH (useful for debugging installer failures).
+func writeInstallerTriggerIgnition(sshKey string) (string, error) {
+	ign := map[string]any{
+		"ignition": map[string]any{"version": "3.3.0"},
+		"storage": map[string]any{
+			"files": []map[string]any{{
+				"path": "/etc/coreos/installer.d/00-install-trigger.yaml",
+				"mode": 420,
+				"contents": map[string]any{
+					"source": "data:,fetch-retries%3A%200%0A",
+				},
+			}},
+		},
+	}
+	if sshKey != "" {
+		ign["passwd"] = map[string]any{
+			"users": []map[string]any{{
+				"name":              "core",
+				"sshAuthorizedKeys": []string{sshKey},
+			}},
+		}
+	}
+
+	data, err := json.Marshal(ign)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal installer trigger ignition: %w", err)
+	}
+
+	f, err := os.CreateTemp("", "installer-trigger-*.ign")
+	if err != nil {
+		return "", fmt.Errorf("failed to create installer trigger ignition: %w", err)
+	}
+	if _, err := f.Write(data); err != nil {
+		_ = f.Close()
+		_ = os.Remove(f.Name())
+		return "", fmt.Errorf("failed to write installer trigger ignition: %w", err)
+	}
+	if err := f.Close(); err != nil {
+		_ = os.Remove(f.Name())
+		return "", fmt.Errorf("failed to close installer trigger ignition: %w", err)
+	}
+	return f.Name(), nil
+}
+
 // buildNodeISO creates a customized CoreOS ISO for a specific node using iso customize.
 func (p *Phase) buildNodeISO(ctx context.Context, cfg *config.Config, node NodeInfo, clusterDir, fcosISO, outputDir string) error {
 	isoName := fmt.Sprintf("%s.iso", node.Name)
@@ -123,6 +173,33 @@ func (p *Phase) buildNodeISO(ctx context.Context, cfg *config.Config, node NodeI
 			return err
 		}
 		defer func() { _ = os.Remove(scriptPath) }()
+
+		// coreos-installer.service requires either coreos.inst.install_dev on the
+		// kernel command line or a non-empty /etc/coreos/installer.d/ directory.
+		// The pre-install script populates installer.d at runtime, but the
+		// directory is still empty when systemd evaluates the condition — so the
+		// service is skipped and the script never runs (chicken-and-egg).
+		//
+		// We solve this with a live ignition fragment that seeds installer.d with
+		// a harmless config file. Ignition runs during initramfs (before systemd
+		// evaluates service conditions) so the directory is non-empty in time.
+		// Unlike a coreos.inst.install_dev karg, this does NOT override the
+		// dest-device written by the pre-install script's serial-based discovery
+		// (kargs are evaluated after installer.d and would take precedence).
+		// Read SSH key for live environment access (debugging).
+		var sshKey string
+		if cfg.Files.SSHPublicKey != "" {
+			keyPath := system.ExpandPath(cfg.Files.SSHPublicKey)
+			if b, err := os.ReadFile(keyPath); err == nil {
+				sshKey = strings.TrimSpace(string(b))
+			}
+		}
+		triggerPath, err := writeInstallerTriggerIgnition(sshKey)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = os.Remove(triggerPath) }()
+		args = append(args, "--live-ignition", triggerPath)
 		args = append(args, "--pre-install", scriptPath)
 	default:
 		// bootstrap and master VMs have a single disk; /dev/sda is always correct.
