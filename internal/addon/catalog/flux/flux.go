@@ -1,0 +1,328 @@
+// Package flux provides the Flux GitOps addon.
+package flux
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
+
+	"github.com/qxtaiba/okd-proxmox-cli/internal/addon"
+	"github.com/qxtaiba/okd-proxmox-cli/internal/executor"
+	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
+	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
+)
+
+// Timeouts for post-install rollout tracking.
+const (
+	controllerTimeout  = 5 * time.Minute
+	gitRepoSyncTimeout = 3 * time.Minute
+)
+
+func init() {
+	addon.Register(&Flux{})
+}
+
+// Flux implements the addon.Addon interface for Flux GitOps.
+type Flux struct{}
+
+func (f *Flux) Info() addon.AddonInfo {
+	return addon.AddonInfo{
+		Name:           "flux",
+		DisplayName:    "Flux GitOps",
+		Description:    "Continuous delivery using Flux GitOps controller",
+		Category:       "gitops",
+		Dependencies:   nil,
+		Priority:       80,
+		DefaultEnabled: false,
+	}
+}
+
+func (f *Flux) Install(ctx context.Context, env *addon.Environment) error {
+	if !executor.CommandExists("helm") {
+		return fmt.Errorf("helm is required to install Flux")
+	}
+
+	result, err := env.Exec.Run(ctx, "oc", "get", "namespace", "flux-system")
+	if err != nil || result == nil || result.ExitCode != 0 {
+		createResult, createErr := env.Exec.Run(ctx, "oc", "create", "namespace", "flux-system")
+		if createErr != nil {
+			return utils.WrapError("failed to create flux-system namespace", createErr)
+		}
+		if createResult == nil || createResult.ExitCode != 0 {
+			stderr := ""
+			if createResult != nil {
+				stderr = createResult.Stderr
+			}
+			return fmt.Errorf("failed to create flux-system namespace: %s", stderr)
+		}
+	}
+
+	if err := f.createDeployKeySecret(ctx, env); err != nil {
+		return utils.WrapError("deploy key secret required", err)
+	}
+
+	env.Logger.Info("flux: installing operator via helm")
+	result, err = env.Exec.Run(ctx, "helm", "install", "flux-operator",
+		"oci://ghcr.io/controlplaneio-fluxcd/charts/flux-operator",
+		"--namespace", "flux-system",
+		"--create-namespace",
+		"--wait")
+	if err != nil {
+		return utils.WrapError("failed to install flux operator", err)
+	}
+	if result.ExitCode != 0 {
+		return fmt.Errorf("failed to install flux operator: %s", result.Stderr)
+	}
+
+	result, _ = env.Exec.Run(ctx, "oc", "wait", "--for=condition=available", "deployment/flux-operator",
+		"--namespace", "flux-system", "--timeout=120s")
+	if result == nil || result.ExitCode != 0 {
+		env.Logger.Warn("flux: operator not ready within 120s timeout, continuing")
+	}
+
+	env.Logger.Info("flux: installing instance for gitops sync")
+	settings := env.AddonConfig.Settings
+	syncURL := settings["repository"]
+	if syncURL == "" {
+		return fmt.Errorf("flux repository not configured - set addons.flux.settings.repository in config")
+	}
+	branch := settings["branch"]
+	if branch == "" {
+		branch = "main"
+	}
+	syncRef := "refs/heads/" + branch
+	syncPath := settings["path"]
+	if syncPath == "" {
+		syncPath = "kubernetes/clusters/production"
+	}
+
+	result, err = env.Exec.Run(ctx, "helm", "install", "flux-instance",
+		"oci://ghcr.io/controlplaneio-fluxcd/charts/flux-instance",
+		"--namespace", "flux-system",
+		"--set", "instance.cluster.type=openshift",
+		"--set", fmt.Sprintf("instance.sync.url=%s", syncURL),
+		"--set", fmt.Sprintf("instance.sync.ref=%s", syncRef),
+		"--set", fmt.Sprintf("instance.sync.path=%s", syncPath),
+		"--set", "instance.sync.pullSecret=flux-system",
+		"--wait")
+	if err != nil {
+		return utils.WrapError("failed to install flux instance", err)
+	}
+	if result.ExitCode != 0 {
+		return fmt.Errorf("failed to install flux instance: %s", result.Stderr)
+	}
+
+	// Wait for Flux controllers to become available (fatal if they don't start)
+	if err := f.waitForControllers(ctx, env); err != nil {
+		return err
+	}
+
+	// Wait for GitRepository sync (non-fatal — user may need to fix deploy key or URL)
+	if err := f.waitForGitSync(ctx, env); err != nil {
+		env.Logger.Warn(fmt.Sprintf("flux: git sync not ready: %v", err))
+		env.Logger.Warn("flux: debug with: oc get gitrepository -n flux-system -o yaml")
+		env.Logger.Warn("flux: the cluster will auto-reconcile once the git source is reachable")
+	}
+
+	env.Logger.Info("flux: gitops installed and syncing with repository")
+	return nil
+}
+
+func (f *Flux) Verify(ctx context.Context, env *addon.Environment) error {
+	result, err := env.Exec.Run(ctx, "oc", "get", "deployment", "flux-operator",
+		"-n", "flux-system", "-o", "jsonpath={.status.readyReplicas}")
+	if err != nil || result == nil || result.ExitCode != 0 {
+		return fmt.Errorf("flux-operator deployment not found")
+	}
+	ready := strings.TrimSpace(result.Stdout)
+	if ready == "" || ready == "0" {
+		return fmt.Errorf("flux-operator has no ready replicas")
+	}
+	env.Logger.Info(fmt.Sprintf("flux: operator ready (%s replicas)", ready))
+
+	result, err = env.Exec.Run(ctx, "oc", "get", "deployment", "source-controller",
+		"-n", "flux-system", "-o", "jsonpath={.status.readyReplicas}")
+	if err == nil && result != nil && result.ExitCode == 0 {
+		scReady := strings.TrimSpace(result.Stdout)
+		if scReady == "" || scReady == "0" {
+			return fmt.Errorf("source-controller has no ready replicas")
+		}
+		env.Logger.Info(fmt.Sprintf("flux: source-controller ready (%s replicas)", scReady))
+	}
+
+	// Check GitRepository sync status (informational, not fatal for verify)
+	result, err = env.Exec.Run(ctx, "oc", "get", "gitrepository", "-n", "flux-system",
+		"-o", "jsonpath={.items[0].status.conditions[?(@.type==\"Ready\")].status}")
+	if err == nil && result != nil && result.ExitCode == 0 {
+		syncStatus := strings.TrimSpace(result.Stdout)
+		if syncStatus == "True" {
+			env.Logger.Info("flux: git repository synced")
+		} else {
+			env.Logger.Warn("flux: git repository not yet synced (status: " + syncStatus + ")")
+		}
+	}
+
+	return nil
+}
+
+func (f *Flux) Uninstall(ctx context.Context, env *addon.Environment) error {
+	env.Logger.Info("flux: removing flux components")
+	_, _ = env.Exec.Run(ctx, "helm", "uninstall", "flux-instance", "--namespace", "flux-system")
+	_, _ = env.Exec.Run(ctx, "helm", "uninstall", "flux-operator", "--namespace", "flux-system")
+	_, _ = env.Exec.Run(ctx, "oc", "delete", "ns", "flux-system")
+	return nil
+}
+
+// RequiredTools implements addon.ToolProvider.
+func (f *Flux) RequiredTools() []addon.ToolSpec {
+	return []addon.ToolSpec{
+		{Name: "helm", Description: "Helm package manager for installing Flux charts"},
+	}
+}
+
+// DefaultSettings implements addon.ConfigurableAddon.
+func (f *Flux) DefaultSettings() map[string]string {
+	return map[string]string{
+		"provider": "flux",
+		"branch":   "main",
+		"path":     "kubernetes/clusters/production",
+	}
+}
+
+// ValidateSettings implements addon.ConfigurableAddon.
+func (f *Flux) ValidateSettings(settings map[string]string) []string {
+	var errs []string
+	if repo := settings["repository"]; repo != "" {
+		if !strings.HasPrefix(repo, "ssh://") && !strings.HasPrefix(repo, "https://") &&
+			!strings.HasPrefix(repo, "git://") && !strings.HasPrefix(repo, "git@") {
+			errs = append(errs, "repository must be a valid Git URL (ssh://, https://, git://, or git@)")
+		}
+		// Reject mixed ssh://...host:org/repo format (must use slashes after scheme)
+		if strings.HasPrefix(repo, "ssh://") {
+			// Strip scheme, then check if host portion contains a colon (SCP-style path)
+			afterScheme := strings.TrimPrefix(repo, "ssh://")
+			if slashIdx := strings.Index(afterScheme, "/"); slashIdx > 0 {
+				host := afterScheme[:slashIdx]
+				// A colon in the host part (e.g., "git@github.com:org") means SCP-style mixed with scheme
+				if strings.Contains(host, ":") && !strings.Contains(host, "]:") {
+					errs = append(errs, "ssh:// URLs must use slashes for path (ssh://git@github.com/org/repo.git), not colons (ssh://git@github.com:org/repo.git)")
+				}
+			} else if strings.Contains(afterScheme, ":") {
+				// No slash at all but has colon — e.g., ssh://git@github.com:org/repo
+				errs = append(errs, "ssh:// URLs must use slashes for path (ssh://git@github.com/org/repo.git), not colons (ssh://git@github.com:org/repo.git)")
+			}
+		}
+	}
+	if branch := settings["branch"]; branch != "" && strings.ContainsAny(branch, " \t") {
+		errs = append(errs, "branch name cannot contain spaces")
+	}
+	return errs
+}
+
+// WizardFields implements addon.WizardProvider.
+func (f *Flux) WizardFields() []addon.WizardField {
+	return []addon.WizardField{
+		{Key: "repository", Label: "Repository URL", Help: "ssh://git@github.com/org/repo.git", Required: true},
+		{Key: "branch", Label: "Branch", Default: "main", Help: "Branch to sync"},
+		{Key: "path", Label: "Path", Default: "kubernetes/clusters/production", Help: "Path within repo"},
+	}
+}
+
+// waitForControllers waits for Flux controllers to have available replicas.
+func (f *Flux) waitForControllers(ctx context.Context, env *addon.Environment) error {
+	env.Logger.Info("flux: waiting for controllers to become ready")
+
+	if err := system.WaitForWithTimeout(ctx, "flux", "controllers", func() bool {
+		if ctx.Err() != nil {
+			return false
+		}
+		result, _ := env.Exec.Run(ctx, "oc", "get", "deployments",
+			"-n", "flux-system",
+			"-l", "app.kubernetes.io/part-of=flux",
+			"-o", "jsonpath={range .items[*]}{.metadata.name}={.status.availableReplicas}{\"\\n\"}{end}")
+		if result == nil || result.ExitCode != 0 {
+			return false
+		}
+		lines := strings.Split(strings.TrimSpace(result.Stdout), "\n")
+		if len(lines) == 0 || (len(lines) == 1 && lines[0] == "") {
+			return false
+		}
+		for _, line := range lines {
+			parts := strings.SplitN(line, "=", 2)
+			if len(parts) != 2 {
+				continue
+			}
+			replicas := strings.TrimSpace(parts[1])
+			if replicas == "" || replicas == "0" {
+				return false
+			}
+		}
+		return true
+	}, controllerTimeout); err != nil {
+		return fmt.Errorf("flux controllers did not become ready within %v: %w", controllerTimeout, err)
+	}
+
+	env.Logger.Info("flux: all controllers are running")
+	return nil
+}
+
+// waitForGitSync waits for the GitRepository to report Ready=True.
+func (f *Flux) waitForGitSync(ctx context.Context, env *addon.Environment) error {
+	env.Logger.Info("flux: waiting for git repository sync")
+
+	if err := system.WaitForWithTimeout(ctx, "flux", "git sync", func() bool {
+		if ctx.Err() != nil {
+			return false
+		}
+		result, _ := env.Exec.Run(ctx, "oc", "get", "gitrepository",
+			"-n", "flux-system",
+			"-o", "jsonpath={.items[0].status.conditions[?(@.type==\"Ready\")].status}")
+		if result == nil || result.ExitCode != 0 {
+			return false
+		}
+		return strings.TrimSpace(result.Stdout) == "True"
+	}, gitRepoSyncTimeout); err != nil {
+		return fmt.Errorf("git repository sync not ready within %v", gitRepoSyncTimeout)
+	}
+
+	env.Logger.Info("flux: git repository synced successfully")
+	return nil
+}
+
+func (f *Flux) createDeployKeySecret(ctx context.Context, env *addon.Environment) error {
+	result, err := env.Exec.Run(ctx, "oc", "get", "secret", "flux-system", "-n", "flux-system")
+	if err == nil && result != nil && result.ExitCode == 0 {
+		return nil
+	}
+
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return utils.WrapError("failed to get home directory", err)
+	}
+	deployKeyFile := filepath.Join(homeDir, ".ssh", "flux-deploy-key")
+
+	if !system.FileExists(deployKeyFile) {
+		return fmt.Errorf("deploy key not found at %s - generate with: ssh-keygen -t ed25519 -f ~/.ssh/flux-deploy-key -N ''", deployKeyFile)
+	}
+
+	knownHostsResult, err := env.Exec.Run(ctx, "ssh-keyscan", "github.com")
+	if err != nil || knownHostsResult.ExitCode != 0 {
+		return fmt.Errorf("failed to get GitHub host key")
+	}
+
+	result, err = env.Exec.Run(ctx, "oc", "create", "secret", "generic", "flux-system",
+		"--namespace", "flux-system",
+		"--from-file=identity="+deployKeyFile,
+		"--from-literal=known_hosts="+knownHostsResult.Stdout)
+	if err != nil {
+		return utils.WrapError("failed to create deploy key secret", err)
+	}
+	if result.ExitCode != 0 {
+		return fmt.Errorf("failed to create deploy key secret: %s", result.Stderr)
+	}
+
+	return nil
+}

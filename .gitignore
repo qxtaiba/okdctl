@@ -1,0 +1,92 @@
+# Go build artifacts
+bin/
+dist/
+coverage.out
+coverage.html
+
+# Environment files
+.env
+.env.local
+.env.*.local
+*.env
+openshitctl.env
+
+# Generated terraform tfvars (contains environment-specific values)
+infrastructure/terraform/environments/*/terraform.tfvars
+
+# Cluster artifacts
+okd-install/
+*.kubeconfig
+kubeadmin-password
+
+# Terraform files
+*.tfstate
+*.tfstate.backup
+*.tfvars
+tfplan
+destroy.tfplan
+.terraform/
+.terraform.lock.hcl
+
+# SSH keys and secrets
+*.pem
+*.key
+id_rsa*
+*.pub
+pull-secret.txt
+pull-secret.json
+
+# Ignition files
+*.ign
+
+# Custom ISOs and downloads
+*.iso
+downloads/
+*.tar.gz
+*.tgz
+*.zip
+
+# Logs and temporary files
+*.log
+logs/
+tmp/
+temp/
+.tmp/
+
+# Backup files
+*.backup
+*.backup.*
+/etc/haproxy/haproxy.cfg.backup.*
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE/Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Certificate files
+*.crt
+*.p12
+*.pfx
+
+# CLI generated files
+openshitctl.yaml
+.openshitctl/
+.deploy-state-*.json
+
+# Test artifacts
+test.yaml
+demo.yaml
+
+# Local AI context
+CLAUDE.md

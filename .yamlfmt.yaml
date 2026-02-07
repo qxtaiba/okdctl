@@ -1,0 +1,7 @@
+---
+formatter:
+  type: basic
+  eof_newline: true
+  line_ending: lf
+  trim_trailing_whitespace: true
+  include_document_start: true

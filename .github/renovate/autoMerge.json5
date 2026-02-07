@@ -1,0 +1,12 @@
+{
+  "packageRules": [
+    {
+      "description": "automerge non-major updates",
+      "matchManagers": ["*"],
+      "matchUpdateTypes": ["minor", "patch", "digest", "pin"],
+      "automerge": true,
+      "automergeType": "pr",
+      "automergeStrategy": "rebase"
+    }
+  ]
+}

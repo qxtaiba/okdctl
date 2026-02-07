@@ -1,0 +1,313 @@
+package wizard
+
+import (
+	"fmt"
+	"strings"
+
+	"github.com/charmbracelet/lipgloss"
+
+	"github.com/qxtaiba/okd-proxmox-cli/internal/tui"
+)
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// VIEW METHOD
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// View renders the wizard UI.
+func (m Model) View() string {
+	if m.quitting {
+		return ""
+	}
+
+	if !m.ready {
+		return "\n  Initializing..."
+	}
+
+	var content strings.Builder
+
+	content.WriteString(m.renderHeader())
+	content.WriteString("\n")
+	content.WriteString(m.viewport.View())
+	content.WriteString("\n")
+	content.WriteString(m.renderScrollIndicator())
+	content.WriteString("\n")
+
+	if m.err != nil {
+		errorStyle := lipgloss.NewStyle().
+			Foreground(tui.ColorError).
+			Bold(true).
+			Padding(0, 1)
+		content.WriteString(errorStyle.Render("✖ " + m.err.Error()))
+		content.WriteString("\n")
+	}
+
+	content.WriteString(m.renderFooter())
+
+	// terminal width - outer padding (4) - border chars (2)
+	borderWidth := m.width - 6
+	if borderWidth < minWidth {
+		borderWidth = minWidth
+	}
+
+	bordered := WizardBorderStyle.
+		Width(borderWidth).
+		Render(content.String())
+
+	return OuterContainerStyle.Render(bordered)
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// RENDERING HELPERS
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// contentWidth returns the available width for content.
+// Must match borderWidth (m.width - 6) so content fills the border exactly.
+func (m Model) contentWidth() int {
+	width := m.width - 6
+	if width < 60 {
+		width = 60
+	}
+	return width
+}
+
+func (m Model) contentDimensions() (int, int) {
+	width := m.contentWidth()
+
+	height := m.height - fixedLayoutOverhead
+
+	if height < 10 {
+		height = 10
+	}
+
+	return width, height
+}
+
+func (m Model) viewportDimensions() (width, height int) {
+	contentWidth := m.contentWidth()
+
+	viewportHeight := m.height - fixedLayoutOverhead
+
+	if viewportHeight < 5 {
+		viewportHeight = 5
+	}
+
+	return contentWidth, viewportHeight
+}
+
+func (m *Model) syncViewportContent() {
+	if len(m.steps) == 0 || m.currentStep >= len(m.steps) {
+		m.viewport.SetContent("")
+		return
+	}
+
+	step := m.steps[m.currentStep]
+	contentWidth := m.contentWidth()
+
+	innerWidth := contentWidth - 4 // horizontal padding (2 on each side)
+	if innerWidth < 40 {
+		innerWidth = 40
+	}
+
+	var content strings.Builder
+
+	if d, ok := step.(DescribedStep); ok {
+		if displayTitle := d.DisplayTitle(); displayTitle != "" {
+			content.WriteString(m.renderStepTitle(displayTitle))
+			content.WriteString("\n\n")
+		}
+	}
+
+	// Large height so the step renders all content; viewport handles clipping
+	stepContent := step.View(innerWidth, 1000)
+
+	if c, ok := step.(centerable); ok && c.IsCentered() {
+		viewportHeight := m.viewport.Height
+		contentWidth := lipgloss.Width(stepContent)
+		contentHeight := lipgloss.Height(stepContent)
+
+		leftPadding := (innerWidth - contentWidth) / 2
+		topPadding := (viewportHeight - contentHeight) / 2
+		if leftPadding < 0 {
+			leftPadding = 0
+		}
+		if topPadding < 0 {
+			topPadding = 0
+		}
+
+		stepContent = lipgloss.NewStyle().
+			PaddingLeft(leftPadding).
+			PaddingTop(topPadding).
+			Render(stepContent)
+	}
+
+	content.WriteString(stepContent)
+
+	paddingStyle := lipgloss.NewStyle().
+		PaddingLeft(2).
+		PaddingRight(2).
+		Width(contentWidth)
+	paddedContent := paddingStyle.Render(content.String())
+	m.viewport.SetContent(paddedContent)
+}
+
+func (m Model) renderHeader() string {
+	width := m.contentWidth()
+
+	brand := LogoStyle.Render("O P E N S H I T")
+	tagline := TaglineStyle.Render("okd over proxmox, the easy way")
+
+	visibleSteps := m.countVisibleSteps()
+	currentVisible := m.currentVisibleStepIndex() + 1
+	progressDots := RenderStepProgress(currentVisible, visibleSteps)
+	stepIndicator := progressDots + " " +
+		StepIndicatorStyle.Render("step ") +
+		StepIndicatorCurrentStyle.Render(fmt.Sprintf("%d", currentVisible)) +
+		StepIndicatorStyle.Render(fmt.Sprintf(" of %d", visibleSteps))
+
+	// Right-align step indicator (HeaderStyle has 1 char padding each side)
+	taglineWidth := lipgloss.Width(tagline)
+	indicatorWidth := lipgloss.Width(stepIndicator)
+	spacing := width - taglineWidth - indicatorWidth - 2
+	if spacing < 1 {
+		spacing = 1
+	}
+
+	header := brand + "\n" + tagline + strings.Repeat(" ", spacing) + stepIndicator
+
+	// Don't use .Width() - it causes text wrapping
+	return HeaderStyle.Render(header)
+}
+
+func (m Model) renderFooter() string {
+	width := m.contentWidth()
+
+	bindings := defaultKeyBindings()
+	if len(m.steps) > 0 && m.currentStep < len(m.steps) {
+		if h, ok := m.steps[m.currentStep].(HelpProvider); ok {
+			bindings = h.ShortHelp()
+		}
+	}
+
+	helpBar := RenderHelpBar(bindings)
+	return FooterStyle.Width(width).Render(helpBar)
+}
+
+func defaultKeyBindings() []KeyBinding {
+	return []KeyBinding{
+		{Key: "↑↓", Help: "navigate"},
+		{Key: "enter", Help: "confirm"},
+		{Key: "esc", Help: "back"},
+		{Key: "ctrl+c", Help: "quit"},
+	}
+}
+
+func (m Model) renderStepTitle(title string) string {
+	titleStyle := lipgloss.NewStyle().
+		Foreground(tui.ColorText).
+		Bold(true)
+	return titleStyle.Render(title)
+}
+
+// renderScrollIndicator renders a scroll position indicator with context badge.
+func (m Model) renderScrollIndicator() string {
+	width := m.contentWidth()
+	lineStyle := lipgloss.NewStyle().Foreground(tui.ColorSlate700)
+
+	contextBadge := m.renderContextBadge()
+	var badgeStyled string
+	badgeWidth := 0
+	if contextBadge != "" {
+		badgeStyled = lipgloss.NewStyle().
+			Foreground(tui.ColorSlate500).
+			Render(" ▸ " + contextBadge + " ")
+		badgeWidth = lipgloss.Width(badgeStyled)
+	}
+
+	if m.viewport.TotalLineCount() <= m.viewport.Height {
+		lineWidth := width - badgeWidth
+		if lineWidth < 10 {
+			lineWidth = 10
+		}
+		return lineStyle.Render(strings.Repeat("─", lineWidth)) + badgeStyled
+	}
+
+	scrollPercent := m.viewport.ScrollPercent()
+	atTop := m.viewport.YOffset == 0
+	atBottom := scrollPercent >= 1.0
+
+	arrowStyle := lipgloss.NewStyle().Foreground(tui.ColorPrimary).Bold(true)
+	dimArrowStyle := lipgloss.NewStyle().Foreground(tui.ColorSlate600)
+	textStyle := lipgloss.NewStyle().Foreground(tui.ColorSlate400)
+
+	var arrows string
+	if atTop {
+		arrows = dimArrowStyle.Render("↑") + " " + arrowStyle.Render("↓")
+	} else if atBottom {
+		arrows = arrowStyle.Render("↑") + " " + dimArrowStyle.Render("↓")
+	} else {
+		arrows = arrowStyle.Render("↑") + " " + arrowStyle.Render("↓")
+	}
+
+	var message string
+	if atTop {
+		message = "scroll down for more"
+	} else if atBottom {
+		message = "scroll up for more"
+	} else {
+		message = fmt.Sprintf("%.0f%% • scroll for more", scrollPercent*100)
+	}
+
+	indicator := arrows + "  " + textStyle.Render(message)
+	indicatorWidth := lipgloss.Width(indicator)
+
+	leftWidth := (width-indicatorWidth)/2 - 1                         // -1 for space before indicator
+	rightWidth := width - leftWidth - indicatorWidth - badgeWidth - 2 // -2 for spaces around indicator
+	if leftWidth < 3 {
+		leftWidth = 3
+	}
+	if rightWidth < 3 {
+		rightWidth = 3
+	}
+
+	leftLine := lineStyle.Render(strings.Repeat("─", leftWidth))
+	rightLine := lineStyle.Render(strings.Repeat("─", rightWidth))
+
+	return leftLine + " " + indicator + " " + rightLine + badgeStyled
+}
+
+func (m Model) renderContextBadge() string {
+	var parts []string
+
+	if m.config.Distribution.Type != "" {
+		parts = append(parts, string(m.config.Distribution.Type))
+		if m.config.Distribution.Version != "" {
+			parts[0] += " " + m.config.Distribution.Version
+		}
+	}
+
+	if len(parts) == 0 {
+		return ""
+	}
+
+	return strings.Join(parts, " → ")
+}
+
+func (m Model) countVisibleSteps() int {
+	count := 0
+	for _, step := range m.steps {
+		if stepShouldShow(step, m.config) {
+			count++
+		}
+	}
+	return count
+}
+
+func (m Model) currentVisibleStepIndex() int {
+	index := 0
+	for i := 0; i < m.currentStep && i < len(m.steps); i++ {
+		if stepShouldShow(m.steps[i], m.config) {
+			index++
+		}
+	}
+	return index
+}

@@ -1,0 +1,26 @@
+---
+# Renovate update types
+- name: major
+  color: "f6412d"
+- name: minor
+  color: "ff9800"
+- name: patch
+  color: "ffec19"
+- name: digest
+  color: "ffec19"
+- name: pin
+  color: "ffec19"
+# Area labels
+- name: area/cli
+  color: "c5def5"
+- name: area/terraform
+  color: "5C4EE5"
+- name: area/flux
+  color: "5468FF"
+- name: area/automation
+  color: "1D76DB"
+- name: area/ci
+  color: "bfdadc"
+# Process
+- name: do-not-merge
+  color: "ee0701"

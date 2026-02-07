@@ -1,0 +1,31 @@
+apiVersion: v1
+baseDomain: {{ .BaseDomain }}
+compute:
+- architecture: amd64
+  hyperthreading: Enabled
+  name: worker
+  platform: {}
+  replicas: {{ .WorkerReplicas }}
+controlPlane:
+  architecture: amd64
+  hyperthreading: Enabled
+  name: master
+  platform: {}
+  replicas: {{ .MasterReplicas }}
+metadata:
+  creationTimestamp: null
+  name: {{ .ClusterName }}
+networking:
+  clusterNetwork:
+  - cidr: {{ .ClusterCIDR }}
+    hostPrefix: {{ .HostPrefix }}
+  machineNetwork:
+  - cidr: {{ .MachineCIDR }}
+  networkType: OVNKubernetes
+  serviceNetwork:
+  - {{ .ServiceCIDR }}
+platform:
+  none: {}
+publish: External
+pullSecret: '{{ .PullSecret }}'
+sshKey: '{{ .SSHKey }}'

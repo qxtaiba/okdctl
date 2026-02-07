@@ -1,0 +1,33 @@
+# sops configuration for encrypting secrets in the repository
+# see: https://github.com/getsops/sops
+#
+# setup (one-time):
+#   1. install: brew install sops age
+#   2. generate key: mkdir -p ~/.config/sops/age && age-keygen -o ~/.config/sops/age/keys.txt
+#   3. update the public key (age1...) in the creation_rules below
+#
+# encrypting 1password credentials:
+#   1. cp ~/Downloads/1password-credentials.json automation/config/secrets/
+#   2. echo -n "TOKEN" > automation/config/secrets/1password-token.txt
+#   3. sops -e -i automation/config/secrets/1password-credentials.json
+#   4. sops -e -i automation/config/secrets/1password-token.txt
+#
+# note: sops matches INPUT file path against rules, so create file at target path first
+#
+# decrypting:
+#   sops -d automation/config/secrets/1password-credentials.json
+#
+# deployment server setup:
+#   ssh okdadmin@bastion "mkdir -p ~/.config/sops/age"
+#   scp ~/.config/sops/age/keys.txt okdadmin@bastion:~/.config/sops/age/
+---
+creation_rules:
+  - path_regex: automation/config/secrets/1password-credentials\.json$
+    age: >-
+      age15z05fhafznfvldtk8tq8vwvp75j83l9guf2dae9fsah4vfdtlylqxh9tuq
+  - path_regex: automation/config/secrets/1password-token\.txt$
+    age: >-
+      age15z05fhafznfvldtk8tq8vwvp75j83l9guf2dae9fsah4vfdtlylqxh9tuq
+  - path_regex: \.enc\.(yaml|yml|json)$
+    age: >-
+      age15z05fhafznfvldtk8tq8vwvp75j83l9guf2dae9fsah4vfdtlylqxh9tuq

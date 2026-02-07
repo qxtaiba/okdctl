@@ -1,0 +1,103 @@
+# =============================================================================
+# dnsmasq configuration - bootstrap/install phase
+# =============================================================================
+# DNS points to kube-vip VIP from day 1. During bootstrap, bastion holds the
+# VIP and HAProxy handles load balancing. When kube-vip starts on masters,
+# it takes over the VIP automatically via ARP announcement.
+# =============================================================================
+
+# listen on bastion IP and localhost (explicit binding overrides main config)
+listen-address=127.0.0.1
+listen-address={{ .BastionIP }}
+bind-interfaces
+
+# upstream dns servers for external queries
+{{- range .UpstreamDNS }}
+server={{ . }}
+{{- end }}
+
+{{- if .KubeVipIP }}
+
+# api endpoints (point to VIP - bastion holds VIP during bootstrap, kube-vip takes over later)
+address=/api.{{ .ClusterDomain }}/{{ .KubeVipIP }}
+address=/api-int.{{ .ClusterDomain }}/{{ .KubeVipIP }}
+{{- end }}
+
+{{- if .BastionIP }}
+
+# apps wildcard (haproxy on bastion routes to workers during bootstrap)
+address=/.apps.{{ .ClusterDomain }}/{{ .BastionIP }}
+
+# cluster nodes
+address=/{{ .ClusterName }}-bastion.{{ .ClusterDomain }}/{{ .BastionIP }}
+{{- end }}
+{{- if .BootstrapNode.IP }}
+address=/{{ .BootstrapNode.Name }}.{{ .ClusterDomain }}/{{ .BootstrapNode.IP }}
+{{- end }}
+{{- range .MasterNodes }}
+{{- if .IP }}
+address=/{{ .Name }}.{{ $.ClusterDomain }}/{{ .IP }}
+{{- end }}
+{{- end }}
+{{- range .WorkerNodes }}
+{{- if .IP }}
+address=/{{ .Name }}.{{ $.ClusterDomain }}/{{ .IP }}
+{{- end }}
+{{- end }}
+
+# ptr records for reverse lookup
+{{- if .KubeVipIP }}
+{{- $apiReverse := reversePTR .KubeVipIP }}
+{{- if $apiReverse }}
+ptr-record={{ $apiReverse }}.in-addr.arpa,api.{{ .ClusterDomain }}
+{{- end }}
+{{- end }}
+{{- if .BastionIP }}
+{{- $bastionReverse := reversePTR .BastionIP }}
+{{- if $bastionReverse }}
+ptr-record={{ $bastionReverse }}.in-addr.arpa,{{ .ClusterName }}-bastion.{{ .ClusterDomain }}
+{{- end }}
+{{- end }}
+{{- if .BootstrapNode.IP }}
+{{- $bootstrapReverse := reversePTR .BootstrapNode.IP }}
+{{- if $bootstrapReverse }}
+ptr-record={{ $bootstrapReverse }}.in-addr.arpa,{{ .BootstrapNode.Name }}.{{ .ClusterDomain }}
+{{- end }}
+{{- end }}
+{{- range .MasterNodes }}
+{{- if .IP }}
+{{- $masterReverse := reversePTR .IP }}
+{{- if $masterReverse }}
+ptr-record={{ $masterReverse }}.in-addr.arpa,{{ .Name }}.{{ $.ClusterDomain }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- range .WorkerNodes }}
+{{- if .IP }}
+{{- $workerReverse := reversePTR .IP }}
+{{- if $workerReverse }}
+ptr-record={{ $workerReverse }}.in-addr.arpa,{{ .Name }}.{{ $.ClusterDomain }}
+{{- end }}
+{{- end }}
+{{- end }}
+
+# short name aliases
+{{- if .KubeVipIP }}
+address=/{{ .ClusterName }}-api/{{ .KubeVipIP }}
+{{- end }}
+{{- if .BastionIP }}
+address=/{{ .ClusterName }}-bastion/{{ .BastionIP }}
+{{- end }}
+{{- if .BootstrapNode.IP }}
+address=/{{ .BootstrapNode.Name }}/{{ .BootstrapNode.IP }}
+{{- end }}
+{{- range .MasterNodes }}
+{{- if .IP }}
+address=/{{ .Name }}/{{ .IP }}
+{{- end }}
+{{- end }}
+{{- range .WorkerNodes }}
+{{- if .IP }}
+address=/{{ .Name }}/{{ .IP }}
+{{- end }}
+{{- end }}

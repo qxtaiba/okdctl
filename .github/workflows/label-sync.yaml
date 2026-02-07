@@ -1,0 +1,25 @@
+---
+name: label-sync
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - develop
+    paths:
+      - .github/labels.yaml
+  schedule:
+    - cron: "0 0 * * *"
+permissions:
+  contents: read
+  issues: write
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+        with:
+          sparse-checkout: .github/labels.yaml
+      - uses: EndBug/label-sync@52074158190acb45f3077f9099fea818aa43f97a # v2
+        with:
+          config-file: .github/labels.yaml
+          delete-other-labels: true

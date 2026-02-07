@@ -1,0 +1,299 @@
+package steps
+
+import (
+	"fmt"
+	"strings"
+
+	"github.com/charmbracelet/bubbles/key"
+	"github.com/charmbracelet/bubbles/spinner"
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+
+	"github.com/qxtaiba/okd-proxmox-cli/internal/config"
+	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/releases"
+	"github.com/qxtaiba/okd-proxmox-cli/internal/tui"
+	"github.com/qxtaiba/okd-proxmox-cli/internal/tui/wizard"
+	"github.com/qxtaiba/okd-proxmox-cli/internal/tui/wizard/components"
+)
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// OKD VERSION STEP
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// selectionPhase represents the current phase of version selection.
+type selectionPhase int
+
+const (
+	phaseVersionLoading selectionPhase = iota
+	phaseVersionSelect
+)
+
+// DistributionStep handles OKD version selection.
+type DistributionStep struct {
+	wizard.BaseStep
+	versionSelector *components.Selector
+	phase           selectionPhase
+	selectedVersion string
+
+	// OKD version fetching
+	versionFetcher *releases.OKDVersionFetcher
+	okdSeries      []releases.OKDReleaseSeries
+	expandedMinor  int // Which minor version is expanded (-1 = none, show only latest per minor)
+	loadingSpinner spinner.Model
+	loadError      error
+}
+
+// NewDistributionStep creates a new OKD version selection step.
+func NewDistributionStep() *DistributionStep {
+	s := spinner.New()
+	s.Spinner = spinner.Dot
+	s.Style = lipgloss.NewStyle().Foreground(tui.ColorPrimary)
+
+	selector := components.NewSelector(nil)
+	selector.SetMaxDropdownVisible(5)
+
+	return &DistributionStep{
+		BaseStep: wizard.NewBaseStepWithDisplayTitle(
+			wizard.StepIDDistribution,
+			"okd version",
+			"which okd version would you like to deploy?",
+			"select okd version",
+		),
+		versionSelector: selector,
+		phase:           phaseVersionLoading,
+		versionFetcher:  releases.NewOKDVersionFetcher(),
+		expandedMinor:   -1,
+		loadingSpinner:  s,
+	}
+}
+
+// Init starts fetching OKD versions.
+func (s *DistributionStep) Init() tea.Cmd {
+	return tea.Batch(
+		s.loadingSpinner.Tick,
+		s.fetchVersions,
+	)
+}
+
+// Update handles input.
+func (s *DistributionStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
+	switch msg := msg.(type) {
+	case versionsLoadedMsg:
+		s.okdSeries = msg.series
+		s.loadError = msg.err
+		s.phase = phaseVersionSelect
+		s.updateVersionSelector()
+		s.versionSelector.SetFocused(true)
+		return s, nil
+
+	case spinner.TickMsg:
+		if s.phase == phaseVersionLoading {
+			var cmd tea.Cmd
+			s.loadingSpinner, cmd = s.loadingSpinner.Update(msg)
+			return s, cmd
+		}
+
+	case tea.KeyMsg:
+		if s.phase != phaseVersionSelect {
+			return s, nil
+		}
+		return s.handleKeyMsg(msg)
+	}
+	return s, nil
+}
+
+func (s *DistributionStep) handleKeyMsg(msg tea.KeyMsg) (wizard.WizardStep, tea.Cmd) {
+	switch {
+	case key.Matches(msg, key.NewBinding(key.WithKeys("enter"))):
+		return s.handleEnterKey()
+	case key.Matches(msg, key.NewBinding(key.WithKeys("tab"))):
+		return s.handleTabKey()
+	case key.Matches(msg, key.NewBinding(key.WithKeys("up", "k", "down", "j"))):
+		return s.handleNavigationKey(msg)
+	}
+	return s, nil
+}
+
+func (s *DistributionStep) handleEnterKey() (wizard.WizardStep, tea.Cmd) {
+	selected := s.versionSelector.Selected()
+
+	// If a minor header is selected, expand it instead of completing
+	if strings.HasPrefix(selected.ID, "minor:") {
+		minor := s.getMinorFromOptionID(selected.ID)
+		if s.expandedMinor == minor {
+			// Already expanded, use the latest version from this series
+			for _, series := range s.okdSeries {
+				if series.Minor == minor {
+					s.selectedVersion = series.Latest.Version
+					break
+				}
+			}
+		} else {
+			s.expandedMinor = minor
+			s.updateVersionSelector()
+			return s, nil
+		}
+	} else {
+		s.selectedVersion = selected.ID
+	}
+
+	return s, func() tea.Msg {
+		return wizard.StepCompleteMsg{StepID: s.ID()}
+	}
+}
+
+func (s *DistributionStep) handleTabKey() (wizard.WizardStep, tea.Cmd) {
+	selected := s.versionSelector.Selected()
+	selectedMinor := s.getMinorFromOptionID(selected.ID)
+	restoreID := selected.ID
+
+	if s.expandedMinor == selectedMinor {
+		s.expandedMinor = -1
+		for _, series := range s.okdSeries {
+			if series.Minor == selectedMinor {
+				restoreID = fmt.Sprintf("minor:%d.%d", series.Major, series.Minor)
+				break
+			}
+		}
+	} else {
+		s.expandedMinor = selectedMinor
+	}
+
+	s.updateVersionSelector()
+	s.versionSelector.SetSelectedByID(restoreID)
+	return s, nil
+}
+
+func (s *DistributionStep) handleNavigationKey(msg tea.KeyMsg) (wizard.WizardStep, tea.Cmd) {
+	s.versionSelector.Update(msg)
+	// Dropdown items handle their own scrolling; only emit for minor headers
+	selected := s.versionSelector.Selected()
+	if !selected.InDropdown {
+		return s, s.emitFocusChanged()
+	}
+	return s, nil
+}
+
+// View renders the version selection.
+func (s *DistributionStep) View(width, height int) string {
+	s.SetSize(width, height)
+	s.versionSelector.SetSize(width, height)
+
+	switch s.phase {
+	case phaseVersionLoading:
+		return s.viewLoadingPhase()
+	case phaseVersionSelect:
+		return s.viewVersionPhase()
+	}
+
+	return ""
+}
+
+func (s *DistributionStep) viewLoadingPhase() string {
+	loading := s.loadingSpinner.View() + " fetching available okd versions..."
+	return lipgloss.NewStyle().
+		Foreground(tui.ColorSlate400).
+		Render(loading)
+}
+
+func (s *DistributionStep) viewVersionPhase() string {
+	var content strings.Builder
+
+	if s.loadError != nil {
+		errMsg := lipgloss.NewStyle().
+			Foreground(tui.ColorError).
+			Bold(true).
+			Render("✗ failed to fetch okd versions: " + s.loadError.Error())
+		content.WriteString(errMsg)
+		content.WriteString("\n\n")
+		content.WriteString(lipgloss.NewStyle().
+			Foreground(tui.ColorSlate500).
+			Italic(true).
+			Render("please check your network connection and try again."))
+		content.WriteString("\n\n")
+		return content.String()
+	}
+
+	content.WriteString(s.versionSelector.View())
+	content.WriteString("\n\n")
+
+	var hints []string
+	if s.expandedMinor >= 0 {
+		hints = append(hints, lipgloss.NewStyle().
+			Foreground(tui.ColorSlate600).
+			Render(fmt.Sprintf("showing patch versions for 4.%d", s.expandedMinor)))
+		hints = append(hints, lipgloss.NewStyle().
+			Foreground(tui.ColorSlate500).
+			Italic(true).
+			Render("press tab to collapse"))
+	} else {
+		hints = append(hints, lipgloss.NewStyle().
+			Foreground(tui.ColorSlate500).
+			Italic(true).
+			Render("press tab to expand patch versions"))
+	}
+
+	content.WriteString(strings.Join(hints, "\n"))
+
+	return content.String()
+}
+
+func (s *DistributionStep) Validate() error {
+	return nil
+}
+
+// Apply writes the selection to config.
+func (s *DistributionStep) Apply(cfg *config.Config) error {
+	cfg.Distribution.Type = config.DistributionOKD
+	cfg.Distribution.Version = s.selectedVersion
+	return nil
+}
+
+// ShortHelp returns help for this step.
+func (s *DistributionStep) ShortHelp() []wizard.KeyBinding {
+	if s.phase == phaseVersionSelect {
+		return []wizard.KeyBinding{
+			{Key: "↑↓", Help: "select"},
+			{Key: "tab", Help: "expand/collapse"},
+			{Key: "enter", Help: "confirm"},
+			{Key: "esc", Help: "back"},
+		}
+	}
+	return []wizard.KeyBinding{
+		{Key: "esc", Help: "back"},
+		{Key: "ctrl+c", Help: "quit"},
+	}
+}
+
+// SetFocused sets the focus state.
+func (s *DistributionStep) SetFocused(focused bool) {
+	s.BaseStep.SetFocused(focused)
+	if focused && s.phase == phaseVersionSelect {
+		s.versionSelector.SetFocused(true)
+	} else {
+		s.versionSelector.SetFocused(false)
+	}
+}
+
+// GetSelectedVersion returns the selected OKD version.
+func (s *DistributionStep) GetSelectedVersion() string {
+	return s.selectedVersion
+}
+
+// SetSelectedVersion sets the selected OKD version.
+func (s *DistributionStep) SetSelectedVersion(version string) {
+	s.selectedVersion = version
+	s.versionSelector.SetSelectedByID(version)
+}
+
+// DisplayTitle returns the title for the current phase.
+func (s *DistributionStep) DisplayTitle() string {
+	switch s.phase {
+	case phaseVersionLoading:
+		return ""
+	case phaseVersionSelect:
+		return "which okd version would you like to deploy?"
+	default:
+		return s.BaseStep.DisplayTitle()
+	}
+}

@@ -1,0 +1,40 @@
+# Minimal Single-Node Cluster Configuration
+# ==========================================
+# This configuration creates a minimal single-node cluster
+# perfect for testing and development.
+---
+cluster:
+  name: minimal
+  domain: k8s.local
+distribution:
+  type: okd
+  version: "4.18.0-okd-scos.10"
+provider:
+  type: proxmox
+  proxmox:
+    host: 192.168.1.100
+    node: pve
+    storage: local-lvm
+    iso_storage: local
+    bridge: vmbr0
+topology:
+  control_plane:
+    count: 1
+    cpu: 4
+    memory: 8192 # 8 GB
+    disk: 50 # 50 GB
+  workers:
+    count: 0 # No workers - control plane runs workloads
+    cpu: 0
+    memory: 0
+    disk: 0
+networking:
+  machine_cidr: 192.168.1.0/24
+  pod_cidr: 10.128.0.0/14
+  service_cidr: 172.30.0.0/16
+  gateway: 192.168.1.1
+  dns:
+    - 192.168.1.1
+addons:
+  flux:
+    enabled: false

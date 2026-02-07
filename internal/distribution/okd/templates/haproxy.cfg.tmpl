@@ -1,0 +1,67 @@
+global
+    log /dev/log local0 info
+    chroot /var/lib/haproxy
+    pidfile /var/run/haproxy.pid
+    maxconn 50000
+    user haproxy
+    group haproxy
+    master-worker
+    stats socket /var/lib/haproxy/stats mode 600 level admin
+    ssl-default-bind-ciphers PROFILE=SYSTEM
+    ssl-default-server-ciphers PROFILE=SYSTEM
+
+defaults
+    log global
+    mode tcp
+    timeout connect 10s
+    timeout client 30s
+    timeout server 30s
+    timeout check 10s
+    retries 5
+
+frontend api
+    bind *:6443
+    mode tcp
+    option tcplog
+    default_backend api-backend
+
+frontend machine-config
+    bind *:22623
+    mode tcp
+    default_backend machine-config-backend
+
+frontend http
+    bind *:80
+    mode tcp
+    default_backend http-backend
+
+frontend https
+    bind *:443
+    mode tcp
+    default_backend https-backend
+
+backend api-backend
+    mode tcp
+    balance roundrobin
+    option log-health-checks
+    option httpchk GET /readyz HTTP/1.1
+    http-check send hdr Host api.{{ .ClusterDomain }}
+    server bootstrap {{ .BootstrapIP }}:6443 check check-ssl verify none inter 10s fall 2 rise 3 backup
+{{ range .MasterServers }}    server {{ .Name }} {{ .IP }}:6443 check check-ssl verify none inter 10s fall 2 rise 3
+{{ end }}
+backend machine-config-backend
+    mode tcp
+    balance roundrobin
+    server bootstrap {{ .BootstrapIP }}:22623 check inter 1s backup
+{{ range .MasterServers }}    server {{ .Name }} {{ .IP }}:22623 check inter 1s
+{{ end }}
+backend http-backend
+    mode tcp
+    balance source
+{{ range .WorkerServers }}    server {{ .Name }} {{ .IP }}:80 check inter 1s
+{{ end }}
+backend https-backend
+    mode tcp
+    balance source
+{{ range .WorkerServers }}    server {{ .Name }} {{ .IP }}:443 check inter 1s
+{{ end }}

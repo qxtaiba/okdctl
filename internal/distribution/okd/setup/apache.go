@@ -1,0 +1,183 @@
+package setup
+
+import (
+	"context"
+	"fmt"
+	"net/http"
+	"path/filepath"
+	"strings"
+	"time"
+
+	"github.com/qxtaiba/okd-proxmox-cli/internal/config"
+	"github.com/qxtaiba/okd-proxmox-cli/internal/executor"
+	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
+	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
+)
+
+const (
+	// minIgnitionFileSize is the minimum expected size for ignition files (in bytes).
+	// Ignition files are typically several KB or more.
+	minIgnitionFileSize = 1000
+)
+
+// ensureIgnitionDir creates the ignition directory under the web root if it doesn't exist.
+func ensureIgnitionDir(ctx context.Context, webRoot string) (string, error) {
+	ignitionDir := filepath.Join(webRoot, "ignition")
+
+	if err := system.MkdirAll(ctx, ignitionDir, "ignition directory"); err != nil {
+		return "", utils.WrapError("failed to create ignition directory", err)
+	}
+
+	// Set ownership to apache:apache (best-effort)
+	_ = system.Chown(ctx, ignitionDir, "apache:apache", "ignition directory ownership")
+	// Set permissions (best-effort)
+	_ = system.Chmod(ctx, ignitionDir, "755", "ignition directory permissions")
+
+	return ignitionDir, nil
+}
+
+// configureApachePort configures Apache to listen on port 8080 instead of 80.
+func (p *Phase) configureApachePort(ctx context.Context) {
+	httpdConf := "/etc/httpd/conf/httpd.conf"
+	if !system.FileExists(httpdConf) {
+		return
+	}
+
+	backupPath := fmt.Sprintf("%s.backup.%d", httpdConf, time.Now().Unix())
+	if err := system.CopyFileWithElevation(ctx, httpdConf, backupPath, "httpd.conf backup"); err != nil {
+		p.LogWarn(fmt.Sprintf("apache: could not backup httpd.conf: %v", err))
+	}
+
+	result, err := p.Exec.Run(ctx, "sudo", "sed", "-i", "s/^Listen 80$/Listen 8080/", httpdConf)
+	if err != nil || result.ExitCode != 0 {
+		p.LogWarn("apache: could not modify httpd.conf to listen on port 8080")
+	}
+}
+
+// configureSELinuxForApache configures SELinux to allow Apache on port 8080.
+func (p *Phase) configureSELinuxForApache(ctx context.Context) {
+	if !executor.CommandExists("semanage") {
+		return
+	}
+	// Try -a first; if port already exists, -m modifies the existing entry
+	_, _ = p.Exec.Run(ctx, "sudo", "semanage", "port", "-a", "-t", "http_port_t", "-p", "tcp", "8080")
+	_, _ = p.Exec.Run(ctx, "sudo", "semanage", "port", "-m", "-t", "http_port_t", "-p", "tcp", "8080")
+}
+
+// enableAndStartApache enables and starts the httpd service.
+func enableAndStartApache(ctx context.Context) error {
+	if err := system.ManageService(ctx, system.ServiceEnable, "httpd", "apache httpd service"); err != nil {
+		return utils.WrapError("failed to enable httpd", err)
+	}
+	if err := system.ManageService(ctx, system.ServiceStart, "httpd", "apache httpd service"); err != nil {
+		return utils.WrapError("failed to start httpd", err)
+	}
+	if !system.IsServiceActive("httpd") {
+		return fmt.Errorf("apache httpd service failed to start - check systemctl status httpd")
+	}
+	return nil
+}
+
+// verifyApacheListening checks if Apache is listening on port 8080.
+func (p *Phase) verifyApacheListening(ctx context.Context) {
+	result, _ := p.Exec.Run(ctx, "ss", "-tlnp")
+	if result != nil && result.ExitCode == 0 && strings.Contains(result.Stdout, ":8080 ") {
+		p.LogInfo("apache: httpd service listening on port 8080")
+	} else {
+		p.LogWarn("apache: httpd may not be listening on port 8080 - check configuration")
+	}
+}
+
+// ConfigureApache configures Apache httpd for serving ignition files.
+func (p *Phase) ConfigureApache(ctx context.Context, cfg *config.Config) error {
+	p.LogInfo("apache: configuring httpd for serving ignition files")
+
+	p.configureApachePort(ctx)
+	p.configureSELinuxForApache(ctx)
+
+	if err := enableAndStartApache(ctx); err != nil {
+		return err
+	}
+
+	p.verifyApacheListening(ctx)
+
+	webRoot := cfg.HTTPServer.Root
+	if webRoot == "" {
+		webRoot = "/var/www/html"
+	}
+	ignitionDir, err := ensureIgnitionDir(ctx, webRoot)
+	if err != nil {
+		return err
+	}
+
+	p.LogInfo(fmt.Sprintf("apache: ignition directory created at %s", ignitionDir))
+	return nil
+}
+
+// DeployToWebServer copies ignition files to the HTTP server root.
+func (p *Phase) DeployToWebServer(ctx context.Context, cfg *config.Config, clusterDir string) error {
+	webRoot := cfg.HTTPServer.Root
+	if webRoot == "" {
+		webRoot = "/var/www/html"
+	}
+
+	ignitionDir, err := ensureIgnitionDir(ctx, webRoot)
+	if err != nil {
+		return err
+	}
+
+	ignitionFiles := []string{"bootstrap.ign", "master.ign", "worker.ign"}
+	for _, file := range ignitionFiles {
+		srcPath := filepath.Join(clusterDir, file)
+		if !system.FileExists(srcPath) {
+			continue
+		}
+
+		destPath := filepath.Join(ignitionDir, file)
+		if err := system.CopyFileWithElevation(ctx, srcPath, destPath, fmt.Sprintf("ignition file %s", file)); err != nil {
+			return utils.WrapErrorf(err, "failed to copy %s", file)
+		}
+
+		if err := system.Chmod(ctx, destPath, "644", fmt.Sprintf("%s permissions", file)); err != nil {
+			return utils.WrapErrorf(err, "failed to set permissions on %s", file)
+		}
+	}
+
+	// Copy auth directory for kubeconfig (non-fatal, just for convenience)
+	authSrc := filepath.Join(clusterDir, "auth")
+	if system.FileExists(authSrc) {
+		authDest := filepath.Join(webRoot, "auth")
+		if result, err := p.Exec.Run(ctx, "sudo", "cp", "-r", authSrc, authDest); err != nil || result.ExitCode != 0 {
+			p.Log.Warn("apache: could not copy auth directory to web root")
+		}
+	}
+
+	return nil
+}
+
+// VerifyWebServer checks that the web server is accessible and serving ignition files.
+func (p *Phase) VerifyWebServer(ctx context.Context, baseURL string) error {
+	testURL := fmt.Sprintf("%s/bootstrap.ign", baseURL)
+
+	client := system.NewAPIClient()
+
+	p.LogInfo(fmt.Sprintf("apache: verifying web server at %s", testURL))
+
+	resp, err := client.Get(testURL)
+	if err != nil {
+		return utils.WrapError("failed to connect to web server", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("web server returned status %d for %s", resp.StatusCode, testURL)
+	}
+
+	if resp.ContentLength > 0 && resp.ContentLength < minIgnitionFileSize {
+		return fmt.Errorf("bootstrap.ign appears too small (%d bytes)", resp.ContentLength)
+	}
+
+	p.LogInfo("apache: web server accessible and serving ignition files")
+
+	return nil
+}

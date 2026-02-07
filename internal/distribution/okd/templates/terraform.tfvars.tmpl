@@ -1,0 +1,39 @@
+cluster_name = "{{ .ClusterName }}"
+
+target_node = "{{ .TargetNode }}"
+bridge = "{{ .Bridge }}"
+os_storage = "{{ .OSStorage }}"
+data_storage = "{{ .DataStorage }}"
+bootstrap_iso = "{{ .FCOSISOStorage }}:iso/bootstrap.iso"
+master_isos = [{{ .MasterISOsString }}]
+worker_isos = [{{ .WorkerISOsString }}]
+
+vmid_base = {{ .VMIDBase }}
+bootstrap_enabled = true
+master_count = {{ .MasterCount }}
+worker_count = {{ .WorkerCount }}
+
+os_disk_size_gb = {{ .OSDiskSizeGB }}
+data_disk_size_gb = {{ .DataDiskSizeGB }}
+
+# default vm resources (fallback if per-node resources not specified)
+cpu_cores = {{ .MasterCPUCores }}
+memory_mb = {{ .MasterMemoryMB }}
+
+bootstrap_cpu_cores = {{ .BootstrapCPUCores }}
+bootstrap_memory_mb = {{ .BootstrapMemoryMB }}
+
+master_cpu_cores = {{ .MasterCPUCores }}
+master_memory_mb = {{ .MasterMemoryMB }}
+
+worker_cpu_cores = {{ .WorkerCPUCores }}
+worker_memory_mb = {{ .WorkerMemoryMB }}
+
+master_names = [{{ .MasterNames }}]
+worker_names = [{{ .WorkerNames }}]
+
+vm_tags = ["okd", "{{ .ClusterName }}"]
+
+additional_networks = []
+
+numa_enabled = false

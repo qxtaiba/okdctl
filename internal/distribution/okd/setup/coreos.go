@@ -1,0 +1,215 @@
+package setup
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"path/filepath"
+	"sort"
+	"strings"
+
+	"github.com/qxtaiba/okd-proxmox-cli/internal/config"
+	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/paths"
+	"github.com/qxtaiba/okd-proxmox-cli/internal/executor"
+	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
+	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/download"
+	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
+)
+
+// DefaultProxmoxISODir is the default path to Proxmox ISO storage directory.
+const DefaultProxmoxISODir = "/var/lib/vz/template/iso"
+
+// findOrDownloadFCOSISO finds an existing FCOS ISO or downloads one.
+func (p *Phase) findOrDownloadFCOSISO(ctx context.Context, cfg *config.Config, opts Options) (string, error) {
+	isoDir := DefaultProxmoxISODir
+
+	if cfg.Provider.Proxmox != nil && cfg.Provider.Proxmox.FCOSIso != "" {
+		fcosISO := cfg.Provider.Proxmox.FCOSIso
+		// Handle Proxmox storage format like "local:iso/filename.iso"
+		if strings.Contains(fcosISO, ":iso/") {
+			parts := strings.SplitN(fcosISO, ":iso/", 2)
+			if len(parts) == 2 {
+				resolvedPath := filepath.Join(isoDir, parts[1])
+				if system.FileExists(resolvedPath) {
+					return resolvedPath, nil
+				}
+			}
+		} else if strings.HasPrefix(fcosISO, "local:iso") {
+			// Just storage reference without specific file - search for FCOS ISO
+		} else if system.FileExists(fcosISO) {
+			return fcosISO, nil
+		}
+	}
+
+	patterns := []string{
+		"fedora-coreos-*.iso",
+		"fcos-*.iso",
+		"fedora-coreos.iso",
+	}
+
+	for _, pattern := range patterns {
+		matches, err := filepath.Glob(filepath.Join(isoDir, pattern))
+		if err != nil {
+			continue
+		}
+		if len(matches) > 0 {
+			sort.Strings(matches)
+			isoPath := matches[len(matches)-1] // newest by lexicographic version
+			p.LogInfo(fmt.Sprintf("coreos: found existing iso at %s", filepath.Base(isoPath)))
+			return isoPath, nil
+		}
+	}
+
+	workISODir := filepath.Join(opts.WorkDir, "downloads")
+	for _, pattern := range patterns {
+		matches, err := filepath.Glob(filepath.Join(workISODir, pattern))
+		if err != nil {
+			continue
+		}
+		if len(matches) > 0 {
+			sort.Strings(matches)
+			isoPath := matches[len(matches)-1]
+			p.LogInfo(fmt.Sprintf("coreos: found existing iso at %s", filepath.Base(isoPath)))
+			return isoPath, nil
+		}
+	}
+
+	p.LogInfo("coreos: no iso found, attempting auto-download")
+
+	return p.EnsureCoreOSISO(ctx, cfg, Options{
+		BaseOptions: paths.BaseOptions{
+			WorkDir: opts.WorkDir,
+		},
+		AutoDownloadISO: true,
+	})
+}
+
+// DetectCoreOSVersion extracts CoreOS image information from openshift-install.
+func (p *Phase) DetectCoreOSVersion(ctx context.Context) (*CoreOSInfo, error) {
+	if !executor.CommandExists("openshift-install") {
+		return nil, fmt.Errorf("openshift-install not found - run setup first")
+	}
+
+	result, err := p.Exec.Run(ctx, "openshift-install", "coreos", "print-stream-json")
+	if err != nil {
+		return nil, utils.WrapError("failed to get CoreOS stream info", err)
+	}
+	if result.ExitCode != 0 {
+		return nil, fmt.Errorf("openshift-install coreos print-stream-json failed: %s", result.Stderr)
+	}
+
+	var streamData struct {
+		Architectures map[string]struct {
+			Artifacts struct {
+				Metal struct {
+					Release string `json:"release"`
+					Formats struct {
+						ISO struct {
+							Disk struct {
+								Location string `json:"location"`
+								SHA256   string `json:"sha256"`
+							} `json:"disk"`
+						} `json:"iso"`
+					} `json:"formats"`
+				} `json:"metal"`
+			} `json:"artifacts"`
+		} `json:"architectures"`
+	}
+
+	if err := json.Unmarshal([]byte(result.Stdout), &streamData); err != nil {
+		return nil, utils.WrapError("failed to parse CoreOS stream JSON", err)
+	}
+
+	arch, ok := streamData.Architectures["x86_64"]
+	if !ok {
+		return nil, fmt.Errorf("x86_64 architecture not found in CoreOS stream")
+	}
+
+	metal := arch.Artifacts.Metal
+	iso := metal.Formats.ISO.Disk
+
+	if iso.Location == "" {
+		return nil, fmt.Errorf("coreos iso location not found in stream")
+	}
+
+	return &CoreOSInfo{
+		Version:      metal.Release,
+		ISOUrl:       iso.Location,
+		ISOChecksum:  iso.SHA256,
+		Architecture: "x86_64",
+	}, nil
+}
+
+// DownloadCoreOSISO downloads the CoreOS ISO if not present.
+func (p *Phase) DownloadCoreOSISO(ctx context.Context, info *CoreOSInfo, destPath string) error {
+	if system.FileExists(destPath) {
+		p.LogInfo(fmt.Sprintf("coreos: iso already exists at %s", destPath))
+		if info.ISOChecksum != "" {
+			err := download.ValidateChecksum(destPath, info.ISOChecksum)
+			if err != nil {
+				p.LogWarn("coreos: existing iso checksum mismatch, re-downloading")
+				// Continue to download
+			} else {
+				p.LogInfo("coreos: iso checksum verified successfully")
+				return nil
+			}
+		} else {
+			return nil
+		}
+	}
+
+	p.LogInfo(fmt.Sprintf("coreos: downloading iso version %s", info.Version))
+	p.LogInfo(fmt.Sprintf("coreos: url %s", info.ISOUrl))
+
+	if err := system.EnsureDir(filepath.Dir(destPath)); err != nil {
+		return err
+	}
+
+	opts := download.Options{
+		URL:              info.ISOUrl,
+		OutputPath:       destPath,
+		ExpectedChecksum: info.ISOChecksum,
+		Description:      "CoreOS ISO",
+	}
+
+	if err := download.Download(ctx, opts); err != nil {
+		return utils.WrapError("failed to download CoreOS ISO", err)
+	}
+
+	p.LogInfo(fmt.Sprintf("coreos: iso downloaded to %s", destPath))
+
+	return nil
+}
+
+// EnsureCoreOSISO ensures the CoreOS ISO is available, downloading if necessary.
+// Downloads to the work directory to avoid permission issues with /var/lib/vz.
+func (p *Phase) EnsureCoreOSISO(ctx context.Context, cfg *config.Config, opts Options) (string, error) {
+	p.LogInfo("coreos: detecting version from openshift-install")
+
+	info, err := p.DetectCoreOSVersion(ctx)
+	if err != nil {
+		return "", err
+	}
+
+	p.LogInfo(fmt.Sprintf("coreos: detected version %s", info.Version))
+
+	// Separate from custom-isos directory which gets uploaded to Proxmox
+	downloadsDir := filepath.Join(opts.WorkDir, "downloads")
+	if err := system.EnsureDir(downloadsDir); err != nil {
+		return "", utils.WrapError("failed to create downloads directory", err)
+	}
+
+	isoFilename := filepath.Base(info.ISOUrl)
+	fcosISO := filepath.Join(downloadsDir, isoFilename)
+
+	if system.FileExists(fcosISO) {
+		p.LogInfo(fmt.Sprintf("coreos: iso already exists at %s", isoFilename))
+		return fcosISO, nil
+	}
+
+	if err := p.DownloadCoreOSISO(ctx, info, fcosISO); err != nil {
+		return "", err
+	}
+
+	return fcosISO, nil
+}

@@ -1,0 +1,52 @@
+---
+name: ci
+on:
+  push:
+    branches: [develop]
+  pull_request:
+    branches: [develop, main]
+permissions:
+  contents: read
+jobs:
+  # Go
+  lint-go:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+  build-go:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: go build -o bin/openshitctl ./cmd/openshitctl
+  # YAML
+  lint-yaml:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: go install github.com/google/yamlfmt/cmd/yamlfmt@latest
+      - run: yamlfmt -lint .
+  # Infrastructure
+  validate-terraform:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.10"
+      - run: terraform fmt -check -recursive infrastructure/terraform
+      - working-directory: infrastructure/terraform/modules/proxmox-okd
+        run: terraform init -backend=false && terraform validate
+      - working-directory: infrastructure/terraform/environments/production
+        run: terraform init -backend=false && terraform validate

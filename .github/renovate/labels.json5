@@ -1,0 +1,9 @@
+{
+  "packageRules": [
+    { "matchUpdateTypes": ["major"], "labels": ["major"] },
+    { "matchUpdateTypes": ["minor"], "labels": ["minor"] },
+    { "matchUpdateTypes": ["patch"], "labels": ["patch"] },
+    { "matchUpdateTypes": ["digest"], "labels": ["digest"] },
+    { "matchUpdateTypes": ["pin"], "labels": ["pin"] }
+  ]
+}

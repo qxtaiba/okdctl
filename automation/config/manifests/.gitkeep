@@ -1,0 +1,2 @@
+# place custom manifests here to inject during openshift-install
+# these will be copied to the openshift/ directory before ignition generation

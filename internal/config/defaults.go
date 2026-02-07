@@ -1,0 +1,110 @@
+package config
+
+// DefaultConfig returns a Config with sensible defaults for a typical homelab environment.
+func DefaultConfig() *Config {
+	return &Config{
+		Cluster: ClusterConfig{
+			Name:   "my-cluster",
+			Domain: "k8s.local",
+		},
+		Distribution: DistributionConfig{
+			Type:    DistributionOKD,
+			Version: "4.18.0-okd-scos.10",
+		},
+		Provider: ProviderConfig{
+			Type: ProviderProxmox,
+			Proxmox: &ProxmoxConfig{
+				Host:        "",
+				Node:        "pve",
+				Storage:     "local-lvm",
+				DataStorage: "local-lvm",
+				ISOStorage:  "local",
+				Bridge:      "vmbr0",
+				Insecure:    true,
+			},
+		},
+		Topology: TopologyConfig{
+			ControlPlane: NodeConfig{
+				Count:  3,
+				CPU:    4,
+				Memory: 12288,
+				Disk:   50,
+			},
+			Workers: NodeConfig{
+				Count:  3,
+				CPU:    8,
+				Memory: 20480,
+				Disk:   50,
+			},
+			Bootstrap: NodeConfig{
+				Count:  1,
+				CPU:    4,
+				Memory: 8192,
+				Disk:   50,
+			},
+			VMIDBase: 6000,
+		},
+		Networking: NetworkingConfig{
+			MachineCIDR: "192.168.1.0/24",
+			PodCIDR:     "10.128.0.0/14",
+			ServiceCIDR: "172.30.0.0/16",
+			HostPrefix:  23,
+			Gateway:     "192.168.1.1",
+			DNS:         []string{"192.168.1.1"},
+			StaticIP: StaticIPConfig{
+				Start:     "192.168.1.21",
+				Netmask:   "255.255.255.0",
+				Interface: "ens18",
+			},
+			Bastion: BastionConfig{
+				IP: "192.168.1.20",
+			},
+			MetalLB: MetalLBConfig{
+				Pool: "192.168.1.205-192.168.1.230",
+			},
+		},
+		Addons: map[string]AddonConfig{
+			"flux": {Enabled: false, Settings: map[string]string{
+				"provider": "flux", "branch": "main", "path": "kubernetes/clusters/production",
+			}},
+			"secretstore": {Enabled: false, Settings: map[string]string{
+				"secrets_dir": "automation/config/secrets",
+			}},
+		},
+		Files: FilesConfig{
+			PullSecret:   "",
+			SSHPublicKey: "",
+		},
+		HTTPServer: HTTPServerConfig{
+			Port:             8080,
+			Root:             "/var/www/html",
+			IgnitionServerIP: "",
+		},
+		Deployment: DeploymentConfig{
+			TerraformEnv:     "production",
+			AutoApprove:      false,
+			Debug:            false,
+			SkipDepsCheck:    false,
+			BootstrapTimeout: 3600,
+			InstallTimeout:   7200,
+		},
+		Disks: DisksConfig{
+			OSSizeGB:   50,
+			DataSizeGB: 500,
+		},
+	}
+}
+
+// MinimalConfig returns a single-node configuration for testing.
+func MinimalConfig() *Config {
+	cfg := DefaultConfig()
+	cfg.Cluster.Name = "minimal"
+	cfg.Topology = TopologyConfig{
+		ControlPlane: NodeConfig{Count: 1, CPU: 4, Memory: 8192, Disk: 50},
+		Workers:      NodeConfig{Count: 0, CPU: 0, Memory: 0, Disk: 0},
+	}
+	cfg.Addons = map[string]AddonConfig{
+		"flux": {Enabled: false},
+	}
+	return cfg
+}

@@ -1,0 +1,127 @@
+# =============================================================================
+# dnsmasq configuration - post-bootstrap/production
+# =============================================================================
+# use this after post-install. kube-vip handles api load balancing via vip,
+# metallb provides loadbalancer ips for ingress routers.
+# =============================================================================
+
+# listen on bastion IP and localhost (explicit binding overrides main config)
+listen-address=127.0.0.1
+listen-address={{ .BastionIP }}
+bind-interfaces
+
+# upstream dns servers for external queries
+{{- range .UpstreamDNS }}
+server={{ . }}
+{{- end }}
+
+# api endpoints (kube-vip provides vip for control plane api)
+{{- if .KubeVipIP }}
+address=/api.{{ .ClusterDomain }}/{{ .KubeVipIP }}
+address=/api-int.{{ .ClusterDomain }}/{{ .KubeVipIP }}
+{{- else }}
+address=/api.{{ .ClusterDomain }}/{{ .BastionIP }}
+address=/api-int.{{ .ClusterDomain }}/{{ .BastionIP }}
+{{- end }}
+
+# apps wildcard (default router via metallb)
+{{- if .AppsIP }}
+address=/.apps.{{ .ClusterDomain }}/{{ .AppsIP }}
+{{- else }}
+# apps ip will be assigned by metallb - update after router gets lb ip
+# address=/.apps.{{ .ClusterDomain }}/<ROUTER_LB_IP>
+{{- end }}
+
+{{- if .UserAppsIP }}
+
+# user applications domain (custom router via metallb)
+address=/.{{ .UserAppsDomain }}/{{ .UserAppsIP }}
+{{- end }}
+
+# cluster nodes
+{{- if .BastionIP }}
+address=/{{ .ClusterName }}-bastion.{{ .ClusterDomain }}/{{ .BastionIP }}
+{{- end }}
+{{- range .MasterNodes }}
+{{- if .IP }}
+address=/{{ .Name }}.{{ $.ClusterDomain }}/{{ .IP }}
+{{- end }}
+{{- end }}
+{{- range .WorkerNodes }}
+{{- if .IP }}
+address=/{{ .Name }}.{{ $.ClusterDomain }}/{{ .IP }}
+{{- end }}
+{{- end }}
+
+# ptr records for reverse lookup
+{{- if .KubeVipIP }}
+{{- $apiReverse := reversePTR .KubeVipIP }}
+{{- if $apiReverse }}
+ptr-record={{ $apiReverse }}.in-addr.arpa,api.{{ .ClusterDomain }}
+{{- end }}
+{{- else if .BastionIP }}
+{{- $bastionReverse := reversePTR .BastionIP }}
+{{- if $bastionReverse }}
+ptr-record={{ $bastionReverse }}.in-addr.arpa,api.{{ .ClusterDomain }}
+{{- end }}
+{{- end }}
+{{- if .BastionIP }}
+{{- $bastionReverse := reversePTR .BastionIP }}
+{{- if $bastionReverse }}
+ptr-record={{ $bastionReverse }}.in-addr.arpa,{{ .ClusterName }}-bastion.{{ .ClusterDomain }}
+{{- end }}
+{{- end }}
+{{- range .MasterNodes }}
+{{- if .IP }}
+{{- $masterReverse := reversePTR .IP }}
+{{- if $masterReverse }}
+ptr-record={{ $masterReverse }}.in-addr.arpa,{{ .Name }}.{{ $.ClusterDomain }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- range .WorkerNodes }}
+{{- if .IP }}
+{{- $workerReverse := reversePTR .IP }}
+{{- if $workerReverse }}
+ptr-record={{ $workerReverse }}.in-addr.arpa,{{ .Name }}.{{ $.ClusterDomain }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- if .AppsIP }}
+{{- $appsReverse := reversePTR .AppsIP }}
+{{- if $appsReverse }}
+ptr-record={{ $appsReverse }}.in-addr.arpa,apps.{{ .ClusterDomain }}
+{{- end }}
+{{- end }}
+{{- if .UserAppsIP }}
+{{- $userAppsReverse := reversePTR .UserAppsIP }}
+{{- if $userAppsReverse }}
+ptr-record={{ $userAppsReverse }}.in-addr.arpa,{{ .UserAppsDomain }}
+{{- end }}
+{{- end }}
+
+# short name aliases
+{{- if .BastionIP }}
+address=/{{ .ClusterName }}-bastion/{{ .BastionIP }}
+{{- end }}
+{{- if .KubeVipIP }}
+address=/{{ .ClusterName }}-api/{{ .KubeVipIP }}
+{{- else if .BastionIP }}
+address=/{{ .ClusterName }}-api/{{ .BastionIP }}
+{{- end }}
+{{- if .AppsIP }}
+address=/{{ .ClusterName }}-apps/{{ .AppsIP }}
+{{- end }}
+{{- if .UserAppsIP }}
+address=/{{ .ClusterName }}-router/{{ .UserAppsIP }}
+{{- end }}
+{{- range .MasterNodes }}
+{{- if .IP }}
+address=/{{ .Name }}/{{ .IP }}
+{{- end }}
+{{- end }}
+{{- range .WorkerNodes }}
+{{- if .IP }}
+address=/{{ .Name }}/{{ .IP }}
+{{- end }}
+{{- end }}

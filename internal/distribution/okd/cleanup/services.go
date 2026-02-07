@@ -1,0 +1,161 @@
+package cleanup
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"path/filepath"
+
+	"github.com/qxtaiba/okd-proxmox-cli/internal/logging"
+	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
+)
+
+// HAProxy stops and cleans up HAProxy service, configuration, and package.
+func HAProxy(ctx context.Context, haproxyConfig string, logger logging.Logger) error {
+	if logger != nil {
+		logger.Info("cleanup: haproxy service and configuration")
+	}
+
+	if system.IsServiceActive("haproxy") {
+		_ = system.ManageService(ctx, system.ServiceStop, "haproxy", "haproxy service")
+	} else if logger != nil {
+		logger.Info("cleanup: haproxy service not running")
+	}
+
+	if system.IsServiceEnabled("haproxy") {
+		_ = system.ManageService(ctx, system.ServiceDisable, "haproxy", "haproxy service")
+	} else if logger != nil {
+		logger.Info("cleanup: haproxy service not enabled")
+	}
+
+	_ = SafeRemoveWithLogger(ctx, haproxyConfig, "haproxy configuration file", logger)
+
+	backupPattern := haproxyConfig + ".backup.*"
+	backups, _ := filepath.Glob(backupPattern)
+	for _, backup := range backups {
+		_ = SafeRemoveWithLogger(ctx, backup, "haproxy backup configuration", logger)
+	}
+
+	if logger != nil {
+		logger.Info("cleanup: removing okd firewall rules")
+	}
+	if err := system.RemoveOKDFirewallRules(ctx, true); err != nil {
+		if logger != nil {
+			logger.Warn(fmt.Sprintf("cleanup: firewall rules incomplete: %v", err))
+		}
+	} else if logger != nil {
+		logger.Info("cleanup: firewall rules removed")
+	}
+
+	if err := system.RemovePackages(ctx, []string{"haproxy"}, logger); err != nil {
+		if logger != nil {
+			logger.Warn(fmt.Sprintf("cleanup: failed to remove haproxy package: %v", err))
+		}
+	}
+
+	if logger != nil {
+		logger.Info("cleanup: haproxy completed")
+	}
+
+	return nil
+}
+
+// Apache stops and cleans up Apache httpd service and package.
+func Apache(ctx context.Context, logger logging.Logger) error {
+	if logger != nil {
+		logger.Info("cleanup: apache httpd service")
+	}
+
+	if system.IsServiceActive("httpd") {
+		_ = system.ManageService(ctx, system.ServiceStop, "httpd", "httpd service")
+	} else if logger != nil {
+		logger.Info("cleanup: httpd service not running")
+	}
+
+	if system.IsServiceEnabled("httpd") {
+		_ = system.ManageService(ctx, system.ServiceDisable, "httpd", "httpd service")
+	} else if logger != nil {
+		logger.Info("cleanup: httpd service not enabled")
+	}
+
+	if err := system.RemovePackages(ctx, []string{"httpd"}, logger); err != nil {
+		if logger != nil {
+			logger.Warn(fmt.Sprintf("cleanup: failed to remove httpd package: %v", err))
+		}
+	}
+
+	if logger != nil {
+		logger.Info("cleanup: apache httpd completed")
+	}
+
+	return nil
+}
+
+// WebServer removes ignition files from the web server directory.
+func WebServer(ctx context.Context, httpServerRoot string, logger logging.Logger) error {
+	ignitionDir := filepath.Join(httpServerRoot, "ignition")
+
+	if _, err := os.Stat(ignitionDir); os.IsNotExist(err) {
+		return nil
+	}
+
+	ignitionFiles, err := filepath.Glob(filepath.Join(ignitionDir, "*.ign"))
+	if err != nil {
+		return err
+	}
+
+	if len(ignitionFiles) == 0 {
+		return nil
+	}
+
+	if logger != nil {
+		logger.Info(fmt.Sprintf("cleanup: removing %d ignition files from web server", len(ignitionFiles)))
+	}
+
+	for _, f := range ignitionFiles {
+		_ = SafeRemoveWithLogger(ctx, f, filepath.Base(f), nil) // best-effort cleanup, suppress individual file logs
+	}
+
+	return nil
+}
+
+// Dnsmasq stops dnsmasq, removes OKD DNS configuration, and removes the package.
+func Dnsmasq(ctx context.Context, clusterName string, logger logging.Logger) error {
+	if logger != nil {
+		logger.Info("cleanup: dnsmasq service and configuration")
+	}
+
+	if err := system.RestoreSystemResolver(ctx); err != nil && logger != nil {
+		logger.Warn(fmt.Sprintf("cleanup: failed to restore system resolver: %v", err))
+	}
+
+	if system.IsServiceActive("dnsmasq") {
+		_ = system.ManageService(ctx, system.ServiceStop, "dnsmasq", "dnsmasq service")
+	}
+	if system.IsServiceEnabled("dnsmasq") {
+		_ = system.ManageService(ctx, system.ServiceDisable, "dnsmasq", "dnsmasq service")
+	}
+
+	if clusterName != "" {
+		configPath := fmt.Sprintf("/etc/dnsmasq.d/okd-%s.conf", clusterName)
+		_ = system.RemoveAll(ctx, configPath, "dnsmasq okd config")
+	}
+
+	configPattern := "/etc/dnsmasq.d/okd-*.conf"
+	configs, _ := filepath.Glob(configPattern)
+	for _, cfg := range configs {
+		_ = system.RemoveAll(ctx, cfg, "dnsmasq okd config")
+	}
+
+	if err := system.RemovePackages(ctx, []string{"dnsmasq"}, logger); err != nil {
+		if logger != nil {
+			logger.Warn(fmt.Sprintf("cleanup: failed to remove dnsmasq package: %v", err))
+		}
+	}
+
+	if logger != nil {
+		logger.Info("cleanup: dnsmasq completed")
+	}
+
+	return nil
+}
