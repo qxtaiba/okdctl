@@ -4,6 +4,7 @@ package templates
 import (
 	"bytes"
 	"embed"
+	"io/fs"
 	"strconv"
 	"strings"
 	"text/template"
@@ -150,24 +151,19 @@ type KubeVIPRBACManifest struct {
 // Each resource is rendered separately because openshift-install only processes
 // the first YAML document per file.
 func RenderKubeVIPRBACManifests() ([]KubeVIPRBACManifest, error) {
-	files := []struct {
-		tmpl     string
-		filename string
-	}{
-		{"kube-vip-rbac-sa.yaml.tmpl", "99-kube-vip-rbac-sa.yaml"},
-		{"kube-vip-rbac-clusterrole.yaml.tmpl", "99-kube-vip-rbac-clusterrole.yaml"},
-		{"kube-vip-rbac-clusterrolebinding.yaml.tmpl", "99-kube-vip-rbac-clusterrolebinding.yaml"},
-		{"kube-vip-rbac-scc.yaml.tmpl", "99-kube-vip-rbac-scc.yaml"},
+	matches, err := fs.Glob(templateFS, "kube-vip-rbac-*.yaml.tmpl")
+	if err != nil {
+		return nil, err
 	}
 
 	var manifests []KubeVIPRBACManifest
-	for _, f := range files {
-		content, err := renderTemplate(f.tmpl, nil)
+	for _, tmpl := range matches {
+		content, err := renderTemplate(tmpl, nil)
 		if err != nil {
 			return nil, err
 		}
 		manifests = append(manifests, KubeVIPRBACManifest{
-			Filename: f.filename,
+			Filename: "99-" + strings.TrimSuffix(tmpl, ".tmpl"),
 			Content:  content,
 		})
 	}
