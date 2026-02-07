@@ -208,14 +208,16 @@ func (p *Phase) newGenerateKubeVIPManifestsStep(cfg *config.Config, opts Options
 				return utils.WrapError("failed to ensure openshift manifests directory", err)
 			}
 
-			// Render and write RBAC manifest
-			rbac, err := templates.RenderKubeVIPRBAC()
+			// Render and write RBAC manifests (one file per resource)
+			rbacManifests, err := templates.RenderKubeVIPRBACManifests()
 			if err != nil {
-				return utils.WrapError("failed to render kube-vip RBAC manifest", err)
+				return utils.WrapError("failed to render kube-vip RBAC manifests", err)
 			}
-			rbacPath := filepath.Join(openshiftDir, "99-kube-vip-rbac.yaml")
-			if err := system.AtomicWriteString(rbacPath, rbac, 0644); err != nil {
-				return utils.WrapError("failed to write kube-vip RBAC manifest", err)
+			for _, m := range rbacManifests {
+				path := filepath.Join(openshiftDir, m.Filename)
+				if err := system.AtomicWriteString(path, m.Content, 0644); err != nil {
+					return utils.WrapErrorf(err, "failed to write %s", m.Filename)
+				}
 			}
 
 			// Render and write DaemonSet manifest

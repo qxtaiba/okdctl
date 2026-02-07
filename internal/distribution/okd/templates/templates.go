@@ -140,9 +140,38 @@ func RenderDNSProductionConfig(data DNSConfigData) (string, error) {
 	return renderTemplate("dnsmasq-production.conf.tmpl", data)
 }
 
-// RenderKubeVIPRBAC generates the kube-vip RBAC manifest from template.
-func RenderKubeVIPRBAC() (string, error) {
-	return renderTemplate("kube-vip-rbac.yaml.tmpl", nil)
+// KubeVIPRBACManifest represents a single kube-vip RBAC manifest file.
+type KubeVIPRBACManifest struct {
+	Filename string
+	Content  string
+}
+
+// RenderKubeVIPRBACManifests generates individual kube-vip RBAC manifests.
+// Each resource is rendered separately because openshift-install only processes
+// the first YAML document per file.
+func RenderKubeVIPRBACManifests() ([]KubeVIPRBACManifest, error) {
+	files := []struct {
+		tmpl     string
+		filename string
+	}{
+		{"kube-vip-rbac-sa.yaml.tmpl", "99-kube-vip-rbac-sa.yaml"},
+		{"kube-vip-rbac-clusterrole.yaml.tmpl", "99-kube-vip-rbac-clusterrole.yaml"},
+		{"kube-vip-rbac-clusterrolebinding.yaml.tmpl", "99-kube-vip-rbac-clusterrolebinding.yaml"},
+		{"kube-vip-rbac-scc.yaml.tmpl", "99-kube-vip-rbac-scc.yaml"},
+	}
+
+	var manifests []KubeVIPRBACManifest
+	for _, f := range files {
+		content, err := renderTemplate(f.tmpl, nil)
+		if err != nil {
+			return nil, err
+		}
+		manifests = append(manifests, KubeVIPRBACManifest{
+			Filename: f.filename,
+			Content:  content,
+		})
+	}
+	return manifests, nil
 }
 
 // RenderKubeVIPDaemonSet generates the kube-vip DaemonSet manifest from template.
