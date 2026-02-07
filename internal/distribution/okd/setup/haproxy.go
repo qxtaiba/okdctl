@@ -32,9 +32,14 @@ func (p *Phase) BuildHAProxyConfigData(cfg *config.Config) (templates.HAProxyCon
 		}
 	}
 
-	// With no dedicated workers, masters handle ingress
+	var backupServers []templates.HAProxyServer
+
 	if len(workerServers) == 0 {
+		// With no dedicated workers, masters handle ingress directly
 		workerServers = masterServers
+	} else {
+		// Workers are configured but may not join; masters serve as backup for http/https
+		backupServers = masterServers
 	}
 
 	return templates.HAProxyConfigData{
@@ -42,6 +47,7 @@ func (p *Phase) BuildHAProxyConfigData(cfg *config.Config) (templates.HAProxyCon
 		BootstrapIP:   bootstrapIP,
 		MasterServers: masterServers,
 		WorkerServers: workerServers,
+		BackupServers: backupServers,
 	}, nil
 }
 

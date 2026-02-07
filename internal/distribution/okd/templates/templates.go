@@ -65,6 +65,7 @@ type HAProxyConfigData struct {
 	BootstrapIP   string
 	MasterServers []HAProxyServer
 	WorkerServers []HAProxyServer
+	BackupServers []HAProxyServer // masters as backup for http/https when workers are configured
 }
 
 // DNSNode represents a cluster node for DNS configuration.
@@ -102,6 +103,16 @@ type KubeVIPData struct {
 	VIPAddress string // Virtual IP address (e.g., "192.168.227.10")
 	Interface  string // Network interface for ARP announcements (e.g., "ens18")
 	ImageTag   string // Container image tag (e.g., "v1.0.4")
+}
+
+// CompactIngressData holds data for compact cluster IngressController generation.
+type CompactIngressData struct {
+	Replicas int
+}
+
+// RenderCompactIngress generates the IngressController manifest for compact clusters.
+func RenderCompactIngress(data CompactIngressData) (string, error) {
+	return renderTemplate("ingress-controller-compact.yaml.tmpl", data)
 }
 
 // RenderInstallConfig generates install-config.yaml from template.

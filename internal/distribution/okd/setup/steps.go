@@ -25,6 +25,7 @@ const (
 	StepGenerateManifests     distribution.StepID = "generate-manifests"
 	StepGenerateKubeVIP       distribution.StepID = "generate-kubevip-manifests"
 	StepInjectManifests       distribution.StepID = "inject-manifests"
+	StepCompactCluster        distribution.StepID = "compact-cluster-manifests"
 	StepGenerateIgnition  distribution.StepID = "generate-ignition"
 	StepInstallApache     distribution.StepID = "install-apache"
 	StepDeployIgnition    distribution.StepID = "deploy-ignition"
@@ -165,14 +166,14 @@ func (p *Phase) newGenerateInstallConfigStep(cfg *config.Config, opts Options) d
 // GENERATE MANIFESTS STEP
 // ═══════════════════════════════════════════════════════════════════════════════
 
-func (p *Phase) newGenerateManifestsStep(opts Options) distribution.ProvisioningStep {
+func (p *Phase) newGenerateManifestsStep(cfg *config.Config, opts Options) distribution.ProvisioningStep {
 	clusterDir := paths.ClusterConfigDir(opts.WorkDir)
 
 	return distribution.NewStepBuilder(StepGenerateManifests, "Generate Manifests").
 		Description("generating kubernetes manifests").
 		Fatal(true).
 		Execute(func(ctx context.Context) error {
-			if err := p.GenerateManifests(ctx, clusterDir); err != nil {
+			if err := p.GenerateManifests(ctx, clusterDir, cfg.Topology.Workers.Count); err != nil {
 				return utils.WrapError("failed to generate manifests", err)
 			}
 			p.LogInfo("manifests: kubernetes manifests generated and configured")
@@ -255,6 +256,28 @@ func (p *Phase) newInjectManifestsStep(opts Options) distribution.ProvisioningSt
 			if count > 0 {
 				p.LogInfo(fmt.Sprintf("manifests: injected %d custom manifest(s) from automation/config/manifests", count))
 			}
+			return nil
+		}).
+		MustBuild()
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// COMPACT CLUSTER MANIFESTS STEP
+// ═══════════════════════════════════════════════════════════════════════════════
+
+func (p *Phase) newCompactClusterManifestsStep(cfg *config.Config, opts Options) distribution.ProvisioningStep {
+	clusterDir := paths.ClusterConfigDir(opts.WorkDir)
+
+	return distribution.NewStepBuilder(StepCompactCluster, "Inject Compact Cluster Manifests").
+		Description("injecting ingress controller placement for compact cluster").
+		Fatal(true).
+		SkipWhen(func() bool { return cfg.Topology.Workers.Count > 0 }).
+		SkipReason("cluster has workers").
+		Execute(func(ctx context.Context) error {
+			if err := p.InjectCompactClusterManifests(ctx, clusterDir, cfg.Topology.Workers.Count, cfg.Topology.ControlPlane.Count); err != nil {
+				return utils.WrapError("failed to inject compact cluster manifests", err)
+			}
+			p.LogInfo("manifests: injected ingress controller master placement for compact cluster")
 			return nil
 		}).
 		MustBuild()
@@ -422,7 +445,7 @@ func (p *Phase) newConfigureHAProxyStep(cfg *config.Config, opts Options) distri
 func (p *Phase) newConfigureFirewallStep(opts Options) distribution.ProvisioningStep {
 	return distribution.NewStepBuilder(StepConfigureFirewall, "Configure Firewall").
 		Description("configuring firewall rules for OKD").
-		Fatal(false).
+		Fatal(true).
 		SkipWhen(func() bool { return opts.SkipFirewall }).
 		SkipReason("firewall configuration disabled").
 		Execute(func(ctx context.Context) error {
@@ -433,7 +456,7 @@ func (p *Phase) newConfigureFirewallStep(opts Options) distribution.Provisioning
 			return nil
 		}).
 		OnError(func(err error) {
-			p.LogWarn(fmt.Sprintf("firewall: configuration skipped: %v", err))
+			p.LogWarn(fmt.Sprintf("firewall: configuration failed: %v", err))
 		}).
 		MustBuild()
 }

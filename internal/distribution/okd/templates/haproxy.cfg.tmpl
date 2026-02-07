@@ -59,9 +59,11 @@ backend http-backend
     mode tcp
     balance source
 {{ range .WorkerServers }}    server {{ .Name }} {{ .IP }}:80 check inter 1s
+{{ end }}{{ range .BackupServers }}    server {{ .Name }}-backup {{ .IP }}:80 check inter 1s backup
 {{ end }}
 backend https-backend
     mode tcp
     balance source
 {{ range .WorkerServers }}    server {{ .Name }} {{ .IP }}:443 check inter 1s
+{{ end }}{{ range .BackupServers }}    server {{ .Name }}-backup {{ .IP }}:443 check inter 1s backup
 {{ end }}

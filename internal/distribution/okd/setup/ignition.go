@@ -68,7 +68,7 @@ func (p *Phase) GenerateInstallConfig(ctx context.Context, cfg *config.Config, o
 }
 
 // GenerateManifests runs openshift-install create manifests.
-func (p *Phase) GenerateManifests(ctx context.Context, clusterDir string) error {
+func (p *Phase) GenerateManifests(ctx context.Context, clusterDir string, workerCount int) error {
 	result, err := p.Exec.Run(ctx, "openshift-install", "create", "manifests", "--dir", clusterDir)
 	if err != nil {
 		return utils.WrapError("openshift-install create manifests failed", err)
@@ -84,12 +84,14 @@ func (p *Phase) GenerateManifests(ctx context.Context, clusterDir string) error 
 			return utils.WrapError("failed to read scheduler config", err)
 		}
 
-		newContent := strings.Replace(string(content), "mastersSchedulable: true", "mastersSchedulable: false", 1)
-		if newContent == string(content) {
-			p.LogWarn("manifests: mastersSchedulable setting not found in scheduler config")
-		}
-		if err := system.AtomicWriteString(schedulerConfig, newContent, 0644); err != nil {
-			return utils.WrapError("failed to write scheduler config", err)
+		if workerCount > 0 {
+			newContent := strings.Replace(string(content), "mastersSchedulable: true", "mastersSchedulable: false", 1)
+			if newContent == string(content) {
+				p.LogWarn("manifests: mastersSchedulable setting not found in scheduler config")
+			}
+			if err := system.AtomicWriteString(schedulerConfig, newContent, 0644); err != nil {
+				return utils.WrapError("failed to write scheduler config", err)
+			}
 		}
 	}
 
@@ -135,6 +137,31 @@ func (p *Phase) InjectCustomManifests(ctx context.Context, projectRoot, clusterD
 	}
 
 	return count, nil
+}
+
+func (p *Phase) InjectCompactClusterManifests(ctx context.Context, clusterDir string, workerCount, masterCount int) error {
+	if workerCount > 0 {
+		return nil
+	}
+
+	openshiftDir := filepath.Join(clusterDir, "openshift")
+	if err := system.EnsureDir(openshiftDir); err != nil {
+		return utils.WrapError("failed to ensure openshift manifests directory", err)
+	}
+
+	manifest, err := templates.RenderCompactIngress(templates.CompactIngressData{
+		Replicas: masterCount,
+	})
+	if err != nil {
+		return utils.WrapError("failed to render compact ingress manifest", err)
+	}
+
+	destPath := filepath.Join(openshiftDir, "99-ingress-controller-master-placement.yaml")
+	if err := system.AtomicWriteString(destPath, manifest, 0644); err != nil {
+		return utils.WrapError("failed to write compact cluster ingress manifest", err)
+	}
+
+	return nil
 }
 
 // GenerateIgnitionConfigs runs openshift-install create ignition-configs.
