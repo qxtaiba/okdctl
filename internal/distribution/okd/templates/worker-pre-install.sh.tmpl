@@ -39,7 +39,9 @@ INSTALLER_EOF
 # wipe data disk so stale partition labels don't confuse the installed system
 if [ -n "$DATA_DISK" ]; then
   echo "pre-install: wiping data disk $DATA_DISK"
-  sgdisk --zap-all "$DATA_DISK"
+  # sgdisk is not available on the SCOS live ISO; wipe GPT/MBR headers with dd
+  # and remove filesystem signatures with wipefs.
+  dd if=/dev/zero of="$DATA_DISK" bs=1M count=1 2>/dev/null
   wipefs --all "$DATA_DISK"
 else
   echo "WARNING: no disk with serial '$DATA_SERIAL' found, skipping wipe" >&2
