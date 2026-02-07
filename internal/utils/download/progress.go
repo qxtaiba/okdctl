@@ -79,7 +79,6 @@ func (pw *progressWriter) printProgress() {
 	writtenMB := float64(written) / 1024 / 1024
 	totalMB := float64(pw.total) / 1024 / 1024
 
-	// Create progress bar
 	percent := atomic.LoadInt32(&pw.lastPercent)
 	filled := int(float64(percent) / 100 * float64(ProgressBarWidth))
 	bar := strings.Repeat("=", filled) + strings.Repeat(" ", ProgressBarWidth-filled)

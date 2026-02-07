@@ -33,7 +33,6 @@ type ExtractOptions struct {
 
 // processTarEntry handles a single tar entry (dir, file, or symlink).
 func processTarEntry(tarReader *tar.Reader, header *tar.Header, destDir string, stripComponents int) error {
-	// Apply strip components
 	name := header.Name
 	if stripComponents > 0 {
 		parts := strings.Split(name, "/")
@@ -61,7 +60,6 @@ func processTarEntry(tarReader *tar.Reader, header *tar.Header, destDir string, 
 		}
 
 	case tar.TypeReg:
-		// Ensure parent directory exists
 		if err := os.MkdirAll(filepath.Dir(targetPath), 0755); err != nil {
 			return utils.WrapError("failed to create parent directory", err)
 		}
@@ -107,7 +105,6 @@ func processTarEntry(tarReader *tar.Reader, header *tar.Header, destDir string, 
 func ExtractTarGz(ctx context.Context, opts ExtractOptions) error {
 	filename := filepath.Base(opts.ArchivePath)
 
-	// Validate checksum if provided
 	if opts.ExpectedChecksum != "" {
 		utils.GetLogger().Info(fmt.Sprintf("download: validating sha256 checksum for %s", filename))
 
@@ -118,29 +115,24 @@ func ExtractTarGz(ctx context.Context, opts ExtractOptions) error {
 		utils.GetLogger().Info(fmt.Sprintf("download: checksum validated for %s", filename))
 	}
 
-	// Open the archive
 	file, err := os.Open(opts.ArchivePath)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = file.Close() }()
 
-	// Create gzip reader
 	gzipReader, err := gzip.NewReader(file)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = gzipReader.Close() }()
 
-	// Create tar reader
 	tarReader := tar.NewReader(gzipReader)
 
-	// Ensure destination directory exists
 	if err := os.MkdirAll(opts.DestDir, 0755); err != nil {
 		return utils.WrapError("failed to create destination directory", err)
 	}
 
-	// Extract files
 	for {
 		select {
 		case <-ctx.Done():
@@ -161,7 +153,6 @@ func ExtractTarGz(ctx context.Context, opts ExtractOptions) error {
 		}
 	}
 
-	// Cleanup archive if requested
 	if opts.CleanupArchive {
 		if err := os.Remove(opts.ArchivePath); err != nil {
 			utils.GetLogger().Warn(fmt.Sprintf("download: failed to cleanup archive %s", filename))

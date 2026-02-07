@@ -52,13 +52,11 @@ func CopyFile(src, dst string) error {
 	}
 	defer func() { _ = sourceFile.Close() }()
 
-	// Get source file info for permissions
 	sourceInfo, err := sourceFile.Stat()
 	if err != nil {
 		return utils.WrapError("failed to stat source file", err)
 	}
 
-	// Ensure destination directory exists
 	if err := EnsureDirForFile(dst); err != nil {
 		return utils.WrapError("failed to create destination directory", err)
 	}
@@ -81,12 +79,10 @@ func CopyFile(src, dst string) error {
 		return utils.WrapError("failed to copy file contents", err)
 	}
 
-	// Sync to ensure data is flushed to disk
 	if err := destFile.Sync(); err != nil {
 		return utils.WrapError("failed to sync destination file", err)
 	}
 
-	// Preserve permissions
 	if err := os.Chmod(dst, sourceInfo.Mode()); err != nil {
 		return utils.WrapError("failed to set file permissions", err)
 	}
@@ -120,12 +116,10 @@ func ExpandPath(path string) string {
 // The temp file is created in the same directory as the target to ensure
 // the rename operation is atomic (same filesystem).
 func AtomicWrite(path string, data []byte, perm os.FileMode) error {
-	// Ensure parent directory exists
 	if err := EnsureDirForFile(path); err != nil {
 		return fmt.Errorf("failed to create directory: %w", err)
 	}
 
-	// Create temp file in same directory for atomic rename
 	dir := filepath.Dir(path)
 	tmpFile, err := os.CreateTemp(dir, ".tmp-*")
 	if err != nil {
@@ -141,7 +135,6 @@ func AtomicWrite(path string, data []byte, perm os.FileMode) error {
 		}
 	}()
 
-	// Write data
 	if _, err := tmpFile.Write(data); err != nil {
 		_ = tmpFile.Close()
 		return fmt.Errorf("failed to write data: %w", err)
@@ -157,12 +150,10 @@ func AtomicWrite(path string, data []byte, perm os.FileMode) error {
 		return fmt.Errorf("failed to close temp file: %w", err)
 	}
 
-	// Set permissions before rename
 	if err := os.Chmod(tmpPath, perm); err != nil {
 		return fmt.Errorf("failed to set permissions: %w", err)
 	}
 
-	// Atomic rename
 	if err := os.Rename(tmpPath, path); err != nil {
 		return fmt.Errorf("failed to rename temp file: %w", err)
 	}

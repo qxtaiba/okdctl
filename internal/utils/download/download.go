@@ -90,7 +90,6 @@ func Download(ctx context.Context, opts Options) error {
 		opts.Description = filepath.Base(opts.OutputPath)
 	}
 
-	// Check if we can skip the download
 	if !opts.Overwrite {
 		skip, err := canSkipDownload(opts)
 		if err != nil {
@@ -101,7 +100,6 @@ func Download(ctx context.Context, opts Options) error {
 		}
 	}
 
-	// Ensure output directory exists
 	if err := os.MkdirAll(filepath.Dir(opts.OutputPath), 0755); err != nil {
 		return utils.WrapError("failed to create output directory", err)
 	}
@@ -109,16 +107,13 @@ func Download(ctx context.Context, opts Options) error {
 	filename := filepath.Base(opts.OutputPath)
 	utils.GetLogger().Info(fmt.Sprintf("download: %s", filename))
 
-	// Create HTTP client with timeout
 	client := system.NewClient(system.WithTimeout(opts.Timeout))
 
-	// Create request with context
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, opts.URL, nil)
 	if err != nil {
 		return err
 	}
 
-	// Execute request
 	resp, err := client.Do(req)
 	if err != nil {
 		return utils.WrapErrorf(err, "download failed for %s", opts.Description)
@@ -129,14 +124,12 @@ func Download(ctx context.Context, opts Options) error {
 		return fmt.Errorf("download failed for %s: HTTP %d", opts.Description, resp.StatusCode)
 	}
 
-	// Create output file
 	outFile, err := os.Create(opts.OutputPath)
 	if err != nil {
 		return utils.WrapError("failed to create output file", err)
 	}
 	defer func() { _ = outFile.Close() }()
 
-	// Copy with progress tracking
 	pw := &progressWriter{
 		writer: outFile,
 		total:  resp.ContentLength,
@@ -155,6 +148,5 @@ func Download(ctx context.Context, opts Options) error {
 	// Close file before checksum verification
 	_ = outFile.Close()
 
-	// Verify checksum if provided
 	return verifyDownloadedFile(opts.OutputPath, opts.ExpectedChecksum)
 }

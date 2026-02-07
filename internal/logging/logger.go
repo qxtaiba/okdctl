@@ -7,7 +7,6 @@ import "context"
 // It provides both basic logging methods and context-aware variants for request
 // tracing and cancellation awareness.
 type Logger interface {
-	// Basic logging methods
 	Debug(msg string)
 	Info(msg string)
 	Warn(msg string)

@@ -36,7 +36,6 @@ module "okd_cluster" {
   cpu_cores = var.cpu_cores
   memory_mb = var.memory_mb
 
-  # optional: different resources per node type
   bootstrap_cpu_cores = var.bootstrap_cpu_cores
   bootstrap_memory_mb = var.bootstrap_memory_mb
   master_cpu_cores    = var.master_cpu_cores
@@ -67,6 +66,5 @@ module "okd_cluster" {
   additional_networks = var.additional_networks
   numa_enabled        = var.numa_enabled
 
-  # worker start control - set to true after bootstrap completes
   start_workers_immediately = var.start_workers_immediately
 }

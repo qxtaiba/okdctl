@@ -122,7 +122,6 @@ variable "memory_mb" {
   default     = 16384
 }
 
-# optional: different resources per node type
 variable "bootstrap_cpu_cores" {
   description = "cpu cores for bootstrap node (defaults to cpu_cores if not set)"
   type        = number
