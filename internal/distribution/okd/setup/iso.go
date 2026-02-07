@@ -8,6 +8,7 @@ import (
 
 	"github.com/qxtaiba/okd-proxmox-cli/internal/config"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/paths"
+	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/templates"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/executor"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
@@ -52,14 +53,14 @@ func (p *Phase) BuildCustomISOs(ctx context.Context, cfg *config.Config, opts Op
 	return nil
 }
 
-// writePreInstallScript writes the worker pre-install script to a temp file.
-func writePreInstallScript() (string, error) {
+// writePreInstallScript writes the rendered pre-install script to a temp file.
+func writePreInstallScript(script string) (string, error) {
 	f, err := os.CreateTemp("", "pre-install-*.sh")
 	if err != nil {
 		return "", fmt.Errorf("failed to create pre-install script: %w", err)
 	}
 
-	if _, err := f.WriteString(WorkerPreInstallScript()); err != nil {
+	if _, err := f.WriteString(script); err != nil {
 		_ = f.Close()
 		_ = os.Remove(f.Name())
 		return "", fmt.Errorf("failed to write pre-install script: %w", err)
@@ -110,7 +111,14 @@ func (p *Phase) buildNodeISO(ctx context.Context, cfg *config.Config, node NodeI
 	case "worker":
 		// workers have two disks — use a pre-install script that discovers the
 		// OS disk by serial via lsblk and wipes the data disk.
-		scriptPath, err := writePreInstallScript()
+		script, err := templates.RenderWorkerPreInstall(templates.WorkerPreInstallData{
+			OSSerial:   "OS-DISK",
+			DataSerial: "CEPH-DATA",
+		})
+		if err != nil {
+			return err
+		}
+		scriptPath, err := writePreInstallScript(script)
 		if err != nil {
 			return err
 		}

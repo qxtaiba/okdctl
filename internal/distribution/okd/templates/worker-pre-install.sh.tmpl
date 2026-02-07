@@ -4,8 +4,8 @@ set -euo pipefail
 # Disk serials assigned in terraform (proxmox-okd/main.tf).
 # If either serial is missing the VM is misconfigured — fail loudly
 # so coreos-installer aborts rather than silently wiping the wrong disk.
-OS_SERIAL="OS-DISK"
-DATA_SERIAL="CEPH-DATA"
+OS_SERIAL="{{ .OSSerial }}"
+DATA_SERIAL="{{ .DataSerial }}"
 OS_DISK=""
 DATA_DISK=""
 
@@ -24,9 +24,11 @@ if [ -z "$OS_DISK" ]; then
   exit 1
 fi
 
-# write dest-device for coreos-installer
+# write dest-device for coreos-installer (YAML format required by --config-file)
 mkdir -p /etc/coreos/installer.d
-echo "--dest-device ${OS_DISK}" > /etc/coreos/installer.d/50-dest-device.conf
+cat > /etc/coreos/installer.d/50-dest-device.yaml <<INSTALLER_EOF
+dest-device: ${OS_DISK}
+INSTALLER_EOF
 
 # wipe data disk so stale partition labels don't confuse the installed system
 if [ -n "$DATA_DISK" ]; then

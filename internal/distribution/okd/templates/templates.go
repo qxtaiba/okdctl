@@ -106,6 +106,17 @@ type KubeVIPData struct {
 	ImageTag   string // Container image tag (e.g., "v1.0.4")
 }
 
+// WorkerPreInstallData holds data for worker pre-install script generation.
+type WorkerPreInstallData struct {
+	OSSerial   string
+	DataSerial string
+}
+
+// RenderWorkerPreInstall generates the worker pre-install script from template.
+func RenderWorkerPreInstall(data WorkerPreInstallData) (string, error) {
+	return renderTemplate("worker-pre-install.sh.tmpl", data)
+}
+
 // CompactIngressData holds data for compact cluster IngressController generation.
 type CompactIngressData struct {
 	Replicas int

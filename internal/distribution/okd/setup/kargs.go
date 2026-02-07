@@ -1,14 +1,10 @@
 package setup
 
 import (
-	_ "embed"
 	"fmt"
 
 	"github.com/qxtaiba/okd-proxmox-cli/internal/config"
 )
-
-//go:embed worker-pre-install.sh
-var workerPreInstallScript string
 
 // LiveKargsParams holds parameters for building live-session kernel arguments.
 type LiveKargsParams struct {
@@ -27,13 +23,6 @@ func BuildLiveKargs(params LiveKargsParams) []string {
 		fmt.Sprintf("ip=%s::%s:%s::%s:none", params.NodeIP, params.Gateway, params.Netmask, params.Interface),
 		fmt.Sprintf("nameserver=%s", params.DNS),
 	}
-}
-
-// WorkerPreInstallScript returns the embedded pre-install script for worker nodes.
-// The script discovers the OS disk and data disk by serial number using lsblk,
-// writes the OS disk as --dest-device to /etc/coreos/installer.d/, and wipes the data disk.
-func WorkerPreInstallScript() string {
-	return workerPreInstallScript
 }
 
 // ExtractNetworkConfig extracts network configuration from config.
