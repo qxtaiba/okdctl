@@ -18,15 +18,23 @@ for dev in /dev/sd?; do
 done
 
 # fallback: if only one disk found by serial, the other is the remaining /dev/sd?
-all_disks=( /dev/sd? )
+all_disks=()
+for dev in /dev/sd?; do
+  [ -b "$dev" ] && all_disks+=("$dev")
+done
+
 if [ -z "$OS_DISK" ] && [ -n "$DATA_DISK" ] && [ "${#all_disks[@]}" -eq 2 ]; then
   for dev in "${all_disks[@]}"; do
-    [ "$dev" != "$DATA_DISK" ] && OS_DISK="$dev"
+    if [ "$dev" != "$DATA_DISK" ]; then
+      OS_DISK="$dev"
+    fi
   done
 fi
 if [ -z "$DATA_DISK" ] && [ -n "$OS_DISK" ] && [ "${#all_disks[@]}" -eq 2 ]; then
   for dev in "${all_disks[@]}"; do
-    [ "$dev" != "$OS_DISK" ] && DATA_DISK="$dev"
+    if [ "$dev" != "$OS_DISK" ]; then
+      DATA_DISK="$dev"
+    fi
   done
 fi
 
