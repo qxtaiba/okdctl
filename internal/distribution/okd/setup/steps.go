@@ -8,6 +8,7 @@ import (
 	"github.com/qxtaiba/okd-proxmox-cli/internal/config"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/paths"
+	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/templates"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/executor"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/netutil"
@@ -21,8 +22,9 @@ const (
 	StepEnsureWorkDir     distribution.StepID = "ensure-workdir"
 	StepDownloadTools     distribution.StepID = "download-tools"
 	StepGenerateConfig    distribution.StepID = "generate-config"
-	StepGenerateManifests distribution.StepID = "generate-manifests"
-	StepInjectManifests   distribution.StepID = "inject-manifests"
+	StepGenerateManifests     distribution.StepID = "generate-manifests"
+	StepGenerateKubeVIP       distribution.StepID = "generate-kubevip-manifests"
+	StepInjectManifests       distribution.StepID = "inject-manifests"
 	StepGenerateIgnition  distribution.StepID = "generate-ignition"
 	StepInstallApache     distribution.StepID = "install-apache"
 	StepDeployIgnition    distribution.StepID = "deploy-ignition"
@@ -174,6 +176,62 @@ func (p *Phase) newGenerateManifestsStep(opts Options) distribution.Provisioning
 				return utils.WrapError("failed to generate manifests", err)
 			}
 			p.LogInfo("manifests: kubernetes manifests generated and configured")
+			return nil
+		}).
+		MustBuild()
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// GENERATE KUBE-VIP MANIFESTS STEP
+// ═══════════════════════════════════════════════════════════════════════════════
+
+func (p *Phase) newGenerateKubeVIPManifestsStep(cfg *config.Config, opts Options) distribution.ProvisioningStep {
+	clusterDir := paths.ClusterConfigDir(opts.WorkDir)
+
+	return distribution.NewStepBuilder(StepGenerateKubeVIP, "Generate Kube-VIP Manifests").
+		Description("generating kube-vip RBAC and DaemonSet manifests for VIP management").
+		Fatal(true).
+		Execute(func(ctx context.Context) error {
+			vip := netutil.DeriveVIPFromStaticIP(cfg.Networking.StaticIP.Start)
+			if vip == "" {
+				return fmt.Errorf("failed to derive VIP from static IP start: %s", cfg.Networking.StaticIP.Start)
+			}
+
+			iface := cfg.Networking.StaticIP.Interface
+			if iface == "" {
+				iface = "ens18" // default virtio interface on Proxmox VMs
+			}
+
+			openshiftDir := filepath.Join(clusterDir, "openshift")
+			if err := system.EnsureDir(openshiftDir); err != nil {
+				return utils.WrapError("failed to ensure openshift manifests directory", err)
+			}
+
+			// Render and write RBAC manifest
+			rbac, err := templates.RenderKubeVIPRBAC()
+			if err != nil {
+				return utils.WrapError("failed to render kube-vip RBAC manifest", err)
+			}
+			rbacPath := filepath.Join(openshiftDir, "99-kube-vip-rbac.yaml")
+			if err := system.AtomicWriteString(rbacPath, rbac, 0644); err != nil {
+				return utils.WrapError("failed to write kube-vip RBAC manifest", err)
+			}
+
+			// Render and write DaemonSet manifest
+			ds, err := templates.RenderKubeVIPDaemonSet(templates.KubeVIPData{
+				VIPAddress: vip,
+				Interface:  iface,
+			})
+			if err != nil {
+				return utils.WrapError("failed to render kube-vip DaemonSet manifest", err)
+			}
+			dsPath := filepath.Join(openshiftDir, "99-kube-vip-daemonset.yaml")
+			if err := system.AtomicWriteString(dsPath, ds, 0644); err != nil {
+				return utils.WrapError("failed to write kube-vip DaemonSet manifest", err)
+			}
+
+			p.LogInfo(fmt.Sprintf("kubevip: manifests generated (vip=%s, interface=%s, image=ghcr.io/kube-vip/kube-vip:%s)",
+				vip, iface, templates.DefaultKubeVIPImageTag))
 			return nil
 		}).
 		MustBuild()

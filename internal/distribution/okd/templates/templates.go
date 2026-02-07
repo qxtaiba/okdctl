@@ -94,6 +94,16 @@ type DNSConfigData struct {
 	WorkerNodes   []DNSNode // Worker nodes
 }
 
+// DefaultKubeVIPImageTag is the default kube-vip container image tag.
+const DefaultKubeVIPImageTag = "v1.0.4"
+
+// KubeVIPData holds data for kube-vip manifest generation.
+type KubeVIPData struct {
+	VIPAddress string // Virtual IP address (e.g., "192.168.227.10")
+	Interface  string // Network interface for ARP announcements (e.g., "ens18")
+	ImageTag   string // Container image tag (e.g., "v1.0.4")
+}
+
 // RenderInstallConfig generates install-config.yaml from template.
 func RenderInstallConfig(data InstallConfigData) (string, error) {
 	return renderTemplate("install-config.yaml.tmpl", data)
@@ -117,6 +127,19 @@ func RenderDNSBootstrapConfig(data DNSConfigData) (string, error) {
 // RenderDNSProductionConfig generates dnsmasq-production.conf from template.
 func RenderDNSProductionConfig(data DNSConfigData) (string, error) {
 	return renderTemplate("dnsmasq-production.conf.tmpl", data)
+}
+
+// RenderKubeVIPRBAC generates the kube-vip RBAC manifest from template.
+func RenderKubeVIPRBAC() (string, error) {
+	return renderTemplate("kube-vip-rbac.yaml.tmpl", nil)
+}
+
+// RenderKubeVIPDaemonSet generates the kube-vip DaemonSet manifest from template.
+func RenderKubeVIPDaemonSet(data KubeVIPData) (string, error) {
+	if data.ImageTag == "" {
+		data.ImageTag = DefaultKubeVIPImageTag
+	}
+	return renderTemplate("kube-vip-daemonset.yaml.tmpl", data)
 }
 
 // templateFuncs provides custom functions for templates.
