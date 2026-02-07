@@ -52,14 +52,14 @@ func (p *Phase) BuildCustomISOs(ctx context.Context, cfg *config.Config, opts Op
 	return nil
 }
 
-// writePreInstallScript writes the data disk wipe script to a temp file.
+// writePreInstallScript writes the worker pre-install script to a temp file.
 func writePreInstallScript() (string, error) {
 	f, err := os.CreateTemp("", "pre-install-*.sh")
 	if err != nil {
 		return "", fmt.Errorf("failed to create pre-install script: %w", err)
 	}
 
-	if _, err := f.WriteString(BuildDataDiskWipeScript()); err != nil {
+	if _, err := f.WriteString(BuildWorkerPreInstallScript()); err != nil {
 		_ = f.Close()
 		_ = os.Remove(f.Name())
 		return "", fmt.Errorf("failed to write pre-install script: %w", err)
@@ -101,19 +101,24 @@ func (p *Phase) buildNodeISO(ctx context.Context, cfg *config.Config, node NodeI
 		IgnitionURL: ignitionURL,
 	})
 
-	args := []string{"iso", "customize", "--dest-device", OSDiskByID}
+	args := []string{"iso", "customize"}
 	for _, karg := range kargs {
 		args = append(args, "--live-karg-append", karg)
 	}
 
-	// wipe stale partition labels from data disk before install (workers only)
-	if node.Role == "worker" {
+	switch node.Role {
+	case "worker":
+		// workers have two disks — use a pre-install script that discovers the
+		// OS disk by serial via lsblk and wipes the data disk.
 		scriptPath, err := writePreInstallScript()
 		if err != nil {
 			return err
 		}
 		defer func() { _ = os.Remove(scriptPath) }()
 		args = append(args, "--pre-install", scriptPath)
+	default:
+		// bootstrap and master VMs have a single disk; /dev/sda is always correct.
+		args = append(args, "--live-karg-append", "coreos.inst.install_dev=/dev/sda")
 	}
 
 	args = append(args, "-o", outputPath, fcosISO)

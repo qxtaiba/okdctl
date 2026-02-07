@@ -7,11 +7,11 @@ import (
 )
 
 const (
-	// OSDiskByID is the stable by-id path for the OS disk (serial set in terraform).
-	OSDiskByID = "/dev/disk/by-id/scsi-0QEMU_QEMU_HARDDISK_OS-DISK"
+	// OSDiskSerial is the disk serial assigned to the OS disk in terraform.
+	OSDiskSerial = "OS-DISK"
 
-	// DataDiskByID is the stable by-id path for the data disk (serial set in terraform).
-	DataDiskByID = "/dev/disk/by-id/scsi-0QEMU_QEMU_HARDDISK_CEPH-DATA"
+	// DataDiskSerial is the disk serial assigned to the data disk in terraform.
+	DataDiskSerial = "CEPH-DATA"
 )
 
 // LiveKargsParams holds parameters for building live-session kernel arguments.
@@ -33,16 +33,58 @@ func BuildLiveKargs(params LiveKargsParams) []string {
 	}
 }
 
-// BuildDataDiskWipeScript returns a shell script that wipes stale partition labels
-// from the data disk before CoreOS installation.
-func BuildDataDiskWipeScript() string {
+// BuildWorkerPreInstallScript returns a shell script that runs before coreos-installer
+// on worker nodes. It discovers the OS disk and data disk by serial number using lsblk,
+// writes the OS disk as --dest-device to /etc/coreos/installer.d/, and wipes the data disk.
+func BuildWorkerPreInstallScript() string {
 	return fmt.Sprintf(`#!/bin/bash
 set -euo pipefail
-if [ -b "%s" ]; then
-  sgdisk --zap-all "%s"
-  wipefs --all "%s"
+
+OS_SERIAL="%s"
+DATA_SERIAL="%s"
+OS_DISK=""
+DATA_DISK=""
+
+# discover disks by serial number
+for dev in /dev/sd?; do
+  [ -b "$dev" ] || continue
+  serial=$(lsblk -ndo SERIAL "$dev" 2>/dev/null) || continue
+  case "$serial" in
+    "$OS_SERIAL")   OS_DISK="$dev" ;;
+    "$DATA_SERIAL") DATA_DISK="$dev" ;;
+  esac
+done
+
+# fallback: if only one disk found by serial, the other is the remaining /dev/sd?
+all_disks=( /dev/sd? )
+if [ -z "$OS_DISK" ] && [ -n "$DATA_DISK" ] && [ "${#all_disks[@]}" -eq 2 ]; then
+  for dev in "${all_disks[@]}"; do
+    [ "$dev" != "$DATA_DISK" ] && OS_DISK="$dev"
+  done
 fi
-`, DataDiskByID, DataDiskByID, DataDiskByID)
+if [ -z "$DATA_DISK" ] && [ -n "$OS_DISK" ] && [ "${#all_disks[@]}" -eq 2 ]; then
+  for dev in "${all_disks[@]}"; do
+    [ "$dev" != "$OS_DISK" ] && DATA_DISK="$dev"
+  done
+fi
+
+# last resort: single-disk VM, use it as OS disk
+if [ -z "$OS_DISK" ] && [ -z "$DATA_DISK" ] && [ "${#all_disks[@]}" -eq 1 ]; then
+  OS_DISK="${all_disks[0]}"
+fi
+
+# write dest-device for coreos-installer
+if [ -n "$OS_DISK" ]; then
+  mkdir -p /etc/coreos/installer.d
+  echo "--dest-device ${OS_DISK}" > /etc/coreos/installer.d/50-dest-device.conf
+fi
+
+# wipe data disk so stale partition labels don't confuse the installed system
+if [ -n "$DATA_DISK" ]; then
+  sgdisk --zap-all "$DATA_DISK"
+  wipefs --all "$DATA_DISK"
+fi
+`, OSDiskSerial, DataDiskSerial)
 }
 
 // ExtractNetworkConfig extracts network configuration from config.
