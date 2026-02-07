@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/qxtaiba/okd-proxmox-cli/internal/config"
@@ -78,20 +79,18 @@ func (p *Phase) GenerateManifests(ctx context.Context, clusterDir string, worker
 	}
 
 	schedulerConfig := filepath.Join(clusterDir, "manifests", "cluster-scheduler-02-config.yml")
-	if system.FileExists(schedulerConfig) {
+	if system.FileExists(schedulerConfig) && workerCount > 0 {
 		content, err := os.ReadFile(schedulerConfig)
 		if err != nil {
 			return utils.WrapError("failed to read scheduler config", err)
 		}
 
-		if workerCount > 0 {
-			newContent := strings.Replace(string(content), "mastersSchedulable: true", "mastersSchedulable: false", 1)
-			if newContent == string(content) {
-				p.LogWarn("manifests: mastersSchedulable setting not found in scheduler config")
-			}
-			if err := system.AtomicWriteString(schedulerConfig, newContent, 0644); err != nil {
-				return utils.WrapError("failed to write scheduler config", err)
-			}
+		newContent := mastersSchedulableRe.ReplaceAllString(string(content), "${1}false")
+		if newContent == string(content) {
+			p.LogWarn("manifests: mastersSchedulable setting not found in scheduler config")
+		}
+		if err := system.AtomicWriteString(schedulerConfig, newContent, 0644); err != nil {
+			return utils.WrapError("failed to write scheduler config", err)
 		}
 	}
 
@@ -163,6 +162,8 @@ func (p *Phase) InjectCompactClusterManifests(ctx context.Context, clusterDir st
 
 	return nil
 }
+
+var mastersSchedulableRe = regexp.MustCompile(`(mastersSchedulable:\s*)true`)
 
 // GenerateIgnitionConfigs runs openshift-install create ignition-configs.
 func (p *Phase) GenerateIgnitionConfigs(ctx context.Context, clusterDir string) error {
