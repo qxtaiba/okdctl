@@ -120,7 +120,6 @@ func (p *Phase) Execute(ctx context.Context, cfg *config.Config, opts Options) e
 		p.newUploadISOsStep(cfg, opts),
 		p.newGenerateTfvarsStep(cfg, opts),
 		p.newConfigureHAProxyStep(cfg, opts),
-		p.newConfigureBastionVIPStep(cfg, opts), // Assign VIP to bastion for bootstrap
 		p.newConfigureFirewallStep(opts),
 		p.newConfigureDNSStep(cfg, opts),
 	)

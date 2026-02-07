@@ -8,14 +8,11 @@ import (
 	"github.com/qxtaiba/okd-proxmox-cli/internal/config"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/netutil"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
 )
 
 const (
 	StepVerifyHealth        distribution.StepID = "verify-health"
 	StepVerifyKubeVIP       distribution.StepID = "verify-kubevip"
-	StepRemoveBastionVIP    distribution.StepID = "remove-bastion-vip"
 	StepRemoveHAProxy       distribution.StepID = "remove-haproxy"
 	StepInstallAddons       distribution.StepID = "install-addons"
 	StepDeployProductionDNS distribution.StepID = "deploy-production-dns"
@@ -76,48 +73,6 @@ func (p *Phase) NewVerifyKubeVIPStep(cfg *config.Config, opts Options, pctx *dis
 				c.KubeVipIP = kubeVipIP
 			})
 			p.LogInfo(fmt.Sprintf("kubevip: vip %s is responding on port 6443", kubeVipIP))
-			return nil
-		}).
-		MustBuild()
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// REMOVE BASTION VIP STEP
-// ═══════════════════════════════════════════════════════════════════════════════
-
-// NewRemoveBastionVIPStep creates a step that removes the VIP from the bastion's
-// network interface after kube-vip has taken over. This is cleanup - kube-vip
-// already owns the VIP via ARP at this point.
-func (p *Phase) NewRemoveBastionVIPStep(cfg *config.Config, opts Options, pctx *distribution.PhaseContext[PostInstallContext]) distribution.ProvisioningStep {
-	return distribution.NewStepBuilder(StepRemoveBastionVIP, "Remove Bastion VIP").
-		Description("removing vip from bastion interface").
-		Fatal(false).
-		SkipWhen(func() bool {
-			// Skip if kube-vip wasn't verified - bastion still needs the VIP
-			return !pctx.Get().KubeVIPVerified
-		}).
-		SkipReason("kube-vip not verified - keeping VIP on bastion").
-		OnError(func(err error) {
-			p.LogWarn(fmt.Sprintf("kubevip: bastion cleanup failed (non-fatal): %v", err))
-		}).
-		Execute(func(ctx context.Context) error {
-			vip := netutil.DeriveVIPFromStaticIP(cfg.Networking.StaticIP.Start)
-			if vip == "" {
-				return fmt.Errorf("failed to derive VIP from static IP start: %s", cfg.Networking.StaticIP.Start)
-			}
-
-			// Detect bastion's actual interface (may differ from VM interface name in config)
-			iface, err := system.GetDefaultInterface(ctx)
-			if err != nil {
-				return utils.WrapError("failed to detect network interface", err)
-			}
-
-			p.LogInfo(fmt.Sprintf("kubevip: removing %s from bastion interface %s", vip, iface))
-			if err := system.RemoveSecondaryIP(ctx, vip, iface); err != nil {
-				return utils.WrapError("failed to remove VIP from interface", err)
-			}
-
-			p.LogInfo("kubevip: bastion vip removed (kube-vip now owns the vip)")
 			return nil
 		}).
 		MustBuild()
