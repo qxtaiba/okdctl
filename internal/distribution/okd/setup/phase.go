@@ -108,7 +108,7 @@ func (p *Phase) Execute(ctx context.Context, cfg *config.Config, opts Options) e
 		p.newEnsureWorkDirStep(opts),
 		p.newDownloadToolsStep(cfg, opts),
 		p.newGenerateInstallConfigStep(cfg, opts),
-		p.newGenerateManifestsStep(cfg, opts),
+		p.newGenerateManifestsStep(opts),
 		p.newGenerateKubeVIPManifestsStep(cfg, opts),
 		p.newInjectManifestsStep(opts),
 		p.newCompactClusterManifestsStep(cfg, opts),

@@ -166,17 +166,17 @@ func (p *Phase) newGenerateInstallConfigStep(cfg *config.Config, opts Options) d
 // GENERATE MANIFESTS STEP
 // ═══════════════════════════════════════════════════════════════════════════════
 
-func (p *Phase) newGenerateManifestsStep(cfg *config.Config, opts Options) distribution.ProvisioningStep {
+func (p *Phase) newGenerateManifestsStep(opts Options) distribution.ProvisioningStep {
 	clusterDir := paths.ClusterConfigDir(opts.WorkDir)
 
 	return distribution.NewStepBuilder(StepGenerateManifests, "Generate Manifests").
 		Description("generating kubernetes manifests").
 		Fatal(true).
 		Execute(func(ctx context.Context) error {
-			if err := p.GenerateManifests(ctx, clusterDir, cfg.Topology.Workers.Count); err != nil {
+			if err := p.GenerateManifests(ctx, clusterDir); err != nil {
 				return utils.WrapError("failed to generate manifests", err)
 			}
-			p.LogInfo("manifests: kubernetes manifests generated and configured")
+			p.LogInfo("manifests: kubernetes manifests generated")
 			return nil
 		}).
 		MustBuild()
