@@ -80,6 +80,7 @@ resource "proxmox_virtual_environment_vm" "bootstrap" {
     iothread     = true
     ssd          = false
     discard      = "on"
+    serial       = "OS-DISK"
   }
 
   # iso mount
@@ -194,6 +195,7 @@ resource "proxmox_virtual_environment_vm" "master" {
     iothread     = true
     ssd          = false
     discard      = "on"
+    serial       = "OS-DISK"
   }
 
   # iso mount
@@ -314,6 +316,7 @@ resource "proxmox_virtual_environment_vm" "worker" {
     iothread     = true
     ssd          = false
     discard      = "on"
+    serial       = "OS-DISK"
   }
 
   # data disk (ceph osd)

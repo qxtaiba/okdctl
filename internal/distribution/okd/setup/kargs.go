@@ -6,30 +6,43 @@ import (
 	"github.com/qxtaiba/okd-proxmox-cli/internal/config"
 )
 
-// KernelArgsParams holds parameters for building CoreOS kernel arguments.
-type KernelArgsParams struct {
+const (
+	// OSDiskByID is the stable by-id path for the OS disk (serial set in terraform).
+	OSDiskByID = "/dev/disk/by-id/scsi-0QEMU_QEMU_HARDDISK_OS-DISK"
+
+	// DataDiskByID is the stable by-id path for the data disk (serial set in terraform).
+	DataDiskByID = "/dev/disk/by-id/scsi-0QEMU_QEMU_HARDDISK_CEPH-DATA"
+)
+
+// LiveKargsParams holds parameters for building live-session kernel arguments.
+type LiveKargsParams struct {
 	NodeIP      string
 	Gateway     string
 	Netmask     string
 	DNS         string
 	Interface   string
 	IgnitionURL string
-	InstallDev  string
 }
 
-// BuildKernelArgs constructs the kernel arguments for CoreOS installation.
-func BuildKernelArgs(params KernelArgsParams) []string {
-	installDev := params.InstallDev
-	if installDev == "" {
-		installDev = "/dev/sda"
-	}
-
+// BuildLiveKargs constructs the live-session kernel arguments for ISO customization.
+func BuildLiveKargs(params LiveKargsParams) []string {
 	return []string{
-		fmt.Sprintf("coreos.inst.install_dev=%s", installDev),
 		fmt.Sprintf("coreos.inst.ignition_url=%s", params.IgnitionURL),
 		fmt.Sprintf("ip=%s::%s:%s::%s:none", params.NodeIP, params.Gateway, params.Netmask, params.Interface),
 		fmt.Sprintf("nameserver=%s", params.DNS),
 	}
+}
+
+// BuildDataDiskWipeScript returns a shell script that wipes stale partition labels
+// from the data disk before CoreOS installation.
+func BuildDataDiskWipeScript() string {
+	return fmt.Sprintf(`#!/bin/bash
+set -euo pipefail
+if [ -b "%s" ]; then
+  sgdisk --zap-all "%s"
+  wipefs --all "%s"
+fi
+`, DataDiskByID, DataDiskByID, DataDiskByID)
 }
 
 // ExtractNetworkConfig extracts network configuration from config.
