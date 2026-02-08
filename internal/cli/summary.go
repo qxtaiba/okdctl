@@ -187,13 +187,28 @@ func UpdateIngressSummary(result *postinstall.UpdateIngressResult) string {
 	sb := newSummaryBuilder()
 	sb.newline()
 
+	if result.ConvertedCount > 0 {
+		sb.section("conversion")
+		sb.kv("controllers converted", fmt.Sprintf("%d (HostNetwork → LoadBalancerService)", result.ConvertedCount))
+		sb.newline()
+	}
+
 	sb.section("dns records")
 	if result.KubeVipIP != "" {
 		sb.kvHighlight("api.*", result.KubeVipIP+" (kube-vip)")
 	}
 	for _, e := range result.Entries {
 		label := fmt.Sprintf("*.%s", e.Domain)
-		sb.kvHighlight(label, e.LBIP+" (loadbalancer)")
+		var suffix string
+		switch {
+		case e.HostNetwork:
+			suffix = " (bastion)"
+		case e.Converted:
+			suffix = " (loadbalancer, converted)"
+		default:
+			suffix = " (loadbalancer)"
+		}
+		sb.kvHighlight(label, e.LBIP+suffix)
 	}
 	sb.newline()
 

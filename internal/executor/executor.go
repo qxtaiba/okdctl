@@ -59,6 +59,16 @@ type Result struct {
 }
 
 func (e *Executor) Run(ctx context.Context, name string, args ...string) (*Result, error) {
+	return e.run(ctx, nil, name, args...)
+}
+
+// RunWithStdin executes a command with the given string piped to its stdin.
+// This is useful for commands like "oc create -f -" that read from stdin.
+func (e *Executor) RunWithStdin(ctx context.Context, input string, name string, args ...string) (*Result, error) {
+	return e.run(ctx, strings.NewReader(input), name, args...)
+}
+
+func (e *Executor) run(ctx context.Context, stdin io.Reader, name string, args ...string) (*Result, error) {
 	start := time.Now()
 
 	cmd := exec.CommandContext(ctx, name, args...)
@@ -72,6 +82,7 @@ func (e *Executor) Run(ctx context.Context, name string, args ...string) (*Resul
 	}
 
 	var stdout, stderr bytes.Buffer
+	cmd.Stdin = stdin
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 

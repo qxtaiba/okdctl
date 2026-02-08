@@ -133,7 +133,8 @@ func (p *Provisioner) Configure(ctx context.Context, cfg *config.Config) (*posti
 }
 
 type UpdateIngressOptions struct {
-	RemoveHAProxy bool
+	RemoveHAProxy     bool
+	ConfirmConversion func(hostNetworkICs []string) bool
 }
 
 type DestroyOptions struct {
@@ -145,6 +146,7 @@ func (p *Provisioner) UpdateIngress(ctx context.Context, cfg *config.Config, opt
 	piOpts := postinstall.UpdateIngressOptions{}
 	if opts != nil {
 		piOpts.RemoveHAProxy = opts.RemoveHAProxy
+		piOpts.ConfirmConversion = opts.ConfirmConversion
 	}
 	return phase.UpdateIngress(ctx, cfg, piOpts)
 }

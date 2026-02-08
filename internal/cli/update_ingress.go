@@ -19,17 +19,22 @@ var (
 var updateIngressCmd = &cobra.Command{
 	Use:   "update-ingress",
 	Short: "Switch ingress DNS from HAProxy to LoadBalancer IPs",
-	Long: `Detect LoadBalancer IPs assigned to the ingress routers and update
+	Long: `Detect IngressController strategies and LoadBalancer IPs, then update
 DNS records to point *.apps at the real LoadBalancer IP instead of
 the bastion HAProxy.
 
-Run this after deploying a LoadBalancer provider (e.g., MetalLB)
-and confirming that router-default has an external IP.`,
+If any IngressControllers use HostNetwork (common on bare-metal OKD)
+and MetalLB is available, you will be prompted to convert them to
+LoadBalancerService. This requires deleting and recreating the
+IngressController, which causes a brief outage (~30s) for routes on
+affected controllers.
+
+Run this after deploying a LoadBalancer provider (e.g., MetalLB).`,
 	RunE: runUpdateIngress,
 }
 
 func init() {
-	updateIngressCmd.Flags().BoolVarP(&updateIngressYes, "yes", "y", false, "skip confirmation prompt")
+	updateIngressCmd.Flags().BoolVarP(&updateIngressYes, "yes", "y", false, "skip confirmation prompts")
 	updateIngressCmd.Flags().BoolVar(&updateIngressRemoveHAProxy, "remove-haproxy", true, "remove haproxy from bastion after dns switch")
 }
 
@@ -60,11 +65,26 @@ func runUpdateIngress(cmd *cobra.Command, args []string) error {
 
 	p := CreateOKDProvisionerNoCreds(cfg)
 
-	tui.Info("detecting loadbalancer ips...")
+	tui.Info("detecting ingress strategy and loadbalancer ips...")
 	startTime := time.Now()
 
 	result, err := p.UpdateIngress(ctx, cfg, &okd.UpdateIngressOptions{
 		RemoveHAProxy: updateIngressRemoveHAProxy,
+		ConfirmConversion: func(hostNetworkICs []string) bool {
+			tui.Warn(fmt.Sprintf("converting %d HostNetwork controller(s) to LoadBalancerService requires deleting and recreating them.", len(hostNetworkICs)))
+			tui.Warn("this will cause a brief outage (~30s) for routes on affected controllers.")
+
+			if updateIngressYes {
+				return true
+			}
+
+			prompt := fmt.Sprintf("convert %d HostNetwork controller(s) to LoadBalancerService? [y/N]: ", len(hostNetworkICs))
+			confirmed, err := promptForConfirmation(ctx, prompt)
+			if err != nil {
+				return false
+			}
+			return confirmed
+		},
 	})
 	if err != nil {
 		return err
