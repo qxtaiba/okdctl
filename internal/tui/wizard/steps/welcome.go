@@ -1,4 +1,3 @@
-// Package steps provides the individual wizard step implementations.
 package steps
 
 import (

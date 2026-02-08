@@ -1,4 +1,3 @@
-// Package retry provides a simple exponential-backoff retry helper.
 package retry
 
 import (

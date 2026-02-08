@@ -100,7 +100,6 @@ func (p *Phase) installTool(ctx context.Context, tool externalTool) error {
 	}
 }
 
-// installTerraform installs terraform via HashiCorp RPM repository.
 func (p *Phase) installTerraform(ctx context.Context) error {
 	p.Log.Info("tools: installing terraform via hashicorp repository")
 
@@ -123,7 +122,6 @@ func (p *Phase) installTerraform(ctx context.Context) error {
 	return nil
 }
 
-// installYQ installs yq from GitHub releases.
 func (p *Phase) installYQ(ctx context.Context) error {
 	p.Log.Info("tools: installing yq from github releases")
 
@@ -154,7 +152,6 @@ func (p *Phase) installYQ(ctx context.Context) error {
 	return nil
 }
 
-// installHelm installs helm from official releases.
 func (p *Phase) installHelm(ctx context.Context) error {
 	p.Log.Info("tools: installing helm from official releases")
 
@@ -201,7 +198,6 @@ func (p *Phase) installHelm(ctx context.Context) error {
 	return nil
 }
 
-// installSops installs sops from GitHub releases.
 func (p *Phase) installSops(ctx context.Context) error {
 	p.Log.Info("tools: installing sops from github releases")
 

@@ -125,7 +125,6 @@ func runSudo(name string, args ...string) error {
 	return RunSudo(context.Background(), name, args...)
 }
 
-// RunSudo connects stdin/stdout/stderr to the terminal so sudo can prompt for password if needed.
 func RunSudo(ctx context.Context, name string, args ...string) error {
 	sudoArgs := append([]string{name}, args...)
 	cmd := exec.CommandContext(ctx, "sudo", sudoArgs...)

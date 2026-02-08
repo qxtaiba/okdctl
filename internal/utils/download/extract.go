@@ -45,7 +45,6 @@ func processTarEntry(tarReader *tar.Reader, header *tar.Header, destDir string, 
 
 	targetPath := filepath.Join(destDir, name)
 
-	// Security check: ensure path doesn't escape destination
 	if !strings.HasPrefix(filepath.Clean(targetPath), filepath.Clean(destDir)) {
 		return fmt.Errorf("archive entry attempts to escape destination: %s", name)
 	}
@@ -73,13 +72,11 @@ func processTarEntry(tarReader *tar.Reader, header *tar.Header, destDir string, 
 		_ = outFile.Close()
 
 	case tar.TypeSymlink:
-		// Validate symlink target doesn't escape destination
 		linkTarget := header.Linkname
 		if filepath.IsAbs(linkTarget) {
 			return fmt.Errorf("absolute symlink target not allowed: %s -> %s", name, linkTarget)
 		}
 
-		// Resolve the symlink target relative to the target path's directory
 		resolvedTarget := filepath.Join(filepath.Dir(targetPath), linkTarget)
 		resolvedTarget = filepath.Clean(resolvedTarget)
 
@@ -88,7 +85,6 @@ func processTarEntry(tarReader *tar.Reader, header *tar.Header, destDir string, 
 		}
 
 		if err := os.Symlink(linkTarget, targetPath); err != nil {
-			// Ignore symlink errors on Windows
 			if !os.IsExist(err) {
 				return utils.WrapError("failed to create symlink", err)
 			}

@@ -9,8 +9,6 @@ import (
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
 )
 
-// AddSecondaryIP adds an IP address to a network interface via networkmanager.
-// Using nmcli ensures the IP persists across connection reactivations and DHCP renewals.
 func AddSecondaryIP(ctx context.Context, ip, iface string) error {
 	if ip == "" {
 		return fmt.Errorf("ip address is required")

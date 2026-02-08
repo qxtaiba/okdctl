@@ -20,9 +20,6 @@ func WithTimeout(d time.Duration) ClientOption {
 	}
 }
 
-// WithInsecureSkipVerify disables TLS certificate verification.
-// Use with caution - only for self-signed certificates in trusted environments.
-// If the transport is not *http.Transport, this option is silently ignored.
 func WithInsecureSkipVerify() ClientOption {
 	return func(c *http.Client) {
 		if c.Transport == nil {

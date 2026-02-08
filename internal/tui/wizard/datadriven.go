@@ -1,4 +1,3 @@
-// Package wizard provides the multi-step configuration wizard.
 package wizard
 
 import (

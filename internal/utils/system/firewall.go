@@ -40,14 +40,12 @@ func DetectFirewallBackend() FirewallBackend {
 		return FirewallNone
 	}
 
-	// Check for firewalld (RHEL/Fedora/CentOS)
 	if _, err := exec.LookPath("firewall-cmd"); err == nil {
 		if IsServiceActive("firewalld") {
 			return FirewallFirewalld
 		}
 	}
 
-	// Check for ufw (Ubuntu/Debian)
 	if _, err := exec.LookPath("ufw"); err == nil {
 		cmd := exec.Command("ufw", "status")
 		if output, err := cmd.Output(); err == nil {
@@ -57,7 +55,6 @@ func DetectFirewallBackend() FirewallBackend {
 		}
 	}
 
-	// Check for iptables
 	if _, err := exec.LookPath("iptables"); err == nil {
 		return FirewallIPTables
 	}

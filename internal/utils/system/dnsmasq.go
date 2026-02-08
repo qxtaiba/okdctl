@@ -29,12 +29,10 @@ func RestartDnsmasq(ctx context.Context) error {
 	return ManageService(ctx, ServiceRestart, dnsmasqService, "dnsmasq")
 }
 
-// ValidateDnsmasqConfig runs dnsmasq --test to check config syntax.
 func ValidateDnsmasqConfig(ctx context.Context) error {
 	return RunSudo(ctx, "dnsmasq", "--test")
 }
 
-// ReloadDnsmasq reloads dnsmasq to pick up config changes without a full restart.
 func ReloadDnsmasq(ctx context.Context) error {
 	return ManageService(ctx, ServiceReload, dnsmasqService, "dnsmasq")
 }

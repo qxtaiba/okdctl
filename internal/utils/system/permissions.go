@@ -35,8 +35,6 @@ func isElevationNeeded(err error) bool {
 		strings.Contains(errStr, "operation not permitted")
 }
 
-// ExecuteWithElevation attempts an operation without sudo first,
-// then falls back to sudo if the operation fails with a permission error.
 func ExecuteWithElevation(ctx context.Context, operation func() error, sudoOperation func() error, description string) error {
 	err := operation()
 	if err == nil {

@@ -1,5 +1,3 @@
-// Package system provides system-level utility functions including
-// file operations, command execution, HTTP clients, logging, and permissions.
 package system
 
 import (
@@ -37,7 +35,6 @@ func EnsureDirForFile(filePath string) error {
 	return EnsureDir(dir)
 }
 
-// CopyFile copies a file from src to dst, cleaning up partial writes on failure.
 func CopyFile(src, dst string) error {
 	sourceFile, err := os.Open(src)
 	if err != nil {
@@ -100,8 +97,6 @@ func ExpandPath(path string) string {
 	return path
 }
 
-// AtomicWrite writes data to a file atomically using a temp file and rename.
-// The temp file is created in the same directory to ensure same-filesystem rename.
 func AtomicWrite(path string, data []byte, perm os.FileMode) error {
 	if err := EnsureDirForFile(path); err != nil {
 		return fmt.Errorf("failed to create directory: %w", err)

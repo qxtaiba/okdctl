@@ -316,7 +316,7 @@ func (p *Phase) newBuildISOsStep(cfg *config.Config, opts Options) distribution.
 func (p *Phase) newUploadISOsStep(cfg *config.Config, opts Options) distribution.ProvisioningStep {
 	return distribution.NewStepBuilder(StepUploadISOs, "Upload ISOs").
 		Description("uploading ISOs to Proxmox storage").
-		Fatal(false). // Non-fatal
+		Fatal(false).
 		SkipWhen(func() bool { return opts.SkipISOs }).
 		SkipReason("ISO building disabled").
 		Execute(func(ctx context.Context) error {
@@ -391,7 +391,7 @@ func (p *Phase) newConfigureDNSStep(cfg *config.Config, opts Options) distributi
 
 	return distribution.NewStepBuilder(StepConfigureDNS, "Configure DNS").
 		Description("configuring dnsmasq and deploying bootstrap dns configuration").
-		Fatal(false). // Non-fatal since DNS can be configured manually
+		Fatal(false).
 		Execute(func(ctx context.Context) error {
 			p.Log.Info("dns: configuring dnsmasq service")
 			if funcs.setupDnsmasq != nil {

@@ -126,7 +126,6 @@ func NewAddonsStep() (*wizard.DataDrivenStep, *wizard.DataDrivenStep) {
 	return step, step
 }
 
-// NewFeaturesStep creates a new features configuration step.
 // Deprecated: Use NewAddonsStep instead. Kept for backward compatibility with wizard registration.
 func NewFeaturesStep() (*wizard.DataDrivenStep, *wizard.DataDrivenStep) {
 	return NewAddonsStep()

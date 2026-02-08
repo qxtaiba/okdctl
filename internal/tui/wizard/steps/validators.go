@@ -1,4 +1,3 @@
-// Package steps provides wizard step implementations for the TUI.
 package steps
 
 import (
