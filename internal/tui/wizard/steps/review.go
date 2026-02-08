@@ -225,6 +225,10 @@ func (s *ReviewStep) renderNetworking(st sectionStyles) string {
 		b.WriteString(st.kvPair("metallb pool", s.cfg.Networking.MetalLB.Pool))
 		b.WriteString("\n")
 	}
+	if s.cfg.Networking.CustomDomain != "" {
+		b.WriteString(st.kvPair("custom domain", s.cfg.Networking.CustomDomain))
+		b.WriteString("\n")
+	}
 	b.WriteString("\n")
 
 	return b.String()
