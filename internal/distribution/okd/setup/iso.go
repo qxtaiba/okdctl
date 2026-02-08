@@ -143,18 +143,21 @@ func (p *Phase) buildNodeISO(ctx context.Context, cfg *config.Config, node NodeI
 	gateway, netmask, dns, iface := ExtractNetworkConfig(cfg)
 	ignitionURL := BuildIgnitionURLForNode(cfg, node.Role)
 
-	kargs := BuildLiveKargs(LiveKargsParams{
+	kargsParams := LiveKargsParams{
 		NodeIP:      node.IP,
 		Gateway:     gateway,
 		Netmask:     netmask,
 		DNS:         dns,
 		Interface:   iface,
 		IgnitionURL: ignitionURL,
-	})
+	}
 
 	args := []string{"iso", "customize"}
-	for _, karg := range kargs {
+	for _, karg := range BuildLiveKargs(kargsParams) {
 		args = append(args, "--live-karg-append", karg)
+	}
+	for _, karg := range BuildDestKargs(kargsParams) {
+		args = append(args, "--dest-karg-append", karg)
 	}
 
 	switch node.Role {

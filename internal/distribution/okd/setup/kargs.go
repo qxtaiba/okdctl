@@ -25,6 +25,16 @@ func BuildLiveKargs(params LiveKargsParams) []string {
 	}
 }
 
+// BuildDestKargs returns networking kernel arguments to persist into the installed OS.
+// Unlike BuildLiveKargs these omit coreos.inst.* directives which are only
+// relevant during the live installer session.
+func BuildDestKargs(params LiveKargsParams) []string {
+	return []string{
+		fmt.Sprintf("ip=%s::%s:%s::%s:none", params.NodeIP, params.Gateway, params.Netmask, params.Interface),
+		fmt.Sprintf("nameserver=%s", params.DNS),
+	}
+}
+
 // ExtractNetworkConfig extracts network configuration from config.
 // Each field prefers the StaticIP-specific value, falling back to the top-level or a default.
 func ExtractNetworkConfig(cfg *config.Config) (gateway, netmask, dns, iface string) {
