@@ -183,24 +183,17 @@ func PostDeploySummary(cfg *config.Config, result *deployment.Result) string {
 	return sb.String()
 }
 
-func UpdateIngressSummary(cfg *config.Config, result *postinstall.UpdateIngressResult) string {
-	clusterFQDN := cfg.Cluster.Name + "." + cfg.Cluster.Domain
-
+func UpdateIngressSummary(result *postinstall.UpdateIngressResult) string {
 	sb := newSummaryBuilder()
 	sb.newline()
 
 	sb.section("dns records")
-	apiDomain := fmt.Sprintf("api.%s", clusterFQDN)
-	appsDomain := fmt.Sprintf("*.apps.%s", clusterFQDN)
 	if result.KubeVipIP != "" {
-		sb.kvHighlight(apiDomain, result.KubeVipIP+" (kube-vip)")
+		sb.kvHighlight("api.*", result.KubeVipIP+" (kube-vip)")
 	}
-	if result.RouterLBIP != "" {
-		sb.kvHighlight(appsDomain, result.RouterLBIP+" (loadbalancer)")
-	}
-	if result.CustomRouterIP != "" && cfg.Networking.CustomDomain != "" {
-		customLabel := fmt.Sprintf("*.%s", cfg.Networking.CustomDomain)
-		sb.kv(customLabel, result.CustomRouterIP+" (loadbalancer)")
+	for _, e := range result.Entries {
+		label := fmt.Sprintf("*.%s", e.Domain)
+		sb.kvHighlight(label, e.LBIP+" (loadbalancer)")
 	}
 	sb.newline()
 

@@ -34,16 +34,7 @@ var BasicsStepDefinition = wizard.StepDefinition{
 					ConfigSet: wizard.SetString(func(c *config.Config, v string) { c.Cluster.Domain = v }),
 					ConfigGet: wizard.GetString(func(c *config.Config) string { return c.Cluster.Domain }),
 				},
-				{
-					Key:      "custom_domain",
-					Label:    "apps domain",
-					Default:  "",
-					Help:     "optional custom domain for app routing (e.g., apps.example.com)",
-					Validate: ValidateOptionalDomain,
-					ConfigSet: wizard.SetString(func(c *config.Config, v string) { c.Networking.CustomDomain = v }),
-					ConfigGet: wizard.GetString(func(c *config.Config) string { return c.Networking.CustomDomain }),
 				},
-			},
 		},
 		{
 			Title: "node topology",

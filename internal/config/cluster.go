@@ -45,9 +45,8 @@ type NetworkingConfig struct {
 	Gateway     string   `yaml:"gateway" json:"gateway" mapstructure:"gateway"`
 	DNS         []string `yaml:"dns" json:"dns" mapstructure:"dns"`
 
-	StaticIP     StaticIPConfig `yaml:"static_ip,omitempty" json:"staticIp,omitempty" mapstructure:"static_ip"`
-	Bastion      BastionConfig  `yaml:"bastion,omitempty" json:"bastion,omitempty" mapstructure:"bastion"`
-	CustomDomain string         `yaml:"custom_domain,omitempty" json:"customDomain,omitempty" mapstructure:"custom_domain"`
+	StaticIP StaticIPConfig `yaml:"static_ip,omitempty" json:"staticIp,omitempty" mapstructure:"static_ip"`
+	Bastion  BastionConfig  `yaml:"bastion,omitempty" json:"bastion,omitempty" mapstructure:"bastion"`
 }
 
 type StaticIPConfig struct {

@@ -199,10 +199,6 @@ func (v *advancedNetworkingValidator) Validate(cfg *Config, result *ValidationRe
 		}
 	}
 
-	if cfg.Networking.CustomDomain != "" && !isValidDomain(cfg.Networking.CustomDomain) {
-		result.AddError(FieldNetworkingCustomDomain, "must be a valid domain name")
-	}
-
 }
 
 type resourcesValidator struct{}

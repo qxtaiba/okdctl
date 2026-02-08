@@ -72,7 +72,7 @@ func runUpdateIngress(cmd *cobra.Command, args []string) error {
 
 	duration := time.Since(startTime).Round(time.Second)
 	tui.Info(fmt.Sprintf("ingress updated (%s)", duration))
-	fmt.Println(UpdateIngressSummary(cfg, result))
+	fmt.Println(UpdateIngressSummary(result))
 
 	return nil
 }

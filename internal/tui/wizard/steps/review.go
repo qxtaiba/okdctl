@@ -221,10 +221,6 @@ func (s *ReviewStep) renderNetworking(st sectionStyles) string {
 		b.WriteString(st.kvPair("vm dns", s.cfg.Networking.Bastion.IP+" (bastion/dnsmasq)"))
 		b.WriteString("\n")
 	}
-	if s.cfg.Networking.CustomDomain != "" {
-		b.WriteString(st.kvPair("custom domain", s.cfg.Networking.CustomDomain))
-		b.WriteString("\n")
-	}
 	b.WriteString("\n")
 
 	return b.String()
