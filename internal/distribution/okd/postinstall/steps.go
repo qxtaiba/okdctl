@@ -97,7 +97,8 @@ func (p *Phase) NewRemoveHAProxyStep(cfg *config.Config, opts Options, pctx *dis
 			p.LogWarn(fmt.Sprintf("haproxy: removal failed: %v", err))
 		}).
 		Execute(func(ctx context.Context) error {
-			if err := p.RemoveHAProxy(ctx); err != nil {
+			vip := pctx.Get().KubeVipIP
+			if err := p.RemoveHAProxy(ctx, vip); err != nil {
 				return utils.WrapError("haproxy removal failed", err)
 			}
 			p.LogInfo("haproxy: service stopped and disabled on bastion")
