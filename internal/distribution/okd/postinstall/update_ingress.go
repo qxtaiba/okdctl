@@ -69,7 +69,7 @@ func (p *Phase) UpdateIngress(ctx context.Context, cfg *config.Config, opts Upda
 	for _, ic := range controllers {
 		descriptions = append(descriptions, fmt.Sprintf("%s (%s)", ic.Name, ic.Strategy))
 	}
-	p.Log.Info(fmt.Sprintf("update-ingress: found %d IngressController(s): %s",
+	p.Log.Info(fmt.Sprintf("update-ingress: found %d controller(s): %s",
 		len(controllers), strings.Join(descriptions, ", ")))
 
 	// Separate by strategy.
@@ -129,18 +129,18 @@ func (p *Phase) UpdateIngress(ctx context.Context, cfg *config.Config, opts Upda
 
 	for _, ic := range lbICs {
 		svcName := fmt.Sprintf("router-%s", ic.Name)
-		p.Log.Info(fmt.Sprintf("update-ingress: waiting for %s LoadBalancer IP", svcName))
+		p.Log.Info(fmt.Sprintf("update-ingress: waiting for %s loadbalancer ip", svcName))
 
 		ip, err := p.waitForServiceLB(ctx, svcName, postOpts)
 		if err != nil {
 			if ic.Name == "default" {
 				return nil, fmt.Errorf("router-default has no LoadBalancer IP: %w", err)
 			}
-			p.Log.Warn(fmt.Sprintf("update-ingress: %s has no LoadBalancer IP: %v", svcName, err))
+			p.Log.Warn(fmt.Sprintf("update-ingress: %s has no loadbalancer ip: %v", svcName, err))
 			continue
 		}
 
-		p.Log.Info(fmt.Sprintf("update-ingress: %s LoadBalancer IP is %s", svcName, ip))
+		p.Log.Info(fmt.Sprintf("update-ingress: %s loadbalancer ip is %s", svcName, ip))
 
 		entry := IngressEntry{
 			Name:      ic.Name,
@@ -174,10 +174,10 @@ func (p *Phase) UpdateIngress(ctx context.Context, cfg *config.Config, opts Upda
 	appsIP := defaultAppsIP
 	if appsIP == "" {
 		appsIP = cfg.Networking.Bastion.IP
-		p.Log.Warn("update-ingress: default IngressController has no LoadBalancer IP, using bastion IP for *.apps DNS")
+		p.Log.Warn("update-ingress: default controller has no loadbalancer ip, using bastion ip for *.apps dns")
 	}
 
-	p.Log.Info("update-ingress: deploying production DNS with LoadBalancer IPs")
+	p.Log.Info("update-ingress: deploying production dns with loadbalancer ips")
 	if err := p.deployProductionDNS(ctx, cfg, appsIP, vip, customDomains); err != nil {
 		return nil, fmt.Errorf("failed to deploy production DNS: %w", err)
 	}
@@ -191,7 +191,7 @@ func (p *Phase) UpdateIngress(ctx context.Context, cfg *config.Config, opts Upda
 
 	// Only remove HAProxy if ALL ICs are LoadBalancerService (none remain HostNetwork).
 	if opts.RemoveHAProxy && len(hostNetworkICs) == 0 {
-		p.Log.Info("update-ingress: removing HAProxy from bastion")
+		p.Log.Info("update-ingress: removing haproxy from bastion")
 		if err := p.RemoveHAProxy(ctx, vip); err != nil {
 			p.Log.Warn(fmt.Sprintf("update-ingress: haproxy removal failed: %v", err))
 		} else {
@@ -199,7 +199,7 @@ func (p *Phase) UpdateIngress(ctx context.Context, cfg *config.Config, opts Upda
 			p.Log.Info("update-ingress: haproxy removed from bastion")
 		}
 	} else if opts.RemoveHAProxy && len(hostNetworkICs) > 0 {
-		p.Log.Warn("update-ingress: skipping haproxy removal — HostNetwork controllers still active")
+		p.Log.Warn("update-ingress: skipping haproxy removal — hostnetwork controllers still active")
 	}
 
 	return result, nil
@@ -216,28 +216,26 @@ func (p *Phase) handleHostNetworkConversion(
 ) (int, error) {
 	var names []string
 	for _, ic := range hostNetworkICs {
-		names = append(names, fmt.Sprintf("%s (%s)", ic.Name, ic.Domain))
+		names = append(names, ic.Name)
 	}
 
-	p.Log.Warn(fmt.Sprintf("update-ingress: %d IngressController(s) use HostNetwork and have no LoadBalancer IP:", len(hostNetworkICs)))
-	for _, n := range names {
-		p.Log.Warn(fmt.Sprintf("update-ingress:   - %s", n))
-	}
+	p.Log.Warn(fmt.Sprintf("update-ingress: %d controller(s) use HostNetwork: %s",
+		len(hostNetworkICs), strings.Join(names, ", ")))
 
 	metalLBAvailable, err := p.checkMetalLBAvailable(ctx)
 	if err != nil {
-		p.Log.Warn(fmt.Sprintf("update-ingress: could not check MetalLB availability: %v", err))
+		p.Log.Warn(fmt.Sprintf("update-ingress: could not check metallb availability: %v", err))
 		return 0, nil
 	}
 	if !metalLBAvailable {
-		p.Log.Warn("update-ingress: MetalLB not detected — skipping HostNetwork conversion")
+		p.Log.Warn("update-ingress: metallb not detected — skipping hostnetwork conversion")
 		return 0, nil
 	}
 
-	p.Log.Info("update-ingress: MetalLB detected with available IPs")
+	p.Log.Info("update-ingress: metallb detected with available ips")
 
 	if opts.ConfirmConversion == nil {
-		p.Log.Warn("update-ingress: no conversion confirmation callback — skipping HostNetwork conversion")
+		p.Log.Warn("update-ingress: no conversion confirmation callback — skipping hostnetwork conversion")
 		return 0, nil
 	}
 
@@ -246,7 +244,7 @@ func (p *Phase) handleHostNetworkConversion(
 		icNames = append(icNames, ic.Name)
 	}
 	if !opts.ConfirmConversion(icNames) {
-		p.Log.Info("update-ingress: user declined HostNetwork conversion — skipping")
+		p.Log.Info("update-ingress: user declined hostnetwork conversion — skipping")
 		return 0, nil
 	}
 
@@ -257,7 +255,7 @@ func (p *Phase) handleHostNetworkConversion(
 
 	converted := 0
 	for _, ic := range hostNetworkICs {
-		p.Log.Info(fmt.Sprintf("update-ingress: converting %q from HostNetwork to LoadBalancerService...", ic.Name))
+		p.Log.Info(fmt.Sprintf("update-ingress: converting %q from hostnetwork to loadbalancerservice...", ic.Name))
 		if err := p.convertToLoadBalancer(ctx, ic, timeout); err != nil {
 			return converted, fmt.Errorf("failed to convert IngressController %q: %w", ic.Name, err)
 		}
@@ -519,7 +517,7 @@ func buildRollbackJSON(ic ingressControllerInfo) (string, error) {
 func (p *Phase) attemptRollback(ctx context.Context, ic ingressControllerInfo) {
 	rollbackJSON, err := buildRollbackJSON(ic)
 	if err != nil {
-		p.Log.Warn(fmt.Sprintf("update-ingress: rollback failed — could not build rollback JSON: %v", err))
+		p.Log.Warn(fmt.Sprintf("update-ingress: rollback failed — could not build rollback json: %v", err))
 		return
 	}
 
@@ -534,6 +532,7 @@ func (p *Phase) attemptRollback(ctx context.Context, ic ingressControllerInfo) {
 	}
 
 	p.Log.Info(fmt.Sprintf("update-ingress: rollback succeeded — %q restored with original strategy", ic.Name))
+
 }
 
 // waitForRouterGone polls until the router-<name> deployment no longer exists.
