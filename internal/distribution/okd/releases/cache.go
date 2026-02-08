@@ -10,15 +10,12 @@ import (
 )
 
 const (
-	// DiskCacheTTL is the time-to-live for the on-disk version cache.
-	// This prevents repeated network requests when the CLI is invoked multiple times.
+	// Prevents repeated network requests when the CLI is invoked multiple times.
 	DiskCacheTTL = 1 * time.Hour
 
-	// cacheFileName is the name of the cache file stored in ~/.okdctl/cache/
 	cacheFileName = "okd-versions.json"
 )
 
-// getCacheFilePath returns the path to the disk cache file.
 func (f *OKDVersionFetcher) getCacheFilePath() (string, error) {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
@@ -27,7 +24,6 @@ func (f *OKDVersionFetcher) getCacheFilePath() (string, error) {
 	return filepath.Join(homeDir, ".okdctl", "cache", cacheFileName), nil
 }
 
-// loadFromDiskCache loads cached versions from disk if the cache is fresh.
 // Returns nil, nil if cache doesn't exist, is stale, or has errors.
 func (f *OKDVersionFetcher) loadFromDiskCache() ([]OKDReleaseSeries, error) {
 	cachePath, err := f.getCacheFilePath()
@@ -55,8 +51,6 @@ func (f *OKDVersionFetcher) loadFromDiskCache() ([]OKDReleaseSeries, error) {
 	return cache.Series, nil
 }
 
-// saveToDiskCache saves the versions to the disk cache.
-// Errors are logged but don't cause failures - caching is best-effort.
 func (f *OKDVersionFetcher) saveToDiskCache(series []OKDReleaseSeries) {
 	cachePath, err := f.getCacheFilePath()
 	if err != nil {
@@ -76,12 +70,10 @@ func (f *OKDVersionFetcher) saveToDiskCache(series []OKDReleaseSeries) {
 	_ = system.AtomicWrite(cachePath, data, 0644)
 }
 
-// isCacheFresh checks if the in-memory cache is still valid.
 func (f *OKDVersionFetcher) isCacheFresh() bool {
 	return f.cache != nil && time.Since(f.cacheAt) < f.cacheTime
 }
 
-// updateMemoryCache stores results in the in-memory cache.
 func (f *OKDVersionFetcher) updateMemoryCache(series []OKDReleaseSeries) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -89,9 +81,6 @@ func (f *OKDVersionFetcher) updateMemoryCache(series []OKDReleaseSeries) {
 	f.cacheAt = time.Now()
 }
 
-// getFromMemoryCache retrieves results from the in-memory cache if fresh.
-// Returns a copy of the cached slice to prevent race conditions if the cache
-// is updated by another goroutine after the lock is released.
 func (f *OKDVersionFetcher) getFromMemoryCache() ([]OKDReleaseSeries, bool) {
 	f.mu.RLock()
 	defer f.mu.RUnlock()

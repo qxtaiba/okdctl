@@ -1,4 +1,3 @@
-// Package cli implements the openshitctl command-line interface.
 package cli
 
 import (

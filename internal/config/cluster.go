@@ -1,4 +1,3 @@
-// Package config provides configuration management for the CLI.
 package config
 
 type Config struct {

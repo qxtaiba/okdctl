@@ -79,10 +79,8 @@ func (p *Phase) RemoveHAProxy(ctx context.Context, vip string) error {
 		}
 		p.Log.Info("haproxy: api confirmed reachable via vip")
 
-		// Verify the API is also reachable via hostname (as oc/kubectl will use).
-		// The nmcli device reapply above can restart the local DNS forwarder,
-		// causing a transient window where hostname resolution fails even though
-		// the raw-IP check above succeeds.
+		// Also verify via hostname -- removing the secondary IP can transiently
+		// restart the local DNS forwarder, causing hostname resolution to lag.
 		p.Log.Info("haproxy: verifying api reachable via hostname after teardown")
 		if waitErr := system.WaitForWithTimeout(ctx, "haproxy", "api-via-hostname", func() bool {
 			if ctx.Err() != nil {

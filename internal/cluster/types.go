@@ -1,4 +1,3 @@
-// Package cluster provides utilities for Kubernetes cluster operations.
 package cluster
 
 type CSR struct {

@@ -12,7 +12,6 @@ import (
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
 )
 
-// ValidateClusterAccess verifies that the cluster is accessible using the kubeconfig.
 func (p *Phase) ValidateClusterAccess(ctx context.Context) error {
 	cmdRunner := p.Exec
 
@@ -47,7 +46,6 @@ func (p *Phase) ValidateClusterAccess(ctx context.Context) error {
 	return nil
 }
 
-// SetupClusterAccess configures persistent kubeconfig for the user.
 func (p *Phase) SetupClusterAccess(ctx context.Context, clusterDir string) error {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
@@ -86,7 +84,6 @@ func (p *Phase) SetupClusterAccess(ctx context.Context, clusterDir string) error
 	return nil
 }
 
-// addKubeconfigToBashrc appends KUBECONFIG export to .bashrc if not present.
 func (p *Phase) addKubeconfigToBashrc(homeDir, kubeconfigPath string) error {
 	bashrcPath := filepath.Join(homeDir, ".bashrc")
 	exportLine := fmt.Sprintf("export KUBECONFIG=%s", kubeconfigPath)

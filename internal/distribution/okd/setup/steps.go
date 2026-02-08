@@ -49,7 +49,7 @@ func systemPackages() []string {
 func (p *Phase) newInstallPackagesStep(opts Options) distribution.ProvisioningStep {
 	return distribution.NewStepBuilder(StepInstallPackages, "Install System Packages").
 		Description("installing required system packages").
-		Fatal(false). // Non-fatal since services can be configured manually
+		Fatal(false).
 		Execute(func(ctx context.Context) error {
 			packages := systemPackages()
 
@@ -85,7 +85,7 @@ func (p *Phase) newInstallPackagesStep(opts Options) distribution.ProvisioningSt
 func (p *Phase) newInstallToolsStep(cfg *config.Config) distribution.ProvisioningStep {
 	return distribution.NewStepBuilder(StepInstallTools, "Install External Tools").
 		Description("installing core tools and addon-required tools").
-		Fatal(false). // Non-fatal since tools may already be installed or user can install manually
+		Fatal(false).
 		Execute(func(ctx context.Context) error {
 			return p.InstallExternalTools(ctx, cfg)
 		}).
@@ -262,7 +262,7 @@ func (p *Phase) newGenerateIgnitionStep(opts Options) distribution.ProvisioningS
 func (p *Phase) newInstallApacheStep(cfg *config.Config, opts Options) distribution.ProvisioningStep {
 	return distribution.NewStepBuilder(StepInstallApache, "Install Apache").
 		Description("installing and configuring apache web server").
-		Fatal(false). // Non-fatal
+		Fatal(false).
 		Execute(func(ctx context.Context) error {
 			return p.ConfigureApache(ctx, cfg)
 		}).

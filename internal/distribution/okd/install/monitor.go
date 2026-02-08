@@ -35,7 +35,6 @@ func (p *Phase) WaitForBootstrap(ctx context.Context, clusterDir string, opts Op
 	return nil
 }
 
-// MonitorInstallation monitors the installation process and approves CSRs.
 func (p *Phase) MonitorInstallation(ctx context.Context, clusterDir string, opts Options) error {
 	ctx, cancel := context.WithTimeout(ctx, opts.InstallTimeout)
 	defer cancel()

@@ -14,8 +14,9 @@ const (
 	StepVerifyHealth        distribution.StepID = "verify-health"
 	StepVerifyKubeVIP       distribution.StepID = "verify-kubevip"
 	StepRemoveHAProxy       distribution.StepID = "remove-haproxy"
-	StepInstallAddons       distribution.StepID = "install-addons"
-	StepDeployProductionDNS distribution.StepID = "deploy-production-dns"
+	StepInstallAddons  distribution.StepID = "install-addons"
+	StepDeployAPIDNS   distribution.StepID = "deploy-api-dns"
+	StepDeployAppsDNS  distribution.StepID = "deploy-apps-dns"
 )
 
 
@@ -105,7 +106,6 @@ func (p *Phase) NewInstallAddonsStep(cfg *config.Config, opts Options, pctx *dis
 			p.Log.Warn(fmt.Sprintf("addons: installation failed: %v", err))
 		}).
 		Execute(func(ctx context.Context) error {
-			// Health gate: verify API is reachable before installing addons
 			if err := p.verifyAPIHealthCheck(ctx); err != nil {
 				p.Log.Warn(fmt.Sprintf("addons: api health check failed before addon install: %v", err))
 			}
@@ -117,10 +117,30 @@ func (p *Phase) NewInstallAddonsStep(cfg *config.Config, opts Options, pctx *dis
 		MustBuild()
 }
 
-// NewDeployProductionDNSStep updates apps wildcard DNS to point to the MetalLB-assigned ingress IP.
-// API DNS already points to kube-vip VIP from day 1; this step handles the apps.* records.
-func (p *Phase) NewDeployProductionDNSStep(cfg *config.Config, opts Options, pctx *distribution.PhaseContext[PostInstallContext], mgr *addon.Manager) distribution.ProvisioningStep {
-	return distribution.NewStepBuilder(StepDeployProductionDNS, "Update Apps DNS").
+func (p *Phase) NewDeployAPIDNSStep(cfg *config.Config, opts Options, pctx *distribution.PhaseContext[PostInstallContext]) distribution.ProvisioningStep {
+	return distribution.NewStepBuilder(StepDeployAPIDNS, "Switch API DNS to VIP").
+		Description("switching api dns to kube-vip").
+		Fatal(false).
+		SkipWhen(func() bool {
+			return !pctx.Get().KubeVIPVerified
+		}).
+		SkipReason("kube-vip not verified — keeping api dns on bastion").
+		OnError(func(err error) {
+			p.Log.Warn(fmt.Sprintf("dns: api dns switch failed: %v", err))
+		}).
+		Execute(func(ctx context.Context) error {
+			state := pctx.Get()
+			if err := p.deployProductionDNS(ctx, cfg, "", state.KubeVipIP); err != nil {
+				return utils.WrapError("api dns switch failed", err)
+			}
+			p.Log.Info(fmt.Sprintf("dns: api.* now points to vip %s (haproxy still running as fallback)", state.KubeVipIP))
+			return nil
+		}).
+		MustBuild()
+}
+
+func (p *Phase) NewDeployAppsDNSStep(cfg *config.Config, opts Options, pctx *distribution.PhaseContext[PostInstallContext], mgr *addon.Manager) distribution.ProvisioningStep {
+	return distribution.NewStepBuilder(StepDeployAppsDNS, "Update Apps DNS").
 		Description("updating apps wildcard dns for ingress load balancer").
 		Fatal(false).
 		OnError(func(err error) {

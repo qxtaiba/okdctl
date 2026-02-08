@@ -11,7 +11,6 @@ import (
 	utilhttp "github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
 )
 
-// OKDVersionFetcher fetches available OKD versions.
 type OKDVersionFetcher struct {
 	httpClient   *http.Client
 	cacheTime    time.Duration // In-memory cache TTL
@@ -21,7 +20,6 @@ type OKDVersionFetcher struct {
 	mu           sync.RWMutex  // Protects cache and cacheAt for thread-safe access
 }
 
-// NewOKDVersionFetcher creates a new version fetcher.
 func NewOKDVersionFetcher() *OKDVersionFetcher {
 	return &OKDVersionFetcher{
 		httpClient:   utilhttp.NewAPIClient(),
@@ -30,9 +28,7 @@ func NewOKDVersionFetcher() *OKDVersionFetcher {
 	}
 }
 
-// FetchVersions fetches available OKD versions from GitHub.
-// Returns release series grouped by major.minor version.
-// This method uses a multi-level caching strategy:
+// FetchVersions uses a multi-level caching strategy:
 // 1. In-memory cache (5 min TTL) for fast repeated calls in the same process
 // 2. On-disk cache (1 hour TTL) to avoid network requests across CLI invocations
 func (f *OKDVersionFetcher) FetchVersions(ctx context.Context) ([]OKDReleaseSeries, error) {
@@ -56,7 +52,6 @@ func (f *OKDVersionFetcher) FetchVersions(ctx context.Context) ([]OKDReleaseSeri
 	return series, nil
 }
 
-// GetLatestStable returns the latest stable version overall.
 func (f *OKDVersionFetcher) GetLatestStable(ctx context.Context) (OKDVersion, error) {
 	series, err := f.FetchVersions(ctx)
 	if err != nil {
@@ -72,7 +67,6 @@ func (f *OKDVersionFetcher) GetLatestStable(ctx context.Context) (OKDVersion, er
 	return OKDVersion{}, fmt.Errorf("no stable version found")
 }
 
-// GetLatestForMinor returns the latest stable version for a specific minor version.
 func (f *OKDVersionFetcher) GetLatestForMinor(ctx context.Context, major, minor int) (OKDVersion, error) {
 	series, err := f.FetchVersions(ctx)
 	if err != nil {

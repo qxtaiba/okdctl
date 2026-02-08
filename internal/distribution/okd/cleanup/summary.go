@@ -90,7 +90,6 @@ func printSummary(opts Options, logger utils.Logger) {
 	}
 }
 
-// collectDirStats walks a directory and returns file count and total size.
 func collectDirStats(path string) (count int, totalSize int64) {
 	_ = filepath.Walk(path, func(_ string, info os.FileInfo, err error) error {
 		if err != nil {

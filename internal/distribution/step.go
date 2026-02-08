@@ -58,7 +58,6 @@ type StepBuilder struct {
 	executeFn   func(context.Context) error
 }
 
-// NewStepBuilder creates a new step builder. Returns nil if id or name are empty.
 func NewStepBuilder(id StepID, name string) *StepBuilder {
 	if id == "" || name == "" {
 		return nil

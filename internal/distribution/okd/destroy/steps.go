@@ -9,6 +9,7 @@ import (
 	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/cleanup"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/paths"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
+	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/netutil"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
 )
 
@@ -56,6 +57,7 @@ func (p *Phase) newCleanupFilesStep(cfg *config.Config, opts Options) distributi
 				ProjectRoot:    opts.ProjectRoot,
 				HTTPServerRoot: cfg.HTTPServer.Root,
 				HAProxyConfig:  paths.DefaultHAProxyConfigPath,
+				VIP:            netutil.DeriveVIPFromStaticIP(cfg.Networking.StaticIP.Start),
 				ClusterName:    cfg.Cluster.Name,
 				TerraformEnv:   opts.TerraformEnv,
 				PreserveConfig: false,

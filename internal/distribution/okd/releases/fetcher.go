@@ -11,7 +11,6 @@ import (
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
 )
 
-// fetchFromNetwork fetches OKD versions from GitHub API.
 func (f *OKDVersionFetcher) fetchFromNetwork(ctx context.Context) ([]OKDReleaseSeries, error) {
 	releases, err := f.fetchAllPages(ctx, "okd-project/okd")
 	if err != nil {
@@ -28,7 +27,6 @@ func (f *OKDVersionFetcher) fetchFromNetwork(ctx context.Context) ([]OKDReleaseS
 	return series, nil
 }
 
-// fetchFromGitHub fetches a single page of releases from a GitHub repository.
 func (f *OKDVersionFetcher) fetchFromGitHub(ctx context.Context, repo string, page, perPage int) ([]githubRelease, error) {
 	url := fmt.Sprintf("https://api.github.com/repos/%s/releases?per_page=%d&page=%d", repo, perPage, page)
 
@@ -57,7 +55,6 @@ func (f *OKDVersionFetcher) fetchFromGitHub(ctx context.Context, repo string, pa
 	return releases, nil
 }
 
-// fetchAllPages fetches all pages of releases from a GitHub repository.
 func (f *OKDVersionFetcher) fetchAllPages(ctx context.Context, repo string) ([]githubRelease, error) {
 	var allReleases []githubRelease
 	page := 1
@@ -100,7 +97,6 @@ func (f *OKDVersionFetcher) fetchAllPages(ctx context.Context, repo string) ([]g
 	return allReleases, nil
 }
 
-// deduplicateReleases removes duplicate releases based on tag name.
 func (f *OKDVersionFetcher) deduplicateReleases(releases []githubRelease) []githubRelease {
 	seen := make(map[string]bool)
 	result := make([]githubRelease, 0, len(releases))
@@ -115,7 +111,6 @@ func (f *OKDVersionFetcher) deduplicateReleases(releases []githubRelease) []gith
 	return result
 }
 
-// parseReleases parses GitHub releases into grouped series.
 func (f *OKDVersionFetcher) parseReleases(releases []githubRelease) []OKDReleaseSeries {
 	seriesMap := make(map[string]*OKDReleaseSeries)
 
@@ -197,9 +192,6 @@ func (f *OKDVersionFetcher) parseReleases(releases []githubRelease) []OKDRelease
 	return result
 }
 
-// assignReleaseTypesToSeries assigns release types to all versions in a series.
-// latestMinor is the minor version of the newest series (for LTS calculation).
-// isFirstSeries indicates whether this is the newest series (for LatestStable).
 func assignReleaseTypesToSeries(series *OKDReleaseSeries, latestMinor int, isFirstSeries bool) {
 	for versionIdx := range series.Versions {
 		version := &series.Versions[versionIdx]
@@ -208,7 +200,6 @@ func assignReleaseTypesToSeries(series *OKDReleaseSeries, latestMinor int, isFir
 	}
 }
 
-// assignReleaseTypeToVersion determines and assigns the release type for a single version.
 func assignReleaseTypeToVersion(version *OKDVersion, series *OKDReleaseSeries, latestMinor int, isFirstSeries, isFirstVersion bool) {
 	if version.Stable {
 		version.Type = determineStableReleaseType(version, series.Minor, latestMinor, isFirstSeries)
@@ -217,7 +208,6 @@ func assignReleaseTypeToVersion(version *OKDVersion, series *OKDReleaseSeries, l
 	}
 }
 
-// determineStableReleaseType returns the appropriate release type for a stable version.
 func determineStableReleaseType(version *OKDVersion, seriesMinor, latestMinor int, isFirstSeries bool) ReleaseType {
 	if version.Latest && isFirstSeries {
 		return ReleaseTypeLatestStable
@@ -228,7 +218,6 @@ func determineStableReleaseType(version *OKDVersion, seriesMinor, latestMinor in
 	return ReleaseTypeStable
 }
 
-// determinePreviewReleaseType returns the appropriate release type for a preview version.
 func determinePreviewReleaseType(version *OKDVersion, series *OKDReleaseSeries, isFirstVersion bool) ReleaseType {
 	// A version is latest preview if explicitly marked or if it's the first version
 	// and the series has no stable versions at the top
@@ -238,7 +227,6 @@ func determinePreviewReleaseType(version *OKDVersion, series *OKDReleaseSeries, 
 	return ReleaseTypePreview
 }
 
-// syncSeriesLatestVersion updates the series.Latest field with the correctly typed version.
 func syncSeriesLatestVersion(series *OKDReleaseSeries) {
 	if series.Latest.Version == "" {
 		return
@@ -251,8 +239,7 @@ func syncSeriesLatestVersion(series *OKDReleaseSeries) {
 	}
 }
 
-// isPrerelease checks if a version tag indicates a prerelease.
-// OKD uses different patterns across versions:
+// OKD uses different prerelease patterns across versions:
 //   - Modern (4.12+): ".ec." (engineering candidate) or ".rc." (release candidate)
 //   - Legacy (4.4 and earlier): "-beta" suffix
 func isPrerelease(tag string) bool {
@@ -262,13 +249,7 @@ func isPrerelease(tag string) bool {
 		strings.Contains(tagLower, "-beta")
 }
 
-// parseVersionTag parses an OKD version tag into components.
 func (f *OKDVersionFetcher) parseVersionTag(tag string) *OKDVersion {
-	// Handle formats like:
-	// - 4.21.0-okd-scos.1
-	// - 4.19.0-okd-scos.ec.8 (prerelease)
-	// - 4.18.0-0.okd-2024-01-06-084517
-
 	tag = strings.Trim(tag, "\"'")
 
 	if !strings.Contains(tag, "okd") {
@@ -286,9 +267,6 @@ func (f *OKDVersionFetcher) parseVersionTag(tag string) *OKDVersion {
 	}
 }
 
-// compareVersions compares two OKD version strings numerically.
-// Returns positive if a > b, negative if a < b, zero if equal.
-// Handles formats like "4.18.0-okd-scos.10" properly.
 func compareVersions(a, b string) int {
 	partsA := extractVersionParts(a)
 	partsB := extractVersionParts(b)
@@ -302,7 +280,6 @@ func compareVersions(a, b string) int {
 	return len(partsA) - len(partsB)
 }
 
-// extractVersionParts extracts numeric parts from a version string.
 func extractVersionParts(version string) []int {
 	var parts []int
 	var current int

@@ -10,8 +10,7 @@ import (
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
 )
 
-// StartWorkerVMs starts worker VMs via terraform apply with started=true.
-// This is called after bootstrap completes to ensure workers can reach the MCS.
+// StartWorkerVMs starts worker VMs after bootstrap completes so they can reach the MCS.
 func (p *Phase) StartWorkerVMs(ctx context.Context, cfg *config.Config, opts Options) error {
 	if cfg.Topology.Workers.Count == 0 {
 		p.Log.Info("workers: no workers configured, skipping")

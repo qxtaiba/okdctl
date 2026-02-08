@@ -27,7 +27,6 @@ func (s *OutputStore) Set(addonName, key, value string) {
 	s.data[addonName][key] = value
 }
 
-// Get returns the value or empty string if not found.
 func (s *OutputStore) Get(addonName, key string) string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

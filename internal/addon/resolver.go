@@ -98,7 +98,6 @@ func ResolveByLevel(addons []Addon) ([][]Addon, error) {
 		}
 	}
 
-	// Collect initial zero-in-degree nodes
 	var queue []Addon
 	for _, a := range addons {
 		if inDegree[a.Info().Name] == 0 {

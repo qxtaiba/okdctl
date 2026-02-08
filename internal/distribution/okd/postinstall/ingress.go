@@ -5,7 +5,6 @@ import (
 	"strings"
 )
 
-// GetGrappleberryRouterIP gets the grappleberry router LoadBalancer IP if it exists.
 func (p *Phase) GetGrappleberryRouterIP(ctx context.Context) string {
 	result, err := p.Exec.Run(ctx, "oc", "get", "svc", "router-grappleberry",
 		"-n", "openshift-ingress",

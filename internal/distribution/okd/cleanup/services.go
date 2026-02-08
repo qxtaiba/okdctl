@@ -10,7 +10,7 @@ import (
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
 )
 
-func HAProxy(ctx context.Context, haproxyConfig string, logger utils.Logger) error {
+func HAProxy(ctx context.Context, haproxyConfig, vip string, logger utils.Logger) error {
 	if logger != nil {
 		logger.Info("cleanup: haproxy service and configuration")
 	}
@@ -44,6 +44,19 @@ func HAProxy(ctx context.Context, haproxyConfig string, logger utils.Logger) err
 		}
 	} else if logger != nil {
 		logger.Info("cleanup: firewall rules removed")
+	}
+
+	if vip != "" {
+		iface, ifaceErr := system.GetDefaultInterface(ctx)
+		if ifaceErr == nil {
+			if rmErr := system.RemoveSecondaryIP(ctx, vip, iface); rmErr != nil {
+				if logger != nil {
+					logger.Warn(fmt.Sprintf("cleanup: could not remove vip %s from %s: %v", vip, iface, rmErr))
+				}
+			} else if logger != nil {
+				logger.Info(fmt.Sprintf("cleanup: removed vip %s from %s", vip, iface))
+			}
+		}
 	}
 
 	if err := system.RemovePackages(ctx, []string{"haproxy"}, logger); err != nil {

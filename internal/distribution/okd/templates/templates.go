@@ -15,7 +15,6 @@ import (
 //go:embed *.tmpl
 var templateFS embed.FS
 
-// InstallConfigData holds data for install-config.yaml generation.
 type InstallConfigData struct {
 	ClusterName    string
 	BaseDomain     string
@@ -29,7 +28,6 @@ type InstallConfigData struct {
 	SSHKey         string
 }
 
-// TerraformVarsData holds data for terraform.tfvars generation.
 type TerraformVarsData struct {
 	ClusterName       string
 	TargetNode        string
@@ -54,13 +52,11 @@ type TerraformVarsData struct {
 	WorkerNames       string
 }
 
-// HAProxyServer represents a server entry in HAProxy configuration.
 type HAProxyServer struct {
 	Name string
 	IP   string
 }
 
-// HAProxyConfigData holds data for haproxy.cfg generation.
 type HAProxyConfigData struct {
 	ClusterDomain string
 	BootstrapIP   string
@@ -69,13 +65,11 @@ type HAProxyConfigData struct {
 	BackupServers []HAProxyServer // masters as backup for http/https when workers are configured
 }
 
-// DNSNode represents a cluster node for DNS configuration.
 type DNSNode struct {
 	Name string
 	IP   string
 }
 
-// DNSConfigData holds data for dnsmasq configuration generation.
 type DNSConfigData struct {
 	ClusterName   string
 	ClusterDomain string // e.g., "grappleberry.k8s.local"
@@ -96,69 +90,56 @@ type DNSConfigData struct {
 	WorkerNodes   []DNSNode // Worker nodes
 }
 
-// DefaultKubeVIPImageTag is the default kube-vip container image tag.
 const DefaultKubeVIPImageTag = "v1.0.4"
 
-// KubeVIPData holds data for kube-vip manifest generation.
 type KubeVIPData struct {
 	VIPAddress string // Virtual IP address (e.g., "192.168.227.10")
 	Interface  string // Network interface for ARP announcements (e.g., "ens18")
 	ImageTag   string // Container image tag (e.g., "v1.0.4")
 }
 
-// PreInstallData holds data for pre-install script generation.
 type PreInstallData struct {
 	OSSerial   string
 	DataSerial string
 }
 
-// RenderPreInstall generates the pre-install script from template.
 func RenderPreInstall(data PreInstallData) (string, error) {
 	return renderTemplate("pre-install.sh.tmpl", data)
 }
 
-// CompactIngressData holds data for compact cluster IngressController generation.
 type CompactIngressData struct {
 	Replicas int
 }
 
-// RenderCompactIngress generates the IngressController manifest for compact clusters.
 func RenderCompactIngress(data CompactIngressData) (string, error) {
 	return renderTemplate("ingress-controller-compact.yaml.tmpl", data)
 }
 
-// RenderInstallConfig generates install-config.yaml from template.
 func RenderInstallConfig(data InstallConfigData) (string, error) {
 	return renderTemplate("install-config.yaml.tmpl", data)
 }
 
-// RenderTerraformVars generates terraform.tfvars from template.
 func RenderTerraformVars(data TerraformVarsData) (string, error) {
 	return renderTemplate("terraform.tfvars.tmpl", data)
 }
 
-// RenderHAProxyConfig generates haproxy.cfg from template.
 func RenderHAProxyConfig(data HAProxyConfigData) (string, error) {
 	return renderTemplate("haproxy.cfg.tmpl", data)
 }
 
-// RenderDNSBootstrapConfig generates dnsmasq-bootstrap.conf from template.
 func RenderDNSBootstrapConfig(data DNSConfigData) (string, error) {
 	return renderTemplate("dnsmasq-bootstrap.conf.tmpl", data)
 }
 
-// RenderDNSProductionConfig generates dnsmasq-production.conf from template.
 func RenderDNSProductionConfig(data DNSConfigData) (string, error) {
 	return renderTemplate("dnsmasq-production.conf.tmpl", data)
 }
 
-// KubeVIPRBACManifest represents a single kube-vip RBAC manifest file.
 type KubeVIPRBACManifest struct {
 	Filename string
 	Content  string
 }
 
-// RenderKubeVIPRBACManifests generates individual kube-vip RBAC manifests.
 // Each resource is rendered separately because openshift-install only processes
 // the first YAML document per file.
 func RenderKubeVIPRBACManifests() ([]KubeVIPRBACManifest, error) {
@@ -181,7 +162,6 @@ func RenderKubeVIPRBACManifests() ([]KubeVIPRBACManifest, error) {
 	return manifests, nil
 }
 
-// RenderKubeVIPDaemonSet generates the kube-vip DaemonSet manifest from template.
 func RenderKubeVIPDaemonSet(data KubeVIPData) (string, error) {
 	if data.ImageTag == "" {
 		data.ImageTag = DefaultKubeVIPImageTag
@@ -189,7 +169,6 @@ func RenderKubeVIPDaemonSet(data KubeVIPData) (string, error) {
 	return renderTemplate("kube-vip-daemonset.yaml.tmpl", data)
 }
 
-// templateFuncs provides custom functions for templates.
 var templateFuncs = template.FuncMap{
 	"split":      strings.Split,
 	"trimPrefix": strings.TrimPrefix,
@@ -198,9 +177,6 @@ var templateFuncs = template.FuncMap{
 	"reversePTR": reversePTR,
 }
 
-// reversePTR safely reverses an IPv4 address for PTR record generation.
-// Returns the reversed octets (e.g., "192.168.1.10" -> "10.1.168.192").
-// Returns empty string if the IP is invalid or empty.
 func reversePTR(ip string) string {
 	if ip == "" {
 		return ""

@@ -29,6 +29,7 @@ type Options struct {
 	PreserveConfig bool
 	HTTPServerRoot string
 	HAProxyConfig  string
+	VIP            string
 	ClusterName    string
 	RemovePackages bool
 	Logger         utils.Logger
@@ -53,7 +54,7 @@ func Execute(ctx context.Context, opts Options) error {
 		if err := WebServer(ctx, opts.HTTPServerRoot, logger); err != nil {
 			errs = append(errs, err)
 		}
-		if err := HAProxy(ctx, opts.HAProxyConfig, logger); err != nil {
+		if err := HAProxy(ctx, opts.HAProxyConfig, opts.VIP, logger); err != nil {
 			errs = append(errs, err)
 		}
 		if err := Apache(ctx, logger); err != nil {
@@ -82,7 +83,7 @@ func Execute(ctx context.Context, opts Options) error {
 		}
 
 	case TypeHAProxyOnly:
-		if err := HAProxy(ctx, opts.HAProxyConfig, logger); err != nil {
+		if err := HAProxy(ctx, opts.HAProxyConfig, opts.VIP, logger); err != nil {
 			errs = append(errs, err)
 		}
 

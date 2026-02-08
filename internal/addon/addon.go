@@ -13,13 +13,8 @@ import (
 type Addon interface {
 	Info() AddonInfo
 
-	// Install deploys the addon into the cluster.
 	Install(ctx context.Context, env *Environment) error
-
-	// Verify checks whether the addon is healthy.
 	Verify(ctx context.Context, env *Environment) error
-
-	// Uninstall removes the addon from the cluster.
 	Uninstall(ctx context.Context, env *Environment) error
 }
 
@@ -49,7 +44,6 @@ type Environment struct {
 
 	AddonConfig config.AddonConfig
 
-	// Exec runs shell commands against the cluster.
 	Exec *executor.Executor
 
 	Logger utils.Logger

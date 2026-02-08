@@ -116,7 +116,7 @@ func (p *Provider) Provision(ctx context.Context, cfg *config.Config, opts Provi
 		return nil, utils.WrapError("terraform plan failed", err)
 	}
 
-	totalNodes := 1 + cfg.Topology.ControlPlane.Count + cfg.Topology.Workers.Count // bootstrap + masters + workers
+	totalNodes := 1 + cfg.Topology.ControlPlane.Count + cfg.Topology.Workers.Count
 	p.logger.Info(fmt.Sprintf("terraform: plan will create %d virtual machines", totalNodes))
 
 	p.logger.Info("terraform: applying infrastructure changes")

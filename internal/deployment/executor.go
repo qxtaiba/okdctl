@@ -22,7 +22,7 @@ type Executor struct {
 	provisioner     *okd.Provisioner
 	projectRoot     string
 	logger          utils.Logger
-	configureResult *postinstall.Result // Captured from configure step
+	configureResult *postinstall.Result
 }
 
 type ExecutorOption func(*Executor)
