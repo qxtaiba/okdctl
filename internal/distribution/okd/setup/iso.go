@@ -160,54 +160,48 @@ func (p *Phase) buildNodeISO(ctx context.Context, cfg *config.Config, node NodeI
 		args = append(args, "--dest-karg-append", karg)
 	}
 
-	switch node.Role {
-	case "worker":
-		// workers have two disks — use a pre-install script that discovers the
-		// OS disk by serial via lsblk and wipes the data disk.
-		script, err := templates.RenderWorkerPreInstall(templates.WorkerPreInstallData{
-			OSSerial:   "OS-DISK",
-			DataSerial: "CEPH-DATA",
-		})
-		if err != nil {
-			return err
-		}
-		scriptPath, err := writePreInstallScript(script)
-		if err != nil {
-			return err
-		}
-		defer func() { _ = os.Remove(scriptPath) }()
-
-		// coreos-installer.service requires either coreos.inst.install_dev on the
-		// kernel command line or a non-empty /etc/coreos/installer.d/ directory.
-		// The pre-install script populates installer.d at runtime, but the
-		// directory is still empty when systemd evaluates the condition — so the
-		// service is skipped and the script never runs (chicken-and-egg).
-		//
-		// We solve this with a live ignition fragment that seeds installer.d with
-		// a harmless config file. Ignition runs during initramfs (before systemd
-		// evaluates service conditions) so the directory is non-empty in time.
-		// Unlike a coreos.inst.install_dev karg, this does NOT override the
-		// dest-device written by the pre-install script's serial-based discovery
-		// (kargs are evaluated after installer.d and would take precedence).
-		// Read SSH key for live environment access (debugging).
-		var sshKey string
-		if cfg.Files.SSHPublicKey != "" {
-			keyPath := system.ExpandPath(cfg.Files.SSHPublicKey)
-			if b, err := os.ReadFile(keyPath); err == nil {
-				sshKey = strings.TrimSpace(string(b))
-			}
-		}
-		triggerPath, err := writeInstallerTriggerIgnition(sshKey)
-		if err != nil {
-			return err
-		}
-		defer func() { _ = os.Remove(triggerPath) }()
-		args = append(args, "--live-ignition", triggerPath)
-		args = append(args, "--pre-install", scriptPath)
-	default:
-		// bootstrap and master VMs have a single disk; /dev/sda is always correct.
-		args = append(args, "--live-karg-append", "coreos.inst.install_dev=/dev/sda")
+	// All nodes use a pre-install script that discovers the OS disk by serial
+	// via lsblk. Workers also get the data disk wiped; for bootstrap/masters
+	// the data serial is absent so the wipe is safely skipped.
+	script, err := templates.RenderPreInstall(templates.PreInstallData{
+		OSSerial:   "OS-DISK",
+		DataSerial: "CEPH-DATA",
+	})
+	if err != nil {
+		return err
 	}
+	scriptPath, err := writePreInstallScript(script)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = os.Remove(scriptPath) }()
+
+	// coreos-installer.service requires either coreos.inst.install_dev on the
+	// kernel command line or a non-empty /etc/coreos/installer.d/ directory.
+	// The pre-install script populates installer.d at runtime, but the
+	// directory is still empty when systemd evaluates the condition — so the
+	// service is skipped and the script never runs (chicken-and-egg).
+	//
+	// We solve this with a live ignition fragment that seeds installer.d with
+	// a harmless config file. Ignition runs during initramfs (before systemd
+	// evaluates service conditions) so the directory is non-empty in time.
+	// Unlike a coreos.inst.install_dev karg, this does NOT override the
+	// dest-device written by the pre-install script's serial-based discovery
+	// (kargs are evaluated after installer.d and would take precedence).
+	var sshKey string
+	if cfg.Files.SSHPublicKey != "" {
+		keyPath := system.ExpandPath(cfg.Files.SSHPublicKey)
+		if b, err := os.ReadFile(keyPath); err == nil {
+			sshKey = strings.TrimSpace(string(b))
+		}
+	}
+	triggerPath, err := writeInstallerTriggerIgnition(sshKey)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = os.Remove(triggerPath) }()
+	args = append(args, "--live-ignition", triggerPath)
+	args = append(args, "--pre-install", scriptPath)
 
 	args = append(args, "-o", outputPath, fcosISO)
 

@@ -2,8 +2,8 @@
 set -euo pipefail
 
 # Disk serials assigned in terraform (proxmox-okd/main.tf).
-# If either serial is missing the VM is misconfigured — fail loudly
-# so coreos-installer aborts rather than silently wiping the wrong disk.
+# OS serial must exist — abort if missing so coreos-installer doesn't
+# silently wipe the wrong disk. Data serial is optional (workers only).
 OS_SERIAL="{{ .OSSerial }}"
 DATA_SERIAL="{{ .DataSerial }}"
 OS_DISK=""
