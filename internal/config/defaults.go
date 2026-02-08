@@ -60,9 +60,6 @@ func DefaultConfig() *Config {
 			Bastion: BastionConfig{
 				IP: "192.168.1.20",
 			},
-			MetalLB: MetalLBConfig{
-				Pool: "192.168.1.205-192.168.1.230",
-			},
 		},
 		Addons: map[string]AddonConfig{
 			"flux": {Enabled: false, Settings: map[string]string{

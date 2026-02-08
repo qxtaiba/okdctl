@@ -1,8 +1,7 @@
 # =============================================================================
 # dnsmasq configuration - post-bootstrap/production
 # =============================================================================
-# use this after post-install. kube-vip handles api load balancing via vip,
-# metallb provides loadbalancer ips for ingress routers.
+# use this after post-install. kube-vip handles api load balancing via vip.
 # =============================================================================
 
 # listen on bastion IP and localhost (explicit binding overrides main config)
@@ -24,17 +23,17 @@ address=/api.{{ .ClusterDomain }}/{{ .BastionIP }}
 address=/api-int.{{ .ClusterDomain }}/{{ .BastionIP }}
 {{- end }}
 
-# apps wildcard (default router via metallb)
+# apps wildcard (default router)
 {{- if .AppsIP }}
 address=/.apps.{{ .ClusterDomain }}/{{ .AppsIP }}
 {{- else }}
-# apps ip will be assigned by metallb - update after router gets lb ip
+# apps ip will be assigned by loadbalancer - update after router gets lb ip
 # address=/.apps.{{ .ClusterDomain }}/<ROUTER_LB_IP>
 {{- end }}
 
 {{- if .UserAppsIP }}
 
-# user applications domain (custom router via metallb)
+# user applications domain (custom router)
 address=/.{{ .UserAppsDomain }}/{{ .UserAppsIP }}
 {{- end }}
 

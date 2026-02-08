@@ -30,7 +30,7 @@ on Proxmox VE infrastructure.
 Highlights:
   • Interactive setup wizard with beautiful TUI
   • OKD/OpenShift 4.15-4.21 support
-  • Addon-extensible architecture (MetalLB, Ingress, Flux, storage, cert-manager)
+  • Addon-extensible architecture (Flux, secrets, storage, cert-manager)
   • YAML configuration with sensible defaults
   • Automated preflight checks and validation
   • Single binary distribution`,
@@ -39,8 +39,9 @@ Highlights:
 		fmt.Println(tui.TitleStyle.Render("Homelab K8s"))
 		fmt.Println()
 		fmt.Println(tui.MutedStyle.Render("Quick start:"))
-		fmt.Println("  " + tui.HighlightStyle.Render("openshitctl deploy") + "    Deploy a cluster")
-		fmt.Println("  " + tui.HighlightStyle.Render("openshitctl destroy") + "   Destroy the cluster")
+		fmt.Println("  " + tui.HighlightStyle.Render("openshitctl deploy") + "           Deploy a cluster")
+		fmt.Println("  " + tui.HighlightStyle.Render("openshitctl destroy") + "          Destroy the cluster")
+		fmt.Println("  " + tui.HighlightStyle.Render("openshitctl update-ingress") + "   Switch ingress to LoadBalancer IPs")
 		fmt.Println()
 		fmt.Println(tui.MutedStyle.Render("Run 'openshitctl --help' for all commands"))
 	},
@@ -72,6 +73,7 @@ func init() {
 
 	rootCmd.AddCommand(deployCmd)
 	rootCmd.AddCommand(destroyCmd)
+	rootCmd.AddCommand(updateIngressCmd)
 
 	rootCmd.SetVersionTemplate(fmt.Sprintf(`{{with .Name}}{{printf "%%s " .}}{{end}}{{printf "%%s" .Version}}
 Git Commit: %s

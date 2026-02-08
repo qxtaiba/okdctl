@@ -6,6 +6,7 @@ import (
 
 	"github.com/qxtaiba/okd-proxmox-cli/internal/config"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/deployment"
+	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/postinstall"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/tui"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/netutil"
 )
@@ -130,21 +131,16 @@ func PostDeploySummary(cfg *config.Config, result *deployment.Result) string {
 	content.WriteString("  " + tui.SubsectionLabel("dns records") + "\n")
 	apiDomain := fmt.Sprintf("api.%s", clusterFQDN)
 	appsDomain := fmt.Sprintf("*.apps.%s", clusterFQDN)
-	if result != nil && result.APIDNSSwitched && result.KubeVipIP != "" {
+	if result != nil && result.DNSDeployed && result.KubeVipIP != "" {
 		content.WriteString("  " + tui.DottedKeyValueFull("  "+apiDomain, result.KubeVipIP+" (kube-vip)", defaultKeyColWidth, kvWidth) + "\n")
 	} else if bastionIP := cfg.Networking.Bastion.IP; bastionIP != "" {
 		content.WriteString("  " + tui.DottedKeyValueFull("  "+apiDomain, bastionIP+" (haproxy)", defaultKeyColWidth, kvWidth) + "\n")
 	}
-	if result != nil && result.RouterLBIP != "" {
-		content.WriteString("  " + tui.DottedKeyValueFull("  "+appsDomain, result.RouterLBIP, defaultKeyColWidth, kvWidth) + "\n")
+	bastionIP := cfg.Networking.Bastion.IP
+	if result != nil && result.BastionIP != "" {
+		bastionIP = result.BastionIP
 	}
-	if result != nil && result.CustomRouterIP != "" {
-		customLabel := fmt.Sprintf("*.%s", cfg.Networking.CustomDomain)
-		if cfg.Networking.CustomDomain == "" {
-			customLabel = fmt.Sprintf("router-%s (custom)", cfg.Cluster.Name)
-		}
-		content.WriteString("  " + tui.DottedKeyValueFull("  "+customLabel, result.CustomRouterIP, defaultKeyColWidth, kvWidth) + "\n")
-	}
+	content.WriteString("  " + tui.DottedKeyValueFull("  "+appsDomain, bastionIP+" (haproxy)", defaultKeyColWidth, kvWidth) + "\n")
 	content.WriteString("\n")
 
 	content.WriteString("  " + tui.SubsectionLabel("status") + "\n")
@@ -154,11 +150,12 @@ func PostDeploySummary(cfg *config.Config, result *deployment.Result) string {
 		} else {
 			content.WriteString("  " + tui.DottedKeyValueFull("  bootstrap", "still running", defaultKeyColWidth, kvWidth) + "\n")
 		}
-		if result.APIDNSSwitched && result.KubeVipIP != "" {
+		if result.DNSDeployed && result.KubeVipIP != "" {
 			content.WriteString("  " + tui.DottedKeyValueFull("  api routing", fmt.Sprintf("kube-vip (%s)", result.KubeVipIP), defaultKeyColWidth, kvWidth) + "\n")
 		} else {
 			content.WriteString("  " + tui.DottedKeyValueFull("  api routing", "haproxy (bastion)", defaultKeyColWidth, kvWidth) + "\n")
 		}
+		content.WriteString("  " + tui.DottedKeyValueFull("  ingress routing", "haproxy (bastion)", defaultKeyColWidth, kvWidth) + "\n")
 	}
 	content.WriteString("\n")
 
@@ -170,6 +167,13 @@ func PostDeploySummary(cfg *config.Config, result *deployment.Result) string {
 	content.WriteString("  " + tui.SubsectionLabel("quick start") + "\n")
 	content.WriteString("    " + tui.CodeInlineStyle.Render("export KUBECONFIG=~/.kube/config") + "\n")
 	content.WriteString("    " + tui.CodeInlineStyle.Render("oc get nodes") + "\n")
+	content.WriteString("\n")
+
+	content.WriteString("  " + tui.SubsectionLabel("next steps") + "\n")
+	content.WriteString("    cluster deployed with haproxy handling ingress on the bastion.\n")
+	content.WriteString("    if you deploy a loadbalancer provider (e.g., metallb), run:\n")
+	content.WriteString("      " + tui.CodeInlineStyle.Render("openshitctl update-ingress") + "\n")
+	content.WriteString("    to auto-detect loadbalancer ips and switch dns over.\n")
 
 	content.WriteString("\n")
 	sb.WriteString("\n")
@@ -177,5 +181,37 @@ func PostDeploySummary(cfg *config.Config, result *deployment.Result) string {
 	sb.WriteString("\n")
 
 	return sb.String()
+}
+
+func UpdateIngressSummary(cfg *config.Config, result *postinstall.UpdateIngressResult) string {
+	clusterFQDN := cfg.Cluster.Name + "." + cfg.Cluster.Domain
+
+	sb := newSummaryBuilder()
+	sb.newline()
+
+	sb.section("dns records")
+	apiDomain := fmt.Sprintf("api.%s", clusterFQDN)
+	appsDomain := fmt.Sprintf("*.apps.%s", clusterFQDN)
+	if result.KubeVipIP != "" {
+		sb.kvHighlight(apiDomain, result.KubeVipIP+" (kube-vip)")
+	}
+	if result.RouterLBIP != "" {
+		sb.kvHighlight(appsDomain, result.RouterLBIP+" (loadbalancer)")
+	}
+	if result.CustomRouterIP != "" && cfg.Networking.CustomDomain != "" {
+		customLabel := fmt.Sprintf("*.%s", cfg.Networking.CustomDomain)
+		sb.kv(customLabel, result.CustomRouterIP+" (loadbalancer)")
+	}
+	sb.newline()
+
+	sb.section("status")
+	if result.HAProxyRemoved {
+		sb.kv("haproxy", "stopped and disabled")
+	} else {
+		sb.kv("haproxy", "still running")
+	}
+	sb.newline()
+
+	return "\n" + tui.BoxedSectionCompact(sb.String(), "INGRESS UPDATED", tui.DefaultBoxWidth) + "\n"
 }
 

@@ -79,7 +79,7 @@ type DNSConfigData struct {
 	// Load balancer IPs
 	BastionIP   string // HAProxy for API load balancing (bootstrap phase only)
 	KubeVipIP   string // kube-vip VIP for API (production only, takes over from HAProxy)
-	AppsIP         string // Default router LB IP (auto-assigned by MetalLB)
+	AppsIP         string // Default router LB IP (auto-assigned by LB provider)
 	UserAppsIP     string // User apps router IP (optional, for custom domain)
 	UserAppsDomain string // User apps domain (e.g., "myapps.example.com")
 

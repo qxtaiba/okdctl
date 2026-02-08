@@ -11,18 +11,12 @@ import (
 )
 
 const (
-	StepVerifyHealth        distribution.StepID = "verify-health"
-	StepCleanupBootstrap    distribution.StepID = "cleanup-bootstrap"
-	StepVerifyKubeVIP       distribution.StepID = "verify-kubevip"
-	StepRemoveHAProxy       distribution.StepID = "remove-haproxy"
-	StepInstallAddons       distribution.StepID = "install-addons"
-	StepWaitIngressLB       distribution.StepID = "wait-ingress-lb"
-	StepWaitCustomRouterLB  distribution.StepID = "wait-custom-router-lb"
-	StepDeployAPIDNS        distribution.StepID = "deploy-api-dns"
-	StepDeployAppsDNS       distribution.StepID = "deploy-apps-dns"
+	StepVerifyHealth       distribution.StepID = "verify-health"
+	StepCleanupBootstrap   distribution.StepID = "cleanup-bootstrap"
+	StepVerifyKubeVIP      distribution.StepID = "verify-kubevip"
+	StepDeployProductionDNS distribution.StepID = "deploy-production-dns"
+	StepInstallAddons      distribution.StepID = "install-addons"
 )
-
-
 
 func (p *Phase) NewVerifyHealthStep(cfg *config.Config, opts Options, pctx *distribution.PhaseContext[PostInstallContext]) distribution.ProvisioningStep {
 	return distribution.NewStepBuilder(StepVerifyHealth, "Verify Cluster Health").
@@ -45,8 +39,6 @@ func (p *Phase) NewVerifyHealthStep(cfg *config.Config, opts Options, pctx *dist
 		}).
 		MustBuild()
 }
-
-
 
 func (p *Phase) NewCleanupBootstrapStep(cfg *config.Config, opts Options, pctx *distribution.PhaseContext[PostInstallContext]) distribution.ProvisioningStep {
 	return distribution.NewStepBuilder(StepCleanupBootstrap, "Cleanup Bootstrap VM").
@@ -93,32 +85,31 @@ func (p *Phase) NewVerifyKubeVIPStep(cfg *config.Config, opts Options, pctx *dis
 		MustBuild()
 }
 
-
-
-func (p *Phase) NewRemoveHAProxyStep(cfg *config.Config, opts Options, pctx *distribution.PhaseContext[PostInstallContext]) distribution.ProvisioningStep {
-	return distribution.NewStepBuilder(StepRemoveHAProxy, "Remove HAProxy").
-		Description("removing haproxy from bastion").
+func (p *Phase) NewDeployProductionDNSStep(cfg *config.Config, opts Options, pctx *distribution.PhaseContext[PostInstallContext]) distribution.ProvisioningStep {
+	return distribution.NewStepBuilder(StepDeployProductionDNS, "Deploy Production DNS").
+		Description("deploying production dns with api vip and apps on bastion").
 		Fatal(false).
 		SkipWhen(func() bool {
-			state := pctx.Get()
-			return !state.KubeVIPVerified || !state.APIDNSSwitched
+			return !pctx.Get().KubeVIPVerified
 		}).
-		SkipReason("kube-vip not verified or api dns not switched — keeping haproxy as fallback").
+		SkipReason("kube-vip not verified — keeping bootstrap dns").
 		OnError(func(err error) {
-			p.Log.Warn(fmt.Sprintf("haproxy: removal failed: %v", err))
+			p.Log.Warn(fmt.Sprintf("dns: production dns deployment failed: %v", err))
 		}).
 		Execute(func(ctx context.Context) error {
-			vip := pctx.Get().KubeVipIP
-			if err := p.RemoveHAProxy(ctx, vip); err != nil {
-				return utils.WrapError("haproxy removal failed", err)
+			state := pctx.Get()
+			bastionIP := cfg.Networking.Bastion.IP
+			if err := p.deployProductionDNS(ctx, cfg, bastionIP, state.KubeVipIP, "", ""); err != nil {
+				return utils.WrapError("production dns deployment failed", err)
 			}
-			p.Log.Info("haproxy: service stopped and disabled on bastion")
+			pctx.Update(func(c *PostInstallContext) {
+				c.DNSDeployed = true
+			})
+			p.Log.Info(fmt.Sprintf("dns: api.* → vip %s, *.apps → bastion %s (haproxy)", state.KubeVipIP, bastionIP))
 			return nil
 		}).
 		MustBuild()
 }
-
-
 
 func (p *Phase) NewInstallAddonsStep(cfg *config.Config, opts Options, pctx *distribution.PhaseContext[PostInstallContext], mgr *addon.Manager) distribution.ProvisioningStep {
 	return distribution.NewStepBuilder(StepInstallAddons, "Install Addons").
@@ -138,103 +129,3 @@ func (p *Phase) NewInstallAddonsStep(cfg *config.Config, opts Options, pctx *dis
 		}).
 		MustBuild()
 }
-
-func (p *Phase) NewDeployAPIDNSStep(cfg *config.Config, opts Options, pctx *distribution.PhaseContext[PostInstallContext]) distribution.ProvisioningStep {
-	return distribution.NewStepBuilder(StepDeployAPIDNS, "Switch API DNS to VIP").
-		Description("switching api dns to kube-vip").
-		Fatal(false).
-		SkipWhen(func() bool {
-			return !pctx.Get().KubeVIPVerified
-		}).
-		SkipReason("kube-vip not verified — keeping api dns on bastion").
-		OnError(func(err error) {
-			p.Log.Warn(fmt.Sprintf("dns: api dns switch failed: %v", err))
-		}).
-		Execute(func(ctx context.Context) error {
-			state := pctx.Get()
-			if err := p.deployProductionDNS(ctx, cfg, "", state.KubeVipIP, "", ""); err != nil {
-				return utils.WrapError("api dns switch failed", err)
-			}
-			pctx.Update(func(c *PostInstallContext) {
-				c.APIDNSSwitched = true
-			})
-			p.Log.Info(fmt.Sprintf("dns: api.* now points to vip %s (haproxy still running as fallback)", state.KubeVipIP))
-			return nil
-		}).
-		MustBuild()
-}
-
-func (p *Phase) NewWaitIngressLBStep(cfg *config.Config, opts Options, pctx *distribution.PhaseContext[PostInstallContext]) distribution.ProvisioningStep {
-	return distribution.NewStepBuilder(StepWaitIngressLB, "Wait for Ingress LB").
-		Description("waiting for metallb to assign router loadbalancer ip").
-		Fatal(false).
-		OnError(func(err error) {
-			p.Log.Warn(fmt.Sprintf("ingress: %v — apps wildcard dns will not be configured", err))
-		}).
-		Execute(func(ctx context.Context) error {
-			ip, err := p.waitForDefaultRouterLB(ctx, opts)
-			if err != nil {
-				return err
-			}
-			pctx.Update(func(c *PostInstallContext) {
-				c.RouterLBIP = ip
-			})
-			p.Log.Info(fmt.Sprintf("ingress: router-default loadbalancer ip is %s", ip))
-			return nil
-		}).
-		MustBuild()
-}
-
-func (p *Phase) NewWaitCustomRouterLBStep(cfg *config.Config, opts Options, pctx *distribution.PhaseContext[PostInstallContext]) distribution.ProvisioningStep {
-	return distribution.NewStepBuilder(StepWaitCustomRouterLB, "Wait for Custom Router LB").
-		Description("waiting for custom router loadbalancer ip").
-		Fatal(false).
-		SkipWhen(func() bool {
-			return cfg.Networking.CustomDomain == ""
-		}).
-		SkipReason("no custom domain configured").
-		OnError(func(err error) {
-			p.Log.Warn(fmt.Sprintf("ingress: %v — custom domain dns will not be configured", err))
-		}).
-		Execute(func(ctx context.Context) error {
-			ip, err := p.waitForCustomRouterLB(ctx, cfg.Cluster.Name, opts)
-			if err != nil {
-				return err
-			}
-			pctx.Update(func(c *PostInstallContext) {
-				c.CustomRouterIP = ip
-			})
-			p.Log.Info(fmt.Sprintf("ingress: router-%s loadbalancer ip is %s", cfg.Cluster.Name, ip))
-			return nil
-		}).
-		MustBuild()
-}
-
-func (p *Phase) NewDeployAppsDNSStep(cfg *config.Config, opts Options, pctx *distribution.PhaseContext[PostInstallContext]) distribution.ProvisioningStep {
-	return distribution.NewStepBuilder(StepDeployAppsDNS, "Update Apps DNS").
-		Description("updating apps wildcard dns for ingress load balancer").
-		Fatal(false).
-		OnError(func(err error) {
-			p.Log.Warn(fmt.Sprintf("dns: apps dns update failed: %v", err))
-		}).
-		Execute(func(ctx context.Context) error {
-			state := pctx.Get()
-			appsIP := state.RouterLBIP
-			customDomain := cfg.Networking.CustomDomain
-			customRouterIP := state.CustomRouterIP
-			if err := p.deployProductionDNS(ctx, cfg, appsIP, state.KubeVipIP, customDomain, customRouterIP); err != nil {
-				return utils.WrapError("apps dns update failed", err)
-			}
-			if appsIP != "" {
-				p.Log.Info(fmt.Sprintf("dns: apps.* wildcard now points to %s", appsIP))
-			} else {
-				p.Log.Warn("dns: production config deployed without apps wildcard — router-default has no loadbalancer ip")
-			}
-			if customDomain != "" && customRouterIP != "" {
-				p.Log.Info(fmt.Sprintf("dns: *.%s now points to %s", customDomain, customRouterIP))
-			}
-			return nil
-		}).
-		MustBuild()
-}
-

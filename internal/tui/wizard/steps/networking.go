@@ -133,17 +133,7 @@ var NetworkingStepDefinition = wizard.StepDefinition{
 					ConfigSet: wizard.SetString(func(c *config.Config, v string) { c.Networking.Bastion.IP = v }),
 					ConfigGet: wizard.GetString(func(c *config.Config) string { return c.Networking.Bastion.IP }),
 				},
-				{
-					Key:       "metallb_pool",
-					Label:     "metallb pool",
-					Default:   "192.168.1.205-192.168.1.230",
-					Help:      "ip range for loadbalancer services",
-					Required:  true,
-					Validate:  config.ValidateIPRange,
-					ConfigSet: wizard.SetString(func(c *config.Config, v string) { c.Networking.MetalLB.Pool = v }),
-					ConfigGet: wizard.GetString(func(c *config.Config) string { return c.Networking.MetalLB.Pool }),
 				},
-			},
 		},
 	},
 	Validate: func(values map[string]string) error {

@@ -38,7 +38,6 @@ const (
 	DefaultNetmask     = "255.255.255.0"
 	DefaultInterface   = "ens18"
 	DefaultBastionIP   = "192.168.1.20"
-	DefaultMetalLBPool = "192.168.1.205-192.168.1.230"
 )
 
 const (

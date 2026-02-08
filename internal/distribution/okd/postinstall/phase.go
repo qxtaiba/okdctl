@@ -26,7 +26,6 @@ type Options struct {
 	Timeout                 time.Duration
 	KubeVIPDaemonSetTimeout time.Duration
 	KubeVIPVIPTimeout       time.Duration
-	IngressLBTimeout        time.Duration
 }
 
 func NewOptions(cfg *config.Config, projectRoot string) Options {
@@ -43,12 +42,11 @@ func NewOptions(cfg *config.Config, projectRoot string) Options {
 }
 
 type Result struct {
-	RouterLBIP       string
-	CustomRouterIP   string
 	KubeVipIP        string
+	BastionIP        string
 	NodeCount        int
 	BootstrapCleaned bool
-	APIDNSSwitched   bool
+	DNSDeployed      bool
 }
 
 type Phase struct {
@@ -71,12 +69,8 @@ func (p *Phase) Execute(ctx context.Context, cfg *config.Config, opts Options) (
 		p.NewVerifyHealthStep(cfg, opts, pctx),
 		p.NewCleanupBootstrapStep(cfg, opts, pctx),
 		p.NewVerifyKubeVIPStep(cfg, opts, pctx),
-		p.NewDeployAPIDNSStep(cfg, opts, pctx),
-		p.NewRemoveHAProxyStep(cfg, opts, pctx),
+		p.NewDeployProductionDNSStep(cfg, opts, pctx),
 		p.NewInstallAddonsStep(cfg, opts, pctx, addonMgr),
-		p.NewWaitIngressLBStep(cfg, opts, pctx),
-		p.NewWaitCustomRouterLBStep(cfg, opts, pctx),
-		p.NewDeployAppsDNSStep(cfg, opts, pctx),
 	)
 	orchestrator.SetLogger(p.Log)
 
@@ -86,11 +80,10 @@ func (p *Phase) Execute(ctx context.Context, cfg *config.Config, opts Options) (
 
 	state := pctx.Get()
 	result := &Result{
-		RouterLBIP:       state.RouterLBIP,
-		CustomRouterIP:   state.CustomRouterIP,
 		KubeVipIP:        state.KubeVipIP,
+		BastionIP:        cfg.Networking.Bastion.IP,
 		BootstrapCleaned: state.BootstrapCleaned,
-		APIDNSSwitched:   state.APIDNSSwitched,
+		DNSDeployed:      state.DNSDeployed,
 	}
 	if state.ClusterHealth != nil {
 		result.NodeCount = state.ClusterHealth.ReadyNodes

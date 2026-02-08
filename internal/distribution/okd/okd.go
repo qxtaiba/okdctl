@@ -132,8 +132,21 @@ func (p *Provisioner) Configure(ctx context.Context, cfg *config.Config) (*posti
 	return phase.Execute(ctx, cfg, opts)
 }
 
+type UpdateIngressOptions struct {
+	RemoveHAProxy bool
+}
+
 type DestroyOptions struct {
 	RemovePackages bool
+}
+
+func (p *Provisioner) UpdateIngress(ctx context.Context, cfg *config.Config, opts *UpdateIngressOptions) (*postinstall.UpdateIngressResult, error) {
+	phase := postinstall.New(p.executor, p.logger, p.version)
+	piOpts := postinstall.UpdateIngressOptions{}
+	if opts != nil {
+		piOpts.RemoveHAProxy = opts.RemoveHAProxy
+	}
+	return phase.UpdateIngress(ctx, cfg, piOpts)
 }
 
 func (p *Provisioner) Destroy(ctx context.Context, cfg *config.Config, destroyOpts *DestroyOptions) error {

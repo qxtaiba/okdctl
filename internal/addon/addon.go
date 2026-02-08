@@ -19,10 +19,10 @@ type Addon interface {
 }
 
 type AddonInfo struct {
-	// Name is the unique identifier used in config (e.g., "metallb").
+	// Name is the unique identifier used in config (e.g., "flux").
 	Name string
 
-	// DisplayName is the human-readable name (e.g., "MetalLB").
+	// DisplayName is the human-readable name (e.g., "Flux GitOps").
 	DisplayName string
 
 	Description string
@@ -48,7 +48,7 @@ type Environment struct {
 
 	Logger utils.Logger
 
-	// Outputs stores cross-addon data (e.g., MetalLB pool → Ingress).
+	// Outputs stores cross-addon data for dependent addons.
 	Outputs *OutputStore
 
 	ProjectRoot string

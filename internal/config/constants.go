@@ -31,7 +31,6 @@ const (
 	FieldNetworkingStaticIPStart   = "networking.static_ip.start"
 	FieldNetworkingStaticIPNetmask = "networking.static_ip.netmask"
 	FieldNetworkingStaticIPIface   = "networking.static_ip.interface"
-	FieldNetworkingMetalLBPool     = "networking.metallb.pool"
 	FieldNetworkingCustomDomain    = "networking.custom_domain"
 
 	FieldProxmoxHost    = "provider.proxmox.host"

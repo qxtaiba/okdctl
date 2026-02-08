@@ -78,6 +78,21 @@ func CreateOKDProvisionerWithCreds(cfg *config.Config, creds *credentials.Proxmo
 	return okd.New(cfg.Distribution.Version, opts...)
 }
 
+// CreateOKDProvisionerNoCreds creates a provisioner without Proxmox credentials.
+// Used for operations that only need local tools (oc, dnsmasq, systemctl).
+func CreateOKDProvisionerNoCreds(cfg *config.Config) *okd.Provisioner {
+	projectRoot, err := os.Getwd()
+	if err != nil {
+		tui.Debug("failed to get working directory, using fallback: " + err.Error())
+		projectRoot = "."
+	}
+
+	return okd.New(cfg.Distribution.Version,
+		okd.WithProjectRoot(projectRoot),
+		okd.WithLogger(CLILogger()),
+	)
+}
+
 func CLILogger() okd.Logger {
 	return tui.SimpleLogger()
 }

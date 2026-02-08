@@ -12,9 +12,9 @@ import (
 const DefaultIngressLBTimeout = 10 * time.Minute
 
 // waitForDefaultRouterLB polls the router-default service in openshift-ingress
-// until MetalLB assigns a LoadBalancer IP. Returns the IP or an error on timeout.
+// until a LoadBalancer IP is assigned. Returns the IP or an error on timeout.
 func (p *Phase) waitForDefaultRouterLB(ctx context.Context, opts Options) (string, error) {
-	timeout := opts.IngressLBTimeout
+	timeout := opts.Timeout
 	if timeout == 0 {
 		timeout = DefaultIngressLBTimeout
 	}
@@ -46,8 +46,8 @@ func (p *Phase) waitForDefaultRouterLB(ctx context.Context, opts Options) (strin
 const DefaultCustomRouterLBTimeout = 2 * time.Minute
 
 // waitForCustomRouterLB polls the router-<name> service in openshift-ingress
-// until MetalLB assigns a LoadBalancer IP. Shorter timeout than the default router
-// since MetalLB should already be running by this point.
+// until a LoadBalancer IP is assigned. Shorter timeout than the default router
+// since the LB provider should already be running by this point.
 func (p *Phase) waitForCustomRouterLB(ctx context.Context, name string, opts Options) (string, error) {
 	timeout := DefaultCustomRouterLBTimeout
 	svcName := fmt.Sprintf("router-%s", name)

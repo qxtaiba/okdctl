@@ -47,7 +47,6 @@ type NetworkingConfig struct {
 
 	StaticIP     StaticIPConfig `yaml:"static_ip,omitempty" json:"staticIp,omitempty" mapstructure:"static_ip"`
 	Bastion      BastionConfig  `yaml:"bastion,omitempty" json:"bastion,omitempty" mapstructure:"bastion"`
-	MetalLB      MetalLBConfig  `yaml:"metallb,omitempty" json:"metallb,omitempty" mapstructure:"metallb"`
 	CustomDomain string         `yaml:"custom_domain,omitempty" json:"customDomain,omitempty" mapstructure:"custom_domain"`
 }
 
@@ -61,10 +60,6 @@ type StaticIPConfig struct {
 // BastionConfig defines the bastion host (runs HAProxy for API load balancing).
 type BastionConfig struct {
 	IP string `yaml:"ip" json:"ip" mapstructure:"ip"`
-}
-
-type MetalLBConfig struct {
-	Pool string `yaml:"pool" json:"pool" mapstructure:"pool"` // e.g., "192.168.1.205-192.168.1.230"
 }
 
 type AddonConfig struct {

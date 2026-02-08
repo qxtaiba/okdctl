@@ -141,7 +141,6 @@ func (v *advancedNetworkingValidator) Validate(cfg *Config, result *ValidationRe
 	gateway := cfg.Networking.Gateway
 	bastionIP := cfg.Networking.Bastion.IP
 	staticIPStart := cfg.Networking.StaticIP.Start
-	metallbPool := cfg.Networking.MetalLB.Pool
 
 	if machineCIDR == "" || !IsValidCIDR(machineCIDR) {
 		return
@@ -175,29 +174,6 @@ func (v *advancedNetworkingValidator) Validate(cfg *Config, result *ValidationRe
 		}
 	}
 
-	var metallbStart, metallbEnd string
-	if metallbPool != "" {
-		var err error
-		metallbStart, metallbEnd, err = netutil.ParseIPPool(metallbPool)
-		if err != nil {
-			result.AddError(FieldNetworkingMetalLBPool, err.Error())
-		} else {
-			cmp, cmpErr := netutil.CompareIPs(metallbStart, metallbEnd)
-			if cmpErr != nil {
-				result.AddError(FieldNetworkingMetalLBPool, cmpErr.Error())
-			} else if cmp > 0 {
-				result.AddError(FieldNetworkingMetalLBPool, "start IP must be less than or equal to end IP")
-			}
-
-			if !netutil.IPInCIDR(metallbStart, machineCIDR) {
-				result.AddError(FieldNetworkingMetalLBPool, fmt.Sprintf("start IP %s must be within machine CIDR %s", metallbStart, machineCIDR))
-			}
-			if !netutil.IPInCIDR(metallbEnd, machineCIDR) {
-				result.AddError(FieldNetworkingMetalLBPool, fmt.Sprintf("end IP %s must be within machine CIDR %s", metallbEnd, machineCIDR))
-			}
-		}
-	}
-
 	type namedIP struct {
 		name string
 		ip   string
@@ -227,16 +203,6 @@ func (v *advancedNetworkingValidator) Validate(cfg *Config, result *ValidationRe
 		result.AddError(FieldNetworkingCustomDomain, "must be a valid domain name")
 	}
 
-	if staticIPStart != "" && IsValidIP(staticIPStart) && metallbStart != "" && metallbEnd != "" {
-		totalNodes := 1 + cfg.Topology.ControlPlane.Count + cfg.Topology.Workers.Count
-		staticIPEnd, err := netutil.CalculateVMIP(staticIPStart, totalNodes-1)
-		if err == nil {
-			if netutil.RangesOverlap(staticIPStart, staticIPEnd, metallbStart, metallbEnd) {
-				result.AddError("networking.static_ip.start",
-					fmt.Sprintf("range %s-%s overlaps with MetalLB pool %s", staticIPStart, staticIPEnd, metallbPool))
-			}
-		}
-	}
 }
 
 type resourcesValidator struct{}

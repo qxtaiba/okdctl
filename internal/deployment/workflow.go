@@ -11,20 +11,17 @@ import (
 )
 
 type Result struct {
-	// RouterLBIP is the LoadBalancer IP assigned to the default ingress router.
-	RouterLBIP string
-
-	// CustomRouterIP is the LoadBalancer IP for the cluster-specific custom ingress (if configured).
-	CustomRouterIP string
-
 	// KubeVipIP is the kube-vip virtual IP for the API server.
 	KubeVipIP string
+
+	// BastionIP is the bastion IP currently handling *.apps ingress via HAProxy.
+	BastionIP string
 
 	// BootstrapCleaned indicates the bootstrap VM was destroyed after install.
 	BootstrapCleaned bool
 
-	// APIDNSSwitched indicates API DNS was switched from bastion to kube-vip.
-	APIDNSSwitched bool
+	// DNSDeployed indicates production DNS was deployed (api → VIP, apps → bastion).
+	DNSDeployed bool
 }
 
 type Options struct {
