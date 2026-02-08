@@ -99,7 +99,7 @@ func (p *Phase) NewDeployProductionDNSStep(cfg *config.Config, opts Options, pct
 		Execute(func(ctx context.Context) error {
 			state := pctx.Get()
 			bastionIP := cfg.Networking.Bastion.IP
-			if err := p.deployProductionDNS(ctx, cfg, bastionIP, state.KubeVipIP, "", ""); err != nil {
+			if err := p.deployProductionDNS(ctx, cfg, bastionIP, state.KubeVipIP, nil); err != nil {
 				return utils.WrapError("production dns deployment failed", err)
 			}
 			pctx.Update(func(c *PostInstallContext) {

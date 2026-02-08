@@ -31,10 +31,10 @@ address=/.apps.{{ .ClusterDomain }}/{{ .AppsIP }}
 # address=/.apps.{{ .ClusterDomain }}/<ROUTER_LB_IP>
 {{- end }}
 
-{{- if .UserAppsIP }}
+{{- range .CustomDomains }}
 
-# user applications domain (custom router)
-address=/.{{ .UserAppsDomain }}/{{ .UserAppsIP }}
+# custom domain ({{ .Domain }})
+address=/.{{ .Domain }}/{{ .IP }}
 {{- end }}
 
 # cluster nodes
@@ -92,10 +92,10 @@ ptr-record={{ $workerReverse }}.in-addr.arpa,{{ .Name }}.{{ $.ClusterDomain }}
 ptr-record={{ $appsReverse }}.in-addr.arpa,apps.{{ .ClusterDomain }}
 {{- end }}
 {{- end }}
-{{- if .UserAppsIP }}
-{{- $userAppsReverse := reversePTR .UserAppsIP }}
-{{- if $userAppsReverse }}
-ptr-record={{ $userAppsReverse }}.in-addr.arpa,{{ .UserAppsDomain }}
+{{- range .CustomDomains }}
+{{- $customReverse := reversePTR .IP }}
+{{- if $customReverse }}
+ptr-record={{ $customReverse }}.in-addr.arpa,{{ .Domain }}
 {{- end }}
 {{- end }}
 
@@ -111,8 +111,8 @@ address=/{{ .ClusterName }}-api/{{ .BastionIP }}
 {{- if .AppsIP }}
 address=/{{ .ClusterName }}-apps/{{ .AppsIP }}
 {{- end }}
-{{- if .UserAppsIP }}
-address=/{{ .ClusterName }}-router/{{ .UserAppsIP }}
+{{- range $i, $cd := .CustomDomains }}
+address=/{{ $.ClusterName }}-router{{ if $i }}{{ $i }}{{ end }}/{{ $cd.IP }}
 {{- end }}
 {{- range .MasterNodes }}
 {{- if .IP }}

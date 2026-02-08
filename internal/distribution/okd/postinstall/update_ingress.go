@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/qxtaiba/okd-proxmox-cli/internal/config"
+	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/templates"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/netutil"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
 )
@@ -56,10 +57,26 @@ func (p *Phase) UpdateIngress(ctx context.Context, cfg *config.Config, opts Upda
 		return nil, fmt.Errorf("no IngressControllers found in the cluster")
 	}
 
-	var entries []IngressEntry
-	var defaultAppsIP string
+	// Check default first — fail fast if the essential router has no LB IP.
+	p.Log.Info("update-ingress: waiting for router-default LoadBalancer IP")
+	defaultAppsIP, err := p.waitForServiceLB(ctx, "router-default", postOpts)
+	if err != nil {
+		return nil, fmt.Errorf("router-default has no LoadBalancer IP: %w", err)
+	}
+	p.Log.Info(fmt.Sprintf("update-ingress: router-default LoadBalancer IP is %s", defaultAppsIP))
 
+	entries := []IngressEntry{{
+		Name:   "default",
+		Domain: controllerDomain(controllers, "default"),
+		LBIP:   defaultAppsIP,
+	}}
+
+	// Then check all non-default IngressControllers.
+	var customDomains []templates.DNSCustomDomain
 	for _, ic := range controllers {
+		if ic.Name == "default" {
+			continue
+		}
 		svcName := fmt.Sprintf("router-%s", ic.Name)
 		p.Log.Info(fmt.Sprintf("update-ingress: waiting for %s LoadBalancer IP", svcName))
 
@@ -75,29 +92,14 @@ func (p *Phase) UpdateIngress(ctx context.Context, cfg *config.Config, opts Upda
 			Domain: ic.Domain,
 			LBIP:   ip,
 		})
-
-		if ic.Name == "default" {
-			defaultAppsIP = ip
-		}
-	}
-
-	if defaultAppsIP == "" {
-		return nil, fmt.Errorf("router-default has no LoadBalancer IP — cannot update ingress DNS")
-	}
-
-	// Build custom domain args for deployProductionDNS.
-	// The first non-default entry becomes the custom domain (template supports one).
-	var customDomain, customRouterIP string
-	for _, e := range entries {
-		if e.Name != "default" && e.LBIP != "" {
-			customDomain = e.Domain
-			customRouterIP = e.LBIP
-			break
-		}
+		customDomains = append(customDomains, templates.DNSCustomDomain{
+			Domain: ic.Domain,
+			IP:     ip,
+		})
 	}
 
 	p.Log.Info("update-ingress: deploying production DNS with LoadBalancer IPs")
-	if err := p.deployProductionDNS(ctx, cfg, defaultAppsIP, vip, customDomain, customRouterIP); err != nil {
+	if err := p.deployProductionDNS(ctx, cfg, defaultAppsIP, vip, customDomains); err != nil {
 		return nil, fmt.Errorf("failed to deploy production DNS: %w", err)
 	}
 	p.Log.Info(fmt.Sprintf("update-ingress: dns updated — *.apps → %s, api.* → %s", defaultAppsIP, vip))
@@ -193,4 +195,13 @@ func (p *Phase) waitForServiceLB(ctx context.Context, svcName string, opts Optio
 	}
 
 	return ip, nil
+}
+
+func controllerDomain(controllers []ingressControllerInfo, name string) string {
+	for _, ic := range controllers {
+		if ic.Name == name {
+			return ic.Domain
+		}
+	}
+	return ""
 }

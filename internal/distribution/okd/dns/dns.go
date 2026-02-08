@@ -146,7 +146,7 @@ func DeployBootstrap(ctx context.Context, cfg *config.Config) error {
 	return nil
 }
 
-func DeployProduction(ctx context.Context, cfg *config.Config, appsIP, kubeVipIP, customDomain, customRouterIP string) error {
+func DeployProduction(ctx context.Context, cfg *config.Config, appsIP, kubeVipIP string, customDomains []templates.DNSCustomDomain) error {
 	data, err := BuildConfigData(cfg)
 	if err != nil {
 		return utils.WrapError("failed to build dns config data", err)
@@ -161,15 +161,14 @@ func DeployProduction(ctx context.Context, cfg *config.Config, appsIP, kubeVipIP
 			return fmt.Errorf("invalid kube-vip IP address: %s", kubeVipIP)
 		}
 	}
-	if customRouterIP != "" {
-		if net.ParseIP(customRouterIP) == nil {
-			return fmt.Errorf("invalid custom router IP address: %s", customRouterIP)
+	for _, cd := range customDomains {
+		if net.ParseIP(cd.IP) == nil {
+			return fmt.Errorf("invalid custom domain IP address for %s: %s", cd.Domain, cd.IP)
 		}
 	}
 	data.AppsIP = appsIP
 	data.KubeVipIP = kubeVipIP
-	data.UserAppsDomain = customDomain
-	data.UserAppsIP = customRouterIP
+	data.CustomDomains = customDomains
 
 	content, err := templates.RenderDNSProductionConfig(data)
 	if err != nil {

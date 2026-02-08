@@ -72,16 +72,23 @@ type DNSNode struct {
 	IP   string
 }
 
+// DNSCustomDomain maps a custom domain to a LoadBalancer IP.
+type DNSCustomDomain struct {
+	Domain string // e.g., "grappleberry.xyz"
+	IP     string // LoadBalancer IP assigned by MetalLB
+}
+
 type DNSConfigData struct {
 	ClusterName   string
 	ClusterDomain string // e.g., "mycluster.k8s.local"
 
 	// Load balancer IPs
-	BastionIP   string // HAProxy for API load balancing (bootstrap phase only)
-	KubeVipIP   string // kube-vip VIP for API (production only, takes over from HAProxy)
-	AppsIP         string // Default router LB IP (auto-assigned by LB provider)
-	UserAppsIP     string // User apps router IP (optional, for custom domain)
-	UserAppsDomain string // User apps domain (e.g., "myapps.example.com")
+	BastionIP string // HAProxy for API load balancing (bootstrap phase only)
+	KubeVipIP string // kube-vip VIP for API (production only, takes over from HAProxy)
+	AppsIP    string // Default router LB IP (auto-assigned by LB provider)
+
+	// Custom domains served by non-default IngressControllers
+	CustomDomains []DNSCustomDomain
 
 	// Upstream DNS servers for forwarding external queries
 	UpstreamDNS []string

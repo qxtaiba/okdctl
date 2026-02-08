@@ -11,6 +11,7 @@ import (
 	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/dns"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/paths"
+	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/templates"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/executor"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
 )
@@ -94,8 +95,8 @@ func (p *Phase) Execute(ctx context.Context, cfg *config.Config, opts Options) (
 	return result, nil
 }
 
-func (p *Phase) deployProductionDNS(ctx context.Context, cfg *config.Config, appsIP, kubeVipIP, customDomain, customRouterIP string) error {
-	if err := dns.DeployProduction(ctx, cfg, appsIP, kubeVipIP, customDomain, customRouterIP); err != nil {
+func (p *Phase) deployProductionDNS(ctx context.Context, cfg *config.Config, appsIP, kubeVipIP string, customDomains []templates.DNSCustomDomain) error {
+	if err := dns.DeployProduction(ctx, cfg, appsIP, kubeVipIP, customDomains); err != nil {
 		return utils.WrapError("failed to deploy production dns config", err)
 	}
 	return nil
