@@ -2,6 +2,7 @@ package addon
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/qxtaiba/okd-proxmox-cli/internal/config"
@@ -35,6 +36,8 @@ func (m *Manager) OutputStore() *OutputStore {
 }
 
 // InstallAll resolves and installs all enabled addons in dependency order.
+// Independent addons are attempted even if an earlier addon fails; addons
+// whose dependency failed are skipped.
 func (m *Manager) InstallAll(ctx context.Context) error {
 	enabled := Enabled(m.cfg)
 	if len(enabled) == 0 {
@@ -49,17 +52,31 @@ func (m *Manager) InstallAll(ctx context.Context) error {
 
 	m.logger.Info(fmt.Sprintf("addons: installing %d addon(s)", len(ordered)))
 
+	failed := make(map[string]bool)
+	var errs []error
+
 	for _, a := range ordered {
 		info := a.Info()
 		if err := ctx.Err(); err != nil {
 			return err
 		}
 
+		// Skip if any dependency failed.
+		if dep := m.firstFailedDep(info.Dependencies, failed); dep != "" {
+			m.logger.Warn(fmt.Sprintf("addons: skipping %s (dependency %s failed)", info.DisplayName, dep))
+			failed[info.Name] = true
+			continue
+		}
+
 		m.logger.Info(fmt.Sprintf("addons: installing %s", info.DisplayName))
 
 		env := m.buildEnv(a)
 		if err := a.Install(ctx, env); err != nil {
-			return fmt.Errorf("addon %s install failed: %w", info.Name, err)
+			failed[info.Name] = true
+			addonErr := fmt.Errorf("addon %s install failed: %w", info.Name, err)
+			m.logger.Warn(addonErr.Error())
+			errs = append(errs, addonErr)
+			continue
 		}
 
 		if op, ok := a.(OutputProducer); ok {
@@ -71,7 +88,17 @@ func (m *Manager) InstallAll(ctx context.Context) error {
 		m.logger.Info(fmt.Sprintf("addons: %s installed", info.DisplayName))
 	}
 
-	return nil
+	return errors.Join(errs...)
+}
+
+// firstFailedDep returns the name of the first dependency in the failed set, or "".
+func (m *Manager) firstFailedDep(deps []string, failed map[string]bool) string {
+	for _, d := range deps {
+		if failed[d] {
+			return d
+		}
+	}
+	return ""
 }
 
 // InstallOne installs a single addon plus any missing dependencies.
