@@ -1,5 +1,3 @@
-// Package download provides utilities for downloading files with
-// checksum verification and archive extraction.
 package download
 
 import (
@@ -15,35 +13,25 @@ import (
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
 )
 
-// Options configures a download operation.
 type Options struct {
-	// URL is the URL to download from.
-	URL string
-
-	// OutputPath is where to save the downloaded file.
-	OutputPath string
-
-	// ExpectedChecksum is the expected SHA256 checksum (optional).
-	// If provided, the download will be verified against this checksum.
-	ExpectedChecksum string
-
-	// Description is a human-readable description for logging.
-	Description string
-
-	// Timeout is the maximum time for the download.
-	// Default: 5 minutes.
-	Timeout time.Duration
-
-	// Overwrite controls whether to overwrite existing files.
-	// If false and file exists with correct checksum, download is skipped.
-	Overwrite bool
+	URL              string
+	OutputPath       string
+	ExpectedChecksum string // SHA256 checksum; if set, download is verified against it
+	Description      string
+	Timeout          time.Duration // Default: 5 minutes
+	Overwrite        bool          // If false and file exists with correct checksum, download is skipped
+	Logger           utils.Logger
 }
 
-// DefaultTimeout is the default download timeout.
+func (o Options) logger() utils.Logger {
+	if o.Logger != nil {
+		return o.Logger
+	}
+	return utils.NoopLogger()
+}
+
 const DefaultTimeout = 5 * time.Minute
 
-// canSkipDownload checks if file exists with valid checksum.
-// Returns true if the file exists and either has valid checksum or no checksum is required.
 func canSkipDownload(opts Options) (bool, error) {
 	info, err := os.Stat(opts.OutputPath)
 	if err != nil || info.Size() == 0 {
@@ -52,13 +40,12 @@ func canSkipDownload(opts Options) (bool, error) {
 
 	filename := filepath.Base(opts.OutputPath)
 
-	// No checksum to validate, use existing file
 	if opts.ExpectedChecksum == "" {
-		utils.GetLogger().Info(fmt.Sprintf("download: using existing file %s (no checksum)", filename))
+		opts.logger().Info(fmt.Sprintf("download: using existing file %s (no checksum)", filename))
 		return true, nil
 	}
 
-	utils.GetLogger().Info(fmt.Sprintf("download: validating existing file %s", filename))
+	opts.logger().Info(fmt.Sprintf("download: validating existing file %s", filename))
 
 	actualChecksum, err := CalculateChecksum(opts.OutputPath)
 	if err != nil {
@@ -66,19 +53,17 @@ func canSkipDownload(opts Options) (bool, error) {
 	}
 
 	if actualChecksum == opts.ExpectedChecksum {
-		utils.GetLogger().Info(fmt.Sprintf("download: checksum verified for %s", filename))
+		opts.logger().Info(fmt.Sprintf("download: checksum verified for %s", filename))
 		return true, nil
 	}
 
-	utils.GetLogger().Warn(fmt.Sprintf("download: checksum mismatch, re-downloading %s", filename))
+	opts.logger().Warn(fmt.Sprintf("download: checksum mismatch, re-downloading %s", filename))
 	if err := os.Remove(opts.OutputPath); err != nil && !os.IsNotExist(err) {
-		utils.GetLogger().Warn(fmt.Sprintf("download: failed to remove mismatched file %s: %v", filename, err))
+		opts.logger().Warn(fmt.Sprintf("download: failed to remove mismatched file %s: %v", filename, err))
 	}
 	return false, nil
 }
 
-// Download downloads a file from a URL with optional checksum verification.
-// If the file already exists and has the correct checksum, the download is skipped.
 func Download(ctx context.Context, opts Options) error {
 	if opts.Timeout == 0 {
 		opts.Timeout = DefaultTimeout
@@ -103,7 +88,7 @@ func Download(ctx context.Context, opts Options) error {
 	}
 
 	filename := filepath.Base(opts.OutputPath)
-	utils.GetLogger().Info(fmt.Sprintf("download: %s", filename))
+	opts.logger().Info(fmt.Sprintf("download: %s", filename))
 
 	client := system.NewClient(system.WithTimeout(opts.Timeout))
 
@@ -135,16 +120,14 @@ func Download(ctx context.Context, opts Options) error {
 
 	_, err = io.Copy(pw, resp.Body)
 	if err != nil {
-		// Stop progress output before returning error (prevents overwriting terminal)
 		pw.stop()
-		fmt.Print("\n") // Ensure we're on a new line after partial progress
+		fmt.Print("\n")
 		_ = os.Remove(opts.OutputPath)
 		return utils.WrapError("failed to write file", err)
 	}
 	pw.finish()
 
-	// Close file before checksum verification
 	_ = outFile.Close()
 
-	return verifyDownloadedFile(opts.OutputPath, opts.ExpectedChecksum)
+	return verifyDownloadedFile(opts.OutputPath, opts.ExpectedChecksum, opts.logger())
 }

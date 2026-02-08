@@ -16,10 +16,8 @@ import (
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
 )
 
-// DefaultProxmoxISODir is the default path to Proxmox ISO storage directory.
 const DefaultProxmoxISODir = "/var/lib/vz/template/iso"
 
-// findOrDownloadFCOSISO finds an existing FCOS ISO or downloads one.
 func (p *Phase) findOrDownloadFCOSISO(ctx context.Context, cfg *config.Config, opts Options) (string, error) {
 	isoDir := DefaultProxmoxISODir
 
@@ -84,7 +82,6 @@ func (p *Phase) findOrDownloadFCOSISO(ctx context.Context, cfg *config.Config, o
 	})
 }
 
-// DetectCoreOSVersion extracts CoreOS image information from openshift-install.
 func (p *Phase) DetectCoreOSVersion(ctx context.Context) (*CoreOSInfo, error) {
 	if !executor.CommandExists("openshift-install") {
 		return nil, fmt.Errorf("openshift-install not found - run setup first")
@@ -140,7 +137,6 @@ func (p *Phase) DetectCoreOSVersion(ctx context.Context) (*CoreOSInfo, error) {
 	}, nil
 }
 
-// DownloadCoreOSISO downloads the CoreOS ISO if not present.
 func (p *Phase) DownloadCoreOSISO(ctx context.Context, info *CoreOSInfo, destPath string) error {
 	if system.FileExists(destPath) {
 		p.Log.Info(fmt.Sprintf("coreos: iso already exists at %s", destPath))
@@ -170,6 +166,7 @@ func (p *Phase) DownloadCoreOSISO(ctx context.Context, info *CoreOSInfo, destPat
 		OutputPath:       destPath,
 		ExpectedChecksum: info.ISOChecksum,
 		Description:      "CoreOS ISO",
+		Logger:           p.Log,
 	}
 
 	if err := download.Download(ctx, opts); err != nil {
@@ -181,8 +178,8 @@ func (p *Phase) DownloadCoreOSISO(ctx context.Context, info *CoreOSInfo, destPat
 	return nil
 }
 
-// EnsureCoreOSISO ensures the CoreOS ISO is available, downloading if necessary.
-// Downloads to the work directory to avoid permission issues with /var/lib/vz.
+// EnsureCoreOSISO ensures the CoreOS ISO is available, downloading to the work
+// directory (avoids permission issues with /var/lib/vz).
 func (p *Phase) EnsureCoreOSISO(ctx context.Context, cfg *config.Config, opts Options) (string, error) {
 	p.Log.Info("coreos: detecting version from openshift-install")
 

@@ -6,17 +6,14 @@ import (
 	"time"
 )
 
-// Default timeout values for different use cases.
 const (
 	TimeoutShort    = 10 * time.Second // For API calls, connectivity checks
 	TimeoutMedium   = 30 * time.Second // For fetching metadata, checksums
 	TimeoutDownload = 5 * time.Minute  // For file downloads
 )
 
-// ClientOption configures an HTTP client.
 type ClientOption func(*http.Client)
 
-// WithTimeout sets the client timeout.
 func WithTimeout(d time.Duration) ClientOption {
 	return func(c *http.Client) {
 		c.Timeout = d
@@ -36,7 +33,6 @@ func WithInsecureSkipVerify() ClientOption {
 		}
 		t, ok := c.Transport.(*http.Transport)
 		if !ok {
-			// Cannot modify non-standard transport, skip silently
 			return
 		}
 		if t.TLSClientConfig == nil {
@@ -46,8 +42,6 @@ func WithInsecureSkipVerify() ClientOption {
 	}
 }
 
-// NewClient creates a new HTTP client with the given options.
-// Default timeout is TimeoutMedium (30 seconds).
 func NewClient(opts ...ClientOption) *http.Client {
 	c := &http.Client{
 		Timeout: TimeoutMedium,
@@ -58,8 +52,6 @@ func NewClient(opts ...ClientOption) *http.Client {
 	return c
 }
 
-// NewAPIClient creates an HTTP client configured for API calls.
-// Uses TimeoutShort (10 seconds) by default.
 func NewAPIClient(opts ...ClientOption) *http.Client {
 	allOpts := append([]ClientOption{WithTimeout(TimeoutShort)}, opts...)
 	return NewClient(allOpts...)

@@ -6,11 +6,10 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/qxtaiba/okd-proxmox-cli/internal/logging"
+	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
 )
 
-// Terraform removes terraform state and plan files.
-func Terraform(ctx context.Context, projectRoot, terraformEnv string, logger logging.Logger) error {
+func Terraform(ctx context.Context, projectRoot, terraformEnv string, logger utils.Logger) error {
 	if logger != nil {
 		logger.Info("cleanup: terraform artifacts")
 	}
@@ -42,7 +41,7 @@ func Terraform(ctx context.Context, projectRoot, terraformEnv string, logger log
 	return nil
 }
 
-func cleanupTerraformEnv(ctx context.Context, envDir, envName string, logger logging.Logger) error {
+func cleanupTerraformEnv(ctx context.Context, envDir, envName string, logger utils.Logger) error {
 	if _, err := os.Stat(envDir); os.IsNotExist(err) {
 		return nil
 	}

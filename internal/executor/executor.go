@@ -1,4 +1,3 @@
-// Package executor provides wrappers for executing external commands.
 package executor
 
 import (
@@ -12,56 +11,39 @@ import (
 	"strings"
 	"time"
 
-	"github.com/qxtaiba/okd-proxmox-cli/internal/logging"
+	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
 )
 
-// Executor runs external commands with configurable working directory,
-// environment variables, and output handling.
 type Executor struct {
-	// WorkDir is the working directory for commands.
 	WorkDir string
-
-	// Env contains additional environment variables.
-	Env []string
-
-	// Stdout is where stdout is written (default: os.Stdout).
-	Stdout io.Writer
-
-	// Stderr is where stderr is written (default: os.Stderr).
-	Stderr io.Writer
-
-	// Verbose enables verbose output.
+	Env     []string
+	Stdout  io.Writer
+	Stderr  io.Writer
 	Verbose bool
-
-	// logger is the logger for verbose output.
-	logger logging.Logger
+	logger  utils.Logger
 }
 
-// Option configures an Executor.
 type Option func(*Executor)
 
-// WithWorkDir sets the working directory for commands.
 func WithWorkDir(dir string) Option {
 	return func(e *Executor) { e.WorkDir = dir }
 }
 
-// WithVerbose enables verbose output.
 func WithVerbose(verbose bool) Option {
 	return func(e *Executor) { e.Verbose = verbose }
 }
 
-// WithEnv adds environment variables to the executor.
-// These are appended to the current environment when running commands.
+// WithEnv appends environment variables; they are merged with os.Environ()
+// at execution time rather than replacing the inherited environment.
 func WithEnv(env []string) Option {
 	return func(e *Executor) { e.Env = append(e.Env, env...) }
 }
 
-// New creates a new executor with optional configuration.
 func New(opts ...Option) *Executor {
 	e := &Executor{
 		Stdout: os.Stdout,
 		Stderr: os.Stderr,
-		logger: logging.NoopLogger(),
+		logger: utils.NoopLogger(),
 	}
 	for _, opt := range opts {
 		opt(e)
@@ -69,23 +51,13 @@ func New(opts ...Option) *Executor {
 	return e
 }
 
-// Result contains the outcome of a command execution, including exit code,
-// captured output streams, and execution duration.
 type Result struct {
-	// ExitCode is the exit code of the command.
 	ExitCode int
-
-	// Stdout is the captured stdout.
-	Stdout string
-
-	// Stderr is the captured stderr.
-	Stderr string
-
-	// Duration is how long the command took.
+	Stdout   string
+	Stderr   string
 	Duration time.Duration
 }
 
-// Run executes a command and returns the result.
 func (e *Executor) Run(ctx context.Context, name string, args ...string) (*Result, error) {
 	start := time.Now()
 
@@ -128,7 +100,6 @@ func (e *Executor) Run(ctx context.Context, name string, args ...string) (*Resul
 	return result, nil
 }
 
-// RunInteractive runs a command with interactive I/O.
 func (e *Executor) RunInteractive(ctx context.Context, name string, args ...string) error {
 	cmd := exec.CommandContext(ctx, name, args...)
 
@@ -151,7 +122,6 @@ func (e *Executor) RunInteractive(ctx context.Context, name string, args ...stri
 	return cmd.Run()
 }
 
-// RunWithOutput runs a command and returns stdout as a string.
 func (e *Executor) RunWithOutput(ctx context.Context, name string, args ...string) (string, error) {
 	result, err := e.Run(ctx, name, args...)
 	if err != nil {
@@ -163,13 +133,11 @@ func (e *Executor) RunWithOutput(ctx context.Context, name string, args ...strin
 	return strings.TrimSpace(result.Stdout), nil
 }
 
-// CommandExists checks if a command exists in PATH.
 func CommandExists(name string) bool {
 	_, err := exec.LookPath(name)
 	return err == nil
 }
 
-// CommandPath returns the full path to a command if it exists in PATH.
 func CommandPath(name string) (string, error) {
 	return exec.LookPath(name)
 }

@@ -10,7 +10,6 @@ import (
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
 )
 
-// FieldType represents the type of input field.
 type FieldType int
 
 const (
@@ -20,13 +19,9 @@ const (
 	FieldTypeBool // For yes/no fields
 )
 
-// ConfigSetter is a function that sets a config value from a string.
 type ConfigSetter func(cfg *config.Config, value string) error
-
-// ConfigGetter is a function that gets a config value as a string.
 type ConfigGetter func(cfg *config.Config) string
 
-// FieldDefinition describes a single form field declaratively.
 type FieldDefinition struct {
 	Key      string              // Unique key for accessing value
 	Label    string              // Display label
@@ -36,19 +31,16 @@ type FieldDefinition struct {
 	Required bool                // Whether field is required
 	Validate func(string) error // Optional validation function
 
-	// Config binding (optional - if set, auto-apply/load works)
 	ConfigSet ConfigSetter
 	ConfigGet ConfigGetter
 }
 
-// SectionDefinition describes a group of related fields.
 type SectionDefinition struct {
 	Title  string
 	Note   string // Optional hint rendered below the title (e.g., prerequisites)
 	Fields []FieldDefinition
 }
 
-// StepDefinition describes a wizard step declaratively.
 type StepDefinition struct {
 	ID           StepID
 	Title        string
@@ -56,28 +48,23 @@ type StepDefinition struct {
 	Description  string
 	Sections     []SectionDefinition
 
-	// Optional callbacks for step-specific behavior
 	Validate     func(values map[string]string) error
 	Apply        func(step *DataDrivenStep, cfg *config.Config) error // Custom apply (after auto-binding)
 	ShouldShow   func(*config.Config) bool
 	ExtraContent func(values map[string]string, width int) string
 }
 
-// DataDrivenStep is a step created from a StepDefinition.
-// It wraps MultiFormStep and provides value access by key.
 type DataDrivenStep struct {
 	*MultiFormStep
 	definition StepDefinition
 	fieldKeys  map[string]fieldLocation // maps Key -> section/field indices
 }
 
-// fieldLocation stores the location of a field within sections.
 type fieldLocation struct {
 	section int
 	field   int
 }
 
-// NewDataDrivenStep creates a wizard step from a declarative definition.
 func NewDataDrivenStep(def StepDefinition) *DataDrivenStep {
 	formStep := NewMultiFormStep(def.ID, def.Title, def.DisplayTitle, def.Description)
 	fieldKeys := make(map[string]fieldLocation)
@@ -167,7 +154,6 @@ func createFieldBuilder(def FieldDefinition) *FieldBuilder {
 	return fb
 }
 
-// Values returns all field values as a map keyed by field Key.
 func (s *DataDrivenStep) Values() map[string]string {
 	values := make(map[string]string)
 	for key, loc := range s.fieldKeys {
@@ -182,7 +168,6 @@ func (s *DataDrivenStep) Values() map[string]string {
 	return values
 }
 
-// Value returns a single field value by key.
 func (s *DataDrivenStep) Value(key string) string {
 	loc, ok := s.fieldKeys[key]
 	if !ok {
@@ -198,7 +183,6 @@ func (s *DataDrivenStep) Value(key string) string {
 	return ""
 }
 
-// SetValue sets a field value by key.
 func (s *DataDrivenStep) SetValue(key, value string) {
 	loc, ok := s.fieldKeys[key]
 	if !ok {
@@ -213,14 +197,12 @@ func (s *DataDrivenStep) SetValue(key, value string) {
 	}
 }
 
-// SetValues sets multiple field values from a map.
 func (s *DataDrivenStep) SetValues(values map[string]string) {
 	for key, value := range values {
 		s.SetValue(key, value)
 	}
 }
 
-// LoadFromConfig populates field values from config using ConfigGet bindings.
 func (s *DataDrivenStep) LoadFromConfig(cfg *config.Config) {
 	for _, sectionDef := range s.definition.Sections {
 		for _, fieldDef := range sectionDef.Fields {
@@ -234,8 +216,6 @@ func (s *DataDrivenStep) LoadFromConfig(cfg *config.Config) {
 	}
 }
 
-// InputGroup returns the InputGroup for a section by index.
-// Useful for step-specific state access.
 func (s *DataDrivenStep) InputGroup(sectionIndex int) *components.InputGroup {
 	section := s.Section(sectionIndex)
 	if section != nil {
@@ -244,12 +224,10 @@ func (s *DataDrivenStep) InputGroup(sectionIndex int) *components.InputGroup {
 	return nil
 }
 
-// Definition returns the step's definition.
 func (s *DataDrivenStep) Definition() StepDefinition {
 	return s.definition
 }
 
-// ValueInt returns a field value as int, with fallback.
 func (s *DataDrivenStep) ValueInt(key string, fallback int) int {
 	v := s.Value(key)
 	if v == "" {
@@ -262,18 +240,15 @@ func (s *DataDrivenStep) ValueInt(key string, fallback int) int {
 	return i
 }
 
-// ValueBool returns a field value as bool (yes/true/1 = true).
 func (s *DataDrivenStep) ValueBool(key string) bool {
 	v := strings.ToLower(strings.TrimSpace(s.Value(key)))
 	return v == "yes" || v == "true" || v == "1" || v == "y"
 }
 
-// SetValueInt sets a field value from an int.
 func (s *DataDrivenStep) SetValueInt(key string, value int) {
 	s.SetValue(key, strconv.Itoa(value))
 }
 
-// SetValueBool sets a field value from a bool (as "yes"/"no").
 func (s *DataDrivenStep) SetValueBool(key string, value bool) {
 	if value {
 		s.SetValue(key, "yes")
@@ -282,13 +257,11 @@ func (s *DataDrivenStep) SetValueBool(key string, value bool) {
 	}
 }
 
-// WithApplyFunc sets a custom Apply callback that runs after auto-binding.
 func (s *DataDrivenStep) WithApplyFunc(fn func(step *DataDrivenStep, cfg *config.Config) error) *DataDrivenStep {
 	s.definition.Apply = fn
 	return s
 }
 
-// WithExtraContentFunc sets extra content to render after sections.
 func (s *DataDrivenStep) WithExtraContentFunc(fn func(step *DataDrivenStep, width int) string) *DataDrivenStep {
 	s.WithExtraContent(func(width int) string {
 		return fn(s, width)
@@ -296,7 +269,6 @@ func (s *DataDrivenStep) WithExtraContentFunc(fn func(step *DataDrivenStep, widt
 	return s
 }
 
-// SetString creates a ConfigSetter for a string field.
 func SetString(setter func(cfg *config.Config, v string)) ConfigSetter {
 	return func(cfg *config.Config, value string) error {
 		setter(cfg, value)
@@ -304,7 +276,6 @@ func SetString(setter func(cfg *config.Config, v string)) ConfigSetter {
 	}
 }
 
-// SetInt creates a ConfigSetter for an integer field.
 func SetInt(setter func(cfg *config.Config, v int)) ConfigSetter {
 	return func(cfg *config.Config, value string) error {
 		v, err := strconv.Atoi(value)
@@ -316,7 +287,6 @@ func SetInt(setter func(cfg *config.Config, v int)) ConfigSetter {
 	}
 }
 
-// SetBool creates a ConfigSetter for a boolean field (yes/no).
 func SetBool(setter func(cfg *config.Config, v bool)) ConfigSetter {
 	return func(cfg *config.Config, value string) error {
 		v := strings.ToLower(strings.TrimSpace(value))
@@ -326,12 +296,10 @@ func SetBool(setter func(cfg *config.Config, v bool)) ConfigSetter {
 	}
 }
 
-// GetString creates a ConfigGetter for a string field.
 func GetString(getter func(cfg *config.Config) string) ConfigGetter {
 	return getter
 }
 
-// GetInt creates a ConfigGetter for an integer field.
 func GetInt(getter func(cfg *config.Config) int) ConfigGetter {
 	return func(cfg *config.Config) string {
 		v := getter(cfg)
@@ -342,7 +310,6 @@ func GetInt(getter func(cfg *config.Config) int) ConfigGetter {
 	}
 }
 
-// GetBool creates a ConfigGetter for a boolean field.
 func GetBool(getter func(cfg *config.Config) bool) ConfigGetter {
 	return func(cfg *config.Config) string {
 		if getter(cfg) {

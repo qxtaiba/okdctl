@@ -10,10 +10,7 @@ import (
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
 )
 
-// K8sClient provides a high-level interface for Kubernetes operations.
-// It uses kubectl or oc as the underlying CLI tool.
 type K8sClient struct {
-	// CLI is the command to use (kubectl, oc)
 	CLI string
 
 	Kubeconfig string
@@ -21,23 +18,19 @@ type K8sClient struct {
 	exec *executor.Executor
 }
 
-// Option configures a K8sClient.
 type Option func(*K8sClient)
 
-// WithCLI sets the CLI tool to use (kubectl or oc).
 func WithCLI(cli string) Option {
 	return func(c *K8sClient) { c.CLI = cli }
 }
 
-// WithKubeconfig sets the path to the kubeconfig file.
 func WithKubeconfig(path string) Option {
 	return func(c *K8sClient) { c.Kubeconfig = path }
 }
 
-// NewK8sClient creates a new Kubernetes client with optional configuration.
 func NewK8sClient(opts ...Option) *K8sClient {
 	c := &K8sClient{
-		CLI: "kubectl", // Default CLI
+		CLI: "kubectl",
 	}
 
 	if envKubeconfig := os.Getenv("KUBECONFIG"); envKubeconfig != "" {
@@ -65,7 +58,6 @@ func NewK8sClient(opts ...Option) *K8sClient {
 	return c
 }
 
-// run executes a kubectl/oc command and checks the result.
 func (c *K8sClient) run(ctx context.Context, args ...string) (*executor.Result, error) {
 	result, err := c.exec.Run(ctx, c.CLI, args...)
 	if err != nil {
@@ -74,7 +66,6 @@ func (c *K8sClient) run(ctx context.Context, args ...string) (*executor.Result, 
 	return result, nil
 }
 
-// runCheck executes a command and returns an error if it fails.
 func (c *K8sClient) runCheck(ctx context.Context, args ...string) error {
 	result, err := c.run(ctx, args...)
 	if err != nil {

@@ -20,9 +20,6 @@ const (
 	StepSetupAccess     distribution.StepID = "setup-access"
 )
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// DEPLOY INFRASTRUCTURE STEP
-// ═══════════════════════════════════════════════════════════════════════════════
 
 func (p *Phase) newDeployInfraStep(cfg *config.Config, opts Options) distribution.ProvisioningStep {
 	return distribution.NewStepBuilder(StepDeployInfra, "Deploy Infrastructure").
@@ -40,9 +37,6 @@ func (p *Phase) newDeployInfraStep(cfg *config.Config, opts Options) distributio
 		MustBuild()
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// WAIT BOOTSTRAP STEP
-// ═══════════════════════════════════════════════════════════════════════════════
 
 func (p *Phase) newWaitBootstrapStep(cfg *config.Config, opts Options) distribution.ProvisioningStep {
 	clusterDir := paths.ClusterConfigDir(opts.WorkDir)
@@ -62,9 +56,6 @@ func (p *Phase) newWaitBootstrapStep(cfg *config.Config, opts Options) distribut
 		MustBuild()
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// START WORKERS STEP
-// ═══════════════════════════════════════════════════════════════════════════════
 
 func (p *Phase) newStartWorkersStep(cfg *config.Config, opts Options) distribution.ProvisioningStep {
 	return distribution.NewStepBuilder(StepStartWorkers, "Start Worker Nodes").
@@ -78,9 +69,6 @@ func (p *Phase) newStartWorkersStep(cfg *config.Config, opts Options) distributi
 		MustBuild()
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// SETUP KUBECONFIG STEP
-// ═══════════════════════════════════════════════════════════════════════════════
 
 func (p *Phase) newSetupKubeconfigStep(opts Options) distribution.ProvisioningStep {
 	clusterDir := paths.ClusterConfigDir(opts.WorkDir)
@@ -93,9 +81,6 @@ func (p *Phase) newSetupKubeconfigStep(opts Options) distribution.ProvisioningSt
 		MustBuild()
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// VALIDATE ACCESS STEP
-// ═══════════════════════════════════════════════════════════════════════════════
 
 func (p *Phase) newValidateAccessStep(opts Options) distribution.ProvisioningStep {
 	return distribution.NewStepBuilder(StepValidateAccess, "Validate Cluster Access").
@@ -107,9 +92,6 @@ func (p *Phase) newValidateAccessStep(opts Options) distribution.ProvisioningSte
 		MustBuild()
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// MONITOR INSTALLATION STEP
-// ═══════════════════════════════════════════════════════════════════════════════
 
 func (p *Phase) newMonitorInstallStep(cfg *config.Config, opts Options) distribution.ProvisioningStep {
 	clusterDir := paths.ClusterConfigDir(opts.WorkDir)
@@ -129,9 +111,6 @@ func (p *Phase) newMonitorInstallStep(cfg *config.Config, opts Options) distribu
 		MustBuild()
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// SETUP CLUSTER ACCESS STEP
-// ═══════════════════════════════════════════════════════════════════════════════
 
 func (p *Phase) newSetupAccessStep(opts Options) distribution.ProvisioningStep {
 	clusterDir := paths.ClusterConfigDir(opts.WorkDir)

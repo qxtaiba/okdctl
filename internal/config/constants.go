@@ -1,13 +1,7 @@
-// Package config provides configuration management for the CLI.
 package config
 
 import "slices"
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// FIELD NAME CONSTANTS
-// ═══════════════════════════════════════════════════════════════════════════════
-
-// Field path constants for validation error messages.
 const (
 	FieldClusterName   = "cluster.name"
 	FieldClusterDomain = "cluster.domain"
@@ -53,7 +47,6 @@ const (
 	FieldDeploymentTerraformEnv = "deployment.terraform_env"
 )
 
-// IsValidEnum checks if a value is in the list of valid values.
 func IsValidEnum(value string, validValues []string) bool {
 	return slices.Contains(validValues, value)
 }

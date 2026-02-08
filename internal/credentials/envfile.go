@@ -6,8 +6,8 @@ import (
 	"strings"
 )
 
-// EnvFilePath returns the .env file path corresponding to a YAML config path.
-// For example, "openshitctl.yaml" becomes "openshitctl.env".
+// EnvFilePath derives the .env path from a config path
+// (e.g. "openshitctl.yaml" becomes "openshitctl.env").
 func EnvFilePath(configPath string) string {
 	if strings.HasSuffix(configPath, ".yaml") {
 		return strings.TrimSuffix(configPath, ".yaml") + ".env"
@@ -18,8 +18,8 @@ func EnvFilePath(configPath string) string {
 	return configPath + ".env"
 }
 
-// WriteEnvFile writes Proxmox credentials to a .env file with 0600 permissions.
-// The file uses KEY=VALUE format compatible with standard .env tooling.
+// WriteEnvFile persists credentials in KEY=VALUE format compatible with
+// standard .env tooling, with 0600 permissions.
 func WriteEnvFile(path string, creds *ProxmoxCredentials) error {
 	var lines []string
 	lines = append(lines, "# Proxmox credentials (managed by openshitctl)")
@@ -42,9 +42,8 @@ func WriteEnvFile(path string, creds *ProxmoxCredentials) error {
 	return os.WriteFile(path, []byte(content), 0600)
 }
 
-// LoadEnvFile reads KEY=VALUE pairs from a .env file and sets them as
-// environment variables. Variables that are already set in the environment
-// are NOT overwritten, ensuring shell env vars always take precedence.
+// LoadEnvFile loads a .env file into the process environment.
+// Already-set variables are NOT overwritten (shell env takes precedence).
 // Missing files are silently ignored.
 func LoadEnvFile(path string) error {
 	f, err := os.Open(path)

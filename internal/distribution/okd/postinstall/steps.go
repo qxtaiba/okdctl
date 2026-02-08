@@ -18,12 +18,8 @@ const (
 	StepDeployProductionDNS distribution.StepID = "deploy-production-dns"
 )
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// VERIFY HEALTH STEP
-// ═══════════════════════════════════════════════════════════════════════════════
 
-// NewVerifyHealthStep creates a step that verifies cluster health after installation.
-// Writes ClusterHealth to the phase context for result building.
+
 func (p *Phase) NewVerifyHealthStep(cfg *config.Config, opts Options, pctx *distribution.PhaseContext[PostInstallContext]) distribution.ProvisioningStep {
 	return distribution.NewStepBuilder(StepVerifyHealth, "Verify Cluster Health").
 		Description("verifying cluster health").
@@ -46,12 +42,8 @@ func (p *Phase) NewVerifyHealthStep(cfg *config.Config, opts Options, pctx *dist
 		MustBuild()
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// VERIFY KUBE-VIP STEP
-// ═══════════════════════════════════════════════════════════════════════════════
 
-// NewVerifyKubeVIPStep creates a step that verifies kube-vip is functioning correctly.
-// Writes KubeVIPVerified and APIIP to the phase context for HAProxy removal and DNS configuration.
+
 func (p *Phase) NewVerifyKubeVIPStep(cfg *config.Config, opts Options, pctx *distribution.PhaseContext[PostInstallContext]) distribution.ProvisioningStep {
 	return distribution.NewStepBuilder(StepVerifyKubeVIP, "Verify kube-vip").
 		Description("verifying kube-vip api load balancer").
@@ -78,12 +70,8 @@ func (p *Phase) NewVerifyKubeVIPStep(cfg *config.Config, opts Options, pctx *dis
 		MustBuild()
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// REMOVE HAPROXY STEP
-// ═══════════════════════════════════════════════════════════════════════════════
 
-// NewRemoveHAProxyStep creates a step that removes HAProxy from the bastion after kube-vip is verified.
-// Only runs if kube-vip verification succeeded (KubeVIPVerified is true in context).
+
 func (p *Phase) NewRemoveHAProxyStep(cfg *config.Config, opts Options, pctx *distribution.PhaseContext[PostInstallContext]) distribution.ProvisioningStep {
 	return distribution.NewStepBuilder(StepRemoveHAProxy, "Remove HAProxy").
 		Description("removing haproxy from bastion").
@@ -107,13 +95,8 @@ func (p *Phase) NewRemoveHAProxyStep(cfg *config.Config, opts Options, pctx *dis
 		MustBuild()
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// INSTALL ADDONS STEP
-// ═══════════════════════════════════════════════════════════════════════════════
 
-// NewInstallAddonsStep creates a step that installs all enabled addons via the addon manager.
-// Addons like MetalLB and Ingress (previously hardcoded steps) are now handled here.
-// The addon manager resolves dependencies and installs in the correct order.
+
 func (p *Phase) NewInstallAddonsStep(cfg *config.Config, opts Options, pctx *distribution.PhaseContext[PostInstallContext], mgr *addon.Manager) distribution.ProvisioningStep {
 	return distribution.NewStepBuilder(StepInstallAddons, "Install Addons").
 		Description("installing enabled cluster addons").
@@ -122,6 +105,10 @@ func (p *Phase) NewInstallAddonsStep(cfg *config.Config, opts Options, pctx *dis
 			p.Log.Warn(fmt.Sprintf("addons: installation failed: %v", err))
 		}).
 		Execute(func(ctx context.Context) error {
+			// Health gate: verify API is reachable before installing addons
+			if err := p.verifyAPIHealthCheck(ctx); err != nil {
+				p.Log.Warn(fmt.Sprintf("addons: api health check failed before addon install: %v", err))
+			}
 			if err := mgr.InstallAll(ctx); err != nil {
 				return utils.WrapError("addon installation failed", err)
 			}
@@ -130,14 +117,8 @@ func (p *Phase) NewInstallAddonsStep(cfg *config.Config, opts Options, pctx *dis
 		MustBuild()
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// DEPLOY PRODUCTION DNS STEP
-// ═══════════════════════════════════════════════════════════════════════════════
-
-// NewDeployProductionDNSStep creates a step that deploys production DNS configuration.
-// Since API DNS already points to kube-vip VIP from day 1, this step primarily updates
-// the apps wildcard DNS to point to the MetalLB-assigned ingress IP.
-// Reads AppsIP from addon outputs (ingress addon's "router_ip" output).
+// NewDeployProductionDNSStep updates apps wildcard DNS to point to the MetalLB-assigned ingress IP.
+// API DNS already points to kube-vip VIP from day 1; this step handles the apps.* records.
 func (p *Phase) NewDeployProductionDNSStep(cfg *config.Config, opts Options, pctx *distribution.PhaseContext[PostInstallContext], mgr *addon.Manager) distribution.ProvisioningStep {
 	return distribution.NewStepBuilder(StepDeployProductionDNS, "Update Apps DNS").
 		Description("updating apps wildcard dns for ingress load balancer").
@@ -154,7 +135,7 @@ func (p *Phase) NewDeployProductionDNSStep(cfg *config.Config, opts Options, pct
 			if appsIP != "" {
 				p.Log.Info(fmt.Sprintf("dns: apps.* wildcard now points to %s", appsIP))
 			} else {
-				p.Log.Info("dns: production config deployed (apps ip pending metallb assignment)")
+				p.Log.Warn("dns: production config deployed without apps wildcard (ingress addon did not produce router_ip — is metallb/ingress enabled?)")
 			}
 			return nil
 		}).

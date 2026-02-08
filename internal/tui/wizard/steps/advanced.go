@@ -8,7 +8,6 @@ import (
 	"github.com/qxtaiba/okd-proxmox-cli/internal/tui/wizard"
 )
 
-// AdvancedStepDefinition defines the advanced settings step declaratively.
 var AdvancedStepDefinition = wizard.StepDefinition{
 	ID:           "advanced",
 	Title:        "advanced settings",
@@ -65,7 +64,6 @@ var AdvancedStepDefinition = wizard.StepDefinition{
 	},
 }
 
-// NewAdvancedStep creates a new advanced settings step.
 func NewAdvancedStep() (*wizard.DataDrivenStep, *wizard.DataDrivenStep) {
 	step := wizard.NewDataDrivenStep(AdvancedStepDefinition)
 	return step, step

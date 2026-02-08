@@ -11,53 +11,35 @@ import (
 	"github.com/qxtaiba/okd-proxmox-cli/internal/config"
 )
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// CONSTANTS
-// ═══════════════════════════════════════════════════════════════════════════════
-
 const (
-	// Minimum terminal dimensions
 	minWidth  = 80
 	minHeight = 24
 
-	// Layout heights for fixed UI elements
-	headerHeight          = 3 // brand + tagline + border
+	headerHeight          = 3
 	scrollIndicatorHeight = 1
-	footerHeight          = 2 // help bar + padding
-	outerVerticalPadding  = 4 // border (2) + outer padding (2)
+	footerHeight          = 2
+	outerVerticalPadding  = 4
 	fixedLayoutOverhead   = headerHeight + scrollIndicatorHeight + footerHeight + outerVerticalPadding
 )
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// INTERNAL INTERFACES FOR TYPE ASSERTIONS
-// ═══════════════════════════════════════════════════════════════════════════════
-
-// earlyExiter is implemented by steps that can exit early (e.g., welcome step).
 type earlyExiter interface {
 	ShouldExitEarly() bool
 }
 
-// actionGetter is implemented by steps that provide a selected action.
 type actionGetter interface {
 	GetSelectedAction() Action
 }
 
-// centerable is implemented by steps that want centered content.
 type centerable interface {
 	IsCentered() bool
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// WIZARD MODEL
-// ═══════════════════════════════════════════════════════════════════════════════
-
-// Model is the main wizard model that orchestrates the step-based flow.
 type Model struct {
 	width  int
 	height int
 
 	viewport viewport.Model
-	ready    bool // true after first WindowSizeMsg
+	ready    bool
 
 	steps       []WizardStep
 	currentStep int
@@ -71,7 +53,6 @@ type Model struct {
 	keyMap KeyMap
 }
 
-// Result holds the wizard completion result.
 type Result struct {
 	Completed bool
 	Cancelled bool
@@ -79,7 +60,6 @@ type Result struct {
 	Action    Action
 }
 
-// Action represents what to do after wizard completes.
 type Action string
 
 const (
@@ -88,7 +68,6 @@ const (
 	ActionExit      Action = "exit"
 )
 
-// KeyMap defines the wizard key bindings.
 type KeyMap struct {
 	Next     key.Binding
 	Back     key.Binding
@@ -103,7 +82,6 @@ type KeyMap struct {
 	End      key.Binding
 }
 
-// DefaultKeyMap returns the default key bindings.
 func DefaultKeyMap() KeyMap {
 	return KeyMap{
 		Next: key.NewBinding(
@@ -153,11 +131,6 @@ func DefaultKeyMap() KeyMap {
 	}
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// CONSTRUCTOR
-// ═══════════════════════════════════════════════════════════════════════════════
-
-// NewModel creates a new wizard model with the given steps.
 func NewModel(steps []WizardStep, cfg *config.Config) Model {
 	w, h := getTerminalSize()
 
@@ -183,7 +156,6 @@ func NewModel(steps []WizardStep, cfg *config.Config) Model {
 	return m
 }
 
-// getTerminalSize returns the current terminal dimensions.
 func getTerminalSize() (int, int) {
 	w, h, err := term.GetSize(int(os.Stdout.Fd()))
 	if err != nil {
@@ -198,11 +170,6 @@ func getTerminalSize() (int, int) {
 	return w, h
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// TEA.MODEL IMPLEMENTATION
-// ═══════════════════════════════════════════════════════════════════════════════
-
-// Init initializes the model.
 func (m Model) Init() tea.Cmd {
 	var cmds []tea.Cmd
 
@@ -213,7 +180,6 @@ func (m Model) Init() tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
-// Update handles messages and updates state.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 
@@ -274,10 +240,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// HELPER FUNCTIONS FOR OPTIONAL INTERFACES
-// ═══════════════════════════════════════════════════════════════════════════════
-
 func stepShouldShow(step WizardStep, cfg *config.Config) bool {
 	if c, ok := step.(ConditionalStep); ok {
 		return c.ShouldShow(cfg)
@@ -292,21 +254,14 @@ func stepAutoCompletes(step WizardStep) bool {
 	return false
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// PUBLIC METHODS
-// ═══════════════════════════════════════════════════════════════════════════════
-
-// Result returns the wizard result.
 func (m Model) Result() Result {
 	return m.result
 }
 
-// Config returns the current configuration.
 func (m Model) Config() *config.Config {
 	return m.config
 }
 
-// CurrentStep returns the current step.
 func (m Model) CurrentStep() WizardStep {
 	if len(m.steps) > 0 && m.currentStep < len(m.steps) {
 		return m.steps[m.currentStep]
@@ -314,12 +269,10 @@ func (m Model) CurrentStep() WizardStep {
 	return nil
 }
 
-// AddStep adds a step to the wizard.
 func (m *Model) AddStep(step WizardStep) {
 	m.steps = append(m.steps, step)
 }
 
-// InsertStepAfter inserts a step after the specified step ID.
 func (m *Model) InsertStepAfter(afterID StepID, step WizardStep) {
 	for i, s := range m.steps {
 		if s.ID() == afterID {
@@ -334,7 +287,6 @@ func (m *Model) InsertStepAfter(afterID StepID, step WizardStep) {
 	m.steps = append(m.steps, step)
 }
 
-// RemoveStep removes a step by ID.
 func (m *Model) RemoveStep(id StepID) {
 	for i, s := range m.steps {
 		if s.ID() == id {

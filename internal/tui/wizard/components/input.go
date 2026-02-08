@@ -11,11 +11,6 @@ import (
 	"github.com/qxtaiba/okd-proxmox-cli/internal/tui"
 )
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// INPUT FIELD
-// ═══════════════════════════════════════════════════════════════════════════════
-
-// InputField represents a labeled text input.
 type InputField struct {
 	Label       string
 	Placeholder string
@@ -32,7 +27,6 @@ type InputField struct {
 	defaultValue string // stores the original default value
 }
 
-// NewInputField creates a new input field.
 func NewInputField(label, placeholder string) *InputField {
 	ti := textinput.New()
 	ti.Placeholder = placeholder
@@ -46,7 +40,6 @@ func NewInputField(label, placeholder string) *InputField {
 	}
 }
 
-// NewPasswordField creates a password input field.
 func NewPasswordField(label, placeholder string) *InputField {
 	f := NewInputField(label, placeholder)
 	f.Password = true
@@ -55,19 +48,16 @@ func NewPasswordField(label, placeholder string) *InputField {
 	return f
 }
 
-// Value returns the current input value.
 func (f *InputField) Value() string {
 	return f.input.Value()
 }
 
-// SetValue sets the input value (marks as user-modified).
 func (f *InputField) SetValue(value string) {
 	f.input.SetValue(value)
 	f.isDefault = false
 	f.updateTextStyle()
 }
 
-// SetDefault sets the input value and marks it as a default (dimmer styling).
 func (f *InputField) SetDefault(value string) {
 	f.input.SetValue(value)
 	f.defaultValue = value
@@ -75,7 +65,6 @@ func (f *InputField) SetDefault(value string) {
 	f.updateTextStyle()
 }
 
-// IsDefault returns true if the value is the original default (unmodified).
 func (f *InputField) IsDefault() bool {
 	return f.isDefault
 }
@@ -85,25 +74,21 @@ func (f *InputField) IsDefault() bool {
 // See charmbracelet/bubbles issues #812, #779.
 func (f *InputField) updateTextStyle() {}
 
-// Focus focuses the input.
 func (f *InputField) Focus() tea.Cmd {
 	f.focused = true
 	return f.input.Focus()
 }
 
-// Blur blurs the input and triggers validation for inline feedback.
 func (f *InputField) Blur() {
 	f.focused = false
 	f.input.Blur()
 	_ = f.Validate()
 }
 
-// IsFocused returns whether the input is focused.
 func (f *InputField) IsFocused() bool {
 	return f.focused
 }
 
-// SetWidth sets the input width.
 func (f *InputField) SetWidth(width int) {
 	f.width = width
 	inputWidth := width - 4 // border (2) + padding (2)
@@ -113,7 +98,6 @@ func (f *InputField) SetWidth(width int) {
 	f.input.Width = inputWidth
 }
 
-// Validate validates the current value.
 func (f *InputField) Validate() error {
 	if f.Required && strings.TrimSpace(f.input.Value()) == "" {
 		f.err = errRequired
@@ -127,12 +111,10 @@ func (f *InputField) Validate() error {
 	return nil
 }
 
-// Error returns any validation error.
 func (f *InputField) Error() error {
 	return f.err
 }
 
-// Update handles input messages.
 func (f *InputField) Update(msg tea.Msg) (*InputField, tea.Cmd) {
 	if !f.focused {
 		return f, nil
@@ -155,7 +137,6 @@ func (f *InputField) Update(msg tea.Msg) (*InputField, tea.Cmd) {
 	return f, cmd
 }
 
-// View renders the input field.
 func (f *InputField) View() string {
 	labelStyle := lipgloss.NewStyle().
 		Foreground(tui.ColorSlate300)
@@ -221,11 +202,6 @@ func (e requiredError) Error() string { return "this field is required" }
 
 var errRequired = requiredError{}
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// INPUT GROUP
-// ═══════════════════════════════════════════════════════════════════════════════
-
-// InputGroup manages a group of related input fields.
 type InputGroup struct {
 	Title  string
 	fields []*InputField
@@ -235,7 +211,6 @@ type InputGroup struct {
 	width      int
 }
 
-// NewInputGroup creates a new input group.
 func NewInputGroup(title string, fields ...*InputField) *InputGroup {
 	return &InputGroup{
 		Title:      title,
@@ -244,17 +219,14 @@ func NewInputGroup(title string, fields ...*InputField) *InputGroup {
 	}
 }
 
-// AddField adds a field to the group.
 func (g *InputGroup) AddField(field *InputField) {
 	g.fields = append(g.fields, field)
 }
 
-// Fields returns all fields in the group.
 func (g *InputGroup) Fields() []*InputField {
 	return g.fields
 }
 
-// Field returns a field by index.
 func (g *InputGroup) Field(index int) *InputField {
 	if index >= 0 && index < len(g.fields) {
 		return g.fields[index]
@@ -262,7 +234,6 @@ func (g *InputGroup) Field(index int) *InputField {
 	return nil
 }
 
-// FieldByLabel returns a field by its label.
 func (g *InputGroup) FieldByLabel(label string) *InputField {
 	for _, f := range g.fields {
 		if f.Label == label {
@@ -272,12 +243,10 @@ func (g *InputGroup) FieldByLabel(label string) *InputField {
 	return nil
 }
 
-// FocusIndex returns the current focus index.
 func (g *InputGroup) FocusIndex() int {
 	return g.focusIndex
 }
 
-// SetFocusIndex sets the focus index.
 func (g *InputGroup) SetFocusIndex(index int) {
 	if index >= 0 && index < len(g.fields) {
 		g.focusIndex = index
@@ -285,13 +254,11 @@ func (g *InputGroup) SetFocusIndex(index int) {
 	}
 }
 
-// Focus focuses the group and its current field.
 func (g *InputGroup) Focus() tea.Cmd {
 	g.focused = true
 	return g.updateFocus()
 }
 
-// Blur blurs the group and all fields.
 func (g *InputGroup) Blur() {
 	g.focused = false
 	for _, f := range g.fields {
@@ -299,12 +266,10 @@ func (g *InputGroup) Blur() {
 	}
 }
 
-// IsFocused returns whether the group is focused.
 func (g *InputGroup) IsFocused() bool {
 	return g.focused
 }
 
-// SetWidth sets the width for all fields.
 func (g *InputGroup) SetWidth(width int) {
 	g.width = width
 	for _, f := range g.fields {
@@ -312,7 +277,6 @@ func (g *InputGroup) SetWidth(width int) {
 	}
 }
 
-// updateFocus updates which field is focused.
 func (g *InputGroup) updateFocus() tea.Cmd {
 	var cmd tea.Cmd
 	for i, f := range g.fields {
@@ -325,7 +289,6 @@ func (g *InputGroup) updateFocus() tea.Cmd {
 	return cmd
 }
 
-// Next moves focus to the next field.
 func (g *InputGroup) Next() tea.Cmd {
 	g.focusIndex++
 	if g.focusIndex >= len(g.fields) {
@@ -334,7 +297,6 @@ func (g *InputGroup) Next() tea.Cmd {
 	return g.updateFocus()
 }
 
-// Previous moves focus to the previous field.
 func (g *InputGroup) Previous() tea.Cmd {
 	g.focusIndex--
 	if g.focusIndex < 0 {
@@ -343,7 +305,6 @@ func (g *InputGroup) Previous() tea.Cmd {
 	return g.updateFocus()
 }
 
-// Validate validates all fields.
 func (g *InputGroup) Validate() []error {
 	var errors []error
 	for _, f := range g.fields {
@@ -354,8 +315,6 @@ func (g *InputGroup) Validate() []error {
 	return errors
 }
 
-// IsValid returns true if all fields are valid.
-// This runs validators on all fields to ensure current values are checked.
 func (g *InputGroup) IsValid() bool {
 	for _, f := range g.fields {
 		if err := f.Validate(); err != nil {
@@ -365,7 +324,6 @@ func (g *InputGroup) IsValid() bool {
 	return true
 }
 
-// Update handles input messages.
 func (g *InputGroup) Update(msg tea.Msg) (*InputGroup, tea.Cmd) {
 	if !g.focused || len(g.fields) == 0 {
 		return g, nil
@@ -386,7 +344,6 @@ func (g *InputGroup) Update(msg tea.Msg) (*InputGroup, tea.Cmd) {
 	return g, cmd
 }
 
-// View renders the input group.
 func (g *InputGroup) View() string {
 	var lines []string
 
@@ -416,8 +373,6 @@ func (g *InputGroup) View() string {
 	return content
 }
 
-// ViewCompact renders without the group border.
-// Pass a title to display it, or empty string for no title.
 func (g *InputGroup) ViewCompact(title string) string {
 	var lines []string
 
@@ -438,11 +393,6 @@ func (g *InputGroup) ViewCompact(title string) string {
 	return strings.Join(lines, "\n")
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// VALUES HELPER
-// ═══════════════════════════════════════════════════════════════════════════════
-
-// GetValues returns a map of field labels to values.
 func (g *InputGroup) GetValues() map[string]string {
 	values := make(map[string]string)
 	for _, f := range g.fields {
@@ -451,7 +401,6 @@ func (g *InputGroup) GetValues() map[string]string {
 	return values
 }
 
-// SetValues sets field values from a map.
 func (g *InputGroup) SetValues(values map[string]string) {
 	for label, value := range values {
 		if f := g.FieldByLabel(label); f != nil {

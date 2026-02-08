@@ -6,10 +6,6 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// RESIZE AND SCROLL HANDLING
-// ═══════════════════════════════════════════════════════════════════════════════
-
 func (m *Model) handleResize(msg tea.WindowSizeMsg) {
 	m.width = msg.Width
 	m.height = msg.Height
@@ -54,8 +50,8 @@ func (m *Model) handleScrollKey(msg tea.KeyMsg) bool {
 	return true
 }
 
-// autoScrollToField scrolls the viewport to keep the focused field visible.
-// Uses percentage-based scrolling: position tracks field progress through the form.
+// autoScrollToField uses percentage-based scrolling relative to field progress
+// through the form to keep the focused field visible in the viewport.
 func (m *Model) autoScrollToField(fieldIndex, totalFields int) {
 	if totalFields == 0 {
 		return
@@ -86,10 +82,6 @@ func (m *Model) autoScrollToField(fieldIndex, totalFields int) {
 
 	m.viewport.SetYOffset(targetOffset)
 }
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// STEP NAVIGATION
-// ═══════════════════════════════════════════════════════════════════════════════
 
 func (m Model) goToNextStep() (tea.Model, tea.Cmd) {
 	if len(m.steps) > 0 && m.currentStep < len(m.steps) {
@@ -162,7 +154,6 @@ func (m Model) goToNextStep() (tea.Model, tea.Cmd) {
 	return m, m.steps[m.currentStep].Init()
 }
 
-// goToPreviousStep goes back to the previous visible, interactive step.
 func (m Model) goToPreviousStep() (tea.Model, tea.Cmd) {
 	if m.currentStep == 0 {
 		return m, nil
@@ -205,7 +196,6 @@ func (m Model) goToPreviousStep() (tea.Model, tea.Cmd) {
 	return m, m.steps[m.currentStep].Init()
 }
 
-// rebuildSteps is a no-op placeholder. Steps are built once at wizard start.
 func (m Model) rebuildSteps() (tea.Model, tea.Cmd) {
 	return m, nil
 }

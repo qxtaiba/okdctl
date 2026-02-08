@@ -15,12 +15,9 @@ import (
 )
 
 const (
-	// minIgnitionFileSize is the minimum expected size for ignition files (in bytes).
-	// Ignition files are typically several KB or more.
-	minIgnitionFileSize = 1000
+	minIgnitionFileSize = 1000 // bytes
 )
 
-// ensureIgnitionDir creates the ignition directory under the web root if it doesn't exist.
 func ensureIgnitionDir(ctx context.Context, webRoot string) (string, error) {
 	ignitionDir := filepath.Join(webRoot, "ignition")
 
@@ -28,15 +25,12 @@ func ensureIgnitionDir(ctx context.Context, webRoot string) (string, error) {
 		return "", utils.WrapError("failed to create ignition directory", err)
 	}
 
-	// Set ownership to apache:apache (best-effort)
 	_ = system.Chown(ctx, ignitionDir, "apache:apache", "ignition directory ownership")
-	// Set permissions (best-effort)
 	_ = system.Chmod(ctx, ignitionDir, "755", "ignition directory permissions")
 
 	return ignitionDir, nil
 }
 
-// configureApachePort configures Apache to listen on port 8080 instead of 80.
 func (p *Phase) configureApachePort(ctx context.Context) {
 	httpdConf := "/etc/httpd/conf/httpd.conf"
 	if !system.FileExists(httpdConf) {
@@ -54,7 +48,6 @@ func (p *Phase) configureApachePort(ctx context.Context) {
 	}
 }
 
-// configureSELinuxForApache configures SELinux to allow Apache on port 8080.
 func (p *Phase) configureSELinuxForApache(ctx context.Context) {
 	if !executor.CommandExists("semanage") {
 		return
@@ -64,7 +57,6 @@ func (p *Phase) configureSELinuxForApache(ctx context.Context) {
 	_, _ = p.Exec.Run(ctx, "sudo", "semanage", "port", "-m", "-t", "http_port_t", "-p", "tcp", "8080")
 }
 
-// enableAndStartApache enables and starts the httpd service.
 func enableAndStartApache(ctx context.Context) error {
 	if err := system.ManageService(ctx, system.ServiceEnable, "httpd", "apache httpd service"); err != nil {
 		return utils.WrapError("failed to enable httpd", err)
@@ -78,7 +70,6 @@ func enableAndStartApache(ctx context.Context) error {
 	return nil
 }
 
-// verifyApacheListening checks if Apache is listening on port 8080.
 func (p *Phase) verifyApacheListening(ctx context.Context) {
 	result, _ := p.Exec.Run(ctx, "ss", "-tlnp")
 	if result != nil && result.ExitCode == 0 && strings.Contains(result.Stdout, ":8080 ") {
@@ -88,7 +79,6 @@ func (p *Phase) verifyApacheListening(ctx context.Context) {
 	}
 }
 
-// ConfigureApache configures Apache httpd for serving ignition files.
 func (p *Phase) ConfigureApache(ctx context.Context, cfg *config.Config) error {
 	p.Log.Info("apache: configuring httpd for serving ignition files")
 
@@ -114,7 +104,6 @@ func (p *Phase) ConfigureApache(ctx context.Context, cfg *config.Config) error {
 	return nil
 }
 
-// DeployToWebServer copies ignition files to the HTTP server root.
 func (p *Phase) DeployToWebServer(ctx context.Context, cfg *config.Config, clusterDir string) error {
 	webRoot := cfg.HTTPServer.Root
 	if webRoot == "" {
@@ -143,7 +132,6 @@ func (p *Phase) DeployToWebServer(ctx context.Context, cfg *config.Config, clust
 		}
 	}
 
-	// Copy auth directory for kubeconfig (non-fatal, just for convenience)
 	authSrc := filepath.Join(clusterDir, "auth")
 	if system.FileExists(authSrc) {
 		authDest := filepath.Join(webRoot, "auth")
@@ -155,7 +143,6 @@ func (p *Phase) DeployToWebServer(ctx context.Context, cfg *config.Config, clust
 	return nil
 }
 
-// VerifyWebServer checks that the web server is accessible and serving ignition files.
 func (p *Phase) VerifyWebServer(ctx context.Context, baseURL string) error {
 	testURL := fmt.Sprintf("%s/bootstrap.ign", baseURL)
 

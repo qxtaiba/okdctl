@@ -4,24 +4,17 @@ import (
 	"github.com/qxtaiba/okd-proxmox-cli/internal/config"
 )
 
-// ===============================================================================
-// WIZARD CONFIGURATION
-// ===============================================================================
-
-// Config configures which steps appear in the wizard and their order.
 type Config struct {
 	Steps         []StepConfig
 	InitialConfig *config.Config
 	ConfigExists  bool
 }
 
-// StepConfig configures an individual wizard step.
 type StepConfig struct {
 	Type     StepType
 	Required bool
 }
 
-// StepType identifies a wizard step type.
 type StepType string
 
 const (
@@ -37,7 +30,6 @@ const (
 	StepTypeReview       StepType = "review"
 )
 
-// DefaultConfig returns the standard wizard configuration with all steps.
 func DefaultConfig() Config {
 	return Config{
 		Steps: []StepConfig{

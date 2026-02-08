@@ -8,12 +8,10 @@ import (
 
 	"github.com/qxtaiba/okd-proxmox-cli/internal/config"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/infrastructure/terraform"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/logging"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/netutil"
 )
 
-// Provider implements the Proxmox VE infrastructure provider.
 type Provider struct {
 	connected     bool
 	host          string
@@ -21,37 +19,32 @@ type Provider struct {
 	terraformExec *terraform.Executor
 	projectRoot   string
 	tfEnv         string
-	logger        logging.Logger
+	logger        utils.Logger
 	env           []string
 }
 
-// Option configures a Provider.
 type Option func(*Provider)
 
-// WithProjectRoot sets the project root directory.
 func WithProjectRoot(root string) Option {
 	return func(p *Provider) { p.projectRoot = root }
 }
 
-// WithLogger sets a custom logger for the provider.
-func WithLogger(l logging.Logger) Option {
+func WithLogger(l utils.Logger) Option {
 	return func(p *Provider) {
 		p.logger = l
 	}
 }
 
-// WithEnv sets environment variables for subprocess execution.
-// These are passed to terraform for provider authentication.
+// WithEnv passes environment variables through to terraform for provider authentication.
 func WithEnv(env []string) Option {
 	return func(p *Provider) {
 		p.env = append(p.env, env...)
 	}
 }
 
-// New creates a new Proxmox provider with optional configuration.
 func New(opts ...Option) *Provider {
 	p := &Provider{
-		logger: logging.NoopLogger(),
+		logger: utils.NoopLogger(),
 	}
 	for _, opt := range opts {
 		opt(p)
@@ -59,7 +52,6 @@ func New(opts ...Option) *Provider {
 	return p
 }
 
-// Connect establishes a connection to the Proxmox API.
 func (p *Provider) Connect(ctx context.Context, cfg *config.Config) error {
 	if cfg == nil {
 		return fmt.Errorf("configuration is required")
@@ -73,16 +65,13 @@ func (p *Provider) Connect(ctx context.Context, cfg *config.Config) error {
 	return nil
 }
 
-// Disconnect closes the connection to Proxmox.
-// The context parameter is accepted for interface consistency but not used
-// as disconnect is a synchronous, non-blocking operation.
+// Disconnect accepts a context for interface consistency but does not use it.
 func (p *Provider) Disconnect(_ context.Context) error {
 	p.connected = false
 	p.terraformExec = nil
 	return nil
 }
 
-// setupTerraform configures the Terraform executor for provisioning.
 func (p *Provider) setupTerraform(projectRoot, tfEnv string) {
 	p.projectRoot = projectRoot
 	p.tfEnv = tfEnv
@@ -101,7 +90,6 @@ func (p *Provider) setupTerraform(projectRoot, tfEnv string) {
 	p.terraformExec = terraform.NewWithVarFile(tfDir, filepath.Join(tfDir, "terraform.tfvars"), tfOpts...)
 }
 
-// Provision creates VMs on Proxmox using Terraform.
 func (p *Provider) Provision(ctx context.Context, cfg *config.Config, opts ProvisionOptions) (*ProvisionResult, error) {
 	if !p.connected {
 		return nil, ErrNotConnected
@@ -165,9 +153,9 @@ func (p *Provider) Provision(ctx context.Context, cfg *config.Config, opts Provi
 	return result, nil
 }
 
-// retrieveProvisionResult builds VM information from the config's static IP assignments.
-// OKD uses static IPs configured via ignition files, not dynamic assignment from Proxmox.
-// The IP scheme is: bootstrap = start IP, masters = start+1 to start+N, workers = start+N+1 onwards.
+// retrieveProvisionResult derives VM IPs from static config rather than querying Proxmox,
+// because OKD assigns IPs via ignition files.
+// IP scheme: bootstrap = start IP, masters = start+1..N, workers = start+N+1 onwards.
 func (p *Provider) retrieveProvisionResult(_ context.Context, cfg *config.Config) (*ProvisionResult, error) {
 	result := &ProvisionResult{
 		VMs:             []VMStatus{},
@@ -177,7 +165,7 @@ func (p *Provider) retrieveProvisionResult(_ context.Context, cfg *config.Config
 
 	startIP := cfg.Networking.StaticIP.Start
 	if startIP == "" {
-		return result, nil // No static IP config, return empty result
+		return result, nil
 	}
 
 	baseIP, lastOctet, err := netutil.SplitIPv4(startIP)

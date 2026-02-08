@@ -1,10 +1,9 @@
-// Package dns provides DNS configuration utilities for OKD clusters.
-// It handles dnsmasq configuration generation and deployment for both
-// bootstrap and production phases of cluster installation.
+// Package dns provides dnsmasq configuration for OKD clusters.
 package dns
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -17,8 +16,6 @@ import (
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
 )
 
-// BuildConfigData creates DNS template data from the cluster configuration.
-// Returns an error if required IPs cannot be calculated.
 func BuildConfigData(cfg *config.Config) (templates.DNSConfigData, error) {
 	if cfg == nil {
 		return templates.DNSConfigData{}, fmt.Errorf("config cannot be nil")
@@ -50,8 +47,8 @@ func BuildConfigData(cfg *config.Config) (templates.DNSConfigData, error) {
 		ClusterName:   cfg.Cluster.Name,
 		ClusterDomain: clusterDomain,
 		BastionIP:     cfg.Networking.Bastion.IP,
-		KubeVipIP:     kubeVipIP, // VIP for API endpoints - used from day 1
-		UpstreamDNS:   cfg.Networking.DNS, // Forward external queries to user's DNS servers
+		KubeVipIP:     kubeVipIP,
+		UpstreamDNS:   cfg.Networking.DNS,
 	}
 
 	bootstrapIP, err := netutil.CalculateVMIP(staticIPStart, 0)
@@ -89,8 +86,6 @@ func BuildConfigData(cfg *config.Config) (templates.DNSConfigData, error) {
 	return data, nil
 }
 
-// GenerateBootstrapConfig generates only the bootstrap DNS config.
-// Returns the path to the generated file and the config content.
 func GenerateBootstrapConfig(cfg *config.Config, outputDir string) (path string, content string, err error) {
 	data, err := BuildConfigData(cfg)
 	if err != nil {
@@ -114,27 +109,20 @@ func GenerateBootstrapConfig(cfg *config.Config, outputDir string) (path string,
 	return path, content, nil
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// DNSMASQ DEPLOYMENT FUNCTIONS
-// ═══════════════════════════════════════════════════════════════════════════════
-
-// ConfigName returns the dnsmasq config file name for a cluster.
 func ConfigName(clusterName string) string {
 	return fmt.Sprintf("okd-%s", clusterName)
 }
 
-// Setup enables dnsmasq and configures the system resolver to use it.
-func Setup(ctx context.Context, fallbackDNS []string) error {
+func Setup(ctx context.Context, fallbackDNS []string, logger utils.Logger) error {
 	if err := system.EnableDnsmasq(ctx); err != nil {
 		return utils.WrapError("failed to enable dnsmasq", err)
 	}
-	if err := system.ConfigureSystemResolver(ctx, fallbackDNS); err != nil {
+	if err := system.ConfigureSystemResolver(ctx, fallbackDNS, logger); err != nil {
 		return utils.WrapError("failed to configure system resolver", err)
 	}
 	return nil
 }
 
-// DeployBootstrap generates and deploys the bootstrap DNS config to dnsmasq.
 func DeployBootstrap(ctx context.Context, cfg *config.Config) error {
 	data, err := BuildConfigData(cfg)
 	if err != nil {
@@ -151,16 +139,13 @@ func DeployBootstrap(ctx context.Context, cfg *config.Config) error {
 		return utils.WrapError("failed to write dnsmasq config", err)
 	}
 
-	if err := system.RestartDnsmasq(ctx); err != nil {
-		return utils.WrapError("failed to restart dnsmasq", err)
+	if err := validateAndReloadDnsmasq(ctx); err != nil {
+		return err
 	}
 
 	return nil
 }
 
-// DeployProduction generates and deploys the production DNS config to dnsmasq.
-// kubeVipIP is the kube-vip VIP for API endpoints (optional, falls back to bastion if empty).
-// appsIP is the MetalLB-assigned IP for the ingress router.
 func DeployProduction(ctx context.Context, cfg *config.Config, appsIP, kubeVipIP string) error {
 	data, err := BuildConfigData(cfg)
 	if err != nil {
@@ -184,16 +169,34 @@ func DeployProduction(ctx context.Context, cfg *config.Config, appsIP, kubeVipIP
 		return utils.WrapError("failed to render production dns config", err)
 	}
 
-	// Replaces bootstrap config with production config
 	configName := ConfigName(cfg.Cluster.Name)
 	if err := system.WriteDnsmasqConfig(ctx, configName, content); err != nil {
 		return utils.WrapError("failed to write dnsmasq config", err)
 	}
 
-	if err := system.RestartDnsmasq(ctx); err != nil {
-		return utils.WrapError("failed to restart dnsmasq", err)
+	if err := validateAndReloadDnsmasq(ctx); err != nil {
+		return err
 	}
 
+	return nil
+}
+
+// validateAndReloadDnsmasq validates the dnsmasq config, then reloads
+// (falling back to restart if reload fails).
+func validateAndReloadDnsmasq(ctx context.Context) error {
+	if err := system.ValidateDnsmasqConfig(ctx); err != nil {
+		return errors.Join(
+			fmt.Errorf("dnsmasq config validation failed (service unchanged)"),
+			err,
+		)
+	}
+
+	if err := system.ReloadDnsmasq(ctx); err != nil {
+		// Reload not supported or failed — fall back to restart
+		if restartErr := system.RestartDnsmasq(ctx); restartErr != nil {
+			return utils.WrapError("failed to restart dnsmasq after reload failure", restartErr)
+		}
+	}
 	return nil
 }
 

@@ -1,8 +1,4 @@
-// Package install provides the install phase implementation for OKD cluster provisioning.
-// It handles Terraform deployment, bootstrap monitoring, CSR approval, and Flux installation.
-//
-// The Phase struct owns all execution logic and coordinates the installation steps
-// via an orchestrator.
+// Package install provides the install phase for OKD cluster provisioning.
 package install
 
 import (
@@ -18,51 +14,29 @@ import (
 	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/paths"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/executor"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/infrastructure/proxmox"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/logging"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
 )
 
-// Default timeouts for installation operations.
 const (
 	DefaultBootstrapTimeout    = 30 * time.Minute
 	DefaultInstallTimeout      = 60 * time.Minute
 	DefaultCSRApprovalInterval = 30 * time.Second
 )
 
-// Options configures the install phase.
 type Options struct {
 	paths.BaseOptions
-
-	// AutoApprove skips Terraform confirmation prompts.
-	AutoApprove bool
-
-	// BootstrapTimeout is the timeout for bootstrap completion.
-	BootstrapTimeout time.Duration
-
-	// InstallTimeout is the timeout for full installation.
-	InstallTimeout time.Duration
-
-	// CSRApprovalInterval is how often to check for pending CSRs.
+	AutoApprove         bool
+	BootstrapTimeout    time.Duration
+	InstallTimeout      time.Duration
 	CSRApprovalInterval time.Duration
-
-	// SkipTerraform skips Terraform deployment.
-	SkipTerraform bool
-
-	// SkipConfirmation skips the interactive deployment confirmation.
-	SkipConfirmation bool
-
-	// BootstrapIP is the IP address of the bootstrap node for SSH log streaming.
-	BootstrapIP string
-
-	// SSHKeyPath is the path to the SSH private key for connecting to nodes.
-	SSHKeyPath string
-
-	// StreamBootstrapLogs enables live streaming of bootstrap node journal logs.
+	SkipTerraform       bool
+	SkipConfirmation    bool
+	BootstrapIP         string
+	SSHKeyPath          string
 	StreamBootstrapLogs bool
 }
 
-// NewOptions returns install options derived from config with sensible defaults.
 func NewOptions(cfg *config.Config, projectRoot string) Options {
 	bootstrapTimeout := DefaultBootstrapTimeout
 	installTimeout := DefaultInstallTimeout
@@ -97,19 +71,16 @@ func NewOptions(cfg *config.Config, projectRoot string) Options {
 }
 
 
-// Phase coordinates the install phase execution.
 type Phase struct {
 	paths.BasePhase
 }
 
-// New creates a new install phase coordinator.
-func New(exec *executor.Executor, logger logging.Logger, version string) *Phase {
+func New(exec *executor.Executor, logger utils.Logger, version string) *Phase {
 	return &Phase{
 		BasePhase: paths.NewBasePhase(exec, logger, version),
 	}
 }
 
-// Execute runs the complete install phase.
 func (p *Phase) Execute(ctx context.Context, cfg *config.Config, opts Options) error {
 	orchestrator := distribution.NewOrchestrator(
 		p.newDeployInfraStep(cfg, opts),

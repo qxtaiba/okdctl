@@ -8,7 +8,6 @@ import (
 	"github.com/qxtaiba/okd-proxmox-cli/internal/tui/wizard"
 )
 
-// NetworkingStepDefinition defines the networking configuration step declaratively.
 var NetworkingStepDefinition = wizard.StepDefinition{
 	ID:           "networking",
 	Title:        "network configuration",
@@ -178,7 +177,6 @@ var NetworkingStepDefinition = wizard.StepDefinition{
 	},
 }
 
-// NewNetworkingStep creates a new networking configuration step.
 func NewNetworkingStep() (*wizard.DataDrivenStep, *wizard.DataDrivenStep) {
 	step := wizard.NewDataDrivenStep(NetworkingStepDefinition)
 	return step, step

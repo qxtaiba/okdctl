@@ -1,8 +1,6 @@
-// Package cluster provides common utilities for Kubernetes cluster operations
-// that can be shared across different distributions.
+// Package cluster provides utilities for Kubernetes cluster operations.
 package cluster
 
-// CSR represents a Certificate Signing Request.
 type CSR struct {
 	Name       string
 	Requester  string

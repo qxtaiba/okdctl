@@ -14,11 +14,6 @@ import (
 	"github.com/qxtaiba/okd-proxmox-cli/internal/tui/wizard/components"
 )
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// REVIEW STEP
-// ═══════════════════════════════════════════════════════════════════════════════
-
-// sectionStyles holds pre-computed styles for rendering review sections.
 type sectionStyles struct {
 	header         lipgloss.Style
 	separator      string
@@ -28,7 +23,6 @@ type sectionStyles struct {
 	check          lipgloss.Style
 }
 
-// newSectionStyles creates styles for the given width.
 func newSectionStyles(width int) sectionStyles {
 	return sectionStyles{
 		header: lipgloss.NewStyle().
@@ -50,19 +44,16 @@ func newSectionStyles(width int) sectionStyles {
 	}
 }
 
-// kvPair renders a label:value pair using the given styles.
 func (st sectionStyles) kvPair(label, value string) string {
 	return st.label.Render(label) + st.value.Render(value)
 }
 
-// ReviewStep shows a summary of all configuration and allows action selection.
 type ReviewStep struct {
 	wizard.BaseStep
 	cfg            *config.Config
 	actionSelector *components.CompactSelector
 }
 
-// NewReviewStep creates a new review step.
 func NewReviewStep() *ReviewStep {
 	actions := []string{
 		"deploy now",
@@ -80,17 +71,14 @@ func NewReviewStep() *ReviewStep {
 	}
 }
 
-// Init initializes the step.
 func (s *ReviewStep) Init() tea.Cmd {
 	return nil
 }
 
-// SetConfig sets the config to review.
 func (s *ReviewStep) SetConfig(cfg *config.Config) {
 	s.cfg = cfg
 }
 
-// Update handles input.
 func (s *ReviewStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
@@ -107,7 +95,6 @@ func (s *ReviewStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 	return s, nil
 }
 
-// emitFocusChanged emits a FocusChangedMsg for auto-scrolling the viewport.
 func (s *ReviewStep) emitFocusChanged() tea.Cmd {
 	index := s.actionSelector.SelectedIndex()
 	const totalActions = 2 // deploy, save & exit
@@ -120,7 +107,6 @@ func (s *ReviewStep) emitFocusChanged() tea.Cmd {
 	}
 }
 
-// View renders the review.
 func (s *ReviewStep) View(width, height int) string {
 	s.SetSize(width, height)
 
@@ -146,7 +132,6 @@ func (s *ReviewStep) View(width, height int) string {
 	return content.String()
 }
 
-// renderClusterIdentity renders the cluster identity section.
 func (s *ReviewStep) renderClusterIdentity(st sectionStyles) string {
 	var b strings.Builder
 
@@ -170,7 +155,6 @@ func (s *ReviewStep) renderClusterIdentity(st sectionStyles) string {
 	return b.String()
 }
 
-// renderProxmox renders the Proxmox section. Returns "" if Proxmox is not configured.
 func (s *ReviewStep) renderProxmox(st sectionStyles) string {
 	if s.cfg.Provider.Proxmox == nil {
 		return ""
@@ -205,7 +189,6 @@ func (s *ReviewStep) renderProxmox(st sectionStyles) string {
 	return b.String()
 }
 
-// renderNetworking renders the networking section.
 func (s *ReviewStep) renderNetworking(st sectionStyles) string {
 	var b strings.Builder
 
@@ -237,7 +220,6 @@ func (s *ReviewStep) renderNetworking(st sectionStyles) string {
 	return b.String()
 }
 
-// renderCompute renders the compute resources section.
 func (s *ReviewStep) renderCompute(st sectionStyles) string {
 	var b strings.Builder
 
@@ -276,7 +258,6 @@ func (s *ReviewStep) renderCompute(st sectionStyles) string {
 	return b.String()
 }
 
-// renderFilesIgnition renders the files & ignition section.
 func (s *ReviewStep) renderFilesIgnition(st sectionStyles) string {
 	var b strings.Builder
 
@@ -310,7 +291,6 @@ func (s *ReviewStep) renderFilesIgnition(st sectionStyles) string {
 	return b.String()
 }
 
-// renderFeatures renders the addons section. Returns "" if no addons are enabled.
 func (s *ReviewStep) renderFeatures(st sectionStyles) string {
 	if s.cfg.Addons == nil {
 		return ""
@@ -352,7 +332,6 @@ func (s *ReviewStep) renderFeatures(st sectionStyles) string {
 	return b.String()
 }
 
-// renderAdvanced renders the advanced settings section. Returns "" if no advanced settings.
 func (s *ReviewStep) renderAdvanced(st sectionStyles) string {
 	if s.cfg.Topology.VMIDBase <= 0 && s.cfg.Deployment.BootstrapTimeout <= 0 {
 		return ""
@@ -381,7 +360,6 @@ func (s *ReviewStep) renderAdvanced(st sectionStyles) string {
 	return b.String()
 }
 
-// truncatePath shortens a path for display, keeping the filename visible.
 func truncatePath(path string, maxLen int) string {
 	if maxLen < 4 {
 		maxLen = 4
@@ -423,7 +401,6 @@ func (s *ReviewStep) Apply(cfg *config.Config) error {
 	return nil
 }
 
-// ShortHelp returns help for this step.
 func (s *ReviewStep) ShortHelp() []wizard.KeyBinding {
 	return []wizard.KeyBinding{
 		{Key: "↑↓", Help: "select action"},
@@ -433,13 +410,11 @@ func (s *ReviewStep) ShortHelp() []wizard.KeyBinding {
 	}
 }
 
-// SetFocused sets the focus state.
 func (s *ReviewStep) SetFocused(focused bool) {
 	s.BaseStep.SetFocused(focused)
 	s.actionSelector.SetFocused(focused)
 }
 
-// GetSelectedAction returns the selected action.
 func (s *ReviewStep) GetSelectedAction() wizard.Action {
 	switch s.actionSelector.SelectedIndex() {
 	case 0:

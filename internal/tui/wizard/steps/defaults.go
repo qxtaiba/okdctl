@@ -1,9 +1,5 @@
-// Package steps provides wizard step implementations for the TUI.
 package steps
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// CENTRALIZED DEFAULT VALUES
-// ═══════════════════════════════════════════════════════════════════════════════
 const (
 	DefaultClusterName = "mycluster"
 	DefaultDomain      = "k8s.local"

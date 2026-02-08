@@ -1,4 +1,3 @@
-// Package flux provides the Flux GitOps addon.
 package flux
 
 import (
@@ -6,26 +5,26 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/qxtaiba/okd-proxmox-cli/internal/addon"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/executor"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
+	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/retry"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
 )
 
-// Timeouts for post-install rollout tracking.
 const (
-	controllerTimeout  = 5 * time.Minute
-	gitRepoSyncTimeout = 3 * time.Minute
+	defaultControllerTimeout  = 5 * time.Minute
+	defaultGitRepoSyncTimeout = 3 * time.Minute
 )
 
 func init() {
 	addon.Register(&Flux{})
 }
 
-// Flux implements the addon.Addon interface for Flux GitOps.
 type Flux struct{}
 
 func (f *Flux) Info() addon.AddonInfo {
@@ -45,8 +44,12 @@ func (f *Flux) Install(ctx context.Context, env *addon.Environment) error {
 		return fmt.Errorf("helm is required to install Flux")
 	}
 
-	result, err := env.Exec.Run(ctx, "oc", "get", "namespace", "flux-system")
-	if err != nil || result == nil || result.ExitCode != 0 {
+	// Create namespace with retry (transient API errors during cluster bootstrap)
+	if err := retry.Do(ctx, 3, 5*time.Second, func() error {
+		result, err := env.Exec.Run(ctx, "oc", "get", "namespace", "flux-system")
+		if err == nil && result != nil && result.ExitCode == 0 {
+			return nil
+		}
 		createResult, createErr := env.Exec.Run(ctx, "oc", "create", "namespace", "flux-system")
 		if createErr != nil {
 			return utils.WrapError("failed to create flux-system namespace", createErr)
@@ -58,26 +61,36 @@ func (f *Flux) Install(ctx context.Context, env *addon.Environment) error {
 			}
 			return fmt.Errorf("failed to create flux-system namespace: %s", stderr)
 		}
+		return nil
+	}); err != nil {
+		return err
 	}
 
-	if err := f.createDeployKeySecret(ctx, env); err != nil {
+	if err := retry.Do(ctx, 3, 5*time.Second, func() error {
+		return f.createDeployKeySecret(ctx, env)
+	}); err != nil {
 		return utils.WrapError("deploy key secret required", err)
 	}
 
 	env.Logger.Info("flux: installing operator via helm")
-	result, err = env.Exec.Run(ctx, "helm", "install", "flux-operator",
-		"oci://ghcr.io/controlplaneio-fluxcd/charts/flux-operator",
-		"--namespace", "flux-system",
-		"--create-namespace",
-		"--wait")
-	if err != nil {
-		return utils.WrapError("failed to install flux operator", err)
-	}
-	if result.ExitCode != 0 {
-		return fmt.Errorf("failed to install flux operator: %s", result.Stderr)
+	if err := retry.Do(ctx, 3, 5*time.Second, func() error {
+		result, err := env.Exec.Run(ctx, "helm", "upgrade", "--install", "flux-operator",
+			"oci://ghcr.io/controlplaneio-fluxcd/charts/flux-operator",
+			"--namespace", "flux-system",
+			"--create-namespace",
+			"--wait")
+		if err != nil {
+			return utils.WrapError("failed to install flux operator", err)
+		}
+		if result.ExitCode != 0 {
+			return fmt.Errorf("failed to install flux operator: %s", result.Stderr)
+		}
+		return nil
+	}); err != nil {
+		return err
 	}
 
-	result, _ = env.Exec.Run(ctx, "oc", "wait", "--for=condition=available", "deployment/flux-operator",
+	result, _ := env.Exec.Run(ctx, "oc", "wait", "--for=condition=available", "deployment/flux-operator",
 		"--namespace", "flux-system", "--timeout=120s")
 	if result == nil || result.ExitCode != 0 {
 		env.Logger.Warn("flux: operator not ready within 120s timeout, continuing")
@@ -99,20 +112,25 @@ func (f *Flux) Install(ctx context.Context, env *addon.Environment) error {
 		syncPath = "kubernetes/clusters/production"
 	}
 
-	result, err = env.Exec.Run(ctx, "helm", "install", "flux-instance",
-		"oci://ghcr.io/controlplaneio-fluxcd/charts/flux-instance",
-		"--namespace", "flux-system",
-		"--set", "instance.cluster.type=openshift",
-		"--set", fmt.Sprintf("instance.sync.url=%s", syncURL),
-		"--set", fmt.Sprintf("instance.sync.ref=%s", syncRef),
-		"--set", fmt.Sprintf("instance.sync.path=%s", syncPath),
-		"--set", "instance.sync.pullSecret=flux-system",
-		"--wait")
-	if err != nil {
-		return utils.WrapError("failed to install flux instance", err)
-	}
-	if result.ExitCode != 0 {
-		return fmt.Errorf("failed to install flux instance: %s", result.Stderr)
+	if err := retry.Do(ctx, 3, 5*time.Second, func() error {
+		r, err := env.Exec.Run(ctx, "helm", "upgrade", "--install", "flux-instance",
+			"oci://ghcr.io/controlplaneio-fluxcd/charts/flux-instance",
+			"--namespace", "flux-system",
+			"--set", "instance.cluster.type=openshift",
+			"--set", fmt.Sprintf("instance.sync.url=%s", syncURL),
+			"--set", fmt.Sprintf("instance.sync.ref=%s", syncRef),
+			"--set", fmt.Sprintf("instance.sync.path=%s", syncPath),
+			"--set", "instance.sync.pullSecret=flux-system",
+			"--wait")
+		if err != nil {
+			return utils.WrapError("failed to install flux instance", err)
+		}
+		if r.ExitCode != 0 {
+			return fmt.Errorf("failed to install flux instance: %s", r.Stderr)
+		}
+		return nil
+	}); err != nil {
+		return err
 	}
 
 	// Wait for Flux controllers to become available (fatal if they don't start)
@@ -176,23 +194,22 @@ func (f *Flux) Uninstall(ctx context.Context, env *addon.Environment) error {
 	return nil
 }
 
-// RequiredTools implements addon.ToolProvider.
 func (f *Flux) RequiredTools() []addon.ToolSpec {
 	return []addon.ToolSpec{
 		{Name: "helm", Description: "Helm package manager for installing Flux charts"},
 	}
 }
 
-// DefaultSettings implements addon.ConfigurableAddon.
 func (f *Flux) DefaultSettings() map[string]string {
 	return map[string]string{
-		"provider": "flux",
-		"branch":   "main",
-		"path":     "kubernetes/clusters/production",
+		"provider":           "flux",
+		"branch":             "main",
+		"path":               "kubernetes/clusters/production",
+		"controller_timeout": "300",
+		"git_sync_timeout":   "180",
 	}
 }
 
-// ValidateSettings implements addon.ConfigurableAddon.
 func (f *Flux) ValidateSettings(settings map[string]string) []string {
 	var errs []string
 	if repo := settings["repository"]; repo != "" {
@@ -222,7 +239,6 @@ func (f *Flux) ValidateSettings(settings map[string]string) []string {
 	return errs
 }
 
-// WizardFields implements addon.WizardProvider.
 func (f *Flux) WizardFields() []addon.WizardField {
 	return []addon.WizardField{
 		{Key: "repository", Label: "Repository URL", Help: "ssh://git@github.com/org/repo.git", Required: true},
@@ -231,9 +247,10 @@ func (f *Flux) WizardFields() []addon.WizardField {
 	}
 }
 
-// waitForControllers waits for Flux controllers to have available replicas.
 func (f *Flux) waitForControllers(ctx context.Context, env *addon.Environment) error {
 	env.Logger.Info("flux: waiting for controllers to become ready")
+
+	timeout := getTimeout(env.AddonConfig.Settings, "controller_timeout", defaultControllerTimeout)
 
 	if err := system.WaitForWithTimeout(ctx, "flux", "controllers", func() bool {
 		if ctx.Err() != nil {
@@ -261,17 +278,18 @@ func (f *Flux) waitForControllers(ctx context.Context, env *addon.Environment) e
 			}
 		}
 		return true
-	}, controllerTimeout); err != nil {
-		return fmt.Errorf("flux controllers did not become ready within %v: %w", controllerTimeout, err)
+	}, timeout, env.Logger); err != nil {
+		return fmt.Errorf("flux controllers did not become ready within %v: %w", timeout, err)
 	}
 
 	env.Logger.Info("flux: all controllers are running")
 	return nil
 }
 
-// waitForGitSync waits for the GitRepository to report Ready=True.
 func (f *Flux) waitForGitSync(ctx context.Context, env *addon.Environment) error {
 	env.Logger.Info("flux: waiting for git repository sync")
+
+	timeout := getTimeout(env.AddonConfig.Settings, "git_sync_timeout", defaultGitRepoSyncTimeout)
 
 	if err := system.WaitForWithTimeout(ctx, "flux", "git sync", func() bool {
 		if ctx.Err() != nil {
@@ -284,8 +302,8 @@ func (f *Flux) waitForGitSync(ctx context.Context, env *addon.Environment) error
 			return false
 		}
 		return strings.TrimSpace(result.Stdout) == "True"
-	}, gitRepoSyncTimeout); err != nil {
-		return fmt.Errorf("git repository sync not ready within %v", gitRepoSyncTimeout)
+	}, timeout, env.Logger); err != nil {
+		return fmt.Errorf("git repository sync not ready within %v", timeout)
 	}
 
 	env.Logger.Info("flux: git repository synced successfully")
@@ -325,4 +343,15 @@ func (f *Flux) createDeployKeySecret(ctx context.Context, env *addon.Environment
 	}
 
 	return nil
+}
+
+// getTimeout reads a timeout setting (in seconds) from the settings map,
+// falling back to the given default.
+func getTimeout(settings map[string]string, key string, defaultTimeout time.Duration) time.Duration {
+	if v, ok := settings[key]; ok && v != "" {
+		if secs, err := strconv.Atoi(v); err == nil && secs > 0 {
+			return time.Duration(secs) * time.Second
+		}
+	}
+	return defaultTimeout
 }

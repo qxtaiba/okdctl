@@ -17,7 +17,6 @@ import (
 	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/dns"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/paths"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/executor"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/logging"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
 )
 
@@ -38,6 +37,12 @@ type Options struct {
 
 	// Timeout for operations.
 	Timeout time.Duration
+
+	// KubeVIPDaemonSetTimeout overrides the default wait for kube-vip DaemonSet readiness.
+	KubeVIPDaemonSetTimeout time.Duration
+
+	// KubeVIPVIPTimeout overrides the default wait for VIP ping/API health.
+	KubeVIPVIPTimeout time.Duration
 }
 
 // NewOptions creates Options with defaults.
@@ -48,7 +53,9 @@ func NewOptions(cfg *config.Config, projectRoot string) Options {
 			WorkDir:      filepath.Join(projectRoot, "okd-install"),
 			TerraformEnv: paths.GetTerraformEnv(cfg),
 		},
-		Timeout: DefaultTimeout,
+		Timeout:                 DefaultTimeout,
+		KubeVIPDaemonSetTimeout: DefaultKubeVIPDaemonSetTimeout,
+		KubeVIPVIPTimeout:       DefaultKubeVIPVIPTimeout,
 	}
 }
 
@@ -66,7 +73,7 @@ type Phase struct {
 }
 
 // New creates a new post-install phase coordinator.
-func New(exec *executor.Executor, logger logging.Logger, version string) *Phase {
+func New(exec *executor.Executor, logger utils.Logger, version string) *Phase {
 	return &Phase{
 		BasePhase: paths.NewBasePhase(exec, logger, version),
 	}

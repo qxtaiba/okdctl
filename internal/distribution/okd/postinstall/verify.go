@@ -12,20 +12,17 @@ import (
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
 )
 
-// Default timeouts for verification operations.
 const (
 	DefaultKubeVIPDaemonSetTimeout = 5 * time.Minute
 	DefaultKubeVIPVIPTimeout       = 2 * time.Minute
 )
 
-// ClusterHealthResult contains the results of cluster health verification.
 type ClusterHealthResult struct {
 	DegradedOperators int
 	ReadyNodes        int
 	TotalNodes        int
 }
 
-// VerifyClusterHealth checks cluster operator status and node readiness.
 func (p *Phase) VerifyClusterHealth(ctx context.Context, opts Options) (*ClusterHealthResult, error) {
 	result := &ClusterHealthResult{}
 
@@ -69,10 +66,6 @@ func (p *Phase) VerifyClusterHealth(ctx context.Context, opts Options) (*Cluster
 	return result, nil
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// KUBE-VIP VERIFICATION
-// ═══════════════════════════════════════════════════════════════════════════════
-
 // VerifyKubeVIP verifies that kube-vip is running and the VIP is responding.
 // Returns the VIP address if successful.
 func (p *Phase) VerifyKubeVIP(ctx context.Context, cfg *config.Config, opts Options) (string, error) {
@@ -83,11 +76,11 @@ func (p *Phase) VerifyKubeVIP(ctx context.Context, cfg *config.Config, opts Opti
 
 	p.Log.Info(fmt.Sprintf("kubevip: checking vip %s", vip))
 
-	if err := p.waitForKubeVIPDaemonSet(ctx); err != nil {
+	if err := p.waitForKubeVIPDaemonSet(ctx, opts); err != nil {
 		return "", err
 	}
 
-	if err := p.waitForKubeVIPPing(ctx, vip); err != nil {
+	if err := p.waitForKubeVIPPing(ctx, vip, opts); err != nil {
 		return "", err
 	}
 
@@ -99,7 +92,12 @@ func (p *Phase) VerifyKubeVIP(ctx context.Context, cfg *config.Config, opts Opti
 }
 
 // waitForKubeVIPDaemonSet waits for the kube-vip DaemonSet to have at least one ready pod.
-func (p *Phase) waitForKubeVIPDaemonSet(ctx context.Context) error {
+func (p *Phase) waitForKubeVIPDaemonSet(ctx context.Context, opts Options) error {
+	timeout := opts.KubeVIPDaemonSetTimeout
+	if timeout == 0 {
+		timeout = DefaultKubeVIPDaemonSetTimeout
+	}
+
 	if err := system.WaitForWithTimeout(ctx, "kubevip", "daemonset", func() bool {
 		if ctx.Err() != nil {
 			return false
@@ -110,7 +108,7 @@ func (p *Phase) waitForKubeVIPDaemonSet(ctx context.Context) error {
 			return false
 		}
 		return strings.TrimSpace(result.Stdout) != "" && strings.TrimSpace(result.Stdout) != "0"
-	}, DefaultKubeVIPDaemonSetTimeout); err != nil {
+	}, timeout, p.Log); err != nil {
 		return utils.WrapError("kube-vip daemonset not ready", err)
 	}
 
@@ -124,14 +122,19 @@ func (p *Phase) waitForKubeVIPDaemonSet(ctx context.Context) error {
 }
 
 // waitForKubeVIPPing waits for the VIP to respond to ping.
-func (p *Phase) waitForKubeVIPPing(ctx context.Context, vip string) error {
+func (p *Phase) waitForKubeVIPPing(ctx context.Context, vip string, opts Options) error {
+	timeout := opts.KubeVIPVIPTimeout
+	if timeout == 0 {
+		timeout = DefaultKubeVIPVIPTimeout
+	}
+
 	if err := system.WaitForWithTimeout(ctx, "kubevip", "ping", func() bool {
 		if ctx.Err() != nil {
 			return false
 		}
 		result, _ := p.Exec.Run(ctx, "ping", "-c", "1", "-W", "2", vip)
 		return result != nil && result.ExitCode == 0
-	}, DefaultKubeVIPVIPTimeout); err != nil {
+	}, timeout, p.Log); err != nil {
 		return utils.WrapError(fmt.Sprintf("vip %s is not responding to ping", vip), err)
 	}
 
@@ -160,3 +163,18 @@ func (p *Phase) verifyKubeVIPAPIHealth(ctx context.Context, vip string) error {
 	return nil
 }
 
+// verifyAPIHealthCheck performs a quick API health check via the cluster hostname.
+// Uses oc get --raw /healthz which goes through the kubeconfig's server URL.
+func (p *Phase) verifyAPIHealthCheck(ctx context.Context) error {
+	result, err := p.Exec.Run(ctx, "oc", "get", "--raw", "/healthz")
+	if err != nil {
+		return utils.WrapError("api health check failed", err)
+	}
+	if result.ExitCode != 0 {
+		return fmt.Errorf("api health check failed: %s", result.Stderr)
+	}
+	if strings.TrimSpace(result.Stdout) != "ok" {
+		return fmt.Errorf("api returned unexpected health status: %s", strings.TrimSpace(result.Stdout))
+	}
+	return nil
+}

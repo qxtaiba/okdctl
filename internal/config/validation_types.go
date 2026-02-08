@@ -5,10 +5,6 @@ import (
 	"strings"
 )
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// RESOURCE LIMITS
-// ═══════════════════════════════════════════════════════════════════════════════
-
 const (
 	MinCPUGeneric      = 1
 	MinMemoryMBGeneric = 1024
@@ -24,11 +20,6 @@ const (
 	MinDiskGBWorkerOKD   = 50
 )
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// VALIDATION TYPES
-// ═══════════════════════════════════════════════════════════════════════════════
-
-// ValidationError represents a single validation error.
 type ValidationError struct {
 	Field   string
 	Message string
@@ -38,7 +29,6 @@ func (e ValidationError) Error() string {
 	return fmt.Sprintf("%s: %s", e.Field, e.Message)
 }
 
-// ValidationResult holds all validation errors.
 type ValidationResult struct {
 	Errors []ValidationError
 }
@@ -61,10 +51,6 @@ func (r *ValidationResult) Error() string {
 	}
 	return strings.Join(msgs, "; ")
 }
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// VALIDATION SCOPE
-// ═══════════════════════════════════════════════════════════════════════════════
 
 // ValidationScope controls what gets validated using a bitmask.
 type ValidationScope uint64
@@ -90,23 +76,16 @@ func (s ValidationScope) HasScope(flag ValidationScope) bool {
 	return s&flag != 0
 }
 
-// ValidationOptions configures validation behavior.
 type ValidationOptions struct {
 	Scope       ValidationScope
 	StopOnFirst bool
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// VALIDATOR INTERFACE AND REGISTRY
-// ═══════════════════════════════════════════════════════════════════════════════
-
-// Validator interface for pluggable validation.
 type Validator interface {
 	Validate(cfg *Config, result *ValidationResult)
 	Scope() ValidationScope
 }
 
-// ValidatorRegistry manages registered validators.
 type ValidatorRegistry struct {
 	validators []Validator
 }
@@ -143,12 +122,7 @@ func (r *ValidatorRegistry) Validate(cfg *Config, opts ValidationOptions) *Valid
 	return result
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// CONFIG VALIDATION METHODS
-// ═══════════════════════════════════════════════════════════════════════════════
-
-// Validate validates the configuration. Optional ValidationOptions control scope and behavior.
-// Defaults to ScopeAll when no options are provided.
+// Validate uses ScopeAll when no options are provided.
 func (cfg *Config) Validate(opts ...ValidationOptions) *ValidationResult {
 	if len(opts) == 0 {
 		opts = []ValidationOptions{{Scope: ScopeAll}}
@@ -156,22 +130,18 @@ func (cfg *Config) Validate(opts ...ValidationOptions) *ValidationResult {
 	return ValidateWithOptions(cfg, opts[0])
 }
 
-// ValidateWithScope validates with a specific scope.
 func (cfg *Config) ValidateWithScope(scope ValidationScope) *ValidationResult {
 	return ValidateWithOptions(cfg, ValidationOptions{Scope: scope})
 }
 
-// ValidateQuick performs fast validation without file I/O checks.
 func (cfg *Config) ValidateQuick() *ValidationResult {
 	return ValidateWithOptions(cfg, ValidationOptions{Scope: ScopeQuick})
 }
 
-// ValidateForOKD validates the configuration including OKD-specific resource requirements.
 func (cfg *Config) ValidateForOKD() *ValidationResult {
 	return ValidateWithOKD(cfg)
 }
 
-// ValidateWithOptions validates using the registry with specified options.
 func ValidateWithOptions(cfg *Config, opts ValidationOptions) *ValidationResult {
 	registry := NewValidatorRegistry()
 	return registry.Validate(cfg, opts)

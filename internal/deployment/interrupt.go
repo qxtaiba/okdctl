@@ -9,11 +9,8 @@ import (
 	"syscall"
 )
 
-// ErrInterrupted is returned when deployment is interrupted by a signal.
 var ErrInterrupted = errors.New("deployment interrupted")
 
-// InterruptHandler manages graceful shutdown on interrupt signals.
-// It uses atomic operations for thread-safe access to the interrupted flag.
 type InterruptHandler struct {
 	sigChan     chan os.Signal
 	cancel      context.CancelFunc
@@ -25,8 +22,8 @@ type InterruptHandler struct {
 	OnInterrupt func(sig os.Signal)
 }
 
-// NewInterruptHandler creates a new interrupt handler and returns its context.
-// The handler listens for SIGINT and SIGTERM signals.
+// NewInterruptHandler listens for SIGINT and SIGTERM and returns a handler
+// paired with a context that is cancelled on signal receipt.
 func NewInterruptHandler() (*InterruptHandler, context.Context) {
 	ctx, cancel := context.WithCancel(context.Background())
 	h := &InterruptHandler{
@@ -41,7 +38,7 @@ func NewInterruptHandler() (*InterruptHandler, context.Context) {
 func (h *InterruptHandler) listen() {
 	sig, ok := <-h.sigChan
 	if !ok {
-		return // Channel closed, exit cleanly
+		return
 	}
 
 	atomic.StoreInt32(&h.interrupted, 1)
@@ -53,14 +50,12 @@ func (h *InterruptHandler) listen() {
 	// Don't os.Exit here - let context cancellation propagate and defers run
 }
 
-// WasInterrupted returns true if an interrupt signal was received.
-// This method is safe to call from any goroutine.
+// WasInterrupted is safe to call from any goroutine.
 func (h *InterruptHandler) WasInterrupted() bool {
 	return atomic.LoadInt32(&h.interrupted) != 0
 }
 
-// Cleanup stops signal handling and cancels the context.
-// This should be called in a defer after creating the handler.
+// Cleanup should be deferred immediately after creating the handler.
 func (h *InterruptHandler) Cleanup() {
 	signal.Stop(h.sigChan)
 	close(h.sigChan)

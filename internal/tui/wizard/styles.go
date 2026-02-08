@@ -8,10 +8,6 @@ import (
 	"github.com/qxtaiba/okd-proxmox-cli/internal/tui"
 )
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// WIZARD CONTAINER STYLES
-// ═══════════════════════════════════════════════════════════════════════════════
-
 var (
 	OuterContainerStyle = lipgloss.NewStyle().
 				Padding(1, 2)
@@ -41,10 +37,6 @@ var (
 			Foreground(tui.ColorSlate500)
 )
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// BRANDING STYLES
-// ═══════════════════════════════════════════════════════════════════════════════
-
 var (
 	LogoStyle = lipgloss.NewStyle().
 			Foreground(tui.ColorPrimary).
@@ -62,10 +54,6 @@ var (
 					Bold(true)
 )
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// STEP CONTENT STYLES
-// ═══════════════════════════════════════════════════════════════════════════════
-
 var (
 	StepTitleStyle = lipgloss.NewStyle().
 			Foreground(tui.ColorText).
@@ -80,10 +68,6 @@ var (
 				Foreground(tui.ColorCyan500).
 				Bold(true)
 )
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// OPTION/SELECTION STYLES
-// ═══════════════════════════════════════════════════════════════════════════════
 
 var (
 	OptionSelectedStyle = lipgloss.NewStyle().
@@ -116,10 +100,6 @@ var (
 	VerticalLineStyle = lipgloss.NewStyle().
 				Foreground(tui.ColorSlate700)
 )
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// INPUT STYLES
-// ═══════════════════════════════════════════════════════════════════════════════
 
 var (
 	InputLabelStyle = lipgloss.NewStyle().
@@ -155,10 +135,6 @@ var (
 				MarginBottom(1)
 )
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// CONTEXT/PREVIEW PANEL STYLES
-// ═══════════════════════════════════════════════════════════════════════════════
-
 var (
 	ContextPanelStyle = lipgloss.NewStyle().
 				Border(lipgloss.RoundedBorder()).
@@ -181,10 +157,6 @@ var (
 				Bold(true)
 )
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// FOOTER/HELP STYLES
-// ═══════════════════════════════════════════════════════════════════════════════
-
 var (
 	HelpKeyStyle = lipgloss.NewStyle().
 			Foreground(tui.ColorSlate900).
@@ -199,10 +171,6 @@ var (
 				Foreground(tui.ColorSlate700)
 )
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// STEP PROGRESS STYLES
-// ═══════════════════════════════════════════════════════════════════════════════
-
 var (
 	StepDotCompletedStyle = lipgloss.NewStyle().
 				Foreground(tui.ColorSuccess)
@@ -214,7 +182,6 @@ var (
 				Foreground(tui.ColorSlate600)
 )
 
-// RenderStepProgress renders dot progress indicator (e.g., "●→●→○→○").
 func RenderStepProgress(current, total int) string {
 	var parts []string
 	for i := 0; i < total; i++ {
@@ -230,16 +197,10 @@ func RenderStepProgress(current, total int) string {
 	return strings.Join(parts, connector)
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// HELPER FUNCTIONS
-// ═══════════════════════════════════════════════════════════════════════════════
-
-// RenderHelpItem renders a single help item (key + description).
 func RenderHelpItem(key, description string) string {
 	return HelpKeyStyle.Render(key) + " " + HelpTextStyle.Render(description)
 }
 
-// RenderHelpBar renders the full help bar with multiple items.
 func RenderHelpBar(items []KeyBinding) string {
 	var parts []string
 	separator := HelpSeparatorStyle.Render("   ")

@@ -9,7 +9,6 @@ import (
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
 )
 
-// FilesStepDefinition defines the files configuration step declaratively.
 var FilesStepDefinition = wizard.StepDefinition{
 	ID:           "files",
 	Title:        "files & ignition",
@@ -96,7 +95,6 @@ var FilesStepDefinition = wizard.StepDefinition{
 	},
 }
 
-// NewFilesStep creates a new files configuration step.
 func NewFilesStep() (*wizard.DataDrivenStep, any) {
 	step := wizard.NewDataDrivenStep(FilesStepDefinition)
 	return step, nil

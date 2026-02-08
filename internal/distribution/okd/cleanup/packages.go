@@ -7,25 +7,20 @@ import (
 	"path/filepath"
 
 	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/setup"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/logging"
+	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
 )
 
 // InstalledPackages returns the list of dnf packages installed by the setup phase.
-// Only includes packages not already handled by service-specific cleanup functions.
-// Note: haproxy, httpd, dnsmasq are removed by their respective cleanup functions
-// (HAProxy(), Apache(), Dnsmasq()) to ensure proper service stop/disable before removal.
+// haproxy, httpd, dnsmasq are removed by their respective cleanup functions
+// to ensure proper service stop/disable before removal.
 func InstalledPackages() []string {
 	return []string{
-		// OKD-specific tools
 		"coreos-installer",
-		// Terraform (installed via HashiCorp repo)
 		"terraform",
 	}
 }
 
-// InstalledBinaries returns the list of binaries installed to /usr/local/bin by setup.
-// This includes OKD tools and external tools (terraform, yq, age, sops).
 func InstalledBinaries() []string {
 	okdBinaries := []string{
 		"openshift-install",
@@ -35,9 +30,7 @@ func InstalledBinaries() []string {
 	return append(okdBinaries, setup.ExternalToolBinaries()...)
 }
 
-// Packages removes all system packages and binaries installed during setup.
-// This restores the system to its pre-installation state.
-func Packages(ctx context.Context, logger logging.Logger) error {
+func Packages(ctx context.Context, logger utils.Logger) error {
 	var hasErrors bool
 
 	packages := InstalledPackages()

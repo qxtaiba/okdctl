@@ -11,7 +11,7 @@ import (
 	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/cleanup"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/paths"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/executor"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/logging"
+	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
 )
 
 // Options configures the destroy phase.
@@ -63,7 +63,7 @@ type Phase struct {
 }
 
 // New creates a new destroy phase coordinator.
-func New(exec *executor.Executor, logger logging.Logger, version string) *Phase {
+func New(exec *executor.Executor, logger utils.Logger, version string) *Phase {
 	return &Phase{
 		BasePhase: paths.NewBasePhase(exec, logger, version),
 	}

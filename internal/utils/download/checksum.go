@@ -15,10 +15,8 @@ import (
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
 )
 
-// maxChecksumFileSize is the maximum size for checksum files (1MB limit).
 const maxChecksumFileSize = 1024 * 1024
 
-// CalculateChecksum calculates the SHA256 checksum of a file.
 func CalculateChecksum(path string) (string, error) {
 	file, err := os.Open(path)
 	if err != nil {
@@ -34,10 +32,9 @@ func CalculateChecksum(path string) (string, error) {
 	return hex.EncodeToString(hasher.Sum(nil)), nil
 }
 
-// ValidateChecksum verifies a file's checksum against an expected value.
 func ValidateChecksum(path, expectedChecksum string) error {
 	if expectedChecksum == "" {
-		return nil // No checksum to validate
+		return nil
 	}
 
 	actualChecksum, err := CalculateChecksum(path)
@@ -53,7 +50,6 @@ func ValidateChecksum(path, expectedChecksum string) error {
 	return nil
 }
 
-// FetchChecksum downloads a checksums file and extracts the checksum for a specific file.
 func FetchChecksum(ctx context.Context, checksumsURL, filename string) (string, error) {
 	client := system.NewClient(system.WithTimeout(system.TimeoutMedium))
 
@@ -79,7 +75,6 @@ func FetchChecksum(ctx context.Context, checksumsURL, filename string) (string, 
 		return "", utils.WrapError("failed to read checksums response", err)
 	}
 
-	// Parse checksums file (format: checksum  filename)
 	lines := strings.Split(string(body), "\n")
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
@@ -87,7 +82,6 @@ func FetchChecksum(ctx context.Context, checksumsURL, filename string) (string, 
 			continue
 		}
 
-		// Split on whitespace (handle both single and double space)
 		parts := strings.Fields(line)
 		if len(parts) >= 2 {
 			checksumValue := parts[0]
@@ -106,16 +100,14 @@ func FetchChecksum(ctx context.Context, checksumsURL, filename string) (string, 
 	return "", fmt.Errorf("checksum not found for file: %s", filename)
 }
 
-// verifyDownloadedFile validates checksum after download.
-// If verification fails, the file is removed and an error is returned.
-func verifyDownloadedFile(path, expectedChecksum string) error {
+func verifyDownloadedFile(path, expectedChecksum string, logger utils.Logger) error {
 	if expectedChecksum == "" {
 		return nil
 	}
 
 	filename := filepath.Base(path)
 
-	utils.GetLogger().Info(fmt.Sprintf("download: verifying checksum for %s", filename))
+	logger.Info(fmt.Sprintf("download: verifying checksum for %s", filename))
 
 	actualChecksum, err := CalculateChecksum(path)
 	if err != nil {
@@ -129,7 +121,7 @@ func verifyDownloadedFile(path, expectedChecksum string) error {
 			filename, expectedChecksum, actualChecksum)
 	}
 
-	utils.GetLogger().Info(fmt.Sprintf("download: checksum verified for %s", filename))
+	logger.Info(fmt.Sprintf("download: checksum verified for %s", filename))
 
 	return nil
 }

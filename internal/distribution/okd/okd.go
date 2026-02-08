@@ -1,20 +1,5 @@
 // Package okd implements the OKD/OpenShift provisioner for Proxmox.
-//
-// # Architecture
-//
-// The Provisioner is a thin coordinator that delegates to phase-specific packages:
-//
-//	okd/
-//	├── okd.go           # Provisioner (coordinator) - this file
-//	├── setup/           # Setup phase (artifacts, ISOs, HAProxy, DNS)
-//	├── install/         # Install phase (Terraform, bootstrap, CSR approval)
-//	├── postinstall/     # Post-install phase (verification, MetalLB, ingress)
-//	├── destroy/         # Destroy phase (Terraform destroy, cleanup)
-//	├── cleanup/         # Cleanup utilities
-//	└── dns/             # DNS utilities (dnsmasq)
-//
-// Each phase package contains its own Options, Phase struct, and Execute() method.
-// The Provisioner simply creates Phase instances and delegates execution.
+// The Provisioner delegates to phase-specific packages (setup, install, postinstall, destroy).
 package okd
 
 import (
@@ -29,21 +14,18 @@ import (
 	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/postinstall"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/setup"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/executor"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/logging"
+	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
 )
 
-type Logger = logging.Logger
+type Logger = utils.Logger
 
-// Minimum resource requirements for OKD control plane nodes.
 const (
 	MinControlPlaneMemoryMB = 8192
 	MinControlPlaneCPUs     = 4
 	MinControlPlaneDiskGB   = 50
 )
 
-// Provisioner coordinates OKD cluster lifecycle operations.
-// It delegates actual work to phase-specific packages.
 type Provisioner struct {
 	version     string
 	projectRoot string
@@ -51,7 +33,6 @@ type Provisioner struct {
 	logger      Logger
 }
 
-// ProvisionerOption configures a Provisioner.
 type ProvisionerOption func(*Provisioner)
 
 func WithProjectRoot(projectRoot string) ProvisionerOption {
@@ -66,28 +47,25 @@ func WithLogger(l Logger) ProvisionerOption {
 	}
 }
 
-// WithEnv sets environment variables for command execution.
-// These are passed to the executor for all subprocess calls.
-// Use this to pass credentials without modifying global process environment.
+// WithEnv passes environment variables to the executor for all subprocess calls,
+// avoiding modification of the global process environment.
 func WithEnv(env []string) ProvisionerOption {
 	return func(p *Provisioner) {
 		if p.executor == nil {
 			p.executor = executor.New(executor.WithEnv(env))
 		} else {
-			// Append to existing executor's environment
 			p.executor.Env = append(p.executor.Env, env...)
 		}
 	}
 }
 
-// New creates a new OKD provisioner with optional configuration.
 func New(version string, opts ...ProvisionerOption) *Provisioner {
 	projectRoot, _ := os.Getwd()
 
 	p := &Provisioner{
 		version:     version,
 		projectRoot: projectRoot,
-		logger:      logging.NoopLogger(),
+		logger:      utils.NoopLogger(),
 	}
 
 	for _, opt := range opts {
@@ -101,11 +79,6 @@ func New(version string, opts ...ProvisionerOption) *Provisioner {
 	return p
 }
 
-// ════════════════════════════════════════════════════════════════════════════════
-// VALIDATION
-// ════════════════════════════════════════════════════════════════════════════════
-
-// Validate checks if the configuration is valid for OKD.
 func (p *Provisioner) Validate(cfg *config.Config) error {
 	if cfg.Distribution.Type != config.DistributionOKD {
 		return fmt.Errorf("invalid distribution type: expected okd, got %s", cfg.Distribution.Type)
@@ -126,12 +99,7 @@ func (p *Provisioner) Validate(cfg *config.Config) error {
 	return nil
 }
 
-// ════════════════════════════════════════════════════════════════════════════════
-// LIFECYCLE PHASES - Thin delegation to phase packages
-// ════════════════════════════════════════════════════════════════════════════════
-
-// Prepare performs pre-installation setup for OKD.
-// Cleans up previous artifacts first, then delegates to setup.Phase.Execute().
+// Prepare cleans up previous artifacts and runs the setup phase.
 func (p *Provisioner) Prepare(ctx context.Context, cfg *config.Config) error {
 	opts := setup.DefaultOptions(p.projectRoot)
 
@@ -153,29 +121,21 @@ func (p *Provisioner) Prepare(ctx context.Context, cfg *config.Config) error {
 	return phase.Execute(ctx, cfg, opts)
 }
 
-// Install installs OKD on the provisioned infrastructure.
-// Delegates to install.Phase.Execute().
 func (p *Provisioner) Install(ctx context.Context, cfg *config.Config, opts install.Options) error {
 	phase := install.New(p.executor, p.logger, p.version)
 	return phase.Execute(ctx, cfg, opts)
 }
 
-// Configure applies post-installation configuration.
-// Delegates to postinstall.Phase.Execute().
 func (p *Provisioner) Configure(ctx context.Context, cfg *config.Config) (*postinstall.Result, error) {
 	phase := postinstall.New(p.executor, p.logger, p.version)
 	opts := postinstall.NewOptions(cfg, p.projectRoot)
 	return phase.Execute(ctx, cfg, opts)
 }
 
-// DestroyOptions configures the destroy operation.
 type DestroyOptions struct {
-	// RemovePackages removes system packages installed during setup.
 	RemovePackages bool
 }
 
-// Destroy removes the OKD installation.
-// Delegates to destroy.Phase.Execute().
 func (p *Provisioner) Destroy(ctx context.Context, cfg *config.Config, destroyOpts *DestroyOptions) error {
 	phase := destroy.New(p.executor, p.logger, p.version)
 	opts := destroy.NewOptions(cfg, p.projectRoot)

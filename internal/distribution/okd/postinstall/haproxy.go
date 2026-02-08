@@ -74,7 +74,7 @@ func (p *Phase) RemoveHAProxy(ctx context.Context, vip string) error {
 			healthURL := fmt.Sprintf("https://%s:6443/healthz", vip)
 			r, _ := p.Exec.Run(ctx, "curl", "-sk", "--connect-timeout", "5", healthURL)
 			return r != nil && r.ExitCode == 0 && strings.TrimSpace(r.Stdout) == "ok"
-		}, DefaultKubeVIPVIPTimeout); waitErr != nil {
+		}, DefaultKubeVIPVIPTimeout, p.Log); waitErr != nil {
 			return fmt.Errorf("api not reachable via vip %s after haproxy removal: %w", vip, waitErr)
 		}
 		p.Log.Info("haproxy: api confirmed reachable via vip")
@@ -90,7 +90,7 @@ func (p *Phase) RemoveHAProxy(ctx context.Context, vip string) error {
 			}
 			r, _ := p.Exec.Run(ctx, "oc", "get", "--raw", "/healthz")
 			return r != nil && r.ExitCode == 0 && strings.TrimSpace(r.Stdout) == "ok"
-		}, DefaultKubeVIPVIPTimeout); waitErr != nil {
+		}, DefaultKubeVIPVIPTimeout, p.Log); waitErr != nil {
 			return fmt.Errorf("api not reachable via hostname after haproxy removal: %w", waitErr)
 		}
 		p.Log.Info("haproxy: api confirmed reachable via hostname")

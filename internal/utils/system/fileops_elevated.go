@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 )
 
-// criticalPaths are system directories that should never be removed.
 var criticalPaths = []string{"/", "/etc", "/var", "/usr", "/bin", "/sbin", "/lib", "/home", "/root", "/boot", "/dev", "/proc", "/sys"}
 
 func isCriticalPath(path string) bool {
@@ -21,7 +20,6 @@ func isCriticalPath(path string) bool {
 	return false
 }
 
-// FileOperation represents the type of file operation to perform.
 type FileOperation int
 
 const (
@@ -32,7 +30,6 @@ const (
 	OpRemove
 )
 
-// ExecuteFileOperation performs a file operation with automatic sudo fallback.
 func ExecuteFileOperation(ctx context.Context, op FileOperation, target string, description string, args ...string) error {
 	var regularOp, sudoOp func() error
 
@@ -82,7 +79,6 @@ func ExecuteFileOperation(ctx context.Context, op FileOperation, target string, 
 		}
 
 	case OpRemove:
-		// Validate path is not a critical system directory
 		if isCriticalPath(target) {
 			return fmt.Errorf("refusing to remove critical system path: %s", target)
 		}
@@ -100,27 +96,22 @@ func ExecuteFileOperation(ctx context.Context, op FileOperation, target string, 
 	return ExecuteWithElevation(ctx, regularOp, sudoOp, description)
 }
 
-// CopyFileWithElevation copies a file with automatic sudo fallback.
 func CopyFileWithElevation(ctx context.Context, src, dst, description string) error {
 	return ExecuteFileOperation(ctx, OpCopy, dst, description, src)
 }
 
-// Chmod changes file permissions with automatic sudo fallback.
 func Chmod(ctx context.Context, path, perms, description string) error {
 	return ExecuteFileOperation(ctx, OpChmod, path, description, perms)
 }
 
-// Chown changes file ownership with automatic sudo fallback.
 func Chown(ctx context.Context, path, owner, description string) error {
 	return ExecuteFileOperation(ctx, OpChown, path, description, owner)
 }
 
-// MkdirAll creates a directory tree with automatic sudo fallback.
 func MkdirAll(ctx context.Context, path, description string) error {
 	return ExecuteFileOperation(ctx, OpMkdir, path, description)
 }
 
-// RemoveAll removes a file or directory with automatic sudo fallback.
 func RemoveAll(ctx context.Context, path, description string) error {
 	return ExecuteFileOperation(ctx, OpRemove, path, description)
 }
@@ -130,20 +121,14 @@ func runCommand(name string, args ...string) error {
 	return cmd.Run()
 }
 
-// runSudo is the internal unexported version for use within the system package.
-// It uses a background context by default for backwards compatibility with internal callers.
 func runSudo(name string, args ...string) error {
 	return RunSudo(context.Background(), name, args...)
 }
 
-// RunSudo runs a command with sudo privileges.
-// Connects stdin/stdout/stderr to the terminal so sudo can prompt for password if needed.
-// The context parameter allows for cancellation of long-running operations.
-// Note: If already running as root, sudo simply runs the command directly (no password needed).
+// RunSudo connects stdin/stdout/stderr to the terminal so sudo can prompt for password if needed.
 func RunSudo(ctx context.Context, name string, args ...string) error {
 	sudoArgs := append([]string{name}, args...)
 	cmd := exec.CommandContext(ctx, "sudo", sudoArgs...)
-	// Connect to terminal so sudo can prompt for password if needed
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

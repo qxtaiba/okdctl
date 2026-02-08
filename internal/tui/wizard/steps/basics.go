@@ -5,7 +5,6 @@ import (
 	"github.com/qxtaiba/okd-proxmox-cli/internal/tui/wizard"
 )
 
-// BasicsStepDefinition defines the cluster basics step declaratively.
 var BasicsStepDefinition = wizard.StepDefinition{
 	ID:           wizard.StepIDBasics,
 	Title:        "cluster basics",
@@ -65,7 +64,6 @@ var BasicsStepDefinition = wizard.StepDefinition{
 	},
 }
 
-// NewBasicsStep creates a new cluster basics step using the data-driven approach.
 func NewBasicsStep() (*wizard.DataDrivenStep, *wizard.DataDrivenStep) {
 	step := wizard.NewDataDrivenStep(BasicsStepDefinition)
 	return step, step

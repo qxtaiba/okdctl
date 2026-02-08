@@ -1,11 +1,6 @@
 // Package config provides configuration management for the CLI.
 package config
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// ROOT CONFIG
-// ═══════════════════════════════════════════════════════════════════════════════
-
-// Config represents the complete cluster configuration.
 type Config struct {
 	Cluster      ClusterConfig            `yaml:"cluster" json:"cluster" mapstructure:"cluster"`
 	Distribution DistributionConfig       `yaml:"distribution" json:"distribution" mapstructure:"distribution"`
@@ -29,15 +24,11 @@ type DistributionConfig struct {
 	Version string           `yaml:"version" json:"version" mapstructure:"version"`
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// TOPOLOGY
-// ═══════════════════════════════════════════════════════════════════════════════
-
 type TopologyConfig struct {
 	ControlPlane NodeConfig `yaml:"control_plane" json:"controlPlane" mapstructure:"control_plane"`
 	Workers      NodeConfig `yaml:"workers" json:"workers" mapstructure:"workers"`
 	Bootstrap    NodeConfig `yaml:"bootstrap,omitempty" json:"bootstrap,omitempty" mapstructure:"bootstrap"`
-	VMIDBase     int        `yaml:"vm_id_base,omitempty" json:"vmIdBase,omitempty" mapstructure:"vm_id_base"` // Starting VM ID
+	VMIDBase     int        `yaml:"vm_id_base,omitempty" json:"vmIdBase,omitempty" mapstructure:"vm_id_base"`
 }
 
 type NodeConfig struct {
@@ -46,10 +37,6 @@ type NodeConfig struct {
 	Memory int `yaml:"memory" json:"memory" mapstructure:"memory"` // in MB
 	Disk   int `yaml:"disk" json:"disk" mapstructure:"disk"`       // in GB
 }
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// NETWORKING
-// ═══════════════════════════════════════════════════════════════════════════════
 
 type NetworkingConfig struct {
 	MachineCIDR string   `yaml:"machine_cidr" json:"machineCidr" mapstructure:"machine_cidr"`
@@ -81,19 +68,10 @@ type MetalLBConfig struct {
 	Pool string `yaml:"pool" json:"pool" mapstructure:"pool"` // e.g., "192.168.1.205-192.168.1.230"
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// ADDONS
-// ═══════════════════════════════════════════════════════════════════════════════
-
-// AddonConfig is the generic configuration for any addon, keyed by name.
 type AddonConfig struct {
 	Enabled  bool              `yaml:"enabled" json:"enabled" mapstructure:"enabled"`
 	Settings map[string]string `yaml:"settings,omitempty" json:"settings,omitempty" mapstructure:"settings"`
 }
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// PROVIDER
-// ═══════════════════════════════════════════════════════════════════════════════
 
 type ProviderConfig struct {
 	Type    ProviderType   `yaml:"type" json:"type" mapstructure:"type"`
@@ -116,10 +94,6 @@ type ProxmoxConfig struct {
 	TokenID  string `yaml:"token_id,omitempty" json:"tokenId,omitempty" mapstructure:"token_id"`
 	Insecure bool   `yaml:"insecure,omitempty" json:"insecure,omitempty" mapstructure:"insecure"`
 }
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// DEPLOYMENT
-// ═══════════════════════════════════════════════════════════════════════════════
 
 type FilesConfig struct {
 	PullSecret   string `yaml:"pull_secret" json:"pullSecret" mapstructure:"pull_secret"`

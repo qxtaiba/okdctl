@@ -9,9 +9,8 @@ import (
 	"github.com/qxtaiba/okd-proxmox-cli/internal/tui"
 )
 
-// promptForConfirmation prompts the user and waits for y/yes confirmation.
-// Supports context cancellation. The stdin-reading goroutine cannot be cleanly
-// cancelled but terminates when the process exits.
+// The stdin-reading goroutine cannot be cleanly cancelled but terminates when
+// the process exits.
 func promptForConfirmation(ctx context.Context, prompt string) (bool, error) {
 	tui.Warn("this will create infrastructure resources")
 	_, _ = os.Stdout.WriteString(prompt)

@@ -1,6 +1,4 @@
-// Package setup provides the setup phase implementation for OKD cluster provisioning.
-// It handles downloading tools, generating configuration files, building ISOs,
-// and configuring infrastructure services (HAProxy, Apache, dnsmasq).
+// Package setup provides the setup phase for OKD cluster provisioning.
 package setup
 
 import (
@@ -13,42 +11,25 @@ import (
 	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/dns"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/paths"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/executor"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/logging"
+	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
 )
 
-// Default ports for ignition server.
 const (
 	DefaultIgnitionPort = 8080
 	HTTPDefaultPort     = 80
 )
 
-// Options configures the setup phase.
 type Options struct {
 	paths.BaseOptions
-
-	// DownloadDir is where to download tools.
-	DownloadDir string
-
-	// SkipDownloads skips downloading OKD tools if they exist.
-	SkipDownloads bool
-
-	// SkipISOs skips building custom ISOs.
-	SkipISOs bool
-
-	// SkipHAProxy skips HAProxy configuration.
-	SkipHAProxy bool
-
-	// SkipFirewall skips firewall configuration.
-	SkipFirewall bool
-
-	// AutoDownloadISO automatically downloads CoreOS ISO if missing.
+	DownloadDir     string
+	SkipDownloads   bool
+	SkipISOs        bool
+	SkipHAProxy     bool
+	SkipFirewall    bool
 	AutoDownloadISO bool
-
-	// Verbose enables extra logging.
-	Verbose bool
+	Verbose         bool
 }
 
-// DefaultOptions returns default setup options.
 func DefaultOptions(projectRoot string) Options {
 	return Options{
 		BaseOptions: paths.BaseOptions{
@@ -59,7 +40,6 @@ func DefaultOptions(projectRoot string) Options {
 	}
 }
 
-// BuildIgnitionURL constructs the ignition URL from IP and port.
 func BuildIgnitionURL(ip string, port int) string {
 	if port == 0 {
 		port = DefaultIgnitionPort
@@ -70,7 +50,6 @@ func BuildIgnitionURL(ip string, port int) string {
 	return fmt.Sprintf("http://%s:%d/ignition", ip, port)
 }
 
-// CoreOSInfo holds information about the CoreOS release.
 type CoreOSInfo struct {
 	Version      string
 	ISOUrl       string
@@ -78,7 +57,6 @@ type CoreOSInfo struct {
 	Architecture string
 }
 
-// NodeInfo holds information about a cluster node.
 type NodeInfo struct {
 	Name string
 	Role string // bootstrap, master, worker
@@ -86,19 +64,16 @@ type NodeInfo struct {
 	MAC  string
 }
 
-// Phase coordinates the setup phase execution.
 type Phase struct {
 	paths.BasePhase
 }
 
-// New creates a new setup phase coordinator.
-func New(exec *executor.Executor, logger logging.Logger, version string) *Phase {
+func New(exec *executor.Executor, logger utils.Logger, version string) *Phase {
 	return &Phase{
 		BasePhase: paths.NewBasePhase(exec, logger, version),
 	}
 }
 
-// Execute runs the complete setup phase.
 func (p *Phase) Execute(ctx context.Context, cfg *config.Config, opts Options) error {
 	p.Log.Info("setup: starting okd cluster configuration")
 
@@ -135,7 +110,6 @@ func (p *Phase) Execute(ctx context.Context, cfg *config.Config, opts Options) e
 	return nil
 }
 
-// PrintSetupCompletionSummary prints a brief summary of generated files.
 func (p *Phase) PrintSetupCompletionSummary(cfg *config.Config, opts Options) {
 	clusterDir := paths.ClusterConfigDir(opts.WorkDir)
 	tfEnv := paths.GetTerraformEnv(cfg)
@@ -144,10 +118,11 @@ func (p *Phase) PrintSetupCompletionSummary(cfg *config.Config, opts Options) {
 	p.Log.Info(fmt.Sprintf("setup: terraform environment set to %s", tfEnv))
 }
 
-// dnsFunctions returns DNS function implementations for the DNS step.
 func (p *Phase) dnsFunctions() dnsFuncs {
 	return dnsFuncs{
-		setupDnsmasq: dns.Setup,
+		setupDnsmasq: func(ctx context.Context, fallbackDNS []string) error {
+			return dns.Setup(ctx, fallbackDNS, p.Log)
+		},
 		deployBootstrapDNS: func(ctx context.Context, cfg *config.Config) error {
 			return dns.DeployBootstrap(ctx, cfg)
 		},
@@ -157,7 +132,6 @@ func (p *Phase) dnsFunctions() dnsFuncs {
 	}
 }
 
-// dnsFuncs holds DNS function implementations.
 type dnsFuncs struct {
 	setupDnsmasq               func(ctx context.Context, fallbackDNS []string) error
 	deployBootstrapDNS         func(ctx context.Context, cfg *config.Config) error

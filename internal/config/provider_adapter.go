@@ -2,7 +2,6 @@ package config
 
 // Implements credentials.ProxmoxConfigProvider to avoid circular imports.
 
-// GetProxmoxHost returns the Proxmox host from configuration.
 func (c *Config) GetProxmoxHost() string {
 	if c.Provider.Proxmox == nil {
 		return ""

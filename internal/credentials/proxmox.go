@@ -6,15 +6,11 @@ import (
 	"strings"
 )
 
-// Source indicates where credentials were loaded from.
 type Source int
 
 const (
-	// SourceNone indicates no credentials found.
 	SourceNone Source = iota
-	// SourceEnv indicates credentials came from environment variables.
 	SourceEnv
-	// SourceConfig indicates credentials came from config file.
 	SourceConfig
 )
 
@@ -29,7 +25,6 @@ func (s Source) String() string {
 	}
 }
 
-// ProxmoxCredentials contains the resolved Proxmox credentials.
 type ProxmoxCredentials struct {
 	Endpoint string
 	Username string
@@ -44,14 +39,12 @@ func (c *ProxmoxCredentials) IsValid() bool {
 	return (c.Username != "" && c.Password != "") || c.APIToken != ""
 }
 
-// UseAPIToken returns true if API token authentication should be used.
 func (c *ProxmoxCredentials) UseAPIToken() bool {
 	return c.APIToken != ""
 }
 
-// Env returns environment variables for subprocess execution.
-// This is the preferred way to pass credentials to subprocesses
-// as it avoids modifying global process environment.
+// Env returns credential env vars for subprocess execution, avoiding
+// modification of the global process environment.
 func (c *ProxmoxCredentials) Env() []string {
 	if !c.IsValid() {
 		return nil
@@ -73,8 +66,7 @@ func (c *ProxmoxCredentials) Env() []string {
 	return env
 }
 
-// ProxmoxConfigProvider defines the interface for accessing Proxmox configuration.
-// This allows the credentials package to work without importing the config package.
+// ProxmoxConfigProvider abstracts config access to avoid importing the config package.
 type ProxmoxConfigProvider interface {
 	GetProxmoxHost() string
 	GetProxmoxInsecure() bool
@@ -84,8 +76,8 @@ type ProxmoxConfigProvider interface {
 	GetProxmoxPassword() string
 }
 
-// GetProxmoxCredentials resolves Proxmox credentials from environment and config.
-// Priority: 1. Environment variables (incl. .env file), 2. Config file (legacy)
+// GetProxmoxCredentials resolves credentials with priority:
+// 1. Environment variables (incl. .env file), 2. Config file (legacy).
 func GetProxmoxCredentials(cfg ProxmoxConfigProvider) *ProxmoxCredentials {
 	creds := &ProxmoxCredentials{
 		Source: SourceNone,
@@ -100,11 +92,9 @@ func GetProxmoxCredentials(cfg ProxmoxConfigProvider) *ProxmoxCredentials {
 		return creds
 	}
 
-	// Build endpoint
 	if !strings.HasPrefix(host, "http") {
 		host = "https://" + host
 	}
-	// Add default port 8006 if not specified
 	hostPart := strings.TrimPrefix(strings.TrimPrefix(host, "https://"), "http://")
 	if !strings.Contains(hostPart, ":") {
 		host = host + ":8006"

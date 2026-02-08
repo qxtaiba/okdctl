@@ -12,17 +12,11 @@ import (
 	"github.com/qxtaiba/okd-proxmox-cli/internal/tui/wizard/components"
 )
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// VERSION LOADING
-// ═══════════════════════════════════════════════════════════════════════════════
-
-// versionsLoadedMsg is sent when OKD versions are loaded.
 type versionsLoadedMsg struct {
 	series []releases.OKDReleaseSeries
 	err    error
 }
 
-// fetchVersions fetches OKD versions asynchronously.
 func (s *DistributionStep) fetchVersions() tea.Msg {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -30,10 +24,6 @@ func (s *DistributionStep) fetchVersions() tea.Msg {
 	series, err := s.versionFetcher.FetchVersions(ctx)
 	return versionsLoadedMsg{series: series, err: err}
 }
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// VERSION SELECTOR UPDATES
-// ═══════════════════════════════════════════════════════════════════════════════
 
 func (s *DistributionStep) updateVersionSelector() {
 	var options []components.Option
@@ -91,14 +81,9 @@ func (s *DistributionStep) updateVersionSelector() {
 	s.versionSelector.SetSelectedByID(s.selectedVersion)
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// FOCUS AND NAVIGATION HELPERS
-// ═══════════════════════════════════════════════════════════════════════════════
-
 func (s *DistributionStep) emitFocusChanged() tea.Cmd {
 	selected := s.versionSelector.Selected()
 
-	// Dropdown items handle their own scrolling
 	if selected.InDropdown {
 		return nil
 	}
@@ -143,10 +128,6 @@ func (s *DistributionStep) getMinorFromOptionID(id string) int {
 
 	return -1
 }
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// RELEASE TYPE HELPERS
-// ═══════════════════════════════════════════════════════════════════════════════
 
 func releaseTypeToOptionStyle(rt releases.ReleaseType) components.OptionStyle {
 	switch rt {

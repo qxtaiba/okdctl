@@ -1,4 +1,3 @@
-// Package config provides configuration management for the CLI.
 package config
 
 import (
@@ -22,10 +21,6 @@ var (
 	interfaceNamePattern = regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9._-]*$`)
 	proxmoxNamePattern   = regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9_-]*$`)
 )
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// REQUIRED FIELDS VALIDATOR
-// ═══════════════════════════════════════════════════════════════════════════════
 
 type requiredFieldsValidator struct{}
 
@@ -67,10 +62,6 @@ func (v *requiredFieldsValidator) Validate(cfg *Config, result *ValidationResult
 	}
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// ENUMS VALIDATOR
-// ═══════════════════════════════════════════════════════════════════════════════
-
 type enumsValidator struct{}
 
 func (v *enumsValidator) Scope() ValidationScope { return ScopeEnums }
@@ -96,10 +87,6 @@ func (v *enumsValidator) Validate(cfg *Config, result *ValidationResult) {
 		result.AddError(FieldProviderType, fmt.Sprintf("unsupported provider: %s", cfg.Provider.Type))
 	}
 }
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// NETWORKING VALIDATOR
-// ═══════════════════════════════════════════════════════════════════════════════
 
 type networkingValidator struct{}
 
@@ -145,10 +132,6 @@ func (v *networkingValidator) Validate(cfg *Config, result *ValidationResult) {
 	}
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// ADVANCED NETWORKING VALIDATOR
-// ═══════════════════════════════════════════════════════════════════════════════
-
 type advancedNetworkingValidator struct{}
 
 func (v *advancedNetworkingValidator) Scope() ValidationScope { return ScopeAdvancedNetworking }
@@ -163,10 +146,6 @@ func (v *advancedNetworkingValidator) Validate(cfg *Config, result *ValidationRe
 	if machineCIDR == "" || !IsValidCIDR(machineCIDR) {
 		return
 	}
-
-	// ───────────────────────────────────────────────────────────────────────────
-	// 1. CIDR Containment - All IPs must be within MachineCIDR
-	// ───────────────────────────────────────────────────────────────────────────
 
 	if gateway != "" && IsValidIP(gateway) && !netutil.IPInCIDR(gateway, machineCIDR) {
 		result.AddError(FieldNetworkingGateway, fmt.Sprintf("must be within machine CIDR %s", machineCIDR))
@@ -196,10 +175,6 @@ func (v *advancedNetworkingValidator) Validate(cfg *Config, result *ValidationRe
 		}
 	}
 
-	// ───────────────────────────────────────────────────────────────────────────
-	// 2. MetalLB Pool Validation
-	// ───────────────────────────────────────────────────────────────────────────
-
 	var metallbStart, metallbEnd string
 	if metallbPool != "" {
 		var err error
@@ -222,10 +197,6 @@ func (v *advancedNetworkingValidator) Validate(cfg *Config, result *ValidationRe
 			}
 		}
 	}
-
-	// ───────────────────────────────────────────────────────────────────────────
-	// 3. No Duplicate IPs - gateway and bastion must be unique
-	// ───────────────────────────────────────────────────────────────────────────
 
 	type namedIP struct {
 		name string
@@ -252,10 +223,6 @@ func (v *advancedNetworkingValidator) Validate(cfg *Config, result *ValidationRe
 		}
 	}
 
-	// ───────────────────────────────────────────────────────────────────────────
-	// 4. StaticIP range must not overlap MetalLB pool
-	// ───────────────────────────────────────────────────────────────────────────
-
 	if staticIPStart != "" && IsValidIP(staticIPStart) && metallbStart != "" && metallbEnd != "" {
 		totalNodes := 1 + cfg.Topology.ControlPlane.Count + cfg.Topology.Workers.Count
 		staticIPEnd, err := netutil.CalculateVMIP(staticIPStart, totalNodes-1)
@@ -267,10 +234,6 @@ func (v *advancedNetworkingValidator) Validate(cfg *Config, result *ValidationRe
 		}
 	}
 }
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// RESOURCES VALIDATOR
-// ═══════════════════════════════════════════════════════════════════════════════
 
 type resourcesValidator struct{}
 
@@ -306,10 +269,6 @@ func (v *resourcesValidator) Validate(cfg *Config, result *ValidationResult) {
 		}
 	}
 }
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// PROVIDER VALIDATOR
-// ═══════════════════════════════════════════════════════════════════════════════
 
 type providerValidator struct{}
 
@@ -358,10 +317,6 @@ func validateProxmoxConfig(proxmox *ProxmoxConfig, result *ValidationResult) {
 	}
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// ADDONS VALIDATOR
-// ═══════════════════════════════════════════════════════════════════════════════
-
 // addonsValidator checks structural correctness; addon-specific validation
 // is delegated to each addon's ValidateSettings at install time.
 type addonsValidator struct{}
@@ -381,10 +336,6 @@ func (v *addonsValidator) Validate(cfg *Config, result *ValidationResult) {
 	}
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// HTTP SERVER VALIDATOR
-// ═══════════════════════════════════════════════════════════════════════════════
-
 type httpServerValidator struct{}
 
 func (v *httpServerValidator) Scope() ValidationScope { return ScopeHTTPServer }
@@ -397,10 +348,6 @@ func (v *httpServerValidator) Validate(cfg *Config, result *ValidationResult) {
 	}
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// DISTRIBUTION VALIDATOR (OKD)
-// ═══════════════════════════════════════════════════════════════════════════════
-
 type distributionValidator struct{}
 
 func (v *distributionValidator) Scope() ValidationScope { return ScopeDistribution }
@@ -411,7 +358,6 @@ func (v *distributionValidator) Validate(cfg *Config, result *ValidationResult) 
 	}
 }
 
-// ValidateOKDVersion validates an OKD version string format.
 func ValidateOKDVersion(version string) error {
 	if version == "" {
 		return fmt.Errorf("okd version is required")
@@ -432,7 +378,6 @@ func ValidateHAMasters(count int) error {
 	return nil
 }
 
-// ValidateOKDConfig validates OKD-specific configuration requirements.
 func ValidateOKDConfig(cfg *Config, result *ValidationResult) {
 	if cfg.Distribution.Type == DistributionOKD {
 		if err := ValidateOKDVersion(cfg.Distribution.Version); err != nil {
@@ -475,7 +420,6 @@ func ValidateOKDConfig(cfg *Config, result *ValidationResult) {
 	}
 }
 
-// ValidateWithOKD performs full validation including OKD-specific checks.
 func ValidateWithOKD(cfg *Config) *ValidationResult {
 	result := cfg.Validate()
 	if cfg.Distribution.Type == DistributionOKD {
@@ -484,10 +428,6 @@ func ValidateWithOKD(cfg *Config) *ValidationResult {
 
 	return result
 }
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// FILES VALIDATOR
-// ═══════════════════════════════════════════════════════════════════════════════
 
 type filesValidator struct{}
 
@@ -509,10 +449,6 @@ func (v *filesValidator) Validate(cfg *Config, result *ValidationResult) {
 	}
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// VALIDATION HELPER FUNCTIONS
-// ═══════════════════════════════════════════════════════════════════════════════
-
 // IsValidDNSLabel checks if a string is a valid DNS label (RFC 1123).
 func IsValidDNSLabel(s string) bool {
 	if len(s) == 0 || len(s) > 63 {
@@ -532,18 +468,15 @@ func isValidHostOrIP(s string) bool {
 	return IsValidIP(s) || isValidDomain(s)
 }
 
-// IsValidIP checks if a string is a valid IP address.
 func IsValidIP(s string) bool {
 	return net.ParseIP(s) != nil
 }
 
-// IsValidCIDR checks if a string is a valid CIDR notation.
 func IsValidCIDR(s string) bool {
 	_, _, err := net.ParseCIDR(s)
 	return err == nil
 }
 
-// isValidNetmask checks if a string is a valid netmask (dotted-quad or CIDR prefix).
 func isValidNetmask(s string) bool {
 	prefix := strings.TrimPrefix(s, "/")
 	if n, err := strconv.Atoi(prefix); err == nil && n >= 0 && n <= 32 {
@@ -566,7 +499,6 @@ func isValidNetmask(s string) bool {
 	return inverted == 0 || (inverted&(inverted+1)) == 0
 }
 
-// CIDROverlaps checks if two CIDR ranges overlap.
 func CIDROverlaps(cidr1, cidr2 string) bool {
 	_, net1, err1 := net.ParseCIDR(cidr1)
 	_, net2, err2 := net.ParseCIDR(cidr2)
@@ -577,7 +509,6 @@ func CIDROverlaps(cidr1, cidr2 string) bool {
 		net2.Contains(cidrLastIP(net1)) || net1.Contains(cidrLastIP(net2))
 }
 
-// cidrLastIP returns the last IP address in a CIDR range.
 func cidrLastIP(n *net.IPNet) net.IP {
 	ip := make(net.IP, len(n.IP))
 	for i := range ip {
@@ -606,7 +537,7 @@ func isValidProvider(p ProviderType) bool {
 
 func getMinMemoryForDistribution(d DistributionType) int {
 	minMemory := map[DistributionType]int{
-		DistributionOKD: MinMemoryMBControlPlaneOKD, // OKD requires significant resources
+		DistributionOKD: MinMemoryMBControlPlaneOKD,
 	}
 	if mem, ok := minMemory[d]; ok {
 		return mem
@@ -614,11 +545,6 @@ func getMinMemoryForDistribution(d DistributionType) int {
 	return DefaultMinMemoryMB
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// COMMON VALIDATORS (for CLI and TUI)
-// ═══════════════════════════════════════════════════════════════════════════════
-
-// ValidateIP validates that a string is a valid IP address.
 func ValidateIP(value string) error {
 	if !IsValidIP(value) {
 		return errors.New("invalid ip address")
@@ -626,7 +552,6 @@ func ValidateIP(value string) error {
 	return nil
 }
 
-// ValidateCIDR validates that a string is valid CIDR notation.
 func ValidateCIDR(value string) error {
 	if !IsValidCIDR(value) {
 		return errors.New("invalid cidr format (e.g., 192.168.1.0/24)")
@@ -634,7 +559,6 @@ func ValidateCIDR(value string) error {
 	return nil
 }
 
-// ValidateIntRange creates a validator for integer values within a range.
 func ValidateIntRange(unit string, min, max int) func(string) error {
 	return func(value string) error {
 		n, err := strconv.Atoi(value)
@@ -651,7 +575,6 @@ func ValidateIntRange(unit string, min, max int) func(string) error {
 	}
 }
 
-// ValidatePortNumber validates that a port number is in range 1-65535.
 func ValidatePortNumber(value string) error {
 	port, err := strconv.Atoi(value)
 	if err != nil {
@@ -663,7 +586,6 @@ func ValidatePortNumber(value string) error {
 	return nil
 }
 
-// ValidateIPRange validates an IP range in "start-end" format.
 func ValidateIPRange(value string) error {
 	parts := strings.Split(value, "-")
 	if len(parts) != 2 {
@@ -689,7 +611,6 @@ func ValidateIPRange(value string) error {
 	return nil
 }
 
-// ValidateHostPrefix validates the host prefix is in range 20-28.
 func ValidateHostPrefix(value string) error {
 	n, err := strconv.Atoi(value)
 	if err != nil {

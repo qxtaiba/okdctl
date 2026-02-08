@@ -14,7 +14,6 @@ import (
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
 )
 
-// GenerateInstallConfig creates the install-config.yaml for openshift-install.
 func (p *Phase) GenerateInstallConfig(ctx context.Context, cfg *config.Config, outputDir string) error {
 	if err := system.EnsureDir(outputDir); err != nil {
 		return utils.WrapError("failed to create output directory", err)
@@ -58,7 +57,7 @@ func (p *Phase) GenerateInstallConfig(ctx context.Context, cfg *config.Config, o
 		return utils.WrapError("failed to write install-config.yaml", err)
 	}
 
-	// openshift-install consumes install-config.yaml, so back it up
+	// openshift-install consumes install-config.yaml during manifest generation
 	backupPath := outputPath + ".backup"
 	if err := system.CopyFile(outputPath, backupPath); err != nil {
 		return utils.WrapError("failed to backup install-config.yaml", err)
@@ -67,7 +66,6 @@ func (p *Phase) GenerateInstallConfig(ctx context.Context, cfg *config.Config, o
 	return nil
 }
 
-// GenerateManifests runs openshift-install create manifests.
 func (p *Phase) GenerateManifests(ctx context.Context, clusterDir string) error {
 	result, err := p.Exec.Run(ctx, "openshift-install", "create", "manifests", "--dir", clusterDir)
 	if err != nil {
@@ -80,7 +78,6 @@ func (p *Phase) GenerateManifests(ctx context.Context, clusterDir string) error 
 	return nil
 }
 
-// InjectCustomManifests copies custom manifests into the cluster config.
 func (p *Phase) InjectCustomManifests(ctx context.Context, projectRoot, clusterDir string) (int, error) {
 	customDir := filepath.Join(projectRoot, "automation", "config", "manifests")
 
@@ -146,7 +143,6 @@ func (p *Phase) InjectCompactClusterManifests(ctx context.Context, clusterDir st
 	return nil
 }
 
-// GenerateIgnitionConfigs runs openshift-install create ignition-configs.
 func (p *Phase) GenerateIgnitionConfigs(ctx context.Context, clusterDir string) error {
 	result, err := p.Exec.Run(ctx, "openshift-install", "create", "ignition-configs", "--dir", clusterDir)
 	if err != nil {
@@ -163,7 +159,6 @@ func (p *Phase) GenerateIgnitionConfigs(ctx context.Context, clusterDir string) 
 	return nil
 }
 
-// ValidateIgnitionFiles checks that ignition files exist and have valid content.
 func (p *Phase) ValidateIgnitionFiles(clusterDir string) error {
 	requiredFiles := []string{"bootstrap.ign", "master.ign", "worker.ign"}
 	minSize := int64(1024) // ignition files are typically much larger

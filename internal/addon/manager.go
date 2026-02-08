@@ -7,20 +7,18 @@ import (
 
 	"github.com/qxtaiba/okd-proxmox-cli/internal/config"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/executor"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/logging"
+	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
 )
 
-// Manager orchestrates addon lifecycle operations.
 type Manager struct {
 	cfg         *config.Config
 	exec        *executor.Executor
-	logger      logging.Logger
+	logger      utils.Logger
 	outputs     *OutputStore
 	projectRoot string
 }
 
-// NewManager creates an addon manager.
-func NewManager(cfg *config.Config, exec *executor.Executor, logger logging.Logger, projectRoot string) *Manager {
+func NewManager(cfg *config.Config, exec *executor.Executor, logger utils.Logger, projectRoot string) *Manager {
 	return &Manager{
 		cfg:         cfg,
 		exec:        exec,
@@ -30,7 +28,6 @@ func NewManager(cfg *config.Config, exec *executor.Executor, logger logging.Logg
 	}
 }
 
-// OutputStore returns the manager's output store for reading addon outputs.
 func (m *Manager) OutputStore() *OutputStore {
 	return m.outputs
 }
@@ -61,7 +58,6 @@ func (m *Manager) InstallAll(ctx context.Context) error {
 			return err
 		}
 
-		// Skip if any dependency failed.
 		if dep := m.firstFailedDep(info.Dependencies, failed); dep != "" {
 			m.logger.Warn(fmt.Sprintf("addons: skipping %s (dependency %s failed)", info.DisplayName, dep))
 			failed[info.Name] = true
@@ -76,6 +72,12 @@ func (m *Manager) InstallAll(ctx context.Context) error {
 			addonErr := fmt.Errorf("addon %s install failed: %w", info.Name, err)
 			m.logger.Warn(addonErr.Error())
 			errs = append(errs, addonErr)
+
+			// Best-effort rollback: uninstall partial resources so re-runs start clean
+			m.logger.Info(fmt.Sprintf("addons: rolling back %s", info.DisplayName))
+			if unErr := a.Uninstall(ctx, env); unErr != nil {
+				m.logger.Warn(fmt.Sprintf("addons: rollback of %s failed: %v", info.DisplayName, unErr))
+			}
 			continue
 		}
 
@@ -85,13 +87,17 @@ func (m *Manager) InstallAll(ctx context.Context) error {
 			}
 		}
 
-		m.logger.Info(fmt.Sprintf("addons: %s installed", info.DisplayName))
+		// Post-install verify (warn-only — the addon is installed, verify is informational)
+		if vErr := a.Verify(ctx, env); vErr != nil {
+			m.logger.Warn(fmt.Sprintf("addons: %s installed but verify failed: %v", info.DisplayName, vErr))
+		} else {
+			m.logger.Info(fmt.Sprintf("addons: %s installed and verified", info.DisplayName))
+		}
 	}
 
 	return errors.Join(errs...)
 }
 
-// firstFailedDep returns the name of the first dependency in the failed set, or "".
 func (m *Manager) firstFailedDep(deps []string, failed map[string]bool) string {
 	for _, d := range deps {
 		if failed[d] {
@@ -141,7 +147,6 @@ func (m *Manager) InstallOne(ctx context.Context, name string) error {
 	return nil
 }
 
-// VerifyAll checks all enabled addons.
 func (m *Manager) VerifyAll(ctx context.Context) error {
 	enabled := Enabled(m.cfg)
 	for _, a := range enabled {

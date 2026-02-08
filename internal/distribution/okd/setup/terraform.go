@@ -11,7 +11,6 @@ import (
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
 )
 
-// buildISOStrings generates ISO path strings for Proxmox (format: datastore:iso/filename.iso).
 func buildISOStrings(isoStorage string, role string, count int) []string {
 	isos := make([]string, count)
 	for i := 0; i < count; i++ {
@@ -20,7 +19,6 @@ func buildISOStrings(isoStorage string, role string, count int) []string {
 	return isos
 }
 
-// buildNodeNames generates node name strings for terraform vars.
 func buildNodeNames(clusterName, role string, count int) []string {
 	names := make([]string, count)
 	for i := 0; i < count; i++ {
@@ -29,7 +27,6 @@ func buildNodeNames(clusterName, role string, count int) []string {
 	return names
 }
 
-// getDiskSizes returns OS and data disk sizes with defaults.
 func getDiskSizes(cfg *config.Config) (osDiskSize, dataDiskSize int) {
 	osDiskSize = 100
 	dataDiskSize = 100
@@ -42,7 +39,6 @@ func getDiskSizes(cfg *config.Config) (osDiskSize, dataDiskSize int) {
 	return osDiskSize, dataDiskSize
 }
 
-// getBootstrapResources returns bootstrap CPU and memory, defaulting to control plane values.
 func getBootstrapResources(cfg *config.Config) (cpu, mem int) {
 	cpu = cfg.Topology.Bootstrap.CPU
 	mem = cfg.Topology.Bootstrap.Memory
@@ -55,7 +51,6 @@ func getBootstrapResources(cfg *config.Config) (cpu, mem int) {
 	return cpu, mem
 }
 
-// buildTerraformVarsData constructs the data structure for terraform.tfvars rendering.
 func buildTerraformVarsData(cfg *config.Config) templates.TerraformVarsData {
 	proxmox := cfg.Provider.Proxmox
 	osDiskSize, dataDiskSize := getDiskSizes(cfg)
@@ -91,7 +86,6 @@ func buildTerraformVarsData(cfg *config.Config) templates.TerraformVarsData {
 	}
 }
 
-// getTerraformEnv returns the terraform environment name, defaulting to "production".
 func getTerraformEnv(cfg *config.Config) string {
 	if cfg.Deployment.TerraformEnv != "" {
 		return cfg.Deployment.TerraformEnv
@@ -99,7 +93,6 @@ func getTerraformEnv(cfg *config.Config) string {
 	return "production"
 }
 
-// GenerateTerraformVars creates terraform.tfvars for Proxmox deployment.
 func (p *Phase) GenerateTerraformVars(cfg *config.Config, opts Options) error {
 	if cfg.Provider.Proxmox == nil {
 		return fmt.Errorf("proxmox provider configuration required")

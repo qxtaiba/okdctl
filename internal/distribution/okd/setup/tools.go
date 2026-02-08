@@ -27,7 +27,6 @@ func ExternalToolBinaries() []string {
 	}
 }
 
-// externalTool represents an external tool that can be installed.
 type externalTool string
 
 const (
@@ -37,12 +36,10 @@ const (
 	toolSops      externalTool = "sops"
 )
 
-// coreTools returns tools that are always installed regardless of addon configuration.
 func coreTools() []externalTool {
 	return []externalTool{toolTerraform, toolYQ}
 }
 
-// addonRequiredTools returns tools required by enabled addons.
 func addonRequiredTools(cfg *config.Config) []externalTool {
 	seen := make(map[string]bool)
 	var tools []externalTool
@@ -63,12 +60,10 @@ func addonRequiredTools(cfg *config.Config) []externalTool {
 	return tools
 }
 
-// isToolInstalled checks if a tool is available in PATH.
 func isToolInstalled(tool externalTool) bool {
 	return executor.CommandExists(string(tool))
 }
 
-// InstallExternalTools installs core tools plus tools required by enabled addons.
 func (p *Phase) InstallExternalTools(ctx context.Context, cfg *config.Config) error {
 	for _, tool := range coreTools() {
 		if err := p.installTool(ctx, tool); err != nil {
@@ -84,7 +79,6 @@ func (p *Phase) InstallExternalTools(ctx context.Context, cfg *config.Config) er
 	return nil
 }
 
-// installTool installs a specific tool if not already present.
 func (p *Phase) installTool(ctx context.Context, tool externalTool) error {
 	if isToolInstalled(tool) {
 		p.Log.Info(fmt.Sprintf("tools: %s already installed", tool))
@@ -105,10 +99,6 @@ func (p *Phase) installTool(ctx context.Context, tool externalTool) error {
 		return nil
 	}
 }
-
-// ════════════════════════════════════════════════════════════════════════════════
-// TERRAFORM INSTALLATION
-// ════════════════════════════════════════════════════════════════════════════════
 
 // installTerraform installs terraform via HashiCorp RPM repository.
 func (p *Phase) installTerraform(ctx context.Context) error {
@@ -133,12 +123,7 @@ func (p *Phase) installTerraform(ctx context.Context) error {
 	return nil
 }
 
-// ════════════════════════════════════════════════════════════════════════════════
-// YQ INSTALLATION
-// ════════════════════════════════════════════════════════════════════════════════
-
 // installYQ installs yq from GitHub releases.
-// yq uses non-standard checksum format, so we skip verification (uses HTTPS).
 func (p *Phase) installYQ(ctx context.Context) error {
 	p.Log.Info("tools: installing yq from github releases")
 
@@ -150,6 +135,7 @@ func (p *Phase) installYQ(ctx context.Context) error {
 		OutputPath:  tempFile,
 		Description: "yq binary",
 		Timeout:     2 * time.Minute,
+		Logger:      p.Log,
 	}); err != nil {
 		return utils.WrapError("failed to download yq", err)
 	}
@@ -168,10 +154,6 @@ func (p *Phase) installYQ(ctx context.Context) error {
 	return nil
 }
 
-// ════════════════════════════════════════════════════════════════════════════════
-// HELM INSTALLATION
-// ════════════════════════════════════════════════════════════════════════════════
-
 // installHelm installs helm from official releases.
 func (p *Phase) installHelm(ctx context.Context) error {
 	p.Log.Info("tools: installing helm from official releases")
@@ -184,6 +166,7 @@ func (p *Phase) installHelm(ctx context.Context) error {
 		OutputPath:  tempFile,
 		Description: "helm archive",
 		Timeout:     2 * time.Minute,
+		Logger:      p.Log,
 	}); err != nil {
 		return utils.WrapError("failed to download helm", err)
 	}
@@ -200,6 +183,7 @@ func (p *Phase) installHelm(ctx context.Context) error {
 		DestDir:         extractDir,
 		StripComponents: 1, // Remove "linux-amd64/" prefix
 		CleanupArchive:  true,
+		Logger:          p.Log,
 	}); err != nil {
 		return utils.WrapError("failed to extract helm", err)
 	}
@@ -217,10 +201,6 @@ func (p *Phase) installHelm(ctx context.Context) error {
 	return nil
 }
 
-// ════════════════════════════════════════════════════════════════════════════════
-// SOPS INSTALLATION
-// ════════════════════════════════════════════════════════════════════════════════
-
 // installSops installs sops from GitHub releases.
 func (p *Phase) installSops(ctx context.Context) error {
 	p.Log.Info("tools: installing sops from github releases")
@@ -233,6 +213,7 @@ func (p *Phase) installSops(ctx context.Context) error {
 		OutputPath:  tempFile,
 		Description: "sops binary",
 		Timeout:     2 * time.Minute,
+		Logger:      p.Log,
 	}); err != nil {
 		return utils.WrapError("failed to download sops", err)
 	}
@@ -251,11 +232,6 @@ func (p *Phase) installSops(ctx context.Context) error {
 	return nil
 }
 
-// ════════════════════════════════════════════════════════════════════════════════
-// HELPER FUNCTIONS
-// ════════════════════════════════════════════════════════════════════════════════
-
-// installBinaryToPath copies a binary to /usr/local/bin with executable permissions.
 func installBinaryToPath(ctx context.Context, srcPath, name string) error {
 	destPath := filepath.Join("/usr/local/bin", name)
 
@@ -270,12 +246,10 @@ func installBinaryToPath(ctx context.Context, srcPath, name string) error {
 	return nil
 }
 
-// runSudoCommand runs a command with sudo (or directly if already root).
 func runSudoCommand(ctx context.Context, name string, args ...string) error {
 	return system.RunSudo(ctx, name, args...)
 }
 
-// getToolVersion runs a tool with a version flag and returns the first line of output.
 func getToolVersion(tool, flag string) string {
 	cmd := exec.Command(tool, flag)
 	output, err := cmd.Output()

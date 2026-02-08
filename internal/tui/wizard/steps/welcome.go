@@ -11,11 +11,6 @@ import (
 	"github.com/qxtaiba/okd-proxmox-cli/internal/tui/wizard"
 )
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// WELCOME STEP
-// ═══════════════════════════════════════════════════════════════════════════════
-
-// WelcomeMode indicates what user wants to do.
 type WelcomeMode int
 
 const (
@@ -24,7 +19,6 @@ const (
 	WelcomeModeFresh
 )
 
-// WelcomeStep is the introductory step of the wizard.
 type WelcomeStep struct {
 	wizard.BaseStep
 	configExists  bool
@@ -32,7 +26,6 @@ type WelcomeStep struct {
 	mode          WelcomeMode
 }
 
-// NewWelcomeStep creates a new welcome step.
 func NewWelcomeStep() *WelcomeStep {
 	return &WelcomeStep{
 		BaseStep: wizard.NewBaseStep(
@@ -45,7 +38,6 @@ func NewWelcomeStep() *WelcomeStep {
 	}
 }
 
-// SetConfigExists tells the welcome step whether a config file exists.
 func (s *WelcomeStep) SetConfigExists(exists bool) {
 	s.configExists = exists
 	if exists {
@@ -54,17 +46,14 @@ func (s *WelcomeStep) SetConfigExists(exists bool) {
 	}
 }
 
-// GetMode returns the selected mode after step completes.
 func (s *WelcomeStep) GetMode() WelcomeMode {
 	return s.mode
 }
 
-// Init initializes the step.
 func (s *WelcomeStep) Init() tea.Cmd {
 	return nil
 }
 
-// Update handles input.
 func (s *WelcomeStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
@@ -86,12 +75,10 @@ func (s *WelcomeStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 	return s, nil
 }
 
-// IsCentered returns true so the wizard model vertically centers this step.
 func (s *WelcomeStep) IsCentered() bool {
 	return true
 }
 
-// View renders the welcome screen.
 func (s *WelcomeStep) View(width, height int) string {
 	s.SetSize(width, height)
 
@@ -133,7 +120,6 @@ func (s *WelcomeStep) View(width, height int) string {
 	return content
 }
 
-// renderOption renders a selectable option.
 func (s *WelcomeStep) renderOption(title, description string, selected bool) string {
 	var bullet, titleStyled string
 
@@ -154,7 +140,6 @@ func (s *WelcomeStep) Validate() error {
 	return nil
 }
 
-// Apply resets config to defaults if "Start Fresh" was selected.
 func (s *WelcomeStep) Apply(cfg *config.Config) error {
 	if s.mode == WelcomeModeFresh && s.configExists {
 		freshCfg := config.DefaultConfig()
@@ -177,7 +162,6 @@ func (s *WelcomeStep) ShortHelp() []wizard.KeyBinding {
 	}
 }
 
-// GetSelectedAction returns the action for the selected mode.
 func (s *WelcomeStep) GetSelectedAction() wizard.Action {
 	if s.mode == WelcomeModeDeploy {
 		return wizard.ActionDeploy
@@ -185,7 +169,6 @@ func (s *WelcomeStep) GetSelectedAction() wizard.Action {
 	return ""
 }
 
-// ShouldExitEarly returns true if the wizard should exit after this step.
 func (s *WelcomeStep) ShouldExitEarly() bool {
 	return s.mode == WelcomeModeDeploy
 }

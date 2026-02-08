@@ -19,9 +19,6 @@ const (
 	StepPrintSummary    distribution.StepID = "print-summary"
 )
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// DESTROY INFRASTRUCTURE STEP
-// ═══════════════════════════════════════════════════════════════════════════════
 
 func (p *Phase) newDestroyInfraStep(cfg *config.Config, opts Options) distribution.ProvisioningStep {
 	return distribution.NewStepBuilder(StepDestroyInfra, "Destroy Infrastructure").
@@ -45,9 +42,6 @@ func (p *Phase) newDestroyInfraStep(cfg *config.Config, opts Options) distributi
 		MustBuild()
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// CLEANUP FILES STEP
-// ═══════════════════════════════════════════════════════════════════════════════
 
 func (p *Phase) newCleanupFilesStep(cfg *config.Config, opts Options) distribution.ProvisioningStep {
 	return distribution.NewStepBuilder(StepCleanupFiles, "Cleanup Files").
@@ -87,9 +81,6 @@ func cleanupFilesSkipReason(opts Options) string {
 	return "No cleanup type specified"
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// CLEANUP FIREWALL STEP
-// ═══════════════════════════════════════════════════════════════════════════════
 
 func (p *Phase) newCleanupFirewallStep(opts Options) distribution.ProvisioningStep {
 	return distribution.NewStepBuilder(StepCleanupFirewall, "Cleanup Firewall").
@@ -98,7 +89,7 @@ func (p *Phase) newCleanupFirewallStep(opts Options) distribution.ProvisioningSt
 		SkipWhen(func() bool { return opts.SkipFirewall }).
 		SkipReason("Firewall cleanup disabled").
 		Execute(func(ctx context.Context) error {
-			if err := system.RemoveOKDFirewallRules(ctx, true); err != nil {
+			if err := system.RemoveOKDFirewallRules(ctx, true, p.Log); err != nil {
 				return utils.WrapError("firewall cleanup failed", err)
 			}
 			p.Log.Info("firewall: okd rules removed from firewalld")
@@ -110,9 +101,6 @@ func (p *Phase) newCleanupFirewallStep(opts Options) distribution.ProvisioningSt
 		MustBuild()
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// PRINT SUMMARY STEP
-// ═══════════════════════════════════════════════════════════════════════════════
 
 func (p *Phase) newPrintSummaryStep(opts Options) distribution.ProvisioningStep {
 	return distribution.NewStepBuilder(StepPrintSummary, "Print Summary").

@@ -13,31 +13,28 @@ import (
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
 )
 
-// ExtractOptions configures archive extraction.
 type ExtractOptions struct {
-	// ArchivePath is the path to the archive file.
-	ArchivePath string
-
-	// DestDir is the destination directory for extraction.
-	DestDir string
-
-	// ExpectedChecksum is the expected SHA256 checksum of the archive (optional).
-	ExpectedChecksum string
-
-	// StripComponents removes leading path components (like tar --strip-components).
-	StripComponents int
-
-	// CleanupArchive removes the archive after successful extraction.
-	CleanupArchive bool
+	ArchivePath      string
+	DestDir          string
+	ExpectedChecksum string // SHA256 checksum of the archive (optional)
+	StripComponents  int    // Removes leading path components (like tar --strip-components)
+	CleanupArchive   bool   // Removes the archive after successful extraction
+	Logger           utils.Logger
 }
 
-// processTarEntry handles a single tar entry (dir, file, or symlink).
+func (o ExtractOptions) logger() utils.Logger {
+	if o.Logger != nil {
+		return o.Logger
+	}
+	return utils.NoopLogger()
+}
+
 func processTarEntry(tarReader *tar.Reader, header *tar.Header, destDir string, stripComponents int) error {
 	name := header.Name
 	if stripComponents > 0 {
 		parts := strings.Split(name, "/")
 		if len(parts) <= stripComponents {
-			return nil // Skip this entry
+			return nil
 		}
 		name = strings.Join(parts[stripComponents:], "/")
 	}
@@ -101,18 +98,17 @@ func processTarEntry(tarReader *tar.Reader, header *tar.Header, destDir string, 
 	return nil
 }
 
-// ExtractTarGz extracts a .tar.gz archive to a destination directory.
 func ExtractTarGz(ctx context.Context, opts ExtractOptions) error {
 	filename := filepath.Base(opts.ArchivePath)
 
 	if opts.ExpectedChecksum != "" {
-		utils.GetLogger().Info(fmt.Sprintf("download: validating sha256 checksum for %s", filename))
+		opts.logger().Info(fmt.Sprintf("download: validating sha256 checksum for %s", filename))
 
 		if err := ValidateChecksum(opts.ArchivePath, opts.ExpectedChecksum); err != nil {
 			return utils.WrapErrorf(err, "checksum validation failed for %s", filename)
 		}
 
-		utils.GetLogger().Info(fmt.Sprintf("download: checksum validated for %s", filename))
+		opts.logger().Info(fmt.Sprintf("download: checksum validated for %s", filename))
 	}
 
 	file, err := os.Open(opts.ArchivePath)
@@ -155,11 +151,11 @@ func ExtractTarGz(ctx context.Context, opts ExtractOptions) error {
 
 	if opts.CleanupArchive {
 		if err := os.Remove(opts.ArchivePath); err != nil {
-			utils.GetLogger().Warn(fmt.Sprintf("download: failed to cleanup archive %s", filename))
+			opts.logger().Warn(fmt.Sprintf("download: failed to cleanup archive %s", filename))
 		}
 	}
 
-	utils.GetLogger().Info(fmt.Sprintf("download: extracted %s", filename))
+	opts.logger().Info(fmt.Sprintf("download: extracted %s", filename))
 
 	return nil
 }

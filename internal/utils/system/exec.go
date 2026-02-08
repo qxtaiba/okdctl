@@ -8,15 +8,12 @@ import (
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
 )
 
-// WaitForOptions configures the WaitFor function behavior.
 type WaitForOptions struct {
-	// Interval is the time between checks. Default: 30 seconds.
-	Interval time.Duration
-	// Timeout is the maximum time to wait. Default: no timeout (0).
-	Timeout time.Duration
+	Interval time.Duration  // Default: 30 seconds
+	Timeout  time.Duration  // Default: no timeout (0)
+	Logger   utils.Logger
 }
 
-// DefaultWaitForOptions returns sensible defaults.
 func DefaultWaitForOptions() WaitForOptions {
 	return WaitForOptions{
 		Interval: 30 * time.Second,
@@ -24,16 +21,19 @@ func DefaultWaitForOptions() WaitForOptions {
 	}
 }
 
-// WaitFor polls a condition until it succeeds or the context is cancelled.
-// Prefix identifies the component (e.g. "metallb"), description identifies what is being waited on (e.g. "namespace").
 func WaitFor(ctx context.Context, prefix, description string, check func() bool, opts WaitForOptions) error {
 	if opts.Interval == 0 {
 		opts.Interval = 30 * time.Second
 	}
 
+	logger := opts.Logger
+	if logger == nil {
+		logger = utils.NoopLogger()
+	}
+
 	waitMsg := fmt.Sprintf("%s: waiting for %s...", prefix, description)
 	readyMsg := fmt.Sprintf("%s: %s is ready", prefix, description)
-	utils.GetLogger().Info(waitMsg)
+	logger.Info(waitMsg)
 
 	ticker := time.NewTicker(opts.Interval)
 	defer ticker.Stop()
@@ -47,9 +47,8 @@ func WaitFor(ctx context.Context, prefix, description string, check func() bool,
 
 	startTime := time.Now()
 
-	// Check immediately first
 	if check() {
-		utils.GetLogger().Info(readyMsg)
+		logger.Info(readyMsg)
 		return nil
 	}
 
@@ -62,17 +61,17 @@ func WaitFor(ctx context.Context, prefix, description string, check func() bool,
 		case <-ticker.C:
 			elapsed := time.Since(startTime)
 			if check() {
-				utils.GetLogger().Info(readyMsg)
+				logger.Info(readyMsg)
 				return nil
 			}
-			utils.GetLogger().Info(fmt.Sprintf("%s: waiting for %s... (%v elapsed)", prefix, description, elapsed.Round(time.Second)))
+			logger.Info(fmt.Sprintf("%s: waiting for %s... (%v elapsed)", prefix, description, elapsed.Round(time.Second)))
 		}
 	}
 }
 
-// WaitForWithTimeout is a convenience wrapper for WaitFor with a timeout.
-func WaitForWithTimeout(ctx context.Context, prefix, description string, check func() bool, timeout time.Duration) error {
+func WaitForWithTimeout(ctx context.Context, prefix, description string, check func() bool, timeout time.Duration, logger utils.Logger) error {
 	opts := DefaultWaitForOptions()
 	opts.Timeout = timeout
+	opts.Logger = logger
 	return WaitFor(ctx, prefix, description, check, opts)
 }

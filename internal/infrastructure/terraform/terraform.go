@@ -11,19 +11,16 @@ import (
 	"sort"
 
 	"github.com/qxtaiba/okd-proxmox-cli/internal/executor"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/logging"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
 )
 
-// ExecError represents a terraform execution failure.
 type ExecError struct {
 	Command  string
 	ExitCode int
 	Stderr   string
 }
 
-// Error implements the error interface.
 func (e *ExecError) Error() string {
 	if e.Stderr != "" {
 		return fmt.Sprintf("terraform %s failed (exit code %d): %s", e.Command, e.ExitCode, e.Stderr)
@@ -31,26 +28,18 @@ func (e *ExecError) Error() string {
 	return fmt.Sprintf("terraform %s failed with exit code %d", e.Command, e.ExitCode)
 }
 
-// Executor implements Terraform operations for Proxmox provisioning.
 type Executor struct {
-	// WorkDir is the Terraform working directory.
 	WorkDir string
-
-	// VarFile is the path to the terraform.tfvars file.
 	VarFile string
-
-	// Verbose enables verbose output.
 	Verbose bool
 
 	exec   *executor.Executor
-	logger logging.Logger
+	logger utils.Logger
 }
 
-// Option configures an Executor.
 type Option func(*Executor)
 
-// WithLogger sets the logger for the executor.
-func WithLogger(l logging.Logger) Option {
+func WithLogger(l utils.Logger) Option {
 	return func(e *Executor) {
 		if l != nil {
 			e.logger = l
@@ -58,75 +47,52 @@ func WithLogger(l logging.Logger) Option {
 	}
 }
 
-// WithVerbose enables verbose output.
 func WithVerbose(v bool) Option {
 	return func(e *Executor) {
 		e.Verbose = v
 	}
 }
 
-// WithEnv sets environment variables for terraform commands.
-// These are passed to the underlying executor for all subprocess calls.
+// WithEnv propagates environment variables to all terraform subprocess calls.
 func WithEnv(env []string) Option {
 	return func(e *Executor) {
 		e.exec.Env = append(e.exec.Env, env...)
 	}
 }
 
-// PlanOptions configures the plan operation.
 type PlanOptions struct {
 	// VarFile overrides the default terraform.tfvars path.
-	VarFile string
-
-	// OutputPlanFile is the path to save the plan.
+	VarFile        string
 	OutputPlanFile string
-
-	// Destroy creates a destruction plan instead of apply plan.
+	// Destroy creates a destruction plan instead of an apply plan.
 	Destroy bool
-
-	// Vars are additional variables to pass.
-	Vars map[string]string
+	Vars    map[string]string
 }
 
-// ApplyOptions configures the apply operation.
 type ApplyOptions struct {
 	// VarFile overrides the default terraform.tfvars path.
-	VarFile string
-
-	// PlanFile is the saved plan file to apply.
-	PlanFile string
-
-	// AutoApprove skips confirmation.
+	VarFile     string
+	PlanFile    string
 	AutoApprove bool
-
-	// Vars are additional variables to pass.
-	Vars map[string]string
+	Vars        map[string]string
 }
 
-// DestroyOptions configures the destroy operation.
 type DestroyOptions struct {
 	// VarFile overrides the default terraform.tfvars path.
-	VarFile string
-
-	// AutoApprove skips confirmation.
+	VarFile     string
 	AutoApprove bool
-
-	// Parallelism controls the number of parallel operations.
 	Parallelism int
-
 	// UsePlan creates a destroy plan first, then applies it.
-	// This is safer as it shows what will be destroyed before applying.
-	// Falls back to direct destroy if plan creation fails.
+	// Safer because it previews changes; falls back to direct destroy on failure.
 	UsePlan bool
 }
 
-// New creates a new Terraform executor.
 func New(workDir string, opts ...Option) *Executor {
 	e := &Executor{
 		WorkDir: workDir,
 		VarFile: filepath.Join(workDir, "terraform.tfvars"),
 		exec:    executor.New(executor.WithWorkDir(workDir)),
-		logger:  logging.NoopLogger(),
+		logger:  utils.NoopLogger(),
 	}
 	for _, opt := range opts {
 		opt(e)
@@ -134,13 +100,12 @@ func New(workDir string, opts ...Option) *Executor {
 	return e
 }
 
-// NewWithVarFile creates a new Terraform executor with a specific var file.
 func NewWithVarFile(workDir, varFile string, opts ...Option) *Executor {
 	e := &Executor{
 		WorkDir: workDir,
 		VarFile: varFile,
 		exec:    executor.New(executor.WithWorkDir(workDir)),
-		logger:  logging.NoopLogger(),
+		logger:  utils.NoopLogger(),
 	}
 	for _, opt := range opts {
 		opt(e)
@@ -148,7 +113,6 @@ func NewWithVarFile(workDir, varFile string, opts ...Option) *Executor {
 	return e
 }
 
-// run executes a terraform command and handles the result.
 func (t *Executor) run(ctx context.Context, args ...string) error {
 	t.exec.Verbose = t.Verbose
 
@@ -168,7 +132,6 @@ func (t *Executor) run(ctx context.Context, args ...string) error {
 	return nil
 }
 
-// Init initializes the Terraform working directory.
 func (t *Executor) Init(ctx context.Context) error {
 	terraformDir := filepath.Join(t.WorkDir, ".terraform")
 	lockFile := filepath.Join(t.WorkDir, ".terraform.lock.hcl")
@@ -182,9 +145,7 @@ func (t *Executor) Init(ctx context.Context) error {
 	return t.run(ctx, "init")
 }
 
-// EnsureInitialized checks if terraform is initialized in the given directory
-// and initializes it if needed. This is a utility function that operates on
-// an arbitrary directory, not necessarily the executor's WorkDir.
+// EnsureInitialized operates on an arbitrary directory, not necessarily the executor's WorkDir.
 func EnsureInitialized(ctx context.Context, workDir string, verbose bool) error {
 	terraformCache := filepath.Join(workDir, ".terraform")
 	lockFile := filepath.Join(workDir, ".terraform.lock.hcl")
@@ -199,7 +160,6 @@ func EnsureInitialized(ctx context.Context, workDir string, verbose bool) error 
 	return tempExec.Init(ctx)
 }
 
-// buildVarArgs builds the variable arguments for terraform commands.
 func (t *Executor) buildVarArgs(varFile string, vars map[string]string) []string {
 	var args []string
 
@@ -226,7 +186,6 @@ func (t *Executor) buildVarArgs(varFile string, vars map[string]string) []string
 	return args
 }
 
-// Plan creates an execution plan.
 func (t *Executor) Plan(ctx context.Context, opts PlanOptions) error {
 	args := []string{"plan"}
 	args = append(args, t.buildVarArgs(opts.VarFile, opts.Vars)...)
@@ -241,7 +200,6 @@ func (t *Executor) Plan(ctx context.Context, opts PlanOptions) error {
 	return t.run(ctx, args...)
 }
 
-// Apply applies the Terraform configuration.
 func (t *Executor) Apply(ctx context.Context, opts ApplyOptions) error {
 	args := []string{"apply"}
 
@@ -258,9 +216,6 @@ func (t *Executor) Apply(ctx context.Context, opts ApplyOptions) error {
 	return t.run(ctx, args...)
 }
 
-// Destroy destroys the Terraform-managed infrastructure.
-// If UsePlan is true, it creates a destroy plan first then applies it.
-// This is safer as it shows what will be destroyed before applying.
 func (t *Executor) Destroy(ctx context.Context, opts DestroyOptions) error {
 	if opts.UsePlan {
 		return t.destroyWithPlan(ctx, opts)
@@ -268,8 +223,7 @@ func (t *Executor) Destroy(ctx context.Context, opts DestroyOptions) error {
 	return t.destroyDirect(ctx, opts)
 }
 
-// destroyWithPlan creates a destroy plan then applies it.
-// Falls back to direct destroy if plan creation fails.
+// destroyWithPlan falls back to direct destroy if plan creation fails.
 func (t *Executor) destroyWithPlan(ctx context.Context, opts DestroyOptions) error {
 	planFile := filepath.Join(t.WorkDir, "destroy.tfplan")
 
@@ -295,7 +249,6 @@ func (t *Executor) destroyWithPlan(ctx context.Context, opts DestroyOptions) err
 	return nil
 }
 
-// destroyDirect runs terraform destroy without a plan.
 func (t *Executor) destroyDirect(ctx context.Context, opts DestroyOptions) error {
 	args := []string{"destroy"}
 	args = append(args, t.buildVarArgs(opts.VarFile, nil)...)
@@ -310,7 +263,6 @@ func (t *Executor) destroyDirect(ctx context.Context, opts DestroyOptions) error
 	return t.run(ctx, args...)
 }
 
-// Output retrieves a Terraform output value.
 func (t *Executor) Output(ctx context.Context, name string) (string, error) {
 	result, err := t.exec.Run(ctx, "terraform", "output", "-raw", name)
 	if err != nil {
@@ -322,19 +274,16 @@ func (t *Executor) Output(ctx context.Context, name string) (string, error) {
 	return result.Stdout, nil
 }
 
-// HasState returns true if terraform.tfstate exists.
 func (t *Executor) HasState() bool {
 	stateFile := filepath.Join(t.WorkDir, "terraform.tfstate")
 	return system.FileExists(stateFile)
 }
 
-// StateFile returns the path to the terraform.tfstate file.
 func (t *Executor) StateFile() string {
 	return filepath.Join(t.WorkDir, "terraform.tfstate")
 }
 
-// Cleanup removes plan files and backup state.
-// It returns an aggregated error if any removal fails (excluding non-existent files).
+// Cleanup returns an aggregated error if any removal fails (non-existent files are ignored).
 func (t *Executor) Cleanup() error {
 	var errs []error
 	files := []string{
@@ -350,8 +299,7 @@ func (t *Executor) Cleanup() error {
 	return errors.Join(errs...)
 }
 
-// Version returns the Terraform version.
-// This is useful for health checks and compatibility verification.
+// Version is used for health checks and compatibility verification.
 func (t *Executor) Version(ctx context.Context) error {
 	result, err := t.exec.Run(ctx, "terraform", "version")
 	if err != nil {
@@ -363,7 +311,6 @@ func (t *Executor) Version(ctx context.Context) error {
 	return nil
 }
 
-// GetVersion returns the Terraform version string.
 func (t *Executor) GetVersion(ctx context.Context) (string, error) {
 	result, err := t.exec.Run(ctx, "terraform", "version", "-json")
 	if err != nil {
@@ -375,7 +322,6 @@ func (t *Executor) GetVersion(ctx context.Context) (string, error) {
 	return result.Stdout, nil
 }
 
-// GetWorkDir returns the terraform working directory.
 func (t *Executor) GetWorkDir() string {
 	return t.WorkDir
 }

@@ -54,7 +54,6 @@ func init() {
 	addonCmd.AddCommand(addonUninstallCmd)
 }
 
-// newAddonManager creates an addon manager using the config file and local executor.
 func newAddonManager(cfgPath string) (*addon.Manager, error) {
 	cfg, err := LoadConfig(cfgPath)
 	if err != nil {

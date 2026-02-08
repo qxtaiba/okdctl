@@ -5,10 +5,9 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/qxtaiba/okd-proxmox-cli/internal/logging"
+	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
 )
 
-// Summary contains cleanup results.
 type Summary struct {
 	RemainingWorkFiles      int
 	RemainingIgnitionFiles  int
@@ -16,7 +15,6 @@ type Summary struct {
 	WorkDirSize             string
 }
 
-// GenerateSummary creates a summary of what remains after cleanup.
 func GenerateSummary(opts Options) Summary {
 	summary := Summary{
 		WorkDirSize: "0B",
@@ -53,7 +51,7 @@ func GenerateSummary(opts Options) Summary {
 	return summary
 }
 
-func printSummary(opts Options, logger logging.Logger) {
+func printSummary(opts Options, logger utils.Logger) {
 	summary := GenerateSummary(opts)
 
 	logger.Info("cleanup: summary")

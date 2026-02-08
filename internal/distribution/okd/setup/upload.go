@@ -14,7 +14,6 @@ import (
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
 )
 
-// collectISOFiles returns all .iso files from the given directory.
 func collectISOFiles(isoDir string) ([]string, error) {
 	entries, err := os.ReadDir(isoDir)
 	if err != nil {
@@ -31,7 +30,6 @@ func collectISOFiles(isoDir string) ([]string, error) {
 	return isoFiles, nil
 }
 
-// calculateTotalSize returns the total size of all files in bytes.
 func calculateTotalSize(files []string) int64 {
 	var totalSize int64
 	for _, f := range files {
@@ -42,7 +40,6 @@ func calculateTotalSize(files []string) int64 {
 	return totalSize
 }
 
-// proxmoxHost extracts the hostname/IP from a host value that may include a port.
 func proxmoxHost(host string) string {
 	if strings.Contains(host, ":") {
 		h, _, err := net.SplitHostPort(host)
@@ -53,7 +50,6 @@ func proxmoxHost(host string) string {
 	return host
 }
 
-// uploadISOsViaSCP uploads multiple ISO files to Proxmox via a single scp command.
 func uploadISOsViaSCP(ctx context.Context, cmdRunner *executor.Executor, isoFiles []string, user, host, remotePath string) error {
 	args := []string{"-o", "StrictHostKeyChecking=accept-new"}
 	args = append(args, isoFiles...)
@@ -65,8 +61,8 @@ func uploadISOsViaSCP(ctx context.Context, cmdRunner *executor.Executor, isoFile
 	return nil
 }
 
-// UploadCustomISOsToProxmox uploads all custom ISOs to Proxmox storage.
-// Uses a single scp command to upload all files at once (avoids multiple password prompts).
+// UploadCustomISOsToProxmox uploads all custom ISOs to Proxmox storage via a
+// single scp command (avoids multiple password prompts).
 func (p *Phase) UploadCustomISOsToProxmox(ctx context.Context, cfg *config.Config, opts Options) error {
 	if cfg.Provider.Proxmox == nil {
 		return fmt.Errorf("proxmox provider configuration required")

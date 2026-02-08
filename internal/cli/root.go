@@ -11,7 +11,6 @@ import (
 
 	"github.com/qxtaiba/okd-proxmox-cli/internal/deployment"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/tui"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
 	"github.com/qxtaiba/okd-proxmox-cli/pkg/version"
 )
 
@@ -48,7 +47,6 @@ Highlights:
 	},
 }
 
-// Execute runs the root command.
 func Execute() {
 	if err := rootCmd.Execute(); err != nil {
 		if errors.Is(err, deployment.ErrInterrupted) {
@@ -61,8 +59,6 @@ func Execute() {
 
 func init() {
 	cobra.OnInitialize(initConfig)
-
-	utils.SetLogger(tui.SimpleLogger())
 
 	rootCmd.PersistentFlags().StringVarP(&cfgFile, "config", "c", "openshitctl.yaml", "configuration file")
 	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "enable verbose output")

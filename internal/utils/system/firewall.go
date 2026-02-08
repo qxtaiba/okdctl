@@ -10,7 +10,6 @@ import (
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
 )
 
-// FirewallBackend represents the firewall management tool.
 type FirewallBackend string
 
 const (
@@ -20,7 +19,6 @@ const (
 	FirewallNone      FirewallBackend = "none"
 )
 
-// OKDRequiredPorts defines the ports required for OKD operation.
 var OKDRequiredPorts = []FirewallPort{
 	{Port: 53, Protocol: "udp", Description: "dns"},
 	{Port: 53, Protocol: "tcp", Description: "dns"},
@@ -31,14 +29,12 @@ var OKDRequiredPorts = []FirewallPort{
 	{Port: 8080, Protocol: "tcp", Description: "ignition server"},
 }
 
-// FirewallPort represents a port to open in the firewall.
 type FirewallPort struct {
 	Port        int
 	Protocol    string // tcp, udp
 	Description string
 }
 
-// DetectFirewallBackend returns the available firewall backend on the system.
 func DetectFirewallBackend() FirewallBackend {
 	if runtime.GOOS != "linux" {
 		return FirewallNone
@@ -69,19 +65,18 @@ func DetectFirewallBackend() FirewallBackend {
 	return FirewallNone
 }
 
-// ConfigureFirewall opens ports in the system firewall.
-func ConfigureFirewall(ctx context.Context, ports []FirewallPort, permanent bool) error {
+func ConfigureFirewall(ctx context.Context, ports []FirewallPort, permanent bool, logger utils.Logger) error {
 	backend := DetectFirewallBackend()
 
 	if backend == FirewallNone {
-		utils.GetLogger().Warn("no active firewall detected, skipping firewall configuration")
+		logger.Warn("no active firewall detected, skipping firewall configuration")
 		return nil
 	}
 
-	utils.GetLogger().Info(fmt.Sprintf("firewall: configuring using %s", backend))
+	logger.Info(fmt.Sprintf("firewall: configuring using %s", backend))
 
 	for _, port := range ports {
-		if err := openPort(ctx, backend, port, permanent); err != nil {
+		if err := openPort(ctx, backend, port, permanent, logger); err != nil {
 			return utils.WrapErrorf(err, "failed to open port %d", port.Port)
 		}
 	}
@@ -92,7 +87,7 @@ func ConfigureFirewall(ctx context.Context, ports []FirewallPort, permanent bool
 		}
 	}
 
-	utils.GetLogger().Info("firewall: configured successfully")
+	logger.Info("firewall: configured successfully")
 
 	return nil
 }
@@ -107,8 +102,7 @@ func validateFirewallPort(port FirewallPort) error {
 	return nil
 }
 
-// openPort opens a single port using the appropriate firewall backend.
-func openPort(ctx context.Context, backend FirewallBackend, port FirewallPort, permanent bool) error {
+func openPort(ctx context.Context, backend FirewallBackend, port FirewallPort, permanent bool, logger utils.Logger) error {
 	if err := validateFirewallPort(port); err != nil {
 		return err
 	}
@@ -131,7 +125,6 @@ func openPort(ctx context.Context, backend FirewallBackend, port FirewallPort, p
 		}
 
 	case FirewallIPTables:
-		// Insert rule at the beginning of INPUT chain
 		args := []string{
 			"iptables", "-I", "INPUT", "-p", port.Protocol,
 			"--dport", fmt.Sprintf("%d", port.Port), "-j", "ACCEPT",
@@ -141,25 +134,23 @@ func openPort(ctx context.Context, backend FirewallBackend, port FirewallPort, p
 		}
 	}
 
-	utils.GetLogger().Info(fmt.Sprintf("firewall: opened port %d/%s (%s)", port.Port, port.Protocol, port.Description))
+	logger.Info(fmt.Sprintf("firewall: opened port %d/%s (%s)", port.Port, port.Protocol, port.Description))
 
 	return nil
 }
 
-// RemoveFirewallRules removes previously added firewall rules.
-func RemoveFirewallRules(ctx context.Context, ports []FirewallPort, permanent bool) error {
+func RemoveFirewallRules(ctx context.Context, ports []FirewallPort, permanent bool, logger utils.Logger) error {
 	backend := DetectFirewallBackend()
 
 	if backend == FirewallNone {
 		return nil
 	}
 
-	utils.GetLogger().Info("firewall: removing rules")
+	logger.Info("firewall: removing rules")
 
 	for _, port := range ports {
 		if err := closePort(ctx, backend, port, permanent); err != nil {
-			// Log but continue - some rules may not exist
-			utils.GetLogger().Warn(fmt.Sprintf("could not remove port %d: %v", port.Port, err))
+			logger.Warn(fmt.Sprintf("could not remove port %d: %v", port.Port, err))
 		}
 	}
 
@@ -170,7 +161,6 @@ func RemoveFirewallRules(ctx context.Context, ports []FirewallPort, permanent bo
 	return nil
 }
 
-// closePort closes a single port using the appropriate firewall backend.
 func closePort(ctx context.Context, backend FirewallBackend, port FirewallPort, permanent bool) error {
 	if err := validateFirewallPort(port); err != nil {
 		return err
@@ -200,12 +190,10 @@ func closePort(ctx context.Context, backend FirewallBackend, port FirewallPort, 
 	return nil
 }
 
-// ConfigureOKDFirewall opens all ports required for OKD operation.
-func ConfigureOKDFirewall(ctx context.Context, permanent bool) error {
-	return ConfigureFirewall(ctx, OKDRequiredPorts, permanent)
+func ConfigureOKDFirewall(ctx context.Context, permanent bool, logger utils.Logger) error {
+	return ConfigureFirewall(ctx, OKDRequiredPorts, permanent, logger)
 }
 
-// RemoveOKDFirewallRules removes all OKD-related firewall rules.
-func RemoveOKDFirewallRules(ctx context.Context, permanent bool) error {
-	return RemoveFirewallRules(ctx, OKDRequiredPorts, permanent)
+func RemoveOKDFirewallRules(ctx context.Context, permanent bool, logger utils.Logger) error {
+	return RemoveFirewallRules(ctx, OKDRequiredPorts, permanent, logger)
 }

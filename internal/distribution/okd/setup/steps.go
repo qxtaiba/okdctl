@@ -15,7 +15,6 @@ import (
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
 )
 
-// Step IDs for setup operations.
 const (
 	StepInstallPackages   distribution.StepID = "install-packages"
 	StepInstallTools      distribution.StepID = "install-tools"
@@ -38,11 +37,6 @@ const (
 	StepConfigureDNS      distribution.StepID = "configure-dns"
 )
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// INSTALL PACKAGES STEP
-// ═══════════════════════════════════════════════════════════════════════════════
-
-// systemPackages returns the list of packages to install via dnf.
 func systemPackages() []string {
 	return []string{
 		"coreos-installer",
@@ -76,7 +70,7 @@ func (p *Phase) newInstallPackagesStep(opts Options) distribution.ProvisioningSt
 			}
 
 			p.Log.Info(fmt.Sprintf("packages: installing %d missing package(s) via dnf", len(packagesToInstall)))
-			if err := system.InstallPackages(ctx, packagesToInstall, "system dependencies"); err != nil {
+			if err := system.InstallPackages(ctx, packagesToInstall, "system dependencies", p.Log); err != nil {
 				p.Log.Warn(fmt.Sprintf("packages: installation had warnings: %v", err))
 			}
 
@@ -87,10 +81,6 @@ func (p *Phase) newInstallPackagesStep(opts Options) distribution.ProvisioningSt
 		}).
 		MustBuild()
 }
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// INSTALL EXTERNAL TOOLS STEP
-// ═══════════════════════════════════════════════════════════════════════════════
 
 func (p *Phase) newInstallToolsStep(cfg *config.Config) distribution.ProvisioningStep {
 	return distribution.NewStepBuilder(StepInstallTools, "Install External Tools").
@@ -105,10 +95,6 @@ func (p *Phase) newInstallToolsStep(cfg *config.Config) distribution.Provisionin
 		MustBuild()
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// ENSURE WORKDIR STEP
-// ═══════════════════════════════════════════════════════════════════════════════
-
 func (p *Phase) newEnsureWorkDirStep(opts Options) distribution.ProvisioningStep {
 	return distribution.NewStepBuilder(StepEnsureWorkDir, "Ensure Work Directory").
 		Description("creating work directory").
@@ -118,10 +104,6 @@ func (p *Phase) newEnsureWorkDirStep(opts Options) distribution.ProvisioningStep
 		}).
 		MustBuild()
 }
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// DOWNLOAD TOOLS STEP
-// ═══════════════════════════════════════════════════════════════════════════════
 
 func (p *Phase) newDownloadToolsStep(cfg *config.Config, opts Options) distribution.ProvisioningStep {
 	return distribution.NewStepBuilder(StepDownloadTools, "Download OKD Tools").
@@ -138,10 +120,6 @@ func (p *Phase) newDownloadToolsStep(cfg *config.Config, opts Options) distribut
 		}).
 		MustBuild()
 }
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// GENERATE INSTALL CONFIG STEP
-// ═══════════════════════════════════════════════════════════════════════════════
 
 func (p *Phase) newGenerateInstallConfigStep(cfg *config.Config, opts Options) distribution.ProvisioningStep {
 	clusterDir := paths.ClusterConfigDir(opts.WorkDir)
@@ -160,10 +138,6 @@ func (p *Phase) newGenerateInstallConfigStep(cfg *config.Config, opts Options) d
 		MustBuild()
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// GENERATE MANIFESTS STEP
-// ═══════════════════════════════════════════════════════════════════════════════
-
 func (p *Phase) newGenerateManifestsStep(opts Options) distribution.ProvisioningStep {
 	clusterDir := paths.ClusterConfigDir(opts.WorkDir)
 
@@ -179,10 +153,6 @@ func (p *Phase) newGenerateManifestsStep(opts Options) distribution.Provisioning
 		}).
 		MustBuild()
 }
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// GENERATE KUBE-VIP MANIFESTS STEP
-// ═══════════════════════════════════════════════════════════════════════════════
 
 func (p *Phase) newGenerateKubeVIPManifestsStep(cfg *config.Config, opts Options) distribution.ProvisioningStep {
 	clusterDir := paths.ClusterConfigDir(opts.WorkDir)
@@ -206,7 +176,6 @@ func (p *Phase) newGenerateKubeVIPManifestsStep(cfg *config.Config, opts Options
 				return utils.WrapError("failed to ensure openshift manifests directory", err)
 			}
 
-			// Render and write RBAC manifests (one file per resource)
 			rbacManifests, err := templates.RenderKubeVIPRBACManifests()
 			if err != nil {
 				return utils.WrapError("failed to render kube-vip RBAC manifests", err)
@@ -218,8 +187,7 @@ func (p *Phase) newGenerateKubeVIPManifestsStep(cfg *config.Config, opts Options
 				}
 			}
 
-			// Render and write DaemonSet manifest
-			ds, err := templates.RenderKubeVIPDaemonSet(templates.KubeVIPData{
+		ds, err := templates.RenderKubeVIPDaemonSet(templates.KubeVIPData{
 				VIPAddress: vip,
 				Interface:  iface,
 			})
@@ -237,10 +205,6 @@ func (p *Phase) newGenerateKubeVIPManifestsStep(cfg *config.Config, opts Options
 		}).
 		MustBuild()
 }
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// INJECT MANIFESTS STEP
-// ═══════════════════════════════════════════════════════════════════════════════
 
 func (p *Phase) newInjectManifestsStep(opts Options) distribution.ProvisioningStep {
 	clusterDir := paths.ClusterConfigDir(opts.WorkDir)
@@ -261,10 +225,6 @@ func (p *Phase) newInjectManifestsStep(opts Options) distribution.ProvisioningSt
 		MustBuild()
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// COMPACT CLUSTER MANIFESTS STEP
-// ═══════════════════════════════════════════════════════════════════════════════
-
 func (p *Phase) newCompactClusterManifestsStep(cfg *config.Config, opts Options) distribution.ProvisioningStep {
 	clusterDir := paths.ClusterConfigDir(opts.WorkDir)
 
@@ -283,10 +243,6 @@ func (p *Phase) newCompactClusterManifestsStep(cfg *config.Config, opts Options)
 		MustBuild()
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// GENERATE IGNITION STEP
-// ═══════════════════════════════════════════════════════════════════════════════
-
 func (p *Phase) newGenerateIgnitionStep(opts Options) distribution.ProvisioningStep {
 	clusterDir := paths.ClusterConfigDir(opts.WorkDir)
 
@@ -303,10 +259,6 @@ func (p *Phase) newGenerateIgnitionStep(opts Options) distribution.ProvisioningS
 		MustBuild()
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// INSTALL APACHE STEP
-// ═══════════════════════════════════════════════════════════════════════════════
-
 func (p *Phase) newInstallApacheStep(cfg *config.Config, opts Options) distribution.ProvisioningStep {
 	return distribution.NewStepBuilder(StepInstallApache, "Install Apache").
 		Description("installing and configuring apache web server").
@@ -319,10 +271,6 @@ func (p *Phase) newInstallApacheStep(cfg *config.Config, opts Options) distribut
 		}).
 		MustBuild()
 }
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// DEPLOY IGNITION STEP
-// ═══════════════════════════════════════════════════════════════════════════════
 
 func (p *Phase) newDeployIgnitionStep(cfg *config.Config, opts Options) distribution.ProvisioningStep {
 	clusterDir := paths.ClusterConfigDir(opts.WorkDir)
@@ -342,10 +290,6 @@ func (p *Phase) newDeployIgnitionStep(cfg *config.Config, opts Options) distribu
 		MustBuild()
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// VERIFY WEB SERVER STEP
-// ═══════════════════════════════════════════════════════════════════════════════
-
 func (p *Phase) newVerifyWebServerStep(cfg *config.Config, opts Options) distribution.ProvisioningStep {
 	return distribution.NewStepBuilder(StepVerifyWebServer, "Verify Web Server").
 		Description("verifying web server accessibility").
@@ -356,10 +300,6 @@ func (p *Phase) newVerifyWebServerStep(cfg *config.Config, opts Options) distrib
 		}).
 		MustBuild()
 }
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// BUILD ISOS STEP
-// ═══════════════════════════════════════════════════════════════════════════════
 
 func (p *Phase) newBuildISOsStep(cfg *config.Config, opts Options) distribution.ProvisioningStep {
 	return distribution.NewStepBuilder(StepBuildISOs, "Build ISOs").
@@ -372,10 +312,6 @@ func (p *Phase) newBuildISOsStep(cfg *config.Config, opts Options) distribution.
 		}).
 		MustBuild()
 }
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// UPLOAD ISOS STEP
-// ═══════════════════════════════════════════════════════════════════════════════
 
 func (p *Phase) newUploadISOsStep(cfg *config.Config, opts Options) distribution.ProvisioningStep {
 	return distribution.NewStepBuilder(StepUploadISOs, "Upload ISOs").
@@ -397,10 +333,6 @@ func (p *Phase) newUploadISOsStep(cfg *config.Config, opts Options) distribution
 		MustBuild()
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// GENERATE TFVARS STEP
-// ═══════════════════════════════════════════════════════════════════════════════
-
 func (p *Phase) newGenerateTfvarsStep(cfg *config.Config, opts Options) distribution.ProvisioningStep {
 	return distribution.NewStepBuilder(StepGenerateTfvars, "Generate Terraform Variables").
 		Description("generating terraform variables").
@@ -415,10 +347,6 @@ func (p *Phase) newGenerateTfvarsStep(cfg *config.Config, opts Options) distribu
 		}).
 		MustBuild()
 }
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// CONFIGURE HAPROXY STEP
-// ═══════════════════════════════════════════════════════════════════════════════
 
 func (p *Phase) newConfigureHAProxyStep(cfg *config.Config, opts Options) distribution.ProvisioningStep {
 	return distribution.NewStepBuilder(StepConfigureHAProxy, "Configure HAProxy").
@@ -438,10 +366,6 @@ func (p *Phase) newConfigureHAProxyStep(cfg *config.Config, opts Options) distri
 		MustBuild()
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// CONFIGURE FIREWALL STEP
-// ═══════════════════════════════════════════════════════════════════════════════
-
 func (p *Phase) newConfigureFirewallStep(opts Options) distribution.ProvisioningStep {
 	return distribution.NewStepBuilder(StepConfigureFirewall, "Configure Firewall").
 		Description("configuring firewall rules for OKD").
@@ -449,7 +373,7 @@ func (p *Phase) newConfigureFirewallStep(opts Options) distribution.Provisioning
 		SkipWhen(func() bool { return opts.SkipFirewall }).
 		SkipReason("firewall configuration disabled").
 		Execute(func(ctx context.Context) error {
-			if err := system.ConfigureOKDFirewall(ctx, true); err != nil {
+			if err := system.ConfigureOKDFirewall(ctx, true, p.Log); err != nil {
 				return err
 			}
 			p.Log.Info("firewall: okd rules added to firewalld")
@@ -460,10 +384,6 @@ func (p *Phase) newConfigureFirewallStep(opts Options) distribution.Provisioning
 		}).
 		MustBuild()
 }
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// CONFIGURE DNS STEP
-// ═══════════════════════════════════════════════════════════════════════════════
 
 func (p *Phase) newConfigureDNSStep(cfg *config.Config, opts Options) distribution.ProvisioningStep {
 	outputDir := filepath.Join(opts.WorkDir, "dns")

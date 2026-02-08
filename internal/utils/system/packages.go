@@ -6,17 +6,14 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/qxtaiba/okd-proxmox-cli/internal/logging"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
 )
 
-// InstallPackages installs system packages using dnf.
-func InstallPackages(ctx context.Context, packages []string, description string) error {
+func InstallPackages(ctx context.Context, packages []string, description string, logger utils.Logger) error {
 	if len(packages) == 0 {
 		return nil
 	}
 
-	logger := utils.GetLogger()
 	logger.Info(fmt.Sprintf("packages: installing %s", description))
 	logger.Info(fmt.Sprintf("packages: %s", strings.Join(packages, ", ")))
 
@@ -30,8 +27,7 @@ func InstallPackages(ctx context.Context, packages []string, description string)
 	return nil
 }
 
-// RemovePackages removes system packages using dnf.
-func RemovePackages(ctx context.Context, packages []string, logger logging.Logger) error {
+func RemovePackages(ctx context.Context, packages []string, logger utils.Logger) error {
 	if len(packages) == 0 {
 		return nil
 	}

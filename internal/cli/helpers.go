@@ -1,4 +1,3 @@
-// Package cli provides CLI command implementations.
 package cli
 
 import (
@@ -18,7 +17,6 @@ import (
 
 var ErrConfigNotFound = errors.New("configuration file not found")
 
-// LoadConfig loads a configuration file with helpful error messages.
 func LoadConfig(configFile string) (*config.Config, error) {
 	loader := config.NewLoader()
 	cfg, err := loader.LoadFile(configFile)
@@ -33,7 +31,6 @@ func LoadConfig(configFile string) (*config.Config, error) {
 	return cfg, nil
 }
 
-// HandleCredentials retrieves Proxmox credentials and displays status.
 // Loads .env first (non-overwriting) so env vars always win.
 func HandleCredentials(cfg *config.Config) *credentials.ProxmoxCredentials {
 	envPath := credentials.EnvFilePath(cfgFile)
@@ -53,7 +50,6 @@ func HandleCredentials(cfg *config.Config) *credentials.ProxmoxCredentials {
 	return creds
 }
 
-// ValidateConfig validates the configuration and prints any errors.
 func ValidateConfig(cfg *config.Config) *config.ValidationResult {
 	result := cfg.Validate()
 	if !result.IsValid() {
@@ -62,8 +58,7 @@ func ValidateConfig(cfg *config.Config) *config.ValidationResult {
 	return result
 }
 
-// CreateOKDProvisionerWithCreds creates an OKD provisioner with credentials
-// passed via environment to avoid modifying global process state.
+// Credentials are passed via environment to avoid modifying global process state.
 func CreateOKDProvisionerWithCreds(cfg *config.Config, creds *credentials.ProxmoxCredentials) *okd.Provisioner {
 	projectRoot, err := os.Getwd()
 	if err != nil {
@@ -83,18 +78,15 @@ func CreateOKDProvisionerWithCreds(cfg *config.Config, creds *credentials.Proxmo
 	return okd.New(cfg.Distribution.Version, opts...)
 }
 
-// CLILogger returns a Logger backed by the TUI.
 func CLILogger() okd.Logger {
 	return tui.SimpleLogger()
 }
 
-// DeploymentOptions configures the deployment workflow.
 type DeploymentOptions struct {
 	ShowStartMessage bool
 	Credentials      *credentials.ProxmoxCredentials
 }
 
-// ExecuteFullDeployment runs the complete deployment workflow.
 func ExecuteFullDeployment(ctx context.Context, cfg *config.Config, opts DeploymentOptions) error {
 	clusterFQDN := cfg.Cluster.Name + "." + cfg.Cluster.Domain
 

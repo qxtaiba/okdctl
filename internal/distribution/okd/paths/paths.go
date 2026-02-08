@@ -1,5 +1,4 @@
 // Package paths provides shared path utilities and base types for OKD phases.
-// This package has no dependencies on phase packages to avoid circular imports.
 package paths
 
 import (
@@ -7,39 +6,25 @@ import (
 
 	"github.com/qxtaiba/okd-proxmox-cli/internal/config"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/executor"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/logging"
+	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
 )
 
-// BaseOptions contains common options for all OKD phases.
-// Embed this in phase-specific Options structs to avoid duplication.
 type BaseOptions struct {
-	// ProjectRoot is the root of the project for accessing templates.
-	ProjectRoot string
-
-	// WorkDir is the working directory for OKD installation files.
-	WorkDir string
-
-	// Debug enables verbose debug logging.
-	Debug bool
-
-	// TerraformEnv is the Terraform environment name.
+	ProjectRoot  string
+	WorkDir      string
+	Debug        bool
 	TerraformEnv string
 }
 
-// Path constants for OKD configuration files.
 const (
-	// DefaultHAProxyConfigPath is the default path to the HAProxy configuration file.
 	DefaultHAProxyConfigPath = "/etc/haproxy/haproxy.cfg"
-	// DefaultHTTPServerRoot is the default web server root directory for ignition files.
-	DefaultHTTPServerRoot = "/var/www/html"
+	DefaultHTTPServerRoot    = "/var/www/html"
 )
 
-// ClusterConfigDir returns the path to the cluster configuration directory.
 func ClusterConfigDir(workDir string) string {
 	return filepath.Join(workDir, "cluster-config")
 }
 
-// GetTerraformEnv returns the terraform environment name, defaulting to "production".
 func GetTerraformEnv(cfg *config.Config) string {
 	if cfg.Deployment.TerraformEnv != "" {
 		return cfg.Deployment.TerraformEnv
@@ -47,23 +32,18 @@ func GetTerraformEnv(cfg *config.Config) string {
 	return "production"
 }
 
-// BasePhase provides shared functionality for all OKD phase implementations.
-// Embed this struct in phase structs to get common executor, logger, and version fields.
 type BasePhase struct {
 	Exec    *executor.Executor
-	Log     logging.Logger
+	Log     utils.Logger
 	Version string
 }
 
-// NewBasePhase creates a new BasePhase with the given dependencies.
-// If exec is nil, a new default executor is created.
-// If logger is nil, a noop logger is used.
-func NewBasePhase(exec *executor.Executor, logger logging.Logger, version string) BasePhase {
+func NewBasePhase(exec *executor.Executor, logger utils.Logger, version string) BasePhase {
 	if exec == nil {
 		exec = executor.New()
 	}
 	if logger == nil {
-		logger = logging.NoopLogger()
+		logger = utils.NoopLogger()
 	}
 	return BasePhase{
 		Exec:    exec,

@@ -6,10 +6,6 @@ import (
 	"github.com/qxtaiba/okd-proxmox-cli/internal/tui/wizard/steps"
 )
 
-// ===============================================================================
-// WIZARD SETUP
-// ===============================================================================
-
 func runWizard(cfg *config.Config) (wizard.Result, error) {
 	wizardCfg := wizard.DefaultConfig()
 	wizardCfg.InitialConfig = cfg
@@ -43,10 +39,6 @@ func runWizardWithMode(cfg *config.Config, configExists bool) (wizard.Result, st
 	return result, mode, err
 }
 
-// ===============================================================================
-// STEP BUILDER REGISTRATION
-// ===============================================================================
-
 type stepRegistration struct {
 	stepType wizard.StepType
 	factory  func() (wizard.WizardStep, any)
@@ -72,10 +64,6 @@ func newDefaultStepBuilder() *wizard.StepBuilder {
 	}
 	return builder
 }
-
-// ===============================================================================
-// STEP BUILDING
-// ===============================================================================
 
 func buildWizardSteps(wizardCfg wizard.Config) []wizard.WizardStep {
 	built := buildWizardStepsWithState(wizardCfg)

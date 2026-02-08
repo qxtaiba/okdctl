@@ -11,7 +11,6 @@ import (
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
 )
 
-// BuildHAProxyConfigData builds the HAProxy configuration data from node list.
 func (p *Phase) BuildHAProxyConfigData(cfg *config.Config) (templates.HAProxyConfigData, error) {
 	nodes, err := p.BuildNodeList(cfg)
 	if err != nil {
@@ -51,7 +50,6 @@ func (p *Phase) BuildHAProxyConfigData(cfg *config.Config) (templates.HAProxyCon
 	}, nil
 }
 
-// writeHAProxyConfigToTemp writes HAProxy config content to a temporary file.
 func writeHAProxyConfigToTemp(content string) (string, error) {
 	tmpFile, err := os.CreateTemp("", "haproxy-*.cfg")
 	if err != nil {
@@ -65,7 +63,6 @@ func writeHAProxyConfigToTemp(content string) (string, error) {
 	return tmpFile.Name(), nil
 }
 
-// installHAProxyConfig copies the config file to /etc/haproxy and validates it.
 func (p *Phase) installHAProxyConfig(ctx context.Context, tmpPath string) error {
 	haproxyConfig := "/etc/haproxy/haproxy.cfg"
 
@@ -90,7 +87,6 @@ func (p *Phase) installHAProxyConfig(ctx context.Context, tmpPath string) error 
 	return nil
 }
 
-// enableAndRestartHAProxy enables HAProxy on boot and restarts the service.
 func enableAndRestartHAProxy(ctx context.Context) error {
 	if err := system.ManageService(ctx, system.ServiceEnable, "haproxy", "haproxy load balancer"); err != nil {
 		return err
@@ -98,7 +94,6 @@ func enableAndRestartHAProxy(ctx context.Context) error {
 	return system.ManageService(ctx, system.ServiceRestart, "haproxy", "haproxy load balancer")
 }
 
-// ConfigureHAProxy generates and applies HAProxy configuration.
 func (p *Phase) ConfigureHAProxy(ctx context.Context, cfg *config.Config, opts Options) error {
 	data, err := p.BuildHAProxyConfigData(cfg)
 	if err != nil {
@@ -128,7 +123,6 @@ func (p *Phase) ConfigureHAProxy(ctx context.Context, cfg *config.Config, opts O
 	return nil
 }
 
-// VerifyHAProxyPorts checks that HAProxy is listening on all required ports.
 func (p *Phase) VerifyHAProxyPorts(ctx context.Context) error {
 	ports := []struct {
 		port        string

@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 
 	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/paths"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/logging"
+	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
 )
 
@@ -16,7 +16,7 @@ import (
 // This is a best-effort operation - errors are logged but nil is returned for cleanup scenarios
 // where partial success is acceptable.
 // Note: If elevated privileges are required, sudo may prompt for a password.
-func SafeRemoveWithLogger(ctx context.Context, path, description string, logger logging.Logger) error {
+func SafeRemoveWithLogger(ctx context.Context, path, description string, logger utils.Logger) error {
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		return nil // Silently skip non-existent paths
 	}
@@ -36,8 +36,7 @@ func SafeRemoveWithLogger(ctx context.Context, path, description string, logger 
 	return nil
 }
 
-// WorkDirectory removes working directory artifacts.
-func WorkDirectory(ctx context.Context, workDir string, preserveConfig bool, logger logging.Logger) error {
+func WorkDirectory(ctx context.Context, workDir string, preserveConfig bool, logger utils.Logger) error {
 	if _, err := os.Stat(workDir); os.IsNotExist(err) {
 		return nil
 	}

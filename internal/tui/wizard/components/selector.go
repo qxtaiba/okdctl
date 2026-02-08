@@ -1,4 +1,3 @@
-// Package components provides reusable UI components for the wizard.
 package components
 
 import (
@@ -11,11 +10,6 @@ import (
 	"github.com/qxtaiba/okd-proxmox-cli/internal/tui"
 )
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// OPTION SELECTOR
-// ═══════════════════════════════════════════════════════════════════════════════
-
-// OptionStyle indicates the visual style for an option.
 type OptionStyle int
 
 const (
@@ -27,7 +21,6 @@ const (
 	OptionStyleLTS                       // Cyan/blue - long-term support
 )
 
-// Option represents a selectable option in the wizard.
 type Option struct {
 	ID           string
 	Title        string
@@ -40,7 +33,6 @@ type Option struct {
 	InDropdown   bool        // Marks options that are part of a scrollable dropdown region
 }
 
-// Selector is a component for selecting from a list of options.
 type Selector struct {
 	options              []Option
 	selected             int
@@ -51,7 +43,6 @@ type Selector struct {
 	maxDropdownVisible   int // max items to show in dropdown (default 5)
 }
 
-// NewSelector creates a new selector with the given options.
 func NewSelector(options []Option) *Selector {
 	return &Selector{
 		options:              options,
@@ -62,10 +53,9 @@ func NewSelector(options []Option) *Selector {
 	}
 }
 
-// SetOptions updates the available options.
 func (s *Selector) SetOptions(options []Option) {
 	s.options = options
-	s.dropdownScrollOffset = 0 // Reset scroll offset when options change
+	s.dropdownScrollOffset = 0
 	if s.selected >= len(options) {
 		s.selected = len(options) - 1
 	}
@@ -74,14 +64,12 @@ func (s *Selector) SetOptions(options []Option) {
 	}
 }
 
-// SetMaxDropdownVisible sets the maximum number of dropdown items visible at once.
 func (s *Selector) SetMaxDropdownVisible(n int) {
 	if n > 0 {
 		s.maxDropdownVisible = n
 	}
 }
 
-// Selected returns the currently selected option.
 func (s *Selector) Selected() Option {
 	if s.selected >= 0 && s.selected < len(s.options) {
 		return s.options[s.selected]
@@ -89,19 +77,16 @@ func (s *Selector) Selected() Option {
 	return Option{}
 }
 
-// SelectedIndex returns the index of the selected option.
 func (s *Selector) SelectedIndex() int {
 	return s.selected
 }
 
-// SetSelected sets the selected index.
 func (s *Selector) SetSelected(index int) {
 	if index >= 0 && index < len(s.options) {
 		s.selected = index
 	}
 }
 
-// SetSelectedByID selects an option by its ID.
 func (s *Selector) SetSelectedByID(id string) {
 	for i, opt := range s.options {
 		if opt.ID == id {
@@ -111,18 +96,15 @@ func (s *Selector) SetSelectedByID(id string) {
 	}
 }
 
-// SetFocused sets the focus state.
 func (s *Selector) SetFocused(focused bool) {
 	s.focused = focused
 }
 
-// SetSize updates the component dimensions.
 func (s *Selector) SetSize(width, height int) {
 	s.width = width
 	s.height = height
 }
 
-// Update handles input messages.
 func (s *Selector) Update(msg tea.Msg) (*Selector, tea.Cmd) {
 	if !s.focused {
 		return s, nil
@@ -141,7 +123,6 @@ func (s *Selector) Update(msg tea.Msg) (*Selector, tea.Cmd) {
 	return s, nil
 }
 
-// optionStyles holds the common styles used for rendering options.
 type optionStyles struct {
 	bulletSelected   lipgloss.Style
 	bulletUnselected lipgloss.Style
@@ -153,7 +134,6 @@ type optionStyles struct {
 	line             lipgloss.Style
 }
 
-// getOptionStyles returns the common styles for rendering options.
 func (s *Selector) getOptionStyles() optionStyles {
 	return optionStyles{
 		bulletSelected:   lipgloss.NewStyle().Foreground(tui.ColorPrimary).Bold(true),
@@ -167,7 +147,6 @@ func (s *Selector) getOptionStyles() optionStyles {
 	}
 }
 
-// getTitleStyle returns the appropriate title style based on the option's style.
 func (s *Selector) getTitleStyle(style OptionStyle) lipgloss.Style {
 	switch style {
 	case OptionStyleLatestStable:
@@ -183,14 +162,11 @@ func (s *Selector) getTitleStyle(style OptionStyle) lipgloss.Style {
 	}
 }
 
-// View renders the selector.
 func (s *Selector) View() string {
 	var lines []string
 
-	// Find dropdown boundaries
 	dropdownStart, dropdownEnd := s.getDropdownBounds()
 
-	// Styles for scroll indicators
 	scrollIndicatorStyle := lipgloss.NewStyle().Foreground(tui.ColorSlate500)
 	dropdownBorderStyle := lipgloss.NewStyle().Foreground(tui.ColorSlate700)
 
@@ -209,7 +185,6 @@ func (s *Selector) View() string {
 			dropdownLines := s.renderDropdownRegion(dropdownStart, dropdownEnd, scrollIndicatorStyle, dropdownBorderStyle)
 			lines = append(lines, dropdownLines...)
 
-			// Skip to end of dropdown
 			i = dropdownEnd + 1
 		}
 	}
@@ -217,12 +192,10 @@ func (s *Selector) View() string {
 	return strings.Join(lines, "\n")
 }
 
-// renderOption renders a single option with full Rich-style formatting.
 func (s *Selector) renderOption(opt Option, selected, showConnector bool) string {
 	return s.renderOptionWithPrefix(opt, selected, showConnector, "")
 }
 
-// renderOptionWithPrefix renders a single option with an optional prefix for each line.
 func (s *Selector) renderOptionWithPrefix(opt Option, selected, showConnector bool, prefix string) string {
 	var result []string
 
@@ -269,11 +242,6 @@ func (s *Selector) renderOptionWithPrefix(opt Option, selected, showConnector bo
 	return strings.Join(result, "\n")
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// COMPACT SELECTOR (for inline selections)
-// ═══════════════════════════════════════════════════════════════════════════════
-
-// CompactSelector is a simpler selector without descriptions.
 type CompactSelector struct {
 	options  []string
 	selected int
@@ -281,7 +249,6 @@ type CompactSelector struct {
 	width    int
 }
 
-// NewCompactSelector creates a new compact selector.
 func NewCompactSelector(options []string) *CompactSelector {
 	return &CompactSelector{
 		options:  options,
@@ -290,7 +257,6 @@ func NewCompactSelector(options []string) *CompactSelector {
 	}
 }
 
-// SetOptions updates the available options.
 func (s *CompactSelector) SetOptions(options []string) {
 	s.options = options
 	if s.selected >= len(options) {
@@ -301,7 +267,6 @@ func (s *CompactSelector) SetOptions(options []string) {
 	}
 }
 
-// Selected returns the currently selected option.
 func (s *CompactSelector) Selected() string {
 	if s.selected >= 0 && s.selected < len(s.options) {
 		return s.options[s.selected]
@@ -309,29 +274,24 @@ func (s *CompactSelector) Selected() string {
 	return ""
 }
 
-// SelectedIndex returns the index of the selected option.
 func (s *CompactSelector) SelectedIndex() int {
 	return s.selected
 }
 
-// SetSelected sets the selected index.
 func (s *CompactSelector) SetSelected(index int) {
 	if index >= 0 && index < len(s.options) {
 		s.selected = index
 	}
 }
 
-// SetFocused sets the focus state.
 func (s *CompactSelector) SetFocused(focused bool) {
 	s.focused = focused
 }
 
-// SetWidth sets the width.
 func (s *CompactSelector) SetWidth(width int) {
 	s.width = width
 }
 
-// Update handles input messages.
 func (s *CompactSelector) Update(msg tea.Msg) (*CompactSelector, tea.Cmd) {
 	if !s.focused {
 		return s, nil
@@ -356,7 +316,6 @@ func (s *CompactSelector) Update(msg tea.Msg) (*CompactSelector, tea.Cmd) {
 	return s, nil
 }
 
-// View renders the compact selector.
 func (s *CompactSelector) View() string {
 	var lines []string
 
@@ -376,7 +335,6 @@ func (s *CompactSelector) View() string {
 	return strings.Join(lines, "\n")
 }
 
-// ViewHorizontal renders options horizontally.
 func (s *CompactSelector) ViewHorizontal() string {
 	var parts []string
 

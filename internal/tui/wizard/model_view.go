@@ -9,11 +9,6 @@ import (
 	"github.com/qxtaiba/okd-proxmox-cli/internal/tui"
 )
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// VIEW METHOD
-// ═══════════════════════════════════════════════════════════════════════════════
-
-// View renders the wizard UI.
 func (m Model) View() string {
 	if m.quitting {
 		return ""
@@ -43,7 +38,6 @@ func (m Model) View() string {
 
 	content.WriteString(m.renderFooter())
 
-	// terminal width - outer padding (4) - border chars (2)
 	borderWidth := m.width - 6
 	if borderWidth < minWidth {
 		borderWidth = minWidth
@@ -56,11 +50,7 @@ func (m Model) View() string {
 	return OuterContainerStyle.Render(bordered)
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// RENDERING HELPERS
-// ═══════════════════════════════════════════════════════════════════════════════
-
-// contentWidth returns the available width for content.
+// contentWidth returns the available width for step content.
 // Must match borderWidth (m.width - 6) so content fills the border exactly.
 func (m Model) contentWidth() int {
 	width := m.width - 6
@@ -103,7 +93,7 @@ func (m *Model) syncViewportContent() {
 	step := m.steps[m.currentStep]
 	contentWidth := m.contentWidth()
 
-	innerWidth := contentWidth - 4 // horizontal padding (2 on each side)
+	innerWidth := contentWidth - 4
 	if innerWidth < 40 {
 		innerWidth = 40
 	}
@@ -117,7 +107,6 @@ func (m *Model) syncViewportContent() {
 		}
 	}
 
-	// Large height so the step renders all content; viewport handles clipping
 	stepContent := step.View(innerWidth, 1000)
 
 	if c, ok := step.(centerable); ok && c.IsCentered() {
@@ -164,7 +153,6 @@ func (m Model) renderHeader() string {
 		StepIndicatorCurrentStyle.Render(fmt.Sprintf("%d", currentVisible)) +
 		StepIndicatorStyle.Render(fmt.Sprintf(" of %d", visibleSteps))
 
-	// Right-align step indicator (HeaderStyle has 1 char padding each side)
 	taglineWidth := lipgloss.Width(tagline)
 	indicatorWidth := lipgloss.Width(stepIndicator)
 	spacing := width - taglineWidth - indicatorWidth - 2
@@ -174,7 +162,6 @@ func (m Model) renderHeader() string {
 
 	header := brand + "\n" + tagline + strings.Repeat(" ", spacing) + stepIndicator
 
-	// Don't use .Width() - it causes text wrapping
 	return HeaderStyle.Render(header)
 }
 
@@ -208,7 +195,6 @@ func (m Model) renderStepTitle(title string) string {
 	return titleStyle.Render(title)
 }
 
-// renderScrollIndicator renders a scroll position indicator with context badge.
 func (m Model) renderScrollIndicator() string {
 	width := m.contentWidth()
 	lineStyle := lipgloss.NewStyle().Foreground(tui.ColorSlate700)

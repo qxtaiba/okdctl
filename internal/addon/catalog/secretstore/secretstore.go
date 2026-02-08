@@ -7,10 +7,12 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/qxtaiba/okd-proxmox-cli/internal/addon"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/executor"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
+	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/retry"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
 )
 
@@ -29,7 +31,6 @@ func init() {
 	addon.Register(&SecretStore{})
 }
 
-// SecretStore implements the addon.Addon interface for 1Password Connect bootstrap.
 type SecretStore struct{}
 
 func (s *SecretStore) Info() addon.AddonInfo {
@@ -72,20 +73,26 @@ func (s *SecretStore) Install(ctx context.Context, env *addon.Environment) error
 		return nil
 	}
 
-	if err := s.ensureNamespace(ctx, env); err != nil {
+	if err := retry.Do(ctx, 3, 5*time.Second, func() error {
+		return s.ensureNamespace(ctx, env)
+	}); err != nil {
 		return err
 	}
 
 	env.Logger.Info("secretstore: creating 1password connect secrets from sops-encrypted files")
 
 	if system.FileExists(credPath) {
-		if err := s.createCredentialsSecret(ctx, env, credPath); err != nil {
+		if err := retry.Do(ctx, 3, 5*time.Second, func() error {
+			return s.createCredentialsSecret(ctx, env, credPath)
+		}); err != nil {
 			return err
 		}
 	}
 
 	if system.FileExists(tokenPath) {
-		if err := s.createTokenSecret(ctx, env, tokenPath); err != nil {
+		if err := retry.Do(ctx, 3, 5*time.Second, func() error {
+			return s.createTokenSecret(ctx, env, tokenPath)
+		}); err != nil {
 			return err
 		}
 	}
@@ -119,36 +126,28 @@ func (s *SecretStore) Uninstall(ctx context.Context, env *addon.Environment) err
 	return nil
 }
 
-// RequiredTools implements addon.ToolProvider.
 func (s *SecretStore) RequiredTools() []addon.ToolSpec {
 	return []addon.ToolSpec{
 		{Name: "sops", Description: "Mozilla SOPS for decrypting secret files"},
 	}
 }
 
-// DefaultSettings implements addon.ConfigurableAddon.
 func (s *SecretStore) DefaultSettings() map[string]string {
 	return map[string]string{
 		"secrets_dir": defaultSecretsDir,
 	}
 }
 
-// ValidateSettings implements addon.ConfigurableAddon.
 func (s *SecretStore) ValidateSettings(settings map[string]string) []string {
 	// No validation errors — secrets_dir defaults are fine, path is checked at install time
 	return nil
 }
 
-// WizardFields implements addon.WizardProvider.
 func (s *SecretStore) WizardFields() []addon.WizardField {
 	return []addon.WizardField{
 		{Key: "secrets_dir", Label: "Secrets Directory", Default: defaultSecretsDir, Help: "Directory containing sops-encrypted 1password-credentials.json and 1password-token.txt"},
 	}
 }
-
-// ════════════════════════════════════════════════════════════════════════════════
-// INTERNAL HELPERS
-// ════════════════════════════════════════════════════════════════════════════════
 
 func (s *SecretStore) secretsDir(env *addon.Environment) string {
 	dir := env.AddonConfig.Settings["secrets_dir"]

@@ -8,7 +8,6 @@ import (
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/netutil"
 )
 
-// BuildNodeList creates a list of all cluster nodes.
 func (p *Phase) BuildNodeList(cfg *config.Config) ([]NodeInfo, error) {
 	var nodes []NodeInfo
 

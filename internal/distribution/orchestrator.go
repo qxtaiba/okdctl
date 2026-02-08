@@ -5,34 +5,30 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/qxtaiba/okd-proxmox-cli/internal/logging"
+	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
 )
 
-// Orchestrator runs provisioning steps in sequence.
 type Orchestrator struct {
 	mu      sync.RWMutex
 	steps   []ProvisioningStep
 	results []StepResult
-	logger  logging.Logger
+	logger  utils.Logger
 }
 
-// NewOrchestrator creates a new Orchestrator with the given steps.
 func NewOrchestrator(steps ...ProvisioningStep) *Orchestrator {
 	return &Orchestrator{
 		steps:   steps,
 		results: make([]StepResult, 0, len(steps)),
-		logger:  logging.NoopLogger(),
+		logger:  utils.NoopLogger(),
 	}
 }
 
-// SetLogger sets the logger for the orchestrator.
-func (o *Orchestrator) SetLogger(logger logging.Logger) {
+func (o *Orchestrator) SetLogger(logger utils.Logger) {
 	if logger != nil {
 		o.logger = logger
 	}
 }
 
-// Run executes all steps in sequence.
 func (o *Orchestrator) Run(ctx context.Context) error {
 	o.mu.Lock()
 	o.results = make([]StepResult, 0, len(o.steps))
@@ -62,7 +58,6 @@ func (o *Orchestrator) Run(ctx context.Context) error {
 	return nil
 }
 
-// executeStep executes a single step and returns the result.
 func (o *Orchestrator) executeStep(ctx context.Context, step ProvisioningStep) StepResult {
 	if step.ShouldSkip() {
 		return StepResult{

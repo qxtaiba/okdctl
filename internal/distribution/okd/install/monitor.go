@@ -12,7 +12,6 @@ import (
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
 )
 
-// WaitForBootstrap waits for the bootstrap node to complete.
 func (p *Phase) WaitForBootstrap(ctx context.Context, clusterDir string, opts Options) error {
 	ctx, cancel := context.WithTimeout(ctx, opts.BootstrapTimeout)
 	defer cancel()

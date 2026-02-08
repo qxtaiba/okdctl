@@ -7,14 +7,10 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// DROPDOWN NAVIGATION
-// ═══════════════════════════════════════════════════════════════════════════════
-
 const dropdownBorderWidth = 20
 
 // moveUp moves selection up, skipping disabled options.
-// When inside a dropdown, navigation is trapped and won't wrap around.
+// Navigation is trapped within dropdown boundaries and won't wrap around.
 func (s *Selector) moveUp() {
 	if len(s.options) == 0 {
 		return
@@ -23,7 +19,6 @@ func (s *Selector) moveUp() {
 	original := s.selected
 	wasInDropdown := s.options[s.selected].InDropdown
 
-	// Navigation is trapped within dropdown boundaries
 	if wasInDropdown {
 		dropdownStart, _ := s.getDropdownBounds()
 
@@ -63,7 +58,6 @@ func (s *Selector) moveUp() {
 	}
 }
 
-// moveDown moves selection down, skipping disabled options.
 func (s *Selector) moveDown() {
 	if len(s.options) == 0 {
 		return
@@ -72,7 +66,6 @@ func (s *Selector) moveDown() {
 	original := s.selected
 	wasInDropdown := s.options[s.selected].InDropdown
 
-	// Navigation is trapped within dropdown boundaries
 	if wasInDropdown {
 		_, dropdownEnd := s.getDropdownBounds()
 
@@ -112,11 +105,6 @@ func (s *Selector) moveDown() {
 	}
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// DROPDOWN SCROLLING
-// ═══════════════════════════════════════════════════════════════════════════════
-
-// adjustDropdownScroll ensures the selected dropdown item is visible within the scroll window.
 func (s *Selector) adjustDropdownScroll() {
 	if len(s.options) == 0 || !s.options[s.selected].InDropdown {
 		return
@@ -148,8 +136,6 @@ func (s *Selector) adjustDropdownScroll() {
 	}
 }
 
-// getDropdownBounds returns the start and end indices of the dropdown region.
-// Returns -1, -1 if no dropdown region exists.
 func (s *Selector) getDropdownBounds() (start, end int) {
 	start = -1
 	end = -1
@@ -164,11 +150,6 @@ func (s *Selector) getDropdownBounds() (start, end int) {
 	return start, end
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// DROPDOWN RENDERING
-// ═══════════════════════════════════════════════════════════════════════════════
-
-// renderDropdownRegion renders the scrollable dropdown area.
 func (s *Selector) renderDropdownRegion(start, end int, scrollStyle, borderStyle lipgloss.Style) []string {
 	var lines []string
 

@@ -5,7 +5,6 @@ import (
 	"github.com/qxtaiba/okd-proxmox-cli/internal/tui/wizard"
 )
 
-// addonEnabled returns a ConfigGet that reads the enabled state of an addon.
 func addonEnabled(name string) wizard.ConfigGetter {
 	return func(c *config.Config) string {
 		if ac, ok := c.Addons[name]; ok && ac.Enabled {
@@ -15,7 +14,6 @@ func addonEnabled(name string) wizard.ConfigGetter {
 	}
 }
 
-// setAddonEnabled returns a ConfigSet that writes the enabled state of an addon.
 func setAddonEnabled(name string) wizard.ConfigSetter {
 	return wizard.SetBool(func(c *config.Config, v bool) {
 		if c.Addons == nil {
@@ -27,7 +25,6 @@ func setAddonEnabled(name string) wizard.ConfigSetter {
 	})
 }
 
-// addonSetting returns a ConfigGet that reads a setting from an addon.
 func addonSetting(name, key string) wizard.ConfigGetter {
 	return func(c *config.Config) string {
 		if ac, ok := c.Addons[name]; ok && ac.Settings != nil {
@@ -37,7 +34,6 @@ func addonSetting(name, key string) wizard.ConfigGetter {
 	}
 }
 
-// setAddonSetting returns a ConfigSet that writes a setting to an addon.
 func setAddonSetting(name, key string) wizard.ConfigSetter {
 	return wizard.SetString(func(c *config.Config, v string) {
 		if c.Addons == nil {
@@ -52,7 +48,6 @@ func setAddonSetting(name, key string) wizard.ConfigSetter {
 	})
 }
 
-// AddonsStepDefinition defines the addons configuration step declaratively.
 var AddonsStepDefinition = wizard.StepDefinition{
 	ID:           "addons",
 	Title:        "cluster addons",
@@ -126,7 +121,6 @@ var AddonsStepDefinition = wizard.StepDefinition{
 	},
 }
 
-// NewAddonsStep creates a new addons configuration step.
 func NewAddonsStep() (*wizard.DataDrivenStep, *wizard.DataDrivenStep) {
 	step := wizard.NewDataDrivenStep(AddonsStepDefinition)
 	return step, step

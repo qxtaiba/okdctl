@@ -8,10 +8,9 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/qxtaiba/okd-proxmox-cli/internal/logging"
+	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
 )
 
-// Type defines the scope of cleanup operations.
 type Type string
 
 const (
@@ -22,49 +21,26 @@ const (
 	TypeTerraformOnly Type = "terraform-only"
 )
 
-// Options configures cleanup operations.
 type Options struct {
-	// Type determines what to clean up.
-	Type Type
-
-	// WorkDir is the working directory containing cluster artifacts.
-	WorkDir string
-
-	// TerraformEnv is the terraform environment to clean (optional).
-	TerraformEnv string
-
-	// ProjectRoot is the root of the project.
-	ProjectRoot string
-
-	// PreserveConfig keeps cluster configuration files when true.
+	Type           Type
+	WorkDir        string
+	TerraformEnv   string
+	ProjectRoot    string
 	PreserveConfig bool
-
-	// HTTPServerRoot is the web server root directory.
 	HTTPServerRoot string
-
-	// HAProxyConfig is the path to the haproxy configuration file.
-	HAProxyConfig string
-
-	// ClusterName is the name of the cluster (used for dnsmasq cleanup).
-	ClusterName string
-
-	// RemovePackages removes system packages installed during setup.
-	// When true, packages like haproxy, httpd, dnsmasq, etc. will be uninstalled.
+	HAProxyConfig  string
+	ClusterName    string
 	RemovePackages bool
-
-	// Logger for output messages.
-	Logger logging.Logger
+	Logger         utils.Logger
 }
 
-// getLogger returns the logger from options or a no-op logger if nil.
-func (opts Options) getLogger() logging.Logger {
+func (opts Options) getLogger() utils.Logger {
 	if opts.Logger != nil {
 		return opts.Logger
 	}
-	return logging.NoopLogger()
+	return utils.NoopLogger()
 }
 
-// Execute performs cleanup based on the provided options.
 func Execute(ctx context.Context, opts Options) error {
 	logger := opts.getLogger()
 	var errs []error

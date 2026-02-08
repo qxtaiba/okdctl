@@ -6,39 +6,21 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// Layout dimension constants
 const (
-	// DefaultBoxWidth is the standard width for boxed sections across the CLI.
-	DefaultBoxWidth = 90
-
-	// MinBoxWidth is the minimum width for boxed sections.
-	MinBoxWidth = 20
-
-	// DefaultBoxWidthFallback is the fallback width when a box is too narrow.
+	DefaultBoxWidth         = 90
+	MinBoxWidth             = 20
 	DefaultBoxWidthFallback = 60
-
-	// TitlePadding is the padding around titles in boxed sections.
-	TitlePadding = 4
-
-	// TitlePaddingCompact is the extra padding for compact boxed sections.
-	TitlePaddingCompact = 8
-
-	// ContentPadding is the padding for content inside boxes.
-	ContentPadding = 2
+	TitlePadding            = 4
+	TitlePaddingCompact     = 8
+	ContentPadding          = 2
 )
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// BOXED PANELS - Rich-style panels with centered headers
-// ═══════════════════════════════════════════════════════════════════════════════
-
-// boxConfig contains style configuration for boxed sections.
 type boxConfig struct {
 	borderColor lipgloss.Color
 	titleColor  lipgloss.Color
 	compact     bool
 }
 
-// maxLineWidth returns the maximum visual width of any line in the content.
 func maxLineWidth(content string) int {
 	maxWidth := 0
 	for _, line := range strings.Split(content, "\n") {
@@ -49,7 +31,6 @@ func maxLineWidth(content string) int {
 	return maxWidth
 }
 
-// boxedSectionCore is the common implementation for all boxed section variants.
 func boxedSectionCore(content, title string, width int, cfg boxConfig) string {
 	if width < MinBoxWidth {
 		width = DefaultBoxWidthFallback
@@ -140,8 +121,6 @@ func boxedSectionCore(content, title string, width int, cfg boxConfig) string {
 	return strings.Join(result, "\n")
 }
 
-// BoxedSection creates a boxed panel with an ALL CAPS title centered in the header row.
-// The box width dynamically expands to fit content if content is wider than specified width.
 func BoxedSection(content string, title string, width int) string {
 	return boxedSectionCore(content, title, width, boxConfig{
 		borderColor: ColorSlate600,
@@ -150,8 +129,6 @@ func BoxedSection(content string, title string, width int) string {
 	})
 }
 
-// BoxedSectionCompact creates a panel with the title embedded in the top border.
-// The box width dynamically expands to fit content if content is wider than specified width.
 func BoxedSectionCompact(content string, title string, width int) string {
 	return boxedSectionCore(content, title, width, boxConfig{
 		borderColor: ColorSlate600,

@@ -9,7 +9,6 @@ import (
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
 )
 
-// DownloadOKDTools downloads openshift-install and oc client.
 func (p *Phase) DownloadOKDTools(ctx context.Context, version string, opts Options) error {
 	if err := system.EnsureDir(opts.DownloadDir); err != nil {
 		return fmt.Errorf("failed to create download directory: %w", err)
@@ -56,6 +55,7 @@ func (p *Phase) DownloadOKDTools(ctx context.Context, version string, opts Optio
 			OutputPath:       archivePath,
 			ExpectedChecksum: checksum,
 			Description:      tool.name,
+			Logger:           p.Log,
 		}
 		if err := download.Download(ctx, downloadOpts); err != nil {
 			return fmt.Errorf("failed to download %s: %w", tool.name, err)
@@ -65,6 +65,7 @@ func (p *Phase) DownloadOKDTools(ctx context.Context, version string, opts Optio
 			ArchivePath:    archivePath,
 			DestDir:        opts.DownloadDir,
 			CleanupArchive: true,
+			Logger:         p.Log,
 		}
 		if err := download.ExtractTarGz(ctx, extractOpts); err != nil {
 			return fmt.Errorf("failed to extract %s: %w", tool.name, err)
@@ -74,8 +75,6 @@ func (p *Phase) DownloadOKDTools(ctx context.Context, version string, opts Optio
 	return p.InstallToolsToSystem(ctx, opts.DownloadDir)
 }
 
-// InstallToolsToSystem copies OKD binaries to system path.
-// This may prompt for sudo password if elevated privileges are required.
 func (p *Phase) InstallToolsToSystem(ctx context.Context, srcDir string) error {
 	binaries := []string{"openshift-install", "oc", "kubectl"}
 	destDir := "/usr/local/bin"

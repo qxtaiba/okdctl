@@ -12,16 +12,13 @@ var registry = &Registry{
 	addons: make(map[string]Addon),
 }
 
-// Registry holds all registered addons.
 type Registry struct {
 	mu     sync.RWMutex
 	addons map[string]Addon
 	order  []string // insertion order for deterministic iteration
 }
 
-// Register adds an addon to the global registry.
-// Called from each addon package's init() function.
-// Panics if an addon with the same name is already registered.
+// Register adds an addon via init(). Panics on duplicate names.
 func Register(a Addon) {
 	registry.mu.Lock()
 	defer registry.mu.Unlock()
@@ -34,14 +31,12 @@ func Register(a Addon) {
 	registry.order = append(registry.order, name)
 }
 
-// Get returns a registered addon by name, or nil if not found.
 func Get(name string) Addon {
 	registry.mu.RLock()
 	defer registry.mu.RUnlock()
 	return registry.addons[name]
 }
 
-// All returns all registered addons in registration order.
 func All() []Addon {
 	registry.mu.RLock()
 	defer registry.mu.RUnlock()
@@ -53,7 +48,6 @@ func All() []Addon {
 	return result
 }
 
-// Enabled returns addons that are enabled in the given config.
 func Enabled(cfg *config.Config) []Addon {
 	registry.mu.RLock()
 	defer registry.mu.RUnlock()
@@ -68,7 +62,6 @@ func Enabled(cfg *config.Config) []Addon {
 	return result
 }
 
-// Names returns the names of all registered addons.
 func Names() []string {
 	registry.mu.RLock()
 	defer registry.mu.RUnlock()
@@ -78,7 +71,6 @@ func Names() []string {
 	return out
 }
 
-// IsRegistered checks if an addon name is known.
 func IsRegistered(name string) bool {
 	registry.mu.RLock()
 	defer registry.mu.RUnlock()

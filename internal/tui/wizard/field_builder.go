@@ -24,7 +24,6 @@ type FieldBuilder struct {
 	validator   func(string) error
 }
 
-// NewFieldBuilder creates a new field builder with label and placeholder.
 func NewFieldBuilder(label, placeholder string) *FieldBuilder {
 	return &FieldBuilder{
 		label:       label,
@@ -32,31 +31,26 @@ func NewFieldBuilder(label, placeholder string) *FieldBuilder {
 	}
 }
 
-// Required marks the field as required.
 func (b *FieldBuilder) Required() *FieldBuilder {
 	b.required = true
 	return b
 }
 
-// Help sets the field's help text.
 func (b *FieldBuilder) Help(text string) *FieldBuilder {
 	b.help = text
 	return b
 }
 
-// Password marks the field as a password input.
 func (b *FieldBuilder) Password() *FieldBuilder {
 	b.password = true
 	return b
 }
 
-// Validate sets the field's validation function.
 func (b *FieldBuilder) Validate(fn func(string) error) *FieldBuilder {
 	b.validator = fn
 	return b
 }
 
-// Build creates the InputField with all configured options.
 func (b *FieldBuilder) Build() *components.InputField {
 	var field *components.InputField
 	if b.password {
@@ -72,12 +66,10 @@ func (b *FieldBuilder) Build() *components.InputField {
 	return field
 }
 
-// TextField is a convenience function for creating a text field builder.
 func TextField(label, placeholder string) *FieldBuilder {
 	return NewFieldBuilder(label, placeholder)
 }
 
-// PasswordField is a convenience function for creating a password field builder.
 func PasswordField(label, placeholder string) *FieldBuilder {
 	return NewFieldBuilder(label, placeholder).Password()
 }
@@ -96,7 +88,6 @@ type SectionBuilder struct {
 	fields []*components.InputField
 }
 
-// NewSectionBuilder creates a new section builder with a title.
 func NewSectionBuilder(title string) *SectionBuilder {
 	return &SectionBuilder{
 		title:  title,
@@ -104,21 +95,15 @@ func NewSectionBuilder(title string) *SectionBuilder {
 	}
 }
 
-// AddField adds a field to the section.
 func (b *SectionBuilder) AddField(field *components.InputField) *SectionBuilder {
 	b.fields = append(b.fields, field)
 	return b
 }
 
-// Field adds a field using a FieldBuilder inline.
-// This allows chaining field creation directly:
-//
-//	section.Field(TextField("name", "").Required().Help("..."))
 func (b *SectionBuilder) Field(fb *FieldBuilder) *SectionBuilder {
 	return b.AddField(fb.Build())
 }
 
-// Build creates the InputGroup.
 func (b *SectionBuilder) Build() *components.InputGroup {
 	return components.NewInputGroup(b.title, b.fields...)
 }

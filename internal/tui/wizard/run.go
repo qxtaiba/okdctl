@@ -9,11 +9,6 @@ import (
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
 )
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// WIZARD RUNNER
-// ═══════════════════════════════════════════════════════════════════════════════
-
-// Run runs the wizard with the given steps and configuration.
 func Run(steps []WizardStep, cfg *config.Config) (Result, error) {
 	model := NewModel(steps, cfg)
 
@@ -39,12 +34,5 @@ func Run(steps []WizardStep, cfg *config.Config) (Result, error) {
 	return result, nil
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// BACKWARD COMPATIBILITY
-// ═══════════════════════════════════════════════════════════════════════════════
-
-// WizardResult is an alias for Result for backward compatibility.
 type WizardResult = Result
-
-// WizardAction is an alias for Action for backward compatibility.
 type WizardAction = Action

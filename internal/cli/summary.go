@@ -13,10 +13,6 @@ import (
 const defaultContentWidth = tui.DefaultBoxWidth - 2
 const defaultKeyColWidth  = 45
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// SUMMARY BUILDER - Helper for consistent summary formatting
-// ═══════════════════════════════════════════════════════════════════════════════
-
 type summaryBuilder struct {
 	b        strings.Builder
 	keyWidth int
@@ -50,15 +46,6 @@ func (s *summaryBuilder) String() string {
 	return s.b.String()
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// SECTION HEADERS - Boxed panels for visual hierarchy
-// ═══════════════════════════════════════════════════════════════════════════════
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// VALIDATION SUMMARY
-// ═══════════════════════════════════════════════════════════════════════════════
-
-// ValidationSummary renders a validation result as formatted output.
 func ValidationSummary(result *config.ValidationResult) string {
 	var sb strings.Builder
 
@@ -79,11 +66,6 @@ func ValidationSummary(result *config.ValidationResult) string {
 	return sb.String()
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// DEPLOYMENT SUMMARY
-// ═══════════════════════════════════════════════════════════════════════════════
-
-// DeploySummary renders a deployment summary before deploying.
 func DeploySummary(cfg *config.Config) string {
 	title := fmt.Sprintf("%s CLUSTER SETUP", strings.ToUpper(string(cfg.Distribution.Type)))
 	clusterDomain := fmt.Sprintf("%s.%s", cfg.Cluster.Name, cfg.Cluster.Domain)
@@ -127,7 +109,6 @@ func DeploySummary(cfg *config.Config) string {
 	return "\n" + tui.BoxedSectionCompact(sb.String(), title, tui.DefaultBoxWidth) + "\n"
 }
 
-// PostDeploySummary renders a summary after successful deployment.
 func PostDeploySummary(cfg *config.Config, result *deployment.Result) string {
 	var sb strings.Builder
 

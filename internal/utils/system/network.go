@@ -41,7 +41,6 @@ func AddSecondaryIP(ctx context.Context, ip, iface string) error {
 	return nil
 }
 
-// RemoveSecondaryIP removes an IP address from a network interface via networkmanager.
 func RemoveSecondaryIP(ctx context.Context, ip, iface string) error {
 	if ip == "" {
 		return fmt.Errorf("ip address is required")
@@ -72,7 +71,6 @@ func RemoveSecondaryIP(ctx context.Context, ip, iface string) error {
 	return nil
 }
 
-// SendGratuitousARP sends gratuitous ARP announcements for an IP address.
 func SendGratuitousARP(ctx context.Context, ip, iface string) error {
 	if ip == "" {
 		return fmt.Errorf("ip address is required")
@@ -87,7 +85,6 @@ func SendGratuitousARP(ctx context.Context, ip, iface string) error {
 	return nil
 }
 
-// GetDefaultInterface returns the default network interface name.
 func GetDefaultInterface(ctx context.Context) (string, error) {
 	cmd := exec.CommandContext(ctx, "ip", "route", "show", "default")
 	output, err := cmd.Output()
@@ -105,7 +102,6 @@ func GetDefaultInterface(ctx context.Context) (string, error) {
 	return "", fmt.Errorf("could not determine default interface from route: %s", string(output))
 }
 
-// getConnectionForDevice returns the networkmanager connection name managing the given device.
 func getConnectionForDevice(ctx context.Context, iface string) (string, error) {
 	cmd := exec.CommandContext(ctx, "nmcli", "-t", "-f", "NAME,DEVICE", "connection", "show", "--active")
 	output, err := cmd.Output()

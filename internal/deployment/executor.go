@@ -8,31 +8,26 @@ import (
 	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/install"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/postinstall"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/logging"
+	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
 )
 
-// Step IDs for deployment phases.
 const (
 	StepIDPrepare   distribution.StepID = "prepare"
 	StepIDInstall   distribution.StepID = "install"
 	StepIDConfigure distribution.StepID = "configure"
 )
 
-// Executor orchestrates deployment using the Orchestrator.
-// It wraps the OKD provisioner and provides step-based execution.
 type Executor struct {
 	cfg             *config.Config
 	provisioner     *okd.Provisioner
 	projectRoot     string
-	logger          logging.Logger
+	logger          utils.Logger
 	configureResult *postinstall.Result // Captured from configure step
 }
 
-// ExecutorOption configures an Executor.
 type ExecutorOption func(*Executor)
 
-// WithLogger sets a custom logger for the executor.
-func WithLogger(l logging.Logger) ExecutorOption {
+func WithLogger(l utils.Logger) ExecutorOption {
 	return func(e *Executor) {
 		if l != nil {
 			e.logger = l
@@ -40,7 +35,6 @@ func WithLogger(l logging.Logger) ExecutorOption {
 	}
 }
 
-// NewExecutor creates a new deployment executor.
 func NewExecutor(
 	cfg *config.Config,
 	provisioner *okd.Provisioner,
@@ -51,7 +45,7 @@ func NewExecutor(
 		cfg:         cfg,
 		provisioner: provisioner,
 		projectRoot: projectRoot,
-		logger:      logging.NoopLogger(),
+		logger:      utils.NoopLogger(),
 	}
 
 	for _, opt := range opts {
@@ -61,8 +55,6 @@ func NewExecutor(
 	return e
 }
 
-// Execute runs all deployment phases using the Orchestrator.
-// Returns the deployment result containing IPs and other info gathered during configuration.
 func (e *Executor) Execute(ctx context.Context) (*Result, error) {
 	steps := e.buildSteps()
 	orchestrator := distribution.NewOrchestrator(steps...)
@@ -72,7 +64,6 @@ func (e *Executor) Execute(ctx context.Context) (*Result, error) {
 		return nil, err
 	}
 
-	// Build result from captured configure result
 	var result *Result
 	if e.configureResult != nil {
 		result = &Result{
@@ -83,7 +74,6 @@ func (e *Executor) Execute(ctx context.Context) (*Result, error) {
 	return result, nil
 }
 
-// buildSteps creates the provisioning steps for deployment.
 func (e *Executor) buildSteps() []distribution.ProvisioningStep {
 	return []distribution.ProvisioningStep{
 		e.buildPrepareStep(),
@@ -92,7 +82,6 @@ func (e *Executor) buildSteps() []distribution.ProvisioningStep {
 	}
 }
 
-// buildPrepareStep creates the prepare phase step.
 func (e *Executor) buildPrepareStep() distribution.ProvisioningStep {
 	return distribution.NewStepBuilder(StepIDPrepare, "Prepare").
 		Description("preparing cluster infrastructure").
@@ -103,7 +92,6 @@ func (e *Executor) buildPrepareStep() distribution.ProvisioningStep {
 		MustBuild()
 }
 
-// buildInstallStep creates the install phase step.
 func (e *Executor) buildInstallStep() distribution.ProvisioningStep {
 	return distribution.NewStepBuilder(StepIDInstall, "Install").
 		Description("installing cluster components").
@@ -115,7 +103,6 @@ func (e *Executor) buildInstallStep() distribution.ProvisioningStep {
 		MustBuild()
 }
 
-// buildConfigureStep creates the configure phase step.
 func (e *Executor) buildConfigureStep() distribution.ProvisioningStep {
 	return distribution.NewStepBuilder(StepIDConfigure, "Configure").
 		Description("configuring cluster").

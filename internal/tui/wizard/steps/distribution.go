@@ -16,11 +16,6 @@ import (
 	"github.com/qxtaiba/okd-proxmox-cli/internal/tui/wizard/components"
 )
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// OKD VERSION STEP
-// ═══════════════════════════════════════════════════════════════════════════════
-
-// selectionPhase represents the current phase of version selection.
 type selectionPhase int
 
 const (
@@ -28,7 +23,6 @@ const (
 	phaseVersionSelect
 )
 
-// DistributionStep handles OKD version selection.
 type DistributionStep struct {
 	wizard.BaseStep
 	versionSelector *components.Selector
@@ -43,7 +37,6 @@ type DistributionStep struct {
 	loadError      error
 }
 
-// NewDistributionStep creates a new OKD version selection step.
 func NewDistributionStep() *DistributionStep {
 	s := spinner.New()
 	s.Spinner = spinner.Dot
@@ -67,7 +60,6 @@ func NewDistributionStep() *DistributionStep {
 	}
 }
 
-// Init starts fetching OKD versions.
 func (s *DistributionStep) Init() tea.Cmd {
 	return tea.Batch(
 		s.loadingSpinner.Tick,
@@ -75,7 +67,6 @@ func (s *DistributionStep) Init() tea.Cmd {
 	)
 }
 
-// Update handles input.
 func (s *DistributionStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 	switch msg := msg.(type) {
 	case versionsLoadedMsg:
@@ -117,11 +108,9 @@ func (s *DistributionStep) handleKeyMsg(msg tea.KeyMsg) (wizard.WizardStep, tea.
 func (s *DistributionStep) handleEnterKey() (wizard.WizardStep, tea.Cmd) {
 	selected := s.versionSelector.Selected()
 
-	// If a minor header is selected, expand it instead of completing
 	if strings.HasPrefix(selected.ID, "minor:") {
 		minor := s.getMinorFromOptionID(selected.ID)
 		if s.expandedMinor == minor {
-			// Already expanded, use the latest version from this series
 			for _, series := range s.okdSeries {
 				if series.Minor == minor {
 					s.selectedVersion = series.Latest.Version
@@ -166,7 +155,6 @@ func (s *DistributionStep) handleTabKey() (wizard.WizardStep, tea.Cmd) {
 
 func (s *DistributionStep) handleNavigationKey(msg tea.KeyMsg) (wizard.WizardStep, tea.Cmd) {
 	s.versionSelector.Update(msg)
-	// Dropdown items handle their own scrolling; only emit for minor headers
 	selected := s.versionSelector.Selected()
 	if !selected.InDropdown {
 		return s, s.emitFocusChanged()
@@ -174,7 +162,6 @@ func (s *DistributionStep) handleNavigationKey(msg tea.KeyMsg) (wizard.WizardSte
 	return s, nil
 }
 
-// View renders the version selection.
 func (s *DistributionStep) View(width, height int) string {
 	s.SetSize(width, height)
 	s.versionSelector.SetSize(width, height)
@@ -242,14 +229,12 @@ func (s *DistributionStep) Validate() error {
 	return nil
 }
 
-// Apply writes the selection to config.
 func (s *DistributionStep) Apply(cfg *config.Config) error {
 	cfg.Distribution.Type = config.DistributionOKD
 	cfg.Distribution.Version = s.selectedVersion
 	return nil
 }
 
-// ShortHelp returns help for this step.
 func (s *DistributionStep) ShortHelp() []wizard.KeyBinding {
 	if s.phase == phaseVersionSelect {
 		return []wizard.KeyBinding{
@@ -265,7 +250,6 @@ func (s *DistributionStep) ShortHelp() []wizard.KeyBinding {
 	}
 }
 
-// SetFocused sets the focus state.
 func (s *DistributionStep) SetFocused(focused bool) {
 	s.BaseStep.SetFocused(focused)
 	if focused && s.phase == phaseVersionSelect {
@@ -275,18 +259,15 @@ func (s *DistributionStep) SetFocused(focused bool) {
 	}
 }
 
-// GetSelectedVersion returns the selected OKD version.
 func (s *DistributionStep) GetSelectedVersion() string {
 	return s.selectedVersion
 }
 
-// SetSelectedVersion sets the selected OKD version.
 func (s *DistributionStep) SetSelectedVersion(version string) {
 	s.selectedVersion = version
 	s.versionSelector.SetSelectedByID(version)
 }
 
-// DisplayTitle returns the title for the current phase.
 func (s *DistributionStep) DisplayTitle() string {
 	switch s.phase {
 	case phaseVersionLoading:

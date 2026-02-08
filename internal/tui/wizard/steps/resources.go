@@ -10,14 +10,12 @@ import (
 	"github.com/qxtaiba/okd-proxmox-cli/internal/tui/wizard"
 )
 
-// ResourcesStepState holds node counts from the basics step for resource summary rendering.
 type ResourcesStepState struct {
 	Step        *wizard.DataDrivenStep
 	CPCount     int
 	WorkerCount int
 }
 
-// ResourcesStepDefinition defines the resources configuration step declaratively.
 var ResourcesStepDefinition = wizard.StepDefinition{
 	ID:           "resources",
 	Title:        "node resources",
@@ -121,14 +119,12 @@ var ResourcesStepDefinition = wizard.StepDefinition{
 	},
 }
 
-// parseIntValue parses a string to int for ConfigSet.
 func parseIntValue(value string) (int, error) {
 	var v int
 	_, err := fmt.Sscanf(value, "%d", &v)
 	return v, err
 }
 
-// NewResourcesStep creates a new resources configuration step.
 func NewResourcesStep() (*wizard.DataDrivenStep, *ResourcesStepState) {
 	step := wizard.NewDataDrivenStep(ResourcesStepDefinition)
 

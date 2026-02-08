@@ -1,9 +1,7 @@
-// Package okd implements the OKD/OpenShift provisioner.
 package okd
 
 import "github.com/qxtaiba/okd-proxmox-cli/internal/distribution"
 
-// ClusterStatus represents the status of a Kubernetes cluster.
 type ClusterStatus struct {
 	Phase        ClusterPhase
 	Version      string
@@ -14,7 +12,6 @@ type ClusterStatus struct {
 	Message      string
 }
 
-// ClusterPhase represents the lifecycle phase of a cluster.
 type ClusterPhase string
 
 const (
@@ -26,7 +23,6 @@ const (
 	PhaseUnknown    ClusterPhase = "Unknown"
 )
 
-// NodeStatus represents the status of a cluster node.
 type NodeStatus struct {
 	Name       string
 	Role       string
@@ -36,7 +32,6 @@ type NodeStatus struct {
 	Conditions []Condition
 }
 
-// Condition represents a status condition.
 type Condition struct {
 	Type    string
 	Status  string
@@ -45,7 +40,6 @@ type Condition struct {
 }
 
 const (
-	// Setup steps
 	StepPreflight          distribution.StepID = "preflight"
 	StepInstallPackages    distribution.StepID = "install-packages"
 	StepCleanup            distribution.StepID = "cleanup"
@@ -65,7 +59,6 @@ const (
 	StepConfigureFirewall distribution.StepID = "configure-firewall"
 	StepGenerateDNS       distribution.StepID = "generate-dns"
 
-	// Install steps
 	StepDeployInfra     distribution.StepID = "deploy-infrastructure"
 	StepWaitBootstrap   distribution.StepID = "wait-bootstrap"
 	StepSetupKubeconfig distribution.StepID = "setup-kubeconfig"

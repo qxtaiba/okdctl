@@ -1,11 +1,6 @@
 package tui
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// ICONS - Only the icons actually used in the codebase
-// ═══════════════════════════════════════════════════════════════════════════════
-
 const (
-	// Status
 	IconSuccess = "✔"
 	IconError   = "✖"
 	IconWarning = "⚠"
@@ -15,11 +10,9 @@ const (
 	IconSkipped = "◌"
 	IconCheck   = "✓"
 
-	// UI
 	IconBullet = "•"
 	IconTime   = "⏱"
 
-	// Objects
 	IconRocket    = "🚀"
 	IconGear      = "⚙"
 	IconCloud     = "☁"

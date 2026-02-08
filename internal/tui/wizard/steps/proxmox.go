@@ -24,7 +24,6 @@ func proxmoxSet(setter func(p *config.ProxmoxConfig, v string)) wizard.ConfigSet
 	}
 }
 
-// ProxmoxStepDefinition defines the Proxmox configuration step declaratively.
 var ProxmoxStepDefinition = wizard.StepDefinition{
 	ID:           "proxmox",
 	Title:        "proxmox configuration",
@@ -130,7 +129,6 @@ var ProxmoxStepDefinition = wizard.StepDefinition{
 	},
 }
 
-// NewProxmoxStep creates a new Proxmox configuration step.
 func NewProxmoxStep() (*wizard.DataDrivenStep, *wizard.DataDrivenStep) {
 	step := wizard.NewDataDrivenStep(ProxmoxStepDefinition)
 	return step, step

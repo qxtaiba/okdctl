@@ -6,12 +6,11 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/qxtaiba/okd-proxmox-cli/internal/logging"
+	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
 )
 
-// HAProxy stops and cleans up HAProxy service, configuration, and package.
-func HAProxy(ctx context.Context, haproxyConfig string, logger logging.Logger) error {
+func HAProxy(ctx context.Context, haproxyConfig string, logger utils.Logger) error {
 	if logger != nil {
 		logger.Info("cleanup: haproxy service and configuration")
 	}
@@ -39,7 +38,7 @@ func HAProxy(ctx context.Context, haproxyConfig string, logger logging.Logger) e
 	if logger != nil {
 		logger.Info("cleanup: removing okd firewall rules")
 	}
-	if err := system.RemoveOKDFirewallRules(ctx, true); err != nil {
+	if err := system.RemoveOKDFirewallRules(ctx, true, logger); err != nil {
 		if logger != nil {
 			logger.Warn(fmt.Sprintf("cleanup: firewall rules incomplete: %v", err))
 		}
@@ -60,8 +59,7 @@ func HAProxy(ctx context.Context, haproxyConfig string, logger logging.Logger) e
 	return nil
 }
 
-// Apache stops and cleans up Apache httpd service and package.
-func Apache(ctx context.Context, logger logging.Logger) error {
+func Apache(ctx context.Context, logger utils.Logger) error {
 	if logger != nil {
 		logger.Info("cleanup: apache httpd service")
 	}
@@ -91,8 +89,7 @@ func Apache(ctx context.Context, logger logging.Logger) error {
 	return nil
 }
 
-// WebServer removes ignition files from the web server directory.
-func WebServer(ctx context.Context, httpServerRoot string, logger logging.Logger) error {
+func WebServer(ctx context.Context, httpServerRoot string, logger utils.Logger) error {
 	ignitionDir := filepath.Join(httpServerRoot, "ignition")
 
 	if _, err := os.Stat(ignitionDir); os.IsNotExist(err) {
@@ -113,19 +110,18 @@ func WebServer(ctx context.Context, httpServerRoot string, logger logging.Logger
 	}
 
 	for _, f := range ignitionFiles {
-		_ = SafeRemoveWithLogger(ctx, f, filepath.Base(f), nil) // best-effort cleanup, suppress individual file logs
+		_ = SafeRemoveWithLogger(ctx, f, filepath.Base(f), nil)
 	}
 
 	return nil
 }
 
-// Dnsmasq stops dnsmasq, removes OKD DNS configuration, and removes the package.
-func Dnsmasq(ctx context.Context, clusterName string, logger logging.Logger) error {
+func Dnsmasq(ctx context.Context, clusterName string, logger utils.Logger) error {
 	if logger != nil {
 		logger.Info("cleanup: dnsmasq service and configuration")
 	}
 
-	if err := system.RestoreSystemResolver(ctx); err != nil && logger != nil {
+	if err := system.RestoreSystemResolver(ctx, logger); err != nil && logger != nil {
 		logger.Warn(fmt.Sprintf("cleanup: failed to restore system resolver: %v", err))
 	}
 

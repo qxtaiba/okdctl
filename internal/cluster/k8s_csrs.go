@@ -9,7 +9,6 @@ import (
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
 )
 
-// PendingCSRs returns pending certificate signing requests.
 func (c *K8sClient) PendingCSRs(ctx context.Context) ([]CSR, error) {
 	result, err := c.run(ctx, "get", "csr", "-o", "json")
 	if err != nil {
@@ -70,7 +69,6 @@ func (c *K8sClient) PendingCSRs(ctx context.Context) ([]CSR, error) {
 	return pendingCSRs, nil
 }
 
-// ApproveCSRs approves the specified CSRs.
 func (c *K8sClient) ApproveCSRs(ctx context.Context, csrNames []string) error {
 	if len(csrNames) == 0 {
 		return nil
@@ -80,7 +78,6 @@ func (c *K8sClient) ApproveCSRs(ctx context.Context, csrNames []string) error {
 	return c.runCheck(ctx, args...)
 }
 
-// ApprovePendingCSRs finds and approves all pending CSRs.
 func (c *K8sClient) ApprovePendingCSRs(ctx context.Context) (int, error) {
 	csrs, err := c.PendingCSRs(ctx)
 	if err != nil {

@@ -12,7 +12,6 @@ import (
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
 )
 
-// FileExists checks if a file exists and is a regular file (not a directory).
 func FileExists(path string) bool {
 	info, err := os.Stat(path)
 	if err != nil {
@@ -21,7 +20,6 @@ func FileExists(path string) bool {
 	return !info.IsDir()
 }
 
-// DirExists checks if a directory exists.
 func DirExists(path string) bool {
 	info, err := os.Stat(path)
 	if err != nil {
@@ -30,21 +28,16 @@ func DirExists(path string) bool {
 	return info.IsDir()
 }
 
-// EnsureDir creates a directory and all parent directories if they don't exist.
-// This is equivalent to `mkdir -p`.
 func EnsureDir(path string) error {
 	return os.MkdirAll(path, 0755)
 }
 
-// EnsureDirForFile creates the parent directory for a file path.
 func EnsureDirForFile(filePath string) error {
 	dir := filepath.Dir(filePath)
 	return EnsureDir(dir)
 }
 
-// CopyFile copies a file from src to dst.
-// If dst already exists, it will be overwritten.
-// On failure, any partially written destination file is cleaned up.
+// CopyFile copies a file from src to dst, cleaning up partial writes on failure.
 func CopyFile(src, dst string) error {
 	sourceFile, err := os.Open(src)
 	if err != nil {
@@ -70,7 +63,7 @@ func CopyFile(src, dst string) error {
 	defer func() {
 		_ = destFile.Close()
 		if !success {
-			_ = os.Remove(dst) // Clean up partial file on failure
+			_ = os.Remove(dst)
 		}
 	}()
 
@@ -91,8 +84,6 @@ func CopyFile(src, dst string) error {
 	return nil
 }
 
-// SafeRemove removes a file or directory if it exists.
-// Returns nil if the path doesn't exist.
 func SafeRemove(path string) error {
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		return nil
@@ -100,8 +91,6 @@ func SafeRemove(path string) error {
 	return os.RemoveAll(path)
 }
 
-// ExpandPath expands ~ to home directory in paths.
-// Returns the original path unchanged if expansion fails or path doesn't start with ~/.
 func ExpandPath(path string) string {
 	if strings.HasPrefix(path, "~/") {
 		if home, err := os.UserHomeDir(); err == nil {
@@ -112,9 +101,7 @@ func ExpandPath(path string) string {
 }
 
 // AtomicWrite writes data to a file atomically using a temp file and rename.
-// This ensures the file is never in a partially-written state.
-// The temp file is created in the same directory as the target to ensure
-// the rename operation is atomic (same filesystem).
+// The temp file is created in the same directory to ensure same-filesystem rename.
 func AtomicWrite(path string, data []byte, perm os.FileMode) error {
 	if err := EnsureDirForFile(path); err != nil {
 		return fmt.Errorf("failed to create directory: %w", err)
@@ -127,7 +114,6 @@ func AtomicWrite(path string, data []byte, perm os.FileMode) error {
 	}
 	tmpPath := tmpFile.Name()
 
-	// Clean up temp file on any failure
 	success := false
 	defer func() {
 		if !success {
@@ -140,7 +126,6 @@ func AtomicWrite(path string, data []byte, perm os.FileMode) error {
 		return fmt.Errorf("failed to write data: %w", err)
 	}
 
-	// Sync to ensure data is flushed to disk before rename
 	if err := tmpFile.Sync(); err != nil {
 		_ = tmpFile.Close()
 		return fmt.Errorf("failed to sync file: %w", err)
@@ -162,7 +147,6 @@ func AtomicWrite(path string, data []byte, perm os.FileMode) error {
 	return nil
 }
 
-// AtomicWriteString writes a string to a file atomically.
 func AtomicWriteString(path, content string, perm os.FileMode) error {
 	return AtomicWrite(path, []byte(content), perm)
 }
