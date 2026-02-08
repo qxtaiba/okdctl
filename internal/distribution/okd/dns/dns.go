@@ -139,14 +139,14 @@ func DeployBootstrap(ctx context.Context, cfg *config.Config) error {
 		return utils.WrapError("failed to write dnsmasq config", err)
 	}
 
-	if err := validateAndReloadDnsmasq(ctx); err != nil {
+	if err := validateAndRestartDnsmasq(ctx); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func DeployProduction(ctx context.Context, cfg *config.Config, appsIP, kubeVipIP string) error {
+func DeployProduction(ctx context.Context, cfg *config.Config, appsIP, kubeVipIP, customDomain, customRouterIP string) error {
 	data, err := BuildConfigData(cfg)
 	if err != nil {
 		return utils.WrapError("failed to build dns config data", err)
@@ -161,8 +161,15 @@ func DeployProduction(ctx context.Context, cfg *config.Config, appsIP, kubeVipIP
 			return fmt.Errorf("invalid kube-vip IP address: %s", kubeVipIP)
 		}
 	}
+	if customRouterIP != "" {
+		if net.ParseIP(customRouterIP) == nil {
+			return fmt.Errorf("invalid custom router IP address: %s", customRouterIP)
+		}
+	}
 	data.AppsIP = appsIP
 	data.KubeVipIP = kubeVipIP
+	data.UserAppsDomain = customDomain
+	data.UserAppsIP = customRouterIP
 
 	content, err := templates.RenderDNSProductionConfig(data)
 	if err != nil {
@@ -174,16 +181,15 @@ func DeployProduction(ctx context.Context, cfg *config.Config, appsIP, kubeVipIP
 		return utils.WrapError("failed to write dnsmasq config", err)
 	}
 
-	if err := validateAndReloadDnsmasq(ctx); err != nil {
+	if err := validateAndRestartDnsmasq(ctx); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-// validateAndReloadDnsmasq validates the dnsmasq config, then reloads
-// (falling back to restart if reload fails).
-func validateAndReloadDnsmasq(ctx context.Context) error {
+// validateAndRestartDnsmasq validates the dnsmasq config, then restarts the service.
+func validateAndRestartDnsmasq(ctx context.Context) error {
 	if err := system.ValidateDnsmasqConfig(ctx); err != nil {
 		return errors.Join(
 			fmt.Errorf("dnsmasq config validation failed (service unchanged)"),
@@ -191,11 +197,8 @@ func validateAndReloadDnsmasq(ctx context.Context) error {
 		)
 	}
 
-	if err := system.ReloadDnsmasq(ctx); err != nil {
-		// Reload not supported or failed — fall back to restart
-		if restartErr := system.RestartDnsmasq(ctx); restartErr != nil {
-			return utils.WrapError("failed to restart dnsmasq after reload failure", restartErr)
-		}
+	if err := system.RestartDnsmasq(ctx); err != nil {
+		return utils.WrapError("failed to restart dnsmasq", err)
 	}
 	return nil
 }

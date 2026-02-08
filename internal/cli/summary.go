@@ -137,8 +137,12 @@ func PostDeploySummary(cfg *config.Config, result *deployment.Result) string {
 	if result != nil && result.RouterLBIP != "" {
 		content.WriteString("  " + tui.DottedKeyValueFull("  "+appsDomain, result.RouterLBIP, defaultKeyColWidth, kvWidth) + "\n")
 	}
-	if result != nil && result.GrappleberryRouterIP != "" {
-		content.WriteString("  " + tui.DottedKeyValueFull("  *.grappleberry.xyz", result.GrappleberryRouterIP, defaultKeyColWidth, kvWidth) + "\n")
+	if result != nil && result.CustomRouterIP != "" {
+		customLabel := fmt.Sprintf("*.%s", cfg.Networking.CustomDomain)
+		if cfg.Networking.CustomDomain == "" {
+			customLabel = fmt.Sprintf("router-%s (custom)", cfg.Cluster.Name)
+		}
+		content.WriteString("  " + tui.DottedKeyValueFull("  "+customLabel, result.CustomRouterIP, defaultKeyColWidth, kvWidth) + "\n")
 	}
 	content.WriteString("\n")
 

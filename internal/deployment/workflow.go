@@ -14,8 +14,8 @@ type Result struct {
 	// RouterLBIP is the LoadBalancer IP assigned to the default ingress router.
 	RouterLBIP string
 
-	// GrappleberryRouterIP is the LoadBalancer IP for the grappleberry ingress (if configured).
-	GrappleberryRouterIP string
+	// CustomRouterIP is the LoadBalancer IP for the cluster-specific custom ingress (if configured).
+	CustomRouterIP string
 }
 
 type Options struct {

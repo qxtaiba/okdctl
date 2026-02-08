@@ -11,12 +11,14 @@ import (
 )
 
 const (
-	StepVerifyHealth        distribution.StepID = "verify-health"
-	StepVerifyKubeVIP       distribution.StepID = "verify-kubevip"
-	StepRemoveHAProxy       distribution.StepID = "remove-haproxy"
+	StepVerifyHealth   distribution.StepID = "verify-health"
+	StepVerifyKubeVIP  distribution.StepID = "verify-kubevip"
+	StepRemoveHAProxy  distribution.StepID = "remove-haproxy"
 	StepInstallAddons  distribution.StepID = "install-addons"
-	StepDeployAPIDNS   distribution.StepID = "deploy-api-dns"
-	StepDeployAppsDNS  distribution.StepID = "deploy-apps-dns"
+	StepWaitIngressLB       distribution.StepID = "wait-ingress-lb"
+	StepWaitCustomRouterLB  distribution.StepID = "wait-custom-router-lb"
+	StepDeployAPIDNS        distribution.StepID = "deploy-api-dns"
+	StepDeployAppsDNS       distribution.StepID = "deploy-apps-dns"
 )
 
 
@@ -130,7 +132,7 @@ func (p *Phase) NewDeployAPIDNSStep(cfg *config.Config, opts Options, pctx *dist
 		}).
 		Execute(func(ctx context.Context) error {
 			state := pctx.Get()
-			if err := p.deployProductionDNS(ctx, cfg, "", state.KubeVipIP); err != nil {
+			if err := p.deployProductionDNS(ctx, cfg, "", state.KubeVipIP, "", ""); err != nil {
 				return utils.WrapError("api dns switch failed", err)
 			}
 			p.Log.Info(fmt.Sprintf("dns: api.* now points to vip %s (haproxy still running as fallback)", state.KubeVipIP))
@@ -139,7 +141,53 @@ func (p *Phase) NewDeployAPIDNSStep(cfg *config.Config, opts Options, pctx *dist
 		MustBuild()
 }
 
-func (p *Phase) NewDeployAppsDNSStep(cfg *config.Config, opts Options, pctx *distribution.PhaseContext[PostInstallContext], mgr *addon.Manager) distribution.ProvisioningStep {
+func (p *Phase) NewWaitIngressLBStep(cfg *config.Config, opts Options, pctx *distribution.PhaseContext[PostInstallContext]) distribution.ProvisioningStep {
+	return distribution.NewStepBuilder(StepWaitIngressLB, "Wait for Ingress LB").
+		Description("waiting for metallb to assign router loadbalancer ip").
+		Fatal(false).
+		OnError(func(err error) {
+			p.Log.Warn(fmt.Sprintf("ingress: %v — apps wildcard dns will not be configured", err))
+		}).
+		Execute(func(ctx context.Context) error {
+			ip, err := p.waitForDefaultRouterLB(ctx, opts)
+			if err != nil {
+				return err
+			}
+			pctx.Update(func(c *PostInstallContext) {
+				c.RouterLBIP = ip
+			})
+			p.Log.Info(fmt.Sprintf("ingress: router-default loadbalancer ip is %s", ip))
+			return nil
+		}).
+		MustBuild()
+}
+
+func (p *Phase) NewWaitCustomRouterLBStep(cfg *config.Config, opts Options, pctx *distribution.PhaseContext[PostInstallContext]) distribution.ProvisioningStep {
+	return distribution.NewStepBuilder(StepWaitCustomRouterLB, "Wait for Custom Router LB").
+		Description("waiting for custom router loadbalancer ip").
+		Fatal(false).
+		SkipWhen(func() bool {
+			return cfg.Networking.CustomDomain == ""
+		}).
+		SkipReason("no custom domain configured").
+		OnError(func(err error) {
+			p.Log.Warn(fmt.Sprintf("ingress: %v — custom domain dns will not be configured", err))
+		}).
+		Execute(func(ctx context.Context) error {
+			ip, err := p.waitForCustomRouterLB(ctx, cfg.Cluster.Name, opts)
+			if err != nil {
+				return err
+			}
+			pctx.Update(func(c *PostInstallContext) {
+				c.CustomRouterIP = ip
+			})
+			p.Log.Info(fmt.Sprintf("ingress: router-%s loadbalancer ip is %s", cfg.Cluster.Name, ip))
+			return nil
+		}).
+		MustBuild()
+}
+
+func (p *Phase) NewDeployAppsDNSStep(cfg *config.Config, opts Options, pctx *distribution.PhaseContext[PostInstallContext]) distribution.ProvisioningStep {
 	return distribution.NewStepBuilder(StepDeployAppsDNS, "Update Apps DNS").
 		Description("updating apps wildcard dns for ingress load balancer").
 		Fatal(false).
@@ -148,14 +196,19 @@ func (p *Phase) NewDeployAppsDNSStep(cfg *config.Config, opts Options, pctx *dis
 		}).
 		Execute(func(ctx context.Context) error {
 			state := pctx.Get()
-			appsIP := mgr.OutputStore().Get("ingress", "router_ip")
-			if err := p.deployProductionDNS(ctx, cfg, appsIP, state.KubeVipIP); err != nil {
+			appsIP := state.RouterLBIP
+			customDomain := cfg.Networking.CustomDomain
+			customRouterIP := state.CustomRouterIP
+			if err := p.deployProductionDNS(ctx, cfg, appsIP, state.KubeVipIP, customDomain, customRouterIP); err != nil {
 				return utils.WrapError("apps dns update failed", err)
 			}
 			if appsIP != "" {
 				p.Log.Info(fmt.Sprintf("dns: apps.* wildcard now points to %s", appsIP))
 			} else {
-				p.Log.Warn("dns: production config deployed without apps wildcard (ingress addon did not produce router_ip — is metallb/ingress enabled?)")
+				p.Log.Warn("dns: production config deployed without apps wildcard — router-default has no loadbalancer ip")
+			}
+			if customDomain != "" && customRouterIP != "" {
+				p.Log.Info(fmt.Sprintf("dns: *.%s now points to %s", customDomain, customRouterIP))
 			}
 			return nil
 		}).

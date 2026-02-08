@@ -26,6 +26,7 @@ type Options struct {
 	Timeout                 time.Duration
 	KubeVIPDaemonSetTimeout time.Duration
 	KubeVIPVIPTimeout       time.Duration
+	IngressLBTimeout        time.Duration
 }
 
 func NewOptions(cfg *config.Config, projectRoot string) Options {
@@ -42,10 +43,10 @@ func NewOptions(cfg *config.Config, projectRoot string) Options {
 }
 
 type Result struct {
-	RouterLBIP           string
-	GrappleberryRouterIP string
-	KubeVipIP            string
-	NodeCount            int
+	RouterLBIP      string
+	CustomRouterIP  string
+	KubeVipIP       string
+	NodeCount       int
 }
 
 type Phase struct {
@@ -70,7 +71,9 @@ func (p *Phase) Execute(ctx context.Context, cfg *config.Config, opts Options) (
 		p.NewDeployAPIDNSStep(cfg, opts, pctx),
 		p.NewRemoveHAProxyStep(cfg, opts, pctx),
 		p.NewInstallAddonsStep(cfg, opts, pctx, addonMgr),
-		p.NewDeployAppsDNSStep(cfg, opts, pctx, addonMgr),
+		p.NewWaitIngressLBStep(cfg, opts, pctx),
+		p.NewWaitCustomRouterLBStep(cfg, opts, pctx),
+		p.NewDeployAppsDNSStep(cfg, opts, pctx),
 	)
 	orchestrator.SetLogger(p.Log)
 
@@ -80,21 +83,21 @@ func (p *Phase) Execute(ctx context.Context, cfg *config.Config, opts Options) (
 
 	state := pctx.Get()
 	result := &Result{
-		RouterLBIP: addonMgr.OutputStore().Get("ingress", "router_ip"),
-		KubeVipIP:  state.KubeVipIP,
+		RouterLBIP:     state.RouterLBIP,
+		CustomRouterIP: state.CustomRouterIP,
+		KubeVipIP:      state.KubeVipIP,
 	}
 	if state.ClusterHealth != nil {
 		result.NodeCount = state.ClusterHealth.ReadyNodes
 	}
-	result.GrappleberryRouterIP = p.GetGrappleberryRouterIP(ctx)
 
 	p.Log.Info("postinstall: cluster configuration completed successfully")
 
 	return result, nil
 }
 
-func (p *Phase) deployProductionDNS(ctx context.Context, cfg *config.Config, appsIP, kubeVipIP string) error {
-	if err := dns.DeployProduction(ctx, cfg, appsIP, kubeVipIP); err != nil {
+func (p *Phase) deployProductionDNS(ctx context.Context, cfg *config.Config, appsIP, kubeVipIP, customDomain, customRouterIP string) error {
+	if err := dns.DeployProduction(ctx, cfg, appsIP, kubeVipIP, customDomain, customRouterIP); err != nil {
 		return utils.WrapError("failed to deploy production dns config", err)
 	}
 	return nil

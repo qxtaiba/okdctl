@@ -33,10 +33,6 @@ func ValidateDnsmasqConfig(ctx context.Context) error {
 	return RunSudo(ctx, "dnsmasq", "--test")
 }
 
-func ReloadDnsmasq(ctx context.Context) error {
-	return ManageService(ctx, ServiceReload, dnsmasqService, "dnsmasq")
-}
-
 func validateConfigName(name string) error {
 	if name == "" {
 		return fmt.Errorf("config name cannot be empty")

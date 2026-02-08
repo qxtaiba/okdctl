@@ -72,14 +72,14 @@ type DNSNode struct {
 
 type DNSConfigData struct {
 	ClusterName   string
-	ClusterDomain string // e.g., "grappleberry.k8s.local"
+	ClusterDomain string // e.g., "mycluster.k8s.local"
 
 	// Load balancer IPs
 	BastionIP   string // HAProxy for API load balancing (bootstrap phase only)
 	KubeVipIP   string // kube-vip VIP for API (production only, takes over from HAProxy)
 	AppsIP         string // Default router LB IP (auto-assigned by MetalLB)
 	UserAppsIP     string // User apps router IP (optional, for custom domain)
-	UserAppsDomain string // User apps domain (e.g., "grappleberry.xyz")
+	UserAppsDomain string // User apps domain (e.g., "myapps.example.com")
 
 	// Upstream DNS servers for forwarding external queries
 	UpstreamDNS []string
