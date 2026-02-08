@@ -21,7 +21,6 @@ const (
 
 type UpdateIngressOptions struct {
 	RemoveHAProxy     bool
-	Timeout           time.Duration
 	ConfirmConversion func(hostNetworkICs []string) bool
 }
 
@@ -51,10 +50,7 @@ func (p *Phase) UpdateIngress(ctx context.Context, cfg *config.Config, opts Upda
 	}
 
 	postOpts := Options{
-		Timeout: opts.Timeout,
-	}
-	if postOpts.Timeout == 0 {
-		postOpts.Timeout = DefaultTimeout
+		Timeout: DefaultTimeout,
 	}
 
 	p.Log.Info("update-ingress: detecting ingress strategy and loadbalancer ips...")
