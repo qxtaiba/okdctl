@@ -219,7 +219,7 @@ func (p *Phase) handleHostNetworkConversion(
 		names = append(names, ic.Name)
 	}
 
-	p.Log.Warn(fmt.Sprintf("update-ingress: %d controller(s) use HostNetwork: %s",
+	p.Log.Warn(fmt.Sprintf("update-ingress: found %d controller(s) using HostNetwork: %s",
 		len(hostNetworkICs), strings.Join(names, ", ")))
 
 	metalLBAvailable, err := p.checkMetalLBAvailable(ctx)
