@@ -32,14 +32,11 @@ func BuildDestKargs(params LiveKargsParams) []string {
 	}
 }
 
-// ExtractNetworkConfig returns network params, preferring StaticIP values over top-level defaults.
+// ExtractNetworkConfig returns network params from config, using top-level gateway directly.
 func ExtractNetworkConfig(cfg *config.Config) (gateway, netmask, dns, iface string) {
 	staticCfg := cfg.Networking.StaticIP
 
-	gateway = staticCfg.Gateway
-	if gateway == "" {
-		gateway = cfg.Networking.Gateway
-	}
+	gateway = cfg.Networking.Gateway
 
 	netmask = staticCfg.Netmask
 	if netmask == "" {

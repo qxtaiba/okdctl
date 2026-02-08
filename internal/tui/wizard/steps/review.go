@@ -201,7 +201,9 @@ func (s *ReviewStep) renderNetworking(st sectionStyles) string {
 	b.WriteString("\n")
 	b.WriteString(st.kvPair("gateway", s.cfg.Networking.Gateway))
 	b.WriteString("\n")
-	b.WriteString(st.kvPair("dns", strings.Join(s.cfg.Networking.DNS, ", ")))
+	b.WriteString(st.kvPair("upstream dns", strings.Join(s.cfg.Networking.DNS, ", ")))
+	b.WriteString("\n")
+	b.WriteString(st.kvPair("bastion", s.cfg.Networking.Bastion.IP))
 	b.WriteString("\n")
 	if s.cfg.Networking.PodCIDR != "" {
 		b.WriteString(st.kvPair("pod cidr", s.cfg.Networking.PodCIDR))
@@ -213,6 +215,14 @@ func (s *ReviewStep) renderNetworking(st sectionStyles) string {
 		b.WriteString(st.kvPair("static ip start", s.cfg.Networking.StaticIP.Start))
 		b.WriteString("\n")
 		b.WriteString(st.kvPair("interface", s.cfg.Networking.StaticIP.Interface))
+		b.WriteString("\n")
+		b.WriteString(st.kvPair("netmask", s.cfg.Networking.StaticIP.Netmask+" (from cidr)"))
+		b.WriteString("\n")
+		b.WriteString(st.kvPair("vm dns", s.cfg.Networking.Bastion.IP+" (bastion/dnsmasq)"))
+		b.WriteString("\n")
+	}
+	if s.cfg.Networking.MetalLB.Pool != "" {
+		b.WriteString(st.kvPair("metallb pool", s.cfg.Networking.MetalLB.Pool))
 		b.WriteString("\n")
 	}
 	b.WriteString("\n")

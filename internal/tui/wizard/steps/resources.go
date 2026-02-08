@@ -11,9 +11,8 @@ import (
 )
 
 type ResourcesStepState struct {
-	Step        *wizard.DataDrivenStep
-	CPCount     int
-	WorkerCount int
+	Step *wizard.DataDrivenStep
+	Cfg  *config.Config
 }
 
 var ResourcesStepDefinition = wizard.StepDefinition{
@@ -45,6 +44,19 @@ var ResourcesStepDefinition = wizard.StepDefinition{
 					ConfigSet: wizard.SetInt(func(c *config.Config, v int) { c.Topology.ControlPlane.Memory = v }),
 					ConfigGet: wizard.GetInt(func(c *config.Config) int { return c.Topology.ControlPlane.Memory }),
 				},
+				{
+					Key:      "cp_disk",
+					Label:    "os disk (gb)",
+					Default:  "50",
+					Help:     "boot disk for control plane nodes (okd minimum: 50 gb)",
+					Required: true,
+					Validate: config.ValidateOSDisk,
+					ConfigSet: wizard.SetInt(func(c *config.Config, v int) {
+						c.Topology.ControlPlane.Disk = v
+						c.Topology.Bootstrap.Disk = v
+					}),
+					ConfigGet: wizard.GetInt(func(c *config.Config) int { return c.Topology.ControlPlane.Disk }),
+				},
 			},
 		},
 		{
@@ -70,40 +82,21 @@ var ResourcesStepDefinition = wizard.StepDefinition{
 					ConfigSet: wizard.SetInt(func(c *config.Config, v int) { c.Topology.Workers.Memory = v }),
 					ConfigGet: wizard.GetInt(func(c *config.Config) int { return c.Topology.Workers.Memory }),
 				},
+				{
+					Key:       "worker_disk",
+					Label:     "os disk (gb)",
+					Default:   "50",
+					Help:      "boot disk for worker nodes (okd minimum: 50 gb)",
+					Required:  true,
+					Validate:  config.ValidateOSDisk,
+					ConfigSet: wizard.SetInt(func(c *config.Config, v int) { c.Topology.Workers.Disk = v }),
+					ConfigGet: wizard.GetInt(func(c *config.Config) int { return c.Topology.Workers.Disk }),
+				},
 			},
 		},
 		{
 			Title: "storage",
 			Fields: []wizard.FieldDefinition{
-				{
-					Key:      "os_disk",
-					Label:    "os disk (gb)",
-					Default:  "50",
-					Help:     "boot disk for all nodes (okd minimum: 50 gb)",
-					Required: true,
-					Validate: config.ValidateOSDisk,
-					ConfigSet: func(cfg *config.Config, value string) error {
-						v, err := parseIntValue(value)
-						if err != nil {
-							return err
-						}
-						cfg.Disks.OSSizeGB = v
-						cfg.Topology.ControlPlane.Disk = v
-						cfg.Topology.Workers.Disk = v
-						cfg.Topology.Bootstrap.Disk = v
-						return nil
-					},
-					ConfigGet: func(cfg *config.Config) string {
-						v := cfg.Disks.OSSizeGB
-						if v == 0 {
-							v = cfg.Topology.ControlPlane.Disk
-						}
-						if v == 0 {
-							return ""
-						}
-						return fmt.Sprintf("%d", v)
-					},
-				},
 				{
 					Key:       "ceph_disk",
 					Label:     "ceph data disk (gb)",
@@ -119,19 +112,11 @@ var ResourcesStepDefinition = wizard.StepDefinition{
 	},
 }
 
-func parseIntValue(value string) (int, error) {
-	var v int
-	_, err := fmt.Sscanf(value, "%d", &v)
-	return v, err
-}
-
 func NewResourcesStep() (*wizard.DataDrivenStep, *ResourcesStepState) {
 	step := wizard.NewDataDrivenStep(ResourcesStepDefinition)
 
 	state := &ResourcesStepState{
-		Step:        step,
-		CPCount:     3,
-		WorkerCount: 3,
+		Step: step,
 	}
 
 	step.WithExtraContentFunc(func(s *wizard.DataDrivenStep, width int) string {
@@ -142,18 +127,25 @@ func NewResourcesStep() (*wizard.DataDrivenStep, *ResourcesStepState) {
 }
 
 func renderResourceSummary(step *wizard.DataDrivenStep, state *ResourcesStepState, width int) string {
+	cpCount := 3
+	workerCount := 3
+	if state.Cfg != nil {
+		cpCount = state.Cfg.Topology.ControlPlane.Count
+		workerCount = state.Cfg.Topology.Workers.Count
+	}
+
 	cpCPU := step.ValueInt("cp_vcpus", 4)
 	cpMem := step.ValueInt("cp_memory", 12288)
+	cpDisk := step.ValueInt("cp_disk", 50)
 	workerCPU := step.ValueInt("worker_vcpus", 8)
 	workerMem := step.ValueInt("worker_memory", 20480)
-	osDisk := step.ValueInt("os_disk", 50)
+	workerDisk := step.ValueInt("worker_disk", 50)
 	cephDisk := step.ValueInt("ceph_disk", 500)
 
-	totalCPU := (cpCPU * state.CPCount) + (workerCPU * state.WorkerCount)
-	totalMem := (cpMem * state.CPCount) + (workerMem * state.WorkerCount)
-	totalNodes := state.CPCount + state.WorkerCount
-	totalOSDisk := osDisk * totalNodes
-	totalCephDisk := cephDisk * state.WorkerCount
+	totalCPU := (cpCPU * cpCount) + (workerCPU * workerCount)
+	totalMem := (cpMem * cpCount) + (workerMem * workerCount)
+	totalOSDisk := (cpDisk * cpCount) + (workerDisk * workerCount)
+	totalCephDisk := cephDisk * workerCount
 
 	wrapperStyle := lipgloss.NewStyle().Padding(1, 2)
 
@@ -188,4 +180,3 @@ func renderResourceSummary(step *wizard.DataDrivenStep, state *ResourcesStepStat
 
 	return wrapperStyle.Render(boxStyle.Render(summary))
 }
-

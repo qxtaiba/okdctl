@@ -27,16 +27,20 @@ func buildNodeNames(clusterName, role string, count int) []string {
 	return names
 }
 
-func getDiskSizes(cfg *config.Config) (osDiskSize, dataDiskSize int) {
-	osDiskSize = 100
-	dataDiskSize = 100
-	if cfg.Disks.OSSizeGB > 0 {
-		osDiskSize = cfg.Disks.OSSizeGB
+func getDiskSizes(cfg *config.Config) (cpDisk, workerDisk, dataDisk int) {
+	cpDisk = cfg.Topology.ControlPlane.Disk
+	if cpDisk == 0 {
+		cpDisk = 50
 	}
-	if cfg.Disks.DataSizeGB > 0 {
-		dataDiskSize = cfg.Disks.DataSizeGB
+	workerDisk = cfg.Topology.Workers.Disk
+	if workerDisk == 0 {
+		workerDisk = cpDisk
 	}
-	return osDiskSize, dataDiskSize
+	dataDisk = cfg.Disks.DataSizeGB
+	if dataDisk == 0 {
+		dataDisk = 500
+	}
+	return cpDisk, workerDisk, dataDisk
 }
 
 func getBootstrapResources(cfg *config.Config) (cpu, mem int) {
@@ -53,7 +57,7 @@ func getBootstrapResources(cfg *config.Config) (cpu, mem int) {
 
 func buildTerraformVarsData(cfg *config.Config) templates.TerraformVarsData {
 	proxmox := cfg.Provider.Proxmox
-	osDiskSize, dataDiskSize := getDiskSizes(cfg)
+	cpDisk, workerDisk, dataDisk := getDiskSizes(cfg)
 	bootstrapCPU, bootstrapMem := getBootstrapResources(cfg)
 
 	masterISOs := buildISOStrings(proxmox.ISOStorage, "master", cfg.Topology.ControlPlane.Count)
@@ -62,27 +66,29 @@ func buildTerraformVarsData(cfg *config.Config) templates.TerraformVarsData {
 	workerNames := buildNodeNames(cfg.Cluster.Name, "worker", cfg.Topology.Workers.Count)
 
 	return templates.TerraformVarsData{
-		ClusterName:       cfg.Cluster.Name,
-		TargetNode:        proxmox.Node,
-		Bridge:            proxmox.Bridge,
-		OSStorage:         proxmox.Storage,
-		DataStorage:       proxmox.DataStorage,
-		FCOSISOStorage:    proxmox.ISOStorage,
-		MasterISOsString:  strings.Join(masterISOs, ", "),
-		WorkerISOsString:  strings.Join(workerISOs, ", "),
-		VMIDBase:          cfg.Topology.VMIDBase,
-		MasterCount:       cfg.Topology.ControlPlane.Count,
-		WorkerCount:       cfg.Topology.Workers.Count,
-		OSDiskSizeGB:      osDiskSize,
-		DataDiskSizeGB:    dataDiskSize,
-		BootstrapCPUCores: bootstrapCPU,
-		BootstrapMemoryMB: bootstrapMem,
-		MasterCPUCores:    cfg.Topology.ControlPlane.CPU,
-		MasterMemoryMB:    cfg.Topology.ControlPlane.Memory,
-		WorkerCPUCores:    cfg.Topology.Workers.CPU,
-		WorkerMemoryMB:    cfg.Topology.Workers.Memory,
-		MasterNames:       strings.Join(masterNames, ", "),
-		WorkerNames:       strings.Join(workerNames, ", "),
+		ClusterName:        cfg.Cluster.Name,
+		TargetNode:         proxmox.Node,
+		Bridge:             proxmox.Bridge,
+		OSStorage:          proxmox.Storage,
+		DataStorage:        proxmox.DataStorage,
+		FCOSISOStorage:     proxmox.ISOStorage,
+		MasterISOsString:   strings.Join(masterISOs, ", "),
+		WorkerISOsString:   strings.Join(workerISOs, ", "),
+		VMIDBase:           cfg.Topology.VMIDBase,
+		MasterCount:        cfg.Topology.ControlPlane.Count,
+		WorkerCount:        cfg.Topology.Workers.Count,
+		OSDiskSizeGB:       cpDisk,
+		MasterOSDiskSizeGB: cpDisk,
+		WorkerOSDiskSizeGB: workerDisk,
+		DataDiskSizeGB:     dataDisk,
+		BootstrapCPUCores:  bootstrapCPU,
+		BootstrapMemoryMB:  bootstrapMem,
+		MasterCPUCores:     cfg.Topology.ControlPlane.CPU,
+		MasterMemoryMB:     cfg.Topology.ControlPlane.Memory,
+		WorkerCPUCores:     cfg.Topology.Workers.CPU,
+		WorkerMemoryMB:     cfg.Topology.Workers.Memory,
+		MasterNames:        strings.Join(masterNames, ", "),
+		WorkerNames:        strings.Join(workerNames, ", "),
 	}
 }
 

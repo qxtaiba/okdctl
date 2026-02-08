@@ -24,7 +24,7 @@ const (
 	StepTypeBasics       StepType = "basics"
 	StepTypeNetworking   StepType = "networking"
 	StepTypeResources    StepType = "resources"
-	StepTypeFeatures     StepType = "features"
+	StepTypeAddons       StepType = "addons"
 	StepTypeFiles        StepType = "files"
 	StepTypeAdvanced     StepType = "advanced"
 	StepTypeReview       StepType = "review"
@@ -39,7 +39,7 @@ func DefaultConfig() Config {
 			{Type: StepTypeBasics, Required: true},
 			{Type: StepTypeNetworking, Required: true},
 			{Type: StepTypeResources, Required: true},
-			{Type: StepTypeFeatures, Required: false},
+			{Type: StepTypeAddons, Required: false},
 			{Type: StepTypeFiles, Required: true},
 			{Type: StepTypeAdvanced, Required: false},
 			{Type: StepTypeReview, Required: true},

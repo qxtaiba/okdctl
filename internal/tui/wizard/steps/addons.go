@@ -125,8 +125,3 @@ func NewAddonsStep() (*wizard.DataDrivenStep, *wizard.DataDrivenStep) {
 	step := wizard.NewDataDrivenStep(AddonsStepDefinition)
 	return step, step
 }
-
-// Deprecated: Use NewAddonsStep instead. Kept for backward compatibility with wizard registration.
-func NewFeaturesStep() (*wizard.DataDrivenStep, *wizard.DataDrivenStep) {
-	return NewAddonsStep()
-}

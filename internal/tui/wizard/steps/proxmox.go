@@ -115,17 +115,30 @@ var ProxmoxStepDefinition = wizard.StepDefinition{
 					ConfigSet: proxmoxSet(func(p *config.ProxmoxConfig, v string) { p.Password = v }),
 					// Don't load password from config
 				},
+				{
+					Key:      "skip_tls_verify",
+					Label:    "skip tls verify",
+					Default:  "yes",
+					Help:     "skip tls certificate verification (yes for self-signed certs)",
+					Required: true,
+					Validate: ValidateYesNo,
+					ConfigSet: wizard.SetBool(func(c *config.Config, v bool) {
+						if c.Provider.Proxmox != nil {
+							c.Provider.Proxmox.Insecure = v
+						}
+					}),
+					ConfigGet: func(c *config.Config) string {
+						if c.Provider.Proxmox != nil && c.Provider.Proxmox.Insecure {
+							return "yes"
+						}
+						return "no"
+					},
+				},
 			},
 		},
 	},
 	ShouldShow: func(cfg *config.Config) bool {
 		return cfg.Provider.Type == config.ProviderProxmox
-	},
-	Apply: func(step *wizard.DataDrivenStep, cfg *config.Config) error {
-		if cfg.Provider.Proxmox != nil {
-			cfg.Provider.Proxmox.Insecure = true
-		}
-		return nil
 	},
 }
 

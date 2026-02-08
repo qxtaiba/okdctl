@@ -29,27 +29,29 @@ type InstallConfigData struct {
 }
 
 type TerraformVarsData struct {
-	ClusterName       string
-	TargetNode        string
-	Bridge            string
-	OSStorage         string
-	DataStorage       string
-	FCOSISOStorage    string
-	MasterISOsString  string
-	WorkerISOsString  string
-	VMIDBase          int
-	MasterCount       int
-	WorkerCount       int
-	OSDiskSizeGB      int
-	DataDiskSizeGB    int
-	BootstrapCPUCores int
-	BootstrapMemoryMB int
-	MasterCPUCores    int
-	MasterMemoryMB    int
-	WorkerCPUCores    int
-	WorkerMemoryMB    int
-	MasterNames       string
-	WorkerNames       string
+	ClusterName        string
+	TargetNode         string
+	Bridge             string
+	OSStorage          string
+	DataStorage        string
+	FCOSISOStorage     string
+	MasterISOsString   string
+	WorkerISOsString   string
+	VMIDBase           int
+	MasterCount        int
+	WorkerCount        int
+	OSDiskSizeGB       int
+	MasterOSDiskSizeGB int
+	WorkerOSDiskSizeGB int
+	DataDiskSizeGB     int
+	BootstrapCPUCores  int
+	BootstrapMemoryMB  int
+	MasterCPUCores     int
+	MasterMemoryMB     int
+	WorkerCPUCores     int
+	WorkerMemoryMB     int
+	MasterNames        string
+	WorkerNames        string
 }
 
 type HAProxyServer struct {

@@ -6,6 +6,7 @@ import (
 
 	"github.com/qxtaiba/okd-proxmox-cli/internal/config"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/tui/wizard"
+	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/netutil"
 )
 
 var NetworkingStepDefinition = wizard.StepDefinition{
@@ -39,9 +40,9 @@ var NetworkingStepDefinition = wizard.StepDefinition{
 				},
 				{
 					Key:      "dns_servers",
-					Label:    "dns servers",
+					Label:    "upstream dns",
 					Default:  "192.168.1.1",
-					Help:     "comma-separated dns server ips",
+					Help:     "upstream dns for dnsmasq on bastion — vms resolve through bastion automatically",
 					Required: true,
 					ConfigSet: func(cfg *config.Config, value string) error {
 						servers := strings.Split(value, ",")
@@ -109,15 +110,6 @@ var NetworkingStepDefinition = wizard.StepDefinition{
 					ConfigGet: wizard.GetString(func(c *config.Config) string { return c.Networking.StaticIP.Start }),
 				},
 				{
-					Key:       "netmask",
-					Label:     "netmask",
-					Default:   "255.255.255.0",
-					Help:      "network mask for static ips",
-					Required:  true,
-					ConfigSet: wizard.SetString(func(c *config.Config, v string) { c.Networking.StaticIP.Netmask = v }),
-					ConfigGet: wizard.GetString(func(c *config.Config) string { return c.Networking.StaticIP.Netmask }),
-				},
-				{
 					Key:       "interface",
 					Label:     "interface",
 					Default:   "ens18",
@@ -135,7 +127,7 @@ var NetworkingStepDefinition = wizard.StepDefinition{
 					Key:       "bastion_ip",
 					Label:     "bastion ip",
 					Default:   "192.168.1.20",
-					Help:      "ip address of this machine (haproxy runs here for api load balancing)",
+					Help:      "ip of this machine (runs haproxy + dnsmasq — vms use this for dns resolution)",
 					Required:  true,
 					Validate:  config.ValidateIP,
 					ConfigSet: wizard.SetString(func(c *config.Config, v string) { c.Networking.Bastion.IP = v }),
@@ -171,8 +163,8 @@ var NetworkingStepDefinition = wizard.StepDefinition{
 		return nil
 	},
 	Apply: func(step *wizard.DataDrivenStep, cfg *config.Config) error {
-		cfg.Networking.StaticIP.Gateway = cfg.Networking.Gateway
 		cfg.Networking.StaticIP.DNS = cfg.Networking.Bastion.IP
+		cfg.Networking.StaticIP.Netmask = netutil.CIDRToNetmask(cfg.Networking.MachineCIDR)
 		return nil
 	},
 }

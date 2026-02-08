@@ -21,8 +21,10 @@ locals {
   bootstrap_memory = coalesce(var.bootstrap_memory_mb, var.memory_mb)
   master_cpu       = coalesce(var.master_cpu_cores, var.cpu_cores)
   master_memory    = coalesce(var.master_memory_mb, var.memory_mb)
+  master_os_disk   = coalesce(var.master_os_disk_size_gb, var.os_disk_size_gb)
   worker_cpu       = coalesce(var.worker_cpu_cores, var.cpu_cores)
   worker_memory    = coalesce(var.worker_memory_mb, var.memory_mb)
+  worker_os_disk   = coalesce(var.worker_os_disk_size_gb, var.os_disk_size_gb)
 }
 
 # =============================================================================
@@ -164,7 +166,7 @@ resource "proxmox_virtual_environment_vm" "master" {
 
   disk {
     datastore_id = var.os_storage
-    size         = var.os_disk_size_gb
+    size         = local.master_os_disk
     interface    = "scsi0"
     iothread     = true
     ssd          = false
@@ -266,7 +268,7 @@ resource "proxmox_virtual_environment_vm" "worker" {
 
   disk {
     datastore_id = var.os_storage
-    size         = var.os_disk_size_gb
+    size         = local.worker_os_disk
     interface    = "scsi0"
     iothread     = true
     ssd          = false

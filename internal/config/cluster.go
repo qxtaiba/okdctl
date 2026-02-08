@@ -55,7 +55,6 @@ type StaticIPConfig struct {
 	Start     string `yaml:"start" json:"start" mapstructure:"start"`
 	Netmask   string `yaml:"netmask" json:"netmask" mapstructure:"netmask"`
 	Interface string `yaml:"interface" json:"interface" mapstructure:"interface"`
-	Gateway   string `yaml:"gateway" json:"gateway" mapstructure:"gateway"`
 	DNS       string `yaml:"dns" json:"dns" mapstructure:"dns"`
 }
 
@@ -116,6 +115,5 @@ type DeploymentConfig struct {
 }
 
 type DisksConfig struct {
-	OSSizeGB   int `yaml:"os_size_gb" json:"osSizeGb" mapstructure:"os_size_gb"`
 	DataSizeGB int `yaml:"data_size_gb" json:"dataSizeGb" mapstructure:"data_size_gb"`
 }

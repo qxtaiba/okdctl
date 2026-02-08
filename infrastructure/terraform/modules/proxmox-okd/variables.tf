@@ -38,6 +38,18 @@ variable "os_disk_size_gb" {
   }
 }
 
+variable "master_os_disk_size_gb" {
+  description = "os disk size for master nodes (defaults to os_disk_size_gb)"
+  type        = number
+  default     = null
+}
+
+variable "worker_os_disk_size_gb" {
+  description = "os disk size for worker nodes (defaults to os_disk_size_gb)"
+  type        = number
+  default     = null
+}
+
 variable "data_storage" {
   description = "storage pool for data/ceph disks"
   type        = string

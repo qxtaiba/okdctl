@@ -50,16 +50,6 @@ var FilesStepDefinition = wizard.StepDefinition{
 			Title: "ignition server",
 			Fields: []wizard.FieldDefinition{
 				{
-					Key:       "ignition_ip",
-					Label:     "ignition server ip",
-					Default:   "192.168.1.20",
-					Help:      "ip where ignition files will be served (usually bastion)",
-					Required:  true,
-					Validate:  config.ValidateIP,
-					ConfigSet: wizard.SetString(func(c *config.Config, v string) { c.HTTPServer.IgnitionServerIP = v }),
-					ConfigGet: wizard.GetString(func(c *config.Config) string { return c.HTTPServer.IgnitionServerIP }),
-				},
-				{
 					Key:       "http_port",
 					Label:     "http port",
 					Default:   "8080",
@@ -84,6 +74,10 @@ var FilesStepDefinition = wizard.StepDefinition{
 	ShouldShow: func(cfg *config.Config) bool {
 		return cfg.Distribution.Type == config.DistributionOKD
 	},
+	Apply: func(step *wizard.DataDrivenStep, cfg *config.Config) error {
+		cfg.HTTPServer.IgnitionServerIP = cfg.Networking.Bastion.IP
+		return nil
+	},
 	ExtraContent: func(values map[string]string, width int) string {
 		helpStyle := lipgloss.NewStyle().
 			Foreground(tui.ColorSlate500).
@@ -91,7 +85,7 @@ var FilesStepDefinition = wizard.StepDefinition{
 
 		return helpStyle.Render(
 			"pull secret: get from https://cloud.redhat.com/openshift/install/pull-secret\n" +
-				"the ignition server hosts boot configuration files for okd nodes.")
+				"ignition server runs on bastion — ip is derived from networking step.")
 	},
 }
 

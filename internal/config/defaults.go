@@ -4,7 +4,7 @@ package config
 func DefaultConfig() *Config {
 	return &Config{
 		Cluster: ClusterConfig{
-			Name:   "my-cluster",
+			Name:   "mycluster",
 			Domain: "k8s.local",
 		},
 		Distribution: DistributionConfig{
@@ -14,7 +14,7 @@ func DefaultConfig() *Config {
 		Provider: ProviderConfig{
 			Type: ProviderProxmox,
 			Proxmox: &ProxmoxConfig{
-				Host:        "",
+				Host:        "192.168.1.100:8006",
 				Node:        "pve",
 				Storage:     "local-lvm",
 				DataStorage: "local-lvm",
@@ -52,9 +52,10 @@ func DefaultConfig() *Config {
 			Gateway:     "192.168.1.1",
 			DNS:         []string{"192.168.1.1"},
 			StaticIP: StaticIPConfig{
-				Start:     "192.168.1.21",
+				Start:     "192.168.1.100",
 				Netmask:   "255.255.255.0",
 				Interface: "ens18",
+				DNS:       "192.168.1.20",
 			},
 			Bastion: BastionConfig{
 				IP: "192.168.1.20",
@@ -78,7 +79,7 @@ func DefaultConfig() *Config {
 		HTTPServer: HTTPServerConfig{
 			Port:             8080,
 			Root:             "/var/www/html",
-			IgnitionServerIP: "",
+			IgnitionServerIP: "192.168.1.20",
 		},
 		Deployment: DeploymentConfig{
 			TerraformEnv:     "production",
@@ -89,7 +90,6 @@ func DefaultConfig() *Config {
 			InstallTimeout:   7200,
 		},
 		Disks: DisksConfig{
-			OSSizeGB:   50,
 			DataSizeGB: 500,
 		},
 	}

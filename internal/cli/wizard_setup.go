@@ -51,7 +51,7 @@ var defaultStepRegistrations = []stepRegistration{
 	{wizard.StepTypeProxmox, func() (wizard.WizardStep, any) { return steps.NewProxmoxStep() }},
 	{wizard.StepTypeNetworking, func() (wizard.WizardStep, any) { return steps.NewNetworkingStep() }},
 	{wizard.StepTypeResources, func() (wizard.WizardStep, any) { return steps.NewResourcesStep() }},
-	{wizard.StepTypeFeatures, func() (wizard.WizardStep, any) { return steps.NewFeaturesStep() }},
+	{wizard.StepTypeAddons, func() (wizard.WizardStep, any) { return steps.NewAddonsStep() }},
 	{wizard.StepTypeFiles, func() (wizard.WizardStep, any) { return steps.NewFilesStep() }},
 	{wizard.StepTypeAdvanced, func() (wizard.WizardStep, any) { return steps.NewAdvancedStep() }},
 	{wizard.StepTypeReview, func() (wizard.WizardStep, any) { return steps.NewReviewStep(), nil }},
@@ -119,10 +119,7 @@ func initializeStepsFromConfig(built wizard.BuiltSteps, cfg *config.Config) {
 		}
 	}
 
-	if cfg.Topology.ControlPlane.CPU > 0 {
-		if state, ok := built.States[wizard.StepTypeResources].(*steps.ResourcesStepState); ok {
-			state.CPCount = cfg.Topology.ControlPlane.Count
-			state.WorkerCount = cfg.Topology.Workers.Count
-		}
+	if state, ok := built.States[wizard.StepTypeResources].(*steps.ResourcesStepState); ok {
+		state.Cfg = cfg
 	}
 }
