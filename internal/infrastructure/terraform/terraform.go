@@ -67,6 +67,8 @@ type PlanOptions struct {
 	// Destroy creates a destruction plan instead of an apply plan.
 	Destroy bool
 	Vars    map[string]string
+	// Targets limits the plan to specific resource addresses.
+	Targets []string
 }
 
 type ApplyOptions struct {
@@ -75,6 +77,8 @@ type ApplyOptions struct {
 	PlanFile    string
 	AutoApprove bool
 	Vars        map[string]string
+	// Targets limits the apply to specific resource addresses.
+	Targets []string
 }
 
 type DestroyOptions struct {
@@ -196,6 +200,9 @@ func (t *Executor) Plan(ctx context.Context, opts PlanOptions) error {
 	if opts.OutputPlanFile != "" {
 		args = append(args, "-out="+opts.OutputPlanFile)
 	}
+	for _, target := range opts.Targets {
+		args = append(args, "-target="+target)
+	}
 
 	return t.run(ctx, args...)
 }
@@ -211,6 +218,9 @@ func (t *Executor) Apply(ctx context.Context, opts ApplyOptions) error {
 	args = append(args, t.buildVarArgs(opts.VarFile, opts.Vars)...)
 	if opts.AutoApprove {
 		args = append(args, "-auto-approve")
+	}
+	for _, target := range opts.Targets {
+		args = append(args, "-target="+target)
 	}
 
 	return t.run(ctx, args...)

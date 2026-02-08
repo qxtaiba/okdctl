@@ -12,7 +12,8 @@ import (
 )
 
 // CleanupBootstrap destroys the bootstrap VM by re-applying terraform with bootstrap_enabled=false.
-// The -var flag overrides the value in terraform.tfvars without modifying the file.
+// Uses -target to scope the operation to the bootstrap resource only, preventing
+// unintended side effects on other resources (e.g., workers being shut down).
 func (p *Phase) CleanupBootstrap(ctx context.Context, cfg *config.Config, opts Options) error {
 	terraformDir := filepath.Join(opts.ProjectRoot, "infrastructure", "terraform", "environments", opts.TerraformEnv)
 	tfvarsFile := filepath.Join(terraformDir, "terraform.tfvars")
@@ -32,12 +33,14 @@ func (p *Phase) CleanupBootstrap(ctx context.Context, cfg *config.Config, opts O
 	}
 
 	vars := map[string]string{"bootstrap_enabled": "false"}
+	targets := []string{"module.okd_cluster.proxmox_virtual_environment_vm.bootstrap"}
 
 	p.Log.Info("bootstrap: planning vm destruction")
 	planFile := "bootstrap-destroy.tfplan"
 	if err := tf.Plan(ctx, terraform.PlanOptions{
 		OutputPlanFile: planFile,
 		Vars:           vars,
+		Targets:        targets,
 	}); err != nil {
 		return utils.WrapError("bootstrap: terraform plan failed", err)
 	}
