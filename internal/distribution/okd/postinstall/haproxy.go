@@ -78,6 +78,22 @@ func (p *Phase) RemoveHAProxy(ctx context.Context, vip string) error {
 			return fmt.Errorf("api not reachable via vip %s after haproxy removal: %w", vip, waitErr)
 		}
 		p.LogInfo("haproxy: api confirmed reachable via vip")
+
+		// Verify the API is also reachable via hostname (as oc/kubectl will use).
+		// The nmcli device reapply above can restart the local DNS forwarder,
+		// causing a transient window where hostname resolution fails even though
+		// the raw-IP check above succeeds.
+		p.LogInfo("haproxy: verifying api reachable via hostname after teardown")
+		if waitErr := system.WaitForWithTimeout(ctx, "haproxy", "api-via-hostname", func() bool {
+			if ctx.Err() != nil {
+				return false
+			}
+			r, _ := p.Exec.Run(ctx, "oc", "get", "--raw", "/healthz")
+			return r != nil && r.ExitCode == 0 && strings.TrimSpace(r.Stdout) == "ok"
+		}, DefaultKubeVIPVIPTimeout); waitErr != nil {
+			return fmt.Errorf("api not reachable via hostname after haproxy removal: %w", waitErr)
+		}
+		p.LogInfo("haproxy: api confirmed reachable via hostname")
 	}
 
 	return nil
