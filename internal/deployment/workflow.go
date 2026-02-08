@@ -16,6 +16,15 @@ type Result struct {
 
 	// CustomRouterIP is the LoadBalancer IP for the cluster-specific custom ingress (if configured).
 	CustomRouterIP string
+
+	// KubeVipIP is the kube-vip virtual IP for the API server.
+	KubeVipIP string
+
+	// BootstrapCleaned indicates the bootstrap VM was destroyed after install.
+	BootstrapCleaned bool
+
+	// APIDNSSwitched indicates API DNS was switched from bastion to kube-vip.
+	APIDNSSwitched bool
 }
 
 type Options struct {

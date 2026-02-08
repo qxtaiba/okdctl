@@ -43,10 +43,12 @@ func NewOptions(cfg *config.Config, projectRoot string) Options {
 }
 
 type Result struct {
-	RouterLBIP      string
-	CustomRouterIP  string
-	KubeVipIP       string
-	NodeCount       int
+	RouterLBIP       string
+	CustomRouterIP   string
+	KubeVipIP        string
+	NodeCount        int
+	BootstrapCleaned bool
+	APIDNSSwitched   bool
 }
 
 type Phase struct {
@@ -67,6 +69,7 @@ func (p *Phase) Execute(ctx context.Context, cfg *config.Config, opts Options) (
 
 	orchestrator := distribution.NewOrchestrator(
 		p.NewVerifyHealthStep(cfg, opts, pctx),
+		p.NewCleanupBootstrapStep(cfg, opts, pctx),
 		p.NewVerifyKubeVIPStep(cfg, opts, pctx),
 		p.NewDeployAPIDNSStep(cfg, opts, pctx),
 		p.NewRemoveHAProxyStep(cfg, opts, pctx),
@@ -83,9 +86,11 @@ func (p *Phase) Execute(ctx context.Context, cfg *config.Config, opts Options) (
 
 	state := pctx.Get()
 	result := &Result{
-		RouterLBIP:     state.RouterLBIP,
-		CustomRouterIP: state.CustomRouterIP,
-		KubeVipIP:      state.KubeVipIP,
+		RouterLBIP:       state.RouterLBIP,
+		CustomRouterIP:   state.CustomRouterIP,
+		KubeVipIP:        state.KubeVipIP,
+		BootstrapCleaned: state.BootstrapCleaned,
+		APIDNSSwitched:   state.APIDNSSwitched,
 	}
 	if state.ClusterHealth != nil {
 		result.NodeCount = state.ClusterHealth.ReadyNodes

@@ -139,7 +139,7 @@ func DeployBootstrap(ctx context.Context, cfg *config.Config) error {
 		return utils.WrapError("failed to write dnsmasq config", err)
 	}
 
-	if err := validateAndRestartDnsmasq(ctx); err != nil {
+	if err := validateAndRestartDnsmasq(ctx, configName); err != nil {
 		return err
 	}
 
@@ -181,7 +181,7 @@ func DeployProduction(ctx context.Context, cfg *config.Config, appsIP, kubeVipIP
 		return utils.WrapError("failed to write dnsmasq config", err)
 	}
 
-	if err := validateAndRestartDnsmasq(ctx); err != nil {
+	if err := validateAndRestartDnsmasq(ctx, configName); err != nil {
 		return err
 	}
 
@@ -189,17 +189,36 @@ func DeployProduction(ctx context.Context, cfg *config.Config, appsIP, kubeVipIP
 }
 
 // validateAndRestartDnsmasq validates the dnsmasq config, then restarts the service.
-func validateAndRestartDnsmasq(ctx context.Context) error {
+// On validation or restart failure, it restores the previous config from the .backup file.
+func validateAndRestartDnsmasq(ctx context.Context, configName string) error {
+	configPath := system.DnsmasqConfigPath(configName)
+	backupPath := configPath + ".backup"
+
+	restore := func() {
+		if !system.FileExists(backupPath) {
+			return
+		}
+		_ = system.CopyFileWithElevation(ctx, backupPath, configPath, "dnsmasq config rollback")
+	}
+
 	if err := system.ValidateDnsmasqConfig(ctx); err != nil {
+		restore()
 		return errors.Join(
-			fmt.Errorf("dnsmasq config validation failed (service unchanged)"),
+			fmt.Errorf("dnsmasq config validation failed — previous config restored"),
 			err,
 		)
 	}
 
 	if err := system.RestartDnsmasq(ctx); err != nil {
-		return utils.WrapError("failed to restart dnsmasq", err)
+		restore()
+		return utils.WrapError("failed to restart dnsmasq — previous config restored", err)
 	}
+
+	// Successful restart — clean up backup.
+	if system.FileExists(backupPath) {
+		_ = system.RemoveAll(ctx, backupPath, "dnsmasq config backup")
+	}
+
 	return nil
 }
 

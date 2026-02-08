@@ -72,9 +72,6 @@ func init() {
 
 	rootCmd.AddCommand(deployCmd)
 	rootCmd.AddCommand(destroyCmd)
-	rootCmd.AddCommand(configCmd)
-	rootCmd.AddCommand(addonCmd)
-	rootCmd.AddCommand(versionCmd)
 
 	rootCmd.SetVersionTemplate(fmt.Sprintf(`{{with .Name}}{{printf "%%s " .}}{{end}}{{printf "%%s" .Version}}
 Git Commit: %s

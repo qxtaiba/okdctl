@@ -67,8 +67,11 @@ func (e *Executor) Execute(ctx context.Context) (*Result, error) {
 	var result *Result
 	if e.configureResult != nil {
 		result = &Result{
-			RouterLBIP:     e.configureResult.RouterLBIP,
-			CustomRouterIP: e.configureResult.CustomRouterIP,
+			RouterLBIP:       e.configureResult.RouterLBIP,
+			CustomRouterIP:   e.configureResult.CustomRouterIP,
+			KubeVipIP:        e.configureResult.KubeVipIP,
+			BootstrapCleaned: e.configureResult.BootstrapCleaned,
+			APIDNSSwitched:   e.configureResult.APIDNSSwitched,
 		}
 	}
 	return result, nil

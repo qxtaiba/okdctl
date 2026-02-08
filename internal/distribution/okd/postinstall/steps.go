@@ -11,10 +11,11 @@ import (
 )
 
 const (
-	StepVerifyHealth   distribution.StepID = "verify-health"
-	StepVerifyKubeVIP  distribution.StepID = "verify-kubevip"
-	StepRemoveHAProxy  distribution.StepID = "remove-haproxy"
-	StepInstallAddons  distribution.StepID = "install-addons"
+	StepVerifyHealth        distribution.StepID = "verify-health"
+	StepCleanupBootstrap    distribution.StepID = "cleanup-bootstrap"
+	StepVerifyKubeVIP       distribution.StepID = "verify-kubevip"
+	StepRemoveHAProxy       distribution.StepID = "remove-haproxy"
+	StepInstallAddons       distribution.StepID = "install-addons"
 	StepWaitIngressLB       distribution.StepID = "wait-ingress-lb"
 	StepWaitCustomRouterLB  distribution.StepID = "wait-custom-router-lb"
 	StepDeployAPIDNS        distribution.StepID = "deploy-api-dns"
@@ -46,6 +47,25 @@ func (p *Phase) NewVerifyHealthStep(cfg *config.Config, opts Options, pctx *dist
 }
 
 
+
+func (p *Phase) NewCleanupBootstrapStep(cfg *config.Config, opts Options, pctx *distribution.PhaseContext[PostInstallContext]) distribution.ProvisioningStep {
+	return distribution.NewStepBuilder(StepCleanupBootstrap, "Cleanup Bootstrap VM").
+		Description("destroying bootstrap vm via terraform").
+		Fatal(false).
+		OnError(func(err error) {
+			p.Log.Warn(fmt.Sprintf("bootstrap: cleanup failed (non-critical): %v", err))
+		}).
+		Execute(func(ctx context.Context) error {
+			if err := p.CleanupBootstrap(ctx, cfg, opts); err != nil {
+				return utils.WrapError("bootstrap cleanup failed", err)
+			}
+			pctx.Update(func(c *PostInstallContext) {
+				c.BootstrapCleaned = true
+			})
+			return nil
+		}).
+		MustBuild()
+}
 
 func (p *Phase) NewVerifyKubeVIPStep(cfg *config.Config, opts Options, pctx *distribution.PhaseContext[PostInstallContext]) distribution.ProvisioningStep {
 	return distribution.NewStepBuilder(StepVerifyKubeVIP, "Verify kube-vip").
@@ -80,10 +100,10 @@ func (p *Phase) NewRemoveHAProxyStep(cfg *config.Config, opts Options, pctx *dis
 		Description("removing haproxy from bastion").
 		Fatal(false).
 		SkipWhen(func() bool {
-			// Skip if kube-vip wasn't verified - HAProxy is still needed
-			return !pctx.Get().KubeVIPVerified
+			state := pctx.Get()
+			return !state.KubeVIPVerified || !state.APIDNSSwitched
 		}).
-		SkipReason("kube-vip not verified - keeping HAProxy as fallback").
+		SkipReason("kube-vip not verified or api dns not switched — keeping haproxy as fallback").
 		OnError(func(err error) {
 			p.Log.Warn(fmt.Sprintf("haproxy: removal failed: %v", err))
 		}).
@@ -135,6 +155,9 @@ func (p *Phase) NewDeployAPIDNSStep(cfg *config.Config, opts Options, pctx *dist
 			if err := p.deployProductionDNS(ctx, cfg, "", state.KubeVipIP, "", ""); err != nil {
 				return utils.WrapError("api dns switch failed", err)
 			}
+			pctx.Update(func(c *PostInstallContext) {
+				c.APIDNSSwitched = true
+			})
 			p.Log.Info(fmt.Sprintf("dns: api.* now points to vip %s (haproxy still running as fallback)", state.KubeVipIP))
 			return nil
 		}).

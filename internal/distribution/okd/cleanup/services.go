@@ -156,6 +156,12 @@ func Dnsmasq(ctx context.Context, clusterName string, logger utils.Logger) error
 		_ = system.RemoveAll(ctx, cfg, "dnsmasq okd config")
 	}
 
+	backupPattern := "/etc/dnsmasq.d/*.backup"
+	backups, _ := filepath.Glob(backupPattern)
+	for _, backup := range backups {
+		_ = system.RemoveAll(ctx, backup, "dnsmasq backup config")
+	}
+
 	if err := system.RemovePackages(ctx, []string{"dnsmasq"}, logger); err != nil {
 		if logger != nil {
 			logger.Warn(fmt.Sprintf("cleanup: failed to remove dnsmasq package: %v", err))

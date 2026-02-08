@@ -54,6 +54,14 @@ func WriteDnsmasqConfig(ctx context.Context, name, content string) error {
 		return utils.WrapError("failed to create dnsmasq config directory", err)
 	}
 
+	// Back up existing config before overwriting so it can be restored on failure.
+	if FileExists(configPath) {
+		backupPath := configPath + ".backup"
+		if err := CopyFileWithElevation(ctx, configPath, backupPath, "dnsmasq config backup"); err != nil {
+			return utils.WrapErrorf(err, "failed to back up config %s", configPath)
+		}
+	}
+
 	tmpFile, err := os.CreateTemp("", "dnsmasq-*.conf")
 	if err != nil {
 		return err

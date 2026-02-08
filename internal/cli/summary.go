@@ -130,8 +130,9 @@ func PostDeploySummary(cfg *config.Config, result *deployment.Result) string {
 	content.WriteString("  " + tui.SubsectionLabel("dns records") + "\n")
 	apiDomain := fmt.Sprintf("api.%s", clusterFQDN)
 	appsDomain := fmt.Sprintf("*.apps.%s", clusterFQDN)
-	bastionIP := cfg.Networking.Bastion.IP
-	if bastionIP != "" {
+	if result != nil && result.APIDNSSwitched && result.KubeVipIP != "" {
+		content.WriteString("  " + tui.DottedKeyValueFull("  "+apiDomain, result.KubeVipIP+" (kube-vip)", defaultKeyColWidth, kvWidth) + "\n")
+	} else if bastionIP := cfg.Networking.Bastion.IP; bastionIP != "" {
 		content.WriteString("  " + tui.DottedKeyValueFull("  "+apiDomain, bastionIP+" (haproxy)", defaultKeyColWidth, kvWidth) + "\n")
 	}
 	if result != nil && result.RouterLBIP != "" {
@@ -143,6 +144,21 @@ func PostDeploySummary(cfg *config.Config, result *deployment.Result) string {
 			customLabel = fmt.Sprintf("router-%s (custom)", cfg.Cluster.Name)
 		}
 		content.WriteString("  " + tui.DottedKeyValueFull("  "+customLabel, result.CustomRouterIP, defaultKeyColWidth, kvWidth) + "\n")
+	}
+	content.WriteString("\n")
+
+	content.WriteString("  " + tui.SubsectionLabel("status") + "\n")
+	if result != nil {
+		if result.BootstrapCleaned {
+			content.WriteString("  " + tui.DottedKeyValueFull("  bootstrap", "cleaned up", defaultKeyColWidth, kvWidth) + "\n")
+		} else {
+			content.WriteString("  " + tui.DottedKeyValueFull("  bootstrap", "still running", defaultKeyColWidth, kvWidth) + "\n")
+		}
+		if result.APIDNSSwitched && result.KubeVipIP != "" {
+			content.WriteString("  " + tui.DottedKeyValueFull("  api routing", fmt.Sprintf("kube-vip (%s)", result.KubeVipIP), defaultKeyColWidth, kvWidth) + "\n")
+		} else {
+			content.WriteString("  " + tui.DottedKeyValueFull("  api routing", "haproxy (bastion)", defaultKeyColWidth, kvWidth) + "\n")
+		}
 	}
 	content.WriteString("\n")
 
