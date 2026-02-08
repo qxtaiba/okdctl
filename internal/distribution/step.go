@@ -85,22 +85,6 @@ func NewStepBuilder(id StepID, name string) *StepBuilder {
 	}
 }
 
-// MustNewStepBuilder creates a new step builder, panicking if id or name are empty.
-// Use this for compile-time constants where empty values indicate a programming error.
-func MustNewStepBuilder(id StepID, name string) *StepBuilder {
-	if id == "" {
-		panic("MustNewStepBuilder: id cannot be empty")
-	}
-	if name == "" {
-		panic("MustNewStepBuilder: name cannot be empty")
-	}
-	return &StepBuilder{
-		id:    id,
-		name:  name,
-		fatal: true,
-	}
-}
-
 // Description sets the step description.
 func (b *StepBuilder) Description(d string) *StepBuilder {
 	b.description = d

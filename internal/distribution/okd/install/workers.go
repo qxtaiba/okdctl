@@ -14,11 +14,11 @@ import (
 // This is called after bootstrap completes to ensure workers can reach the MCS.
 func (p *Phase) StartWorkerVMs(ctx context.Context, cfg *config.Config, opts Options) error {
 	if cfg.Topology.Workers.Count == 0 {
-		p.LogInfo("workers: no workers configured, skipping")
+		p.Log.Info("workers: no workers configured, skipping")
 		return nil
 	}
 
-	p.LogInfo(fmt.Sprintf("workers: starting %d worker nodes", cfg.Topology.Workers.Count))
+	p.Log.Info(fmt.Sprintf("workers: starting %d worker nodes", cfg.Topology.Workers.Count))
 
 	terraformDir := filepath.Join(opts.ProjectRoot, "infrastructure", "terraform", "environments", opts.TerraformEnv)
 
@@ -44,6 +44,6 @@ func (p *Phase) StartWorkerVMs(ctx context.Context, cfg *config.Config, opts Opt
 		return utils.WrapError("failed to start worker VMs", err)
 	}
 
-	p.LogInfo("workers: all worker nodes started successfully")
+	p.Log.Info("workers: all worker nodes started successfully")
 	return nil
 }

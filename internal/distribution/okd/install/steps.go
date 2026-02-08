@@ -34,7 +34,7 @@ func (p *Phase) newDeployInfraStep(cfg *config.Config, opts Options) distributio
 			if err := p.DeployInfrastructure(ctx, cfg, opts); err != nil {
 				return utils.WrapError("infrastructure deployment failed", err)
 			}
-			p.LogInfo("terraform: proxmox infrastructure deployed successfully")
+			p.Log.Info("terraform: proxmox infrastructure deployed successfully")
 			return nil
 		}).
 		MustBuild()
@@ -50,8 +50,8 @@ func (p *Phase) newWaitBootstrapStep(cfg *config.Config, opts Options) distribut
 		Description("waiting for bootstrap node to initialize").
 		Fatal(true).
 		OnStart(func() {
-			p.LogInfo("bootstrap: waiting for control plane initialization")
-			p.LogInfo("bootstrap: this process typically takes 15-30 minutes")
+			p.Log.Info("bootstrap: waiting for control plane initialization")
+			p.Log.Info("bootstrap: this process typically takes 15-30 minutes")
 		}).
 		Execute(func(ctx context.Context) error {
 			if err := p.WaitForBootstrap(ctx, clusterDir, opts); err != nil {
@@ -117,8 +117,8 @@ func (p *Phase) newMonitorInstallStep(cfg *config.Config, opts Options) distribu
 		Description("monitoring installation and approving certificate requests").
 		Fatal(true).
 		OnStart(func() {
-			p.LogInfo("install: monitoring cluster operators and approving csrs")
-			p.LogInfo("install: this process typically takes 30-60 minutes")
+			p.Log.Info("install: monitoring cluster operators and approving csrs")
+			p.Log.Info("install: this process typically takes 30-60 minutes")
 		}).
 		Execute(func(ctx context.Context) error {
 			if err := p.MonitorInstallation(ctx, clusterDir, opts); err != nil {
@@ -142,7 +142,7 @@ func (p *Phase) newSetupAccessStep(opts Options) distribution.ProvisioningStep {
 			return p.SetupClusterAccess(ctx, clusterDir)
 		}).
 		OnError(func(err error) {
-			p.LogWarn(fmt.Sprintf("kubeconfig: failed to setup persistent access: %v", err))
+			p.Log.Warn(fmt.Sprintf("kubeconfig: failed to setup persistent access: %v", err))
 		}).
 		MustBuild()
 }

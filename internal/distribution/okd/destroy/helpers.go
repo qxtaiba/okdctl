@@ -25,7 +25,7 @@ func (p *Phase) destroyInfrastructure(ctx context.Context, opts Options) error {
 	)
 
 	if !tf.HasState() {
-		p.LogWarn("terraform: no state file found - infrastructure may already be destroyed")
+		p.Log.Warn("terraform: no state file found - infrastructure may already be destroyed")
 		return nil
 	}
 
@@ -33,8 +33,8 @@ func (p *Phase) destroyInfrastructure(ctx context.Context, opts Options) error {
 		return utils.WrapError("terraform init failed", err)
 	}
 
-	p.LogInfo(fmt.Sprintf("terraform: destroying infrastructure in %s", opts.TerraformEnv))
-	p.LogWarn("terraform: this operation cannot be undone")
+	p.Log.Info(fmt.Sprintf("terraform: destroying infrastructure in %s", opts.TerraformEnv))
+	p.Log.Warn("terraform: this operation cannot be undone")
 
 	if err := tf.Destroy(ctx, terraform.DestroyOptions{
 		AutoApprove: opts.AutoApprove,
@@ -45,7 +45,7 @@ func (p *Phase) destroyInfrastructure(ctx context.Context, opts Options) error {
 	}
 
 	if err := tf.Cleanup(); err != nil {
-		p.LogWarn(fmt.Sprintf("terraform: plan file cleanup warning: %v", err))
+		p.Log.Warn(fmt.Sprintf("terraform: plan file cleanup warning: %v", err))
 	}
 
 	return nil

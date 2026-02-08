@@ -35,6 +35,13 @@ import (
 
 type Logger = logging.Logger
 
+// Minimum resource requirements for OKD control plane nodes.
+const (
+	MinControlPlaneMemoryMB = 8192
+	MinControlPlaneCPUs     = 4
+	MinControlPlaneDiskGB   = 50
+)
+
 // Provisioner coordinates OKD cluster lifecycle operations.
 // It delegates actual work to phase-specific packages.
 type Provisioner struct {

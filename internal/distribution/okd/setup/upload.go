@@ -82,7 +82,7 @@ func (p *Phase) UploadCustomISOsToProxmox(ctx context.Context, cfg *config.Confi
 		return err
 	}
 	if len(isoFiles) == 0 {
-		p.LogWarn("iso: no iso files found to upload")
+		p.Log.Warn("iso: no iso files found to upload")
 		return nil
 	}
 
@@ -91,12 +91,12 @@ func (p *Phase) UploadCustomISOsToProxmox(ctx context.Context, cfg *config.Confi
 	remotePath := DefaultProxmoxISODir
 
 	totalSizeMB := float64(calculateTotalSize(isoFiles)) / 1024 / 1024
-	p.LogInfo(fmt.Sprintf("iso: uploading %d files (%.1f mb) to %s@%s:%s", len(isoFiles), totalSizeMB, user, host, remotePath))
+	p.Log.Info(fmt.Sprintf("iso: uploading %d files (%.1f mb) to %s@%s:%s", len(isoFiles), totalSizeMB, user, host, remotePath))
 
 	if err := uploadISOsViaSCP(ctx, p.Exec, isoFiles, user, host, remotePath); err != nil {
 		return err
 	}
 
-	p.LogInfo(fmt.Sprintf("iso: uploaded %d files to proxmox storage", len(isoFiles)))
+	p.Log.Info(fmt.Sprintf("iso: uploaded %d files to proxmox storage", len(isoFiles)))
 	return nil
 }

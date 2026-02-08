@@ -32,7 +32,7 @@ func (p *Phase) WaitForBootstrap(ctx context.Context, clusterDir string, opts Op
 		return utils.WrapError("bootstrap failed", err)
 	}
 
-	p.LogInfo("bootstrap: completed - control plane is ready")
+	p.Log.Info("bootstrap: completed - control plane is ready")
 	return nil
 }
 
@@ -75,33 +75,33 @@ func (p *Phase) MonitorInstallation(ctx context.Context, clusterDir string, opts
 
 			approved, csrErr := k8sClient.ApprovePendingCSRs(ctx)
 			if csrErr != nil {
-				p.LogWarn(fmt.Sprintf("csr: final approval had issues: %v", csrErr))
+				p.Log.Warn(fmt.Sprintf("csr: final approval had issues: %v", csrErr))
 			}
 			totalApproved += approved
 
-			p.LogInfo(fmt.Sprintf("install: completed successfully - approved %d csrs total", totalApproved))
+			p.Log.Info(fmt.Sprintf("install: completed successfully - approved %d csrs total", totalApproved))
 			return nil
 
 		case <-ticker.C:
 			approved, err := k8sClient.ApprovePendingCSRs(ctx)
 			if err != nil {
-				p.LogWarn(fmt.Sprintf("csr: approval check failed: %v", err))
+				p.Log.Warn(fmt.Sprintf("csr: approval check failed: %v", err))
 			}
 			if approved > 0 {
 				totalApproved += approved
-				p.LogInfo(fmt.Sprintf("csr: approved %d pending requests (%d total)", approved, totalApproved))
+				p.Log.Info(fmt.Sprintf("csr: approved %d pending requests (%d total)", approved, totalApproved))
 			}
 
 		case <-ctx.Done():
 			if installCmd.Process != nil {
 				if killErr := installCmd.Process.Kill(); killErr != nil {
-					p.LogWarn(fmt.Sprintf("install: failed to kill process: %v", killErr))
+					p.Log.Warn(fmt.Sprintf("install: failed to kill process: %v", killErr))
 				}
 			}
 			select {
 			case <-installDone:
 			case <-time.After(5 * time.Second):
-				p.LogWarn("install: timed out waiting for process cleanup")
+				p.Log.Warn("install: timed out waiting for process cleanup")
 			}
 			return fmt.Errorf("installation timed out after %v", opts.InstallTimeout)
 		}

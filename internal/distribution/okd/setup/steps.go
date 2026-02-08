@@ -64,26 +64,26 @@ func (p *Phase) newInstallPackagesStep(opts Options) distribution.ProvisioningSt
 				cmdName := pkg
 				if !executor.CommandExists(cmdName) {
 					packagesToInstall = append(packagesToInstall, pkg)
-					p.LogInfo(fmt.Sprintf("packages: %s not found", pkg))
+					p.Log.Info(fmt.Sprintf("packages: %s not found", pkg))
 				} else {
-					p.LogInfo(fmt.Sprintf("packages: %s already installed", pkg))
+					p.Log.Info(fmt.Sprintf("packages: %s already installed", pkg))
 				}
 			}
 
 			if len(packagesToInstall) == 0 {
-				p.LogInfo("packages: all system packages already installed")
+				p.Log.Info("packages: all system packages already installed")
 				return nil
 			}
 
-			p.LogInfo(fmt.Sprintf("packages: installing %d missing package(s) via dnf", len(packagesToInstall)))
+			p.Log.Info(fmt.Sprintf("packages: installing %d missing package(s) via dnf", len(packagesToInstall)))
 			if err := system.InstallPackages(ctx, packagesToInstall, "system dependencies"); err != nil {
-				p.LogWarn(fmt.Sprintf("packages: installation had warnings: %v", err))
+				p.Log.Warn(fmt.Sprintf("packages: installation had warnings: %v", err))
 			}
 
 			return nil
 		}).
 		OnError(func(err error) {
-			p.LogWarn(fmt.Sprintf("packages: system installation had warnings: %v", err))
+			p.Log.Warn(fmt.Sprintf("packages: system installation had warnings: %v", err))
 		}).
 		MustBuild()
 }
@@ -100,7 +100,7 @@ func (p *Phase) newInstallToolsStep(cfg *config.Config) distribution.Provisionin
 			return p.InstallExternalTools(ctx, cfg)
 		}).
 		OnError(func(err error) {
-			p.LogWarn(fmt.Sprintf("tools: external installation had warnings: %v", err))
+			p.Log.Warn(fmt.Sprintf("tools: external installation had warnings: %v", err))
 		}).
 		MustBuild()
 }
@@ -133,7 +133,7 @@ func (p *Phase) newDownloadToolsStep(cfg *config.Config, opts Options) distribut
 			if err := p.DownloadOKDTools(ctx, cfg.Distribution.Version, opts); err != nil {
 				return utils.WrapError("failed to download OKD tools", err)
 			}
-			p.LogInfo("tools: sha256 checksums validated successfully")
+			p.Log.Info("tools: sha256 checksums validated successfully")
 			return nil
 		}).
 		MustBuild()
@@ -153,7 +153,7 @@ func (p *Phase) newGenerateInstallConfigStep(cfg *config.Config, opts Options) d
 			if err := p.GenerateInstallConfig(ctx, cfg, clusterDir); err != nil {
 				return utils.WrapError("failed to generate install-config", err)
 			}
-			p.LogInfo(fmt.Sprintf("config: install-config.yaml generated with %d masters and %d workers",
+			p.Log.Info(fmt.Sprintf("config: install-config.yaml generated with %d masters and %d workers",
 				cfg.Topology.ControlPlane.Count, cfg.Topology.Workers.Count))
 			return nil
 		}).
@@ -174,7 +174,7 @@ func (p *Phase) newGenerateManifestsStep(opts Options) distribution.Provisioning
 			if err := p.GenerateManifests(ctx, clusterDir); err != nil {
 				return utils.WrapError("failed to generate manifests", err)
 			}
-			p.LogInfo("manifests: kubernetes manifests generated")
+			p.Log.Info("manifests: kubernetes manifests generated")
 			return nil
 		}).
 		MustBuild()
@@ -231,7 +231,7 @@ func (p *Phase) newGenerateKubeVIPManifestsStep(cfg *config.Config, opts Options
 				return utils.WrapError("failed to write kube-vip DaemonSet manifest", err)
 			}
 
-			p.LogInfo(fmt.Sprintf("kubevip: manifests generated (vip=%s, interface=%s, image=ghcr.io/kube-vip/kube-vip:%s)",
+			p.Log.Info(fmt.Sprintf("kubevip: manifests generated (vip=%s, interface=%s, image=ghcr.io/kube-vip/kube-vip:%s)",
 				vip, iface, templates.DefaultKubeVIPImageTag))
 			return nil
 		}).
@@ -254,7 +254,7 @@ func (p *Phase) newInjectManifestsStep(opts Options) distribution.ProvisioningSt
 				return utils.WrapError("failed to inject custom manifests", err)
 			}
 			if count > 0 {
-				p.LogInfo(fmt.Sprintf("manifests: injected %d custom manifest(s) from automation/config/manifests", count))
+				p.Log.Info(fmt.Sprintf("manifests: injected %d custom manifest(s) from automation/config/manifests", count))
 			}
 			return nil
 		}).
@@ -277,7 +277,7 @@ func (p *Phase) newCompactClusterManifestsStep(cfg *config.Config, opts Options)
 			if err := p.InjectCompactClusterManifests(ctx, clusterDir, cfg.Topology.Workers.Count, cfg.Topology.ControlPlane.Count); err != nil {
 				return utils.WrapError("failed to inject compact cluster manifests", err)
 			}
-			p.LogInfo("manifests: injected ingress controller master placement for compact cluster")
+			p.Log.Info("manifests: injected ingress controller master placement for compact cluster")
 			return nil
 		}).
 		MustBuild()
@@ -297,7 +297,7 @@ func (p *Phase) newGenerateIgnitionStep(opts Options) distribution.ProvisioningS
 			if err := p.GenerateIgnitionConfigs(ctx, clusterDir); err != nil {
 				return utils.WrapError("failed to generate ignition configs", err)
 			}
-			p.LogInfo("ignition: configurations generated and validated")
+			p.Log.Info("ignition: configurations generated and validated")
 			return nil
 		}).
 		MustBuild()
@@ -315,7 +315,7 @@ func (p *Phase) newInstallApacheStep(cfg *config.Config, opts Options) distribut
 			return p.ConfigureApache(ctx, cfg)
 		}).
 		OnError(func(err error) {
-			p.LogWarn(fmt.Sprintf("apache: installation skipped: %v", err))
+			p.Log.Warn(fmt.Sprintf("apache: installation skipped: %v", err))
 		}).
 		MustBuild()
 }
@@ -336,7 +336,7 @@ func (p *Phase) newDeployIgnitionStep(cfg *config.Config, opts Options) distribu
 			}
 
 			webURL := BuildIgnitionURL(cfg.HTTPServer.IgnitionServerIP, cfg.HTTPServer.Port)
-			p.LogInfo(fmt.Sprintf("ignition: deployed to web server at %s", webURL))
+			p.Log.Info(fmt.Sprintf("ignition: deployed to web server at %s", webURL))
 			return nil
 		}).
 		MustBuild()
@@ -387,12 +387,12 @@ func (p *Phase) newUploadISOsStep(cfg *config.Config, opts Options) distribution
 			if err := p.UploadCustomISOsToProxmox(ctx, cfg, opts); err != nil {
 				return err
 			}
-			p.LogInfo("iso: all custom isos uploaded to proxmox storage")
+			p.Log.Info("iso: all custom isos uploaded to proxmox storage")
 			return nil
 		}).
 		OnError(func(err error) {
-			p.LogWarn(fmt.Sprintf("iso: upload failed: %v", err))
-			p.LogWarn("iso: you may need to upload isos manually before deploying")
+			p.Log.Warn(fmt.Sprintf("iso: upload failed: %v", err))
+			p.Log.Warn("iso: you may need to upload isos manually before deploying")
 		}).
 		MustBuild()
 }
@@ -410,7 +410,7 @@ func (p *Phase) newGenerateTfvarsStep(cfg *config.Config, opts Options) distribu
 				return utils.WrapError("failed to generate Terraform variables", err)
 			}
 			tfvarsPath := filepath.Join(opts.ProjectRoot, "infrastructure", "terraform", "environments", paths.GetTerraformEnv(cfg), "terraform.tfvars")
-			p.LogInfo(fmt.Sprintf("terraform: configuration written to %s", tfvarsPath))
+			p.Log.Info(fmt.Sprintf("terraform: configuration written to %s", tfvarsPath))
 			return nil
 		}).
 		MustBuild()
@@ -431,7 +431,7 @@ func (p *Phase) newConfigureHAProxyStep(cfg *config.Config, opts Options) distri
 				return utils.WrapError("failed to configure HAProxy", err)
 			}
 			if err := p.VerifyHAProxyPorts(ctx); err != nil {
-				p.LogWarn(fmt.Sprintf("haproxy: port verification warning: %v", err))
+				p.Log.Warn(fmt.Sprintf("haproxy: port verification warning: %v", err))
 			}
 			return nil
 		}).
@@ -452,11 +452,11 @@ func (p *Phase) newConfigureFirewallStep(opts Options) distribution.Provisioning
 			if err := system.ConfigureOKDFirewall(ctx, true); err != nil {
 				return err
 			}
-			p.LogInfo("firewall: okd rules added to firewalld")
+			p.Log.Info("firewall: okd rules added to firewalld")
 			return nil
 		}).
 		OnError(func(err error) {
-			p.LogWarn(fmt.Sprintf("firewall: configuration failed: %v", err))
+			p.Log.Warn(fmt.Sprintf("firewall: configuration failed: %v", err))
 		}).
 		MustBuild()
 }
@@ -473,14 +473,14 @@ func (p *Phase) newConfigureDNSStep(cfg *config.Config, opts Options) distributi
 		Description("configuring dnsmasq and deploying bootstrap dns configuration").
 		Fatal(false). // Non-fatal since DNS can be configured manually
 		Execute(func(ctx context.Context) error {
-			p.LogInfo("dns: configuring dnsmasq service")
+			p.Log.Info("dns: configuring dnsmasq service")
 			if funcs.setupDnsmasq != nil {
 				if err := funcs.setupDnsmasq(ctx, cfg.Networking.DNS); err != nil {
 					return utils.WrapError("failed to setup dnsmasq", err)
 				}
 			}
 
-			p.LogInfo("dns: deploying bootstrap dns configuration")
+			p.Log.Info("dns: deploying bootstrap dns configuration")
 			if funcs.deployBootstrapDNS != nil {
 				if err := funcs.deployBootstrapDNS(ctx, cfg); err != nil {
 					return utils.WrapError("failed to deploy bootstrap dns", err)
@@ -490,17 +490,17 @@ func (p *Phase) newConfigureDNSStep(cfg *config.Config, opts Options) distributi
 			// Save a copy to the work directory for reference (non-fatal)
 			if funcs.generateBootstrapDNSConfig != nil {
 				if _, _, err := funcs.generateBootstrapDNSConfig(cfg, outputDir); err != nil {
-					p.LogWarn(fmt.Sprintf("dns: failed to save config copy: %v", err))
+					p.Log.Warn(fmt.Sprintf("dns: failed to save config copy: %v", err))
 				}
 			}
 
 			configPath := system.DnsmasqConfigPath(fmt.Sprintf("okd-%s", cfg.Cluster.Name))
-			p.LogInfo(fmt.Sprintf("dns: dnsmasq configured at %s", configPath))
+			p.Log.Info(fmt.Sprintf("dns: dnsmasq configured at %s", configPath))
 			return nil
 		}).
 		OnError(func(err error) {
-			p.LogWarn(fmt.Sprintf("dns: configuration failed: %v", err))
-			p.LogWarn("dns: you may need to configure dns manually")
+			p.Log.Warn(fmt.Sprintf("dns: configuration failed: %v", err))
+			p.Log.Warn("dns: you may need to configure dns manually")
 		}).
 		MustBuild()
 }

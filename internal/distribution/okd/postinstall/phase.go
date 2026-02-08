@@ -74,7 +74,7 @@ func New(exec *executor.Executor, logger logging.Logger, version string) *Phase 
 
 // Execute performs post-installation verification and configuration.
 func (p *Phase) Execute(ctx context.Context, cfg *config.Config, opts Options) (*Result, error) {
-	p.LogInfo("postinstall: starting cluster verification and configuration")
+	p.Log.Info("postinstall: starting cluster verification and configuration")
 
 	addonMgr := addon.NewManager(cfg, p.Exec, p.Log, opts.ProjectRoot)
 	pctx := distribution.NewPhaseContext(PostInstallContext{})
@@ -104,7 +104,7 @@ func (p *Phase) Execute(ctx context.Context, cfg *config.Config, opts Options) (
 	}
 	result.GrappleberryRouterIP = p.GetGrappleberryRouterIP(ctx)
 
-	p.LogInfo("postinstall: cluster configuration completed successfully")
+	p.Log.Info("postinstall: cluster configuration completed successfully")
 
 	return result, nil
 }

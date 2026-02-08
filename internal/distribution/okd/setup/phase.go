@@ -100,7 +100,7 @@ func New(exec *executor.Executor, logger logging.Logger, version string) *Phase 
 
 // Execute runs the complete setup phase.
 func (p *Phase) Execute(ctx context.Context, cfg *config.Config, opts Options) error {
-	p.LogInfo("setup: starting okd cluster configuration")
+	p.Log.Info("setup: starting okd cluster configuration")
 
 	orchestrator := distribution.NewOrchestrator(
 		p.newInstallPackagesStep(opts),
@@ -129,7 +129,7 @@ func (p *Phase) Execute(ctx context.Context, cfg *config.Config, opts Options) e
 		return err
 	}
 
-	p.LogInfo("setup: cluster configuration completed successfully")
+	p.Log.Info("setup: cluster configuration completed successfully")
 	p.PrintSetupCompletionSummary(cfg, opts)
 
 	return nil
@@ -140,8 +140,8 @@ func (p *Phase) PrintSetupCompletionSummary(cfg *config.Config, opts Options) {
 	clusterDir := paths.ClusterConfigDir(opts.WorkDir)
 	tfEnv := paths.GetTerraformEnv(cfg)
 
-	p.LogInfo(fmt.Sprintf("setup: cluster config saved to %s", clusterDir))
-	p.LogInfo(fmt.Sprintf("setup: terraform environment set to %s", tfEnv))
+	p.Log.Info(fmt.Sprintf("setup: cluster config saved to %s", clusterDir))
+	p.Log.Info(fmt.Sprintf("setup: terraform environment set to %s", tfEnv))
 }
 
 // dnsFunctions returns DNS function implementations for the DNS step.

@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/qxtaiba/okd-proxmox-cli/internal/logging"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
 )
 
 // Executor runs external commands with configurable working directory,
@@ -173,68 +172,4 @@ func CommandExists(name string) bool {
 // CommandPath returns the full path to a command if it exists in PATH.
 func CommandPath(name string) (string, error) {
 	return exec.LookPath(name)
-}
-
-// ValidateExecResult validates an executor result and returns a formatted error if the command failed.
-// This is a helper to reduce boilerplate error checking across the codebase.
-func ValidateExecResult(cmdDescription string, result *Result, err error) error {
-	if err != nil {
-		return utils.WrapErrorf(err, "%s: execution failed", cmdDescription)
-	}
-	if result == nil {
-		return fmt.Errorf("%s: nil result", cmdDescription)
-	}
-	if result.ExitCode != 0 {
-		stderr := strings.TrimSpace(result.Stderr)
-		if stderr == "" {
-			stderr = strings.TrimSpace(result.Stdout)
-		}
-		if stderr == "" {
-			return fmt.Errorf("%s: exited with code %d", cmdDescription, result.ExitCode)
-		}
-		return fmt.Errorf("%s: %s", cmdDescription, stderr)
-	}
-	return nil
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// SUDO HELPERS
-// ═══════════════════════════════════════════════════════════════════════════════
-
-// SudoCopy copies a file using sudo.
-func (e *Executor) SudoCopy(ctx context.Context, src, dst string) error {
-	result, err := e.Run(ctx, "sudo", "cp", src, dst)
-	return ValidateExecResult(fmt.Sprintf("copy %s to %s", src, dst), result, err)
-}
-
-// SudoSystemctl runs systemctl commands using sudo.
-func (e *Executor) SudoSystemctl(ctx context.Context, action, service string) error {
-	result, err := e.Run(ctx, "sudo", "systemctl", action, service)
-	return ValidateExecResult(fmt.Sprintf("systemctl %s %s", action, service), result, err)
-}
-
-// RunSudoInteractive runs a command with sudo, connecting terminal I/O for password prompts.
-// This is useful for commands that may require interactive sudo authentication.
-func (e *Executor) RunSudoInteractive(ctx context.Context, name string, args ...string) error {
-	sudoArgs := append([]string{name}, args...)
-	cmd := exec.CommandContext(ctx, "sudo", sudoArgs...)
-
-	if e.WorkDir != "" {
-		cmd.Dir = e.WorkDir
-	}
-
-	if len(e.Env) > 0 {
-		cmd.Env = append(os.Environ(), e.Env...)
-	}
-
-	// Connect to terminal so sudo can prompt for password if needed
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-
-	if e.Verbose {
-		e.logger.Debug(fmt.Sprintf("+ sudo %s %s", name, strings.Join(args, " ")))
-	}
-
-	return cmd.Run()
 }

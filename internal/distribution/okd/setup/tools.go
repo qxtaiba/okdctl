@@ -87,7 +87,7 @@ func (p *Phase) InstallExternalTools(ctx context.Context, cfg *config.Config) er
 // installTool installs a specific tool if not already present.
 func (p *Phase) installTool(ctx context.Context, tool externalTool) error {
 	if isToolInstalled(tool) {
-		p.LogInfo(fmt.Sprintf("tools: %s already installed", tool))
+		p.Log.Info(fmt.Sprintf("tools: %s already installed", tool))
 		return nil
 	}
 
@@ -101,7 +101,7 @@ func (p *Phase) installTool(ctx context.Context, tool externalTool) error {
 	case toolSops:
 		return p.installSops(ctx)
 	default:
-		p.LogWarn(fmt.Sprintf("tools: no installer for %s, skipping (install manually)", tool))
+		p.Log.Warn(fmt.Sprintf("tools: no installer for %s, skipping (install manually)", tool))
 		return nil
 	}
 }
@@ -112,13 +112,13 @@ func (p *Phase) installTool(ctx context.Context, tool externalTool) error {
 
 // installTerraform installs terraform via HashiCorp RPM repository.
 func (p *Phase) installTerraform(ctx context.Context) error {
-	p.LogInfo("tools: installing terraform via hashicorp repository")
+	p.Log.Info("tools: installing terraform via hashicorp repository")
 
 	repoURL := "https://rpm.releases.hashicorp.com/RHEL/hashicorp.repo"
 	if err := runSudoCommand(ctx, "dnf", "config-manager", "--add-repo", repoURL); err != nil {
 		return utils.WrapError("failed to add HashiCorp repository", err)
 	}
-	p.LogInfo("tools: hashicorp repository added")
+	p.Log.Info("tools: hashicorp repository added")
 
 	if err := runSudoCommand(ctx, "dnf", "install", "-y", "terraform"); err != nil {
 		return utils.WrapError("failed to install terraform", err)
@@ -129,7 +129,7 @@ func (p *Phase) installTerraform(ctx context.Context) error {
 	}
 
 	version := getToolVersion("terraform", "--version")
-	p.LogInfo(fmt.Sprintf("tools: terraform installed (%s)", version))
+	p.Log.Info(fmt.Sprintf("tools: terraform installed (%s)", version))
 	return nil
 }
 
@@ -140,7 +140,7 @@ func (p *Phase) installTerraform(ctx context.Context) error {
 // installYQ installs yq from GitHub releases.
 // yq uses non-standard checksum format, so we skip verification (uses HTTPS).
 func (p *Phase) installYQ(ctx context.Context) error {
-	p.LogInfo("tools: installing yq from github releases")
+	p.Log.Info("tools: installing yq from github releases")
 
 	downloadURL := "https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64"
 	tempFile := filepath.Join(os.TempDir(), "yq_linux_amd64")
@@ -164,7 +164,7 @@ func (p *Phase) installYQ(ctx context.Context) error {
 	}
 
 	version := getToolVersion("yq", "--version")
-	p.LogInfo(fmt.Sprintf("tools: yq installed (%s)", version))
+	p.Log.Info(fmt.Sprintf("tools: yq installed (%s)", version))
 	return nil
 }
 
@@ -174,7 +174,7 @@ func (p *Phase) installYQ(ctx context.Context) error {
 
 // installHelm installs helm from official releases.
 func (p *Phase) installHelm(ctx context.Context) error {
-	p.LogInfo("tools: installing helm from official releases")
+	p.Log.Info("tools: installing helm from official releases")
 
 	downloadURL := "https://get.helm.sh/helm-v3.17.3-linux-amd64.tar.gz"
 	tempFile := filepath.Join(os.TempDir(), "helm-linux-amd64.tar.gz")
@@ -213,7 +213,7 @@ func (p *Phase) installHelm(ctx context.Context) error {
 	}
 
 	version := getToolVersion("helm", "version")
-	p.LogInfo(fmt.Sprintf("tools: helm installed (%s)", version))
+	p.Log.Info(fmt.Sprintf("tools: helm installed (%s)", version))
 	return nil
 }
 
@@ -223,7 +223,7 @@ func (p *Phase) installHelm(ctx context.Context) error {
 
 // installSops installs sops from GitHub releases.
 func (p *Phase) installSops(ctx context.Context) error {
-	p.LogInfo("tools: installing sops from github releases")
+	p.Log.Info("tools: installing sops from github releases")
 
 	downloadURL := "https://github.com/getsops/sops/releases/download/v3.9.4/sops-v3.9.4.linux.amd64"
 	tempFile := filepath.Join(os.TempDir(), "sops-linux-amd64")
@@ -247,7 +247,7 @@ func (p *Phase) installSops(ctx context.Context) error {
 	}
 
 	version := getToolVersion("sops", "--version")
-	p.LogInfo(fmt.Sprintf("tools: sops installed (%s)", version))
+	p.Log.Info(fmt.Sprintf("tools: sops installed (%s)", version))
 	return nil
 }
 

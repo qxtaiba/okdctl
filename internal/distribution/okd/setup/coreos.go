@@ -55,7 +55,7 @@ func (p *Phase) findOrDownloadFCOSISO(ctx context.Context, cfg *config.Config, o
 		if len(matches) > 0 {
 			sort.Strings(matches)
 			isoPath := matches[len(matches)-1] // newest by lexicographic version
-			p.LogInfo(fmt.Sprintf("coreos: found existing iso at %s", filepath.Base(isoPath)))
+			p.Log.Info(fmt.Sprintf("coreos: found existing iso at %s", filepath.Base(isoPath)))
 			return isoPath, nil
 		}
 	}
@@ -69,12 +69,12 @@ func (p *Phase) findOrDownloadFCOSISO(ctx context.Context, cfg *config.Config, o
 		if len(matches) > 0 {
 			sort.Strings(matches)
 			isoPath := matches[len(matches)-1]
-			p.LogInfo(fmt.Sprintf("coreos: found existing iso at %s", filepath.Base(isoPath)))
+			p.Log.Info(fmt.Sprintf("coreos: found existing iso at %s", filepath.Base(isoPath)))
 			return isoPath, nil
 		}
 	}
 
-	p.LogInfo("coreos: no iso found, attempting auto-download")
+	p.Log.Info("coreos: no iso found, attempting auto-download")
 
 	return p.EnsureCoreOSISO(ctx, cfg, Options{
 		BaseOptions: paths.BaseOptions{
@@ -143,14 +143,14 @@ func (p *Phase) DetectCoreOSVersion(ctx context.Context) (*CoreOSInfo, error) {
 // DownloadCoreOSISO downloads the CoreOS ISO if not present.
 func (p *Phase) DownloadCoreOSISO(ctx context.Context, info *CoreOSInfo, destPath string) error {
 	if system.FileExists(destPath) {
-		p.LogInfo(fmt.Sprintf("coreos: iso already exists at %s", destPath))
+		p.Log.Info(fmt.Sprintf("coreos: iso already exists at %s", destPath))
 		if info.ISOChecksum != "" {
 			err := download.ValidateChecksum(destPath, info.ISOChecksum)
 			if err != nil {
-				p.LogWarn("coreos: existing iso checksum mismatch, re-downloading")
+				p.Log.Warn("coreos: existing iso checksum mismatch, re-downloading")
 				// Continue to download
 			} else {
-				p.LogInfo("coreos: iso checksum verified successfully")
+				p.Log.Info("coreos: iso checksum verified successfully")
 				return nil
 			}
 		} else {
@@ -158,8 +158,8 @@ func (p *Phase) DownloadCoreOSISO(ctx context.Context, info *CoreOSInfo, destPat
 		}
 	}
 
-	p.LogInfo(fmt.Sprintf("coreos: downloading iso version %s", info.Version))
-	p.LogInfo(fmt.Sprintf("coreos: url %s", info.ISOUrl))
+	p.Log.Info(fmt.Sprintf("coreos: downloading iso version %s", info.Version))
+	p.Log.Info(fmt.Sprintf("coreos: url %s", info.ISOUrl))
 
 	if err := system.EnsureDir(filepath.Dir(destPath)); err != nil {
 		return err
@@ -176,7 +176,7 @@ func (p *Phase) DownloadCoreOSISO(ctx context.Context, info *CoreOSInfo, destPat
 		return utils.WrapError("failed to download CoreOS ISO", err)
 	}
 
-	p.LogInfo(fmt.Sprintf("coreos: iso downloaded to %s", destPath))
+	p.Log.Info(fmt.Sprintf("coreos: iso downloaded to %s", destPath))
 
 	return nil
 }
@@ -184,14 +184,14 @@ func (p *Phase) DownloadCoreOSISO(ctx context.Context, info *CoreOSInfo, destPat
 // EnsureCoreOSISO ensures the CoreOS ISO is available, downloading if necessary.
 // Downloads to the work directory to avoid permission issues with /var/lib/vz.
 func (p *Phase) EnsureCoreOSISO(ctx context.Context, cfg *config.Config, opts Options) (string, error) {
-	p.LogInfo("coreos: detecting version from openshift-install")
+	p.Log.Info("coreos: detecting version from openshift-install")
 
 	info, err := p.DetectCoreOSVersion(ctx)
 	if err != nil {
 		return "", err
 	}
 
-	p.LogInfo(fmt.Sprintf("coreos: detected version %s", info.Version))
+	p.Log.Info(fmt.Sprintf("coreos: detected version %s", info.Version))
 
 	// Separate from custom-isos directory which gets uploaded to Proxmox
 	downloadsDir := filepath.Join(opts.WorkDir, "downloads")
@@ -203,7 +203,7 @@ func (p *Phase) EnsureCoreOSISO(ctx context.Context, cfg *config.Config, opts Op
 	fcosISO := filepath.Join(downloadsDir, isoFilename)
 
 	if system.FileExists(fcosISO) {
-		p.LogInfo(fmt.Sprintf("coreos: iso already exists at %s", isoFilename))
+		p.Log.Info(fmt.Sprintf("coreos: iso already exists at %s", isoFilename))
 		return fcosISO, nil
 	}
 

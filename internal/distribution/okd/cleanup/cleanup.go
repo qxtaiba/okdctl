@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/paths"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/logging"
 )
 
@@ -22,12 +21,6 @@ const (
 	TypeHAProxyOnly   Type = "haproxy-only"
 	TypeTerraformOnly Type = "terraform-only"
 )
-
-// DefaultHAProxyConfigPath is an alias to the shared paths constant.
-const DefaultHAProxyConfigPath = paths.DefaultHAProxyConfigPath
-
-// DefaultHTTPServerRoot is an alias to the shared paths constant.
-const DefaultHTTPServerRoot = paths.DefaultHTTPServerRoot
 
 // Options configures cleanup operations.
 type Options struct {

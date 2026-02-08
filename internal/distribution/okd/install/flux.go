@@ -16,7 +16,7 @@ import (
 func (p *Phase) ValidateClusterAccess(ctx context.Context) error {
 	cmdRunner := p.Exec
 
-	p.LogInfo("cluster: validating access with oc whoami")
+	p.Log.Info("cluster: validating access with oc whoami")
 
 	result, err := cmdRunner.Run(ctx, "oc", "whoami")
 	if err != nil {
@@ -31,14 +31,14 @@ func (p *Phase) ValidateClusterAccess(ctx context.Context) error {
 		return fmt.Errorf("cluster authentication returned empty user")
 	}
 
-	p.LogInfo(fmt.Sprintf("cluster: authenticated as %s", user))
+	p.Log.Info(fmt.Sprintf("cluster: authenticated as %s", user))
 
 	result, err = cmdRunner.Run(ctx, "oc", "version")
 	if err == nil && result.ExitCode == 0 {
 		lines := strings.Split(result.Stdout, "\n")
 		for _, line := range lines {
 			if strings.HasPrefix(line, "Server Version:") {
-				p.LogInfo(fmt.Sprintf("cluster: %s", strings.ToLower(strings.TrimSpace(line))))
+				p.Log.Info(fmt.Sprintf("cluster: %s", strings.ToLower(strings.TrimSpace(line))))
 				break
 			}
 		}
@@ -65,9 +65,9 @@ func (p *Phase) SetupClusterAccess(ctx context.Context, clusterDir string) error
 	if system.FileExists(destKubeconfig) {
 		backupPath := destKubeconfig + ".backup." + time.Now().Format("20060102-150405")
 		if err := system.CopyFile(destKubeconfig, backupPath); err != nil {
-			p.LogWarn(fmt.Sprintf("kubeconfig: could not backup existing file: %v", err))
+			p.Log.Warn(fmt.Sprintf("kubeconfig: could not backup existing file: %v", err))
 		} else {
-			p.LogInfo(fmt.Sprintf("kubeconfig: backed up existing file to %s", backupPath))
+			p.Log.Info(fmt.Sprintf("kubeconfig: backed up existing file to %s", backupPath))
 		}
 	}
 
@@ -80,7 +80,7 @@ func (p *Phase) SetupClusterAccess(ctx context.Context, clusterDir string) error
 	}
 
 	if err := p.addKubeconfigToBashrc(homeDir, destKubeconfig); err != nil {
-		p.LogWarn(fmt.Sprintf("kubeconfig: could not update .bashrc: %v", err))
+		p.Log.Warn(fmt.Sprintf("kubeconfig: could not update .bashrc: %v", err))
 	}
 
 	return nil

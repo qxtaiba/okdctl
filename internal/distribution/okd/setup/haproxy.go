@@ -71,7 +71,7 @@ func (p *Phase) installHAProxyConfig(ctx context.Context, tmpPath string) error 
 
 	if system.FileExists(haproxyConfig) {
 		if err := system.CopyFileWithElevation(ctx, haproxyConfig, haproxyConfig+".backup", "haproxy.cfg backup"); err != nil {
-			p.LogWarn("haproxy: could not backup existing haproxy.cfg")
+			p.Log.Warn("haproxy: could not backup existing haproxy.cfg")
 		}
 	}
 
@@ -124,7 +124,7 @@ func (p *Phase) ConfigureHAProxy(ctx context.Context, cfg *config.Config, opts O
 		return err
 	}
 
-	p.LogInfo("haproxy: configuration validated, service enabled and restarted")
+	p.Log.Info("haproxy: configuration validated, service enabled and restarted")
 	return nil
 }
 
@@ -149,9 +149,9 @@ func (p *Phase) VerifyHAProxyPorts(ctx context.Context) error {
 	for _, portInfo := range ports {
 		pattern := fmt.Sprintf(":%s ", portInfo.port)
 		if strings.Contains(result.Stdout, pattern) {
-			p.LogInfo(fmt.Sprintf("haproxy: listening on port %s (%s)", portInfo.port, portInfo.description))
+			p.Log.Info(fmt.Sprintf("haproxy: listening on port %s (%s)", portInfo.port, portInfo.description))
 		} else {
-			p.LogWarn(fmt.Sprintf("haproxy: may not be listening on port %s (%s)", portInfo.port, portInfo.description))
+			p.Log.Warn(fmt.Sprintf("haproxy: may not be listening on port %s (%s)", portInfo.port, portInfo.description))
 			allListening = false
 		}
 	}

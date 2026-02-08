@@ -40,7 +40,7 @@ func (p *Phase) NewVerifyHealthStep(cfg *config.Config, opts Options, pctx *dist
 			pctx.Update(func(c *PostInstallContext) {
 				c.ClusterHealth = result
 			})
-			p.LogInfo(fmt.Sprintf("cluster: health check passed (%d/%d nodes ready)", result.ReadyNodes, result.TotalNodes))
+			p.Log.Info(fmt.Sprintf("cluster: health check passed (%d/%d nodes ready)", result.ReadyNodes, result.TotalNodes))
 			return nil
 		}).
 		MustBuild()
@@ -61,7 +61,7 @@ func (p *Phase) NewVerifyKubeVIPStep(cfg *config.Config, opts Options, pctx *dis
 		}).
 		SkipReason("kube-vip verification skipped by user").
 		OnError(func(err error) {
-			p.LogWarn(fmt.Sprintf("kubevip: verification failed: %v", err))
+			p.Log.Warn(fmt.Sprintf("kubevip: verification failed: %v", err))
 		}).
 		Execute(func(ctx context.Context) error {
 			kubeVipIP, err := p.VerifyKubeVIP(ctx, cfg, opts)
@@ -72,7 +72,7 @@ func (p *Phase) NewVerifyKubeVIPStep(cfg *config.Config, opts Options, pctx *dis
 				c.KubeVIPVerified = true
 				c.KubeVipIP = kubeVipIP
 			})
-			p.LogInfo(fmt.Sprintf("kubevip: vip %s is responding on port 6443", kubeVipIP))
+			p.Log.Info(fmt.Sprintf("kubevip: vip %s is responding on port 6443", kubeVipIP))
 			return nil
 		}).
 		MustBuild()
@@ -94,14 +94,14 @@ func (p *Phase) NewRemoveHAProxyStep(cfg *config.Config, opts Options, pctx *dis
 		}).
 		SkipReason("kube-vip not verified - keeping HAProxy as fallback").
 		OnError(func(err error) {
-			p.LogWarn(fmt.Sprintf("haproxy: removal failed: %v", err))
+			p.Log.Warn(fmt.Sprintf("haproxy: removal failed: %v", err))
 		}).
 		Execute(func(ctx context.Context) error {
 			vip := pctx.Get().KubeVipIP
 			if err := p.RemoveHAProxy(ctx, vip); err != nil {
 				return utils.WrapError("haproxy removal failed", err)
 			}
-			p.LogInfo("haproxy: service stopped and disabled on bastion")
+			p.Log.Info("haproxy: service stopped and disabled on bastion")
 			return nil
 		}).
 		MustBuild()
@@ -119,7 +119,7 @@ func (p *Phase) NewInstallAddonsStep(cfg *config.Config, opts Options, pctx *dis
 		Description("installing enabled cluster addons").
 		Fatal(false).
 		OnError(func(err error) {
-			p.LogWarn(fmt.Sprintf("addons: installation failed: %v", err))
+			p.Log.Warn(fmt.Sprintf("addons: installation failed: %v", err))
 		}).
 		Execute(func(ctx context.Context) error {
 			if err := mgr.InstallAll(ctx); err != nil {
@@ -143,7 +143,7 @@ func (p *Phase) NewDeployProductionDNSStep(cfg *config.Config, opts Options, pct
 		Description("updating apps wildcard dns for ingress load balancer").
 		Fatal(false).
 		OnError(func(err error) {
-			p.LogWarn(fmt.Sprintf("dns: apps dns update failed: %v", err))
+			p.Log.Warn(fmt.Sprintf("dns: apps dns update failed: %v", err))
 		}).
 		Execute(func(ctx context.Context) error {
 			state := pctx.Get()
@@ -152,9 +152,9 @@ func (p *Phase) NewDeployProductionDNSStep(cfg *config.Config, opts Options, pct
 				return utils.WrapError("apps dns update failed", err)
 			}
 			if appsIP != "" {
-				p.LogInfo(fmt.Sprintf("dns: apps.* wildcard now points to %s", appsIP))
+				p.Log.Info(fmt.Sprintf("dns: apps.* wildcard now points to %s", appsIP))
 			} else {
-				p.LogInfo("dns: production config deployed (apps ip pending metallb assignment)")
+				p.Log.Info("dns: production config deployed (apps ip pending metallb assignment)")
 			}
 			return nil
 		}).

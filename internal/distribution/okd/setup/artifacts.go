@@ -41,13 +41,13 @@ func (p *Phase) DownloadOKDTools(ctx context.Context, version string, opts Optio
 
 		binaryPath := filepath.Join(opts.DownloadDir, tool.binary)
 		if system.FileExists(binaryPath) && !opts.SkipDownloads {
-			p.LogInfo(fmt.Sprintf("tools: using existing %s binary", tool.name))
+			p.Log.Info(fmt.Sprintf("tools: using existing %s binary", tool.name))
 			continue
 		}
 
 		checksum, err := download.FetchChecksum(ctx, checksumsURL, tool.filename)
 		if err != nil {
-			p.LogWarn(fmt.Sprintf("tools: proceeding without checksum validation for %s", tool.name))
+			p.Log.Warn(fmt.Sprintf("tools: proceeding without checksum validation for %s", tool.name))
 			checksum = ""
 		}
 
@@ -93,10 +93,10 @@ func (p *Phase) InstallToolsToSystem(ctx context.Context, srcDir string) error {
 		}
 
 		if err := system.Chmod(ctx, destPath, "+x", fmt.Sprintf("set %s executable", binary)); err != nil {
-			p.LogWarn(fmt.Sprintf("tools: failed to set executable permission for %s: %v", binary, err))
+			p.Log.Warn(fmt.Sprintf("tools: failed to set executable permission for %s: %v", binary, err))
 		}
 
-		p.LogInfo(fmt.Sprintf("tools: installed %s to %s", binary, destPath))
+		p.Log.Info(fmt.Sprintf("tools: installed %s to %s", binary, destPath))
 	}
 
 	return nil

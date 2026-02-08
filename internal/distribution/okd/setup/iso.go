@@ -45,7 +45,7 @@ func (p *Phase) BuildCustomISOs(ctx context.Context, cfg *config.Config, opts Op
 			return ctx.Err()
 		default:
 		}
-		p.LogInfo(fmt.Sprintf("iso: building custom coreos iso for %s", node.Name))
+		p.Log.Info(fmt.Sprintf("iso: building custom coreos iso for %s", node.Name))
 
 		if err := p.buildNodeISO(ctx, cfg, node, clusterDir, fcosISO, isoDir); err != nil {
 			return utils.WrapErrorf(err, "failed to build ISO for %s", node.Name)

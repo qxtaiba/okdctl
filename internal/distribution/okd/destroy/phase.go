@@ -74,8 +74,8 @@ func New(exec *executor.Executor, logger logging.Logger, version string) *Phase 
 // NOTE: User confirmation is handled by the CLI layer before calling this method.
 // The Force option is expected to be true when called from CLI (which has already confirmed).
 func (p *Phase) Execute(ctx context.Context, cfg *config.Config, opts Options) error {
-	p.LogInfo("destroy: starting cluster teardown")
-	p.LogWarn("destroy: this will permanently remove all vms and generated files")
+	p.Log.Info("destroy: starting cluster teardown")
+	p.Log.Warn("destroy: this will permanently remove all vms and generated files")
 
 	orchestrator := distribution.NewOrchestrator(
 		p.newDestroyInfraStep(cfg, opts),

@@ -40,15 +40,15 @@ func (p *Phase) VerifyClusterHealth(ctx context.Context, opts Options) (*Cluster
 		if len(fields) >= 5 {
 			if fields[4] == "True" { // DEGRADED column
 				result.DegradedOperators++
-				p.LogWarn(fmt.Sprintf("cluster: operator %s is degraded", fields[0]))
+				p.Log.Warn(fmt.Sprintf("cluster: operator %s is degraded", fields[0]))
 			}
 		}
 	}
 
 	if result.DegradedOperators > 0 {
-		p.LogWarn(fmt.Sprintf("cluster: %d operators are degraded", result.DegradedOperators))
+		p.Log.Warn(fmt.Sprintf("cluster: %d operators are degraded", result.DegradedOperators))
 	} else {
-		p.LogInfo("cluster: all operators are healthy")
+		p.Log.Info("cluster: all operators are healthy")
 	}
 
 	cmdResult, err = p.Exec.Run(ctx, "oc", "get", "nodes", "--no-headers")
@@ -64,7 +64,7 @@ func (p *Phase) VerifyClusterHealth(ctx context.Context, opts Options) (*Cluster
 		}
 	}
 
-	p.LogInfo(fmt.Sprintf("cluster: %d/%d nodes are ready", result.ReadyNodes, result.TotalNodes))
+	p.Log.Info(fmt.Sprintf("cluster: %d/%d nodes are ready", result.ReadyNodes, result.TotalNodes))
 
 	return result, nil
 }
@@ -81,7 +81,7 @@ func (p *Phase) VerifyKubeVIP(ctx context.Context, cfg *config.Config, opts Opti
 		return "", fmt.Errorf("failed to derive VIP from static IP start: %s", cfg.Networking.StaticIP.Start)
 	}
 
-	p.LogInfo(fmt.Sprintf("kubevip: checking vip %s", vip))
+	p.Log.Info(fmt.Sprintf("kubevip: checking vip %s", vip))
 
 	if err := p.waitForKubeVIPDaemonSet(ctx); err != nil {
 		return "", err
@@ -117,7 +117,7 @@ func (p *Phase) waitForKubeVIPDaemonSet(ctx context.Context) error {
 	result, _ := p.Exec.Run(ctx, "oc", "get", "daemonset", "-n", "kube-system", "kube-vip",
 		"-o", "jsonpath={.status.numberReady}")
 	if result != nil && result.ExitCode == 0 {
-		p.LogInfo(fmt.Sprintf("kubevip: daemonset running (%s pods ready)", strings.TrimSpace(result.Stdout)))
+		p.Log.Info(fmt.Sprintf("kubevip: daemonset running (%s pods ready)", strings.TrimSpace(result.Stdout)))
 	}
 
 	return nil
@@ -135,7 +135,7 @@ func (p *Phase) waitForKubeVIPPing(ctx context.Context, vip string) error {
 		return utils.WrapError(fmt.Sprintf("vip %s is not responding to ping", vip), err)
 	}
 
-	p.LogInfo(fmt.Sprintf("kubevip: vip %s is reachable", vip))
+	p.Log.Info(fmt.Sprintf("kubevip: vip %s is reachable", vip))
 	return nil
 }
 
@@ -156,7 +156,7 @@ func (p *Phase) verifyKubeVIPAPIHealth(ctx context.Context, vip string) error {
 		return fmt.Errorf("api health check returned unexpected response: %s (expected 'ok')", response)
 	}
 
-	p.LogInfo(fmt.Sprintf("kubevip: api server responding at %s", healthURL))
+	p.Log.Info(fmt.Sprintf("kubevip: api server responding at %s", healthURL))
 	return nil
 }
 

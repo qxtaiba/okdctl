@@ -7,6 +7,7 @@ import (
 	"github.com/qxtaiba/okd-proxmox-cli/internal/config"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/cleanup"
+	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/paths"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
 )
@@ -32,13 +33,13 @@ func (p *Phase) newDestroyInfraStep(cfg *config.Config, opts Options) distributi
 			if err := p.destroyInfrastructure(ctx, opts); err != nil {
 				return utils.WrapError("infrastructure destruction failed", err)
 			}
-			p.LogInfo("terraform: infrastructure destruction completed")
+			p.Log.Info("terraform: infrastructure destruction completed")
 			return nil
 		}).
 		OnError(func(err error) {
-			p.LogError(fmt.Sprintf("terraform: destruction failed: %v", err))
+			p.Log.Error(fmt.Sprintf("terraform: destruction failed: %v", err))
 			if !opts.Force {
-				p.LogWarn("terraform: file cleanup will be skipped unless --force is used")
+				p.Log.Warn("terraform: file cleanup will be skipped unless --force is used")
 			}
 		}).
 		MustBuild()
@@ -60,7 +61,7 @@ func (p *Phase) newCleanupFilesStep(cfg *config.Config, opts Options) distributi
 				WorkDir:        opts.WorkDir,
 				ProjectRoot:    opts.ProjectRoot,
 				HTTPServerRoot: cfg.HTTPServer.Root,
-				HAProxyConfig:  cleanup.DefaultHAProxyConfigPath,
+				HAProxyConfig:  paths.DefaultHAProxyConfigPath,
 				ClusterName:    cfg.Cluster.Name,
 				TerraformEnv:   opts.TerraformEnv,
 				PreserveConfig: false,
@@ -74,7 +75,7 @@ func (p *Phase) newCleanupFilesStep(cfg *config.Config, opts Options) distributi
 			return nil
 		}).
 		OnError(func(err error) {
-			p.LogWarn(fmt.Sprintf("cleanup: file removal failed: %v", err))
+			p.Log.Warn(fmt.Sprintf("cleanup: file removal failed: %v", err))
 		}).
 		MustBuild()
 }
@@ -100,11 +101,11 @@ func (p *Phase) newCleanupFirewallStep(opts Options) distribution.ProvisioningSt
 			if err := system.RemoveOKDFirewallRules(ctx, true); err != nil {
 				return utils.WrapError("firewall cleanup failed", err)
 			}
-			p.LogInfo("firewall: okd rules removed from firewalld")
+			p.Log.Info("firewall: okd rules removed from firewalld")
 			return nil
 		}).
 		OnError(func(err error) {
-			p.LogWarn(fmt.Sprintf("firewall: cleanup incomplete: %v", err))
+			p.Log.Warn(fmt.Sprintf("firewall: cleanup incomplete: %v", err))
 		}).
 		MustBuild()
 }
@@ -119,7 +120,7 @@ func (p *Phase) newPrintSummaryStep(opts Options) distribution.ProvisioningStep 
 		Fatal(false).
 		OnStart(func() {}).
 		Execute(func(ctx context.Context) error {
-			p.LogInfo("destroy: cluster teardown completed")
+			p.Log.Info("destroy: cluster teardown completed")
 			return nil
 		}).
 		MustBuild()

@@ -71,33 +71,3 @@ func NewBasePhase(exec *executor.Executor, logger logging.Logger, version string
 		Version: version,
 	}
 }
-
-// Executor returns the phase's command executor.
-func (b *BasePhase) Executor() *executor.Executor {
-	return b.Exec
-}
-
-// Logger returns the phase's logger.
-func (b *BasePhase) Logger() logging.Logger {
-	return b.Log
-}
-
-// LogInfo logs an info message.
-func (b *BasePhase) LogInfo(msg string) {
-	b.Log.Info(msg)
-}
-
-// LogWarn logs a warning message.
-func (b *BasePhase) LogWarn(msg string) {
-	b.Log.Warn(msg)
-}
-
-// LogError logs an error message.
-func (b *BasePhase) LogError(msg string) {
-	b.Log.Error(msg)
-}
-
-// LogDebug logs a debug message.
-func (b *BasePhase) LogDebug(msg string) {
-	b.Log.Debug(msg)
-}

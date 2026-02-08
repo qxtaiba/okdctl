@@ -45,12 +45,12 @@ func (p *Phase) configureApachePort(ctx context.Context) {
 
 	backupPath := fmt.Sprintf("%s.backup.%d", httpdConf, time.Now().Unix())
 	if err := system.CopyFileWithElevation(ctx, httpdConf, backupPath, "httpd.conf backup"); err != nil {
-		p.LogWarn(fmt.Sprintf("apache: could not backup httpd.conf: %v", err))
+		p.Log.Warn(fmt.Sprintf("apache: could not backup httpd.conf: %v", err))
 	}
 
 	result, err := p.Exec.Run(ctx, "sudo", "sed", "-i", "s/^Listen 80$/Listen 8080/", httpdConf)
 	if err != nil || result.ExitCode != 0 {
-		p.LogWarn("apache: could not modify httpd.conf to listen on port 8080")
+		p.Log.Warn("apache: could not modify httpd.conf to listen on port 8080")
 	}
 }
 
@@ -82,15 +82,15 @@ func enableAndStartApache(ctx context.Context) error {
 func (p *Phase) verifyApacheListening(ctx context.Context) {
 	result, _ := p.Exec.Run(ctx, "ss", "-tlnp")
 	if result != nil && result.ExitCode == 0 && strings.Contains(result.Stdout, ":8080 ") {
-		p.LogInfo("apache: httpd service listening on port 8080")
+		p.Log.Info("apache: httpd service listening on port 8080")
 	} else {
-		p.LogWarn("apache: httpd may not be listening on port 8080 - check configuration")
+		p.Log.Warn("apache: httpd may not be listening on port 8080 - check configuration")
 	}
 }
 
 // ConfigureApache configures Apache httpd for serving ignition files.
 func (p *Phase) ConfigureApache(ctx context.Context, cfg *config.Config) error {
-	p.LogInfo("apache: configuring httpd for serving ignition files")
+	p.Log.Info("apache: configuring httpd for serving ignition files")
 
 	p.configureApachePort(ctx)
 	p.configureSELinuxForApache(ctx)
@@ -110,7 +110,7 @@ func (p *Phase) ConfigureApache(ctx context.Context, cfg *config.Config) error {
 		return err
 	}
 
-	p.LogInfo(fmt.Sprintf("apache: ignition directory created at %s", ignitionDir))
+	p.Log.Info(fmt.Sprintf("apache: ignition directory created at %s", ignitionDir))
 	return nil
 }
 
@@ -148,7 +148,7 @@ func (p *Phase) DeployToWebServer(ctx context.Context, cfg *config.Config, clust
 	if system.FileExists(authSrc) {
 		authDest := filepath.Join(webRoot, "auth")
 		if result, err := p.Exec.Run(ctx, "sudo", "cp", "-r", authSrc, authDest); err != nil || result.ExitCode != 0 {
-			p.LogWarn("apache: could not copy auth directory to web root")
+			p.Log.Warn("apache: could not copy auth directory to web root")
 		}
 	}
 
@@ -161,7 +161,7 @@ func (p *Phase) VerifyWebServer(ctx context.Context, baseURL string) error {
 
 	client := system.NewAPIClient()
 
-	p.LogInfo(fmt.Sprintf("apache: verifying web server at %s", testURL))
+	p.Log.Info(fmt.Sprintf("apache: verifying web server at %s", testURL))
 
 	resp, err := client.Get(testURL)
 	if err != nil {
@@ -177,7 +177,7 @@ func (p *Phase) VerifyWebServer(ctx context.Context, baseURL string) error {
 		return fmt.Errorf("bootstrap.ign appears too small (%d bytes)", resp.ContentLength)
 	}
 
-	p.LogInfo("apache: web server accessible and serving ignition files")
+	p.Log.Info("apache: web server accessible and serving ignition files")
 
 	return nil
 }
