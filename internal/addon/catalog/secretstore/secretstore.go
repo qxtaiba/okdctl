@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -37,7 +38,7 @@ func (s *SecretStore) Info() addon.AddonInfo {
 	return addon.AddonInfo{
 		Name:           "secretstore",
 		DisplayName:    "1Password Secret Store",
-		Description:    "Bootstrap 1Password Connect secrets from sops-encrypted files",
+		Description:    "Bootstrap 1Password Connect secrets from plaintext or sops-encrypted files",
 		Category:       "secrets",
 		Dependencies:   nil,
 		Priority:       50,
@@ -46,10 +47,6 @@ func (s *SecretStore) Info() addon.AddonInfo {
 }
 
 func (s *SecretStore) Install(ctx context.Context, env *addon.Environment) error {
-	if !executor.CommandExists("sops") {
-		return fmt.Errorf("sops is required to decrypt secret files — install with: brew install sops (macOS) or enable secretstore during setup to auto-install")
-	}
-
 	secretsDir := s.secretsDir(env)
 
 	credPath := filepath.Join(secretsDir, credentialsFile)
@@ -57,20 +54,22 @@ func (s *SecretStore) Install(ctx context.Context, env *addon.Environment) error
 
 	// If no secret files exist, warn with setup instructions and return (non-fatal)
 	if !system.FileExists(credPath) && !system.FileExists(tokenPath) {
-		env.Logger.Warn(fmt.Sprintf("secretstore: no sops-encrypted files found in %s, skipping", secretsDir))
+		env.Logger.Warn(fmt.Sprintf("secretstore: no secret files found in %s, skipping", secretsDir))
 		env.Logger.Warn("secretstore: to set up 1password connect secrets:")
 		env.Logger.Warn("  1. download 1password-credentials.json from Settings > Automation in 1password.com")
 		env.Logger.Warn("  2. create a connect token and save it:")
 		env.Logger.Warn("     echo -n 'YOUR_TOKEN' > " + filepath.Join(secretsDir, tokenFile))
 		env.Logger.Warn("  3. copy the credentials file:")
 		env.Logger.Warn("     cp ~/Downloads/1password-credentials.json " + secretsDir + "/")
-		env.Logger.Warn("  4. encrypt both files with sops:")
-		env.Logger.Warn("     sops -e -i " + credPath)
-		env.Logger.Warn("     sops -e -i " + tokenPath)
+		env.Logger.Warn("  4. (optional) encrypt with sops: sops -e -i <file>")
 		env.Logger.Warn("  5. re-run: openshitctl addon install secretstore")
-		env.Logger.Warn("  note: sops requires an age key at ~/.config/sops/age/keys.txt")
-		env.Logger.Warn("  setup: age-keygen -o ~/.config/sops/age/keys.txt (local), then scp to bastion")
 		return nil
+	}
+
+	// Only require sops if any file is actually encrypted
+	encrypted := isSopsEncrypted(credPath) || isSopsEncrypted(tokenPath)
+	if encrypted && !executor.CommandExists("sops") {
+		return fmt.Errorf("sops-encrypted secret files detected but sops is not installed — install with: brew install sops")
 	}
 
 	if err := retry.Do(ctx, 3, 5*time.Second, func() error {
@@ -79,7 +78,7 @@ func (s *SecretStore) Install(ctx context.Context, env *addon.Environment) error
 		return err
 	}
 
-	env.Logger.Info("secretstore: creating 1password connect secrets from sops-encrypted files")
+	env.Logger.Info("secretstore: creating 1password connect secrets")
 
 	if system.FileExists(credPath) {
 		if err := retry.Do(ctx, 3, 5*time.Second, func() error {
@@ -128,7 +127,7 @@ func (s *SecretStore) Uninstall(ctx context.Context, env *addon.Environment) err
 
 func (s *SecretStore) RequiredTools() []addon.ToolSpec {
 	return []addon.ToolSpec{
-		{Name: "sops", Description: "Mozilla SOPS for decrypting secret files"},
+		{Name: "sops", Description: "Mozilla SOPS for decrypting secret files (used if files are sops-encrypted)"},
 	}
 }
 
@@ -145,8 +144,38 @@ func (s *SecretStore) ValidateSettings(settings map[string]string) []string {
 
 func (s *SecretStore) WizardFields() []addon.WizardField {
 	return []addon.WizardField{
-		{Key: "secrets_dir", Label: "Secrets Directory", Default: defaultSecretsDir, Help: "Directory containing sops-encrypted 1password-credentials.json and 1password-token.txt"},
+		{Key: "secrets_dir", Label: "Secrets Directory", Default: defaultSecretsDir, Help: "Directory containing 1password-credentials.json and 1password-token.txt (plaintext or sops-encrypted)"},
 	}
+}
+
+func isSopsEncrypted(path string) bool {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return false
+	}
+	content := string(data)
+	return strings.Contains(content, `"sops"`) || strings.Contains(content, "sops_version=")
+}
+
+func (s *SecretStore) readSecret(ctx context.Context, env *addon.Environment, path string) (string, error) {
+	if !isSopsEncrypted(path) {
+		env.Logger.Info(fmt.Sprintf("secretstore: reading plaintext file %s", filepath.Base(path)))
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return "", err
+		}
+		return string(data), nil
+	}
+
+	env.Logger.Info(fmt.Sprintf("secretstore: decrypting %s with sops", filepath.Base(path)))
+	result, err := env.Exec.Run(ctx, "sops", "-d", path)
+	if err != nil {
+		return "", fmt.Errorf("sops decryption failed: %w", err)
+	}
+	if result.ExitCode != 0 {
+		return "", fmt.Errorf("sops decryption failed (is the age key at ~/.config/sops/age/keys.txt?): %s", result.Stderr)
+	}
+	return result.Stdout, nil
 }
 
 func (s *SecretStore) secretsDir(env *addon.Environment) string {
@@ -192,17 +221,13 @@ func (s *SecretStore) createCredentialsSecret(ctx context.Context, env *addon.En
 		return nil
 	}
 
-	env.Logger.Info("secretstore: decrypting credentials file with sops")
-	sopsResult, err := env.Exec.Run(ctx, "sops", "-d", credPath)
+	plaintext, err := s.readSecret(ctx, env, credPath)
 	if err != nil {
-		return utils.WrapError("failed to decrypt 1password credentials with sops", err)
-	}
-	if sopsResult.ExitCode != 0 {
-		return fmt.Errorf("sops decryption failed (is the age key at ~/.config/sops/age/keys.txt?): %s", sopsResult.Stderr)
+		return utils.WrapError("failed to read 1password credentials", err)
 	}
 
 	// Base64-encoded because the HelmRelease mounts it as a pre-encoded value
-	credentialsBase64 := base64.StdEncoding.EncodeToString([]byte(sopsResult.Stdout))
+	credentialsBase64 := base64.StdEncoding.EncodeToString([]byte(plaintext))
 
 	result, err := env.Exec.Run(ctx, "oc", "create", "secret", "generic", credentialsSecretName,
 		"--namespace", defaultNamespace,
@@ -224,15 +249,11 @@ func (s *SecretStore) createTokenSecret(ctx context.Context, env *addon.Environm
 		return nil
 	}
 
-	env.Logger.Info("secretstore: decrypting token file with sops")
-	sopsResult, err := env.Exec.Run(ctx, "sops", "-d", tokenPath)
+	plaintext, err := s.readSecret(ctx, env, tokenPath)
 	if err != nil {
-		return utils.WrapError("failed to decrypt 1password token with sops", err)
+		return utils.WrapError("failed to read 1password token", err)
 	}
-	if sopsResult.ExitCode != 0 {
-		return fmt.Errorf("sops decryption failed (is the age key at ~/.config/sops/age/keys.txt?): %s", sopsResult.Stderr)
-	}
-	token := strings.TrimSpace(sopsResult.Stdout)
+	token := strings.TrimSpace(plaintext)
 
 	result, err := env.Exec.Run(ctx, "oc", "create", "secret", "generic", tokenSecretName,
 		"--namespace", defaultNamespace,

@@ -35,6 +35,7 @@ id_rsa*
 *.pub
 pull-secret.txt
 pull-secret.json
+.sops.yaml
 
 # Ignition files
 *.ign
