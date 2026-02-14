@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
+	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/httputil"
 )
 
 type Options struct {
@@ -90,7 +90,7 @@ func Download(ctx context.Context, opts Options) error {
 	filename := filepath.Base(opts.OutputPath)
 	opts.logger().Info(fmt.Sprintf("download: %s", filename))
 
-	client := system.NewClient(system.WithTimeout(opts.Timeout))
+	client := httputil.NewClient(httputil.WithTimeout(opts.Timeout))
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, opts.URL, nil)
 	if err != nil {

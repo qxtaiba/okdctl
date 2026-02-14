@@ -1,4 +1,4 @@
-package system
+package packages
 
 import (
 	"context"
@@ -7,9 +7,10 @@ import (
 	"strings"
 
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
+	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
 )
 
-func InstallPackages(ctx context.Context, packages []string, description string, logger utils.Logger) error {
+func Install(ctx context.Context, packages []string, description string, logger utils.Logger) error {
 	if len(packages) == 0 {
 		return nil
 	}
@@ -18,7 +19,7 @@ func InstallPackages(ctx context.Context, packages []string, description string,
 	logger.Info(fmt.Sprintf("packages: %s", strings.Join(packages, ", ")))
 
 	args := append([]string{"install", "-y"}, packages...)
-	if err := RunSudo(ctx, "dnf", args...); err != nil {
+	if err := system.RunSudo(ctx, "dnf", args...); err != nil {
 		logger.Error(fmt.Sprintf("packages: failed to install %s", description))
 		return utils.WrapError("dnf install failed", err)
 	}
@@ -27,12 +28,12 @@ func InstallPackages(ctx context.Context, packages []string, description string,
 	return nil
 }
 
-func RemovePackages(ctx context.Context, packages []string, logger utils.Logger) error {
+func Remove(ctx context.Context, packages []string, logger utils.Logger) error {
 	if len(packages) == 0 {
 		return nil
 	}
 
-	installed := filterInstalledPackages(packages)
+	installed := filterInstalled(packages)
 	if len(installed) == 0 {
 		logger.Info("packages: none to remove (none installed)")
 		return nil
@@ -41,7 +42,7 @@ func RemovePackages(ctx context.Context, packages []string, logger utils.Logger)
 	logger.Info(fmt.Sprintf("packages: removing %s", strings.Join(installed, ", ")))
 
 	args := append([]string{"remove", "-y"}, installed...)
-	if err := RunSudo(ctx, "dnf", args...); err != nil {
+	if err := system.RunSudo(ctx, "dnf", args...); err != nil {
 		logger.Error(fmt.Sprintf("packages: failed to remove: %v", err))
 		return utils.WrapError("dnf remove failed", err)
 	}
@@ -50,17 +51,17 @@ func RemovePackages(ctx context.Context, packages []string, logger utils.Logger)
 	return nil
 }
 
-func filterInstalledPackages(packages []string) []string {
+func filterInstalled(packages []string) []string {
 	var installed []string
 	for _, pkg := range packages {
-		if isPackageInstalled(pkg) {
+		if isInstalled(pkg) {
 			installed = append(installed, pkg)
 		}
 	}
 	return installed
 }
 
-func isPackageInstalled(pkg string) bool {
+func isInstalled(pkg string) bool {
 	cmd := exec.Command("rpm", "-q", pkg)
 	return cmd.Run() == nil
 }

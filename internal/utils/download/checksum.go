@@ -12,7 +12,7 @@ import (
 	"strings"
 
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
+	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/httputil"
 )
 
 const maxChecksumFileSize = 1024 * 1024
@@ -51,7 +51,7 @@ func ValidateChecksum(path, expectedChecksum string) error {
 }
 
 func FetchChecksum(ctx context.Context, checksumsURL, filename string) (string, error) {
-	client := system.NewClient(system.WithTimeout(system.TimeoutMedium))
+	client := httputil.NewClient(httputil.WithTimeout(httputil.TimeoutMedium))
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, checksumsURL, nil)
 	if err != nil {

@@ -1,4 +1,4 @@
-package system
+package netutil
 
 import (
 	"context"
@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
+	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
 )
 
 func AddSecondaryIP(ctx context.Context, ip, iface string) error {
@@ -23,16 +24,16 @@ func AddSecondaryIP(ctx context.Context, ip, iface string) error {
 		return nil
 	}
 
-	conn, err := getConnectionForDevice(ctx, iface)
+	conn, err := connectionForDevice(ctx, iface)
 	if err != nil {
 		return utils.WrapErrorf(err, "failed to find networkmanager connection for %s", iface)
 	}
 
-	if err := RunSudo(ctx, "nmcli", "connection", "modify", conn, "+ipv4.addresses", ip+"/32"); err != nil {
+	if err := system.RunSudo(ctx, "nmcli", "connection", "modify", conn, "+ipv4.addresses", ip+"/32"); err != nil {
 		return utils.WrapErrorf(err, "failed to add IP %s to connection %s", ip, conn)
 	}
 
-	if err := RunSudo(ctx, "nmcli", "device", "reapply", iface); err != nil {
+	if err := system.RunSudo(ctx, "nmcli", "device", "reapply", iface); err != nil {
 		return utils.WrapErrorf(err, "failed to apply IP change on %s", iface)
 	}
 
@@ -53,16 +54,16 @@ func RemoveSecondaryIP(ctx context.Context, ip, iface string) error {
 		return nil
 	}
 
-	conn, err := getConnectionForDevice(ctx, iface)
+	conn, err := connectionForDevice(ctx, iface)
 	if err != nil {
 		return utils.WrapErrorf(err, "failed to find networkmanager connection for %s", iface)
 	}
 
-	if err := RunSudo(ctx, "nmcli", "connection", "modify", conn, "-ipv4.addresses", ip+"/32"); err != nil {
+	if err := system.RunSudo(ctx, "nmcli", "connection", "modify", conn, "-ipv4.addresses", ip+"/32"); err != nil {
 		return utils.WrapErrorf(err, "failed to remove IP %s from connection %s", ip, conn)
 	}
 
-	if err := RunSudo(ctx, "nmcli", "device", "reapply", iface); err != nil {
+	if err := system.RunSudo(ctx, "nmcli", "device", "reapply", iface); err != nil {
 		return utils.WrapErrorf(err, "failed to apply IP change on %s", iface)
 	}
 
@@ -77,7 +78,7 @@ func SendGratuitousARP(ctx context.Context, ip, iface string) error {
 		return fmt.Errorf("interface name is required")
 	}
 
-	if err := RunSudo(ctx, "arping", "-A", "-c", "3", "-I", iface, ip); err != nil {
+	if err := system.RunSudo(ctx, "arping", "-A", "-c", "3", "-I", iface, ip); err != nil {
 		return utils.WrapErrorf(err, "failed to send gratuitous ARP for %s on %s", ip, iface)
 	}
 	return nil
@@ -100,7 +101,7 @@ func GetDefaultInterface(ctx context.Context) (string, error) {
 	return "", fmt.Errorf("could not determine default interface from route: %s", string(output))
 }
 
-func getConnectionForDevice(ctx context.Context, iface string) (string, error) {
+func connectionForDevice(ctx context.Context, iface string) (string, error) {
 	cmd := exec.CommandContext(ctx, "nmcli", "-t", "-f", "NAME,DEVICE", "connection", "show", "--active")
 	output, err := cmd.Output()
 	if err != nil {

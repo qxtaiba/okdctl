@@ -114,10 +114,10 @@ func ConfigName(clusterName string) string {
 }
 
 func Setup(ctx context.Context, fallbackDNS []string, logger utils.Logger) error {
-	if err := system.EnableDnsmasq(ctx); err != nil {
+	if err := EnableDnsmasq(ctx); err != nil {
 		return utils.WrapError("failed to enable dnsmasq", err)
 	}
-	if err := system.ConfigureSystemResolver(ctx, fallbackDNS, logger); err != nil {
+	if err := ConfigureSystemResolver(ctx, fallbackDNS, logger); err != nil {
 		return utils.WrapError("failed to configure system resolver", err)
 	}
 	return nil
@@ -135,7 +135,7 @@ func DeployBootstrap(ctx context.Context, cfg *config.Config) error {
 	}
 
 	configName := ConfigName(cfg.Cluster.Name)
-	if err := system.WriteDnsmasqConfig(ctx, configName, content); err != nil {
+	if err := WriteDnsmasqConfig(ctx, configName, content); err != nil {
 		return utils.WrapError("failed to write dnsmasq config", err)
 	}
 
@@ -176,7 +176,7 @@ func DeployProduction(ctx context.Context, cfg *config.Config, appsIP, kubeVipIP
 	}
 
 	configName := ConfigName(cfg.Cluster.Name)
-	if err := system.WriteDnsmasqConfig(ctx, configName, content); err != nil {
+	if err := WriteDnsmasqConfig(ctx, configName, content); err != nil {
 		return utils.WrapError("failed to write dnsmasq config", err)
 	}
 
@@ -190,7 +190,7 @@ func DeployProduction(ctx context.Context, cfg *config.Config, appsIP, kubeVipIP
 // validateAndRestartDnsmasq validates the dnsmasq config, then restarts the service.
 // On validation or restart failure, it restores the previous config from the .backup file.
 func validateAndRestartDnsmasq(ctx context.Context, configName string) error {
-	configPath := system.DnsmasqConfigPath(configName)
+	configPath := DnsmasqConfigPath(configName)
 	backupPath := configPath + ".backup"
 
 	restore := func() {
@@ -200,7 +200,7 @@ func validateAndRestartDnsmasq(ctx context.Context, configName string) error {
 		_ = system.CopyFileWithElevation(ctx, backupPath, configPath, "dnsmasq config rollback")
 	}
 
-	if err := system.ValidateDnsmasqConfig(ctx); err != nil {
+	if err := ValidateDnsmasqConfig(ctx); err != nil {
 		restore()
 		return errors.Join(
 			fmt.Errorf("dnsmasq config validation failed — previous config restored"),
@@ -208,7 +208,7 @@ func validateAndRestartDnsmasq(ctx context.Context, configName string) error {
 		)
 	}
 
-	if err := system.RestartDnsmasq(ctx); err != nil {
+	if err := RestartDnsmasq(ctx); err != nil {
 		restore()
 		return utils.WrapError("failed to restart dnsmasq — previous config restored", err)
 	}

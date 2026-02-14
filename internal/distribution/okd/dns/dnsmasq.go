@@ -1,4 +1,4 @@
-package system
+package dns
 
 import (
 	"context"
@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
+	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
 )
 
 const (
@@ -22,15 +23,15 @@ const (
 var validConfigNameRegex = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$`)
 
 func EnableDnsmasq(ctx context.Context) error {
-	return ManageService(ctx, ServiceEnable, dnsmasqService, "dnsmasq")
+	return system.ManageService(ctx, system.ServiceEnable, dnsmasqService, "dnsmasq")
 }
 
 func RestartDnsmasq(ctx context.Context) error {
-	return ManageService(ctx, ServiceRestart, dnsmasqService, "dnsmasq")
+	return system.ManageService(ctx, system.ServiceRestart, dnsmasqService, "dnsmasq")
 }
 
 func ValidateDnsmasqConfig(ctx context.Context) error {
-	return RunSudo(ctx, "dnsmasq", "--test")
+	return system.RunSudo(ctx, "dnsmasq", "--test")
 }
 
 func validateConfigName(name string) error {
@@ -50,14 +51,14 @@ func WriteDnsmasqConfig(ctx context.Context, name, content string) error {
 
 	configPath := filepath.Join(dnsmasqConfigDir, fmt.Sprintf("%s.conf", name))
 
-	if err := MkdirAll(ctx, dnsmasqConfigDir, "dnsmasq config directory"); err != nil {
+	if err := system.MkdirAll(ctx, dnsmasqConfigDir, "dnsmasq config directory"); err != nil {
 		return utils.WrapError("failed to create dnsmasq config directory", err)
 	}
 
 	// Back up existing config before overwriting so it can be restored on failure.
-	if FileExists(configPath) {
+	if system.FileExists(configPath) {
 		backupPath := configPath + ".backup"
-		if err := CopyFileWithElevation(ctx, configPath, backupPath, "dnsmasq config backup"); err != nil {
+		if err := system.CopyFileWithElevation(ctx, configPath, backupPath, "dnsmasq config backup"); err != nil {
 			return utils.WrapErrorf(err, "failed to back up config %s", configPath)
 		}
 	}
@@ -79,11 +80,11 @@ func WriteDnsmasqConfig(ctx context.Context, name, content string) error {
 		return utils.WrapError("failed to close temp file", err)
 	}
 
-	if err := CopyFileWithElevation(ctx, tmpPath, configPath, "dnsmasq config"); err != nil {
+	if err := system.CopyFileWithElevation(ctx, tmpPath, configPath, "dnsmasq config"); err != nil {
 		return utils.WrapErrorf(err, "failed to copy config to %s", configPath)
 	}
 
-	if err := Chmod(ctx, configPath, "644", "dnsmasq config permissions"); err != nil {
+	if err := system.Chmod(ctx, configPath, "644", "dnsmasq config permissions"); err != nil {
 		return utils.WrapError("failed to set config permissions", err)
 	}
 
@@ -104,7 +105,7 @@ func IsNetworkManagerActive() bool {
 	if _, err := exec.LookPath("nmcli"); err != nil {
 		return false
 	}
-	return IsServiceActive("NetworkManager")
+	return system.IsServiceActive("NetworkManager")
 }
 
 func getActiveConnection(ctx context.Context) (string, error) {
@@ -154,11 +155,11 @@ func ConfigureSystemResolver(ctx context.Context, fallbackDNS []string, logger u
 
 	logger.Info(fmt.Sprintf("resolver: configuring %s to use local dnsmasq", conn))
 
-	if err := runSudo("nmcli", "connection", "modify", conn, "ipv4.dns", dnsConfig, "ipv4.ignore-auto-dns", "yes"); err != nil {
+	if err := system.RunSudo(ctx, "nmcli", "connection", "modify", conn, "ipv4.dns", dnsConfig, "ipv4.ignore-auto-dns", "yes"); err != nil {
 		return utils.WrapError("failed to configure DNS for connection", err)
 	}
 
-	if err := runSudo("nmcli", "connection", "up", conn); err != nil {
+	if err := system.RunSudo(ctx, "nmcli", "connection", "up", conn); err != nil {
 		return utils.WrapError("failed to apply DNS configuration", err)
 	}
 
@@ -178,15 +179,14 @@ func RestoreSystemResolver(ctx context.Context, logger utils.Logger) error {
 
 	logger.Info(fmt.Sprintf("resolver: restoring DHCP DNS for %s", conn))
 
-	if err := runSudo("nmcli", "connection", "modify", conn, "ipv4.dns", "", "ipv4.ignore-auto-dns", "no"); err != nil {
+	if err := system.RunSudo(ctx, "nmcli", "connection", "modify", conn, "ipv4.dns", "", "ipv4.ignore-auto-dns", "no"); err != nil {
 		logger.Warn(fmt.Sprintf("resolver: failed to clear DNS settings: %v", err))
 	}
 
-	if err := runSudo("nmcli", "connection", "up", conn); err != nil {
+	if err := system.RunSudo(ctx, "nmcli", "connection", "up", conn); err != nil {
 		logger.Warn(fmt.Sprintf("resolver: failed to apply DNS configuration: %v", err))
 	}
 
 	logger.Info("resolver: system DNS restored to DHCP")
 	return nil
 }
-

@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/packages"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/setup"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
@@ -33,8 +34,8 @@ func InstalledBinaries() []string {
 func Packages(ctx context.Context, logger utils.Logger) error {
 	var hasErrors bool
 
-	packages := InstalledPackages()
-	if err := system.RemovePackages(ctx, packages, logger); err != nil {
+	pkgList := InstalledPackages()
+	if err := packages.Remove(ctx, pkgList, logger); err != nil {
 		logger.Warn("cleanup: some packages could not be removed (may require manual cleanup)")
 		hasErrors = true
 	}

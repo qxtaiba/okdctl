@@ -11,6 +11,7 @@ import (
 	"github.com/qxtaiba/okd-proxmox-cli/internal/config"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/executor"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
+	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/httputil"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
 )
 
@@ -146,7 +147,7 @@ func (p *Phase) DeployToWebServer(ctx context.Context, cfg *config.Config, clust
 func (p *Phase) VerifyWebServer(ctx context.Context, baseURL string) error {
 	testURL := fmt.Sprintf("%s/bootstrap.ign", baseURL)
 
-	client := system.NewAPIClient()
+	client := httputil.NewAPIClient()
 
 	p.Log.Info(fmt.Sprintf("apache: verifying web server at %s", testURL))
 

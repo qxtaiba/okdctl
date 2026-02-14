@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
+	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/netutil"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
 )
 
@@ -54,12 +55,12 @@ func (p *Phase) RemoveHAProxy(ctx context.Context, vip string) error {
 	// Remove the VIP secondary IP from the bastion so traffic routes to the
 	// real kube-vip holder instead of being handled locally.
 	if vip != "" {
-		iface, ifaceErr := system.GetDefaultInterface(ctx)
+		iface, ifaceErr := netutil.GetDefaultInterface(ctx)
 		if ifaceErr != nil {
 			p.Log.Warn(fmt.Sprintf("haproxy: could not detect default interface for VIP removal: %v", ifaceErr))
 		} else {
 			p.Log.Info(fmt.Sprintf("haproxy: removing vip %s from %s", vip, iface))
-			if rmErr := system.RemoveSecondaryIP(ctx, vip, iface); rmErr != nil {
+			if rmErr := netutil.RemoveSecondaryIP(ctx, vip, iface); rmErr != nil {
 				p.Log.Warn(fmt.Sprintf("haproxy: could not remove vip %s from %s: %v", vip, iface, rmErr))
 			}
 		}

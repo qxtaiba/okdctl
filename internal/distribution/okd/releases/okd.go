@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	utilhttp "github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
+	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/httputil"
 )
 
 type OKDVersionFetcher struct {
@@ -22,7 +22,7 @@ type OKDVersionFetcher struct {
 
 func NewOKDVersionFetcher() *OKDVersionFetcher {
 	return &OKDVersionFetcher{
-		httpClient:   utilhttp.NewAPIClient(),
+		httpClient:   httputil.NewAPIClient(),
 		cacheTime:    5 * time.Minute,
 		diskCacheTTL: DiskCacheTTL,
 	}

@@ -6,7 +6,11 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/dns"
+	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/firewall"
+	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/packages"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
+	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/netutil"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
 )
 
@@ -38,7 +42,7 @@ func HAProxy(ctx context.Context, haproxyConfig, vip string, logger utils.Logger
 	if logger != nil {
 		logger.Info("cleanup: removing okd firewall rules")
 	}
-	if err := system.RemoveOKDFirewallRules(ctx, true, logger); err != nil {
+	if err := firewall.RemoveOKDRules(ctx, true, logger); err != nil {
 		if logger != nil {
 			logger.Warn(fmt.Sprintf("cleanup: firewall rules incomplete: %v", err))
 		}
@@ -47,9 +51,9 @@ func HAProxy(ctx context.Context, haproxyConfig, vip string, logger utils.Logger
 	}
 
 	if vip != "" {
-		iface, ifaceErr := system.GetDefaultInterface(ctx)
+		iface, ifaceErr := netutil.GetDefaultInterface(ctx)
 		if ifaceErr == nil {
-			if rmErr := system.RemoveSecondaryIP(ctx, vip, iface); rmErr != nil {
+			if rmErr := netutil.RemoveSecondaryIP(ctx, vip, iface); rmErr != nil {
 				if logger != nil {
 					logger.Warn(fmt.Sprintf("cleanup: could not remove vip %s from %s: %v", vip, iface, rmErr))
 				}
@@ -59,7 +63,7 @@ func HAProxy(ctx context.Context, haproxyConfig, vip string, logger utils.Logger
 		}
 	}
 
-	if err := system.RemovePackages(ctx, []string{"haproxy"}, logger); err != nil {
+	if err := packages.Remove(ctx, []string{"haproxy"}, logger); err != nil {
 		if logger != nil {
 			logger.Warn(fmt.Sprintf("cleanup: failed to remove haproxy package: %v", err))
 		}
@@ -89,7 +93,7 @@ func Apache(ctx context.Context, logger utils.Logger) error {
 		logger.Info("cleanup: httpd service not enabled")
 	}
 
-	if err := system.RemovePackages(ctx, []string{"httpd"}, logger); err != nil {
+	if err := packages.Remove(ctx, []string{"httpd"}, logger); err != nil {
 		if logger != nil {
 			logger.Warn(fmt.Sprintf("cleanup: failed to remove httpd package: %v", err))
 		}
@@ -134,7 +138,7 @@ func Dnsmasq(ctx context.Context, clusterName string, logger utils.Logger) error
 		logger.Info("cleanup: dnsmasq service and configuration")
 	}
 
-	if err := system.RestoreSystemResolver(ctx, logger); err != nil && logger != nil {
+	if err := dns.RestoreSystemResolver(ctx, logger); err != nil && logger != nil {
 		logger.Warn(fmt.Sprintf("cleanup: failed to restore system resolver: %v", err))
 	}
 
@@ -162,7 +166,7 @@ func Dnsmasq(ctx context.Context, clusterName string, logger utils.Logger) error
 		_ = system.RemoveAll(ctx, backup, "dnsmasq backup config")
 	}
 
-	if err := system.RemovePackages(ctx, []string{"dnsmasq"}, logger); err != nil {
+	if err := packages.Remove(ctx, []string{"dnsmasq"}, logger); err != nil {
 		if logger != nil {
 			logger.Warn(fmt.Sprintf("cleanup: failed to remove dnsmasq package: %v", err))
 		}
