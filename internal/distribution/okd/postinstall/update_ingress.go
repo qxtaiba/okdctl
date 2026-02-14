@@ -122,7 +122,23 @@ func (p *Phase) UpdateIngress(ctx context.Context, cfg *config.Config, opts Upda
 		}
 	}
 
-	// Collect LB IPs for all LoadBalancerService controllers.
+	entries, customDomains, defaultAppsIP, err := p.collectLBEntries(ctx, lbICs, hostNetworkICs, cfg.Networking.Bastion.IP, postOpts)
+	if err != nil {
+		return nil, err
+	}
+
+	return p.finalizeIngress(ctx, cfg, opts, entries, customDomains, defaultAppsIP, vip, convertedCount, len(hostNetworkICs))
+}
+
+// collectLBEntries waits for LoadBalancer IPs on all LB-type controllers and
+// builds the entries list. HostNetwork controllers that were not converted get
+// entries pointing at the bastion IP.
+func (p *Phase) collectLBEntries(
+	ctx context.Context,
+	lbICs, hostNetworkICs []ingressControllerInfo,
+	bastionIP string,
+	postOpts Options,
+) ([]IngressEntry, []templates.DNSCustomDomain, string, error) {
 	var defaultAppsIP string
 	var entries []IngressEntry
 	var customDomains []templates.DNSCustomDomain
@@ -134,7 +150,7 @@ func (p *Phase) UpdateIngress(ctx context.Context, cfg *config.Config, opts Upda
 		ip, err := p.waitForServiceLB(ctx, svcName, postOpts)
 		if err != nil {
 			if ic.Name == "default" {
-				return nil, fmt.Errorf("router-default has no LoadBalancer IP: %w", err)
+				return nil, nil, "", fmt.Errorf("router-default has no LoadBalancer IP: %w", err)
 			}
 			p.Log.Warn(fmt.Sprintf("update-ingress: %s has no loadbalancer ip: %v", svcName, err))
 			continue
@@ -165,12 +181,25 @@ func (p *Phase) UpdateIngress(ctx context.Context, cfg *config.Config, opts Upda
 		entries = append(entries, IngressEntry{
 			Name:        ic.Name,
 			Domain:      ic.Domain,
-			LBIP:        cfg.Networking.Bastion.IP,
+			LBIP:        bastionIP,
 			HostNetwork: true,
 		})
 	}
 
-	// Deploy DNS. Use bastion IP as fallback for apps if default is still HostNetwork.
+	return entries, customDomains, defaultAppsIP, nil
+}
+
+// finalizeIngress deploys production DNS with the collected LB IPs and
+// optionally removes HAProxy.
+func (p *Phase) finalizeIngress(
+	ctx context.Context,
+	cfg *config.Config,
+	opts UpdateIngressOptions,
+	entries []IngressEntry,
+	customDomains []templates.DNSCustomDomain,
+	defaultAppsIP, vip string,
+	convertedCount, hostNetworkCount int,
+) (*UpdateIngressResult, error) {
 	appsIP := defaultAppsIP
 	if appsIP == "" {
 		appsIP = cfg.Networking.Bastion.IP
@@ -190,7 +219,7 @@ func (p *Phase) UpdateIngress(ctx context.Context, cfg *config.Config, opts Upda
 	}
 
 	// Only remove HAProxy if ALL ICs are LoadBalancerService (none remain HostNetwork).
-	if opts.RemoveHAProxy && len(hostNetworkICs) == 0 {
+	if opts.RemoveHAProxy && hostNetworkCount == 0 {
 		p.Log.Info("update-ingress: removing haproxy from bastion")
 		if err := p.RemoveHAProxy(ctx, vip); err != nil {
 			p.Log.Warn(fmt.Sprintf("update-ingress: haproxy removal failed: %v", err))
@@ -198,7 +227,7 @@ func (p *Phase) UpdateIngress(ctx context.Context, cfg *config.Config, opts Upda
 			result.HAProxyRemoved = true
 			p.Log.Info("update-ingress: haproxy removed from bastion")
 		}
-	} else if opts.RemoveHAProxy && len(hostNetworkICs) > 0 {
+	} else if opts.RemoveHAProxy && hostNetworkCount > 0 {
 		p.Log.Warn("update-ingress: skipping haproxy removal — hostnetwork controllers still active")
 	}
 

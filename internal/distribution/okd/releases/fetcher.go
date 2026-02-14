@@ -144,6 +144,12 @@ func (f *OKDVersionFetcher) parseReleases(releases []githubRelease) []OKDRelease
 		}
 	}
 
+	return sortAndClassifySeries(seriesMap)
+}
+
+// sortAndClassifySeries converts the series map into a sorted slice, marks the
+// latest stable/preview versions within each series, and assigns release types.
+func sortAndClassifySeries(seriesMap map[string]*OKDReleaseSeries) []OKDReleaseSeries {
 	var result []OKDReleaseSeries
 	for _, series := range seriesMap {
 		// Sort versions within series (newest first) using proper numeric comparison
