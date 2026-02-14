@@ -7,10 +7,10 @@ import (
 	"github.com/qxtaiba/okd-proxmox-cli/internal/config"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/cleanup"
+	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/firewall"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/paths"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/netutil"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
 )
 
 const (
@@ -70,9 +70,7 @@ func (p *Phase) newCleanupFilesStep(cfg *config.Config, opts Options) distributi
 			}
 			return nil
 		}).
-		OnError(func(err error) {
-			p.Log.Warn(fmt.Sprintf("cleanup: file removal failed: %v", err))
-		}).
+		OnError(paths.WarnOnError(p.Log, "cleanup: file removal failed")).
 		MustBuild()
 }
 
@@ -91,15 +89,13 @@ func (p *Phase) newCleanupFirewallStep(opts Options) distribution.ProvisioningSt
 		SkipWhen(func() bool { return opts.SkipFirewall }).
 		SkipReason("Firewall cleanup disabled").
 		Execute(func(ctx context.Context) error {
-			if err := system.RemoveOKDFirewallRules(ctx, true, p.Log); err != nil {
+			if err := firewall.RemoveOKDRules(ctx, true, p.Log); err != nil {
 				return utils.WrapError("firewall cleanup failed", err)
 			}
 			p.Log.Info("firewall: okd rules removed from firewalld")
 			return nil
 		}).
-		OnError(func(err error) {
-			p.Log.Warn(fmt.Sprintf("firewall: cleanup incomplete: %v", err))
-		}).
+		OnError(paths.WarnOnError(p.Log, "firewall: cleanup incomplete")).
 		MustBuild()
 }
 

@@ -7,6 +7,9 @@ import (
 
 	"github.com/qxtaiba/okd-proxmox-cli/internal/config"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution"
+	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/dns"
+	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/firewall"
+	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/packages"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/paths"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/templates"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/executor"
@@ -51,10 +54,10 @@ func (p *Phase) newInstallPackagesStep(opts Options) distribution.ProvisioningSt
 		Description("installing required system packages").
 		Fatal(false).
 		Execute(func(ctx context.Context) error {
-			packages := systemPackages()
+			sysPkgs := systemPackages()
 
 			var packagesToInstall []string
-			for _, pkg := range packages {
+			for _, pkg := range sysPkgs {
 				cmdName := pkg
 				if !executor.CommandExists(cmdName) {
 					packagesToInstall = append(packagesToInstall, pkg)
@@ -70,15 +73,13 @@ func (p *Phase) newInstallPackagesStep(opts Options) distribution.ProvisioningSt
 			}
 
 			p.Log.Info(fmt.Sprintf("packages: installing %d missing package(s) via dnf", len(packagesToInstall)))
-			if err := system.InstallPackages(ctx, packagesToInstall, "system dependencies", p.Log); err != nil {
+			if err := packages.Install(ctx, packagesToInstall, "system dependencies", p.Log); err != nil {
 				p.Log.Warn(fmt.Sprintf("packages: installation had warnings: %v", err))
 			}
 
 			return nil
 		}).
-		OnError(func(err error) {
-			p.Log.Warn(fmt.Sprintf("packages: system installation had warnings: %v", err))
-		}).
+		OnError(paths.WarnOnError(p.Log, "packages: system installation had warnings")).
 		MustBuild()
 }
 
@@ -89,9 +90,7 @@ func (p *Phase) newInstallToolsStep(cfg *config.Config) distribution.Provisionin
 		Execute(func(ctx context.Context) error {
 			return p.InstallExternalTools(ctx, cfg)
 		}).
-		OnError(func(err error) {
-			p.Log.Warn(fmt.Sprintf("tools: external installation had warnings: %v", err))
-		}).
+		OnError(paths.WarnOnError(p.Log, "tools: external installation had warnings")).
 		MustBuild()
 }
 
@@ -266,9 +265,7 @@ func (p *Phase) newInstallApacheStep(cfg *config.Config, opts Options) distribut
 		Execute(func(ctx context.Context) error {
 			return p.ConfigureApache(ctx, cfg)
 		}).
-		OnError(func(err error) {
-			p.Log.Warn(fmt.Sprintf("apache: installation skipped: %v", err))
-		}).
+		OnError(paths.WarnOnError(p.Log, "apache: installation skipped")).
 		MustBuild()
 }
 
@@ -373,15 +370,13 @@ func (p *Phase) newConfigureFirewallStep(opts Options) distribution.Provisioning
 		SkipWhen(func() bool { return opts.SkipFirewall }).
 		SkipReason("firewall configuration disabled").
 		Execute(func(ctx context.Context) error {
-			if err := system.ConfigureOKDFirewall(ctx, true, p.Log); err != nil {
+			if err := firewall.ConfigureOKD(ctx, true, p.Log); err != nil {
 				return err
 			}
 			p.Log.Info("firewall: okd rules added to firewalld")
 			return nil
 		}).
-		OnError(func(err error) {
-			p.Log.Warn(fmt.Sprintf("firewall: configuration failed: %v", err))
-		}).
+		OnError(paths.WarnOnError(p.Log, "firewall: configuration failed")).
 		MustBuild()
 }
 
@@ -414,7 +409,7 @@ func (p *Phase) newConfigureDNSStep(cfg *config.Config, opts Options) distributi
 				}
 			}
 
-			configPath := system.DnsmasqConfigPath(fmt.Sprintf("okd-%s", cfg.Cluster.Name))
+			configPath := dns.DnsmasqConfigPath(fmt.Sprintf("okd-%s", cfg.Cluster.Name))
 			p.Log.Info(fmt.Sprintf("dns: dnsmasq configured at %s", configPath))
 			return nil
 		}).

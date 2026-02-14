@@ -7,6 +7,7 @@ import (
 	"github.com/qxtaiba/okd-proxmox-cli/internal/addon"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/config"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution"
+	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/paths"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
 )
 
@@ -44,9 +45,7 @@ func (p *Phase) NewCleanupBootstrapStep(cfg *config.Config, opts Options, pctx *
 	return distribution.NewStepBuilder(StepCleanupBootstrap, "Cleanup Bootstrap VM").
 		Description("destroying bootstrap vm via terraform").
 		Fatal(false).
-		OnError(func(err error) {
-			p.Log.Warn(fmt.Sprintf("bootstrap: cleanup failed (non-critical): %v", err))
-		}).
+		OnError(paths.WarnOnError(p.Log, "bootstrap: cleanup failed (non-critical)")).
 		Execute(func(ctx context.Context) error {
 			if err := p.CleanupBootstrap(ctx, cfg, opts); err != nil {
 				return utils.WrapError("bootstrap cleanup failed", err)
@@ -67,9 +66,7 @@ func (p *Phase) NewVerifyKubeVIPStep(cfg *config.Config, opts Options, pctx *dis
 			return opts.SkipKubeVIP
 		}).
 		SkipReason("kube-vip verification skipped by user").
-		OnError(func(err error) {
-			p.Log.Warn(fmt.Sprintf("kubevip: verification failed: %v", err))
-		}).
+		OnError(paths.WarnOnError(p.Log, "kubevip: verification failed")).
 		Execute(func(ctx context.Context) error {
 			kubeVipIP, err := p.VerifyKubeVIP(ctx, cfg, opts)
 			if err != nil {
@@ -93,9 +90,7 @@ func (p *Phase) NewDeployProductionDNSStep(cfg *config.Config, opts Options, pct
 			return !pctx.Get().KubeVIPVerified
 		}).
 		SkipReason("kube-vip not verified — keeping bootstrap dns").
-		OnError(func(err error) {
-			p.Log.Warn(fmt.Sprintf("dns: production dns deployment failed: %v", err))
-		}).
+		OnError(paths.WarnOnError(p.Log, "dns: production dns deployment failed")).
 		Execute(func(ctx context.Context) error {
 			state := pctx.Get()
 			bastionIP := cfg.Networking.Bastion.IP
@@ -115,9 +110,7 @@ func (p *Phase) NewInstallAddonsStep(cfg *config.Config, opts Options, pctx *dis
 	return distribution.NewStepBuilder(StepInstallAddons, "Install Addons").
 		Description("installing enabled cluster addons").
 		Fatal(false).
-		OnError(func(err error) {
-			p.Log.Warn(fmt.Sprintf("addons: installation failed: %v", err))
-		}).
+		OnError(paths.WarnOnError(p.Log, "addons: installation failed")).
 		Execute(func(ctx context.Context) error {
 			if err := p.verifyAPIHealthCheck(ctx); err != nil {
 				p.Log.Warn(fmt.Sprintf("addons: api health check failed before addon install: %v", err))

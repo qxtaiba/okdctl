@@ -2,7 +2,6 @@ package install
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/qxtaiba/okd-proxmox-cli/internal/config"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution"
@@ -120,9 +119,7 @@ func (p *Phase) newSetupAccessStep(opts Options) distribution.ProvisioningStep {
 		Execute(func(ctx context.Context) error {
 			return p.SetupClusterAccess(ctx, clusterDir)
 		}).
-		OnError(func(err error) {
-			p.Log.Warn(fmt.Sprintf("kubeconfig: failed to setup persistent access: %v", err))
-		}).
+		OnError(paths.WarnOnError(p.Log, "kubeconfig: failed to setup persistent access")).
 		MustBuild()
 }
 
