@@ -69,18 +69,17 @@ func NewDataDrivenStep(def StepDefinition) *DataDrivenStep {
 	fieldKeys := make(map[string]fieldLocation)
 
 	for sectionIdx, sectionDef := range def.Sections {
-		sectionBuilder := NewSectionBuilder(sectionDef.Title)
+		fields := make([]*components.InputField, 0, len(sectionDef.Fields))
 
 		for fieldIdx, fieldDef := range sectionDef.Fields {
-			fb := createFieldBuilder(fieldDef)
-			sectionBuilder = sectionBuilder.Field(fb)
+			fields = append(fields, buildInputField(fieldDef))
 			fieldKeys[fieldDef.Key] = fieldLocation{
 				section: sectionIdx,
 				field:   fieldIdx,
 			}
 		}
 
-		group := sectionBuilder.Build()
+		group := components.NewInputGroup(sectionDef.Title, fields...)
 		if sectionDef.Note != "" {
 			formStep = formStep.AddSectionWithNote(sectionDef.Title, sectionDef.Note, group)
 		} else {
@@ -130,27 +129,17 @@ func NewDataDrivenStep(def StepDefinition) *DataDrivenStep {
 	return step
 }
 
-func createFieldBuilder(def FieldDefinition) *FieldBuilder {
-	var fb *FieldBuilder
-
-	switch def.Type {
-	case FieldTypePassword:
-		fb = PasswordField(def.Label, def.Default)
-	default:
-		fb = TextField(def.Label, def.Default)
+func buildInputField(def FieldDefinition) *components.InputField {
+	var field *components.InputField
+	if def.Type == FieldTypePassword {
+		field = components.NewPasswordField(def.Label, def.Default)
+	} else {
+		field = components.NewInputField(def.Label, def.Default)
 	}
-
-	if def.Required {
-		fb = fb.Required()
-	}
-	if def.Help != "" {
-		fb = fb.Help(def.Help)
-	}
-	if def.Validate != nil {
-		fb = fb.Validate(def.Validate)
-	}
-
-	return fb
+	field.Required = def.Required
+	field.Help = def.Help
+	field.Validator = def.Validate
+	return field
 }
 
 func (s *DataDrivenStep) Values() map[string]string {
