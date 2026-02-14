@@ -46,7 +46,7 @@ func (log *Logger) Debug(msg string, fields ...LogField) {
 	if lvl > LogLevelDebug {
 		return
 	}
-	fmt.Println(LogDebug(log.format(msg, fields)))
+	fmt.Println(logDebug(log.format(msg, fields)))
 }
 
 func (log *Logger) Info(msg string, fields ...LogField) {

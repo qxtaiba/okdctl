@@ -21,7 +21,7 @@ func LogError(msg string) string {
 	return prefix + " " + TextStyle.Render(msg)
 }
 
-func LogDebug(msg string) string {
+func logDebug(msg string) string {
 	prefix := lipgloss.NewStyle().Foreground(ColorSlate500).Render("[DEBUG]")
 	return prefix + " " + MutedStyle.Render(msg)
 }
@@ -31,30 +31,6 @@ func SubsectionLabel(title string) string {
 		Foreground(ColorCyan500).
 		Bold(true).
 		Render(strings.ToUpper(title))
-}
-
-func ResourceLine(action, name, details string) string {
-	var actionStyle lipgloss.Style
-	switch action {
-	case "+", "add", "create":
-		actionStyle = SuccessStyle
-		action = "+"
-	case "-", "remove", "delete", "destroy":
-		actionStyle = ErrorStyle
-		action = "-"
-	case "~", "change", "modify", "update":
-		actionStyle = WarningStyle
-		action = "~"
-	default:
-		actionStyle = MutedStyle
-	}
-
-	nameStyle := lipgloss.NewStyle().Foreground(ColorText)
-	detailStyle := MutedStyle
-
-	return actionStyle.Render(action) + " " +
-		nameStyle.Render(name) + " " +
-		detailStyle.Render(details)
 }
 
 func CompletionSuccess(msg string) string {

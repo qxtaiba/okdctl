@@ -56,7 +56,7 @@ var (
 	hcColorBorder  = lipgloss.Color("#888888")
 )
 
-func SetTheme(theme ColorTheme) {
+func setTheme(theme ColorTheme) {
 	switch theme {
 	case ThemeHighContrast:
 		ColorPrimary = hcColorPrimary
@@ -81,6 +81,6 @@ func SetTheme(theme ColorTheme) {
 
 func init() {
 	if os.Getenv("HOMELAB_HIGH_CONTRAST") == "1" || os.Getenv("HOMELAB_HIGH_CONTRAST") == "true" {
-		SetTheme(ThemeHighContrast)
+		setTheme(ThemeHighContrast)
 	}
 }
