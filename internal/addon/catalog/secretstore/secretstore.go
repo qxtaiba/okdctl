@@ -73,7 +73,7 @@ func (s *SecretStore) Install(ctx context.Context, env *addon.Environment) error
 	}
 
 	if err := retry.Do(ctx, 3, 5*time.Second, func() error {
-		return s.ensureNamespace(ctx, env)
+		return addon.EnsureNamespace(ctx, env, defaultNamespace)
 	}); err != nil {
 		return err
 	}
@@ -189,26 +189,6 @@ func (s *SecretStore) secretsDir(env *addon.Environment) string {
 	return dir
 }
 
-func (s *SecretStore) ensureNamespace(ctx context.Context, env *addon.Environment) error {
-	result, err := env.Exec.Run(ctx, "oc", "get", "namespace", defaultNamespace)
-	if err == nil && result != nil && result.ExitCode == 0 {
-		return nil
-	}
-
-	env.Logger.Info(fmt.Sprintf("secretstore: creating %s namespace", defaultNamespace))
-	createResult, createErr := env.Exec.Run(ctx, "oc", "create", "namespace", defaultNamespace)
-	if createErr != nil {
-		return utils.WrapError(fmt.Sprintf("failed to create %s namespace", defaultNamespace), createErr)
-	}
-	if createResult == nil || createResult.ExitCode != 0 {
-		stderr := ""
-		if createResult != nil {
-			stderr = createResult.Stderr
-		}
-		return fmt.Errorf("failed to create %s namespace: %s", defaultNamespace, stderr)
-	}
-	return nil
-}
 
 func (s *SecretStore) secretExists(ctx context.Context, env *addon.Environment, name string) bool {
 	result, err := env.Exec.Run(ctx, "oc", "get", "secret", name, "-n", defaultNamespace)

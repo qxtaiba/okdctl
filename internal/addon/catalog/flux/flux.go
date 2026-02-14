@@ -46,22 +46,7 @@ func (f *Flux) Install(ctx context.Context, env *addon.Environment) error {
 
 	// Create namespace with retry (transient API errors during cluster bootstrap)
 	if err := retry.Do(ctx, 3, 5*time.Second, func() error {
-		result, err := env.Exec.Run(ctx, "oc", "get", "namespace", "flux-system")
-		if err == nil && result != nil && result.ExitCode == 0 {
-			return nil
-		}
-		createResult, createErr := env.Exec.Run(ctx, "oc", "create", "namespace", "flux-system")
-		if createErr != nil {
-			return utils.WrapError("failed to create flux-system namespace", createErr)
-		}
-		if createResult == nil || createResult.ExitCode != 0 {
-			stderr := ""
-			if createResult != nil {
-				stderr = createResult.Stderr
-			}
-			return fmt.Errorf("failed to create flux-system namespace: %s", stderr)
-		}
-		return nil
+		return addon.EnsureNamespace(ctx, env, "flux-system")
 	}); err != nil {
 		return err
 	}
@@ -72,6 +57,31 @@ func (f *Flux) Install(ctx context.Context, env *addon.Environment) error {
 		return utils.WrapError("deploy key secret required", err)
 	}
 
+	if err := f.installOperator(ctx, env); err != nil {
+		return err
+	}
+
+	if err := f.installInstance(ctx, env); err != nil {
+		return err
+	}
+
+	// Wait for Flux controllers to become available (fatal if they don't start)
+	if err := f.waitForControllers(ctx, env); err != nil {
+		return err
+	}
+
+	// Wait for GitRepository sync (non-fatal — user may need to fix deploy key or URL)
+	if err := f.waitForGitSync(ctx, env); err != nil {
+		env.Logger.Warn(fmt.Sprintf("flux: git sync not ready: %v", err))
+		env.Logger.Warn("flux: debug with: oc get gitrepository -n flux-system -o yaml")
+		env.Logger.Warn("flux: the cluster will auto-reconcile once the git source is reachable")
+	}
+
+	env.Logger.Info("flux: gitops installed and syncing with repository")
+	return nil
+}
+
+func (f *Flux) installOperator(ctx context.Context, env *addon.Environment) error {
 	env.Logger.Info("flux: installing operator via helm")
 	if err := retry.Do(ctx, 3, 5*time.Second, func() error {
 		result, err := env.Exec.Run(ctx, "helm", "upgrade", "--install", "flux-operator",
@@ -96,6 +106,10 @@ func (f *Flux) Install(ctx context.Context, env *addon.Environment) error {
 		env.Logger.Warn("flux: operator not ready within 120s timeout, continuing")
 	}
 
+	return nil
+}
+
+func (f *Flux) installInstance(ctx context.Context, env *addon.Environment) error {
 	env.Logger.Info("flux: installing instance for gitops sync")
 	settings := env.AddonConfig.Settings
 	syncURL := settings["repository"]
@@ -133,19 +147,6 @@ func (f *Flux) Install(ctx context.Context, env *addon.Environment) error {
 		return err
 	}
 
-	// Wait for Flux controllers to become available (fatal if they don't start)
-	if err := f.waitForControllers(ctx, env); err != nil {
-		return err
-	}
-
-	// Wait for GitRepository sync (non-fatal — user may need to fix deploy key or URL)
-	if err := f.waitForGitSync(ctx, env); err != nil {
-		env.Logger.Warn(fmt.Sprintf("flux: git sync not ready: %v", err))
-		env.Logger.Warn("flux: debug with: oc get gitrepository -n flux-system -o yaml")
-		env.Logger.Warn("flux: the cluster will auto-reconcile once the git source is reachable")
-	}
-
-	env.Logger.Info("flux: gitops installed and syncing with repository")
 	return nil
 }
 
