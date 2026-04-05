@@ -84,10 +84,18 @@ func (p *Phase) addKubeconfigToBashrc(homeDir, kubeconfigPath string) error {
 	bashrcPath := filepath.Join(homeDir, ".bashrc")
 	exportLine := fmt.Sprintf("export KUBECONFIG=%s", kubeconfigPath)
 
+	// Preserve the existing .bashrc mode so appending an export line can't
+	// silently relax stricter perms the user may have set. 0644 is only
+	// used when the file does not yet exist (sane default for bashrc).
+	mode := os.FileMode(0644)
+	if fi, err := os.Stat(bashrcPath); err == nil {
+		mode = fi.Mode().Perm()
+	}
+
 	content, err := os.ReadFile(bashrcPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return system.AtomicWriteString(bashrcPath, exportLine+"\n", 0644)
+			return system.AtomicWriteString(bashrcPath, exportLine+"\n", mode)
 		}
 		return err
 	}
