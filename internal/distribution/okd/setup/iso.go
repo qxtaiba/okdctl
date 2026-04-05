@@ -178,9 +178,11 @@ func (p *Phase) buildNodeISO(ctx context.Context, cfg *config.Config, node NodeI
 	var sshKey string
 	if cfg.Files.SSHPublicKey != "" {
 		keyPath := system.ExpandPath(cfg.Files.SSHPublicKey)
-		if b, err := os.ReadFile(keyPath); err == nil {
-			sshKey = strings.TrimSpace(string(b))
+		b, err := os.ReadFile(keyPath)
+		if err != nil {
+			return utils.WrapErrorf(err, "failed to read ssh public key %s", keyPath)
 		}
+		sshKey = strings.TrimSpace(string(b))
 	}
 	triggerPath, err := writeInstallerTriggerIgnition(sshKey)
 	if err != nil {
