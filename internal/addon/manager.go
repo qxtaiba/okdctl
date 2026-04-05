@@ -81,6 +81,7 @@ func (m *Manager) InstallAll(ctx context.Context) error {
 			m.logger.Info(fmt.Sprintf("addons: rolling back %s", info.DisplayName))
 			if unErr := a.Uninstall(ctx, env); unErr != nil {
 				m.logger.Warn(fmt.Sprintf("addons: rollback of %s failed: %v", info.DisplayName, unErr))
+				errs = append(errs, fmt.Errorf("addon %s rollback: %w", info.Name, unErr))
 			}
 			continue
 		}
