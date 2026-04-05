@@ -4,8 +4,21 @@ import (
 	"bufio"
 	"os"
 	"strings"
+	"sync"
 
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
+)
+
+// loadOnce guards against concurrent or repeated calls to LoadEnvFile.
+// The global process environment is shared mutable state: without this
+// guard, a "getenv empty → setenv" sequence races against any other
+// goroutine touching the same key. The .env file is intentionally a
+// per-process artefact — callers that pass a different path on a second
+// invocation silently get the first path's result, which is preferred
+// over letting multiple sources mutate the environment.
+var (
+	loadOnce sync.Once
+	loadErr  error
 )
 
 // EnvFilePath derives the .env path from a config path
@@ -49,7 +62,22 @@ func WriteEnvFile(path string, creds *ProxmoxCredentials) error {
 // LoadEnvFile loads a .env file into the process environment.
 // Already-set variables are NOT overwritten (shell env takes precedence).
 // Missing files are silently ignored.
+//
+// LoadEnvFile is guarded by a sync.Once: the underlying work runs at most
+// once per process regardless of how many times (or with which paths) it
+// is invoked. Subsequent calls return the first call's error. This is
+// intentional — mutating os.Environ from multiple sources is a footgun,
+// and the .env file is a per-process resource.
 func LoadEnvFile(path string) error {
+	loadOnce.Do(func() {
+		loadErr = loadEnvFileOnce(path)
+	})
+	return loadErr
+}
+
+// loadEnvFileOnce contains the actual load logic. It is not safe to call
+// concurrently and must only be invoked via the LoadEnvFile sync.Once.
+func loadEnvFileOnce(path string) error {
 	f, err := os.Open(path)
 	if err != nil {
 		if os.IsNotExist(err) {
