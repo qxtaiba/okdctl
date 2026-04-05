@@ -25,7 +25,9 @@ const (
 )
 
 func init() {
-	addon.Register(&Flux{})
+	if err := addon.Register(&Flux{}); err != nil {
+		panic(err)
+	}
 }
 
 type Flux struct{}

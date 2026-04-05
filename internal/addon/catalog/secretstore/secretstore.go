@@ -29,7 +29,9 @@ const (
 )
 
 func init() {
-	addon.Register(&SecretStore{})
+	if err := addon.Register(&SecretStore{}); err != nil {
+		panic(err)
+	}
 }
 
 type SecretStore struct{}
