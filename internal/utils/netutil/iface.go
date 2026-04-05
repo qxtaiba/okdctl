@@ -22,7 +22,10 @@ func AddSecondaryIP(ctx context.Context, ip, iface string) error {
 	}
 
 	checkCmd := exec.CommandContext(ctx, "ip", "addr", "show", "dev", iface)
-	output, _ := checkCmd.Output()
+	output, err := checkCmd.Output()
+	if err != nil {
+		return utils.WrapErrorf(err, "failed to check IP presence on device %s", iface)
+	}
 	if strings.Contains(string(output), ip) {
 		return nil
 	}
@@ -52,7 +55,10 @@ func RemoveSecondaryIP(ctx context.Context, ip, iface string) error {
 	}
 
 	checkCmd := exec.CommandContext(ctx, "ip", "addr", "show", "dev", iface)
-	output, _ := checkCmd.Output()
+	output, err := checkCmd.Output()
+	if err != nil {
+		return utils.WrapErrorf(err, "failed to check IP presence on device %s", iface)
+	}
 	if !strings.Contains(string(output), ip) {
 		return nil
 	}

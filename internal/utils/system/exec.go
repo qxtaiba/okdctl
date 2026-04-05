@@ -60,12 +60,20 @@ func WaitFor(ctx context.Context, prefix, description string, check func() bool,
 		case <-ctx.Done():
 			return utils.WrapErrorf(ctx.Err(), "waiting for %s %s", prefix, description)
 		case <-timeoutCh:
+			// If ctx was cancelled simultaneously, prefer that as the error reason
+			if err := ctx.Err(); err != nil {
+				return utils.WrapErrorf(err, "waiting for %s %s", prefix, description)
+			}
 			return fmt.Errorf("timeout waiting for %s %s after %v", prefix, description, opts.Timeout)
 		case <-ticker.C:
 			elapsed := time.Since(startTime)
 			if check() {
 				logger.Info(readyMsg)
 				return nil
+			}
+			// check() may have taken time during which ctx was cancelled; prefer ctx error
+			if err := ctx.Err(); err != nil {
+				return utils.WrapErrorf(err, "waiting for %s %s", prefix, description)
 			}
 			logger.Info(fmt.Sprintf("%s: waiting for %s... (%v elapsed)", prefix, description, elapsed.Round(time.Second)))
 		}
