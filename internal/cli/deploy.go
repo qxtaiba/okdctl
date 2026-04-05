@@ -114,6 +114,9 @@ func saveConfig(cfg *config.Config, path string) error {
 }
 
 func runFullDeployment(cfg *config.Config) error {
+	creds := HandleCredentials(cfg)
+	defer creds.Zeroize()
+
 	handler, ctx := deployment.NewInterruptHandler()
 	defer handler.Cleanup()
 
@@ -126,9 +129,6 @@ func runFullDeployment(cfg *config.Config) error {
 		tui.Error(fmt.Sprintf("deployment interrupted by %v", sig))
 		tui.Info("run 'openshitctl destroy' to clean up resources")
 	}
-
-	creds := HandleCredentials(cfg)
-	defer creds.Zeroize()
 
 	return ExecuteFullDeployment(ctx, cfg, DeploymentOptions{
 		ShowStartMessage: true,

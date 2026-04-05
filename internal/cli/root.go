@@ -17,11 +17,12 @@ import (
 	"github.com/qxtaiba/okd-proxmox-cli/pkg/version"
 )
 
-var (
-	cfgFile string
-	verbose bool
-	noColor bool
-)
+// cfgFile is package-scope state managed by cobra PersistentFlags. It is
+// populated once by the root command's --config flag and read by subcommand
+// RunE handlers (deploy, destroy, update-ingress) via direct package
+// reference. This is the standard cobra pattern; threading it through
+// function parameters would fight the framework.
+var cfgFile string
 
 var rootCmd = &cobra.Command{
 	Use:   "openshitctl",
@@ -70,8 +71,6 @@ func init() {
 	cobra.OnInitialize(initConfig)
 
 	rootCmd.PersistentFlags().StringVarP(&cfgFile, "config", "c", "openshitctl.yaml", "configuration file")
-	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "enable verbose output")
-	rootCmd.PersistentFlags().BoolVar(&noColor, "no-color", false, "disable colored output")
 
 	rootCmd.AddCommand(deployCmd)
 	rootCmd.AddCommand(destroyCmd)
@@ -103,10 +102,6 @@ func initConfig() {
 	viper.SetEnvPrefix("HOMELAB")
 	viper.AutomaticEnv()
 
-	if err := viper.ReadInConfig(); err == nil {
-		if verbose {
-			tui.Info("using config file: " + viper.ConfigFileUsed())
-		}
-	}
+	_ = viper.ReadInConfig()
 }
 

@@ -38,13 +38,13 @@ type stepRegistration struct {
 var defaultStepRegistrations = []stepRegistration{
 	{wizard.StepTypeWelcome, func() (wizard.WizardStep, any) { return steps.NewWelcomeStep(), nil }},
 	{wizard.StepTypeDistribution, func() (wizard.WizardStep, any) { return steps.NewDistributionStep(), nil }},
-	{wizard.StepTypeBasics, func() (wizard.WizardStep, any) { return steps.NewBasicsStep() }},
-	{wizard.StepTypeProxmox, func() (wizard.WizardStep, any) { return steps.NewProxmoxStep() }},
-	{wizard.StepTypeNetworking, func() (wizard.WizardStep, any) { return steps.NewNetworkingStep() }},
-	{wizard.StepTypeResources, func() (wizard.WizardStep, any) { return steps.NewResourcesStep() }},
-	{wizard.StepTypeAddons, func() (wizard.WizardStep, any) { return steps.NewAddonsStep() }},
-	{wizard.StepTypeFiles, func() (wizard.WizardStep, any) { return steps.NewFilesStep() }},
-	{wizard.StepTypeAdvanced, func() (wizard.WizardStep, any) { return steps.NewAdvancedStep() }},
+	{wizard.StepTypeBasics, func() (wizard.WizardStep, any) { s, st := steps.NewBasicsStep(); return s, st }},
+	{wizard.StepTypeProxmox, func() (wizard.WizardStep, any) { s, st := steps.NewProxmoxStep(); return s, st }},
+	{wizard.StepTypeNetworking, func() (wizard.WizardStep, any) { s, st := steps.NewNetworkingStep(); return s, st }},
+	{wizard.StepTypeResources, func() (wizard.WizardStep, any) { s, st := steps.NewResourcesStep(); return s, st }},
+	{wizard.StepTypeAddons, func() (wizard.WizardStep, any) { s, st := steps.NewAddonsStep(); return s, st }},
+	{wizard.StepTypeFiles, func() (wizard.WizardStep, any) { s, st := steps.NewFilesStep(); return s, st }},
+	{wizard.StepTypeAdvanced, func() (wizard.WizardStep, any) { s, st := steps.NewAdvancedStep(); return s, st }},
 	{wizard.StepTypeReview, func() (wizard.WizardStep, any) { return steps.NewReviewStep(), nil }},
 }
 
