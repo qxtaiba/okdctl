@@ -73,12 +73,12 @@ func (p *Provider) Disconnect(_ context.Context) error {
 }
 
 func (p *Provider) setupTerraform(projectRoot, tfEnv string) {
-	p.projectRoot = projectRoot
-	p.tfEnv = tfEnv
-
-	if p.terraformExec != nil {
+	if p.terraformExec != nil && p.projectRoot == projectRoot && p.tfEnv == tfEnv {
 		return
 	}
+
+	p.projectRoot = projectRoot
+	p.tfEnv = tfEnv
 
 	tfDir := filepath.Join(projectRoot, "infrastructure", "terraform", "environments", tfEnv)
 
