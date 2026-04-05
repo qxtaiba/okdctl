@@ -340,9 +340,13 @@ func (f *Flux) createDeployKeySecret(ctx context.Context, env *addon.Environment
 		return utils.WrapError("failed to read deploy key", err)
 	}
 
+	// The public half is optional: flux/source-controller only requires identity
+	// and known_hosts. Users who only installed the private key should not fail.
 	publicKeyFile := deployKeyFile + ".pub"
-	publicKey, err := os.ReadFile(publicKeyFile)
-	if err != nil {
+	var publicKey []byte
+	if b, err := os.ReadFile(publicKeyFile); err == nil {
+		publicKey = b
+	} else if !os.IsNotExist(err) {
 		return utils.WrapError("failed to read deploy key public half", err)
 	}
 
@@ -399,9 +403,18 @@ func gitHost(repoURL string) (string, error) {
 
 // buildFluxDeployKeySecret renders a Secret manifest containing the SSH deploy
 // key material. Values are base64-encoded into the data map so oc apply can
-// pipe the manifest via stdin without exposing key bytes on argv.
+// pipe the manifest via stdin without exposing key bytes on argv. publicKey is
+// optional — flux only requires identity and known_hosts, so the identity.pub
+// field is omitted when empty.
 func buildFluxDeployKeySecret(namespace, name, privateKey, publicKey, knownHosts string) string {
 	enc := base64.StdEncoding.EncodeToString
+	dataLines := []string{
+		fmt.Sprintf("  identity: %s", enc([]byte(privateKey))),
+	}
+	if publicKey != "" {
+		dataLines = append(dataLines, fmt.Sprintf("  identity.pub: %s", enc([]byte(publicKey))))
+	}
+	dataLines = append(dataLines, fmt.Sprintf("  known_hosts: %s", enc([]byte(knownHosts))))
 	return fmt.Sprintf(`apiVersion: v1
 kind: Secret
 metadata:
@@ -409,10 +422,8 @@ metadata:
   namespace: %s
 type: Opaque
 data:
-  identity: %s
-  identity.pub: %s
-  known_hosts: %s
-`, name, namespace, enc([]byte(privateKey)), enc([]byte(publicKey)), enc([]byte(knownHosts)))
+%s
+`, name, namespace, strings.Join(dataLines, "\n"))
 }
 
 // getTimeout reads a timeout setting (in seconds) from the settings map,
