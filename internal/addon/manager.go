@@ -113,6 +113,13 @@ func (m *Manager) firstFailedDep(deps []string, failed map[string]bool) string {
 }
 
 // InstallOne installs a single addon plus any missing dependencies.
+//
+// Rollback semantics differ from InstallAll: this method is all-or-nothing.
+// If any addon in the resolved dependency closure fails to install, every
+// previously-installed addon in this call is uninstalled in reverse order
+// and the method returns the aggregated error. InstallAll, by contrast, uses
+// per-addon continuation: a failed addon is rolled back in isolation while
+// unrelated addons continue installing.
 func (m *Manager) InstallOne(ctx context.Context, name string) error {
 	a := Get(name)
 	if a == nil {
@@ -154,6 +161,8 @@ func (m *Manager) InstallOne(ctx context.Context, name string) error {
 			installErr := fmt.Errorf("addon %s install failed: %w", info.Name, err)
 
 			// Best-effort rollback of previously-installed addons in reverse order.
+			// Evict their outputs too so dependent addons cannot read stale values
+			// from something that was just unwound.
 			for i := len(installed) - 1; i >= 0; i-- {
 				inst := installed[i]
 				m.logger.Info(fmt.Sprintf("addons: rolling back %s", inst.a.Info().DisplayName))
@@ -161,6 +170,7 @@ func (m *Manager) InstallOne(ctx context.Context, name string) error {
 					m.logger.Warn(fmt.Sprintf("addons: rollback of %s failed: %v", inst.a.Info().DisplayName, unErr))
 					installErr = errors.Join(installErr, fmt.Errorf("addon %s rollback: %w", inst.a.Info().Name, unErr))
 				}
+				m.outputs.DeleteAddon(inst.a.Info().Name)
 			}
 
 			return installErr

@@ -27,6 +27,16 @@ func (s *OutputStore) Set(addonName, key, value string) {
 	s.data[addonName][key] = value
 }
 
+// DeleteAddon removes every output produced by the named addon. Used during
+// install rollback so dependent addons cannot read stale values from an
+// addon that was unwound.
+func (s *OutputStore) DeleteAddon(addonName string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	delete(s.data, addonName)
+}
+
 func (s *OutputStore) Get(addonName, key string) string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
