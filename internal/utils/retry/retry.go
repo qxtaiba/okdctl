@@ -1,3 +1,6 @@
+// Package retry provides context-aware retry helpers with exponential
+// backoff, used for transient failures against cluster APIs, the Proxmox
+// provider, and remote downloads.
 package retry
 
 import (

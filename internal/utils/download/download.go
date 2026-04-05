@@ -1,3 +1,6 @@
+// Package download fetches remote artifacts (ISOs, release binaries,
+// checksums) with progress reporting and handles archive extraction for
+// OKD installer tooling.
 package download
 
 import (

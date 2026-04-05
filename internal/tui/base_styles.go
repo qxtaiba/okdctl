@@ -1,3 +1,6 @@
+// Package tui provides shared terminal UI primitives (lipgloss styles,
+// color themes, icons, layouts, and print helpers) used by the CLI output
+// and the bubbletea wizard.
 package tui
 
 import "github.com/charmbracelet/lipgloss"

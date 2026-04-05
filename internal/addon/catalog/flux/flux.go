@@ -1,3 +1,6 @@
+// Package flux provides the FluxCD GitOps addon, which bootstraps Flux
+// controllers into an OKD cluster and registers them via the addon system's
+// init()-based catalog.
 package flux
 
 import (

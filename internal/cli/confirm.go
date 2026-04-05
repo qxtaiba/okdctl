@@ -1,3 +1,6 @@
+// Package cli wires openshitctl's cobra command tree (deploy, destroy,
+// update-ingress, wizard) and shared CLI helpers for prompts, summaries,
+// and viper-backed config loading.
 package cli
 
 import (

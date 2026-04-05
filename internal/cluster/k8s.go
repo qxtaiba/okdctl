@@ -1,3 +1,6 @@
+// Package cluster provides a thin Kubernetes client wrapper around kubectl/oc
+// for OKD cluster operations such as CSR approval, node readiness checks,
+// and resource queries during install and postinstall phases.
 package cluster
 
 import (

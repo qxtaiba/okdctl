@@ -1,3 +1,6 @@
+// Package system provides host OS operations used during OKD provisioning:
+// filesystem helpers, privileged file writes, command execution with sudo,
+// permission management, and systemd unit control.
 package system
 
 import (

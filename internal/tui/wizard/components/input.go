@@ -1,3 +1,5 @@
+// Package components provides reusable bubbletea widgets (text inputs,
+// selectors, dropdowns) used by wizard steps to collect user configuration.
 package components
 
 import (

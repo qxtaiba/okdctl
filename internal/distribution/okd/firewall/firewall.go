@@ -1,3 +1,5 @@
+// Package firewall manages host firewall rules required for OKD provisioning,
+// abstracting over firewalld, ufw, and iptables backends.
 package firewall
 
 import (
