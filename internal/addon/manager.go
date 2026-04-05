@@ -133,6 +133,14 @@ func (m *Manager) InstallOne(ctx context.Context, name string) error {
 		return err
 	}
 
+	// Track successfully installed addons so we can roll them back if a later
+	// addon in the ordered set fails — matches InstallAll's rollback semantics.
+	type installedAddon struct {
+		a   Addon
+		env *Environment
+	}
+	var installed []installedAddon
+
 	for _, addon := range ordered {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -143,8 +151,21 @@ func (m *Manager) InstallOne(ctx context.Context, name string) error {
 
 		env := m.buildEnv(addon)
 		if err := addon.Install(ctx, env); err != nil {
-			return fmt.Errorf("addon %s install failed: %w", info.Name, err)
+			installErr := fmt.Errorf("addon %s install failed: %w", info.Name, err)
+
+			// Best-effort rollback of previously-installed addons in reverse order.
+			for i := len(installed) - 1; i >= 0; i-- {
+				inst := installed[i]
+				m.logger.Info(fmt.Sprintf("addons: rolling back %s", inst.a.Info().DisplayName))
+				if unErr := inst.a.Uninstall(ctx, inst.env); unErr != nil {
+					m.logger.Warn(fmt.Sprintf("addons: rollback of %s failed: %v", inst.a.Info().DisplayName, unErr))
+					installErr = errors.Join(installErr, fmt.Errorf("addon %s rollback: %w", inst.a.Info().Name, unErr))
+				}
+			}
+
+			return installErr
 		}
+		installed = append(installed, installedAddon{a: addon, env: env})
 
 		if op, ok := addon.(OutputProducer); ok {
 			for k, v := range op.Outputs() {
