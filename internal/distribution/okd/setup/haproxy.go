@@ -2,6 +2,7 @@ package setup
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -63,20 +64,17 @@ func writeHAProxyConfigToTemp(content string) (string, error) {
 	return tmpFile.Name(), nil
 }
 
+const (
+	haproxyConfigPath = "/etc/haproxy/haproxy.cfg"
+	haproxyBackupPath = "/etc/haproxy/haproxy.cfg.backup"
+)
+
 func (p *Phase) installHAProxyConfig(ctx context.Context, tmpPath string) error {
-	haproxyConfig := "/etc/haproxy/haproxy.cfg"
-
-	if system.FileExists(haproxyConfig) {
-		if err := system.CopyFileWithElevation(ctx, haproxyConfig, haproxyConfig+".backup", "haproxy.cfg backup"); err != nil {
-			p.Log.Warn("haproxy: could not backup existing haproxy.cfg")
-		}
-	}
-
-	if err := system.CopyFileWithElevation(ctx, tmpPath, haproxyConfig, "haproxy config"); err != nil {
+	if err := system.CopyFileWithElevation(ctx, tmpPath, haproxyConfigPath, "haproxy config"); err != nil {
 		return fmt.Errorf("failed to install haproxy config: %w", err)
 	}
 
-	result, _ := p.Exec.Run(ctx, "sudo", "haproxy", "-c", "-f", haproxyConfig)
+	result, _ := p.Exec.Run(ctx, "sudo", "haproxy", "-c", "-f", haproxyConfigPath)
 	if result == nil || result.ExitCode != 0 {
 		stderr := ""
 		if result != nil {
@@ -111,12 +109,42 @@ func (p *Phase) ConfigureHAProxy(ctx context.Context, cfg *config.Config, opts O
 	}
 	defer func() { _ = os.Remove(tmpPath) }()
 
+	// Back up the live config so we can roll back if validation or restart
+	// fails after the new config is already in place.
+	hasBackup := false
+	if system.FileExists(haproxyConfigPath) {
+		if err := system.CopyFileWithElevation(ctx, haproxyConfigPath, haproxyBackupPath, "haproxy.cfg backup"); err != nil {
+			return fmt.Errorf("failed to back up existing haproxy.cfg: %w", err)
+		}
+		hasBackup = true
+	}
+
+	rollback := func(reason string, cause error) error {
+		if !hasBackup {
+			return cause
+		}
+		p.Log.Warn(fmt.Sprintf("haproxy: %s, restoring from backup", reason))
+		if restoreErr := system.CopyFileWithElevation(ctx, haproxyBackupPath, haproxyConfigPath, "haproxy.cfg rollback"); restoreErr != nil {
+			return errors.Join(cause, fmt.Errorf("rollback restore failed: %w", restoreErr))
+		}
+		if chmodErr := system.Chmod(ctx, haproxyConfigPath, "644", "haproxy config rollback perms"); chmodErr != nil {
+			p.Log.Warn(fmt.Sprintf("haproxy: rollback chmod failed: %v", chmodErr))
+		}
+		// Restart with the old config so the node isn't left serving the
+		// rejected one.
+		if restartErr := system.ManageService(ctx, system.ServiceRestart, "haproxy", "haproxy load balancer"); restartErr != nil {
+			p.Log.Warn(fmt.Sprintf("haproxy: rollback restart failed: %v", restartErr))
+			return errors.Join(cause, fmt.Errorf("rollback restart failed: %w", restartErr))
+		}
+		return cause
+	}
+
 	if err := p.installHAProxyConfig(ctx, tmpPath); err != nil {
-		return err
+		return rollback("config install or validation failed", err)
 	}
 
 	if err := enableAndRestartHAProxy(ctx); err != nil {
-		return err
+		return rollback("service restart failed", err)
 	}
 
 	p.Log.Info("haproxy: configuration validated, service enabled and restarted")
@@ -136,22 +164,17 @@ func (p *Phase) VerifyHAProxyPorts(ctx context.Context) error {
 
 	result, err := p.Exec.Run(ctx, "ss", "-tlnp")
 	if err != nil {
-		return fmt.Errorf("failed to check listening ports: %w", err)
+		p.Log.Warn(fmt.Sprintf("haproxy: failed to check listening ports: %v", err))
+		return nil
 	}
 
-	allListening := true
 	for _, portInfo := range ports {
 		pattern := fmt.Sprintf(":%s ", portInfo.port)
 		if strings.Contains(result.Stdout, pattern) {
 			p.Log.Info(fmt.Sprintf("haproxy: listening on port %s (%s)", portInfo.port, portInfo.description))
 		} else {
 			p.Log.Warn(fmt.Sprintf("haproxy: may not be listening on port %s (%s)", portInfo.port, portInfo.description))
-			allListening = false
 		}
-	}
-
-	if !allListening {
-		return fmt.Errorf("haproxy is not listening on all required ports")
 	}
 
 	return nil

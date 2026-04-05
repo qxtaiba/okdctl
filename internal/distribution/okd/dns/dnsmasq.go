@@ -91,11 +91,11 @@ func WriteDnsmasqConfig(ctx context.Context, name, content string) error {
 	return nil
 }
 
-func DnsmasqConfigPath(name string) string {
+func DnsmasqConfigPath(name string) (string, error) {
 	if err := validateConfigName(name); err != nil {
-		return ""
+		return "", utils.WrapError("invalid dnsmasq config name", err)
 	}
-	return filepath.Join(dnsmasqConfigDir, fmt.Sprintf("%s.conf", name))
+	return filepath.Join(dnsmasqConfigDir, fmt.Sprintf("%s.conf", name)), nil
 }
 
 func IsNetworkManagerActive() bool {

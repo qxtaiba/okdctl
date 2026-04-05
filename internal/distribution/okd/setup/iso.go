@@ -60,6 +60,12 @@ func writePreInstallScript(script string) (string, error) {
 		return "", fmt.Errorf("failed to create pre-install script: %w", err)
 	}
 
+	if err := f.Chmod(0750); err != nil {
+		_ = f.Close()
+		_ = os.Remove(f.Name())
+		return "", fmt.Errorf("failed to chmod pre-install script: %w", err)
+	}
+
 	if _, err := f.WriteString(script); err != nil {
 		_ = f.Close()
 		_ = os.Remove(f.Name())
@@ -69,11 +75,6 @@ func writePreInstallScript(script string) (string, error) {
 	if err := f.Close(); err != nil {
 		_ = os.Remove(f.Name())
 		return "", fmt.Errorf("failed to close pre-install script: %w", err)
-	}
-
-	if err := os.Chmod(f.Name(), 0755); err != nil {
-		_ = os.Remove(f.Name())
-		return "", fmt.Errorf("failed to chmod pre-install script: %w", err)
 	}
 
 	return f.Name(), nil
@@ -178,9 +179,11 @@ func (p *Phase) buildNodeISO(ctx context.Context, cfg *config.Config, node NodeI
 	var sshKey string
 	if cfg.Files.SSHPublicKey != "" {
 		keyPath := system.ExpandPath(cfg.Files.SSHPublicKey)
-		if b, err := os.ReadFile(keyPath); err == nil {
-			sshKey = strings.TrimSpace(string(b))
+		b, err := os.ReadFile(keyPath)
+		if err != nil {
+			return utils.WrapErrorf(err, "failed to read ssh public key %s", keyPath)
 		}
+		sshKey = strings.TrimSpace(string(b))
 	}
 	triggerPath, err := writeInstallerTriggerIgnition(sshKey)
 	if err != nil {

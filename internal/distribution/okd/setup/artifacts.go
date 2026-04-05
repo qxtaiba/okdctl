@@ -95,6 +95,10 @@ func (p *Phase) InstallToolsToSystem(ctx context.Context, srcDir string) error {
 			p.Log.Warn(fmt.Sprintf("tools: failed to set executable permission for %s: %v", binary, err))
 		}
 
+		if !system.FileExists(destPath) {
+			return fmt.Errorf("tools: %s not found at %s after install", binary, destPath)
+		}
+
 		p.Log.Info(fmt.Sprintf("tools: installed %s to %s", binary, destPath))
 	}
 

@@ -2,6 +2,7 @@ package cleanup
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -12,9 +13,8 @@ import (
 )
 
 // SafeRemoveWithLogger removes a file or directory if it exists, with automatic sudo fallback.
-// Returns nil if the path doesn't exist or was successfully removed.
-// This is a best-effort operation - errors are logged but nil is returned for cleanup scenarios
-// where partial success is acceptable.
+// Returns nil if the path doesn't exist or was successfully removed, or a wrapped error on failure.
+// Errors are also logged via the provided logger for visibility in best-effort cleanup paths.
 // Note: If elevated privileges are required, sudo may prompt for a password.
 func SafeRemoveWithLogger(ctx context.Context, path, description string, logger utils.Logger) error {
 	if _, err := os.Stat(path); os.IsNotExist(err) {
@@ -25,12 +25,14 @@ func SafeRemoveWithLogger(ctx context.Context, path, description string, logger 
 		if logger != nil {
 			logger.Warn(fmt.Sprintf("could not remove %s: %v", description, err))
 		}
+		return utils.WrapErrorf(err, "could not remove %s", description)
 	}
 
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
 		if logger != nil {
 			logger.Warn(fmt.Sprintf("%s still exists after removal", description))
 		}
+		return fmt.Errorf("%s still exists after removal", description)
 	}
 
 	return nil
@@ -45,19 +47,26 @@ func WorkDirectory(ctx context.Context, workDir string, preserveConfig bool, log
 		logger.Info("cleanup: removing work directory")
 	}
 
-	if preserveConfig {
-		_ = SafeRemoveWithLogger(ctx, filepath.Join(workDir, "tmp"), "temporary files", logger)
-		_ = SafeRemoveWithLogger(ctx, filepath.Join(workDir, "downloads"), "download cache", logger)
-		_ = SafeRemoveWithLogger(ctx, filepath.Join(workDir, "installer"), "installer files", logger)
-		_ = SafeRemoveWithLogger(ctx, filepath.Join(workDir, "custom-isos"), "custom ISO files", logger)
-	} else {
-		_ = SafeRemoveWithLogger(ctx, paths.ClusterConfigDir(workDir), "cluster configuration", logger)
-		_ = SafeRemoveWithLogger(ctx, filepath.Join(workDir, "custom-isos"), "custom ISOs", logger)
-		_ = SafeRemoveWithLogger(ctx, filepath.Join(workDir, "installer"), "installer", logger)
-		_ = SafeRemoveWithLogger(ctx, filepath.Join(workDir, "tmp"), "temp files", logger)
-		_ = SafeRemoveWithLogger(ctx, filepath.Join(workDir, "downloads"), "downloads", logger)
-		_ = SafeRemoveWithLogger(ctx, workDir, "work directory", logger)
+	var errs []error
+	remove := func(path, description string) {
+		if err := SafeRemoveWithLogger(ctx, path, description, logger); err != nil {
+			errs = append(errs, err)
+		}
 	}
 
-	return nil
+	if preserveConfig {
+		remove(filepath.Join(workDir, "tmp"), "temporary files")
+		remove(filepath.Join(workDir, "downloads"), "download cache")
+		remove(filepath.Join(workDir, "installer"), "installer files")
+		remove(filepath.Join(workDir, "custom-isos"), "custom ISO files")
+	} else {
+		remove(paths.ClusterConfigDir(workDir), "cluster configuration")
+		remove(filepath.Join(workDir, "custom-isos"), "custom ISOs")
+		remove(filepath.Join(workDir, "installer"), "installer")
+		remove(filepath.Join(workDir, "tmp"), "temp files")
+		remove(filepath.Join(workDir, "downloads"), "downloads")
+		remove(workDir, "work directory")
+	}
+
+	return errors.Join(errs...)
 }

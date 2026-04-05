@@ -355,9 +355,7 @@ func (p *Phase) newConfigureHAProxyStep(cfg *config.Config, opts Options) distri
 			if err := p.ConfigureHAProxy(ctx, cfg, opts); err != nil {
 				return utils.WrapError("failed to configure HAProxy", err)
 			}
-			if err := p.VerifyHAProxyPorts(ctx); err != nil {
-				p.Log.Warn(fmt.Sprintf("haproxy: port verification warning: %v", err))
-			}
+			_ = p.VerifyHAProxyPorts(ctx)
 			return nil
 		}).
 		MustBuild()
@@ -409,7 +407,10 @@ func (p *Phase) newConfigureDNSStep(cfg *config.Config, opts Options) distributi
 				}
 			}
 
-			configPath := dns.DnsmasqConfigPath(fmt.Sprintf("okd-%s", cfg.Cluster.Name))
+			configPath, err := dns.DnsmasqConfigPath(fmt.Sprintf("okd-%s", cfg.Cluster.Name))
+			if err != nil {
+				return utils.WrapError("failed to resolve dnsmasq config path", err)
+			}
 			p.Log.Info(fmt.Sprintf("dns: dnsmasq configured at %s", configPath))
 			return nil
 		}).

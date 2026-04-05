@@ -4,7 +4,6 @@ package install
 import (
 	"context"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -141,12 +140,24 @@ func (p *Phase) DeployInfrastructure(ctx context.Context, cfg *config.Config, op
 	return nil
 }
 
+// SetupKubeconfig points the phase executor at the cluster's kubeconfig by
+// appending KUBECONFIG=<path> to Exec.Env. The assignment is executor-scoped,
+// so any subprocess launched via p.Exec.Run inherits it automatically.
+//
+// Callers constructing a cluster.K8sClient AFTER this method runs must pass
+// cluster.WithKubeconfig(kubeconfigPath) explicitly — K8sClient reads
+// KUBECONFIG from os.Environ at construction time and does NOT see the
+// executor-scoped env. The downstream call graph in install/postinstall uses
+// p.Exec.Run throughout, so no K8sClient there is affected, but any future
+// code path that spawns a bare cluster.NewK8sClient() after install will
+// silently miss the kubeconfig if this contract is forgotten.
 func (p *Phase) SetupKubeconfig(clusterDir string) error {
 	kubeconfigPath := filepath.Join(clusterDir, "auth", "kubeconfig")
-	if err := os.Setenv("KUBECONFIG", kubeconfigPath); err != nil {
-		return utils.WrapError("failed to set KUBECONFIG", err)
+	if !system.FileExists(kubeconfigPath) {
+		return fmt.Errorf("kubeconfig not found at %s", kubeconfigPath)
 	}
-	p.Log.Info(fmt.Sprintf("kubeconfig: exported KUBECONFIG=%s", kubeconfigPath))
+	p.Exec.Env = append(p.Exec.Env, "KUBECONFIG="+kubeconfigPath)
+	p.Log.Info(fmt.Sprintf("kubeconfig: configured KUBECONFIG=%s for phase executor", kubeconfigPath))
 	return nil
 }
 

@@ -190,7 +190,10 @@ func DeployProduction(ctx context.Context, cfg *config.Config, appsIP, kubeVipIP
 // validateAndRestartDnsmasq validates the dnsmasq config, then restarts the service.
 // On validation or restart failure, it restores the previous config from the .backup file.
 func validateAndRestartDnsmasq(ctx context.Context, configName string) error {
-	configPath := DnsmasqConfigPath(configName)
+	configPath, err := DnsmasqConfigPath(configName)
+	if err != nil {
+		return err
+	}
 	backupPath := configPath + ".backup"
 
 	restore := func() {
@@ -198,6 +201,7 @@ func validateAndRestartDnsmasq(ctx context.Context, configName string) error {
 			return
 		}
 		_ = system.CopyFileWithElevation(ctx, backupPath, configPath, "dnsmasq config rollback")
+		_ = system.Chmod(ctx, configPath, "644", "dnsmasq config permissions")
 	}
 
 	if err := ValidateDnsmasqConfig(ctx); err != nil {

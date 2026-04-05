@@ -3,6 +3,7 @@ package setup
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"path/filepath"
 	"strings"
@@ -19,15 +20,19 @@ const (
 	minIgnitionFileSize = 1000 // bytes
 )
 
-func ensureIgnitionDir(ctx context.Context, webRoot string) (string, error) {
+func (p *Phase) ensureIgnitionDir(ctx context.Context, webRoot string) (string, error) {
 	ignitionDir := filepath.Join(webRoot, "ignition")
 
 	if err := system.MkdirAll(ctx, ignitionDir, "ignition directory"); err != nil {
 		return "", utils.WrapError("failed to create ignition directory", err)
 	}
 
-	_ = system.Chown(ctx, ignitionDir, "apache:apache", "ignition directory ownership")
-	_ = system.Chmod(ctx, ignitionDir, "755", "ignition directory permissions")
+	if err := system.Chown(ctx, ignitionDir, "apache:apache", "ignition directory ownership"); err != nil {
+		p.Log.Warn(fmt.Sprintf("apache: failed to set ignition dir ownership: %v", err))
+	}
+	if err := system.Chmod(ctx, ignitionDir, "755", "ignition directory permissions"); err != nil {
+		p.Log.Warn(fmt.Sprintf("apache: failed to set ignition dir permissions: %v", err))
+	}
 
 	return ignitionDir, nil
 }
@@ -96,7 +101,7 @@ func (p *Phase) ConfigureApache(ctx context.Context, cfg *config.Config) error {
 	if webRoot == "" {
 		webRoot = "/var/www/html"
 	}
-	ignitionDir, err := ensureIgnitionDir(ctx, webRoot)
+	ignitionDir, err := p.ensureIgnitionDir(ctx, webRoot)
 	if err != nil {
 		return err
 	}
@@ -111,7 +116,7 @@ func (p *Phase) DeployToWebServer(ctx context.Context, cfg *config.Config, clust
 		webRoot = "/var/www/html"
 	}
 
-	ignitionDir, err := ensureIgnitionDir(ctx, webRoot)
+	ignitionDir, err := p.ensureIgnitionDir(ctx, webRoot)
 	if err != nil {
 		return err
 	}
@@ -158,6 +163,7 @@ func (p *Phase) VerifyWebServer(ctx context.Context, baseURL string) error {
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
+		_, _ = io.Copy(io.Discard, resp.Body)
 		return fmt.Errorf("web server returned status %d for %s", resp.StatusCode, testURL)
 	}
 
