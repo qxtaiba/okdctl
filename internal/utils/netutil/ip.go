@@ -53,12 +53,12 @@ func CalculateVMIP(startIP string, index int) (string, error) {
 	return newIP.String(), nil
 }
 
-func DeriveVIPFromStaticIP(staticIPStart string) string {
-	parts := strings.Split(staticIPStart, ".")
-	if len(parts) != 4 {
-		return ""
+func DeriveVIPFromStaticIP(staticIPStart string) (string, error) {
+	if ip := net.ParseIP(staticIPStart); ip == nil || ip.To4() == nil {
+		return "", fmt.Errorf("invalid IPv4 address %q", staticIPStart)
 	}
-	return fmt.Sprintf("%s.%s.%s.%d", parts[0], parts[1], parts[2], DefaultVIPLastOctet)
+	parts := strings.Split(staticIPStart, ".")
+	return fmt.Sprintf("%s.%s.%s.%d", parts[0], parts[1], parts[2], DefaultVIPLastOctet), nil
 }
 
 func IPInCIDR(ip, cidr string) bool {

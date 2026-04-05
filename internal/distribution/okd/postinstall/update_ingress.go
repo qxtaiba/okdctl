@@ -44,9 +44,9 @@ type UpdateIngressResult struct {
 // converts HostNetwork controllers to LoadBalancerService, waits for their
 // LoadBalancer IPs, deploys production DNS, and optionally removes HAProxy.
 func (p *Phase) UpdateIngress(ctx context.Context, cfg *config.Config, opts UpdateIngressOptions) (*UpdateIngressResult, error) {
-	vip := netutil.DeriveVIPFromStaticIP(cfg.Networking.StaticIP.Start)
-	if vip == "" {
-		return nil, fmt.Errorf("failed to derive VIP from static IP start: %s", cfg.Networking.StaticIP.Start)
+	vip, err := netutil.DeriveVIPFromStaticIP(cfg.Networking.StaticIP.Start)
+	if err != nil {
+		return nil, fmt.Errorf("failed to derive VIP from static IP start: %w", err)
 	}
 
 	postOpts := Options{

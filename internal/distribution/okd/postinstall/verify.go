@@ -69,9 +69,9 @@ func (p *Phase) VerifyClusterHealth(ctx context.Context, opts Options) (*Cluster
 // VerifyKubeVIP verifies that kube-vip is running and the VIP is responding.
 // Returns the VIP address if successful.
 func (p *Phase) VerifyKubeVIP(ctx context.Context, cfg *config.Config, opts Options) (string, error) {
-	vip := netutil.DeriveVIPFromStaticIP(cfg.Networking.StaticIP.Start)
-	if vip == "" {
-		return "", fmt.Errorf("failed to derive VIP from static IP start: %s", cfg.Networking.StaticIP.Start)
+	vip, err := netutil.DeriveVIPFromStaticIP(cfg.Networking.StaticIP.Start)
+	if err != nil {
+		return "", fmt.Errorf("failed to derive VIP from static IP start: %w", err)
 	}
 
 	p.Log.Info(fmt.Sprintf("kubevip: checking vip %s", vip))

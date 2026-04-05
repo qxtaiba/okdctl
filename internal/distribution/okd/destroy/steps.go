@@ -51,13 +51,17 @@ func (p *Phase) newCleanupFilesStep(cfg *config.Config, opts Options) distributi
 		SkipWhen(func() bool { return opts.SkipCleanup || opts.CleanupType == "" }).
 		SkipReason(cleanupFilesSkipReason(opts)).
 		Execute(func(ctx context.Context) error {
+			vip, err := netutil.DeriveVIPFromStaticIP(cfg.Networking.StaticIP.Start)
+			if err != nil {
+				return utils.WrapError("failed to derive VIP from static IP start", err)
+			}
 			cleanupOpts := cleanup.Options{
 				Type:           opts.CleanupType,
 				WorkDir:        opts.WorkDir,
 				ProjectRoot:    opts.ProjectRoot,
 				HTTPServerRoot: cfg.HTTPServer.Root,
 				HAProxyConfig:  paths.DefaultHAProxyConfigPath,
-				VIP:            netutil.DeriveVIPFromStaticIP(cfg.Networking.StaticIP.Start),
+				VIP:            vip,
 				ClusterName:    cfg.Cluster.Name,
 				TerraformEnv:   opts.TerraformEnv,
 				PreserveConfig: false,
