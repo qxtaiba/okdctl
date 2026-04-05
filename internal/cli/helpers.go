@@ -2,7 +2,6 @@ package cli
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -16,8 +15,6 @@ import (
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
 )
 
-var ErrConfigNotFound = errors.New("configuration file not found")
-
 func LoadConfig(configFile string) (*config.Config, error) {
 	loader := config.NewLoader()
 	cfg, err := loader.LoadFile(configFile)
@@ -25,7 +22,7 @@ func LoadConfig(configFile string) (*config.Config, error) {
 		if os.IsNotExist(err) {
 			tui.Error("configuration file not found: " + configFile)
 			tui.Info("run 'openshitctl init' to create a configuration file")
-			return nil, ErrConfigNotFound
+			return nil, fmt.Errorf("configuration file not found: %s", configFile)
 		}
 		return nil, utils.WrapError("load configuration", err)
 	}
