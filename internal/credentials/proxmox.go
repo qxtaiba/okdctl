@@ -217,13 +217,11 @@ func GetProxmoxCredentials(cfg ProxmoxConfigProvider) *ProxmoxCredentials {
 		return creds
 	}
 
-	if username := cfg.GetProxmoxUsername(); username != "" {
-		if password := cfg.GetProxmoxPassword(); password != "" {
-			creds.Username = username
-			creds.Password = []byte(password)
-			creds.Source = SourceConfig
-			return creds
-		}
+	if username, password := cfg.GetProxmoxUsername(), cfg.GetProxmoxPassword(); username != "" && password != "" {
+		creds.Username = username
+		creds.Password = []byte(password)
+		creds.Source = SourceConfig
+		return creds
 	}
 
 	return creds
