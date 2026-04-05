@@ -2,6 +2,7 @@ package setup
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -124,12 +125,13 @@ func (p *Phase) ConfigureHAProxy(ctx context.Context, cfg *config.Config, opts O
 		}
 		p.Log.Warn(fmt.Sprintf("haproxy: %s, restoring from backup", reason))
 		if restoreErr := system.CopyFileWithElevation(ctx, haproxyBackupPath, haproxyConfigPath, "haproxy.cfg rollback"); restoreErr != nil {
-			return fmt.Errorf("%w (rollback also failed: %v)", cause, restoreErr)
+			return errors.Join(cause, fmt.Errorf("rollback restore failed: %w", restoreErr))
 		}
 		// Restart with the old config so the node isn't left serving the
 		// rejected one.
 		if restartErr := system.ManageService(ctx, system.ServiceRestart, "haproxy", "haproxy load balancer"); restartErr != nil {
 			p.Log.Warn(fmt.Sprintf("haproxy: rollback restart failed: %v", restartErr))
+			return errors.Join(cause, fmt.Errorf("rollback restart failed: %w", restartErr))
 		}
 		return cause
 	}
