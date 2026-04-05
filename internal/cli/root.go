@@ -3,6 +3,7 @@ package cli
 import (
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 
 	"github.com/spf13/cobra"
@@ -48,6 +49,8 @@ Highlights:
 }
 
 func Execute() {
+	slog.SetDefault(tui.SimpleLogger())
+
 	if err := rootCmd.Execute(); err != nil {
 		if errors.Is(err, deployment.ErrInterrupted) {
 			os.Exit(130)
