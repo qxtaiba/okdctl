@@ -23,10 +23,10 @@ func (p *Phase) WaitForBootstrap(ctx context.Context, clusterDir string, opts Op
 	cmd.Stderr = os.Stderr
 
 	if err := cmd.Run(); err != nil {
-		if ctx.Err() == context.DeadlineExceeded {
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 			return fmt.Errorf("bootstrap timed out after %v", opts.BootstrapTimeout)
 		}
-		if ctx.Err() == context.Canceled {
+		if errors.Is(ctx.Err(), context.Canceled) {
 			return utils.WrapError("bootstrap cancelled", context.Canceled)
 		}
 		return utils.WrapError("bootstrap failed", err)
