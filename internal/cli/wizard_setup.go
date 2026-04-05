@@ -64,9 +64,8 @@ func buildWizardStepsWithState(wizardCfg wizard.Config) wizard.BuiltSteps {
 
 	if wizardCfg.InitialConfig != nil {
 		initializeStepsFromConfig(built, wizardCfg.InitialConfig)
+		configureReviewStep(built, wizardCfg.InitialConfig)
 	}
-
-	configureReviewStep(built, wizardCfg.InitialConfig)
 
 	return built
 }
