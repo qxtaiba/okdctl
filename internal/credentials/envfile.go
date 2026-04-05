@@ -30,11 +30,13 @@ func WriteEnvFile(path string, creds *ProxmoxCredentials) error {
 	if creds.Username != "" {
 		lines = append(lines, "PROXMOX_VE_USERNAME="+creds.Username)
 	}
-	if creds.Password != "" {
-		lines = append(lines, "PROXMOX_VE_PASSWORD="+creds.Password)
+	if len(creds.Password) > 0 {
+		// On-disk .env format is plain text — string() conversion here is
+		// unavoidable. The in-memory []byte can still be wiped via Zeroize.
+		lines = append(lines, "PROXMOX_VE_PASSWORD="+string(creds.Password))
 	}
-	if creds.APIToken != "" {
-		lines = append(lines, "PROXMOX_VE_API_TOKEN="+creds.APIToken)
+	if len(creds.APIToken) > 0 {
+		lines = append(lines, "PROXMOX_VE_API_TOKEN="+string(creds.APIToken))
 	}
 	if creds.Insecure {
 		lines = append(lines, "PROXMOX_VE_INSECURE=true")

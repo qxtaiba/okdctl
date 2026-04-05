@@ -124,6 +124,7 @@ func runFullDeployment(cfg *config.Config) error {
 	}
 
 	creds := HandleCredentials(cfg)
+	defer creds.Zeroize()
 
 	return ExecuteFullDeployment(ctx, cfg, DeploymentOptions{
 		ShowStartMessage: true,
@@ -148,10 +149,11 @@ func writeCredentialsEnv(cfg *config.Config, configPath string) error {
 
 	creds := &credentials.ProxmoxCredentials{
 		Username: px.Username,
-		Password: px.Password,
-		APIToken: px.APIToken,
+		Password: []byte(px.Password),
+		APIToken: []byte(px.APIToken),
 		Insecure: px.Insecure,
 	}
+	defer creds.Zeroize()
 
 	envPath := credentials.EnvFilePath(configPath)
 	if err := credentials.WriteEnvFile(envPath, creds); err != nil {
