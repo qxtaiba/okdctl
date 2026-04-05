@@ -117,6 +117,10 @@ func runFullDeployment(cfg *config.Config) error {
 	handler, ctx := deployment.NewInterruptHandler()
 	defer handler.Cleanup()
 
+	// OnInterrupt is informational only — the interrupt handler's Cleanup()
+	// cancels ctx automatically and ExecuteFullDeployment returns with the
+	// resulting context error. This callback just surfaces the cancel to the
+	// user before that happens.
 	handler.OnInterrupt = func(sig os.Signal) {
 		fmt.Println()
 		tui.Error(fmt.Sprintf("deployment interrupted by %v", sig))
