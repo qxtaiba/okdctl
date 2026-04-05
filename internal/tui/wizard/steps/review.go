@@ -88,8 +88,9 @@ func (s *ReviewStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 				return wizard.StepCompleteMsg{StepID: s.ID()}
 			}
 		case key.Matches(msg, key.NewBinding(key.WithKeys("up", "k", "down", "j"))):
-			s.actionSelector.Update(msg)
-			return s, s.emitFocusChanged()
+			var cmd tea.Cmd
+			s.actionSelector, cmd = s.actionSelector.Update(msg)
+			return s, tea.Batch(cmd, s.emitFocusChanged())
 		}
 	}
 	return s, nil

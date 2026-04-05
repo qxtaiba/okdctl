@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"context"
 	"fmt"
 	"time"
 
@@ -25,7 +24,7 @@ func init() {
 }
 
 func runDestroy(cmd *cobra.Command, args []string) error {
-	ctx := context.Background()
+	ctx := cmd.Context()
 
 	cfg, err := LoadConfig(cfgFile)
 	if err != nil {

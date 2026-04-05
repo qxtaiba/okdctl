@@ -154,12 +154,13 @@ func (s *DistributionStep) handleTabKey() (wizard.WizardStep, tea.Cmd) {
 }
 
 func (s *DistributionStep) handleNavigationKey(msg tea.KeyMsg) (wizard.WizardStep, tea.Cmd) {
-	s.versionSelector.Update(msg)
+	var cmd tea.Cmd
+	s.versionSelector, cmd = s.versionSelector.Update(msg)
 	selected := s.versionSelector.Selected()
 	if !selected.InDropdown {
-		return s, s.emitFocusChanged()
+		return s, tea.Batch(cmd, s.emitFocusChanged())
 	}
-	return s, nil
+	return s, cmd
 }
 
 func (s *DistributionStep) View(width, height int) string {
