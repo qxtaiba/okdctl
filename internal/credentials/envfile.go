@@ -83,7 +83,7 @@ func loadEnvFileOnce(path string) error {
 		if os.IsNotExist(err) {
 			return nil // missing .env is not an error
 		}
-		return err
+		return utils.WrapErrorf(err, "failed to open env file %s", path)
 	}
 	defer f.Close() //nolint:errcheck // read-only file
 
@@ -119,9 +119,12 @@ func loadEnvFileOnce(path string) error {
 		// Only set if not already present — shell env wins
 		if os.Getenv(key) == "" {
 			if err := os.Setenv(key, value); err != nil {
-				return err
+				return utils.WrapErrorf(err, "failed to set env var %s from %s", key, path)
 			}
 		}
 	}
-	return scanner.Err()
+	if err := scanner.Err(); err != nil {
+		return utils.WrapErrorf(err, "failed to scan env file %s", path)
+	}
+	return nil
 }
