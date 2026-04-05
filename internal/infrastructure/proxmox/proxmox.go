@@ -73,6 +73,11 @@ func (p *Provider) Disconnect(_ context.Context) error {
 	return nil
 }
 
+// setupTerraform initializes (or reinitializes) the terraform executor for the
+// given projectRoot/tfEnv. Not safe for concurrent use — the current call
+// graph is sequential per Provider instance (one deployment per CLI run). If
+// concurrent Provision ever becomes a requirement, add a mutex around
+// terraformExec / projectRoot / tfEnv.
 func (p *Provider) setupTerraform(projectRoot, tfEnv string) {
 	if p.terraformExec != nil && p.projectRoot == projectRoot && p.tfEnv == tfEnv {
 		return
