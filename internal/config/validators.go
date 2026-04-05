@@ -119,16 +119,28 @@ func (v *networkingValidator) Validate(cfg *Config, result *ValidationResult) {
 	serviceCIDR := cfg.Networking.ServiceCIDR
 	machineCIDR := cfg.Networking.MachineCIDR
 
-	if IsValidCIDR(podCIDR) && IsValidCIDR(serviceCIDR) && netutil.CIDRsOverlap(podCIDR, serviceCIDR) {
-		result.AddError(FieldNetworkingPodCIDR, "overlaps with service CIDR")
+	if IsValidCIDR(podCIDR) && IsValidCIDR(serviceCIDR) {
+		if overlap, err := netutil.CIDRsOverlap(podCIDR, serviceCIDR); err != nil {
+			result.AddError(FieldNetworkingPodCIDR, err.Error())
+		} else if overlap {
+			result.AddError(FieldNetworkingPodCIDR, "overlaps with service CIDR")
+		}
 	}
 
-	if IsValidCIDR(podCIDR) && IsValidCIDR(machineCIDR) && netutil.CIDRsOverlap(podCIDR, machineCIDR) {
-		result.AddError(FieldNetworkingPodCIDR, "overlaps with machine CIDR")
+	if IsValidCIDR(podCIDR) && IsValidCIDR(machineCIDR) {
+		if overlap, err := netutil.CIDRsOverlap(podCIDR, machineCIDR); err != nil {
+			result.AddError(FieldNetworkingPodCIDR, err.Error())
+		} else if overlap {
+			result.AddError(FieldNetworkingPodCIDR, "overlaps with machine CIDR")
+		}
 	}
 
-	if IsValidCIDR(serviceCIDR) && IsValidCIDR(machineCIDR) && netutil.CIDRsOverlap(serviceCIDR, machineCIDR) {
-		result.AddError(FieldNetworkingServiceCIDR, "overlaps with machine CIDR")
+	if IsValidCIDR(serviceCIDR) && IsValidCIDR(machineCIDR) {
+		if overlap, err := netutil.CIDRsOverlap(serviceCIDR, machineCIDR); err != nil {
+			result.AddError(FieldNetworkingServiceCIDR, err.Error())
+		} else if overlap {
+			result.AddError(FieldNetworkingServiceCIDR, "overlaps with machine CIDR")
+		}
 	}
 }
 

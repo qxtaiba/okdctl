@@ -138,20 +138,20 @@ func ParseIPPool(pool string) (start, end string, err error) {
 	return start, end, nil
 }
 
-func CIDRsOverlap(cidr1, cidr2 string) bool {
+func CIDRsOverlap(cidr1, cidr2 string) (bool, error) {
 	_, net1, err := net.ParseCIDR(cidr1)
 	if err != nil {
-		return false
+		return false, fmt.Errorf("invalid CIDR %q: %w", cidr1, err)
 	}
 	_, net2, err := net.ParseCIDR(cidr2)
 	if err != nil {
-		return false
+		return false, fmt.Errorf("invalid CIDR %q: %w", cidr2, err)
 	}
 
 	start1, end1 := cidrRange(net1)
 	start2, end2 := cidrRange(net2)
 
-	return ipLessOrEqual(start1, end2) && ipLessOrEqual(start2, end1)
+	return ipLessOrEqual(start1, end2) && ipLessOrEqual(start2, end1), nil
 }
 
 func cidrRange(network *net.IPNet) (net.IP, net.IP) {
