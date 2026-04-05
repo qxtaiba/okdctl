@@ -84,7 +84,7 @@ type ProxmoxConfig struct {
 	FCOSIso     string `yaml:"fcos_iso,omitempty" json:"fcosIso,omitempty" mapstructure:"fcos_iso"`
 
 	// Credentials — prefer openshitctl.env or environment variables
-	Username string `yaml:"username,omitempty" json:"username,omitempty" mapstructure:"username"`
+	Username string `yaml:"-" json:"username,omitempty" mapstructure:"username"`
 	Password string `yaml:"-" json:"-" mapstructure:"-"`
 	APIToken string `yaml:"-" json:"-" mapstructure:"-"`
 	TokenID  string `yaml:"token_id,omitempty" json:"tokenId,omitempty" mapstructure:"token_id"`

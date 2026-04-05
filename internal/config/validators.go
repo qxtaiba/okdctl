@@ -410,13 +410,11 @@ func ValidateOKDConfig(cfg *Config, result *ValidationResult) {
 	}
 }
 
+// ValidateWithOKD is a thin wrapper around cfg.Validate() retained for the
+// legacy ValidateForOKD call site. OKD-specific checks already run via
+// distributionValidator when ScopeAll is used, so no extra pass is needed.
 func ValidateWithOKD(cfg *Config) *ValidationResult {
-	result := cfg.Validate()
-	if cfg.Distribution.Type == DistributionOKD {
-		ValidateOKDConfig(cfg, result)
-	}
-
-	return result
+	return cfg.Validate()
 }
 
 type filesValidator struct{}

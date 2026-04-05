@@ -45,7 +45,7 @@ func (r *ValidationResult) Error() string {
 	if r.IsValid() {
 		return ""
 	}
-	var msgs []string
+	msgs := make([]string, 0, len(r.Errors))
 	for _, e := range r.Errors {
 		msgs = append(msgs, e.Error())
 	}
@@ -109,6 +109,11 @@ func NewValidatorRegistry() *ValidatorRegistry {
 
 func (r *ValidatorRegistry) Validate(cfg *Config, opts ValidationOptions) *ValidationResult {
 	result := &ValidationResult{}
+
+	if cfg == nil {
+		result.AddError("_", "config is nil")
+		return result
+	}
 
 	for _, v := range r.validators {
 		if opts.Scope.HasScope(v.Scope()) {

@@ -153,6 +153,12 @@ func GetProxmoxCredentials(cfg ProxmoxConfigProvider) *ProxmoxCredentials {
 		Source: SourceNone,
 	}
 
+	applyInsecureOverride := func(creds *ProxmoxCredentials) {
+		if os.Getenv("PROXMOX_VE_INSECURE") == "true" {
+			creds.Insecure = true
+		}
+	}
+
 	if cfg == nil {
 		return creds
 	}
@@ -184,9 +190,7 @@ func GetProxmoxCredentials(cfg ProxmoxConfigProvider) *ProxmoxCredentials {
 		} else {
 			creds.EndpointFromConfig = true
 		}
-		if insecure := os.Getenv("PROXMOX_VE_INSECURE"); insecure == "true" {
-			creds.Insecure = true
-		}
+		applyInsecureOverride(creds)
 		return creds
 	}
 
@@ -200,9 +204,7 @@ func GetProxmoxCredentials(cfg ProxmoxConfigProvider) *ProxmoxCredentials {
 		} else {
 			creds.EndpointFromConfig = true
 		}
-		if insecure := os.Getenv("PROXMOX_VE_INSECURE"); insecure == "true" {
-			creds.Insecure = true
-		}
+		applyInsecureOverride(creds)
 		return creds
 	}
 

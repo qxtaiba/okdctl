@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
+	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
 )
 
 // loadOnce guards against concurrent or repeated calls to LoadEnvFile.
@@ -56,7 +57,7 @@ func WriteEnvFile(path string, creds *ProxmoxCredentials) error {
 	}
 
 	content := strings.Join(lines, "\n") + "\n"
-	return os.WriteFile(path, []byte(content), 0600)
+	return system.AtomicWrite(path, []byte(content), 0600)
 }
 
 // LoadEnvFile loads a .env file into the process environment.
@@ -78,21 +79,18 @@ func LoadEnvFile(path string) error {
 // loadEnvFileOnce contains the actual load logic. It is not safe to call
 // concurrently and must only be invoked via the LoadEnvFile sync.Once.
 func loadEnvFileOnce(path string) error {
-	f, err := os.Open(path)
+	// Refuse to load a .env that any other user can read. Proxmox tokens
+	// end up in here — a world-readable file defeats the whole point of
+	// moving secrets out of YAML. The permission check MUST happen before
+	// os.Open: once we open the file its contents are in our address space,
+	// and the whole point of this check is to detect a file that other
+	// processes may already have been able to read.
+	fi, err := os.Stat(path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil // missing .env is not an error
 		}
-		return utils.WrapErrorf(err, "failed to open env file %s", path)
-	}
-	defer f.Close() //nolint:errcheck // read-only file
-
-	// Refuse to load a .env that any other user can read. Proxmox tokens
-	// end up in here — a world-readable file defeats the whole point of
-	// moving secrets out of YAML.
-	fi, err := f.Stat()
-	if err != nil {
-		return utils.WrapErrorf(err, "failed to stat .env file %s", path)
+		return utils.WrapErrorf(err, "failed to stat env file %s", path)
 	}
 	if perm := fi.Mode().Perm(); perm&0077 != 0 {
 		return utils.WrapErrorf(
@@ -101,6 +99,12 @@ func loadEnvFileOnce(path string) error {
 			path, perm, path,
 		)
 	}
+
+	f, err := os.Open(path)
+	if err != nil {
+		return utils.WrapErrorf(err, "failed to open env file %s", path)
+	}
+	defer f.Close() //nolint:errcheck // read-only file
 
 	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {

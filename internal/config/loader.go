@@ -62,6 +62,17 @@ func (l *Loader) Load() (*Config, error) {
 }
 
 func (l *Loader) LoadFile(path string) (*Config, error) {
+	// Reject world- or group-writable config files. The YAML is not
+	// supposed to carry secrets, but if a bug ever leaks one we don't
+	// want an attacker-writable file on the deploy host to matter.
+	fi, err := os.Stat(path)
+	if err != nil {
+		return nil, utils.WrapErrorf(err, "error stating config file %s", path)
+	}
+	if perm := fi.Mode().Perm(); perm&0022 != 0 {
+		return nil, fmt.Errorf("config file %s has insecure permissions %#o; run 'chmod go-w %s' to fix", path, perm, path)
+	}
+
 	l.viper.SetConfigFile(path)
 
 	if err := l.viper.ReadInConfig(); err != nil {
@@ -114,14 +125,6 @@ func (l *Loader) Save(cfg *Config, path string) error {
 		return err
 	}
 
-	return system.AtomicWrite(path, data, 0644)
-}
-
-func (l *Loader) Set(key string, value interface{}) {
-	l.viper.Set(key, value)
-}
-
-func (l *Loader) Get(key string) interface{} {
-	return l.viper.Get(key)
+	return system.AtomicWrite(path, data, 0600)
 }
 
