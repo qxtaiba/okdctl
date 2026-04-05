@@ -407,7 +407,10 @@ func (p *Phase) newConfigureDNSStep(cfg *config.Config, opts Options) distributi
 				}
 			}
 
-			configPath := dns.DnsmasqConfigPath(fmt.Sprintf("okd-%s", cfg.Cluster.Name))
+			configPath, err := dns.DnsmasqConfigPath(fmt.Sprintf("okd-%s", cfg.Cluster.Name))
+			if err != nil {
+				return utils.WrapError("failed to resolve dnsmasq config path", err)
+			}
 			p.Log.Info(fmt.Sprintf("dns: dnsmasq configured at %s", configPath))
 			return nil
 		}).
