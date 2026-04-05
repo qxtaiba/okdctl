@@ -105,27 +105,6 @@ func CompareIPs(a, b string) (int, error) {
 	return 0, nil
 }
 
-func RangesOverlap(start1, end1, start2, end2 string) (bool, error) {
-	s1, ok := ipToUint32(start1)
-	if !ok {
-		return false, fmt.Errorf("invalid start1 IP %q", start1)
-	}
-	e1, ok := ipToUint32(end1)
-	if !ok {
-		return false, fmt.Errorf("invalid end1 IP %q", end1)
-	}
-	s2, ok := ipToUint32(start2)
-	if !ok {
-		return false, fmt.Errorf("invalid start2 IP %q", start2)
-	}
-	e2, ok := ipToUint32(end2)
-	if !ok {
-		return false, fmt.Errorf("invalid end2 IP %q", end2)
-	}
-
-	return s1 <= e2 && s2 <= e1, nil
-}
-
 func SplitIPv4(ip string) (base string, lastOctet int, err error) {
 	parsed := net.ParseIP(ip)
 	if parsed == nil {
