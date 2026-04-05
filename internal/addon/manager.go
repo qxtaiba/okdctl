@@ -42,6 +42,10 @@ func (m *Manager) InstallAll(ctx context.Context) error {
 		return nil
 	}
 
+	if !executor.CommandExists("oc") {
+		return fmt.Errorf("addons: 'oc' binary is required but not found in PATH")
+	}
+
 	ordered, err := Resolve(enabled)
 	if err != nil {
 		return fmt.Errorf("addon dependency resolution failed: %w", err)
@@ -112,6 +116,10 @@ func (m *Manager) InstallOne(ctx context.Context, name string) error {
 	a := Get(name)
 	if a == nil {
 		return fmt.Errorf("unknown addon: %s", name)
+	}
+
+	if !executor.CommandExists("oc") {
+		return fmt.Errorf("addons: 'oc' binary is required but not found in PATH")
 	}
 
 	toInstall, err := m.collectWithDeps(a)
