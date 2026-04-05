@@ -2,6 +2,7 @@ package flux
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -312,11 +313,6 @@ func (f *Flux) waitForGitSync(ctx context.Context, env *addon.Environment) error
 }
 
 func (f *Flux) createDeployKeySecret(ctx context.Context, env *addon.Environment) error {
-	result, err := env.Exec.Run(ctx, "oc", "get", "secret", "flux-system", "-n", "flux-system")
-	if err == nil && result != nil && result.ExitCode == 0 {
-		return nil
-	}
-
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return utils.WrapError("failed to get home directory", err)
@@ -327,23 +323,52 @@ func (f *Flux) createDeployKeySecret(ctx context.Context, env *addon.Environment
 		return fmt.Errorf("deploy key not found at %s - generate with: ssh-keygen -t ed25519 -f ~/.ssh/flux-deploy-key -N ''", deployKeyFile)
 	}
 
+	privateKey, err := os.ReadFile(deployKeyFile)
+	if err != nil {
+		return utils.WrapError("failed to read deploy key", err)
+	}
+
+	publicKeyFile := deployKeyFile + ".pub"
+	publicKey, err := os.ReadFile(publicKeyFile)
+	if err != nil {
+		return utils.WrapError("failed to read deploy key public half", err)
+	}
+
 	knownHostsResult, err := env.Exec.Run(ctx, "ssh-keyscan", "github.com")
 	if err != nil || knownHostsResult.ExitCode != 0 {
 		return fmt.Errorf("failed to get GitHub host key")
 	}
 
-	result, err = env.Exec.Run(ctx, "oc", "create", "secret", "generic", "flux-system",
-		"--namespace", "flux-system",
-		"--from-file=identity="+deployKeyFile,
-		"--from-literal=known_hosts="+knownHostsResult.Stdout)
+	manifest := buildFluxDeployKeySecret("flux-system", "flux-system",
+		string(privateKey), string(publicKey), knownHostsResult.Stdout)
+	result, err := env.Exec.RunWithStdin(ctx, manifest, "oc", "apply", "-f", "-")
 	if err != nil {
-		return utils.WrapError("failed to create deploy key secret", err)
+		return utils.WrapError("failed to apply deploy key secret", err)
 	}
 	if result.ExitCode != 0 {
-		return fmt.Errorf("failed to create deploy key secret: %s", result.Stderr)
+		return fmt.Errorf("failed to apply deploy key secret: %s", result.Stderr)
 	}
 
+	env.Logger.Info("flux: deploy key secret applied")
 	return nil
+}
+
+// buildFluxDeployKeySecret renders a Secret manifest containing the SSH deploy
+// key material. Values are base64-encoded into the data map so oc apply can
+// pipe the manifest via stdin without exposing key bytes on argv.
+func buildFluxDeployKeySecret(namespace, name, privateKey, publicKey, knownHosts string) string {
+	enc := base64.StdEncoding.EncodeToString
+	return fmt.Sprintf(`apiVersion: v1
+kind: Secret
+metadata:
+  name: %s
+  namespace: %s
+type: Opaque
+data:
+  identity: %s
+  identity.pub: %s
+  known_hosts: %s
+`, name, namespace, enc([]byte(privateKey)), enc([]byte(publicKey)), enc([]byte(knownHosts)))
 }
 
 // getTimeout reads a timeout setting (in seconds) from the settings map,
