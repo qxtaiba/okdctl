@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 
@@ -97,7 +98,7 @@ func (l *Loader) MustLoadFile(path string) (*Config, error) {
 	}
 
 	if !result.Validation.IsValid() {
-		return nil, utils.WrapErrorf(nil, "configuration validation failed: %s", result.Validation.Error())
+		return nil, fmt.Errorf("configuration validation failed: %s", result.Validation.Error())
 	}
 
 	return result.Config, nil
