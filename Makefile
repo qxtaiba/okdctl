@@ -30,8 +30,7 @@ LDFLAGS := -ldflags "-s -w \
 .DEFAULT_GOAL := help
 
 # Phony targets
-.PHONY: all build clean test lint fmt vet deps run install help \
-	demo-init demo-validate demo-status demo-deploy-dry demo-all
+.PHONY: all build clean test lint fmt vet deps run install help
 
 ## Build targets
 
@@ -116,39 +115,6 @@ clean: ## Clean build artifacts
 
 clean-all: clean ## Clean everything including dependencies
 	@rm -rf vendor
-
-## Demo targets
-
-demo-init: build ## Demo the init command (non-interactive)
-	@echo "=== Demo: openshitctl init (non-interactive) ==="
-	./$(BUILD_DIR)/$(BINARY_NAME) init --non-interactive --output demo.yaml
-	@echo ""
-	@echo "Generated configuration:"
-	@cat demo.yaml
-	@rm -f demo.yaml
-
-demo-validate: build ## Demo the validate command
-	@echo "=== Demo: openshitctl validate ==="
-	@echo "Creating test configuration..."
-	./$(BUILD_DIR)/$(BINARY_NAME) init --non-interactive --output test.yaml
-	./$(BUILD_DIR)/$(BINARY_NAME) validate --config test.yaml
-	@rm -f test.yaml
-
-demo-status: build ## Demo the status command
-	@echo "=== Demo: openshitctl status ==="
-	@echo "Creating test configuration..."
-	./$(BUILD_DIR)/$(BINARY_NAME) init --non-interactive --output test.yaml
-	./$(BUILD_DIR)/$(BINARY_NAME) status --config test.yaml
-	@rm -f test.yaml
-
-demo-deploy-dry: build ## Demo the deploy command (dry-run)
-	@echo "=== Demo: openshitctl deploy --dry-run ==="
-	@echo "Creating test configuration..."
-	./$(BUILD_DIR)/$(BINARY_NAME) init --non-interactive --output test.yaml
-	./$(BUILD_DIR)/$(BINARY_NAME) deploy --config test.yaml --dry-run
-	@rm -f test.yaml
-
-demo-all: demo-init demo-validate demo-status demo-deploy-dry ## Run all demos
 
 ## Help target
 
