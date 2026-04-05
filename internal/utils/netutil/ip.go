@@ -61,18 +61,18 @@ func DeriveVIPFromStaticIP(staticIPStart string) (string, error) {
 	return fmt.Sprintf("%s.%s.%s.%d", parts[0], parts[1], parts[2], DefaultVIPLastOctet), nil
 }
 
-func IPInCIDR(ip, cidr string) bool {
+func IPInCIDR(ip, cidr string) (bool, error) {
 	parsedIP := net.ParseIP(ip)
 	if parsedIP == nil {
-		return false
+		return false, fmt.Errorf("invalid IP address %q", ip)
 	}
 
 	_, network, err := net.ParseCIDR(cidr)
 	if err != nil {
-		return false
+		return false, fmt.Errorf("invalid CIDR %q: %w", cidr, err)
 	}
 
-	return network.Contains(parsedIP)
+	return network.Contains(parsedIP), nil
 }
 
 func ipToUint32(ip string) (uint32, bool) {
@@ -105,25 +105,25 @@ func CompareIPs(a, b string) (int, error) {
 	return 0, nil
 }
 
-func RangesOverlap(start1, end1, start2, end2 string) bool {
+func RangesOverlap(start1, end1, start2, end2 string) (bool, error) {
 	s1, ok := ipToUint32(start1)
 	if !ok {
-		return false
+		return false, fmt.Errorf("invalid start1 IP %q", start1)
 	}
 	e1, ok := ipToUint32(end1)
 	if !ok {
-		return false
+		return false, fmt.Errorf("invalid end1 IP %q", end1)
 	}
 	s2, ok := ipToUint32(start2)
 	if !ok {
-		return false
+		return false, fmt.Errorf("invalid start2 IP %q", start2)
 	}
 	e2, ok := ipToUint32(end2)
 	if !ok {
-		return false
+		return false, fmt.Errorf("invalid end2 IP %q", end2)
 	}
 
-	return s1 <= e2 && s2 <= e1
+	return s1 <= e2 && s2 <= e1, nil
 }
 
 func SplitIPv4(ip string) (base string, lastOctet int, err error) {

@@ -146,16 +146,28 @@ func (v *advancedNetworkingValidator) Validate(cfg *Config, result *ValidationRe
 		return
 	}
 
-	if gateway != "" && IsValidIP(gateway) && !netutil.IPInCIDR(gateway, machineCIDR) {
-		result.AddError(FieldNetworkingGateway, fmt.Sprintf("must be within machine CIDR %s", machineCIDR))
+	if gateway != "" && IsValidIP(gateway) {
+		if ok, err := netutil.IPInCIDR(gateway, machineCIDR); err != nil {
+			result.AddError(FieldNetworkingGateway, err.Error())
+		} else if !ok {
+			result.AddError(FieldNetworkingGateway, fmt.Sprintf("must be within machine CIDR %s", machineCIDR))
+		}
 	}
 
-	if bastionIP != "" && IsValidIP(bastionIP) && !netutil.IPInCIDR(bastionIP, machineCIDR) {
-		result.AddError(FieldNetworkingBastionIP, fmt.Sprintf("must be within machine CIDR %s", machineCIDR))
+	if bastionIP != "" && IsValidIP(bastionIP) {
+		if ok, err := netutil.IPInCIDR(bastionIP, machineCIDR); err != nil {
+			result.AddError(FieldNetworkingBastionIP, err.Error())
+		} else if !ok {
+			result.AddError(FieldNetworkingBastionIP, fmt.Sprintf("must be within machine CIDR %s", machineCIDR))
+		}
 	}
 
-	if staticIPStart != "" && IsValidIP(staticIPStart) && !netutil.IPInCIDR(staticIPStart, machineCIDR) {
-		result.AddError(FieldNetworkingStaticIPStart, fmt.Sprintf("must be within machine CIDR %s", machineCIDR))
+	if staticIPStart != "" && IsValidIP(staticIPStart) {
+		if ok, err := netutil.IPInCIDR(staticIPStart, machineCIDR); err != nil {
+			result.AddError(FieldNetworkingStaticIPStart, err.Error())
+		} else if !ok {
+			result.AddError(FieldNetworkingStaticIPStart, fmt.Sprintf("must be within machine CIDR %s", machineCIDR))
+		}
 	}
 
 	if staticIPStart != "" {
