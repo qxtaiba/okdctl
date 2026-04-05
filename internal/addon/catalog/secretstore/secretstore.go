@@ -47,10 +47,7 @@ func (s *SecretStore) Info() addon.AddonInfo {
 }
 
 func (s *SecretStore) Install(ctx context.Context, env *addon.Environment) error {
-	secretsDir := s.secretsDir(env)
-
-	credPath := filepath.Join(secretsDir, credentialsFile)
-	tokenPath := filepath.Join(secretsDir, tokenFile)
+	secretsDir, credPath, tokenPath := s.secretFilePaths(env)
 
 	// If no secret files exist, warn with setup instructions and return (non-fatal)
 	if !system.FileExists(credPath) && !system.FileExists(tokenPath) {
@@ -101,6 +98,15 @@ func (s *SecretStore) Install(ctx context.Context, env *addon.Environment) error
 }
 
 func (s *SecretStore) Verify(ctx context.Context, env *addon.Environment) error {
+	// Verify mirrors Install's "skip if no files configured" contract — if the
+	// operator didn't supply any secret material, Install was a no-op and there
+	// is nothing to verify.
+	_, credPath, tokenPath := s.secretFilePaths(env)
+	if !system.FileExists(credPath) && !system.FileExists(tokenPath) {
+		env.Logger.Warn("secretstore: no secret files configured, skipping verification")
+		return nil
+	}
+
 	ns := defaultNamespace
 
 	result, err := env.Exec.Run(ctx, "oc", "get", "secret", credentialsSecretName, "-n", ns)
@@ -187,6 +193,16 @@ func (s *SecretStore) secretsDir(env *addon.Environment) string {
 		dir = filepath.Join(env.ProjectRoot, dir)
 	}
 	return dir
+}
+
+// secretFilePaths returns the resolved secrets directory along with the
+// credentials and token file paths. Install and Verify both use this so the
+// "skip if no files configured" check stays in sync between the two.
+func (s *SecretStore) secretFilePaths(env *addon.Environment) (secretsDir, credPath, tokenPath string) {
+	secretsDir = s.secretsDir(env)
+	credPath = filepath.Join(secretsDir, credentialsFile)
+	tokenPath = filepath.Join(secretsDir, tokenFile)
+	return
 }
 
 
