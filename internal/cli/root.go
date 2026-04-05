@@ -67,13 +67,6 @@ func init() {
 	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "enable verbose output")
 	rootCmd.PersistentFlags().BoolVar(&noColor, "no-color", false, "disable colored output")
 
-	if err := viper.BindPFlag("verbose", rootCmd.PersistentFlags().Lookup("verbose")); err != nil {
-		tui.Warn("failed to bind verbose flag: " + err.Error())
-	}
-	if err := viper.BindPFlag("no-color", rootCmd.PersistentFlags().Lookup("no-color")); err != nil {
-		tui.Warn("failed to bind no-color flag: " + err.Error())
-	}
-
 	rootCmd.AddCommand(deployCmd)
 	rootCmd.AddCommand(destroyCmd)
 	rootCmd.AddCommand(updateIngressCmd)
