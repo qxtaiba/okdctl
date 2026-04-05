@@ -165,7 +165,9 @@ func (f *Flux) Verify(ctx context.Context, env *addon.Environment) error {
 
 	result, err = env.Exec.Run(ctx, "oc", "get", "deployment", "source-controller",
 		"-n", "flux-system", "-o", "jsonpath={.status.readyReplicas}")
-	if err == nil && result != nil && result.ExitCode == 0 {
+	if err != nil || result == nil || result.ExitCode != 0 {
+		env.Logger.Warn("flux: cannot query source-controller deployment; verification skipped")
+	} else {
 		scReady := strings.TrimSpace(result.Stdout)
 		if scReady == "" || scReady == "0" {
 			return fmt.Errorf("source-controller has no ready replicas")
