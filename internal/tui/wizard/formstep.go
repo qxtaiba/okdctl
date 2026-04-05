@@ -226,6 +226,9 @@ func (s *MultiFormStep) View(width, height int) string {
 		Render("○")
 
 	for i, section := range s.sections {
+		if section.Group == nil {
+			continue
+		}
 		section.Group.SetWidth(innerWidth)
 
 		var style lipgloss.Style
@@ -266,6 +269,9 @@ func (s *MultiFormStep) View(width, height int) string {
 func (s *MultiFormStep) Validate() error {
 	var firstErr error
 	for _, section := range s.sections {
+		if section.Group == nil {
+			continue
+		}
 		if errs := section.Group.Validate(); len(errs) > 0 && firstErr == nil {
 			firstErr = errs[0]
 		}
@@ -305,11 +311,14 @@ func (s *MultiFormStep) SetFocused(focused bool) {
 	s.BaseStep.SetFocused(focused)
 	if focused {
 		s.currentSection = 0
-		if len(s.sections) > 0 {
+		if len(s.sections) > 0 && s.sections[0].Group != nil {
 			_ = s.sections[0].Group.Focus() // Command executed during Init()
 		}
 	} else {
 		for _, section := range s.sections {
+			if section.Group == nil {
+				continue
+			}
 			section.Group.Blur()
 		}
 	}
