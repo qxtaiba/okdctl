@@ -127,7 +127,5 @@ func Download(ctx context.Context, opts Options) error {
 	}
 	pw.finish()
 
-	_ = outFile.Close()
-
 	return verifyDownloadedFile(opts.OutputPath, opts.ExpectedChecksum, opts.logger())
 }
