@@ -69,12 +69,8 @@ func (p *Phase) SetupClusterAccess(ctx context.Context, clusterDir string) error
 		}
 	}
 
-	if err := system.CopyFile(srcKubeconfig, destKubeconfig); err != nil {
+	if err := system.CopyFileMode(srcKubeconfig, destKubeconfig, 0600); err != nil {
 		return utils.WrapError("failed to copy kubeconfig", err)
-	}
-
-	if err := os.Chmod(destKubeconfig, 0600); err != nil {
-		return utils.WrapError("failed to set kubeconfig permissions", err)
 	}
 
 	if err := p.addKubeconfigToBashrc(homeDir, destKubeconfig); err != nil {
