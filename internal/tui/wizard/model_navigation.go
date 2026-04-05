@@ -83,7 +83,7 @@ func (m *Model) autoScrollToField(fieldIndex, totalFields int) {
 	m.viewport.SetYOffset(targetOffset)
 }
 
-func (m Model) goToNextStep() (tea.Model, tea.Cmd) {
+func (m *Model) goToNextStep() (tea.Model, tea.Cmd) {
 	if len(m.steps) > 0 && m.currentStep < len(m.steps) {
 		if a, ok := m.steps[m.currentStep].(ConfigApplier); ok {
 			if err := a.Apply(m.config); err != nil {
@@ -154,7 +154,7 @@ func (m Model) goToNextStep() (tea.Model, tea.Cmd) {
 	return m, m.steps[m.currentStep].Init()
 }
 
-func (m Model) goToPreviousStep() (tea.Model, tea.Cmd) {
+func (m *Model) goToPreviousStep() (tea.Model, tea.Cmd) {
 	if m.currentStep == 0 {
 		return m, nil
 	}
@@ -196,6 +196,3 @@ func (m Model) goToPreviousStep() (tea.Model, tea.Cmd) {
 	return m, m.steps[m.currentStep].Init()
 }
 
-func (m Model) rebuildSteps() (tea.Model, tea.Cmd) {
-	return m, nil
-}

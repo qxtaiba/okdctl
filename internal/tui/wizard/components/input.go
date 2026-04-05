@@ -3,6 +3,7 @@
 package components
 
 import (
+	"errors"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/key"
@@ -106,7 +107,16 @@ func (f *InputField) Validate() error {
 		return f.err
 	}
 	if f.Validator != nil {
-		f.err = f.Validator(f.input.Value())
+		value := f.input.Value()
+		f.err = f.Validator(value)
+		// A custom validator may interpolate the raw value into its error
+		// message. For password fields, scrub the value from the error before
+		// it reaches the UI so the secret cannot leak via a validator-authored
+		// message.
+		if f.Password && f.err != nil && value != "" {
+			msg := strings.ReplaceAll(f.err.Error(), value, "***")
+			f.err = errors.New(msg)
+		}
 		return f.err
 	}
 	f.err = nil

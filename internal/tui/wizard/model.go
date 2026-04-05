@@ -1,3 +1,6 @@
+// Package wizard implements the bubbletea model and step orchestration for
+// openshitctl's interactive configuration wizard, producing a validated
+// config.Config for downstream deployment.
 package wizard
 
 import (
@@ -131,10 +134,10 @@ func DefaultKeyMap() KeyMap {
 	}
 }
 
-func NewModel(steps []WizardStep, cfg *config.Config) Model {
+func NewModel(steps []WizardStep, cfg *config.Config) *Model {
 	w, h := getTerminalSize()
 
-	m := Model{
+	m := &Model{
 		width:       w,
 		height:      h,
 		steps:       steps,
@@ -170,7 +173,7 @@ func getTerminalSize() (int, int) {
 	return w, h
 }
 
-func (m Model) Init() tea.Cmd {
+func (m *Model) Init() tea.Cmd {
 	var cmds []tea.Cmd
 
 	if len(m.steps) > 0 {
@@ -180,7 +183,7 @@ func (m Model) Init() tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
-func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 
 	switch msg := msg.(type) {
@@ -209,16 +212,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case StepBackMsg:
 		return m.goToPreviousStep()
 
-	case StepErrorMsg:
-		m.err = msg.Error
-		return m, nil
-
 	case ErrorSetMsg:
 		m.err = msg.Error
 		return m, nil
-
-	case ConfigUpdatedMsg:
-		return m.rebuildSteps()
 
 	case FocusChangedMsg:
 		if m.ready {
@@ -254,15 +250,15 @@ func stepAutoCompletes(step WizardStep) bool {
 	return false
 }
 
-func (m Model) Result() Result {
+func (m *Model) Result() Result {
 	return m.result
 }
 
-func (m Model) Config() *config.Config {
+func (m *Model) Config() *config.Config {
 	return m.config
 }
 
-func (m Model) CurrentStep() WizardStep {
+func (m *Model) CurrentStep() WizardStep {
 	if len(m.steps) > 0 && m.currentStep < len(m.steps) {
 		return m.steps[m.currentStep]
 	}

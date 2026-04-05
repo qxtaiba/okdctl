@@ -15,6 +15,10 @@ type StepConfig struct {
 	Required bool
 }
 
+// StepType names an entry in the StepBuilder factory registry. It is the
+// external, declarative identifier used when assembling a wizard from a Config
+// (see DefaultConfig). It is distinct from StepID (see step.go), which
+// identifies an already-constructed WizardStep instance at runtime.
 type StepType string
 
 const (

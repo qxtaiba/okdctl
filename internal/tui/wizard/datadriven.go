@@ -142,31 +142,34 @@ func buildInputField(def FieldDefinition) *components.InputField {
 	return field
 }
 
+// getField resolves a field key to its InputField by walking the
+// fieldKeys → Section → Group → Field chain, returning nil if any level
+// is missing. Callers must handle the nil case.
+func (s *DataDrivenStep) getField(key string) *components.InputField {
+	loc, ok := s.fieldKeys[key]
+	if !ok {
+		return nil
+	}
+	section := s.Section(loc.section)
+	if section == nil || section.Group == nil {
+		return nil
+	}
+	return section.Group.Field(loc.field)
+}
+
 func (s *DataDrivenStep) Values() map[string]string {
 	values := make(map[string]string)
-	for key, loc := range s.fieldKeys {
-		section := s.Section(loc.section)
-		if section != nil && section.Group != nil {
-			field := section.Group.Field(loc.field)
-			if field != nil {
-				values[key] = field.Value()
-			}
+	for key := range s.fieldKeys {
+		if field := s.getField(key); field != nil {
+			values[key] = field.Value()
 		}
 	}
 	return values
 }
 
 func (s *DataDrivenStep) Value(key string) string {
-	loc, ok := s.fieldKeys[key]
-	if !ok {
-		return ""
-	}
-	section := s.Section(loc.section)
-	if section != nil && section.Group != nil {
-		field := section.Group.Field(loc.field)
-		if field != nil {
-			return field.Value()
-		}
+	if field := s.getField(key); field != nil {
+		return field.Value()
 	}
 	return ""
 }

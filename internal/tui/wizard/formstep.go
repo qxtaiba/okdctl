@@ -26,8 +26,11 @@ func (s *FormSection) IsComplete() bool {
 		if field.Value() == "" {
 			return false
 		}
+		if err := field.Validate(); err != nil {
+			return false
+		}
 	}
-	return s.Group.IsValid()
+	return true
 }
 
 type MultiFormStep struct {
@@ -40,22 +43,30 @@ type MultiFormStep struct {
 	applyFn      func(*config.Config) error
 	extraContent func(width int) string
 	shouldShowFn func(*config.Config) bool
+
+	// totalFieldsCache is the summed field count across all sections, used by
+	// emitFocusChanged. -1 means "not yet computed"; it is invalidated in
+	// AddSection/AddSectionWithNote whenever the section list mutates.
+	totalFieldsCache int
 }
 
 func NewMultiFormStep(id StepID, title, displayTitle, description string) *MultiFormStep {
 	return &MultiFormStep{
-		BaseStep: NewBaseStepWithDisplayTitle(id, title, displayTitle, description),
-		sections: make([]FormSection, 0),
+		BaseStep:         NewBaseStepWithDisplayTitle(id, title, displayTitle, description),
+		sections:         make([]FormSection, 0),
+		totalFieldsCache: -1,
 	}
 }
 
 func (s *MultiFormStep) AddSection(title string, group *components.InputGroup) *MultiFormStep {
 	s.sections = append(s.sections, FormSection{Title: title, Group: group})
+	s.totalFieldsCache = -1
 	return s
 }
 
 func (s *MultiFormStep) AddSectionWithNote(title, note string, group *components.InputGroup) *MultiFormStep {
 	s.sections = append(s.sections, FormSection{Title: title, Note: note, Group: group})
+	s.totalFieldsCache = -1
 	return s
 }
 
@@ -187,7 +198,6 @@ func (s *MultiFormStep) Update(msg tea.Msg) (WizardStep, tea.Cmd) {
 
 func (s *MultiFormStep) emitFocusChanged() tea.Cmd {
 	globalIndex := 0
-	totalFields := 0
 
 	for i := 0; i < s.currentSection; i++ {
 		if s.sections[i].Group == nil {
@@ -199,12 +209,17 @@ func (s *MultiFormStep) emitFocusChanged() tea.Cmd {
 		globalIndex += current.FocusIndex()
 	}
 
-	for _, section := range s.sections {
-		if section.Group == nil {
-			continue
+	if s.totalFieldsCache < 0 {
+		total := 0
+		for _, section := range s.sections {
+			if section.Group == nil {
+				continue
+			}
+			total += len(section.Group.Fields())
 		}
-		totalFields += len(section.Group.Fields())
+		s.totalFieldsCache = total
 	}
+	totalFields := s.totalFieldsCache
 
 	return func() tea.Msg {
 		return FocusChangedMsg{

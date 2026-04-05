@@ -21,7 +21,7 @@ func Run(steps []WizardStep, cfg *config.Config) (Result, error) {
 		return Result{}, utils.WrapError("wizard error", err)
 	}
 
-	m, ok := finalModel.(Model)
+	m, ok := finalModel.(*Model)
 	if !ok {
 		return Result{}, fmt.Errorf("unexpected model type returned from wizard: %T", finalModel)
 	}

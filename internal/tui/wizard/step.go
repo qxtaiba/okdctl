@@ -6,6 +6,11 @@ import (
 	"github.com/qxtaiba/okd-proxmox-cli/internal/config"
 )
 
+// StepID is an opaque identifier used within the wizard runtime to identify
+// a specific WizardStep instance (for StepCompleteMsg routing, InsertStepAfter
+// lookups, and similar). It is distinct from StepType (see config.go), which
+// names entries in the external factory registry used when constructing a
+// wizard from a Config.
 type StepID string
 
 const (
@@ -13,7 +18,6 @@ const (
 	StepIDDistribution StepID = "distribution"
 	StepIDBasics       StepID = "basics"
 	StepIDReview       StepID = "review"
-	StepIDDeploy       StepID = "deploy"
 )
 
 type WizardStep interface {
@@ -139,16 +143,12 @@ type StepSkipMsg struct {
 	StepID StepID
 }
 
-type StepErrorMsg struct {
-	StepID StepID
-	Error  error
-}
-
+// ErrorSetMsg signals an error that should be displayed in the wizard's
+// footer. Emitted from the wizard core when a ConfigApplier returns an error
+// during step transitions (see goToNextStep).
 type ErrorSetMsg struct {
 	Error error
 }
-
-type ConfigUpdatedMsg struct{}
 
 type FocusChangedMsg struct {
 	FieldIndex  int

@@ -149,6 +149,10 @@ func releaseTypeToOptionStyle(rt releases.ReleaseType) components.OptionStyle {
 func (s *DistributionStep) getSeriesDescription(series releases.OKDReleaseSeries) string {
 	v := series.Latest
 
+	if len(s.okdSeries) == 0 {
+		return fmt.Sprintf("stable (%s)", v.Version)
+	}
+
 	if series.Major == s.okdSeries[0].Major && series.Minor == s.okdSeries[0].Minor {
 		return fmt.Sprintf("latest stable (%s)", v.Version)
 	}

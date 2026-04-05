@@ -18,6 +18,10 @@ const (
 	WelcomeModeFresh
 )
 
+// welcomeModeCount is the number of WelcomeMode values. Used to bound the
+// selectedIndex in the welcome step's up/down navigation.
+const welcomeModeCount = int(WelcomeModeFresh) + 1
+
 type WelcomeStep struct {
 	wizard.BaseStep
 	configExists  bool
@@ -63,7 +67,7 @@ func (s *WelcomeStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 				s.mode = WelcomeMode(s.selectedIndex)
 			}
 		case key.Matches(msg, key.NewBinding(key.WithKeys("down", "j"))):
-			if s.configExists && s.selectedIndex < 2 {
+			if s.configExists && s.selectedIndex < welcomeModeCount-1 {
 				s.selectedIndex++
 				s.mode = WelcomeMode(s.selectedIndex)
 			}
@@ -165,7 +169,7 @@ func (s *WelcomeStep) GetSelectedAction() wizard.Action {
 	if s.mode == WelcomeModeDeploy {
 		return wizard.ActionDeploy
 	}
-	return ""
+	return wizard.ActionExit
 }
 
 func (s *WelcomeStep) ShouldExitEarly() bool {

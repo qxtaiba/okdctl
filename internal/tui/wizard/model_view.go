@@ -9,7 +9,7 @@ import (
 	"github.com/qxtaiba/okd-proxmox-cli/internal/tui"
 )
 
-func (m Model) View() string {
+func (m *Model) View() string {
 	if m.quitting {
 		return ""
 	}
@@ -52,7 +52,7 @@ func (m Model) View() string {
 
 // contentWidth returns the available width for step content.
 // Must match borderWidth (m.width - 6) so content fills the border exactly.
-func (m Model) contentWidth() int {
+func (m *Model) contentWidth() int {
 	width := m.width - 6
 	if width < 60 {
 		width = 60
@@ -60,7 +60,7 @@ func (m Model) contentWidth() int {
 	return width
 }
 
-func (m Model) contentDimensions() (int, int) {
+func (m *Model) contentDimensions() (int, int) {
 	width := m.contentWidth()
 
 	height := m.height - fixedLayoutOverhead
@@ -72,7 +72,7 @@ func (m Model) contentDimensions() (int, int) {
 	return width, height
 }
 
-func (m Model) viewportDimensions() (width, height int) {
+func (m *Model) viewportDimensions() (width, height int) {
 	contentWidth := m.contentWidth()
 
 	viewportHeight := m.height - fixedLayoutOverhead
@@ -139,7 +139,7 @@ func (m *Model) syncViewportContent() {
 	m.viewport.SetContent(paddedContent)
 }
 
-func (m Model) renderHeader() string {
+func (m *Model) renderHeader() string {
 	width := m.contentWidth()
 
 	brand := LogoStyle.Render("O P E N S H I T")
@@ -165,7 +165,7 @@ func (m Model) renderHeader() string {
 	return HeaderStyle.Render(header)
 }
 
-func (m Model) renderFooter() string {
+func (m *Model) renderFooter() string {
 	width := m.contentWidth()
 
 	bindings := defaultKeyBindings()
@@ -188,14 +188,14 @@ func defaultKeyBindings() []KeyBinding {
 	}
 }
 
-func (m Model) renderStepTitle(title string) string {
+func (m *Model) renderStepTitle(title string) string {
 	titleStyle := lipgloss.NewStyle().
 		Foreground(tui.ColorText).
 		Bold(true)
 	return titleStyle.Render(title)
 }
 
-func (m Model) renderScrollIndicator() string {
+func (m *Model) renderScrollIndicator() string {
 	width := m.contentWidth()
 	lineStyle := lipgloss.NewStyle().Foreground(tui.ColorSlate700)
 
@@ -261,7 +261,7 @@ func (m Model) renderScrollIndicator() string {
 	return leftLine + " " + indicator + " " + rightLine + badgeStyled
 }
 
-func (m Model) renderContextBadge() string {
+func (m *Model) renderContextBadge() string {
 	var parts []string
 
 	if m.config.Distribution.Type != "" {
@@ -278,7 +278,7 @@ func (m Model) renderContextBadge() string {
 	return strings.Join(parts, " → ")
 }
 
-func (m Model) countVisibleSteps() int {
+func (m *Model) countVisibleSteps() int {
 	count := 0
 	for _, step := range m.steps {
 		if stepShouldShow(step, m.config) {
@@ -288,7 +288,7 @@ func (m Model) countVisibleSteps() int {
 	return count
 }
 
-func (m Model) currentVisibleStepIndex() int {
+func (m *Model) currentVisibleStepIndex() int {
 	index := 0
 	for i := 0; i < m.currentStep && i < len(m.steps); i++ {
 		if stepShouldShow(m.steps[i], m.config) {
