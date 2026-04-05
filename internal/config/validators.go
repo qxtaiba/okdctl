@@ -489,24 +489,6 @@ func isValidNetmask(s string) bool {
 	return inverted == 0 || (inverted&(inverted+1)) == 0
 }
 
-func CIDROverlaps(cidr1, cidr2 string) bool {
-	_, net1, err1 := net.ParseCIDR(cidr1)
-	_, net2, err2 := net.ParseCIDR(cidr2)
-	if err1 != nil || err2 != nil {
-		return false
-	}
-	return net1.Contains(net2.IP) || net2.Contains(net1.IP) ||
-		net2.Contains(cidrLastIP(net1)) || net1.Contains(cidrLastIP(net2))
-}
-
-func cidrLastIP(n *net.IPNet) net.IP {
-	ip := make(net.IP, len(n.IP))
-	for i := range ip {
-		ip[i] = n.IP[i] | ^n.Mask[i]
-	}
-	return ip
-}
-
 func isValidDistribution(d DistributionType) bool {
 	for _, dist := range SupportedDistributions() {
 		if dist == d {

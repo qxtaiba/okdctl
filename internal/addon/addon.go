@@ -77,22 +77,38 @@ type ToolProvider interface {
 	RequiredTools() []ToolSpec
 }
 
+// WizardField describes a single input field that an addon contributes to the
+// interactive configuration wizard. Each field is rendered as a labelled input
+// and its value is persisted into the addon's settings map under Key.
 type WizardField struct {
-	// Key is the settings map key (e.g., "provider", "repository").
+	// Key is the settings map key the wizard writes to (e.g., "provider",
+	// "repository"). It must match a key the addon recognises in its
+	// ValidateSettings / Install logic.
 	Key string
 
-	// Label is displayed to the user (e.g., "GitOps Provider").
+	// Label is the human-readable label displayed next to the input
+	// (e.g., "GitOps Provider").
 	Label string
 
+	// Default is the initial value shown when the wizard opens. It is also
+	// used as the persisted value if the user leaves the input untouched.
 	Default string
 
-	// Help is the hint text shown below the input.
+	// Help is the hint text shown below the input to explain the field's
+	// purpose or expected format.
 	Help string
 
-	// Required marks the field as mandatory when the addon is enabled.
+	// Required marks the field as mandatory when the addon is enabled;
+	// the wizard refuses to advance while a required field is empty.
 	Required bool
 }
 
+// WizardProvider is implemented by addons that want to expose configuration
+// fields in the interactive wizard. The returned fields are rendered in the
+// order given, and their values are written into the addon's settings map
+// (the same map passed to ValidateSettings and surfaced via AddonConfig).
+// Addons that do not implement WizardProvider are still selectable in the
+// wizard but contribute no custom inputs.
 type WizardProvider interface {
 	WizardFields() []WizardField
 }

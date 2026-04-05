@@ -84,20 +84,14 @@ func (p *Phase) UpdateIngress(ctx context.Context, cfg *config.Config, opts Upda
 
 	// Attempt conversion of HostNetwork ICs.
 	convertedCount := 0
-	convertedNames := make(map[string]bool)
+	var convertedNames map[string]bool
 	if len(hostNetworkICs) > 0 {
-		converted, err := p.handleHostNetworkConversion(ctx, hostNetworkICs, opts, postOpts)
+		converted, names, err := p.handleHostNetworkConversion(ctx, hostNetworkICs, opts, postOpts)
 		if err != nil {
 			return nil, err
 		}
 		convertedCount = converted
-
-		// Track which ICs were converted so we can tag them after re-discovery.
-		for i := range hostNetworkICs {
-			if i < converted {
-				convertedNames[hostNetworkICs[i].Name] = true
-			}
-		}
+		convertedNames = names
 
 		if converted > 0 {
 			// Re-discover to pick up the recreated controllers.
@@ -236,13 +230,15 @@ func (p *Phase) finalizeIngress(
 
 // handleHostNetworkConversion checks if MetalLB is available and, if the user
 // confirms, converts HostNetwork IngressControllers to LoadBalancerService.
-// Returns the number of controllers converted.
+// Returns the number of controllers converted and the set of converted names.
 func (p *Phase) handleHostNetworkConversion(
 	ctx context.Context,
 	hostNetworkICs []ingressControllerInfo,
 	opts UpdateIngressOptions,
 	postOpts Options,
-) (int, error) {
+) (int, map[string]bool, error) {
+	convertedNames := make(map[string]bool)
+
 	var names []string
 	for _, ic := range hostNetworkICs {
 		names = append(names, ic.Name)
@@ -254,18 +250,18 @@ func (p *Phase) handleHostNetworkConversion(
 	metalLBAvailable, err := p.checkMetalLBAvailable(ctx)
 	if err != nil {
 		p.Log.Warn(fmt.Sprintf("update-ingress: could not check metallb availability: %v", err))
-		return 0, nil
+		return 0, convertedNames, nil
 	}
 	if !metalLBAvailable {
 		p.Log.Warn("update-ingress: metallb not detected — skipping hostnetwork conversion")
-		return 0, nil
+		return 0, convertedNames, nil
 	}
 
 	p.Log.Info("update-ingress: metallb detected with available ips")
 
 	if opts.ConfirmConversion == nil {
 		p.Log.Warn("update-ingress: no conversion confirmation callback — skipping hostnetwork conversion")
-		return 0, nil
+		return 0, convertedNames, nil
 	}
 
 	var icNames []string
@@ -274,7 +270,7 @@ func (p *Phase) handleHostNetworkConversion(
 	}
 	if !opts.ConfirmConversion(icNames) {
 		p.Log.Info("update-ingress: user declined hostnetwork conversion — skipping")
-		return 0, nil
+		return 0, convertedNames, nil
 	}
 
 	timeout := defaultConversionTimeout
@@ -286,13 +282,14 @@ func (p *Phase) handleHostNetworkConversion(
 	for _, ic := range hostNetworkICs {
 		p.Log.Info(fmt.Sprintf("update-ingress: converting %q from hostnetwork to loadbalancerservice...", ic.Name))
 		if err := p.convertToLoadBalancer(ctx, ic, timeout); err != nil {
-			return converted, fmt.Errorf("failed to convert IngressController %q: %w", ic.Name, err)
+			return converted, convertedNames, fmt.Errorf("failed to convert IngressController %q: %w", ic.Name, err)
 		}
+		convertedNames[ic.Name] = true
 		converted++
 		p.Log.Info(fmt.Sprintf("update-ingress: %q converted successfully", ic.Name))
 	}
 
-	return converted, nil
+	return converted, convertedNames, nil
 }
 
 const (

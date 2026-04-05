@@ -85,8 +85,8 @@ func (m Model) viewportDimensions() (width, height int) {
 }
 
 func (m *Model) syncViewportContent() {
-	if len(m.steps) == 0 || m.currentStep >= len(m.steps) {
-		m.viewport.SetContent("")
+	if len(m.steps) == 0 || m.currentStep < 0 || m.currentStep >= len(m.steps) {
+		m.viewport.SetContent("no steps configured")
 		return
 	}
 
@@ -169,7 +169,7 @@ func (m Model) renderFooter() string {
 	width := m.contentWidth()
 
 	bindings := defaultKeyBindings()
-	if len(m.steps) > 0 && m.currentStep < len(m.steps) {
+	if len(m.steps) > 0 && m.currentStep >= 0 && m.currentStep < len(m.steps) {
 		if h, ok := m.steps[m.currentStep].(HelpProvider); ok {
 			bindings = h.ShortHelp()
 		}

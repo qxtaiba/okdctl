@@ -140,6 +140,10 @@ func (f *InputField) Update(msg tea.Msg) (*InputField, tea.Cmd) {
 }
 
 func (f *InputField) View() string {
+	// Never render f.input.Value() directly when f.Password is true —
+	// rely on textinput's EchoMode to mask it in any rendered frame.
+	// Any code path below that surfaces text to the user (labels, hints,
+	// errors) must scrub the raw value for password fields.
 	labelStyle := lipgloss.NewStyle().
 		Foreground(tui.ColorSlate300)
 
@@ -192,7 +196,15 @@ func (f *InputField) View() string {
 
 	if f.err != nil {
 		errStyle := lipgloss.NewStyle().Foreground(tui.ColorError)
-		result += "\n" + errStyle.Render("✖ "+strings.ToLower(f.err.Error()))
+		errText := strings.ToLower(f.err.Error())
+		// Scrub the raw value from error messages on password fields so a
+		// validator that interpolates the input can never leak the secret.
+		if f.Password {
+			if v := f.input.Value(); v != "" {
+				errText = strings.ReplaceAll(errText, strings.ToLower(v), "<redacted>")
+			}
+		}
+		result += "\n" + errStyle.Render("✖ "+errText)
 	}
 
 	return result
@@ -395,18 +407,3 @@ func (g *InputGroup) ViewCompact(title string) string {
 	return strings.Join(lines, "\n")
 }
 
-func (g *InputGroup) GetValues() map[string]string {
-	values := make(map[string]string)
-	for _, f := range g.fields {
-		values[f.Label] = f.Value()
-	}
-	return values
-}
-
-func (g *InputGroup) SetValues(values map[string]string) {
-	for label, value := range values {
-		if f := g.FieldByLabel(label); f != nil {
-			f.SetValue(value)
-		}
-	}
-}
