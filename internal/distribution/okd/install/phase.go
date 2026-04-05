@@ -143,6 +143,9 @@ func (p *Phase) DeployInfrastructure(ctx context.Context, cfg *config.Config, op
 
 func (p *Phase) SetupKubeconfig(clusterDir string) error {
 	kubeconfigPath := filepath.Join(clusterDir, "auth", "kubeconfig")
+	if !system.FileExists(kubeconfigPath) {
+		return fmt.Errorf("kubeconfig not found at %s", kubeconfigPath)
+	}
 	if err := os.Setenv("KUBECONFIG", kubeconfigPath); err != nil {
 		return utils.WrapError("failed to set KUBECONFIG", err)
 	}
