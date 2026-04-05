@@ -4,6 +4,8 @@ import (
 	"bufio"
 	"os"
 	"strings"
+
+	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
 )
 
 // EnvFilePath derives the .env path from a config path
@@ -54,6 +56,21 @@ func LoadEnvFile(path string) error {
 		return err
 	}
 	defer f.Close() //nolint:errcheck // read-only file
+
+	// Refuse to load a .env that any other user can read. Proxmox tokens
+	// end up in here — a world-readable file defeats the whole point of
+	// moving secrets out of YAML.
+	fi, err := f.Stat()
+	if err != nil {
+		return utils.WrapErrorf(err, "failed to stat .env file %s", path)
+	}
+	if perm := fi.Mode().Perm(); perm&0077 != 0 {
+		return utils.WrapErrorf(
+			os.ErrPermission,
+			".env file %s has insecure permissions %#o; run 'chmod 600 %s' to fix",
+			path, perm, path,
+		)
+	}
 
 	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {
