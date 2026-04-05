@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/firewall"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/netutil"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
@@ -38,12 +39,12 @@ func (p *Phase) RemoveHAProxy(ctx context.Context, vip string) error {
 		p.Log.Warn(fmt.Sprintf("haproxy: failed to remove config: %v", err))
 	}
 
-	ports := []string{"6443", "22623", "80", "443"}
-	for _, port := range ports {
-		p.Log.Info(fmt.Sprintf("haproxy: removing firewall rule for port %s", port))
-		result, err = p.Exec.Run(ctx, "sudo", "firewall-cmd", "--permanent", "--remove-port="+port+"/tcp")
+	for _, port := range firewall.HAProxyFrontendPorts {
+		portSpec := fmt.Sprintf("%d/%s", port.Number, port.Protocol)
+		p.Log.Info(fmt.Sprintf("haproxy: removing firewall rule for port %d", port.Number))
+		result, err = p.Exec.Run(ctx, "sudo", "firewall-cmd", "--permanent", "--remove-port="+portSpec)
 		if err != nil || result.ExitCode != 0 {
-			p.Log.Warn(fmt.Sprintf("haproxy: could not remove firewall rule for port %s (may not exist)", port))
+			p.Log.Warn(fmt.Sprintf("haproxy: could not remove firewall rule for port %d (may not exist)", port.Number))
 		}
 	}
 

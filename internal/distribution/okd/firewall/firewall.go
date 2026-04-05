@@ -30,6 +30,16 @@ var OKDRequiredPorts = []Port{
 	{Number: 8080, Protocol: "tcp", Description: "ignition server"},
 }
 
+// HAProxyFrontendPorts lists the TCP ports HAProxy binds on the bastion while
+// it fronts the cluster API and ingress. Postinstall uses this list to tear
+// down the corresponding firewall rules when HAProxy is removed.
+var HAProxyFrontendPorts = []Port{
+	{Number: 6443, Protocol: "tcp", Description: "kubernetes api"},
+	{Number: 22623, Protocol: "tcp", Description: "machine config server"},
+	{Number: 80, Protocol: "tcp", Description: "http ingress"},
+	{Number: 443, Protocol: "tcp", Description: "https ingress"},
+}
+
 type Port struct {
 	Number      int
 	Protocol    string // tcp, udp
