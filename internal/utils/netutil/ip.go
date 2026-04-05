@@ -11,13 +11,13 @@ const DefaultVIPLastOctet = 10
 
 var ErrInvalidIP = errors.New("invalid IP address")
 
-func CIDRToNetmask(cidr string) string {
+func CIDRToNetmask(cidr string) (string, error) {
 	_, network, err := net.ParseCIDR(cidr)
 	if err != nil {
-		return "255.255.255.0"
+		return "", fmt.Errorf("invalid CIDR %q: %w", cidr, err)
 	}
 	mask := network.Mask
-	return fmt.Sprintf("%d.%d.%d.%d", mask[0], mask[1], mask[2], mask[3])
+	return fmt.Sprintf("%d.%d.%d.%d", mask[0], mask[1], mask[2], mask[3]), nil
 }
 
 func CalculateVMIP(startIP string, index int) (string, error) {
