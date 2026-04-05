@@ -2,6 +2,7 @@ package install
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	osExec "os/exec"
@@ -22,10 +23,10 @@ func (p *Phase) WaitForBootstrap(ctx context.Context, clusterDir string, opts Op
 	cmd.Stderr = os.Stderr
 
 	if err := cmd.Run(); err != nil {
-		if ctx.Err() == context.DeadlineExceeded {
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 			return fmt.Errorf("bootstrap timed out after %v", opts.BootstrapTimeout)
 		}
-		if ctx.Err() == context.Canceled {
+		if errors.Is(ctx.Err(), context.Canceled) {
 			return utils.WrapError("bootstrap cancelled", context.Canceled)
 		}
 		return utils.WrapError("bootstrap failed", err)
@@ -98,10 +99,13 @@ func (p *Phase) MonitorInstallation(ctx context.Context, clusterDir string, opts
 			}
 			select {
 			case <-installDone:
-			case <-time.After(5 * time.Second):
-				p.Log.Warn("install: timed out waiting for process cleanup")
+			case <-time.After(30 * time.Second):
+				p.Log.Warn("install: process did not exit after kill, abandoning reap")
 			}
-			return fmt.Errorf("installation timed out after %v", opts.InstallTimeout)
+			if errors.Is(ctx.Err(), context.Canceled) {
+				return fmt.Errorf("installation cancelled: %w", ctx.Err())
+			}
+			return fmt.Errorf("installation timed out after %v: %w", opts.InstallTimeout, ctx.Err())
 		}
 	}
 }

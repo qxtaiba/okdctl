@@ -3,6 +3,7 @@ package proxmox
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"path/filepath"
 
@@ -72,13 +73,18 @@ func (p *Provider) Disconnect(_ context.Context) error {
 	return nil
 }
 
+// setupTerraform initializes (or reinitializes) the terraform executor for the
+// given projectRoot/tfEnv. Not safe for concurrent use — the current call
+// graph is sequential per Provider instance (one deployment per CLI run). If
+// concurrent Provision ever becomes a requirement, add a mutex around
+// terraformExec / projectRoot / tfEnv.
 func (p *Provider) setupTerraform(projectRoot, tfEnv string) {
-	p.projectRoot = projectRoot
-	p.tfEnv = tfEnv
-
-	if p.terraformExec != nil {
+	if p.terraformExec != nil && p.projectRoot == projectRoot && p.tfEnv == tfEnv {
 		return
 	}
+
+	p.projectRoot = projectRoot
+	p.tfEnv = tfEnv
 
 	tfDir := filepath.Join(projectRoot, "infrastructure", "terraform", "environments", tfEnv)
 
@@ -125,7 +131,7 @@ func (p *Provider) Provision(ctx context.Context, cfg *config.Config, opts Provi
 		AutoApprove: opts.AutoApprove,
 	}
 	if err := p.terraformExec.Apply(ctx, applyOpts); err != nil {
-		if ctx.Err() == context.Canceled {
+		if errors.Is(ctx.Err(), context.Canceled) {
 			return nil, utils.WrapError("terraform apply interrupted", context.Canceled)
 		}
 		return nil, utils.WrapError("terraform apply failed", err)
