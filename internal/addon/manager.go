@@ -151,6 +151,13 @@ func (m *Manager) InstallOne(ctx context.Context, name string) error {
 				m.outputs.Set(info.Name, k, v)
 			}
 		}
+
+		// Post-install verify (warn-only — the addon is installed, verify is informational)
+		if vErr := addon.Verify(ctx, env); vErr != nil {
+			m.logger.Warn(fmt.Sprintf("addons: %s installed but verify failed: %v", info.DisplayName, vErr))
+		} else {
+			m.logger.Info(fmt.Sprintf("addons: %s installed and verified", info.DisplayName))
+		}
 	}
 
 	return nil
