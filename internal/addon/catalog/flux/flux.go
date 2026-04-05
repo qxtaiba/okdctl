@@ -5,7 +5,9 @@ package flux
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -105,10 +107,10 @@ func (f *Flux) installOperator(ctx context.Context, env *addon.Environment) erro
 		return err
 	}
 
-	result, _ := env.Exec.Run(ctx, "oc", "wait", "--for=condition=available", "deployment/flux-operator",
+	result, err := env.Exec.Run(ctx, "oc", "wait", "--for=condition=available", "deployment/flux-operator",
 		"--namespace", "flux-system", "--timeout=120s")
-	if result == nil || result.ExitCode != 0 {
-		env.Logger.Warn("flux: operator not ready within 120s timeout, continuing")
+	if err != nil || result == nil || result.ExitCode != 0 {
+		return fmt.Errorf("flux: operator not ready within 120s timeout")
 	}
 
 	return nil
@@ -169,7 +171,9 @@ func (f *Flux) Verify(ctx context.Context, env *addon.Environment) error {
 
 	result, err = env.Exec.Run(ctx, "oc", "get", "deployment", "source-controller",
 		"-n", "flux-system", "-o", "jsonpath={.status.readyReplicas}")
-	if err == nil && result != nil && result.ExitCode == 0 {
+	if err != nil || result == nil || result.ExitCode != 0 {
+		env.Logger.Warn("flux: cannot query source-controller deployment; verification skipped")
+	} else {
 		scReady := strings.TrimSpace(result.Stdout)
 		if scReady == "" || scReady == "0" {
 			return fmt.Errorf("source-controller has no ready replicas")
@@ -317,9 +321,13 @@ func (f *Flux) waitForGitSync(ctx context.Context, env *addon.Environment) error
 }
 
 func (f *Flux) createDeployKeySecret(ctx context.Context, env *addon.Environment) error {
-	result, err := env.Exec.Run(ctx, "oc", "get", "secret", "flux-system", "-n", "flux-system")
-	if err == nil && result != nil && result.ExitCode == 0 {
-		return nil
+	repoURL := env.AddonConfig.Settings["repository"]
+	if repoURL == "" {
+		return fmt.Errorf("flux repository not configured - set addons.flux.settings.repository in config")
+	}
+	host, err := gitHost(repoURL)
+	if err != nil {
+		return utils.WrapError("failed to resolve git host for ssh-keyscan", err)
 	}
 
 	homeDir, err := os.UserHomeDir()
@@ -332,23 +340,95 @@ func (f *Flux) createDeployKeySecret(ctx context.Context, env *addon.Environment
 		return fmt.Errorf("deploy key not found at %s - generate with: ssh-keygen -t ed25519 -f ~/.ssh/flux-deploy-key -N ''", deployKeyFile)
 	}
 
-	knownHostsResult, err := env.Exec.Run(ctx, "ssh-keyscan", "github.com")
-	if err != nil || knownHostsResult.ExitCode != 0 {
-		return fmt.Errorf("failed to get GitHub host key")
+	privateKey, err := os.ReadFile(deployKeyFile)
+	if err != nil {
+		return utils.WrapError("failed to read deploy key", err)
 	}
 
-	result, err = env.Exec.Run(ctx, "oc", "create", "secret", "generic", "flux-system",
-		"--namespace", "flux-system",
-		"--from-file=identity="+deployKeyFile,
-		"--from-literal=known_hosts="+knownHostsResult.Stdout)
+	// The public half is optional: flux/source-controller only requires identity
+	// and known_hosts. Users who only installed the private key should not fail.
+	publicKeyFile := deployKeyFile + ".pub"
+	var publicKey []byte
+	if b, err := os.ReadFile(publicKeyFile); err == nil {
+		publicKey = b
+	} else if !os.IsNotExist(err) {
+		return utils.WrapError("failed to read deploy key public half", err)
+	}
+
+	knownHostsResult, err := env.Exec.Run(ctx, "ssh-keyscan", host)
+	if err != nil || knownHostsResult.ExitCode != 0 {
+		return fmt.Errorf("failed to get host key for %s", host)
+	}
+
+	manifest := buildFluxDeployKeySecret("flux-system", "flux-system",
+		string(privateKey), string(publicKey), knownHostsResult.Stdout)
+	result, err := env.Exec.RunWithStdin(ctx, manifest, "oc", "apply", "-f", "-")
 	if err != nil {
-		return utils.WrapError("failed to create deploy key secret", err)
+		return utils.WrapError("failed to apply deploy key secret", err)
 	}
 	if result.ExitCode != 0 {
-		return fmt.Errorf("failed to create deploy key secret: %s", result.Stderr)
+		return fmt.Errorf("failed to apply deploy key secret: %s", result.Stderr)
 	}
 
+	env.Logger.Info("flux: deploy key secret applied")
 	return nil
+}
+
+// gitHost extracts the host portion of a git repository URL. It supports
+// ssh://, https://, and the scp-style user@host:path form used by most git
+// servers (github, gitlab, gitea, self-hosted).
+func gitHost(repoURL string) (string, error) {
+	repoURL = strings.TrimSpace(repoURL)
+	if repoURL == "" {
+		return "", fmt.Errorf("empty repository URL")
+	}
+	// scp-style: user@host:path (no scheme, has @ and : before any /)
+	if !strings.Contains(repoURL, "://") {
+		at := strings.Index(repoURL, "@")
+		if at < 0 {
+			return "", fmt.Errorf("cannot parse host from %q", repoURL)
+		}
+		rest := repoURL[at+1:]
+		colon := strings.Index(rest, ":")
+		if colon < 0 {
+			return "", fmt.Errorf("cannot parse host from %q", repoURL)
+		}
+		return rest[:colon], nil
+	}
+	u, err := url.Parse(repoURL)
+	if err != nil {
+		return "", fmt.Errorf("cannot parse %q: %w", repoURL, err)
+	}
+	host := u.Hostname()
+	if host == "" {
+		return "", fmt.Errorf("%q has no host component", repoURL)
+	}
+	return host, nil
+}
+
+// buildFluxDeployKeySecret renders a Secret manifest containing the SSH deploy
+// key material. Values are base64-encoded into the data map so oc apply can
+// pipe the manifest via stdin without exposing key bytes on argv. publicKey is
+// optional — flux only requires identity and known_hosts, so the identity.pub
+// field is omitted when empty.
+func buildFluxDeployKeySecret(namespace, name, privateKey, publicKey, knownHosts string) string {
+	enc := base64.StdEncoding.EncodeToString
+	dataLines := []string{
+		fmt.Sprintf("  identity: %s", enc([]byte(privateKey))),
+	}
+	if publicKey != "" {
+		dataLines = append(dataLines, fmt.Sprintf("  identity.pub: %s", enc([]byte(publicKey))))
+	}
+	dataLines = append(dataLines, fmt.Sprintf("  known_hosts: %s", enc([]byte(knownHosts))))
+	return fmt.Sprintf(`apiVersion: v1
+kind: Secret
+metadata:
+  name: %s
+  namespace: %s
+type: Opaque
+data:
+%s
+`, name, namespace, strings.Join(dataLines, "\n"))
 }
 
 // getTimeout reads a timeout setting (in seconds) from the settings map,
