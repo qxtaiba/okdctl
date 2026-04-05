@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 	"sync"
 
@@ -112,34 +113,73 @@ func Error(msg string, fields ...LogField) {
 	defaultLogger.Error(msg, fields...)
 }
 
-type simpleLogger struct{}
-
-func (simpleLogger) Debug(msg string) { defaultLogger.Debug(msg) }
-func (simpleLogger) Info(msg string)  { defaultLogger.Info(msg) }
-func (simpleLogger) Warn(msg string)  { defaultLogger.Warn(msg) }
-func (simpleLogger) Error(msg string) { defaultLogger.Error(msg) }
-
-func (s simpleLogger) DebugContext(ctx context.Context, msg string) {
-	if ctx.Err() == nil {
-		s.Debug(msg)
-	}
-}
-func (s simpleLogger) InfoContext(ctx context.Context, msg string) {
-	if ctx.Err() == nil {
-		s.Info(msg)
-	}
-}
-func (s simpleLogger) WarnContext(ctx context.Context, msg string) {
-	if ctx.Err() == nil {
-		s.Warn(msg)
-	}
-}
-func (s simpleLogger) ErrorContext(ctx context.Context, msg string) {
-	if ctx.Err() == nil {
-		s.Error(msg)
-	}
+// simpleHandler is a slog.Handler that routes records through the tui
+// default logger so structured-log call sites in the wider codebase print
+// with the same styled output as direct tui.Info/tui.Warn/... calls.
+type simpleHandler struct {
+	attrs  []slog.Attr
+	groups []string
 }
 
+func (h *simpleHandler) Enabled(_ context.Context, level slog.Level) bool {
+	defaultLogger.mu.RLock()
+	lvl := defaultLogger.level
+	defaultLogger.mu.RUnlock()
+	return slogLevelToTUI(level) >= lvl
+}
+
+func (h *simpleHandler) Handle(_ context.Context, r slog.Record) error {
+	fields := make([]LogField, 0, len(h.attrs)+r.NumAttrs())
+	for _, a := range h.attrs {
+		fields = append(fields, LogField{Key: a.Key, Value: a.Value.Any()})
+	}
+	r.Attrs(func(a slog.Attr) bool {
+		fields = append(fields, LogField{Key: a.Key, Value: a.Value.Any()})
+		return true
+	})
+	switch {
+	case r.Level >= slog.LevelError:
+		defaultLogger.Error(r.Message, fields...)
+	case r.Level >= slog.LevelWarn:
+		defaultLogger.Warn(r.Message, fields...)
+	case r.Level >= slog.LevelInfo:
+		defaultLogger.Info(r.Message, fields...)
+	default:
+		defaultLogger.Debug(r.Message, fields...)
+	}
+	return nil
+}
+
+func (h *simpleHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
+	merged := make([]slog.Attr, 0, len(h.attrs)+len(attrs))
+	merged = append(merged, h.attrs...)
+	merged = append(merged, attrs...)
+	return &simpleHandler{attrs: merged, groups: h.groups}
+}
+
+func (h *simpleHandler) WithGroup(name string) slog.Handler {
+	groups := make([]string, 0, len(h.groups)+1)
+	groups = append(groups, h.groups...)
+	groups = append(groups, name)
+	return &simpleHandler{attrs: h.attrs, groups: groups}
+}
+
+func slogLevelToTUI(l slog.Level) LogLevel {
+	switch {
+	case l >= slog.LevelError:
+		return LogLevelError
+	case l >= slog.LevelWarn:
+		return LogLevelWarn
+	case l >= slog.LevelInfo:
+		return LogLevelInfo
+	default:
+		return LogLevelDebug
+	}
+}
+
+// SimpleLogger returns a utils.Logger (alias for *slog.Logger) whose records
+// are printed through the tui styled formatters. Use this to wire CLI-facing
+// log output into subsystems that expect a structured logger.
 func SimpleLogger() utils.Logger {
-	return simpleLogger{}
+	return slog.New(&simpleHandler{})
 }
