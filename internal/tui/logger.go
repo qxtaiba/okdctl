@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"os"
 	"strings"
 	"sync"
 
@@ -47,7 +48,7 @@ func (log *Logger) Debug(msg string, fields ...LogField) {
 	if lvl > LogLevelDebug {
 		return
 	}
-	fmt.Println(logDebug(log.format(msg, fields)))
+	_, _ = fmt.Fprintln(os.Stdout, logDebug(log.format(msg, fields)))
 }
 
 func (log *Logger) Info(msg string, fields ...LogField) {
@@ -57,7 +58,7 @@ func (log *Logger) Info(msg string, fields ...LogField) {
 	if lvl > LogLevelInfo {
 		return
 	}
-	fmt.Println(LogInfo(log.format(msg, fields)))
+	_, _ = fmt.Fprintln(os.Stdout, LogInfo(log.format(msg, fields)))
 }
 
 func (log *Logger) Warn(msg string, fields ...LogField) {
@@ -67,11 +68,11 @@ func (log *Logger) Warn(msg string, fields ...LogField) {
 	if lvl > LogLevelWarn {
 		return
 	}
-	fmt.Println(LogWarn(log.format(msg, fields)))
+	_, _ = fmt.Fprintln(os.Stdout, LogWarn(log.format(msg, fields)))
 }
 
 func (log *Logger) Error(msg string, fields ...LogField) {
-	fmt.Println(LogError(log.format(msg, fields)))
+	fmt.Fprintln(os.Stderr, LogError(log.format(msg, fields)))
 }
 
 func (log *Logger) format(msg string, fields []LogField) string {
