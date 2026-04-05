@@ -18,8 +18,6 @@ import (
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
 )
 
-type Logger = utils.Logger
-
 const (
 	MinControlPlaneMemoryMB = 8192
 	MinControlPlaneCPUs     = 4
@@ -30,7 +28,7 @@ type Provisioner struct {
 	version     string
 	projectRoot string
 	executor    *executor.Executor
-	logger      Logger
+	logger      utils.Logger
 }
 
 type ProvisionerOption func(*Provisioner)
@@ -41,7 +39,7 @@ func WithProjectRoot(projectRoot string) ProvisionerOption {
 	}
 }
 
-func WithLogger(l Logger) ProvisionerOption {
+func WithLogger(l utils.Logger) ProvisionerOption {
 	return func(p *Provisioner) {
 		p.logger = l
 	}

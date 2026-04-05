@@ -93,7 +93,7 @@ func CreateOKDProvisionerNoCreds(cfg *config.Config) *okd.Provisioner {
 	)
 }
 
-func CLILogger() okd.Logger {
+func CLILogger() utils.Logger {
 	return tui.SimpleLogger()
 }
 
