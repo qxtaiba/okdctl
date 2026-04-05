@@ -141,13 +141,19 @@ var NetworkingStepDefinition = wizard.StepDefinition{
 		podCIDR := values["pod_cidr"]
 		serviceCIDR := values["service_cidr"]
 
-		if netutil.CIDRsOverlap(machineCIDR, podCIDR) {
+		if overlap, err := netutil.CIDRsOverlap(machineCIDR, podCIDR); err != nil {
+			return err
+		} else if overlap {
 			return errors.New("machine cidr and pod cidr must not overlap")
 		}
-		if netutil.CIDRsOverlap(machineCIDR, serviceCIDR) {
+		if overlap, err := netutil.CIDRsOverlap(machineCIDR, serviceCIDR); err != nil {
+			return err
+		} else if overlap {
 			return errors.New("machine cidr and service cidr must not overlap")
 		}
-		if netutil.CIDRsOverlap(podCIDR, serviceCIDR) {
+		if overlap, err := netutil.CIDRsOverlap(podCIDR, serviceCIDR); err != nil {
+			return err
+		} else if overlap {
 			return errors.New("pod cidr and service cidr must not overlap")
 		}
 		return nil
