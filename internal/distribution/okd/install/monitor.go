@@ -2,6 +2,7 @@ package install
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	osExec "os/exec"
@@ -98,10 +99,13 @@ func (p *Phase) MonitorInstallation(ctx context.Context, clusterDir string, opts
 			}
 			select {
 			case <-installDone:
-			case <-time.After(5 * time.Second):
-				p.Log.Warn("install: timed out waiting for process cleanup")
+			case <-time.After(30 * time.Second):
+				p.Log.Warn("install: process did not exit after kill, abandoning reap")
 			}
-			return fmt.Errorf("installation timed out after %v", opts.InstallTimeout)
+			if errors.Is(ctx.Err(), context.Canceled) {
+				return fmt.Errorf("installation cancelled: %w", ctx.Err())
+			}
+			return fmt.Errorf("installation timed out after %v: %w", opts.InstallTimeout, ctx.Err())
 		}
 	}
 }
