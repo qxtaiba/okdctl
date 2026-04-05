@@ -30,13 +30,25 @@ func (s Source) String() string {
 // APIToken are []byte (not string) so they can be wiped with Zeroize once
 // the caller is done — Go strings are immutable and can't be overwritten,
 // which leaves secrets lingering in memory and in any stray %+v dump.
+//
+// EndpointFromConfig and ConfigCredentialsOverridden surface credential
+// provenance mismatches that would otherwise be silent:
+//   - EndpointFromConfig is true when Source == SourceEnv but the endpoint
+//     fell back to the config file because PROXMOX_VE_ENDPOINT was unset.
+//   - ConfigCredentialsOverridden is true when both the environment and
+//     the config file held credentials and the environment won.
+//
+// The caller is expected to warn on either flag so operators are not
+// surprised by "credentials from env" messages hiding a mixed source.
 type ProxmoxCredentials struct {
-	Endpoint string
-	Username string
-	Password []byte
-	APIToken []byte
-	Insecure bool
-	Source   Source
+	Endpoint                    string
+	Username                    string
+	Password                    []byte
+	APIToken                    []byte
+	Insecure                    bool
+	Source                      Source
+	EndpointFromConfig          bool
+	ConfigCredentialsOverridden bool
 }
 
 // IsValid returns true if either username/password or API token is set.
@@ -117,8 +129,25 @@ type ProxmoxConfigProvider interface {
 	GetProxmoxPassword() string
 }
 
+// configHasCredentials reports whether the config file carries a full
+// credential set (API token or username+password). Used to detect when
+// environment credentials silently override a populated config.
+func configHasCredentials(cfg ProxmoxConfigProvider) bool {
+	if cfg.GetProxmoxAPIToken() != "" {
+		return true
+	}
+	return cfg.GetProxmoxUsername() != "" && cfg.GetProxmoxPassword() != ""
+}
+
 // GetProxmoxCredentials resolves credentials with priority:
 // 1. Environment variables (incl. .env file), 2. Config file (legacy).
+//
+// When env credentials are used, two provenance flags surface mismatches
+// the caller should warn about:
+//   - EndpointFromConfig: PROXMOX_VE_ENDPOINT was unset, so the endpoint
+//     still comes from the config file (mixed source).
+//   - ConfigCredentialsOverridden: the config file also held credentials
+//     and they were silently ignored in favour of the environment.
 func GetProxmoxCredentials(cfg ProxmoxConfigProvider) *ProxmoxCredentials {
 	creds := &ProxmoxCredentials{
 		Source: SourceNone,
@@ -143,12 +172,17 @@ func GetProxmoxCredentials(cfg ProxmoxConfigProvider) *ProxmoxCredentials {
 	creds.Endpoint = host
 	creds.Insecure = cfg.GetProxmoxInsecure()
 
+	configHadCreds := configHasCredentials(cfg)
+
 	// Priority 1: Environment variables (includes values loaded from .env file)
 	if token := os.Getenv("PROXMOX_VE_API_TOKEN"); token != "" {
 		creds.APIToken = []byte(token)
 		creds.Source = SourceEnv
+		creds.ConfigCredentialsOverridden = configHadCreds
 		if endpoint := os.Getenv("PROXMOX_VE_ENDPOINT"); endpoint != "" {
 			creds.Endpoint = endpoint
+		} else {
+			creds.EndpointFromConfig = true
 		}
 		if insecure := os.Getenv("PROXMOX_VE_INSECURE"); insecure == "true" {
 			creds.Insecure = true
@@ -160,8 +194,11 @@ func GetProxmoxCredentials(cfg ProxmoxConfigProvider) *ProxmoxCredentials {
 		creds.Username = username
 		creds.Password = []byte(password)
 		creds.Source = SourceEnv
+		creds.ConfigCredentialsOverridden = configHadCreds
 		if endpoint := os.Getenv("PROXMOX_VE_ENDPOINT"); endpoint != "" {
 			creds.Endpoint = endpoint
+		} else {
+			creds.EndpointFromConfig = true
 		}
 		if insecure := os.Getenv("PROXMOX_VE_INSECURE"); insecure == "true" {
 			creds.Insecure = true
