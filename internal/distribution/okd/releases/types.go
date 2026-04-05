@@ -1,4 +1,3 @@
-// Package releases provides dynamic version fetching for Kubernetes distributions.
 package releases
 
 import (

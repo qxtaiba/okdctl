@@ -1,3 +1,6 @@
+// Package main is the entry point for the openshitctl binary, which deploys
+// OKD clusters on Proxmox. It refuses to run as root and delegates all CLI
+// handling to internal/cli.
 package main
 
 import (

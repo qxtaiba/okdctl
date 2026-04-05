@@ -1,4 +1,3 @@
-// Package distribution provides step-based provisioning orchestration.
 package distribution
 
 import (

@@ -1,3 +1,5 @@
+// Package packages wraps dnf install/remove operations for OKD host
+// dependencies (haproxy, dnsmasq, httpd, and related tooling).
 package packages
 
 import (

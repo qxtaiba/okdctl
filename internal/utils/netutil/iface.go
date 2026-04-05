@@ -1,3 +1,6 @@
+// Package netutil provides IP math (CIDR arithmetic, host enumeration,
+// VIP derivation) and host interface operations used when provisioning
+// cluster networking.
 package netutil
 
 import (

@@ -1,3 +1,6 @@
+// Package httputil provides shared *http.Client factories with sensible
+// timeouts and optional TLS-skip behaviour for API calls, metadata fetches,
+// and large file downloads.
 package httputil
 
 import (

@@ -1,3 +1,6 @@
+// Package config defines the YAML-serializable deployment schema for
+// openshitctl (cluster, distribution, provider, topology, networking, addons)
+// along with loaders, defaults, generators, and validators.
 package config
 
 type Config struct {

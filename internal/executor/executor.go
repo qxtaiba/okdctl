@@ -1,3 +1,6 @@
+// Package executor wraps os/exec to run shell and sudo commands with
+// context cancellation, timeouts, stream capture, and structured logging
+// used across setup, install, and postinstall phases.
 package executor
 
 import (
