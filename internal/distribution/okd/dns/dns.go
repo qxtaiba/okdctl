@@ -201,6 +201,7 @@ func validateAndRestartDnsmasq(ctx context.Context, configName string) error {
 			return
 		}
 		_ = system.CopyFileWithElevation(ctx, backupPath, configPath, "dnsmasq config rollback")
+		_ = system.Chmod(ctx, configPath, "644", "dnsmasq config permissions")
 	}
 
 	if err := ValidateDnsmasqConfig(ctx); err != nil {
