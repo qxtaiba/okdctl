@@ -39,11 +39,11 @@ type BasePhase struct {
 }
 
 func NewBasePhase(exec *executor.Executor, logger utils.Logger, version string) BasePhase {
-	if exec == nil {
-		exec = executor.New()
-	}
 	if logger == nil {
 		logger = utils.NoopLogger()
+	}
+	if exec == nil {
+		exec = executor.New(executor.WithLogger(logger))
 	}
 	return BasePhase{
 		Exec:    exec,

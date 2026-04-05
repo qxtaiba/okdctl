@@ -101,6 +101,7 @@ func New(workDir string, opts ...Option) *Executor {
 	for _, opt := range opts {
 		opt(e)
 	}
+	executor.WithLogger(e.logger)(e.exec)
 	return e
 }
 
@@ -114,6 +115,7 @@ func NewWithVarFile(workDir, varFile string, opts ...Option) *Executor {
 	for _, opt := range opts {
 		opt(e)
 	}
+	executor.WithLogger(e.logger)(e.exec)
 	return e
 }
 

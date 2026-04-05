@@ -15,7 +15,8 @@ type K8sClient struct {
 
 	Kubeconfig string
 
-	exec *executor.Executor
+	exec   *executor.Executor
+	logger utils.Logger
 }
 
 type Option func(*K8sClient)
@@ -28,9 +29,18 @@ func WithKubeconfig(path string) Option {
 	return func(c *K8sClient) { c.Kubeconfig = path }
 }
 
+func WithLogger(l utils.Logger) Option {
+	return func(c *K8sClient) {
+		if l != nil {
+			c.logger = l
+		}
+	}
+}
+
 func NewK8sClient(opts ...Option) *K8sClient {
 	c := &K8sClient{
-		CLI: "kubectl",
+		CLI:    "kubectl",
+		logger: utils.NoopLogger(),
 	}
 
 	if envKubeconfig := os.Getenv("KUBECONFIG"); envKubeconfig != "" {
@@ -48,7 +58,7 @@ func NewK8sClient(opts ...Option) *K8sClient {
 	}
 
 	if c.exec == nil {
-		cmdRunner := executor.New()
+		cmdRunner := executor.New(executor.WithLogger(c.logger))
 		if c.Kubeconfig != "" {
 			cmdRunner.Env = []string{fmt.Sprintf("KUBECONFIG=%s", c.Kubeconfig)}
 		}
