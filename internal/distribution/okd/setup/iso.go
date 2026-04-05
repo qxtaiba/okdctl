@@ -60,6 +60,12 @@ func writePreInstallScript(script string) (string, error) {
 		return "", fmt.Errorf("failed to create pre-install script: %w", err)
 	}
 
+	if err := f.Chmod(0750); err != nil {
+		_ = f.Close()
+		_ = os.Remove(f.Name())
+		return "", fmt.Errorf("failed to chmod pre-install script: %w", err)
+	}
+
 	if _, err := f.WriteString(script); err != nil {
 		_ = f.Close()
 		_ = os.Remove(f.Name())
@@ -69,11 +75,6 @@ func writePreInstallScript(script string) (string, error) {
 	if err := f.Close(); err != nil {
 		_ = os.Remove(f.Name())
 		return "", fmt.Errorf("failed to close pre-install script: %w", err)
-	}
-
-	if err := os.Chmod(f.Name(), 0755); err != nil {
-		_ = os.Remove(f.Name())
-		return "", fmt.Errorf("failed to chmod pre-install script: %w", err)
 	}
 
 	return f.Name(), nil
