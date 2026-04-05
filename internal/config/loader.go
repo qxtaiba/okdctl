@@ -32,6 +32,10 @@ func NewLoader() *Loader {
 	}
 	v.AddConfigPath("/etc/openshitctl")
 
+	// AutomaticEnv binds HOMELAB_* env vars into the config tree via mapstructure.
+	// Credential fields (Password, APIToken) carry `mapstructure:"-"` so they are
+	// never populated from the environment this way. Credentials flow exclusively
+	// through internal/credentials from the .env file.
 	v.SetEnvPrefix("HOMELAB")
 	v.AutomaticEnv()
 

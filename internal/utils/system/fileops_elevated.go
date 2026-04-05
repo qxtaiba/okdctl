@@ -43,7 +43,7 @@ func ExecuteFileOperation(ctx context.Context, op FileOperation, target string, 
 			return CopyFile(source, target)
 		}
 		sudoOp = func() error {
-			return runSudo("cp", source, target)
+			return runSudo(ctx, "cp", source, target)
 		}
 
 	case OpChmod:
@@ -55,7 +55,7 @@ func ExecuteFileOperation(ctx context.Context, op FileOperation, target string, 
 			return runCommand("chmod", perms, target)
 		}
 		sudoOp = func() error {
-			return runSudo("chmod", perms, target)
+			return runSudo(ctx, "chmod", perms, target)
 		}
 
 	case OpChown:
@@ -67,7 +67,7 @@ func ExecuteFileOperation(ctx context.Context, op FileOperation, target string, 
 			return runCommand("chown", owner, target)
 		}
 		sudoOp = func() error {
-			return runSudo("chown", owner, target)
+			return runSudo(ctx, "chown", owner, target)
 		}
 
 	case OpMkdir:
@@ -75,7 +75,7 @@ func ExecuteFileOperation(ctx context.Context, op FileOperation, target string, 
 			return os.MkdirAll(target, 0755)
 		}
 		sudoOp = func() error {
-			return runSudo("mkdir", "-p", target)
+			return runSudo(ctx, "mkdir", "-p", target)
 		}
 
 	case OpRemove:
@@ -86,7 +86,7 @@ func ExecuteFileOperation(ctx context.Context, op FileOperation, target string, 
 			return os.RemoveAll(target)
 		}
 		sudoOp = func() error {
-			return runSudo("rm", "-rf", target)
+			return runSudo(ctx, "rm", "-rf", target)
 		}
 
 	default:
@@ -121,8 +121,8 @@ func runCommand(name string, args ...string) error {
 	return cmd.Run()
 }
 
-func runSudo(name string, args ...string) error {
-	return RunSudo(context.Background(), name, args...)
+func runSudo(ctx context.Context, name string, args ...string) error {
+	return RunSudo(ctx, name, args...)
 }
 
 func RunSudo(ctx context.Context, name string, args ...string) error {

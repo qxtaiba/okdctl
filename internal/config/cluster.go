@@ -85,8 +85,8 @@ type ProxmoxConfig struct {
 
 	// Credentials — prefer openshitctl.env or environment variables
 	Username string `yaml:"username,omitempty" json:"username,omitempty" mapstructure:"username"`
-	Password string `yaml:"-" json:"-" mapstructure:"password"`
-	APIToken string `yaml:"-" json:"-" mapstructure:"api_token"`
+	Password string `yaml:"-" json:"-" mapstructure:"-"`
+	APIToken string `yaml:"-" json:"-" mapstructure:"-"`
 	TokenID  string `yaml:"token_id,omitempty" json:"tokenId,omitempty" mapstructure:"token_id"`
 	Insecure bool   `yaml:"insecure,omitempty" json:"insecure,omitempty" mapstructure:"insecure"`
 }
