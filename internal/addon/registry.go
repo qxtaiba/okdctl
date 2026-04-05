@@ -18,17 +18,21 @@ type Registry struct {
 	order  []string // insertion order for deterministic iteration
 }
 
-// Register adds an addon via init(). Panics on duplicate names.
-func Register(a Addon) {
+// Register adds an addon to the global registry. It returns an error if an
+// addon with the same name is already registered. Callers invoking Register
+// from an init() function should handle the error explicitly (typically by
+// panicking — init() cannot propagate errors).
+func Register(a Addon) error {
 	registry.mu.Lock()
 	defer registry.mu.Unlock()
 
 	name := a.Info().Name
 	if _, exists := registry.addons[name]; exists {
-		panic(fmt.Sprintf("addon %q already registered", name))
+		return fmt.Errorf("addon %q already registered", name)
 	}
 	registry.addons[name] = a
 	registry.order = append(registry.order, name)
+	return nil
 }
 
 func Get(name string) Addon {
