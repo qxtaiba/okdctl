@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -315,6 +316,15 @@ func (f *Flux) waitForGitSync(ctx context.Context, env *addon.Environment) error
 }
 
 func (f *Flux) createDeployKeySecret(ctx context.Context, env *addon.Environment) error {
+	repoURL := env.AddonConfig.Settings["repository"]
+	if repoURL == "" {
+		return fmt.Errorf("flux repository not configured - set addons.flux.settings.repository in config")
+	}
+	host, err := gitHost(repoURL)
+	if err != nil {
+		return utils.WrapError("failed to resolve git host for ssh-keyscan", err)
+	}
+
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return utils.WrapError("failed to get home directory", err)
@@ -336,9 +346,9 @@ func (f *Flux) createDeployKeySecret(ctx context.Context, env *addon.Environment
 		return utils.WrapError("failed to read deploy key public half", err)
 	}
 
-	knownHostsResult, err := env.Exec.Run(ctx, "ssh-keyscan", "github.com")
+	knownHostsResult, err := env.Exec.Run(ctx, "ssh-keyscan", host)
 	if err != nil || knownHostsResult.ExitCode != 0 {
-		return fmt.Errorf("failed to get GitHub host key")
+		return fmt.Errorf("failed to get host key for %s", host)
 	}
 
 	manifest := buildFluxDeployKeySecret("flux-system", "flux-system",
@@ -353,6 +363,38 @@ func (f *Flux) createDeployKeySecret(ctx context.Context, env *addon.Environment
 
 	env.Logger.Info("flux: deploy key secret applied")
 	return nil
+}
+
+// gitHost extracts the host portion of a git repository URL. It supports
+// ssh://, https://, and the scp-style user@host:path form used by most git
+// servers (github, gitlab, gitea, self-hosted).
+func gitHost(repoURL string) (string, error) {
+	repoURL = strings.TrimSpace(repoURL)
+	if repoURL == "" {
+		return "", fmt.Errorf("empty repository URL")
+	}
+	// scp-style: user@host:path (no scheme, has @ and : before any /)
+	if !strings.Contains(repoURL, "://") {
+		at := strings.Index(repoURL, "@")
+		if at < 0 {
+			return "", fmt.Errorf("cannot parse host from %q", repoURL)
+		}
+		rest := repoURL[at+1:]
+		colon := strings.Index(rest, ":")
+		if colon < 0 {
+			return "", fmt.Errorf("cannot parse host from %q", repoURL)
+		}
+		return rest[:colon], nil
+	}
+	u, err := url.Parse(repoURL)
+	if err != nil {
+		return "", fmt.Errorf("cannot parse %q: %w", repoURL, err)
+	}
+	host := u.Hostname()
+	if host == "" {
+		return "", fmt.Errorf("%q has no host component", repoURL)
+	}
+	return host, nil
 }
 
 // buildFluxDeployKeySecret renders a Secret manifest containing the SSH deploy
