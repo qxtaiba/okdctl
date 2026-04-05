@@ -5,6 +5,8 @@ import (
 	"time"
 )
 
+const maxBackoff = 5 * time.Minute
+
 // Do retries fn up to attempts times with exponential backoff starting at initialBackoff.
 // It returns nil on the first successful call, or the last error after all attempts are exhausted.
 // Context cancellation is checked between retries.
@@ -30,6 +32,9 @@ func Do(ctx context.Context, attempts int, initialBackoff time.Duration, fn func
 				case <-time.After(backoff):
 				}
 				backoff *= 2
+				if backoff > maxBackoff {
+					backoff = maxBackoff
+				}
 			}
 			continue
 		}
