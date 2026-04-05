@@ -17,10 +17,6 @@ func (p *Phase) BuildNodeList(cfg *config.Config) ([]NodeInfo, error) {
 		return nil, utils.WrapError("invalid start IP", err)
 	}
 
-	if lastOctet < 0 || lastOctet > 255 {
-		return nil, fmt.Errorf("start IP %q has invalid last octet %d", startIP, lastOctet)
-	}
-
 	totalNodes := 1 + cfg.Topology.ControlPlane.Count + cfg.Topology.Workers.Count
 	highest := lastOctet + totalNodes - 1
 	if highest > 255 {
