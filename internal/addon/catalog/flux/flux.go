@@ -101,10 +101,10 @@ func (f *Flux) installOperator(ctx context.Context, env *addon.Environment) erro
 		return err
 	}
 
-	result, _ := env.Exec.Run(ctx, "oc", "wait", "--for=condition=available", "deployment/flux-operator",
+	result, err := env.Exec.Run(ctx, "oc", "wait", "--for=condition=available", "deployment/flux-operator",
 		"--namespace", "flux-system", "--timeout=120s")
-	if result == nil || result.ExitCode != 0 {
-		env.Logger.Warn("flux: operator not ready within 120s timeout, continuing")
+	if err != nil || result == nil || result.ExitCode != 0 {
+		return fmt.Errorf("flux: operator not ready within 120s timeout")
 	}
 
 	return nil
