@@ -20,6 +20,11 @@ const (
 	None      Backend = "none"
 )
 
+// OKDRequiredPorts lists every TCP/UDP port the setup phase opens to run an
+// OKD cluster: dns (53), ignition (8080), and the HAProxy-fronted ports
+// duplicated from HAProxyFrontendPorts below. Both lists must agree on the
+// 6443/22623/80/443 quartet — if the OpenShift API or MCS port ever changes,
+// update both.
 var OKDRequiredPorts = []Port{
 	{Number: 53, Protocol: "udp", Description: "dns"},
 	{Number: 53, Protocol: "tcp", Description: "dns"},
@@ -32,7 +37,9 @@ var OKDRequiredPorts = []Port{
 
 // HAProxyFrontendPorts lists the TCP ports HAProxy binds on the bastion while
 // it fronts the cluster API and ingress. Postinstall uses this list to tear
-// down the corresponding firewall rules when HAProxy is removed.
+// down the corresponding firewall rules when HAProxy is removed without
+// touching the DNS and ignition rules that OKDRequiredPorts also owns. These
+// four entries MUST match the same-numbered entries in OKDRequiredPorts.
 var HAProxyFrontendPorts = []Port{
 	{Number: 6443, Protocol: "tcp", Description: "kubernetes api"},
 	{Number: 22623, Protocol: "tcp", Description: "machine config server"},
