@@ -4,7 +4,6 @@ package install
 import (
 	"context"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -146,10 +145,8 @@ func (p *Phase) SetupKubeconfig(clusterDir string) error {
 	if !system.FileExists(kubeconfigPath) {
 		return fmt.Errorf("kubeconfig not found at %s", kubeconfigPath)
 	}
-	if err := os.Setenv("KUBECONFIG", kubeconfigPath); err != nil {
-		return utils.WrapError("failed to set KUBECONFIG", err)
-	}
-	p.Log.Info(fmt.Sprintf("kubeconfig: exported KUBECONFIG=%s", kubeconfigPath))
+	p.Exec.Env = append(p.Exec.Env, "KUBECONFIG="+kubeconfigPath)
+	p.Log.Info(fmt.Sprintf("kubeconfig: configured KUBECONFIG=%s for phase executor", kubeconfigPath))
 	return nil
 }
 
