@@ -212,7 +212,7 @@ func (t *Executor) Plan(ctx context.Context, opts PlanOptions) error {
 func (t *Executor) Apply(ctx context.Context, opts ApplyOptions) error {
 	args := []string{"apply"}
 
-	if opts.PlanFile != "" && system.FileExists(opts.PlanFile) {
+	if opts.PlanFile != "" {
 		args = append(args, opts.PlanFile)
 		return t.run(ctx, args...)
 	}
