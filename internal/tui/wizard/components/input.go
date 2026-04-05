@@ -3,7 +3,6 @@
 package components
 
 import (
-	"errors"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/key"
@@ -110,12 +109,20 @@ func (f *InputField) Validate() error {
 		value := f.input.Value()
 		f.err = f.Validator(value)
 		// A custom validator may interpolate the raw value into its error
-		// message. For password fields, scrub the value from the error before
-		// it reaches the UI so the secret cannot leak via a validator-authored
-		// message.
+		// message. For password fields, wrap the error so its message is
+		// rewritten without leaking the secret, while preserving the wrap
+		// chain via Unwrap().
 		if f.Password && f.err != nil && value != "" {
-			msg := strings.ReplaceAll(f.err.Error(), value, "***")
-			f.err = errors.New(msg)
+			var msg string
+			// strings.ReplaceAll with a very short value would mangle
+			// unrelated characters (e.g. value "a" destroys every "a" in
+			// the message). Fall back to a generic message in that case.
+			if len(value) >= 4 {
+				msg = strings.ReplaceAll(f.err.Error(), value, "***")
+			} else {
+				msg = "invalid password"
+			}
+			f.err = &scrubbedError{msg: msg, inner: f.err}
 		}
 		return f.err
 	}
@@ -225,6 +232,16 @@ type requiredError struct{}
 func (e requiredError) Error() string { return "this field is required" }
 
 var errRequired = requiredError{}
+
+// scrubbedError wraps a validator error so its user-visible message can be
+// rewritten without losing the original via Unwrap().
+type scrubbedError struct {
+	msg   string
+	inner error
+}
+
+func (e *scrubbedError) Error() string { return e.msg }
+func (e *scrubbedError) Unwrap() error { return e.inner }
 
 type InputGroup struct {
 	Title  string

@@ -43,9 +43,9 @@ type Selector struct {
 	maxDropdownVisible   int // max items to show in dropdown (default 5)
 
 	// cachedStyles is a lazily-initialised cache of the lipgloss.Style objects
-	// used when rendering options. It is populated on first access via
-	// getOptionStyles because tui color variables may not yet be resolved at
-	// package init time in tests.
+	// used when rendering options. Caching is safe because tui.Color* values
+	// are only mutated during tui package init (via the HOMELAB_HIGH_CONTRAST
+	// env var) and never change thereafter.
 	cachedStyles *optionStyles
 }
 
