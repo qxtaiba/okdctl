@@ -42,6 +42,16 @@ func WithEnv(env []string) Option {
 	return func(e *Executor) { e.Env = append(e.Env, env...) }
 }
 
+// WithLogger injects a structured logger used for command-trace output.
+// If the provided logger is nil the executor keeps its existing (noop) logger.
+func WithLogger(l utils.Logger) Option {
+	return func(e *Executor) {
+		if l != nil {
+			e.logger = l
+		}
+	}
+}
+
 func New(opts ...Option) *Executor {
 	e := &Executor{
 		Stdout: os.Stdout,

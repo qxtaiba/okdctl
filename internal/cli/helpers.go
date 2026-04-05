@@ -2,9 +2,9 @@ package cli
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/qxtaiba/okd-proxmox-cli/internal/config"
@@ -14,8 +14,6 @@ import (
 	"github.com/qxtaiba/okd-proxmox-cli/internal/tui"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
 )
-
-var ErrConfigNotFound = errors.New("configuration file not found")
 
 func LoadConfig(configFile string) (*config.Config, error) {
 	loader := config.NewLoader()
@@ -28,7 +26,7 @@ func LoadConfig(configFile string) (*config.Config, error) {
 			} else {
 				tui.Info("run 'openshitctl deploy --output " + configFile + "' to create it")
 			}
-			return nil, ErrConfigNotFound
+			return nil, fmt.Errorf("configuration file not found: %s: %w", configFile, err)
 		}
 		return nil, utils.WrapError("load configuration", err)
 	}
@@ -68,13 +66,41 @@ func ValidateConfig(cfg *config.Config) *config.ValidationResult {
 	return result
 }
 
+// resolveProjectRoot returns a canonical absolute path for the current working
+// directory. filepath.Abs makes intent explicit even though Getwd already
+// returns an absolute path; EvalSymlinks canonicalizes it.
+func resolveProjectRoot() (string, error) {
+	wd, err := os.Getwd()
+	if err != nil {
+		return "", err
+	}
+	abs, err := filepath.Abs(wd)
+	if err != nil {
+		return "", err
+	}
+	resolved, err := filepath.EvalSymlinks(abs)
+	if err != nil {
+		// Symlink resolution can fail harmlessly (e.g., temp dirs on macOS).
+		// Fall back to the absolute path.
+		return abs, nil
+	}
+	return resolved, nil
+}
+
+// projectRootOrFallback resolves the project root and logs a debug message on
+// failure, returning an empty string so callers can decide how to proceed.
+func projectRootOrFallback() string {
+	root, err := resolveProjectRoot()
+	if err != nil {
+		tui.Debug("failed to resolve project root: " + err.Error())
+		return ""
+	}
+	return root
+}
+
 // Credentials are passed via environment to avoid modifying global process state.
 func CreateOKDProvisionerWithCreds(cfg *config.Config, creds *credentials.ProxmoxCredentials) *okd.Provisioner {
-	projectRoot, err := os.Getwd()
-	if err != nil {
-		tui.Debug("failed to get working directory, using fallback: " + err.Error())
-		projectRoot = "."
-	}
+	projectRoot := projectRootOrFallback()
 
 	opts := []okd.ProvisionerOption{
 		okd.WithProjectRoot(projectRoot),
@@ -91,11 +117,7 @@ func CreateOKDProvisionerWithCreds(cfg *config.Config, creds *credentials.Proxmo
 // CreateOKDProvisionerNoCreds creates a provisioner without Proxmox credentials.
 // Used for operations that only need local tools (oc, dnsmasq, systemctl).
 func CreateOKDProvisionerNoCreds(cfg *config.Config) *okd.Provisioner {
-	projectRoot, err := os.Getwd()
-	if err != nil {
-		tui.Debug("failed to get working directory, using fallback: " + err.Error())
-		projectRoot = "."
-	}
+	projectRoot := projectRootOrFallback()
 
 	return okd.New(cfg.Distribution.Version,
 		okd.WithProjectRoot(projectRoot),
@@ -103,7 +125,7 @@ func CreateOKDProvisionerNoCreds(cfg *config.Config) *okd.Provisioner {
 	)
 }
 
-func CLILogger() okd.Logger {
+func CLILogger() utils.Logger {
 	return tui.SimpleLogger()
 }
 

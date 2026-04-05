@@ -44,6 +44,7 @@ func (p *Phase) MonitorInstallation(ctx context.Context, clusterDir string, opts
 	k8sClient := cluster.NewK8sClient(
 		cluster.WithCLI("oc"),
 		cluster.WithKubeconfig(kubeconfigPath),
+		cluster.WithLogger(p.Log),
 	)
 
 	installCmd := osExec.CommandContext(ctx, "openshift-install", "wait-for", "install-complete", "--dir", clusterDir, "--log-level=debug")

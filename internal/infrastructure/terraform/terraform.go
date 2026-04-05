@@ -101,6 +101,7 @@ func New(workDir string, opts ...Option) *Executor {
 	for _, opt := range opts {
 		opt(e)
 	}
+	executor.WithLogger(e.logger)(e.exec)
 	return e
 }
 
@@ -114,6 +115,7 @@ func NewWithVarFile(workDir, varFile string, opts ...Option) *Executor {
 	for _, opt := range opts {
 		opt(e)
 	}
+	executor.WithLogger(e.logger)(e.exec)
 	return e
 }
 
@@ -171,8 +173,12 @@ func (t *Executor) buildVarArgs(varFile string, vars map[string]string) []string
 	if vf == "" {
 		vf = t.VarFile
 	}
-	if system.FileExists(vf) {
-		args = append(args, "-var-file="+vf)
+	if vf != "" {
+		if system.FileExists(vf) {
+			args = append(args, "-var-file="+vf)
+		} else {
+			t.logger.Warn(fmt.Sprintf("terraform: var file %s not found, skipping", vf))
+		}
 	}
 
 	if len(vars) > 0 {
@@ -210,7 +216,7 @@ func (t *Executor) Plan(ctx context.Context, opts PlanOptions) error {
 func (t *Executor) Apply(ctx context.Context, opts ApplyOptions) error {
 	args := []string{"apply"}
 
-	if opts.PlanFile != "" && system.FileExists(opts.PlanFile) {
+	if opts.PlanFile != "" {
 		args = append(args, opts.PlanFile)
 		return t.run(ctx, args...)
 	}
