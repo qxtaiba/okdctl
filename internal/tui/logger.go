@@ -130,12 +130,16 @@ func (h *simpleHandler) Enabled(_ context.Context, level slog.Level) bool {
 }
 
 func (h *simpleHandler) Handle(_ context.Context, r slog.Record) error {
+	var prefix string
+	if len(h.groups) > 0 {
+		prefix = strings.Join(h.groups, ".") + "."
+	}
 	fields := make([]LogField, 0, len(h.attrs)+r.NumAttrs())
 	for _, a := range h.attrs {
-		fields = append(fields, LogField{Key: a.Key, Value: a.Value.Any()})
+		fields = append(fields, LogField{Key: prefix + a.Key, Value: a.Value.Any()})
 	}
 	r.Attrs(func(a slog.Attr) bool {
-		fields = append(fields, LogField{Key: a.Key, Value: a.Value.Any()})
+		fields = append(fields, LogField{Key: prefix + a.Key, Value: a.Value.Any()})
 		return true
 	})
 	switch {
