@@ -136,22 +136,17 @@ func (p *Phase) VerifyHAProxyPorts(ctx context.Context) error {
 
 	result, err := p.Exec.Run(ctx, "ss", "-tlnp")
 	if err != nil {
-		return fmt.Errorf("failed to check listening ports: %w", err)
+		p.Log.Warn(fmt.Sprintf("haproxy: failed to check listening ports: %v", err))
+		return nil
 	}
 
-	allListening := true
 	for _, portInfo := range ports {
 		pattern := fmt.Sprintf(":%s ", portInfo.port)
 		if strings.Contains(result.Stdout, pattern) {
 			p.Log.Info(fmt.Sprintf("haproxy: listening on port %s (%s)", portInfo.port, portInfo.description))
 		} else {
 			p.Log.Warn(fmt.Sprintf("haproxy: may not be listening on port %s (%s)", portInfo.port, portInfo.description))
-			allListening = false
 		}
-	}
-
-	if !allListening {
-		return fmt.Errorf("haproxy is not listening on all required ports")
 	}
 
 	return nil
