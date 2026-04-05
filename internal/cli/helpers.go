@@ -22,7 +22,7 @@ func LoadConfig(configFile string) (*config.Config, error) {
 		if os.IsNotExist(err) {
 			tui.Error("configuration file not found: " + configFile)
 			tui.Info("run 'openshitctl init' to create a configuration file")
-			return nil, fmt.Errorf("configuration file not found: %s", configFile)
+			return nil, fmt.Errorf("configuration file not found: %s: %w", configFile, err)
 		}
 		return nil, utils.WrapError("load configuration", err)
 	}
