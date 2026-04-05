@@ -68,10 +68,20 @@ func NewK8sClient(opts ...Option) *K8sClient {
 	return c
 }
 
+// subcommand returns args[0] when present, or "(no args)". Used for error
+// formatting so we never embed arbitrary arg values (which could carry
+// --from-literal=... style secrets) in wrapped errors or logs.
+func subcommand(args []string) string {
+	if len(args) == 0 {
+		return "(no args)"
+	}
+	return args[0]
+}
+
 func (c *K8sClient) run(ctx context.Context, args ...string) (*executor.Result, error) {
 	result, err := c.exec.Run(ctx, c.CLI, args...)
 	if err != nil {
-		return nil, utils.WrapErrorf(err, "%s %s failed", c.CLI, strings.Join(args, " "))
+		return nil, utils.WrapErrorf(err, "%s %s failed", c.CLI, subcommand(args))
 	}
 	return result, nil
 }
@@ -87,7 +97,7 @@ func (c *K8sClient) runCheck(ctx context.Context, args ...string) error {
 			stderr = strings.TrimSpace(result.Stdout)
 		}
 		return fmt.Errorf("%s %s failed (exit %d): %s",
-			c.CLI, strings.Join(args, " "), result.ExitCode, stderr)
+			c.CLI, subcommand(args), result.ExitCode, stderr)
 	}
 	return nil
 }
