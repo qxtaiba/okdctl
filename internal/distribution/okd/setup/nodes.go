@@ -17,6 +17,12 @@ func (p *Phase) BuildNodeList(cfg *config.Config) ([]NodeInfo, error) {
 		return nil, utils.WrapError("invalid start IP", err)
 	}
 
+	totalNodes := 1 + cfg.Topology.ControlPlane.Count + cfg.Topology.Workers.Count
+	highest := lastOctet + totalNodes - 1
+	if highest > 255 {
+		return nil, fmt.Errorf("IP range insufficient: start %q + %d nodes overflows subnet", startIP, totalNodes)
+	}
+
 	bootstrapIP := fmt.Sprintf("%s.%d", baseIP, lastOctet)
 	nodes = append(nodes, NodeInfo{
 		Name: "bootstrap",
@@ -26,9 +32,6 @@ func (p *Phase) BuildNodeList(cfg *config.Config) ([]NodeInfo, error) {
 
 	for i := 0; i < cfg.Topology.ControlPlane.Count; i++ {
 		newOctet := lastOctet + 1 + i
-		if newOctet > 255 {
-			return nil, fmt.Errorf("IP address range exceeded: cannot assign IP for master%d", i)
-		}
 		ip := fmt.Sprintf("%s.%d", baseIP, newOctet)
 		nodes = append(nodes, NodeInfo{
 			Name: fmt.Sprintf("master%d", i),
@@ -40,9 +43,6 @@ func (p *Phase) BuildNodeList(cfg *config.Config) ([]NodeInfo, error) {
 	workerOffset := 1 + cfg.Topology.ControlPlane.Count
 	for i := 0; i < cfg.Topology.Workers.Count; i++ {
 		newOctet := lastOctet + workerOffset + i
-		if newOctet > 255 {
-			return nil, fmt.Errorf("IP address range exceeded: cannot assign IP for worker%d", i)
-		}
 		ip := fmt.Sprintf("%s.%d", baseIP, newOctet)
 		nodes = append(nodes, NodeInfo{
 			Name: fmt.Sprintf("worker%d", i),

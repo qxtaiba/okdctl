@@ -11,13 +11,13 @@ const DefaultVIPLastOctet = 10
 
 var ErrInvalidIP = errors.New("invalid IP address")
 
-func CIDRToNetmask(cidr string) string {
+func CIDRToNetmask(cidr string) (string, error) {
 	_, network, err := net.ParseCIDR(cidr)
 	if err != nil {
-		return "255.255.255.0"
+		return "", fmt.Errorf("invalid CIDR %q: %w", cidr, err)
 	}
 	mask := network.Mask
-	return fmt.Sprintf("%d.%d.%d.%d", mask[0], mask[1], mask[2], mask[3])
+	return fmt.Sprintf("%d.%d.%d.%d", mask[0], mask[1], mask[2], mask[3]), nil
 }
 
 func CalculateVMIP(startIP string, index int) (string, error) {
@@ -53,26 +53,26 @@ func CalculateVMIP(startIP string, index int) (string, error) {
 	return newIP.String(), nil
 }
 
-func DeriveVIPFromStaticIP(staticIPStart string) string {
-	parts := strings.Split(staticIPStart, ".")
-	if len(parts) != 4 {
-		return ""
+func DeriveVIPFromStaticIP(staticIPStart string) (string, error) {
+	if ip := net.ParseIP(staticIPStart); ip == nil || ip.To4() == nil {
+		return "", fmt.Errorf("invalid IPv4 address %q", staticIPStart)
 	}
-	return fmt.Sprintf("%s.%s.%s.%d", parts[0], parts[1], parts[2], DefaultVIPLastOctet)
+	parts := strings.Split(staticIPStart, ".")
+	return fmt.Sprintf("%s.%s.%s.%d", parts[0], parts[1], parts[2], DefaultVIPLastOctet), nil
 }
 
-func IPInCIDR(ip, cidr string) bool {
+func IPInCIDR(ip, cidr string) (bool, error) {
 	parsedIP := net.ParseIP(ip)
 	if parsedIP == nil {
-		return false
+		return false, fmt.Errorf("invalid IP address %q", ip)
 	}
 
 	_, network, err := net.ParseCIDR(cidr)
 	if err != nil {
-		return false
+		return false, fmt.Errorf("invalid CIDR %q: %w", cidr, err)
 	}
 
-	return network.Contains(parsedIP)
+	return network.Contains(parsedIP), nil
 }
 
 func ipToUint32(ip string) (uint32, bool) {
@@ -103,27 +103,6 @@ func CompareIPs(a, b string) (int, error) {
 		return 1, nil
 	}
 	return 0, nil
-}
-
-func RangesOverlap(start1, end1, start2, end2 string) bool {
-	s1, ok := ipToUint32(start1)
-	if !ok {
-		return false
-	}
-	e1, ok := ipToUint32(end1)
-	if !ok {
-		return false
-	}
-	s2, ok := ipToUint32(start2)
-	if !ok {
-		return false
-	}
-	e2, ok := ipToUint32(end2)
-	if !ok {
-		return false
-	}
-
-	return s1 <= e2 && s2 <= e1
 }
 
 func SplitIPv4(ip string) (base string, lastOctet int, err error) {
@@ -159,20 +138,20 @@ func ParseIPPool(pool string) (start, end string, err error) {
 	return start, end, nil
 }
 
-func CIDRsOverlap(cidr1, cidr2 string) bool {
+func CIDRsOverlap(cidr1, cidr2 string) (bool, error) {
 	_, net1, err := net.ParseCIDR(cidr1)
 	if err != nil {
-		return false
+		return false, fmt.Errorf("invalid CIDR %q: %w", cidr1, err)
 	}
 	_, net2, err := net.ParseCIDR(cidr2)
 	if err != nil {
-		return false
+		return false, fmt.Errorf("invalid CIDR %q: %w", cidr2, err)
 	}
 
 	start1, end1 := cidrRange(net1)
 	start2, end2 := cidrRange(net2)
 
-	return ipLessOrEqual(start1, end2) && ipLessOrEqual(start2, end1)
+	return ipLessOrEqual(start1, end2) && ipLessOrEqual(start2, end1), nil
 }
 
 func cidrRange(network *net.IPNet) (net.IP, net.IP) {
