@@ -73,7 +73,11 @@ func New(version string, opts ...ProvisionerOption) *Provisioner {
 	}
 
 	if p.executor == nil {
-		p.executor = executor.New()
+		p.executor = executor.New(executor.WithLogger(p.logger))
+	} else {
+		// WithEnv may have constructed the executor before WithLogger was
+		// applied; ensure the final logger is attached either way.
+		executor.WithLogger(p.logger)(p.executor)
 	}
 
 	return p
