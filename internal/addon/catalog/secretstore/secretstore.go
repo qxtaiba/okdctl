@@ -98,28 +98,31 @@ func (s *SecretStore) Install(ctx context.Context, env *addon.Environment) error
 }
 
 func (s *SecretStore) Verify(ctx context.Context, env *addon.Environment) error {
-	// Verify mirrors Install's "skip if no files configured" contract — if the
-	// operator didn't supply any secret material, Install was a no-op and there
-	// is nothing to verify.
+	// Verify mirrors Install's per-file contract — Install creates each secret
+	// independently based on which source file is present, so Verify must gate
+	// each in-cluster check the same way. This avoids contradictory
+	// "Install OK / Verify fail" states on partial installs.
 	_, credPath, tokenPath := s.secretFilePaths(env)
-	if !system.FileExists(credPath) && !system.FileExists(tokenPath) {
-		env.Logger.Warn("secretstore: no secret files configured, skipping verification")
-		return nil
-	}
-
 	ns := defaultNamespace
 
-	result, err := env.Exec.Run(ctx, "oc", "get", "secret", credentialsSecretName, "-n", ns)
-	if err != nil || result == nil || result.ExitCode != 0 {
-		return fmt.Errorf("secret %s not found in namespace %s", credentialsSecretName, ns)
+	if system.FileExists(credPath) {
+		result, err := env.Exec.Run(ctx, "oc", "get", "secret", credentialsSecretName, "-n", ns)
+		if err != nil || result == nil || result.ExitCode != 0 {
+			return fmt.Errorf("secret %s not found in namespace %s", credentialsSecretName, ns)
+		}
+	} else {
+		env.Logger.Warn("secretstore: credentials file not configured, skipping credentials secret verification")
 	}
 
-	result, err = env.Exec.Run(ctx, "oc", "get", "secret", tokenSecretName, "-n", ns)
-	if err != nil || result == nil || result.ExitCode != 0 {
-		return fmt.Errorf("secret %s not found in namespace %s", tokenSecretName, ns)
+	if system.FileExists(tokenPath) {
+		result, err := env.Exec.Run(ctx, "oc", "get", "secret", tokenSecretName, "-n", ns)
+		if err != nil || result == nil || result.ExitCode != 0 {
+			return fmt.Errorf("secret %s not found in namespace %s", tokenSecretName, ns)
+		}
+	} else {
+		env.Logger.Warn("secretstore: token file not configured, skipping token secret verification")
 	}
 
-	env.Logger.Info("secretstore: both 1password connect secrets exist")
 	return nil
 }
 
