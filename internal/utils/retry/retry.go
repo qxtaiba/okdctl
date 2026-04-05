@@ -17,6 +17,9 @@ func Do(ctx context.Context, attempts int, initialBackoff time.Duration, fn func
 
 	var lastErr error
 	backoff := initialBackoff
+	if backoff > maxBackoff {
+		backoff = maxBackoff
+	}
 
 	for i := 0; i < attempts; i++ {
 		if err := ctx.Err(); err != nil {
