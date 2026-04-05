@@ -53,7 +53,9 @@ func (p *Phase) CleanupBootstrap(ctx context.Context, cfg *config.Config, opts O
 	}
 
 	// Clean up plan file.
-	_ = system.SafeRemove(filepath.Join(terraformDir, planFile))
+	if err := system.SafeRemove(filepath.Join(terraformDir, planFile)); err != nil {
+		p.Log.Warn(fmt.Sprintf("bootstrap: plan file cleanup failed: %v", err))
+	}
 
 	p.Log.Info(fmt.Sprintf("bootstrap: vm destroyed (no longer needed for %s)", cfg.Cluster.Name))
 	return nil
