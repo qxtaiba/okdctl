@@ -70,7 +70,7 @@ func (l *Loader) LoadFile(path string) (*Config, error) {
 		return nil, utils.WrapErrorf(err, "error stating config file %s", path)
 	}
 	if perm := fi.Mode().Perm(); perm&0022 != 0 {
-		return nil, fmt.Errorf("config file %s has insecure permissions %#o; run 'chmod go-w %s' to fix", path, perm, path)
+		return nil, utils.WrapErrorf(os.ErrPermission, "config file %s has insecure permissions %#o; run 'chmod go-w %s' to fix", path, perm, path)
 	}
 
 	l.viper.SetConfigFile(path)
