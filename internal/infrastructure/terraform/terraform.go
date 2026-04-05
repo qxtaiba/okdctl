@@ -173,8 +173,12 @@ func (t *Executor) buildVarArgs(varFile string, vars map[string]string) []string
 	if vf == "" {
 		vf = t.VarFile
 	}
-	if system.FileExists(vf) {
-		args = append(args, "-var-file="+vf)
+	if vf != "" {
+		if system.FileExists(vf) {
+			args = append(args, "-var-file="+vf)
+		} else {
+			t.logger.Warn(fmt.Sprintf("terraform: var file %s not found, skipping", vf))
+		}
 	}
 
 	if len(vars) > 0 {
