@@ -3,6 +3,7 @@ package setup
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"path/filepath"
 	"strings"
@@ -162,6 +163,7 @@ func (p *Phase) VerifyWebServer(ctx context.Context, baseURL string) error {
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
+		_, _ = io.Copy(io.Discard, resp.Body)
 		return fmt.Errorf("web server returned status %d for %s", resp.StatusCode, testURL)
 	}
 
