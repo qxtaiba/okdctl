@@ -50,6 +50,12 @@ func HandleCredentials(cfg *config.Config) *credentials.ProxmoxCredentials {
 		tui.Info("  or PROXMOX_VE_API_TOKEN")
 	} else {
 		tui.Info("using credentials from " + creds.Source.String())
+		if creds.ConfigCredentialsOverridden {
+			tui.Warn("environment credentials override proxmox credentials in config file")
+		}
+		if creds.EndpointFromConfig {
+			tui.Warn("PROXMOX_VE_ENDPOINT not set; endpoint falling back to config file (mixed source)")
+		}
 	}
 	return creds
 }

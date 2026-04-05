@@ -117,6 +117,10 @@ func runFullDeployment(cfg *config.Config) error {
 	handler, ctx := deployment.NewInterruptHandler()
 	defer handler.Cleanup()
 
+	// OnInterrupt is informational only — the interrupt handler's Cleanup()
+	// cancels ctx automatically and ExecuteFullDeployment returns with the
+	// resulting context error. This callback just surfaces the cancel to the
+	// user before that happens.
 	handler.OnInterrupt = func(sig os.Signal) {
 		fmt.Println()
 		tui.Error(fmt.Sprintf("deployment interrupted by %v", sig))
@@ -124,6 +128,7 @@ func runFullDeployment(cfg *config.Config) error {
 	}
 
 	creds := HandleCredentials(cfg)
+	defer creds.Zeroize()
 
 	return ExecuteFullDeployment(ctx, cfg, DeploymentOptions{
 		ShowStartMessage: true,
@@ -148,10 +153,11 @@ func writeCredentialsEnv(cfg *config.Config, configPath string) error {
 
 	creds := &credentials.ProxmoxCredentials{
 		Username: px.Username,
-		Password: px.Password,
-		APIToken: px.APIToken,
+		Password: []byte(px.Password),
+		APIToken: []byte(px.APIToken),
 		Insecure: px.Insecure,
 	}
+	defer creds.Zeroize()
 
 	envPath := credentials.EnvFilePath(configPath)
 	if err := credentials.WriteEnvFile(envPath, creds); err != nil {

@@ -81,6 +81,53 @@ func CopyFile(src, dst string) error {
 	return nil
 }
 
+// CopyFileMode copies src to dst, creating dst with the given mode applied
+// at open time (before any bytes are written). This avoids the race window
+// where a file created with a permissive umask is briefly world-readable
+// before a follow-up chmod narrows it. Use this for anything sensitive —
+// kubeconfigs, credential files, private keys.
+func CopyFileMode(src, dst string, mode os.FileMode) error {
+	sourceFile, err := os.Open(src)
+	if err != nil {
+		return utils.WrapError("failed to open source file", err)
+	}
+	defer func() { _ = sourceFile.Close() }()
+
+	if err := EnsureDirForFile(dst); err != nil {
+		return utils.WrapError("failed to create destination directory", err)
+	}
+
+	destFile, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, mode)
+	if err != nil {
+		return utils.WrapError("failed to create destination file", err)
+	}
+
+	success := false
+	defer func() {
+		_ = destFile.Close()
+		if !success {
+			_ = os.Remove(dst)
+		}
+	}()
+
+	if _, err := io.Copy(destFile, sourceFile); err != nil {
+		return utils.WrapError("failed to copy file contents", err)
+	}
+
+	if err := destFile.Sync(); err != nil {
+		return utils.WrapError("failed to sync destination file", err)
+	}
+
+	// If dst pre-existed with different permissions, O_CREATE won't change
+	// them — tighten explicitly so the caller's mode is always honored.
+	if err := os.Chmod(dst, mode); err != nil {
+		return utils.WrapError("failed to set file permissions", err)
+	}
+
+	success = true
+	return nil
+}
+
 func SafeRemove(path string) error {
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		return nil
