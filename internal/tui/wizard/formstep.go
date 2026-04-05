@@ -90,14 +90,29 @@ func (s *MultiFormStep) CurrentSectionIndex() int {
 	return s.currentSection
 }
 
+// currentGroup returns the Group of the currently-active section, or nil if
+// the index is out of range or the section has no Group. Callers must handle
+// the nil case.
+func (s *MultiFormStep) currentGroup() *components.InputGroup {
+	if s.currentSection < 0 || s.currentSection >= len(s.sections) {
+		return nil
+	}
+	return s.sections[s.currentSection].Group
+}
+
 func (s *MultiFormStep) Init() tea.Cmd {
-	if len(s.sections) > 0 {
+	if len(s.sections) > 0 && s.sections[0].Group != nil {
 		return s.sections[0].Group.Focus()
 	}
 	return nil
 }
 
 func (s *MultiFormStep) Update(msg tea.Msg) (WizardStep, tea.Cmd) {
+	group := s.currentGroup()
+	if group == nil {
+		return s, nil
+	}
+
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch {
@@ -110,7 +125,6 @@ func (s *MultiFormStep) Update(msg tea.Msg) (WizardStep, tea.Cmd) {
 			}
 
 		case key.Matches(msg, key.NewBinding(key.WithKeys("tab", "down"))):
-			group := s.sections[s.currentSection].Group
 			currentIndex := group.FocusIndex()
 			isLastField := currentIndex >= len(group.Fields())-1
 			isLastSection := s.currentSection >= len(s.sections)-1
@@ -122,7 +136,10 @@ func (s *MultiFormStep) Update(msg tea.Msg) (WizardStep, tea.Cmd) {
 			if isLastField {
 				group.Blur()
 				s.currentSection++
-				nextGroup := s.sections[s.currentSection].Group
+				nextGroup := s.currentGroup()
+				if nextGroup == nil {
+					return s, s.emitFocusChanged()
+				}
 				nextGroup.SetFocusIndex(0)
 				cmd := nextGroup.Focus()
 				return s, tea.Batch(cmd, s.emitFocusChanged())
@@ -133,7 +150,6 @@ func (s *MultiFormStep) Update(msg tea.Msg) (WizardStep, tea.Cmd) {
 			return s, tea.Batch(cmd, s.emitFocusChanged())
 
 		case key.Matches(msg, key.NewBinding(key.WithKeys("shift+tab", "up"))):
-			group := s.sections[s.currentSection].Group
 			isFirstField := group.FocusIndex() == 0
 			isFirstSection := s.currentSection == 0
 
@@ -144,7 +160,10 @@ func (s *MultiFormStep) Update(msg tea.Msg) (WizardStep, tea.Cmd) {
 			if isFirstField {
 				group.Blur()
 				s.currentSection--
-				prevGroup := s.sections[s.currentSection].Group
+				prevGroup := s.currentGroup()
+				if prevGroup == nil {
+					return s, s.emitFocusChanged()
+				}
 				prevGroup.SetFocusIndex(len(prevGroup.Fields()) - 1)
 				cmd := prevGroup.Focus()
 				return s, tea.Batch(cmd, s.emitFocusChanged())
@@ -156,15 +175,13 @@ func (s *MultiFormStep) Update(msg tea.Msg) (WizardStep, tea.Cmd) {
 
 		default:
 			var cmd tea.Cmd
-			s.sections[s.currentSection].Group, cmd = s.sections[s.currentSection].Group.Update(msg)
+			s.sections[s.currentSection].Group, cmd = group.Update(msg)
 			return s, cmd
 		}
 	}
 
 	var cmd tea.Cmd
-	if len(s.sections) > 0 {
-		s.sections[s.currentSection].Group, cmd = s.sections[s.currentSection].Group.Update(msg)
-	}
+	s.sections[s.currentSection].Group, cmd = group.Update(msg)
 	return s, cmd
 }
 
@@ -173,13 +190,19 @@ func (s *MultiFormStep) emitFocusChanged() tea.Cmd {
 	totalFields := 0
 
 	for i := 0; i < s.currentSection; i++ {
+		if s.sections[i].Group == nil {
+			continue
+		}
 		globalIndex += len(s.sections[i].Group.Fields())
 	}
-	if s.currentSection < len(s.sections) {
-		globalIndex += s.sections[s.currentSection].Group.FocusIndex()
+	if current := s.currentGroup(); current != nil {
+		globalIndex += current.FocusIndex()
 	}
 
 	for _, section := range s.sections {
+		if section.Group == nil {
+			continue
+		}
 		totalFields += len(section.Group.Fields())
 	}
 
