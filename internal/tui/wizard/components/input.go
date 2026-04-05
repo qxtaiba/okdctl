@@ -405,18 +405,3 @@ func (g *InputGroup) ViewCompact(title string) string {
 	return strings.Join(lines, "\n")
 }
 
-func (g *InputGroup) GetValues() map[string]string {
-	values := make(map[string]string)
-	for _, f := range g.fields {
-		values[f.Label] = f.Value()
-	}
-	return values
-}
-
-func (g *InputGroup) SetValues(values map[string]string) {
-	for label, value := range values {
-		if f := g.FieldByLabel(label); f != nil {
-			f.SetValue(value)
-		}
-	}
-}
