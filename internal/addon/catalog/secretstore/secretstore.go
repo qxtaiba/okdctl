@@ -49,10 +49,7 @@ func (s *SecretStore) Info() addon.AddonInfo {
 }
 
 func (s *SecretStore) Install(ctx context.Context, env *addon.Environment) error {
-	secretsDir := s.secretsDir(env)
-
-	credPath := filepath.Join(secretsDir, credentialsFile)
-	tokenPath := filepath.Join(secretsDir, tokenFile)
+	secretsDir, credPath, tokenPath := s.secretFilePaths(env)
 
 	// If no secret files exist, warn with setup instructions and return (non-fatal)
 	if !system.FileExists(credPath) && !system.FileExists(tokenPath) {
@@ -103,19 +100,31 @@ func (s *SecretStore) Install(ctx context.Context, env *addon.Environment) error
 }
 
 func (s *SecretStore) Verify(ctx context.Context, env *addon.Environment) error {
+	// Verify mirrors Install's per-file contract — Install creates each secret
+	// independently based on which source file is present, so Verify must gate
+	// each in-cluster check the same way. This avoids contradictory
+	// "Install OK / Verify fail" states on partial installs.
+	_, credPath, tokenPath := s.secretFilePaths(env)
 	ns := defaultNamespace
 
-	result, err := env.Exec.Run(ctx, "oc", "get", "secret", credentialsSecretName, "-n", ns)
-	if err != nil || result == nil || result.ExitCode != 0 {
-		return fmt.Errorf("secret %s not found in namespace %s", credentialsSecretName, ns)
+	if system.FileExists(credPath) {
+		result, err := env.Exec.Run(ctx, "oc", "get", "secret", credentialsSecretName, "-n", ns)
+		if err != nil || result == nil || result.ExitCode != 0 {
+			return fmt.Errorf("secret %s not found in namespace %s", credentialsSecretName, ns)
+		}
+	} else {
+		env.Logger.Warn("secretstore: credentials file not configured, skipping credentials secret verification")
 	}
 
-	result, err = env.Exec.Run(ctx, "oc", "get", "secret", tokenSecretName, "-n", ns)
-	if err != nil || result == nil || result.ExitCode != 0 {
-		return fmt.Errorf("secret %s not found in namespace %s", tokenSecretName, ns)
+	if system.FileExists(tokenPath) {
+		result, err := env.Exec.Run(ctx, "oc", "get", "secret", tokenSecretName, "-n", ns)
+		if err != nil || result == nil || result.ExitCode != 0 {
+			return fmt.Errorf("secret %s not found in namespace %s", tokenSecretName, ns)
+		}
+	} else {
+		env.Logger.Warn("secretstore: token file not configured, skipping token secret verification")
 	}
 
-	env.Logger.Info("secretstore: both 1password connect secrets exist")
 	return nil
 }
 
@@ -191,18 +200,48 @@ func (s *SecretStore) secretsDir(env *addon.Environment) string {
 	return dir
 }
 
+// secretFilePaths returns the resolved secrets directory along with the
+// credentials and token file paths. Install and Verify both use this so the
+// "skip if no files configured" check stays in sync between the two.
+func (s *SecretStore) secretFilePaths(env *addon.Environment) (secretsDir, credPath, tokenPath string) {
+	secretsDir = s.secretsDir(env)
+	credPath = filepath.Join(secretsDir, credentialsFile)
+	tokenPath = filepath.Join(secretsDir, tokenFile)
+	return
+}
 
-func (s *SecretStore) secretExists(ctx context.Context, env *addon.Environment, name string) bool {
-	result, err := env.Exec.Run(ctx, "oc", "get", "secret", name, "-n", defaultNamespace)
-	return err == nil && result != nil && result.ExitCode == 0
+
+// buildOpaqueSecretManifest returns a minimal Secret manifest YAML with a
+// single data key. The value must already be raw bytes; it will be base64
+// encoded here.
+func buildOpaqueSecretManifest(namespace, name, dataKey string, rawValue []byte) string {
+	encoded := base64.StdEncoding.EncodeToString(rawValue)
+	return fmt.Sprintf(`apiVersion: v1
+kind: Secret
+metadata:
+  name: %s
+  namespace: %s
+type: Opaque
+data:
+  %s: %s
+`, name, namespace, dataKey, encoded)
+}
+
+// buildOpaqueSecretManifestPreEncoded is the pre-encoded variant: the value is
+// already base64-encoded and gets embedded verbatim.
+func buildOpaqueSecretManifestPreEncoded(namespace, name, dataKey, encodedValue string) string {
+	return fmt.Sprintf(`apiVersion: v1
+kind: Secret
+metadata:
+  name: %s
+  namespace: %s
+type: Opaque
+data:
+  %s: %s
+`, name, namespace, dataKey, encodedValue)
 }
 
 func (s *SecretStore) createCredentialsSecret(ctx context.Context, env *addon.Environment, credPath string) error {
-	if s.secretExists(ctx, env, credentialsSecretName) {
-		env.Logger.Info("secretstore: credentials secret already exists, skipping")
-		return nil
-	}
-
 	plaintext, err := s.readSecret(ctx, env, credPath)
 	if err != nil {
 		return utils.WrapError("failed to read 1password credentials", err)
@@ -211,42 +250,35 @@ func (s *SecretStore) createCredentialsSecret(ctx context.Context, env *addon.En
 	// Base64-encoded because the HelmRelease mounts it as a pre-encoded value
 	credentialsBase64 := base64.StdEncoding.EncodeToString([]byte(plaintext))
 
-	result, err := env.Exec.Run(ctx, "oc", "create", "secret", "generic", credentialsSecretName,
-		"--namespace", defaultNamespace,
-		"--from-literal=credentials_base64="+credentialsBase64)
+	manifest := buildOpaqueSecretManifestPreEncoded(defaultNamespace, credentialsSecretName, "credentials_base64", credentialsBase64)
+	result, err := env.Exec.RunWithStdin(ctx, manifest, "oc", "apply", "-f", "-")
 	if err != nil {
-		return utils.WrapError("failed to create 1password credentials secret", err)
+		return utils.WrapError("failed to apply 1password credentials secret", err)
 	}
 	if result.ExitCode != 0 {
-		return fmt.Errorf("failed to create 1password credentials secret: %s", result.Stderr)
+		return fmt.Errorf("failed to apply 1password credentials secret: %s", result.Stderr)
 	}
 
-	env.Logger.Info("secretstore: credentials secret created")
+	env.Logger.Info("secretstore: credentials secret applied")
 	return nil
 }
 
 func (s *SecretStore) createTokenSecret(ctx context.Context, env *addon.Environment, tokenPath string) error {
-	if s.secretExists(ctx, env, tokenSecretName) {
-		env.Logger.Info("secretstore: token secret already exists, skipping")
-		return nil
-	}
-
 	plaintext, err := s.readSecret(ctx, env, tokenPath)
 	if err != nil {
 		return utils.WrapError("failed to read 1password token", err)
 	}
 	token := strings.TrimSpace(plaintext)
 
-	result, err := env.Exec.Run(ctx, "oc", "create", "secret", "generic", tokenSecretName,
-		"--namespace", defaultNamespace,
-		"--from-literal=token="+token)
+	manifest := buildOpaqueSecretManifest(defaultNamespace, tokenSecretName, "token", []byte(token))
+	result, err := env.Exec.RunWithStdin(ctx, manifest, "oc", "apply", "-f", "-")
 	if err != nil {
-		return utils.WrapError("failed to create 1password token secret", err)
+		return utils.WrapError("failed to apply 1password token secret", err)
 	}
 	if result.ExitCode != 0 {
-		return fmt.Errorf("failed to create 1password token secret: %s", result.Stderr)
+		return fmt.Errorf("failed to apply 1password token secret: %s", result.Stderr)
 	}
 
-	env.Logger.Info("secretstore: token secret created")
+	env.Logger.Info("secretstore: token secret applied")
 	return nil
 }
