@@ -21,8 +21,9 @@ func Do(ctx context.Context, attempts int, initialBackoff time.Duration, fn func
 	b := backoff.NewExponentialBackOff()
 	b.InitialInterval = initialBackoff
 	b.Multiplier = 2
+	b.RandomizationFactor = 0.5 // jitter to avoid thundering herd
 	b.MaxInterval = 5 * time.Minute
-	b.MaxElapsedTime = 0
+	b.MaxElapsedTime = 0 // no time limit; retry count is the sole termination condition
 
 	return backoff.Retry(fn, backoff.WithContext(
 		backoff.WithMaxRetries(b, uint64(attempts-1)),
