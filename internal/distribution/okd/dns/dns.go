@@ -37,6 +37,14 @@ func BuildConfigData(cfg *config.Config) (templates.DNSConfigData, error) {
 		return templates.DNSConfigData{}, fmt.Errorf("static IP start is required")
 	}
 
+	// Validate the node IP range up front so we fail with a clear error here
+	// rather than midway through per-node CalculateVMIP calls. This mirrors
+	// the check in setup/nodes.go so the two paths stay in lockstep.
+	totalNodes := 1 + cfg.Topology.ControlPlane.Count + cfg.Topology.Workers.Count
+	if err := netutil.ValidateIPRangeWithinSubnet(staticIPStart, totalNodes); err != nil {
+		return templates.DNSConfigData{}, err
+	}
+
 	// Derive VIP from static IP configuration (uses .10 as last octet by convention)
 	kubeVipIP, err := netutil.DeriveVIPFromStaticIP(staticIPStart)
 	if err != nil {

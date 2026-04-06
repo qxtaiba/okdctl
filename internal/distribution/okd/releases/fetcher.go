@@ -152,9 +152,22 @@ func (f *OKDVersionFetcher) parseReleases(releases []githubRelease) []OKDRelease
 func sortAndClassifySeries(seriesMap map[string]*OKDReleaseSeries) []OKDReleaseSeries {
 	var result []OKDReleaseSeries
 	for _, series := range seriesMap {
-		// Sort versions within series (newest first) using proper numeric comparison
+		// Sort versions within series (newest first) using proper numeric
+		// comparison. When two versions compare equal by their numeric parts
+		// (e.g. tag variants on the same release), fall back to the GitHub
+		// published_at timestamp (newest first), and finally to the raw tag
+		// string, so the ordering is stable regardless of the input order
+		// returned by the GitHub API.
 		sort.Slice(series.Versions, func(versionIdxA, versionIdxB int) bool {
-			return compareVersions(series.Versions[versionIdxA].Version, series.Versions[versionIdxB].Version) > 0
+			a := series.Versions[versionIdxA]
+			b := series.Versions[versionIdxB]
+			if cmp := compareVersions(a.Version, b.Version); cmp != 0 {
+				return cmp > 0
+			}
+			if !a.ReleaseDate.Equal(b.ReleaseDate) {
+				return a.ReleaseDate.After(b.ReleaseDate)
+			}
+			return a.Version > b.Version
 		})
 
 		foundLatestStable := false

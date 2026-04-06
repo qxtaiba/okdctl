@@ -133,3 +133,17 @@ func RunSudo(ctx context.Context, name string, args ...string) error {
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
 }
+
+// HasPasswordlessSudo returns nil if `sudo -n true` succeeds, meaning the
+// current user can run sudo without a password prompt (either via NOPASSWD
+// or a cached timestamp). Otherwise it returns the underlying error. Callers
+// typically log a warning on failure rather than blocking, because an earlier
+// interactive run may have primed the sudo timestamp.
+func HasPasswordlessSudo(ctx context.Context) error {
+	cmd := exec.CommandContext(ctx, "sudo", "-n", "true")
+	// Detach stdio so a password prompt can't hang here.
+	cmd.Stdin = nil
+	cmd.Stdout = nil
+	cmd.Stderr = nil
+	return cmd.Run()
+}

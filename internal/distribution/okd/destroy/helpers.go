@@ -44,7 +44,7 @@ func (p *Phase) destroyInfrastructure(ctx context.Context, opts Options) error {
 	}
 
 	if err := tf.Cleanup(); err != nil {
-		p.Log.Warn(fmt.Sprintf("terraform: plan file cleanup warning: %v", err))
+		p.Log.Warn(fmt.Sprintf("terraform: plan file cleanup warning in %s: %v (remove stale tfplan/destroy.tfplan/terraform.tfstate.backup manually if needed)", terraformDir, err))
 	}
 
 	return nil

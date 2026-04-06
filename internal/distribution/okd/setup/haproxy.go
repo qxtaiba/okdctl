@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/qxtaiba/okd-proxmox-cli/internal/config"
@@ -51,17 +52,17 @@ func (p *Phase) BuildHAProxyConfigData(cfg *config.Config) (templates.HAProxyCon
 	}, nil
 }
 
+// writeHAProxyConfigToTemp writes the rendered haproxy.cfg contents to a
+// uniquely-named file under os.TempDir using system.AtomicWrite. The caller
+// is responsible for removing the returned path. A user-writable temp file is
+// required because the final install step runs under sudo, so the write
+// itself cannot target /etc/haproxy directly here.
 func writeHAProxyConfigToTemp(content string) (string, error) {
-	tmpFile, err := os.CreateTemp("", "haproxy-*.cfg")
-	if err != nil {
-		return "", err
+	tmpPath := filepath.Join(os.TempDir(), fmt.Sprintf("haproxy-%d.cfg", os.Getpid()))
+	if err := system.AtomicWriteString(tmpPath, content, 0644); err != nil {
+		return "", fmt.Errorf("failed to write temp haproxy config: %w", err)
 	}
-	defer func() { _ = tmpFile.Close() }()
-
-	if _, err := tmpFile.WriteString(content); err != nil {
-		return "", err
-	}
-	return tmpFile.Name(), nil
+	return tmpPath, nil
 }
 
 const (

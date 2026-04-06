@@ -3,6 +3,7 @@ package setup
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/download"
@@ -45,9 +46,11 @@ func (p *Phase) DownloadOKDTools(ctx context.Context, version string, opts Optio
 		}
 
 		checksum, err := download.FetchChecksum(ctx, checksumsURL, tool.filename)
+		checksumSkipped := false
 		if err != nil {
 			p.Log.Warn(fmt.Sprintf("tools: proceeding without checksum validation for %s", tool.name))
 			checksum = ""
+			checksumSkipped = true
 		}
 
 		downloadOpts := download.Options{
@@ -69,6 +72,19 @@ func (p *Phase) DownloadOKDTools(ctx context.Context, version string, opts Optio
 		}
 		if err := download.ExtractTarGz(ctx, extractOpts); err != nil {
 			return fmt.Errorf("failed to extract %s: %w", tool.name, err)
+		}
+
+		// Defense-in-depth: when checksum validation was skipped, verify the
+		// extracted binary at least exists and is non-empty so a corrupt or
+		// missing artifact fails loudly instead of silently installing.
+		if checksumSkipped {
+			fi, statErr := os.Stat(binaryPath)
+			if statErr != nil {
+				return fmt.Errorf("tools: extracted %s binary missing at %s: %w", tool.name, binaryPath, statErr)
+			}
+			if fi.Size() == 0 {
+				return fmt.Errorf("tools: extracted %s binary at %s is empty", tool.name, binaryPath)
+			}
 		}
 	}
 

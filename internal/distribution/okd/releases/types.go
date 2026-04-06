@@ -44,12 +44,21 @@ type diskCache struct {
 	Series   []OKDReleaseSeries `json:"series"`
 }
 
+// Major returns the major version component (e.g. 4 for "4.15.0-okd-0").
+// Callers are expected to pass OKDVersion values that have already been
+// produced by parseVersionTag, which guarantees a well-formed "N.M" prefix.
+// If the Version field was set from unvalidated input, the Sscanf error is
+// intentionally discarded and a zero value is returned — that is acceptable
+// degraded behavior for a helper used only for sorting and display.
 func (v *OKDVersion) Major() int {
 	var major int
 	_, _ = fmt.Sscanf(v.Version, "%d.", &major)
 	return major
 }
 
+// Minor returns the minor version component (e.g. 15 for "4.15.0-okd-0").
+// See the Major godoc: the input is expected to come from parseVersionTag,
+// and unvalidated input degrades to a zero return.
 func (v *OKDVersion) Minor() int {
 	var major, minor int
 	_, _ = fmt.Sscanf(v.Version, "%d.%d", &major, &minor)

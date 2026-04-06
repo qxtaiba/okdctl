@@ -25,6 +25,13 @@ func BuildLiveKargs(params LiveKargsParams) []string {
 
 // BuildDestKargs returns networking kernel arguments persisted into the installed OS,
 // omitting coreos.inst.* directives (only relevant during the live installer session).
+//
+// Repeated ISO builds using these kargs are idempotent: each invocation of
+// buildNodeISO overwrites the target .iso file at outputPath before passing
+// --dest-karg-append to coreos-installer, so kargs are never appended onto a
+// pre-existing ISO from a prior run. Regenerating an ISO with the same
+// parameters produces the same result; changing network fields (e.g. IP,
+// DNS) simply replaces the previous ISO wholesale.
 func BuildDestKargs(params LiveKargsParams) []string {
 	return []string{
 		fmt.Sprintf("ip=%s::%s:%s::%s:none", params.NodeIP, params.Gateway, params.Netmask, params.Interface),

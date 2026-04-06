@@ -18,9 +18,8 @@ func (p *Phase) BuildNodeList(cfg *config.Config) ([]NodeInfo, error) {
 	}
 
 	totalNodes := 1 + cfg.Topology.ControlPlane.Count + cfg.Topology.Workers.Count
-	highest := lastOctet + totalNodes - 1
-	if highest > 255 {
-		return nil, fmt.Errorf("IP range insufficient: start %q + %d nodes overflows subnet", startIP, totalNodes)
+	if err := netutil.ValidateIPRangeWithinSubnet(startIP, totalNodes); err != nil {
+		return nil, err
 	}
 
 	bootstrapIP := fmt.Sprintf("%s.%d", baseIP, lastOctet)

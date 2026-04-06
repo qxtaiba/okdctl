@@ -146,6 +146,7 @@ func (p *Phase) waitForKubeVIPPing(ctx context.Context, vip string, opts Options
 func (p *Phase) verifyKubeVIPAPIHealth(ctx context.Context, vip string) error {
 	// -k skips cert verification (VIP may not be in cert SANs)
 	healthURL := fmt.Sprintf("https://%s:6443/healthz", vip)
+	p.Log.Info("verify: checking vip health with tls verification disabled (bootstrap only)")
 	result, err := p.Exec.Run(ctx, "curl", "-sk", "--connect-timeout", "5", healthURL)
 	if err != nil {
 		return utils.WrapError(fmt.Sprintf("failed to check api health at %s", healthURL), err)

@@ -12,6 +12,7 @@ import (
 	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/paths"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/executor"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
+	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
 )
 
 const (
@@ -76,6 +77,15 @@ func New(exec *executor.Executor, logger utils.Logger, version string) *Phase {
 
 func (p *Phase) Execute(ctx context.Context, cfg *config.Config, opts Options) error {
 	p.Log.Info("setup: starting okd cluster configuration")
+
+	// Preflight: many setup steps call sudo. If passwordless sudo is not
+	// configured and the user has no cached timestamp, the first sudo call
+	// will stall waiting for a password read from stdin, which looks like a
+	// hung deployment. Warn once up front rather than blocking; the user may
+	// have primed sudo earlier in this session.
+	if err := system.HasPasswordlessSudo(ctx); err != nil {
+		p.Log.Warn("setup: passwordless sudo not configured; next sudo command may hang waiting for password")
+	}
 
 	orchestrator := distribution.NewOrchestrator(
 		p.newInstallPackagesStep(opts),

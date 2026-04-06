@@ -109,12 +109,20 @@ func Configure(ctx context.Context, ports []Port, permanent bool, logger utils.L
 	return nil
 }
 
+// validatePort enforces an allowlist on Port.Protocol (tcp or udp only) and
+// a valid port number range. Both openPort and closePort MUST call this
+// before embedding port.Protocol into a firewall-cmd / iptables / ufw
+// argument, because the protocol value flows into fmt.Sprintf("%d/%s", ...).
+// Even though current callers only ever populate Port from the
+// OKDRequiredPorts / HAProxyFrontendPorts constants, keeping the guard here
+// prevents a future caller from sneaking an unvalidated protocol string into
+// the rendered rule.
 func validatePort(port Port) error {
 	if port.Number < 1 || port.Number > 65535 {
 		return fmt.Errorf("invalid port number: %d", port.Number)
 	}
 	if port.Protocol != "tcp" && port.Protocol != "udp" {
-		return fmt.Errorf("invalid protocol: %s (must be tcp or udp)", port.Protocol)
+		return fmt.Errorf("invalid protocol: %q (must be tcp or udp)", port.Protocol)
 	}
 	return nil
 }

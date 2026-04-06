@@ -422,6 +422,11 @@ func (p *Phase) convertToLoadBalancer(ctx context.Context, ic ingressControllerI
 		p.attemptRollback(ctx, ic)
 		return fmt.Errorf("failed to create replacement IngressController: %w", err)
 	}
+	if createResult == nil {
+		p.Log.Warn("update-ingress: oc create returned nil result, attempting rollback")
+		p.attemptRollback(ctx, ic)
+		return fmt.Errorf("oc create returned nil result for IngressController %q", ic.Name)
+	}
 	if createResult.ExitCode != 0 {
 		p.Log.Warn(fmt.Sprintf("update-ingress: create failed (%s), attempting rollback", createResult.Stderr))
 		p.attemptRollback(ctx, ic)
