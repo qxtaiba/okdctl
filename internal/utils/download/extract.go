@@ -89,6 +89,18 @@ func processTarEntry(tarReader *tar.Reader, header *tar.Header, destDir string, 
 				return utils.WrapError("failed to create symlink", err)
 			}
 		}
+
+		// Post-hoc verification: resolve through the real filesystem to catch
+		// symlink chains that escape the destination directory.
+		realTarget, err := filepath.EvalSymlinks(targetPath)
+		if err != nil {
+			_ = os.Remove(targetPath)
+			return utils.WrapErrorf(err, "failed to resolve symlink %s", name)
+		}
+		if !strings.HasPrefix(realTarget, filepath.Clean(destDir)) {
+			_ = os.Remove(targetPath)
+			return fmt.Errorf("symlink %s resolves outside destination: %s", name, realTarget)
+		}
 	}
 
 	return nil

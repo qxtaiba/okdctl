@@ -1,7 +1,6 @@
 package system
 
 import (
-	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -146,13 +145,13 @@ func ExpandPath(path string) string {
 
 func AtomicWrite(path string, data []byte, perm os.FileMode) error {
 	if err := EnsureDirForFile(path); err != nil {
-		return fmt.Errorf("failed to create directory: %w", err)
+		return utils.WrapError("failed to create directory", err)
 	}
 
 	dir := filepath.Dir(path)
 	tmpFile, err := os.CreateTemp(dir, ".tmp-*")
 	if err != nil {
-		return fmt.Errorf("failed to create temp file: %w", err)
+		return utils.WrapError("failed to create temp file", err)
 	}
 	tmpPath := tmpFile.Name()
 
@@ -165,24 +164,24 @@ func AtomicWrite(path string, data []byte, perm os.FileMode) error {
 
 	if _, err := tmpFile.Write(data); err != nil {
 		_ = tmpFile.Close()
-		return fmt.Errorf("failed to write data: %w", err)
+		return utils.WrapError("failed to write data", err)
 	}
 
 	if err := tmpFile.Sync(); err != nil {
 		_ = tmpFile.Close()
-		return fmt.Errorf("failed to sync file: %w", err)
+		return utils.WrapError("failed to sync file", err)
 	}
 
 	if err := tmpFile.Close(); err != nil {
-		return fmt.Errorf("failed to close temp file: %w", err)
+		return utils.WrapError("failed to close temp file", err)
 	}
 
 	if err := os.Chmod(tmpPath, perm); err != nil {
-		return fmt.Errorf("failed to set permissions: %w", err)
+		return utils.WrapError("failed to set permissions", err)
 	}
 
 	if err := os.Rename(tmpPath, path); err != nil {
-		return fmt.Errorf("failed to rename temp file: %w", err)
+		return utils.WrapError("failed to rename temp file", err)
 	}
 
 	success = true

@@ -61,7 +61,7 @@ func DetectBackend() Backend {
 	}
 
 	if _, err := exec.LookPath("firewall-cmd"); err == nil {
-		if system.IsServiceActive("firewalld") {
+		if system.IsServiceActive(context.Background(), "firewalld") {
 			return Firewalld
 		}
 	}

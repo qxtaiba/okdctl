@@ -105,7 +105,7 @@ func IsNetworkManagerActive() bool {
 	if _, err := exec.LookPath("nmcli"); err != nil {
 		return false
 	}
-	return system.IsServiceActive("NetworkManager")
+	return system.IsServiceActive(context.Background(), "NetworkManager")
 }
 
 func getActiveConnection(ctx context.Context) (string, error) {

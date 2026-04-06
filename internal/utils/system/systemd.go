@@ -36,20 +36,20 @@ func ManageService(ctx context.Context, action ServiceAction, serviceName, descr
 	}
 }
 
-func IsServiceActive(serviceName string) bool {
+func IsServiceActive(ctx context.Context, serviceName string) bool {
 	if runtime.GOOS != "linux" {
 		return false
 	}
 
-	cmd := exec.Command("systemctl", "is-active", "--quiet", serviceName)
+	cmd := exec.CommandContext(ctx, "systemctl", "is-active", "--quiet", serviceName)
 	return cmd.Run() == nil
 }
 
-func IsServiceEnabled(serviceName string) bool {
+func IsServiceEnabled(ctx context.Context, serviceName string) bool {
 	if runtime.GOOS != "linux" {
 		return false
 	}
 
-	cmd := exec.Command("systemctl", "is-enabled", "--quiet", serviceName)
+	cmd := exec.CommandContext(ctx, "systemctl", "is-enabled", "--quiet", serviceName)
 	return cmd.Run() == nil
 }

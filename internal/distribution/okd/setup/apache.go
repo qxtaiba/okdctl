@@ -70,7 +70,7 @@ func enableAndStartApache(ctx context.Context) error {
 	if err := system.ManageService(ctx, system.ServiceStart, "httpd", "apache httpd service"); err != nil {
 		return utils.WrapError("failed to start httpd", err)
 	}
-	if !system.IsServiceActive("httpd") {
+	if !system.IsServiceActive(ctx, "httpd") {
 		return fmt.Errorf("apache httpd service failed to start - check systemctl status httpd")
 	}
 	return nil

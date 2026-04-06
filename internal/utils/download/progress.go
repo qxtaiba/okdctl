@@ -2,10 +2,13 @@ package download
 
 import (
 	"fmt"
+	"os"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"golang.org/x/term"
 )
 
 const (
@@ -21,7 +24,10 @@ type progressWriter struct {
 	stopped     int32          // accessed atomically - stops all output when set
 	lastUpdate  atomic.Value   // stores time.Time atomically
 	mu          sync.Mutex     // protects printProgress
+	isTTY       bool
 }
+
+var stdoutIsTTY = term.IsTerminal(int(os.Stdout.Fd()))
 
 type Writer interface {
 	Write(p []byte) (n int, err error)
@@ -62,6 +68,10 @@ func (pw *progressWriter) Write(p []byte) (int, error) {
 }
 
 func (pw *progressWriter) printProgress() {
+	if !pw.isTTY {
+		return
+	}
+
 	written := atomic.LoadInt64(&pw.written)
 	writtenMB := float64(written) / 1024 / 1024
 	totalMB := float64(pw.total) / 1024 / 1024
@@ -79,6 +89,8 @@ func (pw *progressWriter) finish() {
 		pw.mu.Lock()
 		pw.printProgress()
 		pw.mu.Unlock()
-		fmt.Print("\n")
+		if pw.isTTY {
+			fmt.Print("\n")
+		}
 	}
 }

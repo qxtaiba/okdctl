@@ -19,7 +19,7 @@ func HAProxy(ctx context.Context, haproxyConfig, vip string, logger utils.Logger
 		logger.Info("cleanup: haproxy service and configuration")
 	}
 
-	if system.IsServiceActive("haproxy") {
+	if system.IsServiceActive(ctx, "haproxy") {
 		if err := system.ManageService(ctx, system.ServiceStop, "haproxy", "haproxy service"); err != nil && logger != nil {
 			logger.Warn(fmt.Sprintf("cleanup: failed to stop haproxy service: %v", err))
 		}
@@ -27,7 +27,7 @@ func HAProxy(ctx context.Context, haproxyConfig, vip string, logger utils.Logger
 		logger.Info("cleanup: haproxy service not running")
 	}
 
-	if system.IsServiceEnabled("haproxy") {
+	if system.IsServiceEnabled(ctx, "haproxy") {
 		if err := system.ManageService(ctx, system.ServiceDisable, "haproxy", "haproxy service"); err != nil && logger != nil {
 			logger.Warn(fmt.Sprintf("cleanup: failed to disable haproxy service: %v", err))
 		}
@@ -85,7 +85,7 @@ func Apache(ctx context.Context, logger utils.Logger) error {
 		logger.Info("cleanup: apache httpd service")
 	}
 
-	if system.IsServiceActive("httpd") {
+	if system.IsServiceActive(ctx, "httpd") {
 		if err := system.ManageService(ctx, system.ServiceStop, "httpd", "httpd service"); err != nil && logger != nil {
 			logger.Warn(fmt.Sprintf("cleanup: failed to stop httpd service: %v", err))
 		}
@@ -93,7 +93,7 @@ func Apache(ctx context.Context, logger utils.Logger) error {
 		logger.Info("cleanup: httpd service not running")
 	}
 
-	if system.IsServiceEnabled("httpd") {
+	if system.IsServiceEnabled(ctx, "httpd") {
 		if err := system.ManageService(ctx, system.ServiceDisable, "httpd", "httpd service"); err != nil && logger != nil {
 			logger.Warn(fmt.Sprintf("cleanup: failed to disable httpd service: %v", err))
 		}
@@ -150,12 +150,12 @@ func Dnsmasq(ctx context.Context, clusterName string, logger utils.Logger) error
 		logger.Warn(fmt.Sprintf("cleanup: failed to restore system resolver: %v", err))
 	}
 
-	if system.IsServiceActive("dnsmasq") {
+	if system.IsServiceActive(ctx, "dnsmasq") {
 		if err := system.ManageService(ctx, system.ServiceStop, "dnsmasq", "dnsmasq service"); err != nil && logger != nil {
 			logger.Warn(fmt.Sprintf("cleanup: failed to stop dnsmasq service: %v", err))
 		}
 	}
-	if system.IsServiceEnabled("dnsmasq") {
+	if system.IsServiceEnabled(ctx, "dnsmasq") {
 		if err := system.ManageService(ctx, system.ServiceDisable, "dnsmasq", "dnsmasq service"); err != nil && logger != nil {
 			logger.Warn(fmt.Sprintf("cleanup: failed to disable dnsmasq service: %v", err))
 		}

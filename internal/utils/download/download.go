@@ -119,6 +119,7 @@ func Download(ctx context.Context, opts Options) error {
 	pw := &progressWriter{
 		writer: outFile,
 		total:  resp.ContentLength,
+		isTTY:  stdoutIsTTY,
 	}
 
 	_, err = io.Copy(pw, resp.Body)
@@ -130,5 +131,9 @@ func Download(ctx context.Context, opts Options) error {
 	}
 	pw.finish()
 
-	return verifyDownloadedFile(opts.OutputPath, opts.ExpectedChecksum, opts.logger())
+	if err := verifyDownloadedFile(opts.OutputPath, opts.ExpectedChecksum, opts.logger()); err != nil {
+		_ = os.Remove(opts.OutputPath)
+		return err
+	}
+	return nil
 }
