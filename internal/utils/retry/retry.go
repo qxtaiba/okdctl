@@ -6,9 +6,9 @@ package retry
 import (
 	"context"
 	"time"
-)
 
-const maxBackoff = 5 * time.Minute
+	"github.com/cenkalti/backoff/v4"
+)
 
 // Do retries fn up to attempts times with exponential backoff starting at initialBackoff.
 // It returns nil on the first successful call, or the last error after all attempts are exhausted.
@@ -18,34 +18,14 @@ func Do(ctx context.Context, attempts int, initialBackoff time.Duration, fn func
 		attempts = 1
 	}
 
-	var lastErr error
-	backoff := initialBackoff
-	if backoff > maxBackoff {
-		backoff = maxBackoff
-	}
+	b := backoff.NewExponentialBackOff()
+	b.InitialInterval = initialBackoff
+	b.Multiplier = 2
+	b.MaxInterval = 5 * time.Minute
+	b.MaxElapsedTime = 0
 
-	for i := 0; i < attempts; i++ {
-		if err := ctx.Err(); err != nil {
-			return err
-		}
-
-		if err := fn(); err != nil {
-			lastErr = err
-			if i < attempts-1 {
-				select {
-				case <-ctx.Done():
-					return ctx.Err()
-				case <-time.After(backoff):
-				}
-				backoff *= 2
-				if backoff > maxBackoff {
-					backoff = maxBackoff
-				}
-			}
-			continue
-		}
-		return nil
-	}
-
-	return lastErr
+	return backoff.Retry(fn, backoff.WithContext(
+		backoff.WithMaxRetries(b, uint64(attempts-1)),
+		ctx,
+	))
 }
