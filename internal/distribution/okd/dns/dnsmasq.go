@@ -98,14 +98,14 @@ func DnsmasqConfigPath(name string) (string, error) {
 	return filepath.Join(dnsmasqConfigDir, fmt.Sprintf("%s.conf", name)), nil
 }
 
-func IsNetworkManagerActive() bool {
+func IsNetworkManagerActive(ctx context.Context) bool {
 	if runtime.GOOS != "linux" {
 		return false
 	}
 	if _, err := exec.LookPath("nmcli"); err != nil {
 		return false
 	}
-	return system.IsServiceActive(context.Background(), "NetworkManager")
+	return system.IsServiceActive(ctx, "NetworkManager")
 }
 
 func getActiveConnection(ctx context.Context) (string, error) {
@@ -135,7 +135,7 @@ func validateDNSAddresses(addresses []string) error {
 // ConfigureSystemResolver configures the system to use localhost (dnsmasq) for DNS resolution,
 // with the given fallbackDNS servers for queries dnsmasq cannot resolve.
 func ConfigureSystemResolver(ctx context.Context, fallbackDNS []string, logger utils.Logger) error {
-	if !IsNetworkManagerActive() {
+	if !IsNetworkManagerActive(ctx) {
 		logger.Warn("resolver: NetworkManager not active, skipping system resolver configuration")
 		return nil
 	}
@@ -168,7 +168,7 @@ func ConfigureSystemResolver(ctx context.Context, fallbackDNS []string, logger u
 }
 
 func RestoreSystemResolver(ctx context.Context, logger utils.Logger) error {
-	if !IsNetworkManagerActive() {
+	if !IsNetworkManagerActive(ctx) {
 		return nil
 	}
 

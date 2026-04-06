@@ -55,19 +55,19 @@ type Port struct {
 	Description string
 }
 
-func DetectBackend() Backend {
+func DetectBackend(ctx context.Context) Backend {
 	if runtime.GOOS != "linux" {
 		return None
 	}
 
 	if _, err := exec.LookPath("firewall-cmd"); err == nil {
-		if system.IsServiceActive(context.Background(), "firewalld") {
+		if system.IsServiceActive(ctx, "firewalld") {
 			return Firewalld
 		}
 	}
 
 	if _, err := exec.LookPath("ufw"); err == nil {
-		cmd := exec.Command("ufw", "status")
+		cmd := exec.CommandContext(ctx, "ufw", "status")
 		if output, err := cmd.Output(); err == nil {
 			if strings.Contains(string(output), "Status: active") {
 				return UFW
@@ -83,7 +83,7 @@ func DetectBackend() Backend {
 }
 
 func Configure(ctx context.Context, ports []Port, permanent bool, logger utils.Logger) error {
-	backend := DetectBackend()
+	backend := DetectBackend(ctx)
 
 	if backend == None {
 		logger.Warn("no active firewall detected, skipping firewall configuration")
@@ -165,7 +165,7 @@ func openPort(ctx context.Context, backend Backend, port Port, permanent bool, l
 }
 
 func RemoveRules(ctx context.Context, ports []Port, permanent bool, logger utils.Logger) error {
-	backend := DetectBackend()
+	backend := DetectBackend(ctx)
 
 	if backend == None {
 		return nil

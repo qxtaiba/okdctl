@@ -125,7 +125,9 @@ func Download(ctx context.Context, opts Options) error {
 	_, err = io.Copy(pw, resp.Body)
 	if err != nil {
 		pw.stop()
-		fmt.Print("\n")
+		if stdoutIsTTY {
+			fmt.Print("\n")
+		}
 		_ = os.Remove(opts.OutputPath)
 		return utils.WrapError("failed to write file", err)
 	}
