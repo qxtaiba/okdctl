@@ -1,4 +1,16 @@
 // Package proxmox implements the Proxmox VE provider for OKD deployment.
+//
+// Typical lifecycle:
+//
+//	p := New(opts...)      // create provider with logger, env, project root
+//	p.Connect(ctx, cfg)    // validate config and record host/node (no network I/O)
+//	p.Provision(ctx, cfg, provOpts)  // init + plan + apply terraform, return VM IPs
+//	p.Disconnect(ctx)      // release resources, nil out executor
+//
+// Connect does not verify Proxmox reachability because authentication is
+// handled entirely via environment variables forwarded to terraform
+// (PROXMOX_VE_ENDPOINT, PROXMOX_VE_API_TOKEN, etc.). The provider has no
+// direct Proxmox HTTP client.
 package proxmox
 
 import (
@@ -12,6 +24,10 @@ import (
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/netutil"
 )
+
+// planFileName is the terraform plan file name used for both plan output and apply input.
+// Terraform resolves relative paths from its working directory.
+const planFileName = "tfplan"
 
 type Provider struct {
 	connected     bool
@@ -53,6 +69,12 @@ func New(opts ...Option) *Provider {
 	return p
 }
 
+// Connect validates that the required Proxmox configuration is present and
+// records host/node for later use. It does NOT verify network connectivity
+// to the Proxmox host because authentication is handled via environment
+// variables (PROXMOX_VE_ENDPOINT, PROXMOX_VE_API_TOKEN) passed directly to
+// terraform — the Provider has no Proxmox HTTP client. Connectivity issues
+// surface during terraform plan/apply with clear provider-level errors.
 func (p *Provider) Connect(ctx context.Context, cfg *config.Config) error {
 	if cfg == nil {
 		return fmt.Errorf("configuration is required")
@@ -116,7 +138,7 @@ func (p *Provider) Provision(ctx context.Context, cfg *config.Config, opts Provi
 
 	p.logger.Info("terraform: creating execution plan")
 	planOpts := terraform.PlanOptions{
-		OutputPlanFile: "tfplan",
+		OutputPlanFile: planFileName,
 	}
 	if err := p.terraformExec.Plan(ctx, planOpts); err != nil {
 		return nil, utils.WrapError("terraform plan failed", err)
@@ -127,32 +149,30 @@ func (p *Provider) Provision(ctx context.Context, cfg *config.Config, opts Provi
 
 	p.logger.Info("terraform: applying infrastructure changes")
 	applyOpts := terraform.ApplyOptions{
-		PlanFile:    filepath.Join(p.terraformExec.GetWorkDir(), "tfplan"),
+		PlanFile:    filepath.Join(p.terraformExec.GetWorkDir(), planFileName),
 		AutoApprove: opts.AutoApprove,
 	}
 	if err := p.terraformExec.Apply(ctx, applyOpts); err != nil {
 		if errors.Is(ctx.Err(), context.Canceled) {
 			return nil, utils.WrapError("terraform apply interrupted", context.Canceled)
 		}
+		p.logger.Warn("terraform: apply failed; partial infrastructure may exist — run 'openshitctl destroy' to clean up")
 		return nil, utils.WrapError("terraform apply failed", err)
 	}
 
-	result, err := p.retrieveProvisionResult(ctx, cfg)
+	result, err := p.retrieveProvisionResult(cfg)
 	if err != nil {
-		p.logger.Warn(fmt.Sprintf("could not retrieve vm ips from terraform outputs: %v", err))
-		return &ProvisionResult{
-			VMs:             []VMStatus{},
-			ControlPlaneIPs: []string{},
-			WorkerIPs:       []string{},
-		}, nil
+		return nil, utils.WrapError("terraform apply succeeded but IP retrieval failed; run 'openshitctl destroy' to clean up", err)
 	}
 
-	if len(result.VMs) > 0 {
-		p.logger.Info(fmt.Sprintf("terraform: provisioned %d vms", len(result.VMs)))
-		for _, vm := range result.VMs {
-			if vm.IPAddress != "" {
-				p.logger.Info(fmt.Sprintf("terraform: %s: %s", vm.Name, vm.IPAddress))
-			}
+	if len(result.VMs) == 0 {
+		return nil, fmt.Errorf("terraform apply succeeded but no VMs were provisioned; check config")
+	}
+
+	p.logger.Info(fmt.Sprintf("terraform: provisioned %d vms", len(result.VMs)))
+	for _, vm := range result.VMs {
+		if vm.IPAddress != "" {
+			p.logger.Info(fmt.Sprintf("terraform: %s: %s", vm.Name, vm.IPAddress))
 		}
 	}
 
@@ -162,7 +182,7 @@ func (p *Provider) Provision(ctx context.Context, cfg *config.Config, opts Provi
 // retrieveProvisionResult derives VM IPs from static config rather than querying Proxmox,
 // because OKD assigns IPs via ignition files.
 // IP scheme: bootstrap = start IP, masters = start+1..N, workers = start+N+1 onwards.
-func (p *Provider) retrieveProvisionResult(_ context.Context, cfg *config.Config) (*ProvisionResult, error) {
+func (p *Provider) retrieveProvisionResult(cfg *config.Config) (*ProvisionResult, error) {
 	result := &ProvisionResult{
 		VMs:             []VMStatus{},
 		ControlPlaneIPs: []string{},

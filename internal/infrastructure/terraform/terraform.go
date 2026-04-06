@@ -53,13 +53,20 @@ func WithVerbose(v bool) Option {
 	}
 }
 
-// WithEnv propagates environment variables to all terraform subprocess calls.
+// WithEnv appends environment variables to be passed to all terraform subprocess calls.
+// At execution time they are appended after os.Environ(), so entries here override
+// identically-named variables from the inherited environment. Multiple calls to
+// WithEnv are cumulative; later entries for the same key win.
 func WithEnv(env []string) Option {
 	return func(e *Executor) {
 		e.exec.Env = append(e.exec.Env, env...)
 	}
 }
 
+// PlanOptions configures a terraform plan invocation.
+//
+// OutputPlanFile and Destroy are independent and may be combined (destroy plan
+// saved to a file). Vars and VarFile are additive — both can be set.
 type PlanOptions struct {
 	// VarFile overrides the default terraform.tfvars path.
 	VarFile        string
@@ -71,6 +78,12 @@ type PlanOptions struct {
 	Targets []string
 }
 
+// ApplyOptions configures a terraform apply invocation.
+//
+// PlanFile and Vars/VarFile are mutually exclusive: when PlanFile is set,
+// terraform ignores Vars, VarFile, and AutoApprove because the plan file
+// already encodes the full set of changes. If both are provided, PlanFile
+// takes precedence and the other fields are silently unused.
 type ApplyOptions struct {
 	// VarFile overrides the default terraform.tfvars path.
 	VarFile     string
@@ -143,16 +156,27 @@ func (t *Executor) Init(ctx context.Context) error {
 	lockFile := filepath.Join(t.WorkDir, ".terraform.lock.hcl")
 	providersDir := filepath.Join(terraformDir, "providers")
 
-	if system.DirExists(terraformDir) && system.FileExists(lockFile) && system.DirExists(providersDir) {
+	dirOK := system.DirExists(terraformDir)
+	lockOK := system.FileExists(lockFile)
+	provOK := system.DirExists(providersDir)
+
+	if dirOK && lockOK && provOK {
 		t.logger.Info("terraform: already initialized")
 		return nil
+	}
+
+	if dirOK || lockOK || provOK {
+		t.logger.Info("terraform: partial initialization detected, re-initializing")
+	} else {
+		t.logger.Info("terraform: initializing")
 	}
 
 	return t.run(ctx, "init")
 }
 
 // EnsureInitialized operates on an arbitrary directory, not necessarily the executor's WorkDir.
-func EnsureInitialized(ctx context.Context, workDir string, verbose bool) error {
+// Optional Option values (e.g. WithLogger) are forwarded to the temporary Executor.
+func EnsureInitialized(ctx context.Context, workDir string, verbose bool, opts ...Option) error {
 	terraformCache := filepath.Join(workDir, ".terraform")
 	lockFile := filepath.Join(workDir, ".terraform.lock.hcl")
 	providersDir := filepath.Join(terraformCache, "providers")
@@ -161,7 +185,7 @@ func EnsureInitialized(ctx context.Context, workDir string, verbose bool) error 
 		return nil
 	}
 
-	tempExec := New(workDir)
+	tempExec := New(workDir, opts...)
 	tempExec.Verbose = verbose
 	return tempExec.Init(ctx)
 }
