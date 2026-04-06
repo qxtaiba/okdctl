@@ -53,7 +53,7 @@ func (p *Phase) BuildHAProxyConfigData(cfg *config.Config) (templates.HAProxyCon
 }
 
 // writeHAProxyConfigToTemp writes the rendered haproxy.cfg contents to a
-// uniquely-named file under os.TempDir using system.AtomicWrite. The caller
+// PID-named file under os.TempDir using system.AtomicWrite. The caller
 // is responsible for removing the returned path. A user-writable temp file is
 // required because the final install step runs under sudo, so the write
 // itself cannot target /etc/haproxy directly here.

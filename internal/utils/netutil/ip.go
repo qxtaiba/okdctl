@@ -20,12 +20,12 @@ func CIDRToNetmask(cidr string) (string, error) {
 	return fmt.Sprintf("%d.%d.%d.%d", mask[0], mask[1], mask[2], mask[3]), nil
 }
 
-// ValidateIPRangeWithinSubnet ensures that startIP + count - 1 does not
+// ValidateIPRangeWithin24 ensures that startIP + count - 1 does not
 // overflow the /24 containing startIP, i.e. that the last octet of the final
 // address stays <= 255. This is the shared precondition for any code that
 // derives a sequence of node IPs from a start address (setup/nodes.go,
 // dns/dns.go, wizard validators). Returns nil if the range fits.
-func ValidateIPRangeWithinSubnet(startIP string, count int) error {
+func ValidateIPRangeWithin24(startIP string, count int) error {
 	if count <= 0 {
 		return fmt.Errorf("count must be positive: %d", count)
 	}
