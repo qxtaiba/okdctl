@@ -191,7 +191,7 @@ func (p *Provider) retrieveProvisionResult(cfg *config.Config) (*ProvisionResult
 
 	startIP := cfg.Networking.StaticIP.Start
 	if startIP == "" {
-		return result, nil
+		return nil, fmt.Errorf("static IP start address is required for OKD deployments")
 	}
 
 	baseIP, lastOctet, err := netutil.SplitIPv4(startIP)
