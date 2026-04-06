@@ -71,9 +71,7 @@ func (s *SecretStore) Install(ctx context.Context, env *addon.Environment) error
 		return fmt.Errorf("sops-encrypted secret files detected but sops is not installed — install with: brew install sops")
 	}
 
-	if err := retry.Do(ctx, 3, 5*time.Second, func() error {
-		return addon.EnsureNamespace(ctx, env, defaultNamespace)
-	}); err != nil {
+	if err := addon.EnsureNamespace(ctx, env, defaultNamespace); err != nil {
 		return err
 	}
 
@@ -255,8 +253,12 @@ func (s *SecretStore) createCredentialsSecret(ctx context.Context, env *addon.En
 	if err != nil {
 		return utils.WrapError("failed to apply 1password credentials secret", err)
 	}
-	if result.ExitCode != 0 {
-		return fmt.Errorf("failed to apply 1password credentials secret: %s", result.Stderr)
+	if result == nil || result.ExitCode != 0 {
+		stderr := ""
+		if result != nil {
+			stderr = result.Stderr
+		}
+		return fmt.Errorf("failed to apply 1password credentials secret: %s", stderr)
 	}
 
 	env.Logger.Info("secretstore: credentials secret applied")
@@ -275,8 +277,12 @@ func (s *SecretStore) createTokenSecret(ctx context.Context, env *addon.Environm
 	if err != nil {
 		return utils.WrapError("failed to apply 1password token secret", err)
 	}
-	if result.ExitCode != 0 {
-		return fmt.Errorf("failed to apply 1password token secret: %s", result.Stderr)
+	if result == nil || result.ExitCode != 0 {
+		stderr := ""
+		if result != nil {
+			stderr = result.Stderr
+		}
+		return fmt.Errorf("failed to apply 1password token secret: %s", stderr)
 	}
 
 	env.Logger.Info("secretstore: token secret applied")

@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -25,6 +26,9 @@ const (
 	defaultControllerTimeout  = 5 * time.Minute
 	defaultGitRepoSyncTimeout = 3 * time.Minute
 )
+
+// validSyncPath matches safe sync paths: alphanumeric, slashes, underscores, dots, and hyphens.
+var validSyncPath = regexp.MustCompile(`^[a-zA-Z0-9/_.\-]+$`)
 
 func init() {
 	if err := addon.Register(&Flux{}); err != nil {
@@ -51,10 +55,7 @@ func (f *Flux) Install(ctx context.Context, env *addon.Environment) error {
 		return fmt.Errorf("helm is required to install Flux")
 	}
 
-	// Create namespace with retry (transient API errors during cluster bootstrap)
-	if err := retry.Do(ctx, 3, 5*time.Second, func() error {
-		return addon.EnsureNamespace(ctx, env, "flux-system")
-	}); err != nil {
+	if err := addon.EnsureNamespace(ctx, env, "flux-system"); err != nil {
 		return err
 	}
 
@@ -99,8 +100,12 @@ func (f *Flux) installOperator(ctx context.Context, env *addon.Environment) erro
 		if err != nil {
 			return utils.WrapError("failed to install flux operator", err)
 		}
-		if result.ExitCode != 0 {
-			return fmt.Errorf("failed to install flux operator: %s", result.Stderr)
+		if result == nil || result.ExitCode != 0 {
+			stderr := ""
+			if result != nil {
+				stderr = result.Stderr
+			}
+			return fmt.Errorf("failed to install flux operator: %s", stderr)
 		}
 		return nil
 	}); err != nil {
@@ -146,8 +151,12 @@ func (f *Flux) installInstance(ctx context.Context, env *addon.Environment) erro
 		if err != nil {
 			return utils.WrapError("failed to install flux instance", err)
 		}
-		if r.ExitCode != 0 {
-			return fmt.Errorf("failed to install flux instance: %s", r.Stderr)
+		if r == nil || r.ExitCode != 0 {
+			stderr := ""
+			if r != nil {
+				stderr = r.Stderr
+			}
+			return fmt.Errorf("failed to install flux instance: %s", stderr)
 		}
 		return nil
 	}); err != nil {
@@ -189,7 +198,7 @@ func (f *Flux) Verify(ctx context.Context, env *addon.Environment) error {
 		if syncStatus == "True" {
 			env.Logger.Info("flux: git repository synced")
 		} else {
-			env.Logger.Warn("flux: git repository not yet synced (status: " + syncStatus + ")")
+			env.Logger.Warn(fmt.Sprintf("flux: git repository not yet synced (status: %s)", syncStatus))
 		}
 	}
 
@@ -245,6 +254,9 @@ func (f *Flux) ValidateSettings(settings map[string]string) []string {
 	}
 	if branch := settings["branch"]; branch != "" && strings.ContainsAny(branch, " \t") {
 		errs = append(errs, "branch name cannot contain spaces")
+	}
+	if p := settings["path"]; p != "" && !validSyncPath.MatchString(p) {
+		errs = append(errs, "path contains invalid characters (allowed: alphanumeric, /, _, ., -)")
 	}
 	return errs
 }
@@ -366,8 +378,12 @@ func (f *Flux) createDeployKeySecret(ctx context.Context, env *addon.Environment
 	if err != nil {
 		return utils.WrapError("failed to apply deploy key secret", err)
 	}
-	if result.ExitCode != 0 {
-		return fmt.Errorf("failed to apply deploy key secret: %s", result.Stderr)
+	if result == nil || result.ExitCode != 0 {
+		stderr := ""
+		if result != nil {
+			stderr = result.Stderr
+		}
+		return fmt.Errorf("failed to apply deploy key secret: %s", stderr)
 	}
 
 	env.Logger.Info("flux: deploy key secret applied")
