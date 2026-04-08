@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/netip"
 	"strings"
 )
 
@@ -45,32 +46,23 @@ func CalculateVMIP(startIP string, index int) (string, error) {
 		return "", fmt.Errorf("index cannot be negative: %d", index)
 	}
 
-	ip := net.ParseIP(startIP)
-	if ip == nil {
-		return "", fmt.Errorf("invalid starting IP address: %s", startIP)
+	addr, err := netip.ParseAddr(startIP)
+	if err != nil || !addr.Is4() {
+		return "", fmt.Errorf("invalid IPv4 address: %s", startIP)
 	}
 
-	ip = ip.To4()
-	if ip == nil {
-		return "", fmt.Errorf("only IPv4 addresses are supported: %s", startIP)
-	}
-
-	ipInt := uint32(ip[0])<<24 | uint32(ip[1])<<16 | uint32(ip[2])<<8 | uint32(ip[3])
+	raw := addr.As4()
+	ipInt := uint32(raw[0])<<24 | uint32(raw[1])<<16 | uint32(raw[2])<<8 | uint32(raw[3])
 
 	if uint64(ipInt)+uint64(index) > uint64(^uint32(0)) {
 		return "", fmt.Errorf("IP calculation would overflow: %s + %d", startIP, index)
 	}
 
-	newIPInt := ipInt + uint32(index)
-
-	newIP := net.IPv4(
-		byte(newIPInt>>24),
-		byte(newIPInt>>16),
-		byte(newIPInt>>8),
-		byte(newIPInt),
-	)
-
-	return newIP.String(), nil
+	newInt := ipInt + uint32(index)
+	result := netip.AddrFrom4([4]byte{
+		byte(newInt >> 24), byte(newInt >> 16), byte(newInt >> 8), byte(newInt),
+	})
+	return result.String(), nil
 }
 
 func DeriveVIPFromStaticIP(staticIPStart string) (string, error) {
@@ -129,49 +121,13 @@ func ParseIPPool(pool string) (start, end string, err error) {
 }
 
 func CIDRsOverlap(cidr1, cidr2 string) (bool, error) {
-	_, net1, err := net.ParseCIDR(cidr1)
+	p1, err := netip.ParsePrefix(cidr1)
 	if err != nil {
 		return false, fmt.Errorf("invalid CIDR %q: %w", cidr1, err)
 	}
-	_, net2, err := net.ParseCIDR(cidr2)
+	p2, err := netip.ParsePrefix(cidr2)
 	if err != nil {
 		return false, fmt.Errorf("invalid CIDR %q: %w", cidr2, err)
 	}
-
-	start1, end1 := cidrRange(net1)
-	start2, end2 := cidrRange(net2)
-
-	return ipLessOrEqual(start1, end2) && ipLessOrEqual(start2, end1), nil
-}
-
-func cidrRange(network *net.IPNet) (net.IP, net.IP) {
-	first := network.IP.To4()
-	if first == nil {
-		first = network.IP
-	}
-
-	mask := network.Mask
-	last := make(net.IP, len(first))
-	for i := range first {
-		last[i] = first[i] | ^mask[i]
-	}
-
-	return first, last
-}
-
-func ipLessOrEqual(a, b net.IP) bool {
-	a = a.To4()
-	b = b.To4()
-	if a == nil || b == nil {
-		return false
-	}
-	for i := 0; i < 4; i++ {
-		if a[i] < b[i] {
-			return true
-		}
-		if a[i] > b[i] {
-			return false
-		}
-	}
-	return true
+	return p1.Overlaps(p2), nil
 }
