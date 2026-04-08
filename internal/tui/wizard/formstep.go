@@ -184,10 +184,6 @@ func (s *MultiFormStep) Update(msg tea.Msg) (WizardStep, tea.Cmd) {
 			s.sections[s.currentSection].Group, cmd = group.Update(msg)
 			return s, tea.Batch(cmd, s.emitFocusChanged())
 
-		default:
-			var cmd tea.Cmd
-			s.sections[s.currentSection].Group, cmd = group.Update(msg)
-			return s, cmd
 		}
 	}
 
