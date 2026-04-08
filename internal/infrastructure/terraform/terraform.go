@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 
 	"github.com/qxtaiba/okd-proxmox-cli/internal/executor"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
@@ -197,7 +197,7 @@ func (t *Executor) buildVarArgs(varFile string, vars map[string]string) []string
 		for k := range vars {
 			keys = append(keys, k)
 		}
-		sort.Strings(keys)
+		slices.Sort(keys)
 
 		for _, k := range keys {
 			args = append(args, "-var", fmt.Sprintf("%s=%s", k, vars[k]))

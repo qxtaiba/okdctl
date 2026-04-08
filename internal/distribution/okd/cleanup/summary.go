@@ -91,11 +91,15 @@ func printSummary(opts Options, logger utils.Logger) {
 }
 
 func collectDirStats(path string) (count int, totalSize int64) {
-	_ = filepath.Walk(path, func(_ string, info os.FileInfo, err error) error {
+	_ = filepath.WalkDir(path, func(_ string, d os.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
-		if info.IsDir() {
+		if d.IsDir() {
+			return nil
+		}
+		info, err := d.Info()
+		if err != nil {
 			return nil
 		}
 		count++

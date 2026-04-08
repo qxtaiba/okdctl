@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/qxtaiba/okd-proxmox-cli/internal/config"
@@ -50,7 +50,7 @@ func (p *Phase) findOrDownloadFCOSISO(ctx context.Context, cfg *config.Config, o
 			continue
 		}
 		if len(matches) > 0 {
-			sort.Strings(matches)
+			slices.Sort(matches)
 			isoPath := matches[len(matches)-1] // newest by lexicographic version
 			p.Log.Info(fmt.Sprintf("coreos: found existing iso at %s", filepath.Base(isoPath)))
 			return isoPath, nil
@@ -64,7 +64,7 @@ func (p *Phase) findOrDownloadFCOSISO(ctx context.Context, cfg *config.Config, o
 			continue
 		}
 		if len(matches) > 0 {
-			sort.Strings(matches)
+			slices.Sort(matches)
 			isoPath := matches[len(matches)-1]
 			p.Log.Info(fmt.Sprintf("coreos: found existing iso at %s", filepath.Base(isoPath)))
 			return isoPath, nil

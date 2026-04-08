@@ -12,7 +12,7 @@ import (
 
 func buildISOStrings(isoStorage string, role string, count int) []string {
 	isos := make([]string, count)
-	for i := 0; i < count; i++ {
+	for i := range count {
 		isos[i] = fmt.Sprintf(`"%s:iso/%s%d.iso"`, isoStorage, role, i)
 	}
 	return isos
@@ -20,7 +20,7 @@ func buildISOStrings(isoStorage string, role string, count int) []string {
 
 func buildNodeNames(clusterName, role string, count int) []string {
 	names := make([]string, count)
-	for i := 0; i < count; i++ {
+	for i := range count {
 		names[i] = fmt.Sprintf(`"%s-%s%d"`, clusterName, role, i)
 	}
 	return names

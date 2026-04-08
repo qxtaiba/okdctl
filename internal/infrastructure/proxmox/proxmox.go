@@ -214,7 +214,7 @@ func (p *Provider) retrieveProvisionResult(cfg *config.Config) (*ProvisionResult
 		Status:    string(StateRunning),
 	})
 
-	for i := 0; i < cfg.Topology.ControlPlane.Count; i++ {
+	for i := range cfg.Topology.ControlPlane.Count {
 		ip := fmt.Sprintf("%s.%d", baseIP, lastOctet+1+i)
 		result.ControlPlaneIPs = append(result.ControlPlaneIPs, ip)
 		result.VMs = append(result.VMs, VMStatus{
@@ -226,7 +226,7 @@ func (p *Provider) retrieveProvisionResult(cfg *config.Config) (*ProvisionResult
 	}
 
 	workerOffset := 1 + cfg.Topology.ControlPlane.Count
-	for i := 0; i < cfg.Topology.Workers.Count; i++ {
+	for i := range cfg.Topology.Workers.Count {
 		ip := fmt.Sprintf("%s.%d", baseIP, lastOctet+workerOffset+i)
 		result.WorkerIPs = append(result.WorkerIPs, ip)
 		result.VMs = append(result.VMs, VMStatus{

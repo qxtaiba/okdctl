@@ -19,9 +19,9 @@ const (
 type progressWriter struct {
 	writer      Writer
 	total       int64
-	written     int64        // accessed atomically
-	lastPercent int32        // accessed atomically
-	stopped     int32        // accessed atomically - stops all output when set
+	written     atomic.Int64
+	lastPercent atomic.Int32
+	stopped     atomic.Int32
 	lastUpdate  atomic.Value // stores time.Time atomically
 	mu          sync.Mutex   // protects printProgress
 	isTTY       bool
@@ -34,11 +34,11 @@ type Writer interface {
 }
 
 func (pw *progressWriter) stop() {
-	atomic.StoreInt32(&pw.stopped, 1)
+	pw.stopped.Store(1)
 }
 
 func (pw *progressWriter) isStopped() bool {
-	return atomic.LoadInt32(&pw.stopped) != 0
+	return pw.stopped.Load() != 0
 }
 
 func (pw *progressWriter) Write(p []byte) (int, error) {
@@ -47,16 +47,16 @@ func (pw *progressWriter) Write(p []byte) (int, error) {
 		return n, err
 	}
 
-	atomic.AddInt64(&pw.written, int64(n))
+	pw.written.Add(int64(n))
 
 	if pw.total > 0 && !pw.isStopped() {
 		lastUpdate := pw.lastUpdate.Load()
 		if lastUpdate == nil || time.Since(lastUpdate.(time.Time)) > ProgressUpdateInterval {
 			pw.lastUpdate.Store(time.Now())
-			written := atomic.LoadInt64(&pw.written)
+			written := pw.written.Load()
 			percent := int32(float64(written) / float64(pw.total) * 100)
-			if percent != atomic.LoadInt32(&pw.lastPercent) {
-				atomic.StoreInt32(&pw.lastPercent, percent)
+			if percent != pw.lastPercent.Load() {
+				pw.lastPercent.Store(percent)
 				pw.mu.Lock()
 				pw.printProgress()
 				pw.mu.Unlock()
@@ -72,11 +72,11 @@ func (pw *progressWriter) printProgress() {
 		return
 	}
 
-	written := atomic.LoadInt64(&pw.written)
+	written := pw.written.Load()
 	writtenMB := float64(written) / 1024 / 1024
 	totalMB := float64(pw.total) / 1024 / 1024
 
-	percent := atomic.LoadInt32(&pw.lastPercent)
+	percent := pw.lastPercent.Load()
 	filled := int(float64(percent) / 100 * float64(ProgressBarWidth))
 	bar := strings.Repeat("=", filled) + strings.Repeat(" ", ProgressBarWidth-filled)
 
@@ -85,7 +85,7 @@ func (pw *progressWriter) printProgress() {
 
 func (pw *progressWriter) finish() {
 	if pw.total > 0 && !pw.isStopped() {
-		atomic.StoreInt32(&pw.lastPercent, 100)
+		pw.lastPercent.Store(100)
 		pw.mu.Lock()
 		pw.printProgress()
 		pw.mu.Unlock()

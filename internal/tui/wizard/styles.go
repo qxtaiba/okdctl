@@ -184,7 +184,7 @@ var (
 
 func RenderStepProgress(current, total int) string {
 	var parts []string
-	for i := 0; i < total; i++ {
+	for i := range total {
 		if i < current-1 {
 			parts = append(parts, StepDotCompletedStyle.Render("●"))
 		} else if i == current-1 {

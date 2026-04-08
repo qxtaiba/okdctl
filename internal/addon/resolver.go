@@ -2,7 +2,8 @@ package addon
 
 import (
 	"fmt"
-	"sort"
+	"slices"
+	"strings"
 )
 
 // Resolve returns addons in dependency-safe installation order using Kahn's algorithm.
@@ -69,12 +70,10 @@ func Resolve(addons []Addon) ([]Addon, error) {
 }
 
 func sortByPriority(addons []Addon) {
-	sort.Slice(addons, func(i, j int) bool {
-		pi := addons[i].Info().Priority
-		pj := addons[j].Info().Priority
-		if pi != pj {
-			return pi < pj
+	slices.SortFunc(addons, func(a, b Addon) int {
+		if a.Info().Priority != b.Info().Priority {
+			return a.Info().Priority - b.Info().Priority
 		}
-		return addons[i].Info().Name < addons[j].Info().Name
+		return strings.Compare(a.Info().Name, b.Info().Name)
 	})
 }

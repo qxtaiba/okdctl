@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"sort"
+	"slices"
 	"strings"
 )
 
@@ -156,16 +156,14 @@ func sortAndClassifySeries(seriesMap map[string]*OKDReleaseSeries) []OKDReleaseS
 		// published_at timestamp (newest first), and finally to the raw tag
 		// string, so the ordering is stable regardless of the input order
 		// returned by the GitHub API.
-		sort.Slice(series.Versions, func(versionIdxA, versionIdxB int) bool {
-			a := series.Versions[versionIdxA]
-			b := series.Versions[versionIdxB]
+		slices.SortFunc(series.Versions, func(a, b OKDVersion) int {
 			if cmp := compareVersions(a.Version, b.Version); cmp != 0 {
-				return cmp > 0
+				return -cmp // descending
 			}
 			if !a.ReleaseDate.Equal(b.ReleaseDate) {
-				return a.ReleaseDate.After(b.ReleaseDate)
+				return b.ReleaseDate.Compare(a.ReleaseDate)
 			}
-			return a.Version > b.Version
+			return strings.Compare(b.Version, a.Version)
 		})
 
 		foundLatestStable := false
@@ -188,11 +186,11 @@ func sortAndClassifySeries(seriesMap map[string]*OKDReleaseSeries) []OKDReleaseS
 		result = append(result, *series)
 	}
 
-	sort.Slice(result, func(seriesIdxA, seriesIdxB int) bool {
-		if result[seriesIdxA].Major != result[seriesIdxB].Major {
-			return result[seriesIdxA].Major > result[seriesIdxB].Major
+	slices.SortFunc(result, func(a, b OKDReleaseSeries) int {
+		if a.Major != b.Major {
+			return b.Major - a.Major // descending
 		}
-		return result[seriesIdxA].Minor > result[seriesIdxB].Minor
+		return b.Minor - a.Minor // descending
 	})
 
 	latestMinor := 0

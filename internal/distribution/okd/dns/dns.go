@@ -68,7 +68,7 @@ func BuildConfigData(cfg *config.Config) (templates.DNSConfigData, error) {
 		IP:   bootstrapIP,
 	}
 
-	for i := 0; i < cfg.Topology.ControlPlane.Count; i++ {
+	for i := range cfg.Topology.ControlPlane.Count {
 		ip, err := netutil.CalculateVMIP(staticIPStart, i+1)
 		if err != nil {
 			return templates.DNSConfigData{}, fmt.Errorf("failed to calculate master%d IP: %w", i, err)
@@ -80,7 +80,7 @@ func BuildConfigData(cfg *config.Config) (templates.DNSConfigData, error) {
 	}
 
 	workerStartIndex := cfg.Topology.ControlPlane.Count + 1
-	for i := 0; i < cfg.Topology.Workers.Count; i++ {
+	for i := range cfg.Topology.Workers.Count {
 		ip, err := netutil.CalculateVMIP(staticIPStart, workerStartIndex+i)
 		if err != nil {
 			return templates.DNSConfigData{}, fmt.Errorf("failed to calculate worker%d IP: %w", i, err)

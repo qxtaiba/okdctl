@@ -195,7 +195,7 @@ func (s *MultiFormStep) Update(msg tea.Msg) (WizardStep, tea.Cmd) {
 func (s *MultiFormStep) emitFocusChanged() tea.Cmd {
 	globalIndex := 0
 
-	for i := 0; i < s.currentSection; i++ {
+	for i := range s.currentSection {
 		if s.sections[i].Group == nil {
 			continue
 		}

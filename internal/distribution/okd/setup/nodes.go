@@ -28,7 +28,7 @@ func (p *Phase) BuildNodeList(cfg *config.Config) ([]NodeInfo, error) {
 		IP:   bootstrapIP,
 	})
 
-	for i := 0; i < cfg.Topology.ControlPlane.Count; i++ {
+	for i := range cfg.Topology.ControlPlane.Count {
 		newOctet := lastOctet + 1 + i
 		ip := fmt.Sprintf("%s.%d", baseIP, newOctet)
 		nodes = append(nodes, NodeInfo{
@@ -39,7 +39,7 @@ func (p *Phase) BuildNodeList(cfg *config.Config) ([]NodeInfo, error) {
 	}
 
 	workerOffset := 1 + cfg.Topology.ControlPlane.Count
-	for i := 0; i < cfg.Topology.Workers.Count; i++ {
+	for i := range cfg.Topology.Workers.Count {
 		newOctet := lastOctet + workerOffset + i
 		ip := fmt.Sprintf("%s.%d", baseIP, newOctet)
 		nodes = append(nodes, NodeInfo{
