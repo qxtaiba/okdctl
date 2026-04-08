@@ -273,9 +273,6 @@ func (f *Flux) waitForControllers(ctx context.Context, env *addon.Environment) e
 	timeout := getTimeout(env.AddonConfig.Settings, "controller_timeout", defaultControllerTimeout)
 
 	if err := system.WaitForWithTimeout(ctx, "flux", "controllers", func() bool {
-		if ctx.Err() != nil {
-			return false
-		}
 		result, _ := env.Exec.Run(ctx, "oc", "get", "deployments",
 			"-n", "flux-system",
 			"-l", "app.kubernetes.io/part-of=flux",
@@ -312,9 +309,6 @@ func (f *Flux) waitForGitSync(ctx context.Context, env *addon.Environment) error
 	timeout := getTimeout(env.AddonConfig.Settings, "git_sync_timeout", defaultGitRepoSyncTimeout)
 
 	if err := system.WaitForWithTimeout(ctx, "flux", "git sync", func() bool {
-		if ctx.Err() != nil {
-			return false
-		}
 		result, _ := env.Exec.Run(ctx, "oc", "get", "gitrepository",
 			"-n", "flux-system",
 			"-o", "jsonpath={.items[0].status.conditions[?(@.type==\"Ready\")].status}")

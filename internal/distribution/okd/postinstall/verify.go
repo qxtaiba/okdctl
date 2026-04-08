@@ -98,9 +98,6 @@ func (p *Phase) waitForKubeVIPDaemonSet(ctx context.Context, opts Options) error
 	}
 
 	if err := system.WaitForWithTimeout(ctx, "kubevip", "daemonset", func() bool {
-		if ctx.Err() != nil {
-			return false
-		}
 		result, _ := p.Exec.Run(ctx, "oc", "get", "daemonset", "-n", "kube-system", "kube-vip",
 			"-o", "jsonpath={.status.numberReady}")
 		if result == nil || result.ExitCode != 0 {
@@ -128,9 +125,6 @@ func (p *Phase) waitForKubeVIPPing(ctx context.Context, vip string, opts Options
 	}
 
 	if err := system.WaitForWithTimeout(ctx, "kubevip", "ping", func() bool {
-		if ctx.Err() != nil {
-			return false
-		}
 		result, _ := p.Exec.Run(ctx, "ping", "-c", "1", "-W", "2", vip)
 		return result != nil && result.ExitCode == 0
 	}, timeout, p.Log); err != nil {

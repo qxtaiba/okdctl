@@ -571,9 +571,6 @@ func (p *Phase) waitForRouterGone(ctx context.Context, icName string, timeout ti
 	deployName := fmt.Sprintf("router-%s", icName)
 
 	return system.WaitFor(ctx, "ingress", deployName+" termination", func() bool {
-		if ctx.Err() != nil {
-			return false
-		}
 		result, _ := p.Exec.Run(ctx, "oc", "get", "deployment", deployName,
 			"-n", "openshift-ingress", "--no-headers", "--ignore-not-found")
 		if result == nil {
@@ -597,9 +594,6 @@ func (p *Phase) waitForServiceLB(ctx context.Context, svcName string, opts Optio
 
 	var ip string
 	if err := system.WaitForWithTimeout(ctx, "ingress", svcName+" lb", func() bool {
-		if ctx.Err() != nil {
-			return false
-		}
 		result, _ := p.Exec.Run(ctx, "oc", "get", "svc", svcName,
 			"-n", "openshift-ingress",
 			"-o", "jsonpath={.status.loadBalancer.ingress[0].ip}")
