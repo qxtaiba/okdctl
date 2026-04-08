@@ -126,6 +126,18 @@ func NewResourcesStep() (*wizard.DataDrivenStep, *ResourcesStepState) {
 	return step, state
 }
 
+var resourceSummaryStyles = struct {
+	wrapper lipgloss.Style
+	title   lipgloss.Style
+	value   lipgloss.Style
+	sep     string
+}{
+	wrapper: lipgloss.NewStyle().Padding(1, 2),
+	title:   lipgloss.NewStyle().Foreground(tui.ColorSlate400).Bold(true),
+	value:   lipgloss.NewStyle().Foreground(tui.ColorPrimary).Bold(true),
+	sep:     lipgloss.NewStyle().Foreground(tui.ColorSlate600).Render("  ·  "),
+}
+
 func renderResourceSummary(step *wizard.DataDrivenStep, state *ResourcesStepState, width int) string {
 	cpCount := 3
 	workerCount := 3
@@ -147,8 +159,6 @@ func renderResourceSummary(step *wizard.DataDrivenStep, state *ResourcesStepStat
 	totalOSDisk := (cpDisk * cpCount) + (workerDisk * workerCount)
 	totalCephDisk := cephDisk * workerCount
 
-	wrapperStyle := lipgloss.NewStyle().Padding(1, 2)
-
 	boxContentWidth := width - 8
 	if boxContentWidth < 30 {
 		boxContentWidth = 30
@@ -160,10 +170,7 @@ func renderResourceSummary(step *wizard.DataDrivenStep, state *ResourcesStepStat
 		Padding(0, 1).
 		Width(boxContentWidth)
 
-	titleStyle := lipgloss.NewStyle().Foreground(tui.ColorSlate400).Bold(true)
-	valueStyle := lipgloss.NewStyle().Foreground(tui.ColorPrimary).Bold(true)
-	sepStyle := lipgloss.NewStyle().Foreground(tui.ColorSlate600)
-	sep := sepStyle.Render("  ·  ")
+	sep := resourceSummaryStyles.sep
 
 	var storageStr string
 	if totalCephDisk >= 1000 {
@@ -172,11 +179,11 @@ func renderResourceSummary(step *wizard.DataDrivenStep, state *ResourcesStepStat
 		storageStr = fmt.Sprintf("%d gb storage", totalCephDisk)
 	}
 
-	summary := titleStyle.Render("total resources required") + "\n\n" +
-		valueStyle.Render(fmt.Sprintf("%d vcpus", totalCPU)) + sep +
-		valueStyle.Render(fmt.Sprintf("%d gb ram", totalMem/1024)) + sep +
-		valueStyle.Render(fmt.Sprintf("%d gb os", totalOSDisk)) + sep +
-		valueStyle.Render(storageStr)
+	summary := resourceSummaryStyles.title.Render("total resources required") + "\n\n" +
+		resourceSummaryStyles.value.Render(fmt.Sprintf("%d vcpus", totalCPU)) + sep +
+		resourceSummaryStyles.value.Render(fmt.Sprintf("%d gb ram", totalMem/1024)) + sep +
+		resourceSummaryStyles.value.Render(fmt.Sprintf("%d gb os", totalOSDisk)) + sep +
+		resourceSummaryStyles.value.Render(storageStr)
 
-	return wrapperStyle.Render(boxStyle.Render(summary))
+	return resourceSummaryStyles.wrapper.Render(boxStyle.Render(summary))
 }

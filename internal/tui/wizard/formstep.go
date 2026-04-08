@@ -229,6 +229,42 @@ func (s *MultiFormStep) emitFocusChanged() tea.Cmd {
 	}
 }
 
+// formViewStyles holds pre-computed lipgloss styles for MultiFormStep.View.
+// Caching is safe because tui.Color* values are set once during package init
+// and never change.
+var formViewStyles = struct {
+	sectionHeader    lipgloss.Style
+	activeSection    lipgloss.Style
+	inactiveSection  lipgloss.Style
+	completedRender  string
+	activeRender     string
+	pendingRender    string
+	note             lipgloss.Style
+}{
+	sectionHeader: lipgloss.NewStyle().
+		Foreground(tui.ColorCyan500).
+		Bold(true),
+	activeSection: lipgloss.NewStyle().
+		Padding(1, 2),
+	inactiveSection: lipgloss.NewStyle().
+		Padding(1, 2),
+	completedRender: lipgloss.NewStyle().
+		Foreground(tui.ColorSuccess).
+		Bold(true).
+		Render("✓"),
+	activeRender: lipgloss.NewStyle().
+		Foreground(tui.ColorPrimary).
+		Bold(true).
+		Render("●"),
+	pendingRender: lipgloss.NewStyle().
+		Foreground(tui.ColorSlate600).
+		Render("○"),
+	note: lipgloss.NewStyle().
+		Foreground(tui.ColorSlate500).
+		Italic(true).
+		PaddingLeft(2),
+}
+
 func (s *MultiFormStep) View(width, height int) string {
 	s.SetSize(width, height)
 
@@ -238,30 +274,6 @@ func (s *MultiFormStep) View(width, height int) string {
 	}
 
 	var content strings.Builder
-
-	sectionHeader := lipgloss.NewStyle().
-		Foreground(tui.ColorCyan500).
-		Bold(true)
-
-	activeSectionStyle := lipgloss.NewStyle().
-		Padding(1, 2)
-
-	inactiveSectionStyle := lipgloss.NewStyle().
-		Padding(1, 2)
-
-	completedIndicator := lipgloss.NewStyle().
-		Foreground(tui.ColorSuccess).
-		Bold(true).
-		Render("✓")
-
-	activeIndicator := lipgloss.NewStyle().
-		Foreground(tui.ColorPrimary).
-		Bold(true).
-		Render("●")
-
-	pendingIndicator := lipgloss.NewStyle().
-		Foreground(tui.ColorSlate600).
-		Render("○")
 
 	for i, section := range s.sections {
 		if section.Group == nil {
@@ -273,24 +285,20 @@ func (s *MultiFormStep) View(width, height int) string {
 		var indicator string
 
 		if i == s.currentSection {
-			style = activeSectionStyle
-			indicator = activeIndicator
+			style = formViewStyles.activeSection
+			indicator = formViewStyles.activeRender
 		} else if section.IsComplete() {
-			style = inactiveSectionStyle
-			indicator = completedIndicator
+			style = formViewStyles.inactiveSection
+			indicator = formViewStyles.completedRender
 		} else {
-			style = inactiveSectionStyle
-			indicator = pendingIndicator
+			style = formViewStyles.inactiveSection
+			indicator = formViewStyles.pendingRender
 		}
 
-		sectionTitle := indicator + " " + sectionHeader.Render(strings.ToLower(section.Title))
+		sectionTitle := indicator + " " + formViewStyles.sectionHeader.Render(strings.ToLower(section.Title))
 		var sectionContent string
 		if section.Note != "" {
-			noteStyle := lipgloss.NewStyle().
-				Foreground(tui.ColorSlate500).
-				Italic(true).
-				PaddingLeft(2)
-			sectionContent = sectionTitle + "\n" + noteStyle.Render(section.Note) + "\n\n" + section.Group.ViewCompact("")
+			sectionContent = sectionTitle + "\n" + formViewStyles.note.Render(section.Note) + "\n\n" + section.Group.ViewCompact("")
 		} else {
 			sectionContent = sectionTitle + "\n\n" + section.Group.ViewCompact("")
 		}
