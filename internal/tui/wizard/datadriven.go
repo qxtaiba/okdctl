@@ -231,22 +231,8 @@ func (s *DataDrivenStep) ValueInt(key string, fallback int) int {
 	return i
 }
 
-func (s *DataDrivenStep) ValueBool(key string) bool {
-	v := strings.ToLower(strings.TrimSpace(s.Value(key)))
-	return v == "yes" || v == "true" || v == "1" || v == "y"
-}
 
-func (s *DataDrivenStep) SetValueInt(key string, value int) {
-	s.SetValue(key, strconv.Itoa(value))
-}
 
-func (s *DataDrivenStep) SetValueBool(key string, value bool) {
-	if value {
-		s.SetValue(key, "yes")
-	} else {
-		s.SetValue(key, "no")
-	}
-}
 
 func (s *DataDrivenStep) WithApplyFunc(fn func(step *DataDrivenStep, cfg *config.Config) error) *DataDrivenStep {
 	s.definition.Apply = fn
