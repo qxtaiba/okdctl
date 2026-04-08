@@ -14,26 +14,37 @@ import (
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
 )
 
+// stopAndDisableService stops and disables a systemd service, logging warnings on failure.
+func stopAndDisableService(ctx context.Context, serviceName string, logger utils.Logger) {
+	if system.IsServiceActive(ctx, serviceName) {
+		if err := system.ManageService(ctx, system.ServiceStop, serviceName, serviceName+" service"); err != nil && logger != nil {
+			logger.Warn(fmt.Sprintf("cleanup: failed to stop %s service: %v", serviceName, err))
+		}
+	} else if logger != nil {
+		logger.Info(fmt.Sprintf("cleanup: %s service not running", serviceName))
+	}
+
+	if system.IsServiceEnabled(ctx, serviceName) {
+		if err := system.ManageService(ctx, system.ServiceDisable, serviceName, serviceName+" service"); err != nil && logger != nil {
+			logger.Warn(fmt.Sprintf("cleanup: failed to disable %s service: %v", serviceName, err))
+		}
+	} else if logger != nil {
+		logger.Info(fmt.Sprintf("cleanup: %s service not enabled", serviceName))
+	}
+}
+
+func removePackage(ctx context.Context, pkg string, logger utils.Logger) {
+	if err := packages.Remove(ctx, []string{pkg}, logger); err != nil && logger != nil {
+		logger.Warn(fmt.Sprintf("cleanup: failed to remove %s package: %v", pkg, err))
+	}
+}
+
 func HAProxy(ctx context.Context, haproxyConfig, vip string, logger utils.Logger) error {
 	if logger != nil {
 		logger.Info("cleanup: haproxy service and configuration")
 	}
 
-	if system.IsServiceActive(ctx, "haproxy") {
-		if err := system.ManageService(ctx, system.ServiceStop, "haproxy", "haproxy service"); err != nil && logger != nil {
-			logger.Warn(fmt.Sprintf("cleanup: failed to stop haproxy service: %v", err))
-		}
-	} else if logger != nil {
-		logger.Info("cleanup: haproxy service not running")
-	}
-
-	if system.IsServiceEnabled(ctx, "haproxy") {
-		if err := system.ManageService(ctx, system.ServiceDisable, "haproxy", "haproxy service"); err != nil && logger != nil {
-			logger.Warn(fmt.Sprintf("cleanup: failed to disable haproxy service: %v", err))
-		}
-	} else if logger != nil {
-		logger.Info("cleanup: haproxy service not enabled")
-	}
+	stopAndDisableService(ctx, "haproxy", logger)
 
 	_ = SafeRemoveWithLogger(ctx, haproxyConfig, "haproxy configuration file", logger)
 
@@ -67,11 +78,7 @@ func HAProxy(ctx context.Context, haproxyConfig, vip string, logger utils.Logger
 		}
 	}
 
-	if err := packages.Remove(ctx, []string{"haproxy"}, logger); err != nil {
-		if logger != nil {
-			logger.Warn(fmt.Sprintf("cleanup: failed to remove haproxy package: %v", err))
-		}
-	}
+	removePackage(ctx, "haproxy", logger)
 
 	if logger != nil {
 		logger.Info("cleanup: haproxy completed")
@@ -85,27 +92,8 @@ func Apache(ctx context.Context, logger utils.Logger) error {
 		logger.Info("cleanup: apache httpd service")
 	}
 
-	if system.IsServiceActive(ctx, "httpd") {
-		if err := system.ManageService(ctx, system.ServiceStop, "httpd", "httpd service"); err != nil && logger != nil {
-			logger.Warn(fmt.Sprintf("cleanup: failed to stop httpd service: %v", err))
-		}
-	} else if logger != nil {
-		logger.Info("cleanup: httpd service not running")
-	}
-
-	if system.IsServiceEnabled(ctx, "httpd") {
-		if err := system.ManageService(ctx, system.ServiceDisable, "httpd", "httpd service"); err != nil && logger != nil {
-			logger.Warn(fmt.Sprintf("cleanup: failed to disable httpd service: %v", err))
-		}
-	} else if logger != nil {
-		logger.Info("cleanup: httpd service not enabled")
-	}
-
-	if err := packages.Remove(ctx, []string{"httpd"}, logger); err != nil {
-		if logger != nil {
-			logger.Warn(fmt.Sprintf("cleanup: failed to remove httpd package: %v", err))
-		}
-	}
+	stopAndDisableService(ctx, "httpd", logger)
+	removePackage(ctx, "httpd", logger)
 
 	if logger != nil {
 		logger.Info("cleanup: apache httpd completed")
@@ -150,16 +138,7 @@ func Dnsmasq(ctx context.Context, clusterName string, logger utils.Logger) error
 		logger.Warn(fmt.Sprintf("cleanup: failed to restore system resolver: %v", err))
 	}
 
-	if system.IsServiceActive(ctx, "dnsmasq") {
-		if err := system.ManageService(ctx, system.ServiceStop, "dnsmasq", "dnsmasq service"); err != nil && logger != nil {
-			logger.Warn(fmt.Sprintf("cleanup: failed to stop dnsmasq service: %v", err))
-		}
-	}
-	if system.IsServiceEnabled(ctx, "dnsmasq") {
-		if err := system.ManageService(ctx, system.ServiceDisable, "dnsmasq", "dnsmasq service"); err != nil && logger != nil {
-			logger.Warn(fmt.Sprintf("cleanup: failed to disable dnsmasq service: %v", err))
-		}
-	}
+	stopAndDisableService(ctx, "dnsmasq", logger)
 
 	if clusterName != "" {
 		if configPath, err := dns.DnsmasqConfigPath(fmt.Sprintf("okd-%s", clusterName)); err == nil {
@@ -181,11 +160,7 @@ func Dnsmasq(ctx context.Context, clusterName string, logger utils.Logger) error
 		_ = system.RemoveAll(ctx, backup, "dnsmasq backup config")
 	}
 
-	if err := packages.Remove(ctx, []string{"dnsmasq"}, logger); err != nil {
-		if logger != nil {
-			logger.Warn(fmt.Sprintf("cleanup: failed to remove dnsmasq package: %v", err))
-		}
-	}
+	removePackage(ctx, "dnsmasq", logger)
 
 	if logger != nil {
 		logger.Info("cleanup: dnsmasq completed")
