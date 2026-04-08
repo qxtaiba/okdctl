@@ -84,7 +84,7 @@ func subcommand(args []string) string {
 func (c *K8sClient) run(ctx context.Context, args ...string) (*executor.Result, error) {
 	result, err := c.exec.Run(ctx, c.CLI, args...)
 	if err != nil {
-		return nil, utils.WrapErrorf(err, "%s %s failed", c.CLI, subcommand(args))
+		return nil, fmt.Errorf("%s %s failed: %w", c.CLI, subcommand(args), err)
 	}
 	return result, nil
 }

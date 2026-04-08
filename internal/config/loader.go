@@ -8,7 +8,6 @@ import (
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
 
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
 )
 
@@ -51,7 +50,7 @@ func (l *Loader) Load() (*Config, error) {
 		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
 			return cfg, nil
 		}
-		return nil, utils.WrapErrorf(err, "error reading config file %q", l.viper.ConfigFileUsed())
+		return nil, fmt.Errorf("error reading config file %q: %w", l.viper.ConfigFileUsed(), err)
 	}
 
 	if err := l.viper.Unmarshal(cfg); err != nil {
@@ -67,16 +66,16 @@ func (l *Loader) LoadFile(path string) (*Config, error) {
 	// want an attacker-writable file on the deploy host to matter.
 	fi, err := os.Stat(path)
 	if err != nil {
-		return nil, utils.WrapErrorf(err, "error stating config file %s", path)
+		return nil, fmt.Errorf("error stating config file %s: %w", path, err)
 	}
 	if perm := fi.Mode().Perm(); perm&0022 != 0 {
-		return nil, utils.WrapErrorf(os.ErrPermission, "config file %s has insecure permissions %#o; run 'chmod go-w %s' to fix", path, perm, path)
+		return nil, fmt.Errorf("config file %s has insecure permissions %#o; run 'chmod go-w %s' to fix: %w", path, perm, path, os.ErrPermission)
 	}
 
 	l.viper.SetConfigFile(path)
 
 	if err := l.viper.ReadInConfig(); err != nil {
-		return nil, utils.WrapErrorf(err, "error reading config file %s", path)
+		return nil, fmt.Errorf("error reading config file %s: %w", path, err)
 	}
 
 	cfg := DefaultConfig()

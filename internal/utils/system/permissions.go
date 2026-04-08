@@ -1,6 +1,7 @@
 package system
 
 import (
+	"fmt"
 	"context"
 	"errors"
 	"os"
@@ -8,7 +9,6 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
 )
 
 func SudoAvailable() bool {
@@ -46,7 +46,7 @@ func ExecuteWithElevation(ctx context.Context, operation func() error, sudoOpera
 	}
 
 	if err := sudoOperation(); err != nil {
-		return utils.WrapErrorf(err, "%s failed even with sudo", description)
+		return fmt.Errorf("%s failed even with sudo: %w", description, err)
 	}
 
 	return nil

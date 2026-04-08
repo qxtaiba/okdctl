@@ -25,7 +25,7 @@ func SafeRemoveWithLogger(ctx context.Context, path, description string, logger 
 		if logger != nil {
 			logger.Warn(fmt.Sprintf("could not remove %s: %v", description, err))
 		}
-		return utils.WrapErrorf(err, "could not remove %s", description)
+		return fmt.Errorf("could not remove %s: %w", description, err)
 	}
 
 	if _, err := os.Stat(path); !os.IsNotExist(err) {

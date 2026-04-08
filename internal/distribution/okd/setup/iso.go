@@ -12,7 +12,6 @@ import (
 	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/paths"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/templates"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/executor"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
 )
 
@@ -47,7 +46,7 @@ func (p *Phase) BuildCustomISOs(ctx context.Context, cfg *config.Config, opts Op
 		p.Log.Info(fmt.Sprintf("iso: building custom coreos iso for %s", node.Name))
 
 		if err := p.buildNodeISO(ctx, cfg, node, clusterDir, fcosISO, isoDir); err != nil {
-			return utils.WrapErrorf(err, "failed to build ISO for %s", node.Name)
+			return fmt.Errorf("failed to build ISO for %s: %w", node.Name, err)
 		}
 	}
 
@@ -132,7 +131,7 @@ func (p *Phase) buildNodeISO(ctx context.Context, cfg *config.Config, node NodeI
 
 	if system.FileExists(outputPath) {
 		if err := os.Remove(outputPath); err != nil {
-			return utils.WrapErrorf(err, "failed to remove existing ISO %s", outputPath)
+			return fmt.Errorf("failed to remove existing ISO %s: %w", outputPath, err)
 		}
 	}
 
@@ -181,7 +180,7 @@ func (p *Phase) buildNodeISO(ctx context.Context, cfg *config.Config, node NodeI
 		keyPath := system.ExpandPath(cfg.Files.SSHPublicKey)
 		b, err := os.ReadFile(keyPath)
 		if err != nil {
-			return utils.WrapErrorf(err, "failed to read ssh public key %s", keyPath)
+			return fmt.Errorf("failed to read ssh public key %s: %w", keyPath, err)
 		}
 		sshKey = strings.TrimSpace(string(b))
 	}

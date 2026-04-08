@@ -7,7 +7,6 @@ import (
 
 	"github.com/qxtaiba/okd-proxmox-cli/internal/config"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/tui/wizard/components"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
 )
 
 type FieldType int
@@ -116,7 +115,7 @@ func NewDataDrivenStep(def StepDefinition) *DataDrivenStep {
 				if fieldDef.ConfigSet != nil {
 					value := step.Value(fieldDef.Key)
 					if err := fieldDef.ConfigSet(cfg, value); err != nil {
-						return utils.WrapErrorf(err, "field %s", fieldDef.Key)
+						return fmt.Errorf("field %s: %w", fieldDef.Key, err)
 					}
 				}
 			}

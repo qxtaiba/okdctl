@@ -10,7 +10,6 @@ import (
 
 	"github.com/qxtaiba/okd-proxmox-cli/internal/config"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/templates"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
 )
 
@@ -110,7 +109,7 @@ func (p *Phase) InjectCustomManifests(ctx context.Context, projectRoot, clusterD
 		destPath := filepath.Join(openshiftDir, name)
 
 		if err := system.CopyFile(srcPath, destPath); err != nil {
-			return count, utils.WrapErrorf(err, "failed to inject %s", name)
+			return count, fmt.Errorf("failed to inject %s: %w", name, err)
 		}
 		count++
 	}
@@ -171,7 +170,7 @@ func (p *Phase) ValidateIgnitionFiles(clusterDir string) error {
 			if os.IsNotExist(err) {
 				return fmt.Errorf("%s was not generated", file)
 			}
-			return utils.WrapErrorf(err, "failed to stat %s", file)
+			return fmt.Errorf("failed to stat %s: %w", file, err)
 		}
 
 		if info.Size() < minSize {
@@ -180,12 +179,12 @@ func (p *Phase) ValidateIgnitionFiles(clusterDir string) error {
 
 		content, err := os.ReadFile(path)
 		if err != nil {
-			return utils.WrapErrorf(err, "failed to read %s", file)
+			return fmt.Errorf("failed to read %s: %w", file, err)
 		}
 
 		var js json.RawMessage
 		if err := json.Unmarshal(content, &js); err != nil {
-			return utils.WrapErrorf(err, "%s is not valid JSON", file)
+			return fmt.Errorf("%s is not valid JSON: %w", file, err)
 		}
 	}
 

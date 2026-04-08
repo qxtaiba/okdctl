@@ -95,7 +95,7 @@ func processTarEntry(tarReader *tar.Reader, header *tar.Header, destDir string, 
 		realTarget, err := filepath.EvalSymlinks(targetPath)
 		if err != nil {
 			_ = os.Remove(targetPath)
-			return utils.WrapErrorf(err, "failed to resolve symlink %s", name)
+			return fmt.Errorf("failed to resolve symlink %s: %w", name, err)
 		}
 		if !strings.HasPrefix(realTarget, filepath.Clean(destDir)) {
 			_ = os.Remove(targetPath)
@@ -113,7 +113,7 @@ func ExtractTarGz(ctx context.Context, opts ExtractOptions) error {
 		opts.logger().Info(fmt.Sprintf("download: validating sha256 checksum for %s", filename))
 
 		if err := ValidateChecksum(opts.ArchivePath, opts.ExpectedChecksum); err != nil {
-			return utils.WrapErrorf(err, "checksum validation failed for %s", filename)
+			return fmt.Errorf("checksum validation failed for %s: %w", filename, err)
 		}
 
 		opts.logger().Info(fmt.Sprintf("download: checksum validated for %s", filename))

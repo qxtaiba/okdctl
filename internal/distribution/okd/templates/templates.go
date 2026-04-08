@@ -2,6 +2,7 @@
 package templates
 
 import (
+	"fmt"
 	"bytes"
 	"embed"
 	"io/fs"
@@ -9,7 +10,6 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
 )
 
 //go:embed *.tmpl
@@ -210,17 +210,17 @@ func reversePTR(ip string) string {
 func renderTemplate(name string, data interface{}) (string, error) {
 	content, err := templateFS.ReadFile(name)
 	if err != nil {
-		return "", utils.WrapErrorf(err, "failed to read template %s", name)
+		return "", fmt.Errorf("failed to read template %s: %w", name, err)
 	}
 
 	tmpl, err := template.New(name).Funcs(templateFuncs).Parse(string(content))
 	if err != nil {
-		return "", utils.WrapErrorf(err, "failed to parse template %s", name)
+		return "", fmt.Errorf("failed to parse template %s: %w", name, err)
 	}
 
 	var buf bytes.Buffer
 	if err := tmpl.Execute(&buf, data); err != nil {
-		return "", utils.WrapErrorf(err, "failed to execute template %s", name)
+		return "", fmt.Errorf("failed to execute template %s: %w", name, err)
 	}
 
 	return buf.String(), nil

@@ -59,7 +59,7 @@ func WriteDnsmasqConfig(ctx context.Context, name, content string) error {
 	if system.FileExists(configPath) {
 		backupPath := configPath + ".backup"
 		if err := system.CopyFileWithElevation(ctx, configPath, backupPath, "dnsmasq config backup"); err != nil {
-			return utils.WrapErrorf(err, "failed to back up config %s", configPath)
+			return fmt.Errorf("failed to back up config %s: %w", configPath, err)
 		}
 	}
 
@@ -81,7 +81,7 @@ func WriteDnsmasqConfig(ctx context.Context, name, content string) error {
 	}
 
 	if err := system.CopyFileWithElevation(ctx, tmpPath, configPath, "dnsmasq config"); err != nil {
-		return utils.WrapErrorf(err, "failed to copy config to %s", configPath)
+		return fmt.Errorf("failed to copy config to %s: %w", configPath, err)
 	}
 
 	if err := system.Chmod(ctx, configPath, "644", "dnsmasq config permissions"); err != nil {

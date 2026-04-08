@@ -94,7 +94,7 @@ func Configure(ctx context.Context, ports []Port, permanent bool, logger utils.L
 
 	for _, port := range ports {
 		if err := openPort(ctx, backend, port, permanent, logger); err != nil {
-			return utils.WrapErrorf(err, "failed to open port %d", port.Number)
+			return fmt.Errorf("failed to open port %d: %w", port.Number, err)
 		}
 	}
 

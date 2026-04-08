@@ -13,7 +13,6 @@ import (
 	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/paths"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/templates"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/executor"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/netutil"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
 )
@@ -182,7 +181,7 @@ func (p *Phase) newGenerateKubeVIPManifestsStep(cfg *config.Config, opts Options
 			for _, m := range rbacManifests {
 				path := filepath.Join(openshiftDir, m.Filename)
 				if err := system.AtomicWriteString(path, m.Content, 0644); err != nil {
-					return utils.WrapErrorf(err, "failed to write %s", m.Filename)
+					return fmt.Errorf("failed to write %s: %w", m.Filename, err)
 				}
 			}
 

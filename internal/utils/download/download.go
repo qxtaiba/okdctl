@@ -102,7 +102,7 @@ func Download(ctx context.Context, opts Options) error {
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return utils.WrapErrorf(err, "download failed for %s", opts.Description)
+		return fmt.Errorf("download failed for %s: %w", opts.Description, err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 

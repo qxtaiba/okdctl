@@ -142,7 +142,7 @@ func (t *Executor) run(ctx context.Context, args ...string) error {
 
 	result, err := t.exec.Run(ctx, "terraform", args...)
 	if err != nil {
-		return utils.WrapErrorf(err, "terraform %s failed", args[0])
+		return fmt.Errorf("terraform %s failed: %w", args[0], err)
 	}
 	if result.ExitCode != 0 {
 		return &ExecError{
@@ -320,7 +320,7 @@ func (t *Executor) Cleanup() error {
 	}
 	for _, f := range files {
 		if err := system.SafeRemove(f); err != nil && !os.IsNotExist(err) {
-			errs = append(errs, utils.WrapErrorf(err, "failed to remove %s", f))
+			errs = append(errs, fmt.Errorf("failed to remove %s: %w", f, err))
 		}
 	}
 	return errors.Join(errs...)

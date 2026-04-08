@@ -11,7 +11,6 @@ import (
 
 	"github.com/qxtaiba/okd-proxmox-cli/internal/config"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/executor"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/httputil"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
 )
@@ -130,11 +129,11 @@ func (p *Phase) DeployToWebServer(ctx context.Context, cfg *config.Config, clust
 
 		destPath := filepath.Join(ignitionDir, file)
 		if err := system.CopyFileWithElevation(ctx, srcPath, destPath, fmt.Sprintf("ignition file %s", file)); err != nil {
-			return utils.WrapErrorf(err, "failed to copy %s", file)
+			return fmt.Errorf("failed to copy %s: %w", file, err)
 		}
 
 		if err := system.Chmod(ctx, destPath, "644", fmt.Sprintf("%s permissions", file)); err != nil {
-			return utils.WrapErrorf(err, "failed to set permissions on %s", file)
+			return fmt.Errorf("failed to set permissions on %s: %w", file, err)
 		}
 	}
 
@@ -143,7 +142,7 @@ func (p *Phase) DeployToWebServer(ctx context.Context, cfg *config.Config, clust
 		authDest := filepath.Join(webRoot, "auth")
 		result, err := p.Exec.Run(ctx, "sudo", "cp", "-r", authSrc, authDest)
 		if err != nil {
-			return utils.WrapErrorf(err, "failed to copy auth directory %s to web root %s", authSrc, authDest)
+			return fmt.Errorf("failed to copy auth directory %s to web root %s: %w", authSrc, authDest, err)
 		}
 		if result == nil || result.ExitCode != 0 {
 			stderr := ""

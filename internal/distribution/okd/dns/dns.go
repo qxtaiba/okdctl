@@ -71,7 +71,7 @@ func BuildConfigData(cfg *config.Config) (templates.DNSConfigData, error) {
 	for i := 0; i < cfg.Topology.ControlPlane.Count; i++ {
 		ip, err := netutil.CalculateVMIP(staticIPStart, i+1)
 		if err != nil {
-			return templates.DNSConfigData{}, utils.WrapErrorf(err, "failed to calculate master%d IP", i)
+			return templates.DNSConfigData{}, fmt.Errorf("failed to calculate master%d IP: %w", i, err)
 		}
 		data.MasterNodes = append(data.MasterNodes, templates.DNSNode{
 			Name: fmt.Sprintf("%s-master%d", cfg.Cluster.Name, i),
@@ -83,7 +83,7 @@ func BuildConfigData(cfg *config.Config) (templates.DNSConfigData, error) {
 	for i := 0; i < cfg.Topology.Workers.Count; i++ {
 		ip, err := netutil.CalculateVMIP(staticIPStart, workerStartIndex+i)
 		if err != nil {
-			return templates.DNSConfigData{}, utils.WrapErrorf(err, "failed to calculate worker%d IP", i)
+			return templates.DNSConfigData{}, fmt.Errorf("failed to calculate worker%d IP: %w", i, err)
 		}
 		data.WorkerNodes = append(data.WorkerNodes, templates.DNSNode{
 			Name: fmt.Sprintf("%s-worker%d", cfg.Cluster.Name, i),

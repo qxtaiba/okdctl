@@ -196,7 +196,7 @@ func (p *Provider) retrieveProvisionResult(cfg *config.Config) (*ProvisionResult
 
 	baseIP, lastOctet, err := netutil.SplitIPv4(startIP)
 	if err != nil {
-		return nil, utils.WrapErrorf(err, "invalid start IP %q", startIP)
+		return nil, fmt.Errorf("invalid start IP %q: %w", startIP, err)
 	}
 
 	totalNodes := 1 + cfg.Topology.ControlPlane.Count + cfg.Topology.Workers.Count

@@ -2,11 +2,11 @@ package credentials
 
 import (
 	"bufio"
+	"fmt"
 	"os"
 	"strings"
 	"sync"
 
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
 )
 
@@ -93,19 +93,17 @@ func loadEnvFileOnce(path string) error {
 		if os.IsNotExist(err) {
 			return nil // missing .env is not an error
 		}
-		return utils.WrapErrorf(err, "failed to stat env file %s", path)
+		return fmt.Errorf("failed to stat env file %s: %w", path, err)
 	}
 	if perm := fi.Mode().Perm(); perm&0077 != 0 {
-		return utils.WrapErrorf(
-			os.ErrPermission,
-			".env file %s has insecure permissions %#o; run 'chmod 600 %s' to fix",
-			path, perm, path,
+		return fmt.Errorf(".env file %s has insecure permissions %#o; run 'chmod 600 %s' to fix: %w",
+			path, perm, path, os.ErrPermission,
 		)
 	}
 
 	f, err := os.Open(path)
 	if err != nil {
-		return utils.WrapErrorf(err, "failed to open env file %s", path)
+		return fmt.Errorf("failed to open env file %s: %w", path, err)
 	}
 	defer f.Close() //nolint:errcheck // read-only file
 
@@ -126,12 +124,12 @@ func loadEnvFileOnce(path string) error {
 		// Only set if not already present — shell env wins
 		if os.Getenv(key) == "" {
 			if err := os.Setenv(key, value); err != nil {
-				return utils.WrapErrorf(err, "failed to set env var %s from %s", key, path)
+				return fmt.Errorf("failed to set env var %s from %s: %w", key, path, err)
 			}
 		}
 	}
 	if err := scanner.Err(); err != nil {
-		return utils.WrapErrorf(err, "failed to scan env file %s", path)
+		return fmt.Errorf("failed to scan env file %s: %w", path, err)
 	}
 	return nil
 }
