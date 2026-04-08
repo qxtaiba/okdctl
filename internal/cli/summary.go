@@ -111,76 +111,70 @@ func DeploySummary(cfg *config.Config) string {
 }
 
 func PostDeploySummary(cfg *config.Config, result *deployment.Result) string {
-	var sb strings.Builder
-
 	clusterFQDN := cfg.Cluster.Name + "." + cfg.Cluster.Domain
 	consoleURL := fmt.Sprintf("https://console-openshift-console.apps.%s", clusterFQDN)
 	apiURL := fmt.Sprintf("https://api.%s:6443", clusterFQDN)
 
-	kvWidth := defaultContentWidth - 2
-	var content strings.Builder
+	sb := newSummaryBuilder()
+	sb.b.WriteString("\n")
+	sb.b.WriteString("  " + tui.CompletionSuccess("cluster deployed successfully!") + "\n")
+	sb.newline()
 
-	content.WriteString("\n")
-	content.WriteString("  " + tui.CompletionSuccess("cluster deployed successfully!") + "\n\n")
-	content.WriteString("  " + tui.SubsectionLabel("access") + "\n")
-	content.WriteString("  " + tui.DottedKeyValueFull("  cluster", clusterFQDN, defaultKeyColWidth, kvWidth) + "\n")
-	content.WriteString("  " + tui.DottedKeyValueFull("  console", consoleURL, defaultKeyColWidth, kvWidth) + "\n")
-	content.WriteString("  " + tui.DottedKeyValueFull("  api", apiURL, defaultKeyColWidth, kvWidth) + "\n")
-	content.WriteString("\n")
+	sb.section("access")
+	sb.kv("cluster", clusterFQDN)
+	sb.kv("console", consoleURL)
+	sb.kv("api", apiURL)
+	sb.newline()
 
-	content.WriteString("  " + tui.SubsectionLabel("dns records") + "\n")
+	sb.section("dns records")
 	apiDomain := fmt.Sprintf("api.%s", clusterFQDN)
 	appsDomain := fmt.Sprintf("*.apps.%s", clusterFQDN)
 	if result != nil && result.DNSDeployed && result.KubeVipIP != "" {
-		content.WriteString("  " + tui.DottedKeyValueFull("  "+apiDomain, result.KubeVipIP+" (kube-vip)", defaultKeyColWidth, kvWidth) + "\n")
+		sb.kv(apiDomain, result.KubeVipIP+" (kube-vip)")
 	} else if bastionIP := cfg.Networking.Bastion.IP; bastionIP != "" {
-		content.WriteString("  " + tui.DottedKeyValueFull("  "+apiDomain, bastionIP+" (haproxy)", defaultKeyColWidth, kvWidth) + "\n")
+		sb.kv(apiDomain, bastionIP+" (haproxy)")
 	}
 	bastionIP := cfg.Networking.Bastion.IP
 	if result != nil && result.BastionIP != "" {
 		bastionIP = result.BastionIP
 	}
-	content.WriteString("  " + tui.DottedKeyValueFull("  "+appsDomain, bastionIP+" (haproxy)", defaultKeyColWidth, kvWidth) + "\n")
-	content.WriteString("\n")
+	sb.kv(appsDomain, bastionIP+" (haproxy)")
+	sb.newline()
 
-	content.WriteString("  " + tui.SubsectionLabel("status") + "\n")
+	sb.section("status")
 	if result != nil {
 		if result.BootstrapCleaned {
-			content.WriteString("  " + tui.DottedKeyValueFull("  bootstrap", "cleaned up", defaultKeyColWidth, kvWidth) + "\n")
+			sb.kv("bootstrap", "cleaned up")
 		} else {
-			content.WriteString("  " + tui.DottedKeyValueFull("  bootstrap", "still running", defaultKeyColWidth, kvWidth) + "\n")
+			sb.kv("bootstrap", "still running")
 		}
 		if result.DNSDeployed && result.KubeVipIP != "" {
-			content.WriteString("  " + tui.DottedKeyValueFull("  api routing", fmt.Sprintf("kube-vip (%s)", result.KubeVipIP), defaultKeyColWidth, kvWidth) + "\n")
+			sb.kv("api routing", fmt.Sprintf("kube-vip (%s)", result.KubeVipIP))
 		} else {
-			content.WriteString("  " + tui.DottedKeyValueFull("  api routing", "haproxy (bastion)", defaultKeyColWidth, kvWidth) + "\n")
+			sb.kv("api routing", "haproxy (bastion)")
 		}
-		content.WriteString("  " + tui.DottedKeyValueFull("  ingress routing", "haproxy (bastion)", defaultKeyColWidth, kvWidth) + "\n")
+		sb.kv("ingress routing", "haproxy (bastion)")
 	}
-	content.WriteString("\n")
+	sb.newline()
 
-	content.WriteString("  " + tui.SubsectionLabel("credentials") + "\n")
-	content.WriteString("  " + tui.DottedKeyValueHighlightFull("  username", "kubeadmin", defaultKeyColWidth, kvWidth) + "\n")
-	content.WriteString("  " + tui.DottedKeyValueFull("  password", "cat okd-install/cluster-config/auth/kubeadmin-password", defaultKeyColWidth, kvWidth) + "\n")
-	content.WriteString("\n")
+	sb.section("credentials")
+	sb.kvHighlight("username", "kubeadmin")
+	sb.kv("password", "cat okd-install/cluster-config/auth/kubeadmin-password")
+	sb.newline()
 
-	content.WriteString("  " + tui.SubsectionLabel("quick start") + "\n")
-	content.WriteString("    " + tui.CodeInlineStyle.Render("export KUBECONFIG=~/.kube/config") + "\n")
-	content.WriteString("    " + tui.CodeInlineStyle.Render("oc get nodes") + "\n")
-	content.WriteString("\n")
+	sb.section("quick start")
+	sb.b.WriteString("    " + tui.CodeInlineStyle.Render("export KUBECONFIG=~/.kube/config") + "\n")
+	sb.b.WriteString("    " + tui.CodeInlineStyle.Render("oc get nodes") + "\n")
+	sb.newline()
 
-	content.WriteString("  " + tui.SubsectionLabel("next steps") + "\n")
-	content.WriteString("    cluster deployed with haproxy handling ingress on the bastion.\n")
-	content.WriteString("    if you deploy a loadbalancer provider (e.g., metallb), run:\n")
-	content.WriteString("      " + tui.CodeInlineStyle.Render("openshitctl update-ingress") + "\n")
-	content.WriteString("    to auto-detect loadbalancer ips and switch dns over.\n")
+	sb.section("next steps")
+	sb.b.WriteString("    cluster deployed with haproxy handling ingress on the bastion.\n")
+	sb.b.WriteString("    if you deploy a loadbalancer provider (e.g., metallb), run:\n")
+	sb.b.WriteString("      " + tui.CodeInlineStyle.Render("openshitctl update-ingress") + "\n")
+	sb.b.WriteString("    to auto-detect loadbalancer ips and switch dns over.\n")
+	sb.newline()
 
-	content.WriteString("\n")
-	sb.WriteString("\n")
-	sb.WriteString(tui.BoxedSectionCompact(content.String(), "DEPLOYMENT COMPLETE", tui.DefaultBoxWidth))
-	sb.WriteString("\n")
-
-	return sb.String()
+	return "\n" + tui.BoxedSectionCompact(sb.String(), "DEPLOYMENT COMPLETE", tui.DefaultBoxWidth) + "\n"
 }
 
 func UpdateIngressSummary(result *postinstall.UpdateIngressResult) string {
