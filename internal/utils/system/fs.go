@@ -1,12 +1,11 @@
 package system
 
 import (
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
-
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
 )
 
 func FileExists(path string) bool {
@@ -37,22 +36,22 @@ func EnsureDirForFile(filePath string) error {
 func CopyFile(src, dst string) error {
 	sourceFile, err := os.Open(src)
 	if err != nil {
-		return utils.WrapError("failed to open source file", err)
+		return fmt.Errorf("failed to open source file: %w", err)
 	}
 	defer func() { _ = sourceFile.Close() }()
 
 	sourceInfo, err := sourceFile.Stat()
 	if err != nil {
-		return utils.WrapError("failed to stat source file", err)
+		return fmt.Errorf("failed to stat source file: %w", err)
 	}
 
 	if err := EnsureDirForFile(dst); err != nil {
-		return utils.WrapError("failed to create destination directory", err)
+		return fmt.Errorf("failed to create destination directory: %w", err)
 	}
 
 	destFile, err := os.Create(dst)
 	if err != nil {
-		return utils.WrapError("failed to create destination file", err)
+		return fmt.Errorf("failed to create destination file: %w", err)
 	}
 
 	success := false
@@ -65,15 +64,15 @@ func CopyFile(src, dst string) error {
 
 	_, err = io.Copy(destFile, sourceFile)
 	if err != nil {
-		return utils.WrapError("failed to copy file contents", err)
+		return fmt.Errorf("failed to copy file contents: %w", err)
 	}
 
 	if err := destFile.Sync(); err != nil {
-		return utils.WrapError("failed to sync destination file", err)
+		return fmt.Errorf("failed to sync destination file: %w", err)
 	}
 
 	if err := os.Chmod(dst, sourceInfo.Mode()); err != nil {
-		return utils.WrapError("failed to set file permissions", err)
+		return fmt.Errorf("failed to set file permissions: %w", err)
 	}
 
 	success = true
@@ -88,17 +87,17 @@ func CopyFile(src, dst string) error {
 func CopyFileMode(src, dst string, mode os.FileMode) error {
 	sourceFile, err := os.Open(src)
 	if err != nil {
-		return utils.WrapError("failed to open source file", err)
+		return fmt.Errorf("failed to open source file: %w", err)
 	}
 	defer func() { _ = sourceFile.Close() }()
 
 	if err := EnsureDirForFile(dst); err != nil {
-		return utils.WrapError("failed to create destination directory", err)
+		return fmt.Errorf("failed to create destination directory: %w", err)
 	}
 
 	destFile, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, mode)
 	if err != nil {
-		return utils.WrapError("failed to create destination file", err)
+		return fmt.Errorf("failed to create destination file: %w", err)
 	}
 
 	success := false
@@ -110,17 +109,17 @@ func CopyFileMode(src, dst string, mode os.FileMode) error {
 	}()
 
 	if _, err := io.Copy(destFile, sourceFile); err != nil {
-		return utils.WrapError("failed to copy file contents", err)
+		return fmt.Errorf("failed to copy file contents: %w", err)
 	}
 
 	if err := destFile.Sync(); err != nil {
-		return utils.WrapError("failed to sync destination file", err)
+		return fmt.Errorf("failed to sync destination file: %w", err)
 	}
 
 	// If dst pre-existed with different permissions, O_CREATE won't change
 	// them — tighten explicitly so the caller's mode is always honored.
 	if err := os.Chmod(dst, mode); err != nil {
-		return utils.WrapError("failed to set file permissions", err)
+		return fmt.Errorf("failed to set file permissions: %w", err)
 	}
 
 	success = true
@@ -145,13 +144,13 @@ func ExpandPath(path string) string {
 
 func AtomicWrite(path string, data []byte, perm os.FileMode) error {
 	if err := EnsureDirForFile(path); err != nil {
-		return utils.WrapError("failed to create directory", err)
+		return fmt.Errorf("failed to create directory: %w", err)
 	}
 
 	dir := filepath.Dir(path)
 	tmpFile, err := os.CreateTemp(dir, ".tmp-*")
 	if err != nil {
-		return utils.WrapError("failed to create temp file", err)
+		return fmt.Errorf("failed to create temp file: %w", err)
 	}
 	tmpPath := tmpFile.Name()
 
@@ -164,24 +163,24 @@ func AtomicWrite(path string, data []byte, perm os.FileMode) error {
 
 	if _, err := tmpFile.Write(data); err != nil {
 		_ = tmpFile.Close()
-		return utils.WrapError("failed to write data", err)
+		return fmt.Errorf("failed to write data: %w", err)
 	}
 
 	if err := tmpFile.Sync(); err != nil {
 		_ = tmpFile.Close()
-		return utils.WrapError("failed to sync file", err)
+		return fmt.Errorf("failed to sync file: %w", err)
 	}
 
 	if err := tmpFile.Close(); err != nil {
-		return utils.WrapError("failed to close temp file", err)
+		return fmt.Errorf("failed to close temp file: %w", err)
 	}
 
 	if err := os.Chmod(tmpPath, perm); err != nil {
-		return utils.WrapError("failed to set permissions", err)
+		return fmt.Errorf("failed to set permissions: %w", err)
 	}
 
 	if err := os.Rename(tmpPath, path); err != nil {
-		return utils.WrapError("failed to rename temp file", err)
+		return fmt.Errorf("failed to rename temp file: %w", err)
 	}
 
 	success = true

@@ -177,22 +177,6 @@ func (t *Executor) Init(ctx context.Context) error {
 	return t.run(ctx, "init")
 }
 
-// EnsureInitialized operates on an arbitrary directory, not necessarily the executor's WorkDir.
-// Optional Option values (e.g. WithLogger) are forwarded to the temporary Executor.
-func EnsureInitialized(ctx context.Context, workDir string, verbose bool, opts ...Option) error {
-	terraformCache := filepath.Join(workDir, ".terraform")
-	lockFile := filepath.Join(workDir, ".terraform.lock.hcl")
-	providersDir := filepath.Join(terraformCache, "providers")
-
-	if system.DirExists(terraformCache) && system.FileExists(lockFile) && system.DirExists(providersDir) {
-		return nil
-	}
-
-	tempExec := New(workDir, opts...)
-	tempExec.Verbose = verbose
-	return tempExec.Init(ctx)
-}
-
 func (t *Executor) buildVarArgs(varFile string, vars map[string]string) []string {
 	var args []string
 
@@ -340,29 +324,6 @@ func (t *Executor) Cleanup() error {
 		}
 	}
 	return errors.Join(errs...)
-}
-
-// Version is used for health checks and compatibility verification.
-func (t *Executor) Version(ctx context.Context) error {
-	result, err := t.exec.Run(ctx, "terraform", "version")
-	if err != nil {
-		return err
-	}
-	if result.ExitCode != 0 {
-		return fmt.Errorf("terraform version: exit code %d", result.ExitCode)
-	}
-	return nil
-}
-
-func (t *Executor) GetVersion(ctx context.Context) (string, error) {
-	result, err := t.exec.Run(ctx, "terraform", "version", "-json")
-	if err != nil {
-		return "", err
-	}
-	if result.ExitCode != 0 {
-		return "", fmt.Errorf("terraform version: %s", result.Stderr)
-	}
-	return result.Stdout, nil
 }
 
 func (t *Executor) GetWorkDir() string {

@@ -100,7 +100,7 @@ func Configure(ctx context.Context, ports []Port, permanent bool, logger utils.L
 
 	if backend == Firewalld && permanent {
 		if err := system.RunSudo(ctx, "firewall-cmd", "--reload"); err != nil {
-			return utils.WrapError("failed to reload firewall", err)
+			return fmt.Errorf("failed to reload firewall: %w", err)
 		}
 	}
 
@@ -128,39 +128,10 @@ func validatePort(port Port) error {
 }
 
 func openPort(ctx context.Context, backend Backend, port Port, permanent bool, logger utils.Logger) error {
-	if err := validatePort(port); err != nil {
+	if err := modifyPort(ctx, backend, port, permanent, "add"); err != nil {
 		return err
 	}
-
-	portStr := fmt.Sprintf("%d/%s", port.Number, port.Protocol)
-
-	switch backend {
-	case Firewalld:
-		args := []string{"firewall-cmd", fmt.Sprintf("--add-port=%s", portStr)}
-		if permanent {
-			args = append(args, "--permanent")
-		}
-		if err := system.RunSudo(ctx, args[0], args[1:]...); err != nil {
-			return err
-		}
-
-	case UFW:
-		if err := system.RunSudo(ctx, "ufw", "allow", portStr); err != nil {
-			return err
-		}
-
-	case IPTables:
-		args := []string{
-			"iptables", "-I", "INPUT", "-p", port.Protocol,
-			"--dport", fmt.Sprintf("%d", port.Number), "-j", "ACCEPT",
-		}
-		if err := system.RunSudo(ctx, args[0], args[1:]...); err != nil {
-			return err
-		}
-	}
-
 	logger.Info(fmt.Sprintf("firewall: opened port %d/%s (%s)", port.Number, port.Protocol, port.Description))
-
 	return nil
 }
 
@@ -174,7 +145,7 @@ func RemoveRules(ctx context.Context, ports []Port, permanent bool, logger utils
 	logger.Info("firewall: removing rules")
 
 	for _, port := range ports {
-		if err := closePort(ctx, backend, port, permanent); err != nil {
+		if err := modifyPort(ctx, backend, port, permanent, "remove"); err != nil {
 			logger.Warn(fmt.Sprintf("could not remove port %d: %v", port.Number, err))
 		}
 	}
@@ -186,7 +157,8 @@ func RemoveRules(ctx context.Context, ports []Port, permanent bool, logger utils
 	return nil
 }
 
-func closePort(ctx context.Context, backend Backend, port Port, permanent bool) error {
+// modifyPort adds or removes a single firewall rule. action is "add" or "remove".
+func modifyPort(ctx context.Context, backend Backend, port Port, permanent bool, action string) error {
 	if err := validatePort(port); err != nil {
 		return err
 	}
@@ -195,18 +167,29 @@ func closePort(ctx context.Context, backend Backend, port Port, permanent bool) 
 
 	switch backend {
 	case Firewalld:
-		args := []string{"firewall-cmd", fmt.Sprintf("--remove-port=%s", portStr)}
+		flag := "--add-port="
+		if action == "remove" {
+			flag = "--remove-port="
+		}
+		args := []string{"firewall-cmd", flag + portStr}
 		if permanent {
 			args = append(args, "--permanent")
 		}
 		return system.RunSudo(ctx, args[0], args[1:]...)
 
 	case UFW:
-		return system.RunSudo(ctx, "ufw", "delete", "allow", portStr)
+		if action == "remove" {
+			return system.RunSudo(ctx, "ufw", "delete", "allow", portStr)
+		}
+		return system.RunSudo(ctx, "ufw", "allow", portStr)
 
 	case IPTables:
+		chainAction := "-I"
+		if action == "remove" {
+			chainAction = "-D"
+		}
 		args := []string{
-			"iptables", "-D", "INPUT", "-p", port.Protocol,
+			"iptables", chainAction, "INPUT", "-p", port.Protocol,
 			"--dport", fmt.Sprintf("%d", port.Number), "-j", "ACCEPT",
 		}
 		return system.RunSudo(ctx, args[0], args[1:]...)

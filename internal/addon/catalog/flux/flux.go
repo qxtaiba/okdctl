@@ -17,8 +17,6 @@ import (
 
 	"github.com/qxtaiba/okd-proxmox-cli/internal/addon"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/executor"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/retry"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
 )
 
@@ -59,10 +57,10 @@ func (f *Flux) Install(ctx context.Context, env *addon.Environment) error {
 		return err
 	}
 
-	if err := retry.Do(ctx, 3, 5*time.Second, func() error {
+	if err := addon.RetryDefault(ctx, func() error {
 		return f.createDeployKeySecret(ctx, env)
 	}); err != nil {
-		return utils.WrapError("deploy key secret required", err)
+		return fmt.Errorf("deploy key secret required: %w", err)
 	}
 
 	if err := f.installOperator(ctx, env); err != nil {
@@ -91,14 +89,14 @@ func (f *Flux) Install(ctx context.Context, env *addon.Environment) error {
 
 func (f *Flux) installOperator(ctx context.Context, env *addon.Environment) error {
 	env.Logger.Info("flux: installing operator via helm")
-	if err := retry.Do(ctx, 3, 5*time.Second, func() error {
+	if err := addon.RetryDefault(ctx, func() error {
 		result, err := env.Exec.Run(ctx, "helm", "upgrade", "--install", "flux-operator",
 			"oci://ghcr.io/controlplaneio-fluxcd/charts/flux-operator",
 			"--namespace", "flux-system",
 			"--create-namespace",
 			"--wait")
 		if err != nil {
-			return utils.WrapError("failed to install flux operator", err)
+			return fmt.Errorf("failed to install flux operator: %w", err)
 		}
 		if result == nil || result.ExitCode != 0 {
 			stderr := ""
@@ -138,7 +136,7 @@ func (f *Flux) installInstance(ctx context.Context, env *addon.Environment) erro
 		syncPath = "kubernetes/clusters/production"
 	}
 
-	if err := retry.Do(ctx, 3, 5*time.Second, func() error {
+	if err := addon.RetryDefault(ctx, func() error {
 		r, err := env.Exec.Run(ctx, "helm", "upgrade", "--install", "flux-instance",
 			"oci://ghcr.io/controlplaneio-fluxcd/charts/flux-instance",
 			"--namespace", "flux-system",
@@ -149,7 +147,7 @@ func (f *Flux) installInstance(ctx context.Context, env *addon.Environment) erro
 			"--set", "instance.sync.pullSecret=flux-system",
 			"--wait")
 		if err != nil {
-			return utils.WrapError("failed to install flux instance", err)
+			return fmt.Errorf("failed to install flux instance: %w", err)
 		}
 		if r == nil || r.ExitCode != 0 {
 			stderr := ""
@@ -339,12 +337,12 @@ func (f *Flux) createDeployKeySecret(ctx context.Context, env *addon.Environment
 	}
 	host, err := gitHost(repoURL)
 	if err != nil {
-		return utils.WrapError("failed to resolve git host for ssh-keyscan", err)
+		return fmt.Errorf("failed to resolve git host for ssh-keyscan: %w", err)
 	}
 
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
-		return utils.WrapError("failed to get home directory", err)
+		return fmt.Errorf("failed to get home directory: %w", err)
 	}
 	deployKeyFile := filepath.Join(homeDir, ".ssh", "flux-deploy-key")
 
@@ -354,7 +352,7 @@ func (f *Flux) createDeployKeySecret(ctx context.Context, env *addon.Environment
 
 	privateKey, err := os.ReadFile(deployKeyFile)
 	if err != nil {
-		return utils.WrapError("failed to read deploy key", err)
+		return fmt.Errorf("failed to read deploy key: %w", err)
 	}
 
 	// The public half is optional: flux/source-controller only requires identity
@@ -364,7 +362,7 @@ func (f *Flux) createDeployKeySecret(ctx context.Context, env *addon.Environment
 	if b, err := os.ReadFile(publicKeyFile); err == nil {
 		publicKey = b
 	} else if !os.IsNotExist(err) {
-		return utils.WrapError("failed to read deploy key public half", err)
+		return fmt.Errorf("failed to read deploy key public half: %w", err)
 	}
 
 	knownHostsResult, err := env.Exec.Run(ctx, "ssh-keyscan", host)
@@ -376,7 +374,7 @@ func (f *Flux) createDeployKeySecret(ctx context.Context, env *addon.Environment
 		string(privateKey), string(publicKey), knownHostsResult.Stdout)
 	result, err := env.Exec.RunWithStdin(ctx, manifest, "oc", "apply", "-f", "-")
 	if err != nil {
-		return utils.WrapError("failed to apply deploy key secret", err)
+		return fmt.Errorf("failed to apply deploy key secret: %w", err)
 	}
 	if result == nil || result.ExitCode != 0 {
 		stderr := ""

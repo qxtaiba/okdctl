@@ -2,6 +2,7 @@ package deployment
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"time"
 
@@ -40,7 +41,7 @@ type Options struct {
 	OnError func(err error)
 }
 
-// Run expects a cancellable context; callers should handle interrupt signals separately.
+// Run expects a cancellable context (e.g. from signal.NotifyContext).
 func Run(ctx context.Context, cfg *config.Config, opts Options) error {
 	if opts.Logger == nil {
 		opts.Logger = utils.NoopLogger()
@@ -54,7 +55,7 @@ func Run(ctx context.Context, cfg *config.Config, opts Options) error {
 
 	projectRoot, err := os.Getwd()
 	if err != nil {
-		return utils.WrapError("failed to get working directory", err)
+		return fmt.Errorf("failed to get working directory: %w", err)
 	}
 
 	provisionerOpts := []okd.ProvisionerOption{
@@ -69,7 +70,7 @@ func Run(ctx context.Context, cfg *config.Config, opts Options) error {
 	p := okd.New(cfg.Distribution.Version, provisionerOpts...)
 
 	if err := p.Validate(cfg); err != nil {
-		return utils.WrapError("provisioner validation failed", err)
+		return fmt.Errorf("provisioner validation failed: %w", err)
 	}
 
 	exec := NewExecutor(
@@ -86,7 +87,7 @@ func Run(ctx context.Context, cfg *config.Config, opts Options) error {
 		if opts.OnError != nil {
 			opts.OnError(err)
 		}
-		return utils.WrapError("deployment failed", err)
+		return fmt.Errorf("deployment failed: %w", err)
 	}
 
 	duration := time.Since(startTime).Round(time.Second)

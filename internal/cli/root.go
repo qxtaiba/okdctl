@@ -2,7 +2,6 @@ package cli
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -10,9 +9,7 @@ import (
 	"syscall"
 
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 
-	"github.com/qxtaiba/okd-proxmox-cli/internal/deployment"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/tui"
 	"github.com/qxtaiba/okd-proxmox-cli/pkg/version"
 )
@@ -59,7 +56,7 @@ func Execute() {
 	defer stop()
 
 	if err := rootCmd.ExecuteContext(ctx); err != nil {
-		if errors.Is(err, deployment.ErrInterrupted) {
+		if ctx.Err() != nil {
 			os.Exit(130)
 		}
 		tui.Error(err.Error())
@@ -68,8 +65,6 @@ func Execute() {
 }
 
 func init() {
-	cobra.OnInitialize(initConfig)
-
 	rootCmd.PersistentFlags().StringVarP(&cfgFile, "config", "c", "openshitctl.yaml", "configuration file")
 
 	rootCmd.AddCommand(deployCmd)
@@ -83,25 +78,3 @@ Go Version: %s
 Platform:   %s
 `, version.GitCommit, version.BuildDate, version.GoVersion, version.Platform))
 }
-
-func initConfig() {
-	if cfgFile != "" {
-		viper.SetConfigFile(cfgFile)
-	} else {
-		viper.SetConfigName("openshitctl")
-		viper.SetConfigType("yaml")
-
-		viper.AddConfigPath(".")
-		if home, err := os.UserHomeDir(); err == nil {
-			viper.AddConfigPath(home + "/.openshitctl")
-		}
-
-		viper.AddConfigPath("/etc/openshitctl")
-	}
-
-	viper.SetEnvPrefix("HOMELAB")
-	viper.AutomaticEnv()
-
-	_ = viper.ReadInConfig()
-}
-

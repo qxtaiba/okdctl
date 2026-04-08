@@ -97,7 +97,7 @@ func GetDefaultInterface(ctx context.Context) (string, error) {
 	cmd := exec.CommandContext(ctx, "ip", "route", "show", "default")
 	output, err := cmd.Output()
 	if err != nil {
-		return "", utils.WrapError("failed to get default route", err)
+		return "", fmt.Errorf("failed to get default route: %w", err)
 	}
 
 	fields := strings.Fields(string(output))

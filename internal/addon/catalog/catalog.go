@@ -9,9 +9,8 @@
 //     so the registry picks it up at program start.
 //  4. Add a blank import for the new package to this file so it is pulled in
 //     whenever the catalog is imported.
-//  5. Optionally implement ConfigurableAddon (settings + validation),
-//     OutputProducer (cross-addon outputs), or WizardProvider (wizard UI
-//     fields) for richer integration.
+//  5. Optionally implement ConfigurableAddon (settings + validation)
+//     or WizardProvider (wizard UI fields) for richer integration.
 //
 // See the flux and secretstore subpackages for reference implementations.
 package catalog

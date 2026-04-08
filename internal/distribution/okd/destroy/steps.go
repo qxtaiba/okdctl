@@ -9,7 +9,6 @@ import (
 	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/cleanup"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/firewall"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/paths"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/netutil"
 )
 
@@ -20,7 +19,6 @@ const (
 	StepPrintSummary    distribution.StepID = "print-summary"
 )
 
-
 func (p *Phase) newDestroyInfraStep(cfg *config.Config, opts Options) distribution.ProvisioningStep {
 	return distribution.NewStepBuilder(StepDestroyInfra, "Destroy Infrastructure").
 		Description("destroying proxmox infrastructure using terraform").
@@ -29,7 +27,7 @@ func (p *Phase) newDestroyInfraStep(cfg *config.Config, opts Options) distributi
 		SkipReason("Terraform destroy disabled").
 		Execute(func(ctx context.Context) error {
 			if err := p.destroyInfrastructure(ctx, opts); err != nil {
-				return utils.WrapError("infrastructure destruction failed", err)
+				return fmt.Errorf("infrastructure destruction failed: %w", err)
 			}
 			p.Log.Info("terraform: infrastructure destruction completed")
 			return nil
@@ -43,7 +41,6 @@ func (p *Phase) newDestroyInfraStep(cfg *config.Config, opts Options) distributi
 		MustBuild()
 }
 
-
 func (p *Phase) newCleanupFilesStep(cfg *config.Config, opts Options) distribution.ProvisioningStep {
 	return distribution.NewStepBuilder(StepCleanupFiles, "Cleanup Files").
 		Description("performing comprehensive cleanup").
@@ -53,7 +50,7 @@ func (p *Phase) newCleanupFilesStep(cfg *config.Config, opts Options) distributi
 		Execute(func(ctx context.Context) error {
 			vip, err := netutil.DeriveVIPFromStaticIP(cfg.Networking.StaticIP.Start)
 			if err != nil {
-				return utils.WrapError("failed to derive VIP from static IP start", err)
+				return fmt.Errorf("failed to derive VIP from static IP start: %w", err)
 			}
 			cleanupOpts := cleanup.Options{
 				Type:           opts.CleanupType,
@@ -70,7 +67,7 @@ func (p *Phase) newCleanupFilesStep(cfg *config.Config, opts Options) distributi
 			}
 
 			if err := cleanup.Execute(ctx, cleanupOpts); err != nil {
-				return utils.WrapError("cleanup failed", err)
+				return fmt.Errorf("cleanup failed: %w", err)
 			}
 			return nil
 		}).
@@ -85,7 +82,6 @@ func cleanupFilesSkipReason(opts Options) string {
 	return "No cleanup type specified"
 }
 
-
 func (p *Phase) newCleanupFirewallStep(opts Options) distribution.ProvisioningStep {
 	return distribution.NewStepBuilder(StepCleanupFirewall, "Cleanup Firewall").
 		Description("removing firewall rules").
@@ -94,7 +90,7 @@ func (p *Phase) newCleanupFirewallStep(opts Options) distribution.ProvisioningSt
 		SkipReason("Firewall cleanup disabled").
 		Execute(func(ctx context.Context) error {
 			if err := firewall.RemoveOKDRules(ctx, true, p.Log); err != nil {
-				return utils.WrapError("firewall cleanup failed", err)
+				return fmt.Errorf("firewall cleanup failed: %w", err)
 			}
 			p.Log.Info("firewall: okd rules removed from firewalld")
 			return nil
@@ -102,7 +98,6 @@ func (p *Phase) newCleanupFirewallStep(opts Options) distribution.ProvisioningSt
 		OnError(paths.WarnOnError(p.Log, "firewall: cleanup incomplete")).
 		MustBuild()
 }
-
 
 func (p *Phase) newPrintSummaryStep(opts Options) distribution.ProvisioningStep {
 	return distribution.NewStepBuilder(StepPrintSummary, "Print Summary").

@@ -52,22 +52,22 @@ func processTarEntry(tarReader *tar.Reader, header *tar.Header, destDir string, 
 	switch header.Typeflag {
 	case tar.TypeDir:
 		if err := os.MkdirAll(targetPath, os.FileMode(header.Mode)); err != nil {
-			return utils.WrapError("failed to create directory", err)
+			return fmt.Errorf("failed to create directory: %w", err)
 		}
 
 	case tar.TypeReg:
 		if err := os.MkdirAll(filepath.Dir(targetPath), 0755); err != nil {
-			return utils.WrapError("failed to create parent directory", err)
+			return fmt.Errorf("failed to create parent directory: %w", err)
 		}
 
 		outFile, err := os.OpenFile(targetPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.FileMode(header.Mode))
 		if err != nil {
-			return utils.WrapError("failed to create file", err)
+			return fmt.Errorf("failed to create file: %w", err)
 		}
 
 		if _, err := io.Copy(outFile, tarReader); err != nil {
 			_ = outFile.Close()
-			return utils.WrapError("failed to write file", err)
+			return fmt.Errorf("failed to write file: %w", err)
 		}
 		_ = outFile.Close()
 
@@ -86,7 +86,7 @@ func processTarEntry(tarReader *tar.Reader, header *tar.Header, destDir string, 
 
 		if err := os.Symlink(linkTarget, targetPath); err != nil {
 			if !os.IsExist(err) {
-				return utils.WrapError("failed to create symlink", err)
+				return fmt.Errorf("failed to create symlink: %w", err)
 			}
 		}
 
@@ -134,7 +134,7 @@ func ExtractTarGz(ctx context.Context, opts ExtractOptions) error {
 	tarReader := tar.NewReader(gzipReader)
 
 	if err := os.MkdirAll(opts.DestDir, 0755); err != nil {
-		return utils.WrapError("failed to create destination directory", err)
+		return fmt.Errorf("failed to create destination directory: %w", err)
 	}
 
 	for {

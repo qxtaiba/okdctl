@@ -99,7 +99,7 @@ func NewBaseStepWithDisplayTitle(id StepID, title, displayTitle, description str
 	}
 }
 
-func (b *BaseStep) ID() StepID          { return b.id }
+func (b *BaseStep) ID() StepID           { return b.id }
 func (b *BaseStep) Title() string        { return b.title }
 func (b *BaseStep) DisplayTitle() string { return b.displayTitle }
 func (b *BaseStep) Description() string  { return b.description }
@@ -138,10 +138,6 @@ type StepCompleteMsg struct {
 }
 
 type StepBackMsg struct{}
-
-type StepSkipMsg struct {
-	StepID StepID
-}
 
 // ErrorSetMsg signals an error that should be displayed in the wizard's
 // footer. Emitted from the wizard core when a ConfigApplier returns an error

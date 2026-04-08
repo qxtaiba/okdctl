@@ -3,6 +3,7 @@ package postinstall
 
 import (
 	"context"
+	"fmt"
 	"path/filepath"
 	"time"
 
@@ -97,7 +98,7 @@ func (p *Phase) Execute(ctx context.Context, cfg *config.Config, opts Options) (
 
 func (p *Phase) deployProductionDNS(ctx context.Context, cfg *config.Config, appsIP, kubeVipIP string, customDomains []templates.DNSCustomDomain) error {
 	if err := dns.DeployProduction(ctx, cfg, appsIP, kubeVipIP, customDomains); err != nil {
-		return utils.WrapError("failed to deploy production dns config", err)
+		return fmt.Errorf("failed to deploy production dns config: %w", err)
 	}
 	return nil
 }

@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/qxtaiba/okd-proxmox-cli/internal/cluster"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
 )
 
 func (p *Phase) WaitForBootstrap(ctx context.Context, clusterDir string, opts Options) error {
@@ -27,9 +26,9 @@ func (p *Phase) WaitForBootstrap(ctx context.Context, clusterDir string, opts Op
 			return fmt.Errorf("bootstrap timed out after %v", opts.BootstrapTimeout)
 		}
 		if errors.Is(ctx.Err(), context.Canceled) {
-			return utils.WrapError("bootstrap cancelled", context.Canceled)
+			return fmt.Errorf("bootstrap cancelled: %w", context.Canceled)
 		}
-		return utils.WrapError("bootstrap failed", err)
+		return fmt.Errorf("bootstrap failed: %w", err)
 	}
 
 	p.Log.Info("bootstrap: completed - control plane is ready")
@@ -52,7 +51,7 @@ func (p *Phase) MonitorInstallation(ctx context.Context, clusterDir string, opts
 	installCmd.Stderr = os.Stderr
 
 	if err := installCmd.Start(); err != nil {
-		return utils.WrapError("failed to start installation monitor", err)
+		return fmt.Errorf("failed to start installation monitor: %w", err)
 	}
 
 	installDone := make(chan error, 1)
@@ -70,7 +69,7 @@ func (p *Phase) MonitorInstallation(ctx context.Context, clusterDir string, opts
 		select {
 		case err := <-installDone:
 			if err != nil {
-				return utils.WrapError("installation failed", err)
+				return fmt.Errorf("installation failed: %w", err)
 			}
 
 			approved, csrErr := k8sClient.ApprovePendingCSRs(ctx)

@@ -22,8 +22,7 @@ func Install(ctx context.Context, packages []string, description string, logger 
 
 	args := append([]string{"install", "-y"}, packages...)
 	if err := system.RunSudo(ctx, "dnf", args...); err != nil {
-		logger.Error(fmt.Sprintf("packages: failed to install %s", description))
-		return utils.WrapError("dnf install failed", err)
+		return fmt.Errorf("dnf install failed: %w", err)
 	}
 
 	logger.Info(fmt.Sprintf("packages: %s installed", description))
@@ -45,8 +44,7 @@ func Remove(ctx context.Context, packages []string, logger utils.Logger) error {
 
 	args := append([]string{"remove", "-y"}, installed...)
 	if err := system.RunSudo(ctx, "dnf", args...); err != nil {
-		logger.Error(fmt.Sprintf("packages: failed to remove: %v", err))
-		return utils.WrapError("dnf remove failed", err)
+		return fmt.Errorf("dnf remove failed: %w", err)
 	}
 
 	logger.Info("packages: removed successfully")

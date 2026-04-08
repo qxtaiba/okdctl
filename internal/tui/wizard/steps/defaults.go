@@ -52,9 +52,9 @@ const (
 )
 
 const (
-	DefaultVMIDBase          = 6000
-	DefaultBootstrapTimeout  = 3600  // 1 hour in seconds
-	DefaultInstallTimeout    = 7200  // 2 hours in seconds
+	DefaultVMIDBase         = 6000
+	DefaultBootstrapTimeout = 3600 // 1 hour in seconds
+	DefaultInstallTimeout   = 7200 // 2 hours in seconds
 )
 
 const (

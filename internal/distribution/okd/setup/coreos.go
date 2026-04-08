@@ -11,7 +11,6 @@ import (
 	"github.com/qxtaiba/okd-proxmox-cli/internal/config"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/paths"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/executor"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/download"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
 )
@@ -89,7 +88,7 @@ func (p *Phase) DetectCoreOSVersion(ctx context.Context) (*CoreOSInfo, error) {
 
 	result, err := p.Exec.Run(ctx, "openshift-install", "coreos", "print-stream-json")
 	if err != nil {
-		return nil, utils.WrapError("failed to get CoreOS stream info", err)
+		return nil, fmt.Errorf("failed to get CoreOS stream info: %w", err)
 	}
 	if result.ExitCode != 0 {
 		return nil, fmt.Errorf("openshift-install coreos print-stream-json failed: %s", result.Stderr)
@@ -114,7 +113,7 @@ func (p *Phase) DetectCoreOSVersion(ctx context.Context) (*CoreOSInfo, error) {
 	}
 
 	if err := json.Unmarshal([]byte(result.Stdout), &streamData); err != nil {
-		return nil, utils.WrapError("failed to parse CoreOS stream JSON", err)
+		return nil, fmt.Errorf("failed to parse CoreOS stream JSON: %w", err)
 	}
 
 	arch, ok := streamData.Architectures["x86_64"]
@@ -170,7 +169,7 @@ func (p *Phase) DownloadCoreOSISO(ctx context.Context, info *CoreOSInfo, destPat
 	}
 
 	if err := download.Download(ctx, opts); err != nil {
-		return utils.WrapError("failed to download CoreOS ISO", err)
+		return fmt.Errorf("failed to download CoreOS ISO: %w", err)
 	}
 
 	p.Log.Info(fmt.Sprintf("coreos: iso downloaded to %s", destPath))
@@ -193,7 +192,7 @@ func (p *Phase) EnsureCoreOSISO(ctx context.Context, cfg *config.Config, opts Op
 	// Separate from custom-isos directory which gets uploaded to Proxmox
 	downloadsDir := filepath.Join(opts.WorkDir, "downloads")
 	if err := system.EnsureDir(downloadsDir); err != nil {
-		return "", utils.WrapError("failed to create downloads directory", err)
+		return "", fmt.Errorf("failed to create downloads directory: %w", err)
 	}
 
 	isoFilename := filepath.Base(info.ISOUrl)

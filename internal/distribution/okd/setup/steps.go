@@ -24,10 +24,10 @@ const (
 	StepEnsureWorkDir     distribution.StepID = "ensure-workdir"
 	StepDownloadTools     distribution.StepID = "download-tools"
 	StepGenerateConfig    distribution.StepID = "generate-config"
-	StepGenerateManifests     distribution.StepID = "generate-manifests"
-	StepGenerateKubeVIP       distribution.StepID = "generate-kubevip-manifests"
-	StepInjectManifests       distribution.StepID = "inject-manifests"
-	StepCompactCluster        distribution.StepID = "compact-cluster-manifests"
+	StepGenerateManifests distribution.StepID = "generate-manifests"
+	StepGenerateKubeVIP   distribution.StepID = "generate-kubevip-manifests"
+	StepInjectManifests   distribution.StepID = "inject-manifests"
+	StepCompactCluster    distribution.StepID = "compact-cluster-manifests"
 	StepGenerateIgnition  distribution.StepID = "generate-ignition"
 	StepInstallApache     distribution.StepID = "install-apache"
 	StepDeployIgnition    distribution.StepID = "deploy-ignition"
@@ -112,7 +112,7 @@ func (p *Phase) newDownloadToolsStep(cfg *config.Config, opts Options) distribut
 		SkipReason("downloads disabled").
 		Execute(func(ctx context.Context) error {
 			if err := p.DownloadOKDTools(ctx, cfg.Distribution.Version, opts); err != nil {
-				return utils.WrapError("failed to download OKD tools", err)
+				return fmt.Errorf("failed to download OKD tools: %w", err)
 			}
 			p.Log.Info("tools: sha256 checksums validated successfully")
 			return nil
@@ -128,7 +128,7 @@ func (p *Phase) newGenerateInstallConfigStep(cfg *config.Config, opts Options) d
 		Fatal(true).
 		Execute(func(ctx context.Context) error {
 			if err := p.GenerateInstallConfig(ctx, cfg, clusterDir); err != nil {
-				return utils.WrapError("failed to generate install-config", err)
+				return fmt.Errorf("failed to generate install-config: %w", err)
 			}
 			p.Log.Info(fmt.Sprintf("config: install-config.yaml generated with %d masters and %d workers",
 				cfg.Topology.ControlPlane.Count, cfg.Topology.Workers.Count))
@@ -145,7 +145,7 @@ func (p *Phase) newGenerateManifestsStep(opts Options) distribution.Provisioning
 		Fatal(true).
 		Execute(func(ctx context.Context) error {
 			if err := p.GenerateManifests(ctx, clusterDir); err != nil {
-				return utils.WrapError("failed to generate manifests", err)
+				return fmt.Errorf("failed to generate manifests: %w", err)
 			}
 			p.Log.Info("manifests: kubernetes manifests generated")
 			return nil
@@ -172,12 +172,12 @@ func (p *Phase) newGenerateKubeVIPManifestsStep(cfg *config.Config, opts Options
 
 			openshiftDir := filepath.Join(clusterDir, "openshift")
 			if err := system.EnsureDir(openshiftDir); err != nil {
-				return utils.WrapError("failed to ensure openshift manifests directory", err)
+				return fmt.Errorf("failed to ensure openshift manifests directory: %w", err)
 			}
 
 			rbacManifests, err := templates.RenderKubeVIPRBACManifests()
 			if err != nil {
-				return utils.WrapError("failed to render kube-vip RBAC manifests", err)
+				return fmt.Errorf("failed to render kube-vip RBAC manifests: %w", err)
 			}
 			for _, m := range rbacManifests {
 				path := filepath.Join(openshiftDir, m.Filename)
@@ -186,16 +186,16 @@ func (p *Phase) newGenerateKubeVIPManifestsStep(cfg *config.Config, opts Options
 				}
 			}
 
-		ds, err := templates.RenderKubeVIPDaemonSet(templates.KubeVIPData{
+			ds, err := templates.RenderKubeVIPDaemonSet(templates.KubeVIPData{
 				VIPAddress: vip,
 				Interface:  iface,
 			})
 			if err != nil {
-				return utils.WrapError("failed to render kube-vip DaemonSet manifest", err)
+				return fmt.Errorf("failed to render kube-vip DaemonSet manifest: %w", err)
 			}
 			dsPath := filepath.Join(openshiftDir, "99-kube-vip-daemonset.yaml")
 			if err := system.AtomicWriteString(dsPath, ds, 0644); err != nil {
-				return utils.WrapError("failed to write kube-vip DaemonSet manifest", err)
+				return fmt.Errorf("failed to write kube-vip DaemonSet manifest: %w", err)
 			}
 
 			p.Log.Info(fmt.Sprintf("kubevip: manifests generated (vip=%s, interface=%s, image=ghcr.io/kube-vip/kube-vip:%s)",
@@ -214,7 +214,7 @@ func (p *Phase) newInjectManifestsStep(opts Options) distribution.ProvisioningSt
 		Execute(func(ctx context.Context) error {
 			count, err := p.InjectCustomManifests(ctx, opts.ProjectRoot, clusterDir)
 			if err != nil {
-				return utils.WrapError("failed to inject custom manifests", err)
+				return fmt.Errorf("failed to inject custom manifests: %w", err)
 			}
 			if count > 0 {
 				p.Log.Info(fmt.Sprintf("manifests: injected %d custom manifest(s) from automation/config/manifests", count))
@@ -234,7 +234,7 @@ func (p *Phase) newCompactClusterManifestsStep(cfg *config.Config, opts Options)
 		SkipReason("cluster has workers").
 		Execute(func(ctx context.Context) error {
 			if err := p.InjectCompactClusterManifests(ctx, clusterDir, cfg.Topology.Workers.Count, cfg.Topology.ControlPlane.Count); err != nil {
-				return utils.WrapError("failed to inject compact cluster manifests", err)
+				return fmt.Errorf("failed to inject compact cluster manifests: %w", err)
 			}
 			p.Log.Info("manifests: injected ingress controller master placement for compact cluster")
 			return nil
@@ -250,7 +250,7 @@ func (p *Phase) newGenerateIgnitionStep(opts Options) distribution.ProvisioningS
 		Fatal(true).
 		Execute(func(ctx context.Context) error {
 			if err := p.GenerateIgnitionConfigs(ctx, clusterDir); err != nil {
-				return utils.WrapError("failed to generate ignition configs", err)
+				return fmt.Errorf("failed to generate ignition configs: %w", err)
 			}
 			p.Log.Info("ignition: configurations generated and validated")
 			return nil
@@ -277,7 +277,7 @@ func (p *Phase) newDeployIgnitionStep(cfg *config.Config, opts Options) distribu
 		Fatal(true).
 		Execute(func(ctx context.Context) error {
 			if err := p.DeployToWebServer(ctx, cfg, clusterDir); err != nil {
-				return utils.WrapError("failed to deploy to web server", err)
+				return fmt.Errorf("failed to deploy to web server: %w", err)
 			}
 
 			webURL := BuildIgnitionURL(cfg.HTTPServer.IgnitionServerIP, cfg.HTTPServer.Port)
@@ -336,7 +336,7 @@ func (p *Phase) newGenerateTfvarsStep(cfg *config.Config, opts Options) distribu
 		Fatal(true).
 		Execute(func(ctx context.Context) error {
 			if err := p.GenerateTerraformVars(cfg, opts); err != nil {
-				return utils.WrapError("failed to generate Terraform variables", err)
+				return fmt.Errorf("failed to generate Terraform variables: %w", err)
 			}
 			tfvarsPath := filepath.Join(opts.ProjectRoot, "infrastructure", "terraform", "environments", paths.GetTerraformEnv(cfg), "terraform.tfvars")
 			p.Log.Info(fmt.Sprintf("terraform: configuration written to %s", tfvarsPath))
@@ -353,7 +353,7 @@ func (p *Phase) newConfigureHAProxyStep(cfg *config.Config, opts Options) distri
 		SkipReason("HAProxy configuration disabled").
 		Execute(func(ctx context.Context) error {
 			if err := p.ConfigureHAProxy(ctx, cfg, opts); err != nil {
-				return utils.WrapError("failed to configure HAProxy", err)
+				return fmt.Errorf("failed to configure HAProxy: %w", err)
 			}
 			_ = p.VerifyHAProxyPorts(ctx)
 			return nil
@@ -389,14 +389,14 @@ func (p *Phase) newConfigureDNSStep(cfg *config.Config, opts Options) distributi
 			p.Log.Info("dns: configuring dnsmasq service")
 			if funcs.setupDnsmasq != nil {
 				if err := funcs.setupDnsmasq(ctx, cfg.Networking.DNS); err != nil {
-					return utils.WrapError("failed to setup dnsmasq", err)
+					return fmt.Errorf("failed to setup dnsmasq: %w", err)
 				}
 			}
 
 			p.Log.Info("dns: deploying bootstrap dns configuration")
 			if funcs.deployBootstrapDNS != nil {
 				if err := funcs.deployBootstrapDNS(ctx, cfg); err != nil {
-					return utils.WrapError("failed to deploy bootstrap dns", err)
+					return fmt.Errorf("failed to deploy bootstrap dns: %w", err)
 				}
 			}
 
@@ -409,7 +409,7 @@ func (p *Phase) newConfigureDNSStep(cfg *config.Config, opts Options) distributi
 
 			configPath, err := dns.DnsmasqConfigPath(fmt.Sprintf("okd-%s", cfg.Cluster.Name))
 			if err != nil {
-				return utils.WrapError("failed to resolve dnsmasq config path", err)
+				return fmt.Errorf("failed to resolve dnsmasq config path: %w", err)
 			}
 			p.Log.Info(fmt.Sprintf("dns: dnsmasq configured at %s", configPath))
 			return nil
@@ -420,4 +420,3 @@ func (p *Phase) newConfigureDNSStep(cfg *config.Config, opts Options) distributi
 		}).
 		MustBuild()
 }
-

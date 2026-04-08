@@ -6,7 +6,6 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/qxtaiba/okd-proxmox-cli/internal/config"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
 )
 
 func Run(steps []WizardStep, cfg *config.Config) (Result, error) {
@@ -18,7 +17,7 @@ func Run(steps []WizardStep, cfg *config.Config) (Result, error) {
 	)
 	finalModel, err := p.Run()
 	if err != nil {
-		return Result{}, utils.WrapError("wizard error", err)
+		return Result{}, fmt.Errorf("wizard error: %w", err)
 	}
 
 	m, ok := finalModel.(*Model)

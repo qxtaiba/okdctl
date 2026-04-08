@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/firewall"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/netutil"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
 )
@@ -18,7 +17,7 @@ func (p *Phase) RemoveHAProxy(ctx context.Context, vip string) error {
 	p.Log.Info("haproxy: stopping service")
 	result, err := p.Exec.Run(ctx, "sudo", "systemctl", "stop", "haproxy")
 	if err != nil {
-		return utils.WrapError("failed to stop haproxy", err)
+		return fmt.Errorf("failed to stop haproxy: %w", err)
 	}
 	if result.ExitCode != 0 {
 		p.Log.Warn(fmt.Sprintf("haproxy: stop returned non-zero exit code: %s", result.Stderr))
@@ -27,7 +26,7 @@ func (p *Phase) RemoveHAProxy(ctx context.Context, vip string) error {
 	p.Log.Info("haproxy: disabling service")
 	result, err = p.Exec.Run(ctx, "sudo", "systemctl", "disable", "haproxy")
 	if err != nil {
-		return utils.WrapError("failed to disable haproxy", err)
+		return fmt.Errorf("failed to disable haproxy: %w", err)
 	}
 	if result.ExitCode != 0 {
 		p.Log.Warn(fmt.Sprintf("haproxy: disable returned non-zero exit code: %s", result.Stderr))

@@ -195,4 +195,3 @@ func (m *Model) goToPreviousStep() (tea.Model, tea.Cmd) {
 
 	return m, m.steps[m.currentStep].Init()
 }
-

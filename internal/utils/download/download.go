@@ -87,7 +87,7 @@ func Download(ctx context.Context, opts Options) error {
 	}
 
 	if err := os.MkdirAll(filepath.Dir(opts.OutputPath), 0755); err != nil {
-		return utils.WrapError("failed to create output directory", err)
+		return fmt.Errorf("failed to create output directory: %w", err)
 	}
 
 	filename := filepath.Base(opts.OutputPath)
@@ -112,7 +112,7 @@ func Download(ctx context.Context, opts Options) error {
 
 	outFile, err := os.Create(opts.OutputPath)
 	if err != nil {
-		return utils.WrapError("failed to create output file", err)
+		return fmt.Errorf("failed to create output file: %w", err)
 	}
 	defer func() { _ = outFile.Close() }()
 
@@ -129,7 +129,7 @@ func Download(ctx context.Context, opts Options) error {
 			fmt.Print("\n")
 		}
 		_ = os.Remove(opts.OutputPath)
-		return utils.WrapError("failed to write file", err)
+		return fmt.Errorf("failed to write file: %w", err)
 	}
 	pw.finish()
 

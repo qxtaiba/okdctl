@@ -24,7 +24,7 @@ func (p *Phase) ensureIgnitionDir(ctx context.Context, webRoot string) (string, 
 	ignitionDir := filepath.Join(webRoot, "ignition")
 
 	if err := system.MkdirAll(ctx, ignitionDir, "ignition directory"); err != nil {
-		return "", utils.WrapError("failed to create ignition directory", err)
+		return "", fmt.Errorf("failed to create ignition directory: %w", err)
 	}
 
 	if err := system.Chown(ctx, ignitionDir, "apache:apache", "ignition directory ownership"); err != nil {
@@ -65,10 +65,10 @@ func (p *Phase) configureSELinuxForApache(ctx context.Context) {
 
 func enableAndStartApache(ctx context.Context) error {
 	if err := system.ManageService(ctx, system.ServiceEnable, "httpd", "apache httpd service"); err != nil {
-		return utils.WrapError("failed to enable httpd", err)
+		return fmt.Errorf("failed to enable httpd: %w", err)
 	}
 	if err := system.ManageService(ctx, system.ServiceStart, "httpd", "apache httpd service"); err != nil {
-		return utils.WrapError("failed to start httpd", err)
+		return fmt.Errorf("failed to start httpd: %w", err)
 	}
 	if !system.IsServiceActive(ctx, "httpd") {
 		return fmt.Errorf("apache httpd service failed to start - check systemctl status httpd")
@@ -166,7 +166,7 @@ func (p *Phase) VerifyWebServer(ctx context.Context, baseURL string) error {
 
 	resp, err := client.Get(testURL)
 	if err != nil {
-		return utils.WrapError("failed to connect to web server", err)
+		return fmt.Errorf("failed to connect to web server: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 

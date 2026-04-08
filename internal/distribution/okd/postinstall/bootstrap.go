@@ -7,7 +7,6 @@ import (
 
 	"github.com/qxtaiba/okd-proxmox-cli/internal/config"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/infrastructure/terraform"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
 )
 
@@ -29,7 +28,7 @@ func (p *Phase) CleanupBootstrap(ctx context.Context, cfg *config.Config, opts O
 	)
 
 	if err := tf.Init(ctx); err != nil {
-		return utils.WrapError("bootstrap: terraform init failed", err)
+		return fmt.Errorf("bootstrap: terraform init failed: %w", err)
 	}
 
 	vars := map[string]string{"bootstrap_enabled": "false"}
@@ -42,14 +41,14 @@ func (p *Phase) CleanupBootstrap(ctx context.Context, cfg *config.Config, opts O
 		Vars:           vars,
 		Targets:        targets,
 	}); err != nil {
-		return utils.WrapError("bootstrap: terraform plan failed", err)
+		return fmt.Errorf("bootstrap: terraform plan failed: %w", err)
 	}
 
 	p.Log.Info("bootstrap: applying — destroying bootstrap vm")
 	if err := tf.Apply(ctx, terraform.ApplyOptions{
 		PlanFile: filepath.Join(terraformDir, planFile),
 	}); err != nil {
-		return utils.WrapError("bootstrap: terraform apply failed", err)
+		return fmt.Errorf("bootstrap: terraform apply failed: %w", err)
 	}
 
 	// Clean up plan file.

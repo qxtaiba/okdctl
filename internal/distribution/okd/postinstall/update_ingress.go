@@ -14,9 +14,9 @@ import (
 )
 
 const (
-	DefaultIngressLBTimeout   = 10 * time.Minute
-	defaultConversionTimeout  = 5 * time.Minute
-	routerGonePollInterval    = 5 * time.Second
+	DefaultIngressLBTimeout  = 10 * time.Minute
+	defaultConversionTimeout = 5 * time.Minute
+	routerGonePollInterval   = 5 * time.Second
 )
 
 type UpdateIngressOptions struct {
@@ -293,8 +293,8 @@ func (p *Phase) handleHostNetworkConversion(
 }
 
 const (
-	strategyHostNetwork      = "HostNetwork"
-	strategyLoadBalancer     = "LoadBalancerService"
+	strategyHostNetwork  = "HostNetwork"
+	strategyLoadBalancer = "LoadBalancerService"
 )
 
 type ingressControllerInfo struct {

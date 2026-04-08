@@ -5,16 +5,23 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/retry"
 )
 
+const (
+	DefaultRetryCount   = 3
+	DefaultRetryBackoff = 5 * time.Second
+)
+
+// RetryDefault wraps retry.Do with the standard addon retry policy.
+func RetryDefault(ctx context.Context, fn func() error) error {
+	return retry.Do(ctx, DefaultRetryCount, DefaultRetryBackoff, fn)
+}
+
 // EnsureNamespace checks whether a Kubernetes namespace exists and creates it
-// if missing. The operation is retried up to 3 times with exponential backoff
-// to handle transient API errors during cluster bootstrap. This is shared
-// across addons that need to bootstrap namespaces.
+// if missing, using the default addon retry policy.
 func EnsureNamespace(ctx context.Context, env *Environment, namespace string) error {
-	return retry.Do(ctx, 3, 5*time.Second, func() error {
+	return RetryDefault(ctx, func() error {
 		result, err := env.Exec.Run(ctx, "oc", "get", "namespace", namespace)
 		if err == nil && result != nil && result.ExitCode == 0 {
 			return nil
@@ -23,7 +30,7 @@ func EnsureNamespace(ctx context.Context, env *Environment, namespace string) er
 		env.Logger.Info(fmt.Sprintf("creating %s namespace", namespace))
 		createResult, createErr := env.Exec.Run(ctx, "oc", "create", "namespace", namespace)
 		if createErr != nil {
-			return utils.WrapError(fmt.Sprintf("failed to create %s namespace", namespace), createErr)
+			return fmt.Errorf("failed to create %s namespace: %w", namespace, createErr)
 		}
 		if createResult == nil || createResult.ExitCode != 0 {
 			stderr := ""

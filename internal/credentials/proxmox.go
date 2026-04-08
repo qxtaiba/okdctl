@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"strings"
+
+	"github.com/qxtaiba/okd-proxmox-cli/internal/config"
 )
 
 type Source int
@@ -119,24 +121,14 @@ func (c *ProxmoxCredentials) Env() []string {
 	return env
 }
 
-// ProxmoxConfigProvider abstracts config access to avoid importing the config package.
-type ProxmoxConfigProvider interface {
-	GetProxmoxHost() string
-	GetProxmoxInsecure() bool
-	GetProxmoxAPIToken() string
-	GetProxmoxTokenID() string
-	GetProxmoxUsername() string
-	GetProxmoxPassword() string
-}
-
 // configHasCredentials reports whether the config file carries a full
 // credential set (API token or username+password). Used to detect when
 // environment credentials silently override a populated config.
-func configHasCredentials(cfg ProxmoxConfigProvider) bool {
-	if cfg.GetProxmoxAPIToken() != "" {
+func configHasCredentials(px *config.ProxmoxConfig) bool {
+	if px.APIToken != "" {
 		return true
 	}
-	return cfg.GetProxmoxUsername() != "" && cfg.GetProxmoxPassword() != ""
+	return px.Username != "" && px.Password != ""
 }
 
 // GetProxmoxCredentials resolves credentials with priority:
@@ -148,7 +140,7 @@ func configHasCredentials(cfg ProxmoxConfigProvider) bool {
 //     still comes from the config file (mixed source).
 //   - ConfigCredentialsOverridden: the config file also held credentials
 //     and they were silently ignored in favour of the environment.
-func GetProxmoxCredentials(cfg ProxmoxConfigProvider) *ProxmoxCredentials {
+func GetProxmoxCredentials(cfg *config.Config) *ProxmoxCredentials {
 	creds := &ProxmoxCredentials{
 		Source: SourceNone,
 	}
@@ -159,11 +151,12 @@ func GetProxmoxCredentials(cfg ProxmoxConfigProvider) *ProxmoxCredentials {
 		}
 	}
 
-	if cfg == nil {
+	if cfg == nil || cfg.Provider.Proxmox == nil {
 		return creds
 	}
+	px := cfg.Provider.Proxmox
 
-	host := cfg.GetProxmoxHost()
+	host := px.Host
 	if host == "" {
 		return creds
 	}
@@ -176,13 +169,11 @@ func GetProxmoxCredentials(cfg ProxmoxConfigProvider) *ProxmoxCredentials {
 		host = host + ":8006"
 	}
 	creds.Endpoint = host
-	creds.Insecure = cfg.GetProxmoxInsecure()
+	creds.Insecure = px.Insecure
 
-	configHadCreds := configHasCredentials(cfg)
+	configHadCreds := configHasCredentials(px)
 
-	// Priority 1: Environment variables (includes values loaded from .env file)
-	if token := os.Getenv("PROXMOX_VE_API_TOKEN"); token != "" {
-		creds.APIToken = []byte(token)
+	applyEnvOverrides := func(creds *ProxmoxCredentials) {
 		creds.Source = SourceEnv
 		creds.ConfigCredentialsOverridden = configHadCreds
 		if endpoint := os.Getenv("PROXMOX_VE_ENDPOINT"); endpoint != "" {
@@ -191,37 +182,36 @@ func GetProxmoxCredentials(cfg ProxmoxConfigProvider) *ProxmoxCredentials {
 			creds.EndpointFromConfig = true
 		}
 		applyInsecureOverride(creds)
+	}
+
+	// Priority 1: Environment variables (includes values loaded from .env file)
+	if token := os.Getenv("PROXMOX_VE_API_TOKEN"); token != "" {
+		creds.APIToken = []byte(token)
+		applyEnvOverrides(creds)
 		return creds
 	}
 
 	if username, password := os.Getenv("PROXMOX_VE_USERNAME"), os.Getenv("PROXMOX_VE_PASSWORD"); username != "" && password != "" {
 		creds.Username = username
 		creds.Password = []byte(password)
-		creds.Source = SourceEnv
-		creds.ConfigCredentialsOverridden = configHadCreds
-		if endpoint := os.Getenv("PROXMOX_VE_ENDPOINT"); endpoint != "" {
-			creds.Endpoint = endpoint
-		} else {
-			creds.EndpointFromConfig = true
-		}
-		applyInsecureOverride(creds)
+		applyEnvOverrides(creds)
 		return creds
 	}
 
 	// Priority 2: Config file fields (legacy support)
-	if apiToken := cfg.GetProxmoxAPIToken(); apiToken != "" {
-		token := apiToken
-		if tokenID := cfg.GetProxmoxTokenID(); tokenID != "" {
-			token = tokenID + "=" + apiToken
+	if px.APIToken != "" {
+		token := px.APIToken
+		if px.TokenID != "" {
+			token = px.TokenID + "=" + px.APIToken
 		}
 		creds.APIToken = []byte(token)
 		creds.Source = SourceConfig
 		return creds
 	}
 
-	if username, password := cfg.GetProxmoxUsername(), cfg.GetProxmoxPassword(); username != "" && password != "" {
-		creds.Username = username
-		creds.Password = []byte(password)
+	if px.Username != "" && px.Password != "" {
+		creds.Username = px.Username
+		creds.Password = []byte(px.Password)
 		creds.Source = SourceConfig
 		return creds
 	}

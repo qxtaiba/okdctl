@@ -433,4 +433,3 @@ func (g *InputGroup) ViewCompact(title string) string {
 
 	return strings.Join(lines, "\n")
 }
-

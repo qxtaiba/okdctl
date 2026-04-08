@@ -16,17 +16,17 @@ import (
 
 func (p *Phase) GenerateInstallConfig(ctx context.Context, cfg *config.Config, outputDir string) error {
 	if err := system.EnsureDir(outputDir); err != nil {
-		return utils.WrapError("failed to create output directory", err)
+		return fmt.Errorf("failed to create output directory: %w", err)
 	}
 
 	pullSecret, err := os.ReadFile(cfg.Files.PullSecret)
 	if err != nil {
-		return utils.WrapError("failed to read pull secret", err)
+		return fmt.Errorf("failed to read pull secret: %w", err)
 	}
 
 	sshKey, err := os.ReadFile(cfg.Files.SSHPublicKey)
 	if err != nil {
-		return utils.WrapError("failed to read SSH key", err)
+		return fmt.Errorf("failed to read SSH key: %w", err)
 	}
 
 	hostPrefix := cfg.Networking.HostPrefix
@@ -49,18 +49,18 @@ func (p *Phase) GenerateInstallConfig(ctx context.Context, cfg *config.Config, o
 
 	content, err := templates.RenderInstallConfig(data)
 	if err != nil {
-		return utils.WrapError("failed to render install-config template", err)
+		return fmt.Errorf("failed to render install-config template: %w", err)
 	}
 
 	outputPath := filepath.Join(outputDir, "install-config.yaml")
 	if err := system.AtomicWriteString(outputPath, content, 0600); err != nil {
-		return utils.WrapError("failed to write install-config.yaml", err)
+		return fmt.Errorf("failed to write install-config.yaml: %w", err)
 	}
 
 	// openshift-install consumes install-config.yaml during manifest generation
 	backupPath := outputPath + ".backup"
 	if err := system.CopyFile(outputPath, backupPath); err != nil {
-		return utils.WrapError("failed to backup install-config.yaml", err)
+		return fmt.Errorf("failed to backup install-config.yaml: %w", err)
 	}
 
 	return nil
@@ -69,7 +69,7 @@ func (p *Phase) GenerateInstallConfig(ctx context.Context, cfg *config.Config, o
 func (p *Phase) GenerateManifests(ctx context.Context, clusterDir string) error {
 	result, err := p.Exec.Run(ctx, "openshift-install", "create", "manifests", "--dir", clusterDir)
 	if err != nil {
-		return utils.WrapError("openshift-install create manifests failed", err)
+		return fmt.Errorf("openshift-install create manifests failed: %w", err)
 	}
 	if result.ExitCode != 0 {
 		return fmt.Errorf("openshift-install create manifests failed: %s", result.Stderr)
@@ -125,19 +125,19 @@ func (p *Phase) InjectCompactClusterManifests(ctx context.Context, clusterDir st
 
 	openshiftDir := filepath.Join(clusterDir, "openshift")
 	if err := system.EnsureDir(openshiftDir); err != nil {
-		return utils.WrapError("failed to ensure openshift manifests directory", err)
+		return fmt.Errorf("failed to ensure openshift manifests directory: %w", err)
 	}
 
 	manifest, err := templates.RenderCompactIngress(templates.CompactIngressData{
 		Replicas: masterCount,
 	})
 	if err != nil {
-		return utils.WrapError("failed to render compact ingress manifest", err)
+		return fmt.Errorf("failed to render compact ingress manifest: %w", err)
 	}
 
 	destPath := filepath.Join(openshiftDir, "99-ingress-controller-master-placement.yaml")
 	if err := system.AtomicWriteString(destPath, manifest, 0644); err != nil {
-		return utils.WrapError("failed to write compact cluster ingress manifest", err)
+		return fmt.Errorf("failed to write compact cluster ingress manifest: %w", err)
 	}
 
 	return nil
@@ -153,7 +153,7 @@ func (p *Phase) GenerateIgnitionConfigs(ctx context.Context, clusterDir string) 
 	}
 
 	if err := p.ValidateIgnitionFiles(clusterDir); err != nil {
-		return utils.WrapError("ignition file validation failed", err)
+		return fmt.Errorf("ignition file validation failed: %w", err)
 	}
 
 	return nil

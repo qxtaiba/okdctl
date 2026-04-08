@@ -14,7 +14,6 @@ type Manager struct {
 	cfg         *config.Config
 	exec        *executor.Executor
 	logger      utils.Logger
-	outputs     *OutputStore
 	projectRoot string
 }
 
@@ -23,13 +22,8 @@ func NewManager(cfg *config.Config, exec *executor.Executor, logger utils.Logger
 		cfg:         cfg,
 		exec:        exec,
 		logger:      logger,
-		outputs:     NewOutputStore(),
 		projectRoot: projectRoot,
 	}
-}
-
-func (m *Manager) OutputStore() *OutputStore {
-	return m.outputs
 }
 
 // InstallAll resolves and installs all enabled addons in dependency order.
@@ -84,12 +78,6 @@ func (m *Manager) InstallAll(ctx context.Context) error {
 				errs = append(errs, fmt.Errorf("addon %s rollback: %w", info.Name, unErr))
 			}
 			continue
-		}
-
-		if op, ok := a.(OutputProducer); ok {
-			for k, v := range op.Outputs() {
-				m.outputs.Set(info.Name, k, v)
-			}
 		}
 
 		// Post-install verify (warn-only — the addon is installed, verify is informational)
@@ -170,18 +158,11 @@ func (m *Manager) InstallOne(ctx context.Context, name string) error {
 					m.logger.Warn(fmt.Sprintf("addons: rollback of %s failed: %v", inst.a.Info().DisplayName, unErr))
 					installErr = errors.Join(installErr, fmt.Errorf("addon %s rollback: %w", inst.a.Info().Name, unErr))
 				}
-				m.outputs.DeleteAddon(inst.a.Info().Name)
 			}
 
 			return installErr
 		}
 		installed = append(installed, installedAddon{a: addon, env: env})
-
-		if op, ok := addon.(OutputProducer); ok {
-			for k, v := range op.Outputs() {
-				m.outputs.Set(info.Name, k, v)
-			}
-		}
 
 		// Post-install verify (warn-only — the addon is installed, verify is informational)
 		if vErr := addon.Verify(ctx, env); vErr != nil {
@@ -264,11 +245,9 @@ func (m *Manager) collectWithDeps(a Addon) ([]Addon, error) {
 func (m *Manager) buildEnv(a Addon) *Environment {
 	ac := m.cfg.Addons[a.Info().Name]
 	return &Environment{
-		Config:      m.cfg,
 		AddonConfig: ac,
 		Exec:        m.exec,
 		Logger:      m.logger,
-		Outputs:     m.outputs,
 		ProjectRoot: m.projectRoot,
 	}
 }

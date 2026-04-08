@@ -26,7 +26,7 @@ func CalculateChecksum(path string) (string, error) {
 
 	hasher := sha256.New()
 	if _, err := io.Copy(hasher, file); err != nil {
-		return "", utils.WrapError("failed to read file for checksum", err)
+		return "", fmt.Errorf("failed to read file for checksum: %w", err)
 	}
 
 	return hex.EncodeToString(hasher.Sum(nil)), nil
@@ -72,7 +72,7 @@ func FetchChecksum(ctx context.Context, checksumsURL, filename string) (string, 
 	limitedReader := io.LimitReader(resp.Body, maxChecksumFileSize)
 	body, err := io.ReadAll(limitedReader)
 	if err != nil {
-		return "", utils.WrapError("failed to read checksums response", err)
+		return "", fmt.Errorf("failed to read checksums response: %w", err)
 	}
 
 	lines := strings.Split(string(body), "\n")

@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
 )
 
@@ -19,7 +18,7 @@ func (p *Phase) ValidateClusterAccess(ctx context.Context) error {
 
 	result, err := cmdRunner.Run(ctx, "oc", "whoami")
 	if err != nil {
-		return utils.WrapError("failed to run oc whoami", err)
+		return fmt.Errorf("failed to run oc whoami: %w", err)
 	}
 	if result.ExitCode != 0 {
 		return fmt.Errorf("cluster authentication failed: %s", result.Stderr)
@@ -49,12 +48,12 @@ func (p *Phase) ValidateClusterAccess(ctx context.Context) error {
 func (p *Phase) SetupClusterAccess(ctx context.Context, clusterDir string) error {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
-		return utils.WrapError("failed to get user home directory", err)
+		return fmt.Errorf("failed to get user home directory: %w", err)
 	}
 
 	kubeDir := filepath.Join(homeDir, ".kube")
 	if err := system.EnsureDir(kubeDir); err != nil {
-		return utils.WrapError("failed to create .kube directory", err)
+		return fmt.Errorf("failed to create .kube directory: %w", err)
 	}
 
 	srcKubeconfig := filepath.Join(clusterDir, "auth", "kubeconfig")
@@ -70,7 +69,7 @@ func (p *Phase) SetupClusterAccess(ctx context.Context, clusterDir string) error
 	}
 
 	if err := system.CopyFileMode(srcKubeconfig, destKubeconfig, 0600); err != nil {
-		return utils.WrapError("failed to copy kubeconfig", err)
+		return fmt.Errorf("failed to copy kubeconfig: %w", err)
 	}
 
 	if err := p.addKubeconfigToBashrc(homeDir, destKubeconfig); err != nil {
@@ -122,4 +121,3 @@ func (p *Phase) addKubeconfigToBashrc(homeDir, kubeconfigPath string) error {
 
 	return nil
 }
-

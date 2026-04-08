@@ -12,7 +12,6 @@ import (
 	"github.com/qxtaiba/okd-proxmox-cli/internal/addon"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/config"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/executor"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/download"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
 )
@@ -105,12 +104,12 @@ func (p *Phase) installTerraform(ctx context.Context) error {
 
 	repoURL := "https://rpm.releases.hashicorp.com/RHEL/hashicorp.repo"
 	if err := runSudoCommand(ctx, "dnf", "config-manager", "--add-repo", repoURL); err != nil {
-		return utils.WrapError("failed to add HashiCorp repository", err)
+		return fmt.Errorf("failed to add HashiCorp repository: %w", err)
 	}
 	p.Log.Info("tools: hashicorp repository added")
 
 	if err := runSudoCommand(ctx, "dnf", "install", "-y", "terraform"); err != nil {
-		return utils.WrapError("failed to install terraform", err)
+		return fmt.Errorf("failed to install terraform: %w", err)
 	}
 
 	if !isToolInstalled(toolTerraform) {
@@ -135,7 +134,7 @@ func (p *Phase) installYQ(ctx context.Context) error {
 		Timeout:     2 * time.Minute,
 		Logger:      p.Log,
 	}); err != nil {
-		return utils.WrapError("failed to download yq", err)
+		return fmt.Errorf("failed to download yq: %w", err)
 	}
 	defer func() { _ = os.Remove(tempFile) }()
 
@@ -165,13 +164,13 @@ func (p *Phase) installHelm(ctx context.Context) error {
 		Timeout:     2 * time.Minute,
 		Logger:      p.Log,
 	}); err != nil {
-		return utils.WrapError("failed to download helm", err)
+		return fmt.Errorf("failed to download helm: %w", err)
 	}
 	defer func() { _ = os.Remove(tempFile) }()
 
 	extractDir := filepath.Join(os.TempDir(), "helm-extract")
 	if err := os.MkdirAll(extractDir, 0755); err != nil {
-		return utils.WrapError("failed to create extract directory", err)
+		return fmt.Errorf("failed to create extract directory: %w", err)
 	}
 	defer func() { _ = os.RemoveAll(extractDir) }()
 
@@ -182,7 +181,7 @@ func (p *Phase) installHelm(ctx context.Context) error {
 		CleanupArchive:  true,
 		Logger:          p.Log,
 	}); err != nil {
-		return utils.WrapError("failed to extract helm", err)
+		return fmt.Errorf("failed to extract helm: %w", err)
 	}
 
 	if err := installBinaryToPath(ctx, filepath.Join(extractDir, "helm"), "helm"); err != nil {
@@ -211,7 +210,7 @@ func (p *Phase) installSops(ctx context.Context) error {
 		Timeout:     2 * time.Minute,
 		Logger:      p.Log,
 	}); err != nil {
-		return utils.WrapError("failed to download sops", err)
+		return fmt.Errorf("failed to download sops: %w", err)
 	}
 	defer func() { _ = os.Remove(tempFile) }()
 
@@ -232,11 +231,11 @@ func installBinaryToPath(ctx context.Context, srcPath, name string) error {
 	destPath := filepath.Join("/usr/local/bin", name)
 
 	if err := system.CopyFileWithElevation(ctx, srcPath, destPath, fmt.Sprintf("install %s", name)); err != nil {
-		return utils.WrapError(fmt.Sprintf("failed to copy %s to /usr/local/bin", name), err)
+		return fmt.Errorf("failed to copy %s to /usr/local/bin: %w", name, err)
 	}
 
 	if err := system.Chmod(ctx, destPath, "+x", fmt.Sprintf("make %s executable", name)); err != nil {
-		return utils.WrapError(fmt.Sprintf("failed to set executable permissions on %s", name), err)
+		return fmt.Errorf("failed to set executable permissions on %s: %w", name, err)
 	}
 
 	return nil

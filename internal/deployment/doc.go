@@ -3,7 +3,6 @@
 // This package contains the core deployment logic separated from CLI concerns:
 //
 //   - Executor: Orchestrates deployment phases (prepare, install, configure)
-//   - InterruptHandler: Manages graceful shutdown on interrupt signals
 //   - Workflow: High-level deployment execution with options
 //
 // The CLI layer uses this package to implement deployment commands while

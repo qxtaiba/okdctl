@@ -8,12 +8,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/qxtaiba/okd-proxmox-cli/internal/addon"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/executor"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/retry"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
 )
 
@@ -78,7 +75,7 @@ func (s *SecretStore) Install(ctx context.Context, env *addon.Environment) error
 	env.Logger.Info("secretstore: creating 1password connect secrets")
 
 	if system.FileExists(credPath) {
-		if err := retry.Do(ctx, 3, 5*time.Second, func() error {
+		if err := addon.RetryDefault(ctx, func() error {
 			return s.createCredentialsSecret(ctx, env, credPath)
 		}); err != nil {
 			return err
@@ -86,7 +83,7 @@ func (s *SecretStore) Install(ctx context.Context, env *addon.Environment) error
 	}
 
 	if system.FileExists(tokenPath) {
-		if err := retry.Do(ctx, 3, 5*time.Second, func() error {
+		if err := addon.RetryDefault(ctx, func() error {
 			return s.createTokenSecret(ctx, env, tokenPath)
 		}); err != nil {
 			return err
@@ -208,7 +205,6 @@ func (s *SecretStore) secretFilePaths(env *addon.Environment) (secretsDir, credP
 	return
 }
 
-
 // buildOpaqueSecretManifest returns a minimal Secret manifest YAML with a
 // single data key. The value must already be raw bytes; it will be base64
 // encoded here.
@@ -242,7 +238,7 @@ data:
 func (s *SecretStore) createCredentialsSecret(ctx context.Context, env *addon.Environment, credPath string) error {
 	plaintext, err := s.readSecret(ctx, env, credPath)
 	if err != nil {
-		return utils.WrapError("failed to read 1password credentials", err)
+		return fmt.Errorf("failed to read 1password credentials: %w", err)
 	}
 
 	// Base64-encoded because the HelmRelease mounts it as a pre-encoded value
@@ -251,7 +247,7 @@ func (s *SecretStore) createCredentialsSecret(ctx context.Context, env *addon.En
 	manifest := buildOpaqueSecretManifestPreEncoded(defaultNamespace, credentialsSecretName, "credentials_base64", credentialsBase64)
 	result, err := env.Exec.RunWithStdin(ctx, manifest, "oc", "apply", "-f", "-")
 	if err != nil {
-		return utils.WrapError("failed to apply 1password credentials secret", err)
+		return fmt.Errorf("failed to apply 1password credentials secret: %w", err)
 	}
 	if result == nil || result.ExitCode != 0 {
 		stderr := ""
@@ -268,14 +264,14 @@ func (s *SecretStore) createCredentialsSecret(ctx context.Context, env *addon.En
 func (s *SecretStore) createTokenSecret(ctx context.Context, env *addon.Environment, tokenPath string) error {
 	plaintext, err := s.readSecret(ctx, env, tokenPath)
 	if err != nil {
-		return utils.WrapError("failed to read 1password token", err)
+		return fmt.Errorf("failed to read 1password token: %w", err)
 	}
 	token := strings.TrimSpace(plaintext)
 
 	manifest := buildOpaqueSecretManifest(defaultNamespace, tokenSecretName, "token", []byte(token))
 	result, err := env.Exec.RunWithStdin(ctx, manifest, "oc", "apply", "-f", "-")
 	if err != nil {
-		return utils.WrapError("failed to apply 1password token secret", err)
+		return fmt.Errorf("failed to apply 1password token secret: %w", err)
 	}
 	if result == nil || result.ExitCode != 0 {
 		stderr := ""

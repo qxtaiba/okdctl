@@ -8,15 +8,14 @@ import (
 	"github.com/qxtaiba/okd-proxmox-cli/internal/config"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/paths"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
 )
 
 const (
-	StepVerifyHealth       distribution.StepID = "verify-health"
-	StepCleanupBootstrap   distribution.StepID = "cleanup-bootstrap"
-	StepVerifyKubeVIP      distribution.StepID = "verify-kubevip"
+	StepVerifyHealth        distribution.StepID = "verify-health"
+	StepCleanupBootstrap    distribution.StepID = "cleanup-bootstrap"
+	StepVerifyKubeVIP       distribution.StepID = "verify-kubevip"
 	StepDeployProductionDNS distribution.StepID = "deploy-production-dns"
-	StepInstallAddons      distribution.StepID = "install-addons"
+	StepInstallAddons       distribution.StepID = "install-addons"
 )
 
 func (p *Phase) NewVerifyHealthStep(cfg *config.Config, opts Options, pctx *distribution.PhaseContext[PostInstallContext]) distribution.ProvisioningStep {
@@ -30,7 +29,7 @@ func (p *Phase) NewVerifyHealthStep(cfg *config.Config, opts Options, pctx *dist
 		Execute(func(ctx context.Context) error {
 			result, err := p.VerifyClusterHealth(ctx, opts)
 			if err != nil {
-				return utils.WrapError("cluster health verification failed", err)
+				return fmt.Errorf("cluster health verification failed: %w", err)
 			}
 			pctx.Update(func(c *PostInstallContext) {
 				c.ClusterHealth = result
@@ -48,7 +47,7 @@ func (p *Phase) NewCleanupBootstrapStep(cfg *config.Config, opts Options, pctx *
 		OnError(paths.WarnOnError(p.Log, "bootstrap: cleanup failed (non-critical)")).
 		Execute(func(ctx context.Context) error {
 			if err := p.CleanupBootstrap(ctx, cfg, opts); err != nil {
-				return utils.WrapError("bootstrap cleanup failed", err)
+				return fmt.Errorf("bootstrap cleanup failed: %w", err)
 			}
 			pctx.Update(func(c *PostInstallContext) {
 				c.BootstrapCleaned = true
@@ -70,7 +69,7 @@ func (p *Phase) NewVerifyKubeVIPStep(cfg *config.Config, opts Options, pctx *dis
 		Execute(func(ctx context.Context) error {
 			kubeVipIP, err := p.VerifyKubeVIP(ctx, cfg, opts)
 			if err != nil {
-				return utils.WrapError("kube-vip verification failed", err)
+				return fmt.Errorf("kube-vip verification failed: %w", err)
 			}
 			pctx.Update(func(c *PostInstallContext) {
 				c.KubeVIPVerified = true
@@ -95,7 +94,7 @@ func (p *Phase) NewDeployProductionDNSStep(cfg *config.Config, opts Options, pct
 			state := pctx.Get()
 			bastionIP := cfg.Networking.Bastion.IP
 			if err := p.deployProductionDNS(ctx, cfg, bastionIP, state.KubeVipIP, nil); err != nil {
-				return utils.WrapError("production dns deployment failed", err)
+				return fmt.Errorf("production dns deployment failed: %w", err)
 			}
 			pctx.Update(func(c *PostInstallContext) {
 				c.DNSDeployed = true
@@ -116,7 +115,7 @@ func (p *Phase) NewInstallAddonsStep(cfg *config.Config, opts Options, pctx *dis
 				p.Log.Warn(fmt.Sprintf("addons: api health check failed before addon install: %v", err))
 			}
 			if err := mgr.InstallAll(ctx); err != nil {
-				return utils.WrapError("addon installation failed", err)
+				return fmt.Errorf("addon installation failed: %w", err)
 			}
 			return nil
 		}).

@@ -7,7 +7,6 @@ import (
 
 	"github.com/qxtaiba/okd-proxmox-cli/internal/config"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/infrastructure/terraform"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
 )
 
 // StartWorkerVMs starts worker VMs after bootstrap completes so they can reach the MCS.
@@ -29,7 +28,7 @@ func (p *Phase) StartWorkerVMs(ctx context.Context, cfg *config.Config, opts Opt
 	)
 
 	if err := tf.Init(ctx); err != nil {
-		return utils.WrapError("terraform init failed", err)
+		return fmt.Errorf("terraform init failed: %w", err)
 	}
 
 	applyOpts := terraform.ApplyOptions{
@@ -40,7 +39,7 @@ func (p *Phase) StartWorkerVMs(ctx context.Context, cfg *config.Config, opts Opt
 	}
 
 	if err := tf.Apply(ctx, applyOpts); err != nil {
-		return utils.WrapError("failed to start worker VMs", err)
+		return fmt.Errorf("failed to start worker VMs: %w", err)
 	}
 
 	p.Log.Info("workers: all worker nodes started successfully")

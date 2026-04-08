@@ -30,12 +30,12 @@ func (p *Phase) BuildCustomISOs(ctx context.Context, cfg *config.Config, opts Op
 
 	fcosISO, err := p.findOrDownloadFCOSISO(ctx, cfg, opts)
 	if err != nil {
-		return utils.WrapError("failed to find or download FCOS ISO", err)
+		return fmt.Errorf("failed to find or download FCOS ISO: %w", err)
 	}
 
 	nodes, err := p.BuildNodeList(cfg)
 	if err != nil {
-		return utils.WrapError("failed to build node list", err)
+		return fmt.Errorf("failed to build node list: %w", err)
 	}
 
 	for _, node := range nodes {

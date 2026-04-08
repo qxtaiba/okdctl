@@ -40,11 +40,11 @@ type Condition struct {
 }
 
 const (
-	StepPreflight          distribution.StepID = "preflight"
-	StepInstallPackages    distribution.StepID = "install-packages"
-	StepCleanup            distribution.StepID = "cleanup"
-	StepEnsureWorkDir      distribution.StepID = "ensure-workdir"
-	StepDownloadTools      distribution.StepID = "download-tools"
+	StepPreflight         distribution.StepID = "preflight"
+	StepInstallPackages   distribution.StepID = "install-packages"
+	StepCleanup           distribution.StepID = "cleanup"
+	StepEnsureWorkDir     distribution.StepID = "ensure-workdir"
+	StepDownloadTools     distribution.StepID = "download-tools"
 	StepGenerateConfig    distribution.StepID = "generate-config"
 	StepGenerateManifests distribution.StepID = "generate-manifests"
 	StepInjectManifests   distribution.StepID = "inject-manifests"
@@ -64,5 +64,5 @@ const (
 	StepSetupKubeconfig distribution.StepID = "setup-kubeconfig"
 	StepValidateAccess  distribution.StepID = "validate-access"
 	StepMonitorInstall  distribution.StepID = "monitor-install"
-	StepSetupAccess distribution.StepID = "setup-access"
+	StepSetupAccess     distribution.StepID = "setup-access"
 )

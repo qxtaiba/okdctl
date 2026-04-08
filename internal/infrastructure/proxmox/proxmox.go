@@ -133,7 +133,7 @@ func (p *Provider) Provision(ctx context.Context, cfg *config.Config, opts Provi
 
 	p.logger.Info("terraform: initializing backend and providers")
 	if err := p.terraformExec.Init(ctx); err != nil {
-		return nil, utils.WrapError("terraform init failed", err)
+		return nil, fmt.Errorf("terraform init failed: %w", err)
 	}
 
 	p.logger.Info("terraform: creating execution plan")
@@ -141,7 +141,7 @@ func (p *Provider) Provision(ctx context.Context, cfg *config.Config, opts Provi
 		OutputPlanFile: planFileName,
 	}
 	if err := p.terraformExec.Plan(ctx, planOpts); err != nil {
-		return nil, utils.WrapError("terraform plan failed", err)
+		return nil, fmt.Errorf("terraform plan failed: %w", err)
 	}
 
 	totalNodes := 1 + cfg.Topology.ControlPlane.Count + cfg.Topology.Workers.Count
@@ -154,15 +154,15 @@ func (p *Provider) Provision(ctx context.Context, cfg *config.Config, opts Provi
 	}
 	if err := p.terraformExec.Apply(ctx, applyOpts); err != nil {
 		if errors.Is(ctx.Err(), context.Canceled) {
-			return nil, utils.WrapError("terraform apply interrupted", context.Canceled)
+			return nil, fmt.Errorf("terraform apply interrupted: %w", context.Canceled)
 		}
 		p.logger.Warn("terraform: apply failed; partial infrastructure may exist — run 'openshitctl destroy' to clean up")
-		return nil, utils.WrapError("terraform apply failed", err)
+		return nil, fmt.Errorf("terraform apply failed: %w", err)
 	}
 
 	result, err := p.retrieveProvisionResult(cfg)
 	if err != nil {
-		return nil, utils.WrapError("terraform apply succeeded but IP retrieval failed; run 'openshitctl destroy' to clean up", err)
+		return nil, fmt.Errorf("terraform apply succeeded but IP retrieval failed; run 'openshitctl destroy' to clean up: %w", err)
 	}
 
 	if len(result.VMs) == 0 {

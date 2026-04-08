@@ -12,7 +12,6 @@ import (
 	"github.com/qxtaiba/okd-proxmox-cli/internal/deployment"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/tui"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
 )
 
 func LoadConfig(configFile string) (*config.Config, error) {
@@ -28,7 +27,7 @@ func LoadConfig(configFile string) (*config.Config, error) {
 			}
 			return nil, fmt.Errorf("configuration file not found: %s: %w", configFile, err)
 		}
-		return nil, utils.WrapError("load configuration", err)
+		return nil, fmt.Errorf("load configuration: %w", err)
 	}
 	return cfg, nil
 }
@@ -98,13 +97,14 @@ func projectRootOrFallback() string {
 	return root
 }
 
-// Credentials are passed via environment to avoid modifying global process state.
-func CreateOKDProvisionerWithCreds(cfg *config.Config, creds *credentials.ProxmoxCredentials) *okd.Provisioner {
+// CreateOKDProvisioner creates a provisioner, optionally with Proxmox credentials.
+// Pass nil for creds when the operation only needs local tools (oc, dnsmasq, systemctl).
+func CreateOKDProvisioner(cfg *config.Config, creds *credentials.ProxmoxCredentials) *okd.Provisioner {
 	projectRoot := projectRootOrFallback()
 
 	opts := []okd.ProvisionerOption{
 		okd.WithProjectRoot(projectRoot),
-		okd.WithLogger(CLILogger()),
+		okd.WithLogger(tui.SimpleLogger()),
 	}
 
 	if creds != nil && creds.IsValid() {
@@ -112,21 +112,6 @@ func CreateOKDProvisionerWithCreds(cfg *config.Config, creds *credentials.Proxmo
 	}
 
 	return okd.New(cfg.Distribution.Version, opts...)
-}
-
-// CreateOKDProvisionerNoCreds creates a provisioner without Proxmox credentials.
-// Used for operations that only need local tools (oc, dnsmasq, systemctl).
-func CreateOKDProvisionerNoCreds(cfg *config.Config) *okd.Provisioner {
-	projectRoot := projectRootOrFallback()
-
-	return okd.New(cfg.Distribution.Version,
-		okd.WithProjectRoot(projectRoot),
-		okd.WithLogger(CLILogger()),
-	)
-}
-
-func CLILogger() utils.Logger {
-	return tui.SimpleLogger()
 }
 
 type DeploymentOptions struct {
@@ -144,7 +129,7 @@ func ExecuteFullDeployment(ctx context.Context, cfg *config.Config, opts Deploym
 
 	return deployment.Run(ctx, cfg, deployment.Options{
 		ShowStartMessage: opts.ShowStartMessage,
-		Logger:           CLILogger(),
+		Logger:           tui.SimpleLogger(),
 		CredentialsEnv:   credsEnv,
 		OnStart: func(clusterName string) {
 			tui.Info("starting deployment...", tui.LF("cluster", clusterFQDN))

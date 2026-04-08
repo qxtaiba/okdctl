@@ -4,16 +4,16 @@
 package config
 
 type Config struct {
-	Cluster      ClusterConfig            `yaml:"cluster" json:"cluster" mapstructure:"cluster"`
-	Distribution DistributionConfig       `yaml:"distribution" json:"distribution" mapstructure:"distribution"`
-	Provider     ProviderConfig           `yaml:"provider" json:"provider" mapstructure:"provider"`
-	Topology     TopologyConfig           `yaml:"topology" json:"topology" mapstructure:"topology"`
-	Networking   NetworkingConfig         `yaml:"networking" json:"networking" mapstructure:"networking"`
-	Addons       map[string]AddonConfig   `yaml:"addons,omitempty" json:"addons,omitempty" mapstructure:"addons"`
-	Files        FilesConfig              `yaml:"files" json:"files" mapstructure:"files"`
-	HTTPServer   HTTPServerConfig         `yaml:"http_server" json:"httpServer" mapstructure:"http_server"`
-	Deployment   DeploymentConfig         `yaml:"deployment" json:"deployment" mapstructure:"deployment"`
-	Disks        DisksConfig              `yaml:"disks,omitempty" json:"disks,omitempty" mapstructure:"disks"`
+	Cluster      ClusterConfig          `yaml:"cluster" json:"cluster" mapstructure:"cluster"`
+	Distribution DistributionConfig     `yaml:"distribution" json:"distribution" mapstructure:"distribution"`
+	Provider     ProviderConfig         `yaml:"provider" json:"provider" mapstructure:"provider"`
+	Topology     TopologyConfig         `yaml:"topology" json:"topology" mapstructure:"topology"`
+	Networking   NetworkingConfig       `yaml:"networking" json:"networking" mapstructure:"networking"`
+	Addons       map[string]AddonConfig `yaml:"addons,omitempty" json:"addons,omitempty" mapstructure:"addons"`
+	Files        FilesConfig            `yaml:"files" json:"files" mapstructure:"files"`
+	HTTPServer   HTTPServerConfig       `yaml:"http_server" json:"httpServer" mapstructure:"http_server"`
+	Deployment   DeploymentConfig       `yaml:"deployment" json:"deployment" mapstructure:"deployment"`
+	Disks        DisksConfig            `yaml:"disks,omitempty" json:"disks,omitempty" mapstructure:"disks"`
 }
 
 type ClusterConfig struct {

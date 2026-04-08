@@ -41,6 +41,9 @@ func WriteEnvFile(path string, creds *ProxmoxCredentials) error {
 	lines = append(lines, "# Proxmox credentials (managed by openshitctl)")
 	lines = append(lines, "# This file has restricted permissions (0600) — do not commit to git.")
 
+	if creds.Endpoint != "" {
+		lines = append(lines, "PROXMOX_VE_ENDPOINT="+creds.Endpoint)
+	}
 	if creds.Username != "" {
 		lines = append(lines, "PROXMOX_VE_USERNAME="+creds.Username)
 	}

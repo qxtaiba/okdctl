@@ -56,7 +56,7 @@ func (r *ValidationResult) Error() string {
 type ValidationScope uint64
 
 const (
-	ScopeRequired           ValidationScope = 1 << iota
+	ScopeRequired ValidationScope = 1 << iota
 	ScopeNetworking
 	ScopeResources
 	ScopeDistribution
@@ -66,7 +66,6 @@ const (
 	ScopeAdvancedNetworking
 	ScopeHTTPServer
 	ScopeEnums
-	ScopeDependencies
 
 	ScopeAll   = 0xFFFFFFFFFFFFFFFF
 	ScopeQuick = ScopeRequired | ScopeEnums | ScopeNetworking
@@ -141,10 +140,6 @@ func (cfg *Config) ValidateWithScope(scope ValidationScope) *ValidationResult {
 
 func (cfg *Config) ValidateQuick() *ValidationResult {
 	return ValidateWithOptions(cfg, ValidationOptions{Scope: ScopeQuick})
-}
-
-func (cfg *Config) ValidateForOKD() *ValidationResult {
-	return ValidateWithOKD(cfg)
 }
 
 func ValidateWithOptions(cfg *Config, opts ValidationOptions) *ValidationResult {

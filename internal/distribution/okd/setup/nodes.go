@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"github.com/qxtaiba/okd-proxmox-cli/internal/config"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/netutil"
 )
 
@@ -14,7 +13,7 @@ func (p *Phase) BuildNodeList(cfg *config.Config) ([]NodeInfo, error) {
 	startIP := cfg.Networking.StaticIP.Start
 	baseIP, lastOctet, err := netutil.SplitIPv4(startIP)
 	if err != nil {
-		return nil, utils.WrapError("invalid start IP", err)
+		return nil, fmt.Errorf("invalid start IP: %w", err)
 	}
 
 	totalNodes := 1 + cfg.Topology.ControlPlane.Count + cfg.Topology.Workers.Count

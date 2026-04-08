@@ -2,11 +2,11 @@ package install
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/qxtaiba/okd-proxmox-cli/internal/config"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/paths"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
 )
 
 const (
@@ -19,7 +19,6 @@ const (
 	StepSetupAccess     distribution.StepID = "setup-access"
 )
 
-
 func (p *Phase) newDeployInfraStep(cfg *config.Config, opts Options) distribution.ProvisioningStep {
 	return distribution.NewStepBuilder(StepDeployInfra, "Deploy Infrastructure").
 		Description("deploying proxmox infrastructure using terraform").
@@ -28,14 +27,13 @@ func (p *Phase) newDeployInfraStep(cfg *config.Config, opts Options) distributio
 		SkipReason("Terraform deployment disabled").
 		Execute(func(ctx context.Context) error {
 			if err := p.DeployInfrastructure(ctx, cfg, opts); err != nil {
-				return utils.WrapError("infrastructure deployment failed", err)
+				return fmt.Errorf("infrastructure deployment failed: %w", err)
 			}
 			p.Log.Info("terraform: proxmox infrastructure deployed successfully")
 			return nil
 		}).
 		MustBuild()
 }
-
 
 func (p *Phase) newWaitBootstrapStep(cfg *config.Config, opts Options) distribution.ProvisioningStep {
 	clusterDir := paths.ClusterConfigDir(opts.WorkDir)
@@ -48,13 +46,12 @@ func (p *Phase) newWaitBootstrapStep(cfg *config.Config, opts Options) distribut
 		}).
 		Execute(func(ctx context.Context) error {
 			if err := p.WaitForBootstrap(ctx, clusterDir, opts); err != nil {
-				return utils.WrapError("bootstrap failed", err)
+				return fmt.Errorf("bootstrap failed: %w", err)
 			}
 			return nil
 		}).
 		MustBuild()
 }
-
 
 func (p *Phase) newStartWorkersStep(cfg *config.Config, opts Options) distribution.ProvisioningStep {
 	return distribution.NewStepBuilder(StepStartWorkers, "Start Worker Nodes").
@@ -68,7 +65,6 @@ func (p *Phase) newStartWorkersStep(cfg *config.Config, opts Options) distributi
 		MustBuild()
 }
 
-
 func (p *Phase) newSetupKubeconfigStep(opts Options) distribution.ProvisioningStep {
 	clusterDir := paths.ClusterConfigDir(opts.WorkDir)
 	return distribution.NewStepBuilder(StepSetupKubeconfig, "Setup Kubeconfig").
@@ -80,7 +76,6 @@ func (p *Phase) newSetupKubeconfigStep(opts Options) distribution.ProvisioningSt
 		MustBuild()
 }
 
-
 func (p *Phase) newValidateAccessStep(opts Options) distribution.ProvisioningStep {
 	return distribution.NewStepBuilder(StepValidateAccess, "Validate Cluster Access").
 		Description("validating cluster access").
@@ -90,7 +85,6 @@ func (p *Phase) newValidateAccessStep(opts Options) distribution.ProvisioningSte
 		}).
 		MustBuild()
 }
-
 
 func (p *Phase) newMonitorInstallStep(cfg *config.Config, opts Options) distribution.ProvisioningStep {
 	clusterDir := paths.ClusterConfigDir(opts.WorkDir)
@@ -103,13 +97,12 @@ func (p *Phase) newMonitorInstallStep(cfg *config.Config, opts Options) distribu
 		}).
 		Execute(func(ctx context.Context) error {
 			if err := p.MonitorInstallation(ctx, clusterDir, opts); err != nil {
-				return utils.WrapError("installation monitoring failed", err)
+				return fmt.Errorf("installation monitoring failed: %w", err)
 			}
 			return nil
 		}).
 		MustBuild()
 }
-
 
 func (p *Phase) newSetupAccessStep(opts Options) distribution.ProvisioningStep {
 	clusterDir := paths.ClusterConfigDir(opts.WorkDir)
@@ -122,4 +115,3 @@ func (p *Phase) newSetupAccessStep(opts Options) distribution.ProvisioningStep {
 		OnError(paths.WarnOnError(p.Log, "kubeconfig: failed to setup persistent access")).
 		MustBuild()
 }
-

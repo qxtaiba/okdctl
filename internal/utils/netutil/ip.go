@@ -95,36 +95,6 @@ func IPInCIDR(ip, cidr string) (bool, error) {
 	return network.Contains(parsedIP), nil
 }
 
-func ipToUint32(ip string) (uint32, bool) {
-	parsed := net.ParseIP(ip)
-	if parsed == nil {
-		return 0, false
-	}
-	parsed = parsed.To4()
-	if parsed == nil {
-		return 0, false
-	}
-	return uint32(parsed[0])<<24 | uint32(parsed[1])<<16 | uint32(parsed[2])<<8 | uint32(parsed[3]), true
-}
-
-func CompareIPs(a, b string) (int, error) {
-	aVal, okA := ipToUint32(a)
-	if !okA {
-		return 0, fmt.Errorf("%w: %s", ErrInvalidIP, a)
-	}
-	bVal, okB := ipToUint32(b)
-	if !okB {
-		return 0, fmt.Errorf("%w: %s", ErrInvalidIP, b)
-	}
-
-	if aVal < bVal {
-		return -1, nil
-	} else if aVal > bVal {
-		return 1, nil
-	}
-	return 0, nil
-}
-
 func SplitIPv4(ip string) (base string, lastOctet int, err error) {
 	parsed := net.ParseIP(ip)
 	if parsed == nil {

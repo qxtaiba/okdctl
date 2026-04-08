@@ -40,16 +40,11 @@ type AddonInfo struct {
 }
 
 type Environment struct {
-	Config *config.Config
-
 	AddonConfig config.AddonConfig
 
 	Exec *executor.Executor
 
 	Logger utils.Logger
-
-	// Outputs stores cross-addon data for dependent addons.
-	Outputs *OutputStore
 
 	ProjectRoot string
 }
@@ -59,11 +54,6 @@ type ConfigurableAddon interface {
 
 	DefaultSettings() map[string]string
 	ValidateSettings(settings map[string]string) []string
-}
-
-type OutputProducer interface {
-	// Outputs returns key-value pairs available to dependent addons.
-	Outputs() map[string]string
 }
 
 type ToolSpec struct {

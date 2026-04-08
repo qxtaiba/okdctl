@@ -4,9 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
-
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
 )
 
 func (c *K8sClient) PendingCSRs(ctx context.Context) ([]CSR, error) {
@@ -15,7 +14,7 @@ func (c *K8sClient) PendingCSRs(ctx context.Context) ([]CSR, error) {
 		return nil, err
 	}
 	if result.ExitCode != 0 {
-		return nil, utils.WrapError("failed to get CSRs", errors.New(strings.TrimSpace(result.Stderr)))
+		return nil, fmt.Errorf("failed to get CSRs: %w", errors.New(strings.TrimSpace(result.Stderr)))
 	}
 
 	var csrList struct {
@@ -23,59 +22,27 @@ func (c *K8sClient) PendingCSRs(ctx context.Context) ([]CSR, error) {
 			Metadata struct {
 				Name string `json:"name"`
 			} `json:"metadata"`
-			Spec struct {
-				Username   string `json:"username"`
-				SignerName string `json:"signerName"`
-			} `json:"spec"`
 			Status struct {
-				Conditions []struct {
-					Type string `json:"type"`
-				} `json:"conditions"`
+				Conditions []json.RawMessage `json:"conditions"`
 			} `json:"status"`
 		} `json:"items"`
 	}
 
 	if err := json.Unmarshal([]byte(result.Stdout), &csrList); err != nil {
-		return nil, utils.WrapError("failed to parse CSRs", err)
+		return nil, fmt.Errorf("failed to parse CSRs: %w", err)
 	}
 
 	var pendingCSRs []CSR
 	for _, item := range csrList.Items {
-		approved := false
-		denied := false
-		for _, cond := range item.Status.Conditions {
-			if cond.Type == "Approved" {
-				approved = true
-			}
-			if cond.Type == "Denied" {
-				denied = true
-			}
-		}
-
-		csr := CSR{
-			Name:       item.Metadata.Name,
-			Requester:  item.Spec.Username,
-			SignerName: item.Spec.SignerName,
-			Approved:   approved,
-			Denied:     denied,
-			Pending:    len(item.Status.Conditions) == 0,
-		}
-
-		if csr.Pending {
-			pendingCSRs = append(pendingCSRs, csr)
+		if len(item.Status.Conditions) == 0 {
+			pendingCSRs = append(pendingCSRs, CSR{
+				Name:    item.Metadata.Name,
+				Pending: true,
+			})
 		}
 	}
 
 	return pendingCSRs, nil
-}
-
-func (c *K8sClient) ApproveCSRs(ctx context.Context, csrNames []string) error {
-	if len(csrNames) == 0 {
-		return nil
-	}
-
-	args := append([]string{"adm", "certificate", "approve"}, csrNames...)
-	return c.runCheck(ctx, args...)
 }
 
 func (c *K8sClient) ApprovePendingCSRs(ctx context.Context) (int, error) {
@@ -88,13 +55,14 @@ func (c *K8sClient) ApprovePendingCSRs(ctx context.Context) (int, error) {
 		return 0, nil
 	}
 
-	var names []string
-	for _, csr := range csrs {
-		names = append(names, csr.Name)
+	names := make([]string, len(csrs))
+	for i, csr := range csrs {
+		names[i] = csr.Name
 	}
 
-	if err := c.ApproveCSRs(ctx, names); err != nil {
-		return 0, utils.WrapError("failed to approve CSRs", err)
+	args := append([]string{"adm", "certificate", "approve"}, names...)
+	if err := c.runCheck(ctx, args...); err != nil {
+		return 0, fmt.Errorf("failed to approve CSRs: %w", err)
 	}
 
 	return len(names), nil

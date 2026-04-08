@@ -12,8 +12,8 @@ import (
 )
 
 type WaitForOptions struct {
-	Interval time.Duration  // Default: 30 seconds
-	Timeout  time.Duration  // Default: no timeout (0)
+	Interval time.Duration // Default: 30 seconds
+	Timeout  time.Duration // Default: no timeout (0)
 	Logger   utils.Logger
 }
 

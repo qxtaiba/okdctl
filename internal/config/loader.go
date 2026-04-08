@@ -55,7 +55,7 @@ func (l *Loader) Load() (*Config, error) {
 	}
 
 	if err := l.viper.Unmarshal(cfg); err != nil {
-		return nil, utils.WrapError("error parsing config", err)
+		return nil, fmt.Errorf("error parsing config: %w", err)
 	}
 
 	return cfg, nil
@@ -81,7 +81,7 @@ func (l *Loader) LoadFile(path string) (*Config, error) {
 
 	cfg := DefaultConfig()
 	if err := l.viper.Unmarshal(cfg); err != nil {
-		return nil, utils.WrapError("error parsing config", err)
+		return nil, fmt.Errorf("error parsing config: %w", err)
 	}
 
 	return cfg, nil
@@ -127,4 +127,3 @@ func (l *Loader) Save(cfg *Config, path string) error {
 
 	return system.AtomicWrite(path, data, 0600)
 }
-

@@ -10,7 +10,6 @@ import (
 
 	"github.com/qxtaiba/okd-proxmox-cli/internal/config"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/executor"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
 )
 
@@ -56,7 +55,7 @@ func uploadISOsViaSCP(ctx context.Context, cmdRunner *executor.Executor, isoFile
 	args = append(args, fmt.Sprintf("%s@%s:%s/", user, host, remotePath))
 
 	if err := cmdRunner.RunInteractive(ctx, "scp", args...); err != nil {
-		return utils.WrapError("scp failed", err)
+		return fmt.Errorf("scp failed: %w", err)
 	}
 	return nil
 }

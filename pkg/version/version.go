@@ -23,24 +23,3 @@ var (
 	// Platform is the OS/architecture.
 	Platform = fmt.Sprintf("%s/%s", runtime.GOOS, runtime.GOARCH)
 )
-
-// Info contains version information.
-type Info struct {
-	Version   string `json:"version"`
-	GitCommit string `json:"gitCommit"`
-	BuildDate string `json:"buildDate"`
-	GoVersion string `json:"goVersion"`
-	Platform  string `json:"platform"`
-}
-
-// Get returns the version information.
-func Get() Info {
-	return Info{
-		Version:   Version,
-		GitCommit: GitCommit,
-		BuildDate: BuildDate,
-		GoVersion: GoVersion,
-		Platform:  Platform,
-	}
-}
-

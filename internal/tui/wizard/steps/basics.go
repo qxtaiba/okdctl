@@ -34,7 +34,7 @@ var BasicsStepDefinition = wizard.StepDefinition{
 					ConfigSet: wizard.SetString(func(c *config.Config, v string) { c.Cluster.Domain = v }),
 					ConfigGet: wizard.GetString(func(c *config.Config) string { return c.Cluster.Domain }),
 				},
-				},
+			},
 		},
 		{
 			Title: "node topology",

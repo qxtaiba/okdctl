@@ -7,14 +7,12 @@ import (
 	"net/http"
 	"sort"
 	"strings"
-
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
 )
 
 func (f *OKDVersionFetcher) fetchFromNetwork(ctx context.Context) ([]OKDReleaseSeries, error) {
 	releases, err := f.fetchAllPages(ctx, "okd-project/okd")
 	if err != nil {
-		return nil, utils.WrapError("failed to fetch OKD releases", err)
+		return nil, fmt.Errorf("failed to fetch OKD releases: %w", err)
 	}
 
 	releases = f.deduplicateReleases(releases)

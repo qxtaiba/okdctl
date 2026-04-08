@@ -1,6 +1,7 @@
 package wizard
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
 
@@ -22,12 +23,12 @@ type ConfigSetter func(cfg *config.Config, value string) error
 type ConfigGetter func(cfg *config.Config) string
 
 type FieldDefinition struct {
-	Key      string              // Unique key for accessing value
-	Label    string              // Display label
-	Default  string              // Default value (as string)
-	Help     string              // Help text shown next to label
-	Type     FieldType           // Field type
-	Required bool                // Whether field is required
+	Key      string             // Unique key for accessing value
+	Label    string             // Display label
+	Default  string             // Default value (as string)
+	Help     string             // Help text shown next to label
+	Type     FieldType          // Field type
+	Required bool               // Whether field is required
 	Validate func(string) error // Optional validation function
 
 	ConfigSet ConfigSetter
@@ -271,7 +272,7 @@ func SetInt(setter func(cfg *config.Config, v int)) ConfigSetter {
 	return func(cfg *config.Config, value string) error {
 		v, err := strconv.Atoi(value)
 		if err != nil {
-			return utils.WrapError("invalid integer", err)
+			return fmt.Errorf("invalid integer: %w", err)
 		}
 		setter(cfg, v)
 		return nil

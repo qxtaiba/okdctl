@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"github.com/qxtaiba/okd-proxmox-cli/internal/config"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
 )
 
@@ -88,7 +87,7 @@ func ValidateFilePath(value string) error {
 	if _, err := os.Stat(expanded); os.IsNotExist(err) {
 		return fmt.Errorf("file does not exist: %s", expanded)
 	} else if err != nil {
-		return utils.WrapError("cannot access file", err)
+		return fmt.Errorf("cannot access file: %w", err)
 	}
 	return nil
 }

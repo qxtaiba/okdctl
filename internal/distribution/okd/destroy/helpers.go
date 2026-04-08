@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 
 	"github.com/qxtaiba/okd-proxmox-cli/internal/infrastructure/terraform"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
 )
 
@@ -29,7 +28,7 @@ func (p *Phase) destroyInfrastructure(ctx context.Context, opts Options) error {
 	}
 
 	if err := tf.Init(ctx); err != nil {
-		return utils.WrapError("terraform init failed", err)
+		return fmt.Errorf("terraform init failed: %w", err)
 	}
 
 	p.Log.Info(fmt.Sprintf("terraform: destroying infrastructure in %s", opts.TerraformEnv))
@@ -40,7 +39,7 @@ func (p *Phase) destroyInfrastructure(ctx context.Context, opts Options) error {
 		Parallelism: opts.Parallelism,
 		UsePlan:     true, // use safer plan-then-apply approach
 	}); err != nil {
-		return utils.WrapError("terraform destroy failed", err)
+		return fmt.Errorf("terraform destroy failed: %w", err)
 	}
 
 	if err := tf.Cleanup(); err != nil {

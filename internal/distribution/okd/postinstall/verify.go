@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/qxtaiba/okd-proxmox-cli/internal/config"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/netutil"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
 )
@@ -28,7 +27,7 @@ func (p *Phase) VerifyClusterHealth(ctx context.Context, opts Options) (*Cluster
 
 	cmdResult, err := p.Exec.Run(ctx, "oc", "get", "clusteroperators", "--no-headers")
 	if err != nil {
-		return nil, utils.WrapError("failed to get cluster operators", err)
+		return nil, fmt.Errorf("failed to get cluster operators: %w", err)
 	}
 
 	lines := strings.Split(strings.TrimSpace(cmdResult.Stdout), "\n")
@@ -50,7 +49,7 @@ func (p *Phase) VerifyClusterHealth(ctx context.Context, opts Options) (*Cluster
 
 	cmdResult, err = p.Exec.Run(ctx, "oc", "get", "nodes", "--no-headers")
 	if err != nil {
-		return result, utils.WrapError("failed to get nodes", err)
+		return result, fmt.Errorf("failed to get nodes: %w", err)
 	}
 
 	nodeLines := strings.Split(strings.TrimSpace(cmdResult.Stdout), "\n")
@@ -109,7 +108,7 @@ func (p *Phase) waitForKubeVIPDaemonSet(ctx context.Context, opts Options) error
 		}
 		return strings.TrimSpace(result.Stdout) != "" && strings.TrimSpace(result.Stdout) != "0"
 	}, timeout, p.Log); err != nil {
-		return utils.WrapError("kube-vip daemonset not ready", err)
+		return fmt.Errorf("kube-vip daemonset not ready: %w", err)
 	}
 
 	result, _ := p.Exec.Run(ctx, "oc", "get", "daemonset", "-n", "kube-system", "kube-vip",
@@ -135,7 +134,7 @@ func (p *Phase) waitForKubeVIPPing(ctx context.Context, vip string, opts Options
 		result, _ := p.Exec.Run(ctx, "ping", "-c", "1", "-W", "2", vip)
 		return result != nil && result.ExitCode == 0
 	}, timeout, p.Log); err != nil {
-		return utils.WrapError(fmt.Sprintf("vip %s is not responding to ping", vip), err)
+		return fmt.Errorf("vip %s is not responding to ping: %w", vip, err)
 	}
 
 	p.Log.Info(fmt.Sprintf("kubevip: vip %s is reachable", vip))
@@ -149,7 +148,7 @@ func (p *Phase) verifyKubeVIPAPIHealth(ctx context.Context, vip string) error {
 	p.Log.Info(fmt.Sprintf("verify: checking vip health at %s with tls verification disabled (bootstrap only)", healthURL))
 	result, err := p.Exec.Run(ctx, "curl", "-sk", "--connect-timeout", "5", healthURL)
 	if err != nil {
-		return utils.WrapError(fmt.Sprintf("failed to check api health at %s", healthURL), err)
+		return fmt.Errorf("failed to check api health at %s: %w", healthURL, err)
 	}
 	if result.ExitCode != 0 {
 		return fmt.Errorf("api health check failed at %s: %s", healthURL, result.Stderr)
@@ -169,7 +168,7 @@ func (p *Phase) verifyKubeVIPAPIHealth(ctx context.Context, vip string) error {
 func (p *Phase) verifyAPIHealthCheck(ctx context.Context) error {
 	result, err := p.Exec.Run(ctx, "oc", "get", "--raw", "/healthz")
 	if err != nil {
-		return utils.WrapError("api health check failed", err)
+		return fmt.Errorf("api health check failed: %w", err)
 	}
 	if result.ExitCode != 0 {
 		return fmt.Errorf("api health check failed: %s", result.Stderr)

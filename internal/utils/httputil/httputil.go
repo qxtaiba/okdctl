@@ -4,8 +4,6 @@
 package httputil
 
 import (
-	"crypto/tls"
-	"log"
 	"net/http"
 	"time"
 )
@@ -21,26 +19,6 @@ type ClientOption func(*http.Client)
 func WithTimeout(d time.Duration) ClientOption {
 	return func(c *http.Client) {
 		c.Timeout = d
-	}
-}
-
-func WithInsecureSkipVerify() ClientOption {
-	return func(c *http.Client) {
-		log.Printf("WARNING: TLS certificate verification disabled for HTTP client")
-		if c.Transport == nil {
-			c.Transport = &http.Transport{
-				TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-			}
-			return
-		}
-		t, ok := c.Transport.(*http.Transport)
-		if !ok {
-			return
-		}
-		if t.TLSClientConfig == nil {
-			t.TLSClientConfig = &tls.Config{}
-		}
-		t.TLSClientConfig.InsecureSkipVerify = true
 	}
 }
 

@@ -19,11 +19,11 @@ const (
 type progressWriter struct {
 	writer      Writer
 	total       int64
-	written     int64          // accessed atomically
-	lastPercent int32          // accessed atomically
-	stopped     int32          // accessed atomically - stops all output when set
-	lastUpdate  atomic.Value   // stores time.Time atomically
-	mu          sync.Mutex     // protects printProgress
+	written     int64        // accessed atomically
+	lastPercent int32        // accessed atomically
+	stopped     int32        // accessed atomically - stops all output when set
+	lastUpdate  atomic.Value // stores time.Time atomically
+	mu          sync.Mutex   // protects printProgress
 	isTTY       bool
 }
 

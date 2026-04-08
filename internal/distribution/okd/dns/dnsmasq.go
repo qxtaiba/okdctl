@@ -46,13 +46,13 @@ func validateConfigName(name string) error {
 
 func WriteDnsmasqConfig(ctx context.Context, name, content string) error {
 	if err := validateConfigName(name); err != nil {
-		return utils.WrapError("invalid config name", err)
+		return fmt.Errorf("invalid config name: %w", err)
 	}
 
 	configPath := filepath.Join(dnsmasqConfigDir, fmt.Sprintf("%s.conf", name))
 
 	if err := system.MkdirAll(ctx, dnsmasqConfigDir, "dnsmasq config directory"); err != nil {
-		return utils.WrapError("failed to create dnsmasq config directory", err)
+		return fmt.Errorf("failed to create dnsmasq config directory: %w", err)
 	}
 
 	// Back up existing config before overwriting so it can be restored on failure.
@@ -74,10 +74,10 @@ func WriteDnsmasqConfig(ctx context.Context, name, content string) error {
 
 	if _, err := tmpFile.WriteString(content); err != nil {
 		_ = tmpFile.Close()
-		return utils.WrapError("failed to write temp file", err)
+		return fmt.Errorf("failed to write temp file: %w", err)
 	}
 	if err := tmpFile.Close(); err != nil {
-		return utils.WrapError("failed to close temp file", err)
+		return fmt.Errorf("failed to close temp file: %w", err)
 	}
 
 	if err := system.CopyFileWithElevation(ctx, tmpPath, configPath, "dnsmasq config"); err != nil {
@@ -85,7 +85,7 @@ func WriteDnsmasqConfig(ctx context.Context, name, content string) error {
 	}
 
 	if err := system.Chmod(ctx, configPath, "644", "dnsmasq config permissions"); err != nil {
-		return utils.WrapError("failed to set config permissions", err)
+		return fmt.Errorf("failed to set config permissions: %w", err)
 	}
 
 	return nil
@@ -93,7 +93,7 @@ func WriteDnsmasqConfig(ctx context.Context, name, content string) error {
 
 func DnsmasqConfigPath(name string) (string, error) {
 	if err := validateConfigName(name); err != nil {
-		return "", utils.WrapError("invalid dnsmasq config name", err)
+		return "", fmt.Errorf("invalid dnsmasq config name: %w", err)
 	}
 	return filepath.Join(dnsmasqConfigDir, fmt.Sprintf("%s.conf", name)), nil
 }
@@ -111,7 +111,7 @@ func IsNetworkManagerActive(ctx context.Context) bool {
 func getActiveConnection(ctx context.Context) (string, error) {
 	out, err := exec.CommandContext(ctx, "nmcli", "-t", "-f", "NAME", "connection", "show", "--active").Output()
 	if err != nil {
-		return "", utils.WrapError("failed to list network connections", err)
+		return "", fmt.Errorf("failed to list network connections: %w", err)
 	}
 
 	for _, line := range strings.Split(string(out), "\n") {
@@ -141,7 +141,7 @@ func ConfigureSystemResolver(ctx context.Context, fallbackDNS []string, logger u
 	}
 
 	if err := validateDNSAddresses(fallbackDNS); err != nil {
-		return utils.WrapError("invalid fallback DNS configuration", err)
+		return fmt.Errorf("invalid fallback DNS configuration: %w", err)
 	}
 
 	conn, err := getActiveConnection(ctx)
@@ -156,11 +156,11 @@ func ConfigureSystemResolver(ctx context.Context, fallbackDNS []string, logger u
 	logger.Info(fmt.Sprintf("resolver: configuring %s to use local dnsmasq", conn))
 
 	if err := system.RunSudo(ctx, "nmcli", "connection", "modify", conn, "ipv4.dns", dnsConfig, "ipv4.ignore-auto-dns", "yes"); err != nil {
-		return utils.WrapError("failed to configure DNS for connection", err)
+		return fmt.Errorf("failed to configure DNS for connection: %w", err)
 	}
 
 	if err := system.RunSudo(ctx, "nmcli", "connection", "up", conn); err != nil {
-		return utils.WrapError("failed to apply DNS configuration", err)
+		return fmt.Errorf("failed to apply DNS configuration: %w", err)
 	}
 
 	logger.Info("resolver: system configured to use local dnsmasq")

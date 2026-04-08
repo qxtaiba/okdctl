@@ -348,7 +348,7 @@ func (v *distributionValidator) Validate(cfg *Config, result *ValidationResult) 
 	}
 }
 
-func ValidateOKDVersion(version string) error {
+func validateOKDVersion(version string) error {
 	if version == "" {
 		return fmt.Errorf("okd version is required")
 	}
@@ -361,7 +361,7 @@ func ValidateOKDVersion(version string) error {
 }
 
 // ValidateHAMasters validates that master count is odd for proper etcd quorum.
-func ValidateHAMasters(count int) error {
+func validateHAMasters(count int) error {
 	if count > 1 && count%2 == 0 {
 		return fmt.Errorf("master replicas should be odd for HA quorum (1, 3, or 5), got %d", count)
 	}
@@ -370,7 +370,7 @@ func ValidateHAMasters(count int) error {
 
 func ValidateOKDConfig(cfg *Config, result *ValidationResult) {
 	if cfg.Distribution.Type == DistributionOKD {
-		if err := ValidateOKDVersion(cfg.Distribution.Version); err != nil {
+		if err := validateOKDVersion(cfg.Distribution.Version); err != nil {
 			result.AddError(FieldDistributionVersion, err.Error())
 		}
 
@@ -389,7 +389,7 @@ func ValidateOKDConfig(cfg *Config, result *ValidationResult) {
 				fmt.Sprintf("OKD requires at least %d GB of disk space for control plane nodes", MinDiskGBControlPlaneOKD))
 		}
 
-		if err := ValidateHAMasters(cfg.Topology.ControlPlane.Count); err != nil {
+		if err := validateHAMasters(cfg.Topology.ControlPlane.Count); err != nil {
 			result.AddError(FieldTopologyControlPlaneCount, err.Error())
 		}
 
@@ -408,13 +408,6 @@ func ValidateOKDConfig(cfg *Config, result *ValidationResult) {
 			}
 		}
 	}
-}
-
-// ValidateWithOKD is a thin wrapper around cfg.Validate() retained for the
-// legacy ValidateForOKD call site. OKD-specific checks already run via
-// distributionValidator when ScopeAll is used, so no extra pass is needed.
-func ValidateWithOKD(cfg *Config) *ValidationResult {
-	return cfg.Validate()
 }
 
 type filesValidator struct{}

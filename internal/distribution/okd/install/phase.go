@@ -69,7 +69,6 @@ func NewOptions(cfg *config.Config, projectRoot string) Options {
 	}
 }
 
-
 type Phase struct {
 	paths.BasePhase
 }
@@ -122,7 +121,7 @@ func (p *Phase) DeployInfrastructure(ctx context.Context, cfg *config.Config, op
 		proxmox.WithEnv(p.Exec.Env),
 	)
 	if err := prov.Connect(ctx, cfg); err != nil {
-		return utils.WrapError("failed to connect to Proxmox", err)
+		return fmt.Errorf("failed to connect to Proxmox: %w", err)
 	}
 	defer func() { _ = prov.Disconnect(ctx) }()
 
@@ -160,4 +159,3 @@ func (p *Phase) SetupKubeconfig(clusterDir string) error {
 	p.Log.Info(fmt.Sprintf("kubeconfig: configured KUBECONFIG=%s for phase executor", kubeconfigPath))
 	return nil
 }
-

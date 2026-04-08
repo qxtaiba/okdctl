@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"os"
 
@@ -8,11 +9,9 @@ import (
 
 	"github.com/qxtaiba/okd-proxmox-cli/internal/config"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/credentials"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/deployment"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/tui"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/tui/wizard"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/tui/wizard/steps"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
 )
 
 var (
@@ -64,7 +63,7 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 
 	result, welcomeMode, err := runWizardWithMode(cfg, configExists)
 	if err != nil {
-		return utils.WrapError("wizard failed", err)
+		return fmt.Errorf("wizard failed: %w", err)
 	}
 
 	if result.Cancelled {
@@ -73,25 +72,25 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 	}
 
 	if welcomeMode == steps.WelcomeModeDeploy {
-		return runFullDeployment(cfg)
+		return runFullDeployment(cmd.Context(), cfg)
 	}
 
 	cfg = result.Config
 
 	if err := writeCredentialsEnv(cfg, deployOutputFile); err != nil {
-		return utils.WrapError("failed to save credentials", err)
+		return fmt.Errorf("failed to save credentials: %w", err)
 	}
 
 	clearConfigCredentials(cfg)
 
 	if err := saveConfig(cfg, deployOutputFile); err != nil {
-		return utils.WrapError("failed to save configuration", err)
+		return fmt.Errorf("failed to save configuration: %w", err)
 	}
 
 	switch result.Action {
 	case wizard.ActionDeploy:
-		if err := runFullDeployment(cfg); err != nil {
-			return utils.WrapError("deployment failed", err)
+		if err := runFullDeployment(cmd.Context(), cfg); err != nil {
+			return fmt.Errorf("deployment failed: %w", err)
 		}
 	case wizard.ActionExit:
 		showExitSummary(deployOutputFile)
@@ -107,28 +106,15 @@ func saveConfig(cfg *config.Config, path string) error {
 
 	loader := config.NewLoader()
 	if err := loader.Save(cfg, path); err != nil {
-		return utils.WrapError("failed to save configuration", err)
+		return fmt.Errorf("failed to save configuration: %w", err)
 	}
 
 	return nil
 }
 
-func runFullDeployment(cfg *config.Config) error {
+func runFullDeployment(ctx context.Context, cfg *config.Config) error {
 	creds := HandleCredentials(cfg)
 	defer creds.Zeroize()
-
-	handler, ctx := deployment.NewInterruptHandler()
-	defer handler.Cleanup()
-
-	// OnInterrupt is informational only — the interrupt handler's Cleanup()
-	// cancels ctx automatically and ExecuteFullDeployment returns with the
-	// resulting context error. This callback just surfaces the cancel to the
-	// user before that happens.
-	handler.OnInterrupt = func(sig os.Signal) {
-		fmt.Println()
-		tui.Error(fmt.Sprintf("deployment interrupted by %v", sig))
-		tui.Info("run 'openshitctl destroy' to clean up resources")
-	}
 
 	return ExecuteFullDeployment(ctx, cfg, DeploymentOptions{
 		ShowStartMessage: true,
@@ -151,7 +137,12 @@ func writeCredentialsEnv(cfg *config.Config, configPath string) error {
 		return nil
 	}
 
+	// Resolve the normalized endpoint (adds https:// and :8006 as needed)
+	// so the .env file is self-contained for Proxmox connection.
+	resolved := credentials.GetProxmoxCredentials(cfg)
+
 	creds := &credentials.ProxmoxCredentials{
+		Endpoint: resolved.Endpoint,
 		Username: px.Username,
 		Password: []byte(px.Password),
 		APIToken: []byte(px.APIToken),

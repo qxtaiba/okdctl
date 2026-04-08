@@ -133,7 +133,7 @@ var NetworkingStepDefinition = wizard.StepDefinition{
 					ConfigSet: wizard.SetString(func(c *config.Config, v string) { c.Networking.Bastion.IP = v }),
 					ConfigGet: wizard.GetString(func(c *config.Config) string { return c.Networking.Bastion.IP }),
 				},
-				},
+			},
 		},
 	},
 	Validate: func(values map[string]string) error {

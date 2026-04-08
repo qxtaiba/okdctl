@@ -52,7 +52,7 @@ func ExecuteFileOperation(ctx context.Context, op FileOperation, target string, 
 		}
 		perms := args[0]
 		regularOp = func() error {
-			return runCommand("chmod", perms, target)
+			return runCommand(ctx, "chmod", perms, target)
 		}
 		sudoOp = func() error {
 			return runSudo(ctx, "chmod", perms, target)
@@ -64,7 +64,7 @@ func ExecuteFileOperation(ctx context.Context, op FileOperation, target string, 
 		}
 		owner := args[0]
 		regularOp = func() error {
-			return runCommand("chown", owner, target)
+			return runCommand(ctx, "chown", owner, target)
 		}
 		sudoOp = func() error {
 			return runSudo(ctx, "chown", owner, target)
@@ -116,9 +116,8 @@ func RemoveAll(ctx context.Context, path, description string) error {
 	return ExecuteFileOperation(ctx, OpRemove, path, description)
 }
 
-func runCommand(name string, args ...string) error {
-	cmd := exec.Command(name, args...)
-	return cmd.Run()
+func runCommand(ctx context.Context, name string, args ...string) error {
+	return exec.CommandContext(ctx, name, args...).Run()
 }
 
 func runSudo(ctx context.Context, name string, args ...string) error {

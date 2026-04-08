@@ -48,7 +48,7 @@ func BuildConfigData(cfg *config.Config) (templates.DNSConfigData, error) {
 	// Derive VIP from static IP configuration (uses .10 as last octet by convention)
 	kubeVipIP, err := netutil.DeriveVIPFromStaticIP(staticIPStart)
 	if err != nil {
-		return templates.DNSConfigData{}, utils.WrapError("failed to derive VIP from static IP start", err)
+		return templates.DNSConfigData{}, fmt.Errorf("failed to derive VIP from static IP start: %w", err)
 	}
 
 	data := templates.DNSConfigData{
@@ -61,7 +61,7 @@ func BuildConfigData(cfg *config.Config) (templates.DNSConfigData, error) {
 
 	bootstrapIP, err := netutil.CalculateVMIP(staticIPStart, 0)
 	if err != nil {
-		return templates.DNSConfigData{}, utils.WrapError("failed to calculate bootstrap IP", err)
+		return templates.DNSConfigData{}, fmt.Errorf("failed to calculate bootstrap IP: %w", err)
 	}
 	data.BootstrapNode = templates.DNSNode{
 		Name: fmt.Sprintf("%s-bootstrap", cfg.Cluster.Name),
@@ -97,21 +97,21 @@ func BuildConfigData(cfg *config.Config) (templates.DNSConfigData, error) {
 func GenerateBootstrapConfig(cfg *config.Config, outputDir string) (path string, content string, err error) {
 	data, err := BuildConfigData(cfg)
 	if err != nil {
-		return "", "", utils.WrapError("failed to build dns config data", err)
+		return "", "", fmt.Errorf("failed to build dns config data: %w", err)
 	}
 
 	if err := os.MkdirAll(outputDir, 0755); err != nil {
-		return "", "", utils.WrapError("failed to create dns config directory", err)
+		return "", "", fmt.Errorf("failed to create dns config directory: %w", err)
 	}
 
 	content, err = templates.RenderDNSBootstrapConfig(data)
 	if err != nil {
-		return "", "", utils.WrapError("failed to render bootstrap dns config", err)
+		return "", "", fmt.Errorf("failed to render bootstrap dns config: %w", err)
 	}
 
 	path = filepath.Join(outputDir, "dnsmasq-bootstrap.conf")
 	if err := system.AtomicWriteString(path, content, 0644); err != nil {
-		return "", "", utils.WrapError("failed to write bootstrap dns config", err)
+		return "", "", fmt.Errorf("failed to write bootstrap dns config: %w", err)
 	}
 
 	return path, content, nil
@@ -123,10 +123,10 @@ func ConfigName(clusterName string) string {
 
 func Setup(ctx context.Context, fallbackDNS []string, logger utils.Logger) error {
 	if err := EnableDnsmasq(ctx); err != nil {
-		return utils.WrapError("failed to enable dnsmasq", err)
+		return fmt.Errorf("failed to enable dnsmasq: %w", err)
 	}
 	if err := ConfigureSystemResolver(ctx, fallbackDNS, logger); err != nil {
-		return utils.WrapError("failed to configure system resolver", err)
+		return fmt.Errorf("failed to configure system resolver: %w", err)
 	}
 	return nil
 }
@@ -134,17 +134,17 @@ func Setup(ctx context.Context, fallbackDNS []string, logger utils.Logger) error
 func DeployBootstrap(ctx context.Context, cfg *config.Config) error {
 	data, err := BuildConfigData(cfg)
 	if err != nil {
-		return utils.WrapError("failed to build dns config data", err)
+		return fmt.Errorf("failed to build dns config data: %w", err)
 	}
 
 	content, err := templates.RenderDNSBootstrapConfig(data)
 	if err != nil {
-		return utils.WrapError("failed to render bootstrap dns config", err)
+		return fmt.Errorf("failed to render bootstrap dns config: %w", err)
 	}
 
 	configName := ConfigName(cfg.Cluster.Name)
 	if err := WriteDnsmasqConfig(ctx, configName, content); err != nil {
-		return utils.WrapError("failed to write dnsmasq config", err)
+		return fmt.Errorf("failed to write dnsmasq config: %w", err)
 	}
 
 	if err := validateAndRestartDnsmasq(ctx, configName); err != nil {
@@ -157,7 +157,7 @@ func DeployBootstrap(ctx context.Context, cfg *config.Config) error {
 func DeployProduction(ctx context.Context, cfg *config.Config, appsIP, kubeVipIP string, customDomains []templates.DNSCustomDomain) error {
 	data, err := BuildConfigData(cfg)
 	if err != nil {
-		return utils.WrapError("failed to build dns config data", err)
+		return fmt.Errorf("failed to build dns config data: %w", err)
 	}
 	if appsIP != "" {
 		if net.ParseIP(appsIP) == nil {
@@ -180,12 +180,12 @@ func DeployProduction(ctx context.Context, cfg *config.Config, appsIP, kubeVipIP
 
 	content, err := templates.RenderDNSProductionConfig(data)
 	if err != nil {
-		return utils.WrapError("failed to render production dns config", err)
+		return fmt.Errorf("failed to render production dns config: %w", err)
 	}
 
 	configName := ConfigName(cfg.Cluster.Name)
 	if err := WriteDnsmasqConfig(ctx, configName, content); err != nil {
-		return utils.WrapError("failed to write dnsmasq config", err)
+		return fmt.Errorf("failed to write dnsmasq config: %w", err)
 	}
 
 	if err := validateAndRestartDnsmasq(ctx, configName); err != nil {
@@ -222,7 +222,7 @@ func validateAndRestartDnsmasq(ctx context.Context, configName string) error {
 
 	if err := RestartDnsmasq(ctx); err != nil {
 		restore()
-		return utils.WrapError("failed to restart dnsmasq — previous config restored", err)
+		return fmt.Errorf("failed to restart dnsmasq — previous config restored: %w", err)
 	}
 
 	// Successful restart — clean up backup.
@@ -232,4 +232,3 @@ func validateAndRestartDnsmasq(ctx context.Context, configName string) error {
 
 	return nil
 }
-

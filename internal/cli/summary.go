@@ -12,7 +12,7 @@ import (
 )
 
 const defaultContentWidth = tui.DefaultBoxWidth - 2
-const defaultKeyColWidth  = 45
+const defaultKeyColWidth = 45
 
 type summaryBuilder struct {
 	b        strings.Builder
@@ -222,4 +222,3 @@ func UpdateIngressSummary(result *postinstall.UpdateIngressResult) string {
 
 	return "\n" + tui.BoxedSectionCompact(sb.String(), "INGRESS UPDATED", tui.DefaultBoxWidth) + "\n"
 }
-
