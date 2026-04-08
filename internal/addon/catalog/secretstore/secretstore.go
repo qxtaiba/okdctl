@@ -206,24 +206,9 @@ func (s *SecretStore) secretFilePaths(env *addon.Environment) (secretsDir, credP
 }
 
 // buildOpaqueSecretManifest returns a minimal Secret manifest YAML with a
-// single data key. The value must already be raw bytes; it will be base64
-// encoded here.
-func buildOpaqueSecretManifest(namespace, name, dataKey string, rawValue []byte) string {
-	encoded := base64.StdEncoding.EncodeToString(rawValue)
-	return fmt.Sprintf(`apiVersion: v1
-kind: Secret
-metadata:
-  name: %s
-  namespace: %s
-type: Opaque
-data:
-  %s: %s
-`, name, namespace, dataKey, encoded)
-}
-
-// buildOpaqueSecretManifestPreEncoded is the pre-encoded variant: the value is
-// already base64-encoded and gets embedded verbatim.
-func buildOpaqueSecretManifestPreEncoded(namespace, name, dataKey, encodedValue string) string {
+// single pre-encoded data key. Callers must base64-encode raw values before
+// passing them.
+func buildOpaqueSecretManifest(namespace, name, dataKey, encodedValue string) string {
 	return fmt.Sprintf(`apiVersion: v1
 kind: Secret
 metadata:
@@ -244,7 +229,7 @@ func (s *SecretStore) createCredentialsSecret(ctx context.Context, env *addon.En
 	// Base64-encoded because the HelmRelease mounts it as a pre-encoded value
 	credentialsBase64 := base64.StdEncoding.EncodeToString([]byte(plaintext))
 
-	manifest := buildOpaqueSecretManifestPreEncoded(defaultNamespace, credentialsSecretName, "credentials_base64", credentialsBase64)
+	manifest := buildOpaqueSecretManifest(defaultNamespace, credentialsSecretName, "credentials_base64", credentialsBase64)
 	result, err := env.Exec.RunWithStdin(ctx, manifest, "oc", "apply", "-f", "-")
 	if err != nil {
 		return fmt.Errorf("failed to apply 1password credentials secret: %w", err)
@@ -268,7 +253,7 @@ func (s *SecretStore) createTokenSecret(ctx context.Context, env *addon.Environm
 	}
 	token := strings.TrimSpace(plaintext)
 
-	manifest := buildOpaqueSecretManifest(defaultNamespace, tokenSecretName, "token", []byte(token))
+	manifest := buildOpaqueSecretManifest(defaultNamespace, tokenSecretName, "token", base64.StdEncoding.EncodeToString([]byte(token)))
 	result, err := env.Exec.RunWithStdin(ctx, manifest, "oc", "apply", "-f", "-")
 	if err != nil {
 		return fmt.Errorf("failed to apply 1password token secret: %w", err)
