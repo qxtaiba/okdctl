@@ -118,8 +118,8 @@ var ProxmoxStepDefinition = wizard.StepDefinition{
 				{
 					Key:      "skip_tls_verify",
 					Label:    "skip tls verify",
-					Default:  "yes",
-					Help:     "skip tls certificate verification (yes for self-signed certs)",
+					Default:  "no",
+					Help:     "skip tls certificate verification — set to yes only for self-signed certs",
 					Required: true,
 					Validate: ValidateYesNo,
 					ConfigSet: wizard.SetBool(func(c *config.Config, v bool) {

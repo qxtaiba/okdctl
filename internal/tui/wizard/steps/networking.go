@@ -113,7 +113,7 @@ var NetworkingStepDefinition = wizard.StepDefinition{
 					Key:       "interface",
 					Label:     "interface",
 					Default:   "ens18",
-					Help:      "network interface name on vms",
+					Help:      "network interface inside vms — ens18 is the proxmox/virtio default; use ip link in a vm to verify",
 					Required:  true,
 					ConfigSet: wizard.SetString(func(c *config.Config, v string) { c.Networking.StaticIP.Interface = v }),
 					ConfigGet: wizard.GetString(func(c *config.Config) string { return c.Networking.StaticIP.Interface }),
