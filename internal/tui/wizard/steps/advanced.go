@@ -51,6 +51,26 @@ var AdvancedStepDefinition = wizard.StepDefinition{
 						return "host"
 					},
 				},
+				{
+					Key:      "numa_enabled",
+					Label:    "enable numa",
+					Default:  "no",
+					Help:     "enable numa topology for vms — improves performance on multi-socket hosts",
+					Required: true,
+					Validate: ValidateYesNo,
+					ConfigSet: func(cfg *config.Config, value string) error {
+						if cfg.Provider.Proxmox != nil {
+							cfg.Provider.Proxmox.NUMAEnabled = value == "yes"
+						}
+						return nil
+					},
+					ConfigGet: func(cfg *config.Config) string {
+						if cfg.Provider.Proxmox != nil && cfg.Provider.Proxmox.NUMAEnabled {
+							return "yes"
+						}
+						return "no"
+					},
+				},
 			},
 		},
 		{

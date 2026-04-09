@@ -50,6 +50,10 @@ resource "proxmox_virtual_environment_vm" "bootstrap" {
     dedicated = local.bootstrap_memory
   }
 
+  numa {
+    enabled = var.numa_enabled
+  }
+
   # disabled for faster terraform operations
   agent {
     enabled = false
@@ -150,6 +154,10 @@ resource "proxmox_virtual_environment_vm" "master" {
 
   memory {
     dedicated = local.master_memory
+  }
+
+  numa {
+    enabled = var.numa_enabled
   }
 
   # disabled for faster terraform operations
@@ -269,6 +277,10 @@ resource "proxmox_virtual_environment_vm" "worker" {
 
   memory {
     dedicated = local.worker_memory
+  }
+
+  numa {
+    enabled = var.numa_enabled
   }
 
   # disabled for faster terraform operations

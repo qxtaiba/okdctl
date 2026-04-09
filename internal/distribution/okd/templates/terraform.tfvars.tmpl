@@ -37,8 +37,8 @@ worker_names = [{{ .WorkerNames }}]
 
 vm_tags = ["okd", "{{ .ClusterName }}"]
 
-additional_networks = []
+additional_networks = {{ .AdditionalNetworks }}
 
-numa_enabled = false
+numa_enabled = {{ .NUMAEnabled }}
 
 cpu_type = "{{ .CPUType }}"
