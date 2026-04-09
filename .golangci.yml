@@ -1,0 +1,109 @@
+version: "2"
+
+formatters:
+  enable:
+    - gofumpt
+    - goimports
+
+linters:
+  default: none
+  enable:
+    # correctness
+    - errcheck
+    - govet
+    - staticcheck
+    - ineffassign
+    - unused
+
+    # antipatterns
+    - gocritic
+    - revive
+    - unconvert
+    - unparam
+    - wastedassign
+    - nilerr
+    - noctx
+
+    # security
+    - gosec
+
+    # style
+    - misspell
+    - dupword
+    - goconst
+    - nakedret
+    - whitespace
+    - nolintlint
+
+    # complexity
+    - gocyclo
+    - funlen
+    - nestif
+
+    # duplication
+    - dupl
+
+  settings:
+    gocyclo:
+      min-complexity: 15
+
+    funlen:
+      lines: 120
+      statements: 50
+
+    nestif:
+      min-complexity: 5
+
+    dupl:
+      threshold: 100
+
+    goconst:
+      min-occurrences: 3
+
+    gocritic:
+      enabled-tags:
+        - diagnostic
+        - performance
+        - style
+
+    nolintlint:
+      require-explanation: true
+      require-specific: true
+
+    revive:
+      rules:
+        - name: blank-imports
+        - name: context-as-argument
+        - name: error-return
+        - name: error-strings
+        - name: increment-decrement
+        - name: range
+        - name: receiver-naming
+        - name: redefines-builtin-id
+        - name: superfluous-else
+        - name: unreachable-code
+        - name: unused-parameter
+
+    gosec:
+      excludes:
+        - G107 # url provided by variable — expected for api calls
+        - G304 # file path from variable — expected for config loading
+
+  exclusions:
+    presets:
+      - common-false-positives
+      - std-error-handling
+      - legacy
+    rules:
+      # allow dupl/funlen/goconst in tests
+      - linters: [dupl, funlen, goconst]
+        path: _test\.go
+      # noctx: allow http calls without context in wizard discovery (short-lived)
+      - linters: [noctx]
+        path: proxmox_discovery\.go
+    paths:
+      - docs
+      - third_party
+
+run:
+  tests: false
