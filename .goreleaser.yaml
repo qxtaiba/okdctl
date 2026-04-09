@@ -1,0 +1,37 @@
+---
+version: 2
+builds:
+  - main: ./cmd/openshitctl
+    binary: openshitctl
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X github.com/qxtaiba/okd-proxmox-cli/pkg/version.Version={{.Version}}
+      - -X github.com/qxtaiba/okd-proxmox-cli/pkg/version.GitCommit={{.ShortCommit}}
+      - -X github.com/qxtaiba/okd-proxmox-cli/pkg/version.BuildDate={{.Date}}
+archives:
+  - formats:
+      - tar.gz
+    format_overrides:
+      - goos: darwin
+        formats:
+          - zip
+    name_template: >-
+      {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^chore:"
+      - "^test:"
+      - "^ci:"
+      - Merge pull request
+      - Merge branch
