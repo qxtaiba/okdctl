@@ -17,7 +17,7 @@ import (
 )
 
 const (
-	defaultSecretsDir = "automation/config/secrets"
+	defaultSecretsDir = "automation/config/secrets" //nolint:gosec // directory path, not a credential
 	defaultNamespace  = "external-secrets"
 
 	credentialsFile = "1password-credentials.json"
@@ -149,7 +149,7 @@ func (s *SecretStore) DefaultSettings() map[string]string {
 	}
 }
 
-func (s *SecretStore) ValidateSettings(settings map[string]string) []string {
+func (s *SecretStore) ValidateSettings(_ map[string]string) []string {
 	// No validation errors — secrets_dir defaults are fine, path is checked at install time
 	return nil
 }

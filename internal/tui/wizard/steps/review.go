@@ -280,9 +280,9 @@ func (s *ReviewStep) renderCompute(st sectionStyles) string {
 	}
 
 	// Resource totals
-	totalCPU := cpCPU*cpCount + 4 // +4 for bootstrap
+	totalCPU := cpCPU*cpCount + 4                                            // +4 for bootstrap
 	totalMemGB := (s.cfg.Topology.ControlPlane.Memory*cpCount + 8192) / 1024 // +8192 for bootstrap
-	totalOSDiskGB := cpDisk*cpCount + 50 // +50 for bootstrap
+	totalOSDiskGB := cpDisk*cpCount + 50                                     // +50 for bootstrap
 	totalDataDiskGB := 0
 
 	wCount := 0
@@ -488,7 +488,7 @@ func (s *ReviewStep) Validate() error {
 	return nil
 }
 
-func (s *ReviewStep) Apply(cfg *config.Config) error {
+func (s *ReviewStep) Apply(_ *config.Config) error {
 	return nil
 }
 

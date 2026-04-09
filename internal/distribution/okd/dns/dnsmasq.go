@@ -182,7 +182,8 @@ func RestoreSystemResolver(ctx context.Context, logger *slog.Logger) error {
 	if IsNetworkManagerActive(ctx) {
 		conn, err := getActiveConnection(ctx)
 		if err != nil {
-			return nil
+			logger.Warn(fmt.Sprintf("resolver: could not detect active connection for restore: %v", err))
+			return nil // best-effort restore; no active connection is non-fatal
 		}
 
 		logger.Info(fmt.Sprintf("resolver: restoring DHCP DNS for %s", conn))

@@ -9,7 +9,7 @@ import (
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
 )
 
-func (p *Phase) destroyInfrastructure(ctx context.Context, opts Options) error {
+func (p *Phase) destroyInfrastructure(ctx context.Context, opts *Options) error {
 	terraformDir := filepath.Join(opts.ProjectRoot, "infrastructure", "terraform", "environments", opts.TerraformEnv)
 
 	if !system.DirExists(terraformDir) {

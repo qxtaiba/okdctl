@@ -40,9 +40,9 @@ type proxmoxBridge struct {
 
 // proxmoxDiscovery holds everything discovered from a Proxmox cluster.
 type proxmoxDiscovery struct {
-	Nodes    []proxmoxNode
-	Storage  []proxmoxStorage
-	Bridges  []proxmoxBridge
+	Nodes   []proxmoxNode
+	Storage []proxmoxStorage
+	Bridges []proxmoxBridge
 }
 
 // discoverProxmox queries the Proxmox API to list nodes, storage, and bridges.

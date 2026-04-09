@@ -7,6 +7,8 @@ import (
 	"runtime"
 )
 
+const osLinux = "linux"
+
 type ServiceAction string
 
 const (
@@ -19,8 +21,8 @@ const (
 	ServiceStatus  ServiceAction = "status"
 )
 
-func ManageService(ctx context.Context, action ServiceAction, serviceName, description string) error {
-	if runtime.GOOS != "linux" {
+func ManageService(ctx context.Context, action ServiceAction, serviceName, _ string) error {
+	if runtime.GOOS != osLinux {
 		return fmt.Errorf("systemd services are only supported on Linux")
 	}
 
@@ -37,7 +39,7 @@ func ManageService(ctx context.Context, action ServiceAction, serviceName, descr
 }
 
 func IsServiceActive(ctx context.Context, serviceName string) bool {
-	if runtime.GOOS != "linux" {
+	if runtime.GOOS != osLinux {
 		return false
 	}
 
@@ -46,7 +48,7 @@ func IsServiceActive(ctx context.Context, serviceName string) bool {
 }
 
 func IsServiceEnabled(ctx context.Context, serviceName string) bool {
-	if runtime.GOOS != "linux" {
+	if runtime.GOOS != osLinux {
 		return false
 	}
 

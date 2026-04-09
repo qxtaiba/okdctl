@@ -15,7 +15,7 @@ import (
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
 )
 
-func (p *Phase) BuildCustomISOs(ctx context.Context, cfg *config.Config, opts Options) error {
+func (p *Phase) BuildCustomISOs(ctx context.Context, cfg *config.Config, opts *Options) error {
 	isoDir := filepath.Join(opts.WorkDir, "custom-isos")
 	if err := system.EnsureDir(isoDir); err != nil {
 		return err
@@ -59,7 +59,7 @@ func writePreInstallScript(script string) (string, error) {
 		return "", fmt.Errorf("failed to create pre-install script: %w", err)
 	}
 
-	if err := f.Chmod(0750); err != nil {
+	if err := f.Chmod(0o750); err != nil {
 		_ = f.Close()
 		_ = os.Remove(f.Name())
 		return "", fmt.Errorf("failed to chmod pre-install script: %w", err)
@@ -125,7 +125,7 @@ func writeInstallerTriggerIgnition(sshKey string) (string, error) {
 	return f.Name(), nil
 }
 
-func (p *Phase) buildNodeISO(ctx context.Context, cfg *config.Config, node NodeInfo, clusterDir, fcosISO, outputDir string) error {
+func (p *Phase) buildNodeISO(ctx context.Context, cfg *config.Config, node NodeInfo, _, fcosISO, outputDir string) error {
 	isoName := fmt.Sprintf("%s.iso", node.Name)
 	outputPath := filepath.Join(outputDir, isoName)
 
@@ -138,7 +138,7 @@ func (p *Phase) buildNodeISO(ctx context.Context, cfg *config.Config, node NodeI
 	gateway, netmask, dns, iface := ExtractNetworkConfig(cfg)
 	ignitionURL := BuildIgnitionURLForNode(cfg, node.Role)
 
-	kargsParams := LiveKargsParams{
+	kargsParams := &LiveKargsParams{
 		NodeIP:      node.IP,
 		Gateway:     gateway,
 		Netmask:     netmask,
@@ -189,10 +189,11 @@ func (p *Phase) buildNodeISO(ctx context.Context, cfg *config.Config, node NodeI
 		return err
 	}
 	defer func() { _ = os.Remove(triggerPath) }()
-	args = append(args, "--live-ignition", triggerPath)
-	args = append(args, "--pre-install", scriptPath)
-
-	args = append(args, "-o", outputPath, fcosISO)
+	args = append(args,
+		"--live-ignition", triggerPath,
+		"--pre-install", scriptPath,
+		"-o", outputPath, fcosISO,
+	)
 
 	_, err = p.Exec.RunChecked(ctx, "coreos-installer", args...)
 	if err != nil {

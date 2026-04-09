@@ -63,13 +63,12 @@ func ValidateProxmoxHost(value string) error {
 	}
 
 	if net.ParseIP(host) == nil {
-		if len(host) == 0 || len(host) > 253 {
+		if host == "" || len(host) > 253 {
 			return errors.New("invalid hostname")
 		}
 	}
 	return nil
 }
-
 
 func ValidateFilePath(value string) error {
 	if value == "" {

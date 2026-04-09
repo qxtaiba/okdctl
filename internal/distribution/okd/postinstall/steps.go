@@ -18,7 +18,7 @@ const (
 	StepInstallAddons       distribution.StepID = "install-addons"
 )
 
-func (p *Phase) NewVerifyHealthStep(cfg *config.Config, opts Options, pctx *distribution.PhaseContext[PostInstallContext]) distribution.ProvisioningStep {
+func (p *Phase) NewVerifyHealthStep(_ *config.Config, opts *Options, pctx *distribution.PhaseContext[PostInstallContext]) distribution.ProvisioningStep {
 	return distribution.NewStepBuilder(StepVerifyHealth, "Verify Cluster Health").
 		Description("verifying cluster health").
 		Fatal(true).
@@ -40,7 +40,7 @@ func (p *Phase) NewVerifyHealthStep(cfg *config.Config, opts Options, pctx *dist
 		MustBuild()
 }
 
-func (p *Phase) NewCleanupBootstrapStep(cfg *config.Config, opts Options, pctx *distribution.PhaseContext[PostInstallContext]) distribution.ProvisioningStep {
+func (p *Phase) NewCleanupBootstrapStep(cfg *config.Config, opts *Options, pctx *distribution.PhaseContext[PostInstallContext]) distribution.ProvisioningStep {
 	return distribution.NewStepBuilder(StepCleanupBootstrap, "Cleanup Bootstrap VM").
 		Description("destroying bootstrap vm via terraform").
 		Fatal(false).
@@ -57,7 +57,7 @@ func (p *Phase) NewCleanupBootstrapStep(cfg *config.Config, opts Options, pctx *
 		MustBuild()
 }
 
-func (p *Phase) NewVerifyKubeVIPStep(cfg *config.Config, opts Options, pctx *distribution.PhaseContext[PostInstallContext]) distribution.ProvisioningStep {
+func (p *Phase) NewVerifyKubeVIPStep(cfg *config.Config, opts *Options, pctx *distribution.PhaseContext[PostInstallContext]) distribution.ProvisioningStep {
 	return distribution.NewStepBuilder(StepVerifyKubeVIP, "Verify kube-vip").
 		Description("verifying kube-vip api load balancer").
 		Fatal(false).
@@ -81,7 +81,7 @@ func (p *Phase) NewVerifyKubeVIPStep(cfg *config.Config, opts Options, pctx *dis
 		MustBuild()
 }
 
-func (p *Phase) NewDeployProductionDNSStep(cfg *config.Config, opts Options, pctx *distribution.PhaseContext[PostInstallContext]) distribution.ProvisioningStep {
+func (p *Phase) NewDeployProductionDNSStep(cfg *config.Config, _ *Options, pctx *distribution.PhaseContext[PostInstallContext]) distribution.ProvisioningStep {
 	return distribution.NewStepBuilder(StepDeployProductionDNS, "Deploy Production DNS").
 		Description("deploying production dns with api vip and apps on bastion").
 		Fatal(false).
@@ -105,7 +105,7 @@ func (p *Phase) NewDeployProductionDNSStep(cfg *config.Config, opts Options, pct
 		MustBuild()
 }
 
-func (p *Phase) NewInstallAddonsStep(cfg *config.Config, opts Options, pctx *distribution.PhaseContext[PostInstallContext], mgr *addon.Manager) distribution.ProvisioningStep {
+func (p *Phase) NewInstallAddonsStep(_ *config.Config, _ *Options, _ *distribution.PhaseContext[PostInstallContext], mgr *addon.Manager) distribution.ProvisioningStep {
 	return distribution.NewStepBuilder(StepInstallAddons, "Install Addons").
 		Description("installing enabled cluster addons").
 		Fatal(false).

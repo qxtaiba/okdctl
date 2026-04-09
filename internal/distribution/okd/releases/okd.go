@@ -23,7 +23,7 @@ func NewOKDVersionFetcher() *OKDVersionFetcher {
 }
 
 func (f *OKDVersionFetcher) FetchVersions(ctx context.Context) ([]OKDReleaseSeries, error) {
-	if cached, _ := f.loadFromDiskCache(); cached != nil {
+	if cached := f.loadFromDiskCache(); cached != nil {
 		return cached, nil
 	}
 

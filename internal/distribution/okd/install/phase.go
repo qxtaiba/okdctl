@@ -79,7 +79,7 @@ func New(exec *executor.Executor, logger *slog.Logger, version string) *Phase {
 	}
 }
 
-func (p *Phase) Execute(ctx context.Context, cfg *config.Config, opts Options) error {
+func (p *Phase) Execute(ctx context.Context, cfg *config.Config, opts *Options) error {
 	orchestrator := distribution.NewOrchestrator(
 		p.newDeployInfraStep(cfg, opts),
 		p.newWaitBootstrapStep(cfg, opts),
@@ -98,7 +98,7 @@ func (p *Phase) Execute(ctx context.Context, cfg *config.Config, opts Options) e
 	return nil
 }
 
-func (p *Phase) DeployInfrastructure(ctx context.Context, cfg *config.Config, opts Options) error {
+func (p *Phase) DeployInfrastructure(ctx context.Context, cfg *config.Config, opts *Options) error {
 	terraformDir := filepath.Join(opts.ProjectRoot, "infrastructure", "terraform", "environments", opts.TerraformEnv)
 	tfvarsFile := filepath.Join(terraformDir, "terraform.tfvars")
 

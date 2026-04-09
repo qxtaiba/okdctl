@@ -20,7 +20,7 @@ type PackageManager interface {
 
 // NewPackageManager returns the appropriate PackageManager for the detected OS.
 func NewPackageManager(os OS) PackageManager {
-	if os.Family == "debian" {
+	if os.Family == familyDebian {
 		return &APTManager{}
 	}
 	return &DNFManager{}
@@ -41,7 +41,7 @@ func (m *DNFManager) Install(ctx context.Context, packages []string, logger *slo
 	return nil
 }
 
-func (m *DNFManager) Remove(ctx context.Context, packages []string, logger *slog.Logger) error {
+func (m *DNFManager) Remove(ctx context.Context, packages []string, _ *slog.Logger) error {
 	if len(packages) == 0 {
 		return nil
 	}
@@ -59,7 +59,7 @@ func (m *DNFManager) Remove(ctx context.Context, packages []string, logger *slog
 }
 
 func (m *DNFManager) IsInstalled(pkg string) bool {
-	return exec.Command("rpm", "-q", pkg).Run() == nil
+	return exec.CommandContext(context.Background(), "rpm", "-q", pkg).Run() == nil
 }
 
 func (m *DNFManager) AddRepo(ctx context.Context, name, url string, logger *slog.Logger) error {
@@ -82,7 +82,7 @@ func (m *APTManager) Install(ctx context.Context, packages []string, logger *slo
 	return nil
 }
 
-func (m *APTManager) Remove(ctx context.Context, packages []string, logger *slog.Logger) error {
+func (m *APTManager) Remove(ctx context.Context, packages []string, _ *slog.Logger) error {
 	if len(packages) == 0 {
 		return nil
 	}
@@ -100,7 +100,7 @@ func (m *APTManager) Remove(ctx context.Context, packages []string, logger *slog
 }
 
 func (m *APTManager) IsInstalled(pkg string) bool {
-	cmd := exec.Command("dpkg", "-l", pkg)
+	cmd := exec.CommandContext(context.Background(), "dpkg", "-l", pkg)
 	output, err := cmd.Output()
 	if err != nil {
 		return false

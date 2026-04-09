@@ -10,8 +10,10 @@ import (
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/netutil"
 )
 
-const defaultContentWidth = tui.DefaultBoxWidth - 2
-const defaultKeyColWidth = 45
+const (
+	defaultContentWidth = tui.DefaultBoxWidth - 2
+	defaultKeyColWidth  = 45
+)
 
 type summaryBuilder struct {
 	b        strings.Builder

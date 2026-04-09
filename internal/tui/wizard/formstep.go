@@ -183,7 +183,6 @@ func (s *MultiFormStep) Update(msg tea.Msg) (WizardStep, tea.Cmd) {
 			var cmd tea.Cmd
 			s.sections[s.currentSection].Group, cmd = group.Update(msg)
 			return s, tea.Batch(cmd, s.emitFocusChanged())
-
 		}
 	}
 
@@ -229,13 +228,13 @@ func (s *MultiFormStep) emitFocusChanged() tea.Cmd {
 // Caching is safe because tui.Color* values are set once during package init
 // and never change.
 var formViewStyles = struct {
-	sectionHeader    lipgloss.Style
-	activeSection    lipgloss.Style
-	inactiveSection  lipgloss.Style
-	completedRender  string
-	activeRender     string
-	pendingRender    string
-	note             lipgloss.Style
+	sectionHeader   lipgloss.Style
+	activeSection   lipgloss.Style
+	inactiveSection lipgloss.Style
+	completedRender string
+	activeRender    string
+	pendingRender   string
+	note            lipgloss.Style
 }{
 	sectionHeader: lipgloss.NewStyle().
 		Foreground(tui.ColorCyan500).

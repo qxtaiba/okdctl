@@ -87,7 +87,7 @@ func New(exec *executor.Executor, logger *slog.Logger, version string) *Phase {
 	}
 }
 
-func (p *Phase) Execute(ctx context.Context, cfg *config.Config, opts Options) error {
+func (p *Phase) Execute(ctx context.Context, cfg *config.Config, opts *Options) error {
 	p.Log.Info("setup: starting okd cluster configuration")
 
 	// Preflight: many setup steps call sudo. If passwordless sudo is not
@@ -132,7 +132,7 @@ func (p *Phase) Execute(ctx context.Context, cfg *config.Config, opts Options) e
 	return nil
 }
 
-func (p *Phase) PrintSetupCompletionSummary(cfg *config.Config, opts Options) {
+func (p *Phase) PrintSetupCompletionSummary(cfg *config.Config, opts *Options) {
 	clusterDir := phase.ClusterConfigDir(opts.WorkDir)
 	tfEnv := phase.GetTerraformEnv(cfg)
 
@@ -145,12 +145,8 @@ func (p *Phase) dnsFunctions() dnsFuncs {
 		setupDnsmasq: func(ctx context.Context, fallbackDNS []string) error {
 			return dns.Setup(ctx, fallbackDNS, p.Log)
 		},
-		deployBootstrapDNS: func(ctx context.Context, cfg *config.Config) error {
-			return dns.DeployBootstrap(ctx, cfg)
-		},
-		generateBootstrapDNSConfig: func(cfg *config.Config, outputDir string) (string, string, error) {
-			return dns.GenerateBootstrapConfig(cfg, outputDir)
-		},
+		deployBootstrapDNS:         dns.DeployBootstrap,
+		generateBootstrapDNSConfig: dns.GenerateBootstrapConfig,
 	}
 }
 

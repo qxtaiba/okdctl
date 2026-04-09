@@ -62,7 +62,7 @@ func uploadISOsViaSCP(ctx context.Context, cmdRunner *executor.Executor, isoFile
 
 // UploadCustomISOsToProxmox uploads all custom ISOs to Proxmox storage via a
 // single scp command (avoids multiple password prompts).
-func (p *Phase) UploadCustomISOsToProxmox(ctx context.Context, cfg *config.Config, opts Options) error {
+func (p *Phase) UploadCustomISOsToProxmox(ctx context.Context, cfg *config.Config, opts *Options) error {
 	if cfg.Provider.Proxmox == nil {
 		return fmt.Errorf("proxmox provider configuration required")
 	}

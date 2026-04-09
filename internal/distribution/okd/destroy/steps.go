@@ -19,7 +19,7 @@ const (
 	StepPrintSummary    distribution.StepID = "print-summary"
 )
 
-func (p *Phase) newDestroyInfraStep(cfg *config.Config, opts Options) distribution.ProvisioningStep {
+func (p *Phase) newDestroyInfraStep(_ *config.Config, opts *Options) distribution.ProvisioningStep {
 	return distribution.NewStepBuilder(StepDestroyInfra, "Destroy Infrastructure").
 		Description("destroying proxmox infrastructure using terraform").
 		Fatal(true).
@@ -41,7 +41,7 @@ func (p *Phase) newDestroyInfraStep(cfg *config.Config, opts Options) distributi
 		MustBuild()
 }
 
-func (p *Phase) newCleanupFilesStep(cfg *config.Config, opts Options) distribution.ProvisioningStep {
+func (p *Phase) newCleanupFilesStep(cfg *config.Config, opts *Options) distribution.ProvisioningStep {
 	return distribution.NewStepBuilder(StepCleanupFiles, "Cleanup Files").
 		Description("performing comprehensive cleanup").
 		Fatal(false).
@@ -52,7 +52,7 @@ func (p *Phase) newCleanupFilesStep(cfg *config.Config, opts Options) distributi
 			if err != nil {
 				return fmt.Errorf("failed to resolve VIP: %w", err)
 			}
-			cleanupOpts := cleanup.Options{
+			cleanupOpts := &cleanup.Options{
 				Kind:           opts.CleanupKind,
 				WorkDir:        opts.WorkDir,
 				ProjectRoot:    opts.ProjectRoot,
@@ -75,14 +75,14 @@ func (p *Phase) newCleanupFilesStep(cfg *config.Config, opts Options) distributi
 		MustBuild()
 }
 
-func cleanupFilesSkipReason(opts Options) string {
+func cleanupFilesSkipReason(opts *Options) string {
 	if opts.SkipCleanup {
 		return "Cleanup disabled"
 	}
 	return "No cleanup type specified"
 }
 
-func (p *Phase) newCleanupFirewallStep(opts Options) distribution.ProvisioningStep {
+func (p *Phase) newCleanupFirewallStep(opts *Options) distribution.ProvisioningStep {
 	return distribution.NewStepBuilder(StepCleanupFirewall, "Cleanup Firewall").
 		Description("removing firewall rules").
 		Fatal(false).
@@ -99,12 +99,12 @@ func (p *Phase) newCleanupFirewallStep(opts Options) distribution.ProvisioningSt
 		MustBuild()
 }
 
-func (p *Phase) newPrintSummaryStep(opts Options) distribution.ProvisioningStep {
+func (p *Phase) newPrintSummaryStep(_ *Options) distribution.ProvisioningStep {
 	return distribution.NewStepBuilder(StepPrintSummary, "Print Summary").
 		Description("printing destruction summary").
 		Fatal(false).
 		OnStart(func() {}).
-		Execute(func(ctx context.Context) error {
+		Execute(func(_ context.Context) error {
 			p.Log.Info("destroy: cluster teardown completed")
 			return nil
 		}).

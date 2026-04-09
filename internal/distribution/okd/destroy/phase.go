@@ -73,7 +73,7 @@ func New(exec *executor.Executor, logger *slog.Logger, version string) *Phase {
 // This is the main entry point for the destroy phase.
 // NOTE: User confirmation is handled by the CLI layer before calling this method.
 // The Force option is expected to be true when called from CLI (which has already confirmed).
-func (p *Phase) Execute(ctx context.Context, cfg *config.Config, opts Options) error {
+func (p *Phase) Execute(ctx context.Context, cfg *config.Config, opts *Options) error {
 	p.Log.Info("destroy: starting cluster teardown")
 	p.Log.Warn("destroy: this will permanently remove all vms and generated files")
 

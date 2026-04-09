@@ -11,7 +11,7 @@ import (
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
 )
 
-func buildISOStrings(isoStorage string, role string, count int) []string {
+func buildISOStrings(isoStorage, role string, count int) []string {
 	isos := make([]string, count)
 	for i := range count {
 		isos[i] = fmt.Sprintf(`"%s:iso/%s%d.iso"`, isoStorage, role, i)
@@ -38,7 +38,7 @@ func getDiskSizes(cfg *config.Config) (cpDisk, workerDisk, workerDataDisk, maste
 	}
 	workerDataDisk = cfg.Disks.WorkerDataSizeGB
 	if workerDataDisk == 0 && cfg.Disks.DataSizeGB > 0 { //nolint:staticcheck // intentional migration from deprecated field
-		workerDataDisk = cfg.Disks.DataSizeGB //nolint:staticcheck
+		workerDataDisk = cfg.Disks.DataSizeGB //nolint:staticcheck // intentional migration from deprecated field
 	}
 	masterDataDisk = cfg.Disks.MasterDataSizeGB
 	return cpDisk, workerDisk, workerDataDisk, masterDataDisk
@@ -135,20 +135,20 @@ func formatAdditionalNetworks(networks []config.AdditionalNetwork) string {
 	return "[" + strings.Join(parts, ", ") + "]"
 }
 
-func (p *Phase) GenerateTerraformVars(cfg *config.Config, opts Options) error {
+func (p *Phase) GenerateTerraformVars(cfg *config.Config, opts *Options) error {
 	if cfg.Provider.Proxmox == nil {
 		return fmt.Errorf("proxmox provider configuration required")
 	}
 
 	data := buildTerraformVarsData(cfg)
-	content, err := templates.RenderTerraformVars(data)
+	content, err := templates.RenderTerraformVars(&data)
 	if err != nil {
 		return fmt.Errorf("failed to render terraform.tfvars template: %w", err)
 	}
 
 	outputPath := filepath.Join(opts.ProjectRoot, "infrastructure", "terraform", "environments", phase.GetTerraformEnv(cfg), "terraform.tfvars")
 
-	if err := system.AtomicWriteString(outputPath, content, 0644); err != nil {
+	if err := system.AtomicWriteString(outputPath, content, 0o644); err != nil {
 		return fmt.Errorf("failed to write terraform.tfvars: %w", err)
 	}
 	return nil

@@ -10,7 +10,7 @@ import (
 )
 
 // StartWorkerVMs starts worker VMs after bootstrap completes so they can reach the MCS.
-func (p *Phase) StartWorkerVMs(ctx context.Context, cfg *config.Config, opts Options) error {
+func (p *Phase) StartWorkerVMs(ctx context.Context, cfg *config.Config, opts *Options) error {
 	if cfg.Topology.Workers.Count == 0 {
 		p.Log.Info("workers: no workers configured, skipping")
 		return nil

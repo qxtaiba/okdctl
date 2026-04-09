@@ -38,9 +38,10 @@ func EnvFilePath(configPath string) string {
 // WriteEnvFile persists credentials in KEY=VALUE format compatible with
 // standard .env tooling, with 0600 permissions.
 func WriteEnvFile(path string, creds *ProxmoxCredentials) error {
-	var lines []string
-	lines = append(lines, "# Proxmox credentials (managed by openshitctl)")
-	lines = append(lines, "# This file has restricted permissions (0600) — do not commit to git.")
+	lines := []string{
+		"# Proxmox credentials (managed by openshitctl)",
+		"# This file has restricted permissions (0600) — do not commit to git.",
+	}
 
 	if creds.Endpoint != "" {
 		lines = append(lines, "PROXMOX_VE_ENDPOINT="+creds.Endpoint)
@@ -61,7 +62,7 @@ func WriteEnvFile(path string, creds *ProxmoxCredentials) error {
 	}
 
 	content := strings.Join(lines, "\n") + "\n"
-	return system.AtomicWrite(path, []byte(content), 0600)
+	return system.AtomicWrite(path, []byte(content), 0o600)
 }
 
 // LoadEnvFile loads a .env file into the process environment.
@@ -100,7 +101,7 @@ func loadEnvFileOnce(path string) error {
 		}
 		return fmt.Errorf("failed to stat env file %s: %w", path, err)
 	}
-	if perm := fi.Mode().Perm(); perm&0077 != 0 {
+	if perm := fi.Mode().Perm(); perm&0o077 != 0 {
 		return fmt.Errorf(".env file %s has insecure permissions %#o; run 'chmod 600 %s' to fix: %w",
 			path, perm, path, os.ErrPermission,
 		)
@@ -110,7 +111,7 @@ func loadEnvFileOnce(path string) error {
 	if err != nil {
 		return fmt.Errorf("failed to open env file %s: %w", path, err)
 	}
-	defer f.Close() //nolint:errcheck // read-only file
+	defer f.Close() // close error on read-only file is harmless
 
 	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {

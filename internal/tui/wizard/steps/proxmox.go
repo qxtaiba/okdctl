@@ -70,10 +70,10 @@ var ProxmoxStepDefinition = wizard.StepDefinition{
 				{
 					Key:     "skip_tls_verify",
 					Label:   "skip tls verify",
-					Default: "no",
+					Default: valNo,
 					Help:    "skip tls certificate verification — set to yes only for self-signed certs",
 					Type:    wizard.FieldTypeSelect,
-					Options: []string{"no", "yes"},
+					Options: []string{valNo, valYes},
 					ConfigSet: wizard.SetBool(func(c *config.Config, v bool) {
 						if c.Provider.Proxmox != nil {
 							c.Provider.Proxmox.Insecure = v
@@ -81,9 +81,9 @@ var ProxmoxStepDefinition = wizard.StepDefinition{
 					}),
 					ConfigGet: func(c *config.Config) string {
 						if c.Provider.Proxmox != nil && c.Provider.Proxmox.Insecure {
-							return "yes"
+							return valYes
 						}
-						return "no"
+						return valNo
 					},
 				},
 			},

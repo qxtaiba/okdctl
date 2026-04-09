@@ -151,7 +151,7 @@ func (p *Phase) installBinary(ctx context.Context, spec binaryInstallSpec) error
 	p.Log.Info(fmt.Sprintf("tools: installing %s", spec.name))
 
 	tempFile := filepath.Join(os.TempDir(), spec.name+"-download")
-	if err := download.Download(ctx, download.Options{
+	if err := download.Download(ctx, &download.Options{
 		URL: spec.url, OutputPath: tempFile,
 		Description: spec.name, Timeout: 2 * time.Minute, Logger: p.Log,
 	}); err != nil {
@@ -162,7 +162,7 @@ func (p *Phase) installBinary(ctx context.Context, spec binaryInstallSpec) error
 	srcPath := tempFile
 	if spec.archiveBinary != "" {
 		extractDir := filepath.Join(os.TempDir(), spec.name+"-extract")
-		if err := os.MkdirAll(extractDir, 0755); err != nil {
+		if err := os.MkdirAll(extractDir, 0o755); err != nil {
 			return fmt.Errorf("failed to create extract directory: %w", err)
 		}
 		defer func() { _ = os.RemoveAll(extractDir) }()
@@ -197,7 +197,7 @@ func (p *Phase) installHelm(ctx context.Context) error {
 	arch := platform.DownloadArch()
 	return p.installBinary(ctx, binaryInstallSpec{
 		name: "helm", versionFlag: "version",
-		url: fmt.Sprintf("https://get.helm.sh/helm-v3.17.3-linux-%s.tar.gz", arch),
+		url:           fmt.Sprintf("https://get.helm.sh/helm-v3.17.3-linux-%s.tar.gz", arch),
 		archiveBinary: "helm", stripComponents: 1,
 	})
 }
@@ -229,7 +229,7 @@ func runSudoCommand(ctx context.Context, name string, args ...string) error {
 }
 
 func getToolVersion(tool, flag string) string {
-	cmd := exec.Command(tool, flag)
+	cmd := exec.CommandContext(context.Background(), tool, flag)
 	output, err := cmd.Output()
 	if err != nil {
 		return "unknown"

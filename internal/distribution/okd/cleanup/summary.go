@@ -14,7 +14,7 @@ type Summary struct {
 	WorkDirSize             string
 }
 
-func GenerateSummary(opts Options) Summary {
+func GenerateSummary(opts *Options) Summary {
 	summary := Summary{
 		WorkDirSize: "0B",
 	}
@@ -50,7 +50,7 @@ func GenerateSummary(opts Options) Summary {
 	return summary
 }
 
-func printSummary(opts Options, logger *slog.Logger) {
+func printSummary(opts *Options, logger *slog.Logger) {
 	summary := GenerateSummary(opts)
 
 	logger.Info("cleanup: summary")
@@ -99,7 +99,7 @@ func collectDirStats(path string) (count int, totalSize int64) {
 		}
 		info, err := d.Info()
 		if err != nil {
-			return nil
+			return err
 		}
 		count++
 		totalSize += info.Size()

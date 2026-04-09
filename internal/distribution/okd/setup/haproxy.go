@@ -60,7 +60,7 @@ func (p *Phase) BuildHAProxyConfigData(cfg *config.Config) (templates.HAProxyCon
 // itself cannot target /etc/haproxy directly here.
 func writeHAProxyConfigToTemp(content string) (string, error) {
 	tmpPath := filepath.Join(os.TempDir(), fmt.Sprintf("haproxy-%d.cfg", os.Getpid()))
-	if err := system.AtomicWriteString(tmpPath, content, 0644); err != nil {
+	if err := system.AtomicWriteString(tmpPath, content, 0o644); err != nil {
 		return "", fmt.Errorf("failed to write temp haproxy config: %w", err)
 	}
 	return tmpPath, nil
@@ -89,13 +89,13 @@ func enableAndRestartHAProxy(ctx context.Context) error {
 	return system.ManageService(ctx, system.ServiceRestart, "haproxy", "haproxy load balancer")
 }
 
-func (p *Phase) ConfigureHAProxy(ctx context.Context, cfg *config.Config, opts Options) error {
+func (p *Phase) ConfigureHAProxy(ctx context.Context, cfg *config.Config, _ *Options) error {
 	data, err := p.BuildHAProxyConfigData(cfg)
 	if err != nil {
 		return fmt.Errorf("failed to build HAProxy config data: %w", err)
 	}
 
-	content, err := templates.RenderHAProxyConfig(data)
+	content, err := templates.RenderHAProxyConfig(&data)
 	if err != nil {
 		return fmt.Errorf("failed to render haproxy.cfg template: %w", err)
 	}

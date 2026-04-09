@@ -15,7 +15,7 @@ type LiveKargsParams struct {
 	IgnitionURL string
 }
 
-func BuildLiveKargs(params LiveKargsParams) []string {
+func BuildLiveKargs(params *LiveKargsParams) []string {
 	return []string{
 		fmt.Sprintf("coreos.inst.ignition_url=%s", params.IgnitionURL),
 		fmt.Sprintf("ip=%s::%s:%s::%s:none", params.NodeIP, params.Gateway, params.Netmask, params.Interface),
@@ -32,7 +32,7 @@ func BuildLiveKargs(params LiveKargsParams) []string {
 // pre-existing ISO from a prior run. Regenerating an ISO with the same
 // parameters produces the same result; changing network fields (e.g. IP,
 // DNS) simply replaces the previous ISO wholesale.
-func BuildDestKargs(params LiveKargsParams) []string {
+func BuildDestKargs(params *LiveKargsParams) []string {
 	return []string{
 		fmt.Sprintf("ip=%s::%s:%s::%s:none", params.NodeIP, params.Gateway, params.Netmask, params.Interface),
 		fmt.Sprintf("nameserver=%s", params.DNS),

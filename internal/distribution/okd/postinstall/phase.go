@@ -61,7 +61,7 @@ func New(exec *executor.Executor, logger *slog.Logger, version string) *Phase {
 	}
 }
 
-func (p *Phase) Execute(ctx context.Context, cfg *config.Config, opts Options) (*Result, error) {
+func (p *Phase) Execute(ctx context.Context, cfg *config.Config, opts *Options) (*Result, error) {
 	p.Log.Info("postinstall: starting cluster verification and configuration")
 
 	addonMgr := addon.NewManager(cfg, p.Exec, p.Log, opts.ProjectRoot)

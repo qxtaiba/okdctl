@@ -107,7 +107,7 @@ func (p *Provisioner) Prepare(ctx context.Context, cfg *config.Config) error {
 
 	if system.DirExists(opts.WorkDir) {
 		p.logger.Info("setup: cleaning up previous artifacts")
-		cleanupOpts := cleanup.Options{
+		cleanupOpts := &cleanup.Options{
 			Kind:           cleanup.WorkOnly,
 			WorkDir:        opts.WorkDir,
 			ProjectRoot:    p.projectRoot,
@@ -120,10 +120,10 @@ func (p *Provisioner) Prepare(ctx context.Context, cfg *config.Config) error {
 	}
 
 	phase := setup.New(p.executor, p.logger, p.version)
-	return phase.Execute(ctx, cfg, opts)
+	return phase.Execute(ctx, cfg, &opts)
 }
 
-func (p *Provisioner) Install(ctx context.Context, cfg *config.Config, opts install.Options) error {
+func (p *Provisioner) Install(ctx context.Context, cfg *config.Config, opts *install.Options) error {
 	phase := install.New(p.executor, p.logger, p.version)
 	return phase.Execute(ctx, cfg, opts)
 }
@@ -131,7 +131,7 @@ func (p *Provisioner) Install(ctx context.Context, cfg *config.Config, opts inst
 func (p *Provisioner) Configure(ctx context.Context, cfg *config.Config) (*postinstall.Result, error) {
 	phase := postinstall.New(p.executor, p.logger, p.version)
 	opts := postinstall.NewOptions(cfg, p.projectRoot)
-	return phase.Execute(ctx, cfg, opts)
+	return phase.Execute(ctx, cfg, &opts)
 }
 
 func (p *Provisioner) UpdateIngress(ctx context.Context, cfg *config.Config, opts postinstall.UpdateIngressOptions) (*postinstall.UpdateIngressResult, error) {
@@ -146,5 +146,5 @@ func (p *Provisioner) Destroy(ctx context.Context, cfg *config.Config, removePac
 	opts.Force = true
 	opts.RemovePackages = removePackages
 
-	return phase.Execute(ctx, cfg, opts)
+	return phase.Execute(ctx, cfg, &opts)
 }

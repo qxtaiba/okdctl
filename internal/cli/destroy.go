@@ -16,7 +16,7 @@ var destroyCmd = &cobra.Command{
 	Short: "Destroy a Kubernetes cluster",
 	Long: `Destroy a Kubernetes cluster and all associated infrastructure.
 This operation is idempotent and safe to re-run if a previous destroy was interrupted.`,
-	RunE:  runDestroy,
+	RunE: runDestroy,
 }
 
 func init() {

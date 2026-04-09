@@ -35,7 +35,7 @@ const (
 	FieldProxmoxStorage = "provider.proxmox.storage"
 
 	FieldFilesSSHPublicKey = "files.ssh_public_key"
-	FieldFilesPullSecret   = "files.pull_secret"
+	FieldFilesPullSecret   = "files.pull_secret" //nolint:gosec // field name constant, not a credential
 
 	FieldHTTPServerIP   = "http_server.ip"
 	FieldHTTPServerPort = "http_server.port"

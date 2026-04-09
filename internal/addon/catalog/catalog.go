@@ -16,6 +16,6 @@
 package catalog
 
 import (
-	_ "github.com/qxtaiba/okd-proxmox-cli/internal/addon/catalog/flux"
-	_ "github.com/qxtaiba/okd-proxmox-cli/internal/addon/catalog/secretstore"
+	_ "github.com/qxtaiba/okd-proxmox-cli/internal/addon/catalog/flux"        // register flux addon
+	_ "github.com/qxtaiba/okd-proxmox-cli/internal/addon/catalog/secretstore" // register secretstore addon
 )

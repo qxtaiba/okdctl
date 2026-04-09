@@ -111,8 +111,10 @@ func (c *ProxmoxCredentials) Env() []string {
 	if c.UseAPIToken() {
 		env = append(env, "PROXMOX_VE_API_TOKEN="+string(c.APIToken))
 	} else {
-		env = append(env, "PROXMOX_VE_USERNAME="+c.Username)
-		env = append(env, "PROXMOX_VE_PASSWORD="+string(c.Password))
+		env = append(env,
+			"PROXMOX_VE_USERNAME="+c.Username,
+			"PROXMOX_VE_PASSWORD="+string(c.Password),
+		)
 	}
 
 	if c.Insecure {

@@ -100,7 +100,7 @@ var AdvancedStepDefinition = wizard.StepDefinition{
 			},
 		},
 	},
-	ExtraContent: func(values map[string]string, width int) string {
+	ExtraContent: func(_ map[string]string, _ int) string {
 		subtitle := lipgloss.NewStyle().
 			Foreground(tui.ColorSlate400).
 			Italic(true).

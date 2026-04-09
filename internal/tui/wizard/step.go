@@ -114,7 +114,7 @@ func (b *BaseStep) IsFocused() bool      { return b.focused }
 func (b *BaseStep) Width() int           { return b.width }
 func (b *BaseStep) Height() int          { return b.height }
 
-func (b *BaseStep) ShouldShow(cfg *config.Config) bool {
+func (b *BaseStep) ShouldShow(_ *config.Config) bool {
 	return true
 }
 

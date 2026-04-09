@@ -79,7 +79,7 @@ func (e *Executor) Run(ctx context.Context, name string, args ...string) (*Resul
 
 // RunWithStdin executes a command with the given string piped to its stdin.
 // This is useful for commands like "oc create -f -" that read from stdin.
-func (e *Executor) RunWithStdin(ctx context.Context, input string, name string, args ...string) (*Result, error) {
+func (e *Executor) RunWithStdin(ctx context.Context, input, name string, args ...string) (*Result, error) {
 	return e.run(ctx, strings.NewReader(input), name, args...)
 }
 
@@ -163,7 +163,7 @@ func (e *Executor) RunChecked(ctx context.Context, name string, args ...string) 
 }
 
 // RunWithStdinChecked is like RunChecked but pipes input to the command's stdin.
-func (e *Executor) RunWithStdinChecked(ctx context.Context, input string, name string, args ...string) (*Result, error) {
+func (e *Executor) RunWithStdinChecked(ctx context.Context, input, name string, args ...string) (*Result, error) {
 	result, err := e.RunWithStdin(ctx, input, name, args...)
 	if err != nil {
 		return result, err

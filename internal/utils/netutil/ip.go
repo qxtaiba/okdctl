@@ -73,9 +73,9 @@ func CalculateVMIP(startIP string, index int) (string, error) {
 		return "", fmt.Errorf("IP calculation would overflow: %s + %d", startIP, index)
 	}
 
-	newInt := ipInt + uint32(index)
+	newInt := ipInt + uint32(index) //nolint:gosec // G115: overflow checked above via uint64 guard
 	result := netip.AddrFrom4([4]byte{
-		byte(newInt >> 24), byte(newInt >> 16), byte(newInt >> 8), byte(newInt),
+		byte(newInt >> 24), byte(newInt >> 16), byte(newInt >> 8), byte(newInt), //nolint:gosec // G115: byte conversion of right-shifted uint32 is safe
 	})
 	return result.String(), nil
 }

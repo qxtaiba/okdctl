@@ -12,7 +12,7 @@ import (
 	"github.com/qxtaiba/okd-proxmox-cli/internal/cluster"
 )
 
-func (p *Phase) WaitForBootstrap(ctx context.Context, clusterDir string, opts Options) error {
+func (p *Phase) WaitForBootstrap(ctx context.Context, clusterDir string, opts *Options) error {
 	ctx, cancel := context.WithTimeout(ctx, opts.BootstrapTimeout)
 	defer cancel()
 
@@ -35,7 +35,7 @@ func (p *Phase) WaitForBootstrap(ctx context.Context, clusterDir string, opts Op
 	return nil
 }
 
-func (p *Phase) MonitorInstallation(ctx context.Context, clusterDir string, opts Options) error {
+func (p *Phase) MonitorInstallation(ctx context.Context, clusterDir string, opts *Options) error {
 	ctx, cancel := context.WithTimeout(ctx, opts.InstallTimeout)
 	defer cancel()
 

@@ -94,23 +94,23 @@ func BuildConfigData(cfg *config.Config) (templates.DNSConfigData, error) {
 	return data, nil
 }
 
-func GenerateBootstrapConfig(cfg *config.Config, outputDir string) (path string, content string, err error) {
+func GenerateBootstrapConfig(cfg *config.Config, outputDir string) (path, content string, err error) {
 	data, err := BuildConfigData(cfg)
 	if err != nil {
 		return "", "", fmt.Errorf("failed to build dns config data: %w", err)
 	}
 
-	if err := os.MkdirAll(outputDir, 0755); err != nil {
+	if err := os.MkdirAll(outputDir, 0o755); err != nil {
 		return "", "", fmt.Errorf("failed to create dns config directory: %w", err)
 	}
 
-	content, err = templates.RenderDNSBootstrapConfig(data)
+	content, err = templates.RenderDNSBootstrapConfig(&data)
 	if err != nil {
 		return "", "", fmt.Errorf("failed to render bootstrap dns config: %w", err)
 	}
 
 	path = filepath.Join(outputDir, "dnsmasq-bootstrap.conf")
-	if err := system.AtomicWriteString(path, content, 0644); err != nil {
+	if err := system.AtomicWriteString(path, content, 0o644); err != nil {
 		return "", "", fmt.Errorf("failed to write bootstrap dns config: %w", err)
 	}
 
@@ -137,7 +137,7 @@ func DeployBootstrap(ctx context.Context, cfg *config.Config) error {
 		return fmt.Errorf("failed to build dns config data: %w", err)
 	}
 
-	content, err := templates.RenderDNSBootstrapConfig(data)
+	content, err := templates.RenderDNSBootstrapConfig(&data)
 	if err != nil {
 		return fmt.Errorf("failed to render bootstrap dns config: %w", err)
 	}
@@ -178,7 +178,7 @@ func DeployProduction(ctx context.Context, cfg *config.Config, appsIP, kubeVipIP
 	data.KubeVipIP = kubeVipIP
 	data.CustomDomains = customDomains
 
-	content, err := templates.RenderDNSProductionConfig(data)
+	content, err := templates.RenderDNSProductionConfig(&data)
 	if err != nil {
 		return fmt.Errorf("failed to render production dns config: %w", err)
 	}

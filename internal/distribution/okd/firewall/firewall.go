@@ -22,6 +22,8 @@ const (
 	None      Backend = "none"
 )
 
+const actionRemove = "remove"
+
 // OKDRequiredPorts lists every TCP/UDP port the setup phase opens to run an
 // OKD cluster: dns (53), ignition (8080), and the HAProxy-fronted ports
 // (6443/22623/80/443). HAProxyFrontendPorts() derives its list from this one.
@@ -147,7 +149,7 @@ func RemoveRules(ctx context.Context, ports []Port, permanent bool, logger *slog
 	logger.Info("firewall: removing rules")
 
 	for _, port := range ports {
-		if err := modifyPort(ctx, backend, port, permanent, "remove"); err != nil {
+		if err := modifyPort(ctx, backend, port, permanent, actionRemove); err != nil {
 			logger.Warn(fmt.Sprintf("could not remove port %d: %v", port.Number, err))
 		}
 	}
@@ -170,7 +172,7 @@ func modifyPort(ctx context.Context, backend Backend, port Port, permanent bool,
 	switch backend {
 	case Firewalld:
 		flag := "--add-port="
-		if action == "remove" {
+		if action == actionRemove {
 			flag = "--remove-port="
 		}
 		args := []string{"firewall-cmd", flag + portStr}
@@ -180,14 +182,14 @@ func modifyPort(ctx context.Context, backend Backend, port Port, permanent bool,
 		return system.RunSudo(ctx, args[0], args[1:]...)
 
 	case UFW:
-		if action == "remove" {
+		if action == actionRemove {
 			return system.RunSudo(ctx, "ufw", "delete", "allow", portStr)
 		}
 		return system.RunSudo(ctx, "ufw", "allow", portStr)
 
 	case IPTables:
 		chainAction := "-I"
-		if action == "remove" {
+		if action == actionRemove {
 			chainAction = "-D"
 		}
 		args := []string{

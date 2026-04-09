@@ -48,7 +48,7 @@ func systemPackages(apachePackage string) []string {
 	}
 }
 
-func (p *Phase) newInstallPackagesStep(opts Options) distribution.ProvisioningStep {
+func (p *Phase) newInstallPackagesStep(_ *Options) distribution.ProvisioningStep {
 	return distribution.NewStepBuilder(StepInstallPackages, "Install System Packages").
 		Description("installing required system packages").
 		Fatal(false).
@@ -93,17 +93,17 @@ func (p *Phase) newInstallToolsStep(cfg *config.Config) distribution.Provisionin
 		MustBuild()
 }
 
-func (p *Phase) newEnsureWorkDirStep(opts Options) distribution.ProvisioningStep {
+func (p *Phase) newEnsureWorkDirStep(opts *Options) distribution.ProvisioningStep {
 	return distribution.NewStepBuilder(StepEnsureWorkDir, "Ensure Work Directory").
 		Description("creating work directory").
 		Fatal(true).
-		Execute(func(ctx context.Context) error {
+		Execute(func(_ context.Context) error {
 			return system.EnsureDir(opts.WorkDir)
 		}).
 		MustBuild()
 }
 
-func (p *Phase) newDownloadToolsStep(cfg *config.Config, opts Options) distribution.ProvisioningStep {
+func (p *Phase) newDownloadToolsStep(cfg *config.Config, opts *Options) distribution.ProvisioningStep {
 	return distribution.NewStepBuilder(StepDownloadTools, "Download OKD Tools").
 		Description(fmt.Sprintf("downloading OKD tools version %s", cfg.Distribution.Version)).
 		Fatal(true).
@@ -119,7 +119,7 @@ func (p *Phase) newDownloadToolsStep(cfg *config.Config, opts Options) distribut
 		MustBuild()
 }
 
-func (p *Phase) newGenerateInstallConfigStep(cfg *config.Config, opts Options) distribution.ProvisioningStep {
+func (p *Phase) newGenerateInstallConfigStep(cfg *config.Config, opts *Options) distribution.ProvisioningStep {
 	clusterDir := phase.ClusterConfigDir(opts.WorkDir)
 
 	return distribution.NewStepBuilder(StepGenerateConfig, "Generate Install Config").
@@ -136,7 +136,7 @@ func (p *Phase) newGenerateInstallConfigStep(cfg *config.Config, opts Options) d
 		MustBuild()
 }
 
-func (p *Phase) newGenerateManifestsStep(opts Options) distribution.ProvisioningStep {
+func (p *Phase) newGenerateManifestsStep(opts *Options) distribution.ProvisioningStep {
 	clusterDir := phase.ClusterConfigDir(opts.WorkDir)
 
 	return distribution.NewStepBuilder(StepGenerateManifests, "Generate Manifests").
@@ -152,13 +152,13 @@ func (p *Phase) newGenerateManifestsStep(opts Options) distribution.Provisioning
 		MustBuild()
 }
 
-func (p *Phase) newGenerateKubeVIPManifestsStep(cfg *config.Config, opts Options) distribution.ProvisioningStep {
+func (p *Phase) newGenerateKubeVIPManifestsStep(cfg *config.Config, opts *Options) distribution.ProvisioningStep {
 	clusterDir := phase.ClusterConfigDir(opts.WorkDir)
 
 	return distribution.NewStepBuilder(StepGenerateKubeVIP, "Generate Kube-VIP Manifests").
 		Description("generating kube-vip RBAC and DaemonSet manifests for VIP management").
 		Fatal(true).
-		Execute(func(ctx context.Context) error {
+		Execute(func(_ context.Context) error {
 			vip, err := netutil.ResolveVIP(cfg.Networking.Bastion.VIP, cfg.Networking.StaticIP.Start)
 			if err != nil {
 				return fmt.Errorf("failed to resolve VIP: %w", err)
@@ -180,7 +180,7 @@ func (p *Phase) newGenerateKubeVIPManifestsStep(cfg *config.Config, opts Options
 			}
 			for _, m := range rbacManifests {
 				path := filepath.Join(openshiftDir, m.Filename)
-				if err := system.AtomicWriteString(path, m.Content, 0644); err != nil {
+				if err := system.AtomicWriteString(path, m.Content, 0o644); err != nil {
 					return fmt.Errorf("failed to write %s: %w", m.Filename, err)
 				}
 			}
@@ -193,7 +193,7 @@ func (p *Phase) newGenerateKubeVIPManifestsStep(cfg *config.Config, opts Options
 				return fmt.Errorf("failed to render kube-vip DaemonSet manifest: %w", err)
 			}
 			dsPath := filepath.Join(openshiftDir, "99-kube-vip-daemonset.yaml")
-			if err := system.AtomicWriteString(dsPath, ds, 0644); err != nil {
+			if err := system.AtomicWriteString(dsPath, ds, 0o644); err != nil {
 				return fmt.Errorf("failed to write kube-vip DaemonSet manifest: %w", err)
 			}
 
@@ -204,7 +204,7 @@ func (p *Phase) newGenerateKubeVIPManifestsStep(cfg *config.Config, opts Options
 		MustBuild()
 }
 
-func (p *Phase) newInjectManifestsStep(opts Options) distribution.ProvisioningStep {
+func (p *Phase) newInjectManifestsStep(opts *Options) distribution.ProvisioningStep {
 	clusterDir := phase.ClusterConfigDir(opts.WorkDir)
 
 	return distribution.NewStepBuilder(StepInjectManifests, "Inject Custom Manifests").
@@ -223,7 +223,7 @@ func (p *Phase) newInjectManifestsStep(opts Options) distribution.ProvisioningSt
 		MustBuild()
 }
 
-func (p *Phase) newCompactClusterManifestsStep(cfg *config.Config, opts Options) distribution.ProvisioningStep {
+func (p *Phase) newCompactClusterManifestsStep(cfg *config.Config, opts *Options) distribution.ProvisioningStep {
 	clusterDir := phase.ClusterConfigDir(opts.WorkDir)
 
 	return distribution.NewStepBuilder(StepCompactCluster, "Inject Compact Cluster Manifests").
@@ -241,7 +241,7 @@ func (p *Phase) newCompactClusterManifestsStep(cfg *config.Config, opts Options)
 		MustBuild()
 }
 
-func (p *Phase) newGenerateIgnitionStep(opts Options) distribution.ProvisioningStep {
+func (p *Phase) newGenerateIgnitionStep(opts *Options) distribution.ProvisioningStep {
 	clusterDir := phase.ClusterConfigDir(opts.WorkDir)
 
 	return distribution.NewStepBuilder(StepGenerateIgnition, "Generate Ignition").
@@ -257,7 +257,7 @@ func (p *Phase) newGenerateIgnitionStep(opts Options) distribution.ProvisioningS
 		MustBuild()
 }
 
-func (p *Phase) newInstallApacheStep(cfg *config.Config, opts Options) distribution.ProvisioningStep {
+func (p *Phase) newInstallApacheStep(cfg *config.Config, _ *Options) distribution.ProvisioningStep {
 	return distribution.NewStepBuilder(StepInstallApache, "Install Apache").
 		Description("installing and configuring apache web server").
 		Fatal(false).
@@ -268,7 +268,7 @@ func (p *Phase) newInstallApacheStep(cfg *config.Config, opts Options) distribut
 		MustBuild()
 }
 
-func (p *Phase) newDeployIgnitionStep(cfg *config.Config, opts Options) distribution.ProvisioningStep {
+func (p *Phase) newDeployIgnitionStep(cfg *config.Config, opts *Options) distribution.ProvisioningStep {
 	clusterDir := phase.ClusterConfigDir(opts.WorkDir)
 
 	return distribution.NewStepBuilder(StepDeployIgnition, "Deploy Ignition").
@@ -286,7 +286,7 @@ func (p *Phase) newDeployIgnitionStep(cfg *config.Config, opts Options) distribu
 		MustBuild()
 }
 
-func (p *Phase) newVerifyWebServerStep(cfg *config.Config, opts Options) distribution.ProvisioningStep {
+func (p *Phase) newVerifyWebServerStep(cfg *config.Config, _ *Options) distribution.ProvisioningStep {
 	return distribution.NewStepBuilder(StepVerifyWebServer, "Verify Web Server").
 		Description("verifying web server accessibility").
 		Fatal(true).
@@ -297,7 +297,7 @@ func (p *Phase) newVerifyWebServerStep(cfg *config.Config, opts Options) distrib
 		MustBuild()
 }
 
-func (p *Phase) newBuildISOsStep(cfg *config.Config, opts Options) distribution.ProvisioningStep {
+func (p *Phase) newBuildISOsStep(cfg *config.Config, opts *Options) distribution.ProvisioningStep {
 	return distribution.NewStepBuilder(StepBuildISOs, "Build ISOs").
 		Description("building custom CoreOS ISOs").
 		Fatal(true).
@@ -309,7 +309,7 @@ func (p *Phase) newBuildISOsStep(cfg *config.Config, opts Options) distribution.
 		MustBuild()
 }
 
-func (p *Phase) newUploadISOsStep(cfg *config.Config, opts Options) distribution.ProvisioningStep {
+func (p *Phase) newUploadISOsStep(cfg *config.Config, opts *Options) distribution.ProvisioningStep {
 	return distribution.NewStepBuilder(StepUploadISOs, "Upload ISOs").
 		Description("uploading ISOs to Proxmox storage").
 		Fatal(false).
@@ -329,11 +329,11 @@ func (p *Phase) newUploadISOsStep(cfg *config.Config, opts Options) distribution
 		MustBuild()
 }
 
-func (p *Phase) newGenerateTfvarsStep(cfg *config.Config, opts Options) distribution.ProvisioningStep {
+func (p *Phase) newGenerateTfvarsStep(cfg *config.Config, opts *Options) distribution.ProvisioningStep {
 	return distribution.NewStepBuilder(StepGenerateTfvars, "Generate Terraform Variables").
 		Description("generating terraform variables").
 		Fatal(true).
-		Execute(func(ctx context.Context) error {
+		Execute(func(_ context.Context) error {
 			if err := p.GenerateTerraformVars(cfg, opts); err != nil {
 				return fmt.Errorf("failed to generate Terraform variables: %w", err)
 			}
@@ -344,7 +344,7 @@ func (p *Phase) newGenerateTfvarsStep(cfg *config.Config, opts Options) distribu
 		MustBuild()
 }
 
-func (p *Phase) newConfigureHAProxyStep(cfg *config.Config, opts Options) distribution.ProvisioningStep {
+func (p *Phase) newConfigureHAProxyStep(cfg *config.Config, opts *Options) distribution.ProvisioningStep {
 	return distribution.NewStepBuilder(StepConfigureHAProxy, "Configure HAProxy").
 		Description("configuring haproxy load balancer").
 		Fatal(true).
@@ -360,7 +360,7 @@ func (p *Phase) newConfigureHAProxyStep(cfg *config.Config, opts Options) distri
 		MustBuild()
 }
 
-func (p *Phase) newConfigureFirewallStep(opts Options) distribution.ProvisioningStep {
+func (p *Phase) newConfigureFirewallStep(opts *Options) distribution.ProvisioningStep {
 	return distribution.NewStepBuilder(StepConfigureFirewall, "Configure Firewall").
 		Description("configuring firewall rules for OKD").
 		Fatal(true).
@@ -377,7 +377,7 @@ func (p *Phase) newConfigureFirewallStep(opts Options) distribution.Provisioning
 		MustBuild()
 }
 
-func (p *Phase) newConfigureDNSStep(cfg *config.Config, opts Options) distribution.ProvisioningStep {
+func (p *Phase) newConfigureDNSStep(cfg *config.Config, opts *Options) distribution.ProvisioningStep {
 	outputDir := filepath.Join(opts.WorkDir, "dns")
 	funcs := p.dnsFunctions()
 

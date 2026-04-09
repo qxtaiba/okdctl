@@ -15,7 +15,7 @@ import (
 var (
 	dnsLabelPattern   = regexp.MustCompile(`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`)
 	domainPattern     = regexp.MustCompile(`^([a-z0-9]([-a-z0-9]*[a-z0-9])?\.)*[a-z0-9]([-a-z0-9]*[a-z0-9])?$`)
-	okdVersionPattern = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+-okd-[a-zA-Z0-9.-]+$`)
+	okdVersionPattern = regexp.MustCompile(`^\d+\.\d+\.\d+-okd-[a-zA-Z0-9.-]+$`)
 
 	interfaceNamePattern = regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9._-]*$`)
 	proxmoxNamePattern   = regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9_-]*$`)
@@ -92,8 +92,8 @@ func checkCIDROverlap(cidr1, cidr2, field, otherName string, result *ValidationR
 	}
 }
 
-// checkIPInCIDR appends a validation error if ip is not within cidr.
-func checkIPInCIDR(ip, cidr, field, cidrName string, result *ValidationResult) {
+// checkIPInCIDR appends a validation error if ip is not within the machine CIDR.
+func checkIPInCIDR(ip, cidr, field string, result *ValidationResult) {
 	if ip == "" || !IsValidIP(ip) || !IsValidCIDR(cidr) {
 		return
 	}
@@ -101,7 +101,7 @@ func checkIPInCIDR(ip, cidr, field, cidrName string, result *ValidationResult) {
 	if err != nil {
 		result.AddError(field, fmt.Sprintf("cannot check CIDR membership: %v", err))
 	} else if !ok {
-		result.AddError(field, fmt.Sprintf("must be within %s %s", cidrName, cidr))
+		result.AddError(field, fmt.Sprintf("must be within machine CIDR %s", cidr))
 	}
 }
 
@@ -160,15 +160,15 @@ func validateAdvancedNetworking(cfg *Config, result *ValidationResult) {
 		return
 	}
 
-	checkIPInCIDR(gateway, machineCIDR, FieldNetworkingGateway, "machine CIDR", result)
-	checkIPInCIDR(bastionIP, machineCIDR, FieldNetworkingBastionIP, "machine CIDR", result)
-	checkIPInCIDR(staticIPStart, machineCIDR, FieldNetworkingStaticIPStart, "machine CIDR", result)
+	checkIPInCIDR(gateway, machineCIDR, FieldNetworkingGateway, result)
+	checkIPInCIDR(bastionIP, machineCIDR, FieldNetworkingBastionIP, result)
+	checkIPInCIDR(staticIPStart, machineCIDR, FieldNetworkingStaticIPStart, result)
 
 	if cfg.Networking.Bastion.VIP != "" {
 		if !IsValidIP(cfg.Networking.Bastion.VIP) {
 			result.AddError("networking.bastion.vip", "must be a valid IP address")
 		} else {
-			checkIPInCIDR(cfg.Networking.Bastion.VIP, machineCIDR, "networking.bastion.vip", "machine CIDR", result)
+			checkIPInCIDR(cfg.Networking.Bastion.VIP, machineCIDR, "networking.bastion.vip", result)
 			if cfg.Networking.Bastion.VIP == gateway {
 				result.AddError("networking.bastion.vip", "vip cannot be the same as the gateway")
 			}
@@ -218,7 +218,6 @@ func validateAdvancedNetworking(cfg *Config, result *ValidationResult) {
 			seen[normalized] = nip.name
 		}
 	}
-
 }
 
 func validateResources(cfg *Config, result *ValidationResult) {
@@ -235,8 +234,7 @@ func validateResources(cfg *Config, result *ValidationResult) {
 }
 
 func validateProvider(cfg *Config, result *ValidationResult) {
-	switch cfg.Provider.Type {
-	case ProviderProxmox:
+	if cfg.Provider.Type == ProviderProxmox {
 		validateProxmoxConfig(cfg.Provider.Proxmox, result)
 	}
 }
@@ -288,7 +286,7 @@ func validateProxmoxConfig(proxmox *ProxmoxConfig, result *ValidationResult) {
 	}
 }
 
-func validateAddons(cfg *Config, result *ValidationResult) {
+func validateAddons(cfg *Config, _ *ValidationResult) {
 	if cfg.Addons == nil {
 		return
 	}
@@ -375,14 +373,14 @@ func validateFiles(cfg *Config, result *ValidationResult) {
 
 // IsValidDNSLabel checks if a string is a valid DNS label (RFC 1123).
 func IsValidDNSLabel(s string) bool {
-	if len(s) == 0 || len(s) > 63 {
+	if s == "" || len(s) > 63 {
 		return false
 	}
 	return dnsLabelPattern.MatchString(s)
 }
 
 func isValidDomain(s string) bool {
-	if len(s) == 0 || len(s) > 253 {
+	if s == "" || len(s) > 253 {
 		return false
 	}
 	return domainPattern.MatchString(s)
@@ -465,17 +463,17 @@ func ValidateCIDR(value string) error {
 	return nil
 }
 
-func ValidateIntRange(unit string, min, max int) func(string) error {
+func ValidateIntRange(unit string, lo, hi int) func(string) error {
 	return func(value string) error {
 		n, err := strconv.Atoi(value)
 		if err != nil {
 			return fmt.Errorf("must be a number%s", unit)
 		}
-		if n < min {
-			return fmt.Errorf("minimum %d%s", min, unit)
+		if n < lo {
+			return fmt.Errorf("minimum %d%s", lo, unit)
 		}
-		if n > max {
-			return fmt.Errorf("maximum %d%s", max, unit)
+		if n > hi {
+			return fmt.Errorf("maximum %d%s", hi, unit)
 		}
 		return nil
 	}

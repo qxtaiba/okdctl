@@ -49,7 +49,7 @@ func (p *Phase) UpdateIngress(ctx context.Context, cfg *config.Config, opts Upda
 		return nil, fmt.Errorf("failed to resolve VIP: %w", err)
 	}
 
-	postOpts := Options{
+	postOpts := &Options{
 		Timeout: DefaultTimeout,
 	}
 
@@ -131,7 +131,7 @@ func (p *Phase) collectLBEntries(
 	ctx context.Context,
 	lbICs, hostNetworkICs []ingressControllerInfo,
 	bastionIP string,
-	postOpts Options,
+	postOpts *Options,
 ) ([]IngressEntry, []templates.DNSCustomDomain, string, error) {
 	var defaultAppsIP string
 	var entries []IngressEntry
@@ -235,7 +235,7 @@ func (p *Phase) handleHostNetworkConversion(
 	ctx context.Context,
 	hostNetworkICs []ingressControllerInfo,
 	opts UpdateIngressOptions,
-	postOpts Options,
+	postOpts *Options,
 ) (int, map[string]bool, error) {
 	convertedNames := make(map[string]bool)
 
@@ -279,7 +279,8 @@ func (p *Phase) handleHostNetworkConversion(
 	}
 
 	converted := 0
-	for _, ic := range hostNetworkICs {
+	for i := range hostNetworkICs {
+		ic := &hostNetworkICs[i]
 		p.Log.Info(fmt.Sprintf("update-ingress: converting %q from hostnetwork to loadbalancerservice...", ic.Name))
 		if err := p.convertToLoadBalancer(ctx, ic, timeout); err != nil {
 			return converted, convertedNames, fmt.Errorf("failed to convert IngressController %q: %w", ic.Name, err)
@@ -393,7 +394,7 @@ func (p *Phase) checkMetalLBAvailable(ctx context.Context) (bool, error) {
 
 // convertToLoadBalancer deletes a HostNetwork IngressController and recreates
 // it with LoadBalancerService strategy.
-func (p *Phase) convertToLoadBalancer(ctx context.Context, ic ingressControllerInfo, timeout time.Duration) error {
+func (p *Phase) convertToLoadBalancer(ctx context.Context, ic *ingressControllerInfo, timeout time.Duration) error {
 	// Build the replacement JSON before deleting.
 	replacementJSON, err := buildLBIngressController(ic)
 	if err != nil {
@@ -426,7 +427,7 @@ func (p *Phase) convertToLoadBalancer(ctx context.Context, ic ingressControllerI
 
 // buildLBIngressController constructs a clean IngressController JSON with
 // LoadBalancerService strategy, preserving key fields from the original.
-func buildLBIngressController(ic ingressControllerInfo) (string, error) {
+func buildLBIngressController(ic *ingressControllerInfo) (string, error) {
 	// Parse the original to extract fields we want to preserve.
 	var original struct {
 		Metadata struct {
@@ -498,7 +499,7 @@ func buildLBIngressController(ic ingressControllerInfo) (string, error) {
 
 // buildRollbackJSON strips server-managed fields from the original RawJSON
 // for use with oc create during rollback.
-func buildRollbackJSON(ic ingressControllerInfo) (string, error) {
+func buildRollbackJSON(ic *ingressControllerInfo) (string, error) {
 	var obj map[string]json.RawMessage
 	if err := json.Unmarshal(ic.RawJSON, &obj); err != nil {
 		return "", err
@@ -533,7 +534,7 @@ func buildRollbackJSON(ic ingressControllerInfo) (string, error) {
 // attemptRollback tries to recreate the original IngressController from its
 // captured RawJSON. Errors are logged but not returned — the caller already
 // has a primary error to report.
-func (p *Phase) attemptRollback(ctx context.Context, ic ingressControllerInfo) {
+func (p *Phase) attemptRollback(ctx context.Context, ic *ingressControllerInfo) {
 	rollbackJSON, err := buildRollbackJSON(ic)
 	if err != nil {
 		p.Log.Warn(fmt.Sprintf("update-ingress: rollback failed — could not build rollback json: %v", err))
@@ -551,7 +552,6 @@ func (p *Phase) attemptRollback(ctx context.Context, ic ingressControllerInfo) {
 	}
 
 	p.Log.Info(fmt.Sprintf("update-ingress: rollback succeeded — %q restored with original strategy", ic.Name))
-
 }
 
 // waitForRouterGone polls until the router-<name> deployment no longer exists.
@@ -574,7 +574,7 @@ func (p *Phase) waitForRouterGone(ctx context.Context, icName string, timeout ti
 }
 
 // waitForServiceLB polls a service in openshift-ingress until a LoadBalancer IP is assigned.
-func (p *Phase) waitForServiceLB(ctx context.Context, svcName string, opts Options) (string, error) {
+func (p *Phase) waitForServiceLB(ctx context.Context, svcName string, opts *Options) (string, error) {
 	timeout := opts.Timeout
 	if timeout == 0 {
 		timeout = DefaultIngressLBTimeout

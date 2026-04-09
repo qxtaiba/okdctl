@@ -11,7 +11,7 @@ import (
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
 )
 
-func (p *Phase) DownloadOKDTools(ctx context.Context, version string, opts Options) error {
+func (p *Phase) DownloadOKDTools(ctx context.Context, version string, opts *Options) error {
 	if err := system.EnsureDir(opts.DownloadDir); err != nil {
 		return fmt.Errorf("failed to create download directory: %w", err)
 	}
@@ -54,7 +54,7 @@ func (p *Phase) DownloadOKDTools(ctx context.Context, version string, opts Optio
 			checksumSkipped = true
 		}
 
-		downloadOpts := download.Options{
+		downloadOpts := &download.Options{
 			URL:              toolURL,
 			OutputPath:       archivePath,
 			ExpectedChecksum: checksum,

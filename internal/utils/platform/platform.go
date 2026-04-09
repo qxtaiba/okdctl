@@ -7,17 +7,23 @@ import (
 	"strings"
 )
 
+const (
+	archARM64    = "arm64"
+	familyRHEL   = "rhel"
+	familyDebian = "debian"
+)
+
 // DownloadArch returns the architecture suffix for tool download URLs.
 func DownloadArch() string {
-	if runtime.GOARCH == "arm64" {
-		return "arm64"
+	if runtime.GOARCH == archARM64 {
+		return archARM64
 	}
 	return "amd64"
 }
 
 // CoreOSArch returns the CoreOS stream architecture key.
 func CoreOSArch() string {
-	if runtime.GOARCH == "arm64" {
+	if runtime.GOARCH == archARM64 {
 		return "aarch64"
 	}
 	return "x86_64"
@@ -80,17 +86,17 @@ func parseOSRelease(content string) (OS, error) {
 
 func detectFamily(id, idLike string) string {
 	if rhelIDs[id] {
-		return "rhel"
+		return familyRHEL
 	}
 	if debianIDs[id] {
-		return "debian"
+		return familyDebian
 	}
 	for _, like := range strings.Fields(idLike) {
 		if rhelIDs[like] {
-			return "rhel"
+			return familyRHEL
 		}
 		if debianIDs[like] {
-			return "debian"
+			return familyDebian
 		}
 	}
 	return ""
@@ -98,7 +104,7 @@ func detectFamily(id, idLike string) string {
 
 // ApachePackageName returns the package name for Apache HTTP server.
 func (o OS) ApachePackageName() string {
-	if o.Family == "debian" {
+	if o.Family == familyDebian {
 		return "apache2"
 	}
 	return "httpd"
@@ -106,7 +112,7 @@ func (o OS) ApachePackageName() string {
 
 // ApacheConfigPath returns the path to the main Apache config file.
 func (o OS) ApacheConfigPath() string {
-	if o.Family == "debian" {
+	if o.Family == familyDebian {
 		return "/etc/apache2/apache2.conf"
 	}
 	return "/etc/httpd/conf/httpd.conf"
@@ -114,7 +120,7 @@ func (o OS) ApacheConfigPath() string {
 
 // ApacheServiceName returns the systemd service name for Apache.
 func (o OS) ApacheServiceName() string {
-	if o.Family == "debian" {
+	if o.Family == familyDebian {
 		return "apache2"
 	}
 	return "httpd"
@@ -122,7 +128,7 @@ func (o OS) ApacheServiceName() string {
 
 // ApacheUser returns the user that Apache runs as.
 func (o OS) ApacheUser() string {
-	if o.Family == "debian" {
+	if o.Family == familyDebian {
 		return "www-data"
 	}
 	return "apache"
@@ -130,5 +136,5 @@ func (o OS) ApacheUser() string {
 
 // HasSELinux returns true if the OS family uses SELinux.
 func (o OS) HasSELinux() bool {
-	return o.Family == "rhel"
+	return o.Family == familyRHEL
 }

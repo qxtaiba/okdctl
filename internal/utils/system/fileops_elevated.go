@@ -30,7 +30,7 @@ const (
 	OpRemove
 )
 
-func ExecuteFileOperation(ctx context.Context, op FileOperation, target string, description string, args ...string) error {
+func ExecuteFileOperation(ctx context.Context, op FileOperation, target, description string, args ...string) error {
 	var regularOp, sudoOp func() error
 
 	switch op {
@@ -72,7 +72,7 @@ func ExecuteFileOperation(ctx context.Context, op FileOperation, target string, 
 
 	case OpMkdir:
 		regularOp = func() error {
-			return os.MkdirAll(target, 0755)
+			return os.MkdirAll(target, 0o755)
 		}
 		sudoOp = func() error {
 			return runSudo(ctx, "mkdir", "-p", target)

@@ -17,11 +17,11 @@ type BaseOptions struct {
 }
 
 const (
-	DefaultHAProxyConfigPath  = "/etc/haproxy/haproxy.cfg"
-	DefaultHAProxyBackupPath  = "/etc/haproxy/haproxy.cfg.backup"
-	DefaultHTTPServerRoot     = "/var/www/html"
-	DefaultBinDir             = "/usr/local/bin"
-	DefaultDNSMasqConfigDir   = "/etc/dnsmasq.d"
+	DefaultHAProxyConfigPath = "/etc/haproxy/haproxy.cfg"
+	DefaultHAProxyBackupPath = "/etc/haproxy/haproxy.cfg.backup"
+	DefaultHTTPServerRoot    = "/var/www/html"
+	DefaultBinDir            = "/usr/local/bin"
+	DefaultDNSMasqConfigDir  = "/etc/dnsmasq.d"
 )
 
 func ClusterConfigDir(workDir string) string {

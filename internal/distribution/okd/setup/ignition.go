@@ -14,7 +14,7 @@ import (
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
 )
 
-func (p *Phase) GenerateInstallConfig(ctx context.Context, cfg *config.Config, outputDir string) error {
+func (p *Phase) GenerateInstallConfig(_ context.Context, cfg *config.Config, outputDir string) error {
 	if err := system.EnsureDir(outputDir); err != nil {
 		return fmt.Errorf("failed to create output directory: %w", err)
 	}
@@ -48,13 +48,13 @@ func (p *Phase) GenerateInstallConfig(ctx context.Context, cfg *config.Config, o
 		Architecture:   runtime.GOARCH,
 	}
 
-	content, err := templates.RenderInstallConfig(data)
+	content, err := templates.RenderInstallConfig(&data)
 	if err != nil {
 		return fmt.Errorf("failed to render install-config template: %w", err)
 	}
 
 	outputPath := filepath.Join(outputDir, "install-config.yaml")
-	if err := system.AtomicWriteString(outputPath, content, 0600); err != nil {
+	if err := system.AtomicWriteString(outputPath, content, 0o600); err != nil {
 		return fmt.Errorf("failed to write install-config.yaml: %w", err)
 	}
 
@@ -76,7 +76,7 @@ func (p *Phase) GenerateManifests(ctx context.Context, clusterDir string) error 
 	return nil
 }
 
-func (p *Phase) InjectCustomManifests(ctx context.Context, projectRoot, clusterDir string) (int, error) {
+func (p *Phase) InjectCustomManifests(_ context.Context, projectRoot, clusterDir string) (int, error) {
 	customDir := filepath.Join(projectRoot, "automation", "config", "manifests")
 
 	if !system.DirExists(customDir) {
@@ -116,7 +116,7 @@ func (p *Phase) InjectCustomManifests(ctx context.Context, projectRoot, clusterD
 	return count, nil
 }
 
-func (p *Phase) InjectCompactClusterManifests(ctx context.Context, clusterDir string, workerCount, masterCount int) error {
+func (p *Phase) InjectCompactClusterManifests(_ context.Context, clusterDir string, workerCount, masterCount int) error {
 	if workerCount > 0 {
 		return nil
 	}
@@ -134,7 +134,7 @@ func (p *Phase) InjectCompactClusterManifests(ctx context.Context, clusterDir st
 	}
 
 	destPath := filepath.Join(openshiftDir, "99-ingress-controller-master-placement.yaml")
-	if err := system.AtomicWriteString(destPath, manifest, 0644); err != nil {
+	if err := system.AtomicWriteString(destPath, manifest, 0o644); err != nil {
 		return fmt.Errorf("failed to write compact cluster ingress manifest: %w", err)
 	}
 

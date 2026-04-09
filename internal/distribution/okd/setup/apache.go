@@ -161,7 +161,12 @@ func (p *Phase) VerifyWebServer(ctx context.Context, baseURL string) error {
 
 	p.Log.Info(fmt.Sprintf("apache: verifying web server at %s", testURL))
 
-	resp, err := client.Get(testURL)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, testURL, http.NoBody)
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+
+	resp, err := client.Do(req)
 	if err != nil {
 		return fmt.Errorf("failed to connect to web server: %w", err)
 	}

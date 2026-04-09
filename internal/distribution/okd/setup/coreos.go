@@ -18,7 +18,7 @@ import (
 
 const DefaultProxmoxISODir = "/var/lib/vz/template/iso"
 
-func (p *Phase) findOrDownloadFCOSISO(ctx context.Context, cfg *config.Config, opts Options) (string, error) {
+func (p *Phase) findOrDownloadFCOSISO(ctx context.Context, cfg *config.Config, opts *Options) (string, error) {
 	isoDir := DefaultProxmoxISODir
 
 	if cfg.Provider.Proxmox != nil && cfg.Provider.Proxmox.FCOSIso != "" {
@@ -74,7 +74,7 @@ func (p *Phase) findOrDownloadFCOSISO(ctx context.Context, cfg *config.Config, o
 
 	p.Log.Info("coreos: no iso found, attempting auto-download")
 
-	return p.EnsureCoreOSISO(ctx, cfg, Options{
+	return p.EnsureCoreOSISO(ctx, cfg, &Options{
 		BaseOptions: phase.BaseOptions{
 			WorkDir: opts.WorkDir,
 		},
@@ -159,7 +159,7 @@ func (p *Phase) DownloadCoreOSISO(ctx context.Context, info *CoreOSInfo, destPat
 		return err
 	}
 
-	opts := download.Options{
+	opts := &download.Options{
 		URL:              info.ISOUrl,
 		OutputPath:       destPath,
 		ExpectedChecksum: info.ISOChecksum,
@@ -178,7 +178,7 @@ func (p *Phase) DownloadCoreOSISO(ctx context.Context, info *CoreOSInfo, destPat
 
 // EnsureCoreOSISO ensures the CoreOS ISO is available, downloading to the work
 // directory (avoids permission issues with /var/lib/vz).
-func (p *Phase) EnsureCoreOSISO(ctx context.Context, cfg *config.Config, opts Options) (string, error) {
+func (p *Phase) EnsureCoreOSISO(ctx context.Context, _ *config.Config, opts *Options) (string, error) {
 	p.Log.Info("coreos: detecting version from openshift-install")
 
 	info, err := p.DetectCoreOSVersion(ctx)

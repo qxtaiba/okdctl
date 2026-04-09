@@ -42,7 +42,7 @@ func (p *Phase) ValidateClusterAccess(ctx context.Context) error {
 	return nil
 }
 
-func (p *Phase) SetupClusterAccess(ctx context.Context, clusterDir string) error {
+func (p *Phase) SetupClusterAccess(_ context.Context, clusterDir string) error {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return fmt.Errorf("failed to get user home directory: %w", err)
@@ -65,7 +65,7 @@ func (p *Phase) SetupClusterAccess(ctx context.Context, clusterDir string) error
 		}
 	}
 
-	if err := system.CopyFileMode(srcKubeconfig, destKubeconfig, 0600); err != nil {
+	if err := system.CopyFileMode(srcKubeconfig, destKubeconfig, 0o600); err != nil {
 		return fmt.Errorf("failed to copy kubeconfig: %w", err)
 	}
 
@@ -83,7 +83,7 @@ func (p *Phase) addKubeconfigToBashrc(homeDir, kubeconfigPath string) error {
 	// Preserve the existing .bashrc mode so appending an export line can't
 	// silently relax stricter perms the user may have set. 0644 is only
 	// used when the file does not yet exist (sane default for bashrc).
-	mode := os.FileMode(0644)
+	mode := os.FileMode(0o644)
 	if fi, err := os.Stat(bashrcPath); err == nil {
 		mode = fi.Mode().Perm()
 	}
@@ -100,7 +100,7 @@ func (p *Phase) addKubeconfigToBashrc(homeDir, kubeconfigPath string) error {
 		return nil
 	}
 
-	f, err := os.OpenFile(bashrcPath, os.O_APPEND|os.O_WRONLY, 0644)
+	f, err := os.OpenFile(bashrcPath, os.O_APPEND|os.O_WRONLY, 0o644)
 	if err != nil {
 		return err
 	}

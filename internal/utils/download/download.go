@@ -26,7 +26,7 @@ type Options struct {
 	Logger           *slog.Logger
 }
 
-func (o Options) logger() *slog.Logger {
+func (o *Options) logger() *slog.Logger {
 	if o.Logger != nil {
 		return o.Logger
 	}
@@ -35,39 +35,39 @@ func (o Options) logger() *slog.Logger {
 
 const DefaultTimeout = 5 * time.Minute
 
-func canSkipDownload(opts Options) (bool, error) {
+func canSkipDownload(opts *Options) bool {
 	info, err := os.Stat(opts.OutputPath)
 	if err != nil || info.Size() == 0 {
-		return false, nil
+		return false
 	}
 
 	filename := filepath.Base(opts.OutputPath)
 
 	if opts.ExpectedChecksum == "" {
 		opts.logger().Info(fmt.Sprintf("download: using existing file %s (no checksum)", filename))
-		return true, nil
+		return true
 	}
 
 	opts.logger().Info(fmt.Sprintf("download: validating existing file %s", filename))
 
 	actualChecksum, err := CalculateChecksum(opts.OutputPath)
 	if err != nil {
-		return false, nil // Can't read file, need to re-download
+		return false // can't read file; re-download instead of failing
 	}
 
 	if actualChecksum == opts.ExpectedChecksum {
 		opts.logger().Info(fmt.Sprintf("download: checksum verified for %s", filename))
-		return true, nil
+		return true
 	}
 
 	opts.logger().Warn(fmt.Sprintf("download: checksum mismatch, re-downloading %s", filename))
 	if err := os.Remove(opts.OutputPath); err != nil && !os.IsNotExist(err) {
 		opts.logger().Warn(fmt.Sprintf("download: failed to remove mismatched file %s: %v", filename, err))
 	}
-	return false, nil
+	return false
 }
 
-func Download(ctx context.Context, opts Options) error {
+func Download(ctx context.Context, opts *Options) error {
 	if opts.Timeout == 0 {
 		opts.Timeout = DefaultTimeout
 	}
@@ -76,17 +76,11 @@ func Download(ctx context.Context, opts Options) error {
 		opts.Description = filepath.Base(opts.OutputPath)
 	}
 
-	if !opts.Overwrite {
-		skip, err := canSkipDownload(opts)
-		if err != nil {
-			return err
-		}
-		if skip {
-			return nil
-		}
+	if !opts.Overwrite && canSkipDownload(opts) {
+		return nil
 	}
 
-	if err := os.MkdirAll(filepath.Dir(opts.OutputPath), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(opts.OutputPath), 0o755); err != nil {
 		return fmt.Errorf("failed to create output directory: %w", err)
 	}
 
@@ -95,7 +89,7 @@ func Download(ctx context.Context, opts Options) error {
 
 	client := httputil.NewClient(httputil.WithTimeout(opts.Timeout))
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, opts.URL, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, opts.URL, http.NoBody)
 	if err != nil {
 		return err
 	}

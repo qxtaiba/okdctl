@@ -25,7 +25,7 @@ func DirExists(path string) bool {
 }
 
 func EnsureDir(path string) error {
-	return os.MkdirAll(path, 0755)
+	return os.MkdirAll(path, 0o755)
 }
 
 func EnsureDirForFile(filePath string) error {

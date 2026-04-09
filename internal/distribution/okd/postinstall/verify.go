@@ -22,7 +22,7 @@ type ClusterHealthResult struct {
 	TotalNodes        int
 }
 
-func (p *Phase) VerifyClusterHealth(ctx context.Context, opts Options) (*ClusterHealthResult, error) {
+func (p *Phase) VerifyClusterHealth(ctx context.Context, _ *Options) (*ClusterHealthResult, error) {
 	result := &ClusterHealthResult{}
 
 	cmdResult, err := p.Exec.RunChecked(ctx, "oc", "get", "clusteroperators", "--no-headers")
@@ -67,7 +67,7 @@ func (p *Phase) VerifyClusterHealth(ctx context.Context, opts Options) (*Cluster
 
 // VerifyKubeVIP verifies that kube-vip is running and the VIP is responding.
 // Returns the VIP address if successful.
-func (p *Phase) VerifyKubeVIP(ctx context.Context, cfg *config.Config, opts Options) (string, error) {
+func (p *Phase) VerifyKubeVIP(ctx context.Context, cfg *config.Config, opts *Options) (string, error) {
 	vip, err := netutil.ResolveVIP(cfg.Networking.Bastion.VIP, cfg.Networking.StaticIP.Start)
 	if err != nil {
 		return "", fmt.Errorf("failed to resolve VIP: %w", err)
@@ -91,7 +91,7 @@ func (p *Phase) VerifyKubeVIP(ctx context.Context, cfg *config.Config, opts Opti
 }
 
 // waitForKubeVIPDaemonSet waits for the kube-vip DaemonSet to have at least one ready pod.
-func (p *Phase) waitForKubeVIPDaemonSet(ctx context.Context, opts Options) error {
+func (p *Phase) waitForKubeVIPDaemonSet(ctx context.Context, opts *Options) error {
 	timeout := opts.KubeVIPDaemonSetTimeout
 	if timeout == 0 {
 		timeout = DefaultKubeVIPDaemonSetTimeout
@@ -119,7 +119,7 @@ func (p *Phase) waitForKubeVIPDaemonSet(ctx context.Context, opts Options) error
 }
 
 // waitForKubeVIPPing waits for the VIP to respond to ping.
-func (p *Phase) waitForKubeVIPPing(ctx context.Context, vip string, opts Options) error {
+func (p *Phase) waitForKubeVIPPing(ctx context.Context, vip string, opts *Options) error {
 	timeout := opts.KubeVIPVIPTimeout
 	if timeout == 0 {
 		timeout = DefaultKubeVIPVIPTimeout

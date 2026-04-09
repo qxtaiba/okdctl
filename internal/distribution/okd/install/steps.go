@@ -19,7 +19,7 @@ const (
 	StepSetupAccess     distribution.StepID = "setup-access"
 )
 
-func (p *Phase) newDeployInfraStep(cfg *config.Config, opts Options) distribution.ProvisioningStep {
+func (p *Phase) newDeployInfraStep(cfg *config.Config, opts *Options) distribution.ProvisioningStep {
 	return distribution.NewStepBuilder(StepDeployInfra, "Deploy Infrastructure").
 		Description("deploying proxmox infrastructure using terraform").
 		Fatal(true).
@@ -35,7 +35,7 @@ func (p *Phase) newDeployInfraStep(cfg *config.Config, opts Options) distributio
 		MustBuild()
 }
 
-func (p *Phase) newWaitBootstrapStep(cfg *config.Config, opts Options) distribution.ProvisioningStep {
+func (p *Phase) newWaitBootstrapStep(_ *config.Config, opts *Options) distribution.ProvisioningStep {
 	clusterDir := phase.ClusterConfigDir(opts.WorkDir)
 	return distribution.NewStepBuilder(StepWaitBootstrap, "Wait for Bootstrap").
 		Description("waiting for bootstrap node to initialize").
@@ -53,7 +53,7 @@ func (p *Phase) newWaitBootstrapStep(cfg *config.Config, opts Options) distribut
 		MustBuild()
 }
 
-func (p *Phase) newStartWorkersStep(cfg *config.Config, opts Options) distribution.ProvisioningStep {
+func (p *Phase) newStartWorkersStep(cfg *config.Config, opts *Options) distribution.ProvisioningStep {
 	return distribution.NewStepBuilder(StepStartWorkers, "Start Worker Nodes").
 		Description("starting worker nodes after bootstrap complete").
 		Fatal(true).
@@ -65,18 +65,18 @@ func (p *Phase) newStartWorkersStep(cfg *config.Config, opts Options) distributi
 		MustBuild()
 }
 
-func (p *Phase) newSetupKubeconfigStep(opts Options) distribution.ProvisioningStep {
+func (p *Phase) newSetupKubeconfigStep(opts *Options) distribution.ProvisioningStep {
 	clusterDir := phase.ClusterConfigDir(opts.WorkDir)
 	return distribution.NewStepBuilder(StepSetupKubeconfig, "Setup Kubeconfig").
 		Description("configuring cluster access").
 		Fatal(true).
-		Execute(func(ctx context.Context) error {
+		Execute(func(_ context.Context) error {
 			return p.SetupKubeconfig(clusterDir)
 		}).
 		MustBuild()
 }
 
-func (p *Phase) newValidateAccessStep(opts Options) distribution.ProvisioningStep {
+func (p *Phase) newValidateAccessStep(_ *Options) distribution.ProvisioningStep {
 	return distribution.NewStepBuilder(StepValidateAccess, "Validate Cluster Access").
 		Description("validating cluster access").
 		Fatal(true).
@@ -86,7 +86,7 @@ func (p *Phase) newValidateAccessStep(opts Options) distribution.ProvisioningSte
 		MustBuild()
 }
 
-func (p *Phase) newMonitorInstallStep(cfg *config.Config, opts Options) distribution.ProvisioningStep {
+func (p *Phase) newMonitorInstallStep(_ *config.Config, opts *Options) distribution.ProvisioningStep {
 	clusterDir := phase.ClusterConfigDir(opts.WorkDir)
 	return distribution.NewStepBuilder(StepMonitorInstall, "Monitor Installation").
 		Description("monitoring installation and approving certificate requests").
@@ -104,7 +104,7 @@ func (p *Phase) newMonitorInstallStep(cfg *config.Config, opts Options) distribu
 		MustBuild()
 }
 
-func (p *Phase) newSetupAccessStep(opts Options) distribution.ProvisioningStep {
+func (p *Phase) newSetupAccessStep(opts *Options) distribution.ProvisioningStep {
 	clusterDir := phase.ClusterConfigDir(opts.WorkDir)
 	return distribution.NewStepBuilder(StepSetupAccess, "Setup Cluster Access").
 		Description("configuring persistent cluster access").

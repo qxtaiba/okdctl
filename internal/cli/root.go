@@ -37,7 +37,7 @@ Highlights:
   • Automated preflight checks and validation
   • Single binary distribution`,
 	Version: version.Version,
-	Run: func(cmd *cobra.Command, args []string) {
+	Run: func(_ *cobra.Command, _ []string) {
 		fmt.Println(tui.TitleStyle.Render("Homelab K8s"))
 		fmt.Println()
 		fmt.Println(tui.MutedStyle.Render("Quick start:"))

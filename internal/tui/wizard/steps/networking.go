@@ -172,7 +172,7 @@ var NetworkingStepDefinition = wizard.StepDefinition{
 		}
 		return nil
 	},
-	Apply: func(step *wizard.DataDrivenStep, cfg *config.Config) error {
+	Apply: func(_ *wizard.DataDrivenStep, cfg *config.Config) error {
 		cfg.Networking.StaticIP.DNS = cfg.Networking.Bastion.IP
 		netmask, err := netutil.CIDRToNetmask(cfg.Networking.MachineCIDR)
 		if err != nil {

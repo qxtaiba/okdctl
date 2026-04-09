@@ -2,14 +2,13 @@
 package templates
 
 import (
-	"fmt"
 	"bytes"
 	"embed"
+	"fmt"
 	"io/fs"
 	"strconv"
 	"strings"
 	"text/template"
-
 )
 
 //go:embed *.tmpl
@@ -30,35 +29,35 @@ type InstallConfigData struct {
 }
 
 type TerraformVarsData struct {
-	ClusterName        string
-	TargetNode         string
-	Bridge             string
-	OSStorage          string
-	DataStorage        string
-	FCOSISOStorage     string
-	MasterISOsString   string
-	WorkerISOsString   string
-	VMIDBase           int
-	MasterCount        int
-	WorkerCount        int
-	OSDiskSizeGB       int
-	MasterOSDiskSizeGB int
-	WorkerOSDiskSizeGB int
+	ClusterName          string
+	TargetNode           string
+	Bridge               string
+	OSStorage            string
+	DataStorage          string
+	FCOSISOStorage       string
+	MasterISOsString     string
+	WorkerISOsString     string
+	VMIDBase             int
+	MasterCount          int
+	WorkerCount          int
+	OSDiskSizeGB         int
+	MasterOSDiskSizeGB   int
+	WorkerOSDiskSizeGB   int
 	WorkerDataDiskSizeGB int
 	MasterDataDiskSizeGB int
-	BootstrapCPUCores  int
-	BootstrapMemoryMB  int
-	MasterCPUCores     int
-	MasterMemoryMB     int
-	WorkerCPUCores     int
-	WorkerMemoryMB     int
-	MasterNames        string
-	WorkerNames        string
-	CPUType            string
-	NUMAEnabled        bool
-	AdditionalNetworks string
-	MasterTargetNodes  string
-	WorkerTargetNodes  string
+	BootstrapCPUCores    int
+	BootstrapMemoryMB    int
+	MasterCPUCores       int
+	MasterMemoryMB       int
+	WorkerCPUCores       int
+	WorkerMemoryMB       int
+	MasterNames          string
+	WorkerNames          string
+	CPUType              string
+	NUMAEnabled          bool
+	AdditionalNetworks   string
+	MasterTargetNodes    string
+	WorkerTargetNodes    string
 }
 
 type HAProxyServer struct {
@@ -131,23 +130,23 @@ func RenderCompactIngress(data CompactIngressData) (string, error) {
 	return renderTemplate("ingress-controller-compact.yaml.tmpl", data)
 }
 
-func RenderInstallConfig(data InstallConfigData) (string, error) {
+func RenderInstallConfig(data *InstallConfigData) (string, error) {
 	return renderTemplate("install-config.yaml.tmpl", data)
 }
 
-func RenderTerraformVars(data TerraformVarsData) (string, error) {
+func RenderTerraformVars(data *TerraformVarsData) (string, error) {
 	return renderTemplate("terraform.tfvars.tmpl", data)
 }
 
-func RenderHAProxyConfig(data HAProxyConfigData) (string, error) {
+func RenderHAProxyConfig(data *HAProxyConfigData) (string, error) {
 	return renderTemplate("haproxy.cfg.tmpl", data)
 }
 
-func RenderDNSBootstrapConfig(data DNSConfigData) (string, error) {
+func RenderDNSBootstrapConfig(data *DNSConfigData) (string, error) {
 	return renderTemplate("dnsmasq-bootstrap.conf.tmpl", data)
 }
 
-func RenderDNSProductionConfig(data DNSConfigData) (string, error) {
+func RenderDNSProductionConfig(data *DNSConfigData) (string, error) {
 	return renderTemplate("dnsmasq-production.conf.tmpl", data)
 }
 

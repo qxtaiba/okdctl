@@ -53,7 +53,7 @@ func ValidateChecksum(path, expectedChecksum string) error {
 func FetchChecksum(ctx context.Context, checksumsURL, filename string) (string, error) {
 	client := httputil.NewClient(httputil.WithTimeout(httputil.TimeoutMedium))
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, checksumsURL, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, checksumsURL, http.NoBody)
 	if err != nil {
 		return "", err
 	}

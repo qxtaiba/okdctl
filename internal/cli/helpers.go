@@ -81,7 +81,7 @@ func resolveProjectRoot() (string, error) {
 	if err != nil {
 		// Symlink resolution can fail harmlessly (e.g., temp dirs on macOS).
 		// Fall back to the absolute path.
-		return abs, nil
+		return abs, nil //nolint:nilerr // intentional fallback to abs path when symlink resolution fails
 	}
 	return resolved, nil
 }
@@ -141,7 +141,7 @@ func executeFullDeployment(ctx context.Context, cfg *config.Config, opts deploym
 	}
 
 	installOpts := install.NewOptions(cfg, projectRoot)
-	if err := p.Install(ctx, cfg, installOpts); err != nil {
+	if err := p.Install(ctx, cfg, &installOpts); err != nil {
 		tui.Info("run 'openshitctl destroy' to clean up resources")
 		return fmt.Errorf("deployment failed: %w", err)
 	}

@@ -31,12 +31,12 @@ func (o ExtractOptions) logger() *slog.Logger {
 // verifyResolvedPath checks that path, after resolving symlinks on the real
 // filesystem, is still within destDir. The path must already exist.
 func verifyResolvedPath(path, cleanDest string) error {
-	real, err := filepath.EvalSymlinks(path)
+	resolved, err := filepath.EvalSymlinks(path)
 	if err != nil {
 		return fmt.Errorf("failed to resolve path %s: %w", path, err)
 	}
-	if !strings.HasPrefix(filepath.Clean(real), cleanDest) {
-		return fmt.Errorf("resolves outside destination: %s -> %s", path, real)
+	if !strings.HasPrefix(filepath.Clean(resolved), cleanDest) {
+		return fmt.Errorf("resolves outside destination: %s -> %s", path, resolved)
 	}
 	return nil
 }
@@ -55,17 +55,16 @@ func processTarEntry(tarReader *tar.Reader, header *tar.Header, destDir string, 
 		return nil
 	}
 
-	targetPath := filepath.Join(destDir, name)
+	targetPath := filepath.Join(destDir, name) //nolint:gosec // G305: validated below
+	cleanDest := filepath.Clean(destDir)
 
-	if !strings.HasPrefix(filepath.Clean(targetPath), filepath.Clean(destDir)) {
+	if !strings.HasPrefix(filepath.Clean(targetPath), cleanDest+string(os.PathSeparator)) && filepath.Clean(targetPath) != cleanDest {
 		return fmt.Errorf("archive entry attempts to escape destination: %s", name)
 	}
 
-	cleanDest := filepath.Clean(destDir)
-
 	switch header.Typeflag {
 	case tar.TypeDir:
-		if err := os.MkdirAll(targetPath, os.FileMode(header.Mode)); err != nil {
+		if err := os.MkdirAll(targetPath, os.FileMode(header.Mode&0o777)); err != nil {
 			return fmt.Errorf("failed to create directory: %w", err)
 		}
 		if err := verifyResolvedPath(targetPath, cleanDest); err != nil {
@@ -73,7 +72,7 @@ func processTarEntry(tarReader *tar.Reader, header *tar.Header, destDir string, 
 		}
 
 	case tar.TypeReg:
-		if err := os.MkdirAll(filepath.Dir(targetPath), 0755); err != nil {
+		if err := os.MkdirAll(filepath.Dir(targetPath), 0o755); err != nil {
 			return fmt.Errorf("failed to create parent directory: %w", err)
 		}
 		// Resolve the parent through the real filesystem to catch writes
@@ -83,7 +82,7 @@ func processTarEntry(tarReader *tar.Reader, header *tar.Header, destDir string, 
 			return fmt.Errorf("file %s: parent %w", name, err)
 		}
 
-		outFile, err := os.OpenFile(targetPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.FileMode(header.Mode))
+		outFile, err := os.OpenFile(targetPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.FileMode(header.Mode&0o777))
 		if err != nil {
 			return fmt.Errorf("failed to create file: %w", err)
 		}
@@ -100,8 +99,8 @@ func processTarEntry(tarReader *tar.Reader, header *tar.Header, destDir string, 
 			return fmt.Errorf("absolute symlink target not allowed: %s -> %s", name, linkTarget)
 		}
 
-		resolvedTarget := filepath.Clean(filepath.Join(filepath.Dir(targetPath), linkTarget))
-		if !strings.HasPrefix(resolvedTarget, cleanDest) {
+		resolvedTarget := filepath.Clean(filepath.Join(filepath.Dir(targetPath), linkTarget)) //nolint:gosec // G305: validated below
+		if !strings.HasPrefix(resolvedTarget, cleanDest+string(os.PathSeparator)) && resolvedTarget != cleanDest {
 			return fmt.Errorf("symlink target escapes destination: %s -> %s", name, linkTarget)
 		}
 
@@ -145,7 +144,7 @@ func ExtractTarGz(ctx context.Context, opts ExtractOptions) error {
 
 	tarReader := tar.NewReader(gzipReader)
 
-	if err := os.MkdirAll(opts.DestDir, 0755); err != nil {
+	if err := os.MkdirAll(opts.DestDir, 0o755); err != nil {
 		return fmt.Errorf("failed to create destination directory: %w", err)
 	}
 

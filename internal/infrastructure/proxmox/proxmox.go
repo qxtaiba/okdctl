@@ -71,7 +71,7 @@ func New(opts ...Option) *Provider {
 // variables (PROXMOX_VE_ENDPOINT, PROXMOX_VE_API_TOKEN) passed directly to
 // terraform — the Provider has no Proxmox HTTP client. Connectivity issues
 // surface during terraform plan/apply with clear provider-level errors.
-func (p *Provider) Connect(ctx context.Context, cfg *config.Config) error {
+func (p *Provider) Connect(_ context.Context, cfg *config.Config) error {
 	if cfg == nil {
 		return fmt.Errorf("configuration is required")
 	}

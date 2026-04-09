@@ -91,11 +91,11 @@ type ProxmoxConfig struct {
 	FCOSIso     string `yaml:"fcos_iso,omitempty" json:"fcosIso,omitempty" mapstructure:"fcos_iso"`
 
 	// Credentials — prefer openshitctl.env or environment variables
-	Username string `yaml:"-" json:"username,omitempty" mapstructure:"username"`
-	Password string `yaml:"-" json:"-" mapstructure:"-"`
-	APIToken string `yaml:"-" json:"-" mapstructure:"-"`
-	TokenID  string `yaml:"token_id,omitempty" json:"tokenId,omitempty" mapstructure:"token_id"`
-	Insecure bool   `yaml:"insecure,omitempty" json:"insecure,omitempty" mapstructure:"insecure"`
+	Username           string              `yaml:"-" json:"username,omitempty" mapstructure:"username"`
+	Password           string              `yaml:"-" json:"-" mapstructure:"-"`
+	APIToken           string              `yaml:"-" json:"-" mapstructure:"-"`
+	TokenID            string              `yaml:"token_id,omitempty" json:"tokenId,omitempty" mapstructure:"token_id"`
+	Insecure           bool                `yaml:"insecure,omitempty" json:"insecure,omitempty" mapstructure:"insecure"`
 	CPUType            string              `yaml:"cpu_type,omitempty" json:"cpuType,omitempty" mapstructure:"cpu_type"`
 	AdditionalNetworks []AdditionalNetwork `yaml:"additional_networks,omitempty" json:"additionalNetworks,omitempty" mapstructure:"additional_networks"`
 	NUMAEnabled        bool                `yaml:"numa_enabled,omitempty" json:"numaEnabled,omitempty" mapstructure:"numa_enabled"`

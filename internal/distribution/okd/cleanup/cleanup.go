@@ -34,14 +34,14 @@ type Options struct {
 	Logger         *slog.Logger
 }
 
-func (opts Options) getLogger() *slog.Logger {
+func (opts *Options) getLogger() *slog.Logger {
 	if opts.Logger != nil {
 		return opts.Logger
 	}
 	return slog.New(slog.DiscardHandler)
 }
 
-func Execute(ctx context.Context, opts Options) error {
+func Execute(ctx context.Context, opts *Options) error {
 	logger := opts.getLogger()
 	var errs []error
 

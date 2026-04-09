@@ -19,8 +19,10 @@ const (
 	FieldTypeSelect // Dropdown selector with predefined options
 )
 
-type ConfigSetter func(cfg *config.Config, value string) error
-type ConfigGetter func(cfg *config.Config) string
+type (
+	ConfigSetter func(cfg *config.Config, value string) error
+	ConfigGetter func(cfg *config.Config) string
+)
 
 type FieldDefinition struct {
 	Key      string             // Unique key for accessing value

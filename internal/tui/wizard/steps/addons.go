@@ -16,12 +16,17 @@ import (
 	"github.com/qxtaiba/okd-proxmox-cli/internal/tui/wizard"
 )
 
+const (
+	valYes = "yes"
+	valNo  = "no"
+)
+
 func addonEnabled(name string) wizard.ConfigGetter {
 	return func(c *config.Config) string {
 		if ac, ok := c.Addons[name]; ok && ac.Enabled {
-			return "yes"
+			return valYes
 		}
-		return "no"
+		return valNo
 	}
 }
 
@@ -70,12 +75,12 @@ var AddonsStepDefinition = wizard.StepDefinition{
 			Note:  "requires: ssh deploy key at ~/.ssh/flux-deploy-key",
 			Fields: []wizard.FieldDefinition{
 				{
-					Key:     "flux_enabled",
-					Label:   "enabled",
-					Default: "no",
-					Help:    "enable gitops deployment",
-					Type:    wizard.FieldTypeSelect,
-					Options: []string{"no", "yes"},
+					Key:       "flux_enabled",
+					Label:     "enabled",
+					Default:   "no",
+					Help:      "enable gitops deployment",
+					Type:      wizard.FieldTypeSelect,
+					Options:   []string{valNo, valYes},
 					ConfigSet: setAddonEnabled("flux"),
 					ConfigGet: addonEnabled("flux"),
 				},
@@ -110,12 +115,12 @@ var AddonsStepDefinition = wizard.StepDefinition{
 			Note:  "requires: sops-encrypted 1password-credentials.json and 1password-token.txt + age key on bastion",
 			Fields: []wizard.FieldDefinition{
 				{
-					Key:     "secretstore_enabled",
-					Label:   "enabled",
-					Default: "no",
-					Help:    "bootstrap 1password connect secrets from sops files",
-					Type:    wizard.FieldTypeSelect,
-					Options: []string{"no", "yes"},
+					Key:       "secretstore_enabled",
+					Label:     "enabled",
+					Default:   "no",
+					Help:      "bootstrap 1password connect secrets from sops files",
+					Type:      wizard.FieldTypeSelect,
+					Options:   []string{valNo, valYes},
 					ConfigSet: setAddonEnabled("secretstore"),
 					ConfigGet: addonEnabled("secretstore"),
 				},
@@ -135,7 +140,7 @@ var AddonsStepDefinition = wizard.StepDefinition{
 func NewAddonsStep() (*wizard.DataDrivenStep, *wizard.DataDrivenStep) {
 	step := wizard.NewDataDrivenStep(AddonsStepDefinition)
 
-	step.WithExtraContentFunc(func(s *wizard.DataDrivenStep, width int) string {
+	step.WithExtraContentFunc(func(s *wizard.DataDrivenStep, _ int) string {
 		return renderAddonWarnings(s)
 	})
 
@@ -146,7 +151,7 @@ func renderAddonWarnings(step *wizard.DataDrivenStep) string {
 	warnStyle := lipgloss.NewStyle().Foreground(tui.ColorWarning)
 	var warnings []string
 
-	if step.Value("flux_enabled") == "yes" {
+	if step.Value("flux_enabled") == valYes {
 		home, _ := os.UserHomeDir()
 		keyPath := filepath.Join(home, ".ssh", "flux-deploy-key")
 		if _, err := os.Stat(keyPath); os.IsNotExist(err) {
@@ -154,7 +159,7 @@ func renderAddonWarnings(step *wizard.DataDrivenStep) string {
 		}
 	}
 
-	if step.Value("secretstore_enabled") == "yes" {
+	if step.Value("secretstore_enabled") == valYes {
 		if _, err := exec.LookPath("sops"); err != nil {
 			warnings = append(warnings, warnStyle.Render("  secretstore requires sops — install before deploying"))
 		}

@@ -74,11 +74,11 @@ var FilesStepDefinition = wizard.StepDefinition{
 	ShouldShow: func(cfg *config.Config) bool {
 		return cfg.Distribution.Type == config.DistributionOKD
 	},
-	Apply: func(step *wizard.DataDrivenStep, cfg *config.Config) error {
+	Apply: func(_ *wizard.DataDrivenStep, cfg *config.Config) error {
 		cfg.HTTPServer.IgnitionServerIP = cfg.Networking.Bastion.IP
 		return nil
 	},
-	ExtraContent: func(values map[string]string, width int) string {
+	ExtraContent: func(_ map[string]string, _ int) string {
 		helpStyle := lipgloss.NewStyle().
 			Foreground(tui.ColorSlate500).
 			Italic(true)

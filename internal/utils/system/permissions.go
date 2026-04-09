@@ -15,7 +15,7 @@ func SudoAvailable() bool {
 		return false
 	}
 
-	cmd := exec.Command("sudo", "-n", "true")
+	cmd := exec.CommandContext(context.Background(), "sudo", "-n", "true")
 	return cmd.Run() == nil
 }
 
@@ -34,7 +34,7 @@ func isElevationNeeded(err error) bool {
 		strings.Contains(errStr, "operation not permitted")
 }
 
-func ExecuteWithElevation(ctx context.Context, operation func() error, sudoOperation func() error, description string) error {
+func ExecuteWithElevation(_ context.Context, operation, sudoOperation func() error, description string) error {
 	err := operation()
 	if err == nil {
 		return nil

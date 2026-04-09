@@ -69,7 +69,7 @@ func (l *Loader) LoadFile(path string) (*Config, error) {
 	if err != nil {
 		return nil, fmt.Errorf("error stating config file %s: %w", path, err)
 	}
-	if perm := fi.Mode().Perm(); perm&0022 != 0 {
+	if perm := fi.Mode().Perm(); perm&0o022 != 0 {
 		return nil, fmt.Errorf("config file %s has insecure permissions %#o; run 'chmod go-w %s' to fix: %w", path, perm, path, os.ErrPermission)
 	}
 
@@ -126,7 +126,7 @@ func (l *Loader) Save(cfg *Config, path string) error {
 		return err
 	}
 
-	return system.AtomicWrite(path, data, 0600)
+	return system.AtomicWrite(path, data, 0o600)
 }
 
 // migrateDeprecatedFields promotes old config fields to their replacements so

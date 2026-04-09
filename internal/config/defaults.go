@@ -66,7 +66,7 @@ func DefaultConfig() *Config {
 			"flux": {Enabled: false, Settings: map[string]string{
 				"provider": "flux", "branch": "main", "path": "kubernetes/clusters/production",
 			}},
-			"secretstore": {Enabled: false, Settings: map[string]string{
+			"secretstore": {Enabled: false, Settings: map[string]string{ //nolint:gosec // G101: addon name, not a credential
 				"secrets_dir": "automation/config/secrets",
 			}},
 		},
