@@ -26,6 +26,7 @@ type InstallConfigData struct {
 	ServiceCIDR    string
 	PullSecret     string
 	SSHKey         string
+	Architecture   string
 }
 
 type TerraformVarsData struct {
