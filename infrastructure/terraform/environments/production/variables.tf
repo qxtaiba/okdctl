@@ -215,6 +215,36 @@ variable "vm_tags" {
   default     = []
 }
 
+variable "worker_data_disk_size_gb" {
+  description = "size of data disk for worker nodes (0 = no data disk)"
+  type        = number
+  default     = 500
+}
+
+variable "master_data_disk_size_gb" {
+  description = "size of data disk for master nodes (0 = no data disk)"
+  type        = number
+  default     = 0
+}
+
+variable "cpu_type" {
+  description = "cpu type for vms (host, x86-64-v2, x86-64-v3, kvm64)"
+  type        = string
+  default     = "host"
+}
+
+variable "master_target_nodes" {
+  description = "per-master proxmox node assignment (index-based, falls back to target_node)"
+  type        = list(string)
+  default     = []
+}
+
+variable "worker_target_nodes" {
+  description = "per-worker proxmox node assignment (index-based, falls back to target_node)"
+  type        = list(string)
+  default     = []
+}
+
 variable "start_workers_immediately" {
   description = "Start worker nodes immediately on creation"
   type        = bool
