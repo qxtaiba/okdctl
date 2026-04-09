@@ -4,7 +4,15 @@
 package steps
 
 import (
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+
+	"github.com/charmbracelet/lipgloss"
+
 	"github.com/qxtaiba/okd-proxmox-cli/internal/config"
+	"github.com/qxtaiba/okd-proxmox-cli/internal/tui"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/tui/wizard"
 )
 
@@ -126,5 +134,34 @@ var AddonsStepDefinition = wizard.StepDefinition{
 
 func NewAddonsStep() (*wizard.DataDrivenStep, *wizard.DataDrivenStep) {
 	step := wizard.NewDataDrivenStep(AddonsStepDefinition)
+
+	step.WithExtraContentFunc(func(s *wizard.DataDrivenStep, width int) string {
+		return renderAddonWarnings(s)
+	})
+
 	return step, step
+}
+
+func renderAddonWarnings(step *wizard.DataDrivenStep) string {
+	warnStyle := lipgloss.NewStyle().Foreground(tui.ColorWarning)
+	var warnings []string
+
+	if step.Value("flux_enabled") == "yes" {
+		home, _ := os.UserHomeDir()
+		keyPath := filepath.Join(home, ".ssh", "flux-deploy-key")
+		if _, err := os.Stat(keyPath); os.IsNotExist(err) {
+			warnings = append(warnings, warnStyle.Render("  flux requires ssh deploy key at ~/.ssh/flux-deploy-key — create it before deploying"))
+		}
+	}
+
+	if step.Value("secretstore_enabled") == "yes" {
+		if _, err := exec.LookPath("sops"); err != nil {
+			warnings = append(warnings, warnStyle.Render("  secretstore requires sops — install before deploying"))
+		}
+	}
+
+	if len(warnings) == 0 {
+		return ""
+	}
+	return "\n" + strings.Join(warnings, "\n")
 }
