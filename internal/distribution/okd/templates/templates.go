@@ -52,6 +52,7 @@ type TerraformVarsData struct {
 	WorkerMemoryMB     int
 	MasterNames        string
 	WorkerNames        string
+	CPUType            string
 }
 
 type HAProxyServer struct {

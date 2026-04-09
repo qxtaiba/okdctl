@@ -65,6 +65,11 @@ func buildTerraformVarsData(cfg *config.Config) templates.TerraformVarsData {
 	masterNames := buildNodeNames(cfg.Cluster.Name, "master", cfg.Topology.ControlPlane.Count)
 	workerNames := buildNodeNames(cfg.Cluster.Name, "worker", cfg.Topology.Workers.Count)
 
+	cpuType := proxmox.CPUType
+	if cpuType == "" {
+		cpuType = "host"
+	}
+
 	return templates.TerraformVarsData{
 		ClusterName:        cfg.Cluster.Name,
 		TargetNode:         proxmox.Node,
@@ -89,6 +94,7 @@ func buildTerraformVarsData(cfg *config.Config) templates.TerraformVarsData {
 		WorkerMemoryMB:     cfg.Topology.Workers.Memory,
 		MasterNames:        strings.Join(masterNames, ", "),
 		WorkerNames:        strings.Join(workerNames, ", "),
+		CPUType:            cpuType,
 	}
 }
 

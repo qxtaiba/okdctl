@@ -43,7 +43,7 @@ resource "proxmox_virtual_environment_vm" "bootstrap" {
   cpu {
     cores   = local.bootstrap_cpu
     sockets = 1
-    type    = "host"
+    type    = var.cpu_type
   }
 
   memory {
@@ -145,7 +145,7 @@ resource "proxmox_virtual_environment_vm" "master" {
   cpu {
     cores   = local.master_cpu
     sockets = 1
-    type    = "host"
+    type    = var.cpu_type
   }
 
   memory {
@@ -251,7 +251,7 @@ resource "proxmox_virtual_environment_vm" "worker" {
   cpu {
     cores   = local.worker_cpu
     sockets = 1
-    type    = "host"
+    type    = var.cpu_type
   }
 
   memory {
