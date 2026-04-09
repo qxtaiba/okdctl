@@ -11,6 +11,7 @@ import (
 
 	"github.com/qxtaiba/okd-proxmox-cli/internal/addon"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/config"
+	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/executor"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/download"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/platform"
@@ -210,10 +211,10 @@ func (p *Phase) installSops(ctx context.Context) error {
 }
 
 func installBinaryToPath(ctx context.Context, srcPath, name string) error {
-	destPath := filepath.Join("/usr/local/bin", name)
+	destPath := filepath.Join(phase.DefaultBinDir, name)
 
 	if err := system.CopyFileWithElevation(ctx, srcPath, destPath, fmt.Sprintf("install %s", name)); err != nil {
-		return fmt.Errorf("failed to copy %s to /usr/local/bin: %w", name, err)
+		return fmt.Errorf("failed to copy %s to %s: %w", name, phase.DefaultBinDir, err)
 	}
 
 	if err := system.Chmod(ctx, destPath, "+x", fmt.Sprintf("make %s executable", name)); err != nil {

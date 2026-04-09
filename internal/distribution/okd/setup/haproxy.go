@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/qxtaiba/okd-proxmox-cli/internal/config"
+	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/templates"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
 )
@@ -66,8 +67,8 @@ func writeHAProxyConfigToTemp(content string) (string, error) {
 }
 
 const (
-	haproxyConfigPath = "/etc/haproxy/haproxy.cfg"
-	haproxyBackupPath = "/etc/haproxy/haproxy.cfg.backup"
+	haproxyConfigPath = phase.DefaultHAProxyConfigPath
+	haproxyBackupPath = phase.DefaultHAProxyBackupPath
 )
 
 func (p *Phase) installHAProxyConfig(ctx context.Context, tmpPath string) error {

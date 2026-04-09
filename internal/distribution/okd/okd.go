@@ -134,34 +134,17 @@ func (p *Provisioner) Configure(ctx context.Context, cfg *config.Config) (*posti
 	return phase.Execute(ctx, cfg, opts)
 }
 
-type UpdateIngressOptions struct {
-	RemoveHAProxy     bool
-	ConfirmConversion func(hostNetworkICs []string) bool
-}
-
-type DestroyOptions struct {
-	RemovePackages bool
-}
-
-func (p *Provisioner) UpdateIngress(ctx context.Context, cfg *config.Config, opts *UpdateIngressOptions) (*postinstall.UpdateIngressResult, error) {
+func (p *Provisioner) UpdateIngress(ctx context.Context, cfg *config.Config, opts postinstall.UpdateIngressOptions) (*postinstall.UpdateIngressResult, error) {
 	phase := postinstall.New(p.executor, p.logger, p.version)
-	piOpts := postinstall.UpdateIngressOptions{}
-	if opts != nil {
-		piOpts.RemoveHAProxy = opts.RemoveHAProxy
-		piOpts.ConfirmConversion = opts.ConfirmConversion
-	}
-	return phase.UpdateIngress(ctx, cfg, piOpts)
+	return phase.UpdateIngress(ctx, cfg, opts)
 }
 
-func (p *Provisioner) Destroy(ctx context.Context, cfg *config.Config, destroyOpts *DestroyOptions) error {
+func (p *Provisioner) Destroy(ctx context.Context, cfg *config.Config, removePackages bool) error {
 	phase := destroy.New(p.executor, p.logger, p.version)
 	opts := destroy.NewOptions(cfg, p.projectRoot)
 	opts.AutoApprove = true
 	opts.Force = true
-
-	if destroyOpts != nil {
-		opts.RemovePackages = destroyOpts.RemovePackages
-	}
+	opts.RemovePackages = removePackages
 
 	return phase.Execute(ctx, cfg, opts)
 }

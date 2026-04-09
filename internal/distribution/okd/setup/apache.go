@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/qxtaiba/okd-proxmox-cli/internal/config"
+	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/executor"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/httputil"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
@@ -102,7 +103,7 @@ func (p *Phase) ConfigureApache(ctx context.Context, cfg *config.Config) error {
 
 	webRoot := cfg.HTTPServer.Root
 	if webRoot == "" {
-		webRoot = "/var/www/html"
+		webRoot = phase.DefaultHTTPServerRoot
 	}
 	ignitionDir, err := p.ensureIgnitionDir(ctx, webRoot)
 	if err != nil {
@@ -116,7 +117,7 @@ func (p *Phase) ConfigureApache(ctx context.Context, cfg *config.Config) error {
 func (p *Phase) DeployToWebServer(ctx context.Context, cfg *config.Config, clusterDir string) error {
 	webRoot := cfg.HTTPServer.Root
 	if webRoot == "" {
-		webRoot = "/var/www/html"
+		webRoot = phase.DefaultHTTPServerRoot
 	}
 
 	ignitionDir, err := p.ensureIgnitionDir(ctx, webRoot)

@@ -6,7 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd"
+	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/postinstall"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/tui"
 )
 
@@ -67,7 +67,7 @@ func runUpdateIngress(cmd *cobra.Command, _ []string) error {
 	tui.Info("detecting ingress strategy and loadbalancer ips...")
 	startTime := time.Now()
 
-	result, err := p.UpdateIngress(ctx, cfg, &okd.UpdateIngressOptions{
+	result, err := p.UpdateIngress(ctx, cfg, postinstall.UpdateIngressOptions{
 		RemoveHAProxy: updateIngressRemoveHAProxy,
 		ConfirmConversion: func(hostNetworkICs []string) bool {
 			tui.Warn(fmt.Sprintf("converting %d HostNetwork controller(s) to LoadBalancerService requires deleting and recreating them.", len(hostNetworkICs)))

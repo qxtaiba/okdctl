@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 
 	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/packages"
+	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/setup"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/platform"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
@@ -64,7 +65,7 @@ func Packages(ctx context.Context, logger *slog.Logger) error {
 
 	binaries := InstalledBinaries()
 	for _, binary := range binaries {
-		binPath := filepath.Join("/usr/local/bin", binary)
+		binPath := filepath.Join(phase.DefaultBinDir, binary)
 		if _, err := os.Stat(binPath); os.IsNotExist(err) {
 			continue // Already removed or never installed
 		}

@@ -6,7 +6,6 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/tui"
 )
 
@@ -52,10 +51,7 @@ func runDestroy(cmd *cobra.Command, _ []string) error {
 	tui.Info("destroying cluster...")
 	startTime := time.Now()
 
-	destroyOpts := &okd.DestroyOptions{
-		RemovePackages: true,
-	}
-	if err := p.Destroy(ctx, cfg, destroyOpts); err != nil {
+	if err := p.Destroy(ctx, cfg, true); err != nil {
 		return err
 	}
 

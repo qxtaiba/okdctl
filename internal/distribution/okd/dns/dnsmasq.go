@@ -12,11 +12,12 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
 )
 
 const (
-	dnsmasqConfigDir = "/etc/dnsmasq.d"
+	dnsmasqConfigDir = phase.DefaultDNSMasqConfigDir
 	dnsmasqService   = "dnsmasq"
 )
 

@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/firewall"
+	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/netutil"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
 )
@@ -28,7 +29,7 @@ func (p *Phase) RemoveHAProxy(ctx context.Context, vip string) error {
 	}
 
 	p.Log.Info("haproxy: removing configuration")
-	if err := system.RemoveAll(ctx, "/etc/haproxy/haproxy.cfg", "haproxy config"); err != nil {
+	if err := system.RemoveAll(ctx, phase.DefaultHAProxyConfigPath, "haproxy config"); err != nil {
 		p.Log.Warn(fmt.Sprintf("haproxy: failed to remove config: %v", err))
 	}
 

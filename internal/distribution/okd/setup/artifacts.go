@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/download"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
 )
@@ -93,7 +94,7 @@ func (p *Phase) DownloadOKDTools(ctx context.Context, version string, opts Optio
 
 func (p *Phase) InstallToolsToSystem(ctx context.Context, srcDir string) error {
 	binaries := []string{"openshift-install", "oc", "kubectl"}
-	destDir := "/usr/local/bin"
+	destDir := phase.DefaultBinDir
 
 	for _, binary := range binaries {
 		srcPath := filepath.Join(srcDir, binary)
