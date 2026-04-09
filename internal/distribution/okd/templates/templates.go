@@ -43,7 +43,8 @@ type TerraformVarsData struct {
 	OSDiskSizeGB       int
 	MasterOSDiskSizeGB int
 	WorkerOSDiskSizeGB int
-	DataDiskSizeGB     int
+	WorkerDataDiskSizeGB int
+	MasterDataDiskSizeGB int
 	BootstrapCPUCores  int
 	BootstrapMemoryMB  int
 	MasterCPUCores     int

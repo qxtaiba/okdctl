@@ -69,13 +69,25 @@ variable "data_storage" {
 }
 
 variable "data_disk_size_gb" {
-  description = "size of data disk in gb for ceph osd storage"
+  description = "deprecated: use worker_data_disk_size_gb"
+  type        = number
+  default     = 0
+  validation {
+    condition     = var.data_disk_size_gb >= 0 && var.data_disk_size_gb <= 5000
+    error_message = "data disk size must be between 0gb and 5000gb."
+  }
+}
+
+variable "worker_data_disk_size_gb" {
+  description = "size of data disk for worker nodes (0 = no data disk)"
   type        = number
   default     = 500
-  validation {
-    condition     = var.data_disk_size_gb >= 50 && var.data_disk_size_gb <= 5000
-    error_message = "data disk size must be between 50gb and 5000gb."
-  }
+}
+
+variable "master_data_disk_size_gb" {
+  description = "size of data disk for master nodes (0 = no data disk)"
+  type        = number
+  default     = 0
 }
 
 variable "bootstrap_iso" {

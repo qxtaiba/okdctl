@@ -114,5 +114,8 @@ type DeploymentConfig struct {
 }
 
 type DisksConfig struct {
-	DataSizeGB int `yaml:"data_size_gb" json:"dataSizeGb" mapstructure:"data_size_gb"`
+	WorkerDataSizeGB int `yaml:"worker_data_size_gb" json:"workerDataSizeGb" mapstructure:"worker_data_size_gb"`
+	MasterDataSizeGB int `yaml:"master_data_size_gb" json:"masterDataSizeGb" mapstructure:"master_data_size_gb"`
+	// Deprecated: use WorkerDataSizeGB. Kept for config migration.
+	DataSizeGB int `yaml:"data_size_gb,omitempty" json:"dataSizeGb,omitempty" mapstructure:"data_size_gb"`
 }

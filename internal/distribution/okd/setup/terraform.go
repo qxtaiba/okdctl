@@ -27,7 +27,7 @@ func buildNodeNames(clusterName, role string, count int) []string {
 	return names
 }
 
-func getDiskSizes(cfg *config.Config) (cpDisk, workerDisk, dataDisk int) {
+func getDiskSizes(cfg *config.Config) (cpDisk, workerDisk, workerDataDisk, masterDataDisk int) {
 	cpDisk = cfg.Topology.ControlPlane.Disk
 	if cpDisk == 0 {
 		cpDisk = 50
@@ -36,11 +36,12 @@ func getDiskSizes(cfg *config.Config) (cpDisk, workerDisk, dataDisk int) {
 	if workerDisk == 0 {
 		workerDisk = cpDisk
 	}
-	dataDisk = cfg.Disks.DataSizeGB
-	if dataDisk == 0 {
-		dataDisk = 500
+	workerDataDisk = cfg.Disks.WorkerDataSizeGB
+	if workerDataDisk == 0 && cfg.Disks.DataSizeGB > 0 {
+		workerDataDisk = cfg.Disks.DataSizeGB // migration from old field
 	}
-	return cpDisk, workerDisk, dataDisk
+	masterDataDisk = cfg.Disks.MasterDataSizeGB
+	return cpDisk, workerDisk, workerDataDisk, masterDataDisk
 }
 
 func getBootstrapResources(cfg *config.Config) (cpu, mem int) {
@@ -57,7 +58,7 @@ func getBootstrapResources(cfg *config.Config) (cpu, mem int) {
 
 func buildTerraformVarsData(cfg *config.Config) templates.TerraformVarsData {
 	proxmox := cfg.Provider.Proxmox
-	cpDisk, workerDisk, dataDisk := getDiskSizes(cfg)
+	cpDisk, workerDisk, workerDataDisk, masterDataDisk := getDiskSizes(cfg)
 	bootstrapCPU, bootstrapMem := getBootstrapResources(cfg)
 
 	masterISOs := buildISOStrings(proxmox.ISOStorage, "master", cfg.Topology.ControlPlane.Count)
@@ -85,7 +86,8 @@ func buildTerraformVarsData(cfg *config.Config) templates.TerraformVarsData {
 		OSDiskSizeGB:       cpDisk,
 		MasterOSDiskSizeGB: cpDisk,
 		WorkerOSDiskSizeGB: workerDisk,
-		DataDiskSizeGB:     dataDisk,
+		WorkerDataDiskSizeGB: workerDataDisk,
+		MasterDataDiskSizeGB: masterDataDisk,
 		BootstrapCPUCores:  bootstrapCPU,
 		BootstrapMemoryMB:  bootstrapMem,
 		MasterCPUCores:     cfg.Topology.ControlPlane.CPU,

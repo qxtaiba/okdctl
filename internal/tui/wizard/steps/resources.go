@@ -95,17 +95,27 @@ var ResourcesStepDefinition = wizard.StepDefinition{
 			},
 		},
 		{
-			Title: "storage",
+			Title: "data storage",
 			Fields: []wizard.FieldDefinition{
 				{
-					Key:       "ceph_disk",
-					Label:     "ceph data disk (gb)",
+					Key:       "worker_data_disk",
+					Label:     "worker data disk (gb)",
 					Default:   "500",
-					Help:      "dedicated ceph osd disk per worker (50-5000 gb)",
+					Help:      "data disk per worker for ceph/storage — set to 0 to disable",
 					Required:  true,
-					Validate:  config.ValidateDataDisk,
-					ConfigSet: wizard.SetInt(func(c *config.Config, v int) { c.Disks.DataSizeGB = v }),
-					ConfigGet: wizard.GetInt(func(c *config.Config) int { return c.Disks.DataSizeGB }),
+					Validate:  config.ValidateIntRange(" (in gb)", 0, 5000),
+					ConfigSet: wizard.SetInt(func(c *config.Config, v int) { c.Disks.WorkerDataSizeGB = v }),
+					ConfigGet: wizard.GetInt(func(c *config.Config) int { return c.Disks.WorkerDataSizeGB }),
+				},
+				{
+					Key:       "master_data_disk",
+					Label:     "master data disk (gb)",
+					Default:   "0",
+					Help:      "data disk per master for ceph/storage — set to 0 to disable",
+					Required:  true,
+					Validate:  config.ValidateIntRange(" (in gb)", 0, 5000),
+					ConfigSet: wizard.SetInt(func(c *config.Config, v int) { c.Disks.MasterDataSizeGB = v }),
+					ConfigGet: wizard.GetInt(func(c *config.Config) int { return c.Disks.MasterDataSizeGB }),
 				},
 			},
 		},
@@ -152,12 +162,13 @@ func renderResourceSummary(step *wizard.DataDrivenStep, state *ResourcesStepStat
 	workerCPU := step.ValueInt("worker_vcpus", 8)
 	workerMem := step.ValueInt("worker_memory", 20480)
 	workerDisk := step.ValueInt("worker_disk", 50)
-	cephDisk := step.ValueInt("ceph_disk", 500)
+	workerDataDisk := step.ValueInt("worker_data_disk", 500)
+	masterDataDisk := step.ValueInt("master_data_disk", 0)
 
 	totalCPU := (cpCPU * cpCount) + (workerCPU * workerCount)
 	totalMem := (cpMem * cpCount) + (workerMem * workerCount)
 	totalOSDisk := (cpDisk * cpCount) + (workerDisk * workerCount)
-	totalCephDisk := cephDisk * workerCount
+	totalDataDisk := (workerDataDisk * workerCount) + (masterDataDisk * cpCount)
 
 	boxContentWidth := width - 8
 	if boxContentWidth < 30 {
@@ -173,10 +184,10 @@ func renderResourceSummary(step *wizard.DataDrivenStep, state *ResourcesStepStat
 	sep := resourceSummaryStyles.sep
 
 	var storageStr string
-	if totalCephDisk >= 1000 {
-		storageStr = fmt.Sprintf("%.1f tb storage", float64(totalCephDisk)/1000)
+	if totalDataDisk >= 1000 {
+		storageStr = fmt.Sprintf("%.1f tb storage", float64(totalDataDisk)/1000)
 	} else {
-		storageStr = fmt.Sprintf("%d gb storage", totalCephDisk)
+		storageStr = fmt.Sprintf("%d gb storage", totalDataDisk)
 	}
 
 	summary := resourceSummaryStyles.title.Render("total resources required") + "\n\n" +
