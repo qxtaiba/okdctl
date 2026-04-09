@@ -5,6 +5,7 @@ package okd
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 
 	"github.com/qxtaiba/okd-proxmox-cli/internal/config"
@@ -14,7 +15,6 @@ import (
 	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/postinstall"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/setup"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/executor"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
 )
 
@@ -28,7 +28,7 @@ type Provisioner struct {
 	version     string
 	projectRoot string
 	executor    *executor.Executor
-	logger      utils.Logger
+	logger      *slog.Logger
 }
 
 type ProvisionerOption func(*Provisioner)
@@ -39,7 +39,7 @@ func WithProjectRoot(projectRoot string) ProvisionerOption {
 	}
 }
 
-func WithLogger(l utils.Logger) ProvisionerOption {
+func WithLogger(l *slog.Logger) ProvisionerOption {
 	return func(p *Provisioner) {
 		p.logger = l
 	}
@@ -63,7 +63,7 @@ func New(version string, opts ...ProvisionerOption) *Provisioner {
 	p := &Provisioner{
 		version:     version,
 		projectRoot: projectRoot,
-		logger:      utils.NoopLogger(),
+		logger:      slog.New(slog.DiscardHandler),
 	}
 
 	for _, opt := range opts {

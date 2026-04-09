@@ -9,8 +9,8 @@ import (
 
 	"github.com/qxtaiba/okd-proxmox-cli/internal/config"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/credentials"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/deployment"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd"
+	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/install"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/tui"
 )
 
@@ -121,26 +121,42 @@ type deploymentOptions struct {
 
 func executeFullDeployment(ctx context.Context, cfg *config.Config, opts deploymentOptions) error {
 	clusterFQDN := cfg.Cluster.Name + "." + cfg.Cluster.Domain
+	projectRoot := projectRootOrFallback()
 
-	var credsEnv []string
-	if opts.Credentials != nil && opts.Credentials.IsValid() {
-		credsEnv = opts.Credentials.Env()
+	p := createOKDProvisioner(cfg, opts.Credentials)
+
+	if err := p.Validate(cfg); err != nil {
+		return fmt.Errorf("provisioner validation failed: %w", err)
 	}
 
-	return deployment.Run(ctx, cfg, deployment.Options{
-		ShowStartMessage: opts.ShowStartMessage,
-		Logger:           tui.SimpleLogger(),
-		CredentialsEnv:   credsEnv,
-		OnStart: func(clusterName string) {
-			tui.Info("starting deployment...", tui.LF("cluster", clusterFQDN))
-		},
-		OnComplete: func(duration time.Duration, result *deployment.Result) {
-			fmt.Println()
-			tui.Info(fmt.Sprintf("deployment complete (total time: %s)", duration))
-			fmt.Println(PostDeploySummary(cfg, result))
-		},
-		OnError: func(err error) {
-			tui.Info("run 'openshitctl destroy' to clean up resources")
-		},
-	})
+	if opts.ShowStartMessage {
+		tui.Info("starting deployment...", tui.LF("cluster", clusterFQDN))
+	}
+
+	startTime := time.Now()
+
+	if err := p.Prepare(ctx, cfg); err != nil {
+		tui.Info("run 'openshitctl destroy' to clean up resources")
+		return fmt.Errorf("deployment failed: %w", err)
+	}
+
+	installOpts := install.NewOptions(cfg, projectRoot)
+	if err := p.Install(ctx, cfg, installOpts); err != nil {
+		tui.Info("run 'openshitctl destroy' to clean up resources")
+		return fmt.Errorf("deployment failed: %w", err)
+	}
+
+	result, err := p.Configure(ctx, cfg)
+	if err != nil {
+		tui.Info("run 'openshitctl destroy' to clean up resources")
+		return fmt.Errorf("deployment failed: %w", err)
+	}
+
+	duration := time.Since(startTime).Round(time.Second)
+
+	fmt.Println()
+	tui.Info(fmt.Sprintf("deployment complete (total time: %s)", duration))
+	fmt.Println(PostDeploySummary(cfg, result))
+
+	return nil
 }

@@ -6,11 +6,10 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
-
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
 )
 
 type ExtractOptions struct {
@@ -19,14 +18,14 @@ type ExtractOptions struct {
 	ExpectedChecksum string // SHA256 checksum of the archive (optional)
 	StripComponents  int    // Removes leading path components (like tar --strip-components)
 	CleanupArchive   bool   // Removes the archive after successful extraction
-	Logger           utils.Logger
+	Logger           *slog.Logger
 }
 
-func (o ExtractOptions) logger() utils.Logger {
+func (o ExtractOptions) logger() *slog.Logger {
 	if o.Logger != nil {
 		return o.Logger
 	}
-	return utils.NoopLogger()
+	return slog.New(slog.DiscardHandler)
 }
 
 // verifyResolvedPath checks that path, after resolving symlinks on the real

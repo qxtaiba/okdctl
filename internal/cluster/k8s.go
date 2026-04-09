@@ -6,11 +6,11 @@ package cluster
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"strings"
 
 	"github.com/qxtaiba/okd-proxmox-cli/internal/executor"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
 )
 
 type K8sClient struct {
@@ -19,7 +19,7 @@ type K8sClient struct {
 	Kubeconfig string
 
 	exec   *executor.Executor
-	logger utils.Logger
+	logger *slog.Logger
 }
 
 type Option func(*K8sClient)
@@ -32,7 +32,7 @@ func WithKubeconfig(path string) Option {
 	return func(c *K8sClient) { c.Kubeconfig = path }
 }
 
-func WithLogger(l utils.Logger) Option {
+func WithLogger(l *slog.Logger) Option {
 	return func(c *K8sClient) {
 		if l != nil {
 			c.logger = l
@@ -43,7 +43,7 @@ func WithLogger(l utils.Logger) Option {
 func NewK8sClient(opts ...Option) *K8sClient {
 	c := &K8sClient{
 		CLI:    "kubectl",
-		logger: utils.NoopLogger(),
+		logger: slog.New(slog.DiscardHandler),
 	}
 
 	if envKubeconfig := os.Getenv("KUBECONFIG"); envKubeconfig != "" {

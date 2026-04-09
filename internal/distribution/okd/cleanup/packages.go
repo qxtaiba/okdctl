@@ -3,12 +3,12 @@ package cleanup
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 
 	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/packages"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/setup"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
 )
 
@@ -31,7 +31,7 @@ func InstalledBinaries() []string {
 	return append(okdBinaries, setup.ExternalToolBinaries()...)
 }
 
-func Packages(ctx context.Context, logger utils.Logger) error {
+func Packages(ctx context.Context, logger *slog.Logger) error {
 	var hasErrors bool
 
 	pkgList := InstalledPackages()

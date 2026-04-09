@@ -3,27 +3,26 @@ package distribution
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"sync"
-
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
 )
 
 type Orchestrator struct {
 	mu      sync.RWMutex
 	steps   []ProvisioningStep
 	results []StepResult
-	logger  utils.Logger
+	logger  *slog.Logger
 }
 
 func NewOrchestrator(steps ...ProvisioningStep) *Orchestrator {
 	return &Orchestrator{
 		steps:   steps,
 		results: make([]StepResult, 0, len(steps)),
-		logger:  utils.NoopLogger(),
+		logger:  slog.New(slog.DiscardHandler),
 	}
 }
 
-func (o *Orchestrator) SetLogger(logger utils.Logger) {
+func (o *Orchestrator) SetLogger(logger *slog.Logger) {
 	if logger != nil {
 		o.logger = logger
 	}

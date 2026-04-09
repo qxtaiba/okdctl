@@ -9,12 +9,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"os/exec"
 	"strings"
 	"time"
-
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
 )
 
 type Executor struct {
@@ -23,7 +22,7 @@ type Executor struct {
 	Stdout  io.Writer
 	Stderr  io.Writer
 	Verbose bool
-	logger  utils.Logger
+	logger  *slog.Logger
 }
 
 type Option func(*Executor)
@@ -44,7 +43,7 @@ func WithEnv(env []string) Option {
 
 // WithLogger injects a structured logger used for command-trace output.
 // If the provided logger is nil the executor keeps its existing (noop) logger.
-func WithLogger(l utils.Logger) Option {
+func WithLogger(l *slog.Logger) Option {
 	return func(e *Executor) {
 		if l != nil {
 			e.logger = l
@@ -56,7 +55,7 @@ func New(opts ...Option) *Executor {
 	e := &Executor{
 		Stdout: os.Stdout,
 		Stderr: os.Stderr,
-		logger: utils.NoopLogger(),
+		logger: slog.New(slog.DiscardHandler),
 	}
 	for _, opt := range opts {
 		opt(e)

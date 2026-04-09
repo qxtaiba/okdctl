@@ -2,10 +2,9 @@ package cleanup
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
-
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
 )
 
 type Summary struct {
@@ -51,7 +50,7 @@ func GenerateSummary(opts Options) Summary {
 	return summary
 }
 
-func printSummary(opts Options, logger utils.Logger) {
+func printSummary(opts Options, logger *slog.Logger) {
 	summary := GenerateSummary(opts)
 
 	logger.Info("cleanup: summary")

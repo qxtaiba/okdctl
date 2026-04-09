@@ -5,14 +5,14 @@ package packages
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os/exec"
 	"strings"
 
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
 )
 
-func Install(ctx context.Context, packages []string, description string, logger utils.Logger) error {
+func Install(ctx context.Context, packages []string, description string, logger *slog.Logger) error {
 	if len(packages) == 0 {
 		return nil
 	}
@@ -29,7 +29,7 @@ func Install(ctx context.Context, packages []string, description string, logger 
 	return nil
 }
 
-func Remove(ctx context.Context, packages []string, logger utils.Logger) error {
+func Remove(ctx context.Context, packages []string, logger *slog.Logger) error {
 	if len(packages) == 0 {
 		return nil
 	}

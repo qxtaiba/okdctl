@@ -4,20 +4,20 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 
 	"github.com/qxtaiba/okd-proxmox-cli/internal/config"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/executor"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
 )
 
 type Manager struct {
 	cfg         *config.Config
 	exec        *executor.Executor
-	logger      utils.Logger
+	logger      *slog.Logger
 	projectRoot string
 }
 
-func NewManager(cfg *config.Config, exec *executor.Executor, logger utils.Logger, projectRoot string) *Manager {
+func NewManager(cfg *config.Config, exec *executor.Executor, logger *slog.Logger, projectRoot string) *Manager {
 	return &Manager{
 		cfg:         cfg,
 		exec:        exec,

@@ -17,14 +17,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"path/filepath"
 
 	"github.com/qxtaiba/okd-proxmox-cli/internal/config"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/infrastructure/terraform"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/netutil"
 )
-
 
 type Provider struct {
 	connected     bool
@@ -33,7 +32,7 @@ type Provider struct {
 	terraformExec *terraform.Executor
 	projectRoot   string
 	tfEnv         string
-	logger        utils.Logger
+	logger        *slog.Logger
 	env           []string
 }
 
@@ -43,7 +42,7 @@ func WithProjectRoot(root string) Option {
 	return func(p *Provider) { p.projectRoot = root }
 }
 
-func WithLogger(l utils.Logger) Option {
+func WithLogger(l *slog.Logger) Option {
 	return func(p *Provider) {
 		p.logger = l
 	}
@@ -58,7 +57,7 @@ func WithEnv(env []string) Option {
 
 func New(opts ...Option) *Provider {
 	p := &Provider{
-		logger: utils.NoopLogger(),
+		logger: slog.New(slog.DiscardHandler),
 	}
 	for _, opt := range opts {
 		opt(p)

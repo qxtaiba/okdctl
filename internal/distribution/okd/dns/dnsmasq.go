@@ -3,6 +3,7 @@ package dns
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net"
 	"os"
 	"os/exec"
@@ -11,7 +12,6 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
 )
 
@@ -134,7 +134,7 @@ func validateDNSAddresses(addresses []string) error {
 
 // ConfigureSystemResolver configures the system to use localhost (dnsmasq) for DNS resolution,
 // with the given fallbackDNS servers for queries dnsmasq cannot resolve.
-func ConfigureSystemResolver(ctx context.Context, fallbackDNS []string, logger utils.Logger) error {
+func ConfigureSystemResolver(ctx context.Context, fallbackDNS []string, logger *slog.Logger) error {
 	if !IsNetworkManagerActive(ctx) {
 		logger.Warn("resolver: NetworkManager not active, skipping system resolver configuration")
 		return nil
@@ -167,7 +167,7 @@ func ConfigureSystemResolver(ctx context.Context, fallbackDNS []string, logger u
 	return nil
 }
 
-func RestoreSystemResolver(ctx context.Context, logger utils.Logger) error {
+func RestoreSystemResolver(ctx context.Context, logger *slog.Logger) error {
 	if !IsNetworkManagerActive(ctx) {
 		return nil
 	}

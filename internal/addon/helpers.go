@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/retry"
+	"github.com/cenkalti/backoff/v4"
 )
 
 const (
@@ -13,9 +13,21 @@ const (
 	DefaultRetryBackoff = 5 * time.Second
 )
 
-// RetryDefault wraps retry.Do with the standard addon retry policy.
+// RetryDefault retries fn up to DefaultRetryCount times with exponential
+// backoff starting at DefaultRetryBackoff. Context cancellation is checked
+// between retries.
 func RetryDefault(ctx context.Context, fn func() error) error {
-	return retry.Do(ctx, DefaultRetryCount, DefaultRetryBackoff, fn)
+	b := backoff.NewExponentialBackOff()
+	b.InitialInterval = DefaultRetryBackoff
+	b.Multiplier = 2
+	b.RandomizationFactor = 0.5
+	b.MaxInterval = 5 * time.Minute
+	b.MaxElapsedTime = 0
+
+	return backoff.Retry(fn, backoff.WithContext(
+		backoff.WithMaxRetries(b, uint64(DefaultRetryCount-1)),
+		ctx,
+	))
 }
 
 // EnsureNamespace checks whether a Kubernetes namespace exists and creates it

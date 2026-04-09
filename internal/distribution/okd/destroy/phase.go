@@ -4,19 +4,19 @@ package destroy
 
 import (
 	"context"
+	"log/slog"
 	"path/filepath"
 
 	"github.com/qxtaiba/okd-proxmox-cli/internal/config"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/cleanup"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/paths"
+	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/executor"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
 )
 
 // Options configures the destroy phase.
 type Options struct {
-	paths.BaseOptions
+	phase.BaseOptions
 
 	// AutoApprove skips Terraform confirmation prompts.
 	AutoApprove bool
@@ -47,10 +47,10 @@ type Options struct {
 // NewOptions returns destroy options derived from config with sensible defaults.
 func NewOptions(cfg *config.Config, projectRoot string) Options {
 	return Options{
-		BaseOptions: paths.BaseOptions{
+		BaseOptions: phase.BaseOptions{
 			ProjectRoot:  projectRoot,
 			WorkDir:      filepath.Join(projectRoot, "okd-install"),
-			TerraformEnv: paths.GetTerraformEnv(cfg),
+			TerraformEnv: phase.GetTerraformEnv(cfg),
 		},
 		AutoApprove: cfg.Deployment.AutoApprove,
 		CleanupKind: cleanup.Full,
@@ -59,13 +59,13 @@ func NewOptions(cfg *config.Config, projectRoot string) Options {
 
 // Phase coordinates the destroy phase execution.
 type Phase struct {
-	paths.BasePhase
+	phase.BasePhase
 }
 
 // New creates a new destroy phase coordinator.
-func New(exec *executor.Executor, logger utils.Logger, version string) *Phase {
+func New(exec *executor.Executor, logger *slog.Logger, version string) *Phase {
 	return &Phase{
-		BasePhase: paths.NewBasePhase(exec, logger, version),
+		BasePhase: phase.NewBasePhase(exec, logger, version),
 	}
 }
 

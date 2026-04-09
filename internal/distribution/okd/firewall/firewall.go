@@ -5,11 +5,11 @@ package firewall
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os/exec"
 	"runtime"
 	"strings"
 
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
 )
 
@@ -84,7 +84,7 @@ func DetectBackend(ctx context.Context) Backend {
 	return None
 }
 
-func Configure(ctx context.Context, ports []Port, permanent bool, logger utils.Logger) error {
+func Configure(ctx context.Context, ports []Port, permanent bool, logger *slog.Logger) error {
 	backend := DetectBackend(ctx)
 
 	if backend == None {
@@ -129,7 +129,7 @@ func validatePort(port Port) error {
 	return nil
 }
 
-func openPort(ctx context.Context, backend Backend, port Port, permanent bool, logger utils.Logger) error {
+func openPort(ctx context.Context, backend Backend, port Port, permanent bool, logger *slog.Logger) error {
 	if err := modifyPort(ctx, backend, port, permanent, "add"); err != nil {
 		return err
 	}
@@ -137,7 +137,7 @@ func openPort(ctx context.Context, backend Backend, port Port, permanent bool, l
 	return nil
 }
 
-func RemoveRules(ctx context.Context, ports []Port, permanent bool, logger utils.Logger) error {
+func RemoveRules(ctx context.Context, ports []Port, permanent bool, logger *slog.Logger) error {
 	backend := DetectBackend(ctx)
 
 	if backend == None {
@@ -200,10 +200,10 @@ func modifyPort(ctx context.Context, backend Backend, port Port, permanent bool,
 	return nil
 }
 
-func ConfigureOKD(ctx context.Context, permanent bool, logger utils.Logger) error {
+func ConfigureOKD(ctx context.Context, permanent bool, logger *slog.Logger) error {
 	return Configure(ctx, OKDRequiredPorts, permanent, logger)
 }
 
-func RemoveOKDRules(ctx context.Context, permanent bool, logger utils.Logger) error {
+func RemoveOKDRules(ctx context.Context, permanent bool, logger *slog.Logger) error {
 	return RemoveRules(ctx, OKDRequiredPorts, permanent, logger)
 }

@@ -8,7 +8,7 @@ import (
 	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/cleanup"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/firewall"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/paths"
+	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/netutil"
 )
 
@@ -57,7 +57,7 @@ func (p *Phase) newCleanupFilesStep(cfg *config.Config, opts Options) distributi
 				WorkDir:        opts.WorkDir,
 				ProjectRoot:    opts.ProjectRoot,
 				HTTPServerRoot: cfg.HTTPServer.Root,
-				HAProxyConfig:  paths.DefaultHAProxyConfigPath,
+				HAProxyConfig:  phase.DefaultHAProxyConfigPath,
 				VIP:            vip,
 				ClusterName:    cfg.Cluster.Name,
 				TerraformEnv:   opts.TerraformEnv,
@@ -71,7 +71,7 @@ func (p *Phase) newCleanupFilesStep(cfg *config.Config, opts Options) distributi
 			}
 			return nil
 		}).
-		OnError(paths.WarnOnError(p.Log, "cleanup: file removal failed")).
+		OnError(phase.WarnOnError(p.Log, "cleanup: file removal failed")).
 		MustBuild()
 }
 
@@ -95,7 +95,7 @@ func (p *Phase) newCleanupFirewallStep(opts Options) distribution.ProvisioningSt
 			p.Log.Info("firewall: okd rules removed from firewalld")
 			return nil
 		}).
-		OnError(paths.WarnOnError(p.Log, "firewall: cleanup incomplete")).
+		OnError(phase.WarnOnError(p.Log, "firewall: cleanup incomplete")).
 		MustBuild()
 }
 

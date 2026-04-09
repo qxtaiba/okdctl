@@ -4,19 +4,19 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 
-	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/paths"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
+	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
 )
 
 // SafeRemoveWithLogger removes a file or directory if it exists, with automatic sudo fallback.
 // Returns nil if the path doesn't exist or was successfully removed, or a wrapped error on failure.
-// Errors are also logged via the provided logger for visibility in best-effort cleanup paths.
+// Errors are also logged via the provided logger for visibility in best-effort cleanup phase.
 // Note: If elevated privileges are required, sudo may prompt for a password.
-func SafeRemoveWithLogger(ctx context.Context, path, description string, logger utils.Logger) error {
+func SafeRemoveWithLogger(ctx context.Context, path, description string, logger *slog.Logger) error {
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		return nil // Silently skip non-existent paths
 	}
@@ -43,7 +43,7 @@ func SafeRemoveWithLogger(ctx context.Context, path, description string, logger 
 	return nil
 }
 
-func WorkDirectory(ctx context.Context, workDir string, preserveConfig bool, logger utils.Logger) error {
+func WorkDirectory(ctx context.Context, workDir string, preserveConfig bool, logger *slog.Logger) error {
 	if _, err := os.Stat(workDir); os.IsNotExist(err) {
 		return nil
 	}
@@ -65,7 +65,7 @@ func WorkDirectory(ctx context.Context, workDir string, preserveConfig bool, log
 		remove(filepath.Join(workDir, "installer"), "installer files")
 		remove(filepath.Join(workDir, "custom-isos"), "custom ISO files")
 	} else {
-		remove(paths.ClusterConfigDir(workDir), "cluster configuration")
+		remove(phase.ClusterConfigDir(workDir), "cluster configuration")
 		remove(filepath.Join(workDir, "custom-isos"), "custom ISOs")
 		remove(filepath.Join(workDir, "installer"), "installer")
 		remove(filepath.Join(workDir, "tmp"), "temp files")

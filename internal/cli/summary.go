@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"github.com/qxtaiba/okd-proxmox-cli/internal/config"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/deployment"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/postinstall"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/tui"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/netutil"
@@ -110,7 +109,7 @@ func DeploySummary(cfg *config.Config) string {
 	return "\n" + tui.BoxedSectionCompact(sb.String(), title, tui.DefaultBoxWidth) + "\n"
 }
 
-func PostDeploySummary(cfg *config.Config, result *deployment.Result) string {
+func PostDeploySummary(cfg *config.Config, result *postinstall.Result) string {
 	clusterFQDN := cfg.Cluster.Name + "." + cfg.Cluster.Domain
 	consoleURL := fmt.Sprintf("https://console-openshift-console.apps.%s", clusterFQDN)
 	apiURL := fmt.Sprintf("https://api.%s:6443", clusterFQDN)

@@ -4,14 +4,14 @@ package setup
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"path/filepath"
 
 	"github.com/qxtaiba/okd-proxmox-cli/internal/config"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/dns"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/paths"
+	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/executor"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
 )
 
@@ -21,7 +21,7 @@ const (
 )
 
 type Options struct {
-	paths.BaseOptions
+	phase.BaseOptions
 	DownloadDir     string
 	SkipDownloads   bool
 	SkipISOs        bool
@@ -33,7 +33,7 @@ type Options struct {
 
 func DefaultOptions(projectRoot string) Options {
 	return Options{
-		BaseOptions: paths.BaseOptions{
+		BaseOptions: phase.BaseOptions{
 			WorkDir:     filepath.Join(projectRoot, "okd-install"),
 			ProjectRoot: projectRoot,
 		},
@@ -66,12 +66,12 @@ type NodeInfo struct {
 }
 
 type Phase struct {
-	paths.BasePhase
+	phase.BasePhase
 }
 
-func New(exec *executor.Executor, logger utils.Logger, version string) *Phase {
+func New(exec *executor.Executor, logger *slog.Logger, version string) *Phase {
 	return &Phase{
-		BasePhase: paths.NewBasePhase(exec, logger, version),
+		BasePhase: phase.NewBasePhase(exec, logger, version),
 	}
 }
 
@@ -121,8 +121,8 @@ func (p *Phase) Execute(ctx context.Context, cfg *config.Config, opts Options) e
 }
 
 func (p *Phase) PrintSetupCompletionSummary(cfg *config.Config, opts Options) {
-	clusterDir := paths.ClusterConfigDir(opts.WorkDir)
-	tfEnv := paths.GetTerraformEnv(cfg)
+	clusterDir := phase.ClusterConfigDir(opts.WorkDir)
+	tfEnv := phase.GetTerraformEnv(cfg)
 
 	p.Log.Info(fmt.Sprintf("setup: cluster config saved to %s", clusterDir))
 	p.Log.Info(fmt.Sprintf("setup: terraform environment set to %s", tfEnv))

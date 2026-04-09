@@ -3,13 +3,12 @@ package cleanup
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
-
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
 )
 
-func Terraform(ctx context.Context, projectRoot, terraformEnv string, logger utils.Logger) error {
+func Terraform(ctx context.Context, projectRoot, terraformEnv string, logger *slog.Logger) error {
 	if logger != nil {
 		logger.Info("cleanup: terraform artifacts")
 	}
@@ -41,7 +40,7 @@ func Terraform(ctx context.Context, projectRoot, terraformEnv string, logger uti
 	return nil
 }
 
-func cleanupTerraformEnv(ctx context.Context, envDir, envName string, logger utils.Logger) error {
+func cleanupTerraformEnv(ctx context.Context, envDir, envName string, logger *slog.Logger) error {
 	if _, err := os.Stat(envDir); os.IsNotExist(err) {
 		return nil
 	}

@@ -10,7 +10,7 @@ import (
 	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/dns"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/firewall"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/packages"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/paths"
+	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/templates"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/executor"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/netutil"
@@ -78,7 +78,7 @@ func (p *Phase) newInstallPackagesStep(opts Options) distribution.ProvisioningSt
 
 			return nil
 		}).
-		OnError(paths.WarnOnError(p.Log, "packages: system installation had warnings")).
+		OnError(phase.WarnOnError(p.Log, "packages: system installation had warnings")).
 		MustBuild()
 }
 
@@ -89,7 +89,7 @@ func (p *Phase) newInstallToolsStep(cfg *config.Config) distribution.Provisionin
 		Execute(func(ctx context.Context) error {
 			return p.InstallExternalTools(ctx, cfg)
 		}).
-		OnError(paths.WarnOnError(p.Log, "tools: external installation had warnings")).
+		OnError(phase.WarnOnError(p.Log, "tools: external installation had warnings")).
 		MustBuild()
 }
 
@@ -120,7 +120,7 @@ func (p *Phase) newDownloadToolsStep(cfg *config.Config, opts Options) distribut
 }
 
 func (p *Phase) newGenerateInstallConfigStep(cfg *config.Config, opts Options) distribution.ProvisioningStep {
-	clusterDir := paths.ClusterConfigDir(opts.WorkDir)
+	clusterDir := phase.ClusterConfigDir(opts.WorkDir)
 
 	return distribution.NewStepBuilder(StepGenerateConfig, "Generate Install Config").
 		Description("generating install-config.yaml").
@@ -137,7 +137,7 @@ func (p *Phase) newGenerateInstallConfigStep(cfg *config.Config, opts Options) d
 }
 
 func (p *Phase) newGenerateManifestsStep(opts Options) distribution.ProvisioningStep {
-	clusterDir := paths.ClusterConfigDir(opts.WorkDir)
+	clusterDir := phase.ClusterConfigDir(opts.WorkDir)
 
 	return distribution.NewStepBuilder(StepGenerateManifests, "Generate Manifests").
 		Description("generating kubernetes manifests").
@@ -153,7 +153,7 @@ func (p *Phase) newGenerateManifestsStep(opts Options) distribution.Provisioning
 }
 
 func (p *Phase) newGenerateKubeVIPManifestsStep(cfg *config.Config, opts Options) distribution.ProvisioningStep {
-	clusterDir := paths.ClusterConfigDir(opts.WorkDir)
+	clusterDir := phase.ClusterConfigDir(opts.WorkDir)
 
 	return distribution.NewStepBuilder(StepGenerateKubeVIP, "Generate Kube-VIP Manifests").
 		Description("generating kube-vip RBAC and DaemonSet manifests for VIP management").
@@ -205,7 +205,7 @@ func (p *Phase) newGenerateKubeVIPManifestsStep(cfg *config.Config, opts Options
 }
 
 func (p *Phase) newInjectManifestsStep(opts Options) distribution.ProvisioningStep {
-	clusterDir := paths.ClusterConfigDir(opts.WorkDir)
+	clusterDir := phase.ClusterConfigDir(opts.WorkDir)
 
 	return distribution.NewStepBuilder(StepInjectManifests, "Inject Custom Manifests").
 		Description("injecting custom manifests").
@@ -224,7 +224,7 @@ func (p *Phase) newInjectManifestsStep(opts Options) distribution.ProvisioningSt
 }
 
 func (p *Phase) newCompactClusterManifestsStep(cfg *config.Config, opts Options) distribution.ProvisioningStep {
-	clusterDir := paths.ClusterConfigDir(opts.WorkDir)
+	clusterDir := phase.ClusterConfigDir(opts.WorkDir)
 
 	return distribution.NewStepBuilder(StepCompactCluster, "Inject Compact Cluster Manifests").
 		Description("injecting ingress controller placement for compact cluster").
@@ -242,7 +242,7 @@ func (p *Phase) newCompactClusterManifestsStep(cfg *config.Config, opts Options)
 }
 
 func (p *Phase) newGenerateIgnitionStep(opts Options) distribution.ProvisioningStep {
-	clusterDir := paths.ClusterConfigDir(opts.WorkDir)
+	clusterDir := phase.ClusterConfigDir(opts.WorkDir)
 
 	return distribution.NewStepBuilder(StepGenerateIgnition, "Generate Ignition").
 		Description("generating ignition files").
@@ -264,12 +264,12 @@ func (p *Phase) newInstallApacheStep(cfg *config.Config, opts Options) distribut
 		Execute(func(ctx context.Context) error {
 			return p.ConfigureApache(ctx, cfg)
 		}).
-		OnError(paths.WarnOnError(p.Log, "apache: installation skipped")).
+		OnError(phase.WarnOnError(p.Log, "apache: installation skipped")).
 		MustBuild()
 }
 
 func (p *Phase) newDeployIgnitionStep(cfg *config.Config, opts Options) distribution.ProvisioningStep {
-	clusterDir := paths.ClusterConfigDir(opts.WorkDir)
+	clusterDir := phase.ClusterConfigDir(opts.WorkDir)
 
 	return distribution.NewStepBuilder(StepDeployIgnition, "Deploy Ignition").
 		Description("deploying ignition files to apache web server").
@@ -337,7 +337,7 @@ func (p *Phase) newGenerateTfvarsStep(cfg *config.Config, opts Options) distribu
 			if err := p.GenerateTerraformVars(cfg, opts); err != nil {
 				return fmt.Errorf("failed to generate Terraform variables: %w", err)
 			}
-			tfvarsPath := filepath.Join(opts.ProjectRoot, "infrastructure", "terraform", "environments", paths.GetTerraformEnv(cfg), "terraform.tfvars")
+			tfvarsPath := filepath.Join(opts.ProjectRoot, "infrastructure", "terraform", "environments", phase.GetTerraformEnv(cfg), "terraform.tfvars")
 			p.Log.Info(fmt.Sprintf("terraform: configuration written to %s", tfvarsPath))
 			return nil
 		}).
@@ -373,7 +373,7 @@ func (p *Phase) newConfigureFirewallStep(opts Options) distribution.Provisioning
 			p.Log.Info("firewall: okd rules added to firewalld")
 			return nil
 		}).
-		OnError(paths.WarnOnError(p.Log, "firewall: configuration failed")).
+		OnError(phase.WarnOnError(p.Log, "firewall: configuration failed")).
 		MustBuild()
 }
 

@@ -7,8 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
+	"log/slog"
 )
 
 type Kind string
@@ -32,14 +31,14 @@ type Options struct {
 	VIP            string
 	ClusterName    string
 	RemovePackages bool
-	Logger         utils.Logger
+	Logger         *slog.Logger
 }
 
-func (opts Options) getLogger() utils.Logger {
+func (opts Options) getLogger() *slog.Logger {
 	if opts.Logger != nil {
 		return opts.Logger
 	}
-	return utils.NoopLogger()
+	return slog.New(slog.DiscardHandler)
 }
 
 func Execute(ctx context.Context, opts Options) error {

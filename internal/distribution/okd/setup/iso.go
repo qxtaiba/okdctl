@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	"github.com/qxtaiba/okd-proxmox-cli/internal/config"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/paths"
+	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/templates"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/executor"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
@@ -21,7 +21,7 @@ func (p *Phase) BuildCustomISOs(ctx context.Context, cfg *config.Config, opts Op
 		return err
 	}
 
-	clusterDir := paths.ClusterConfigDir(opts.WorkDir)
+	clusterDir := phase.ClusterConfigDir(opts.WorkDir)
 
 	if !executor.CommandExists("coreos-installer") {
 		return fmt.Errorf("coreos-installer not found - please install it first")

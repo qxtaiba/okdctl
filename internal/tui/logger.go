@@ -7,8 +7,6 @@ import (
 	"os"
 	"strings"
 	"sync"
-
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
 )
 
 type LogLevel int
@@ -182,9 +180,9 @@ func slogLevelToTUI(l slog.Level) LogLevel {
 	}
 }
 
-// SimpleLogger returns a utils.Logger (alias for *slog.Logger) whose records
+// SimpleLogger returns a *slog.Logger (alias for *slog.Logger) whose records
 // are printed through the tui styled formatters. Use this to wire CLI-facing
 // log output into subsystems that expect a structured logger.
-func SimpleLogger() utils.Logger {
+func SimpleLogger() *slog.Logger {
 	return slog.New(&simpleHandler{})
 }

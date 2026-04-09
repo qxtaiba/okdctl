@@ -6,12 +6,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"slices"
 
 	"github.com/qxtaiba/okd-proxmox-cli/internal/executor"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
 )
 
@@ -37,12 +37,12 @@ type Executor struct {
 	Verbose bool
 
 	exec   *executor.Executor
-	logger utils.Logger
+	logger *slog.Logger
 }
 
 type Option func(*Executor)
 
-func WithLogger(l utils.Logger) Option {
+func WithLogger(l *slog.Logger) Option {
 	return func(e *Executor) {
 		if l != nil {
 			e.logger = l
@@ -112,7 +112,7 @@ func New(workDir string, opts ...Option) *Executor {
 		WorkDir: workDir,
 		VarFile: filepath.Join(workDir, "terraform.tfvars"),
 		exec:    executor.New(executor.WithWorkDir(workDir)),
-		logger:  utils.NoopLogger(),
+		logger:  slog.New(slog.DiscardHandler),
 	}
 	for _, opt := range opts {
 		opt(e)
@@ -126,7 +126,7 @@ func NewWithVarFile(workDir, varFile string, opts ...Option) *Executor {
 		WorkDir: workDir,
 		VarFile: varFile,
 		exec:    executor.New(executor.WithWorkDir(workDir)),
-		logger:  utils.NoopLogger(),
+		logger:  slog.New(slog.DiscardHandler),
 	}
 	for _, opt := range opts {
 		opt(e)

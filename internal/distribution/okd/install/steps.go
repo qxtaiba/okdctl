@@ -6,7 +6,7 @@ import (
 
 	"github.com/qxtaiba/okd-proxmox-cli/internal/config"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/paths"
+	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/phase"
 )
 
 const (
@@ -36,7 +36,7 @@ func (p *Phase) newDeployInfraStep(cfg *config.Config, opts Options) distributio
 }
 
 func (p *Phase) newWaitBootstrapStep(cfg *config.Config, opts Options) distribution.ProvisioningStep {
-	clusterDir := paths.ClusterConfigDir(opts.WorkDir)
+	clusterDir := phase.ClusterConfigDir(opts.WorkDir)
 	return distribution.NewStepBuilder(StepWaitBootstrap, "Wait for Bootstrap").
 		Description("waiting for bootstrap node to initialize").
 		Fatal(true).
@@ -66,7 +66,7 @@ func (p *Phase) newStartWorkersStep(cfg *config.Config, opts Options) distributi
 }
 
 func (p *Phase) newSetupKubeconfigStep(opts Options) distribution.ProvisioningStep {
-	clusterDir := paths.ClusterConfigDir(opts.WorkDir)
+	clusterDir := phase.ClusterConfigDir(opts.WorkDir)
 	return distribution.NewStepBuilder(StepSetupKubeconfig, "Setup Kubeconfig").
 		Description("configuring cluster access").
 		Fatal(true).
@@ -87,7 +87,7 @@ func (p *Phase) newValidateAccessStep(opts Options) distribution.ProvisioningSte
 }
 
 func (p *Phase) newMonitorInstallStep(cfg *config.Config, opts Options) distribution.ProvisioningStep {
-	clusterDir := paths.ClusterConfigDir(opts.WorkDir)
+	clusterDir := phase.ClusterConfigDir(opts.WorkDir)
 	return distribution.NewStepBuilder(StepMonitorInstall, "Monitor Installation").
 		Description("monitoring installation and approving certificate requests").
 		Fatal(true).
@@ -105,13 +105,13 @@ func (p *Phase) newMonitorInstallStep(cfg *config.Config, opts Options) distribu
 }
 
 func (p *Phase) newSetupAccessStep(opts Options) distribution.ProvisioningStep {
-	clusterDir := paths.ClusterConfigDir(opts.WorkDir)
+	clusterDir := phase.ClusterConfigDir(opts.WorkDir)
 	return distribution.NewStepBuilder(StepSetupAccess, "Setup Cluster Access").
 		Description("configuring persistent cluster access").
 		Fatal(false).
 		Execute(func(ctx context.Context) error {
 			return p.SetupClusterAccess(ctx, clusterDir)
 		}).
-		OnError(paths.WarnOnError(p.Log, "kubeconfig: failed to setup persistent access")).
+		OnError(phase.WarnOnError(p.Log, "kubeconfig: failed to setup persistent access")).
 		MustBuild()
 }

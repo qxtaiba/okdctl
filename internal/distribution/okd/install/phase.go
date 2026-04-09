@@ -4,16 +4,16 @@ package install
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/qxtaiba/okd-proxmox-cli/internal/config"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/paths"
+	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/executor"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/infrastructure/proxmox"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
 )
 
@@ -24,7 +24,7 @@ const (
 )
 
 type Options struct {
-	paths.BaseOptions
+	phase.BaseOptions
 	AutoApprove         bool
 	BootstrapTimeout    time.Duration
 	InstallTimeout      time.Duration
@@ -54,10 +54,10 @@ func NewOptions(cfg *config.Config, projectRoot string) Options {
 	}
 
 	return Options{
-		BaseOptions: paths.BaseOptions{
+		BaseOptions: phase.BaseOptions{
 			WorkDir:      filepath.Join(projectRoot, "okd-install"),
 			ProjectRoot:  projectRoot,
-			TerraformEnv: paths.GetTerraformEnv(cfg),
+			TerraformEnv: phase.GetTerraformEnv(cfg),
 		},
 		AutoApprove:         cfg.Deployment.AutoApprove,
 		BootstrapTimeout:    bootstrapTimeout,
@@ -70,12 +70,12 @@ func NewOptions(cfg *config.Config, projectRoot string) Options {
 }
 
 type Phase struct {
-	paths.BasePhase
+	phase.BasePhase
 }
 
-func New(exec *executor.Executor, logger utils.Logger, version string) *Phase {
+func New(exec *executor.Executor, logger *slog.Logger, version string) *Phase {
 	return &Phase{
-		BasePhase: paths.NewBasePhase(exec, logger, version),
+		BasePhase: phase.NewBasePhase(exec, logger, version),
 	}
 }
 

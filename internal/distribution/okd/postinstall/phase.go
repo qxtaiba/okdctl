@@ -4,6 +4,7 @@ package postinstall
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"path/filepath"
 	"time"
 
@@ -11,10 +12,9 @@ import (
 	"github.com/qxtaiba/okd-proxmox-cli/internal/config"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/dns"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/paths"
+	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/templates"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/executor"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
 )
 
 const (
@@ -22,7 +22,7 @@ const (
 )
 
 type Options struct {
-	paths.BaseOptions
+	phase.BaseOptions
 	SkipClusterHealth       bool
 	SkipKubeVIP             bool
 	Timeout                 time.Duration
@@ -32,10 +32,10 @@ type Options struct {
 
 func NewOptions(cfg *config.Config, projectRoot string) Options {
 	return Options{
-		BaseOptions: paths.BaseOptions{
+		BaseOptions: phase.BaseOptions{
 			ProjectRoot:  projectRoot,
 			WorkDir:      filepath.Join(projectRoot, "okd-install"),
-			TerraformEnv: paths.GetTerraformEnv(cfg),
+			TerraformEnv: phase.GetTerraformEnv(cfg),
 		},
 		Timeout:                 DefaultTimeout,
 		KubeVIPDaemonSetTimeout: DefaultKubeVIPDaemonSetTimeout,
@@ -52,12 +52,12 @@ type Result struct {
 }
 
 type Phase struct {
-	paths.BasePhase
+	phase.BasePhase
 }
 
-func New(exec *executor.Executor, logger utils.Logger, version string) *Phase {
+func New(exec *executor.Executor, logger *slog.Logger, version string) *Phase {
 	return &Phase{
-		BasePhase: paths.NewBasePhase(exec, logger, version),
+		BasePhase: phase.NewBasePhase(exec, logger, version),
 	}
 }
 

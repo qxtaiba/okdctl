@@ -5,13 +5,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net"
 	"os"
 	"path/filepath"
 
 	"github.com/qxtaiba/okd-proxmox-cli/internal/config"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/templates"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/netutil"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
 )
@@ -121,7 +121,7 @@ func ConfigName(clusterName string) string {
 	return fmt.Sprintf("okd-%s", clusterName)
 }
 
-func Setup(ctx context.Context, fallbackDNS []string, logger utils.Logger) error {
+func Setup(ctx context.Context, fallbackDNS []string, logger *slog.Logger) error {
 	if err := EnableDnsmasq(ctx); err != nil {
 		return fmt.Errorf("failed to enable dnsmasq: %w", err)
 	}

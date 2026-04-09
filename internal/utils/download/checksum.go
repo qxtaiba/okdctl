@@ -6,12 +6,12 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/httputil"
 )
 
@@ -107,7 +107,7 @@ func FetchChecksum(ctx context.Context, checksumsURL, filename string) (string, 
 	return "", fmt.Errorf("checksum not found for file: %s", filename)
 }
 
-func verifyDownloadedFile(path, expectedChecksum string, logger utils.Logger) error {
+func verifyDownloadedFile(path, expectedChecksum string, logger *slog.Logger) error {
 	if expectedChecksum == "" {
 		return nil
 	}

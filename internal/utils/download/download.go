@@ -7,12 +7,12 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
 	"time"
 
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/httputil"
 )
 
@@ -23,14 +23,14 @@ type Options struct {
 	Description      string
 	Timeout          time.Duration // Default: 5 minutes
 	Overwrite        bool          // If false and file exists with correct checksum, download is skipped
-	Logger           utils.Logger
+	Logger           *slog.Logger
 }
 
-func (o Options) logger() utils.Logger {
+func (o Options) logger() *slog.Logger {
 	if o.Logger != nil {
 		return o.Logger
 	}
-	return utils.NoopLogger()
+	return slog.New(slog.DiscardHandler)
 }
 
 const DefaultTimeout = 5 * time.Minute

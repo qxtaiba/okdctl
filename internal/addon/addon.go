@@ -4,10 +4,10 @@ package addon
 
 import (
 	"context"
+	"log/slog"
 
 	"github.com/qxtaiba/okd-proxmox-cli/internal/config"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/executor"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
 )
 
 type Addon interface {
@@ -44,7 +44,7 @@ type Environment struct {
 
 	Exec *executor.Executor
 
-	Logger utils.Logger
+	Logger *slog.Logger
 
 	ProjectRoot string
 }

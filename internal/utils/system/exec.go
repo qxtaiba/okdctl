@@ -6,15 +6,14 @@ package system
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"time"
-
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
 )
 
 type WaitForOptions struct {
 	Interval time.Duration // Default: 30 seconds
 	Timeout  time.Duration // Default: no timeout (0)
-	Logger   utils.Logger
+	Logger   *slog.Logger
 }
 
 func DefaultWaitForOptions() WaitForOptions {
@@ -31,7 +30,7 @@ func WaitFor(ctx context.Context, prefix, description string, check func() bool,
 
 	logger := opts.Logger
 	if logger == nil {
-		logger = utils.NoopLogger()
+		logger = slog.New(slog.DiscardHandler)
 	}
 
 	waitMsg := fmt.Sprintf("%s: waiting for %s...", prefix, description)
@@ -80,7 +79,7 @@ func WaitFor(ctx context.Context, prefix, description string, check func() bool,
 	}
 }
 
-func WaitForWithTimeout(ctx context.Context, prefix, description string, check func() bool, timeout time.Duration, logger utils.Logger) error {
+func WaitForWithTimeout(ctx context.Context, prefix, description string, check func() bool, timeout time.Duration, logger *slog.Logger) error {
 	opts := DefaultWaitForOptions()
 	opts.Timeout = timeout
 	opts.Logger = logger

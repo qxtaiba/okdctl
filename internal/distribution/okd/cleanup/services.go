@@ -3,19 +3,19 @@ package cleanup
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 
 	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/dns"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/firewall"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/packages"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/netutil"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
 )
 
 // stopAndDisableService stops and disables a systemd service, logging warnings on failure.
-func stopAndDisableService(ctx context.Context, serviceName string, logger utils.Logger) {
+func stopAndDisableService(ctx context.Context, serviceName string, logger *slog.Logger) {
 	if system.IsServiceActive(ctx, serviceName) {
 		if err := system.ManageService(ctx, system.ServiceStop, serviceName, serviceName+" service"); err != nil && logger != nil {
 			logger.Warn(fmt.Sprintf("cleanup: failed to stop %s service: %v", serviceName, err))
@@ -33,13 +33,13 @@ func stopAndDisableService(ctx context.Context, serviceName string, logger utils
 	}
 }
 
-func removePackage(ctx context.Context, pkg string, logger utils.Logger) {
+func removePackage(ctx context.Context, pkg string, logger *slog.Logger) {
 	if err := packages.Remove(ctx, []string{pkg}, logger); err != nil && logger != nil {
 		logger.Warn(fmt.Sprintf("cleanup: failed to remove %s package: %v", pkg, err))
 	}
 }
 
-func HAProxy(ctx context.Context, haproxyConfig, vip string, logger utils.Logger) error {
+func HAProxy(ctx context.Context, haproxyConfig, vip string, logger *slog.Logger) error {
 	if logger != nil {
 		logger.Info("cleanup: haproxy service and configuration")
 	}
@@ -87,7 +87,7 @@ func HAProxy(ctx context.Context, haproxyConfig, vip string, logger utils.Logger
 	return nil
 }
 
-func Apache(ctx context.Context, logger utils.Logger) error {
+func Apache(ctx context.Context, logger *slog.Logger) error {
 	if logger != nil {
 		logger.Info("cleanup: apache httpd service")
 	}
@@ -102,7 +102,7 @@ func Apache(ctx context.Context, logger utils.Logger) error {
 	return nil
 }
 
-func WebServer(ctx context.Context, httpServerRoot string, logger utils.Logger) error {
+func WebServer(ctx context.Context, httpServerRoot string, logger *slog.Logger) error {
 	ignitionDir := filepath.Join(httpServerRoot, "ignition")
 
 	if _, err := os.Stat(ignitionDir); os.IsNotExist(err) {
@@ -129,7 +129,7 @@ func WebServer(ctx context.Context, httpServerRoot string, logger utils.Logger) 
 	return nil
 }
 
-func Dnsmasq(ctx context.Context, clusterName string, logger utils.Logger) error {
+func Dnsmasq(ctx context.Context, clusterName string, logger *slog.Logger) error {
 	if logger != nil {
 		logger.Info("cleanup: dnsmasq service and configuration")
 	}

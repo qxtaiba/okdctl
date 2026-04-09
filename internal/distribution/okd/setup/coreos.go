@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	"github.com/qxtaiba/okd-proxmox-cli/internal/config"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/paths"
+	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/executor"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/download"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
@@ -74,7 +74,7 @@ func (p *Phase) findOrDownloadFCOSISO(ctx context.Context, cfg *config.Config, o
 	p.Log.Info("coreos: no iso found, attempting auto-download")
 
 	return p.EnsureCoreOSISO(ctx, cfg, Options{
-		BaseOptions: paths.BaseOptions{
+		BaseOptions: phase.BaseOptions{
 			WorkDir: opts.WorkDir,
 		},
 		AutoDownloadISO: true,
