@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/bubbles/key"
+	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
@@ -14,6 +15,19 @@ import (
 	"github.com/qxtaiba/okd-proxmox-cli/internal/tui/wizard/components"
 )
 
+type placementPhase int
+
+const (
+	phaseDiscovering placementPhase = iota
+	phasePlacing
+)
+
+// nodesDiscoveredMsg is sent when the async Proxmox node fetch completes.
+type nodesDiscoveredMsg struct {
+	nodes []proxmoxNode
+	err   error
+}
+
 type vmAssignment struct {
 	name     string
 	selector *components.CompactSelector
@@ -22,10 +36,18 @@ type vmAssignment struct {
 type NodePlacementStep struct {
 	wizard.BaseStep
 
-	cfg *config.Config
+	cfg   *config.Config
+	phase placementPhase
 
+	// discovery
+	loadingSpinner spinner.Model
+	discovered     []proxmoxNode
+	discoveryErr   error
+
+	// "available nodes" text input (manual fallback / edit)
 	nodesInput *components.InputField
 
+	// per-VM selectors
 	masters []vmAssignment
 	workers []vmAssignment
 
@@ -34,12 +56,16 @@ type NodePlacementStep struct {
 	totalSlots int
 
 	availableNodes []string
-	lastNodesValue string // track input changes to avoid needless rebuilds
+	lastNodesValue string
 }
 
 func NewNodePlacementStep() (*NodePlacementStep, *NodePlacementStep) {
 	nodesInput := components.NewInputField("available nodes", "pve1, pve2, pve3")
 	nodesInput.Help = "comma-separated list of proxmox node names"
+
+	sp := spinner.New()
+	sp.Spinner = spinner.Dot
+	sp.Style = lipgloss.NewStyle().Foreground(tui.ColorPrimary)
 
 	s := &NodePlacementStep{
 		BaseStep: wizard.NewBaseStepWithDisplayTitle(
@@ -48,14 +74,15 @@ func NewNodePlacementStep() (*NodePlacementStep, *NodePlacementStep) {
 			"assign vms to proxmox nodes",
 			"configure which proxmox node each vm runs on",
 		),
-		nodesInput: nodesInput,
-		focusIndex: 0,
-		totalSlots: 1,
+		nodesInput:     nodesInput,
+		loadingSpinner: sp,
+		phase:          phaseDiscovering,
+		focusIndex:     0,
+		totalSlots:     1,
 	}
 	return s, s
 }
 
-// ShouldShow captures the config reference. Selectors are built in Init only.
 func (s *NodePlacementStep) ShouldShow(cfg *config.Config) bool {
 	if cfg.Provider.Type != config.ProviderProxmox {
 		return false
@@ -69,41 +96,54 @@ func (s *NodePlacementStep) Init() tea.Cmd {
 		return nil
 	}
 
+	s.phase = phaseDiscovering
+	return tea.Batch(
+		s.loadingSpinner.Tick,
+		s.fetchNodes,
+	)
+}
+
+func (s *NodePlacementStep) fetchNodes() tea.Msg {
+	nodes, err := discoverProxmoxNodes(s.cfg)
+	return nodesDiscoveredMsg{nodes: nodes, err: err}
+}
+
+func (s *NodePlacementStep) buildSelectors(availableNodes []string) {
 	defaultNode := s.cfg.Provider.Proxmox.Node
-	if defaultNode == "" {
-		defaultNode = "pve"
+	if defaultNode == "" && len(availableNodes) > 0 {
+		defaultNode = availableNodes[0]
 	}
 
-	// Determine available nodes: from existing config, input, or default
-	nodes := s.resolveAvailableNodes(defaultNode)
-	s.availableNodes = nodes
-	s.nodesInput.SetDefault(strings.Join(nodes, ", "))
+	s.availableNodes = availableNodes
+	s.nodesInput.SetDefault(strings.Join(availableNodes, ", "))
 	s.lastNodesValue = s.nodesInput.Value()
 
-	// Build selectors
 	s.masters = buildVMAssignments(
 		s.cfg.Cluster.Name, "master",
 		s.cfg.Topology.ControlPlane.Count,
-		nodes, s.cfg.Provider.Proxmox.MasterNodes, defaultNode,
+		availableNodes, s.cfg.Provider.Proxmox.MasterNodes, defaultNode,
 	)
 	s.workers = buildVMAssignments(
 		s.cfg.Cluster.Name, "worker",
 		s.cfg.Topology.Workers.Count,
-		nodes, s.cfg.Provider.Proxmox.WorkerNodes, defaultNode,
+		availableNodes, s.cfg.Provider.Proxmox.WorkerNodes, defaultNode,
 	)
 
 	s.totalSlots = 1 + len(s.masters) + len(s.workers)
 	s.focusIndex = 0
-	return s.updateFocus()
 }
 
-// resolveAvailableNodes collects unique node names from the config's
-// MasterNodes/WorkerNodes and the default node. This seeds the input field
-// so the user sees all nodes already in use.
-func (s *NodePlacementStep) resolveAvailableNodes(defaultNode string) []string {
+// resolveAvailableNodes collects unique node names from config when
+// discovery fails or returns nothing.
+func (s *NodePlacementStep) resolveAvailableNodes() []string {
 	// If the user already typed something, use that
 	if typed := parseNodeList(s.nodesInput.Value()); len(typed) > 0 {
 		return typed
+	}
+
+	defaultNode := s.cfg.Provider.Proxmox.Node
+	if defaultNode == "" {
+		defaultNode = "pve"
 	}
 
 	seen := map[string]bool{defaultNode: true}
@@ -148,95 +188,121 @@ func buildVMAssignments(clusterName, role string, count int, nodes, configured [
 
 func (s *NodePlacementStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 	switch msg := msg.(type) {
-	case tea.KeyMsg:
-		switch {
-		case key.Matches(msg, key.NewBinding(key.WithKeys("enter"))):
-			return s, func() tea.Msg {
-				return wizard.StepCompleteMsg{StepID: s.ID()}
-			}
+	case nodesDiscoveredMsg:
+		s.discovered = msg.nodes
+		s.discoveryErr = msg.err
+		s.phase = phasePlacing
 
-		case key.Matches(msg, key.NewBinding(key.WithKeys("tab"))):
-			// Tab always moves forward (never cycles nodes)
-			if s.focusIndex == 0 {
-				s.nodesInput.Blur()
-				s.syncSelectorsFromInput()
+		var nodeNames []string
+		if msg.err == nil && len(msg.nodes) > 0 {
+			for _, n := range msg.nodes {
+				nodeNames = append(nodeNames, n.Name)
 			}
-			s.focusIndex++
-			if s.focusIndex >= s.totalSlots {
-				s.focusIndex = s.totalSlots - 1
-			}
-			return s, s.updateFocus()
-
-		case key.Matches(msg, key.NewBinding(key.WithKeys("shift+tab"))):
-			// Shift+tab always moves backward
-			s.focusIndex--
-			if s.focusIndex < 0 {
-				s.focusIndex = 0
-			}
-			return s, s.updateFocus()
-
-		case key.Matches(msg, key.NewBinding(key.WithKeys("down"))):
-			if s.focusIndex == 0 {
-				// In text input, down moves to first VM
-				s.nodesInput.Blur()
-				s.syncSelectorsFromInput()
-				s.focusIndex = 1
-				if s.focusIndex >= s.totalSlots {
-					s.focusIndex = s.totalSlots - 1
-				}
-				return s, s.updateFocus()
-			}
-			// On a VM selector, down moves to next VM
-			s.focusIndex++
-			if s.focusIndex >= s.totalSlots {
-				s.focusIndex = s.totalSlots - 1
-			}
-			return s, s.updateFocus()
-
-		case key.Matches(msg, key.NewBinding(key.WithKeys("up"))):
-			if s.focusIndex <= 1 {
-				// Move to input
-				s.focusIndex = 0
-				return s, s.updateFocus()
-			}
-			// On a VM selector, up moves to previous VM
-			s.focusIndex--
-			return s, s.updateFocus()
-
-		case key.Matches(msg, key.NewBinding(key.WithKeys("left", "right"))):
-			if s.focusIndex > 0 {
-				sel := s.selectorAt(s.focusIndex)
-				if sel != nil && sel.Len() > 1 {
-					if key.Matches(msg, key.NewBinding(key.WithKeys("left"))) {
-						idx := sel.SelectedIndex() - 1
-						if idx < 0 {
-							idx = sel.Len() - 1
-						}
-						sel.SetSelected(idx)
-					} else {
-						idx := sel.SelectedIndex() + 1
-						if idx >= sel.Len() {
-							idx = 0
-						}
-						sel.SetSelected(idx)
-					}
-				}
-				return s, nil
-			}
+		} else {
+			nodeNames = s.resolveAvailableNodes()
 		}
 
-		// Pass remaining keys to nodesInput when focused
-		if s.focusIndex == 0 {
+		s.buildSelectors(nodeNames)
+		return s, s.updateFocus()
+
+	case spinner.TickMsg:
+		if s.phase == phaseDiscovering {
 			var cmd tea.Cmd
-			s.nodesInput, cmd = s.nodesInput.Update(msg)
+			s.loadingSpinner, cmd = s.loadingSpinner.Update(msg)
 			return s, cmd
 		}
+
+	case tea.KeyMsg:
+		if s.phase != phasePlacing {
+			return s, nil
+		}
+		return s.handleKey(msg)
 	}
 
 	return s, nil
 }
 
-// syncSelectorsFromInput updates selector options only when the input changed.
+func (s *NodePlacementStep) handleKey(msg tea.KeyMsg) (wizard.WizardStep, tea.Cmd) {
+	switch {
+	case key.Matches(msg, key.NewBinding(key.WithKeys("enter"))):
+		return s, func() tea.Msg {
+			return wizard.StepCompleteMsg{StepID: s.ID()}
+		}
+
+	case key.Matches(msg, key.NewBinding(key.WithKeys("tab"))):
+		if s.focusIndex == 0 {
+			s.nodesInput.Blur()
+			s.syncSelectorsFromInput()
+		}
+		s.focusIndex++
+		if s.focusIndex >= s.totalSlots {
+			s.focusIndex = s.totalSlots - 1
+		}
+		return s, s.updateFocus()
+
+	case key.Matches(msg, key.NewBinding(key.WithKeys("shift+tab"))):
+		s.focusIndex--
+		if s.focusIndex < 0 {
+			s.focusIndex = 0
+		}
+		return s, s.updateFocus()
+
+	case key.Matches(msg, key.NewBinding(key.WithKeys("down"))):
+		if s.focusIndex == 0 {
+			s.nodesInput.Blur()
+			s.syncSelectorsFromInput()
+			s.focusIndex = 1
+			if s.focusIndex >= s.totalSlots {
+				s.focusIndex = s.totalSlots - 1
+			}
+			return s, s.updateFocus()
+		}
+		s.focusIndex++
+		if s.focusIndex >= s.totalSlots {
+			s.focusIndex = s.totalSlots - 1
+		}
+		return s, s.updateFocus()
+
+	case key.Matches(msg, key.NewBinding(key.WithKeys("up"))):
+		if s.focusIndex <= 1 {
+			s.focusIndex = 0
+			return s, s.updateFocus()
+		}
+		s.focusIndex--
+		return s, s.updateFocus()
+
+	case key.Matches(msg, key.NewBinding(key.WithKeys("left", "right"))):
+		if s.focusIndex > 0 {
+			sel := s.selectorAt(s.focusIndex)
+			if sel != nil && sel.Len() > 1 {
+				if key.Matches(msg, key.NewBinding(key.WithKeys("left"))) {
+					idx := sel.SelectedIndex() - 1
+					if idx < 0 {
+						idx = sel.Len() - 1
+					}
+					sel.SetSelected(idx)
+				} else {
+					idx := sel.SelectedIndex() + 1
+					if idx >= sel.Len() {
+						idx = 0
+					}
+					sel.SetSelected(idx)
+				}
+			}
+			return s, nil
+		}
+	}
+
+	// Pass remaining keys to nodesInput when focused
+	if s.focusIndex == 0 {
+		var cmd tea.Cmd
+		s.nodesInput, cmd = s.nodesInput.Update(msg)
+		return s, cmd
+	}
+
+	return s, nil
+}
+
 func (s *NodePlacementStep) syncSelectorsFromInput() {
 	current := s.nodesInput.Value()
 	if current == s.lastNodesValue {
@@ -258,7 +324,6 @@ func updateAssignmentOptions(assignments []vmAssignment, nodes []string) {
 	for i := range assignments {
 		current := assignments[i].selector.Selected()
 		assignments[i].selector.SetOptions(nodes)
-		// Preserve previous selection by string match
 		for j, n := range nodes {
 			if n == current {
 				assignments[i].selector.SetSelected(j)
@@ -307,11 +372,18 @@ func (s *NodePlacementStep) updateFocus() tea.Cmd {
 
 func (s *NodePlacementStep) View(width, height int) string {
 	s.SetSize(width, height)
-	s.nodesInput.SetWidth(width - 4)
 
 	headerStyle := lipgloss.NewStyle().
 		Foreground(tui.ColorCyan500).
 		Bold(true)
+
+	// Loading phase
+	if s.phase == phaseDiscovering {
+		return s.loadingSpinner.View() + " discovering proxmox nodes..."
+	}
+
+	s.nodesInput.SetWidth(width - 4)
+
 	separator := lipgloss.NewStyle().
 		Foreground(tui.ColorSlate700).
 		Render(strings.Repeat("┄", width-4))
@@ -319,8 +391,30 @@ func (s *NodePlacementStep) View(width, height int) string {
 	labelStyle := lipgloss.NewStyle().Foreground(tui.ColorSlate400).Width(20)
 	activeStyle := lipgloss.NewStyle().Foreground(tui.ColorPrimary).Bold(true)
 	dimStyle := lipgloss.NewStyle().Foreground(tui.ColorSlate500)
+	successStyle := lipgloss.NewStyle().Foreground(tui.ColorSuccess)
+	warnStyle := lipgloss.NewStyle().Foreground(tui.ColorWarning)
 
 	var b strings.Builder
+
+	// Discovery result banner
+	if s.discoveryErr != nil {
+		b.WriteString(warnStyle.Render("  could not auto-discover nodes — enter them manually below"))
+		b.WriteString("\n\n")
+	} else if len(s.discovered) > 0 {
+		parts := make([]string, len(s.discovered))
+		for i, n := range s.discovered {
+			info := n.Name
+			if n.CPUs > 0 || n.MemGB > 0 {
+				info += fmt.Sprintf(" (%d cpu, %d gb)", n.CPUs, n.MemGB)
+			}
+			if n.Status != "online" {
+				info += " [" + n.Status + "]"
+			}
+			parts[i] = info
+		}
+		b.WriteString(successStyle.Render("  discovered: "+strings.Join(parts, ", ")))
+		b.WriteString("\n\n")
+	}
 
 	// Available nodes input
 	b.WriteString(headerStyle.Render("available proxmox nodes"))
@@ -384,9 +478,9 @@ func (s *NodePlacementStep) Apply(cfg *config.Config) error {
 
 func (s *NodePlacementStep) SetFocused(focused bool) {
 	s.BaseStep.SetFocused(focused)
-	if focused {
+	if focused && s.phase == phasePlacing {
 		s.updateFocus()
-	} else {
+	} else if !focused {
 		s.nodesInput.Blur()
 		for i := range s.masters {
 			s.masters[i].selector.SetFocused(false)
@@ -398,6 +492,9 @@ func (s *NodePlacementStep) SetFocused(focused bool) {
 }
 
 func (s *NodePlacementStep) ShortHelp() []wizard.KeyBinding {
+	if s.phase == phaseDiscovering {
+		return nil
+	}
 	if s.focusIndex == 0 {
 		return []wizard.KeyBinding{
 			{Key: "tab/↓", Help: "next field"},
