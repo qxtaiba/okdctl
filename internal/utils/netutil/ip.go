@@ -65,6 +65,18 @@ func CalculateVMIP(startIP string, index int) (string, error) {
 	return result.String(), nil
 }
 
+// ResolveVIP returns explicitVIP if set (after validation), otherwise falls
+// back to DeriveVIPFromStaticIP which uses the .10 last octet convention.
+func ResolveVIP(explicitVIP, staticIPStart string) (string, error) {
+	if explicitVIP != "" {
+		if net.ParseIP(explicitVIP) == nil {
+			return "", fmt.Errorf("invalid VIP address: %s", explicitVIP)
+		}
+		return explicitVIP, nil
+	}
+	return DeriveVIPFromStaticIP(staticIPStart)
+}
+
 func DeriveVIPFromStaticIP(staticIPStart string) (string, error) {
 	ip := net.ParseIP(staticIPStart)
 	if ip == nil || ip.To4() == nil {

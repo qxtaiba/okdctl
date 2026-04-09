@@ -133,6 +133,20 @@ var NetworkingStepDefinition = wizard.StepDefinition{
 					ConfigSet: wizard.SetString(func(c *config.Config, v string) { c.Networking.Bastion.IP = v }),
 					ConfigGet: wizard.GetString(func(c *config.Config) string { return c.Networking.Bastion.IP }),
 				},
+				{
+					Key:     "vip",
+					Label:   "api vip",
+					Default: "",
+					Help:    "virtual ip for kubernetes api — leave blank to auto-derive from static ip start",
+					Validate: func(value string) error {
+						if value == "" {
+							return nil
+						}
+						return config.ValidateIP(value)
+					},
+					ConfigSet: wizard.SetString(func(c *config.Config, v string) { c.Networking.Bastion.VIP = v }),
+					ConfigGet: wizard.GetString(func(c *config.Config) string { return c.Networking.Bastion.VIP }),
+				},
 			},
 		},
 	},

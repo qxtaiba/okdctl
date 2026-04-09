@@ -48,9 +48,9 @@ func (p *Phase) newCleanupFilesStep(cfg *config.Config, opts Options) distributi
 		SkipWhen(func() bool { return opts.SkipCleanup || opts.CleanupKind == "" }).
 		SkipReason(cleanupFilesSkipReason(opts)).
 		Execute(func(ctx context.Context) error {
-			vip, err := netutil.DeriveVIPFromStaticIP(cfg.Networking.StaticIP.Start)
+			vip, err := netutil.ResolveVIP(cfg.Networking.Bastion.VIP, cfg.Networking.StaticIP.Start)
 			if err != nil {
-				return fmt.Errorf("failed to derive VIP from static IP start: %w", err)
+				return fmt.Errorf("failed to resolve VIP: %w", err)
 			}
 			cleanupOpts := cleanup.Options{
 				Kind:           opts.CleanupKind,

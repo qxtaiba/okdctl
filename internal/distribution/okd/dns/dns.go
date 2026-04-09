@@ -45,10 +45,10 @@ func BuildConfigData(cfg *config.Config) (templates.DNSConfigData, error) {
 		return templates.DNSConfigData{}, err
 	}
 
-	// Derive VIP from static IP configuration (uses .10 as last octet by convention)
-	kubeVipIP, err := netutil.DeriveVIPFromStaticIP(staticIPStart)
+	// Resolve VIP: use explicit config value or fall back to .10 derivation
+	kubeVipIP, err := netutil.ResolveVIP(cfg.Networking.Bastion.VIP, staticIPStart)
 	if err != nil {
-		return templates.DNSConfigData{}, fmt.Errorf("failed to derive VIP from static IP start: %w", err)
+		return templates.DNSConfigData{}, fmt.Errorf("failed to resolve VIP: %w", err)
 	}
 
 	data := templates.DNSConfigData{

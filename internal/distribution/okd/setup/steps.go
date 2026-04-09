@@ -159,9 +159,9 @@ func (p *Phase) newGenerateKubeVIPManifestsStep(cfg *config.Config, opts Options
 		Description("generating kube-vip RBAC and DaemonSet manifests for VIP management").
 		Fatal(true).
 		Execute(func(ctx context.Context) error {
-			vip, err := netutil.DeriveVIPFromStaticIP(cfg.Networking.StaticIP.Start)
+			vip, err := netutil.ResolveVIP(cfg.Networking.Bastion.VIP, cfg.Networking.StaticIP.Start)
 			if err != nil {
-				return fmt.Errorf("failed to derive VIP from static IP start: %w", err)
+				return fmt.Errorf("failed to resolve VIP: %w", err)
 			}
 
 			iface := cfg.Networking.StaticIP.Interface

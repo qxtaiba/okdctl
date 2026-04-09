@@ -206,6 +206,10 @@ func (s *ReviewStep) renderNetworking(st sectionStyles) string {
 	b.WriteString("\n")
 	b.WriteString(st.kvPair("bastion", s.cfg.Networking.Bastion.IP))
 	b.WriteString("\n")
+	if s.cfg.Networking.Bastion.VIP != "" {
+		b.WriteString(st.kvPair("api vip", s.cfg.Networking.Bastion.VIP))
+		b.WriteString("\n")
+	}
 	if s.cfg.Networking.PodCIDR != "" {
 		b.WriteString(st.kvPair("pod cidr", s.cfg.Networking.PodCIDR))
 		b.WriteString("\n")
