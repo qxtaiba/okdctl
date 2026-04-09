@@ -269,6 +269,43 @@ func (s *ReviewStep) renderCompute(st sectionStyles) string {
 			b.WriteString("\n")
 		}
 	}
+
+	// Resource totals
+	totalCPU := cpCPU*cpCount + 4 // +4 for bootstrap
+	totalMemGB := (s.cfg.Topology.ControlPlane.Memory*cpCount + 8192) / 1024 // +8192 for bootstrap
+	totalOSDiskGB := cpDisk*cpCount + 50 // +50 for bootstrap
+	totalDataDiskGB := 0
+
+	wCount := 0
+	if s.cfg.Topology.Workers.Count > 0 {
+		wCount = s.cfg.Topology.Workers.Count
+		totalCPU += s.cfg.Topology.Workers.CPU * wCount
+		totalMemGB += (s.cfg.Topology.Workers.Memory * wCount) / 1024
+		totalOSDiskGB += s.cfg.Topology.Workers.Disk * wCount
+	}
+
+	if s.cfg.Disks.WorkerDataSizeGB > 0 {
+		totalDataDiskGB += s.cfg.Disks.WorkerDataSizeGB * wCount
+	}
+	if s.cfg.Disks.MasterDataSizeGB > 0 {
+		totalDataDiskGB += s.cfg.Disks.MasterDataSizeGB * cpCount
+	}
+
+	b.WriteString(st.separator)
+	b.WriteString("\n")
+	totalSpec := fmt.Sprintf("%d vcpu, %d gb ram, %d gb disk", totalCPU, totalMemGB, totalOSDiskGB+totalDataDiskGB)
+	b.WriteString(st.kvPair("total", totalSpec))
+	b.WriteString("\n")
+
+	warnStyle := lipgloss.NewStyle().Foreground(tui.ColorWarning)
+	if totalMemGB > 64 {
+		b.WriteString(warnStyle.Render("  total ram exceeds 64 gb — verify your proxmox host has sufficient memory"))
+		b.WriteString("\n")
+	}
+	if totalCPU > 32 {
+		b.WriteString(warnStyle.Render("  total vcpu exceeds 32 — verify your proxmox host has sufficient cores"))
+		b.WriteString("\n")
+	}
 	b.WriteString("\n")
 
 	return b.String()
