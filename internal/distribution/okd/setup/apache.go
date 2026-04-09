@@ -26,7 +26,8 @@ func (p *Phase) ensureIgnitionDir(ctx context.Context, webRoot string) (string, 
 		return "", fmt.Errorf("failed to create ignition directory: %w", err)
 	}
 
-	if err := system.Chown(ctx, ignitionDir, "apache:apache", "ignition directory ownership"); err != nil {
+	apacheUser := p.OS.ApacheUser()
+	if err := system.Chown(ctx, ignitionDir, apacheUser+":"+apacheUser, "ignition directory ownership"); err != nil {
 		p.Log.Warn(fmt.Sprintf("apache: failed to set ignition dir ownership: %v", err))
 	}
 	if err := system.Chmod(ctx, ignitionDir, "755", "ignition directory permissions"); err != nil {
@@ -37,7 +38,7 @@ func (p *Phase) ensureIgnitionDir(ctx context.Context, webRoot string) (string, 
 }
 
 func (p *Phase) configureApachePort(ctx context.Context) {
-	httpdConf := "/etc/httpd/conf/httpd.conf"
+	httpdConf := p.OS.ApacheConfigPath()
 	if !system.FileExists(httpdConf) {
 		return
 	}
@@ -54,6 +55,9 @@ func (p *Phase) configureApachePort(ctx context.Context) {
 }
 
 func (p *Phase) configureSELinuxForApache(ctx context.Context) {
+	if !p.OS.HasSELinux() {
+		return
+	}
 	if !executor.CommandExists("semanage") {
 		return
 	}
@@ -62,15 +66,15 @@ func (p *Phase) configureSELinuxForApache(ctx context.Context) {
 	_, _ = p.Exec.Run(ctx, "sudo", "semanage", "port", "-m", "-t", "http_port_t", "-p", "tcp", "8080")
 }
 
-func enableAndStartApache(ctx context.Context) error {
-	if err := system.ManageService(ctx, system.ServiceEnable, "httpd", "apache httpd service"); err != nil {
-		return fmt.Errorf("failed to enable httpd: %w", err)
+func enableAndStartApache(ctx context.Context, serviceName string) error {
+	if err := system.ManageService(ctx, system.ServiceEnable, serviceName, "apache service"); err != nil {
+		return fmt.Errorf("failed to enable %s: %w", serviceName, err)
 	}
-	if err := system.ManageService(ctx, system.ServiceStart, "httpd", "apache httpd service"); err != nil {
-		return fmt.Errorf("failed to start httpd: %w", err)
+	if err := system.ManageService(ctx, system.ServiceStart, serviceName, "apache service"); err != nil {
+		return fmt.Errorf("failed to start %s: %w", serviceName, err)
 	}
-	if !system.IsServiceActive(ctx, "httpd") {
-		return fmt.Errorf("apache httpd service failed to start - check systemctl status httpd")
+	if !system.IsServiceActive(ctx, serviceName) {
+		return fmt.Errorf("apache service %s failed to start - check systemctl status %s", serviceName, serviceName)
 	}
 	return nil
 }
@@ -90,7 +94,7 @@ func (p *Phase) ConfigureApache(ctx context.Context, cfg *config.Config) error {
 	p.configureApachePort(ctx)
 	p.configureSELinuxForApache(ctx)
 
-	if err := enableAndStartApache(ctx); err != nil {
+	if err := enableAndStartApache(ctx, p.OS.ApacheServiceName()); err != nil {
 		return err
 	}
 

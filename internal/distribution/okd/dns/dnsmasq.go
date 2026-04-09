@@ -134,59 +134,82 @@ func validateDNSAddresses(addresses []string) error {
 
 // ConfigureSystemResolver configures the system to use localhost (dnsmasq) for DNS resolution,
 // with the given fallbackDNS servers for queries dnsmasq cannot resolve.
+//
+// It tries NetworkManager first, then systemd-resolved, and logs a warning if neither is found.
 func ConfigureSystemResolver(ctx context.Context, fallbackDNS []string, logger *slog.Logger) error {
-	if !IsNetworkManagerActive(ctx) {
-		logger.Warn("resolver: NetworkManager not active, skipping system resolver configuration")
-		return nil
-	}
-
 	if err := validateDNSAddresses(fallbackDNS); err != nil {
 		return fmt.Errorf("invalid fallback DNS configuration: %w", err)
 	}
 
-	conn, err := getActiveConnection(ctx)
-	if err != nil {
-		return err
+	// Prefer NetworkManager when available.
+	if IsNetworkManagerActive(ctx) {
+		conn, err := getActiveConnection(ctx)
+		if err != nil {
+			return err
+		}
+
+		dnsList := []string{"127.0.0.1"}
+		dnsList = append(dnsList, fallbackDNS...)
+		dnsConfig := strings.Join(dnsList, ",")
+
+		logger.Info(fmt.Sprintf("resolver: configuring %s to use local dnsmasq", conn))
+
+		if err := system.RunSudo(ctx, "nmcli", "connection", "modify", conn, "ipv4.dns", dnsConfig, "ipv4.ignore-auto-dns", "yes"); err != nil {
+			return fmt.Errorf("failed to configure DNS for connection: %w", err)
+		}
+
+		if err := system.RunSudo(ctx, "nmcli", "connection", "up", conn); err != nil {
+			return fmt.Errorf("failed to apply DNS configuration: %w", err)
+		}
+
+		logger.Info("resolver: system configured to use local dnsmasq")
+		return nil
 	}
 
-	dnsList := []string{"127.0.0.1"}
-	dnsList = append(dnsList, fallbackDNS...)
-	dnsConfig := strings.Join(dnsList, ",")
-
-	logger.Info(fmt.Sprintf("resolver: configuring %s to use local dnsmasq", conn))
-
-	if err := system.RunSudo(ctx, "nmcli", "connection", "modify", conn, "ipv4.dns", dnsConfig, "ipv4.ignore-auto-dns", "yes"); err != nil {
-		return fmt.Errorf("failed to configure DNS for connection: %w", err)
+	// Fall back to systemd-resolved.
+	if system.IsServiceActive(ctx, "systemd-resolved") {
+		logger.Info("dns: configuring systemd-resolved to use dnsmasq")
+		return system.RunSudo(ctx, "sh", "-c",
+			`mkdir -p /etc/systemd/resolved.conf.d && printf "[Resolve]\nDNS=127.0.0.1\nDomains=~.\n" > /etc/systemd/resolved.conf.d/dnsmasq.conf && systemctl restart systemd-resolved`)
 	}
 
-	if err := system.RunSudo(ctx, "nmcli", "connection", "up", conn); err != nil {
-		return fmt.Errorf("failed to apply DNS configuration: %w", err)
-	}
-
-	logger.Info("resolver: system configured to use local dnsmasq")
+	logger.Warn("dns: neither NetworkManager nor systemd-resolved found, skipping system resolver configuration")
 	return nil
 }
 
 func RestoreSystemResolver(ctx context.Context, logger *slog.Logger) error {
-	if !IsNetworkManagerActive(ctx) {
+	if IsNetworkManagerActive(ctx) {
+		conn, err := getActiveConnection(ctx)
+		if err != nil {
+			return nil
+		}
+
+		logger.Info(fmt.Sprintf("resolver: restoring DHCP DNS for %s", conn))
+
+		if err := system.RunSudo(ctx, "nmcli", "connection", "modify", conn, "ipv4.dns", "", "ipv4.ignore-auto-dns", "no"); err != nil {
+			logger.Warn(fmt.Sprintf("resolver: failed to clear DNS settings: %v", err))
+		}
+
+		if err := system.RunSudo(ctx, "nmcli", "connection", "up", conn); err != nil {
+			logger.Warn(fmt.Sprintf("resolver: failed to apply DNS configuration: %v", err))
+		}
+
+		logger.Info("resolver: system DNS restored to DHCP")
 		return nil
 	}
 
-	conn, err := getActiveConnection(ctx)
-	if err != nil {
-		return nil
+	// Clean up systemd-resolved drop-in if it exists.
+	const resolvedConf = "/etc/systemd/resolved.conf.d/dnsmasq.conf"
+	if system.FileExists(resolvedConf) {
+		logger.Info("resolver: removing systemd-resolved dnsmasq configuration")
+		if err := system.RemoveAll(ctx, resolvedConf, "dnsmasq resolved config"); err != nil {
+			logger.Warn(fmt.Sprintf("resolver: failed to remove %s: %v", resolvedConf, err))
+		}
+		if system.IsServiceActive(ctx, "systemd-resolved") {
+			_ = system.ManageService(ctx, system.ServiceRestart, "systemd-resolved", "systemd-resolved")
+		}
+		logger.Info("resolver: systemd-resolved configuration restored")
 	}
 
-	logger.Info(fmt.Sprintf("resolver: restoring DHCP DNS for %s", conn))
-
-	if err := system.RunSudo(ctx, "nmcli", "connection", "modify", conn, "ipv4.dns", "", "ipv4.ignore-auto-dns", "no"); err != nil {
-		logger.Warn(fmt.Sprintf("resolver: failed to clear DNS settings: %v", err))
-	}
-
-	if err := system.RunSudo(ctx, "nmcli", "connection", "up", conn); err != nil {
-		logger.Warn(fmt.Sprintf("resolver: failed to apply DNS configuration: %v", err))
-	}
-
-	logger.Info("resolver: system DNS restored to DHCP")
 	return nil
 }
