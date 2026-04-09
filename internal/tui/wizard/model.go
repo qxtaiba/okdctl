@@ -6,9 +6,9 @@ package wizard
 import (
 	"os"
 
-	"github.com/charmbracelet/bubbles/key"
-	"github.com/charmbracelet/bubbles/viewport"
-	tea "github.com/charmbracelet/bubbletea"
+	"charm.land/bubbles/v2/key"
+	"charm.land/bubbles/v2/viewport"
+	tea "charm.land/bubbletea/v2"
 	"golang.org/x/term"
 
 	"github.com/qxtaiba/okd-proxmox-cli/internal/config"
@@ -191,7 +191,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.handleResize(msg)
 		return m, nil
 
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		if key.Matches(msg, m.keyMap.Quit) {
 			m.quitting = true
 			m.result = Result{Cancelled: true}

@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/qxtaiba/okd-proxmox-cli/internal/config"
 )
@@ -14,8 +14,6 @@ func Run(ctx context.Context, steps []WizardStep, cfg *config.Config) (Result, e
 
 	p := tea.NewProgram(model,
 		tea.WithContext(ctx),
-		tea.WithAltScreen(),
-		tea.WithMouseCellMotion(),
 	)
 	finalModel, err := p.Run()
 	if err != nil {

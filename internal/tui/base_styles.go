@@ -3,7 +3,7 @@
 // and the bubbletea wizard.
 package tui
 
-import "github.com/charmbracelet/lipgloss"
+import "charm.land/lipgloss/v2"
 
 var (
 	TitleStyle      = lipgloss.NewStyle().Bold(true).Foreground(ColorPrimary)

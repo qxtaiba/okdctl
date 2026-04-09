@@ -4,18 +4,22 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/qxtaiba/okd-proxmox-cli/internal/tui"
 )
 
-func (m *Model) View() string {
+func (m *Model) View() tea.View {
+	v := tea.View{AltScreen: true}
+
 	if m.quitting {
-		return ""
+		return v
 	}
 
 	if !m.ready {
-		return "\n  Initializing..."
+		v.Content = "\n  Initializing..."
+		return v
 	}
 
 	var content strings.Builder
@@ -47,7 +51,8 @@ func (m *Model) View() string {
 		Width(borderWidth).
 		Render(content.String())
 
-	return OuterContainerStyle.Render(bordered)
+	v.Content = OuterContainerStyle.Render(bordered)
+	return v
 }
 
 // contentWidth returns the available width for step content.
@@ -110,7 +115,7 @@ func (m *Model) syncViewportContent() {
 	stepContent := step.View(innerWidth, 1000)
 
 	if c, ok := step.(centerable); ok && c.IsCentered() {
-		viewportHeight := m.viewport.Height
+		viewportHeight := m.viewport.Height()
 		contentWidth := lipgloss.Width(stepContent)
 		contentHeight := lipgloss.Height(stepContent)
 
@@ -209,7 +214,7 @@ func (m *Model) renderScrollIndicator() string {
 		badgeWidth = lipgloss.Width(badgeStyled)
 	}
 
-	if m.viewport.TotalLineCount() <= m.viewport.Height {
+	if m.viewport.TotalLineCount() <= m.viewport.Height() {
 		lineWidth := width - badgeWidth
 		if lineWidth < 10 {
 			lineWidth = 10
@@ -218,7 +223,7 @@ func (m *Model) renderScrollIndicator() string {
 	}
 
 	scrollPercent := m.viewport.ScrollPercent()
-	atTop := m.viewport.YOffset == 0
+	atTop := m.viewport.YOffset() == 0
 	atBottom := scrollPercent >= 1.0
 
 	arrowStyle := lipgloss.NewStyle().Foreground(tui.ColorPrimary).Bold(true)

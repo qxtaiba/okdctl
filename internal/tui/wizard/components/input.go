@@ -5,10 +5,10 @@ package components
 import (
 	"strings"
 
-	"github.com/charmbracelet/bubbles/key"
-	"github.com/charmbracelet/bubbles/textinput"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/key"
+	"charm.land/bubbles/v2/textinput"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/qxtaiba/okd-proxmox-cli/internal/tui"
 )
@@ -50,7 +50,7 @@ func NewInputField(label, placeholder string) *InputField {
 	ti := textinput.New()
 	ti.Placeholder = placeholder
 	ti.CharLimit = 256
-	ti.Width = 40
+	ti.SetWidth(40)
 
 	return &InputField{
 		Label:       label,
@@ -114,7 +114,7 @@ func (f *InputField) SetWidth(width int) {
 	if inputWidth < 20 {
 		inputWidth = 20
 	}
-	f.input.Width = inputWidth
+	f.input.SetWidth(inputWidth)
 }
 
 func (f *InputField) Validate() error {
@@ -156,7 +156,7 @@ func (f *InputField) updateInternal(msg tea.Msg) (*InputField, tea.Cmd) {
 		return f, nil
 	}
 
-	if _, ok := msg.(tea.KeyMsg); ok {
+	if _, ok := msg.(tea.KeyPressMsg); ok {
 		f.err = nil
 	}
 
@@ -202,7 +202,7 @@ func (f *InputField) View() string {
 		labelLine += defaultIndicator
 	}
 
-	contentWidth := f.input.Width
+	contentWidth := f.input.Width()
 	if contentWidth < 20 {
 		contentWidth = 40
 	}
@@ -383,7 +383,7 @@ func (g *InputGroup) Update(msg tea.Msg) (*InputGroup, tea.Cmd) {
 	}
 
 	switch msg := msg.(type) {
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		switch {
 		case key.Matches(msg, key.NewBinding(key.WithKeys("tab", "down"))):
 			return g, g.Next()

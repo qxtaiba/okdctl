@@ -1,7 +1,7 @@
 package wizard
 
 import (
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/qxtaiba/okd-proxmox-cli/internal/config"
 )

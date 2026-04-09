@@ -1,9 +1,10 @@
 package tui
 
 import (
+	"image/color"
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 )
 
 const (
@@ -16,8 +17,8 @@ const (
 )
 
 type boxConfig struct {
-	borderColor lipgloss.Color
-	titleColor  lipgloss.Color
+	borderColor color.Color
+	titleColor  color.Color
 	compact     bool
 }
 

@@ -1,9 +1,9 @@
 package wizard
 
 import (
-	"github.com/charmbracelet/bubbles/key"
-	"github.com/charmbracelet/bubbles/viewport"
-	tea "github.com/charmbracelet/bubbletea"
+	"charm.land/bubbles/v2/key"
+	"charm.land/bubbles/v2/viewport"
+	tea "charm.land/bubbletea/v2"
 )
 
 func (m *Model) handleResize(msg tea.WindowSizeMsg) {
@@ -13,13 +13,11 @@ func (m *Model) handleResize(msg tea.WindowSizeMsg) {
 	viewportWidth, viewportHeight := m.viewportDimensions()
 
 	if !m.ready {
-		m.viewport = viewport.New(viewportWidth, viewportHeight)
-		m.viewport.MouseWheelEnabled = false
-		m.viewport.YPosition = 0
+		m.viewport = viewport.New(viewport.WithWidth(viewportWidth), viewport.WithHeight(viewportHeight))
 		m.ready = true
 	} else {
-		m.viewport.Width = viewportWidth
-		m.viewport.Height = viewportHeight
+		m.viewport.SetWidth(viewportWidth)
+		m.viewport.SetHeight(viewportHeight)
 	}
 
 	if len(m.steps) > 0 && m.currentStep < len(m.steps) {
@@ -31,7 +29,7 @@ func (m *Model) handleResize(msg tea.WindowSizeMsg) {
 	m.syncViewportContent()
 }
 
-func (m *Model) handleScrollKey(msg tea.KeyMsg) bool {
+func (m *Model) handleScrollKey(msg tea.KeyPressMsg) bool {
 	if !m.ready {
 		return false
 	}
@@ -58,7 +56,7 @@ func (m *Model) autoScrollToField(fieldIndex, totalFields int) {
 	}
 
 	totalContent := m.viewport.TotalLineCount()
-	viewportHeight := m.viewport.Height
+	viewportHeight := m.viewport.Height()
 
 	if totalContent <= viewportHeight {
 		return
