@@ -62,6 +62,12 @@ module "okd_cluster" {
   # OPTIONAL CONFIGURATION
   # =============================================================================
 
+  worker_data_disk_size_gb = var.worker_data_disk_size_gb
+  master_data_disk_size_gb = var.master_data_disk_size_gb
+  cpu_type                 = var.cpu_type
+  master_target_nodes      = var.master_target_nodes
+  worker_target_nodes      = var.worker_target_nodes
+
   vm_tags             = var.vm_tags
   additional_networks = var.additional_networks
   numa_enabled        = var.numa_enabled

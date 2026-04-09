@@ -57,6 +57,7 @@ func (l *Loader) Load() (*Config, error) {
 		return nil, fmt.Errorf("error parsing config: %w", err)
 	}
 
+	migrateDeprecatedFields(cfg)
 	return cfg, nil
 }
 
@@ -83,6 +84,7 @@ func (l *Loader) LoadFile(path string) (*Config, error) {
 		return nil, fmt.Errorf("error parsing config: %w", err)
 	}
 
+	migrateDeprecatedFields(cfg)
 	return cfg, nil
 }
 
@@ -125,4 +127,13 @@ func (l *Loader) Save(cfg *Config, path string) error {
 	}
 
 	return system.AtomicWrite(path, data, 0600)
+}
+
+// migrateDeprecatedFields promotes old config fields to their replacements so
+// the wizard, review step, and terraform var generation all see consistent
+// values immediately after load.
+func migrateDeprecatedFields(cfg *Config) {
+	if cfg.Disks.WorkerDataSizeGB == 0 && cfg.Disks.DataSizeGB > 0 {
+		cfg.Disks.WorkerDataSizeGB = cfg.Disks.DataSizeGB
+	}
 }

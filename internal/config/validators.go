@@ -275,6 +275,17 @@ func validateProxmoxConfig(proxmox *ProxmoxConfig, result *ValidationResult) {
 	} else if !proxmoxNamePattern.MatchString(proxmox.Storage) {
 		result.AddError(FieldProxmoxStorage, "must be a valid Proxmox storage name (alphanumeric, hyphens, underscores)")
 	}
+
+	for i, node := range proxmox.MasterNodes {
+		if node != "" && !proxmoxNamePattern.MatchString(node) {
+			result.AddError(fmt.Sprintf("proxmox.master_nodes[%d]", i), "must be a valid Proxmox node name")
+		}
+	}
+	for i, node := range proxmox.WorkerNodes {
+		if node != "" && !proxmoxNamePattern.MatchString(node) {
+			result.AddError(fmt.Sprintf("proxmox.worker_nodes[%d]", i), "must be a valid Proxmox node name")
+		}
+	}
 }
 
 func validateAddons(cfg *Config, result *ValidationResult) {
@@ -481,22 +492,10 @@ func ValidatePortNumber(value string) error {
 	return nil
 }
 
-func ValidateHostPrefix(value string) error {
-	n, err := strconv.Atoi(value)
-	if err != nil {
-		return errors.New("must be a number")
-	}
-	if n < 20 || n > 28 {
-		return fmt.Errorf("must be between 20-28 (got %d)", n)
-	}
-	return nil
-}
-
 var (
 	ValidateCPU       = ValidateIntRange(" (vcpus)", 1, 128)
 	ValidateMemory    = ValidateIntRange(" (in mb)", 1024, 1048576)
 	ValidateOSDisk    = ValidateIntRange(" (in gb)", 20, 1000)
-	ValidateDataDisk  = ValidateIntRange(" (in gb)", 50, 5000)
 	ValidateNodeCount = ValidateIntRange(" (nodes)", 1, 100)
 	ValidateVMID      = ValidateIntRange("", 100, 999999999)
 	ValidateTimeout   = ValidateIntRange(" (seconds)", 60, 86400)

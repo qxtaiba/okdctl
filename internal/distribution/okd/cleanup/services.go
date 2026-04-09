@@ -11,7 +11,6 @@ import (
 	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/firewall"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/packages"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/netutil"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/platform"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
 )
 
@@ -94,7 +93,7 @@ func Apache(ctx context.Context, logger *slog.Logger) error {
 		logger.Info("cleanup: apache httpd service")
 	}
 
-	detectedOS, _ := platform.Detect()
+	detectedOS := detectOS(logger)
 	svcName := detectedOS.ApacheServiceName()
 	pkgName := detectedOS.ApachePackageName()
 

@@ -57,6 +57,8 @@ type TerraformVarsData struct {
 	CPUType            string
 	NUMAEnabled        bool
 	AdditionalNetworks string
+	MasterTargetNodes  string
+	WorkerTargetNodes  string
 }
 
 type HAProxyServer struct {

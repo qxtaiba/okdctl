@@ -72,36 +72,48 @@ func buildTerraformVarsData(cfg *config.Config) templates.TerraformVarsData {
 	}
 
 	return templates.TerraformVarsData{
-		ClusterName:        cfg.Cluster.Name,
-		TargetNode:         proxmox.Node,
-		Bridge:             proxmox.Bridge,
-		OSStorage:          proxmox.Storage,
-		DataStorage:        proxmox.DataStorage,
-		FCOSISOStorage:     proxmox.ISOStorage,
-		MasterISOsString:   strings.Join(masterISOs, ", "),
-		WorkerISOsString:   strings.Join(workerISOs, ", "),
-		VMIDBase:           cfg.Topology.VMIDBase,
-		MasterCount:        cfg.Topology.ControlPlane.Count,
-		WorkerCount:        cfg.Topology.Workers.Count,
-		OSDiskSizeGB:       cpDisk,
-		MasterOSDiskSizeGB: cpDisk,
-		WorkerOSDiskSizeGB: workerDisk,
+		ClusterName:          cfg.Cluster.Name,
+		TargetNode:           proxmox.Node,
+		Bridge:               proxmox.Bridge,
+		OSStorage:            proxmox.Storage,
+		DataStorage:          proxmox.DataStorage,
+		FCOSISOStorage:       proxmox.ISOStorage,
+		MasterISOsString:     strings.Join(masterISOs, ", "),
+		WorkerISOsString:     strings.Join(workerISOs, ", "),
+		VMIDBase:             cfg.Topology.VMIDBase,
+		MasterCount:          cfg.Topology.ControlPlane.Count,
+		WorkerCount:          cfg.Topology.Workers.Count,
+		OSDiskSizeGB:         cpDisk,
+		MasterOSDiskSizeGB:   cpDisk,
+		WorkerOSDiskSizeGB:   workerDisk,
 		WorkerDataDiskSizeGB: workerDataDisk,
 		MasterDataDiskSizeGB: masterDataDisk,
-		BootstrapCPUCores:  bootstrapCPU,
-		BootstrapMemoryMB:  bootstrapMem,
-		MasterCPUCores:     cfg.Topology.ControlPlane.CPU,
-		MasterMemoryMB:     cfg.Topology.ControlPlane.Memory,
-		WorkerCPUCores:     cfg.Topology.Workers.CPU,
-		WorkerMemoryMB:     cfg.Topology.Workers.Memory,
-		MasterNames:        strings.Join(masterNames, ", "),
-		WorkerNames:        strings.Join(workerNames, ", "),
-		CPUType:            cpuType,
-		NUMAEnabled:        proxmox.NUMAEnabled,
-		AdditionalNetworks: formatAdditionalNetworks(proxmox.AdditionalNetworks),
+		BootstrapCPUCores:    bootstrapCPU,
+		BootstrapMemoryMB:    bootstrapMem,
+		MasterCPUCores:       cfg.Topology.ControlPlane.CPU,
+		MasterMemoryMB:       cfg.Topology.ControlPlane.Memory,
+		WorkerCPUCores:       cfg.Topology.Workers.CPU,
+		WorkerMemoryMB:       cfg.Topology.Workers.Memory,
+		MasterNames:          strings.Join(masterNames, ", "),
+		WorkerNames:          strings.Join(workerNames, ", "),
+		CPUType:              cpuType,
+		NUMAEnabled:          proxmox.NUMAEnabled,
+		AdditionalNetworks:   formatAdditionalNetworks(proxmox.AdditionalNetworks),
+		MasterTargetNodes:    formatStringList(proxmox.MasterNodes),
+		WorkerTargetNodes:    formatStringList(proxmox.WorkerNodes),
 	}
 }
 
+func formatStringList(items []string) string {
+	if len(items) == 0 {
+		return "[]"
+	}
+	quoted := make([]string, len(items))
+	for i, item := range items {
+		quoted[i] = fmt.Sprintf("%q", item)
+	}
+	return "[" + strings.Join(quoted, ", ") + "]"
+}
 
 func formatAdditionalNetworks(networks []config.AdditionalNetwork) string {
 	if len(networks) == 0 {

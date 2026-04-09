@@ -13,17 +13,23 @@ import (
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
 )
 
-// detectPackageManager returns a PackageManager for the current host OS,
-// falling back to RHEL/dnf if detection fails (cleanup runs on the bastion).
-func detectPackageManager(logger *slog.Logger) platform.PackageManager {
+// detectOS returns the detected host OS, falling back to RHEL if detection
+// fails (cleanup runs on the bastion, which is typically RHEL-family).
+func detectOS(logger *slog.Logger) platform.OS {
 	detectedOS, err := platform.Detect()
 	if err != nil {
 		if logger != nil {
 			logger.Warn(fmt.Sprintf("platform: %v, defaulting to rhel", err))
 		}
-		detectedOS = platform.OS{Family: "rhel", ID: "unknown", Version: ""}
+		return platform.OS{Family: "rhel", ID: "unknown", Version: ""}
 	}
-	return platform.NewPackageManager(detectedOS)
+	return detectedOS
+}
+
+// detectPackageManager returns a PackageManager for the current host OS,
+// falling back to RHEL/dnf if detection fails (cleanup runs on the bastion).
+func detectPackageManager(logger *slog.Logger) platform.PackageManager {
+	return platform.NewPackageManager(detectOS(logger))
 }
 
 // InstalledPackages returns the list of dnf packages installed by the setup phase.

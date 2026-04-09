@@ -141,7 +141,7 @@ resource "proxmox_virtual_environment_vm" "master" {
   count = length(local.masters)
 
   name      = local.masters[count.index]
-  node_name = var.target_node
+  node_name = length(var.master_target_nodes) > count.index ? var.master_target_nodes[count.index] : var.target_node
   vm_id     = var.vmid_base + 10 + count.index
 
   on_boot = false
@@ -262,7 +262,7 @@ resource "proxmox_virtual_environment_vm" "worker" {
   count = length(local.workers)
 
   name      = local.workers[count.index]
-  node_name = var.target_node
+  node_name = length(var.worker_target_nodes) > count.index ? var.worker_target_nodes[count.index] : var.target_node
   vm_id     = var.vmid_base + 100 + count.index
 
   on_boot = false

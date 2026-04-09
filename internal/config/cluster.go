@@ -99,6 +99,8 @@ type ProxmoxConfig struct {
 	CPUType            string              `yaml:"cpu_type,omitempty" json:"cpuType,omitempty" mapstructure:"cpu_type"`
 	AdditionalNetworks []AdditionalNetwork `yaml:"additional_networks,omitempty" json:"additionalNetworks,omitempty" mapstructure:"additional_networks"`
 	NUMAEnabled        bool                `yaml:"numa_enabled,omitempty" json:"numaEnabled,omitempty" mapstructure:"numa_enabled"`
+	MasterNodes        []string            `yaml:"master_nodes,omitempty" json:"masterNodes,omitempty" mapstructure:"master_nodes"`
+	WorkerNodes        []string            `yaml:"worker_nodes,omitempty" json:"workerNodes,omitempty" mapstructure:"worker_nodes"`
 }
 
 type FilesConfig struct {
