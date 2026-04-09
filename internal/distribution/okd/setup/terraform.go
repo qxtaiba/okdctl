@@ -97,9 +97,31 @@ func buildTerraformVarsData(cfg *config.Config) templates.TerraformVarsData {
 		MasterNames:        strings.Join(masterNames, ", "),
 		WorkerNames:        strings.Join(workerNames, ", "),
 		CPUType:            cpuType,
+		NUMAEnabled:        proxmox.NUMAEnabled,
+		AdditionalNetworks: formatAdditionalNetworks(proxmox.AdditionalNetworks),
 	}
 }
 
+
+func formatAdditionalNetworks(networks []config.AdditionalNetwork) string {
+	if len(networks) == 0 {
+		return "[]"
+	}
+	var parts []string
+	for _, n := range networks {
+		model := n.Model
+		if model == "" {
+			model = "virtio"
+		}
+		entry := fmt.Sprintf(`{ model = %q, bridge = %q`, model, n.Bridge)
+		if n.VLANTag > 0 {
+			entry += fmt.Sprintf(`, tag = %d`, n.VLANTag)
+		}
+		entry += " }"
+		parts = append(parts, entry)
+	}
+	return "[" + strings.Join(parts, ", ") + "]"
+}
 
 func (p *Phase) GenerateTerraformVars(cfg *config.Config, opts Options) error {
 	if cfg.Provider.Proxmox == nil {

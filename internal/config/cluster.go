@@ -70,6 +70,12 @@ type AddonConfig struct {
 	Settings map[string]string `yaml:"settings,omitempty" json:"settings,omitempty" mapstructure:"settings"`
 }
 
+type AdditionalNetwork struct {
+	Bridge  string `yaml:"bridge" json:"bridge" mapstructure:"bridge"`
+	Model   string `yaml:"model,omitempty" json:"model,omitempty" mapstructure:"model"`
+	VLANTag int    `yaml:"vlan_tag,omitempty" json:"vlanTag,omitempty" mapstructure:"vlan_tag"`
+}
+
 type ProviderConfig struct {
 	Type    ProviderType   `yaml:"type" json:"type" mapstructure:"type"`
 	Proxmox *ProxmoxConfig `yaml:"proxmox,omitempty" json:"proxmox,omitempty" mapstructure:"proxmox"`
@@ -90,7 +96,9 @@ type ProxmoxConfig struct {
 	APIToken string `yaml:"-" json:"-" mapstructure:"-"`
 	TokenID  string `yaml:"token_id,omitempty" json:"tokenId,omitempty" mapstructure:"token_id"`
 	Insecure bool   `yaml:"insecure,omitempty" json:"insecure,omitempty" mapstructure:"insecure"`
-	CPUType  string `yaml:"cpu_type,omitempty" json:"cpuType,omitempty" mapstructure:"cpu_type"`
+	CPUType            string              `yaml:"cpu_type,omitempty" json:"cpuType,omitempty" mapstructure:"cpu_type"`
+	AdditionalNetworks []AdditionalNetwork `yaml:"additional_networks,omitempty" json:"additionalNetworks,omitempty" mapstructure:"additional_networks"`
+	NUMAEnabled        bool                `yaml:"numa_enabled,omitempty" json:"numaEnabled,omitempty" mapstructure:"numa_enabled"`
 }
 
 type FilesConfig struct {
