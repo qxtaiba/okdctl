@@ -20,7 +20,7 @@ func DefaultConfig() *Config {
 				DataStorage: "local-lvm",
 				ISOStorage:  "local",
 				Bridge:      "vmbr0",
-				Insecure:    true,
+				Insecure:    false,
 			},
 		},
 		Topology: TopologyConfig{
