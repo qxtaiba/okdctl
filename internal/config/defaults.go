@@ -21,6 +21,7 @@ func DefaultConfig() *Config {
 				ISOStorage:  "local",
 				Bridge:      "vmbr0",
 				Insecure:    false,
+				CPUType:     "host",
 			},
 		},
 		Topology: TopologyConfig{

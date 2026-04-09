@@ -282,6 +282,12 @@ variable "numa_enabled" {
   default     = false
 }
 
+variable "cpu_type" {
+  description = "cpu type for vms (host, x86-64-v2, x86-64-v3, kvm64)"
+  type        = string
+  default     = "host"
+}
+
 variable "start_workers_immediately" {
   description = "Start worker nodes immediately on creation (false to start after bootstrap)"
   type        = bool

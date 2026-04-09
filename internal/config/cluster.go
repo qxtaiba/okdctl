@@ -90,6 +90,7 @@ type ProxmoxConfig struct {
 	APIToken string `yaml:"-" json:"-" mapstructure:"-"`
 	TokenID  string `yaml:"token_id,omitempty" json:"tokenId,omitempty" mapstructure:"token_id"`
 	Insecure bool   `yaml:"insecure,omitempty" json:"insecure,omitempty" mapstructure:"insecure"`
+	CPUType  string `yaml:"cpu_type,omitempty" json:"cpuType,omitempty" mapstructure:"cpu_type"`
 }
 
 type FilesConfig struct {
