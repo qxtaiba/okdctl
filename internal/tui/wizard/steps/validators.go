@@ -70,13 +70,6 @@ func ValidateProxmoxHost(value string) error {
 	return nil
 }
 
-func ValidateYesNo(value string) error {
-	v := strings.ToLower(strings.TrimSpace(value))
-	if v != "yes" && v != "no" && v != "y" && v != "n" && v != "true" && v != "false" && v != "1" && v != "0" {
-		return errors.New("must be yes or no")
-	}
-	return nil
-}
 
 func ValidateFilePath(value string) error {
 	if value == "" {

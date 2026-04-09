@@ -68,12 +68,12 @@ var ProxmoxStepDefinition = wizard.StepDefinition{
 					// Don't load password from config
 				},
 				{
-					Key:      "skip_tls_verify",
-					Label:    "skip tls verify",
-					Default:  "no",
-					Help:     "skip tls certificate verification — set to yes only for self-signed certs",
-					Required: true,
-					Validate: ValidateYesNo,
+					Key:     "skip_tls_verify",
+					Label:   "skip tls verify",
+					Default: "no",
+					Help:    "skip tls certificate verification — set to yes only for self-signed certs",
+					Type:    wizard.FieldTypeSelect,
+					Options: []string{"no", "yes"},
 					ConfigSet: wizard.SetBool(func(c *config.Config, v bool) {
 						if c.Provider.Proxmox != nil {
 							c.Provider.Proxmox.Insecure = v

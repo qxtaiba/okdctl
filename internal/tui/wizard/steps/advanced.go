@@ -52,12 +52,12 @@ var AdvancedStepDefinition = wizard.StepDefinition{
 					},
 				},
 				{
-					Key:      "numa_enabled",
-					Label:    "enable numa",
-					Default:  "no",
-					Help:     "enable numa topology for vms — improves performance on multi-socket hosts",
-					Required: true,
-					Validate: ValidateYesNo,
+					Key:     "numa_enabled",
+					Label:   "enable numa",
+					Default: "no",
+					Help:    "enable numa topology for vms — improves performance on multi-socket hosts",
+					Type:    wizard.FieldTypeSelect,
+					Options: []string{"no", "yes"},
 					ConfigSet: func(cfg *config.Config, value string) error {
 						if cfg.Provider.Proxmox != nil {
 							cfg.Provider.Proxmox.NUMAEnabled = value == "yes"
