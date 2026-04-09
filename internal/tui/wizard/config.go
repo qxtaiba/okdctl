@@ -22,16 +22,17 @@ type StepConfig struct {
 type StepType string
 
 const (
-	StepTypeWelcome      StepType = "welcome"
-	StepTypeDistribution StepType = "distribution"
-	StepTypeProxmox      StepType = "proxmox"
-	StepTypeBasics       StepType = "basics"
-	StepTypeNetworking   StepType = "networking"
-	StepTypeResources    StepType = "resources"
-	StepTypeAddons       StepType = "addons"
-	StepTypeFiles        StepType = "files"
-	StepTypeAdvanced     StepType = "advanced"
-	StepTypeReview       StepType = "review"
+	StepTypeWelcome       StepType = "welcome"
+	StepTypeDistribution  StepType = "distribution"
+	StepTypeProxmox       StepType = "proxmox"
+	StepTypeBasics        StepType = "basics"
+	StepTypeNodePlacement StepType = "node-placement"
+	StepTypeNetworking    StepType = "networking"
+	StepTypeResources     StepType = "resources"
+	StepTypeAddons        StepType = "addons"
+	StepTypeFiles         StepType = "files"
+	StepTypeAdvanced      StepType = "advanced"
+	StepTypeReview        StepType = "review"
 )
 
 func DefaultConfig() Config {
@@ -41,6 +42,7 @@ func DefaultConfig() Config {
 			{Type: StepTypeDistribution, Required: true},
 			{Type: StepTypeProxmox, Required: true},
 			{Type: StepTypeBasics, Required: true},
+			{Type: StepTypeNodePlacement, Required: false},
 			{Type: StepTypeNetworking, Required: true},
 			{Type: StepTypeResources, Required: true},
 			{Type: StepTypeAddons, Required: false},

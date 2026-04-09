@@ -28,7 +28,7 @@ var ProxmoxStepDefinition = wizard.StepDefinition{
 	ID:           wizard.StepIDProxmox,
 	Title:        "proxmox configuration",
 	DisplayTitle: "configure proxmox ve connection",
-	Description:  "configure proxmox connection and storage",
+	Description:  "configure proxmox connection",
 	Sections: []wizard.SectionDefinition{
 		{
 			Title: "connection",
@@ -42,54 +42,6 @@ var ProxmoxStepDefinition = wizard.StepDefinition{
 					Validate:  ValidateProxmoxHost,
 					ConfigSet: proxmoxSet(func(p *config.ProxmoxConfig, v string) { p.Host = v }),
 					ConfigGet: proxmoxGet(func(p *config.ProxmoxConfig) string { return p.Host }),
-				},
-				{
-					Key:       "node",
-					Label:     "node",
-					Default:   "pve",
-					Help:      "proxmox node name",
-					Required:  true,
-					ConfigSet: proxmoxSet(func(p *config.ProxmoxConfig, v string) { p.Node = v }),
-					ConfigGet: proxmoxGet(func(p *config.ProxmoxConfig) string { return p.Node }),
-				},
-				{
-					Key:       "bridge",
-					Label:     "bridge",
-					Default:   "vmbr0",
-					Help:      "network bridge for vms",
-					Required:  true,
-					ConfigSet: proxmoxSet(func(p *config.ProxmoxConfig, v string) { p.Bridge = v }),
-					ConfigGet: proxmoxGet(func(p *config.ProxmoxConfig) string { return p.Bridge }),
-				},
-			},
-		},
-		{
-			Title: "storage",
-			Fields: []wizard.FieldDefinition{
-				{
-					Key:       "os_storage",
-					Label:     "os storage",
-					Default:   "local-lvm",
-					Help:      "storage pool for vm boot disks",
-					Required:  true,
-					ConfigSet: proxmoxSet(func(p *config.ProxmoxConfig, v string) { p.Storage = v }),
-					ConfigGet: proxmoxGet(func(p *config.ProxmoxConfig) string { return p.Storage }),
-				},
-				{
-					Key:       "data_storage",
-					Label:     "data storage",
-					Default:   "local-lvm",
-					Help:      "storage pool for data disks (optional)",
-					ConfigSet: proxmoxSet(func(p *config.ProxmoxConfig, v string) { p.DataStorage = v }),
-					ConfigGet: proxmoxGet(func(p *config.ProxmoxConfig) string { return p.DataStorage }),
-				},
-				{
-					Key:       "iso_storage",
-					Label:     "iso storage",
-					Default:   "local",
-					Help:      "storage for iso files",
-					ConfigSet: proxmoxSet(func(p *config.ProxmoxConfig, v string) { p.ISOStorage = v }),
-					ConfigGet: proxmoxGet(func(p *config.ProxmoxConfig) string { return p.ISOStorage }),
 				},
 			},
 		},
@@ -116,12 +68,12 @@ var ProxmoxStepDefinition = wizard.StepDefinition{
 					// Don't load password from config
 				},
 				{
-					Key:      "skip_tls_verify",
-					Label:    "skip tls verify",
-					Default:  "no",
-					Help:     "skip tls certificate verification — set to yes only for self-signed certs",
-					Required: true,
-					Validate: ValidateYesNo,
+					Key:     "skip_tls_verify",
+					Label:   "skip tls verify",
+					Default: "no",
+					Help:    "skip tls certificate verification — set to yes only for self-signed certs",
+					Type:    wizard.FieldTypeSelect,
+					Options: []string{"no", "yes"},
 					ConfigSet: wizard.SetBool(func(c *config.Config, v bool) {
 						if c.Provider.Proxmox != nil {
 							c.Provider.Proxmox.Insecure = v

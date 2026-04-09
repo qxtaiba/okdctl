@@ -171,8 +171,16 @@ func (s *ReviewStep) renderProxmox(st sectionStyles) string {
 
 	b.WriteString(st.kvPair("host", p.Host))
 	b.WriteString("\n")
-	b.WriteString(st.kvPair("node", p.Node))
+	b.WriteString(st.kvPair("bootstrap node", p.Node))
 	b.WriteString("\n")
+	if len(p.MasterNodes) > 0 {
+		b.WriteString(st.kvPair("master nodes", strings.Join(p.MasterNodes, ", ")))
+		b.WriteString("\n")
+	}
+	if len(p.WorkerNodes) > 0 {
+		b.WriteString(st.kvPair("worker nodes", strings.Join(p.WorkerNodes, ", ")))
+		b.WriteString("\n")
+	}
 	b.WriteString(st.kvPair("bridge", p.Bridge))
 	b.WriteString("\n")
 	b.WriteString(st.kvPair("storage", p.Storage))
@@ -263,11 +271,12 @@ func (s *ReviewStep) renderCompute(st sectionStyles) string {
 			b.WriteString(st.kvPair("worker data disk", cephSpec))
 			b.WriteString("\n")
 		}
-		if s.cfg.Disks.MasterDataSizeGB > 0 {
-			cephSpec := fmt.Sprintf("%d gb per master (%d gb total)", s.cfg.Disks.MasterDataSizeGB, s.cfg.Disks.MasterDataSizeGB*cpCount)
-			b.WriteString(st.kvPair("master data disk", cephSpec))
-			b.WriteString("\n")
-		}
+	}
+
+	if s.cfg.Disks.MasterDataSizeGB > 0 {
+		cephSpec := fmt.Sprintf("%d gb per master (%d gb total)", s.cfg.Disks.MasterDataSizeGB, s.cfg.Disks.MasterDataSizeGB*cpCount)
+		b.WriteString(st.kvPair("master data disk", cephSpec))
+		b.WriteString("\n")
 	}
 
 	// Resource totals
@@ -298,12 +307,17 @@ func (s *ReviewStep) renderCompute(st sectionStyles) string {
 	b.WriteString("\n")
 
 	warnStyle := lipgloss.NewStyle().Foreground(tui.ColorWarning)
+	nodeCount := countUniqueNodes(s.cfg)
+	perHost := ""
+	if nodeCount > 1 {
+		perHost = fmt.Sprintf(" across %d nodes", nodeCount)
+	}
 	if totalMemGB > 64 {
-		b.WriteString(warnStyle.Render("  total ram exceeds 64 gb — verify your proxmox host has sufficient memory"))
+		b.WriteString(warnStyle.Render(fmt.Sprintf("  total ram exceeds 64 gb%s — verify your proxmox host(s) have sufficient memory", perHost)))
 		b.WriteString("\n")
 	}
 	if totalCPU > 32 {
-		b.WriteString(warnStyle.Render("  total vcpu exceeds 32 — verify your proxmox host has sufficient cores"))
+		b.WriteString(warnStyle.Render(fmt.Sprintf("  total vcpu exceeds 32%s — verify your proxmox host(s) have sufficient cores", perHost)))
 		b.WriteString("\n")
 	}
 	b.WriteString("\n")
@@ -444,6 +458,30 @@ func truncatePath(path string, maxLen int) string {
 		return path[:maxLen-3] + "..."
 	}
 	return path
+}
+
+func countUniqueNodes(cfg *config.Config) int {
+	if cfg.Provider.Proxmox == nil {
+		return 1
+	}
+	seen := map[string]bool{}
+	if cfg.Provider.Proxmox.Node != "" {
+		seen[cfg.Provider.Proxmox.Node] = true
+	}
+	for _, n := range cfg.Provider.Proxmox.MasterNodes {
+		if n != "" {
+			seen[n] = true
+		}
+	}
+	for _, n := range cfg.Provider.Proxmox.WorkerNodes {
+		if n != "" {
+			seen[n] = true
+		}
+	}
+	if len(seen) == 0 {
+		return 1
+	}
+	return len(seen)
 }
 
 func (s *ReviewStep) Validate() error {
