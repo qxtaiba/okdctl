@@ -307,12 +307,17 @@ func (s *ReviewStep) renderCompute(st sectionStyles) string {
 	b.WriteString("\n")
 
 	warnStyle := lipgloss.NewStyle().Foreground(tui.ColorWarning)
+	nodeCount := countUniqueNodes(s.cfg)
+	perHost := ""
+	if nodeCount > 1 {
+		perHost = fmt.Sprintf(" across %d nodes", nodeCount)
+	}
 	if totalMemGB > 64 {
-		b.WriteString(warnStyle.Render("  total ram exceeds 64 gb — verify your proxmox host has sufficient memory"))
+		b.WriteString(warnStyle.Render(fmt.Sprintf("  total ram exceeds 64 gb%s — verify your proxmox host(s) have sufficient memory", perHost)))
 		b.WriteString("\n")
 	}
 	if totalCPU > 32 {
-		b.WriteString(warnStyle.Render("  total vcpu exceeds 32 — verify your proxmox host has sufficient cores"))
+		b.WriteString(warnStyle.Render(fmt.Sprintf("  total vcpu exceeds 32%s — verify your proxmox host(s) have sufficient cores", perHost)))
 		b.WriteString("\n")
 	}
 	b.WriteString("\n")
@@ -453,6 +458,30 @@ func truncatePath(path string, maxLen int) string {
 		return path[:maxLen-3] + "..."
 	}
 	return path
+}
+
+func countUniqueNodes(cfg *config.Config) int {
+	if cfg.Provider.Proxmox == nil {
+		return 1
+	}
+	seen := map[string]bool{}
+	if cfg.Provider.Proxmox.Node != "" {
+		seen[cfg.Provider.Proxmox.Node] = true
+	}
+	for _, n := range cfg.Provider.Proxmox.MasterNodes {
+		if n != "" {
+			seen[n] = true
+		}
+	}
+	for _, n := range cfg.Provider.Proxmox.WorkerNodes {
+		if n != "" {
+			seen[n] = true
+		}
+	}
+	if len(seen) == 0 {
+		return 1
+	}
+	return len(seen)
 }
 
 func (s *ReviewStep) Validate() error {
