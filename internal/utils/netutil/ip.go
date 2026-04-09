@@ -21,23 +21,38 @@ func CIDRToNetmask(cidr string) (string, error) {
 	return fmt.Sprintf("%d.%d.%d.%d", mask[0], mask[1], mask[2], mask[3]), nil
 }
 
-// ValidateIPRangeWithin24 ensures that startIP + count - 1 does not
-// overflow the /24 containing startIP, i.e. that the last octet of the final
-// address stays <= 255. This is the shared precondition for any code that
-// derives a sequence of node IPs from a start address (setup/nodes.go,
-// dns/dns.go, wizard validators). Returns nil if the range fits.
-func ValidateIPRangeWithin24(startIP string, count int) error {
+// ValidateIPRangeInCIDR checks that startIP through startIP+count-1 all
+// fall within the given CIDR. Replaces the old /24-only check.
+func ValidateIPRangeInCIDR(startIP string, count int, cidr string) error {
 	if count <= 0 {
 		return fmt.Errorf("count must be positive: %d", count)
 	}
-	_, lastOctet, err := SplitIPv4(startIP)
+
+	_, network, err := net.ParseCIDR(cidr)
 	if err != nil {
-		return err
+		return fmt.Errorf("invalid CIDR %q: %w", cidr, err)
 	}
-	highest := lastOctet + count - 1
-	if highest > 255 {
-		return fmt.Errorf("IP range insufficient: start %q + %d addresses overflows subnet (last octet would be %d)", startIP, count, highest)
+
+	start := net.ParseIP(startIP)
+	if start == nil || start.To4() == nil {
+		return fmt.Errorf("invalid IPv4 address: %s", startIP)
 	}
+
+	if !network.Contains(start) {
+		return fmt.Errorf("start IP %s is not within CIDR %s", startIP, cidr)
+	}
+
+	// Check the last IP in the range
+	endIP, err := CalculateVMIP(startIP, count-1)
+	if err != nil {
+		return fmt.Errorf("failed to calculate end of range: %w", err)
+	}
+
+	end := net.ParseIP(endIP)
+	if !network.Contains(end) {
+		return fmt.Errorf("IP range %s + %d addresses exceeds CIDR %s (last IP would be %s)", startIP, count, cidr, endIP)
+	}
+
 	return nil
 }
 
