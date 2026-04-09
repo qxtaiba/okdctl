@@ -99,9 +99,22 @@ func buildTerraformVarsData(cfg *config.Config) templates.TerraformVarsData {
 		CPUType:            cpuType,
 		NUMAEnabled:        proxmox.NUMAEnabled,
 		AdditionalNetworks: formatAdditionalNetworks(proxmox.AdditionalNetworks),
+		MasterTargetNodes:  formatStringList(proxmox.MasterNodes),
+		WorkerTargetNodes:  formatStringList(proxmox.WorkerNodes),
 	}
 }
 
+
+func formatStringList(items []string) string {
+	if len(items) == 0 {
+		return "[]"
+	}
+	quoted := make([]string, len(items))
+	for i, item := range items {
+		quoted[i] = fmt.Sprintf("%q", item)
+	}
+	return "[" + strings.Join(quoted, ", ") + "]"
+}
 
 func formatAdditionalNetworks(networks []config.AdditionalNetwork) string {
 	if len(networks) == 0 {

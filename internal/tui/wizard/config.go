@@ -26,7 +26,8 @@ const (
 	StepTypeDistribution StepType = "distribution"
 	StepTypeProxmox      StepType = "proxmox"
 	StepTypeBasics       StepType = "basics"
-	StepTypeNetworking   StepType = "networking"
+	StepTypeNodePlacement StepType = "node-placement"
+	StepTypeNetworking    StepType = "networking"
 	StepTypeResources    StepType = "resources"
 	StepTypeAddons       StepType = "addons"
 	StepTypeFiles        StepType = "files"
@@ -41,6 +42,7 @@ func DefaultConfig() Config {
 			{Type: StepTypeDistribution, Required: true},
 			{Type: StepTypeProxmox, Required: true},
 			{Type: StepTypeBasics, Required: true},
+			{Type: StepTypeNodePlacement, Required: false},
 			{Type: StepTypeNetworking, Required: true},
 			{Type: StepTypeResources, Required: true},
 			{Type: StepTypeAddons, Required: false},

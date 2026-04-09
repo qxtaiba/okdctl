@@ -300,6 +300,18 @@ variable "cpu_type" {
   default     = "host"
 }
 
+variable "master_target_nodes" {
+  description = "per-master proxmox node assignment (index-based, falls back to target_node)"
+  type        = list(string)
+  default     = []
+}
+
+variable "worker_target_nodes" {
+  description = "per-worker proxmox node assignment (index-based, falls back to target_node)"
+  type        = list(string)
+  default     = []
+}
+
 variable "start_workers_immediately" {
   description = "Start worker nodes immediately on creation (false to start after bootstrap)"
   type        = bool

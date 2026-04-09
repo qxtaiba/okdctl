@@ -275,6 +275,17 @@ func validateProxmoxConfig(proxmox *ProxmoxConfig, result *ValidationResult) {
 	} else if !proxmoxNamePattern.MatchString(proxmox.Storage) {
 		result.AddError(FieldProxmoxStorage, "must be a valid Proxmox storage name (alphanumeric, hyphens, underscores)")
 	}
+
+	for i, node := range proxmox.MasterNodes {
+		if node != "" && !proxmoxNamePattern.MatchString(node) {
+			result.AddError(fmt.Sprintf("proxmox.master_nodes[%d]", i), "must be a valid Proxmox node name")
+		}
+	}
+	for i, node := range proxmox.WorkerNodes {
+		if node != "" && !proxmoxNamePattern.MatchString(node) {
+			result.AddError(fmt.Sprintf("proxmox.worker_nodes[%d]", i), "must be a valid Proxmox node name")
+		}
+	}
 }
 
 func validateAddons(cfg *Config, result *ValidationResult) {
