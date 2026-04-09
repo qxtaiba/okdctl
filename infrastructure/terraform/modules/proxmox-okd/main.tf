@@ -116,6 +116,10 @@ resource "proxmox_virtual_environment_vm" "bootstrap" {
 
 
   lifecycle {
+    precondition {
+      condition     = var.bootstrap_iso != ""
+      error_message = "bootstrap_iso must be provided when bootstrap is enabled."
+    }
     ignore_changes = [
       network_device,
       startup,
@@ -216,6 +220,10 @@ resource "proxmox_virtual_environment_vm" "master" {
   depends_on = [proxmox_virtual_environment_vm.bootstrap]
 
   lifecycle {
+    precondition {
+      condition     = length(var.master_isos) >= var.master_count
+      error_message = "master_isos must have at least master_count (${var.master_count}) entries, got ${length(var.master_isos)}."
+    }
     ignore_changes = [
       network_device,
       startup,
@@ -328,6 +336,10 @@ resource "proxmox_virtual_environment_vm" "worker" {
   depends_on = [proxmox_virtual_environment_vm.master]
 
   lifecycle {
+    precondition {
+      condition     = length(var.worker_isos) >= var.worker_count
+      error_message = "worker_isos must have at least worker_count (${var.worker_count}) entries, got ${length(var.worker_isos)}."
+    }
     ignore_changes = [
       network_device,
       startup,

@@ -69,6 +69,12 @@ func (p *Phase) MonitorInstallation(ctx context.Context, clusterDir string, opts
 		select {
 		case err := <-installDone:
 			if err != nil {
+				if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+					return fmt.Errorf("installation timed out after %v: %w", opts.InstallTimeout, ctx.Err())
+				}
+				if errors.Is(ctx.Err(), context.Canceled) {
+					return fmt.Errorf("installation cancelled: %w", ctx.Err())
+				}
 				return fmt.Errorf("installation failed: %w", err)
 			}
 
@@ -97,9 +103,11 @@ func (p *Phase) MonitorInstallation(ctx context.Context, clusterDir string, opts
 					p.Log.Warn(fmt.Sprintf("install: failed to kill process: %v", killErr))
 				}
 			}
+			reapTimer := time.NewTimer(30 * time.Second)
 			select {
 			case <-installDone:
-			case <-time.After(30 * time.Second):
+				reapTimer.Stop()
+			case <-reapTimer.C:
 				p.Log.Warn("install: process did not exit after kill, abandoning reap")
 			}
 			if errors.Is(ctx.Err(), context.Canceled) {

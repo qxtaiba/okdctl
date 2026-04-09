@@ -25,7 +25,7 @@ type ClusterHealthResult struct {
 func (p *Phase) VerifyClusterHealth(ctx context.Context, opts Options) (*ClusterHealthResult, error) {
 	result := &ClusterHealthResult{}
 
-	cmdResult, err := p.Exec.Run(ctx, "oc", "get", "clusteroperators", "--no-headers")
+	cmdResult, err := p.Exec.RunChecked(ctx, "oc", "get", "clusteroperators", "--no-headers")
 	if err != nil {
 		return nil, fmt.Errorf("failed to get cluster operators: %w", err)
 	}
@@ -47,7 +47,7 @@ func (p *Phase) VerifyClusterHealth(ctx context.Context, opts Options) (*Cluster
 		p.Log.Info("cluster: all operators are healthy")
 	}
 
-	cmdResult, err = p.Exec.Run(ctx, "oc", "get", "nodes", "--no-headers")
+	cmdResult, err = p.Exec.RunChecked(ctx, "oc", "get", "nodes", "--no-headers")
 	if err != nil {
 		return result, fmt.Errorf("failed to get nodes: %w", err)
 	}
@@ -103,7 +103,8 @@ func (p *Phase) waitForKubeVIPDaemonSet(ctx context.Context, opts Options) error
 		if result == nil || result.ExitCode != 0 {
 			return false
 		}
-		return strings.TrimSpace(result.Stdout) != "" && strings.TrimSpace(result.Stdout) != "0"
+		ready := strings.TrimSpace(result.Stdout)
+		return ready != "" && ready != "0"
 	}, timeout, p.Log); err != nil {
 		return fmt.Errorf("kube-vip daemonset not ready: %w", err)
 	}
@@ -137,15 +138,13 @@ func (p *Phase) waitForKubeVIPPing(ctx context.Context, vip string, opts Options
 
 // verifyKubeVIPAPIHealth verifies the API server responds via the VIP.
 func (p *Phase) verifyKubeVIPAPIHealth(ctx context.Context, vip string) error {
-	// -k skips cert verification (VIP may not be in cert SANs)
+	// -k skips cert verification because the VIP is not yet in the API
+	// server's TLS certificate SANs during the bootstrap-to-kube-vip transition.
 	healthURL := fmt.Sprintf("https://%s:6443/healthz", vip)
-	p.Log.Info(fmt.Sprintf("verify: checking vip health at %s with tls verification disabled (bootstrap only)", healthURL))
-	result, err := p.Exec.Run(ctx, "curl", "-sk", "--connect-timeout", "5", healthURL)
+	p.Log.Info(fmt.Sprintf("verify: checking vip health at %s (tls verification skipped, vip not yet in cert SANs)", healthURL))
+	result, err := p.Exec.RunChecked(ctx, "curl", "-sk", "--connect-timeout", "5", healthURL)
 	if err != nil {
 		return fmt.Errorf("failed to check api health at %s: %w", healthURL, err)
-	}
-	if result.ExitCode != 0 {
-		return fmt.Errorf("api health check failed at %s: %s", healthURL, result.Stderr)
 	}
 
 	response := strings.TrimSpace(result.Stdout)
@@ -160,12 +159,9 @@ func (p *Phase) verifyKubeVIPAPIHealth(ctx context.Context, vip string) error {
 // verifyAPIHealthCheck performs a quick API health check via the cluster hostname.
 // Uses oc get --raw /healthz which goes through the kubeconfig's server URL.
 func (p *Phase) verifyAPIHealthCheck(ctx context.Context) error {
-	result, err := p.Exec.Run(ctx, "oc", "get", "--raw", "/healthz")
+	result, err := p.Exec.RunChecked(ctx, "oc", "get", "--raw", "/healthz")
 	if err != nil {
 		return fmt.Errorf("api health check failed: %w", err)
-	}
-	if result.ExitCode != 0 {
-		return fmt.Errorf("api health check failed: %s", result.Stderr)
 	}
 	if strings.TrimSpace(result.Stdout) != "ok" {
 		return fmt.Errorf("api returned unexpected health status: %s", strings.TrimSpace(result.Stdout))

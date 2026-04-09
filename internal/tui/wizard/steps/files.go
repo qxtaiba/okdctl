@@ -10,7 +10,7 @@ import (
 )
 
 var FilesStepDefinition = wizard.StepDefinition{
-	ID:           "files",
+	ID:           wizard.StepIDFiles,
 	Title:        "files & ignition",
 	DisplayTitle: "configure files & ignition server",
 	Description:  "configure required files and ignition server",

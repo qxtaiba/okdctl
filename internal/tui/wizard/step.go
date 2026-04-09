@@ -17,6 +17,12 @@ const (
 	StepIDWelcome      StepID = "welcome"
 	StepIDDistribution StepID = "distribution"
 	StepIDBasics       StepID = "basics"
+	StepIDProxmox      StepID = "proxmox"
+	StepIDNetworking   StepID = "networking"
+	StepIDResources    StepID = "resources"
+	StepIDAddons       StepID = "addons"
+	StepIDFiles        StepID = "files"
+	StepIDAdvanced     StepID = "advanced"
 	StepIDReview       StepID = "review"
 )
 

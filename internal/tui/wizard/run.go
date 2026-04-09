@@ -1,6 +1,7 @@
 package wizard
 
 import (
+	"context"
 	"fmt"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -8,10 +9,11 @@ import (
 	"github.com/qxtaiba/okd-proxmox-cli/internal/config"
 )
 
-func Run(steps []WizardStep, cfg *config.Config) (Result, error) {
+func Run(ctx context.Context, steps []WizardStep, cfg *config.Config) (Result, error) {
 	model := NewModel(steps, cfg)
 
 	p := tea.NewProgram(model,
+		tea.WithContext(ctx),
 		tea.WithAltScreen(),
 		tea.WithMouseCellMotion(),
 	)
@@ -32,6 +34,3 @@ func Run(steps []WizardStep, cfg *config.Config) (Result, error) {
 
 	return result, nil
 }
-
-type WizardResult = Result
-type WizardAction = Action

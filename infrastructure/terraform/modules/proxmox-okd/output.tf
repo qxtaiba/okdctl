@@ -156,8 +156,9 @@ output "cluster_resources" {
       (coalesce(var.worker_memory_mb, var.memory_mb) * var.worker_count)
     ) / 1024
     total_storage_gb = (
-      (var.os_disk_size_gb + var.data_disk_size_gb) *
-      (var.master_count + var.worker_count + (var.bootstrap_enabled ? 1 : 0))
+      (var.bootstrap_enabled ? var.os_disk_size_gb : 0) +
+      (local.master_os_disk * var.master_count) +
+      ((local.worker_os_disk + var.data_disk_size_gb) * var.worker_count)
     )
   }
 }

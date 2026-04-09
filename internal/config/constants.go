@@ -1,7 +1,5 @@
 package config
 
-import "slices"
-
 const (
 	FieldClusterName   = "cluster.name"
 	FieldClusterDomain = "cluster.domain"
@@ -45,7 +43,3 @@ const (
 	FieldDeploymentAutoApprove  = "deployment.auto_approve"
 	FieldDeploymentTerraformEnv = "deployment.terraform_env"
 )
-
-func IsValidEnum(value string, validValues []string) bool {
-	return slices.Contains(validValues, value)
-}

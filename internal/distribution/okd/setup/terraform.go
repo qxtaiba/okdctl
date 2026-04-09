@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/qxtaiba/okd-proxmox-cli/internal/config"
+	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/paths"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/templates"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
 )
@@ -91,12 +92,6 @@ func buildTerraformVarsData(cfg *config.Config) templates.TerraformVarsData {
 	}
 }
 
-func getTerraformEnv(cfg *config.Config) string {
-	if cfg.Deployment.TerraformEnv != "" {
-		return cfg.Deployment.TerraformEnv
-	}
-	return "production"
-}
 
 func (p *Phase) GenerateTerraformVars(cfg *config.Config, opts Options) error {
 	if cfg.Provider.Proxmox == nil {
@@ -109,7 +104,7 @@ func (p *Phase) GenerateTerraformVars(cfg *config.Config, opts Options) error {
 		return fmt.Errorf("failed to render terraform.tfvars template: %w", err)
 	}
 
-	outputPath := filepath.Join(opts.ProjectRoot, "infrastructure", "terraform", "environments", getTerraformEnv(cfg), "terraform.tfvars")
+	outputPath := filepath.Join(opts.ProjectRoot, "infrastructure", "terraform", "environments", paths.GetTerraformEnv(cfg), "terraform.tfvars")
 
 	if err := system.AtomicWriteString(outputPath, content, 0644); err != nil {
 		return fmt.Errorf("failed to write terraform.tfvars: %w", err)

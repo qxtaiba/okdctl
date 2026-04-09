@@ -76,8 +76,7 @@ func (s ValidationScope) HasScope(flag ValidationScope) bool {
 }
 
 type ValidationOptions struct {
-	Scope       ValidationScope
-	StopOnFirst bool
+	Scope ValidationScope
 }
 
 type Validator interface {
@@ -117,9 +116,6 @@ func (r *ValidatorRegistry) Validate(cfg *Config, opts ValidationOptions) *Valid
 	for _, v := range r.validators {
 		if opts.Scope.HasScope(v.Scope()) {
 			v.Validate(cfg, result)
-			if opts.StopOnFirst && !result.IsValid() {
-				return result
-			}
 		}
 	}
 

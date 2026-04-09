@@ -16,12 +16,9 @@ func (p *Phase) ValidateClusterAccess(ctx context.Context) error {
 
 	p.Log.Info("cluster: validating access with oc whoami")
 
-	result, err := cmdRunner.Run(ctx, "oc", "whoami")
+	result, err := cmdRunner.RunChecked(ctx, "oc", "whoami")
 	if err != nil {
 		return fmt.Errorf("failed to run oc whoami: %w", err)
-	}
-	if result.ExitCode != 0 {
-		return fmt.Errorf("cluster authentication failed: %s", result.Stderr)
 	}
 
 	user := strings.TrimSpace(result.Stdout)

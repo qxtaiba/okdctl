@@ -49,7 +49,7 @@ func (p *Phase) configureApachePort(ctx context.Context) {
 
 	result, err := p.Exec.Run(ctx, "sudo", "sed", "-i", "s/^Listen 80$/Listen 8080/", httpdConf)
 	if err != nil || result.ExitCode != 0 {
-		p.Log.Warn("apache: could not modify httpd.conf to listen on port 8080")
+		p.Log.Warn(fmt.Sprintf("apache: could not modify httpd.conf to listen on port 8080: %v", err))
 	}
 }
 
@@ -140,16 +140,9 @@ func (p *Phase) DeployToWebServer(ctx context.Context, cfg *config.Config, clust
 	authSrc := filepath.Join(clusterDir, "auth")
 	if system.FileExists(authSrc) {
 		authDest := filepath.Join(webRoot, "auth")
-		result, err := p.Exec.Run(ctx, "sudo", "cp", "-r", authSrc, authDest)
+		_, err := p.Exec.RunChecked(ctx, "sudo", "cp", "-r", authSrc, authDest)
 		if err != nil {
 			return fmt.Errorf("failed to copy auth directory %s to web root %s: %w", authSrc, authDest, err)
-		}
-		if result == nil || result.ExitCode != 0 {
-			stderr := ""
-			if result != nil {
-				stderr = result.Stderr
-			}
-			return fmt.Errorf("failed to copy auth directory %s to web root %s: %s", authSrc, authDest, stderr)
 		}
 	}
 

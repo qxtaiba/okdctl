@@ -23,21 +23,18 @@ func RetryDefault(ctx context.Context, fn func() error) error {
 func EnsureNamespace(ctx context.Context, env *Environment, namespace string) error {
 	return RetryDefault(ctx, func() error {
 		result, err := env.Exec.Run(ctx, "oc", "get", "namespace", namespace)
-		if err == nil && result != nil && result.ExitCode == 0 {
+		if err != nil {
+			// Exec-level failure (command not found, connection refused) —
+			// don't attempt create, let retry handle it.
+			return fmt.Errorf("cannot reach cluster to check namespace %s: %w", namespace, err)
+		}
+		if result != nil && result.ExitCode == 0 {
 			return nil
 		}
 
 		env.Logger.Info(fmt.Sprintf("creating %s namespace", namespace))
-		createResult, createErr := env.Exec.Run(ctx, "oc", "create", "namespace", namespace)
-		if createErr != nil {
-			return fmt.Errorf("failed to create %s namespace: %w", namespace, createErr)
-		}
-		if createResult == nil || createResult.ExitCode != 0 {
-			stderr := ""
-			if createResult != nil {
-				stderr = createResult.Stderr
-			}
-			return fmt.Errorf("failed to create %s namespace: %s", namespace, stderr)
+		if _, err := env.Exec.RunChecked(ctx, "oc", "create", "namespace", namespace); err != nil {
+			return fmt.Errorf("failed to create %s namespace: %w", namespace, err)
 		}
 		return nil
 	})

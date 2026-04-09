@@ -268,6 +268,10 @@ func NewCompactSelector(options []string) *CompactSelector {
 	}
 }
 
+func (s *CompactSelector) Len() int {
+	return len(s.options)
+}
+
 func (s *CompactSelector) SetOptions(options []string) {
 	s.options = options
 	if s.selected >= len(options) {

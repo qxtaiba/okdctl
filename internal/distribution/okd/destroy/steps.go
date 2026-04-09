@@ -45,7 +45,7 @@ func (p *Phase) newCleanupFilesStep(cfg *config.Config, opts Options) distributi
 	return distribution.NewStepBuilder(StepCleanupFiles, "Cleanup Files").
 		Description("performing comprehensive cleanup").
 		Fatal(false).
-		SkipWhen(func() bool { return opts.SkipCleanup || opts.CleanupType == "" }).
+		SkipWhen(func() bool { return opts.SkipCleanup || opts.CleanupKind == "" }).
 		SkipReason(cleanupFilesSkipReason(opts)).
 		Execute(func(ctx context.Context) error {
 			vip, err := netutil.DeriveVIPFromStaticIP(cfg.Networking.StaticIP.Start)
@@ -53,7 +53,7 @@ func (p *Phase) newCleanupFilesStep(cfg *config.Config, opts Options) distributi
 				return fmt.Errorf("failed to derive VIP from static IP start: %w", err)
 			}
 			cleanupOpts := cleanup.Options{
-				Type:           opts.CleanupType,
+				Kind:           opts.CleanupKind,
 				WorkDir:        opts.WorkDir,
 				ProjectRoot:    opts.ProjectRoot,
 				HTTPServerRoot: cfg.HTTPServer.Root,

@@ -98,7 +98,7 @@ func (s *ReviewStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 
 func (s *ReviewStep) emitFocusChanged() tea.Cmd {
 	index := s.actionSelector.SelectedIndex()
-	const totalActions = 2 // deploy, save & exit
+	totalActions := s.actionSelector.Len()
 
 	return func() tea.Msg {
 		return wizard.FocusChangedMsg{

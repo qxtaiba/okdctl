@@ -1,4 +1,4 @@
-// Package version provides version information for the openshiftctl CLI.
+// Package version provides version information for the openshitctl CLI.
 package version
 
 import (

@@ -15,6 +15,8 @@ import (
 	"strings"
 	"time"
 
+	"gopkg.in/yaml.v3"
+
 	"github.com/qxtaiba/okd-proxmox-cli/internal/addon"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/executor"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
@@ -90,30 +92,21 @@ func (f *Flux) Install(ctx context.Context, env *addon.Environment) error {
 func (f *Flux) installOperator(ctx context.Context, env *addon.Environment) error {
 	env.Logger.Info("flux: installing operator via helm")
 	if err := addon.RetryDefault(ctx, func() error {
-		result, err := env.Exec.Run(ctx, "helm", "upgrade", "--install", "flux-operator",
+		if _, err := env.Exec.RunChecked(ctx, "helm", "upgrade", "--install", "flux-operator",
 			"oci://ghcr.io/controlplaneio-fluxcd/charts/flux-operator",
 			"--namespace", "flux-system",
 			"--create-namespace",
-			"--wait")
-		if err != nil {
+			"--wait"); err != nil {
 			return fmt.Errorf("failed to install flux operator: %w", err)
-		}
-		if result == nil || result.ExitCode != 0 {
-			stderr := ""
-			if result != nil {
-				stderr = result.Stderr
-			}
-			return fmt.Errorf("failed to install flux operator: %s", stderr)
 		}
 		return nil
 	}); err != nil {
 		return err
 	}
 
-	result, err := env.Exec.Run(ctx, "oc", "wait", "--for=condition=available", "deployment/flux-operator",
-		"--namespace", "flux-system", "--timeout=120s")
-	if err != nil || result == nil || result.ExitCode != 0 {
-		return fmt.Errorf("flux: operator not ready within 120s timeout")
+	if _, err := env.Exec.RunChecked(ctx, "oc", "wait", "--for=condition=available", "deployment/flux-operator",
+		"--namespace", "flux-system", "--timeout=120s"); err != nil {
+		return fmt.Errorf("flux: operator not ready within 120s timeout: %w", err)
 	}
 
 	return nil
@@ -137,7 +130,7 @@ func (f *Flux) installInstance(ctx context.Context, env *addon.Environment) erro
 	}
 
 	if err := addon.RetryDefault(ctx, func() error {
-		r, err := env.Exec.Run(ctx, "helm", "upgrade", "--install", "flux-instance",
+		if _, err := env.Exec.RunChecked(ctx, "helm", "upgrade", "--install", "flux-instance",
 			"oci://ghcr.io/controlplaneio-fluxcd/charts/flux-instance",
 			"--namespace", "flux-system",
 			"--set", "instance.cluster.type=openshift",
@@ -145,16 +138,8 @@ func (f *Flux) installInstance(ctx context.Context, env *addon.Environment) erro
 			"--set", fmt.Sprintf("instance.sync.ref=%s", syncRef),
 			"--set", fmt.Sprintf("instance.sync.path=%s", syncPath),
 			"--set", "instance.sync.pullSecret=flux-system",
-			"--wait")
-		if err != nil {
+			"--wait"); err != nil {
 			return fmt.Errorf("failed to install flux instance: %w", err)
-		}
-		if r == nil || r.ExitCode != 0 {
-			stderr := ""
-			if r != nil {
-				stderr = r.Stderr
-			}
-			return fmt.Errorf("failed to install flux instance: %s", stderr)
 		}
 		return nil
 	}); err != nil {
@@ -165,10 +150,10 @@ func (f *Flux) installInstance(ctx context.Context, env *addon.Environment) erro
 }
 
 func (f *Flux) Verify(ctx context.Context, env *addon.Environment) error {
-	result, err := env.Exec.Run(ctx, "oc", "get", "deployment", "flux-operator",
+	result, err := env.Exec.RunChecked(ctx, "oc", "get", "deployment", "flux-operator",
 		"-n", "flux-system", "-o", "jsonpath={.status.readyReplicas}")
-	if err != nil || result == nil || result.ExitCode != 0 {
-		return fmt.Errorf("flux-operator deployment not found")
+	if err != nil {
+		return fmt.Errorf("flux-operator deployment not found: %w", err)
 	}
 	ready := strings.TrimSpace(result.Stdout)
 	if ready == "" || ready == "0" {
@@ -205,9 +190,17 @@ func (f *Flux) Verify(ctx context.Context, env *addon.Environment) error {
 
 func (f *Flux) Uninstall(ctx context.Context, env *addon.Environment) error {
 	env.Logger.Info("flux: removing flux components")
-	_, _ = env.Exec.Run(ctx, "helm", "uninstall", "flux-instance", "--namespace", "flux-system")
-	_, _ = env.Exec.Run(ctx, "helm", "uninstall", "flux-operator", "--namespace", "flux-system")
-	_, _ = env.Exec.Run(ctx, "oc", "delete", "ns", "flux-system")
+	warnOnErr := func(err error, desc string) {
+		if err != nil {
+			env.Logger.Warn(fmt.Sprintf("flux: %s: %v", desc, err))
+		}
+	}
+	_, err := env.Exec.Run(ctx, "helm", "uninstall", "flux-instance", "--namespace", "flux-system")
+	warnOnErr(err, "uninstall flux-instance")
+	_, err = env.Exec.Run(ctx, "helm", "uninstall", "flux-operator", "--namespace", "flux-system")
+	warnOnErr(err, "uninstall flux-operator")
+	_, err = env.Exec.Run(ctx, "oc", "delete", "ns", "flux-system")
+	warnOnErr(err, "delete flux-system namespace")
 	return nil
 }
 
@@ -229,7 +222,10 @@ func (f *Flux) DefaultSettings() map[string]string {
 
 func (f *Flux) ValidateSettings(settings map[string]string) []string {
 	var errs []string
-	if repo := settings["repository"]; repo != "" {
+	repo := settings["repository"]
+	if repo == "" {
+		errs = append(errs, "repository is required (set addons.flux.settings.repository)")
+	} else {
 		if !strings.HasPrefix(repo, "ssh://") && !strings.HasPrefix(repo, "https://") &&
 			!strings.HasPrefix(repo, "git://") && !strings.HasPrefix(repo, "git@") {
 			errs = append(errs, "repository must be a valid Git URL (ssh://, https://, git://, or git@)")
@@ -359,23 +355,15 @@ func (f *Flux) createDeployKeySecret(ctx context.Context, env *addon.Environment
 		return fmt.Errorf("failed to read deploy key public half: %w", err)
 	}
 
-	knownHostsResult, err := env.Exec.Run(ctx, "ssh-keyscan", host)
-	if err != nil || knownHostsResult.ExitCode != 0 {
-		return fmt.Errorf("failed to get host key for %s", host)
+	knownHostsResult, err := env.Exec.RunChecked(ctx, "ssh-keyscan", host)
+	if err != nil {
+		return fmt.Errorf("failed to get host key for %s: %w", host, err)
 	}
 
 	manifest := buildFluxDeployKeySecret("flux-system", "flux-system",
 		string(privateKey), string(publicKey), knownHostsResult.Stdout)
-	result, err := env.Exec.RunWithStdin(ctx, manifest, "oc", "apply", "-f", "-")
-	if err != nil {
+	if _, err := env.Exec.RunWithStdinChecked(ctx, manifest, "oc", "apply", "-f", "-"); err != nil {
 		return fmt.Errorf("failed to apply deploy key secret: %w", err)
-	}
-	if result == nil || result.ExitCode != 0 {
-		stderr := ""
-		if result != nil {
-			stderr = result.Stderr
-		}
-		return fmt.Errorf("failed to apply deploy key secret: %s", stderr)
 	}
 
 	env.Logger.Info("flux: deploy key secret applied")
@@ -421,22 +409,29 @@ func gitHost(repoURL string) (string, error) {
 // field is omitted when empty.
 func buildFluxDeployKeySecret(namespace, name, privateKey, publicKey, knownHosts string) string {
 	enc := base64.StdEncoding.EncodeToString
-	dataLines := []string{
-		fmt.Sprintf("  identity: %s", enc([]byte(privateKey))),
+	data := map[string]string{
+		"identity":    enc([]byte(privateKey)),
+		"known_hosts": enc([]byte(knownHosts)),
 	}
 	if publicKey != "" {
-		dataLines = append(dataLines, fmt.Sprintf("  identity.pub: %s", enc([]byte(publicKey))))
+		data["identity.pub"] = enc([]byte(publicKey))
 	}
-	dataLines = append(dataLines, fmt.Sprintf("  known_hosts: %s", enc([]byte(knownHosts))))
-	return fmt.Sprintf(`apiVersion: v1
-kind: Secret
-metadata:
-  name: %s
-  namespace: %s
-type: Opaque
-data:
-%s
-`, name, namespace, strings.Join(dataLines, "\n"))
+	manifest := map[string]any{
+		"apiVersion": "v1",
+		"kind":       "Secret",
+		"metadata": map[string]any{
+			"name":      name,
+			"namespace": namespace,
+		},
+		"type": "Opaque",
+		"data": data,
+	}
+	out, err := yaml.Marshal(manifest)
+	if err != nil {
+		// All inputs are simple strings; marshal cannot fail in practice.
+		panic(fmt.Sprintf("buildFluxDeployKeySecret: %v", err))
+	}
+	return string(out)
 }
 
 // getTimeout reads a timeout setting (in seconds) from the settings map,

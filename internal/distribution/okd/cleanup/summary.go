@@ -31,7 +31,7 @@ func GenerateSummary(opts Options) Summary {
 		summary.RemainingIgnitionFiles = len(files)
 	}
 
-	if opts.Type == TypeFull || opts.Type == TypeTerraformOnly {
+	if opts.Kind == Full || opts.Kind == TerraformOnly {
 		terraformBase := filepath.Join(opts.ProjectRoot, "infrastructure", "terraform", "environments")
 		if entries, err := os.ReadDir(terraformBase); err == nil {
 			for _, entry := range entries {
@@ -68,7 +68,7 @@ func printSummary(opts Options, logger utils.Logger) {
 		logger.Info(fmt.Sprintf("  ignition files: %d files remaining", summary.RemainingIgnitionFiles))
 	}
 
-	if opts.Type == TypeFull || opts.Type == TypeTerraformOnly {
+	if opts.Kind == Full || opts.Kind == TerraformOnly {
 		if summary.RemainingTerraformFiles == 0 {
 			logger.Info("  terraform: clean (0 files)")
 		} else {
@@ -78,11 +78,11 @@ func printSummary(opts Options, logger utils.Logger) {
 
 	totalRemaining := summary.RemainingWorkFiles + summary.RemainingIgnitionFiles + summary.RemainingTerraformFiles
 	if totalRemaining == 0 {
-		if opts.Type == TypeFull {
+		if opts.Kind == Full {
 			logger.Info("cleanup: completed successfully")
 			logger.Info("cleanup: system ready for fresh deployment")
 		} else {
-			logger.Info(fmt.Sprintf("cleanup: completed for scope %s", opts.Type))
+			logger.Info(fmt.Sprintf("cleanup: completed for scope %s", opts.Kind))
 		}
 	} else {
 		logger.Warn("cleanup: partial completion")

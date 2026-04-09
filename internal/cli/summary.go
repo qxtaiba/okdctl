@@ -131,8 +131,8 @@ func PostDeploySummary(cfg *config.Config, result *deployment.Result) string {
 	appsDomain := fmt.Sprintf("*.apps.%s", clusterFQDN)
 	if result != nil && result.DNSDeployed && result.KubeVipIP != "" {
 		sb.kv(apiDomain, result.KubeVipIP+" (kube-vip)")
-	} else if bastionIP := cfg.Networking.Bastion.IP; bastionIP != "" {
-		sb.kv(apiDomain, bastionIP+" (haproxy)")
+	} else if cfg.Networking.Bastion.IP != "" {
+		sb.kv(apiDomain, cfg.Networking.Bastion.IP+" (haproxy)")
 	}
 	bastionIP := cfg.Networking.Bastion.IP
 	if result != nil && result.BastionIP != "" {

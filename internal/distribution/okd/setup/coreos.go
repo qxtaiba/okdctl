@@ -86,12 +86,9 @@ func (p *Phase) DetectCoreOSVersion(ctx context.Context) (*CoreOSInfo, error) {
 		return nil, fmt.Errorf("openshift-install not found - run setup first")
 	}
 
-	result, err := p.Exec.Run(ctx, "openshift-install", "coreos", "print-stream-json")
+	result, err := p.Exec.RunChecked(ctx, "openshift-install", "coreos", "print-stream-json")
 	if err != nil {
 		return nil, fmt.Errorf("failed to get CoreOS stream info: %w", err)
-	}
-	if result.ExitCode != 0 {
-		return nil, fmt.Errorf("openshift-install coreos print-stream-json failed: %s", result.Stderr)
 	}
 
 	var streamData struct {

@@ -308,14 +308,11 @@ type ingressControllerInfo struct {
 // discoverIngressControllers queries the cluster for all IngressControllers
 // and returns their names, domains, strategies, and raw JSON.
 func (p *Phase) discoverIngressControllers(ctx context.Context) ([]ingressControllerInfo, error) {
-	result, err := p.Exec.Run(ctx, "oc", "get", "ingresscontroller",
+	result, err := p.Exec.RunChecked(ctx, "oc", "get", "ingresscontroller",
 		"-n", "openshift-ingress-operator",
 		"-o", "json")
 	if err != nil {
 		return nil, fmt.Errorf("failed to query IngressControllers: %w", err)
-	}
-	if result.ExitCode != 0 {
-		return nil, fmt.Errorf("oc get ingresscontroller failed: %s", result.Stderr)
 	}
 
 	var list struct {
@@ -351,6 +348,10 @@ func (p *Phase) discoverIngressControllers(ctx context.Context) ([]ingressContro
 		strategy := strategyHostNetwork
 		if item.Spec.EndpointPublishingStrategy != nil && item.Spec.EndpointPublishingStrategy.Type != "" {
 			strategy = item.Spec.EndpointPublishingStrategy.Type
+		}
+
+		if item.Metadata.Name == "" {
+			continue // skip malformed entries with no name
 		}
 
 		controllers = append(controllers, ingressControllerInfo{
@@ -400,13 +401,10 @@ func (p *Phase) convertToLoadBalancer(ctx context.Context, ic ingressControllerI
 	}
 
 	// Delete the existing IC.
-	delResult, err := p.Exec.Run(ctx, "oc", "delete", "ingresscontroller", ic.Name,
+	_, err = p.Exec.RunChecked(ctx, "oc", "delete", "ingresscontroller", ic.Name,
 		"-n", "openshift-ingress-operator")
 	if err != nil {
 		return fmt.Errorf("failed to delete IngressController %q: %w", ic.Name, err)
-	}
-	if delResult.ExitCode != 0 {
-		return fmt.Errorf("oc delete ingresscontroller %s failed: %s", ic.Name, delResult.Stderr)
 	}
 
 	// Wait for the router deployment to be gone.
@@ -416,21 +414,11 @@ func (p *Phase) convertToLoadBalancer(ctx context.Context, ic ingressControllerI
 	}
 
 	// Create the replacement via stdin.
-	createResult, err := p.Exec.RunWithStdin(ctx, replacementJSON, "oc", "create", "-f", "-")
+	_, err = p.Exec.RunWithStdinChecked(ctx, replacementJSON, "oc", "create", "-f", "-")
 	if err != nil {
 		p.Log.Warn(fmt.Sprintf("update-ingress: failed to create replacement, attempting rollback: %v", err))
 		p.attemptRollback(ctx, ic)
 		return fmt.Errorf("failed to create replacement IngressController: %w", err)
-	}
-	if createResult == nil {
-		p.Log.Warn("update-ingress: oc create returned nil result, attempting rollback")
-		p.attemptRollback(ctx, ic)
-		return fmt.Errorf("oc create returned nil result for IngressController %q", ic.Name)
-	}
-	if createResult.ExitCode != 0 {
-		p.Log.Warn(fmt.Sprintf("update-ingress: create failed (%s), attempting rollback", createResult.Stderr))
-		p.attemptRollback(ctx, ic)
-		return fmt.Errorf("oc create ingresscontroller failed: %s", createResult.Stderr)
 	}
 
 	return nil

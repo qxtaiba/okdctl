@@ -66,12 +66,9 @@ func (p *Phase) GenerateInstallConfig(ctx context.Context, cfg *config.Config, o
 }
 
 func (p *Phase) GenerateManifests(ctx context.Context, clusterDir string) error {
-	result, err := p.Exec.Run(ctx, "openshift-install", "create", "manifests", "--dir", clusterDir)
+	_, err := p.Exec.RunChecked(ctx, "openshift-install", "create", "manifests", "--dir", clusterDir)
 	if err != nil {
 		return fmt.Errorf("openshift-install create manifests failed: %w", err)
-	}
-	if result.ExitCode != 0 {
-		return fmt.Errorf("openshift-install create manifests failed: %s", result.Stderr)
 	}
 
 	return nil
@@ -143,12 +140,9 @@ func (p *Phase) InjectCompactClusterManifests(ctx context.Context, clusterDir st
 }
 
 func (p *Phase) GenerateIgnitionConfigs(ctx context.Context, clusterDir string) error {
-	result, err := p.Exec.Run(ctx, "openshift-install", "create", "ignition-configs", "--dir", clusterDir)
+	_, err := p.Exec.RunChecked(ctx, "openshift-install", "create", "ignition-configs", "--dir", clusterDir)
 	if err != nil {
-		return err
-	}
-	if result.ExitCode != 0 {
-		return fmt.Errorf("openshift-install create ignition-configs failed: %s", result.Stderr)
+		return fmt.Errorf("openshift-install create ignition-configs failed: %w", err)
 	}
 
 	if err := p.ValidateIgnitionFiles(clusterDir); err != nil {

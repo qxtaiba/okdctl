@@ -38,23 +38,28 @@ func (p *Phase) RemoveHAProxy(ctx context.Context, vip string) error {
 		p.Log.Warn(fmt.Sprintf("haproxy: failed to remove config: %v", err))
 	}
 
-	for _, port := range firewall.HAProxyFrontendPorts {
+	for _, port := range firewall.HAProxyFrontendPorts() {
 		portSpec := fmt.Sprintf("%d/%s", port.Number, port.Protocol)
 		p.Log.Info(fmt.Sprintf("haproxy: removing firewall rule for port %d", port.Number))
 		result, err = p.Exec.Run(ctx, "sudo", "firewall-cmd", "--permanent", "--remove-port="+portSpec)
-		if err != nil || result.ExitCode != 0 {
+		if err != nil {
+			p.Log.Warn(fmt.Sprintf("haproxy: could not remove firewall rule for port %d: %v", port.Number, err))
+		} else if result.ExitCode != 0 {
 			p.Log.Warn(fmt.Sprintf("haproxy: could not remove firewall rule for port %d (may not exist)", port.Number))
 		}
 	}
 
 	result, err = p.Exec.Run(ctx, "sudo", "firewall-cmd", "--reload")
-	if err != nil || result.ExitCode != 0 {
+	if err != nil {
+		p.Log.Warn(fmt.Sprintf("haproxy: could not reload firewall: %v", err))
+	} else if result.ExitCode != 0 {
 		p.Log.Warn("haproxy: could not reload firewall")
 	}
 
 	// Remove the VIP secondary IP from the bastion so traffic routes to the
 	// real kube-vip holder instead of being handled locally.
 	if vip != "" {
+		vipRemoved := false
 		iface, ifaceErr := netutil.GetDefaultInterface(ctx)
 		if ifaceErr != nil {
 			p.Log.Warn(fmt.Sprintf("haproxy: could not detect default interface for VIP removal: %v", ifaceErr))
@@ -62,6 +67,8 @@ func (p *Phase) RemoveHAProxy(ctx context.Context, vip string) error {
 			p.Log.Info(fmt.Sprintf("haproxy: removing vip %s from %s", vip, iface))
 			if rmErr := netutil.RemoveSecondaryIP(ctx, vip, iface); rmErr != nil {
 				p.Log.Warn(fmt.Sprintf("haproxy: could not remove vip %s from %s: %v", vip, iface, rmErr))
+			} else {
+				vipRemoved = true
 			}
 		}
 
@@ -75,7 +82,11 @@ func (p *Phase) RemoveHAProxy(ctx context.Context, vip string) error {
 		}, DefaultKubeVIPVIPTimeout, p.Log); waitErr != nil {
 			return fmt.Errorf("api not reachable via vip %s after haproxy removal: %w", vip, waitErr)
 		}
-		p.Log.Info("haproxy: api confirmed reachable via vip")
+		if !vipRemoved {
+			p.Log.Warn("haproxy: api is reachable but vip was not removed from bastion — traffic may still route through haproxy")
+		} else {
+			p.Log.Info("haproxy: api confirmed reachable via vip")
+		}
 
 		// Also verify via hostname -- removing the secondary IP can transiently
 		// restart the local DNS forwarder, causing hostname resolution to lag.

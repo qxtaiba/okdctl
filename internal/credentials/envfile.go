@@ -18,8 +18,9 @@ import (
 // invocation silently get the first path's result, which is preferred
 // over letting multiple sources mutate the environment.
 var (
-	loadOnce sync.Once
-	loadErr  error
+	loadOnce   sync.Once
+	loadErr    error
+	loadedPath string
 )
 
 // EnvFilePath derives the .env path from a config path
@@ -74,8 +75,12 @@ func WriteEnvFile(path string, creds *ProxmoxCredentials) error {
 // and the .env file is a per-process resource.
 func LoadEnvFile(path string) error {
 	loadOnce.Do(func() {
+		loadedPath = path
 		loadErr = loadEnvFileOnce(path)
 	})
+	if loadedPath != path {
+		return fmt.Errorf("LoadEnvFile already called with %q; cannot reload from %q", loadedPath, path)
+	}
 	return loadErr
 }
 
@@ -120,6 +125,10 @@ func loadEnvFileOnce(path string) error {
 		}
 		key = strings.TrimSpace(key)
 		value = strings.TrimSpace(value)
+
+		if key == "" {
+			continue
+		}
 
 		// Only set if not already present — shell env wins
 		if os.Getenv(key) == "" {

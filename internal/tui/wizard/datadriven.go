@@ -198,10 +198,7 @@ func (s *DataDrivenStep) LoadFromConfig(cfg *config.Config) {
 	for _, sectionDef := range s.definition.Sections {
 		for _, fieldDef := range sectionDef.Fields {
 			if fieldDef.ConfigGet != nil {
-				value := fieldDef.ConfigGet(cfg)
-				if value != "" {
-					s.SetValue(fieldDef.Key, value)
-				}
+				s.SetValue(fieldDef.Key, fieldDef.ConfigGet(cfg))
 			}
 		}
 	}
@@ -229,14 +226,6 @@ func (s *DataDrivenStep) ValueInt(key string, fallback int) int {
 		return fallback
 	}
 	return i
-}
-
-
-
-
-func (s *DataDrivenStep) WithApplyFunc(fn func(step *DataDrivenStep, cfg *config.Config) error) *DataDrivenStep {
-	s.definition.Apply = fn
-	return s
 }
 
 func (s *DataDrivenStep) WithExtraContentFunc(fn func(step *DataDrivenStep, width int) string) *DataDrivenStep {
@@ -279,11 +268,7 @@ func GetString(getter func(cfg *config.Config) string) ConfigGetter {
 
 func GetInt(getter func(cfg *config.Config) int) ConfigGetter {
 	return func(cfg *config.Config) string {
-		v := getter(cfg)
-		if v == 0 {
-			return ""
-		}
-		return strconv.Itoa(v)
+		return strconv.Itoa(getter(cfg))
 	}
 }
 

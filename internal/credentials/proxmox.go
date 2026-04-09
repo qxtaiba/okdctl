@@ -3,6 +3,7 @@ package credentials
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"strings"
 
@@ -161,12 +162,12 @@ func GetProxmoxCredentials(cfg *config.Config) *ProxmoxCredentials {
 		return creds
 	}
 
-	if !strings.HasPrefix(host, "http") {
+	if !strings.HasPrefix(host, "https://") && !strings.HasPrefix(host, "http://") {
 		host = "https://" + host
 	}
-	hostPart := strings.TrimPrefix(strings.TrimPrefix(host, "https://"), "http://")
-	if !strings.Contains(hostPart, ":") {
-		host = host + ":8006"
+	if u, err := url.Parse(host); err == nil && u.Port() == "" {
+		u.Host = u.Hostname() + ":8006"
+		host = u.String()
 	}
 	creds.Endpoint = host
 	creds.Insecure = px.Insecure
@@ -201,7 +202,11 @@ func GetProxmoxCredentials(cfg *config.Config) *ProxmoxCredentials {
 	// Priority 2: Config file fields (legacy support)
 	if px.APIToken != "" {
 		token := px.APIToken
-		if px.TokenID != "" {
+		if strings.Contains(px.APIToken, "=") && px.TokenID != "" {
+			// APIToken already contains the full "tokenid=secret" format;
+			// ignore the separate TokenID to avoid "tokenid=tokenid=secret".
+			_ = px.TokenID
+		} else if px.TokenID != "" {
 			token = px.TokenID + "=" + px.APIToken
 		}
 		creds.APIToken = []byte(token)

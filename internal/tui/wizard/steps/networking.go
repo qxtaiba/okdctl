@@ -10,7 +10,7 @@ import (
 )
 
 var NetworkingStepDefinition = wizard.StepDefinition{
-	ID:           "networking",
+	ID:           wizard.StepIDNetworking,
 	Title:        "network configuration",
 	DisplayTitle: "configure cluster networking",
 	Description:  "configure cluster networking",

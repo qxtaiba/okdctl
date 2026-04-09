@@ -29,6 +29,19 @@ func (o ExtractOptions) logger() utils.Logger {
 	return utils.NoopLogger()
 }
 
+// verifyResolvedPath checks that path, after resolving symlinks on the real
+// filesystem, is still within destDir. The path must already exist.
+func verifyResolvedPath(path, cleanDest string) error {
+	real, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		return fmt.Errorf("failed to resolve path %s: %w", path, err)
+	}
+	if !strings.HasPrefix(filepath.Clean(real), cleanDest) {
+		return fmt.Errorf("resolves outside destination: %s -> %s", path, real)
+	}
+	return nil
+}
+
 func processTarEntry(tarReader *tar.Reader, header *tar.Header, destDir string, stripComponents int) error {
 	name := header.Name
 	if stripComponents > 0 {
@@ -49,15 +62,26 @@ func processTarEntry(tarReader *tar.Reader, header *tar.Header, destDir string, 
 		return fmt.Errorf("archive entry attempts to escape destination: %s", name)
 	}
 
+	cleanDest := filepath.Clean(destDir)
+
 	switch header.Typeflag {
 	case tar.TypeDir:
 		if err := os.MkdirAll(targetPath, os.FileMode(header.Mode)); err != nil {
 			return fmt.Errorf("failed to create directory: %w", err)
 		}
+		if err := verifyResolvedPath(targetPath, cleanDest); err != nil {
+			return fmt.Errorf("directory %s: %w", name, err)
+		}
 
 	case tar.TypeReg:
 		if err := os.MkdirAll(filepath.Dir(targetPath), 0755); err != nil {
 			return fmt.Errorf("failed to create parent directory: %w", err)
+		}
+		// Resolve the parent through the real filesystem to catch writes
+		// that traverse a previously-extracted symlink (e.g. link -> /etc
+		// followed by link/crontab).
+		if err := verifyResolvedPath(filepath.Dir(targetPath), cleanDest); err != nil {
+			return fmt.Errorf("file %s: parent %w", name, err)
 		}
 
 		outFile, err := os.OpenFile(targetPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.FileMode(header.Mode))
@@ -77,10 +101,8 @@ func processTarEntry(tarReader *tar.Reader, header *tar.Header, destDir string, 
 			return fmt.Errorf("absolute symlink target not allowed: %s -> %s", name, linkTarget)
 		}
 
-		resolvedTarget := filepath.Join(filepath.Dir(targetPath), linkTarget)
-		resolvedTarget = filepath.Clean(resolvedTarget)
-
-		if !strings.HasPrefix(resolvedTarget, filepath.Clean(destDir)) {
+		resolvedTarget := filepath.Clean(filepath.Join(filepath.Dir(targetPath), linkTarget))
+		if !strings.HasPrefix(resolvedTarget, cleanDest) {
 			return fmt.Errorf("symlink target escapes destination: %s -> %s", name, linkTarget)
 		}
 
@@ -90,17 +112,8 @@ func processTarEntry(tarReader *tar.Reader, header *tar.Header, destDir string, 
 			}
 		}
 
-		// Post-hoc verification: resolve through the real filesystem to catch
-		// symlink chains that escape the destination directory.
-		realTarget, err := filepath.EvalSymlinks(targetPath)
-		if err != nil {
-			_ = os.Remove(targetPath)
-			return fmt.Errorf("failed to resolve symlink %s: %w", name, err)
-		}
-		if !strings.HasPrefix(realTarget, filepath.Clean(destDir)) {
-			_ = os.Remove(targetPath)
-			return fmt.Errorf("symlink %s resolves outside destination: %s", name, realTarget)
-		}
+	default:
+		// Skip unsupported entry types (hardlinks, char/block devices, FIFOs).
 	}
 
 	return nil

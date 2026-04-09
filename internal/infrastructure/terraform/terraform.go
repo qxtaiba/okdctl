@@ -15,8 +15,8 @@ import (
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
 )
 
-// planFileName is the default plan file name used by Plan and Cleanup.
-const planFileName = "tfplan"
+// PlanFileName is the default plan file name used by Plan, Apply, and Cleanup.
+const PlanFileName = "tfplan"
 
 type ExecError struct {
 	Command  string
@@ -314,7 +314,7 @@ func (t *Executor) StateFile() string {
 func (t *Executor) Cleanup() error {
 	var errs []error
 	files := []string{
-		filepath.Join(t.WorkDir, planFileName),
+		filepath.Join(t.WorkDir, PlanFileName),
 		filepath.Join(t.WorkDir, "destroy.tfplan"),
 		filepath.Join(t.WorkDir, "terraform.tfstate.backup"),
 	}

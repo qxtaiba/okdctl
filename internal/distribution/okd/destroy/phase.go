@@ -21,8 +21,8 @@ type Options struct {
 	// AutoApprove skips Terraform confirmation prompts.
 	AutoApprove bool
 
-	// CleanupType specifies what to clean up after destruction.
-	CleanupType cleanup.Type
+	// CleanupKind specifies what to clean up after destruction.
+	CleanupKind cleanup.Kind
 
 	// Force skips confirmation prompts.
 	Force bool
@@ -53,7 +53,7 @@ func NewOptions(cfg *config.Config, projectRoot string) Options {
 			TerraformEnv: paths.GetTerraformEnv(cfg),
 		},
 		AutoApprove: cfg.Deployment.AutoApprove,
-		CleanupType: cleanup.TypeFull,
+		CleanupKind: cleanup.Full,
 	}
 }
 

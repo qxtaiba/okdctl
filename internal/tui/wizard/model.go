@@ -18,10 +18,10 @@ const (
 	minWidth  = 80
 	minHeight = 24
 
-	headerHeight          = 3
-	scrollIndicatorHeight = 1
-	footerHeight          = 2
-	outerVerticalPadding  = 4
+	headerHeight          = 3 // logo + tagline + step indicator
+	scrollIndicatorHeight = 1 // scroll arrows and percentage
+	footerHeight          = 2 // help bar + padding
+	outerVerticalPadding  = 4 // top (2) + bottom (2)
 	fixedLayoutOverhead   = headerHeight + scrollIndicatorHeight + footerHeight + outerVerticalPadding
 )
 
@@ -85,7 +85,7 @@ type KeyMap struct {
 	End      key.Binding
 }
 
-func DefaultKeyMap() KeyMap {
+func defaultKeyMap() KeyMap {
 	return KeyMap{
 		Next: key.NewBinding(
 			key.WithKeys("enter"),
@@ -143,7 +143,7 @@ func NewModel(steps []WizardStep, cfg *config.Config) *Model {
 		steps:       steps,
 		currentStep: 0,
 		config:      cfg,
-		keyMap:      DefaultKeyMap(),
+		keyMap:      defaultKeyMap(),
 	}
 
 	if len(steps) > 0 {

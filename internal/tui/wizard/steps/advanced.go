@@ -9,7 +9,7 @@ import (
 )
 
 var AdvancedStepDefinition = wizard.StepDefinition{
-	ID:           "advanced",
+	ID:           wizard.StepIDAdvanced,
 	Title:        "advanced settings",
 	DisplayTitle: "advanced settings",
 	Description:  "configure vm ids and timeouts",

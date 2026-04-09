@@ -92,6 +92,13 @@ func FetchChecksum(ctx context.Context, checksumsURL, filename string) (string, 
 			checksumFilename = strings.TrimPrefix(checksumFilename, "./")
 
 			if checksumFilename == filename || strings.HasSuffix(checksumFilename, "/"+filename) {
+				if len(checksumValue) != sha256.Size*2 {
+					return "", fmt.Errorf("malformed checksum for %s: expected %d hex chars, got %d",
+						filename, sha256.Size*2, len(checksumValue))
+				}
+				if _, err := hex.DecodeString(checksumValue); err != nil {
+					return "", fmt.Errorf("malformed checksum for %s: %w", filename, err)
+				}
 				return checksumValue, nil
 			}
 		}

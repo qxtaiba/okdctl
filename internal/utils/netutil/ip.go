@@ -1,7 +1,6 @@
 package netutil
 
 import (
-	"errors"
 	"fmt"
 	"net"
 	"net/netip"
@@ -10,12 +9,13 @@ import (
 
 const DefaultVIPLastOctet = 10
 
-var ErrInvalidIP = errors.New("invalid IP address")
-
 func CIDRToNetmask(cidr string) (string, error) {
 	_, network, err := net.ParseCIDR(cidr)
 	if err != nil {
 		return "", fmt.Errorf("invalid CIDR %q: %w", cidr, err)
+	}
+	if ip4 := network.IP.To4(); ip4 == nil {
+		return "", fmt.Errorf("IPv6 CIDR not supported: %q", cidr)
 	}
 	mask := network.Mask
 	return fmt.Sprintf("%d.%d.%d.%d", mask[0], mask[1], mask[2], mask[3]), nil
@@ -66,11 +66,12 @@ func CalculateVMIP(startIP string, index int) (string, error) {
 }
 
 func DeriveVIPFromStaticIP(staticIPStart string) (string, error) {
-	if ip := net.ParseIP(staticIPStart); ip == nil || ip.To4() == nil {
+	ip := net.ParseIP(staticIPStart)
+	if ip == nil || ip.To4() == nil {
 		return "", fmt.Errorf("invalid IPv4 address %q", staticIPStart)
 	}
-	parts := strings.Split(staticIPStart, ".")
-	return fmt.Sprintf("%s.%s.%s.%d", parts[0], parts[1], parts[2], DefaultVIPLastOctet), nil
+	ip4 := ip.To4()
+	return fmt.Sprintf("%d.%d.%d.%d", ip4[0], ip4[1], ip4[2], DefaultVIPLastOctet), nil
 }
 
 func IPInCIDR(ip, cidr string) (bool, error) {

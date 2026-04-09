@@ -1,6 +1,6 @@
 // Package cli wires openshitctl's cobra command tree (deploy, destroy,
 // update-ingress, wizard) and shared CLI helpers for prompts, summaries,
-// and viper-backed config loading.
+// and config loading.
 package cli
 
 import (
@@ -36,7 +36,7 @@ func promptForConfirmation(ctx context.Context, prompt string) (bool, error) {
 
 	select {
 	case <-ctx.Done():
-		return false, nil
+		return false, ctx.Err()
 	case response := <-inputCh:
 		return isConfirmResponse(response), nil
 	}

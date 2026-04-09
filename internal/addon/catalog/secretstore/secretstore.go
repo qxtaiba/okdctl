@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"gopkg.in/yaml.v3"
+
 	"github.com/qxtaiba/okd-proxmox-cli/internal/addon"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/executor"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
@@ -126,8 +128,12 @@ func (s *SecretStore) Verify(ctx context.Context, env *addon.Environment) error 
 func (s *SecretStore) Uninstall(ctx context.Context, env *addon.Environment) error {
 	ns := defaultNamespace
 	env.Logger.Info("secretstore: removing 1password connect secrets")
-	_, _ = env.Exec.Run(ctx, "oc", "delete", "secret", credentialsSecretName, "-n", ns)
-	_, _ = env.Exec.Run(ctx, "oc", "delete", "secret", tokenSecretName, "-n", ns)
+	if _, err := env.Exec.Run(ctx, "oc", "delete", "secret", credentialsSecretName, "-n", ns); err != nil {
+		env.Logger.Warn(fmt.Sprintf("secretstore: delete %s: %v", credentialsSecretName, err))
+	}
+	if _, err := env.Exec.Run(ctx, "oc", "delete", "secret", tokenSecretName, "-n", ns); err != nil {
+		env.Logger.Warn(fmt.Sprintf("secretstore: delete %s: %v", tokenSecretName, err))
+	}
 	return nil
 }
 
@@ -174,12 +180,9 @@ func (s *SecretStore) readSecret(ctx context.Context, env *addon.Environment, pa
 	}
 
 	env.Logger.Info(fmt.Sprintf("secretstore: decrypting %s with sops", filepath.Base(path)))
-	result, err := env.Exec.Run(ctx, "sops", "-d", path)
+	result, err := env.Exec.RunChecked(ctx, "sops", "-d", path)
 	if err != nil {
-		return "", fmt.Errorf("sops decryption failed: %w", err)
-	}
-	if result.ExitCode != 0 {
-		return "", fmt.Errorf("sops decryption failed (is the age key at ~/.config/sops/age/keys.txt?): %s", result.Stderr)
+		return "", fmt.Errorf("sops decryption failed (is the age key at ~/.config/sops/age/keys.txt?): %w", err)
 	}
 	return result.Stdout, nil
 }
@@ -209,15 +212,24 @@ func (s *SecretStore) secretFilePaths(env *addon.Environment) (secretsDir, credP
 // single pre-encoded data key. Callers must base64-encode raw values before
 // passing them.
 func buildOpaqueSecretManifest(namespace, name, dataKey, encodedValue string) string {
-	return fmt.Sprintf(`apiVersion: v1
-kind: Secret
-metadata:
-  name: %s
-  namespace: %s
-type: Opaque
-data:
-  %s: %s
-`, name, namespace, dataKey, encodedValue)
+	manifest := map[string]any{
+		"apiVersion": "v1",
+		"kind":       "Secret",
+		"metadata": map[string]any{
+			"name":      name,
+			"namespace": namespace,
+		},
+		"type": "Opaque",
+		"data": map[string]string{
+			dataKey: encodedValue,
+		},
+	}
+	out, err := yaml.Marshal(manifest)
+	if err != nil {
+		// All inputs are simple strings; marshal cannot fail in practice.
+		panic(fmt.Sprintf("buildOpaqueSecretManifest: %v", err))
+	}
+	return string(out)
 }
 
 func (s *SecretStore) createCredentialsSecret(ctx context.Context, env *addon.Environment, credPath string) error {
@@ -230,16 +242,8 @@ func (s *SecretStore) createCredentialsSecret(ctx context.Context, env *addon.En
 	credentialsBase64 := base64.StdEncoding.EncodeToString([]byte(plaintext))
 
 	manifest := buildOpaqueSecretManifest(defaultNamespace, credentialsSecretName, "credentials_base64", credentialsBase64)
-	result, err := env.Exec.RunWithStdin(ctx, manifest, "oc", "apply", "-f", "-")
-	if err != nil {
+	if _, err := env.Exec.RunWithStdinChecked(ctx, manifest, "oc", "apply", "-f", "-"); err != nil {
 		return fmt.Errorf("failed to apply 1password credentials secret: %w", err)
-	}
-	if result == nil || result.ExitCode != 0 {
-		stderr := ""
-		if result != nil {
-			stderr = result.Stderr
-		}
-		return fmt.Errorf("failed to apply 1password credentials secret: %s", stderr)
 	}
 
 	env.Logger.Info("secretstore: credentials secret applied")
@@ -254,16 +258,8 @@ func (s *SecretStore) createTokenSecret(ctx context.Context, env *addon.Environm
 	token := strings.TrimSpace(plaintext)
 
 	manifest := buildOpaqueSecretManifest(defaultNamespace, tokenSecretName, "token", base64.StdEncoding.EncodeToString([]byte(token)))
-	result, err := env.Exec.RunWithStdin(ctx, manifest, "oc", "apply", "-f", "-")
-	if err != nil {
+	if _, err := env.Exec.RunWithStdinChecked(ctx, manifest, "oc", "apply", "-f", "-"); err != nil {
 		return fmt.Errorf("failed to apply 1password token secret: %w", err)
-	}
-	if result == nil || result.ExitCode != 0 {
-		stderr := ""
-		if result != nil {
-			stderr = result.Stderr
-		}
-		return fmt.Errorf("failed to apply 1password token secret: %s", stderr)
 	}
 
 	env.Logger.Info("secretstore: token secret applied")

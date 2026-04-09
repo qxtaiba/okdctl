@@ -25,9 +25,6 @@ import (
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/netutil"
 )
 
-// planFileName is the terraform plan file name used for both plan output and apply input.
-// Terraform resolves relative paths from its working directory.
-const planFileName = "tfplan"
 
 type Provider struct {
 	connected     bool
@@ -138,7 +135,7 @@ func (p *Provider) Provision(ctx context.Context, cfg *config.Config, opts Provi
 
 	p.logger.Info("terraform: creating execution plan")
 	planOpts := terraform.PlanOptions{
-		OutputPlanFile: planFileName,
+		OutputPlanFile: terraform.PlanFileName,
 	}
 	if err := p.terraformExec.Plan(ctx, planOpts); err != nil {
 		return nil, fmt.Errorf("terraform plan failed: %w", err)
@@ -149,12 +146,12 @@ func (p *Provider) Provision(ctx context.Context, cfg *config.Config, opts Provi
 
 	p.logger.Info("terraform: applying infrastructure changes")
 	applyOpts := terraform.ApplyOptions{
-		PlanFile:    filepath.Join(p.terraformExec.GetWorkDir(), planFileName),
+		PlanFile:    filepath.Join(p.terraformExec.GetWorkDir(), terraform.PlanFileName),
 		AutoApprove: opts.AutoApprove,
 	}
 	if err := p.terraformExec.Apply(ctx, applyOpts); err != nil {
 		if errors.Is(ctx.Err(), context.Canceled) {
-			return nil, fmt.Errorf("terraform apply interrupted: %w", context.Canceled)
+			return nil, fmt.Errorf("terraform apply interrupted: %w", err)
 		}
 		p.logger.Warn("terraform: apply failed; partial infrastructure may exist — run 'openshitctl destroy' to clean up")
 		return nil, fmt.Errorf("terraform apply failed: %w", err)

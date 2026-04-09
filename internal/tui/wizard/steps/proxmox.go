@@ -25,7 +25,7 @@ func proxmoxSet(setter func(p *config.ProxmoxConfig, v string)) wizard.ConfigSet
 }
 
 var ProxmoxStepDefinition = wizard.StepDefinition{
-	ID:           "proxmox",
+	ID:           wizard.StepIDProxmox,
 	Title:        "proxmox configuration",
 	DisplayTitle: "configure proxmox ve connection",
 	Description:  "configure proxmox connection and storage",

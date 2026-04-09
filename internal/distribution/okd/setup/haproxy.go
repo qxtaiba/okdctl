@@ -75,13 +75,8 @@ func (p *Phase) installHAProxyConfig(ctx context.Context, tmpPath string) error 
 		return fmt.Errorf("failed to install haproxy config: %w", err)
 	}
 
-	result, _ := p.Exec.Run(ctx, "sudo", "haproxy", "-c", "-f", haproxyConfigPath)
-	if result == nil || result.ExitCode != 0 {
-		stderr := ""
-		if result != nil {
-			stderr = result.Stderr
-		}
-		return fmt.Errorf("haproxy configuration validation failed: %s", stderr)
+	if _, err := p.Exec.RunChecked(ctx, "sudo", "haproxy", "-c", "-f", haproxyConfigPath); err != nil {
+		return fmt.Errorf("haproxy configuration validation failed: %w", err)
 	}
 	return nil
 }

@@ -108,7 +108,7 @@ func (p *Provisioner) Prepare(ctx context.Context, cfg *config.Config) error {
 	if system.DirExists(opts.WorkDir) {
 		p.logger.Info("setup: cleaning up previous artifacts")
 		cleanupOpts := cleanup.Options{
-			Type:           cleanup.TypeWorkOnly,
+			Kind:           cleanup.WorkOnly,
 			WorkDir:        opts.WorkDir,
 			ProjectRoot:    p.projectRoot,
 			HTTPServerRoot: cfg.HTTPServer.Root,

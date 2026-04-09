@@ -15,7 +15,8 @@ var destroyForce bool
 var destroyCmd = &cobra.Command{
 	Use:   "destroy",
 	Short: "Destroy a Kubernetes cluster",
-	Long:  `Destroy a Kubernetes cluster and all associated infrastructure.`,
+	Long: `Destroy a Kubernetes cluster and all associated infrastructure.
+This operation is idempotent and safe to re-run if a previous destroy was interrupted.`,
 	RunE:  runDestroy,
 }
 
@@ -23,15 +24,15 @@ func init() {
 	destroyCmd.Flags().BoolVarP(&destroyForce, "force", "y", false, "skip confirmation prompt")
 }
 
-func runDestroy(cmd *cobra.Command, args []string) error {
+func runDestroy(cmd *cobra.Command, _ []string) error {
 	ctx := cmd.Context()
 
-	cfg, err := LoadConfig(cfgFile)
+	cfg, err := loadConfig(cfgFile)
 	if err != nil {
 		return err
 	}
 
-	tui.Warn("this will destroy cluster '" + cfg.Cluster.Name + "' and all associated resources")
+	tui.Warn(fmt.Sprintf("this will destroy cluster '%s' and all associated resources", cfg.Cluster.Name))
 
 	if !destroyForce {
 		confirmed, err := promptForConfirmation(ctx, "proceed with destroy? [y/N]: ")
@@ -44,9 +45,9 @@ func runDestroy(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	creds := HandleCredentials(cfg)
+	creds := handleCredentials(cfg)
 	defer creds.Zeroize()
-	p := CreateOKDProvisioner(cfg, creds)
+	p := createOKDProvisioner(cfg, creds)
 
 	tui.Info("destroying cluster...")
 	startTime := time.Now()

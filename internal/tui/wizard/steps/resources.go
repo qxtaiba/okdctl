@@ -16,7 +16,7 @@ type ResourcesStepState struct {
 }
 
 var ResourcesStepDefinition = wizard.StepDefinition{
-	ID:           "resources",
+	ID:           wizard.StepIDResources,
 	Title:        "node resources",
 	DisplayTitle: "configure node resources",
 	Description:  "configure cpu, memory, and storage for nodes",

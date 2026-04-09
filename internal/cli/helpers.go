@@ -14,16 +14,16 @@ import (
 	"github.com/qxtaiba/okd-proxmox-cli/internal/tui"
 )
 
-func LoadConfig(configFile string) (*config.Config, error) {
+func loadConfig(configFile string) (*config.Config, error) {
 	loader := config.NewLoader()
 	cfg, err := loader.LoadFile(configFile)
 	if err != nil {
 		if os.IsNotExist(err) {
-			tui.Error("configuration file not found: " + configFile)
+			tui.Error(fmt.Sprintf("configuration file not found: %s", configFile))
 			if configFile == "openshitctl.yaml" {
 				tui.Info("run 'openshitctl deploy' to create a configuration file")
 			} else {
-				tui.Info("run 'openshitctl deploy --output " + configFile + "' to create it")
+				tui.Info(fmt.Sprintf("run 'openshitctl deploy --output %s' to create it", configFile))
 			}
 			return nil, fmt.Errorf("configuration file not found: %s: %w", configFile, err)
 		}
@@ -33,20 +33,20 @@ func LoadConfig(configFile string) (*config.Config, error) {
 }
 
 // Loads .env first (non-overwriting) so env vars always win.
-func HandleCredentials(cfg *config.Config) *credentials.ProxmoxCredentials {
+func handleCredentials(cfg *config.Config) *credentials.ProxmoxCredentials {
 	envPath := credentials.EnvFilePath(cfgFile)
 	if err := credentials.LoadEnvFile(envPath); err != nil {
-		tui.Warn("failed to load credentials from " + envPath + ": " + err.Error())
+		tui.Warn(fmt.Sprintf("failed to load credentials from %s: %v", envPath, err))
 	}
 
 	creds := credentials.GetProxmoxCredentials(cfg)
 	if !creds.IsValid() {
 		tui.Warn("no proxmox credentials found")
-		tui.Info("set credentials via environment variables or " + envPath + ":")
+		tui.Info(fmt.Sprintf("set credentials via environment variables or %s:", envPath))
 		tui.Info("  PROXMOX_VE_USERNAME + PROXMOX_VE_PASSWORD")
 		tui.Info("  or PROXMOX_VE_API_TOKEN")
 	} else {
-		tui.Info("using credentials from " + creds.Source.String())
+		tui.Info(fmt.Sprintf("using credentials from %s", creds.Source))
 		if creds.ConfigCredentialsOverridden {
 			tui.Warn("environment credentials override proxmox credentials in config file")
 		}
@@ -57,7 +57,7 @@ func HandleCredentials(cfg *config.Config) *credentials.ProxmoxCredentials {
 	return creds
 }
 
-func ValidateConfig(cfg *config.Config) *config.ValidationResult {
+func validateConfig(cfg *config.Config) *config.ValidationResult {
 	result := cfg.Validate()
 	if !result.IsValid() {
 		fmt.Println(ValidationSummary(result))
@@ -99,7 +99,7 @@ func projectRootOrFallback() string {
 
 // CreateOKDProvisioner creates a provisioner, optionally with Proxmox credentials.
 // Pass nil for creds when the operation only needs local tools (oc, dnsmasq, systemctl).
-func CreateOKDProvisioner(cfg *config.Config, creds *credentials.ProxmoxCredentials) *okd.Provisioner {
+func createOKDProvisioner(cfg *config.Config, creds *credentials.ProxmoxCredentials) *okd.Provisioner {
 	projectRoot := projectRootOrFallback()
 
 	opts := []okd.ProvisionerOption{
@@ -114,12 +114,12 @@ func CreateOKDProvisioner(cfg *config.Config, creds *credentials.ProxmoxCredenti
 	return okd.New(cfg.Distribution.Version, opts...)
 }
 
-type DeploymentOptions struct {
+type deploymentOptions struct {
 	ShowStartMessage bool
 	Credentials      *credentials.ProxmoxCredentials
 }
 
-func ExecuteFullDeployment(ctx context.Context, cfg *config.Config, opts DeploymentOptions) error {
+func executeFullDeployment(ctx context.Context, cfg *config.Config, opts deploymentOptions) error {
 	clusterFQDN := cfg.Cluster.Name + "." + cfg.Cluster.Domain
 
 	var credsEnv []string

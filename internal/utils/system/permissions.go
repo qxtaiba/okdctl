@@ -1,14 +1,13 @@
 package system
 
 import (
-	"fmt"
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"runtime"
 	"strings"
-
 )
 
 func SudoAvailable() bool {

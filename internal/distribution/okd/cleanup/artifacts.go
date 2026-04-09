@@ -28,11 +28,16 @@ func SafeRemoveWithLogger(ctx context.Context, path, description string, logger 
 		return fmt.Errorf("could not remove %s: %w", description, err)
 	}
 
-	if _, err := os.Stat(path); !os.IsNotExist(err) {
+	if _, err := os.Stat(path); err == nil {
 		if logger != nil {
 			logger.Warn(fmt.Sprintf("%s still exists after removal", description))
 		}
 		return fmt.Errorf("%s still exists after removal", description)
+	} else if !os.IsNotExist(err) {
+		// Cannot verify removal (e.g. permission denied on parent); assume success.
+		if logger != nil {
+			logger.Warn(fmt.Sprintf("could not verify removal of %s: %v", description, err))
+		}
 	}
 
 	return nil

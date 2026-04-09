@@ -20,6 +20,10 @@ variable "bridge" {
   description = "network bridge to use for vm network interfaces"
   type        = string
   default     = "vmbr0"
+  validation {
+    condition     = can(regex("^vmbr[0-9]+$", var.bridge))
+    error_message = "bridge must be a valid proxmox bridge name (e.g., vmbr0, vmbr1)."
+  }
 }
 
 variable "os_storage" {
@@ -42,12 +46,20 @@ variable "master_os_disk_size_gb" {
   description = "os disk size for master nodes (defaults to os_disk_size_gb)"
   type        = number
   default     = null
+  validation {
+    condition     = var.master_os_disk_size_gb == null || (var.master_os_disk_size_gb >= 20 && var.master_os_disk_size_gb <= 1000)
+    error_message = "master os disk size must be between 20gb and 1000gb."
+  }
 }
 
 variable "worker_os_disk_size_gb" {
   description = "os disk size for worker nodes (defaults to os_disk_size_gb)"
   type        = number
   default     = null
+  validation {
+    condition     = var.worker_os_disk_size_gb == null || (var.worker_os_disk_size_gb >= 20 && var.worker_os_disk_size_gb <= 1000)
+    error_message = "worker os disk size must be between 20gb and 1000gb."
+  }
 }
 
 variable "data_storage" {
@@ -258,6 +270,10 @@ variable "additional_networks" {
     tag    = optional(number)
   }))
   default = []
+  validation {
+    condition     = alltrue([for net in var.additional_networks : net.tag == null || (net.tag >= 1 && net.tag <= 4094)])
+    error_message = "vlan tags must be between 1 and 4094."
+  }
 }
 
 variable "numa_enabled" {

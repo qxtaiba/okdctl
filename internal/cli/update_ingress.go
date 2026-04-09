@@ -37,16 +37,16 @@ func init() {
 	updateIngressCmd.Flags().BoolVar(&updateIngressRemoveHAProxy, "remove-haproxy", true, "remove haproxy from bastion after dns switch")
 }
 
-func runUpdateIngress(cmd *cobra.Command, args []string) error {
+func runUpdateIngress(cmd *cobra.Command, _ []string) error {
 	ctx := cmd.Context()
 
-	cfg, err := LoadConfig(cfgFile)
+	cfg, err := loadConfig(cfgFile)
 	if err != nil {
 		return err
 	}
 
 	clusterFQDN := cfg.Cluster.Name + "." + cfg.Cluster.Domain
-	tui.Warn("this will update dns for '" + clusterFQDN + "' to use loadbalancer ips")
+	tui.Warn(fmt.Sprintf("this will update dns for '%s' to use loadbalancer ips", clusterFQDN))
 	if updateIngressRemoveHAProxy {
 		tui.Warn("haproxy will be stopped and disabled on the bastion")
 	}
@@ -62,7 +62,7 @@ func runUpdateIngress(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	p := CreateOKDProvisioner(cfg, nil)
+	p := createOKDProvisioner(cfg, nil)
 
 	tui.Info("detecting ingress strategy and loadbalancer ips...")
 	startTime := time.Now()

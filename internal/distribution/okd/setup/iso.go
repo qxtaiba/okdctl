@@ -194,12 +194,9 @@ func (p *Phase) buildNodeISO(ctx context.Context, cfg *config.Config, node NodeI
 
 	args = append(args, "-o", outputPath, fcosISO)
 
-	result, err := p.Exec.Run(ctx, "coreos-installer", args...)
+	_, err = p.Exec.RunChecked(ctx, "coreos-installer", args...)
 	if err != nil {
-		return err
-	}
-	if result.ExitCode != 0 {
-		return fmt.Errorf("coreos-installer failed: %s", result.Stderr)
+		return fmt.Errorf("coreos-installer failed: %w", err)
 	}
 
 	return nil

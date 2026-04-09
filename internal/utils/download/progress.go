@@ -58,8 +58,8 @@ func (pw *progressWriter) Write(p []byte) (int, error) {
 			if percent != pw.lastPercent.Load() {
 				pw.lastPercent.Store(percent)
 				pw.mu.Lock()
+				defer pw.mu.Unlock()
 				pw.printProgress()
-				pw.mu.Unlock()
 			}
 		}
 	}
@@ -87,8 +87,8 @@ func (pw *progressWriter) finish() {
 	if pw.total > 0 && !pw.isStopped() {
 		pw.lastPercent.Store(100)
 		pw.mu.Lock()
+		defer pw.mu.Unlock()
 		pw.printProgress()
-		pw.mu.Unlock()
 		if pw.isTTY {
 			fmt.Print("\n")
 		}

@@ -33,7 +33,8 @@ func init() {
 	deployCmd.Flags().BoolVar(&deployNonInteractive, "non-interactive", false, "use all defaults without prompts")
 }
 
-func runDeploy(cmd *cobra.Command, args []string) error {
+func runDeploy(cmd *cobra.Command, _ []string) error {
+	ctx := cmd.Context()
 	configExists := false
 	var cfg *config.Config
 
@@ -42,7 +43,11 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 		loader := config.NewLoader()
 		loadedCfg, loadErr := loader.LoadFile(deployOutputFile)
 		if loadErr != nil {
-			tui.Warn("existing config could not be loaded, starting fresh")
+			tui.Warn(fmt.Sprintf("existing config could not be loaded: %v", loadErr))
+			if deployNonInteractive {
+				return fmt.Errorf("cannot proceed in non-interactive mode with invalid config: %w", loadErr)
+			}
+			tui.Info("starting fresh with defaults")
 			configExists = false
 		} else {
 			cfg = loadedCfg
@@ -61,7 +66,7 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 		return saveConfig(cfg, deployOutputFile)
 	}
 
-	result, welcomeMode, err := runWizardWithMode(cfg, configExists)
+	result, welcomeMode, err := runWizardWithMode(ctx, cfg, configExists)
 	if err != nil {
 		return fmt.Errorf("wizard failed: %w", err)
 	}
@@ -72,15 +77,20 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 	}
 
 	if welcomeMode == steps.WelcomeModeDeploy {
-		return runFullDeployment(cmd.Context(), cfg)
+		return runFullDeployment(ctx, cfg)
 	}
 
 	cfg = result.Config
+
+	// Guarantee secrets are cleared from the config struct, even on panic.
+	defer clearConfigCredentials(cfg)
 
 	if err := writeCredentialsEnv(cfg, deployOutputFile); err != nil {
 		return fmt.Errorf("failed to save credentials: %w", err)
 	}
 
+	// Clear secrets before saving so they never appear in YAML.
+	// The defer above is a safety net; this is the primary clear.
 	clearConfigCredentials(cfg)
 
 	if err := saveConfig(cfg, deployOutputFile); err != nil {
@@ -89,7 +99,7 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 
 	switch result.Action {
 	case wizard.ActionDeploy:
-		if err := runFullDeployment(cmd.Context(), cfg); err != nil {
+		if err := runFullDeployment(ctx, cfg); err != nil {
 			return fmt.Errorf("deployment failed: %w", err)
 		}
 	case wizard.ActionExit:
@@ -100,7 +110,7 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 }
 
 func saveConfig(cfg *config.Config, path string) error {
-	if result := ValidateConfig(cfg); !result.IsValid() {
+	if result := validateConfig(cfg); !result.IsValid() {
 		tui.Warn("configuration has validation warnings but will still be saved")
 	}
 
@@ -113,10 +123,10 @@ func saveConfig(cfg *config.Config, path string) error {
 }
 
 func runFullDeployment(ctx context.Context, cfg *config.Config) error {
-	creds := HandleCredentials(cfg)
+	creds := handleCredentials(cfg)
 	defer creds.Zeroize()
 
-	return ExecuteFullDeployment(ctx, cfg, DeploymentOptions{
+	return executeFullDeployment(ctx, cfg, deploymentOptions{
 		ShowStartMessage: true,
 		Credentials:      creds,
 	})
@@ -124,7 +134,7 @@ func runFullDeployment(ctx context.Context, cfg *config.Config) error {
 
 func showExitSummary(path string) {
 	fmt.Println()
-	tui.Info("configuration saved to " + path)
+	tui.Info(fmt.Sprintf("configuration saved to %s", path))
 }
 
 func writeCredentialsEnv(cfg *config.Config, configPath string) error {
@@ -155,7 +165,7 @@ func writeCredentialsEnv(cfg *config.Config, configPath string) error {
 		return err
 	}
 
-	tui.Info("credentials saved to " + envPath)
+	tui.Info(fmt.Sprintf("credentials saved to %s", envPath))
 	return nil
 }
 

@@ -52,7 +52,7 @@ func setAddonSetting(name, key string) wizard.ConfigSetter {
 }
 
 var AddonsStepDefinition = wizard.StepDefinition{
-	ID:           "addons",
+	ID:           wizard.StepIDAddons,
 	Title:        "cluster addons",
 	DisplayTitle: "configure cluster addons",
 	Description:  "enable optional cluster features",

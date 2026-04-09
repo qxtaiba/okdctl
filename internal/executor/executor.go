@@ -71,6 +71,9 @@ type Result struct {
 	Duration time.Duration
 }
 
+// Run executes a command and returns its result. The returned *Result is
+// always non-nil, even when error is non-nil — callers can safely access
+// result.ExitCode and result.Stderr without a nil guard.
 func (e *Executor) Run(ctx context.Context, name string, args ...string) (*Result, error) {
 	return e.run(ctx, nil, name, args...)
 }
@@ -146,15 +149,30 @@ func (e *Executor) RunInteractive(ctx context.Context, name string, args ...stri
 	return cmd.Run()
 }
 
-func (e *Executor) RunWithOutput(ctx context.Context, name string, args ...string) (string, error) {
+// RunChecked executes a command and returns an error if it fails to execute
+// or exits with a non-zero status. Use this when the caller expects success;
+// use Run directly when non-zero exit codes are acceptable (probing, cleanup).
+func (e *Executor) RunChecked(ctx context.Context, name string, args ...string) (*Result, error) {
 	result, err := e.Run(ctx, name, args...)
 	if err != nil {
-		return "", err
+		return result, err
 	}
 	if result.ExitCode != 0 {
-		return result.Stdout, fmt.Errorf("command failed with exit code %d: %s", result.ExitCode, result.Stderr)
+		return result, fmt.Errorf("%s failed (exit %d): %s", name, result.ExitCode, strings.TrimSpace(result.Stderr))
 	}
-	return strings.TrimSpace(result.Stdout), nil
+	return result, nil
+}
+
+// RunWithStdinChecked is like RunChecked but pipes input to the command's stdin.
+func (e *Executor) RunWithStdinChecked(ctx context.Context, input string, name string, args ...string) (*Result, error) {
+	result, err := e.RunWithStdin(ctx, input, name, args...)
+	if err != nil {
+		return result, err
+	}
+	if result.ExitCode != 0 {
+		return result, fmt.Errorf("%s failed (exit %d): %s", name, result.ExitCode, strings.TrimSpace(result.Stderr))
+	}
+	return result, nil
 }
 
 func CommandExists(name string) bool {

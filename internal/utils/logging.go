@@ -1,3 +1,5 @@
+// Package utils provides the shared Logger interface and noop implementation
+// used across openshitctl's internal packages.
 package utils
 
 import "log/slog"

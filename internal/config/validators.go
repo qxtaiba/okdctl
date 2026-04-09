@@ -1,7 +1,6 @@
 package config
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"net"
@@ -121,7 +120,7 @@ func (v *networkingValidator) Validate(cfg *Config, result *ValidationResult) {
 
 	if IsValidCIDR(podCIDR) && IsValidCIDR(serviceCIDR) {
 		if overlap, err := netutil.CIDRsOverlap(podCIDR, serviceCIDR); err != nil {
-			result.AddError(FieldNetworkingPodCIDR, err.Error())
+			result.AddError(FieldNetworkingPodCIDR, fmt.Sprintf("cannot check overlap with service CIDR: %v", err))
 		} else if overlap {
 			result.AddError(FieldNetworkingPodCIDR, "overlaps with service CIDR")
 		}
@@ -129,7 +128,7 @@ func (v *networkingValidator) Validate(cfg *Config, result *ValidationResult) {
 
 	if IsValidCIDR(podCIDR) && IsValidCIDR(machineCIDR) {
 		if overlap, err := netutil.CIDRsOverlap(podCIDR, machineCIDR); err != nil {
-			result.AddError(FieldNetworkingPodCIDR, err.Error())
+			result.AddError(FieldNetworkingPodCIDR, fmt.Sprintf("cannot check overlap with machine CIDR: %v", err))
 		} else if overlap {
 			result.AddError(FieldNetworkingPodCIDR, "overlaps with machine CIDR")
 		}
@@ -137,7 +136,7 @@ func (v *networkingValidator) Validate(cfg *Config, result *ValidationResult) {
 
 	if IsValidCIDR(serviceCIDR) && IsValidCIDR(machineCIDR) {
 		if overlap, err := netutil.CIDRsOverlap(serviceCIDR, machineCIDR); err != nil {
-			result.AddError(FieldNetworkingServiceCIDR, err.Error())
+			result.AddError(FieldNetworkingServiceCIDR, fmt.Sprintf("cannot check overlap with machine CIDR: %v", err))
 		} else if overlap {
 			result.AddError(FieldNetworkingServiceCIDR, "overlaps with machine CIDR")
 		}
@@ -160,7 +159,7 @@ func (v *advancedNetworkingValidator) Validate(cfg *Config, result *ValidationRe
 
 	if gateway != "" && IsValidIP(gateway) {
 		if ok, err := netutil.IPInCIDR(gateway, machineCIDR); err != nil {
-			result.AddError(FieldNetworkingGateway, err.Error())
+			result.AddError(FieldNetworkingGateway, fmt.Sprintf("cannot check CIDR membership: %v", err))
 		} else if !ok {
 			result.AddError(FieldNetworkingGateway, fmt.Sprintf("must be within machine CIDR %s", machineCIDR))
 		}
@@ -168,7 +167,7 @@ func (v *advancedNetworkingValidator) Validate(cfg *Config, result *ValidationRe
 
 	if bastionIP != "" && IsValidIP(bastionIP) {
 		if ok, err := netutil.IPInCIDR(bastionIP, machineCIDR); err != nil {
-			result.AddError(FieldNetworkingBastionIP, err.Error())
+			result.AddError(FieldNetworkingBastionIP, fmt.Sprintf("cannot check CIDR membership: %v", err))
 		} else if !ok {
 			result.AddError(FieldNetworkingBastionIP, fmt.Sprintf("must be within machine CIDR %s", machineCIDR))
 		}
@@ -176,7 +175,7 @@ func (v *advancedNetworkingValidator) Validate(cfg *Config, result *ValidationRe
 
 	if staticIPStart != "" && IsValidIP(staticIPStart) {
 		if ok, err := netutil.IPInCIDR(staticIPStart, machineCIDR); err != nil {
-			result.AddError(FieldNetworkingStaticIPStart, err.Error())
+			result.AddError(FieldNetworkingStaticIPStart, fmt.Sprintf("cannot check CIDR membership: %v", err))
 		} else if !ok {
 			result.AddError(FieldNetworkingStaticIPStart, fmt.Sprintf("must be within machine CIDR %s", machineCIDR))
 		}
@@ -217,7 +216,7 @@ func (v *advancedNetworkingValidator) Validate(cfg *Config, result *ValidationRe
 
 		if prevField, exists := seen[normalized]; exists {
 			result.AddError(fmt.Sprintf("networking.%s", nip.name),
-				fmt.Sprintf("IP %s is already used by %s", nip.ip, prevField))
+				fmt.Sprintf("ip %s is already used by %s", nip.ip, prevField))
 		} else {
 			seen[normalized] = nip.name
 		}
@@ -363,7 +362,7 @@ func validateOKDVersion(version string) error {
 // ValidateHAMasters validates that master count is odd for proper etcd quorum.
 func validateHAMasters(count int) error {
 	if count > 1 && count%2 == 0 {
-		return fmt.Errorf("master replicas should be odd for HA quorum (1, 3, or 5), got %d", count)
+		return fmt.Errorf("master replicas should be odd for ha quorum (1, 3, or 5), got %d", count)
 	}
 	return nil
 }
@@ -371,40 +370,40 @@ func validateHAMasters(count int) error {
 func ValidateOKDConfig(cfg *Config, result *ValidationResult) {
 	if cfg.Distribution.Type == DistributionOKD {
 		if err := validateOKDVersion(cfg.Distribution.Version); err != nil {
-			result.AddError(FieldDistributionVersion, err.Error())
+			result.AddError(FieldDistributionVersion, fmt.Sprintf("invalid okd version: %v", err))
 		}
 
 		if cfg.Topology.ControlPlane.Memory < MinMemoryMBControlPlaneOKD {
 			result.AddError(FieldTopologyControlPlaneMemory,
-				fmt.Sprintf("OKD requires at least %d MB (%d GB) of memory for control plane nodes", MinMemoryMBControlPlaneOKD, MinMemoryMBControlPlaneOKD/1024))
+				fmt.Sprintf("okd requires at least %d MB (%d GB) of memory for control plane nodes", MinMemoryMBControlPlaneOKD, MinMemoryMBControlPlaneOKD/1024))
 		}
 
 		if cfg.Topology.ControlPlane.CPU < MinCPUControlPlaneOKD {
 			result.AddError(FieldTopologyControlPlaneCPU,
-				fmt.Sprintf("OKD requires at least %d vCPUs for control plane nodes", MinCPUControlPlaneOKD))
+				fmt.Sprintf("okd requires at least %d vCPUs for control plane nodes", MinCPUControlPlaneOKD))
 		}
 
 		if cfg.Topology.ControlPlane.Disk < MinDiskGBControlPlaneOKD {
 			result.AddError(FieldTopologyControlPlaneDisk,
-				fmt.Sprintf("OKD requires at least %d GB of disk space for control plane nodes", MinDiskGBControlPlaneOKD))
+				fmt.Sprintf("okd requires at least %d GB of disk space for control plane nodes", MinDiskGBControlPlaneOKD))
 		}
 
 		if err := validateHAMasters(cfg.Topology.ControlPlane.Count); err != nil {
-			result.AddError(FieldTopologyControlPlaneCount, err.Error())
+			result.AddError(FieldTopologyControlPlaneCount, fmt.Sprintf("invalid master count: %v", err))
 		}
 
 		if cfg.Topology.Workers.Count > 0 {
 			if cfg.Topology.Workers.Memory < MinMemoryMBWorkerOKD {
 				result.AddError(FieldTopologyWorkersMemory,
-					fmt.Sprintf("OKD workers require at least %d MB (%d GB) of memory", MinMemoryMBWorkerOKD, MinMemoryMBWorkerOKD/1024))
+					fmt.Sprintf("okd workers require at least %d MB (%d GB) of memory", MinMemoryMBWorkerOKD, MinMemoryMBWorkerOKD/1024))
 			}
 			if cfg.Topology.Workers.CPU < MinCPUWorkerOKD {
 				result.AddError(FieldTopologyWorkersCPU,
-					fmt.Sprintf("OKD workers require at least %d vCPUs", MinCPUWorkerOKD))
+					fmt.Sprintf("okd workers require at least %d vCPUs", MinCPUWorkerOKD))
 			}
 			if cfg.Topology.Workers.Disk < MinDiskGBWorkerOKD {
 				result.AddError(FieldTopologyWorkersDisk,
-					fmt.Sprintf("OKD workers require at least %d GB of disk space", MinDiskGBWorkerOKD))
+					fmt.Sprintf("okd workers require at least %d GB of disk space", MinDiskGBWorkerOKD))
 			}
 		}
 	}
@@ -546,31 +545,6 @@ func ValidatePortNumber(value string) error {
 	if port < 1 || port > 65535 {
 		return errors.New("must be between 1 and 65535")
 	}
-	return nil
-}
-
-func ValidateIPRange(value string) error {
-	parts := strings.Split(value, "-")
-	if len(parts) != 2 {
-		return errors.New("invalid range format (e.g., 192.168.1.200-192.168.1.230)")
-	}
-
-	startIPStr := strings.TrimSpace(parts[0])
-	endIPStr := strings.TrimSpace(parts[1])
-
-	startIP := net.ParseIP(startIPStr)
-	if startIP == nil {
-		return fmt.Errorf("invalid start ip: %s", startIPStr)
-	}
-	endIP := net.ParseIP(endIPStr)
-	if endIP == nil {
-		return fmt.Errorf("invalid end ip: %s", endIPStr)
-	}
-
-	if bytes.Compare(startIP.To16(), endIP.To16()) > 0 {
-		return errors.New("start ip must be less than or equal to end ip")
-	}
-
 	return nil
 }
 

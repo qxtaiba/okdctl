@@ -3,7 +3,6 @@ package cluster
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strings"
 )
@@ -14,7 +13,7 @@ func (c *K8sClient) PendingCSRs(ctx context.Context) ([]CSR, error) {
 		return nil, err
 	}
 	if result.ExitCode != 0 {
-		return nil, fmt.Errorf("failed to get CSRs: %w", errors.New(strings.TrimSpace(result.Stderr)))
+		return nil, fmt.Errorf("failed to get CSRs: %s", strings.TrimSpace(result.Stderr))
 	}
 
 	var csrList struct {
