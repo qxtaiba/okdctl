@@ -418,7 +418,7 @@ func (s *NodePlacementStep) View(width, height int) string {
 		}
 
 		b.WriteString(indicator + " " + titleStyle.Render(sec.title))
-		b.WriteString("\n")
+		b.WriteString("\n\n")
 
 		// Section content
 		if sectionHasFocus || secIdx < len(s.sections) {
