@@ -178,6 +178,19 @@ resource "proxmox_virtual_environment_vm" "master" {
     serial       = "OS-DISK"
   }
 
+  dynamic "disk" {
+    for_each = var.master_data_disk_size_gb > 0 ? [1] : []
+    content {
+      datastore_id = var.data_storage
+      size         = var.master_data_disk_size_gb
+      interface    = "scsi1"
+      iothread     = true
+      ssd          = false
+      discard      = "on"
+      serial       = "CEPH-DATA"
+    }
+  }
+
   cdrom {
     file_id   = var.master_isos[count.index]
     interface = "ide2"
@@ -284,14 +297,17 @@ resource "proxmox_virtual_environment_vm" "worker" {
     serial       = "OS-DISK"
   }
 
-  disk {
-    datastore_id = var.data_storage
-    size         = var.data_disk_size_gb
-    interface    = "scsi1"
-    iothread     = true
-    ssd          = false
-    discard      = "on"
-    serial       = "CEPH-DATA"
+  dynamic "disk" {
+    for_each = var.worker_data_disk_size_gb > 0 ? [1] : []
+    content {
+      datastore_id = var.data_storage
+      size         = var.worker_data_disk_size_gb
+      interface    = "scsi1"
+      iothread     = true
+      ssd          = false
+      discard      = "on"
+      serial       = "CEPH-DATA"
+    }
   }
 
   cdrom {

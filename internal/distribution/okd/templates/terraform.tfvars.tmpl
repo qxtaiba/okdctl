@@ -16,7 +16,8 @@ worker_count = {{ .WorkerCount }}
 os_disk_size_gb = {{ .OSDiskSizeGB }}
 master_os_disk_size_gb = {{ .MasterOSDiskSizeGB }}
 worker_os_disk_size_gb = {{ .WorkerOSDiskSizeGB }}
-data_disk_size_gb = {{ .DataDiskSizeGB }}
+worker_data_disk_size_gb = {{ .WorkerDataDiskSizeGB }}
+master_data_disk_size_gb = {{ .MasterDataDiskSizeGB }}
 
 # default vm resources (fallback if per-node resources not specified)
 cpu_cores = {{ .MasterCPUCores }}

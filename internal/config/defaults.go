@@ -88,7 +88,8 @@ func DefaultConfig() *Config {
 			InstallTimeout:   7200,
 		},
 		Disks: DisksConfig{
-			DataSizeGB: 500,
+			WorkerDataSizeGB: 500,
+			MasterDataSizeGB: 0,
 		},
 	}
 }

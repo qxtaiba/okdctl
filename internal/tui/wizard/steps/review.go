@@ -258,9 +258,14 @@ func (s *ReviewStep) renderCompute(st sectionStyles) string {
 		b.WriteString(st.kvPair("workers", wSpec))
 		b.WriteString("\n")
 
-		if s.cfg.Disks.DataSizeGB > 0 {
-			cephSpec := fmt.Sprintf("%d GB per worker (%d GB total)", s.cfg.Disks.DataSizeGB, s.cfg.Disks.DataSizeGB*wCount)
-			b.WriteString(st.kvPair("ceph data disk", cephSpec))
+		if s.cfg.Disks.WorkerDataSizeGB > 0 {
+			cephSpec := fmt.Sprintf("%d gb per worker (%d gb total)", s.cfg.Disks.WorkerDataSizeGB, s.cfg.Disks.WorkerDataSizeGB*wCount)
+			b.WriteString(st.kvPair("worker data disk", cephSpec))
+			b.WriteString("\n")
+		}
+		if s.cfg.Disks.MasterDataSizeGB > 0 {
+			cephSpec := fmt.Sprintf("%d gb per master (%d gb total)", s.cfg.Disks.MasterDataSizeGB, s.cfg.Disks.MasterDataSizeGB*cpCount)
+			b.WriteString(st.kvPair("master data disk", cephSpec))
 			b.WriteString("\n")
 		}
 	}
