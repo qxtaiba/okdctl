@@ -112,13 +112,29 @@ func (p *Phase) installTool(ctx context.Context, tool externalTool) error {
 func (p *Phase) installTerraform(ctx context.Context) error {
 	p.Log.Info("tools: installing terraform via hashicorp repository")
 
-	repoURL := "https://rpm.releases.hashicorp.com/RHEL/hashicorp.repo"
-	if err := runSudoCommand(ctx, "dnf", "config-manager", "--add-repo", repoURL); err != nil {
-		return fmt.Errorf("failed to add HashiCorp repository: %w", err)
+	switch p.OS.Family {
+	case "debian":
+		if err := system.RunSudo(ctx, "sh", "-c",
+			"wget -O- https://apt.releases.hashicorp.com/gpg | gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg"); err != nil {
+			return fmt.Errorf("failed to add HashiCorp GPG key: %w", err)
+		}
+		if err := system.RunSudo(ctx, "sh", "-c",
+			`echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" > /etc/apt/sources.list.d/hashicorp.list`); err != nil {
+			return fmt.Errorf("failed to add HashiCorp repository: %w", err)
+		}
+		if err := system.RunSudo(ctx, "apt-get", "update"); err != nil {
+			return fmt.Errorf("failed to update package list: %w", err)
+		}
+	default: // rhel family
+		repoURL := "https://rpm.releases.hashicorp.com/RHEL/hashicorp.repo"
+		if err := runSudoCommand(ctx, "dnf", "config-manager", "--add-repo", repoURL); err != nil {
+			return fmt.Errorf("failed to add HashiCorp repository: %w", err)
+		}
 	}
+
 	p.Log.Info("tools: hashicorp repository added")
 
-	if err := runSudoCommand(ctx, "dnf", "install", "-y", "terraform"); err != nil {
+	if err := p.Pkg.Install(ctx, []string{"terraform"}, p.Log); err != nil {
 		return fmt.Errorf("failed to install terraform: %w", err)
 	}
 

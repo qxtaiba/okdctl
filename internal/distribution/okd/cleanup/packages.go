@@ -9,8 +9,22 @@ import (
 
 	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/packages"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/setup"
+	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/platform"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
 )
+
+// detectPackageManager returns a PackageManager for the current host OS,
+// falling back to RHEL/dnf if detection fails (cleanup runs on the bastion).
+func detectPackageManager(logger *slog.Logger) platform.PackageManager {
+	detectedOS, err := platform.Detect()
+	if err != nil {
+		if logger != nil {
+			logger.Warn(fmt.Sprintf("platform: %v, defaulting to rhel", err))
+		}
+		detectedOS = platform.OS{Family: "rhel", ID: "unknown", Version: ""}
+	}
+	return platform.NewPackageManager(detectedOS)
+}
 
 // InstalledPackages returns the list of dnf packages installed by the setup phase.
 // haproxy, httpd, dnsmasq are removed by their respective cleanup functions
@@ -34,8 +48,10 @@ func InstalledBinaries() []string {
 func Packages(ctx context.Context, logger *slog.Logger) error {
 	var hasErrors bool
 
+	pm := detectPackageManager(logger)
+
 	pkgList := InstalledPackages()
-	if err := packages.Remove(ctx, pkgList, logger); err != nil {
+	if err := packages.Remove(ctx, pm, pkgList, logger); err != nil {
 		logger.Warn("cleanup: some packages could not be removed (may require manual cleanup)")
 		hasErrors = true
 	}

@@ -11,6 +11,7 @@ import (
 	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/firewall"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/packages"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/netutil"
+	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/platform"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
 )
 
@@ -34,7 +35,8 @@ func stopAndDisableService(ctx context.Context, serviceName string, logger *slog
 }
 
 func removePackage(ctx context.Context, pkg string, logger *slog.Logger) {
-	if err := packages.Remove(ctx, []string{pkg}, logger); err != nil && logger != nil {
+	pm := detectPackageManager(logger)
+	if err := packages.Remove(ctx, pm, []string{pkg}, logger); err != nil && logger != nil {
 		logger.Warn(fmt.Sprintf("cleanup: failed to remove %s package: %v", pkg, err))
 	}
 }
@@ -92,8 +94,12 @@ func Apache(ctx context.Context, logger *slog.Logger) error {
 		logger.Info("cleanup: apache httpd service")
 	}
 
-	stopAndDisableService(ctx, "httpd", logger)
-	removePackage(ctx, "httpd", logger)
+	detectedOS, _ := platform.Detect()
+	svcName := detectedOS.ApacheServiceName()
+	pkgName := detectedOS.ApachePackageName()
+
+	stopAndDisableService(ctx, svcName, logger)
+	removePackage(ctx, pkgName, logger)
 
 	if logger != nil {
 		logger.Info("cleanup: apache httpd completed")

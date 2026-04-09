@@ -12,6 +12,7 @@ import (
 	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/dns"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/executor"
+	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/platform"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
 )
 
@@ -67,11 +68,22 @@ type NodeInfo struct {
 
 type Phase struct {
 	phase.BasePhase
+	OS  platform.OS
+	Pkg platform.PackageManager
 }
 
 func New(exec *executor.Executor, logger *slog.Logger, version string) *Phase {
+	detectedOS, err := platform.Detect()
+	if err != nil {
+		if logger != nil {
+			logger.Warn(fmt.Sprintf("platform: %v", err))
+		}
+		detectedOS = platform.OS{Family: "rhel", ID: "unknown", Version: ""}
+	}
 	return &Phase{
 		BasePhase: phase.NewBasePhase(exec, logger, version),
+		OS:        detectedOS,
+		Pkg:       platform.NewPackageManager(detectedOS),
 	}
 }
 

@@ -39,11 +39,11 @@ const (
 	StepConfigureDNS      distribution.StepID = "configure-dns"
 )
 
-func systemPackages() []string {
+func systemPackages(apachePackage string) []string {
 	return []string{
 		"coreos-installer",
 		"haproxy",
-		"httpd",
+		apachePackage,
 		"dnsmasq",
 	}
 }
@@ -53,7 +53,7 @@ func (p *Phase) newInstallPackagesStep(opts Options) distribution.ProvisioningSt
 		Description("installing required system packages").
 		Fatal(false).
 		Execute(func(ctx context.Context) error {
-			sysPkgs := systemPackages()
+			sysPkgs := systemPackages(p.OS.ApachePackageName())
 
 			var packagesToInstall []string
 			for _, pkg := range sysPkgs {
@@ -71,8 +71,8 @@ func (p *Phase) newInstallPackagesStep(opts Options) distribution.ProvisioningSt
 				return nil
 			}
 
-			p.Log.Info(fmt.Sprintf("packages: installing %d missing package(s) via dnf", len(packagesToInstall)))
-			if err := packages.Install(ctx, packagesToInstall, "system dependencies", p.Log); err != nil {
+			p.Log.Info(fmt.Sprintf("packages: installing %d missing package(s)", len(packagesToInstall)))
+			if err := packages.Install(ctx, p.Pkg, packagesToInstall, "system dependencies", p.Log); err != nil {
 				p.Log.Warn(fmt.Sprintf("packages: installation had warnings: %v", err))
 			}
 
