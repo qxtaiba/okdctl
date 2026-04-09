@@ -47,7 +47,7 @@ variable "master_os_disk_size_gb" {
   type        = number
   default     = null
   validation {
-    condition     = var.master_os_disk_size_gb == null || (var.master_os_disk_size_gb >= 20 && var.master_os_disk_size_gb <= 1000)
+    condition     = var.master_os_disk_size_gb == null ? true : (var.master_os_disk_size_gb >= 20 && var.master_os_disk_size_gb <= 1000)
     error_message = "master os disk size must be between 20gb and 1000gb."
   }
 }
@@ -57,7 +57,7 @@ variable "worker_os_disk_size_gb" {
   type        = number
   default     = null
   validation {
-    condition     = var.worker_os_disk_size_gb == null || (var.worker_os_disk_size_gb >= 20 && var.worker_os_disk_size_gb <= 1000)
+    condition     = var.worker_os_disk_size_gb == null ? true : (var.worker_os_disk_size_gb >= 20 && var.worker_os_disk_size_gb <= 1000)
     error_message = "worker os disk size must be between 20gb and 1000gb."
   }
 }
