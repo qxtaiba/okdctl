@@ -3,8 +3,25 @@ package platform
 import (
 	"fmt"
 	"os"
+	"runtime"
 	"strings"
 )
+
+// DownloadArch returns the architecture suffix for tool download URLs.
+func DownloadArch() string {
+	if runtime.GOARCH == "arm64" {
+		return "arm64"
+	}
+	return "amd64"
+}
+
+// CoreOSArch returns the CoreOS stream architecture key.
+func CoreOSArch() string {
+	if runtime.GOARCH == "arm64" {
+		return "aarch64"
+	}
+	return "x86_64"
+}
 
 // OS describes the detected host operating system.
 type OS struct {

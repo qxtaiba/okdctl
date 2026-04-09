@@ -271,11 +271,12 @@ func (s *ReviewStep) renderCompute(st sectionStyles) string {
 			b.WriteString(st.kvPair("worker data disk", cephSpec))
 			b.WriteString("\n")
 		}
-		if s.cfg.Disks.MasterDataSizeGB > 0 {
-			cephSpec := fmt.Sprintf("%d gb per master (%d gb total)", s.cfg.Disks.MasterDataSizeGB, s.cfg.Disks.MasterDataSizeGB*cpCount)
-			b.WriteString(st.kvPair("master data disk", cephSpec))
-			b.WriteString("\n")
-		}
+	}
+
+	if s.cfg.Disks.MasterDataSizeGB > 0 {
+		cephSpec := fmt.Sprintf("%d gb per master (%d gb total)", s.cfg.Disks.MasterDataSizeGB, s.cfg.Disks.MasterDataSizeGB*cpCount)
+		b.WriteString(st.kvPair("master data disk", cephSpec))
+		b.WriteString("\n")
 	}
 
 	// Resource totals
