@@ -15,7 +15,8 @@ const (
 	FieldTypeText FieldType = iota
 	FieldTypePassword
 	FieldTypeNumber
-	FieldTypeBool // For yes/no fields
+	FieldTypeBool   // For yes/no fields
+	FieldTypeSelect // Dropdown selector with predefined options
 )
 
 type ConfigSetter func(cfg *config.Config, value string) error
@@ -27,6 +28,7 @@ type FieldDefinition struct {
 	Default  string             // Default value (as string)
 	Help     string             // Help text shown next to label
 	Type     FieldType          // Field type
+	Options  []string           // Options for FieldTypeSelect
 	Required bool               // Whether field is required
 	Validate func(string) error // Optional validation function
 
@@ -72,7 +74,7 @@ func NewDataDrivenStep(def StepDefinition) *DataDrivenStep {
 		fields := make([]components.FormField, 0, len(sectionDef.Fields))
 
 		for fieldIdx, fieldDef := range sectionDef.Fields {
-			fields = append(fields, buildInputField(fieldDef))
+			fields = append(fields, buildFormField(fieldDef))
 			fieldKeys[fieldDef.Key] = fieldLocation{
 				section: sectionIdx,
 				field:   fieldIdx,
@@ -129,7 +131,16 @@ func NewDataDrivenStep(def StepDefinition) *DataDrivenStep {
 	return step
 }
 
-func buildInputField(def FieldDefinition) *components.InputField {
+func buildFormField(def FieldDefinition) components.FormField {
+	if def.Type == FieldTypeSelect {
+		sf := components.NewSelectField(def.Label, def.Options)
+		sf.Help = def.Help
+		if def.Default != "" {
+			sf.SetDefault(def.Default)
+		}
+		return sf
+	}
+
 	var field *components.InputField
 	if def.Type == FieldTypePassword {
 		field = components.NewPasswordField(def.Label, def.Default)
