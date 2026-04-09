@@ -69,7 +69,7 @@ func NewDataDrivenStep(def StepDefinition) *DataDrivenStep {
 	fieldKeys := make(map[string]fieldLocation)
 
 	for sectionIdx, sectionDef := range def.Sections {
-		fields := make([]*components.InputField, 0, len(sectionDef.Fields))
+		fields := make([]components.FormField, 0, len(sectionDef.Fields))
 
 		for fieldIdx, fieldDef := range sectionDef.Fields {
 			fields = append(fields, buildInputField(fieldDef))
@@ -142,10 +142,10 @@ func buildInputField(def FieldDefinition) *components.InputField {
 	return field
 }
 
-// getField resolves a field key to its InputField by walking the
+// getField resolves a field key to its FormField by walking the
 // fieldKeys → Section → Group → Field chain, returning nil if any level
 // is missing. Callers must handle the nil case.
-func (s *DataDrivenStep) getField(key string) *components.InputField {
+func (s *DataDrivenStep) getField(key string) components.FormField {
 	loc, ok := s.fieldKeys[key]
 	if !ok {
 		return nil

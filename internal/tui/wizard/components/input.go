@@ -13,6 +13,23 @@ import (
 	"github.com/qxtaiba/okd-proxmox-cli/internal/tui"
 )
 
+// FormField is the interface that all form field types must implement
+// to be usable in an InputGroup.
+type FormField interface {
+	Value() string
+	SetValue(value string)
+	SetDefault(value string)
+	IsDefault() bool
+	Focus() tea.Cmd
+	Blur()
+	IsFocused() bool
+	SetWidth(width int)
+	Validate() error
+	Error() error
+	Update(msg tea.Msg) (FormField, tea.Cmd)
+	View() string
+}
+
 type InputField struct {
 	Label       string
 	Placeholder string
@@ -134,7 +151,7 @@ func (f *InputField) Error() error {
 	return f.err
 }
 
-func (f *InputField) Update(msg tea.Msg) (*InputField, tea.Cmd) {
+func (f *InputField) updateInternal(msg tea.Msg) (*InputField, tea.Cmd) {
 	if !f.focused {
 		return f, nil
 	}
@@ -154,6 +171,10 @@ func (f *InputField) Update(msg tea.Msg) (*InputField, tea.Cmd) {
 	}
 
 	return f, cmd
+}
+
+func (f *InputField) Update(msg tea.Msg) (FormField, tea.Cmd) {
+	return f.updateInternal(msg)
 }
 
 func (f *InputField) View() string {
@@ -245,14 +266,14 @@ func (e *scrubbedError) Unwrap() error { return e.inner }
 
 type InputGroup struct {
 	Title  string
-	fields []*InputField
+	fields []FormField
 
 	focusIndex int
 	focused    bool
 	width      int
 }
 
-func NewInputGroup(title string, fields ...*InputField) *InputGroup {
+func NewInputGroup(title string, fields ...FormField) *InputGroup {
 	return &InputGroup{
 		Title:      title,
 		fields:     fields,
@@ -260,26 +281,17 @@ func NewInputGroup(title string, fields ...*InputField) *InputGroup {
 	}
 }
 
-func (g *InputGroup) AddField(field *InputField) {
+func (g *InputGroup) AddField(field FormField) {
 	g.fields = append(g.fields, field)
 }
 
-func (g *InputGroup) Fields() []*InputField {
+func (g *InputGroup) Fields() []FormField {
 	return g.fields
 }
 
-func (g *InputGroup) Field(index int) *InputField {
+func (g *InputGroup) Field(index int) FormField {
 	if index >= 0 && index < len(g.fields) {
 		return g.fields[index]
-	}
-	return nil
-}
-
-func (g *InputGroup) FieldByLabel(label string) *InputField {
-	for _, f := range g.fields {
-		if f.Label == label {
-			return f
-		}
 	}
 	return nil
 }
