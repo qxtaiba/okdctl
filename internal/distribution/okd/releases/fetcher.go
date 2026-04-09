@@ -200,58 +200,31 @@ func sortAndClassifySeries(seriesMap map[string]*OKDReleaseSeries) []OKDReleaseS
 
 	for seriesIdx := range result {
 		isFirstSeries := seriesIdx == 0
-		assignReleaseTypesToSeries(&result[seriesIdx], latestMinor, isFirstSeries)
-		syncSeriesLatestVersion(&result[seriesIdx])
+		for versionIdx := range result[seriesIdx].Versions {
+			v := &result[seriesIdx].Versions[versionIdx]
+			switch {
+			case v.Stable && v.Latest && isFirstSeries:
+				v.Type = ReleaseTypeLatestStable
+			case v.Stable && result[seriesIdx].Minor <= latestMinor-2:
+				v.Type = ReleaseTypeLTS
+			case v.Stable:
+				v.Type = ReleaseTypeStable
+			case v.Latest || (versionIdx == 0 && !result[seriesIdx].Versions[0].Stable):
+				v.Type = ReleaseTypeLatestPreview
+			default:
+				v.Type = ReleaseTypePreview
+			}
+		}
+		// Sync series.Latest with the (possibly updated) version entry.
+		for versionIdx := range result[seriesIdx].Versions {
+			if result[seriesIdx].Versions[versionIdx].Version == result[seriesIdx].Latest.Version {
+				result[seriesIdx].Latest = result[seriesIdx].Versions[versionIdx]
+				break
+			}
+		}
 	}
 
 	return result
-}
-
-func assignReleaseTypesToSeries(series *OKDReleaseSeries, latestMinor int, isFirstSeries bool) {
-	for versionIdx := range series.Versions {
-		version := &series.Versions[versionIdx]
-		isFirstVersion := versionIdx == 0
-		assignReleaseTypeToVersion(version, series, latestMinor, isFirstSeries, isFirstVersion)
-	}
-}
-
-func assignReleaseTypeToVersion(version *OKDVersion, series *OKDReleaseSeries, latestMinor int, isFirstSeries, isFirstVersion bool) {
-	if version.Stable {
-		version.Type = determineStableReleaseType(version, series.Minor, latestMinor, isFirstSeries)
-	} else {
-		version.Type = determinePreviewReleaseType(version, series, isFirstVersion)
-	}
-}
-
-func determineStableReleaseType(version *OKDVersion, seriesMinor, latestMinor int, isFirstSeries bool) ReleaseType {
-	if version.Latest && isFirstSeries {
-		return ReleaseTypeLatestStable
-	}
-	if seriesMinor <= latestMinor-2 {
-		return ReleaseTypeLTS
-	}
-	return ReleaseTypeStable
-}
-
-func determinePreviewReleaseType(version *OKDVersion, series *OKDReleaseSeries, isFirstVersion bool) ReleaseType {
-	// A version is latest preview if explicitly marked or if it's the first version
-	// and the series has no stable versions at the top
-	if version.Latest || (isFirstVersion && !series.Versions[0].Stable) {
-		return ReleaseTypeLatestPreview
-	}
-	return ReleaseTypePreview
-}
-
-func syncSeriesLatestVersion(series *OKDReleaseSeries) {
-	if series.Latest.Version == "" {
-		return
-	}
-	for versionIdx := range series.Versions {
-		if series.Versions[versionIdx].Version == series.Latest.Version {
-			series.Latest = series.Versions[versionIdx]
-			return
-		}
-	}
 }
 
 // OKD uses different prerelease patterns across versions:

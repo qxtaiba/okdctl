@@ -21,11 +21,7 @@ var (
 	proxmoxNamePattern   = regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9_-]*$`)
 )
 
-type requiredFieldsValidator struct{}
-
-func (v *requiredFieldsValidator) Scope() ValidationScope { return ScopeRequired }
-
-func (v *requiredFieldsValidator) Validate(cfg *Config, result *ValidationResult) {
+func validateRequired(cfg *Config, result *ValidationResult) {
 	if cfg.Cluster.Name == "" {
 		result.AddError(FieldClusterName, "cluster name is required")
 	}
@@ -61,11 +57,7 @@ func (v *requiredFieldsValidator) Validate(cfg *Config, result *ValidationResult
 	}
 }
 
-type enumsValidator struct{}
-
-func (v *enumsValidator) Scope() ValidationScope { return ScopeEnums }
-
-func (v *enumsValidator) Validate(cfg *Config, result *ValidationResult) {
+func validateEnums(cfg *Config, result *ValidationResult) {
 	if cfg.Cluster.Name != "" {
 		if !IsValidDNSLabel(cfg.Cluster.Name) {
 			result.AddError(FieldClusterName, "must be a valid DNS label (lowercase, alphanumeric, hyphens)")
@@ -87,11 +79,46 @@ func (v *enumsValidator) Validate(cfg *Config, result *ValidationResult) {
 	}
 }
 
-type networkingValidator struct{}
+// checkCIDROverlap appends a validation error if the two CIDRs overlap.
+func checkCIDROverlap(cidr1, cidr2, field, otherName string, result *ValidationResult) {
+	if !IsValidCIDR(cidr1) || !IsValidCIDR(cidr2) {
+		return
+	}
+	overlap, err := netutil.CIDRsOverlap(cidr1, cidr2)
+	if err != nil {
+		result.AddError(field, fmt.Sprintf("cannot check overlap with %s: %v", otherName, err))
+	} else if overlap {
+		result.AddError(field, "overlaps with "+otherName)
+	}
+}
 
-func (v *networkingValidator) Scope() ValidationScope { return ScopeNetworking }
+// checkIPInCIDR appends a validation error if ip is not within cidr.
+func checkIPInCIDR(ip, cidr, field, cidrName string, result *ValidationResult) {
+	if ip == "" || !IsValidIP(ip) || !IsValidCIDR(cidr) {
+		return
+	}
+	ok, err := netutil.IPInCIDR(ip, cidr)
+	if err != nil {
+		result.AddError(field, fmt.Sprintf("cannot check CIDR membership: %v", err))
+	} else if !ok {
+		result.AddError(field, fmt.Sprintf("must be within %s %s", cidrName, cidr))
+	}
+}
 
-func (v *networkingValidator) Validate(cfg *Config, result *ValidationResult) {
+// checkNodeResources validates CPU/memory/disk minimums for a node config.
+func checkNodeResources(node NodeConfig, minCPU, minMemory, minDisk int, cpuField, memField, diskField, label string, result *ValidationResult) {
+	if node.CPU < minCPU {
+		result.AddError(cpuField, fmt.Sprintf("must have at least %d vCPUs for %s", minCPU, label))
+	}
+	if node.Memory < minMemory {
+		result.AddError(memField, fmt.Sprintf("must have at least %d MB of memory for %s", minMemory, label))
+	}
+	if node.Disk < minDisk {
+		result.AddError(diskField, fmt.Sprintf("must have at least %d GB of disk space for %s", minDisk, label))
+	}
+}
+
+func validateNetworking(cfg *Config, result *ValidationResult) {
 	if cfg.Networking.MachineCIDR != "" && !IsValidCIDR(cfg.Networking.MachineCIDR) {
 		result.AddError(FieldNetworkingMachineCIDR, "must be a valid CIDR notation")
 	}
@@ -118,36 +145,12 @@ func (v *networkingValidator) Validate(cfg *Config, result *ValidationResult) {
 	serviceCIDR := cfg.Networking.ServiceCIDR
 	machineCIDR := cfg.Networking.MachineCIDR
 
-	if IsValidCIDR(podCIDR) && IsValidCIDR(serviceCIDR) {
-		if overlap, err := netutil.CIDRsOverlap(podCIDR, serviceCIDR); err != nil {
-			result.AddError(FieldNetworkingPodCIDR, fmt.Sprintf("cannot check overlap with service CIDR: %v", err))
-		} else if overlap {
-			result.AddError(FieldNetworkingPodCIDR, "overlaps with service CIDR")
-		}
-	}
-
-	if IsValidCIDR(podCIDR) && IsValidCIDR(machineCIDR) {
-		if overlap, err := netutil.CIDRsOverlap(podCIDR, machineCIDR); err != nil {
-			result.AddError(FieldNetworkingPodCIDR, fmt.Sprintf("cannot check overlap with machine CIDR: %v", err))
-		} else if overlap {
-			result.AddError(FieldNetworkingPodCIDR, "overlaps with machine CIDR")
-		}
-	}
-
-	if IsValidCIDR(serviceCIDR) && IsValidCIDR(machineCIDR) {
-		if overlap, err := netutil.CIDRsOverlap(serviceCIDR, machineCIDR); err != nil {
-			result.AddError(FieldNetworkingServiceCIDR, fmt.Sprintf("cannot check overlap with machine CIDR: %v", err))
-		} else if overlap {
-			result.AddError(FieldNetworkingServiceCIDR, "overlaps with machine CIDR")
-		}
-	}
+	checkCIDROverlap(podCIDR, serviceCIDR, FieldNetworkingPodCIDR, "service CIDR", result)
+	checkCIDROverlap(podCIDR, machineCIDR, FieldNetworkingPodCIDR, "machine CIDR", result)
+	checkCIDROverlap(serviceCIDR, machineCIDR, FieldNetworkingServiceCIDR, "machine CIDR", result)
 }
 
-type advancedNetworkingValidator struct{}
-
-func (v *advancedNetworkingValidator) Scope() ValidationScope { return ScopeAdvancedNetworking }
-
-func (v *advancedNetworkingValidator) Validate(cfg *Config, result *ValidationResult) {
+func validateAdvancedNetworking(cfg *Config, result *ValidationResult) {
 	machineCIDR := cfg.Networking.MachineCIDR
 	gateway := cfg.Networking.Gateway
 	bastionIP := cfg.Networking.Bastion.IP
@@ -157,29 +160,9 @@ func (v *advancedNetworkingValidator) Validate(cfg *Config, result *ValidationRe
 		return
 	}
 
-	if gateway != "" && IsValidIP(gateway) {
-		if ok, err := netutil.IPInCIDR(gateway, machineCIDR); err != nil {
-			result.AddError(FieldNetworkingGateway, fmt.Sprintf("cannot check CIDR membership: %v", err))
-		} else if !ok {
-			result.AddError(FieldNetworkingGateway, fmt.Sprintf("must be within machine CIDR %s", machineCIDR))
-		}
-	}
-
-	if bastionIP != "" && IsValidIP(bastionIP) {
-		if ok, err := netutil.IPInCIDR(bastionIP, machineCIDR); err != nil {
-			result.AddError(FieldNetworkingBastionIP, fmt.Sprintf("cannot check CIDR membership: %v", err))
-		} else if !ok {
-			result.AddError(FieldNetworkingBastionIP, fmt.Sprintf("must be within machine CIDR %s", machineCIDR))
-		}
-	}
-
-	if staticIPStart != "" && IsValidIP(staticIPStart) {
-		if ok, err := netutil.IPInCIDR(staticIPStart, machineCIDR); err != nil {
-			result.AddError(FieldNetworkingStaticIPStart, fmt.Sprintf("cannot check CIDR membership: %v", err))
-		} else if !ok {
-			result.AddError(FieldNetworkingStaticIPStart, fmt.Sprintf("must be within machine CIDR %s", machineCIDR))
-		}
-	}
+	checkIPInCIDR(gateway, machineCIDR, FieldNetworkingGateway, "machine CIDR", result)
+	checkIPInCIDR(bastionIP, machineCIDR, FieldNetworkingBastionIP, "machine CIDR", result)
+	checkIPInCIDR(staticIPStart, machineCIDR, FieldNetworkingStaticIPStart, "machine CIDR", result)
 
 	if staticIPStart != "" {
 		netmask := cfg.Networking.StaticIP.Netmask
@@ -224,46 +207,20 @@ func (v *advancedNetworkingValidator) Validate(cfg *Config, result *ValidationRe
 
 }
 
-type resourcesValidator struct{}
-
-func (v *resourcesValidator) Scope() ValidationScope { return ScopeResources }
-
-func (v *resourcesValidator) Validate(cfg *Config, result *ValidationResult) {
-	cp := cfg.Topology.ControlPlane
-
-	if cp.CPU < MinCPUGeneric {
-		result.AddError(FieldTopologyControlPlaneCPU, fmt.Sprintf("must have at least %d CPU", MinCPUGeneric))
-	}
-
+func validateResources(cfg *Config, result *ValidationResult) {
 	minMemory := getMinMemoryForDistribution(cfg.Distribution.Type)
-	if cp.Memory < minMemory {
-		result.AddError(FieldTopologyControlPlaneMemory,
-			fmt.Sprintf("must have at least %d MB of memory for %s", minMemory, cfg.Distribution.Type))
-	}
+	checkNodeResources(cfg.Topology.ControlPlane, MinCPUGeneric, minMemory, MinDiskGBGeneric,
+		FieldTopologyControlPlaneCPU, FieldTopologyControlPlaneMemory, FieldTopologyControlPlaneDisk,
+		string(cfg.Distribution.Type), result)
 
-	if cp.Disk < MinDiskGBGeneric {
-		result.AddError(FieldTopologyControlPlaneDisk, fmt.Sprintf("must have at least %d GB of disk space", MinDiskGBGeneric))
-	}
-
-	w := cfg.Topology.Workers
-	if w.Count > 0 {
-		if w.CPU < MinCPUGeneric {
-			result.AddError(FieldTopologyWorkersCPU, fmt.Sprintf("must have at least %d CPU", MinCPUGeneric))
-		}
-		if w.Memory < MinMemoryMBGeneric {
-			result.AddError(FieldTopologyWorkersMemory, fmt.Sprintf("must have at least %d MB of memory", MinMemoryMBGeneric))
-		}
-		if w.Disk < MinDiskGBGeneric {
-			result.AddError(FieldTopologyWorkersDisk, fmt.Sprintf("must have at least %d GB of disk space", MinDiskGBGeneric))
-		}
+	if cfg.Topology.Workers.Count > 0 {
+		checkNodeResources(cfg.Topology.Workers, MinCPUGeneric, MinMemoryMBGeneric, MinDiskGBGeneric,
+			FieldTopologyWorkersCPU, FieldTopologyWorkersMemory, FieldTopologyWorkersDisk,
+			"workers", result)
 	}
 }
 
-type providerValidator struct{}
-
-func (v *providerValidator) Scope() ValidationScope { return ScopeProvider }
-
-func (v *providerValidator) Validate(cfg *Config, result *ValidationResult) {
+func validateProvider(cfg *Config, result *ValidationResult) {
 	switch cfg.Provider.Type {
 	case ProviderProxmox:
 		validateProxmoxConfig(cfg.Provider.Proxmox, result)
@@ -306,13 +263,7 @@ func validateProxmoxConfig(proxmox *ProxmoxConfig, result *ValidationResult) {
 	}
 }
 
-// addonsValidator checks structural correctness; addon-specific validation
-// is delegated to each addon's ValidateSettings at install time.
-type addonsValidator struct{}
-
-func (v *addonsValidator) Scope() ValidationScope { return ScopeFeatures }
-
-func (v *addonsValidator) Validate(cfg *Config, result *ValidationResult) {
+func validateAddons(cfg *Config, result *ValidationResult) {
 	if cfg.Addons == nil {
 		return
 	}
@@ -325,11 +276,7 @@ func (v *addonsValidator) Validate(cfg *Config, result *ValidationResult) {
 	}
 }
 
-type httpServerValidator struct{}
-
-func (v *httpServerValidator) Scope() ValidationScope { return ScopeHTTPServer }
-
-func (v *httpServerValidator) Validate(cfg *Config, result *ValidationResult) {
+func validateHTTPServer(cfg *Config, result *ValidationResult) {
 	if cfg.HTTPServer.Port != 0 {
 		if cfg.HTTPServer.Port < 1 || cfg.HTTPServer.Port > 65535 {
 			result.AddError(FieldHTTPServerPort, "must be a valid port number (1-65535)")
@@ -337,11 +284,7 @@ func (v *httpServerValidator) Validate(cfg *Config, result *ValidationResult) {
 	}
 }
 
-type distributionValidator struct{}
-
-func (v *distributionValidator) Scope() ValidationScope { return ScopeDistribution }
-
-func (v *distributionValidator) Validate(cfg *Config, result *ValidationResult) {
+func validateDistribution(cfg *Config, result *ValidationResult) {
 	if cfg.Distribution.Type == DistributionOKD {
 		ValidateOKDConfig(cfg, result)
 	}
@@ -373,47 +316,23 @@ func ValidateOKDConfig(cfg *Config, result *ValidationResult) {
 			result.AddError(FieldDistributionVersion, fmt.Sprintf("invalid okd version: %v", err))
 		}
 
-		if cfg.Topology.ControlPlane.Memory < MinMemoryMBControlPlaneOKD {
-			result.AddError(FieldTopologyControlPlaneMemory,
-				fmt.Sprintf("okd requires at least %d MB (%d GB) of memory for control plane nodes", MinMemoryMBControlPlaneOKD, MinMemoryMBControlPlaneOKD/1024))
-		}
-
-		if cfg.Topology.ControlPlane.CPU < MinCPUControlPlaneOKD {
-			result.AddError(FieldTopologyControlPlaneCPU,
-				fmt.Sprintf("okd requires at least %d vCPUs for control plane nodes", MinCPUControlPlaneOKD))
-		}
-
-		if cfg.Topology.ControlPlane.Disk < MinDiskGBControlPlaneOKD {
-			result.AddError(FieldTopologyControlPlaneDisk,
-				fmt.Sprintf("okd requires at least %d GB of disk space for control plane nodes", MinDiskGBControlPlaneOKD))
-		}
+		checkNodeResources(cfg.Topology.ControlPlane, MinCPUControlPlaneOKD, MinMemoryMBControlPlaneOKD, MinDiskGBControlPlaneOKD,
+			FieldTopologyControlPlaneCPU, FieldTopologyControlPlaneMemory, FieldTopologyControlPlaneDisk,
+			"okd control plane", result)
 
 		if err := validateHAMasters(cfg.Topology.ControlPlane.Count); err != nil {
 			result.AddError(FieldTopologyControlPlaneCount, fmt.Sprintf("invalid master count: %v", err))
 		}
 
 		if cfg.Topology.Workers.Count > 0 {
-			if cfg.Topology.Workers.Memory < MinMemoryMBWorkerOKD {
-				result.AddError(FieldTopologyWorkersMemory,
-					fmt.Sprintf("okd workers require at least %d MB (%d GB) of memory", MinMemoryMBWorkerOKD, MinMemoryMBWorkerOKD/1024))
-			}
-			if cfg.Topology.Workers.CPU < MinCPUWorkerOKD {
-				result.AddError(FieldTopologyWorkersCPU,
-					fmt.Sprintf("okd workers require at least %d vCPUs", MinCPUWorkerOKD))
-			}
-			if cfg.Topology.Workers.Disk < MinDiskGBWorkerOKD {
-				result.AddError(FieldTopologyWorkersDisk,
-					fmt.Sprintf("okd workers require at least %d GB of disk space", MinDiskGBWorkerOKD))
-			}
+			checkNodeResources(cfg.Topology.Workers, MinCPUWorkerOKD, MinMemoryMBWorkerOKD, MinDiskGBWorkerOKD,
+				FieldTopologyWorkersCPU, FieldTopologyWorkersMemory, FieldTopologyWorkersDisk,
+				"okd workers", result)
 		}
 	}
 }
 
-type filesValidator struct{}
-
-func (v *filesValidator) Scope() ValidationScope { return ScopeFiles }
-
-func (v *filesValidator) Validate(cfg *Config, result *ValidationResult) {
+func validateFiles(cfg *Config, result *ValidationResult) {
 	if cfg.Files.PullSecret != "" {
 		path := system.ExpandPath(cfg.Files.PullSecret)
 		if !system.FileExists(path) {

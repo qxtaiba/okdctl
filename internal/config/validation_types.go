@@ -79,33 +79,25 @@ type ValidationOptions struct {
 	Scope ValidationScope
 }
 
-type Validator interface {
-	Validate(cfg *Config, result *ValidationResult)
-	Scope() ValidationScope
+type validatorEntry struct {
+	scope    ValidationScope
+	validate func(*Config, *ValidationResult)
 }
 
-type ValidatorRegistry struct {
-	validators []Validator
+var validators = []validatorEntry{
+	{ScopeRequired, validateRequired},
+	{ScopeEnums, validateEnums},
+	{ScopeNetworking, validateNetworking},
+	{ScopeAdvancedNetworking, validateAdvancedNetworking},
+	{ScopeResources, validateResources},
+	{ScopeProvider, validateProvider},
+	{ScopeFeatures, validateAddons},
+	{ScopeHTTPServer, validateHTTPServer},
+	{ScopeDistribution, validateDistribution},
+	{ScopeFiles, validateFiles},
 }
 
-func NewValidatorRegistry() *ValidatorRegistry {
-	return &ValidatorRegistry{
-		validators: []Validator{
-			&requiredFieldsValidator{},
-			&enumsValidator{},
-			&networkingValidator{},
-			&advancedNetworkingValidator{},
-			&resourcesValidator{},
-			&providerValidator{},
-			&addonsValidator{},
-			&httpServerValidator{},
-			&distributionValidator{},
-			&filesValidator{},
-		},
-	}
-}
-
-func (r *ValidatorRegistry) Validate(cfg *Config, opts ValidationOptions) *ValidationResult {
+func runValidators(cfg *Config, opts ValidationOptions) *ValidationResult {
 	result := &ValidationResult{}
 
 	if cfg == nil {
@@ -113,9 +105,9 @@ func (r *ValidatorRegistry) Validate(cfg *Config, opts ValidationOptions) *Valid
 		return result
 	}
 
-	for _, v := range r.validators {
-		if opts.Scope.HasScope(v.Scope()) {
-			v.Validate(cfg, result)
+	for _, v := range validators {
+		if opts.Scope.HasScope(v.scope) {
+			v.validate(cfg, result)
 		}
 	}
 
@@ -139,6 +131,5 @@ func (cfg *Config) ValidateQuick() *ValidationResult {
 }
 
 func ValidateWithOptions(cfg *Config, opts ValidationOptions) *ValidationResult {
-	registry := NewValidatorRegistry()
-	return registry.Validate(cfg, opts)
+	return runValidators(cfg, opts)
 }

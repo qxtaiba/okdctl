@@ -69,29 +69,3 @@ func (f *OKDVersionFetcher) saveToDiskCache(series []OKDReleaseSeries) {
 
 	_ = system.AtomicWrite(cachePath, data, 0644)
 }
-
-// isCacheFreshLocked reports whether the in-memory cache is populated and
-// within its TTL. The caller MUST hold f.mu (read or write) because this
-// function reads f.cache and f.cacheAt without acquiring the lock itself.
-func (f *OKDVersionFetcher) isCacheFreshLocked() bool {
-	return f.cache != nil && time.Since(f.cacheAt) < f.cacheTime
-}
-
-func (f *OKDVersionFetcher) updateMemoryCache(series []OKDReleaseSeries) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	f.cache = series
-	f.cacheAt = time.Now()
-}
-
-func (f *OKDVersionFetcher) getFromMemoryCache() ([]OKDReleaseSeries, bool) {
-	f.mu.RLock()
-	defer f.mu.RUnlock()
-	if f.isCacheFreshLocked() {
-		// Return a copy to avoid TOCTOU race with updateMemoryCache
-		result := make([]OKDReleaseSeries, len(f.cache))
-		copy(result, f.cache)
-		return result, true
-	}
-	return nil, false
-}

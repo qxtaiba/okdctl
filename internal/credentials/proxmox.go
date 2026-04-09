@@ -132,6 +132,19 @@ func configHasCredentials(px *config.ProxmoxConfig) bool {
 	return px.Username != "" && px.Password != ""
 }
 
+func applyEnvSource(creds *ProxmoxCredentials, configHadCreds bool) {
+	creds.Source = SourceEnv
+	creds.ConfigCredentialsOverridden = configHadCreds
+	if endpoint := os.Getenv("PROXMOX_VE_ENDPOINT"); endpoint != "" {
+		creds.Endpoint = endpoint
+	} else {
+		creds.EndpointFromConfig = true
+	}
+	if os.Getenv("PROXMOX_VE_INSECURE") == "true" {
+		creds.Insecure = true
+	}
+}
+
 // GetProxmoxCredentials resolves credentials with priority:
 // 1. Environment variables (incl. .env file), 2. Config file (legacy).
 //
@@ -144,12 +157,6 @@ func configHasCredentials(px *config.ProxmoxConfig) bool {
 func GetProxmoxCredentials(cfg *config.Config) *ProxmoxCredentials {
 	creds := &ProxmoxCredentials{
 		Source: SourceNone,
-	}
-
-	applyInsecureOverride := func(creds *ProxmoxCredentials) {
-		if os.Getenv("PROXMOX_VE_INSECURE") == "true" {
-			creds.Insecure = true
-		}
 	}
 
 	if cfg == nil || cfg.Provider.Proxmox == nil {
@@ -174,28 +181,17 @@ func GetProxmoxCredentials(cfg *config.Config) *ProxmoxCredentials {
 
 	configHadCreds := configHasCredentials(px)
 
-	applyEnvOverrides := func(creds *ProxmoxCredentials) {
-		creds.Source = SourceEnv
-		creds.ConfigCredentialsOverridden = configHadCreds
-		if endpoint := os.Getenv("PROXMOX_VE_ENDPOINT"); endpoint != "" {
-			creds.Endpoint = endpoint
-		} else {
-			creds.EndpointFromConfig = true
-		}
-		applyInsecureOverride(creds)
-	}
-
 	// Priority 1: Environment variables (includes values loaded from .env file)
 	if token := os.Getenv("PROXMOX_VE_API_TOKEN"); token != "" {
 		creds.APIToken = []byte(token)
-		applyEnvOverrides(creds)
+		applyEnvSource(creds, configHadCreds)
 		return creds
 	}
 
 	if username, password := os.Getenv("PROXMOX_VE_USERNAME"), os.Getenv("PROXMOX_VE_PASSWORD"); username != "" && password != "" {
 		creds.Username = username
 		creds.Password = []byte(password)
-		applyEnvOverrides(creds)
+		applyEnvSource(creds, configHadCreds)
 		return creds
 	}
 

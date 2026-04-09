@@ -78,7 +78,7 @@ func (s *SecretStore) Install(ctx context.Context, env *addon.Environment) error
 
 	if system.FileExists(credPath) {
 		if err := addon.RetryDefault(ctx, func() error {
-			return s.createCredentialsSecret(ctx, env, credPath)
+			return s.createSecretFromFile(ctx, env, credPath, credentialsSecretName, "credentials_base64")
 		}); err != nil {
 			return err
 		}
@@ -86,7 +86,7 @@ func (s *SecretStore) Install(ctx context.Context, env *addon.Environment) error
 
 	if system.FileExists(tokenPath) {
 		if err := addon.RetryDefault(ctx, func() error {
-			return s.createTokenSecret(ctx, env, tokenPath)
+			return s.createSecretFromFile(ctx, env, tokenPath, tokenSecretName, "token")
 		}); err != nil {
 			return err
 		}
@@ -232,36 +232,16 @@ func buildOpaqueSecretManifest(namespace, name, dataKey, encodedValue string) st
 	return string(out)
 }
 
-func (s *SecretStore) createCredentialsSecret(ctx context.Context, env *addon.Environment, credPath string) error {
-	plaintext, err := s.readSecret(ctx, env, credPath)
+func (s *SecretStore) createSecretFromFile(ctx context.Context, env *addon.Environment, filePath, secretName, dataKey string) error {
+	plaintext, err := s.readSecret(ctx, env, filePath)
 	if err != nil {
-		return fmt.Errorf("failed to read 1password credentials: %w", err)
+		return fmt.Errorf("failed to read %s: %w", filepath.Base(filePath), err)
 	}
-
-	// Base64-encoded because the HelmRelease mounts it as a pre-encoded value
-	credentialsBase64 := base64.StdEncoding.EncodeToString([]byte(plaintext))
-
-	manifest := buildOpaqueSecretManifest(defaultNamespace, credentialsSecretName, "credentials_base64", credentialsBase64)
+	encoded := base64.StdEncoding.EncodeToString([]byte(strings.TrimSpace(plaintext)))
+	manifest := buildOpaqueSecretManifest(defaultNamespace, secretName, dataKey, encoded)
 	if _, err := env.Exec.RunWithStdinChecked(ctx, manifest, "oc", "apply", "-f", "-"); err != nil {
-		return fmt.Errorf("failed to apply 1password credentials secret: %w", err)
+		return fmt.Errorf("failed to apply %s secret: %w", secretName, err)
 	}
-
-	env.Logger.Info("secretstore: credentials secret applied")
-	return nil
-}
-
-func (s *SecretStore) createTokenSecret(ctx context.Context, env *addon.Environment, tokenPath string) error {
-	plaintext, err := s.readSecret(ctx, env, tokenPath)
-	if err != nil {
-		return fmt.Errorf("failed to read 1password token: %w", err)
-	}
-	token := strings.TrimSpace(plaintext)
-
-	manifest := buildOpaqueSecretManifest(defaultNamespace, tokenSecretName, "token", base64.StdEncoding.EncodeToString([]byte(token)))
-	if _, err := env.Exec.RunWithStdinChecked(ctx, manifest, "oc", "apply", "-f", "-"); err != nil {
-		return fmt.Errorf("failed to apply 1password token secret: %w", err)
-	}
-
-	env.Logger.Info("secretstore: token secret applied")
+	env.Logger.Info(fmt.Sprintf("secretstore: %s secret applied", secretName))
 	return nil
 }

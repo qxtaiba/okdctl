@@ -62,16 +62,12 @@ func (m *Manager) InstallAll(ctx context.Context) error {
 			continue
 		}
 
-		m.logger.Info(fmt.Sprintf("addons: installing %s", info.DisplayName))
-
-		env := m.buildEnv(a)
-		if err := a.Install(ctx, env); err != nil {
+		env, err := m.installAndVerify(ctx, a)
+		if err != nil {
 			failed[info.Name] = true
-			addonErr := fmt.Errorf("addon %s install failed: %w", info.Name, err)
-			m.logger.Warn(addonErr.Error())
-			errs = append(errs, addonErr)
+			m.logger.Warn(err.Error())
+			errs = append(errs, err)
 
-			// Best-effort rollback: uninstall partial resources so re-runs start clean
 			m.logger.Info(fmt.Sprintf("addons: rolling back %s", info.DisplayName))
 			if unErr := a.Uninstall(ctx, env); unErr != nil {
 				m.logger.Warn(fmt.Sprintf("addons: rollback of %s failed: %v", info.DisplayName, unErr))
@@ -79,16 +75,26 @@ func (m *Manager) InstallAll(ctx context.Context) error {
 			}
 			continue
 		}
-
-		// Post-install verify (warn-only — the addon is installed, verify is informational)
-		if vErr := a.Verify(ctx, env); vErr != nil {
-			m.logger.Warn(fmt.Sprintf("addons: %s installed but verify failed: %v", info.DisplayName, vErr))
-		} else {
-			m.logger.Info(fmt.Sprintf("addons: %s installed and verified", info.DisplayName))
-		}
 	}
 
 	return errors.Join(errs...)
+}
+
+// installAndVerify runs Install + Verify for a single addon, returning the
+// Environment on success or error. Used by both InstallAll and InstallOne.
+func (m *Manager) installAndVerify(ctx context.Context, a Addon) (*Environment, error) {
+	info := a.Info()
+	m.logger.Info(fmt.Sprintf("addons: installing %s", info.DisplayName))
+	env := m.buildEnv(a)
+	if err := a.Install(ctx, env); err != nil {
+		return env, fmt.Errorf("addon %s install failed: %w", info.Name, err)
+	}
+	if vErr := a.Verify(ctx, env); vErr != nil {
+		m.logger.Warn(fmt.Sprintf("addons: %s installed but verify failed: %v", info.DisplayName, vErr))
+	} else {
+		m.logger.Info(fmt.Sprintf("addons: %s installed and verified", info.DisplayName))
+	}
+	return env, nil
 }
 
 func (m *Manager) firstFailedDep(deps []string, failed map[string]bool) string {
@@ -128,8 +134,6 @@ func (m *Manager) InstallOne(ctx context.Context, name string) error {
 		return err
 	}
 
-	// Track successfully installed addons so we can roll them back if a later
-	// addon in the ordered set fails — matches InstallAll's rollback semantics.
 	type installedAddon struct {
 		a   Addon
 		env *Environment
@@ -141,35 +145,20 @@ func (m *Manager) InstallOne(ctx context.Context, name string) error {
 			return err
 		}
 
-		info := addon.Info()
-		m.logger.Info(fmt.Sprintf("addons: installing %s", info.DisplayName))
-
-		env := m.buildEnv(addon)
-		if err := addon.Install(ctx, env); err != nil {
-			installErr := fmt.Errorf("addon %s install failed: %w", info.Name, err)
-
-			// Best-effort rollback of previously-installed addons in reverse order.
-			// Evict their outputs too so dependent addons cannot read stale values
-			// from something that was just unwound.
+		env, err := m.installAndVerify(ctx, addon)
+		if err != nil {
+			// All-or-nothing: roll back previously-installed addons in reverse order.
 			for i := len(installed) - 1; i >= 0; i-- {
 				inst := installed[i]
 				m.logger.Info(fmt.Sprintf("addons: rolling back %s", inst.a.Info().DisplayName))
 				if unErr := inst.a.Uninstall(ctx, inst.env); unErr != nil {
 					m.logger.Warn(fmt.Sprintf("addons: rollback of %s failed: %v", inst.a.Info().DisplayName, unErr))
-					installErr = errors.Join(installErr, fmt.Errorf("addon %s rollback: %w", inst.a.Info().Name, unErr))
+					err = errors.Join(err, fmt.Errorf("addon %s rollback: %w", inst.a.Info().Name, unErr))
 				}
 			}
-
-			return installErr
+			return err
 		}
 		installed = append(installed, installedAddon{a: addon, env: env})
-
-		// Post-install verify (warn-only — the addon is installed, verify is informational)
-		if vErr := addon.Verify(ctx, env); vErr != nil {
-			m.logger.Warn(fmt.Sprintf("addons: %s installed but verify failed: %v", info.DisplayName, vErr))
-		} else {
-			m.logger.Info(fmt.Sprintf("addons: %s installed and verified", info.DisplayName))
-		}
 	}
 
 	return nil

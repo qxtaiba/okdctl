@@ -14,46 +14,26 @@ import (
 // If vip is non-empty, the secondary IP is removed from the bastion's interface and the API
 // is re-verified via the VIP after teardown to ensure kube-vip is handling traffic.
 func (p *Phase) RemoveHAProxy(ctx context.Context, vip string) error {
-	p.Log.Info("haproxy: stopping service")
-	result, err := p.Exec.Run(ctx, "sudo", "systemctl", "stop", "haproxy")
-	if err != nil {
-		return fmt.Errorf("failed to stop haproxy: %w", err)
+	if system.IsServiceActive(ctx, "haproxy") {
+		p.Log.Info("haproxy: stopping service")
+		if err := system.ManageService(ctx, system.ServiceStop, "haproxy", "haproxy service"); err != nil {
+			p.Log.Warn(fmt.Sprintf("haproxy: stop failed: %v", err))
+		}
 	}
-	if result.ExitCode != 0 {
-		p.Log.Warn(fmt.Sprintf("haproxy: stop returned non-zero exit code: %s", result.Stderr))
-	}
-
-	p.Log.Info("haproxy: disabling service")
-	result, err = p.Exec.Run(ctx, "sudo", "systemctl", "disable", "haproxy")
-	if err != nil {
-		return fmt.Errorf("failed to disable haproxy: %w", err)
-	}
-	if result.ExitCode != 0 {
-		p.Log.Warn(fmt.Sprintf("haproxy: disable returned non-zero exit code: %s", result.Stderr))
-	}
-
-	p.Log.Info("haproxy: removing configuration")
-	_, err = p.Exec.Run(ctx, "sudo", "rm", "-f", "/etc/haproxy/haproxy.cfg")
-	if err != nil {
-		p.Log.Warn(fmt.Sprintf("haproxy: failed to remove config: %v", err))
-	}
-
-	for _, port := range firewall.HAProxyFrontendPorts() {
-		portSpec := fmt.Sprintf("%d/%s", port.Number, port.Protocol)
-		p.Log.Info(fmt.Sprintf("haproxy: removing firewall rule for port %d", port.Number))
-		result, err = p.Exec.Run(ctx, "sudo", "firewall-cmd", "--permanent", "--remove-port="+portSpec)
-		if err != nil {
-			p.Log.Warn(fmt.Sprintf("haproxy: could not remove firewall rule for port %d: %v", port.Number, err))
-		} else if result.ExitCode != 0 {
-			p.Log.Warn(fmt.Sprintf("haproxy: could not remove firewall rule for port %d (may not exist)", port.Number))
+	if system.IsServiceEnabled(ctx, "haproxy") {
+		p.Log.Info("haproxy: disabling service")
+		if err := system.ManageService(ctx, system.ServiceDisable, "haproxy", "haproxy service"); err != nil {
+			p.Log.Warn(fmt.Sprintf("haproxy: disable failed: %v", err))
 		}
 	}
 
-	result, err = p.Exec.Run(ctx, "sudo", "firewall-cmd", "--reload")
-	if err != nil {
-		p.Log.Warn(fmt.Sprintf("haproxy: could not reload firewall: %v", err))
-	} else if result.ExitCode != 0 {
-		p.Log.Warn("haproxy: could not reload firewall")
+	p.Log.Info("haproxy: removing configuration")
+	if err := system.RemoveAll(ctx, "/etc/haproxy/haproxy.cfg", "haproxy config"); err != nil {
+		p.Log.Warn(fmt.Sprintf("haproxy: failed to remove config: %v", err))
+	}
+
+	if err := firewall.RemoveRules(ctx, firewall.HAProxyFrontendPorts(), true, p.Log); err != nil {
+		p.Log.Warn(fmt.Sprintf("haproxy: firewall cleanup incomplete: %v", err))
 	}
 
 	// Remove the VIP secondary IP from the bastion so traffic routes to the

@@ -121,110 +121,72 @@ func (p *Phase) installTerraform(ctx context.Context) error {
 	return nil
 }
 
-func (p *Phase) installYQ(ctx context.Context) error {
-	p.Log.Info("tools: installing yq from github releases")
+type binaryInstallSpec struct {
+	name            string
+	url             string
+	versionFlag     string
+	archiveBinary   string // if non-empty, download is a tar.gz; value is the binary path within the archive
+	stripComponents int
+}
 
-	downloadURL := "https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64"
-	tempFile := filepath.Join(os.TempDir(), "yq_linux_amd64")
+func (p *Phase) installBinary(ctx context.Context, spec binaryInstallSpec) error {
+	p.Log.Info(fmt.Sprintf("tools: installing %s", spec.name))
 
+	tempFile := filepath.Join(os.TempDir(), spec.name+"-download")
 	if err := download.Download(ctx, download.Options{
-		URL:         downloadURL,
-		OutputPath:  tempFile,
-		Description: "yq binary",
-		Timeout:     2 * time.Minute,
-		Logger:      p.Log,
+		URL: spec.url, OutputPath: tempFile,
+		Description: spec.name, Timeout: 2 * time.Minute, Logger: p.Log,
 	}); err != nil {
-		return fmt.Errorf("failed to download yq: %w", err)
+		return fmt.Errorf("failed to download %s: %w", spec.name, err)
 	}
 	defer func() { _ = os.Remove(tempFile) }()
 
-	if err := installBinaryToPath(ctx, tempFile, "yq"); err != nil {
+	srcPath := tempFile
+	if spec.archiveBinary != "" {
+		extractDir := filepath.Join(os.TempDir(), spec.name+"-extract")
+		if err := os.MkdirAll(extractDir, 0755); err != nil {
+			return fmt.Errorf("failed to create extract directory: %w", err)
+		}
+		defer func() { _ = os.RemoveAll(extractDir) }()
+		if err := download.ExtractTarGz(ctx, download.ExtractOptions{
+			ArchivePath: tempFile, DestDir: extractDir,
+			StripComponents: spec.stripComponents, CleanupArchive: true, Logger: p.Log,
+		}); err != nil {
+			return fmt.Errorf("failed to extract %s: %w", spec.name, err)
+		}
+		srcPath = filepath.Join(extractDir, spec.archiveBinary)
+	}
+
+	if err := installBinaryToPath(ctx, srcPath, spec.name); err != nil {
 		return err
 	}
-
-	if !isToolInstalled(toolYQ) {
-		return fmt.Errorf("yq installation verification failed")
+	if !isToolInstalled(externalTool(spec.name)) {
+		return fmt.Errorf("%s installation verification failed", spec.name)
 	}
-
-	version := getToolVersion("yq", "--version")
-	p.Log.Info(fmt.Sprintf("tools: yq installed (%s)", version))
+	p.Log.Info(fmt.Sprintf("tools: %s installed (%s)", spec.name, getToolVersion(spec.name, spec.versionFlag)))
 	return nil
+}
+
+func (p *Phase) installYQ(ctx context.Context) error {
+	return p.installBinary(ctx, binaryInstallSpec{
+		name: "yq", versionFlag: "--version",
+		url: "https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64",
+	})
 }
 
 func (p *Phase) installHelm(ctx context.Context) error {
-	p.Log.Info("tools: installing helm from official releases")
-
-	downloadURL := "https://get.helm.sh/helm-v3.17.3-linux-amd64.tar.gz"
-	tempFile := filepath.Join(os.TempDir(), "helm-linux-amd64.tar.gz")
-
-	if err := download.Download(ctx, download.Options{
-		URL:         downloadURL,
-		OutputPath:  tempFile,
-		Description: "helm archive",
-		Timeout:     2 * time.Minute,
-		Logger:      p.Log,
-	}); err != nil {
-		return fmt.Errorf("failed to download helm: %w", err)
-	}
-	defer func() { _ = os.Remove(tempFile) }()
-
-	extractDir := filepath.Join(os.TempDir(), "helm-extract")
-	if err := os.MkdirAll(extractDir, 0755); err != nil {
-		return fmt.Errorf("failed to create extract directory: %w", err)
-	}
-	defer func() { _ = os.RemoveAll(extractDir) }()
-
-	if err := download.ExtractTarGz(ctx, download.ExtractOptions{
-		ArchivePath:     tempFile,
-		DestDir:         extractDir,
-		StripComponents: 1, // Remove "linux-amd64/" prefix
-		CleanupArchive:  true,
-		Logger:          p.Log,
-	}); err != nil {
-		return fmt.Errorf("failed to extract helm: %w", err)
-	}
-
-	if err := installBinaryToPath(ctx, filepath.Join(extractDir, "helm"), "helm"); err != nil {
-		return err
-	}
-
-	if !isToolInstalled(toolHelm) {
-		return fmt.Errorf("helm installation verification failed")
-	}
-
-	version := getToolVersion("helm", "version")
-	p.Log.Info(fmt.Sprintf("tools: helm installed (%s)", version))
-	return nil
+	return p.installBinary(ctx, binaryInstallSpec{
+		name: "helm", versionFlag: "version",
+		url: "https://get.helm.sh/helm-v3.17.3-linux-amd64.tar.gz",
+		archiveBinary: "helm", stripComponents: 1,
+	})
 }
 
 func (p *Phase) installSops(ctx context.Context) error {
-	p.Log.Info("tools: installing sops from github releases")
-
-	downloadURL := "https://github.com/getsops/sops/releases/download/v3.9.4/sops-v3.9.4.linux.amd64"
-	tempFile := filepath.Join(os.TempDir(), "sops-linux-amd64")
-
-	if err := download.Download(ctx, download.Options{
-		URL:         downloadURL,
-		OutputPath:  tempFile,
-		Description: "sops binary",
-		Timeout:     2 * time.Minute,
-		Logger:      p.Log,
-	}); err != nil {
-		return fmt.Errorf("failed to download sops: %w", err)
-	}
-	defer func() { _ = os.Remove(tempFile) }()
-
-	if err := installBinaryToPath(ctx, tempFile, "sops"); err != nil {
-		return err
-	}
-
-	if !isToolInstalled(toolSops) {
-		return fmt.Errorf("sops installation verification failed")
-	}
-
-	version := getToolVersion("sops", "--version")
-	p.Log.Info(fmt.Sprintf("tools: sops installed (%s)", version))
-	return nil
+	return p.installBinary(ctx, binaryInstallSpec{
+		name: "sops", versionFlag: "--version",
+		url: "https://github.com/getsops/sops/releases/download/v3.9.4/sops-v3.9.4.linux.amd64",
+	})
 }
 
 func installBinaryToPath(ctx context.Context, srcPath, name string) error {

@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"sync"
 	"time"
 
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/httputil"
@@ -13,32 +12,19 @@ import (
 
 type OKDVersionFetcher struct {
 	httpClient   *http.Client
-	cacheTime    time.Duration // In-memory cache TTL
-	cache        []OKDReleaseSeries
-	cacheAt      time.Time
-	diskCacheTTL time.Duration // On-disk cache TTL
-	mu           sync.RWMutex  // Protects cache and cacheAt for thread-safe access
+	diskCacheTTL time.Duration
 }
 
 func NewOKDVersionFetcher() *OKDVersionFetcher {
 	return &OKDVersionFetcher{
 		httpClient:   httputil.NewAPIClient(),
-		cacheTime:    5 * time.Minute,
 		diskCacheTTL: DiskCacheTTL,
 	}
 }
 
-// FetchVersions uses a multi-level caching strategy:
-// 1. In-memory cache (5 min TTL) for fast repeated calls in the same process
-// 2. On-disk cache (1 hour TTL) to avoid network requests across CLI invocations
 func (f *OKDVersionFetcher) FetchVersions(ctx context.Context) ([]OKDReleaseSeries, error) {
-	if cached, ok := f.getFromMemoryCache(); ok {
+	if cached, _ := f.loadFromDiskCache(); cached != nil {
 		return cached, nil
-	}
-
-	if diskCached, _ := f.loadFromDiskCache(); diskCached != nil {
-		f.updateMemoryCache(diskCached)
-		return diskCached, nil
 	}
 
 	series, err := f.fetchFromNetwork(ctx)
@@ -46,9 +32,7 @@ func (f *OKDVersionFetcher) FetchVersions(ctx context.Context) ([]OKDReleaseSeri
 		return nil, err
 	}
 
-	f.updateMemoryCache(series)
 	f.saveToDiskCache(series)
-
 	return series, nil
 }
 
