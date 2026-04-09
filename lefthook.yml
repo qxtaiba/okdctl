@@ -1,3 +1,4 @@
+---
 pre-commit:
   parallel: true
   commands:
@@ -7,7 +8,6 @@ pre-commit:
       stage_fixed: true
     govet:
       run: go vet ./...
-
 pre-push:
   parallel: true
   commands:
