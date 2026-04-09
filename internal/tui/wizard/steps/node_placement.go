@@ -32,8 +32,18 @@ type vmAssignment struct {
 	selector *components.CompactSelector
 }
 
-// namedSelector is a labeled CompactSelector for infrastructure fields.
 type namedSelector struct {
+	label    string
+	selector *components.CompactSelector
+}
+
+// placementSection groups selectors under a header for rendering.
+type placementSection struct {
+	title string
+	rows  []placementRow
+}
+
+type placementRow struct {
 	label    string
 	selector *components.CompactSelector
 }
@@ -48,18 +58,14 @@ type NodePlacementStep struct {
 	discovery      *proxmoxDiscovery
 	discoveryErr   error
 
-	// Infrastructure selectors (bridge, storage)
-	infra []namedSelector
+	// All selectors organized into sections for rendering
+	sections []placementSection
 
-	// VM node selectors
-	bootstrap *components.CompactSelector
-	masters   []vmAssignment
-	workers   []vmAssignment
+	// Flat index into all rows across all sections
+	focusIndex int
+	totalSlots int
+	allRows    []placementRow // flattened for indexed access
 
-	// Flat focus list: infra[0..I-1], bootstrap=I, masters[I+1..], workers[...]
-	focusIndex     int
-	totalSlots     int
-	infraCount     int // number of infra selectors
 	availableNodes []string
 }
 
@@ -105,43 +111,8 @@ func (s *NodePlacementStep) fetchDiscovery() tea.Msg {
 func (s *NodePlacementStep) build(disc *proxmoxDiscovery, nodeNames []string) {
 	px := s.cfg.Provider.Proxmox
 	s.availableNodes = nodeNames
+	s.sections = nil
 
-	// --- Infrastructure selectors ---
-	s.infra = nil
-
-	// Bridge
-	if disc != nil && len(disc.Bridges) > 0 {
-		names := make([]string, len(disc.Bridges))
-		for i, b := range disc.Bridges {
-			names[i] = b.Name
-		}
-		s.infra = append(s.infra, makeNamedSelector("bridge", names, px.Bridge, "vmbr0"))
-	}
-
-	// OS storage — pools that support "images"
-	if disc != nil {
-		if pools := filterStorageByContent(disc.Storage, "images"); len(pools) > 0 {
-			s.infra = append(s.infra, makeNamedSelector("os storage", pools, px.Storage, "local-lvm"))
-		}
-	}
-
-	// Data storage — same pools
-	if disc != nil {
-		if pools := filterStorageByContent(disc.Storage, "images"); len(pools) > 0 {
-			s.infra = append(s.infra, makeNamedSelector("data storage", pools, px.DataStorage, "local-lvm"))
-		}
-	}
-
-	// ISO storage — pools that support "iso"
-	if disc != nil {
-		if pools := filterStorageByContent(disc.Storage, "iso"); len(pools) > 0 {
-			s.infra = append(s.infra, makeNamedSelector("iso storage", pools, px.ISOStorage, "local"))
-		}
-	}
-
-	s.infraCount = len(s.infra)
-
-	// --- Node selectors ---
 	defaultNode := nodeNames[0]
 	if px.Node != "" {
 		for _, n := range nodeNames {
@@ -152,23 +123,86 @@ func (s *NodePlacementStep) build(disc *proxmoxDiscovery, nodeNames []string) {
 		}
 	}
 
-	s.bootstrap = components.NewCompactSelector(nodeNames)
-	s.bootstrap.SetFocused(false)
-	selectByName(s.bootstrap, nodeNames, defaultNode)
+	// Infrastructure section
+	var infraRows []placementRow
+	if disc != nil {
+		if bridges := bridgeNames(disc.Bridges); len(bridges) > 0 {
+			infraRows = append(infraRows, makePlacementRow("bridge", bridges, px.Bridge, "vmbr0"))
+		}
+		if pools := filterStorageByContent(disc.Storage, "images"); len(pools) > 0 {
+			infraRows = append(infraRows, makePlacementRow("os storage", pools, px.Storage, "local-lvm"))
+			infraRows = append(infraRows, makePlacementRow("data storage", pools, px.DataStorage, "local-lvm"))
+		}
+		if pools := filterStorageByContent(disc.Storage, "iso"); len(pools) > 0 {
+			infraRows = append(infraRows, makePlacementRow("iso storage", pools, px.ISOStorage, "local"))
+		}
+	}
+	if len(infraRows) > 0 {
+		s.sections = append(s.sections, placementSection{title: "infrastructure", rows: infraRows})
+	}
 
-	s.masters = buildVMAssignments(
-		s.cfg.Cluster.Name, "master",
-		s.cfg.Topology.ControlPlane.Count,
-		nodeNames, px.MasterNodes, defaultNode,
-	)
-	s.workers = buildVMAssignments(
-		s.cfg.Cluster.Name, "worker",
-		s.cfg.Topology.Workers.Count,
-		nodeNames, px.WorkerNodes, defaultNode,
-	)
+	// Bootstrap section
+	bootstrapSel := components.NewCompactSelector(nodeNames)
+	bootstrapSel.SetFocused(false)
+	selectByName(bootstrapSel, nodeNames, defaultNode)
+	clusterName := s.cfg.Cluster.Name
+	if clusterName == "" {
+		clusterName = "cluster"
+	}
+	s.sections = append(s.sections, placementSection{
+		title: "bootstrap",
+		rows:  []placementRow{{label: clusterName + "-bootstrap", selector: bootstrapSel}},
+	})
 
-	s.totalSlots = s.infraCount + 1 + len(s.masters) + len(s.workers)
+	// Control plane section
+	if s.cfg.Topology.ControlPlane.Count > 0 {
+		var masterRows []placementRow
+		for i := range s.cfg.Topology.ControlPlane.Count {
+			name := fmt.Sprintf("%s-master%d", clusterName, i)
+			sel := components.NewCompactSelector(nodeNames)
+			sel.SetFocused(false)
+			target := defaultNode
+			if i < len(px.MasterNodes) && px.MasterNodes[i] != "" {
+				target = px.MasterNodes[i]
+			}
+			selectByName(sel, nodeNames, target)
+			masterRows = append(masterRows, placementRow{label: name, selector: sel})
+		}
+		s.sections = append(s.sections, placementSection{title: "control plane", rows: masterRows})
+	}
+
+	// Workers section
+	if s.cfg.Topology.Workers.Count > 0 {
+		var workerRows []placementRow
+		for i := range s.cfg.Topology.Workers.Count {
+			name := fmt.Sprintf("%s-worker%d", clusterName, i)
+			sel := components.NewCompactSelector(nodeNames)
+			sel.SetFocused(false)
+			target := defaultNode
+			if i < len(px.WorkerNodes) && px.WorkerNodes[i] != "" {
+				target = px.WorkerNodes[i]
+			}
+			selectByName(sel, nodeNames, target)
+			workerRows = append(workerRows, placementRow{label: name, selector: sel})
+		}
+		s.sections = append(s.sections, placementSection{title: "workers", rows: workerRows})
+	}
+
+	// Build flat index
+	s.allRows = nil
+	for _, sec := range s.sections {
+		s.allRows = append(s.allRows, sec.rows...)
+	}
+	s.totalSlots = len(s.allRows)
 	s.focusIndex = 0
+}
+
+func bridgeNames(bridges []proxmoxBridge) []string {
+	names := make([]string, len(bridges))
+	for i, b := range bridges {
+		names[i] = b.Name
+	}
+	return names
 }
 
 func filterStorageByContent(storage []proxmoxStorage, content string) []string {
@@ -181,7 +215,7 @@ func filterStorageByContent(storage []proxmoxStorage, content string) []string {
 	return names
 }
 
-func makeNamedSelector(label string, options []string, current, fallback string) namedSelector {
+func makePlacementRow(label string, options []string, current, fallback string) placementRow {
 	sel := components.NewCompactSelector(options)
 	sel.SetFocused(false)
 	target := fallback
@@ -189,7 +223,7 @@ func makeNamedSelector(label string, options []string, current, fallback string)
 		target = current
 	}
 	selectByName(sel, options, target)
-	return namedSelector{label: label, selector: sel}
+	return placementRow{label: label, selector: sel}
 }
 
 func selectByName(sel *components.CompactSelector, options []string, target string) {
@@ -199,24 +233,6 @@ func selectByName(sel *components.CompactSelector, options []string, target stri
 			return
 		}
 	}
-}
-
-func buildVMAssignments(clusterName, role string, count int, nodes, configured []string, defaultNode string) []vmAssignment {
-	assignments := make([]vmAssignment, count)
-	for i := range count {
-		name := fmt.Sprintf("%s-%s%d", clusterName, role, i)
-		sel := components.NewCompactSelector(nodes)
-		sel.SetFocused(false)
-
-		target := defaultNode
-		if i < len(configured) && configured[i] != "" {
-			target = configured[i]
-		}
-		selectByName(sel, nodes, target)
-
-		assignments[i] = vmAssignment{name: name, selector: sel}
-	}
-	return assignments
 }
 
 func (s *NodePlacementStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
@@ -282,20 +298,22 @@ func (s *NodePlacementStep) handleKey(msg tea.KeyMsg) (wizard.WizardStep, tea.Cm
 		return s, s.updateFocus()
 
 	case key.Matches(msg, key.NewBinding(key.WithKeys("left", "right"))):
-		sel := s.selectorAt(s.focusIndex)
-		if sel != nil && sel.Len() > 1 {
-			if key.Matches(msg, key.NewBinding(key.WithKeys("left"))) {
-				idx := sel.SelectedIndex() - 1
-				if idx < 0 {
-					idx = sel.Len() - 1
+		if s.focusIndex < len(s.allRows) {
+			sel := s.allRows[s.focusIndex].selector
+			if sel.Len() > 1 {
+				if key.Matches(msg, key.NewBinding(key.WithKeys("left"))) {
+					idx := sel.SelectedIndex() - 1
+					if idx < 0 {
+						idx = sel.Len() - 1
+					}
+					sel.SetSelected(idx)
+				} else {
+					idx := sel.SelectedIndex() + 1
+					if idx >= sel.Len() {
+						idx = 0
+					}
+					sel.SetSelected(idx)
 				}
-				sel.SetSelected(idx)
-			} else {
-				idx := sel.SelectedIndex() + 1
-				if idx >= sel.Len() {
-					idx = 0
-				}
-				sel.SetSelected(idx)
 			}
 		}
 		return s, nil
@@ -304,55 +322,54 @@ func (s *NodePlacementStep) handleKey(msg tea.KeyMsg) (wizard.WizardStep, tea.Cm
 	return s, nil
 }
 
-func (s *NodePlacementStep) selectorAt(index int) *components.CompactSelector {
-	// infra selectors: 0..infraCount-1
-	if index < s.infraCount {
-		return s.infra[index].selector
-	}
-	index -= s.infraCount
-
-	// bootstrap: index 0 after infra offset
-	if index == 0 {
-		return s.bootstrap
-	}
-	index-- // skip bootstrap
-
-	// masters
-	if index < len(s.masters) {
-		return s.masters[index].selector
-	}
-	index -= len(s.masters)
-
-	// workers
-	if index < len(s.workers) {
-		return s.workers[index].selector
-	}
-	return nil
-}
-
 func (s *NodePlacementStep) updateFocus() tea.Cmd {
-	for i := range s.infra {
-		s.infra[i].selector.SetFocused(false)
-	}
-	if s.bootstrap != nil {
-		s.bootstrap.SetFocused(false)
-	}
-	for i := range s.masters {
-		s.masters[i].selector.SetFocused(false)
-	}
-	for i := range s.workers {
-		s.workers[i].selector.SetFocused(false)
-	}
-
-	sel := s.selectorAt(s.focusIndex)
-	if sel != nil {
-		sel.SetFocused(true)
+	for i := range s.allRows {
+		s.allRows[i].selector.SetFocused(i == s.focusIndex)
 	}
 	return func() tea.Msg {
 		return wizard.FocusChangedMsg{
 			FieldIndex:  s.focusIndex,
 			TotalFields: s.totalSlots,
 		}
+	}
+}
+
+// --- View ---
+
+type placementStyles struct {
+	sectionActive  lipgloss.Style
+	sectionPending lipgloss.Style
+	sectionDone    lipgloss.Style
+	label          lipgloss.Style
+	valueActive    lipgloss.Style
+	valueDim       lipgloss.Style
+	hint           lipgloss.Style
+	note           lipgloss.Style
+	warn           lipgloss.Style
+	sectionPad     lipgloss.Style
+}
+
+func newPlacementStyles() placementStyles {
+	return placementStyles{
+		sectionActive: lipgloss.NewStyle().
+			Foreground(tui.ColorCyan500).Bold(true),
+		sectionPending: lipgloss.NewStyle().
+			Foreground(tui.ColorSlate600),
+		sectionDone: lipgloss.NewStyle().
+			Foreground(tui.ColorSuccess).Bold(true),
+		label: lipgloss.NewStyle().
+			Foreground(tui.ColorSlate300).Width(22),
+		valueActive: lipgloss.NewStyle().
+			Foreground(tui.ColorPrimary).Bold(true),
+		valueDim: lipgloss.NewStyle().
+			Foreground(tui.ColorSlate400),
+		hint: lipgloss.NewStyle().
+			Foreground(tui.ColorSlate500).Italic(true),
+		note: lipgloss.NewStyle().
+			Foreground(tui.ColorSlate500).Italic(true).PaddingLeft(2),
+		warn: lipgloss.NewStyle().
+			Foreground(tui.ColorWarning),
+		sectionPad: lipgloss.NewStyle().Padding(0, 2),
 	}
 }
 
@@ -363,104 +380,77 @@ func (s *NodePlacementStep) View(width, height int) string {
 		return s.loadingSpinner.View() + " discovering proxmox infrastructure..."
 	}
 
-	headerStyle := lipgloss.NewStyle().Foreground(tui.ColorCyan500).Bold(true)
-	separator := lipgloss.NewStyle().Foreground(tui.ColorSlate700).Render(strings.Repeat("┄", width-4))
-	labelStyle := lipgloss.NewStyle().Foreground(tui.ColorSlate400).Width(20)
-	activeStyle := lipgloss.NewStyle().Foreground(tui.ColorPrimary).Bold(true)
-	dimStyle := lipgloss.NewStyle().Foreground(tui.ColorSlate500)
-	successStyle := lipgloss.NewStyle().Foreground(tui.ColorSuccess)
-
+	st := newPlacementStyles()
 	var b strings.Builder
 
 	// Discovery banner
 	if s.discoveryErr != nil {
-		warnStyle := lipgloss.NewStyle().Foreground(tui.ColorWarning)
-		b.WriteString(warnStyle.Render("  " + s.discoveryErr.Error()))
-		b.WriteString("\n\n")
+		b.WriteString(st.warn.Render("  "+s.discoveryErr.Error()) + "\n\n")
 	} else if s.discovery != nil {
-		nodeParts := make([]string, len(s.discovery.Nodes))
-		for i, n := range s.discovery.Nodes {
-			info := n.Name
-			if n.CPUs > 0 || n.MemGB > 0 {
-				info += fmt.Sprintf(" (%d cpu, %d gb)", n.CPUs, n.MemGB)
-			}
-			if n.Status != "online" {
-				info += " [" + n.Status + "]"
-			}
-			nodeParts[i] = info
-		}
-		b.WriteString(successStyle.Render("  discovered " + fmt.Sprintf("%d", len(s.discovery.Nodes)) + " node(s), " +
-			fmt.Sprintf("%d", len(s.discovery.Storage)) + " storage pool(s), " +
-			fmt.Sprintf("%d", len(s.discovery.Bridges)) + " bridge(s)"))
+		b.WriteString(st.note.Render(fmt.Sprintf("discovered %d node(s), %d storage pool(s), %d bridge(s)",
+			len(s.discovery.Nodes), len(s.discovery.Storage), len(s.discovery.Bridges))))
 		b.WriteString("\n\n")
 	}
 
-	renderRow := func(label string, sel *components.CompactSelector, globalIdx int) {
-		isFocused := s.focusIndex == globalIdx
-		lbl := labelStyle.Render(label)
-		val := sel.Selected()
-		if isFocused {
-			hint := ""
-			if sel.Len() > 1 {
-				hint = dimStyle.Render("  ← →")
+	globalIdx := 0
+	for secIdx, sec := range s.sections {
+		// Section indicator + title
+		sectionHasFocus := false
+		for _, row := range sec.rows {
+			if globalIdx <= s.focusIndex && s.focusIndex < globalIdx+len(sec.rows) {
+				sectionHasFocus = true
+				break
 			}
-			b.WriteString(lbl + activeStyle.Render("▸ "+val+" ◂") + hint)
+			_ = row
+		}
+
+		var indicator string
+		var titleStyle lipgloss.Style
+		if sectionHasFocus {
+			indicator = st.sectionActive.Render("●")
+			titleStyle = st.sectionActive
+		} else if s.focusIndex > globalIdx+len(sec.rows)-1 {
+			indicator = st.sectionDone.Render("✓")
+			titleStyle = st.sectionDone
 		} else {
-			b.WriteString(lbl + dimStyle.Render(val))
+			indicator = st.sectionPending.Render("○")
+			titleStyle = st.sectionPending
 		}
-		b.WriteString("\n")
-	}
 
-	// Infrastructure section
-	if s.infraCount > 0 {
-		b.WriteString(headerStyle.Render("infrastructure"))
+		b.WriteString(indicator + " " + titleStyle.Render(sec.title))
 		b.WriteString("\n")
-		b.WriteString(separator)
-		b.WriteString("\n")
-		for i, inf := range s.infra {
-			renderRow(inf.label, inf.selector, i)
+
+		// Section content
+		if sectionHasFocus || secIdx < len(s.sections) {
+			var content strings.Builder
+			for _, row := range sec.rows {
+				isFocused := globalIdx == s.focusIndex
+				lbl := st.label.Render(row.label)
+
+				if isFocused {
+					val := row.selector.Selected()
+					content.WriteString(lbl + st.valueActive.Render("▸ "+val+" ◂"))
+					if row.selector.Len() > 1 {
+						content.WriteString(st.hint.Render("  ← →"))
+					}
+				} else {
+					content.WriteString(lbl + st.valueDim.Render(row.selector.Selected()))
+				}
+				content.WriteString("\n")
+				globalIdx++
+			}
+			b.WriteString(st.sectionPad.Render(content.String()))
+		} else {
+			globalIdx += len(sec.rows)
 		}
-		b.WriteString("\n")
-	}
 
-	// Bootstrap
-	clusterName := s.cfg.Cluster.Name
-	if clusterName == "" {
-		clusterName = "cluster"
-	}
-	b.WriteString(headerStyle.Render("bootstrap"))
-	b.WriteString("\n")
-	b.WriteString(separator)
-	b.WriteString("\n")
-	renderRow(clusterName+"-bootstrap", s.bootstrap, s.infraCount)
-	b.WriteString("\n")
-
-	// Control plane
-	if len(s.masters) > 0 {
-		b.WriteString(headerStyle.Render("control plane"))
-		b.WriteString("\n")
-		b.WriteString(separator)
-		b.WriteString("\n")
-		for i, a := range s.masters {
-			renderRow(a.name, a.selector, s.infraCount+1+i)
-		}
-		b.WriteString("\n")
-	}
-
-	// Workers
-	if len(s.workers) > 0 {
-		b.WriteString(headerStyle.Render("workers"))
-		b.WriteString("\n")
-		b.WriteString(separator)
-		b.WriteString("\n")
-		for i, a := range s.workers {
-			renderRow(a.name, a.selector, s.infraCount+1+len(s.masters)+i)
-		}
 		b.WriteString("\n")
 	}
 
 	return b.String()
 }
+
+// --- Apply ---
 
 func (s *NodePlacementStep) Apply(cfg *config.Config) error {
 	if cfg.Provider.Proxmox == nil {
@@ -468,61 +458,54 @@ func (s *NodePlacementStep) Apply(cfg *config.Config) error {
 	}
 	px := cfg.Provider.Proxmox
 
-	// Infrastructure selectors → config
-	for _, inf := range s.infra {
-		val := inf.selector.Selected()
-		switch inf.label {
-		case "bridge":
-			px.Bridge = val
-		case "os storage":
-			px.Storage = val
-		case "data storage":
-			px.DataStorage = val
-		case "iso storage":
-			px.ISOStorage = val
+	// Walk sections and apply values
+	masterIdx := 0
+	workerIdx := 0
+	var masterNodes, workerNodes []string
+
+	for _, sec := range s.sections {
+		for _, row := range sec.rows {
+			val := row.selector.Selected()
+			switch {
+			case row.label == "bridge":
+				px.Bridge = val
+			case row.label == "os storage":
+				px.Storage = val
+			case row.label == "data storage":
+				px.DataStorage = val
+			case row.label == "iso storage":
+				px.ISOStorage = val
+			case strings.HasSuffix(row.label, "-bootstrap"):
+				px.Node = val
+			case strings.Contains(row.label, "-master"):
+				masterNodes = append(masterNodes, val)
+				masterIdx++
+			case strings.Contains(row.label, "-worker"):
+				workerNodes = append(workerNodes, val)
+				workerIdx++
+			}
 		}
 	}
 
-	// Bootstrap node
-	if s.bootstrap != nil {
-		px.Node = s.bootstrap.Selected()
-	}
-
-	// Master/worker nodes
-	if len(s.masters) > 0 {
-		masterNodes := make([]string, len(s.masters))
-		for i, m := range s.masters {
-			masterNodes[i] = m.selector.Selected()
-		}
+	if len(masterNodes) > 0 {
 		px.MasterNodes = masterNodes
 	}
-	if len(s.workers) > 0 {
-		workerNodes := make([]string, len(s.workers))
-		for i, w := range s.workers {
-			workerNodes[i] = w.selector.Selected()
-		}
+	if len(workerNodes) > 0 {
 		px.WorkerNodes = workerNodes
 	}
 
 	return nil
 }
 
+// --- Focus & Help ---
+
 func (s *NodePlacementStep) SetFocused(focused bool) {
 	s.BaseStep.SetFocused(focused)
-	if focused && s.phase == phasePlacing {
+	if focused && s.phase == phasePlacing && len(s.allRows) > 0 {
 		s.updateFocus()
 	} else if !focused {
-		for i := range s.infra {
-			s.infra[i].selector.SetFocused(false)
-		}
-		if s.bootstrap != nil {
-			s.bootstrap.SetFocused(false)
-		}
-		for i := range s.masters {
-			s.masters[i].selector.SetFocused(false)
-		}
-		for i := range s.workers {
-			s.workers[i].selector.SetFocused(false)
+		for i := range s.allRows {
+			s.allRows[i].selector.SetFocused(false)
 		}
 	}
 }
