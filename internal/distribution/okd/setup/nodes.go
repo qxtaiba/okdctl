@@ -17,7 +17,7 @@ func (p *Phase) BuildNodeList(cfg *config.Config) ([]NodeInfo, error) {
 	}
 
 	totalNodes := 1 + cfg.Topology.ControlPlane.Count + cfg.Topology.Workers.Count
-	if err := netutil.ValidateIPRangeWithin24(startIP, totalNodes); err != nil {
+	if err := netutil.ValidateIPRangeInCIDR(startIP, totalNodes, cfg.Networking.MachineCIDR); err != nil {
 		return nil, err
 	}
 
