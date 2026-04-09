@@ -42,6 +42,7 @@ var defaultStepRegistrations = []stepRegistration{
 	{wizard.StepTypeDistribution, func() (wizard.WizardStep, any) { return steps.NewDistributionStep(), nil }},
 	{wizard.StepTypeBasics, func() (wizard.WizardStep, any) { return steps.NewBasicsStep() }},
 	{wizard.StepTypeProxmox, func() (wizard.WizardStep, any) { return steps.NewProxmoxStep() }},
+	{wizard.StepTypeNodePlacement, func() (wizard.WizardStep, any) { return steps.NewNodePlacementStep() }},
 	{wizard.StepTypeNetworking, func() (wizard.WizardStep, any) { return steps.NewNetworkingStep() }},
 	{wizard.StepTypeResources, func() (wizard.WizardStep, any) { return steps.NewResourcesStep() }},
 	{wizard.StepTypeAddons, func() (wizard.WizardStep, any) { return steps.NewAddonsStep() }},
