@@ -33,11 +33,12 @@ var AdvancedStepDefinition = wizard.StepDefinition{
 			Title: "proxmox vm settings",
 			Fields: []wizard.FieldDefinition{
 				{
-					Key:      "cpu_type",
-					Label:    "cpu type",
-					Default:  "host",
-					Help:     "cpu type for vms — host gives best performance, x86-64-v2 or kvm64 allow live migration",
-					Required: true,
+					Key:     "cpu_type",
+					Label:   "cpu type",
+					Default: "host",
+					Help:    "host gives best performance, x86-64-v2 or kvm64 allow live migration",
+					Type:    wizard.FieldTypeSelect,
+					Options: []string{"host", "x86-64-v2", "x86-64-v3", "kvm64"},
 					ConfigSet: func(cfg *config.Config, value string) error {
 						if cfg.Provider.Proxmox != nil {
 							cfg.Provider.Proxmox.CPUType = value
