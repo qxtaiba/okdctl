@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 
@@ -14,6 +15,15 @@ import (
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/download"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
 )
+
+func coreOSArch() string {
+	switch runtime.GOARCH {
+	case "arm64":
+		return "aarch64"
+	default:
+		return "x86_64"
+	}
+}
 
 const DefaultProxmoxISODir = "/var/lib/vz/template/iso"
 
@@ -113,9 +123,10 @@ func (p *Phase) DetectCoreOSVersion(ctx context.Context) (*CoreOSInfo, error) {
 		return nil, fmt.Errorf("failed to parse CoreOS stream JSON: %w", err)
 	}
 
-	arch, ok := streamData.Architectures["x86_64"]
+	archKey := coreOSArch()
+	arch, ok := streamData.Architectures[archKey]
 	if !ok {
-		return nil, fmt.Errorf("x86_64 architecture not found in CoreOS stream")
+		return nil, fmt.Errorf("%s architecture not found in CoreOS stream", archKey)
 	}
 
 	metal := arch.Artifacts.Metal
@@ -129,7 +140,7 @@ func (p *Phase) DetectCoreOSVersion(ctx context.Context) (*CoreOSInfo, error) {
 		Version:      metal.Release,
 		ISOUrl:       iso.Location,
 		ISOChecksum:  iso.SHA256,
-		Architecture: "x86_64",
+		Architecture: archKey,
 	}, nil
 }
 

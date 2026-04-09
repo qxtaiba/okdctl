@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/qxtaiba/okd-proxmox-cli/internal/config"
@@ -44,6 +45,7 @@ func (p *Phase) GenerateInstallConfig(ctx context.Context, cfg *config.Config, o
 		ServiceCIDR:    cfg.Networking.ServiceCIDR,
 		PullSecret:     strings.TrimSpace(string(pullSecret)),
 		SSHKey:         strings.TrimSpace(string(sshKey)),
+		Architecture:   runtime.GOARCH,
 	}
 
 	content, err := templates.RenderInstallConfig(data)

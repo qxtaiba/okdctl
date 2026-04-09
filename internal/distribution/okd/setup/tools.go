@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -15,6 +16,15 @@ import (
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/download"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
 )
+
+func downloadArch() string {
+	switch runtime.GOARCH {
+	case "arm64":
+		return "arm64"
+	default:
+		return "amd64"
+	}
+}
 
 // ExternalToolBinaries returns the list of external tool binaries installed to /usr/local/bin.
 // Note: terraform is installed via dnf (HashiCorp repo) so it's not in this list.
@@ -168,24 +178,27 @@ func (p *Phase) installBinary(ctx context.Context, spec binaryInstallSpec) error
 }
 
 func (p *Phase) installYQ(ctx context.Context) error {
+	arch := downloadArch()
 	return p.installBinary(ctx, binaryInstallSpec{
 		name: "yq", versionFlag: "--version",
-		url: "https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64",
+		url: fmt.Sprintf("https://github.com/mikefarah/yq/releases/latest/download/yq_linux_%s", arch),
 	})
 }
 
 func (p *Phase) installHelm(ctx context.Context) error {
+	arch := downloadArch()
 	return p.installBinary(ctx, binaryInstallSpec{
 		name: "helm", versionFlag: "version",
-		url: "https://get.helm.sh/helm-v3.17.3-linux-amd64.tar.gz",
+		url: fmt.Sprintf("https://get.helm.sh/helm-v3.17.3-linux-%s.tar.gz", arch),
 		archiveBinary: "helm", stripComponents: 1,
 	})
 }
 
 func (p *Phase) installSops(ctx context.Context) error {
+	arch := downloadArch()
 	return p.installBinary(ctx, binaryInstallSpec{
 		name: "sops", versionFlag: "--version",
-		url: "https://github.com/getsops/sops/releases/download/v3.9.4/sops-v3.9.4.linux.amd64",
+		url: fmt.Sprintf("https://github.com/getsops/sops/releases/download/v3.9.4/sops-v3.9.4.linux.%s", arch),
 	})
 }
 
