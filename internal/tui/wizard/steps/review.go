@@ -171,8 +171,16 @@ func (s *ReviewStep) renderProxmox(st sectionStyles) string {
 
 	b.WriteString(st.kvPair("host", p.Host))
 	b.WriteString("\n")
-	b.WriteString(st.kvPair("node", p.Node))
+	b.WriteString(st.kvPair("bootstrap node", p.Node))
 	b.WriteString("\n")
+	if len(p.MasterNodes) > 0 {
+		b.WriteString(st.kvPair("master nodes", strings.Join(p.MasterNodes, ", ")))
+		b.WriteString("\n")
+	}
+	if len(p.WorkerNodes) > 0 {
+		b.WriteString(st.kvPair("worker nodes", strings.Join(p.WorkerNodes, ", ")))
+		b.WriteString("\n")
+	}
 	b.WriteString(st.kvPair("bridge", p.Bridge))
 	b.WriteString("\n")
 	b.WriteString(st.kvPair("storage", p.Storage))

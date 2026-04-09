@@ -44,15 +44,6 @@ var ProxmoxStepDefinition = wizard.StepDefinition{
 					ConfigGet: proxmoxGet(func(p *config.ProxmoxConfig) string { return p.Host }),
 				},
 				{
-					Key:       "node",
-					Label:     "node",
-					Default:   "pve",
-					Help:      "proxmox node name",
-					Required:  true,
-					ConfigSet: proxmoxSet(func(p *config.ProxmoxConfig, v string) { p.Node = v }),
-					ConfigGet: proxmoxGet(func(p *config.ProxmoxConfig) string { return p.Node }),
-				},
-				{
 					Key:       "bridge",
 					Label:     "bridge",
 					Default:   "vmbr0",
