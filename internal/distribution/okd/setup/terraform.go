@@ -37,8 +37,8 @@ func getDiskSizes(cfg *config.Config) (cpDisk, workerDisk, workerDataDisk, maste
 		workerDisk = cpDisk
 	}
 	workerDataDisk = cfg.Disks.WorkerDataSizeGB
-	if workerDataDisk == 0 && cfg.Disks.DataSizeGB > 0 {
-		workerDataDisk = cfg.Disks.DataSizeGB // migration from old field
+	if workerDataDisk == 0 && cfg.Disks.DataSizeGB > 0 { //nolint:staticcheck // intentional migration from deprecated field
+		workerDataDisk = cfg.Disks.DataSizeGB //nolint:staticcheck
 	}
 	masterDataDisk = cfg.Disks.MasterDataSizeGB
 	return cpDisk, workerDisk, workerDataDisk, masterDataDisk
