@@ -1,10 +1,9 @@
+---
 version: "2"
-
 formatters:
   enable:
     - gofumpt
     - goimports
-
 linters:
   default: none
   enable:
@@ -14,7 +13,6 @@ linters:
     - staticcheck
     - ineffassign
     - unused
-
     # antipatterns
     - gocritic
     - revive
@@ -23,10 +21,8 @@ linters:
     - wastedassign
     - nilerr
     - noctx
-
     # security
     - gosec
-
     # style
     - misspell
     - dupword
@@ -34,42 +30,32 @@ linters:
     - nakedret
     - whitespace
     - nolintlint
-
     # complexity
     - gocyclo
     - funlen
     - nestif
-
     # duplication
     - dupl
-
   settings:
     gocyclo:
       min-complexity: 15
-
     funlen:
       lines: 120
       statements: 50
-
     nestif:
       min-complexity: 5
-
     dupl:
       threshold: 100
-
     goconst:
       min-occurrences: 3
-
     gocritic:
       enabled-tags:
         - diagnostic
         - performance
         - style
-
     nolintlint:
       require-explanation: true
       require-specific: true
-
     revive:
       rules:
         - name: blank-imports
@@ -83,12 +69,10 @@ linters:
         - name: superfluous-else
         - name: unreachable-code
         - name: unused-parameter
-
     gosec:
       excludes:
         - G107 # url provided by variable — expected for api calls
         - G304 # file path from variable — expected for config loading
-
   exclusions:
     presets:
       - common-false-positives
@@ -104,6 +88,5 @@ linters:
     paths:
       - docs
       - third_party
-
 run:
   tests: false
