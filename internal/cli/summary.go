@@ -100,7 +100,7 @@ func DeploySummary(cfg *config.Config) string {
 	sb.kv("service cidr", cfg.Networking.ServiceCIDR)
 
 	if cfg.Networking.StaticIP.Start != "" {
-		if vip, err := netutil.DeriveVIPFromStaticIP(cfg.Networking.StaticIP.Start); err == nil {
+		if vip, err := netutil.ResolveVIP(cfg.Networking.Bastion.VIP, cfg.Networking.StaticIP.Start); err == nil {
 			sb.kvHighlight("vip address", vip)
 		}
 	}

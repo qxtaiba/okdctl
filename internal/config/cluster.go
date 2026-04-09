@@ -61,7 +61,8 @@ type StaticIPConfig struct {
 
 // BastionConfig defines the bastion host (runs HAProxy for API load balancing).
 type BastionConfig struct {
-	IP string `yaml:"ip" json:"ip" mapstructure:"ip"`
+	IP  string `yaml:"ip" json:"ip" mapstructure:"ip"`
+	VIP string `yaml:"vip,omitempty" json:"vip,omitempty" mapstructure:"vip"`
 }
 
 type AddonConfig struct {

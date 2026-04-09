@@ -164,6 +164,20 @@ func validateAdvancedNetworking(cfg *Config, result *ValidationResult) {
 	checkIPInCIDR(bastionIP, machineCIDR, FieldNetworkingBastionIP, "machine CIDR", result)
 	checkIPInCIDR(staticIPStart, machineCIDR, FieldNetworkingStaticIPStart, "machine CIDR", result)
 
+	if cfg.Networking.Bastion.VIP != "" {
+		if !IsValidIP(cfg.Networking.Bastion.VIP) {
+			result.AddError("networking.bastion.vip", "must be a valid IP address")
+		} else {
+			checkIPInCIDR(cfg.Networking.Bastion.VIP, machineCIDR, "networking.bastion.vip", "machine CIDR", result)
+			if cfg.Networking.Bastion.VIP == gateway {
+				result.AddError("networking.bastion.vip", "vip cannot be the same as the gateway")
+			}
+			if cfg.Networking.Bastion.VIP == bastionIP {
+				result.AddError("networking.bastion.vip", "vip cannot be the same as the bastion ip")
+			}
+		}
+	}
+
 	if staticIPStart != "" {
 		netmask := cfg.Networking.StaticIP.Netmask
 		if netmask == "" {
