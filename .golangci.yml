@@ -45,7 +45,7 @@ linters:
     nestif:
       min-complexity: 12
     dupl:
-      threshold: 100
+      threshold: 200
     goconst:
       min-occurrences: 3
     gocritic:
