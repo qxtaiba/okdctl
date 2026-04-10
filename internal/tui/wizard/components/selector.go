@@ -312,15 +312,14 @@ func (s *CompactSelector) Update(msg tea.Msg) (*CompactSelector, tea.Cmd) {
 		return s, nil
 	}
 
-	switch msg := msg.(type) {
-	case tea.KeyPressMsg:
+	if keyMsg, ok := msg.(tea.KeyPressMsg); ok {
 		switch {
-		case key.Matches(msg, key.NewBinding(key.WithKeys("up", "k"))):
+		case key.Matches(keyMsg, key.NewBinding(key.WithKeys("up", "k"))):
 			s.selected--
 			if s.selected < 0 {
 				s.selected = len(s.options) - 1
 			}
-		case key.Matches(msg, key.NewBinding(key.WithKeys("down", "j"))):
+		case key.Matches(keyMsg, key.NewBinding(key.WithKeys("down", "j"))):
 			s.selected++
 			if s.selected >= len(s.options) {
 				s.selected = 0

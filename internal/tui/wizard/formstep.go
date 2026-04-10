@@ -124,10 +124,9 @@ func (s *MultiFormStep) Update(msg tea.Msg) (WizardStep, tea.Cmd) {
 		return s, nil
 	}
 
-	switch msg := msg.(type) {
-	case tea.KeyPressMsg:
+	if keyMsg, ok := msg.(tea.KeyPressMsg); ok {
 		switch {
-		case key.Matches(msg, key.NewBinding(key.WithKeys("enter"))):
+		case key.Matches(keyMsg, key.NewBinding(key.WithKeys("enter"))):
 			if err := s.Validate(); err != nil {
 				return s, nil
 			}
@@ -135,7 +134,7 @@ func (s *MultiFormStep) Update(msg tea.Msg) (WizardStep, tea.Cmd) {
 				return StepCompleteMsg{StepID: s.ID()}
 			}
 
-		case key.Matches(msg, key.NewBinding(key.WithKeys("tab", "down"))):
+		case key.Matches(keyMsg, key.NewBinding(key.WithKeys("tab", "down"))):
 			currentIndex := group.FocusIndex()
 			isLastField := currentIndex >= len(group.Fields())-1
 			isLastSection := s.currentSection >= len(s.sections)-1
@@ -161,7 +160,7 @@ func (s *MultiFormStep) Update(msg tea.Msg) (WizardStep, tea.Cmd) {
 			s.sections[s.currentSection].Group, cmd = group.Update(msg)
 			return s, tea.Batch(cmd, s.emitFocusChanged())
 
-		case key.Matches(msg, key.NewBinding(key.WithKeys("shift+tab", "up"))):
+		case key.Matches(keyMsg, key.NewBinding(key.WithKeys("shift+tab", "up"))):
 			isFirstField := group.FocusIndex() == 0
 			isFirstSection := s.currentSection == 0
 
@@ -281,13 +280,14 @@ func (s *MultiFormStep) View(width, height int) string {
 		var style lipgloss.Style
 		var indicator string
 
-		if i == s.currentSection {
+		switch {
+		case i == s.currentSection:
 			style = formViewStyles.activeSection
 			indicator = formViewStyles.activeRender
-		} else if section.IsComplete() {
+		case section.IsComplete():
 			style = formViewStyles.inactiveSection
 			indicator = formViewStyles.completedRender
-		} else {
+		default:
 			style = formViewStyles.inactiveSection
 			indicator = formViewStyles.pendingRender
 		}

@@ -109,7 +109,7 @@ var AdvancedStepDefinition = wizard.StepDefinition{
 	},
 }
 
-func NewAdvancedStep() (*wizard.DataDrivenStep, *wizard.DataDrivenStep) {
-	step := wizard.NewDataDrivenStep(&AdvancedStepDefinition)
+func NewAdvancedStep() (step, state *wizard.DataDrivenStep) {
+	step = wizard.NewDataDrivenStep(&AdvancedStepDefinition)
 	return step, step
 }

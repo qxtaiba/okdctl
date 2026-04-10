@@ -65,15 +65,12 @@ func (m *Model) contentWidth() int {
 	return width
 }
 
-func (m *Model) contentDimensions() (int, int) {
-	width := m.contentWidth()
-
-	height := m.height - fixedLayoutOverhead
-
+func (m *Model) contentDimensions() (width, height int) {
+	width = m.contentWidth()
+	height = m.height - fixedLayoutOverhead
 	if height < 10 {
 		height = 10
 	}
-
 	return width, height
 }
 
@@ -231,20 +228,22 @@ func (m *Model) renderScrollIndicator() string {
 	textStyle := lipgloss.NewStyle().Foreground(tui.ColorSlate400)
 
 	var arrows string
-	if atTop {
+	switch {
+	case atTop:
 		arrows = dimArrowStyle.Render("↑") + " " + arrowStyle.Render("↓")
-	} else if atBottom {
+	case atBottom:
 		arrows = arrowStyle.Render("↑") + " " + dimArrowStyle.Render("↓")
-	} else {
+	default:
 		arrows = arrowStyle.Render("↑") + " " + arrowStyle.Render("↓")
 	}
 
 	var message string
-	if atTop {
+	switch {
+	case atTop:
 		message = "scroll down for more"
-	} else if atBottom {
+	case atBottom:
 		message = "scroll up for more"
-	} else {
+	default:
 		message = fmt.Sprintf("%.0f%% • scroll for more", scrollPercent*100)
 	}
 

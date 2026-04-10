@@ -80,14 +80,13 @@ func (s *ReviewStep) SetConfig(cfg *config.Config) {
 }
 
 func (s *ReviewStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
-	switch msg := msg.(type) {
-	case tea.KeyPressMsg:
+	if keyMsg, ok := msg.(tea.KeyPressMsg); ok {
 		switch {
-		case key.Matches(msg, key.NewBinding(key.WithKeys("enter"))):
+		case key.Matches(keyMsg, key.NewBinding(key.WithKeys("enter"))):
 			return s, func() tea.Msg {
 				return wizard.StepCompleteMsg{StepID: s.ID()}
 			}
-		case key.Matches(msg, key.NewBinding(key.WithKeys("up", "k", "down", "j"))):
+		case key.Matches(keyMsg, key.NewBinding(key.WithKeys("up", "k", "down", "j"))):
 			var cmd tea.Cmd
 			s.actionSelector, cmd = s.actionSelector.Update(msg)
 			return s, tea.Batch(cmd, s.emitFocusChanged())
