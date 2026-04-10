@@ -103,6 +103,12 @@ func (p *Phase) MonitorInstallation(ctx context.Context, clusterDir string, opts
 					p.Log.Warn(fmt.Sprintf("install: failed to kill process: %v", killErr))
 				}
 			}
+			// Give the just-killed openshift-install 30s to exit and flush
+			// its final output; then give up rather than blocking shutdown.
+			// The goroutine above still holds Wait() on the dead process —
+			// it will eventually return and send to installDone, but the
+			// buffered channel means we don't leak a blocked sender if we
+			// abandon early.
 			reapTimer := time.NewTimer(30 * time.Second)
 			select {
 			case <-installDone:

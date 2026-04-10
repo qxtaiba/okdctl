@@ -7,6 +7,10 @@ import (
 	"strings"
 )
 
+// PendingCSRs returns CSRs whose status.conditions slice is empty, which
+// is how the kube-controller-manager represents a request that has neither
+// been approved nor denied. An Approved or Denied CSR carries at least one
+// condition entry and is excluded.
 func (c *K8sClient) PendingCSRs(ctx context.Context) ([]CSR, error) {
 	result, err := c.run(ctx, "get", "csr", "-o", "json")
 	if err != nil {

@@ -21,6 +21,9 @@ func (c *PhaseContext[T]) Get() T {
 	return c.data
 }
 
+// Update calls fn with a pointer to the stored data while holding the
+// write lock. fn must not call Get or Update on the same PhaseContext —
+// sync.RWMutex is not reentrant and doing so will deadlock.
 func (c *PhaseContext[T]) Update(fn func(*T)) {
 	c.mu.Lock()
 	defer c.mu.Unlock()

@@ -1,3 +1,7 @@
+// Package platform detects the host Linux family (RHEL vs Debian) from
+// /etc/os-release and exposes family-specific knobs — package manager,
+// Apache paths, SELinux presence, CoreOS/download architecture strings —
+// so provisioning code can stay distribution-agnostic.
 package platform
 
 import (

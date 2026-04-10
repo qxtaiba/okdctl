@@ -57,6 +57,10 @@ type StepBuilder struct {
 	executeFn   func(context.Context) error
 }
 
+// NewStepBuilder returns a builder for a fatal-by-default step. If id or
+// name is empty, it returns nil rather than an error — the subsequent
+// Build call surfaces the problem with a message that points at this
+// function, which keeps the fluent chain readable for valid inputs.
 func NewStepBuilder(id StepID, name string) *StepBuilder {
 	if id == "" || name == "" {
 		return nil
@@ -121,6 +125,10 @@ func (b *StepBuilder) Build() (ProvisioningStep, error) {
 	return &builtStep{builder: b}, nil
 }
 
+// MustBuild is Build without error return; it panics if the builder is
+// invalid. Use it only for steps constructed from literal id/name pairs
+// at init or package-load time — callers that build steps from user
+// input should use Build so validation errors surface normally.
 func (b *StepBuilder) MustBuild() ProvisioningStep {
 	step, err := b.Build()
 	if err != nil {
