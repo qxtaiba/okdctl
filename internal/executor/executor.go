@@ -33,10 +33,6 @@ func WithWorkDir(dir string) Option {
 	return func(e *Executor) { e.WorkDir = dir }
 }
 
-func WithVerbose(verbose bool) Option {
-	return func(e *Executor) { e.Verbose = verbose }
-}
-
 // WithEnv appends environment variables; they are merged with os.Environ()
 // at execution time rather than replacing the inherited environment.
 func WithEnv(env []string) Option {
@@ -178,8 +174,4 @@ func (e *Executor) RunWithStdinChecked(ctx context.Context, input, name string, 
 func CommandExists(name string) bool {
 	_, err := exec.LookPath(name)
 	return err == nil
-}
-
-func CommandPath(name string) (string, error) {
-	return exec.LookPath(name)
 }

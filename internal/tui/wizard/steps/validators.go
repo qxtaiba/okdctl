@@ -45,13 +45,6 @@ func ValidateDomain(value string) error {
 	return nil
 }
 
-func ValidateOptionalDomain(value string) error {
-	if value == "" {
-		return nil
-	}
-	return ValidateDomain(value)
-}
-
 func ValidateProxmoxHost(value string) error {
 	host := value
 	if strings.Contains(value, ":") {

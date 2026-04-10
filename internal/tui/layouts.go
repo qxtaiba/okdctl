@@ -122,14 +122,6 @@ func boxedSectionCore(content, title string, width int, cfg boxConfig) string {
 	return strings.Join(result, "\n")
 }
 
-func BoxedSection(content, title string, width int) string {
-	return boxedSectionCore(content, title, width, boxConfig{
-		borderColor: ColorSlate600,
-		titleColor:  ColorSlate100,
-		compact:     false,
-	})
-}
-
 func BoxedSectionCompact(content, title string, width int) string {
 	return boxedSectionCore(content, title, width, boxConfig{
 		borderColor: ColorSlate600,

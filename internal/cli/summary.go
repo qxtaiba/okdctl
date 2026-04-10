@@ -7,7 +7,6 @@ import (
 	"github.com/qxtaiba/okd-proxmox-cli/internal/config"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/postinstall"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/tui"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/netutil"
 )
 
 const (
@@ -66,49 +65,6 @@ func ValidationSummary(result *config.ValidationResult) string {
 	}
 
 	return sb.String()
-}
-
-func DeploySummary(cfg *config.Config) string {
-	title := fmt.Sprintf("%s CLUSTER SETUP", strings.ToUpper(string(cfg.Distribution.Type)))
-	clusterDomain := fmt.Sprintf("%s.%s", cfg.Cluster.Name, cfg.Cluster.Domain)
-
-	sb := newSummaryBuilder()
-	sb.newline()
-
-	sb.section("cluster")
-	sb.kvHighlight("name", cfg.Cluster.Name)
-	sb.kv("base domain", cfg.Cluster.Domain)
-	sb.kvHighlight("full domain", clusterDomain)
-	sb.kvHighlight("version", cfg.Distribution.Version)
-	sb.newline()
-
-	sb.section("control plane")
-	sb.kvHighlight("nodes", fmt.Sprintf("%d", cfg.Topology.ControlPlane.Count))
-	sb.kv("cpu", fmt.Sprintf("%dvCPU/node", cfg.Topology.ControlPlane.CPU))
-	sb.kv("memory", fmt.Sprintf("%dGB/node", cfg.Topology.ControlPlane.Memory/1024))
-	sb.kv("disk", fmt.Sprintf("%dGB/node", cfg.Topology.ControlPlane.Disk))
-	sb.newline()
-
-	sb.section("workers")
-	sb.kvHighlight("nodes", fmt.Sprintf("%d", cfg.Topology.Workers.Count))
-	sb.kv("cpu", fmt.Sprintf("%dvCPU/node", cfg.Topology.Workers.CPU))
-	sb.kv("memory", fmt.Sprintf("%dGB/node", cfg.Topology.Workers.Memory/1024))
-	sb.kv("disk", fmt.Sprintf("%dGB/node", cfg.Topology.Workers.Disk))
-	sb.newline()
-
-	sb.section("network")
-	sb.kv("machine cidr", cfg.Networking.MachineCIDR)
-	sb.kv("pod cidr", cfg.Networking.PodCIDR)
-	sb.kv("service cidr", cfg.Networking.ServiceCIDR)
-
-	if cfg.Networking.StaticIP.Start != "" {
-		if vip, err := netutil.ResolveVIP(cfg.Networking.Bastion.VIP, cfg.Networking.StaticIP.Start); err == nil {
-			sb.kvHighlight("vip address", vip)
-		}
-	}
-	sb.newline()
-
-	return "\n" + tui.BoxedSectionCompact(sb.String(), title, tui.DefaultBoxWidth) + "\n"
 }
 
 func PostDeploySummary(cfg *config.Config, result *postinstall.Result) string {

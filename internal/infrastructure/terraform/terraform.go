@@ -291,17 +291,6 @@ func (t *Executor) destroyDirect(ctx context.Context, opts DestroyOptions) error
 	return t.run(ctx, args...)
 }
 
-func (t *Executor) Output(ctx context.Context, name string) (string, error) {
-	result, err := t.exec.Run(ctx, "terraform", "output", "-raw", name)
-	if err != nil {
-		return "", err
-	}
-	if result.ExitCode != 0 {
-		return "", fmt.Errorf("terraform output %s: %s", name, result.Stderr)
-	}
-	return result.Stdout, nil
-}
-
 func (t *Executor) HasState() bool {
 	stateFile := filepath.Join(t.WorkDir, "terraform.tfstate")
 	return system.FileExists(stateFile)

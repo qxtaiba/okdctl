@@ -548,12 +548,3 @@ func GetInt(getter func(cfg *config.Config) int) ConfigGetter {
 		return strconv.Itoa(getter(cfg))
 	}
 }
-
-func GetBool(getter func(cfg *config.Config) bool) ConfigGetter {
-	return func(cfg *config.Config) string {
-		if getter(cfg) {
-			return "yes"
-		}
-		return "no"
-	}
-}

@@ -6,18 +6,8 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"runtime"
 	"strings"
 )
-
-func SudoAvailable() bool {
-	if runtime.GOOS == "windows" {
-		return false
-	}
-
-	cmd := exec.CommandContext(context.Background(), "sudo", "-n", "true")
-	return cmd.Run() == nil
-}
 
 func isElevationNeeded(err error) bool {
 	if errors.Is(err, os.ErrPermission) {

@@ -42,25 +42,6 @@ func NewLoader() *Loader {
 	return &Loader{viper: v}
 }
 
-// Load returns the default config if no config file is found.
-func (l *Loader) Load() (*Config, error) {
-	cfg := DefaultConfig()
-
-	if err := l.viper.ReadInConfig(); err != nil {
-		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
-			return cfg, nil
-		}
-		return nil, fmt.Errorf("error reading config file %q: %w", l.viper.ConfigFileUsed(), err)
-	}
-
-	if err := l.viper.Unmarshal(cfg); err != nil {
-		return nil, fmt.Errorf("error parsing config: %w", err)
-	}
-
-	migrateDeprecatedFields(cfg)
-	return cfg, nil
-}
-
 func (l *Loader) LoadFile(path string) (*Config, error) {
 	// Reject world- or group-writable config files. The YAML is not
 	// supposed to carry secrets, but if a bug ever leaks one we don't
@@ -86,38 +67,6 @@ func (l *Loader) LoadFile(path string) (*Config, error) {
 
 	migrateDeprecatedFields(cfg)
 	return cfg, nil
-}
-
-type LoadResult struct {
-	Config     *Config
-	Validation *ValidationResult
-}
-
-func (l *Loader) LoadFileWithValidation(path string) (*LoadResult, error) {
-	cfg, err := l.LoadFile(path)
-	if err != nil {
-		return nil, err
-	}
-
-	validation := cfg.Validate()
-	return &LoadResult{
-		Config:     cfg,
-		Validation: validation,
-	}, nil
-}
-
-// MustLoadFile returns an error if validation fails.
-func (l *Loader) MustLoadFile(path string) (*Config, error) {
-	result, err := l.LoadFileWithValidation(path)
-	if err != nil {
-		return nil, err
-	}
-
-	if !result.Validation.IsValid() {
-		return nil, fmt.Errorf("configuration validation failed: %s", result.Validation.Error())
-	}
-
-	return result.Config, nil
 }
 
 func (l *Loader) Save(cfg *Config, path string) error {
