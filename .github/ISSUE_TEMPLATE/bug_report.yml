@@ -6,11 +6,10 @@ body:
   - type: markdown
     attributes:
       value: |
-        Thanks for taking the time to file a bug report. To make the fix
-        as fast as possible, please include the diagnostic bundle generated
-        by `openshitctl diag`. That single command captures versions, OS
-        info, effective config (with secrets masked), and recent logs — it
-        is the fastest path to a fix and is sanitized by default.
+        Thanks for taking the time to file a bug report. Please run
+        `openshitctl doctor` and paste its output in the "doctor output"
+        field below, along with any relevant error output from the
+        command that was failing. The more context, the faster the fix.
 
   - type: input
     id: version
@@ -86,13 +85,13 @@ body:
       required: true
 
   - type: textarea
-    id: diag
+    id: doctor
     attributes:
-      label: Diagnostic bundle
+      label: Doctor output
       description: |
-        Paste the output of `openshitctl diag --stdout`, or attach the
-        generated `diag-*.tar.gz` file from `openshitctl diag`. Both
-        modes mask secrets automatically — it is safe to paste publicly.
+        Paste the full output of `openshitctl doctor`. This captures
+        host OS, available binaries, port status, pull-secret validity,
+        and disk space — the environment data most bugs depend on.
       render: shell
     validations:
       required: true

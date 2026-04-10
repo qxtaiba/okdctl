@@ -38,14 +38,14 @@ Highlights:
   • Single binary distribution`,
 	Version: version.Version,
 	Run: func(_ *cobra.Command, _ []string) {
-		fmt.Println(tui.TitleStyle.Render("Homelab K8s"))
+		fmt.Println(tui.TitleStyle.Render("homelab k8s"))
 		fmt.Println()
-		fmt.Println(tui.MutedStyle.Render("Quick start:"))
-		fmt.Println("  " + tui.HighlightStyle.Render("openshitctl deploy") + "           Deploy a cluster")
-		fmt.Println("  " + tui.HighlightStyle.Render("openshitctl destroy") + "          Destroy the cluster")
-		fmt.Println("  " + tui.HighlightStyle.Render("openshitctl update-ingress") + "   Switch ingress to LoadBalancer IPs")
+		fmt.Println(tui.MutedStyle.Render("quick start:"))
+		fmt.Println("  " + tui.HighlightStyle.Render("openshitctl deploy") + "           deploy a cluster")
+		fmt.Println("  " + tui.HighlightStyle.Render("openshitctl destroy") + "          destroy the cluster")
+		fmt.Println("  " + tui.HighlightStyle.Render("openshitctl update-ingress") + "   switch ingress to loadbalancer ips")
 		fmt.Println()
-		fmt.Println(tui.MutedStyle.Render("Run 'openshitctl --help' for all commands"))
+		fmt.Println(tui.MutedStyle.Render("run 'openshitctl --help' for all commands"))
 	},
 }
 

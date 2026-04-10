@@ -11,7 +11,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `openshitctl doctor` — preflight checks for OS, required binaries,
   free ports, sudo access, pull-secret validity, disk space, Proxmox
   reachability
-- `openshitctl diag` — sanitized diagnostic bundle for bug reports
 - Apache-2.0 license
 - Architecture documentation under `docs/architecture/`
 - Compatibility matrix in README

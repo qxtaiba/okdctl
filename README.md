@@ -31,8 +31,6 @@ becoming a second job.
   classes, external-secrets, and more (opt-in per cluster)
 - **Automated preflight** — `openshitctl doctor` verifies your host is
   ready before any destructive operation
-- **Diagnostic bundles** — `openshitctl diag` collects a sanitized
-  support bundle you can attach to an issue
 - **kube-vip for API VIP** — no reliance on external load balancers for the
   API server; HAProxy handles ingress
 - **Compact cluster support** — 3-master / 0-worker topologies for small
@@ -176,7 +174,6 @@ openshitctl deploy            Deploy a new cluster (launches wizard on first run
 openshitctl destroy           Tear down a cluster, cleaning up VMs and host config
 openshitctl update-ingress    Switch ingress controllers from HostNetwork to LoadBalancer IPs
 openshitctl doctor            Run preflight checks against the local environment
-openshitctl diag              Collect a sanitized diagnostic bundle as a tarball
 openshitctl version           Print version, git commit, build date, platform
 ```
 
@@ -290,9 +287,10 @@ Before filing an issue, please run:
 
 ```sh
 openshitctl doctor            # what's wrong with my environment?
-openshitctl diag              # bundle everything for a bug report (tar.gz)
-openshitctl diag --stdout     # same bundle as plain text, for pasting
 ```
+
+Attach the full output of `openshitctl doctor` to your bug report,
+plus any relevant error output from the command that was failing.
 
 ### Common failures
 

@@ -131,7 +131,7 @@ func PostDeploySummary(cfg *config.Config, result *postinstall.Result) string {
 	sb.b.WriteString("    to auto-detect loadbalancer ips and switch dns over.\n")
 	sb.newline()
 
-	return "\n" + tui.BoxedSectionCompact(sb.String(), "DEPLOYMENT COMPLETE", tui.DefaultBoxWidth) + "\n"
+	return "\n" + tui.BoxedSectionCompact(sb.String(), "deployment complete", tui.DefaultBoxWidth) + "\n"
 }
 
 func UpdateIngressSummary(result *postinstall.UpdateIngressResult) string {
@@ -171,5 +171,5 @@ func UpdateIngressSummary(result *postinstall.UpdateIngressResult) string {
 	}
 	sb.newline()
 
-	return "\n" + tui.BoxedSectionCompact(sb.String(), "INGRESS UPDATED", tui.DefaultBoxWidth) + "\n"
+	return "\n" + tui.BoxedSectionCompact(sb.String(), "ingress updated", tui.DefaultBoxWidth) + "\n"
 }

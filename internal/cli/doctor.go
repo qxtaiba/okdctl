@@ -22,8 +22,6 @@ import (
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/platform"
 )
 
-// goosDarwin is the runtime.GOOS string for macOS, hoisted out of inline
-// comparisons so the doctor and diag commands can share it.
 const goosDarwin = "darwin"
 
 // doctorCmd is the user-facing 'openshitctl doctor' command. It is separate
@@ -34,15 +32,17 @@ var doctorCmd = &cobra.Command{
 	Short: "Check that your environment is ready to deploy a cluster",
 	Long: `Run preflight checks on the local environment before a deploy.
 
-Each check is reported as PASS, WARN, or FAIL:
+Each check is reported as [ok], [warn], or [fail]:
 
-  PASS — the check passed, no action needed
-  WARN — something is suboptimal or missing but can be handled during
-         deploy (e.g., 'oc' will be auto-downloaded into /usr/local/bin)
-  FAIL — this must be fixed before 'openshitctl deploy' will succeed
+  [ok]   — the check passed, no action needed
+  [warn] — something is suboptimal or missing but can be handled
+           during deploy (e.g., 'oc' will be auto-downloaded into
+           /usr/local/bin)
+  [fail] — this must be fixed before 'openshitctl deploy' will
+           succeed
 
-Exit code is 0 if there are no FAIL results (WARN is tolerated), 1
-otherwise. Designed to be rerun until clean.`,
+Exit code is 0 if there are no [fail] results ([warn] is tolerated),
+1 otherwise. Designed to be rerun until clean.`,
 	RunE: runDoctor,
 }
 
@@ -73,15 +73,15 @@ func runDoctor(cmd *cobra.Command, _ []string) error {
 	ctx := cmd.Context()
 
 	checks := []check{
-		{"host OS", checkHostOS},
+		{"host os", checkHostOS},
 		{"not running as root", checkNotRoot},
-		{"PATH contains /usr/local/bin", checkPath},
+		{"path contains /usr/local/bin", checkPath},
 		{"required binaries", checkBinaries},
 		{"sudo (non-interactive)", checkSudo},
-		{"SSH public key", checkSSHKey},
+		{"ssh public key", checkSSHKey},
 		{"pull secret", checkPullSecret},
 		{"free disk space (workdir)", checkDiskSpace},
-		{"host ports available", checkPorts},
+		{"host ports", checkPorts},
 	}
 
 	var fails, warns int
@@ -109,17 +109,26 @@ func runDoctor(cmd *cobra.Command, _ []string) error {
 	return nil
 }
 
+// labelWidth is the column width reserved for the severity label, sized
+// for the longest label ("[fail]" / "[warn]" = 6 chars). Keeps check
+// names aligned in a scannable column.
+const labelWidth = 6
+
 func printResult(name string, r checkResult) {
-	var marker string
+	var rawLabel, styled string
 	switch r.sev {
 	case sevPass:
-		marker = tui.SuccessStyle.Render("✓ PASS")
+		rawLabel = "[ok]"
+		styled = tui.SuccessStyle.Render(rawLabel)
 	case sevWarn:
-		marker = tui.WarningStyle.Render("⚠ WARN")
+		rawLabel = "[warn]"
+		styled = tui.WarningStyle.Render(rawLabel)
 	case sevFail:
-		marker = tui.ErrorStyle.Render("✗ FAIL")
+		rawLabel = "[fail]"
+		styled = tui.ErrorStyle.Render(rawLabel)
 	}
-	line := fmt.Sprintf("  %s  %s", marker, name)
+	padding := strings.Repeat(" ", labelWidth-len(rawLabel)+2)
+	line := "  " + styled + padding + name
 	if r.detail != "" {
 		line += tui.MutedStyle.Render(" — " + r.detail)
 	}
@@ -130,7 +139,7 @@ func printResult(name string, r checkResult) {
 // we do not parse /etc/os-release and instead report darwin directly.
 func checkHostOS(_ context.Context) checkResult {
 	if runtime.GOOS == goosDarwin {
-		return checkResult{sev: sevPass, detail: "macOS (operator mode — deploying to a remote Proxmox host)"}
+		return checkResult{sev: sevPass, detail: "macos (operator mode — deploying to a remote proxmox host)"}
 	}
 	host, err := platform.Detect()
 	if err != nil {
@@ -152,7 +161,7 @@ func checkNotRoot(_ context.Context) checkResult {
 func checkPath(_ context.Context) checkResult {
 	path := os.Getenv("PATH")
 	if !strings.Contains(path, "/usr/local/bin") {
-		return checkResult{sev: sevWarn, detail: "/usr/local/bin missing from PATH; openshitctl will prepend it at startup"}
+		return checkResult{sev: sevWarn, detail: "/usr/local/bin missing from path; openshitctl will prepend it at startup"}
 	}
 	return checkResult{sev: sevPass}
 }
@@ -193,7 +202,7 @@ func checkBinaries(_ context.Context) checkResult {
 // long-running bootstrap to block on a password prompt halfway through.
 func checkSudo(ctx context.Context) checkResult {
 	if runtime.GOOS == goosDarwin {
-		return checkResult{sev: sevPass, detail: "skipped on macOS (operator mode)"}
+		return checkResult{sev: sevPass, detail: "skipped on macos (operator mode)"}
 	}
 	if _, err := exec.LookPath("sudo"); err != nil {
 		return checkResult{sev: sevFail, detail: "sudo not installed"}
@@ -204,7 +213,7 @@ func checkSudo(ctx context.Context) checkResult {
 	if err := cmd.Run(); err != nil {
 		return checkResult{sev: sevWarn, detail: "sudo requires a password; deploy will prompt"}
 	}
-	return checkResult{sev: sevPass, detail: "NOPASSWD enabled"}
+	return checkResult{sev: sevPass, detail: "nopasswd enabled"}
 }
 
 func checkSSHKey(_ context.Context) checkResult {
@@ -222,7 +231,7 @@ func checkSSHKey(_ context.Context) checkResult {
 			return checkResult{sev: sevPass, detail: p}
 		}
 	}
-	return checkResult{sev: sevWarn, detail: "no default SSH public key found; you will need to specify one in the wizard"}
+	return checkResult{sev: sevWarn, detail: "no default ssh public key found; you will need to specify one in the wizard"}
 }
 
 // checkPullSecret looks for a pull secret in the default location. The
@@ -238,18 +247,18 @@ func checkPullSecret(_ context.Context) checkResult {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return checkResult{sev: sevWarn, detail: "not found at " + path + " (required for deploy; see README)"}
+			return checkResult{sev: sevWarn, detail: "not found at " + path + " (required for deploy; see readme)"}
 		}
 		return checkResult{sev: sevFail, detail: err.Error()}
 	}
 
 	var js map[string]any
 	if err := json.Unmarshal(data, &js); err != nil {
-		return checkResult{sev: sevFail, detail: "invalid JSON: " + err.Error()}
+		return checkResult{sev: sevFail, detail: "invalid json: " + err.Error()}
 	}
 	auths, ok := js["auths"].(map[string]any)
 	if !ok {
-		return checkResult{sev: sevFail, detail: "missing or malformed 'auths' field — not a valid OKD pull secret"}
+		return checkResult{sev: sevFail, detail: "missing or malformed 'auths' field — not a valid okd pull secret"}
 	}
 	if len(auths) == 0 {
 		return checkResult{sev: sevFail, detail: "'auths' is empty — pull secret has no registry entries"}
@@ -277,9 +286,9 @@ func checkDiskSpace(_ context.Context) checkResult {
 	freeBytes := uint64(st.Bavail) * uint64(st.Bsize) //nolint:unconvert // platform-portability
 	freeGB := freeBytes / (1024 * 1024 * 1024)
 	if freeGB < minGB {
-		return checkResult{sev: sevFail, detail: fmt.Sprintf("%d GB free in %s (need at least %d GB)", freeGB, u.HomeDir, minGB)}
+		return checkResult{sev: sevFail, detail: fmt.Sprintf("%d gb free in %s (need at least %d gb)", freeGB, u.HomeDir, minGB)}
 	}
-	return checkResult{sev: sevPass, detail: fmt.Sprintf("%d GB free in %s", freeGB, u.HomeDir)}
+	return checkResult{sev: sevPass, detail: fmt.Sprintf("%d gb free in %s", freeGB, u.HomeDir)}
 }
 
 // checkPorts probes each port openshitctl's deploy will bind by trying
@@ -291,7 +300,7 @@ func checkDiskSpace(_ context.Context) checkResult {
 // services bound only on a specific non-loopback address.
 func checkPorts(ctx context.Context) checkResult {
 	if runtime.GOOS == goosDarwin {
-		return checkResult{sev: sevPass, detail: "skipped on macOS (operator mode)"}
+		return checkResult{sev: sevPass, detail: "skipped on macos (operator mode)"}
 	}
 
 	ports := []int{53, 80, 443, 6443, 22623, 8080}
