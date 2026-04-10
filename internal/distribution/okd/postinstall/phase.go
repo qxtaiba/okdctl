@@ -67,13 +67,7 @@ func (p *Phase) Execute(ctx context.Context, cfg *config.Config, opts *Options) 
 	addonMgr := addon.NewManager(cfg, p.Exec, p.Log, opts.ProjectRoot)
 	pctx := distribution.NewPhaseContext(PostInstallContext{})
 
-	orchestrator := distribution.NewOrchestrator(
-		p.NewVerifyHealthStep(cfg, opts, pctx),
-		p.NewCleanupBootstrapStep(cfg, opts, pctx),
-		p.NewVerifyKubeVIPStep(cfg, opts, pctx),
-		p.NewDeployProductionDNSStep(cfg, opts, pctx),
-		p.NewInstallAddonsStep(cfg, opts, pctx, addonMgr),
-	)
+	orchestrator := distribution.NewOrchestrator(distribution.BuildSteps(p.postinstallSteps(cfg, opts, pctx, addonMgr))...)
 	orchestrator.SetLogger(p.Log)
 
 	if err := orchestrator.Run(ctx); err != nil {

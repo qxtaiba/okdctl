@@ -9,7 +9,6 @@ import (
 
 	"github.com/qxtaiba/okd-proxmox-cli/internal/config"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/dns"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/executor"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/platform"
@@ -99,27 +98,7 @@ func (p *Phase) Execute(ctx context.Context, cfg *config.Config, opts *Options) 
 		p.Log.Warn("setup: passwordless sudo not configured; next sudo command may hang waiting for password")
 	}
 
-	orchestrator := distribution.NewOrchestrator(
-		p.newInstallPackagesStep(opts),
-		p.newInstallToolsStep(cfg),
-		p.newEnsureWorkDirStep(opts),
-		p.newDownloadToolsStep(cfg, opts),
-		p.newGenerateInstallConfigStep(cfg, opts),
-		p.newGenerateManifestsStep(opts),
-		p.newGenerateKubeVIPManifestsStep(cfg, opts),
-		p.newInjectManifestsStep(opts),
-		p.newCompactClusterManifestsStep(cfg, opts),
-		p.newGenerateIgnitionStep(opts),
-		p.newInstallApacheStep(cfg, opts),
-		p.newDeployIgnitionStep(cfg, opts),
-		p.newVerifyWebServerStep(cfg, opts),
-		p.newBuildISOsStep(cfg, opts),
-		p.newUploadISOsStep(cfg, opts),
-		p.newGenerateTfvarsStep(cfg, opts),
-		p.newConfigureHAProxyStep(cfg, opts),
-		p.newConfigureFirewallStep(opts),
-		p.newConfigureDNSStep(cfg, opts),
-	)
+	orchestrator := distribution.NewOrchestrator(distribution.BuildSteps(p.setupSteps(cfg, opts))...)
 	orchestrator.SetLogger(p.Log)
 
 	if err := orchestrator.Run(ctx); err != nil {
@@ -138,20 +117,4 @@ func (p *Phase) PrintSetupCompletionSummary(cfg *config.Config, opts *Options) {
 
 	p.Log.Info(fmt.Sprintf("setup: cluster config saved to %s", clusterDir))
 	p.Log.Info(fmt.Sprintf("setup: terraform environment set to %s", tfEnv))
-}
-
-func (p *Phase) dnsFunctions() dnsFuncs {
-	return dnsFuncs{
-		setupDnsmasq: func(ctx context.Context, fallbackDNS []string) error {
-			return dns.Setup(ctx, fallbackDNS, p.Log)
-		},
-		deployBootstrapDNS:         dns.DeployBootstrap,
-		generateBootstrapDNSConfig: dns.GenerateBootstrapConfig,
-	}
-}
-
-type dnsFuncs struct {
-	setupDnsmasq               func(ctx context.Context, fallbackDNS []string) error
-	deployBootstrapDNS         func(ctx context.Context, cfg *config.Config) error
-	generateBootstrapDNSConfig func(cfg *config.Config, outputDir string) (string, string, error)
 }

@@ -37,10 +37,6 @@ const (
 	toolSops      externalTool = "sops"
 )
 
-func coreTools() []externalTool {
-	return []externalTool{toolTerraform, toolYQ}
-}
-
 func addonRequiredTools(cfg *config.Config) []externalTool {
 	seen := make(map[string]bool)
 	var tools []externalTool
@@ -66,18 +62,31 @@ func isToolInstalled(tool externalTool) bool {
 }
 
 func (p *Phase) InstallExternalTools(ctx context.Context, cfg *config.Config) error {
-	for _, tool := range coreTools() {
-		if err := p.installTool(ctx, tool); err != nil {
-			return fmt.Errorf("failed to install %s: %w", tool, err)
-		}
-	}
-
-	for _, tool := range addonRequiredTools(cfg) {
+	tools := append([]externalTool{toolTerraform, toolYQ}, addonRequiredTools(cfg)...)
+	for _, tool := range tools {
 		if err := p.installTool(ctx, tool); err != nil {
 			return fmt.Errorf("failed to install %s: %w", tool, err)
 		}
 	}
 	return nil
+}
+
+// binaryTools defines the install specs for tools fetched as prebuilt
+// binaries. The %s in url is substituted with platform.DownloadArch().
+var binaryTools = map[externalTool]binaryInstallSpec{
+	toolYQ: {
+		name: "yq", versionFlag: "--version",
+		url: "https://github.com/mikefarah/yq/releases/latest/download/yq_linux_%s",
+	},
+	toolHelm: {
+		name: "helm", versionFlag: "version",
+		url:           "https://get.helm.sh/helm-v3.17.3-linux-%s.tar.gz",
+		archiveBinary: "helm", stripComponents: 1,
+	},
+	toolSops: {
+		name: "sops", versionFlag: "--version",
+		url: "https://github.com/getsops/sops/releases/download/v3.9.4/sops-v3.9.4.linux.%s",
+	},
 }
 
 func (p *Phase) installTool(ctx context.Context, tool externalTool) error {
@@ -86,19 +95,17 @@ func (p *Phase) installTool(ctx context.Context, tool externalTool) error {
 		return nil
 	}
 
-	switch tool {
-	case toolTerraform:
+	if tool == toolTerraform {
 		return p.installTerraform(ctx)
-	case toolYQ:
-		return p.installYQ(ctx)
-	case toolHelm:
-		return p.installHelm(ctx)
-	case toolSops:
-		return p.installSops(ctx)
-	default:
+	}
+
+	spec, ok := binaryTools[tool]
+	if !ok {
 		p.Log.Warn(fmt.Sprintf("tools: no installer for %s, skipping (install manually)", tool))
 		return nil
 	}
+	spec.url = fmt.Sprintf(spec.url, platform.DownloadArch())
+	return p.installBinary(ctx, spec)
 }
 
 func (p *Phase) installTerraform(ctx context.Context) error {
@@ -119,7 +126,7 @@ func (p *Phase) installTerraform(ctx context.Context) error {
 		}
 	default: // rhel family
 		repoURL := "https://rpm.releases.hashicorp.com/RHEL/hashicorp.repo"
-		if err := runSudoCommand(ctx, "dnf", "config-manager", "--add-repo", repoURL); err != nil {
+		if err := system.RunSudo(ctx, "dnf", "config-manager", "--add-repo", repoURL); err != nil {
 			return fmt.Errorf("failed to add HashiCorp repository: %w", err)
 		}
 	}
@@ -185,31 +192,6 @@ func (p *Phase) installBinary(ctx context.Context, spec binaryInstallSpec) error
 	return nil
 }
 
-func (p *Phase) installYQ(ctx context.Context) error {
-	arch := platform.DownloadArch()
-	return p.installBinary(ctx, binaryInstallSpec{
-		name: "yq", versionFlag: "--version",
-		url: fmt.Sprintf("https://github.com/mikefarah/yq/releases/latest/download/yq_linux_%s", arch),
-	})
-}
-
-func (p *Phase) installHelm(ctx context.Context) error {
-	arch := platform.DownloadArch()
-	return p.installBinary(ctx, binaryInstallSpec{
-		name: "helm", versionFlag: "version",
-		url:           fmt.Sprintf("https://get.helm.sh/helm-v3.17.3-linux-%s.tar.gz", arch),
-		archiveBinary: "helm", stripComponents: 1,
-	})
-}
-
-func (p *Phase) installSops(ctx context.Context) error {
-	arch := platform.DownloadArch()
-	return p.installBinary(ctx, binaryInstallSpec{
-		name: "sops", versionFlag: "--version",
-		url: fmt.Sprintf("https://github.com/getsops/sops/releases/download/v3.9.4/sops-v3.9.4.linux.%s", arch),
-	})
-}
-
 func installBinaryToPath(ctx context.Context, srcPath, name string) error {
 	destPath := filepath.Join(phase.DefaultBinDir, name)
 
@@ -222,10 +204,6 @@ func installBinaryToPath(ctx context.Context, srcPath, name string) error {
 	}
 
 	return nil
-}
-
-func runSudoCommand(ctx context.Context, name string, args ...string) error {
-	return system.RunSudo(ctx, name, args...)
 }
 
 func getToolVersion(tool, flag string) string {

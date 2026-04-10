@@ -129,6 +129,45 @@ func (b *StepBuilder) MustBuild() ProvisioningStep {
 	return step
 }
 
+// StepDef is a data-driven step definition. ID, Name, and Exec are required;
+// everything else is optional. Fatal is the default — set NonFatal to true
+// for steps that should log a warning on failure and continue.
+type StepDef struct {
+	ID         StepID
+	Name       string
+	Desc       string
+	NonFatal   bool
+	SkipWhen   func() bool
+	SkipReason string
+	OnStart    func()
+	Exec       func(ctx context.Context) error
+	OnError    func(error)
+}
+
+// BuildSteps converts a slice of StepDef into ProvisioningSteps ready for
+// NewOrchestrator. Panics via MustBuild if any StepDef has an empty ID or Name.
+// Fatal is set explicitly from !NonFatal so the guarantee does not depend on
+// NewStepBuilder's default — if that default ever changes, this helper still
+// produces the correct behavior.
+func BuildSteps(defs []StepDef) []ProvisioningStep {
+	steps := make([]ProvisioningStep, 0, len(defs))
+	for _, d := range defs {
+		b := NewStepBuilder(d.ID, d.Name).Description(d.Desc).Fatal(!d.NonFatal)
+		if d.SkipWhen != nil {
+			b = b.SkipWhen(d.SkipWhen).SkipReason(d.SkipReason)
+		}
+		if d.OnStart != nil {
+			b = b.OnStart(d.OnStart)
+		}
+		b = b.Execute(d.Exec)
+		if d.OnError != nil {
+			b = b.OnError(d.OnError)
+		}
+		steps = append(steps, b.MustBuild())
+	}
+	return steps
+}
+
 type builtStep struct {
 	builder *StepBuilder
 }

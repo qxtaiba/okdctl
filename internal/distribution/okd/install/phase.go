@@ -80,15 +80,7 @@ func New(exec *executor.Executor, logger *slog.Logger, version string) *Phase {
 }
 
 func (p *Phase) Execute(ctx context.Context, cfg *config.Config, opts *Options) error {
-	orchestrator := distribution.NewOrchestrator(
-		p.newDeployInfraStep(cfg, opts),
-		p.newWaitBootstrapStep(cfg, opts),
-		p.newStartWorkersStep(cfg, opts),
-		p.newSetupKubeconfigStep(opts),
-		p.newValidateAccessStep(opts),
-		p.newMonitorInstallStep(cfg, opts),
-		p.newSetupAccessStep(opts),
-	)
+	orchestrator := distribution.NewOrchestrator(distribution.BuildSteps(p.installSteps(cfg, opts))...)
 	orchestrator.SetLogger(p.Log)
 
 	if err := orchestrator.Run(ctx); err != nil {
