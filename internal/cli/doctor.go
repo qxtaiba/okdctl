@@ -32,14 +32,15 @@ var doctorCmd = &cobra.Command{
 	Short: "Check that your environment is ready to deploy a cluster",
 	Long: `Run preflight checks on the local environment before a deploy.
 
-Each check is reported as [ok], [warn], or [fail]:
+Each check prints a title line with a status icon and a result line
+with a bracketed label:
 
-  [ok]   — the check passed, no action needed
-  [warn] — something is suboptimal or missing but can be handled
-           during deploy (e.g., 'oc' will be auto-downloaded into
-           /usr/local/bin)
-  [fail] — this must be fixed before 'openshitctl deploy' will
-           succeed
+  ✓ [ok]   — the check passed, no action needed
+  ⚠ [warn] — something is suboptimal or missing but can be handled
+             during deploy (e.g., 'oc' will be auto-downloaded into
+             /usr/local/bin)
+  ✗ [fail] — this must be fixed before 'openshitctl deploy' will
+             succeed
 
 Exit code is 0 if there are no [fail] results ([warn] is tolerated),
 1 otherwise. Designed to be rerun until clean.`,
@@ -66,6 +67,7 @@ type checkResult struct {
 
 type check struct {
 	name string
+	desc string
 	fn   func(context.Context) checkResult
 }
 
@@ -73,21 +75,25 @@ func runDoctor(cmd *cobra.Command, _ []string) error {
 	ctx := cmd.Context()
 
 	checks := []check{
-		{"host os", checkHostOS},
-		{"not running as root", checkNotRoot},
-		{"path contains /usr/local/bin", checkPath},
-		{"required binaries", checkBinaries},
-		{"sudo (non-interactive)", checkSudo},
-		{"ssh public key", checkSSHKey},
-		{"pull secret", checkPullSecret},
-		{"free disk space (workdir)", checkDiskSpace},
-		{"host ports", checkPorts},
+		{"host os", "platform and operator-mode detection", checkHostOS},
+		{"root check", "guard against running as root (deploy uses sudo internally)", checkNotRoot},
+		{"path", "/usr/local/bin present for auto-installed tools", checkPath},
+		{"required binaries", "curl, ssh, git, oc, openshift-install, terraform", checkBinaries},
+		{"sudo", "non-interactive (nopasswd) for long-running installs", checkSudo},
+		{"ssh public key", "default key for vm provisioning", checkSSHKey},
+		{"pull secret", "valid okd registry pull secret", checkPullSecret},
+		{"disk space", "at least 20 gb free in $home for install artifacts", checkDiskSpace},
+		{"host ports", "53, 80, 443, 6443, 22623, 8080 available for bind", checkPorts},
 	}
+
+	fmt.Println()
+	fmt.Println("🩺 " + tui.HighlightStyle.Render(fmt.Sprintf("doctor — running %d environment checks", len(checks))))
+	fmt.Println()
 
 	var fails, warns int
 	for _, c := range checks {
 		r := c.fn(ctx)
-		printResult(c.name, r)
+		printResult(c, r)
 		switch r.sev {
 		case sevFail:
 			fails++
@@ -96,7 +102,6 @@ func runDoctor(cmd *cobra.Command, _ []string) error {
 		}
 	}
 
-	fmt.Println()
 	switch {
 	case fails > 0:
 		tui.Error(fmt.Sprintf("doctor: %d failing check(s), %d warning(s) — fix before deploying", fails, warns))
@@ -109,30 +114,32 @@ func runDoctor(cmd *cobra.Command, _ []string) error {
 	return nil
 }
 
-// labelWidth is the column width reserved for the severity label, sized
-// for the longest label ("[fail]" / "[warn]" = 6 chars). Keeps check
-// names aligned in a scannable column.
-const labelWidth = 6
-
-func printResult(name string, r checkResult) {
-	var rawLabel, styled string
+// printResult renders one check as a two-line block: a title line with
+// the status icon, check name, and muted description, then an indented
+// result line with the bracketed label and detail. A blank line follows
+// so check blocks are visually distinct.
+func printResult(c check, r checkResult) {
+	var icon, label string
 	switch r.sev {
 	case sevPass:
-		rawLabel = "[ok]"
-		styled = tui.SuccessStyle.Render(rawLabel)
+		icon = tui.SuccessStyle.Render("✓")
+		label = tui.SuccessStyle.Render("[ok]")
 	case sevWarn:
-		rawLabel = "[warn]"
-		styled = tui.WarningStyle.Render(rawLabel)
+		icon = tui.WarningStyle.Render("⚠")
+		label = tui.WarningStyle.Render("[warn]")
 	case sevFail:
-		rawLabel = "[fail]"
-		styled = tui.ErrorStyle.Render(rawLabel)
+		icon = tui.ErrorStyle.Render("✗")
+		label = tui.ErrorStyle.Render("[fail]")
 	}
-	padding := strings.Repeat(" ", labelWidth-len(rawLabel)+2)
-	line := "  " + styled + padding + name
-	if r.detail != "" {
-		line += tui.MutedStyle.Render(" — " + r.detail)
+
+	title := c.name
+	if c.desc != "" {
+		title += tui.MutedStyle.Render(": " + c.desc)
 	}
-	fmt.Println(line)
+
+	fmt.Println("  " + icon + " " + title)
+	fmt.Println("      " + label + " " + r.detail)
+	fmt.Println()
 }
 
 // checkHostOS verifies we can identify the host OS. On macOS (operator mode)
@@ -155,7 +162,7 @@ func checkNotRoot(_ context.Context) checkResult {
 	if os.Geteuid() == 0 {
 		return checkResult{sev: sevFail, detail: "running as root; openshitctl uses sudo internally"}
 	}
-	return checkResult{sev: sevPass}
+	return checkResult{sev: sevPass, detail: "running as unprivileged user"}
 }
 
 func checkPath(_ context.Context) checkResult {
@@ -163,7 +170,7 @@ func checkPath(_ context.Context) checkResult {
 	if !strings.Contains(path, "/usr/local/bin") {
 		return checkResult{sev: sevWarn, detail: "/usr/local/bin missing from path; openshitctl will prepend it at startup"}
 	}
-	return checkResult{sev: sevPass}
+	return checkResult{sev: sevPass, detail: "/usr/local/bin found on path"}
 }
 
 // checkBinaries looks for the binaries openshitctl shells out to. Tools
