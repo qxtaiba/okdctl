@@ -183,7 +183,7 @@ var NetworkingStepDefinition = wizard.StepDefinition{
 	},
 }
 
-func NewNetworkingStep() (*wizard.DataDrivenStep, *wizard.DataDrivenStep) {
-	step := wizard.NewDataDrivenStep(&NetworkingStepDefinition)
+func NewNetworkingStep() (step, state *wizard.DataDrivenStep) {
+	step = wizard.NewDataDrivenStep(&NetworkingStepDefinition)
 	return step, step
 }

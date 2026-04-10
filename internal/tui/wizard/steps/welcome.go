@@ -58,20 +58,19 @@ func (s *WelcomeStep) Init() tea.Cmd {
 }
 
 func (s *WelcomeStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
-	switch msg := msg.(type) {
-	case tea.KeyPressMsg:
+	if keyMsg, ok := msg.(tea.KeyPressMsg); ok {
 		switch {
-		case key.Matches(msg, key.NewBinding(key.WithKeys("up", "k"))):
+		case key.Matches(keyMsg, key.NewBinding(key.WithKeys("up", "k"))):
 			if s.configExists && s.selectedIndex > 0 {
 				s.selectedIndex--
 				s.mode = WelcomeMode(s.selectedIndex)
 			}
-		case key.Matches(msg, key.NewBinding(key.WithKeys("down", "j"))):
+		case key.Matches(keyMsg, key.NewBinding(key.WithKeys("down", "j"))):
 			if s.configExists && s.selectedIndex < welcomeModeCount-1 {
 				s.selectedIndex++
 				s.mode = WelcomeMode(s.selectedIndex)
 			}
-		case key.Matches(msg, key.NewBinding(key.WithKeys("enter", " "))):
+		case key.Matches(keyMsg, key.NewBinding(key.WithKeys("enter", " "))):
 			return s, func() tea.Msg { return wizard.StepCompleteMsg{StepID: s.ID()} }
 		}
 	}
