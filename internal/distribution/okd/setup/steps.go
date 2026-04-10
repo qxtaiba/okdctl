@@ -40,11 +40,24 @@ const (
 )
 
 // setupSteps returns the ordered list of setup steps for the OKD setup phase.
-// Complex step bodies are extracted to named methods (installSystemPackages,
-// generateKubeVIPManifests, configureDNS) to keep this list readable.
+// The step list is split into 4 sub-methods (base / manifest / web / infra)
+// to keep each function under the funlen threshold; setupSteps concatenates
+// them in the order they must run. Complex step bodies are extracted to
+// named methods (installSystemPackages, generateKubeVIPManifests,
+// configureDNS).
 func (p *Phase) setupSteps(cfg *config.Config, opts *Options) []distribution.StepDef {
 	clusterDir := phase.ClusterConfigDir(opts.WorkDir)
+	var steps []distribution.StepDef
+	steps = append(steps, p.setupBaseSteps(cfg, opts)...)
+	steps = append(steps, p.setupManifestSteps(cfg, opts, clusterDir)...)
+	steps = append(steps, p.setupWebSteps(cfg, opts, clusterDir)...)
+	steps = append(steps, p.setupInfraSteps(cfg, opts)...)
+	return steps
+}
 
+// setupBaseSteps covers the host-level prerequisites: OS packages, external
+// tools, the working directory, and the OKD installer download.
+func (p *Phase) setupBaseSteps(cfg *config.Config, opts *Options) []distribution.StepDef {
 	return []distribution.StepDef{
 		{
 			ID: StepInstallPackages, Name: "Install System Packages",
@@ -76,6 +89,13 @@ func (p *Phase) setupSteps(cfg *config.Config, opts *Options) []distribution.Ste
 				return nil
 			},
 		},
+	}
+}
+
+// setupManifestSteps covers install-config, k8s manifests (core, kube-vip,
+// custom, compact-cluster), and ignition file generation.
+func (p *Phase) setupManifestSteps(cfg *config.Config, opts *Options, clusterDir string) []distribution.StepDef {
+	return []distribution.StepDef{
 		{
 			ID: StepGenerateConfig, Name: "Generate Install Config",
 			Desc: "generating install-config.yaml",
@@ -142,6 +162,13 @@ func (p *Phase) setupSteps(cfg *config.Config, opts *Options) []distribution.Ste
 				return nil
 			},
 		},
+	}
+}
+
+// setupWebSteps covers the apache web server for ignition delivery and the
+// CoreOS ISO customization / upload pipeline.
+func (p *Phase) setupWebSteps(cfg *config.Config, opts *Options, clusterDir string) []distribution.StepDef {
+	return []distribution.StepDef{
 		{
 			ID: StepInstallApache, Name: "Install Apache",
 			Desc: "installing and configuring apache web server", NonFatal: true,
@@ -191,6 +218,13 @@ func (p *Phase) setupSteps(cfg *config.Config, opts *Options) []distribution.Ste
 				p.Log.Warn("iso: you may need to upload isos manually before deploying")
 			},
 		},
+	}
+}
+
+// setupInfraSteps covers the host-level infrastructure: terraform variables,
+// haproxy load balancer, firewall rules, and dnsmasq.
+func (p *Phase) setupInfraSteps(cfg *config.Config, opts *Options) []distribution.StepDef {
+	return []distribution.StepDef{
 		{
 			ID: StepGenerateTfvars, Name: "Generate Terraform Variables",
 			Desc: "generating terraform variables",

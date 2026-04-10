@@ -166,9 +166,10 @@ func buildFormField(def *FieldDefinition) components.FormField {
 
 // getField resolves a field key to its FormField by walking the
 // fieldKeys → section → group → field chain, returning nil if any level
-// is missing. Callers must handle the nil case.
-func (s *DataDrivenStep) getField(key string) components.FormField {
-	loc, ok := s.fieldKeys[key]
+// is missing. Callers must handle the nil case. The parameter is named
+// fieldKey rather than key to avoid shadowing the bubbles/v2/key import.
+func (s *DataDrivenStep) getField(fieldKey string) components.FormField {
+	loc, ok := s.fieldKeys[fieldKey]
 	if !ok || loc.section < 0 || loc.section >= len(s.sections) {
 		return nil
 	}
@@ -179,15 +180,15 @@ func (s *DataDrivenStep) getField(key string) components.FormField {
 	return group.Field(loc.field)
 }
 
-func (s *DataDrivenStep) Value(key string) string {
-	if field := s.getField(key); field != nil {
+func (s *DataDrivenStep) Value(fieldKey string) string {
+	if field := s.getField(fieldKey); field != nil {
 		return field.Value()
 	}
 	return ""
 }
 
-func (s *DataDrivenStep) ValueInt(key string, fallback int) int {
-	v := s.Value(key)
+func (s *DataDrivenStep) ValueInt(fieldKey string, fallback int) int {
+	v := s.Value(fieldKey)
 	if v == "" {
 		return fallback
 	}
@@ -198,8 +199,8 @@ func (s *DataDrivenStep) ValueInt(key string, fallback int) int {
 	return i
 }
 
-func (s *DataDrivenStep) setValue(key, value string) {
-	loc, ok := s.fieldKeys[key]
+func (s *DataDrivenStep) setValue(fieldKey, value string) {
+	loc, ok := s.fieldKeys[fieldKey]
 	if !ok || loc.section < 0 || loc.section >= len(s.sections) {
 		return
 	}
@@ -214,9 +215,9 @@ func (s *DataDrivenStep) setValue(key, value string) {
 
 func (s *DataDrivenStep) values() map[string]string {
 	out := make(map[string]string, len(s.fieldKeys))
-	for key := range s.fieldKeys {
-		if field := s.getField(key); field != nil {
-			out[key] = field.Value()
+	for fieldKey := range s.fieldKeys {
+		if field := s.getField(fieldKey); field != nil {
+			out[fieldKey] = field.Value()
 		}
 	}
 	return out
@@ -308,11 +309,12 @@ func (s *DataDrivenStep) Update(msg tea.Msg) (WizardStep, tea.Cmd) {
 				group.Blur()
 				s.currentSection++
 				nextGroup := s.currentGroup()
+				focusCmd := s.emitFocusChanged()
 				if nextGroup == nil {
-					return s, s.emitFocusChanged()
+					return s, focusCmd
 				}
 				nextGroup.SetFocusIndex(0)
-				return s, tea.Batch(nextGroup.Focus(), s.emitFocusChanged())
+				return s, tea.Batch(nextGroup.Focus(), focusCmd)
 			}
 
 			var cmd tea.Cmd
@@ -331,11 +333,12 @@ func (s *DataDrivenStep) Update(msg tea.Msg) (WizardStep, tea.Cmd) {
 				group.Blur()
 				s.currentSection--
 				prevGroup := s.currentGroup()
+				focusCmd := s.emitFocusChanged()
 				if prevGroup == nil {
-					return s, s.emitFocusChanged()
+					return s, focusCmd
 				}
 				prevGroup.SetFocusIndex(len(prevGroup.Fields()) - 1)
-				return s, tea.Batch(prevGroup.Focus(), s.emitFocusChanged())
+				return s, tea.Batch(prevGroup.Focus(), focusCmd)
 			}
 
 			var cmd tea.Cmd

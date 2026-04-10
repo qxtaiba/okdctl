@@ -264,4 +264,3 @@ func (m *Model) CurrentStep() WizardStep {
 	}
 	return nil
 }
-
