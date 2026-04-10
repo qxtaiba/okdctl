@@ -289,8 +289,9 @@ you may be using them for other things.
 Before filing an issue, please run:
 
 ```sh
-openshitctl doctor             # what's wrong with my environment?
-openshitctl diag --sanitize    # bundle everything for a bug report
+openshitctl doctor            # what's wrong with my environment?
+openshitctl diag              # bundle everything for a bug report (tar.gz)
+openshitctl diag --stdout     # same bundle as plain text, for pasting
 ```
 
 ### Common failures

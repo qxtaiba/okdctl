@@ -9,7 +9,11 @@ on:
       - .goreleaser.yaml
       - .github/workflows/release.yml
       - .github/workflows/release-prep.yml
-      - go.mod
+
+# Cancel redundant runs when a PR is force-pushed or amended.
+concurrency:
+  group: release-prep-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
