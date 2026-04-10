@@ -1,7 +1,15 @@
 ---
 version: 2
+
+project_name: openshitctl
+
+before:
+  hooks:
+    - go mod tidy
+
 builds:
-  - main: ./cmd/openshitctl
+  - id: openshitctl
+    main: ./cmd/openshitctl
     binary: openshitctl
     env:
       - CGO_ENABLED=0
@@ -11,11 +19,14 @@ builds:
     goarch:
       - amd64
       - arm64
+    flags:
+      - -trimpath
     ldflags:
       - -s -w
       - -X github.com/qxtaiba/okd-proxmox-cli/pkg/version.Version={{.Version}}
       - -X github.com/qxtaiba/okd-proxmox-cli/pkg/version.GitCommit={{.ShortCommit}}
       - -X github.com/qxtaiba/okd-proxmox-cli/pkg/version.BuildDate={{.Date}}
+
 archives:
   - formats:
       - tar.gz
@@ -25,6 +36,123 @@ archives:
           - zip
     name_template: >-
       {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    files:
+      - README.md
+      - LICENSE
+      - NOTICE
+      - CHANGELOG.md
+
+checksum:
+  name_template: "SHA256SUMS"
+  algorithm: sha256
+
+# SBOM attached to every release; syft produces CycloneDX JSON
+sboms:
+  - id: default
+    artifacts: archive
+    documents:
+      - "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}.sbom.json"
+    cmd: syft
+    args: ["$artifact", "--output", "cyclonedx-json=$document"]
+
+# Sigstore keyless signing of checksum file + artifacts.
+# Signs via cosign using a GitHub OIDC identity token — no private keys.
+signs:
+  - cmd: cosign
+    env:
+      - COSIGN_EXPERIMENTAL=1
+    certificate: "${artifact}.pem"
+    args:
+      - sign-blob
+      - "--output-certificate=${certificate}"
+      - "--output-signature=${signature}"
+      - "${artifact}"
+      - "--yes"
+    artifacts: checksum
+    output: true
+
+# Homebrew tap — goreleaser will open a PR against
+# github.com/qxtaiba/homebrew-tap on every release, updating the formula.
+brews:
+  - name: openshitctl
+    repository:
+      owner: qxtaiba
+      name: homebrew-tap
+      branch: main
+    directory: Formula
+    homepage: "https://github.com/qxtaiba/okd-proxmox-cli"
+    description: "Deploy OKD clusters on Proxmox with one binary"
+    license: "Apache-2.0"
+    test: |
+      system "#{bin}/openshitctl version"
+    install: |
+      bin.install "openshitctl"
+
+# Docker images published to GitHub Container Registry
+dockers:
+  - image_templates:
+      - "ghcr.io/qxtaiba/openshitctl:{{ .Version }}-amd64"
+      - "ghcr.io/qxtaiba/openshitctl:latest-amd64"
+    dockerfile: Dockerfile
+    use: buildx
+    goos: linux
+    goarch: amd64
+    build_flag_templates:
+      - "--platform=linux/amd64"
+      - "--label=org.opencontainers.image.source=https://github.com/qxtaiba/okd-proxmox-cli"
+      - "--label=org.opencontainers.image.version={{ .Version }}"
+      - "--label=org.opencontainers.image.created={{ .Date }}"
+      - "--label=org.opencontainers.image.revision={{ .FullCommit }}"
+      - "--label=org.opencontainers.image.licenses=Apache-2.0"
+  - image_templates:
+      - "ghcr.io/qxtaiba/openshitctl:{{ .Version }}-arm64"
+      - "ghcr.io/qxtaiba/openshitctl:latest-arm64"
+    dockerfile: Dockerfile
+    use: buildx
+    goos: linux
+    goarch: arm64
+    build_flag_templates:
+      - "--platform=linux/arm64"
+      - "--label=org.opencontainers.image.source=https://github.com/qxtaiba/okd-proxmox-cli"
+      - "--label=org.opencontainers.image.version={{ .Version }}"
+      - "--label=org.opencontainers.image.created={{ .Date }}"
+      - "--label=org.opencontainers.image.revision={{ .FullCommit }}"
+      - "--label=org.opencontainers.image.licenses=Apache-2.0"
+
+docker_manifests:
+  - name_template: "ghcr.io/qxtaiba/openshitctl:{{ .Version }}"
+    image_templates:
+      - "ghcr.io/qxtaiba/openshitctl:{{ .Version }}-amd64"
+      - "ghcr.io/qxtaiba/openshitctl:{{ .Version }}-arm64"
+  - name_template: "ghcr.io/qxtaiba/openshitctl:latest"
+    image_templates:
+      - "ghcr.io/qxtaiba/openshitctl:latest-amd64"
+      - "ghcr.io/qxtaiba/openshitctl:latest-arm64"
+
+# .deb / .rpm packages for Linux users who install via apt/dnf
+nfpms:
+  - id: default
+    package_name: openshitctl
+    vendor: Q Al Nuaimi
+    homepage: "https://github.com/qxtaiba/okd-proxmox-cli"
+    maintainer: "Q Al Nuaimi"
+    description: |-
+      Deploy production-ready OKD Kubernetes clusters on Proxmox VE.
+      Interactive TUI wizard, single binary, opinionated defaults for homelab
+      operators.
+    license: "Apache-2.0"
+    formats:
+      - deb
+      - rpm
+    bindir: /usr/bin
+    contents:
+      - src: LICENSE
+        dst: /usr/share/doc/openshitctl/LICENSE
+      - src: NOTICE
+        dst: /usr/share/doc/openshitctl/NOTICE
+      - src: README.md
+        dst: /usr/share/doc/openshitctl/README.md
+
 changelog:
   sort: asc
   filters:
@@ -35,3 +163,20 @@ changelog:
       - "^ci:"
       - Merge pull request
       - Merge branch
+
+release:
+  github:
+    owner: qxtaiba
+    name: okd-proxmox-cli
+  prerelease: auto
+  draft: false
+  header: |
+    ## openshitctl {{ .Tag }}
+
+    See [CHANGELOG.md](https://github.com/qxtaiba/okd-proxmox-cli/blob/main/CHANGELOG.md)
+    for human-curated release notes.
+
+    All release artifacts are signed with sigstore keyless signing. Verify
+    with `cosign verify-blob` (see README for instructions).
+  footer: |
+    **Full Changelog**: https://github.com/qxtaiba/okd-proxmox-cli/compare/{{ .PreviousTag }}...{{ .Tag }}

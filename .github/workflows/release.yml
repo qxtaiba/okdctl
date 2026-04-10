@@ -4,21 +4,70 @@ on:
   push:
     tags:
       - v*
+
+# Permissions required by goreleaser for a full release:
+#   contents:    write — create the GitHub Release and upload assets
+#   id-token:    write — sigstore keyless signing via GitHub OIDC
+#   packages:    write — push Docker images to GHCR
+#   attestations: write — SLSA provenance attestation
 permissions:
   contents: write
+  id-token: write
+  packages: write
+  attestations: write
+
 jobs:
   release:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
         with:
           fetch-depth: 0
-      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
+
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c  # v6
         with:
           go-version-file: go.mod
-      - uses: goreleaser/goreleaser-action@ec59f474b9834571250b370d4735c50f8e2d1e29 # v7
+
+      # Install sigstore cosign for keyless signing (no key management).
+      - uses: sigstore/cosign-installer@3454372f43399081ed03b604cb2d021dabca52bb  # v3.8.2
+
+      # Install anchore/syft for SBOM generation.
+      - uses: anchore/sbom-action/download-syft@61119d458adab75f756bc0b9e4bde25725f86a7a  # v0.17.2
+
+      # Set up Docker buildx for multi-arch image builds.
+      - uses: docker/setup-qemu-action@49b3bc8e6bdd4a60e6116a5414239cba5943d3cf  # v3.2.0
+      - uses: docker/setup-buildx-action@c47758b77c9736f4b2ef4073d4d51994fabfe349  # v3.7.1
+
+      # Authenticate to GHCR for docker push.
+      - uses: docker/login-action@9780b0c442fbb1117ed29e0efdff1e18412f7567  # v3.3.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: goreleaser/goreleaser-action@ec59f474b9834571250b370d4735c50f8e2d1e29  # v7
         with:
           version: latest
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # For the brews: section — goreleaser opens a PR against
+          # qxtaiba/homebrew-tap. You need a PAT with repo scope stored
+          # as HOMEBREW_TAP_TOKEN in this repo's secrets for that to work.
+          # Until then, the Homebrew publish step is a no-op (it will warn
+          # but not fail the release).
+          HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+
+  # Generate SLSA build provenance for the release binaries. This runs in
+  # a separate, isolated job that cannot see the release workflow's
+  # environment — a SLSA requirement for non-forgeable provenance.
+  provenance:
+    needs: release
+    permissions:
+      actions: read
+      id-token: write
+      contents: write
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.0.0
+    with:
+      base64-subjects: "${{ needs.release.outputs.hashes }}"
+      upload-assets: true
