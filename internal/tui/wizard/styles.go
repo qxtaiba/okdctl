@@ -26,9 +26,6 @@ var (
 			BorderStyle(lipgloss.NormalBorder()).
 			BorderForeground(tui.ColorSlate700)
 
-	ContentStyle = lipgloss.NewStyle().
-			Padding(1, 2)
-
 	FooterStyle = lipgloss.NewStyle().
 			Padding(0, 2).
 			BorderTop(true).
@@ -52,109 +49,6 @@ var (
 	StepIndicatorCurrentStyle = lipgloss.NewStyle().
 					Foreground(tui.ColorPrimary).
 					Bold(true)
-)
-
-var (
-	StepTitleStyle = lipgloss.NewStyle().
-			Foreground(tui.ColorText).
-			Bold(true).
-			MarginBottom(1)
-
-	StepDescriptionStyle = lipgloss.NewStyle().
-				Foreground(tui.ColorSlate400).
-				MarginBottom(1)
-
-	SectionHeaderStyle = lipgloss.NewStyle().
-				Foreground(tui.ColorCyan500).
-				Bold(true)
-)
-
-var (
-	OptionSelectedStyle = lipgloss.NewStyle().
-				Foreground(tui.ColorPrimary).
-				Bold(true)
-
-	OptionUnselectedStyle = lipgloss.NewStyle().
-				Foreground(tui.ColorSlate600)
-
-	OptionTitleSelectedStyle = lipgloss.NewStyle().
-					Foreground(tui.ColorText).
-					Bold(true)
-
-	OptionTitleStyle = lipgloss.NewStyle().
-				Foreground(tui.ColorSlate300)
-
-	OptionDescriptionStyle = lipgloss.NewStyle().
-				Foreground(tui.ColorSlate500).
-				PaddingLeft(4)
-
-	OptionRequirementsStyle = lipgloss.NewStyle().
-				Foreground(tui.ColorSlate600).
-				Italic(true).
-				PaddingLeft(4)
-
-	RecommendedBadgeStyle = lipgloss.NewStyle().
-				Foreground(tui.ColorSuccess).
-				Italic(true)
-
-	VerticalLineStyle = lipgloss.NewStyle().
-				Foreground(tui.ColorSlate700)
-)
-
-var (
-	InputLabelStyle = lipgloss.NewStyle().
-			Foreground(tui.ColorSlate300).
-			Width(20)
-
-	InputFocusedStyle = lipgloss.NewStyle().
-				Border(lipgloss.RoundedBorder()).
-				BorderForeground(tui.ColorPrimary).
-				Padding(0, 1)
-
-	InputBlurredStyle = lipgloss.NewStyle().
-				Border(lipgloss.RoundedBorder()).
-				BorderForeground(tui.ColorSlate600).
-				Padding(0, 1)
-
-	InputHintStyle = lipgloss.NewStyle().
-			Foreground(tui.ColorSlate600).
-			Italic(true)
-
-	InputErrorStyle = lipgloss.NewStyle().
-			Foreground(tui.ColorError)
-
-	InputGroupStyle = lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(tui.ColorSlate700).
-			Padding(1, 2).
-			MarginBottom(1)
-
-	InputGroupTitleStyle = lipgloss.NewStyle().
-				Foreground(tui.ColorSlate300).
-				Bold(true).
-				MarginBottom(1)
-)
-
-var (
-	ContextPanelStyle = lipgloss.NewStyle().
-				Border(lipgloss.RoundedBorder()).
-				BorderForeground(tui.ColorSlate700).
-				Padding(1, 2)
-
-	ContextTitleStyle = lipgloss.NewStyle().
-				Foreground(tui.ColorSlate400).
-				Bold(true).
-				MarginBottom(1)
-
-	ContextLabelStyle = lipgloss.NewStyle().
-				Foreground(tui.ColorSlate500)
-
-	ContextValueStyle = lipgloss.NewStyle().
-				Foreground(tui.ColorText)
-
-	ContextHighlightStyle = lipgloss.NewStyle().
-				Foreground(tui.ColorPrimary).
-				Bold(true)
 )
 
 var (

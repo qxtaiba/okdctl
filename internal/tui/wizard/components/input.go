@@ -74,24 +74,17 @@ func (f *InputField) Value() string {
 func (f *InputField) SetValue(value string) {
 	f.input.SetValue(value)
 	f.isDefault = false
-	f.updateTextStyle()
 }
 
 func (f *InputField) SetDefault(value string) {
 	f.input.SetValue(value)
 	f.defaultValue = value
 	f.isDefault = true
-	f.updateTextStyle()
 }
 
 func (f *InputField) IsDefault() bool {
 	return f.isDefault
 }
-
-// updateTextStyle is intentionally a no-op. Setting TextStyle on textinput.Model
-// causes ANSI escape codes that break width calculations and multi-line rendering.
-// See charmbracelet/bubbles issues #812, #779.
-func (f *InputField) updateTextStyle() {}
 
 func (f *InputField) Focus() tea.Cmd {
 	f.focused = true
@@ -151,7 +144,7 @@ func (f *InputField) Error() error {
 	return f.err
 }
 
-func (f *InputField) updateInternal(msg tea.Msg) (*InputField, tea.Cmd) {
+func (f *InputField) Update(msg tea.Msg) (FormField, tea.Cmd) {
 	if !f.focused {
 		return f, nil
 	}
@@ -167,14 +160,9 @@ func (f *InputField) updateInternal(msg tea.Msg) (*InputField, tea.Cmd) {
 
 	if f.input.Value() != oldValue {
 		f.isDefault = false
-		f.updateTextStyle()
 	}
 
 	return f, cmd
-}
-
-func (f *InputField) Update(msg tea.Msg) (FormField, tea.Cmd) {
-	return f.updateInternal(msg)
 }
 
 func (f *InputField) View() string {

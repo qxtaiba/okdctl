@@ -22,38 +22,27 @@ var (
 )
 
 func validateRequired(cfg *Config, result *ValidationResult) {
-	if cfg.Cluster.Name == "" {
-		result.AddError(FieldClusterName, "cluster name is required")
+	checks := []struct {
+		bad   bool
+		field string
+		msg   string
+	}{
+		{cfg.Cluster.Name == "", FieldClusterName, "cluster name is required"},
+		{cfg.Cluster.Domain == "", FieldClusterDomain, "cluster domain is required"},
+		{cfg.Distribution.Type == "", FieldDistributionType, "distribution type is required"},
+		{cfg.Distribution.Version == "", FieldDistributionVersion, "distribution version is required"},
+		{cfg.Provider.Type == "", FieldProviderType, "provider type is required"},
+		{cfg.Topology.ControlPlane.Count < 1, FieldTopologyControlPlaneCount, "must have at least 1 control plane node"},
+		{cfg.Networking.MachineCIDR == "", FieldNetworkingMachineCIDR, "machine CIDR is required"},
+		{cfg.Networking.PodCIDR == "", FieldNetworkingPodCIDR, "pod CIDR is required"},
+		{cfg.Networking.ServiceCIDR == "", FieldNetworkingServiceCIDR, "service CIDR is required"},
+		{cfg.Networking.Gateway == "", FieldNetworkingGateway, "gateway is required"},
+		{len(cfg.Networking.DNS) == 0, FieldNetworkingDNS, "at least one DNS server is required"},
 	}
-	if cfg.Cluster.Domain == "" {
-		result.AddError(FieldClusterDomain, "cluster domain is required")
-	}
-	if cfg.Distribution.Type == "" {
-		result.AddError(FieldDistributionType, "distribution type is required")
-	}
-	if cfg.Distribution.Version == "" {
-		result.AddError(FieldDistributionVersion, "distribution version is required")
-	}
-	if cfg.Provider.Type == "" {
-		result.AddError(FieldProviderType, "provider type is required")
-	}
-	if cfg.Topology.ControlPlane.Count < 1 {
-		result.AddError(FieldTopologyControlPlaneCount, "must have at least 1 control plane node")
-	}
-	if cfg.Networking.MachineCIDR == "" {
-		result.AddError(FieldNetworkingMachineCIDR, "machine CIDR is required")
-	}
-	if cfg.Networking.PodCIDR == "" {
-		result.AddError(FieldNetworkingPodCIDR, "pod CIDR is required")
-	}
-	if cfg.Networking.ServiceCIDR == "" {
-		result.AddError(FieldNetworkingServiceCIDR, "service CIDR is required")
-	}
-	if cfg.Networking.Gateway == "" {
-		result.AddError(FieldNetworkingGateway, "gateway is required")
-	}
-	if len(cfg.Networking.DNS) == 0 {
-		result.AddError(FieldNetworkingDNS, "at least one DNS server is required")
+	for _, c := range checks {
+		if c.bad {
+			result.AddError(c.field, c.msg)
+		}
 	}
 }
 
@@ -283,19 +272,6 @@ func validateProxmoxConfig(proxmox *ProxmoxConfig, result *ValidationResult) {
 		if node != "" && !proxmoxNamePattern.MatchString(node) {
 			result.AddError(fmt.Sprintf("proxmox.worker_nodes[%d]", i), "must be a valid Proxmox node name")
 		}
-	}
-}
-
-func validateAddons(cfg *Config, _ *ValidationResult) {
-	if cfg.Addons == nil {
-		return
-	}
-
-	for name, ac := range cfg.Addons {
-		if !ac.Enabled {
-			continue
-		}
-		_ = name // addon-specific validation is handled by the addon registry at install time
 	}
 }
 

@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"net"
 	"net/netip"
-	"strings"
 )
 
 const DefaultVIPLastOctet = 10
@@ -127,25 +126,6 @@ func SplitIPv4(ip string) (base string, lastOctet int, err error) {
 	base = fmt.Sprintf("%d.%d.%d", parsed[0], parsed[1], parsed[2])
 	lastOctet = int(parsed[3])
 	return base, lastOctet, nil
-}
-
-func ParseIPPool(pool string) (start, end string, err error) {
-	parts := strings.Split(pool, "-")
-	if len(parts) != 2 {
-		return "", "", fmt.Errorf("invalid pool format, expected 'start-end': %s", pool)
-	}
-
-	start = strings.TrimSpace(parts[0])
-	end = strings.TrimSpace(parts[1])
-
-	if net.ParseIP(start) == nil {
-		return "", "", fmt.Errorf("invalid start IP in pool: %s", start)
-	}
-	if net.ParseIP(end) == nil {
-		return "", "", fmt.Errorf("invalid end IP in pool: %s", end)
-	}
-
-	return start, end, nil
 }
 
 func CIDRsOverlap(cidr1, cidr2 string) (bool, error) {

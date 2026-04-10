@@ -91,7 +91,6 @@ var validators = []validatorEntry{
 	{ScopeAdvancedNetworking, validateAdvancedNetworking},
 	{ScopeResources, validateResources},
 	{ScopeProvider, validateProvider},
-	{ScopeFeatures, validateAddons},
 	{ScopeHTTPServer, validateHTTPServer},
 	{ScopeDistribution, validateDistribution},
 	{ScopeFiles, validateFiles},
@@ -120,14 +119,6 @@ func (cfg *Config) Validate(opts ...ValidationOptions) *ValidationResult {
 		opts = []ValidationOptions{{Scope: ScopeAll}}
 	}
 	return ValidateWithOptions(cfg, opts[0])
-}
-
-func (cfg *Config) ValidateWithScope(scope ValidationScope) *ValidationResult {
-	return ValidateWithOptions(cfg, ValidationOptions{Scope: scope})
-}
-
-func (cfg *Config) ValidateQuick() *ValidationResult {
-	return ValidateWithOptions(cfg, ValidationOptions{Scope: ScopeQuick})
 }
 
 func ValidateWithOptions(cfg *Config, opts ValidationOptions) *ValidationResult {

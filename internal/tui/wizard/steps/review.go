@@ -2,6 +2,7 @@ package steps
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	"charm.land/bubbles/v2/key"
@@ -13,6 +14,39 @@ import (
 	"github.com/qxtaiba/okd-proxmox-cli/internal/tui/wizard"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/tui/wizard/components"
 )
+
+// kvEntry describes one label/value line within a review section. When skip
+// is true, the entry is omitted entirely (not rendered as blank).
+type kvEntry struct {
+	label string
+	value string
+	skip  bool
+}
+
+// renderSection emits a titled block of kvEntry lines. Returns "" if every
+// entry is skipped — lets callers short-circuit whole sections by filtering.
+func renderSection(st *sectionStyles, title string, entries []kvEntry) string {
+	visible := entries[:0:0]
+	for _, e := range entries {
+		if !e.skip {
+			visible = append(visible, e)
+		}
+	}
+	if len(visible) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString(st.header.Render(title))
+	b.WriteString("\n")
+	b.WriteString(st.separator)
+	b.WriteString("\n")
+	for _, e := range visible {
+		b.WriteString(st.kvPair(e.label, e.value))
+		b.WriteString("\n")
+	}
+	b.WriteString("\n")
+	return b.String()
+}
 
 type sectionStyles struct {
 	header         lipgloss.Style
@@ -133,109 +167,50 @@ func (s *ReviewStep) View(width, height int) string {
 }
 
 func (s *ReviewStep) renderClusterIdentity(st *sectionStyles) string {
-	var b strings.Builder
-
-	b.WriteString(st.header.Render("cluster identity"))
-	b.WriteString("\n")
-	b.WriteString(st.separator)
-	b.WriteString("\n")
-
-	b.WriteString(st.kvPair("name", s.cfg.Cluster.Name))
-	b.WriteString("\n")
-	b.WriteString(st.kvPair("domain", s.cfg.Cluster.Domain))
-	b.WriteString("\n")
-
 	distVersion := string(s.cfg.Distribution.Type)
 	if s.cfg.Distribution.Version != "" {
 		distVersion = "OKD " + s.cfg.Distribution.Version
 	}
-	b.WriteString(st.kvPair("distribution", distVersion))
-	b.WriteString("\n\n")
-
-	return b.String()
+	return renderSection(st, "cluster identity", []kvEntry{
+		{label: "name", value: s.cfg.Cluster.Name},
+		{label: "domain", value: s.cfg.Cluster.Domain},
+		{label: "distribution", value: distVersion},
+	})
 }
 
 func (s *ReviewStep) renderProxmox(st *sectionStyles) string {
-	if s.cfg.Provider.Proxmox == nil {
+	p := s.cfg.Provider.Proxmox
+	if p == nil {
 		return ""
 	}
-
-	p := s.cfg.Provider.Proxmox
-	var b strings.Builder
-
-	b.WriteString(st.header.Render("proxmox"))
-	b.WriteString("\n")
-	b.WriteString(st.separator)
-	b.WriteString("\n")
-
-	b.WriteString(st.kvPair("host", p.Host))
-	b.WriteString("\n")
-	b.WriteString(st.kvPair("bootstrap node", p.Node))
-	b.WriteString("\n")
-	if len(p.MasterNodes) > 0 {
-		b.WriteString(st.kvPair("master nodes", strings.Join(p.MasterNodes, ", ")))
-		b.WriteString("\n")
-	}
-	if len(p.WorkerNodes) > 0 {
-		b.WriteString(st.kvPair("worker nodes", strings.Join(p.WorkerNodes, ", ")))
-		b.WriteString("\n")
-	}
-	b.WriteString(st.kvPair("bridge", p.Bridge))
-	b.WriteString("\n")
-	b.WriteString(st.kvPair("storage", p.Storage))
-	b.WriteString("\n")
-	if p.DataStorage != "" && p.DataStorage != p.Storage {
-		b.WriteString(st.kvPair("data storage", p.DataStorage))
-		b.WriteString("\n")
-	}
-	if p.ISOStorage != "" {
-		b.WriteString(st.kvPair("iso storage", p.ISOStorage))
-		b.WriteString("\n")
-	}
-	b.WriteString("\n")
-
-	return b.String()
+	return renderSection(st, "proxmox", []kvEntry{
+		{label: "host", value: p.Host},
+		{label: "bootstrap node", value: p.Node},
+		{label: "master nodes", value: strings.Join(p.MasterNodes, ", "), skip: len(p.MasterNodes) == 0},
+		{label: "worker nodes", value: strings.Join(p.WorkerNodes, ", "), skip: len(p.WorkerNodes) == 0},
+		{label: "bridge", value: p.Bridge},
+		{label: "storage", value: p.Storage},
+		{label: "data storage", value: p.DataStorage, skip: p.DataStorage == "" || p.DataStorage == p.Storage},
+		{label: "iso storage", value: p.ISOStorage, skip: p.ISOStorage == ""},
+	})
 }
 
 func (s *ReviewStep) renderNetworking(st *sectionStyles) string {
-	var b strings.Builder
-
-	b.WriteString(st.header.Render("networking"))
-	b.WriteString("\n")
-	b.WriteString(st.separator)
-	b.WriteString("\n")
-
-	b.WriteString(st.kvPair("machine cidr", s.cfg.Networking.MachineCIDR))
-	b.WriteString("\n")
-	b.WriteString(st.kvPair("gateway", s.cfg.Networking.Gateway))
-	b.WriteString("\n")
-	b.WriteString(st.kvPair("upstream dns", strings.Join(s.cfg.Networking.DNS, ", ")))
-	b.WriteString("\n")
-	b.WriteString(st.kvPair("bastion", s.cfg.Networking.Bastion.IP))
-	b.WriteString("\n")
-	if s.cfg.Networking.Bastion.VIP != "" {
-		b.WriteString(st.kvPair("api vip", s.cfg.Networking.Bastion.VIP))
-		b.WriteString("\n")
-	}
-	if s.cfg.Networking.PodCIDR != "" {
-		b.WriteString(st.kvPair("pod cidr", s.cfg.Networking.PodCIDR))
-		b.WriteString("\n")
-		b.WriteString(st.kvPair("service cidr", s.cfg.Networking.ServiceCIDR))
-		b.WriteString("\n")
-	}
-	if s.cfg.Networking.StaticIP.Start != "" {
-		b.WriteString(st.kvPair("static ip start", s.cfg.Networking.StaticIP.Start))
-		b.WriteString("\n")
-		b.WriteString(st.kvPair("interface", s.cfg.Networking.StaticIP.Interface))
-		b.WriteString("\n")
-		b.WriteString(st.kvPair("netmask", s.cfg.Networking.StaticIP.Netmask+" (from cidr)"))
-		b.WriteString("\n")
-		b.WriteString(st.kvPair("vm dns", s.cfg.Networking.Bastion.IP+" (bastion/dnsmasq)"))
-		b.WriteString("\n")
-	}
-	b.WriteString("\n")
-
-	return b.String()
+	net := s.cfg.Networking
+	noStatic := net.StaticIP.Start == ""
+	return renderSection(st, "networking", []kvEntry{
+		{label: "machine cidr", value: net.MachineCIDR},
+		{label: "gateway", value: net.Gateway},
+		{label: "upstream dns", value: strings.Join(net.DNS, ", ")},
+		{label: "bastion", value: net.Bastion.IP},
+		{label: "api vip", value: net.Bastion.VIP, skip: net.Bastion.VIP == ""},
+		{label: "pod cidr", value: net.PodCIDR, skip: net.PodCIDR == ""},
+		{label: "service cidr", value: net.ServiceCIDR, skip: net.PodCIDR == ""},
+		{label: "static ip start", value: net.StaticIP.Start, skip: noStatic},
+		{label: "interface", value: net.StaticIP.Interface, skip: noStatic},
+		{label: "netmask", value: net.StaticIP.Netmask + " (from cidr)", skip: noStatic},
+		{label: "vm dns", value: net.Bastion.IP + " (bastion/dnsmasq)", skip: noStatic},
+	})
 }
 
 func (s *ReviewStep) renderCompute(st *sectionStyles) string {
@@ -399,31 +374,16 @@ func (s *ReviewStep) renderFeatures(st *sectionStyles) string {
 }
 
 func (s *ReviewStep) renderAdvanced(st *sectionStyles) string {
-	if s.cfg.Topology.VMIDBase <= 0 && s.cfg.Deployment.BootstrapTimeout <= 0 {
-		return ""
+	bt := s.cfg.Deployment.BootstrapTimeout
+	vmid := s.cfg.Topology.VMIDBase
+	timeouts := ""
+	if bt > 0 {
+		timeouts = fmt.Sprintf("bootstrap %dm, install %dm", bt/60, s.cfg.Deployment.InstallTimeout/60)
 	}
-
-	var b strings.Builder
-
-	b.WriteString(st.header.Render("advanced"))
-	b.WriteString("\n")
-	b.WriteString(st.separator)
-	b.WriteString("\n")
-
-	if s.cfg.Topology.VMIDBase > 0 {
-		b.WriteString(st.kvPair("vm id base", fmt.Sprintf("%d", s.cfg.Topology.VMIDBase)))
-		b.WriteString("\n")
-	}
-	if s.cfg.Deployment.BootstrapTimeout > 0 {
-		bootstrapMin := s.cfg.Deployment.BootstrapTimeout / 60
-		installMin := s.cfg.Deployment.InstallTimeout / 60
-		timeouts := fmt.Sprintf("bootstrap %dm, install %dm", bootstrapMin, installMin)
-		b.WriteString(st.kvPair("timeouts", timeouts))
-		b.WriteString("\n")
-	}
-	b.WriteString("\n")
-
-	return b.String()
+	return renderSection(st, "advanced", []kvEntry{
+		{label: "vm id base", value: fmt.Sprintf("%d", vmid), skip: vmid <= 0},
+		{label: "timeouts", value: timeouts, skip: bt <= 0},
+	})
 }
 
 func truncatePath(path string, maxLen int) string {
@@ -433,30 +393,11 @@ func truncatePath(path string, maxLen int) string {
 	if len(path) <= maxLen {
 		return path
 	}
-	parts := strings.Split(path, "/")
-	if len(parts) > 0 {
-		filename := parts[len(parts)-1]
-		if len(filename) >= maxLen-3 {
-			truncLen := maxLen - 3
-			if truncLen > len(filename) {
-				truncLen = len(filename)
-			}
-			return "..." + filename[len(filename)-truncLen:]
-		}
-		remaining := maxLen - len(filename) - 4 // 4 for ".../"
-		if remaining > 0 && len(parts) > 1 {
-			prefix := strings.Join(parts[:len(parts)-1], "/")
-			if len(prefix) > remaining {
-				prefix = prefix[:remaining]
-			}
-			return prefix + "/.../" + filename
-		}
-		return ".../" + filename
+	base := filepath.Base(path)
+	if len(base) >= maxLen-3 {
+		return "..." + base[len(base)-(maxLen-3):]
 	}
-	if maxLen > 3 && len(path) > maxLen-3 {
-		return path[:maxLen-3] + "..."
-	}
-	return path
+	return ".../" + base
 }
 
 func countUniqueNodes(cfg *config.Config) int {

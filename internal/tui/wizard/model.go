@@ -265,36 +265,3 @@ func (m *Model) CurrentStep() WizardStep {
 	return nil
 }
 
-func (m *Model) AddStep(step WizardStep) {
-	m.steps = append(m.steps, step)
-}
-
-func (m *Model) InsertStepAfter(afterID StepID, step WizardStep) {
-	for i, s := range m.steps {
-		if s.ID() != afterID {
-			continue
-		}
-		newSteps := make([]WizardStep, 0, len(m.steps)+1)
-		newSteps = append(newSteps, m.steps[:i+1]...)
-		newSteps = append(newSteps, step)
-		newSteps = append(newSteps, m.steps[i+1:]...)
-		m.steps = newSteps
-		return
-	}
-	m.steps = append(m.steps, step)
-}
-
-func (m *Model) RemoveStep(id StepID) {
-	for i, s := range m.steps {
-		if s.ID() == id {
-			m.steps = append(m.steps[:i], m.steps[i+1:]...)
-			if m.currentStep >= len(m.steps) {
-				m.currentStep = len(m.steps) - 1
-			}
-			if m.currentStep < 0 {
-				m.currentStep = 0
-			}
-			return
-		}
-	}
-}

@@ -149,40 +149,14 @@ func (s *NodePlacementStep) buildInnerStep(disc *proxmoxDiscovery, nodeNames []s
 		}},
 	})
 
-	// Control plane
 	cpCount := s.cfg.Topology.ControlPlane.Count
 	if cpCount > 0 {
-		var cpFields []wizard.FieldDefinition
-		for i := range cpCount {
-			idx := i // capture
-			target := defaultNode
-			if idx < len(px.MasterNodes) && px.MasterNodes[idx] != "" {
-				target = px.MasterNodes[idx]
-			}
-			cpFields = append(cpFields, wizard.FieldDefinition{
-				Key: fmt.Sprintf("master_%d", idx), Label: fmt.Sprintf("%s-master%d", clusterName, idx),
-				Default: target, Help: "proxmox node", Type: wizard.FieldTypeSelect, Options: nodeNames,
-			})
-		}
-		sections = append(sections, wizard.SectionDefinition{Title: "control plane", Fields: cpFields})
+		sections = append(sections, nodePlacementSection("control plane", "master", clusterName, cpCount, px.MasterNodes, defaultNode, nodeNames))
 	}
 
-	// Workers
 	wCount := s.cfg.Topology.Workers.Count
 	if wCount > 0 {
-		var wFields []wizard.FieldDefinition
-		for i := range wCount {
-			idx := i
-			target := defaultNode
-			if idx < len(px.WorkerNodes) && px.WorkerNodes[idx] != "" {
-				target = px.WorkerNodes[idx]
-			}
-			wFields = append(wFields, wizard.FieldDefinition{
-				Key: fmt.Sprintf("worker_%d", idx), Label: fmt.Sprintf("%s-worker%d", clusterName, idx),
-				Default: target, Help: "proxmox node", Type: wizard.FieldTypeSelect, Options: nodeNames,
-			})
-		}
-		sections = append(sections, wizard.SectionDefinition{Title: "workers", Fields: wFields})
+		sections = append(sections, nodePlacementSection("workers", "worker", clusterName, wCount, px.WorkerNodes, defaultNode, nodeNames))
 	}
 
 	def := wizard.StepDefinition{
@@ -301,7 +275,25 @@ func (s *NodePlacementStep) ShortHelp() []wizard.KeyBinding {
 	}
 }
 
-// --- helpers ---
+// nodePlacementSection builds a SectionDefinition of proxmox-node select
+// fields for a role (bootstrap, master, worker). fieldPrefix is used for
+// both the field key (e.g. "master_0") and the label suffix.
+func nodePlacementSection(title, fieldPrefix, clusterName string, count int, existing []string, defaultNode string, allNodes []string) wizard.SectionDefinition {
+	fields := make([]wizard.FieldDefinition, 0, count)
+	for i := range count {
+		target := defaultNode
+		if i < len(existing) && existing[i] != "" {
+			target = existing[i]
+		}
+		fields = append(fields, wizard.FieldDefinition{
+			Key:     fmt.Sprintf("%s_%d", fieldPrefix, i),
+			Label:   fmt.Sprintf("%s-%s%d", clusterName, fieldPrefix, i),
+			Default: target, Help: "proxmox node",
+			Type: wizard.FieldTypeSelect, Options: allNodes,
+		})
+	}
+	return wizard.SectionDefinition{Title: title, Fields: fields}
+}
 
 func bridgeNames(bridges []proxmoxBridge) []string {
 	names := make([]string, len(bridges))
