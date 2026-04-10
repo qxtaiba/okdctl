@@ -14,10 +14,8 @@ import (
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
 )
 
-// renderAndWrite calls render and atomically writes the result to path. Error
-// messages use errLabel for context on both render and write failures. This
-// is a setup-local helper for the "render k8s/installer templates and drop
-// them on disk" pattern used across multiple generation steps.
+// renderAndWrite calls render and atomically writes the result to path,
+// wrapping errors with errLabel.
 func renderAndWrite(render func() (string, error), path string, mode os.FileMode, errLabel string) error {
 	content, err := render()
 	if err != nil {

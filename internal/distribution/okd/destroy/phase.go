@@ -69,10 +69,9 @@ func New(exec *executor.Executor, logger *slog.Logger, version string) *Phase {
 	}
 }
 
-// Execute destroys the OKD cluster infrastructure using the step orchestrator.
-// This is the main entry point for the destroy phase.
-// NOTE: User confirmation is handled by the CLI layer before calling this method.
-// The Force option is expected to be true when called from CLI (which has already confirmed).
+// Execute tears down the cluster. User confirmation is the CLI layer's
+// responsibility; by the time Execute runs, opts.Force is expected to
+// be true.
 func (p *Phase) Execute(ctx context.Context, cfg *config.Config, opts *Options) error {
 	p.Log.Info("destroy: starting cluster teardown")
 	p.Log.Warn("destroy: this will permanently remove all vms and generated files")

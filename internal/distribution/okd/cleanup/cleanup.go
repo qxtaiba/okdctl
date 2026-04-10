@@ -1,6 +1,4 @@
-// Package cleanup provides cleanup utilities for OKD cluster artifacts.
-// It handles removal of work directories, web server files, HAProxy configuration,
-// dnsmasq settings, and Terraform state.
+// Package cleanup provides utilities for removing OKD cluster artifacts.
 package cleanup
 
 import (

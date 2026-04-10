@@ -24,9 +24,8 @@ const (
 
 const actionRemove = "remove"
 
-// OKDRequiredPorts lists every TCP/UDP port the setup phase opens to run an
-// OKD cluster: dns (53), ignition (8080), and the HAProxy-fronted ports
-// (6443/22623/80/443). HAProxyFrontendPorts() derives its list from this one.
+// OKDRequiredPorts is the authoritative port list opened by setup;
+// HAProxyFrontendPorts() derives its subset from this slice.
 var OKDRequiredPorts = []Port{
 	{Number: 53, Protocol: "udp", Description: "dns"},
 	{Number: 53, Protocol: "tcp", Description: "dns"},

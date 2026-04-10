@@ -129,8 +129,6 @@ func buildHTTPClient(insecure bool) *http.Client {
 	}
 }
 
-// --- Auth ---
-
 type ticketResponse struct {
 	Data struct {
 		Ticket string `json:"ticket"`
@@ -186,8 +184,6 @@ func apiGet(client *http.Client, endpoint, ticket string, target any) error {
 	return json.NewDecoder(resp.Body).Decode(target)
 }
 
-// --- Nodes ---
-
 func fetchNodes(client *http.Client, baseURL, ticket string) ([]proxmoxNode, error) {
 	var result struct {
 		Data []struct {
@@ -213,8 +209,6 @@ func fetchNodes(client *http.Client, baseURL, ticket string) ([]proxmoxNode, err
 	}
 	return nodes, nil
 }
-
-// --- Storage ---
 
 func fetchStorage(client *http.Client, baseURL, ticket, node string) ([]proxmoxStorage, error) {
 	var result struct {
@@ -249,8 +243,6 @@ func fetchStorage(client *http.Client, baseURL, ticket, node string) ([]proxmoxS
 	}
 	return pools, nil
 }
-
-// --- Bridges ---
 
 func fetchBridges(client *http.Client, baseURL, ticket, node string) ([]proxmoxBridge, error) {
 	var result struct {

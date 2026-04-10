@@ -30,14 +30,14 @@ type (
 )
 
 type FieldDefinition struct {
-	Key      string             // Unique key for accessing value
-	Label    string             // Display label
-	Default  string             // Default value (as string)
-	Help     string             // Help text shown next to label
-	Type     FieldType          // Field type
-	Options  []string           // Options for FieldTypeSelect
-	Required bool               // Whether field is required
-	Validate func(string) error // Optional validation function
+	Key      string
+	Label    string
+	Default  string
+	Help     string
+	Type     FieldType
+	Options  []string // populated only when Type == FieldTypeSelect
+	Required bool
+	Validate func(string) error
 
 	ConfigSet ConfigSetter
 	ConfigGet ConfigGetter
@@ -45,7 +45,7 @@ type FieldDefinition struct {
 
 type SectionDefinition struct {
 	Title  string
-	Note   string // Optional hint rendered below the title (e.g., prerequisites)
+	Note   string // e.g. prerequisites, shown below the title
 	Fields []FieldDefinition
 }
 

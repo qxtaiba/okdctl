@@ -65,9 +65,8 @@ func validateConfig(cfg *config.Config) *config.ValidationResult {
 	return result
 }
 
-// resolveProjectRoot returns a canonical absolute path for the current working
-// directory. filepath.Abs makes intent explicit even though Getwd already
-// returns an absolute path; EvalSymlinks canonicalizes it.
+// resolveProjectRoot returns the canonical absolute path of the current
+// working directory.
 func resolveProjectRoot() (string, error) {
 	wd, err := os.Getwd()
 	if err != nil {

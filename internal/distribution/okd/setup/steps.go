@@ -39,12 +39,8 @@ const (
 	StepConfigureDNS      distribution.StepID = "configure-dns"
 )
 
-// setupSteps returns the ordered list of setup steps for the OKD setup phase.
-// The step list is split into 4 sub-methods (base / manifest / web / infra)
-// to keep each function under the funlen threshold; setupSteps concatenates
-// them in the order they must run. Complex step bodies are extracted to
-// named methods (installSystemPackages, generateKubeVIPManifests,
-// configureDNS).
+// setupSteps returns the ordered steps for the OKD setup phase, grouped
+// into base / manifest / web / infra sub-methods.
 func (p *Phase) setupSteps(cfg *config.Config, opts *Options) []distribution.StepDef {
 	clusterDir := phase.ClusterConfigDir(opts.WorkDir)
 	var steps []distribution.StepDef
@@ -277,7 +273,6 @@ func (p *Phase) setupInfraSteps(cfg *config.Config, opts *Options) []distributio
 }
 
 // installSystemPackages installs the base OS packages required for setup.
-// Extracted from the StepInstallPackages closure because the body is 20+ LOC.
 func (p *Phase) installSystemPackages(ctx context.Context) error {
 	sysPkgs := []string{"coreos-installer", "haproxy", p.OS.ApachePackageName(), "dnsmasq"}
 
@@ -304,8 +299,7 @@ func (p *Phase) installSystemPackages(ctx context.Context) error {
 }
 
 // generateKubeVIPManifests renders and writes the kube-vip RBAC and DaemonSet
-// manifests into the openshift manifests directory. Extracted from the
-// StepGenerateKubeVIP closure because the body is ~40 LOC.
+// manifests into the openshift manifests directory.
 func (p *Phase) generateKubeVIPManifests(cfg *config.Config, clusterDir string) error {
 	vip, err := netutil.ResolveVIP(cfg.Networking.Bastion.VIP, cfg.Networking.StaticIP.Start)
 	if err != nil {
@@ -351,7 +345,7 @@ func (p *Phase) generateKubeVIPManifests(cfg *config.Config, clusterDir string) 
 }
 
 // configureDNS wires up dnsmasq, deploys the bootstrap DNS config, and saves
-// a reference copy to the work dir. Extracted from StepConfigureDNS closure.
+// a reference copy to the work dir.
 func (p *Phase) configureDNS(ctx context.Context, cfg *config.Config, opts *Options) error {
 	p.Log.Info("dns: configuring dnsmasq service")
 	if err := dns.Setup(ctx, cfg.Networking.DNS, p.Log); err != nil {

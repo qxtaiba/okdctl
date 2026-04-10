@@ -9,13 +9,9 @@ import (
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
 )
 
-// OcResourceExists runs `oc get <args...> --no-headers --ignore-not-found`
-// and returns true if the command succeeds and produces non-empty stdout.
-// errPrefix is prepended to any transport error so callers get a useful
-// wrapped error instead of a bare exec failure.
-//
-// This is the canonical "does this k8s resource exist?" check for OKD phases
-// that go through p.Exec rather than a typed client.
+// OcResourceExists returns true if `oc get <args...>` produces non-empty
+// output, wrapping transport errors with errPrefix. --no-headers and
+// --ignore-not-found are appended automatically.
 func (p *BasePhase) OcResourceExists(ctx context.Context, errPrefix string, args ...string) (bool, error) {
 	full := append([]string{"get"}, args...)
 	full = append(full, "--no-headers", "--ignore-not-found")
@@ -26,12 +22,9 @@ func (p *BasePhase) OcResourceExists(ctx context.Context, errPrefix string, args
 	return result.ExitCode == 0 && strings.TrimSpace(result.Stdout) != "", nil
 }
 
-// OcPollOutput polls `oc <args...>` on the default WaitFor interval until
-// predicate returns true for the trimmed stdout. The first matching value is
-// returned along with nil error. Use this for "wait until resource has value
-// X" patterns where the value should be captured and returned.
-//
-// prefix/desc are passed through to system.WaitForWithTimeout for logging.
+// OcPollOutput polls `oc <args...>` until predicate matches the trimmed
+// stdout, and returns the first matching value. Polls on the default
+// WaitFor interval bounded by timeout.
 func (p *BasePhase) OcPollOutput(ctx context.Context, prefix, desc string, timeout time.Duration, predicate func(stdout string) bool, args ...string) (string, error) {
 	var captured string
 	err := system.WaitForWithTimeout(ctx, prefix, desc, func() bool {

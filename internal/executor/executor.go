@@ -80,7 +80,6 @@ func (e *Executor) Run(ctx context.Context, name string, args ...string) (*Resul
 }
 
 // RunWithStdin executes a command with the given string piped to its stdin.
-// This is useful for commands like "oc create -f -" that read from stdin.
 func (e *Executor) RunWithStdin(ctx context.Context, input, name string, args ...string) (*Result, error) {
 	return e.run(ctx, strings.NewReader(input), name, args...)
 }
