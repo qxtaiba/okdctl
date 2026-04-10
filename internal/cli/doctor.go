@@ -73,6 +73,7 @@ type check struct {
 
 func runDoctor(cmd *cobra.Command, _ []string) error {
 	ctx := cmd.Context()
+	defer fmt.Println()
 
 	checks := []check{
 		{"host os", "platform and operator-mode detection", checkHostOS},
