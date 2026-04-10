@@ -298,7 +298,7 @@ type ingressControllerInfo struct {
 	Domain    string
 	Strategy  string
 	RawJSON   json.RawMessage
-	converted bool // set after conversion
+	converted bool
 }
 
 // discoverIngressControllers queries the cluster for all IngressControllers

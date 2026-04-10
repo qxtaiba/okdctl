@@ -29,8 +29,8 @@ type Option struct {
 	Recommended  bool
 	Disabled     bool
 	DisabledMsg  string
-	Style        OptionStyle // Visual style for the option
-	InDropdown   bool        // Marks options that are part of a scrollable dropdown region
+	Style        OptionStyle
+	InDropdown   bool // part of the scrollable dropdown region
 }
 
 type Selector struct {
@@ -39,8 +39,8 @@ type Selector struct {
 	focused              bool
 	width                int
 	height               int
-	dropdownScrollOffset int // current scroll position within the dropdown
-	maxDropdownVisible   int // max items to show in dropdown (default 5)
+	dropdownScrollOffset int
+	maxDropdownVisible   int // default 5
 
 	// cachedStyles is a lazily-initialised cache of the lipgloss.Style objects
 	// used when rendering options. Caching is safe because tui.Color* values

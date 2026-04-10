@@ -100,17 +100,17 @@ type DNSConfigData struct {
 	UpstreamDNS []string
 
 	// Node details
-	BootstrapNode DNSNode   // Bootstrap node (only in bootstrap config)
-	MasterNodes   []DNSNode // Control plane nodes
-	WorkerNodes   []DNSNode // Worker nodes
+	BootstrapNode DNSNode // only set in bootstrap config
+	MasterNodes   []DNSNode
+	WorkerNodes   []DNSNode
 }
 
 const DefaultKubeVIPImageTag = "v1.0.4"
 
 type KubeVIPData struct {
-	VIPAddress string // Virtual IP address (e.g., "192.168.227.10")
-	Interface  string // Network interface for ARP announcements (e.g., "ens18")
-	ImageTag   string // Container image tag (e.g., "v1.0.4")
+	VIPAddress string // e.g. "192.168.227.10"
+	Interface  string // interface used for ARP announcements, e.g. "ens18"
+	ImageTag   string // e.g. "v1.0.4"
 }
 
 type PreInstallData struct {
