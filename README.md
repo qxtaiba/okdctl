@@ -105,9 +105,10 @@ The pull secret is **free** — you just need a Red Hat account.
 1. Go to <https://console.redhat.com/openshift/install/pull-secret>
 2. Sign in with a (free) Red Hat Developer account
 3. Click **Download pull secret**
-4. Save the file to `~/.openshitctl/pull-secret.json`
+4. Save the file anywhere on your host. The wizard's default path is
+   `~/pull-secret.json`; you can also pick any other location and
+   reference it during the wizard's file-paths step.
 
-You'll reference this path in the wizard when it asks for the pull secret.
 The file is a JSON object with auth tokens for the registries OKD pulls
 from; it carries no PII and is safe to store on a homelab host.
 

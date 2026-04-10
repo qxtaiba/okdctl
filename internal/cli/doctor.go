@@ -18,8 +18,10 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/qxtaiba/okd-proxmox-cli/internal/config"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/tui"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/platform"
+	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
 )
 
 const goosDarwin = "darwin"
@@ -307,20 +309,43 @@ func checkSSHKey(_ context.Context) checkResult {
 	return checkResult{sev: sevWarn, detail: "no default ssh public key found; you will need to specify one in the wizard"}
 }
 
-// checkPullSecret looks for a pull secret in the default location. The
-// actual deploy-time check is more thorough (validates JSON structure,
-// checks for required auth entries); here we just verify presence and
-// basic JSON well-formedness.
+// checkPullSecret reads the effective config file and verifies the path
+// at cfg.Files.PullSecret. If no config exists yet (normal pre-deploy
+// state), warns and directs the user to the wizard. If the config
+// points at a file that does not exist, is not valid JSON, or has an
+// empty 'auths' map, fails.
 func checkPullSecret(_ context.Context) checkResult {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return checkResult{sev: sevWarn, detail: "cannot resolve home directory"}
+	configPath := cfgFile
+	if configPath == "" {
+		configPath = "openshitctl.yaml"
 	}
-	path := filepath.Join(home, ".openshitctl", "pull-secret.json")
+
+	if _, err := os.Stat(configPath); err != nil {
+		if os.IsNotExist(err) {
+			return checkResult{
+				sev:    sevWarn,
+				detail: "no config yet at " + configPath + "; run 'openshitctl deploy' to set the pull secret path in the wizard",
+			}
+		}
+		return checkResult{sev: sevFail, detail: "cannot stat config: " + err.Error()}
+	}
+
+	loader := config.NewLoader()
+	cfg, err := loader.LoadFile(configPath)
+	if err != nil {
+		return checkResult{sev: sevFail, detail: "cannot load config: " + err.Error()}
+	}
+
+	if cfg.Files.PullSecret == "" {
+		return checkResult{sev: sevFail, detail: "files.pull_secret not set in " + configPath + "; run 'openshitctl deploy' to configure"}
+	}
+
+	path := system.ExpandPath(cfg.Files.PullSecret)
+
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return checkResult{sev: sevWarn, detail: "not found at " + path + " (required for deploy; see readme)"}
+			return checkResult{sev: sevFail, detail: "not found at " + path + " (download from https://console.redhat.com/openshift/install/pull-secret)"}
 		}
 		return checkResult{sev: sevFail, detail: err.Error()}
 	}
