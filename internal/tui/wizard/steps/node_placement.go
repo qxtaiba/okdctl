@@ -43,12 +43,12 @@ type NodePlacementStep struct {
 	inner *wizard.DataDrivenStep
 }
 
-func NewNodePlacementStep() (*NodePlacementStep, *NodePlacementStep) {
+func NewNodePlacementStep() (step, state *NodePlacementStep) {
 	sp := spinner.New()
 	sp.Spinner = spinner.Dot
 	sp.Style = lipgloss.NewStyle().Foreground(tui.ColorPrimary)
 
-	s := &NodePlacementStep{
+	step = &NodePlacementStep{
 		BaseStep: wizard.NewBaseStepWithDisplayTitle(
 			wizard.StepIDNodePlacement,
 			"proxmox infrastructure",
@@ -58,7 +58,7 @@ func NewNodePlacementStep() (*NodePlacementStep, *NodePlacementStep) {
 		loadingSpinner: sp,
 		phase:          phaseDiscovering,
 	}
-	return s, s
+	return step, step
 }
 
 func (s *NodePlacementStep) ShouldShow(cfg *config.Config) bool {
