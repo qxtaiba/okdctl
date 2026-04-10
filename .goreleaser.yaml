@@ -73,8 +73,15 @@ signs:
 
 # Homebrew tap — goreleaser will open a PR against
 # github.com/qxtaiba/homebrew-tap on every release, updating the formula.
+#
+# skip_upload is set to "true" until the qxtaiba/homebrew-tap repository
+# exists. Without that, goreleaser fails the entire release trying to
+# clone a non-existent repo. Once the tap repo is created (empty repo
+# with a Formula/ directory is enough), flip this to "auto" or remove
+# the line entirely.
 brews:
   - name: openshitctl
+    skip_upload: "true"
     repository:
       owner: qxtaiba
       name: homebrew-tap
@@ -87,47 +94,6 @@ brews:
       system "#{bin}/openshitctl version"
     install: |
       bin.install "openshitctl"
-
-# Docker images published to GitHub Container Registry
-dockers:
-  - image_templates:
-      - "ghcr.io/qxtaiba/openshitctl:{{ .Version }}-amd64"
-      - "ghcr.io/qxtaiba/openshitctl:latest-amd64"
-    dockerfile: Dockerfile
-    use: buildx
-    goos: linux
-    goarch: amd64
-    build_flag_templates:
-      - "--platform=linux/amd64"
-      - "--label=org.opencontainers.image.source=https://github.com/qxtaiba/okd-proxmox-cli"
-      - "--label=org.opencontainers.image.version={{ .Version }}"
-      - "--label=org.opencontainers.image.created={{ .Date }}"
-      - "--label=org.opencontainers.image.revision={{ .FullCommit }}"
-      - "--label=org.opencontainers.image.licenses=Apache-2.0"
-  - image_templates:
-      - "ghcr.io/qxtaiba/openshitctl:{{ .Version }}-arm64"
-      - "ghcr.io/qxtaiba/openshitctl:latest-arm64"
-    dockerfile: Dockerfile
-    use: buildx
-    goos: linux
-    goarch: arm64
-    build_flag_templates:
-      - "--platform=linux/arm64"
-      - "--label=org.opencontainers.image.source=https://github.com/qxtaiba/okd-proxmox-cli"
-      - "--label=org.opencontainers.image.version={{ .Version }}"
-      - "--label=org.opencontainers.image.created={{ .Date }}"
-      - "--label=org.opencontainers.image.revision={{ .FullCommit }}"
-      - "--label=org.opencontainers.image.licenses=Apache-2.0"
-
-docker_manifests:
-  - name_template: "ghcr.io/qxtaiba/openshitctl:{{ .Version }}"
-    image_templates:
-      - "ghcr.io/qxtaiba/openshitctl:{{ .Version }}-amd64"
-      - "ghcr.io/qxtaiba/openshitctl:{{ .Version }}-arm64"
-  - name_template: "ghcr.io/qxtaiba/openshitctl:latest"
-    image_templates:
-      - "ghcr.io/qxtaiba/openshitctl:latest-amd64"
-      - "ghcr.io/qxtaiba/openshitctl:latest-arm64"
 
 # .deb / .rpm packages for Linux users who install via apt/dnf
 nfpms:

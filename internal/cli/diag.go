@@ -22,9 +22,8 @@ import (
 )
 
 var (
-	diagOutput   string
-	diagStdout   bool
-	diagSanitize bool // kept for backward compatibility; sanitization is always on
+	diagOutput string
+	diagStdout bool
 )
 
 var diagCmd = &cobra.Command{
@@ -37,12 +36,10 @@ versions, a sanitized environment variable dump, and your effective
 config file with secrets masked. It is safe to attach to a public
 issue or paste into a bug report.
 
-Sanitization is ALWAYS on — environment variables matching PASSWORD,
-TOKEN, SECRET, or CREDENTIAL are masked as '***', and Proxmox
-credential fields in the config are zeroed before marshalling. There
-is no way to produce an unsanitized bundle; the --sanitize flag is
-accepted as a no-op for backward compatibility with the issue
-template.
+Sanitization is unconditional. Environment variables matching common
+secret name patterns (PASSWORD, TOKEN, SECRET, CREDENTIAL, API_KEY,
+PRIVATE_KEY, ACCESS_KEY) are masked as '***', and Proxmox credential
+fields in the config are zeroed before marshalling.
 
 By default writes a timestamped tar.gz in the current directory.
 Pass --stdout to dump the bundle as plain text for pasting.`,
@@ -52,7 +49,6 @@ Pass --stdout to dump the bundle as plain text for pasting.`,
 func init() {
 	diagCmd.Flags().StringVarP(&diagOutput, "output", "o", "", "output file (default: diag-<timestamp>.tar.gz in current directory)")
 	diagCmd.Flags().BoolVar(&diagStdout, "stdout", false, "write the bundle as plain text to stdout instead of a tar.gz")
-	diagCmd.Flags().BoolVar(&diagSanitize, "sanitize", true, "always on; accepted as a no-op")
 	rootCmd.AddCommand(diagCmd)
 }
 
@@ -71,7 +67,7 @@ func runDiag(cmd *cobra.Command, _ []string) error {
 		{"system", collectSystem()},
 		{"tool_versions", collectToolVersions(ctx)},
 		{"env_sanitized", collectEnvSanitized()},
-		{"config_sanitized", collectConfigSanitized()},
+		{"config_sanitized", collectConfigSanitized(cfgFile)},
 	}
 
 	if diagStdout {
@@ -127,7 +123,8 @@ func collectSystem() string {
 
 // collectToolVersions probes the CLIs openshitctl shells out to and
 // records their self-reported versions. A missing tool yields "(not
-// installed)" — not an error.
+// installed)" — not an error. Cold-cache invocations on macOS can take
+// 5-8s due to Gatekeeper/Rosetta, hence the 10s timeout.
 func collectToolVersions(ctx context.Context) string {
 	tools := []struct {
 		name string
@@ -151,12 +148,14 @@ func collectToolVersions(ctx context.Context) string {
 			fmt.Fprintln(&sb)
 			continue
 		}
-		cctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+		cctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		// Tool names are hardcoded constants from the loop above, not user input.
 		out, err := exec.CommandContext(cctx, t.name, t.args...).CombinedOutput() //nolint:gosec // G204: hardcoded tool names
 		cancel()
 		if err != nil {
 			fmt.Fprintf(&sb, "(error running %s: %v)\n", t.name, err)
+			fmt.Fprintln(&sb)
+			continue
 		}
 		// First 20 lines max, to keep the bundle terse.
 		lines := strings.SplitN(string(out), "\n", 21)
@@ -172,14 +171,19 @@ func collectToolVersions(ctx context.Context) string {
 
 // sensitiveKeyParts is the set of substrings (matched case-insensitively
 // against environment variable names) that trigger value masking in the
-// env dump. Keep it narrow: overly aggressive matching loses debug value,
-// but missing a real secret is a security bug.
+// env dump. Sourced from envchain / dotenv-linter convention. Keep narrow
+// enough to avoid false positives like AUTHOR matching AUTH; missing a
+// real secret is a security bug.
 var sensitiveKeyParts = []string{
 	"PASSWORD",
 	"PASSWD",
 	"TOKEN",
 	"SECRET",
 	"CREDENTIAL",
+	"API_KEY",
+	"APIKEY",
+	"PRIVATE_KEY",
+	"ACCESS_KEY",
 }
 
 func isSensitiveKey(k string) bool {
@@ -211,12 +215,12 @@ func collectEnvSanitized() string {
 	return sb.String()
 }
 
-// collectConfigSanitized loads the effective openshitctl.yaml (honoring
-// the --config global flag), zeroes out the Proxmox credential fields
-// on the in-memory config, and marshals the result. If no config file
-// exists, reports that instead of failing.
-func collectConfigSanitized() string {
-	path := cfgFile
+// collectConfigSanitized loads the named config file, zeroes out the
+// Proxmox credential fields on the in-memory config, and marshals the
+// result. If no config file exists, reports that instead of failing.
+// Takes path as a parameter (rather than reading the cli package global)
+// so it is unit-testable.
+func collectConfigSanitized(path string) string {
 	if path == "" {
 		path = "openshitctl.yaml"
 	}
@@ -267,48 +271,54 @@ func writeTarball(path string, sections []diagSection) error {
 	if err != nil {
 		return err
 	}
+	// Safety net: deferred close runs after any explicit close below.
 	defer func() { _ = f.Close() }()
 
 	gz := gzip.NewWriter(f)
-	defer func() { _ = gz.Close() }()
-
 	tw := tar.NewWriter(gz)
-	defer func() { _ = tw.Close() }()
 
 	now := time.Now()
-	for _, s := range sections {
-		body := []byte(s.content)
+	writeEntry := func(name, content string) error {
+		body := []byte(content)
 		hdr := &tar.Header{
-			Name:    s.name + ".txt",
+			Name:    name + ".txt",
 			Mode:    0o644,
 			Size:    int64(len(body)),
 			ModTime: now,
 		}
 		if err := tw.WriteHeader(hdr); err != nil {
-			return fmt.Errorf("tar header for %s: %w", s.name, err)
+			return fmt.Errorf("tar header for %s: %w", name, err)
 		}
 		if _, err := tw.Write(body); err != nil {
-			return fmt.Errorf("tar body for %s: %w", s.name, err)
+			return fmt.Errorf("tar body for %s: %w", name, err)
+		}
+		return nil
+	}
+
+	for _, s := range sections {
+		if err := writeEntry(s.name, s.content); err != nil {
+			return err
 		}
 	}
-
-	// Also include a top-level README in the tarball so whoever opens
-	// it knows what it is and what was sanitized.
-	readme := generateDiagReadme(sections)
-	body := []byte(readme)
-	hdr := &tar.Header{
-		Name:    "README.txt",
-		Mode:    0o644,
-		Size:    int64(len(body)),
-		ModTime: now,
-	}
-	if err := tw.WriteHeader(hdr); err != nil {
-		return fmt.Errorf("tar header for README: %w", err)
-	}
-	if _, err := tw.Write(body); err != nil {
-		return fmt.Errorf("tar body for README: %w", err)
+	// Top-level README describes the bundle format and sanitization rules
+	// so whoever opens it — possibly years later — understands what's in
+	// it without reading source.
+	if err := writeEntry("README", generateDiagReadme(sections)); err != nil {
+		return err
 	}
 
+	// Explicit close order: tar → gzip → file. Errors from these closes
+	// (gzip flush, disk full, quota) must propagate so a truncated bundle
+	// is never silently shipped.
+	if err := tw.Close(); err != nil {
+		return fmt.Errorf("close tar writer: %w", err)
+	}
+	if err := gz.Close(); err != nil {
+		return fmt.Errorf("close gzip writer: %w", err)
+	}
+	if err := f.Close(); err != nil {
+		return fmt.Errorf("close output file: %w", err)
+	}
 	return nil
 }
 
@@ -331,6 +341,6 @@ into a bug report.
 Contents:
 
 %s
-Version: %s (%s)
-`, time.Now().UTC().Format(time.RFC3339), names.String(), version.Version, version.GitCommit)
+Version: v%s (%s)
+`, time.Now().UTC().Format(time.RFC3339), names.String(), strings.TrimPrefix(version.Version, "v"), version.GitCommit)
 }

@@ -1,3 +1,5 @@
+//go:build linux || darwin
+
 package cli
 
 import (
@@ -245,8 +247,12 @@ func checkPullSecret(_ context.Context) checkResult {
 	if err := json.Unmarshal(data, &js); err != nil {
 		return checkResult{sev: sevFail, detail: "invalid JSON: " + err.Error()}
 	}
-	if _, ok := js["auths"]; !ok {
-		return checkResult{sev: sevFail, detail: "missing 'auths' field — not a valid OKD pull secret"}
+	auths, ok := js["auths"].(map[string]any)
+	if !ok {
+		return checkResult{sev: sevFail, detail: "missing or malformed 'auths' field — not a valid OKD pull secret"}
+	}
+	if len(auths) == 0 {
+		return checkResult{sev: sevFail, detail: "'auths' is empty — pull secret has no registry entries"}
 	}
 	return checkResult{sev: sevPass, detail: path}
 }
@@ -276,11 +282,11 @@ func checkDiskSpace(_ context.Context) checkResult {
 	return checkResult{sev: sevPass, detail: fmt.Sprintf("%d GB free in %s", freeGB, u.HomeDir)}
 }
 
-// checkPorts probes the host ports that openshitctl binds during deploy
-// (dnsmasq, HAProxy frontends, ignition server). A bound port is a warning
-// rather than a fail because the user may intentionally use --skip-* flags
-// to delegate one of these services to something else.
 func checkPorts(ctx context.Context) checkResult {
+	if runtime.GOOS == goosDarwin {
+		return checkResult{sev: sevPass, detail: "skipped on macOS (operator mode)"}
+	}
+
 	tcpPorts := []int{53, 80, 443, 6443, 22623, 8080}
 	udpPorts := []int{53}
 
@@ -302,8 +308,11 @@ func checkPorts(ctx context.Context) checkResult {
 	return checkResult{sev: sevPass, detail: "53, 80, 443, 6443, 22623, 8080 all available"}
 }
 
+// tryListenTCP binds to all interfaces (":port"), not just 127.0.0.1, so
+// services like systemd-resolved bound on 0.0.0.0:53 are correctly detected
+// as conflicting.
 func tryListenTCP(ctx context.Context, lc *net.ListenConfig, port int) bool {
-	l, err := lc.Listen(ctx, "tcp", fmt.Sprintf("127.0.0.1:%d", port))
+	l, err := lc.Listen(ctx, "tcp", fmt.Sprintf(":%d", port))
 	if err != nil {
 		return false
 	}
@@ -312,7 +321,7 @@ func tryListenTCP(ctx context.Context, lc *net.ListenConfig, port int) bool {
 }
 
 func tryListenUDP(ctx context.Context, lc *net.ListenConfig, port int) bool {
-	c, err := lc.ListenPacket(ctx, "udp", fmt.Sprintf("127.0.0.1:%d", port))
+	c, err := lc.ListenPacket(ctx, "udp", fmt.Sprintf(":%d", port))
 	if err != nil {
 		return false
 	}

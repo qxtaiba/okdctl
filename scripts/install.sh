@@ -6,7 +6,7 @@
 # the binary to /usr/local/bin (or $INSTALL_DIR if set).
 #
 # Usage:
-#   curl -sfL https://raw.githubusercontent.com/qxtaiba/okd-proxmox-cli/main/scripts/install.sh | sh
+#   curl -sSfL https://raw.githubusercontent.com/qxtaiba/okd-proxmox-cli/main/scripts/install.sh | sh
 #
 # Environment variables:
 #   VERSION      - pin to a specific release, e.g. VERSION=v0.1.0 (default: latest)
@@ -60,13 +60,14 @@ case "$ARCH" in
     *) die "unsupported arch: $ARCH (supported: x86_64, arm64)" ;;
 esac
 
-# Resolve latest version if not pinned
+# Resolve latest version if not pinned. Pattern adapted from get.helm.sh
+# (sed -n + capture group), more robust than grep | head | cut against
+# JSON key reordering or whitespace variation in the API response.
 if [ -z "$VERSION" ]; then
     info "resolving latest release..."
-    VERSION=$(curl -sfL "https://api.github.com/repos/$REPO/releases/latest" |
-        grep -o '"tag_name": *"[^"]*"' |
-        head -1 |
-        cut -d'"' -f4)
+    VERSION=$(curl -sSfL "https://api.github.com/repos/$REPO/releases/latest" |
+        sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' |
+        head -1)
     [ -n "$VERSION" ] || die "failed to resolve latest release from GitHub API"
     info "latest: $VERSION"
 fi
@@ -88,13 +89,13 @@ TMP=$(mktemp -d 2>/dev/null || mktemp -d -t "$BINARY")
 trap 'rm -rf "$TMP"' EXIT INT TERM
 
 info "downloading $ARCHIVE_NAME"
-curl -sfL -o "$TMP/$ARCHIVE_NAME" "$ARCHIVE_URL" ||
+curl -sSfL -o "$TMP/$ARCHIVE_NAME" "$ARCHIVE_URL" ||
     die "failed to download $ARCHIVE_URL"
 
 # Verify SHA256 unless explicitly skipped.
 if [ -z "$INSECURE" ] && [ -n "$SHA_CMD" ]; then
     info "verifying SHA256"
-    curl -sfL -o "$TMP/SHA256SUMS" "$SHA_URL" ||
+    curl -sSfL -o "$TMP/SHA256SUMS" "$SHA_URL" ||
         die "failed to download SHA256SUMS from $SHA_URL"
     EXPECTED=$(grep " $ARCHIVE_NAME\$" "$TMP/SHA256SUMS" | awk '{print $1}')
     [ -n "$EXPECTED" ] || die "no checksum found for $ARCHIVE_NAME in SHA256SUMS"

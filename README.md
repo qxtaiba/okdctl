@@ -44,23 +44,18 @@ becoming a second job.
 
 ## Compatibility
 
-<!-- COMPAT:START -->
-<!-- This section is generated from docs/compatibility.yaml. Run `make compat` to regenerate. -->
-
 | Component | Tested | Known broken / unsupported |
 |-----------|--------|----------------------------|
 | Proxmox VE | 8.0, 8.1, 8.2 | `<8.0` (API breaking changes in the pve-api-go client) |
 | OKD | 4.15.0, 4.16.0 | `<4.13` (ignition format v3 changes not handled) |
 | Host OS | Debian 12, Fedora 39 | — |
 | Storage backend | LVM-thin, directory | `Ceph` (not tested; PRs welcome) |
-| Firewall | firewalld, ufw | `nftables (direct)` (not tested; firewalld and ufw both use nftables under the hood) |
-| Host architecture | amd64, arm64 | `Windows` (not supported by design — this is a Linux/macOS tool) |
+| Firewall | firewalld, ufw | `nftables (direct)` (not tested) |
+| Host architecture | amd64, arm64 | Windows (not supported by design — this is a Linux/macOS tool) |
 
-<!-- COMPAT:END -->
-
-If your configuration isn't on the list, it may still work — the list reflects
+If your configuration isn't on the list, it may still work — this reflects
 what's actively tested, not what's theoretically supported. PRs adding new
-tested combinations are welcome; see `docs/compatibility.yaml`.
+tested combinations to the table above are welcome.
 
 ## Quickstart
 

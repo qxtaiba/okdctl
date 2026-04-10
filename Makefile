@@ -30,7 +30,7 @@ LDFLAGS := -ldflags "-s -w \
 .DEFAULT_GOAL := help
 
 # Phony targets
-.PHONY: all build build-all clean test test-short test-cover lint fmt vet check compat compat-check deps deps-update run dev install help
+.PHONY: all build build-all clean test test-short test-cover lint fmt vet check deps deps-update run dev install help
 
 ## Build targets
 
@@ -91,14 +91,6 @@ vet: ## Run go vet
 	$(GOVET) ./...
 
 check: fmt vet lint ## Run all checks
-
-## Compatibility matrix targets
-
-compat: ## Regenerate the compatibility matrix section of README.md
-	@$(GOCMD) run ./tools/render-compat
-
-compat-check: ## Verify README.md compatibility matrix is in sync with docs/compatibility.yaml
-	@$(GOCMD) run ./tools/render-compat -check
 
 ## Dependency targets
 
