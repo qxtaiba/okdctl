@@ -60,9 +60,24 @@ const (
 	sevFail
 )
 
+// checkResult is a check's outcome. If items is non-empty, printResult
+// renders it as a per-item sub-list and detail is ignored; otherwise
+// detail is rendered as a single-line result next to the bracketed label.
+// sev is the aggregate severity (the worst item severity in the sub-list
+// case, or set directly in the single-line case).
 type checkResult struct {
 	sev    severity
 	detail string
+	items  []checkItem
+}
+
+// checkItem is one row in a multi-item check result (e.g. per-binary status
+// under the tools-and-packages check). Each item has its own severity so a
+// rollup check can mix [ok] / [warn] / [fail] rows under one title.
+type checkItem struct {
+	sev  severity
+	name string
+	note string
 }
 
 type check struct {
@@ -79,7 +94,7 @@ func runDoctor(cmd *cobra.Command, _ []string) error {
 		{"host os", "platform and operator-mode detection", checkHostOS},
 		{"root check", "guard against running as root (deploy uses sudo internally)", checkNotRoot},
 		{"path", "/usr/local/bin present for auto-installed tools", checkPath},
-		{"required binaries", "curl, ssh, git, oc, openshift-install, terraform", checkBinaries},
+		{"tools and packages", "host tools, installable clis, and system packages", checkBinaries},
 		{"sudo", "non-interactive (nopasswd) for long-running installs", checkSudo},
 		{"ssh public key", "default key for vm provisioning", checkSSHKey},
 		{"pull secret", "valid okd registry pull secret", checkPullSecret},
@@ -115,31 +130,56 @@ func runDoctor(cmd *cobra.Command, _ []string) error {
 	return nil
 }
 
-// printResult renders one check as a two-line block: a title line with
-// the status icon, check name, and muted description, then an indented
-// result line with the bracketed label and detail. A blank line follows
-// so check blocks are visually distinct.
-func printResult(c check, r checkResult) {
-	var icon, label string
-	switch r.sev {
+// severityMarkers returns the styled icon, the styled bracketed label,
+// and the raw (unstyled) label text for a given severity. Callers use the
+// raw text for column-width math when rendering aligned sub-item lists.
+func severityMarkers(sev severity) (icon, label, rawLabel string) {
+	switch sev {
 	case sevPass:
+		rawLabel = "[ok]"
 		icon = tui.SuccessStyle.Render("✓")
-		label = tui.SuccessStyle.Render("[ok]")
+		label = tui.SuccessStyle.Render(rawLabel)
 	case sevWarn:
+		rawLabel = "[warn]"
 		icon = tui.WarningStyle.Render("⚠")
-		label = tui.WarningStyle.Render("[warn]")
+		label = tui.WarningStyle.Render(rawLabel)
 	case sevFail:
+		rawLabel = "[fail]"
 		icon = tui.ErrorStyle.Render("✗")
-		label = tui.ErrorStyle.Render("[fail]")
+		label = tui.ErrorStyle.Render(rawLabel)
 	}
+	return
+}
+
+// printResult renders one check as either a two-line block (title + single
+// result line) or a title followed by a per-item sub-list. A blank line
+// follows either shape so check blocks remain visually distinct.
+func printResult(c check, r checkResult) {
+	icon, aggregateLabel, _ := severityMarkers(r.sev)
 
 	title := c.name
 	if c.desc != "" {
 		title += tui.MutedStyle.Render(": " + c.desc)
 	}
-
 	fmt.Println("  " + icon + " " + title)
-	fmt.Println("      " + label + " " + r.detail)
+
+	if len(r.items) > 0 {
+		// Sub-list: each item on its own line, labels aligned to the
+		// widest possible label ("[fail]" / "[warn]" at 6 chars).
+		const maxLabelWidth = 6
+		for _, item := range r.items {
+			_, itemLabel, itemRawLabel := severityMarkers(item.sev)
+			padding := strings.Repeat(" ", maxLabelWidth-len(itemRawLabel)+2)
+			line := "      " + itemLabel + padding + item.name
+			if item.note != "" {
+				line += tui.MutedStyle.Render(" (" + item.note + ")")
+			}
+			fmt.Println(line)
+		}
+	} else {
+		fmt.Println("      " + aggregateLabel + " " + r.detail)
+	}
+
 	fmt.Println()
 }
 
@@ -174,34 +214,59 @@ func checkPath(_ context.Context) checkResult {
 	return checkResult{sev: sevPass, detail: "/usr/local/bin found on path"}
 }
 
-// checkBinaries looks for the binaries openshitctl shells out to. Tools
-// that setup auto-downloads into /usr/local/bin (oc, openshift-install,
-// terraform) are warnings, not failures — they will be installed on first
-// deploy if missing.
+// checkBinaries reports per-item status for three categories: host tools
+// that must already exist (missing = fail), installable CLIs that setup
+// downloads into /usr/local/bin (missing = warn), and system packages
+// that setup installs via dnf/apt (missing = warn). The system package
+// list is a mirror of setup.installSystemPackages — keep in sync.
 func checkBinaries(_ context.Context) checkResult {
-	required := []string{"curl", "ssh", "git"}
-	autoInstalled := []string{"oc", "openshift-install", "terraform"}
+	hostBinaries := []string{"curl", "ssh", "git"}
+	installableTools := []string{"oc", "openshift-install", "terraform"}
+	systemPackages := []string{"coreos-installer", "haproxy", "dnsmasq"}
 
-	var missing []string
-	for _, name := range required {
+	var items []checkItem
+	worst := sevPass
+
+	probe := func(name string, missingSev severity, note string) {
 		if _, err := exec.LookPath(name); err != nil {
-			missing = append(missing, name)
+			items = append(items, checkItem{sev: missingSev, name: name, note: note})
+			if missingSev > worst {
+				worst = missingSev
+			}
+			return
+		}
+		items = append(items, checkItem{sev: sevPass, name: name})
+	}
+
+	for _, name := range hostBinaries {
+		probe(name, sevFail, "missing; required before anything else will work")
+	}
+	for _, name := range installableTools {
+		probe(name, sevWarn, "will be downloaded during setup")
+	}
+	for _, name := range systemPackages {
+		probe(name, sevWarn, "will be installed via package manager")
+	}
+
+	// Apache binary name varies by distro: httpd on rhel-family, apache2
+	// on debian-family. If either is on PATH, treat apache as installed.
+	apacheFound := false
+	for _, bin := range []string{"httpd", "apache2"} {
+		if _, err := exec.LookPath(bin); err == nil {
+			apacheFound = true
+			break
 		}
 	}
-	if len(missing) > 0 {
-		return checkResult{sev: sevFail, detail: "missing required: " + strings.Join(missing, ", ")}
-	}
-
-	var missingAuto []string
-	for _, name := range autoInstalled {
-		if _, err := exec.LookPath(name); err != nil {
-			missingAuto = append(missingAuto, name)
+	if apacheFound {
+		items = append(items, checkItem{sev: sevPass, name: "apache"})
+	} else {
+		items = append(items, checkItem{sev: sevWarn, name: "apache", note: "will be installed via package manager"})
+		if sevWarn > worst {
+			worst = sevWarn
 		}
 	}
-	if len(missingAuto) > 0 {
-		return checkResult{sev: sevWarn, detail: "will be auto-downloaded during setup: " + strings.Join(missingAuto, ", ")}
-	}
-	return checkResult{sev: sevPass, detail: "curl, ssh, git, oc, openshift-install, terraform all present"}
+
+	return checkResult{sev: worst, items: items}
 }
 
 // checkSudo verifies that sudo can escalate without prompting. A failing
