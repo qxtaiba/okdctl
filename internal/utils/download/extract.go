@@ -10,6 +10,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/logutil"
 )
 
 type ExtractOptions struct {
@@ -25,7 +27,7 @@ func (o ExtractOptions) logger() *slog.Logger {
 	if o.Logger != nil {
 		return o.Logger
 	}
-	return slog.New(slog.DiscardHandler)
+	return logutil.NopLogger
 }
 
 // verifyResolvedPath checks that path, after resolving symlinks on the real

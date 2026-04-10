@@ -7,6 +7,7 @@ import (
 
 	"github.com/qxtaiba/okd-proxmox-cli/internal/config"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/executor"
+	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/logutil"
 )
 
 type BaseOptions struct {
@@ -43,7 +44,7 @@ type BasePhase struct {
 
 func NewBasePhase(exec *executor.Executor, logger *slog.Logger, version string) BasePhase {
 	if logger == nil {
-		logger = slog.New(slog.DiscardHandler)
+		logger = logutil.NopLogger
 	}
 	if exec == nil {
 		exec = executor.New(executor.WithLogger(logger))

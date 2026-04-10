@@ -239,13 +239,13 @@ func (p *Phase) handleHostNetworkConversion(
 ) (convertedCount int, names map[string]bool, retErr error) {
 	names = make(map[string]bool)
 
-	var icNameList []string
-	for _, ic := range hostNetworkICs {
-		icNameList = append(icNameList, ic.Name)
+	icNames := make([]string, len(hostNetworkICs))
+	for i, ic := range hostNetworkICs {
+		icNames[i] = ic.Name
 	}
 
 	p.Log.Warn(fmt.Sprintf("update-ingress: found %d controller(s) using HostNetwork: %s",
-		len(hostNetworkICs), strings.Join(icNameList, ", ")))
+		len(hostNetworkICs), strings.Join(icNames, ", ")))
 
 	metalLBAvailable, err := p.checkMetalLBAvailable(ctx)
 	if err != nil {
@@ -264,11 +264,7 @@ func (p *Phase) handleHostNetworkConversion(
 		return 0, names, nil
 	}
 
-	var confirmNames []string
-	for _, ic := range hostNetworkICs {
-		confirmNames = append(confirmNames, ic.Name)
-	}
-	if !opts.ConfirmConversion(confirmNames) {
+	if !opts.ConfirmConversion(icNames) {
 		p.Log.Info("update-ingress: user declined hostnetwork conversion — skipping")
 		return 0, names, nil
 	}
@@ -368,26 +364,12 @@ func (p *Phase) discoverIngressControllers(ctx context.Context) ([]ingressContro
 // checkMetalLBAvailable returns true if MetalLB is installed and has at least
 // one IPAddressPool configured.
 func (p *Phase) checkMetalLBAvailable(ctx context.Context) (bool, error) {
-	// Check namespace exists.
-	nsResult, err := p.Exec.Run(ctx, "oc", "get", "namespace", "metallb-system",
-		"--no-headers", "--ignore-not-found")
-	if err != nil {
-		return false, fmt.Errorf("failed to check metallb-system namespace: %w", err)
+	if ok, err := p.OcResourceExists(ctx, "failed to check metallb-system namespace", "namespace", "metallb-system"); err != nil || !ok {
+		return false, err
 	}
-	if nsResult.ExitCode != 0 || strings.TrimSpace(nsResult.Stdout) == "" {
-		return false, nil
+	if ok, err := p.OcResourceExists(ctx, "failed to check IPAddressPools", "ipaddresspool", "-n", "metallb-system"); err != nil || !ok {
+		return false, err
 	}
-
-	// Check at least one IPAddressPool exists.
-	poolResult, err := p.Exec.Run(ctx, "oc", "get", "ipaddresspool",
-		"-n", "metallb-system", "--no-headers", "--ignore-not-found")
-	if err != nil {
-		return false, fmt.Errorf("failed to check IPAddressPools: %w", err)
-	}
-	if poolResult.ExitCode != 0 || strings.TrimSpace(poolResult.Stdout) == "" {
-		return false, nil
-	}
-
 	return true, nil
 }
 
@@ -578,24 +560,12 @@ func (p *Phase) waitForServiceLB(ctx context.Context, svcName string, opts *Opti
 	if timeout == 0 {
 		timeout = DefaultIngressLBTimeout
 	}
-
-	var ip string
-	if err := system.WaitForWithTimeout(ctx, "ingress", svcName+" lb", func() bool {
-		result, _ := p.Exec.Run(ctx, "oc", "get", "svc", svcName,
-			"-n", "openshift-ingress",
-			"-o", "jsonpath={.status.loadBalancer.ingress[0].ip}")
-		if result == nil || result.ExitCode != 0 {
-			return false
-		}
-		candidate := strings.TrimSpace(result.Stdout)
-		if candidate == "" {
-			return false
-		}
-		ip = candidate
-		return true
-	}, timeout, p.Log); err != nil {
+	ip, err := p.OcPollOutput(ctx, "ingress", svcName+" lb", timeout,
+		func(v string) bool { return v != "" },
+		"get", "svc", svcName, "-n", "openshift-ingress",
+		"-o", "jsonpath={.status.loadBalancer.ingress[0].ip}")
+	if err != nil {
 		return "", fmt.Errorf("%s did not receive a LoadBalancer IP within %v: %w", svcName, timeout, err)
 	}
-
 	return ip, nil
 }

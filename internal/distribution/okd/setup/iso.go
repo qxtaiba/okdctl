@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"github.com/qxtaiba/okd-proxmox-cli/internal/config"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/templates"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/executor"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
@@ -20,8 +19,6 @@ func (p *Phase) BuildCustomISOs(ctx context.Context, cfg *config.Config, opts *O
 	if err := system.EnsureDir(isoDir); err != nil {
 		return err
 	}
-
-	clusterDir := phase.ClusterConfigDir(opts.WorkDir)
 
 	if !executor.CommandExists("coreos-installer") {
 		return fmt.Errorf("coreos-installer not found - please install it first")
@@ -45,7 +42,7 @@ func (p *Phase) BuildCustomISOs(ctx context.Context, cfg *config.Config, opts *O
 		}
 		p.Log.Info(fmt.Sprintf("iso: building custom coreos iso for %s", node.Name))
 
-		if err := p.buildNodeISO(ctx, cfg, node, clusterDir, fcosISO, isoDir); err != nil {
+		if err := p.buildNodeISO(ctx, cfg, node, fcosISO, isoDir); err != nil {
 			return fmt.Errorf("failed to build ISO for %s: %w", node.Name, err)
 		}
 	}
@@ -54,29 +51,12 @@ func (p *Phase) BuildCustomISOs(ctx context.Context, cfg *config.Config, opts *O
 }
 
 func writePreInstallScript(script string) (string, error) {
-	f, err := os.CreateTemp("", "pre-install-*.sh")
-	if err != nil {
-		return "", fmt.Errorf("failed to create pre-install script: %w", err)
-	}
-
-	if err := f.Chmod(0o750); err != nil {
-		_ = f.Close()
-		_ = os.Remove(f.Name())
-		return "", fmt.Errorf("failed to chmod pre-install script: %w", err)
-	}
-
-	if _, err := f.WriteString(script); err != nil {
-		_ = f.Close()
-		_ = os.Remove(f.Name())
-		return "", fmt.Errorf("failed to write pre-install script: %w", err)
-	}
-
-	if err := f.Close(); err != nil {
-		_ = os.Remove(f.Name())
-		return "", fmt.Errorf("failed to close pre-install script: %w", err)
-	}
-
-	return f.Name(), nil
+	return system.WriteTempFile("pre-install-*.sh", 0o750, func(f *os.File) error {
+		if _, err := f.WriteString(script); err != nil {
+			return fmt.Errorf("failed to write pre-install script: %w", err)
+		}
+		return nil
+	})
 }
 
 // writeInstallerTriggerIgnition creates a temp Ignition config that seeds
@@ -109,23 +89,15 @@ func writeInstallerTriggerIgnition(sshKey string) (string, error) {
 		return "", fmt.Errorf("failed to marshal installer trigger ignition: %w", err)
 	}
 
-	f, err := os.CreateTemp("", "installer-trigger-*.ign")
-	if err != nil {
-		return "", fmt.Errorf("failed to create installer trigger ignition: %w", err)
-	}
-	if _, err := f.Write(data); err != nil {
-		_ = f.Close()
-		_ = os.Remove(f.Name())
-		return "", fmt.Errorf("failed to write installer trigger ignition: %w", err)
-	}
-	if err := f.Close(); err != nil {
-		_ = os.Remove(f.Name())
-		return "", fmt.Errorf("failed to close installer trigger ignition: %w", err)
-	}
-	return f.Name(), nil
+	return system.WriteTempFile("installer-trigger-*.ign", 0o644, func(f *os.File) error {
+		if _, err := f.Write(data); err != nil {
+			return fmt.Errorf("failed to write installer trigger ignition: %w", err)
+		}
+		return nil
+	})
 }
 
-func (p *Phase) buildNodeISO(ctx context.Context, cfg *config.Config, node NodeInfo, _, fcosISO, outputDir string) error {
+func (p *Phase) buildNodeISO(ctx context.Context, cfg *config.Config, node NodeInfo, fcosISO, outputDir string) error {
 	isoName := fmt.Sprintf("%s.iso", node.Name)
 	outputPath := filepath.Join(outputDir, isoName)
 

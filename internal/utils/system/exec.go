@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"log/slog"
 	"time"
+
+	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/logutil"
 )
 
 type WaitForOptions struct {
@@ -30,7 +32,7 @@ func WaitFor(ctx context.Context, prefix, description string, check func() bool,
 
 	logger := opts.Logger
 	if logger == nil {
-		logger = slog.New(slog.DiscardHandler)
+		logger = logutil.NopLogger
 	}
 
 	waitMsg := fmt.Sprintf("%s: waiting for %s...", prefix, description)

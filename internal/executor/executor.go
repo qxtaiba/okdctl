@@ -14,6 +14,8 @@ import (
 	"os/exec"
 	"strings"
 	"time"
+
+	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/logutil"
 )
 
 type Executor struct {
@@ -55,7 +57,7 @@ func New(opts ...Option) *Executor {
 	e := &Executor{
 		Stdout: os.Stdout,
 		Stderr: os.Stderr,
-		logger: slog.New(slog.DiscardHandler),
+		logger: logutil.NopLogger,
 	}
 	for _, opt := range opts {
 		opt(e)

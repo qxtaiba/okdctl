@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
+	"gopkg.in/yaml.v3"
 )
 
 const (
@@ -28,6 +29,28 @@ func RetryDefault(ctx context.Context, fn func() error) error {
 		backoff.WithMaxRetries(b, uint64(DefaultRetryCount-1)),
 		ctx,
 	))
+}
+
+// BuildOpaqueSecret returns a Kubernetes Secret manifest YAML of type Opaque.
+// Values in data must be pre-base64-encoded by the caller; they are written
+// straight into the .data map. Panics only if yaml.Marshal fails, which
+// cannot happen for the string-only map shapes used here.
+func BuildOpaqueSecret(namespace, name string, data map[string]string) string {
+	manifest := map[string]any{
+		"apiVersion": "v1",
+		"kind":       "Secret",
+		"metadata": map[string]any{
+			"name":      name,
+			"namespace": namespace,
+		},
+		"type": "Opaque",
+		"data": data,
+	}
+	out, err := yaml.Marshal(manifest)
+	if err != nil {
+		panic(fmt.Sprintf("BuildOpaqueSecret: %v", err))
+	}
+	return string(out)
 }
 
 // EnsureNamespace checks whether a Kubernetes namespace exists and creates it

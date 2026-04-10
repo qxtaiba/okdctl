@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/qxtaiba/okd-proxmox-cli/internal/executor"
+	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/logutil"
 )
 
 type K8sClient struct {
@@ -43,7 +44,7 @@ func WithLogger(l *slog.Logger) Option {
 func NewK8sClient(opts ...Option) *K8sClient {
 	c := &K8sClient{
 		CLI:    "kubectl",
-		logger: slog.New(slog.DiscardHandler),
+		logger: logutil.NopLogger,
 	}
 
 	if envKubeconfig := os.Getenv("KUBECONFIG"); envKubeconfig != "" {

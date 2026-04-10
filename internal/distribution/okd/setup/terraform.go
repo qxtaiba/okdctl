@@ -8,7 +8,6 @@ import (
 	"github.com/qxtaiba/okd-proxmox-cli/internal/config"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/templates"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
 )
 
 func buildISOStrings(isoStorage, role string, count int) []string {
@@ -141,15 +140,9 @@ func (p *Phase) GenerateTerraformVars(cfg *config.Config, opts *Options) error {
 	}
 
 	data := buildTerraformVarsData(cfg)
-	content, err := templates.RenderTerraformVars(&data)
-	if err != nil {
-		return fmt.Errorf("failed to render terraform.tfvars template: %w", err)
-	}
-
 	outputPath := filepath.Join(opts.ProjectRoot, "infrastructure", "terraform", "environments", phase.GetTerraformEnv(cfg), "terraform.tfvars")
-
-	if err := system.AtomicWriteString(outputPath, content, 0o644); err != nil {
-		return fmt.Errorf("failed to write terraform.tfvars: %w", err)
-	}
-	return nil
+	return renderAndWrite(
+		func() (string, error) { return templates.RenderTerraformVars(&data) },
+		outputPath, 0o644, "terraform.tfvars",
+	)
 }

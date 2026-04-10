@@ -15,8 +15,6 @@ import (
 	"strings"
 	"time"
 
-	"gopkg.in/yaml.v3"
-
 	"github.com/qxtaiba/okd-proxmox-cli/internal/addon"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/executor"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
@@ -89,26 +87,33 @@ func (f *Flux) Install(ctx context.Context, env *addon.Environment) error {
 	return nil
 }
 
-func (f *Flux) installOperator(ctx context.Context, env *addon.Environment) error {
-	env.Logger.Info("flux: installing operator via helm")
-	if err := addon.RetryDefault(ctx, func() error {
-		if _, err := env.Exec.RunChecked(ctx, "helm", "upgrade", "--install", "flux-operator",
-			"oci://ghcr.io/controlplaneio-fluxcd/charts/flux-operator",
-			"--namespace", "flux-system",
-			"--create-namespace",
-			"--wait"); err != nil {
-			return fmt.Errorf("failed to install flux operator: %w", err)
+// helmUpgradeInstall wraps the shared "helm upgrade --install ... --wait"
+// invocation used for both flux-operator and flux-instance. extraArgs is
+// appended after the common --namespace flag (so callers can pass --set
+// pairs or --create-namespace).
+func (f *Flux) helmUpgradeInstall(ctx context.Context, env *addon.Environment, release, chart, errLabel string, extraArgs ...string) error {
+	return addon.RetryDefault(ctx, func() error {
+		args := []string{"upgrade", "--install", release, chart, "--namespace", "flux-system"}
+		args = append(args, extraArgs...)
+		args = append(args, "--wait")
+		if _, err := env.Exec.RunChecked(ctx, "helm", args...); err != nil {
+			return fmt.Errorf("failed to install %s: %w", errLabel, err)
 		}
 		return nil
-	}); err != nil {
+	})
+}
+
+func (f *Flux) installOperator(ctx context.Context, env *addon.Environment) error {
+	env.Logger.Info("flux: installing operator via helm")
+	if err := f.helmUpgradeInstall(ctx, env, "flux-operator",
+		"oci://ghcr.io/controlplaneio-fluxcd/charts/flux-operator",
+		"flux operator", "--create-namespace"); err != nil {
 		return err
 	}
-
 	if _, err := env.Exec.RunChecked(ctx, "oc", "wait", "--for=condition=available", "deployment/flux-operator",
 		"--namespace", "flux-system", "--timeout=120s"); err != nil {
 		return fmt.Errorf("flux: operator not ready within 120s timeout: %w", err)
 	}
-
 	return nil
 }
 
@@ -123,30 +128,20 @@ func (f *Flux) installInstance(ctx context.Context, env *addon.Environment) erro
 	if branch == "" {
 		branch = "main"
 	}
-	syncRef := "refs/heads/" + branch
 	syncPath := settings["path"]
 	if syncPath == "" {
 		syncPath = "kubernetes/clusters/production"
 	}
 
-	if err := addon.RetryDefault(ctx, func() error {
-		if _, err := env.Exec.RunChecked(ctx, "helm", "upgrade", "--install", "flux-instance",
-			"oci://ghcr.io/controlplaneio-fluxcd/charts/flux-instance",
-			"--namespace", "flux-system",
-			"--set", "instance.cluster.type=openshift",
-			"--set", fmt.Sprintf("instance.sync.url=%s", syncURL),
-			"--set", fmt.Sprintf("instance.sync.ref=%s", syncRef),
-			"--set", fmt.Sprintf("instance.sync.path=%s", syncPath),
-			"--set", "instance.sync.pullSecret=flux-system",
-			"--wait"); err != nil {
-			return fmt.Errorf("failed to install flux instance: %w", err)
-		}
-		return nil
-	}); err != nil {
-		return err
-	}
-
-	return nil
+	return f.helmUpgradeInstall(ctx, env, "flux-instance",
+		"oci://ghcr.io/controlplaneio-fluxcd/charts/flux-instance",
+		"flux instance",
+		"--set", "instance.cluster.type=openshift",
+		"--set", fmt.Sprintf("instance.sync.url=%s", syncURL),
+		"--set", fmt.Sprintf("instance.sync.ref=refs/heads/%s", branch),
+		"--set", fmt.Sprintf("instance.sync.path=%s", syncPath),
+		"--set", "instance.sync.pullSecret=flux-system",
+	)
 }
 
 func (f *Flux) Verify(ctx context.Context, env *addon.Environment) error {
@@ -380,16 +375,15 @@ func gitHost(repoURL string) (string, error) {
 	}
 	// scp-style: user@host:path (no scheme, has @ and : before any /)
 	if !strings.Contains(repoURL, "://") {
-		at := strings.Index(repoURL, "@")
-		if at < 0 {
+		_, rest, ok := strings.Cut(repoURL, "@")
+		if !ok {
 			return "", fmt.Errorf("cannot parse host from %q", repoURL)
 		}
-		rest := repoURL[at+1:]
-		colon := strings.Index(rest, ":")
-		if colon < 0 {
+		host, _, ok := strings.Cut(rest, ":")
+		if !ok {
 			return "", fmt.Errorf("cannot parse host from %q", repoURL)
 		}
-		return rest[:colon], nil
+		return host, nil
 	}
 	u, err := url.Parse(repoURL)
 	if err != nil {
@@ -403,10 +397,8 @@ func gitHost(repoURL string) (string, error) {
 }
 
 // buildFluxDeployKeySecret renders a Secret manifest containing the SSH deploy
-// key material. Values are base64-encoded into the data map so oc apply can
-// pipe the manifest via stdin without exposing key bytes on argv. publicKey is
-// optional — flux only requires identity and known_hosts, so the identity.pub
-// field is omitted when empty.
+// key material. publicKey is optional — flux only requires identity and
+// known_hosts, so the identity.pub field is omitted when empty.
 func buildFluxDeployKeySecret(namespace, name, privateKey, publicKey, knownHosts string) string {
 	enc := base64.StdEncoding.EncodeToString
 	data := map[string]string{
@@ -416,22 +408,7 @@ func buildFluxDeployKeySecret(namespace, name, privateKey, publicKey, knownHosts
 	if publicKey != "" {
 		data["identity.pub"] = enc([]byte(publicKey))
 	}
-	manifest := map[string]any{
-		"apiVersion": "v1",
-		"kind":       "Secret",
-		"metadata": map[string]any{
-			"name":      name,
-			"namespace": namespace,
-		},
-		"type": "Opaque",
-		"data": data,
-	}
-	out, err := yaml.Marshal(manifest)
-	if err != nil {
-		// All inputs are simple strings; marshal cannot fail in practice.
-		panic(fmt.Sprintf("buildFluxDeployKeySecret: %v", err))
-	}
-	return string(out)
+	return addon.BuildOpaqueSecret(namespace, name, data)
 }
 
 // getTimeout reads a timeout setting (in seconds) from the settings map,

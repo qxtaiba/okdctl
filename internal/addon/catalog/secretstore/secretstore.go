@@ -9,8 +9,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"gopkg.in/yaml.v3"
-
 	"github.com/qxtaiba/okd-proxmox-cli/internal/addon"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/executor"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
@@ -208,37 +206,13 @@ func (s *SecretStore) secretFilePaths(env *addon.Environment) (secretsDir, credP
 	return
 }
 
-// buildOpaqueSecretManifest returns a minimal Secret manifest YAML with a
-// single pre-encoded data key. Callers must base64-encode raw values before
-// passing them.
-func buildOpaqueSecretManifest(namespace, name, dataKey, encodedValue string) string {
-	manifest := map[string]any{
-		"apiVersion": "v1",
-		"kind":       "Secret",
-		"metadata": map[string]any{
-			"name":      name,
-			"namespace": namespace,
-		},
-		"type": "Opaque",
-		"data": map[string]string{
-			dataKey: encodedValue,
-		},
-	}
-	out, err := yaml.Marshal(manifest)
-	if err != nil {
-		// All inputs are simple strings; marshal cannot fail in practice.
-		panic(fmt.Sprintf("buildOpaqueSecretManifest: %v", err))
-	}
-	return string(out)
-}
-
 func (s *SecretStore) createSecretFromFile(ctx context.Context, env *addon.Environment, filePath, secretName, dataKey string) error {
 	plaintext, err := s.readSecret(ctx, env, filePath)
 	if err != nil {
 		return fmt.Errorf("failed to read %s: %w", filepath.Base(filePath), err)
 	}
 	encoded := base64.StdEncoding.EncodeToString([]byte(strings.TrimSpace(plaintext)))
-	manifest := buildOpaqueSecretManifest(defaultNamespace, secretName, dataKey, encoded)
+	manifest := addon.BuildOpaqueSecret(defaultNamespace, secretName, map[string]string{dataKey: encoded})
 	if _, err := env.Exec.RunWithStdinChecked(ctx, manifest, "oc", "apply", "-f", "-"); err != nil {
 		return fmt.Errorf("failed to apply %s secret: %w", secretName, err)
 	}

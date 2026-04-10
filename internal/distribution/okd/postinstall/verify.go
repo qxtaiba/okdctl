@@ -96,25 +96,14 @@ func (p *Phase) waitForKubeVIPDaemonSet(ctx context.Context, opts *Options) erro
 	if timeout == 0 {
 		timeout = DefaultKubeVIPDaemonSetTimeout
 	}
-
-	if err := system.WaitForWithTimeout(ctx, "kubevip", "daemonset", func() bool {
-		result, _ := p.Exec.Run(ctx, "oc", "get", "daemonset", "-n", "kube-system", "kube-vip",
-			"-o", "jsonpath={.status.numberReady}")
-		if result == nil || result.ExitCode != 0 {
-			return false
-		}
-		ready := strings.TrimSpace(result.Stdout)
-		return ready != "" && ready != "0"
-	}, timeout, p.Log); err != nil {
+	ready, err := p.OcPollOutput(ctx, "kubevip", "daemonset", timeout,
+		func(v string) bool { return v != "" && v != "0" },
+		"get", "daemonset", "-n", "kube-system", "kube-vip",
+		"-o", "jsonpath={.status.numberReady}")
+	if err != nil {
 		return fmt.Errorf("kube-vip daemonset not ready: %w", err)
 	}
-
-	result, _ := p.Exec.Run(ctx, "oc", "get", "daemonset", "-n", "kube-system", "kube-vip",
-		"-o", "jsonpath={.status.numberReady}")
-	if result != nil && result.ExitCode == 0 {
-		p.Log.Info(fmt.Sprintf("kubevip: daemonset running (%s pods ready)", strings.TrimSpace(result.Stdout)))
-	}
-
+	p.Log.Info(fmt.Sprintf("kubevip: daemonset running (%s pods ready)", ready))
 	return nil
 }
 

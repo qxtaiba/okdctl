@@ -15,6 +15,7 @@ import (
 	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/postinstall"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/setup"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/executor"
+	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/logutil"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
 )
 
@@ -63,7 +64,7 @@ func New(version string, opts ...ProvisionerOption) *Provisioner {
 	p := &Provisioner{
 		version:     version,
 		projectRoot: projectRoot,
-		logger:      slog.New(slog.DiscardHandler),
+		logger:      logutil.NopLogger,
 	}
 
 	for _, opt := range opts {

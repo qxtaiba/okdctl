@@ -53,19 +53,6 @@ func (p *Phase) BuildHAProxyConfigData(cfg *config.Config) (templates.HAProxyCon
 	}, nil
 }
 
-// writeHAProxyConfigToTemp writes the rendered haproxy.cfg contents to a
-// PID-named file under os.TempDir using system.AtomicWrite. The caller
-// is responsible for removing the returned path. A user-writable temp file is
-// required because the final install step runs under sudo, so the write
-// itself cannot target /etc/haproxy directly here.
-func writeHAProxyConfigToTemp(content string) (string, error) {
-	tmpPath := filepath.Join(os.TempDir(), fmt.Sprintf("haproxy-%d.cfg", os.Getpid()))
-	if err := system.AtomicWriteString(tmpPath, content, 0o644); err != nil {
-		return "", fmt.Errorf("failed to write temp haproxy config: %w", err)
-	}
-	return tmpPath, nil
-}
-
 const (
 	haproxyConfigPath = phase.DefaultHAProxyConfigPath
 	haproxyBackupPath = phase.DefaultHAProxyBackupPath
@@ -100,9 +87,11 @@ func (p *Phase) ConfigureHAProxy(ctx context.Context, cfg *config.Config, _ *Opt
 		return fmt.Errorf("failed to render haproxy.cfg template: %w", err)
 	}
 
-	tmpPath, err := writeHAProxyConfigToTemp(content)
-	if err != nil {
-		return err
+	// A user-writable temp file is required because the final install step
+	// runs under sudo, so the write here cannot target /etc/haproxy directly.
+	tmpPath := filepath.Join(os.TempDir(), fmt.Sprintf("haproxy-%d.cfg", os.Getpid()))
+	if err := system.AtomicWriteString(tmpPath, content, 0o644); err != nil {
+		return fmt.Errorf("failed to write temp haproxy config: %w", err)
 	}
 	defer func() { _ = os.Remove(tmpPath) }()
 

@@ -12,6 +12,7 @@ import (
 	"slices"
 
 	"github.com/qxtaiba/okd-proxmox-cli/internal/executor"
+	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/logutil"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
 )
 
@@ -112,7 +113,7 @@ func New(workDir string, opts ...Option) *Executor {
 		WorkDir: workDir,
 		VarFile: filepath.Join(workDir, "terraform.tfvars"),
 		exec:    executor.New(executor.WithWorkDir(workDir)),
-		logger:  slog.New(slog.DiscardHandler),
+		logger:  logutil.NopLogger,
 	}
 	for _, opt := range opts {
 		opt(e)
@@ -126,7 +127,7 @@ func NewWithVarFile(workDir, varFile string, opts ...Option) *Executor {
 		WorkDir: workDir,
 		VarFile: varFile,
 		exec:    executor.New(executor.WithWorkDir(workDir)),
-		logger:  slog.New(slog.DiscardHandler),
+		logger:  logutil.NopLogger,
 	}
 	for _, opt := range opts {
 		opt(e)
@@ -306,10 +307,6 @@ func (t *Executor) HasState() bool {
 	return system.FileExists(stateFile)
 }
 
-func (t *Executor) StateFile() string {
-	return filepath.Join(t.WorkDir, "terraform.tfstate")
-}
-
 // Cleanup returns an aggregated error if any removal fails (non-existent files are ignored).
 func (t *Executor) Cleanup() error {
 	var errs []error
@@ -324,8 +321,4 @@ func (t *Executor) Cleanup() error {
 		}
 	}
 	return errors.Join(errs...)
-}
-
-func (t *Executor) GetWorkDir() string {
-	return t.WorkDir
 }

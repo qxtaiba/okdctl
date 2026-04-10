@@ -22,6 +22,7 @@ import (
 
 	"github.com/qxtaiba/okd-proxmox-cli/internal/config"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/infrastructure/terraform"
+	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/logutil"
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/netutil"
 )
 
@@ -57,7 +58,7 @@ func WithEnv(env []string) Option {
 
 func New(opts ...Option) *Provider {
 	p := &Provider{
-		logger: slog.New(slog.DiscardHandler),
+		logger: logutil.NopLogger,
 	}
 	for _, opt := range opts {
 		opt(p)
@@ -145,7 +146,7 @@ func (p *Provider) Provision(ctx context.Context, cfg *config.Config, opts Provi
 
 	p.logger.Info("terraform: applying infrastructure changes")
 	applyOpts := terraform.ApplyOptions{
-		PlanFile:    filepath.Join(p.terraformExec.GetWorkDir(), terraform.PlanFileName),
+		PlanFile:    filepath.Join(p.terraformExec.WorkDir, terraform.PlanFileName),
 		AutoApprove: opts.AutoApprove,
 	}
 	if err := p.terraformExec.Apply(ctx, applyOpts); err != nil {

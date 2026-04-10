@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log/slog"
 	"sync"
+
+	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/logutil"
 )
 
 type Orchestrator struct {
@@ -18,7 +20,7 @@ func NewOrchestrator(steps ...ProvisioningStep) *Orchestrator {
 	return &Orchestrator{
 		steps:   steps,
 		results: make([]StepResult, 0, len(steps)),
-		logger:  slog.New(slog.DiscardHandler),
+		logger:  logutil.NopLogger,
 	}
 }
 

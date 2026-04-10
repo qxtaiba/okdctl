@@ -8,6 +8,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+
+	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/logutil"
 )
 
 type Kind string
@@ -38,7 +40,7 @@ func (opts *Options) getLogger() *slog.Logger {
 	if opts.Logger != nil {
 		return opts.Logger
 	}
-	return slog.New(slog.DiscardHandler)
+	return logutil.NopLogger
 }
 
 func Execute(ctx context.Context, opts *Options) error {

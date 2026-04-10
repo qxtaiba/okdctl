@@ -14,6 +14,21 @@ import (
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
 )
 
+// renderAndWrite calls render and atomically writes the result to path. Error
+// messages use errLabel for context on both render and write failures. This
+// is a setup-local helper for the "render k8s/installer templates and drop
+// them on disk" pattern used across multiple generation steps.
+func renderAndWrite(render func() (string, error), path string, mode os.FileMode, errLabel string) error {
+	content, err := render()
+	if err != nil {
+		return fmt.Errorf("failed to render %s: %w", errLabel, err)
+	}
+	if err := system.AtomicWriteString(path, content, mode); err != nil {
+		return fmt.Errorf("failed to write %s: %w", errLabel, err)
+	}
+	return nil
+}
+
 func (p *Phase) GenerateInstallConfig(_ context.Context, cfg *config.Config, outputDir string) error {
 	if err := system.EnsureDir(outputDir); err != nil {
 		return fmt.Errorf("failed to create output directory: %w", err)
@@ -48,14 +63,12 @@ func (p *Phase) GenerateInstallConfig(_ context.Context, cfg *config.Config, out
 		Architecture:   runtime.GOARCH,
 	}
 
-	content, err := templates.RenderInstallConfig(&data)
-	if err != nil {
-		return fmt.Errorf("failed to render install-config template: %w", err)
-	}
-
 	outputPath := filepath.Join(outputDir, "install-config.yaml")
-	if err := system.AtomicWriteString(outputPath, content, 0o600); err != nil {
-		return fmt.Errorf("failed to write install-config.yaml: %w", err)
+	if err := renderAndWrite(
+		func() (string, error) { return templates.RenderInstallConfig(&data) },
+		outputPath, 0o600, "install-config.yaml",
+	); err != nil {
+		return err
 	}
 
 	// openshift-install consumes install-config.yaml during manifest generation
@@ -126,19 +139,13 @@ func (p *Phase) InjectCompactClusterManifests(_ context.Context, clusterDir stri
 		return fmt.Errorf("failed to ensure openshift manifests directory: %w", err)
 	}
 
-	manifest, err := templates.RenderCompactIngress(templates.CompactIngressData{
-		Replicas: masterCount,
-	})
-	if err != nil {
-		return fmt.Errorf("failed to render compact ingress manifest: %w", err)
-	}
-
 	destPath := filepath.Join(openshiftDir, "99-ingress-controller-master-placement.yaml")
-	if err := system.AtomicWriteString(destPath, manifest, 0o644); err != nil {
-		return fmt.Errorf("failed to write compact cluster ingress manifest: %w", err)
-	}
-
-	return nil
+	return renderAndWrite(
+		func() (string, error) {
+			return templates.RenderCompactIngress(templates.CompactIngressData{Replicas: masterCount})
+		},
+		destPath, 0o644, "compact cluster ingress manifest",
+	)
 }
 
 func (p *Phase) GenerateIgnitionConfigs(ctx context.Context, clusterDir string) error {

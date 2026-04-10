@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/httputil"
+	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/logutil"
 )
 
 type Options struct {
@@ -30,7 +31,7 @@ func (o *Options) logger() *slog.Logger {
 	if o.Logger != nil {
 		return o.Logger
 	}
-	return slog.New(slog.DiscardHandler)
+	return logutil.NopLogger
 }
 
 const DefaultTimeout = 5 * time.Minute
