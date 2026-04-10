@@ -90,6 +90,6 @@ var FilesStepDefinition = wizard.StepDefinition{
 }
 
 func NewFilesStep() (*wizard.DataDrivenStep, any) {
-	step := wizard.NewDataDrivenStep(FilesStepDefinition)
+	step := wizard.NewDataDrivenStep(&FilesStepDefinition)
 	return step, nil
 }

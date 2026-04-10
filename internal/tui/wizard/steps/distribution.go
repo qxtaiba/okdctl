@@ -207,13 +207,15 @@ func (s *DistributionStep) viewVersionPhase() string {
 
 	var hints []string
 	if s.expandedMinor >= 0 {
-		hints = append(hints, lipgloss.NewStyle().
-			Foreground(tui.ColorSlate600).
-			Render(fmt.Sprintf("showing patch versions for 4.%d", s.expandedMinor)))
-		hints = append(hints, lipgloss.NewStyle().
-			Foreground(tui.ColorSlate500).
-			Italic(true).
-			Render("press tab to collapse"))
+		hints = append(hints,
+			lipgloss.NewStyle().
+				Foreground(tui.ColorSlate600).
+				Render(fmt.Sprintf("showing patch versions for 4.%d", s.expandedMinor)),
+			lipgloss.NewStyle().
+				Foreground(tui.ColorSlate500).
+				Italic(true).
+				Render("press tab to collapse"),
+		)
 	} else {
 		hints = append(hints, lipgloss.NewStyle().
 			Foreground(tui.ColorSlate500).

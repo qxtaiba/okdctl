@@ -106,18 +106,20 @@ func (s *NodePlacementStep) buildInnerStep(disc *proxmoxDiscovery, nodeNames []s
 			})
 		}
 		if pools := filterStorageByContent(disc.Storage, "images"); len(pools) > 0 {
-			infraFields = append(infraFields, wizard.FieldDefinition{
-				Key: "os_storage", Label: "os storage", Default: firstMatch(pools, px.Storage, "local-lvm"),
-				Help: "storage pool for vm boot disks", Type: wizard.FieldTypeSelect, Options: pools,
-				ConfigSet: func(cfg *config.Config, v string) error { cfg.Provider.Proxmox.Storage = v; return nil },
-				ConfigGet: func(cfg *config.Config) string { return cfg.Provider.Proxmox.Storage },
-			})
-			infraFields = append(infraFields, wizard.FieldDefinition{
-				Key: "data_storage", Label: "data storage", Default: firstMatch(pools, px.DataStorage, "local-lvm"),
-				Help: "storage pool for data/ceph disks", Type: wizard.FieldTypeSelect, Options: pools,
-				ConfigSet: func(cfg *config.Config, v string) error { cfg.Provider.Proxmox.DataStorage = v; return nil },
-				ConfigGet: func(cfg *config.Config) string { return cfg.Provider.Proxmox.DataStorage },
-			})
+			infraFields = append(infraFields,
+				wizard.FieldDefinition{
+					Key: "os_storage", Label: "os storage", Default: firstMatch(pools, px.Storage, "local-lvm"),
+					Help: "storage pool for vm boot disks", Type: wizard.FieldTypeSelect, Options: pools,
+					ConfigSet: func(cfg *config.Config, v string) error { cfg.Provider.Proxmox.Storage = v; return nil },
+					ConfigGet: func(cfg *config.Config) string { return cfg.Provider.Proxmox.Storage },
+				},
+				wizard.FieldDefinition{
+					Key: "data_storage", Label: "data storage", Default: firstMatch(pools, px.DataStorage, "local-lvm"),
+					Help: "storage pool for data/ceph disks", Type: wizard.FieldTypeSelect, Options: pools,
+					ConfigSet: func(cfg *config.Config, v string) error { cfg.Provider.Proxmox.DataStorage = v; return nil },
+					ConfigGet: func(cfg *config.Config) string { return cfg.Provider.Proxmox.DataStorage },
+				},
+			)
 		}
 		if pools := filterStorageByContent(disc.Storage, "iso"); len(pools) > 0 {
 			infraFields = append(infraFields, wizard.FieldDefinition{
@@ -204,7 +206,7 @@ func (s *NodePlacementStep) buildInnerStep(disc *proxmoxDiscovery, nodeNames []s
 		},
 	}
 
-	s.inner = wizard.NewDataDrivenStep(def)
+	s.inner = wizard.NewDataDrivenStep(&def)
 	s.inner.LoadFromConfig(s.cfg)
 }
 

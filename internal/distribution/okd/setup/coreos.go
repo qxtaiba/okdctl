@@ -24,7 +24,8 @@ func (p *Phase) findOrDownloadFCOSISO(ctx context.Context, cfg *config.Config, o
 	if cfg.Provider.Proxmox != nil && cfg.Provider.Proxmox.FCOSIso != "" {
 		fcosISO := cfg.Provider.Proxmox.FCOSIso
 		// Handle Proxmox storage format like "local:iso/filename.iso"
-		if strings.Contains(fcosISO, ":iso/") {
+		switch {
+		case strings.Contains(fcosISO, ":iso/"):
 			parts := strings.SplitN(fcosISO, ":iso/", 2)
 			if len(parts) == 2 {
 				resolvedPath := filepath.Join(isoDir, parts[1])
@@ -32,10 +33,12 @@ func (p *Phase) findOrDownloadFCOSISO(ctx context.Context, cfg *config.Config, o
 					return resolvedPath, nil
 				}
 			}
-		} else if strings.HasPrefix(fcosISO, "local:iso") {
+		case strings.HasPrefix(fcosISO, "local:iso"):
 			// Just storage reference without specific file - search for FCOS ISO
-		} else if system.FileExists(fcosISO) {
-			return fcosISO, nil
+		default:
+			if system.FileExists(fcosISO) {
+				return fcosISO, nil
+			}
 		}
 	}
 

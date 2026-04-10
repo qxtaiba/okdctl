@@ -150,7 +150,7 @@ func (s *Selector) getDropdownBounds() (start, end int) {
 	return start, end
 }
 
-func (s *Selector) renderDropdownRegion(start, end int, scrollStyle, borderStyle lipgloss.Style) []string {
+func (s *Selector) renderDropdownRegion(start, end int, scrollStyle, borderStyle *lipgloss.Style) []string {
 	var lines []string
 
 	visibleStart := start + s.dropdownScrollOffset
@@ -171,7 +171,7 @@ func (s *Selector) renderDropdownRegion(start, end int, scrollStyle, borderStyle
 
 	dropdownPrefix := borderStyle.Render("  │ ")
 	for i := visibleStart; i <= visibleEnd; i++ {
-		opt := s.options[i]
+		opt := &s.options[i]
 		isSelected := i == s.selected
 		isLast := i == visibleEnd
 		optView := s.renderOptionWithPrefix(opt, isSelected, !isLast, dropdownPrefix)

@@ -149,7 +149,8 @@ func (s *MultiFormStep) Update(msg tea.Msg) (WizardStep, tea.Cmd) {
 				s.currentSection++
 				nextGroup := s.currentGroup()
 				if nextGroup == nil {
-					return s, s.emitFocusChanged()
+					focusCmd := s.emitFocusChanged()
+					return s, focusCmd
 				}
 				nextGroup.SetFocusIndex(0)
 				cmd := nextGroup.Focus()
@@ -173,7 +174,8 @@ func (s *MultiFormStep) Update(msg tea.Msg) (WizardStep, tea.Cmd) {
 				s.currentSection--
 				prevGroup := s.currentGroup()
 				if prevGroup == nil {
-					return s, s.emitFocusChanged()
+					focusCmd := s.emitFocusChanged()
+					return s, focusCmd
 				}
 				prevGroup.SetFocusIndex(len(prevGroup.Fields()) - 1)
 				cmd := prevGroup.Focus()

@@ -65,6 +65,6 @@ var BasicsStepDefinition = wizard.StepDefinition{
 }
 
 func NewBasicsStep() (*wizard.DataDrivenStep, *wizard.DataDrivenStep) {
-	step := wizard.NewDataDrivenStep(BasicsStepDefinition)
+	step := wizard.NewDataDrivenStep(&BasicsStepDefinition)
 	return step, step
 }

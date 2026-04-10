@@ -127,7 +127,7 @@ func (h *simpleHandler) Enabled(_ context.Context, level slog.Level) bool {
 	return slogLevelToTUI(level) >= lvl
 }
 
-func (h *simpleHandler) Handle(_ context.Context, r slog.Record) error {
+func (h *simpleHandler) Handle(_ context.Context, r slog.Record) error { //nolint:gocritic // hugeParam: slog.Handler interface requires value receiver
 	var prefix string
 	if len(h.groups) > 0 {
 		prefix = strings.Join(h.groups, ".") + "."

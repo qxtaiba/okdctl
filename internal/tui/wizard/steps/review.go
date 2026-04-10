@@ -44,7 +44,7 @@ func newSectionStyles(width int) sectionStyles {
 	}
 }
 
-func (st sectionStyles) kvPair(label, value string) string {
+func (st *sectionStyles) kvPair(label, value string) string {
 	return st.label.Render(label) + st.value.Render(value)
 }
 
@@ -118,13 +118,13 @@ func (s *ReviewStep) View(width, height int) string {
 	st := newSectionStyles(width)
 	var content strings.Builder
 
-	content.WriteString(s.renderClusterIdentity(st))
-	content.WriteString(s.renderProxmox(st))
-	content.WriteString(s.renderNetworking(st))
-	content.WriteString(s.renderCompute(st))
-	content.WriteString(s.renderFilesIgnition(st))
-	content.WriteString(s.renderFeatures(st))
-	content.WriteString(s.renderAdvanced(st))
+	content.WriteString(s.renderClusterIdentity(&st))
+	content.WriteString(s.renderProxmox(&st))
+	content.WriteString(s.renderNetworking(&st))
+	content.WriteString(s.renderCompute(&st))
+	content.WriteString(s.renderFilesIgnition(&st))
+	content.WriteString(s.renderFeatures(&st))
+	content.WriteString(s.renderAdvanced(&st))
 
 	content.WriteString(st.thickSeparator)
 	content.WriteString("\n\n")
@@ -133,7 +133,7 @@ func (s *ReviewStep) View(width, height int) string {
 	return content.String()
 }
 
-func (s *ReviewStep) renderClusterIdentity(st sectionStyles) string {
+func (s *ReviewStep) renderClusterIdentity(st *sectionStyles) string {
 	var b strings.Builder
 
 	b.WriteString(st.header.Render("cluster identity"))
@@ -156,7 +156,7 @@ func (s *ReviewStep) renderClusterIdentity(st sectionStyles) string {
 	return b.String()
 }
 
-func (s *ReviewStep) renderProxmox(st sectionStyles) string {
+func (s *ReviewStep) renderProxmox(st *sectionStyles) string {
 	if s.cfg.Provider.Proxmox == nil {
 		return ""
 	}
@@ -198,7 +198,7 @@ func (s *ReviewStep) renderProxmox(st sectionStyles) string {
 	return b.String()
 }
 
-func (s *ReviewStep) renderNetworking(st sectionStyles) string {
+func (s *ReviewStep) renderNetworking(st *sectionStyles) string {
 	var b strings.Builder
 
 	b.WriteString(st.header.Render("networking"))
@@ -239,7 +239,7 @@ func (s *ReviewStep) renderNetworking(st sectionStyles) string {
 	return b.String()
 }
 
-func (s *ReviewStep) renderCompute(st sectionStyles) string {
+func (s *ReviewStep) renderCompute(st *sectionStyles) string {
 	var b strings.Builder
 
 	b.WriteString(st.header.Render("compute"))
@@ -325,7 +325,7 @@ func (s *ReviewStep) renderCompute(st sectionStyles) string {
 	return b.String()
 }
 
-func (s *ReviewStep) renderFilesIgnition(st sectionStyles) string {
+func (s *ReviewStep) renderFilesIgnition(st *sectionStyles) string {
 	var b strings.Builder
 
 	b.WriteString(st.header.Render("files & ignition"))
@@ -358,7 +358,7 @@ func (s *ReviewStep) renderFilesIgnition(st sectionStyles) string {
 	return b.String()
 }
 
-func (s *ReviewStep) renderFeatures(st sectionStyles) string {
+func (s *ReviewStep) renderFeatures(st *sectionStyles) string {
 	if s.cfg.Addons == nil {
 		return ""
 	}
@@ -399,7 +399,7 @@ func (s *ReviewStep) renderFeatures(st sectionStyles) string {
 	return b.String()
 }
 
-func (s *ReviewStep) renderAdvanced(st sectionStyles) string {
+func (s *ReviewStep) renderAdvanced(st *sectionStyles) string {
 	if s.cfg.Topology.VMIDBase <= 0 && s.cfg.Deployment.BootstrapTimeout <= 0 {
 		return ""
 	}

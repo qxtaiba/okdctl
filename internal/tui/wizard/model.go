@@ -159,7 +159,7 @@ func NewModel(steps []WizardStep, cfg *config.Config) *Model {
 	return m
 }
 
-func getTerminalSize() (int, int) {
+func getTerminalSize() (width, height int) {
 	w, h, err := term.GetSize(int(os.Stdout.Fd())) //nolint:gosec // G115: Fd() returns uintptr; always fits in int on supported platforms
 	if err != nil {
 		return minWidth, minHeight
@@ -271,14 +271,15 @@ func (m *Model) AddStep(step WizardStep) {
 
 func (m *Model) InsertStepAfter(afterID StepID, step WizardStep) {
 	for i, s := range m.steps {
-		if s.ID() == afterID {
-			newSteps := make([]WizardStep, 0, len(m.steps)+1)
-			newSteps = append(newSteps, m.steps[:i+1]...)
-			newSteps = append(newSteps, step)
-			newSteps = append(newSteps, m.steps[i+1:]...)
-			m.steps = newSteps
-			return
+		if s.ID() != afterID {
+			continue
 		}
+		newSteps := make([]WizardStep, 0, len(m.steps)+1)
+		newSteps = append(newSteps, m.steps[:i+1]...)
+		newSteps = append(newSteps, step)
+		newSteps = append(newSteps, m.steps[i+1:]...)
+		m.steps = newSteps
+		return
 	}
 	m.steps = append(m.steps, step)
 }

@@ -22,7 +22,7 @@ func (b *StepBuilder) Register(stepType StepType, factory StepBuilderFactory) {
 	b.factories[stepType] = factory
 }
 
-func (b *StepBuilder) Build(stepType StepType) (WizardStep, any) {
+func (b *StepBuilder) Build(stepType StepType) (step WizardStep, state any) {
 	if factory, ok := b.factories[stepType]; ok {
 		return factory()
 	}

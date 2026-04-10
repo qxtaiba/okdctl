@@ -165,8 +165,8 @@ func getAuthTicket(client *http.Client, baseURL, username, password string) (str
 
 // apiGet performs an authenticated GET request using a PVE ticket cookie.
 // GET requests do not require a CSRFPreventionToken — only POST/PUT/DELETE do.
-func apiGet(client *http.Client, url, ticket string, target any) error {
-	req, err := http.NewRequest("GET", url, nil)
+func apiGet(client *http.Client, endpoint, ticket string, target any) error {
+	req, err := http.NewRequest("GET", endpoint, http.NoBody)
 	if err != nil {
 		return err
 	}

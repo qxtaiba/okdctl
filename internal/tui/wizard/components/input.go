@@ -207,26 +207,18 @@ func (f *InputField) View() string {
 		contentWidth = 40
 	}
 
-	var inputStyle lipgloss.Style
-	if f.focused {
-		inputStyle = lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(tui.ColorPrimary).
-			Padding(0, 1).
-			Width(contentWidth)
-	} else if f.err != nil {
-		inputStyle = lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(tui.ColorError).
-			Padding(0, 1).
-			Width(contentWidth)
-	} else {
-		inputStyle = lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(tui.ColorSlate600).
-			Padding(0, 1).
-			Width(contentWidth)
+	borderColor := tui.ColorSlate600
+	switch {
+	case f.focused:
+		borderColor = tui.ColorPrimary
+	case f.err != nil:
+		borderColor = tui.ColorError
 	}
+	inputStyle := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(borderColor).
+		Padding(0, 1).
+		Width(contentWidth)
 
 	input := inputStyle.Render(f.input.View())
 
@@ -382,13 +374,14 @@ func (g *InputGroup) Update(msg tea.Msg) (*InputGroup, tea.Cmd) {
 		return g, nil
 	}
 
-	switch msg := msg.(type) {
-	case tea.KeyPressMsg:
+	if msg, ok := msg.(tea.KeyPressMsg); ok {
 		switch {
 		case key.Matches(msg, key.NewBinding(key.WithKeys("tab", "down"))):
-			return g, g.Next()
+			cmd := g.Next()
+			return g, cmd
 		case key.Matches(msg, key.NewBinding(key.WithKeys("shift+tab", "up"))):
-			return g, g.Previous()
+			cmd := g.Previous()
+			return g, cmd
 		}
 	}
 
@@ -409,8 +402,7 @@ func (g *InputGroup) View() string {
 	}
 
 	for _, f := range g.fields {
-		lines = append(lines, f.View())
-		lines = append(lines, "")
+		lines = append(lines, f.View(), "")
 	}
 
 	content := strings.Join(lines, "\n")

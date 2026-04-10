@@ -59,7 +59,7 @@ type StepDefinition struct {
 
 type DataDrivenStep struct {
 	*MultiFormStep
-	definition StepDefinition
+	definition *StepDefinition
 	fieldKeys  map[string]fieldLocation // maps Key -> section/field indices
 }
 
@@ -68,14 +68,16 @@ type fieldLocation struct {
 	field   int
 }
 
-func NewDataDrivenStep(def StepDefinition) *DataDrivenStep {
+func NewDataDrivenStep(def *StepDefinition) *DataDrivenStep {
 	formStep := NewMultiFormStep(def.ID, def.Title, def.DisplayTitle, def.Description)
 	fieldKeys := make(map[string]fieldLocation)
 
-	for sectionIdx, sectionDef := range def.Sections {
+	for sectionIdx := range def.Sections {
+		sectionDef := &def.Sections[sectionIdx]
 		fields := make([]components.FormField, 0, len(sectionDef.Fields))
 
-		for fieldIdx, fieldDef := range sectionDef.Fields {
+		for fieldIdx := range sectionDef.Fields {
+			fieldDef := &sectionDef.Fields[fieldIdx]
 			fields = append(fields, buildFormField(fieldDef))
 			fieldKeys[fieldDef.Key] = fieldLocation{
 				section: sectionIdx,
@@ -114,8 +116,9 @@ func NewDataDrivenStep(def StepDefinition) *DataDrivenStep {
 	}
 
 	formStep.WithApply(func(cfg *config.Config) error {
-		for _, sectionDef := range def.Sections {
-			for _, fieldDef := range sectionDef.Fields {
+		for sIdx := range def.Sections {
+			for fIdx := range def.Sections[sIdx].Fields {
+				fieldDef := &def.Sections[sIdx].Fields[fIdx]
 				if fieldDef.ConfigSet != nil {
 					value := step.Value(fieldDef.Key)
 					if err := fieldDef.ConfigSet(cfg, value); err != nil {
@@ -133,7 +136,7 @@ func NewDataDrivenStep(def StepDefinition) *DataDrivenStep {
 	return step
 }
 
-func buildFormField(def FieldDefinition) components.FormField {
+func buildFormField(def *FieldDefinition) components.FormField {
 	if def.Type == FieldTypeSelect {
 		sf := components.NewSelectField(def.Label, def.Options)
 		sf.Help = def.Help
@@ -208,8 +211,9 @@ func (s *DataDrivenStep) SetValues(values map[string]string) {
 }
 
 func (s *DataDrivenStep) LoadFromConfig(cfg *config.Config) {
-	for _, sectionDef := range s.definition.Sections {
-		for _, fieldDef := range sectionDef.Fields {
+	for sIdx := range s.definition.Sections {
+		for fIdx := range s.definition.Sections[sIdx].Fields {
+			fieldDef := &s.definition.Sections[sIdx].Fields[fIdx]
 			if fieldDef.ConfigGet != nil {
 				s.SetValue(fieldDef.Key, fieldDef.ConfigGet(cfg))
 			}
@@ -225,7 +229,7 @@ func (s *DataDrivenStep) InputGroup(sectionIndex int) *components.InputGroup {
 	return nil
 }
 
-func (s *DataDrivenStep) Definition() StepDefinition {
+func (s *DataDrivenStep) Definition() *StepDefinition {
 	return s.definition
 }
 

@@ -28,7 +28,8 @@ func (s *DistributionStep) fetchVersions() tea.Msg {
 func (s *DistributionStep) updateVersionSelector() {
 	var options []components.Option
 
-	for i, series := range s.okdSeries {
+	for i := range s.okdSeries {
+		series := &s.okdSeries[i]
 		v := series.Latest
 		if v.Version == "" {
 			continue
@@ -146,7 +147,7 @@ func releaseTypeToOptionStyle(rt releases.ReleaseType) components.OptionStyle {
 	}
 }
 
-func (s *DistributionStep) getSeriesDescription(series releases.OKDReleaseSeries) string {
+func (s *DistributionStep) getSeriesDescription(series *releases.OKDReleaseSeries) string {
 	v := series.Latest
 
 	if len(s.okdSeries) == 0 {

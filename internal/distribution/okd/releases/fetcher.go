@@ -28,7 +28,7 @@ func (f *OKDVersionFetcher) fetchFromNetwork(ctx context.Context) ([]OKDReleaseS
 func (f *OKDVersionFetcher) fetchFromGitHub(ctx context.Context, repo string, page, perPage int) ([]githubRelease, error) {
 	url := fmt.Sprintf("https://api.github.com/repos/%s/releases?per_page=%d&page=%d", repo, perPage, page)
 
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", url, http.NoBody)
 	if err != nil {
 		return nil, err
 	}
@@ -283,13 +283,11 @@ func extractVersionParts(version string) []int {
 			}
 			current = current*10 + int(char-'0')
 			inNumber = true
-		} else {
-			if inNumber {
-				parts = append(parts, current)
-				current = 0
-				digitCount = 0
-				inNumber = false
-			}
+		} else if inNumber {
+			parts = append(parts, current)
+			current = 0
+			digitCount = 0
+			inNumber = false
 		}
 	}
 	if inNumber {

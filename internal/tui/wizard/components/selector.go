@@ -116,8 +116,7 @@ func (s *Selector) Update(msg tea.Msg) (*Selector, tea.Cmd) {
 		return s, nil
 	}
 
-	switch msg := msg.(type) {
-	case tea.KeyPressMsg:
+	if msg, ok := msg.(tea.KeyPressMsg); ok {
 		switch {
 		case key.Matches(msg, key.NewBinding(key.WithKeys("up", "k"))):
 			s.moveUp()
@@ -183,7 +182,7 @@ func (s *Selector) View() string {
 
 	i := 0
 	for i < len(s.options) {
-		opt := s.options[i]
+		opt := &s.options[i]
 
 		if !opt.InDropdown {
 			isSelected := i == s.selected
@@ -193,7 +192,7 @@ func (s *Selector) View() string {
 			lines = append(lines, optView)
 			i++
 		} else {
-			dropdownLines := s.renderDropdownRegion(dropdownStart, dropdownEnd, scrollIndicatorStyle, dropdownBorderStyle)
+			dropdownLines := s.renderDropdownRegion(dropdownStart, dropdownEnd, &scrollIndicatorStyle, &dropdownBorderStyle)
 			lines = append(lines, dropdownLines...)
 
 			i = dropdownEnd + 1
@@ -203,24 +202,25 @@ func (s *Selector) View() string {
 	return strings.Join(lines, "\n")
 }
 
-func (s *Selector) renderOption(opt Option, selected, showConnector bool) string {
+func (s *Selector) renderOption(opt *Option, selected, showConnector bool) string {
 	return s.renderOptionWithPrefix(opt, selected, showConnector, "")
 }
 
-func (s *Selector) renderOptionWithPrefix(opt Option, selected, showConnector bool, prefix string) string {
+func (s *Selector) renderOptionWithPrefix(opt *Option, selected, showConnector bool, prefix string) string {
 	var result []string
 
 	styles := s.getOptionStyles()
 	titleStyle := s.getTitleStyle(opt.Style)
 
 	var bullet, title string
-	if opt.Disabled {
+	switch {
+	case opt.Disabled:
 		bullet = styles.bulletUnselected.Render("○")
 		title = styles.titleDisabled.Render(opt.Title)
-	} else if selected {
+	case selected:
 		bullet = styles.bulletSelected.Render("●")
 		title = titleStyle.Bold(true).Render(opt.Title)
-	} else {
+	default:
 		bullet = styles.bulletUnselected.Render("○")
 		title = titleStyle.Render(opt.Title)
 	}

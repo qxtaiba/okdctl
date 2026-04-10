@@ -123,7 +123,7 @@ var ResourcesStepDefinition = wizard.StepDefinition{
 }
 
 func NewResourcesStep() (*wizard.DataDrivenStep, *ResourcesStepState) {
-	step := wizard.NewDataDrivenStep(ResourcesStepDefinition)
+	step := wizard.NewDataDrivenStep(&ResourcesStepDefinition)
 
 	state := &ResourcesStepState{
 		Step: step,

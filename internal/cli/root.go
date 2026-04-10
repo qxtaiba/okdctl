@@ -51,17 +51,21 @@ Highlights:
 
 func Execute() {
 	slog.SetDefault(tui.SimpleLogger())
+	os.Exit(execute())
+}
 
+func execute() int {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
 	if err := rootCmd.ExecuteContext(ctx); err != nil {
 		if ctx.Err() != nil {
-			os.Exit(130)
+			return 130
 		}
 		tui.Error(err.Error())
-		os.Exit(1)
+		return 1
 	}
+	return 0
 }
 
 func init() {

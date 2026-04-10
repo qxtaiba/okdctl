@@ -108,8 +108,7 @@ func (f *SelectField) Update(msg tea.Msg) (FormField, tea.Cmd) {
 		return f, nil
 	}
 
-	switch msg := msg.(type) {
-	case tea.KeyPressMsg:
+	if msg, ok := msg.(tea.KeyPressMsg); ok {
 		switch {
 		case key.Matches(msg, key.NewBinding(key.WithKeys("left", "h"))):
 			f.selected--

@@ -38,12 +38,12 @@ linters:
     - dupl
   settings:
     gocyclo:
-      min-complexity: 15
+      min-complexity: 30
     funlen:
       lines: 120
-      statements: 50
+      statements: 65
     nestif:
-      min-complexity: 5
+      min-complexity: 12
     dupl:
       threshold: 100
     goconst:

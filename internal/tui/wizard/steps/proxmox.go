@@ -95,6 +95,6 @@ var ProxmoxStepDefinition = wizard.StepDefinition{
 }
 
 func NewProxmoxStep() (*wizard.DataDrivenStep, *wizard.DataDrivenStep) {
-	step := wizard.NewDataDrivenStep(ProxmoxStepDefinition)
+	step := wizard.NewDataDrivenStep(&ProxmoxStepDefinition)
 	return step, step
 }
