@@ -30,7 +30,7 @@ LDFLAGS := -ldflags "-s -w \
 .DEFAULT_GOAL := help
 
 # Phony targets
-.PHONY: all build clean test lint fmt vet deps run install help
+.PHONY: all build build-all clean test test-short test-cover lint fmt vet check compat compat-check deps deps-update run dev install help
 
 ## Build targets
 
@@ -41,14 +41,13 @@ build: ## Build the binary
 	@mkdir -p $(BUILD_DIR)
 	$(GOBUILD) $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME) ./cmd/openshitctl
 
-build-all: ## Build for all platforms
+build-all: ## Build for all supported platforms (linux+darwin, amd64+arm64)
 	@echo "Building for all platforms..."
 	@mkdir -p $(BUILD_DIR)
 	GOOS=darwin GOARCH=amd64 $(GOBUILD) $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-darwin-amd64 ./cmd/openshitctl
 	GOOS=darwin GOARCH=arm64 $(GOBUILD) $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-darwin-arm64 ./cmd/openshitctl
 	GOOS=linux GOARCH=amd64 $(GOBUILD) $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-linux-amd64 ./cmd/openshitctl
 	GOOS=linux GOARCH=arm64 $(GOBUILD) $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-linux-arm64 ./cmd/openshitctl
-	GOOS=windows GOARCH=amd64 $(GOBUILD) $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-windows-amd64.exe ./cmd/openshitctl
 
 install: build ## Install the binary to GOPATH/bin
 	@echo "Installing $(BINARY_NAME)..."
@@ -92,6 +91,14 @@ vet: ## Run go vet
 	$(GOVET) ./...
 
 check: fmt vet lint ## Run all checks
+
+## Compatibility matrix targets
+
+compat: ## Regenerate the compatibility matrix section of README.md
+	@$(GOCMD) run ./tools/render-compat
+
+compat-check: ## Verify README.md compatibility matrix is in sync with docs/compatibility.yaml
+	@$(GOCMD) run ./tools/render-compat -check
 
 ## Dependency targets
 
