@@ -21,7 +21,7 @@ const (
 func (p *Phase) postinstallSteps(cfg *config.Config, opts *Options, pctx *distribution.PhaseContext[PostInstallContext], mgr *addon.Manager) []distribution.StepDef {
 	return []distribution.StepDef{
 		{
-			ID: StepVerifyHealth, Name: "Verify Cluster Health",
+			ID: StepVerifyHealth, Name: "verify cluster health",
 			Desc:       "verifying cluster health",
 			SkipWhen:   func() bool { return opts.SkipClusterHealth },
 			SkipReason: "cluster health verification skipped by user",
@@ -38,7 +38,7 @@ func (p *Phase) postinstallSteps(cfg *config.Config, opts *Options, pctx *distri
 			},
 		},
 		{
-			ID: StepCleanupBootstrap, Name: "Cleanup Bootstrap VM",
+			ID: StepCleanupBootstrap, Name: "cleanup bootstrap vm",
 			Desc: "destroying bootstrap vm via terraform", NonFatal: true,
 			Exec: func(ctx context.Context) error {
 				if err := p.CleanupBootstrap(ctx, cfg, opts); err != nil {
@@ -52,7 +52,7 @@ func (p *Phase) postinstallSteps(cfg *config.Config, opts *Options, pctx *distri
 			OnError: phase.WarnOnError(p.Log, "bootstrap: cleanup failed (non-critical)"),
 		},
 		{
-			ID: StepVerifyKubeVIP, Name: "Verify kube-vip",
+			ID: StepVerifyKubeVIP, Name: "verify kube-vip",
 			Desc: "verifying kube-vip api load balancer", NonFatal: true,
 			SkipWhen:   func() bool { return opts.SkipKubeVIP },
 			SkipReason: "kube-vip verification skipped by user",
@@ -71,10 +71,10 @@ func (p *Phase) postinstallSteps(cfg *config.Config, opts *Options, pctx *distri
 			OnError: phase.WarnOnError(p.Log, "kubevip: verification failed"),
 		},
 		{
-			ID: StepDeployProductionDNS, Name: "Deploy Production DNS",
+			ID: StepDeployProductionDNS, Name: "deploy production dns",
 			Desc: "deploying production dns with api vip and apps on bastion", NonFatal: true,
 			SkipWhen:   func() bool { return !pctx.Get().KubeVIPVerified },
-			SkipReason: "kube-vip not verified — keeping bootstrap dns",
+			SkipReason: "kube-vip not verified, keeping bootstrap dns",
 			Exec: func(ctx context.Context) error {
 				state := pctx.Get()
 				bastionIP := cfg.Networking.Bastion.IP
@@ -90,7 +90,7 @@ func (p *Phase) postinstallSteps(cfg *config.Config, opts *Options, pctx *distri
 			OnError: phase.WarnOnError(p.Log, "dns: production dns deployment failed"),
 		},
 		{
-			ID: StepInstallAddons, Name: "Install Addons",
+			ID: StepInstallAddons, Name: "install addons",
 			Desc: "installing enabled cluster addons", NonFatal: true,
 			Exec: func(ctx context.Context) error {
 				if err := p.verifyAPIHealthCheck(ctx); err != nil {

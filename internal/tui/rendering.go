@@ -1,8 +1,6 @@
 package tui
 
 import (
-	"strings"
-
 	"charm.land/lipgloss/v2"
 )
 
@@ -27,10 +25,7 @@ func logDebug(msg string) string {
 }
 
 func SubsectionLabel(title string) string {
-	return lipgloss.NewStyle().
-		Foreground(ColorCyan500).
-		Bold(true).
-		Render(strings.ToUpper(title))
+	return HighlightStyle.Render(title)
 }
 
 func CompletionSuccess(msg string) string {

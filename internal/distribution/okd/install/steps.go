@@ -24,10 +24,10 @@ func (p *Phase) installSteps(cfg *config.Config, opts *Options) []distribution.S
 
 	return []distribution.StepDef{
 		{
-			ID: StepDeployInfra, Name: "Deploy Infrastructure",
+			ID: StepDeployInfra, Name: "deploy infrastructure",
 			Desc:       "deploying proxmox infrastructure using terraform",
 			SkipWhen:   func() bool { return opts.SkipTerraform },
-			SkipReason: "Terraform deployment disabled",
+			SkipReason: "terraform deployment disabled",
 			Exec: func(ctx context.Context) error {
 				if err := p.DeployInfrastructure(ctx, cfg, opts); err != nil {
 					return fmt.Errorf("infrastructure deployment failed: %w", err)
@@ -37,7 +37,7 @@ func (p *Phase) installSteps(cfg *config.Config, opts *Options) []distribution.S
 			},
 		},
 		{
-			ID: StepWaitBootstrap, Name: "Wait for Bootstrap",
+			ID: StepWaitBootstrap, Name: "wait for bootstrap",
 			Desc: "waiting for bootstrap node to initialize",
 			OnStart: func() {
 				p.Log.Info("bootstrap: waiting for control plane initialization")
@@ -51,24 +51,24 @@ func (p *Phase) installSteps(cfg *config.Config, opts *Options) []distribution.S
 			},
 		},
 		{
-			ID: StepStartWorkers, Name: "Start Worker Nodes",
+			ID: StepStartWorkers, Name: "start worker nodes",
 			Desc:       "starting worker nodes after bootstrap complete",
 			SkipWhen:   func() bool { return opts.SkipTerraform },
-			SkipReason: "Terraform deployment disabled",
+			SkipReason: "terraform deployment disabled",
 			Exec:       func(ctx context.Context) error { return p.StartWorkerVMs(ctx, cfg, opts) },
 		},
 		{
-			ID: StepSetupKubeconfig, Name: "Setup Kubeconfig",
+			ID: StepSetupKubeconfig, Name: "setup kubeconfig",
 			Desc: "configuring cluster access",
 			Exec: func(_ context.Context) error { return p.SetupKubeconfig(clusterDir) },
 		},
 		{
-			ID: StepValidateAccess, Name: "Validate Cluster Access",
+			ID: StepValidateAccess, Name: "validate cluster access",
 			Desc: "validating cluster access",
 			Exec: func(ctx context.Context) error { return p.ValidateClusterAccess(ctx) },
 		},
 		{
-			ID: StepMonitorInstall, Name: "Monitor Installation",
+			ID: StepMonitorInstall, Name: "monitor installation",
 			Desc: "monitoring installation and approving certificate requests",
 			OnStart: func() {
 				p.Log.Info("install: monitoring cluster operators and approving csrs")
@@ -82,7 +82,7 @@ func (p *Phase) installSteps(cfg *config.Config, opts *Options) []distribution.S
 			},
 		},
 		{
-			ID: StepSetupAccess, Name: "Setup Cluster Access",
+			ID: StepSetupAccess, Name: "setup cluster access",
 			Desc: "configuring persistent cluster access", NonFatal: true,
 			Exec:    func(ctx context.Context) error { return p.SetupClusterAccess(ctx, clusterDir) },
 			OnError: phase.WarnOnError(p.Log, "kubeconfig: failed to setup persistent access"),

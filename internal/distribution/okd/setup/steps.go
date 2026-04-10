@@ -56,24 +56,24 @@ func (p *Phase) setupSteps(cfg *config.Config, opts *Options) []distribution.Ste
 func (p *Phase) setupBaseSteps(cfg *config.Config, opts *Options) []distribution.StepDef {
 	return []distribution.StepDef{
 		{
-			ID: StepInstallPackages, Name: "Install System Packages",
+			ID: StepInstallPackages, Name: "install system packages",
 			Desc: "installing required system packages", NonFatal: true,
 			Exec:    func(ctx context.Context) error { return p.installSystemPackages(ctx) },
 			OnError: phase.WarnOnError(p.Log, "packages: system installation had warnings"),
 		},
 		{
-			ID: StepInstallTools, Name: "Install External Tools",
+			ID: StepInstallTools, Name: "install external tools",
 			Desc: "installing core tools and addon-required tools", NonFatal: true,
 			Exec:    func(ctx context.Context) error { return p.InstallExternalTools(ctx, cfg) },
 			OnError: phase.WarnOnError(p.Log, "tools: external installation had warnings"),
 		},
 		{
-			ID: StepEnsureWorkDir, Name: "Ensure Work Directory",
+			ID: StepEnsureWorkDir, Name: "ensure work directory",
 			Desc: "creating work directory",
 			Exec: func(_ context.Context) error { return system.EnsureDir(opts.WorkDir) },
 		},
 		{
-			ID: StepDownloadTools, Name: "Download OKD Tools",
+			ID: StepDownloadTools, Name: "download okd tools",
 			Desc:       fmt.Sprintf("downloading OKD tools version %s", cfg.Distribution.Version),
 			SkipWhen:   func() bool { return opts.SkipDownloads },
 			SkipReason: "downloads disabled",
@@ -93,7 +93,7 @@ func (p *Phase) setupBaseSteps(cfg *config.Config, opts *Options) []distribution
 func (p *Phase) setupManifestSteps(cfg *config.Config, opts *Options, clusterDir string) []distribution.StepDef {
 	return []distribution.StepDef{
 		{
-			ID: StepGenerateConfig, Name: "Generate Install Config",
+			ID: StepGenerateConfig, Name: "generate install config",
 			Desc: "generating install-config.yaml",
 			Exec: func(ctx context.Context) error {
 				if err := p.GenerateInstallConfig(ctx, cfg, clusterDir); err != nil {
@@ -105,7 +105,7 @@ func (p *Phase) setupManifestSteps(cfg *config.Config, opts *Options, clusterDir
 			},
 		},
 		{
-			ID: StepGenerateManifests, Name: "Generate Manifests",
+			ID: StepGenerateManifests, Name: "generate manifests",
 			Desc: "generating kubernetes manifests",
 			Exec: func(ctx context.Context) error {
 				if err := p.GenerateManifests(ctx, clusterDir); err != nil {
@@ -116,12 +116,12 @@ func (p *Phase) setupManifestSteps(cfg *config.Config, opts *Options, clusterDir
 			},
 		},
 		{
-			ID: StepGenerateKubeVIP, Name: "Generate Kube-VIP Manifests",
+			ID: StepGenerateKubeVIP, Name: "generate kube-vip manifests",
 			Desc: "generating kube-vip RBAC and DaemonSet manifests for VIP management",
 			Exec: func(_ context.Context) error { return p.generateKubeVIPManifests(cfg, clusterDir) },
 		},
 		{
-			ID: StepInjectManifests, Name: "Inject Custom Manifests",
+			ID: StepInjectManifests, Name: "inject custom manifests",
 			Desc: "injecting custom manifests",
 			Exec: func(ctx context.Context) error {
 				count, err := p.InjectCustomManifests(ctx, opts.ProjectRoot, clusterDir)
@@ -135,7 +135,7 @@ func (p *Phase) setupManifestSteps(cfg *config.Config, opts *Options, clusterDir
 			},
 		},
 		{
-			ID: StepCompactCluster, Name: "Inject Compact Cluster Manifests",
+			ID: StepCompactCluster, Name: "inject compact cluster manifests",
 			Desc:       "injecting ingress controller placement for compact cluster",
 			SkipWhen:   func() bool { return cfg.Topology.Workers.Count > 0 },
 			SkipReason: "cluster has workers",
@@ -148,7 +148,7 @@ func (p *Phase) setupManifestSteps(cfg *config.Config, opts *Options, clusterDir
 			},
 		},
 		{
-			ID: StepGenerateIgnition, Name: "Generate Ignition",
+			ID: StepGenerateIgnition, Name: "generate ignition",
 			Desc: "generating ignition files",
 			Exec: func(ctx context.Context) error {
 				if err := p.GenerateIgnitionConfigs(ctx, clusterDir); err != nil {
@@ -166,13 +166,13 @@ func (p *Phase) setupManifestSteps(cfg *config.Config, opts *Options, clusterDir
 func (p *Phase) setupWebSteps(cfg *config.Config, opts *Options, clusterDir string) []distribution.StepDef {
 	return []distribution.StepDef{
 		{
-			ID: StepInstallApache, Name: "Install Apache",
+			ID: StepInstallApache, Name: "install apache",
 			Desc: "installing and configuring apache web server", NonFatal: true,
 			Exec:    func(ctx context.Context) error { return p.ConfigureApache(ctx, cfg) },
 			OnError: phase.WarnOnError(p.Log, "apache: installation skipped"),
 		},
 		{
-			ID: StepDeployIgnition, Name: "Deploy Ignition",
+			ID: StepDeployIgnition, Name: "deploy ignition",
 			Desc: "deploying ignition files to apache web server",
 			Exec: func(ctx context.Context) error {
 				if err := p.DeployToWebServer(ctx, cfg, clusterDir); err != nil {
@@ -184,24 +184,24 @@ func (p *Phase) setupWebSteps(cfg *config.Config, opts *Options, clusterDir stri
 			},
 		},
 		{
-			ID: StepVerifyWebServer, Name: "Verify Web Server",
+			ID: StepVerifyWebServer, Name: "verify web server",
 			Desc: "verifying web server accessibility",
 			Exec: func(ctx context.Context) error {
 				return p.VerifyWebServer(ctx, BuildIgnitionURL(cfg.HTTPServer.IgnitionServerIP, cfg.HTTPServer.Port))
 			},
 		},
 		{
-			ID: StepBuildISOs, Name: "Build ISOs",
+			ID: StepBuildISOs, Name: "build isos",
 			Desc:       "building custom CoreOS ISOs",
 			SkipWhen:   func() bool { return opts.SkipISOs },
-			SkipReason: "ISO building disabled",
+			SkipReason: "iso building disabled",
 			Exec:       func(ctx context.Context) error { return p.BuildCustomISOs(ctx, cfg, opts) },
 		},
 		{
-			ID: StepUploadISOs, Name: "Upload ISOs",
+			ID: StepUploadISOs, Name: "upload isos",
 			Desc: "uploading ISOs to Proxmox storage", NonFatal: true,
 			SkipWhen:   func() bool { return opts.SkipISOs },
-			SkipReason: "ISO building disabled",
+			SkipReason: "iso building disabled",
 			Exec: func(ctx context.Context) error {
 				if err := p.UploadCustomISOsToProxmox(ctx, cfg, opts); err != nil {
 					return err
@@ -222,7 +222,7 @@ func (p *Phase) setupWebSteps(cfg *config.Config, opts *Options, clusterDir stri
 func (p *Phase) setupInfraSteps(cfg *config.Config, opts *Options) []distribution.StepDef {
 	return []distribution.StepDef{
 		{
-			ID: StepGenerateTfvars, Name: "Generate Terraform Variables",
+			ID: StepGenerateTfvars, Name: "generate terraform variables",
 			Desc: "generating terraform variables",
 			Exec: func(_ context.Context) error {
 				if err := p.GenerateTerraformVars(cfg, opts); err != nil {
@@ -234,10 +234,10 @@ func (p *Phase) setupInfraSteps(cfg *config.Config, opts *Options) []distributio
 			},
 		},
 		{
-			ID: StepConfigureHAProxy, Name: "Configure HAProxy",
+			ID: StepConfigureHAProxy, Name: "configure haproxy",
 			Desc:       "configuring haproxy load balancer",
 			SkipWhen:   func() bool { return opts.SkipHAProxy },
-			SkipReason: "HAProxy configuration disabled",
+			SkipReason: "haproxy configuration disabled",
 			Exec: func(ctx context.Context) error {
 				if err := p.ConfigureHAProxy(ctx, cfg, opts); err != nil {
 					return fmt.Errorf("failed to configure HAProxy: %w", err)
@@ -247,7 +247,7 @@ func (p *Phase) setupInfraSteps(cfg *config.Config, opts *Options) []distributio
 			},
 		},
 		{
-			ID: StepConfigureFirewall, Name: "Configure Firewall",
+			ID: StepConfigureFirewall, Name: "configure firewall",
 			Desc:       "configuring firewall rules for OKD",
 			SkipWhen:   func() bool { return opts.SkipFirewall },
 			SkipReason: "firewall configuration disabled",
@@ -261,7 +261,7 @@ func (p *Phase) setupInfraSteps(cfg *config.Config, opts *Options) []distributio
 			OnError: phase.WarnOnError(p.Log, "firewall: configuration failed"),
 		},
 		{
-			ID: StepConfigureDNS, Name: "Configure DNS",
+			ID: StepConfigureDNS, Name: "configure dns",
 			Desc: "configuring dnsmasq and deploying bootstrap dns configuration", NonFatal: true,
 			Exec: func(ctx context.Context) error { return p.configureDNS(ctx, cfg, opts) },
 			OnError: func(err error) {

@@ -22,10 +22,10 @@ const (
 func (p *Phase) destroySteps(cfg *config.Config, opts *Options) []distribution.StepDef {
 	return []distribution.StepDef{
 		{
-			ID: StepDestroyInfra, Name: "Destroy Infrastructure",
+			ID: StepDestroyInfra, Name: "destroy infrastructure",
 			Desc:       "destroying proxmox infrastructure using terraform",
 			SkipWhen:   func() bool { return opts.SkipTerraform },
-			SkipReason: "Terraform destroy disabled",
+			SkipReason: "terraform destroy disabled",
 			Exec: func(ctx context.Context) error {
 				if err := p.destroyInfrastructure(ctx, opts); err != nil {
 					return fmt.Errorf("infrastructure destruction failed: %w", err)
@@ -41,7 +41,7 @@ func (p *Phase) destroySteps(cfg *config.Config, opts *Options) []distribution.S
 			},
 		},
 		{
-			ID: StepCleanupFiles, Name: "Cleanup Files",
+			ID: StepCleanupFiles, Name: "cleanup files",
 			Desc: "performing comprehensive cleanup", NonFatal: true,
 			SkipWhen:   func() bool { return opts.SkipCleanup || opts.CleanupKind == "" },
 			SkipReason: cleanupFilesSkipReason(opts),
@@ -71,10 +71,10 @@ func (p *Phase) destroySteps(cfg *config.Config, opts *Options) []distribution.S
 			OnError: phase.WarnOnError(p.Log, "cleanup: file removal failed"),
 		},
 		{
-			ID: StepCleanupFirewall, Name: "Cleanup Firewall",
+			ID: StepCleanupFirewall, Name: "cleanup firewall",
 			Desc: "removing firewall rules", NonFatal: true,
 			SkipWhen:   func() bool { return opts.SkipFirewall },
-			SkipReason: "Firewall cleanup disabled",
+			SkipReason: "firewall cleanup disabled",
 			Exec: func(ctx context.Context) error {
 				if err := firewall.RemoveOKDRules(ctx, true, p.Log); err != nil {
 					return fmt.Errorf("firewall cleanup failed: %w", err)
@@ -85,7 +85,7 @@ func (p *Phase) destroySteps(cfg *config.Config, opts *Options) []distribution.S
 			OnError: phase.WarnOnError(p.Log, "firewall: cleanup incomplete"),
 		},
 		{
-			ID: StepPrintSummary, Name: "Print Summary",
+			ID: StepPrintSummary, Name: "print summary",
 			Desc: "printing destruction summary", NonFatal: true,
 			Exec: func(_ context.Context) error {
 				p.Log.Info("destroy: cluster teardown completed")
@@ -97,7 +97,7 @@ func (p *Phase) destroySteps(cfg *config.Config, opts *Options) []distribution.S
 
 func cleanupFilesSkipReason(opts *Options) string {
 	if opts.SkipCleanup {
-		return "Cleanup disabled"
+		return "cleanup disabled"
 	}
-	return "No cleanup type specified"
+	return "no cleanup type specified"
 }
