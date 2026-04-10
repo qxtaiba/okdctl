@@ -40,7 +40,7 @@ func EnvFilePath(configPath string) string {
 func WriteEnvFile(path string, creds *ProxmoxCredentials) error {
 	lines := []string{
 		"# Proxmox credentials (managed by openshitctl)",
-		"# This file has restricted permissions (0600) — do not commit to git.",
+		"# This file has restricted permissions (0600). Do not commit to git.",
 	}
 
 	if creds.Endpoint != "" {

@@ -78,7 +78,7 @@ func parseOSRelease(content string) (OS, error) {
 
 	family := detectFamily(id, fields["ID_LIKE"])
 	if family == "" {
-		return OS{}, fmt.Errorf("unsupported os: %s — requires fedora, rocky, alma, rhel, ubuntu, or debian", id)
+		return OS{}, fmt.Errorf("unsupported os: %s (requires fedora, rocky, alma, rhel, ubuntu, or debian)", id)
 	}
 
 	return OS{

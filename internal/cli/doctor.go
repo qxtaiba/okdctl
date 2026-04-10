@@ -35,11 +35,11 @@ var doctorCmd = &cobra.Command{
 Each check prints a title line with a status icon and a result line
 with a bracketed label:
 
-  ✓ [ok]   — the check passed, no action needed
-  ⚠ [warn] — something is suboptimal or missing but can be handled
+  ✓ [ok]   : the check passed, no action needed
+  ⚠ [warn] : something is suboptimal or missing but can be handled
              during deploy (e.g., 'oc' will be auto-downloaded into
              /usr/local/bin)
-  ✗ [fail] — this must be fixed before 'openshitctl deploy' will
+  ✗ [fail] : this must be fixed before 'openshitctl deploy' will
              succeed
 
 Exit code is 0 if there are no [fail] results ([warn] is tolerated),
@@ -87,7 +87,7 @@ func runDoctor(cmd *cobra.Command, _ []string) error {
 	}
 
 	fmt.Println()
-	fmt.Println("🩺 " + tui.HighlightStyle.Render(fmt.Sprintf("doctor — running %d environment checks", len(checks))))
+	fmt.Println("🩺 " + tui.HighlightStyle.Render(fmt.Sprintf("doctor: running %d environment checks", len(checks))))
 	fmt.Println()
 
 	var fails, warns int
@@ -104,10 +104,10 @@ func runDoctor(cmd *cobra.Command, _ []string) error {
 
 	switch {
 	case fails > 0:
-		tui.Error(fmt.Sprintf("doctor: %d failing check(s), %d warning(s) — fix before deploying", fails, warns))
+		tui.Error(fmt.Sprintf("doctor: %d failing check(s), %d warning(s): fix before deploying", fails, warns))
 		return fmt.Errorf("preflight checks failed")
 	case warns > 0:
-		tui.Warn(fmt.Sprintf("doctor: %d warning(s) — deploy may proceed but review the warnings above", warns))
+		tui.Warn(fmt.Sprintf("doctor: %d warning(s): deploy may proceed but review the warnings above", warns))
 	default:
 		tui.Info("doctor: environment looks ready")
 	}
@@ -146,7 +146,7 @@ func printResult(c check, r checkResult) {
 // we do not parse /etc/os-release and instead report darwin directly.
 func checkHostOS(_ context.Context) checkResult {
 	if runtime.GOOS == goosDarwin {
-		return checkResult{sev: sevPass, detail: "macos (operator mode — deploying to a remote proxmox host)"}
+		return checkResult{sev: sevPass, detail: "macos (operator mode: deploying to a remote proxmox host)"}
 	}
 	host, err := platform.Detect()
 	if err != nil {
@@ -265,10 +265,10 @@ func checkPullSecret(_ context.Context) checkResult {
 	}
 	auths, ok := js["auths"].(map[string]any)
 	if !ok {
-		return checkResult{sev: sevFail, detail: "missing or malformed 'auths' field — not a valid okd pull secret"}
+		return checkResult{sev: sevFail, detail: "missing or malformed 'auths' field: not a valid okd pull secret"}
 	}
 	if len(auths) == 0 {
-		return checkResult{sev: sevFail, detail: "'auths' is empty — pull secret has no registry entries"}
+		return checkResult{sev: sevFail, detail: "'auths' is empty: pull secret has no registry entries"}
 	}
 	return checkResult{sev: sevPass, detail: path}
 }
@@ -319,7 +319,7 @@ func checkPorts(ctx context.Context) checkResult {
 		}
 	}
 	if len(busy) > 0 {
-		return checkResult{sev: sevWarn, detail: "in use: " + strings.Join(busy, ", ") + " — use --skip-* flags if intentional"}
+		return checkResult{sev: sevWarn, detail: "in use: " + strings.Join(busy, ", ") + " (use --skip-* flags if intentional)"}
 	}
 	return checkResult{sev: sevPass, detail: "53, 80, 443, 6443, 22623, 8080 all free"}
 }

@@ -65,7 +65,7 @@ func (s *SecretStore) Install(ctx context.Context, env *addon.Environment) error
 	// Only require sops if any file is actually encrypted
 	encrypted := isSopsEncrypted(credPath) || isSopsEncrypted(tokenPath)
 	if encrypted && !executor.CommandExists("sops") {
-		return fmt.Errorf("sops-encrypted secret files detected but sops is not installed — install with: brew install sops")
+		return fmt.Errorf("sops-encrypted secret files detected but sops is not installed: install with 'brew install sops'")
 	}
 
 	if err := addon.EnsureNamespace(ctx, env, defaultNamespace); err != nil {
