@@ -71,17 +71,12 @@ signs:
     artifacts: checksum
     output: true
 
-# Homebrew tap — goreleaser will open a PR against
-# github.com/qxtaiba/homebrew-tap on every release, updating the formula.
-#
-# skip_upload is set to "true" until the qxtaiba/homebrew-tap repository
-# exists. Without that, goreleaser fails the entire release trying to
-# clone a non-existent repo. Once the tap repo is created (empty repo
-# with a Formula/ directory is enough), flip this to "auto" or remove
-# the line entirely.
+# Homebrew tap — goreleaser opens a PR against github.com/qxtaiba/homebrew-tap
+# on every release, updating the formula at Formula/okdctl.rb. Requires
+# HOMEBREW_TAP_TOKEN (PAT with `repo` scope on the tap repo) in this repo's
+# secrets — without it the brew publish step no-ops.
 brews:
   - name: okdctl
-    skip_upload: "true"
     repository:
       owner: qxtaiba
       name: homebrew-tap
