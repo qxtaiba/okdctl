@@ -13,7 +13,7 @@
 #   INSTALL_DIR  - where to put the binary (default: /usr/local/bin)
 #   INSECURE     - set to "1" to skip checksum verification (NOT recommended)
 #
-# Requires: curl, sha256sum (or shasum -a 256), tar (or unzip on macOS).
+# Requires: curl, tar, sha256sum.
 
 set -eu
 
@@ -35,22 +35,18 @@ require() {
 require curl
 require tar
 
-# Detect sha256 tool (linux: sha256sum, macOS: shasum -a 256)
 if command -v sha256sum >/dev/null 2>&1; then
     SHA_CMD="sha256sum"
-elif command -v shasum >/dev/null 2>&1; then
-    SHA_CMD="shasum -a 256"
 else
-    [ -n "$INSECURE" ] || die "sha256sum or shasum -a 256 is required (or set INSECURE=1 to skip)"
+    [ -n "$INSECURE" ] || die "sha256sum is required (or set INSECURE=1 to skip checksum verification)"
     SHA_CMD=""
 fi
 
-# Detect OS and arch
+# okdctl is Linux-only. Refuse to install on anything else.
 OS=$(uname -s | tr '[:upper:]' '[:lower:]')
 case "$OS" in
-    linux)  OS="Linux" ;;
-    darwin) OS="Darwin" ;;
-    *) die "unsupported OS: $OS (supported: linux, darwin)" ;;
+    linux) OS="Linux" ;;
+    *) die "unsupported OS: $OS — okdctl runs on Linux only (the deploy phase needs dnf/apt, systemd, firewall-cmd, nmcli)" ;;
 esac
 
 ARCH=$(uname -m)
@@ -72,14 +68,8 @@ if [ -z "$VERSION" ]; then
     info "latest: $VERSION"
 fi
 
-# Determine archive format: darwin=zip, linux=tar.gz
 VERSION_NOPREFIX="${VERSION#v}"
-case "$OS" in
-    Darwin) ARCHIVE_EXT="zip" ;;
-    Linux)  ARCHIVE_EXT="tar.gz" ;;
-esac
-
-ARCHIVE_NAME="${BINARY}_${VERSION_NOPREFIX}_${OS}_${ARCH}.${ARCHIVE_EXT}"
+ARCHIVE_NAME="${BINARY}_${VERSION_NOPREFIX}_${OS}_${ARCH}.tar.gz"
 BASE_URL="https://github.com/$REPO/releases/download/$VERSION"
 ARCHIVE_URL="$BASE_URL/$ARCHIVE_NAME"
 SHA_URL="$BASE_URL/SHA256SUMS"
@@ -108,16 +98,7 @@ fi
 # Extract the archive.
 info "extracting"
 cd "$TMP"
-case "$ARCHIVE_EXT" in
-    zip)
-        command -v unzip >/dev/null 2>&1 ||
-            die "unzip is required to extract darwin archives"
-        unzip -q "$ARCHIVE_NAME"
-        ;;
-    tar.gz)
-        tar -xzf "$ARCHIVE_NAME"
-        ;;
-esac
+tar -xzf "$ARCHIVE_NAME"
 
 [ -f "$BINARY" ] || die "$BINARY not found in archive"
 

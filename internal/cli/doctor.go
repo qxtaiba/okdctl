@@ -1,4 +1,4 @@
-//go:build linux || darwin
+//go:build linux
 
 package cli
 
@@ -11,7 +11,6 @@ import (
 	"os/exec"
 	"os/user"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"syscall"
 	"time"
@@ -23,8 +22,6 @@ import (
 	"github.com/qxtaiba/okdctl/internal/utils/platform"
 	"github.com/qxtaiba/okdctl/internal/utils/system"
 )
-
-const goosDarwin = "darwin"
 
 // doctorCmd is the user-facing 'okdctl doctor' command. It is separate
 // from main.preflight() (which is a startup guardrail) — doctor runs a
@@ -185,12 +182,8 @@ func printResult(c check, r checkResult) {
 	fmt.Println()
 }
 
-// checkHostOS verifies we can identify the host OS. On macOS (operator mode)
-// we do not parse /etc/os-release and instead report darwin directly.
+// checkHostOS identifies the host OS by parsing /etc/os-release.
 func checkHostOS(_ context.Context) checkResult {
-	if runtime.GOOS == goosDarwin {
-		return checkResult{sev: sevPass, detail: "macos (operator mode: deploying to a remote proxmox host)"}
-	}
 	host, err := platform.Detect()
 	if err != nil {
 		return checkResult{sev: sevFail, detail: "cannot read /etc/os-release: " + err.Error()}
@@ -276,9 +269,6 @@ func checkBinaries(_ context.Context) checkResult {
 // work if the user is present during deploy — but it is frustrating for a
 // long-running bootstrap to block on a password prompt halfway through.
 func checkSudo(ctx context.Context) checkResult {
-	if runtime.GOOS == goosDarwin {
-		return checkResult{sev: sevPass, detail: "skipped on macos (operator mode)"}
-	}
 	if _, err := exec.LookPath("sudo"); err != nil {
 		return checkResult{sev: sevFail, detail: "sudo not installed"}
 	}
@@ -378,10 +368,13 @@ func checkDiskSpace(_ context.Context) checkResult {
 	if err := syscall.Statfs(u.HomeDir, &st); err != nil {
 		return checkResult{sev: sevWarn, detail: "statfs failed: " + err.Error()}
 	}
-	// uint64 cast on Bavail is redundant on darwin (already uint64) but
-	// required on linux/amd64 to make the multiplication compile against
-	// the signed Bsize type. Both casts kept for portability.
-	freeBytes := uint64(st.Bavail) * uint64(st.Bsize) //nolint:unconvert // platform-portability
+	// Bsize is int64 on linux but a filesystem block size is always
+	// positive in practice; the bound check exists to satisfy gosec
+	// G115 without a nolint directive.
+	if st.Bsize <= 0 {
+		return checkResult{sev: sevWarn, detail: "statfs returned a non-positive block size"}
+	}
+	freeBytes := st.Bavail * uint64(st.Bsize)
 	freeGB := freeBytes / (1024 * 1024 * 1024)
 	if freeGB < minGB {
 		return checkResult{sev: sevFail, detail: fmt.Sprintf("%d gb free in %s (need at least %d gb)", freeGB, u.HomeDir, minGB)}
@@ -397,10 +390,6 @@ func checkDiskSpace(_ context.Context) checkResult {
 // the common case of services bound on 0.0.0.0 or 127.0.0.1; misses
 // services bound only on a specific non-loopback address.
 func checkPorts(ctx context.Context) checkResult {
-	if runtime.GOOS == goosDarwin {
-		return checkResult{sev: sevPass, detail: "skipped on macos (operator mode)"}
-	}
-
 	ports := []int{53, 80, 443, 6443, 22623, 8080}
 
 	var busy []string

@@ -15,7 +15,6 @@ builds:
       - CGO_ENABLED=0
     goos:
       - linux
-      - darwin
     goarch:
       - amd64
       - arm64
@@ -30,10 +29,6 @@ builds:
 archives:
   - formats:
       - tar.gz
-    format_overrides:
-      - goos: darwin
-        formats:
-          - zip
     name_template: >-
       {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
     files:
@@ -70,25 +65,6 @@ signs:
       - "--yes"
     artifacts: checksum
     output: true
-
-# Homebrew tap — goreleaser opens a PR against github.com/qxtaiba/homebrew-tap
-# on every release, updating the formula at Formula/okdctl.rb. Requires
-# HOMEBREW_TAP_TOKEN (PAT with `repo` scope on the tap repo) in this repo's
-# secrets — without it the brew publish step no-ops.
-brews:
-  - name: okdctl
-    repository:
-      owner: qxtaiba
-      name: homebrew-tap
-      branch: main
-    directory: Formula
-    homepage: "https://github.com/qxtaiba/okdctl"
-    description: "Deploy OKD clusters on Proxmox with one binary"
-    license: "Apache-2.0"
-    test: |
-      system "#{bin}/okdctl version"
-    install: |
-      bin.install "okdctl"
 
 # .deb / .rpm packages for Linux users who install via apt/dnf
 nfpms:

@@ -21,13 +21,11 @@ okdctl phones home to nothing. No telemetry, no analytics, no update pings.
 
 ## Install
 
-**Homebrew:**
+okdctl is **Linux-only**. The deploy phase shells out to `dnf`/`apt`,
+`firewall-cmd`, `nmcli`, and `systemctl` — none of which exist on macOS or
+Windows. Install on the bastion host you intend to deploy from.
 
-```sh
-brew install qxtaiba/tap/okdctl
-```
-
-**curl | sh** (auto-detects OS/arch, verifies SHA256):
+**curl | sh** (verifies SHA256):
 
 ```sh
 curl -sSfL https://raw.githubusercontent.com/qxtaiba/okdctl/main/scripts/install.sh | sh
@@ -144,7 +142,7 @@ output goes in bug reports.
 ```sh
 okdctl destroy                          # tear down the cluster
 rm -rf ~/okd-install okdctl.yaml .env   # residual state
-sudo rm /usr/local/bin/okdctl           # or: brew uninstall okdctl
+sudo rm /usr/local/bin/okdctl           # or: apt remove okdctl / dnf remove okdctl
 ```
 
 `destroy` removes the dnsmasq drop-in, HAProxy config block, firewall rules
@@ -156,7 +154,7 @@ you may be using them for other things.
 
 Every tagged release ships:
 
-- `okdctl_<version>_<os>_<arch>.{tar.gz,zip}` — binary archive
+- `okdctl_<version>_linux_<arch>.tar.gz` — binary archive (amd64 + arm64)
 - `SHA256SUMS`, `SHA256SUMS.sig`, `SHA256SUMS.pem` — sigstore keyless signature
 - `okdctl.sbom.json` — CycloneDX SBOM
 - `okdctl.intoto.jsonl` — SLSA build provenance

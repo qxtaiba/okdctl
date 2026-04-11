@@ -13,11 +13,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   reachability
 - Apache-2.0 license
 - Architecture documentation under `docs/architecture/`
-- Compatibility matrix in README
 - Sigstore keyless signing on release artifacts
 - SBOM (CycloneDX) attached to each release
 - SLSA build provenance attestation
-- Homebrew tap formula published on release
 - `.deb` and `.rpm` packages published on release
 - `curl | sh` installer script with SHA256 verification
 - CodeQL SAST scan on every PR
@@ -25,9 +23,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - Release builds now use `-trimpath` for reproducibility
+- Project renamed from `openshitctl` (binary) and `okd-proxmox-cli`
+  (module path) to `okdctl` for both. Module path is now
+  `github.com/qxtaiba/okdctl`. Anyone with the old paths needs to
+  update their go.mod and re-clone the renamed GitHub repo.
 
 ### Removed
-- Windows build target from Makefile (never supported, now explicitly dropped)
+- macOS / darwin support. The deploy phase shells out to `dnf`/`apt`,
+  `firewall-cmd`, `nmcli`, and `systemctl`, none of which exist on
+  macOS — the doctor and wizard would run on a Mac but the actual
+  deploy never could. Goreleaser darwin targets, the Homebrew tap,
+  and the install script's macOS branch are all gone.
+- Windows build target from Makefile (never supported, now explicitly
+  dropped)
 
 ## [0.1.0] - TBD
 

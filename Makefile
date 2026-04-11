@@ -41,11 +41,9 @@ build: ## Build the binary
 	@mkdir -p $(BUILD_DIR)
 	$(GOBUILD) $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME) ./cmd/okdctl
 
-build-all: ## Build for all supported platforms (linux+darwin, amd64+arm64)
+build-all: ## Build for all supported platforms (linux amd64+arm64)
 	@echo "Building for all platforms..."
 	@mkdir -p $(BUILD_DIR)
-	GOOS=darwin GOARCH=amd64 $(GOBUILD) $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-darwin-amd64 ./cmd/okdctl
-	GOOS=darwin GOARCH=arm64 $(GOBUILD) $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-darwin-arm64 ./cmd/okdctl
 	GOOS=linux GOARCH=amd64 $(GOBUILD) $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-linux-amd64 ./cmd/okdctl
 	GOOS=linux GOARCH=arm64 $(GOBUILD) $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-linux-arm64 ./cmd/okdctl
 

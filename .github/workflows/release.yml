@@ -35,7 +35,6 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
 
       # Compute base64-encoded subject hashes for SLSA provenance from
       # goreleaser's artifacts.json. Pattern adapted from anchore/syft and
