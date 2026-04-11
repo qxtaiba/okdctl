@@ -1,44 +1,17 @@
 # openshitctl
 
-> A single-binary CLI for deploying production-ready OKD (OpenShift Kubernetes
-> Distribution) clusters on Proxmox VE, aimed at homelab operators who want a
-> real Kubernetes cluster without the operational overhead of writing their
-> own Terraform, Ignition, and bootstrap plumbing.
-
 [![CI](https://github.com/qxtaiba/okd-proxmox-cli/actions/workflows/ci.yml/badge.svg?branch=develop)](https://github.com/qxtaiba/okd-proxmox-cli/actions/workflows/ci.yml)
-[![CodeQL](https://github.com/qxtaiba/okd-proxmox-cli/actions/workflows/codeql.yml/badge.svg)](https://github.com/qxtaiba/okd-proxmox-cli/actions/workflows/codeql.yml)
-[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
-[![Go Report Card](https://goreportcard.com/badge/github.com/qxtaiba/okd-proxmox-cli)](https://goreportcard.com/report/github.com/qxtaiba/okd-proxmox-cli)
-[![Release](https://img.shields.io/github/v/release/qxtaiba/okd-proxmox-cli?sort=semver)](https://github.com/qxtaiba/okd-proxmox-cli/releases)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 
-`openshitctl` walks you through an interactive TUI wizard, generates the full
-set of OKD install artifacts (install-config, manifests, ignition, custom ISOs),
-provisions VMs via Terraform on your Proxmox host, sits the cluster up through
-bootstrap, and hands you a working cluster with console access. Then it cleans
-up after itself when you're done.
+A single-binary CLI that stands up OKD (OpenShift Kubernetes Distribution)
+clusters on Proxmox VE. Runs a wizard, generates install configs and
+custom CoreOS ISOs, drives Terraform to provision the VMs on your
+Proxmox node, waits through bootstrap and cluster-operator stages,
+installs any enabled addons, and cleans up after itself on destroy.
 
-It's designed for the homelab operator who has one or a few Proxmox nodes and
-wants a Kubernetes platform that behaves like the ones at work, without
-becoming a second job.
-
-## Features
-
-- **Interactive wizard TUI** — no YAML-by-hand; the wizard writes a
-  validated config and remembers your answers across runs
-- **Data-driven phases** — setup, install, post-install, destroy, and
-  cleanup each run as ordered step lists with rollback-on-failure semantics
-- **Addon system** — built-in catalog for Flux, cert-manager, storage
-  classes, external-secrets, and more (opt-in per cluster)
-- **Automated preflight** — `openshitctl doctor` verifies your host is
-  ready before any destructive operation
-- **kube-vip for API VIP** — no reliance on external load balancers for the
-  API server; HAProxy handles ingress
-- **Compact cluster support** — 3-master / 0-worker topologies for small
-  homelabs are a first-class configuration
-- **Zeroizing credential handling** — Proxmox credentials are wiped from
-  memory after use and never logged
-- **Supply chain hygiene** — sigstore-signed releases, SBOM attached to
-  every release, SLSA provenance, reproducible builds
+Built for the homelab operator with one or two Proxmox nodes who wants
+a real Kubernetes cluster that behaves like the ones at work, without
+hand-rolling Terraform, Ignition, and bootstrap glue.
 
 ## Compatibility
 
@@ -51,37 +24,27 @@ becoming a second job.
 | Firewall | firewalld, ufw | `nftables (direct)` (not tested) |
 | Host architecture | amd64, arm64 | Windows (not supported by design — this is a Linux/macOS tool) |
 
-If your configuration isn't on the list, it may still work — this reflects
-what's actively tested, not what's theoretically supported. PRs adding new
-tested combinations to the table above are welcome.
+Not on the list doesn't mean it won't work — this reflects what's
+actively tested, nothing more. PRs adding tested combinations to this
+table are welcome.
 
-## Quickstart
+## Install
 
-### 1. Install
-
-**Homebrew (macOS / Linux):**
+**Homebrew:**
 
 ```sh
 brew install qxtaiba/tap/openshitctl
 ```
 
-**Shell installer (any Linux / macOS):**
+**curl | sh** (auto-detects OS/arch, verifies SHA256):
 
 ```sh
-curl -sfL https://raw.githubusercontent.com/qxtaiba/okd-proxmox-cli/main/scripts/install.sh | sh
+curl -sSfL https://raw.githubusercontent.com/qxtaiba/okd-proxmox-cli/main/scripts/install.sh | sh
 ```
 
-The installer auto-detects your OS and architecture, downloads the matching
-release from GitHub, verifies its SHA256 against the published checksum file,
-and drops the binary in `/usr/local/bin`.
-
-**Direct binary:**
-
-Grab a release archive from
-[GitHub Releases](https://github.com/qxtaiba/okd-proxmox-cli/releases) for
-your OS/arch, extract, and put the `openshitctl` binary somewhere on your
-`$PATH`. Each release ships with a `SHA256SUMS` file and sigstore signatures
-(see [Verifying a release](#verifying-a-release)).
+**`.deb` / `.rpm`** from the
+[releases page](https://github.com/qxtaiba/okd-proxmox-cli/releases) for
+apt/dnf users.
 
 **From source:**
 
@@ -92,138 +55,130 @@ make build
 sudo install -m 0755 bin/openshitctl /usr/local/bin/
 ```
 
-> Do **not** run `openshitctl` as root — it refuses to start under `sudo`
-> and escalates privileges internally only for the specific commands that
-> need them (`nmcli`, `firewall-cmd`, `systemctl`, etc.).
+Releases are signed with sigstore keyless signing and ship with a
+CycloneDX SBOM and SLSA build provenance. See
+[Verifying a release](#verifying-a-release) to check what you
+downloaded.
 
-### 2. Get an OKD pull secret
+Don't run `openshitctl` as root. It refuses to start under `sudo` and
+escalates internally only for the specific commands that need it
+(`nmcli`, `firewall-cmd`, `systemctl`).
 
-OKD uses the same release-image infrastructure as OpenShift, and it needs
-a pull secret to pull from `quay.io/openshift-release-dev` during install.
-The pull secret is **free** — you just need a Red Hat account.
+## Usage
 
-1. Go to <https://console.redhat.com/openshift/install/pull-secret>
-2. Sign in with a (free) Red Hat Developer account
-3. Click **Download pull secret**
-4. Save the file anywhere on your host. The wizard's default path is
-   `~/pull-secret.json`; you can also pick any other location and
-   reference it during the wizard's file-paths step.
-
-The file is a JSON object with auth tokens for the registries OKD pulls
-from; it carries no PII and is safe to store on a homelab host.
-
-### 3. Check your environment
-
-```sh
-openshitctl doctor
+```
+openshitctl deploy           run the wizard, then deploy the cluster
+openshitctl destroy          tear down a cluster
+openshitctl update-ingress   switch ingress controllers to LoadBalancer IPs
+openshitctl doctor           environment preflight check
+openshitctl version          print version, git commit, build date
 ```
 
-This runs the preflight checks: OS detection, required binaries, free ports,
-sudo capability, pull-secret validity, disk space, Proxmox API reachability.
-Fix anything it complains about before proceeding — it's much cheaper to
-fix environment problems now than halfway through a bootstrap.
+On first run, `deploy` launches the interactive wizard and writes
+`openshitctl.yaml` alongside a `.env` file for Proxmox credentials.
+Subsequent runs reuse the existing config. Pass `--config other.yaml`
+to manage multiple clusters from the same machine.
 
-### 4. Configure and deploy
+A deploy walks through three phases:
 
-```sh
-openshitctl deploy
-```
+1. **setup** — install host packages, download external tools (`oc`,
+   `openshift-install`, `terraform`), generate install configs and k8s
+   manifests, build custom CoreOS ISOs, and configure HAProxy, DNS, and
+   firewall on the bastion
+2. **install** — run Terraform to provision VMs on Proxmox, wait for
+   bootstrap, approve CSRs, wait for cluster operators to come up
+3. **post-install** — clean up the bootstrap node, migrate ingress to
+   LoadBalancer IPs if you have an LB provider, install any enabled
+   addons
 
-On a fresh run, this launches the wizard. Answer the prompts for cluster
-name, domain, node count, Proxmox endpoint, networking, storage, pull
-secret path, and any addons you want. The wizard writes
-`openshitctl.yaml` alongside a `.env` file for Proxmox credentials
-(so you never commit secrets to the config file).
+Each phase is a sequence of steps with rollback on failure. Re-running
+`deploy` after an interruption picks up where it left off. Skip flags
+(`--skip-terraform`, `--skip-isos`, `--skip-haproxy`, `--skip-dns`) let
+you bring your own parts of the stack.
 
-Subsequent runs will reuse the existing `openshitctl.yaml` — pass
-`--config path/to/another.yaml` to manage multiple clusters from the same
-machine.
-
-The full deploy sequence runs through:
-
-1. **Setup** — install host packages, download tools, generate install
-   configs, build custom CoreOS ISOs, configure HAProxy/DNS/firewall
-2. **Install** — run Terraform to create the VMs on Proxmox, wait for
-   bootstrap, approve CSRs, wait for cluster operators
-3. **Post-install** — clean up the bootstrap node, update ingress
-   controllers to use LoadBalancer IPs, install any enabled addons
-
-You'll see per-step progress in the TUI, and get the console URL, API URL,
-and DNS records you need to point your DNS at when the cluster comes up.
+The phase model, addon system, and wizard internals are documented in
+[`docs/architecture/`](docs/architecture/).
 
 ## Configuration
 
-The wizard is the recommended entry point, but if you want to edit YAML
-directly, see the three reference configs under `configs/examples/`:
+The wizard is the easiest way to generate a config. If you prefer
+editing YAML directly, reference configs for common setups live in
+[`configs/examples/`](configs/examples/):
 
-- [`configs/examples/minimal.yaml`](configs/examples/minimal.yaml) — the
-  smallest compact cluster (3 masters, 0 workers)
-- [`configs/examples/production.yaml`](configs/examples/production.yaml) —
-  a 3 master / 3 worker layout with external LB considerations
-- [`configs/examples/media-server.yaml`](configs/examples/media-server.yaml) —
-  a homelab-flavored config with storage-heavy workers
+- `minimal.yaml` — 3 control-plane nodes, 0 workers (compact cluster)
+- `production.yaml` — 3 control-plane, 3 worker layout
+- `media-server.yaml` — homelab-flavored with storage-heavy workers
 
 Proxmox credentials live in a `.env` file next to the config, never in
-the YAML itself. See `handleCredentials` in `internal/cli/helpers.go` for
-the exact env variable names (`PROXMOX_VE_USERNAME`, `PROXMOX_VE_PASSWORD`,
-`PROXMOX_VE_API_TOKEN`, `PROXMOX_VE_ENDPOINT`).
-
-## Commands
+the YAML itself. The env var names:
 
 ```
-openshitctl deploy            Deploy a new cluster (launches wizard on first run)
-openshitctl destroy           Tear down a cluster, cleaning up VMs and host config
-openshitctl update-ingress    Switch ingress controllers from HostNetwork to LoadBalancer IPs
-openshitctl doctor            Run preflight checks against the local environment
-openshitctl version           Print version, git commit, build date, platform
+PROXMOX_VE_ENDPOINT
+PROXMOX_VE_USERNAME
+PROXMOX_VE_PASSWORD    # or PROXMOX_VE_API_TOKEN
 ```
 
-Use `--help` on any command for flags and details.
+### Getting an OKD pull secret
 
-## How it works
+OKD pulls release images from the same registries as OpenShift and
+needs a pull secret. It's free — you just need a Red Hat account.
 
-At a high level, `openshitctl` is organized around a **phase/step model**:
+1. Log in at
+   [console.redhat.com/openshift/install/pull-secret](https://console.redhat.com/openshift/install/pull-secret)
+2. Click **Download pull secret**
+3. Save it somewhere on your host. The wizard defaults to
+   `~/pull-secret.json`; you can also pick another location and
+   reference it during the wizard's file-paths step.
+4. The file is a JSON object with registry auth tokens — no PII, safe
+   to store locally.
 
+## Troubleshooting
+
+Before filing an issue, run `openshitctl doctor` and attach the output.
+It catches most of the common failures ahead of time.
+
+- **Bootstrap VM never comes up.** Usually a networking issue. Verify
+  the ignition URL is reachable from the node network (HAProxy IP,
+  port 8080, path `/ignition/<role>.ign`). Doctor probes this.
+- **`dnsmasq` fails to start on port 53.** `systemd-resolved` grabs
+  port 53 on most modern distros. Either disable its DNS stub
+  (`DNSStubListener=no` in `/etc/systemd/resolved.conf`) or run
+  `openshitctl deploy --skip-dns` and handle DNS externally.
+- **`oc` not found mid-setup.** The tool auto-installs `oc` into
+  `/usr/local/bin`, which may not be on your `$PATH` during the same
+  shell session. Re-source your shell rc and retry.
+- **Terraform destroy hangs.** The Proxmox API under load can drop
+  long-running destroy requests. Re-run `openshitctl destroy` — the
+  state is preserved and it picks up where it left off.
+- **Clock skew during CSR approval.** The CSR flow refuses to approve
+  certs from nodes whose clock differs from the bastion's. Run
+  `ntpdate` on both and retry.
+
+## Uninstall
+
+```sh
+openshitctl destroy                          # tear down the cluster
+rm -rf ~/okd-install openshitctl.yaml .env   # residual state
+sudo rm /usr/local/bin/openshitctl           # or: brew uninstall openshitctl
 ```
-deploy = setup → install → post-install
-destroy = destroy → cleanup
-```
 
-Each phase is a list of `StepDef` values ordered by dependency; the shared
-`distribution.Orchestrator` runs them with progress, logging, and
-rollback-on-failure. The phases live under `internal/distribution/okd/`:
-
-- [`setup/`](internal/distribution/okd/setup/) — host packages, ignition
-  generation, ISO customization, HAProxy/DNS/firewall configuration
-- [`install/`](internal/distribution/okd/install/) — Terraform orchestration,
-  bootstrap monitoring, CSR approval, cluster operator wait
-- [`postinstall/`](internal/distribution/okd/postinstall/) — bootstrap cleanup,
-  ingress migration, addon installation
-- [`destroy/`](internal/distribution/okd/destroy/) — Terraform destroy plus
-  file/service cleanup
-- [`cleanup/`](internal/distribution/okd/cleanup/) — standalone cleanup helpers
-  invoked both by destroy and as a subcommand
-
-See [`docs/architecture/`](docs/architecture/) for deeper dives on the phase
-model, addon system, and wizard.
+`destroy` removes the dnsmasq drop-in, the HAProxy config block, the
+firewall rules openshitctl added during setup, and the
+Terraform-provisioned VMs. Pass `--remove-packages` if you also want
+the system packages uninstalled (`haproxy`, `dnsmasq`, `httpd`) — by
+default they stay since you may be using them for other things.
 
 ## Verifying a release
 
-Every tagged release produces:
+Every tagged release ships:
 
-- `openshitctl_<version>_<os>_<arch>.{tar.gz,zip}` — the binary archive
-- `SHA256SUMS` — checksums of all archives
-- `SHA256SUMS.sig` + `SHA256SUMS.pem` — sigstore keyless signature + cert
-- `openshitctl.sbom.json` — CycloneDX SBOM of all dependencies
-- `openshitctl.intoto.jsonl` — SLSA build provenance attestation
+- `openshitctl_<version>_<os>_<arch>.{tar.gz,zip}` — binary archive
+- `SHA256SUMS`, `SHA256SUMS.sig`, `SHA256SUMS.pem` — sigstore keyless
+  signature
+- `openshitctl.sbom.json` — CycloneDX SBOM
+- `openshitctl.intoto.jsonl` — SLSA provenance attestation
 
-### Verify the SHA256
-
-```sh
-sha256sum --check SHA256SUMS 2>&1 | grep openshitctl_<version>_<os>_<arch>
-```
-
-### Verify the sigstore signature (no keys needed)
+Check the signature without managing any keys:
 
 ```sh
 cosign verify-blob \
@@ -234,120 +189,30 @@ cosign verify-blob \
   SHA256SUMS
 ```
 
-This proves the checksums file was produced by a GitHub Actions workflow
-in this repository at release time — no maintainer private key, no trust in
-the release page markup, no trust in any CDN between you and GitHub.
+This proves the checksums file was produced by a GitHub Actions
+workflow in this repository at release time — no maintainer private
+keys, no trust in the release page markup, no trust in any CDN between
+you and GitHub.
 
-### Reproduce the build from source
+Binaries are built with `-trimpath` and deterministic ldflags, so
+`make build` from the tagged commit should produce a byte-identical
+binary. Compare `sha256sum bin/openshitctl` against the published
+`SHA256SUMS`.
 
-The release binaries are built with `-trimpath` and deterministic ldflags,
-so a local build from the tagged commit should produce a byte-identical
-binary for the same `GOOS`/`GOARCH`:
+## Status
 
-```sh
-git checkout v<version>
-CGO_ENABLED=0 go build \
-  -trimpath \
-  -ldflags "-s -w \
-    -X github.com/qxtaiba/okd-proxmox-cli/pkg/version.Version=v<version> \
-    -X github.com/qxtaiba/okd-proxmox-cli/pkg/version.GitCommit=<short-commit> \
-    -X github.com/qxtaiba/okd-proxmox-cli/pkg/version.BuildDate=<release-date>" \
-  -o openshitctl ./cmd/openshitctl
-sha256sum openshitctl  # compare with SHA256SUMS
-```
-
-## Clean uninstall
-
-If you want to remove `openshitctl` and everything it created on your host:
-
-```sh
-# 1. Tear down the cluster (this removes VMs on Proxmox and cleans host config)
-openshitctl destroy
-
-# 2. Remove any residual work directory
-rm -rf ~/okd-install  # or wherever your config's workDir points
-
-# 3. Remove the config and credentials
-rm -rf ~/.openshitctl openshitctl.yaml .env
-
-# 4. Remove the binary
-sudo rm /usr/local/bin/openshitctl
-# or: brew uninstall openshitctl
-```
-
-`openshitctl destroy` handles the non-obvious parts: it removes the
-dnsmasq drop-in config, tears down the HAProxy config block, removes the
-firewall rules it added during setup, and destroys the Terraform-managed
-VMs. Pass `--remove-packages` if you also want the system packages
-(`haproxy`, `dnsmasq`, `httpd`) uninstalled — they stay by default because
-you may be using them for other things.
-
-## Troubleshooting
-
-Before filing an issue, please run:
-
-```sh
-openshitctl doctor            # what's wrong with my environment?
-```
-
-Attach the full output of `openshitctl doctor` to your bug report,
-plus any relevant error output from the command that was failing.
-
-### Common failures
-
-- **Bootstrap VM never comes up:** usually a networking issue. Check that
-  the ignition URL is reachable from the node network (HAProxy IP, port
-  8080, path `/ignition/<role>.ign`). `openshitctl doctor` tests this.
-- **`dnsmasq` failed to start:** port 53 is already bound, often by
-  `systemd-resolved`. Either disable `systemd-resolved` DNS stub
-  (`DNSStubListener=no` in `/etc/systemd/resolved.conf`) or run
-  `openshitctl deploy --skip-dns` and handle DNS with your own resolver.
-- **`oc` command not found:** the tool auto-installs `oc` into
-  `/usr/local/bin`, which may not be on `$PATH` during the setup phase.
-  Log out and back in, or re-source your shell rc.
-- **Terraform destroy hangs:** Proxmox API under load can drop long-running
-  destroy requests. Re-run `openshitctl destroy` — the Terraform state
-  is preserved and it picks up where it left off.
-- **CSRs never get approved:** check `openshitctl doctor` for clock skew
-  between the bastion and nodes, and verify the `oc` binary points at the
-  right kubeconfig (`openshitctl` sets `KUBECONFIG` on its internal
-  executor; see `internal/distribution/okd/install/phase.go`).
-
-## Versioning and stability
-
-`openshitctl` is pre-1.0 and follows **SemVer with a homelab-safety twist**:
-
-- **Patch releases** (`v0.x.y` → `v0.x.z`) never change on-disk state
-  formats, the config file schema, or command behavior
-- **Minor releases** (`v0.x.*` → `v0.y.*`) may change the config file
-  schema; the `CHANGELOG.md` documents a migration path for every breaking
-  change, and `openshitctl` will refuse to run against a config it doesn't
-  understand rather than silently corrupting state
-- **Post-1.0**, breaking changes are reserved for major releases
-
-Pinning to an exact version is recommended until 1.0. If you use the
-`curl | sh` installer, pass `VERSION=v0.1.0` to pin.
+Pre-1.0. Expect the config schema to change between minor versions.
+The `CHANGELOG` has migration notes for breaking changes, and the tool
+refuses to run against a config it doesn't understand rather than
+silently corrupting state. Pin to a specific version until 1.0.
 
 ## Contributing
 
-Found a bug? Have an idea? PRs are welcome. Before you start:
-
-1. Run the tests: `make test`
-2. Run the linter: `make lint`
-3. Check for dead code: `deadcode ./cmd/openshitctl`
-4. File an issue first if you're planning a significant change — it's
-   much faster to align on approach before writing a lot of code
-
-See the issue templates (`.github/ISSUE_TEMPLATE/`) for what to include in
-bug reports and feature requests. The PR template
-(`.github/PULL_REQUEST_TEMPLATE.md`) has a short checklist for review
-readiness.
+Bug reports and PRs welcome. Run `make test && make lint` before
+submitting. The issue forms in `.github/ISSUE_TEMPLATE/` ask for the
+info I need to reproduce; filling them out usually saves a round trip.
 
 ## License
 
-Copyright 2026 Q Al Nuaimi.
-
-Licensed under the Apache License, Version 2.0 (the "License"); you may not
-use this file except in compliance with the License. You may obtain a copy
-of the License at <http://www.apache.org/licenses/LICENSE-2.0>. See the
-[LICENSE](LICENSE) and [NOTICE](NOTICE) files for details.
+Apache-2.0. Copyright 2026 Q Al Nuaimi. See [LICENSE](LICENSE) and
+[NOTICE](NOTICE).
