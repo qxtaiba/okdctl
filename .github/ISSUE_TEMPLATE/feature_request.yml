@@ -10,7 +10,6 @@ body:
         Thanks for proposing an enhancement. Feature requests with a
         clear problem statement and a concrete use case land much faster
         than vague wish-list items — please help us help you.
-
   - type: textarea
     id: problem
     attributes:
@@ -23,7 +22,6 @@ body:
         because...
     validations:
       required: true
-
   - type: textarea
     id: proposed
     attributes:
@@ -31,7 +29,6 @@ body:
       description: How do you imagine okdctl should address this?
     validations:
       required: true
-
   - type: textarea
     id: alternatives
     attributes:
@@ -41,7 +38,6 @@ body:
         and why do they fall short for your use case?
     validations:
       required: false
-
   - type: dropdown
     id: scope
     attributes:
@@ -59,7 +55,6 @@ body:
         - Not sure
     validations:
       required: true
-
   - type: checkboxes
     id: checks
     attributes:

@@ -8,6 +8,6 @@ contact_links:
       The issue tracker is for bugs and concrete feature requests.
   - name: Security Vulnerabilities
     url: https://github.com/qxtaiba/okdctl/security/advisories/new
-    about: |
+    about: |-
       Please report security vulnerabilities privately via GitHub
       Security Advisories, not as a public issue.

@@ -8,10 +8,8 @@ on:
   schedule:
     # Weekly full scan, Mondays at 07:00 UTC.
     - cron: "0 7 * * 1"
-
 permissions:
   contents: read
-
 jobs:
   analyze:
     name: analyze (${{ matrix.language }})
@@ -25,18 +23,15 @@ jobs:
       matrix:
         language: ["go"]
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
-
-      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c  # v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
           go-version-file: go.mod
-
-      - uses: github/codeql-action/init@4e828ff8d448a8a6e532957b1811f387a63867e8  # v3.28.6
+      - uses: github/codeql-action/init@4e828ff8d448a8a6e532957b1811f387a63867e8 # v3.28.6
         with:
           languages: ${{ matrix.language }}
           # Extended query pack for deeper SAST coverage (default is "basic").
           queries: security-and-quality
-
-      - uses: github/codeql-action/analyze@4e828ff8d448a8a6e532957b1811f387a63867e8  # v3.28.6
+      - uses: github/codeql-action/analyze@4e828ff8d448a8a6e532957b1811f387a63867e8 # v3.28.6
         with:
           category: "/language:${{ matrix.language }}"

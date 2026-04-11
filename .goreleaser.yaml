@@ -1,12 +1,9 @@
 ---
 version: 2
-
 project_name: okdctl
-
 before:
   hooks:
     - go mod tidy
-
 builds:
   - id: okdctl
     main: ./cmd/okdctl
@@ -25,7 +22,6 @@ builds:
       - -X github.com/qxtaiba/okdctl/pkg/version.Version={{.Version}}
       - -X github.com/qxtaiba/okdctl/pkg/version.GitCommit={{.ShortCommit}}
       - -X github.com/qxtaiba/okdctl/pkg/version.BuildDate={{.Date}}
-
 archives:
   - formats:
       - tar.gz
@@ -36,11 +32,9 @@ archives:
       - LICENSE
       - NOTICE
       - CHANGELOG.md
-
 checksum:
   name_template: "SHA256SUMS"
   algorithm: sha256
-
 # SBOM attached to every release; syft produces CycloneDX JSON
 sboms:
   - id: default
@@ -49,7 +43,6 @@ sboms:
       - "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}.sbom.json"
     cmd: syft
     args: ["$artifact", "--output", "cyclonedx-json=$document"]
-
 # Sigstore keyless signing of checksum file + artifacts.
 # Signs via cosign using a GitHub OIDC identity token — no private keys.
 signs:
@@ -65,7 +58,6 @@ signs:
       - "--yes"
     artifacts: checksum
     output: true
-
 # .deb / .rpm packages for Linux users who install via apt/dnf
 nfpms:
   - id: default
@@ -89,7 +81,6 @@ nfpms:
         dst: /usr/share/doc/okdctl/NOTICE
       - src: README.md
         dst: /usr/share/doc/okdctl/README.md
-
 changelog:
   sort: asc
   filters:
@@ -100,7 +91,6 @@ changelog:
       - "^ci:"
       - Merge pull request
       - Merge branch
-
 release:
   github:
     owner: qxtaiba
@@ -115,5 +105,5 @@ release:
 
     All release artifacts are signed with sigstore keyless signing. Verify
     with `cosign verify-blob` (see README for instructions).
-  footer: |
+  footer: |-
     **Full Changelog**: https://github.com/qxtaiba/okdctl/compare/{{ .PreviousTag }}...{{ .Tag }}

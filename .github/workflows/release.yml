@@ -4,38 +4,31 @@ on:
   push:
     tags:
       - v*
-
 permissions:
   contents: write
   id-token: write
   attestations: write
-
 jobs:
   release:
     runs-on: ubuntu-latest
     outputs:
       hashes: ${{ steps.hash.outputs.hashes }}
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           fetch-depth: 0
-
-      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c  # v6
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
           go-version-file: go.mod
-
-      - uses: sigstore/cosign-installer@3454372f43399081ed03b604cb2d021dabca52bb  # v3.8.2
-
-      - uses: anchore/sbom-action/download-syft@61119d458adab75f756bc0b9e4bde25725f86a7a  # v0.17.2
-
-      - uses: goreleaser/goreleaser-action@ec59f474b9834571250b370d4735c50f8e2d1e29  # v7
+      - uses: sigstore/cosign-installer@3454372f43399081ed03b604cb2d021dabca52bb # v3.8.2
+      - uses: anchore/sbom-action/download-syft@61119d458adab75f756bc0b9e4bde25725f86a7a # v0.17.2
+      - uses: goreleaser/goreleaser-action@ec59f474b9834571250b370d4735c50f8e2d1e29 # v7
         id: goreleaser
         with:
           version: "v2.15.2"
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
       # Compute base64-encoded subject hashes for SLSA provenance from
       # goreleaser's artifacts.json. Pattern adapted from anchore/syft and
       # goreleaser/goreleaser's own release workflows.
@@ -52,7 +45,6 @@ jobs:
           fi
           hashes=$(base64 -w0 < "$checksum_file")
           echo "hashes=$hashes" >> "$GITHUB_OUTPUT"
-
   # Generate SLSA build provenance for the release binaries. This runs in
   # a separate, isolated job that cannot see the release workflow's
   # environment — a SLSA requirement for non-forgeable provenance.
@@ -62,7 +54,7 @@ jobs:
       actions: read
       id-token: write
       contents: write
-    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@f7dd8c54c2067bafc12ca7a55595d5ee9b75204a  # v2.1.0
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@f7dd8c54c2067bafc12ca7a55595d5ee9b75204a # v2.1.0
     with:
       base64-subjects: "${{ needs.release.outputs.hashes }}"
       upload-assets: true
