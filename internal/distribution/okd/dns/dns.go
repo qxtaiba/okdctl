@@ -10,10 +10,10 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/qxtaiba/okd-proxmox-cli/internal/config"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/templates"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/netutil"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
+	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/distribution/okd/templates"
+	"github.com/qxtaiba/okdctl/internal/utils/netutil"
+	"github.com/qxtaiba/okdctl/internal/utils/system"
 )
 
 func BuildConfigData(cfg *config.Config) (templates.DNSConfigData, error) {

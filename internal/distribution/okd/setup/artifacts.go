@@ -6,9 +6,9 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/phase"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/download"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
+	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
+	"github.com/qxtaiba/okdctl/internal/utils/download"
+	"github.com/qxtaiba/okdctl/internal/utils/system"
 )
 
 func (p *Phase) DownloadOKDTools(ctx context.Context, version string, opts *Options) error {

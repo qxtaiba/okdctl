@@ -1,5 +1,5 @@
 // Package config defines the YAML-serializable deployment schema for
-// openshitctl (cluster, distribution, provider, topology, networking, addons)
+// okdctl (cluster, distribution, provider, topology, networking, addons)
 // along with loaders, defaults, generators, and validators.
 package config
 
@@ -90,7 +90,7 @@ type ProxmoxConfig struct {
 	Bridge      string `yaml:"bridge,omitempty" json:"bridge,omitempty" mapstructure:"bridge"`
 	FCOSIso     string `yaml:"fcos_iso,omitempty" json:"fcosIso,omitempty" mapstructure:"fcos_iso"`
 
-	// Credentials — prefer openshitctl.env or environment variables
+	// Credentials — prefer okdctl.env or environment variables
 	Username           string              `yaml:"-" json:"username,omitempty" mapstructure:"username"`
 	Password           string              `yaml:"-" json:"-" mapstructure:"-"`
 	APIToken           string              `yaml:"-" json:"-" mapstructure:"-"`

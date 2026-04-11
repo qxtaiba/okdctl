@@ -7,7 +7,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
-	"github.com/qxtaiba/okd-proxmox-cli/internal/tui"
+	"github.com/qxtaiba/okdctl/internal/tui"
 )
 
 func (m *Model) View() tea.View {

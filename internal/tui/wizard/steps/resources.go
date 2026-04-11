@@ -5,9 +5,9 @@ import (
 
 	"charm.land/lipgloss/v2"
 
-	"github.com/qxtaiba/okd-proxmox-cli/internal/config"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/tui"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/tui/wizard"
+	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/tui"
+	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 )
 
 type ResourcesStepState struct {

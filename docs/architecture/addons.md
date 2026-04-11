@@ -50,7 +50,7 @@ func init() {
 The binary imports the catalog root for side effects:
 
 ```go
-import _ "github.com/qxtaiba/okd-proxmox-cli/internal/addon/catalog"
+import _ "github.com/qxtaiba/okdctl/internal/addon/catalog"
 ```
 
 which in turn imports each addon package for its side effects. This is

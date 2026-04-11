@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/platform"
+	"github.com/qxtaiba/okdctl/internal/utils/platform"
 )
 
 func Install(ctx context.Context, pm platform.PackageManager, packages []string, description string, logger *slog.Logger) error {

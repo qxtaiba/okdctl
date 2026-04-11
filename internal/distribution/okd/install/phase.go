@@ -9,12 +9,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/qxtaiba/okd-proxmox-cli/internal/config"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/phase"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/executor"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/infrastructure/proxmox"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
+	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/distribution"
+	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
+	"github.com/qxtaiba/okdctl/internal/executor"
+	"github.com/qxtaiba/okdctl/internal/infrastructure/proxmox"
+	"github.com/qxtaiba/okdctl/internal/utils/system"
 )
 
 const (

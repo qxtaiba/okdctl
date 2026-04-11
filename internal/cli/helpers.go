@@ -7,11 +7,11 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/qxtaiba/okd-proxmox-cli/internal/config"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/credentials"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/install"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/tui"
+	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/credentials"
+	"github.com/qxtaiba/okdctl/internal/distribution/okd"
+	"github.com/qxtaiba/okdctl/internal/distribution/okd/install"
+	"github.com/qxtaiba/okdctl/internal/tui"
 )
 
 func loadConfig(configFile string) (*config.Config, error) {
@@ -20,10 +20,10 @@ func loadConfig(configFile string) (*config.Config, error) {
 	if err != nil {
 		if os.IsNotExist(err) {
 			tui.Error(fmt.Sprintf("configuration file not found: %s", configFile))
-			if configFile == "openshitctl.yaml" {
-				tui.Info("run 'openshitctl deploy' to create a configuration file")
+			if configFile == "okdctl.yaml" {
+				tui.Info("run 'okdctl deploy' to create a configuration file")
 			} else {
-				tui.Info(fmt.Sprintf("run 'openshitctl deploy --output %s' to create it", configFile))
+				tui.Info(fmt.Sprintf("run 'okdctl deploy --output %s' to create it", configFile))
 			}
 			return nil, fmt.Errorf("configuration file not found: %s: %w", configFile, err)
 		}
@@ -135,19 +135,19 @@ func executeFullDeployment(ctx context.Context, cfg *config.Config, opts deploym
 	startTime := time.Now()
 
 	if err := p.Prepare(ctx, cfg); err != nil {
-		tui.Info("run 'openshitctl destroy' to clean up resources")
+		tui.Info("run 'okdctl destroy' to clean up resources")
 		return fmt.Errorf("deployment failed: %w", err)
 	}
 
 	installOpts := install.NewOptions(cfg, projectRoot)
 	if err := p.Install(ctx, cfg, &installOpts); err != nil {
-		tui.Info("run 'openshitctl destroy' to clean up resources")
+		tui.Info("run 'okdctl destroy' to clean up resources")
 		return fmt.Errorf("deployment failed: %w", err)
 	}
 
 	result, err := p.Configure(ctx, cfg)
 	if err != nil {
-		tui.Info("run 'openshitctl destroy' to clean up resources")
+		tui.Info("run 'okdctl destroy' to clean up resources")
 		return fmt.Errorf("deployment failed: %w", err)
 	}
 

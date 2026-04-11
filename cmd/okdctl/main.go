@@ -1,4 +1,4 @@
-// Package main is the entry point for the openshitctl binary, which deploys
+// Package main is the entry point for the okdctl binary, which deploys
 // OKD clusters on Proxmox. It refuses to run as root and delegates all CLI
 // handling to internal/cli.
 package main
@@ -7,9 +7,9 @@ import (
 	"os"
 	"strings"
 
-	_ "github.com/qxtaiba/okd-proxmox-cli/internal/addon/catalog" // Register all built-in addons
-	"github.com/qxtaiba/okd-proxmox-cli/internal/cli"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/tui"
+	_ "github.com/qxtaiba/okdctl/internal/addon/catalog" // Register all built-in addons
+	"github.com/qxtaiba/okdctl/internal/cli"
+	"github.com/qxtaiba/okdctl/internal/tui"
 )
 
 func main() {

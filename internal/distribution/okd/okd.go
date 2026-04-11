@@ -8,15 +8,15 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/qxtaiba/okd-proxmox-cli/internal/config"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/cleanup"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/destroy"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/install"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/postinstall"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/setup"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/executor"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/logutil"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
+	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/distribution/okd/cleanup"
+	"github.com/qxtaiba/okdctl/internal/distribution/okd/destroy"
+	"github.com/qxtaiba/okdctl/internal/distribution/okd/install"
+	"github.com/qxtaiba/okdctl/internal/distribution/okd/postinstall"
+	"github.com/qxtaiba/okdctl/internal/distribution/okd/setup"
+	"github.com/qxtaiba/okdctl/internal/executor"
+	"github.com/qxtaiba/okdctl/internal/utils/logutil"
+	"github.com/qxtaiba/okdctl/internal/utils/system"
 )
 
 const (

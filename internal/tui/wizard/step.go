@@ -3,7 +3,7 @@ package wizard
 import (
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/qxtaiba/okd-proxmox-cli/internal/config"
+	"github.com/qxtaiba/okdctl/internal/config"
 )
 
 // StepID is an opaque identifier used within the wizard runtime to identify

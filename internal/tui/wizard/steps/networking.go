@@ -4,9 +4,9 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/qxtaiba/okd-proxmox-cli/internal/config"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/tui/wizard"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/netutil"
+	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/tui/wizard"
+	"github.com/qxtaiba/okdctl/internal/utils/netutil"
 )
 
 var NetworkingStepDefinition = wizard.StepDefinition{

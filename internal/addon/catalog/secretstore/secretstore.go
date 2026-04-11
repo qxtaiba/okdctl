@@ -9,9 +9,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/qxtaiba/okd-proxmox-cli/internal/addon"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/executor"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
+	"github.com/qxtaiba/okdctl/internal/addon"
+	"github.com/qxtaiba/okdctl/internal/executor"
+	"github.com/qxtaiba/okdctl/internal/utils/system"
 )
 
 const (
@@ -58,7 +58,7 @@ func (s *SecretStore) Install(ctx context.Context, env *addon.Environment) error
 		env.Logger.Warn("  3. copy the credentials file:")
 		env.Logger.Warn("     cp ~/Downloads/1password-credentials.json " + secretsDir + "/")
 		env.Logger.Warn("  4. (optional) encrypt with sops: sops -e -i <file>")
-		env.Logger.Warn("  5. re-run: openshitctl addon install secretstore")
+		env.Logger.Warn("  5. re-run: okdctl addon install secretstore")
 		return nil
 	}
 

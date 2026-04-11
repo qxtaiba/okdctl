@@ -8,12 +8,12 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/qxtaiba/okd-proxmox-cli/internal/config"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/phase"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/executor"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/download"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/platform"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
+	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
+	"github.com/qxtaiba/okdctl/internal/executor"
+	"github.com/qxtaiba/okdctl/internal/utils/download"
+	"github.com/qxtaiba/okdctl/internal/utils/platform"
+	"github.com/qxtaiba/okdctl/internal/utils/system"
 )
 
 const DefaultProxmoxISODir = "/var/lib/vz/template/iso"

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
+	"github.com/qxtaiba/okdctl/internal/utils/system"
 )
 
 // loadOnce guards against concurrent or repeated calls to LoadEnvFile.
@@ -24,7 +24,7 @@ var (
 )
 
 // EnvFilePath derives the .env path from a config path
-// (e.g. "openshitctl.yaml" becomes "openshitctl.env").
+// (e.g. "okdctl.yaml" becomes "okdctl.env").
 func EnvFilePath(configPath string) string {
 	if strings.HasSuffix(configPath, ".yaml") {
 		return strings.TrimSuffix(configPath, ".yaml") + ".env"
@@ -39,7 +39,7 @@ func EnvFilePath(configPath string) string {
 // standard .env tooling, with 0600 permissions.
 func WriteEnvFile(path string, creds *ProxmoxCredentials) error {
 	lines := []string{
-		"# Proxmox credentials (managed by openshitctl)",
+		"# Proxmox credentials (managed by okdctl)",
 		"# This file has restricted permissions (0600). Do not commit to git.",
 	}
 

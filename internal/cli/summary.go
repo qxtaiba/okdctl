@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/qxtaiba/okd-proxmox-cli/internal/config"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/postinstall"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/tui"
+	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/distribution/okd/postinstall"
+	"github.com/qxtaiba/okdctl/internal/tui"
 )
 
 const (
@@ -127,7 +127,7 @@ func PostDeploySummary(cfg *config.Config, result *postinstall.Result) string {
 	sb.section("next steps")
 	sb.b.WriteString("    cluster deployed with haproxy handling ingress on the bastion.\n")
 	sb.b.WriteString("    if you deploy a loadbalancer provider (e.g., metallb), run:\n")
-	sb.b.WriteString("      " + tui.CodeInlineStyle.Render("openshitctl update-ingress") + "\n")
+	sb.b.WriteString("      " + tui.CodeInlineStyle.Render("okdctl update-ingress") + "\n")
 	sb.b.WriteString("    to auto-detect loadbalancer ips and switch dns over.\n")
 	sb.newline()
 

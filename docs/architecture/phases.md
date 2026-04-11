@@ -1,6 +1,6 @@
 # The phase model
 
-`openshitctl` organizes all its work into **phases** and **steps**. A phase
+`okdctl` organizes all its work into **phases** and **steps**. A phase
 is a cohesive unit of work (setup, install, post-install, destroy, cleanup);
 a step is one operation inside a phase (install a package, render a
 template, provision VMs). Phases are orchestrated by shared infrastructure

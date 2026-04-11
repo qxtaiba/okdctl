@@ -9,7 +9,7 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/logutil"
+	"github.com/qxtaiba/okdctl/internal/utils/logutil"
 )
 
 type WaitForOptions struct {

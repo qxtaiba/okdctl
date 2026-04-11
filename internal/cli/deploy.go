@@ -7,11 +7,11 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/qxtaiba/okd-proxmox-cli/internal/config"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/credentials"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/tui"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/tui/wizard"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/tui/wizard/steps"
+	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/credentials"
+	"github.com/qxtaiba/okdctl/internal/tui"
+	"github.com/qxtaiba/okdctl/internal/tui/wizard"
+	"github.com/qxtaiba/okdctl/internal/tui/wizard/steps"
 )
 
 var (
@@ -28,7 +28,7 @@ var deployCmd = &cobra.Command{
 }
 
 func init() {
-	deployCmd.Flags().StringVarP(&deployOutputFile, "output", "o", "openshitctl.yaml", "output file for configuration")
+	deployCmd.Flags().StringVarP(&deployOutputFile, "output", "o", "okdctl.yaml", "output file for configuration")
 	deployCmd.Flags().BoolVar(&deployMinimal, "minimal", false, "use minimal defaults (single-node cluster)")
 	deployCmd.Flags().BoolVar(&deployNonInteractive, "non-interactive", false, "use all defaults without prompts")
 }

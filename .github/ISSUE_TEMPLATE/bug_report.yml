@@ -1,5 +1,5 @@
 name: Bug report
-description: Report a bug in openshitctl
+description: Report a bug in okdctl
 title: "[bug]: "
 labels: ["bug", "needs-triage"]
 body:
@@ -7,16 +7,16 @@ body:
     attributes:
       value: |
         Thanks for taking the time to file a bug report. Please run
-        `openshitctl doctor` and paste its output in the "doctor output"
+        `okdctl doctor` and paste its output in the "doctor output"
         field below, along with any relevant error output from the
         command that was failing. The more context, the faster the fix.
 
   - type: input
     id: version
     attributes:
-      label: openshitctl version
-      description: Output of `openshitctl version`
-      placeholder: "openshitctl v0.1.0"
+      label: okdctl version
+      description: Output of `okdctl version`
+      placeholder: "okdctl v0.1.0"
     validations:
       required: true
 
@@ -24,7 +24,7 @@ body:
     id: os
     attributes:
       label: Host OS
-      description: What OS are you running openshitctl from?
+      description: What OS are you running okdctl from?
       options:
         - Debian 12
         - Debian 11
@@ -51,7 +51,7 @@ body:
     id: okd
     attributes:
       label: OKD version
-      description: From your config or `openshitctl.yaml`
+      description: From your config or `okdctl.yaml`
       placeholder: "4.15.0"
     validations:
       required: true
@@ -78,7 +78,7 @@ body:
       label: Steps to reproduce
       description: Minimal steps to reproduce. If you can't reproduce, say so.
       placeholder: |
-        1. Run `openshitctl deploy`
+        1. Run `okdctl deploy`
         2. Answer wizard with ...
         3. Error appears at step X
     validations:
@@ -89,7 +89,7 @@ body:
     attributes:
       label: Doctor output
       description: |
-        Paste the full output of `openshitctl doctor`. This captures
+        Paste the full output of `okdctl doctor`. This captures
         host OS, available binaries, port status, pull-secret validity,
         and disk space — the environment data most bugs depend on.
       render: shell
@@ -109,7 +109,7 @@ body:
     attributes:
       label: Pre-flight
       options:
-        - label: I ran `openshitctl doctor` and it did not flag the issue
+        - label: I ran `okdctl doctor` and it did not flag the issue
           required: true
         - label: I searched existing issues before filing
           required: true

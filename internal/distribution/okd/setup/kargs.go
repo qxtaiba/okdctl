@@ -3,7 +3,7 @@ package setup
 import (
 	"fmt"
 
-	"github.com/qxtaiba/okd-proxmox-cli/internal/config"
+	"github.com/qxtaiba/okdctl/internal/config"
 )
 
 type LiveKargsParams struct {

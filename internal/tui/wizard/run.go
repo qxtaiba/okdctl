@@ -6,7 +6,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/qxtaiba/okd-proxmox-cli/internal/config"
+	"github.com/qxtaiba/okdctl/internal/config"
 )
 
 func Run(ctx context.Context, steps []WizardStep, cfg *config.Config) (Result, error) {

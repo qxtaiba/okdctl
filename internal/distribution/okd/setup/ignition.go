@@ -9,9 +9,9 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/qxtaiba/okd-proxmox-cli/internal/config"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/templates"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
+	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/distribution/okd/templates"
+	"github.com/qxtaiba/okdctl/internal/utils/system"
 )
 
 // renderAndWrite calls render and atomically writes the result to path,

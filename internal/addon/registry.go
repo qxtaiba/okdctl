@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/qxtaiba/okd-proxmox-cli/internal/config"
+	"github.com/qxtaiba/okdctl/internal/config"
 )
 
 // registry is the global addon registry, populated via init() in each addon package.

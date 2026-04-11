@@ -9,7 +9,7 @@ coverage.html
 .env.local
 .env.*.local
 *.env
-openshitctl.env
+okdctl.env
 
 # Generated terraform tfvars (contains environment-specific values)
 infrastructure/terraform/environments/*/terraform.tfvars
@@ -81,8 +81,8 @@ Thumbs.db
 *.pfx
 
 # CLI generated files
-openshitctl.yaml
-.openshitctl/
+okdctl.yaml
+.okdctl/
 .deploy-state-*.json
 
 # Test artifacts

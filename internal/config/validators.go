@@ -8,8 +8,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/netutil"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
+	"github.com/qxtaiba/okdctl/internal/utils/netutil"
+	"github.com/qxtaiba/okdctl/internal/utils/system"
 )
 
 var (

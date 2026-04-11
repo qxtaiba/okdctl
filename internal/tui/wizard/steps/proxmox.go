@@ -1,8 +1,8 @@
 package steps
 
 import (
-	"github.com/qxtaiba/okd-proxmox-cli/internal/config"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/tui/wizard"
+	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 )
 
 func proxmoxGet(getter func(p *config.ProxmoxConfig) string) wizard.ConfigGetter {

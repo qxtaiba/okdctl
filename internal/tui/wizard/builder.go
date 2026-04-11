@@ -1,7 +1,7 @@
 package wizard
 
 import (
-	"github.com/qxtaiba/okd-proxmox-cli/internal/config"
+	"github.com/qxtaiba/okdctl/internal/config"
 )
 
 type StepBuilder struct {

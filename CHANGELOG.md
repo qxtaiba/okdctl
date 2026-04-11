@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- `openshitctl doctor` — preflight checks for OS, required binaries,
+- `okdctl doctor` — preflight checks for OS, required binaries,
   free ports, sudo access, pull-secret validity, disk space, Proxmox
   reachability
 - Apache-2.0 license
@@ -33,5 +33,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Initial public release.
 
-[Unreleased]: https://github.com/qxtaiba/okd-proxmox-cli/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/qxtaiba/okd-proxmox-cli/releases/tag/v0.1.0
+[Unreleased]: https://github.com/qxtaiba/okdctl/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/qxtaiba/okdctl/releases/tag/v0.1.0

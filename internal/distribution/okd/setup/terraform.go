@@ -5,9 +5,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/qxtaiba/okd-proxmox-cli/internal/config"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/phase"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/templates"
+	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
+	"github.com/qxtaiba/okdctl/internal/distribution/okd/templates"
 )
 
 func buildISOStrings(isoStorage, role string, count int) []string {

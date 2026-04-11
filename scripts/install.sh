@@ -1,12 +1,12 @@
 #!/bin/sh
-# openshitctl installer
+# okdctl installer
 # ---------------------
-# Downloads the latest (or a pinned) openshitctl release from GitHub,
+# Downloads the latest (or a pinned) okdctl release from GitHub,
 # verifies its SHA256 against the published SHA256SUMS file, and installs
 # the binary to /usr/local/bin (or $INSTALL_DIR if set).
 #
 # Usage:
-#   curl -sSfL https://raw.githubusercontent.com/qxtaiba/okd-proxmox-cli/main/scripts/install.sh | sh
+#   curl -sSfL https://raw.githubusercontent.com/qxtaiba/okdctl/main/scripts/install.sh | sh
 #
 # Environment variables:
 #   VERSION      - pin to a specific release, e.g. VERSION=v0.1.0 (default: latest)
@@ -17,8 +17,8 @@
 
 set -eu
 
-REPO="qxtaiba/okd-proxmox-cli"
-BINARY="openshitctl"
+REPO="qxtaiba/okdctl"
+BINARY="okdctl"
 VERSION="${VERSION:-}"
 INSTALL_DIR="${INSTALL_DIR:-/usr/local/bin}"
 INSECURE="${INSECURE:-}"
@@ -131,5 +131,5 @@ else
     die "$INSTALL_DIR is not writable and sudo is not available"
 fi
 
-green "openshitctl $VERSION installed to $INSTALL_DIR/$BINARY"
-info "run 'openshitctl doctor' to verify your environment"
+green "okdctl $VERSION installed to $INSTALL_DIR/$BINARY"
+info "run 'okdctl doctor' to verify your environment"

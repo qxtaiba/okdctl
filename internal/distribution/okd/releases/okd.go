@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/httputil"
+	"github.com/qxtaiba/okdctl/internal/utils/httputil"
 )
 
 type OKDVersionFetcher struct {

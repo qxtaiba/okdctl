@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
+	"github.com/qxtaiba/okdctl/internal/utils/system"
 )
 
 func (p *Phase) ValidateClusterAccess(ctx context.Context) error {
@@ -112,7 +112,7 @@ func (p *Phase) addKubeconfigToBashrc(homeDir, kubeconfigPath string) error {
 		}
 	}
 
-	if _, err := fmt.Fprintf(f, "\n# Added by okd-proxmox-cli\n%s\n", exportLine); err != nil {
+	if _, err := fmt.Fprintf(f, "\n# Added by okdctl\n%s\n", exportLine); err != nil {
 		return err
 	}
 

@@ -5,9 +5,9 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
-	"github.com/qxtaiba/okd-proxmox-cli/internal/config"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/tui"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/tui/wizard"
+	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/tui"
+	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 )
 
 type WelcomeMode int
@@ -95,14 +95,14 @@ func (s *WelcomeStep) View(width, height int) string {
 	var content string
 
 	if s.configExists {
-		content = titleStyle.Render("openshitctl setup") + "\n\n"
+		content = titleStyle.Render("okdctl setup") + "\n\n"
 		content += subtitleStyle.Render("existing configuration detected") + "\n\n"
 
 		options := []struct {
 			title string
 			desc  string
 		}{
-			{"deploy now", "deploy using current openshitctl.yaml"},
+			{"deploy now", "deploy using current okdctl.yaml"},
 			{"edit existing", "modify your current settings"},
 			{"start fresh", "create a new configuration"},
 		}
@@ -114,7 +114,7 @@ func (s *WelcomeStep) View(width, height int) string {
 			}
 		}
 	} else {
-		content = titleStyle.Render("openshitctl setup") + "\n\n"
+		content = titleStyle.Render("okdctl setup") + "\n\n"
 		content += subtitleStyle.Render("configure your kubernetes cluster") + "\n\n"
 		content += s.renderOption("get started", "create your first configuration", true)
 	}

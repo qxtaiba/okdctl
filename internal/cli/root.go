@@ -10,8 +10,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/qxtaiba/okd-proxmox-cli/internal/tui"
-	"github.com/qxtaiba/okd-proxmox-cli/pkg/version"
+	"github.com/qxtaiba/okdctl/internal/tui"
+	"github.com/qxtaiba/okdctl/pkg/version"
 )
 
 // cfgFile is package-scope state managed by cobra PersistentFlags. It is
@@ -22,7 +22,7 @@ import (
 var cfgFile string
 
 var rootCmd = &cobra.Command{
-	Use:   "openshitctl",
+	Use:   "okdctl",
 	Short: "Deploy production-ready Kubernetes clusters",
 	Long: `Homelab K8s - Deploy production-ready Kubernetes clusters
 
@@ -41,11 +41,11 @@ Highlights:
 		fmt.Println(tui.TitleStyle.Render("homelab k8s"))
 		fmt.Println()
 		fmt.Println(tui.MutedStyle.Render("quick start:"))
-		fmt.Println("  " + tui.HighlightStyle.Render("openshitctl deploy") + "           deploy a cluster")
-		fmt.Println("  " + tui.HighlightStyle.Render("openshitctl destroy") + "          destroy the cluster")
-		fmt.Println("  " + tui.HighlightStyle.Render("openshitctl update-ingress") + "   switch ingress to loadbalancer ips")
+		fmt.Println("  " + tui.HighlightStyle.Render("okdctl deploy") + "           deploy a cluster")
+		fmt.Println("  " + tui.HighlightStyle.Render("okdctl destroy") + "          destroy the cluster")
+		fmt.Println("  " + tui.HighlightStyle.Render("okdctl update-ingress") + "   switch ingress to loadbalancer ips")
 		fmt.Println()
-		fmt.Println(tui.MutedStyle.Render("run 'openshitctl --help' for all commands"))
+		fmt.Println(tui.MutedStyle.Render("run 'okdctl --help' for all commands"))
 	},
 }
 
@@ -69,7 +69,7 @@ func execute() int {
 }
 
 func init() {
-	rootCmd.PersistentFlags().StringVarP(&cfgFile, "config", "c", "openshitctl.yaml", "configuration file")
+	rootCmd.PersistentFlags().StringVarP(&cfgFile, "config", "c", "okdctl.yaml", "configuration file")
 
 	rootCmd.AddCommand(deployCmd)
 	rootCmd.AddCommand(destroyCmd)

@@ -6,8 +6,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/postinstall"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/tui"
+	"github.com/qxtaiba/okdctl/internal/distribution/okd/postinstall"
+	"github.com/qxtaiba/okdctl/internal/tui"
 )
 
 var (

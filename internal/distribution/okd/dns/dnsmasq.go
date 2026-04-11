@@ -12,8 +12,8 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/phase"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
+	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
+	"github.com/qxtaiba/okdctl/internal/utils/system"
 )
 
 const (

@@ -11,9 +11,9 @@ import (
 	"path/filepath"
 	"slices"
 
-	"github.com/qxtaiba/okd-proxmox-cli/internal/executor"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/logutil"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
+	"github.com/qxtaiba/okdctl/internal/executor"
+	"github.com/qxtaiba/okdctl/internal/utils/logutil"
+	"github.com/qxtaiba/okdctl/internal/utils/system"
 )
 
 // PlanFileName is the default plan file name used by Plan, Apply, and Cleanup.

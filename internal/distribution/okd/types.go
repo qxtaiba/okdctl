@@ -1,6 +1,6 @@
 package okd
 
-import "github.com/qxtaiba/okd-proxmox-cli/internal/distribution"
+import "github.com/qxtaiba/okdctl/internal/distribution"
 
 type ClusterStatus struct {
 	Phase        ClusterPhase

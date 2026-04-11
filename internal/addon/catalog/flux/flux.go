@@ -15,9 +15,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/qxtaiba/okd-proxmox-cli/internal/addon"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/executor"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
+	"github.com/qxtaiba/okdctl/internal/addon"
+	"github.com/qxtaiba/okdctl/internal/executor"
+	"github.com/qxtaiba/okdctl/internal/utils/system"
 )
 
 const (

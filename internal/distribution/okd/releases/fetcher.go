@@ -33,7 +33,7 @@ func (f *OKDVersionFetcher) fetchFromGitHub(ctx context.Context, repo string, pa
 		return nil, err
 	}
 	req.Header.Set("Accept", "application/vnd.github.v3+json")
-	req.Header.Set("User-Agent", "okd-proxmox-cli")
+	req.Header.Set("User-Agent", "okdctl")
 
 	resp, err := f.httpClient.Do(req)
 	if err != nil {

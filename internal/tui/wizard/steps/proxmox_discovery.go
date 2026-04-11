@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/qxtaiba/okd-proxmox-cli/internal/config"
+	"github.com/qxtaiba/okdctl/internal/config"
 )
 
 // proxmoxNode is a discovered Proxmox cluster node.

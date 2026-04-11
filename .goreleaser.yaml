@@ -1,16 +1,16 @@
 ---
 version: 2
 
-project_name: openshitctl
+project_name: okdctl
 
 before:
   hooks:
     - go mod tidy
 
 builds:
-  - id: openshitctl
-    main: ./cmd/openshitctl
-    binary: openshitctl
+  - id: okdctl
+    main: ./cmd/okdctl
+    binary: okdctl
     env:
       - CGO_ENABLED=0
     goos:
@@ -23,9 +23,9 @@ builds:
       - -trimpath
     ldflags:
       - -s -w
-      - -X github.com/qxtaiba/okd-proxmox-cli/pkg/version.Version={{.Version}}
-      - -X github.com/qxtaiba/okd-proxmox-cli/pkg/version.GitCommit={{.ShortCommit}}
-      - -X github.com/qxtaiba/okd-proxmox-cli/pkg/version.BuildDate={{.Date}}
+      - -X github.com/qxtaiba/okdctl/pkg/version.Version={{.Version}}
+      - -X github.com/qxtaiba/okdctl/pkg/version.GitCommit={{.ShortCommit}}
+      - -X github.com/qxtaiba/okdctl/pkg/version.BuildDate={{.Date}}
 
 archives:
   - formats:
@@ -80,27 +80,27 @@ signs:
 # with a Formula/ directory is enough), flip this to "auto" or remove
 # the line entirely.
 brews:
-  - name: openshitctl
+  - name: okdctl
     skip_upload: "true"
     repository:
       owner: qxtaiba
       name: homebrew-tap
       branch: main
     directory: Formula
-    homepage: "https://github.com/qxtaiba/okd-proxmox-cli"
+    homepage: "https://github.com/qxtaiba/okdctl"
     description: "Deploy OKD clusters on Proxmox with one binary"
     license: "Apache-2.0"
     test: |
-      system "#{bin}/openshitctl version"
+      system "#{bin}/okdctl version"
     install: |
-      bin.install "openshitctl"
+      bin.install "okdctl"
 
 # .deb / .rpm packages for Linux users who install via apt/dnf
 nfpms:
   - id: default
-    package_name: openshitctl
+    package_name: okdctl
     vendor: Q Al Nuaimi
-    homepage: "https://github.com/qxtaiba/okd-proxmox-cli"
+    homepage: "https://github.com/qxtaiba/okdctl"
     maintainer: "Q Al Nuaimi"
     description: |-
       Deploy production-ready OKD Kubernetes clusters on Proxmox VE.
@@ -113,11 +113,11 @@ nfpms:
     bindir: /usr/bin
     contents:
       - src: LICENSE
-        dst: /usr/share/doc/openshitctl/LICENSE
+        dst: /usr/share/doc/okdctl/LICENSE
       - src: NOTICE
-        dst: /usr/share/doc/openshitctl/NOTICE
+        dst: /usr/share/doc/okdctl/NOTICE
       - src: README.md
-        dst: /usr/share/doc/openshitctl/README.md
+        dst: /usr/share/doc/okdctl/README.md
 
 changelog:
   sort: asc
@@ -133,16 +133,16 @@ changelog:
 release:
   github:
     owner: qxtaiba
-    name: okd-proxmox-cli
+    name: okdctl
   prerelease: auto
   draft: false
   header: |
-    ## openshitctl {{ .Tag }}
+    ## okdctl {{ .Tag }}
 
-    See [CHANGELOG.md](https://github.com/qxtaiba/okd-proxmox-cli/blob/main/CHANGELOG.md)
+    See [CHANGELOG.md](https://github.com/qxtaiba/okdctl/blob/main/CHANGELOG.md)
     for human-curated release notes.
 
     All release artifacts are signed with sigstore keyless signing. Verify
     with `cosign verify-blob` (see README for instructions).
   footer: |
-    **Full Changelog**: https://github.com/qxtaiba/okd-proxmox-cli/compare/{{ .PreviousTag }}...{{ .Tag }}
+    **Full Changelog**: https://github.com/qxtaiba/okdctl/compare/{{ .PreviousTag }}...{{ .Tag }}

@@ -2,7 +2,7 @@
 # ================================
 
 # Binary name
-BINARY_NAME := openshitctl
+BINARY_NAME := okdctl
 
 # Build directory
 BUILD_DIR := bin
@@ -22,9 +22,9 @@ BUILD_DATE ?= $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
 
 # Linker flags for version injection
 LDFLAGS := -ldflags "-s -w \
-	-X github.com/qxtaiba/okd-proxmox-cli/pkg/version.Version=$(VERSION) \
-	-X github.com/qxtaiba/okd-proxmox-cli/pkg/version.GitCommit=$(GIT_COMMIT) \
-	-X github.com/qxtaiba/okd-proxmox-cli/pkg/version.BuildDate=$(BUILD_DATE)"
+	-X github.com/qxtaiba/okdctl/pkg/version.Version=$(VERSION) \
+	-X github.com/qxtaiba/okdctl/pkg/version.GitCommit=$(GIT_COMMIT) \
+	-X github.com/qxtaiba/okdctl/pkg/version.BuildDate=$(BUILD_DATE)"
 
 # Default target
 .DEFAULT_GOAL := help
@@ -39,15 +39,15 @@ all: deps lint test build ## Run all checks and build
 build: ## Build the binary
 	@echo "Building $(BINARY_NAME)..."
 	@mkdir -p $(BUILD_DIR)
-	$(GOBUILD) $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME) ./cmd/openshitctl
+	$(GOBUILD) $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME) ./cmd/okdctl
 
 build-all: ## Build for all supported platforms (linux+darwin, amd64+arm64)
 	@echo "Building for all platforms..."
 	@mkdir -p $(BUILD_DIR)
-	GOOS=darwin GOARCH=amd64 $(GOBUILD) $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-darwin-amd64 ./cmd/openshitctl
-	GOOS=darwin GOARCH=arm64 $(GOBUILD) $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-darwin-arm64 ./cmd/openshitctl
-	GOOS=linux GOARCH=amd64 $(GOBUILD) $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-linux-amd64 ./cmd/openshitctl
-	GOOS=linux GOARCH=arm64 $(GOBUILD) $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-linux-arm64 ./cmd/openshitctl
+	GOOS=darwin GOARCH=amd64 $(GOBUILD) $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-darwin-amd64 ./cmd/okdctl
+	GOOS=darwin GOARCH=arm64 $(GOBUILD) $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-darwin-arm64 ./cmd/okdctl
+	GOOS=linux GOARCH=amd64 $(GOBUILD) $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-linux-amd64 ./cmd/okdctl
+	GOOS=linux GOARCH=arm64 $(GOBUILD) $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-linux-arm64 ./cmd/okdctl
 
 install: build ## Install the binary to GOPATH/bin
 	@echo "Installing $(BINARY_NAME)..."
@@ -56,7 +56,7 @@ install: build ## Install the binary to GOPATH/bin
 ## Development targets
 
 run: ## Run the CLI directly
-	$(GOCMD) run ./cmd/openshitctl $(ARGS)
+	$(GOCMD) run ./cmd/okdctl $(ARGS)
 
 dev: ## Run with hot reload (requires air)
 	@which air > /dev/null || (echo "Installing air..." && go install github.com/cosmtrek/air@latest)
@@ -110,7 +110,7 @@ clean: ## Clean build artifacts
 	@echo "Cleaning..."
 	@rm -rf $(BUILD_DIR)
 	@rm -f coverage.out coverage.html
-	@rm -f openshitctl.yaml test.yaml demo.yaml
+	@rm -f okdctl.yaml test.yaml demo.yaml
 
 clean-all: clean ## Clean everything including dependencies
 	@rm -rf vendor

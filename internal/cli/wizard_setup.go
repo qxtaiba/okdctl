@@ -3,9 +3,9 @@ package cli
 import (
 	"context"
 
-	"github.com/qxtaiba/okd-proxmox-cli/internal/config"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/tui/wizard"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/tui/wizard/steps"
+	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/tui/wizard"
+	"github.com/qxtaiba/okdctl/internal/tui/wizard/steps"
 )
 
 func runWizardWithMode(ctx context.Context, cfg *config.Config, configExists bool) (wizard.Result, steps.WelcomeMode, error) {

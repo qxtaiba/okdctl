@@ -7,11 +7,11 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/dns"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/firewall"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/packages"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/netutil"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
+	"github.com/qxtaiba/okdctl/internal/distribution/okd/dns"
+	"github.com/qxtaiba/okdctl/internal/distribution/okd/firewall"
+	"github.com/qxtaiba/okdctl/internal/distribution/okd/packages"
+	"github.com/qxtaiba/okdctl/internal/utils/netutil"
+	"github.com/qxtaiba/okdctl/internal/utils/system"
 )
 
 // stopAndDisableService stops and disables a systemd service, logging warnings on failure.

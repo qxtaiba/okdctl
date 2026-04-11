@@ -7,11 +7,11 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/packages"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/phase"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/setup"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/platform"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
+	"github.com/qxtaiba/okdctl/internal/distribution/okd/packages"
+	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
+	"github.com/qxtaiba/okdctl/internal/distribution/okd/setup"
+	"github.com/qxtaiba/okdctl/internal/utils/platform"
+	"github.com/qxtaiba/okdctl/internal/utils/system"
 )
 
 // detectOS returns the detected host OS, falling back to RHEL if detection

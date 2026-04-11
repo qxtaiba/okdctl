@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/qxtaiba/okd-proxmox-cli/internal/cluster"
+	"github.com/qxtaiba/okdctl/internal/cluster"
 )
 
 func (p *Phase) WaitForBootstrap(ctx context.Context, clusterDir string, opts *Options) error {

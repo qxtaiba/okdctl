@@ -6,8 +6,8 @@ import (
 	"context"
 	"log/slog"
 
-	"github.com/qxtaiba/okd-proxmox-cli/internal/config"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/executor"
+	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/executor"
 )
 
 type Addon interface {

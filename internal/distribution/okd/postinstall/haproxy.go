@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/firewall"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/phase"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/netutil"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
+	"github.com/qxtaiba/okdctl/internal/distribution/okd/firewall"
+	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
+	"github.com/qxtaiba/okdctl/internal/utils/netutil"
+	"github.com/qxtaiba/okdctl/internal/utils/system"
 )
 
 // RemoveHAProxy stops and disables HAProxy on the bastion, removing it as the API load balancer.

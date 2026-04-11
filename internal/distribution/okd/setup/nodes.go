@@ -3,8 +3,8 @@ package setup
 import (
 	"fmt"
 
-	"github.com/qxtaiba/okd-proxmox-cli/internal/config"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/netutil"
+	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/utils/netutil"
 )
 
 func (p *Phase) BuildNodeList(cfg *config.Config) ([]NodeInfo, error) {

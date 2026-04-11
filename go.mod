@@ -1,4 +1,4 @@
-module github.com/qxtaiba/okd-proxmox-cli
+module github.com/qxtaiba/okdctl
 
 go 1.25.0
 

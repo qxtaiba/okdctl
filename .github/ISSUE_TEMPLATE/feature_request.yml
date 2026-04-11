@@ -27,7 +27,7 @@ body:
     id: proposed
     attributes:
       label: Proposed solution
-      description: How do you imagine openshitctl should address this?
+      description: How do you imagine okdctl should address this?
     validations:
       required: true
 
@@ -45,7 +45,7 @@ body:
     id: scope
     attributes:
       label: Scope
-      description: Which part of openshitctl would this touch?
+      description: Which part of okdctl would this touch?
       options:
         - CLI / wizard UX
         - Phase model (setup/install/postinstall/destroy/cleanup)

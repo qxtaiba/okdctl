@@ -7,11 +7,11 @@ import (
 	"log/slog"
 	"path/filepath"
 
-	"github.com/qxtaiba/okd-proxmox-cli/internal/config"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/cleanup"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/phase"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/executor"
+	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/distribution"
+	"github.com/qxtaiba/okdctl/internal/distribution/okd/cleanup"
+	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
+	"github.com/qxtaiba/okdctl/internal/executor"
 )
 
 // Options configures the destroy phase.

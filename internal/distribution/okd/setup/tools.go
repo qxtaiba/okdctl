@@ -9,13 +9,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/qxtaiba/okd-proxmox-cli/internal/addon"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/config"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/phase"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/executor"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/download"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/platform"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
+	"github.com/qxtaiba/okdctl/internal/addon"
+	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
+	"github.com/qxtaiba/okdctl/internal/executor"
+	"github.com/qxtaiba/okdctl/internal/utils/download"
+	"github.com/qxtaiba/okdctl/internal/utils/platform"
+	"github.com/qxtaiba/okdctl/internal/utils/system"
 )
 
 // ExternalToolBinaries returns the list of external tool binaries installed to /usr/local/bin.

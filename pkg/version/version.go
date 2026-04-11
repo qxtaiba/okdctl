@@ -1,4 +1,4 @@
-// Package version provides version information for the openshitctl CLI.
+// Package version provides version information for the okdctl CLI.
 package version
 
 import (

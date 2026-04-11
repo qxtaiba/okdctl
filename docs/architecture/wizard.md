@@ -1,8 +1,8 @@
 # The wizard
 
 The wizard is the interactive TUI that walks the user through configuring
-a cluster. It runs the first time `openshitctl deploy` is invoked without
-an existing `openshitctl.yaml`, and can be re-run on demand to edit an
+a cluster. It runs the first time `okdctl deploy` is invoked without
+an existing `okdctl.yaml`, and can be re-run on demand to edit an
 existing config.
 
 ## Data-driven, not code-driven

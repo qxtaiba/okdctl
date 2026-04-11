@@ -8,13 +8,13 @@ import (
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
 
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
+	"github.com/qxtaiba/okdctl/internal/utils/system"
 )
 
 const (
-	ConfigFileName = "openshitctl"
+	ConfigFileName = "okdctl"
 	ConfigFileType = "yaml"
-	ConfigDirName  = ".openshitctl"
+	ConfigDirName  = ".okdctl"
 )
 
 type Loader struct {
@@ -30,7 +30,7 @@ func NewLoader() *Loader {
 	if home, err := os.UserHomeDir(); err == nil {
 		v.AddConfigPath(filepath.Join(home, ConfigDirName))
 	}
-	v.AddConfigPath("/etc/openshitctl")
+	v.AddConfigPath("/etc/okdctl")
 
 	// AutomaticEnv binds HOMELAB_* env vars into the config tree via mapstructure.
 	// Credential fields (Password, APIToken) carry `mapstructure:"-"` so they are

@@ -7,9 +7,9 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/releases"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/tui/wizard"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/tui/wizard/components"
+	"github.com/qxtaiba/okdctl/internal/distribution/okd/releases"
+	"github.com/qxtaiba/okdctl/internal/tui/wizard"
+	"github.com/qxtaiba/okdctl/internal/tui/wizard/components"
 )
 
 type versionsLoadedMsg struct {

@@ -5,7 +5,7 @@ import (
 
 	"charm.land/lipgloss/v2"
 
-	"github.com/qxtaiba/okd-proxmox-cli/internal/tui"
+	"github.com/qxtaiba/okdctl/internal/tui"
 )
 
 var (

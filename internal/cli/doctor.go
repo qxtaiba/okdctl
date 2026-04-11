@@ -18,15 +18,15 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/qxtaiba/okd-proxmox-cli/internal/config"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/tui"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/platform"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/system"
+	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/tui"
+	"github.com/qxtaiba/okdctl/internal/utils/platform"
+	"github.com/qxtaiba/okdctl/internal/utils/system"
 )
 
 const goosDarwin = "darwin"
 
-// doctorCmd is the user-facing 'openshitctl doctor' command. It is separate
+// doctorCmd is the user-facing 'okdctl doctor' command. It is separate
 // from main.preflight() (which is a startup guardrail) — doctor runs a
 // comprehensive environment audit and reports status for each check.
 var doctorCmd = &cobra.Command{
@@ -41,7 +41,7 @@ with a bracketed label:
   ⚠ [warn] : something is suboptimal or missing but can be handled
              during deploy (e.g., 'oc' will be auto-downloaded into
              /usr/local/bin)
-  ✗ [fail] : this must be fixed before 'openshitctl deploy' will
+  ✗ [fail] : this must be fixed before 'okdctl deploy' will
              succeed
 
 Exit code is 0 if there are no [fail] results ([warn] is tolerated),
@@ -203,7 +203,7 @@ func checkHostOS(_ context.Context) checkResult {
 // the check so it shows up green in the output for user confidence.
 func checkNotRoot(_ context.Context) checkResult {
 	if os.Geteuid() == 0 {
-		return checkResult{sev: sevFail, detail: "running as root; openshitctl uses sudo internally"}
+		return checkResult{sev: sevFail, detail: "running as root; okdctl uses sudo internally"}
 	}
 	return checkResult{sev: sevPass, detail: "running as unprivileged user"}
 }
@@ -211,7 +211,7 @@ func checkNotRoot(_ context.Context) checkResult {
 func checkPath(_ context.Context) checkResult {
 	path := os.Getenv("PATH")
 	if !strings.Contains(path, "/usr/local/bin") {
-		return checkResult{sev: sevWarn, detail: "/usr/local/bin missing from path; openshitctl will prepend it at startup"}
+		return checkResult{sev: sevWarn, detail: "/usr/local/bin missing from path; okdctl will prepend it at startup"}
 	}
 	return checkResult{sev: sevPass, detail: "/usr/local/bin found on path"}
 }
@@ -317,14 +317,14 @@ func checkSSHKey(_ context.Context) checkResult {
 func checkPullSecret(_ context.Context) checkResult {
 	configPath := cfgFile
 	if configPath == "" {
-		configPath = "openshitctl.yaml"
+		configPath = "okdctl.yaml"
 	}
 
 	if _, err := os.Stat(configPath); err != nil {
 		if os.IsNotExist(err) {
 			return checkResult{
 				sev:    sevWarn,
-				detail: "no config yet at " + configPath + "; run 'openshitctl deploy' to set the pull secret path in the wizard",
+				detail: "no config yet at " + configPath + "; run 'okdctl deploy' to set the pull secret path in the wizard",
 			}
 		}
 		return checkResult{sev: sevFail, detail: "cannot stat config: " + err.Error()}
@@ -337,7 +337,7 @@ func checkPullSecret(_ context.Context) checkResult {
 	}
 
 	if cfg.Files.PullSecret == "" {
-		return checkResult{sev: sevFail, detail: "files.pull_secret not set in " + configPath + "; run 'openshitctl deploy' to configure"}
+		return checkResult{sev: sevFail, detail: "files.pull_secret not set in " + configPath + "; run 'okdctl deploy' to configure"}
 	}
 
 	path := system.ExpandPath(cfg.Files.PullSecret)
@@ -389,7 +389,7 @@ func checkDiskSpace(_ context.Context) checkResult {
 	return checkResult{sev: sevPass, detail: fmt.Sprintf("%d gb free in %s", freeGB, u.HomeDir)}
 }
 
-// checkPorts probes each port openshitctl's deploy will bind by trying
+// checkPorts probes each port okdctl's deploy will bind by trying
 // to connect to 127.0.0.1:<port>. Connect-probe beats bind-probe for the
 // preflight use case: the real deploy binds happen via sudo (haproxy,
 // dnsmasq, apache), so the relevant question is "is something already

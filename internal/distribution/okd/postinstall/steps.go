@@ -4,10 +4,10 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/qxtaiba/okd-proxmox-cli/internal/addon"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/config"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/distribution/okd/phase"
+	"github.com/qxtaiba/okdctl/internal/addon"
+	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/distribution"
+	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 )
 
 const (

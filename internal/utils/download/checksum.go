@@ -12,7 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/httputil"
+	"github.com/qxtaiba/okdctl/internal/utils/httputil"
 )
 
 const maxChecksumFileSize = 1024 * 1024

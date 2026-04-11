@@ -1,5 +1,5 @@
 // Package wizard implements the bubbletea model and step orchestration for
-// openshitctl's interactive configuration wizard, producing a validated
+// okdctl's interactive configuration wizard, producing a validated
 // config.Config for downstream deployment.
 package wizard
 
@@ -11,7 +11,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"golang.org/x/term"
 
-	"github.com/qxtaiba/okd-proxmox-cli/internal/config"
+	"github.com/qxtaiba/okdctl/internal/config"
 )
 
 const (

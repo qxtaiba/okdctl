@@ -20,10 +20,10 @@ import (
 	"log/slog"
 	"path/filepath"
 
-	"github.com/qxtaiba/okd-proxmox-cli/internal/config"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/infrastructure/terraform"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/logutil"
-	"github.com/qxtaiba/okd-proxmox-cli/internal/utils/netutil"
+	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/infrastructure/terraform"
+	"github.com/qxtaiba/okdctl/internal/utils/logutil"
+	"github.com/qxtaiba/okdctl/internal/utils/netutil"
 )
 
 type Provider struct {
@@ -153,13 +153,13 @@ func (p *Provider) Provision(ctx context.Context, cfg *config.Config, opts Provi
 		if errors.Is(ctx.Err(), context.Canceled) {
 			return nil, fmt.Errorf("terraform apply interrupted: %w", err)
 		}
-		p.logger.Warn("terraform: apply failed; partial infrastructure may exist. run 'openshitctl destroy' to clean up")
+		p.logger.Warn("terraform: apply failed; partial infrastructure may exist. run 'okdctl destroy' to clean up")
 		return nil, fmt.Errorf("terraform apply failed: %w", err)
 	}
 
 	result, err := p.retrieveProvisionResult(cfg)
 	if err != nil {
-		return nil, fmt.Errorf("terraform apply succeeded but IP retrieval failed; run 'openshitctl destroy' to clean up: %w", err)
+		return nil, fmt.Errorf("terraform apply succeeded but IP retrieval failed; run 'okdctl destroy' to clean up: %w", err)
 	}
 
 	if len(result.VMs) == 0 {
