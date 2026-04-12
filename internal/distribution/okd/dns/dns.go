@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"net"
 	"os"
 	"path/filepath"
 
@@ -159,18 +158,14 @@ func DeployProduction(ctx context.Context, cfg *config.Config, appsIP, kubeVipIP
 	if err != nil {
 		return fmt.Errorf("failed to build dns config data: %w", err)
 	}
-	if appsIP != "" {
-		if net.ParseIP(appsIP) == nil {
-			return fmt.Errorf("invalid apps IP address: %s", appsIP)
-		}
+	if appsIP != "" && !config.IsValidIP(appsIP) {
+		return fmt.Errorf("invalid apps IP address: %s", appsIP)
 	}
-	if kubeVipIP != "" {
-		if net.ParseIP(kubeVipIP) == nil {
-			return fmt.Errorf("invalid kube-vip IP address: %s", kubeVipIP)
-		}
+	if kubeVipIP != "" && !config.IsValidIP(kubeVipIP) {
+		return fmt.Errorf("invalid kube-vip IP address: %s", kubeVipIP)
 	}
 	for _, cd := range customDomains {
-		if net.ParseIP(cd.IP) == nil {
+		if !config.IsValidIP(cd.IP) {
 			return fmt.Errorf("invalid custom domain IP address for %s: %s", cd.Domain, cd.IP)
 		}
 	}

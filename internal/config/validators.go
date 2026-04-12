@@ -4,7 +4,9 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/netip"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -47,12 +49,8 @@ func validateRequired(cfg *Config, result *ValidationResult) {
 }
 
 func validateEnums(cfg *Config, result *ValidationResult) {
-	if cfg.Cluster.Name != "" {
-		if !IsValidDNSLabel(cfg.Cluster.Name) {
-			result.AddError(FieldClusterName, "must be a valid DNS label (lowercase, alphanumeric, hyphens)")
-		} else if len(cfg.Cluster.Name) > 63 {
-			result.AddError(FieldClusterName, "must be 63 characters or less")
-		}
+	if cfg.Cluster.Name != "" && !IsValidDNSLabel(cfg.Cluster.Name) {
+		result.AddError(FieldClusterName, "must be a valid DNS label (lowercase, alphanumeric, hyphens)")
 	}
 
 	if cfg.Cluster.Domain != "" && !isValidDomain(cfg.Cluster.Domain) {
@@ -192,19 +190,20 @@ func validateAdvancedNetworking(cfg *Config, result *ValidationResult) {
 		{"bastion.ip", bastionIP},
 	}
 
-	seen := make(map[string]string)
+	seen := make(map[netip.Addr]string)
 	for _, nip := range uniqueIPs {
-		if nip.ip == "" || !IsValidIP(nip.ip) {
+		if nip.ip == "" {
 			continue
 		}
-		parsed := net.ParseIP(nip.ip)
-		normalized := parsed.String()
-
-		if prevField, exists := seen[normalized]; exists {
+		addr, err := netip.ParseAddr(nip.ip)
+		if err != nil {
+			continue
+		}
+		if prevField, exists := seen[addr]; exists {
 			result.AddError(fmt.Sprintf("networking.%s", nip.name),
 				fmt.Sprintf("ip %s is already used by %s", nip.ip, prevField))
 		} else {
-			seen[normalized] = nip.name
+			seen[addr] = nip.name
 		}
 	}
 }
@@ -367,52 +366,38 @@ func isValidHostOrIP(s string) bool {
 }
 
 func IsValidIP(s string) bool {
-	return net.ParseIP(s) != nil
+	_, err := netip.ParseAddr(s)
+	return err == nil
 }
 
 func IsValidCIDR(s string) bool {
-	_, _, err := net.ParseCIDR(s)
+	_, err := netip.ParsePrefix(s)
 	return err == nil
 }
 
 func isValidNetmask(s string) bool {
-	prefix := strings.TrimPrefix(s, "/")
-	if n, err := strconv.Atoi(prefix); err == nil && n >= 0 && n <= 32 {
-		return true
+	if strings.HasPrefix(s, "/") {
+		_, err := netip.ParsePrefix("0.0.0.0" + s)
+		return err == nil
 	}
-
 	ip := net.ParseIP(s)
 	if ip == nil {
 		return false
 	}
-
 	ip4 := ip.To4()
 	if ip4 == nil {
 		return false
 	}
-
-	// Valid netmask: contiguous 1s followed by contiguous 0s
-	mask := uint32(ip4[0])<<24 | uint32(ip4[1])<<16 | uint32(ip4[2])<<8 | uint32(ip4[3])
-	inverted := ^mask
-	return inverted == 0 || (inverted&(inverted+1)) == 0
+	ones, bits := net.IPMask(ip4).Size()
+	return bits != 0 && ones >= 0
 }
 
 func isValidDistribution(d DistributionType) bool {
-	for _, dist := range SupportedDistributions() {
-		if dist == d {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(SupportedDistributions(), d)
 }
 
 func isValidProvider(p ProviderType) bool {
-	for _, prov := range SupportedProviders() {
-		if prov == p {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(SupportedProviders(), p)
 }
 
 func getMinMemoryForDistribution(d DistributionType) int {
@@ -423,6 +408,41 @@ func getMinMemoryForDistribution(d DistributionType) int {
 		return mem
 	}
 	return DefaultMinMemoryMB
+}
+
+func ValidateClusterName(value string) error {
+	if len(value) < 2 {
+		return errors.New("must be at least 2 characters")
+	}
+	if !IsValidDNSLabel(value) {
+		return errors.New("must start with letter, contain only lowercase letters, numbers, hyphens, max 63 chars")
+	}
+	return nil
+}
+
+func ValidateDomain(value string) error {
+	if len(value) < 3 {
+		return errors.New("must be at least 3 characters")
+	}
+	if !isValidDomain(value) {
+		return errors.New("invalid domain format")
+	}
+	return nil
+}
+
+func ValidateProxmoxHost(value string) error {
+	host := value
+	if strings.Contains(value, ":") {
+		h, _, err := net.SplitHostPort(value)
+		if err != nil {
+			return errors.New("invalid host:port format")
+		}
+		host = h
+	}
+	if host == "" || !isValidHostOrIP(host) {
+		return errors.New("must be a valid hostname or IP address")
+	}
+	return nil
 }
 
 func ValidateIP(value string) error {

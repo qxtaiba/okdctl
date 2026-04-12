@@ -27,28 +27,27 @@ func ValidateIPRangeInCIDR(startIP string, count int, cidr string) error {
 		return fmt.Errorf("count must be positive: %d", count)
 	}
 
-	_, network, err := net.ParseCIDR(cidr)
+	prefix, err := netip.ParsePrefix(cidr)
 	if err != nil {
 		return fmt.Errorf("invalid CIDR %q: %w", cidr, err)
 	}
 
-	start := net.ParseIP(startIP)
-	if start == nil || start.To4() == nil {
+	start, err := netip.ParseAddr(startIP)
+	if err != nil || !start.Is4() {
 		return fmt.Errorf("invalid IPv4 address: %s", startIP)
 	}
 
-	if !network.Contains(start) {
+	if !prefix.Contains(start) {
 		return fmt.Errorf("start IP %s is not within CIDR %s", startIP, cidr)
 	}
 
-	// Check the last IP in the range
 	endIP, err := CalculateVMIP(startIP, count-1)
 	if err != nil {
 		return fmt.Errorf("failed to calculate end of range: %w", err)
 	}
 
-	end := net.ParseIP(endIP)
-	if !network.Contains(end) {
+	end, _ := netip.ParseAddr(endIP)
+	if !prefix.Contains(end) {
 		return fmt.Errorf("IP range %s + %d addresses exceeds CIDR %s (last IP would be %s)", startIP, count, cidr, endIP)
 	}
 
@@ -101,31 +100,17 @@ func DeriveVIPFromStaticIP(staticIPStart string) (string, error) {
 }
 
 func IPInCIDR(ip, cidr string) (bool, error) {
-	parsedIP := net.ParseIP(ip)
-	if parsedIP == nil {
-		return false, fmt.Errorf("invalid IP address %q", ip)
+	addr, err := netip.ParseAddr(ip)
+	if err != nil {
+		return false, fmt.Errorf("invalid IP address %q: %w", ip, err)
 	}
 
-	_, network, err := net.ParseCIDR(cidr)
+	prefix, err := netip.ParsePrefix(cidr)
 	if err != nil {
 		return false, fmt.Errorf("invalid CIDR %q: %w", cidr, err)
 	}
 
-	return network.Contains(parsedIP), nil
-}
-
-func SplitIPv4(ip string) (base string, lastOctet int, err error) {
-	parsed := net.ParseIP(ip)
-	if parsed == nil {
-		return "", 0, fmt.Errorf("invalid IP address: %s", ip)
-	}
-	parsed = parsed.To4()
-	if parsed == nil {
-		return "", 0, fmt.Errorf("only IPv4 addresses are supported: %s", ip)
-	}
-	base = fmt.Sprintf("%d.%d.%d", parsed[0], parsed[1], parsed[2])
-	lastOctet = int(parsed[3])
-	return base, lastOctet, nil
+	return prefix.Contains(addr), nil
 }
 
 func CIDRsOverlap(cidr1, cidr2 string) (bool, error) {

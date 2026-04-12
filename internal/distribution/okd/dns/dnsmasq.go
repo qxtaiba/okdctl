@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -12,6 +11,7 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/utils/system"
 )
@@ -113,8 +113,8 @@ func getActiveConnection(ctx context.Context) (string, error) {
 
 func validateDNSAddresses(addresses []string) error {
 	for _, addr := range addresses {
-		if net.ParseIP(addr) == nil {
-			return fmt.Errorf("invalid DNS address: %s", addr)
+		if err := config.ValidateIP(addr); err != nil {
+			return fmt.Errorf("invalid DNS address %s: %w", addr, err)
 		}
 	}
 	return nil
