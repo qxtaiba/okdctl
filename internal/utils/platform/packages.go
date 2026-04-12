@@ -20,8 +20,8 @@ type PackageManager interface {
 }
 
 // NewPackageManager returns the appropriate PackageManager for the detected OS.
-func NewPackageManager(os OS) PackageManager {
-	if os.Family == familyDebian {
+func NewPackageManager(detected OS) PackageManager {
+	if detected.Family == familyDebian {
 		return &APTManager{}
 	}
 	return &DNFManager{}

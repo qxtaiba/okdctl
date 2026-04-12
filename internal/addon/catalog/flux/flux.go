@@ -225,22 +225,7 @@ func (f *Flux) ValidateSettings(settings map[string]string) []string {
 			!strings.HasPrefix(repo, "git://") && !strings.HasPrefix(repo, "git@") {
 			errs = append(errs, "repository must be a valid Git URL (ssh://, https://, git://, or git@)")
 		}
-		if strings.HasPrefix(repo, "ssh://") {
-			afterScheme := strings.TrimPrefix(repo, "ssh://")
-			if slashIdx := strings.Index(afterScheme, "/"); slashIdx > 0 {
-				host := afterScheme[:slashIdx]
-				if strings.Contains(host, ":") && !strings.Contains(host, "]:") {
-					// Allow host:port (numeric) but reject SCP-style host:path
-					colonIdx := strings.LastIndex(host, ":")
-					portPart := host[colonIdx+1:]
-					if !isNumeric(portPart) {
-						errs = append(errs, "ssh:// URLs must use slashes for path (ssh://git@github.com/org/repo.git), not colons (ssh://git@github.com:org/repo.git)")
-					}
-				}
-			} else if strings.Contains(afterScheme, ":") {
-				errs = append(errs, "ssh:// URLs must use slashes for path (ssh://git@github.com/org/repo.git), not colons (ssh://git@github.com:org/repo.git)")
-			}
-		}
+		errs = append(errs, validateSSHRepoURL(repo)...)
 	}
 	if branch := settings["branch"]; branch != "" && strings.ContainsAny(branch, " \t") {
 		errs = append(errs, "branch name cannot contain spaces")
@@ -421,6 +406,29 @@ func getTimeout(settings map[string]string, key string, defaultTimeout time.Dura
 		}
 	}
 	return defaultTimeout
+}
+
+func validateSSHRepoURL(repo string) []string {
+	if !strings.HasPrefix(repo, "ssh://") {
+		return nil
+	}
+	const scpErr = "ssh:// URLs must use slashes for path (ssh://git@github.com/org/repo.git), not colons (ssh://git@github.com:org/repo.git)"
+	afterScheme := strings.TrimPrefix(repo, "ssh://")
+	slashIdx := strings.Index(afterScheme, "/")
+	if slashIdx <= 0 {
+		if strings.Contains(afterScheme, ":") {
+			return []string{scpErr}
+		}
+		return nil
+	}
+	host := afterScheme[:slashIdx]
+	if strings.Contains(host, ":") && !strings.Contains(host, "]:") {
+		colonIdx := strings.LastIndex(host, ":")
+		if !isNumeric(host[colonIdx+1:]) {
+			return []string{scpErr}
+		}
+	}
+	return nil
 }
 
 func isNumeric(s string) bool {
