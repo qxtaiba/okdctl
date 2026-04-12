@@ -70,7 +70,7 @@ func DetectBackend(ctx context.Context) Backend {
 	}
 
 	if _, err := exec.LookPath("ufw"); err == nil {
-		cmd := exec.CommandContext(ctx, "ufw", "status")
+		cmd := exec.CommandContext(ctx, "sudo", "ufw", "status")
 		if output, err := cmd.Output(); err == nil {
 			if strings.Contains(string(output), "Status: active") {
 				return UFW

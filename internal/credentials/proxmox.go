@@ -142,8 +142,8 @@ func applyEnvSource(creds *ProxmoxCredentials, configHadCreds bool) {
 	} else {
 		creds.EndpointFromConfig = true
 	}
-	if os.Getenv("PROXMOX_VE_INSECURE") == "true" {
-		creds.Insecure = true
+	if v, ok := os.LookupEnv("PROXMOX_VE_INSECURE"); ok {
+		creds.Insecure = v == "true"
 	}
 }
 

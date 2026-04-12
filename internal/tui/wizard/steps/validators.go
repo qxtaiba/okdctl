@@ -76,3 +76,16 @@ func ValidateFilePath(value string) error {
 	}
 	return nil
 }
+
+func validateDNSServers(value string) error {
+	for _, entry := range strings.Split(value, ",") {
+		entry = strings.TrimSpace(entry)
+		if entry == "" {
+			continue
+		}
+		if err := config.ValidateIP(entry); err != nil {
+			return fmt.Errorf("invalid dns server %q: %w", entry, err)
+		}
+	}
+	return nil
+}

@@ -44,6 +44,7 @@ var NetworkingStepDefinition = wizard.StepDefinition{
 					Default:  "192.168.1.1",
 					Help:     "upstream dns for dnsmasq on bastion — vms resolve through bastion automatically",
 					Required: true,
+					Validate: validateDNSServers,
 					ConfigSet: func(cfg *config.Config, value string) error {
 						servers := strings.Split(value, ",")
 						cfg.Networking.DNS = make([]string, 0, len(servers))

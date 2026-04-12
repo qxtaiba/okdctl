@@ -113,16 +113,8 @@ func (p *Phase) installTerraform(ctx context.Context) error {
 
 	switch p.OS.Family {
 	case "debian":
-		if err := system.RunSudo(ctx, "sh", "-c",
-			"wget -O- https://apt.releases.hashicorp.com/gpg | gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg"); err != nil {
-			return fmt.Errorf("failed to add HashiCorp GPG key: %w", err)
-		}
-		if err := system.RunSudo(ctx, "sh", "-c",
-			`echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" > /etc/apt/sources.list.d/hashicorp.list`); err != nil {
-			return fmt.Errorf("failed to add HashiCorp repository: %w", err)
-		}
-		if err := system.RunSudo(ctx, "apt-get", "update"); err != nil {
-			return fmt.Errorf("failed to update package list: %w", err)
+		if err := installHashiCorpDebianRepo(ctx); err != nil {
+			return err
 		}
 	default: // rhel family
 		repoURL := "https://rpm.releases.hashicorp.com/RHEL/hashicorp.repo"
@@ -217,4 +209,45 @@ func getToolVersion(tool, flag string) string {
 		return lines[0]
 	}
 	return "unknown"
+}
+
+func installHashiCorpDebianRepo(ctx context.Context) error {
+	gpgPath := "/usr/share/keyrings/hashicorp-archive-keyring.gpg"
+
+	gpgTmp, err := system.WriteTempFile("hashicorp-gpg", 0o644, func(f *os.File) error {
+		cmd := exec.CommandContext(ctx, "wget", "-qO-", "https://apt.releases.hashicorp.com/gpg")
+		cmd.Stdout = f
+		return cmd.Run()
+	})
+	if err != nil {
+		return fmt.Errorf("failed to download HashiCorp GPG key: %w", err)
+	}
+	defer func() { _ = os.Remove(gpgTmp) }()
+
+	if err := system.RunSudo(ctx, "gpg", "--dearmor", "-o", gpgPath, gpgTmp); err != nil {
+		return fmt.Errorf("failed to dearmor HashiCorp GPG key: %w", err)
+	}
+
+	codeCmd := exec.CommandContext(ctx, "lsb_release", "-cs")
+	codeOut, err := codeCmd.Output()
+	if err != nil {
+		return fmt.Errorf("failed to detect debian codename: %w", err)
+	}
+	codename := strings.TrimSpace(string(codeOut))
+
+	listContent := fmt.Sprintf("deb [signed-by=%s] https://apt.releases.hashicorp.com %s main\n", gpgPath, codename)
+	listPath := "/etc/apt/sources.list.d/hashicorp.list"
+	listTmp, err := system.WriteTempFile("hashicorp-list", 0o644, func(f *os.File) error {
+		_, err := f.WriteString(listContent)
+		return err
+	})
+	if err != nil {
+		return fmt.Errorf("failed to write HashiCorp repo list: %w", err)
+	}
+	defer func() { _ = os.Remove(listTmp) }()
+
+	if err := system.CopyFileWithElevation(ctx, listTmp, listPath, "add hashicorp repository"); err != nil {
+		return fmt.Errorf("failed to install HashiCorp repo list: %w", err)
+	}
+	return system.RunSudo(ctx, "apt-get", "update")
 }

@@ -62,7 +62,11 @@ func runUpdateIngress(cmd *cobra.Command, _ []string) error {
 		}
 	}
 
-	p := createOKDProvisioner(cfg, nil)
+	projectRoot, err := resolveProjectRootOrDie()
+	if err != nil {
+		return err
+	}
+	p := createOKDProvisioner(cfg, nil, projectRoot)
 
 	tui.Info("detecting ingress strategy and loadbalancer ips...")
 	startTime := time.Now()

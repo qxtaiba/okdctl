@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"os"
 	"os/exec"
 	"strings"
 
@@ -110,6 +111,35 @@ func (m *APTManager) IsInstalled(pkg string) bool {
 
 func (m *APTManager) AddRepo(ctx context.Context, name, url string, logger *slog.Logger) error {
 	logger.Info(fmt.Sprintf("packages: adding repository %s", name))
-	return system.RunSudo(ctx, "sh", "-c",
-		fmt.Sprintf("echo 'deb [arch=$(dpkg --print-architecture)] %s any main' > /etc/apt/sources.list.d/%s.list && apt-get update", url, name))
+
+	arch, err := dpkgArch(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to detect architecture: %w", err)
+	}
+
+	listContent := fmt.Sprintf("deb [arch=%s] %s any main\n", arch, url)
+	listPath := fmt.Sprintf("/etc/apt/sources.list.d/%s.list", name)
+
+	tmpPath, err := system.WriteTempFile("apt-repo", 0o644, func(f *os.File) error {
+		_, err := f.WriteString(listContent)
+		return err
+	})
+	if err != nil {
+		return fmt.Errorf("failed to write repo list: %w", err)
+	}
+	defer func() { _ = os.Remove(tmpPath) }()
+
+	if err := system.CopyFileWithElevation(ctx, tmpPath, listPath, "add apt repository"); err != nil {
+		return fmt.Errorf("failed to install repo list: %w", err)
+	}
+	return system.RunSudo(ctx, "apt-get", "update")
+}
+
+func dpkgArch(ctx context.Context) (string, error) {
+	cmd := exec.CommandContext(ctx, "dpkg", "--print-architecture")
+	out, err := cmd.Output()
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(out)), nil
 }

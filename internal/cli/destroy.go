@@ -46,7 +46,11 @@ func runDestroy(cmd *cobra.Command, _ []string) error {
 
 	creds := handleCredentials(cfg)
 	defer creds.Zeroize()
-	p := createOKDProvisioner(cfg, creds)
+	projectRoot, err := resolveProjectRootOrDie()
+	if err != nil {
+		return err
+	}
+	p := createOKDProvisioner(cfg, creds, projectRoot)
 
 	tui.Info("destroying cluster...")
 	startTime := time.Now()

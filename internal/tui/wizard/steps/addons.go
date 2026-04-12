@@ -4,9 +4,7 @@
 package steps
 
 import (
-	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 
 	"charm.land/lipgloss/v2"
@@ -14,6 +12,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/tui"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
+	"github.com/qxtaiba/okdctl/internal/utils/system"
 )
 
 const (
@@ -150,9 +149,8 @@ func renderAddonWarnings(step *wizard.DataDrivenStep) string {
 	var warnings []string
 
 	if step.Value("flux_enabled") == valYes {
-		home, _ := os.UserHomeDir()
-		keyPath := filepath.Join(home, ".ssh", "flux-deploy-key")
-		if _, err := os.Stat(keyPath); os.IsNotExist(err) {
+		keyPath := system.ExpandPath("~/.ssh/flux-deploy-key")
+		if !system.FileExists(keyPath) {
 			warnings = append(warnings, warnStyle.Render("  flux requires ssh deploy key at ~/.ssh/flux-deploy-key — create it before deploying"))
 		}
 	}

@@ -57,13 +57,14 @@ type StepBuilder struct {
 	executeFn   func(context.Context) error
 }
 
-// NewStepBuilder returns a builder for a fatal-by-default step. If id or
-// name is empty, it returns nil rather than an error — the subsequent
-// Build call surfaces the problem with a message that points at this
-// function, which keeps the fluent chain readable for valid inputs.
+// NewStepBuilder returns a builder for a fatal-by-default step.
+// Panics on empty id or name — these are always literal strings.
 func NewStepBuilder(id StepID, name string) *StepBuilder {
-	if id == "" || name == "" {
-		return nil
+	if id == "" {
+		panic("NewStepBuilder: id must not be empty")
+	}
+	if name == "" {
+		panic("NewStepBuilder: name must not be empty")
 	}
 	return &StepBuilder{
 		id:    id,
@@ -114,13 +115,7 @@ func (b *StepBuilder) Execute(fn func(context.Context) error) *StepBuilder {
 
 func (b *StepBuilder) Build() (ProvisioningStep, error) {
 	if b == nil {
-		return nil, fmt.Errorf("StepBuilder is nil - NewStepBuilder returned nil due to empty id or name")
-	}
-	if b.id == "" {
-		return nil, fmt.Errorf("StepBuilder: ID is required - call NewStepBuilder with a non-empty ID")
-	}
-	if b.name == "" {
-		return nil, fmt.Errorf("StepBuilder: Name is required - call NewStepBuilder with a non-empty name")
+		return nil, fmt.Errorf("StepBuilder is nil")
 	}
 	return &builtStep{builder: b}, nil
 }

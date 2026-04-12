@@ -85,22 +85,21 @@ func resolveProjectRoot() (string, error) {
 	return resolved, nil
 }
 
-// projectRootOrFallback resolves the project root and logs a debug message on
-// failure, returning an empty string so callers can decide how to proceed.
-func projectRootOrFallback() string {
+// resolveProjectRootOrDie resolves the project root or returns an error.
+func resolveProjectRootOrDie() (string, error) {
 	root, err := resolveProjectRoot()
 	if err != nil {
-		tui.Debug("failed to resolve project root: " + err.Error())
-		return ""
+		return "", fmt.Errorf("failed to resolve project root: %w", err)
 	}
-	return root
+	if root == "" {
+		return "", fmt.Errorf("project root resolved to empty path")
+	}
+	return root, nil
 }
 
 // CreateOKDProvisioner creates a provisioner, optionally with Proxmox credentials.
 // Pass nil for creds when the operation only needs local tools (oc, dnsmasq, systemctl).
-func createOKDProvisioner(cfg *config.Config, creds *credentials.ProxmoxCredentials) *okd.Provisioner {
-	projectRoot := projectRootOrFallback()
-
+func createOKDProvisioner(cfg *config.Config, creds *credentials.ProxmoxCredentials, projectRoot string) *okd.Provisioner {
 	opts := []okd.ProvisionerOption{
 		okd.WithProjectRoot(projectRoot),
 		okd.WithLogger(tui.SimpleLogger()),
@@ -120,9 +119,12 @@ type deploymentOptions struct {
 
 func executeFullDeployment(ctx context.Context, cfg *config.Config, opts deploymentOptions) error {
 	clusterFQDN := cfg.Cluster.Name + "." + cfg.Cluster.Domain
-	projectRoot := projectRootOrFallback()
+	projectRoot, err := resolveProjectRootOrDie()
+	if err != nil {
+		return err
+	}
 
-	p := createOKDProvisioner(cfg, opts.Credentials)
+	p := createOKDProvisioner(cfg, opts.Credentials, projectRoot)
 
 	if err := p.Validate(cfg); err != nil {
 		return fmt.Errorf("provisioner validation failed: %w", err)

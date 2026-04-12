@@ -123,8 +123,25 @@ func saveConfig(cfg *config.Config, path string) error {
 }
 
 func runFullDeployment(ctx context.Context, cfg *config.Config) error {
-	creds := handleCredentials(cfg)
+	envPath := credentials.EnvFilePath(deployOutputFile)
+	if err := credentials.LoadEnvFile(envPath); err != nil {
+		tui.Warn(fmt.Sprintf("failed to load credentials from %s: %v", envPath, err))
+	}
+
+	creds := credentials.GetProxmoxCredentials(cfg)
 	defer creds.Zeroize()
+
+	if !creds.IsValid() {
+		tui.Warn("no proxmox credentials found")
+	} else {
+		tui.Info(fmt.Sprintf("using credentials from %s", creds.Source))
+		if creds.ConfigCredentialsOverridden {
+			tui.Warn("environment credentials override proxmox credentials in config file")
+		}
+		if creds.EndpointFromConfig {
+			tui.Warn("PROXMOX_VE_ENDPOINT not set; endpoint falling back to config file (mixed source)")
+		}
+	}
 
 	return executeFullDeployment(ctx, cfg, deploymentOptions{
 		ShowStartMessage: true,

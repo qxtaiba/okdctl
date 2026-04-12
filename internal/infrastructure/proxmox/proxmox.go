@@ -107,7 +107,9 @@ func (p *Provider) setupTerraform(projectRoot, tfEnv string) {
 
 	tfDir := filepath.Join(projectRoot, "infrastructure", "terraform", "environments", tfEnv)
 
-	var tfOpts []terraform.Option
+	tfOpts := []terraform.Option{
+		terraform.WithLogger(p.logger),
+	}
 	if len(p.env) > 0 {
 		tfOpts = append(tfOpts, terraform.WithEnv(p.env))
 	}
@@ -176,8 +178,7 @@ func (p *Provider) Provision(ctx context.Context, cfg *config.Config, opts Provi
 	return result, nil
 }
 
-// retrieveProvisionResult derives VM IPs from static config rather than querying Proxmox,
-// because OKD assigns IPs via ignition files.
+// retrieveProvisionResult derives VM IPs from static config.
 // IP scheme: bootstrap = start IP, masters = start+1..N, workers = start+N+1 onwards.
 func (p *Provider) retrieveProvisionResult(cfg *config.Config) (*ProvisionResult, error) {
 	result := &ProvisionResult{
@@ -191,18 +192,14 @@ func (p *Provider) retrieveProvisionResult(cfg *config.Config) (*ProvisionResult
 		return nil, fmt.Errorf("static IP start address is required for OKD deployments")
 	}
 
-	baseIP, lastOctet, err := netutil.SplitIPv4(startIP)
-	if err != nil {
-		return nil, fmt.Errorf("invalid start IP %q: %w", startIP, err)
-	}
-
 	totalNodes := 1 + cfg.Topology.ControlPlane.Count + cfg.Topology.Workers.Count
-	maxOctet := lastOctet + totalNodes - 1
-	if maxOctet > 255 {
-		return nil, fmt.Errorf("IP range overflow: starting IP %s with %d nodes would exceed .255 (needs up to .%d)", startIP, totalNodes, maxOctet)
+	if cfg.Networking.MachineCIDR != "" {
+		if err := netutil.ValidateIPRangeInCIDR(startIP, totalNodes, cfg.Networking.MachineCIDR); err != nil {
+			return nil, fmt.Errorf("IP range validation failed: %w", err)
+		}
 	}
 
-	bootstrapIP := fmt.Sprintf("%s.%d", baseIP, lastOctet)
+	bootstrapIP := startIP
 	result.BootstrapIP = bootstrapIP
 	result.VMs = append(result.VMs, VMStatus{
 		Name:      "bootstrap",
@@ -212,7 +209,10 @@ func (p *Provider) retrieveProvisionResult(cfg *config.Config) (*ProvisionResult
 	})
 
 	for i := range cfg.Topology.ControlPlane.Count {
-		ip := fmt.Sprintf("%s.%d", baseIP, lastOctet+1+i)
+		ip, err := netutil.CalculateVMIP(startIP, 1+i)
+		if err != nil {
+			return nil, fmt.Errorf("failed to calculate master%d IP: %w", i, err)
+		}
 		result.ControlPlaneIPs = append(result.ControlPlaneIPs, ip)
 		result.VMs = append(result.VMs, VMStatus{
 			Name:      fmt.Sprintf("master%d", i),
@@ -224,7 +224,10 @@ func (p *Provider) retrieveProvisionResult(cfg *config.Config) (*ProvisionResult
 
 	workerOffset := 1 + cfg.Topology.ControlPlane.Count
 	for i := range cfg.Topology.Workers.Count {
-		ip := fmt.Sprintf("%s.%d", baseIP, lastOctet+workerOffset+i)
+		ip, err := netutil.CalculateVMIP(startIP, workerOffset+i)
+		if err != nil {
+			return nil, fmt.Errorf("failed to calculate worker%d IP: %w", i, err)
+		}
 		result.WorkerIPs = append(result.WorkerIPs, ip)
 		result.VMs = append(result.VMs, VMStatus{
 			Name:      fmt.Sprintf("worker%d", i),

@@ -56,7 +56,6 @@ func WriteDnsmasqConfig(ctx context.Context, name, content string) error {
 		return fmt.Errorf("failed to create dnsmasq config directory: %w", err)
 	}
 
-	// Back up existing config before overwriting so it can be restored on failure.
 	if system.FileExists(configPath) {
 		backupPath := configPath + ".backup"
 		if err := system.CopyFileWithElevation(ctx, configPath, backupPath, "dnsmasq config backup"); err != nil {
@@ -64,29 +63,17 @@ func WriteDnsmasqConfig(ctx context.Context, name, content string) error {
 		}
 	}
 
-	tmpFile, err := os.CreateTemp("", "dnsmasq-*.conf")
-	if err != nil {
+	tmpPath, err := system.WriteTempFile("dnsmasq-*.conf", 0o644, func(f *os.File) error {
+		_, err := f.WriteString(content)
 		return err
+	})
+	if err != nil {
+		return fmt.Errorf("failed to write temp config: %w", err)
 	}
-	tmpPath := tmpFile.Name()
-
-	cleanup := func() { _ = os.Remove(tmpPath) }
-	defer cleanup()
-
-	if _, err := tmpFile.WriteString(content); err != nil {
-		_ = tmpFile.Close()
-		return fmt.Errorf("failed to write temp file: %w", err)
-	}
-	if err := tmpFile.Close(); err != nil {
-		return fmt.Errorf("failed to close temp file: %w", err)
-	}
+	defer func() { _ = os.Remove(tmpPath) }()
 
 	if err := system.CopyFileWithElevation(ctx, tmpPath, configPath, "dnsmasq config"); err != nil {
 		return fmt.Errorf("failed to copy config to %s: %w", configPath, err)
-	}
-
-	if err := system.Chmod(ctx, configPath, "644", "dnsmasq config permissions"); err != nil {
-		return fmt.Errorf("failed to set config permissions: %w", err)
 	}
 
 	return nil
@@ -170,8 +157,24 @@ func ConfigureSystemResolver(ctx context.Context, fallbackDNS []string, logger *
 	// Fall back to systemd-resolved.
 	if system.IsServiceActive(ctx, "systemd-resolved") {
 		logger.Info("dns: configuring systemd-resolved to use dnsmasq")
-		return system.RunSudo(ctx, "sh", "-c",
-			`mkdir -p /etc/systemd/resolved.conf.d && printf "[Resolve]\nDNS=127.0.0.1\nDomains=~.\n" > /etc/systemd/resolved.conf.d/dnsmasq.conf && systemctl restart systemd-resolved`)
+		confDir := "/etc/systemd/resolved.conf.d"
+		confPath := confDir + "/dnsmasq.conf"
+		confContent := "[Resolve]\nDNS=127.0.0.1\nDomains=~.\n"
+		if err := system.MkdirAll(ctx, confDir, "create resolved.conf.d"); err != nil {
+			return fmt.Errorf("failed to create resolved.conf.d: %w", err)
+		}
+		tmpPath, err := system.WriteTempFile("resolved-conf", 0o644, func(f *os.File) error {
+			_, err := f.WriteString(confContent)
+			return err
+		})
+		if err != nil {
+			return fmt.Errorf("failed to write dnsmasq.conf: %w", err)
+		}
+		defer func() { _ = os.Remove(tmpPath) }()
+		if err := system.CopyFileWithElevation(ctx, tmpPath, confPath, "configure systemd-resolved"); err != nil {
+			return fmt.Errorf("failed to install dnsmasq.conf: %w", err)
+		}
+		return system.RunSudo(ctx, "systemctl", "restart", "systemd-resolved")
 	}
 
 	logger.Warn("dns: neither NetworkManager nor systemd-resolved found, skipping system resolver configuration")

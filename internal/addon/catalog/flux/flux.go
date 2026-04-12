@@ -225,18 +225,19 @@ func (f *Flux) ValidateSettings(settings map[string]string) []string {
 			!strings.HasPrefix(repo, "git://") && !strings.HasPrefix(repo, "git@") {
 			errs = append(errs, "repository must be a valid Git URL (ssh://, https://, git://, or git@)")
 		}
-		// Reject mixed ssh://...host:org/repo format (must use slashes after scheme)
 		if strings.HasPrefix(repo, "ssh://") {
-			// Strip scheme, then check if host portion contains a colon (SCP-style path)
 			afterScheme := strings.TrimPrefix(repo, "ssh://")
 			if slashIdx := strings.Index(afterScheme, "/"); slashIdx > 0 {
 				host := afterScheme[:slashIdx]
-				// A colon in the host part (e.g., "git@github.com:org") means SCP-style mixed with scheme
 				if strings.Contains(host, ":") && !strings.Contains(host, "]:") {
-					errs = append(errs, "ssh:// URLs must use slashes for path (ssh://git@github.com/org/repo.git), not colons (ssh://git@github.com:org/repo.git)")
+					// Allow host:port (numeric) but reject SCP-style host:path
+					colonIdx := strings.LastIndex(host, ":")
+					portPart := host[colonIdx+1:]
+					if !isNumeric(portPart) {
+						errs = append(errs, "ssh:// URLs must use slashes for path (ssh://git@github.com/org/repo.git), not colons (ssh://git@github.com:org/repo.git)")
+					}
 				}
 			} else if strings.Contains(afterScheme, ":") {
-				// No slash at all but has colon — e.g., ssh://git@github.com:org/repo
 				errs = append(errs, "ssh:// URLs must use slashes for path (ssh://git@github.com/org/repo.git), not colons (ssh://git@github.com:org/repo.git)")
 			}
 		}
@@ -420,4 +421,16 @@ func getTimeout(settings map[string]string, key string, defaultTimeout time.Dura
 		}
 	}
 	return defaultTimeout
+}
+
+func isNumeric(s string) bool {
+	if s == "" {
+		return false
+	}
+	for _, c := range s {
+		if c < '0' || c > '9' {
+			return false
+		}
+	}
+	return true
 }

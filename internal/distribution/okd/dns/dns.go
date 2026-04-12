@@ -175,7 +175,9 @@ func DeployProduction(ctx context.Context, cfg *config.Config, appsIP, kubeVipIP
 		}
 	}
 	data.AppsIP = appsIP
-	data.KubeVipIP = kubeVipIP
+	if kubeVipIP != "" {
+		data.KubeVipIP = kubeVipIP
+	}
 	data.CustomDomains = customDomains
 
 	content, err := templates.RenderDNSProductionConfig(&data)

@@ -80,8 +80,8 @@ func (m *Manager) InstallAll(ctx context.Context) error {
 	return errors.Join(errs...)
 }
 
-// installAndVerify runs Install + Verify for a single addon, returning the
-// Environment on success or error. Used by both InstallAll and InstallOne.
+// installAndVerify runs Install + Verify for a single addon.
+// Verify failure fails the install — the addon is rolled back by the caller.
 func (m *Manager) installAndVerify(ctx context.Context, a Addon) (*Environment, error) {
 	info := a.Info()
 	m.logger.Info(fmt.Sprintf("addons: installing %s", info.DisplayName))
@@ -90,10 +90,9 @@ func (m *Manager) installAndVerify(ctx context.Context, a Addon) (*Environment, 
 		return env, fmt.Errorf("addon %s install failed: %w", info.Name, err)
 	}
 	if vErr := a.Verify(ctx, env); vErr != nil {
-		m.logger.Warn(fmt.Sprintf("addons: %s installed but verify failed: %v", info.DisplayName, vErr))
-	} else {
-		m.logger.Info(fmt.Sprintf("addons: %s installed and verified", info.DisplayName))
+		return env, fmt.Errorf("addon %s installed but verify failed: %w", info.Name, vErr)
 	}
+	m.logger.Info(fmt.Sprintf("addons: %s installed and verified", info.DisplayName))
 	return env, nil
 }
 
@@ -180,23 +179,52 @@ func (m *Manager) VerifyAll(ctx context.Context) error {
 	return nil
 }
 
-// Uninstall removes an addon, blocking if dependents are still enabled.
+// Uninstall removes an addon, blocking if any enabled addon transitively
+// depends on it.
 func (m *Manager) Uninstall(ctx context.Context, name string) error {
 	a := Get(name)
 	if a == nil {
 		return fmt.Errorf("unknown addon: %s", name)
 	}
 
-	for _, other := range Enabled(m.cfg) {
-		for _, dep := range other.Info().Dependencies {
-			if dep == name {
-				return fmt.Errorf("cannot uninstall %s: %s depends on it", name, other.Info().Name)
-			}
-		}
+	if dep := m.findTransitiveDependent(name); dep != "" {
+		return fmt.Errorf("cannot uninstall %s: %s depends on it (directly or transitively)", name, dep)
 	}
 
 	env := m.buildEnv(a)
 	return a.Uninstall(ctx, env)
+}
+
+// findTransitiveDependent returns the name of the first enabled addon that
+// transitively depends on target, or "" if none do.
+func (m *Manager) findTransitiveDependent(target string) string {
+	for _, other := range Enabled(m.cfg) {
+		if m.dependsOn(other.Info().Name, target, make(map[string]bool)) {
+			return other.Info().Name
+		}
+	}
+	return ""
+}
+
+func (m *Manager) dependsOn(addonName, target string, visited map[string]bool) bool {
+	if visited[addonName] {
+		return false
+	}
+	visited[addonName] = true
+
+	a := Get(addonName)
+	if a == nil {
+		return false
+	}
+	for _, dep := range a.Info().Dependencies {
+		if dep == target {
+			return true
+		}
+		if m.dependsOn(dep, target, visited) {
+			return true
+		}
+	}
+	return false
 }
 
 // collectWithDeps returns the addon and all its transitive dependencies.

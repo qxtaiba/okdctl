@@ -25,7 +25,7 @@ func RemoveSecondaryIP(ctx context.Context, ip, iface string) error {
 	if err != nil {
 		return fmt.Errorf("failed to check IP presence on device %s: %w", iface, err)
 	}
-	if !strings.Contains(string(output), ip) {
+	if !strings.Contains(string(output), ip+"/") {
 		return nil
 	}
 
@@ -70,9 +70,10 @@ func connectionForDevice(ctx context.Context, iface string) (string, error) {
 	}
 
 	for _, line := range strings.Split(strings.TrimSpace(string(output)), "\n") {
-		parts := strings.SplitN(line, ":", 2)
+		unescaped := strings.ReplaceAll(line, `\:`, "\x00")
+		parts := strings.SplitN(unescaped, ":", 2)
 		if len(parts) == 2 && parts[1] == iface {
-			return parts[0], nil
+			return strings.ReplaceAll(parts[0], "\x00", ":"), nil
 		}
 	}
 

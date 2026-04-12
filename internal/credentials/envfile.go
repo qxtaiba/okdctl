@@ -131,8 +131,7 @@ func loadEnvFileOnce(path string) error {
 			continue
 		}
 
-		// Only set if not already present — shell env wins
-		if os.Getenv(key) == "" {
+		if _, exists := os.LookupEnv(key); !exists {
 			if err := os.Setenv(key, value); err != nil {
 				return fmt.Errorf("failed to set env var %s from %s: %w", key, path, err)
 			}

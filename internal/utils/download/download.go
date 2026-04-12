@@ -128,6 +128,15 @@ func Download(ctx context.Context, opts *Options) error {
 	}
 	pw.finish()
 
+	if err := outFile.Sync(); err != nil {
+		_ = os.Remove(opts.OutputPath)
+		return fmt.Errorf("failed to sync output file: %w", err)
+	}
+	if err := outFile.Close(); err != nil {
+		_ = os.Remove(opts.OutputPath)
+		return fmt.Errorf("failed to close output file: %w", err)
+	}
+
 	if err := verifyDownloadedFile(opts.OutputPath, opts.ExpectedChecksum, opts.logger()); err != nil {
 		_ = os.Remove(opts.OutputPath)
 		return err

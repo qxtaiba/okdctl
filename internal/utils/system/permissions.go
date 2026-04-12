@@ -5,17 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"strings"
 )
 
 func isElevationNeeded(err error) bool {
 	if errors.Is(err, os.ErrPermission) {
-		return true
-	}
-
-	var exitErr *exec.ExitError
-	if errors.As(err, &exitErr) {
 		return true
 	}
 

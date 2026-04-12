@@ -110,6 +110,12 @@ func processTarEntry(tarReader *tar.Reader, header *tar.Header, destDir string, 
 			if !os.IsExist(err) {
 				return fmt.Errorf("failed to create symlink: %w", err)
 			}
+			if err := os.Remove(targetPath); err != nil {
+				return fmt.Errorf("failed to remove existing symlink %s: %w", name, err)
+			}
+			if err := os.Symlink(linkTarget, targetPath); err != nil {
+				return fmt.Errorf("failed to replace symlink: %w", err)
+			}
 		}
 
 	default:

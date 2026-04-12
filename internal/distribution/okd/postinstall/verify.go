@@ -52,7 +52,11 @@ func (p *Phase) VerifyClusterHealth(ctx context.Context, _ *Options) (*ClusterHe
 		return result, fmt.Errorf("failed to get nodes: %w", err)
 	}
 
-	nodeLines := strings.Split(strings.TrimSpace(cmdResult.Stdout), "\n")
+	nodeOutput := strings.TrimSpace(cmdResult.Stdout)
+	var nodeLines []string
+	if nodeOutput != "" {
+		nodeLines = strings.Split(nodeOutput, "\n")
+	}
 	result.TotalNodes = len(nodeLines)
 	for _, line := range nodeLines {
 		if strings.Contains(line, "Ready") && !strings.Contains(line, "NotReady") {
