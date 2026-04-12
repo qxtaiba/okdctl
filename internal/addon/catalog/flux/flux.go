@@ -220,12 +220,9 @@ func (f *Flux) ValidateSettings(settings map[string]string) []string {
 	repo := settings["repository"]
 	if repo == "" {
 		errs = append(errs, "repository is required (set addons.flux.settings.repository)")
-	} else {
-		if !strings.HasPrefix(repo, "ssh://") && !strings.HasPrefix(repo, "https://") &&
-			!strings.HasPrefix(repo, "git://") && !strings.HasPrefix(repo, "git@") {
-			errs = append(errs, "repository must be a valid Git URL (ssh://, https://, git://, or git@)")
-		}
-		errs = append(errs, validateSSHRepoURL(repo)...)
+	} else if !strings.HasPrefix(repo, "ssh://") && !strings.HasPrefix(repo, "https://") &&
+		!strings.HasPrefix(repo, "git://") && !strings.HasPrefix(repo, "git@") {
+		errs = append(errs, "repository must be a valid Git URL (ssh://, https://, git://, or git@)")
 	}
 	if branch := settings["branch"]; branch != "" && strings.ContainsAny(branch, " \t") {
 		errs = append(errs, "branch name cannot contain spaces")
@@ -406,38 +403,4 @@ func getTimeout(settings map[string]string, key string, defaultTimeout time.Dura
 		}
 	}
 	return defaultTimeout
-}
-
-func validateSSHRepoURL(repo string) []string {
-	if !strings.HasPrefix(repo, "ssh://") {
-		return nil
-	}
-	const scpErr = "ssh:// URLs must use slashes for path (ssh://git@github.com/org/repo.git), not colons (ssh://git@github.com:org/repo.git)"
-	afterScheme := strings.TrimPrefix(repo, "ssh://")
-	slashIdx := strings.Index(afterScheme, "/")
-	var host string
-	if slashIdx <= 0 {
-		host = afterScheme
-	} else {
-		host = afterScheme[:slashIdx]
-	}
-	if strings.Contains(host, ":") && !strings.Contains(host, "]:") {
-		colonIdx := strings.LastIndex(host, ":")
-		if !isNumeric(host[colonIdx+1:]) {
-			return []string{scpErr}
-		}
-	}
-	return nil
-}
-
-func isNumeric(s string) bool {
-	if s == "" {
-		return false
-	}
-	for _, c := range s {
-		if c < '0' || c > '9' {
-			return false
-		}
-	}
-	return true
 }
