@@ -13,8 +13,8 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/qxtaiba/okdctl/internal/utils/httputil"
-	"github.com/qxtaiba/okdctl/internal/utils/logutil"
+	"github.com/qxtaiba/okdctl/internal/httputil"
+	"github.com/qxtaiba/okdctl/internal/logutil"
 )
 
 type Options struct {

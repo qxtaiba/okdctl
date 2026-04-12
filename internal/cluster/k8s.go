@@ -11,7 +11,7 @@ import (
 	"strings"
 
 	"github.com/qxtaiba/okdctl/internal/executor"
-	"github.com/qxtaiba/okdctl/internal/utils/logutil"
+	"github.com/qxtaiba/okdctl/internal/logutil"
 )
 
 type K8sClient struct {

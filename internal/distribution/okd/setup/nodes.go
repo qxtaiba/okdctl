@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"github.com/qxtaiba/okdctl/internal/config"
-	"github.com/qxtaiba/okdctl/internal/utils/netutil"
+	"github.com/qxtaiba/okdctl/internal/netutil"
 )
 
 func (p *Phase) BuildNodeList(cfg *config.Config) ([]NodeInfo, error) {

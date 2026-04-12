@@ -22,9 +22,9 @@ BUILD_DATE ?= $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
 
 # Linker flags for version injection
 LDFLAGS := -ldflags "-s -w \
-	-X github.com/qxtaiba/okdctl/pkg/version.Version=$(VERSION) \
-	-X github.com/qxtaiba/okdctl/pkg/version.GitCommit=$(GIT_COMMIT) \
-	-X github.com/qxtaiba/okdctl/pkg/version.BuildDate=$(BUILD_DATE)"
+	-X github.com/qxtaiba/okdctl/internal/version.Version=$(VERSION) \
+	-X github.com/qxtaiba/okdctl/internal/version.GitCommit=$(GIT_COMMIT) \
+	-X github.com/qxtaiba/okdctl/internal/version.BuildDate=$(BUILD_DATE)"
 
 # Default target
 .DEFAULT_GOAL := help

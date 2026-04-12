@@ -10,8 +10,8 @@ import (
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/packages"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/setup"
-	"github.com/qxtaiba/okdctl/internal/utils/platform"
-	"github.com/qxtaiba/okdctl/internal/utils/system"
+	"github.com/qxtaiba/okdctl/internal/platform"
+	"github.com/qxtaiba/okdctl/internal/system"
 )
 
 // detectOS returns the detected host OS, falling back to RHEL if detection

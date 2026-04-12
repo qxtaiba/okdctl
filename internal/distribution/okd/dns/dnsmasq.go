@@ -13,7 +13,7 @@ import (
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
-	"github.com/qxtaiba/okdctl/internal/utils/system"
+	"github.com/qxtaiba/okdctl/internal/system"
 )
 
 const (

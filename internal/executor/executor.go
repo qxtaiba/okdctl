@@ -15,7 +15,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/qxtaiba/okdctl/internal/utils/logutil"
+	"github.com/qxtaiba/okdctl/internal/logutil"
 )
 
 type Executor struct {

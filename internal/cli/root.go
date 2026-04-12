@@ -11,7 +11,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/qxtaiba/okdctl/internal/tui"
-	"github.com/qxtaiba/okdctl/pkg/version"
+	"github.com/qxtaiba/okdctl/internal/version"
 )
 
 // cfgFile is package-scope state managed by cobra PersistentFlags. It is

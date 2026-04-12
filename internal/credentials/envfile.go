@@ -7,7 +7,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/qxtaiba/okdctl/internal/utils/system"
+	"github.com/qxtaiba/okdctl/internal/system"
 )
 
 // loadOnce guards against concurrent or repeated calls to LoadEnvFile.

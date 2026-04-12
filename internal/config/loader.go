@@ -8,7 +8,7 @@ import (
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
 
-	"github.com/qxtaiba/okdctl/internal/utils/system"
+	"github.com/qxtaiba/okdctl/internal/system"
 )
 
 const (

@@ -11,7 +11,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/templates"
 	"github.com/qxtaiba/okdctl/internal/executor"
-	"github.com/qxtaiba/okdctl/internal/utils/system"
+	"github.com/qxtaiba/okdctl/internal/system"
 )
 
 func (p *Phase) BuildCustomISOs(ctx context.Context, cfg *config.Config, opts *Options) error {

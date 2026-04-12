@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
-	"github.com/qxtaiba/okdctl/internal/utils/download"
-	"github.com/qxtaiba/okdctl/internal/utils/system"
+	"github.com/qxtaiba/okdctl/internal/download"
+	"github.com/qxtaiba/okdctl/internal/system"
 )
 
 func (p *Phase) DownloadOKDTools(ctx context.Context, version string, opts *Options) error {

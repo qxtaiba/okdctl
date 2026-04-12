@@ -9,7 +9,7 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/qxtaiba/okdctl/internal/utils/system"
+	"github.com/qxtaiba/okdctl/internal/system"
 )
 
 func RemoveSecondaryIP(ctx context.Context, ip, iface string) error {

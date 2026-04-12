@@ -12,7 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/qxtaiba/okdctl/internal/utils/httputil"
+	"github.com/qxtaiba/okdctl/internal/httputil"
 )
 
 const maxChecksumFileSize = 1024 * 1024

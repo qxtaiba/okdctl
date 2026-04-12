@@ -5,8 +5,8 @@ import (
 	"strings"
 
 	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/netutil"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
-	"github.com/qxtaiba/okdctl/internal/utils/netutil"
 )
 
 var NetworkingStepDefinition = wizard.StepDefinition{

@@ -22,8 +22,8 @@ import (
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/infrastructure/terraform"
-	"github.com/qxtaiba/okdctl/internal/utils/logutil"
-	"github.com/qxtaiba/okdctl/internal/utils/netutil"
+	"github.com/qxtaiba/okdctl/internal/logutil"
+	"github.com/qxtaiba/okdctl/internal/netutil"
 )
 
 type Provider struct {

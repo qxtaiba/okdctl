@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/qxtaiba/okdctl/internal/utils/httputil"
+	"github.com/qxtaiba/okdctl/internal/httputil"
 )
 
 type OKDVersionFetcher struct {

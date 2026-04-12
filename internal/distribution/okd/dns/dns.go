@@ -11,8 +11,8 @@ import (
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/templates"
-	"github.com/qxtaiba/okdctl/internal/utils/netutil"
-	"github.com/qxtaiba/okdctl/internal/utils/system"
+	"github.com/qxtaiba/okdctl/internal/netutil"
+	"github.com/qxtaiba/okdctl/internal/system"
 )
 
 func BuildConfigData(cfg *config.Config) (templates.DNSConfigData, error) {

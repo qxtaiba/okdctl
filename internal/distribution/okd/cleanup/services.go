@@ -10,8 +10,8 @@ import (
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/dns"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/firewall"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/packages"
-	"github.com/qxtaiba/okdctl/internal/utils/netutil"
-	"github.com/qxtaiba/okdctl/internal/utils/system"
+	"github.com/qxtaiba/okdctl/internal/netutil"
+	"github.com/qxtaiba/okdctl/internal/system"
 )
 
 // stopAndDisableService stops and disables a systemd service, logging warnings on failure.

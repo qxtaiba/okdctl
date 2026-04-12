@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/qxtaiba/okdctl/internal/utils/system"
+	"github.com/qxtaiba/okdctl/internal/system"
 )
 
 // OcResourceExists returns true if `oc get <args...>` produces non-empty

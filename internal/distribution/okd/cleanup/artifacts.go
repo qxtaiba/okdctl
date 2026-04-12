@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
-	"github.com/qxtaiba/okdctl/internal/utils/system"
+	"github.com/qxtaiba/okdctl/internal/system"
 )
 
 // SafeRemoveWithLogger removes a file or directory if it exists, with automatic sudo fallback.

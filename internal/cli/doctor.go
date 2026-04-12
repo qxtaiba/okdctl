@@ -19,8 +19,8 @@ import (
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/tui"
-	"github.com/qxtaiba/okdctl/internal/utils/platform"
-	"github.com/qxtaiba/okdctl/internal/utils/system"
+	"github.com/qxtaiba/okdctl/internal/platform"
+	"github.com/qxtaiba/okdctl/internal/system"
 )
 
 // doctorCmd is the user-facing 'okdctl doctor' command. It is separate

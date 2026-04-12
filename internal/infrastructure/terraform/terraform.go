@@ -12,8 +12,8 @@ import (
 	"slices"
 
 	"github.com/qxtaiba/okdctl/internal/executor"
-	"github.com/qxtaiba/okdctl/internal/utils/logutil"
-	"github.com/qxtaiba/okdctl/internal/utils/system"
+	"github.com/qxtaiba/okdctl/internal/logutil"
+	"github.com/qxtaiba/okdctl/internal/system"
 )
 
 // PlanFileName is the default plan file name used by Plan, Apply, and Cleanup.

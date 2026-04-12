@@ -7,8 +7,8 @@ import (
 
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/firewall"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
-	"github.com/qxtaiba/okdctl/internal/utils/netutil"
-	"github.com/qxtaiba/okdctl/internal/utils/system"
+	"github.com/qxtaiba/okdctl/internal/netutil"
+	"github.com/qxtaiba/okdctl/internal/system"
 )
 
 // RemoveHAProxy stops and disables HAProxy on the bastion, removing it as the API load balancer.

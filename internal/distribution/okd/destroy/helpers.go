@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 
 	"github.com/qxtaiba/okdctl/internal/infrastructure/terraform"
-	"github.com/qxtaiba/okdctl/internal/utils/system"
+	"github.com/qxtaiba/okdctl/internal/system"
 )
 
 func (p *Phase) destroyInfrastructure(ctx context.Context, opts *Options) error {

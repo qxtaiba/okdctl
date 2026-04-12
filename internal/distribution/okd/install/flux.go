@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/qxtaiba/okdctl/internal/utils/system"
+	"github.com/qxtaiba/okdctl/internal/system"
 )
 
 func (p *Phase) ValidateClusterAccess(ctx context.Context) error {

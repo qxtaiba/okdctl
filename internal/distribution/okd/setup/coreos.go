@@ -10,10 +10,10 @@ import (
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
+	"github.com/qxtaiba/okdctl/internal/download"
 	"github.com/qxtaiba/okdctl/internal/executor"
-	"github.com/qxtaiba/okdctl/internal/utils/download"
-	"github.com/qxtaiba/okdctl/internal/utils/platform"
-	"github.com/qxtaiba/okdctl/internal/utils/system"
+	"github.com/qxtaiba/okdctl/internal/platform"
+	"github.com/qxtaiba/okdctl/internal/system"
 )
 
 const DefaultProxmoxISODir = "/var/lib/vz/template/iso"
