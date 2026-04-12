@@ -415,13 +415,12 @@ func validateSSHRepoURL(repo string) []string {
 	const scpErr = "ssh:// URLs must use slashes for path (ssh://git@github.com/org/repo.git), not colons (ssh://git@github.com:org/repo.git)"
 	afterScheme := strings.TrimPrefix(repo, "ssh://")
 	slashIdx := strings.Index(afterScheme, "/")
+	var host string
 	if slashIdx <= 0 {
-		if strings.Contains(afterScheme, ":") {
-			return []string{scpErr}
-		}
-		return nil
+		host = afterScheme
+	} else {
+		host = afterScheme[:slashIdx]
 	}
-	host := afterScheme[:slashIdx]
 	if strings.Contains(host, ":") && !strings.Contains(host, "]:") {
 		colonIdx := strings.LastIndex(host, ":")
 		if !isNumeric(host[colonIdx+1:]) {
