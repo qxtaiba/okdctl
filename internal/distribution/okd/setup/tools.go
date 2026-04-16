@@ -18,16 +18,6 @@ import (
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
-// ExternalToolBinaries returns the list of external tool binaries installed to /usr/local/bin.
-// Note: terraform is installed via dnf (HashiCorp repo) so it's not in this list.
-func ExternalToolBinaries() []string {
-	return []string{
-		"yq",
-		"helm",
-		"sops",
-	}
-}
-
 type externalTool string
 
 const (

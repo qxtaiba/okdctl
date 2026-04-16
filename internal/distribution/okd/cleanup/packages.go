@@ -9,7 +9,6 @@ import (
 
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/packages"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
-	"github.com/qxtaiba/okdctl/internal/distribution/okd/setup"
 	"github.com/qxtaiba/okdctl/internal/platform"
 	"github.com/qxtaiba/okdctl/internal/system"
 )
@@ -49,7 +48,7 @@ func InstalledBinaries() []string {
 		"oc",
 		"kubectl",
 	}
-	return append(okdBinaries, setup.ExternalToolBinaries()...)
+	return append(okdBinaries, phase.ExternalToolBinaries()...)
 }
 
 func Packages(ctx context.Context, logger *slog.Logger) error {

@@ -25,6 +25,17 @@ const (
 	DefaultDNSMasqConfigDir  = "/etc/dnsmasq.d"
 )
 
+// ExternalToolBinaries returns the names of tool binaries installed into
+// DefaultBinDir by the setup phase. Declared here (not in setup/) so cleanup
+// can remove the same set without importing setup.
+func ExternalToolBinaries() []string {
+	return []string{
+		"yq",
+		"helm",
+		"sops",
+	}
+}
+
 func ClusterConfigDir(workDir string) string {
 	return filepath.Join(workDir, "cluster-config")
 }
