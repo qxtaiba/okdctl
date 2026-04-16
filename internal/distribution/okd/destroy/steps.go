@@ -51,14 +51,16 @@ func (p *Phase) destroySteps(cfg *config.Config, opts *Options) []distribution.S
 					return fmt.Errorf("failed to resolve VIP: %w", err)
 				}
 				cleanupOpts := &cleanup.Options{
+					BaseOptions: phase.BaseOptions{
+						WorkDir:      opts.WorkDir,
+						ProjectRoot:  opts.ProjectRoot,
+						TerraformEnv: opts.TerraformEnv,
+					},
 					Kind:           opts.CleanupKind,
-					WorkDir:        opts.WorkDir,
-					ProjectRoot:    opts.ProjectRoot,
 					HTTPServerRoot: cfg.HTTPServer.Root,
 					HAProxyConfig:  phase.DefaultHAProxyConfigPath,
 					VIP:            vip,
 					ClusterName:    cfg.Cluster.Name,
-					TerraformEnv:   opts.TerraformEnv,
 					PreserveConfig: false,
 					RemovePackages: opts.RemovePackages,
 					Logger:         p.Log,

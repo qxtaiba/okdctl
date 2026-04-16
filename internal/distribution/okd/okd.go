@@ -12,6 +12,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/cleanup"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/destroy"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/install"
+	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/postinstall"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/setup"
 	"github.com/qxtaiba/okdctl/internal/executor"
@@ -109,9 +110,11 @@ func (p *Provisioner) Prepare(ctx context.Context, cfg *config.Config) error {
 	if system.DirExists(opts.WorkDir) {
 		p.logger.Info("setup: cleaning up previous artifacts")
 		cleanupOpts := &cleanup.Options{
+			BaseOptions: phase.BaseOptions{
+				WorkDir:     opts.WorkDir,
+				ProjectRoot: p.projectRoot,
+			},
 			Kind:           cleanup.WorkOnly,
-			WorkDir:        opts.WorkDir,
-			ProjectRoot:    p.projectRoot,
 			HTTPServerRoot: cfg.HTTPServer.Root,
 			Logger:         p.logger,
 		}
@@ -120,32 +123,32 @@ func (p *Provisioner) Prepare(ctx context.Context, cfg *config.Config) error {
 		}
 	}
 
-	phase := setup.New(p.executor, p.logger, p.version)
-	return phase.Execute(ctx, cfg, &opts)
+	setupPhase := setup.New(p.executor, p.logger, p.version)
+	return setupPhase.Execute(ctx, cfg, &opts)
 }
 
 func (p *Provisioner) Install(ctx context.Context, cfg *config.Config, opts *install.Options) error {
-	phase := install.New(p.executor, p.logger, p.version)
-	return phase.Execute(ctx, cfg, opts)
+	installPhase := install.New(p.executor, p.logger, p.version)
+	return installPhase.Execute(ctx, cfg, opts)
 }
 
 func (p *Provisioner) Configure(ctx context.Context, cfg *config.Config) (*postinstall.Result, error) {
-	phase := postinstall.New(p.executor, p.logger, p.version)
+	postPhase := postinstall.New(p.executor, p.logger, p.version)
 	opts := postinstall.NewOptions(cfg, p.projectRoot)
-	return phase.Execute(ctx, cfg, &opts)
+	return postPhase.Execute(ctx, cfg, &opts)
 }
 
 func (p *Provisioner) UpdateIngress(ctx context.Context, cfg *config.Config, opts postinstall.UpdateIngressOptions) (*postinstall.UpdateIngressResult, error) {
-	phase := postinstall.New(p.executor, p.logger, p.version)
-	return phase.UpdateIngress(ctx, cfg, opts)
+	postPhase := postinstall.New(p.executor, p.logger, p.version)
+	return postPhase.UpdateIngress(ctx, cfg, opts)
 }
 
 func (p *Provisioner) Destroy(ctx context.Context, cfg *config.Config, removePackages bool) error {
-	phase := destroy.New(p.executor, p.logger, p.version)
-	opts := destroy.NewOptions(cfg, p.projectRoot)
-	opts.AutoApprove = true
-	opts.Force = true
-	opts.RemovePackages = removePackages
+	destroyPhase := destroy.New(p.executor, p.logger, p.version)
+	destroyOpts := destroy.NewOptions(cfg, p.projectRoot)
+	destroyOpts.AutoApprove = true
+	destroyOpts.Force = true
+	destroyOpts.RemovePackages = removePackages
 
-	return phase.Execute(ctx, cfg, &opts)
+	return destroyPhase.Execute(ctx, cfg, &destroyOpts)
 }

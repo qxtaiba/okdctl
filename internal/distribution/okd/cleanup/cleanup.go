@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/logutil"
 )
 
@@ -21,10 +22,9 @@ const (
 )
 
 type Options struct {
+	phase.BaseOptions
+
 	Kind           Kind
-	WorkDir        string
-	TerraformEnv   string
-	ProjectRoot    string
 	PreserveConfig bool
 	HTTPServerRoot string
 	HAProxyConfig  string
