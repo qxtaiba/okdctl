@@ -22,8 +22,8 @@ type progressWriter struct {
 	written     atomic.Int64
 	lastPercent atomic.Int32
 	stopped     atomic.Int32
-	lastUpdate  atomic.Value // stores time.Time atomically
-	mu          sync.Mutex   // protects printProgress
+	lastUpdate  atomic.Pointer[time.Time]
+	mu          sync.Mutex // protects printProgress
 	isTTY       bool
 }
 
@@ -51,8 +51,9 @@ func (pw *progressWriter) Write(p []byte) (int, error) {
 
 	if pw.total > 0 && !pw.isStopped() {
 		lastUpdate := pw.lastUpdate.Load()
-		if lastUpdate == nil || time.Since(lastUpdate.(time.Time)) > ProgressUpdateInterval {
-			pw.lastUpdate.Store(time.Now())
+		if lastUpdate == nil || time.Since(*lastUpdate) > ProgressUpdateInterval {
+			now := time.Now()
+			pw.lastUpdate.Store(&now)
 			written := pw.written.Load()
 			percent := int32(float64(written) / float64(pw.total) * 100)
 			if percent != pw.lastPercent.Load() {

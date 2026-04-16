@@ -3,7 +3,6 @@ package secretstore
 
 import (
 	"context"
-	"encoding/base64"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -211,8 +210,9 @@ func (s *SecretStore) createSecretFromFile(ctx context.Context, env *addon.Envir
 	if err != nil {
 		return fmt.Errorf("failed to read %s: %w", filepath.Base(filePath), err)
 	}
-	encoded := base64.StdEncoding.EncodeToString([]byte(strings.TrimSpace(plaintext)))
-	manifest := addon.BuildOpaqueSecret(defaultNamespace, secretName, map[string]string{dataKey: encoded})
+	manifest := addon.BuildOpaqueSecret(defaultNamespace, secretName, map[string][]byte{
+		dataKey: []byte(strings.TrimSpace(plaintext)),
+	})
 	if _, err := env.Exec.RunWithStdinChecked(ctx, manifest, "oc", "apply", "-f", "-"); err != nil {
 		return fmt.Errorf("failed to apply %s secret: %w", secretName, err)
 	}

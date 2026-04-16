@@ -213,7 +213,7 @@ func reversePTR(ip string) string {
 	return parts[3] + "." + parts[2] + "." + parts[1] + "." + parts[0]
 }
 
-func renderTemplate(name string, data interface{}) (string, error) {
+func renderTemplate(name string, data any) (string, error) {
 	content, err := templateFS.ReadFile(name)
 	if err != nil {
 		return "", fmt.Errorf("failed to read template %s: %w", name, err)

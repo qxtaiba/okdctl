@@ -6,7 +6,9 @@ import (
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
-	"gopkg.in/yaml.v3"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/yaml"
 )
 
 const (
@@ -32,21 +34,23 @@ func RetryDefault(ctx context.Context, fn func() error) error {
 }
 
 // BuildOpaqueSecret returns a Kubernetes Secret manifest YAML of type Opaque.
-// Values in data must be pre-base64-encoded by the caller; they are written
-// straight into the .data map. Panics only if yaml.Marshal fails, which
-// cannot happen for the string-only map shapes used here.
-func BuildOpaqueSecret(namespace, name string, data map[string]string) string {
-	manifest := map[string]any{
-		"apiVersion": "v1",
-		"kind":       "Secret",
-		"metadata": map[string]any{
-			"name":      name,
-			"namespace": namespace,
+// Values in data are raw bytes; they are base64-encoded on marshal by the
+// k8s Secret type. Panics only if yaml.Marshal fails, which cannot happen
+// for well-formed Secret values.
+func BuildOpaqueSecret(namespace, name string, data map[string][]byte) string {
+	s := corev1.Secret{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "v1",
+			Kind:       "Secret",
 		},
-		"type": "Opaque",
-		"data": data,
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+		},
+		Type: corev1.SecretTypeOpaque,
+		Data: data,
 	}
-	out, err := yaml.Marshal(manifest)
+	out, err := yaml.Marshal(s)
 	if err != nil {
 		panic(fmt.Sprintf("BuildOpaqueSecret: %v", err))
 	}

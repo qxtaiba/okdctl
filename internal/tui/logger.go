@@ -20,10 +20,10 @@ const (
 
 type LogField struct {
 	Key   string
-	Value interface{}
+	Value any
 }
 
-func LF(key string, value interface{}) LogField {
+func LF(key string, value any) LogField {
 	return LogField{Key: key, Value: value}
 }
 

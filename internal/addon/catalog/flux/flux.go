@@ -5,7 +5,6 @@ package flux
 
 import (
 	"context"
-	"encoding/base64"
 	"fmt"
 	"net/url"
 	"os"
@@ -383,13 +382,12 @@ func gitHost(repoURL string) (string, error) {
 // key material. publicKey is optional — flux only requires identity and
 // known_hosts, so the identity.pub field is omitted when empty.
 func buildFluxDeployKeySecret(namespace, name, privateKey, publicKey, knownHosts string) string {
-	enc := base64.StdEncoding.EncodeToString
-	data := map[string]string{
-		"identity":    enc([]byte(privateKey)),
-		"known_hosts": enc([]byte(knownHosts)),
+	data := map[string][]byte{
+		"identity":    []byte(privateKey),
+		"known_hosts": []byte(knownHosts),
 	}
 	if publicKey != "" {
-		data["identity.pub"] = enc([]byte(publicKey))
+		data["identity.pub"] = []byte(publicKey)
 	}
 	return addon.BuildOpaqueSecret(namespace, name, data)
 }

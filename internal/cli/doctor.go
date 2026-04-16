@@ -340,15 +340,16 @@ func checkPullSecret(_ context.Context) checkResult {
 		return checkResult{sev: sevFail, detail: err.Error()}
 	}
 
-	var js map[string]any
-	if err := json.Unmarshal(data, &js); err != nil {
+	var parsed struct {
+		Auths map[string]json.RawMessage `json:"auths"`
+	}
+	if err := json.Unmarshal(data, &parsed); err != nil {
 		return checkResult{sev: sevFail, detail: "invalid json: " + err.Error()}
 	}
-	auths, ok := js["auths"].(map[string]any)
-	if !ok {
+	if parsed.Auths == nil {
 		return checkResult{sev: sevFail, detail: "missing or malformed 'auths' field: not a valid okd pull secret"}
 	}
-	if len(auths) == 0 {
+	if len(parsed.Auths) == 0 {
 		return checkResult{sev: sevFail, detail: "'auths' is empty: pull secret has no registry entries"}
 	}
 	return checkResult{sev: sevPass, detail: path}
