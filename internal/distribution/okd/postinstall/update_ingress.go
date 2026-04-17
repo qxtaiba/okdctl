@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/templates"
-	"github.com/qxtaiba/okdctl/internal/netutil"
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
@@ -44,9 +44,9 @@ type UpdateIngressResult struct {
 // converts HostNetwork controllers to LoadBalancerService, waits for their
 // LoadBalancer IPs, deploys production DNS, and optionally removes HAProxy.
 func (p *Phase) UpdateIngress(ctx context.Context, cfg *config.Config, opts UpdateIngressOptions) (*UpdateIngressResult, error) {
-	vip, err := netutil.ResolveVIP(cfg.Networking.Bastion.VIP, cfg.Networking.StaticIP.Start)
+	vip, err := phase.ResolveClusterVIP(cfg)
 	if err != nil {
-		return nil, fmt.Errorf("failed to resolve VIP: %w", err)
+		return nil, err
 	}
 
 	postOpts := &Options{

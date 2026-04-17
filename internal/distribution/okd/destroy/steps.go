@@ -9,7 +9,6 @@ import (
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/cleanup"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/firewall"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
-	"github.com/qxtaiba/okdctl/internal/netutil"
 )
 
 const (
@@ -46,9 +45,9 @@ func (p *Phase) destroySteps(cfg *config.Config, opts *Options) []distribution.S
 			SkipWhen:   func() bool { return opts.SkipCleanup || opts.CleanupKind == "" },
 			SkipReason: cleanupFilesSkipReason(opts),
 			Exec: func(ctx context.Context) error {
-				vip, err := netutil.ResolveVIP(cfg.Networking.Bastion.VIP, cfg.Networking.StaticIP.Start)
+				vip, err := phase.ResolveClusterVIP(cfg)
 				if err != nil {
-					return fmt.Errorf("failed to resolve VIP: %w", err)
+					return err
 				}
 				cleanupOpts := &cleanup.Options{
 					BaseOptions: phase.BaseOptions{

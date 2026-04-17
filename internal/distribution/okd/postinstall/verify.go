@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/qxtaiba/okdctl/internal/config"
-	"github.com/qxtaiba/okdctl/internal/netutil"
+	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
@@ -72,9 +72,9 @@ func (p *Phase) VerifyClusterHealth(ctx context.Context, _ *Options) (*ClusterHe
 // VerifyKubeVIP verifies that kube-vip is running and the VIP is responding.
 // Returns the VIP address if successful.
 func (p *Phase) VerifyKubeVIP(ctx context.Context, cfg *config.Config, opts *Options) (string, error) {
-	vip, err := netutil.ResolveVIP(cfg.Networking.Bastion.VIP, cfg.Networking.StaticIP.Start)
+	vip, err := phase.ResolveClusterVIP(cfg)
 	if err != nil {
-		return "", fmt.Errorf("failed to resolve VIP: %w", err)
+		return "", err
 	}
 
 	p.Log.Info(fmt.Sprintf("kubevip: checking vip %s", vip))

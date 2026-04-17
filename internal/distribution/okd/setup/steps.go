@@ -13,7 +13,6 @@ import (
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/templates"
 	"github.com/qxtaiba/okdctl/internal/executor"
-	"github.com/qxtaiba/okdctl/internal/netutil"
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
@@ -301,9 +300,9 @@ func (p *Phase) installSystemPackages(ctx context.Context) error {
 // generateKubeVIPManifests renders and writes the kube-vip RBAC and DaemonSet
 // manifests into the openshift manifests directory.
 func (p *Phase) generateKubeVIPManifests(cfg *config.Config, clusterDir string) error {
-	vip, err := netutil.ResolveVIP(cfg.Networking.Bastion.VIP, cfg.Networking.StaticIP.Start)
+	vip, err := phase.ResolveClusterVIP(cfg)
 	if err != nil {
-		return fmt.Errorf("failed to resolve VIP: %w", err)
+		return err
 	}
 
 	iface := cfg.Networking.StaticIP.Interface

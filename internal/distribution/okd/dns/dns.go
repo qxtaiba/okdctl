@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 
 	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/templates"
 	"github.com/qxtaiba/okdctl/internal/netutil"
 	"github.com/qxtaiba/okdctl/internal/system"
@@ -44,10 +45,9 @@ func BuildConfigData(cfg *config.Config) (templates.DNSConfigData, error) {
 		return templates.DNSConfigData{}, err
 	}
 
-	// Resolve VIP: use explicit config value or fall back to .10 derivation
-	kubeVipIP, err := netutil.ResolveVIP(cfg.Networking.Bastion.VIP, staticIPStart)
+	kubeVipIP, err := phase.ResolveClusterVIP(cfg)
 	if err != nil {
-		return templates.DNSConfigData{}, fmt.Errorf("failed to resolve VIP: %w", err)
+		return templates.DNSConfigData{}, err
 	}
 
 	data := templates.DNSConfigData{
