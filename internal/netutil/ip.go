@@ -20,8 +20,6 @@ func CIDRToNetmask(cidr string) (string, error) {
 	return fmt.Sprintf("%d.%d.%d.%d", mask[0], mask[1], mask[2], mask[3]), nil
 }
 
-// ValidateIPRangeInCIDR checks that startIP through startIP+count-1 all
-// fall within the given CIDR. Replaces the old /24-only check.
 func ValidateIPRangeInCIDR(startIP string, count int, cidr string) error {
 	if count <= 0 {
 		return fmt.Errorf("count must be positive: %d", count)

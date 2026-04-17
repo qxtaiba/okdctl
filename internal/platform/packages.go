@@ -19,7 +19,6 @@ type PackageManager interface {
 	AddRepo(ctx context.Context, name, url string, logger *slog.Logger) error
 }
 
-// NewPackageManager returns the appropriate PackageManager for the detected OS.
 func NewPackageManager(detected OS) PackageManager {
 	if detected.Family == familyDebian {
 		return &APTManager{}

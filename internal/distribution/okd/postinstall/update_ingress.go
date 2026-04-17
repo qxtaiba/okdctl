@@ -376,13 +376,11 @@ func (p *Phase) checkMetalLBAvailable(ctx context.Context) (bool, error) {
 // convertToLoadBalancer deletes a HostNetwork IngressController and recreates
 // it with LoadBalancerService strategy.
 func (p *Phase) convertToLoadBalancer(ctx context.Context, ic *ingressControllerInfo, timeout time.Duration) error {
-	// Build the replacement JSON before deleting.
 	replacementJSON, err := buildLBIngressController(ic)
 	if err != nil {
 		return fmt.Errorf("failed to build replacement IngressController: %w", err)
 	}
 
-	// Delete the existing IC.
 	_, err = p.Exec.RunChecked(ctx, "oc", "delete", "ingresscontroller", ic.Name,
 		"-n", "openshift-ingress-operator")
 	if err != nil {
@@ -395,7 +393,6 @@ func (p *Phase) convertToLoadBalancer(ctx context.Context, ic *ingressController
 		return fmt.Errorf("router-%s did not terminate: %w", ic.Name, err)
 	}
 
-	// Create the replacement via stdin.
 	_, err = p.Exec.RunWithStdinChecked(ctx, replacementJSON, "oc", "create", "-f", "-")
 	if err != nil {
 		p.Log.Warn(fmt.Sprintf("update-ingress: failed to create replacement, attempting rollback: %v", err))
@@ -409,7 +406,6 @@ func (p *Phase) convertToLoadBalancer(ctx context.Context, ic *ingressController
 // buildLBIngressController constructs a clean IngressController JSON with
 // LoadBalancerService strategy, preserving key fields from the original.
 func buildLBIngressController(ic *ingressControllerInfo) (string, error) {
-	// Parse the original to extract fields we want to preserve.
 	var original struct {
 		Metadata struct {
 			Name      string `json:"name"`
@@ -429,7 +425,6 @@ func buildLBIngressController(ic *ingressControllerInfo) (string, error) {
 		return "", fmt.Errorf("failed to parse original IngressController: %w", err)
 	}
 
-	// Build the replacement spec.
 	spec := map[string]any{
 		"endpointPublishingStrategy": map[string]any{
 			"type": strategyLoadBalancer,

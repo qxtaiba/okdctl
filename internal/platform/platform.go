@@ -138,7 +138,6 @@ func (o OS) ApacheUser() string {
 	return "apache"
 }
 
-// HasSELinux returns true if the OS family uses SELinux.
 func (o OS) HasSELinux() bool {
 	return o.Family == familyRHEL
 }

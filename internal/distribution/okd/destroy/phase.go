@@ -44,7 +44,6 @@ type Options struct {
 	RemovePackages bool
 }
 
-// NewOptions returns destroy options derived from config with sensible defaults.
 func NewOptions(cfg *config.Config, projectRoot string) Options {
 	return Options{
 		BaseOptions: phase.BaseOptions{

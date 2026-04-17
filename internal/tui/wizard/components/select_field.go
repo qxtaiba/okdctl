@@ -25,7 +25,6 @@ type SelectField struct {
 	defaultValue string
 }
 
-// NewSelectField creates a dropdown field with the given label and options.
 func NewSelectField(label string, options []string) *SelectField {
 	return &SelectField{
 		Label:   label,
