@@ -29,7 +29,7 @@ func (p *BasePhase) OcPollOutput(ctx context.Context, prefix, desc string, timeo
 	var captured string
 	err := system.WaitForWithTimeout(ctx, prefix, desc, func() bool {
 		result, _ := p.Exec.Run(ctx, "oc", args...)
-		if result == nil || result.ExitCode != 0 {
+		if result.ExitCode != 0 {
 			return false
 		}
 		value := strings.TrimSpace(result.Stdout)

@@ -82,7 +82,7 @@ func enableAndStartApache(ctx context.Context, serviceName string) error {
 
 func (p *Phase) verifyApacheListening(ctx context.Context) {
 	result, _ := p.Exec.Run(ctx, "ss", "-tlnp")
-	if result != nil && result.ExitCode == 0 && strings.Contains(result.Stdout, ":8080 ") {
+	if result.ExitCode == 0 && strings.Contains(result.Stdout, ":8080 ") {
 		p.Log.Info("apache: httpd service listening on port 8080")
 	} else {
 		p.Log.Warn("apache: httpd may not be listening on port 8080 - check configuration")

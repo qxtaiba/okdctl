@@ -103,7 +103,7 @@ func (s *SecretStore) Verify(ctx context.Context, env *addon.Environment) error 
 
 	if system.FileExists(credPath) {
 		result, err := env.Exec.Run(ctx, "oc", "get", "secret", credentialsSecretName, "-n", ns)
-		if err != nil || result == nil || result.ExitCode != 0 {
+		if err != nil || result.ExitCode != 0 {
 			return fmt.Errorf("secret %s not found in namespace %s", credentialsSecretName, ns)
 		}
 	} else {
@@ -112,7 +112,7 @@ func (s *SecretStore) Verify(ctx context.Context, env *addon.Environment) error 
 
 	if system.FileExists(tokenPath) {
 		result, err := env.Exec.Run(ctx, "oc", "get", "secret", tokenSecretName, "-n", ns)
-		if err != nil || result == nil || result.ExitCode != 0 {
+		if err != nil || result.ExitCode != 0 {
 			return fmt.Errorf("secret %s not found in namespace %s", tokenSecretName, ns)
 		}
 	} else {

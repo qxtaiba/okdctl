@@ -157,7 +157,7 @@ func (f *Flux) Verify(ctx context.Context, env *addon.Environment) error {
 
 	result, err = env.Exec.Run(ctx, "oc", "get", "deployment", "source-controller",
 		"-n", "flux-system", "-o", "jsonpath={.status.readyReplicas}")
-	if err != nil || result == nil || result.ExitCode != 0 {
+	if err != nil || result.ExitCode != 0 {
 		env.Logger.Warn("flux: cannot query source-controller deployment; verification skipped")
 	} else {
 		scReady := strings.TrimSpace(result.Stdout)
@@ -170,7 +170,7 @@ func (f *Flux) Verify(ctx context.Context, env *addon.Environment) error {
 	// Check GitRepository sync status (informational, not fatal for verify)
 	result, err = env.Exec.Run(ctx, "oc", "get", "gitrepository", "-n", "flux-system",
 		"-o", "jsonpath={.items[0].status.conditions[?(@.type==\"Ready\")].status}")
-	if err == nil && result != nil && result.ExitCode == 0 {
+	if err == nil && result.ExitCode == 0 {
 		syncStatus := strings.TrimSpace(result.Stdout)
 		if syncStatus == "True" {
 			env.Logger.Info("flux: git repository synced")
@@ -250,7 +250,7 @@ func (f *Flux) waitForControllers(ctx context.Context, env *addon.Environment) e
 			"-n", "flux-system",
 			"-l", "app.kubernetes.io/part-of=flux",
 			"-o", "jsonpath={range .items[*]}{.metadata.name}={.status.availableReplicas}{\"\\n\"}{end}")
-		if result == nil || result.ExitCode != 0 {
+		if result.ExitCode != 0 {
 			return false
 		}
 		lines := strings.Split(strings.TrimSpace(result.Stdout), "\n")
@@ -285,7 +285,7 @@ func (f *Flux) waitForGitSync(ctx context.Context, env *addon.Environment) error
 		result, _ := env.Exec.Run(ctx, "oc", "get", "gitrepository",
 			"-n", "flux-system",
 			"-o", "jsonpath={.items[0].status.conditions[?(@.type==\"Ready\")].status}")
-		if result == nil || result.ExitCode != 0 {
+		if result.ExitCode != 0 {
 			return false
 		}
 		return strings.TrimSpace(result.Stdout) == "True"

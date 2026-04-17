@@ -120,7 +120,7 @@ func (p *Phase) waitForKubeVIPPing(ctx context.Context, vip string, opts *Option
 
 	if err := system.WaitForWithTimeout(ctx, "kubevip", "ping", func() bool {
 		result, _ := p.Exec.Run(ctx, "ping", "-c", "1", "-W", "2", vip)
-		return result != nil && result.ExitCode == 0
+		return result.ExitCode == 0
 	}, timeout, p.Log); err != nil {
 		return fmt.Errorf("vip %s is not responding to ping: %w", vip, err)
 	}

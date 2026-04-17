@@ -67,7 +67,7 @@ func EnsureNamespace(ctx context.Context, env *Environment, namespace string) er
 			// don't attempt create, let retry handle it.
 			return fmt.Errorf("cannot reach cluster to check namespace %s: %w", namespace, err)
 		}
-		if result != nil && result.ExitCode == 0 {
+		if result.ExitCode == 0 {
 			return nil
 		}
 

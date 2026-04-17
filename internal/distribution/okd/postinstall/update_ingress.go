@@ -518,12 +518,8 @@ func (p *Phase) attemptRollback(ctx context.Context, ic *ingressControllerInfo) 
 	}
 
 	result, err := p.Exec.RunWithStdin(ctx, rollbackJSON, "oc", "create", "-f", "-")
-	if err != nil || (result != nil && result.ExitCode != 0) {
-		stderr := ""
-		if result != nil {
-			stderr = result.Stderr
-		}
-		p.Log.Warn(fmt.Sprintf("update-ingress: rollback create failed: %v %s", err, stderr))
+	if err != nil || result.ExitCode != 0 {
+		p.Log.Warn(fmt.Sprintf("update-ingress: rollback create failed: %v %s", err, result.Stderr))
 		return
 	}
 
@@ -537,9 +533,6 @@ func (p *Phase) waitForRouterGone(ctx context.Context, icName string, timeout ti
 	return system.WaitFor(ctx, "ingress", deployName+" termination", func() bool {
 		result, _ := p.Exec.Run(ctx, "oc", "get", "deployment", deployName,
 			"-n", "openshift-ingress", "--no-headers", "--ignore-not-found")
-		if result == nil {
-			return false
-		}
 		// Gone when stdout is empty (--ignore-not-found returns empty for missing resources).
 		return strings.TrimSpace(result.Stdout) == ""
 	}, system.WaitForOptions{
