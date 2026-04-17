@@ -62,7 +62,6 @@ type Phase struct {
 	phase.BasePhase
 }
 
-// New creates a new destroy phase coordinator.
 func New(exec *executor.Executor, logger *slog.Logger, version string) *Phase {
 	return &Phase{
 		BasePhase: phase.NewBasePhase(exec, logger, version),
