@@ -92,7 +92,7 @@ func Download(ctx context.Context, opts *Options) error {
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, opts.URL, http.NoBody)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to build request for %s: %w", opts.Description, err)
 	}
 
 	resp, err := client.Do(req)

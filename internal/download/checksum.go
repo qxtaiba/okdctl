@@ -20,7 +20,7 @@ const maxChecksumFileSize = 1024 * 1024
 func CalculateChecksum(path string) (string, error) {
 	file, err := os.Open(path)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to open %s for checksum: %w", path, err)
 	}
 	defer func() { _ = file.Close() }()
 
@@ -55,12 +55,12 @@ func FetchChecksum(ctx context.Context, checksumsURL, filename string) (string, 
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, checksumsURL, http.NoBody)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to build checksum request for %s: %w", checksumsURL, err)
 	}
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to fetch checksums from %s: %w", checksumsURL, err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 

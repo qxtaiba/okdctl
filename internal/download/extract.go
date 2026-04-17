@@ -140,13 +140,13 @@ func ExtractTarGz(ctx context.Context, opts ExtractOptions) error {
 
 	file, err := os.Open(opts.ArchivePath)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to open archive %s: %w", opts.ArchivePath, err)
 	}
 	defer func() { _ = file.Close() }()
 
 	gzipReader, err := gzip.NewReader(file)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to decompress archive %s: %w", opts.ArchivePath, err)
 	}
 	defer func() { _ = gzipReader.Close() }()
 
@@ -168,7 +168,7 @@ func ExtractTarGz(ctx context.Context, opts ExtractOptions) error {
 			break
 		}
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to read tar entry from %s: %w", opts.ArchivePath, err)
 		}
 
 		if err := processTarEntry(tarReader, header, opts.DestDir, opts.StripComponents); err != nil {
