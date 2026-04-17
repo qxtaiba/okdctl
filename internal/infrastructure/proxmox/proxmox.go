@@ -203,9 +203,9 @@ func (p *Provider) retrieveProvisionResult(cfg *config.Config) (*ProvisionResult
 	result.BootstrapIP = bootstrapIP
 	result.VMs = append(result.VMs, VMStatus{
 		Name:      "bootstrap",
-		Role:      string(RoleBootstrap),
+		Role:      RoleBootstrap,
 		IPAddress: bootstrapIP,
-		Status:    string(StateRunning),
+		Status:    StateRunning,
 	})
 
 	for i := range cfg.Topology.ControlPlane.Count {
@@ -216,9 +216,9 @@ func (p *Provider) retrieveProvisionResult(cfg *config.Config) (*ProvisionResult
 		result.ControlPlaneIPs = append(result.ControlPlaneIPs, ip)
 		result.VMs = append(result.VMs, VMStatus{
 			Name:      fmt.Sprintf("master%d", i),
-			Role:      string(RoleMaster),
+			Role:      RoleMaster,
 			IPAddress: ip,
-			Status:    string(StateRunning),
+			Status:    StateRunning,
 		})
 	}
 
@@ -231,9 +231,9 @@ func (p *Provider) retrieveProvisionResult(cfg *config.Config) (*ProvisionResult
 		result.WorkerIPs = append(result.WorkerIPs, ip)
 		result.VMs = append(result.VMs, VMStatus{
 			Name:      fmt.Sprintf("worker%d", i),
-			Role:      string(RoleWorker),
+			Role:      RoleWorker,
 			IPAddress: ip,
-			Status:    string(StateRunning),
+			Status:    StateRunning,
 		})
 	}
 

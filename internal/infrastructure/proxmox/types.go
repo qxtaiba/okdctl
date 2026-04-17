@@ -22,12 +22,10 @@ type ProvisionResult struct {
 }
 
 type VMStatus struct {
-	ID   string
-	Name string
-	// Role is one of: bootstrap, master, worker.
-	Role string
-	// Status is one of: running, stopped, creating, deleting, unknown.
-	Status    string
+	ID        string
+	Name      string
+	Role      VMRole
+	Status    VMState
 	IPAddress string
 }
 
