@@ -30,16 +30,22 @@ func ResolveReleaseBaseURL(cfg *config.Config) string {
 }
 
 var toolURLEnvVars = map[string]string{
-	"helm": "OKDCTL_HELM_URL",
-	"sops": "OKDCTL_SOPS_URL",
-	"yq":   "OKDCTL_YQ_URL",
+	string(toolHelm): "OKDCTL_HELM_URL",
+	string(toolSops): "OKDCTL_SOPS_URL",
+	string(toolYQ):   "OKDCTL_YQ_URL",
+}
+
+var toolVersionEnvVars = map[string]string{
+	string(toolHelm): "OKDCTL_HELM_VERSION",
+	string(toolSops): "OKDCTL_SOPS_VERSION",
+	string(toolYQ):   "OKDCTL_YQ_VERSION",
 }
 
 // ResolveToolURL returns the download URL template for the named binary tool.
 // Resolution order: env var > cfg.Deployment.ToolVersions[tool].URLTemplate >
-// defaultURL. The returned string may contain a single %s for arch
-// substitution; callers always apply fmt.Sprintf(url, arch), so a verbatim URL
-// (no %s) passes through unchanged.
+// defaultURL. The returned string may contain {version} and {arch} placeholders
+// that callers substitute via strings.NewReplacer; a URL with no placeholders
+// passes through verbatim.
 func ResolveToolURL(tool, defaultURL string, cfg *config.Config) string {
 	if envKey, ok := toolURLEnvVars[tool]; ok {
 		if v := os.Getenv(envKey); v != "" {
@@ -52,6 +58,23 @@ func ResolveToolURL(tool, defaultURL string, cfg *config.Config) string {
 		}
 	}
 	return defaultURL
+}
+
+// ResolveToolVersion returns the version string used to expand the {version}
+// placeholder in a tool URL template. Resolution order: env var >
+// cfg.Deployment.ToolVersions[tool].Version > defaultVersion.
+func ResolveToolVersion(tool, defaultVersion string, cfg *config.Config) string {
+	if envKey, ok := toolVersionEnvVars[tool]; ok {
+		if v := os.Getenv(envKey); v != "" {
+			return v
+		}
+	}
+	if cfg != nil {
+		if ov, ok := cfg.Deployment.ToolVersions[tool]; ok && ov.Version != "" {
+			return ov.Version
+		}
+	}
+	return defaultVersion
 }
 
 func (p *Phase) DownloadOKDTools(ctx context.Context, version string, opts *Options) error {

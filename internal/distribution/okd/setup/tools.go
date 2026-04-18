@@ -63,20 +63,24 @@ func (p *Phase) InstallExternalTools(ctx context.Context, cfg *config.Config) er
 }
 
 // binaryTools defines the install specs for tools fetched as prebuilt
-// binaries. The %s in url is substituted with platform.DownloadArch().
+// binaries. url may contain {version} and {arch} placeholders substituted
+// at install time; defaultVersion seeds {version} when no override is set.
+// yq intentionally uses GitHub's /releases/latest/download/ redirect rather
+// than a {version} placeholder — it is the only path that resolves to "the
+// current release" without a concrete tag.
 var binaryTools = map[externalTool]binaryInstallSpec{
 	toolYQ: {
 		name: "yq", versionFlag: "--version",
-		url: "https://github.com/mikefarah/yq/releases/latest/download/yq_linux_%s",
+		url: "https://github.com/mikefarah/yq/releases/latest/download/yq_linux_{arch}",
 	},
 	toolHelm: {
-		name: "helm", versionFlag: "version",
-		url:           "https://get.helm.sh/helm-v3.17.3-linux-%s.tar.gz",
+		name: "helm", versionFlag: "version", defaultVersion: "v3.17.3",
+		url:           "https://get.helm.sh/helm-{version}-linux-{arch}.tar.gz",
 		archiveBinary: "helm", stripComponents: 1,
 	},
 	toolSops: {
-		name: "sops", versionFlag: "--version",
-		url: "https://github.com/getsops/sops/releases/download/v3.9.4/sops-v3.9.4.linux.%s",
+		name: "sops", versionFlag: "--version", defaultVersion: "v3.9.4",
+		url: "https://github.com/getsops/sops/releases/download/{version}/sops-{version}.linux.{arch}",
 	},
 }
 
@@ -95,8 +99,16 @@ func (p *Phase) installTool(ctx context.Context, tool externalTool, cfg *config.
 		p.Log.Warn(fmt.Sprintf("tools: no installer for %s, skipping (install manually)", tool))
 		return nil
 	}
-	spec.url = fmt.Sprintf(ResolveToolURL(string(tool), spec.url, cfg), platform.DownloadArch())
-	return p.installBinary(ctx, spec)
+	resolvedURL := ResolveToolURL(string(tool), spec.url, cfg)
+	resolvedVersion := ResolveToolVersion(string(tool), spec.defaultVersion, cfg)
+	if resolvedURL != spec.url || resolvedVersion != spec.defaultVersion {
+		p.Log.Info(fmt.Sprintf("tools: %s using override (version=%q url=%s)", tool, resolvedVersion, resolvedURL))
+	}
+	spec.url = strings.NewReplacer(
+		"{version}", resolvedVersion,
+		"{arch}", platform.DownloadArch(),
+	).Replace(resolvedURL)
+	return p.installBinary(ctx, &spec)
 }
 
 func (p *Phase) installTerraform(ctx context.Context) error {
@@ -132,12 +144,13 @@ func (p *Phase) installTerraform(ctx context.Context) error {
 type binaryInstallSpec struct {
 	name            string
 	url             string
+	defaultVersion  string
 	versionFlag     string
 	archiveBinary   string // if non-empty, download is a tar.gz; value is the binary path within the archive
 	stripComponents int
 }
 
-func (p *Phase) installBinary(ctx context.Context, spec binaryInstallSpec) error {
+func (p *Phase) installBinary(ctx context.Context, spec *binaryInstallSpec) error {
 	p.Log.Info(fmt.Sprintf("tools: installing %s", spec.name))
 
 	tempFile := filepath.Join(os.TempDir(), spec.name+"-download")

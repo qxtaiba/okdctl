@@ -122,10 +122,11 @@ type HTTPServerConfig struct {
 	IgnitionServerIP string `json:"ignition_server_ip"`
 }
 
-// ToolVersionOverride lets operators replace the download URL for a single
-// binary tool. URLTemplate may contain a single %s for the platform arch
-// (same contract as the built-in defaults); a value without %s is used
-// verbatim so arch substitution is a no-op.
+// ToolVersionOverride lets operators pin a tool version or redirect its
+// download URL. URLTemplate may contain {version} and {arch} placeholders
+// substituted at install time; a URL without placeholders is used verbatim.
+// Version overrides the default version used in URL construction, so
+// setting only Version swaps the version embedded in the default template.
 type ToolVersionOverride struct {
 	Version     string `json:"version,omitempty"`
 	URLTemplate string `json:"url_template,omitempty"`
