@@ -64,7 +64,6 @@ func (p *Phase) UpdateIngress(ctx context.Context, cfg *config.Config, opts Upda
 		return nil, fmt.Errorf("no IngressControllers found in the cluster")
 	}
 
-	// Log what we found.
 	var descriptions []string
 	for _, ic := range controllers {
 		descriptions = append(descriptions, fmt.Sprintf("%s (%s)", ic.Name, ic.Strategy))
@@ -72,7 +71,6 @@ func (p *Phase) UpdateIngress(ctx context.Context, cfg *config.Config, opts Upda
 	p.Log.Info(fmt.Sprintf("update-ingress: found %d controller(s): %s",
 		len(controllers), strings.Join(descriptions, ", ")))
 
-	// Separate by strategy.
 	var hostNetworkICs, lbICs []ingressControllerInfo
 	for _, ic := range controllers {
 		if ic.Strategy == strategyHostNetwork {
@@ -82,7 +80,6 @@ func (p *Phase) UpdateIngress(ctx context.Context, cfg *config.Config, opts Upda
 		}
 	}
 
-	// Attempt conversion of HostNetwork ICs.
 	convertedCount := 0
 	var convertedNames map[string]bool
 	if len(hostNetworkICs) > 0 {
@@ -100,7 +97,6 @@ func (p *Phase) UpdateIngress(ctx context.Context, cfg *config.Config, opts Upda
 				return nil, fmt.Errorf("failed to re-discover IngressControllers after conversion: %w", err)
 			}
 
-			// Re-separate after conversion, marking converted ICs.
 			hostNetworkICs = nil
 			lbICs = nil
 			for _, ic := range controllers {
@@ -288,15 +284,18 @@ func (p *Phase) handleHostNetworkConversion(
 	return convertedCount, names, nil
 }
 
+// IngressStrategy is the value of IngressController.spec.endpointPublishingStrategy.type.
+type IngressStrategy string
+
 const (
-	strategyHostNetwork  = "HostNetwork"
-	strategyLoadBalancer = "LoadBalancerService"
+	strategyHostNetwork  IngressStrategy = "HostNetwork"
+	strategyLoadBalancer IngressStrategy = "LoadBalancerService"
 )
 
 type ingressControllerInfo struct {
 	Name      string
 	Domain    string
-	Strategy  string
+	Strategy  IngressStrategy
 	RawJSON   json.RawMessage
 	converted bool
 }
@@ -327,7 +326,7 @@ func (p *Phase) discoverIngressControllers(ctx context.Context) ([]ingressContro
 			} `json:"metadata"`
 			Spec struct {
 				EndpointPublishingStrategy *struct {
-					Type string `json:"type"`
+					Type IngressStrategy `json:"type"`
 				} `json:"endpointPublishingStrategy"`
 			} `json:"spec"`
 			Status struct {
@@ -387,7 +386,6 @@ func (p *Phase) convertToLoadBalancer(ctx context.Context, ic *ingressController
 		return fmt.Errorf("failed to delete IngressController %q: %w", ic.Name, err)
 	}
 
-	// Wait for the router deployment to be gone.
 	p.Log.Info(fmt.Sprintf("update-ingress: waiting for router-%s deployment to terminate...", ic.Name))
 	if err := p.waitForRouterGone(ctx, ic.Name, timeout); err != nil {
 		return fmt.Errorf("router-%s did not terminate: %w", ic.Name, err)
@@ -425,44 +423,47 @@ func buildLBIngressController(ic *ingressControllerInfo) (string, error) {
 		return "", fmt.Errorf("failed to parse original IngressController: %w", err)
 	}
 
-	spec := map[string]any{
-		"endpointPublishingStrategy": map[string]any{
-			"type": strategyLoadBalancer,
-		},
-	}
-
-	if original.Spec.Domain != "" {
-		spec["domain"] = original.Spec.Domain
-	}
-	if original.Spec.Replicas != nil {
-		spec["replicas"] = *original.Spec.Replicas
-	}
-	if original.Spec.DefaultCertificate != nil {
-		spec["defaultCertificate"] = original.Spec.DefaultCertificate
-	}
-	if original.Spec.RouteSelector != nil {
-		spec["routeSelector"] = original.Spec.RouteSelector
-	}
-	if original.Spec.RouteAdmission != nil {
-		spec["routeAdmission"] = original.Spec.RouteAdmission
-	}
-	if original.Spec.NodePlacement != nil {
-		spec["nodePlacement"] = original.Spec.NodePlacement
-	}
-
 	namespace := original.Metadata.Namespace
 	if namespace == "" {
 		namespace = "openshift-ingress-operator"
 	}
 
-	replacement := map[string]any{
-		"apiVersion": "operator.openshift.io/v1",
-		"kind":       "IngressController",
-		"metadata": map[string]any{
-			"name":      original.Metadata.Name,
-			"namespace": namespace,
+	type endpointPublishingStrategy struct {
+		Type IngressStrategy `json:"type"`
+	}
+	type specOut struct {
+		EndpointPublishingStrategy endpointPublishingStrategy `json:"endpointPublishingStrategy"`
+		Domain                     string                     `json:"domain,omitempty"`
+		Replicas                   *int32                     `json:"replicas,omitempty"`
+		DefaultCertificate         *json.RawMessage           `json:"defaultCertificate,omitempty"`
+		RouteSelector              *json.RawMessage           `json:"routeSelector,omitempty"`
+		RouteAdmission             *json.RawMessage           `json:"routeAdmission,omitempty"`
+		NodePlacement              *json.RawMessage           `json:"nodePlacement,omitempty"`
+	}
+	type metadataOut struct {
+		Name      string `json:"name"`
+		Namespace string `json:"namespace"`
+	}
+	type replacementOut struct {
+		APIVersion string      `json:"apiVersion"`
+		Kind       string      `json:"kind"`
+		Metadata   metadataOut `json:"metadata"`
+		Spec       specOut     `json:"spec"`
+	}
+
+	replacement := replacementOut{
+		APIVersion: "operator.openshift.io/v1",
+		Kind:       "IngressController",
+		Metadata:   metadataOut{Name: original.Metadata.Name, Namespace: namespace},
+		Spec: specOut{
+			EndpointPublishingStrategy: endpointPublishingStrategy{Type: strategyLoadBalancer},
+			Domain:                     original.Spec.Domain,
+			Replicas:                   original.Spec.Replicas,
+			DefaultCertificate:         original.Spec.DefaultCertificate,
+			RouteSelector:              original.Spec.RouteSelector,
+			RouteAdmission:             original.Spec.RouteAdmission,
+			NodePlacement:              original.Spec.NodePlacement,
 		},
-		"spec": spec,
 	}
 
 	data, err := json.Marshal(replacement)
@@ -481,7 +482,6 @@ func buildRollbackJSON(ic *ingressControllerInfo) (string, error) {
 		return "", err
 	}
 
-	// Strip server-managed fields from metadata.
 	if metaRaw, ok := obj["metadata"]; ok {
 		var meta map[string]json.RawMessage
 		if err := json.Unmarshal(metaRaw, &meta); err == nil {

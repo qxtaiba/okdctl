@@ -4,11 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net"
+	"net/http"
 	"strings"
 	"time"
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
+	"github.com/qxtaiba/okdctl/internal/httputil"
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
@@ -23,8 +27,8 @@ type nodeList struct {
 		} `json:"metadata"`
 		Status struct {
 			Conditions []struct {
-				Type   string `json:"type"`
-				Status string `json:"status"`
+				Type   phase.ConditionType   `json:"type"`
+				Status phase.ConditionStatus `json:"status"`
 			} `json:"conditions"`
 		} `json:"status"`
 	} `json:"items"`
@@ -43,8 +47,7 @@ func parseNodeReadiness(payload []byte) (ready, total int, err error) {
 	for _, node := range n.Items {
 		total++
 		for _, cond := range node.Status.Conditions {
-			if phase.ConditionType(cond.Type) == phase.ConditionTypeReady &&
-				phase.ConditionStatus(cond.Status) == phase.ConditionStatusTrue {
+			if cond.Type == phase.ConditionTypeReady && cond.Status == phase.ConditionStatusTrue {
 				ready++
 				break
 			}
@@ -155,29 +158,44 @@ func (p *Phase) waitForKubeVIPPing(ctx context.Context, vip string, opts *Option
 		timeout = DefaultKubeVIPVIPTimeout
 	}
 
-	if err := system.WaitForWithTimeout(ctx, "kubevip", "ping", func() bool {
-		result, _ := p.Exec.Run(ctx, "ping", "-c", "1", "-W", "2", vip)
-		return result.ExitCode == 0
+	dialer := &net.Dialer{Timeout: 2 * time.Second}
+	if err := system.WaitForWithTimeout(ctx, "kubevip", "port 6443", func() bool {
+		conn, dErr := dialer.DialContext(ctx, "tcp", net.JoinHostPort(vip, "6443"))
+		if dErr != nil {
+			return false
+		}
+		_ = conn.Close()
+		return true
 	}, timeout, p.Log); err != nil {
-		return fmt.Errorf("vip %s is not responding to ping: %w", vip, err)
+		return fmt.Errorf("vip %s is not accepting tcp:6443: %w", vip, err)
 	}
 
 	p.Log.Info(fmt.Sprintf("kubevip: vip %s is reachable", vip))
 	return nil
 }
 
-// verifyKubeVIPAPIHealth verifies the API server responds via the VIP.
+// verifyKubeVIPAPIHealth verifies the API server responds via the VIP. TLS
+// verification is skipped because the VIP is not yet in the API server's
+// certificate SANs during the bootstrap-to-kube-vip transition.
 func (p *Phase) verifyKubeVIPAPIHealth(ctx context.Context, vip string) error {
-	// -k skips cert verification because the VIP is not yet in the API
-	// server's TLS certificate SANs during the bootstrap-to-kube-vip transition.
 	healthURL := fmt.Sprintf("https://%s:6443/healthz", vip)
 	p.Log.Info(fmt.Sprintf("verify: checking vip health at %s (tls verification skipped, vip not yet in cert SANs)", healthURL))
-	result, err := p.Exec.RunChecked(ctx, "curl", "-sk", "--connect-timeout", "5", healthURL)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, healthURL, http.NoBody)
+	if err != nil {
+		return fmt.Errorf("failed to build health request: %w", err)
+	}
+	resp, err := httputil.NewInsecure(5 * time.Second).Do(req)
 	if err != nil {
 		return fmt.Errorf("failed to check api health at %s: %w", healthURL, err)
 	}
+	defer resp.Body.Close()
 
-	response := strings.TrimSpace(result.Stdout)
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("failed to read health response: %w", err)
+	}
+	response := strings.TrimSpace(string(body))
 	if response != "ok" {
 		return fmt.Errorf("api health check returned unexpected response: %s (expected 'ok')", response)
 	}

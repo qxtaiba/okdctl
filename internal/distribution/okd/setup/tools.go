@@ -1,9 +1,10 @@
 package setup
 
 import (
-	"bytes"
 	"context"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -15,6 +16,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/download"
 	"github.com/qxtaiba/okdctl/internal/executor"
+	"github.com/qxtaiba/okdctl/internal/httputil"
 	"github.com/qxtaiba/okdctl/internal/platform"
 	"github.com/qxtaiba/okdctl/internal/system"
 )
@@ -219,12 +221,20 @@ func installHashiCorpDebianRepo(ctx context.Context) error {
 	gpgPath := "/usr/share/keyrings/hashicorp-archive-keyring.gpg"
 
 	gpgTmp, err := system.WriteTempFile("hashicorp-gpg", 0o600, func(f *os.File) error {
-		var stderr bytes.Buffer
-		cmd := exec.CommandContext(ctx, "wget", "-qO-", "https://apt.releases.hashicorp.com/gpg")
-		cmd.Stdout = f
-		cmd.Stderr = &stderr
-		if err := cmd.Run(); err != nil {
-			return fmt.Errorf("wget failed: %w (stderr: %s)", err, stderr.String())
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://apt.releases.hashicorp.com/gpg", http.NoBody)
+		if err != nil {
+			return err
+		}
+		resp, err := httputil.New(httputil.TimeoutShort).Do(req)
+		if err != nil {
+			return fmt.Errorf("fetch hashicorp gpg key: %w", err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			return fmt.Errorf("fetch hashicorp gpg key: status %d", resp.StatusCode)
+		}
+		if _, err := io.Copy(f, resp.Body); err != nil {
+			return fmt.Errorf("copy hashicorp gpg key: %w", err)
 		}
 		return nil
 	})

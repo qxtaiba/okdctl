@@ -1,13 +1,15 @@
 package setup
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/qxtaiba/okdctl/internal/config"
@@ -40,7 +42,7 @@ func (p *Phase) ensureIgnitionDir(_ context.Context, webRoot string) (string, er
 	return ignitionDir, nil
 }
 
-func (p *Phase) configureApachePort(ctx context.Context) {
+func (p *Phase) configureApachePort(_ context.Context) {
 	httpdConf := p.OS.ApacheConfigPath()
 	if !system.FileExists(httpdConf) {
 		return
@@ -51,8 +53,33 @@ func (p *Phase) configureApachePort(ctx context.Context) {
 		p.Log.Warn(fmt.Sprintf("apache: could not backup httpd.conf: %v", err))
 	}
 
-	result, err := p.Exec.Run(ctx, "sed", "-i", "s/^Listen 80$/Listen 8080/", httpdConf)
-	if err != nil || result.ExitCode != 0 {
+	original, err := os.ReadFile(httpdConf)
+	if err != nil {
+		p.Log.Warn(fmt.Sprintf("apache: could not read httpd.conf: %v", err))
+		return
+	}
+
+	var buf bytes.Buffer
+	changed := false
+	scanner := bufio.NewScanner(bytes.NewReader(original))
+	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if line == "Listen 80" {
+			line = "Listen 8080"
+			changed = true
+		}
+		buf.WriteString(line)
+		buf.WriteByte('\n')
+	}
+	if err := scanner.Err(); err != nil {
+		p.Log.Warn(fmt.Sprintf("apache: scan of httpd.conf failed: %v", err))
+		return
+	}
+	if !changed {
+		return
+	}
+	if err := system.AtomicWrite(httpdConf, buf.Bytes(), 0o644); err != nil {
 		p.Log.Warn(fmt.Sprintf("apache: could not modify httpd.conf to listen on port 8080: %v", err))
 	}
 }
@@ -83,12 +110,14 @@ func enableAndStartApache(ctx context.Context, serviceName string) error {
 }
 
 func (p *Phase) verifyApacheListening(ctx context.Context) {
-	result, _ := p.Exec.Run(ctx, "ss", "-tlnp")
-	if result.ExitCode == 0 && strings.Contains(result.Stdout, ":8080 ") {
-		p.Log.Info("apache: httpd service listening on port 8080")
-	} else {
+	dialer := &net.Dialer{Timeout: 1 * time.Second}
+	conn, err := dialer.DialContext(ctx, "tcp", "127.0.0.1:8080")
+	if err != nil {
 		p.Log.Warn("apache: httpd may not be listening on port 8080 - check configuration")
+		return
 	}
+	_ = conn.Close()
+	p.Log.Info("apache: httpd service listening on port 8080")
 }
 
 func (p *Phase) ConfigureApache(ctx context.Context, cfg *config.Config) error {
@@ -147,13 +176,37 @@ func (p *Phase) DeployToWebServer(ctx context.Context, cfg *config.Config, clust
 	authSrc := filepath.Join(clusterDir, "auth")
 	if system.FileExists(authSrc) {
 		authDest := filepath.Join(webRoot, "auth")
-		_, err := p.Exec.RunChecked(ctx, "cp", "-r", authSrc, authDest)
-		if err != nil {
+		if err := copyAuthTree(authSrc, authDest); err != nil {
 			return fmt.Errorf("failed to copy auth directory %s to web root %s: %w", authSrc, authDest, err)
 		}
 	}
 
 	return nil
+}
+
+// copyAuthTree copies the install-config auth/ directory (kubeadmin-password,
+// kubeconfig) into the web root, preserving each file's mode bits. `cp -r`
+// would lose mode because it doesn't imply `-p`, leaving the htpasswd-class
+// files world-readable under the apache user's umask.
+func copyAuthTree(src, dst string) error {
+	return filepath.WalkDir(src, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(src, path)
+		if err != nil {
+			return err
+		}
+		target := filepath.Join(dst, rel)
+		if d.IsDir() {
+			info, err := os.Stat(path)
+			if err != nil {
+				return err
+			}
+			return os.MkdirAll(target, info.Mode().Perm())
+		}
+		return system.CopyFile(path, target)
+	})
 }
 
 func (p *Phase) VerifyWebServer(ctx context.Context, baseURL string) error {

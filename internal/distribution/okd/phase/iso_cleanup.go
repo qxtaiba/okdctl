@@ -59,21 +59,26 @@ func validateISODir(isoDir string) error {
 	return nil
 }
 
+// vmStatus is the "status" field value in pvesh qemu list output.
+type vmStatus string
+
+const vmStatusRunning vmStatus = "running"
+
 // parseVMIDsFromSummary parses the JSON array returned by
 // pvesh get /nodes/<node>/qemu and returns the vmid of each running VM.
 // Stopped VMs are excluded: yanking a cdrom from a running VM disrupts it,
 // but a stopped VM that still references an ISO can be destroyed cleanly.
 func parseVMIDsFromSummary(data []byte) ([]int, error) {
 	var vms []struct {
-		VMID   int    `json:"vmid"`
-		Status string `json:"status"`
+		VMID   int      `json:"vmid"`
+		Status vmStatus `json:"status"`
 	}
 	if err := json.Unmarshal(data, &vms); err != nil {
 		return nil, fmt.Errorf("pvesh qemu list output not valid json: %w", err)
 	}
 	var ids []int
 	for _, vm := range vms {
-		if vm.Status == "running" {
+		if vm.Status == vmStatusRunning {
 			ids = append(ids, vm.VMID)
 		}
 	}
@@ -140,16 +145,16 @@ func anyVMReferencesISO(ctx context.Context, p *RemoteISOParams, isoBase string)
 
 var deviceFields = func() []string {
 	fields := []string{"boot", "bootdisk"}
-	for i := 0; i <= 3; i++ {
+	for i := range 4 {
 		fields = append(fields, fmt.Sprintf("ide%d", i))
 	}
-	for i := 0; i <= 5; i++ {
+	for i := range 6 {
 		fields = append(fields, fmt.Sprintf("sata%d", i))
 	}
-	for i := 0; i <= 30; i++ {
+	for i := range 31 {
 		fields = append(fields, fmt.Sprintf("scsi%d", i))
 	}
-	for i := 0; i <= 15; i++ {
+	for i := range 16 {
 		fields = append(fields, fmt.Sprintf("virtio%d", i))
 	}
 	return fields

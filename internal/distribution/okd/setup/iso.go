@@ -59,28 +59,59 @@ func writePreInstallScript(script string) (string, error) {
 	})
 }
 
+// ignitionConfig is a narrow subset of the Ignition v3.3 spec — only the
+// fields writeInstallerTriggerIgnition emits. See
+// https://coreos.github.io/ignition/specs/v3.3.0/ for the full schema.
+type ignitionConfig struct {
+	Ignition ignitionMeta    `json:"ignition"`
+	Storage  ignitionStorage `json:"storage"`
+	Passwd   *ignitionPasswd `json:"passwd,omitempty"`
+}
+
+type ignitionMeta struct {
+	Version string `json:"version"`
+}
+
+type ignitionStorage struct {
+	Files []ignitionFile `json:"files"`
+}
+
+type ignitionFile struct {
+	Path     string           `json:"path"`
+	Mode     int              `json:"mode"`
+	Contents ignitionContents `json:"contents"`
+}
+
+type ignitionContents struct {
+	Source string `json:"source"`
+}
+
+type ignitionPasswd struct {
+	Users []ignitionUser `json:"users"`
+}
+
+type ignitionUser struct {
+	Name              string   `json:"name"`
+	SSHAuthorizedKeys []string `json:"sshAuthorizedKeys"`
+}
+
 // writeInstallerTriggerIgnition creates a temp Ignition config that seeds
 // /etc/coreos/installer.d/ so coreos-installer.service's
 // ConditionDirectoryNotEmpty is satisfied before systemd evaluates it.
 func writeInstallerTriggerIgnition(sshKey string) (string, error) {
-	ign := map[string]any{
-		"ignition": map[string]any{"version": "3.3.0"},
-		"storage": map[string]any{
-			"files": []map[string]any{{
-				"path": "/etc/coreos/installer.d/00-install-trigger.yaml",
-				"mode": 420,
-				"contents": map[string]any{
-					"source": "data:,fetch-retries%3A%200%0A",
-				},
+	ign := ignitionConfig{
+		Ignition: ignitionMeta{Version: "3.3.0"},
+		Storage: ignitionStorage{
+			Files: []ignitionFile{{
+				Path:     "/etc/coreos/installer.d/00-install-trigger.yaml",
+				Mode:     420,
+				Contents: ignitionContents{Source: "data:,fetch-retries%3A%200%0A"},
 			}},
 		},
 	}
 	if sshKey != "" {
-		ign["passwd"] = map[string]any{
-			"users": []map[string]any{{
-				"name":              "core",
-				"sshAuthorizedKeys": []string{sshKey},
-			}},
+		ign.Passwd = &ignitionPasswd{
+			Users: []ignitionUser{{Name: "core", SSHAuthorizedKeys: []string{sshKey}}},
 		}
 	}
 

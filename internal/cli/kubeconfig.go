@@ -77,12 +77,12 @@ func runKubeconfig(_ *cobra.Command, _ []string) error {
 func mergeKubeconfig(srcData []byte) error {
 	dest := mergeTargetPath()
 
-	var srcMap map[string]interface{}
+	var srcMap map[string]any
 	if err := yaml.Unmarshal(srcData, &srcMap); err != nil {
 		return fmt.Errorf("parse source kubeconfig: %w", err)
 	}
 
-	var destMap map[string]interface{}
+	var destMap map[string]any
 	if system.FileExists(dest) {
 		raw, err := os.ReadFile(dest)
 		if err != nil {
@@ -93,7 +93,7 @@ func mergeKubeconfig(srcData []byte) error {
 		}
 	}
 	if destMap == nil {
-		destMap = map[string]interface{}{}
+		destMap = map[string]any{}
 	}
 
 	for _, key := range []string{"clusters", "users", "contexts"} {
@@ -137,17 +137,17 @@ func mergeTargetPath() string {
 
 // mergeNamedList appends entries from src into dest, skipping any src entry
 // whose .name already appears in dest. Both arguments are the raw YAML
-// unmarshalled representation ([]interface{} of map[string]interface{}).
-func mergeNamedList(dest, src interface{}) interface{} {
-	destSlice, _ := dest.([]interface{})
-	srcSlice, _ := src.([]interface{})
+// unmarshalled representation ([]any of map[string]any).
+func mergeNamedList(dest, src any) any {
+	destSlice, _ := dest.([]any)
+	srcSlice, _ := src.([]any)
 	if len(srcSlice) == 0 {
 		return dest
 	}
 
 	existing := map[string]bool{}
 	for _, item := range destSlice {
-		if m, ok := item.(map[string]interface{}); ok {
+		if m, ok := item.(map[string]any); ok {
 			if name, ok := m["name"].(string); ok {
 				existing[name] = true
 			}
@@ -155,7 +155,7 @@ func mergeNamedList(dest, src interface{}) interface{} {
 	}
 
 	for _, item := range srcSlice {
-		if m, ok := item.(map[string]interface{}); ok {
+		if m, ok := item.(map[string]any); ok {
 			if name, ok := m["name"].(string); ok && !existing[name] {
 				destSlice = append(destSlice, item)
 			}

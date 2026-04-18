@@ -11,6 +11,9 @@ import (
 	"time"
 
 	"golang.org/x/mod/semver"
+
+	"github.com/qxtaiba/okdctl/internal/httputil"
+	"github.com/qxtaiba/okdctl/internal/system"
 )
 
 const (
@@ -91,7 +94,7 @@ func fetchLatest(ctx context.Context) (string, error) {
 	}
 	req.Header.Set("Accept", "application/vnd.github+json")
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := httputil.New(httpTimeout).Do(req)
 	if err != nil {
 		return "", err
 	}
@@ -148,24 +151,7 @@ func saveCache(tag string) error {
 		return err
 	}
 
-	tmp, err := os.CreateTemp(filepath.Dir(path), filepath.Base(path)+".*")
-	if err != nil {
-		return err
-	}
-	defer os.Remove(tmp.Name())
-
-	if err := os.Chmod(tmp.Name(), 0o600); err != nil {
-		tmp.Close()
-		return err
-	}
-	if _, err := tmp.Write(data); err != nil {
-		tmp.Close()
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		return err
-	}
-	return os.Rename(tmp.Name(), path)
+	return system.AtomicWrite(path, data, 0o600)
 }
 
 func cachePath() (string, error) {

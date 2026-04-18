@@ -3,11 +3,15 @@ package postinstall
 import (
 	"context"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/firewall"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
+	"github.com/qxtaiba/okdctl/internal/httputil"
 	"github.com/qxtaiba/okdctl/internal/netutil"
 	"github.com/qxtaiba/okdctl/internal/system"
 )
@@ -57,10 +61,20 @@ func (p *Phase) RemoveHAProxy(ctx context.Context, vip string) error {
 		// Wait for the API to become reachable via the VIP now that the
 		// bastion no longer intercepts the traffic.
 		p.Log.Info("haproxy: verifying api reachable via vip after teardown")
+		healthClient := httputil.NewInsecure(5 * time.Second)
+		healthURL := fmt.Sprintf("https://%s:6443/healthz", vip)
 		if waitErr := system.WaitForWithTimeout(ctx, "haproxy", "api-via-vip", func() bool {
-			healthURL := fmt.Sprintf("https://%s:6443/healthz", vip)
-			r, _ := p.Exec.Run(ctx, "curl", "-sk", "--connect-timeout", "5", healthURL)
-			return r.ExitCode == 0 && strings.TrimSpace(r.Stdout) == "ok"
+			req, rErr := http.NewRequestWithContext(ctx, http.MethodGet, healthURL, http.NoBody)
+			if rErr != nil {
+				return false
+			}
+			resp, rErr := healthClient.Do(req)
+			if rErr != nil {
+				return false
+			}
+			defer resp.Body.Close()
+			body, _ := io.ReadAll(resp.Body)
+			return resp.StatusCode == http.StatusOK && strings.TrimSpace(string(body)) == "ok"
 		}, DefaultKubeVIPVIPTimeout, p.Log); waitErr != nil {
 			return fmt.Errorf("api not reachable via vip %s after haproxy removal: %w", vip, waitErr)
 		}
