@@ -276,7 +276,7 @@ scaffolding the internal code already holds."
 - **Depends on:** N8 (to know which steps completed).
 
 #### N11 — `--yes` / `--force` parity on `deploy` and `update-ingress`
-- **Status:** not started
+- **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/n11-yes-parity
 - **Category:** feature-gap
 - **State:** half-done
 - **Effort:** hours
@@ -470,7 +470,7 @@ scaffolding the internal code already holds."
 - **Depends on:** none.
 
 #### L13 — Auto-update version check on startup
-- **Status:** not started
+- **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/l13-update-check
 - **Category:** polish
 - **State:** not started
 - **Effort:** days
