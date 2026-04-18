@@ -14,6 +14,7 @@ require (
 	github.com/schollz/progressbar/v3 v3.19.0
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/viper v1.21.0
+	golang.org/x/mod v0.35.0
 	golang.org/x/term v0.42.0
 	gopkg.in/yaml.v3 v3.0.1
 	k8s.io/api v0.35.1

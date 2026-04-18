@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"slices"
 	"strings"
+
+	"golang.org/x/mod/semver"
 )
 
 func (f *OKDVersionFetcher) fetchFromNetwork(ctx context.Context) ([]OKDReleaseSeries, error) {
@@ -157,7 +159,7 @@ func sortAndClassifySeries(seriesMap map[string]*OKDReleaseSeries) []OKDReleaseS
 		// string, so the ordering is stable regardless of the input order
 		// returned by the GitHub API.
 		slices.SortFunc(series.Versions, func(a, b OKDVersion) int {
-			if cmp := compareVersions(a.Version, b.Version); cmp != 0 {
+			if cmp := semver.Compare("v"+a.Version, "v"+b.Version); cmp != 0 {
 				return -cmp // descending
 			}
 			if !a.ReleaseDate.Equal(b.ReleaseDate) {
@@ -253,46 +255,4 @@ func (f *OKDVersionFetcher) parseVersionTag(tag string) *OKDVersion {
 		Version: tag,
 		Tag:     tag,
 	}
-}
-
-func compareVersions(a, b string) int {
-	partsA := extractVersionParts(a)
-	partsB := extractVersionParts(b)
-
-	for i := 0; i < len(partsA) && i < len(partsB); i++ {
-		if partsA[i] != partsB[i] {
-			return partsA[i] - partsB[i]
-		}
-	}
-
-	return len(partsA) - len(partsB)
-}
-
-func extractVersionParts(version string) []int {
-	var parts []int
-	var current int
-	var inNumber bool
-	var digitCount int
-
-	for _, char := range version {
-		if char >= '0' && char <= '9' {
-			digitCount++
-			// Prevent integer overflow by limiting to 10 digits (covers int32 range)
-			if digitCount > 10 {
-				continue
-			}
-			current = current*10 + int(char-'0')
-			inNumber = true
-		} else if inNumber {
-			parts = append(parts, current)
-			current = 0
-			digitCount = 0
-			inNumber = false
-		}
-	}
-	if inNumber {
-		parts = append(parts, current)
-	}
-
-	return parts
 }
