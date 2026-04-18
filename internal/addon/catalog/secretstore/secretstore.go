@@ -215,9 +215,12 @@ func (s *SecretStore) createSecretFromFile(ctx context.Context, env *addon.Envir
 	if err != nil {
 		return fmt.Errorf("failed to read %s: %w", filepath.Base(filePath), err)
 	}
-	manifest := addon.BuildOpaqueSecret(defaultNamespace, secretName, map[string][]byte{
+	manifest, err := addon.BuildOpaqueSecret(defaultNamespace, secretName, map[string][]byte{
 		dataKey: []byte(strings.TrimSpace(plaintext)),
 	})
+	if err != nil {
+		return fmt.Errorf("build %s secret: %w", secretName, err)
+	}
 	if _, err := env.Exec.RunWithStdinChecked(ctx, manifest, "oc", "apply", "-f", "-"); err != nil {
 		return fmt.Errorf("failed to apply %s secret: %w", secretName, err)
 	}
