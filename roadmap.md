@@ -211,7 +211,7 @@ scaffolding the internal code already holds."
 - **Depends on:** none.
 
 #### N9 — `--log-level` / `--log-format=json` / `--log-file` flags
-- **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/n9-log-flags
+- **Status:** in review — PR #65
 - **Category:** feature-gap
 - **State:** scaffolding exists
 - **Effort:** hours
@@ -308,7 +308,7 @@ scaffolding the internal code already holds."
 ### Theme D — wizard coverage
 
 #### N15 — Wizard collects `Deployment.{Debug, SkipDepsCheck, TerraformEnv, AutoApprove}`
-- **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/n15-wizard-deployment-fields
+- **Status:** in review — PR #66
 - **Category:** feature-gap
 - **State:** not started
 - **Effort:** days
@@ -473,7 +473,7 @@ scaffolding the internal code already holds."
 - **Depends on:** none.
 
 #### N20 — Doctor-check reference doc
-- **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/n20-doctor-checks-doc
+- **Status:** in review — PR #67
 - **Category:** docs
 - **State:** not started
 - **Effort:** hours
