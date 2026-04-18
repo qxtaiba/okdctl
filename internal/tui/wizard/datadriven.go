@@ -20,8 +20,9 @@ const (
 	FieldTypeText FieldType = iota
 	FieldTypePassword
 	FieldTypeNumber
-	FieldTypeBool   // For yes/no fields
-	FieldTypeSelect // Dropdown selector with predefined options
+	FieldTypeBool        // For yes/no fields
+	FieldTypeSelect      // Dropdown selector with predefined options
+	FieldTypeMultiSelect // Checklist where multiple options may be toggled
 )
 
 type (
@@ -143,6 +144,15 @@ func NewDataDrivenStep(def *StepDefinition) *DataDrivenStep {
 }
 
 func buildFormField(def *FieldDefinition) components.FormField {
+	if def.Type == FieldTypeMultiSelect {
+		mf := components.NewMultiSelectField(def.Label, def.Options)
+		mf.Help = def.Help
+		if def.Default != "" {
+			mf.SetDefault(def.Default)
+		}
+		return mf
+	}
+
 	if def.Type == FieldTypeSelect {
 		sf := components.NewSelectField(def.Label, def.Options)
 		sf.Help = def.Help

@@ -98,12 +98,15 @@ func (s *NodePlacementStep) buildInnerStep(disc *proxmoxDiscovery, nodeNames []s
 		var infraFields []wizard.FieldDefinition
 
 		if bridges := bridgeNames(disc.Bridges); len(bridges) > 0 {
-			infraFields = append(infraFields, wizard.FieldDefinition{
-				Key: "bridge", Label: "bridge", Default: firstMatch(bridges, px.Bridge, "vmbr0"),
-				Help: "network bridge for vms", Type: wizard.FieldTypeSelect, Options: bridges,
-				ConfigSet: func(cfg *config.Config, v string) error { cfg.Provider.Proxmox.Bridge = v; return nil },
-				ConfigGet: func(cfg *config.Config) string { return cfg.Provider.Proxmox.Bridge },
-			})
+			infraFields = append(infraFields,
+				wizard.FieldDefinition{
+					Key: "bridge", Label: "bridge", Default: firstMatch(bridges, px.Bridge, "vmbr0"),
+					Help: "network bridge for vms", Type: wizard.FieldTypeSelect, Options: bridges,
+					ConfigSet: func(cfg *config.Config, v string) error { cfg.Provider.Proxmox.Bridge = v; return nil },
+					ConfigGet: func(cfg *config.Config) string { return cfg.Provider.Proxmox.Bridge },
+				},
+				additionalNetworksField(bridges, px.AdditionalNetworks),
+			)
 		}
 		if pools := filterStorageByContent(disc.Storage, "images"); len(pools) > 0 {
 			infraFields = append(infraFields,
@@ -128,6 +131,9 @@ func (s *NodePlacementStep) buildInnerStep(disc *proxmoxDiscovery, nodeNames []s
 				ConfigSet: func(cfg *config.Config, v string) error { cfg.Provider.Proxmox.ISOStorage = v; return nil },
 				ConfigGet: func(cfg *config.Config) string { return cfg.Provider.Proxmox.ISOStorage },
 			})
+		}
+		if len(disc.ISOs) > 0 {
+			infraFields = append(infraFields, fcosISOField(disc.ISOs, px.FCOSIso))
 		}
 
 		if len(infraFields) > 0 {
@@ -301,6 +307,69 @@ func bridgeNames(bridges []proxmoxBridge) []string {
 		names[i] = b.Name
 	}
 	return names
+}
+
+func additionalNetworksField(bridges []string, current []config.AdditionalNetwork) wizard.FieldDefinition {
+	return wizard.FieldDefinition{
+		Key:     "additional_networks",
+		Label:   "additional networks",
+		Default: additionalNetworksBridges(current),
+		Help:    "extra bridges to attach to all vms — leave empty for none",
+		Type:    wizard.FieldTypeMultiSelect,
+		Options: bridges,
+		ConfigSet: func(cfg *config.Config, v string) error {
+			cfg.Provider.Proxmox.AdditionalNetworks = parseAdditionalNetworks(v)
+			return nil
+		},
+		ConfigGet: func(cfg *config.Config) string {
+			return additionalNetworksBridges(cfg.Provider.Proxmox.AdditionalNetworks)
+		},
+	}
+}
+
+func fcosISOField(isos []string, current string) wizard.FieldDefinition {
+	return wizard.FieldDefinition{
+		Key:     "fcos_iso",
+		Label:   "fcos iso",
+		Default: firstMatch(isos, current, ""),
+		Help:    "pre-uploaded coreos iso — blank to let okdctl download and upload it",
+		Type:    wizard.FieldTypeSelect,
+		Options: append([]string{""}, isos...),
+		ConfigSet: func(cfg *config.Config, v string) error {
+			cfg.Provider.Proxmox.FCOSIso = v
+			return nil
+		},
+		ConfigGet: func(cfg *config.Config) string { return cfg.Provider.Proxmox.FCOSIso },
+	}
+}
+
+// additionalNetworksBridges serialises []AdditionalNetwork to a comma-
+// separated list of bridge names for round-tripping through the wizard's
+// string-valued field model.
+func additionalNetworksBridges(nets []config.AdditionalNetwork) string {
+	names := make([]string, len(nets))
+	for i, n := range nets {
+		names[i] = n.Bridge
+	}
+	return strings.Join(names, ",")
+}
+
+// parseAdditionalNetworks converts a comma-separated bridge-name string into
+// []AdditionalNetwork with model "virtio". Empty input produces a nil slice.
+func parseAdditionalNetworks(v string) []config.AdditionalNetwork {
+	v = strings.TrimSpace(v)
+	if v == "" {
+		return nil
+	}
+	parts := strings.Split(v, ",")
+	nets := make([]config.AdditionalNetwork, 0, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			nets = append(nets, config.AdditionalNetwork{Bridge: p, Model: "virtio"})
+		}
+	}
+	return nets
 }
 
 func filterStorageByContent(storage []proxmoxStorage, content string) []string {

@@ -43,6 +43,7 @@ type proxmoxDiscovery struct {
 	Nodes   []proxmoxNode
 	Storage []proxmoxStorage
 	Bridges []proxmoxBridge
+	ISOs    []string // storage volids of ISO files, e.g. "local:iso/fcos.iso"
 }
 
 // discoverProxmox queries the Proxmox API to list nodes, storage, and bridges.
@@ -97,25 +98,27 @@ func discoverProxmox(cfg *config.Config) (*proxmoxDiscovery, error) {
 		}
 	}
 
-	storage, bridges := fetchNodeDetails(ctx, client, targetNode)
+	storage, bridges, isos := fetchNodeDetails(ctx, client, targetNode)
 
 	return &proxmoxDiscovery{
 		Nodes:   nodes,
 		Storage: storage,
 		Bridges: bridges,
+		ISOs:    isos,
 	}, nil
 }
 
-// fetchNodeDetails pulls storage + bridges from the given node. Errors are
-// swallowed to nil slices — discovery is best-effort, and a partial result
-// beats no result when one endpoint misbehaves.
-func fetchNodeDetails(ctx context.Context, client *proxmox.Client, nodeName string) ([]proxmoxStorage, []proxmoxBridge) {
+// fetchNodeDetails pulls storage, bridges, and ISO volids from the given
+// node. Errors are swallowed to nil slices — discovery is best-effort, and
+// a partial result beats no result when one endpoint misbehaves.
+func fetchNodeDetails(ctx context.Context, client *proxmox.Client, nodeName string) ([]proxmoxStorage, []proxmoxBridge, []string) {
 	node, err := client.Node(ctx, nodeName)
 	if err != nil {
-		return nil, nil
+		return nil, nil, nil
 	}
 
 	var storage []proxmoxStorage
+	var isoStorageNames []string
 	if stores, err := node.Storages(ctx); err == nil {
 		storage = make([]proxmoxStorage, 0, len(stores))
 		for _, s := range stores {
@@ -130,6 +133,9 @@ func fetchNodeDetails(ctx context.Context, client *proxmox.Client, nodeName stri
 				TotalGB: int(s.Total / (1024 * 1024 * 1024)), //nolint:gosec // G115: uint64→int is safe for GB-scale storage
 				UsedPct: s.UsedFraction,
 			})
+			if strings.Contains(s.Content, "iso") {
+				isoStorageNames = append(isoStorageNames, s.Name)
+			}
 		}
 	}
 
@@ -145,7 +151,24 @@ func fetchNodeDetails(ctx context.Context, client *proxmox.Client, nodeName stri
 		}
 	}
 
-	return storage, bridges
+	var isos []string
+	for _, storeName := range isoStorageNames {
+		st, err := node.Storage(ctx, storeName)
+		if err != nil {
+			continue
+		}
+		contents, err := st.GetContent(ctx)
+		if err != nil {
+			continue
+		}
+		for _, c := range contents {
+			if strings.HasSuffix(strings.ToLower(c.Volid), ".iso") {
+				isos = append(isos, c.Volid)
+			}
+		}
+	}
+
+	return storage, bridges, isos
 }
 
 // classifyError maps raw HTTP/TLS errors to user-friendly messages.
