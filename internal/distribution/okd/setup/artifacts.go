@@ -5,18 +5,36 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
+	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/download"
 	"github.com/qxtaiba/okdctl/internal/system"
 )
+
+const defaultOKDReleaseBaseURL = "https://github.com/okd-project/okd/releases/download"
+
+// ResolveReleaseBaseURL returns the OKD release base URL for downloads.
+// OKDCTL_OKD_RELEASE_URL (env) overrides cfg.Deployment.OKDReleaseBaseURL,
+// which overrides the upstream GitHub default — the env wins so air-gapped
+// operators can redirect a single invocation without editing the config.
+func ResolveReleaseBaseURL(cfg *config.Config) string {
+	if v := os.Getenv("OKDCTL_OKD_RELEASE_URL"); v != "" {
+		return strings.TrimRight(v, "/")
+	}
+	if cfg.Deployment.OKDReleaseBaseURL != "" {
+		return strings.TrimRight(cfg.Deployment.OKDReleaseBaseURL, "/")
+	}
+	return defaultOKDReleaseBaseURL
+}
 
 func (p *Phase) DownloadOKDTools(ctx context.Context, version string, opts *Options) error {
 	if err := system.EnsureDir(opts.DownloadDir); err != nil {
 		return fmt.Errorf("failed to create download directory: %w", err)
 	}
 
-	baseURL := fmt.Sprintf("https://github.com/okd-project/okd/releases/download/%s", version)
+	baseURL := fmt.Sprintf("%s/%s", opts.OKDReleaseBaseURL, version)
 	checksumsURL := fmt.Sprintf("%s/sha256sum.txt", baseURL)
 
 	tools := []struct {

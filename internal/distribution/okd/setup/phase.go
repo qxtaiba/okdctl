@@ -21,13 +21,14 @@ const (
 
 type Options struct {
 	phase.BaseOptions
-	DownloadDir     string
-	SkipDownloads   bool
-	SkipISOs        bool
-	SkipHAProxy     bool
-	SkipFirewall    bool
-	AutoDownloadISO bool
-	Verbose         bool
+	DownloadDir       string
+	SkipDownloads     bool
+	SkipISOs          bool
+	SkipHAProxy       bool
+	SkipFirewall      bool
+	AutoDownloadISO   bool
+	Verbose           bool
+	OKDReleaseBaseURL string
 }
 
 func DefaultOptions(projectRoot string) Options {
