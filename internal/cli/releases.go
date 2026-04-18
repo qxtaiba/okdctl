@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"text/tabwriter"
 
 	"github.com/spf13/cobra"
 
@@ -163,16 +164,17 @@ func printVersionList(w io.Writer, versions []releases.OKDVersion) error {
 		_, err := fmt.Fprintln(w, "no versions found")
 		return err
 	}
-	fmt.Fprintf(w, "%-12s  %-10s  %-6s  %s\n", "VERSION", "RELEASED", "STABLE", "TYPE")
+	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(tw, "VERSION\tRELEASED\tSTABLE\tTYPE")
 	for _, v := range versions {
-		fmt.Fprintf(w, "%-12s  %-10s  %-6s  %s\n",
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n",
 			v.Version,
 			v.ReleaseDate.Format("2006-01-02"),
 			yesNo(v.Stable),
 			releaseTypeLabel(v.Type),
 		)
 	}
-	return nil
+	return tw.Flush()
 }
 
 func printVersionDetail(w io.Writer, v releases.OKDVersion) error {
