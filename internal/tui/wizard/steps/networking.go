@@ -171,6 +171,9 @@ var NetworkingStepDefinition = wizard.StepDefinition{
 		} else if overlap {
 			return errors.New("pod cidr and service cidr must not overlap")
 		}
+		if err := config.ValidateGatewayInCIDR(values["gateway"], machineCIDR); err != nil {
+			return err
+		}
 		return nil
 	},
 	Apply: func(_ *wizard.DataDrivenStep, cfg *config.Config) error {
