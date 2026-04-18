@@ -89,8 +89,9 @@ var ProxmoxStepDefinition = wizard.StepDefinition{
 			},
 		},
 	},
-	ShouldShow: func(cfg *config.Config) bool {
-		return cfg.Provider.Type == config.ProviderProxmox
+	Apply: func(_ *wizard.DataDrivenStep, cfg *config.Config) error {
+		cfg.Provider.Type = config.ProviderProxmox
+		return nil
 	},
 }
 
