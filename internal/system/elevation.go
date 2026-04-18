@@ -1,0 +1,123 @@
+package system
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"os"
+	"os/exec"
+	"os/user"
+	"path/filepath"
+	"strconv"
+)
+
+// InvokingUser returns the user who invoked the command. When the process
+// was re-exec'd under sudo (as okdctl deploy / destroy / cleanup /
+// update-ingress do), SUDO_USER identifies the original user. Without it,
+// the current user is returned. The caller uses this to chown user-home
+// artifacts back after a privileged run.
+func InvokingUser() (*user.User, error) {
+	if name := os.Getenv("SUDO_USER"); name != "" {
+		return user.Lookup(name)
+	}
+	return user.Current()
+}
+
+// InvokingUserHomeDir returns the home directory of the invoking user. Use
+// this instead of os.UserHomeDir() at sites that write artifacts the user
+// must read back (kubeconfig, releases cache, .bashrc). os.UserHomeDir()
+// returns /root under sudo's default env reset, which would land files in
+// the wrong place.
+func InvokingUserHomeDir() (string, error) {
+	u, err := InvokingUser()
+	if err != nil {
+		return "", err
+	}
+	return u.HomeDir, nil
+}
+
+type sudoIDs struct {
+	uid, gid int
+}
+
+// invokingUserIDs returns the SUDO_UID / SUDO_GID pair. Returns nil if the
+// process was not re-exec'd under sudo, meaning chown is unnecessary.
+func invokingUserIDs() (*sudoIDs, error) {
+	uidStr := os.Getenv("SUDO_UID")
+	gidStr := os.Getenv("SUDO_GID")
+	if uidStr == "" || gidStr == "" {
+		return nil, nil
+	}
+	uid, err := strconv.Atoi(uidStr)
+	if err != nil {
+		return nil, fmt.Errorf("invalid SUDO_UID %q: %w", uidStr, err)
+	}
+	gid, err := strconv.Atoi(gidStr)
+	if err != nil {
+		return nil, fmt.Errorf("invalid SUDO_GID %q: %w", gidStr, err)
+	}
+	return &sudoIDs{uid: uid, gid: gid}, nil
+}
+
+// ChownToInvokingUser chowns path to SUDO_UID:SUDO_GID. Silently no-ops when
+// the process was not re-exec'd under sudo — in that case the caller is
+// already the invoking user and the file is already owned correctly.
+func ChownToInvokingUser(path string) error {
+	ids, err := invokingUserIDs()
+	if err != nil || ids == nil {
+		return err
+	}
+	return os.Chown(path, ids.uid, ids.gid)
+}
+
+// WriteAsInvokingUser atomically writes data to path with mode, then chowns
+// the file and its immediate parent directory to the invoking user (if
+// running under sudo). Parent chown covers the case where AtomicWrite's
+// EnsureDirForFile just created the parent as root.
+func WriteAsInvokingUser(path string, data []byte, mode os.FileMode) error {
+	if err := AtomicWrite(path, data, mode); err != nil {
+		return err
+	}
+	if err := ChownToInvokingUser(path); err != nil {
+		return err
+	}
+	return ChownToInvokingUser(filepath.Dir(path))
+}
+
+// ChownTreeToInvokingUser recursively chowns root and all descendants to the
+// invoking user. No-op if the process was not re-exec'd under sudo. Errors
+// on individual entries are collected; the walk does not abort so a single
+// unreadable symlink doesn't leave the rest of the tree root-owned.
+func ChownTreeToInvokingUser(root string) error {
+	ids, err := invokingUserIDs()
+	if err != nil || ids == nil {
+		return err
+	}
+	var errs []error
+	walkErr := filepath.WalkDir(root, func(path string, _ os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			errs = append(errs, walkErr)
+			return nil
+		}
+		if chownErr := os.Lchown(path, ids.uid, ids.gid); chownErr != nil {
+			errs = append(errs, fmt.Errorf("chown %s: %w", path, chownErr))
+		}
+		return nil
+	})
+	if walkErr != nil {
+		errs = append(errs, walkErr)
+	}
+	return errors.Join(errs...)
+}
+
+// HasPasswordlessSudo returns nil if `sudo -n true` succeeds. Callers use
+// this as an advisory pre-flight to warn the user that the next sudo
+// invocation may prompt for a password. Under the re-exec model this is
+// only called by doctor; operational paths never call it.
+func HasPasswordlessSudo(ctx context.Context) error {
+	cmd := exec.CommandContext(ctx, "sudo", "-n", "true")
+	cmd.Stdin = nil
+	cmd.Stdout = nil
+	cmd.Stderr = nil
+	return cmd.Run()
+}
