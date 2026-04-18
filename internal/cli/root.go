@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -74,6 +75,8 @@ func execute() int {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	updateCh := version.BackgroundCheck(ctx)
+
 	if err := rootCmd.ExecuteContext(ctx); err != nil {
 		if ctx.Err() != nil {
 			return 130
@@ -81,7 +84,25 @@ func execute() int {
 		tui.Error(err.Error())
 		return 1
 	}
+
+	printUpdateNotice(updateCh)
 	return 0
+}
+
+func printUpdateNotice(ch <-chan version.CheckResult) {
+	var result version.CheckResult
+	select {
+	case result = <-ch:
+	case <-time.After(100 * time.Millisecond):
+		return
+	}
+	if result.LatestTag == "" {
+		return
+	}
+	fmt.Println()
+	fmt.Println(tui.WarningStyle.Render("update available:") + " " +
+		tui.MutedStyle.Render(version.Version) + " → " +
+		tui.HighlightStyle.Render(result.LatestTag))
 }
 
 func init() {
