@@ -14,6 +14,12 @@ jobs:
   analyze:
     name: analyze (${{ matrix.language }})
     runs-on: ubuntu-latest
+    # Non-blocking until Code Scanning is enabled on this repo. Private
+    # repos need GHAS (or must be made public) before SARIF uploads work;
+    # the workflow currently fails at analyze-upload with "Code scanning
+    # is not enabled for this repository." Keeping it here as scaffolding
+    # so flipping the switch requires no YAML change.
+    continue-on-error: true
     permissions:
       contents: read
       security-events: write
