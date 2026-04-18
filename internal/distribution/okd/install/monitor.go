@@ -27,7 +27,7 @@ func (p *Phase) WaitForBootstrap(ctx context.Context, clusterDir string, opts *O
 			return fmt.Errorf("bootstrap timed out after %v", opts.BootstrapTimeout)
 		}
 		if errors.Is(ctx.Err(), context.Canceled) {
-			return fmt.Errorf("bootstrap cancelled: %w", context.Canceled)
+			return fmt.Errorf("bootstrap cancelled: %w", ctx.Err())
 		}
 		return fmt.Errorf("bootstrap failed: %w", err)
 	}

@@ -112,7 +112,7 @@ func Download(ctx context.Context, opts *Options) error {
 		return fmt.Errorf("download failed for %s: HTTP %d", opts.Description, resp.StatusCode)
 	}
 
-	outFile, err := os.Create(opts.OutputPath)
+	outFile, err := os.OpenFile(opts.OutputPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
 	if err != nil {
 		return fmt.Errorf("failed to create output file: %w", err)
 	}

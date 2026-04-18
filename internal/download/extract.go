@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"compress/gzip"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -93,7 +94,9 @@ func processTarEntry(tarReader *tar.Reader, header *tar.Header, destDir string, 
 			_ = outFile.Close()
 			return fmt.Errorf("failed to write file: %w", err)
 		}
-		_ = outFile.Close()
+		if err := outFile.Close(); err != nil {
+			return fmt.Errorf("failed to close extracted file: %w", err)
+		}
 
 	case tar.TypeSymlink:
 		linkTarget := header.Linkname
@@ -164,7 +167,7 @@ func ExtractTarGz(ctx context.Context, opts ExtractOptions) error {
 		}
 
 		header, err := tarReader.Next()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {
