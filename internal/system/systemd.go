@@ -34,7 +34,7 @@ func ManageService(ctx context.Context, action ServiceAction, serviceName, _ str
 		return cmd.Run()
 
 	default:
-		return RunSudo(ctx, "systemctl", actionStr, serviceName)
+		return exec.CommandContext(ctx, "systemctl", actionStr, serviceName).Run()
 	}
 }
 
