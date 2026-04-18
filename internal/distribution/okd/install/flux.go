@@ -135,5 +135,5 @@ func (p *Phase) addKubeconfigToBashrc(homeDir, kubeconfigPath string) error {
 		return err
 	}
 
-	return nil
+	return f.Sync()
 }
