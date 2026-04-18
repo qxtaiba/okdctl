@@ -459,6 +459,20 @@ func ValidateIP(value string) error {
 	return nil
 }
 
+func ValidateGatewayInCIDR(gateway, cidr string) error {
+	if gateway == "" || !IsValidIP(gateway) || cidr == "" || !IsValidCIDR(cidr) {
+		return nil
+	}
+	ok, err := netutil.IPInCIDR(gateway, cidr)
+	if err != nil {
+		return fmt.Errorf("cannot check gateway CIDR membership: %w", err)
+	}
+	if !ok {
+		return fmt.Errorf("gateway %s is not within machine CIDR %s", gateway, cidr)
+	}
+	return nil
+}
+
 func ValidateCIDR(value string) error {
 	if !IsValidCIDR(value) {
 		return errors.New("invalid cidr format (e.g., 192.168.1.0/24)")
