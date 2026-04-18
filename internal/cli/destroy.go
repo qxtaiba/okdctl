@@ -11,7 +11,10 @@ import (
 	"github.com/qxtaiba/okdctl/internal/tui"
 )
 
-var destroyForce bool
+var (
+	destroyForce    bool
+	destroyKeepISOs bool
+)
 
 var destroyCmd = &cobra.Command{
 	Use:   "destroy",
@@ -23,6 +26,7 @@ This operation is idempotent and safe to re-run if a previous destroy was interr
 
 func init() {
 	destroyCmd.Flags().BoolVarP(&destroyForce, "force", "y", false, "skip confirmation prompt")
+	destroyCmd.Flags().BoolVar(&destroyKeepISOs, "keep-isos", false, "do not remove the FCOS ISO from the Proxmox host")
 }
 
 func runDestroy(cmd *cobra.Command, _ []string) error {
@@ -69,7 +73,7 @@ func runDestroy(cmd *cobra.Command, _ []string) error {
 	tui.Info("destroying cluster...")
 	startTime := time.Now()
 
-	if err := p.Destroy(ctx, cfg, true); err != nil {
+	if err := p.Destroy(ctx, cfg, true, destroyKeepISOs); err != nil {
 		return err
 	}
 

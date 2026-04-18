@@ -143,12 +143,13 @@ func (p *Provisioner) UpdateIngress(ctx context.Context, cfg *config.Config, opt
 	return postPhase.UpdateIngress(ctx, cfg, opts)
 }
 
-func (p *Provisioner) Destroy(ctx context.Context, cfg *config.Config, removePackages bool) error {
+func (p *Provisioner) Destroy(ctx context.Context, cfg *config.Config, removePackages, keepISOs bool) error {
 	destroyPhase := destroy.New(p.executor, p.logger, p.version)
 	destroyOpts := destroy.NewOptions(cfg, p.projectRoot)
 	destroyOpts.AutoApprove = true
 	destroyOpts.Force = true
 	destroyOpts.RemovePackages = removePackages
+	destroyOpts.KeepISOs = keepISOs
 
 	return destroyPhase.Execute(ctx, cfg, &destroyOpts)
 }
