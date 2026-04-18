@@ -17,7 +17,7 @@ type OKDVersionFetcher struct {
 
 func NewOKDVersionFetcher() *OKDVersionFetcher {
 	return &OKDVersionFetcher{
-		httpClient:   httputil.NewAPIClient(),
+		httpClient:   httputil.New(httputil.TimeoutShort),
 		diskCacheTTL: DiskCacheTTL,
 	}
 }

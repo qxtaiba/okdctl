@@ -1,6 +1,4 @@
-// Package httputil provides shared *http.Client factories with sensible
-// timeouts and optional TLS-skip behaviour for API calls, metadata fetches,
-// and large file downloads.
+// Package httputil provides *http.Client factories with standard timeouts.
 package httputil
 
 import (
@@ -9,30 +7,11 @@ import (
 )
 
 const (
-	TimeoutShort    = 10 * time.Second // For API calls, connectivity checks
-	TimeoutMedium   = 30 * time.Second // For fetching metadata, checksums
-	TimeoutDownload = 5 * time.Minute  // For file downloads
+	TimeoutShort    = 10 * time.Second // API calls, connectivity checks
+	TimeoutMedium   = 30 * time.Second // Metadata, checksum fetches
+	TimeoutDownload = 5 * time.Minute  // File downloads
 )
 
-type ClientOption func(*http.Client)
-
-func WithTimeout(d time.Duration) ClientOption {
-	return func(c *http.Client) {
-		c.Timeout = d
-	}
-}
-
-func NewClient(opts ...ClientOption) *http.Client {
-	c := &http.Client{
-		Timeout: TimeoutMedium,
-	}
-	for _, opt := range opts {
-		opt(c)
-	}
-	return c
-}
-
-func NewAPIClient(opts ...ClientOption) *http.Client {
-	allOpts := append([]ClientOption{WithTimeout(TimeoutShort)}, opts...)
-	return NewClient(allOpts...)
+func New(timeout time.Duration) *http.Client {
+	return &http.Client{Timeout: timeout}
 }

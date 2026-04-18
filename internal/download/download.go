@@ -95,7 +95,7 @@ func Download(ctx context.Context, opts *Options) error {
 	filename := filepath.Base(opts.OutputPath)
 	opts.logger().Info(fmt.Sprintf("download: %s", filename))
 
-	client := httputil.NewClient(httputil.WithTimeout(opts.Timeout))
+	client := httputil.New(opts.Timeout)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, opts.URL, http.NoBody)
 	if err != nil {

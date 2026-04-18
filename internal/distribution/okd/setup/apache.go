@@ -157,7 +157,7 @@ func (p *Phase) DeployToWebServer(ctx context.Context, cfg *config.Config, clust
 func (p *Phase) VerifyWebServer(ctx context.Context, baseURL string) error {
 	testURL := fmt.Sprintf("%s/bootstrap.ign", baseURL)
 
-	client := httputil.NewAPIClient()
+	client := httputil.New(httputil.TimeoutShort)
 
 	p.Log.Info(fmt.Sprintf("apache: verifying web server at %s", testURL))
 
