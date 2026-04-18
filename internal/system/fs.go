@@ -143,9 +143,13 @@ func SafeRemove(path string) error {
 	return os.RemoveAll(path)
 }
 
+// ExpandPath expands a leading `~/` to the invoking user's home directory.
+// Uses InvokingUserHomeDir so that hand-edited config values like
+// `~/pull-secret.json` resolve to the shell user's home even after the
+// deploy re-execs under sudo (where os.UserHomeDir would return /root).
 func ExpandPath(path string) string {
 	if strings.HasPrefix(path, "~/") {
-		if home, err := os.UserHomeDir(); err == nil {
+		if home, err := InvokingUserHomeDir(); err == nil {
 			return filepath.Join(home, path[2:])
 		}
 	}

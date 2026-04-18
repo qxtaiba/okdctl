@@ -14,11 +14,14 @@ import (
 // InvokingUser returns the user who invoked the command. When the process
 // was re-exec'd under sudo (as okdctl deploy / destroy / cleanup /
 // update-ingress do), SUDO_USER identifies the original user. Without it,
-// the current user is returned. The caller uses this to chown user-home
-// artifacts back after a privileged run.
+// the current user is returned. If SUDO_USER names a user that no longer
+// exists (deleted mid-run), we fall back to the current user rather than
+// failing the deploy — a late-stage chown-back is best-effort.
 func InvokingUser() (*user.User, error) {
 	if name := os.Getenv("SUDO_USER"); name != "" {
-		return user.Lookup(name)
+		if u, err := user.Lookup(name); err == nil {
+			return u, nil
+		}
 	}
 	return user.Current()
 }
@@ -71,17 +74,27 @@ func ChownToInvokingUser(path string) error {
 }
 
 // WriteAsInvokingUser atomically writes data to path with mode, then chowns
-// the file and its immediate parent directory to the invoking user (if
-// running under sudo). Parent chown covers the case where AtomicWrite's
-// EnsureDirForFile just created the parent as root.
+// the file to the invoking user (if running under sudo). If AtomicWrite had
+// to create the immediate parent directory (i.e. it didn't exist before),
+// that directory is also chowned — otherwise we leave pre-existing
+// directory ownership untouched to avoid silently chowning a directory the
+// user explicitly created with a different owner.
 func WriteAsInvokingUser(path string, data []byte, mode os.FileMode) error {
+	parentDir := filepath.Dir(path)
+	parentExisted := true
+	if _, err := os.Stat(parentDir); os.IsNotExist(err) {
+		parentExisted = false
+	}
 	if err := AtomicWrite(path, data, mode); err != nil {
 		return err
 	}
 	if err := ChownToInvokingUser(path); err != nil {
 		return err
 	}
-	return ChownToInvokingUser(filepath.Dir(path))
+	if !parentExisted {
+		return ChownToInvokingUser(parentDir)
+	}
+	return nil
 }
 
 // ChownTreeToInvokingUser recursively chowns root and all descendants to the

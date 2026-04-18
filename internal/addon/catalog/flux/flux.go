@@ -27,9 +27,12 @@ const (
 // Settings keys consumed by the Flux addon. Named here so callers (install
 // wizard, validators, gitops bootstrap) reference the same string.
 const (
-	SettingRepository = "repository"
-	SettingBranch     = "branch"
-	SettingPath       = "path"
+	SettingRepository        = "repository"
+	SettingBranch            = "branch"
+	SettingPath              = "path"
+	SettingProvider          = "provider"
+	SettingControllerTimeout = "controller_timeout"
+	SettingGitSyncTimeout    = "git_sync_timeout"
 )
 
 // validSyncPath matches safe sync paths: alphanumeric, slashes, underscores, dots, and hyphens.
@@ -214,11 +217,11 @@ func (f *Flux) RequiredTools() []addon.ToolSpec {
 
 func (f *Flux) DefaultSettings() map[string]string {
 	return map[string]string{
-		"provider":           "flux",
-		SettingBranch:        "main",
-		SettingPath:          "kubernetes/clusters/production",
-		"controller_timeout": "300",
-		"git_sync_timeout":   "180",
+		SettingProvider:          "flux",
+		SettingBranch:            "main",
+		SettingPath:              "kubernetes/clusters/production",
+		SettingControllerTimeout: "300",
+		SettingGitSyncTimeout:    "180",
 	}
 }
 
@@ -242,16 +245,16 @@ func (f *Flux) ValidateSettings(settings map[string]string) []string {
 
 func (f *Flux) WizardFields() []addon.WizardField {
 	return []addon.WizardField{
-		{Key: "repository", Label: "Repository URL", Help: "ssh://git@github.com/org/repo.git", Required: true},
-		{Key: "branch", Label: "Branch", Default: "main", Help: "Branch to sync"},
-		{Key: "path", Label: "Path", Default: "kubernetes/clusters/production", Help: "Path within repo"},
+		{Key: SettingRepository, Label: "Repository URL", Help: "ssh://git@github.com/org/repo.git", Required: true},
+		{Key: SettingBranch, Label: "Branch", Default: "main", Help: "Branch to sync"},
+		{Key: SettingPath, Label: "Path", Default: "kubernetes/clusters/production", Help: "Path within repo"},
 	}
 }
 
 func (f *Flux) waitForControllers(ctx context.Context, env *addon.Environment) error {
 	env.Logger.Info("flux: waiting for controllers to become ready")
 
-	timeout := getTimeout(env.AddonConfig.Settings, "controller_timeout", defaultControllerTimeout)
+	timeout := getTimeout(env.AddonConfig.Settings, SettingControllerTimeout, defaultControllerTimeout)
 
 	if err := system.WaitForWithTimeout(ctx, "flux", "controllers", func() bool {
 		result, _ := env.Exec.Run(ctx, "oc", "get", "deployments",
@@ -287,7 +290,7 @@ func (f *Flux) waitForControllers(ctx context.Context, env *addon.Environment) e
 func (f *Flux) waitForGitSync(ctx context.Context, env *addon.Environment) error {
 	env.Logger.Info("flux: waiting for git repository sync")
 
-	timeout := getTimeout(env.AddonConfig.Settings, "git_sync_timeout", defaultGitRepoSyncTimeout)
+	timeout := getTimeout(env.AddonConfig.Settings, SettingGitSyncTimeout, defaultGitRepoSyncTimeout)
 
 	if err := system.WaitForWithTimeout(ctx, "flux", "git sync", func() bool {
 		result, _ := env.Exec.Run(ctx, "oc", "get", "gitrepository",
@@ -315,7 +318,10 @@ func (f *Flux) createDeployKeySecret(ctx context.Context, env *addon.Environment
 		return fmt.Errorf("failed to resolve git host for ssh-keyscan: %w", err)
 	}
 
-	homeDir, err := os.UserHomeDir()
+	// Resolve the invoking user's home so `ssh-keygen -f ~/.ssh/...` from
+	// their shell and the path we read here resolve to the same file, even
+	// after the deploy re-execs under sudo.
+	homeDir, err := system.InvokingUserHomeDir()
 	if err != nil {
 		return fmt.Errorf("failed to get home directory: %w", err)
 	}

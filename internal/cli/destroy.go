@@ -2,10 +2,12 @@ package cli
 
 import (
 	"fmt"
+	"path/filepath"
 	"time"
 
 	"github.com/spf13/cobra"
 
+	"github.com/qxtaiba/okdctl/internal/system"
 	"github.com/qxtaiba/okdctl/internal/tui"
 )
 
@@ -50,6 +52,18 @@ func runDestroy(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
+
+	// Destroy writes .tfstate + logs into <projectRoot>/okd-install before
+	// tearing down. On partial/cancelled runs the workdir may survive
+	// root-owned; restore invoking-user ownership at exit so the user can
+	// inspect or retry.
+	workDir := filepath.Join(projectRoot, "okd-install")
+	defer func() {
+		if chownErr := system.ChownTreeToInvokingUser(workDir); chownErr != nil {
+			tui.Warn(fmt.Sprintf("workdir chown back to user incomplete: %v", chownErr))
+		}
+	}()
+
 	p := createOKDProvisioner(cfg, creds, projectRoot)
 
 	tui.Info("destroying cluster...")
