@@ -10,7 +10,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/templates"
 )
 
-func buildISOStrings(isoStorage, role string, count int) []string {
+func buildISOStrings(isoStorage string, role phase.NodeRole, count int) []string {
 	isos := make([]string, count)
 	for i := range count {
 		isos[i] = fmt.Sprintf(`"%s:iso/%s%d.iso"`, isoStorage, role, i)
@@ -18,7 +18,7 @@ func buildISOStrings(isoStorage, role string, count int) []string {
 	return isos
 }
 
-func buildNodeNames(clusterName, role string, count int) []string {
+func buildNodeNames(clusterName string, role phase.NodeRole, count int) []string {
 	names := make([]string, count)
 	for i := range count {
 		names[i] = fmt.Sprintf(`"%s-%s%d"`, clusterName, role, i)
@@ -57,10 +57,10 @@ func buildTerraformVarsData(cfg *config.Config) templates.TerraformVarsData {
 	cpDisk, workerDisk, workerDataDisk, masterDataDisk := getDiskSizes(cfg)
 	bootstrapCPU, bootstrapMem := getBootstrapResources(cfg)
 
-	masterISOs := buildISOStrings(proxmox.ISOStorage, "master", cfg.Topology.ControlPlane.Count)
-	workerISOs := buildISOStrings(proxmox.ISOStorage, "worker", cfg.Topology.Workers.Count)
-	masterNames := buildNodeNames(cfg.Cluster.Name, "master", cfg.Topology.ControlPlane.Count)
-	workerNames := buildNodeNames(cfg.Cluster.Name, "worker", cfg.Topology.Workers.Count)
+	masterISOs := buildISOStrings(proxmox.ISOStorage, phase.RoleMaster, cfg.Topology.ControlPlane.Count)
+	workerISOs := buildISOStrings(proxmox.ISOStorage, phase.RoleWorker, cfg.Topology.Workers.Count)
+	masterNames := buildNodeNames(cfg.Cluster.Name, phase.RoleMaster, cfg.Topology.ControlPlane.Count)
+	workerNames := buildNodeNames(cfg.Cluster.Name, phase.RoleWorker, cfg.Topology.Workers.Count)
 
 	cpuType := proxmox.CPUType
 	if cpuType == "" {

@@ -25,11 +25,11 @@ func (p *Phase) BuildHAProxyConfigData(cfg *config.Config) (templates.HAProxyCon
 
 	for _, node := range nodes {
 		switch node.Role {
-		case "bootstrap":
+		case phase.RoleBootstrap:
 			bootstrapIP = node.IP
-		case "master":
+		case phase.RoleMaster:
 			masterServers = append(masterServers, templates.HAProxyServer{Name: node.Name, IP: node.IP})
-		case "worker":
+		case phase.RoleWorker:
 			workerServers = append(workerServers, templates.HAProxyServer{Name: node.Name, IP: node.IP})
 		}
 	}

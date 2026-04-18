@@ -59,7 +59,7 @@ type CoreOSInfo struct {
 
 type NodeInfo struct {
 	Name string
-	Role string // bootstrap, master, worker
+	Role phase.NodeRole
 	IP   string
 	MAC  string
 }

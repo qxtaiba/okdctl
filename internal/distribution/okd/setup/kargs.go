@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 )
 
 type LiveKargsParams struct {
@@ -57,12 +58,12 @@ func ExtractNetworkConfig(cfg *config.Config) (gateway, netmask, dns, iface stri
 	return gateway, netmask, dns, iface
 }
 
-func BuildIgnitionURLForNode(cfg *config.Config, role string) string {
+func BuildIgnitionURLForNode(cfg *config.Config, role phase.NodeRole) string {
 	ignitionIP := cfg.HTTPServer.IgnitionServerIP
 	ignitionPort := cfg.HTTPServer.Port
 	if ignitionPort == 0 {
 		ignitionPort = 8080
 	}
-	ignitionFile := role + ".ign"
+	ignitionFile := role.String() + ".ign"
 	return fmt.Sprintf("http://%s:%d/ignition/%s", ignitionIP, ignitionPort, ignitionFile)
 }

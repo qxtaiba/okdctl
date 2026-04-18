@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/netutil"
 )
 
@@ -21,7 +22,7 @@ func (p *Phase) BuildNodeList(cfg *config.Config) ([]NodeInfo, error) {
 
 	nodes = append(nodes, NodeInfo{
 		Name: "bootstrap",
-		Role: "bootstrap",
+		Role: phase.RoleBootstrap,
 		IP:   startIP,
 	})
 
@@ -32,7 +33,7 @@ func (p *Phase) BuildNodeList(cfg *config.Config) ([]NodeInfo, error) {
 		}
 		nodes = append(nodes, NodeInfo{
 			Name: fmt.Sprintf("master%d", i),
-			Role: "master",
+			Role: phase.RoleMaster,
 			IP:   ip,
 		})
 	}
@@ -45,7 +46,7 @@ func (p *Phase) BuildNodeList(cfg *config.Config) ([]NodeInfo, error) {
 		}
 		nodes = append(nodes, NodeInfo{
 			Name: fmt.Sprintf("worker%d", i),
-			Role: "worker",
+			Role: phase.RoleWorker,
 			IP:   ip,
 		})
 	}

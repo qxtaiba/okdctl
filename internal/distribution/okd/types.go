@@ -1,5 +1,7 @@
 package okd
 
+import "github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
+
 type ClusterStatus struct {
 	Phase        ClusterPhase
 	Version      string
@@ -23,7 +25,7 @@ const (
 
 type NodeStatus struct {
 	Name       string
-	Role       string
+	Role       phase.NodeRole
 	Status     string
 	Version    string
 	InternalIP string
