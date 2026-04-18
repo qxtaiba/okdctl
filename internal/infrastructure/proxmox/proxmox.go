@@ -24,6 +24,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/infrastructure/terraform"
 	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/netutil"
+	"github.com/qxtaiba/okdctl/internal/tui"
 )
 
 type Provider struct {
@@ -147,16 +148,19 @@ func (p *Provider) Provision(ctx context.Context, cfg *config.Config, opts Provi
 	p.logger.Info(fmt.Sprintf("terraform: plan will create %d virtual machines", totalNodes))
 
 	p.logger.Info("terraform: applying infrastructure changes")
+	stopSpinner := tui.StartSpinner(ctx, "applying terraform infrastructure")
 	applyOpts := terraform.ApplyOptions{
 		PlanFile:    filepath.Join(p.terraformExec.WorkDir, terraform.PlanFileName),
 		AutoApprove: opts.AutoApprove,
 	}
-	if err := p.terraformExec.Apply(ctx, applyOpts); err != nil {
+	applyErr := p.terraformExec.Apply(ctx, applyOpts)
+	stopSpinner()
+	if applyErr != nil {
 		if errors.Is(ctx.Err(), context.Canceled) {
-			return nil, fmt.Errorf("terraform apply interrupted: %w", err)
+			return nil, fmt.Errorf("terraform apply interrupted: %w", applyErr)
 		}
 		p.logger.Warn("terraform: apply failed; partial infrastructure may exist. run 'okdctl destroy' to clean up")
-		return nil, fmt.Errorf("terraform apply failed: %w", err)
+		return nil, fmt.Errorf("terraform apply failed: %w", applyErr)
 	}
 
 	result, err := p.retrieveProvisionResult(cfg)

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/qxtaiba/okdctl/internal/cluster"
+	"github.com/qxtaiba/okdctl/internal/tui"
 )
 
 func (p *Phase) WaitForBootstrap(ctx context.Context, clusterDir string, opts *Options) error {
@@ -22,7 +23,10 @@ func (p *Phase) WaitForBootstrap(ctx context.Context, clusterDir string, opts *O
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
-	if err := cmd.Run(); err != nil {
+	stopSpinner := tui.StartSpinner(ctx, "waiting for bootstrap complete")
+	err := cmd.Run()
+	stopSpinner()
+	if err != nil {
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 			return fmt.Errorf("bootstrap timed out after %v", opts.BootstrapTimeout)
 		}
@@ -50,6 +54,9 @@ func (p *Phase) MonitorInstallation(ctx context.Context, clusterDir string, opts
 	installCmd := osExec.CommandContext(ctx, "openshift-install", "wait-for", "install-complete", "--dir", clusterDir, "--log-level=debug")
 	installCmd.Stdout = os.Stdout
 	installCmd.Stderr = os.Stderr
+
+	stopSpinner := tui.StartSpinner(ctx, "monitoring cluster operators")
+	defer stopSpinner()
 
 	if err := installCmd.Start(); err != nil {
 		return fmt.Errorf("failed to start installation monitor: %w", err)
