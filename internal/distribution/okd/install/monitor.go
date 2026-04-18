@@ -7,6 +7,7 @@ import (
 	"os"
 	osExec "os/exec"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/qxtaiba/okdctl/internal/cluster"
@@ -60,6 +61,19 @@ func (p *Phase) MonitorInstallation(ctx context.Context, clusterDir string, opts
 		installDone <- installCmd.Wait()
 	}()
 
+	// Kill fires at most once even if the ctx.Done branch runs concurrently
+	// with installDone receiving — sync.Once makes that invariant explicit.
+	var killOnce sync.Once
+	killInstall := func() {
+		killOnce.Do(func() {
+			if installCmd.Process != nil {
+				if killErr := installCmd.Process.Kill(); killErr != nil {
+					p.Log.Warn(fmt.Sprintf("install: failed to kill process: %v", killErr))
+				}
+			}
+		})
+	}
+
 	ticker := time.NewTicker(opts.CSRApprovalInterval)
 	defer ticker.Stop()
 
@@ -98,11 +112,7 @@ func (p *Phase) MonitorInstallation(ctx context.Context, clusterDir string, opts
 			}
 
 		case <-ctx.Done():
-			if installCmd.Process != nil {
-				if killErr := installCmd.Process.Kill(); killErr != nil {
-					p.Log.Warn(fmt.Sprintf("install: failed to kill process: %v", killErr))
-				}
-			}
+			killInstall()
 			// Give the just-killed openshift-install 30s to exit and flush
 			// its final output; then give up rather than blocking shutdown.
 			// The goroutine above still holds Wait() on the dead process —

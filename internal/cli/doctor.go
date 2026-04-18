@@ -183,10 +183,16 @@ func printResult(c check, r checkResult) {
 }
 
 // checkHostOS identifies the host OS by parsing /etc/os-release.
+// Doctor checks share a uniform signature `func(context.Context) checkResult`
+// so they can be stored in a registry slice and invoked in a loop. Checks
+// that have no cancellable work (checkHostOS, checkNotRoot, checkPath,
+// checkBinaries, checkSSHKey, checkPullSecret, checkDiskSpace) take ctx as
+// a blank-named parameter to keep the signature uniform; only checks that
+// shell out (checkSudo, checkPorts) consume it.
 func checkHostOS(_ context.Context) checkResult {
 	host, err := platform.Detect()
 	if err != nil {
-		return checkResult{sev: sevFail, detail: "cannot read /etc/os-release: " + err.Error()}
+		return checkResult{sev: sevFail, detail: fmt.Sprintf("cannot read /etc/os-release: %v", err)}
 	}
 	return checkResult{sev: sevPass, detail: fmt.Sprintf("%s %s (%s family)", host.ID, host.Version, host.Family)}
 }
@@ -316,13 +322,13 @@ func checkPullSecret(_ context.Context) checkResult {
 				detail: "no config yet at " + configPath + "; run 'okdctl deploy' to set the pull secret path in the wizard",
 			}
 		}
-		return checkResult{sev: sevFail, detail: "cannot stat config: " + err.Error()}
+		return checkResult{sev: sevFail, detail: fmt.Sprintf("cannot stat config: %v", err)}
 	}
 
 	loader := config.NewLoader()
 	cfg, err := loader.LoadFile(configPath)
 	if err != nil {
-		return checkResult{sev: sevFail, detail: "cannot load config: " + err.Error()}
+		return checkResult{sev: sevFail, detail: fmt.Sprintf("cannot load config: %v", err)}
 	}
 
 	if cfg.Files.PullSecret == "" {
@@ -343,7 +349,7 @@ func checkPullSecret(_ context.Context) checkResult {
 		Auths map[string]json.RawMessage `json:"auths"`
 	}
 	if err := json.Unmarshal(data, &parsed); err != nil {
-		return checkResult{sev: sevFail, detail: "invalid json: " + err.Error()}
+		return checkResult{sev: sevFail, detail: fmt.Sprintf("invalid json: %v", err)}
 	}
 	if parsed.Auths == nil {
 		return checkResult{sev: sevFail, detail: "missing or malformed 'auths' field: not a valid okd pull secret"}
@@ -366,7 +372,7 @@ func checkDiskSpace(_ context.Context) checkResult {
 	}
 	var st syscall.Statfs_t
 	if err := syscall.Statfs(u.HomeDir, &st); err != nil {
-		return checkResult{sev: sevWarn, detail: "statfs failed: " + err.Error()}
+		return checkResult{sev: sevWarn, detail: fmt.Sprintf("statfs failed: %v", err)}
 	}
 	// Bsize is int64 on linux but a filesystem block size is always
 	// positive in practice; the bound check exists to satisfy gosec

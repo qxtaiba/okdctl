@@ -1,6 +1,7 @@
 package setup
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"os"
@@ -205,9 +206,14 @@ func installHashiCorpDebianRepo(ctx context.Context) error {
 	gpgPath := "/usr/share/keyrings/hashicorp-archive-keyring.gpg"
 
 	gpgTmp, err := system.WriteTempFile("hashicorp-gpg", 0o600, func(f *os.File) error {
+		var stderr bytes.Buffer
 		cmd := exec.CommandContext(ctx, "wget", "-qO-", "https://apt.releases.hashicorp.com/gpg")
 		cmd.Stdout = f
-		return cmd.Run()
+		cmd.Stderr = &stderr
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("wget failed: %w (stderr: %s)", err, stderr.String())
+		}
+		return nil
 	})
 	if err != nil {
 		return fmt.Errorf("failed to download HashiCorp GPG key: %w", err)
