@@ -203,7 +203,7 @@ scaffolding the internal code already holds."
 ### Theme D — wizard coverage
 
 #### N16 — Wizard collects `FCOSIso` / `TokenID` / `AdditionalNetworks`
-- **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/n16-wizard-fcos-token-networks
+- **Status:** in review — PR #79
 - **Category:** half-done
 - **State:** partially done
 - **Effort:** days
