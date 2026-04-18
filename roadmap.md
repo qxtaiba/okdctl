@@ -403,6 +403,55 @@ This is **design-doc-first**. No code lands until the plan is reviewed.
 
 - **Status:** deferred (menu open; no item scheduled)
 
+## Air-gap workstream — design-doc-first
+
+Full air-gap support is not a single PR; it is a cross-cutting question
+about every upstream okdctl currently reaches. M4 (`OKDReleaseBaseURL`)
+and M5 (`ToolVersions` for helm/sops/yq) redirect four HTTP fetches but
+leave terraform, OS package managers, FCOS media, and addon Helm charts
+pointing at public networks. Before shipping more redirects piecemeal we
+want a scoping doc that maps the complete surface and decides which
+scenarios we actually support.
+
+### L15 — Air-gap feasibility + scoping doc
+
+- **Status:** not started
+- **Category:** feature-gap / design-needed
+- **State:** scoping needed
+- **Effort:** weeks (scoping); full implementation is quarters
+- **Impact:** large
+- **Scope:**
+  - Design document in `docs/superpowers/plans/YYYY-MM-DD-airgap-scoping.md`
+    covering:
+    - Complete inventory of external HTTP/package fetches: OKD release
+      binaries, FCOS ISO, helm/sops/yq, terraform (HashiCorp apt/dnf),
+      OS packages (apt/dnf distro mirrors), addon Helm chart pulls,
+      container image references baked into addon manifests, the GitHub
+      update check, any runtime `go install` (e.g. yamlfmt in CI) —
+      audit-grade with file:line refs.
+    - For each fetch: today's source, whether it is already redirectable
+      (M4/M5), and what would be required to redirect it (config field,
+      env var, install-script change, addon contract change).
+    - Target user scenarios: "fully air-gapped homelab with a mirror
+      registry"; "intermittently-connected with a caching proxy";
+      "connected but wants a private mirror for speed/compliance" — pick
+      which to support, explicitly defer the rest.
+    - Mirror contract: what URL shape / directory layout a mirror must
+      expose to satisfy okdctl. Prefer a layout that maps 1:1 to
+      upstream paths so users can `rsync` rather than rewrite.
+    - Addon implications: does an air-gap mode require every addon to
+      declare a mirror-friendly chart repo? If so, an extension to the
+      `Addon` interface may land alongside R1.
+    - Verification strategy: how do we smoke-test air-gap in CI without
+      a real mirror?
+- **Acceptance:** design doc reviewed and approved before any code. Once
+  approved, implementation lands as a series of roadmap items (one per
+  unblocked fetch), not one mega-PR. M4 and M5 are referenced as
+  precedent for the env > config > default resolution pattern.
+- **Depends on:** none. M4 and M5 are context but not prerequisites.
+
+
+
 When the refactor lands, these are the candidates captured during
 triage. **None of these are scheduled yet.** They are the menu for a
 later decision.
@@ -780,5 +829,6 @@ but link evidence.
 | L12 | Container image distribution | **Skipped** |
 | L13 | Auto-update version check | **Done** (PR #69) |
 | L14 | Coverage thresholds + codecov | Sprint 1 |
+| L15 | Air-gap feasibility + scoping doc | Workstream (design-doc-first) |
 | R1 | Addon category model + design doc | Workstream (design-doc-first) |
 | R2 | Specific addons after R1 | Deferred conversation |
