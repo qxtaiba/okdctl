@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/cenkalti/backoff/v4"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"sigs.k8s.io/yaml"
 )
 
@@ -20,17 +20,23 @@ const (
 // backoff starting at DefaultRetryBackoff. Context cancellation is checked
 // between retries.
 func RetryDefault(ctx context.Context, fn func() error) error {
-	b := backoff.NewExponentialBackOff()
-	b.InitialInterval = DefaultRetryBackoff
-	b.Multiplier = 2
-	b.RandomizationFactor = 0.5
-	b.MaxInterval = 5 * time.Minute
-	b.MaxElapsedTime = 0
-
-	return backoff.Retry(fn, backoff.WithContext(
-		backoff.WithMaxRetries(b, uint64(DefaultRetryCount-1)),
-		ctx,
-	))
+	return wait.ExponentialBackoffWithContext(ctx, wait.Backoff{
+		Duration: DefaultRetryBackoff,
+		Factor:   2,
+		Jitter:   0.5,
+		Steps:    DefaultRetryCount,
+		Cap:      5 * time.Minute,
+	}, func(_ context.Context) (bool, error) {
+		// Returning (false, nil) on error asks wait to retry; returning
+		// the error would abort the retry loop. Non-retryable errors
+		// aren't distinguished today — all fn failures are retried
+		// through the full backoff budget, matching the previous
+		// cenkalti/backoff behavior.
+		if err := fn(); err != nil {
+			return false, nil //nolint:nilerr // intentional: retry on any error
+		}
+		return true, nil
+	})
 }
 
 // BuildOpaqueSecret returns a Kubernetes Secret manifest YAML of type Opaque.
