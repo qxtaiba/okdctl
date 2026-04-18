@@ -29,6 +29,31 @@ func ResolveReleaseBaseURL(cfg *config.Config) string {
 	return defaultOKDReleaseBaseURL
 }
 
+var toolURLEnvVars = map[string]string{
+	"helm": "OKDCTL_HELM_URL",
+	"sops": "OKDCTL_SOPS_URL",
+	"yq":   "OKDCTL_YQ_URL",
+}
+
+// ResolveToolURL returns the download URL template for the named binary tool.
+// Resolution order: env var > cfg.Deployment.ToolVersions[tool].URLTemplate >
+// defaultURL. The returned string may contain a single %s for arch
+// substitution; callers always apply fmt.Sprintf(url, arch), so a verbatim URL
+// (no %s) passes through unchanged.
+func ResolveToolURL(tool, defaultURL string, cfg *config.Config) string {
+	if envKey, ok := toolURLEnvVars[tool]; ok {
+		if v := os.Getenv(envKey); v != "" {
+			return v
+		}
+	}
+	if cfg != nil {
+		if ov, ok := cfg.Deployment.ToolVersions[tool]; ok && ov.URLTemplate != "" {
+			return ov.URLTemplate
+		}
+	}
+	return defaultURL
+}
+
 func (p *Phase) DownloadOKDTools(ctx context.Context, version string, opts *Options) error {
 	if err := system.EnsureDir(opts.DownloadDir); err != nil {
 		return fmt.Errorf("failed to create download directory: %w", err)

@@ -122,14 +122,24 @@ type HTTPServerConfig struct {
 	IgnitionServerIP string `json:"ignition_server_ip"`
 }
 
+// ToolVersionOverride lets operators replace the download URL for a single
+// binary tool. URLTemplate may contain a single %s for the platform arch
+// (same contract as the built-in defaults); a value without %s is used
+// verbatim so arch substitution is a no-op.
+type ToolVersionOverride struct {
+	Version     string `json:"version,omitempty"`
+	URLTemplate string `json:"url_template,omitempty"`
+}
+
 type DeploymentConfig struct {
-	TerraformEnv      string `json:"terraform_env,omitempty"`
-	AutoApprove       bool   `json:"auto_approve,omitempty"`
-	Debug             bool   `json:"debug,omitempty"`
-	SkipDepsCheck     bool   `json:"skip_deps_check,omitempty"`
-	BootstrapTimeout  int    `json:"bootstrap_timeout,omitempty"`
-	InstallTimeout    int    `json:"install_timeout,omitempty"`
-	OKDReleaseBaseURL string `json:"okd_release_base_url,omitempty"`
+	TerraformEnv      string                         `json:"terraform_env,omitempty"`
+	AutoApprove       bool                           `json:"auto_approve,omitempty"`
+	Debug             bool                           `json:"debug,omitempty"`
+	SkipDepsCheck     bool                           `json:"skip_deps_check,omitempty"`
+	BootstrapTimeout  int                            `json:"bootstrap_timeout,omitempty"`
+	InstallTimeout    int                            `json:"install_timeout,omitempty"`
+	OKDReleaseBaseURL string                         `json:"okd_release_base_url,omitempty"`
+	ToolVersions      map[string]ToolVersionOverride `json:"tool_versions,omitempty"`
 }
 
 type DisksConfig struct {
