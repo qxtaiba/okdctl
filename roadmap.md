@@ -168,7 +168,7 @@ scaffolding the internal code already holds."
 - **Depends on:** U4 (so validation failure maps to exit code 2).
 
 #### N4 — `okdctl cleanup` standalone
-- **Status:** not started
+- **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/n4-cleanup-cmd
 - **Category:** half-done
 - **State:** scaffolding exists
 - **Effort:** hours
@@ -183,7 +183,7 @@ scaffolding the internal code already holds."
   visibly broken command).
 
 #### N6 — `okdctl config show`
-- **Status:** not started
+- **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/n6-config-show
 - **Category:** feature-gap
 - **State:** not started
 - **Effort:** hours
@@ -195,7 +195,7 @@ scaffolding the internal code already holds."
 - **Depends on:** none.
 
 #### N7 — `okdctl completion bash|zsh|fish`
-- **Status:** not started
+- **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/n7-completion
 - **Category:** polish
 - **State:** not started
 - **Effort:** hours
