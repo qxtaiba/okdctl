@@ -86,20 +86,6 @@ Theme D (wizard) → Theme F (errors/types) → remaining themes in parallel.
   end-to-end without manual YAML edit.
 - **Depends on:** none.
 
-#### U3 — HTTP downloads have no retry
-- **Status:** in review — PR #49
-- **Category:** urgent-bugfix
-- **State:** half-done
-- **Effort:** hours
-- **Impact:** large
-- **Evidence:** `internal/download/download.go:112` single-shot-fails on
-  transient 5xx; `internal/addon/helpers.go:22` already exposes
-  `RetryDefault` (3 attempts, exponential backoff, 5-minute cap).
-- **Acceptance:** download wraps attempts in `RetryDefault` (or equivalent
-  retry with ctx + backoff). 5xx + network-reset responses are retried;
-  4xx is not. Retry count + last error logged on final failure.
-- **Depends on:** none.
-
 #### U4 — Exit codes collapse everything to 0/1/130
 - **Status:** not started
 - **Category:** urgent-bugfix
@@ -111,18 +97,6 @@ Theme D (wizard) → Theme F (errors/types) → remaining themes in parallel.
 - **Acceptance:** documented exit-code table (config=2, network=3,
   cluster=4, auth=5, other=1). `main()` switches on typed error from M13.
 - **Depends on:** M13 (typed error hierarchy) lands first or in parallel.
-
-#### U6 — `BuildOpaqueSecret` panics on YAML marshal error
-- **Status:** in review — PR #50
-- **Category:** urgent-bugfix
-- **State:** partially done
-- **Effort:** hours
-- **Impact:** small
-- **Evidence:** `internal/addon/helpers.go:61` `panic(fmt.Sprintf(...))`
-  fires from package-level callers in addon catalog init.
-- **Acceptance:** `BuildOpaqueSecret` returns `(string, error)`; all
-  callers propagate. No package-level panic in addon init paths.
-- **Depends on:** none.
 
 #### U1b — Clean remote Proxmox FCOS ISO on destroy
 - **Status:** in progress — worktree: .worktrees/u1b-remote-iso-cleanup
@@ -179,21 +153,6 @@ scaffolding the internal code already holds."
     cluster state.
 - **Depends on:** addon category refactor (R1) should land first if it
   lands before this item; otherwise this ships flat and migrates later.
-
-#### N2 — Wire `okdctl releases list/show`
-- **Status:** in review — PR #51
-- **Category:** half-done
-- **State:** scaffolding exists
-- **Effort:** hours
-- **Impact:** medium
-- **Evidence:** `internal/distribution/okd/releases/fetcher.go` exposes
-  `FetchVersions`, `GetLatestStable`, `GetLatestForMinor` — zero CLI
-  callers.
-- **Acceptance:** `okdctl releases list` prints available OKD versions
-  (semver-sorted, optionally `--channel stable|all`).
-  `okdctl releases show <version>` prints manifest info. Both honour
-  the fetcher's existing caching.
-- **Depends on:** none.
 
 #### N3 — `okdctl config validate` standalone
 - **Status:** not started
@@ -738,6 +697,29 @@ but link evidence.
   it). Fix landed as a side-effect of commit `65d8fce refactor(platform):
   thread ctx through PackageManager and tool version lookup`
   (elevation-refactor-and-hardening plan).
+- **U3 — HTTP downloads have no retry** — done PR #49, merged 2026-04-18.
+  `internal/download` now retries 5xx, 408, 429, and transport errors with
+  exponential backoff (5s base, factor 2, jitter 0.5, 3 steps, 5-minute
+  cap). 4xx and context cancellation fail fast. Retry helper kept local
+  to `internal/download/retry.go` rather than importing `addon` so the
+  package layering stays low-level → nothing. Attempt count and last
+  error are logged on exhaustion.
+- **U6 — `BuildOpaqueSecret` panics on YAML marshal error** — done PR #50,
+  merged 2026-04-18. `addon.BuildOpaqueSecret` now returns
+  `(string, error)`; secretstore and flux callers propagate. The two
+  remaining `panic(err)` sites in `internal/addon/catalog/*` init paths
+  are `addon.Register` duplicate-name guards — distinct from the
+  YAML-marshal panic U6 addressed. Pre-existing doc drift in
+  `docs/architecture/addons.md:109` (arg order shown reversed) left for
+  a follow-up.
+- **N2 — Wire `okdctl releases list/show`** — done PR #51, merged
+  2026-04-18. New `internal/cli/releases.go` wires
+  `releases.OKDVersionFetcher` to two subcommands. `list --channel
+  stable|all --output text|json` uses `text/tabwriter` so alignment holds
+  for long tags like `4.21.0-okd-scos.10`. `show <version>` matches by
+  `Version` or `Tag` and prints via `tui.DottedKeyValueFull`. Both honour
+  the fetcher's existing disk cache; neither is added to
+  `rootRequiredCmds` (read-only commands).
 
 ## Appendix — full item ledger
 
