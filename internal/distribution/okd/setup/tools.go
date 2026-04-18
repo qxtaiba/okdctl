@@ -123,7 +123,7 @@ func (p *Phase) installTerraform(ctx context.Context) error {
 		return fmt.Errorf("terraform installation verification failed")
 	}
 
-	version := getToolVersion("terraform", "--version")
+	version := getToolVersion(ctx, "terraform", "--version")
 	p.Log.Info(fmt.Sprintf("tools: terraform installed (%s)", version))
 	return nil
 }
@@ -170,7 +170,7 @@ func (p *Phase) installBinary(ctx context.Context, spec binaryInstallSpec) error
 	if !isToolInstalled(externalTool(spec.name)) {
 		return fmt.Errorf("%s installation verification failed", spec.name)
 	}
-	p.Log.Info(fmt.Sprintf("tools: %s installed (%s)", spec.name, getToolVersion(spec.name, spec.versionFlag)))
+	p.Log.Info(fmt.Sprintf("tools: %s installed (%s)", spec.name, getToolVersion(ctx, spec.name, spec.versionFlag)))
 	return nil
 }
 
@@ -188,8 +188,8 @@ func installBinaryToPath(_ context.Context, srcPath, name string) error {
 	return nil
 }
 
-func getToolVersion(tool, flag string) string {
-	cmd := exec.CommandContext(context.Background(), tool, flag)
+func getToolVersion(ctx context.Context, tool, flag string) string {
+	cmd := exec.CommandContext(ctx, tool, flag)
 	output, err := cmd.Output()
 	if err != nil {
 		return "unknown"

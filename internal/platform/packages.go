@@ -15,7 +15,7 @@ import (
 type PackageManager interface {
 	Install(ctx context.Context, packages []string, logger *slog.Logger) error
 	Remove(ctx context.Context, packages []string, logger *slog.Logger) error
-	IsInstalled(pkg string) bool
+	IsInstalled(ctx context.Context, pkg string) bool
 	AddRepo(ctx context.Context, name, url string, logger *slog.Logger) error
 }
 
@@ -47,7 +47,7 @@ func (m *DNFManager) Remove(ctx context.Context, packages []string, _ *slog.Logg
 	}
 	var installed []string
 	for _, pkg := range packages {
-		if m.IsInstalled(pkg) {
+		if m.IsInstalled(ctx, pkg) {
 			installed = append(installed, pkg)
 		}
 	}
@@ -58,8 +58,8 @@ func (m *DNFManager) Remove(ctx context.Context, packages []string, _ *slog.Logg
 	return exec.CommandContext(ctx, "dnf", args...).Run()
 }
 
-func (m *DNFManager) IsInstalled(pkg string) bool {
-	return exec.CommandContext(context.Background(), "rpm", "-q", pkg).Run() == nil
+func (m *DNFManager) IsInstalled(ctx context.Context, pkg string) bool {
+	return exec.CommandContext(ctx, "rpm", "-q", pkg).Run() == nil
 }
 
 func (m *DNFManager) AddRepo(ctx context.Context, name, url string, logger *slog.Logger) error {
@@ -88,7 +88,7 @@ func (m *APTManager) Remove(ctx context.Context, packages []string, _ *slog.Logg
 	}
 	var installed []string
 	for _, pkg := range packages {
-		if m.IsInstalled(pkg) {
+		if m.IsInstalled(ctx, pkg) {
 			installed = append(installed, pkg)
 		}
 	}
@@ -99,8 +99,8 @@ func (m *APTManager) Remove(ctx context.Context, packages []string, _ *slog.Logg
 	return exec.CommandContext(ctx, "apt-get", args...).Run()
 }
 
-func (m *APTManager) IsInstalled(pkg string) bool {
-	cmd := exec.CommandContext(context.Background(), "dpkg", "-l", pkg)
+func (m *APTManager) IsInstalled(ctx context.Context, pkg string) bool {
+	cmd := exec.CommandContext(ctx, "dpkg", "-l", pkg)
 	output, err := cmd.Output()
 	if err != nil {
 		return false
