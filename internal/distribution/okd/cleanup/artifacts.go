@@ -9,19 +9,39 @@ import (
 	"path/filepath"
 
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
-	"github.com/qxtaiba/okdctl/internal/system"
 )
 
-// SafeRemoveWithLogger removes a file or directory if it exists, with automatic sudo fallback.
-// Returns nil if the path doesn't exist or was successfully removed, or a wrapped error on failure.
-// Errors are also logged via the provided logger for visibility in best-effort cleanup phase.
-// Note: If elevated privileges are required, sudo may prompt for a password.
-func SafeRemoveWithLogger(ctx context.Context, path, description string, logger *slog.Logger) error {
+var criticalPaths = []string{"/", "/etc", "/var", "/usr", "/bin", "/sbin", "/lib", "/home", "/root", "/boot", "/dev", "/proc", "/sys"}
+
+// refuseCriticalPath aborts if path resolves to a root-of-system location.
+// Defense-in-depth against a config-file typo pointing cleanup at the wrong
+// target. Returns nil for safe paths.
+func refuseCriticalPath(path string) error {
+	cleaned := filepath.Clean(path)
+	for _, p := range criticalPaths {
+		if cleaned == p {
+			return fmt.Errorf("refusing to remove critical system path: %s", path)
+		}
+	}
+	return nil
+}
+
+// SafeRemoveWithLogger removes a file or directory if it exists, logging
+// failures via the provided logger. Returns nil if the path didn't exist or
+// was removed successfully. Runs as root under the re-exec model so there
+// is no fallback path to worry about.
+func SafeRemoveWithLogger(_ context.Context, path, description string, logger *slog.Logger) error {
+	if err := refuseCriticalPath(path); err != nil {
+		if logger != nil {
+			logger.Warn(err.Error())
+		}
+		return err
+	}
 	if _, err := os.Stat(path); os.IsNotExist(err) {
-		return nil // Silently skip non-existent paths
+		return nil
 	}
 
-	if err := system.RemoveAll(ctx, path, description); err != nil {
+	if err := os.RemoveAll(path); err != nil {
 		if logger != nil {
 			logger.Warn(fmt.Sprintf("could not remove %s: %v", description, err))
 		}
