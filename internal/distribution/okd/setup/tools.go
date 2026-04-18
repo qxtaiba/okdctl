@@ -55,7 +55,7 @@ func isToolInstalled(tool externalTool) bool {
 func (p *Phase) InstallExternalTools(ctx context.Context, cfg *config.Config) error {
 	tools := append([]externalTool{toolTerraform, toolYQ}, addonRequiredTools(cfg)...)
 	for _, tool := range tools {
-		if err := p.installTool(ctx, tool); err != nil {
+		if err := p.installTool(ctx, tool, cfg); err != nil {
 			return fmt.Errorf("failed to install %s: %w", tool, err)
 		}
 	}
@@ -80,7 +80,7 @@ var binaryTools = map[externalTool]binaryInstallSpec{
 	},
 }
 
-func (p *Phase) installTool(ctx context.Context, tool externalTool) error {
+func (p *Phase) installTool(ctx context.Context, tool externalTool, cfg *config.Config) error {
 	if isToolInstalled(tool) {
 		p.Log.Info(fmt.Sprintf("tools: %s already installed", tool))
 		return nil
@@ -95,7 +95,7 @@ func (p *Phase) installTool(ctx context.Context, tool externalTool) error {
 		p.Log.Warn(fmt.Sprintf("tools: no installer for %s, skipping (install manually)", tool))
 		return nil
 	}
-	spec.url = fmt.Sprintf(spec.url, platform.DownloadArch())
+	spec.url = fmt.Sprintf(ResolveToolURL(string(tool), spec.url, cfg), platform.DownloadArch())
 	return p.installBinary(ctx, spec)
 }
 
