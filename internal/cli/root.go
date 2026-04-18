@@ -36,7 +36,8 @@ Highlights:
   • YAML configuration with sensible defaults
   • Automated preflight checks and validation
   • Single binary distribution`,
-	Version: version.Version,
+	Version:           version.Version,
+	PersistentPreRunE: func(cmd *cobra.Command, _ []string) error { return ensureRoot(cmd) },
 	Run: func(_ *cobra.Command, _ []string) {
 		fmt.Println(tui.TitleStyle.Render("homelab k8s"))
 		fmt.Println()
