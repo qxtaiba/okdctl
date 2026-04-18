@@ -163,20 +163,36 @@ func (m *Manager) InstallOne(ctx context.Context, name string) error {
 	return nil
 }
 
-func (m *Manager) VerifyAll(ctx context.Context) error {
+// VerifyResult is one addon's verify outcome. Err is nil on success.
+type VerifyResult struct {
+	Name string
+	Err  error
+}
+
+// VerifyAll runs Verify on every enabled addon and returns one result per
+// addon plus an aggregated error built from any failures. Iteration does
+// not stop on the first failure — callers receive results for every addon
+// that was attempted before context cancellation.
+func (m *Manager) VerifyAll(ctx context.Context) ([]VerifyResult, error) {
 	enabled := Enabled(m.cfg)
+	results := make([]VerifyResult, 0, len(enabled))
+	var errs []error
 	for _, a := range enabled {
 		if err := ctx.Err(); err != nil {
-			return err
+			return results, err
 		}
 
 		info := a.Info()
 		env := m.buildEnv(a)
-		if err := a.Verify(ctx, env); err != nil {
-			return fmt.Errorf("addon %s verify failed: %w", info.Name, err)
+		if vErr := a.Verify(ctx, env); vErr != nil {
+			wrapped := fmt.Errorf("addon %s verify failed: %w", info.Name, vErr)
+			results = append(results, VerifyResult{Name: info.Name, Err: wrapped})
+			errs = append(errs, wrapped)
+		} else {
+			results = append(results, VerifyResult{Name: info.Name})
 		}
 	}
-	return nil
+	return results, errors.Join(errs...)
 }
 
 // Uninstall removes an addon, blocking if any enabled addon transitively
