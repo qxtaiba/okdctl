@@ -131,7 +131,7 @@ Motto for this theme: "finish the last mile of the manager/fetcher
 scaffolding the internal code already holds."
 
 #### N1 — Wire `okdctl addon list/install/uninstall/verify`
-- **Status:** not started
+- **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/n1-addon-cli
 - **Category:** half-done
 - **State:** scaffolding exists
 - **Effort:** days
@@ -499,7 +499,7 @@ scaffolding the internal code already holds."
 ### Theme H — docs
 
 #### N19 — Addon-specific docs in `docs/addons/`
-- **Status:** not started
+- **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/n19-addon-docs
 - **Category:** docs
 - **State:** not started
 - **Effort:** hours
@@ -532,7 +532,7 @@ scaffolding the internal code already holds."
 - **Depends on:** N7 (so completion command is covered).
 
 #### M17 — Architecture diagrams (Mermaid)
-- **Status:** not started
+- **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/m17-arch-diagrams
 - **Category:** docs
 - **State:** not started
 - **Effort:** hours
