@@ -182,18 +182,6 @@ scaffolding the internal code already holds."
 - **Depends on:** U1 (bug fix should land first to avoid shipping a
   visibly broken command).
 
-#### N5 — `okdctl kubeconfig`
-- **Status:** in review — PR #55
-- **Category:** feature-gap
-- **State:** not started
-- **Effort:** hours
-- **Impact:** medium
-- **Acceptance:** `okdctl kubeconfig [--config path] [--output -]` prints
-  the cluster kubeconfig (by default to stdout, merged into
-  `$KUBECONFIG`/`~/.kube/config` with a flag). Errors cleanly when the
-  artifact isn't present.
-- **Depends on:** none.
-
 #### N6 — `okdctl config show`
 - **Status:** not started
 - **Category:** feature-gap
@@ -381,31 +369,6 @@ scaffolding the internal code already holds."
   input). `FCOSIso` collected via storage-ref picker similar to existing
   ISO discovery. `AdditionalNetworks` collected as multi-select over
   discovered bridges.
-- **Depends on:** none.
-
-#### N17 — Wizard review renders all fields
-- **Status:** in review — PR #56
-- **Category:** polish
-- **State:** partially done
-- **Effort:** hours
-- **Impact:** small
-- **Evidence:** `internal/tui/wizard/steps/review.go` skips `HostPrefix`,
-  `StaticIP.DNS`, derived `Bastion.VIP`.
-- **Acceptance:** review page shows every user-settable field plus every
-  derived field (VIP, Netmask, IgnitionServerIP).
-- **Depends on:** none.
-
-#### N18 — Gateway-in-CIDR wizard validation
-- **Status:** in review — PR #57
-- **Category:** polish
-- **State:** partially done
-- **Effort:** hours
-- **Impact:** small
-- **Evidence:** CIDR overlap is validated
-  (`internal/tui/wizard/steps/networking.go:154-175`); gateway membership
-  in machine CIDR is not.
-- **Acceptance:** new validator `ValidateGatewayInCIDR(gateway, cidr)`
-  invoked during wizard validation. Matching failure prevents advancing.
 - **Depends on:** none.
 
 ### Theme E — config ergonomics, air-gap, rootless
@@ -720,6 +683,27 @@ but link evidence.
   `Version` or `Tag` and prints via `tui.DottedKeyValueFull`. Both honour
   the fetcher's existing disk cache; neither is added to
   `rootRequiredCmds` (read-only commands).
+- **N5 — `okdctl kubeconfig`** — done PR #55, merged 2026-04-18. New
+  `internal/cli/kubeconfig.go` prints the post-install cluster kubeconfig
+  to stdout (default), writes it to a file via `--output`, or merges it
+  into the first `$KUBECONFIG` path (falling back to `~/.kube/config`)
+  via `--merge`. Structural YAML merge through `sigs.k8s.io/yaml`
+  deduplicates `clusters`/`users`/`contexts` by `.name`; `current-context`
+  is only adopted when the destination has none. Read-only — not added
+  to `rootRequiredCmds`.
+- **N17 — Wizard review renders all fields** — done PR #56, merged
+  2026-04-18. `internal/tui/wizard/steps/review.go` now renders
+  `HostPrefix` and `StaticIP.DNS`, and displays the API VIP with an
+  `(auto)` suffix when the user left it blank but static IPs are
+  configured — derived via `netutil.DeriveVIPFromStaticIP` at render
+  time so the review doesn't silently omit the effective value.
+- **N18 — Gateway-in-CIDR wizard validation** — done PR #57, merged
+  2026-04-18. New exported `config.ValidateGatewayInCIDR(gateway, cidr)`
+  in `internal/config/validators.go`, invoked from
+  `NetworkingStepDefinition.Validate` so users cannot advance past the
+  networking wizard page when the gateway falls outside the machine
+  CIDR. Defers to per-field validators when either input is empty or
+  malformed so the user doesn't see two errors for one bad field.
 
 ## Appendix — full item ledger
 
@@ -736,7 +720,7 @@ but link evidence.
 | N2 | `okdctl releases list/show` | Sprint 1 |
 | N3 | `okdctl config validate` standalone | Sprint 1 |
 | N4 | `okdctl cleanup` standalone | Sprint 1 |
-| N5 | `okdctl kubeconfig` | Sprint 1 |
+| N5 | `okdctl kubeconfig` | **Done** (PR #55) |
 | N6 | `okdctl config show` | Sprint 1 |
 | N7 | `okdctl completion` | Sprint 1 |
 | N8 | Step timing + deploy summary | Sprint 1 |
@@ -748,8 +732,8 @@ but link evidence.
 | N14 | `go vet` in CI | Sprint 1 |
 | N15 | Wizard: Deployment fields | Sprint 1 |
 | N16 | Wizard: FCOSIso/TokenID/AdditionalNetworks | Sprint 1 |
-| N17 | Wizard review completeness | Sprint 1 |
-| N18 | Gateway-in-CIDR validator | Sprint 1 |
+| N17 | Wizard review completeness | **Done** (PR #56) |
+| N18 | Gateway-in-CIDR validator | **Done** (PR #57) |
 | N19 | Addon-specific docs | Sprint 1 |
 | N20 | Doctor-check reference doc | Sprint 1 |
 | N21 | `CONTRIBUTING.md` | Deferred |
