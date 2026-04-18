@@ -11,6 +11,7 @@ import (
 
 	"github.com/qxtaiba/okdctl/internal/addon/catalog/flux"
 	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/netutil"
 	"github.com/qxtaiba/okdctl/internal/tui"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard/components"
@@ -199,18 +200,25 @@ func (s *ReviewStep) renderProxmox(st *sectionStyles) string {
 func (s *ReviewStep) renderNetworking(st *sectionStyles) string {
 	net := s.cfg.Networking
 	noStatic := net.StaticIP.Start == ""
+	vipValue := net.Bastion.VIP
+	if vipValue == "" && !noStatic {
+		if derived, err := netutil.DeriveVIPFromStaticIP(net.StaticIP.Start); err == nil {
+			vipValue = derived + " (auto)"
+		}
+	}
 	return renderSection(st, "networking", []kvEntry{
 		{label: "machine cidr", value: net.MachineCIDR},
 		{label: "gateway", value: net.Gateway},
 		{label: "upstream dns", value: strings.Join(net.DNS, ", ")},
 		{label: "bastion", value: net.Bastion.IP},
-		{label: "api vip", value: net.Bastion.VIP, skip: net.Bastion.VIP == ""},
+		{label: "api vip", value: vipValue, skip: vipValue == ""},
+		{label: "host prefix", value: fmt.Sprintf("%d", net.HostPrefix), skip: net.HostPrefix == 0},
 		{label: "pod cidr", value: net.PodCIDR, skip: net.PodCIDR == ""},
 		{label: "service cidr", value: net.ServiceCIDR, skip: net.PodCIDR == ""},
 		{label: "static ip start", value: net.StaticIP.Start, skip: noStatic},
 		{label: "interface", value: net.StaticIP.Interface, skip: noStatic},
 		{label: "netmask", value: net.StaticIP.Netmask + " (from cidr)", skip: noStatic},
-		{label: "vm dns", value: net.Bastion.IP + " (bastion/dnsmasq)", skip: noStatic},
+		{label: "vm dns", value: net.StaticIP.DNS + " (bastion/dnsmasq)", skip: noStatic},
 	})
 }
 
