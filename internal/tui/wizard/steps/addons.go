@@ -9,6 +9,8 @@ import (
 
 	"charm.land/lipgloss/v2"
 
+	"github.com/qxtaiba/okdctl/internal/addon/catalog/flux"
+	"github.com/qxtaiba/okdctl/internal/addon/catalog/secretstore"
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/system"
 	"github.com/qxtaiba/okdctl/internal/tui"
@@ -88,24 +90,24 @@ var AddonsStepDefinition = wizard.StepDefinition{
 					Label:     "repository",
 					Default:   "",
 					Help:      "git repository url (e.g., ssh://git@github.com/org/repo.git)",
-					ConfigSet: setAddonSetting("flux", "repository"),
-					ConfigGet: addonSetting("flux", "repository"),
+					ConfigSet: setAddonSetting("flux", flux.SettingRepository),
+					ConfigGet: addonSetting("flux", flux.SettingRepository),
 				},
 				{
 					Key:       "flux_branch",
 					Label:     "branch",
 					Default:   "main",
 					Help:      "branch to sync (e.g., main, develop)",
-					ConfigSet: setAddonSetting("flux", "branch"),
-					ConfigGet: addonSetting("flux", "branch"),
+					ConfigSet: setAddonSetting("flux", flux.SettingBranch),
+					ConfigGet: addonSetting("flux", flux.SettingBranch),
 				},
 				{
 					Key:       "flux_path",
 					Label:     "path",
 					Default:   "kubernetes/clusters/production",
 					Help:      "path within repository for manifests",
-					ConfigSet: setAddonSetting("flux", "path"),
-					ConfigGet: addonSetting("flux", "path"),
+					ConfigSet: setAddonSetting("flux", flux.SettingPath),
+					ConfigGet: addonSetting("flux", flux.SettingPath),
 				},
 			},
 		},
@@ -128,8 +130,8 @@ var AddonsStepDefinition = wizard.StepDefinition{
 					Label:     "secrets directory",
 					Default:   "automation/config/secrets",
 					Help:      "path to sops-encrypted files (relative to project root)",
-					ConfigSet: setAddonSetting("secretstore", "secrets_dir"),
-					ConfigGet: addonSetting("secretstore", "secrets_dir"),
+					ConfigSet: setAddonSetting("secretstore", secretstore.SettingSecretsDir),
+					ConfigGet: addonSetting("secretstore", secretstore.SettingSecretsDir),
 				},
 			},
 		},

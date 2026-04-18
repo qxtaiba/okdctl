@@ -9,6 +9,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
+	"github.com/qxtaiba/okdctl/internal/addon/catalog/flux"
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/tui"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
@@ -362,7 +363,7 @@ func (s *ReviewStep) renderFeatures(st *sectionStyles) string {
 		label := name
 		if detail, ok := ac.Settings["type"]; ok && detail != "" {
 			label = fmt.Sprintf("%s (%s)", name, detail)
-		} else if repo, ok := ac.Settings["repository"]; ok && repo != "" {
+		} else if repo, ok := ac.Settings[flux.SettingRepository]; ok && repo != "" {
 			label = fmt.Sprintf("%s (%s)", name, repo)
 		}
 		b.WriteString(st.kvPair(name, label))
