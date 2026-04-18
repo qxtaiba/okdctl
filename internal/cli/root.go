@@ -1,7 +1,12 @@
+// Package cli wires together the cobra command tree and drives the
+// top-level event loop. Process exit codes follow a documented contract:
+// config error=2, network error=3, cluster error=4, auth error=5,
+// other error=1, SIGINT/SIGTERM=130, success=0.
 package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -11,6 +16,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/tui"
 	"github.com/qxtaiba/okdctl/internal/version"
 )
@@ -82,7 +88,7 @@ func execute() int {
 			return 130
 		}
 		tui.Error(err.Error())
-		return 1
+		return exitCodeFor(err)
 	}
 
 	printUpdateNotice(updateCh)
@@ -103,6 +109,26 @@ func printUpdateNotice(ch <-chan version.CheckResult) {
 	fmt.Println(tui.WarningStyle.Render("update available:") + " " +
 		tui.MutedStyle.Render(version.Version) + " → " +
 		tui.HighlightStyle.Render(result.LatestTag))
+}
+
+func exitCodeFor(err error) int {
+	var cfgErr *errtypes.ConfigError
+	if errors.As(err, &cfgErr) {
+		return 2
+	}
+	var netErr *errtypes.NetworkError
+	if errors.As(err, &netErr) {
+		return 3
+	}
+	var clusterErr *errtypes.ClusterError
+	if errors.As(err, &clusterErr) {
+		return 4
+	}
+	var authErr *errtypes.AuthError
+	if errors.As(err, &authErr) {
+		return 5
+	}
+	return 1
 }
 
 func init() {
