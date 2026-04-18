@@ -264,18 +264,17 @@ func checkBinaries(_ context.Context) checkResult {
 	return checkResult{sev: worst, items: items}
 }
 
-// checkSudo verifies that sudo can escalate without prompting. A failing
-// check is a warning rather than a fail because interactive sudo can still
-// work if the user is present during deploy — but it is frustrating for a
-// long-running bootstrap to block on a password prompt halfway through.
+// checkSudo verifies that sudo is present and can escalate without
+// prompting. A failing check is a warning rather than a fail because the
+// deploy re-exec gate can still succeed with an interactive password — but
+// the user should know up front whether the sudo prompt will appear.
 func checkSudo(ctx context.Context) checkResult {
 	if _, err := exec.LookPath("sudo"); err != nil {
 		return checkResult{sev: sevFail, detail: "sudo not installed"}
 	}
 	cctx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(cctx, "sudo", "-n", "true")
-	if err := cmd.Run(); err != nil {
+	if err := system.HasPasswordlessSudo(cctx); err != nil {
 		return checkResult{sev: sevWarn, detail: "sudo requires a password; deploy will prompt"}
 	}
 	return checkResult{sev: sevPass, detail: "nopasswd enabled"}
