@@ -74,6 +74,9 @@ func TestValidateISODir(t *testing.T) {
 		"/var/lib/vz/$(id)",
 		"/var/lib/vz/`id`",
 		"/var/lib/vz/iso|tee /tmp/x",
+		"/var/lib/vz/iso with space",
+		"/var/lib/vz/iso\twith\ttab",
+		"/var/lib/vz/iso'quoted",
 	}
 	for _, d := range invalid {
 		if err := validateISODir(d); err == nil {
@@ -116,5 +119,91 @@ func TestVmDevicesReferenceISO(t *testing.T) {
 	})
 	if vmDevicesReferenceISO(vmDesc, "fedora-coreos-40.iso") {
 		t.Error("description field must not trigger iso match")
+	}
+}
+
+func TestParseVMIDsFromSummary_onlyRunning(t *testing.T) {
+	// Realistic summary response: three VMs, one stopped, two running.
+	summaryJSON := []byte(`[
+		{"vmid":100,"name":"okd-bootstrap","status":"running","mem":4096,"cpus":4,"uptime":3600},
+		{"vmid":101,"name":"okd-master-0","status":"stopped","mem":16384,"cpus":8,"uptime":0},
+		{"vmid":102,"name":"okd-master-1","status":"running","mem":16384,"cpus":8,"uptime":7200}
+	]`)
+
+	ids, err := parseVMIDsFromSummary(summaryJSON)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(ids) != 2 {
+		t.Fatalf("expected 2 running vmids, got %d: %v", len(ids), ids)
+	}
+	if ids[0] != 100 || ids[1] != 102 {
+		t.Errorf("expected vmids [100, 102], got %v", ids)
+	}
+}
+
+func TestParseVMIDsFromSummary_empty(t *testing.T) {
+	ids, err := parseVMIDsFromSummary([]byte(`[]`))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(ids) != 0 {
+		t.Errorf("expected empty vmid list, got %v", ids)
+	}
+}
+
+func TestConfigDevicesReferenceISO_found(t *testing.T) {
+	// Per-vmid config shape from pvesh get /nodes/<node>/qemu/<vmid>/config:
+	// top-level keys include device fields alongside non-device fields.
+	configJSON := []byte(`{
+		"ide2": "local:iso/fedora-coreos-40.iso,media=cdrom",
+		"scsi0": "local-lvm:vm-100-disk-0,size=120G",
+		"memory": 4096,
+		"cores": 4
+	}`)
+
+	found, err := configDevicesReferenceISO(configJSON, "fedora-coreos-40.iso")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !found {
+		t.Error("expected config with ide2 cdrom to reference fedora-coreos-40.iso")
+	}
+}
+
+func TestConfigDevicesReferenceISO_notFound(t *testing.T) {
+	configJSON := []byte(`{
+		"scsi0": "local-lvm:vm-101-disk-0,size=120G",
+		"memory": 16384,
+		"cores": 8
+	}`)
+
+	found, err := configDevicesReferenceISO(configJSON, "fedora-coreos-40.iso")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if found {
+		t.Error("expected config without iso reference to return false")
+	}
+}
+
+func TestConfigDevicesReferenceISO_summaryShapeNoDevices(t *testing.T) {
+	// The summary-list element shape (vmid/name/status/mem/cpus/uptime) must
+	// not match device fields — confirms the per-vmid /config call is required.
+	summaryElementJSON := []byte(`{
+		"vmid": 100,
+		"name": "okd-bootstrap",
+		"status": "running",
+		"mem": 4096,
+		"cpus": 4,
+		"uptime": 3600
+	}`)
+
+	found, err := configDevicesReferenceISO(summaryElementJSON, "fedora-coreos-40.iso")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if found {
+		t.Error("summary-list element shape must not match any device field")
 	}
 }

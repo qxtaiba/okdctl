@@ -45,14 +45,12 @@ func shellSingleQuote(s string) string {
 }
 
 // validateISODir rejects isoDir values that contain shell metacharacters or
-// are not absolute paths. The check prevents command injection when isoDir is
-// interpolated into the find command string.
+// are not absolute paths.
 func validateISODir(isoDir string) error {
 	if !filepath.IsAbs(isoDir) {
 		return fmt.Errorf("isoDir must be an absolute path, got %q", isoDir)
 	}
-	// Reject characters that have meaning to /bin/sh.
-	const dangerous = ";|&$`\\\"!(){}<>~*?[]#"
+	const dangerous = ";|&$`\\\"!(){}<>~*?[]# \t\n\r'"
 	for _, r := range dangerous {
 		if strings.ContainsRune(isoDir, r) {
 			return fmt.Errorf("isoDir %q contains unsafe character %q", isoDir, string(r))
@@ -61,31 +59,81 @@ func validateISODir(isoDir string) error {
 	return nil
 }
 
-// proxmoxQEMUList is the minimal shape returned by pvesh for the QEMU list.
-type proxmoxQEMUList []map[string]json.RawMessage
+// parseVMIDsFromSummary parses the JSON array returned by
+// pvesh get /nodes/<node>/qemu and returns the vmid of each running VM.
+// Stopped VMs are excluded: yanking a cdrom from a running VM disrupts it,
+// but a stopped VM that still references an ISO can be destroyed cleanly.
+func parseVMIDsFromSummary(data []byte) ([]int, error) {
+	var vms []struct {
+		VMID   int    `json:"vmid"`
+		Status string `json:"status"`
+	}
+	if err := json.Unmarshal(data, &vms); err != nil {
+		return nil, fmt.Errorf("pvesh qemu list output not valid json: %w", err)
+	}
+	var ids []int
+	for _, vm := range vms {
+		if vm.Status == "running" {
+			ids = append(ids, vm.VMID)
+		}
+	}
+	return ids, nil
+}
 
-// vmReferencesISO returns true when any VM on the node has the given ISO
-// filename in its device-mapping configuration, determined by running pvesh
-// over SSH.
-//
-// Proxmox device fields (ide0-3, sata0-5, scsi0-30, virtio0-15) hold
-// comma-separated key=value pairs such as "local:iso/fedora-coreos-40.iso,media=cdrom".
-// Checking only those fields avoids false positives from description or notes.
-func vmReferencesISO(ctx context.Context, p *RemoteISOParams, isoBase string) (bool, error) {
+// configDevicesReferenceISO parses the JSON object returned by
+// pvesh get /nodes/<node>/qemu/<vmid>/config and returns true if any
+// device-mapping field references isoBase.
+func configDevicesReferenceISO(data []byte, isoBase string) (bool, error) {
+	var config map[string]json.RawMessage
+	if err := json.Unmarshal(data, &config); err != nil {
+		return false, fmt.Errorf("pvesh config output not valid json: %w", err)
+	}
+	return vmDevicesReferenceISO(config, isoBase), nil
+}
+
+// listProxmoxVMIDs issues pvesh get /nodes/<node>/qemu over SSH and returns
+// the vmids of all running VMs.
+func listProxmoxVMIDs(ctx context.Context, p *RemoteISOParams) ([]int, error) {
 	result, err := SSHRun(ctx, p.Exec, p.Host,
 		fmt.Sprintf("pvesh get /nodes/%s/qemu --output-format json 2>/dev/null || echo '[]'", p.Node),
 	)
 	if err != nil {
-		return false, fmt.Errorf("ssh pvesh failed: %w", err)
+		return nil, fmt.Errorf("ssh pvesh qemu list failed: %w", err)
 	}
+	return parseVMIDsFromSummary([]byte(result.Stdout))
+}
 
-	var vms proxmoxQEMUList
-	if err := json.Unmarshal([]byte(result.Stdout), &vms); err != nil {
-		return false, fmt.Errorf("pvesh output not valid json: %w", err)
+// vmConfigReferencesISO fetches the per-VM config for vmid and returns true
+// if any device-mapping field references isoBase. If the config call fails,
+// it returns true (fail-closed) to prevent removing an ISO whose usage is unknown.
+func vmConfigReferencesISO(ctx context.Context, p *RemoteISOParams, vmid int, isoBase string) (bool, error) {
+	result, err := SSHRun(ctx, p.Exec, p.Host,
+		fmt.Sprintf("pvesh get /nodes/%s/qemu/%d/config --output-format json 2>/dev/null", p.Node, vmid),
+	)
+	if err != nil {
+		return true, fmt.Errorf("ssh pvesh qemu config failed for vmid %d: %w", vmid, err)
 	}
+	found, parseErr := configDevicesReferenceISO([]byte(result.Stdout), isoBase)
+	if parseErr != nil {
+		return true, fmt.Errorf("vmid %d: %w", vmid, parseErr)
+	}
+	return found, nil
+}
 
-	for _, vm := range vms {
-		if vmDevicesReferenceISO(vm, isoBase) {
+// anyVMReferencesISO returns true if any running VM on the node has isoBase
+// in its device-mapping configuration. Issues one summary call and one config
+// call per running VM.
+func anyVMReferencesISO(ctx context.Context, p *RemoteISOParams, isoBase string) (bool, error) {
+	vmids, err := listProxmoxVMIDs(ctx, p)
+	if err != nil {
+		return false, err
+	}
+	for _, vmid := range vmids {
+		referenced, err := vmConfigReferencesISO(ctx, p, vmid, isoBase)
+		if err != nil {
+			return true, err
+		}
+		if referenced {
 			return true, nil
 		}
 	}
@@ -148,7 +196,7 @@ func RemoveFCOSISOFromProxmox(ctx context.Context, p *RemoteISOParams, isoDir st
 	// find -print0 avoids newline-splitting ambiguity that plagued the old ls approach.
 	findCmd := fmt.Sprintf(
 		"find %s -maxdepth 1 -name 'fedora-coreos-*.iso' -type f -print0 2>/dev/null || true",
-		isoDir,
+		shellSingleQuote(isoDir),
 	)
 	result, err := SSHRun(ctx, p.Exec, p.Host, findCmd)
 	if err != nil {
@@ -168,7 +216,7 @@ func RemoveFCOSISOFromProxmox(ctx context.Context, p *RemoteISOParams, isoDir st
 		}
 
 		isoBase := filepath.Base(f)
-		inUse, err := vmReferencesISO(ctx, p, isoBase)
+		inUse, err := anyVMReferencesISO(ctx, p, isoBase)
 		if err != nil {
 			p.Log.Warn(fmt.Sprintf("iso: could not check vm references for %s: %v — skipping", isoBase, err))
 			continue
