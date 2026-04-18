@@ -8,8 +8,6 @@ import (
 	"fmt"
 	"os/exec"
 	"strings"
-
-	"github.com/qxtaiba/okdctl/internal/system"
 )
 
 func RemoveSecondaryIP(ctx context.Context, ip, iface string) error {
@@ -34,11 +32,11 @@ func RemoveSecondaryIP(ctx context.Context, ip, iface string) error {
 		return fmt.Errorf("failed to find networkmanager connection for %s: %w", iface, err)
 	}
 
-	if err := system.RunSudo(ctx, "nmcli", "connection", "modify", conn, "-ipv4.addresses", ip+"/32"); err != nil {
+	if err := exec.CommandContext(ctx, "nmcli", "connection", "modify", conn, "-ipv4.addresses", ip+"/32").Run(); err != nil {
 		return fmt.Errorf("failed to remove IP %s from connection %s: %w", ip, conn, err)
 	}
 
-	if err := system.RunSudo(ctx, "nmcli", "device", "reapply", iface); err != nil {
+	if err := exec.CommandContext(ctx, "nmcli", "device", "reapply", iface).Run(); err != nil {
 		return fmt.Errorf("failed to apply IP change on %s: %w", iface, err)
 	}
 

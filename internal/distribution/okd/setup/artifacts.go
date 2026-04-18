@@ -104,11 +104,11 @@ func (p *Phase) InstallToolsToSystem(ctx context.Context, srcDir string) error {
 
 		destPath := filepath.Join(destDir, binary)
 
-		if err := system.CopyFileWithElevation(ctx, srcPath, destPath, fmt.Sprintf("install %s", binary)); err != nil {
+		if err := system.CopyFile(srcPath, destPath); err != nil {
 			return fmt.Errorf("failed to install %s: %w", binary, err)
 		}
 
-		if err := system.Chmod(ctx, destPath, "+x", fmt.Sprintf("set %s executable", binary)); err != nil {
+		if err := system.MakeExecutable(destPath); err != nil {
 			p.Log.Warn(fmt.Sprintf("tools: failed to set executable permission for %s: %v", binary, err))
 		}
 

@@ -10,7 +10,6 @@ import (
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/packages"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/platform"
-	"github.com/qxtaiba/okdctl/internal/system"
 )
 
 // detectOS returns the detected host OS, falling back to RHEL if detection
@@ -69,7 +68,7 @@ func Packages(ctx context.Context, logger *slog.Logger) error {
 			continue // Already removed or never installed
 		}
 
-		if err := system.RemoveAll(ctx, binPath, fmt.Sprintf("remove %s", binary)); err != nil {
+		if err := os.RemoveAll(binPath); err != nil {
 			logger.Warn(fmt.Sprintf("cleanup: failed to remove %s: %v", binPath, err))
 			hasErrors = true
 		} else {

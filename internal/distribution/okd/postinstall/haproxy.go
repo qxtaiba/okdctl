@@ -3,6 +3,7 @@ package postinstall
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/firewall"
@@ -29,7 +30,7 @@ func (p *Phase) RemoveHAProxy(ctx context.Context, vip string) error {
 	}
 
 	p.Log.Info("haproxy: removing configuration")
-	if err := system.RemoveAll(ctx, phase.DefaultHAProxyConfigPath, "haproxy config"); err != nil {
+	if err := os.RemoveAll(phase.DefaultHAProxyConfigPath); err != nil {
 		p.Log.Warn(fmt.Sprintf("haproxy: failed to remove config: %v", err))
 	}
 
