@@ -123,7 +123,14 @@ func fetchToFile(ctx context.Context, client *http.Client, opts *Options, filena
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
-		return &httpStatusError{Status: resp.StatusCode, URL: opts.URL}
+		raw, _ := io.ReadAll(io.LimitReader(resp.Body, 256))
+		body := redactBodySnippet(raw, len(raw) == 256)
+		return &httpStatusError{
+			Status: resp.StatusCode,
+			Method: http.MethodGet,
+			URL:    opts.URL,
+			Body:   body,
+		}
 	}
 
 	outFile, err := os.OpenFile(opts.OutputPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
