@@ -73,7 +73,7 @@ Theme D (wizard) → Theme F (errors/types) → remaining themes in parallel.
 ### Theme A — urgent correctness bugs
 
 #### U2 — Wizard never sets `Provider.Type`
-- **Status:** not started
+- **Status:** in progress — worktree: .worktrees/u2-wizard-provider-type
 - **Category:** urgent-bugfix
 - **State:** not started
 - **Effort:** days
@@ -125,7 +125,7 @@ Theme D (wizard) → Theme F (errors/types) → remaining themes in parallel.
 - **Depends on:** none.
 
 #### U1b — Clean remote Proxmox FCOS ISO on destroy
-- **Status:** not started
+- **Status:** in progress — worktree: .worktrees/u1b-remote-iso-cleanup
 - **Category:** urgent-bugfix
 - **State:** not started
 - **Effort:** days
@@ -535,7 +535,7 @@ scaffolding the internal code already holds."
 ### Theme G — CI, tooling, distribution
 
 #### N14 — Add `go vet ./...` to CI
-- **Status:** not started
+- **Status:** in progress — worktree: .worktrees/n14-govet-ci
 - **Category:** infra
 - **State:** not started
 - **Effort:** hours
