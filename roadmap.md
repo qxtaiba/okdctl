@@ -87,7 +87,7 @@ Theme D (wizard) → Theme F (errors/types) → remaining themes in parallel.
 - **Depends on:** none.
 
 #### U4 — Exit codes collapse everything to 0/1/130
-- **Status:** in progress — branch: fix/u4-m13-exit-codes-typed-errors
+- **Status:** in review — PR #70
 - **Category:** urgent-bugfix
 - **State:** not started
 - **Effort:** hours (plus M13 for the typed-error plumbing)
@@ -363,7 +363,7 @@ scaffolding the internal code already holds."
 ### Theme F — error types, exit codes, correctness
 
 #### M13 — Typed error hierarchy
-- **Status:** in progress — branch: fix/u4-m13-exit-codes-typed-errors
+- **Status:** in review — PR #70
 - **Category:** feature-gap
 - **State:** not started
 - **Effort:** days
