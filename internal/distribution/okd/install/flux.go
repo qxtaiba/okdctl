@@ -58,7 +58,7 @@ func (p *Phase) SetupClusterAccess(_ context.Context, clusterDir string) error {
 
 	if system.FileExists(destKubeconfig) {
 		backupPath := destKubeconfig + ".backup." + time.Now().Format("20060102-150405")
-		if err := system.CopyFile(destKubeconfig, backupPath); err != nil {
+		if err := system.CopyFileMode(destKubeconfig, backupPath, 0o600); err != nil {
 			p.Log.Warn(fmt.Sprintf("kubeconfig: could not backup existing file: %v", err))
 		} else {
 			p.Log.Info(fmt.Sprintf("kubeconfig: backed up existing file to %s", backupPath))

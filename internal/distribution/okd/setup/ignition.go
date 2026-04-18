@@ -71,7 +71,7 @@ func (p *Phase) GenerateInstallConfig(_ context.Context, cfg *config.Config, out
 
 	// openshift-install consumes install-config.yaml during manifest generation
 	backupPath := outputPath + ".backup"
-	if err := system.CopyFile(outputPath, backupPath); err != nil {
+	if err := system.CopyFileMode(outputPath, backupPath, 0o600); err != nil {
 		return fmt.Errorf("failed to backup install-config.yaml: %w", err)
 	}
 
