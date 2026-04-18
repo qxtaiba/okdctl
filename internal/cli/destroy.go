@@ -1,6 +1,8 @@
 package cli
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"time"
@@ -73,7 +75,12 @@ func runDestroy(cmd *cobra.Command, _ []string) error {
 	tui.Info("destroying cluster...")
 	startTime := time.Now()
 
-	if err := p.Destroy(ctx, cfg, true, destroyKeepISOs); err != nil {
+	steps, err := p.Destroy(ctx, cfg, true, destroyKeepISOs)
+	if err != nil {
+		if errors.Is(err, context.Canceled) {
+			fmt.Println(InterruptSummary(steps, "okdctl destroy"))
+			return err
+		}
 		return err
 	}
 

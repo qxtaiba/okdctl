@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -156,6 +157,10 @@ func executeFullDeployment(ctx context.Context, cfg *config.Config, opts deploym
 
 	setupSteps, err := p.Prepare(ctx, cfg)
 	if err != nil {
+		if errors.Is(err, context.Canceled) {
+			fmt.Println(InterruptSummary(setupSteps, "okdctl deploy"))
+			return err
+		}
 		tui.Info("run 'okdctl destroy' to clean up resources")
 		return fmt.Errorf("deployment failed: %w", err)
 	}
@@ -163,12 +168,27 @@ func executeFullDeployment(ctx context.Context, cfg *config.Config, opts deploym
 	installOpts := install.NewOptions(cfg, projectRoot)
 	installSteps, err := p.Install(ctx, cfg, &installOpts)
 	if err != nil {
+		if errors.Is(err, context.Canceled) {
+			combined := make([]distribution.StepResult, 0, len(setupSteps)+len(installSteps))
+			combined = append(combined, setupSteps...)
+			combined = append(combined, installSteps...)
+			fmt.Println(InterruptSummary(combined, "okdctl deploy"))
+			return err
+		}
 		tui.Info("run 'okdctl destroy' to clean up resources")
 		return fmt.Errorf("deployment failed: %w", err)
 	}
 
 	result, configureSteps, err := p.Configure(ctx, cfg)
 	if err != nil {
+		if errors.Is(err, context.Canceled) {
+			combined := make([]distribution.StepResult, 0, len(setupSteps)+len(installSteps)+len(configureSteps))
+			combined = append(combined, setupSteps...)
+			combined = append(combined, installSteps...)
+			combined = append(combined, configureSteps...)
+			fmt.Println(InterruptSummary(combined, "okdctl deploy"))
+			return err
+		}
 		tui.Info("run 'okdctl destroy' to clean up resources")
 		return fmt.Errorf("deployment failed: %w", err)
 	}
