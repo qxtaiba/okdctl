@@ -43,5 +43,8 @@ func ensureRoot(cmd *cobra.Command) error {
 		return fmt.Errorf("resolve own binary: %w", err)
 	}
 	args := append([]string{"sudo", "--", self}, os.Args[1:]...)
-	return syscall.Exec(sudoPath, args, os.Environ())
+	// args are forwarded to sudo as an argv slice (no shell interpolation),
+	// and the `--` separator pins the binary. cobra validated the args
+	// before this PreRunE runs; callers cannot inject flags into sudo itself.
+	return syscall.Exec(sudoPath, args, os.Environ()) //nolint:gosec // argv slice, no shell
 }

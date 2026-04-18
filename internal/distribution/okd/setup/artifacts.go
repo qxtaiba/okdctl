@@ -92,7 +92,7 @@ func (p *Phase) DownloadOKDTools(ctx context.Context, version string, opts *Opti
 	return p.InstallToolsToSystem(ctx, opts.DownloadDir)
 }
 
-func (p *Phase) InstallToolsToSystem(ctx context.Context, srcDir string) error {
+func (p *Phase) InstallToolsToSystem(_ context.Context, srcDir string) error {
 	binaries := []string{"openshift-install", "oc", "kubectl"}
 	destDir := phase.DefaultBinDir
 

@@ -94,12 +94,16 @@ func ChownTreeToInvokingUser(root string) error {
 		return err
 	}
 	var errs []error
+	// root points at the deploy workdir, which is created by okdctl during
+	// the same process. We're not walking an attacker-controlled tree.
+	// Lchown (not Chown) means symlinks are chowned themselves, not their
+	// targets, so a malicious symlink cannot redirect the chown to /etc.
 	walkErr := filepath.WalkDir(root, func(path string, _ os.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			errs = append(errs, walkErr)
 			return nil
 		}
-		if chownErr := os.Lchown(path, ids.uid, ids.gid); chownErr != nil {
+		if chownErr := os.Lchown(path, ids.uid, ids.gid); chownErr != nil { //nolint:gosec // see function-level doc: Lchown + trusted workdir
 			errs = append(errs, fmt.Errorf("chown %s: %w", path, chownErr))
 		}
 		return nil

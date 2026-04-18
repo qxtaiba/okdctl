@@ -178,7 +178,9 @@ func modifyPort(ctx context.Context, backend Backend, port Port, permanent bool,
 		if permanent {
 			args = append(args, "--permanent")
 		}
-		return exec.CommandContext(ctx, args[0], args[1:]...).Run()
+		// Port/protocol validated by validatePort above; args are an argv
+		// slice (no shell interpolation).
+		return exec.CommandContext(ctx, args[0], args[1:]...).Run() //nolint:gosec // validated argv
 
 	case UFW:
 		if action == actionRemove {
@@ -195,7 +197,7 @@ func modifyPort(ctx context.Context, backend Backend, port Port, permanent bool,
 			"iptables", chainAction, "INPUT", "-p", port.Protocol,
 			"--dport", fmt.Sprintf("%d", port.Number), "-j", "ACCEPT",
 		}
-		return exec.CommandContext(ctx, args[0], args[1:]...).Run()
+		return exec.CommandContext(ctx, args[0], args[1:]...).Run() //nolint:gosec // validated argv
 	}
 
 	return nil
