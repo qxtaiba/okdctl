@@ -147,7 +147,7 @@ scaffolding the internal code already holds."
 ### Theme C — observability, error messages, logging
 
 #### N10 — Ctrl-C partial-progress summary + resume hint
-- **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/n10-ctrlc-summary
+- **Status:** in review — PR #77
 - **Category:** polish
 - **State:** scaffolding exists
 - **Effort:** hours
@@ -161,7 +161,7 @@ scaffolding the internal code already holds."
 - **Depends on:** N8 (to know which steps completed).
 
 #### N25 — Progress bars for long-running operations
-- **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/n25-progress-bars
+- **Status:** in review — PR #78
 - **Category:** polish
 - **State:** scaffolding exists
 - **Effort:** hours
