@@ -3,6 +3,7 @@ package version
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -96,6 +97,10 @@ func fetchLatest(ctx context.Context) (string, error) {
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return "", fmt.Errorf("unexpected status %d", resp.StatusCode)
+	}
+
 	var payload struct {
 		TagName string `json:"tag_name"`
 	}
@@ -142,7 +147,25 @@ func saveCache(tag string) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, data, 0o600)
+
+	tmp, err := os.CreateTemp(filepath.Dir(path), filepath.Base(path)+".*")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(tmp.Name())
+
+	if err := os.Chmod(tmp.Name(), 0o600); err != nil {
+		tmp.Close()
+		return err
+	}
+	if _, err := tmp.Write(data); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tmp.Name(), path)
 }
 
 func cachePath() (string, error) {
@@ -153,7 +176,6 @@ func cachePath() (string, error) {
 	return filepath.Join(dir, "okdctl", "update-check.json"), nil
 }
 
-// isNewer reports whether latestTag is a higher semver than current.
 func isNewer(current, latestTag string) bool {
 	c := canonicalTag(current)
 	l := canonicalTag(latestTag)
@@ -163,7 +185,6 @@ func isNewer(current, latestTag string) bool {
 	return semver.Compare(l, c) > 0
 }
 
-// canonicalTag ensures the version string has a leading "v".
 func canonicalTag(v string) string {
 	if v == "" {
 		return v
