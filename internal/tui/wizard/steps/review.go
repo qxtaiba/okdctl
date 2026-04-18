@@ -185,13 +185,11 @@ func (s *ReviewStep) renderProxmox(st *sectionStyles) string {
 	if p == nil {
 		return ""
 	}
-	var addlNetworks string
+	bridges := make([]string, len(p.AdditionalNetworks))
 	for i, n := range p.AdditionalNetworks {
-		if i > 0 {
-			addlNetworks += ", "
-		}
-		addlNetworks += n.Bridge
+		bridges[i] = n.Bridge
 	}
+	addlNetworks := strings.Join(bridges, ", ")
 	return renderSection(st, "proxmox", []kvEntry{
 		{label: "host", value: p.Host},
 		{label: "token id", value: p.TokenID, skip: p.TokenID == ""},

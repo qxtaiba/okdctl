@@ -23,7 +23,6 @@ type MultiSelectField struct {
 	selected     []bool
 	cursor       int
 	focused      bool
-	width        int
 	isDefault    bool
 	defaultValue string
 }
@@ -84,9 +83,7 @@ func (f *MultiSelectField) IsFocused() bool {
 	return f.focused
 }
 
-func (f *MultiSelectField) SetWidth(width int) {
-	f.width = width
-}
+func (f *MultiSelectField) SetWidth(_ int) {}
 
 func (f *MultiSelectField) Validate() error {
 	return nil
@@ -114,7 +111,7 @@ func (f *MultiSelectField) Update(msg tea.Msg) (FormField, tea.Cmd) {
 				f.cursor = 0
 			}
 		case key.Matches(keyMsg, key.NewBinding(key.WithKeys(" "))):
-			if len(f.selected) == len(f.Options) && f.cursor >= 0 && f.cursor < len(f.selected) {
+			if f.cursor >= 0 && f.cursor < len(f.selected) {
 				f.selected[f.cursor] = !f.selected[f.cursor]
 				f.isDefault = false
 			}
@@ -137,7 +134,7 @@ func (f *MultiSelectField) View() string {
 		labelLine += " " + hintStyle.Render("("+strings.ToLower(f.Help)+")")
 	}
 	if f.focused {
-		labelLine += " " + hintStyle.Render("(j/k move, space toggle)")
+		labelLine += " " + hintStyle.Render("(j/k navigate, space toggle)")
 	}
 
 	var lines []string
