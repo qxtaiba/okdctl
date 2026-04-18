@@ -1,11 +1,12 @@
 package credentials
 
 import (
-	"bufio"
 	"fmt"
 	"os"
 	"strings"
 	"sync"
+
+	"github.com/joho/godotenv"
 
 	"github.com/qxtaiba/okdctl/internal/system"
 )
@@ -91,8 +92,8 @@ func loadEnvFileOnce(path string) error {
 	// Refuse to load a .env that any other user can read. Proxmox tokens
 	// end up in here — a world-readable file defeats the whole point of
 	// moving secrets out of YAML. The permission check MUST happen before
-	// os.Open: once we open the file its contents are in our address space,
-	// and the whole point of this check is to detect a file that other
+	// godotenv opens the file: once its contents are in our address space,
+	// the whole point of this check is to detect a file that other
 	// processes may already have been able to read.
 	fi, err := os.Stat(path)
 	if err != nil {
@@ -107,38 +108,10 @@ func loadEnvFileOnce(path string) error {
 		)
 	}
 
-	f, err := os.Open(path)
-	if err != nil {
-		return fmt.Errorf("failed to open env file %s: %w", path, err)
-	}
-	defer f.Close() // close error on read-only file is harmless
-
-	scanner := bufio.NewScanner(f)
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-
-		key, value, ok := strings.Cut(line, "=")
-		if !ok {
-			continue
-		}
-		key = strings.TrimSpace(key)
-		value = strings.TrimSpace(value)
-
-		if key == "" {
-			continue
-		}
-
-		if _, exists := os.LookupEnv(key); !exists {
-			if err := os.Setenv(key, value); err != nil {
-				return fmt.Errorf("failed to set env var %s from %s: %w", key, path, err)
-			}
-		}
-	}
-	if err := scanner.Err(); err != nil {
-		return fmt.Errorf("failed to scan env file %s: %w", path, err)
+	// godotenv.Load does not overwrite already-set env vars, matching our
+	// "shell takes precedence" contract.
+	if err := godotenv.Load(path); err != nil {
+		return fmt.Errorf("failed to load env file %s: %w", path, err)
 	}
 	return nil
 }
