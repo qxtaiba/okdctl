@@ -11,6 +11,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/credentials"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/install"
+	"github.com/qxtaiba/okdctl/internal/system"
 	"github.com/qxtaiba/okdctl/internal/tui"
 )
 
@@ -123,6 +124,18 @@ func executeFullDeployment(ctx context.Context, cfg *config.Config, opts deploym
 	if err != nil {
 		return err
 	}
+
+	// Deploy writes per-run artifacts (install-config.yaml, manifests,
+	// ignition files, downloaded tools, ISOs) under <projectRoot>/okd-install.
+	// Under the sudo re-exec model these are root-owned by default; restore
+	// ownership to the invoking user at exit so they can inspect and rm -rf
+	// the workdir without sudo. No-op when not running under sudo.
+	workDir := filepath.Join(projectRoot, "okd-install")
+	defer func() {
+		if chownErr := system.ChownTreeToInvokingUser(workDir); chownErr != nil {
+			tui.Warn(fmt.Sprintf("workdir chown back to user incomplete: %v", chownErr))
+		}
+	}()
 
 	p := createOKDProvisioner(cfg, opts.Credentials, projectRoot)
 
