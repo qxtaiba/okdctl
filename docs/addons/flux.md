@@ -27,12 +27,12 @@ apply`) or if you have no Git repository to point it at.
 | `controller_timeout` | `300` (seconds) | how long to wait for controllers |
 | `git_sync_timeout` | `180` (seconds) | how long to wait for first git sync |
 
-Sources: `flux.go:223-231` (`DefaultSettings`), `flux.go:23-25` (duration
+Sources: `flux.go:223-231` (`DefaultSettings`), `flux.go:22-25` (duration
 constants).
 
 `repository` accepts `ssh://`, `https://`, `git://`, and `git@host:path`
-forms. Branch names cannot contain spaces. Path is restricted to
-`[a-zA-Z0-9/_.-]`.
+forms. Branch names cannot contain whitespace (spaces or tabs). Path is
+restricted to `[a-zA-Z0-9/_.-]`.
 
 ## configuration
 
@@ -98,10 +98,11 @@ oc get gitrepository -n flux-system -o yaml
 Common causes: deploy key not added to the git host, repository URL
 typo, network policy blocking egress.
 
-**Verify shows source-controller missing.** If the `source-controller`
-deployment is absent, `Verify` warns but does not fail. A missing
-source-controller means Flux cannot sync manifests even if the operator
-is healthy.
+**Verify reports source-controller unhealthy.** If `Verify` cannot query
+the `source-controller` deployment, it warns and continues. If the query
+succeeds and reports zero ready replicas, `Verify` returns a fatal
+"source-controller has no ready replicas" error. Flux cannot sync
+manifests in either state.
 
 ## uninstall behaviour
 
