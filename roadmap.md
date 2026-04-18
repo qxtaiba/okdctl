@@ -87,7 +87,7 @@ Theme D (wizard) → Theme F (errors/types) → remaining themes in parallel.
 - **Depends on:** none.
 
 #### U3 — HTTP downloads have no retry
-- **Status:** in progress — worktree: .worktrees/u3-download-retry
+- **Status:** in review — PR #49
 - **Category:** urgent-bugfix
 - **State:** half-done
 - **Effort:** hours
@@ -113,7 +113,7 @@ Theme D (wizard) → Theme F (errors/types) → remaining themes in parallel.
 - **Depends on:** M13 (typed error hierarchy) lands first or in parallel.
 
 #### U6 — `BuildOpaqueSecret` panics on YAML marshal error
-- **Status:** in progress — worktree: .worktrees/u6-buildopaquesecret-error
+- **Status:** in review — PR #50
 - **Category:** urgent-bugfix
 - **State:** partially done
 - **Effort:** hours
@@ -181,7 +181,7 @@ scaffolding the internal code already holds."
   lands before this item; otherwise this ships flat and migrates later.
 
 #### N2 — Wire `okdctl releases list/show`
-- **Status:** in progress — worktree: .worktrees/n2-releases-cli
+- **Status:** in review — PR #51
 - **Category:** half-done
 - **State:** scaffolding exists
 - **Effort:** hours
