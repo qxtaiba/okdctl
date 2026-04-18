@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -137,50 +136,30 @@ func runAddonVerify(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
-	exec := executor.New(executor.WithWorkDir(projectRoot))
-	logger := tui.SimpleLogger()
-
-	enabled := addon.Enabled(cfg)
-	if len(enabled) == 0 {
+	mgr := newAddonManager(cfg, projectRoot)
+	results, vErr := mgr.VerifyAll(cmd.Context())
+	if len(results) == 0 {
 		_, _ = fmt.Fprintln(cmd.OutOrStdout(), "no addons enabled")
-		return nil
-	}
-
-	type row struct {
-		name   string
-		status string
-	}
-	rows := make([]row, 0, len(enabled))
-	var errs []error
-
-	for _, a := range enabled {
-		if ctxErr := cmd.Context().Err(); ctxErr != nil {
-			return ctxErr
-		}
-		info := a.Info()
-		ac := cfg.Addons[info.Name]
-		env := &addon.Environment{
-			AddonConfig: ac,
-			Exec:        exec,
-			Logger:      logger,
-			ProjectRoot: projectRoot,
-		}
-		if vErr := a.Verify(cmd.Context(), env); vErr != nil {
-			rows = append(rows, row{name: info.Name, status: "FAIL: " + vErr.Error()})
-			errs = append(errs, fmt.Errorf("addon %s verify failed: %w", info.Name, vErr))
-		} else {
-			rows = append(rows, row{name: info.Name, status: "OK"})
-		}
+		return vErr
 	}
 
 	tw := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
 	_, _ = fmt.Fprintln(tw, "NAME\tSTATUS")
-	for _, r := range rows {
-		_, _ = fmt.Fprintf(tw, "%s\t%s\n", r.name, r.status)
+	failed := 0
+	for _, r := range results {
+		status := "OK"
+		if r.Err != nil {
+			status = "FAIL: " + r.Err.Error()
+			failed++
+		}
+		_, _ = fmt.Fprintf(tw, "%s\t%s\n", r.Name, status)
 	}
 	_ = tw.Flush()
 
-	return errors.Join(errs...)
+	if failed > 0 {
+		return fmt.Errorf("%d addon(s) failed verification", failed)
+	}
+	return vErr
 }
 
 func newAddonManager(cfg *config.Config, projectRoot string) *addon.Manager {
