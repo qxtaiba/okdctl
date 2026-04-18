@@ -28,8 +28,8 @@ func configureLogging() error {
 		stderrW = io.MultiWriter(os.Stderr, f)
 	}
 
-	stdoutIsTTY := term.IsTerminal(int(os.Stdout.Fd())) //nolint:gosec // G115: Fd() always fits int on supported platforms
-	progressBars := stdoutIsTTY && logFormat != "json"
+	stderrIsTTY := term.IsTerminal(int(os.Stderr.Fd())) //nolint:gosec // G115: Fd() always fits int on supported platforms
+	progressBars := stderrIsTTY && logFormat != "json"
 
 	return tui.ConfigureLoggers(logLevel, logFormat, stdoutW, stderrW, progressBars)
 }
