@@ -24,6 +24,7 @@ var rootRequiredCmds = map[string]bool{
 	"destroy":        true,
 	"cleanup":        true,
 	"update-ingress": true,
+	"addon":          true,
 }
 
 // requiresRoot returns true if cmd or any ancestor is in rootRequiredCmds.
