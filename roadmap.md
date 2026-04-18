@@ -209,18 +209,6 @@ scaffolding the internal code already holds."
   stays 130.
 - **Depends on:** N8 (to know which steps completed).
 
-#### N11 — `--yes` / `--force` parity on `deploy` and `update-ingress`
-- **Status:** in review — PR #68
-- **Category:** feature-gap
-- **State:** half-done
-- **Effort:** hours
-- **Impact:** medium
-- **Evidence:** destroy has `--force` at `internal/cli/flags.go:25`. Deploy
-  + update-ingress prompt interactively with no non-TTY fallback.
-- **Acceptance:** both commands accept `--yes` / `-y`; when the stdin is
-  not a TTY, prompts return their default answer rather than blocking.
-- **Depends on:** none.
-
 #### N25 — Progress bars for long-running operations
 - **Status:** not started
 - **Category:** polish
@@ -361,18 +349,6 @@ scaffolding the internal code already holds."
 - **Acceptance:** new job or step in CI runs `go vet ./...` and fails
   the pipeline on non-zero exit. Documented in CONTRIBUTING if it
   lands.
-- **Depends on:** none.
-
-#### L13 — Auto-update version check on startup
-- **Status:** in review — PR #69
-- **Category:** polish
-- **State:** not started
-- **Effort:** days
-- **Impact:** small
-- **Acceptance:** on startup, background-check GitHub releases/latest
-  (with cache, timeout, opt-out via `OKDCTL_NO_UPDATE_CHECK=1`). If a
-  newer version exists, print one-line notice after the main command
-  output. Never blocks the main flow.
 - **Depends on:** none.
 
 #### L14 — Coverage thresholds + codecov in CI
@@ -682,6 +658,32 @@ but link evidence.
   with a total row. Destroy not instrumented — it does not flow
   through the post-deploy summary. Unblocks L5 (Prometheus metrics),
   N10 (Ctrl-C partial-progress summary), and M1 (`okdctl status`).
+- **N11 — `--yes`/`--force` parity on deploy and update-ingress** — done
+  PR #68, merged 2026-04-19. `internal/cli/deploy.go` gains `--yes`/`-y`
+  that sets `deployNonInteractive = true` at `runDeploy` entry so the
+  flag surface matches destroy (`--force`/`-y`) and update-ingress
+  (`--yes`/`-y`). `internal/cli/confirm.go:promptForConfirmation`
+  short-circuits to `(false, nil)` when
+  `term.IsTerminal(os.Stdin.Fd())` is false, preventing the prompt
+  goroutine from dead-locking in CI or piped invocations. All three
+  existing call sites (destroy, update-ingress main, update-ingress
+  HostNetwork-conversion) inherit the fix through the shared helper.
+  `//nolint:gosec // G115` matches the existing
+  `internal/tui/wizard/model.go:163` suppression for the uintptr→int
+  cast.
+- **L13 — Auto-update version check on startup** — done PR #69, merged
+  2026-04-19. New `internal/version/updatecheck.go` with
+  `BackgroundCheck(ctx)` fires a goroutine that queries
+  `/repos/qxtaiba/okdctl/releases/latest` under a 4s
+  `context.WithTimeout`; results are cached 24h under
+  `$UserCacheDir/okdctl/update-check.json` (atomic tmp + `os.Rename`,
+  mode 0600). `OKDCTL_NO_UPDATE_CHECK=1` short-circuits before the
+  goroutine starts. `internal/cli/root.go:execute()` fires the check
+  before `rootCmd.ExecuteContext` and drains the buffered channel via
+  a `select` with `time.After(100ms)` after the command returns —
+  only on exit 0, so error paths stay clean. Non-2xx responses,
+  non-semver current version, and cache I/O errors all fail silently
+  via `slog.Debug`.
 
 ## Appendix — full item ledger
 
@@ -704,7 +706,7 @@ but link evidence.
 | N8 | Step timing + deploy summary | **Done** (PR #64) |
 | N9 | `--log-level/--log-format/--log-file` flags | **Done** (PR #65) |
 | N10 | Ctrl-C partial-progress summary | Sprint 1 |
-| N11 | `--yes` parity on deploy/update-ingress | Sprint 1 |
+| N11 | `--yes` parity on deploy/update-ingress | **Done** (PR #68) |
 | N12 | Unit tests for `netutil` | Deferred |
 | N13 | Unit tests for `config/validators` | Deferred |
 | N14 | `go vet` in CI | Sprint 1 |
@@ -748,7 +750,7 @@ but link evidence.
 | L10 | Argo CD addon | Deferred (under R2) |
 | L11 | Service mesh addons | Deferred (under R2) |
 | L12 | Container image distribution | **Skipped** |
-| L13 | Auto-update version check | Sprint 1 |
+| L13 | Auto-update version check | **Done** (PR #69) |
 | L14 | Coverage thresholds + codecov | Sprint 1 |
 | R1 | Addon category model + design doc | Workstream (design-doc-first) |
 | R2 | Specific addons after R1 | Deferred conversation |
