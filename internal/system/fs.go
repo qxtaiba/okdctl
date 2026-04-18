@@ -61,50 +61,18 @@ func WriteTempFile(pattern string, mode os.FileMode, writeFn func(*os.File) erro
 	return f.Name(), nil
 }
 
+// CopyFile copies src to dst, preserving the source file's permission bits.
+// The destination is opened with the correct mode at creation time via
+// CopyFileMode, so there is no window where dst is briefly world-readable
+// under a permissive umask. For credential-bearing files (kubeconfig,
+// install-config.yaml, private keys), prefer CopyFileMode with an explicit
+// 0o600.
 func CopyFile(src, dst string) error {
-	sourceFile, err := os.Open(src)
-	if err != nil {
-		return fmt.Errorf("failed to open source file: %w", err)
-	}
-	defer func() { _ = sourceFile.Close() }()
-
-	sourceInfo, err := sourceFile.Stat()
+	info, err := os.Stat(src)
 	if err != nil {
 		return fmt.Errorf("failed to stat source file: %w", err)
 	}
-
-	if err := EnsureDirForFile(dst); err != nil {
-		return fmt.Errorf("failed to create destination directory: %w", err)
-	}
-
-	destFile, err := os.Create(dst)
-	if err != nil {
-		return fmt.Errorf("failed to create destination file: %w", err)
-	}
-
-	success := false
-	defer func() {
-		_ = destFile.Close()
-		if !success {
-			_ = os.Remove(dst)
-		}
-	}()
-
-	_, err = io.Copy(destFile, sourceFile)
-	if err != nil {
-		return fmt.Errorf("failed to copy file contents: %w", err)
-	}
-
-	if err := destFile.Sync(); err != nil {
-		return fmt.Errorf("failed to sync destination file: %w", err)
-	}
-
-	if err := os.Chmod(dst, sourceInfo.Mode()); err != nil {
-		return fmt.Errorf("failed to set file permissions: %w", err)
-	}
-
-	success = true
-	return nil
+	return CopyFileMode(src, dst, info.Mode().Perm())
 }
 
 // CopyFileMode copies src to dst, creating dst with the given mode applied
@@ -112,6 +80,10 @@ func CopyFile(src, dst string) error {
 // where a file created with a permissive umask is briefly world-readable
 // before a follow-up chmod narrows it. Use this for anything sensitive —
 // kubeconfigs, credential files, private keys.
+//
+// Close errors on the destination are surfaced: a failing Close can mask an
+// unflushed buffer or fsync problem, and silently discarding it would lose
+// a durability signal.
 func CopyFileMode(src, dst string, mode os.FileMode) error {
 	sourceFile, err := os.Open(src)
 	if err != nil {
@@ -128,9 +100,12 @@ func CopyFileMode(src, dst string, mode os.FileMode) error {
 		return fmt.Errorf("failed to create destination file: %w", err)
 	}
 
+	closed := false
 	success := false
 	defer func() {
-		_ = destFile.Close()
+		if !closed {
+			_ = destFile.Close()
+		}
 		if !success {
 			_ = os.Remove(dst)
 		}
@@ -143,6 +118,11 @@ func CopyFileMode(src, dst string, mode os.FileMode) error {
 	if err := destFile.Sync(); err != nil {
 		return fmt.Errorf("failed to sync destination file: %w", err)
 	}
+
+	if err := destFile.Close(); err != nil {
+		return fmt.Errorf("failed to close destination file: %w", err)
+	}
+	closed = true
 
 	// If dst pre-existed with different permissions, O_CREATE won't change
 	// them — tighten explicitly so the caller's mode is always honored.
