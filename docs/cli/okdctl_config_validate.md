@@ -1,11 +1,15 @@
-## okdctl config
+## okdctl config validate
 
-Inspect okdctl configuration
+Validate the configuration file and report errors
+
+```
+okdctl config validate [flags]
+```
 
 ### Options
 
 ```
-  -h, --help   help for config
+  -h, --help   help for validate
 ```
 
 ### Options inherited from parent commands
@@ -19,7 +23,5 @@ Inspect okdctl configuration
 
 ### SEE ALSO
 
-* [okdctl](okdctl.md)	 - Deploy production-ready Kubernetes clusters
-* [okdctl config show](okdctl_config_show.md)	 - Print the resolved configuration with secrets redacted
-* [okdctl config validate](okdctl_config_validate.md)	 - Validate the configuration file and report errors
+* [okdctl config](okdctl_config.md)	 - Inspect okdctl configuration
 
