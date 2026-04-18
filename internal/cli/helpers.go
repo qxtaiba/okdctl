@@ -9,6 +9,7 @@ import (
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/credentials"
+	"github.com/qxtaiba/okdctl/internal/distribution"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/install"
 	"github.com/qxtaiba/okdctl/internal/system"
@@ -152,28 +153,35 @@ func executeFullDeployment(ctx context.Context, cfg *config.Config, opts deploym
 
 	startTime := time.Now()
 
-	if err := p.Prepare(ctx, cfg); err != nil {
-		tui.Info("run 'okdctl destroy' to clean up resources")
-		return fmt.Errorf("deployment failed: %w", err)
-	}
-
-	installOpts := install.NewOptions(cfg, projectRoot)
-	if err := p.Install(ctx, cfg, &installOpts); err != nil {
-		tui.Info("run 'okdctl destroy' to clean up resources")
-		return fmt.Errorf("deployment failed: %w", err)
-	}
-
-	result, err := p.Configure(ctx, cfg)
+	setupSteps, err := p.Prepare(ctx, cfg)
 	if err != nil {
 		tui.Info("run 'okdctl destroy' to clean up resources")
 		return fmt.Errorf("deployment failed: %w", err)
 	}
 
+	installOpts := install.NewOptions(cfg, projectRoot)
+	installSteps, err := p.Install(ctx, cfg, &installOpts)
+	if err != nil {
+		tui.Info("run 'okdctl destroy' to clean up resources")
+		return fmt.Errorf("deployment failed: %w", err)
+	}
+
+	result, configureSteps, err := p.Configure(ctx, cfg)
+	if err != nil {
+		tui.Info("run 'okdctl destroy' to clean up resources")
+		return fmt.Errorf("deployment failed: %w", err)
+	}
+
+	allSteps := make([]distribution.StepResult, 0, len(setupSteps)+len(installSteps)+len(configureSteps))
+	allSteps = append(allSteps, setupSteps...)
+	allSteps = append(allSteps, installSteps...)
+	allSteps = append(allSteps, configureSteps...)
+
 	duration := time.Since(startTime).Round(time.Second)
 
 	fmt.Println()
 	tui.Info(fmt.Sprintf("deployment complete (total time: %s)", duration))
-	fmt.Println(PostDeploySummary(cfg, result))
+	fmt.Println(PostDeploySummary(cfg, result, allSteps))
 
 	return nil
 }

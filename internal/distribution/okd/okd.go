@@ -9,6 +9,7 @@ import (
 	"os"
 
 	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/distribution"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/cleanup"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/destroy"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/install"
@@ -104,7 +105,7 @@ func (p *Provisioner) Validate(cfg *config.Config) error {
 }
 
 // Prepare cleans up previous artifacts and runs the setup phase.
-func (p *Provisioner) Prepare(ctx context.Context, cfg *config.Config) error {
+func (p *Provisioner) Prepare(ctx context.Context, cfg *config.Config) ([]distribution.StepResult, error) {
 	opts := setup.DefaultOptions(p.projectRoot)
 	opts.OKDReleaseBaseURL = setup.ResolveReleaseBaseURL(cfg)
 
@@ -128,12 +129,12 @@ func (p *Provisioner) Prepare(ctx context.Context, cfg *config.Config) error {
 	return setupPhase.Execute(ctx, cfg, &opts)
 }
 
-func (p *Provisioner) Install(ctx context.Context, cfg *config.Config, opts *install.Options) error {
+func (p *Provisioner) Install(ctx context.Context, cfg *config.Config, opts *install.Options) ([]distribution.StepResult, error) {
 	installPhase := install.New(p.executor, p.logger, p.version)
 	return installPhase.Execute(ctx, cfg, opts)
 }
 
-func (p *Provisioner) Configure(ctx context.Context, cfg *config.Config) (*postinstall.Result, error) {
+func (p *Provisioner) Configure(ctx context.Context, cfg *config.Config) (*postinstall.Result, []distribution.StepResult, error) {
 	postPhase := postinstall.New(p.executor, p.logger, p.version)
 	opts := postinstall.NewOptions(cfg, p.projectRoot)
 	return postPhase.Execute(ctx, cfg, &opts)
