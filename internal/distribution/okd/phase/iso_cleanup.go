@@ -91,11 +91,9 @@ func configDevicesReferenceISO(data []byte, isoBase string) (bool, error) {
 	return vmDevicesReferenceISO(config, isoBase), nil
 }
 
-// listProxmoxVMIDs issues pvesh get /nodes/<node>/qemu over SSH and returns
-// the vmids of all running VMs.
 func listProxmoxVMIDs(ctx context.Context, p *RemoteISOParams) ([]int, error) {
 	result, err := SSHRun(ctx, p.Exec, p.Host,
-		fmt.Sprintf("pvesh get /nodes/%s/qemu --output-format json 2>/dev/null || echo '[]'", p.Node),
+		fmt.Sprintf("pvesh get /nodes/%s/qemu --output-format json", p.Node),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("ssh pvesh qemu list failed: %w", err)
@@ -140,7 +138,6 @@ func anyVMReferencesISO(ctx context.Context, p *RemoteISOParams, isoBase string)
 	return false, nil
 }
 
-// deviceFields enumerates Proxmox VM disk/CD-ROM config keys.
 var deviceFields = func() []string {
 	fields := []string{"boot", "bootdisk"}
 	for i := 0; i <= 3; i++ {
@@ -193,7 +190,6 @@ func RemoveFCOSISOFromProxmox(ctx context.Context, p *RemoteISOParams, isoDir st
 		return err
 	}
 
-	// find -print0 avoids newline-splitting ambiguity that plagued the old ls approach.
 	findCmd := fmt.Sprintf(
 		"find %s -maxdepth 1 -name 'fedora-coreos-*.iso' -type f -print0 2>/dev/null || true",
 		shellSingleQuote(isoDir),
