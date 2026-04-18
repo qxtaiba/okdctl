@@ -123,21 +123,23 @@ answer is usually "your step is too complex — split it" rather than
 If the user hits escape, state is **not** discarded — it's preserved
 in the step's field values so they can come back and tweak.
 
-Wizard step flow:
+Wizard step flow. Steps with `ShouldShow` predicates are shown twice
+— once as the active step, once as a `(skipped)` bypass — to make the
+condition explicit:
 
 ```mermaid
 flowchart TD
     welcome --> distribution
     distribution --> proxmox
     proxmox --> basics
-    basics --> node-placement
-    node-placement -->|"provider == proxmox"| networking
-    node-placement -->|"provider != proxmox\n(skipped)"| networking
+    basics -->|"provider == proxmox"| nodePlacement[node-placement]
+    basics -->|"provider != proxmox"| networking
+    nodePlacement --> networking
     networking --> resources
     resources --> addons
-    addons --> files
-    files -->|"distribution == okd"| advanced
-    files -->|"distribution != okd\n(skipped)"| advanced
+    addons -->|"distribution == okd"| filesStep[files]
+    addons -->|"distribution != okd"| advanced
+    filesStep --> advanced
     advanced --> review
     review --> E([complete])
 ```
