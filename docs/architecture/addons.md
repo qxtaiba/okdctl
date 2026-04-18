@@ -83,6 +83,27 @@ per-addon rollback: if addon C fails, the manager attempts to uninstall
 any addons in C's dependency closure that were installed in this
 invocation, then returns the aggregated error.
 
+Addon lifecycle (per addon, in dependency order):
+
+```mermaid
+flowchart TD
+    A([InstallAll]) --> B{any enabled?}
+    B -->|no| Z([skip])
+    B -->|yes| C[Resolve dependency order]
+    C --> D{next addon}
+    D -->|dep failed| SK[skip — log warning]
+    SK --> D
+    D -->|all done| OK([return errors])
+    D -->|proceed| E[Install]
+    E -->|error| R[Uninstall rollback]
+    R --> ERR[record error]
+    ERR --> D
+    E -->|ok| F[Verify]
+    F -->|error| R
+    F -->|ok| G[log installed]
+    G --> D
+```
+
 ## WizardProvider: addons that contribute config fields
 
 Addons that need user input (e.g., Flux wants a Git repository URL) can
