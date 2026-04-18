@@ -2,11 +2,12 @@ package tui
 
 import (
 	"context"
-	"fmt"
+	"io"
 	"log/slog"
 	"os"
-	"strings"
-	"sync"
+
+	"charm.land/lipgloss/v2"
+	charmlog "charm.land/log/v2"
 )
 
 type LogLevel int
@@ -27,162 +28,66 @@ func LF(key string, value any) LogField {
 	return LogField{Key: key, Value: value}
 }
 
-type Logger struct {
-	mu     sync.RWMutex
-	level  LogLevel
-	fields []LogField
+var (
+	stdoutLogger = buildLogger(os.Stdout)
+	stderrLogger = buildLogger(os.Stderr)
+)
+
+func buildLogger(w io.Writer) *charmlog.Logger {
+	l := charmlog.New(w)
+	l.SetReportTimestamp(false)
+	l.SetLevel(charmlog.InfoLevel)
+	styles := charmlog.DefaultStyles()
+	styles.Levels[charmlog.DebugLevel] = lipgloss.NewStyle().Foreground(ColorSlate500).SetString("[DEBUG]")
+	styles.Levels[charmlog.InfoLevel] = lipgloss.NewStyle().Foreground(ColorCyan500).Bold(true).SetString("[INFO]")
+	styles.Levels[charmlog.WarnLevel] = lipgloss.NewStyle().Foreground(ColorWarning).Bold(true).SetString("[WARN]")
+	styles.Levels[charmlog.ErrorLevel] = lipgloss.NewStyle().Foreground(ColorError).Bold(true).SetString("[ERROR]")
+	l.SetStyles(styles)
+	return l
 }
 
-func NewLogger() *Logger {
-	return &Logger{
-		level: LogLevelInfo,
+func fieldsToArgs(fields []LogField) []any {
+	args := make([]any, 0, len(fields)*2)
+	for _, f := range fields {
+		args = append(args, f.Key, f.Value)
 	}
+	return args
 }
 
-func (log *Logger) Debug(msg string, fields ...LogField) {
-	log.mu.RLock()
-	lvl := log.level
-	log.mu.RUnlock()
-	if lvl > LogLevelDebug {
-		return
+func Debug(msg string, fields ...LogField) { stdoutLogger.Debug(msg, fieldsToArgs(fields)...) }
+func Info(msg string, fields ...LogField)  { stdoutLogger.Info(msg, fieldsToArgs(fields)...) }
+func Warn(msg string, fields ...LogField)  { stdoutLogger.Warn(msg, fieldsToArgs(fields)...) }
+func Error(msg string, fields ...LogField) { stderrLogger.Error(msg, fieldsToArgs(fields)...) }
+
+// dualHandler splits slog records by level so Error records go to stderr
+// while Info/Warn/Debug go to stdout — matching the direct tui.Error vs
+// tui.Info/Warn/Debug stream split on the package-level helpers above.
+type dualHandler struct {
+	stdout, stderr slog.Handler
+}
+
+func (h *dualHandler) Enabled(ctx context.Context, lvl slog.Level) bool {
+	return h.stdout.Enabled(ctx, lvl)
+}
+
+func (h *dualHandler) Handle(ctx context.Context, r slog.Record) error { //nolint:gocritic // hugeParam: slog.Handler interface requires value receiver
+	if r.Level >= slog.LevelError {
+		return h.stderr.Handle(ctx, r)
 	}
-	_, _ = fmt.Fprintln(os.Stdout, logDebug(log.format(msg, fields)))
+	return h.stdout.Handle(ctx, r)
 }
 
-func (log *Logger) Info(msg string, fields ...LogField) {
-	log.mu.RLock()
-	lvl := log.level
-	log.mu.RUnlock()
-	if lvl > LogLevelInfo {
-		return
-	}
-	_, _ = fmt.Fprintln(os.Stdout, LogInfo(log.format(msg, fields)))
+func (h *dualHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
+	return &dualHandler{stdout: h.stdout.WithAttrs(attrs), stderr: h.stderr.WithAttrs(attrs)}
 }
 
-func (log *Logger) Warn(msg string, fields ...LogField) {
-	log.mu.RLock()
-	lvl := log.level
-	log.mu.RUnlock()
-	if lvl > LogLevelWarn {
-		return
-	}
-	_, _ = fmt.Fprintln(os.Stdout, LogWarn(log.format(msg, fields)))
+func (h *dualHandler) WithGroup(name string) slog.Handler {
+	return &dualHandler{stdout: h.stdout.WithGroup(name), stderr: h.stderr.WithGroup(name)}
 }
 
-func (log *Logger) Error(msg string, fields ...LogField) {
-	fmt.Fprintln(os.Stderr, LogError(log.format(msg, fields)))
-}
-
-func (log *Logger) format(msg string, fields []LogField) string {
-	log.mu.RLock()
-	logFields := make([]LogField, len(log.fields))
-	copy(logFields, log.fields)
-	log.mu.RUnlock()
-
-	allFields := make([]LogField, 0, len(logFields)+len(fields))
-	allFields = append(allFields, logFields...)
-	allFields = append(allFields, fields...)
-	if len(allFields) == 0 {
-		return msg
-	}
-
-	var parts []string
-	for _, f := range allFields {
-		parts = append(parts, fmt.Sprintf("%s=%v", f.Key, f.Value))
-	}
-
-	return fmt.Sprintf("%s [%s]", msg, strings.Join(parts, " "))
-}
-
-var defaultLogger = NewLogger()
-
-func Debug(msg string, fields ...LogField) {
-	defaultLogger.Debug(msg, fields...)
-}
-
-func Info(msg string, fields ...LogField) {
-	defaultLogger.Info(msg, fields...)
-}
-
-func Warn(msg string, fields ...LogField) {
-	defaultLogger.Warn(msg, fields...)
-}
-
-func Error(msg string, fields ...LogField) {
-	defaultLogger.Error(msg, fields...)
-}
-
-// simpleHandler is a slog.Handler that routes records through the tui
-// default logger so structured-log call sites in the wider codebase print
-// with the same styled output as direct tui.Info/tui.Warn/... calls.
-type simpleHandler struct {
-	attrs  []slog.Attr
-	groups []string
-}
-
-func (h *simpleHandler) Enabled(_ context.Context, level slog.Level) bool {
-	defaultLogger.mu.RLock()
-	lvl := defaultLogger.level
-	defaultLogger.mu.RUnlock()
-	return slogLevelToTUI(level) >= lvl
-}
-
-func (h *simpleHandler) Handle(_ context.Context, r slog.Record) error { //nolint:gocritic // hugeParam: slog.Handler interface requires value receiver
-	var prefix string
-	if len(h.groups) > 0 {
-		prefix = strings.Join(h.groups, ".") + "."
-	}
-	fields := make([]LogField, 0, len(h.attrs)+r.NumAttrs())
-	for _, a := range h.attrs {
-		fields = append(fields, LogField{Key: prefix + a.Key, Value: a.Value.Any()})
-	}
-	r.Attrs(func(a slog.Attr) bool {
-		fields = append(fields, LogField{Key: prefix + a.Key, Value: a.Value.Any()})
-		return true
-	})
-	switch {
-	case r.Level >= slog.LevelError:
-		defaultLogger.Error(r.Message, fields...)
-	case r.Level >= slog.LevelWarn:
-		defaultLogger.Warn(r.Message, fields...)
-	case r.Level >= slog.LevelInfo:
-		defaultLogger.Info(r.Message, fields...)
-	default:
-		defaultLogger.Debug(r.Message, fields...)
-	}
-	return nil
-}
-
-func (h *simpleHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
-	merged := make([]slog.Attr, 0, len(h.attrs)+len(attrs))
-	merged = append(merged, h.attrs...)
-	merged = append(merged, attrs...)
-	return &simpleHandler{attrs: merged, groups: h.groups}
-}
-
-func (h *simpleHandler) WithGroup(name string) slog.Handler {
-	groups := make([]string, 0, len(h.groups)+1)
-	groups = append(groups, h.groups...)
-	groups = append(groups, name)
-	return &simpleHandler{attrs: h.attrs, groups: groups}
-}
-
-func slogLevelToTUI(l slog.Level) LogLevel {
-	switch {
-	case l >= slog.LevelError:
-		return LogLevelError
-	case l >= slog.LevelWarn:
-		return LogLevelWarn
-	case l >= slog.LevelInfo:
-		return LogLevelInfo
-	default:
-		return LogLevelDebug
-	}
-}
-
-// SimpleLogger returns a *slog.Logger (alias for *slog.Logger) whose records
-// are printed through the tui styled formatters. Use this to wire CLI-facing
-// log output into subsystems that expect a structured logger.
+// SimpleLogger returns a *slog.Logger whose records render through the
+// styled charm.land/log/v2 formatter. Error records route to stderr,
+// everything else to stdout.
 func SimpleLogger() *slog.Logger {
-	return slog.New(&simpleHandler{})
+	return slog.New(&dualHandler{stdout: stdoutLogger, stderr: stderrLogger})
 }
