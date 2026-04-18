@@ -99,7 +99,7 @@ Theme D (wizard) → Theme F (errors/types) → remaining themes in parallel.
 - **Depends on:** M13 (typed error hierarchy) lands first or in parallel.
 
 #### U1b — Clean remote Proxmox FCOS ISO on destroy
-- **Status:** in progress — worktree: .worktrees/u1b-remote-iso-cleanup
+- **Status:** in review — PR #54
 - **Category:** urgent-bugfix
 - **State:** not started
 - **Effort:** days
