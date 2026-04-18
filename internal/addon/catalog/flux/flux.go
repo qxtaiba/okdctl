@@ -35,6 +35,11 @@ const (
 	SettingGitSyncTimeout    = "git_sync_timeout"
 )
 
+// k8sBoolTrue is the literal Kubernetes returns for boolean-valued status
+// fields (e.g. status.conditions[?(@.type=="Ready")].status). External API
+// contract — do not change.
+const k8sBoolTrue = "True"
+
 // validSyncPath matches safe sync paths: alphanumeric, slashes, underscores, dots, and hyphens.
 var validSyncPath = regexp.MustCompile(`^[a-zA-Z0-9/_.\-]+$`)
 
@@ -183,7 +188,7 @@ func (f *Flux) Verify(ctx context.Context, env *addon.Environment) error {
 		"-o", "jsonpath={.items[0].status.conditions[?(@.type==\"Ready\")].status}")
 	if err == nil && result.ExitCode == 0 {
 		syncStatus := strings.TrimSpace(result.Stdout)
-		if syncStatus == "True" {
+		if syncStatus == k8sBoolTrue {
 			env.Logger.Info("flux: git repository synced")
 		} else {
 			env.Logger.Warn(fmt.Sprintf("flux: git repository not yet synced (status: %s)", syncStatus))
@@ -299,7 +304,7 @@ func (f *Flux) waitForGitSync(ctx context.Context, env *addon.Environment) error
 		if result.ExitCode != 0 {
 			return false
 		}
-		return strings.TrimSpace(result.Stdout) == "True"
+		return strings.TrimSpace(result.Stdout) == k8sBoolTrue
 	}, timeout, env.Logger); err != nil {
 		return fmt.Errorf("git repository sync not ready within %v", timeout)
 	}
