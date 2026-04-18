@@ -183,7 +183,7 @@ scaffolding the internal code already holds."
   visibly broken command).
 
 #### N5 — `okdctl kubeconfig`
-- **Status:** not started
+- **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/n5-kubeconfig
 - **Category:** feature-gap
 - **State:** not started
 - **Effort:** hours
@@ -384,7 +384,7 @@ scaffolding the internal code already holds."
 - **Depends on:** none.
 
 #### N17 — Wizard review renders all fields
-- **Status:** not started
+- **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/n17-wizard-review
 - **Category:** polish
 - **State:** partially done
 - **Effort:** hours
@@ -396,7 +396,7 @@ scaffolding the internal code already holds."
 - **Depends on:** none.
 
 #### N18 — Gateway-in-CIDR wizard validation
-- **Status:** not started
+- **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/n18-gateway-cidr
 - **Category:** polish
 - **State:** partially done
 - **Effort:** hours
