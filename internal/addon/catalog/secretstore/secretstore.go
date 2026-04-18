@@ -24,6 +24,11 @@ const (
 	tokenSecretName       = "onepassword-connect-token"
 )
 
+// Settings keys consumed by the SecretStore addon.
+const (
+	SettingSecretsDir = "secrets_dir"
+)
+
 func init() {
 	if err := addon.Register(&SecretStore{}); err != nil {
 		panic(err)
@@ -142,7 +147,7 @@ func (s *SecretStore) RequiredTools() []addon.ToolSpec {
 
 func (s *SecretStore) DefaultSettings() map[string]string {
 	return map[string]string{
-		"secrets_dir": defaultSecretsDir,
+		SettingSecretsDir: defaultSecretsDir,
 	}
 }
 
@@ -153,7 +158,7 @@ func (s *SecretStore) ValidateSettings(_ map[string]string) []string {
 
 func (s *SecretStore) WizardFields() []addon.WizardField {
 	return []addon.WizardField{
-		{Key: "secrets_dir", Label: "Secrets Directory", Default: defaultSecretsDir, Help: "Directory containing 1password-credentials.json and 1password-token.txt (plaintext or sops-encrypted)"},
+		{Key: SettingSecretsDir, Label: "Secrets Directory", Default: defaultSecretsDir, Help: "Directory containing 1password-credentials.json and 1password-token.txt (plaintext or sops-encrypted)"},
 	}
 }
 
@@ -185,7 +190,7 @@ func (s *SecretStore) readSecret(ctx context.Context, env *addon.Environment, pa
 }
 
 func (s *SecretStore) secretsDir(env *addon.Environment) string {
-	dir := env.AddonConfig.Settings["secrets_dir"]
+	dir := env.AddonConfig.Settings[SettingSecretsDir]
 	if dir == "" {
 		dir = defaultSecretsDir
 	}

@@ -24,6 +24,14 @@ const (
 	defaultGitRepoSyncTimeout = 3 * time.Minute
 )
 
+// Settings keys consumed by the Flux addon. Named here so callers (install
+// wizard, validators, gitops bootstrap) reference the same string.
+const (
+	SettingRepository = "repository"
+	SettingBranch     = "branch"
+	SettingPath       = "path"
+)
+
 // validSyncPath matches safe sync paths: alphanumeric, slashes, underscores, dots, and hyphens.
 var validSyncPath = regexp.MustCompile(`^[a-zA-Z0-9/_.\-]+$`)
 
@@ -119,15 +127,15 @@ func (f *Flux) installOperator(ctx context.Context, env *addon.Environment) erro
 func (f *Flux) installInstance(ctx context.Context, env *addon.Environment) error {
 	env.Logger.Info("flux: installing instance for gitops sync")
 	settings := env.AddonConfig.Settings
-	syncURL := settings["repository"]
+	syncURL := settings[SettingRepository]
 	if syncURL == "" {
 		return fmt.Errorf("flux repository not configured - set addons.flux.settings.repository in config")
 	}
-	branch := settings["branch"]
+	branch := settings[SettingBranch]
 	if branch == "" {
 		branch = "main"
 	}
-	syncPath := settings["path"]
+	syncPath := settings[SettingPath]
 	if syncPath == "" {
 		syncPath = "kubernetes/clusters/production"
 	}
@@ -207,8 +215,8 @@ func (f *Flux) RequiredTools() []addon.ToolSpec {
 func (f *Flux) DefaultSettings() map[string]string {
 	return map[string]string{
 		"provider":           "flux",
-		"branch":             "main",
-		"path":               "kubernetes/clusters/production",
+		SettingBranch:        "main",
+		SettingPath:          "kubernetes/clusters/production",
 		"controller_timeout": "300",
 		"git_sync_timeout":   "180",
 	}
@@ -216,17 +224,17 @@ func (f *Flux) DefaultSettings() map[string]string {
 
 func (f *Flux) ValidateSettings(settings map[string]string) []string {
 	var errs []string
-	repo := settings["repository"]
+	repo := settings[SettingRepository]
 	if repo == "" {
 		errs = append(errs, "repository is required (set addons.flux.settings.repository)")
 	} else if !strings.HasPrefix(repo, "ssh://") && !strings.HasPrefix(repo, "https://") &&
 		!strings.HasPrefix(repo, "git://") && !strings.HasPrefix(repo, "git@") {
 		errs = append(errs, "repository must be a valid Git URL (ssh://, https://, git://, or git@)")
 	}
-	if branch := settings["branch"]; branch != "" && strings.ContainsAny(branch, " \t") {
+	if branch := settings[SettingBranch]; branch != "" && strings.ContainsAny(branch, " \t") {
 		errs = append(errs, "branch name cannot contain spaces")
 	}
-	if p := settings["path"]; p != "" && !validSyncPath.MatchString(p) {
+	if p := settings[SettingPath]; p != "" && !validSyncPath.MatchString(p) {
 		errs = append(errs, "path contains invalid characters (allowed: alphanumeric, /, _, ., -)")
 	}
 	return errs
@@ -298,7 +306,7 @@ func (f *Flux) waitForGitSync(ctx context.Context, env *addon.Environment) error
 }
 
 func (f *Flux) createDeployKeySecret(ctx context.Context, env *addon.Environment) error {
-	repoURL := env.AddonConfig.Settings["repository"]
+	repoURL := env.AddonConfig.Settings[SettingRepository]
 	if repoURL == "" {
 		return fmt.Errorf("flux repository not configured - set addons.flux.settings.repository in config")
 	}
