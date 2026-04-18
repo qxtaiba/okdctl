@@ -204,7 +204,7 @@ func getToolVersion(tool, flag string) string {
 func installHashiCorpDebianRepo(ctx context.Context) error {
 	gpgPath := "/usr/share/keyrings/hashicorp-archive-keyring.gpg"
 
-	gpgTmp, err := system.WriteTempFile("hashicorp-gpg", 0o644, func(f *os.File) error {
+	gpgTmp, err := system.WriteTempFile("hashicorp-gpg", 0o600, func(f *os.File) error {
 		cmd := exec.CommandContext(ctx, "wget", "-qO-", "https://apt.releases.hashicorp.com/gpg")
 		cmd.Stdout = f
 		return cmd.Run()
@@ -227,7 +227,7 @@ func installHashiCorpDebianRepo(ctx context.Context) error {
 
 	listContent := fmt.Sprintf("deb [signed-by=%s] https://apt.releases.hashicorp.com %s main\n", gpgPath, codename)
 	listPath := "/etc/apt/sources.list.d/hashicorp.list"
-	listTmp, err := system.WriteTempFile("hashicorp-list", 0o644, func(f *os.File) error {
+	listTmp, err := system.WriteTempFile("hashicorp-list", 0o600, func(f *os.File) error {
 		_, err := f.WriteString(listContent)
 		return err
 	})

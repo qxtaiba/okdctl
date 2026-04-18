@@ -140,6 +140,6 @@ func (p *Phase) GenerateTerraformVars(cfg *config.Config, opts *Options) error {
 	outputPath := filepath.Join(opts.ProjectRoot, "infrastructure", "terraform", "environments", phase.GetTerraformEnv(cfg), "terraform.tfvars")
 	return renderAndWrite(
 		func() (string, error) { return templates.RenderTerraformVars(&data) },
-		outputPath, 0o644, "terraform.tfvars",
+		outputPath, 0o600, "terraform.tfvars",
 	)
 }
