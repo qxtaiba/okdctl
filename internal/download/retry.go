@@ -11,8 +11,7 @@ import (
 )
 
 // httpStatusError carries the HTTP status returned from a download attempt
-// so isRetryable can tell 4xx (fail fast) from 5xx (retry). Callers wrap
-// this with description context before returning it.
+// so isRetryable can tell 4xx (fail fast) from 5xx (retry).
 type httpStatusError struct {
 	Status int
 	URL    string
@@ -24,7 +23,8 @@ func (e *httpStatusError) Error() string {
 
 // isRetryable reports whether err should trigger another download attempt.
 // 5xx responses and transport errors (net.Dial, TLS, reset, DNS) are
-// retryable. 4xx responses and context cancellation are not.
+// retryable, as are 408 Request Timeout and 429 Too Many Requests. Other
+// 4xx responses and context cancellation are not.
 func isRetryable(err error) bool {
 	if err == nil {
 		return false
@@ -34,7 +34,15 @@ func isRetryable(err error) bool {
 	}
 	var httpErr *httpStatusError
 	if errors.As(err, &httpErr) {
-		return httpErr.Status >= http.StatusInternalServerError
+		switch {
+		case httpErr.Status >= http.StatusInternalServerError:
+			return true
+		case httpErr.Status == http.StatusRequestTimeout,
+			httpErr.Status == http.StatusTooManyRequests:
+			return true
+		default:
+			return false
+		}
 	}
 	return true
 }

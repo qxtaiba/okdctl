@@ -112,9 +112,8 @@ func Download(ctx context.Context, opts *Options) error {
 	return nil
 }
 
-// fetchToFile performs one download attempt: request, stream body to disk,
-// fsync. On any mid-attempt failure the partial file is removed so the next
-// attempt starts from a clean slate.
+// fetchToFile runs one download attempt. On any mid-attempt failure the
+// partial file is removed so the next retry starts from a clean slate.
 func fetchToFile(ctx context.Context, client *http.Client, opts *Options, filename string) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, opts.URL, http.NoBody)
 	if err != nil {
