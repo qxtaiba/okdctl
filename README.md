@@ -105,7 +105,9 @@ with `--skip-terraform` (existing VMs), `--skip-isos` (your own ignition),
 `--skip-haproxy`, or `--skip-dns`.
 
 Phase internals, addon system, and wizard architecture live in
-[`docs/architecture/`](docs/architecture/).
+[`docs/architecture/`](docs/architecture/). Per-addon reference:
+[Flux](docs/addons/flux.md),
+[1Password Secret Store](docs/addons/secretstore.md).
 
 ## Configuration
 
