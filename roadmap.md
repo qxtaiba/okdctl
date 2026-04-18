@@ -160,7 +160,7 @@ scaffolding the internal code already holds."
 ### Theme C — observability, error messages, logging
 
 #### N10 — Ctrl-C partial-progress summary + resume hint
-- **Status:** not started
+- **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/n10-ctrlc-summary
 - **Category:** polish
 - **State:** scaffolding exists
 - **Effort:** hours
@@ -174,7 +174,7 @@ scaffolding the internal code already holds."
 - **Depends on:** N8 (to know which steps completed).
 
 #### N25 — Progress bars for long-running operations
-- **Status:** not started
+- **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/n25-progress-bars
 - **Category:** polish
 - **State:** scaffolding exists
 - **Effort:** hours
@@ -216,7 +216,7 @@ scaffolding the internal code already holds."
 ### Theme D — wizard coverage
 
 #### N16 — Wizard collects `FCOSIso` / `TokenID` / `AdditionalNetworks`
-- **Status:** not started
+- **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/n16-wizard-fcos-token-networks
 - **Category:** half-done
 - **State:** partially done
 - **Effort:** days
