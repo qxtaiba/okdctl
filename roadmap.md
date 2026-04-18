@@ -73,7 +73,7 @@ Theme D (wizard) → Theme F (errors/types) → remaining themes in parallel.
 ### Theme A — urgent correctness bugs
 
 #### U2 — Wizard never sets `Provider.Type`
-- **Status:** in progress — worktree: .worktrees/u2-wizard-provider-type
+- **Status:** in review — PR #52
 - **Category:** urgent-bugfix
 - **State:** not started
 - **Effort:** days
@@ -535,7 +535,7 @@ scaffolding the internal code already holds."
 ### Theme G — CI, tooling, distribution
 
 #### N14 — Add `go vet ./...` to CI
-- **Status:** in progress — worktree: .worktrees/n14-govet-ci
+- **Status:** in review — PR #53
 - **Category:** infra
 - **State:** not started
 - **Effort:** hours
