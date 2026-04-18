@@ -47,6 +47,30 @@ Releases are sigstore-signed (keyless) and ship with a CycloneDX SBOM and SLSA
 build provenance. Verify with `cosign verify-blob` — see
 [Verifying a release](#verifying-a-release).
 
+### Shell completion
+
+Generate and install a completion script for your shell:
+
+```sh
+# bash — persistent
+okdctl completion bash > /etc/bash_completion.d/okdctl
+
+# bash — current session only
+source <(okdctl completion bash)
+
+# zsh — persistent (pick a dir in $fpath)
+okdctl completion zsh > "${fpath[1]}/_okdctl"
+
+# zsh — current session only
+source <(okdctl completion zsh)
+
+# fish
+okdctl completion fish > ~/.config/fish/completions/okdctl.fish
+
+# powershell — add to $PROFILE for persistence
+okdctl completion powershell | Out-String | Invoke-Expression
+```
+
 Don't run `okdctl` as root. It refuses to start under `sudo` and
 escalates internally for the commands that need it (`nmcli`, `firewall-cmd`,
 `systemctl`).
