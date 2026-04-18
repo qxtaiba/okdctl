@@ -146,36 +146,6 @@ scaffolding the internal code already holds."
 
 ### Theme C — observability, error messages, logging
 
-#### N10 — Ctrl-C partial-progress summary + resume hint
-- **Status:** in review — PR #77
-- **Category:** polish
-- **State:** scaffolding exists
-- **Effort:** hours
-- **Impact:** medium
-- **Evidence:** `internal/cli/root.go:59` catches SIGINT → exit 130 with no
-  guidance. Destroy flow already prints recovery hints on partial
-  failure — SIGINT doesn't.
-- **Acceptance:** SIGINT during deploy/destroy prints "partial progress:
-  <steps done>; resume with <recommended next command>". Exit code
-  stays 130.
-- **Depends on:** N8 (to know which steps completed).
-
-#### N25 — Progress bars for long-running operations
-- **Status:** in review — PR #78
-- **Category:** polish
-- **State:** scaffolding exists
-- **Effort:** hours
-- **Impact:** medium
-- **Evidence:** `schollz/progressbar` is imported only at
-  `internal/download/download.go:16`. Terraform apply, bootstrap wait,
-  install monitor have no progress indication; users see 15+ minutes of
-  silence.
-- **Acceptance:** terraform apply, bootstrap wait, install monitor each
-  emit a live progress line (determinate where possible, spinner
-  otherwise). Respects TTY detection (disabled when `--log-format=json`
-  or stdout is piped).
-- **Depends on:** N9 (TTY detection hook).
-
 #### M14 — Correlation ID per deploy run
 - **Status:** not started
 - **Category:** feature-gap
@@ -201,21 +171,6 @@ scaffolding the internal code already holds."
 - **Depends on:** N8 (step timing must record durations first).
 
 ### Theme D — wizard coverage
-
-#### N16 — Wizard collects `FCOSIso` / `TokenID` / `AdditionalNetworks`
-- **Status:** in review — PR #79
-- **Category:** half-done
-- **State:** partially done
-- **Effort:** days
-- **Impact:** medium
-- **Evidence:** `internal/config/cluster.go:95,105,108` defined but no
-  wizard step collects them. Bridge discovery exists
-  (`node_placement.go:87-135`); additional networks discovery does not.
-- **Acceptance:** wizard Proxmox step collects `TokenID` (optional, text
-  input). `FCOSIso` collected via storage-ref picker similar to existing
-  ISO discovery. `AdditionalNetworks` collected as multi-select over
-  discovered bridges.
-- **Depends on:** none.
 
 ### Theme E — config ergonomics, air-gap, rootless
 
@@ -762,6 +717,42 @@ but link evidence.
   for doc gen — preserving the "doctor is Linux-only at runtime"
   invariant while fixing a macOS/Linux drift that would have made the
   drift check unresolvable.
+- **N10 — Ctrl-C partial-progress summary + resume hint** — done PR #77,
+  merged 2026-04-19. New `InterruptSummary` in `internal/cli/summary.go`
+  reuses the N8 `StepResult` plumbing to render a partial-progress box
+  plus "resume with okdctl deploy/destroy" hint. `executeFullDeployment`
+  (helpers.go) and `runDestroy` (destroy.go) detect `errors.Is(err,
+  context.Canceled)` and print the box before returning the bare
+  cancellation error so root.go's `ctx.Err() != nil → exit 130` dispatch
+  still fires. `destroy.Phase.Execute` and `okd.Provisioner.Destroy`
+  widened to return `([]distribution.StepResult, error)` so destroy has
+  the same step data the deploy summary already used.
+- **N25 — Progress bars for long-running operations** — done PR #78,
+  merged 2026-04-19. New `tui.StartSpinner(ctx, desc) func()` in
+  `internal/tui/spinner.go` renders a stderr spinner gated on
+  `tui.ProgressBarsEnabled()` (the N9 predicate). Terraform apply
+  (`internal/infrastructure/proxmox/proxmox.go`), bootstrap wait, and
+  install monitor (`internal/distribution/okd/install/monitor.go`) wrap
+  their long-running call with start/stop. No new third-party dep —
+  stdlib goroutine + 120ms ticker; `sync.Once` guards the stop closure;
+  `ctx.Done()` is one of the select cases so the spinner exits on
+  cancel. Determinate progress wasn't viable: terraform buffers output
+  through `executor.Run`, and openshift-install emits unparseable
+  log lines.
+- **N16 — Wizard collects `FCOSIso` / `TokenID` / `AdditionalNetworks`** —
+  done PR #79, merged 2026-04-19. Three new fields wired into the
+  wizard: `token_id` text field in the Proxmox credentials section;
+  `fcos_iso` storage-ref `FieldTypeSelect` populated by walking
+  ISO-capable storage pools and listing volids with `.iso` suffix
+  (proxmox_discovery.go uses go-proxmox `Storage(...).GetContent(...)`);
+  `additional_networks` `FieldTypeMultiSelect` over discovered bridges,
+  with a new `MultiSelectField` component (j/k cursor, space toggle).
+  `parseAdditionalNetworks` is a bridge-keyed merge — hand-authored
+  `Model` and `VLANTag` survive a wizard re-run (caught in code review).
+  Discovery error path distinguishes "token-only credentials" from
+  generic missing-credentials so users understand wizard discovery
+  still requires password auth (token id is saved for deploy use with
+  `PROXMOX_VE_API_TOKEN_SECRET`).
 
 ## Appendix — full item ledger
 
@@ -783,13 +774,13 @@ but link evidence.
 | N7 | `okdctl completion` | **Done** (PR #60) |
 | N8 | Step timing + deploy summary | **Done** (PR #64) |
 | N9 | `--log-level/--log-format/--log-file` flags | **Done** (PR #65) |
-| N10 | Ctrl-C partial-progress summary | Sprint 1 |
+| N10 | Ctrl-C partial-progress summary | **Done** (PR #77) |
 | N11 | `--yes` parity on deploy/update-ingress | **Done** (PR #68) |
 | N12 | Unit tests for `netutil` | Deferred |
 | N13 | Unit tests for `config/validators` | Deferred |
 | N14 | `go vet` in CI | Sprint 1 |
 | N15 | Wizard: Deployment fields | **Done** (PR #66) |
-| N16 | Wizard: FCOSIso/TokenID/AdditionalNetworks | Sprint 1 |
+| N16 | Wizard: FCOSIso/TokenID/AdditionalNetworks | **Done** (PR #79) |
 | N17 | Wizard review completeness | **Done** (PR #56) |
 | N18 | Gateway-in-CIDR validator | **Done** (PR #57) |
 | N19 | Addon-specific docs | **Done** (PR #71) |
@@ -797,7 +788,7 @@ but link evidence.
 | N21 | `CONTRIBUTING.md` | Deferred |
 | N22 | Troubleshooting / FAQ | Deferred |
 | N23 | HTTP error context | **Done** (PR #62) |
-| N25 | Progress bars for long ops | Sprint 1 |
+| N25 | Progress bars for long ops | **Done** (PR #78) |
 | M1 | `okdctl status` / `describe` | Sprint 1 |
 | M2 | `okdctl debug-bundle` | Sprint 1 |
 | M3 | `--dry-run` / `--plan` mode | Sprint 1 |
