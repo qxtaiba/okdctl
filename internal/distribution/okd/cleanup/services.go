@@ -147,7 +147,11 @@ func Dnsmasq(ctx context.Context, clusterName string, logger *slog.Logger) error
 
 	if clusterName != "" {
 		if configPath, err := dns.DnsmasqConfigPath(fmt.Sprintf("okd-%s", clusterName)); err == nil {
-			_ = os.RemoveAll(configPath)
+			if guardErr := refuseCriticalPath(configPath); guardErr != nil {
+				logger.Warn(guardErr.Error())
+			} else {
+				_ = os.RemoveAll(configPath)
+			}
 		} else if logger != nil {
 			logger.Warn(fmt.Sprintf("cleanup: invalid dnsmasq config name for cluster %q: %v", clusterName, err))
 		}
@@ -156,12 +160,20 @@ func Dnsmasq(ctx context.Context, clusterName string, logger *slog.Logger) error
 	configPattern := "/etc/dnsmasq.d/okd-*.conf"
 	configs, _ := filepath.Glob(configPattern)
 	for _, cfg := range configs {
+		if guardErr := refuseCriticalPath(cfg); guardErr != nil {
+			logger.Warn(guardErr.Error())
+			continue
+		}
 		_ = os.RemoveAll(cfg)
 	}
 
 	backupPattern := "/etc/dnsmasq.d/*.backup"
 	backups, _ := filepath.Glob(backupPattern)
 	for _, backup := range backups {
+		if guardErr := refuseCriticalPath(backup); guardErr != nil {
+			logger.Warn(guardErr.Error())
+			continue
+		}
 		_ = os.RemoveAll(backup)
 	}
 

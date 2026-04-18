@@ -61,8 +61,10 @@ func (p *Phase) MonitorInstallation(ctx context.Context, clusterDir string, opts
 		installDone <- installCmd.Wait()
 	}()
 
-	// Kill fires at most once even if the ctx.Done branch runs concurrently
-	// with installDone receiving — sync.Once makes that invariant explicit.
+	// sync.Once guards against a future second caller of killInstall
+	// (e.g. if a signal handler or additional select case is added). Under
+	// the current single-kill-path control flow, the Once is not load-
+	// bearing — it is idempotency-by-construction for the next developer.
 	var killOnce sync.Once
 	killInstall := func() {
 		killOnce.Do(func() {

@@ -67,6 +67,11 @@ func Packages(ctx context.Context, logger *slog.Logger) error {
 		if _, err := os.Stat(binPath); os.IsNotExist(err) {
 			continue // Already removed or never installed
 		}
+		if guardErr := refuseCriticalPath(binPath); guardErr != nil {
+			logger.Warn(guardErr.Error())
+			hasErrors = true
+			continue
+		}
 
 		if err := os.RemoveAll(binPath); err != nil {
 			logger.Warn(fmt.Sprintf("cleanup: failed to remove %s: %v", binPath, err))
