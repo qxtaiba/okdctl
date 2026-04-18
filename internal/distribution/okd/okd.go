@@ -106,6 +106,7 @@ func (p *Provisioner) Validate(cfg *config.Config) error {
 // Prepare cleans up previous artifacts and runs the setup phase.
 func (p *Provisioner) Prepare(ctx context.Context, cfg *config.Config) error {
 	opts := setup.DefaultOptions(p.projectRoot)
+	opts.OKDReleaseBaseURL = setup.ResolveReleaseBaseURL(cfg)
 
 	if system.DirExists(opts.WorkDir) {
 		p.logger.Info("setup: cleaning up previous artifacts")
