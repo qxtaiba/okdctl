@@ -16,8 +16,11 @@ const (
 	cacheFileName = "okd-versions.json"
 )
 
+// Cache lives under the invoking user's home so `okdctl releases list` run
+// as a non-root user later can still read it, even when the cache was
+// populated during a root-mode deploy.
 func (f *OKDVersionFetcher) getCacheFilePath() (string, error) {
-	homeDir, err := os.UserHomeDir()
+	homeDir, err := system.InvokingUserHomeDir()
 	if err != nil {
 		return "", err
 	}
@@ -64,5 +67,5 @@ func (f *OKDVersionFetcher) saveToDiskCache(series []OKDReleaseSeries) {
 		return // Serialization failed, skip silently
 	}
 
-	_ = system.AtomicWrite(cachePath, data, 0o644)
+	_ = system.WriteAsInvokingUser(cachePath, data, 0o644)
 }
