@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/user"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -202,4 +204,41 @@ func AtomicWrite(path string, data []byte, perm os.FileMode) error {
 
 func AtomicWriteString(path, content string, perm os.FileMode) error {
 	return AtomicWrite(path, []byte(content), perm)
+}
+
+// MakeExecutable adds the owner/group/other execute bits to path's existing
+// mode. Equivalent to `chmod +x` but without a subprocess.
+func MakeExecutable(path string) error {
+	info, err := os.Stat(path)
+	if err != nil {
+		return fmt.Errorf("stat %s: %w", path, err)
+	}
+	return os.Chmod(path, info.Mode().Perm()|0o111)
+}
+
+// ChownByName chowns path to the given user:group string. Both parts must
+// be present; numeric-only forms are rejected so config typos surface as
+// errors rather than silently chowning to UID 0.
+func ChownByName(path, ownerSpec string) error {
+	userName, groupName, ok := strings.Cut(ownerSpec, ":")
+	if !ok || userName == "" || groupName == "" {
+		return fmt.Errorf("invalid owner spec %q: want user:group", ownerSpec)
+	}
+	u, err := user.Lookup(userName)
+	if err != nil {
+		return fmt.Errorf("lookup user %s: %w", userName, err)
+	}
+	g, err := user.LookupGroup(groupName)
+	if err != nil {
+		return fmt.Errorf("lookup group %s: %w", groupName, err)
+	}
+	uid, err := strconv.Atoi(u.Uid)
+	if err != nil {
+		return fmt.Errorf("parse uid %q: %w", u.Uid, err)
+	}
+	gid, err := strconv.Atoi(g.Gid)
+	if err != nil {
+		return fmt.Errorf("parse gid %q: %w", g.Gid, err)
+	}
+	return os.Chown(path, uid, gid)
 }
