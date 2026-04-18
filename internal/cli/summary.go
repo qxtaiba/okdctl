@@ -3,8 +3,10 @@ package cli
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/distribution"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/postinstall"
 	"github.com/qxtaiba/okdctl/internal/tui"
 )
@@ -67,7 +69,7 @@ func ValidationSummary(result *config.ValidationResult) string {
 	return sb.String()
 }
 
-func PostDeploySummary(cfg *config.Config, result *postinstall.Result) string {
+func PostDeploySummary(cfg *config.Config, result *postinstall.Result, steps []distribution.StepResult) string {
 	clusterFQDN := cfg.Cluster.Name + "." + cfg.Cluster.Domain
 	consoleURL := fmt.Sprintf("https://console-openshift-console.apps.%s", clusterFQDN)
 	apiURL := fmt.Sprintf("https://api.%s:6443", clusterFQDN)
@@ -113,6 +115,27 @@ func PostDeploySummary(cfg *config.Config, result *postinstall.Result) string {
 		sb.kv("ingress routing", "haproxy (bastion)")
 	}
 	sb.newline()
+
+	if len(steps) > 0 {
+		sb.section("steps")
+		var total time.Duration
+		for _, s := range steps {
+			total += s.Duration
+			var status string
+			switch {
+			case s.Skipped:
+				status = "skip"
+			case s.Success:
+				status = "ok"
+			default:
+				status = "fail"
+			}
+			d := s.Duration.Truncate(time.Millisecond).String()
+			sb.kv(string(s.StepID), fmt.Sprintf("%-4s  %s", status, d))
+		}
+		sb.kv("total", total.Truncate(time.Millisecond).String())
+		sb.newline()
+	}
 
 	sb.section("credentials")
 	sb.kvHighlight("username", "kubeadmin")

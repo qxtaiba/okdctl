@@ -61,7 +61,7 @@ func New(exec *executor.Executor, logger *slog.Logger, version string) *Phase {
 	}
 }
 
-func (p *Phase) Execute(ctx context.Context, cfg *config.Config, opts *Options) (*Result, error) {
+func (p *Phase) Execute(ctx context.Context, cfg *config.Config, opts *Options) (*Result, []distribution.StepResult, error) {
 	p.Log.Info("postinstall: starting cluster verification and configuration")
 
 	addonMgr := addon.NewManager(cfg, p.Exec, p.Log, opts.ProjectRoot)
@@ -71,7 +71,7 @@ func (p *Phase) Execute(ctx context.Context, cfg *config.Config, opts *Options) 
 	orchestrator.SetLogger(p.Log)
 
 	if err := orchestrator.Run(ctx); err != nil {
-		return nil, err
+		return nil, orchestrator.Results(), err
 	}
 
 	state := pctx.Get()
@@ -87,7 +87,7 @@ func (p *Phase) Execute(ctx context.Context, cfg *config.Config, opts *Options) 
 
 	p.Log.Info("postinstall: cluster configuration completed successfully")
 
-	return result, nil
+	return result, orchestrator.Results(), nil
 }
 
 func (p *Phase) deployProductionDNS(ctx context.Context, cfg *config.Config, appsIP, kubeVipIP string, customDomains []templates.DNSCustomDomain) error {

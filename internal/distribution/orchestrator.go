@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"sync"
+	"time"
 
 	"github.com/qxtaiba/okdctl/internal/logutil"
 )
@@ -59,13 +60,27 @@ func (o *Orchestrator) Run(ctx context.Context) error {
 	return nil
 }
 
+// Results returns a snapshot of step results collected so far. Safe to call
+// concurrently with Run; the returned slice is a copy.
+func (o *Orchestrator) Results() []StepResult {
+	o.mu.RLock()
+	defer o.mu.RUnlock()
+	out := make([]StepResult, len(o.results))
+	copy(out, o.results)
+	return out
+}
+
 func (o *Orchestrator) executeStep(ctx context.Context, step ProvisioningStep) StepResult {
+	startedAt := time.Now()
+
 	if step.ShouldSkip() {
 		return StepResult{
 			StepID:     step.ID(),
 			Success:    true,
 			Skipped:    true,
 			SkipReason: step.SkipReason(),
+			StartedAt:  startedAt,
+			Duration:   time.Since(startedAt),
 		}
 	}
 
@@ -74,15 +89,19 @@ func (o *Orchestrator) executeStep(ctx context.Context, step ProvisioningStep) S
 	if err := step.Execute(ctx); err != nil {
 		step.OnError(err)
 		return StepResult{
-			StepID:  step.ID(),
-			Success: false,
-			Error:   err,
+			StepID:    step.ID(),
+			Success:   false,
+			Error:     err,
+			StartedAt: startedAt,
+			Duration:  time.Since(startedAt),
 		}
 	}
 
 	step.OnComplete()
 	return StepResult{
-		StepID:  step.ID(),
-		Success: true,
+		StepID:    step.ID(),
+		Success:   true,
+		StartedAt: startedAt,
+		Duration:  time.Since(startedAt),
 	}
 }

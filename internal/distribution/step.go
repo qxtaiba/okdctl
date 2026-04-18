@@ -3,6 +3,7 @@ package distribution
 import (
 	"context"
 	"fmt"
+	"time"
 )
 
 type StepID string
@@ -13,6 +14,8 @@ type StepResult struct {
 	Error      error
 	Skipped    bool
 	SkipReason string
+	StartedAt  time.Time
+	Duration   time.Duration
 }
 
 type Step interface {

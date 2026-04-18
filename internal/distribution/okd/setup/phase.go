@@ -86,20 +86,20 @@ func New(exec *executor.Executor, logger *slog.Logger, version string) *Phase {
 	}
 }
 
-func (p *Phase) Execute(ctx context.Context, cfg *config.Config, opts *Options) error {
+func (p *Phase) Execute(ctx context.Context, cfg *config.Config, opts *Options) ([]distribution.StepResult, error) {
 	p.Log.Info("setup: starting okd cluster configuration")
 
 	orchestrator := distribution.NewOrchestrator(distribution.BuildSteps(p.setupSteps(cfg, opts))...)
 	orchestrator.SetLogger(p.Log)
 
 	if err := orchestrator.Run(ctx); err != nil {
-		return err
+		return orchestrator.Results(), err
 	}
 
 	p.Log.Info("setup: cluster configuration completed successfully")
 	p.PrintSetupCompletionSummary(cfg, opts)
 
-	return nil
+	return orchestrator.Results(), nil
 }
 
 func (p *Phase) PrintSetupCompletionSummary(cfg *config.Config, opts *Options) {
