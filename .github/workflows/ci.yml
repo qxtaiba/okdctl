@@ -53,6 +53,22 @@ jobs:
           go-version-file: go.mod
       - run: go install golang.org/x/vuln/cmd/govulncheck@latest
       - run: govulncheck ./...
+  docs-go:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
+        with:
+          go-version-file: go.mod
+      - run: go run ./cmd/okdctl-gen-docs
+      - name: fail on CLI reference drift
+        run: |
+          if ! git diff --quiet docs/cli/ || \
+             [ -n "$(git ls-files --others --exclude-standard docs/cli/)" ]; then
+            echo "CLI reference is out of date. Run 'make docs' and commit docs/cli/." >&2
+            git status docs/cli/ >&2
+            exit 1
+          fi
   # YAML
   lint-yaml:
     runs-on: ubuntu-latest

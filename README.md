@@ -216,6 +216,17 @@ PRs welcome. Run `make test && make lint` before submitting. The issue forms
 in `.github/ISSUE_TEMPLATE/` ask for the info I need to reproduce — filling
 them out saves a round trip.
 
+## Release checklist
+
+Before tagging a release, regenerate the CLI reference and commit any
+drift:
+
+```sh
+make docs
+git add docs/cli/
+git commit -m "docs(cli): regenerate reference for <version>"
+```
+
 ## License
 
 Apache-2.0. Copyright 2026 Q Al Nuaimi. See [LICENSE](LICENSE) and
