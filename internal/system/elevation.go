@@ -101,6 +101,13 @@ func WriteAsInvokingUser(path string, data []byte, mode os.FileMode) error {
 // invoking user. No-op if the process was not re-exec'd under sudo. Errors
 // on individual entries are collected; the walk does not abort so a single
 // unreadable symlink doesn't leave the rest of the tree root-owned.
+//
+// CALLER CONTRACT: root must be a path whose subtree was created by okdctl
+// during this same process (the deploy/destroy workdir). Passing an
+// attacker-influenced path lets a malicious symlink redirect Lchown — the
+// function uses Lchown (symlink-safe) but the walk itself can still
+// traverse into directories the invoking user should not own. Audit any
+// new caller against this contract.
 func ChownTreeToInvokingUser(root string) error {
 	ids, err := invokingUserIDs()
 	if err != nil || ids == nil {

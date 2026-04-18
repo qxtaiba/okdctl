@@ -386,6 +386,11 @@ func isValidNetmask(s string) bool {
 	}
 	octets := addr.As4()
 	mask := uint32(octets[0])<<24 | uint32(octets[1])<<16 | uint32(octets[2])<<8 | uint32(octets[3])
+	// Reject 0.0.0.0 outright — it's a legal bit pattern but meaningless
+	// as a host netmask (would claim the entire IPv4 space).
+	if mask == 0 {
+		return false
+	}
 	// A canonical netmask is N contiguous 1 bits followed by (32-N) zeros.
 	// ^mask + 1 sets only the lowest zero-bit; a contiguous mask is a power
 	// of two in (^mask + 1), equivalently (~m & (~m+1)) == (~m+1). We allow

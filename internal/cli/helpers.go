@@ -130,6 +130,9 @@ func executeFullDeployment(ctx context.Context, cfg *config.Config, opts deploym
 	// Under the sudo re-exec model these are root-owned by default; restore
 	// ownership to the invoking user at exit so they can inspect and rm -rf
 	// the workdir without sudo. No-op when not running under sudo.
+	//
+	// If resolveProjectRootOrDie failed above, we returned early — the
+	// workdir cannot exist yet because no phase code has run.
 	workDir := filepath.Join(projectRoot, "okd-install")
 	defer func() {
 		if chownErr := system.ChownTreeToInvokingUser(workDir); chownErr != nil {

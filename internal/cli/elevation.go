@@ -9,15 +9,29 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// rootRequiredCmds lists subcommands that perform privileged operations
+// rootRequiredCmds lists subcommand names that perform privileged operations
 // (writing to /etc, /usr/local/bin, /var/www/html, managing systemd units,
 // configuring firewalls). When invoked without euid=0, the CLI re-execs
 // itself under sudo before cobra's RunE fires so the body runs single-UID.
+//
+// Matching walks the cobra parent chain, so a future nested layout like
+// `okdctl cluster deploy` still triggers the gate as long as `deploy`
+// stays in this set.
 var rootRequiredCmds = map[string]bool{
 	"deploy":         true,
 	"destroy":        true,
 	"cleanup":        true,
 	"update-ingress": true,
+}
+
+// requiresRoot returns true if cmd or any ancestor is in rootRequiredCmds.
+func requiresRoot(cmd *cobra.Command) bool {
+	for c := cmd; c != nil; c = c.Parent() {
+		if rootRequiredCmds[c.Name()] {
+			return true
+		}
+	}
+	return false
 }
 
 // ensureRoot is wired into the root cobra command's PersistentPreRunE. It
@@ -28,7 +42,7 @@ var rootRequiredCmds = map[string]bool{
 // so a successful re-exec never returns. The euid=0 check prevents re-exec
 // loops.
 func ensureRoot(cmd *cobra.Command) error {
-	if !rootRequiredCmds[cmd.Name()] {
+	if !requiresRoot(cmd) {
 		return nil
 	}
 	if os.Geteuid() == 0 {

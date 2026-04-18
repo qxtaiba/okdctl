@@ -85,6 +85,12 @@ type check struct {
 	fn   func(context.Context) checkResult
 }
 
+// Doctor checks share a uniform signature `func(context.Context) checkResult`
+// so they can live in this registry and run in a loop. Checks that have no
+// cancellable work (checkHostOS, checkNotRoot, checkPath, checkBinaries,
+// checkSSHKey, checkPullSecret, checkDiskSpace) take ctx as a blank-named
+// parameter to keep the signature uniform; only checks that shell out
+// (checkSudo, checkPorts) consume it.
 func runDoctor(cmd *cobra.Command, _ []string) error {
 	ctx := cmd.Context()
 	defer fmt.Println()
@@ -183,12 +189,6 @@ func printResult(c check, r checkResult) {
 }
 
 // checkHostOS identifies the host OS by parsing /etc/os-release.
-// Doctor checks share a uniform signature `func(context.Context) checkResult`
-// so they can be stored in a registry slice and invoked in a loop. Checks
-// that have no cancellable work (checkHostOS, checkNotRoot, checkPath,
-// checkBinaries, checkSSHKey, checkPullSecret, checkDiskSpace) take ctx as
-// a blank-named parameter to keep the signature uniform; only checks that
-// shell out (checkSudo, checkPorts) consume it.
 func checkHostOS(_ context.Context) checkResult {
 	host, err := platform.Detect()
 	if err != nil {
