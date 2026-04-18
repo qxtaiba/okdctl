@@ -12,6 +12,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/distribution"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/install"
+	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/system"
 	"github.com/qxtaiba/okdctl/internal/tui"
 )
@@ -27,9 +28,9 @@ func loadConfig(configFile string) (*config.Config, error) {
 			} else {
 				tui.Info(fmt.Sprintf("run 'okdctl deploy --output %s' to create it", configFile))
 			}
-			return nil, fmt.Errorf("configuration file not found: %s: %w", configFile, err)
+			return nil, &errtypes.ConfigError{Msg: fmt.Sprintf("configuration file not found: %s", configFile), Err: err}
 		}
-		return nil, fmt.Errorf("load configuration: %w", err)
+		return nil, &errtypes.ConfigError{Msg: "load configuration", Err: err}
 	}
 	return cfg, nil
 }

@@ -8,6 +8,7 @@ import (
 
 	"github.com/joho/godotenv"
 
+	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
@@ -103,9 +104,10 @@ func loadEnvFileOnce(path string) error {
 		return fmt.Errorf("failed to stat env file %s: %w", path, err)
 	}
 	if perm := fi.Mode().Perm(); perm&0o077 != 0 {
-		return fmt.Errorf(".env file %s has insecure permissions %#o; run 'chmod 600 %s' to fix: %w",
-			path, perm, path, os.ErrPermission,
-		)
+		return &errtypes.AuthError{
+			Msg: fmt.Sprintf(".env file %s has insecure permissions %#o; run 'chmod 600 %s' to fix", path, perm, path),
+			Err: os.ErrPermission,
+		}
 	}
 
 	// godotenv.Load does not overwrite already-set env vars, matching our
