@@ -41,9 +41,8 @@ func RetryDefault(ctx context.Context, fn func() error) error {
 
 // BuildOpaqueSecret returns a Kubernetes Secret manifest YAML of type Opaque.
 // Values in data are raw bytes; they are base64-encoded on marshal by the
-// k8s Secret type. Panics only if yaml.Marshal fails, which cannot happen
-// for well-formed Secret values.
-func BuildOpaqueSecret(namespace, name string, data map[string][]byte) string {
+// k8s Secret type.
+func BuildOpaqueSecret(namespace, name string, data map[string][]byte) (string, error) {
 	s := corev1.Secret{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "v1",
@@ -58,9 +57,9 @@ func BuildOpaqueSecret(namespace, name string, data map[string][]byte) string {
 	}
 	out, err := yaml.Marshal(s)
 	if err != nil {
-		panic(fmt.Sprintf("BuildOpaqueSecret: %v", err))
+		return "", fmt.Errorf("marshal opaque secret %s/%s: %w", namespace, name, err)
 	}
-	return string(out)
+	return string(out), nil
 }
 
 // EnsureNamespace checks whether a Kubernetes namespace exists and creates it
