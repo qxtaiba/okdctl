@@ -195,21 +195,6 @@ scaffolding the internal code already holds."
 
 ### Theme C — observability, error messages, logging
 
-#### N8 — Step timing + per-step deploy summary
-- **Status:** in review — PR #64
-- **Category:** feature-gap
-- **State:** scaffolding exists
-- **Effort:** hours
-- **Impact:** large
-- **Evidence:** `internal/distribution/step.go:10-16` `StepResult` lacks
-  `Duration`; `internal/distribution/orchestrator.go:62-88` has
-  `OnStart`/`OnComplete` callbacks that are never used for timing.
-  `internal/cli/summary.go:70-135` has no duration section.
-- **Acceptance:** `StepResult` gains `Duration time.Duration` and
-  `StartedAt time.Time`. Orchestrator records both. Post-deploy summary
-  prints a per-step table (`step | result | duration`) plus a total.
-- **Depends on:** none.
-
 #### N10 — Ctrl-C partial-progress summary + resume hint
 - **Status:** not started
 - **Category:** polish
@@ -235,21 +220,6 @@ scaffolding the internal code already holds."
 - **Acceptance:** both commands accept `--yes` / `-y`; when the stdin is
   not a TTY, prompts return their default answer rather than blocking.
 - **Depends on:** none.
-
-#### N23 — HTTP error surface: include URL + response snippet
-- **Status:** in review — PR #62
-- **Category:** polish
-- **State:** scaffolding exists
-- **Effort:** hours
-- **Impact:** medium
-- **Evidence:** `internal/download/download.go:112` returns bare status
-  code; `internal/tui/wizard/steps/proxmox_discovery.go:156-164` shows
-  the preferred pattern (net-error-to-actionable-message).
-- **Acceptance:** download errors include method, URL, status code, and a
-  ≤256-byte response-body excerpt. Body is redacted if it looks like a
-  credential (matches the password redaction pattern in
-  `InputField.Validate`).
-- **Depends on:** U3 (retry wraps the eventual failure).
 
 #### N25 — Progress bars for long-running operations
 - **Status:** not started
@@ -321,19 +291,6 @@ scaffolding the internal code already holds."
   every mutating step it *would* execute. No real mutations. Exit 0
   on plan success, 2 on plan failure.
 - **Depends on:** U4 (exit code 2 for plan failure).
-
-#### M4 — OKD release URL override
-- **Status:** in review — PR #61
-- **Category:** feature-gap
-- **State:** not started
-- **Effort:** hours
-- **Impact:** large
-- **Evidence:** `internal/distribution/okd/setup/artifacts.go:19`
-  hardcodes `https://github.com/okd-project/okd/releases/download/%s`.
-- **Acceptance:** new config field `Deployment.OKDReleaseBaseURL` (or
-  env var `OKDCTL_OKD_RELEASE_URL`) overrides the base URL. Air-gapped
-  users point to a mirror. Default unchanged.
-- **Depends on:** none.
 
 #### M5 — Tool binary versions / URLs overridable
 - **Status:** not started
@@ -689,6 +646,42 @@ but link evidence.
   implementations were touched. The roadmap cited `doctor.go:16-24`
   for the check list but the actual registry is at `:98-108` — stale
   line reference, valid item.
+- **M4 — OKD release URL override** — done PR #61, merged 2026-04-18.
+  New `Deployment.OKDReleaseBaseURL` YAML field and
+  `OKDCTL_OKD_RELEASE_URL` env var override the hardcoded GitHub
+  release URL. Resolution order in `setup.ResolveReleaseBaseURL`:
+  env > config > default
+  `https://github.com/okd-project/okd/releases/download`.
+  `strings.TrimRight` normalizes trailing slashes. Mirrors that
+  preserve upstream path layout (`<base>/<version>/<filename>`) work
+  out of the box; full URL-template overrides for non-standard mirror
+  shapes are scoped to M5.
+- **N23 — HTTP error surface** — done PR #62, merged 2026-04-18.
+  `httpStatusError` now carries `Method` and a ≤256-byte `Body`
+  excerpt; `Error()` emits `HTTP <status> <method> <url>: <body>`.
+  `fetchToFile` reads up to 256 bytes via `io.LimitReader` before
+  returning the error. `bodySnippet` strips non-printable bytes
+  (defense against terminal escape sequences in an error body) and
+  trims whitespace; no credential scrubbing — an earlier bare-token
+  heuristic was dropped because it caught only one narrow case while
+  missing JSON/JWT/prose embeddings, and logs are not shipped today.
+  A key-based scrubber (`token=`, `password=`, etc.) is the right
+  follow-up when M2 (debug-bundle) or `--log-file` persistence lands.
+  Retry behaviour unchanged — `isRetryable` still switches on
+  `httpErr.Status`.
+- **N8 — Step timing + per-step deploy summary** — done PR #64,
+  merged 2026-04-18. `StepResult` gains `StartedAt time.Time` and
+  `Duration time.Duration`. `Orchestrator.executeStep` captures
+  `time.Now()` before the skip/execute branch and sets both fields
+  on all three return paths (skip, fail, success); new `Results()`
+  getter returns a copy of the slice under `RLock`. Each phase's
+  `Execute` returns `[]distribution.StepResult` alongside existing
+  returns; `executeFullDeployment` concatenates across setup +
+  install + postinstall and passes the slice to `PostDeploySummary`,
+  which renders a "steps" section (step id | ok/skip/fail | duration)
+  with a total row. Destroy not instrumented — it does not flow
+  through the post-deploy summary. Unblocks L5 (Prometheus metrics),
+  N10 (Ctrl-C partial-progress summary), and M1 (`okdctl status`).
 
 ## Appendix — full item ledger
 
@@ -708,7 +701,7 @@ but link evidence.
 | N5 | `okdctl kubeconfig` | **Done** (PR #55) |
 | N6 | `okdctl config show` | **Done** (PR #59) |
 | N7 | `okdctl completion` | **Done** (PR #60) |
-| N8 | Step timing + deploy summary | Sprint 1 |
+| N8 | Step timing + deploy summary | **Done** (PR #64) |
 | N9 | `--log-level/--log-format/--log-file` flags | **Done** (PR #65) |
 | N10 | Ctrl-C partial-progress summary | Sprint 1 |
 | N11 | `--yes` parity on deploy/update-ingress | Sprint 1 |
@@ -723,12 +716,12 @@ but link evidence.
 | N20 | Doctor-check reference doc | **Done** (PR #67) |
 | N21 | `CONTRIBUTING.md` | Deferred |
 | N22 | Troubleshooting / FAQ | Deferred |
-| N23 | HTTP error context | Sprint 1 |
+| N23 | HTTP error context | **Done** (PR #62) |
 | N25 | Progress bars for long ops | Sprint 1 |
 | M1 | `okdctl status` / `describe` | Sprint 1 |
 | M2 | `okdctl debug-bundle` | Sprint 1 |
 | M3 | `--dry-run` / `--plan` mode | Sprint 1 |
-| M4 | OKD release URL override | Sprint 1 |
+| M4 | OKD release URL override | **Done** (PR #61) |
 | M5 | Tool binary versions override | Sprint 1 |
 | M6 | `DefaultBinDir` rootless | Sprint 1 |
 | M7 | Provider interface extraction | **Skipped** |
