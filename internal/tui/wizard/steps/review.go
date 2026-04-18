@@ -185,8 +185,16 @@ func (s *ReviewStep) renderProxmox(st *sectionStyles) string {
 	if p == nil {
 		return ""
 	}
+	var addlNetworks string
+	for i, n := range p.AdditionalNetworks {
+		if i > 0 {
+			addlNetworks += ", "
+		}
+		addlNetworks += n.Bridge
+	}
 	return renderSection(st, "proxmox", []kvEntry{
 		{label: "host", value: p.Host},
+		{label: "token id", value: p.TokenID, skip: p.TokenID == ""},
 		{label: "bootstrap node", value: p.Node},
 		{label: "master nodes", value: strings.Join(p.MasterNodes, ", "), skip: len(p.MasterNodes) == 0},
 		{label: "worker nodes", value: strings.Join(p.WorkerNodes, ", "), skip: len(p.WorkerNodes) == 0},
@@ -194,6 +202,8 @@ func (s *ReviewStep) renderProxmox(st *sectionStyles) string {
 		{label: "storage", value: p.Storage},
 		{label: "data storage", value: p.DataStorage, skip: p.DataStorage == "" || p.DataStorage == p.Storage},
 		{label: "iso storage", value: p.ISOStorage, skip: p.ISOStorage == ""},
+		{label: "fcos iso", value: p.FCOSIso, skip: p.FCOSIso == ""},
+		{label: "extra networks", value: addlNetworks, skip: len(p.AdditionalNetworks) == 0},
 	})
 }
 

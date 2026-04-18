@@ -68,6 +68,14 @@ var ProxmoxStepDefinition = wizard.StepDefinition{
 					// Don't load password from config
 				},
 				{
+					Key:       "token_id",
+					Label:     "token id",
+					Default:   "",
+					Help:      "api token id (user@realm!tokenname) — leave blank when using password auth",
+					ConfigSet: proxmoxSet(func(p *config.ProxmoxConfig, v string) { p.TokenID = v }),
+					ConfigGet: proxmoxGet(func(p *config.ProxmoxConfig) string { return p.TokenID }),
+				},
+				{
 					Key:     "skip_tls_verify",
 					Label:   "skip tls verify",
 					Default: valNo,
