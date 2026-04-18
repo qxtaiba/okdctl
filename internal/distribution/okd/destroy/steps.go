@@ -3,8 +3,6 @@ package destroy
 import (
 	"context"
 	"fmt"
-	"net"
-	"strings"
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/distribution"
@@ -51,7 +49,7 @@ func (p *Phase) destroySteps(cfg *config.Config, opts *Options) []distribution.S
 			SkipReason: isoSkipReason(opts, cfg),
 			Exec: func(ctx context.Context) error {
 				params := &phase.RemoteISOParams{
-					Host: proxmoxBareHost(cfg.Provider.Proxmox.Host),
+					Host: phase.ProxmoxBareHost(cfg.Provider.Proxmox.Host),
 					Node: cfg.Provider.Proxmox.Node,
 					Exec: p.Exec,
 					Log:  p.Log,
@@ -132,20 +130,4 @@ func isoSkipReason(opts *Options, cfg *config.Config) string {
 		return "no proxmox provider configured"
 	}
 	return ""
-}
-
-// proxmoxBareHost strips any port suffix from the host so it can be passed to
-// ssh. Proxmox hosts in config may appear as "host:8006".
-func proxmoxBareHost(host string) string {
-	if strings.Contains(host, ":") {
-		h, _, err := net.SplitHostPort(host)
-		if err == nil {
-			return h
-		}
-	}
-	// Strip scheme if present (e.g. "https://host")
-	if idx := strings.Index(host, "://"); idx != -1 {
-		host = host[idx+3:]
-	}
-	return host
 }

@@ -3,12 +3,11 @@ package setup
 import (
 	"context"
 	"fmt"
-	"net"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/executor"
 	"github.com/qxtaiba/okdctl/internal/system"
 )
@@ -37,16 +36,6 @@ func calculateTotalSize(files []string) int64 {
 		}
 	}
 	return totalSize
-}
-
-func proxmoxHost(host string) string {
-	if strings.Contains(host, ":") {
-		h, _, err := net.SplitHostPort(host)
-		if err == nil {
-			return h
-		}
-	}
-	return host
 }
 
 func uploadISOsViaSCP(ctx context.Context, cmdRunner *executor.Executor, isoFiles []string, user, host, remotePath string) error {
@@ -81,7 +70,7 @@ func (p *Phase) UploadCustomISOsToProxmox(ctx context.Context, cfg *config.Confi
 		return nil
 	}
 
-	host := proxmoxHost(cfg.Provider.Proxmox.Host)
+	host := phase.ProxmoxBareHost(cfg.Provider.Proxmox.Host)
 	user := "root"
 	remotePath := DefaultProxmoxISODir
 
