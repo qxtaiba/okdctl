@@ -2,6 +2,7 @@ package postinstall
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -10,6 +11,45 @@ import (
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/system"
 )
+
+// nodeList is a minimal view of `oc get nodes -o json` output — only the
+// fields we need for readiness counting. Using k8s.io/api/core/v1 would work
+// but drags the entire corev1 surface for one readiness check.
+type nodeList struct {
+	Items []struct {
+		Metadata struct {
+			Name string `json:"name"`
+		} `json:"metadata"`
+		Status struct {
+			Conditions []struct {
+				Type   string `json:"type"`
+				Status string `json:"status"`
+			} `json:"conditions"`
+		} `json:"status"`
+	} `json:"items"`
+}
+
+// parseNodeReadiness returns (ready, total) from a `oc get nodes -o json`
+// payload. A node is ready when it has a condition with type=Ready and
+// status=True. Replaces the prior strings.Contains(line, "Ready") && !strings.
+// Contains(line, "NotReady") text-parse which misclassified "SchedulingDisabled
+// Ready" output and could not distinguish transient state flaps.
+func parseNodeReadiness(payload []byte) (ready, total int, err error) {
+	var n nodeList
+	if err := json.Unmarshal(payload, &n); err != nil {
+		return 0, 0, fmt.Errorf("parse node list json: %w", err)
+	}
+	for _, node := range n.Items {
+		total++
+		for _, cond := range node.Status.Conditions {
+			if cond.Type == "Ready" && cond.Status == "True" {
+				ready++
+				break
+			}
+		}
+	}
+	return ready, total, nil
+}
 
 const (
 	DefaultKubeVIPDaemonSetTimeout = 5 * time.Minute
@@ -47,22 +87,17 @@ func (p *Phase) VerifyClusterHealth(ctx context.Context, _ *Options) (*ClusterHe
 		p.Log.Info("cluster: all operators are healthy")
 	}
 
-	cmdResult, err = p.Exec.RunChecked(ctx, "oc", "get", "nodes", "--no-headers")
+	cmdResult, err = p.Exec.RunChecked(ctx, "oc", "get", "nodes", "-o", "json")
 	if err != nil {
 		return result, fmt.Errorf("failed to get nodes: %w", err)
 	}
 
-	nodeOutput := strings.TrimSpace(cmdResult.Stdout)
-	var nodeLines []string
-	if nodeOutput != "" {
-		nodeLines = strings.Split(nodeOutput, "\n")
+	ready, total, err := parseNodeReadiness([]byte(cmdResult.Stdout))
+	if err != nil {
+		return result, err
 	}
-	result.TotalNodes = len(nodeLines)
-	for _, line := range nodeLines {
-		if strings.Contains(line, "Ready") && !strings.Contains(line, "NotReady") {
-			result.ReadyNodes++
-		}
-	}
+	result.ReadyNodes = ready
+	result.TotalNodes = total
 
 	p.Log.Info(fmt.Sprintf("cluster: %d/%d nodes are ready", result.ReadyNodes, result.TotalNodes))
 
