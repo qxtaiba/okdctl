@@ -97,26 +97,44 @@ func Download(ctx context.Context, opts *Options) error {
 
 	client := httputil.New(opts.Timeout)
 
+	attempts, err := retryDownload(ctx, func() error {
+		return fetchToFile(ctx, client, opts, filename)
+	})
+	if err != nil {
+		opts.logger().Error(fmt.Sprintf("download: giving up on %s after %d attempt(s): %v", opts.Description, attempts, err))
+		return fmt.Errorf("download failed for %s: %w", opts.Description, err)
+	}
+
+	if err := verifyDownloadedFile(opts.OutputPath, opts.ExpectedChecksum, opts.logger()); err != nil {
+		_ = os.Remove(opts.OutputPath)
+		return err
+	}
+	return nil
+}
+
+// fetchToFile performs one download attempt: request, stream body to disk,
+// fsync. On any mid-attempt failure the partial file is removed so the next
+// attempt starts from a clean slate.
+func fetchToFile(ctx context.Context, client *http.Client, opts *Options, filename string) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, opts.URL, http.NoBody)
 	if err != nil {
-		return fmt.Errorf("failed to build request for %s: %w", opts.Description, err)
+		return fmt.Errorf("build request: %w", err)
 	}
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return fmt.Errorf("download failed for %s: %w", opts.Description, err)
+		return err
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("download failed for %s: HTTP %d", opts.Description, resp.StatusCode)
+		return &httpStatusError{Status: resp.StatusCode, URL: opts.URL}
 	}
 
 	outFile, err := os.OpenFile(opts.OutputPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
 	if err != nil {
-		return fmt.Errorf("failed to create output file: %w", err)
+		return fmt.Errorf("create output file: %w", err)
 	}
-	defer func() { _ = outFile.Close() }()
 
 	dst := io.Writer(outFile)
 	var bar *progressbar.ProgressBar
@@ -128,25 +146,22 @@ func Download(ctx context.Context, opts *Options) error {
 		if bar != nil {
 			_ = bar.Exit()
 		}
+		_ = outFile.Close()
 		_ = os.Remove(opts.OutputPath)
-		return fmt.Errorf("failed to write file: %w", err)
+		return fmt.Errorf("write file: %w", err)
 	}
 	if bar != nil {
 		_ = bar.Finish()
 	}
 
 	if err := outFile.Sync(); err != nil {
+		_ = outFile.Close()
 		_ = os.Remove(opts.OutputPath)
-		return fmt.Errorf("failed to sync output file: %w", err)
+		return fmt.Errorf("sync output file: %w", err)
 	}
 	if err := outFile.Close(); err != nil {
 		_ = os.Remove(opts.OutputPath)
-		return fmt.Errorf("failed to close output file: %w", err)
-	}
-
-	if err := verifyDownloadedFile(opts.OutputPath, opts.ExpectedChecksum, opts.logger()); err != nil {
-		_ = os.Remove(opts.OutputPath)
-		return err
+		return fmt.Errorf("close output file: %w", err)
 	}
 	return nil
 }
