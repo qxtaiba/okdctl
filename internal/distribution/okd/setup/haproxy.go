@@ -59,11 +59,11 @@ const (
 )
 
 func (p *Phase) installHAProxyConfig(ctx context.Context, tmpPath string) error {
-	if err := system.CopyFileWithElevation(ctx, tmpPath, haproxyConfigPath, "haproxy config"); err != nil {
+	if err := system.CopyFile(tmpPath, haproxyConfigPath); err != nil {
 		return fmt.Errorf("failed to install haproxy config: %w", err)
 	}
 
-	if _, err := p.Exec.RunChecked(ctx, "sudo", "haproxy", "-c", "-f", haproxyConfigPath); err != nil {
+	if _, err := p.Exec.RunChecked(ctx, "haproxy", "-c", "-f", haproxyConfigPath); err != nil {
 		return fmt.Errorf("haproxy configuration validation failed: %w", err)
 	}
 	return nil
@@ -99,7 +99,7 @@ func (p *Phase) ConfigureHAProxy(ctx context.Context, cfg *config.Config, _ *Opt
 	// fails after the new config is already in place.
 	hasBackup := false
 	if system.FileExists(haproxyConfigPath) {
-		if err := system.CopyFileWithElevation(ctx, haproxyConfigPath, haproxyBackupPath, "haproxy.cfg backup"); err != nil {
+		if err := system.CopyFile(haproxyConfigPath, haproxyBackupPath); err != nil {
 			return fmt.Errorf("failed to back up existing haproxy.cfg: %w", err)
 		}
 		hasBackup = true
@@ -110,10 +110,10 @@ func (p *Phase) ConfigureHAProxy(ctx context.Context, cfg *config.Config, _ *Opt
 			return cause
 		}
 		p.Log.Warn(fmt.Sprintf("haproxy: %s, restoring from backup", reason))
-		if restoreErr := system.CopyFileWithElevation(ctx, haproxyBackupPath, haproxyConfigPath, "haproxy.cfg rollback"); restoreErr != nil {
+		if restoreErr := system.CopyFile(haproxyBackupPath, haproxyConfigPath); restoreErr != nil {
 			return errors.Join(cause, fmt.Errorf("rollback restore failed: %w", restoreErr))
 		}
-		if chmodErr := system.Chmod(ctx, haproxyConfigPath, "644", "haproxy config rollback perms"); chmodErr != nil {
+		if chmodErr := os.Chmod(haproxyConfigPath, 0o644); chmodErr != nil {
 			p.Log.Warn(fmt.Sprintf("haproxy: rollback chmod failed: %v", chmodErr))
 		}
 		// Restart with the old config so the node isn't left serving the

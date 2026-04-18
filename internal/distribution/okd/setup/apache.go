@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -20,18 +21,19 @@ const (
 	minIgnitionFileSize = 1000 // bytes
 )
 
-func (p *Phase) ensureIgnitionDir(ctx context.Context, webRoot string) (string, error) {
+func (p *Phase) ensureIgnitionDir(_ context.Context, webRoot string) (string, error) {
 	ignitionDir := filepath.Join(webRoot, "ignition")
 
-	if err := system.MkdirAll(ctx, ignitionDir, "ignition directory"); err != nil {
+	if err := os.MkdirAll(ignitionDir, 0o755); err != nil {
 		return "", fmt.Errorf("failed to create ignition directory: %w", err)
 	}
 
 	apacheUser := p.OS.ApacheUser()
-	if err := system.Chown(ctx, ignitionDir, apacheUser+":"+apacheUser, "ignition directory ownership"); err != nil {
+	if err := system.ChownByName(ignitionDir, apacheUser+":"+apacheUser); err != nil {
 		p.Log.Warn(fmt.Sprintf("apache: failed to set ignition dir ownership: %v", err))
 	}
-	if err := system.Chmod(ctx, ignitionDir, "755", "ignition directory permissions"); err != nil {
+	// Explicit chmod in case ignitionDir pre-existed with narrower perms.
+	if err := os.Chmod(ignitionDir, 0o755); err != nil {
 		p.Log.Warn(fmt.Sprintf("apache: failed to set ignition dir permissions: %v", err))
 	}
 
@@ -45,11 +47,11 @@ func (p *Phase) configureApachePort(ctx context.Context) {
 	}
 
 	backupPath := fmt.Sprintf("%s.backup.%d", httpdConf, time.Now().Unix())
-	if err := system.CopyFileWithElevation(ctx, httpdConf, backupPath, "httpd.conf backup"); err != nil {
+	if err := system.CopyFile(httpdConf, backupPath); err != nil {
 		p.Log.Warn(fmt.Sprintf("apache: could not backup httpd.conf: %v", err))
 	}
 
-	result, err := p.Exec.Run(ctx, "sudo", "sed", "-i", "s/^Listen 80$/Listen 8080/", httpdConf)
+	result, err := p.Exec.Run(ctx, "sed", "-i", "s/^Listen 80$/Listen 8080/", httpdConf)
 	if err != nil || result.ExitCode != 0 {
 		p.Log.Warn(fmt.Sprintf("apache: could not modify httpd.conf to listen on port 8080: %v", err))
 	}
@@ -63,8 +65,8 @@ func (p *Phase) configureSELinuxForApache(ctx context.Context) {
 		return
 	}
 	// Try -a first; if port already exists, -m modifies the existing entry
-	_, _ = p.Exec.Run(ctx, "sudo", "semanage", "port", "-a", "-t", "http_port_t", "-p", "tcp", "8080")
-	_, _ = p.Exec.Run(ctx, "sudo", "semanage", "port", "-m", "-t", "http_port_t", "-p", "tcp", "8080")
+	_, _ = p.Exec.Run(ctx, "semanage", "port", "-a", "-t", "http_port_t", "-p", "tcp", "8080")
+	_, _ = p.Exec.Run(ctx, "semanage", "port", "-m", "-t", "http_port_t", "-p", "tcp", "8080")
 }
 
 func enableAndStartApache(ctx context.Context, serviceName string) error {
@@ -133,11 +135,11 @@ func (p *Phase) DeployToWebServer(ctx context.Context, cfg *config.Config, clust
 		}
 
 		destPath := filepath.Join(ignitionDir, file)
-		if err := system.CopyFileWithElevation(ctx, srcPath, destPath, fmt.Sprintf("ignition file %s", file)); err != nil {
+		if err := system.CopyFile(srcPath, destPath); err != nil {
 			return fmt.Errorf("failed to copy %s: %w", file, err)
 		}
 
-		if err := system.Chmod(ctx, destPath, "644", fmt.Sprintf("%s permissions", file)); err != nil {
+		if err := os.Chmod(destPath, 0o644); err != nil {
 			return fmt.Errorf("failed to set permissions on %s: %w", file, err)
 		}
 	}
@@ -145,7 +147,7 @@ func (p *Phase) DeployToWebServer(ctx context.Context, cfg *config.Config, clust
 	authSrc := filepath.Join(clusterDir, "auth")
 	if system.FileExists(authSrc) {
 		authDest := filepath.Join(webRoot, "auth")
-		_, err := p.Exec.RunChecked(ctx, "sudo", "cp", "-r", authSrc, authDest)
+		_, err := p.Exec.RunChecked(ctx, "cp", "-r", authSrc, authDest)
 		if err != nil {
 			return fmt.Errorf("failed to copy auth directory %s to web root %s: %w", authSrc, authDest, err)
 		}

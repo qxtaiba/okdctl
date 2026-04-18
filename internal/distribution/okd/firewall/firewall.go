@@ -70,7 +70,7 @@ func DetectBackend(ctx context.Context) Backend {
 	}
 
 	if _, err := exec.LookPath("ufw"); err == nil {
-		cmd := exec.CommandContext(ctx, "sudo", "ufw", "status")
+		cmd := exec.CommandContext(ctx, "ufw", "status")
 		if output, err := cmd.Output(); err == nil {
 			if strings.Contains(string(output), "Status: active") {
 				return UFW
@@ -102,7 +102,7 @@ func Configure(ctx context.Context, ports []Port, permanent bool, logger *slog.L
 	}
 
 	if backend == Firewalld && permanent {
-		if err := system.RunSudo(ctx, "firewall-cmd", "--reload"); err != nil {
+		if err := exec.CommandContext(ctx, "firewall-cmd", "--reload").Run(); err != nil {
 			return fmt.Errorf("failed to reload firewall: %w", err)
 		}
 	}
@@ -154,7 +154,7 @@ func RemoveRules(ctx context.Context, ports []Port, permanent bool, logger *slog
 	}
 
 	if backend == Firewalld && permanent {
-		_ = system.RunSudo(ctx, "firewall-cmd", "--reload")
+		_ = exec.CommandContext(ctx, "firewall-cmd", "--reload").Run()
 	}
 
 	return nil
@@ -178,13 +178,13 @@ func modifyPort(ctx context.Context, backend Backend, port Port, permanent bool,
 		if permanent {
 			args = append(args, "--permanent")
 		}
-		return system.RunSudo(ctx, args[0], args[1:]...)
+		return exec.CommandContext(ctx, args[0], args[1:]...).Run()
 
 	case UFW:
 		if action == actionRemove {
-			return system.RunSudo(ctx, "ufw", "delete", "allow", portStr)
+			return exec.CommandContext(ctx, "ufw", "delete", "allow", portStr).Run()
 		}
-		return system.RunSudo(ctx, "ufw", "allow", portStr)
+		return exec.CommandContext(ctx, "ufw", "allow", portStr).Run()
 
 	case IPTables:
 		chainAction := "-I"
@@ -195,7 +195,7 @@ func modifyPort(ctx context.Context, backend Backend, port Port, permanent bool,
 			"iptables", chainAction, "INPUT", "-p", port.Protocol,
 			"--dport", fmt.Sprintf("%d", port.Number), "-j", "ACCEPT",
 		}
-		return system.RunSudo(ctx, args[0], args[1:]...)
+		return exec.CommandContext(ctx, args[0], args[1:]...).Run()
 	}
 
 	return nil
