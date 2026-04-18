@@ -43,14 +43,19 @@ func (p *Phase) ValidateClusterAccess(ctx context.Context) error {
 }
 
 func (p *Phase) SetupClusterAccess(_ context.Context, clusterDir string) error {
-	homeDir, err := os.UserHomeDir()
+	// Resolve the invoking user's home (not root's) so files land where
+	// the user will look for them after the re-exec'd deploy returns.
+	homeDir, err := system.InvokingUserHomeDir()
 	if err != nil {
-		return fmt.Errorf("failed to get user home directory: %w", err)
+		return fmt.Errorf("failed to resolve invoking user home: %w", err)
 	}
 
 	kubeDir := filepath.Join(homeDir, ".kube")
 	if err := system.EnsureDir(kubeDir); err != nil {
 		return fmt.Errorf("failed to create .kube directory: %w", err)
+	}
+	if err := system.ChownToInvokingUser(kubeDir); err != nil {
+		p.Log.Warn(fmt.Sprintf("kubeconfig: could not chown .kube dir: %v", err))
 	}
 
 	srcKubeconfig := filepath.Join(clusterDir, "auth", "kubeconfig")
@@ -61,12 +66,16 @@ func (p *Phase) SetupClusterAccess(_ context.Context, clusterDir string) error {
 		if err := system.CopyFileMode(destKubeconfig, backupPath, 0o600); err != nil {
 			p.Log.Warn(fmt.Sprintf("kubeconfig: could not backup existing file: %v", err))
 		} else {
+			_ = system.ChownToInvokingUser(backupPath)
 			p.Log.Info(fmt.Sprintf("kubeconfig: backed up existing file to %s", backupPath))
 		}
 	}
 
 	if err := system.CopyFileMode(srcKubeconfig, destKubeconfig, 0o600); err != nil {
 		return fmt.Errorf("failed to copy kubeconfig: %w", err)
+	}
+	if err := system.ChownToInvokingUser(destKubeconfig); err != nil {
+		p.Log.Warn(fmt.Sprintf("kubeconfig: could not chown config: %v", err))
 	}
 
 	if err := p.addKubeconfigToBashrc(homeDir, destKubeconfig); err != nil {
@@ -84,14 +93,23 @@ func (p *Phase) addKubeconfigToBashrc(homeDir, kubeconfigPath string) error {
 	// silently relax stricter perms the user may have set. 0644 is only
 	// used when the file does not yet exist (sane default for bashrc).
 	mode := os.FileMode(0o644)
+	created := false
 	if fi, err := os.Stat(bashrcPath); err == nil {
 		mode = fi.Mode().Perm()
+	} else if os.IsNotExist(err) {
+		created = true
 	}
 
 	content, err := os.ReadFile(bashrcPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return system.AtomicWriteString(bashrcPath, exportLine+"\n", mode)
+			if writeErr := system.AtomicWriteString(bashrcPath, exportLine+"\n", mode); writeErr != nil {
+				return writeErr
+			}
+			if created {
+				return system.ChownToInvokingUser(bashrcPath)
+			}
+			return nil
 		}
 		return err
 	}
