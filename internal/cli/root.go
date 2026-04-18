@@ -21,6 +21,12 @@ import (
 // function parameters would fight the framework.
 var cfgFile string
 
+var (
+	logLevel  string
+	logFormat string
+	logFile   string
+)
+
 var rootCmd = &cobra.Command{
 	Use:   "okdctl",
 	Short: "Deploy production-ready Kubernetes clusters",
@@ -36,8 +42,13 @@ Highlights:
   • YAML configuration with sensible defaults
   • Automated preflight checks and validation
   • Single binary distribution`,
-	Version:           version.Version,
-	PersistentPreRunE: func(cmd *cobra.Command, _ []string) error { return ensureRoot(cmd) },
+	Version: version.Version,
+	PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
+		if err := configureLogging(); err != nil {
+			return err
+		}
+		return ensureRoot(cmd)
+	},
 	Run: func(_ *cobra.Command, _ []string) {
 		fmt.Println(tui.TitleStyle.Render("homelab k8s"))
 		fmt.Println()
@@ -52,7 +63,11 @@ Highlights:
 
 func Execute() {
 	slog.SetDefault(tui.SimpleLogger())
-	os.Exit(execute())
+	code := execute()
+	if logFileCloser != nil {
+		_ = logFileCloser.Close()
+	}
+	os.Exit(code)
 }
 
 func execute() int {
@@ -71,6 +86,9 @@ func execute() int {
 
 func init() {
 	rootCmd.PersistentFlags().StringVarP(&cfgFile, "config", "c", "okdctl.yaml", "configuration file")
+	rootCmd.PersistentFlags().StringVar(&logLevel, "log-level", "info", "log verbosity (debug, info, warn, error)")
+	rootCmd.PersistentFlags().StringVar(&logFormat, "log-format", "text", "log output format (text, json)")
+	rootCmd.PersistentFlags().StringVar(&logFile, "log-file", "", "write log output to this file in addition to stdout")
 
 	rootCmd.AddCommand(deployCmd)
 	rootCmd.AddCommand(destroyCmd)

@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"log/slog"
 	"os"
@@ -29,8 +30,9 @@ func LF(key string, value any) LogField {
 }
 
 var (
-	stdoutLogger = buildLogger(os.Stdout)
-	stderrLogger = buildLogger(os.Stderr)
+	stdoutLogger       = buildLogger(os.Stdout)
+	stderrLogger       = buildLogger(os.Stderr)
+	progressBarsActive = true
 )
 
 func buildLogger(w io.Writer) *charmlog.Logger {
@@ -90,4 +92,44 @@ func (h *dualHandler) WithGroup(name string) slog.Handler {
 // everything else to stdout.
 func SimpleLogger() *slog.Logger {
 	return slog.New(&dualHandler{stdout: stdoutLogger, stderr: stderrLogger})
+}
+
+// ConfigureLoggers applies level, formatter, and writer settings to the
+// package-level loggers. stdoutW and stderrW replace the current outputs;
+// level must be a charmlog level string (debug/info/warn/error).
+// format must be "text" or "json". progressBars controls whether
+// ProgressBarsEnabled returns true. Not safe for concurrent calls — call
+// once during cobra PersistentPreRunE before any subcommand runs.
+func ConfigureLoggers(level, format string, stdoutW, stderrW io.Writer, progressBars bool) error {
+	lvl, err := charmlog.ParseLevel(level)
+	if err != nil {
+		return fmt.Errorf("unknown log level %q: %w", level, err)
+	}
+
+	var formatter charmlog.Formatter
+	switch format {
+	case "text":
+		formatter = charmlog.TextFormatter
+	case "json":
+		formatter = charmlog.JSONFormatter
+	default:
+		return fmt.Errorf("unknown log format %q: must be text or json", format)
+	}
+
+	stdoutLogger.SetLevel(lvl)
+	stdoutLogger.SetFormatter(formatter)
+	stdoutLogger.SetOutput(stdoutW)
+
+	stderrLogger.SetLevel(lvl)
+	stderrLogger.SetFormatter(formatter)
+	stderrLogger.SetOutput(stderrW)
+
+	progressBarsActive = progressBars
+	return nil
+}
+
+// ProgressBarsEnabled reports whether progress bars should be rendered.
+// False when stdout is not a TTY or when JSON log format is active.
+func ProgressBarsEnabled() bool {
+	return progressBarsActive
 }

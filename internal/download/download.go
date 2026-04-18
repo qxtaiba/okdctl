@@ -14,15 +14,11 @@ import (
 	"time"
 
 	"github.com/schollz/progressbar/v3"
-	"golang.org/x/term"
 
 	"github.com/qxtaiba/okdctl/internal/httputil"
 	"github.com/qxtaiba/okdctl/internal/logutil"
+	"github.com/qxtaiba/okdctl/internal/tui"
 )
-
-// stderrIsTTY gates progress-bar rendering. When the process is piped or
-// run in CI, we skip the bar so logs don't fill with carriage-return spam.
-var stderrIsTTY = term.IsTerminal(int(os.Stderr.Fd()))
 
 type Options struct {
 	URL              string
@@ -137,7 +133,7 @@ func fetchToFile(ctx context.Context, client *http.Client, opts *Options, filena
 
 	dst := io.Writer(outFile)
 	var bar *progressbar.ProgressBar
-	if stderrIsTTY {
+	if tui.ProgressBarsEnabled() {
 		bar = progressbar.DefaultBytes(resp.ContentLength, filename)
 		dst = io.MultiWriter(outFile, bar)
 	}
