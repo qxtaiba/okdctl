@@ -196,7 +196,7 @@ scaffolding the internal code already holds."
 ### Theme C — observability, error messages, logging
 
 #### N8 — Step timing + per-step deploy summary
-- **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/n8-step-timing
+- **Status:** in review — PR #64
 - **Category:** feature-gap
 - **State:** scaffolding exists
 - **Effort:** hours
@@ -251,7 +251,7 @@ scaffolding the internal code already holds."
 - **Depends on:** none.
 
 #### N23 — HTTP error surface: include URL + response snippet
-- **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/n23-http-error-context
+- **Status:** in review — PR #62
 - **Category:** polish
 - **State:** scaffolding exists
 - **Effort:** hours
@@ -349,7 +349,7 @@ scaffolding the internal code already holds."
 - **Depends on:** U4 (exit code 2 for plan failure).
 
 #### M4 — OKD release URL override
-- **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/m4-okd-release-url
+- **Status:** in review — PR #61
 - **Category:** feature-gap
 - **State:** not started
 - **Effort:** hours
