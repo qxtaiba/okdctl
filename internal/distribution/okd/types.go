@@ -26,15 +26,15 @@ const (
 type NodeStatus struct {
 	Name       string
 	Role       phase.NodeRole
-	Status     string
+	Status     phase.NodeStatusPhase
 	Version    string
 	InternalIP string
 	Conditions []Condition
 }
 
 type Condition struct {
-	Type    string
-	Status  string
+	Type    phase.ConditionType
+	Status  phase.ConditionStatus
 	Reason  string
 	Message string
 }

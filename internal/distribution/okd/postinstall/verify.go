@@ -43,7 +43,8 @@ func parseNodeReadiness(payload []byte) (ready, total int, err error) {
 	for _, node := range n.Items {
 		total++
 		for _, cond := range node.Status.Conditions {
-			if cond.Type == "Ready" && cond.Status == "True" {
+			if phase.ConditionType(cond.Type) == phase.ConditionTypeReady &&
+				phase.ConditionStatus(cond.Status) == phase.ConditionStatusTrue {
 				ready++
 				break
 			}
@@ -75,7 +76,7 @@ func (p *Phase) VerifyClusterHealth(ctx context.Context, _ *Options) (*ClusterHe
 	for _, line := range lines {
 		fields := strings.Fields(line)
 		if len(fields) >= 5 {
-			if fields[4] == "True" { // DEGRADED column
+			if phase.ConditionStatus(fields[4]) == phase.ConditionStatusTrue { // DEGRADED column
 				result.DegradedOperators++
 				p.Log.Warn(fmt.Sprintf("cluster: operator %s is degraded", fields[0]))
 			}
