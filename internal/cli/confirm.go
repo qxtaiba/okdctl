@@ -8,6 +8,8 @@ import (
 	"context"
 	"os"
 	"strings"
+
+	"golang.org/x/term"
 )
 
 // promptForConfirmation reads a y/N answer from stdin with context awareness.
@@ -21,6 +23,9 @@ import (
 // a bounded leak scoped to the lifetime of the parent process, not a true
 // resource leak.
 func promptForConfirmation(ctx context.Context, prompt string) (bool, error) {
+	if !term.IsTerminal(int(os.Stdin.Fd())) { //nolint:gosec // G115: Fd() returns uintptr; always fits in int on supported platforms
+		return false, nil
+	}
 	_, _ = os.Stdout.WriteString(prompt)
 
 	inputCh := make(chan string, 1)

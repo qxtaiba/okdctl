@@ -18,6 +18,7 @@ var (
 	deployOutputFile     string
 	deployMinimal        bool
 	deployNonInteractive bool
+	deployYes            bool
 )
 
 var deployCmd = &cobra.Command{
@@ -31,10 +32,14 @@ func init() {
 	deployCmd.Flags().StringVarP(&deployOutputFile, "output", "o", "okdctl.yaml", "output file for configuration")
 	deployCmd.Flags().BoolVar(&deployMinimal, "minimal", false, "use minimal defaults (single-node cluster)")
 	deployCmd.Flags().BoolVar(&deployNonInteractive, "non-interactive", false, "use all defaults without prompts")
+	deployCmd.Flags().BoolVarP(&deployYes, "yes", "y", false, "skip prompts, use defaults (alias for --non-interactive)")
 }
 
 func runDeploy(cmd *cobra.Command, _ []string) error {
 	ctx := cmd.Context()
+	if deployYes {
+		deployNonInteractive = true
+	}
 	configExists := false
 	var cfg *config.Config
 
