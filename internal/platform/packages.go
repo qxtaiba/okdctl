@@ -35,7 +35,7 @@ func (m *DNFManager) Install(ctx context.Context, packages []string, logger *slo
 	}
 	logger.Info(fmt.Sprintf("packages: installing %s", strings.Join(packages, ", ")))
 	args := append([]string{"install", "-y"}, packages...)
-	if err := system.RunSudo(ctx, "dnf", args...); err != nil {
+	if err := exec.CommandContext(ctx, "dnf", args...).Run(); err != nil {
 		return fmt.Errorf("dnf install failed: %w", err)
 	}
 	return nil
@@ -55,7 +55,7 @@ func (m *DNFManager) Remove(ctx context.Context, packages []string, _ *slog.Logg
 		return nil
 	}
 	args := append([]string{"remove", "-y"}, installed...)
-	return system.RunSudo(ctx, "dnf", args...)
+	return exec.CommandContext(ctx, "dnf", args...).Run()
 }
 
 func (m *DNFManager) IsInstalled(pkg string) bool {
@@ -64,7 +64,7 @@ func (m *DNFManager) IsInstalled(pkg string) bool {
 
 func (m *DNFManager) AddRepo(ctx context.Context, name, url string, logger *slog.Logger) error {
 	logger.Info(fmt.Sprintf("packages: adding repository %s", name))
-	return system.RunSudo(ctx, "dnf", "config-manager", "--add-repo", url)
+	return exec.CommandContext(ctx, "dnf", "config-manager", "--add-repo", url).Run()
 }
 
 // APTManager wraps apt-get/dpkg for Debian-family systems.
@@ -76,7 +76,7 @@ func (m *APTManager) Install(ctx context.Context, packages []string, logger *slo
 	}
 	logger.Info(fmt.Sprintf("packages: installing %s", strings.Join(packages, ", ")))
 	args := append([]string{"install", "-y"}, packages...)
-	if err := system.RunSudo(ctx, "apt-get", args...); err != nil {
+	if err := exec.CommandContext(ctx, "apt-get", args...).Run(); err != nil {
 		return fmt.Errorf("apt-get install failed: %w", err)
 	}
 	return nil
@@ -96,7 +96,7 @@ func (m *APTManager) Remove(ctx context.Context, packages []string, _ *slog.Logg
 		return nil
 	}
 	args := append([]string{"remove", "-y"}, installed...)
-	return system.RunSudo(ctx, "apt-get", args...)
+	return exec.CommandContext(ctx, "apt-get", args...).Run()
 }
 
 func (m *APTManager) IsInstalled(pkg string) bool {
@@ -128,10 +128,10 @@ func (m *APTManager) AddRepo(ctx context.Context, name, url string, logger *slog
 	}
 	defer func() { _ = os.Remove(tmpPath) }()
 
-	if err := system.CopyFileWithElevation(ctx, tmpPath, listPath, "add apt repository"); err != nil {
+	if err := system.CopyFile(tmpPath, listPath); err != nil {
 		return fmt.Errorf("failed to install repo list: %w", err)
 	}
-	return system.RunSudo(ctx, "apt-get", "update")
+	return exec.CommandContext(ctx, "apt-get", "update").Run()
 }
 
 func dpkgArch(ctx context.Context) (string, error) {

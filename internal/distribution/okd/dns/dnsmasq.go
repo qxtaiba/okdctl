@@ -32,7 +32,7 @@ func RestartDnsmasq(ctx context.Context) error {
 }
 
 func ValidateDnsmasqConfig(ctx context.Context) error {
-	return system.RunSudo(ctx, "dnsmasq", "--test")
+	return exec.CommandContext(ctx, "dnsmasq", "--test").Run()
 }
 
 func validateConfigName(name string) error {
@@ -45,20 +45,20 @@ func validateConfigName(name string) error {
 	return nil
 }
 
-func WriteDnsmasqConfig(ctx context.Context, name, content string) error {
+func WriteDnsmasqConfig(_ context.Context, name, content string) error {
 	if err := validateConfigName(name); err != nil {
 		return fmt.Errorf("invalid config name: %w", err)
 	}
 
 	configPath := filepath.Join(dnsmasqConfigDir, fmt.Sprintf("%s.conf", name))
 
-	if err := system.MkdirAll(ctx, dnsmasqConfigDir, "dnsmasq config directory"); err != nil {
+	if err := os.MkdirAll(dnsmasqConfigDir, 0o755); err != nil {
 		return fmt.Errorf("failed to create dnsmasq config directory: %w", err)
 	}
 
 	if system.FileExists(configPath) {
 		backupPath := configPath + ".backup"
-		if err := system.CopyFileWithElevation(ctx, configPath, backupPath, "dnsmasq config backup"); err != nil {
+		if err := system.CopyFile(configPath, backupPath); err != nil {
 			return fmt.Errorf("failed to back up config %s: %w", configPath, err)
 		}
 	}
@@ -72,7 +72,7 @@ func WriteDnsmasqConfig(ctx context.Context, name, content string) error {
 	}
 	defer func() { _ = os.Remove(tmpPath) }()
 
-	if err := system.CopyFileWithElevation(ctx, tmpPath, configPath, "dnsmasq config"); err != nil {
+	if err := system.CopyFile(tmpPath, configPath); err != nil {
 		return fmt.Errorf("failed to copy config to %s: %w", configPath, err)
 	}
 
@@ -142,11 +142,11 @@ func ConfigureSystemResolver(ctx context.Context, fallbackDNS []string, logger *
 
 		logger.Info(fmt.Sprintf("resolver: configuring %s to use local dnsmasq", conn))
 
-		if err := system.RunSudo(ctx, "nmcli", "connection", "modify", conn, "ipv4.dns", dnsConfig, "ipv4.ignore-auto-dns", "yes"); err != nil {
+		if err := exec.CommandContext(ctx, "nmcli", "connection", "modify", conn, "ipv4.dns", dnsConfig, "ipv4.ignore-auto-dns", "yes").Run(); err != nil {
 			return fmt.Errorf("failed to configure DNS for connection: %w", err)
 		}
 
-		if err := system.RunSudo(ctx, "nmcli", "connection", "up", conn); err != nil {
+		if err := exec.CommandContext(ctx, "nmcli", "connection", "up", conn).Run(); err != nil {
 			return fmt.Errorf("failed to apply DNS configuration: %w", err)
 		}
 
@@ -160,7 +160,7 @@ func ConfigureSystemResolver(ctx context.Context, fallbackDNS []string, logger *
 		confDir := "/etc/systemd/resolved.conf.d"
 		confPath := confDir + "/dnsmasq.conf"
 		confContent := "[Resolve]\nDNS=127.0.0.1\nDomains=~.\n"
-		if err := system.MkdirAll(ctx, confDir, "create resolved.conf.d"); err != nil {
+		if err := os.MkdirAll(confDir, 0o755); err != nil {
 			return fmt.Errorf("failed to create resolved.conf.d: %w", err)
 		}
 		tmpPath, err := system.WriteTempFile("resolved-conf", 0o644, func(f *os.File) error {
@@ -171,10 +171,10 @@ func ConfigureSystemResolver(ctx context.Context, fallbackDNS []string, logger *
 			return fmt.Errorf("failed to write dnsmasq.conf: %w", err)
 		}
 		defer func() { _ = os.Remove(tmpPath) }()
-		if err := system.CopyFileWithElevation(ctx, tmpPath, confPath, "configure systemd-resolved"); err != nil {
+		if err := system.CopyFile(tmpPath, confPath); err != nil {
 			return fmt.Errorf("failed to install dnsmasq.conf: %w", err)
 		}
-		return system.RunSudo(ctx, "systemctl", "restart", "systemd-resolved")
+		return exec.CommandContext(ctx, "systemctl", "restart", "systemd-resolved").Run()
 	}
 
 	logger.Warn("dns: neither NetworkManager nor systemd-resolved found, skipping system resolver configuration")
@@ -191,11 +191,11 @@ func RestoreSystemResolver(ctx context.Context, logger *slog.Logger) error {
 
 		logger.Info(fmt.Sprintf("resolver: restoring DHCP DNS for %s", conn))
 
-		if err := system.RunSudo(ctx, "nmcli", "connection", "modify", conn, "ipv4.dns", "", "ipv4.ignore-auto-dns", "no"); err != nil {
+		if err := exec.CommandContext(ctx, "nmcli", "connection", "modify", conn, "ipv4.dns", "", "ipv4.ignore-auto-dns", "no").Run(); err != nil {
 			logger.Warn(fmt.Sprintf("resolver: failed to clear DNS settings: %v", err))
 		}
 
-		if err := system.RunSudo(ctx, "nmcli", "connection", "up", conn); err != nil {
+		if err := exec.CommandContext(ctx, "nmcli", "connection", "up", conn).Run(); err != nil {
 			logger.Warn(fmt.Sprintf("resolver: failed to apply DNS configuration: %v", err))
 		}
 
@@ -207,7 +207,7 @@ func RestoreSystemResolver(ctx context.Context, logger *slog.Logger) error {
 	const resolvedConf = "/etc/systemd/resolved.conf.d/dnsmasq.conf"
 	if system.FileExists(resolvedConf) {
 		logger.Info("resolver: removing systemd-resolved dnsmasq configuration")
-		if err := system.RemoveAll(ctx, resolvedConf, "dnsmasq resolved config"); err != nil {
+		if err := os.RemoveAll(resolvedConf); err != nil {
 			logger.Warn(fmt.Sprintf("resolver: failed to remove %s: %v", resolvedConf, err))
 		}
 		if system.IsServiceActive(ctx, "systemd-resolved") {

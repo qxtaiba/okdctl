@@ -108,7 +108,7 @@ func (p *Phase) installTerraform(ctx context.Context) error {
 		}
 	default: // rhel family
 		repoURL := "https://rpm.releases.hashicorp.com/RHEL/hashicorp.repo"
-		if err := system.RunSudo(ctx, "dnf", "config-manager", "--add-repo", repoURL); err != nil {
+		if err := exec.CommandContext(ctx, "dnf", "config-manager", "--add-repo", repoURL).Run(); err != nil {
 			return fmt.Errorf("failed to add HashiCorp repository: %w", err)
 		}
 	}
@@ -174,14 +174,14 @@ func (p *Phase) installBinary(ctx context.Context, spec binaryInstallSpec) error
 	return nil
 }
 
-func installBinaryToPath(ctx context.Context, srcPath, name string) error {
+func installBinaryToPath(_ context.Context, srcPath, name string) error {
 	destPath := filepath.Join(phase.DefaultBinDir, name)
 
-	if err := system.CopyFileWithElevation(ctx, srcPath, destPath, fmt.Sprintf("install %s", name)); err != nil {
+	if err := system.CopyFile(srcPath, destPath); err != nil {
 		return fmt.Errorf("failed to copy %s to %s: %w", name, phase.DefaultBinDir, err)
 	}
 
-	if err := system.Chmod(ctx, destPath, "+x", fmt.Sprintf("make %s executable", name)); err != nil {
+	if err := system.MakeExecutable(destPath); err != nil {
 		return fmt.Errorf("failed to set executable permissions on %s: %w", name, err)
 	}
 
@@ -214,7 +214,7 @@ func installHashiCorpDebianRepo(ctx context.Context) error {
 	}
 	defer func() { _ = os.Remove(gpgTmp) }()
 
-	if err := system.RunSudo(ctx, "gpg", "--dearmor", "-o", gpgPath, gpgTmp); err != nil {
+	if err := exec.CommandContext(ctx, "gpg", "--dearmor", "-o", gpgPath, gpgTmp).Run(); err != nil {
 		return fmt.Errorf("failed to dearmor HashiCorp GPG key: %w", err)
 	}
 
@@ -236,8 +236,8 @@ func installHashiCorpDebianRepo(ctx context.Context) error {
 	}
 	defer func() { _ = os.Remove(listTmp) }()
 
-	if err := system.CopyFileWithElevation(ctx, listTmp, listPath, "add hashicorp repository"); err != nil {
+	if err := system.CopyFile(listTmp, listPath); err != nil {
 		return fmt.Errorf("failed to install HashiCorp repo list: %w", err)
 	}
-	return system.RunSudo(ctx, "apt-get", "update")
+	return exec.CommandContext(ctx, "apt-get", "update").Run()
 }
