@@ -7,6 +7,19 @@ template, provision VMs). Phases are orchestrated by shared infrastructure
 so each phase implementation only has to declare *what* happens, not *how*
 it's sequenced, logged, skipped, or rolled back.
 
+Phase flow:
+
+```mermaid
+flowchart LR
+    S([start]) --> setup
+    setup --> install
+    install --> postinstall
+    postinstall --> E([done])
+
+    destroy --> cleanup
+    cleanup --> F([destroyed])
+```
+
 ## The contract
 
 Every phase follows the same contract:

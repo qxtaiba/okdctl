@@ -123,6 +123,25 @@ answer is usually "your step is too complex — split it" rather than
 If the user hits escape, state is **not** discarded — it's preserved
 in the step's field values so they can come back and tweak.
 
+Wizard step flow:
+
+```mermaid
+flowchart TD
+    welcome --> distribution
+    distribution --> proxmox
+    proxmox --> basics
+    basics --> node-placement
+    node-placement -->|"provider == proxmox"| networking
+    node-placement -->|"provider != proxmox\n(skipped)"| networking
+    networking --> resources
+    resources --> addons
+    addons --> files
+    files -->|"distribution == okd"| advanced
+    files -->|"distribution != okd\n(skipped)"| advanced
+    advanced --> review
+    review --> E([complete])
+```
+
 ## Why not huh / survey / promptui?
 
 We looked at the Charmbracelet `huh` library and decided to skip it.
