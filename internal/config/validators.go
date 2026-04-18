@@ -380,16 +380,18 @@ func isValidNetmask(s string) bool {
 		_, err := netip.ParsePrefix("0.0.0.0" + s)
 		return err == nil
 	}
-	ip := net.ParseIP(s)
-	if ip == nil {
+	addr, err := netip.ParseAddr(s)
+	if err != nil || !addr.Is4() {
 		return false
 	}
-	ip4 := ip.To4()
-	if ip4 == nil {
-		return false
-	}
-	ones, bits := net.IPMask(ip4).Size()
-	return bits != 0 && ones >= 0
+	octets := addr.As4()
+	mask := uint32(octets[0])<<24 | uint32(octets[1])<<16 | uint32(octets[2])<<8 | uint32(octets[3])
+	// A canonical netmask is N contiguous 1 bits followed by (32-N) zeros.
+	// ^mask + 1 sets only the lowest zero-bit; a contiguous mask is a power
+	// of two in (^mask + 1), equivalently (~m & (~m+1)) == (~m+1). We allow
+	// the all-ones mask (255.255.255.255) where ~m is zero.
+	inverted := ^mask
+	return inverted == 0 || (inverted&(inverted+1)) == 0
 }
 
 func isValidDistribution(d DistributionType) bool {

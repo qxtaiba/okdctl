@@ -2,22 +2,28 @@ package netutil
 
 import (
 	"fmt"
-	"net"
 	"net/netip"
 )
 
 const DefaultVIPLastOctet = 10
 
+// CIDRToNetmask converts an IPv4 CIDR like "192.168.1.0/24" to its dotted
+// netmask form "255.255.255.0" as consumed by HAProxy and dnsmasq templates.
+// IPv6 CIDRs are rejected because downstream templates are IPv4-only.
 func CIDRToNetmask(cidr string) (string, error) {
-	_, network, err := net.ParseCIDR(cidr)
+	prefix, err := netip.ParsePrefix(cidr)
 	if err != nil {
 		return "", fmt.Errorf("invalid CIDR %q: %w", cidr, err)
 	}
-	if ip4 := network.IP.To4(); ip4 == nil {
+	if !prefix.Addr().Is4() {
 		return "", fmt.Errorf("IPv6 CIDR not supported: %q", cidr)
 	}
-	mask := network.Mask
-	return fmt.Sprintf("%d.%d.%d.%d", mask[0], mask[1], mask[2], mask[3]), nil
+	bits := prefix.Bits()
+	var mask uint32
+	if bits > 0 {
+		mask = ^uint32(0) << (32 - bits)
+	}
+	return fmt.Sprintf("%d.%d.%d.%d", byte(mask>>24), byte(mask>>16), byte(mask>>8), byte(mask)), nil
 }
 
 func ValidateIPRangeInCIDR(startIP string, count int, cidr string) error {
@@ -80,21 +86,22 @@ func CalculateVMIP(startIP string, index int) (string, error) {
 // back to DeriveVIPFromStaticIP which uses the .10 last octet convention.
 func ResolveVIP(explicitVIP, staticIPStart string) (string, error) {
 	if explicitVIP != "" {
-		if net.ParseIP(explicitVIP) == nil {
+		addr, err := netip.ParseAddr(explicitVIP)
+		if err != nil || !addr.Is4() {
 			return "", fmt.Errorf("invalid VIP address: %s", explicitVIP)
 		}
-		return explicitVIP, nil
+		return addr.String(), nil
 	}
 	return DeriveVIPFromStaticIP(staticIPStart)
 }
 
 func DeriveVIPFromStaticIP(staticIPStart string) (string, error) {
-	ip := net.ParseIP(staticIPStart)
-	if ip == nil || ip.To4() == nil {
+	addr, err := netip.ParseAddr(staticIPStart)
+	if err != nil || !addr.Is4() {
 		return "", fmt.Errorf("invalid IPv4 address %q", staticIPStart)
 	}
-	ip4 := ip.To4()
-	return fmt.Sprintf("%d.%d.%d.%d", ip4[0], ip4[1], ip4[2], DefaultVIPLastOctet), nil
+	octets := addr.As4()
+	return fmt.Sprintf("%d.%d.%d.%d", octets[0], octets[1], octets[2], DefaultVIPLastOctet), nil
 }
 
 func IPInCIDR(ip, cidr string) (bool, error) {
