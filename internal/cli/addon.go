@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -29,8 +30,9 @@ var addonListCmd = &cobra.Command{
 }
 
 var addonInstallCmd = &cobra.Command{
-	Use:   "install [name]",
-	Short: "Install one addon (or all enabled addons with --all)",
+	Use:         "install [name]",
+	Short:       "Install one addon (or all enabled addons with --all)",
+	Annotations: map[string]string{"requiresRoot": "true"},
 	Long: `Install an addon onto the live cluster.
 
 install <name>  installs the named addon and its transitive dependencies.
@@ -58,8 +60,9 @@ install --all   installs every addon enabled in the configuration file in
 }
 
 var addonUninstallCmd = &cobra.Command{
-	Use:   "uninstall <name>",
-	Short: "Uninstall a named addon",
+	Use:         "uninstall <name>",
+	Short:       "Uninstall a named addon",
+	Annotations: map[string]string{"requiresRoot": "true"},
 	Long: `Remove an addon from the cluster.
 
 Uninstall is blocked when any other enabled addon transitively depends on the
@@ -121,7 +124,7 @@ func runAddonUninstall(cmd *cobra.Command, args []string) error {
 	if err := mgr.Uninstall(cmd.Context(), args[0]); err != nil {
 		return err
 	}
-	fmt.Fprintf(cmd.OutOrStdout(), "addon %s uninstalled\n", args[0])
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "addon %s uninstalled\n", args[0])
 	return nil
 }
 
@@ -134,12 +137,50 @@ func runAddonVerify(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
-	mgr := newAddonManager(cfg, projectRoot)
-	if err := mgr.VerifyAll(cmd.Context()); err != nil {
-		return err
+	exec := executor.New(executor.WithWorkDir(projectRoot))
+	logger := tui.SimpleLogger()
+
+	enabled := addon.Enabled(cfg)
+	if len(enabled) == 0 {
+		_, _ = fmt.Fprintln(cmd.OutOrStdout(), "no addons enabled")
+		return nil
 	}
-	fmt.Fprintln(cmd.OutOrStdout(), "all enabled addons verified successfully")
-	return nil
+
+	type row struct {
+		name   string
+		status string
+	}
+	rows := make([]row, 0, len(enabled))
+	var errs []error
+
+	for _, a := range enabled {
+		if ctxErr := cmd.Context().Err(); ctxErr != nil {
+			return ctxErr
+		}
+		info := a.Info()
+		ac := cfg.Addons[info.Name]
+		env := &addon.Environment{
+			AddonConfig: ac,
+			Exec:        exec,
+			Logger:      logger,
+			ProjectRoot: projectRoot,
+		}
+		if vErr := a.Verify(cmd.Context(), env); vErr != nil {
+			rows = append(rows, row{name: info.Name, status: "FAIL: " + vErr.Error()})
+			errs = append(errs, fmt.Errorf("addon %s verify failed: %w", info.Name, vErr))
+		} else {
+			rows = append(rows, row{name: info.Name, status: "OK"})
+		}
+	}
+
+	tw := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
+	_, _ = fmt.Fprintln(tw, "NAME\tSTATUS")
+	for _, r := range rows {
+		_, _ = fmt.Fprintf(tw, "%s\t%s\n", r.name, r.status)
+	}
+	_ = tw.Flush()
+
+	return errors.Join(errs...)
 }
 
 func newAddonManager(cfg *config.Config, projectRoot string) *addon.Manager {
@@ -154,7 +195,7 @@ func printAddonList(w io.Writer, cfg *config.Config) error {
 		return err
 	}
 	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(tw, "NAME\tDISPLAY-NAME\tDEPS\tENABLED")
+	_, _ = fmt.Fprintln(tw, "NAME\tDISPLAY-NAME\tDEPS\tCONFIG-ENABLED")
 	for _, a := range all {
 		info := a.Info()
 		deps := "-"
@@ -162,7 +203,11 @@ func printAddonList(w io.Writer, cfg *config.Config) error {
 			deps = strings.Join(info.Dependencies, ",")
 		}
 		ac := cfg.Addons[info.Name]
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", info.Name, info.DisplayName, deps, yesNo(ac.Enabled))
+		_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", info.Name, info.DisplayName, deps, yesNo(ac.Enabled))
 	}
-	return tw.Flush()
+	if err := tw.Flush(); err != nil {
+		return err
+	}
+	_, _ = fmt.Fprintln(w, "\nCONFIG-ENABLED reflects the configuration file only. Run 'addon verify' for live cluster state.")
+	return nil
 }
