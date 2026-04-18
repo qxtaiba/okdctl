@@ -13,9 +13,16 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/schollz/progressbar/v3"
+	"golang.org/x/term"
+
 	"github.com/qxtaiba/okdctl/internal/httputil"
 	"github.com/qxtaiba/okdctl/internal/logutil"
 )
+
+// stderrIsTTY gates progress-bar rendering. When the process is piped or
+// run in CI, we skip the bar so logs don't fill with carriage-return spam.
+var stderrIsTTY = term.IsTerminal(int(os.Stderr.Fd()))
 
 type Options struct {
 	URL              string
@@ -111,22 +118,22 @@ func Download(ctx context.Context, opts *Options) error {
 	}
 	defer func() { _ = outFile.Close() }()
 
-	pw := &progressWriter{
-		writer: outFile,
-		total:  resp.ContentLength,
-		isTTY:  stdoutIsTTY,
+	dst := io.Writer(outFile)
+	var bar *progressbar.ProgressBar
+	if stderrIsTTY {
+		bar = progressbar.DefaultBytes(resp.ContentLength, filename)
+		dst = io.MultiWriter(outFile, bar)
 	}
-
-	_, err = io.Copy(pw, resp.Body)
-	if err != nil {
-		pw.stop()
-		if stdoutIsTTY {
-			fmt.Print("\n")
+	if _, err := io.Copy(dst, resp.Body); err != nil {
+		if bar != nil {
+			_ = bar.Exit()
 		}
 		_ = os.Remove(opts.OutputPath)
 		return fmt.Errorf("failed to write file: %w", err)
 	}
-	pw.finish()
+	if bar != nil {
+		_ = bar.Finish()
+	}
 
 	if err := outFile.Sync(); err != nil {
 		_ = os.Remove(opts.OutputPath)

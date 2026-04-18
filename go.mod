@@ -10,6 +10,7 @@ require (
 	charm.land/lipgloss/v2 v2.0.2
 	github.com/cenkalti/backoff/v4 v4.3.0
 	github.com/joho/godotenv v1.5.1
+	github.com/schollz/progressbar/v3 v3.19.0
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/viper v1.21.0
 	golang.org/x/term v0.42.0
@@ -38,6 +39,7 @@ require (
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/lucasb-eyer/go-colorful v1.3.0 // indirect
 	github.com/mattn/go-runewidth v0.0.21 // indirect
+	github.com/mitchellh/colorstring v0.0.0-20190213212951-d06e56a500db // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.3-0.20250322232337-35a7c28c31ee // indirect
 	github.com/muesli/cancelreader v0.2.2 // indirect
