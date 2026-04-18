@@ -15,6 +15,7 @@ import (
 
 	"github.com/schollz/progressbar/v3"
 
+	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/httputil"
 	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/tui"
@@ -98,7 +99,7 @@ func Download(ctx context.Context, opts *Options) error {
 	})
 	if err != nil {
 		opts.logger().Error(fmt.Sprintf("download: giving up on %s after %d attempt(s): %v", opts.Description, attempts, err))
-		return fmt.Errorf("download failed for %s: %w", opts.Description, err)
+		return &errtypes.NetworkError{Msg: fmt.Sprintf("download failed for %s", opts.Description), Err: err}
 	}
 
 	if err := verifyDownloadedFile(opts.OutputPath, opts.ExpectedChecksum, opts.logger()); err != nil {

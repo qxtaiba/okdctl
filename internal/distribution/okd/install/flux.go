@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
@@ -18,7 +19,7 @@ func (p *Phase) ValidateClusterAccess(ctx context.Context) error {
 
 	result, err := cmdRunner.RunChecked(ctx, "oc", "whoami")
 	if err != nil {
-		return fmt.Errorf("failed to run oc whoami: %w", err)
+		return &errtypes.ClusterError{Msg: "failed to run oc whoami", Err: err}
 	}
 
 	user := strings.TrimSpace(result.Stdout)
