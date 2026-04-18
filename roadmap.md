@@ -72,21 +72,6 @@ Theme D (wizard) → Theme F (errors/types) → remaining themes in parallel.
 
 ### Theme A — urgent correctness bugs
 
-#### U1 — Cleanup phase leaves FCOS ISO cache
-- **Status:** not started
-- **Category:** urgent-bugfix
-- **State:** partially done
-- **Effort:** hours
-- **Impact:** large
-- **Evidence:** `internal/distribution/okd/cleanup/artifacts.go:84,86,89`
-  already removes `downloads/` and `custom-isos/`, but skips the FCOS ISO
-  cache directory. Stale 500 MB–2 GB per deploy blocks re-deploy on the
-  same host.
-- **Acceptance:** cleanup removes the FCOS ISO cache path the way it
-  removes `downloads/`. No orphan `*.iso` in the cache after
-  `okdctl destroy`. Cleanup honours `refuseCriticalPath` guard.
-- **Depends on:** none.
-
 #### U2 — Wizard never sets `Provider.Type`
 - **Status:** not started
 - **Category:** urgent-bugfix
@@ -127,19 +112,6 @@ Theme D (wizard) → Theme F (errors/types) → remaining themes in parallel.
   cluster=4, auth=5, other=1). `main()` switches on typed error from M13.
 - **Depends on:** M13 (typed error hierarchy) lands first or in parallel.
 
-#### U5 — `cmd.Run()` without `CommandContext` in two sites
-- **Status:** not started
-- **Category:** urgent-bugfix
-- **State:** scaffolding exists
-- **Effort:** hours
-- **Impact:** medium
-- **Evidence:** `internal/distribution/okd/setup/tools.go:92` (tool install)
-  and `internal/system/elevation.go:146` (sudo check) use bare `cmd.Run()`;
-  SIGINT does not propagate.
-- **Acceptance:** both sites use `exec.CommandContext(ctx, ...)`. Ctrl-C
-  during tool install or sudo probe terminates the subprocess.
-- **Depends on:** none.
-
 #### U6 — `BuildOpaqueSecret` panics on YAML marshal error
 - **Status:** in progress — worktree: .worktrees/u6-buildopaquesecret-error
 - **Category:** urgent-bugfix
@@ -151,6 +123,33 @@ Theme D (wizard) → Theme F (errors/types) → remaining themes in parallel.
 - **Acceptance:** `BuildOpaqueSecret` returns `(string, error)`; all
   callers propagate. No package-level panic in addon init paths.
 - **Depends on:** none.
+
+#### U1b — Clean remote Proxmox FCOS ISO on destroy
+- **Status:** not started
+- **Category:** urgent-bugfix
+- **State:** not started
+- **Effort:** days
+- **Impact:** medium
+- **Evidence:** `internal/distribution/okd/setup/coreos.go:19` defines
+  `DefaultProxmoxISODir = "/var/lib/vz/template/iso"`. ISOs are uploaded
+  via SSH at `internal/distribution/okd/setup/upload.go:86` but never
+  removed during `destroy` or `cleanup`. Each deploy leaves
+  500 MB–2 GB on the Proxmox host. Supersedes the closed U1 (the
+  audit conflated the local `downloads/` cache — which is already
+  cleaned by `internal/distribution/okd/cleanup/artifacts.go:84,92` —
+  with the remote Proxmox ISO dir, which is the real gap).
+- **Acceptance:** destroy (and `okdctl cleanup` once N4 lands) removes
+  `fedora-coreos-*.iso` from `DefaultProxmoxISODir` on the Proxmox host,
+  reusing the SSH plumbing from `upload.go`. Before removal: check
+  `pvesh get /nodes/<node>/qemu` (or the equivalent
+  `luthermonson/go-proxmox` call) to confirm no running VM references
+  the ISO; skip with a warning if one does. New `--keep-isos` flag on
+  `destroy` preserves the ISO for users chaining deploys. Honours
+  `refuseCriticalPath` semantics — the removal path must pass through
+  `SafeRemoveWithLogger` or an SSH-equivalent safety check before
+  the rm runs.
+- **Depends on:** none. (N4 would let `okdctl cleanup` invoke the same
+  logic standalone; not a blocker.)
 
 ### Theme B — CLI subcommand expansion
 
@@ -717,15 +716,39 @@ Also skipped by design (documented in audit, not user-driven):
 - Hardcoded k8s ports (6443, 22623) — OKD spec-level; configurability
   would break installer assumptions.
 
+## Completed
+
+Items that have reached `done` status, ordered by close date. New
+entries land here when a PR merges, or when an item is closed without
+code (audit error, done-by-prior-work). Keep the explanation terse
+but link evidence.
+
+- **U1 — Cleanup phase leaves FCOS ISO cache** — closed 2026-04-18 as
+  audit error; no code change required. Local `downloads/` cache is
+  already removed by `internal/distribution/okd/cleanup/artifacts.go:84,92`
+  in both `preserveConfig` branches. The real gap — remote Proxmox
+  ISO cleanup — is now tracked as **U1b**.
+- **U5 — `cmd.Run()` without `CommandContext` in two sites** — closed
+  2026-04-18 as done-by-prior-work. Both sites already use
+  `exec.CommandContext(ctx, ...)`: `internal/distribution/okd/setup/tools.go`
+  builds every cmd with `CommandContext` across lines 112/193/210/223/227/248,
+  and `internal/system/elevation.go:142` constructs its cmd via
+  `exec.CommandContext(ctx, "sudo", "-n", "true")` — the `cmd.Run()` at
+  line 146 is the method call on that ctx-aware cmd (the audit misread
+  it). Fix landed as a side-effect of commit `65d8fce refactor(platform):
+  thread ctx through PackageManager and tool version lookup`
+  (elevation-refactor-and-hardening plan).
+
 ## Appendix — full item ledger
 
 | ID | Item | Disposition |
 |---|---|---|
-| U1 | Cleanup leaves FCOS ISO cache | Sprint 1 |
+| U1 | Cleanup leaves FCOS ISO cache | **Done** (audit error — see Completed) |
+| U1b | Clean remote Proxmox FCOS ISO on destroy | Sprint 1 |
 | U2 | Wizard never sets `Provider.Type` | Sprint 1 |
 | U3 | HTTP downloads no retry | Sprint 1 |
 | U4 | Exit codes only 0/1/130 | Sprint 1 |
-| U5 | `cmd.Run()` without ctx (2 sites) | Sprint 1 |
+| U5 | `cmd.Run()` without ctx (2 sites) | **Done** (landed in 65d8fce — see Completed) |
 | U6 | `BuildOpaqueSecret` panic | Sprint 1 |
 | N1 | `okdctl addon list/install/uninstall/verify` | Sprint 1 |
 | N2 | `okdctl releases list/show` | Sprint 1 |
