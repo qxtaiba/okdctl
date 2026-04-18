@@ -157,6 +157,40 @@ func PostDeploySummary(cfg *config.Config, result *postinstall.Result, steps []d
 	return "\n" + tui.BoxedSectionCompact(sb.String(), "deployment complete", tui.DefaultBoxWidth) + "\n"
 }
 
+// InterruptSummary renders a partial-progress box for a Ctrl-C interruption.
+// steps is whatever the orchestrator completed before cancellation;
+// resumeCmd is the exact command the user should re-run (e.g. "okdctl deploy").
+func InterruptSummary(steps []distribution.StepResult, resumeCmd string) string {
+	sb := newSummaryBuilder()
+	sb.b.WriteString("\n")
+	sb.b.WriteString("  " + tui.WarningStyle.Render("interrupted") + "\n")
+	sb.newline()
+
+	if len(steps) > 0 {
+		sb.section("partial progress")
+		for _, s := range steps {
+			var status string
+			switch {
+			case s.Skipped:
+				status = "skip"
+			case s.Success:
+				status = "ok"
+			default:
+				status = "fail"
+			}
+			d := s.Duration.Truncate(time.Millisecond).String()
+			sb.kv(string(s.StepID), fmt.Sprintf("%-4s  %s", status, d))
+		}
+		sb.newline()
+	}
+
+	sb.section("resume")
+	sb.b.WriteString("    " + tui.CodeInlineStyle.Render(resumeCmd) + "\n")
+	sb.newline()
+
+	return "\n" + tui.BoxedSectionCompact(sb.String(), "interrupted", tui.DefaultBoxWidth) + "\n"
+}
+
 func UpdateIngressSummary(result *postinstall.UpdateIngressResult) string {
 	sb := newSummaryBuilder()
 	sb.newline()
