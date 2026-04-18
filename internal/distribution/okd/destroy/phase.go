@@ -42,6 +42,10 @@ type Options struct {
 	// RemovePackages removes system packages installed during setup.
 	// When true, packages like haproxy, httpd, dnsmasq, etc. will be uninstalled.
 	RemovePackages bool
+
+	// KeepISOs skips removal of fedora-coreos-*.iso from the Proxmox host.
+	// Useful when chaining a destroy with an immediate re-deploy.
+	KeepISOs bool
 }
 
 func NewOptions(cfg *config.Config, projectRoot string) Options {

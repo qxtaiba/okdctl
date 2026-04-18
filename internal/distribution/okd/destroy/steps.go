@@ -3,16 +3,20 @@ package destroy
 import (
 	"context"
 	"fmt"
+	"net"
+	"strings"
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/distribution"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/cleanup"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/firewall"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
+	"github.com/qxtaiba/okdctl/internal/distribution/okd/setup"
 )
 
 const (
 	StepDestroyInfra    distribution.StepID = "destroy-infrastructure"
+	StepRemoveRemoteISO distribution.StepID = "remove-remote-iso"
 	StepCleanupFiles    distribution.StepID = "cleanup-files"
 	StepCleanupFirewall distribution.StepID = "cleanup-firewall"
 	StepPrintSummary    distribution.StepID = "print-summary"
@@ -38,6 +42,23 @@ func (p *Phase) destroySteps(cfg *config.Config, opts *Options) []distribution.S
 					p.Log.Warn("terraform: file cleanup will be skipped unless --force is used")
 				}
 			},
+		},
+		{
+			ID: StepRemoveRemoteISO, Name: "remove remote ISO",
+			Desc:       "removing fedora-coreos iso from proxmox host",
+			NonFatal:   true,
+			SkipWhen:   func() bool { return opts.KeepISOs || cfg.Provider.Proxmox == nil },
+			SkipReason: isoSkipReason(opts, cfg),
+			Exec: func(ctx context.Context) error {
+				params := &phase.RemoteISOParams{
+					Host: proxmoxBareHost(cfg.Provider.Proxmox.Host),
+					Node: cfg.Provider.Proxmox.Node,
+					Exec: p.Exec,
+					Log:  p.Log,
+				}
+				return phase.RemoveFCOSISOFromProxmox(ctx, params, setup.DefaultProxmoxISODir)
+			},
+			OnError: phase.WarnOnError(p.Log, "iso: remote removal incomplete"),
 		},
 		{
 			ID: StepCleanupFiles, Name: "cleanup files",
@@ -101,4 +122,30 @@ func cleanupFilesSkipReason(opts *Options) string {
 		return "cleanup disabled"
 	}
 	return "no cleanup type specified"
+}
+
+func isoSkipReason(opts *Options, cfg *config.Config) string {
+	if opts.KeepISOs {
+		return "iso removal skipped via --keep-isos"
+	}
+	if cfg.Provider.Proxmox == nil {
+		return "no proxmox provider configured"
+	}
+	return ""
+}
+
+// proxmoxBareHost strips any port suffix from the host so it can be passed to
+// ssh. Proxmox hosts in config may appear as "host:8006".
+func proxmoxBareHost(host string) string {
+	if strings.Contains(host, ":") {
+		h, _, err := net.SplitHostPort(host)
+		if err == nil {
+			return h
+		}
+	}
+	// Strip scheme if present (e.g. "https://host")
+	if idx := strings.Index(host, "://"); idx != -1 {
+		host = host[idx+3:]
+	}
+	return host
 }
