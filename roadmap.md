@@ -86,18 +86,6 @@ Theme D (wizard) → Theme F (errors/types) → remaining themes in parallel.
   end-to-end without manual YAML edit.
 - **Depends on:** none.
 
-#### U4 — Exit codes collapse everything to 0/1/130
-- **Status:** in review — PR #70
-- **Category:** urgent-bugfix
-- **State:** not started
-- **Effort:** hours (plus M13 for the typed-error plumbing)
-- **Impact:** large
-- **Evidence:** `internal/cli/root.go:55,64,67` exits 0, 1, or 130. CI
-  cannot distinguish config error vs network error vs cluster failure.
-- **Acceptance:** documented exit-code table (config=2, network=3,
-  cluster=4, auth=5, other=1). `main()` switches on typed error from M13.
-- **Depends on:** M13 (typed error hierarchy) lands first or in parallel.
-
 #### U1b — Clean remote Proxmox FCOS ISO on destroy
 - **Status:** in review — PR #54
 - **Category:** urgent-bugfix
@@ -307,19 +295,43 @@ scaffolding the internal code already holds."
 
 ### Theme F — error types, exit codes, correctness
 
-#### M13 — Typed error hierarchy
-- **Status:** in review — PR #70
-- **Category:** feature-gap
-- **State:** not started
+#### M13b — Complete errtypes migration across phase code
+- **Status:** not started
+- **Category:** refactor
+- **State:** partially done
 - **Effort:** days
 - **Impact:** medium
-- **Acceptance:** new package `internal/errtypes/` (or extension of
-  `internal/config.ValidationError`) defines `ConfigError`,
-  `NetworkError`, `ClusterError`, `AuthError`. Phase code wraps
-  returned errors with the right type. `internal/cli/root.go` uses
-  `errors.As` to pick exit code. Documented in CONTRIBUTING when that
-  lands.
-- **Depends on:** U4 (pairs with exit-code work).
+- **Evidence:** M13 (PR #70) introduced `internal/errtypes` and wrapped
+  five exemplar sites (`loadConfig`, `Download`, `ValidateClusterAccess`,
+  `ensureRoot`, `.env` insecure-perms check). Every other `fmt.Errorf`
+  site across `internal/distribution/okd/{setup,install,postinstall,
+  destroy,cleanup}`, `internal/distribution/proxmox/`, `internal/addon/`,
+  and remaining credentials / wizard-validation paths still bubbles up
+  as an untyped error — U4's exit-code dispatch therefore falls through
+  to exit 1 for the majority of real failures today.
+- **Acceptance:** each exported phase/addon function that returns an
+  error wraps the leaf error in the appropriate `errtypes.*` type.
+  Sites to cover:
+  - `internal/distribution/okd/setup/*.go` (tool install, artifact
+    fetch, ISO upload — NetworkError / ConfigError / AuthError as
+    appropriate).
+  - `internal/distribution/okd/install/*.go` (oc/kubectl commands,
+    bootstrap wait, manifest apply — ClusterError).
+  - `internal/distribution/okd/postinstall/*.go` (addon install,
+    resource apply — ClusterError).
+  - `internal/distribution/okd/{destroy,cleanup}/*.go` (terraform
+    destroy, remote SSH cleanup — ClusterError / NetworkError).
+  - `internal/distribution/proxmox/*.go` (API calls, token resolution
+    — NetworkError / AuthError).
+  - `internal/credentials/*.go` remaining sites — AuthError.
+  - `internal/addon/manager.go` error returns — ClusterError for
+    apply/verify failures, ConfigError for settings validation.
+  Spot-checks after migration:
+  `okdctl deploy --config /nonexistent.yaml` returns exit 2; a network
+  failure during download returns exit 3; an `oc` failure during
+  install returns exit 4. Keep the sweep a single PR so the diff is
+  reviewable as one conceptual change.
+- **Depends on:** M13 (PR #70) — must be `done` so the types exist.
 
 #### M12 — Generalize SecretStore beyond 1Password
 - **Status:** not started
@@ -684,6 +696,28 @@ but link evidence.
   only on exit 0, so error paths stay clean. Non-2xx responses,
   non-semver current version, and cache I/O errors all fail silently
   via `slog.Debug`.
+- **M13 — Typed error hierarchy** — done PR #70, merged 2026-04-18.
+  New `internal/errtypes` package defines `ConfigError`, `NetworkError`,
+  `ClusterError`, and `AuthError` as concrete pointer-receiver structs
+  (`Msg string`, `Err error`) with `Error()` and `Unwrap()` so
+  `errors.As`/`errors.Is` both work across the chain.
+  `WrapValidation(*config.ValidationResult) error` bridges the existing
+  validation output into `*ConfigError` without touching the
+  `ValidationResult` API. Five exemplar sites wrapped in this PR
+  (`loadConfig`, `Download`, `ValidateClusterAccess`, `ensureRoot`,
+  envfile insecure-perms check). Broader migration across remaining
+  phase/addon error returns is tracked as **M13b** so U4's dispatch
+  eventually covers every error path.
+- **U4 — Exit codes collapse everything to 0/1/130** — done PR #70,
+  merged 2026-04-18. `internal/cli/root.go:execute()` now dispatches
+  exit codes via `errors.As` against the `internal/errtypes` types:
+  `ConfigError`=2, `NetworkError`=3, `ClusterError`=4, `AuthError`=5,
+  other=1. SIGINT/SIGTERM still return 130 via the existing
+  `ctx.Err()` guard. The exit-code table is documented in the
+  `internal/cli` package doc (authoritative for operators and CI
+  scripts); the `internal/errtypes` package doc mirrors the same
+  mapping from the type-producer side. Coverage is partial until
+  M13b lands — sites not yet wrapped fall through to exit 1.
 
 ## Appendix — full item ledger
 
@@ -693,7 +727,7 @@ but link evidence.
 | U1b | Clean remote Proxmox FCOS ISO on destroy | Sprint 1 |
 | U2 | Wizard never sets `Provider.Type` | Sprint 1 |
 | U3 | HTTP downloads no retry | Sprint 1 |
-| U4 | Exit codes only 0/1/130 | Sprint 1 |
+| U4 | Exit codes only 0/1/130 | **Done** (PR #70) |
 | U5 | `cmd.Run()` without ctx (2 sites) | **Done** (landed in 65d8fce — see Completed) |
 | U6 | `BuildOpaqueSecret` panic | Sprint 1 |
 | N1 | `okdctl addon list/install/uninstall/verify` | Sprint 1 |
@@ -732,7 +766,8 @@ but link evidence.
 | M10 | ingress-nginx addon | Deferred (under R2) |
 | M11 | kube-prometheus-stack addon | Deferred (under R2) |
 | M12 | SecretStore multi-provider | Sprint 1 |
-| M13 | Typed error hierarchy | Sprint 1 |
+| M13 | Typed error hierarchy | **Done** (PR #70) |
+| M13b | Complete errtypes migration across phase code | Sprint 1 |
 | M14 | Correlation ID | Sprint 1 |
 | M15 | Integration test harness | Deferred |
 | M16 | Autogenerated CLI reference | Sprint 1 |
