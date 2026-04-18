@@ -1,14 +1,14 @@
 package steps
 
 import (
+	"context"
 	"crypto/tls"
-	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
-	"net/url"
 	"strings"
 	"time"
+
+	"github.com/luthermonson/go-proxmox"
 
 	"github.com/qxtaiba/okdctl/internal/config"
 )
@@ -50,30 +50,45 @@ func discoverProxmox(cfg *config.Config) (*proxmoxDiscovery, error) {
 	if cfg.Provider.Proxmox == nil {
 		return nil, fmt.Errorf("no proxmox config")
 	}
-
 	px := cfg.Provider.Proxmox
 	if px.Host == "" || px.Username == "" || px.Password == "" {
 		return nil, fmt.Errorf("missing credentials — enter host, username, and password in the proxmox step")
 	}
 
-	baseURL := buildBaseURL(px.Host)
-	client := buildHTTPClient(px.Insecure)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
 
-	ticket, err := getAuthTicket(client, baseURL, px.Username, px.Password)
+	httpClient := &http.Client{
+		Timeout: 10 * time.Second,
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: px.Insecure}, //nolint:gosec // user opted in via Insecure flag
+		},
+	}
+
+	client := proxmox.NewClient(
+		buildBaseURL(px.Host)+"/api2/json",
+		proxmox.WithHTTPClient(httpClient),
+		proxmox.WithCredentials(&proxmox.Credentials{Username: px.Username, Password: px.Password}),
+	)
+
+	rawNodes, err := client.Nodes(ctx)
 	if err != nil {
 		return nil, classifyError(err)
 	}
-
-	nodes, err := fetchNodes(client, baseURL, ticket)
-	if err != nil {
-		return nil, fmt.Errorf("fetch nodes: %w", err)
-	}
-
-	if len(nodes) == 0 {
+	if len(rawNodes) == 0 {
 		return nil, fmt.Errorf("no nodes found in cluster")
 	}
 
-	// Fetch storage and bridges from the first online node
+	nodes := make([]proxmoxNode, 0, len(rawNodes))
+	for _, n := range rawNodes {
+		nodes = append(nodes, proxmoxNode{
+			Name:   n.Node,
+			Status: n.Status,
+			CPUs:   n.MaxCPU,
+			MemGB:  int(n.MaxMem / (1024 * 1024 * 1024)), //nolint:gosec // G115: uint64→int is safe for GB-scale memory
+		})
+	}
+
 	targetNode := nodes[0].Name
 	for _, n := range nodes {
 		if n.Status == "online" {
@@ -82,14 +97,55 @@ func discoverProxmox(cfg *config.Config) (*proxmoxDiscovery, error) {
 		}
 	}
 
-	storage, _ := fetchStorage(client, baseURL, ticket, targetNode)
-	bridges, _ := fetchBridges(client, baseURL, ticket, targetNode)
+	storage, bridges := fetchNodeDetails(ctx, client, targetNode)
 
 	return &proxmoxDiscovery{
 		Nodes:   nodes,
 		Storage: storage,
 		Bridges: bridges,
 	}, nil
+}
+
+// fetchNodeDetails pulls storage + bridges from the given node. Errors are
+// swallowed to nil slices — discovery is best-effort, and a partial result
+// beats no result when one endpoint misbehaves.
+func fetchNodeDetails(ctx context.Context, client *proxmox.Client, nodeName string) ([]proxmoxStorage, []proxmoxBridge) {
+	node, err := client.Node(ctx, nodeName)
+	if err != nil {
+		return nil, nil
+	}
+
+	var storage []proxmoxStorage
+	if stores, err := node.Storages(ctx); err == nil {
+		storage = make([]proxmoxStorage, 0, len(stores))
+		for _, s := range stores {
+			if s.Enabled == 0 {
+				continue
+			}
+			storage = append(storage, proxmoxStorage{
+				Name:    s.Name,
+				Type:    s.Type,
+				Content: s.Content,
+				Enabled: s.Enabled == 1,
+				TotalGB: int(s.Total / (1024 * 1024 * 1024)), //nolint:gosec // G115: uint64→int is safe for GB-scale storage
+				UsedPct: s.UsedFraction,
+			})
+		}
+	}
+
+	var bridges []proxmoxBridge
+	if nets, err := node.Networks(ctx, "bridge"); err == nil {
+		bridges = make([]proxmoxBridge, 0, len(nets))
+		for _, n := range nets {
+			bridges = append(bridges, proxmoxBridge{
+				Name:   n.Iface,
+				Active: n.Active == 1,
+				CIDR:   n.CIDR,
+			})
+		}
+	}
+
+	return storage, bridges
 }
 
 // classifyError maps raw HTTP/TLS errors to user-friendly messages.
@@ -116,158 +172,4 @@ func buildBaseURL(host string) string {
 		return strings.TrimRight(host, "/")
 	}
 	return "https://" + strings.TrimRight(host, "/")
-}
-
-func buildHTTPClient(insecure bool) *http.Client {
-	transport := &http.Transport{}
-	if insecure {
-		transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true} //nolint:gosec // user opted in
-	}
-	return &http.Client{
-		Timeout:   10 * time.Second,
-		Transport: transport,
-	}
-}
-
-type ticketResponse struct {
-	Data struct {
-		Ticket string `json:"ticket"`
-	} `json:"data"`
-}
-
-func getAuthTicket(client *http.Client, baseURL, username, password string) (string, error) {
-	resp, err := client.PostForm(baseURL+"/api2/json/access/ticket", url.Values{
-		"username": {username},
-		"password": {password},
-	})
-	if err != nil {
-		return "", err
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return "", fmt.Errorf("status %d: %s", resp.StatusCode, string(body))
-	}
-
-	var result ticketResponse
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return "", fmt.Errorf("decode ticket: %w", err)
-	}
-	if result.Data.Ticket == "" {
-		return "", fmt.Errorf("empty ticket in response")
-	}
-
-	return result.Data.Ticket, nil
-}
-
-// apiGet performs an authenticated GET request using a PVE ticket cookie.
-// GET requests do not require a CSRFPreventionToken — only POST/PUT/DELETE do.
-func apiGet(client *http.Client, endpoint, ticket string, target any) error {
-	req, err := http.NewRequest("GET", endpoint, http.NoBody)
-	if err != nil {
-		return err
-	}
-	req.AddCookie(&http.Cookie{Name: "PVEAuthCookie", Value: ticket})
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("status %d: %s", resp.StatusCode, string(body))
-	}
-
-	return json.NewDecoder(resp.Body).Decode(target)
-}
-
-func fetchNodes(client *http.Client, baseURL, ticket string) ([]proxmoxNode, error) {
-	var result struct {
-		Data []struct {
-			Node   string  `json:"node"`
-			Status string  `json:"status"`
-			MaxCPU int     `json:"maxcpu"`
-			MaxMem float64 `json:"maxmem"`
-		} `json:"data"`
-	}
-
-	if err := apiGet(client, baseURL+"/api2/json/nodes", ticket, &result); err != nil {
-		return nil, err
-	}
-
-	nodes := make([]proxmoxNode, 0, len(result.Data))
-	for _, n := range result.Data {
-		nodes = append(nodes, proxmoxNode{
-			Name:   n.Node,
-			Status: n.Status,
-			CPUs:   n.MaxCPU,
-			MemGB:  int(n.MaxMem / (1024 * 1024 * 1024)),
-		})
-	}
-	return nodes, nil
-}
-
-func fetchStorage(client *http.Client, baseURL, ticket, node string) ([]proxmoxStorage, error) {
-	var result struct {
-		Data []struct {
-			Storage      string  `json:"storage"`
-			Type         string  `json:"type"`
-			Content      string  `json:"content"`
-			Enabled      int     `json:"enabled"`
-			Active       int     `json:"active"`
-			Total        float64 `json:"total"`
-			UsedFraction float64 `json:"used_fraction"`
-		} `json:"data"`
-	}
-
-	if err := apiGet(client, baseURL+"/api2/json/nodes/"+node+"/storage", ticket, &result); err != nil {
-		return nil, err
-	}
-
-	var pools []proxmoxStorage
-	for _, s := range result.Data {
-		if s.Enabled == 0 {
-			continue
-		}
-		pools = append(pools, proxmoxStorage{
-			Name:    s.Storage,
-			Type:    s.Type,
-			Content: s.Content,
-			Enabled: s.Enabled == 1,
-			TotalGB: int(s.Total / (1024 * 1024 * 1024)),
-			UsedPct: s.UsedFraction,
-		})
-	}
-	return pools, nil
-}
-
-func fetchBridges(client *http.Client, baseURL, ticket, node string) ([]proxmoxBridge, error) {
-	var result struct {
-		Data []struct {
-			Iface  string `json:"iface"`
-			Type   string `json:"type"`
-			Active int    `json:"active"`
-			CIDR   string `json:"cidr"`
-		} `json:"data"`
-	}
-
-	if err := apiGet(client, baseURL+"/api2/json/nodes/"+node+"/network", ticket, &result); err != nil {
-		return nil, err
-	}
-
-	var bridges []proxmoxBridge
-	for _, iface := range result.Data {
-		if iface.Type != "bridge" {
-			continue
-		}
-		bridges = append(bridges, proxmoxBridge{
-			Name:   iface.Iface,
-			Active: iface.Active == 1,
-			CIDR:   iface.CIDR,
-		})
-	}
-	return bridges, nil
 }
