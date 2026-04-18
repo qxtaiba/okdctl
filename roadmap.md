@@ -167,43 +167,6 @@ scaffolding the internal code already holds."
   `ValidationResult` summary the deploy flow uses.
 - **Depends on:** U4 (so validation failure maps to exit code 2).
 
-#### N4 — `okdctl cleanup` standalone
-- **Status:** in review — PR #58
-- **Category:** half-done
-- **State:** scaffolding exists
-- **Effort:** hours
-- **Impact:** medium
-- **Evidence:** `internal/cli/elevation.go:23` includes `"cleanup": true`
-  in `rootRequiredCmds`, but no `cleanupCmd` is registered in `root.go`.
-  Cleanup runs today only as a phase inside destroy.
-- **Acceptance:** new `cleanupCmd` in `internal/cli/` registers a subcommand
-  that runs the cleanup phase against a config without requiring destroy.
-  Honours re-exec elevation gate.
-- **Depends on:** U1 (bug fix should land first to avoid shipping a
-  visibly broken command).
-
-#### N6 — `okdctl config show`
-- **Status:** in review — PR #59
-- **Category:** feature-gap
-- **State:** not started
-- **Effort:** hours
-- **Impact:** small
-- **Acceptance:** `okdctl config show [--config path]` prints the resolved
-  YAML with secrets redacted (passwords, tokens, Proxmox API tokens).
-  Matches the redaction pattern already used in
-  `internal/credentials/proxmox.go`.
-- **Depends on:** none.
-
-#### N7 — `okdctl completion bash|zsh|fish`
-- **Status:** in review — PR #60
-- **Category:** polish
-- **State:** not started
-- **Effort:** hours
-- **Impact:** small
-- **Acceptance:** `okdctl completion <shell>` uses cobra's built-in
-  generator. Documented in README install section.
-- **Depends on:** none.
-
 #### M1 — `okdctl status` / `describe`
 - **Status:** not started
 - **Category:** feature-gap
@@ -704,6 +667,30 @@ but link evidence.
   networking wizard page when the gateway falls outside the machine
   CIDR. Defers to per-field validators when either input is empty or
   malformed so the user doesn't see two errors for one bad field.
+- **N4 — `okdctl cleanup` standalone** — done PR #58, merged 2026-04-18.
+  New `internal/cli/cleanup.go` runs the full cleanup phase
+  (`cleanup.Execute` with `Kind=Full`) against a config without a
+  destroy flow, reusing `phase.ResolveClusterVIP`, `phase.BaseOptions`,
+  `phase.GetTerraformEnv`, and `phase.DefaultHAProxyConfigPath`. Named
+  `cleanup` so the existing `rootRequiredCmds` entry at
+  `internal/cli/elevation.go:23` drives the sudo re-exec gate; no
+  elevation edits needed. `--yes`/`-y` skips the confirmation prompt.
+- **N6 — `okdctl config show`** — done PR #59, merged 2026-04-18.
+  New `internal/cli/config.go` adds a `config` parent with a `show`
+  subcommand that prints the resolved YAML to stdout with Proxmox
+  `TokenID` redacted to `***`. `Username`/`Password`/`APIToken` on
+  `ProxmoxConfig` already carry `json:"-"` so they never marshal —
+  `redactConfig` only needs to shallow-copy and scrub `TokenID`. Read-only,
+  not added to `rootRequiredCmds`.
+- **N7 — `okdctl completion`** — done PR #60, merged 2026-04-18. New
+  `internal/cli/completion.go` exposes `okdctl completion
+  <bash|zsh|fish|powershell>` via cobra's built-in generators
+  (`GenBashCompletionV2`, `GenZshCompletion`, `GenFishCompletion`,
+  `GenPowerShellCompletionWithDesc`). Cobra's auto-registered bare
+  `completion` command is suppressed via
+  `rootCmd.CompletionOptions.DisableDefaultCmd = true` in favour of one
+  with activation docs. README install section gains per-shell
+  one-liners.
 
 ## Appendix — full item ledger
 
@@ -719,10 +706,10 @@ but link evidence.
 | N1 | `okdctl addon list/install/uninstall/verify` | Sprint 1 |
 | N2 | `okdctl releases list/show` | Sprint 1 |
 | N3 | `okdctl config validate` standalone | Sprint 1 |
-| N4 | `okdctl cleanup` standalone | Sprint 1 |
+| N4 | `okdctl cleanup` standalone | **Done** (PR #58) |
 | N5 | `okdctl kubeconfig` | **Done** (PR #55) |
-| N6 | `okdctl config show` | Sprint 1 |
-| N7 | `okdctl completion` | Sprint 1 |
+| N6 | `okdctl config show` | **Done** (PR #59) |
+| N7 | `okdctl completion` | **Done** (PR #60) |
 | N8 | Step timing + deploy summary | Sprint 1 |
 | N9 | `--log-level/--log-format/--log-file` flags | Sprint 1 |
 | N10 | Ctrl-C partial-progress summary | Sprint 1 |
