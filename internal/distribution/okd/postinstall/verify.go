@@ -13,8 +13,9 @@ import (
 )
 
 // nodeList is a minimal view of `oc get nodes -o json` output — only the
-// fields we need for readiness counting. Using k8s.io/api/core/v1 would work
-// but drags the entire corev1 surface for one readiness check.
+// fields we need for readiness counting. A local struct keeps the parse
+// decoupled from corev1 schema evolution; we'd need to pin a specific
+// k8s.io/api version in lockstep with the OKD release anyway.
 type nodeList struct {
 	Items []struct {
 		Metadata struct {

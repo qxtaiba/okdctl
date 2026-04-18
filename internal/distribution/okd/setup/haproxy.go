@@ -31,6 +31,8 @@ func (p *Phase) BuildHAProxyConfigData(cfg *config.Config) (templates.HAProxyCon
 			masterServers = append(masterServers, templates.HAProxyServer{Name: node.Name, IP: node.IP})
 		case phase.RoleWorker:
 			workerServers = append(workerServers, templates.HAProxyServer{Name: node.Name, IP: node.IP})
+		default:
+			return templates.HAProxyConfigData{}, fmt.Errorf("unexpected node role %q in node %q — HAProxy backend unrenderable", node.Role, node.Name)
 		}
 	}
 

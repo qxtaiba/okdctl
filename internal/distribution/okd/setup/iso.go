@@ -89,7 +89,7 @@ func writeInstallerTriggerIgnition(sshKey string) (string, error) {
 		return "", fmt.Errorf("failed to marshal installer trigger ignition: %w", err)
 	}
 
-	return system.WriteTempFile("installer-trigger-*.ign", 0o644, func(f *os.File) error {
+	return system.WriteTempFile("installer-trigger-*.ign", 0o600, func(f *os.File) error {
 		if _, err := f.Write(data); err != nil {
 			return fmt.Errorf("failed to write installer trigger ignition: %w", err)
 		}
