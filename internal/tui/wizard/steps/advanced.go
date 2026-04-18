@@ -99,6 +99,65 @@ var AdvancedStepDefinition = wizard.StepDefinition{
 				},
 			},
 		},
+		{
+			Title: "deployment options",
+			Fields: []wizard.FieldDefinition{
+				{
+					Key:       "debug",
+					Label:     "debug mode",
+					Default:   valNo,
+					Help:      "print verbose terraform and command output during deployment",
+					Type:      wizard.FieldTypeSelect,
+					Options:   []string{valNo, valYes},
+					ConfigSet: wizard.SetBool(func(c *config.Config, v bool) { c.Deployment.Debug = v }),
+					ConfigGet: func(c *config.Config) string {
+						if c.Deployment.Debug {
+							return valYes
+						}
+						return valNo
+					},
+				},
+				{
+					Key:       "skip_deps_check",
+					Label:     "skip deps check",
+					Default:   valNo,
+					Help:      "skip pre-flight dependency validation (oc, terraform, helm, etc.)",
+					Type:      wizard.FieldTypeSelect,
+					Options:   []string{valNo, valYes},
+					ConfigSet: wizard.SetBool(func(c *config.Config, v bool) { c.Deployment.SkipDepsCheck = v }),
+					ConfigGet: func(c *config.Config) string {
+						if c.Deployment.SkipDepsCheck {
+							return valYes
+						}
+						return valNo
+					},
+				},
+				{
+					Key:       "terraform_env",
+					Label:     "terraform workspace",
+					Default:   "",
+					Help:      "terraform workspace name to use — leave blank to use the default (production)",
+					Validate:  config.ValidateTerraformEnv,
+					ConfigSet: wizard.SetString(func(c *config.Config, v string) { c.Deployment.TerraformEnv = v }),
+					ConfigGet: wizard.GetString(func(c *config.Config) string { return c.Deployment.TerraformEnv }),
+				},
+				{
+					Key:       "auto_approve",
+					Label:     "auto approve",
+					Default:   valNo,
+					Help:      "skip terraform apply confirmation prompts — use with care",
+					Type:      wizard.FieldTypeSelect,
+					Options:   []string{valNo, valYes},
+					ConfigSet: wizard.SetBool(func(c *config.Config, v bool) { c.Deployment.AutoApprove = v }),
+					ConfigGet: func(c *config.Config) string {
+						if c.Deployment.AutoApprove {
+							return valYes
+						}
+						return valNo
+					},
+				},
+			},
+		},
 	},
 	ExtraContent: func(_ map[string]string, _ int) string {
 		subtitle := lipgloss.NewStyle().

@@ -515,3 +515,17 @@ var (
 	ValidateVMID      = ValidateIntRange("", 100, 999999999)
 	ValidateTimeout   = ValidateIntRange(" (seconds)", 60, 86400)
 )
+
+var terraformEnvPattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_-]*$`)
+
+// ValidateTerraformEnv allows an empty string (runtime default applies) and
+// otherwise requires a terraform-workspace-shaped identifier.
+func ValidateTerraformEnv(value string) error {
+	if value == "" {
+		return nil
+	}
+	if !terraformEnvPattern.MatchString(value) {
+		return errors.New("must start with a letter or underscore and contain only letters, digits, hyphens, or underscores")
+	}
+	return nil
+}

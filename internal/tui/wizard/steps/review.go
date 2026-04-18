@@ -389,9 +389,14 @@ func (s *ReviewStep) renderAdvanced(st *sectionStyles) string {
 	if bt > 0 {
 		timeouts = fmt.Sprintf("bootstrap %dm, install %dm", bt/60, s.cfg.Deployment.InstallTimeout/60)
 	}
+	dep := s.cfg.Deployment
 	return renderSection(st, "advanced", []kvEntry{
 		{label: "vm id base", value: fmt.Sprintf("%d", vmid), skip: vmid <= 0},
 		{label: "timeouts", value: timeouts, skip: bt <= 0},
+		{label: "debug mode", value: "yes", skip: !dep.Debug},
+		{label: "skip deps check", value: "yes", skip: !dep.SkipDepsCheck},
+		{label: "terraform workspace", value: dep.TerraformEnv, skip: dep.TerraformEnv == ""},
+		{label: "auto approve", value: "yes", skip: !dep.AutoApprove},
 	})
 }
 
