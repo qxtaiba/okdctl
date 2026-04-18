@@ -318,7 +318,7 @@ func additionalNetworksField(bridges []string, current []config.AdditionalNetwor
 		Type:    wizard.FieldTypeMultiSelect,
 		Options: bridges,
 		ConfigSet: func(cfg *config.Config, v string) error {
-			cfg.Provider.Proxmox.AdditionalNetworks = parseAdditionalNetworks(v)
+			cfg.Provider.Proxmox.AdditionalNetworks = parseAdditionalNetworks(v, cfg.Provider.Proxmox.AdditionalNetworks)
 			return nil
 		},
 		ConfigGet: func(cfg *config.Config) string {
@@ -355,17 +355,28 @@ func additionalNetworksBridges(nets []config.AdditionalNetwork) string {
 }
 
 // parseAdditionalNetworks converts a comma-separated bridge-name string into
-// []AdditionalNetwork with model "virtio". Empty input produces a nil slice.
-func parseAdditionalNetworks(v string) []config.AdditionalNetwork {
+// []AdditionalNetwork. Pre-existing entries matched by Bridge are preserved
+// intact (keeping hand-authored Model and VLANTag values). Newly selected
+// bridges get Model "virtio". Empty input returns nil.
+func parseAdditionalNetworks(v string, existing []config.AdditionalNetwork) []config.AdditionalNetwork {
 	v = strings.TrimSpace(v)
 	if v == "" {
 		return nil
+	}
+	byBridge := make(map[string]config.AdditionalNetwork, len(existing))
+	for _, n := range existing {
+		byBridge[n.Bridge] = n
 	}
 	parts := strings.Split(v, ",")
 	nets := make([]config.AdditionalNetwork, 0, len(parts))
 	for _, p := range parts {
 		p = strings.TrimSpace(p)
-		if p != "" {
+		if p == "" {
+			continue
+		}
+		if prev, ok := byBridge[p]; ok {
+			nets = append(nets, prev)
+		} else {
 			nets = append(nets, config.AdditionalNetwork{Bridge: p, Model: "virtio"})
 		}
 	}

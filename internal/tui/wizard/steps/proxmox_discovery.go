@@ -52,7 +52,12 @@ func discoverProxmox(cfg *config.Config) (*proxmoxDiscovery, error) {
 		return nil, fmt.Errorf("no proxmox config")
 	}
 	px := cfg.Provider.Proxmox
-	if px.Host == "" || px.Username == "" || px.Password == "" {
+	switch {
+	case px.Host == "" || px.Username == "":
+		return nil, fmt.Errorf("missing credentials — enter host and username in the proxmox step")
+	case px.Password == "" && px.TokenID != "":
+		return nil, fmt.Errorf("discovery uses password auth — enter a password in the proxmox step (token id is saved for deploy)")
+	case px.Password == "":
 		return nil, fmt.Errorf("missing credentials — enter host, username, and password in the proxmox step")
 	}
 

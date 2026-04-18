@@ -71,7 +71,7 @@ var ProxmoxStepDefinition = wizard.StepDefinition{
 					Key:       "token_id",
 					Label:     "token id",
 					Default:   "",
-					Help:      "api token id (user@realm!tokenname) — leave blank when using password auth",
+					Help:      "api token id (user@realm!tokenname) — saved to config; used at deploy time with PROXMOX_VE_API_TOKEN_SECRET",
 					ConfigSet: proxmoxSet(func(p *config.ProxmoxConfig, v string) { p.TokenID = v }),
 					ConfigGet: proxmoxGet(func(p *config.ProxmoxConfig) string { return p.TokenID }),
 				},
