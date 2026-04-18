@@ -4,6 +4,9 @@ dist/
 coverage.out
 coverage.html
 
+# Local worktrees for parallel agent work
+.worktrees/
+
 # Environment files
 .env
 .env.local
