@@ -40,6 +40,7 @@ var (
 	stdoutLogger       = buildLogger(os.Stdout)
 	stderrLogger       = buildLogger(os.Stderr)
 	progressBarsActive = true
+	runID              string
 )
 
 func buildLogger(w io.Writer) *charmlog.Logger {
@@ -146,4 +147,23 @@ func ConfigureLoggers(level, format string, stdoutW, stderrW io.Writer, progress
 // False when stdout is not a TTY or when JSON log format is active.
 func ProgressBarsEnabled() bool {
 	return progressBarsActive
+}
+
+// SetRunID pins run_id on the package-level loggers so every subsequent
+// tui.X call carries the correlation ID. Call once at the top of a
+// deploy/destroy run — before credential loading, config loading, or
+// any log line — so the whole invocation shares a single ID. The
+// provisioner's slog.Logger snapshot (SimpleLogger) captures the
+// pinned loggers at createOKDProvisioner time. Not safe for concurrent
+// callers.
+func SetRunID(id string) {
+	runID = id
+	stdoutLogger = stdoutLogger.With("run_id", id)
+	stderrLogger = stderrLogger.With("run_id", id)
+}
+
+// RunID returns the correlation ID set by SetRunID, or the empty
+// string if SetRunID has not been called in this process.
+func RunID() string {
+	return runID
 }

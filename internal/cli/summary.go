@@ -73,7 +73,7 @@ func ValidationSummary(result *config.ValidationResult) string {
 
 // PostDeploySummary renders the success summary shown after a cluster deploy
 // completes, including access URLs, kubeadmin credentials, and step results.
-func PostDeploySummary(cfg *config.Config, result *postinstall.Result, steps []distribution.StepResult) string {
+func PostDeploySummary(cfg *config.Config, result *postinstall.Result, steps []distribution.StepResult, runID string) string {
 	clusterFQDN := cfg.Cluster.Name + "." + cfg.Cluster.Domain
 	consoleURL := fmt.Sprintf("https://console-openshift-console.apps.%s", clusterFQDN)
 	apiURL := fmt.Sprintf("https://api.%s:6443", clusterFQDN)
@@ -81,6 +81,8 @@ func PostDeploySummary(cfg *config.Config, result *postinstall.Result, steps []d
 	sb := newSummaryBuilder()
 	sb.b.WriteString("\n")
 	sb.b.WriteString("  " + tui.CompletionSuccess("cluster deployed successfully!") + "\n")
+	sb.newline()
+	sb.kv("run_id", runID)
 	sb.newline()
 
 	sb.section("access")
@@ -164,10 +166,12 @@ func PostDeploySummary(cfg *config.Config, result *postinstall.Result, steps []d
 // InterruptSummary renders a partial-progress box for a Ctrl-C interruption.
 // steps is whatever the orchestrator completed before cancellation;
 // resumeCmd is the exact command the user should re-run (e.g. "okdctl deploy").
-func InterruptSummary(steps []distribution.StepResult, resumeCmd string) string {
+func InterruptSummary(steps []distribution.StepResult, resumeCmd, runID string) string {
 	sb := newSummaryBuilder()
 	sb.b.WriteString("\n")
 	sb.b.WriteString("  " + tui.WarningStyle.Render("interrupted") + "\n")
+	sb.newline()
+	sb.kv("run_id", runID)
 	sb.newline()
 
 	if len(steps) > 0 {
