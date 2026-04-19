@@ -72,64 +72,10 @@ Theme D (wizard) → Theme F (errors/types) → remaining themes in parallel.
 
 ### Theme A — urgent correctness bugs
 
-#### U2 — Wizard never sets `Provider.Type`
-- **Status:** in review — PR #52
-- **Category:** urgent-bugfix
-- **State:** not started
-- **Effort:** days
-- **Impact:** large
-- **Evidence:** `internal/config/validators.go` requires `cfg.Provider.Type`;
-  `internal/tui/wizard/steps/proxmox.go` reads it via `ShouldShow` but no
-  step writes it. Wizard-only users produce YAML that fails validation.
-- **Acceptance:** wizard completing produces a YAML where
-  `cfg.Provider.Type == config.ProviderProxmox` is set; validation passes
-  end-to-end without manual YAML edit.
-- **Depends on:** none.
-
-#### U1b — Clean remote Proxmox FCOS ISO on destroy
-- **Status:** in review — PR #54
-- **Category:** urgent-bugfix
-- **State:** not started
-- **Effort:** days
-- **Impact:** medium
-- **Evidence:** `internal/distribution/okd/setup/coreos.go:19` defines
-  `DefaultProxmoxISODir = "/var/lib/vz/template/iso"`. ISOs are uploaded
-  via SSH at `internal/distribution/okd/setup/upload.go:86` but never
-  removed during `destroy` or `cleanup`. Each deploy leaves
-  500 MB–2 GB on the Proxmox host. Supersedes the closed U1 (the
-  audit conflated the local `downloads/` cache — which is already
-  cleaned by `internal/distribution/okd/cleanup/artifacts.go:84,92` —
-  with the remote Proxmox ISO dir, which is the real gap).
-- **Acceptance:** destroy (and `okdctl cleanup` once N4 lands) removes
-  `fedora-coreos-*.iso` from `DefaultProxmoxISODir` on the Proxmox host,
-  reusing the SSH plumbing from `upload.go`. Before removal: check
-  `pvesh get /nodes/<node>/qemu` (or the equivalent
-  `luthermonson/go-proxmox` call) to confirm no running VM references
-  the ISO; skip with a warning if one does. New `--keep-isos` flag on
-  `destroy` preserves the ISO for users chaining deploys. Honours
-  `refuseCriticalPath` semantics — the removal path must pass through
-  `SafeRemoveWithLogger` or an SSH-equivalent safety check before
-  the rm runs.
-- **Depends on:** none. (N4 would let `okdctl cleanup` invoke the same
-  logic standalone; not a blocker.)
-
 ### Theme B — CLI subcommand expansion
 
 Motto for this theme: "finish the last mile of the manager/fetcher
 scaffolding the internal code already holds."
-
-#### M2 — `okdctl debug-bundle`
-- **Status:** in review — PR #90
-- **Category:** feature-gap
-- **State:** not started
-- **Effort:** week
-- **Impact:** large
-- **Acceptance:** `okdctl debug-bundle [--output bundle.tgz]` collects:
-  redacted config, recent log file (see N9), `oc adm must-gather`
-  output, terraform state summary, `okdctl doctor` results, system
-  metadata. Output is a tarball safe to attach to a support ticket.
-- **Depends on:** N9 (log-file flag so logs persist), M14 (correlation
-  ID for cross-referencing).
 
 ### Theme E — config ergonomics, air-gap, rootless
 
@@ -147,19 +93,6 @@ scaffolding the internal code already holds."
 - **Depends on:** U2 (wizard should then collect this field).
 
 ### Theme G — CI, tooling, distribution
-
-#### N14 — Add `go vet ./...` to CI
-- **Status:** in review — PR #53
-- **Category:** infra
-- **State:** not started
-- **Effort:** hours
-- **Impact:** small
-- **Evidence:** `.github/workflows/ci.yml` runs golangci-lint and
-  `go test` but no explicit vet step. `Makefile:make vet` exists.
-- **Acceptance:** new job or step in CI runs `go vet ./...` and fails
-  the pipeline on non-zero exit. Documented in CONTRIBUTING if it
-  lands.
-- **Depends on:** none.
 
 ## Addon category refactor — dedicated workstream
 
@@ -831,14 +764,46 @@ but link evidence.
   drift and moved the retrofit target onto M20's grouped
   `secretstore_op_vaults` field in the onepassword section rather than
   adding a duplicate-binding field in the earlier "common" layout.
+- **U2 — Wizard never sets `Provider.Type`** — done PR #52, merged
+  2026-04-18. `ProxmoxStepDefinition` replaced its `ShouldShow`
+  catch-22 (hidden when `Provider.Type` was unset → step never ran →
+  type stayed unset) with an `Apply` hook that assigns
+  `config.ProviderProxmox`. Mirrors `DistributionStep.Apply` at
+  `internal/tui/wizard/steps/distribution.go:236` and the Apply hooks
+  already in `networking.go` / `files.go` / `node_placement.go`.
+  Single-distribution assumption is encoded in the hook body; revisit
+  if L1–L3 ever move out of Skipped.
+- **U1b — Clean remote Proxmox FCOS ISO on destroy** — done PR #54,
+  merged 2026-04-18. New `StepRemoveRemoteISO` in the destroy phase
+  SSHs to the Proxmox host, enumerates `<isoDir>/fedora-coreos-*.iso`
+  via `find -print0`, checks the running-VM set via `pvesh` per-vmid
+  config queries, and removes the file only if no running VM
+  references it. Shared SSH plumbing extracted to new `phase/ssh.go`
+  (`ProxmoxBareHost`, `SSHRun`); `setup/upload.go` now uses the same
+  helper. Safety layers: `validateISODir` rejects shell
+  metacharacters / whitespace / quotes; `refuseUnsafeISOPath`
+  restricts filenames to `<isoDir>/fedora-coreos-*.iso`; paths are
+  single-quoted before shell interpolation. VM-reference scan walks
+  device fields (`ide*`, `sata*`, `scsi*`, `virtio*`, `boot`,
+  `bootdisk`) with `file=`-prefix strip and suffix match; fails
+  closed on any pvesh error. New `--keep-isos` flag on `destroy`
+  preserves the ISO for users chaining destroy → re-deploy. Four
+  review rounds resolved 15+ findings (helper duplication, `rm`/
+  `find` injection, wrong pvesh endpoint, fail-open parse, comment
+  density).
+- **N14 — `go vet ./...` in CI** — done PR #53, merged 2026-04-18.
+  New `vet-go` job in `.github/workflows/ci.yml` mirrors
+  `lint-go` / `build-go` (same pinned action SHAs, `go-version-file:
+  go.mod`, `ubuntu-latest`). Closes the gap where `make vet` existed
+  locally but CI never invoked it.
 
 ## Appendix — full item ledger
 
 | ID | Item | Disposition |
 |---|---|---|
 | U1 | Cleanup leaves FCOS ISO cache | **Done** (audit error — see Completed) |
-| U1b | Clean remote Proxmox FCOS ISO on destroy | Sprint 1 |
-| U2 | Wizard never sets `Provider.Type` | Sprint 1 |
+| U1b | Clean remote Proxmox FCOS ISO on destroy | **Done** (PR #54) |
+| U2 | Wizard never sets `Provider.Type` | **Done** (PR #52) |
 | U3 | HTTP downloads no retry | Sprint 1 |
 | U4 | Exit codes only 0/1/130 | **Done** (PR #70) |
 | U5 | `cmd.Run()` without ctx (2 sites) | **Done** (landed in 65d8fce — see Completed) |
@@ -856,7 +821,7 @@ but link evidence.
 | N11 | `--yes` parity on deploy/update-ingress | **Done** (PR #68) |
 | N12 | Unit tests for `netutil` | Deferred |
 | N13 | Unit tests for `config/validators` | Deferred |
-| N14 | `go vet` in CI | Sprint 1 |
+| N14 | `go vet` in CI | **Done** (PR #53) |
 | N15 | Wizard: Deployment fields | **Done** (PR #66) |
 | N16 | Wizard: FCOSIso/TokenID/AdditionalNetworks | **Done** (PR #79) |
 | N17 | Wizard review completeness | **Done** (PR #56) |
