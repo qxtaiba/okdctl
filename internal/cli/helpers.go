@@ -143,6 +143,8 @@ func executeFullDeployment(ctx context.Context, cfg *config.Config, opts deploym
 		}
 	}()
 
+	runID := tui.RunID()
+
 	p := createOKDProvisioner(cfg, opts.Credentials, projectRoot)
 
 	if err := p.Validate(cfg); err != nil {
@@ -158,7 +160,7 @@ func executeFullDeployment(ctx context.Context, cfg *config.Config, opts deploym
 	setupSteps, err := p.Prepare(ctx, cfg)
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
-			fmt.Println(InterruptSummary(setupSteps, "okdctl deploy"))
+			fmt.Println(InterruptSummary(setupSteps, "okdctl deploy", runID))
 			return err
 		}
 		tui.Info("run 'okdctl destroy' to clean up resources")
@@ -172,7 +174,7 @@ func executeFullDeployment(ctx context.Context, cfg *config.Config, opts deploym
 			combined := make([]distribution.StepResult, 0, len(setupSteps)+len(installSteps))
 			combined = append(combined, setupSteps...)
 			combined = append(combined, installSteps...)
-			fmt.Println(InterruptSummary(combined, "okdctl deploy"))
+			fmt.Println(InterruptSummary(combined, "okdctl deploy", runID))
 			return err
 		}
 		tui.Info("run 'okdctl destroy' to clean up resources")
@@ -186,7 +188,7 @@ func executeFullDeployment(ctx context.Context, cfg *config.Config, opts deploym
 			combined = append(combined, setupSteps...)
 			combined = append(combined, installSteps...)
 			combined = append(combined, configureSteps...)
-			fmt.Println(InterruptSummary(combined, "okdctl deploy"))
+			fmt.Println(InterruptSummary(combined, "okdctl deploy", runID))
 			return err
 		}
 		tui.Info("run 'okdctl destroy' to clean up resources")
@@ -202,7 +204,7 @@ func executeFullDeployment(ctx context.Context, cfg *config.Config, opts deploym
 
 	fmt.Println()
 	tui.Info(fmt.Sprintf("deployment complete (total time: %s)", duration))
-	fmt.Println(PostDeploySummary(cfg, result, allSteps))
+	fmt.Println(PostDeploySummary(cfg, result, allSteps, runID))
 
 	return nil
 }

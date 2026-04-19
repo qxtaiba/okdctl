@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/spf13/cobra"
 
 	"github.com/qxtaiba/okdctl/internal/config"
@@ -38,6 +39,7 @@ func init() {
 
 func runDestroy(cmd *cobra.Command, _ []string) error {
 	ctx := cmd.Context()
+	tui.SetRunID(uuid.NewString())
 
 	cfg, err := loadConfig(cfgFile)
 	if err != nil {
@@ -88,7 +90,7 @@ func runDestroy(cmd *cobra.Command, _ []string) error {
 	steps, err := p.Destroy(ctx, cfg, true, destroyKeepISOs)
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
-			fmt.Println(InterruptSummary(steps, "okdctl destroy"))
+			fmt.Println(InterruptSummary(steps, "okdctl destroy", tui.RunID()))
 			return err
 		}
 		return err
