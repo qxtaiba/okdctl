@@ -118,32 +118,18 @@ Theme D (wizard) → Theme F (errors/types) → remaining themes in parallel.
 Motto for this theme: "finish the last mile of the manager/fetcher
 scaffolding the internal code already holds."
 
-#### M1 — `okdctl status` / `describe`
-- **Status:** in review — PR #84
-- **Category:** feature-gap
-- **State:** not started
-- **Effort:** days
-- **Impact:** large
-- **Acceptance:** `okdctl status` prints a post-deploy summary: API
-  reachability, node count by role, operator health, addon status.
-  `okdctl describe` drills into a specific node / addon. Uses existing
-  `OcPollOutput` helpers in `phase/kubectl.go`.
-- **Depends on:** N8 (step-timing summary shape to reuse), N5
-  (kubeconfig access pattern).
-
-### Theme C — observability, error messages, logging
-
-#### L5 — Prometheus metrics endpoint during deploy
-- **Status:** in review — PR #87
+#### M2 — `okdctl debug-bundle`
+- **Status:** in review — PR #90
 - **Category:** feature-gap
 - **State:** not started
 - **Effort:** week
-- **Impact:** medium
-- **Acceptance:** `okdctl deploy --metrics-addr :9090` starts a Prometheus
-  HTTP endpoint for the duration of the run. Metrics emitted: per-step
-  counter + histogram, current-step gauge, deploy total duration.
-  Disabled by default.
-- **Depends on:** N8 (step timing must record durations first).
+- **Impact:** large
+- **Acceptance:** `okdctl debug-bundle [--output bundle.tgz]` collects:
+  redacted config, recent log file (see N9), `oc adm must-gather`
+  output, terraform state summary, `okdctl doctor` results, system
+  metadata. Output is a tarball safe to attach to a support ticket.
+- **Depends on:** N9 (log-file flag so logs persist), M14 (correlation
+  ID for cross-referencing).
 
 ### Theme D — wizard coverage
 
@@ -169,18 +155,6 @@ scaffolding the internal code already holds."
   M19/M20 but pairs naturally with M20.)
 
 ### Theme E — config ergonomics, air-gap, rootless
-
-#### M3 — `--dry-run` / `--plan` mode
-- **Status:** in review — PR #87
-- **Category:** feature-gap
-- **State:** not started
-- **Effort:** days
-- **Impact:** large
-- **Acceptance:** `--dry-run` on deploy/destroy/update-ingress skips
-  the re-exec-as-root gate, prints the terraform plan output, and lists
-  every mutating step it *would* execute. No real mutations. Exit 0
-  on plan success, 2 on plan failure.
-- **Depends on:** U4 (exit code 2 for plan failure).
 
 #### M6 — `DefaultBinDir` configurable (rootless support)
 - **Status:** not started
@@ -209,21 +183,6 @@ scaffolding the internal code already holds."
   the pipeline on non-zero exit. Documented in CONTRIBUTING if it
   lands.
 - **Depends on:** none.
-
-#### L14 — Coverage thresholds + codecov in CI
-- **Status:** in review — PR #85
-- **Category:** infra
-- **State:** not started
-- **Effort:** days
-- **Impact:** medium
-- **Evidence:** CI already generates `coverage.out`
-  (`.github/workflows/ci.yml:37`) but enforces nothing. With zero tests
-  the threshold would be 0% — set a floor that rises as N12/N13 land.
-- **Acceptance:** codecov or equivalent configured. Per-package
-  minimums documented. PR check fails on coverage regression.
-- **Depends on:** N12 / N13 to land in some form first (they are
-  deferred — so this ships as scaffolding with 0% floor, ready to
-  tighten).
 
 ## Addon category refactor — dedicated workstream
 
@@ -349,19 +308,6 @@ These made the audit but are not scheduled now. Re-evaluate on
 
 Filed as roadmap items so `/roadmap-pickup` can fan them out when
 bandwidth opens. Each references the audit finding ID for diff tracking.
-
-#### D2 — evaluate progressbar swap for bubbles/progress
-- **Status:** in review — PR #86
-- **Category:** deps (transitive-weight)
-- **Effort:** days
-- **Impact:** small (dep-count reduction)
-- **Finding:** `dep:33ef32bf:schollz-progressbar-transitive-weight`
-- **Evidence:** `go.mod:14`; single call site `internal/download/download.go:16`.
-  Pulls `mitchellh/colorstring` (2019-stale) as a transitive.
-- **Acceptance:** evaluate `charm.land/bubbles/v2/progress` as replacement
-  (already in tree); or hand-roll ~30 LOC. TTY/SIGWINCH/pipe-detection
-  paths are battle-tested — plan first, then swap.
-- **Depends on:** none
 
 ## Explicitly skipped
 
@@ -834,6 +780,57 @@ but link evidence.
   Review round 1 caught three issues: double `loadConfig` print,
   tar/gzip not deferred (truncation risk on mid-run failure), and
   the go.mod tidy drift; round 2 PASSed.
+- **L14 — Coverage thresholds + codecov in CI** — done PR #85, merged
+  2026-04-19. New `.github/scripts/coverage-check.sh` reads `coverage.out`
+  and enforces per-package floors from `.github/coverage-floors.conf`
+  (key=value, `*` is default, `total` gates the aggregate). All floors
+  start at 0 so the scaffolding passes vacuously today; N12/N13 tighten
+  specific packages one line at a time when tests land. Self-contained
+  shell check chosen over codecov SaaS — no token, no third-party
+  dashboard, acceptance's "or equivalent" allows the substitution.
+- **D2 — evaluate progressbar swap for bubbles/progress** — done PR #86,
+  merged 2026-04-19. Dropped `schollz/progressbar/v3` in favour of a
+  ~60 LOC hand-rolled `io.WriteCloser` in
+  `internal/download/progress.go` that reuses `tui.ProgressBarsEnabled()`
+  and `golang.org/x/term` for width. Cleanup removes
+  `mitchellh/colorstring` (2019-stale) and `chengxilo/virtualterm` from
+  the transitive graph. `bubbles/v2/progress` swap was re-rejected as
+  still-strictly-heavier (requires bubbletea Program); CLAUDE.md §Deps
+  note updated from "Kept" to "Removed".
+- **M1 — `okdctl status` / `describe`** — done PR #84, merged 2026-04-19.
+  New `internal/cli/status.go` wires three subcommands. `status` prints
+  API reachability (`oc get --raw /healthz`), node counts by role
+  (master/worker from `node-role.kubernetes.io/*` labels via
+  `oc get nodes -o json`), cluster-operator degraded count
+  (`oc get clusteroperators --no-headers`), and addon VerifyAll results.
+  `describe node <name>` and `describe addon <name>` drill into a single
+  resource with tabwriter output. Reuses `phase.BasePhase` + executor
+  via a new `OcOutput` one-shot helper added next to `OcPollOutput` in
+  `phase/kubectl.go` (polling helper was the wrong shape for a one-shot
+  describe). Read-only — not added to `rootRequiredCmds`.
+- **M3 — `--dry-run` / `--plan` mode** — done PR #87, merged 2026-04-19.
+  New `--dry-run` flag on `deploy`, `destroy`, and `update-ingress`.
+  Re-exec-as-root gate in `cli/elevation.go` already probed
+  `cmd.Flags().GetBool("dry-run")` — adding the flag on the three
+  commands activates the bypass. New `terraform.Executor.PlanStreamed`
+  wires terraform stdout/stderr directly to the terminal via
+  `executor.RunInteractive`; new `proxmox.Provider.PlanOnly` does
+  Init + PlanStreamed. Deploy dry-run renders a 31-entry step listing
+  through new `DryRunSummary`. Plan failures wrap as
+  `*errtypes.ConfigError` → exit 2 via the U4 taxonomy.
+- **L5 — Prometheus metrics endpoint during deploy** — done PR #87,
+  merged 2026-04-19. New `--metrics-addr :9090` on deploy starts an
+  HTTP server serving `/metrics` in Prometheus text format for the
+  lifetime of the run; disabled when empty. Four metric families —
+  `okdctl_deploy_step_total` (counter, success/failure labels),
+  `okdctl_deploy_step_duration_seconds` (histogram, 12 buckets),
+  `okdctl_deploy_current_step` (gauge, set by StepStarted/StepFinished
+  on the new `MetricsRecorder` interface), `okdctl_deploy_duration_seconds`
+  (gauge). Hand-rolled text renderer in `internal/deploymetrics/`
+  (no `prometheus/client_golang` dep — the four metrics don't justify
+  ~15 transitive packages). Orchestrator `MetricsRecorder` interface
+  with a no-op default means existing callers are unaffected;
+  `BasePhase.Recorder` propagates through setup/install/postinstall.
 
 ## Appendix — full item ledger
 
@@ -871,9 +868,9 @@ but link evidence.
 | N23 | HTTP error context | **Done** (PR #62) |
 | N25 | Progress bars for long ops | **Done** (PR #78) |
 | N26 | TUI key-value map editor component | Sprint 1 |
-| M1 | `okdctl status` / `describe` | Sprint 1 |
+| M1 | `okdctl status` / `describe` | **Done** (PR #84) |
 | M2 | `okdctl debug-bundle` | **Done** (PR #90) |
-| M3 | `--dry-run` / `--plan` mode | Sprint 1 |
+| M3 | `--dry-run` / `--plan` mode | **Done** (PR #87) |
 | M4 | OKD release URL override | **Done** (PR #61) |
 | M5 | Tool binary versions override | **Done** (PR #75) |
 | M6 | `DefaultBinDir` rootless | Sprint 1 |
@@ -896,7 +893,7 @@ but link evidence.
 | L2 | vSphere/AWS/Equinix/bare-metal/Vagrant | **Skipped** |
 | L3 | Multi-distribution (RKE2, vanilla) | **Skipped** |
 | L4 | `okdctl upgrade` | Deferred |
-| L5 | Prometheus metrics endpoint during deploy | Sprint 1 |
+| L5 | Prometheus metrics endpoint during deploy | **Done** (PR #87) |
 | L6 | OpenTelemetry tracing | Deferred |
 | L7 | Storage addons (Rook-Ceph) | Deferred (under R2) |
 | L8 | Backup addons (Velero / VolSync) | Deferred (under R2) |
@@ -905,7 +902,7 @@ but link evidence.
 | L11 | Service mesh addons | Deferred (under R2) |
 | L12 | Container image distribution | **Skipped** |
 | L13 | Auto-update version check | **Done** (PR #69) |
-| L14 | Coverage thresholds + codecov | Sprint 1 |
+| L14 | Coverage thresholds + codecov | **Done** (PR #85) |
 | L15 | Air-gap feasibility + scoping doc | Workstream (design-doc-first) |
 | R1 | Addon category model + design doc | Workstream (design-doc-first) |
 | R2 | Specific addons after R1 | Deferred conversation |
