@@ -134,6 +134,9 @@ write the comment — then it carries real information.
 - CI runs `lint-go`, `test-go`, `build-go`, `security` (govulncheck),
   `lint-yaml`, `validate-terraform`. All must be green before merging to
   `develop`.
+- Coverage floors live in `.github/coverage-floors.conf` (key=value,
+  one package per line, `*` is the default). Raise a package's floor
+  when its tests land; the `test-go` CI job will fail on regression.
 - Pre-commit hooks run via `lefthook`.
 
 ## Credentials and secrets
