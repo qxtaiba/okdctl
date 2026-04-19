@@ -1,8 +1,9 @@
 // Package fetchplan declares every external artifact okdctl reaches for
 // during deploy as typed data, and routes resolution through a Resolver
 // so air-gap mirror rewrites (M24) can be applied uniformly. The current
-// release ships M4 (OKD release tarballs) and M5 (helm/sops/yq) plan
-// builders; OCI source kinds are declared but unwired pending M22.
+// release ships M4 (OKD release tarballs), M5 (helm/sops/yq), and M23
+// (scos.json stream metadata) plan builders; OCI source kinds are
+// declared but unwired pending M22.
 package fetchplan
 
 import (
@@ -71,10 +72,11 @@ func (r MirrorResolver) ResolveBlob(b Blob) (string, error) { return b.URL, nil 
 // Purpose tags identify Plan entries across the M4/M5 workstream so
 // callers can pick the entry they need without index magic.
 const (
-	M4Purpose     = "okd-release"
-	M5PurposeHelm = "tool-helm"
-	M5PurposeSops = "tool-sops"
-	M5PurposeYQ   = "tool-yq"
+	M4Purpose            = "okd-release"
+	M5PurposeHelm        = "tool-helm"
+	M5PurposeSops        = "tool-sops"
+	M5PurposeYQ          = "tool-yq"
+	M23PurposeSCOSStream = "scos-stream"
 )
 
 const (
@@ -228,4 +230,20 @@ func BuildM5Plan(in *M5Input) Plan {
 
 func expandTemplate(tmpl, version, arch string) string {
 	return strings.NewReplacer("{version}", version, "{arch}", arch).Replace(tmpl)
+}
+
+// scosRawBase is the GitHub raw-content root for openshift/installer branches.
+const scosRawBase = "https://raw.githubusercontent.com/openshift/installer"
+
+// BuildSCOSStreamPlan returns a Plan with the scos.json Blob for the given
+// OKD minor. Callers must not pass minor < 19 — earlier release-4.X branches
+// do not carry scos.json. The URL targets a versioned release branch so
+// MirrorResolver (M24) can rewrite it uniformly with other plan entries.
+func BuildSCOSStreamPlan(minor int) Plan {
+	return Plan{
+		HTTPS: []Blob{{
+			URL:     fmt.Sprintf("%s/release-4.%d/data/data/coreos/scos.json", scosRawBase, minor),
+			Purpose: M23PurposeSCOSStream,
+		}},
+	}
 }
