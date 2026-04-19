@@ -178,43 +178,6 @@ agent should re-verify floor versions, `oc-mirror` schema, mirror rule
 coverage, bootstrap-oc URL, and cosign status. Findings travel with
 the plan.
 
-### L15 — Air-gap feasibility + scoping doc
-
-- **Status:** in review — scoping doc committed (25ae630); awaiting user approval before marking done
-- **Category:** feature-gap / design-needed
-- **State:** scoping complete
-- **Effort:** weeks (scoping); full implementation is quarters (via M21–M28)
-- **Impact:** large
-- **Scope:**
-  - Design document in `docs/superpowers/plans/YYYY-MM-DD-airgap-scoping.md`
-    covering:
-    - Complete inventory of external HTTP/package fetches: OKD release
-      binaries, FCOS ISO, helm/sops/yq, terraform (HashiCorp apt/dnf),
-      OS packages (apt/dnf distro mirrors), addon Helm chart pulls,
-      container image references baked into addon manifests, the GitHub
-      update check, any runtime `go install` (e.g. yamlfmt in CI) —
-      audit-grade with file:line refs.
-    - For each fetch: today's source, whether it is already redirectable
-      (M4/M5), and what would be required to redirect it (config field,
-      env var, install-script change, addon contract change).
-    - Target user scenarios: "fully air-gapped homelab with a mirror
-      registry"; "intermittently-connected with a caching proxy";
-      "connected but wants a private mirror for speed/compliance" — pick
-      which to support, explicitly defer the rest.
-    - Mirror contract: what URL shape / directory layout a mirror must
-      expose to satisfy okdctl. Prefer a layout that maps 1:1 to
-      upstream paths so users can `rsync` rather than rewrite.
-    - Addon implications: does an air-gap mode require every addon to
-      declare a mirror-friendly chart repo? If so, an extension to the
-      `Addon` interface may land alongside R1.
-    - Verification strategy: how do we smoke-test air-gap in CI without
-      a real mirror?
-- **Acceptance:** design doc reviewed and approved before any code. Once
-  approved, implementation lands as a series of roadmap items (M21–M28,
-  one per PR), not one mega-PR. M4 and M5 are referenced as precedent
-  for the env > config > default resolution pattern.
-- **Depends on:** none. M4 and M5 are context but not prerequisites.
-
 ### M21 — FetchPlan abstraction + resolver
 
 - **Status:** not started
@@ -1050,6 +1013,43 @@ but link evidence.
   `lint-go` / `build-go` (same pinned action SHAs, `go-version-file:
   go.mod`, `ubuntu-latest`). Closes the gap where `make vet` existed
   locally but CI never invoked it.
+- **L15 — Air-gap feasibility + scoping doc** — done 2026-04-20
+  (direct commit to develop; no PR since the deliverable is a scoping
+  markdown, not shipped code). Doc at
+  `docs/superpowers/plans/2026-04-19-airgap-scoping.md`
+  (commits `25ae630` + `b18aa07` for the §11.0 picker-upper
+  protocol). Locks a `FetchPlan` abstraction (**M21**) as the central
+  refactor replacing ad-hoc fetches. OCI-centric pivot shifts OKD
+  binaries to release-image extraction via
+  `oc adm release extract --tools quay.io/okd/scos-release:<tag>`
+  plus a ~20 MB bootstrap `oc` fetched once from
+  `mirror.openshift.com` (**M22**). Direct `scos.json` GET replaces
+  the `openshift-install coreos print-stream-json` shellout for
+  4.19+, with dual-path fallback for older minors (**M23**) — user
+  explicit "don't throttle users" reversed an earlier proposal to
+  drop <4.19 support. Hybrid responsibility: operator stages the
+  mirror via `oc-mirror --v2`, okdctl emits an
+  `ImageSetConfiguration` + HTTPS blob manifest (**M26**) and
+  verifies via `doctor --airgap` (**M27**). Four in-tree research
+  agents verified the unknowns before locking the design: `oc-mirror
+  --v2` supports `type: okd` via the `TypeOKD` enum + dedicated
+  Cincinnati client (PR #117, 2021), but rejects `4-scos-stable`
+  (use `stable-4.21`); `quay.io/okd/scos-release` has no sigstore
+  signatures so M27 relies on digest pinning (track
+  [okd#2092](https://github.com/okd-project/okd/issues/2092));
+  `scos.json` in `openshift/installer` is 4.19+ only (not 4.16 as
+  the original task brief assumed), so M23 keeps the shellout
+  fallback rather than dropping the older minors. Adjacent items
+  filed: **M29** (GitHub Artifact Attestations on okdctl's own
+  releases — pre-provisioned permissions at `release.yml:7-10`,
+  one-step addition), **M30** (`oras-go/v2` deferred — no current
+  use case), **M32** (embed OKD maintainer GPG pubkey — blocked
+  upstream on okd#2092). Subsequent sessions pick up M21 first via
+  `/roadmap-pickup`; every item's acceptance references the doc's
+  §11.0 pre-implementation verification checklist so
+  planner-phase agents re-verify drift (floor versions, oc-mirror
+  schema, mirror rule coverage, bootstrap-oc URL, cosign status)
+  before coding.
 
 ## Appendix — full item ledger
 
@@ -1134,7 +1134,7 @@ but link evidence.
 | L12 | Container image distribution | **Skipped** |
 | L13 | Auto-update version check | **Done** (PR #69) |
 | L14 | Coverage thresholds + codecov | **Done** (PR #85) |
-| L15 | Air-gap feasibility + scoping doc | In review (doc at 25ae630; M21–M28 filed as impl items) |
+| L15 | Air-gap feasibility + scoping doc | **Done** (scoping complete — see Completed; M21–M28 filed) |
 | R1 | Addon category model + design doc | Workstream (design-doc-first) |
 | R2 | Specific addons after R1 | Deferred conversation |
 
