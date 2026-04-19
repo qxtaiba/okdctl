@@ -68,7 +68,14 @@ func DefaultConfig() *Config {
 				"provider": "flux", "branch": "main", "path": "kubernetes/clusters/production",
 			}},
 			"secretstore": {Enabled: false, Settings: map[string]string{ //nolint:gosec // G101: addon name, not a credential
-				"secrets_dir": "automation/config/secrets",
+				"secrets_dir":              "automation/config/secrets",
+				"provider":                 "onepassword",
+				"onepassword_vaults":       "homelab=1",
+				"vault_path":               "secret",
+				"vault_version":            "v2",
+				"bitwarden_api_url":        "https://api.bitwarden.com",
+				"bitwarden_identity_url":   "https://identity.bitwarden.com",
+				"bitwarden_sdk_server_url": "https://bitwarden-sdk-server.external-secrets.svc.cluster.local:9998",
 			}},
 		},
 		Files: FilesConfig{

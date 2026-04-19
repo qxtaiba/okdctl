@@ -1,4 +1,6 @@
-// Package secretstore provides the 1Password Connect secret bootstrap addon.
+// Package secretstore provides the External Secrets Operator secret-bootstrap
+// addon. It supports multiple ESO backends (onepassword, vault, bitwarden) via
+// a provider setting and applies both auth Secrets and an ESO SecretStore CRD.
 package secretstore
 
 import (
@@ -14,19 +16,26 @@ import (
 )
 
 const (
-	defaultSecretsDir = "automation/config/secrets" //nolint:gosec // directory path, not a credential
-	defaultNamespace  = "external-secrets"
-
-	credentialsFile = "1password-credentials.json"
-	tokenFile       = "1password-token.txt"
-
-	credentialsSecretName = "onepassword-connect-credentials"
-	tokenSecretName       = "onepassword-connect-token"
+	defaultSecretsDir  = "automation/config/secrets" //nolint:gosec // directory path, not a credential
+	defaultNamespace   = "external-secrets"
+	esoSecretStoreName = "okdctl-secretstore" //nolint:gosec // resource name, not a credential
 )
 
 // Settings keys consumed by the SecretStore addon.
 const (
-	SettingSecretsDir = "secrets_dir"
+	SettingSecretsDir             = "secrets_dir"
+	SettingProvider               = "provider"
+	SettingOnepasswordConnectHost = "onepassword_connect_host"
+	SettingOnepasswordVaults      = "onepassword_vaults"
+	SettingVaultServer            = "vault_server"
+	SettingVaultPath              = "vault_path"
+	SettingVaultVersion           = "vault_version"
+
+	SettingBitwardenOrganizationID = "bitwarden_organization_id"
+	SettingBitwardenProjectID      = "bitwarden_project_id"
+	SettingBitwardenAPIURL         = "bitwarden_api_url"
+	SettingBitwardenIdentityURL    = "bitwarden_identity_url"
+	SettingBitwardenSDKServerURL   = "bitwarden_sdk_server_url"
 )
 
 func init() {
@@ -35,15 +44,15 @@ func init() {
 	}
 }
 
-// SecretStore is the 1Password Connect secret-bootstrap addon.
+// SecretStore is the multi-provider ESO secret-bootstrap addon.
 type SecretStore struct{}
 
 // Info returns the addon metadata block used by the registry.
 func (s *SecretStore) Info() addon.AddonInfo {
 	return addon.AddonInfo{
 		Name:           "secretstore",
-		DisplayName:    "1Password Secret Store",
-		Description:    "Bootstrap 1Password Connect secrets from plaintext or sops-encrypted files",
+		DisplayName:    "External Secrets Operator Secret Store",
+		Description:    "Bootstrap ESO provider credentials and SecretStore CRD (onepassword, vault, bitwarden)",
 		Category:       "secrets",
 		Dependencies:   nil,
 		Priority:       50,
@@ -51,100 +60,131 @@ func (s *SecretStore) Info() addon.AddonInfo {
 	}
 }
 
-// Install creates the 1Password Connect credentials and token secrets in the
-// cluster. When no secret source files are present the method logs setup
-// instructions and returns nil (non-fatal).
+// Install creates the auth Secrets and the ESO SecretStore CRD for the
+// configured provider. When provider prerequisites (e.g., credential files)
+// are absent it logs setup instructions and returns nil.
 func (s *SecretStore) Install(ctx context.Context, env *addon.Environment) error {
-	secretsDir, credPath, tokenPath := s.secretFilePaths(env)
-
-	// If no secret files exist, warn with setup instructions and return (non-fatal)
-	if !system.FileExists(credPath) && !system.FileExists(tokenPath) {
-		env.Logger.Warn(fmt.Sprintf("secretstore: no secret files found in %s, skipping", secretsDir))
-		env.Logger.Warn("secretstore: to set up 1password connect secrets:")
-		env.Logger.Warn("  1. download 1password-credentials.json from Settings > Automation in 1password.com")
-		env.Logger.Warn("  2. create a connect token and save it:")
-		env.Logger.Warn("     echo -n 'YOUR_TOKEN' > " + filepath.Join(secretsDir, tokenFile))
-		env.Logger.Warn("  3. copy the credentials file:")
-		env.Logger.Warn("     cp ~/Downloads/1password-credentials.json " + secretsDir + "/")
-		env.Logger.Warn("  4. (optional) encrypt with sops: sops -e -i <file>")
-		env.Logger.Warn("  5. re-run: okdctl addon install secretstore")
-		return nil
+	p, providerName := resolveProvider(env.AddonConfig.Settings)
+	if p == nil {
+		return fmt.Errorf("secretstore: unknown provider %q", providerName)
 	}
 
-	// Only require sops if any file is actually encrypted
-	encrypted := isSopsEncrypted(credPath) || isSopsEncrypted(tokenPath)
-	if encrypted && !executor.CommandExists("sops") {
-		return fmt.Errorf("sops-encrypted secret files detected but sops is not installed: install with 'brew install sops'")
+	skip, err := s.installPrereqCheck(env, providerName)
+	if err != nil {
+		return err
+	}
+	if skip {
+		return nil
 	}
 
 	if err := addon.EnsureNamespace(ctx, env, defaultNamespace); err != nil {
 		return err
 	}
 
-	env.Logger.Info("secretstore: creating 1password connect secrets")
+	env.Logger.Info(fmt.Sprintf("secretstore: installing %s provider", providerName))
 
-	if system.FileExists(credPath) {
+	manifests, err := p.buildResources(ctx, env)
+	if err != nil {
+		return err
+	}
+	for _, manifest := range manifests {
+		m := manifest
 		if err := addon.RetryDefault(ctx, func() error {
-			return s.createSecretFromFile(ctx, env, credPath, credentialsSecretName, "credentials_base64")
+			if _, err := env.Exec.RunWithStdinChecked(ctx, m, "oc", "apply", "-f", "-"); err != nil {
+				return fmt.Errorf("secretstore: apply failed: %w", err)
+			}
+			return nil
 		}); err != nil {
 			return err
 		}
 	}
 
-	if system.FileExists(tokenPath) {
-		if err := addon.RetryDefault(ctx, func() error {
-			return s.createSecretFromFile(ctx, env, tokenPath, tokenSecretName, "token")
-		}); err != nil {
-			return err
-		}
-	}
-
-	env.Logger.Info("secretstore: all connect secrets created successfully")
+	env.Logger.Info(fmt.Sprintf("secretstore: %s provider installed", providerName))
 	return nil
 }
 
-// Verify checks that each secret created by Install exists in the cluster.
-// Verification mirrors Install's per-file contract to avoid contradictory
-// outcomes on partial installs.
+// installPrereqCheck validates provider-specific file prerequisites. It
+// returns (true, nil) to signal a non-fatal skip when required files are
+// absent — install logs setup instructions and returns success so the
+// caller can rerun after placing the files.
+func (s *SecretStore) installPrereqCheck(env *addon.Environment, providerName string) (skip bool, err error) {
+	dir := resolveSecretsDir(env)
+	switch providerName {
+	case "onepassword":
+		credPath := filepath.Join(dir, opCredentialsFile)
+		tokenPath := filepath.Join(dir, opTokenFile)
+		if !system.FileExists(credPath) && !system.FileExists(tokenPath) {
+			env.Logger.Warn(fmt.Sprintf("secretstore: no secret files found in %s, skipping", dir))
+			env.Logger.Warn("secretstore: to set up 1password connect secrets:")
+			env.Logger.Warn("  1. download 1password-credentials.json from Settings > Automation in 1password.com")
+			env.Logger.Warn("  2. create a connect token and save it:")
+			env.Logger.Warn("     echo -n 'YOUR_TOKEN' > " + filepath.Join(dir, opTokenFile))
+			env.Logger.Warn("  3. copy the credentials file:")
+			env.Logger.Warn("     cp ~/Downloads/1password-credentials.json " + dir + "/")
+			env.Logger.Warn("  4. (optional) encrypt with sops: sops -e -i <file>")
+			env.Logger.Warn("  5. re-run: okdctl addon install secretstore")
+			return true, nil
+		}
+		if (isSopsEncrypted(credPath) || isSopsEncrypted(tokenPath)) && !executor.CommandExists("sops") {
+			return false, fmt.Errorf("sops-encrypted secret files detected but sops is not installed: install with 'brew install sops'")
+		}
+	case "vault":
+		tokenPath := filepath.Join(dir, vaultTokenFile)
+		if !system.FileExists(tokenPath) {
+			env.Logger.Warn(fmt.Sprintf("secretstore: vault-token.txt not found in %s, skipping", dir))
+			env.Logger.Warn("secretstore: write your Vault token to " + tokenPath)
+			env.Logger.Warn("secretstore: re-run: okdctl addon install secretstore")
+			return true, nil
+		}
+		if isSopsEncrypted(tokenPath) && !executor.CommandExists("sops") {
+			return false, fmt.Errorf("sops-encrypted vault token detected but sops is not installed: install with 'brew install sops'")
+		}
+	case "bitwarden":
+		tokenPath := filepath.Join(dir, bitwardenTokenFile)
+		if !system.FileExists(tokenPath) {
+			env.Logger.Warn(fmt.Sprintf("secretstore: bitwarden-token.txt not found in %s, skipping", dir))
+			env.Logger.Warn("secretstore: write your Bitwarden machine-account access token to " + tokenPath)
+			env.Logger.Warn("secretstore: re-run: okdctl addon install secretstore")
+			return true, nil
+		}
+		if isSopsEncrypted(tokenPath) && !executor.CommandExists("sops") {
+			return false, fmt.Errorf("sops-encrypted bitwarden token detected but sops is not installed: install with 'brew install sops'")
+		}
+	}
+	return false, nil
+}
+
+// Verify checks that each auth Secret created by Install exists in the cluster.
 func (s *SecretStore) Verify(ctx context.Context, env *addon.Environment) error {
-	// Verify mirrors Install's per-file contract — Install creates each secret
-	// independently based on which source file is present, so Verify must gate
-	// each in-cluster check the same way. This avoids contradictory
-	// "Install OK / Verify fail" states on partial installs.
-	_, credPath, tokenPath := s.secretFilePaths(env)
+	p, providerName := resolveProvider(env.AddonConfig.Settings)
+	if p == nil {
+		return fmt.Errorf("secretstore: unknown provider %q", providerName)
+	}
 	ns := defaultNamespace
-
-	if system.FileExists(credPath) {
-		result, err := env.Exec.Run(ctx, "oc", "get", "secret", credentialsSecretName, "-n", ns)
+	for _, name := range p.secretNames() {
+		result, err := env.Exec.Run(ctx, "oc", "get", "secret", name, "-n", ns)
 		if err != nil || result.ExitCode != 0 {
-			return fmt.Errorf("secret %s not found in namespace %s", credentialsSecretName, ns)
+			return fmt.Errorf("secret %s not found in namespace %s", name, ns)
 		}
-	} else {
-		env.Logger.Warn("secretstore: credentials file not configured, skipping credentials secret verification")
 	}
-
-	if system.FileExists(tokenPath) {
-		result, err := env.Exec.Run(ctx, "oc", "get", "secret", tokenSecretName, "-n", ns)
-		if err != nil || result.ExitCode != 0 {
-			return fmt.Errorf("secret %s not found in namespace %s", tokenSecretName, ns)
-		}
-	} else {
-		env.Logger.Warn("secretstore: token file not configured, skipping token secret verification")
-	}
-
 	return nil
 }
 
-// Uninstall deletes the credentials and token secrets. Deletion failures are
-// logged but do not abort the sequence.
+// Uninstall deletes the provider's auth Secrets and the ESO SecretStore CRD.
+// Deletion failures are logged but do not abort the sequence.
 func (s *SecretStore) Uninstall(ctx context.Context, env *addon.Environment) error {
+	p, providerName := resolveProvider(env.AddonConfig.Settings)
 	ns := defaultNamespace
-	env.Logger.Info("secretstore: removing 1password connect secrets")
-	if _, err := env.Exec.Run(ctx, "oc", "delete", "secret", credentialsSecretName, "-n", ns); err != nil {
-		env.Logger.Warn("secretstore: delete secret failed", "secret", credentialsSecretName, "err", err)
+	env.Logger.Info(fmt.Sprintf("secretstore: removing %s provider resources", providerName))
+	if p != nil {
+		for _, name := range p.secretNames() {
+			if _, err := env.Exec.Run(ctx, "oc", "delete", "secret", name, "-n", ns); err != nil {
+				env.Logger.Warn("secretstore: delete secret failed", "secret", name, "err", err)
+			}
+		}
 	}
-	if _, err := env.Exec.Run(ctx, "oc", "delete", "secret", tokenSecretName, "-n", ns); err != nil {
-		env.Logger.Warn("secretstore: delete secret failed", "secret", tokenSecretName, "err", err)
+	if _, err := env.Exec.Run(ctx, "oc", "delete", "secretstore", esoSecretStoreName, "-n", ns); err != nil {
+		env.Logger.Warn("secretstore: delete SecretStore CRD failed", "name", esoSecretStoreName, "err", err)
 	}
 	return nil
 }
@@ -159,21 +199,38 @@ func (s *SecretStore) RequiredTools() []addon.ToolSpec {
 // DefaultSettings returns the built-in defaults for secretstore's settings.
 func (s *SecretStore) DefaultSettings() map[string]string {
 	return map[string]string{
-		SettingSecretsDir: defaultSecretsDir,
+		SettingSecretsDir:            defaultSecretsDir,
+		SettingProvider:              "onepassword",
+		SettingOnepasswordVaults:     defaultOPVaults,
+		SettingVaultPath:             "secret",
+		SettingVaultVersion:          "v2",
+		SettingBitwardenAPIURL:       defaultBitwardenAPIURL,
+		SettingBitwardenIdentityURL:  defaultBitwardenIdentityURL,
+		SettingBitwardenSDKServerURL: defaultBitwardenSDKServerURL,
 	}
 }
 
-// ValidateSettings returns no errors — the secrets directory is checked at
-// install time.
-func (s *SecretStore) ValidateSettings(_ map[string]string) []string {
-	// No validation errors — secrets_dir defaults are fine, path is checked at install time
-	return nil
+// ValidateSettings dispatches to the selected provider's validator and
+// returns human-readable error strings for any invalid settings.
+func (s *SecretStore) ValidateSettings(settings map[string]string) []string {
+	p, name := resolveProvider(settings)
+	if p == nil {
+		return []string{fmt.Sprintf("provider %q is not supported; valid values: onepassword, vault, bitwarden", name)}
+	}
+	return p.validateSettings(settings)
 }
 
 // WizardFields returns the wizard input fields the secretstore contributes.
 func (s *SecretStore) WizardFields() []addon.WizardField {
 	return []addon.WizardField{
-		{Key: SettingSecretsDir, Label: "Secrets Directory", Default: defaultSecretsDir, Help: "Directory containing 1password-credentials.json and 1password-token.txt (plaintext or sops-encrypted)"},
+		{Key: SettingProvider, Label: "Provider", Default: "onepassword", Help: "ESO backend provider: onepassword, vault, bitwarden"},
+		{Key: SettingSecretsDir, Label: "Secrets Directory", Default: defaultSecretsDir, Help: "Directory containing provider credential files (plaintext or sops-encrypted)"},
+		{Key: SettingOnepasswordVaults, Label: "1Password Vaults", Default: defaultOPVaults, Help: "CSV of name=priority pairs (onepassword only), e.g. \"homelab=1,shared=2\""},
+		{Key: SettingVaultServer, Label: "Vault Server URL", Help: "Required for vault provider (e.g. https://vault.example.com)"},
+		{Key: SettingVaultPath, Label: "Vault Secret Path", Default: "secret", Help: "Vault KV mount path (vault provider only)"},
+		{Key: SettingVaultVersion, Label: "Vault KV Version", Default: "v2", Help: "Vault KV engine version: v1 or v2 (vault provider only)"},
+		{Key: SettingBitwardenOrganizationID, Label: "Bitwarden Organization ID", Help: "Required for bitwarden provider (UUID)"},
+		{Key: SettingBitwardenProjectID, Label: "Bitwarden Project ID", Help: "Required for bitwarden provider (UUID)"},
 	}
 }
 
@@ -186,7 +243,7 @@ func isSopsEncrypted(path string) bool {
 	return strings.Contains(content, `"sops"`) || strings.Contains(content, "sops_version=")
 }
 
-func (s *SecretStore) readSecret(ctx context.Context, env *addon.Environment, path string) (string, error) {
+func readSecret(ctx context.Context, env *addon.Environment, path string) (string, error) {
 	if !isSopsEncrypted(path) {
 		env.Logger.Info(fmt.Sprintf("secretstore: reading plaintext file %s", filepath.Base(path)))
 		data, err := os.ReadFile(path)
@@ -204,7 +261,7 @@ func (s *SecretStore) readSecret(ctx context.Context, env *addon.Environment, pa
 	return result.Stdout, nil
 }
 
-func (s *SecretStore) secretsDir(env *addon.Environment) string {
+func resolveSecretsDir(env *addon.Environment) string {
 	dir := env.AddonConfig.Settings[SettingSecretsDir]
 	if dir == "" {
 		dir = defaultSecretsDir
@@ -215,30 +272,16 @@ func (s *SecretStore) secretsDir(env *addon.Environment) string {
 	return dir
 }
 
-// secretFilePaths returns the resolved secrets directory along with the
-// credentials and token file paths. Install and Verify both use this so the
-// "skip if no files configured" check stays in sync between the two.
-func (s *SecretStore) secretFilePaths(env *addon.Environment) (secretsDir, credPath, tokenPath string) {
-	secretsDir = s.secretsDir(env)
-	credPath = filepath.Join(secretsDir, credentialsFile)
-	tokenPath = filepath.Join(secretsDir, tokenFile)
-	return
-}
-
-func (s *SecretStore) createSecretFromFile(ctx context.Context, env *addon.Environment, filePath, secretName, dataKey string) error {
-	plaintext, err := s.readSecret(ctx, env, filePath)
+func secretManifestFromFile(ctx context.Context, env *addon.Environment, filePath, secretName, dataKey string) (string, error) {
+	plaintext, err := readSecret(ctx, env, filePath)
 	if err != nil {
-		return fmt.Errorf("failed to read %s: %w", filepath.Base(filePath), err)
+		return "", fmt.Errorf("failed to read %s: %w", filepath.Base(filePath), err)
 	}
 	manifest, err := addon.BuildOpaqueSecret(defaultNamespace, secretName, map[string][]byte{
 		dataKey: []byte(strings.TrimSpace(plaintext)),
 	})
 	if err != nil {
-		return fmt.Errorf("build %s secret: %w", secretName, err)
+		return "", fmt.Errorf("build %s secret: %w", secretName, err)
 	}
-	if _, err := env.Exec.RunWithStdinChecked(ctx, manifest, "oc", "apply", "-f", "-"); err != nil {
-		return fmt.Errorf("failed to apply %s secret: %w", secretName, err)
-	}
-	env.Logger.Info(fmt.Sprintf("secretstore: %s secret applied", secretName))
-	return nil
+	return manifest, nil
 }
