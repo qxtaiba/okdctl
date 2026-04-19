@@ -11,13 +11,16 @@ import (
 	"os/exec"
 	"os/user"
 	"path/filepath"
+	"slices"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
 	"github.com/spf13/cobra"
 
 	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/platform"
 	"github.com/qxtaiba/okdctl/internal/system"
 	"github.com/qxtaiba/okdctl/internal/tui"
@@ -64,10 +67,10 @@ type check struct {
 
 // Doctor checks share a uniform signature `func(context.Context) checkResult`
 // so they can live in this registry and run in a loop. Checks that have no
-// cancellable work (checkHostOS, checkNotRoot, checkPath, checkBinaries,
-// checkSSHKey, checkPullSecret, checkDiskSpace) take ctx as a blank-named
-// parameter to keep the signature uniform; only checks that shell out
-// (checkSudo, checkPorts) consume it.
+// cancellable work (checkHostOS, checkNotRoot, checkPath, checkBinDir,
+// checkBinaries, checkSSHKey, checkPullSecret, checkDiskSpace) take ctx as
+// a blank-named parameter to keep the signature uniform; only checks that
+// shell out (checkSudo, checkPorts) consume it.
 func runDoctor(cmd *cobra.Command, _ []string) error {
 	ctx := cmd.Context()
 	defer fmt.Println()
@@ -75,7 +78,8 @@ func runDoctor(cmd *cobra.Command, _ []string) error {
 	checks := []check{
 		{"host os", "platform and operator-mode detection", checkHostOS},
 		{"root check", "guard against running as root (deploy uses sudo internally)", checkNotRoot},
-		{"path", "/usr/local/bin present for auto-installed tools", checkPath},
+		{"bin dir on path", "effective bin dir present on $PATH", checkPath},
+		{"bin dir", "configured bin dir is writable by the invoking user", checkBinDir},
 		{"tools and packages", "host tools, installable clis, and system packages", checkBinaries},
 		{"sudo", "non-interactive (nopasswd) for long-running installs", checkSudo},
 		{"ssh public key", "default key for vm provisioning", checkSSHKey},
@@ -184,12 +188,72 @@ func checkNotRoot(_ context.Context) checkResult {
 	return checkResult{sev: sevPass, detail: "running as unprivileged user"}
 }
 
-func checkPath(_ context.Context) checkResult {
-	path := os.Getenv("PATH")
-	if !strings.Contains(path, "/usr/local/bin") {
-		return checkResult{sev: sevWarn, detail: "/usr/local/bin missing from path; okdctl will prepend it at startup"}
+// binDirResolution pairs the resolved bin dir with a flag set when the
+// config file failed to load. The flag demotes pass→warn and suffixes the
+// detail so a malformed YAML never reads as green.
+type binDirResolution struct {
+	Dir        string
+	LoadFailed bool
+}
+
+func resolveBinDirForDoctor() binDirResolution {
+	loader := config.NewLoader()
+	loaded, err := loader.LoadFile(cfgFile)
+	if err != nil {
+		return binDirResolution{Dir: phase.ResolveBinDir(nil), LoadFailed: true}
 	}
-	return checkResult{sev: sevPass, detail: "/usr/local/bin found on path"}
+	return binDirResolution{Dir: phase.ResolveBinDir(loaded)}
+}
+
+var effectiveBinDir = sync.OnceValue(resolveBinDirForDoctor)
+
+func (r binDirResolution) suffix(s string) string {
+	if r.LoadFailed {
+		return s + " (config unavailable; using default)"
+	}
+	return s
+}
+
+func (r binDirResolution) demote(sev severity) severity {
+	if r.LoadFailed && sev == sevPass {
+		return sevWarn
+	}
+	return sev
+}
+
+func checkPath(_ context.Context) checkResult {
+	r := effectiveBinDir()
+	if slices.Contains(filepath.SplitList(os.Getenv("PATH")), r.Dir) {
+		return checkResult{sev: r.demote(sevPass), detail: r.suffix(r.Dir + " found on $PATH")}
+	}
+	if r.Dir == phase.PreflightBinDir() {
+		return checkResult{sev: sevWarn, detail: r.suffix(r.Dir + " missing from $PATH; okdctl will prepend it at startup")}
+	}
+	return checkResult{sev: sevFail, detail: r.suffix(r.Dir + " missing from $PATH; add it to your shell profile (okdctl cannot auto-prepend a config-only dir)")}
+}
+
+// checkBinDir probes the effective bin dir for existence and user-write
+// access. User-configured dirs that are not user-writable are a fail because
+// setup runs under sudo and would install root-owned binaries.
+func checkBinDir(_ context.Context) checkResult {
+	r := effectiveBinDir()
+	defaultDir := r.Dir == phase.DefaultBinDir
+	if _, err := os.Stat(r.Dir); err != nil {
+		if os.IsNotExist(err) {
+			if defaultDir {
+				return checkResult{sev: sevWarn, detail: r.suffix(r.Dir + " does not exist; setup will create it as root via sudo")}
+			}
+			return checkResult{sev: sevFail, detail: r.suffix(r.Dir + " does not exist; create it first (e.g. mkdir -p)")}
+		}
+		return checkResult{sev: sevFail, detail: r.suffix(r.Dir + " stat failed: " + err.Error())}
+	}
+	if !system.IsDirWritable(r.Dir) {
+		if defaultDir {
+			return checkResult{sev: sevWarn, detail: r.suffix(r.Dir + " not writable by invoking user; setup will install as root via sudo")}
+		}
+		return checkResult{sev: sevFail, detail: r.suffix(r.Dir + " not writable by invoking user; setup runs under sudo so binaries will be root-owned — chown to your user if you want to manage them later")}
+	}
+	return checkResult{sev: r.demote(sevPass), detail: r.suffix(r.Dir + " writable")}
 }
 
 // checkBinaries reports per-item status for three categories: host tools

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"net/netip"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strconv"
@@ -545,6 +546,18 @@ func ValidateTerraformEnv(value string) error {
 	}
 	if !terraformEnvPattern.MatchString(value) {
 		return errors.New("must start with a letter or underscore and contain only letters, digits, hyphens, or underscores")
+	}
+	return nil
+}
+
+// ValidateBinDir accepts empty (default applies) or an absolute path.
+// Relative paths resolve against an unpredictable cwd at install time.
+func ValidateBinDir(value string) error {
+	if value == "" {
+		return nil
+	}
+	if !filepath.IsAbs(value) {
+		return errors.New("must be an absolute path (e.g. /usr/local/bin or /home/user/bin)")
 	}
 	return nil
 }

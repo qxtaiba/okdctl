@@ -36,6 +36,7 @@ type Options struct {
 	VIP            string
 	ClusterName    string
 	RemovePackages bool
+	BinDir         string
 	Logger         *slog.Logger
 }
 
@@ -74,7 +75,7 @@ func Execute(ctx context.Context, opts *Options) error {
 			errs = append(errs, err)
 		}
 		if opts.RemovePackages {
-			if err := Packages(ctx, logger); err != nil {
+			if err := Packages(ctx, opts.BinDir, logger); err != nil {
 				errs = append(errs, err)
 			}
 		}

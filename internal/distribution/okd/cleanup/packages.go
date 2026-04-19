@@ -54,8 +54,10 @@ func InstalledBinaries() []string {
 
 // Packages removes dnf packages and tool binaries installed during setup.
 // Individual failures are logged and aggregated; the function returns an
-// error only if at least one removal failed.
-func Packages(ctx context.Context, logger *slog.Logger) error {
+// error only if at least one removal failed. Empty binDir falls back to
+// phase.DefaultBinDir.
+func Packages(ctx context.Context, binDir string, logger *slog.Logger) error {
+	binDir = phase.BinDirOrDefault(binDir)
 	logger = logutil.OrNop(logger)
 	var hasErrors bool
 
@@ -69,7 +71,7 @@ func Packages(ctx context.Context, logger *slog.Logger) error {
 
 	binaries := InstalledBinaries()
 	for _, binary := range binaries {
-		binPath := filepath.Join(phase.DefaultBinDir, binary)
+		binPath := filepath.Join(binDir, binary)
 		if _, err := os.Stat(binPath); os.IsNotExist(err) {
 			continue // Already removed or never installed
 		}

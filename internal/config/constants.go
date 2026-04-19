@@ -45,4 +45,5 @@ const (
 
 	FieldDeploymentAutoApprove  = "deployment.auto_approve"
 	FieldDeploymentTerraformEnv = "deployment.terraform_env"
+	FieldDeploymentBinDir       = "deployment.bin_dir"
 )

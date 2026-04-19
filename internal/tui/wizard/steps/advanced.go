@@ -157,6 +157,15 @@ var AdvancedStepDefinition = wizard.StepDefinition{
 						return valNo
 					},
 				},
+				{
+					Key:       "bin_dir",
+					Label:     "bin dir",
+					Default:   "",
+					Help:      "absolute path to install oc, openshift-install and tools; ~/ is expanded. blank = /usr/local/bin",
+					Validate:  config.ValidateBinDir,
+					ConfigSet: wizard.SetString(func(c *config.Config, v string) { c.Deployment.BinDir = v }),
+					ConfigGet: wizard.GetString(func(c *config.Config) string { return c.Deployment.BinDir }),
+				},
 			},
 		},
 	},

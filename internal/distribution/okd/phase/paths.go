@@ -3,12 +3,14 @@ package phase
 
 import (
 	"log/slog"
+	"os"
 	"path/filepath"
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/distribution"
 	"github.com/qxtaiba/okdctl/internal/executor"
 	"github.com/qxtaiba/okdctl/internal/logutil"
+	"github.com/qxtaiba/okdctl/internal/system"
 )
 
 // BaseOptions is the common option set every phase's own Options embeds —
@@ -38,9 +40,60 @@ const (
 	DefaultDNSMasqConfigDir = "/etc/dnsmasq.d"
 )
 
+// ResolveBinDir returns the tool-install directory: OKDCTL_BIN_DIR env >
+// cfg.Deployment.BinDir > DefaultBinDir. cfg may be nil; non-absolute values
+// fall through. Paths are cleaned but `..` traversal is not rejected.
+func ResolveBinDir(cfg *config.Config) string {
+	if v := envBinDir(); v != "" {
+		return v
+	}
+	if cfg != nil && cfg.Deployment.BinDir != "" {
+		if dir, ok := validateAndClean(cfg.Deployment.BinDir); ok {
+			return dir
+		}
+	}
+	return DefaultBinDir
+}
+
+// PreflightBinDir returns the env-only bin dir resolution; the config is not
+// yet parsed when main.preflight runs.
+func PreflightBinDir() string {
+	if v := envBinDir(); v != "" {
+		return v
+	}
+	return DefaultBinDir
+}
+
+// BinDirOrDefault returns s, or DefaultBinDir when s is empty.
+func BinDirOrDefault(s string) string {
+	if s == "" {
+		return DefaultBinDir
+	}
+	return s
+}
+
+func envBinDir() string {
+	v := os.Getenv("OKDCTL_BIN_DIR")
+	if v == "" {
+		return ""
+	}
+	if dir, ok := validateAndClean(v); ok {
+		return dir
+	}
+	return ""
+}
+
+func validateAndClean(raw string) (string, bool) {
+	expanded := system.ExpandPath(raw)
+	if err := config.ValidateBinDir(expanded); err != nil {
+		return "", false
+	}
+	return filepath.Clean(expanded), true
+}
+
 // ExternalToolBinaries returns the names of tool binaries installed into
-// DefaultBinDir by the setup phase. Declared here (not in setup/) so cleanup
-// can remove the same set without importing setup.
+// the resolved bin dir (see ResolveBinDir) by the setup phase. Declared here
+// (not in setup/) so cleanup can remove the same set without importing setup.
 func ExternalToolBinaries() []string {
 	return []string{
 		"yq",

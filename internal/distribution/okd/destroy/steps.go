@@ -78,6 +78,7 @@ func (p *Phase) destroySteps(cfg *config.Config, opts *Options) []distribution.S
 					ClusterName:    cfg.Cluster.Name,
 					PreserveConfig: false,
 					RemovePackages: opts.RemovePackages,
+					BinDir:         phase.ResolveBinDir(cfg),
 					Logger:         p.Log,
 				}
 				if err := cleanup.Execute(ctx, cleanupOpts); err != nil {
