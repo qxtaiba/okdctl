@@ -39,6 +39,7 @@ okdctl [flags]
 * [okdctl cleanup](okdctl_cleanup.md)	 - Remove OKD cluster artifacts without destroying infrastructure
 * [okdctl completion](okdctl_completion.md)	 - Generate shell completion script
 * [okdctl config](okdctl_config.md)	 - Inspect okdctl configuration
+* [okdctl debug-bundle](okdctl_debug-bundle.md)	 - Collect a support bundle for troubleshooting
 * [okdctl deploy](okdctl_deploy.md)	 - Deploy a Kubernetes cluster
 * [okdctl destroy](okdctl_destroy.md)	 - Destroy a Kubernetes cluster
 * [okdctl doctor](okdctl_doctor.md)	 - Check that your environment is ready to deploy a cluster
