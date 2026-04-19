@@ -17,6 +17,7 @@ import (
 	"github.com/spf13/cobra"
 	"sigs.k8s.io/yaml"
 
+	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/executor"
 	"github.com/qxtaiba/okdctl/internal/tui"
@@ -67,7 +68,7 @@ type manifestEntry struct {
 	Message string `json:"message,omitempty"`
 }
 
-func runDebugBundle(cmd *cobra.Command, _ []string) error {
+func runDebugBundle(cmd *cobra.Command, _ []string) (retErr error) {
 	ctx := cmd.Context()
 	bundleID := uuid.NewString()
 	bundleAt := time.Now().UTC()
@@ -79,6 +80,8 @@ func runDebugBundle(cmd *cobra.Command, _ []string) error {
 
 	tui.Info("collecting debug bundle", tui.LF("bundle_id", bundleID), tui.LF("output", outPath))
 
+	cfg, cfgErr := loadConfig(cfgFile)
+
 	f, err := os.OpenFile(outPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
 	if err != nil {
 		return fmt.Errorf("create bundle file: %w", err)
@@ -87,6 +90,17 @@ func runDebugBundle(cmd *cobra.Command, _ []string) error {
 
 	gz := gzip.NewWriter(f)
 	tw := tar.NewWriter(gz)
+	// Deferred closes run on every return path so a failure between tar writes
+	// and explicit Close still finalizes the archive — without this a mid-run
+	// error leaves a truncated .tgz that gunzip reports as corrupt.
+	defer func() {
+		if cErr := tw.Close(); cErr != nil && retErr == nil {
+			retErr = fmt.Errorf("finalize tar: %w", cErr)
+		}
+		if cErr := gz.Close(); cErr != nil && retErr == nil {
+			retErr = fmt.Errorf("finalize gzip: %w", cErr)
+		}
+	}()
 
 	addFile := func(name string, data []byte) error {
 		hdr := &tar.Header{
@@ -107,9 +121,9 @@ func runDebugBundle(cmd *cobra.Command, _ []string) error {
 	projectRoot, prErr := resolveProjectRoot()
 
 	sections := []manifestEntry{
-		bundleConfig(addFile),
+		bundleConfig(addFile, cfg, cfgErr),
 		bundleLogFile(addFile),
-		bundleTerraformState(ctx, addFile, projectRoot, prErr),
+		bundleTerraformState(ctx, addFile, projectRoot, prErr, cfg),
 		bundleDoctor(ctx, addFile),
 		bundleSystemMeta(addFile, bundleID, bundleAt),
 	}
@@ -135,21 +149,13 @@ func runDebugBundle(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("write manifest: %w", err)
 	}
 
-	if err := tw.Close(); err != nil {
-		return fmt.Errorf("finalize tar: %w", err)
-	}
-	if err := gz.Close(); err != nil {
-		return fmt.Errorf("finalize gzip: %w", err)
-	}
-
 	tui.Info("debug bundle written", tui.LF("path", outPath), tui.LF("bundle_id", bundleID))
 	return nil
 }
 
-func bundleConfig(addFile func(string, []byte) error) manifestEntry {
-	cfg, err := loadConfig(cfgFile)
-	if err != nil {
-		return manifestEntry{Name: "config", Status: "skipped", Message: fmt.Sprintf("load config: %v", err)}
+func bundleConfig(addFile func(string, []byte) error, cfg *config.Config, cfgErr error) manifestEntry {
+	if cfgErr != nil {
+		return manifestEntry{Name: "config", Status: "skipped", Message: fmt.Sprintf("load config: %v", cfgErr)}
 	}
 	redacted := redactConfig(cfg)
 	data, err := yaml.Marshal(redacted)
@@ -180,12 +186,12 @@ func bundleLogFile(addFile func(string, []byte) error) manifestEntry {
 	return manifestEntry{Name: "log-file", Status: "ok", Message: logFile}
 }
 
-func bundleTerraformState(ctx context.Context, addFile func(string, []byte) error, projectRoot string, prErr error) manifestEntry {
+func bundleTerraformState(ctx context.Context, addFile func(string, []byte) error, projectRoot string, prErr error, cfg *config.Config) manifestEntry {
 	if prErr != nil {
 		return manifestEntry{Name: "terraform-state", Status: "skipped", Message: fmt.Sprintf("project root: %v", prErr)}
 	}
 	tfEnv := "production"
-	if cfg, loadErr := loadConfig(cfgFile); loadErr == nil {
+	if cfg != nil {
 		tfEnv = phase.GetTerraformEnv(cfg)
 	}
 	tfDir := filepath.Join(projectRoot, "infrastructure", "terraform", "environments", tfEnv)
