@@ -422,19 +422,6 @@ bandwidth opens. Each references the audit finding ID for diff tracking.
   paths are battle-tested — plan first, then swap.
 - **Depends on:** none
 
-#### D5 — plan gorilla/websocket removal path
-- **Status:** not started
-- **Category:** deps (maintenance-signal)
-- **Effort:** hours (plan), days (if exec)
-- **Impact:** small
-- **Finding:** `dep:33ef32bf:gorilla-websocket-maintenance`
-- **Evidence:** `go.mod:41` — 5+yr-old WebSocket lib pulled transitively
-  via go-proxmox. Not in okdctl's reachable call graph.
-- **Acceptance:** write a 1-paragraph CLAUDE.md note confirming
-  non-reachability; track go-proxmox upstream for a `coder/websocket`
-  migration and pick up whenever they bump.
-- **Depends on:** `D1` (justifies the same dep audit surface).
-
 ## Explicitly skipped
 
 Do not revisit these without a strong new signal.
@@ -800,6 +787,14 @@ but link evidence.
 - **D4 — tighten terraform version floor in CI** — closed 2026-04-19 as
   done-by-prior-work. `ci.yml:89` is `terraform_version: "1.10.3"` (was
   `"1.10"`). Landed in commit `d69c36d`.
+- **D5 — plan gorilla/websocket removal path** — closed 2026-04-19 as
+  done-by-prior-work. `CLAUDE.md:167-171` documents non-reachability
+  (okdctl's Go source contains zero `websocket` references outside
+  `go.mod`/`go.sum`) and records the tracking signal for the
+  go-proxmox → `coder/websocket` upstream bump so the transitive
+  update lands without local code changes. Audit ledger
+  `.claude/audits/resolved-2026-04-18.jsonl:75` records this as
+  resolved under `task-21-D5`. Landed in commit `d69c36d`.
 
 ## Appendix — full item ledger
 
