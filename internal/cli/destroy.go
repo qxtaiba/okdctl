@@ -11,6 +11,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/infrastructure/terraform"
 	"github.com/qxtaiba/okdctl/internal/system"
@@ -115,10 +116,7 @@ func runDestroyDryRun(ctx context.Context, cfg *config.Config) error {
 		return err
 	}
 
-	tfEnv := "production"
-	if cfg.Deployment.TerraformEnv != "" {
-		tfEnv = cfg.Deployment.TerraformEnv
-	}
+	tfEnv := phase.GetTerraformEnv(cfg)
 	terraformDir := filepath.Join(projectRoot, "infrastructure", "terraform", "environments", tfEnv)
 
 	tfOpts := []terraform.Option{terraform.WithLogger(tui.SimpleLogger())}

@@ -10,6 +10,7 @@ import (
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/credentials"
+	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/infrastructure/proxmox"
 	"github.com/qxtaiba/okdctl/internal/tui"
@@ -146,10 +147,7 @@ func runDeployDryRun(ctx context.Context, cfg *config.Config) error {
 
 	tui.Info("dry-run: running terraform plan (no changes will be made)")
 
-	tfEnv := "production"
-	if cfg.Deployment.TerraformEnv != "" {
-		tfEnv = cfg.Deployment.TerraformEnv
-	}
+	tfEnv := phase.GetTerraformEnv(cfg)
 	if planErr := prov.PlanOnly(ctx, cfg, proxmox.ProvisionOptions{
 		ProjectRoot:  projectRoot,
 		TerraformEnv: tfEnv,
