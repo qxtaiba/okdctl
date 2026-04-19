@@ -5,78 +5,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
-	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/download"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/system"
 )
-
-const defaultOKDReleaseBaseURL = "https://github.com/okd-project/okd/releases/download"
-
-// ResolveReleaseBaseURL returns the OKD release base URL for downloads.
-// OKDCTL_OKD_RELEASE_URL (env) overrides cfg.Deployment.OKDReleaseBaseURL,
-// which overrides the upstream GitHub default — the env wins so air-gapped
-// operators can redirect a single invocation without editing the config.
-func ResolveReleaseBaseURL(cfg *config.Config) string {
-	if v := os.Getenv("OKDCTL_OKD_RELEASE_URL"); v != "" {
-		return strings.TrimRight(v, "/")
-	}
-	if cfg.Deployment.OKDReleaseBaseURL != "" {
-		return strings.TrimRight(cfg.Deployment.OKDReleaseBaseURL, "/")
-	}
-	return defaultOKDReleaseBaseURL
-}
-
-var toolURLEnvVars = map[string]string{
-	string(toolHelm): "OKDCTL_HELM_URL",
-	string(toolSops): "OKDCTL_SOPS_URL",
-	string(toolYQ):   "OKDCTL_YQ_URL",
-}
-
-var toolVersionEnvVars = map[string]string{
-	string(toolHelm): "OKDCTL_HELM_VERSION",
-	string(toolSops): "OKDCTL_SOPS_VERSION",
-	string(toolYQ):   "OKDCTL_YQ_VERSION",
-}
-
-// ResolveToolURL returns the download URL template for the named binary tool.
-// Resolution order: env var > cfg.Deployment.ToolVersions[tool].URLTemplate >
-// defaultURL. The returned string may contain {version} and {arch} placeholders
-// that callers substitute via strings.NewReplacer; a URL with no placeholders
-// passes through verbatim.
-func ResolveToolURL(tool, defaultURL string, cfg *config.Config) string {
-	if envKey, ok := toolURLEnvVars[tool]; ok {
-		if v := os.Getenv(envKey); v != "" {
-			return v
-		}
-	}
-	if cfg != nil {
-		if ov, ok := cfg.Deployment.ToolVersions[tool]; ok && ov.URLTemplate != "" {
-			return ov.URLTemplate
-		}
-	}
-	return defaultURL
-}
-
-// ResolveToolVersion returns the version string used to expand the {version}
-// placeholder in a tool URL template. Resolution order: env var >
-// cfg.Deployment.ToolVersions[tool].Version > defaultVersion.
-func ResolveToolVersion(tool, defaultVersion string, cfg *config.Config) string {
-	if envKey, ok := toolVersionEnvVars[tool]; ok {
-		if v := os.Getenv(envKey); v != "" {
-			return v
-		}
-	}
-	if cfg != nil {
-		if ov, ok := cfg.Deployment.ToolVersions[tool]; ok && ov.Version != "" {
-			return ov.Version
-		}
-	}
-	return defaultVersion
-}
 
 // DownloadOKDTools fetches openshift-install and oc for the given OKD
 // version, verifies checksums when available, extracts the binaries, and

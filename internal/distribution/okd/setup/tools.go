@@ -17,6 +17,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/download"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/executor"
+	"github.com/qxtaiba/okdctl/internal/fetchplan"
 	"github.com/qxtaiba/okdctl/internal/httputil"
 	"github.com/qxtaiba/okdctl/internal/platform"
 	"github.com/qxtaiba/okdctl/internal/system"
@@ -66,26 +67,16 @@ func (p *Phase) InstallExternalTools(ctx context.Context, cfg *config.Config) er
 	return nil
 }
 
-// binaryTools defines the install specs for tools fetched as prebuilt
-// binaries. url may contain {version} and {arch} placeholders substituted
-// at install time; defaultVersion seeds {version} when no override is set.
-// yq intentionally uses GitHub's /releases/latest/download/ redirect rather
-// than a {version} placeholder — it is the only path that resolves to "the
-// current release" without a concrete tag.
-var binaryTools = map[externalTool]binaryInstallSpec{
-	toolYQ: {
-		name: "yq", versionFlag: "--version",
-		url: "https://github.com/mikefarah/yq/releases/latest/download/yq_linux_{arch}",
-	},
-	toolHelm: {
-		name: "helm", versionFlag: "version", defaultVersion: "v3.17.3",
-		url:           "https://get.helm.sh/helm-{version}-linux-{arch}.tar.gz",
-		archiveBinary: "helm", stripComponents: 1,
-	},
-	toolSops: {
-		name: "sops", versionFlag: "--version", defaultVersion: "v3.9.4",
-		url: "https://github.com/getsops/sops/releases/download/{version}/sops-{version}.linux.{arch}",
-	},
+var binaryToolMeta = map[externalTool]struct {
+	name            string
+	versionFlag     string
+	archiveBinary   string
+	stripComponents int
+	purpose         string
+}{
+	toolYQ:   {name: "yq", versionFlag: "--version", purpose: fetchplan.M5PurposeYQ},
+	toolHelm: {name: "helm", versionFlag: "version", archiveBinary: "helm", stripComponents: 1, purpose: fetchplan.M5PurposeHelm},
+	toolSops: {name: "sops", versionFlag: "--version", purpose: fetchplan.M5PurposeSops},
 }
 
 func (p *Phase) installTool(ctx context.Context, tool externalTool, cfg *config.Config) error {
@@ -98,20 +89,32 @@ func (p *Phase) installTool(ctx context.Context, tool externalTool, cfg *config.
 		return p.installTerraform(ctx)
 	}
 
-	spec, ok := binaryTools[tool]
+	meta, ok := binaryToolMeta[tool]
 	if !ok {
 		p.Log.Warn(fmt.Sprintf("tools: no installer for %s, skipping (install manually)", tool))
 		return nil
 	}
-	resolvedURL := ResolveToolURL(string(tool), spec.url, cfg)
-	resolvedVersion := ResolveToolVersion(string(tool), spec.defaultVersion, cfg)
-	if resolvedURL != spec.url || resolvedVersion != spec.defaultVersion {
-		p.Log.Info("tools: using override", "tool", tool, "version", resolvedVersion, "url", resolvedURL)
+
+	in := fetchplan.ResolveM5Input(platform.DownloadArch(), cfg)
+	plan := fetchplan.BuildM5Plan(&in)
+	var resolvedURL string
+	for _, b := range plan.HTTPS {
+		if b.Purpose == meta.purpose {
+			resolvedURL = b.URL
+			break
+		}
 	}
-	spec.url = strings.NewReplacer(
-		"{version}", resolvedVersion,
-		"{arch}", platform.DownloadArch(),
-	).Replace(resolvedURL)
+	if resolvedURL == "" {
+		return fmt.Errorf("tools: no fetchplan URL resolved for %s", tool)
+	}
+
+	spec := binaryInstallSpec{
+		name:            meta.name,
+		url:             resolvedURL,
+		versionFlag:     meta.versionFlag,
+		archiveBinary:   meta.archiveBinary,
+		stripComponents: meta.stripComponents,
+	}
 	return p.installBinary(ctx, &spec)
 }
 
@@ -148,7 +151,6 @@ func (p *Phase) installTerraform(ctx context.Context) error {
 type binaryInstallSpec struct {
 	name            string
 	url             string
-	defaultVersion  string
 	versionFlag     string
 	archiveBinary   string // if non-empty, download is a tar.gz; value is the binary path within the archive
 	stripComponents int
