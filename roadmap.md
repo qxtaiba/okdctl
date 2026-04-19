@@ -799,6 +799,48 @@ but link evidence.
   update lands without local code changes. Audit ledger
   `.claude/audits/resolved-2026-04-18.jsonl:75` records this as
   resolved under `task-21-D5`. Landed in commit `d69c36d`.
+- **M14 — Correlation ID per deploy run** — done PR #82, merged
+  2026-04-19. `uuid.NewString()` is minted at the top of `runDeploy`
+  and `runDestroy` (before credential/config/wizard log lines) and
+  pinned on the package-level charmlog loggers via new
+  `tui.SetRunID`. Subsequent `tui.X` calls and every slog record from
+  the provisioner's `SimpleLogger()` snapshot carry `run_id`
+  automatically. `tui.RunID()` reads the pinned value back for the
+  summary renderer; `PostDeploySummary` and `InterruptSummary` gained
+  a `runID string` parameter and render it via `sb.kv("run_id",
+  runID)`. `github.com/google/uuid` promoted from transitive (via
+  go-proxmox) to direct require.
+- **M13b — Complete errtypes migration across phase code** — done PR
+  #83, merged 2026-04-19. Wraps every exported phase/addon boundary
+  in `internal/distribution/okd/{setup,install,postinstall,destroy,
+  cleanup}`, `internal/addon/manager.go`, and
+  `internal/credentials/envfile.go` with the appropriate `errtypes.*`
+  type. ~30 files touched, ~100 wrapping sites. `ctx.Err()` paths in
+  `install/monitor.go` left as raw `fmt.Errorf` so
+  `errors.Is(err, context.Canceled)` still resolves and root.go's
+  exit-130 dispatch stays intact. U4's `errors.As` now routes the
+  full failure surface to exit codes 2–5 instead of falling through
+  to 1. Cleanup destroy paths are NonFatal steps so those wraps are
+  belt-and-braces; every other site is a Fatal boundary. Sweep took
+  three review rounds — gap narrowed from ~30 sites (round 1) → 14
+  (round 2) → 9 (round 3), all addressed inline.
+- **M12 — Generalize SecretStore beyond 1Password** — done PR #81,
+  merged 2026-04-19. New package-private `provider` interface in
+  `internal/addon/catalog/secretstore/providers.go` with three impls:
+  `onepassword` (default, preserves existing behavior and file
+  names), `vault` (full — `vault-token.txt` + ESO SecretStore CRD
+  with token auth), `bitwarden` (full — Bitwarden Secrets Manager /
+  Vaultwarden-compatible, requires an in-cluster
+  `bitwarden-sdk-server` sidecar not provisioned by this addon).
+  Install now applies both the provider's auth Secrets AND an ESO
+  `SecretStore` CRD named `okdctl-secretstore` (previously only
+  Opaque Secrets). `ValidateSettings` dispatches to the provider's
+  validator so misconfig surfaces before `oc apply`.
+  `onepassword_vaults` setting exposes the 1P vault map as CSV
+  (`"homelab=1,shared=2"`) with default `"homelab=1"`; a structured
+  key-value editor is tracked as N26. Design investigation returned
+  M19 (typed decoder) and M20 (grouped wizard fields) as the
+  follow-on items.
 
 ## Appendix — full item ledger
 
