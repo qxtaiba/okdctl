@@ -96,7 +96,7 @@ scaffolding the internal code already holds."
 
 #### M29 — GitHub Artifact Attestations for release binaries
 
-- **Status:** not started
+- **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/m29-attestations
 - **Category:** supply-chain / distribution
 - **State:** not started
 - **Effort:** hours
@@ -180,7 +180,7 @@ the plan.
 
 ### M21 — FetchPlan abstraction + resolver
 
-- **Status:** not started
+- **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/m21-m23-fetchplan
 - **Category:** refactor / air-gap prerequisite
 - **State:** design approved (L15)
 - **Effort:** days
@@ -231,7 +231,7 @@ the plan.
 
 ### M23 — Direct scos.json fetch for 4.19+ (dual-path)
 
-- **Status:** not started
+- **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/m21-m23-fetchplan
 - **Category:** refactor / cleanup
 - **State:** design approved (L15)
 - **Effort:** hours
