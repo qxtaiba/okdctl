@@ -40,10 +40,12 @@ okdctl [flags]
 * [okdctl completion](okdctl_completion.md)	 - Generate shell completion script
 * [okdctl config](okdctl_config.md)	 - Inspect okdctl configuration
 * [okdctl deploy](okdctl_deploy.md)	 - Deploy a Kubernetes cluster
+* [okdctl describe](okdctl_describe.md)	 - Drill into a specific node or addon
 * [okdctl destroy](okdctl_destroy.md)	 - Destroy a Kubernetes cluster
 * [okdctl doctor](okdctl_doctor.md)	 - Check that your environment is ready to deploy a cluster
 * [okdctl kubeconfig](okdctl_kubeconfig.md)	 - Print or export the cluster kubeconfig
 * [okdctl releases](okdctl_releases.md)	 - Query available OKD versions
+* [okdctl status](okdctl_status.md)	 - Print a post-deploy cluster summary
 * [okdctl update-ingress](okdctl_update-ingress.md)	 - Switch ingress DNS from HAProxy to LoadBalancer IPs
 * [okdctl version](okdctl_version.md)	 - Print version, git commit, build date
 
