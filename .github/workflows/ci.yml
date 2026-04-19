@@ -44,6 +44,8 @@ jobs:
           go-version-file: go.mod
       - run: go test -coverprofile=coverage.out ./...
       - run: go tool cover -func=coverage.out | tail -1
+      - run: chmod +x .github/scripts/coverage-check.sh
+      - run: .github/scripts/coverage-check.sh coverage.out
   security:
     runs-on: ubuntu-latest
     steps:
