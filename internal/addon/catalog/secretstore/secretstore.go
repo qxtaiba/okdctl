@@ -231,16 +231,22 @@ func (s *SecretStore) ValidateSettings(settings map[string]string) []string {
 }
 
 // WizardFields returns the wizard input fields the secretstore contributes.
+// Fields are annotated with Group to associate them with their provider
+// section; common fields have an empty Group.
 func (s *SecretStore) WizardFields() []addon.WizardField {
 	return []addon.WizardField{
 		{Key: SettingProvider, Label: "Provider", Default: providerOnepassword, Help: "ESO backend provider: onepassword, vault, bitwarden"},
 		{Key: SettingSecretsDir, Label: "Secrets Directory", Default: defaultSecretsDir, Help: "Directory containing provider credential files (plaintext or sops-encrypted)"},
-		{Key: SettingOnepasswordVaults, Label: "1Password Vaults", Default: defaultOPVaults, Help: "CSV of name=priority pairs (onepassword only), e.g. \"homelab=1,shared=2\""},
-		{Key: SettingVaultServer, Label: "Vault Server URL", Help: "Required for vault provider (e.g. https://vault.example.com)"},
-		{Key: SettingVaultPath, Label: "Vault Secret Path", Default: "secret", Help: "Vault KV mount path (vault provider only)"},
-		{Key: SettingVaultVersion, Label: "Vault KV Version", Default: "v2", Help: "Vault KV engine version: v1 or v2 (vault provider only)"},
-		{Key: SettingBitwardenOrganizationID, Label: "Bitwarden Organization ID", Help: "Required for bitwarden provider (UUID)"},
-		{Key: SettingBitwardenProjectID, Label: "Bitwarden Project ID", Help: "Required for bitwarden provider (UUID)"},
+		{Key: SettingOnepasswordConnectHost, Label: "Connect Host", Default: defaultOPConnectHost, Help: "1Password Connect server URL", Group: providerOnepassword},
+		{Key: SettingOnepasswordVaults, Label: "Vaults", Default: defaultOPVaults, Help: "CSV of name=priority pairs, e.g. \"homelab=1,shared=2\"", Group: providerOnepassword},
+		{Key: SettingVaultServer, Label: "Server URL", Help: "Vault server URL (e.g. https://vault.example.com)", Group: providerVault},
+		{Key: SettingVaultPath, Label: "Secret Path", Default: "secret", Help: "Vault KV mount path", Group: providerVault},
+		{Key: SettingVaultVersion, Label: "KV Version", Default: "v2", Help: "Vault KV engine version: v1 or v2", Group: providerVault},
+		{Key: SettingBitwardenOrganizationID, Label: "Organization ID", Help: "Bitwarden organization UUID", Group: providerBitwarden},
+		{Key: SettingBitwardenProjectID, Label: "Project ID", Help: "Bitwarden project UUID", Group: providerBitwarden},
+		{Key: SettingBitwardenAPIURL, Label: "API URL", Default: defaultBitwardenAPIURL, Help: "Bitwarden Secrets Manager API URL", Group: providerBitwarden},
+		{Key: SettingBitwardenIdentityURL, Label: "Identity URL", Default: defaultBitwardenIdentityURL, Help: "Bitwarden identity service URL", Group: providerBitwarden},
+		{Key: SettingBitwardenSDKServerURL, Label: "SDK Server URL", Default: defaultBitwardenSDKServerURL, Help: "In-cluster bitwarden-sdk-server URL", Group: providerBitwarden},
 	}
 }
 

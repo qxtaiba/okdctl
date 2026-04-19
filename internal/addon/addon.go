@@ -71,13 +71,16 @@ type ToolProvider interface {
 
 // WizardField describes an input field an addon contributes to the wizard.
 // Key is the settings map key; Required = true blocks wizard progress until
-// populated.
+// populated. Group, when non-empty, associates the field with a named
+// provider group; fields sharing a Group value belong to the same visual
+// section.
 type WizardField struct {
 	Key      string
 	Label    string
 	Default  string
 	Help     string
 	Required bool
+	Group    string
 }
 
 // WizardProvider is implemented by addons that expose configuration fields
