@@ -147,7 +147,7 @@ scaffolding the internal code already holds."
 ### Theme C — observability, error messages, logging
 
 #### M14 — Correlation ID per deploy run
-- **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/m14-correlation-id
+- **Status:** in review — PR #82
 - **Category:** feature-gap
 - **State:** not started
 - **Effort:** hours
@@ -240,7 +240,7 @@ scaffolding the internal code already holds."
 - **Depends on:** M13 (PR #70) — must be `done` so the types exist.
 
 #### M12 — Generalize SecretStore beyond 1Password
-- **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/m12-secretstore-providers
+- **Status:** in review — PR #81
 - **Category:** half-done
 - **State:** partially done
 - **Effort:** days
