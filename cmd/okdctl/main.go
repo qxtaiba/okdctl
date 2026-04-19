@@ -5,10 +5,15 @@ package main
 
 import (
 	"os"
+	"path/filepath"
+	"slices"
 	"strings"
 
 	_ "github.com/qxtaiba/okdctl/internal/addon/catalog" // Register all built-in addons
 	"github.com/qxtaiba/okdctl/internal/cli"
+	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
+	"github.com/qxtaiba/okdctl/internal/system"
 	"github.com/qxtaiba/okdctl/internal/tui"
 )
 
@@ -26,11 +31,22 @@ func preflight() {
 		os.Exit(1)
 	}
 
-	// /usr/local/bin may be missing from PATH when invoked via sudo
+	// Warn before OKDCTL_BIN_DIR is silently dropped downstream.
+	if v := os.Getenv("OKDCTL_BIN_DIR"); v != "" {
+		expanded := system.ExpandPath(v)
+		if err := config.ValidateBinDir(expanded); err != nil {
+			detail := err.Error()
+			if strings.HasPrefix(v, "~") && expanded == v {
+				detail = "tilde expansion failed (home dir unresolved); " + detail
+			}
+			tui.Warn("OKDCTL_BIN_DIR=" + v + " ignored: " + detail)
+		}
+	}
+	binDir := phase.PreflightBinDir()
 	path := os.Getenv("PATH")
-	if !strings.Contains(path, "/usr/local/bin") {
-		if err := os.Setenv("PATH", "/usr/local/bin:"+path); err != nil {
-			tui.Warn("failed to prepend /usr/local/bin to PATH: " + err.Error())
+	if !slices.Contains(filepath.SplitList(path), binDir) {
+		if err := os.Setenv("PATH", binDir+":"+path); err != nil {
+			tui.Warn("failed to prepend " + binDir + " to PATH: " + err.Error())
 		}
 	}
 }

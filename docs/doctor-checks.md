@@ -1,8 +1,8 @@
 # Doctor checks reference
 
-`okdctl doctor` runs 9 preflight checks against the local environment
+`okdctl doctor` runs 10 preflight checks against the local environment
 before a deploy. The command is Linux-only (it reads `/etc/os-release` and
-uses Linux syscalls). Checks run in the order listed below; all 9 always
+uses Linux syscalls). Checks run in the order listed below; all 10 always
 execute and results are reported per-check. Exit code is 0 when there are no
 `[fail]` results (`[warn]` is tolerated), 1 otherwise.
 
@@ -10,13 +10,14 @@ execute and results are reported per-check. Exit code is 0 when there are no
 
 1. [host os](#host-os)
 2. [root check](#root-check)
-3. [path](#path)
-4. [tools and packages](#tools-and-packages)
-5. [sudo](#sudo)
-6. [ssh public key](#ssh-public-key)
-7. [pull secret](#pull-secret)
-8. [disk space](#disk-space)
-9. [host ports](#host-ports)
+3. [bin dir on path](#bin-dir-on-path)
+4. [bin dir](#bin-dir)
+5. [tools and packages](#tools-and-packages)
+6. [sudo](#sudo)
+7. [ssh public key](#ssh-public-key)
+8. [pull secret](#pull-secret)
+9. [disk space](#disk-space)
+10. [host ports](#host-ports)
 
 ---
 
@@ -54,25 +55,79 @@ normal use.
 
 ---
 
-## path
+## bin dir on path
 
-**What it checks:** Verifies that `/usr/local/bin` is present in `$PATH`.
-The setup phase auto-installs `oc`, `openshift-install`, and `terraform` into
-that directory; they must be reachable after installation.
+**What it checks:** Resolves the effective bin dir (OKDCTL_BIN_DIR env >
+`deployment.bin_dir` in `okdctl.yaml` > `/usr/local/bin`) and verifies that
+exact directory is present in `$PATH`. The setup phase installs `oc`,
+`openshift-install`, and `terraform` there; they must be reachable after
+installation. Membership is checked component-wise via `filepath.SplitList`,
+so `/home/user/bin` does not false-positive against `/home/user/bin-archived`.
+When the config file cannot be loaded, the detail is suffixed with
+`(config unavailable; using default)` and a pass is demoted to warn.
 
-**Warn message:**
+**Warn message (default or `OKDCTL_BIN_DIR`-configured dir missing from `$PATH`):**
 ```
-/usr/local/bin missing from path; okdctl will prepend it at startup
+<dir> missing from $PATH; okdctl will prepend it at startup
 ```
 
-**How to fix:** Add `/usr/local/bin` to your shell profile:
+**Fail message (config-file-only `deployment.bin_dir` missing from `$PATH`):**
+```
+<dir> missing from $PATH; add it to your shell profile (okdctl cannot auto-prepend a config-only dir)
+```
+
+**How to fix:** Add the resolved bin dir (replace `<your-bin-dir>` with the
+value reported in the doctor output) to your shell profile:
 ```bash
-echo 'export PATH="/usr/local/bin:$PATH"' >> ~/.bashrc
+echo 'export PATH="<your-bin-dir>:$PATH"' >> ~/.bashrc
 source ~/.bashrc
 ```
-`okdctl` prepends the path at startup so the deploy itself will work, but
-your interactive shell will not see the installed tools until the profile is
-reloaded.
+`okdctl` auto-prepends the bin dir at startup only when the dir is the
+default (`/usr/local/bin`) or set via `OKDCTL_BIN_DIR` — both are available
+before config parsing. A dir set only via `deployment.bin_dir` in
+`okdctl.yaml` must be added to `$PATH` manually; okdctl cannot auto-prepend
+it because the config is not loaded at startup.
+
+---
+
+## bin dir
+
+**What it checks:** Resolves the effective bin dir (`OKDCTL_BIN_DIR` env >
+`deployment.bin_dir` in `okdctl.yaml` > `/usr/local/bin`) and verifies the
+directory exists and is writable by the invoking user. Writability is probed
+by creating and immediately removing a temporary file; missing directories
+are reported separately. When the config file cannot be loaded the detail
+text is suffixed with `(config unavailable; using default)` so a malformed
+YAML does not hide behind a green pass row.
+
+**Pass message:**
+```
+<dir> writable
+```
+
+**Warn message (default `/usr/local/bin` — either missing or not writable):**
+```
+/usr/local/bin does not exist; setup will create it as root via sudo
+/usr/local/bin not writable by invoking user; setup will install as root via sudo
+```
+
+**Fail message (user-configured dir — either missing or not writable):**
+```
+<dir> does not exist; create it first (e.g. mkdir -p)
+<dir> not writable by invoking user; setup runs under sudo so binaries will be root-owned — chown to your user if you want to manage them later
+```
+
+**How to fix:**
+
+For the default `/usr/local/bin` a `[warn]` is expected and normal — `okdctl deploy`
+escalates via sudo. For a user-configured `deployment.bin_dir`, ensure the directory
+exists and is owned (or group-writable) by the invoking user:
+```bash
+mkdir -p ~/bin
+# in okdctl.yaml:
+# deployment:
+#   bin_dir: /home/youruser/bin   # or ~/bin — tilde is expanded
+```
 
 ---
 
@@ -82,7 +137,8 @@ reloaded.
 
 - **Host tools** (`curl`, `ssh`, `git`) — must already be installed; missing = `[fail]`.
 - **Installable CLIs** (`oc`, `openshift-install`, `terraform`) — downloaded by
-  setup into `/usr/local/bin`; missing = `[warn]`.
+  setup into the configured bin dir (see [bin dir](#bin-dir); defaults to
+  `/usr/local/bin`); missing = `[warn]`.
 - **System packages** (`coreos-installer`, `haproxy`, `dnsmasq`, `apache`/`httpd`/`apache2`)
   — installed by setup via `dnf`/`apt`; missing = `[warn]`.
 

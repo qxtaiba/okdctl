@@ -216,6 +216,18 @@ func AtomicWriteString(path, content string, perm os.FileMode) error {
 	return AtomicWrite(path, []byte(content), perm)
 }
 
+// IsDirWritable probes by creating and removing a temp file; permission bits
+// alone can mislead when ACLs or mount options differ.
+func IsDirWritable(dir string) bool {
+	f, err := os.CreateTemp(dir, "")
+	if err != nil {
+		return false
+	}
+	_ = f.Close()
+	_ = os.Remove(f.Name())
+	return true
+}
+
 // MakeExecutable adds the owner/group/other execute bits to path's existing
 // mode. Equivalent to `chmod +x` but without a subprocess.
 func MakeExecutable(path string) error {

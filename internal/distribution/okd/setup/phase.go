@@ -80,8 +80,9 @@ type NodeInfo struct {
 // Phase coordinates the setup phase execution.
 type Phase struct {
 	phase.BasePhase
-	OS  platform.OS
-	Pkg platform.PackageManager
+	OS     platform.OS
+	Pkg    platform.PackageManager
+	BinDir string
 }
 
 // New constructs a setup Phase with the given executor, logger, and okdctl

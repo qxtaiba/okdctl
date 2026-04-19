@@ -159,7 +159,8 @@ type ToolVersionOverride struct {
 }
 
 // DeploymentConfig tunes deployment-time behavior: Terraform environment,
-// auto-approve, timeouts, release mirror, and per-tool version overrides.
+// auto-approve, timeouts, release mirror, per-tool version overrides, and
+// the directory where setup installs managed binaries.
 type DeploymentConfig struct {
 	TerraformEnv      string                         `json:"terraform_env,omitempty"`
 	AutoApprove       bool                           `json:"auto_approve,omitempty"`
@@ -168,6 +169,7 @@ type DeploymentConfig struct {
 	BootstrapTimeout  int                            `json:"bootstrap_timeout,omitempty"`
 	InstallTimeout    int                            `json:"install_timeout,omitempty"`
 	OKDReleaseBaseURL string                         `json:"okd_release_base_url,omitempty"`
+	BinDir            string                         `json:"bin_dir,omitempty"`
 	ToolVersions      map[string]ToolVersionOverride `json:"tool_versions,omitempty"`
 }
 

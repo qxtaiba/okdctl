@@ -83,6 +83,7 @@ func runCleanup(cmd *cobra.Command, _ []string) error {
 		ClusterName:    cfg.Cluster.Name,
 		PreserveConfig: false,
 		RemovePackages: false,
+		BinDir:         phase.ResolveBinDir(cfg),
 		Logger:         tui.SimpleLogger(),
 	}
 

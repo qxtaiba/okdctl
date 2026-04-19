@@ -130,6 +130,7 @@ func (p *Provisioner) Prepare(ctx context.Context, cfg *config.Config) ([]distri
 
 	setupPhase := setup.New(p.executor, p.logger, p.version)
 	setupPhase.Recorder = p.recorder
+	setupPhase.BinDir = phase.ResolveBinDir(cfg)
 	return setupPhase.Execute(ctx, cfg, &opts)
 }
 

@@ -182,7 +182,7 @@ func (p *Phase) installBinary(ctx context.Context, spec *binaryInstallSpec) erro
 		srcPath = filepath.Join(extractDir, spec.archiveBinary)
 	}
 
-	if err := installBinaryToPath(ctx, srcPath, spec.name); err != nil {
+	if err := p.installBinaryToPath(ctx, srcPath, spec.name); err != nil {
 		return err
 	}
 	if !isToolInstalled(externalTool(spec.name)) {
@@ -192,11 +192,12 @@ func (p *Phase) installBinary(ctx context.Context, spec *binaryInstallSpec) erro
 	return nil
 }
 
-func installBinaryToPath(_ context.Context, srcPath, name string) error {
-	destPath := filepath.Join(phase.DefaultBinDir, name)
+func (p *Phase) installBinaryToPath(_ context.Context, srcPath, name string) error {
+	binDir := phase.BinDirOrDefault(p.BinDir)
+	destPath := filepath.Join(binDir, name)
 
 	if err := system.CopyFile(srcPath, destPath); err != nil {
-		return fmt.Errorf("failed to copy %s to %s: %w", name, phase.DefaultBinDir, err)
+		return fmt.Errorf("failed to copy %s to %s: %w", name, binDir, err)
 	}
 
 	if err := system.MakeExecutable(destPath); err != nil {
