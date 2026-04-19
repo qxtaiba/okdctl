@@ -79,19 +79,6 @@ scaffolding the internal code already holds."
 
 ### Theme E — config ergonomics, air-gap, rootless
 
-#### M6 — `DefaultBinDir` configurable (rootless support)
-- **Status:** in review — PR #93
-- **Category:** feature-gap
-- **State:** not started
-- **Effort:** hours
-- **Impact:** medium
-- **Evidence:** `internal/distribution/okd/phase/paths.go:24` hardcodes
-  `/usr/local/bin`.
-- **Acceptance:** config field + env override for bin dir. Elevation
-  logic skips re-exec when installing to a user-local dir. Doctor check
-  validates the chosen dir is writable by the invoking user.
-- **Depends on:** U2 (wizard should then collect this field).
-
 ### Theme G — CI, tooling, distribution
 
 #### M29 — GitHub Artifact Attestations for release binaries
@@ -1050,6 +1037,43 @@ but link evidence.
   planner-phase agents re-verify drift (floor versions, oc-mirror
   schema, mirror rule coverage, bootstrap-oc URL, cosign status)
   before coding.
+- **M6 — `DefaultBinDir` configurable (rootless support)** — done PR
+  #93, merged 2026-04-20. New `DeploymentConfig.BinDir` YAML field and
+  `OKDCTL_BIN_DIR` env var override the hardcoded `/usr/local/bin`,
+  resolved via a new `phase.ResolveBinDir(cfg)` helper
+  (env > config > default, mirroring M4's `ResolveReleaseBaseURL`
+  pattern). `system.ExpandPath` is applied before validation so
+  `~/bin` matches pull_secret / ssh_public_key ergonomics. Setup
+  install sites (`InstallToolsToSystem`, `installBinaryToPath`) and
+  the cleanup binary-removal path thread the resolved value through
+  `okd.go:Prepare`, `cli/cleanup.go`, and `destroy/steps.go`; a shared
+  `phase.BinDirOrDefault` replaces three copies of the zero-value
+  fallback. `phase.PreflightBinDir` encapsulates the env-only
+  resolution `main.preflight` uses (config isn't parsed at startup)
+  so doctor's renamed `bin dir on path` check can compare against
+  exactly what preflight chose. New doctor `bin dir` check probes
+  existence and writability separately (stat errors reported with
+  raw error); user-configured fail text makes the sudo re-exec
+  semantics explicit (binaries are root-owned; chown to manage
+  later). `resolveBinDirForDoctor` memoises the config load via
+  `sync.OnceValue` and surfaces load failures via a detail suffix
+  plus pass→warn demotion so a malformed YAML never reads as green.
+  Elevation is **not** rewired: acceptance bullet 2 is satisfied
+  machinery-only (ResolveBinDir / IsDirWritable / checkBinDir all
+  ship) — a blanket re-exec skip would bypass sudo for
+  deploy/destroy/cleanup/update-ingress, which also write to
+  `/etc/haproxy`, `/etc/dnsmasq.d`, `/var/www/html` and run `dnf`.
+  Future standalone `okdctl install-tools` subcommand is the
+  correct home for the scoped skip. Seven review rounds resolved
+  the full surface: round 3 (destroy cleanup.Options missing
+  BinDir, setup zero-value), round 4 (`ResolveBinDir` bypassed
+  `ValidateBinDir`, path-vs-default equality fragility,
+  preflight/doctor contradiction when env set), round 5
+  (missing-dir vs not-writable distinction, `checkPath` warn-gate
+  on post-validation env, docs parametric fix snippet, tilde
+  expansion, `PreflightBinDir` vs `checkPath` consistency), round
+  6 (malformed-config demote, stat error branch, comment density),
+  final PASS on round 7.
 
 ## Appendix — full item ledger
 
@@ -1092,7 +1116,7 @@ but link evidence.
 | M3 | `--dry-run` / `--plan` mode | **Done** (PR #87) |
 | M4 | OKD release URL override | **Done** (PR #61) |
 | M5 | Tool binary versions override | **Done** (PR #75) |
-| M6 | `DefaultBinDir` rootless | Sprint 1 |
+| M6 | `DefaultBinDir` rootless | **Done** (PR #93) |
 | M7 | Provider interface extraction | **Skipped** |
 | M8 | MetalLB addon | Deferred (under R2) |
 | M9 | cert-manager addon | Deferred (under R2) |
