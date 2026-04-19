@@ -211,7 +211,7 @@ scaffolding the internal code already holds."
 ### Theme F — error types, exit codes, correctness
 
 #### M19 — Typed addon settings via per-addon decoder method
-- **Status:** in progress — branch: feat/m19-m20-addon-typed-settings
+- **Status:** in review — PR #89
 - **Category:** feature-gap / refactor
 - **State:** design needed (Option A from the M12 design investigation)
 - **Effort:** days
@@ -237,7 +237,7 @@ scaffolding the internal code already holds."
   or after R1.)
 
 #### M20 — Grouped wizard fields for structured addon settings
-- **Status:** in progress — branch: feat/m19-m20-addon-typed-settings
+- **Status:** in review — PR #89
 - **Category:** feature-gap / UX
 - **State:** design needed (Option C from the M12 design investigation)
 - **Effort:** days
