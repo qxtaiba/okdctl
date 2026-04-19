@@ -131,29 +131,6 @@ scaffolding the internal code already holds."
 - **Depends on:** N9 (log-file flag so logs persist), M14 (correlation
   ID for cross-referencing).
 
-### Theme D — wizard coverage
-
-#### N26 — TUI key-value map editor component
-- **Status:** in review — PR #92
-- **Category:** feature-gap / TUI
-- **State:** design needed
-- **Effort:** days
-- **Impact:** small (enables future addon features)
-- **Evidence:** M12 (PR #81) secretstore has `onepassword_vaults:
-  "homelab=1,shared=2"` (CSV in a string) because the wizard has no
-  native map-editor widget. Future addons with structured sub-maps
-  (vault mount paths, custom headers, label selectors) will either
-  re-invent CSV-in-string or have to edit YAML by hand.
-- **Acceptance:** new TUI component (analogous to `InputField` /
-  `InputGroup` / the `MultiSelectField` added for N16) renders a
-  focused table of (key, value) rows with add/delete/edit navigation.
-  Integrates with `FieldDefinition` via a new `FieldTypeMapEditor` or
-  `FieldTypeKeyValue` type. Stores as a YAML map or as a delimited
-  string (configurable per field). Retrofit `onepassword_vaults` in
-  the secretstore wizard as the first consumer.
-- **Depends on:** none. (Nice-to-have foundation; does not block
-  M19/M20 but pairs naturally with M20.)
-
 ### Theme E — config ergonomics, air-gap, rootless
 
 #### M6 — `DefaultBinDir` configurable (rootless support)
@@ -831,6 +808,29 @@ but link evidence.
   ~15 transitive packages). Orchestrator `MetricsRecorder` interface
   with a no-op default means existing callers are unaffected;
   `BasePhase.Recorder` propagates through setup/install/postinstall.
+- **N26 — TUI key-value map editor component** — done PR #92, merged
+  2026-04-19. New `components.KeyValueField` in
+  `internal/tui/wizard/components/key_value_field.go` renders a focused
+  (key, value) table mirroring the `MultiSelectField` shape — `j/k`
+  moves rows, `h/l` switches column, `a` adds, `d` deletes, `ctrl+e`
+  toggles edit mode (the host `DataDrivenStep` consumes `enter`/`tab`/
+  `shift+tab` for inter-field navigation, same constraint documented
+  on `MultiSelectField`). `FieldDefinition` gains `Type:
+  FieldTypeKeyValue` and `KVAsDelimitedString bool` — true = CSV
+  `"k1=v1,k2=v2"`, false = YAML-map `"k1: v1\nk2: v2"`. Secretstore
+  wizard's `secretstore_op_vaults` retrofit as the first consumer in
+  CSV mode; `Default: "homelab=1"` round-trips unchanged so existing
+  YAMLs keep working. Review round 1 flagged 11 findings (empty-key
+  pair emission in `Value()`, sentinel-vs-dynamic error, redundant doc
+  comments, dead `defaultValue` field, file-name snake_case, host-step
+  key-consumption type doc, one-frame width drift in `addRow`,
+  delimiter-round-trip doc on `Value`/`SetValue`, blink-cmd plumbing
+  through `syncInputFocus`/`Focus`/`toggleEditMode`, 73→60-char commit
+  subject) — all addressed in round 2. Develop merged 7 items
+  (M19/M20/M2/M1/M3/L5/L14/D2) during this session; rebase caught the
+  drift and moved the retrofit target onto M20's grouped
+  `secretstore_op_vaults` field in the onepassword section rather than
+  adding a duplicate-binding field in the earlier "common" layout.
 
 ## Appendix — full item ledger
 
@@ -867,7 +867,7 @@ but link evidence.
 | N22 | Troubleshooting / FAQ | Deferred |
 | N23 | HTTP error context | **Done** (PR #62) |
 | N25 | Progress bars for long ops | **Done** (PR #78) |
-| N26 | TUI key-value map editor component | Sprint 1 |
+| N26 | TUI key-value map editor component | **Done** (PR #92) |
 | M1 | `okdctl status` / `describe` | **Done** (PR #84) |
 | M2 | `okdctl debug-bundle` | **Done** (PR #90) |
 | M3 | `--dry-run` / `--plan` mode | **Done** (PR #87) |
