@@ -169,11 +169,13 @@ write the comment — then it carries real information.
   uses REST discovery only, not shell/console websockets. Safe to keep
   until go-proxmox migrates to `coder/websocket`, at which point take the
   bump without local code changes.
-- **Kept despite transitive-weight flags.** `schollz/progressbar/v3` has
-  one call site in `internal/download/download.go` (byte-count download
-  progress). A `charm.land/bubbles/v2/progress` swap would require a
-  bubbletea Program for a one-shot terminal indicator — strictly heavier.
-  Kept.
+- **Removed transitive-weight deps.** `schollz/progressbar/v3` was dropped
+  in favour of a ~30 LOC hand-rolled byte-progress writer in
+  `internal/download/progress.go`. The writer reuses
+  `tui.ProgressBarsEnabled()` and `golang.org/x/term` for TTY gating.
+  Re-introducing a third-party progressbar needs a second call site or a
+  concrete feature (cross-file aggregate, ETA, coloured segments) that
+  the hand-roll can't serve.
 - **Pin stability.** GitHub Actions must be SHA-pinned with a version
   trailer (`uses: owner/action@<40-hex-sha> # vX.Y.Z`). Tool installs
   from Go must be explicit versions — never `@latest`. Terraform versions

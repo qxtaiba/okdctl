@@ -13,12 +13,9 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/schollz/progressbar/v3"
-
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/httputil"
 	"github.com/qxtaiba/okdctl/internal/logutil"
-	"github.com/qxtaiba/okdctl/internal/tui"
 )
 
 // Options configures a Download call. An empty ExpectedChecksum disables
@@ -145,23 +142,14 @@ func fetchToFile(ctx context.Context, client *http.Client, opts *Options, filena
 		return fmt.Errorf("create output file: %w", err)
 	}
 
-	dst := io.Writer(outFile)
-	var bar *progressbar.ProgressBar
-	if tui.ProgressBarsEnabled() {
-		bar = progressbar.DefaultBytes(resp.ContentLength, filename)
-		dst = io.MultiWriter(outFile, bar)
-	}
-	if _, err := io.Copy(dst, resp.Body); err != nil {
-		if bar != nil {
-			_ = bar.Exit()
-		}
+	pw := newProgressWriter(outFile, resp.ContentLength, filename)
+	if _, err := io.Copy(pw, resp.Body); err != nil {
+		_ = pw.Close()
 		_ = outFile.Close()
 		_ = os.Remove(opts.OutputPath)
 		return fmt.Errorf("write file: %w", err)
 	}
-	if bar != nil {
-		_ = bar.Finish()
-	}
+	_ = pw.Close()
 
 	if err := outFile.Sync(); err != nil {
 		_ = outFile.Close()
