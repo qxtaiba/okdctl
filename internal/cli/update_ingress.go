@@ -6,6 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/postinstall"
 	"github.com/qxtaiba/okdctl/internal/tui"
 )
@@ -13,6 +14,7 @@ import (
 var (
 	updateIngressYes           bool
 	updateIngressRemoveHAProxy bool
+	updateIngressDryRun        bool
 )
 
 var updateIngressCmd = &cobra.Command{
@@ -35,6 +37,22 @@ Run this after deploying a LoadBalancer provider (e.g., MetalLB).`,
 func init() {
 	updateIngressCmd.Flags().BoolVarP(&updateIngressYes, "yes", "y", false, "skip confirmation prompts")
 	updateIngressCmd.Flags().BoolVar(&updateIngressRemoveHAProxy, "remove-haproxy", true, "remove haproxy from bastion after dns switch")
+	updateIngressCmd.Flags().BoolVar(&updateIngressDryRun, "dry-run", false, "preview update-ingress mutations without touching the cluster")
+}
+
+// runUpdateIngressDryRun prints the mutations update-ingress would perform
+// without connecting to the cluster or modifying any host configuration.
+func runUpdateIngressDryRun(cfg *config.Config) error {
+	clusterFQDN := cfg.Cluster.Name + "." + cfg.Cluster.Domain
+	tui.Info(fmt.Sprintf("dry-run: update-ingress for cluster '%s'", clusterFQDN))
+	fmt.Println("  would: query IngressControllers (oc get ingresscontroller -n openshift-ingress-operator)")
+	fmt.Println("  would: wait for LoadBalancer IPs on router-* services in openshift-ingress")
+	fmt.Println("  would: deploy production dnsmasq config pointing *.apps at LoadBalancer IPs")
+	if updateIngressRemoveHAProxy {
+		fmt.Println("  would: stop and disable haproxy on the bastion (if all controllers are LB-type)")
+	}
+	tui.Info("dry-run: re-run without --dry-run to execute update-ingress")
+	return nil
 }
 
 func runUpdateIngress(cmd *cobra.Command, _ []string) error {
@@ -43,6 +61,10 @@ func runUpdateIngress(cmd *cobra.Command, _ []string) error {
 	cfg, err := loadConfig(cfgFile)
 	if err != nil {
 		return err
+	}
+
+	if updateIngressDryRun {
+		return runUpdateIngressDryRun(cfg)
 	}
 
 	clusterFQDN := cfg.Cluster.Name + "." + cfg.Cluster.Domain

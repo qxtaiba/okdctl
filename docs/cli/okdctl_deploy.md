@@ -13,6 +13,7 @@ okdctl deploy [flags]
 ### Options
 
 ```
+      --dry-run         preview terraform plan and step listing without deploying
   -h, --help            help for deploy
       --minimal         use minimal defaults (single-node cluster)
   -o, --output string   output file for configuration (default "okdctl.yaml")

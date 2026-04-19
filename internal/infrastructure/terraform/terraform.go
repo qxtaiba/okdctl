@@ -230,6 +230,27 @@ func (t *Executor) Plan(ctx context.Context, opts PlanOptions) error {
 	return t.run(ctx, args...)
 }
 
+// PlanStreamed runs "terraform plan" streaming stdout and stderr directly to the
+// terminal. Use instead of Plan when the operator must see the plan output —
+// Plan captures into internal buffers and only surfaces stderr on failure.
+func (t *Executor) PlanStreamed(ctx context.Context, opts PlanOptions) error {
+	args := []string{"plan"}
+	args = append(args, t.buildVarArgs(opts.VarFile, opts.Vars)...)
+
+	if opts.Destroy {
+		args = append(args, "-destroy")
+	}
+	if opts.OutputPlanFile != "" {
+		args = append(args, "-out="+opts.OutputPlanFile)
+	}
+	for _, target := range opts.Targets {
+		args = append(args, "-target="+target)
+	}
+
+	t.logger.Info("terraform: running plan (streaming to terminal)")
+	return t.exec.RunInteractive(ctx, "terraform", args...)
+}
+
 // Apply runs "terraform apply". When opts.PlanFile is set, Vars, VarFile,
 // and AutoApprove are ignored — the plan file encodes the full change set.
 func (t *Executor) Apply(ctx context.Context, opts ApplyOptions) error {

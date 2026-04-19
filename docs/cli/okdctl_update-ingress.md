@@ -23,6 +23,7 @@ okdctl update-ingress [flags]
 ### Options
 
 ```
+      --dry-run          preview update-ingress mutations without touching the cluster
   -h, --help             help for update-ingress
       --remove-haproxy   remove haproxy from bastion after dns switch (default true)
   -y, --yes              skip confirmation prompts

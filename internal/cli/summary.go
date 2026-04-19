@@ -49,6 +49,31 @@ func (s *summaryBuilder) String() string {
 	return s.b.String()
 }
 
+// DryRunStep is a single step entry for a dry-run plan listing.
+type DryRunStep struct {
+	ID   string
+	Name string
+}
+
+// DryRunSummary renders the step listing for a dry-run inside a boxed section
+// consistent with PostDeploySummary.
+func DryRunSummary(title string, steps []DryRunStep) string {
+	sb := newSummaryBuilder()
+	sb.b.WriteString("\n")
+	sb.b.WriteString("  " + tui.WarningStyle.Render("dry-run — no changes made") + "\n")
+	sb.newline()
+
+	if len(steps) > 0 {
+		sb.section("would execute")
+		for _, s := range steps {
+			sb.kv(s.ID, s.Name)
+		}
+		sb.newline()
+	}
+
+	return "\n" + tui.BoxedSectionCompact(sb.String(), title, tui.DefaultBoxWidth) + "\n"
+}
+
 // ValidationSummary renders a config validation result for CLI output,
 // listing each error with field context when present.
 func ValidationSummary(result *config.ValidationResult) string {
