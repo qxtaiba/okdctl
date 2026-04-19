@@ -131,19 +131,6 @@ scaffolding the internal code already holds."
 - **Depends on:** N8 (step-timing summary shape to reuse), N5
   (kubeconfig access pattern).
 
-#### M2 — `okdctl debug-bundle`
-- **Status:** in review — PR #90
-- **Category:** feature-gap
-- **State:** not started
-- **Effort:** week
-- **Impact:** large
-- **Acceptance:** `okdctl debug-bundle [--output bundle.tgz]` collects:
-  redacted config, recent log file (see N9), `oc adm must-gather`
-  output, terraform state summary, `okdctl doctor` results, system
-  metadata. Output is a tarball safe to attach to a support ticket.
-- **Depends on:** N9 (log-file flag so logs persist), M14 (correlation
-  ID for cross-referencing).
-
 ### Theme C — observability, error messages, logging
 
 #### L5 — Prometheus metrics endpoint during deploy
@@ -826,6 +813,27 @@ but link evidence.
   `ShouldShow` and plumbing one exceeds M20 scope. Group headers alone
   materially improve UX over the previous flat 2-field view. Flux
   unchanged.
+- **M2 — `okdctl debug-bundle`** — done PR #90, merged 2026-04-19.
+  New `internal/cli/debug_bundle.go` collects redacted config
+  (via N6's `redactConfig`), the `--log-file` from N9, `oc adm
+  must-gather` output, `terraform state list` (raw `terraform.tfstate`
+  excluded — it carries Proxmox credentials), `okdctl doctor` output,
+  and runtime/version metadata into a gzip tarball with a top-level
+  `manifest.yaml`. Each section returns a `manifestEntry` instead of
+  fatally erroring, so a partial bundle is still useful in the exact
+  scenario (broken cluster) where bundles are needed most.
+  Doctor collection is build-tag-split (`debug_bundle_doctor.go` /
+  `debug_bundle_doctor_stub.go`), mirroring the `doctor_cmd.go` /
+  `doctor_stub.go` pattern from M16. Must-gather is bounded by a
+  5-minute context timeout and a `--skip-must-gather` flag; output
+  is archived through `os.OpenRoot`-scoped reads so symlinks cannot
+  redirect reads outside the temp dir (TOCTOU-safe). Bundle
+  correlation id minted via `uuid.NewString()`; `github.com/google/uuid`
+  promoted from indirect to direct in `go.mod` (M14 had left this
+  drift). Not added to `rootRequiredCmds` — read-only collection.
+  Review round 1 caught three issues: double `loadConfig` print,
+  tar/gzip not deferred (truncation risk on mid-run failure), and
+  the go.mod tidy drift; round 2 PASSed.
 
 ## Appendix — full item ledger
 
@@ -864,7 +872,7 @@ but link evidence.
 | N25 | Progress bars for long ops | **Done** (PR #78) |
 | N26 | TUI key-value map editor component | Sprint 1 |
 | M1 | `okdctl status` / `describe` | Sprint 1 |
-| M2 | `okdctl debug-bundle` | Sprint 1 |
+| M2 | `okdctl debug-bundle` | **Done** (PR #90) |
 | M3 | `--dry-run` / `--plan` mode | Sprint 1 |
 | M4 | OKD release URL override | **Done** (PR #61) |
 | M5 | Tool binary versions override | **Done** (PR #75) |
