@@ -1,4 +1,6 @@
+---
 schemaVersion: "v1"
+
 # Media Server Stack Configuration
 # =================================
 # This configuration creates a cluster optimized for running

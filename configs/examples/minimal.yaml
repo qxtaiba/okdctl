@@ -1,4 +1,6 @@
+---
 schemaVersion: "v1"
+
 # Minimal Single-Node Cluster Configuration
 # ==========================================
 # This configuration creates a minimal single-node cluster
