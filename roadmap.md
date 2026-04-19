@@ -80,7 +80,7 @@ scaffolding the internal code already holds."
 ### Theme E — config ergonomics, air-gap, rootless
 
 #### M6 — `DefaultBinDir` configurable (rootless support)
-- **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/m6-bindir
+- **Status:** in review — PR #93
 - **Category:** feature-gap
 - **State:** not started
 - **Effort:** hours
