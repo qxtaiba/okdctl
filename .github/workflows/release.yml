@@ -29,6 +29,14 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: attest build provenance
+        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4.1.0
+        with:
+          subject-path: |
+            dist/okdctl_*.tar.gz
+            dist/okdctl_*.deb
+            dist/okdctl_*.rpm
+            dist/SHA256SUMS
       # Compute base64-encoded subject hashes for SLSA provenance from
       # goreleaser's artifacts.json. Pattern adapted from anchore/syft and
       # goreleaser/goreleaser's own release workflows.

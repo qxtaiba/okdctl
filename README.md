@@ -197,6 +197,18 @@ This proves the checksums file came from a GitHub Actions workflow in this
 repository — no maintainer private keys, no trust in the release page markup,
 no trust in any CDN between you and GitHub.
 
+Each release also carries a GitHub artifact attestation (SLSA build
+provenance recorded in the repository's attestations log). Verify any
+shipped file with:
+
+```sh
+gh attestation verify <file> --repo qxtaiba/okdctl
+```
+
+This checks the attestation against GitHub's Sigstore instance and confirms
+the artifact was produced by a workflow in this repository. Requires the
+[GitHub CLI](https://cli.github.com/) (`gh`).
+
 Binaries are built with `-trimpath` and deterministic ldflags, so `make
 build` from the tagged commit produces a byte-identical binary.
 `sha256sum bin/okdctl` should match `SHA256SUMS`.
