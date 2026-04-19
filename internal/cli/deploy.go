@@ -18,10 +18,11 @@ import (
 )
 
 var (
-	deployOutputFile string
-	deployMinimal    bool
-	deployYes        bool
-	deployDryRun     bool
+	deployOutputFile  string
+	deployMinimal     bool
+	deployYes         bool
+	deployDryRun      bool
+	deployMetricsAddr string
 )
 
 var deployCmd = &cobra.Command{
@@ -36,6 +37,7 @@ func init() {
 	deployCmd.Flags().BoolVar(&deployMinimal, "minimal", false, "use minimal defaults (single-node cluster)")
 	deployCmd.Flags().BoolVarP(&deployYes, "yes", "y", false, "skip prompts, use defaults")
 	deployCmd.Flags().BoolVar(&deployDryRun, "dry-run", false, "preview terraform plan and step listing without deploying")
+	deployCmd.Flags().StringVar(&deployMetricsAddr, "metrics-addr", "", "address for Prometheus metrics endpoint (e.g. :9090); disabled when empty")
 }
 
 func runDeploy(cmd *cobra.Command, _ []string) error {
@@ -239,6 +241,7 @@ func runFullDeployment(ctx context.Context, cfg *config.Config) error {
 	return executeFullDeployment(ctx, cfg, deploymentOptions{
 		ShowStartMessage: true,
 		Credentials:      creds,
+		MetricsAddr:      deployMetricsAddr,
 	})
 }
 

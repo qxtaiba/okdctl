@@ -9,6 +9,20 @@ import (
 	"github.com/qxtaiba/okdctl/internal/logutil"
 )
 
+// MetricsRecorder receives per-step and overall-run observations from the
+// Orchestrator. Implementations must be safe for concurrent use.
+type MetricsRecorder interface {
+	StepStarted(id StepID)
+	StepFinished(result *StepResult)
+	DeployFinished(total time.Duration)
+}
+
+type nopMetricsRecorder struct{}
+
+func (nopMetricsRecorder) StepStarted(StepID)           {}
+func (nopMetricsRecorder) StepFinished(*StepResult)     {}
+func (nopMetricsRecorder) DeployFinished(time.Duration) {}
+
 // Orchestrator runs a sequence of ProvisioningSteps, recording per-step
 // outcomes. Stops on the first fatal failure (per Step.IsFatal); non-fatal
 // failures log a warning and continue. Safe to snapshot Results concurrently
@@ -18,6 +32,7 @@ type Orchestrator struct {
 	steps   []ProvisioningStep
 	results []StepResult
 	logger  *slog.Logger
+	rec     MetricsRecorder
 }
 
 // NewOrchestrator returns an Orchestrator seeded with the given steps and a
@@ -27,6 +42,7 @@ func NewOrchestrator(steps ...ProvisioningStep) *Orchestrator {
 		steps:   steps,
 		results: make([]StepResult, 0, len(steps)),
 		logger:  logutil.NopLogger,
+		rec:     nopMetricsRecorder{},
 	}
 }
 
@@ -34,6 +50,16 @@ func NewOrchestrator(steps ...ProvisioningStep) *Orchestrator {
 // via logutil.OrNop.
 func (o *Orchestrator) SetLogger(logger *slog.Logger) {
 	o.logger = logutil.OrNop(logger)
+}
+
+// SetMetricsRecorder attaches a metrics recorder. Nil resolves to the nop
+// recorder so callers never need a nil guard.
+func (o *Orchestrator) SetMetricsRecorder(rec MetricsRecorder) {
+	if rec == nil {
+		o.rec = nopMetricsRecorder{}
+		return
+	}
+	o.rec = rec
 }
 
 // Run executes each step in order, honoring ctx cancellation between steps.
@@ -45,9 +71,12 @@ func (o *Orchestrator) Run(ctx context.Context) error {
 	o.results = make([]StepResult, 0, len(o.steps))
 	o.mu.Unlock()
 
+	runStart := time.Now()
+
 	for _, step := range o.steps {
 		select {
 		case <-ctx.Done():
+			o.rec.DeployFinished(time.Since(runStart))
 			return ctx.Err()
 		default:
 		}
@@ -63,9 +92,11 @@ func (o *Orchestrator) Run(ctx context.Context) error {
 		}
 
 		if !result.Success && step.IsFatal() {
+			o.rec.DeployFinished(time.Since(runStart))
 			return result.Error
 		}
 	}
+	o.rec.DeployFinished(time.Since(runStart))
 	return nil
 }
 
@@ -83,7 +114,7 @@ func (o *Orchestrator) executeStep(ctx context.Context, step ProvisioningStep) S
 	startedAt := time.Now()
 
 	if step.ShouldSkip() {
-		return StepResult{
+		r := StepResult{
 			StepID:     step.ID(),
 			Success:    true,
 			Skipped:    true,
@@ -91,26 +122,33 @@ func (o *Orchestrator) executeStep(ctx context.Context, step ProvisioningStep) S
 			StartedAt:  startedAt,
 			Duration:   time.Since(startedAt),
 		}
+		o.rec.StepFinished(&r)
+		return r
 	}
 
+	o.rec.StepStarted(step.ID())
 	step.OnStart()
 
 	if err := step.Execute(ctx); err != nil {
 		step.OnError(err)
-		return StepResult{
+		r := StepResult{
 			StepID:    step.ID(),
 			Success:   false,
 			Error:     err,
 			StartedAt: startedAt,
 			Duration:  time.Since(startedAt),
 		}
+		o.rec.StepFinished(&r)
+		return r
 	}
 
 	step.OnComplete()
-	return StepResult{
+	r := StepResult{
 		StepID:    step.ID(),
 		Success:   true,
 		StartedAt: startedAt,
 		Duration:  time.Since(startedAt),
 	}
+	o.rec.StepFinished(&r)
+	return r
 }

@@ -4,12 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"time"
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/credentials"
+	"github.com/qxtaiba/okdctl/internal/deploymetrics"
 	"github.com/qxtaiba/okdctl/internal/distribution"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/install"
@@ -101,9 +103,13 @@ func resolveProjectRootOrDie() (string, error) {
 	return root, nil
 }
 
-// CreateOKDProvisioner creates a provisioner, optionally with Proxmox credentials.
+// createOKDProvisioner creates a provisioner, optionally with Proxmox credentials.
 // Pass nil for creds when the operation only needs local tools (oc, dnsmasq, systemctl).
 func createOKDProvisioner(cfg *config.Config, creds *credentials.ProxmoxCredentials, projectRoot string) *okd.Provisioner {
+	return createOKDProvisionerWithOpts(cfg, creds, projectRoot)
+}
+
+func createOKDProvisionerWithOpts(cfg *config.Config, creds *credentials.ProxmoxCredentials, projectRoot string, extra ...okd.ProvisionerOption) *okd.Provisioner {
 	opts := []okd.ProvisionerOption{
 		okd.WithProjectRoot(projectRoot),
 		okd.WithLogger(tui.SimpleLogger()),
@@ -113,12 +119,36 @@ func createOKDProvisioner(cfg *config.Config, creds *credentials.ProxmoxCredenti
 		opts = append(opts, okd.WithEnv(creds.Env()))
 	}
 
+	opts = append(opts, extra...)
 	return okd.New(cfg.Distribution.Version, opts...)
 }
 
 type deploymentOptions struct {
 	ShowStartMessage bool
 	Credentials      *credentials.ProxmoxCredentials
+	MetricsAddr      string
+}
+
+// startMetricsServer starts a Prometheus metrics HTTP server on addr (disabled
+// when addr is empty). Returns a stop closure that shuts the server down with
+// a 5-second deadline, plus any provisioner options the caller must apply so
+// orchestrated phases feed observations to the recorder.
+func startMetricsServer(addr string) (func(), []okd.ProvisionerOption) {
+	if addr == "" {
+		return func() {}, nil
+	}
+	rec := deploymetrics.NewRecorder()
+	mux := http.NewServeMux()
+	mux.Handle("/metrics", rec.Handler())
+	srv := &http.Server{Addr: addr, Handler: mux, ReadHeaderTimeout: 5 * time.Second}
+	go func() { _ = srv.ListenAndServe() }()
+	tui.Info("metrics endpoint listening", tui.LF("addr", addr))
+	stop := func() {
+		shutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = srv.Shutdown(shutCtx)
+	}
+	return stop, []okd.ProvisionerOption{okd.WithMetricsRecorder(rec)}
 }
 
 func executeFullDeployment(ctx context.Context, cfg *config.Config, opts deploymentOptions) error {
@@ -145,7 +175,10 @@ func executeFullDeployment(ctx context.Context, cfg *config.Config, opts deploym
 
 	runID := tui.RunID()
 
-	p := createOKDProvisioner(cfg, opts.Credentials, projectRoot)
+	stopMetrics, provOpts := startMetricsServer(opts.MetricsAddr)
+	defer stopMetrics()
+
+	p := createOKDProvisionerWithOpts(cfg, opts.Credentials, projectRoot, provOpts...)
 
 	if err := p.Validate(cfg); err != nil {
 		return fmt.Errorf("provisioner validation failed: %w", err)
