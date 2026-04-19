@@ -134,7 +134,7 @@ scaffolding the internal code already holds."
 ### Theme D — wizard coverage
 
 #### N26 — TUI key-value map editor component
-- **Status:** not started
+- **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/n26-map-editor
 - **Category:** feature-gap / TUI
 - **State:** design needed
 - **Effort:** days
