@@ -11,6 +11,8 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/errtypes"
+	"github.com/qxtaiba/okdctl/internal/infrastructure/terraform"
 	"github.com/qxtaiba/okdctl/internal/system"
 	"github.com/qxtaiba/okdctl/internal/tui"
 )
@@ -47,8 +49,7 @@ func runDestroy(cmd *cobra.Command, _ []string) error {
 	}
 
 	if destroyDryRun {
-		runDestroyDryRun(cfg)
-		return nil
+		return runDestroyDryRun(ctx, cfg)
 	}
 
 	tui.Warn(fmt.Sprintf("this will destroy cluster '%s' and all associated resources", cfg.Cluster.Name))
@@ -102,20 +103,40 @@ func runDestroy(cmd *cobra.Command, _ []string) error {
 	return nil
 }
 
-// runDestroyDryRun prints what `okdctl destroy` would tear down without
-// re-execing as root or touching infra. Always returns nil so the process
-// exits 0 — the intent of --dry-run is a survey, not a validation pass.
-func runDestroyDryRun(cfg *config.Config) {
-	tui.Info(fmt.Sprintf("dry-run: would destroy cluster '%s'", cfg.Cluster.Name))
-	tui.Info("dry-run: terraform destroy plan preview is not yet implemented (tracked in roadmap M3)")
-	tui.Info("dry-run: the following would be torn down:")
-	fmt.Println("  - terraform-provisioned VMs (bootstrap + control-plane + workers)")
-	fmt.Println("  - dnsmasq /etc/dnsmasq.d/okd-* drop-in")
-	fmt.Println("  - haproxy /etc/haproxy/haproxy.cfg block")
-	fmt.Println("  - firewall rules opened by okdctl")
-	if !destroyKeepISOs && cfg.Provider.Proxmox != nil {
-		fmt.Println("  - FCOS ISOs uploaded to Proxmox storage")
+// runDestroyDryRun runs terraform plan -destroy so the operator can preview what
+// would be removed. Returns *errtypes.ConfigError on plan failure so the process
+// exits 2.
+func runDestroyDryRun(ctx context.Context, cfg *config.Config) error {
+	creds := handleCredentials(cfg)
+	defer creds.Zeroize()
+
+	projectRoot, err := resolveProjectRootOrDie()
+	if err != nil {
+		return err
 	}
-	fmt.Println("  - haproxy, dnsmasq, httpd packages")
-	tui.Info("dry-run: no changes made; re-run without --dry-run to execute")
+
+	tfEnv := "production"
+	if cfg.Deployment.TerraformEnv != "" {
+		tfEnv = cfg.Deployment.TerraformEnv
+	}
+	terraformDir := filepath.Join(projectRoot, "infrastructure", "terraform", "environments", tfEnv)
+
+	tfOpts := []terraform.Option{terraform.WithLogger(tui.SimpleLogger())}
+	if creds.IsValid() {
+		tfOpts = append(tfOpts, terraform.WithEnv(creds.Env()))
+	}
+	tf := terraform.New(terraformDir, tfOpts...)
+
+	tui.Info(fmt.Sprintf("dry-run: terraform destroy plan for cluster '%s'", cfg.Cluster.Name))
+
+	if err := tf.Init(ctx); err != nil {
+		return &errtypes.ConfigError{Msg: "terraform init failed in dry-run", Err: err}
+	}
+
+	if err := tf.PlanStreamed(ctx, terraform.PlanOptions{Destroy: true}); err != nil {
+		return &errtypes.ConfigError{Msg: "terraform destroy plan failed", Err: err}
+	}
+
+	tui.Info("dry-run: re-run without --dry-run to execute destroy")
+	return nil
 }

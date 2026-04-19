@@ -192,6 +192,37 @@ func (p *Provider) Provision(ctx context.Context, cfg *config.Config, opts Provi
 	return result, nil
 }
 
+// PlanOnly runs terraform init and plan for the configured environment without
+// applying changes. opts.ProjectRoot and opts.TerraformEnv must both be set.
+// Plan output streams to the terminal via PlanStreamed. Used by --dry-run deploy.
+func (p *Provider) PlanOnly(ctx context.Context, cfg *config.Config, opts ProvisionOptions) error {
+	if !p.connected {
+		return ErrNotConnected
+	}
+
+	if opts.ProjectRoot != "" && opts.TerraformEnv != "" {
+		p.setupTerraform(opts.ProjectRoot, opts.TerraformEnv)
+	}
+
+	if p.terraformExec == nil {
+		return ErrTerraformNotConfigured
+	}
+
+	p.logger.Info("terraform: initializing backend and providers")
+	if err := p.terraformExec.Init(ctx); err != nil {
+		return fmt.Errorf("terraform init failed: %w", err)
+	}
+
+	totalNodes := 1 + cfg.Topology.ControlPlane.Count + cfg.Topology.Workers.Count
+	p.logger.Info(fmt.Sprintf("terraform: plan will preview %d virtual machines", totalNodes))
+
+	if err := p.terraformExec.PlanStreamed(ctx, terraform.PlanOptions{}); err != nil {
+		return fmt.Errorf("terraform plan failed: %w", err)
+	}
+
+	return nil
+}
+
 // retrieveProvisionResult derives VM IPs from static config.
 // IP scheme: bootstrap = start IP, masters = start+1..N, workers = start+N+1 onwards.
 func (p *Provider) retrieveProvisionResult(cfg *config.Config) (*ProvisionResult, error) {

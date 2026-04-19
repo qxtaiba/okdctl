@@ -10,6 +10,8 @@ import (
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/credentials"
+	"github.com/qxtaiba/okdctl/internal/errtypes"
+	"github.com/qxtaiba/okdctl/internal/infrastructure/proxmox"
 	"github.com/qxtaiba/okdctl/internal/tui"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard/steps"
@@ -19,6 +21,7 @@ var (
 	deployOutputFile string
 	deployMinimal    bool
 	deployYes        bool
+	deployDryRun     bool
 )
 
 var deployCmd = &cobra.Command{
@@ -32,6 +35,7 @@ func init() {
 	deployCmd.Flags().StringVarP(&deployOutputFile, "output", "o", "okdctl.yaml", "output file for configuration")
 	deployCmd.Flags().BoolVar(&deployMinimal, "minimal", false, "use minimal defaults (single-node cluster)")
 	deployCmd.Flags().BoolVarP(&deployYes, "yes", "y", false, "skip prompts, use defaults")
+	deployCmd.Flags().BoolVar(&deployDryRun, "dry-run", false, "preview terraform plan and step listing without deploying")
 }
 
 func runDeploy(cmd *cobra.Command, _ []string) error {
@@ -112,6 +116,88 @@ func runDeploy(cmd *cobra.Command, _ []string) error {
 	return nil
 }
 
+// runDeployDryRun previews a deploy: runs terraform plan and lists every phase
+// step. Requires terraform.tfvars from a prior setup run; absent tfvars causes
+// plan failure and exits 2.
+func runDeployDryRun(ctx context.Context, cfg *config.Config) error {
+	envPath := credentials.EnvFilePath(deployOutputFile)
+	if err := credentials.LoadEnvFile(envPath); err != nil {
+		tui.Warn("failed to load credentials", tui.LF("path", envPath), tui.LF("err", err))
+	}
+
+	creds := credentials.GetProxmoxCredentials(cfg)
+	defer creds.Zeroize()
+
+	projectRoot, err := resolveProjectRootOrDie()
+	if err != nil {
+		return err
+	}
+
+	prov := proxmox.New(
+		proxmox.WithProjectRoot(projectRoot),
+		proxmox.WithLogger(tui.SimpleLogger()),
+		proxmox.WithEnv(creds.Env()),
+	)
+	if connErr := prov.Connect(ctx, cfg); connErr != nil {
+		return &errtypes.ConfigError{Msg: "dry-run: provider connect failed", Err: connErr}
+	}
+
+	tui.Info("dry-run: running terraform plan (no changes will be made)")
+
+	tfEnv := "production"
+	if cfg.Deployment.TerraformEnv != "" {
+		tfEnv = cfg.Deployment.TerraformEnv
+	}
+	if planErr := prov.PlanOnly(ctx, cfg, proxmox.ProvisionOptions{
+		ProjectRoot:  projectRoot,
+		TerraformEnv: tfEnv,
+	}); planErr != nil {
+		return &errtypes.ConfigError{Msg: "dry-run: terraform plan failed", Err: planErr}
+	}
+
+	fmt.Println(DryRunSummary("deploy step listing", deployDryRunSteps()))
+	tui.Info("dry-run: re-run without --dry-run to execute deploy")
+	return nil
+}
+
+// deployDryRunSteps returns the ID/Name for every step across setup, install, and
+// postinstall phases in execution order.
+func deployDryRunSteps() []DryRunStep {
+	return []DryRunStep{
+		{ID: "install-packages", Name: "install system packages"},
+		{ID: "install-tools", Name: "install external tools"},
+		{ID: "ensure-workdir", Name: "ensure work directory"},
+		{ID: "download-tools", Name: "download okd tools"},
+		{ID: "generate-config", Name: "generate install config"},
+		{ID: "generate-manifests", Name: "generate manifests"},
+		{ID: "generate-kubevip-manifests", Name: "generate kube-vip manifests"},
+		{ID: "inject-manifests", Name: "inject custom manifests"},
+		{ID: "compact-cluster-manifests", Name: "inject compact cluster manifests"},
+		{ID: "generate-ignition", Name: "generate ignition"},
+		{ID: "install-apache", Name: "install apache"},
+		{ID: "deploy-ignition", Name: "deploy ignition"},
+		{ID: "verify-webserver", Name: "verify web server"},
+		{ID: "build-isos", Name: "build isos"},
+		{ID: "upload-isos", Name: "upload isos"},
+		{ID: "generate-tfvars", Name: "generate terraform variables"},
+		{ID: "configure-haproxy", Name: "configure haproxy"},
+		{ID: "configure-firewall", Name: "configure firewall"},
+		{ID: "configure-dns", Name: "configure dns"},
+		{ID: "deploy-infrastructure", Name: "deploy infrastructure"},
+		{ID: "wait-bootstrap", Name: "wait for bootstrap"},
+		{ID: "start-workers", Name: "start worker nodes"},
+		{ID: "setup-kubeconfig", Name: "setup kubeconfig"},
+		{ID: "validate-access", Name: "validate cluster access"},
+		{ID: "monitor-install", Name: "monitor installation"},
+		{ID: "setup-access", Name: "setup cluster access"},
+		{ID: "verify-health", Name: "verify cluster health"},
+		{ID: "cleanup-bootstrap", Name: "cleanup bootstrap vm"},
+		{ID: "verify-kubevip", Name: "verify kube-vip"},
+		{ID: "deploy-production-dns", Name: "deploy production dns"},
+		{ID: "install-addons", Name: "install addons"},
+	}
+}
+
 func saveConfig(cfg *config.Config, path string) error {
 	if result := validateConfig(cfg); !result.IsValid() {
 		tui.Warn("configuration has validation warnings but will still be saved")
@@ -126,6 +212,10 @@ func saveConfig(cfg *config.Config, path string) error {
 }
 
 func runFullDeployment(ctx context.Context, cfg *config.Config) error {
+	if deployDryRun {
+		return runDeployDryRun(ctx, cfg)
+	}
+
 	envPath := credentials.EnvFilePath(deployOutputFile)
 	if err := credentials.LoadEnvFile(envPath); err != nil {
 		tui.Warn("failed to load credentials", tui.LF("path", envPath), tui.LF("err", err))
