@@ -134,6 +134,33 @@ func TestResolveM5Input_configOverride(t *testing.T) {
 	}
 }
 
+func TestBuildSCOSStreamPlan_urlShape(t *testing.T) {
+	cases := []struct {
+		minor   int
+		wantSub string
+	}{
+		{19, "release-4.19"},
+		{20, "release-4.20"},
+		{23, "release-4.23"},
+	}
+	for _, tt := range cases {
+		p := fetchplan.BuildSCOSStreamPlan(tt.minor)
+		if len(p.HTTPS) != 1 {
+			t.Fatalf("minor %d: expected 1 blob, got %d", tt.minor, len(p.HTTPS))
+		}
+		b := p.HTTPS[0]
+		if !strings.Contains(b.URL, tt.wantSub) {
+			t.Errorf("minor %d: URL %q missing %q", tt.minor, b.URL, tt.wantSub)
+		}
+		if !strings.HasSuffix(b.URL, "/data/data/coreos/scos.json") {
+			t.Errorf("minor %d: URL %q missing expected path suffix", tt.minor, b.URL)
+		}
+		if b.Purpose != fetchplan.M23PurposeSCOSStream {
+			t.Errorf("minor %d: purpose %q, want %q", tt.minor, b.Purpose, fetchplan.M23PurposeSCOSStream)
+		}
+	}
+}
+
 func blobByPurpose(t *testing.T, p fetchplan.Plan, purpose string) fetchplan.Blob {
 	t.Helper()
 	for _, b := range p.HTTPS {
