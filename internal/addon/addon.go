@@ -46,13 +46,15 @@ type Environment struct {
 	ProjectRoot string
 }
 
-// ConfigurableAddon is an Addon that exposes tunable settings with defaults
-// and per-key validation.
+// ConfigurableAddon is an Addon that exposes tunable settings with defaults,
+// per-key validation, and typed decoding. DecodeSettings converts the flat
+// settings map into a typed struct; the concrete type is defined per addon.
 type ConfigurableAddon interface {
 	Addon
 
 	DefaultSettings() map[string]string
 	ValidateSettings(settings map[string]string) []string
+	DecodeSettings(settings map[string]string) (any, error)
 }
 
 // ToolSpec names an external binary an addon requires and why.
