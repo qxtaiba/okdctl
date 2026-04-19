@@ -29,6 +29,7 @@ type Provisioner struct {
 	projectRoot string
 	executor    *executor.Executor
 	logger      *slog.Logger
+	recorder    distribution.MetricsRecorder
 }
 
 // ProvisionerOption configures a Provisioner. Options compose — pass multiple
@@ -49,6 +50,12 @@ func WithLogger(l *slog.Logger) ProvisionerOption {
 	return func(p *Provisioner) {
 		p.logger = l
 	}
+}
+
+// WithMetricsRecorder attaches a MetricsRecorder that receives per-step and
+// overall-run observations during the provisioner's Execute phases.
+func WithMetricsRecorder(rec distribution.MetricsRecorder) ProvisionerOption {
+	return func(p *Provisioner) { p.recorder = rec }
 }
 
 // WithEnv passes environment variables to the executor for all subprocess calls,
@@ -122,6 +129,7 @@ func (p *Provisioner) Prepare(ctx context.Context, cfg *config.Config) ([]distri
 	}
 
 	setupPhase := setup.New(p.executor, p.logger, p.version)
+	setupPhase.Recorder = p.recorder
 	return setupPhase.Execute(ctx, cfg, &opts)
 }
 
@@ -129,6 +137,7 @@ func (p *Provisioner) Prepare(ctx context.Context, cfg *config.Config) ([]distri
 // install-complete monitor. Must be called after Prepare.
 func (p *Provisioner) Install(ctx context.Context, cfg *config.Config, opts *install.Options) ([]distribution.StepResult, error) {
 	installPhase := install.New(p.executor, p.logger, p.version)
+	installPhase.Recorder = p.recorder
 	return installPhase.Execute(ctx, cfg, opts)
 }
 
@@ -136,6 +145,7 @@ func (p *Provisioner) Install(ctx context.Context, cfg *config.Config, opts *ins
 // DNS cutover, bootstrap cleanup. Returns the result alongside per-step records.
 func (p *Provisioner) Configure(ctx context.Context, cfg *config.Config) (*postinstall.Result, []distribution.StepResult, error) {
 	postPhase := postinstall.New(p.executor, p.logger, p.version)
+	postPhase.Recorder = p.recorder
 	opts := postinstall.NewOptions(cfg, p.projectRoot)
 	return postPhase.Execute(ctx, cfg, &opts)
 }

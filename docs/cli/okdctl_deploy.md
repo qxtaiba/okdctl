@@ -13,11 +13,12 @@ okdctl deploy [flags]
 ### Options
 
 ```
-      --dry-run         preview terraform plan and step listing without deploying
-  -h, --help            help for deploy
-      --minimal         use minimal defaults (single-node cluster)
-  -o, --output string   output file for configuration (default "okdctl.yaml")
-  -y, --yes             skip prompts, use defaults
+      --dry-run               preview terraform plan and step listing without deploying
+  -h, --help                  help for deploy
+      --metrics-addr string   address for Prometheus metrics endpoint (e.g. :9090); disabled when empty
+      --minimal               use minimal defaults (single-node cluster)
+  -o, --output string         output file for configuration (default "okdctl.yaml")
+  -y, --yes                   skip prompts, use defaults
 ```
 
 ### Options inherited from parent commands

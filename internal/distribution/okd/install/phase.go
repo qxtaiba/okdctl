@@ -95,6 +95,7 @@ func New(exec *executor.Executor, logger *slog.Logger, version string) *Phase {
 func (p *Phase) Execute(ctx context.Context, cfg *config.Config, opts *Options) ([]distribution.StepResult, error) {
 	orchestrator := distribution.NewOrchestrator(distribution.BuildSteps(p.installSteps(cfg, opts))...)
 	orchestrator.SetLogger(p.Log)
+	orchestrator.SetMetricsRecorder(p.Recorder)
 
 	if err := orchestrator.Run(ctx); err != nil {
 		return orchestrator.Results(), err

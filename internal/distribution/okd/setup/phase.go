@@ -106,6 +106,7 @@ func (p *Phase) Execute(ctx context.Context, cfg *config.Config, opts *Options) 
 
 	orchestrator := distribution.NewOrchestrator(distribution.BuildSteps(p.setupSteps(cfg, opts))...)
 	orchestrator.SetLogger(p.Log)
+	orchestrator.SetMetricsRecorder(p.Recorder)
 
 	if err := orchestrator.Run(ctx); err != nil {
 		return orchestrator.Results(), err

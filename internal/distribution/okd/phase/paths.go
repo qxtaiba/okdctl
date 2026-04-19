@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 
 	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/distribution"
 	"github.com/qxtaiba/okdctl/internal/executor"
 	"github.com/qxtaiba/okdctl/internal/logutil"
 )
@@ -67,9 +68,10 @@ func GetTerraformEnv(cfg *config.Config) string {
 // destroy, cleanup) embeds — command executor, logger, and the okdctl version
 // string used for provenance in generated artifacts.
 type BasePhase struct {
-	Exec    *executor.Executor
-	Log     *slog.Logger
-	Version string
+	Exec     *executor.Executor
+	Log      *slog.Logger
+	Version  string
+	Recorder distribution.MetricsRecorder
 }
 
 // BasePhaseOption configures a BasePhase at construction time.
@@ -84,6 +86,12 @@ func WithExecutor(exec *executor.Executor) BasePhaseOption {
 // WithLogger attaches the phase logger. Nil resolves to NopLogger.
 func WithLogger(l *slog.Logger) BasePhaseOption {
 	return func(p *BasePhase) { p.Log = l }
+}
+
+// WithRecorder attaches a MetricsRecorder. Nil is tolerated; phases pass
+// p.Recorder to orchestrator.SetMetricsRecorder which normalises nil to nop.
+func WithRecorder(rec distribution.MetricsRecorder) BasePhaseOption {
+	return func(p *BasePhase) { p.Recorder = rec }
 }
 
 // NewBasePhase constructs a BasePhase tagged with the okdctl version and the
