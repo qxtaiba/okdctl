@@ -208,56 +208,6 @@ scaffolding the internal code already holds."
   validates the chosen dir is writable by the invoking user.
 - **Depends on:** U2 (wizard should then collect this field).
 
-### Theme F — error types, exit codes, correctness
-
-#### M19 — Typed addon settings via per-addon decoder method
-- **Status:** in review — PR #89
-- **Category:** feature-gap / refactor
-- **State:** design needed (Option A from the M12 design investigation)
-- **Effort:** days
-- **Impact:** medium
-- **Evidence:** `internal/addon/addon.go:49-56` defines
-  `ConfigurableAddon`; `internal/config/cluster.go:89-92` holds flat
-  `AddonConfig.Settings map[string]string`; M12 (PR #81) now carries
-  ~13 flat keys across three providers (onepassword, vault, bitwarden)
-  with provider-specific meaning. `ValidateSettings` can't distinguish
-  provider context without string-prefix matching; CSV-in-string
-  encoding (`onepassword_vaults: "homelab=1,shared=2"`) is a workaround
-  for lack of structured types.
-- **Acceptance:** optional `DecodeSettings(settings map[string]string)
-  (any, error)` method added to `ConfigurableAddon`. Each addon catalog
-  package defines its own settings struct(s) (e.g., `FluxSettings`,
-  `SecretStoreSettings` with provider-specific sub-structs). Each
-  addon's `ValidateSettings` and `Install` use the typed struct
-  internally. YAML shape stays flat — no config migration required.
-  Exemplar: secretstore multi-provider case validates
-  `bitwarden_organization_id` required when `provider=bitwarden` at
-  the struct field level, not via string matching.
-- **Depends on:** none. (Follow-on refinement of M12; could land before
-  or after R1.)
-
-#### M20 — Grouped wizard fields for structured addon settings
-- **Status:** in review — PR #89
-- **Category:** feature-gap / UX
-- **State:** design needed (Option C from the M12 design investigation)
-- **Effort:** days
-- **Impact:** medium
-- **Evidence:** `internal/addon/addon.go:73-86` `WizardField` has no
-  `Group` field. `internal/tui/wizard/steps/addons.go:74-140` renders
-  all addon fields flat. M12 (PR #81) secretstore has 8 wizard fields
-  spanning three providers with no visual grouping — users see all of
-  them regardless of which provider they picked.
-- **Acceptance:** optional `Group string` field added to
-  `addon.WizardField`. Wizard renderer buckets fields by group,
-  renders group headers, and (optionally) hides groups that don't
-  match the currently-selected provider. Secretstore wizard shows a
-  "provider" dropdown, then the matching provider's field group below
-  it. Addons with no `Group` annotations render in the existing flat
-  path (flux, etc. unchanged). No YAML changes.
-- **Depends on:** M19 (loose dependency — structured decoders make
-  group selection deterministic; can ship with manual Group
-  annotations in WizardFields if M19 slips).
-
 ### Theme G — CI, tooling, distribution
 
 #### N14 — Add `go vet ./...` to CI
@@ -841,6 +791,41 @@ but link evidence.
   key-value editor is tracked as N26. Design investigation returned
   M19 (typed decoder) and M20 (grouped wizard fields) as the
   follow-on items.
+- **M19 — Typed addon settings via per-addon decoder method** — done
+  PR #89, merged 2026-04-19. `ConfigurableAddon` grows
+  `DecodeSettings(map[string]string) (any, error)`; `flux.Settings`
+  and `secretstore.Settings` are the per-addon typed structs.
+  `secretstore.Settings` carries three provider sub-structs
+  (`OnePasswordSettings`, `VaultSettings`, `BitwardenSettings`);
+  `DecodeSettings` populates only the sub-struct matching the active
+  `Provider`, so `s.Bitwarden.OrganizationID == ""` is structurally
+  scoped to the bitwarden provider — no more string-prefix matching.
+  `Install` and `ValidateSettings` on both addons call `DecodeSettings`
+  once at entry and operate on typed fields. Linter required two
+  renames: `flux.FluxSettings` → `flux.Settings` and
+  `secretstore.SecretStoreSettings` → `secretstore.Settings` (revive
+  stutter); provider names (`onepassword`/`vault`/`bitwarden`) got
+  package-private constants (goconst). Design choice B (added to
+  `ConfigurableAddon` directly) over design choice A (sub-interface
+  `TypedConfigurableAddon`) — repo has only two addon implementers,
+  both in-tree, no external type assertions to break.
+- **M20 — Grouped wizard fields for structured addon settings** — done
+  PR #89, merged 2026-04-19. `addon.WizardField` grows an optional
+  `Group string`. Secretstore's `WizardFields()` annotates each field
+  with its provider group and surfaces 10 provider-specific settings
+  that were previously absent from the hardcoded wizard. The
+  `AddonsStepDefinition` at `internal/tui/wizard/steps/addons.go`
+  splits the single "1password secret store" section into four
+  sections — common (`enabled`, `provider` dropdown, `secrets_dir`),
+  onepassword, vault, bitwarden — each with a group-level title.
+  Approach A (static `SectionDefinition` entries) chosen over approach
+  B (dynamic renderer walking `WizardProvider`) — every other wizard
+  step is hand-authored; a dynamic renderer just for secretstore would
+  create asymmetry. Optional per-group hiding based on the selected
+  provider is deferred: `DataDrivenStep` has no per-section
+  `ShouldShow` and plumbing one exceeds M20 scope. Group headers alone
+  materially improve UX over the previous flat 2-field view. Flux
+  unchanged.
 
 ## Appendix — full item ledger
 
@@ -897,8 +882,8 @@ but link evidence.
 | M16 | Autogenerated CLI reference | **Done** (PR #76) |
 | M17 | Architecture diagrams | **Done** (PR #72) |
 | M18 | Homebrew tap | Deferred |
-| M19 | Typed addon settings (decoder method) | Sprint 1 |
-| M20 | Grouped wizard fields for addons | Sprint 1 |
+| M19 | Typed addon settings (decoder method) | **Done** (PR #89) |
+| M20 | Grouped wizard fields for addons | **Done** (PR #89) |
 | L1 | libvirt/KVM provider | **Skipped** |
 | L2 | vSphere/AWS/Equinix/bare-metal/Vagrant | **Skipped** |
 | L3 | Multi-distribution (RKE2, vanilla) | **Skipped** |
