@@ -202,7 +202,7 @@ scaffolding the internal code already holds."
 ### Theme F — error types, exit codes, correctness
 
 #### M13b — Complete errtypes migration across phase code
-- **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/m13b-errtypes-sweep
+- **Status:** in review — PR #83
 - **Category:** refactor
 - **State:** partially done
 - **Effort:** days
