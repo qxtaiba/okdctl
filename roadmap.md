@@ -132,7 +132,7 @@ scaffolding the internal code already holds."
   (kubeconfig access pattern).
 
 #### M2 — `okdctl debug-bundle`
-- **Status:** not started
+- **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/m2-debug-bundle
 - **Category:** feature-gap
 - **State:** not started
 - **Effort:** week
