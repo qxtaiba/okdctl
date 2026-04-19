@@ -25,6 +25,7 @@ const (
 	FieldTypeBool        // For yes/no fields
 	FieldTypeSelect      // Dropdown selector with predefined options
 	FieldTypeMultiSelect // Checklist where multiple options may be toggled
+	FieldTypeKeyValue    // Editable table of key=value pairs
 )
 
 // ConfigSetter writes a field's value into a Config.
@@ -44,6 +45,10 @@ type FieldDefinition struct {
 	Options  []string // populated only when Type == FieldTypeSelect
 	Required bool
 	Validate func(string) error
+
+	// KVAsDelimitedString controls Value() serialization for FieldTypeKeyValue.
+	// true = "k1=v1,k2=v2" (CSV); false = "k1: v1\nk2: v2" (YAML-map).
+	KVAsDelimitedString bool
 
 	ConfigSet ConfigSetter
 	ConfigGet ConfigGetter
@@ -152,6 +157,18 @@ func NewDataDrivenStep(def *StepDefinition) *DataDrivenStep {
 }
 
 func buildFormField(def *FieldDefinition) components.FormField {
+	if def.Type == FieldTypeKeyValue {
+		kv := components.NewKeyValueField(def.Label, def.KVAsDelimitedString)
+		kv.Help = def.Help
+		if def.Validate != nil {
+			kv.Validator = def.Validate
+		}
+		if def.Default != "" {
+			kv.SetDefault(def.Default)
+		}
+		return kv
+	}
+
 	if def.Type == FieldTypeMultiSelect {
 		mf := components.NewMultiSelectField(def.Label, def.Options)
 		mf.Help = def.Help
