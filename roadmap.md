@@ -409,20 +409,6 @@ These made the audit but are not scheduled now. Re-evaluate on
 Filed as roadmap items so `/roadmap-pickup` can fan them out when
 bandwidth opens. Each references the audit finding ID for diff tracking.
 
-#### D1 — document go-proxmox v0.x abandonment plan
-- **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/d1-deps-doc
-- **Category:** deps
-- **Effort:** hours
-- **Impact:** medium (supply-chain risk reduction)
-- **Finding:** `dep:33ef32bf:go-proxmox-v0x-floor`
-- **Evidence:** `go.mod:13` — `go-proxmox v0.4.1` (v0.x, single maintainer)
-  on the Proxmox discovery critical path (`internal/tui/wizard/steps/proxmox_discovery.go:11`).
-- **Acceptance:** add a new `## Dependencies` section in `CLAUDE.md`
-  listing the permissive-license rule, v0.x-dep justification format,
-  action SHA-pin expectation, and an abandonment fallback plan for
-  `go-proxmox` (~200 LOC REST-only rewrite if upstream disappears).
-- **Depends on:** none
-
 #### D2 — evaluate progressbar swap for bubbles/progress
 - **Status:** not started
 - **Category:** deps (transitive-weight)
@@ -434,32 +420,6 @@ bandwidth opens. Each references the audit finding ID for diff tracking.
 - **Acceptance:** evaluate `charm.land/bubbles/v2/progress` as replacement
   (already in tree); or hand-roll ~30 LOC. TTY/SIGWINCH/pipe-detection
   paths are battle-tested — plan first, then swap.
-- **Depends on:** none
-
-#### D3 — pin tool-install @latest references
-- **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/d3-d4-pins
-- **Category:** deps (reproducibility)
-- **Effort:** hours
-- **Impact:** small
-- **Finding:** `dep:33ef32bf:makefile-tool-install-latest`
-- **Evidence:** `Makefile:80`, `.github/workflows/ci.yml:54,80` —
-  `go install ...@latest` in three places.
-- **Acceptance:** convert to Go 1.24+ `tools` directive in `go.mod`, or
-  replace every `@latest` with an explicit `@vX.Y.Z`. CI runs
-  identically; locally `make tools` produces reproducible versions.
-- **Depends on:** none
-
-#### D4 — tighten terraform version floor in CI
-- **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/d3-d4-pins
-- **Category:** deps (reproducibility)
-- **Effort:** hours
-- **Impact:** small
-- **Finding:** `dep:33ef32bf:terraform-version-floor-loose`
-- **Evidence:** `.github/workflows/ci.yml:89` — `terraform_version: "1.10"`
-  resolves to any 1.10.x.
-- **Acceptance:** pin to an explicit `1.10.x` (e.g. `1.10.3`); bump
-  explicitly on PR when a new patch is required. Same destructive-infra
-  surface that `validate-terraform` covers.
 - **Depends on:** none
 
 #### D5 — plan gorilla/websocket removal path
@@ -824,6 +784,22 @@ but link evidence.
   generic missing-credentials so users understand wizard discovery
   still requires password auth (token id is saved for deploy use with
   `PROXMOX_VE_API_TOKEN_SECRET`).
+- **D1 — document go-proxmox v0.x abandonment plan** — closed 2026-04-19
+  as done-by-prior-work. `CLAUDE.md:154-182` already contains a complete
+  `## Dependencies` section covering the permissive-license rule
+  (MIT/Apache-2.0/BSD only), the v0.x justification format with the
+  go-proxmox v0.4.x entry and its ~200-LOC REST-only fallback, the
+  GitHub-Actions SHA-pin expectation with version-trailer format, and
+  the stdlib-first rule. Landed in commit `d69c36d refactor(repo):
+  resolve 2026-04-18 audit findings (tiers a+b)`.
+- **D3 — pin tool-install @latest references** — closed 2026-04-19 as
+  done-by-prior-work. `Makefile:60` pins `air@v1.61.7`, `Makefile:80`
+  pins `golangci-lint@v2.11.4`, `ci.yml:54` pins `govulncheck@v1.1.4`,
+  `ci.yml:80` pins `yamlfmt@v0.14.0`. Zero `@latest` left in tool-install
+  sites. Landed in commit `d69c36d`.
+- **D4 — tighten terraform version floor in CI** — closed 2026-04-19 as
+  done-by-prior-work. `ci.yml:89` is `terraform_version: "1.10.3"` (was
+  `"1.10"`). Landed in commit `d69c36d`.
 
 ## Appendix — full item ledger
 
