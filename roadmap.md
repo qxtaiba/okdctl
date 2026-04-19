@@ -94,6 +94,31 @@ scaffolding the internal code already holds."
 
 ### Theme G — CI, tooling, distribution
 
+#### M29 — GitHub Artifact Attestations for release binaries
+
+- **Status:** not started
+- **Category:** supply-chain / distribution
+- **State:** not started
+- **Effort:** hours
+- **Impact:** small (additive; redundant with existing cosign/SLSA
+  provenance)
+- **Evidence:** `.github/workflows/release.yml:7-10` already declares
+  `id-token: write` and `attestations: write` permissions on the
+  `release` job — pre-provisioned, no `actions/attest-build-provenance`
+  step exists yet. `.goreleaser.yaml:48-60` emits cosign keyless
+  signatures over `SHA256SUMS`. `scripts/install.sh:102-115` verifies
+  via `cosign verify-blob`. Filed alongside L15 implementation items.
+- **Acceptance:** one `actions/attest-build-provenance@<pinned-sha>`
+  step added to the `release` job after goreleaser completes, with
+  `subject-path` glob covering every shipped artifact
+  (`dist/okdctl_*.tar.gz dist/okdctl_*.deb dist/okdctl_*.rpm
+  dist/SHA256SUMS`). Additive to cosign + SLSA flows. `install.sh`
+  unchanged. README gains a one-paragraph `gh attestation verify
+  <file> --repo qxtaiba/okdctl` snippet alongside the existing cosign
+  block. Tagged release produces an attestation visible at
+  `https://github.com/qxtaiba/okdctl/attestations/<n>`.
+- **Depends on:** none.
+
 ## Addon category refactor — dedicated workstream
 
 This is **design-doc-first**. No code lands until the plan is reviewed.
@@ -130,22 +155,35 @@ This is **design-doc-first**. No code lands until the plan is reviewed.
 
 - **Status:** deferred (menu open; no item scheduled)
 
-## Air-gap workstream — design-doc-first
+## Air-gap workstream
 
-Full air-gap support is not a single PR; it is a cross-cutting question
-about every upstream okdctl currently reaches. M4 (`OKDReleaseBaseURL`)
-and M5 (`ToolVersions` for helm/sops/yq) redirect four HTTP fetches but
-leave terraform, OS package managers, FCOS media, and addon Helm charts
-pointing at public networks. Before shipping more redirects piecemeal we
-want a scoping doc that maps the complete surface and decides which
-scenarios we actually support.
+L15's scoping doc landed 2026-04-20 at
+`docs/superpowers/plans/2026-04-19-airgap-scoping.md` (commit
+`25ae630`). It fixes the architecture: a `FetchPlan` abstraction
+replaces ad-hoc fetches, OKD binaries shift to release-image
+extraction via `oc adm release extract --tools`, operator stages
+the mirror (`oc-mirror --v2`), okdctl verifies via `doctor
+--airgap`. All three scenarios (fully air-gapped / caching proxy /
+private mirror) are supported.
+
+Implementation lands as **M21–M28**, one item per PR, in dependency
+order. **M29** tracks an adjacent supply-chain improvement on okdctl's
+own release workflow (independent of L15's architecture). **M30** and
+**M32** capture deferred and upstream-blocked follow-ups.
+
+**Picker-upper protocol:** before implementing any M21–M28 item, run
+the pre-implementation verification pass in §11.0 of the scoping doc.
+Assumptions captured 2026-04-19 drift fast; a planner-phase research
+agent should re-verify floor versions, `oc-mirror` schema, mirror rule
+coverage, bootstrap-oc URL, and cosign status. Findings travel with
+the plan.
 
 ### L15 — Air-gap feasibility + scoping doc
 
-- **Status:** not started
+- **Status:** in review — scoping doc committed (25ae630); awaiting user approval before marking done
 - **Category:** feature-gap / design-needed
-- **State:** scoping needed
-- **Effort:** weeks (scoping); full implementation is quarters
+- **State:** scoping complete
+- **Effort:** weeks (scoping); full implementation is quarters (via M21–M28)
 - **Impact:** large
 - **Scope:**
   - Design document in `docs/superpowers/plans/YYYY-MM-DD-airgap-scoping.md`
@@ -172,10 +210,225 @@ scenarios we actually support.
     - Verification strategy: how do we smoke-test air-gap in CI without
       a real mirror?
 - **Acceptance:** design doc reviewed and approved before any code. Once
-  approved, implementation lands as a series of roadmap items (one per
-  unblocked fetch), not one mega-PR. M4 and M5 are referenced as
-  precedent for the env > config > default resolution pattern.
+  approved, implementation lands as a series of roadmap items (M21–M28,
+  one per PR), not one mega-PR. M4 and M5 are referenced as precedent
+  for the env > config > default resolution pattern.
 - **Depends on:** none. M4 and M5 are context but not prerequisites.
+
+### M21 — FetchPlan abstraction + resolver
+
+- **Status:** not started
+- **Category:** refactor / air-gap prerequisite
+- **State:** design approved (L15)
+- **Effort:** days
+- **Impact:** large (gates M22–M28)
+- **Evidence:** `internal/download/download.go`,
+  `internal/distribution/okd/setup/artifacts.go:90`,
+  `internal/distribution/okd/releases/fetcher.go:31`,
+  `internal/distribution/okd/setup/tools.go:78-87`. M4/M5 fetch sites
+  are currently ad-hoc; `FetchPlan` centralizes them as data.
+  Design: L15 §5.
+- **Acceptance:** new `internal/fetchplan` package with `Plan`,
+  `OCIArtifact`, `Blob`, and `Resolver` types per L15 §5.
+  `DefaultResolver` and `MirrorResolver` implementations. M4
+  (`OKDCTL_OKD_RELEASE_URL`) and M5 (`OKDCTL_{HELM,SOPS,YQ}_URL` +
+  `Deployment.ToolVersions`) fetch sites migrated into the plan with
+  their existing env vars preserved. yq `/releases/latest/download/`
+  URLTemplate gap fixed in the migration. OCI source kind stubbed but
+  not wired yet (M22 lights it up). Unit tests cover resolver paths
+  per L15 §9.2: connected mode, air-gap mode, per-fetch override, and
+  M4/M5 backwards-compat.
+- **Depends on:** none. Prerequisite to M22, M23, M24, M25. **Run
+  pre-implementation verification per L15 §11.0 before coding.**
+
+### M22 — OKD binaries via release-image extraction
+
+- **Status:** not started
+- **Category:** source change / refactor
+- **State:** design approved (L15)
+- **Effort:** days
+- **Impact:** large (enables air-gap; aligns with upstream
+  disconnected-install workflow)
+- **Evidence:** `internal/distribution/okd/releases/fetcher.go:31`,
+  `internal/distribution/okd/setup/artifacts.go:90`. L15 research
+  confirmed every OKD GitHub release body has a
+  `Pull From: quay.io/okd/scos-release@sha256:<digest>` line;
+  tarballs are a convenience wrapper over the release image.
+  Design: L15 §7.1.
+- **Acceptance:** bootstrap `oc` fetch from
+  `https://mirror.openshift.com/pub/openshift-v4/clients/oc/latest/linux/oc.tar.gz`
+  (~20 MB, cached, SHA256-verified). `oc adm release extract --tools
+  quay.io/okd/scos-release:<tag>` produces the same output files the
+  current code consumes (`openshift-install`, `oc`, checksums). GitHub
+  tarball path survives as fallback via new `OKDCTL_RELEASE_SOURCE=github`
+  env var / `--release-source github` flag, with deprecation log.
+  FetchPlan OCI source kind fully wired.
+- **Depends on:** M21. **Run pre-implementation verification per L15
+  §11.0, especially the bootstrap-oc URL stability check.**
+
+### M23 — Direct scos.json fetch for 4.19+ (dual-path)
+
+- **Status:** not started
+- **Category:** refactor / cleanup
+- **State:** design approved (L15)
+- **Effort:** hours
+- **Impact:** medium (parallelizable stream-metadata fetch; removes
+  `openshift-install` bootstrap dependency)
+- **Evidence:** `internal/distribution/okd/setup/coreos.go:91-143`
+  shells out to `openshift-install coreos print-stream-json`. L15
+  research confirmed `scos.json` at
+  `openshift/installer/release-<minor>/data/data/coreos/scos.json`
+  for 4.19+ (table in L15 §7.2). Design: L15 §7.2.
+- **Acceptance:** `DetectCoreOSVersion` grows a `minScosDirectFetch`
+  constant (4.19 per 2026-04-19 verification). For
+  `minor >= minScosDirectFetch`, direct HTTP GET of the
+  installer-repo `scos.json` via a typed Go struct; for older minors,
+  keep the existing shellout. Stream name parser accepts both `c9s`
+  (4.19) and `c10s` (4.20+). Never falls back to `main` for a
+  version-pinned request.
+- **Depends on:** M21. **Run pre-implementation verification per L15
+  §11.0, especially the floor/version-landscape check. Implementer
+  MUST re-verify the 4.19 floor against current `openshift/installer`
+  branches before coding the conditional — OKD timelines shift; the
+  floor may have moved retroactively.**
+
+### M24 — Mirror contract (MirrorBase + rewrite rules)
+
+- **Status:** not started
+- **Category:** feature-gap / air-gap
+- **State:** design approved (L15)
+- **Effort:** days
+- **Impact:** large (air-gap mode config surface)
+- **Evidence:** L15 §6 design; rewrite rules in §6.1; per-fetch
+  override env vars in §6.2.
+- **Acceptance:** new `OKDCTL_MIRROR_BASE` env var +
+  `Deployment.MirrorBase` YAML field. `MirrorResolver` implements the
+  rewrite rules per L15 §6.1. New env vars `OKDCTL_UPDATE_CHECK_URL`,
+  `OKDCTL_SCOS_STREAM_URL`, `OKDCTL_SCOS_ISO_URL`, and
+  `OKDCTL_BOOTSTRAP_OC_URL` wired. M4/M5 per-fetch overrides preserved
+  as final escape hatches. Air-gap mode activated via
+  `OKDCTL_AIRGAP=1`, `--airgap` flag on `doctor`/`deploy`/`destroy`,
+  or presence of `MirrorBase` config.
+- **Depends on:** M21. **Run pre-implementation verification per L15
+  §11.0, especially the mirror rewrite rule coverage pass — if new
+  fetches landed since 2026-04-19, add them to the rule table.**
+
+### M25 — MirrorableAddon interface + addon migrations
+
+- **Status:** not started
+- **Category:** interface extension
+- **State:** design approved (L15)
+- **Effort:** days
+- **Impact:** medium (inventory for `doctor --airgap`)
+- **Evidence:** `internal/addon/addon.go:16-22` (current Addon
+  interface), `internal/addon/catalog/flux/flux.go:134,151` (flux
+  chart refs). Design: L15 §8.
+- **Acceptance:** new opt-in `MirrorableAddon` sub-interface exposing
+  `MirrorArtifacts() MirrorSpec`. Follows the established
+  `ConfigurableAddon` / `ToolProvider` / `WizardProvider` pattern.
+  Flux implements (returns its two chart refs); secretstore returns
+  an empty spec (applies CRDs only). Helm-template image-extraction
+  helper in a new `internal/addon/mirror/` package for transitive
+  image discovery (no addon-maintainer image-list tracking burden).
+- **Depends on:** M21. **Run pre-implementation verification per L15
+  §11.0.**
+
+### M26 — `okdctl airgap plan` subcommand
+
+- **Status:** not started
+- **Category:** CLI / operator contract
+- **State:** design approved (L15)
+- **Effort:** days
+- **Impact:** large (operator-facing contract)
+- **Evidence:** L15 §10 design. `internal/cli/` — new command lands
+  alongside existing top-level verbs.
+- **Acceptance:** new `internal/cli/airgap.go` with `plan`
+  subcommand. Default emits `ImageSetConfiguration`
+  (`mirror.openshift.io/v2alpha1`) in pin-release form
+  (`mirror.platform.release: quay.io/okd/scos-release@sha256:<digest>`).
+  `--channel stable-<minor>` switches to graph mode. Emits companion
+  `airgap.yaml` listing HTTPS blobs (SCOS ISO, tool tarballs) with
+  pinned SHA256s. Emits `run-oc-mirror.sh` wrapper that exports
+  `OCP_SIGNATURE_URL` + `OCP_SIGNATURE_VERIFICATION_PK` pointing at
+  OKD CI values. Emits `fetch-blobs.sh` helper for staging blobs.
+  Golden-file test per L15 §9.2: `airgap plan --version <pinned>` for
+  a fixed OKD version produces a byte-stable `ImageSetConfiguration`
+  + `airgap.yaml` pair matching a checked-in fixture.
+- **Depends on:** M22, M24, M25. **Run pre-implementation
+  verification per L15 §11.0, especially the `oc-mirror --v2` schema
+  + channel check — the `type: okd` enum and `stable-4.X` channel
+  name may drift.**
+
+### M27 — `okdctl doctor --airgap`
+
+- **Status:** not started
+- **Category:** verifier / doctor extension
+- **State:** design approved (L15)
+- **Effort:** days
+- **Impact:** medium (pre-deploy air-gap verification)
+- **Evidence:** L15 §9.1 design. `internal/cli/doctor.go:98-108`
+  (existing 9-check registry).
+- **Acceptance:** five new doctor checks gated on `--airgap` or
+  `OKDCTL_AIRGAP=1` per L15 §9.1: (1) `airgap mirror reachable`,
+  (2) `airgap release image digest pinned` (WARNING per current
+  cosign status; upgrade to `cosign verify` if sigstore adoption
+  lands — see M32 and [okd#2092](https://github.com/okd-project/okd/issues/2092)),
+  (3) `airgap addon artifacts present` (helm-template image
+  extraction + mirror HEAD), (4) `airgap bootstrap oc present`,
+  (5) `airgap idms applied` (post-deploy only). Each check produces
+  a concrete remediation hint. Integration smoke test per L15 §9.2:
+  `httptest.NewServer` for HTTPS blob mock plus
+  `github.com/distribution/distribution/v3` in-process OCI registry
+  for the image-reachability checks; `doctor --airgap` runs against
+  both and every FetchPlan + MirrorableAddon entry resolves. No full
+  air-gap deploy in CI (explicit §9.2 non-goal).
+- **Depends on:** M21, M25, M26. **Run pre-implementation
+  verification per L15 §11.0, especially the cosign-status check
+  on `quay.io/okd/scos-release`.**
+
+### M28 — Air-gap docs: mirror contract + operator runbook
+
+- **Status:** not started
+- **Category:** docs
+- **State:** design approved (L15)
+- **Effort:** hours
+- **Impact:** medium
+- **Evidence:** L15 §6, §10.2 design.
+- **Acceptance:** new `docs/airgap/mirror-contract.md`
+  (the MirrorBase rewrite table + per-fetch override cheat sheet).
+  New `docs/airgap/operator-runbook.md` (the 6-step workflow from
+  L15 §10.2). Runbook explicitly names the operator-side fetches L15
+  §12 defers to operator responsibility: the distro package list
+  (`coreos-installer`, `haproxy`, `httpd`/`apache2`, `dnsmasq`,
+  `terraform`, plus HashiCorp apt/rpm repos), the `TF_CLI_CONFIG_FILE`
+  `filesystem_mirror` recipe for the `bpg/proxmox` terraform provider,
+  and the cluster-runtime IDMS/ITMS application step. README air-gap
+  section pointer. Operator workflow in the runbook ends with a
+  `doctor --airgap` invocation matching M27.
+- **Depends on:** M21–M27. **Run pre-implementation verification per
+  L15 §11.0.**
+
+### M32 — Embed OKD maintainer GPG pubkey for tarball verification
+
+- **Status:** blocked — waiting on upstream okd-project/okd#2092
+- **Category:** supply-chain / verification
+- **State:** blocked upstream
+- **Effort:** hours (when unblocked)
+- **Impact:** small (adds GPG-verify of tarball sidecars to
+  `doctor --airgap`)
+- **Evidence:** L15 research (2026-04-19) confirmed OKD GitHub
+  release tarballs are GPG-signed via `sha256sum.txt.asc` with key
+  `maintainers@okd.io`, but the pubkey is not published at any
+  canonical location. `quay.io/okd/scos-release` has no sigstore
+  signatures. Tracked upstream as
+  [okd-project/okd#2092](https://github.com/okd-project/okd/issues/2092).
+- **Acceptance:** once OKD publishes the pubkey canonically (or
+  provides out-of-band provenance for embedding), okdctl embeds it
+  and adds a `doctor --airgap` check that GPG-verifies
+  `sha256sum.txt.asc` against downloaded `openshift-install` tarballs
+  (applicable to M22's GitHub-tarball fallback path only — the
+  release-image path is digest-pinned).
+- **Depends on:** upstream okd-project/okd#2092 resolution.
 
 
 
@@ -213,6 +466,7 @@ These made the audit but are not scheduled now. Re-evaluate on
 | M18 | Homebrew tap | Post-1.0 distribution item |
 | L4 | `okdctl upgrade` (in-place OKD upgrade) | Strategic; needs design |
 | L6 | OpenTelemetry tracing hooks | N8 step-timing covers 80% of value |
+| M30 | `oras-go/v2` as a direct OCI pull client | No current use case; `oc` + `helm` subprocess cover OCI pulls today (only OCI pulls in the repo are the two flux chart refs at `flux.go:134,151`). Promote to `not started` when a non-helm OCI artifact surfaces (BYO-OCI addon flow, air-gap proxy semantics that need progress/retry from Go, or M22 deciding not to shell to `oc adm release extract`). ~1-2 MB binary growth if activated; 5 permissive transitive deps. |
 
 ### Tier D — dependency items from 2026-04-18 audit
 
@@ -854,6 +1108,18 @@ but link evidence.
 | M18 | Homebrew tap | Deferred |
 | M19 | Typed addon settings (decoder method) | **Done** (PR #89) |
 | M20 | Grouped wizard fields for addons | **Done** (PR #89) |
+| M21 | FetchPlan abstraction + resolver | Sprint 1 (air-gap prereq; L15) |
+| M22 | OKD binaries via release-image extraction | Sprint 1 (air-gap; L15) |
+| M23 | Direct scos.json fetch for 4.19+ (dual-path) | Sprint 1 (air-gap; L15) |
+| M24 | Mirror contract (MirrorBase + rewrite rules) | Sprint 1 (air-gap; L15) |
+| M25 | MirrorableAddon interface + migrations | Sprint 1 (air-gap; L15) |
+| M26 | `okdctl airgap plan` subcommand | Sprint 1 (air-gap; L15) |
+| M27 | `okdctl doctor --airgap` | Sprint 1 (air-gap; L15) |
+| M28 | Air-gap docs: mirror contract + operator runbook | Sprint 1 (air-gap; L15) |
+| M29 | GitHub Artifact Attestations for release binaries | Sprint 1 (Theme G) |
+| M30 | `oras-go/v2` as direct OCI pull client | Deferred |
+| M31 | *(unassigned — was OKD version floor, reversed 2026-04-20)* | n/a |
+| M32 | Embed OKD maintainer GPG pubkey for tarball verification | **Blocked** (okd#2092) |
 | L1 | libvirt/KVM provider | **Skipped** |
 | L2 | vSphere/AWS/Equinix/bare-metal/Vagrant | **Skipped** |
 | L3 | Multi-distribution (RKE2, vanilla) | **Skipped** |
@@ -868,7 +1134,7 @@ but link evidence.
 | L12 | Container image distribution | **Skipped** |
 | L13 | Auto-update version check | **Done** (PR #69) |
 | L14 | Coverage thresholds + codecov | **Done** (PR #85) |
-| L15 | Air-gap feasibility + scoping doc | Workstream (design-doc-first) |
+| L15 | Air-gap feasibility + scoping doc | In review (doc at 25ae630; M21–M28 filed as impl items) |
 | R1 | Addon category model + design doc | Workstream (design-doc-first) |
 | R2 | Specific addons after R1 | Deferred conversation |
 
