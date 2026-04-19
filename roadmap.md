@@ -119,7 +119,7 @@ Motto for this theme: "finish the last mile of the manager/fetcher
 scaffolding the internal code already holds."
 
 #### M1 — `okdctl status` / `describe`
-- **Status:** not started
+- **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/m1-status-describe
 - **Category:** feature-gap
 - **State:** not started
 - **Effort:** days
@@ -159,7 +159,7 @@ scaffolding the internal code already holds."
   regardless and wired through both console and file outputs.
 
 #### L5 — Prometheus metrics endpoint during deploy
-- **Status:** not started
+- **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/m3-l5-dryrun-metrics
 - **Category:** feature-gap
 - **State:** not started
 - **Effort:** week
@@ -175,7 +175,7 @@ scaffolding the internal code already holds."
 ### Theme E — config ergonomics, air-gap, rootless
 
 #### M3 — `--dry-run` / `--plan` mode
-- **Status:** not started
+- **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/m3-l5-dryrun-metrics
 - **Category:** feature-gap
 - **State:** not started
 - **Effort:** days
@@ -270,7 +270,7 @@ scaffolding the internal code already holds."
 - **Depends on:** none.
 
 #### L14 — Coverage thresholds + codecov in CI
-- **Status:** not started
+- **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/l14-coverage-codecov
 - **Category:** infra
 - **State:** not started
 - **Effort:** days
@@ -410,7 +410,7 @@ Filed as roadmap items so `/roadmap-pickup` can fan them out when
 bandwidth opens. Each references the audit finding ID for diff tracking.
 
 #### D2 — evaluate progressbar swap for bubbles/progress
-- **Status:** not started
+- **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/d2-progressbar-swap
 - **Category:** deps (transitive-weight)
 - **Effort:** days
 - **Impact:** small (dep-count reduction)
