@@ -147,7 +147,7 @@ scaffolding the internal code already holds."
 ### Theme C — observability, error messages, logging
 
 #### M14 — Correlation ID per deploy run
-- **Status:** not started
+- **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/m14-correlation-id
 - **Category:** feature-gap
 - **State:** not started
 - **Effort:** hours
@@ -202,7 +202,7 @@ scaffolding the internal code already holds."
 ### Theme F — error types, exit codes, correctness
 
 #### M13b — Complete errtypes migration across phase code
-- **Status:** not started
+- **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/m13b-errtypes-sweep
 - **Category:** refactor
 - **State:** partially done
 - **Effort:** days
@@ -240,7 +240,7 @@ scaffolding the internal code already holds."
 - **Depends on:** M13 (PR #70) — must be `done` so the types exist.
 
 #### M12 — Generalize SecretStore beyond 1Password
-- **Status:** not started
+- **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/m12-secretstore-providers
 - **Category:** half-done
 - **State:** partially done
 - **Effort:** days
@@ -410,7 +410,7 @@ Filed as roadmap items so `/roadmap-pickup` can fan them out when
 bandwidth opens. Each references the audit finding ID for diff tracking.
 
 #### D1 — document go-proxmox v0.x abandonment plan
-- **Status:** not started
+- **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/d1-deps-doc
 - **Category:** deps
 - **Effort:** hours
 - **Impact:** medium (supply-chain risk reduction)
@@ -437,7 +437,7 @@ bandwidth opens. Each references the audit finding ID for diff tracking.
 - **Depends on:** none
 
 #### D3 — pin tool-install @latest references
-- **Status:** not started
+- **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/d3-d4-pins
 - **Category:** deps (reproducibility)
 - **Effort:** hours
 - **Impact:** small
@@ -450,7 +450,7 @@ bandwidth opens. Each references the audit finding ID for diff tracking.
 - **Depends on:** none
 
 #### D4 — tighten terraform version floor in CI
-- **Status:** not started
+- **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/d3-d4-pins
 - **Category:** deps (reproducibility)
 - **Effort:** hours
 - **Impact:** small
