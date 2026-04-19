@@ -22,6 +22,19 @@ func (p *BasePhase) OcResourceExists(ctx context.Context, errPrefix string, args
 	return result.ExitCode == 0 && strings.TrimSpace(result.Stdout) != "", nil
 }
 
+// OcOutput runs `oc <args...>` once and returns trimmed stdout.
+// A non-zero exit code is returned as an error wrapping the stderr text.
+func (p *BasePhase) OcOutput(ctx context.Context, args ...string) (string, error) {
+	result, err := p.Exec.Run(ctx, "oc", args...)
+	if err != nil {
+		return "", err
+	}
+	if result.ExitCode != 0 {
+		return "", fmt.Errorf("oc %s failed (exit %d): %s", args[0], result.ExitCode, strings.TrimSpace(result.Stderr))
+	}
+	return strings.TrimSpace(result.Stdout), nil
+}
+
 // OcPollOutput polls `oc <args...>` until predicate matches the trimmed
 // stdout, and returns the first matching value. Polls on the default
 // WaitFor interval bounded by timeout.
