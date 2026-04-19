@@ -9,6 +9,7 @@ import (
 
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/packages"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
+	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/platform"
 )
@@ -87,7 +88,7 @@ func Packages(ctx context.Context, logger *slog.Logger) error {
 	}
 
 	if hasErrors {
-		return fmt.Errorf("some cleanup operations failed")
+		return &errtypes.ClusterError{Msg: "some cleanup operations failed"}
 	}
 	return nil
 }

@@ -11,6 +11,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/download"
+	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/executor"
 	"github.com/qxtaiba/okdctl/internal/platform"
 	"github.com/qxtaiba/okdctl/internal/system"
@@ -91,12 +92,12 @@ func (p *Phase) findOrDownloadFCOSISO(ctx context.Context, cfg *config.Config, o
 // extracts the ISO location, checksum, and release for the host architecture.
 func (p *Phase) DetectCoreOSVersion(ctx context.Context) (*CoreOSInfo, error) {
 	if !executor.CommandExists("openshift-install") {
-		return nil, fmt.Errorf("openshift-install not found - run setup first")
+		return nil, &errtypes.ConfigError{Msg: "openshift-install not found - run setup first"}
 	}
 
 	result, err := p.Exec.RunChecked(ctx, "openshift-install", "coreos", "print-stream-json")
 	if err != nil {
-		return nil, fmt.Errorf("failed to get CoreOS stream info: %w", err)
+		return nil, &errtypes.ClusterError{Msg: "failed to get CoreOS stream info", Err: err}
 	}
 
 	var streamData struct {
@@ -118,20 +119,20 @@ func (p *Phase) DetectCoreOSVersion(ctx context.Context) (*CoreOSInfo, error) {
 	}
 
 	if err := json.Unmarshal([]byte(result.Stdout), &streamData); err != nil {
-		return nil, fmt.Errorf("failed to parse CoreOS stream JSON: %w", err)
+		return nil, &errtypes.ConfigError{Msg: "failed to parse CoreOS stream JSON", Err: err}
 	}
 
 	archKey := platform.CoreOSArch()
 	arch, ok := streamData.Architectures[archKey]
 	if !ok {
-		return nil, fmt.Errorf("%s architecture not found in CoreOS stream", archKey)
+		return nil, &errtypes.ConfigError{Msg: fmt.Sprintf("%s architecture not found in CoreOS stream", archKey)}
 	}
 
 	metal := arch.Artifacts.Metal
 	iso := metal.Formats.ISO.Disk
 
 	if iso.Location == "" {
-		return nil, fmt.Errorf("coreos iso location not found in stream")
+		return nil, &errtypes.ConfigError{Msg: "coreos iso location not found in stream"}
 	}
 
 	return &CoreOSInfo{
@@ -166,7 +167,7 @@ func (p *Phase) DownloadCoreOSISO(ctx context.Context, info *CoreOSInfo, destPat
 	p.Log.Info(fmt.Sprintf("coreos: url %s", info.ISOUrl))
 
 	if err := system.EnsureDir(filepath.Dir(destPath)); err != nil {
-		return err
+		return &errtypes.ConfigError{Msg: "failed to ensure CoreOS ISO destination directory", Err: err}
 	}
 
 	opts := &download.Options{
@@ -178,7 +179,7 @@ func (p *Phase) DownloadCoreOSISO(ctx context.Context, info *CoreOSInfo, destPat
 	}
 
 	if err := download.Download(ctx, opts); err != nil {
-		return fmt.Errorf("failed to download CoreOS ISO: %w", err)
+		return &errtypes.NetworkError{Msg: "failed to download CoreOS ISO", Err: err}
 	}
 
 	p.Log.Info(fmt.Sprintf("coreos: iso downloaded to %s", destPath))
@@ -201,7 +202,7 @@ func (p *Phase) EnsureCoreOSISO(ctx context.Context, _ *config.Config, opts *Opt
 	// Separate from custom-isos directory which gets uploaded to Proxmox
 	downloadsDir := filepath.Join(opts.WorkDir, "downloads")
 	if err := system.EnsureDir(downloadsDir); err != nil {
-		return "", fmt.Errorf("failed to create downloads directory: %w", err)
+		return "", &errtypes.ConfigError{Msg: "failed to create downloads directory", Err: err}
 	}
 
 	isoFilename := filepath.Base(info.ISOUrl)

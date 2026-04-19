@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/qxtaiba/okdctl/internal/cluster"
+	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/tui"
 )
 
@@ -30,12 +31,12 @@ func (p *Phase) WaitForBootstrap(ctx context.Context, clusterDir string, opts *O
 	stopSpinner()
 	if err != nil {
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-			return fmt.Errorf("bootstrap timed out after %v", opts.BootstrapTimeout)
+			return &errtypes.ClusterError{Msg: fmt.Sprintf("bootstrap timed out after %v", opts.BootstrapTimeout)}
 		}
 		if errors.Is(ctx.Err(), context.Canceled) {
 			return fmt.Errorf("bootstrap cancelled: %w", ctx.Err())
 		}
-		return fmt.Errorf("bootstrap failed: %w", err)
+		return &errtypes.ClusterError{Msg: "bootstrap failed", Err: err}
 	}
 
 	p.Log.Info("bootstrap: completed - control plane is ready")
@@ -63,7 +64,7 @@ func (p *Phase) MonitorInstallation(ctx context.Context, clusterDir string, opts
 	defer stopSpinner()
 
 	if err := installCmd.Start(); err != nil {
-		return fmt.Errorf("failed to start installation monitor: %w", err)
+		return &errtypes.ClusterError{Msg: "failed to start installation monitor", Err: err}
 	}
 
 	installDone := make(chan error, 1)
@@ -97,7 +98,7 @@ func (p *Phase) MonitorInstallation(ctx context.Context, clusterDir string, opts
 				if errors.Is(ctx.Err(), context.Canceled) {
 					return fmt.Errorf("installation cancelled: %w", ctx.Err())
 				}
-				return fmt.Errorf("installation failed: %w", err)
+				return &errtypes.ClusterError{Msg: "installation failed", Err: err}
 			}
 
 			approved, csrErr := k8sClient.ApprovePendingCSRs(ctx)

@@ -10,6 +10,7 @@ import (
 	"slices"
 
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
+	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/logutil"
 )
 
@@ -33,7 +34,7 @@ func SafeRemoveWithLogger(_ context.Context, path, description string, logger *s
 	logger = logutil.OrNop(logger)
 	if err := refuseCriticalPath(path); err != nil {
 		logger.Warn("cleanup: refusing critical path", "err", err)
-		return err
+		return &errtypes.ConfigError{Msg: "cleanup refused critical path", Err: err}
 	}
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		return nil
@@ -41,12 +42,12 @@ func SafeRemoveWithLogger(_ context.Context, path, description string, logger *s
 
 	if err := os.RemoveAll(path); err != nil {
 		logger.Warn("cleanup: could not remove", "target", description, "err", err)
-		return fmt.Errorf("could not remove %s: %w", description, err)
+		return &errtypes.ConfigError{Msg: fmt.Sprintf("could not remove %s", description), Err: err}
 	}
 
 	if _, err := os.Stat(path); err == nil {
 		logger.Warn(fmt.Sprintf("%s still exists after removal", description))
-		return fmt.Errorf("%s still exists after removal", description)
+		return &errtypes.ConfigError{Msg: fmt.Sprintf("%s still exists after removal", description)}
 	} else if !os.IsNotExist(err) {
 		// Cannot verify removal (e.g. permission denied on parent); assume success.
 		logger.Warn("cleanup: could not verify removal", "target", description, "err", err)

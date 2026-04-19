@@ -12,6 +12,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/packages"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/templates"
+	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/executor"
 	"github.com/qxtaiba/okdctl/internal/system"
 )
@@ -79,7 +80,7 @@ func (p *Phase) setupBaseSteps(cfg *config.Config, opts *Options) []distribution
 			SkipReason: "downloads disabled",
 			Exec: func(ctx context.Context) error {
 				if err := p.DownloadOKDTools(ctx, cfg.Distribution.Version, opts); err != nil {
-					return fmt.Errorf("failed to download OKD tools: %w", err)
+					return &errtypes.NetworkError{Msg: "failed to download OKD tools", Err: err}
 				}
 				p.Log.Info("tools: sha256 checksums validated successfully")
 				return nil
@@ -97,7 +98,7 @@ func (p *Phase) setupManifestSteps(cfg *config.Config, opts *Options, clusterDir
 			Desc: "generating install-config.yaml",
 			Exec: func(ctx context.Context) error {
 				if err := p.GenerateInstallConfig(ctx, cfg, clusterDir); err != nil {
-					return fmt.Errorf("failed to generate install-config: %w", err)
+					return &errtypes.ConfigError{Msg: "failed to generate install-config", Err: err}
 				}
 				p.Log.Info("config: install-config.yaml generated",
 					"masters", cfg.Topology.ControlPlane.Count, "workers", cfg.Topology.Workers.Count)
@@ -109,7 +110,7 @@ func (p *Phase) setupManifestSteps(cfg *config.Config, opts *Options, clusterDir
 			Desc: "generating kubernetes manifests",
 			Exec: func(ctx context.Context) error {
 				if err := p.GenerateManifests(ctx, clusterDir); err != nil {
-					return fmt.Errorf("failed to generate manifests: %w", err)
+					return &errtypes.ClusterError{Msg: "failed to generate manifests", Err: err}
 				}
 				p.Log.Info("manifests: kubernetes manifests generated")
 				return nil
@@ -118,7 +119,12 @@ func (p *Phase) setupManifestSteps(cfg *config.Config, opts *Options, clusterDir
 		{
 			ID: StepGenerateKubeVIP, Name: "generate kube-vip manifests",
 			Desc: "generating kube-vip RBAC and DaemonSet manifests for VIP management",
-			Exec: func(_ context.Context) error { return p.generateKubeVIPManifests(cfg, clusterDir) },
+			Exec: func(_ context.Context) error {
+				if err := p.generateKubeVIPManifests(cfg, clusterDir); err != nil {
+					return &errtypes.ConfigError{Msg: "failed to generate kube-vip manifests", Err: err}
+				}
+				return nil
+			},
 		},
 		{
 			ID: StepInjectManifests, Name: "inject custom manifests",
@@ -126,7 +132,7 @@ func (p *Phase) setupManifestSteps(cfg *config.Config, opts *Options, clusterDir
 			Exec: func(ctx context.Context) error {
 				count, err := p.InjectCustomManifests(ctx, opts.ProjectRoot, clusterDir)
 				if err != nil {
-					return fmt.Errorf("failed to inject custom manifests: %w", err)
+					return &errtypes.ConfigError{Msg: "failed to inject custom manifests", Err: err}
 				}
 				if count > 0 {
 					p.Log.Info(fmt.Sprintf("manifests: injected %d custom manifest(s) from automation/config/manifests", count))
@@ -141,7 +147,7 @@ func (p *Phase) setupManifestSteps(cfg *config.Config, opts *Options, clusterDir
 			SkipReason: "cluster has workers",
 			Exec: func(ctx context.Context) error {
 				if err := p.InjectCompactClusterManifests(ctx, clusterDir, cfg.Topology.Workers.Count, cfg.Topology.ControlPlane.Count); err != nil {
-					return fmt.Errorf("failed to inject compact cluster manifests: %w", err)
+					return &errtypes.ConfigError{Msg: "failed to inject compact cluster manifests", Err: err}
 				}
 				p.Log.Info("manifests: injected ingress controller master placement for compact cluster")
 				return nil
@@ -152,7 +158,7 @@ func (p *Phase) setupManifestSteps(cfg *config.Config, opts *Options, clusterDir
 			Desc: "generating ignition files",
 			Exec: func(ctx context.Context) error {
 				if err := p.GenerateIgnitionConfigs(ctx, clusterDir); err != nil {
-					return fmt.Errorf("failed to generate ignition configs: %w", err)
+					return &errtypes.ClusterError{Msg: "failed to generate ignition configs", Err: err}
 				}
 				p.Log.Info("ignition: configurations generated and validated")
 				return nil
@@ -176,7 +182,7 @@ func (p *Phase) setupWebSteps(cfg *config.Config, opts *Options, clusterDir stri
 			Desc: "deploying ignition files to apache web server",
 			Exec: func(ctx context.Context) error {
 				if err := p.DeployToWebServer(ctx, cfg, clusterDir); err != nil {
-					return fmt.Errorf("failed to deploy to web server: %w", err)
+					return &errtypes.ConfigError{Msg: "failed to deploy to web server", Err: err}
 				}
 				webURL := BuildIgnitionURL(cfg.HTTPServer.IgnitionServerIP, cfg.HTTPServer.Port)
 				p.Log.Info(fmt.Sprintf("ignition: deployed to web server at %s", webURL))
@@ -226,7 +232,7 @@ func (p *Phase) setupInfraSteps(cfg *config.Config, opts *Options) []distributio
 			Desc: "generating terraform variables",
 			Exec: func(_ context.Context) error {
 				if err := p.GenerateTerraformVars(cfg, opts); err != nil {
-					return fmt.Errorf("failed to generate Terraform variables: %w", err)
+					return &errtypes.ConfigError{Msg: "failed to generate Terraform variables", Err: err}
 				}
 				tfvarsPath := filepath.Join(opts.ProjectRoot, "infrastructure", "terraform", "environments", phase.GetTerraformEnv(cfg), "terraform.tfvars")
 				p.Log.Info(fmt.Sprintf("terraform: configuration written to %s", tfvarsPath))
@@ -240,7 +246,7 @@ func (p *Phase) setupInfraSteps(cfg *config.Config, opts *Options) []distributio
 			SkipReason: "haproxy configuration disabled",
 			Exec: func(ctx context.Context) error {
 				if err := p.ConfigureHAProxy(ctx, cfg, opts); err != nil {
-					return fmt.Errorf("failed to configure HAProxy: %w", err)
+					return &errtypes.ClusterError{Msg: "failed to configure HAProxy", Err: err}
 				}
 				_ = p.VerifyHAProxyPorts(ctx)
 				return nil
@@ -263,7 +269,12 @@ func (p *Phase) setupInfraSteps(cfg *config.Config, opts *Options) []distributio
 		{
 			ID: StepConfigureDNS, Name: "configure dns",
 			Desc: "configuring dnsmasq and deploying bootstrap dns configuration", NonFatal: true,
-			Exec: func(ctx context.Context) error { return p.configureDNS(ctx, cfg, opts) },
+			Exec: func(ctx context.Context) error {
+				if err := p.configureDNS(ctx, cfg, opts); err != nil {
+					return &errtypes.ClusterError{Msg: "dns configuration failed", Err: err}
+				}
+				return nil
+			},
 			OnError: func(err error) {
 				p.Log.Warn("dns: configuration failed", "err", err)
 				p.Log.Warn("dns: you may need to configure dns manually")

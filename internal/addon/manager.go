@@ -8,6 +8,7 @@ import (
 	"slices"
 
 	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/executor"
 	"github.com/qxtaiba/okdctl/internal/logutil"
 )
@@ -66,12 +67,12 @@ func (m *Manager) InstallAll(ctx context.Context) error {
 	}
 
 	if !executor.CommandExists("oc") {
-		return fmt.Errorf("addons: 'oc' binary is required but not found in PATH")
+		return &errtypes.ClusterError{Msg: "addons: 'oc' binary is required but not found in PATH"}
 	}
 
 	ordered, err := Resolve(enabled)
 	if err != nil {
-		return fmt.Errorf("addon dependency resolution failed: %w", err)
+		return &errtypes.ConfigError{Msg: "addon dependency resolution failed", Err: err}
 	}
 
 	m.logger.Info(fmt.Sprintf("addons: installing %d addon(s)", len(ordered)))
@@ -116,10 +117,10 @@ func (m *Manager) installAndVerify(ctx context.Context, a Addon) (*Environment, 
 	m.logger.Info(fmt.Sprintf("addons: installing %s", info.DisplayName))
 	env := m.buildEnv(a)
 	if err := a.Install(ctx, env); err != nil {
-		return env, fmt.Errorf("addon %s install failed: %w", info.Name, err)
+		return env, &errtypes.ClusterError{Msg: fmt.Sprintf("addon %s install failed", info.Name), Err: err}
 	}
 	if vErr := a.Verify(ctx, env); vErr != nil {
-		return env, fmt.Errorf("addon %s installed but verify failed: %w", info.Name, vErr)
+		return env, &errtypes.ClusterError{Msg: fmt.Sprintf("addon %s installed but verify failed", info.Name), Err: vErr}
 	}
 	m.logger.Info(fmt.Sprintf("addons: %s installed and verified", info.DisplayName))
 	return env, nil
@@ -145,11 +146,11 @@ func (m *Manager) firstFailedDep(deps []string, failed map[string]bool) string {
 func (m *Manager) InstallOne(ctx context.Context, name string) error {
 	a := Get(name)
 	if a == nil {
-		return fmt.Errorf("unknown addon: %s", name)
+		return &errtypes.ConfigError{Msg: fmt.Sprintf("unknown addon: %s", name)}
 	}
 
 	if !executor.CommandExists("oc") {
-		return fmt.Errorf("addons: 'oc' binary is required but not found in PATH")
+		return &errtypes.ClusterError{Msg: "addons: 'oc' binary is required but not found in PATH"}
 	}
 
 	toInstall, err := m.collectWithDeps(a)
@@ -213,7 +214,7 @@ func (m *Manager) VerifyAll(ctx context.Context) ([]VerifyResult, error) {
 		info := a.Info()
 		env := m.buildEnv(a)
 		if vErr := a.Verify(ctx, env); vErr != nil {
-			wrapped := fmt.Errorf("addon %s verify failed: %w", info.Name, vErr)
+			wrapped := &errtypes.ClusterError{Msg: fmt.Sprintf("addon %s verify failed", info.Name), Err: vErr}
 			results = append(results, VerifyResult{Name: info.Name, Err: wrapped})
 			errs = append(errs, wrapped)
 		} else {
@@ -228,11 +229,11 @@ func (m *Manager) VerifyAll(ctx context.Context) ([]VerifyResult, error) {
 func (m *Manager) Uninstall(ctx context.Context, name string) error {
 	a := Get(name)
 	if a == nil {
-		return fmt.Errorf("unknown addon: %s", name)
+		return &errtypes.ConfigError{Msg: fmt.Sprintf("unknown addon: %s", name)}
 	}
 
 	if dep := m.findTransitiveDependent(name); dep != "" {
-		return fmt.Errorf("cannot uninstall %s: %s depends on it (directly or transitively)", name, dep)
+		return &errtypes.ConfigError{Msg: fmt.Sprintf("cannot uninstall %s: %s depends on it (directly or transitively)", name, dep)}
 	}
 
 	env := m.buildEnv(a)
@@ -287,7 +288,7 @@ func (m *Manager) collectWithDeps(a Addon) ([]Addon, error) {
 		for _, depName := range info.Dependencies {
 			dep := Get(depName)
 			if dep == nil {
-				return fmt.Errorf("addon %s requires %s which is not registered", info.Name, depName)
+				return &errtypes.ConfigError{Msg: fmt.Sprintf("addon %s requires %s which is not registered", info.Name, depName)}
 			}
 			if err := visit(dep); err != nil {
 				return err

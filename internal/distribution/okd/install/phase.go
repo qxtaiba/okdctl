@@ -115,11 +115,11 @@ func (p *Phase) DeployInfrastructure(ctx context.Context, cfg *config.Config, op
 	}
 
 	if !system.DirExists(terraformDir) {
-		return fmt.Errorf("terraform environment directory not found: %s", terraformDir)
+		return &errtypes.ConfigError{Msg: fmt.Sprintf("terraform environment directory not found: %s", terraformDir)}
 	}
 
 	if !system.FileExists(tfvarsFile) {
-		return fmt.Errorf("terraform.tfvars not found: %s - run setup first", tfvarsFile)
+		return &errtypes.ConfigError{Msg: fmt.Sprintf("terraform.tfvars not found: %s - run setup first", tfvarsFile)}
 	}
 
 	prov := proxmox.New(
@@ -128,7 +128,7 @@ func (p *Phase) DeployInfrastructure(ctx context.Context, cfg *config.Config, op
 		proxmox.WithEnv(p.Exec.Env),
 	)
 	if err := prov.Connect(ctx, cfg); err != nil {
-		return fmt.Errorf("failed to connect to Proxmox: %w", err)
+		return &errtypes.NetworkError{Msg: "failed to connect to Proxmox", Err: err}
 	}
 	defer func() { _ = prov.Disconnect(ctx) }()
 

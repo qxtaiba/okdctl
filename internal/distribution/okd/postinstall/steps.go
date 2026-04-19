@@ -8,6 +8,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/distribution"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
+	"github.com/qxtaiba/okdctl/internal/errtypes"
 )
 
 // Step IDs for the post-install phase, ordered as they execute.
@@ -29,7 +30,7 @@ func (p *Phase) postinstallSteps(cfg *config.Config, opts *Options, pctx *distri
 			Exec: func(ctx context.Context) error {
 				result, err := p.VerifyClusterHealth(ctx, opts)
 				if err != nil {
-					return fmt.Errorf("cluster health verification failed: %w", err)
+					return &errtypes.ClusterError{Msg: "cluster health verification failed", Err: err}
 				}
 				pctx.Update(func(c *PostInstallContext) {
 					c.ClusterHealth = result
@@ -43,7 +44,7 @@ func (p *Phase) postinstallSteps(cfg *config.Config, opts *Options, pctx *distri
 			Desc: "destroying bootstrap vm via terraform", NonFatal: true,
 			Exec: func(ctx context.Context) error {
 				if err := p.CleanupBootstrap(ctx, cfg, opts); err != nil {
-					return fmt.Errorf("bootstrap cleanup failed: %w", err)
+					return &errtypes.ClusterError{Msg: "bootstrap cleanup failed", Err: err}
 				}
 				pctx.Update(func(c *PostInstallContext) {
 					c.BootstrapCleaned = true
@@ -60,7 +61,7 @@ func (p *Phase) postinstallSteps(cfg *config.Config, opts *Options, pctx *distri
 			Exec: func(ctx context.Context) error {
 				kubeVipIP, err := p.VerifyKubeVIP(ctx, cfg, opts)
 				if err != nil {
-					return fmt.Errorf("kube-vip verification failed: %w", err)
+					return &errtypes.ClusterError{Msg: "kube-vip verification failed", Err: err}
 				}
 				pctx.Update(func(c *PostInstallContext) {
 					c.KubeVIPVerified = true
@@ -80,7 +81,7 @@ func (p *Phase) postinstallSteps(cfg *config.Config, opts *Options, pctx *distri
 				state := pctx.Get()
 				bastionIP := cfg.Networking.Bastion.IP
 				if err := p.deployProductionDNS(ctx, cfg, bastionIP, state.KubeVipIP, nil); err != nil {
-					return fmt.Errorf("production dns deployment failed: %w", err)
+					return &errtypes.ClusterError{Msg: "production dns deployment failed", Err: err}
 				}
 				pctx.Update(func(c *PostInstallContext) {
 					c.DNSDeployed = true
@@ -98,7 +99,7 @@ func (p *Phase) postinstallSteps(cfg *config.Config, opts *Options, pctx *distri
 					p.Log.Warn("addons: api health check failed before addon install", "err", err)
 				}
 				if err := mgr.InstallAll(ctx); err != nil {
-					return fmt.Errorf("addon installation failed: %w", err)
+					return &errtypes.ClusterError{Msg: "addon installation failed", Err: err}
 				}
 				return nil
 			},

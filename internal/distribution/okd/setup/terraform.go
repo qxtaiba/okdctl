@@ -8,6 +8,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/templates"
+	"github.com/qxtaiba/okdctl/internal/errtypes"
 )
 
 // DefaultProxmoxCPUType is the Proxmox qemu cpu type used when the operator
@@ -140,7 +141,7 @@ func formatAdditionalNetworks(networks []config.AdditionalNetwork) string {
 // into the environment directory derived from cfg.
 func (p *Phase) GenerateTerraformVars(cfg *config.Config, opts *Options) error {
 	if cfg.Provider.Proxmox == nil {
-		return fmt.Errorf("proxmox provider configuration required")
+		return &errtypes.ConfigError{Msg: "proxmox provider configuration required"}
 	}
 
 	data := buildTerraformVarsData(cfg)

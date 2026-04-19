@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 
 	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/infrastructure/terraform"
 	"github.com/qxtaiba/okdctl/internal/system"
 )
@@ -28,7 +29,7 @@ func (p *Phase) CleanupBootstrap(ctx context.Context, cfg *config.Config, opts *
 	)
 
 	if err := tf.Init(ctx); err != nil {
-		return fmt.Errorf("bootstrap: terraform init failed: %w", err)
+		return &errtypes.ClusterError{Msg: "bootstrap: terraform init failed", Err: err}
 	}
 
 	vars := map[string]string{"bootstrap_enabled": "false"}
@@ -41,14 +42,14 @@ func (p *Phase) CleanupBootstrap(ctx context.Context, cfg *config.Config, opts *
 		Vars:           vars,
 		Targets:        targets,
 	}); err != nil {
-		return fmt.Errorf("bootstrap: terraform plan failed: %w", err)
+		return &errtypes.ClusterError{Msg: "bootstrap: terraform plan failed", Err: err}
 	}
 
 	p.Log.Info("bootstrap: applying — destroying bootstrap vm")
 	if err := tf.Apply(ctx, terraform.ApplyOptions{
 		PlanFile: filepath.Join(terraformDir, planFile),
 	}); err != nil {
-		return fmt.Errorf("bootstrap: terraform apply failed: %w", err)
+		return &errtypes.ClusterError{Msg: "bootstrap: terraform apply failed", Err: err}
 	}
 
 	// Clean up plan file.

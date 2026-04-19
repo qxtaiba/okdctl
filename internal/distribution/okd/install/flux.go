@@ -53,12 +53,12 @@ func (p *Phase) SetupClusterAccess(_ context.Context, clusterDir string) error {
 	// the user will look for them after the re-exec'd deploy returns.
 	homeDir, err := system.InvokingUserHomeDir()
 	if err != nil {
-		return fmt.Errorf("failed to resolve invoking user home: %w", err)
+		return &errtypes.ConfigError{Msg: "failed to resolve invoking user home", Err: err}
 	}
 
 	kubeDir := filepath.Join(homeDir, ".kube")
 	if err := system.EnsureDir(kubeDir); err != nil {
-		return fmt.Errorf("failed to create .kube directory: %w", err)
+		return &errtypes.ConfigError{Msg: "failed to create .kube directory", Err: err}
 	}
 	if err := system.ChownToInvokingUser(kubeDir); err != nil {
 		p.Log.Warn("kubeconfig: could not chown .kube dir", "err", err)
@@ -78,7 +78,7 @@ func (p *Phase) SetupClusterAccess(_ context.Context, clusterDir string) error {
 	}
 
 	if err := system.CopyFileMode(srcKubeconfig, destKubeconfig, 0o600); err != nil {
-		return fmt.Errorf("failed to copy kubeconfig: %w", err)
+		return &errtypes.ConfigError{Msg: "failed to copy kubeconfig", Err: err}
 	}
 	if err := system.ChownToInvokingUser(destKubeconfig); err != nil {
 		p.Log.Warn("kubeconfig: could not chown config", "err", err)

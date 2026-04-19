@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/logutil"
 )
 
@@ -30,7 +31,7 @@ func Terraform(ctx context.Context, projectRoot, terraformEnv string, logger *sl
 			logger.Info("cleanup: terraform environments directory does not exist")
 			return nil
 		}
-		return err
+		return &errtypes.ConfigError{Msg: "failed to read terraform environments directory", Err: err}
 	}
 
 	for _, entry := range entries {

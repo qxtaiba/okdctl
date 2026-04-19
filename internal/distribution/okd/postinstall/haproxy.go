@@ -11,6 +11,7 @@ import (
 
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/firewall"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
+	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/httputil"
 	"github.com/qxtaiba/okdctl/internal/netutil"
 	"github.com/qxtaiba/okdctl/internal/system"
@@ -76,7 +77,7 @@ func (p *Phase) RemoveHAProxy(ctx context.Context, vip string) error {
 			body, _ := io.ReadAll(resp.Body)
 			return resp.StatusCode == http.StatusOK && strings.TrimSpace(string(body)) == "ok"
 		}, DefaultKubeVIPVIPTimeout, p.Log); waitErr != nil {
-			return fmt.Errorf("api not reachable via vip %s after haproxy removal: %w", vip, waitErr)
+			return &errtypes.NetworkError{Msg: fmt.Sprintf("api not reachable via vip %s after haproxy removal", vip), Err: waitErr}
 		}
 		if !vipRemoved {
 			p.Log.Warn("haproxy: api is reachable but vip was not removed from bastion — traffic may still route through haproxy")
@@ -91,7 +92,7 @@ func (p *Phase) RemoveHAProxy(ctx context.Context, vip string) error {
 			r, _ := p.Exec.Run(ctx, "oc", "get", "--raw", "/healthz")
 			return r.ExitCode == 0 && strings.TrimSpace(r.Stdout) == "ok"
 		}, DefaultKubeVIPVIPTimeout, p.Log); waitErr != nil {
-			return fmt.Errorf("api not reachable via hostname after haproxy removal: %w", waitErr)
+			return &errtypes.ClusterError{Msg: "api not reachable via hostname after haproxy removal", Err: waitErr}
 		}
 		p.Log.Info("haproxy: api confirmed reachable via hostname")
 	}

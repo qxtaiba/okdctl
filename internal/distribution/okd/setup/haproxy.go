@@ -11,6 +11,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/templates"
+	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
@@ -19,7 +20,7 @@ import (
 func (p *Phase) BuildHAProxyConfigData(cfg *config.Config) (templates.HAProxyConfigData, error) {
 	nodes, err := p.BuildNodeList(cfg)
 	if err != nil {
-		return templates.HAProxyConfigData{}, fmt.Errorf("failed to build node list: %w", err)
+		return templates.HAProxyConfigData{}, &errtypes.ConfigError{Msg: "failed to build node list", Err: err}
 	}
 
 	var masterServers, workerServers []templates.HAProxyServer
@@ -34,7 +35,7 @@ func (p *Phase) BuildHAProxyConfigData(cfg *config.Config) (templates.HAProxyCon
 		case phase.RoleWorker:
 			workerServers = append(workerServers, templates.HAProxyServer{Name: node.Name, IP: node.IP})
 		default:
-			return templates.HAProxyConfigData{}, fmt.Errorf("unexpected node role %q in node %q — HAProxy backend unrenderable", node.Role, node.Name)
+			return templates.HAProxyConfigData{}, &errtypes.ConfigError{Msg: fmt.Sprintf("unexpected node role %q in node %q — HAProxy backend unrenderable", node.Role, node.Name)}
 		}
 	}
 
@@ -64,11 +65,11 @@ const (
 
 func (p *Phase) installHAProxyConfig(ctx context.Context, tmpPath string) error {
 	if err := system.CopyFile(tmpPath, haproxyConfigPath); err != nil {
-		return fmt.Errorf("failed to install haproxy config: %w", err)
+		return &errtypes.ClusterError{Msg: "failed to install haproxy config", Err: err}
 	}
 
 	if _, err := p.Exec.RunChecked(ctx, "haproxy", "-c", "-f", haproxyConfigPath); err != nil {
-		return fmt.Errorf("haproxy configuration validation failed: %w", err)
+		return &errtypes.ClusterError{Msg: "haproxy configuration validation failed", Err: err}
 	}
 	return nil
 }
@@ -86,19 +87,19 @@ func enableAndRestartHAProxy(ctx context.Context) error {
 func (p *Phase) ConfigureHAProxy(ctx context.Context, cfg *config.Config, _ *Options) error {
 	data, err := p.BuildHAProxyConfigData(cfg)
 	if err != nil {
-		return fmt.Errorf("failed to build HAProxy config data: %w", err)
+		return &errtypes.ConfigError{Msg: "failed to build HAProxy config data", Err: err}
 	}
 
 	content, err := templates.RenderHAProxyConfig(&data)
 	if err != nil {
-		return fmt.Errorf("failed to render haproxy.cfg template: %w", err)
+		return &errtypes.ConfigError{Msg: "failed to render haproxy.cfg template", Err: err}
 	}
 
 	// A user-writable temp file is required because the final install step
 	// runs under sudo, so the write here cannot target /etc/haproxy directly.
 	tmpPath := filepath.Join(os.TempDir(), fmt.Sprintf("haproxy-%d.cfg", os.Getpid()))
 	if err := system.AtomicWriteString(tmpPath, content, 0o644); err != nil {
-		return fmt.Errorf("failed to write temp haproxy config: %w", err)
+		return &errtypes.ConfigError{Msg: "failed to write temp haproxy config", Err: err}
 	}
 	defer func() { _ = os.Remove(tmpPath) }()
 
@@ -107,7 +108,7 @@ func (p *Phase) ConfigureHAProxy(ctx context.Context, cfg *config.Config, _ *Opt
 	hasBackup := false
 	if system.FileExists(haproxyConfigPath) {
 		if err := system.CopyFile(haproxyConfigPath, haproxyBackupPath); err != nil {
-			return fmt.Errorf("failed to back up existing haproxy.cfg: %w", err)
+			return &errtypes.ConfigError{Msg: "failed to back up existing haproxy.cfg", Err: err}
 		}
 		hasBackup = true
 	}

@@ -2,7 +2,6 @@ package destroy
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/distribution"
@@ -10,6 +9,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/firewall"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/setup"
+	"github.com/qxtaiba/okdctl/internal/errtypes"
 )
 
 // Step IDs for the destroy phase, ordered as they execute.
@@ -31,7 +31,7 @@ func (p *Phase) destroySteps(cfg *config.Config, opts *Options) []distribution.S
 			SkipReason: "terraform destroy disabled",
 			Exec: func(ctx context.Context) error {
 				if err := p.destroyInfrastructure(ctx, opts); err != nil {
-					return fmt.Errorf("infrastructure destruction failed: %w", err)
+					return &errtypes.ClusterError{Msg: "infrastructure destruction failed", Err: err}
 				}
 				p.Log.Info("terraform: infrastructure destruction completed")
 				return nil
@@ -81,7 +81,7 @@ func (p *Phase) destroySteps(cfg *config.Config, opts *Options) []distribution.S
 					Logger:         p.Log,
 				}
 				if err := cleanup.Execute(ctx, cleanupOpts); err != nil {
-					return fmt.Errorf("cleanup failed: %w", err)
+					return &errtypes.ClusterError{Msg: "cleanup failed", Err: err}
 				}
 				return nil
 			},
@@ -94,7 +94,7 @@ func (p *Phase) destroySteps(cfg *config.Config, opts *Options) []distribution.S
 			SkipReason: "firewall cleanup disabled",
 			Exec: func(ctx context.Context) error {
 				if err := firewall.RemoveOKDRules(ctx, true, p.Log); err != nil {
-					return fmt.Errorf("firewall cleanup failed: %w", err)
+					return &errtypes.ClusterError{Msg: "firewall cleanup failed", Err: err}
 				}
 				p.Log.Info("firewall: okd rules removed from firewalld")
 				return nil

@@ -5,6 +5,7 @@ import (
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
+	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/netutil"
 )
 
@@ -20,7 +21,7 @@ func (p *Phase) BuildNodeList(cfg *config.Config) ([]NodeInfo, error) {
 	totalNodes := 1 + cfg.Topology.ControlPlane.Count + cfg.Topology.Workers.Count
 	if cfg.Networking.MachineCIDR != "" {
 		if err := netutil.ValidateIPRangeInCIDR(startIP, totalNodes, cfg.Networking.MachineCIDR); err != nil {
-			return nil, err
+			return nil, &errtypes.ConfigError{Msg: "static IP range does not fit in machine CIDR", Err: err}
 		}
 	}
 
@@ -33,7 +34,7 @@ func (p *Phase) BuildNodeList(cfg *config.Config) ([]NodeInfo, error) {
 	for i := range cfg.Topology.ControlPlane.Count {
 		ip, err := netutil.CalculateVMIP(startIP, 1+i)
 		if err != nil {
-			return nil, fmt.Errorf("failed to calculate %s%d IP: %w", phase.RoleMaster, i, err)
+			return nil, &errtypes.ConfigError{Msg: fmt.Sprintf("failed to calculate %s%d IP", phase.RoleMaster, i), Err: err}
 		}
 		nodes = append(nodes, NodeInfo{
 			Name: fmt.Sprintf("%s%d", phase.RoleMaster, i),
@@ -46,7 +47,7 @@ func (p *Phase) BuildNodeList(cfg *config.Config) ([]NodeInfo, error) {
 	for i := range cfg.Topology.Workers.Count {
 		ip, err := netutil.CalculateVMIP(startIP, workerOffset+i)
 		if err != nil {
-			return nil, fmt.Errorf("failed to calculate %s%d IP: %w", phase.RoleWorker, i, err)
+			return nil, &errtypes.ConfigError{Msg: fmt.Sprintf("failed to calculate %s%d IP", phase.RoleWorker, i), Err: err}
 		}
 		nodes = append(nodes, NodeInfo{
 			Name: fmt.Sprintf("%s%d", phase.RoleWorker, i),

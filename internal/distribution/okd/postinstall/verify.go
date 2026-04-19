@@ -77,7 +77,7 @@ func (p *Phase) VerifyClusterHealth(ctx context.Context, _ *Options) (*ClusterHe
 
 	cmdResult, err := p.Exec.RunChecked(ctx, "oc", "get", "clusteroperators", "--no-headers")
 	if err != nil {
-		return nil, fmt.Errorf("failed to get cluster operators: %w", err)
+		return nil, &errtypes.ClusterError{Msg: "failed to get cluster operators", Err: err}
 	}
 
 	lines := strings.Split(strings.TrimSpace(cmdResult.Stdout), "\n")
@@ -99,12 +99,12 @@ func (p *Phase) VerifyClusterHealth(ctx context.Context, _ *Options) (*ClusterHe
 
 	cmdResult, err = p.Exec.RunChecked(ctx, "oc", "get", "nodes", "-o", "json")
 	if err != nil {
-		return result, fmt.Errorf("failed to get nodes: %w", err)
+		return result, &errtypes.ClusterError{Msg: "failed to get nodes", Err: err}
 	}
 
 	ready, total, err := parseNodeReadiness([]byte(cmdResult.Stdout))
 	if err != nil {
-		return result, err
+		return result, &errtypes.ClusterError{Msg: "failed to parse node readiness", Err: err}
 	}
 	result.ReadyNodes = ready
 	result.TotalNodes = total
@@ -119,21 +119,21 @@ func (p *Phase) VerifyClusterHealth(ctx context.Context, _ *Options) (*ClusterHe
 func (p *Phase) VerifyKubeVIP(ctx context.Context, cfg *config.Config, opts *Options) (string, error) {
 	vip, err := phase.ResolveClusterVIP(cfg)
 	if err != nil {
-		return "", err
+		return "", &errtypes.ConfigError{Msg: "failed to resolve cluster VIP", Err: err}
 	}
 
 	p.Log.Info(fmt.Sprintf("kubevip: checking vip %s", vip))
 
 	if err := p.waitForKubeVIPDaemonSet(ctx, opts); err != nil {
-		return "", err
+		return "", &errtypes.ClusterError{Msg: "kube-vip daemonset not ready", Err: err}
 	}
 
 	if err := p.waitForKubeVIPPing(ctx, vip, opts); err != nil {
-		return "", err
+		return "", &errtypes.ClusterError{Msg: "kube-vip vip not reachable", Err: err}
 	}
 
 	if err := p.verifyKubeVIPAPIHealth(ctx, vip); err != nil {
-		return "", err
+		return "", &errtypes.ClusterError{Msg: "kube-vip api health check failed", Err: err}
 	}
 
 	return vip, nil

@@ -15,6 +15,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/download"
+	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/executor"
 	"github.com/qxtaiba/okdctl/internal/httputil"
 	"github.com/qxtaiba/okdctl/internal/platform"
@@ -59,7 +60,7 @@ func (p *Phase) InstallExternalTools(ctx context.Context, cfg *config.Config) er
 	tools := append([]externalTool{toolTerraform, toolYQ}, addonRequiredTools(cfg)...)
 	for _, tool := range tools {
 		if err := p.installTool(ctx, tool, cfg); err != nil {
-			return fmt.Errorf("failed to install %s: %w", tool, err)
+			return &errtypes.ConfigError{Msg: fmt.Sprintf("failed to install %s", tool), Err: err}
 		}
 	}
 	return nil
