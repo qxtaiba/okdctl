@@ -13,8 +13,10 @@ import (
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
+// Backend identifies which host firewall implementation is active.
 type Backend string
 
+// Backend values recognised by DetectBackend.
 const (
 	Firewalld Backend = "firewalld"
 	UFW       Backend = "ufw"
@@ -52,12 +54,17 @@ func HAProxyFrontendPorts() []Port {
 	return ports
 }
 
+// Port describes a single firewall rule: number + protocol, with a
+// human-readable description used for logging.
 type Port struct {
 	Number      int
 	Protocol    string // tcp, udp
 	Description string
 }
 
+// DetectBackend returns the active firewall backend, preferring firewalld,
+// then ufw, then iptables. Returns None on non-Linux hosts or when no
+// backend is present.
 func DetectBackend(ctx context.Context) Backend {
 	if runtime.GOOS != "linux" {
 		return None
@@ -85,6 +92,8 @@ func DetectBackend(ctx context.Context) Backend {
 	return None
 }
 
+// Configure opens each port in ports on the active backend. When permanent
+// is true, firewalld rules persist across reloads. A None backend no-ops.
 func Configure(ctx context.Context, ports []Port, permanent bool, logger *slog.Logger) error {
 	backend := DetectBackend(ctx)
 
@@ -134,10 +143,12 @@ func openPort(ctx context.Context, backend Backend, port Port, permanent bool, l
 	if err := modifyPort(ctx, backend, port, permanent, "add"); err != nil {
 		return err
 	}
-	logger.Info(fmt.Sprintf("firewall: opened port %d/%s (%s)", port.Number, port.Protocol, port.Description))
+	logger.Info("firewall: opened port", "port", port.Number, "proto", port.Protocol, "desc", port.Description)
 	return nil
 }
 
+// RemoveRules deletes each port in ports from the active backend. Missing
+// rules are logged as warnings rather than returned as errors.
 func RemoveRules(ctx context.Context, ports []Port, permanent bool, logger *slog.Logger) error {
 	backend := DetectBackend(ctx)
 
@@ -149,7 +160,7 @@ func RemoveRules(ctx context.Context, ports []Port, permanent bool, logger *slog
 
 	for _, port := range ports {
 		if err := modifyPort(ctx, backend, port, permanent, actionRemove); err != nil {
-			logger.Warn(fmt.Sprintf("could not remove port %d: %v", port.Number, err))
+			logger.Warn("firewall: could not remove port", "port", port.Number, "err", err)
 		}
 	}
 
@@ -203,10 +214,12 @@ func modifyPort(ctx context.Context, backend Backend, port Port, permanent bool,
 	return nil
 }
 
+// ConfigureOKD opens all ports in OKDRequiredPorts.
 func ConfigureOKD(ctx context.Context, permanent bool, logger *slog.Logger) error {
 	return Configure(ctx, OKDRequiredPorts, permanent, logger)
 }
 
+// RemoveOKDRules removes all ports in OKDRequiredPorts.
 func RemoveOKDRules(ctx context.Context, permanent bool, logger *slog.Logger) error {
 	return RemoveRules(ctx, OKDRequiredPorts, permanent, logger)
 }

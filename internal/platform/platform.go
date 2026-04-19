@@ -1,7 +1,9 @@
 // Package platform detects the host Linux family (RHEL vs Debian) from
-// /etc/os-release and exposes family-specific knobs — package manager,
-// Apache paths, SELinux presence, CoreOS/download architecture strings —
-// so provisioning code can stay distribution-agnostic.
+// /etc/os-release and exposes family-specific knobs — Apache paths,
+// SELinux presence, CoreOS/download architecture strings — plus the
+// PackageManager abstraction (single Manager type driven by per-family
+// binary names: dnf/rpm on RHEL, apt-get/dpkg on Debian) so provisioning
+// code can stay distribution-agnostic.
 package platform
 
 import (
@@ -11,10 +13,11 @@ import (
 	"strings"
 )
 
+// Supported OS family identifiers plus the ARM64 architecture literal.
 const (
 	archARM64    = "arm64"
-	familyRHEL   = "rhel"
-	familyDebian = "debian"
+	FamilyRHEL   = "rhel"
+	FamilyDebian = "debian"
 )
 
 // DownloadArch returns the architecture suffix for tool download URLs.
@@ -90,17 +93,17 @@ func parseOSRelease(content string) (OS, error) {
 
 func detectFamily(id, idLike string) string {
 	if rhelIDs[id] {
-		return familyRHEL
+		return FamilyRHEL
 	}
 	if debianIDs[id] {
-		return familyDebian
+		return FamilyDebian
 	}
 	for _, like := range strings.Fields(idLike) {
 		if rhelIDs[like] {
-			return familyRHEL
+			return FamilyRHEL
 		}
 		if debianIDs[like] {
-			return familyDebian
+			return FamilyDebian
 		}
 	}
 	return ""
@@ -108,7 +111,7 @@ func detectFamily(id, idLike string) string {
 
 // ApachePackageName returns the package name for Apache HTTP server.
 func (o OS) ApachePackageName() string {
-	if o.Family == familyDebian {
+	if o.Family == FamilyDebian {
 		return "apache2"
 	}
 	return "httpd"
@@ -116,7 +119,7 @@ func (o OS) ApachePackageName() string {
 
 // ApacheConfigPath returns the path to the main Apache config file.
 func (o OS) ApacheConfigPath() string {
-	if o.Family == familyDebian {
+	if o.Family == FamilyDebian {
 		return "/etc/apache2/apache2.conf"
 	}
 	return "/etc/httpd/conf/httpd.conf"
@@ -124,7 +127,7 @@ func (o OS) ApacheConfigPath() string {
 
 // ApacheServiceName returns the systemd service name for Apache.
 func (o OS) ApacheServiceName() string {
-	if o.Family == familyDebian {
+	if o.Family == FamilyDebian {
 		return "apache2"
 	}
 	return "httpd"
@@ -132,12 +135,13 @@ func (o OS) ApacheServiceName() string {
 
 // ApacheUser returns the user that Apache runs as.
 func (o OS) ApacheUser() string {
-	if o.Family == familyDebian {
+	if o.Family == FamilyDebian {
 		return "www-data"
 	}
 	return "apache"
 }
 
+// HasSELinux reports whether the detected family ships SELinux by default.
 func (o OS) HasSELinux() bool {
-	return o.Family == familyRHEL
+	return o.Family == FamilyRHEL
 }

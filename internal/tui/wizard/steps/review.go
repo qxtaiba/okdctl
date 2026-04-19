@@ -84,12 +84,15 @@ func (st *sectionStyles) kvPair(label, value string) string {
 	return st.label.Render(label) + st.value.Render(value)
 }
 
+// ReviewStep renders the final configuration review and deploy/save action
+// selector.
 type ReviewStep struct {
 	wizard.BaseStep
 	cfg            *config.Config
 	actionSelector *components.CompactSelector
 }
 
+// NewReviewStep constructs the review wizard step.
 func NewReviewStep() *ReviewStep {
 	actions := []string{
 		"deploy now",
@@ -107,14 +110,17 @@ func NewReviewStep() *ReviewStep {
 	}
 }
 
+// Init returns nil; the step has no async startup work.
 func (s *ReviewStep) Init() tea.Cmd {
 	return nil
 }
 
+// SetConfig stores the Config to be summarized on the review screen.
 func (s *ReviewStep) SetConfig(cfg *config.Config) {
 	s.cfg = cfg
 }
 
+// Update handles action-selector navigation and the enter confirm key.
 func (s *ReviewStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 	if keyMsg, ok := msg.(tea.KeyPressMsg); ok {
 		switch {
@@ -143,6 +149,7 @@ func (s *ReviewStep) emitFocusChanged() tea.Cmd {
 	}
 }
 
+// View renders the full configuration summary and deploy-or-save selector.
 func (s *ReviewStep) View(width, height int) string {
 	s.SetSize(width, height)
 
@@ -446,14 +453,17 @@ func countUniqueNodes(cfg *config.Config) int {
 	return len(seen)
 }
 
+// Validate always returns nil; the review step has no editable fields.
 func (s *ReviewStep) Validate() error {
 	return nil
 }
 
+// Apply is a no-op; the review step does not mutate the Config.
 func (s *ReviewStep) Apply(_ *config.Config) error {
 	return nil
 }
 
+// ShortHelp returns the review step's help bar.
 func (s *ReviewStep) ShortHelp() []wizard.KeyBinding {
 	return []wizard.KeyBinding{
 		{Key: "↑↓", Help: "select action"},
@@ -463,11 +473,13 @@ func (s *ReviewStep) ShortHelp() []wizard.KeyBinding {
 	}
 }
 
+// SetFocused propagates focus to the action selector.
 func (s *ReviewStep) SetFocused(focused bool) {
 	s.BaseStep.SetFocused(focused)
 	s.actionSelector.SetFocused(focused)
 }
 
+// GetSelectedAction returns the action the user chose on the review screen.
 func (s *ReviewStep) GetSelectedAction() wizard.Action {
 	switch s.actionSelector.SelectedIndex() {
 	case 0:

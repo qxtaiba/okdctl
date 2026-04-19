@@ -10,6 +10,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 )
 
+// Step IDs for the post-install phase, ordered as they execute.
 const (
 	StepVerifyHealth        distribution.StepID = "verify-health"
 	StepCleanupBootstrap    distribution.StepID = "cleanup-bootstrap"
@@ -33,7 +34,7 @@ func (p *Phase) postinstallSteps(cfg *config.Config, opts *Options, pctx *distri
 				pctx.Update(func(c *PostInstallContext) {
 					c.ClusterHealth = result
 				})
-				p.Log.Info(fmt.Sprintf("cluster: health check passed (%d/%d nodes ready)", result.ReadyNodes, result.TotalNodes))
+				p.Log.Info("cluster: health check passed", "ready", result.ReadyNodes, "total", result.TotalNodes)
 				return nil
 			},
 		},
@@ -84,7 +85,7 @@ func (p *Phase) postinstallSteps(cfg *config.Config, opts *Options, pctx *distri
 				pctx.Update(func(c *PostInstallContext) {
 					c.DNSDeployed = true
 				})
-				p.Log.Info(fmt.Sprintf("dns: api.* → vip %s, *.apps → bastion %s (haproxy)", state.KubeVipIP, bastionIP))
+				p.Log.Info("dns: api.* → vip, *.apps → bastion (haproxy)", "vip", state.KubeVipIP, "bastion", bastionIP)
 				return nil
 			},
 			OnError: phase.WarnOnError(p.Log, "dns: production dns deployment failed"),
@@ -94,7 +95,7 @@ func (p *Phase) postinstallSteps(cfg *config.Config, opts *Options, pctx *distri
 			Desc: "installing enabled cluster addons", NonFatal: true,
 			Exec: func(ctx context.Context) error {
 				if err := p.verifyAPIHealthCheck(ctx); err != nil {
-					p.Log.Warn(fmt.Sprintf("addons: api health check failed before addon install: %v", err))
+					p.Log.Warn("addons: api health check failed before addon install", "err", err)
 				}
 				if err := mgr.InstallAll(ctx); err != nil {
 					return fmt.Errorf("addon installation failed: %w", err)

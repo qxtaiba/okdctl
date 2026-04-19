@@ -10,6 +10,8 @@ import (
 	"github.com/qxtaiba/okdctl/internal/platform"
 )
 
+// Install installs the given packages via pm and logs a grouped status line
+// using description. Empty slices are a no-op.
 func Install(ctx context.Context, pm platform.PackageManager, packages []string, description string, logger *slog.Logger) error {
 	if len(packages) == 0 {
 		return nil
@@ -24,6 +26,7 @@ func Install(ctx context.Context, pm platform.PackageManager, packages []string,
 	return nil
 }
 
+// Remove uninstalls the given packages via pm. Empty slices are a no-op.
 func Remove(ctx context.Context, pm platform.PackageManager, packages []string, logger *slog.Logger) error {
 	if len(packages) == 0 {
 		return nil

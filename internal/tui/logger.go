@@ -9,10 +9,14 @@ import (
 
 	"charm.land/lipgloss/v2"
 	charmlog "charm.land/log/v2"
+
+	"github.com/qxtaiba/okdctl/internal/logutil"
 )
 
+// LogLevel enumerates the severity thresholds accepted by the TUI logger.
 type LogLevel int
 
+// LogLevel values ordered from most to least verbose.
 const (
 	LogLevelDebug LogLevel = iota
 	LogLevelInfo
@@ -20,11 +24,14 @@ const (
 	LogLevelError
 )
 
+// LogField is a single structured key/value pair attached to a log record.
 type LogField struct {
 	Key   string
 	Value any
 }
 
+// LF is a shorthand constructor for LogField, producing concise call sites
+// for the Debug/Info/Warn/Error helpers.
 func LF(key string, value any) LogField {
 	return LogField{Key: key, Value: value}
 }
@@ -56,42 +63,49 @@ func fieldsToArgs(fields []LogField) []any {
 	return args
 }
 
-func Debug(msg string, fields ...LogField) { stdoutLogger.Debug(msg, fieldsToArgs(fields)...) }
-func Info(msg string, fields ...LogField)  { stdoutLogger.Info(msg, fieldsToArgs(fields)...) }
-func Warn(msg string, fields ...LogField)  { stdoutLogger.Warn(msg, fieldsToArgs(fields)...) }
+// Debug emits a debug-level record on stderr. Stdout is reserved for data
+// the user explicitly asked for (config show, kubeconfig, JSON output).
+func Debug(msg string, fields ...LogField) { stderrLogger.Debug(msg, fieldsToArgs(fields)...) }
+
+// Info emits an info-level record on stderr.
+func Info(msg string, fields ...LogField) { stderrLogger.Info(msg, fieldsToArgs(fields)...) }
+
+// Warn emits a warn-level record on stderr.
+func Warn(msg string, fields ...LogField) { stderrLogger.Warn(msg, fieldsToArgs(fields)...) }
+
+// Error emits an error-level record on stderr.
 func Error(msg string, fields ...LogField) { stderrLogger.Error(msg, fieldsToArgs(fields)...) }
 
-// dualHandler splits slog records by level so Error records go to stderr
-// while Info/Warn/Debug go to stdout — matching the direct tui.Error vs
-// tui.Info/Warn/Debug stream split on the package-level helpers above.
-type dualHandler struct {
-	stdout, stderr slog.Handler
+// stderrHandler is a slog.Handler that writes every record to stderr.
+// stdoutLogger is retained in the package only so ConfigureLoggers has a
+// writer to swap when a caller injects a fake stdout in tests.
+type stderrHandler struct {
+	h slog.Handler
 }
 
-func (h *dualHandler) Enabled(ctx context.Context, lvl slog.Level) bool {
-	return h.stdout.Enabled(ctx, lvl)
+func (h *stderrHandler) Enabled(ctx context.Context, lvl slog.Level) bool {
+	return h.h.Enabled(ctx, lvl)
 }
 
-func (h *dualHandler) Handle(ctx context.Context, r slog.Record) error { //nolint:gocritic // hugeParam: slog.Handler interface requires value receiver
-	if r.Level >= slog.LevelError {
-		return h.stderr.Handle(ctx, r)
-	}
-	return h.stdout.Handle(ctx, r)
+func (h *stderrHandler) Handle(ctx context.Context, r slog.Record) error { //nolint:gocritic // hugeParam: slog.Handler interface requires value receiver
+	return h.h.Handle(ctx, r)
 }
 
-func (h *dualHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
-	return &dualHandler{stdout: h.stdout.WithAttrs(attrs), stderr: h.stderr.WithAttrs(attrs)}
+func (h *stderrHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
+	return &stderrHandler{h: h.h.WithAttrs(attrs)}
 }
 
-func (h *dualHandler) WithGroup(name string) slog.Handler {
-	return &dualHandler{stdout: h.stdout.WithGroup(name), stderr: h.stderr.WithGroup(name)}
+func (h *stderrHandler) WithGroup(name string) slog.Handler {
+	return &stderrHandler{h: h.h.WithGroup(name)}
 }
 
 // SimpleLogger returns a *slog.Logger whose records render through the
-// styled charm.land/log/v2 formatter. Error records route to stderr,
-// everything else to stdout.
+// styled charm.land/log/v2 formatter on stderr. stdout stays reserved for
+// user-requested data (`okdctl config show`, kubeconfig, `releases list
+// --format=json`). Every record passes through logutil.RedactHandler so
+// credentials in structured attrs never reach the sink.
 func SimpleLogger() *slog.Logger {
-	return slog.New(&dualHandler{stdout: stdoutLogger, stderr: stderrLogger})
+	return slog.New(logutil.NewRedactHandler(&stderrHandler{h: stderrLogger}))
 }
 
 // ConfigureLoggers applies level, formatter, and writer settings to the

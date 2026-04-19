@@ -25,6 +25,7 @@ type SelectField struct {
 	defaultValue string
 }
 
+// NewSelectField builds a SelectField with the given label and option list.
 func NewSelectField(label string, options []string) *SelectField {
 	return &SelectField{
 		Label:   label,
@@ -32,6 +33,7 @@ func NewSelectField(label string, options []string) *SelectField {
 	}
 }
 
+// Value returns the currently selected option, or "" when none.
 func (f *SelectField) Value() string {
 	if f.selected >= 0 && f.selected < len(f.Options) {
 		return f.Options[f.selected]
@@ -39,6 +41,8 @@ func (f *SelectField) Value() string {
 	return ""
 }
 
+// SetValue selects the first option equal to value and marks the field as
+// user-modified. Unknown values are silently ignored.
 func (f *SelectField) SetValue(value string) {
 	for i, opt := range f.Options {
 		if opt == value {
@@ -49,6 +53,7 @@ func (f *SelectField) SetValue(value string) {
 	}
 }
 
+// SetDefault sets the starting selection and marks the field as unchanged.
 func (f *SelectField) SetDefault(value string) {
 	f.defaultValue = value
 	f.isDefault = true
@@ -60,35 +65,44 @@ func (f *SelectField) SetDefault(value string) {
 	}
 }
 
+// IsDefault reports whether the field still holds its initial default.
 func (f *SelectField) IsDefault() bool {
 	return f.isDefault
 }
 
+// Focus gives the field focus so arrow keys cycle options.
 func (f *SelectField) Focus() tea.Cmd {
 	f.focused = true
 	return nil
 }
 
+// Blur removes focus from the field.
 func (f *SelectField) Blur() {
 	f.focused = false
 }
 
+// IsFocused reports whether the field currently owns focus.
 func (f *SelectField) IsFocused() bool {
 	return f.focused
 }
 
+// SetWidth records the rendering width used when drawing the bordered box.
 func (f *SelectField) SetWidth(width int) {
 	f.width = width
 }
 
+// Validate always returns nil because selection is constrained to Options.
 func (f *SelectField) Validate() error {
 	return nil // always valid — constrained to options
 }
 
+// Error always returns nil: SelectField has no validator that can fail.
 func (f *SelectField) Error() error {
 	return nil
 }
 
+// SetOptions replaces the option list, preserving the current selection by
+// name when possible and resetting to index 0 otherwise.
 func (f *SelectField) SetOptions(options []string) {
 	current := f.Value()
 	f.Options = options
@@ -102,6 +116,7 @@ func (f *SelectField) SetOptions(options []string) {
 	}
 }
 
+// Update handles left/right and h/l key presses to cycle through Options.
 func (f *SelectField) Update(msg tea.Msg) (FormField, tea.Cmd) {
 	if !f.focused || len(f.Options) == 0 {
 		return f, nil
@@ -127,6 +142,8 @@ func (f *SelectField) Update(msg tea.Msg) (FormField, tea.Cmd) {
 	return f, nil
 }
 
+// View renders the field with its label and a bordered box showing the
+// current option, optionally flanked by cycle indicators when focused.
 func (f *SelectField) View() string {
 	labelStyle := lipgloss.NewStyle().Foreground(tui.ColorSlate300)
 	hintStyle := lipgloss.NewStyle().Foreground(tui.ColorSlate500)

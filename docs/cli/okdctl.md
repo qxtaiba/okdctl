@@ -26,9 +26,11 @@ okdctl [flags]
 ```
   -c, --config string       configuration file (default "okdctl.yaml")
   -h, --help                help for okdctl
-      --log-file string     write log output to this file in addition to stdout
+      --log-file string     write log output to this file in addition to stderr
       --log-format string   log output format (text, json) (default "text")
       --log-level string    log verbosity (debug, info, warn, error) (default "info")
+  -q, --quiet               suppress info/warn logs (alias for --log-level=error)
+  -v, --verbose             enable debug logging (alias for --log-level=debug)
 ```
 
 ### SEE ALSO
@@ -43,4 +45,5 @@ okdctl [flags]
 * [okdctl kubeconfig](okdctl_kubeconfig.md)	 - Print or export the cluster kubeconfig
 * [okdctl releases](okdctl_releases.md)	 - Query available OKD versions
 * [okdctl update-ingress](okdctl_update-ingress.md)	 - Switch ingress DNS from HAProxy to LoadBalancer IPs
+* [okdctl version](okdctl_version.md)	 - Print version, git commit, build date
 

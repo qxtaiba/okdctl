@@ -14,6 +14,8 @@ import (
 	"github.com/qxtaiba/okdctl/internal/tui"
 )
 
+// WaitForBootstrap runs "openshift-install wait-for bootstrap-complete",
+// bounded by opts.BootstrapTimeout, streaming output to the current TTY.
 func (p *Phase) WaitForBootstrap(ctx context.Context, clusterDir string, opts *Options) error {
 	ctx, cancel := context.WithTimeout(ctx, opts.BootstrapTimeout)
 	defer cancel()
@@ -40,6 +42,8 @@ func (p *Phase) WaitForBootstrap(ctx context.Context, clusterDir string, opts *O
 	return nil
 }
 
+// MonitorInstallation watches the post-bootstrap install until all cluster
+// operators are Available, bounded by opts.InstallTimeout.
 func (p *Phase) MonitorInstallation(ctx context.Context, clusterDir string, opts *Options) error {
 	ctx, cancel := context.WithTimeout(ctx, opts.InstallTimeout)
 	defer cancel()
@@ -68,20 +72,15 @@ func (p *Phase) MonitorInstallation(ctx context.Context, clusterDir string, opts
 		installDone <- installCmd.Wait()
 	}()
 
-	// sync.Once guards against a future second caller of killInstall
-	// (e.g. if a signal handler or additional select case is added). Under
-	// the current single-kill-path control flow, the Once is not load-
-	// bearing — it is idempotency-by-construction for the next developer.
-	var killOnce sync.Once
-	killInstall := func() {
-		killOnce.Do(func() {
-			if installCmd.Process != nil {
-				if killErr := installCmd.Process.Kill(); killErr != nil {
-					p.Log.Warn(fmt.Sprintf("install: failed to kill process: %v", killErr))
-				}
+	// sync.OnceFunc keeps kill idempotent if a future signal handler or
+	// additional select case ends up invoking killInstall twice.
+	killInstall := sync.OnceFunc(func() {
+		if installCmd.Process != nil {
+			if killErr := installCmd.Process.Kill(); killErr != nil {
+				p.Log.Warn("install: failed to kill process", "err", killErr)
 			}
-		})
-	}
+		}
+	})
 
 	ticker := time.NewTicker(opts.CSRApprovalInterval)
 	defer ticker.Stop()
@@ -103,7 +102,7 @@ func (p *Phase) MonitorInstallation(ctx context.Context, clusterDir string, opts
 
 			approved, csrErr := k8sClient.ApprovePendingCSRs(ctx)
 			if csrErr != nil {
-				p.Log.Warn(fmt.Sprintf("csr: final approval had issues: %v", csrErr))
+				p.Log.Warn("csr: final approval had issues", "err", csrErr)
 			}
 			totalApproved += approved
 
@@ -113,11 +112,11 @@ func (p *Phase) MonitorInstallation(ctx context.Context, clusterDir string, opts
 		case <-ticker.C:
 			approved, err := k8sClient.ApprovePendingCSRs(ctx)
 			if err != nil {
-				p.Log.Warn(fmt.Sprintf("csr: approval check failed: %v", err))
+				p.Log.Warn("csr: approval check failed", "err", err)
 			}
 			if approved > 0 {
 				totalApproved += approved
-				p.Log.Info(fmt.Sprintf("csr: approved %d pending requests (%d total)", approved, totalApproved))
+				p.Log.Info("csr: approved pending requests", "approved", approved, "total", totalApproved)
 			}
 
 		case <-ctx.Done():

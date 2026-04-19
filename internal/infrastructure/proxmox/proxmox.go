@@ -21,12 +21,15 @@ import (
 	"path/filepath"
 
 	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/infrastructure/terraform"
 	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/netutil"
 	"github.com/qxtaiba/okdctl/internal/tui"
 )
 
+// Provider drives the Proxmox VE infrastructure lifecycle (connect, provision,
+// disconnect) via a Terraform executor.
 type Provider struct {
 	connected     bool
 	host          string
@@ -38,16 +41,18 @@ type Provider struct {
 	env           []string
 }
 
+// Option configures a Provider at construction time.
 type Option func(*Provider)
 
+// WithProjectRoot sets the project root used to locate the Terraform tree.
 func WithProjectRoot(root string) Option {
 	return func(p *Provider) { p.projectRoot = root }
 }
 
+// WithLogger sets the slog logger used by the Provider. Nil resolves to
+// logutil.NopLogger to match the other infrastructure constructors.
 func WithLogger(l *slog.Logger) Option {
-	return func(p *Provider) {
-		p.logger = l
-	}
+	return func(p *Provider) { p.logger = logutil.OrNop(l) }
 }
 
 // WithEnv passes environment variables through to terraform for provider authentication.
@@ -57,6 +62,8 @@ func WithEnv(env []string) Option {
 	}
 }
 
+// New constructs a Provider with the given options. The logger defaults to
+// a no-op logger if WithLogger is not supplied.
 func New(opts ...Option) *Provider {
 	p := &Provider{
 		logger: logutil.NopLogger,
@@ -75,10 +82,10 @@ func New(opts ...Option) *Provider {
 // surface during terraform plan/apply with clear provider-level errors.
 func (p *Provider) Connect(_ context.Context, cfg *config.Config) error {
 	if cfg == nil {
-		return fmt.Errorf("configuration is required")
+		return &errtypes.ConfigError{Msg: "configuration is required"}
 	}
 	if cfg.Provider.Proxmox == nil {
-		return fmt.Errorf("proxmox configuration is required")
+		return &errtypes.ConfigError{Msg: "proxmox configuration is required"}
 	}
 	p.host = cfg.Provider.Proxmox.Host
 	p.node = cfg.Provider.Proxmox.Node
@@ -118,6 +125,9 @@ func (p *Provider) setupTerraform(projectRoot, tfEnv string) {
 	p.terraformExec = terraform.NewWithVarFile(tfDir, filepath.Join(tfDir, "terraform.tfvars"), tfOpts...)
 }
 
+// Provision runs terraform init/plan/apply for the configured environment
+// and returns the VM IPs. Connect must have run first; otherwise this
+// returns ErrNotConnected.
 func (p *Provider) Provision(ctx context.Context, cfg *config.Config, opts ProvisionOptions) (*ProvisionResult, error) {
 	if !p.connected {
 		return nil, ErrNotConnected
@@ -175,7 +185,7 @@ func (p *Provider) Provision(ctx context.Context, cfg *config.Config, opts Provi
 	p.logger.Info(fmt.Sprintf("terraform: provisioned %d vms", len(result.VMs)))
 	for _, vm := range result.VMs {
 		if vm.IPAddress != "" {
-			p.logger.Info(fmt.Sprintf("terraform: %s: %s", vm.Name, vm.IPAddress))
+			p.logger.Info("terraform: vm provisioned", "vm", vm.Name, "ip", vm.IPAddress)
 		}
 	}
 
@@ -206,7 +216,7 @@ func (p *Provider) retrieveProvisionResult(cfg *config.Config) (*ProvisionResult
 	bootstrapIP := startIP
 	result.BootstrapIP = bootstrapIP
 	result.VMs = append(result.VMs, VMStatus{
-		Name:      "bootstrap",
+		Name:      string(RoleBootstrap),
 		Role:      RoleBootstrap,
 		IPAddress: bootstrapIP,
 		Status:    StateRunning,
@@ -215,11 +225,11 @@ func (p *Provider) retrieveProvisionResult(cfg *config.Config) (*ProvisionResult
 	for i := range cfg.Topology.ControlPlane.Count {
 		ip, err := netutil.CalculateVMIP(startIP, 1+i)
 		if err != nil {
-			return nil, fmt.Errorf("failed to calculate master%d IP: %w", i, err)
+			return nil, fmt.Errorf("failed to calculate %s%d IP: %w", RoleMaster, i, err)
 		}
 		result.ControlPlaneIPs = append(result.ControlPlaneIPs, ip)
 		result.VMs = append(result.VMs, VMStatus{
-			Name:      fmt.Sprintf("master%d", i),
+			Name:      fmt.Sprintf("%s%d", RoleMaster, i),
 			Role:      RoleMaster,
 			IPAddress: ip,
 			Status:    StateRunning,
@@ -230,11 +240,11 @@ func (p *Provider) retrieveProvisionResult(cfg *config.Config) (*ProvisionResult
 	for i := range cfg.Topology.Workers.Count {
 		ip, err := netutil.CalculateVMIP(startIP, workerOffset+i)
 		if err != nil {
-			return nil, fmt.Errorf("failed to calculate worker%d IP: %w", i, err)
+			return nil, fmt.Errorf("failed to calculate %s%d IP: %w", RoleWorker, i, err)
 		}
 		result.WorkerIPs = append(result.WorkerIPs, ip)
 		result.VMs = append(result.VMs, VMStatus{
-			Name:      fmt.Sprintf("worker%d", i),
+			Name:      fmt.Sprintf("%s%d", RoleWorker, i),
 			Role:      RoleWorker,
 			IPAddress: ip,
 			Status:    StateRunning,

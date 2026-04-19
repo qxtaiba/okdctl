@@ -12,7 +12,7 @@ import (
 // message prefix followed by the error. Use with StepBuilder.OnError().
 func WarnOnError(logger *slog.Logger, msg string) func(error) {
 	return func(err error) {
-		logger.Warn(fmt.Sprintf("%s: %v", msg, err))
+		logger.Warn(msg, "err", err)
 	}
 }
 

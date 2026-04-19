@@ -10,14 +10,20 @@ import (
 	"github.com/qxtaiba/okdctl/internal/config"
 )
 
+// Source tracks where a credential came from so the CLI can warn on mixed-
+// provenance situations (env overriding config silently).
 type Source int
 
 const (
+	// SourceNone means no credential was located.
 	SourceNone Source = iota
+	// SourceEnv means PROXMOX_VE_PASSWORD / PROXMOX_VE_API_TOKEN supplied it.
 	SourceEnv
+	// SourceConfig means the credential came from the YAML config file.
 	SourceConfig
 )
 
+// String returns a human-readable label used in status output.
 func (s Source) String() string {
 	switch s {
 	case SourceEnv:
@@ -59,6 +65,9 @@ func (c *ProxmoxCredentials) IsValid() bool {
 	return (c.Username != "" && len(c.Password) > 0) || len(c.APIToken) > 0
 }
 
+// UseAPIToken reports whether API-token auth should be used. Callers branch
+// on this to decide between basic-auth (username+password) and bearer-token
+// flows without inspecting the token field directly.
 func (c *ProxmoxCredentials) UseAPIToken() bool {
 	return len(c.APIToken) > 0
 }

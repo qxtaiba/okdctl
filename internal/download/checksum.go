@@ -17,6 +17,7 @@ import (
 
 const maxChecksumFileSize = 1024 * 1024
 
+// CalculateChecksum returns the hex-encoded SHA-256 of the file at path.
 func CalculateChecksum(path string) (string, error) {
 	file, err := os.Open(path)
 	if err != nil {
@@ -32,6 +33,8 @@ func CalculateChecksum(path string) (string, error) {
 	return hex.EncodeToString(hasher.Sum(nil)), nil
 }
 
+// ValidateChecksum compares the SHA-256 of path against expectedChecksum.
+// An empty expectedChecksum disables the check and returns nil.
 func ValidateChecksum(path, expectedChecksum string) error {
 	if expectedChecksum == "" {
 		return nil
@@ -50,6 +53,9 @@ func ValidateChecksum(path, expectedChecksum string) error {
 	return nil
 }
 
+// FetchChecksum downloads the sha256sum.txt at checksumsURL and extracts
+// the hex-encoded SHA-256 for filename. The response body is capped to
+// maxChecksumFileSize to prevent memory exhaustion.
 func FetchChecksum(ctx context.Context, checksumsURL, filename string) (string, error) {
 	client := httputil.New(httputil.TimeoutMedium)
 

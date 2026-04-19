@@ -9,6 +9,8 @@ import "fmt"
 // without pulling an import cycle through okd → subpackage → okd.
 type NodeRole string
 
+// Node role values. String literals are load-bearing — openshift-install,
+// HAProxy templates, and ignition URLs expect these verbatim.
 const (
 	RoleBootstrap NodeRole = "bootstrap"
 	RoleMaster    NodeRole = "master"

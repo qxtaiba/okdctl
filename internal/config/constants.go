@@ -1,5 +1,8 @@
 package config
 
+// Field* constants name dotted paths into Config. They are used by the
+// validator to tag each ValidationError with the offending field so the CLI
+// can surface precise "cluster.domain: must not be empty" messages.
 const (
 	FieldClusterName   = "cluster.name"
 	FieldClusterDomain = "cluster.domain"

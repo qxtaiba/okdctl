@@ -164,7 +164,11 @@ func runAddonVerify(cmd *cobra.Command, _ []string) error {
 
 func newAddonManager(cfg *config.Config, projectRoot string) *addon.Manager {
 	exec := executor.New(executor.WithWorkDir(projectRoot))
-	return addon.NewManager(cfg, exec, tui.SimpleLogger(), projectRoot)
+	return addon.NewManager(cfg,
+		addon.WithExecutor(exec),
+		addon.WithLogger(tui.SimpleLogger()),
+		addon.WithProjectRoot(projectRoot),
+	)
 }
 
 func printAddonList(w io.Writer, cfg *config.Config) error {

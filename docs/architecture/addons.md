@@ -22,18 +22,29 @@ deploy OKD itself and stop; addons install on top of a live cluster.
 
 ```go
 type Addon interface {
-    Info() Info                                      // name, display name, deps, etc.
-    ValidateSettings(settings map[string]any) error  // check user inputs
+    Info() AddonInfo
     Install(ctx context.Context, env *Environment) error
     Verify(ctx context.Context, env *Environment) error
     Uninstall(ctx context.Context, env *Environment) error
 }
 ```
 
-`Info` is static metadata; `ValidateSettings` runs at wizard time and
-again before install; `Install`, `Verify`, and `Uninstall` do the actual
-work against a live cluster via the `Environment` (which carries an
-executor, logger, kubeconfig, and per-addon settings).
+Addons that take user-tunable settings opt into the `ConfigurableAddon`
+sub-interface:
+
+```go
+type ConfigurableAddon interface {
+    Addon
+    DefaultSettings() map[string]string
+    ValidateSettings(settings map[string]string) []string
+}
+```
+
+`Info` is static metadata (name, display name, dependencies, priority);
+`DefaultSettings` / `ValidateSettings` run at wizard time and again before
+install; `Install`, `Verify`, and `Uninstall` do the actual work against a
+live cluster via the `Environment` (which carries an executor, logger,
+kubeconfig, and per-addon settings).
 
 ## Registration via init()
 

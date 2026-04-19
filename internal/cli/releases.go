@@ -23,8 +23,8 @@ const (
 
 var (
 	releasesListChannel string
-	releasesListOutput  string
-	releasesShowOutput  string
+	releasesListFormat  string
+	releasesShowFormat  string
 )
 
 // releasesCmd groups the read-only subcommands that query the OKD releases
@@ -55,9 +55,9 @@ var releasesShowCmd = &cobra.Command{
 func init() {
 	releasesListCmd.Flags().StringVar(&releasesListChannel, "channel", channelStable,
 		"filter versions: stable|all")
-	releasesListCmd.Flags().StringVar(&releasesListOutput, "output", outputText,
+	releasesListCmd.Flags().StringVarP(&releasesListFormat, "format", "F", outputText,
 		"output format: text|json")
-	releasesShowCmd.Flags().StringVar(&releasesShowOutput, "output", outputText,
+	releasesShowCmd.Flags().StringVarP(&releasesShowFormat, "format", "F", outputText,
 		"output format: text|json")
 
 	releasesCmd.AddCommand(releasesListCmd)
@@ -69,7 +69,7 @@ func runReleasesList(cmd *cobra.Command, _ []string) error {
 	if err := validateChannel(releasesListChannel); err != nil {
 		return err
 	}
-	if err := validateOutput(releasesListOutput); err != nil {
+	if err := validateFormat(releasesListFormat); err != nil {
 		return err
 	}
 
@@ -81,14 +81,17 @@ func runReleasesList(cmd *cobra.Command, _ []string) error {
 		versions = filterStable(versions)
 	}
 
-	if releasesListOutput == outputJSON {
+	if releasesListFormat == outputJSON {
 		return writeJSON(cmd.OutOrStdout(), versions)
 	}
 	return printVersionList(cmd.OutOrStdout(), versions)
 }
 
+// releasesListFormat, releasesShowFormat are owned by releasesListCmd /
+// releasesShowCmd's --format/-F flag.
+
 func runReleasesShow(cmd *cobra.Command, args []string) error {
-	if err := validateOutput(releasesShowOutput); err != nil {
+	if err := validateFormat(releasesShowFormat); err != nil {
 		return err
 	}
 
@@ -102,7 +105,7 @@ func runReleasesShow(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("version %q not found; try `okdctl releases list --channel all`", args[0])
 	}
 
-	if releasesShowOutput == outputJSON {
+	if releasesShowFormat == outputJSON {
 		return writeJSON(cmd.OutOrStdout(), v)
 	}
 	return printVersionDetail(cmd.OutOrStdout(), v)
@@ -150,12 +153,12 @@ func validateChannel(ch string) error {
 	}
 }
 
-func validateOutput(format string) error {
+func validateFormat(format string) error {
 	switch format {
 	case outputText, outputJSON:
 		return nil
 	default:
-		return fmt.Errorf("invalid --output %q (want text|json)", format)
+		return fmt.Errorf("invalid --format %q (want text|json)", format)
 	}
 }
 

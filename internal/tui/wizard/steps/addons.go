@@ -65,6 +65,7 @@ func setAddonSetting(name, key string) wizard.ConfigSetter {
 	})
 }
 
+// AddonsStepDefinition declares the cluster-addons step fields.
 var AddonsStepDefinition = wizard.StepDefinition{
 	ID:           wizard.StepIDAddons,
 	Title:        "cluster addons",
@@ -138,6 +139,7 @@ var AddonsStepDefinition = wizard.StepDefinition{
 	},
 }
 
+// NewAddonsStep returns the addons wizard step and its state.
 func NewAddonsStep() (step, state *wizard.DataDrivenStep) {
 	step = wizard.NewDataDrivenStep(&AddonsStepDefinition)
 	step.WithExtraContentFunc(func(s *wizard.DataDrivenStep, _ int) string {

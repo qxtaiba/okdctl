@@ -12,17 +12,22 @@ import (
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/distribution"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
+	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/executor"
 	"github.com/qxtaiba/okdctl/internal/infrastructure/proxmox"
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
+// Default timeouts and intervals for the install phase. Overridable via
+// Deployment.BootstrapTimeout / Deployment.InstallTimeout in the Config.
 const (
 	DefaultBootstrapTimeout    = 30 * time.Minute
 	DefaultInstallTimeout      = 60 * time.Minute
 	DefaultCSRApprovalInterval = 30 * time.Second
 )
 
+// Options configures an install run: timeouts, CSR approval cadence, and
+// the bootstrap IP/SSH details used to stream bootstrap logs.
 type Options struct {
 	phase.BaseOptions
 	AutoApprove         bool
@@ -36,6 +41,9 @@ type Options struct {
 	StreamBootstrapLogs bool
 }
 
+// NewOptions builds install Options from cfg, applying deployment-level
+// timeout overrides and resolving the SSH key path for bootstrap log
+// streaming.
 func NewOptions(cfg *config.Config, projectRoot string) Options {
 	bootstrapTimeout := DefaultBootstrapTimeout
 	installTimeout := DefaultInstallTimeout
@@ -69,16 +77,21 @@ func NewOptions(cfg *config.Config, projectRoot string) Options {
 	}
 }
 
+// Phase coordinates the install phase execution.
 type Phase struct {
 	phase.BasePhase
 }
 
+// New constructs an install Phase with the given executor, logger, and
+// okdctl version tag.
 func New(exec *executor.Executor, logger *slog.Logger, version string) *Phase {
 	return &Phase{
-		BasePhase: phase.NewBasePhase(exec, logger, version),
+		BasePhase: phase.NewBasePhase(version, phase.WithExecutor(exec), phase.WithLogger(logger)),
 	}
 }
 
+// Execute runs the install phase step sequence and returns each step's
+// result. A non-nil error means orchestration stopped early.
 func (p *Phase) Execute(ctx context.Context, cfg *config.Config, opts *Options) ([]distribution.StepResult, error) {
 	orchestrator := distribution.NewOrchestrator(distribution.BuildSteps(p.installSteps(cfg, opts))...)
 	orchestrator.SetLogger(p.Log)
@@ -90,6 +103,8 @@ func (p *Phase) Execute(ctx context.Context, cfg *config.Config, opts *Options) 
 	return orchestrator.Results(), nil
 }
 
+// DeployInfrastructure applies the generated Terraform plan against Proxmox
+// to provision the bootstrap and node VMs.
 func (p *Phase) DeployInfrastructure(ctx context.Context, cfg *config.Config, opts *Options) error {
 	terraformDir := filepath.Join(opts.ProjectRoot, "infrastructure", "terraform", "environments", opts.TerraformEnv)
 	tfvarsFile := filepath.Join(terraformDir, "terraform.tfvars")
@@ -138,9 +153,9 @@ func (p *Phase) DeployInfrastructure(ctx context.Context, cfg *config.Config, op
 func (p *Phase) SetupKubeconfig(clusterDir string) error {
 	kubeconfigPath := filepath.Join(clusterDir, "auth", "kubeconfig")
 	if !system.FileExists(kubeconfigPath) {
-		return fmt.Errorf("kubeconfig not found at %s", kubeconfigPath)
+		return &errtypes.ClusterError{Msg: fmt.Sprintf("kubeconfig not found at %s", kubeconfigPath)}
 	}
 	p.Exec.Env = append(p.Exec.Env, "KUBECONFIG="+kubeconfigPath)
-	p.Log.Info(fmt.Sprintf("kubeconfig: configured KUBECONFIG=%s for phase executor", kubeconfigPath))
+	p.Log.Info("kubeconfig: configured for phase executor", "path", kubeconfigPath)
 	return nil
 }

@@ -11,8 +11,11 @@ import (
 	"github.com/qxtaiba/okdctl/internal/logutil"
 )
 
+// Kind selects which cleanup steps run.
 type Kind string
 
+// Cleanup kinds. Full removes everything; the *Only kinds scope cleanup to
+// a single subsystem.
 const (
 	Full          Kind = "full"
 	WorkOnly      Kind = "work-only"
@@ -21,6 +24,7 @@ const (
 	TerraformOnly Kind = "terraform-only"
 )
 
+// Options configures a cleanup run.
 type Options struct {
 	phase.BaseOptions
 
@@ -41,6 +45,9 @@ func (opts *Options) getLogger() *slog.Logger {
 	return logutil.NopLogger
 }
 
+// Execute runs the cleanup steps selected by opts.Kind. Individual step
+// failures are accumulated and returned as a joined error; a partial run
+// still attempts the remaining steps.
 func Execute(ctx context.Context, opts *Options) error {
 	logger := opts.getLogger()
 	var errs []error

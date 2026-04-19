@@ -10,8 +10,10 @@ import (
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 )
 
+// WelcomeMode selects the welcome-step flow chosen by the user.
 type WelcomeMode int
 
+// Welcome mode values.
 const (
 	WelcomeModeDeploy WelcomeMode = iota
 	WelcomeModeEdit
@@ -22,6 +24,8 @@ const (
 // selectedIndex in the welcome step's up/down navigation.
 const welcomeModeCount = int(WelcomeModeFresh) + 1
 
+// WelcomeStep is the wizard's entry screen, offering deploy/edit/fresh
+// options when an existing config is present.
 type WelcomeStep struct {
 	wizard.BaseStep
 	configExists  bool
@@ -29,6 +33,7 @@ type WelcomeStep struct {
 	mode          WelcomeMode
 }
 
+// NewWelcomeStep constructs the welcome wizard step.
 func NewWelcomeStep() *WelcomeStep {
 	return &WelcomeStep{
 		BaseStep: wizard.NewBaseStep(
@@ -41,6 +46,8 @@ func NewWelcomeStep() *WelcomeStep {
 	}
 }
 
+// SetConfigExists tells the step whether an okdctl.yaml exists so it can
+// offer the deploy/edit/fresh branch instead of the blank onboarding branch.
 func (s *WelcomeStep) SetConfigExists(exists bool) {
 	s.configExists = exists
 	if exists {
@@ -49,14 +56,17 @@ func (s *WelcomeStep) SetConfigExists(exists bool) {
 	}
 }
 
+// GetMode returns the currently-selected welcome mode.
 func (s *WelcomeStep) GetMode() WelcomeMode {
 	return s.mode
 }
 
+// Init returns nil; the step has no async startup work.
 func (s *WelcomeStep) Init() tea.Cmd {
 	return nil
 }
 
+// Update handles up/down navigation and enter to advance.
 func (s *WelcomeStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 	if keyMsg, ok := msg.(tea.KeyPressMsg); ok {
 		switch {
@@ -77,10 +87,12 @@ func (s *WelcomeStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 	return s, nil
 }
 
+// IsCentered returns true so the welcome screen is rendered centered.
 func (s *WelcomeStep) IsCentered() bool {
 	return true
 }
 
+// View renders the welcome screen with the appropriate option set.
 func (s *WelcomeStep) View(width, height int) string {
 	s.SetSize(width, height)
 
@@ -138,10 +150,13 @@ func (s *WelcomeStep) renderOption(title, description string, selected bool) str
 	return bullet + " " + titleStyled + "\n  " + descStyled
 }
 
+// Validate always returns nil; the welcome step has no inputs to validate.
 func (s *WelcomeStep) Validate() error {
 	return nil
 }
 
+// Apply resets cfg to the package defaults when the user picked
+// WelcomeModeFresh on top of an existing configuration.
 func (s *WelcomeStep) Apply(cfg *config.Config) error {
 	if s.mode == WelcomeModeFresh && s.configExists {
 		freshCfg := config.DefaultConfig()
@@ -150,6 +165,7 @@ func (s *WelcomeStep) Apply(cfg *config.Config) error {
 	return nil
 }
 
+// ShortHelp returns the help bar shown on the welcome screen.
 func (s *WelcomeStep) ShortHelp() []wizard.KeyBinding {
 	if s.configExists {
 		return []wizard.KeyBinding{
@@ -164,6 +180,7 @@ func (s *WelcomeStep) ShortHelp() []wizard.KeyBinding {
 	}
 }
 
+// GetSelectedAction maps the chosen welcome mode to a wizard.Action.
 func (s *WelcomeStep) GetSelectedAction() wizard.Action {
 	if s.mode == WelcomeModeDeploy {
 		return wizard.ActionDeploy
@@ -171,6 +188,8 @@ func (s *WelcomeStep) GetSelectedAction() wizard.Action {
 	return wizard.ActionExit
 }
 
+// ShouldExitEarly reports whether the user chose deploy-now, which skips
+// the rest of the wizard steps.
 func (s *WelcomeStep) ShouldExitEarly() bool {
 	return s.mode == WelcomeModeDeploy
 }

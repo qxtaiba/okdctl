@@ -77,6 +77,9 @@ func ResolveToolVersion(tool, defaultVersion string, cfg *config.Config) string 
 	return defaultVersion
 }
 
+// DownloadOKDTools fetches openshift-install and oc for the given OKD
+// version, verifies checksums when available, extracts the binaries, and
+// then delegates to InstallToolsToSystem for final placement.
 func (p *Phase) DownloadOKDTools(ctx context.Context, version string, opts *Options) error {
 	if err := system.EnsureDir(opts.DownloadDir); err != nil {
 		return fmt.Errorf("failed to create download directory: %w", err)
@@ -158,6 +161,8 @@ func (p *Phase) DownloadOKDTools(ctx context.Context, version string, opts *Opti
 	return p.InstallToolsToSystem(ctx, opts.DownloadDir)
 }
 
+// InstallToolsToSystem copies the downloaded OKD binaries from srcDir into
+// the default system bin directory with executable mode.
 func (p *Phase) InstallToolsToSystem(_ context.Context, srcDir string) error {
 	binaries := []string{"openshift-install", "oc", "kubectl"}
 	destDir := phase.DefaultBinDir
@@ -175,14 +180,14 @@ func (p *Phase) InstallToolsToSystem(_ context.Context, srcDir string) error {
 		}
 
 		if err := system.MakeExecutable(destPath); err != nil {
-			p.Log.Warn(fmt.Sprintf("tools: failed to set executable permission for %s: %v", binary, err))
+			p.Log.Warn("tools: failed to set executable permission", "binary", binary, "err", err)
 		}
 
 		if !system.FileExists(destPath) {
 			return fmt.Errorf("tools: %s not found at %s after install", binary, destPath)
 		}
 
-		p.Log.Info(fmt.Sprintf("tools: installed %s to %s", binary, destPath))
+		p.Log.Info("tools: installed binary", "binary", binary, "path", destPath)
 	}
 
 	return nil

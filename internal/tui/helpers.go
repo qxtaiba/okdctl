@@ -6,6 +6,8 @@ import (
 	"charm.land/lipgloss/v2"
 )
 
+// DefaultKeyColWidth is the column width used for the key side of dotted
+// key/value lines when the caller does not override it.
 const DefaultKeyColWidth = 28
 
 type dottedKVOpts struct {
@@ -46,10 +48,13 @@ func dottedKV(key, value string, keyColWidth int, opts dottedKVOpts) string {
 	return result
 }
 
+// DottedKeyValueFull renders "key ....... value" padded to totalWidth.
 func DottedKeyValueFull(key, value string, keyColWidth, totalWidth int) string {
 	return dottedKV(key, value, keyColWidth, dottedKVOpts{totalWidth: totalWidth})
 }
 
+// DottedKeyValueHighlightFull renders DottedKeyValueFull with value styled
+// in the amber highlight color.
 func DottedKeyValueHighlightFull(key, value string, keyColWidth, totalWidth int) string {
 	return dottedKV(key, value, keyColWidth, dottedKVOpts{highlight: true, totalWidth: totalWidth})
 }

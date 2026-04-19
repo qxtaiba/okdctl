@@ -11,6 +11,7 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
+// Default retry policy shared by all addons using RetryDefault.
 const (
 	DefaultRetryCount   = 3
 	DefaultRetryBackoff = 5 * time.Second

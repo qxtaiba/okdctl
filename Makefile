@@ -57,7 +57,7 @@ run: ## Run the CLI directly
 	$(GOCMD) run ./cmd/okdctl $(ARGS)
 
 dev: ## Run with hot reload (requires air)
-	@which air > /dev/null || (echo "Installing air..." && go install github.com/cosmtrek/air@latest)
+	@which air > /dev/null || (echo "Installing air..." && go install github.com/air-verse/air@v1.61.7)
 	air
 
 ## Test targets
@@ -77,7 +77,7 @@ test-cover: test ## Run tests with coverage report
 ## Quality targets
 
 lint: ## Run linter
-	@which golangci-lint > /dev/null || (echo "Installing golangci-lint..." && go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest)
+	@which golangci-lint > /dev/null || (echo "Installing golangci-lint..." && go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.11.4)
 	golangci-lint run ./...
 
 fmt: ## Format code

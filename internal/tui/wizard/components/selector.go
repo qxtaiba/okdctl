@@ -10,8 +10,11 @@ import (
 	"github.com/qxtaiba/okdctl/internal/tui"
 )
 
+// OptionStyle categorises a Selector option so the renderer can apply a
+// consistent color and badge treatment.
 type OptionStyle int
 
+// OptionStyle values used across the version/release selectors.
 const (
 	OptionStyleDefault       OptionStyle = iota
 	OptionStyleLatestStable              // Green - latest stable release
@@ -21,6 +24,8 @@ const (
 	OptionStyleLTS                       // Cyan/blue - long-term support
 )
 
+// Option is a single entry in a Selector — a styled, optionally disabled
+// row with a title, description, and requirements note.
 type Option struct {
 	ID           string
 	Title        string
@@ -33,6 +38,7 @@ type Option struct {
 	InDropdown   bool // part of the scrollable dropdown region
 }
 
+// Selector is a vertical option list with a scrollable dropdown region.
 type Selector struct {
 	options              []Option
 	selected             int
@@ -49,6 +55,8 @@ type Selector struct {
 	cachedStyles *optionStyles
 }
 
+// NewSelector builds a Selector starting focused on the first option with
+// the default dropdown window size of 5.
 func NewSelector(options []Option) *Selector {
 	return &Selector{
 		options:              options,
@@ -59,6 +67,8 @@ func NewSelector(options []Option) *Selector {
 	}
 }
 
+// SetOptions replaces the option list and clamps the selection index to the
+// new slice length.
 func (s *Selector) SetOptions(options []Option) {
 	s.options = options
 	s.dropdownScrollOffset = 0
@@ -70,12 +80,16 @@ func (s *Selector) SetOptions(options []Option) {
 	}
 }
 
+// SetMaxDropdownVisible caps the number of dropdown rows rendered at once.
+// Values <= 0 are ignored so a bad caller can't hide every option.
 func (s *Selector) SetMaxDropdownVisible(n int) {
 	if n > 0 {
 		s.maxDropdownVisible = n
 	}
 }
 
+// Selected returns the currently highlighted Option, or the zero value when
+// the option list is empty.
 func (s *Selector) Selected() Option {
 	if s.selected >= 0 && s.selected < len(s.options) {
 		return s.options[s.selected]
@@ -83,16 +97,20 @@ func (s *Selector) Selected() Option {
 	return Option{}
 }
 
+// SelectedIndex returns the current selection's index in the option list.
 func (s *Selector) SelectedIndex() int {
 	return s.selected
 }
 
+// SetSelected moves the selection to index, ignoring out-of-range values.
 func (s *Selector) SetSelected(index int) {
 	if index >= 0 && index < len(s.options) {
 		s.selected = index
 	}
 }
 
+// SetSelectedByID moves the selection to the first option whose ID matches.
+// Unknown IDs are silently ignored.
 func (s *Selector) SetSelectedByID(id string) {
 	for i, opt := range s.options {
 		if opt.ID == id {
@@ -102,15 +120,18 @@ func (s *Selector) SetSelectedByID(id string) {
 	}
 }
 
+// SetFocused toggles keyboard focus on the selector.
 func (s *Selector) SetFocused(focused bool) {
 	s.focused = focused
 }
 
+// SetSize records the selector's layout dimensions for view rendering.
 func (s *Selector) SetSize(width, height int) {
 	s.width = width
 	s.height = height
 }
 
+// Update handles up/down and j/k key presses to move the selection.
 func (s *Selector) Update(msg tea.Msg) (*Selector, tea.Cmd) {
 	if !s.focused {
 		return s, nil
@@ -172,6 +193,8 @@ func (s *Selector) getTitleStyle(style OptionStyle) lipgloss.Style {
 	}
 }
 
+// View renders the selector as a vertical list with top-of-list options
+// above the scrollable dropdown region.
 func (s *Selector) View() string {
 	var lines []string
 
@@ -253,6 +276,8 @@ func (s *Selector) renderOptionWithPrefix(opt *Option, selected, showConnector b
 	return strings.Join(result, "\n")
 }
 
+// CompactSelector is a lightweight Selector variant that renders a simple
+// radio-style list without dropdown scrolling.
 type CompactSelector struct {
 	options  []string
 	selected int
@@ -260,6 +285,7 @@ type CompactSelector struct {
 	width    int
 }
 
+// NewCompactSelector builds a CompactSelector starting focused on index 0.
 func NewCompactSelector(options []string) *CompactSelector {
 	return &CompactSelector{
 		options:  options,
@@ -268,10 +294,12 @@ func NewCompactSelector(options []string) *CompactSelector {
 	}
 }
 
+// Len returns the number of options currently in the selector.
 func (s *CompactSelector) Len() int {
 	return len(s.options)
 }
 
+// SetOptions replaces the option list, clamping the selection if needed.
 func (s *CompactSelector) SetOptions(options []string) {
 	s.options = options
 	if s.selected >= len(options) {
@@ -282,6 +310,7 @@ func (s *CompactSelector) SetOptions(options []string) {
 	}
 }
 
+// Selected returns the currently highlighted option, or "" when empty.
 func (s *CompactSelector) Selected() string {
 	if s.selected >= 0 && s.selected < len(s.options) {
 		return s.options[s.selected]
@@ -289,24 +318,29 @@ func (s *CompactSelector) Selected() string {
 	return ""
 }
 
+// SelectedIndex returns the current selection's index.
 func (s *CompactSelector) SelectedIndex() int {
 	return s.selected
 }
 
+// SetSelected moves the selection to index, ignoring out-of-range values.
 func (s *CompactSelector) SetSelected(index int) {
 	if index >= 0 && index < len(s.options) {
 		s.selected = index
 	}
 }
 
+// SetFocused toggles keyboard focus on the selector.
 func (s *CompactSelector) SetFocused(focused bool) {
 	s.focused = focused
 }
 
+// SetWidth records the rendering width used by ViewHorizontal.
 func (s *CompactSelector) SetWidth(width int) {
 	s.width = width
 }
 
+// Update handles up/down and j/k key presses to move the selection.
 func (s *CompactSelector) Update(msg tea.Msg) (*CompactSelector, tea.Cmd) {
 	if !s.focused {
 		return s, nil
@@ -330,6 +364,7 @@ func (s *CompactSelector) Update(msg tea.Msg) (*CompactSelector, tea.Cmd) {
 	return s, nil
 }
 
+// View renders the options as a vertical radio-style list, one per line.
 func (s *CompactSelector) View() string {
 	var lines []string
 
@@ -349,6 +384,7 @@ func (s *CompactSelector) View() string {
 	return strings.Join(lines, "\n")
 }
 
+// ViewHorizontal renders the options side-by-side as styled tab-like cells.
 func (s *CompactSelector) ViewHorizontal() string {
 	var parts []string
 

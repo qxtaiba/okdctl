@@ -14,8 +14,10 @@ import (
 	"github.com/qxtaiba/okdctl/internal/tui/wizard/components"
 )
 
+// FieldType classifies how a FieldDefinition is rendered and validated.
 type FieldType int
 
+// Field type values for data-driven step definitions.
 const (
 	FieldTypeText FieldType = iota
 	FieldTypePassword
@@ -25,11 +27,14 @@ const (
 	FieldTypeMultiSelect // Checklist where multiple options may be toggled
 )
 
-type (
-	ConfigSetter func(cfg *config.Config, value string) error
-	ConfigGetter func(cfg *config.Config) string
-)
+// ConfigSetter writes a field's value into a Config.
+type ConfigSetter func(cfg *config.Config, value string) error
 
+// ConfigGetter reads a field's value from a Config.
+type ConfigGetter func(cfg *config.Config) string
+
+// FieldDefinition declares a single wizard form field and how it binds to
+// the Config struct.
 type FieldDefinition struct {
 	Key      string
 	Label    string
@@ -44,12 +49,14 @@ type FieldDefinition struct {
 	ConfigGet ConfigGetter
 }
 
+// SectionDefinition groups related fields under a shared title/note.
 type SectionDefinition struct {
 	Title  string
 	Note   string // e.g. prerequisites, shown below the title
 	Fields []FieldDefinition
 }
 
+// StepDefinition is the declarative description of a data-driven wizard step.
 type StepDefinition struct {
 	ID           StepID
 	Title        string
@@ -111,6 +118,7 @@ type DataDrivenStep struct {
 	totalFieldsCache int
 }
 
+// NewDataDrivenStep builds a DataDrivenStep from a StepDefinition.
 func NewDataDrivenStep(def *StepDefinition) *DataDrivenStep {
 	step := &DataDrivenStep{
 		BaseStep:         NewBaseStepWithDisplayTitle(def.ID, def.Title, def.DisplayTitle, def.Description),
@@ -190,6 +198,7 @@ func (s *DataDrivenStep) getField(fieldKey string) components.FormField {
 	return group.Field(loc.field)
 }
 
+// Value returns the current string value of the field named fieldKey.
 func (s *DataDrivenStep) Value(fieldKey string) string {
 	if field := s.getField(fieldKey); field != nil {
 		return field.Value()
@@ -197,6 +206,8 @@ func (s *DataDrivenStep) Value(fieldKey string) string {
 	return ""
 }
 
+// ValueInt returns the integer value of fieldKey or fallback when empty
+// or unparseable.
 func (s *DataDrivenStep) ValueInt(fieldKey string, fallback int) int {
 	v := s.Value(fieldKey)
 	if v == "" {
@@ -233,6 +244,7 @@ func (s *DataDrivenStep) values() map[string]string {
 	return out
 }
 
+// LoadFromConfig seeds field values from cfg using each field's ConfigGet.
 func (s *DataDrivenStep) LoadFromConfig(cfg *config.Config) {
 	for sIdx := range s.definition.Sections {
 		for fIdx := range s.definition.Sections[sIdx].Fields {
@@ -244,6 +256,7 @@ func (s *DataDrivenStep) LoadFromConfig(cfg *config.Config) {
 	}
 }
 
+// WithExtraContentFunc overrides the definition's ExtraContent with fn.
 func (s *DataDrivenStep) WithExtraContentFunc(fn func(step *DataDrivenStep, width int) string) *DataDrivenStep {
 	s.customExtraContent = func(width int) string {
 		return fn(s, width)
@@ -260,6 +273,7 @@ func (s *DataDrivenStep) currentGroup() *components.InputGroup {
 	return s.sections[s.currentSection].group
 }
 
+// Init focuses the first input group so the user can type immediately.
 func (s *DataDrivenStep) Init() tea.Cmd {
 	if len(s.sections) > 0 && s.sections[0].group != nil {
 		return s.sections[0].group.Focus()
@@ -267,6 +281,8 @@ func (s *DataDrivenStep) Init() tea.Cmd {
 	return nil
 }
 
+// SetFocused toggles step focus; when re-focused, focus returns to the
+// first section.
 func (s *DataDrivenStep) SetFocused(focused bool) {
 	s.BaseStep.SetFocused(focused)
 	if focused {
@@ -283,6 +299,7 @@ func (s *DataDrivenStep) SetFocused(focused bool) {
 	}
 }
 
+// ShortHelp returns the key bindings shown in the step's help footer.
 func (s *DataDrivenStep) ShortHelp() []KeyBinding {
 	return []KeyBinding{
 		{Key: "↑↓/tab", Help: "navigate"},
@@ -291,6 +308,8 @@ func (s *DataDrivenStep) ShortHelp() []KeyBinding {
 	}
 }
 
+// Update handles navigation (enter/tab/shift-tab) and forwards other input
+// to the currently-focused form group.
 func (s *DataDrivenStep) Update(msg tea.Msg) (WizardStep, tea.Cmd) {
 	group := s.currentGroup()
 	if group == nil {
@@ -393,6 +412,8 @@ func (s *DataDrivenStep) emitFocusChanged() tea.Cmd {
 	}
 }
 
+// Validate runs each section's group validation, then the step-level
+// Validate function if the definition provides one.
 func (s *DataDrivenStep) Validate() error {
 	for _, section := range s.sections {
 		if section.group == nil {
@@ -408,6 +429,8 @@ func (s *DataDrivenStep) Validate() error {
 	return nil
 }
 
+// Apply writes each field's value into cfg using its ConfigSet, then runs
+// the step-level Apply function if provided.
 func (s *DataDrivenStep) Apply(cfg *config.Config) error {
 	for sIdx := range s.definition.Sections {
 		for fIdx := range s.definition.Sections[sIdx].Fields {
@@ -426,6 +449,7 @@ func (s *DataDrivenStep) Apply(cfg *config.Config) error {
 	return nil
 }
 
+// ShouldShow reports whether this step is visible given the current cfg.
 func (s *DataDrivenStep) ShouldShow(cfg *config.Config) bool {
 	if s.definition.ShouldShow != nil {
 		return s.definition.ShouldShow(cfg)
@@ -469,6 +493,8 @@ var formViewStyles = struct {
 		PaddingLeft(2),
 }
 
+// View renders the step's sections with per-section active/completed
+// indicators and appends any configured extra content.
 func (s *DataDrivenStep) View(width, height int) string {
 	s.SetSize(width, height)
 
@@ -522,6 +548,7 @@ func (s *DataDrivenStep) View(width, height int) string {
 	return content.String()
 }
 
+// SetString adapts a plain string setter into a ConfigSetter.
 func SetString(setter func(cfg *config.Config, v string)) ConfigSetter {
 	return func(cfg *config.Config, value string) error {
 		setter(cfg, value)
@@ -529,6 +556,7 @@ func SetString(setter func(cfg *config.Config, v string)) ConfigSetter {
 	}
 }
 
+// SetInt adapts an int setter into a ConfigSetter that parses the input.
 func SetInt(setter func(cfg *config.Config, v int)) ConfigSetter {
 	return func(cfg *config.Config, value string) error {
 		v, err := strconv.Atoi(value)
@@ -540,6 +568,7 @@ func SetInt(setter func(cfg *config.Config, v int)) ConfigSetter {
 	}
 }
 
+// SetBool adapts a bool setter into a ConfigSetter that parses yes/no.
 func SetBool(setter func(cfg *config.Config, v bool)) ConfigSetter {
 	return func(cfg *config.Config, value string) error {
 		v := strings.ToLower(strings.TrimSpace(value))
@@ -549,10 +578,13 @@ func SetBool(setter func(cfg *config.Config, v bool)) ConfigSetter {
 	}
 }
 
+// GetString adapts a string getter into a ConfigGetter.
 func GetString(getter func(cfg *config.Config) string) ConfigGetter {
 	return getter
 }
 
+// GetInt adapts an int getter into a ConfigGetter that returns the base-10
+// encoded value.
 func GetInt(getter func(cfg *config.Config) int) ConfigGetter {
 	return func(cfg *config.Config) string {
 		return strconv.Itoa(getter(cfg))

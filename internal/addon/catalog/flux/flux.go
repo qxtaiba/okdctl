@@ -49,8 +49,10 @@ func init() {
 	}
 }
 
+// Flux is the addon.Addon implementation for Flux GitOps.
 type Flux struct{}
 
+// Info returns the addon metadata.
 func (f *Flux) Info() addon.AddonInfo {
 	return addon.AddonInfo{
 		Name:           "flux",
@@ -63,6 +65,8 @@ func (f *Flux) Info() addon.AddonInfo {
 	}
 }
 
+// Install provisions flux-operator and flux-instance via Helm and waits for
+// controllers and the initial git sync.
 func (f *Flux) Install(ctx context.Context, env *addon.Environment) error {
 	if !executor.CommandExists("helm") {
 		return fmt.Errorf("helm is required to install Flux")
@@ -93,7 +97,7 @@ func (f *Flux) Install(ctx context.Context, env *addon.Environment) error {
 
 	// Wait for GitRepository sync (non-fatal — user may need to fix deploy key or URL)
 	if err := f.waitForGitSync(ctx, env); err != nil {
-		env.Logger.Warn(fmt.Sprintf("flux: git sync not ready: %v", err))
+		env.Logger.Warn("flux: git sync not ready", "err", err)
 		env.Logger.Warn("flux: debug with: oc get gitrepository -n flux-system -o yaml")
 		env.Logger.Warn("flux: the cluster will auto-reconcile once the git source is reachable")
 	}
@@ -159,6 +163,8 @@ func (f *Flux) installInstance(ctx context.Context, env *addon.Environment) erro
 	)
 }
 
+// Verify reports whether the flux-operator and source-controller deployments
+// have ready replicas. GitRepository sync status is logged but non-fatal.
 func (f *Flux) Verify(ctx context.Context, env *addon.Environment) error {
 	result, err := env.Exec.RunChecked(ctx, "oc", "get", "deployment", "flux-operator",
 		"-n", "flux-system", "-o", "jsonpath={.status.readyReplicas}")
@@ -198,11 +204,14 @@ func (f *Flux) Verify(ctx context.Context, env *addon.Environment) error {
 	return nil
 }
 
+// Uninstall removes the flux-operator and flux-instance Helm releases and
+// deletes the flux-system namespace. Individual failures are logged but do
+// not abort the sequence.
 func (f *Flux) Uninstall(ctx context.Context, env *addon.Environment) error {
 	env.Logger.Info("flux: removing flux components")
 	warnOnErr := func(err error, desc string) {
 		if err != nil {
-			env.Logger.Warn(fmt.Sprintf("flux: %s: %v", desc, err))
+			env.Logger.Warn("flux: "+desc, "err", err)
 		}
 	}
 	_, err := env.Exec.Run(ctx, "helm", "uninstall", "flux-instance", "--namespace", "flux-system")
@@ -214,12 +223,14 @@ func (f *Flux) Uninstall(ctx context.Context, env *addon.Environment) error {
 	return nil
 }
 
+// RequiredTools lists the external binaries flux needs on the host (helm).
 func (f *Flux) RequiredTools() []addon.ToolSpec {
 	return []addon.ToolSpec{
 		{Name: "helm", Description: "Helm package manager for installing Flux charts"},
 	}
 }
 
+// DefaultSettings returns the built-in defaults for flux's settings map.
 func (f *Flux) DefaultSettings() map[string]string {
 	return map[string]string{
 		SettingProvider:          "flux",
@@ -230,6 +241,8 @@ func (f *Flux) DefaultSettings() map[string]string {
 	}
 }
 
+// ValidateSettings checks the flux addon settings map. It requires a Git URL
+// and rejects malformed branch or path values.
 func (f *Flux) ValidateSettings(settings map[string]string) []string {
 	var errs []string
 	repo := settings[SettingRepository]
@@ -248,6 +261,7 @@ func (f *Flux) ValidateSettings(settings map[string]string) []string {
 	return errs
 }
 
+// WizardFields returns the wizard input fields the flux addon contributes.
 func (f *Flux) WizardFields() []addon.WizardField {
 	return []addon.WizardField{
 		{Key: SettingRepository, Label: "Repository URL", Help: "ssh://git@github.com/org/repo.git", Required: true},

@@ -3,6 +3,7 @@ package config
 // DefaultConfig returns a Config with sensible defaults for a typical homelab environment.
 func DefaultConfig() *Config {
 	return &Config{
+		SchemaVersion: SchemaVersionV1,
 		Cluster: ClusterConfig{
 			Name:   "mycluster",
 			Domain: "k8s.local",

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -19,6 +20,8 @@ import (
 // PlanFileName is the default plan file name used by Plan, Apply, and Cleanup.
 const PlanFileName = "tfplan"
 
+// ExecError reports a non-zero exit from a terraform subprocess, carrying
+// the subcommand name, exit code, and captured stderr.
 type ExecError struct {
 	Command  string
 	ExitCode int
@@ -32,6 +35,8 @@ func (e *ExecError) Error() string {
 	return fmt.Sprintf("terraform %s failed with exit code %d", e.Command, e.ExitCode)
 }
 
+// Executor wraps terraform subcommand execution for a single working
+// directory with an optional var-file and verbose-logging toggle.
 type Executor struct {
 	WorkDir string
 	VarFile string
@@ -41,16 +46,15 @@ type Executor struct {
 	logger *slog.Logger
 }
 
+// Option configures an Executor at construction time.
 type Option func(*Executor)
 
+// WithLogger sets the slog logger used to narrate terraform invocations.
 func WithLogger(l *slog.Logger) Option {
-	return func(e *Executor) {
-		if l != nil {
-			e.logger = l
-		}
-	}
+	return func(e *Executor) { e.logger = logutil.OrNop(l) }
 }
 
+// WithVerbose toggles verbose subprocess logging.
 func WithVerbose(v bool) Option {
 	return func(e *Executor) {
 		e.Verbose = v
@@ -98,16 +102,20 @@ type ApplyOptions struct {
 	Targets []string
 }
 
+// DestroyOptions configures a terraform destroy invocation.
 type DestroyOptions struct {
 	// VarFile overrides the default terraform.tfvars path.
 	VarFile     string
 	AutoApprove bool
 	Parallelism int
 	// UsePlan creates a destroy plan first, then applies it.
-	// Safer because it previews changes; falls back to direct destroy on failure.
+	// Safer because it previews changes. Plan failures surface as errors
+	// rather than silently degrading to direct destroy.
 	UsePlan bool
 }
 
+// New constructs an Executor rooted at workDir with the default var-file
+// path (<workDir>/terraform.tfvars).
 func New(workDir string, opts ...Option) *Executor {
 	e := &Executor{
 		WorkDir: workDir,
@@ -122,6 +130,7 @@ func New(workDir string, opts ...Option) *Executor {
 	return e
 }
 
+// NewWithVarFile constructs an Executor with an explicit var-file path.
 func NewWithVarFile(workDir, varFile string, opts ...Option) *Executor {
 	e := &Executor{
 		WorkDir: workDir,
@@ -155,6 +164,8 @@ func (t *Executor) run(ctx context.Context, args ...string) error {
 	return nil
 }
 
+// Init runs "terraform init" when the working directory is not already
+// initialized. A partial init (some artifacts missing) triggers a re-init.
 func (t *Executor) Init(ctx context.Context) error {
 	terraformDir := filepath.Join(t.WorkDir, ".terraform")
 	lockFile := filepath.Join(t.WorkDir, ".terraform.lock.hcl")
@@ -193,21 +204,15 @@ func (t *Executor) buildVarArgs(varFile string, vars map[string]string) []string
 		}
 	}
 
-	if len(vars) > 0 {
-		keys := make([]string, 0, len(vars))
-		for k := range vars {
-			keys = append(keys, k)
-		}
-		slices.Sort(keys)
-
-		for _, k := range keys {
-			args = append(args, "-var", fmt.Sprintf("%s=%s", k, vars[k]))
-		}
+	for _, k := range slices.Sorted(maps.Keys(vars)) {
+		args = append(args, "-var", fmt.Sprintf("%s=%s", k, vars[k]))
 	}
 
 	return args
 }
 
+// Plan runs "terraform plan" with the options in opts. When Destroy is true
+// the plan is a destruction plan.
 func (t *Executor) Plan(ctx context.Context, opts PlanOptions) error {
 	args := []string{"plan"}
 	args = append(args, t.buildVarArgs(opts.VarFile, opts.Vars)...)
@@ -225,6 +230,8 @@ func (t *Executor) Plan(ctx context.Context, opts PlanOptions) error {
 	return t.run(ctx, args...)
 }
 
+// Apply runs "terraform apply". When opts.PlanFile is set, Vars, VarFile,
+// and AutoApprove are ignored — the plan file encodes the full change set.
 func (t *Executor) Apply(ctx context.Context, opts ApplyOptions) error {
 	args := []string{"apply"}
 
@@ -244,6 +251,9 @@ func (t *Executor) Apply(ctx context.Context, opts ApplyOptions) error {
 	return t.run(ctx, args...)
 }
 
+// Destroy runs "terraform destroy". When opts.UsePlan is true the destroy
+// plan is generated first and applied, so plan failures surface cleanly
+// before any infra mutation.
 func (t *Executor) Destroy(ctx context.Context, opts DestroyOptions) error {
 	if opts.UsePlan {
 		return t.destroyWithPlan(ctx, opts)
@@ -251,7 +261,10 @@ func (t *Executor) Destroy(ctx context.Context, opts DestroyOptions) error {
 	return t.destroyDirect(ctx, opts)
 }
 
-// destroyWithPlan falls back to direct destroy if plan creation fails.
+// destroyWithPlan runs `terraform plan -destroy` and then applies the plan.
+// Plan failures are returned to the caller; we do NOT silently fall back to
+// direct destroy because a plan failure usually signals an auth/state issue
+// the operator needs to see before mutating infra.
 func (t *Executor) destroyWithPlan(ctx context.Context, opts DestroyOptions) error {
 	planFile := filepath.Join(t.WorkDir, "destroy.tfplan")
 
@@ -262,8 +275,7 @@ func (t *Executor) destroyWithPlan(ctx context.Context, opts DestroyOptions) err
 	})
 
 	if planErr != nil {
-		t.logger.Warn("terraform: destroy plan failed, falling back to direct destroy")
-		return t.destroyDirect(ctx, opts)
+		return fmt.Errorf("terraform destroy plan failed: %w (re-run with an explicit fix or pass UsePlan=false to skip the plan step)", planErr)
 	}
 
 	applyOpts := ApplyOptions{
@@ -291,6 +303,8 @@ func (t *Executor) destroyDirect(ctx context.Context, opts DestroyOptions) error
 	return t.run(ctx, args...)
 }
 
+// HasState reports whether the working directory contains a non-empty
+// terraform.tfstate file.
 func (t *Executor) HasState() bool {
 	stateFile := filepath.Join(t.WorkDir, "terraform.tfstate")
 	return system.FileExists(stateFile)

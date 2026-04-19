@@ -13,12 +13,16 @@ import (
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
+// Default timeouts and poll interval for ingress LB conversion.
 const (
 	DefaultIngressLBTimeout  = 10 * time.Minute
 	defaultConversionTimeout = 5 * time.Minute
 	routerGonePollInterval   = 5 * time.Second
 )
 
+// UpdateIngressOptions configures the update-ingress flow. ConfirmConversion
+// is called when HostNetwork IngressControllers are detected; returning
+// false aborts conversion.
 type UpdateIngressOptions struct {
 	RemoveHAProxy     bool
 	ConfirmConversion func(hostNetworkICs []string) bool
@@ -33,6 +37,7 @@ type IngressEntry struct {
 	HostNetwork bool   // true if this IC is still using HostNetwork (not converted)
 }
 
+// UpdateIngressResult summarizes what the update-ingress flow changed.
 type UpdateIngressResult struct {
 	Entries        []IngressEntry
 	KubeVipIP      string
@@ -68,8 +73,8 @@ func (p *Phase) UpdateIngress(ctx context.Context, cfg *config.Config, opts Upda
 	for _, ic := range controllers {
 		descriptions = append(descriptions, fmt.Sprintf("%s (%s)", ic.Name, ic.Strategy))
 	}
-	p.Log.Info(fmt.Sprintf("update-ingress: found %d controller(s): %s",
-		len(controllers), strings.Join(descriptions, ", ")))
+	p.Log.Info("update-ingress: discovered controllers",
+		"count", len(controllers), "controllers", strings.Join(descriptions, ", "))
 
 	var hostNetworkICs, lbICs []ingressControllerInfo
 	for _, ic := range controllers {
@@ -142,11 +147,11 @@ func (p *Phase) collectLBEntries(
 			if ic.Name == "default" {
 				return nil, nil, "", fmt.Errorf("router-default has no LoadBalancer IP: %w", err)
 			}
-			p.Log.Warn(fmt.Sprintf("update-ingress: %s has no loadbalancer ip: %v", svcName, err))
+			p.Log.Warn("update-ingress: service has no loadbalancer ip", "svc", svcName, "err", err)
 			continue
 		}
 
-		p.Log.Info(fmt.Sprintf("update-ingress: %s loadbalancer ip is %s", svcName, ip))
+		p.Log.Info("update-ingress: service loadbalancer ip resolved", "svc", svcName, "ip", ip)
 
 		entry := IngressEntry{
 			Name:      ic.Name,
@@ -200,7 +205,7 @@ func (p *Phase) finalizeIngress(
 	if err := p.deployProductionDNS(ctx, cfg, appsIP, vip, customDomains); err != nil {
 		return nil, fmt.Errorf("failed to deploy production DNS: %w", err)
 	}
-	p.Log.Info(fmt.Sprintf("update-ingress: dns updated — *.apps → %s, api.* → %s", appsIP, vip))
+	p.Log.Info("update-ingress: dns updated", "apps", appsIP, "api", vip)
 
 	result := &UpdateIngressResult{
 		Entries:        entries,
@@ -212,7 +217,7 @@ func (p *Phase) finalizeIngress(
 	if opts.RemoveHAProxy && hostNetworkCount == 0 {
 		p.Log.Info("update-ingress: removing haproxy from bastion")
 		if err := p.RemoveHAProxy(ctx, vip); err != nil {
-			p.Log.Warn(fmt.Sprintf("update-ingress: haproxy removal failed: %v", err))
+			p.Log.Warn("update-ingress: haproxy removal failed", "err", err)
 		} else {
 			result.HAProxyRemoved = true
 			p.Log.Info("update-ingress: haproxy removed from bastion")
@@ -240,12 +245,12 @@ func (p *Phase) handleHostNetworkConversion(
 		icNames[i] = ic.Name
 	}
 
-	p.Log.Warn(fmt.Sprintf("update-ingress: found %d controller(s) using HostNetwork: %s",
-		len(hostNetworkICs), strings.Join(icNames, ", ")))
+	p.Log.Warn("update-ingress: controllers using HostNetwork",
+		"count", len(hostNetworkICs), "controllers", strings.Join(icNames, ", "))
 
 	metalLBAvailable, err := p.checkMetalLBAvailable(ctx)
 	if err != nil {
-		p.Log.Warn(fmt.Sprintf("update-ingress: could not check metallb availability: %v", err))
+		p.Log.Warn("update-ingress: could not check metallb availability", "err", err)
 		return 0, names, nil
 	}
 	if !metalLBAvailable {
@@ -393,7 +398,7 @@ func (p *Phase) convertToLoadBalancer(ctx context.Context, ic *ingressController
 
 	_, err = p.Exec.RunWithStdinChecked(ctx, replacementJSON, "oc", "create", "-f", "-")
 	if err != nil {
-		p.Log.Warn(fmt.Sprintf("update-ingress: failed to create replacement, attempting rollback: %v", err))
+		p.Log.Warn("update-ingress: failed to create replacement, attempting rollback", "err", err)
 		p.attemptRollback(ctx, ic)
 		return fmt.Errorf("failed to create replacement IngressController: %w", err)
 	}
@@ -513,13 +518,13 @@ func buildRollbackJSON(ic *ingressControllerInfo) (string, error) {
 func (p *Phase) attemptRollback(ctx context.Context, ic *ingressControllerInfo) {
 	rollbackJSON, err := buildRollbackJSON(ic)
 	if err != nil {
-		p.Log.Warn(fmt.Sprintf("update-ingress: rollback failed — could not build rollback json: %v", err))
+		p.Log.Warn("update-ingress: rollback failed — could not build rollback json", "err", err)
 		return
 	}
 
 	result, err := p.Exec.RunWithStdin(ctx, rollbackJSON, "oc", "create", "-f", "-")
 	if err != nil || result.ExitCode != 0 {
-		p.Log.Warn(fmt.Sprintf("update-ingress: rollback create failed: %v %s", err, result.Stderr))
+		p.Log.Warn("update-ingress: rollback create failed", "err", err, "stderr", result.Stderr)
 		return
 	}
 

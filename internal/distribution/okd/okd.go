@@ -21,12 +21,9 @@ import (
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
-const (
-	MinControlPlaneMemoryMB = 8192
-	MinControlPlaneCPUs     = 4
-	MinControlPlaneDiskGB   = 50
-)
-
+// Provisioner orchestrates the OKD distribution's phase packages (setup,
+// install, postinstall, destroy). Construct via New with functional options;
+// the zero value is not usable.
 type Provisioner struct {
 	version     string
 	projectRoot string
@@ -34,14 +31,20 @@ type Provisioner struct {
 	logger      *slog.Logger
 }
 
+// ProvisionerOption configures a Provisioner. Options compose — pass multiple
+// to New. Nil-safe where documented (WithLogger accepts nil).
 type ProvisionerOption func(*Provisioner)
 
+// WithProjectRoot sets the working directory rooted at the okdctl project
+// checkout. Defaults to os.Getwd() when omitted.
 func WithProjectRoot(projectRoot string) ProvisionerOption {
 	return func(p *Provisioner) {
 		p.projectRoot = projectRoot
 	}
 }
 
+// WithLogger attaches a structured logger. A nil logger is tolerated and
+// normalized to logutil.NopLogger inside New.
 func WithLogger(l *slog.Logger) ProvisionerOption {
 	return func(p *Provisioner) {
 		p.logger = l
@@ -60,6 +63,9 @@ func WithEnv(env []string) ProvisionerOption {
 	}
 }
 
+// New constructs a Provisioner for the given okdctl version with options
+// applied in order. Normalizes a nil logger to NopLogger and guarantees an
+// executor is attached even when WithEnv did not allocate one.
 func New(version string, opts ...ProvisionerOption) *Provisioner {
 	projectRoot, _ := os.Getwd()
 
@@ -84,23 +90,13 @@ func New(version string, opts ...ProvisionerOption) *Provisioner {
 	return p
 }
 
+// Validate checks the distribution type and delegates resource-minimum
+// validation to config-side ValidateOKDConfig so a single source of truth
+// is enforced (config-load time and provisioner entry both hit it).
 func (p *Provisioner) Validate(cfg *config.Config) error {
 	if cfg.Distribution.Type != config.DistributionOKD {
 		return fmt.Errorf("invalid distribution type: expected okd, got %s", cfg.Distribution.Type)
 	}
-
-	if cfg.Topology.ControlPlane.Memory < MinControlPlaneMemoryMB {
-		return fmt.Errorf("okd requires at least %dMB RAM for control plane nodes", MinControlPlaneMemoryMB)
-	}
-
-	if cfg.Topology.ControlPlane.CPU < MinControlPlaneCPUs {
-		return fmt.Errorf("okd requires at least %d vCPUs for control plane nodes", MinControlPlaneCPUs)
-	}
-
-	if cfg.Topology.ControlPlane.Disk < MinControlPlaneDiskGB {
-		return fmt.Errorf("okd requires at least %dGB disk for control plane nodes", MinControlPlaneDiskGB)
-	}
-
 	return nil
 }
 
@@ -121,7 +117,7 @@ func (p *Provisioner) Prepare(ctx context.Context, cfg *config.Config) ([]distri
 			Logger:         p.logger,
 		}
 		if err := cleanup.Execute(ctx, cleanupOpts); err != nil {
-			p.logger.Warn(fmt.Sprintf("cleanup warning: %v", err))
+			p.logger.Warn("cleanup warning", "err", err)
 		}
 	}
 
@@ -129,22 +125,31 @@ func (p *Provisioner) Prepare(ctx context.Context, cfg *config.Config) ([]distri
 	return setupPhase.Execute(ctx, cfg, &opts)
 }
 
+// Install runs the install phase: ignition delivery, bootstrap wait, and
+// install-complete monitor. Must be called after Prepare.
 func (p *Provisioner) Install(ctx context.Context, cfg *config.Config, opts *install.Options) ([]distribution.StepResult, error) {
 	installPhase := install.New(p.executor, p.logger, p.version)
 	return installPhase.Execute(ctx, cfg, opts)
 }
 
+// Configure runs the postinstall phase: kube-vip verification, production
+// DNS cutover, bootstrap cleanup. Returns the result alongside per-step records.
 func (p *Provisioner) Configure(ctx context.Context, cfg *config.Config) (*postinstall.Result, []distribution.StepResult, error) {
 	postPhase := postinstall.New(p.executor, p.logger, p.version)
 	opts := postinstall.NewOptions(cfg, p.projectRoot)
 	return postPhase.Execute(ctx, cfg, &opts)
 }
 
+// UpdateIngress re-points haproxy at a fresh set of backend nodes without
+// re-running the full postinstall phase. Used by the update-ingress CLI verb.
 func (p *Provisioner) UpdateIngress(ctx context.Context, cfg *config.Config, opts postinstall.UpdateIngressOptions) (*postinstall.UpdateIngressResult, error) {
 	postPhase := postinstall.New(p.executor, p.logger, p.version)
 	return postPhase.UpdateIngress(ctx, cfg, opts)
 }
 
+// Destroy tears down the cluster and its infrastructure. removePackages=true
+// also uninstalls host packages (haproxy, dnsmasq, httpd); keepISOs=true
+// preserves uploaded FCOS ISOs so a subsequent install can skip the upload.
 func (p *Provisioner) Destroy(ctx context.Context, cfg *config.Config, removePackages, keepISOs bool) ([]distribution.StepResult, error) {
 	destroyPhase := destroy.New(p.executor, p.logger, p.version)
 	destroyOpts := destroy.NewOptions(cfg, p.projectRoot)

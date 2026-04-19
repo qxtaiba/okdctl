@@ -2,8 +2,9 @@
 # okdctl installer
 # ---------------------
 # Downloads the latest (or a pinned) okdctl release from GitHub,
-# verifies its SHA256 against the published SHA256SUMS file, and installs
-# the binary to /usr/local/bin (or $INSTALL_DIR if set).
+# verifies its SHA256 against the published SHA256SUMS file, verifies the
+# cosign signature on SHA256SUMS when cosign is available, and installs the
+# binary to /usr/local/bin (or $INSTALL_DIR if set).
 #
 # Usage:
 #   curl -sSfL https://raw.githubusercontent.com/qxtaiba/okdctl/main/scripts/install.sh | sh
@@ -13,7 +14,7 @@
 #   INSTALL_DIR  - where to put the binary (default: /usr/local/bin)
 #   INSECURE     - set to "1" to skip checksum verification (NOT recommended)
 #
-# Requires: curl, tar, sha256sum.
+# Requires: curl, tar, sha256sum. Optionally: cosign (highly recommended).
 
 set -eu
 
@@ -22,6 +23,12 @@ BINARY="okdctl"
 VERSION="${VERSION:-}"
 INSTALL_DIR="${INSTALL_DIR:-/usr/local/bin}"
 INSECURE="${INSECURE:-}"
+
+if [ -n "$INSECURE" ]; then
+    printf '\033[31mWARNING: INSECURE=1 is set — SHA256 and cosign signature verification SKIPPED.\033[0m\n' >&2
+    printf '\033[31m         A compromised GitHub release or CDN can substitute arbitrary binaries.\033[0m\n' >&2
+    printf '\033[31m         Unset INSECURE to re-enable verification.\033[0m\n' >&2
+fi
 
 red()   { printf '\033[31m%s\033[0m\n' "$*" >&2; }
 green() { printf '\033[32m%s\033[0m\n' "$*"; }
@@ -84,9 +91,34 @@ curl -sSfL -o "$TMP/$ARCHIVE_NAME" "$ARCHIVE_URL" ||
 
 # Verify SHA256 unless explicitly skipped.
 if [ -z "$INSECURE" ] && [ -n "$SHA_CMD" ]; then
-    info "verifying SHA256"
+    info "downloading SHA256SUMS"
     curl -sSfL -o "$TMP/SHA256SUMS" "$SHA_URL" ||
         die "failed to download SHA256SUMS from $SHA_URL"
+
+    # Cosign verify-blob against the sigstore-published signature.
+    # goreleaser publishes SHA256SUMS.sig + SHA256SUMS.pem for every
+    # release — verifying these closes the window where an attacker who
+    # controls release-asset upload can swap both archive and SHA256SUMS.
+    if command -v cosign >/dev/null 2>&1; then
+        info "verifying cosign signature on SHA256SUMS"
+        curl -sSfL -o "$TMP/SHA256SUMS.sig" "$BASE_URL/SHA256SUMS.sig" ||
+            die "failed to download SHA256SUMS.sig (release missing signature? rerun with INSECURE=1 if you accept the risk)"
+        curl -sSfL -o "$TMP/SHA256SUMS.pem" "$BASE_URL/SHA256SUMS.pem" ||
+            die "failed to download SHA256SUMS.pem"
+        COSIGN_EXPERIMENTAL=1 cosign verify-blob \
+            --certificate="$TMP/SHA256SUMS.pem" \
+            --signature="$TMP/SHA256SUMS.sig" \
+            --certificate-identity-regexp='https://github\.com/qxtaiba/okdctl/' \
+            --certificate-oidc-issuer='https://token.actions.githubusercontent.com' \
+            "$TMP/SHA256SUMS" >/dev/null 2>&1 ||
+            die "cosign signature verification failed on SHA256SUMS"
+        info "cosign signature verified"
+    else
+        info "cosign not installed — skipping signature verification (checksum still enforced)"
+        info "install cosign from https://docs.sigstore.dev/system_config/installation/ to enable signature verification"
+    fi
+
+    info "verifying SHA256"
     EXPECTED=$(grep " $ARCHIVE_NAME\$" "$TMP/SHA256SUMS" | awk '{print $1}')
     [ -n "$EXPECTED" ] || die "no checksum found for $ARCHIVE_NAME in SHA256SUMS"
     ACTUAL=$($SHA_CMD "$TMP/$ARCHIVE_NAME" | awk '{print $1}')

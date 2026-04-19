@@ -27,8 +27,12 @@ var rootRequiredCmds = map[string]bool{
 }
 
 // requiresRoot returns true if cmd carries the requiresRoot annotation or
-// any ancestor is in rootRequiredCmds.
+// any ancestor is in rootRequiredCmds. --dry-run escapes the gate so
+// `okdctl destroy --dry-run` prints the preview without a sudo prompt.
 func requiresRoot(cmd *cobra.Command) bool {
+	if dry, err := cmd.Flags().GetBool("dry-run"); err == nil && dry {
+		return false
+	}
 	if cmd.Annotations["requiresRoot"] == "true" {
 		return true
 	}

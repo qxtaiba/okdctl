@@ -7,6 +7,7 @@ import (
 	"charm.land/lipgloss/v2"
 )
 
+// Dimensions used by the boxed section renderer.
 const (
 	DefaultBoxWidth         = 90
 	MinBoxWidth             = 20
@@ -122,6 +123,8 @@ func boxedSectionCore(content, title string, width int, cfg boxConfig) string {
 	return strings.Join(result, "\n")
 }
 
+// BoxedSectionCompact renders content inside a single-line-titled box using
+// the muted slate palette.
 func BoxedSectionCompact(content, title string, width int) string {
 	return boxedSectionCore(content, title, width, boxConfig{
 		borderColor: ColorSlate600,

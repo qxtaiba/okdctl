@@ -23,23 +23,23 @@ func (p *Phase) RemoveHAProxy(ctx context.Context, vip string) error {
 	if system.IsServiceActive(ctx, "haproxy") {
 		p.Log.Info("haproxy: stopping service")
 		if err := system.ManageService(ctx, system.ServiceStop, "haproxy", "haproxy service"); err != nil {
-			p.Log.Warn(fmt.Sprintf("haproxy: stop failed: %v", err))
+			p.Log.Warn("haproxy: stop failed", "err", err)
 		}
 	}
 	if system.IsServiceEnabled(ctx, "haproxy") {
 		p.Log.Info("haproxy: disabling service")
 		if err := system.ManageService(ctx, system.ServiceDisable, "haproxy", "haproxy service"); err != nil {
-			p.Log.Warn(fmt.Sprintf("haproxy: disable failed: %v", err))
+			p.Log.Warn("haproxy: disable failed", "err", err)
 		}
 	}
 
 	p.Log.Info("haproxy: removing configuration")
 	if err := os.RemoveAll(phase.DefaultHAProxyConfigPath); err != nil {
-		p.Log.Warn(fmt.Sprintf("haproxy: failed to remove config: %v", err))
+		p.Log.Warn("haproxy: failed to remove config", "err", err)
 	}
 
 	if err := firewall.RemoveRules(ctx, firewall.HAProxyFrontendPorts(), true, p.Log); err != nil {
-		p.Log.Warn(fmt.Sprintf("haproxy: firewall cleanup incomplete: %v", err))
+		p.Log.Warn("haproxy: firewall cleanup incomplete", "err", err)
 	}
 
 	// Remove the VIP secondary IP from the bastion so traffic routes to the
@@ -48,11 +48,11 @@ func (p *Phase) RemoveHAProxy(ctx context.Context, vip string) error {
 		vipRemoved := false
 		iface, ifaceErr := netutil.GetDefaultInterface(ctx)
 		if ifaceErr != nil {
-			p.Log.Warn(fmt.Sprintf("haproxy: could not detect default interface for VIP removal: %v", ifaceErr))
+			p.Log.Warn("haproxy: could not detect default interface for VIP removal", "err", ifaceErr)
 		} else {
-			p.Log.Info(fmt.Sprintf("haproxy: removing vip %s from %s", vip, iface))
+			p.Log.Info("haproxy: removing vip", "vip", vip, "iface", iface)
 			if rmErr := netutil.RemoveSecondaryIP(ctx, vip, iface); rmErr != nil {
-				p.Log.Warn(fmt.Sprintf("haproxy: could not remove vip %s from %s: %v", vip, iface, rmErr))
+				p.Log.Warn("haproxy: could not remove vip", "vip", vip, "iface", iface, "err", rmErr)
 			} else {
 				vipRemoved = true
 			}

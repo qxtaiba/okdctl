@@ -32,11 +32,11 @@ func (p *Phase) ensureIgnitionDir(_ context.Context, webRoot string) (string, er
 
 	apacheUser := p.OS.ApacheUser()
 	if err := system.ChownByName(ignitionDir, apacheUser+":"+apacheUser); err != nil {
-		p.Log.Warn(fmt.Sprintf("apache: failed to set ignition dir ownership: %v", err))
+		p.Log.Warn("apache: failed to set ignition dir ownership", "err", err)
 	}
 	// Explicit chmod in case ignitionDir pre-existed with narrower perms.
 	if err := os.Chmod(ignitionDir, 0o755); err != nil {
-		p.Log.Warn(fmt.Sprintf("apache: failed to set ignition dir permissions: %v", err))
+		p.Log.Warn("apache: failed to set ignition dir permissions", "err", err)
 	}
 
 	return ignitionDir, nil
@@ -50,12 +50,12 @@ func (p *Phase) configureApachePort(_ context.Context) {
 
 	backupPath := fmt.Sprintf("%s.backup.%d", httpdConf, time.Now().Unix())
 	if err := system.CopyFile(httpdConf, backupPath); err != nil {
-		p.Log.Warn(fmt.Sprintf("apache: could not backup httpd.conf: %v", err))
+		p.Log.Warn("apache: could not backup httpd.conf", "err", err)
 	}
 
 	original, err := os.ReadFile(httpdConf)
 	if err != nil {
-		p.Log.Warn(fmt.Sprintf("apache: could not read httpd.conf: %v", err))
+		p.Log.Warn("apache: could not read httpd.conf", "err", err)
 		return
 	}
 
@@ -73,14 +73,14 @@ func (p *Phase) configureApachePort(_ context.Context) {
 		buf.WriteByte('\n')
 	}
 	if err := scanner.Err(); err != nil {
-		p.Log.Warn(fmt.Sprintf("apache: scan of httpd.conf failed: %v", err))
+		p.Log.Warn("apache: scan of httpd.conf failed", "err", err)
 		return
 	}
 	if !changed {
 		return
 	}
 	if err := system.AtomicWrite(httpdConf, buf.Bytes(), 0o644); err != nil {
-		p.Log.Warn(fmt.Sprintf("apache: could not modify httpd.conf to listen on port 8080: %v", err))
+		p.Log.Warn("apache: could not modify httpd.conf to listen on port 8080", "err", err)
 	}
 }
 
@@ -120,6 +120,8 @@ func (p *Phase) verifyApacheListening(ctx context.Context) {
 	p.Log.Info("apache: httpd service listening on port 8080")
 }
 
+// ConfigureApache configures httpd for serving ignition payloads: port,
+// SELinux context, service enable, and ignition directory creation.
 func (p *Phase) ConfigureApache(ctx context.Context, cfg *config.Config) error {
 	p.Log.Info("apache: configuring httpd for serving ignition files")
 
@@ -145,6 +147,9 @@ func (p *Phase) ConfigureApache(ctx context.Context, cfg *config.Config) error {
 	return nil
 }
 
+// DeployToWebServer copies the generated ignition files and the auth
+// directory (kubeconfig, kubeadmin-password) from clusterDir into the
+// httpd web root, preserving file modes so sensitive files stay protected.
 func (p *Phase) DeployToWebServer(ctx context.Context, cfg *config.Config, clusterDir string) error {
 	webRoot := cfg.HTTPServer.Root
 	if webRoot == "" {
@@ -209,6 +214,8 @@ func copyAuthTree(src, dst string) error {
 	})
 }
 
+// VerifyWebServer fetches bootstrap.ign from baseURL and checks the response
+// status and approximate size to catch misconfigured or empty deploys early.
 func (p *Phase) VerifyWebServer(ctx context.Context, baseURL string) error {
 	testURL := fmt.Sprintf("%s/bootstrap.ign", baseURL)
 

@@ -5,11 +5,16 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/executor"
+	"github.com/qxtaiba/okdctl/internal/logutil"
 )
 
+// Manager drives the addon lifecycle: resolving dependencies, installing in
+// order, verifying, and rolling back on failure. Construct via NewManager
+// with functional options.
 type Manager struct {
 	cfg         *config.Config
 	exec        *executor.Executor
@@ -17,13 +22,37 @@ type Manager struct {
 	projectRoot string
 }
 
-func NewManager(cfg *config.Config, exec *executor.Executor, logger *slog.Logger, projectRoot string) *Manager {
-	return &Manager{
-		cfg:         cfg,
-		exec:        exec,
-		logger:      logger,
-		projectRoot: projectRoot,
+// ManagerOption configures a Manager at construction time.
+type ManagerOption func(*Manager)
+
+// WithExecutor sets the subprocess executor used by addon Install/Verify/Uninstall.
+func WithExecutor(exec *executor.Executor) ManagerOption {
+	return func(m *Manager) { m.exec = exec }
+}
+
+// WithLogger attaches a logger.
+func WithLogger(l *slog.Logger) ManagerOption {
+	return func(m *Manager) { m.logger = l }
+}
+
+// WithProjectRoot sets the path the manager resolves addon-local resources
+// against (manifests, helm charts, flux bootstrap paths).
+func WithProjectRoot(root string) ManagerOption {
+	return func(m *Manager) { m.projectRoot = root }
+}
+
+// NewManager constructs a Manager bound to cfg with options applied in order.
+// A nil logger is tolerated and resolved to NopLogger so the body can log
+// unconditionally — matches the nil-safety contract of phase.NewBasePhase.
+func NewManager(cfg *config.Config, opts ...ManagerOption) *Manager {
+	m := &Manager{cfg: cfg}
+	for _, opt := range opts {
+		opt(m)
 	}
+	if m.logger == nil {
+		m.logger = logutil.NopLogger
+	}
+	return m
 }
 
 // InstallAll resolves and installs all enabled addons in dependency order.
@@ -57,7 +86,7 @@ func (m *Manager) InstallAll(ctx context.Context) error {
 		}
 
 		if dep := m.firstFailedDep(info.Dependencies, failed); dep != "" {
-			m.logger.Warn(fmt.Sprintf("addons: skipping %s (dependency %s failed)", info.DisplayName, dep))
+			m.logger.Warn("addons: skipping — dependency failed", "addon", info.DisplayName, "dep", dep)
 			failed[info.Name] = true
 			continue
 		}
@@ -65,12 +94,12 @@ func (m *Manager) InstallAll(ctx context.Context) error {
 		env, err := m.installAndVerify(ctx, a)
 		if err != nil {
 			failed[info.Name] = true
-			m.logger.Warn(err.Error())
+			m.logger.Warn("addons: install and verify failed", "err", err)
 			errs = append(errs, err)
 
 			m.logger.Info(fmt.Sprintf("addons: rolling back %s", info.DisplayName))
 			if unErr := a.Uninstall(ctx, env); unErr != nil {
-				m.logger.Warn(fmt.Sprintf("addons: rollback of %s failed: %v", info.DisplayName, unErr))
+				m.logger.Warn("addons: rollback failed", "addon", info.DisplayName, "err", unErr)
 				errs = append(errs, fmt.Errorf("addon %s rollback: %w", info.Name, unErr))
 			}
 			continue
@@ -147,11 +176,10 @@ func (m *Manager) InstallOne(ctx context.Context, name string) error {
 		env, err := m.installAndVerify(ctx, addon)
 		if err != nil {
 			// All-or-nothing: roll back previously-installed addons in reverse order.
-			for i := len(installed) - 1; i >= 0; i-- {
-				inst := installed[i]
+			for _, inst := range slices.Backward(installed) {
 				m.logger.Info(fmt.Sprintf("addons: rolling back %s", inst.a.Info().DisplayName))
 				if unErr := inst.a.Uninstall(ctx, inst.env); unErr != nil {
-					m.logger.Warn(fmt.Sprintf("addons: rollback of %s failed: %v", inst.a.Info().DisplayName, unErr))
+					m.logger.Warn("addons: rollback failed", "addon", inst.a.Info().DisplayName, "err", unErr)
 					err = errors.Join(err, fmt.Errorf("addon %s rollback: %w", inst.a.Info().Name, unErr))
 				}
 			}

@@ -1,3 +1,8 @@
+// Package distribution hosts the phase-step orchestration primitives
+// (StepDef, StepBuilder, Orchestrator) shared by every distribution under
+// internal/distribution/. Canonical step declaration per CLAUDE.md
+// §architecture-notes uses StepDef + BuildSteps rather than hand-rolled
+// ProvisioningStep implementations.
 package distribution
 
 import (
@@ -6,8 +11,13 @@ import (
 	"time"
 )
 
+// StepID is a stable identifier for a provisioning step. IDs appear in logs,
+// persisted StepResult records, and roadmap cross-references, so they must not
+// change once a step ships.
 type StepID string
 
+// StepResult is the outcome of a single provisioning step, populated by the
+// Orchestrator. Skipped steps carry Success=true with SkipReason set.
 type StepResult struct {
 	StepID     StepID
 	Success    bool
@@ -18,6 +28,8 @@ type StepResult struct {
 	Duration   time.Duration
 }
 
+// Step is the minimal contract a provisioning step must satisfy: identity,
+// human-readable name/description, and an Execute that honors ctx cancellation.
 type Step interface {
 	ID() StepID
 	Name() string
@@ -25,21 +37,30 @@ type Step interface {
 	Execute(ctx context.Context) error
 }
 
+// Skipper lets a step declare that it should be skipped for this run (e.g.
+// preflight checks that don't apply to the current platform). The Orchestrator
+// consults ShouldSkip before Execute.
 type Skipper interface {
 	ShouldSkip() bool
 	SkipReason() string
 }
 
+// FatalChecker lets a step declare whether its failure aborts the Orchestrator.
+// Fatal=false is "log a warning and continue to the next step".
 type FatalChecker interface {
 	IsFatal() bool
 }
 
+// StepCallbacks are side-effect hooks the Orchestrator fires around Execute.
+// All three callbacks are optional and must be safe to call with no setup.
 type StepCallbacks interface {
 	OnStart()
 	OnComplete()
 	OnError(err error)
 }
 
+// ProvisioningStep is the full contract consumed by Orchestrator.Run — the
+// union of identity, Execute, Skipper, FatalChecker, and lifecycle callbacks.
 type ProvisioningStep interface {
 	Step
 	Skipper
@@ -47,6 +68,10 @@ type ProvisioningStep interface {
 	StepCallbacks
 }
 
+// StepBuilder is the fluent builder for ProvisioningStep values. Prefer
+// StepDef + BuildSteps per CLAUDE.md §architecture-notes; use the builder
+// directly only when you need to wire a step from a dynamic source. All
+// setter methods return the receiver for chaining.
 type StepBuilder struct {
 	id          StepID
 	name        string
@@ -76,46 +101,58 @@ func NewStepBuilder(id StepID, name string) *StepBuilder {
 	}
 }
 
+// Description sets the step's human-readable description and returns b.
 func (b *StepBuilder) Description(d string) *StepBuilder {
 	b.description = d
 	return b
 }
 
+// Fatal toggles whether a failure in this step aborts the Orchestrator.
+// Steps default to fatal=true; call Fatal(false) for warn-and-continue steps.
 func (b *StepBuilder) Fatal(f bool) *StepBuilder {
 	b.fatal = f
 	return b
 }
 
+// SkipWhen wires a predicate consulted by Orchestrator before Execute.
 func (b *StepBuilder) SkipWhen(fn func() bool) *StepBuilder {
 	b.skipFn = fn
 	return b
 }
 
+// SkipReason sets the message surfaced when SkipWhen returns true.
 func (b *StepBuilder) SkipReason(r string) *StepBuilder {
 	b.skipReason = r
 	return b
 }
 
+// OnStart registers a callback fired before Execute.
 func (b *StepBuilder) OnStart(fn func()) *StepBuilder {
 	b.onStart = fn
 	return b
 }
 
+// OnComplete registers a callback fired after Execute returns nil.
 func (b *StepBuilder) OnComplete(fn func()) *StepBuilder {
 	b.onComplete = fn
 	return b
 }
 
+// OnError registers a callback fired when Execute returns a non-nil error.
 func (b *StepBuilder) OnError(fn func(error)) *StepBuilder {
 	b.onError = fn
 	return b
 }
 
+// Execute registers the step body. Fatal steps propagate the returned error
+// through Orchestrator.Run; non-fatal steps log it and continue.
 func (b *StepBuilder) Execute(fn func(context.Context) error) *StepBuilder {
 	b.executeFn = fn
 	return b
 }
 
+// Build produces a ProvisioningStep from the configured builder. Returns an
+// error only when b is nil; all other validation happens in NewStepBuilder.
 func (b *StepBuilder) Build() (ProvisioningStep, error) {
 	if b == nil {
 		return nil, fmt.Errorf("StepBuilder is nil")

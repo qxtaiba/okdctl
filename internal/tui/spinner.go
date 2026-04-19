@@ -23,7 +23,7 @@ func StartSpinner(ctx context.Context, desc string) func() {
 
 	done := make(chan struct{})
 	stopCh := make(chan struct{})
-	var once sync.Once
+	stop := sync.OnceFunc(func() { close(stopCh) })
 
 	go func() {
 		defer close(done)
@@ -50,7 +50,7 @@ func StartSpinner(ctx context.Context, desc string) func() {
 	}()
 
 	return func() {
-		once.Do(func() { close(stopCh) })
+		stop()
 		<-done
 	}
 }

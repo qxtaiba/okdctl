@@ -308,6 +308,9 @@ func validateHAMasters(count int) error {
 	return nil
 }
 
+// ValidateOKDConfig applies OKD-specific version and node-resource floors.
+// Errors are appended to result; callers run this in addition to the
+// distribution-neutral validators.
 func ValidateOKDConfig(cfg *Config, result *ValidationResult) {
 	if cfg.Distribution.Type == DistributionOKD {
 		if err := validateOKDVersion(cfg.Distribution.Version); err != nil {
@@ -365,11 +368,13 @@ func isValidHostOrIP(s string) bool {
 	return IsValidIP(s) || isValidDomain(s)
 }
 
+// IsValidIP reports whether s parses as a valid IP address.
 func IsValidIP(s string) bool {
 	_, err := netip.ParseAddr(s)
 	return err == nil
 }
 
+// IsValidCIDR reports whether s parses as a valid CIDR prefix.
 func IsValidCIDR(s string) bool {
 	_, err := netip.ParsePrefix(s)
 	return err == nil
@@ -417,6 +422,7 @@ func getMinMemoryForDistribution(d DistributionType) int {
 	return DefaultMinMemoryMB
 }
 
+// ValidateClusterName enforces DNS-label rules on the cluster name.
 func ValidateClusterName(value string) error {
 	if len(value) < 2 {
 		return errors.New("must be at least 2 characters")
@@ -427,6 +433,7 @@ func ValidateClusterName(value string) error {
 	return nil
 }
 
+// ValidateDomain enforces RFC 1123 domain-name rules.
 func ValidateDomain(value string) error {
 	if len(value) < 3 {
 		return errors.New("must be at least 3 characters")
@@ -437,6 +444,8 @@ func ValidateDomain(value string) error {
 	return nil
 }
 
+// ValidateProxmoxHost accepts a hostname, IP, or host:port and validates the
+// host portion.
 func ValidateProxmoxHost(value string) error {
 	host := value
 	if strings.Contains(value, ":") {
@@ -452,6 +461,7 @@ func ValidateProxmoxHost(value string) error {
 	return nil
 }
 
+// ValidateIP returns an error if value is not a valid IP address.
 func ValidateIP(value string) error {
 	if !IsValidIP(value) {
 		return errors.New("invalid ip address")
@@ -459,6 +469,9 @@ func ValidateIP(value string) error {
 	return nil
 }
 
+// ValidateGatewayInCIDR reports an error if gateway is not inside cidr.
+// When either value is missing or malformed this returns nil — the required
+// field validators surface those cases separately.
 func ValidateGatewayInCIDR(gateway, cidr string) error {
 	if gateway == "" || !IsValidIP(gateway) || cidr == "" || !IsValidCIDR(cidr) {
 		return nil
@@ -473,6 +486,7 @@ func ValidateGatewayInCIDR(gateway, cidr string) error {
 	return nil
 }
 
+// ValidateCIDR returns an error if value is not a valid CIDR prefix.
 func ValidateCIDR(value string) error {
 	if !IsValidCIDR(value) {
 		return errors.New("invalid cidr format (e.g., 192.168.1.0/24)")
@@ -480,6 +494,8 @@ func ValidateCIDR(value string) error {
 	return nil
 }
 
+// ValidateIntRange returns a validator that requires value to parse as an
+// integer in [lo, hi]. unit is appended to error messages for context.
 func ValidateIntRange(unit string, lo, hi int) func(string) error {
 	return func(value string) error {
 		n, err := strconv.Atoi(value)
@@ -496,6 +512,7 @@ func ValidateIntRange(unit string, lo, hi int) func(string) error {
 	}
 }
 
+// ValidatePortNumber requires value to parse as a port in [1, 65535].
 func ValidatePortNumber(value string) error {
 	port, err := strconv.Atoi(value)
 	if err != nil {
@@ -507,6 +524,8 @@ func ValidatePortNumber(value string) error {
 	return nil
 }
 
+// Preset field validators used by wizard input fields. Each wraps
+// ValidateIntRange with the appropriate unit label and bounds.
 var (
 	ValidateCPU       = ValidateIntRange(" (vcpus)", 1, 128)
 	ValidateMemory    = ValidateIntRange(" (in mb)", 1024, 1048576)

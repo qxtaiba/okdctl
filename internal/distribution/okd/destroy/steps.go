@@ -12,6 +12,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/setup"
 )
 
+// Step IDs for the destroy phase, ordered as they execute.
 const (
 	StepDestroyInfra    distribution.StepID = "destroy-infrastructure"
 	StepRemoveRemoteISO distribution.StepID = "remove-remote-iso"
@@ -25,6 +26,7 @@ func (p *Phase) destroySteps(cfg *config.Config, opts *Options) []distribution.S
 		{
 			ID: StepDestroyInfra, Name: "destroy infrastructure",
 			Desc:       "destroying proxmox infrastructure using terraform",
+			NonFatal:   true, // orchestrator continues through cleanup steps on TF failure
 			SkipWhen:   func() bool { return opts.SkipTerraform },
 			SkipReason: "terraform destroy disabled",
 			Exec: func(ctx context.Context) error {
@@ -34,12 +36,7 @@ func (p *Phase) destroySteps(cfg *config.Config, opts *Options) []distribution.S
 				p.Log.Info("terraform: infrastructure destruction completed")
 				return nil
 			},
-			OnError: func(err error) {
-				p.Log.Error(fmt.Sprintf("terraform: destruction failed: %v", err))
-				if !opts.Force {
-					p.Log.Warn("terraform: file cleanup will be skipped unless --force is used")
-				}
-			},
+			OnError: phase.WarnOnError(p.Log, "terraform: destruction failed; continuing with file/firewall cleanup (re-run 'okdctl destroy' to retry infrastructure)"),
 		},
 		{
 			ID: StepRemoveRemoteISO, Name: "remove remote ISO",

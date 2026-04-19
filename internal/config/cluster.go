@@ -7,29 +7,40 @@
 // separate yaml tags to maintain.
 package config
 
+// SchemaVersionV1 is the current okdctl.yaml schema marker. Loader rejects
+// configs that do not match — bump this value (and add a migration) only
+// when the schema makes a breaking change.
+const SchemaVersionV1 = "v1"
+
+// Config is the root okdctl.yaml schema.
 type Config struct {
-	Cluster      ClusterConfig          `json:"cluster"`
-	Distribution DistributionConfig     `json:"distribution"`
-	Provider     ProviderConfig         `json:"provider"`
-	Topology     TopologyConfig         `json:"topology"`
-	Networking   NetworkingConfig       `json:"networking"`
-	Addons       map[string]AddonConfig `json:"addons,omitempty"`
-	Files        FilesConfig            `json:"files"`
-	HTTPServer   HTTPServerConfig       `json:"http_server"`
-	Deployment   DeploymentConfig       `json:"deployment"`
-	Disks        DisksConfig            `json:"disks,omitempty"`
+	SchemaVersion string                 `json:"schemaVersion"`
+	Cluster       ClusterConfig          `json:"cluster"`
+	Distribution  DistributionConfig     `json:"distribution"`
+	Provider      ProviderConfig         `json:"provider"`
+	Topology      TopologyConfig         `json:"topology"`
+	Networking    NetworkingConfig       `json:"networking"`
+	Addons        map[string]AddonConfig `json:"addons,omitempty"`
+	Files         FilesConfig            `json:"files"`
+	HTTPServer    HTTPServerConfig       `json:"http_server"`
+	Deployment    DeploymentConfig       `json:"deployment"`
+	Disks         DisksConfig            `json:"disks,omitempty"`
 }
 
+// ClusterConfig configures the cluster's identity (name and base domain).
 type ClusterConfig struct {
 	Name   string `json:"name"`
 	Domain string `json:"domain"`
 }
 
+// DistributionConfig selects the Kubernetes distribution and version.
 type DistributionConfig struct {
 	Type    DistributionType `json:"type"`
 	Version string           `json:"version"`
 }
 
+// TopologyConfig configures the control-plane, worker, and bootstrap node
+// groups plus the VMID base used when numbering provisioned VMs.
 type TopologyConfig struct {
 	ControlPlane NodeConfig `json:"control_plane"`
 	Workers      NodeConfig `json:"workers"`
@@ -37,6 +48,7 @@ type TopologyConfig struct {
 	VMIDBase     int        `json:"vm_id_base,omitempty"`
 }
 
+// NodeConfig configures the count and per-node resources for a node group.
 type NodeConfig struct {
 	Count  int `json:"count"`
 	CPU    int `json:"cpu"`
@@ -44,6 +56,8 @@ type NodeConfig struct {
 	Disk   int `json:"disk"`   // in GB
 }
 
+// NetworkingConfig configures the cluster's machine, pod, and service CIDRs
+// along with gateway, DNS, and optional static-IP / bastion settings.
 type NetworkingConfig struct {
 	MachineCIDR string   `json:"machine_cidr"`
 	PodCIDR     string   `json:"pod_cidr"`
@@ -56,6 +70,8 @@ type NetworkingConfig struct {
 	Bastion  BastionConfig  `json:"bastion,omitempty"`
 }
 
+// StaticIPConfig describes the starting IP, netmask, interface, and DNS
+// used when assigning static addresses to cluster nodes.
 type StaticIPConfig struct {
 	Start     string `json:"start"`
 	Netmask   string `json:"netmask"`
@@ -69,22 +85,28 @@ type BastionConfig struct {
 	VIP string `json:"vip,omitempty"`
 }
 
+// AddonConfig toggles an optional cluster feature and carries its settings.
 type AddonConfig struct {
 	Enabled  bool              `json:"enabled"`
 	Settings map[string]string `json:"settings,omitempty"`
 }
 
+// AdditionalNetwork describes an extra NIC attached to each VM.
 type AdditionalNetwork struct {
 	Bridge  string `json:"bridge"`
 	Model   string `json:"model,omitempty"`
 	VLANTag int    `json:"vlan_tag,omitempty"`
 }
 
+// ProviderConfig selects the infrastructure provider and its settings.
 type ProviderConfig struct {
 	Type    ProviderType   `json:"type"`
 	Proxmox *ProxmoxConfig `json:"proxmox,omitempty"`
 }
 
+// ProxmoxConfig configures the Proxmox VE provider. Credential fields carry
+// json:"-" and are populated from env/config separately — never persisted
+// to okdctl.yaml.
 type ProxmoxConfig struct {
 	Host        string `json:"host"`
 	Node        string `json:"node"`
@@ -111,11 +133,15 @@ type ProxmoxConfig struct {
 	WorkerNodes        []string            `json:"worker_nodes,omitempty"`
 }
 
+// FilesConfig points at the pull-secret and SSH public key files injected
+// into ignition/cloud-init.
 type FilesConfig struct {
 	PullSecret   string `json:"pull_secret"`
 	SSHPublicKey string `json:"ssh_public_key"`
 }
 
+// HTTPServerConfig configures the local HTTP server that hosts ignition
+// payloads during install.
 type HTTPServerConfig struct {
 	Port             int    `json:"port"`
 	Root             string `json:"root"`
@@ -132,6 +158,8 @@ type ToolVersionOverride struct {
 	URLTemplate string `json:"url_template,omitempty"`
 }
 
+// DeploymentConfig tunes deployment-time behavior: Terraform environment,
+// auto-approve, timeouts, release mirror, and per-tool version overrides.
 type DeploymentConfig struct {
 	TerraformEnv      string                         `json:"terraform_env,omitempty"`
 	AutoApprove       bool                           `json:"auto_approve,omitempty"`
@@ -143,6 +171,8 @@ type DeploymentConfig struct {
 	ToolVersions      map[string]ToolVersionOverride `json:"tool_versions,omitempty"`
 }
 
+// DisksConfig sets optional extra data-disk sizes attached to master/worker
+// nodes.
 type DisksConfig struct {
 	WorkerDataSizeGB int `json:"worker_data_size_gb"`
 	MasterDataSizeGB int `json:"master_data_size_gb"`

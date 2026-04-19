@@ -27,6 +27,7 @@ type MultiSelectField struct {
 	defaultValue string
 }
 
+// NewMultiSelectField returns a multi-select field with options unchecked.
 func NewMultiSelectField(label string, options []string) *MultiSelectField {
 	return &MultiSelectField{
 		Label:    label,
@@ -35,6 +36,7 @@ func NewMultiSelectField(label string, options []string) *MultiSelectField {
 	}
 }
 
+// Value returns a comma-separated list of the selected options.
 func (f *MultiSelectField) Value() string {
 	var parts []string
 	for i, opt := range f.Options {
@@ -45,6 +47,8 @@ func (f *MultiSelectField) Value() string {
 	return strings.Join(parts, ",")
 }
 
+// SetValue marks each option present in the comma-separated value as
+// selected.
 func (f *MultiSelectField) SetValue(value string) {
 	f.selected = make([]bool, len(f.Options))
 	f.isDefault = false
@@ -60,31 +64,38 @@ func (f *MultiSelectField) SetValue(value string) {
 	}
 }
 
+// SetDefault initializes the selection from value and marks it as default.
 func (f *MultiSelectField) SetDefault(value string) {
 	f.SetValue(value)
 	f.defaultValue = value
 	f.isDefault = true
 }
 
+// IsDefault reports whether the current selection is the field's default.
 func (f *MultiSelectField) IsDefault() bool {
 	return f.isDefault
 }
 
+// Focus gives the field keyboard focus.
 func (f *MultiSelectField) Focus() tea.Cmd {
 	f.focused = true
 	return nil
 }
 
+// Blur removes keyboard focus from the field.
 func (f *MultiSelectField) Blur() {
 	f.focused = false
 }
 
+// IsFocused reports whether the field currently has focus.
 func (f *MultiSelectField) IsFocused() bool {
 	return f.focused
 }
 
+// SetWidth is a no-op: the field width is governed by option labels.
 func (f *MultiSelectField) SetWidth(_ int) {}
 
+// Validate always returns nil — any non-empty selection is valid.
 func (f *MultiSelectField) Validate() error {
 	return nil
 }
@@ -93,6 +104,7 @@ func (f *MultiSelectField) Error() error {
 	return nil
 }
 
+// Update handles j/k cursor movement and space to toggle selection.
 func (f *MultiSelectField) Update(msg tea.Msg) (FormField, tea.Cmd) {
 	if !f.focused || len(f.Options) == 0 {
 		return f, nil
@@ -121,6 +133,7 @@ func (f *MultiSelectField) Update(msg tea.Msg) (FormField, tea.Cmd) {
 	return f, nil
 }
 
+// View renders the label and checkbox list with the cursor highlighted.
 func (f *MultiSelectField) View() string {
 	labelStyle := lipgloss.NewStyle().Foreground(tui.ColorSlate300)
 	hintStyle := lipgloss.NewStyle().Foreground(tui.ColorSlate500)

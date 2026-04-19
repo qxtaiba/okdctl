@@ -15,10 +15,9 @@ import (
 )
 
 var (
-	deployOutputFile     string
-	deployMinimal        bool
-	deployNonInteractive bool
-	deployYes            bool
+	deployOutputFile string
+	deployMinimal    bool
+	deployYes        bool
 )
 
 var deployCmd = &cobra.Command{
@@ -31,15 +30,11 @@ var deployCmd = &cobra.Command{
 func init() {
 	deployCmd.Flags().StringVarP(&deployOutputFile, "output", "o", "okdctl.yaml", "output file for configuration")
 	deployCmd.Flags().BoolVar(&deployMinimal, "minimal", false, "use minimal defaults (single-node cluster)")
-	deployCmd.Flags().BoolVar(&deployNonInteractive, "non-interactive", false, "use all defaults without prompts")
-	deployCmd.Flags().BoolVarP(&deployYes, "yes", "y", false, "skip prompts, use defaults (alias for --non-interactive)")
+	deployCmd.Flags().BoolVarP(&deployYes, "yes", "y", false, "skip prompts, use defaults")
 }
 
 func runDeploy(cmd *cobra.Command, _ []string) error {
 	ctx := cmd.Context()
-	if deployYes {
-		deployNonInteractive = true
-	}
 	configExists := false
 	var cfg *config.Config
 
@@ -48,8 +43,8 @@ func runDeploy(cmd *cobra.Command, _ []string) error {
 		loader := config.NewLoader()
 		loadedCfg, loadErr := loader.LoadFile(deployOutputFile)
 		if loadErr != nil {
-			tui.Warn(fmt.Sprintf("existing config could not be loaded: %v", loadErr))
-			if deployNonInteractive {
+			tui.Warn("existing config could not be loaded", tui.LF("err", loadErr))
+			if deployYes {
 				return fmt.Errorf("cannot proceed in non-interactive mode with invalid config: %w", loadErr)
 			}
 			tui.Info("starting fresh with defaults")
@@ -67,7 +62,7 @@ func runDeploy(cmd *cobra.Command, _ []string) error {
 		}
 	}
 
-	if deployNonInteractive {
+	if deployYes {
 		return saveConfig(cfg, deployOutputFile)
 	}
 
@@ -130,7 +125,7 @@ func saveConfig(cfg *config.Config, path string) error {
 func runFullDeployment(ctx context.Context, cfg *config.Config) error {
 	envPath := credentials.EnvFilePath(deployOutputFile)
 	if err := credentials.LoadEnvFile(envPath); err != nil {
-		tui.Warn(fmt.Sprintf("failed to load credentials from %s: %v", envPath, err))
+		tui.Warn("failed to load credentials", tui.LF("path", envPath), tui.LF("err", err))
 	}
 
 	creds := credentials.GetProxmoxCredentials(cfg)

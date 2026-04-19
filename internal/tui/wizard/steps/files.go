@@ -9,6 +9,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 )
 
+// FilesStepDefinition declares the files / ignition-server step fields.
 var FilesStepDefinition = wizard.StepDefinition{
 	ID:           wizard.StepIDFiles,
 	Title:        "files & ignition",
@@ -89,6 +90,7 @@ var FilesStepDefinition = wizard.StepDefinition{
 	},
 }
 
+// NewFilesStep returns the files / ignition wizard step.
 func NewFilesStep() (step *wizard.DataDrivenStep, _ any) {
 	step = wizard.NewDataDrivenStep(&FilesStepDefinition)
 	return step, nil

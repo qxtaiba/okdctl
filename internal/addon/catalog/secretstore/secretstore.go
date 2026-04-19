@@ -35,8 +35,10 @@ func init() {
 	}
 }
 
+// SecretStore is the 1Password Connect secret-bootstrap addon.
 type SecretStore struct{}
 
+// Info returns the addon metadata block used by the registry.
 func (s *SecretStore) Info() addon.AddonInfo {
 	return addon.AddonInfo{
 		Name:           "secretstore",
@@ -49,6 +51,9 @@ func (s *SecretStore) Info() addon.AddonInfo {
 	}
 }
 
+// Install creates the 1Password Connect credentials and token secrets in the
+// cluster. When no secret source files are present the method logs setup
+// instructions and returns nil (non-fatal).
 func (s *SecretStore) Install(ctx context.Context, env *addon.Environment) error {
 	secretsDir, credPath, tokenPath := s.secretFilePaths(env)
 
@@ -98,6 +103,9 @@ func (s *SecretStore) Install(ctx context.Context, env *addon.Environment) error
 	return nil
 }
 
+// Verify checks that each secret created by Install exists in the cluster.
+// Verification mirrors Install's per-file contract to avoid contradictory
+// outcomes on partial installs.
 func (s *SecretStore) Verify(ctx context.Context, env *addon.Environment) error {
 	// Verify mirrors Install's per-file contract — Install creates each secret
 	// independently based on which source file is present, so Verify must gate
@@ -127,35 +135,42 @@ func (s *SecretStore) Verify(ctx context.Context, env *addon.Environment) error 
 	return nil
 }
 
+// Uninstall deletes the credentials and token secrets. Deletion failures are
+// logged but do not abort the sequence.
 func (s *SecretStore) Uninstall(ctx context.Context, env *addon.Environment) error {
 	ns := defaultNamespace
 	env.Logger.Info("secretstore: removing 1password connect secrets")
 	if _, err := env.Exec.Run(ctx, "oc", "delete", "secret", credentialsSecretName, "-n", ns); err != nil {
-		env.Logger.Warn(fmt.Sprintf("secretstore: delete %s: %v", credentialsSecretName, err))
+		env.Logger.Warn("secretstore: delete secret failed", "secret", credentialsSecretName, "err", err)
 	}
 	if _, err := env.Exec.Run(ctx, "oc", "delete", "secret", tokenSecretName, "-n", ns); err != nil {
-		env.Logger.Warn(fmt.Sprintf("secretstore: delete %s: %v", tokenSecretName, err))
+		env.Logger.Warn("secretstore: delete secret failed", "secret", tokenSecretName, "err", err)
 	}
 	return nil
 }
 
+// RequiredTools lists the external binaries needed to decrypt source files.
 func (s *SecretStore) RequiredTools() []addon.ToolSpec {
 	return []addon.ToolSpec{
 		{Name: "sops", Description: "Mozilla SOPS for decrypting secret files (used if files are sops-encrypted)"},
 	}
 }
 
+// DefaultSettings returns the built-in defaults for secretstore's settings.
 func (s *SecretStore) DefaultSettings() map[string]string {
 	return map[string]string{
 		SettingSecretsDir: defaultSecretsDir,
 	}
 }
 
+// ValidateSettings returns no errors — the secrets directory is checked at
+// install time.
 func (s *SecretStore) ValidateSettings(_ map[string]string) []string {
 	// No validation errors — secrets_dir defaults are fine, path is checked at install time
 	return nil
 }
 
+// WizardFields returns the wizard input fields the secretstore contributes.
 func (s *SecretStore) WizardFields() []addon.WizardField {
 	return []addon.WizardField{
 		{Key: SettingSecretsDir, Label: "Secrets Directory", Default: defaultSecretsDir, Help: "Directory containing 1password-credentials.json and 1password-token.txt (plaintext or sops-encrypted)"},

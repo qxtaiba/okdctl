@@ -10,11 +10,14 @@ import (
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 )
 
+// ResourcesStepState pairs the resources step with the Config it edits so
+// callers can inspect values after the wizard completes.
 type ResourcesStepState struct {
 	Step *wizard.DataDrivenStep
 	Cfg  *config.Config
 }
 
+// ResourcesStepDefinition declares the node-resources step fields.
 var ResourcesStepDefinition = wizard.StepDefinition{
 	ID:           wizard.StepIDResources,
 	Title:        "node resources",
@@ -122,6 +125,7 @@ var ResourcesStepDefinition = wizard.StepDefinition{
 	},
 }
 
+// NewResourcesStep returns the resources wizard step and its state.
 func NewResourcesStep() (*wizard.DataDrivenStep, *ResourcesStepState) {
 	step := wizard.NewDataDrivenStep(&ResourcesStepDefinition)
 

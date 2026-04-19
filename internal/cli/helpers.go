@@ -40,7 +40,7 @@ func loadConfig(configFile string) (*config.Config, error) {
 func handleCredentials(cfg *config.Config) *credentials.ProxmoxCredentials {
 	envPath := credentials.EnvFilePath(cfgFile)
 	if err := credentials.LoadEnvFile(envPath); err != nil {
-		tui.Warn(fmt.Sprintf("failed to load credentials from %s: %v", envPath, err))
+		tui.Warn("failed to load credentials", tui.LF("path", envPath), tui.LF("err", err))
 	}
 
 	creds := credentials.GetProxmoxCredentials(cfg)
@@ -139,7 +139,7 @@ func executeFullDeployment(ctx context.Context, cfg *config.Config, opts deploym
 	workDir := filepath.Join(projectRoot, "okd-install")
 	defer func() {
 		if chownErr := system.ChownTreeToInvokingUser(workDir); chownErr != nil {
-			tui.Warn(fmt.Sprintf("workdir chown back to user incomplete: %v", chownErr))
+			tui.Warn("workdir chown back to user incomplete", tui.LF("err", chownErr))
 		}
 	}()
 

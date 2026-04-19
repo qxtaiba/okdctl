@@ -82,7 +82,7 @@ okdctl deploy           run the wizard, then deploy the cluster
 okdctl destroy          tear down a cluster
 okdctl update-ingress   switch ingress controllers to LoadBalancer IPs
 okdctl doctor           environment preflight check
-okdctl version          print version, git commit, build date
+okdctl --version        print version, git commit, build date
 ```
 
 First run of `deploy` launches the wizard and writes `okdctl.yaml` plus
@@ -100,9 +100,7 @@ A deploy runs three phases:
    LoadBalancer IPs if an LB provider is installed; installs any enabled addons.
 
 Each phase is a sequence of steps with rollback on failure. Re-running
-`deploy` after an interruption picks up where it left off. Bring your own infra
-with `--skip-terraform` (existing VMs), `--skip-isos` (your own ignition),
-`--skip-haproxy`, or `--skip-dns`.
+`deploy` after an interruption picks up where it left off.
 
 Phase internals, addon system, and wizard architecture live in
 [`docs/architecture/`](docs/architecture/). Per-addon reference:
@@ -152,9 +150,9 @@ output goes in bug reports.
 - **Bootstrap VM never comes up.** Networking. The ignition URL must be
   reachable from the node network (HAProxy IP, port 8080, path
   `/ignition/<role>.ign`). Doctor probes this.
-- **`dnsmasq` fails on port 53.** `systemd-resolved` has it. Either set
-  `DNSStubListener=no` in `/etc/systemd/resolved.conf`, or run
-  `okdctl deploy --skip-dns` and handle DNS yourself.
+- **`dnsmasq` fails on port 53.** `systemd-resolved` has it. Set
+  `DNSStubListener=no` in `/etc/systemd/resolved.conf` and restart
+  `systemd-resolved`, then retry `okdctl deploy`.
 - **`oc` not found mid-setup.** okdctl installs it into
   `/usr/local/bin`, which isn't on `$PATH` in the current shell until you
   re-source your rc.
@@ -172,9 +170,8 @@ sudo rm /usr/local/bin/okdctl           # or: apt remove okdctl / dnf remove okd
 ```
 
 `destroy` removes the dnsmasq drop-in, HAProxy config block, firewall rules
-okdctl added, and the Terraform-provisioned VMs. `--remove-packages`
-also uninstalls `haproxy`, `dnsmasq`, `httpd` — by default they stay, since
-you may be using them for other things.
+okdctl added, the Terraform-provisioned VMs, and the `haproxy`, `dnsmasq`,
+and `httpd` packages it installed.
 
 ## Verifying a release
 

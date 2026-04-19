@@ -43,6 +43,7 @@ type NodePlacementStep struct {
 	inner *wizard.DataDrivenStep
 }
 
+// NewNodePlacementStep constructs the node placement wizard step.
 func NewNodePlacementStep() (step, state *NodePlacementStep) {
 	sp := spinner.New()
 	sp.Spinner = spinner.Dot
@@ -61,6 +62,7 @@ func NewNodePlacementStep() (step, state *NodePlacementStep) {
 	return step, step
 }
 
+// ShouldShow shows this step only when the Proxmox provider is selected.
 func (s *NodePlacementStep) ShouldShow(cfg *config.Config) bool {
 	if cfg.Provider.Type != config.ProviderProxmox {
 		return false
@@ -69,6 +71,7 @@ func (s *NodePlacementStep) ShouldShow(cfg *config.Config) bool {
 	return true
 }
 
+// Init kicks off the Proxmox discovery fetch and spins the loading indicator.
 func (s *NodePlacementStep) Init() tea.Cmd {
 	if s.cfg == nil || s.cfg.Provider.Proxmox == nil {
 		return nil
@@ -190,6 +193,8 @@ func (s *NodePlacementStep) buildInnerStep(disc *proxmoxDiscovery, nodeNames []s
 	s.inner.LoadFromConfig(s.cfg)
 }
 
+// Update handles discovery results, spinner ticks, and forwards other
+// input to the built inner form once discovery completes.
 func (s *NodePlacementStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 	switch msg := msg.(type) {
 	case discoveryCompleteMsg:
@@ -231,6 +236,7 @@ func (s *NodePlacementStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 	return s, nil
 }
 
+// View renders either the loading spinner or the inner placement form.
 func (s *NodePlacementStep) View(width, height int) string {
 	s.SetSize(width, height)
 
@@ -255,6 +261,7 @@ func (s *NodePlacementStep) View(width, height int) string {
 	return header
 }
 
+// Apply delegates to the inner form's Apply when one has been built.
 func (s *NodePlacementStep) Apply(cfg *config.Config) error {
 	if s.inner != nil {
 		return s.inner.Apply(cfg)
@@ -262,6 +269,7 @@ func (s *NodePlacementStep) Apply(cfg *config.Config) error {
 	return nil
 }
 
+// SetFocused propagates focus to the inner form.
 func (s *NodePlacementStep) SetFocused(focused bool) {
 	s.BaseStep.SetFocused(focused)
 	if s.inner != nil {
@@ -269,6 +277,7 @@ func (s *NodePlacementStep) SetFocused(focused bool) {
 	}
 }
 
+// ShortHelp returns the step's help bar or nil while discovering.
 func (s *NodePlacementStep) ShortHelp() []wizard.KeyBinding {
 	if s.phase == phaseDiscovering {
 		return nil

@@ -61,7 +61,7 @@ func runCleanup(cmd *cobra.Command, _ []string) error {
 	workDir := filepath.Join(projectRoot, "okd-install")
 	defer func() {
 		if chownErr := system.ChownTreeToInvokingUser(workDir); chownErr != nil {
-			tui.Warn(fmt.Sprintf("workdir chown back to user incomplete: %v", chownErr))
+			tui.Warn("workdir chown back to user incomplete", tui.LF("err", chownErr))
 		}
 	}()
 

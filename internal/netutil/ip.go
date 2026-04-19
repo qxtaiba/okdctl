@@ -5,6 +5,8 @@ import (
 	"net/netip"
 )
 
+// DefaultVIPLastOctet is the final IPv4 octet used when deriving a VIP from
+// a static-IP range without an explicit override.
 const DefaultVIPLastOctet = 10
 
 // CIDRToNetmask converts an IPv4 CIDR like "192.168.1.0/24" to its dotted
@@ -26,6 +28,8 @@ func CIDRToNetmask(cidr string) (string, error) {
 	return fmt.Sprintf("%d.%d.%d.%d", byte(mask>>24), byte(mask>>16), byte(mask>>8), byte(mask)), nil
 }
 
+// ValidateIPRangeInCIDR checks that startIP and the next count-1 addresses
+// all fall inside cidr. Only IPv4 is supported.
 func ValidateIPRangeInCIDR(startIP string, count int, cidr string) error {
 	if count <= 0 {
 		return fmt.Errorf("count must be positive: %d", count)
@@ -58,6 +62,8 @@ func ValidateIPRangeInCIDR(startIP string, count int, cidr string) error {
 	return nil
 }
 
+// CalculateVMIP returns the IPv4 address obtained by adding index to startIP.
+// Negative index is rejected, and 32-bit overflow is guarded.
 func CalculateVMIP(startIP string, index int) (string, error) {
 	if index < 0 {
 		return "", fmt.Errorf("index cannot be negative: %d", index)
@@ -95,6 +101,8 @@ func ResolveVIP(explicitVIP, staticIPStart string) (string, error) {
 	return DeriveVIPFromStaticIP(staticIPStart)
 }
 
+// DeriveVIPFromStaticIP replaces the last octet of staticIPStart with
+// DefaultVIPLastOctet to yield a conventional VIP in the same /24.
 func DeriveVIPFromStaticIP(staticIPStart string) (string, error) {
 	addr, err := netip.ParseAddr(staticIPStart)
 	if err != nil || !addr.Is4() {
@@ -104,6 +112,7 @@ func DeriveVIPFromStaticIP(staticIPStart string) (string, error) {
 	return fmt.Sprintf("%d.%d.%d.%d", octets[0], octets[1], octets[2], DefaultVIPLastOctet), nil
 }
 
+// IPInCIDR reports whether ip is contained within cidr.
 func IPInCIDR(ip, cidr string) (bool, error) {
 	addr, err := netip.ParseAddr(ip)
 	if err != nil {
@@ -118,6 +127,7 @@ func IPInCIDR(ip, cidr string) (bool, error) {
 	return prefix.Contains(addr), nil
 }
 
+// CIDRsOverlap reports whether cidr1 and cidr2 share any addresses.
 func CIDRsOverlap(cidr1, cidr2 string) (bool, error) {
 	p1, err := netip.ParsePrefix(cidr1)
 	if err != nil {

@@ -49,6 +49,8 @@ func (s *summaryBuilder) String() string {
 	return s.b.String()
 }
 
+// ValidationSummary renders a config validation result for CLI output,
+// listing each error with field context when present.
 func ValidationSummary(result *config.ValidationResult) string {
 	var sb strings.Builder
 
@@ -69,6 +71,8 @@ func ValidationSummary(result *config.ValidationResult) string {
 	return sb.String()
 }
 
+// PostDeploySummary renders the success summary shown after a cluster deploy
+// completes, including access URLs, kubeadmin credentials, and step results.
 func PostDeploySummary(cfg *config.Config, result *postinstall.Result, steps []distribution.StepResult) string {
 	clusterFQDN := cfg.Cluster.Name + "." + cfg.Cluster.Domain
 	consoleURL := fmt.Sprintf("https://console-openshift-console.apps.%s", clusterFQDN)
@@ -191,6 +195,8 @@ func InterruptSummary(steps []distribution.StepResult, resumeCmd string) string 
 	return "\n" + tui.BoxedSectionCompact(sb.String(), "interrupted", tui.DefaultBoxWidth) + "\n"
 }
 
+// UpdateIngressSummary renders the result of the update-ingress subcommand,
+// showing converted controllers and DNS record changes.
 func UpdateIngressSummary(result *postinstall.UpdateIngressResult) string {
 	sb := newSummaryBuilder()
 	sb.newline()

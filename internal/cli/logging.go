@@ -28,8 +28,18 @@ func configureLogging() error {
 		stderrW = io.MultiWriter(os.Stderr, f)
 	}
 
+	// --quiet and --verbose are sugar over --log-level; mutual exclusion is
+	// enforced at flag registration so at most one is set here.
+	effectiveLevel := logLevel
+	switch {
+	case logQuiet:
+		effectiveLevel = "error"
+	case logVerbose:
+		effectiveLevel = "debug"
+	}
+
 	stderrIsTTY := term.IsTerminal(int(os.Stderr.Fd())) //nolint:gosec // G115: Fd() always fits int on supported platforms
 	progressBars := stderrIsTTY && logFormat != "json"
 
-	return tui.ConfigureLoggers(logLevel, logFormat, stdoutW, stderrW, progressBars)
+	return tui.ConfigureLoggers(effectiveLevel, logFormat, stdoutW, stderrW, progressBars)
 }

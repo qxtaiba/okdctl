@@ -404,6 +404,77 @@ These made the audit but are not scheduled now. Re-evaluate on
 | L4 | `okdctl upgrade` (in-place OKD upgrade) | Strategic; needs design |
 | L6 | OpenTelemetry tracing hooks | N8 step-timing covers 80% of value |
 
+### Tier D — dependency items from 2026-04-18 audit
+
+Filed as roadmap items so `/roadmap-pickup` can fan them out when
+bandwidth opens. Each references the audit finding ID for diff tracking.
+
+#### D1 — document go-proxmox v0.x abandonment plan
+- **Status:** not started
+- **Category:** deps
+- **Effort:** hours
+- **Impact:** medium (supply-chain risk reduction)
+- **Finding:** `dep:33ef32bf:go-proxmox-v0x-floor`
+- **Evidence:** `go.mod:13` — `go-proxmox v0.4.1` (v0.x, single maintainer)
+  on the Proxmox discovery critical path (`internal/tui/wizard/steps/proxmox_discovery.go:11`).
+- **Acceptance:** add a new `## Dependencies` section in `CLAUDE.md`
+  listing the permissive-license rule, v0.x-dep justification format,
+  action SHA-pin expectation, and an abandonment fallback plan for
+  `go-proxmox` (~200 LOC REST-only rewrite if upstream disappears).
+- **Depends on:** none
+
+#### D2 — evaluate progressbar swap for bubbles/progress
+- **Status:** not started
+- **Category:** deps (transitive-weight)
+- **Effort:** days
+- **Impact:** small (dep-count reduction)
+- **Finding:** `dep:33ef32bf:schollz-progressbar-transitive-weight`
+- **Evidence:** `go.mod:14`; single call site `internal/download/download.go:16`.
+  Pulls `mitchellh/colorstring` (2019-stale) as a transitive.
+- **Acceptance:** evaluate `charm.land/bubbles/v2/progress` as replacement
+  (already in tree); or hand-roll ~30 LOC. TTY/SIGWINCH/pipe-detection
+  paths are battle-tested — plan first, then swap.
+- **Depends on:** none
+
+#### D3 — pin tool-install @latest references
+- **Status:** not started
+- **Category:** deps (reproducibility)
+- **Effort:** hours
+- **Impact:** small
+- **Finding:** `dep:33ef32bf:makefile-tool-install-latest`
+- **Evidence:** `Makefile:80`, `.github/workflows/ci.yml:54,80` —
+  `go install ...@latest` in three places.
+- **Acceptance:** convert to Go 1.24+ `tools` directive in `go.mod`, or
+  replace every `@latest` with an explicit `@vX.Y.Z`. CI runs
+  identically; locally `make tools` produces reproducible versions.
+- **Depends on:** none
+
+#### D4 — tighten terraform version floor in CI
+- **Status:** not started
+- **Category:** deps (reproducibility)
+- **Effort:** hours
+- **Impact:** small
+- **Finding:** `dep:33ef32bf:terraform-version-floor-loose`
+- **Evidence:** `.github/workflows/ci.yml:89` — `terraform_version: "1.10"`
+  resolves to any 1.10.x.
+- **Acceptance:** pin to an explicit `1.10.x` (e.g. `1.10.3`); bump
+  explicitly on PR when a new patch is required. Same destructive-infra
+  surface that `validate-terraform` covers.
+- **Depends on:** none
+
+#### D5 — plan gorilla/websocket removal path
+- **Status:** not started
+- **Category:** deps (maintenance-signal)
+- **Effort:** hours (plan), days (if exec)
+- **Impact:** small
+- **Finding:** `dep:33ef32bf:gorilla-websocket-maintenance`
+- **Evidence:** `go.mod:41` — 5+yr-old WebSocket lib pulled transitively
+  via go-proxmox. Not in okdctl's reachable call graph.
+- **Acceptance:** write a 1-paragraph CLAUDE.md note confirming
+  non-reachability; track go-proxmox upstream for a `coder/websocket`
+  migration and pick up whenever they bump.
+- **Depends on:** `D1` (justifies the same dep audit surface).
+
 ## Explicitly skipped
 
 Do not revisit these without a strong new signal.
@@ -825,3 +896,27 @@ but link evidence.
 | L15 | Air-gap feasibility + scoping doc | Workstream (design-doc-first) |
 | R1 | Addon category model + design doc | Workstream (design-doc-first) |
 | R2 | Specific addons after R1 | Deferred conversation |
+
+## Scaffolding — verify intent (no code change)
+
+Captured from the 2026-04-18 full audit. Per MEMORY.md §scaffolding, these
+are exported-but-unreferenced symbols that MAY be future-API-shaped. Do
+NOT delete without first confirming against the roadmap (either with a
+code owner or by resolving the symmetric-sibling it pairs with). Each
+entry lists the stable finding ID so subsequent audit runs mark it
+resolved when the symmetric caller lands.
+
+| Finding ID | Location | Why kept | Symmetric sibling |
+|---|---|---|---|
+| `api:25fa1be8:export-no-caller-configure` | `internal/distribution/okd/firewall/firewall.go:88` | `Configure` has no caller; `RemoveRules` (sibling) has one. Shaped for a future "configure an arbitrary port set" verb. | `RemoveRules` |
+| `api:66f217c9:export-no-caller-getlatestforminor` | `internal/distribution/okd/releases/okd.go:54` | `GetLatestForMinor` / `GetLatestStable` unreferenced; `FetchVersions` is used. Shaped for `okdctl releases latest [--minor N.M]`. | `FetchVersions` |
+| `api:1d5afa08:export-no-caller-shortversion` | `internal/distribution/okd/releases/types.go:76` | `ShortVersion` unreferenced; `DisplayName`, `Major`, `Minor` are used. | `DisplayName` |
+| `api:98723e5d:export-no-caller-validateclusteraccess` | `internal/distribution/okd/install/flux.go:15` | `ValidateClusterAccess` / `SetupClusterAccess` / `SetupKubeconfig` only called in-package; Phase itself is exported one hop away from the CLI. | `Phase` |
+| `smell:2c4d8e6b:unused-metadata-field` | `internal/addon/addon.go:24` | `AddonInfo.Category` populated ("gitops", "secrets") but unread. Shaped for a category-grouped addon listing. | — (see R1 Addon category model) |
+| `smell:2be6306e:scaffolding-registry-api` | `internal/addon/registry.go:78` | `addon.IsRegistered` unreferenced but is the symmetric sibling of `Register`/`Get`/`All`/`Enabled`/`Names`. | `Register` |
+| `err:d6b325cb:vocab-ad-hoc-sentinel` | `internal/infrastructure/proxmox/types.go:5` | `ErrNotConnected`, `ErrTerraformNotConfigured` exist with no `errors.Is` callers but pair symmetrically with a future `Connected()` probe. | `Connect` |
+| `err:a4001485:vocab-gap-cert-pending` | `internal/errtypes/errtypes.go:5` | errtypes vocabulary covers Config/Network/Cluster/Auth but has no typed error for `Recoverable` or `CertPending` — both concrete error states named in the coordinator memo. | `ConfigError`, `ClusterError` |
+
+**Review cadence:** re-check on every audit sweep. If a symmetric
+sibling never materialises for ≥6 months and no roadmap item targets
+the symbol, downgrade to a delete candidate then.

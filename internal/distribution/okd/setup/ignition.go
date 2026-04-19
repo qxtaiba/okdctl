@@ -27,6 +27,9 @@ func renderAndWrite(render func() (string, error), path string, mode os.FileMode
 	return nil
 }
 
+// GenerateInstallConfig renders install-config.yaml into outputDir using
+// pull-secret and SSH key paths from cfg, then keeps a .backup copy before
+// openshift-install consumes the original during manifest generation.
 func (p *Phase) GenerateInstallConfig(_ context.Context, cfg *config.Config, outputDir string) error {
 	if err := system.EnsureDir(outputDir); err != nil {
 		return fmt.Errorf("failed to create output directory: %w", err)
@@ -78,6 +81,7 @@ func (p *Phase) GenerateInstallConfig(_ context.Context, cfg *config.Config, out
 	return nil
 }
 
+// GenerateManifests invokes "openshift-install create manifests" in clusterDir.
 func (p *Phase) GenerateManifests(ctx context.Context, clusterDir string) error {
 	_, err := p.Exec.RunChecked(ctx, "openshift-install", "create", "manifests", "--dir", clusterDir)
 	if err != nil {
@@ -87,6 +91,9 @@ func (p *Phase) GenerateManifests(ctx context.Context, clusterDir string) error 
 	return nil
 }
 
+// InjectCustomManifests copies user-supplied YAML from
+// automation/config/manifests into clusterDir/openshift/, returning the
+// count of files injected.
 func (p *Phase) InjectCustomManifests(_ context.Context, projectRoot, clusterDir string) (int, error) {
 	customDir := filepath.Join(projectRoot, "automation", "config", "manifests")
 
@@ -127,6 +134,9 @@ func (p *Phase) InjectCustomManifests(_ context.Context, projectRoot, clusterDir
 	return count, nil
 }
 
+// InjectCompactClusterManifests adds an ingress-controller placement
+// manifest when the cluster has no workers (compact topology). With
+// workers present, this is a no-op.
 func (p *Phase) InjectCompactClusterManifests(_ context.Context, clusterDir string, workerCount, masterCount int) error {
 	if workerCount > 0 {
 		return nil
@@ -146,6 +156,8 @@ func (p *Phase) InjectCompactClusterManifests(_ context.Context, clusterDir stri
 	)
 }
 
+// GenerateIgnitionConfigs invokes "openshift-install create ignition-configs"
+// and validates that each expected .ign file exists and is non-trivial in size.
 func (p *Phase) GenerateIgnitionConfigs(ctx context.Context, clusterDir string) error {
 	_, err := p.Exec.RunChecked(ctx, "openshift-install", "create", "ignition-configs", "--dir", clusterDir)
 	if err != nil {
@@ -159,6 +171,8 @@ func (p *Phase) GenerateIgnitionConfigs(ctx context.Context, clusterDir string) 
 	return nil
 }
 
+// ValidateIgnitionFiles verifies that bootstrap.ign, master.ign, and
+// worker.ign exist in clusterDir and are at least 1 KiB.
 func (p *Phase) ValidateIgnitionFiles(clusterDir string) error {
 	requiredFiles := []string{"bootstrap.ign", "master.ign", "worker.ign"}
 	minSize := int64(1024) // ignition files are typically much larger

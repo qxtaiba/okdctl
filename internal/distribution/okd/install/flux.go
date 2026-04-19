@@ -12,6 +12,8 @@ import (
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
+// ValidateClusterAccess runs "oc whoami" to confirm the kubeconfig points at
+// a live cluster and logs the server version when available.
 func (p *Phase) ValidateClusterAccess(ctx context.Context) error {
 	cmdRunner := p.Exec
 
@@ -24,7 +26,7 @@ func (p *Phase) ValidateClusterAccess(ctx context.Context) error {
 
 	user := strings.TrimSpace(result.Stdout)
 	if user == "" {
-		return fmt.Errorf("cluster authentication returned empty user")
+		return &errtypes.ClusterError{Msg: "cluster authentication returned empty user"}
 	}
 
 	p.Log.Info(fmt.Sprintf("cluster: authenticated as %s", user))
@@ -43,6 +45,9 @@ func (p *Phase) ValidateClusterAccess(ctx context.Context) error {
 	return nil
 }
 
+// SetupClusterAccess installs the generated kubeconfig into the invoking
+// user's ~/.kube/config, chowning paths so the file is usable after any
+// sudo re-exec returns.
 func (p *Phase) SetupClusterAccess(_ context.Context, clusterDir string) error {
 	// Resolve the invoking user's home (not root's) so files land where
 	// the user will look for them after the re-exec'd deploy returns.
@@ -56,7 +61,7 @@ func (p *Phase) SetupClusterAccess(_ context.Context, clusterDir string) error {
 		return fmt.Errorf("failed to create .kube directory: %w", err)
 	}
 	if err := system.ChownToInvokingUser(kubeDir); err != nil {
-		p.Log.Warn(fmt.Sprintf("kubeconfig: could not chown .kube dir: %v", err))
+		p.Log.Warn("kubeconfig: could not chown .kube dir", "err", err)
 	}
 
 	srcKubeconfig := filepath.Join(clusterDir, "auth", "kubeconfig")
@@ -65,7 +70,7 @@ func (p *Phase) SetupClusterAccess(_ context.Context, clusterDir string) error {
 	if system.FileExists(destKubeconfig) {
 		backupPath := destKubeconfig + ".backup." + time.Now().Format("20060102-150405")
 		if err := system.CopyFileMode(destKubeconfig, backupPath, 0o600); err != nil {
-			p.Log.Warn(fmt.Sprintf("kubeconfig: could not backup existing file: %v", err))
+			p.Log.Warn("kubeconfig: could not backup existing file", "err", err)
 		} else {
 			_ = system.ChownToInvokingUser(backupPath)
 			p.Log.Info(fmt.Sprintf("kubeconfig: backed up existing file to %s", backupPath))
@@ -76,11 +81,11 @@ func (p *Phase) SetupClusterAccess(_ context.Context, clusterDir string) error {
 		return fmt.Errorf("failed to copy kubeconfig: %w", err)
 	}
 	if err := system.ChownToInvokingUser(destKubeconfig); err != nil {
-		p.Log.Warn(fmt.Sprintf("kubeconfig: could not chown config: %v", err))
+		p.Log.Warn("kubeconfig: could not chown config", "err", err)
 	}
 
 	if err := p.addKubeconfigToBashrc(homeDir, destKubeconfig); err != nil {
-		p.Log.Warn(fmt.Sprintf("kubeconfig: could not update .bashrc: %v", err))
+		p.Log.Warn("kubeconfig: could not update .bashrc", "err", err)
 	}
 
 	return nil

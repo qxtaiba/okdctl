@@ -14,6 +14,9 @@ import (
 	"github.com/qxtaiba/okdctl/internal/logutil"
 )
 
+// K8sClient is a thin kubectl/oc wrapper used by the install and
+// postinstall phases for CSR approval, readiness checks, and resource
+// queries.
 type K8sClient struct {
 	CLI string
 
@@ -23,24 +26,29 @@ type K8sClient struct {
 	logger *slog.Logger
 }
 
+// Option configures a K8sClient at construction time.
 type Option func(*K8sClient)
 
+// WithCLI overrides the CLI binary name (defaults to "kubectl", upgraded to
+// "oc" when available).
 func WithCLI(cli string) Option {
 	return func(c *K8sClient) { c.CLI = cli }
 }
 
+// WithKubeconfig points the client at a specific kubeconfig path.
 func WithKubeconfig(path string) Option {
 	return func(c *K8sClient) { c.Kubeconfig = path }
 }
 
+// WithLogger injects a structured logger. Nil logger falls back to
+// logutil.NopLogger.
 func WithLogger(l *slog.Logger) Option {
-	return func(c *K8sClient) {
-		if l != nil {
-			c.logger = l
-		}
-	}
+	return func(c *K8sClient) { c.logger = logutil.OrNop(l) }
 }
 
+// NewK8sClient builds a K8sClient using KUBECONFIG from the environment when
+// no explicit path is provided and prefers "oc" over "kubectl" when both are
+// on PATH.
 func NewK8sClient(opts ...Option) *K8sClient {
 	c := &K8sClient{
 		CLI:    "kubectl",

@@ -10,6 +10,9 @@ import (
 	"github.com/qxtaiba/okdctl/internal/logutil"
 )
 
+// BaseOptions is the common option set every phase's own Options embeds —
+// the project checkout root, per-run workDir, Debug flag, and the terraform
+// environment name (production|staging|...).
 type BaseOptions struct {
 	ProjectRoot  string
 	WorkDir      string
@@ -17,12 +20,21 @@ type BaseOptions struct {
 	TerraformEnv string
 }
 
+// Default paths for artifacts the bastion phase code writes or removes.
+// Values follow the stock RHEL-family layout; Debian-family paths are
+// resolved through platform.OS helpers instead.
 const (
+	// DefaultHAProxyConfigPath is where HAProxy reads its live config.
 	DefaultHAProxyConfigPath = "/etc/haproxy/haproxy.cfg"
+	// DefaultHAProxyBackupPath is the reboot-safe snapshot setup writes
+	// before rewriting DefaultHAProxyConfigPath.
 	DefaultHAProxyBackupPath = "/etc/haproxy/haproxy.cfg.backup"
-	DefaultHTTPServerRoot    = "/var/www/html"
-	DefaultBinDir            = "/usr/local/bin"
-	DefaultDNSMasqConfigDir  = "/etc/dnsmasq.d"
+	// DefaultHTTPServerRoot is where the bastion's httpd serves ignition.
+	DefaultHTTPServerRoot = "/var/www/html"
+	// DefaultBinDir is where setup installs okd/terraform/yq/helm/sops.
+	DefaultBinDir = "/usr/local/bin"
+	// DefaultDNSMasqConfigDir is where per-cluster dnsmasq fragments live.
+	DefaultDNSMasqConfigDir = "/etc/dnsmasq.d"
 )
 
 // ExternalToolBinaries returns the names of tool binaries installed into
@@ -36,10 +48,14 @@ func ExternalToolBinaries() []string {
 	}
 }
 
+// ClusterConfigDir returns the path where openshift-install writes its
+// install-config.yaml and the generated kubeconfig/auth bundle.
 func ClusterConfigDir(workDir string) string {
 	return filepath.Join(workDir, "cluster-config")
 }
 
+// GetTerraformEnv returns the active terraform environment name from the
+// config, defaulting to "production" when unset.
 func GetTerraformEnv(cfg *config.Config) string {
 	if cfg.Deployment.TerraformEnv != "" {
 		return cfg.Deployment.TerraformEnv
@@ -47,22 +63,42 @@ func GetTerraformEnv(cfg *config.Config) string {
 	return "production"
 }
 
+// BasePhase is the shared state every phase (setup, install, postinstall,
+// destroy, cleanup) embeds — command executor, logger, and the okdctl version
+// string used for provenance in generated artifacts.
 type BasePhase struct {
 	Exec    *executor.Executor
 	Log     *slog.Logger
 	Version string
 }
 
-func NewBasePhase(exec *executor.Executor, logger *slog.Logger, version string) BasePhase {
-	if logger == nil {
-		logger = logutil.NopLogger
+// BasePhaseOption configures a BasePhase at construction time.
+type BasePhaseOption func(*BasePhase)
+
+// WithExecutor sets the subprocess executor. Nil is tolerated; NewBasePhase
+// materializes a fresh executor wired to the same logger.
+func WithExecutor(exec *executor.Executor) BasePhaseOption {
+	return func(p *BasePhase) { p.Exec = exec }
+}
+
+// WithLogger attaches the phase logger. Nil resolves to NopLogger.
+func WithLogger(l *slog.Logger) BasePhaseOption {
+	return func(p *BasePhase) { p.Log = l }
+}
+
+// NewBasePhase constructs a BasePhase tagged with the okdctl version and the
+// supplied options. Nil-safe for logger (→ NopLogger) and exec (→ a fresh
+// executor wired to the same logger).
+func NewBasePhase(version string, opts ...BasePhaseOption) BasePhase {
+	p := BasePhase{Version: version}
+	for _, opt := range opts {
+		opt(&p)
 	}
-	if exec == nil {
-		exec = executor.New(executor.WithLogger(logger))
+	if p.Log == nil {
+		p.Log = logutil.NopLogger
 	}
-	return BasePhase{
-		Exec:    exec,
-		Log:     logger,
-		Version: version,
+	if p.Exec == nil {
+		p.Exec = executor.New(executor.WithLogger(p.Log))
 	}
+	return p
 }

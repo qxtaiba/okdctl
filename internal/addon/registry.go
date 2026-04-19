@@ -12,6 +12,9 @@ var registry = &Registry{
 	addons: make(map[string]Addon),
 }
 
+// Registry holds the set of addons an okdctl build knows about. Lookups are
+// safe for concurrent use; iteration order is insertion order (the order the
+// addon packages' init() functions called Register), not alphabetical.
 type Registry struct {
 	mu     sync.RWMutex
 	addons map[string]Addon
@@ -35,12 +38,14 @@ func Register(a Addon) error {
 	return nil
 }
 
+// Get returns the addon registered under name, or nil if no such addon exists.
 func Get(name string) Addon {
 	registry.mu.RLock()
 	defer registry.mu.RUnlock()
 	return registry.addons[name]
 }
 
+// All returns every registered addon in insertion order (not alphabetical).
 func All() []Addon {
 	registry.mu.RLock()
 	defer registry.mu.RUnlock()
@@ -52,6 +57,8 @@ func All() []Addon {
 	return result
 }
 
+// Enabled returns the subset of registered addons whose config entry has
+// Enabled=true, preserving insertion order.
 func Enabled(cfg *config.Config) []Addon {
 	registry.mu.RLock()
 	defer registry.mu.RUnlock()
@@ -66,6 +73,7 @@ func Enabled(cfg *config.Config) []Addon {
 	return result
 }
 
+// Names returns the registered addon names in insertion order.
 func Names() []string {
 	registry.mu.RLock()
 	defer registry.mu.RUnlock()
@@ -75,6 +83,7 @@ func Names() []string {
 	return out
 }
 
+// IsRegistered reports whether an addon with the given name is in the registry.
 func IsRegistered(name string) bool {
 	registry.mu.RLock()
 	defer registry.mu.RUnlock()

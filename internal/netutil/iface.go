@@ -10,6 +10,8 @@ import (
 	"strings"
 )
 
+// RemoveSecondaryIP strips ip from the active NetworkManager connection bound
+// to iface and reapplies the device. No-ops when ip is not currently assigned.
 func RemoveSecondaryIP(ctx context.Context, ip, iface string) error {
 	if ip == "" {
 		return fmt.Errorf("ip address is required")
@@ -43,6 +45,8 @@ func RemoveSecondaryIP(ctx context.Context, ip, iface string) error {
 	return nil
 }
 
+// GetDefaultInterface returns the interface name that carries the host's
+// default IPv4 route.
 func GetDefaultInterface(ctx context.Context) (string, error) {
 	cmd := exec.CommandContext(ctx, "ip", "route", "show", "default")
 	output, err := cmd.Output()

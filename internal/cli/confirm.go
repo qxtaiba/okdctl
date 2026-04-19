@@ -1,6 +1,3 @@
-// Package cli wires okdctl's cobra command tree (deploy, destroy,
-// update-ingress, wizard) and shared CLI helpers for prompts, summaries,
-// and config loading.
 package cli
 
 import (
@@ -26,7 +23,7 @@ func promptForConfirmation(ctx context.Context, prompt string) (bool, error) {
 	if !term.IsTerminal(int(os.Stdin.Fd())) { //nolint:gosec // G115: Fd() returns uintptr; always fits in int on supported platforms
 		return false, nil
 	}
-	_, _ = os.Stdout.WriteString(prompt)
+	_, _ = os.Stderr.WriteString(prompt)
 
 	inputCh := make(chan string, 1)
 	go func() {

@@ -16,6 +16,8 @@ import (
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
+// DefaultProxmoxISODir is the default Proxmox-managed path where downloaded
+// FCOS ISOs land when no explicit Proxmox storage reference is provided.
 const DefaultProxmoxISODir = "/var/lib/vz/template/iso"
 
 func (p *Phase) findOrDownloadFCOSISO(ctx context.Context, cfg *config.Config, opts *Options) (string, error) {
@@ -85,6 +87,8 @@ func (p *Phase) findOrDownloadFCOSISO(ctx context.Context, cfg *config.Config, o
 	})
 }
 
+// DetectCoreOSVersion runs "openshift-install coreos print-stream-json" and
+// extracts the ISO location, checksum, and release for the host architecture.
 func (p *Phase) DetectCoreOSVersion(ctx context.Context) (*CoreOSInfo, error) {
 	if !executor.CommandExists("openshift-install") {
 		return nil, fmt.Errorf("openshift-install not found - run setup first")
@@ -138,6 +142,9 @@ func (p *Phase) DetectCoreOSVersion(ctx context.Context) (*CoreOSInfo, error) {
 	}, nil
 }
 
+// DownloadCoreOSISO downloads the CoreOS ISO described by info to destPath.
+// An existing file with a matching checksum is reused; mismatch triggers a
+// re-download.
 func (p *Phase) DownloadCoreOSISO(ctx context.Context, info *CoreOSInfo, destPath string) error {
 	if system.FileExists(destPath) {
 		p.Log.Info(fmt.Sprintf("coreos: iso already exists at %s", destPath))

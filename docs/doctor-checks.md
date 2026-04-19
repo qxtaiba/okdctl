@@ -247,7 +247,7 @@ connect means another service is already bound there; deploy services
 
 **Warn message:**
 ```
-in use: <ports> (use --skip-* flags if intentional)
+in use: <ports> (stop the conflicting service before deploy)
 ```
 
 **How to fix:**
@@ -267,5 +267,5 @@ Common culprits and fixes:
 | 6443 | Existing k8s API server | Stop the conflicting cluster |
 | 22623 | Another OKD install | Stop or destroy the existing cluster first |
 
-If the service on the port is intentional and `okdctl` should not bind it,
-use the corresponding `--skip-*` flag with `okdctl deploy`.
+If the service on the port is intentional, stop or reconfigure it before
+running `okdctl deploy` — okdctl always binds to the ports listed above.

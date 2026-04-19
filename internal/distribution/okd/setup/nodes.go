@@ -8,6 +8,10 @@ import (
 	"github.com/qxtaiba/okdctl/internal/netutil"
 )
 
+// BuildNodeList returns the ordered list of nodes (bootstrap, masters,
+// workers) with IPs allocated from the static-IP start. The IP range is
+// validated against machineCIDR up front so we fail before per-node
+// calculation.
 func (p *Phase) BuildNodeList(cfg *config.Config) ([]NodeInfo, error) {
 	var nodes []NodeInfo
 
@@ -21,7 +25,7 @@ func (p *Phase) BuildNodeList(cfg *config.Config) ([]NodeInfo, error) {
 	}
 
 	nodes = append(nodes, NodeInfo{
-		Name: "bootstrap",
+		Name: string(phase.RoleBootstrap),
 		Role: phase.RoleBootstrap,
 		IP:   startIP,
 	})
@@ -29,10 +33,10 @@ func (p *Phase) BuildNodeList(cfg *config.Config) ([]NodeInfo, error) {
 	for i := range cfg.Topology.ControlPlane.Count {
 		ip, err := netutil.CalculateVMIP(startIP, 1+i)
 		if err != nil {
-			return nil, fmt.Errorf("failed to calculate master%d IP: %w", i, err)
+			return nil, fmt.Errorf("failed to calculate %s%d IP: %w", phase.RoleMaster, i, err)
 		}
 		nodes = append(nodes, NodeInfo{
-			Name: fmt.Sprintf("master%d", i),
+			Name: fmt.Sprintf("%s%d", phase.RoleMaster, i),
 			Role: phase.RoleMaster,
 			IP:   ip,
 		})
@@ -42,10 +46,10 @@ func (p *Phase) BuildNodeList(cfg *config.Config) ([]NodeInfo, error) {
 	for i := range cfg.Topology.Workers.Count {
 		ip, err := netutil.CalculateVMIP(startIP, workerOffset+i)
 		if err != nil {
-			return nil, fmt.Errorf("failed to calculate worker%d IP: %w", i, err)
+			return nil, fmt.Errorf("failed to calculate %s%d IP: %w", phase.RoleWorker, i, err)
 		}
 		nodes = append(nodes, NodeInfo{
-			Name: fmt.Sprintf("worker%d", i),
+			Name: fmt.Sprintf("%s%d", phase.RoleWorker, i),
 			Role: phase.RoleWorker,
 			IP:   ip,
 		})

@@ -14,6 +14,8 @@ import (
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
+// BuildHAProxyConfigData assembles the HAProxy template data from cfg's
+// node list. When no workers are configured, masters serve ingress directly.
 func (p *Phase) BuildHAProxyConfigData(cfg *config.Config) (templates.HAProxyConfigData, error) {
 	nodes, err := p.BuildNodeList(cfg)
 	if err != nil {
@@ -78,6 +80,9 @@ func enableAndRestartHAProxy(ctx context.Context) error {
 	return system.ManageService(ctx, system.ServiceRestart, "haproxy", "haproxy load balancer")
 }
 
+// ConfigureHAProxy renders haproxy.cfg, installs it, validates with
+// "haproxy -c", and restarts the service. On any failure the previous
+// config is restored and haproxy is restarted with it.
 func (p *Phase) ConfigureHAProxy(ctx context.Context, cfg *config.Config, _ *Options) error {
 	data, err := p.BuildHAProxyConfigData(cfg)
 	if err != nil {
@@ -116,12 +121,12 @@ func (p *Phase) ConfigureHAProxy(ctx context.Context, cfg *config.Config, _ *Opt
 			return errors.Join(cause, fmt.Errorf("rollback restore failed: %w", restoreErr))
 		}
 		if chmodErr := os.Chmod(haproxyConfigPath, 0o644); chmodErr != nil {
-			p.Log.Warn(fmt.Sprintf("haproxy: rollback chmod failed: %v", chmodErr))
+			p.Log.Warn("haproxy: rollback chmod failed", "err", chmodErr)
 		}
 		// Restart with the old config so the node isn't left serving the
 		// rejected one.
 		if restartErr := system.ManageService(ctx, system.ServiceRestart, "haproxy", "haproxy load balancer"); restartErr != nil {
-			p.Log.Warn(fmt.Sprintf("haproxy: rollback restart failed: %v", restartErr))
+			p.Log.Warn("haproxy: rollback restart failed", "err", restartErr)
 			return errors.Join(cause, fmt.Errorf("rollback restart failed: %w", restartErr))
 		}
 		return cause
@@ -139,6 +144,9 @@ func (p *Phase) ConfigureHAProxy(ctx context.Context, cfg *config.Config, _ *Opt
 	return nil
 }
 
+// VerifyHAProxyPorts checks that haproxy is listening on the API, machine
+// config, HTTP, and HTTPS ports. Missing ports are logged as warnings but do
+// not return an error — listeners can come up shortly after service start.
 func (p *Phase) VerifyHAProxyPorts(ctx context.Context) error {
 	ports := []struct {
 		port        string
@@ -152,16 +160,16 @@ func (p *Phase) VerifyHAProxyPorts(ctx context.Context) error {
 
 	result, err := p.Exec.Run(ctx, "ss", "-tlnp")
 	if err != nil {
-		p.Log.Warn(fmt.Sprintf("haproxy: failed to check listening ports: %v", err))
+		p.Log.Warn("haproxy: failed to check listening ports", "err", err)
 		return nil
 	}
 
 	for _, portInfo := range ports {
 		pattern := fmt.Sprintf(":%s ", portInfo.port)
 		if strings.Contains(result.Stdout, pattern) {
-			p.Log.Info(fmt.Sprintf("haproxy: listening on port %s (%s)", portInfo.port, portInfo.description))
+			p.Log.Info("haproxy: listening", "port", portInfo.port, "desc", portInfo.description)
 		} else {
-			p.Log.Warn(fmt.Sprintf("haproxy: may not be listening on port %s (%s)", portInfo.port, portInfo.description))
+			p.Log.Warn("haproxy: may not be listening", "port", portInfo.port, "desc", portInfo.description)
 		}
 	}
 

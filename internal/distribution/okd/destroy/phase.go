@@ -48,6 +48,7 @@ type Options struct {
 	KeepISOs bool
 }
 
+// NewOptions builds the default destroy Options from cfg and projectRoot.
 func NewOptions(cfg *config.Config, projectRoot string) Options {
 	return Options{
 		BaseOptions: phase.BaseOptions{
@@ -65,9 +66,11 @@ type Phase struct {
 	phase.BasePhase
 }
 
+// New constructs a destroy Phase with the given executor, logger, and okdctl
+// version tag.
 func New(exec *executor.Executor, logger *slog.Logger, version string) *Phase {
 	return &Phase{
-		BasePhase: phase.NewBasePhase(exec, logger, version),
+		BasePhase: phase.NewBasePhase(version, phase.WithExecutor(exec), phase.WithLogger(logger)),
 	}
 }
 

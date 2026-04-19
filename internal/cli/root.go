@@ -1,7 +1,10 @@
 // Package cli wires together the cobra command tree and drives the
 // top-level event loop. Process exit codes follow a documented contract:
 // config error=2, network error=3, cluster error=4, auth error=5,
-// other error=1, SIGINT/SIGTERM=130, success=0.
+// unknown-flag error=64 (EX_USAGE, via SetFlagErrorFunc), other error=1
+// (includes unknown subcommands, arg-count violations, and mutually-
+// exclusive-flag conflicts which cobra surfaces outside the flag-parser),
+// SIGINT=130, SIGTERM=143, success=0.
 package cli
 
 import (
@@ -11,6 +14,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -29,9 +33,11 @@ import (
 var cfgFile string
 
 var (
-	logLevel  string
-	logFormat string
-	logFile   string
+	logLevel   string
+	logFormat  string
+	logFile    string
+	logQuiet   bool
+	logVerbose bool
 )
 
 var rootCmd = &cobra.Command{
@@ -49,7 +55,9 @@ Highlights:
   • YAML configuration with sensible defaults
   • Automated preflight checks and validation
   • Single binary distribution`,
-	Version: version.Version,
+	Version:       version.Version,
+	SilenceUsage:  true,
+	SilenceErrors: true,
 	PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
 		if err := configureLogging(); err != nil {
 			return err
@@ -68,6 +76,9 @@ Highlights:
 	},
 }
 
+// Execute is the process-level entry point. It wires the default slog logger,
+// runs the cobra tree, flushes any log file, and exits with the exit code
+// computed by execute().
 func Execute() {
 	slog.SetDefault(tui.SimpleLogger())
 	code := execute()
@@ -78,13 +89,33 @@ func Execute() {
 }
 
 func execute() int {
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
+	// Roll our own signal handling so we can tell SIGINT (→130) apart from
+	// SIGTERM (→143). signal.NotifyContext would collapse them.
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
+	defer signal.Stop(sigCh)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var caughtSig atomic.Value // os.Signal
+	go func() {
+		sig, ok := <-sigCh
+		if !ok {
+			return
+		}
+		caughtSig.Store(sig)
+		cancel()
+	}()
 
 	updateCh := version.BackgroundCheck(ctx)
 
-	if err := rootCmd.ExecuteContext(ctx); err != nil {
+	err := rootCmd.ExecuteContext(ctx)
+	if err != nil {
 		if ctx.Err() != nil {
+			if sig, _ := caughtSig.Load().(os.Signal); sig == syscall.SIGTERM {
+				return 143
+			}
 			return 130
 		}
 		tui.Error(err.Error())
@@ -131,15 +162,38 @@ func exitCodeFor(err error) int {
 	return 1
 }
 
+// versionCmd prints the same template as the --version flag. Exists so
+// `okdctl version` works alongside `okdctl --version` (kubectl/docker/gh
+// all expose both).
+var versionCmd = &cobra.Command{
+	Use:   "version",
+	Short: "Print version, git commit, build date",
+	Run: func(_ *cobra.Command, _ []string) {
+		fmt.Printf("okdctl %s\nGit Commit: %s\nBuild Date: %s\nGo Version: %s\nPlatform:   %s\n",
+			version.Version, version.GitCommit, version.BuildDate, version.GoVersion, version.Platform)
+	},
+}
+
 func init() {
 	rootCmd.PersistentFlags().StringVarP(&cfgFile, "config", "c", "okdctl.yaml", "configuration file")
 	rootCmd.PersistentFlags().StringVar(&logLevel, "log-level", "info", "log verbosity (debug, info, warn, error)")
 	rootCmd.PersistentFlags().StringVar(&logFormat, "log-format", "text", "log output format (text, json)")
-	rootCmd.PersistentFlags().StringVar(&logFile, "log-file", "", "write log output to this file in addition to stdout")
+	rootCmd.PersistentFlags().StringVar(&logFile, "log-file", "", "write log output to this file in addition to stderr")
+	rootCmd.PersistentFlags().BoolVarP(&logQuiet, "quiet", "q", false, "suppress info/warn logs (alias for --log-level=error)")
+	rootCmd.PersistentFlags().BoolVarP(&logVerbose, "verbose", "v", false, "enable debug logging (alias for --log-level=debug)")
+	rootCmd.MarkFlagsMutuallyExclusive("quiet", "verbose")
+
+	// EX_USAGE (64, per BSD sysexits.h) for cobra arg-parse failures.
+	rootCmd.SetFlagErrorFunc(func(_ *cobra.Command, err error) error {
+		tui.Error(err.Error())
+		os.Exit(64)
+		return err
+	})
 
 	rootCmd.AddCommand(deployCmd)
 	rootCmd.AddCommand(destroyCmd)
 	rootCmd.AddCommand(updateIngressCmd)
+	rootCmd.AddCommand(versionCmd)
 
 	rootCmd.SetVersionTemplate(fmt.Sprintf(`{{with .Name}}{{printf "%%s " .}}{{end}}{{printf "%%s" .Version}}
 Git Commit: %s

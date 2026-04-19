@@ -21,6 +21,9 @@ import (
 	"github.com/qxtaiba/okdctl/internal/tui"
 )
 
+// Options configures a Download call. An empty ExpectedChecksum disables
+// checksum verification; an Overwrite=false call skips the fetch when a
+// matching file already exists.
 type Options struct {
 	URL              string
 	OutputPath       string
@@ -38,6 +41,7 @@ func (o *Options) logger() *slog.Logger {
 	return logutil.NopLogger
 }
 
+// DefaultTimeout bounds a single Download call when Options.Timeout is zero.
 const DefaultTimeout = 5 * time.Minute
 
 func canSkipDownload(opts *Options) bool {
@@ -67,11 +71,14 @@ func canSkipDownload(opts *Options) bool {
 
 	opts.logger().Warn(fmt.Sprintf("download: checksum mismatch, re-downloading %s", filename))
 	if err := os.Remove(opts.OutputPath); err != nil && !os.IsNotExist(err) {
-		opts.logger().Warn(fmt.Sprintf("download: failed to remove mismatched file %s: %v", filename, err))
+		opts.logger().Warn("download: failed to remove mismatched file", "file", filename, "err", err)
 	}
 	return false
 }
 
+// Download fetches opts.URL to opts.OutputPath with bounded retries and
+// optional SHA-256 verification. A partially-written file is removed on any
+// mid-attempt failure so retries start clean.
 func Download(ctx context.Context, opts *Options) error {
 	if opts.Timeout == 0 {
 		opts.Timeout = DefaultTimeout
@@ -98,7 +105,7 @@ func Download(ctx context.Context, opts *Options) error {
 		return fetchToFile(ctx, client, opts, filename)
 	})
 	if err != nil {
-		opts.logger().Error(fmt.Sprintf("download: giving up on %s after %d attempt(s): %v", opts.Description, attempts, err))
+		opts.logger().Error("download: giving up after retries", "desc", opts.Description, "attempts", attempts, "err", err)
 		return &errtypes.NetworkError{Msg: fmt.Sprintf("download failed for %s", opts.Description), Err: err}
 	}
 

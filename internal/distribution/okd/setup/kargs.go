@@ -7,6 +7,8 @@ import (
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 )
 
+// LiveKargsParams carries the per-node values embedded as kernel arguments
+// in the custom live ISO and on the installed system.
 type LiveKargsParams struct {
 	NodeIP      string
 	Gateway     string
@@ -16,6 +18,8 @@ type LiveKargsParams struct {
 	IgnitionURL string
 }
 
+// BuildLiveKargs returns the kernel arguments used by the live ISO during
+// FCOS install (ignition URL plus static networking).
 func BuildLiveKargs(params *LiveKargsParams) []string {
 	return []string{
 		fmt.Sprintf("coreos.inst.ignition_url=%s", params.IgnitionURL),
@@ -58,6 +62,8 @@ func ExtractNetworkConfig(cfg *config.Config) (gateway, netmask, dns, iface stri
 	return gateway, netmask, dns, iface
 }
 
+// BuildIgnitionURLForNode builds the http:// ignition URL a node of the
+// given role fetches during FCOS first-boot.
 func BuildIgnitionURLForNode(cfg *config.Config, role phase.NodeRole) string {
 	ignitionIP := cfg.HTTPServer.IgnitionServerIP
 	ignitionPort := cfg.HTTPServer.Port

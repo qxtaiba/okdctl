@@ -382,7 +382,7 @@ func checkPorts(ctx context.Context) checkResult {
 		}
 	}
 	if len(busy) > 0 {
-		return checkResult{sev: sevWarn, detail: "in use: " + strings.Join(busy, ", ") + " (use --skip-* flags if intentional)"}
+		return checkResult{sev: sevWarn, detail: "in use: " + strings.Join(busy, ", ") + " (stop the conflicting service before deploy)"}
 	}
 	return checkResult{sev: sevPass, detail: "53, 80, 443, 6443, 22623, 8080 all free"}
 }

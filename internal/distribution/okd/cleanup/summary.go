@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 )
 
+// Summary is the post-cleanup accounting the CLI renders for the operator —
+// how many files survived each removal pass, and the work-dir footprint.
 type Summary struct {
 	RemainingWorkFiles      int
 	RemainingIgnitionFiles  int
@@ -14,6 +16,10 @@ type Summary struct {
 	WorkDirSize             string
 }
 
+// GenerateSummary walks the known cleanup targets under opts.WorkDir,
+// opts.HTTPServerRoot, and the terraform environments directory and returns
+// a Summary. Non-existent paths are treated as "zero remaining" rather than
+// an error.
 func GenerateSummary(opts *Options) Summary {
 	summary := Summary{
 		WorkDirSize: "0B",
@@ -58,7 +64,7 @@ func printSummary(opts *Options, logger *slog.Logger) {
 	if summary.RemainingWorkFiles == 0 {
 		logger.Info("  work directory: clean (0 files)")
 	} else {
-		logger.Info(fmt.Sprintf("  work directory: %d files remaining (%s)", summary.RemainingWorkFiles, summary.WorkDirSize))
+		logger.Info("  work directory: files remaining", "count", summary.RemainingWorkFiles, "size", summary.WorkDirSize)
 	}
 
 	if summary.RemainingIgnitionFiles == 0 {

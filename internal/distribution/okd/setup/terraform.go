@@ -10,6 +10,11 @@ import (
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/templates"
 )
 
+// DefaultProxmoxCPUType is the Proxmox qemu cpu type used when the operator
+// has not set proxmox.cpuType. "host" passes every CPU flag through so nested
+// virt and vector extensions (AVX2, AES-NI) required by OKD nodes work.
+const DefaultProxmoxCPUType = "host"
+
 func buildISOStrings(isoStorage string, role phase.NodeRole, count int) []string {
 	isos := make([]string, count)
 	for i := range count {
@@ -64,7 +69,7 @@ func buildTerraformVarsData(cfg *config.Config) templates.TerraformVarsData {
 
 	cpuType := proxmox.CPUType
 	if cpuType == "" {
-		cpuType = "host"
+		cpuType = DefaultProxmoxCPUType
 	}
 
 	return templates.TerraformVarsData{
@@ -131,6 +136,8 @@ func formatAdditionalNetworks(networks []config.AdditionalNetwork) string {
 	return "[" + strings.Join(parts, ", ") + "]"
 }
 
+// GenerateTerraformVars renders terraform.tfvars for the Proxmox provider
+// into the environment directory derived from cfg.
 func (p *Phase) GenerateTerraformVars(cfg *config.Config, opts *Options) error {
 	if cfg.Provider.Proxmox == nil {
 		return fmt.Errorf("proxmox provider configuration required")

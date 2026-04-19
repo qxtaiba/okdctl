@@ -17,10 +17,14 @@ import (
 	"github.com/qxtaiba/okdctl/internal/executor"
 )
 
+// DefaultTimeout is the overall cap applied to post-install verification
+// steps that don't override it.
 const (
 	DefaultTimeout = 10 * time.Minute
 )
 
+// Options configures a post-install run: which verifications to skip and
+// the timeouts for kube-vip readiness checks.
 type Options struct {
 	phase.BaseOptions
 	SkipClusterHealth       bool
@@ -30,6 +34,7 @@ type Options struct {
 	KubeVIPVIPTimeout       time.Duration
 }
 
+// NewOptions builds default post-install Options from cfg and projectRoot.
 func NewOptions(cfg *config.Config, projectRoot string) Options {
 	return Options{
 		BaseOptions: phase.BaseOptions{
@@ -43,6 +48,8 @@ func NewOptions(cfg *config.Config, projectRoot string) Options {
 	}
 }
 
+// Result summarizes what the post-install phase did: final VIP, ready node
+// count, and which cleanup / DNS steps actually ran.
 type Result struct {
 	KubeVipIP        string
 	BastionIP        string
@@ -51,20 +58,29 @@ type Result struct {
 	DNSDeployed      bool
 }
 
+// Phase coordinates post-install verification and configuration.
 type Phase struct {
 	phase.BasePhase
 }
 
+// New constructs a post-install Phase with the given executor, logger, and
+// okdctl version tag.
 func New(exec *executor.Executor, logger *slog.Logger, version string) *Phase {
 	return &Phase{
-		BasePhase: phase.NewBasePhase(exec, logger, version),
+		BasePhase: phase.NewBasePhase(version, phase.WithExecutor(exec), phase.WithLogger(logger)),
 	}
 }
 
+// Execute runs the post-install step sequence and returns a summary Result
+// along with each step's outcome.
 func (p *Phase) Execute(ctx context.Context, cfg *config.Config, opts *Options) (*Result, []distribution.StepResult, error) {
 	p.Log.Info("postinstall: starting cluster verification and configuration")
 
-	addonMgr := addon.NewManager(cfg, p.Exec, p.Log, opts.ProjectRoot)
+	addonMgr := addon.NewManager(cfg,
+		addon.WithExecutor(p.Exec),
+		addon.WithLogger(p.Log),
+		addon.WithProjectRoot(opts.ProjectRoot),
+	)
 	pctx := distribution.NewPhaseContext(PostInstallContext{})
 
 	orchestrator := distribution.NewOrchestrator(distribution.BuildSteps(p.postinstallSteps(cfg, opts, pctx, addonMgr))...)

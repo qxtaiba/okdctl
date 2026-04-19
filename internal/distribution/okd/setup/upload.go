@@ -75,7 +75,7 @@ func (p *Phase) UploadCustomISOsToProxmox(ctx context.Context, cfg *config.Confi
 	remotePath := DefaultProxmoxISODir
 
 	totalSizeMB := float64(calculateTotalSize(isoFiles)) / 1024 / 1024
-	p.Log.Info(fmt.Sprintf("iso: uploading %d files (%.1f mb) to %s@%s:%s", len(isoFiles), totalSizeMB, user, host, remotePath))
+	p.Log.Info("iso: uploading", "count", len(isoFiles), "size_mb", fmt.Sprintf("%.1f", totalSizeMB), "user", user, "host", host, "path", remotePath)
 
 	if err := uploadISOsViaSCP(ctx, p.Exec, isoFiles, user, host, remotePath); err != nil {
 		return err

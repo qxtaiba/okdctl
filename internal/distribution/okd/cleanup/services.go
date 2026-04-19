@@ -10,40 +10,45 @@ import (
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/dns"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/firewall"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/packages"
+	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/netutil"
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
 // stopAndDisableService stops and disables a systemd service, logging warnings on failure.
 func stopAndDisableService(ctx context.Context, serviceName string, logger *slog.Logger) {
+	logger = logutil.OrNop(logger)
 	if system.IsServiceActive(ctx, serviceName) {
-		if err := system.ManageService(ctx, system.ServiceStop, serviceName, serviceName+" service"); err != nil && logger != nil {
-			logger.Warn(fmt.Sprintf("cleanup: failed to stop %s service: %v", serviceName, err))
+		if err := system.ManageService(ctx, system.ServiceStop, serviceName, serviceName+" service"); err != nil {
+			logger.Warn("cleanup: failed to stop service", "svc", serviceName, "err", err)
 		}
-	} else if logger != nil {
+	} else {
 		logger.Info(fmt.Sprintf("cleanup: %s service not running", serviceName))
 	}
 
 	if system.IsServiceEnabled(ctx, serviceName) {
-		if err := system.ManageService(ctx, system.ServiceDisable, serviceName, serviceName+" service"); err != nil && logger != nil {
-			logger.Warn(fmt.Sprintf("cleanup: failed to disable %s service: %v", serviceName, err))
+		if err := system.ManageService(ctx, system.ServiceDisable, serviceName, serviceName+" service"); err != nil {
+			logger.Warn("cleanup: failed to disable service", "svc", serviceName, "err", err)
 		}
-	} else if logger != nil {
+	} else {
 		logger.Info(fmt.Sprintf("cleanup: %s service not enabled", serviceName))
 	}
 }
 
 func removePackage(ctx context.Context, pkg string, logger *slog.Logger) {
+	logger = logutil.OrNop(logger)
 	pm := detectPackageManager(logger)
-	if err := packages.Remove(ctx, pm, []string{pkg}, logger); err != nil && logger != nil {
-		logger.Warn(fmt.Sprintf("cleanup: failed to remove %s package: %v", pkg, err))
+	if err := packages.Remove(ctx, pm, []string{pkg}, logger); err != nil {
+		logger.Warn("cleanup: failed to remove package", "pkg", pkg, "err", err)
 	}
 }
 
+// HAProxy stops the haproxy service, removes its config and backups, tears
+// down okdctl-managed firewall rules, releases the VIP (when set), and
+// uninstalls the haproxy package.
 func HAProxy(ctx context.Context, haproxyConfig, vip string, logger *slog.Logger) error {
-	if logger != nil {
-		logger.Info("cleanup: haproxy service and configuration")
-	}
+	logger = logutil.OrNop(logger)
+	logger.Info("cleanup: haproxy service and configuration")
 
 	stopAndDisableService(ctx, "haproxy", logger)
 
@@ -55,14 +60,10 @@ func HAProxy(ctx context.Context, haproxyConfig, vip string, logger *slog.Logger
 		_ = SafeRemoveWithLogger(ctx, backup, "haproxy backup configuration", logger)
 	}
 
-	if logger != nil {
-		logger.Info("cleanup: removing okd firewall rules")
-	}
+	logger.Info("cleanup: removing okd firewall rules")
 	if err := firewall.RemoveOKDRules(ctx, true, logger); err != nil {
-		if logger != nil {
-			logger.Warn(fmt.Sprintf("cleanup: firewall rules incomplete: %v", err))
-		}
-	} else if logger != nil {
+		logger.Warn("cleanup: firewall rules incomplete", "err", err)
+	} else {
 		logger.Info("cleanup: firewall rules removed")
 	}
 
@@ -70,28 +71,25 @@ func HAProxy(ctx context.Context, haproxyConfig, vip string, logger *slog.Logger
 		iface, ifaceErr := netutil.GetDefaultInterface(ctx)
 		if ifaceErr == nil {
 			if rmErr := netutil.RemoveSecondaryIP(ctx, vip, iface); rmErr != nil {
-				if logger != nil {
-					logger.Warn(fmt.Sprintf("cleanup: could not remove vip %s from %s: %v", vip, iface, rmErr))
-				}
-			} else if logger != nil {
-				logger.Info(fmt.Sprintf("cleanup: removed vip %s from %s", vip, iface))
+				logger.Warn("cleanup: could not remove vip", "vip", vip, "iface", iface, "err", rmErr)
+			} else {
+				logger.Info("cleanup: removed vip", "vip", vip, "iface", iface)
 			}
 		}
 	}
 
 	removePackage(ctx, "haproxy", logger)
 
-	if logger != nil {
-		logger.Info("cleanup: haproxy completed")
-	}
+	logger.Info("cleanup: haproxy completed")
 
 	return nil
 }
 
+// Apache stops the httpd service and removes the apache package using the
+// platform-appropriate service and package names.
 func Apache(ctx context.Context, logger *slog.Logger) error {
-	if logger != nil {
-		logger.Info("cleanup: apache httpd service")
-	}
+	logger = logutil.OrNop(logger)
+	logger.Info("cleanup: apache httpd service")
 
 	detectedOS := detectOS(logger)
 	svcName := detectedOS.ApacheServiceName()
@@ -100,14 +98,14 @@ func Apache(ctx context.Context, logger *slog.Logger) error {
 	stopAndDisableService(ctx, svcName, logger)
 	removePackage(ctx, pkgName, logger)
 
-	if logger != nil {
-		logger.Info("cleanup: apache httpd completed")
-	}
+	logger.Info("cleanup: apache httpd completed")
 
 	return nil
 }
 
+// WebServer removes generated *.ign files from the httpd ignition directory.
 func WebServer(ctx context.Context, httpServerRoot string, logger *slog.Logger) error {
+	logger = logutil.OrNop(logger)
 	ignitionDir := filepath.Join(httpServerRoot, "ignition")
 
 	if _, err := os.Stat(ignitionDir); os.IsNotExist(err) {
@@ -123,24 +121,23 @@ func WebServer(ctx context.Context, httpServerRoot string, logger *slog.Logger) 
 		return nil
 	}
 
-	if logger != nil {
-		logger.Info(fmt.Sprintf("cleanup: removing %d ignition files from web server", len(ignitionFiles)))
-	}
+	logger.Info(fmt.Sprintf("cleanup: removing %d ignition files from web server", len(ignitionFiles)))
 
 	for _, f := range ignitionFiles {
-		_ = SafeRemoveWithLogger(ctx, f, filepath.Base(f), nil)
+		_ = SafeRemoveWithLogger(ctx, f, filepath.Base(f), logger)
 	}
 
 	return nil
 }
 
+// Dnsmasq restores the system resolver, stops dnsmasq, removes the
+// cluster-specific config, and uninstalls the dnsmasq package.
 func Dnsmasq(ctx context.Context, clusterName string, logger *slog.Logger) error {
-	if logger != nil {
-		logger.Info("cleanup: dnsmasq service and configuration")
-	}
+	logger = logutil.OrNop(logger)
+	logger.Info("cleanup: dnsmasq service and configuration")
 
-	if err := dns.RestoreSystemResolver(ctx, logger); err != nil && logger != nil {
-		logger.Warn(fmt.Sprintf("cleanup: failed to restore system resolver: %v", err))
+	if err := dns.RestoreSystemResolver(ctx, logger); err != nil {
+		logger.Warn("cleanup: failed to restore system resolver", "err", err)
 	}
 
 	stopAndDisableService(ctx, "dnsmasq", logger)
@@ -152,8 +149,8 @@ func Dnsmasq(ctx context.Context, clusterName string, logger *slog.Logger) error
 			} else {
 				_ = os.RemoveAll(configPath)
 			}
-		} else if logger != nil {
-			logger.Warn(fmt.Sprintf("cleanup: invalid dnsmasq config name for cluster %q: %v", clusterName, err))
+		} else {
+			logger.Warn("cleanup: invalid dnsmasq config name for cluster", "cluster", clusterName, "err", err)
 		}
 	}
 
@@ -179,9 +176,7 @@ func Dnsmasq(ctx context.Context, clusterName string, logger *slog.Logger) error
 
 	removePackage(ctx, "dnsmasq", logger)
 
-	if logger != nil {
-		logger.Info("cleanup: dnsmasq completed")
-	}
+	logger.Info("cleanup: dnsmasq completed")
 
 	return nil
 }

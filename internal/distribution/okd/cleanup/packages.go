@@ -9,6 +9,7 @@ import (
 
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/packages"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
+	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/platform"
 )
 
@@ -17,10 +18,8 @@ import (
 func detectOS(logger *slog.Logger) platform.OS {
 	detectedOS, err := platform.Detect()
 	if err != nil {
-		if logger != nil {
-			logger.Warn(fmt.Sprintf("platform: %v, defaulting to rhel", err))
-		}
-		return platform.OS{Family: "rhel", ID: "unknown", Version: ""}
+		logutil.OrNop(logger).Warn("platform: detect failed; defaulting to rhel", "err", err)
+		return platform.OS{Family: platform.FamilyRHEL, ID: "unknown", Version: ""}
 	}
 	return detectedOS
 }
@@ -41,6 +40,8 @@ func InstalledPackages() []string {
 	}
 }
 
+// InstalledBinaries returns the installer-managed binaries that Packages
+// removes (OKD release binaries plus registered external tools).
 func InstalledBinaries() []string {
 	okdBinaries := []string{
 		"openshift-install",
@@ -50,7 +51,11 @@ func InstalledBinaries() []string {
 	return append(okdBinaries, phase.ExternalToolBinaries()...)
 }
 
+// Packages removes dnf packages and tool binaries installed during setup.
+// Individual failures are logged and aggregated; the function returns an
+// error only if at least one removal failed.
 func Packages(ctx context.Context, logger *slog.Logger) error {
+	logger = logutil.OrNop(logger)
 	var hasErrors bool
 
 	pm := detectPackageManager(logger)
@@ -74,7 +79,7 @@ func Packages(ctx context.Context, logger *slog.Logger) error {
 		}
 
 		if err := os.RemoveAll(binPath); err != nil {
-			logger.Warn(fmt.Sprintf("cleanup: failed to remove %s: %v", binPath, err))
+			logger.Warn("cleanup: failed to remove binary", "path", binPath, "err", err)
 			hasErrors = true
 		} else {
 			logger.Info(fmt.Sprintf("cleanup: removed %s", binPath))

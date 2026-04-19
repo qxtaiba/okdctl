@@ -2,7 +2,6 @@ package distribution
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"sync"
 	"time"
@@ -10,6 +9,10 @@ import (
 	"github.com/qxtaiba/okdctl/internal/logutil"
 )
 
+// Orchestrator runs a sequence of ProvisioningSteps, recording per-step
+// outcomes. Stops on the first fatal failure (per Step.IsFatal); non-fatal
+// failures log a warning and continue. Safe to snapshot Results concurrently
+// with Run.
 type Orchestrator struct {
 	mu      sync.RWMutex
 	steps   []ProvisioningStep
@@ -17,6 +20,8 @@ type Orchestrator struct {
 	logger  *slog.Logger
 }
 
+// NewOrchestrator returns an Orchestrator seeded with the given steps and a
+// NopLogger. Use SetLogger to attach a real logger before Run.
 func NewOrchestrator(steps ...ProvisioningStep) *Orchestrator {
 	return &Orchestrator{
 		steps:   steps,
@@ -25,12 +30,16 @@ func NewOrchestrator(steps ...ProvisioningStep) *Orchestrator {
 	}
 }
 
+// SetLogger attaches a logger. Nil is tolerated and resolved to NopLogger
+// via logutil.OrNop.
 func (o *Orchestrator) SetLogger(logger *slog.Logger) {
-	if logger != nil {
-		o.logger = logger
-	}
+	o.logger = logutil.OrNop(logger)
 }
 
+// Run executes each step in order, honoring ctx cancellation between steps.
+// Returns the first fatal-step error (or ctx.Err on cancel), nil otherwise.
+// Per-step results are recorded in Results even on cancellation so callers
+// can render a partial-progress summary.
 func (o *Orchestrator) Run(ctx context.Context) error {
 	o.mu.Lock()
 	o.results = make([]StepResult, 0, len(o.steps))
@@ -49,7 +58,7 @@ func (o *Orchestrator) Run(ctx context.Context) error {
 		o.mu.Unlock()
 
 		if result.Skipped {
-			o.logger.Info(fmt.Sprintf("skipping %s: %s", step.Name(), result.SkipReason))
+			o.logger.Info("step: skipped", "step", step.Name(), "reason", result.SkipReason)
 			continue
 		}
 

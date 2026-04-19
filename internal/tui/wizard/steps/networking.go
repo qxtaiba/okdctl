@@ -9,6 +9,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 )
 
+// NetworkingStepDefinition declares the cluster-networking step fields.
 var NetworkingStepDefinition = wizard.StepDefinition{
 	ID:           wizard.StepIDNetworking,
 	Title:        "network configuration",
@@ -187,6 +188,7 @@ var NetworkingStepDefinition = wizard.StepDefinition{
 	},
 }
 
+// NewNetworkingStep returns the networking wizard step and its state.
 func NewNetworkingStep() (step, state *wizard.DataDrivenStep) {
 	step = wizard.NewDataDrivenStep(&NetworkingStepDefinition)
 	return step, step

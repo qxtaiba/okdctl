@@ -7,12 +7,14 @@ import (
 	"time"
 )
 
+// Standard request timeouts tiered by expected response size.
 const (
 	TimeoutShort    = 10 * time.Second // API calls, connectivity checks
 	TimeoutMedium   = 30 * time.Second // Metadata, checksum fetches
 	TimeoutDownload = 5 * time.Minute  // File downloads
 )
 
+// New returns an *http.Client configured with the given request timeout.
 func New(timeout time.Duration) *http.Client {
 	return &http.Client{Timeout: timeout}
 }

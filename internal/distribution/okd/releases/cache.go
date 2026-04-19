@@ -10,7 +10,8 @@ import (
 )
 
 const (
-	// Prevents repeated network requests when the CLI is invoked multiple times.
+	// DiskCacheTTL bounds how long the on-disk OKD release cache is reused
+	// before a fresh network fetch is required.
 	DiskCacheTTL = 1 * time.Hour
 
 	cacheFileName = "okd-versions.json"

@@ -5,6 +5,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 )
 
+// BasicsStepDefinition declares the cluster-basics step fields.
 var BasicsStepDefinition = wizard.StepDefinition{
 	ID:           wizard.StepIDBasics,
 	Title:        "cluster basics",
@@ -64,6 +65,7 @@ var BasicsStepDefinition = wizard.StepDefinition{
 	},
 }
 
+// NewBasicsStep returns the basics wizard step and its state.
 func NewBasicsStep() (step, state *wizard.DataDrivenStep) {
 	step = wizard.NewDataDrivenStep(&BasicsStepDefinition)
 	return step, step

@@ -13,6 +13,7 @@ linters:
     - staticcheck
     - ineffassign
     - unused
+    - errorlint
     # antipatterns
     - gocritic
     - revive
@@ -62,13 +63,16 @@ linters:
         - name: context-as-argument
         - name: error-return
         - name: error-strings
+        - name: exported
         - name: increment-decrement
+        - name: package-comments
         - name: range
         - name: receiver-naming
         - name: redefines-builtin-id
         - name: superfluous-else
         - name: unreachable-code
         - name: unused-parameter
+        - name: var-naming
     gosec:
       excludes:
         - G107 # url provided by variable — expected for api calls

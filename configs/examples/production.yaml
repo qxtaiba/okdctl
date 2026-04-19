@@ -1,3 +1,4 @@
+schemaVersion: "v1"
 # Production-Ready Cluster Configuration
 # ======================================
 # This configuration creates a highly available production cluster

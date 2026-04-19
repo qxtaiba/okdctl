@@ -144,3 +144,39 @@ write the comment — then it carries real information.
   can `Zeroize` them after use.
 - Error messages must not leak raw credentials. See `InputField.Validate`
   for the password scrubbing pattern.
+- slog records pass through `internal/logutil.RedactHandler` (installed by
+  `tui.SimpleLogger`). Attrs whose keys contain password/token/secret/api_key
+  are rewritten to `[redacted]`; `*url.URL` userinfo is stripped; types that
+  implement `Redacted() any` control their own output. Prefer structured
+  attrs (`logger.Warn("…", "err", err)`) over `fmt.Sprintf(…%v…)` so the
+  handler can inspect values.
+
+## Dependencies
+
+- **License policy.** Every direct and transitive dep must ship under a
+  permissive license (MIT / Apache-2.0 / BSD-{2,3}). No GPL / AGPL / LGPL
+  / custom / missing licenses — the shipped static binary plus apt/rpm/brew
+  packaging would be blocked. New deps touch `go.mod` ⇒ check the upstream
+  LICENSE.
+- **v0.x deps need a justification and an abandonment plan.** v0.x APIs
+  may break on any minor bump. Today's entries:
+  - `github.com/luthermonson/go-proxmox` v0.4.x — sole Proxmox discovery
+    path (`internal/tui/wizard/steps/proxmox_discovery.go`). Bus-factor 1.
+    Fallback: ~200 LOC REST-only rewrite using `net/http` + the documented
+    Proxmox API. Track upstream releases; bump on each.
+- **Maintained but upstream-locked deps.** `gorilla/websocket` is pulled
+  transitively via `go-proxmox`. **okdctl does not reach it** — the wizard
+  uses REST discovery only, not shell/console websockets. Safe to keep
+  until go-proxmox migrates to `coder/websocket`, at which point take the
+  bump without local code changes.
+- **Kept despite transitive-weight flags.** `schollz/progressbar/v3` has
+  one call site in `internal/download/download.go` (byte-count download
+  progress). A `charm.land/bubbles/v2/progress` swap would require a
+  bubbletea Program for a one-shot terminal indicator — strictly heavier.
+  Kept.
+- **Pin stability.** GitHub Actions must be SHA-pinned with a version
+  trailer (`uses: owner/action@<40-hex-sha> # vX.Y.Z`). Tool installs
+  from Go must be explicit versions — never `@latest`. Terraform versions
+  in CI are patch-pinned (`terraform_version: "1.10.3"`, not `"1.10"`).
+- **Before adding a dep,** check whether Go 1.25 stdlib covers it
+  (`slices`, `maps`, `net/netip`, `log/slog`, `sync.OnceFunc`, etc.).

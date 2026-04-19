@@ -11,14 +11,18 @@ import (
 	"github.com/qxtaiba/okdctl/internal/distribution"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/executor"
+	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/platform"
 )
 
+// Well-known ports used when assembling ignition URLs.
 const (
 	DefaultIgnitionPort = 8080
 	HTTPDefaultPort     = 80
 )
 
+// Options configures a setup run: download and skip toggles plus the base
+// URL used when fetching OKD release artifacts.
 type Options struct {
 	phase.BaseOptions
 	DownloadDir       string
@@ -31,6 +35,8 @@ type Options struct {
 	OKDReleaseBaseURL string
 }
 
+// DefaultOptions returns setup Options rooted at projectRoot with default
+// work and download directories.
 func DefaultOptions(projectRoot string) Options {
 	return Options{
 		BaseOptions: phase.BaseOptions{
@@ -41,6 +47,9 @@ func DefaultOptions(projectRoot string) Options {
 	}
 }
 
+// BuildIgnitionURL builds the base http:// URL where ignition payloads are
+// served. Port 80 is elided from the URL; port 0 falls back to the default
+// ignition port.
 func BuildIgnitionURL(ip string, port int) string {
 	if port == 0 {
 		port = DefaultIgnitionPort
@@ -51,6 +60,8 @@ func BuildIgnitionURL(ip string, port int) string {
 	return fmt.Sprintf("http://%s:%d/ignition", ip, port)
 }
 
+// CoreOSInfo describes a CoreOS ISO release: version, download URL, and
+// SHA-256 checksum for the target architecture.
 type CoreOSInfo struct {
 	Version      string
 	ISOUrl       string
@@ -58,6 +69,7 @@ type CoreOSInfo struct {
 	Architecture string
 }
 
+// NodeInfo describes a single cluster node used by setup (name, role, IP).
 type NodeInfo struct {
 	Name string
 	Role phase.NodeRole
@@ -65,27 +77,30 @@ type NodeInfo struct {
 	MAC  string
 }
 
+// Phase coordinates the setup phase execution.
 type Phase struct {
 	phase.BasePhase
 	OS  platform.OS
 	Pkg platform.PackageManager
 }
 
+// New constructs a setup Phase with the given executor, logger, and okdctl
+// version tag. Host OS detection populates OS and Pkg; detection errors
+// fall back to RHEL/dnf.
 func New(exec *executor.Executor, logger *slog.Logger, version string) *Phase {
 	detectedOS, err := platform.Detect()
 	if err != nil {
-		if logger != nil {
-			logger.Warn(fmt.Sprintf("platform: %v", err))
-		}
-		detectedOS = platform.OS{Family: "rhel", ID: "unknown", Version: ""}
+		logutil.OrNop(logger).Warn("platform: detect failed", "err", err)
+		detectedOS = platform.OS{Family: platform.FamilyRHEL, ID: "unknown", Version: ""}
 	}
 	return &Phase{
-		BasePhase: phase.NewBasePhase(exec, logger, version),
+		BasePhase: phase.NewBasePhase(version, phase.WithExecutor(exec), phase.WithLogger(logger)),
 		OS:        detectedOS,
 		Pkg:       platform.NewPackageManager(detectedOS),
 	}
 }
 
+// Execute runs the setup step sequence and returns each step's result.
 func (p *Phase) Execute(ctx context.Context, cfg *config.Config, opts *Options) ([]distribution.StepResult, error) {
 	p.Log.Info("setup: starting okd cluster configuration")
 
@@ -102,6 +117,8 @@ func (p *Phase) Execute(ctx context.Context, cfg *config.Config, opts *Options) 
 	return orchestrator.Results(), nil
 }
 
+// PrintSetupCompletionSummary logs the cluster-config directory and
+// Terraform environment after a successful setup run.
 func (p *Phase) PrintSetupCompletionSummary(cfg *config.Config, opts *Options) {
 	clusterDir := phase.ClusterConfigDir(opts.WorkDir)
 	tfEnv := phase.GetTerraformEnv(cfg)

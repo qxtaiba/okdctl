@@ -3,8 +3,9 @@ package cluster
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"strings"
+
+	"github.com/qxtaiba/okdctl/internal/errtypes"
 )
 
 // PendingCSRs returns CSRs whose status.conditions slice is empty, which
@@ -17,7 +18,9 @@ func (c *K8sClient) PendingCSRs(ctx context.Context) ([]CSR, error) {
 		return nil, err
 	}
 	if result.ExitCode != 0 {
-		return nil, fmt.Errorf("failed to get CSRs: %s", strings.TrimSpace(result.Stderr))
+		// c.run returns (*Result, nil) on non-zero exit, so there's no Go
+		// error value to wrap as Err — fold the stderr text into Msg instead.
+		return nil, &errtypes.ClusterError{Msg: "failed to get CSRs: " + strings.TrimSpace(result.Stderr)}
 	}
 
 	var csrList struct {
@@ -32,7 +35,7 @@ func (c *K8sClient) PendingCSRs(ctx context.Context) ([]CSR, error) {
 	}
 
 	if err := json.Unmarshal([]byte(result.Stdout), &csrList); err != nil {
-		return nil, fmt.Errorf("failed to parse CSRs: %w", err)
+		return nil, &errtypes.ClusterError{Msg: "failed to parse CSRs", Err: err}
 	}
 
 	var pendingCSRs []CSR
@@ -48,6 +51,8 @@ func (c *K8sClient) PendingCSRs(ctx context.Context) ([]CSR, error) {
 	return pendingCSRs, nil
 }
 
+// ApprovePendingCSRs approves every CSR returned by PendingCSRs in one
+// `oc adm certificate approve` invocation and returns the count approved.
 func (c *K8sClient) ApprovePendingCSRs(ctx context.Context) (int, error) {
 	csrs, err := c.PendingCSRs(ctx)
 	if err != nil {
@@ -65,7 +70,7 @@ func (c *K8sClient) ApprovePendingCSRs(ctx context.Context) (int, error) {
 
 	args := append([]string{"adm", "certificate", "approve"}, names...)
 	if err := c.runCheck(ctx, args...); err != nil {
-		return 0, fmt.Errorf("failed to approve CSRs: %w", err)
+		return 0, &errtypes.ClusterError{Msg: "failed to approve CSRs", Err: err}
 	}
 
 	return len(names), nil

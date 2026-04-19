@@ -12,6 +12,7 @@ import (
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
+	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/httputil"
 	"github.com/qxtaiba/okdctl/internal/system"
 )
@@ -56,17 +57,21 @@ func parseNodeReadiness(payload []byte) (ready, total int, err error) {
 	return ready, total, nil
 }
 
+// Default timeouts for kube-vip readiness checks.
 const (
 	DefaultKubeVIPDaemonSetTimeout = 5 * time.Minute
 	DefaultKubeVIPVIPTimeout       = 2 * time.Minute
 )
 
+// ClusterHealthResult summarizes a cluster-health probe.
 type ClusterHealthResult struct {
 	DegradedOperators int
 	ReadyNodes        int
 	TotalNodes        int
 }
 
+// VerifyClusterHealth probes ClusterOperators and Nodes, returning a summary
+// of degraded operators and ready node counts.
 func (p *Phase) VerifyClusterHealth(ctx context.Context, _ *Options) (*ClusterHealthResult, error) {
 	result := &ClusterHealthResult{}
 
@@ -104,7 +109,7 @@ func (p *Phase) VerifyClusterHealth(ctx context.Context, _ *Options) (*ClusterHe
 	result.ReadyNodes = ready
 	result.TotalNodes = total
 
-	p.Log.Info(fmt.Sprintf("cluster: %d/%d nodes are ready", result.ReadyNodes, result.TotalNodes))
+	p.Log.Info("cluster: node readiness", "ready", result.ReadyNodes, "total", result.TotalNodes)
 
 	return result, nil
 }
@@ -209,10 +214,10 @@ func (p *Phase) verifyKubeVIPAPIHealth(ctx context.Context, vip string) error {
 func (p *Phase) verifyAPIHealthCheck(ctx context.Context) error {
 	result, err := p.Exec.RunChecked(ctx, "oc", "get", "--raw", "/healthz")
 	if err != nil {
-		return fmt.Errorf("api health check failed: %w", err)
+		return &errtypes.ClusterError{Msg: "api health check failed", Err: err}
 	}
 	if strings.TrimSpace(result.Stdout) != "ok" {
-		return fmt.Errorf("api returned unexpected health status: %s", strings.TrimSpace(result.Stdout))
+		return &errtypes.ClusterError{Msg: fmt.Sprintf("api returned unexpected health status: %s", strings.TrimSpace(result.Stdout))}
 	}
 	return nil
 }

@@ -13,6 +13,7 @@ import (
 // wizard from a Config.
 type StepID string
 
+// Step IDs for the standard wizard steps.
 const (
 	StepIDWelcome       StepID = "welcome"
 	StepIDDistribution  StepID = "distribution"
@@ -27,6 +28,9 @@ const (
 	StepIDReview        StepID = "review"
 )
 
+// WizardStep is the contract every wizard step must satisfy.
+//
+//nolint:revive // stutter-named interface is the established internal API; rename deferred to a dedicated refactor
 type WizardStep interface {
 	ID() StepID
 	Title() string
@@ -35,19 +39,24 @@ type WizardStep interface {
 	View(width, height int) string
 }
 
+// ConfigApplier is implemented by steps that write their values into cfg on
+// step advance.
 type ConfigApplier interface {
 	Apply(cfg *config.Config) error
 }
 
+// ConditionalStep is implemented by steps that may be skipped based on cfg.
 type ConditionalStep interface {
 	ShouldShow(cfg *config.Config) bool
 }
 
+// FocusableStep is implemented by steps that track their own focus state.
 type FocusableStep interface {
 	IsFocused() bool
 	SetFocused(focused bool)
 }
 
+// ResizableStep is implemented by steps that respond to viewport resizes.
 type ResizableStep interface {
 	SetSize(width, height int)
 }
@@ -58,10 +67,12 @@ type AutoCompletingStep interface {
 	AutoCompletes() bool
 }
 
+// HelpProvider is implemented by steps that supply their own help footer.
 type HelpProvider interface {
 	ShortHelp() []KeyBinding
 }
 
+// DescribedStep is implemented by steps that supply descriptive header text.
 type DescribedStep interface {
 	Description() string
 
@@ -70,11 +81,14 @@ type DescribedStep interface {
 	DisplayTitle() string
 }
 
+// KeyBinding is a key/help pair used in the wizard footer.
 type KeyBinding struct {
 	Key  string
 	Help string
 }
 
+// BaseStep implements common WizardStep fields and defaults; embed it in
+// concrete steps to avoid boilerplate.
 type BaseStep struct {
 	id           StepID
 	title        string
@@ -85,6 +99,7 @@ type BaseStep struct {
 	height       int
 }
 
+// NewBaseStep returns a BaseStep with the given id, title, and description.
 func NewBaseStep(id StepID, title, description string) BaseStep {
 	return BaseStep{
 		id:          id,
@@ -95,6 +110,9 @@ func NewBaseStep(id StepID, title, description string) BaseStep {
 	}
 }
 
+// NewBaseStepWithDisplayTitle returns a BaseStep with a separate
+// displayTitle (shown above the step body) in addition to title (shown in
+// the progress indicator).
 func NewBaseStepWithDisplayTitle(id StepID, title, displayTitle, description string) BaseStep {
 	return BaseStep{
 		id:           id,
@@ -106,27 +124,44 @@ func NewBaseStepWithDisplayTitle(id StepID, title, displayTitle, description str
 	}
 }
 
-func (b *BaseStep) ID() StepID           { return b.id }
-func (b *BaseStep) Title() string        { return b.title }
-func (b *BaseStep) DisplayTitle() string { return b.displayTitle }
-func (b *BaseStep) Description() string  { return b.description }
-func (b *BaseStep) IsFocused() bool      { return b.focused }
-func (b *BaseStep) Width() int           { return b.width }
-func (b *BaseStep) Height() int          { return b.height }
+// ID returns the step identifier.
+func (b *BaseStep) ID() StepID { return b.id }
 
+// Title returns the progress-indicator title.
+func (b *BaseStep) Title() string { return b.title }
+
+// DisplayTitle returns the title shown above the step body.
+func (b *BaseStep) DisplayTitle() string { return b.displayTitle }
+
+// Description returns the step's descriptive text.
+func (b *BaseStep) Description() string { return b.description }
+
+// IsFocused reports whether the step currently has focus.
+func (b *BaseStep) IsFocused() bool { return b.focused }
+
+// Width returns the step's rendered width.
+func (b *BaseStep) Width() int { return b.width }
+
+// Height returns the step's rendered height.
+func (b *BaseStep) Height() int { return b.height }
+
+// ShouldShow always returns true; override in concrete steps to skip.
 func (b *BaseStep) ShouldShow(_ *config.Config) bool {
 	return true
 }
 
+// SetFocused toggles the step's focus state.
 func (b *BaseStep) SetFocused(focused bool) {
 	b.focused = focused
 }
 
+// SetSize records the available width and height for rendering.
 func (b *BaseStep) SetSize(width, height int) {
 	b.width = width
 	b.height = height
 }
 
+// ShortHelp returns the default key/help pairs shown in the wizard footer.
 func (b *BaseStep) ShortHelp() []KeyBinding {
 	return []KeyBinding{
 		{Key: "↑↓", Help: "navigate"},
@@ -136,14 +171,18 @@ func (b *BaseStep) ShortHelp() []KeyBinding {
 	}
 }
 
+// AutoCompletes returns false so BaseStep doesn't auto-advance by default.
 func (b *BaseStep) AutoCompletes() bool {
 	return false
 }
 
+// StepCompleteMsg signals that the named step is finished and the wizard
+// should advance.
 type StepCompleteMsg struct {
 	StepID StepID
 }
 
+// StepBackMsg signals that the wizard should step back one position.
 type StepBackMsg struct{}
 
 // ErrorSetMsg signals an error that should be displayed in the wizard's
@@ -153,6 +192,8 @@ type ErrorSetMsg struct {
 	Error error
 }
 
+// FocusChangedMsg signals that focus has moved within the active step; the
+// wizard uses this to auto-scroll the focused field into view.
 type FocusChangedMsg struct {
 	FieldIndex  int
 	TotalFields int

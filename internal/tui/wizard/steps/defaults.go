@@ -1,32 +1,38 @@
 package steps
 
+// Cluster identity defaults.
 const (
 	DefaultClusterName = "mycluster"
 	DefaultDomain      = "k8s.local"
 )
 
+// Topology count defaults.
 const (
 	DefaultControlPlaneCount = 3
 	DefaultWorkerCount       = 3
 )
 
+// Control-plane resource defaults.
 const (
 	DefaultControlPlaneCPU    = 4
 	DefaultControlPlaneMemory = 12288 // MB
 	DefaultControlPlaneDisk   = 50    // GB
 )
 
+// Worker resource defaults.
 const (
 	DefaultWorkerCPU    = 8
 	DefaultWorkerMemory = 20480 // MB
 	DefaultWorkerDisk   = 50    // GB
 )
 
+// Disk size defaults.
 const (
 	DefaultOSDiskGB   = 50
 	DefaultDataDiskGB = 500 // For Ceph
 )
 
+// Networking defaults.
 const (
 	DefaultMachineCIDR = "192.168.1.0/24"
 	DefaultGateway     = "192.168.1.1"
@@ -40,29 +46,34 @@ const (
 	DefaultBastionIP   = "192.168.1.20"
 )
 
+// Proxmox provider defaults.
 const (
 	DefaultProxmoxBridge  = "vmbr0"
 	DefaultProxmoxStorage = "local-lvm"
 )
 
+// HTTP server defaults for ignition hosting.
 const (
 	DefaultIgnitionServerIP = "192.168.1.20"
 	DefaultHTTPPort         = 8080
 	DefaultWebRoot          = "/var/www/html"
 )
 
+// VM numbering and deployment timeout defaults.
 const (
 	DefaultVMIDBase         = 6000
 	DefaultBootstrapTimeout = 3600 // 1 hour in seconds
 	DefaultInstallTimeout   = 7200 // 2 hours in seconds
 )
 
+// Addon defaults (GitOps).
 const (
 	DefaultGitOpsProvider = "flux"
 	DefaultGitOpsBranch   = "main"
 	DefaultGitOpsPath     = "kubernetes/clusters/production"
 )
 
+// Validator bounds applied to wizard input fields.
 const (
 	MinNodeCount  = 1
 	MaxNodeCount  = 100

@@ -6,12 +6,17 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+
+	"github.com/qxtaiba/okdctl/internal/logutil"
 )
 
+// Terraform removes generated Terraform artifacts under
+// infrastructure/terraform/environments. When terraformEnv is empty every
+// environment directory is cleaned; otherwise only that one.
+// terraform.tfstate is intentionally preserved so destroy can still run.
 func Terraform(ctx context.Context, projectRoot, terraformEnv string, logger *slog.Logger) error {
-	if logger != nil {
-		logger.Info("cleanup: terraform artifacts")
-	}
+	logger = logutil.OrNop(logger)
+	logger.Info("cleanup: terraform artifacts")
 
 	terraformBase := filepath.Join(projectRoot, "infrastructure", "terraform", "environments")
 
@@ -22,9 +27,7 @@ func Terraform(ctx context.Context, projectRoot, terraformEnv string, logger *sl
 	entries, err := os.ReadDir(terraformBase)
 	if err != nil {
 		if os.IsNotExist(err) {
-			if logger != nil {
-				logger.Info("cleanup: terraform environments directory does not exist")
-			}
+			logger.Info("cleanup: terraform environments directory does not exist")
 			return nil
 		}
 		return err
@@ -45,9 +48,8 @@ func cleanupTerraformEnv(ctx context.Context, envDir, envName string, logger *sl
 		return nil
 	}
 
-	if logger != nil {
-		logger.Info(fmt.Sprintf("cleanup: terraform artifacts for environment %s", envName))
-	}
+	logger = logutil.OrNop(logger)
+	logger.Info(fmt.Sprintf("cleanup: terraform artifacts for environment %s", envName))
 
 	// Note: We intentionally do NOT remove terraform.tfstate here!
 	// The state file is needed to track existing resources for destroy operations.
@@ -62,10 +64,10 @@ func cleanupTerraformEnv(ctx context.Context, envDir, envName string, logger *sl
 	}
 
 	for _, f := range filesToRemove {
-		_ = SafeRemoveWithLogger(ctx, filepath.Join(envDir, f), fmt.Sprintf("terraform %s", f), nil)
+		_ = SafeRemoveWithLogger(ctx, filepath.Join(envDir, f), fmt.Sprintf("terraform %s", f), logger)
 	}
 
-	_ = SafeRemoveWithLogger(ctx, filepath.Join(envDir, ".terraform"), "terraform cache directory", nil)
+	_ = SafeRemoveWithLogger(ctx, filepath.Join(envDir, ".terraform"), "terraform cache directory", logger)
 
 	return nil
 }

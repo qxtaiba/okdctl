@@ -8,6 +8,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 )
 
+// AdvancedStepDefinition declares the advanced-settings step fields.
 var AdvancedStepDefinition = wizard.StepDefinition{
 	ID:           wizard.StepIDAdvanced,
 	Title:        "advanced settings",
@@ -168,6 +169,7 @@ var AdvancedStepDefinition = wizard.StepDefinition{
 	},
 }
 
+// NewAdvancedStep returns the advanced-settings wizard step and its state.
 func NewAdvancedStep() (step, state *wizard.DataDrivenStep) {
 	step = wizard.NewDataDrivenStep(&AdvancedStepDefinition)
 	return step, step

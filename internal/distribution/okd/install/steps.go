@@ -9,6 +9,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 )
 
+// Step IDs for the install phase, ordered as they execute.
 const (
 	StepDeployInfra     distribution.StepID = "deploy-infrastructure"
 	StepWaitBootstrap   distribution.StepID = "wait-bootstrap"

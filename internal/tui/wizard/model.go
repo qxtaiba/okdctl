@@ -37,6 +37,7 @@ type centerable interface {
 	IsCentered() bool
 }
 
+// Model is the bubbletea model backing the configuration wizard.
 type Model struct {
 	width  int
 	height int
@@ -56,6 +57,7 @@ type Model struct {
 	keyMap KeyMap
 }
 
+// Result is what the wizard returns when it exits.
 type Result struct {
 	Completed bool
 	Cancelled bool
@@ -63,14 +65,17 @@ type Result struct {
 	Action    Action
 }
 
+// Action names the user's choice at the wizard's terminal step.
 type Action string
 
+// Wizard terminal actions.
 const (
 	ActionDeploy    Action = "deploy"
 	ActionPreflight Action = "preflight"
 	ActionExit      Action = "exit"
 )
 
+// KeyMap enumerates the wizard's global keybindings.
 type KeyMap struct {
 	Next     key.Binding
 	Back     key.Binding
@@ -134,6 +139,7 @@ func defaultKeyMap() KeyMap {
 	}
 }
 
+// NewModel constructs a wizard Model from its ordered steps and a seed cfg.
 func NewModel(steps []WizardStep, cfg *config.Config) *Model {
 	w, h := getTerminalSize()
 
@@ -173,6 +179,7 @@ func getTerminalSize() (width, height int) {
 	return w, h
 }
 
+// Init returns the command emitted by the first step's Init.
 func (m *Model) Init() tea.Cmd {
 	var cmds []tea.Cmd
 
@@ -183,6 +190,8 @@ func (m *Model) Init() tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
+// Update processes wizard-level messages (navigation, resize, quit) and
+// delegates the rest to the currently-active step.
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 
@@ -250,14 +259,17 @@ func stepAutoCompletes(step WizardStep) bool {
 	return false
 }
 
+// Result returns the final wizard outcome.
 func (m *Model) Result() Result {
 	return m.result
 }
 
+// Config returns the Config the wizard is editing.
 func (m *Model) Config() *config.Config {
 	return m.config
 }
 
+// CurrentStep returns the step the wizard is currently displaying.
 func (m *Model) CurrentStep() WizardStep {
 	if len(m.steps) > 0 && m.currentStep < len(m.steps) {
 		return m.steps[m.currentStep]

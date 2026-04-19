@@ -11,10 +11,12 @@ type PhaseContext[T any] struct {
 	data T
 }
 
+// NewPhaseContext returns a PhaseContext seeded with initial.
 func NewPhaseContext[T any](initial T) *PhaseContext[T] {
 	return &PhaseContext[T]{data: initial}
 }
 
+// Get returns a copy of the stored value under the read lock.
 func (c *PhaseContext[T]) Get() T {
 	c.mu.RLock()
 	defer c.mu.RUnlock()

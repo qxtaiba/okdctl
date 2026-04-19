@@ -15,6 +15,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/logutil"
 )
 
+// ExtractOptions configures an ExtractTarGz call.
 type ExtractOptions struct {
 	ArchivePath      string
 	DestDir          string
@@ -128,6 +129,9 @@ func processTarEntry(tarReader *tar.Reader, header *tar.Header, destDir string, 
 	return nil
 }
 
+// ExtractTarGz extracts opts.ArchivePath into opts.DestDir. Zip-slip and
+// symlink-traversal escapes are rejected; path prefixes are rechecked after
+// os.EvalSymlinks so writes through previously-extracted links also fail.
 func ExtractTarGz(ctx context.Context, opts ExtractOptions) error {
 	filename := filepath.Base(opts.ArchivePath)
 

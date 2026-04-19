@@ -81,10 +81,12 @@ type BasePhase struct {
     Exec    *executor.Executor  // subprocess runner (oc, terraform, etc.)
     Log     *slog.Logger        // structured logger
     Version string              // OKD version string, for display
-    OS      platform.OS         // OS family detection
-    Pkg     packages.Manager    // dnf/apt wrapper
 }
 ```
+
+Phases that need OS-family awareness (setup, cleanup) embed `BasePhase` and
+add their own `platform.OS` / `platform.PackageManager` fields — `BasePhase`
+itself stays distribution-agnostic.
 
 Phases get shared helper methods on `BasePhase` for common operations:
 

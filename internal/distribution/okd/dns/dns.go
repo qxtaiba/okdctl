@@ -16,6 +16,10 @@ import (
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
+// BuildConfigData assembles the DNS template data (cluster domain, node IPs,
+// VIPs, upstream servers) from a validated Config. The node IP range is
+// checked against machineCIDR up front so we fail early rather than midway
+// through per-node calculations.
 func BuildConfigData(cfg *config.Config) (templates.DNSConfigData, error) {
 	if cfg == nil {
 		return templates.DNSConfigData{}, fmt.Errorf("config cannot be nil")
@@ -93,6 +97,8 @@ func BuildConfigData(cfg *config.Config) (templates.DNSConfigData, error) {
 	return data, nil
 }
 
+// GenerateBootstrapConfig renders the bootstrap-phase dnsmasq config to
+// outputDir/dnsmasq-bootstrap.conf and returns its path and content.
 func GenerateBootstrapConfig(cfg *config.Config, outputDir string) (path, content string, err error) {
 	data, err := BuildConfigData(cfg)
 	if err != nil {
@@ -116,10 +122,13 @@ func GenerateBootstrapConfig(cfg *config.Config, outputDir string) (path, conten
 	return path, content, nil
 }
 
+// ConfigName returns the dnsmasq drop-in name for clusterName ("okd-<name>").
 func ConfigName(clusterName string) string {
 	return fmt.Sprintf("okd-%s", clusterName)
 }
 
+// Setup enables dnsmasq and points the system resolver at it, with
+// fallbackDNS used when the cluster resolver is unavailable.
 func Setup(ctx context.Context, fallbackDNS []string, logger *slog.Logger) error {
 	if err := EnableDnsmasq(ctx); err != nil {
 		return fmt.Errorf("failed to enable dnsmasq: %w", err)
@@ -130,6 +139,8 @@ func Setup(ctx context.Context, fallbackDNS []string, logger *slog.Logger) error
 	return nil
 }
 
+// DeployBootstrap writes the bootstrap-phase dnsmasq config and restarts the
+// service. On validation or restart failure the previous config is restored.
 func DeployBootstrap(ctx context.Context, cfg *config.Config) error {
 	data, err := BuildConfigData(cfg)
 	if err != nil {
@@ -153,6 +164,9 @@ func DeployBootstrap(ctx context.Context, cfg *config.Config) error {
 	return nil
 }
 
+// DeployProduction writes the post-install dnsmasq config with cluster
+// apps/VIP records and any custom-domain overrides, then restarts dnsmasq.
+// On failure the previous config is restored.
 func DeployProduction(ctx context.Context, cfg *config.Config, appsIP, kubeVipIP string, customDomains []templates.DNSCustomDomain) error {
 	data, err := BuildConfigData(cfg)
 	if err != nil {

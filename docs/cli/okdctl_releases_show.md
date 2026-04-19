@@ -9,17 +9,19 @@ okdctl releases show <version> [flags]
 ### Options
 
 ```
+  -F, --format string   output format: text|json (default "text")
   -h, --help            help for show
-      --output string   output format: text|json (default "text")
 ```
 
 ### Options inherited from parent commands
 
 ```
   -c, --config string       configuration file (default "okdctl.yaml")
-      --log-file string     write log output to this file in addition to stdout
+      --log-file string     write log output to this file in addition to stderr
       --log-format string   log output format (text, json) (default "text")
       --log-level string    log verbosity (debug, info, warn, error) (default "info")
+  -q, --quiet               suppress info/warn logs (alias for --log-level=error)
+  -v, --verbose             enable debug logging (alias for --log-level=debug)
 ```
 
 ### SEE ALSO

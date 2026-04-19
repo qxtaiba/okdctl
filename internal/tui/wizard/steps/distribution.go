@@ -23,6 +23,8 @@ const (
 	phaseVersionSelect
 )
 
+// DistributionStep is the bubbletea step that lets the user pick an OKD
+// version, with on-demand release fetching and grouped minor/patch display.
 type DistributionStep struct {
 	wizard.BaseStep
 	versionSelector *components.Selector
@@ -37,6 +39,7 @@ type DistributionStep struct {
 	loadError      error
 }
 
+// NewDistributionStep constructs the distribution step.
 func NewDistributionStep() *DistributionStep {
 	s := spinner.New()
 	s.Spinner = spinner.Dot
@@ -60,6 +63,7 @@ func NewDistributionStep() *DistributionStep {
 	}
 }
 
+// Init starts the release fetch and spins the loading indicator.
 func (s *DistributionStep) Init() tea.Cmd {
 	return tea.Batch(
 		s.loadingSpinner.Tick,
@@ -67,6 +71,7 @@ func (s *DistributionStep) Init() tea.Cmd {
 	)
 }
 
+// Update handles version-load messages, spinner ticks, and navigation keys.
 func (s *DistributionStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 	switch msg := msg.(type) {
 	case versionsLoadedMsg:
@@ -163,6 +168,7 @@ func (s *DistributionStep) handleNavigationKey(msg tea.KeyPressMsg) (wizard.Wiza
 	return s, cmd
 }
 
+// View renders either the loading indicator or the version selector.
 func (s *DistributionStep) View(width, height int) string {
 	s.SetSize(width, height)
 	s.versionSelector.SetSize(width, height)
@@ -228,16 +234,19 @@ func (s *DistributionStep) viewVersionPhase() string {
 	return content.String()
 }
 
+// Validate always returns nil; any available version choice is valid.
 func (s *DistributionStep) Validate() error {
 	return nil
 }
 
+// Apply writes the selected OKD version into cfg.
 func (s *DistributionStep) Apply(cfg *config.Config) error {
 	cfg.Distribution.Type = config.DistributionOKD
 	cfg.Distribution.Version = s.selectedVersion
 	return nil
 }
 
+// ShortHelp returns the step's help bar, which differs by phase.
 func (s *DistributionStep) ShortHelp() []wizard.KeyBinding {
 	if s.phase == phaseVersionSelect {
 		return []wizard.KeyBinding{
@@ -253,6 +262,8 @@ func (s *DistributionStep) ShortHelp() []wizard.KeyBinding {
 	}
 }
 
+// SetFocused toggles focus; the version selector is only focused once the
+// release list has loaded.
 func (s *DistributionStep) SetFocused(focused bool) {
 	s.BaseStep.SetFocused(focused)
 	if focused && s.phase == phaseVersionSelect {
@@ -262,15 +273,19 @@ func (s *DistributionStep) SetFocused(focused bool) {
 	}
 }
 
+// GetSelectedVersion returns the version the user has chosen.
 func (s *DistributionStep) GetSelectedVersion() string {
 	return s.selectedVersion
 }
 
+// SetSelectedVersion pre-selects a version, keeping the UI in sync.
 func (s *DistributionStep) SetSelectedVersion(version string) {
 	s.selectedVersion = version
 	s.versionSelector.SetSelectedByID(version)
 }
 
+// DisplayTitle returns the header text for the step, suppressed while the
+// release list is loading.
 func (s *DistributionStep) DisplayTitle() string {
 	switch s.phase {
 	case phaseVersionLoading:

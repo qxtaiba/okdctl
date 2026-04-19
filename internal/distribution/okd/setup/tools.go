@@ -54,6 +54,7 @@ func isToolInstalled(tool externalTool) bool {
 	return executor.CommandExists(string(tool))
 }
 
+// InstallExternalTools installs terraform, yq, and any addon-declared tools.
 func (p *Phase) InstallExternalTools(ctx context.Context, cfg *config.Config) error {
 	tools := append([]externalTool{toolTerraform, toolYQ}, addonRequiredTools(cfg)...)
 	for _, tool := range tools {
@@ -104,7 +105,7 @@ func (p *Phase) installTool(ctx context.Context, tool externalTool, cfg *config.
 	resolvedURL := ResolveToolURL(string(tool), spec.url, cfg)
 	resolvedVersion := ResolveToolVersion(string(tool), spec.defaultVersion, cfg)
 	if resolvedURL != spec.url || resolvedVersion != spec.defaultVersion {
-		p.Log.Info(fmt.Sprintf("tools: %s using override (version=%q url=%s)", tool, resolvedVersion, resolvedURL))
+		p.Log.Info("tools: using override", "tool", tool, "version", resolvedVersion, "url", resolvedURL)
 	}
 	spec.url = strings.NewReplacer(
 		"{version}", resolvedVersion,
@@ -117,7 +118,7 @@ func (p *Phase) installTerraform(ctx context.Context) error {
 	p.Log.Info("tools: installing terraform via hashicorp repository")
 
 	switch p.OS.Family {
-	case "debian":
+	case platform.FamilyDebian:
 		if err := installHashiCorpDebianRepo(ctx); err != nil {
 			return err
 		}
@@ -186,7 +187,7 @@ func (p *Phase) installBinary(ctx context.Context, spec *binaryInstallSpec) erro
 	if !isToolInstalled(externalTool(spec.name)) {
 		return fmt.Errorf("%s installation verification failed", spec.name)
 	}
-	p.Log.Info(fmt.Sprintf("tools: %s installed (%s)", spec.name, getToolVersion(ctx, spec.name, spec.versionFlag)))
+	p.Log.Info("tools: installed", "tool", spec.name, "version", getToolVersion(ctx, spec.name, spec.versionFlag))
 	return nil
 }
 

@@ -1,9 +1,3 @@
-// Package platform — see platform.go for the package summary. This file
-// implements the OS-agnostic PackageManager abstraction, with a single
-// Manager type driven by per-family binary names (dnf/apt-get, rpm/dpkg)
-// rather than separate DNF/APT structs. Stderr is captured on every
-// invocation so an install/remove failure surfaces the apt/dnf error
-// message rather than a bare exit code.
 package platform
 
 import (
@@ -18,6 +12,8 @@ import (
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
+// PackageManager abstracts the host package manager (dnf or apt-get) used to
+// install OKD host dependencies.
 type PackageManager interface {
 	Install(ctx context.Context, packages []string, logger *slog.Logger) error
 	Remove(ctx context.Context, packages []string, logger *slog.Logger) error
@@ -41,10 +37,12 @@ type Manager struct {
 	queryMatch string
 }
 
+// NewPackageManager returns a Manager wired to the appropriate backend for
+// the detected OS family (dnf/rpm on RHEL, apt-get/dpkg on Debian).
 func NewPackageManager(detected OS) PackageManager {
-	if detected.Family == familyDebian {
+	if detected.Family == FamilyDebian {
 		return &Manager{
-			family:     familyDebian,
+			family:     FamilyDebian,
 			pkgCmd:     "apt-get",
 			queryCmd:   "dpkg",
 			queryArgs:  []string{"-l"},
@@ -52,13 +50,15 @@ func NewPackageManager(detected OS) PackageManager {
 		}
 	}
 	return &Manager{
-		family:    familyRHEL,
+		family:    FamilyRHEL,
 		pkgCmd:    "dnf",
 		queryCmd:  "rpm",
 		queryArgs: []string{"-q"},
 	}
 }
 
+// Install installs packages via the configured backend. Empty input
+// is a no-op.
 func (m *Manager) Install(ctx context.Context, packages []string, logger *slog.Logger) error {
 	if len(packages) == 0 {
 		return nil
@@ -68,6 +68,8 @@ func (m *Manager) Install(ctx context.Context, packages []string, logger *slog.L
 	return runCaptured(ctx, m.pkgCmd, args)
 }
 
+// Remove uninstalls only the packages in packages that are currently
+// installed, leaving the rest alone.
 func (m *Manager) Remove(ctx context.Context, packages []string, _ *slog.Logger) error {
 	if len(packages) == 0 {
 		return nil
@@ -85,6 +87,8 @@ func (m *Manager) Remove(ctx context.Context, packages []string, _ *slog.Logger)
 	return runCaptured(ctx, m.pkgCmd, args)
 }
 
+// IsInstalled reports whether pkg is present using the backend's query
+// command. For dpkg, stale "rc" entries are filtered out.
 func (m *Manager) IsInstalled(ctx context.Context, pkg string) bool {
 	args := append(append([]string{}, m.queryArgs...), pkg)
 	cmd := exec.CommandContext(ctx, m.queryCmd, args...) //nolint:gosec // queryCmd/queryArgs are set only from the literal constructors in NewPackageManager
@@ -98,10 +102,12 @@ func (m *Manager) IsInstalled(ctx context.Context, pkg string) bool {
 	return strings.Contains(string(output), m.queryMatch+pkg)
 }
 
+// AddRepo registers a new package repository with the backend: dnf
+// config-manager on RHEL, an /etc/apt/sources.list.d entry on Debian.
 func (m *Manager) AddRepo(ctx context.Context, name, url string, logger *slog.Logger) error {
 	logger.Info(fmt.Sprintf("packages: adding repository %s", name))
 
-	if m.family == familyRHEL {
+	if m.family == FamilyRHEL {
 		return runCaptured(ctx, m.pkgCmd, []string{"config-manager", "--add-repo", url})
 	}
 

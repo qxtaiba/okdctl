@@ -14,6 +14,7 @@ import (
 //go:embed *.tmpl
 var templateFS embed.FS
 
+// InstallConfigData is the template binding for install-config.yaml.
 type InstallConfigData struct {
 	ClusterName    string
 	BaseDomain     string
@@ -28,6 +29,7 @@ type InstallConfigData struct {
 	Architecture   string
 }
 
+// TerraformVarsData is the template binding for terraform.tfvars.
 type TerraformVarsData struct {
 	ClusterName          string
 	TargetNode           string
@@ -60,11 +62,13 @@ type TerraformVarsData struct {
 	WorkerTargetNodes    string
 }
 
+// HAProxyServer is a single backend entry in the HAProxy config template.
 type HAProxyServer struct {
 	Name string
 	IP   string
 }
 
+// HAProxyConfigData is the template binding for haproxy.cfg.
 type HAProxyConfigData struct {
 	ClusterDomain string
 	BootstrapIP   string
@@ -73,6 +77,7 @@ type HAProxyConfigData struct {
 	BackupServers []HAProxyServer // masters as backup for http/https when workers are configured
 }
 
+// DNSNode is one A/PTR record pair in the dnsmasq config template.
 type DNSNode struct {
 	Name string
 	IP   string
@@ -84,6 +89,8 @@ type DNSCustomDomain struct {
 	IP     string // LoadBalancer IP assigned by MetalLB
 }
 
+// DNSConfigData is the template binding for dnsmasq bootstrap and production
+// configs.
 type DNSConfigData struct {
 	ClusterName   string
 	ClusterDomain string // e.g., "mycluster.k8s.local"
@@ -105,58 +112,75 @@ type DNSConfigData struct {
 	WorkerNodes   []DNSNode
 }
 
+// DefaultKubeVIPImageTag is the kube-vip image tag used when KubeVIPData
+// leaves ImageTag empty.
 const DefaultKubeVIPImageTag = "v1.0.4"
 
+// KubeVIPData is the template binding for the kube-vip DaemonSet manifest.
 type KubeVIPData struct {
 	VIPAddress string // e.g. "192.168.227.10"
 	Interface  string // interface used for ARP announcements, e.g. "ens18"
 	ImageTag   string // e.g. "v1.0.4"
 }
 
+// PreInstallData is the template binding for the pre-install shell script.
 type PreInstallData struct {
 	OSSerial   string
 	DataSerial string
 }
 
+// RenderPreInstall renders the pre-install shell script from data.
 func RenderPreInstall(data PreInstallData) (string, error) {
 	return renderTemplate("pre-install.sh.tmpl", data)
 }
 
+// CompactIngressData is the template binding for the compact-mode ingress
+// controller manifest.
 type CompactIngressData struct {
 	Replicas int
 }
 
+// RenderCompactIngress renders the compact-mode ingress controller manifest.
 func RenderCompactIngress(data CompactIngressData) (string, error) {
 	return renderTemplate("ingress-controller-compact.yaml.tmpl", data)
 }
 
+// RenderInstallConfig renders install-config.yaml from data.
 func RenderInstallConfig(data *InstallConfigData) (string, error) {
 	return renderTemplate("install-config.yaml.tmpl", data)
 }
 
+// RenderTerraformVars renders terraform.tfvars from data.
 func RenderTerraformVars(data *TerraformVarsData) (string, error) {
 	return renderTemplate("terraform.tfvars.tmpl", data)
 }
 
+// RenderHAProxyConfig renders haproxy.cfg from data.
 func RenderHAProxyConfig(data *HAProxyConfigData) (string, error) {
 	return renderTemplate("haproxy.cfg.tmpl", data)
 }
 
+// RenderDNSBootstrapConfig renders the dnsmasq config used during bootstrap.
 func RenderDNSBootstrapConfig(data *DNSConfigData) (string, error) {
 	return renderTemplate("dnsmasq-bootstrap.conf.tmpl", data)
 }
 
+// RenderDNSProductionConfig renders the dnsmasq config used once the cluster
+// is live.
 func RenderDNSProductionConfig(data *DNSConfigData) (string, error) {
 	return renderTemplate("dnsmasq-production.conf.tmpl", data)
 }
 
+// KubeVIPRBACManifest is one rendered kube-vip RBAC YAML document with its
+// target filename.
 type KubeVIPRBACManifest struct {
 	Filename string
 	Content  string
 }
 
-// Each resource is rendered separately because openshift-install only processes
-// the first YAML document per file.
+// RenderKubeVIPRBACManifests renders each kube-vip RBAC manifest as a
+// separate document. Each resource is rendered separately because
+// openshift-install only processes the first YAML document per file.
 func RenderKubeVIPRBACManifests() ([]KubeVIPRBACManifest, error) {
 	matches, err := fs.Glob(templateFS, "kube-vip-rbac-*.yaml.tmpl")
 	if err != nil {
@@ -177,6 +201,8 @@ func RenderKubeVIPRBACManifests() ([]KubeVIPRBACManifest, error) {
 	return manifests, nil
 }
 
+// RenderKubeVIPDaemonSet renders the kube-vip DaemonSet manifest from data,
+// defaulting ImageTag to DefaultKubeVIPImageTag when empty.
 func RenderKubeVIPDaemonSet(data KubeVIPData) (string, error) {
 	if data.ImageTag == "" {
 		data.ImageTag = DefaultKubeVIPImageTag

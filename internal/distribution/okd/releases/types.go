@@ -5,16 +5,26 @@ import (
 	"time"
 )
 
+// ReleaseType classifies an OKD release for display. Values drive DisplayName
+// suffixes ("(Latest)", "(Preview)", etc.) surfaced by the releases CLI.
 type ReleaseType int
 
 const (
+	// ReleaseTypeStable is a shipped-stable release.
 	ReleaseTypeStable ReleaseType = iota
+	// ReleaseTypeLatestStable is the newest stable in its minor series.
 	ReleaseTypeLatestStable
+	// ReleaseTypePreview is a pre-release (preview) build.
 	ReleaseTypePreview
+	// ReleaseTypeLatestPreview is the newest preview in its minor series.
 	ReleaseTypeLatestPreview
+	// ReleaseTypeLTS is a long-term-support release.
 	ReleaseTypeLTS
 )
 
+// OKDVersion is one OKD release entry fetched from the release catalog.
+// JSON field names are part of the `okdctl releases list --output=json`
+// contract — see audit-cli-ux ux:e7db1220 before renaming.
 type OKDVersion struct {
 	Version     string      `json:"version"`
 	Tag         string      `json:"tag"`
@@ -24,6 +34,8 @@ type OKDVersion struct {
 	Type        ReleaseType `json:"release_type"` // Computed release type for display
 }
 
+// OKDReleaseSeries groups releases by major.minor with the newest member
+// cached as Latest for O(1) lookup.
 type OKDReleaseSeries struct {
 	Major    int
 	Minor    int
@@ -58,6 +70,8 @@ func (v *OKDVersion) Minor() int {
 	return minor
 }
 
+// DisplayName returns the version string with a release-type suffix
+// ("4.15.1 (Latest)"), used by the releases list CLI renderer.
 func (v *OKDVersion) DisplayName() string {
 	switch v.Type {
 	case ReleaseTypeLatestStable:
@@ -73,6 +87,8 @@ func (v *OKDVersion) DisplayName() string {
 	}
 }
 
+// ShortVersion returns the "major.minor" form (e.g. "4.15") of the version,
+// or "0.0" when Version is unparsable.
 func (v *OKDVersion) ShortVersion() string {
 	return fmt.Sprintf("%d.%d", v.Major(), v.Minor())
 }

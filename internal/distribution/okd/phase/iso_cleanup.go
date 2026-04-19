@@ -212,14 +212,14 @@ func RemoveFCOSISOFromProxmox(ctx context.Context, p *RemoteISOParams, isoDir st
 
 	for _, f := range files {
 		if err := refuseUnsafeISOPath(isoDir, f); err != nil {
-			p.Log.Warn(fmt.Sprintf("iso: skipping %s: %v", f, err))
+			p.Log.Warn("iso: skipping file", "file", f, "err", err)
 			continue
 		}
 
 		isoBase := filepath.Base(f)
 		inUse, err := anyVMReferencesISO(ctx, p, isoBase)
 		if err != nil {
-			p.Log.Warn(fmt.Sprintf("iso: could not check vm references for %s: %v — skipping", isoBase, err))
+			p.Log.Warn("iso: could not check vm references — skipping", "iso", isoBase, "err", err)
 			continue
 		}
 		if inUse {
@@ -230,7 +230,7 @@ func RemoveFCOSISOFromProxmox(ctx context.Context, p *RemoteISOParams, isoDir st
 		// Shell-single-quote the path so filenames with spaces or metacharacters
 		// reach rm as a single literal argument.
 		if _, rmErr := SSHRun(ctx, p.Exec, p.Host, "rm -f "+shellSingleQuote(f)); rmErr != nil {
-			p.Log.Warn(fmt.Sprintf("iso: failed to remove %s: %v", isoBase, rmErr))
+			p.Log.Warn("iso: failed to remove", "iso", isoBase, "err", rmErr)
 			continue
 		}
 		p.Log.Info(fmt.Sprintf("iso: removed %s from proxmox host", isoBase))

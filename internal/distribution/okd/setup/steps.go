@@ -16,6 +16,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
+// Step IDs for the setup phase, ordered as they execute.
 const (
 	StepInstallPackages   distribution.StepID = "install-packages"
 	StepInstallTools      distribution.StepID = "install-tools"
@@ -98,8 +99,8 @@ func (p *Phase) setupManifestSteps(cfg *config.Config, opts *Options, clusterDir
 				if err := p.GenerateInstallConfig(ctx, cfg, clusterDir); err != nil {
 					return fmt.Errorf("failed to generate install-config: %w", err)
 				}
-				p.Log.Info(fmt.Sprintf("config: install-config.yaml generated with %d masters and %d workers",
-					cfg.Topology.ControlPlane.Count, cfg.Topology.Workers.Count))
+				p.Log.Info("config: install-config.yaml generated",
+					"masters", cfg.Topology.ControlPlane.Count, "workers", cfg.Topology.Workers.Count)
 				return nil
 			},
 		},
@@ -209,7 +210,7 @@ func (p *Phase) setupWebSteps(cfg *config.Config, opts *Options, clusterDir stri
 				return nil
 			},
 			OnError: func(err error) {
-				p.Log.Warn(fmt.Sprintf("iso: upload failed: %v", err))
+				p.Log.Warn("iso: upload failed", "err", err)
 				p.Log.Warn("iso: you may need to upload isos manually before deploying")
 			},
 		},
@@ -264,7 +265,7 @@ func (p *Phase) setupInfraSteps(cfg *config.Config, opts *Options) []distributio
 			Desc: "configuring dnsmasq and deploying bootstrap dns configuration", NonFatal: true,
 			Exec: func(ctx context.Context) error { return p.configureDNS(ctx, cfg, opts) },
 			OnError: func(err error) {
-				p.Log.Warn(fmt.Sprintf("dns: configuration failed: %v", err))
+				p.Log.Warn("dns: configuration failed", "err", err)
 				p.Log.Warn("dns: you may need to configure dns manually")
 			},
 		},
@@ -292,7 +293,7 @@ func (p *Phase) installSystemPackages(ctx context.Context) error {
 
 	p.Log.Info(fmt.Sprintf("packages: installing %d missing package(s)", len(toInstall)))
 	if err := packages.Install(ctx, p.Pkg, toInstall, "system dependencies", p.Log); err != nil {
-		p.Log.Warn(fmt.Sprintf("packages: installation had warnings: %v", err))
+		p.Log.Warn("packages: installation had warnings", "err", err)
 	}
 	return nil
 }
@@ -338,8 +339,8 @@ func (p *Phase) generateKubeVIPManifests(cfg *config.Config, clusterDir string) 
 		return fmt.Errorf("failed to write kube-vip DaemonSet manifest: %w", err)
 	}
 
-	p.Log.Info(fmt.Sprintf("kubevip: manifests generated (vip=%s, interface=%s, image=ghcr.io/kube-vip/kube-vip:%s)",
-		vip, iface, templates.DefaultKubeVIPImageTag))
+	p.Log.Info("kubevip: manifests generated",
+		"vip", vip, "interface", iface, "image", "ghcr.io/kube-vip/kube-vip:"+templates.DefaultKubeVIPImageTag)
 	return nil
 }
 
@@ -359,7 +360,7 @@ func (p *Phase) configureDNS(ctx context.Context, cfg *config.Config, opts *Opti
 	// Save a copy to the work directory for reference (non-fatal).
 	outputDir := filepath.Join(opts.WorkDir, "dns")
 	if _, _, err := dns.GenerateBootstrapConfig(cfg, outputDir); err != nil {
-		p.Log.Warn(fmt.Sprintf("dns: failed to save config copy: %v", err))
+		p.Log.Warn("dns: failed to save config copy", "err", err)
 	}
 
 	configPath, err := dns.DnsmasqConfigPath(fmt.Sprintf("okd-%s", cfg.Cluster.Name))

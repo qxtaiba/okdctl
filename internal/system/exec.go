@@ -12,12 +12,15 @@ import (
 	"github.com/qxtaiba/okdctl/internal/logutil"
 )
 
+// WaitForOptions configures the polling loop driven by WaitFor.
 type WaitForOptions struct {
 	Interval time.Duration // Default: 30 seconds
 	Timeout  time.Duration // Default: no timeout (0)
 	Logger   *slog.Logger
 }
 
+// DefaultWaitForOptions returns WaitForOptions with Interval=30s and no
+// timeout, suitable as a starting point for callers that tweak one field.
 func DefaultWaitForOptions() WaitForOptions {
 	return WaitForOptions{
 		Interval: 30 * time.Second,
@@ -25,6 +28,9 @@ func DefaultWaitForOptions() WaitForOptions {
 	}
 }
 
+// WaitFor polls check at opts.Interval until it returns true, ctx is
+// cancelled, or opts.Timeout elapses. A timeout that races with ctx
+// cancellation reports ctx.Err as the primary cause.
 func WaitFor(ctx context.Context, prefix, description string, check func() bool, opts WaitForOptions) error {
 	if opts.Interval == 0 {
 		opts.Interval = 30 * time.Second
@@ -76,11 +82,13 @@ func WaitFor(ctx context.Context, prefix, description string, check func() bool,
 			if err := ctx.Err(); err != nil {
 				return fmt.Errorf("waiting for %s %s: %w", prefix, description, err)
 			}
-			logger.Info(fmt.Sprintf("%s: waiting for %s... (%v elapsed)", prefix, description, elapsed.Round(time.Second)))
+			logger.Info(prefix+": waiting", "for", description, "elapsed", elapsed.Round(time.Second))
 		}
 	}
 }
 
+// WaitForWithTimeout is a convenience wrapper around WaitFor that sets
+// opts.Timeout and opts.Logger without the caller building WaitForOptions.
 func WaitForWithTimeout(ctx context.Context, prefix, description string, check func() bool, timeout time.Duration, logger *slog.Logger) error {
 	opts := DefaultWaitForOptions()
 	opts.Timeout = timeout

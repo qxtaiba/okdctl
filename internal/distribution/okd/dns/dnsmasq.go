@@ -23,14 +23,17 @@ const (
 
 var validConfigNameRegex = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$`)
 
+// EnableDnsmasq enables and starts the dnsmasq service.
 func EnableDnsmasq(ctx context.Context) error {
 	return system.ManageService(ctx, system.ServiceEnable, dnsmasqService, "dnsmasq")
 }
 
+// RestartDnsmasq restarts the dnsmasq service.
 func RestartDnsmasq(ctx context.Context) error {
 	return system.ManageService(ctx, system.ServiceRestart, dnsmasqService, "dnsmasq")
 }
 
+// ValidateDnsmasqConfig runs "dnsmasq --test" to verify the on-disk config.
 func ValidateDnsmasqConfig(ctx context.Context) error {
 	return exec.CommandContext(ctx, "dnsmasq", "--test").Run()
 }
@@ -45,6 +48,9 @@ func validateConfigName(name string) error {
 	return nil
 }
 
+// WriteDnsmasqConfig writes content to /etc/dnsmasq.d/<name>.conf. An
+// existing file is copied to <path>.backup first so validateAndRestartDnsmasq
+// can roll back on failure.
 func WriteDnsmasqConfig(_ context.Context, name, content string) error {
 	if err := validateConfigName(name); err != nil {
 		return fmt.Errorf("invalid config name: %w", err)
@@ -79,6 +85,8 @@ func WriteDnsmasqConfig(_ context.Context, name, content string) error {
 	return nil
 }
 
+// DnsmasqConfigPath returns the absolute path for the named drop-in config.
+// The name is validated to reject path-traversal characters.
 func DnsmasqConfigPath(name string) (string, error) {
 	if err := validateConfigName(name); err != nil {
 		return "", fmt.Errorf("invalid dnsmasq config name: %w", err)
@@ -86,6 +94,8 @@ func DnsmasqConfigPath(name string) (string, error) {
 	return filepath.Join(dnsmasqConfigDir, fmt.Sprintf("%s.conf", name)), nil
 }
 
+// IsNetworkManagerActive reports whether NetworkManager is running on a
+// Linux host with nmcli present. Returns false on non-Linux platforms.
 func IsNetworkManagerActive(ctx context.Context) bool {
 	if runtime.GOOS != "linux" {
 		return false
@@ -181,22 +191,25 @@ func ConfigureSystemResolver(ctx context.Context, fallbackDNS []string, logger *
 	return nil
 }
 
+// RestoreSystemResolver undoes ConfigureSystemResolver: it clears the
+// nmcli DNS override or removes the systemd-resolved drop-in. Failures are
+// logged but do not abort cleanup.
 func RestoreSystemResolver(ctx context.Context, logger *slog.Logger) error {
 	if IsNetworkManagerActive(ctx) {
 		conn, err := getActiveConnection(ctx)
 		if err != nil {
-			logger.Warn(fmt.Sprintf("resolver: could not detect active connection for restore: %v", err))
+			logger.Warn("resolver: could not detect active connection for restore", "err", err)
 			return nil // best-effort restore; no active connection is non-fatal
 		}
 
 		logger.Info(fmt.Sprintf("resolver: restoring DHCP DNS for %s", conn))
 
 		if err := exec.CommandContext(ctx, "nmcli", "connection", "modify", conn, "ipv4.dns", "", "ipv4.ignore-auto-dns", "no").Run(); err != nil {
-			logger.Warn(fmt.Sprintf("resolver: failed to clear DNS settings: %v", err))
+			logger.Warn("resolver: failed to clear DNS settings", "err", err)
 		}
 
 		if err := exec.CommandContext(ctx, "nmcli", "connection", "up", conn).Run(); err != nil {
-			logger.Warn(fmt.Sprintf("resolver: failed to apply DNS configuration: %v", err))
+			logger.Warn("resolver: failed to apply DNS configuration", "err", err)
 		}
 
 		logger.Info("resolver: system DNS restored to DHCP")
@@ -208,7 +221,7 @@ func RestoreSystemResolver(ctx context.Context, logger *slog.Logger) error {
 	if system.FileExists(resolvedConf) {
 		logger.Info("resolver: removing systemd-resolved dnsmasq configuration")
 		if err := os.RemoveAll(resolvedConf); err != nil {
-			logger.Warn(fmt.Sprintf("resolver: failed to remove %s: %v", resolvedConf, err))
+			logger.Warn("resolver: failed to remove", "path", resolvedConf, "err", err)
 		}
 		if system.IsServiceActive(ctx, "systemd-resolved") {
 			_ = system.ManageService(ctx, system.ServiceRestart, "systemd-resolved", "systemd-resolved")

@@ -14,6 +14,8 @@ import (
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
+// BuildCustomISOs produces a per-node FCOS ISO with coreos-installer that
+// embeds the node's ignition URL, role, and static-IP kernel arguments.
 func (p *Phase) BuildCustomISOs(ctx context.Context, cfg *config.Config, opts *Options) error {
 	isoDir := filepath.Join(opts.WorkDir, "custom-isos")
 	if err := system.EnsureDir(isoDir); err != nil {
