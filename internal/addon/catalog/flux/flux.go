@@ -72,12 +72,18 @@ func (f *Flux) Install(ctx context.Context, env *addon.Environment) error {
 		return fmt.Errorf("helm is required to install Flux")
 	}
 
+	decoded, err := f.DecodeSettings(env.AddonConfig.Settings)
+	if err != nil {
+		return fmt.Errorf("flux: invalid settings: %w", err)
+	}
+	fs := decoded.(Settings)
+
 	if err := addon.EnsureNamespace(ctx, env, "flux-system"); err != nil {
 		return err
 	}
 
 	if err := addon.RetryDefault(ctx, func() error {
-		return f.createDeployKeySecret(ctx, env)
+		return f.createDeployKeySecret(ctx, env, fs)
 	}); err != nil {
 		return fmt.Errorf("deploy key secret required: %w", err)
 	}
@@ -86,7 +92,7 @@ func (f *Flux) Install(ctx context.Context, env *addon.Environment) error {
 		return err
 	}
 
-	if err := f.installInstance(ctx, env); err != nil {
+	if err := f.installInstance(ctx, env, fs); err != nil {
 		return err
 	}
 
@@ -136,29 +142,18 @@ func (f *Flux) installOperator(ctx context.Context, env *addon.Environment) erro
 	return nil
 }
 
-func (f *Flux) installInstance(ctx context.Context, env *addon.Environment) error {
+func (f *Flux) installInstance(ctx context.Context, env *addon.Environment, fs Settings) error {
 	env.Logger.Info("flux: installing instance for gitops sync")
-	settings := env.AddonConfig.Settings
-	syncURL := settings[SettingRepository]
-	if syncURL == "" {
+	if fs.Repository == "" {
 		return fmt.Errorf("flux repository not configured - set addons.flux.settings.repository in config")
 	}
-	branch := settings[SettingBranch]
-	if branch == "" {
-		branch = "main"
-	}
-	syncPath := settings[SettingPath]
-	if syncPath == "" {
-		syncPath = "kubernetes/clusters/production"
-	}
-
 	return f.helmUpgradeInstall(ctx, env, "flux-instance",
 		"oci://ghcr.io/controlplaneio-fluxcd/charts/flux-instance",
 		"flux instance",
 		"--set", "instance.cluster.type=openshift",
-		"--set", fmt.Sprintf("instance.sync.url=%s", syncURL),
-		"--set", fmt.Sprintf("instance.sync.ref=refs/heads/%s", branch),
-		"--set", fmt.Sprintf("instance.sync.path=%s", syncPath),
+		"--set", fmt.Sprintf("instance.sync.url=%s", fs.Repository),
+		"--set", fmt.Sprintf("instance.sync.ref=refs/heads/%s", fs.Branch),
+		"--set", fmt.Sprintf("instance.sync.path=%s", fs.Path),
 		"--set", "instance.sync.pullSecret=flux-system",
 	)
 }
@@ -244,18 +239,22 @@ func (f *Flux) DefaultSettings() map[string]string {
 // ValidateSettings checks the flux addon settings map. It requires a Git URL
 // and rejects malformed branch or path values.
 func (f *Flux) ValidateSettings(settings map[string]string) []string {
+	decoded, err := f.DecodeSettings(settings)
+	if err != nil {
+		return []string{err.Error()}
+	}
+	fs := decoded.(Settings)
 	var errs []string
-	repo := settings[SettingRepository]
-	if repo == "" {
+	if fs.Repository == "" {
 		errs = append(errs, "repository is required (set addons.flux.settings.repository)")
-	} else if !strings.HasPrefix(repo, "ssh://") && !strings.HasPrefix(repo, "https://") &&
-		!strings.HasPrefix(repo, "git://") && !strings.HasPrefix(repo, "git@") {
+	} else if !strings.HasPrefix(fs.Repository, "ssh://") && !strings.HasPrefix(fs.Repository, "https://") &&
+		!strings.HasPrefix(fs.Repository, "git://") && !strings.HasPrefix(fs.Repository, "git@") {
 		errs = append(errs, "repository must be a valid Git URL (ssh://, https://, git://, or git@)")
 	}
-	if branch := settings[SettingBranch]; branch != "" && strings.ContainsAny(branch, " \t") {
+	if fs.Branch != "" && strings.ContainsAny(fs.Branch, " \t") {
 		errs = append(errs, "branch name cannot contain spaces")
 	}
-	if p := settings[SettingPath]; p != "" && !validSyncPath.MatchString(p) {
+	if fs.Path != "" && !validSyncPath.MatchString(fs.Path) {
 		errs = append(errs, "path contains invalid characters (allowed: alphanumeric, /, _, ., -)")
 	}
 	return errs
@@ -327,8 +326,8 @@ func (f *Flux) waitForGitSync(ctx context.Context, env *addon.Environment) error
 	return nil
 }
 
-func (f *Flux) createDeployKeySecret(ctx context.Context, env *addon.Environment) error {
-	repoURL := env.AddonConfig.Settings[SettingRepository]
+func (f *Flux) createDeployKeySecret(ctx context.Context, env *addon.Environment, fs Settings) error {
+	repoURL := fs.Repository
 	if repoURL == "" {
 		return fmt.Errorf("flux repository not configured - set addons.flux.settings.repository in config")
 	}

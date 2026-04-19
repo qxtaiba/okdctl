@@ -64,12 +64,17 @@ func (s *SecretStore) Info() addon.AddonInfo {
 // configured provider. When provider prerequisites (e.g., credential files)
 // are absent it logs setup instructions and returns nil.
 func (s *SecretStore) Install(ctx context.Context, env *addon.Environment) error {
-	p, providerName := resolveProvider(env.AddonConfig.Settings)
+	decoded, err := s.DecodeSettings(env.AddonConfig.Settings)
+	if err != nil {
+		return fmt.Errorf("secretstore: invalid settings: %w", err)
+	}
+	ts := decoded.(Settings)
+	p, _ := resolveProvider(env.AddonConfig.Settings)
 	if p == nil {
-		return fmt.Errorf("secretstore: unknown provider %q", providerName)
+		return fmt.Errorf("secretstore: unknown provider %q", ts.Provider)
 	}
 
-	skip, err := s.installPrereqCheck(env, providerName)
+	skip, err := s.installPrereqCheck(env, ts.Provider)
 	if err != nil {
 		return err
 	}
@@ -81,9 +86,9 @@ func (s *SecretStore) Install(ctx context.Context, env *addon.Environment) error
 		return err
 	}
 
-	env.Logger.Info(fmt.Sprintf("secretstore: installing %s provider", providerName))
+	env.Logger.Info(fmt.Sprintf("secretstore: installing %s provider", ts.Provider))
 
-	manifests, err := p.buildResources(ctx, env)
+	manifests, err := p.buildResources(ctx, env, ts)
 	if err != nil {
 		return err
 	}
@@ -99,7 +104,7 @@ func (s *SecretStore) Install(ctx context.Context, env *addon.Environment) error
 		}
 	}
 
-	env.Logger.Info(fmt.Sprintf("secretstore: %s provider installed", providerName))
+	env.Logger.Info(fmt.Sprintf("secretstore: %s provider installed", ts.Provider))
 	return nil
 }
 
@@ -110,7 +115,7 @@ func (s *SecretStore) Install(ctx context.Context, env *addon.Environment) error
 func (s *SecretStore) installPrereqCheck(env *addon.Environment, providerName string) (skip bool, err error) {
 	dir := resolveSecretsDir(env)
 	switch providerName {
-	case "onepassword":
+	case providerOnepassword:
 		credPath := filepath.Join(dir, opCredentialsFile)
 		tokenPath := filepath.Join(dir, opTokenFile)
 		if !system.FileExists(credPath) && !system.FileExists(tokenPath) {
@@ -128,7 +133,7 @@ func (s *SecretStore) installPrereqCheck(env *addon.Environment, providerName st
 		if (isSopsEncrypted(credPath) || isSopsEncrypted(tokenPath)) && !executor.CommandExists("sops") {
 			return false, fmt.Errorf("sops-encrypted secret files detected but sops is not installed: install with 'brew install sops'")
 		}
-	case "vault":
+	case providerVault:
 		tokenPath := filepath.Join(dir, vaultTokenFile)
 		if !system.FileExists(tokenPath) {
 			env.Logger.Warn(fmt.Sprintf("secretstore: vault-token.txt not found in %s, skipping", dir))
@@ -139,7 +144,7 @@ func (s *SecretStore) installPrereqCheck(env *addon.Environment, providerName st
 		if isSopsEncrypted(tokenPath) && !executor.CommandExists("sops") {
 			return false, fmt.Errorf("sops-encrypted vault token detected but sops is not installed: install with 'brew install sops'")
 		}
-	case "bitwarden":
+	case providerBitwarden:
 		tokenPath := filepath.Join(dir, bitwardenTokenFile)
 		if !system.FileExists(tokenPath) {
 			env.Logger.Warn(fmt.Sprintf("secretstore: bitwarden-token.txt not found in %s, skipping", dir))
@@ -200,7 +205,7 @@ func (s *SecretStore) RequiredTools() []addon.ToolSpec {
 func (s *SecretStore) DefaultSettings() map[string]string {
 	return map[string]string{
 		SettingSecretsDir:            defaultSecretsDir,
-		SettingProvider:              "onepassword",
+		SettingProvider:              providerOnepassword,
 		SettingOnepasswordVaults:     defaultOPVaults,
 		SettingVaultPath:             "secret",
 		SettingVaultVersion:          "v2",
@@ -213,17 +218,22 @@ func (s *SecretStore) DefaultSettings() map[string]string {
 // ValidateSettings dispatches to the selected provider's validator and
 // returns human-readable error strings for any invalid settings.
 func (s *SecretStore) ValidateSettings(settings map[string]string) []string {
+	decoded, err := s.DecodeSettings(settings)
+	if err != nil {
+		return []string{err.Error()}
+	}
+	ts := decoded.(Settings)
 	p, name := resolveProvider(settings)
 	if p == nil {
 		return []string{fmt.Sprintf("provider %q is not supported; valid values: onepassword, vault, bitwarden", name)}
 	}
-	return p.validateSettings(settings)
+	return p.validate(ts)
 }
 
 // WizardFields returns the wizard input fields the secretstore contributes.
 func (s *SecretStore) WizardFields() []addon.WizardField {
 	return []addon.WizardField{
-		{Key: SettingProvider, Label: "Provider", Default: "onepassword", Help: "ESO backend provider: onepassword, vault, bitwarden"},
+		{Key: SettingProvider, Label: "Provider", Default: providerOnepassword, Help: "ESO backend provider: onepassword, vault, bitwarden"},
 		{Key: SettingSecretsDir, Label: "Secrets Directory", Default: defaultSecretsDir, Help: "Directory containing provider credential files (plaintext or sops-encrypted)"},
 		{Key: SettingOnepasswordVaults, Label: "1Password Vaults", Default: defaultOPVaults, Help: "CSV of name=priority pairs (onepassword only), e.g. \"homelab=1,shared=2\""},
 		{Key: SettingVaultServer, Label: "Vault Server URL", Help: "Required for vault provider (e.g. https://vault.example.com)"},

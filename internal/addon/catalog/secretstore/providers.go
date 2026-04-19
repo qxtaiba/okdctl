@@ -18,15 +18,22 @@ import (
 // the ESO SecretStore CRD) to apply via `oc apply`. secretNames returns the
 // Opaque Secret names the provider creates — used by Verify and Uninstall.
 type provider interface {
-	validateSettings(settings map[string]string) []string
-	buildResources(ctx context.Context, env *addon.Environment) ([]string, error)
+	validate(s Settings) []string
+	buildResources(ctx context.Context, env *addon.Environment, s Settings) ([]string, error)
 	secretNames() []string
 }
 
+// Provider values accepted by the secretstore addon.
+const (
+	providerOnepassword = "onepassword"
+	providerVault       = "vault"
+	providerBitwarden   = "bitwarden"
+)
+
 var providers = map[string]provider{
-	"onepassword": &onepasswordProvider{},
-	"vault":       &vaultProvider{},
-	"bitwarden":   &bitwardenProvider{},
+	providerOnepassword: &onepasswordProvider{},
+	providerVault:       &vaultProvider{},
+	providerBitwarden:   &bitwardenProvider{},
 }
 
 // resolveProvider returns the provider implementation for the `provider`
@@ -35,7 +42,7 @@ var providers = map[string]provider{
 func resolveProvider(settings map[string]string) (impl provider, name string) {
 	name = settings[SettingProvider]
 	if name == "" {
-		name = "onepassword"
+		name = providerOnepassword
 	}
 	p, ok := providers[name]
 	if !ok {
@@ -67,12 +74,7 @@ const (
 
 type onepasswordProvider struct{}
 
-func (p *onepasswordProvider) validateSettings(settings map[string]string) []string {
-	if v := settings[SettingOnepasswordVaults]; v != "" {
-		if _, err := parseOnepasswordVaults(v); err != nil {
-			return []string{err.Error()}
-		}
-	}
+func (p *onepasswordProvider) validate(_ Settings) []string {
 	return nil
 }
 
@@ -80,7 +82,7 @@ func (p *onepasswordProvider) secretNames() []string {
 	return []string{opCredentialsSecretName, opTokenSecretName}
 }
 
-func (p *onepasswordProvider) buildResources(ctx context.Context, env *addon.Environment) ([]string, error) {
+func (p *onepasswordProvider) buildResources(ctx context.Context, env *addon.Environment, s Settings) ([]string, error) {
 	dir := resolveSecretsDir(env)
 	credPath := filepath.Join(dir, opCredentialsFile)
 	tokenPath := filepath.Join(dir, opTokenFile)
@@ -105,15 +107,7 @@ func (p *onepasswordProvider) buildResources(ctx context.Context, env *addon.Env
 		env.Logger.Info("secretstore: onepassword token secret prepared")
 	}
 
-	connectHost := env.AddonConfig.Settings[SettingOnepasswordConnectHost]
-	if connectHost == "" {
-		connectHost = defaultOPConnectHost
-	}
-	vaults, err := parseOnepasswordVaults(env.AddonConfig.Settings[SettingOnepasswordVaults])
-	if err != nil {
-		return nil, err
-	}
-	manifests = append(manifests, buildOPSecretStoreCRD(connectHost, vaults))
+	manifests = append(manifests, buildOPSecretStoreCRD(s.OnePassword.ConnectHost, s.OnePassword.Vaults))
 	return manifests, nil
 }
 
@@ -177,9 +171,9 @@ spec:
 
 type vaultProvider struct{}
 
-func (p *vaultProvider) validateSettings(settings map[string]string) []string {
+func (p *vaultProvider) validate(s Settings) []string {
 	var errs []string
-	srv := settings[SettingVaultServer]
+	srv := s.Vault.Server
 	if srv == "" {
 		errs = append(errs, "vault_server is required for the vault provider (e.g. https://vault.example.com)")
 	} else if !strings.HasPrefix(srv, "http://") && !strings.HasPrefix(srv, "https://") {
@@ -190,7 +184,7 @@ func (p *vaultProvider) validateSettings(settings map[string]string) []string {
 
 func (p *vaultProvider) secretNames() []string { return []string{vaultTokenSecretName} }
 
-func (p *vaultProvider) buildResources(ctx context.Context, env *addon.Environment) ([]string, error) {
+func (p *vaultProvider) buildResources(ctx context.Context, env *addon.Environment, s Settings) ([]string, error) {
 	dir := resolveSecretsDir(env)
 	tokenPath := filepath.Join(dir, vaultTokenFile)
 
@@ -200,16 +194,7 @@ func (p *vaultProvider) buildResources(ctx context.Context, env *addon.Environme
 	}
 	env.Logger.Info("secretstore: vault token secret prepared")
 
-	server := env.AddonConfig.Settings[SettingVaultServer]
-	path := env.AddonConfig.Settings[SettingVaultPath]
-	if path == "" {
-		path = "secret"
-	}
-	version := env.AddonConfig.Settings[SettingVaultVersion]
-	if version == "" {
-		version = "v2"
-	}
-	return []string{tokenManifest, buildVaultSecretStoreCRD(server, path, version)}, nil
+	return []string{tokenManifest, buildVaultSecretStoreCRD(s.Vault.Server, s.Vault.Path, s.Vault.Version)}, nil
 }
 
 func buildVaultSecretStoreCRD(server, path, version string) string {
@@ -238,12 +223,12 @@ spec:
 // bitwarden-sdk-server sidecar (ESO ships one; not provisioned here).
 type bitwardenProvider struct{}
 
-func (p *bitwardenProvider) validateSettings(settings map[string]string) []string {
+func (p *bitwardenProvider) validate(s Settings) []string {
 	var errs []string
-	if settings[SettingBitwardenOrganizationID] == "" {
+	if s.Bitwarden.OrganizationID == "" {
 		errs = append(errs, "bitwarden_organization_id is required for the bitwarden provider")
 	}
-	if settings[SettingBitwardenProjectID] == "" {
+	if s.Bitwarden.ProjectID == "" {
 		errs = append(errs, "bitwarden_project_id is required for the bitwarden provider")
 	}
 	return errs
@@ -251,7 +236,7 @@ func (p *bitwardenProvider) validateSettings(settings map[string]string) []strin
 
 func (p *bitwardenProvider) secretNames() []string { return []string{bitwardenTokenSecretName} }
 
-func (p *bitwardenProvider) buildResources(ctx context.Context, env *addon.Environment) ([]string, error) {
+func (p *bitwardenProvider) buildResources(ctx context.Context, env *addon.Environment, s Settings) ([]string, error) {
 	dir := resolveSecretsDir(env)
 	tokenPath := filepath.Join(dir, bitwardenTokenFile)
 
@@ -261,13 +246,10 @@ func (p *bitwardenProvider) buildResources(ctx context.Context, env *addon.Envir
 	}
 	env.Logger.Info("secretstore: bitwarden access-token secret prepared")
 
-	apiURL := settingOrDefault(env.AddonConfig.Settings, SettingBitwardenAPIURL, defaultBitwardenAPIURL)
-	identityURL := settingOrDefault(env.AddonConfig.Settings, SettingBitwardenIdentityURL, defaultBitwardenIdentityURL)
-	sdkServerURL := settingOrDefault(env.AddonConfig.Settings, SettingBitwardenSDKServerURL, defaultBitwardenSDKServerURL)
-	orgID := env.AddonConfig.Settings[SettingBitwardenOrganizationID]
-	projectID := env.AddonConfig.Settings[SettingBitwardenProjectID]
-
-	return []string{tokenManifest, buildBitwardenSecretStoreCRD(apiURL, identityURL, sdkServerURL, orgID, projectID)}, nil
+	return []string{tokenManifest, buildBitwardenSecretStoreCRD(
+		s.Bitwarden.APIURL, s.Bitwarden.IdentityURL, s.Bitwarden.SDKServerURL,
+		s.Bitwarden.OrganizationID, s.Bitwarden.ProjectID,
+	)}, nil
 }
 
 func buildBitwardenSecretStoreCRD(apiURL, identityURL, sdkServerURL, orgID, projectID string) string {
