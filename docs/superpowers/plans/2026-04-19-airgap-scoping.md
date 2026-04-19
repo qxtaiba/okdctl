@@ -551,6 +551,50 @@ layout so nothing needs rewriting post-staging.
 
 ## 11. Implementation sequencing
 
+### 11.0 Pre-implementation verification — MUST run before any item starts
+
+The assumptions in this doc were captured 2026-04-19. OKD release cadence
+and upstream tooling shift fast. **Every picker-upper of an L15
+implementation item (M21–M28) must run the checks below before writing
+code.** Run them as a dedicated research agent inside the roadmap-pickup
+planner phase; include findings in the returned plan.
+
+1. **Floor / release-landscape check.** Confirm which OKD minors are
+   currently active on Cincinnati stable, and whether the `scos.json`
+   floor (4.19 as of 2026-04-19) has moved. Concretely:
+   - `GET https://origin-release.ci.openshift.org/graph?channel=stable&arch=amd64` → which minors show up?
+   - For each `release-<minor>` on `openshift/installer` between 4.15 and
+     current, check `data/data/coreos/scos.json` via the GitHub API.
+     Update the table in §7.2 if retroactive additions landed.
+   - What's the current latest stable GA? M23's `minScosDirectFetch`
+     constant and M26's `--version` default adjust accordingly.
+2. **`oc-mirror --v2` schema + channel check.** Re-run the `type: okd` +
+   `stable-4.X` channel verification against the current `oc-mirror`
+   binary. The `PlatformType` enum and channel names may drift.
+   Authoritative fixture: `internal/pkg/release/cincinnati_test.go` in
+   `openshift/oc-mirror@main`.
+3. **Mirror rewrite rule coverage.** Re-run the §4 external-fetch
+   inventory pass. If a new fetch has landed since 2026-04-19 (grep
+   `http[s]?://`, `oci://`, `quay.io`, `ghcr.io`, `registry.`, `.iso`,
+   `apt-get install`, `dnf install` across the repo), add it to M24's
+   `MirrorBase` rule table or document the operator-side redirect.
+4. **Bootstrap `oc` URL stability.** Confirm
+   `https://mirror.openshift.com/pub/openshift-v4/clients/oc/latest/linux/oc.tar.gz`
+   still serves a binary compatible with current OKD SCOS releases.
+   Historically stable; not a formal contract.
+5. **Cosign status on OKD release images.** Run `cosign tree
+   quay.io/okd/scos-release:<current-tag>`. If sigstore signatures have
+   landed since 2026-04-19, upgrade M27's release-image check from
+   digest-pinning-with-warning to `cosign verify`. Track
+   [okd#2092](https://github.com/okd-project/okd/issues/2092).
+
+Skipping this pass = shipping code against stale assumptions. The
+roadmap-pickup planner phase is the right place — the planner agent
+runs these checks and returns findings alongside the implementation
+plan.
+
+### 11.1 Item sequence
+
 Each item is one PR against `develop`. Items are written in dependency
 order; later items assume earlier ones have merged.
 
