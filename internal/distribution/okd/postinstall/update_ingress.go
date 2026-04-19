@@ -10,6 +10,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/templates"
+	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
@@ -51,7 +52,7 @@ type UpdateIngressResult struct {
 func (p *Phase) UpdateIngress(ctx context.Context, cfg *config.Config, opts UpdateIngressOptions) (*UpdateIngressResult, error) {
 	vip, err := phase.ResolveClusterVIP(cfg)
 	if err != nil {
-		return nil, err
+		return nil, &errtypes.ConfigError{Msg: "failed to resolve cluster VIP", Err: err}
 	}
 
 	postOpts := &Options{
@@ -62,11 +63,11 @@ func (p *Phase) UpdateIngress(ctx context.Context, cfg *config.Config, opts Upda
 
 	controllers, err := p.discoverIngressControllers(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to discover IngressControllers: %w", err)
+		return nil, &errtypes.ClusterError{Msg: "failed to discover IngressControllers", Err: err}
 	}
 
 	if len(controllers) == 0 {
-		return nil, fmt.Errorf("no IngressControllers found in the cluster")
+		return nil, &errtypes.ClusterError{Msg: "no IngressControllers found in the cluster"}
 	}
 
 	var descriptions []string
@@ -90,7 +91,7 @@ func (p *Phase) UpdateIngress(ctx context.Context, cfg *config.Config, opts Upda
 	if len(hostNetworkICs) > 0 {
 		converted, names, err := p.handleHostNetworkConversion(ctx, hostNetworkICs, opts, postOpts)
 		if err != nil {
-			return nil, err
+			return nil, &errtypes.ClusterError{Msg: "hostnetwork ingress conversion failed", Err: err}
 		}
 		convertedCount = converted
 		convertedNames = names
@@ -99,7 +100,7 @@ func (p *Phase) UpdateIngress(ctx context.Context, cfg *config.Config, opts Upda
 			// Re-discover to pick up the recreated controllers.
 			controllers, err = p.discoverIngressControllers(ctx)
 			if err != nil {
-				return nil, fmt.Errorf("failed to re-discover IngressControllers after conversion: %w", err)
+				return nil, &errtypes.ClusterError{Msg: "failed to re-discover IngressControllers after conversion", Err: err}
 			}
 
 			hostNetworkICs = nil
@@ -145,7 +146,7 @@ func (p *Phase) collectLBEntries(
 		ip, err := p.waitForServiceLB(ctx, svcName, postOpts)
 		if err != nil {
 			if ic.Name == "default" {
-				return nil, nil, "", fmt.Errorf("router-default has no LoadBalancer IP: %w", err)
+				return nil, nil, "", &errtypes.ClusterError{Msg: "router-default has no LoadBalancer IP", Err: err}
 			}
 			p.Log.Warn("update-ingress: service has no loadbalancer ip", "svc", svcName, "err", err)
 			continue
@@ -203,7 +204,7 @@ func (p *Phase) finalizeIngress(
 
 	p.Log.Info("update-ingress: deploying production dns with loadbalancer ips")
 	if err := p.deployProductionDNS(ctx, cfg, appsIP, vip, customDomains); err != nil {
-		return nil, fmt.Errorf("failed to deploy production DNS: %w", err)
+		return nil, &errtypes.ClusterError{Msg: "failed to deploy production DNS", Err: err}
 	}
 	p.Log.Info("update-ingress: dns updated", "apps", appsIP, "api", vip)
 

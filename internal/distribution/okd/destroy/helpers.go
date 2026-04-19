@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"path/filepath"
 
+	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/infrastructure/terraform"
 	"github.com/qxtaiba/okdctl/internal/system"
 )
@@ -13,7 +14,7 @@ func (p *Phase) destroyInfrastructure(ctx context.Context, opts *Options) error 
 	terraformDir := filepath.Join(opts.ProjectRoot, "infrastructure", "terraform", "environments", opts.TerraformEnv)
 
 	if !system.DirExists(terraformDir) {
-		return fmt.Errorf("terraform environment directory not found: %s", terraformDir)
+		return &errtypes.ConfigError{Msg: fmt.Sprintf("terraform environment directory not found: %s", terraformDir)}
 	}
 
 	tf := terraform.New(terraformDir,
@@ -28,7 +29,7 @@ func (p *Phase) destroyInfrastructure(ctx context.Context, opts *Options) error 
 	}
 
 	if err := tf.Init(ctx); err != nil {
-		return fmt.Errorf("terraform init failed: %w", err)
+		return &errtypes.ClusterError{Msg: "terraform init failed", Err: err}
 	}
 
 	p.Log.Info(fmt.Sprintf("terraform: destroying infrastructure in %s", opts.TerraformEnv))
@@ -39,7 +40,7 @@ func (p *Phase) destroyInfrastructure(ctx context.Context, opts *Options) error 
 		Parallelism: opts.Parallelism,
 		UsePlan:     true, // use safer plan-then-apply approach
 	}); err != nil {
-		return fmt.Errorf("terraform destroy failed: %w", err)
+		return &errtypes.ClusterError{Msg: "terraform destroy failed", Err: err}
 	}
 
 	if err := tf.Cleanup(); err != nil {

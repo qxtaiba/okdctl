@@ -10,6 +10,7 @@ import (
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/templates"
+	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/executor"
 	"github.com/qxtaiba/okdctl/internal/system"
 )
@@ -23,17 +24,17 @@ func (p *Phase) BuildCustomISOs(ctx context.Context, cfg *config.Config, opts *O
 	}
 
 	if !executor.CommandExists("coreos-installer") {
-		return fmt.Errorf("coreos-installer not found - please install it first")
+		return &errtypes.ConfigError{Msg: "coreos-installer not found - please install it first"}
 	}
 
 	fcosISO, err := p.findOrDownloadFCOSISO(ctx, cfg, opts)
 	if err != nil {
-		return fmt.Errorf("failed to find or download FCOS ISO: %w", err)
+		return &errtypes.NetworkError{Msg: "failed to find or download FCOS ISO", Err: err}
 	}
 
 	nodes, err := p.BuildNodeList(cfg)
 	if err != nil {
-		return fmt.Errorf("failed to build node list: %w", err)
+		return &errtypes.ConfigError{Msg: "failed to build node list", Err: err}
 	}
 
 	for _, node := range nodes {
@@ -45,7 +46,7 @@ func (p *Phase) BuildCustomISOs(ctx context.Context, cfg *config.Config, opts *O
 		p.Log.Info(fmt.Sprintf("iso: building custom coreos iso for %s", node.Name))
 
 		if err := p.buildNodeISO(ctx, cfg, node, fcosISO, isoDir); err != nil {
-			return fmt.Errorf("failed to build ISO for %s: %w", node.Name, err)
+			return &errtypes.ClusterError{Msg: fmt.Sprintf("failed to build ISO for %s", node.Name), Err: err}
 		}
 	}
 
@@ -202,7 +203,7 @@ func (p *Phase) buildNodeISO(ctx context.Context, cfg *config.Config, node NodeI
 
 	_, err = p.Exec.RunChecked(ctx, "coreos-installer", args...)
 	if err != nil {
-		return fmt.Errorf("coreos-installer failed: %w", err)
+		return &errtypes.ClusterError{Msg: "coreos-installer failed", Err: err}
 	}
 
 	return nil

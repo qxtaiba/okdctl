@@ -82,7 +82,7 @@ func LoadEnvFile(path string) error {
 		loadErr = loadEnvFileOnce(path)
 	})
 	if loadedPath != path {
-		return fmt.Errorf("LoadEnvFile already called with %q; cannot reload from %q", loadedPath, path)
+		return &errtypes.ConfigError{Msg: fmt.Sprintf("LoadEnvFile already called with %q; cannot reload from %q", loadedPath, path)}
 	}
 	return loadErr
 }
@@ -101,7 +101,7 @@ func loadEnvFileOnce(path string) error {
 		if os.IsNotExist(err) {
 			return nil // missing .env is not an error
 		}
-		return fmt.Errorf("failed to stat env file %s: %w", path, err)
+		return &errtypes.ConfigError{Msg: fmt.Sprintf("failed to stat env file %s", path), Err: err}
 	}
 	if perm := fi.Mode().Perm(); perm&0o077 != 0 {
 		return &errtypes.AuthError{
@@ -113,7 +113,7 @@ func loadEnvFileOnce(path string) error {
 	// godotenv.Load does not overwrite already-set env vars, matching our
 	// "shell takes precedence" contract.
 	if err := godotenv.Load(path); err != nil {
-		return fmt.Errorf("failed to load env file %s: %w", path, err)
+		return &errtypes.ConfigError{Msg: fmt.Sprintf("failed to load env file %s", path), Err: err}
 	}
 	return nil
 }

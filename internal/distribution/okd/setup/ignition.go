@@ -11,6 +11,7 @@ import (
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/templates"
+	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
@@ -32,17 +33,17 @@ func renderAndWrite(render func() (string, error), path string, mode os.FileMode
 // openshift-install consumes the original during manifest generation.
 func (p *Phase) GenerateInstallConfig(_ context.Context, cfg *config.Config, outputDir string) error {
 	if err := system.EnsureDir(outputDir); err != nil {
-		return fmt.Errorf("failed to create output directory: %w", err)
+		return &errtypes.ConfigError{Msg: "failed to create output directory", Err: err}
 	}
 
 	pullSecret, err := os.ReadFile(cfg.Files.PullSecret)
 	if err != nil {
-		return fmt.Errorf("failed to read pull secret: %w", err)
+		return &errtypes.AuthError{Msg: "failed to read pull secret", Err: err}
 	}
 
 	sshKey, err := os.ReadFile(cfg.Files.SSHPublicKey)
 	if err != nil {
-		return fmt.Errorf("failed to read SSH key: %w", err)
+		return &errtypes.ConfigError{Msg: "failed to read SSH key", Err: err}
 	}
 
 	hostPrefix := cfg.Networking.HostPrefix
@@ -69,13 +70,13 @@ func (p *Phase) GenerateInstallConfig(_ context.Context, cfg *config.Config, out
 		func() (string, error) { return templates.RenderInstallConfig(&data) },
 		outputPath, 0o600, "install-config.yaml",
 	); err != nil {
-		return err
+		return &errtypes.ConfigError{Msg: "failed to render install-config.yaml", Err: err}
 	}
 
 	// openshift-install consumes install-config.yaml during manifest generation
 	backupPath := outputPath + ".backup"
 	if err := system.CopyFileMode(outputPath, backupPath, 0o600); err != nil {
-		return fmt.Errorf("failed to backup install-config.yaml: %w", err)
+		return &errtypes.ConfigError{Msg: "failed to backup install-config.yaml", Err: err}
 	}
 
 	return nil
@@ -85,7 +86,7 @@ func (p *Phase) GenerateInstallConfig(_ context.Context, cfg *config.Config, out
 func (p *Phase) GenerateManifests(ctx context.Context, clusterDir string) error {
 	_, err := p.Exec.RunChecked(ctx, "openshift-install", "create", "manifests", "--dir", clusterDir)
 	if err != nil {
-		return fmt.Errorf("openshift-install create manifests failed: %w", err)
+		return &errtypes.ClusterError{Msg: "openshift-install create manifests failed", Err: err}
 	}
 
 	return nil
@@ -103,12 +104,12 @@ func (p *Phase) InjectCustomManifests(_ context.Context, projectRoot, clusterDir
 
 	entries, err := os.ReadDir(customDir)
 	if err != nil {
-		return 0, err
+		return 0, &errtypes.ConfigError{Msg: "failed to read custom manifests directory", Err: err}
 	}
 
 	openshiftDir := filepath.Join(clusterDir, "openshift")
 	if err := system.EnsureDir(openshiftDir); err != nil {
-		return 0, err
+		return 0, &errtypes.ConfigError{Msg: "failed to ensure openshift manifests directory", Err: err}
 	}
 
 	count := 0
@@ -126,7 +127,7 @@ func (p *Phase) InjectCustomManifests(_ context.Context, projectRoot, clusterDir
 		destPath := filepath.Join(openshiftDir, name)
 
 		if err := system.CopyFile(srcPath, destPath); err != nil {
-			return count, fmt.Errorf("failed to inject %s: %w", name, err)
+			return count, &errtypes.ConfigError{Msg: fmt.Sprintf("failed to inject %s", name), Err: err}
 		}
 		count++
 	}
@@ -144,16 +145,19 @@ func (p *Phase) InjectCompactClusterManifests(_ context.Context, clusterDir stri
 
 	openshiftDir := filepath.Join(clusterDir, "openshift")
 	if err := system.EnsureDir(openshiftDir); err != nil {
-		return fmt.Errorf("failed to ensure openshift manifests directory: %w", err)
+		return &errtypes.ConfigError{Msg: "failed to ensure openshift manifests directory", Err: err}
 	}
 
 	destPath := filepath.Join(openshiftDir, "99-ingress-controller-master-placement.yaml")
-	return renderAndWrite(
+	if err := renderAndWrite(
 		func() (string, error) {
 			return templates.RenderCompactIngress(templates.CompactIngressData{Replicas: masterCount})
 		},
 		destPath, 0o644, "compact cluster ingress manifest",
-	)
+	); err != nil {
+		return &errtypes.ConfigError{Msg: "failed to render compact cluster ingress manifest", Err: err}
+	}
+	return nil
 }
 
 // GenerateIgnitionConfigs invokes "openshift-install create ignition-configs"
@@ -161,11 +165,11 @@ func (p *Phase) InjectCompactClusterManifests(_ context.Context, clusterDir stri
 func (p *Phase) GenerateIgnitionConfigs(ctx context.Context, clusterDir string) error {
 	_, err := p.Exec.RunChecked(ctx, "openshift-install", "create", "ignition-configs", "--dir", clusterDir)
 	if err != nil {
-		return fmt.Errorf("openshift-install create ignition-configs failed: %w", err)
+		return &errtypes.ClusterError{Msg: "openshift-install create ignition-configs failed", Err: err}
 	}
 
 	if err := p.ValidateIgnitionFiles(clusterDir); err != nil {
-		return fmt.Errorf("ignition file validation failed: %w", err)
+		return &errtypes.ConfigError{Msg: "ignition file validation failed", Err: err}
 	}
 
 	return nil
@@ -183,23 +187,23 @@ func (p *Phase) ValidateIgnitionFiles(clusterDir string) error {
 		info, err := os.Stat(path)
 		if err != nil {
 			if os.IsNotExist(err) {
-				return fmt.Errorf("%s was not generated", file)
+				return &errtypes.ConfigError{Msg: fmt.Sprintf("%s was not generated", file)}
 			}
-			return fmt.Errorf("failed to stat %s: %w", file, err)
+			return &errtypes.ConfigError{Msg: fmt.Sprintf("failed to stat %s", file), Err: err}
 		}
 
 		if info.Size() < minSize {
-			return fmt.Errorf("%s is too small (%d bytes) - may be corrupted or empty", file, info.Size())
+			return &errtypes.ConfigError{Msg: fmt.Sprintf("%s is too small (%d bytes) - may be corrupted or empty", file, info.Size())}
 		}
 
 		content, err := os.ReadFile(path)
 		if err != nil {
-			return fmt.Errorf("failed to read %s: %w", file, err)
+			return &errtypes.ConfigError{Msg: fmt.Sprintf("failed to read %s", file), Err: err}
 		}
 
 		var js json.RawMessage
 		if err := json.Unmarshal(content, &js); err != nil {
-			return fmt.Errorf("%s is not valid JSON: %w", file, err)
+			return &errtypes.ConfigError{Msg: fmt.Sprintf("%s is not valid JSON", file), Err: err}
 		}
 	}
 

@@ -8,6 +8,7 @@ import (
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
+	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/executor"
 	"github.com/qxtaiba/okdctl/internal/system"
 )
@@ -53,17 +54,17 @@ func uploadISOsViaSCP(ctx context.Context, cmdRunner *executor.Executor, isoFile
 // single scp command (avoids multiple password prompts).
 func (p *Phase) UploadCustomISOsToProxmox(ctx context.Context, cfg *config.Config, opts *Options) error {
 	if cfg.Provider.Proxmox == nil {
-		return fmt.Errorf("proxmox provider configuration required")
+		return &errtypes.ConfigError{Msg: "proxmox provider configuration required"}
 	}
 
 	isoDir := filepath.Join(opts.WorkDir, "custom-isos")
 	if !system.DirExists(isoDir) {
-		return fmt.Errorf("custom ISOs directory not found: %s", isoDir)
+		return &errtypes.ConfigError{Msg: fmt.Sprintf("custom ISOs directory not found: %s", isoDir)}
 	}
 
 	isoFiles, err := collectISOFiles(isoDir)
 	if err != nil {
-		return err
+		return &errtypes.ConfigError{Msg: "failed to collect ISO files", Err: err}
 	}
 	if len(isoFiles) == 0 {
 		p.Log.Warn("iso: no iso files found to upload")
@@ -78,7 +79,7 @@ func (p *Phase) UploadCustomISOsToProxmox(ctx context.Context, cfg *config.Confi
 	p.Log.Info("iso: uploading", "count", len(isoFiles), "size_mb", fmt.Sprintf("%.1f", totalSizeMB), "user", user, "host", host, "path", remotePath)
 
 	if err := uploadISOsViaSCP(ctx, p.Exec, isoFiles, user, host, remotePath); err != nil {
-		return err
+		return &errtypes.NetworkError{Msg: "scp upload to proxmox failed", Err: err}
 	}
 
 	p.Log.Info(fmt.Sprintf("iso: uploaded %d files to proxmox storage", len(isoFiles)))

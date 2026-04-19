@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 
 	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/infrastructure/terraform"
 )
 
@@ -28,7 +29,7 @@ func (p *Phase) StartWorkerVMs(ctx context.Context, cfg *config.Config, opts *Op
 	)
 
 	if err := tf.Init(ctx); err != nil {
-		return fmt.Errorf("terraform init failed: %w", err)
+		return &errtypes.ClusterError{Msg: "terraform init failed", Err: err}
 	}
 
 	applyOpts := terraform.ApplyOptions{
@@ -39,7 +40,7 @@ func (p *Phase) StartWorkerVMs(ctx context.Context, cfg *config.Config, opts *Op
 	}
 
 	if err := tf.Apply(ctx, applyOpts); err != nil {
-		return fmt.Errorf("failed to start worker VMs: %w", err)
+		return &errtypes.ClusterError{Msg: "failed to start worker VMs", Err: err}
 	}
 
 	p.Log.Info("workers: all worker nodes started successfully")

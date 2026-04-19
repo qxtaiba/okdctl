@@ -14,6 +14,7 @@ import (
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
+	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/executor"
 	"github.com/qxtaiba/okdctl/internal/httputil"
 	"github.com/qxtaiba/okdctl/internal/system"
@@ -27,7 +28,7 @@ func (p *Phase) ensureIgnitionDir(_ context.Context, webRoot string) (string, er
 	ignitionDir := filepath.Join(webRoot, "ignition")
 
 	if err := os.MkdirAll(ignitionDir, 0o755); err != nil {
-		return "", fmt.Errorf("failed to create ignition directory: %w", err)
+		return "", &errtypes.ConfigError{Msg: "failed to create ignition directory", Err: err}
 	}
 
 	apacheUser := p.OS.ApacheUser()
@@ -129,7 +130,7 @@ func (p *Phase) ConfigureApache(ctx context.Context, cfg *config.Config) error {
 	p.configureSELinuxForApache(ctx)
 
 	if err := enableAndStartApache(ctx, p.OS.ApacheServiceName()); err != nil {
-		return err
+		return &errtypes.ClusterError{Msg: "failed to enable and start apache", Err: err}
 	}
 
 	p.verifyApacheListening(ctx)
@@ -170,11 +171,11 @@ func (p *Phase) DeployToWebServer(ctx context.Context, cfg *config.Config, clust
 
 		destPath := filepath.Join(ignitionDir, file)
 		if err := system.CopyFile(srcPath, destPath); err != nil {
-			return fmt.Errorf("failed to copy %s: %w", file, err)
+			return &errtypes.ConfigError{Msg: fmt.Sprintf("failed to copy %s", file), Err: err}
 		}
 
 		if err := os.Chmod(destPath, 0o644); err != nil {
-			return fmt.Errorf("failed to set permissions on %s: %w", file, err)
+			return &errtypes.ConfigError{Msg: fmt.Sprintf("failed to set permissions on %s", file), Err: err}
 		}
 	}
 
@@ -182,7 +183,7 @@ func (p *Phase) DeployToWebServer(ctx context.Context, cfg *config.Config, clust
 	if system.FileExists(authSrc) {
 		authDest := filepath.Join(webRoot, "auth")
 		if err := copyAuthTree(authSrc, authDest); err != nil {
-			return fmt.Errorf("failed to copy auth directory %s to web root %s: %w", authSrc, authDest, err)
+			return &errtypes.ConfigError{Msg: fmt.Sprintf("failed to copy auth directory %s to web root %s", authSrc, authDest), Err: err}
 		}
 	}
 
@@ -225,22 +226,22 @@ func (p *Phase) VerifyWebServer(ctx context.Context, baseURL string) error {
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, testURL, http.NoBody)
 	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
+		return &errtypes.NetworkError{Msg: "failed to create request", Err: err}
 	}
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return fmt.Errorf("failed to connect to web server: %w", err)
+		return &errtypes.NetworkError{Msg: "failed to connect to web server", Err: err}
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		_, _ = io.Copy(io.Discard, resp.Body)
-		return fmt.Errorf("web server returned status %d for %s", resp.StatusCode, testURL)
+		return &errtypes.NetworkError{Msg: fmt.Sprintf("web server returned status %d for %s", resp.StatusCode, testURL)}
 	}
 
 	if resp.ContentLength > 0 && resp.ContentLength < minIgnitionFileSize {
-		return fmt.Errorf("bootstrap.ign appears too small (%d bytes)", resp.ContentLength)
+		return &errtypes.NetworkError{Msg: fmt.Sprintf("bootstrap.ign appears too small (%d bytes)", resp.ContentLength)}
 	}
 
 	p.Log.Info("apache: web server accessible and serving ignition files")

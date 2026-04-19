@@ -8,6 +8,7 @@ import (
 	"log/slog"
 
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
+	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/logutil"
 )
 
@@ -99,7 +100,7 @@ func Execute(ctx context.Context, opts *Options) error {
 		}
 
 	default:
-		return fmt.Errorf("unknown cleanup type: %s (valid types: full, work-only, web-only, haproxy-only, terraform-only)", opts.Kind)
+		return &errtypes.ConfigError{Msg: fmt.Sprintf("unknown cleanup type: %s (valid types: full, work-only, web-only, haproxy-only, terraform-only)", opts.Kind)}
 	}
 
 	printSummary(opts, logger)

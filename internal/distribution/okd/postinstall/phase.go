@@ -3,7 +3,6 @@ package postinstall
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"path/filepath"
 	"time"
@@ -14,6 +13,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/dns"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/templates"
+	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/executor"
 )
 
@@ -108,7 +108,7 @@ func (p *Phase) Execute(ctx context.Context, cfg *config.Config, opts *Options) 
 
 func (p *Phase) deployProductionDNS(ctx context.Context, cfg *config.Config, appsIP, kubeVipIP string, customDomains []templates.DNSCustomDomain) error {
 	if err := dns.DeployProduction(ctx, cfg, appsIP, kubeVipIP, customDomains); err != nil {
-		return fmt.Errorf("failed to deploy production dns config: %w", err)
+		return &errtypes.ClusterError{Msg: "failed to deploy production dns config", Err: err}
 	}
 	return nil
 }

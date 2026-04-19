@@ -10,6 +10,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/dns"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/firewall"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/packages"
+	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/netutil"
 	"github.com/qxtaiba/okdctl/internal/system"
@@ -114,7 +115,7 @@ func WebServer(ctx context.Context, httpServerRoot string, logger *slog.Logger) 
 
 	ignitionFiles, err := filepath.Glob(filepath.Join(ignitionDir, "*.ign"))
 	if err != nil {
-		return err
+		return &errtypes.ConfigError{Msg: "failed to glob ignition files", Err: err}
 	}
 
 	if len(ignitionFiles) == 0 {
