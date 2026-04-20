@@ -74,9 +74,9 @@ var binaryToolMeta = map[externalTool]struct {
 	stripComponents int
 	purpose         string
 }{
-	toolYQ:   {name: "yq", versionFlag: "--version", purpose: fetchplan.M5PurposeYQ},
-	toolHelm: {name: "helm", versionFlag: "version", archiveBinary: "helm", stripComponents: 1, purpose: fetchplan.M5PurposeHelm},
-	toolSops: {name: "sops", versionFlag: "--version", purpose: fetchplan.M5PurposeSops},
+	toolYQ:   {name: "yq", versionFlag: "--version", purpose: fetchplan.PurposeYQ},
+	toolHelm: {name: "helm", versionFlag: "version", archiveBinary: "helm", stripComponents: 1, purpose: fetchplan.PurposeHelm},
+	toolSops: {name: "sops", versionFlag: "--version", purpose: fetchplan.PurposeSops},
 }
 
 func (p *Phase) installTool(ctx context.Context, tool externalTool, cfg *config.Config) error {

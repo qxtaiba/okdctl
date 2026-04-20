@@ -8,6 +8,7 @@ import (
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/executor"
+	"github.com/qxtaiba/okdctl/internal/fetchplan"
 )
 
 // Addon is the contract every pluggable cluster feature must satisfy.
@@ -38,12 +39,14 @@ type AddonInfo struct {
 
 // Environment carries the shared dependencies an addon needs during Install,
 // Verify, or Uninstall: its config slice, an executor for shelling out, a
-// logger, and the project root for locating embedded assets.
+// logger, the project root for locating embedded assets, and the active
+// Resolver for routing external OCI and HTTPS fetches through any mirror.
 type Environment struct {
 	AddonConfig config.AddonConfig
 	Exec        *executor.Executor
 	Logger      *slog.Logger
 	ProjectRoot string
+	Resolver    fetchplan.Resolver
 }
 
 // ConfigurableAddon is an Addon that exposes tunable settings with defaults,

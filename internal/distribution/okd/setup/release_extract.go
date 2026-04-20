@@ -133,7 +133,7 @@ func isAuthError(msg string) bool {
 // `oc adm release extract --tools` places in destDir so that
 // InstallToolsToSystem finds the bare binaries.
 func extractReleaseTarballs(ctx context.Context, destDir string, logger *slog.Logger) error {
-	matches, err := filepath.Glob(filepath.Join(destDir, "*.tar.gz"))
+	matches, err := filepath.Glob(filepath.Join(destDir, "openshift-*-linux-*.tar.gz"))
 	if err != nil {
 		return fmt.Errorf("glob release tarballs: %w", err)
 	}
