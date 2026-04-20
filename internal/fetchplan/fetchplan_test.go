@@ -22,12 +22,12 @@ func TestDefaultResolver_passthrough(t *testing.T) {
 	}
 }
 
-func TestMirrorResolver_passthroughUntilM24(t *testing.T) {
+func TestMirrorResolver_stubPassthrough(t *testing.T) {
 	r := fetchplan.MirrorResolver{MirrorBase: "https://mirror.corp"}
 	const url = "https://get.helm.sh/helm-v3.17.3-linux-amd64.tar.gz"
 	got, err := r.ResolveBlob(fetchplan.Blob{URL: url, Purpose: fetchplan.M5PurposeHelm})
 	if err != nil || got != url {
-		t.Fatalf("ResolveBlob with MirrorBase set should return upstream until M24; got (%q,%v)", got, err)
+		t.Fatalf("ResolveBlob with MirrorBase set should currently passthrough; got (%q,%v)", got, err)
 	}
 }
 
@@ -76,7 +76,7 @@ func TestBuildM4Plan_urlsContainVersion(t *testing.T) {
 	}
 }
 
-func TestResolveM5Input_helmEnvOverride(t *testing.T) {
+func TestHelmEnvURLAndVersionOverride(t *testing.T) {
 	t.Setenv("OKDCTL_HELM_URL", "https://mirror.example.com/helm-{version}-linux-{arch}.tar.gz")
 	t.Setenv("OKDCTL_HELM_VERSION", "v3.99.0")
 	in := fetchplan.ResolveM5Input("amd64", nil)
@@ -91,7 +91,7 @@ func TestResolveM5Input_helmEnvOverride(t *testing.T) {
 	}
 }
 
-func TestBuildM5Plan_yqVersionGapFix(t *testing.T) {
+func TestYQVersionedURLWhenVersionSet(t *testing.T) {
 	t.Setenv("OKDCTL_YQ_VERSION", "v4.45.4")
 	in := fetchplan.ResolveM5Input("amd64", nil)
 	p := fetchplan.BuildM5Plan(&in)
@@ -105,7 +105,7 @@ func TestBuildM5Plan_yqVersionGapFix(t *testing.T) {
 	}
 }
 
-func TestBuildM5Plan_yqLatestWhenNoVersion(t *testing.T) {
+func TestYQLatestRedirectWhenNoVersion(t *testing.T) {
 	t.Setenv("OKDCTL_YQ_VERSION", "")
 	t.Setenv("OKDCTL_YQ_URL", "")
 	in := fetchplan.ResolveM5Input("amd64", nil)
@@ -116,7 +116,7 @@ func TestBuildM5Plan_yqLatestWhenNoVersion(t *testing.T) {
 	}
 }
 
-func TestResolveM5Input_configOverride(t *testing.T) {
+func TestSopsConfigVersionOverride(t *testing.T) {
 	t.Setenv("OKDCTL_SOPS_URL", "")
 	t.Setenv("OKDCTL_SOPS_VERSION", "")
 	cfg := &config.Config{}
