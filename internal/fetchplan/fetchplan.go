@@ -72,11 +72,11 @@ func (r MirrorResolver) ResolveBlob(b Blob) (string, error) { return b.URL, nil 
 // Purpose tags identify Plan entries across the M4/M5 workstream so
 // callers can pick the entry they need without index magic.
 const (
-	M4Purpose            = "okd-release"
-	M5PurposeHelm        = "tool-helm"
-	M5PurposeSops        = "tool-sops"
-	M5PurposeYQ          = "tool-yq"
-	M23PurposeSCOSStream = "scos-stream"
+	M4Purpose              = "okd-release"
+	M5PurposeHelm          = "tool-helm"
+	M5PurposeSops          = "tool-sops"
+	M5PurposeYQ            = "tool-yq"
+	M23PurposeCoreOSStream = "coreos-stream"
 )
 
 const (
@@ -232,18 +232,26 @@ func expandTemplate(tmpl, version, arch string) string {
 	return strings.NewReplacer("{version}", version, "{arch}", arch).Replace(tmpl)
 }
 
-// scosRawBase is the GitHub raw-content root for openshift/installer branches.
-const scosRawBase = "https://raw.githubusercontent.com/openshift/installer"
+// coreOSStreamRawBase is the GitHub raw-content root for openshift/installer.
+const coreOSStreamRawBase = "https://raw.githubusercontent.com/openshift/installer"
 
-// BuildSCOSStreamPlan returns a Plan with the scos.json Blob for the given
-// OKD minor. Callers must not pass minor < 19 — earlier release-4.X branches
-// do not carry scos.json. The URL targets a versioned release branch so
+// minSCOSStreamMinor is the first OKD minor that publishes scos.json
+// (Stream CoreOS); 4.15-4.18 ship Fedora CoreOS via fcos.json.
+const minSCOSStreamMinor = 19
+
+// BuildCoreOSStreamPlan returns a Plan with the upstream CoreOS stream
+// metadata Blob for the given OKD minor: fcos.json for 4.15-4.18,
+// scos.json for 4.19+. The URL is pinned to a release-4.<minor> branch so
 // MirrorResolver (M24) can rewrite it uniformly with other plan entries.
-func BuildSCOSStreamPlan(minor int) Plan {
+func BuildCoreOSStreamPlan(minor int) Plan {
+	file := "fcos.json"
+	if minor >= minSCOSStreamMinor {
+		file = "scos.json"
+	}
 	return Plan{
 		HTTPS: []Blob{{
-			URL:     fmt.Sprintf("%s/release-4.%d/data/data/coreos/scos.json", scosRawBase, minor),
-			Purpose: M23PurposeSCOSStream,
+			URL:     fmt.Sprintf("%s/release-4.%d/data/data/coreos/%s", coreOSStreamRawBase, minor, file),
+			Purpose: M23PurposeCoreOSStream,
 		}},
 	}
 }

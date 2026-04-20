@@ -134,29 +134,28 @@ func TestResolveM5Input_configOverride(t *testing.T) {
 	}
 }
 
-func TestBuildSCOSStreamPlan_urlShape(t *testing.T) {
+func TestBuildCoreOSStreamPlan_urlShape(t *testing.T) {
 	cases := []struct {
-		minor   int
-		wantSub string
+		minor    int
+		wantPath string
 	}{
-		{19, "release-4.19"},
-		{20, "release-4.20"},
-		{23, "release-4.23"},
+		{15, "release-4.15/data/data/coreos/fcos.json"},
+		{18, "release-4.18/data/data/coreos/fcos.json"},
+		{19, "release-4.19/data/data/coreos/scos.json"},
+		{20, "release-4.20/data/data/coreos/scos.json"},
+		{23, "release-4.23/data/data/coreos/scos.json"},
 	}
 	for _, tt := range cases {
-		p := fetchplan.BuildSCOSStreamPlan(tt.minor)
+		p := fetchplan.BuildCoreOSStreamPlan(tt.minor)
 		if len(p.HTTPS) != 1 {
 			t.Fatalf("minor %d: expected 1 blob, got %d", tt.minor, len(p.HTTPS))
 		}
 		b := p.HTTPS[0]
-		if !strings.Contains(b.URL, tt.wantSub) {
-			t.Errorf("minor %d: URL %q missing %q", tt.minor, b.URL, tt.wantSub)
+		if !strings.HasSuffix(b.URL, tt.wantPath) {
+			t.Errorf("minor %d: URL %q missing suffix %q", tt.minor, b.URL, tt.wantPath)
 		}
-		if !strings.HasSuffix(b.URL, "/data/data/coreos/scos.json") {
-			t.Errorf("minor %d: URL %q missing expected path suffix", tt.minor, b.URL)
-		}
-		if b.Purpose != fetchplan.M23PurposeSCOSStream {
-			t.Errorf("minor %d: purpose %q, want %q", tt.minor, b.Purpose, fetchplan.M23PurposeSCOSStream)
+		if b.Purpose != fetchplan.M23PurposeCoreOSStream {
+			t.Errorf("minor %d: purpose %q, want %q", tt.minor, b.Purpose, fetchplan.M23PurposeCoreOSStream)
 		}
 	}
 }
