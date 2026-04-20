@@ -80,7 +80,7 @@ func defaultRegistryHead(ctx context.Context, ref string) (int, error) {
 // is active (--airgap flag or OKDCTL_AIRGAP=1), or nil otherwise. httpHead
 // and registryHead may be nil; nil resolves to the real net/http
 // implementations — tests inject deterministic stubs.
-func buildAirgapChecks(ctx context.Context, cfg *config.Config, airgapFlag bool, httpHead httpHeadFunc, registryHead registryHeadFunc) []check {
+func buildAirgapChecks(_ context.Context, cfg *config.Config, airgapFlag bool, httpHead httpHeadFunc, registryHead registryHeadFunc) []check {
 	if !fetchplan.IsAirgap(cfg, airgapFlag) {
 		return nil
 	}
@@ -124,7 +124,7 @@ func buildAirgapChecks(ctx context.Context, cfg *config.Config, airgapFlag bool,
 		{
 			"airgap idms applied",
 			"ImageDigestMirrorSet / ImageTagMirrorSet on cluster (post-deploy only)",
-			func(c context.Context) checkResult { return checkAirgapIDMS(c) },
+			checkAirgapIDMS,
 		},
 	}
 }
