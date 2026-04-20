@@ -242,6 +242,7 @@ func runFullDeployment(ctx context.Context, cfg *config.Config) error {
 		ShowStartMessage: true,
 		Credentials:      creds,
 		MetricsAddr:      deployMetricsAddr,
+		Airgap:           deployAirgap,
 	})
 }
 

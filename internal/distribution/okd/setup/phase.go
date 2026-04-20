@@ -11,6 +11,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/distribution"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/executor"
+	"github.com/qxtaiba/okdctl/internal/fetchplan"
 	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/platform"
 )
@@ -21,8 +22,8 @@ const (
 	HTTPDefaultPort     = 80
 )
 
-// Options configures a setup run: download and skip toggles for the various
-// setup-phase steps.
+// Options configures a setup run: download and skip toggles plus the
+// fetchplan Resolver used by every external artifact fetch.
 type Options struct {
 	phase.BaseOptions
 	DownloadDir     string
@@ -32,6 +33,9 @@ type Options struct {
 	SkipFirewall    bool
 	AutoDownloadISO bool
 	Verbose         bool
+	// Resolver redirects external URLs and OCI refs. Nil means
+	// DefaultResolver (upstream as-is); air-gap callers set MirrorResolver.
+	Resolver fetchplan.Resolver
 }
 
 // DefaultOptions returns setup Options rooted at projectRoot with default
