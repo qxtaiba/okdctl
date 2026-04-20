@@ -142,7 +142,7 @@ the plan.
 
 ### M22 — OKD binaries via release-image extraction
 
-- **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/m22-release-extract
+- **Status:** in review — PR #97
 - **Category:** source change / refactor
 - **State:** design approved (L15)
 - **Effort:** days
@@ -169,7 +169,7 @@ the plan.
 
 ### M24 — Mirror contract (MirrorBase + rewrite rules)
 
-- **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/m24-mirror-contract
+- **Status:** in review — PR #98
 - **Category:** feature-gap / air-gap
 - **State:** design approved (L15)
 - **Effort:** days
