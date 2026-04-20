@@ -16,17 +16,20 @@ import (
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
-const ocExtractTimeout = 120 * time.Second
+// ocExtractTimeout bounds the `oc adm release extract --tools` call. The
+// release image is 5-7 GB across 200+ layers; on cold caches or residential
+// links the extract regularly takes 4-8 minutes before the tools layer
+// completes. 10 minutes leaves margin for the realistic worst case.
+const ocExtractTimeout = 10 * time.Minute
 
-// bootstrapOC ensures oc is available in downloadDir. If already present the
-// cached binary is reused. The fetch URL is routed through resolver so M24 can
-// redirect it. No upstream checksum is published for the bootstrap-oc URL;
-// binary-exists+nonzero-size is the integrity gate. Final binaries come from
-// the digest-pinned release image, so a tampered bootstrap oc would still fail
-// downstream digest verification at extract time.
+// bootstrapOC ensures oc is available in downloadDir. If a non-empty cached
+// binary is present it is reused; an empty or missing file falls through to
+// re-download. The fetch URL is routed through resolver so M24 can redirect
+// it. No upstream checksum is published for the bootstrap-oc URL;
+// binary-exists+nonzero-size is the integrity gate.
 func (p *Phase) bootstrapOC(ctx context.Context, downloadDir string, resolver fetchplan.Resolver) (string, error) {
 	ocPath := filepath.Join(downloadDir, "oc")
-	if system.FileExists(ocPath) {
+	if fi, statErr := os.Stat(ocPath); statErr == nil && fi.Size() > 0 {
 		p.Log.Info("tools: bootstrap oc already present", "path", ocPath)
 		return ocPath, nil
 	}
@@ -75,9 +78,22 @@ func (p *Phase) bootstrapOC(ctx context.Context, downloadDir string, resolver fe
 	return ocPath, nil
 }
 
+// authMarkers names substrings that registries and oc emit for credential
+// failures. Best-effort — a registry whose error envelope drifts from these
+// patterns will fall through to *errtypes.ClusterError instead of AuthError.
+var authMarkers = []string{
+	"unauthorized",
+	"authentication",
+	"denied",
+	"forbidden",
+	"no basic auth",
+	"401",
+	"403",
+}
+
 // extractReleaseImage runs `oc adm release extract --tools <ref> --to <destDir>`
-// with a bounded timeout. Registry auth failures produce *errtypes.AuthError;
-// other failures produce *errtypes.ClusterError.
+// with a bounded timeout. Best-effort registry-auth detection produces
+// *errtypes.AuthError; other failures produce *errtypes.ClusterError.
 func (p *Phase) extractReleaseImage(ctx context.Context, ocPath, ref, destDir string) error {
 	extractCtx, cancel := context.WithTimeout(ctx, ocExtractTimeout)
 	defer cancel()
@@ -94,13 +110,23 @@ func (p *Phase) extractReleaseImage(ctx context.Context, ocPath, ref, destDir st
 	if runErr := cmd.Run(); runErr != nil {
 		msg := strings.TrimSpace(stderr.String())
 		p.Log.Error("tools: oc adm release extract failed", "ref", ref, "stderr", msg)
-		if strings.Contains(msg, "unauthorized") || strings.Contains(msg, "authentication") {
+		if isAuthError(msg) {
 			return &errtypes.AuthError{Msg: fmt.Sprintf("release extract: registry auth failed for %s", ref), Err: runErr}
 		}
 		return &errtypes.ClusterError{Msg: fmt.Sprintf("release extract failed for %s", ref), Err: runErr}
 	}
 
 	return extractReleaseTarballs(ctx, destDir, p.Log)
+}
+
+func isAuthError(msg string) bool {
+	lower := strings.ToLower(msg)
+	for _, marker := range authMarkers {
+		if strings.Contains(lower, marker) {
+			return true
+		}
+	}
+	return false
 }
 
 // extractReleaseTarballs extracts the versioned tarballs that

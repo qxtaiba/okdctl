@@ -31,51 +31,6 @@ func TestMirrorResolver_stubPassthrough(t *testing.T) {
 	}
 }
 
-func TestResolveM4BaseURL_envOverride(t *testing.T) {
-	t.Setenv("OKDCTL_OKD_RELEASE_URL", "https://mirror.example.com/okd/")
-	got := fetchplan.ResolveM4BaseURL(&config.Config{})
-	if got != "https://mirror.example.com/okd" {
-		t.Errorf("got %q, want trailing slash trimmed", got)
-	}
-}
-
-func TestResolveM4BaseURL_configOverride(t *testing.T) {
-	t.Setenv("OKDCTL_OKD_RELEASE_URL", "")
-	cfg := &config.Config{}
-	cfg.Deployment.OKDReleaseBaseURL = "https://config.example.com/okd"
-	if got := fetchplan.ResolveM4BaseURL(cfg); got != "https://config.example.com/okd" {
-		t.Errorf("got %q, want config value", got)
-	}
-}
-
-func TestResolveM4BaseURL_default(t *testing.T) {
-	t.Setenv("OKDCTL_OKD_RELEASE_URL", "")
-	const want = "https://github.com/okd-project/okd/releases/download"
-	if got := fetchplan.ResolveM4BaseURL(&config.Config{}); got != want {
-		t.Errorf("got %q, want %q", got, want)
-	}
-}
-
-func TestBuildM4Plan_urlsContainVersion(t *testing.T) {
-	in := fetchplan.M4Input{
-		BaseURL: "https://github.com/okd-project/okd/releases/download",
-		Version: "4.16.0-0.okd-2024-01-27-040212",
-		Arch:    "amd64",
-	}
-	p := fetchplan.BuildM4Plan(in)
-	if len(p.HTTPS) != 3 {
-		t.Fatalf("expected 3 blobs, got %d", len(p.HTTPS))
-	}
-	for _, b := range p.HTTPS {
-		if !strings.Contains(b.URL, in.Version) {
-			t.Errorf("blob URL %q missing version %q", b.URL, in.Version)
-		}
-		if b.Purpose != fetchplan.M4Purpose {
-			t.Errorf("blob purpose %q, want %q", b.Purpose, fetchplan.M4Purpose)
-		}
-	}
-}
-
 func TestHelmEnvURLAndVersionOverride(t *testing.T) {
 	t.Setenv("OKDCTL_HELM_URL", "https://mirror.example.com/helm-{version}-linux-{arch}.tar.gz")
 	t.Setenv("OKDCTL_HELM_VERSION", "v3.99.0")

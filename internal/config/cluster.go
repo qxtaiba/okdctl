@@ -159,18 +159,17 @@ type ToolVersionOverride struct {
 }
 
 // DeploymentConfig tunes deployment-time behavior: Terraform environment,
-// auto-approve, timeouts, release mirror, per-tool version overrides, and
-// the directory where setup installs managed binaries.
+// auto-approve, timeouts, per-tool version overrides, and the directory where
+// setup installs managed binaries.
 type DeploymentConfig struct {
-	TerraformEnv      string                         `json:"terraform_env,omitempty"`
-	AutoApprove       bool                           `json:"auto_approve,omitempty"`
-	Debug             bool                           `json:"debug,omitempty"`
-	SkipDepsCheck     bool                           `json:"skip_deps_check,omitempty"`
-	BootstrapTimeout  int                            `json:"bootstrap_timeout,omitempty"`
-	InstallTimeout    int                            `json:"install_timeout,omitempty"`
-	OKDReleaseBaseURL string                         `json:"okd_release_base_url,omitempty"`
-	BinDir            string                         `json:"bin_dir,omitempty"`
-	ToolVersions      map[string]ToolVersionOverride `json:"tool_versions,omitempty"`
+	TerraformEnv     string                         `json:"terraform_env,omitempty"`
+	AutoApprove      bool                           `json:"auto_approve,omitempty"`
+	Debug            bool                           `json:"debug,omitempty"`
+	SkipDepsCheck    bool                           `json:"skip_deps_check,omitempty"`
+	BootstrapTimeout int                            `json:"bootstrap_timeout,omitempty"`
+	InstallTimeout   int                            `json:"install_timeout,omitempty"`
+	BinDir           string                         `json:"bin_dir,omitempty"`
+	ToolVersions     map[string]ToolVersionOverride `json:"tool_versions,omitempty"`
 }
 
 // DisksConfig sets optional extra data-disk sizes attached to master/worker

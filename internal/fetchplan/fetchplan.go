@@ -1,9 +1,8 @@
 // Package fetchplan declares every external artifact okdctl reaches for
 // during deploy as typed data, and routes resolution through a Resolver
-// so air-gap mirror rewrites (M24) can be applied uniformly. The current
-// release ships M4 (OKD release tarballs), M5 (helm/sops/yq), and M23
-// (scos.json stream metadata) plan builders; OCI source kinds are
-// declared but unwired pending M22.
+// so air-gap mirror rewrites (M24) can be applied uniformly. Plan builders
+// cover M5 tool binaries (helm/sops/yq), M22 bootstrap-oc and OKD release
+// image, and M23 CoreOS stream metadata.
 package fetchplan
 
 import (
@@ -69,8 +68,8 @@ func (r MirrorResolver) ResolveOCI(a OCIArtifact) (string, error) { return a.Ref
 // ResolveBlob returns b.URL unchanged pending M24's rewrite table.
 func (r MirrorResolver) ResolveBlob(b Blob) (string, error) { return b.URL, nil }
 
-// Purpose tags identify Plan entries across the M4/M5 workstream so
-// callers can pick the entry they need without index magic.
+// Purpose tags identify Plan entries so callers can pick what they need
+// without index magic.
 const (
 	M4Purpose              = "okd-release"
 	M5PurposeHelm          = "tool-helm"
@@ -81,8 +80,6 @@ const (
 )
 
 const (
-	defaultOKDReleaseBaseURL = "https://github.com/okd-project/okd/releases/download"
-
 	defaultHelmVersion = "v3.17.3"
 	defaultSopsVersion = "v3.9.4"
 
@@ -96,40 +93,6 @@ const (
 	// by switching to yqVersionedTemplate when a version is configured.
 	yqLatestRedirect = "https://github.com/mikefarah/yq/releases/latest/download/yq_linux_{arch}"
 )
-
-// ResolveM4BaseURL returns the OKD release base URL applying the standard
-// precedence: OKDCTL_OKD_RELEASE_URL env > cfg.Deployment.OKDReleaseBaseURL >
-// upstream GitHub default. Trailing slashes are stripped.
-func ResolveM4BaseURL(cfg *config.Config) string {
-	if v := os.Getenv("OKDCTL_OKD_RELEASE_URL"); v != "" {
-		return strings.TrimRight(v, "/")
-	}
-	if cfg != nil && cfg.Deployment.OKDReleaseBaseURL != "" {
-		return strings.TrimRight(cfg.Deployment.OKDReleaseBaseURL, "/")
-	}
-	return defaultOKDReleaseBaseURL
-}
-
-// M4Input carries the resolved parameters for BuildM4Plan.
-type M4Input struct {
-	BaseURL string
-	Version string
-	Arch    string
-}
-
-// BuildM4Plan returns the three OKD release Blobs (sha256sum.txt and the
-// two tool tarballs) for the given input. Callers typically obtain BaseURL
-// via ResolveM4BaseURL.
-func BuildM4Plan(in M4Input) Plan {
-	base := fmt.Sprintf("%s/%s", strings.TrimRight(in.BaseURL, "/"), in.Version)
-	return Plan{
-		HTTPS: []Blob{
-			{URL: fmt.Sprintf("%s/sha256sum.txt", base), Purpose: M4Purpose},
-			{URL: fmt.Sprintf("%s/openshift-install-linux-%s.tar.gz", base, in.Version), Purpose: M4Purpose},
-			{URL: fmt.Sprintf("%s/openshift-client-linux-%s.tar.gz", base, in.Version), Purpose: M4Purpose},
-		},
-	}
-}
 
 // M5Input carries the resolved parameters for BuildM5Plan.
 type M5Input struct {
@@ -251,17 +214,12 @@ func BuildM22BootstrapOCPlan() Plan {
 	}
 }
 
-// OKDReleaseImageRef builds an OCIArtifact for the given OKD version tag.
-// Pass a non-empty digest to produce a digest-pinned ref from the GitHub
-// release body's "Pull From:" line; pass "" for a tag-only ref.
-func OKDReleaseImageRef(version, digest string) OCIArtifact {
-	ref := "quay.io/okd/scos-release:" + version
-	if digest != "" {
-		ref = "quay.io/okd/scos-release@" + digest
-	}
+// OKDReleaseImageRef builds an OCIArtifact pointing at the upstream OKD
+// release image for the given version tag. The trust anchor is TLS to
+// quay.io plus oc's manifest pinning at extract time.
+func OKDReleaseImageRef(version string) OCIArtifact {
 	return OCIArtifact{
-		Ref:        ref,
-		Digest:     digest,
+		Ref:        "quay.io/okd/scos-release:" + version,
 		ExtractVia: "oc-adm-release-extract",
 		Purpose:    M4Purpose,
 	}

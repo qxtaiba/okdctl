@@ -21,18 +21,17 @@ const (
 	HTTPDefaultPort     = 80
 )
 
-// Options configures a setup run: download and skip toggles plus the base
-// URL used when fetching OKD release artifacts.
+// Options configures a setup run: download and skip toggles for the various
+// setup-phase steps.
 type Options struct {
 	phase.BaseOptions
-	DownloadDir       string
-	SkipDownloads     bool
-	SkipISOs          bool
-	SkipHAProxy       bool
-	SkipFirewall      bool
-	AutoDownloadISO   bool
-	Verbose           bool
-	OKDReleaseBaseURL string
+	DownloadDir     string
+	SkipDownloads   bool
+	SkipISOs        bool
+	SkipHAProxy     bool
+	SkipFirewall    bool
+	AutoDownloadISO bool
+	Verbose         bool
 }
 
 // DefaultOptions returns setup Options rooted at projectRoot with default
