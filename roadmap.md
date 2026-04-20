@@ -140,33 +140,6 @@ agent should re-verify floor versions, `oc-mirror` schema, mirror rule
 coverage, bootstrap-oc URL, and cosign status. Findings travel with
 the plan.
 
-### M27 — `okdctl doctor --airgap`
-
-- **Status:** in review — PR #101
-- **Category:** verifier / doctor extension
-- **State:** design approved (L15)
-- **Effort:** days
-- **Impact:** medium (pre-deploy air-gap verification)
-- **Evidence:** L15 §9.1 design. `internal/cli/doctor.go:98-108`
-  (existing 9-check registry).
-- **Acceptance:** five new doctor checks gated on `--airgap` or
-  `OKDCTL_AIRGAP=1` per L15 §9.1: (1) `airgap mirror reachable`,
-  (2) `airgap release image digest pinned` (WARNING per current
-  cosign status; upgrade to `cosign verify` if sigstore adoption
-  lands — see M32 and [okd#2092](https://github.com/okd-project/okd/issues/2092)),
-  (3) `airgap addon artifacts present` (helm-template image
-  extraction + mirror HEAD), (4) `airgap bootstrap oc present`,
-  (5) `airgap idms applied` (post-deploy only). Each check produces
-  a concrete remediation hint. Integration smoke test per L15 §9.2:
-  `httptest.NewServer` for HTTPS blob mock plus
-  `github.com/distribution/distribution/v3` in-process OCI registry
-  for the image-reachability checks; `doctor --airgap` runs against
-  both and every FetchPlan + MirrorableAddon entry resolves. No full
-  air-gap deploy in CI (explicit §9.2 non-goal).
-- **Depends on:** M21, M25, M26. **Run pre-implementation
-  verification per L15 §11.0, especially the cosign-status check
-  on `quay.io/okd/scos-release`.**
-
 ### M28 — Air-gap docs: mirror contract + operator runbook
 
 - **Status:** not started
@@ -353,6 +326,67 @@ entries land here when a PR merges, or when an item is closed without
 code (audit error, done-by-prior-work). Keep the explanation terse
 but link evidence.
 
+- **M27 — `okdctl doctor --airgap`** — done PR #101, merged 2026-04-20.
+  New `internal/cli/doctor_airgap.go` (`//go:build linux`) adds five
+  checks appended to the base 10-check registry when
+  `fetchplan.IsAirgap(cfg, airgapFlag)` is true: (1) `airgap mirror
+  reachable` HEADs every M5/M22/M23 FetchPlan HTTPS blob through
+  `MirrorResolver`; (2) `airgap release image digest pinned` probes
+  `quay.io/okd/scos-release:<ver>` via OCI manifest HEAD and ships as
+  `sevWarn` even on success per L15 §9.1 until cosign lands for OKD
+  release images (tracked okd#2092; pre-implementation verification
+  re-confirmed the absence on 2026-04-20); (3) `airgap addon artifacts
+  present` walks `addon.All()` → `MirrorableAddon` → `mirror.SpecImages`
+  (helm template) → mirror HEAD per image; (4) `airgap bootstrap oc
+  present` is a simple `exec.LookPath("oc")`; (5) `airgap idms applied`
+  uses `BasePhase.OcResourceExists` to probe `imagedigestmirrorset`
+  and `imagetagmirrorset` post-deploy and self-skips with `sevWarn`
+  when no kubeconfig is present. Each `sevFail`/`sevWarn` carries a
+  concrete remediation hint (which URL to HEAD, which `oc-mirror`
+  sub-operation to rerun, which config field to set). Injection via
+  `httpHeadFunc` / `registryHeadFunc` (nil → real `net/http`) keeps
+  the hermetic test suite trivial; the L15 §9.2 acceptance text named
+  `github.com/distribution/distribution/v3` for the OCI fixture but a
+  stdlib `http.HandlerFunc` serving `Content-Type:
+  application/vnd.oci.image.manifest.v1+json` on `/v2/*/manifests/`
+  HEAD covers the check code path — no new dep added per CLAUDE.md
+  §Dependencies. `doctor.go`'s `runDoctor` now consolidates its
+  config load behind `sync.OnceValues`; `resolveBinDirForDoctor`
+  and the airgap gate share one disk read and a single error path
+  instead of silently re-loading twice. `docs/doctor-checks.md` gains
+  a TOC entry + five new sections with pass/warn/fail message
+  fixtures. **Pre-implementation verification findings (L15 §11.0,
+  2026-04-20):** Cincinnati stable channel serves minors 4.21/4.22;
+  scos.json exists for 4.19–4.23 (not 4.24 — no branch cut);
+  bootstrap-oc URL still 200 (~47 MB); `TypeOKD` still present in
+  `oc-mirror` main; `quay.io/okd/scos-release` still unsigned by
+  sigstore so check 2 ships as designed. Review took one round: round
+  1 FAILed on six findings — integration test that created httptest
+  fixtures but never ran checks against them; unused `newBlobServer`
+  in `_allPass`; `exec` var shadowing the `os/exec` import;
+  signature-echoing doc comment; silent double config-load; an
+  unreachable "all reachable" branch after the loop always appended
+  items. Round 2 PASSed. CI surfaced three artifacts local `make
+  lint` missed because the files carry `//go:build linux` and the
+  dev machine is darwin: `lint-go` flagged `gocritic` unlambda on the
+  IDMS check closure and `revive` unused-parameter on
+  `buildAirgapChecks`'s unused `ctx`; `test-go` hit a nil-pointer
+  when the round-2 `_allPass` test passed `nil` as `head` without
+  realising only `buildAirgapChecks` defaulted nil. Adjacent fixes
+  rolled in: `docs-go` regen captured M24's stale `--airgap` flag
+  entries + M26's missing `okdctl airgap` doc tree; `lint-yaml`
+  caught M26's golden fixtures missing the `---` document start
+  that `.yamlfmt.yaml`'s `include_document_start: true` mandates —
+  fixed by making `renderISC` / `renderAirgapYAML` emit `---` so the
+  generator's output matches the repo convention. The integration
+  smoke test `TestDoctorAirgap_integrationSmoke` exercises `httptest`
+  blob + OCI fixtures end-to-end: real HEAD against `blobSrv` through
+  `defaultHTTPHead`; `ociHead` rewrites refs to http on ociSrv;
+  asserts per-check severity (mirror pass, release warn w/ okd#2092
+  pointer, addons pass w/ no catalog import, bootstrap tolerant,
+  IDMS warn pre-deploy). Future work: if OKD adopts sigstore (see
+  **M32**, blocked on okd#2092), upgrade check 2 from `sevWarn` to
+  `cosign verify`.
 - **M26 — `okdctl airgap plan` subcommand** — done PR #99, merged
   2026-04-20. New `internal/cli/airgap.go` emits four operator
   artifacts into `--out-dir` (default `./airgap/`): `isc.yaml`
@@ -1200,7 +1234,7 @@ but link evidence.
 | M24 | Mirror contract (MirrorBase + rewrite rules) | **Done** (PR #98) |
 | M25 | MirrorableAddon interface + migrations | **Done** (PR #96) |
 | M26 | `okdctl airgap plan` subcommand | **Done** (PR #99) |
-| M27 | `okdctl doctor --airgap` | Sprint 1 (air-gap; L15) |
+| M27 | `okdctl doctor --airgap` | **Done** (PR #101) |
 | M28 | Air-gap docs: mirror contract + operator runbook | Sprint 1 (air-gap; L15) |
 | M29 | GitHub Artifact Attestations for release binaries | **Done** (PR #94) |
 | M30 | `oras-go/v2` as direct OCI pull client | Deferred |
