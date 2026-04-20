@@ -142,7 +142,7 @@ the plan.
 
 ### M27 — `okdctl doctor --airgap`
 
-- **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/m27-doctor-airgap
+- **Status:** in review — PR #101
 - **Category:** verifier / doctor extension
 - **State:** design approved (L15)
 - **Effort:** days
