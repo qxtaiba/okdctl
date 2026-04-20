@@ -81,31 +81,6 @@ scaffolding the internal code already holds."
 
 ### Theme G — CI, tooling, distribution
 
-#### M29 — GitHub Artifact Attestations for release binaries
-
-- **Status:** in review — PR #94
-- **Category:** supply-chain / distribution
-- **State:** not started
-- **Effort:** hours
-- **Impact:** small (additive; redundant with existing cosign/SLSA
-  provenance)
-- **Evidence:** `.github/workflows/release.yml:7-10` already declares
-  `id-token: write` and `attestations: write` permissions on the
-  `release` job — pre-provisioned, no `actions/attest-build-provenance`
-  step exists yet. `.goreleaser.yaml:48-60` emits cosign keyless
-  signatures over `SHA256SUMS`. `scripts/install.sh:102-115` verifies
-  via `cosign verify-blob`. Filed alongside L15 implementation items.
-- **Acceptance:** one `actions/attest-build-provenance@<pinned-sha>`
-  step added to the `release` job after goreleaser completes, with
-  `subject-path` glob covering every shipped artifact
-  (`dist/okdctl_*.tar.gz dist/okdctl_*.deb dist/okdctl_*.rpm
-  dist/SHA256SUMS`). Additive to cosign + SLSA flows. `install.sh`
-  unchanged. README gains a one-paragraph `gh attestation verify
-  <file> --repo qxtaiba/okdctl` snippet alongside the existing cosign
-  block. Tagged release produces an attestation visible at
-  `https://github.com/qxtaiba/okdctl/attestations/<n>`.
-- **Depends on:** none.
-
 ## Addon category refactor — dedicated workstream
 
 This is **design-doc-first**. No code lands until the plan is reviewed.
@@ -165,32 +140,6 @@ agent should re-verify floor versions, `oc-mirror` schema, mirror rule
 coverage, bootstrap-oc URL, and cosign status. Findings travel with
 the plan.
 
-### M21 — FetchPlan abstraction + resolver
-
-- **Status:** in review — PR #95
-- **Category:** refactor / air-gap prerequisite
-- **State:** design approved (L15)
-- **Effort:** days
-- **Impact:** large (gates M22–M28)
-- **Evidence:** `internal/download/download.go`,
-  `internal/distribution/okd/setup/artifacts.go:90`,
-  `internal/distribution/okd/releases/fetcher.go:31`,
-  `internal/distribution/okd/setup/tools.go:78-87`. M4/M5 fetch sites
-  are currently ad-hoc; `FetchPlan` centralizes them as data.
-  Design: L15 §5.
-- **Acceptance:** new `internal/fetchplan` package with `Plan`,
-  `OCIArtifact`, `Blob`, and `Resolver` types per L15 §5.
-  `DefaultResolver` and `MirrorResolver` implementations. M4
-  (`OKDCTL_OKD_RELEASE_URL`) and M5 (`OKDCTL_{HELM,SOPS,YQ}_URL` +
-  `Deployment.ToolVersions`) fetch sites migrated into the plan with
-  their existing env vars preserved. yq `/releases/latest/download/`
-  URLTemplate gap fixed in the migration. OCI source kind stubbed but
-  not wired yet (M22 lights it up). Unit tests cover resolver paths
-  per L15 §9.2: connected mode, air-gap mode, per-fetch override, and
-  M4/M5 backwards-compat.
-- **Depends on:** none. Prerequisite to M22, M23, M24, M25. **Run
-  pre-implementation verification per L15 §11.0 before coding.**
-
 ### M22 — OKD binaries via release-image extraction
 
 - **Status:** not started
@@ -215,32 +164,6 @@ the plan.
   FetchPlan OCI source kind fully wired.
 - **Depends on:** M21. **Run pre-implementation verification per L15
   §11.0, especially the bootstrap-oc URL stability check.**
-
-### M23 — Direct scos.json fetch for 4.19+ (dual-path)
-
-- **Status:** in review — PR #95
-- **Category:** refactor / cleanup
-- **State:** design approved (L15)
-- **Effort:** hours
-- **Impact:** medium (parallelizable stream-metadata fetch; removes
-  `openshift-install` bootstrap dependency)
-- **Evidence:** `internal/distribution/okd/setup/coreos.go:91-143`
-  shells out to `openshift-install coreos print-stream-json`. L15
-  research confirmed `scos.json` at
-  `openshift/installer/release-<minor>/data/data/coreos/scos.json`
-  for 4.19+ (table in L15 §7.2). Design: L15 §7.2.
-- **Acceptance:** `DetectCoreOSVersion` grows a `minScosDirectFetch`
-  constant (4.19 per 2026-04-19 verification). For
-  `minor >= minScosDirectFetch`, direct HTTP GET of the
-  installer-repo `scos.json` via a typed Go struct; for older minors,
-  keep the existing shellout. Stream name parser accepts both `c9s`
-  (4.19) and `c10s` (4.20+). Never falls back to `main` for a
-  version-pinned request.
-- **Depends on:** M21. **Run pre-implementation verification per L15
-  §11.0, especially the floor/version-landscape check. Implementer
-  MUST re-verify the 4.19 floor against current `openshift/installer`
-  branches before coding the conditional — OKD timelines shift; the
-  floor may have moved retroactively.**
 
 ### M24 — Mirror contract (MirrorBase + rewrite rules)
 
@@ -455,6 +378,55 @@ entries land here when a PR merges, or when an item is closed without
 code (audit error, done-by-prior-work). Keep the explanation terse
 but link evidence.
 
+- **M29 — GitHub Artifact Attestations for release binaries** — done
+  PR #94, merged 2026-04-20. New `actions/attest-build-provenance@v4.1.0`
+  step in `.github/workflows/release.yml` after goreleaser (SHA-pinned
+  `a2bbfa25...`); permissions were pre-provisioned at lines 7-10 so no
+  scope change. `subject-path` covers all four shipped artifact globs
+  (`dist/okdctl_*.tar.gz`, `*.deb`, `*.rpm`, `SHA256SUMS`); SBOMs
+  intentionally excluded per acceptance. Additive to the existing
+  cosign + SLSA flows; `install.sh` untouched. README gains a one-line
+  `gh attestation verify <file> --repo qxtaiba/okdctl` snippet next to
+  the existing cosign block. Tagged release will publish attestations
+  at `https://github.com/qxtaiba/okdctl/attestations/<n>`.
+- **M21 — FetchPlan abstraction + resolver** — done PR #95, merged
+  2026-04-20. New `internal/fetchplan` package with `Plan`,
+  `OCIArtifact`, `Blob`, `Resolver` types per L15 §5; `DefaultResolver`
+  + `MirrorResolver` implementations (the latter ships as a stub —
+  rewrite table arrives in M24). M4 (`OKDCTL_OKD_RELEASE_URL`) and M5
+  (`OKDCTL_{HELM,SOPS,YQ}_URL` + `Deployment.ToolVersions`) fetch
+  sites migrated from `setup/artifacts.go` + `setup/tools.go` into the
+  plan with env > config > default precedence preserved. Old
+  `Resolve{ReleaseBaseURL,ToolURL,ToolVersion}` helpers deleted (sole
+  external caller switched to `fetchplan.ResolveM4BaseURL`); shims
+  would have violated CLAUDE.md's "delete unused code" rule. Closes
+  the M5 yq URLTemplate gap: `OKDCTL_YQ_VERSION` (or the config
+  equivalent) now produces a versioned URL via a new
+  `yqVersionedTemplate` constant; the latest-redirect URL stays the
+  fallback for unconfigured deploys. OCI source kind declared but
+  unwired (M22 lights it up). Unit tests at 95.9% statement coverage.
+- **M23 — Direct CoreOS stream fetch (no openshift-install dep)** —
+  done PR #95, merged 2026-04-20. Original acceptance was 4.19+ direct
+  scos.json with shellout fallback; mid-PR upstream re-verification
+  (2026-04-20: release-4.14 through 4.24) showed `fcos.json` ships on
+  4.15-4.18 with the same parser-relevant schema as `scos.json` on
+  4.19+, so the shellout was removed entirely. `DetectCoreOSVersion`
+  now: `parseOKDMinor(version)` → `streamFileForMinor(minor)` returns
+  `fcos.json` for `<19` and `scos.json` for `>=19` → one
+  `fetchCoreOSStream` against `https://raw.githubusercontent.com/openshift/installer/release-4.<minor>/data/data/coreos/<file>`
+  via a typed `coreOSStreamData` struct → `coreOSInfoFromStream`
+  populates `CoreOSInfo`. Stream names `c9s`/`c10s`/`stable` all work
+  (the stream field is not consumed). On fetch failure returns a
+  `*errtypes.ClusterError` — no fallback, no embedded
+  `openshift-install` dependency anywhere in the detection path.
+  `EnsureCoreOSISO` was widened to thread `cfg.Distribution.Version`.
+  Sole `executor` import in `coreos.go` removed alongside the
+  shellout. `fetchplan.BuildCoreOSStreamPlan` (renamed from the
+  scos-only name in the original commit) ready for M24's
+  MirrorResolver to rewrite. Tests cover both fcos (4.18) and scos
+  (4.19) paths via `httptest`, assert the right filename was
+  requested per minor, and use `platform.CoreOSArch()` so they run on
+  amd64 + arm64.
 - **U1 — Cleanup phase leaves FCOS ISO cache** — closed 2026-04-18 as
   audit error; no code change required. Local `downloads/` cache is
   already removed by `internal/distribution/okd/cleanup/artifacts.go:84,92`
@@ -1132,15 +1104,15 @@ but link evidence.
 | M18 | Homebrew tap | Deferred |
 | M19 | Typed addon settings (decoder method) | **Done** (PR #89) |
 | M20 | Grouped wizard fields for addons | **Done** (PR #89) |
-| M21 | FetchPlan abstraction + resolver | Sprint 1 (air-gap prereq; L15) |
+| M21 | FetchPlan abstraction + resolver | **Done** (PR #95) |
 | M22 | OKD binaries via release-image extraction | Sprint 1 (air-gap; L15) |
-| M23 | Direct scos.json fetch for 4.19+ (dual-path) | Sprint 1 (air-gap; L15) |
+| M23 | Direct CoreOS stream fetch (no openshift-install dep) | **Done** (PR #95) |
 | M24 | Mirror contract (MirrorBase + rewrite rules) | Sprint 1 (air-gap; L15) |
 | M25 | MirrorableAddon interface + migrations | Sprint 1 (air-gap; L15) |
 | M26 | `okdctl airgap plan` subcommand | Sprint 1 (air-gap; L15) |
 | M27 | `okdctl doctor --airgap` | Sprint 1 (air-gap; L15) |
 | M28 | Air-gap docs: mirror contract + operator runbook | Sprint 1 (air-gap; L15) |
-| M29 | GitHub Artifact Attestations for release binaries | Sprint 1 (Theme G) |
+| M29 | GitHub Artifact Attestations for release binaries | **Done** (PR #94) |
 | M30 | `oras-go/v2` as direct OCI pull client | Deferred |
 | M31 | *(unassigned — was OKD version floor, reversed 2026-04-20)* | n/a |
 | M32 | Embed OKD maintainer GPG pubkey for tarball verification | **Blocked** (okd#2092) |
