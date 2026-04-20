@@ -186,9 +186,6 @@ func checkAirgapMirrorReachable(ctx context.Context, cfg *config.Config, resolve
 		}
 	}
 
-	if len(items) == 0 {
-		return checkResult{sev: sevPass, detail: "all blob endpoints reachable"}
-	}
 	return checkResult{sev: worst, items: items}
 }
 
@@ -240,7 +237,7 @@ func checkAirgapReleaseImage(ctx context.Context, cfg *config.Config, resolver f
 }
 
 func checkAirgapAddonArtifacts(ctx context.Context, resolver fetchplan.MirrorResolver, head registryHeadFunc) checkResult {
-	exec := executor.New()
+	execr := executor.New()
 	addons := addon.All()
 
 	var items []checkItem
@@ -259,7 +256,7 @@ func checkAirgapAddonArtifacts(ctx context.Context, resolver fetchplan.MirrorRes
 			continue
 		}
 
-		imgs, err := addonmirror.SpecImages(probeCtx, exec, spec)
+		imgs, err := addonmirror.SpecImages(probeCtx, execr, spec)
 		if err != nil {
 			items = append(items, checkItem{
 				sev:  sevWarn,
@@ -363,8 +360,6 @@ func checkAirgapIDMS(ctx context.Context) checkResult {
 	}
 }
 
-// resolveOKDVersionForDoctor returns the configured OKD version from the
-// distribution block, or empty string when the config is nil or unset.
 func resolveOKDVersionForDoctor(cfg *config.Config) string {
 	if cfg == nil {
 		return ""
