@@ -89,3 +89,32 @@ type WizardField struct {
 type WizardProvider interface {
 	WizardFields() []WizardField
 }
+
+// ChartRef identifies one Helm chart an addon pulls by OCI reference and
+// pinned version. M27's doctor --airgap and M26's airgap plan use these
+// to discover transitive container images via helm template.
+type ChartRef struct {
+	OCIRef  string
+	Version string
+}
+
+// MirrorSpec declares the external artifacts an addon requires for an
+// air-gap deploy. Maintainers list charts; okdctl discovers transitive
+// container images at verify time via helm template expansion.
+type MirrorSpec struct {
+	Charts       []ChartRef
+	StaticImages []string
+}
+
+// MirrorableAddon is implemented by addons that pull external artifacts
+// (Helm charts, container images) requiring explicit mirroring in an
+// air-gap environment. Opt-in; addons that don't implement it are assumed
+// to apply only in-cluster-resident manifests.
+//
+// Callers discover implementors via type assertion:
+//
+//	if m, ok := a.(MirrorableAddon); ok { spec := m.MirrorArtifacts() }
+type MirrorableAddon interface {
+	Addon
+	MirrorArtifacts() MirrorSpec
+}
