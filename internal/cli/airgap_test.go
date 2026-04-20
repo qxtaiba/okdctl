@@ -10,6 +10,21 @@ import (
 	"github.com/qxtaiba/okdctl/internal/fetchplan"
 )
 
+// fixtureShas is the canned per-purpose SHA map the golden-file test uses.
+// Keys match fetchplan Purpose values; values are stable 64-hex placeholders.
+var fixtureShas = map[string]string{
+	"tool-helm":    "1111111111111111111111111111111111111111111111111111111111111111",
+	"tool-sops":    "2222222222222222222222222222222222222222222222222222222222222222",
+	"tool-yq":      "3333333333333333333333333333333333333333333333333333333333333333",
+	"bootstrap-oc": "4444444444444444444444444444444444444444444444444444444444444444",
+}
+
+type fixtureShaFetcher struct{}
+
+func (fixtureShaFetcher) fetch(_ context.Context, b fetchplan.Blob) (string, error) {
+	return fixtureShas[b.Purpose], nil
+}
+
 const (
 	fixtureVersion = "4.21.0-okd-scos.10"
 	fixtureDigest  = "sha256:deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
@@ -63,7 +78,7 @@ func readGolden(t *testing.T, name string) string {
 
 func TestAirgapPlan_pinRelease_golden(t *testing.T) {
 	outDir := t.TempDir()
-	blobs, err := buildAirgapPlan(context.Background(), fixtureVersion, 21, fixtureStream{})
+	blobs, err := buildAirgapPlan(context.Background(), fixtureVersion, 21, fixtureStream{}, fixtureShaFetcher{})
 	if err != nil {
 		t.Fatalf("buildAirgapPlan: %v", err)
 	}
@@ -77,7 +92,7 @@ func TestAirgapPlan_pinRelease_golden(t *testing.T) {
 
 func TestAirgapPlan_graph_golden(t *testing.T) {
 	outDir := t.TempDir()
-	blobs, err := buildAirgapPlan(context.Background(), fixtureVersion, 21, fixtureStream{})
+	blobs, err := buildAirgapPlan(context.Background(), fixtureVersion, 21, fixtureStream{}, fixtureShaFetcher{})
 	if err != nil {
 		t.Fatalf("buildAirgapPlan: %v", err)
 	}
@@ -90,7 +105,7 @@ func TestAirgapPlan_graph_golden(t *testing.T) {
 
 func TestAirgapPlan_scripts_golden(t *testing.T) {
 	outDir := t.TempDir()
-	blobs, err := buildAirgapPlan(context.Background(), fixtureVersion, 21, fixtureStream{})
+	blobs, err := buildAirgapPlan(context.Background(), fixtureVersion, 21, fixtureStream{}, fixtureShaFetcher{})
 	if err != nil {
 		t.Fatalf("buildAirgapPlan: %v", err)
 	}
@@ -151,17 +166,44 @@ func TestIsoFromStream_missingArch(t *testing.T) {
 	}
 }
 
-func TestBlobSHA_placeholder(t *testing.T) {
-	b := fetchplan.Blob{URL: "https://example.com/file", Purpose: "test"}
-	if got := blobSHA(b); got != "<tbd>" {
-		t.Errorf("blobSHA with empty SHA256: got %q, want %q", got, "<tbd>")
+func TestSidecarFor_helm(t *testing.T) {
+	b := fetchplan.Blob{URL: "https://get.helm.sh/helm-v3.17.3-linux-amd64.tar.gz", Purpose: "tool-helm"}
+	sidecar, filename := sidecarFor(b)
+	if sidecar != "https://get.helm.sh/helm-v3.17.3-linux-amd64.tar.gz.sha256sum" {
+		t.Errorf("helm sidecar = %q", sidecar)
+	}
+	if filename != "helm-v3.17.3-linux-amd64.tar.gz" {
+		t.Errorf("helm filename = %q", filename)
 	}
 }
 
-func TestBlobSHA_passthrough(t *testing.T) {
-	b := fetchplan.Blob{URL: "https://example.com/file", SHA256: "abc123", Purpose: "test"}
-	if got := blobSHA(b); got != "abc123" {
-		t.Errorf("blobSHA with set SHA256: got %q, want %q", got, "abc123")
+func TestSidecarFor_sops(t *testing.T) {
+	b := fetchplan.Blob{URL: "https://github.com/getsops/sops/releases/download/v3.9.4/sops-v3.9.4.linux.amd64", Purpose: "tool-sops"}
+	sidecar, filename := sidecarFor(b)
+	if !strings.HasSuffix(sidecar, "/sops-v3.9.4.checksums.txt") {
+		t.Errorf("sops sidecar = %q", sidecar)
+	}
+	if filename != "sops-v3.9.4.linux.amd64" {
+		t.Errorf("sops filename = %q", filename)
+	}
+}
+
+func TestSidecarFor_bootstrapOC(t *testing.T) {
+	b := fetchplan.Blob{URL: "https://mirror.openshift.com/pub/openshift-v4/clients/oc/latest/linux/oc.tar.gz", Purpose: "bootstrap-oc"}
+	sidecar, filename := sidecarFor(b)
+	if sidecar != "https://mirror.openshift.com/pub/openshift-v4/clients/oc/latest/sha256sum.txt" {
+		t.Errorf("oc sidecar = %q", sidecar)
+	}
+	if filename != "oc.tar.gz" {
+		t.Errorf("oc filename = %q", filename)
+	}
+}
+
+func TestSidecarFor_unknown(t *testing.T) {
+	b := fetchplan.Blob{URL: "https://example.com/file", Purpose: "unknown"}
+	sidecar, _ := sidecarFor(b)
+	if sidecar != "" {
+		t.Errorf("unknown purpose sidecar = %q, want empty", sidecar)
 	}
 }
 

@@ -5,14 +5,17 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 
 	"github.com/spf13/cobra"
 
+	"github.com/qxtaiba/okdctl/internal/download"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/fetchplan"
 	"github.com/qxtaiba/okdctl/internal/system"
@@ -88,7 +91,7 @@ func runAirgapPlan(cmd *cobra.Command, _ []string) error {
 		fetcher = fileStreamFetcher{path: airgapPlanStreamJSONPath}
 	}
 
-	p, err := buildAirgapPlan(cmd.Context(), airgapPlanVersion, minor, fetcher)
+	p, err := buildAirgapPlan(cmd.Context(), airgapPlanVersion, minor, fetcher, httpShaFetcher{Logger: slog.Default()})
 	if err != nil {
 		return err
 	}
@@ -183,7 +186,80 @@ type airgapBlob struct {
 	MirrorPath string `json:"mirror_path"`
 }
 
-func buildAirgapPlan(ctx context.Context, _ string, minor int, fetcher streamFetcher) ([]airgapBlob, error) {
+// shaFetcher resolves a blob to its upstream-published SHA256. Tests inject
+// a fixture implementation so golden runs stay hermetic.
+type shaFetcher interface {
+	fetch(ctx context.Context, b fetchplan.Blob) (string, error)
+}
+
+// httpShaFetcher GETs the tool's sidecar checksum URL (convention varies
+// per upstream) and parses the hex SHA for the blob's filename.
+type httpShaFetcher struct {
+	Logger *slog.Logger
+}
+
+func (h httpShaFetcher) fetch(ctx context.Context, b fetchplan.Blob) (string, error) {
+	sidecar, filename := sidecarFor(b)
+	if sidecar == "" {
+		return "", nil
+	}
+	sha, err := download.FetchChecksum(ctx, sidecar, filename)
+	if err != nil {
+		if h.Logger != nil {
+			h.Logger.Warn("airgap: checksum fetch failed, blob will list <tbd>",
+				"purpose", b.Purpose, "sidecar", sidecar, "err", err)
+		}
+		return "", nil
+	}
+	return sha, nil
+}
+
+// sidecarFor returns the sidecar checksums URL and the filename to look up
+// within it, based on the blob's Purpose. An empty URL means "no known
+// sidecar convention" — the caller falls back to the placeholder.
+func sidecarFor(b fetchplan.Blob) (sidecarURL, filename string) {
+	blobFilename := path.Base(b.URL)
+	switch b.Purpose {
+	case "tool-helm":
+		return b.URL + ".sha256sum", blobFilename
+	case "tool-sops":
+		base := strings.TrimSuffix(b.URL, "/"+blobFilename)
+		version := sopsVersionFromFilename(blobFilename)
+		if version == "" {
+			return "", ""
+		}
+		return base + "/sops-" + version + ".checksums.txt", blobFilename
+	case "tool-yq":
+		base := strings.TrimSuffix(b.URL, "/"+blobFilename)
+		return base + "/checksums", blobFilename
+	case "bootstrap-oc":
+		u, err := url.Parse(b.URL)
+		if err != nil {
+			return "", ""
+		}
+		dir := path.Dir(path.Dir(u.Path))
+		return u.Scheme + "://" + u.Host + dir + "/sha256sum.txt", blobFilename
+	}
+	return "", ""
+}
+
+// sopsVersionFromFilename extracts "v3.9.4" from "sops-v3.9.4.linux.amd64".
+func sopsVersionFromFilename(name string) string {
+	const prefix = "sops-"
+	if !strings.HasPrefix(name, prefix) {
+		return ""
+	}
+	rest := name[len(prefix):]
+	for i, ch := range rest {
+		if ch == '.' && i+1 < len(rest) && (rest[i+1] == 'l' || rest[i+1] == 'd') {
+			// first '.' before .linux/.darwin/.exe etc.
+			return rest[:i]
+		}
+	}
+	return ""
+}
+
+func buildAirgapPlan(ctx context.Context, _ string, minor int, fetcher streamFetcher, shas shaFetcher) ([]airgapBlob, error) {
 	in := fetchplan.ResolveM5Input("amd64", nil)
 	m5 := fetchplan.BuildM5Plan(&in)
 	oc := fetchplan.BuildM22BootstrapOCPlan()
@@ -205,24 +281,24 @@ func buildAirgapPlan(ctx context.Context, _ string, minor int, fetcher streamFet
 
 	blobs := make([]airgapBlob, 0, len(all))
 	for _, b := range all {
+		sha := b.SHA256
+		if sha == "" && shas != nil {
+			fetched, fetchErr := shas.fetch(ctx, b)
+			if fetchErr == nil && fetched != "" {
+				sha = fetched
+			}
+		}
+		if sha == "" {
+			sha = "<tbd>"
+		}
 		blobs = append(blobs, airgapBlob{
 			Purpose:    b.Purpose,
 			URL:        b.URL,
-			SHA256:     blobSHA(b),
+			SHA256:     sha,
 			MirrorPath: mirrorPath(b.URL),
 		})
 	}
 	return blobs, nil
-}
-
-// blobSHA returns the blob's known SHA256 or the sentinel "<tbd>" when
-// no checksum is pre-computed. Real checksums require a live fetch from
-// per-tool sidecar checksum URLs; that is deferred to a follow-up.
-func blobSHA(b fetchplan.Blob) string {
-	if b.SHA256 != "" {
-		return b.SHA256
-	}
-	return "<tbd>"
 }
 
 // mirrorPath derives the operator-facing staging path by stripping the
