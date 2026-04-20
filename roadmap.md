@@ -164,7 +164,7 @@ the plan.
 
 ### M34 — Colonoscopy audit + scoping of air-gap functionality
 
-- **Status:** in progress — branch: docs/m34-airgap-audit
+- **Status:** in review — PR #102
 - **Category:** audit / scoping / verification
 - **State:** scoping needed
 - **Effort:** days
