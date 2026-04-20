@@ -262,6 +262,73 @@ the plan.
   - L15 §6.1 drift: back-port `raw-github` and `openshift-mirror`
     additions, or document as implementation-extensible.
 
+### M34 — Colonoscopy audit + scoping of air-gap functionality
+
+- **Status:** not started
+- **Category:** audit / scoping / verification
+- **State:** scoping needed
+- **Effort:** days
+- **Impact:** large (derisks air-gap release; shapes M26/M27/M28/M33
+  scope; produces a scoping doc siblings of L15)
+- **Evidence:** After M22/M24/M25 + the M24 fixup landed on 2026-04-20,
+  three patterns coexist in the air-gap path (resolver-mediated,
+  env-direct at fetch site, plan-pre-resolved) and only the OKD
+  release-image fetch flows through `PickResolver` today. The first
+  cross-PR review (2026-04-20) caught that `MirrorResolver` was dead
+  code before a late wiring commit rescued the release-image path.
+  Cross-cutting concerns remain unverified end-to-end: helm chart
+  pulls (bastion-side), kubelet image pulls (cluster-runtime via IDMS),
+  SCOS ISO host variants, terraform provider mirror, hashicorp apt/rpm
+  repos, update-check endpoint. No integration smoke yet exercises an
+  actual air-gap deploy — so real breakage will first surface in
+  operator incidents.
+- **Acceptance:**
+  - **§1 Audit passes.** Run every `audit-*` skill (security, errors,
+    observability, concurrency, subprocess, state-and-recovery,
+    dependencies, modernization, cli-ux, code-smells, api-design,
+    tests, documentation, iac-and-shell) with an air-gap lens via
+    `audit-all`. Each produces findings scoped to: `internal/fetchplan/`,
+    `internal/addon/mirror/`, `internal/distribution/okd/setup/release_extract.go`,
+    the three `--airgap` CLI flags, `MirrorResolver` rewrite rules,
+    and the four per-fetch escape-hatch env vars. Out of scope: code
+    paths untouched by the air-gap workstream.
+  - **§2 End-to-end trace.** For each of the three L15 §3 scenarios
+    (fully air-gapped, caching proxy, private mirror), walk every
+    external fetch okdctl emits and confirm it either: (a) routes
+    through `Resolver.ResolveBlob`/`ResolveOCI`, (b) honours a
+    documented per-fetch escape-hatch env var, or (c) is explicitly
+    operator-staged per L15 §4.2 / §4.3. Gaps become either a change
+    (rolled into M33) or a documented operator responsibility
+    (rolled into M28).
+  - **§3 Addon chart-pull gap.** Specifically verify whether flux's
+    bastion-side `helm install oci://ghcr.io/...` requires ghcr.io
+    reachability today and whether cluster-runtime IDMS alone is
+    enough. If not, file the chart-pull rewrite as a concrete M33
+    acceptance bullet or spin a standalone item.
+  - **§4 Integration smoke plan.** Produce a CI-viable plan for an
+    end-to-end air-gap smoke: `httptest` for HTTPS blobs +
+    `distribution/distribution/v3` for an in-process OCI registry +
+    stubbed `oc`/`helm` that assert their inputs. Covers
+    `PickResolver` → `DownloadOKDTools` → bootstrap-oc fetch → release
+    extract → addon chart pull → install. Deliverable is a scoping
+    doc siblings of L15; execution is its own item only if the plan
+    is non-trivial.
+  - **§5 Scoping doc.** Land `docs/superpowers/plans/YYYY-MM-DD-airgap-audit.md`
+    with: audit findings table (ID, severity, proposed disposition),
+    end-to-end trace table, chart-pull determination, integration
+    smoke plan, and a list of new/reshaped roadmap items with
+    acceptance-ready bullets. Doc is the deliverable; no code ships
+    from this item directly.
+- **Depends on:** M22 (done), M24 (done), M25 (done). Should run
+  **before** M26/M27 pick-up so those items absorb audit findings.
+  M33 (unification) can land before or after — if after, the audit
+  shapes M33's final shape; if before, the audit verifies M33's
+  completeness. Either sequence is valid; the picker-upper decides.
+- **Non-goals:** Shipping code. Fixing every finding. Expanding scope
+  beyond air-gap code paths. The audit is a scoping instrument, not
+  an implementation pass. Implementation lands as subsequent items
+  filed off this doc.
+
 ### M32 — Embed OKD maintainer GPG pubkey for tarball verification
 
 - **Status:** blocked — waiting on upstream okd-project/okd#2092
@@ -1154,6 +1221,7 @@ but link evidence.
 | M31 | *(unassigned — was OKD version floor, reversed 2026-04-20)* | n/a |
 | M32 | Embed OKD maintainer GPG pubkey for tarball verification | **Blocked** (okd#2092) |
 | M33 | Unify fetch resolution: Plan + EnvOverrideResolver chain | Sprint 1 (air-gap follow-up) |
+| M34 | Colonoscopy audit + scoping of air-gap functionality | Sprint 1 (air-gap follow-up) |
 | L1 | libvirt/KVM provider | **Skipped** |
 | L2 | vSphere/AWS/Equinix/bare-metal/Vagrant | **Skipped** |
 | L3 | Multi-distribution (RKE2, vanilla) | **Skipped** |
