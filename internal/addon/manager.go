@@ -10,6 +10,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/executor"
+	"github.com/qxtaiba/okdctl/internal/fetchplan"
 	"github.com/qxtaiba/okdctl/internal/logutil"
 )
 
@@ -21,6 +22,7 @@ type Manager struct {
 	exec        *executor.Executor
 	logger      *slog.Logger
 	projectRoot string
+	resolver    fetchplan.Resolver
 }
 
 // ManagerOption configures a Manager at construction time.
@@ -40,6 +42,12 @@ func WithLogger(l *slog.Logger) ManagerOption {
 // against (manifests, helm charts, flux bootstrap paths).
 func WithProjectRoot(root string) ManagerOption {
 	return func(m *Manager) { m.projectRoot = root }
+}
+
+// WithResolver sets the fetchplan.Resolver propagated into every addon's
+// Environment so addons can route OCI and HTTPS fetches through any mirror.
+func WithResolver(r fetchplan.Resolver) ManagerOption {
+	return func(m *Manager) { m.resolver = r }
 }
 
 // NewManager constructs a Manager bound to cfg with options applied in order.
@@ -306,10 +314,15 @@ func (m *Manager) collectWithDeps(a Addon) ([]Addon, error) {
 
 func (m *Manager) buildEnv(a Addon) *Environment {
 	ac := m.cfg.Addons[a.Info().Name]
+	r := m.resolver
+	if r == nil {
+		r = fetchplan.DefaultResolver{}
+	}
 	return &Environment{
 		AddonConfig: ac,
 		Exec:        m.exec,
 		Logger:      m.logger,
 		ProjectRoot: m.projectRoot,
+		Resolver:    r,
 	}
 }

@@ -160,9 +160,14 @@ func (p *Provisioner) Install(ctx context.Context, cfg *config.Config, opts *ins
 // Configure runs the postinstall phase: kube-vip verification, production
 // DNS cutover, bootstrap cleanup. Returns the result alongside per-step records.
 func (p *Provisioner) Configure(ctx context.Context, cfg *config.Config) (*postinstall.Result, []distribution.StepResult, error) {
+	resolver, err := fetchplan.PickResolver(cfg, p.airgap)
+	if err != nil {
+		return nil, nil, err
+	}
 	postPhase := postinstall.New(p.executor, p.logger, p.version)
 	postPhase.Recorder = p.recorder
 	opts := postinstall.NewOptions(cfg, p.projectRoot)
+	opts.Resolver = resolver
 	return postPhase.Execute(ctx, cfg, &opts)
 }
 

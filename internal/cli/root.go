@@ -21,6 +21,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/qxtaiba/okdctl/internal/errtypes"
+	"github.com/qxtaiba/okdctl/internal/fetchplan"
 	"github.com/qxtaiba/okdctl/internal/tui"
 	"github.com/qxtaiba/okdctl/internal/version"
 )
@@ -108,7 +109,10 @@ func execute() int {
 		cancel()
 	}()
 
-	updateCh := version.BackgroundCheck(ctx)
+	updateCh := version.BackgroundCheck(ctx, fetchplan.EnvOverrideResolver{
+		Inner:     fetchplan.DefaultResolver{},
+		Overrides: fetchplan.DefaultEnvOverrides(),
+	})
 
 	err := rootCmd.ExecuteContext(ctx)
 	if err != nil {

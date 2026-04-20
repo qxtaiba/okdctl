@@ -12,13 +12,12 @@ import (
 
 	"golang.org/x/mod/semver"
 
+	"github.com/qxtaiba/okdctl/internal/fetchplan"
 	"github.com/qxtaiba/okdctl/internal/httputil"
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
 const (
-	githubOwner = "qxtaiba"
-	githubRepo  = "okdctl"
 	cacheTTL    = 24 * time.Hour
 	httpTimeout = 4 * time.Second
 )
@@ -37,8 +36,9 @@ type cacheEntry struct {
 // BackgroundCheck starts a goroutine that checks for a newer release.
 // It returns a buffered channel (capacity 1) that receives exactly one
 // CheckResult. If OKDCTL_NO_UPDATE_CHECK=1 the goroutine is not started
-// and the channel already holds a zero result.
-func BackgroundCheck(ctx context.Context) <-chan CheckResult {
+// and the channel already holds a zero result. The resolver routes the
+// GitHub API call through any mirror or env override.
+func BackgroundCheck(ctx context.Context, resolver fetchplan.Resolver) <-chan CheckResult {
 	ch := make(chan CheckResult, 1)
 
 	if os.Getenv("OKDCTL_NO_UPDATE_CHECK") == "1" {
@@ -47,13 +47,13 @@ func BackgroundCheck(ctx context.Context) <-chan CheckResult {
 	}
 
 	go func() {
-		ch <- runCheck(ctx)
+		ch <- runCheck(ctx, resolver)
 	}()
 
 	return ch
 }
 
-func runCheck(ctx context.Context) CheckResult {
+func runCheck(ctx context.Context, resolver fetchplan.Resolver) CheckResult {
 	current := Version
 	if !semver.IsValid(canonicalTag(current)) {
 		return CheckResult{}
@@ -66,7 +66,7 @@ func runCheck(ctx context.Context) CheckResult {
 		return CheckResult{}
 	}
 
-	tag, err := fetchLatest(ctx)
+	tag, err := fetchLatest(ctx, resolver)
 	if err != nil {
 		slog.Debug("update check fetch failed", "err", err)
 		return CheckResult{}
@@ -82,15 +82,14 @@ func runCheck(ctx context.Context) CheckResult {
 	return CheckResult{}
 }
 
-func resolveUpdateCheckURL() string {
-	if v := os.Getenv("OKDCTL_UPDATE_CHECK_URL"); v != "" {
-		return v
+func fetchLatest(ctx context.Context, resolver fetchplan.Resolver) (string, error) {
+	if resolver == nil {
+		resolver = fetchplan.DefaultResolver{}
 	}
-	return "https://api.github.com/repos/" + githubOwner + "/" + githubRepo + "/releases/latest"
-}
-
-func fetchLatest(ctx context.Context) (string, error) {
-	url := resolveUpdateCheckURL()
+	url, err := resolver.ResolveBlob(fetchplan.BuildUpdateCheckPlan().HTTPS[0])
+	if err != nil {
+		return "", fmt.Errorf("resolve update check URL: %w", err)
+	}
 
 	reqCtx, cancel := context.WithTimeout(ctx, httpTimeout)
 	defer cancel()

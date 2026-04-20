@@ -169,29 +169,36 @@ func IsAirgap(cfg *config.Config, airgapFlag bool) bool {
 	return ResolveMirrorBase(cfg) != ""
 }
 
-// PickResolver returns MirrorResolver when air-gap mode is active and
-// DefaultResolver otherwise. Returns a *ConfigError when air-gap is active
-// but MirrorBase is not configured.
+// PickResolver composes the active resolver chain: Default or Mirror as
+// the inner resolver, wrapped by EnvOverrideResolver with the standard
+// escape-hatch map. Returns a *ConfigError when air-gap is active but
+// MirrorBase is not configured.
 func PickResolver(cfg *config.Config, airgapFlag bool) (Resolver, error) {
-	if !IsAirgap(cfg, airgapFlag) {
-		return DefaultResolver{}, nil
+	var inner Resolver
+	if IsAirgap(cfg, airgapFlag) {
+		base := ResolveMirrorBase(cfg)
+		if base == "" {
+			return nil, &errtypes.ConfigError{Msg: "air-gap mode is active but OKDCTL_MIRROR_BASE (or deployment.mirror_base) is not set"}
+		}
+		inner = MirrorResolver{MirrorBase: base}
+	} else {
+		inner = DefaultResolver{}
 	}
-	base := ResolveMirrorBase(cfg)
-	if base == "" {
-		return nil, &errtypes.ConfigError{Msg: "air-gap mode is active but OKDCTL_MIRROR_BASE (or deployment.mirror_base) is not set"}
-	}
-	return MirrorResolver{MirrorBase: base}, nil
+	return EnvOverrideResolver{Inner: inner, Overrides: DefaultEnvOverrides()}, nil
 }
 
 // Purpose tags identify Plan entries so callers can pick what they need
 // without index magic.
 const (
-	M4Purpose              = "okd-release"
-	M5PurposeHelm          = "tool-helm"
-	M5PurposeSops          = "tool-sops"
-	M5PurposeYQ            = "tool-yq"
-	M22PurposeBootstrapOC  = "bootstrap-oc"
-	M23PurposeCoreOSStream = "coreos-stream"
+	PurposeOKDRelease   = "okd-release"
+	PurposeHelm         = "tool-helm"
+	PurposeSops         = "tool-sops"
+	PurposeYQ           = "tool-yq"
+	PurposeBootstrapOC  = "bootstrap-oc"
+	PurposeCoreOSStream = "coreos-stream"
+	PurposeCoreOSISO    = "coreos-iso"
+	PurposeUpdateCheck  = "update-check"
+	PurposeAddonChart   = "addon-chart"
 )
 
 // Per-fetch env-var override keys (L15 §6.2 — final escape hatches).
@@ -202,6 +209,46 @@ const (
 	EnvSCOSISOURL     = "OKDCTL_SCOS_ISO_URL"
 	EnvBootstrapOCURL = "OKDCTL_BOOTSTRAP_OC_URL"
 )
+
+// EnvOverrideResolver wraps an inner Resolver and consults Overrides
+// (a Purpose → env-var-name map) before delegating. When the named env
+// var is non-empty its value is returned directly, bypassing the inner
+// resolver and any MirrorBase rewrite.
+type EnvOverrideResolver struct {
+	Inner     Resolver
+	Overrides map[string]string
+}
+
+// ResolveOCI checks Overrides for a.Purpose before delegating to Inner.
+func (r EnvOverrideResolver) ResolveOCI(a OCIArtifact) (string, error) {
+	if envKey, ok := r.Overrides[a.Purpose]; ok {
+		if v := os.Getenv(envKey); v != "" {
+			return v, nil
+		}
+	}
+	return r.Inner.ResolveOCI(a)
+}
+
+// ResolveBlob checks Overrides for b.Purpose before delegating to Inner.
+func (r EnvOverrideResolver) ResolveBlob(b Blob) (string, error) {
+	if envKey, ok := r.Overrides[b.Purpose]; ok {
+		if v := os.Getenv(envKey); v != "" {
+			return v, nil
+		}
+	}
+	return r.Inner.ResolveBlob(b)
+}
+
+// DefaultEnvOverrides returns the standard Purpose → env-var-name map
+// covering the four L15 §6.2 escape hatches.
+func DefaultEnvOverrides() map[string]string {
+	return map[string]string{
+		PurposeUpdateCheck:  EnvUpdateCheckURL,
+		PurposeCoreOSStream: EnvSCOSStreamURL,
+		PurposeCoreOSISO:    EnvSCOSISOURL,
+		PurposeBootstrapOC:  EnvBootstrapOCURL,
+	}
+}
 
 const (
 	defaultHelmVersion = "v3.17.3"
@@ -309,9 +356,9 @@ func BuildM5Plan(in *M5Input) Plan {
 
 	return Plan{
 		HTTPS: []Blob{
-			{URL: helmURL, Purpose: M5PurposeHelm},
-			{URL: sopsURL, Purpose: M5PurposeSops},
-			{URL: yqURL, Purpose: M5PurposeYQ},
+			{URL: helmURL, Purpose: PurposeHelm},
+			{URL: sopsURL, Purpose: PurposeSops},
+			{URL: yqURL, Purpose: PurposeYQ},
 		},
 	}
 }
@@ -327,13 +374,51 @@ func expandTemplate(tmpl, version, arch string) string {
 const bootstrapOCURL = "https://mirror.openshift.com/pub/openshift-v4/clients/oc/latest/linux/oc.tar.gz"
 
 // BuildM22BootstrapOCPlan returns a Plan with the bootstrap oc Blob.
-// The URL is routed through the caller's Resolver so MirrorResolver
-// (M24) can redirect it via OKDCTL_BOOTSTRAP_OC_URL.
+// The URL is routed through the caller's Resolver so EnvOverrideResolver
+// can redirect it via OKDCTL_BOOTSTRAP_OC_URL.
 func BuildM22BootstrapOCPlan() Plan {
 	return Plan{
 		HTTPS: []Blob{{
 			URL:     bootstrapOCURL,
-			Purpose: M22PurposeBootstrapOC,
+			Purpose: PurposeBootstrapOC,
+		}},
+	}
+}
+
+// BuildCoreOSISOPlan returns a Plan with the CoreOS ISO Blob. isoURL is
+// the location field from the CoreOS stream JSON; sha256 is the matching
+// checksum (empty when the caller verifies separately).
+func BuildCoreOSISOPlan(isoURL, sha256 string) Plan {
+	return Plan{
+		HTTPS: []Blob{{
+			URL:     isoURL,
+			SHA256:  sha256,
+			Purpose: PurposeCoreOSISO,
+		}},
+	}
+}
+
+// defaultUpdateCheckURL is the GitHub releases API endpoint for okdctl.
+const defaultUpdateCheckURL = "https://api.github.com/repos/qxtaiba/okdctl/releases/latest"
+
+// BuildUpdateCheckPlan returns a Plan for the okdctl update-check endpoint.
+func BuildUpdateCheckPlan() Plan {
+	return Plan{
+		HTTPS: []Blob{{
+			URL:     defaultUpdateCheckURL,
+			Purpose: PurposeUpdateCheck,
+		}},
+	}
+}
+
+// BuildAddonChartPlan returns a Plan with the OCI chart reference. ref is
+// the bare registry path without an oci:// scheme; callers that require the
+// scheme must re-prepend it after resolution.
+func BuildAddonChartPlan(ref string) Plan {
+	return Plan{
+		OCI: []OCIArtifact{{
+			Ref:     ref,
+			Purpose: PurposeAddonChart,
 		}},
 	}
 }
@@ -345,7 +430,7 @@ func OKDReleaseImageRef(version string) OCIArtifact {
 	return OCIArtifact{
 		Ref:        "quay.io/okd/scos-release:" + version,
 		ExtractVia: "oc-adm-release-extract",
-		Purpose:    M4Purpose,
+		Purpose:    PurposeOKDRelease,
 	}
 }
 
@@ -368,7 +453,7 @@ func BuildCoreOSStreamPlan(minor int) Plan {
 	return Plan{
 		HTTPS: []Blob{{
 			URL:     fmt.Sprintf("%s/release-4.%d/data/data/coreos/%s", coreOSStreamRawBase, minor, file),
-			Purpose: M23PurposeCoreOSStream,
+			Purpose: PurposeCoreOSStream,
 		}},
 	}
 }

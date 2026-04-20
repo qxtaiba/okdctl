@@ -101,8 +101,12 @@ func TestPickResolver_default(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if _, ok := r.(fetchplan.DefaultResolver); !ok {
-		t.Fatalf("want DefaultResolver, got %T", r)
+	er, ok := r.(fetchplan.EnvOverrideResolver)
+	if !ok {
+		t.Fatalf("want EnvOverrideResolver wrapping DefaultResolver, got %T", r)
+	}
+	if _, ok := er.Inner.(fetchplan.DefaultResolver); !ok {
+		t.Fatalf("want inner DefaultResolver, got %T", er.Inner)
 	}
 }
 
@@ -113,8 +117,12 @@ func TestPickResolver_airgapEnv(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if _, ok := r.(fetchplan.MirrorResolver); !ok {
-		t.Fatalf("want MirrorResolver, got %T", r)
+	er, ok := r.(fetchplan.EnvOverrideResolver)
+	if !ok {
+		t.Fatalf("want EnvOverrideResolver wrapping MirrorResolver, got %T", r)
+	}
+	if _, ok := er.Inner.(fetchplan.MirrorResolver); !ok {
+		t.Fatalf("want inner MirrorResolver, got %T", er.Inner)
 	}
 }
 
@@ -143,7 +151,7 @@ func TestHelmEnvURLAndVersionOverride(t *testing.T) {
 	in := fetchplan.ResolveM5Input("amd64", nil)
 	p := fetchplan.BuildM5Plan(&in)
 
-	helm := blobByPurpose(t, p, fetchplan.M5PurposeHelm)
+	helm := blobByPurpose(t, p, fetchplan.PurposeHelm)
 	if !strings.Contains(helm.URL, "mirror.example.com") {
 		t.Errorf("helm URL %q does not honour env URL override", helm.URL)
 	}
@@ -157,7 +165,7 @@ func TestYQVersionedURLWhenVersionSet(t *testing.T) {
 	in := fetchplan.ResolveM5Input("amd64", nil)
 	p := fetchplan.BuildM5Plan(&in)
 
-	yq := blobByPurpose(t, p, fetchplan.M5PurposeYQ)
+	yq := blobByPurpose(t, p, fetchplan.PurposeYQ)
 	if !strings.Contains(yq.URL, "v4.45.4") {
 		t.Errorf("yq URL %q missing configured version — gap fix failed", yq.URL)
 	}
@@ -171,7 +179,7 @@ func TestYQLatestRedirectWhenNoVersion(t *testing.T) {
 	t.Setenv("OKDCTL_YQ_URL", "")
 	in := fetchplan.ResolveM5Input("amd64", nil)
 	p := fetchplan.BuildM5Plan(&in)
-	yq := blobByPurpose(t, p, fetchplan.M5PurposeYQ)
+	yq := blobByPurpose(t, p, fetchplan.PurposeYQ)
 	if !strings.Contains(yq.URL, "/latest/") {
 		t.Errorf("expected /latest/ redirect when no version configured; got %q", yq.URL)
 	}
@@ -186,7 +194,7 @@ func TestSopsConfigVersionOverride(t *testing.T) {
 	}
 	in := fetchplan.ResolveM5Input("arm64", cfg)
 	p := fetchplan.BuildM5Plan(&in)
-	sops := blobByPurpose(t, p, fetchplan.M5PurposeSops)
+	sops := blobByPurpose(t, p, fetchplan.PurposeSops)
 	if !strings.Contains(sops.URL, "v3.10.0") {
 		t.Errorf("sops URL %q does not honour config version override", sops.URL)
 	}
@@ -215,8 +223,8 @@ func TestBuildCoreOSStreamPlan_urlShape(t *testing.T) {
 		if !strings.HasSuffix(b.URL, tt.wantPath) {
 			t.Errorf("minor %d: URL %q missing suffix %q", tt.minor, b.URL, tt.wantPath)
 		}
-		if b.Purpose != fetchplan.M23PurposeCoreOSStream {
-			t.Errorf("minor %d: purpose %q, want %q", tt.minor, b.Purpose, fetchplan.M23PurposeCoreOSStream)
+		if b.Purpose != fetchplan.PurposeCoreOSStream {
+			t.Errorf("minor %d: purpose %q, want %q", tt.minor, b.Purpose, fetchplan.PurposeCoreOSStream)
 		}
 	}
 }
