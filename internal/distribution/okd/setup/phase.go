@@ -33,6 +33,9 @@ type Options struct {
 	AutoDownloadISO   bool
 	Verbose           bool
 	OKDReleaseBaseURL string
+	// ReleaseSource selects the OKD binary acquisition path. Use
+	// ResolveReleaseSource to apply env > explicit > default precedence.
+	ReleaseSource string
 }
 
 // DefaultOptions returns setup Options rooted at projectRoot with default
