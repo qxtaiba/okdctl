@@ -14,7 +14,6 @@ import (
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/download"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
-	"github.com/qxtaiba/okdctl/internal/executor"
 	"github.com/qxtaiba/okdctl/internal/httputil"
 	"github.com/qxtaiba/okdctl/internal/platform"
 	"github.com/qxtaiba/okdctl/internal/system"
@@ -91,19 +90,20 @@ func (p *Phase) findOrDownloadFCOSISO(ctx context.Context, cfg *config.Config, o
 	})
 }
 
-// minScosDirectFetch is the first OKD minor that publishes scos.json at
-// openshift/installer release-4.<minor>/data/data/coreos/scos.json. Verified
-// 2026-04-20: minors 4.15–4.18 return 404; 4.19+ return 200.
-const minScosDirectFetch = 19
+// minSCOSStreamMinor is the first OKD minor that publishes scos.json
+// (Stream CoreOS); earlier minors (4.15-4.18) ship Fedora CoreOS via
+// fcos.json. The schema is identical at the path the parser walks.
+// Verified 2026-04-20 across release-4.14 through release-4.24.
+const minSCOSStreamMinor = 19
 
-// scosRawBaseURL is the GitHub raw-content root for openshift/installer.
+// streamRawBaseURL is the GitHub raw-content root for openshift/installer.
 // Tests override this to an httptest.Server URL for hermetic mocking.
-var scosRawBaseURL = "https://raw.githubusercontent.com"
+var streamRawBaseURL = "https://raw.githubusercontent.com"
 
-// scosStreamData is the CoreOS stream JSON subset DetectCoreOSVersion
-// consumes. The schema matches both openshift-install stdout and the
-// scos.json files on openshift/installer release branches.
-type scosStreamData struct {
+// coreOSStreamData is the subset of fcos.json / scos.json DetectCoreOSVersion
+// consumes. Both files share the schema at this path; the parser does not
+// read the top-level stream field, so c9s/c10s and stable all work.
+type coreOSStreamData struct {
 	Architectures map[string]struct {
 		Artifacts struct {
 			Metal struct {
@@ -122,15 +122,23 @@ type scosStreamData struct {
 }
 
 // parseOKDMinor extracts the minor from an OKD version like
-// "4.19.0-0.okd-2025-…". Returns 0 on parse failure (0 < minScosDirectFetch
-// so the shellout path is taken safely for malformed or empty input).
+// "4.19.0-0.okd-2025-…". Returns 0 on parse failure.
 func parseOKDMinor(version string) int {
 	var major, minor int
 	_, _ = fmt.Sscanf(version, "%d.%d", &major, &minor)
 	return minor
 }
 
-func fetchSCOSStream(ctx context.Context, url string) (*scosStreamData, error) {
+// streamFileForMinor returns the data file an OKD minor publishes:
+// fcos.json for 4.15-4.18, scos.json for 4.19+.
+func streamFileForMinor(minor int) string {
+	if minor >= minSCOSStreamMinor {
+		return "scos.json"
+	}
+	return "fcos.json"
+}
+
+func fetchCoreOSStream(ctx context.Context, url string) (*coreOSStreamData, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
 	if err != nil {
 		return nil, fmt.Errorf("build request: %w", err)
@@ -141,20 +149,20 @@ func fetchSCOSStream(ctx context.Context, url string) (*scosStreamData, error) {
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("scos.json: HTTP %d", resp.StatusCode)
+		return nil, fmt.Errorf("coreos stream: HTTP %d", resp.StatusCode)
 	}
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
 	if err != nil {
-		return nil, fmt.Errorf("read scos.json: %w", err)
+		return nil, fmt.Errorf("read coreos stream: %w", err)
 	}
-	var sd scosStreamData
+	var sd coreOSStreamData
 	if err := json.Unmarshal(body, &sd); err != nil {
-		return nil, fmt.Errorf("parse scos.json: %w", err)
+		return nil, fmt.Errorf("parse coreos stream: %w", err)
 	}
 	return &sd, nil
 }
 
-func coreOSInfoFromStream(sd *scosStreamData) (*CoreOSInfo, error) {
+func coreOSInfoFromStream(sd *coreOSStreamData) (*CoreOSInfo, error) {
 	archKey := platform.CoreOSArch()
 	arch, ok := sd.Architectures[archKey]
 	if !ok {
@@ -174,34 +182,20 @@ func coreOSInfoFromStream(sd *scosStreamData) (*CoreOSInfo, error) {
 }
 
 // DetectCoreOSVersion returns the CoreOS ISO location, checksum, and release
-// for the host architecture. For OKD 4.19+ it fetches scos.json directly from
-// the openshift/installer release branch; on fetch failure or for older
-// minors it falls back to "openshift-install coreos print-stream-json".
+// for the host architecture. okdVersion picks the right upstream data file:
+// 4.15-4.18 → fcos.json (Fedora CoreOS), 4.19+ → scos.json (Stream CoreOS).
+// A malformed okdVersion parses to minor 0 and resolves to fcos.json.
 func (p *Phase) DetectCoreOSVersion(ctx context.Context, okdVersion string) (*CoreOSInfo, error) {
-	if minor := parseOKDMinor(okdVersion); minor >= minScosDirectFetch {
-		url := fmt.Sprintf(
-			"%s/openshift/installer/release-4.%d/data/data/coreos/scos.json",
-			scosRawBaseURL, minor,
-		)
-		sd, fetchErr := fetchSCOSStream(ctx, url)
-		if fetchErr == nil {
-			return coreOSInfoFromStream(sd)
-		}
-		p.Log.Warn("coreos: direct scos.json fetch failed, falling back to shellout", "err", fetchErr)
-	}
-
-	if !executor.CommandExists("openshift-install") {
-		return nil, &errtypes.ConfigError{Msg: "openshift-install not found - run setup first"}
-	}
-	result, err := p.Exec.RunChecked(ctx, "openshift-install", "coreos", "print-stream-json")
+	minor := parseOKDMinor(okdVersion)
+	url := fmt.Sprintf(
+		"%s/openshift/installer/release-4.%d/data/data/coreos/%s",
+		streamRawBaseURL, minor, streamFileForMinor(minor),
+	)
+	sd, err := fetchCoreOSStream(ctx, url)
 	if err != nil {
-		return nil, &errtypes.ClusterError{Msg: "failed to get CoreOS stream info", Err: err}
+		return nil, &errtypes.ClusterError{Msg: "failed to fetch CoreOS stream info", Err: err}
 	}
-	var sd scosStreamData
-	if err := json.Unmarshal([]byte(result.Stdout), &sd); err != nil {
-		return nil, &errtypes.ConfigError{Msg: "failed to parse CoreOS stream JSON", Err: err}
-	}
-	return coreOSInfoFromStream(&sd)
+	return coreOSInfoFromStream(sd)
 }
 
 // DownloadCoreOSISO downloads the CoreOS ISO described by info to destPath.
