@@ -283,6 +283,53 @@ the plan.
 - **Depends on:** M21–M27. **Run pre-implementation verification per
   L15 §11.0.**
 
+### M33 — Unify fetch resolution: Plan + EnvOverrideResolver chain
+
+- **Status:** not started
+- **Category:** refactor / air-gap follow-up
+- **State:** design sketched (this entry); no formal scoping doc
+- **Effort:** days
+- **Impact:** medium (air-gap completeness; reviewer correctness)
+- **Evidence:** M22/M24 cross-PR review (2026-04-20) found three
+  coexisting patterns for the same concern — resolver-mediated (M22 OKD
+  release image, wired in `fix(okd): wire PickResolver …`),
+  env-direct in fetch sites (`coreos.go:resolveStreamURL`,
+  `coreos.go:resolveISOURL`, `updatecheck.go:resolveUpdateCheckURL`),
+  and plan-pre-resolved (`BuildM5Plan` for helm/sops/yq — bypass the
+  Resolver entirely). `MirrorResolver`'s rules for `raw-github` /
+  `rhcos` / `helm` / `github` sit unreachable from the stream, ISO,
+  and tool-tarball paths; setting `OKDCTL_MIRROR_BASE` rewrites only
+  the OKD release image today.
+- **Acceptance:**
+  - Every external fetch in `internal/` is declared as a `fetchplan.Plan`
+    entry with a `Purpose` tag. New builders: `BuildCoreOSISOPlan`,
+    `BuildUpdateCheckPlan`, `BuildAddonChartPlan(ref, version)`.
+    `BuildM5Plan` already exists; route its output through the Resolver
+    at fetch time rather than pre-resolving at plan-build time.
+  - New `EnvOverrideResolver` wraps an inner Resolver and consults a
+    `Purpose → envVarName` map. The four existing escape-hatch env
+    vars (`EnvUpdateCheckURL`, `EnvSCOSStreamURL`, `EnvSCOSISOURL`,
+    `EnvBootstrapOCURL`) move into this layer.
+  - `PickResolver` composes: `EnvOverrideResolver{Inner: MirrorResolver
+    OR DefaultResolver, Overrides: m}`.
+  - Every fetch site calls `opts.Resolver.ResolveBlob` /
+    `ResolveOCI` — no direct `os.Getenv` at fetch sites.
+  - Flux addon rewrites its chart refs through
+    `opts.Resolver.ResolveOCI` before invoking `helm install`, so the
+    bastion-side chart pull honours MirrorBase (today kubelet-side
+    image pulls are IDMS-redirected, but helm's pull is not).
+  - Milestone-id constant renames done alongside: `M4Purpose` →
+    `PurposeOKDRelease`, `M5PurposeHelm` → `PurposeHelm`, etc.
+- **Depends on:** M22 (done), M24 (done). Should land before M27 so
+  `doctor --airgap` walks a complete, resolver-mediated Plan.
+- **Follow-ups bundled:**
+  - `extractReleaseTarballs` glob tightening (match
+    `openshift-*-linux-*.tar.gz` only).
+  - `parseMirrorBase` either honouring or rejecting a path component
+    on `MirrorBase` (today the path is silently dropped).
+  - L15 §6.1 drift: back-port `raw-github` and `openshift-mirror`
+    additions, or document as implementation-extensible.
+
 ### M32 — Embed OKD maintainer GPG pubkey for tarball verification
 
 - **Status:** blocked — waiting on upstream okd-project/okd#2092
