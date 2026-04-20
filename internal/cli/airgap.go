@@ -374,7 +374,8 @@ func writeAirgapArtifacts(outDir, version, digest, channel string, blobs []airga
 
 func renderISC(version, digest, channel string) []byte {
 	if channel != "" {
-		return fmt.Appendf(nil, `apiVersion: mirror.openshift.io/v2alpha1
+		return fmt.Appendf(nil, `---
+apiVersion: mirror.openshift.io/v2alpha1
 kind: ImageSetConfiguration
 mirror:
   platform:
@@ -389,7 +390,8 @@ mirror:
 `, channel, version, version)
 	}
 
-	return fmt.Appendf(nil, `apiVersion: mirror.openshift.io/v2alpha1
+	return fmt.Appendf(nil, `---
+apiVersion: mirror.openshift.io/v2alpha1
 kind: ImageSetConfiguration
 mirror:
   platform:
@@ -404,6 +406,7 @@ mirror:
 
 func renderAirgapYAML(version string, blobs []airgapBlob) []byte {
 	var sb strings.Builder
+	sb.WriteString("---\n")
 	sb.WriteString("apiVersion: okdctl/v1\n")
 	sb.WriteString("kind: AirgapBlobs\n")
 	fmt.Fprintf(&sb, "version: %s\n", version)
