@@ -17,6 +17,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/postinstall"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/setup"
 	"github.com/qxtaiba/okdctl/internal/executor"
+	"github.com/qxtaiba/okdctl/internal/fetchplan"
 	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/system"
 )
@@ -30,6 +31,7 @@ type Provisioner struct {
 	executor    *executor.Executor
 	logger      *slog.Logger
 	recorder    distribution.MetricsRecorder
+	airgap      bool
 }
 
 // ProvisionerOption configures a Provisioner. Options compose — pass multiple
@@ -56,6 +58,14 @@ func WithLogger(l *slog.Logger) ProvisionerOption {
 // overall-run observations during the provisioner's Execute phases.
 func WithMetricsRecorder(rec distribution.MetricsRecorder) ProvisionerOption {
 	return func(p *Provisioner) { p.recorder = rec }
+}
+
+// WithAirgap activates air-gap mode for this provisioner. The chosen
+// resolver (MirrorResolver vs DefaultResolver) is decided at Prepare time
+// via fetchplan.PickResolver, which also honours OKDCTL_AIRGAP=1 and
+// MirrorBase config presence as equivalent triggers.
+func WithAirgap(on bool) ProvisionerOption {
+	return func(p *Provisioner) { p.airgap = on }
 }
 
 // WithEnv passes environment variables to the executor for all subprocess calls,
@@ -110,6 +120,12 @@ func (p *Provisioner) Validate(cfg *config.Config) error {
 // Prepare cleans up previous artifacts and runs the setup phase.
 func (p *Provisioner) Prepare(ctx context.Context, cfg *config.Config) ([]distribution.StepResult, error) {
 	opts := setup.DefaultOptions(p.projectRoot)
+
+	resolver, err := fetchplan.PickResolver(cfg, p.airgap)
+	if err != nil {
+		return nil, err
+	}
+	opts.Resolver = resolver
 
 	if system.DirExists(opts.WorkDir) {
 		p.logger.Info("setup: cleaning up previous artifacts")

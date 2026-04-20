@@ -12,13 +12,18 @@ import (
 )
 
 // DownloadOKDTools bootstraps oc, extracts openshift-install and oc from the
-// OKD release container image, and installs them to BinDir.
+// OKD release container image, and installs them to BinDir. opts.Resolver
+// redirects the bootstrap-oc URL and the release-image ref through the
+// active mirror in air-gap mode.
 func (p *Phase) DownloadOKDTools(ctx context.Context, version string, opts *Options) error {
 	if err := system.EnsureDir(opts.DownloadDir); err != nil {
 		return &errtypes.ConfigError{Msg: "failed to create download directory", Err: err}
 	}
 
-	var resolver fetchplan.Resolver = fetchplan.DefaultResolver{}
+	resolver := opts.Resolver
+	if resolver == nil {
+		resolver = fetchplan.DefaultResolver{}
+	}
 
 	ocPath, err := p.bootstrapOC(ctx, opts.DownloadDir, resolver)
 	if err != nil {

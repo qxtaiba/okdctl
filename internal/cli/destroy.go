@@ -11,6 +11,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/distribution/okd"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/infrastructure/terraform"
@@ -86,7 +87,11 @@ func runDestroy(cmd *cobra.Command, _ []string) error {
 		}
 	}()
 
-	p := createOKDProvisioner(cfg, creds, projectRoot)
+	var destroyProvOpts []okd.ProvisionerOption
+	if destroyAirgap {
+		destroyProvOpts = append(destroyProvOpts, okd.WithAirgap(true))
+	}
+	p := createOKDProvisionerWithOpts(cfg, creds, projectRoot, destroyProvOpts...)
 
 	tui.Info("destroying cluster...")
 	startTime := time.Now()
