@@ -142,7 +142,7 @@ the plan.
 
 ### M26 — `okdctl airgap plan` subcommand
 
-- **Status:** not started
+- **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/m26-airgap-plan
 - **Category:** CLI / operator contract
 - **State:** design approved (L15)
 - **Effort:** days
@@ -217,7 +217,7 @@ the plan.
 
 ### M33 — Unify fetch resolution: Plan + EnvOverrideResolver chain
 
-- **Status:** not started
+- **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/m33-unify-fetch
 - **Category:** refactor / air-gap follow-up
 - **State:** design sketched (this entry); no formal scoping doc
 - **Effort:** days
