@@ -140,74 +140,6 @@ agent should re-verify floor versions, `oc-mirror` schema, mirror rule
 coverage, bootstrap-oc URL, and cosign status. Findings travel with
 the plan.
 
-### M22 — OKD binaries via release-image extraction
-
-- **Status:** in review — PR #97
-- **Category:** source change / refactor
-- **State:** design approved (L15)
-- **Effort:** days
-- **Impact:** large (enables air-gap; aligns with upstream
-  disconnected-install workflow)
-- **Evidence:** `internal/distribution/okd/releases/fetcher.go:31`,
-  `internal/distribution/okd/setup/artifacts.go:90`. L15 research
-  confirmed every OKD GitHub release body has a
-  `Pull From: quay.io/okd/scos-release@sha256:<digest>` line;
-  tarballs are a convenience wrapper over the release image.
-  Design: L15 §7.1.
-- **Acceptance:** bootstrap `oc` fetch from
-  `https://mirror.openshift.com/pub/openshift-v4/clients/oc/latest/linux/oc.tar.gz`
-  (~20 MB, cached). `oc adm release extract --tools
-  quay.io/okd/scos-release:<tag>` produces the same output files the
-  current code consumes (`openshift-install`, `oc`). FetchPlan OCI
-  source kind fully wired. No GitHub-tarball fallback: quay.io is the
-  canonical OKD registry and operators get an air-gap escape hatch via
-  M24's MirrorBase. Bootstrap-`oc` integrity is binary-exists+nonzero-size
-  (no upstream checksum sidecar published); final binaries inherit the
-  release-image digest pin.
-- **Depends on:** M21. **Run pre-implementation verification per L15
-  §11.0, especially the bootstrap-oc URL stability check.**
-
-### M24 — Mirror contract (MirrorBase + rewrite rules)
-
-- **Status:** in review — PR #98
-- **Category:** feature-gap / air-gap
-- **State:** design approved (L15)
-- **Effort:** days
-- **Impact:** large (air-gap mode config surface)
-- **Evidence:** L15 §6 design; rewrite rules in §6.1; per-fetch
-  override env vars in §6.2.
-- **Acceptance:** new `OKDCTL_MIRROR_BASE` env var +
-  `Deployment.MirrorBase` YAML field. `MirrorResolver` implements the
-  rewrite rules per L15 §6.1. New env vars `OKDCTL_UPDATE_CHECK_URL`,
-  `OKDCTL_SCOS_STREAM_URL`, `OKDCTL_SCOS_ISO_URL`, and
-  `OKDCTL_BOOTSTRAP_OC_URL` wired. M4/M5 per-fetch overrides preserved
-  as final escape hatches. Air-gap mode activated via
-  `OKDCTL_AIRGAP=1`, `--airgap` flag on `doctor`/`deploy`/`destroy`,
-  or presence of `MirrorBase` config.
-- **Depends on:** M21. **Run pre-implementation verification per L15
-  §11.0, especially the mirror rewrite rule coverage pass — if new
-  fetches landed since 2026-04-19, add them to the rule table.**
-
-### M25 — MirrorableAddon interface + addon migrations
-
-- **Status:** in review — PR #96
-- **Category:** interface extension
-- **State:** design approved (L15)
-- **Effort:** days
-- **Impact:** medium (inventory for `doctor --airgap`)
-- **Evidence:** `internal/addon/addon.go:16-22` (current Addon
-  interface), `internal/addon/catalog/flux/flux.go:134,151` (flux
-  chart refs). Design: L15 §8.
-- **Acceptance:** new opt-in `MirrorableAddon` sub-interface exposing
-  `MirrorArtifacts() MirrorSpec`. Follows the established
-  `ConfigurableAddon` / `ToolProvider` / `WizardProvider` pattern.
-  Flux implements (returns its two chart refs); secretstore returns
-  an empty spec (applies CRDs only). Helm-template image-extraction
-  helper in a new `internal/addon/mirror/` package for transitive
-  image discovery (no addon-maintainer image-list tracking burden).
-- **Depends on:** M21. **Run pre-implementation verification per L15
-  §11.0.**
-
 ### M26 — `okdctl airgap plan` subcommand
 
 - **Status:** not started
@@ -427,6 +359,62 @@ entries land here when a PR merges, or when an item is closed without
 code (audit error, done-by-prior-work). Keep the explanation terse
 but link evidence.
 
+- **M25 — MirrorableAddon interface + addon migrations** — done PR #96,
+  merged 2026-04-20. Opt-in `MirrorableAddon` sub-interface in
+  `internal/addon/addon.go` exposing `MirrorArtifacts() MirrorSpec`;
+  follows the `ConfigurableAddon` / `ToolProvider` / `WizardProvider`
+  pattern (access via type assertion). Flux returns its two chart refs
+  (`flux-operator`, `flux-instance`); secretstore returns an empty spec
+  (CRDs only — ESO itself is user-installed). New `internal/addon/mirror/`
+  package with `ChartImages` / `SpecImages` / `AddonImages` helpers that
+  run `helm template` and walk rendered YAML via `sigs.k8s.io/yaml` to
+  extract transitive image refs — addons declare charts, okdctl discovers
+  images at verify time. Consumer is M27 (`doctor --airgap`) and M26
+  (`airgap plan`); M33 tracks wiring the addon chart-pull rewrite itself.
+- **M22 — OKD binaries via release-image extraction** — done PR #97,
+  merged 2026-04-20. Default OKD binary acquisition shifted from
+  GitHub release tarballs to `oc adm release extract --tools
+  quay.io/okd/scos-release:<version>`, bootstrap-fetching `oc` from
+  `mirror.openshift.com` with binary-exists+nonzero-size verification
+  (no upstream checksum sidecar). New `setup/release_extract.go` with
+  `bootstrapOC` (size-validated on cache reuse), `extractReleaseImage`
+  (10-min timeout on a 5-7 GB image; best-effort auth detection via
+  `authMarkers` → `*errtypes.AuthError`, other → `*errtypes.ClusterError`),
+  and `extractReleaseTarballs`. `fetchplan.BuildM22BootstrapOCPlan`
+  (Blob) and `fetchplan.OKDReleaseImageRef(version)` (OCIArtifact) wire
+  the FetchPlan OCI source kind for the first time. **Dropped entirely**:
+  the GitHub-tarball fallback and the dead M4 plumbing it depended on
+  (`Deployment.OKDReleaseBaseURL`, `OKDCTL_OKD_RELEASE_URL`,
+  `ResolveM4BaseURL`, `M4Input`, `BuildM4Plan`, `defaultOKDReleaseBaseURL`,
+  plus 4 fetchplan tests). The acceptance originally called for a
+  deprecated fallback; user called it "backward compat is not an issue"
+  so the cleanup went with it. Review took two rounds: round 1 FAILED
+  on bootstrap-oc cache integrity skip, dead `digest` parameter, dead
+  M4 surface, tight `ocExtractTimeout`, narrow auth markers, stale
+  package doc, refactor-narration comment, redundant interface cast —
+  all 9 findings fixed in round 2 which PASSED.
+- **M24 — Mirror contract (MirrorBase + rewrite rules)** — done PR #98,
+  merged 2026-04-20. `MirrorResolver` activated with real rewrite logic:
+  `mirrorBlobRules` covers helm/github/api/rhcos/raw-github/openshift-mirror
+  (the last two added because M23 coreos stream and M22 bootstrap-oc
+  aren't in L15 §6.1); `mirrorOCIRules` covers quay/ghcr/registry-ci.
+  Malformed `MirrorBase` → `*errtypes.ConfigError`. New
+  `Deployment.MirrorBase` YAML + `OKDCTL_MIRROR_BASE` env (env > config).
+  Helpers: `ResolveMirrorBase`, `IsAirgap`, `PickResolver`. Per-fetch
+  escape-hatch env keys declared (`EnvUpdateCheckURL` wired in
+  updatecheck.go; `EnvSCOSStreamURL` / `EnvSCOSISOURL` wired via
+  `resolveStreamURL` / `resolveISOURL` in coreos.go; `EnvBootstrapOCURL`
+  declared — consumer is M33 unification). `--airgap` flag on
+  `deploy`/`destroy`/`doctor`. Cross-PR review (2026-04-20) returned
+  FAIL because `PickResolver` existed but no caller invoked it, leaving
+  `MirrorResolver` dead in production. Fix-up commit on the same branch
+  threads the resolver: `Provisioner.WithAirgap(bool)` → `Prepare()` calls
+  `PickResolver(cfg, p.airgap)` → `setup.Options.Resolver` → consumed by
+  `DownloadOKDTools`. CLI `--airgap` flags on deploy/destroy now feed
+  `okd.WithAirgap`. The coreos stream/ISO and M5 tool-tarball sites
+  still bypass the resolver (env-only today) — tracked as **M33**.
+  Rebase after M22 merge resolved the `DeploymentConfig` conflict
+  (M22 dropped `OKDReleaseBaseURL`, M24 added `MirrorBase`).
 - **M29 — GitHub Artifact Attestations for release binaries** — done
   PR #94, merged 2026-04-20. New `actions/attest-build-provenance@v4.1.0`
   step in `.github/workflows/release.yml` after goreleaser (SHA-pinned
@@ -1154,10 +1142,10 @@ but link evidence.
 | M19 | Typed addon settings (decoder method) | **Done** (PR #89) |
 | M20 | Grouped wizard fields for addons | **Done** (PR #89) |
 | M21 | FetchPlan abstraction + resolver | **Done** (PR #95) |
-| M22 | OKD binaries via release-image extraction | Sprint 1 (air-gap; L15) |
+| M22 | OKD binaries via release-image extraction | **Done** (PR #97) |
 | M23 | Direct CoreOS stream fetch (no openshift-install dep) | **Done** (PR #95) |
-| M24 | Mirror contract (MirrorBase + rewrite rules) | Sprint 1 (air-gap; L15) |
-| M25 | MirrorableAddon interface + migrations | Sprint 1 (air-gap; L15) |
+| M24 | Mirror contract (MirrorBase + rewrite rules) | **Done** (PR #98) |
+| M25 | MirrorableAddon interface + migrations | **Done** (PR #96) |
 | M26 | `okdctl airgap plan` subcommand | Sprint 1 (air-gap; L15) |
 | M27 | `okdctl doctor --airgap` | Sprint 1 (air-gap; L15) |
 | M28 | Air-gap docs: mirror contract + operator runbook | Sprint 1 (air-gap; L15) |
@@ -1165,6 +1153,7 @@ but link evidence.
 | M30 | `oras-go/v2` as direct OCI pull client | Deferred |
 | M31 | *(unassigned — was OKD version floor, reversed 2026-04-20)* | n/a |
 | M32 | Embed OKD maintainer GPG pubkey for tarball verification | **Blocked** (okd#2092) |
+| M33 | Unify fetch resolution: Plan + EnvOverrideResolver chain | Sprint 1 (air-gap follow-up) |
 | L1 | libvirt/KVM provider | **Skipped** |
 | L2 | vSphere/AWS/Equinix/bare-metal/Vagrant | **Skipped** |
 | L3 | Multi-distribution (RKE2, vanilla) | **Skipped** |
