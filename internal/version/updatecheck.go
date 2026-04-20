@@ -82,8 +82,15 @@ func runCheck(ctx context.Context) CheckResult {
 	return CheckResult{}
 }
 
+func resolveUpdateCheckURL() string {
+	if v := os.Getenv("OKDCTL_UPDATE_CHECK_URL"); v != "" {
+		return v
+	}
+	return "https://api.github.com/repos/" + githubOwner + "/" + githubRepo + "/releases/latest"
+}
+
 func fetchLatest(ctx context.Context) (string, error) {
-	url := "https://api.github.com/repos/" + githubOwner + "/" + githubRepo + "/releases/latest"
+	url := resolveUpdateCheckURL()
 
 	reqCtx, cancel := context.WithTimeout(ctx, httpTimeout)
 	defer cancel()

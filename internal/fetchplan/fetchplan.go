@@ -7,10 +7,12 @@ package fetchplan
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"strings"
 
 	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/errtypes"
 )
 
 // Plan is the set of remote artifacts a phase needs to fetch.
@@ -54,19 +56,132 @@ func (DefaultResolver) ResolveOCI(a OCIArtifact) (string, error) { return a.Ref,
 // ResolveBlob returns b.URL unchanged.
 func (DefaultResolver) ResolveBlob(b Blob) (string, error) { return b.URL, nil }
 
-// MirrorResolver rewrites fetches through a mirror base. The rewrite
-// table arrives in M24; until then MirrorBase is stored but resolution
-// returns the upstream value unchanged so the type composes cleanly with
-// the rest of the air-gap workstream.
+// MirrorResolver rewrites fetches through a mirror base using the 1:1
+// host-prefix table from L15 §6.1. Unrecognised upstream hosts pass through
+// unchanged so future fetch sites don't silently break.
 type MirrorResolver struct {
 	MirrorBase string
 }
 
-// ResolveOCI returns a.Ref unchanged pending M24's rewrite table.
-func (r MirrorResolver) ResolveOCI(a OCIArtifact) (string, error) { return a.Ref, nil }
+// mirrorBlobRules maps upstream HTTPS host to the path prefix appended under
+// MirrorBase. Covers the L15 §6.1 table plus raw.githubusercontent.com
+// (coreos stream) and mirror.openshift.com (bootstrap-oc fetch).
+var mirrorBlobRules = map[string]string{
+	"get.helm.sh":                "helm",
+	"github.com":                 "github",
+	"api.github.com":             "okdctl-api",
+	"rhcos.mirror.openshift.com": "rhcos",
+	"raw.githubusercontent.com":  "raw-github",
+	"mirror.openshift.com":       "openshift-mirror",
+}
 
-// ResolveBlob returns b.URL unchanged pending M24's rewrite table.
-func (r MirrorResolver) ResolveBlob(b Blob) (string, error) { return b.URL, nil }
+// mirrorOCIRules maps upstream OCI registry host to the path prefix under
+// MirrorBase. The rewritten ref uses the MirrorBase host (scheme stripped).
+var mirrorOCIRules = map[string]string{
+	"quay.io":                   "quay",
+	"ghcr.io":                   "ghcr",
+	"registry.ci.openshift.org": "registry-ci",
+}
+
+// ResolveOCI rewrites an OCI image reference through the mirror base. The
+// upstream registry host is replaced by the MirrorBase host with a fixed
+// prefix (e.g. quay.io/okd/… → <mirror-host>/quay/okd/…). Refs whose
+// registry is not in the rewrite table are returned unchanged.
+func (r MirrorResolver) ResolveOCI(a OCIArtifact) (string, error) {
+	ref := a.Ref
+	slash := strings.IndexByte(ref, '/')
+	if slash < 0 {
+		return ref, nil
+	}
+	host := ref[:slash]
+	rest := ref[slash+1:]
+	prefix, ok := mirrorOCIRules[host]
+	if !ok {
+		return ref, nil
+	}
+	base, err := parseMirrorBase(r.MirrorBase)
+	if err != nil {
+		return "", err
+	}
+	return base.Host + "/" + prefix + "/" + rest, nil
+}
+
+// ResolveBlob rewrites an HTTPS blob URL through the mirror base. The
+// upstream host is replaced with MirrorBase and a fixed prefix
+// (e.g. get.helm.sh/… → <base>/helm/…). URLs whose host is not in the
+// rewrite table are returned unchanged.
+func (r MirrorResolver) ResolveBlob(b Blob) (string, error) {
+	u, parseErr := url.Parse(b.URL)
+	if parseErr != nil || u.Host == "" {
+		return b.URL, nil //nolint:nilerr // unparseable URL falls through unchanged
+	}
+	prefix, ok := mirrorBlobRules[u.Host]
+	if !ok {
+		return b.URL, nil
+	}
+	base, err := parseMirrorBase(r.MirrorBase)
+	if err != nil {
+		return "", err
+	}
+	rewritten := *base
+	rewritten.Path = "/" + prefix + u.Path
+	rewritten.RawQuery = u.RawQuery
+	return rewritten.String(), nil
+}
+
+// parseMirrorBase validates and parses the MirrorBase URL. Returns a
+// *ConfigError when the value is empty, unparseable, or scheme/host are absent.
+func parseMirrorBase(base string) (*url.URL, error) {
+	if base == "" {
+		return nil, &errtypes.ConfigError{Msg: "MirrorBase is not set"}
+	}
+	u, err := url.Parse(base)
+	if err != nil || u.Scheme == "" || u.Host == "" {
+		return nil, &errtypes.ConfigError{Msg: "MirrorBase must be an absolute URL (e.g. https://mirror.local)"}
+	}
+	u.Path = strings.TrimRight(u.Path, "/")
+	return u, nil
+}
+
+// ResolveMirrorBase returns the effective MirrorBase applying env > config
+// precedence: OKDCTL_MIRROR_BASE env var, then cfg.Deployment.MirrorBase.
+// Returns empty string when neither is set.
+func ResolveMirrorBase(cfg *config.Config) string {
+	if v := os.Getenv("OKDCTL_MIRROR_BASE"); v != "" {
+		return strings.TrimRight(v, "/")
+	}
+	if cfg != nil && cfg.Deployment.MirrorBase != "" {
+		return strings.TrimRight(cfg.Deployment.MirrorBase, "/")
+	}
+	return ""
+}
+
+// IsAirgap reports whether air-gap mode is active for this invocation. Any
+// of OKDCTL_AIRGAP=1, airgapFlag=true, or a non-empty MirrorBase (env or
+// config) activates air-gap mode.
+func IsAirgap(cfg *config.Config, airgapFlag bool) bool {
+	if os.Getenv("OKDCTL_AIRGAP") == "1" {
+		return true
+	}
+	if airgapFlag {
+		return true
+	}
+	return ResolveMirrorBase(cfg) != ""
+}
+
+// PickResolver returns MirrorResolver when air-gap mode is active and
+// DefaultResolver otherwise. Returns a *ConfigError when air-gap is active
+// but MirrorBase is not configured.
+func PickResolver(cfg *config.Config, airgapFlag bool) (Resolver, error) {
+	if !IsAirgap(cfg, airgapFlag) {
+		return DefaultResolver{}, nil
+	}
+	base := ResolveMirrorBase(cfg)
+	if base == "" {
+		return nil, &errtypes.ConfigError{Msg: "air-gap mode is active but OKDCTL_MIRROR_BASE (or deployment.mirror_base) is not set"}
+	}
+	return MirrorResolver{MirrorBase: base}, nil
+}
 
 // Purpose tags identify Plan entries so callers can pick what they need
 // without index magic.
@@ -77,6 +192,15 @@ const (
 	M5PurposeYQ            = "tool-yq"
 	M22PurposeBootstrapOC  = "bootstrap-oc"
 	M23PurposeCoreOSStream = "coreos-stream"
+)
+
+// Per-fetch env-var override keys (L15 §6.2 — final escape hatches).
+// Values in these vars take precedence over MirrorBase rewrites.
+const (
+	EnvUpdateCheckURL = "OKDCTL_UPDATE_CHECK_URL"
+	EnvSCOSStreamURL  = "OKDCTL_SCOS_STREAM_URL"
+	EnvSCOSISOURL     = "OKDCTL_SCOS_ISO_URL"
+	EnvBootstrapOCURL = "OKDCTL_BOOTSTRAP_OC_URL"
 )
 
 const (
@@ -135,7 +259,7 @@ func ResolveM5Input(arch string, cfg *config.Config) M5Input {
 	return in
 }
 
-func applyConfigOverride(url, version *string, cfg *config.Config, tool string) {
+func applyConfigOverride(urlPtr, version *string, cfg *config.Config, tool string) {
 	if cfg == nil {
 		return
 	}
@@ -144,7 +268,7 @@ func applyConfigOverride(url, version *string, cfg *config.Config, tool string) 
 		return
 	}
 	if ov.URLTemplate != "" {
-		*url = ov.URLTemplate
+		*urlPtr = ov.URLTemplate
 	}
 	if ov.Version != "" {
 		*version = ov.Version
