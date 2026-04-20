@@ -3,105 +3,39 @@ package setup
 import (
 	"context"
 	"fmt"
-	"os"
 	"path/filepath"
 
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
-	"github.com/qxtaiba/okdctl/internal/download"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/fetchplan"
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
-// DownloadOKDTools dispatches to the OCI release-image path (default) or the
-// legacy GitHub-tarball path when OKDCTL_RELEASE_SOURCE=github is set.
+// DownloadOKDTools bootstraps oc, extracts openshift-install and oc from the
+// OKD release container image, and installs them to BinDir. M24's
+// MirrorResolver will replace the DefaultResolver here once it lands.
 func (p *Phase) DownloadOKDTools(ctx context.Context, version string, opts *Options) error {
-	src := ResolveReleaseSource(opts.ReleaseSource)
-	if src == ReleaseSourceGitHub {
-		p.Log.Warn("tools: OKDCTL_RELEASE_SOURCE=github is deprecated; the GitHub tarball path will be removed in a future release")
-		return p.downloadOKDToolsFromGitHub(ctx, version, opts)
-	}
-	return p.DownloadOKDToolsViaImage(ctx, version, opts, fetchplan.DefaultResolver{})
-}
-
-// downloadOKDToolsFromGitHub is the legacy GitHub-tarball path retained as a
-// deprecation fallback. Call only via DownloadOKDTools.
-func (p *Phase) downloadOKDToolsFromGitHub(ctx context.Context, version string, opts *Options) error {
 	if err := system.EnsureDir(opts.DownloadDir); err != nil {
 		return &errtypes.ConfigError{Msg: "failed to create download directory", Err: err}
 	}
 
-	baseURL := fmt.Sprintf("%s/%s", opts.OKDReleaseBaseURL, version)
-	checksumsURL := fmt.Sprintf("%s/sha256sum.txt", baseURL)
+	resolver := fetchplan.Resolver(fetchplan.DefaultResolver{})
 
-	tools := []struct {
-		name     string
-		filename string
-		binary   string
-	}{
-		{
-			name:     "openshift-install",
-			filename: fmt.Sprintf("openshift-install-linux-%s.tar.gz", version),
-			binary:   "openshift-install",
-		},
-		{
-			name:     "oc",
-			filename: fmt.Sprintf("openshift-client-linux-%s.tar.gz", version),
-			binary:   "oc",
-		},
+	ocPath, err := p.bootstrapOC(ctx, opts.DownloadDir, resolver)
+	if err != nil {
+		return err
 	}
 
-	for _, tool := range tools {
-		archivePath := filepath.Join(opts.DownloadDir, tool.filename)
-		toolURL := fmt.Sprintf("%s/%s", baseURL, tool.filename)
+	artifact := fetchplan.OKDReleaseImageRef(version, "")
+	resolvedRef, err := resolver.ResolveOCI(artifact)
+	if err != nil {
+		return &errtypes.ConfigError{Msg: "failed to resolve OKD release image ref", Err: err}
+	}
 
-		binaryPath := filepath.Join(opts.DownloadDir, tool.binary)
-		if system.FileExists(binaryPath) && !opts.SkipDownloads {
-			p.Log.Info(fmt.Sprintf("tools: using existing %s binary", tool.name))
-			continue
-		}
+	p.Log.Info("tools: extracting OKD binaries from release image", "ref", resolvedRef)
 
-		checksum, err := download.FetchChecksum(ctx, checksumsURL, tool.filename)
-		checksumSkipped := false
-		if err != nil {
-			p.Log.Warn(fmt.Sprintf("tools: proceeding without checksum validation for %s", tool.name))
-			checksum = ""
-			checksumSkipped = true
-		}
-
-		downloadOpts := &download.Options{
-			URL:              toolURL,
-			OutputPath:       archivePath,
-			ExpectedChecksum: checksum,
-			Description:      tool.name,
-			Logger:           p.Log,
-		}
-		if err := download.Download(ctx, downloadOpts); err != nil {
-			return &errtypes.NetworkError{Msg: fmt.Sprintf("failed to download %s", tool.name), Err: err}
-		}
-
-		extractOpts := download.ExtractOptions{
-			ArchivePath:    archivePath,
-			DestDir:        opts.DownloadDir,
-			CleanupArchive: true,
-			Logger:         p.Log,
-		}
-		if err := download.ExtractTarGz(ctx, extractOpts); err != nil {
-			return &errtypes.NetworkError{Msg: fmt.Sprintf("failed to extract %s", tool.name), Err: err}
-		}
-
-		// Defense-in-depth: when checksum validation was skipped, verify the
-		// extracted binary at least exists and is non-empty so a corrupt or
-		// missing artifact fails loudly instead of silently installing.
-		if checksumSkipped {
-			fi, statErr := os.Stat(binaryPath)
-			if statErr != nil {
-				return &errtypes.NetworkError{Msg: fmt.Sprintf("tools: extracted %s binary missing at %s", tool.name, binaryPath), Err: statErr}
-			}
-			if fi.Size() == 0 {
-				return &errtypes.NetworkError{Msg: fmt.Sprintf("tools: extracted %s binary at %s is empty", tool.name, binaryPath)}
-			}
-		}
+	if err := p.extractReleaseImage(ctx, ocPath, resolvedRef, opts.DownloadDir); err != nil {
+		return err
 	}
 
 	return p.InstallToolsToSystem(ctx, opts.DownloadDir)

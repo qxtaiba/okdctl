@@ -26,12 +26,11 @@ import (
 // install, postinstall, destroy). Construct via New with functional options;
 // the zero value is not usable.
 type Provisioner struct {
-	version       string
-	projectRoot   string
-	executor      *executor.Executor
-	logger        *slog.Logger
-	recorder      distribution.MetricsRecorder
-	releaseSource string
+	version     string
+	projectRoot string
+	executor    *executor.Executor
+	logger      *slog.Logger
+	recorder    distribution.MetricsRecorder
 }
 
 // ProvisionerOption configures a Provisioner. Options compose — pass multiple
@@ -58,13 +57,6 @@ func WithLogger(l *slog.Logger) ProvisionerOption {
 // overall-run observations during the provisioner's Execute phases.
 func WithMetricsRecorder(rec distribution.MetricsRecorder) ProvisionerOption {
 	return func(p *Provisioner) { p.recorder = rec }
-}
-
-// WithReleaseSource sets the OKD binary acquisition strategy. The value is
-// resolved through setup.ResolveReleaseSource at Prepare time so that
-// OKDCTL_RELEASE_SOURCE env still wins over the flag value.
-func WithReleaseSource(src string) ProvisionerOption {
-	return func(p *Provisioner) { p.releaseSource = src }
 }
 
 // WithEnv passes environment variables to the executor for all subprocess calls,
@@ -120,7 +112,6 @@ func (p *Provisioner) Validate(cfg *config.Config) error {
 func (p *Provisioner) Prepare(ctx context.Context, cfg *config.Config) ([]distribution.StepResult, error) {
 	opts := setup.DefaultOptions(p.projectRoot)
 	opts.OKDReleaseBaseURL = fetchplan.ResolveM4BaseURL(cfg)
-	opts.ReleaseSource = string(setup.ResolveReleaseSource(p.releaseSource))
 
 	if system.DirExists(opts.WorkDir) {
 		p.logger.Info("setup: cleaning up previous artifacts")
