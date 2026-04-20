@@ -16,7 +16,6 @@ okdctl destroy [flags]
 ### Options
 
 ```
-      --airgap      activate air-gap mode; use mirror resolver for all fetches
       --dry-run     preview terraform destroy plan without running destroy
   -y, --force       skip confirmation prompt
   -h, --help        help for destroy

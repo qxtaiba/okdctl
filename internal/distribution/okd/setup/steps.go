@@ -65,7 +65,7 @@ func (p *Phase) setupBaseSteps(cfg *config.Config, opts *Options) []distribution
 		{
 			ID: StepInstallTools, Name: "install external tools",
 			Desc: "installing core tools and addon-required tools", NonFatal: true,
-			Exec:    func(ctx context.Context) error { return p.InstallExternalTools(ctx, cfg, opts.Resolver) },
+			Exec:    func(ctx context.Context) error { return p.InstallExternalTools(ctx, cfg) },
 			OnError: phase.WarnOnError(p.Log, "tools: external installation had warnings"),
 		},
 		{

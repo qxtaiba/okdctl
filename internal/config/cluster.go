@@ -148,29 +148,17 @@ type HTTPServerConfig struct {
 	IgnitionServerIP string `json:"ignition_server_ip"`
 }
 
-// ToolVersionOverride lets operators pin a tool version or redirect its
-// download URL. URLTemplate may contain {version} and {arch} placeholders
-// substituted at install time; a URL without placeholders is used verbatim.
-// Version overrides the default version used in URL construction, so
-// setting only Version swaps the version embedded in the default template.
-type ToolVersionOverride struct {
-	Version     string `json:"version,omitempty"`
-	URLTemplate string `json:"url_template,omitempty"`
-}
-
 // DeploymentConfig tunes deployment-time behavior: Terraform environment,
-// auto-approve, timeouts, per-tool version overrides, and the directory where
-// setup installs managed binaries.
+// auto-approve, timeouts, and the directory where setup installs managed
+// binaries.
 type DeploymentConfig struct {
-	TerraformEnv     string                         `json:"terraform_env,omitempty"`
-	AutoApprove      bool                           `json:"auto_approve,omitempty"`
-	Debug            bool                           `json:"debug,omitempty"`
-	SkipDepsCheck    bool                           `json:"skip_deps_check,omitempty"`
-	BootstrapTimeout int                            `json:"bootstrap_timeout,omitempty"`
-	InstallTimeout   int                            `json:"install_timeout,omitempty"`
-	MirrorBase       string                         `json:"mirror_base,omitempty"`
-	BinDir           string                         `json:"bin_dir,omitempty"`
-	ToolVersions     map[string]ToolVersionOverride `json:"tool_versions,omitempty"`
+	TerraformEnv     string `json:"terraform_env,omitempty"`
+	AutoApprove      bool   `json:"auto_approve,omitempty"`
+	Debug            bool   `json:"debug,omitempty"`
+	SkipDepsCheck    bool   `json:"skip_deps_check,omitempty"`
+	BootstrapTimeout int    `json:"bootstrap_timeout,omitempty"`
+	InstallTimeout   int    `json:"install_timeout,omitempty"`
+	BinDir           string `json:"bin_dir,omitempty"`
 }
 
 // DisksConfig sets optional extra data-disk sizes attached to master/worker

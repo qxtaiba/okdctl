@@ -1,12 +1,10 @@
 # Doctor checks reference
 
 `okdctl doctor` runs 10 preflight checks against the local environment
-before a deploy, plus 5 additional air-gap checks gated on `--airgap` or
-`OKDCTL_AIRGAP=1`. The command is Linux-only (it reads `/etc/os-release`
-and uses Linux syscalls). Checks run in the order listed below; the 10
-base checks always execute and results are reported per-check. Exit code
-is 0 when there are no `[fail]` results (`[warn]` is tolerated), 1
-otherwise.
+before a deploy. The command is Linux-only (it reads `/etc/os-release`
+and uses Linux syscalls). Checks run in the order listed below; results
+are reported per-check. Exit code is 0 when there are no `[fail]`
+results (`[warn]` is tolerated), 1 otherwise.
 
 ## Table of contents
 
@@ -20,14 +18,6 @@ otherwise.
 8. [pull secret](#pull-secret)
 9. [disk space](#disk-space)
 10. [host ports](#host-ports)
-
-Air-gap checks (active when `--airgap` or `OKDCTL_AIRGAP=1`):
-
-11. [airgap mirror reachable](#airgap-mirror-reachable)
-12. [airgap release image digest pinned](#airgap-release-image-digest-pinned)
-13. [airgap addon artifacts present](#airgap-addon-artifacts-present)
-14. [airgap bootstrap oc present](#airgap-bootstrap-oc-present)
-15. [airgap idms applied](#airgap-idms-applied)
 
 ---
 
@@ -337,127 +327,3 @@ If the service on the port is intentional, stop or reconfigure it before
 running `okdctl deploy` — okdctl always binds to the ports listed above.
 
 ---
-
-## airgap mirror reachable
-
-**What it checks:** Resolves every HTTPS blob in the active FetchPlan
-(helm, sops, yq, bootstrap oc, CoreOS stream metadata) through
-`OKDCTL_MIRROR_BASE` and sends an HTTP HEAD to each resolved URL. All
-must return HTTP 200 or 302.
-
-**Fail message (per blob):**
-```
-HTTP <N> at <url>; stage via fetch-blobs.sh
-<url> — <err>; stage via fetch-blobs.sh
-```
-
-**How to fix:** Re-run `./fetch-blobs.sh` from your airgap plan output
-directory to stage missing blobs onto the mirror host. Ensure
-`OKDCTL_MIRROR_BASE` (or `deployment.mirror_base` in `okdctl.yaml`)
-points at the correct mirror URL.
-
----
-
-## airgap release image digest pinned
-
-**What it checks:** Probes `quay.io/okd/scos-release:<version>` in the
-mirror via OCI manifest HEAD (`/v2/<name>/manifests/<tag>`). Reports the
-image as reachable, then emits a `[warn]` noting that cosign verification
-is not yet available for OKD release images (tracked at
-[okd-project/okd#2092](https://github.com/okd-project/okd/issues/2092)).
-Digest pinning via the OCI manifest response is the available verification
-mechanism today.
-
-**Warn message (reachable):**
-```
-<resolved-ref> reachable — digest-pinning only; cosign verification pending okd-project/okd#2092
-```
-
-**Fail message:**
-```
-HTTP <N> from <resolved-ref>; push quay.io/okd/scos-release:<version> to your mirror via run-oc-mirror.sh
-cannot reach <resolved-ref>: <err>; push quay.io/okd/scos-release:<version> to your mirror, then re-run run-oc-mirror.sh
-```
-
-**How to fix:** Run `./run-oc-mirror.sh` from your airgap plan output
-directory to mirror the OKD release image. Ensure `distribution.version`
-is set in `okdctl.yaml`.
-
----
-
-## airgap addon artifacts present
-
-**What it checks:** For every `MirrorableAddon` (currently: flux), runs
-`helm template` to discover transitive container images declared in the
-addon's charts, then probes each image ref against the mirror via OCI
-manifest HEAD.
-
-**Warn message (helm absent or chart unreachable):**
-```
-helm template failed (<err>); ensure helm is on PATH and charts are reachable upstream
-```
-
-**Fail message (per image):**
-```
-HTTP 404 at <resolved-ref>; add to isc.yaml additionalImages and re-run oc-mirror
-HTTP <N> at <resolved-ref>; re-run ./run-oc-mirror.sh
-<resolved-ref> — <err>; re-run ./run-oc-mirror.sh
-```
-
-**How to fix:** Re-run `./run-oc-mirror.sh`. If an image is not covered
-by the `ImageSetConfiguration`, add it to the `additionalImages:` section
-in `isc.yaml` and re-run oc-mirror.
-
----
-
-## airgap bootstrap oc present
-
-**What it checks:** Confirms `oc` is on `$PATH`. The setup phase uses
-`oc adm release extract --tools` to obtain the OKD binaries; a missing
-`oc` blocks setup.
-
-**Pass message:**
-```
-oc found on $PATH
-```
-
-**Fail message:**
-```
-oc not found on $PATH; fetch from https://mirror.openshift.com/pub/openshift-v4/clients/oc/latest/linux/oc.tar.gz and extract to a directory on $PATH
-```
-
-**How to fix:** Download the bootstrap `oc` client, extract it, and
-place the `oc` binary in a directory on `$PATH`. In an air-gap
-environment fetch from your mirror at
-`<OKDCTL_MIRROR_BASE>/openshift-mirror/pub/openshift-v4/clients/oc/latest/linux/oc.tar.gz`.
-
----
-
-## airgap idms applied
-
-**What it checks:** Probes the connected cluster for
-`ImageDigestMirrorSet` and `ImageTagMirrorSet` resources via `oc get`.
-These resources redirect image pulls from upstream registries to the
-air-gap mirror at cluster runtime. The check is skipped pre-deploy
-(when no kubeconfig is present).
-
-**Warn message (pre-deploy / no cluster):**
-```
-cluster not reachable (no kubeconfig); run this check after okdctl deploy
-```
-
-**Pass message:**
-```
-ImageDigestMirrorSet / ImageTagMirrorSet applied on cluster
-```
-
-**Fail message:**
-```
-no ImageDigestMirrorSet or ImageTagMirrorSet found; apply oc-mirror output: oc apply -f oc-mirror-workspace/results-*/
-```
-
-**How to fix:** Apply the IDMS/ITMS manifests produced by `oc-mirror --v2`:
-```bash
-oc apply -f oc-mirror-workspace/results-*/
-```
-Then re-run `okdctl doctor --airgap` to confirm the resources are present.

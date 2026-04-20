@@ -154,7 +154,7 @@ func TestDetectCoreOSVersion_scosFor419(t *testing.T) {
 	t.Cleanup(func() { streamRawBaseURL = old })
 
 	p := newTestPhase(t)
-	info, err := p.DetectCoreOSVersion(context.Background(), "4.19.0-0.okd-2025-05-01-000000", nil)
+	info, err := p.DetectCoreOSVersion(context.Background(), "4.19.0-0.okd-2025-05-01-000000")
 	if err != nil {
 		t.Fatalf("DetectCoreOSVersion 4.19: %v", err)
 	}
@@ -180,7 +180,7 @@ func TestDetectCoreOSVersion_fcosFor418(t *testing.T) {
 	t.Cleanup(func() { streamRawBaseURL = old })
 
 	p := newTestPhase(t)
-	info, err := p.DetectCoreOSVersion(context.Background(), "4.18.0-0.okd-2024-12-01-000000", nil)
+	info, err := p.DetectCoreOSVersion(context.Background(), "4.18.0-0.okd-2024-12-01-000000")
 	if err != nil {
 		t.Fatalf("DetectCoreOSVersion 4.18: %v", err)
 	}
@@ -203,7 +203,7 @@ func TestDetectCoreOSVersion_fetchFailErrors(t *testing.T) {
 	t.Cleanup(func() { streamRawBaseURL = old })
 
 	p := newTestPhase(t)
-	if _, err := p.DetectCoreOSVersion(context.Background(), "4.19.0-0.okd-2025-05-01-000000", nil); err == nil {
+	if _, err := p.DetectCoreOSVersion(context.Background(), "4.19.0-0.okd-2025-05-01-000000"); err == nil {
 		t.Fatal("expected error when upstream fetch fails, got nil")
 	}
 }

@@ -17,10 +17,21 @@ import (
 	"github.com/qxtaiba/okdctl/internal/download"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/executor"
-	"github.com/qxtaiba/okdctl/internal/fetchplan"
 	"github.com/qxtaiba/okdctl/internal/httputil"
 	"github.com/qxtaiba/okdctl/internal/platform"
 	"github.com/qxtaiba/okdctl/internal/system"
+)
+
+// Tool binary fetch URLs. helm + sops are version-pinned; yq uses GitHub's
+// /releases/latest redirect so the binary is always the newest upstream tag
+// at fetch time. The {arch} placeholder is expanded via strings.NewReplacer.
+const (
+	helmVersion = "v3.17.3"
+	sopsVersion = "v3.9.4"
+
+	helmURLTemplate = "https://get.helm.sh/helm-" + helmVersion + "-linux-{arch}.tar.gz"
+	sopsURLTemplate = "https://github.com/getsops/sops/releases/download/" + sopsVersion + "/sops-" + sopsVersion + ".linux.{arch}"
+	yqURLTemplate   = "https://github.com/mikefarah/yq/releases/latest/download/yq_linux_{arch}"
 )
 
 type externalTool string
@@ -57,15 +68,10 @@ func isToolInstalled(tool externalTool) bool {
 }
 
 // InstallExternalTools installs terraform, yq, and any addon-declared tools.
-// resolver routes each tool's download URL through the active Resolver chain;
-// nil falls back to DefaultResolver to preserve connected-mode behaviour.
-func (p *Phase) InstallExternalTools(ctx context.Context, cfg *config.Config, resolver fetchplan.Resolver) error {
-	if resolver == nil {
-		resolver = fetchplan.DefaultResolver{}
-	}
+func (p *Phase) InstallExternalTools(ctx context.Context, cfg *config.Config) error {
 	tools := append([]externalTool{toolTerraform, toolYQ}, addonRequiredTools(cfg)...)
 	for _, tool := range tools {
-		if err := p.installTool(ctx, tool, cfg, resolver); err != nil {
+		if err := p.installTool(ctx, tool); err != nil {
 			return &errtypes.ConfigError{Msg: fmt.Sprintf("failed to install %s", tool), Err: err}
 		}
 	}
@@ -77,14 +83,14 @@ var binaryToolMeta = map[externalTool]struct {
 	versionFlag     string
 	archiveBinary   string
 	stripComponents int
-	purpose         string
+	urlTemplate     string
 }{
-	toolYQ:   {name: "yq", versionFlag: "--version", purpose: fetchplan.PurposeYQ},
-	toolHelm: {name: "helm", versionFlag: "version", archiveBinary: "helm", stripComponents: 1, purpose: fetchplan.PurposeHelm},
-	toolSops: {name: "sops", versionFlag: "--version", purpose: fetchplan.PurposeSops},
+	toolYQ:   {name: "yq", versionFlag: "--version", urlTemplate: yqURLTemplate},
+	toolHelm: {name: "helm", versionFlag: "version", archiveBinary: "helm", stripComponents: 1, urlTemplate: helmURLTemplate},
+	toolSops: {name: "sops", versionFlag: "--version", urlTemplate: sopsURLTemplate},
 }
 
-func (p *Phase) installTool(ctx context.Context, tool externalTool, cfg *config.Config, resolver fetchplan.Resolver) error {
+func (p *Phase) installTool(ctx context.Context, tool externalTool) error {
 	if isToolInstalled(tool) {
 		p.Log.Info(fmt.Sprintf("tools: %s already installed", tool))
 		return nil
@@ -100,26 +106,10 @@ func (p *Phase) installTool(ctx context.Context, tool externalTool, cfg *config.
 		return nil
 	}
 
-	in := fetchplan.ResolveM5Input(platform.DownloadArch(), cfg)
-	plan := fetchplan.BuildM5Plan(&in)
-	var resolvedURL string
-	for _, b := range plan.HTTPS {
-		if b.Purpose == meta.purpose {
-			u, rErr := resolver.ResolveBlob(b)
-			if rErr != nil {
-				return fmt.Errorf("tools: resolve %s URL: %w", tool, rErr)
-			}
-			resolvedURL = u
-			break
-		}
-	}
-	if resolvedURL == "" {
-		return fmt.Errorf("tools: no fetchplan URL resolved for %s", tool)
-	}
-
+	url := strings.NewReplacer("{arch}", platform.DownloadArch()).Replace(meta.urlTemplate)
 	spec := binaryInstallSpec{
 		name:            meta.name,
-		url:             resolvedURL,
+		url:             url,
 		versionFlag:     meta.versionFlag,
 		archiveBinary:   meta.archiveBinary,
 		stripComponents: meta.stripComponents,

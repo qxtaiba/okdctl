@@ -8,7 +8,6 @@ import (
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/executor"
-	"github.com/qxtaiba/okdctl/internal/fetchplan"
 )
 
 // Addon is the contract every pluggable cluster feature must satisfy.
@@ -39,14 +38,12 @@ type AddonInfo struct {
 
 // Environment carries the shared dependencies an addon needs during Install,
 // Verify, or Uninstall: its config slice, an executor for shelling out, a
-// logger, the project root for locating embedded assets, and the active
-// Resolver for routing external OCI and HTTPS fetches through any mirror.
+// logger, and the project root for locating embedded assets.
 type Environment struct {
 	AddonConfig config.AddonConfig
 	Exec        *executor.Executor
 	Logger      *slog.Logger
 	ProjectRoot string
-	Resolver    fetchplan.Resolver
 }
 
 // ConfigurableAddon is an Addon that exposes tunable settings with defaults,
@@ -91,33 +88,4 @@ type WizardField struct {
 // values land in AddonConfig.Settings keyed by WizardField.Key.
 type WizardProvider interface {
 	WizardFields() []WizardField
-}
-
-// ChartRef identifies one Helm chart an addon pulls by OCI reference and
-// pinned version. M27's doctor --airgap and M26's airgap plan use these
-// to discover transitive container images via helm template.
-type ChartRef struct {
-	OCIRef  string
-	Version string
-}
-
-// MirrorSpec declares the external artifacts an addon requires for an
-// air-gap deploy. Maintainers list charts; okdctl discovers transitive
-// container images at verify time via helm template expansion.
-type MirrorSpec struct {
-	Charts       []ChartRef
-	StaticImages []string
-}
-
-// MirrorableAddon is implemented by addons that pull external artifacts
-// (Helm charts, container images) requiring explicit mirroring in an
-// air-gap environment. Opt-in; addons that don't implement it are assumed
-// to apply only in-cluster-resident manifests.
-//
-// Callers discover implementors via type assertion:
-//
-//	if m, ok := a.(MirrorableAddon); ok { spec := m.MirrorArtifacts() }
-type MirrorableAddon interface {
-	Addon
-	MirrorArtifacts() MirrorSpec
 }

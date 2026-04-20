@@ -28,8 +28,7 @@ okdctl doctor [flags]
 ### Options
 
 ```
-      --airgap   activate air-gap mode for the check
-  -h, --help     help for doctor
+  -h, --help   help for doctor
 ```
 
 ### Options inherited from parent commands
