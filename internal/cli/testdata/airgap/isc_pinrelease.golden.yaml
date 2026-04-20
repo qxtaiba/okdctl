@@ -1,0 +1,10 @@
+apiVersion: mirror.openshift.io/v2alpha1
+kind: ImageSetConfiguration
+mirror:
+  platform:
+    release: quay.io/okd/scos-release@sha256:deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef
+    architectures:
+      - amd64
+  additionalImages: []
+  helm:
+    repositories: []

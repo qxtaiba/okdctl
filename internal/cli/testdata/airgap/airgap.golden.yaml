@@ -1,0 +1,24 @@
+apiVersion: okdctl/v1
+kind: AirgapBlobs
+version: 4.21.0-okd-scos.10
+blobs:
+  - purpose: tool-helm
+    url: https://get.helm.sh/helm-v3.17.3-linux-amd64.tar.gz
+    sha256: <tbd>
+    mirror_path: helm/helm-v3.17.3-linux-amd64.tar.gz
+  - purpose: tool-sops
+    url: https://github.com/getsops/sops/releases/download/v3.9.4/sops-v3.9.4.linux.amd64
+    sha256: <tbd>
+    mirror_path: github/getsops/sops/releases/download/v3.9.4/sops-v3.9.4.linux.amd64
+  - purpose: tool-yq
+    url: https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+    sha256: <tbd>
+    mirror_path: github/mikefarah/yq/releases/latest/download/yq_linux_amd64
+  - purpose: bootstrap-oc
+    url: https://mirror.openshift.com/pub/openshift-v4/clients/oc/latest/linux/oc.tar.gz
+    sha256: <tbd>
+    mirror_path: openshift-mirror/pub/openshift-v4/clients/oc/latest/linux/oc.tar.gz
+  - purpose: scos-iso
+    url: https://rhcos.mirror.openshift.com/art/storage/releases/scos-9.20250401.0/x86_64/scos-live.x86_64.iso
+    sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+    mirror_path: rhcos/art/storage/releases/scos-9.20250401.0/x86_64/scos-live.x86_64.iso
