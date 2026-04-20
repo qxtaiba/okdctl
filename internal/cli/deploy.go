@@ -24,6 +24,7 @@ var (
 	deployYes         bool
 	deployDryRun      bool
 	deployMetricsAddr string
+	deployAirgap      bool
 )
 
 var deployCmd = &cobra.Command{
@@ -39,6 +40,7 @@ func init() {
 	deployCmd.Flags().BoolVarP(&deployYes, "yes", "y", false, "skip prompts, use defaults")
 	deployCmd.Flags().BoolVar(&deployDryRun, "dry-run", false, "preview terraform plan and step listing without deploying")
 	deployCmd.Flags().StringVar(&deployMetricsAddr, "metrics-addr", "", "address for Prometheus metrics endpoint (e.g. :9090); disabled when empty")
+	deployCmd.Flags().BoolVar(&deployAirgap, "airgap", false, "activate air-gap mode; use mirror resolver for all fetches")
 }
 
 func runDeploy(cmd *cobra.Command, _ []string) error {

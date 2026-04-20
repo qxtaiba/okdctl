@@ -29,6 +29,9 @@ Exit code is 0 if there are no [fail] results ([warn] is tolerated),
 See docs/doctor-checks.md for per-check fail messages and fix guidance.`,
 }
 
+var doctorAirgap bool
+
 func init() {
+	doctorCmd.Flags().BoolVar(&doctorAirgap, "airgap", false, "activate air-gap mode for the check")
 	rootCmd.AddCommand(doctorCmd)
 }

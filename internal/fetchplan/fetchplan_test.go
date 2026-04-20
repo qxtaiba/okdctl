@@ -22,12 +22,118 @@ func TestDefaultResolver_passthrough(t *testing.T) {
 	}
 }
 
-func TestMirrorResolver_stubPassthrough(t *testing.T) {
+func TestMirrorResolver_blobRewrite(t *testing.T) {
 	r := fetchplan.MirrorResolver{MirrorBase: "https://mirror.corp"}
-	const url = "https://get.helm.sh/helm-v3.17.3-linux-amd64.tar.gz"
-	got, err := r.ResolveBlob(fetchplan.Blob{URL: url, Purpose: fetchplan.M5PurposeHelm})
-	if err != nil || got != url {
-		t.Fatalf("ResolveBlob with MirrorBase set should currently passthrough; got (%q,%v)", got, err)
+	cases := []struct {
+		url  string
+		want string
+	}{
+		{
+			"https://get.helm.sh/helm-v3.17.3-linux-amd64.tar.gz",
+			"https://mirror.corp/helm/helm-v3.17.3-linux-amd64.tar.gz",
+		},
+		{
+			"https://rhcos.mirror.openshift.com/art/storage/scos.iso",
+			"https://mirror.corp/rhcos/art/storage/scos.iso",
+		},
+		{
+			"https://raw.githubusercontent.com/openshift/installer/release-4.21/data/data/coreos/scos.json",
+			"https://mirror.corp/raw-github/openshift/installer/release-4.21/data/data/coreos/scos.json",
+		},
+		{
+			"https://mirror.openshift.com/pub/openshift-v4/clients/oc/latest/linux/oc.tar.gz",
+			"https://mirror.corp/openshift-mirror/pub/openshift-v4/clients/oc/latest/linux/oc.tar.gz",
+		},
+	}
+	for _, tc := range cases {
+		got, err := r.ResolveBlob(fetchplan.Blob{URL: tc.url})
+		if err != nil {
+			t.Fatalf("ResolveBlob(%q): unexpected error: %v", tc.url, err)
+		}
+		if got != tc.want {
+			t.Errorf("ResolveBlob(%q)\n  got  %q\n  want %q", tc.url, got, tc.want)
+		}
+	}
+}
+
+func TestMirrorResolver_blobUnknownHostPassthrough(t *testing.T) {
+	r := fetchplan.MirrorResolver{MirrorBase: "https://mirror.corp"}
+	const unknownURL = "https://unknown-host.example.com/file.tar.gz"
+	got, err := r.ResolveBlob(fetchplan.Blob{URL: unknownURL})
+	if err != nil || got != unknownURL {
+		t.Fatalf("unknown host should pass through unchanged; got (%q,%v)", got, err)
+	}
+}
+
+func TestMirrorResolver_ociRewrite(t *testing.T) {
+	r := fetchplan.MirrorResolver{MirrorBase: "https://mirror.corp"}
+	cases := []struct {
+		ref  string
+		want string
+	}{
+		{"quay.io/okd/scos-release:4.21.0", "mirror.corp/quay/okd/scos-release:4.21.0"},
+		{"ghcr.io/controlplaneio-fluxcd/charts/flux-operator:2.4.0", "mirror.corp/ghcr/controlplaneio-fluxcd/charts/flux-operator:2.4.0"},
+		{"registry.ci.openshift.org/origin/release-scos@sha256:abc", "mirror.corp/registry-ci/origin/release-scos@sha256:abc"},
+	}
+	for _, tc := range cases {
+		got, err := r.ResolveOCI(fetchplan.OCIArtifact{Ref: tc.ref})
+		if err != nil {
+			t.Fatalf("ResolveOCI(%q): unexpected error: %v", tc.ref, err)
+		}
+		if got != tc.want {
+			t.Errorf("ResolveOCI(%q)\n  got  %q\n  want %q", tc.ref, got, tc.want)
+		}
+	}
+}
+
+func TestMirrorResolver_badBase(t *testing.T) {
+	r := fetchplan.MirrorResolver{MirrorBase: "not-a-url"}
+	_, err := r.ResolveBlob(fetchplan.Blob{URL: "https://get.helm.sh/helm.tar.gz"})
+	if err == nil {
+		t.Fatal("expected error for malformed MirrorBase, got nil")
+	}
+}
+
+func TestPickResolver_default(t *testing.T) {
+	t.Setenv("OKDCTL_AIRGAP", "")
+	t.Setenv("OKDCTL_MIRROR_BASE", "")
+	r, err := fetchplan.PickResolver(nil, false)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if _, ok := r.(fetchplan.DefaultResolver); !ok {
+		t.Fatalf("want DefaultResolver, got %T", r)
+	}
+}
+
+func TestPickResolver_airgapEnv(t *testing.T) {
+	t.Setenv("OKDCTL_AIRGAP", "1")
+	t.Setenv("OKDCTL_MIRROR_BASE", "https://mirror.corp")
+	r, err := fetchplan.PickResolver(nil, false)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if _, ok := r.(fetchplan.MirrorResolver); !ok {
+		t.Fatalf("want MirrorResolver, got %T", r)
+	}
+}
+
+func TestPickResolver_airgapMissingBase(t *testing.T) {
+	t.Setenv("OKDCTL_AIRGAP", "1")
+	t.Setenv("OKDCTL_MIRROR_BASE", "")
+	_, err := fetchplan.PickResolver(nil, false)
+	if err == nil {
+		t.Fatal("expected ConfigError when air-gap active but no base; got nil")
+	}
+}
+
+func TestResolveMirrorBase_envWins(t *testing.T) {
+	t.Setenv("OKDCTL_MIRROR_BASE", "https://env.mirror/")
+	cfg := &config.Config{}
+	cfg.Deployment.MirrorBase = "https://config.mirror"
+	got := fetchplan.ResolveMirrorBase(cfg)
+	if got != "https://env.mirror" {
+		t.Errorf("env should win over config; got %q", got)
 	}
 }
 

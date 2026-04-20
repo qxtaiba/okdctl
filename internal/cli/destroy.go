@@ -22,6 +22,7 @@ var (
 	destroyForce    bool
 	destroyKeepISOs bool
 	destroyDryRun   bool
+	destroyAirgap   bool
 )
 
 var destroyCmd = &cobra.Command{
@@ -38,6 +39,7 @@ func init() {
 	destroyCmd.Flags().BoolVarP(&destroyForce, "force", "y", false, "skip confirmation prompt")
 	destroyCmd.Flags().BoolVar(&destroyKeepISOs, "keep-isos", false, "do not remove the FCOS ISO from the Proxmox host")
 	destroyCmd.Flags().BoolVar(&destroyDryRun, "dry-run", false, "preview terraform destroy plan without running destroy")
+	destroyCmd.Flags().BoolVar(&destroyAirgap, "airgap", false, "activate air-gap mode; use mirror resolver for all fetches")
 }
 
 func runDestroy(cmd *cobra.Command, _ []string) error {

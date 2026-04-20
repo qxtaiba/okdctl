@@ -168,6 +168,7 @@ type DeploymentConfig struct {
 	SkipDepsCheck    bool                           `json:"skip_deps_check,omitempty"`
 	BootstrapTimeout int                            `json:"bootstrap_timeout,omitempty"`
 	InstallTimeout   int                            `json:"install_timeout,omitempty"`
+	MirrorBase       string                         `json:"mirror_base,omitempty"`
 	BinDir           string                         `json:"bin_dir,omitempty"`
 	ToolVersions     map[string]ToolVersionOverride `json:"tool_versions,omitempty"`
 }
