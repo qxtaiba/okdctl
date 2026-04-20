@@ -218,6 +218,18 @@ func (f *Flux) Uninstall(ctx context.Context, env *addon.Environment) error {
 	return nil
 }
 
+// MirrorArtifacts returns the two Helm charts flux installs. Transitive
+// container images are discovered at air-gap plan / doctor time via
+// internal/addon/mirror.ChartImages rather than tracked manually here.
+func (f *Flux) MirrorArtifacts() addon.MirrorSpec {
+	return addon.MirrorSpec{
+		Charts: []addon.ChartRef{
+			{OCIRef: "oci://ghcr.io/controlplaneio-fluxcd/charts/flux-operator"},
+			{OCIRef: "oci://ghcr.io/controlplaneio-fluxcd/charts/flux-instance"},
+		},
+	}
+}
+
 // RequiredTools lists the external binaries flux needs on the host (helm).
 func (f *Flux) RequiredTools() []addon.ToolSpec {
 	return []addon.ToolSpec{
