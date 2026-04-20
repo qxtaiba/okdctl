@@ -91,8 +91,8 @@ Three strategic agents ran in parallel:
    10-decision matrix + explicit recommendations (including "keep
    current" where that's the call).
 
-Output archived at `/tmp/claude-501/...` (ephemeral); the findings are
-inline below. No code was modified.
+The findings those agents produced are summarised inline below in §5–§10.
+No code was modified.
 
 ## 4. Current architecture — recap
 
@@ -157,7 +157,7 @@ scope: general bug-hunt findings (deferred to M38).
 
 | # | Smell | Severity | Where | Why it smells | Audit |
 |---|---|---|---|---|---|
-| 1 | **Three fetch patterns coexist in the air-gap path** | arch-blocker | `fetchplan.go` (Plan builders); `coreos.go:191-217` (`DetectCoreOSVersion` calls `resolver.ResolveBlob` inline); `airgap.go:140-165` (own `httpStreamFetcher` that doesn't use the resolver chain for the operator-facing plan build) | Post-M33 the coexistence is **structural**, not transitional. `coreos.go` receives a resolver and fetches directly; `airgap.go` reaches past `PickResolver` to build its plan with a private fetcher. Every fetch should flow through `PickResolver` at CLI entry. | AR |
+| 1 | **Three fetch patterns coexist in the air-gap path** | arch-blocker | `fetchplan.go` (Plan builders); `coreos.go:191-217` (`DetectCoreOSVersion` calls `resolver.ResolveBlob` inline); `airgap.go:140-165` + `airgap.go:262-302` (own `httpStreamFetcher` + `buildAirgapPlan` that doesn't use the resolver chain for the operator-facing plan build) | Post-M33 the coexistence is **structural**, not transitional. `coreos.go` receives a resolver and fetches directly; `airgap.go` reaches past `PickResolver` to build its plan with a private fetcher. Every fetch should flow through `PickResolver` at CLI entry. | AR |
 | 2 | **Mirror-rewrite table duplicated across two files** | high | `fetchplan.go:69-84` (`mirrorBlobRules`); `airgap.go:311-318` (identical `prefixTable` in `mirrorPath`) | Single source of truth violated. A typo or new host added to one and not the other silently defeats air-gap for that host. Drift vector matures on the next rewrite-rule addition. | AR |
 | 3 | **MirrorResolver pass-through on unrecognised hosts** | medium | `fetchplan.go:98-101`, `fetchplan.go:118-121` | Unknown host falls through unchanged — future-proofing the table, but a typo in `mirrorOCIRules` silently defeats air-gap for *that* registry. Fail-closed (return an explicit `ConfigError` naming the missing host) is safer. | AR |
 | 4 | **Per-fetch env-var escape hatches are an outlier pattern** | medium | `fetchplan.go:208-213`, `fetchplan.go:247-253` | No peer ships more than one per-fetch override. okdctl ships four and has pressure to add a fifth (CoreOS mirror, once that lands). The env-var surface is a debug contract masquerading as happy-path config. | PR |
@@ -326,8 +326,9 @@ Concrete bullets the next roadmap session can pick up as-is.
     is active and the resolved artifact's host is not in
     `mirrorBlobRules`/`mirrorOCIRules`, return a `*ConfigError`
     naming the host instead of passing through silently.
-  - EnvOverrideResolver precedence documented in CLAUDE.md §6.3
-    (env > config > default; break-glass-friendly).
+  - EnvOverrideResolver precedence documented (env > config > default;
+    break-glass-friendly) either in CLAUDE.md or as an amendment to L15
+    §6.3 — picker-upper's call.
 - **Depends on:** none (all in-file fixes).
 
 ### M36 — De-duplicate mirror-rewrite rule table
