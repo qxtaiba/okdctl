@@ -80,7 +80,7 @@ func TestCheckAirgapMirrorReachable_allPass(t *testing.T) {
 	defer srv.Close()
 
 	resolver := fetchplan.MirrorResolver{MirrorBase: srv.URL}
-	r := checkAirgapMirrorReachable(context.Background(), nil, resolver, nil)
+	r := checkAirgapMirrorReachable(context.Background(), nil, resolver, defaultHTTPHead)
 
 	for _, item := range r.items {
 		if item.sev == sevFail {

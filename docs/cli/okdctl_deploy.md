@@ -13,6 +13,7 @@ okdctl deploy [flags]
 ### Options
 
 ```
+      --airgap                activate air-gap mode; use mirror resolver for all fetches
       --dry-run               preview terraform plan and step listing without deploying
   -h, --help                  help for deploy
       --metrics-addr string   address for Prometheus metrics endpoint (e.g. :9090); disabled when empty

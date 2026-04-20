@@ -1,26 +1,11 @@
-## okdctl destroy
+## okdctl airgap
 
-Destroy a Kubernetes cluster
-
-### Synopsis
-
-Destroy a Kubernetes cluster and all associated infrastructure.
-This operation is idempotent and safe to re-run if a previous destroy was interrupted.
-
-Use --dry-run to preview the terraform destroy plan without modifying infra.
-
-```
-okdctl destroy [flags]
-```
+Tools for air-gap deployments
 
 ### Options
 
 ```
-      --airgap      activate air-gap mode; use mirror resolver for all fetches
-      --dry-run     preview terraform destroy plan without running destroy
-  -y, --force       skip confirmation prompt
-  -h, --help        help for destroy
-      --keep-isos   do not remove the FCOS ISO from the Proxmox host
+  -h, --help   help for airgap
 ```
 
 ### Options inherited from parent commands
@@ -37,4 +22,5 @@ okdctl destroy [flags]
 ### SEE ALSO
 
 * [okdctl](okdctl.md)	 - Deploy production-ready Kubernetes clusters
+* [okdctl airgap plan](okdctl_airgap_plan.md)	 - Emit oc-mirror ImageSetConfiguration and blob manifest for an air-gap deploy
 

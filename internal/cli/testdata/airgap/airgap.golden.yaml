@@ -1,3 +1,4 @@
+---
 apiVersion: okdctl/v1
 kind: AirgapBlobs
 version: 4.21.0-okd-scos.10
