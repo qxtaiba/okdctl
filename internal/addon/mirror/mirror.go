@@ -17,8 +17,7 @@ import (
 // ChartImages runs helm template against ref and returns the deduplicated
 // set of container image refs found in the rendered manifests. An empty
 // Version omits --version so helm resolves the latest chart version.
-//
-// Caller must ensure helm is on PATH before calling.
+// Returns *errtypes.ConfigError if helm is not on PATH.
 func ChartImages(ctx context.Context, exec *executor.Executor, ref addon.ChartRef) ([]string, error) {
 	if !executor.CommandExists("helm") {
 		return nil, &errtypes.ConfigError{Msg: "helm is required for chart image discovery but was not found in PATH"}
