@@ -156,12 +156,14 @@ the plan.
   Design: L15 §7.1.
 - **Acceptance:** bootstrap `oc` fetch from
   `https://mirror.openshift.com/pub/openshift-v4/clients/oc/latest/linux/oc.tar.gz`
-  (~20 MB, cached, SHA256-verified). `oc adm release extract --tools
+  (~20 MB, cached). `oc adm release extract --tools
   quay.io/okd/scos-release:<tag>` produces the same output files the
-  current code consumes (`openshift-install`, `oc`, checksums). GitHub
-  tarball path survives as fallback via new `OKDCTL_RELEASE_SOURCE=github`
-  env var / `--release-source github` flag, with deprecation log.
-  FetchPlan OCI source kind fully wired.
+  current code consumes (`openshift-install`, `oc`). FetchPlan OCI
+  source kind fully wired. No GitHub-tarball fallback: quay.io is the
+  canonical OKD registry and operators get an air-gap escape hatch via
+  M24's MirrorBase. Bootstrap-`oc` integrity is binary-exists+nonzero-size
+  (no upstream checksum sidecar published); final binaries inherit the
+  release-image digest pin.
 - **Depends on:** M21. **Run pre-implementation verification per L15
   §11.0, especially the bootstrap-oc URL stability check.**
 
