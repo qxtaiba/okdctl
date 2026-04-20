@@ -88,8 +88,7 @@ func runDoctor(cmd *cobra.Command, _ []string) error {
 		{"host ports", "53, 80, 443, 6443, 22623, 8080 available for bind", checkPorts},
 	}
 
-	agLoader := config.NewLoader()
-	agCfg, _ := agLoader.LoadFile(cfgFile)
+	agCfg, _ := doctorLoadedCfg()
 	checks = append(checks, buildAirgapChecks(ctx, agCfg, doctorAirgap, nil, nil)...)
 
 	fmt.Println()
@@ -200,9 +199,15 @@ type binDirResolution struct {
 	LoadFailed bool
 }
 
-func resolveBinDirForDoctor() binDirResolution {
+// doctorLoadedCfg loads cfgFile once per doctor invocation and caches the
+// result so airgap gating and binDir resolution don't each hit disk.
+var doctorLoadedCfg = sync.OnceValues(func() (*config.Config, error) {
 	loader := config.NewLoader()
-	loaded, err := loader.LoadFile(cfgFile)
+	return loader.LoadFile(cfgFile)
+})
+
+func resolveBinDirForDoctor() binDirResolution {
+	loaded, err := doctorLoadedCfg()
 	if err != nil {
 		return binDirResolution{Dir: phase.ResolveBinDir(nil), LoadFailed: true}
 	}

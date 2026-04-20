@@ -80,13 +80,15 @@ func TestCheckAirgapMirrorReachable_allPass(t *testing.T) {
 	defer srv.Close()
 
 	resolver := fetchplan.MirrorResolver{MirrorBase: srv.URL}
-	head := stubHTTPHead(map[string]int{"": http.StatusOK})
-	r := checkAirgapMirrorReachable(context.Background(), nil, resolver, head)
+	r := checkAirgapMirrorReachable(context.Background(), nil, resolver, nil)
 
 	for _, item := range r.items {
 		if item.sev == sevFail {
 			t.Errorf("unexpected fail item: %s — %s", item.name, item.note)
 		}
+	}
+	if r.sev == sevFail {
+		t.Errorf("expected non-fail aggregate sev when all blobs resolve to a 200 httptest server, got sev=%d", r.sev)
 	}
 }
 
@@ -185,16 +187,18 @@ func TestCheckAirgapAddonArtifacts_noAddons(t *testing.T) {
 	}
 }
 
-// TestDoctorAirgap_integrationSmoke wires a real httptest blob server and a
-// stubbed OCI registry (via newOCIServer) to confirm the five checks
-// assemble, run, and route every probe through the injection points without
-// touching the network. Asserts all five checks are present; per-check
-// probing is exercised by the focused Test* cases above.
+// TestDoctorAirgap_integrationSmoke wires a real httptest blob server as
+// MirrorBase, drives every check function, and asserts each resolves without
+// a hard failure. The OCI probes use an injected registryHead that rewrites
+// the upstream scheme/host to the httptest OCI server, so the check code
+// path — not a disconnected stub — is what exercises the fixtures.
 func TestDoctorAirgap_integrationSmoke(t *testing.T) {
 	blobSrv := newBlobServer(t)
 	defer blobSrv.Close()
 	ociSrv := newOCIServer(t)
 	defer ociSrv.Close()
+
+	ociHost := strings.TrimPrefix(ociSrv.URL, "http://")
 
 	t.Setenv("OKDCTL_AIRGAP", "1")
 	t.Setenv("OKDCTL_MIRROR_BASE", blobSrv.URL)
@@ -202,38 +206,83 @@ func TestDoctorAirgap_integrationSmoke(t *testing.T) {
 	cfg := &config.Config{}
 	cfg.Distribution.Version = "4.21.0-okd-scos.10"
 
-	registryOK := stubRegistryHead(map[string]int{"": http.StatusOK})
+	// The production registryHead speaks https; the httptest fixture is
+	// http-only. Route each ref through the OCI stub by rewriting the host
+	// and forcing http, matching the shape defaultRegistryHead would build.
+	ociHead := func(ctx context.Context, ref string) (int, error) {
+		slash := strings.IndexByte(ref, '/')
+		if slash < 0 {
+			return 0, nil
+		}
+		rest := ref[slash+1:]
+		var name, reference string
+		if idx := strings.LastIndex(rest, "@"); idx >= 0 {
+			name, reference = rest[:idx], rest[idx+1:]
+		} else if idx := strings.LastIndex(rest, ":"); idx >= 0 {
+			name, reference = rest[:idx], rest[idx+1:]
+		} else {
+			name, reference = rest, "latest"
+		}
+		url := "http://" + ociHost + "/v2/" + name + "/manifests/" + reference
+		req, err := http.NewRequestWithContext(ctx, http.MethodHead, url, http.NoBody)
+		if err != nil {
+			return 0, err
+		}
+		resp, doErr := http.DefaultClient.Do(req)
+		if doErr != nil {
+			return 0, doErr
+		}
+		_ = resp.Body.Close()
+		return resp.StatusCode, nil
+	}
 
-	checks := buildAirgapChecks(context.Background(), cfg, true, nil, registryOK)
+	checks := buildAirgapChecks(context.Background(), cfg, true, nil, ociHead)
 	if len(checks) != 5 {
 		t.Fatalf("expected 5 airgap checks, got %d", len(checks))
 	}
 
-	seen := make(map[string]bool)
+	results := make(map[string]checkResult, 5)
 	for _, c := range checks {
-		seen[c.name] = true
+		results[c.name] = c.fn(context.Background())
 	}
-	want := []string{
-		"airgap mirror reachable",
-		"airgap release image digest pinned",
-		"airgap addon artifacts present",
-		"airgap bootstrap oc present",
-		"airgap idms applied",
-	}
-	for _, name := range want {
-		if !seen[name] {
-			t.Errorf("missing airgap check %q", name)
+
+	// Mirror-reachable: httptest serves 200 on every HEAD, so every blob
+	// must pass.
+	mirror := results["airgap mirror reachable"]
+	for _, item := range mirror.items {
+		if item.sev == sevFail {
+			t.Errorf("mirror-reachable item unexpectedly failed: %s — %s", item.name, item.note)
 		}
 	}
 
-	// Sanity-probe the OCI stub so the fixture is exercised end-to-end;
-	// defaultRegistryHead hardcodes https, so issue a raw HEAD here.
-	resp, err := http.Head(ociSrv.URL + "/v2/test/image/manifests/tag")
-	if err != nil {
-		t.Fatalf("OCI stub HEAD returned error: %v", err)
+	// Release-image: ociHead returns 200, but the check always warns per
+	// okd-project/okd#2092 until cosign is available.
+	rel := results["airgap release image digest pinned"]
+	if rel.sev != sevWarn {
+		t.Errorf("release-image expected sevWarn on reachable, got sev=%d detail=%q", rel.sev, rel.detail)
 	}
-	_ = resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Errorf("OCI stub expected 200, got %d", resp.StatusCode)
+	if !strings.Contains(rel.detail, "okd#2092") {
+		t.Errorf("release-image detail missing okd#2092 pointer: %q", rel.detail)
+	}
+
+	// Addon artifacts: no catalog import in the test binary, so addon.All
+	// is empty and the check reports sevPass with the "no entries" detail.
+	addons := results["airgap addon artifacts present"]
+	if addons.sev != sevPass {
+		t.Errorf("addon-artifacts expected sevPass with no registered addons, got sev=%d detail=%q", addons.sev, addons.detail)
+	}
+
+	// Bootstrap-oc depends on the host environment; accept either pass or
+	// fail but require a remediation hint when it fails.
+	boc := results["airgap bootstrap oc present"]
+	if boc.sev == sevFail && !strings.Contains(boc.detail, "mirror.openshift.com") {
+		t.Errorf("bootstrap-oc fail detail missing remediation hint: %q", boc.detail)
+	}
+
+	// IDMS: test environment has no kubeconfig, so the check self-skips
+	// with sevWarn.
+	idms := results["airgap idms applied"]
+	if idms.sev != sevWarn {
+		t.Errorf("idms expected sevWarn pre-deploy, got sev=%d detail=%q", idms.sev, idms.detail)
 	}
 }
