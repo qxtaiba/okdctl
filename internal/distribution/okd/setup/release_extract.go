@@ -16,63 +16,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
-// ReleaseSource selects the OKD binary acquisition strategy.
-type ReleaseSource string
-
-const (
-	// ReleaseSourceImage extracts binaries from the OKD release container
-	// image via `oc adm release extract --tools`. Default.
-	ReleaseSourceImage ReleaseSource = "image"
-	// ReleaseSourceGitHub fetches tarballs from the GitHub release page.
-	//
-	// Deprecated: retained as a fallback for connected deployments blocked
-	// by a restrictive registry proxy.
-	ReleaseSourceGitHub ReleaseSource = "github"
-)
-
-// ResolveReleaseSource returns the effective ReleaseSource applying
-// env > explicit > default precedence.
-func ResolveReleaseSource(explicit string) ReleaseSource {
-	if v := os.Getenv("OKDCTL_RELEASE_SOURCE"); v != "" {
-		return ReleaseSource(strings.ToLower(strings.TrimSpace(v)))
-	}
-	if explicit != "" {
-		return ReleaseSource(strings.ToLower(strings.TrimSpace(explicit)))
-	}
-	return ReleaseSourceImage
-}
-
 const ocExtractTimeout = 120 * time.Second
-
-// DownloadOKDToolsViaImage bootstraps oc, resolves the release image ref,
-// runs `oc adm release extract --tools`, and delegates to
-// InstallToolsToSystem. The resolver routes the bootstrap-oc URL via
-// ResolveBlob and the OCI ref via ResolveOCI so M24's MirrorResolver can
-// redirect both.
-func (p *Phase) DownloadOKDToolsViaImage(ctx context.Context, version string, opts *Options, resolver fetchplan.Resolver) error {
-	if err := system.EnsureDir(opts.DownloadDir); err != nil {
-		return &errtypes.ConfigError{Msg: "failed to create download directory", Err: err}
-	}
-
-	ocPath, err := p.bootstrapOC(ctx, opts.DownloadDir, resolver)
-	if err != nil {
-		return err
-	}
-
-	artifact := fetchplan.OKDReleaseImageRef(version, "")
-	resolvedRef, err := resolver.ResolveOCI(artifact)
-	if err != nil {
-		return &errtypes.ConfigError{Msg: "failed to resolve OKD release image ref", Err: err}
-	}
-
-	p.Log.Info("tools: extracting OKD binaries from release image", "ref", resolvedRef)
-
-	if err := p.extractReleaseImage(ctx, ocPath, resolvedRef, opts.DownloadDir); err != nil {
-		return err
-	}
-
-	return p.InstallToolsToSystem(ctx, opts.DownloadDir)
-}
 
 // bootstrapOC ensures oc is available in downloadDir. If already present the
 // cached binary is reused. The fetch URL is routed through resolver so M24 can
