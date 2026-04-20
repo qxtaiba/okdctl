@@ -84,9 +84,9 @@ var mirrorOCIRules = map[string]string{
 }
 
 // ResolveOCI rewrites an OCI image reference through the mirror base. The
-// upstream registry host is replaced by the MirrorBase host with a fixed
-// prefix (e.g. quay.io/okd/… → <mirror-host>/quay/okd/…). Refs whose
-// registry is not in the rewrite table are returned unchanged.
+// upstream registry host is replaced by the MirrorBase host-and-path with a
+// fixed prefix (e.g. quay.io/okd/… → <mirror-host>/<base-path>/quay/okd/…).
+// Refs whose registry is not in the rewrite table are returned unchanged.
 func (r MirrorResolver) ResolveOCI(a OCIArtifact) (string, error) {
 	ref := a.Ref
 	slash := strings.IndexByte(ref, '/')
@@ -103,11 +103,11 @@ func (r MirrorResolver) ResolveOCI(a OCIArtifact) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return base.Host + "/" + prefix + "/" + rest, nil
+	return base.Host + base.Path + "/" + prefix + "/" + rest, nil
 }
 
 // ResolveBlob rewrites an HTTPS blob URL through the mirror base. The
-// upstream host is replaced with MirrorBase and a fixed prefix
+// upstream host is replaced with MirrorBase (host + path) and a fixed prefix
 // (e.g. get.helm.sh/… → <base>/helm/…). URLs whose host is not in the
 // rewrite table are returned unchanged.
 func (r MirrorResolver) ResolveBlob(b Blob) (string, error) {
@@ -124,13 +124,15 @@ func (r MirrorResolver) ResolveBlob(b Blob) (string, error) {
 		return "", err
 	}
 	rewritten := *base
-	rewritten.Path = "/" + prefix + u.Path
+	rewritten.Path = base.Path + "/" + prefix + u.Path
 	rewritten.RawQuery = u.RawQuery
 	return rewritten.String(), nil
 }
 
 // parseMirrorBase validates and parses the MirrorBase URL. Returns a
 // *ConfigError when the value is empty, unparseable, or scheme/host are absent.
+// A trailing slash on the path is trimmed; any other path is preserved so
+// operators can point at a sub-directory mirror (https://mirror.local/okdctl).
 func parseMirrorBase(base string) (*url.URL, error) {
 	if base == "" {
 		return nil, &errtypes.ConfigError{Msg: "MirrorBase is not set"}

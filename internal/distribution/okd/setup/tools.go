@@ -57,10 +57,15 @@ func isToolInstalled(tool externalTool) bool {
 }
 
 // InstallExternalTools installs terraform, yq, and any addon-declared tools.
-func (p *Phase) InstallExternalTools(ctx context.Context, cfg *config.Config) error {
+// resolver routes each tool's download URL through the active Resolver chain;
+// nil falls back to DefaultResolver to preserve connected-mode behaviour.
+func (p *Phase) InstallExternalTools(ctx context.Context, cfg *config.Config, resolver fetchplan.Resolver) error {
+	if resolver == nil {
+		resolver = fetchplan.DefaultResolver{}
+	}
 	tools := append([]externalTool{toolTerraform, toolYQ}, addonRequiredTools(cfg)...)
 	for _, tool := range tools {
-		if err := p.installTool(ctx, tool, cfg); err != nil {
+		if err := p.installTool(ctx, tool, cfg, resolver); err != nil {
 			return &errtypes.ConfigError{Msg: fmt.Sprintf("failed to install %s", tool), Err: err}
 		}
 	}
@@ -79,7 +84,7 @@ var binaryToolMeta = map[externalTool]struct {
 	toolSops: {name: "sops", versionFlag: "--version", purpose: fetchplan.PurposeSops},
 }
 
-func (p *Phase) installTool(ctx context.Context, tool externalTool, cfg *config.Config) error {
+func (p *Phase) installTool(ctx context.Context, tool externalTool, cfg *config.Config, resolver fetchplan.Resolver) error {
 	if isToolInstalled(tool) {
 		p.Log.Info(fmt.Sprintf("tools: %s already installed", tool))
 		return nil
@@ -100,7 +105,11 @@ func (p *Phase) installTool(ctx context.Context, tool externalTool, cfg *config.
 	var resolvedURL string
 	for _, b := range plan.HTTPS {
 		if b.Purpose == meta.purpose {
-			resolvedURL = b.URL
+			u, rErr := resolver.ResolveBlob(b)
+			if rErr != nil {
+				return fmt.Errorf("tools: resolve %s URL: %w", tool, rErr)
+			}
+			resolvedURL = u
 			break
 		}
 	}

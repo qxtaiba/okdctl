@@ -86,6 +86,24 @@ func TestMirrorResolver_ociRewrite(t *testing.T) {
 	}
 }
 
+func TestMirrorResolver_honoursBasePath(t *testing.T) {
+	r := fetchplan.MirrorResolver{MirrorBase: "https://mirror.corp/okdctl"}
+	blob, err := r.ResolveBlob(fetchplan.Blob{URL: "https://get.helm.sh/helm.tar.gz"})
+	if err != nil {
+		t.Fatalf("ResolveBlob: %v", err)
+	}
+	if blob != "https://mirror.corp/okdctl/helm/helm.tar.gz" {
+		t.Errorf("MirrorBase path not honoured for blob; got %q", blob)
+	}
+	oci, err := r.ResolveOCI(fetchplan.OCIArtifact{Ref: "quay.io/okd/scos-release:4.21"})
+	if err != nil {
+		t.Fatalf("ResolveOCI: %v", err)
+	}
+	if oci != "mirror.corp/okdctl/quay/okd/scos-release:4.21" {
+		t.Errorf("MirrorBase path not honoured for OCI; got %q", oci)
+	}
+}
+
 func TestMirrorResolver_badBase(t *testing.T) {
 	r := fetchplan.MirrorResolver{MirrorBase: "not-a-url"}
 	_, err := r.ResolveBlob(fetchplan.Blob{URL: "https://get.helm.sh/helm.tar.gz"})
