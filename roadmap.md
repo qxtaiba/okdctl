@@ -142,7 +142,7 @@ the plan.
 
 ### M22 — OKD binaries via release-image extraction
 
-- **Status:** not started
+- **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/m22-release-extract
 - **Category:** source change / refactor
 - **State:** design approved (L15)
 - **Effort:** days
@@ -167,7 +167,7 @@ the plan.
 
 ### M24 — Mirror contract (MirrorBase + rewrite rules)
 
-- **Status:** not started
+- **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/m24-mirror-contract
 - **Category:** feature-gap / air-gap
 - **State:** design approved (L15)
 - **Effort:** days
@@ -188,7 +188,7 @@ the plan.
 
 ### M25 — MirrorableAddon interface + addon migrations
 
-- **Status:** not started
+- **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/m25-mirrorable-addon
 - **Category:** interface extension
 - **State:** design approved (L15)
 - **Effort:** days
