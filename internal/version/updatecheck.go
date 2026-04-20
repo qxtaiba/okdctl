@@ -12,14 +12,14 @@ import (
 
 	"golang.org/x/mod/semver"
 
-	"github.com/qxtaiba/okdctl/internal/fetchplan"
 	"github.com/qxtaiba/okdctl/internal/httputil"
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
 const (
-	cacheTTL    = 24 * time.Hour
-	httpTimeout = 4 * time.Second
+	cacheTTL       = 24 * time.Hour
+	httpTimeout    = 4 * time.Second
+	updateCheckURL = "https://api.github.com/repos/qxtaiba/okdctl/releases/latest"
 )
 
 // CheckResult carries the outcome of a background update check.
@@ -36,9 +36,8 @@ type cacheEntry struct {
 // BackgroundCheck starts a goroutine that checks for a newer release.
 // It returns a buffered channel (capacity 1) that receives exactly one
 // CheckResult. If OKDCTL_NO_UPDATE_CHECK=1 the goroutine is not started
-// and the channel already holds a zero result. The resolver routes the
-// GitHub API call through any mirror or env override.
-func BackgroundCheck(ctx context.Context, resolver fetchplan.Resolver) <-chan CheckResult {
+// and the channel already holds a zero result.
+func BackgroundCheck(ctx context.Context) <-chan CheckResult {
 	ch := make(chan CheckResult, 1)
 
 	if os.Getenv("OKDCTL_NO_UPDATE_CHECK") == "1" {
@@ -47,13 +46,13 @@ func BackgroundCheck(ctx context.Context, resolver fetchplan.Resolver) <-chan Ch
 	}
 
 	go func() {
-		ch <- runCheck(ctx, resolver)
+		ch <- runCheck(ctx)
 	}()
 
 	return ch
 }
 
-func runCheck(ctx context.Context, resolver fetchplan.Resolver) CheckResult {
+func runCheck(ctx context.Context) CheckResult {
 	current := Version
 	if !semver.IsValid(canonicalTag(current)) {
 		return CheckResult{}
@@ -66,7 +65,7 @@ func runCheck(ctx context.Context, resolver fetchplan.Resolver) CheckResult {
 		return CheckResult{}
 	}
 
-	tag, err := fetchLatest(ctx, resolver)
+	tag, err := fetchLatest(ctx)
 	if err != nil {
 		slog.Debug("update check fetch failed", "err", err)
 		return CheckResult{}
@@ -82,19 +81,11 @@ func runCheck(ctx context.Context, resolver fetchplan.Resolver) CheckResult {
 	return CheckResult{}
 }
 
-func fetchLatest(ctx context.Context, resolver fetchplan.Resolver) (string, error) {
-	if resolver == nil {
-		resolver = fetchplan.DefaultResolver{}
-	}
-	url, err := resolver.ResolveBlob(fetchplan.BuildUpdateCheckPlan().HTTPS[0])
-	if err != nil {
-		return "", fmt.Errorf("resolve update check URL: %w", err)
-	}
-
+func fetchLatest(ctx context.Context) (string, error) {
 	reqCtx, cancel := context.WithTimeout(ctx, httpTimeout)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, url, http.NoBody)
+	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, updateCheckURL, http.NoBody)
 	if err != nil {
 		return "", err
 	}

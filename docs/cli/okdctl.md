@@ -36,7 +36,6 @@ okdctl [flags]
 ### SEE ALSO
 
 * [okdctl addon](okdctl_addon.md)	 - Manage cluster addons
-* [okdctl airgap](okdctl_airgap.md)	 - Tools for air-gap deployments
 * [okdctl cleanup](okdctl_cleanup.md)	 - Remove OKD cluster artifacts without destroying infrastructure
 * [okdctl completion](okdctl_completion.md)	 - Generate shell completion script
 * [okdctl config](okdctl_config.md)	 - Inspect okdctl configuration

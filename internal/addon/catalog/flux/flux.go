@@ -16,7 +16,6 @@ import (
 
 	"github.com/qxtaiba/okdctl/internal/addon"
 	"github.com/qxtaiba/okdctl/internal/executor"
-	"github.com/qxtaiba/okdctl/internal/fetchplan"
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
@@ -129,27 +128,10 @@ func (f *Flux) helmUpgradeInstall(ctx context.Context, env *addon.Environment, r
 	})
 }
 
-// resolveChartRef routes a bare OCI chart ref through the resolver and
-// re-prepends the oci:// scheme for helm. On resolver error the original
-// bareRef is returned with an env.Logger warning so air-gap misconfiguration
-// surfaces in logs rather than silently pulling from the upstream registry.
-func resolveChartRef(env *addon.Environment, bareRef string) string {
-	resolver := env.Resolver
-	if resolver == nil {
-		resolver = fetchplan.DefaultResolver{}
-	}
-	resolved, err := resolver.ResolveOCI(fetchplan.BuildAddonChartPlan(bareRef).OCI[0])
-	if err != nil {
-		env.Logger.Warn("flux: chart ref resolve failed, falling back to upstream", "ref", bareRef, "err", err)
-		return "oci://" + bareRef
-	}
-	return "oci://" + resolved
-}
-
 func (f *Flux) installOperator(ctx context.Context, env *addon.Environment) error {
 	env.Logger.Info("flux: installing operator via helm")
 	if err := f.helmUpgradeInstall(ctx, env, "flux-operator",
-		resolveChartRef(env, "ghcr.io/controlplaneio-fluxcd/charts/flux-operator"),
+		"oci://ghcr.io/controlplaneio-fluxcd/charts/flux-operator",
 		"flux operator", "--create-namespace"); err != nil {
 		return err
 	}
@@ -166,7 +148,7 @@ func (f *Flux) installInstance(ctx context.Context, env *addon.Environment, fs S
 		return fmt.Errorf("flux repository not configured - set addons.flux.settings.repository in config")
 	}
 	return f.helmUpgradeInstall(ctx, env, "flux-instance",
-		resolveChartRef(env, "ghcr.io/controlplaneio-fluxcd/charts/flux-instance"),
+		"oci://ghcr.io/controlplaneio-fluxcd/charts/flux-instance",
 		"flux instance",
 		"--set", "instance.cluster.type=openshift",
 		"--set", fmt.Sprintf("instance.sync.url=%s", fs.Repository),
@@ -234,18 +216,6 @@ func (f *Flux) Uninstall(ctx context.Context, env *addon.Environment) error {
 	_, err = env.Exec.Run(ctx, "oc", "delete", "ns", "flux-system")
 	warnOnErr(err, "delete flux-system namespace")
 	return nil
-}
-
-// MirrorArtifacts returns the two Helm charts flux installs. Transitive
-// container images are discovered at air-gap plan / doctor time via
-// internal/addon/mirror.ChartImages rather than tracked manually here.
-func (f *Flux) MirrorArtifacts() addon.MirrorSpec {
-	return addon.MirrorSpec{
-		Charts: []addon.ChartRef{
-			{OCIRef: "oci://ghcr.io/controlplaneio-fluxcd/charts/flux-operator"},
-			{OCIRef: "oci://ghcr.io/controlplaneio-fluxcd/charts/flux-instance"},
-		},
-	}
 }
 
 // RequiredTools lists the external binaries flux needs on the host (helm).

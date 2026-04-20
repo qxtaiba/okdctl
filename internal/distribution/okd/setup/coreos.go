@@ -14,7 +14,6 @@ import (
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/download"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
-	"github.com/qxtaiba/okdctl/internal/fetchplan"
 	"github.com/qxtaiba/okdctl/internal/httputil"
 	"github.com/qxtaiba/okdctl/internal/platform"
 	"github.com/qxtaiba/okdctl/internal/system"
@@ -185,36 +184,18 @@ func coreOSInfoFromStream(sd *coreOSStreamData) (*CoreOSInfo, error) {
 // DetectCoreOSVersion returns the CoreOS ISO location, checksum, and release
 // for the host architecture. okdVersion picks the right upstream data file:
 // 4.15-4.18 → fcos.json (Fedora CoreOS), 4.19+ → scos.json (Stream CoreOS).
-// A malformed okdVersion parses to minor 0 and resolves to fcos.json. A nil
-// resolver falls back to fetchplan.DefaultResolver so connected-mode callers
-// (tests, pre-wizard invocations) don't need to thread one.
-func (p *Phase) DetectCoreOSVersion(ctx context.Context, okdVersion string, resolver fetchplan.Resolver) (*CoreOSInfo, error) {
-	if resolver == nil {
-		resolver = fetchplan.DefaultResolver{}
-	}
+// A malformed okdVersion parses to minor 0 and resolves to fcos.json.
+func (p *Phase) DetectCoreOSVersion(ctx context.Context, okdVersion string) (*CoreOSInfo, error) {
 	minor := parseOKDMinor(okdVersion)
-	rawURL := fmt.Sprintf(
+	streamURL := fmt.Sprintf(
 		"%s/openshift/installer/release-4.%d/data/data/coreos/%s",
 		streamRawBaseURL, minor, streamFileForMinor(minor),
 	)
-	streamURL, err := resolver.ResolveBlob(fetchplan.Blob{URL: rawURL, Purpose: fetchplan.PurposeCoreOSStream})
-	if err != nil {
-		return nil, &errtypes.ClusterError{Msg: "failed to resolve CoreOS stream URL", Err: err}
-	}
 	sd, err := fetchCoreOSStream(ctx, streamURL)
 	if err != nil {
 		return nil, &errtypes.ClusterError{Msg: "failed to fetch CoreOS stream info", Err: err}
 	}
-	info, err := coreOSInfoFromStream(sd)
-	if err != nil {
-		return nil, err
-	}
-	isoURL, err := resolver.ResolveBlob(fetchplan.Blob{URL: info.ISOUrl, SHA256: info.ISOChecksum, Purpose: fetchplan.PurposeCoreOSISO})
-	if err != nil {
-		return nil, &errtypes.ClusterError{Msg: "failed to resolve CoreOS ISO URL", Err: err}
-	}
-	info.ISOUrl = isoURL
-	return info, nil
+	return coreOSInfoFromStream(sd)
 }
 
 // DownloadCoreOSISO downloads the CoreOS ISO described by info to destPath.
@@ -270,7 +251,7 @@ func (p *Phase) EnsureCoreOSISO(ctx context.Context, cfg *config.Config, opts *O
 	if cfg != nil {
 		okdVersion = cfg.Distribution.Version
 	}
-	info, err := p.DetectCoreOSVersion(ctx, okdVersion, opts.Resolver)
+	info, err := p.DetectCoreOSVersion(ctx, okdVersion)
 	if err != nil {
 		return "", err
 	}

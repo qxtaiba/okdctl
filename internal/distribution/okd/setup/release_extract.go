@@ -12,7 +12,6 @@ import (
 
 	"github.com/qxtaiba/okdctl/internal/download"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
-	"github.com/qxtaiba/okdctl/internal/fetchplan"
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
@@ -22,29 +21,27 @@ import (
 // completes. 10 minutes leaves margin for the realistic worst case.
 const ocExtractTimeout = 10 * time.Minute
 
+// bootstrapOCURL is the mirror.openshift.com path for the universal oc client
+// used to run `oc adm release extract`. No upstream checksum is published for
+// this URL; post-extraction binary-exists verification is the integrity gate.
+const bootstrapOCURL = "https://mirror.openshift.com/pub/openshift-v4/clients/oc/latest/linux/oc.tar.gz"
+
 // bootstrapOC ensures oc is available in downloadDir. If a non-empty cached
 // binary is present it is reused; an empty or missing file falls through to
-// re-download. The fetch URL is routed through resolver so M24 can redirect
-// it. No upstream checksum is published for the bootstrap-oc URL;
+// re-download. No upstream checksum is published for the bootstrap-oc URL;
 // binary-exists+nonzero-size is the integrity gate.
-func (p *Phase) bootstrapOC(ctx context.Context, downloadDir string, resolver fetchplan.Resolver) (string, error) {
+func (p *Phase) bootstrapOC(ctx context.Context, downloadDir string) (string, error) {
 	ocPath := filepath.Join(downloadDir, "oc")
 	if fi, statErr := os.Stat(ocPath); statErr == nil && fi.Size() > 0 {
 		p.Log.Info("tools: bootstrap oc already present", "path", ocPath)
 		return ocPath, nil
 	}
 
-	plan := fetchplan.BuildM22BootstrapOCPlan()
-	url, err := resolver.ResolveBlob(plan.HTTPS[0])
-	if err != nil {
-		return "", &errtypes.ConfigError{Msg: "failed to resolve bootstrap oc URL", Err: err}
-	}
-
 	archivePath := filepath.Join(downloadDir, "oc.tar.gz")
-	p.Log.Info("tools: fetching bootstrap oc", "url", url)
+	p.Log.Info("tools: fetching bootstrap oc", "url", bootstrapOCURL)
 
 	if err := download.Download(ctx, &download.Options{
-		URL:         url,
+		URL:         bootstrapOCURL,
 		OutputPath:  archivePath,
 		Description: "bootstrap-oc",
 		Timeout:     3 * time.Minute,

@@ -7,37 +7,29 @@ import (
 
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
-	"github.com/qxtaiba/okdctl/internal/fetchplan"
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
+// releaseImageRef is the canonical OKD release-image coordinate used by
+// `oc adm release extract --tools`. The :<version> tag is appended per call.
+const releaseImageRef = "quay.io/okd/scos-release:"
+
 // DownloadOKDTools bootstraps oc, extracts openshift-install and oc from the
-// OKD release container image, and installs them to BinDir. opts.Resolver
-// redirects the bootstrap-oc URL and the release-image ref through the
-// active mirror in air-gap mode.
+// OKD release container image, and installs them to BinDir.
 func (p *Phase) DownloadOKDTools(ctx context.Context, version string, opts *Options) error {
 	if err := system.EnsureDir(opts.DownloadDir); err != nil {
 		return &errtypes.ConfigError{Msg: "failed to create download directory", Err: err}
 	}
 
-	resolver := opts.Resolver
-	if resolver == nil {
-		resolver = fetchplan.DefaultResolver{}
-	}
-
-	ocPath, err := p.bootstrapOC(ctx, opts.DownloadDir, resolver)
+	ocPath, err := p.bootstrapOC(ctx, opts.DownloadDir)
 	if err != nil {
 		return err
 	}
 
-	resolvedRef, err := resolver.ResolveOCI(fetchplan.OKDReleaseImageRef(version))
-	if err != nil {
-		return &errtypes.ConfigError{Msg: "resolve OKD release image ref", Err: err}
-	}
+	ref := releaseImageRef + version
+	p.Log.Info("tools: extracting OKD binaries from release image", "ref", ref)
 
-	p.Log.Info("tools: extracting OKD binaries from release image", "ref", resolvedRef)
-
-	if err := p.extractReleaseImage(ctx, ocPath, resolvedRef, opts.DownloadDir); err != nil {
+	if err := p.extractReleaseImage(ctx, ocPath, ref, opts.DownloadDir); err != nil {
 		return err
 	}
 

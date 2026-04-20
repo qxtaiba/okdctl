@@ -194,13 +194,6 @@ func (s *SecretStore) Uninstall(ctx context.Context, env *addon.Environment) err
 	return nil
 }
 
-// MirrorArtifacts returns an empty spec: secretstore applies CRDs and auth
-// Secrets via oc apply and installs no Helm charts of its own. The ESO
-// operator itself is user-installed at cluster level outside this addon.
-func (s *SecretStore) MirrorArtifacts() addon.MirrorSpec {
-	return addon.MirrorSpec{}
-}
-
 // RequiredTools lists the external binaries needed to decrypt source files.
 func (s *SecretStore) RequiredTools() []addon.ToolSpec {
 	return []addon.ToolSpec{

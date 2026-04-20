@@ -15,7 +15,6 @@ import (
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/templates"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/executor"
-	"github.com/qxtaiba/okdctl/internal/fetchplan"
 )
 
 // DefaultTimeout is the overall cap applied to post-install verification
@@ -25,8 +24,7 @@ const (
 )
 
 // Options configures a post-install run: which verifications to skip and
-// the timeouts for kube-vip readiness checks. Resolver routes external OCI
-// and HTTPS fetches through any configured mirror; nil means DefaultResolver.
+// the timeouts for kube-vip readiness checks.
 type Options struct {
 	phase.BaseOptions
 	SkipClusterHealth       bool
@@ -34,7 +32,6 @@ type Options struct {
 	Timeout                 time.Duration
 	KubeVIPDaemonSetTimeout time.Duration
 	KubeVIPVIPTimeout       time.Duration
-	Resolver                fetchplan.Resolver
 }
 
 // NewOptions builds default post-install Options from cfg and projectRoot.
@@ -83,7 +80,6 @@ func (p *Phase) Execute(ctx context.Context, cfg *config.Config, opts *Options) 
 		addon.WithExecutor(p.Exec),
 		addon.WithLogger(p.Log),
 		addon.WithProjectRoot(opts.ProjectRoot),
-		addon.WithResolver(opts.Resolver),
 	)
 	pctx := distribution.NewPhaseContext(PostInstallContext{})
 
