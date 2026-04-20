@@ -88,6 +88,10 @@ func runDoctor(cmd *cobra.Command, _ []string) error {
 		{"host ports", "53, 80, 443, 6443, 22623, 8080 available for bind", checkPorts},
 	}
 
+	agLoader := config.NewLoader()
+	agCfg, _ := agLoader.LoadFile(cfgFile)
+	checks = append(checks, buildAirgapChecks(ctx, agCfg, doctorAirgap, nil, nil)...)
+
 	fmt.Println()
 	fmt.Println("🩺 " + tui.HighlightStyle.Render(fmt.Sprintf("doctor: running %d environment checks", len(checks))))
 	fmt.Println()
