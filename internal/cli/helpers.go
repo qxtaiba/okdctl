@@ -127,6 +127,7 @@ type deploymentOptions struct {
 	ShowStartMessage bool
 	Credentials      *credentials.ProxmoxCredentials
 	MetricsAddr      string
+	ReleaseSource    string
 }
 
 // startMetricsServer starts a Prometheus metrics HTTP server on addr (disabled
@@ -178,6 +179,9 @@ func executeFullDeployment(ctx context.Context, cfg *config.Config, opts deploym
 	stopMetrics, provOpts := startMetricsServer(opts.MetricsAddr)
 	defer stopMetrics()
 
+	if opts.ReleaseSource != "" {
+		provOpts = append(provOpts, okd.WithReleaseSource(opts.ReleaseSource))
+	}
 	p := createOKDProvisionerWithOpts(cfg, opts.Credentials, projectRoot, provOpts...)
 
 	if err := p.Validate(cfg); err != nil {

@@ -9,13 +9,24 @@ import (
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/download"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
+	"github.com/qxtaiba/okdctl/internal/fetchplan"
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
-// DownloadOKDTools fetches openshift-install and oc for the given OKD
-// version, verifies checksums when available, extracts the binaries, and
-// then delegates to InstallToolsToSystem for final placement.
+// DownloadOKDTools dispatches to the OCI release-image path (default) or the
+// legacy GitHub-tarball path when OKDCTL_RELEASE_SOURCE=github is set.
 func (p *Phase) DownloadOKDTools(ctx context.Context, version string, opts *Options) error {
+	src := ResolveReleaseSource(opts.ReleaseSource)
+	if src == ReleaseSourceGitHub {
+		p.Log.Warn("tools: OKDCTL_RELEASE_SOURCE=github is deprecated; the GitHub tarball path will be removed in a future release")
+		return p.downloadOKDToolsFromGitHub(ctx, version, opts)
+	}
+	return p.DownloadOKDToolsViaImage(ctx, version, opts, fetchplan.DefaultResolver{})
+}
+
+// downloadOKDToolsFromGitHub is the legacy GitHub-tarball path retained as a
+// deprecation fallback. Call only via DownloadOKDTools.
+func (p *Phase) downloadOKDToolsFromGitHub(ctx context.Context, version string, opts *Options) error {
 	if err := system.EnsureDir(opts.DownloadDir); err != nil {
 		return &errtypes.ConfigError{Msg: "failed to create download directory", Err: err}
 	}

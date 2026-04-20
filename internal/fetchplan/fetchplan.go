@@ -76,6 +76,7 @@ const (
 	M5PurposeHelm          = "tool-helm"
 	M5PurposeSops          = "tool-sops"
 	M5PurposeYQ            = "tool-yq"
+	M22PurposeBootstrapOC  = "bootstrap-oc"
 	M23PurposeCoreOSStream = "coreos-stream"
 )
 
@@ -230,6 +231,40 @@ func BuildM5Plan(in *M5Input) Plan {
 
 func expandTemplate(tmpl, version, arch string) string {
 	return strings.NewReplacer("{version}", version, "{arch}", arch).Replace(tmpl)
+}
+
+// bootstrapOCURL is the mirror.openshift.com path for the universal oc client
+// used to run `oc adm release extract`. No upstream checksum is published for
+// this URL; post-extraction binary-exists verification is the integrity gate.
+// All final binaries come from the digest-pinned release image.
+const bootstrapOCURL = "https://mirror.openshift.com/pub/openshift-v4/clients/oc/latest/linux/oc.tar.gz"
+
+// BuildM22BootstrapOCPlan returns a Plan with the bootstrap oc Blob.
+// The URL is routed through the caller's Resolver so MirrorResolver
+// (M24) can redirect it via OKDCTL_BOOTSTRAP_OC_URL.
+func BuildM22BootstrapOCPlan() Plan {
+	return Plan{
+		HTTPS: []Blob{{
+			URL:     bootstrapOCURL,
+			Purpose: M22PurposeBootstrapOC,
+		}},
+	}
+}
+
+// OKDReleaseImageRef builds an OCIArtifact for the given OKD version tag.
+// Pass a non-empty digest to produce a digest-pinned ref from the GitHub
+// release body's "Pull From:" line; pass "" for a tag-only ref.
+func OKDReleaseImageRef(version, digest string) OCIArtifact {
+	ref := "quay.io/okd/scos-release:" + version
+	if digest != "" {
+		ref = "quay.io/okd/scos-release@" + digest
+	}
+	return OCIArtifact{
+		Ref:        ref,
+		Digest:     digest,
+		ExtractVia: "oc-adm-release-extract",
+		Purpose:    M4Purpose,
+	}
 }
 
 // coreOSStreamRawBase is the GitHub raw-content root for openshift/installer.
