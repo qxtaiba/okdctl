@@ -188,7 +188,7 @@ the plan.
 
 ### M25 — MirrorableAddon interface + addon migrations
 
-- **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/m25-mirrorable-addon
+- **Status:** in review — PR #96
 - **Category:** interface extension
 - **State:** design approved (L15)
 - **Effort:** days
