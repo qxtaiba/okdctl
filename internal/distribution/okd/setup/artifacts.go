@@ -12,24 +12,22 @@ import (
 )
 
 // DownloadOKDTools bootstraps oc, extracts openshift-install and oc from the
-// OKD release container image, and installs them to BinDir. M24's
-// MirrorResolver will replace the DefaultResolver here once it lands.
+// OKD release container image, and installs them to BinDir.
 func (p *Phase) DownloadOKDTools(ctx context.Context, version string, opts *Options) error {
 	if err := system.EnsureDir(opts.DownloadDir); err != nil {
 		return &errtypes.ConfigError{Msg: "failed to create download directory", Err: err}
 	}
 
-	resolver := fetchplan.Resolver(fetchplan.DefaultResolver{})
+	var resolver fetchplan.Resolver = fetchplan.DefaultResolver{}
 
 	ocPath, err := p.bootstrapOC(ctx, opts.DownloadDir, resolver)
 	if err != nil {
 		return err
 	}
 
-	artifact := fetchplan.OKDReleaseImageRef(version, "")
-	resolvedRef, err := resolver.ResolveOCI(artifact)
+	resolvedRef, err := resolver.ResolveOCI(fetchplan.OKDReleaseImageRef(version))
 	if err != nil {
-		return &errtypes.ConfigError{Msg: "failed to resolve OKD release image ref", Err: err}
+		return &errtypes.ConfigError{Msg: "resolve OKD release image ref", Err: err}
 	}
 
 	p.Log.Info("tools: extracting OKD binaries from release image", "ref", resolvedRef)

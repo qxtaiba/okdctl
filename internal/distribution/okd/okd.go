@@ -17,7 +17,6 @@ import (
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/postinstall"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/setup"
 	"github.com/qxtaiba/okdctl/internal/executor"
-	"github.com/qxtaiba/okdctl/internal/fetchplan"
 	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/system"
 )
@@ -111,7 +110,6 @@ func (p *Provisioner) Validate(cfg *config.Config) error {
 // Prepare cleans up previous artifacts and runs the setup phase.
 func (p *Provisioner) Prepare(ctx context.Context, cfg *config.Config) ([]distribution.StepResult, error) {
 	opts := setup.DefaultOptions(p.projectRoot)
-	opts.OKDReleaseBaseURL = fetchplan.ResolveM4BaseURL(cfg)
 
 	if system.DirExists(opts.WorkDir) {
 		p.logger.Info("setup: cleaning up previous artifacts")
