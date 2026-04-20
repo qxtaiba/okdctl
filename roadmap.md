@@ -140,32 +140,6 @@ agent should re-verify floor versions, `oc-mirror` schema, mirror rule
 coverage, bootstrap-oc URL, and cosign status. Findings travel with
 the plan.
 
-### M26 — `okdctl airgap plan` subcommand
-
-- **Status:** in review — PR #99
-- **Category:** CLI / operator contract
-- **State:** design approved (L15)
-- **Effort:** days
-- **Impact:** large (operator-facing contract)
-- **Evidence:** L15 §10 design. `internal/cli/` — new command lands
-  alongside existing top-level verbs.
-- **Acceptance:** new `internal/cli/airgap.go` with `plan`
-  subcommand. Default emits `ImageSetConfiguration`
-  (`mirror.openshift.io/v2alpha1`) in pin-release form
-  (`mirror.platform.release: quay.io/okd/scos-release@sha256:<digest>`).
-  `--channel stable-<minor>` switches to graph mode. Emits companion
-  `airgap.yaml` listing HTTPS blobs (SCOS ISO, tool tarballs) with
-  pinned SHA256s. Emits `run-oc-mirror.sh` wrapper that exports
-  `OCP_SIGNATURE_URL` + `OCP_SIGNATURE_VERIFICATION_PK` pointing at
-  OKD CI values. Emits `fetch-blobs.sh` helper for staging blobs.
-  Golden-file test per L15 §9.2: `airgap plan --version <pinned>` for
-  a fixed OKD version produces a byte-stable `ImageSetConfiguration`
-  + `airgap.yaml` pair matching a checked-in fixture.
-- **Depends on:** M22, M24, M25. **Run pre-implementation
-  verification per L15 §11.0, especially the `oc-mirror --v2` schema
-  + channel check — the `type: okd` enum and `stable-4.X` channel
-  name may drift.**
-
 ### M27 — `okdctl doctor --airgap`
 
 - **Status:** not started
@@ -214,53 +188,6 @@ the plan.
   `doctor --airgap` invocation matching M27.
 - **Depends on:** M21–M27. **Run pre-implementation verification per
   L15 §11.0.**
-
-### M33 — Unify fetch resolution: Plan + EnvOverrideResolver chain
-
-- **Status:** in review — PR #100
-- **Category:** refactor / air-gap follow-up
-- **State:** design sketched (this entry); no formal scoping doc
-- **Effort:** days
-- **Impact:** medium (air-gap completeness; reviewer correctness)
-- **Evidence:** M22/M24 cross-PR review (2026-04-20) found three
-  coexisting patterns for the same concern — resolver-mediated (M22 OKD
-  release image, wired in `fix(okd): wire PickResolver …`),
-  env-direct in fetch sites (`coreos.go:resolveStreamURL`,
-  `coreos.go:resolveISOURL`, `updatecheck.go:resolveUpdateCheckURL`),
-  and plan-pre-resolved (`BuildM5Plan` for helm/sops/yq — bypass the
-  Resolver entirely). `MirrorResolver`'s rules for `raw-github` /
-  `rhcos` / `helm` / `github` sit unreachable from the stream, ISO,
-  and tool-tarball paths; setting `OKDCTL_MIRROR_BASE` rewrites only
-  the OKD release image today.
-- **Acceptance:**
-  - Every external fetch in `internal/` is declared as a `fetchplan.Plan`
-    entry with a `Purpose` tag. New builders: `BuildCoreOSISOPlan`,
-    `BuildUpdateCheckPlan`, `BuildAddonChartPlan(ref, version)`.
-    `BuildM5Plan` already exists; route its output through the Resolver
-    at fetch time rather than pre-resolving at plan-build time.
-  - New `EnvOverrideResolver` wraps an inner Resolver and consults a
-    `Purpose → envVarName` map. The four existing escape-hatch env
-    vars (`EnvUpdateCheckURL`, `EnvSCOSStreamURL`, `EnvSCOSISOURL`,
-    `EnvBootstrapOCURL`) move into this layer.
-  - `PickResolver` composes: `EnvOverrideResolver{Inner: MirrorResolver
-    OR DefaultResolver, Overrides: m}`.
-  - Every fetch site calls `opts.Resolver.ResolveBlob` /
-    `ResolveOCI` — no direct `os.Getenv` at fetch sites.
-  - Flux addon rewrites its chart refs through
-    `opts.Resolver.ResolveOCI` before invoking `helm install`, so the
-    bastion-side chart pull honours MirrorBase (today kubelet-side
-    image pulls are IDMS-redirected, but helm's pull is not).
-  - Milestone-id constant renames done alongside: `M4Purpose` →
-    `PurposeOKDRelease`, `M5PurposeHelm` → `PurposeHelm`, etc.
-- **Depends on:** M22 (done), M24 (done). Should land before M27 so
-  `doctor --airgap` walks a complete, resolver-mediated Plan.
-- **Follow-ups bundled:**
-  - `extractReleaseTarballs` glob tightening (match
-    `openshift-*-linux-*.tar.gz` only).
-  - `parseMirrorBase` either honouring or rejecting a path component
-    on `MirrorBase` (today the path is silently dropped).
-  - L15 §6.1 drift: back-port `raw-github` and `openshift-mirror`
-    additions, or document as implementation-extensible.
 
 ### M34 — Colonoscopy audit + scoping of air-gap functionality
 
@@ -426,6 +353,65 @@ entries land here when a PR merges, or when an item is closed without
 code (audit error, done-by-prior-work). Keep the explanation terse
 but link evidence.
 
+- **M26 — `okdctl airgap plan` subcommand** — done PR #99, merged
+  2026-04-20. New `internal/cli/airgap.go` emits four operator
+  artifacts into `--out-dir` (default `./airgap/`): `isc.yaml`
+  (ImageSetConfiguration v2alpha1; pin-release default,
+  `--channel stable-<minor>` switches to graph mode with `type: okd`),
+  `airgap.yaml` (okdctl/v1 AirgapBlobs with pinned SHA256s),
+  `run-oc-mirror.sh` (exports `OCP_SIGNATURE_URL` +
+  `OCP_SIGNATURE_VERIFICATION_PK` pointing at OKD CI values),
+  `fetch-blobs.sh` (python3+PyYAML walker over airgap.yaml).
+  `--release-digest` is a required flag — runtime resolution via
+  `oc adm release info` would force `oc` on the bastion, a flag is
+  simpler for the operator. Stream JSON fetch abstracted behind a
+  `streamFetcher` interface so golden tests stay hermetic;
+  `--stream-json <path>` gives operators the same escape for offline
+  runs. Tool-tarball SHA256s fetched live via a `shaFetcher` that
+  wraps `download.FetchChecksum` with per-tool sidecar conventions
+  (helm: `URL.sha256sum`; sops: `<base>/sops-<version>.checksums.txt`;
+  yq: `<base>/checksums`; bootstrap-oc: `.../latest/sha256sum.txt`).
+  Fetch failure falls back to `<tbd>` plus a `Warn` so operators see
+  the gap. Golden-file tests under `internal/cli/testdata/airgap/`
+  cover both ISC forms, the blob manifest, and both shell scripts;
+  tests inject `fixtureStream` + `fixtureShaFetcher`. Review took
+  two rounds: round 1 FAILed on tool-tarball SHA placeholders (`<tbd>`
+  for four of five blobs — breaking the "pinned SHA256s" acceptance
+  bullet) — fixed by adding the live SHA fetcher. Round 2 PASSed.
+  The emitted ISO purpose is the L15 §10 string `scos-iso`; M33's
+  `PurposeCoreOSISO` constant uses `coreos-iso` — cosmetic drift,
+  no consumer today, reconcile if M27's `doctor --airgap` needs a
+  canonical string.
+- **M33 — Unify fetch resolution: Plan + EnvOverrideResolver chain** —
+  done PR #100, merged 2026-04-20. New `EnvOverrideResolver` wraps
+  `DefaultResolver` or `MirrorResolver` and owns the four L15 §6.2
+  escape-hatch env vars (`EnvUpdateCheckURL`, `EnvSCOSStreamURL`,
+  `EnvSCOSISOURL`, `EnvBootstrapOCURL`) via a `Purpose → envVarName`
+  map (`DefaultEnvOverrides()`). `PickResolver` composes
+  `EnvOverrideResolver{Inner: Mirror|Default, Overrides: m}`. Three
+  new builders: `BuildCoreOSISOPlan`, `BuildUpdateCheckPlan`,
+  `BuildAddonChartPlan`. Fetch sites that peeked `os.Getenv` directly
+  — `coreos.go:resolveStreamURL`/`resolveISOURL`,
+  `updatecheck.go:resolveUpdateCheckURL` — are deleted; each path
+  routes through `resolver.ResolveBlob`/`ResolveOCI`. M5 tool tarballs
+  (helm/sops/yq) now route through `opts.Resolver` in `installTool`
+  (initially missed; caught in round 1). Flux's `helm install
+  oci://...` chart pulls are resolver-mediated via a new
+  `resolveChartRef(env, bareRef)` that strips/re-prepends `oci://`
+  and logs a `Warn` with upstream-fallback on resolver error.
+  Milestone-prefixed purpose constants renamed to semantic names
+  (`M4Purpose` → `PurposeOKDRelease`, `M5PurposeHelm` → `PurposeHelm`,
+  `M22PurposeBootstrapOC` → `PurposeBootstrapOC`,
+  `M23PurposeCoreOSStream` → `PurposeCoreOSStream`). Follow-ups
+  bundled: `extractReleaseTarballs` glob narrowed to
+  `openshift-*-linux-*.tar.gz`; `parseMirrorBase` now honours a base
+  path so operators can mirror under a subdirectory
+  (`https://mirror.local/okdctl/...`). `addon.Environment` grows a
+  `Resolver` field; `Manager.WithResolver` threads it from
+  `postinstall.Options.Resolver`, set by `okd.Provisioner.Configure`
+  calling `fetchplan.PickResolver`. Review took two rounds: round 1
+  FAILed on M5 tools bypassing the resolver plus `parseMirrorBase`
+  silently dropping the path — both fixed in round 2 which PASSed.
 - **M25 — MirrorableAddon interface + addon migrations** — done PR #96,
   merged 2026-04-20. Opt-in `MirrorableAddon` sub-interface in
   `internal/addon/addon.go` exposing `MirrorArtifacts() MirrorSpec`;
@@ -1213,14 +1199,14 @@ but link evidence.
 | M23 | Direct CoreOS stream fetch (no openshift-install dep) | **Done** (PR #95) |
 | M24 | Mirror contract (MirrorBase + rewrite rules) | **Done** (PR #98) |
 | M25 | MirrorableAddon interface + migrations | **Done** (PR #96) |
-| M26 | `okdctl airgap plan` subcommand | Sprint 1 (air-gap; L15) |
+| M26 | `okdctl airgap plan` subcommand | **Done** (PR #99) |
 | M27 | `okdctl doctor --airgap` | Sprint 1 (air-gap; L15) |
 | M28 | Air-gap docs: mirror contract + operator runbook | Sprint 1 (air-gap; L15) |
 | M29 | GitHub Artifact Attestations for release binaries | **Done** (PR #94) |
 | M30 | `oras-go/v2` as direct OCI pull client | Deferred |
 | M31 | *(unassigned — was OKD version floor, reversed 2026-04-20)* | n/a |
 | M32 | Embed OKD maintainer GPG pubkey for tarball verification | **Blocked** (okd#2092) |
-| M33 | Unify fetch resolution: Plan + EnvOverrideResolver chain | Sprint 1 (air-gap follow-up) |
+| M33 | Unify fetch resolution: Plan + EnvOverrideResolver chain | **Done** (PR #100) |
 | M34 | Colonoscopy audit + scoping of air-gap functionality | Sprint 1 (air-gap follow-up) |
 | L1 | libvirt/KVM provider | **Skipped** |
 | L2 | vSphere/AWS/Equinix/bare-metal/Vagrant | **Skipped** |
