@@ -30,9 +30,9 @@ func detectPackageManager(logger *slog.Logger) platform.PackageManager {
 	return platform.NewPackageManager(detectOS(logger))
 }
 
-// InstalledPackages returns the list of dnf packages installed by the setup phase.
-// haproxy, httpd, dnsmasq are removed by their respective cleanup functions
-// to ensure proper service stop/disable before removal.
+// InstalledPackages returns the scoped list of dnf packages cleanup will
+// uninstall. Exported so a future cleanup preview/plan CLI verb can render
+// this list without executing the removal.
 func InstalledPackages() []string {
 	return []string{
 		"coreos-installer",
@@ -40,8 +40,9 @@ func InstalledPackages() []string {
 	}
 }
 
-// InstalledBinaries returns the installer-managed binaries that Packages
-// removes (OKD release binaries plus registered external tools).
+// InstalledBinaries returns the installer-managed binaries cleanup will
+// remove from BinDir. Exported so a future cleanup preview/plan CLI verb
+// can render this list without executing the removal.
 func InstalledBinaries() []string {
 	okdBinaries := []string{
 		"openshift-install",

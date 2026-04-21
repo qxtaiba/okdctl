@@ -21,9 +21,8 @@ func (p *Phase) StartWorkerVMs(ctx context.Context, cfg *config.Config, opts *Op
 
 	terraformDir := filepath.Join(opts.ProjectRoot, "infrastructure", "terraform", "environments", opts.TerraformEnv)
 
-	tf := terraform.NewWithVarFile(
+	tf := terraform.New(
 		terraformDir,
-		filepath.Join(terraformDir, "terraform.tfvars"),
 		terraform.WithLogger(p.Log),
 		terraform.WithEnv(p.Exec.Env),
 	)

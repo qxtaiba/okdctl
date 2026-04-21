@@ -51,10 +51,10 @@ func validateConfigName(name string) error {
 	return nil
 }
 
-// WriteDnsmasqConfig writes content to /etc/dnsmasq.d/<name>.conf. An
+// writeDnsmasqConfig writes content to /etc/dnsmasq.d/<name>.conf. An
 // existing file is copied to <path>.backup first so validateAndRestartDnsmasq
 // can roll back on failure.
-func WriteDnsmasqConfig(ctx context.Context, name, content string) error {
+func writeDnsmasqConfig(ctx context.Context, name, content string) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}

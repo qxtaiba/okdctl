@@ -7,8 +7,9 @@ import (
 	"path/filepath"
 )
 
-// Summary is the post-cleanup accounting the CLI renders for the operator —
-// how many files survived each removal pass, and the work-dir footprint.
+// Summary is the post-cleanup inventory the CLI renders for the operator.
+// Exported so a future `okdctl cleanup status` verb can fetch and render it
+// without re-running cleanup.
 type Summary struct {
 	RemainingWorkFiles      int
 	RemainingIgnitionFiles  int
@@ -16,10 +17,9 @@ type Summary struct {
 	WorkDirSize             string
 }
 
-// GenerateSummary walks the known cleanup targets under opts.WorkDir,
-// opts.HTTPServerRoot, and the terraform environments directory and returns
-// a Summary. Non-existent paths are treated as "zero remaining" rather than
-// an error.
+// GenerateSummary returns a post-cleanup inventory for opts. Non-existent
+// paths are treated as zero remaining. Exported for a future
+// `okdctl cleanup status` verb to render without re-running cleanup.
 func GenerateSummary(opts *Options) Summary {
 	summary := Summary{
 		WorkDirSize: "0B",

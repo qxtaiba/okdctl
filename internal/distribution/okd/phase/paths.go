@@ -94,9 +94,9 @@ func validateAndClean(raw string) (string, bool) {
 	return filepath.Clean(expanded), true
 }
 
-// ExternalToolBinaries returns the names of tool binaries installed into
-// the resolved bin dir (see ResolveBinDir) by the setup phase. Declared here
-// (not in setup/) so cleanup can remove the same set without importing setup.
+// ExternalToolBinaries returns the names of tool binaries setup installs
+// into BinDir. Declared in phase/ (not setup/) so cleanup can reference the
+// same set without creating a setup→cleanup import cycle.
 func ExternalToolBinaries() []string {
 	return []string{
 		"yq",

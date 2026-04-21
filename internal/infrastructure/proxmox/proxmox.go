@@ -113,7 +113,7 @@ func (p *Provider) setupTerraform(projectRoot, tfEnv string) {
 		tfOpts = append(tfOpts, terraform.WithEnv(p.env))
 	}
 
-	p.terraformExec = terraform.NewWithVarFile(tfDir, filepath.Join(tfDir, "terraform.tfvars"), tfOpts...)
+	p.terraformExec = terraform.New(tfDir, tfOpts...)
 }
 
 // Provision runs terraform init/plan/apply for the configured environment

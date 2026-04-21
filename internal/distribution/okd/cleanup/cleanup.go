@@ -44,6 +44,10 @@ func (opts *Options) getLogger() *slog.Logger {
 	return logutil.OrNop(opts.Logger)
 }
 
+// ErrKindNotSet is returned by Execute when opts.Kind is empty.
+// Callers can test for it with errors.Is.
+var ErrKindNotSet = errors.New("cleanup kind not set")
+
 // Execute runs the cleanup steps selected by opts.Kind. Individual step
 // failures are accumulated and returned as a joined error; a partial run
 // still attempts the remaining steps.
@@ -98,6 +102,9 @@ func Execute(ctx context.Context, opts *Options) error {
 		}
 
 	default:
+		if opts.Kind == "" {
+			return &errtypes.ConfigError{Msg: "cleanup kind not set", Err: ErrKindNotSet}
+		}
 		return &errtypes.ConfigError{Msg: fmt.Sprintf("unknown cleanup type: %s (valid types: full, work-only, web-only, haproxy-only, terraform-only)", opts.Kind)}
 	}
 

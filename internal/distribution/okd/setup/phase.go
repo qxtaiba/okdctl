@@ -35,13 +35,14 @@ type Options struct {
 	Verbose         bool
 }
 
-// DefaultOptions returns setup Options with WorkDir/DownloadDir rooted at
-// projectRoot.
-func DefaultOptions(projectRoot string) Options {
+// NewOptions returns setup Options with WorkDir/DownloadDir rooted at
+// projectRoot and TerraformEnv resolved from cfg.
+func NewOptions(cfg *config.Config, projectRoot string) Options {
 	return Options{
 		BaseOptions: phase.BaseOptions{
-			WorkDir:     filepath.Join(projectRoot, "okd-install"),
-			ProjectRoot: projectRoot,
+			WorkDir:      filepath.Join(projectRoot, "okd-install"),
+			ProjectRoot:  projectRoot,
+			TerraformEnv: phase.GetTerraformEnv(cfg),
 		},
 		DownloadDir: filepath.Join(projectRoot, "okd-install", "downloads"),
 	}
