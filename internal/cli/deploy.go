@@ -75,6 +75,10 @@ func runDeploy(cmd *cobra.Command, _ []string) error {
 		}
 	}
 
+	if deployDryRun {
+		return runDeployDryRun(ctx, cfg)
+	}
+
 	if deployYes {
 		return saveConfig(cfg, deployOutputFile)
 	}

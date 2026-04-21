@@ -13,7 +13,10 @@ import (
 	"github.com/qxtaiba/okdctl/internal/tui"
 )
 
-var cleanupYes bool
+var (
+	cleanupYes    bool
+	cleanupDryRun bool
+)
 
 var cleanupCmd = &cobra.Command{
 	Use:   "cleanup",
@@ -25,13 +28,25 @@ Proxmox infrastructure.
 Use this after a manual Terraform destroy, or to reset a failed deployment
 to a clean state.`,
 	Example: `  okdctl cleanup
-  okdctl cleanup --yes`,
+  okdctl cleanup --yes
+  okdctl cleanup --dry-run`,
 	RunE: runCleanup,
 }
 
 func init() {
 	cleanupCmd.Flags().BoolVarP(&cleanupYes, "yes", "y", false, "skip confirmation prompt")
+	cleanupCmd.Flags().BoolVar(&cleanupDryRun, "dry-run", false, "preview what would be removed without making changes")
 	rootCmd.AddCommand(cleanupCmd)
+}
+
+func runCleanupDryRun(projectRoot string) {
+	workDir := filepath.Join(projectRoot, "okd-install")
+	tui.Info(fmt.Sprintf("dry-run: would remove work directory: %s", workDir))
+	tui.Info(fmt.Sprintf("dry-run: would remove haproxy config block: %s", phase.DefaultHAProxyConfigPath))
+	tui.Info(fmt.Sprintf("dry-run: would remove dnsmasq drop-in: %s/okd-<cluster>.conf", phase.DefaultDNSMasqConfigDir))
+	tui.Info(fmt.Sprintf("dry-run: would remove packages: %v", cleanup.InstalledPackages()))
+	tui.Info(fmt.Sprintf("dry-run: would remove binaries: %v", cleanup.InstalledBinaries()))
+	tui.Info("dry-run: re-run without --dry-run to execute cleanup")
 }
 
 func runCleanup(cmd *cobra.Command, _ []string) error {
@@ -40,6 +55,15 @@ func runCleanup(cmd *cobra.Command, _ []string) error {
 	cfg, err := loadConfig(cfgFile)
 	if err != nil {
 		return err
+	}
+
+	if cleanupDryRun {
+		projectRoot, err := resolveProjectRootOrDie()
+		if err != nil {
+			return err
+		}
+		runCleanupDryRun(projectRoot)
+		return nil
 	}
 
 	tui.Warn(fmt.Sprintf("this will remove all local artifacts for cluster '%s'", cfg.Cluster.Name))

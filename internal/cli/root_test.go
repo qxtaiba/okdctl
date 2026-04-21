@@ -25,6 +25,7 @@ func TestExitCodeForTaxonomy(t *testing.T) {
 		{"generic", errors.New("something else"), 1},
 		{"wrappedConfig", fmt.Errorf("step: %w", &errtypes.ConfigError{Msg: "x"}), 2},
 		{"wrappedAuth", fmt.Errorf("step: %w", &errtypes.AuthError{Msg: "x"}), 5},
+		{"nilIsSuccess", nil, 0},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

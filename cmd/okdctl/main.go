@@ -24,7 +24,10 @@ func main() {
 
 // preflight runs startup checks that must happen before the cobra command
 // tree runs. It intentionally lives in main() rather than init() so tui
-// output is available when reporting errors.
+// output is available when reporting errors. Signal handling is installed
+// inside cli.Execute; a Ctrl-C during preflight exits via the default
+// SIGINT disposition (no summary printed), which is acceptable given
+// preflight's sub-second runtime.
 func preflight() {
 	if os.Geteuid() == 0 {
 		tui.Error("do not run as root/sudo. this tool uses sudo internally when needed.")

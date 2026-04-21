@@ -142,6 +142,9 @@ func printUpdateNotice(ch <-chan version.CheckResult) {
 }
 
 func exitCodeFor(err error) int {
+	if err == nil {
+		return 0
+	}
 	var cfgErr *errtypes.ConfigError
 	if errors.As(err, &cfgErr) {
 		return 2
