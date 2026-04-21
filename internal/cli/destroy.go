@@ -15,6 +15,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/infrastructure/terraform"
+	"github.com/qxtaiba/okdctl/internal/runlock"
 	"github.com/qxtaiba/okdctl/internal/system"
 	"github.com/qxtaiba/okdctl/internal/tui"
 )
@@ -109,6 +110,12 @@ func runDestroy(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
+
+	lock, err := runlock.Acquire(projectRoot, "destroy")
+	if err != nil {
+		return err
+	}
+	defer lock.Release()
 
 	// Destroy writes .tfstate + logs into <projectRoot>/okd-install before
 	// tearing down. On partial/cancelled runs the workdir may survive

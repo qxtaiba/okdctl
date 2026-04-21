@@ -17,6 +17,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/distribution/okd"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/install"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
+	"github.com/qxtaiba/okdctl/internal/runlock"
 	"github.com/qxtaiba/okdctl/internal/system"
 	"github.com/qxtaiba/okdctl/internal/tui"
 )
@@ -163,6 +164,12 @@ func executeFullDeployment(ctx context.Context, cfg *config.Config, opts deploym
 	if err != nil {
 		return err
 	}
+
+	lock, err := runlock.Acquire(projectRoot, "deploy")
+	if err != nil {
+		return err
+	}
+	defer lock.Release()
 
 	// Deploy writes per-run artifacts (install-config.yaml, manifests,
 	// ignition files, downloaded tools, ISOs) under <projectRoot>/okd-install.
