@@ -3,6 +3,7 @@ package platform
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -17,7 +18,7 @@ import (
 type PackageManager interface {
 	Install(ctx context.Context, packages []string, logger *slog.Logger) error
 	Remove(ctx context.Context, packages []string, logger *slog.Logger) error
-	IsInstalled(ctx context.Context, pkg string) bool
+	IsInstalled(ctx context.Context, pkg string) (bool, error)
 	AddRepo(ctx context.Context, name, url string, logger *slog.Logger) error
 }
 
@@ -76,7 +77,11 @@ func (m *Manager) Remove(ctx context.Context, packages []string, _ *slog.Logger)
 	}
 	var installed []string
 	for _, pkg := range packages {
-		if m.IsInstalled(ctx, pkg) {
+		ok, err := m.IsInstalled(ctx, pkg)
+		if err != nil {
+			return fmt.Errorf("query %s: %w", pkg, err)
+		}
+		if ok {
 			installed = append(installed, pkg)
 		}
 	}
@@ -88,18 +93,26 @@ func (m *Manager) Remove(ctx context.Context, packages []string, _ *slog.Logger)
 }
 
 // IsInstalled reports whether pkg is present using the backend's query
-// command. For dpkg, stale "rc" entries are filtered out.
-func (m *Manager) IsInstalled(ctx context.Context, pkg string) bool {
+// command. For dpkg, stale "rc" entries are filtered out. A non-zero
+// exit from the query binary (rpm/dpkg typically exit 1 when the
+// package is not installed) is mapped to (false, nil). Any other
+// failure — ctx cancellation, LookPath, I/O — is propagated so callers
+// don't silently treat a broken query backend as "not installed".
+func (m *Manager) IsInstalled(ctx context.Context, pkg string) (bool, error) {
 	args := append(append([]string{}, m.queryArgs...), pkg)
 	cmd := exec.CommandContext(ctx, m.queryCmd, args...) //nolint:gosec // queryCmd/queryArgs are set only from the literal constructors in NewPackageManager
 	output, err := cmd.Output()
 	if err != nil {
-		return false
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			return false, nil
+		}
+		return false, fmt.Errorf("%s query: %w", m.queryCmd, err)
 	}
 	if m.queryMatch == "" {
-		return true
+		return true, nil
 	}
-	return strings.Contains(string(output), m.queryMatch+pkg)
+	return strings.Contains(string(output), m.queryMatch+pkg), nil
 }
 
 // AddRepo registers a new package repository with the backend: dnf
