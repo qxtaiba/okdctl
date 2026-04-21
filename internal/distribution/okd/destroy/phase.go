@@ -12,6 +12,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/cleanup"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/executor"
+	"github.com/qxtaiba/okdctl/internal/logutil"
 )
 
 // Options configures the destroy phase.
@@ -58,8 +59,9 @@ type Phase struct {
 // New constructs a destroy Phase bound to exec/logger and the okdctl
 // version tag.
 func New(exec *executor.Executor, logger *slog.Logger, version string) *Phase {
+	phaseLogger := logutil.OrNop(logger).With("phase", "destroy")
 	return &Phase{
-		BasePhase: phase.NewBasePhase(version, phase.WithExecutor(exec), phase.WithLogger(logger)),
+		BasePhase: phase.NewBasePhase(version, phase.WithExecutor(exec), phase.WithLogger(phaseLogger)),
 	}
 }
 

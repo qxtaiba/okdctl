@@ -240,9 +240,7 @@ func (e *Executor) run(ctx context.Context, stdin io.Reader, name string, args .
 	cmd.Stdout = rout
 	cmd.Stderr = rerr
 
-	if e.Verbose {
-		e.logger.Debug(fmt.Sprintf("+ %s %s", name, strings.Join(args, " ")))
-	}
+	e.logger.Debug("exec: started", "cmd", name, "argc", len(args))
 
 	err := cmd.Run()
 
@@ -258,10 +256,12 @@ func (e *Executor) run(ctx context.Context, stdin io.Reader, name string, args .
 		if errors.As(err, &exitErr) {
 			result.ExitCode = exitErr.ExitCode()
 		} else {
+			e.logger.Debug("exec: completed", "cmd", name, "exit", result.ExitCode, "duration", result.Duration)
 			return result, err
 		}
 	}
 
+	e.logger.Debug("exec: completed", "cmd", name, "exit", result.ExitCode, "duration", result.Duration)
 	return result, nil
 }
 
@@ -322,6 +322,7 @@ func (e *Executor) RunStreamedChecked(ctx context.Context, name string, args ...
 // RunInteractive executes a command wired to the current process's stdin and
 // the Executor's Stdout/Stderr for user-facing prompts.
 func (e *Executor) RunInteractive(ctx context.Context, name string, args ...string) error {
+	start := time.Now()
 	cmd := exec.CommandContext(ctx, name, args...)
 
 	if e.WorkDir != "" {
@@ -334,11 +335,25 @@ func (e *Executor) RunInteractive(ctx context.Context, name string, args ...stri
 	cmd.Stdout = e.Stdout
 	cmd.Stderr = e.Stderr
 
-	if e.Verbose {
-		e.logger.Debug(fmt.Sprintf("+ %s %s", name, strings.Join(args, " ")))
-	}
+	e.logger.Debug("exec: started", "cmd", name, "argc", len(args))
 
-	return cmd.Run()
+	err := cmd.Run()
+	e.logger.Debug("exec: completed", "cmd", name, "exit", exitCodeOf(err), "duration", time.Since(start))
+	return err
+}
+
+// exitCodeOf extracts the exit code from a cmd.Run error for logging.
+// Returns 0 for nil, the exit status for *exec.ExitError, and -1 for other
+// errors (e.g. exec not found).
+func exitCodeOf(err error) int {
+	if err == nil {
+		return 0
+	}
+	var ee *exec.ExitError
+	if errors.As(err, &ee) {
+		return ee.ExitCode()
+	}
+	return -1
 }
 
 // RunChecked executes a command and returns an error if it fails to execute

@@ -205,7 +205,7 @@ func (p *Provider) PlanOnly(ctx context.Context, cfg *config.Config, opts Provis
 	}
 
 	totalNodes := 1 + cfg.Topology.ControlPlane.Count + cfg.Topology.Workers.Count
-	p.logger.Info(fmt.Sprintf("terraform: plan will preview %d virtual machines", totalNodes))
+	p.logger.Info("terraform: plan preview", "vm_count", totalNodes)
 
 	if err := p.terraformExec.PlanStreamed(ctx, terraform.PlanOptions{}); err != nil {
 		return fmt.Errorf("terraform plan failed: %w", err)

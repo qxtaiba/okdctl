@@ -187,7 +187,7 @@ func init() {
 
 	// EX_USAGE (64, per BSD sysexits.h) for cobra arg-parse failures.
 	rootCmd.SetFlagErrorFunc(func(_ *cobra.Command, err error) error {
-		tui.Error(err.Error())
+		tui.Error("flag error", tui.LF("err", err))
 		os.Exit(64)
 		return err
 	})

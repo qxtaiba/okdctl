@@ -70,14 +70,14 @@ func printSummary(opts *Options, logger *slog.Logger) {
 	if summary.RemainingIgnitionFiles == 0 {
 		logger.Info("  ignition files: clean (0 files)")
 	} else {
-		logger.Info(fmt.Sprintf("  ignition files: %d files remaining", summary.RemainingIgnitionFiles))
+		logger.Info("  ignition files: files remaining", "count", summary.RemainingIgnitionFiles)
 	}
 
 	if opts.Kind == Full || opts.Kind == TerraformOnly {
 		if summary.RemainingTerraformFiles == 0 {
 			logger.Info("  terraform: clean (0 files)")
 		} else {
-			logger.Info(fmt.Sprintf("  terraform: %d files remaining", summary.RemainingTerraformFiles))
+			logger.Info("  terraform: files remaining", "count", summary.RemainingTerraformFiles)
 		}
 	}
 
@@ -87,11 +87,11 @@ func printSummary(opts *Options, logger *slog.Logger) {
 			logger.Info("cleanup: completed successfully")
 			logger.Info("cleanup: system ready for fresh deployment")
 		} else {
-			logger.Info(fmt.Sprintf("cleanup: completed for scope %s", opts.Kind))
+			logger.Info("cleanup: completed for scope", "scope", opts.Kind)
 		}
 	} else {
 		logger.Warn("cleanup: partial completion")
-		logger.Info(fmt.Sprintf("cleanup: %d files remain (this may be normal)", totalRemaining))
+		logger.Info("cleanup: files remain (this may be normal)", "count", totalRemaining)
 	}
 }
 

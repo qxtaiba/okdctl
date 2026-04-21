@@ -19,6 +19,21 @@ import (
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
+// logISOFound emits "coreos: iso found" at Info for isoPath, de-duping by
+// base filename across this Phase's lifetime so a single setup run never
+// logs the same ISO more than once.
+func (p *Phase) logISOFound(isoPath string) {
+	base := filepath.Base(isoPath)
+	if p.loggedISOs == nil {
+		p.loggedISOs = make(map[string]bool)
+	}
+	if p.loggedISOs[base] {
+		return
+	}
+	p.loggedISOs[base] = true
+	p.Log.Info("coreos: iso found", "iso", base)
+}
+
 func (p *Phase) findOrDownloadFCOSISO(ctx context.Context, cfg *config.Config, opts *Options) (string, error) {
 	isoDir := phase.DefaultProxmoxISODir
 
@@ -56,7 +71,7 @@ func (p *Phase) findOrDownloadFCOSISO(ctx context.Context, cfg *config.Config, o
 		}
 		if len(matches) > 0 {
 			isoPath := slices.Max(matches) // newest by lexicographic version
-			p.Log.Info(fmt.Sprintf("coreos: found existing iso at %s", filepath.Base(isoPath)))
+			p.logISOFound(isoPath)
 			return isoPath, nil
 		}
 	}
@@ -69,7 +84,7 @@ func (p *Phase) findOrDownloadFCOSISO(ctx context.Context, cfg *config.Config, o
 		}
 		if len(matches) > 0 {
 			isoPath := slices.Max(matches) // newest by lexicographic version
-			p.Log.Info(fmt.Sprintf("coreos: found existing iso at %s", filepath.Base(isoPath)))
+			p.logISOFound(isoPath)
 			return isoPath, nil
 		}
 	}
@@ -197,7 +212,7 @@ func (p *Phase) DetectCoreOSVersion(ctx context.Context, okdVersion string) (*Co
 // re-download.
 func (p *Phase) DownloadCoreOSISO(ctx context.Context, info *CoreOSInfo, destPath string) error {
 	if system.FileExists(destPath) {
-		p.Log.Info(fmt.Sprintf("coreos: iso already exists at %s", destPath))
+		p.logISOFound(destPath)
 		if info.ISOChecksum != "" {
 			err := download.ValidateChecksum(destPath, info.ISOChecksum)
 			if err != nil {
@@ -261,7 +276,7 @@ func (p *Phase) EnsureCoreOSISO(ctx context.Context, cfg *config.Config, opts *O
 	fcosISO := filepath.Join(downloadsDir, isoFilename)
 
 	if system.FileExists(fcosISO) {
-		p.Log.Info(fmt.Sprintf("coreos: iso already exists at %s", isoFilename))
+		p.logISOFound(fcosISO)
 		return fcosISO, nil
 	}
 
