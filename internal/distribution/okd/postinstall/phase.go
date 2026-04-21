@@ -23,6 +23,8 @@ const (
 	DefaultTimeout = 10 * time.Minute
 )
 
+// Options configures the post-install phase: skip toggles plus per-step
+// timeouts for kube-vip verification.
 type Options struct {
 	phase.BaseOptions
 	SkipClusterHealth       bool
@@ -32,6 +34,8 @@ type Options struct {
 	KubeVIPVIPTimeout       time.Duration
 }
 
+// NewOptions builds post-install Options from cfg and projectRoot, applying
+// the default timeout values.
 func NewOptions(cfg *config.Config, projectRoot string) Options {
 	return Options{
 		BaseOptions: phase.BaseOptions{
@@ -45,6 +49,7 @@ func NewOptions(cfg *config.Config, projectRoot string) Options {
 	}
 }
 
+// Result summarises the observable outcomes of a post-install run.
 type Result struct {
 	KubeVipIP        string
 	BastionIP        string
@@ -53,10 +58,14 @@ type Result struct {
 	DNSDeployed      bool
 }
 
+// Phase drives the post-install flow: cluster-health verification,
+// bootstrap cleanup, kube-vip handoff, and production DNS deploy.
 type Phase struct {
 	phase.BasePhase
 }
 
+// New constructs a post-install Phase bound to exec/logger and the okdctl
+// version tag.
 func New(exec *executor.Executor, logger *slog.Logger, version string) *Phase {
 	return &Phase{
 		BasePhase: phase.NewBasePhase(version, phase.WithExecutor(exec), phase.WithLogger(logger)),

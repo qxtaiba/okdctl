@@ -12,6 +12,8 @@ type Config struct {
 	ConfigExists  bool
 }
 
+// StepConfig declares one step in a wizard's sequence: its registry type
+// and whether it is required (required steps cannot be skipped).
 type StepConfig struct {
 	Type     StepType
 	Required bool
@@ -23,6 +25,8 @@ type StepConfig struct {
 // identifies an already-constructed WizardStep instance at runtime.
 type StepType string
 
+// Built-in StepType values. Each names an entry in the default
+// StepBuilder factory registry.
 const (
 	StepTypeWelcome       StepType = "welcome"
 	StepTypeDistribution  StepType = "distribution"

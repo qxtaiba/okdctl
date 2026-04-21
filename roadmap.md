@@ -159,7 +159,7 @@ the next push until F1 is resolved. F2–F4 are polish.
 
 #### F1 — Restore exported-symbol docs stripped by comment-hygiene
 
-**Status:** urgent (CI-blocking)
+**Status:** in progress — branch: fix/f1-restore-exported-docs
 **Audit:** 21 findings with prefix `doc:*:exported-doc-missing`
 **Evidence:** `golangci-lint run` reports ~50 revive `exported`
 violations across 16 files after the 2026-04-21 hygiene pass.

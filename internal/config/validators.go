@@ -366,11 +366,13 @@ func isValidHostOrIP(s string) bool {
 	return IsValidIP(s) || isValidDomain(s)
 }
 
+// IsValidIP reports whether s parses as an IPv4 or IPv6 literal.
 func IsValidIP(s string) bool {
 	_, err := netip.ParseAddr(s)
 	return err == nil
 }
 
+// IsValidCIDR reports whether s parses as an IPv4 or IPv6 prefix.
 func IsValidCIDR(s string) bool {
 	_, err := netip.ParsePrefix(s)
 	return err == nil
@@ -418,6 +420,9 @@ func getMinMemoryForDistribution(d DistributionType) int {
 	return DefaultMinMemoryMB
 }
 
+// ValidateClusterName returns a descriptive error if value violates the
+// DNS-1123 cluster-name grammar (2-63 chars, lowercase a-z/0-9/-, must
+// start with a letter).
 func ValidateClusterName(value string) error {
 	if len(value) < 2 {
 		return errors.New("must be at least 2 characters")
@@ -428,6 +433,8 @@ func ValidateClusterName(value string) error {
 	return nil
 }
 
+// ValidateDomain returns a descriptive error if value is not a
+// dot-separated DNS name of reasonable length.
 func ValidateDomain(value string) error {
 	if len(value) < 3 {
 		return errors.New("must be at least 3 characters")
@@ -454,6 +461,8 @@ func ValidateProxmoxHost(value string) error {
 	return nil
 }
 
+// ValidateIP returns "invalid ip address" if value does not parse as an
+// IPv4 or IPv6 literal.
 func ValidateIP(value string) error {
 	if !IsValidIP(value) {
 		return errors.New("invalid ip address")
@@ -478,6 +487,8 @@ func ValidateGatewayInCIDR(gateway, cidr string) error {
 	return nil
 }
 
+// ValidateCIDR returns "invalid cidr format" if value does not parse as
+// an IPv4 or IPv6 prefix.
 func ValidateCIDR(value string) error {
 	if !IsValidCIDR(value) {
 		return errors.New("invalid cidr format (e.g., 192.168.1.0/24)")

@@ -11,6 +11,8 @@ import (
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 )
 
+// Postinstall StepIDs. These identify each step in Phase.Run order
+// and appear in distribution.Orchestrator events.
 const (
 	StepVerifyHealth        distribution.StepID = "verify-health"
 	StepCleanupBootstrap    distribution.StepID = "cleanup-bootstrap"

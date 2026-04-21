@@ -13,6 +13,7 @@ import (
 // wizard from a Config.
 type StepID string
 
+// Built-in StepID values for each wizard step in DefaultConfig.
 const (
 	StepIDWelcome       StepID = "welcome"
 	StepIDDistribution  StepID = "distribution"
@@ -123,6 +124,7 @@ func NewBaseStepWithDisplayTitle(id StepID, title, displayTitle, description str
 	}
 }
 
+// ID returns the step's identifier.
 func (b *BaseStep) ID() StepID { return b.id }
 
 // Title returns the progress-indicator title.
@@ -131,12 +133,16 @@ func (b *BaseStep) Title() string { return b.title }
 // DisplayTitle returns the title shown above the step body.
 func (b *BaseStep) DisplayTitle() string { return b.displayTitle }
 
+// Description returns the step's descriptive header text.
 func (b *BaseStep) Description() string { return b.description }
 
+// IsFocused reports whether the step currently owns input focus.
 func (b *BaseStep) IsFocused() bool { return b.focused }
 
+// Width returns the step's current inner width in terminal columns.
 func (b *BaseStep) Width() int { return b.width }
 
+// Height returns the step's current inner height in terminal rows.
 func (b *BaseStep) Height() int { return b.height }
 
 // ShouldShow always returns true; override in concrete steps to skip.
@@ -144,15 +150,19 @@ func (b *BaseStep) ShouldShow(_ *config.Config) bool {
 	return true
 }
 
+// SetFocused updates the step's focus state.
 func (b *BaseStep) SetFocused(focused bool) {
 	b.focused = focused
 }
 
+// SetSize updates the step's inner width and height.
 func (b *BaseStep) SetSize(width, height int) {
 	b.width = width
 	b.height = height
 }
 
+// ShortHelp returns the default key bindings shown in the wizard footer;
+// concrete steps override to contribute step-specific keys.
 func (b *BaseStep) ShortHelp() []KeyBinding {
 	return []KeyBinding{
 		{Key: "↑↓", Help: "navigate"},
@@ -162,6 +172,8 @@ func (b *BaseStep) ShortHelp() []KeyBinding {
 	}
 }
 
+// AutoCompletes reports whether the step auto-advances without user input;
+// the default is false. Override in steps that complete themselves.
 func (b *BaseStep) AutoCompletes() bool {
 	return false
 }

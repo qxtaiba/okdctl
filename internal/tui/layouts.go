@@ -7,6 +7,9 @@ import (
 	"charm.land/lipgloss/v2"
 )
 
+// Layout constants for BoxedSection rendering. DefaultBoxWidth is the
+// nominal content width (90 leaves room for the 1-col lipgloss border on
+// each side plus 2-col ContentPadding in a 94-col terminal).
 const (
 	DefaultBoxWidth         = 90
 	MinBoxWidth             = 20

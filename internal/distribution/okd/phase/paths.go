@@ -67,6 +67,7 @@ func PreflightBinDir() string {
 	return DefaultBinDir
 }
 
+// BinDirOrDefault returns s when non-empty, else DefaultBinDir.
 func BinDirOrDefault(s string) string {
 	if s == "" {
 		return DefaultBinDir
@@ -129,6 +130,8 @@ type BasePhase struct {
 	Recorder distribution.MetricsRecorder
 }
 
+// BasePhaseOption configures a BasePhase at construction time. See
+// WithExecutor, WithLogger, and WithVersion.
 type BasePhaseOption func(*BasePhase)
 
 // WithExecutor sets the subprocess executor. Nil is tolerated; NewBasePhase

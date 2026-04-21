@@ -15,11 +15,15 @@ import (
 	"github.com/qxtaiba/okdctl/internal/platform"
 )
 
+// Defaults for the ignition HTTP server. Port 80 is elided from generated
+// URLs; port 0 falls back to DefaultIgnitionPort.
 const (
 	DefaultIgnitionPort = 8080
 	HTTPDefaultPort     = 80
 )
 
+// Options configures a setup run: download and upload toggles plus an
+// AutoDownloadISO switch that skips the "is the ISO present?" prompt.
 type Options struct {
 	phase.BaseOptions
 	DownloadDir     string
@@ -31,6 +35,8 @@ type Options struct {
 	Verbose         bool
 }
 
+// DefaultOptions returns setup Options with WorkDir/DownloadDir rooted at
+// projectRoot.
 func DefaultOptions(projectRoot string) Options {
 	return Options{
 		BaseOptions: phase.BaseOptions{
@@ -54,6 +60,8 @@ func BuildIgnitionURL(ip string, port int) string {
 	return fmt.Sprintf("http://%s:%d/ignition", ip, port)
 }
 
+// CoreOSInfo describes a Fedora CoreOS download candidate resolved from
+// the CoreOS stream metadata.
 type CoreOSInfo struct {
 	Version      string
 	ISOUrl       string
@@ -61,6 +69,8 @@ type CoreOSInfo struct {
 	Architecture string
 }
 
+// NodeInfo identifies a single VM the setup phase emits into the generated
+// Terraform tfvars (role, IP, MAC).
 type NodeInfo struct {
 	Name string
 	Role phase.NodeRole
@@ -68,6 +78,8 @@ type NodeInfo struct {
 	MAC  string
 }
 
+// Phase drives the setup flow: artifact download, config generation,
+// ignition upload, and bastion service configuration.
 type Phase struct {
 	phase.BasePhase
 	OS     platform.OS
@@ -91,6 +103,8 @@ func New(exec *executor.Executor, logger *slog.Logger, version string) *Phase {
 	}
 }
 
+// Execute runs the setup phase step sequence and returns each step's
+// result. A non-nil error means orchestration stopped early.
 func (p *Phase) Execute(ctx context.Context, cfg *config.Config, opts *Options) ([]distribution.StepResult, error) {
 	p.Log.Info("setup: starting okd cluster configuration")
 
@@ -108,6 +122,8 @@ func (p *Phase) Execute(ctx context.Context, cfg *config.Config, opts *Options) 
 	return orchestrator.Results(), nil
 }
 
+// PrintSetupCompletionSummary logs the cluster-config dir and terraform
+// environment a user needs to reference for the follow-up install step.
 func (p *Phase) PrintSetupCompletionSummary(cfg *config.Config, opts *Options) {
 	clusterDir := phase.ClusterConfigDir(opts.WorkDir)
 	tfEnv := phase.GetTerraformEnv(cfg)

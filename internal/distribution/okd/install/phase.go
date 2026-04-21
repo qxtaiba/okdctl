@@ -77,10 +77,14 @@ func NewOptions(cfg *config.Config, projectRoot string) Options {
 	}
 }
 
+// Phase drives the install flow: openshift-install wrapper, bootstrap
+// monitor, and cluster-up poll.
 type Phase struct {
 	phase.BasePhase
 }
 
+// New constructs an install Phase bound to exec/logger and the okdctl
+// version tag.
 func New(exec *executor.Executor, logger *slog.Logger, version string) *Phase {
 	return &Phase{
 		BasePhase: phase.NewBasePhase(version, phase.WithExecutor(exec), phase.WithLogger(logger)),

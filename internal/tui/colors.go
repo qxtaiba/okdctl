@@ -9,11 +9,14 @@ import (
 // ColorTheme selects between the default palette and a high-contrast variant.
 type ColorTheme int
 
+// Built-in color themes.
 const (
 	ThemeDefault ColorTheme = iota
 	ThemeHighContrast
 )
 
+// Palette — literal hex values kept stable across themes; setTheme
+// swaps the semantic aliases below.
 var (
 	ColorPurple600 = lipgloss.Color("#9333EA")
 	ColorPrimary   = ColorPurple600

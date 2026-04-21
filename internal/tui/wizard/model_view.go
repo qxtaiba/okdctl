@@ -10,6 +10,8 @@ import (
 	"github.com/qxtaiba/okdctl/internal/tui"
 )
 
+// View implements tea.Model; it renders header, viewport, scroll
+// indicator, optional error banner, and footer into a bordered box.
 func (m *Model) View() tea.View {
 	v := tea.View{AltScreen: true}
 
