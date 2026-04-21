@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 )
 
 // FileExists reports whether path exists and is a regular file.
@@ -207,8 +208,35 @@ func AtomicWrite(path string, data []byte, perm os.FileMode) error {
 		return fmt.Errorf("failed to rename temp file: %w", err)
 	}
 
+	// fsync the parent directory so the rename's directory-entry update is
+	// durable across crash. Without this, a power loss after a successful
+	// rename can leave the directory listing the old name while the file
+	// content is the new one — matters for trust-boundary files
+	// (kubeconfig, .env, install-config.yaml) that are consumed immediately
+	// after AtomicWrite returns.
+	if err := fsyncDir(dir); err != nil {
+		return fmt.Errorf("failed to fsync directory: %w", err)
+	}
+
 	success = true
 	return nil
+}
+
+// fsyncDir opens dir read-only and calls fsync so the directory inode
+// update (from a rename) is durable. On non-Unix platforms where
+// O_RDONLY of a directory is rejected, callers still get a best-effort
+// (the pre-rename file contents are durable from the earlier tmpFile.Sync).
+func fsyncDir(dir string) error {
+	f, err := os.OpenFile(dir, os.O_RDONLY|syscall.O_DIRECTORY, 0)
+	if err != nil {
+		return err
+	}
+	syncErr := f.Sync()
+	closeErr := f.Close()
+	if syncErr != nil {
+		return syncErr
+	}
+	return closeErr
 }
 
 // AtomicWriteString is a string-typed wrapper around AtomicWrite.

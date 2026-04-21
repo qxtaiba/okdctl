@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 
 	"github.com/qxtaiba/okdctl/internal/logutil"
 )
@@ -86,7 +87,10 @@ func processTarEntry(tarReader *tar.Reader, header *tar.Header, destDir string, 
 			return fmt.Errorf("file %s: parent %w", name, err)
 		}
 
-		outFile, err := os.OpenFile(targetPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.FileMode(header.Mode&0o777))
+		// O_NOFOLLOW refuses to open the final component through a symlink,
+		// closing the TOCTOU where a previously-extracted symlink would redirect
+		// the open onto an attacker-chosen path.
+		outFile, err := os.OpenFile(targetPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC|syscall.O_NOFOLLOW, os.FileMode(header.Mode&0o777))
 		if err != nil {
 			return fmt.Errorf("failed to create file: %w", err)
 		}
