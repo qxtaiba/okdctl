@@ -9,13 +9,11 @@ import (
 // ColorTheme selects between the default palette and a high-contrast variant.
 type ColorTheme int
 
-// Available ColorTheme values.
 const (
 	ThemeDefault ColorTheme = iota
 	ThemeHighContrast
 )
 
-// Named palette colors and their semantic aliases used across the TUI.
 var (
 	ColorPurple600 = lipgloss.Color("#9333EA")
 	ColorPrimary   = ColorPurple600

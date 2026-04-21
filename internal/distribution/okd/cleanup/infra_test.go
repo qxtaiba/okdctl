@@ -30,7 +30,6 @@ func TestCleanupTerraformEnv_PreservesState(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	// .terraform cache directory also expected to be removed.
 	if err := os.MkdirAll(filepath.Join(dir, ".terraform", "providers"), 0o755); err != nil {
 		t.Fatal(err)
 	}

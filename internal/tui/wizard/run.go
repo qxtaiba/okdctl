@@ -9,8 +9,8 @@ import (
 	"github.com/qxtaiba/okdctl/internal/config"
 )
 
-// Run starts the bubbletea wizard with the given steps and seed config and
-// blocks until the user completes or cancels the flow.
+// Run starts the bubbletea wizard and blocks until the user completes or
+// cancels the flow.
 func Run(ctx context.Context, steps []WizardStep, cfg *config.Config) (Result, error) {
 	model := NewModel(steps, cfg)
 

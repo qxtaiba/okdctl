@@ -18,26 +18,14 @@ import (
 type Options struct {
 	phase.BaseOptions
 
-	// AutoApprove skips Terraform confirmation prompts.
 	AutoApprove bool
-
-	// CleanupKind specifies what to clean up after destruction.
 	CleanupKind cleanup.Kind
-
-	// Force skips confirmation prompts.
-	Force bool
-
-	// Parallelism controls Terraform parallelism.
+	Force       bool
 	Parallelism int
 
-	// SkipTerraform skips Terraform destroy (useful for cleanup-only operations).
 	SkipTerraform bool
-
-	// SkipCleanup skips file cleanup after Terraform destroy.
-	SkipCleanup bool
-
-	// SkipFirewall skips firewall rule cleanup.
-	SkipFirewall bool
+	SkipCleanup   bool
+	SkipFirewall  bool
 
 	// RemovePackages removes system packages installed during setup.
 	// When true, packages like haproxy, httpd, dnsmasq, etc. will be uninstalled.
@@ -61,13 +49,10 @@ func NewOptions(cfg *config.Config, projectRoot string) Options {
 	}
 }
 
-// Phase coordinates the destroy phase execution.
 type Phase struct {
 	phase.BasePhase
 }
 
-// New constructs a destroy Phase with the given executor, logger, and okdctl
-// version tag.
 func New(exec *executor.Executor, logger *slog.Logger, version string) *Phase {
 	return &Phase{
 		BasePhase: phase.NewBasePhase(version, phase.WithExecutor(exec), phase.WithLogger(logger)),

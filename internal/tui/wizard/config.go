@@ -12,7 +12,6 @@ type Config struct {
 	ConfigExists  bool
 }
 
-// StepConfig declares a single step within a wizard Config.
 type StepConfig struct {
 	Type     StepType
 	Required bool
@@ -24,7 +23,6 @@ type StepConfig struct {
 // identifies an already-constructed WizardStep instance at runtime.
 type StepType string
 
-// Step type identifiers used by the StepBuilder registry.
 const (
 	StepTypeWelcome       StepType = "welcome"
 	StepTypeDistribution  StepType = "distribution"
@@ -39,8 +37,7 @@ const (
 	StepTypeReview        StepType = "review"
 )
 
-// DefaultConfig returns the standard wizard step sequence used by
-// "okdctl configure".
+// DefaultConfig returns the step sequence used by "okdctl configure".
 func DefaultConfig() Config {
 	return Config{
 		Steps: []StepConfig{

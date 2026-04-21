@@ -11,7 +11,6 @@ import (
 	"syscall"
 )
 
-// FileExists reports whether path exists and is a regular file.
 func FileExists(path string) bool {
 	info, err := os.Stat(path)
 	if err != nil {
@@ -20,7 +19,6 @@ func FileExists(path string) bool {
 	return !info.IsDir()
 }
 
-// DirExists reports whether path exists and is a directory.
 func DirExists(path string) bool {
 	info, err := os.Stat(path)
 	if err != nil {
@@ -34,7 +32,6 @@ func EnsureDir(path string) error {
 	return os.MkdirAll(path, 0o755)
 }
 
-// EnsureDirForFile ensures the parent directory of filePath exists.
 func EnsureDirForFile(filePath string) error {
 	dir := filepath.Dir(filePath)
 	return EnsureDir(dir)
@@ -141,7 +138,7 @@ func CopyFileMode(src, dst string, mode os.FileMode) error {
 	return nil
 }
 
-// SafeRemove removes path recursively, returning nil if path does not exist.
+// SafeRemove removes path recursively; nil if path does not exist.
 func SafeRemove(path string) error {
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		return nil
@@ -235,7 +232,6 @@ func fsyncDir(dir string) error {
 	return closeErr
 }
 
-// AtomicWriteString is a string-typed wrapper around AtomicWrite.
 func AtomicWriteString(path, content string, perm os.FileMode) error {
 	return AtomicWrite(path, []byte(content), perm)
 }

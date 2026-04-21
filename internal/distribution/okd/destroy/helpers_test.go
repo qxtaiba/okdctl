@@ -52,7 +52,6 @@ func TestDestroyInfrastructure_EmptyStateReturnsNil(t *testing.T) {
 	if err := os.MkdirAll(envDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	// No terraform.tfstate → HasState() is false.
 
 	p := &Phase{
 		BasePhase: phase.NewBasePhase(

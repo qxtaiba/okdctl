@@ -1,6 +1,6 @@
 package config
 
-// DefaultConfig returns a Config with sensible defaults for a typical homelab environment.
+// DefaultConfig returns a Config with defaults for a typical homelab environment.
 func DefaultConfig() *Config {
 	return &Config{
 		SchemaVersion: SchemaVersionV1,

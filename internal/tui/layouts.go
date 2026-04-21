@@ -7,7 +7,6 @@ import (
 	"charm.land/lipgloss/v2"
 )
 
-// Dimensions used by the boxed section renderer.
 const (
 	DefaultBoxWidth         = 90
 	MinBoxWidth             = 20

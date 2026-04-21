@@ -82,7 +82,6 @@ func (p *Phase) GenerateInstallConfig(_ context.Context, cfg *config.Config, out
 	return nil
 }
 
-// GenerateManifests invokes "openshift-install create manifests" in clusterDir.
 func (p *Phase) GenerateManifests(ctx context.Context, clusterDir string) error {
 	_, err := p.Exec.RunChecked(ctx, "openshift-install", "create", "manifests", "--dir", clusterDir)
 	if err != nil {
@@ -99,7 +98,7 @@ func (p *Phase) InjectCustomManifests(_ context.Context, projectRoot, clusterDir
 	customDir := filepath.Join(projectRoot, "automation", "config", "manifests")
 
 	if !system.DirExists(customDir) {
-		return 0, nil // No custom manifests
+		return 0, nil
 	}
 
 	entries, err := os.ReadDir(customDir)

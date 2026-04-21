@@ -74,8 +74,8 @@ func TestMergeNamedList(t *testing.T) {
 		dest := []any{}
 		src := []any{
 			map[string]any{"name": "good"},
-			map[string]any{"cluster": "no-name-key"}, // skipped
-			"not-a-map",                              // skipped
+			map[string]any{"cluster": "no-name-key"},
+			"not-a-map",
 		}
 		got, _ := mergeNamedList(dest, src).([]any)
 		if len(got) != 1 {

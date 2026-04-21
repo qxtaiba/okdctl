@@ -87,9 +87,6 @@ func TestInvokingUserIDs(t *testing.T) {
 }
 
 func TestWriteAsInvokingUser(t *testing.T) {
-	// Without SUDO_UID/GID, WriteAsInvokingUser is equivalent to AtomicWrite
-	// with best-effort chown-no-op. Exercise the success path and the
-	// parentExisted branch.
 	t.Setenv("SUDO_UID", "")
 	t.Setenv("SUDO_GID", "")
 
@@ -118,14 +115,10 @@ func TestWriteAsInvokingUser(t *testing.T) {
 }
 
 func TestChownTreeToInvokingUser_NoSudo(t *testing.T) {
-	// When SUDO_UID/GID are unset, ChownTreeToInvokingUser must no-op
-	// without walking or erroring.
 	t.Setenv("SUDO_UID", "")
 	t.Setenv("SUDO_GID", "")
 
 	dir := t.TempDir()
-	// Create a file; if ChownTree walked, we'd see Lchown calls that may
-	// either no-op or (under root) succeed.
 	if err := os.WriteFile(filepath.Join(dir, "a"), []byte("x"), 0o600); err != nil {
 		t.Fatal(err)
 	}

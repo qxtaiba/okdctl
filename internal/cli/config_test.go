@@ -59,9 +59,6 @@ func TestRedactConfig(t *testing.T) {
 	})
 
 	t.Run("yaml marshalling omits Username/Password/APIToken", func(t *testing.T) {
-		// Defense-in-depth for the regression trap the finding called out:
-		// lock that the json:"-" exclusion tags survive whatever reshuffling
-		// happens to ProxmoxConfig.
 		cfg := &config.Config{
 			Provider: config.ProviderConfig{
 				Proxmox: &config.ProxmoxConfig{

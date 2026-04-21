@@ -15,13 +15,11 @@ import (
 	"github.com/qxtaiba/okdctl/internal/platform"
 )
 
-// Well-known ports used when assembling ignition URLs.
 const (
 	DefaultIgnitionPort = 8080
 	HTTPDefaultPort     = 80
 )
 
-// Options configures a setup run: download and skip toggles.
 type Options struct {
 	phase.BaseOptions
 	DownloadDir     string
@@ -33,8 +31,6 @@ type Options struct {
 	Verbose         bool
 }
 
-// DefaultOptions returns setup Options rooted at projectRoot with default
-// work and download directories.
 func DefaultOptions(projectRoot string) Options {
 	return Options{
 		BaseOptions: phase.BaseOptions{
@@ -58,8 +54,6 @@ func BuildIgnitionURL(ip string, port int) string {
 	return fmt.Sprintf("http://%s:%d/ignition", ip, port)
 }
 
-// CoreOSInfo describes a CoreOS ISO release: version, download URL, and
-// SHA-256 checksum for the target architecture.
 type CoreOSInfo struct {
 	Version      string
 	ISOUrl       string
@@ -67,7 +61,6 @@ type CoreOSInfo struct {
 	Architecture string
 }
 
-// NodeInfo describes a single cluster node used by setup (name, role, IP).
 type NodeInfo struct {
 	Name string
 	Role phase.NodeRole
@@ -75,7 +68,6 @@ type NodeInfo struct {
 	MAC  string
 }
 
-// Phase coordinates the setup phase execution.
 type Phase struct {
 	phase.BasePhase
 	OS     platform.OS
@@ -99,7 +91,6 @@ func New(exec *executor.Executor, logger *slog.Logger, version string) *Phase {
 	}
 }
 
-// Execute runs the setup step sequence and returns each step's result.
 func (p *Phase) Execute(ctx context.Context, cfg *config.Config, opts *Options) ([]distribution.StepResult, error) {
 	p.Log.Info("setup: starting okd cluster configuration")
 
@@ -117,8 +108,6 @@ func (p *Phase) Execute(ctx context.Context, cfg *config.Config, opts *Options) 
 	return orchestrator.Results(), nil
 }
 
-// PrintSetupCompletionSummary logs the cluster-config directory and
-// Terraform environment after a successful setup run.
 func (p *Phase) PrintSetupCompletionSummary(cfg *config.Config, opts *Options) {
 	clusterDir := phase.ClusterConfigDir(opts.WorkDir)
 	tfEnv := phase.GetTerraformEnv(cfg)

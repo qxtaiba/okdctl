@@ -15,14 +15,12 @@ type StepBuilderFactory func() (WizardStep, any)
 // StepInitializer seeds a built step with values derived from cfg.
 type StepInitializer func(step WizardStep, state any, cfg *config.Config)
 
-// NewStepBuilder returns an empty StepBuilder ready for Register calls.
 func NewStepBuilder() *StepBuilder {
 	return &StepBuilder{
 		factories: make(map[StepType]StepBuilderFactory),
 	}
 }
 
-// Register binds a factory to stepType.
 func (b *StepBuilder) Register(stepType StepType, factory StepBuilderFactory) {
 	b.factories[stepType] = factory
 }
@@ -42,7 +40,6 @@ type BuiltSteps struct {
 	States map[StepType]any
 }
 
-// BuildSteps materializes the steps listed in wizardCfg using builder.
 func BuildSteps(wizardCfg Config, builder *StepBuilder) BuiltSteps {
 	result := BuiltSteps{
 		Steps:  make([]WizardStep, 0, len(wizardCfg.Steps)),

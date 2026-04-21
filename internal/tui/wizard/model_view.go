@@ -10,8 +10,6 @@ import (
 	"github.com/qxtaiba/okdctl/internal/tui"
 )
 
-// View renders the wizard frame: header, progress dots, active step, and
-// help footer. Returns an empty view when the wizard is quitting.
 func (m *Model) View() tea.View {
 	v := tea.View{AltScreen: true}
 
@@ -57,8 +55,8 @@ func (m *Model) View() tea.View {
 	return v
 }
 
-// contentWidth returns the available width for step content.
-// Must match borderWidth (m.width - 6) so content fills the border exactly.
+// contentWidth must match borderWidth (m.width - 6) so content fills the
+// border exactly.
 func (m *Model) contentWidth() int {
 	width := m.width - 6
 	if width < 60 {

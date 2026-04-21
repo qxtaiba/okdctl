@@ -37,7 +37,6 @@ func TestExecute_WorkOnlyKindScopesToWorkDirOnly(t *testing.T) {
 	// We prove this negatively by pointing them at paths that would error
 	// if cleanup tried to touch them — and asserting the run still succeeds.
 	workDir := t.TempDir()
-	// Seed a file in workDir that should be removed.
 	probe := filepath.Join(workDir, "probe.txt")
 	if err := os.WriteFile(probe, []byte("x"), 0o600); err != nil {
 		t.Fatal(err)

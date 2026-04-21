@@ -77,13 +77,10 @@ func NewOptions(cfg *config.Config, projectRoot string) Options {
 	}
 }
 
-// Phase coordinates the install phase execution.
 type Phase struct {
 	phase.BasePhase
 }
 
-// New constructs an install Phase with the given executor, logger, and
-// okdctl version tag.
 func New(exec *executor.Executor, logger *slog.Logger, version string) *Phase {
 	return &Phase{
 		BasePhase: phase.NewBasePhase(version, phase.WithExecutor(exec), phase.WithLogger(logger)),

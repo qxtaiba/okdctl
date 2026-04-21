@@ -11,8 +11,6 @@ import (
 	"github.com/qxtaiba/okdctl/internal/logutil"
 )
 
-// TestWaitFor_ReadyOnFirstCheck locks that the fast-path (ready before the
-// first tick) returns immediately with nil.
 func TestWaitFor_ReadyOnFirstCheck(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		ctx := context.Background()
@@ -27,8 +25,6 @@ func TestWaitFor_ReadyOnFirstCheck(t *testing.T) {
 	})
 }
 
-// TestWaitFor_ReadyAfterTicks locks that the ticker loop polls until check
-// returns true, within the timeout budget.
 func TestWaitFor_ReadyAfterTicks(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		calls := 0
@@ -51,8 +47,6 @@ func TestWaitFor_ReadyAfterTicks(t *testing.T) {
 	})
 }
 
-// TestWaitFor_Timeout locks that a never-ready predicate errors with a
-// timeout that errors.Is matches context.DeadlineExceeded.
 func TestWaitFor_Timeout(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		err := WaitFor(context.Background(), "test", "never-ready", func() bool { return false }, WaitForOptions{
@@ -77,8 +71,6 @@ func TestWaitFor_Timeout(t *testing.T) {
 func TestWaitFor_CtxCancellation(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
-		// Cancel immediately so the first tick after the ctx-checked branch
-		// returns ctx.Err, not "ready".
 		cancel()
 
 		err := WaitFor(ctx, "test", "cancelled", func() bool { return false }, WaitForOptions{
@@ -95,8 +87,6 @@ func TestWaitFor_CtxCancellation(t *testing.T) {
 	})
 }
 
-// TestWaitFor_DefaultInterval locks that a zero Interval falls back to 30s
-// (covered by the default code path) and does not infinite-loop.
 func TestWaitFor_DefaultInterval(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		err := WaitFor(context.Background(), "test", "default-interval", func() bool { return true }, WaitForOptions{

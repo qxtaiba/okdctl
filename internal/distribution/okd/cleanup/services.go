@@ -16,7 +16,6 @@ import (
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
-// stopAndDisableService stops and disables a systemd service, logging warnings on failure.
 func stopAndDisableService(ctx context.Context, serviceName string, logger *slog.Logger) {
 	logger = logutil.OrNop(logger)
 	if system.IsServiceActive(ctx, serviceName) {

@@ -64,10 +64,6 @@ Highlights:
 		}
 		return ensureRoot(cmd)
 	},
-	// No Run defined — cobra's default behavior surfaces the full subcommand
-	// tree on bare `okdctl`. A previous custom Run printed a curated welcome
-	// banner but hid all 13 subcommands; the audit flagged that as the
-	// dominant discoverability gap.
 }
 
 // Execute is the process-level entry point. It wires the default slog logger,

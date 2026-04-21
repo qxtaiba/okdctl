@@ -17,9 +17,9 @@ import (
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
-// RemoveHAProxy stops and disables HAProxy on the bastion, removing it as the API load balancer.
-// If vip is non-empty, the secondary IP is removed from the bastion's interface and the API
-// is re-verified via the VIP after teardown to ensure kube-vip is handling traffic.
+// RemoveHAProxy stops and disables HAProxy on the bastion. If vip is non-empty,
+// the secondary IP is removed from the bastion's interface and the API is
+// re-verified via the VIP after teardown to ensure kube-vip is handling traffic.
 func (p *Phase) RemoveHAProxy(ctx context.Context, vip string) error {
 	if system.IsServiceActive(ctx, "haproxy") {
 		p.Log.Info("haproxy: stopping service")
@@ -43,8 +43,6 @@ func (p *Phase) RemoveHAProxy(ctx context.Context, vip string) error {
 		p.Log.Warn("haproxy: firewall cleanup incomplete", "err", err)
 	}
 
-	// Remove the VIP secondary IP from the bastion so traffic routes to the
-	// real kube-vip holder instead of being handled locally.
 	if vip != "" {
 		vipRemoved := false
 		iface, ifaceErr := netutil.GetDefaultInterface(ctx)
@@ -59,8 +57,6 @@ func (p *Phase) RemoveHAProxy(ctx context.Context, vip string) error {
 			}
 		}
 
-		// Wait for the API to become reachable via the VIP now that the
-		// bastion no longer intercepts the traffic.
 		p.Log.Info("haproxy: verifying api reachable via vip after teardown")
 		healthClient := httputil.NewInsecure(5 * time.Second)
 		healthURL := fmt.Sprintf("https://%s:6443/healthz", vip)
@@ -85,8 +81,8 @@ func (p *Phase) RemoveHAProxy(ctx context.Context, vip string) error {
 			p.Log.Info("haproxy: api confirmed reachable via vip")
 		}
 
-		// Also verify via hostname -- removing the secondary IP can transiently
-		// restart the local DNS forwarder, causing hostname resolution to lag.
+		// Removing the secondary IP can transiently restart the local DNS
+		// forwarder, causing hostname resolution to lag — verify separately.
 		p.Log.Info("haproxy: verifying api reachable via hostname after teardown")
 		if waitErr := system.WaitForWithTimeout(ctx, "haproxy", "api-via-hostname", func() bool {
 			r, _ := p.Exec.Run(ctx, "oc", "get", "--raw", "/healthz")

@@ -14,7 +14,6 @@ import (
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
-// Default timeouts and poll interval for ingress LB conversion.
 const (
 	DefaultIngressLBTimeout  = 10 * time.Minute
 	defaultConversionTimeout = 5 * time.Minute
@@ -29,16 +28,14 @@ type UpdateIngressOptions struct {
 	ConfirmConversion func(hostNetworkICs []string) bool
 }
 
-// IngressEntry represents a discovered IngressController and its LB IP.
 type IngressEntry struct {
-	Name        string // IngressController name (e.g., "default", "grappleberry")
-	Domain      string // Domain served (e.g., "apps.grappleberry.k8s.local", "grappleberry.xyz")
-	LBIP        string // LoadBalancer IP assigned by MetalLB
-	Converted   bool   // true if this IC was converted from HostNetwork
-	HostNetwork bool   // true if this IC is still using HostNetwork (not converted)
+	Name        string
+	Domain      string
+	LBIP        string
+	Converted   bool
+	HostNetwork bool
 }
 
-// UpdateIngressResult summarizes what the update-ingress flow changed.
 type UpdateIngressResult struct {
 	Entries        []IngressEntry
 	KubeVipIP      string
@@ -97,7 +94,6 @@ func (p *Phase) UpdateIngress(ctx context.Context, cfg *config.Config, opts Upda
 		convertedNames = names
 
 		if converted > 0 {
-			// Re-discover to pick up the recreated controllers.
 			controllers, err = p.discoverIngressControllers(ctx)
 			if err != nil {
 				return nil, &errtypes.ClusterError{Msg: "failed to re-discover IngressControllers after conversion", Err: err}
@@ -126,9 +122,9 @@ func (p *Phase) UpdateIngress(ctx context.Context, cfg *config.Config, opts Upda
 	return p.finalizeIngress(ctx, cfg, opts, entries, customDomains, defaultAppsIP, vip, convertedCount, len(hostNetworkICs))
 }
 
-// collectLBEntries waits for LoadBalancer IPs on all LB-type controllers and
-// builds the entries list. HostNetwork controllers that were not converted get
-// entries pointing at the bastion IP.
+// collectLBEntries waits for LoadBalancer IPs on all LB-type controllers.
+// HostNetwork controllers that were not converted get entries pointing at the
+// bastion IP.
 func (p *Phase) collectLBEntries(
 	ctx context.Context,
 	lbICs, hostNetworkICs []ingressControllerInfo,
@@ -172,7 +168,6 @@ func (p *Phase) collectLBEntries(
 		}
 	}
 
-	// HostNetwork ICs that weren't converted — DNS stays at bastion.
 	for _, ic := range hostNetworkICs {
 		entries = append(entries, IngressEntry{
 			Name:        ic.Name,
@@ -185,8 +180,6 @@ func (p *Phase) collectLBEntries(
 	return entries, customDomains, defaultAppsIP, nil
 }
 
-// finalizeIngress deploys production DNS with the collected LB IPs and
-// optionally removes HAProxy.
 func (p *Phase) finalizeIngress(
 	ctx context.Context,
 	cfg *config.Config,
@@ -214,7 +207,8 @@ func (p *Phase) finalizeIngress(
 		ConvertedCount: convertedCount,
 	}
 
-	// Only remove HAProxy if ALL ICs are LoadBalancerService (none remain HostNetwork).
+	// Only remove HAProxy if every IC is LoadBalancerService — HostNetwork
+	// controllers still require the bastion to front :80/:443.
 	if opts.RemoveHAProxy && hostNetworkCount == 0 {
 		p.Log.Info("update-ingress: removing haproxy from bastion")
 		if err := p.RemoveHAProxy(ctx, vip); err != nil {
@@ -230,9 +224,9 @@ func (p *Phase) finalizeIngress(
 	return result, nil
 }
 
-// handleHostNetworkConversion checks if MetalLB is available and, if the user
-// confirms, converts HostNetwork IngressControllers to LoadBalancerService.
-// Returns the number of controllers converted and the set of converted names.
+// handleHostNetworkConversion converts HostNetwork IngressControllers to
+// LoadBalancerService when MetalLB is available and the caller confirms.
+// Returns the number converted and the set of converted names.
 func (p *Phase) handleHostNetworkConversion(
 	ctx context.Context,
 	hostNetworkICs []ingressControllerInfo,
@@ -290,7 +284,7 @@ func (p *Phase) handleHostNetworkConversion(
 	return convertedCount, names, nil
 }
 
-// IngressStrategy is the value of IngressController.spec.endpointPublishingStrategy.type.
+// IngressStrategy mirrors IngressController.spec.endpointPublishingStrategy.type.
 type IngressStrategy string
 
 const (
@@ -306,8 +300,6 @@ type ingressControllerInfo struct {
 	converted bool
 }
 
-// discoverIngressControllers queries the cluster for all IngressControllers
-// and returns their names, domains, strategies, and raw JSON.
 func (p *Phase) discoverIngressControllers(ctx context.Context) ([]ingressControllerInfo, error) {
 	result, err := p.Exec.RunChecked(ctx, "oc", "get", "ingresscontroller",
 		"-n", "openshift-ingress-operator",
@@ -352,7 +344,7 @@ func (p *Phase) discoverIngressControllers(ctx context.Context) ([]ingressContro
 		}
 
 		if item.Metadata.Name == "" {
-			continue // skip malformed entries with no name
+			continue
 		}
 
 		controllers = append(controllers, ingressControllerInfo{
@@ -366,8 +358,6 @@ func (p *Phase) discoverIngressControllers(ctx context.Context) ([]ingressContro
 	return controllers, nil
 }
 
-// checkMetalLBAvailable returns true if MetalLB is installed and has at least
-// one IPAddressPool configured.
 func (p *Phase) checkMetalLBAvailable(ctx context.Context) (bool, error) {
 	if ok, err := p.OcResourceExists(ctx, "failed to check metallb-system namespace", "namespace", "metallb-system"); err != nil || !ok {
 		return false, err
@@ -378,8 +368,6 @@ func (p *Phase) checkMetalLBAvailable(ctx context.Context) (bool, error) {
 	return true, nil
 }
 
-// convertToLoadBalancer deletes a HostNetwork IngressController and recreates
-// it with LoadBalancerService strategy.
 func (p *Phase) convertToLoadBalancer(ctx context.Context, ic *ingressControllerInfo, timeout time.Duration) error {
 	replacementJSON, err := buildLBIngressController(ic)
 	if err != nil {
@@ -407,8 +395,6 @@ func (p *Phase) convertToLoadBalancer(ctx context.Context, ic *ingressController
 	return nil
 }
 
-// buildLBIngressController constructs a clean IngressController JSON with
-// LoadBalancerService strategy, preserving key fields from the original.
 func buildLBIngressController(ic *ingressControllerInfo) (string, error) {
 	var original struct {
 		Metadata struct {
@@ -480,8 +466,8 @@ func buildLBIngressController(ic *ingressControllerInfo) (string, error) {
 	return string(data), nil
 }
 
-// buildRollbackJSON strips server-managed fields from the original RawJSON
-// for use with oc create during rollback.
+// buildRollbackJSON strips server-managed fields from the original RawJSON so
+// the payload round-trips through `oc create` during rollback.
 func buildRollbackJSON(ic *ingressControllerInfo) (string, error) {
 	var obj map[string]json.RawMessage
 	if err := json.Unmarshal(ic.RawJSON, &obj); err != nil {
@@ -503,7 +489,6 @@ func buildRollbackJSON(ic *ingressControllerInfo) (string, error) {
 		}
 	}
 
-	// Strip status — not needed for create.
 	delete(obj, "status")
 
 	data, err := json.Marshal(obj)
@@ -513,9 +498,8 @@ func buildRollbackJSON(ic *ingressControllerInfo) (string, error) {
 	return string(data), nil
 }
 
-// attemptRollback tries to recreate the original IngressController from its
-// captured RawJSON. Errors are logged but not returned — the caller already
-// has a primary error to report.
+// attemptRollback recreates the original IngressController from its captured
+// RawJSON. Errors are logged only — the caller already has a primary error.
 func (p *Phase) attemptRollback(ctx context.Context, ic *ingressControllerInfo) {
 	rollbackJSON, err := buildRollbackJSON(ic)
 	if err != nil {
@@ -532,14 +516,13 @@ func (p *Phase) attemptRollback(ctx context.Context, ic *ingressControllerInfo) 
 	p.Log.Info(fmt.Sprintf("update-ingress: rollback succeeded — %q restored with original strategy", ic.Name))
 }
 
-// waitForRouterGone polls until the router-<name> deployment no longer exists.
 func (p *Phase) waitForRouterGone(ctx context.Context, icName string, timeout time.Duration) error {
 	deployName := fmt.Sprintf("router-%s", icName)
 
 	return system.WaitFor(ctx, "ingress", deployName+" termination", func() bool {
 		result, _ := p.Exec.Run(ctx, "oc", "get", "deployment", deployName,
 			"-n", "openshift-ingress", "--no-headers", "--ignore-not-found")
-		// Gone when stdout is empty (--ignore-not-found returns empty for missing resources).
+		// --ignore-not-found returns empty stdout when the deployment is gone.
 		return strings.TrimSpace(result.Stdout) == ""
 	}, system.WaitForOptions{
 		Interval: routerGonePollInterval,
@@ -548,7 +531,6 @@ func (p *Phase) waitForRouterGone(ctx context.Context, icName string, timeout ti
 	})
 }
 
-// waitForServiceLB polls a service in openshift-ingress until a LoadBalancer IP is assigned.
 func (p *Phase) waitForServiceLB(ctx context.Context, svcName string, opts *Options) (string, error) {
 	timeout := opts.Timeout
 	if timeout == 0 {

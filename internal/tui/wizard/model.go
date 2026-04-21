@@ -68,14 +68,12 @@ type Result struct {
 // Action names the user's choice at the wizard's terminal step.
 type Action string
 
-// Wizard terminal actions.
 const (
 	ActionDeploy    Action = "deploy"
 	ActionPreflight Action = "preflight"
 	ActionExit      Action = "exit"
 )
 
-// KeyMap enumerates the wizard's global keybindings.
 type KeyMap struct {
 	Next     key.Binding
 	Back     key.Binding
@@ -139,7 +137,6 @@ func defaultKeyMap() KeyMap {
 	}
 }
 
-// NewModel constructs a wizard Model from its ordered steps and a seed cfg.
 func NewModel(steps []WizardStep, cfg *config.Config) *Model {
 	w, h := getTerminalSize()
 
@@ -179,7 +176,6 @@ func getTerminalSize() (width, height int) {
 	return w, h
 }
 
-// Init returns the command emitted by the first step's Init.
 func (m *Model) Init() tea.Cmd {
 	var cmds []tea.Cmd
 
@@ -259,17 +255,14 @@ func stepAutoCompletes(step WizardStep) bool {
 	return false
 }
 
-// Result returns the final wizard outcome.
 func (m *Model) Result() Result {
 	return m.result
 }
 
-// Config returns the Config the wizard is editing.
 func (m *Model) Config() *config.Config {
 	return m.config
 }
 
-// CurrentStep returns the step the wizard is currently displaying.
 func (m *Model) CurrentStep() WizardStep {
 	if len(m.steps) > 0 && m.currentStep < len(m.steps) {
 		return m.steps[m.currentStep]

@@ -73,7 +73,7 @@ func Packages(ctx context.Context, binDir string, logger *slog.Logger) error {
 	for _, binary := range binaries {
 		binPath := filepath.Join(binDir, binary)
 		if _, err := os.Stat(binPath); os.IsNotExist(err) {
-			continue // Already removed or never installed
+			continue
 		}
 		if guardErr := refuseCriticalPath(binPath); guardErr != nil {
 			logger.Warn(guardErr.Error())

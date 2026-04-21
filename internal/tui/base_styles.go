@@ -5,8 +5,6 @@ package tui
 
 import "charm.land/lipgloss/v2"
 
-// Shared lipgloss styles used across the CLI output and wizard. Colors are
-// resolved from the active ColorTheme; see colors.go.
 var (
 	TitleStyle      = lipgloss.NewStyle().Bold(true).Foreground(ColorPrimary)
 	TextStyle       = lipgloss.NewStyle().Foreground(ColorText)

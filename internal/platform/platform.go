@@ -13,7 +13,6 @@ import (
 	"strings"
 )
 
-// Supported OS family identifiers plus the ARM64 architecture literal.
 const (
 	archARM64    = "arm64"
 	FamilyRHEL   = "rhel"

@@ -74,7 +74,6 @@ func FetchChecksum(ctx context.Context, checksumsURL, filename string) (string, 
 		return "", fmt.Errorf("failed to fetch checksums: HTTP %d", resp.StatusCode)
 	}
 
-	// Limit response size to avoid memory exhaustion
 	limitedReader := io.LimitReader(resp.Body, maxChecksumFileSize)
 	body, err := io.ReadAll(limitedReader)
 	if err != nil {
@@ -92,8 +91,6 @@ func FetchChecksum(ctx context.Context, checksumsURL, filename string) (string, 
 		if len(parts) >= 2 {
 			checksumValue := parts[0]
 			checksumFilename := parts[len(parts)-1]
-
-			// Remove leading * or ./ from filename
 			checksumFilename = strings.TrimPrefix(checksumFilename, "*")
 			checksumFilename = strings.TrimPrefix(checksumFilename, "./")
 

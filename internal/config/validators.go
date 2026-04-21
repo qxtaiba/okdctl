@@ -67,7 +67,6 @@ func validateEnums(cfg *Config, result *ValidationResult) {
 	}
 }
 
-// checkCIDROverlap appends a validation error if the two CIDRs overlap.
 func checkCIDROverlap(cidr1, cidr2, field, otherName string, result *ValidationResult) {
 	if !IsValidCIDR(cidr1) || !IsValidCIDR(cidr2) {
 		return
@@ -80,7 +79,6 @@ func checkCIDROverlap(cidr1, cidr2, field, otherName string, result *ValidationR
 	}
 }
 
-// checkIPInCIDR appends a validation error if ip is not within the machine CIDR.
 func checkIPInCIDR(ip, cidr, field string, result *ValidationResult) {
 	if ip == "" || !IsValidIP(ip) || !IsValidCIDR(cidr) {
 		return
@@ -93,7 +91,6 @@ func checkIPInCIDR(ip, cidr, field string, result *ValidationResult) {
 	}
 }
 
-// checkNodeResources validates CPU/memory/disk minimums for a node config.
 func checkNodeResources(node NodeConfig, minCPU, minMemory, minDisk int, cpuField, memField, diskField, label string, result *ValidationResult) {
 	if node.CPU < minCPU {
 		result.AddError(cpuField, fmt.Sprintf("must have at least %d vCPUs for %s", minCPU, label))
@@ -301,7 +298,7 @@ func validateOKDVersion(version string) error {
 	return nil
 }
 
-// ValidateHAMasters validates that master count is odd for proper etcd quorum.
+// validateHAMasters requires master count to be odd for etcd quorum.
 func validateHAMasters(count int) error {
 	if count > 1 && count%2 == 0 {
 		return fmt.Errorf("master replicas should be odd for ha quorum (1, 3, or 5), got %d", count)
@@ -350,7 +347,7 @@ func validateFiles(cfg *Config, result *ValidationResult) {
 	}
 }
 
-// IsValidDNSLabel checks if a string is a valid DNS label (RFC 1123).
+// IsValidDNSLabel reports whether s is a valid RFC 1123 DNS label.
 func IsValidDNSLabel(s string) bool {
 	if s == "" || len(s) > 63 {
 		return false
@@ -369,13 +366,11 @@ func isValidHostOrIP(s string) bool {
 	return IsValidIP(s) || isValidDomain(s)
 }
 
-// IsValidIP reports whether s parses as a valid IP address.
 func IsValidIP(s string) bool {
 	_, err := netip.ParseAddr(s)
 	return err == nil
 }
 
-// IsValidCIDR reports whether s parses as a valid CIDR prefix.
 func IsValidCIDR(s string) bool {
 	_, err := netip.ParsePrefix(s)
 	return err == nil
@@ -423,7 +418,6 @@ func getMinMemoryForDistribution(d DistributionType) int {
 	return DefaultMinMemoryMB
 }
 
-// ValidateClusterName enforces DNS-label rules on the cluster name.
 func ValidateClusterName(value string) error {
 	if len(value) < 2 {
 		return errors.New("must be at least 2 characters")
@@ -434,7 +428,6 @@ func ValidateClusterName(value string) error {
 	return nil
 }
 
-// ValidateDomain enforces RFC 1123 domain-name rules.
 func ValidateDomain(value string) error {
 	if len(value) < 3 {
 		return errors.New("must be at least 3 characters")
@@ -445,8 +438,7 @@ func ValidateDomain(value string) error {
 	return nil
 }
 
-// ValidateProxmoxHost accepts a hostname, IP, or host:port and validates the
-// host portion.
+// ValidateProxmoxHost accepts a hostname, IP, or host:port.
 func ValidateProxmoxHost(value string) error {
 	host := value
 	if strings.Contains(value, ":") {
@@ -462,7 +454,6 @@ func ValidateProxmoxHost(value string) error {
 	return nil
 }
 
-// ValidateIP returns an error if value is not a valid IP address.
 func ValidateIP(value string) error {
 	if !IsValidIP(value) {
 		return errors.New("invalid ip address")
@@ -487,7 +478,6 @@ func ValidateGatewayInCIDR(gateway, cidr string) error {
 	return nil
 }
 
-// ValidateCIDR returns an error if value is not a valid CIDR prefix.
 func ValidateCIDR(value string) error {
 	if !IsValidCIDR(value) {
 		return errors.New("invalid cidr format (e.g., 192.168.1.0/24)")

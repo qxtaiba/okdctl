@@ -16,10 +16,8 @@ import (
 )
 
 // RunCaptured runs bin with args, capturing stderr into the returned error on
-// non-zero exit. Use this at sites where the audit shows operators see bare
-// exit codes instead of nmcli/firewall-cmd/semanage diagnostics on failure.
-// Context cancellation is respected; stdout is discarded (callers that need
-// it should use internal/executor.Executor instead).
+// non-zero exit. Context cancellation is respected; stdout is discarded
+// (callers that need it should use internal/executor.Executor instead).
 func RunCaptured(ctx context.Context, bin string, args ...string) error {
 	cmd := exec.CommandContext(ctx, bin, args...)
 	var stderr bytes.Buffer
@@ -89,7 +87,6 @@ func WaitFor(ctx context.Context, prefix, description string, check func() bool,
 		case <-ctx.Done():
 			return fmt.Errorf("waiting for %s %s: %w", prefix, description, ctx.Err())
 		case <-timeoutCh:
-			// If ctx was cancelled simultaneously, prefer that as the error reason
 			if err := ctx.Err(); err != nil {
 				return fmt.Errorf("waiting for %s %s: %w", prefix, description, err)
 			}
@@ -103,14 +100,9 @@ func WaitFor(ctx context.Context, prefix, description string, check func() bool,
 				logger.Info(readyMsg)
 				return nil
 			}
-			// check() may have taken time during which ctx was cancelled; prefer ctx error
 			if err := ctx.Err(); err != nil {
 				return fmt.Errorf("waiting for %s %s: %w", prefix, description, err)
 			}
-			// Demoted to Debug: the per-tick "still waiting" line spammed the
-			// log on long polls; the periodic state is captured in the
-			// initial Info ("waiting for X") plus the eventual Info ("X is
-			// ready") or the timeout error.
 			logger.Debug(prefix+": waiting", "for", description, "elapsed", elapsed.Round(time.Second))
 		}
 	}

@@ -283,7 +283,6 @@ func (p *Phase) setupInfraSteps(cfg *config.Config, opts *Options) []distributio
 	}
 }
 
-// installSystemPackages installs the base OS packages required for setup.
 func (p *Phase) installSystemPackages(ctx context.Context) error {
 	sysPkgs := []string{"coreos-installer", "haproxy", p.OS.ApachePackageName(), "dnsmasq"}
 
@@ -309,8 +308,6 @@ func (p *Phase) installSystemPackages(ctx context.Context) error {
 	return nil
 }
 
-// generateKubeVIPManifests renders and writes the kube-vip RBAC and DaemonSet
-// manifests into the openshift manifests directory.
 func (p *Phase) generateKubeVIPManifests(cfg *config.Config, clusterDir string) error {
 	vip, err := phase.ResolveClusterVIP(cfg)
 	if err != nil {
@@ -355,8 +352,6 @@ func (p *Phase) generateKubeVIPManifests(cfg *config.Config, clusterDir string) 
 	return nil
 }
 
-// configureDNS wires up dnsmasq, deploys the bootstrap DNS config, and saves
-// a reference copy to the work dir.
 func (p *Phase) configureDNS(ctx context.Context, cfg *config.Config, opts *Options) error {
 	p.Log.Info("dns: configuring dnsmasq service")
 	if err := dns.Setup(ctx, cfg.Networking.DNS, p.Log); err != nil {

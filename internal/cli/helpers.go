@@ -72,8 +72,6 @@ func validateConfig(cfg *config.Config) *config.ValidationResult {
 	return result
 }
 
-// resolveProjectRoot returns the canonical absolute path of the current
-// working directory.
 func resolveProjectRoot() (string, error) {
 	wd, err := os.Getwd()
 	if err != nil {
@@ -92,7 +90,6 @@ func resolveProjectRoot() (string, error) {
 	return resolved, nil
 }
 
-// resolveProjectRootOrDie resolves the project root or returns an error.
 func resolveProjectRootOrDie() (string, error) {
 	root, err := resolveProjectRoot()
 	if err != nil {

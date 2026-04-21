@@ -13,7 +13,6 @@ import (
 // wizard from a Config.
 type StepID string
 
-// Step IDs for the standard wizard steps.
 const (
 	StepIDWelcome       StepID = "welcome"
 	StepIDDistribution  StepID = "distribution"
@@ -124,7 +123,6 @@ func NewBaseStepWithDisplayTitle(id StepID, title, displayTitle, description str
 	}
 }
 
-// ID returns the step identifier.
 func (b *BaseStep) ID() StepID { return b.id }
 
 // Title returns the progress-indicator title.
@@ -133,16 +131,12 @@ func (b *BaseStep) Title() string { return b.title }
 // DisplayTitle returns the title shown above the step body.
 func (b *BaseStep) DisplayTitle() string { return b.displayTitle }
 
-// Description returns the step's descriptive text.
 func (b *BaseStep) Description() string { return b.description }
 
-// IsFocused reports whether the step currently has focus.
 func (b *BaseStep) IsFocused() bool { return b.focused }
 
-// Width returns the step's rendered width.
 func (b *BaseStep) Width() int { return b.width }
 
-// Height returns the step's rendered height.
 func (b *BaseStep) Height() int { return b.height }
 
 // ShouldShow always returns true; override in concrete steps to skip.
@@ -150,18 +144,15 @@ func (b *BaseStep) ShouldShow(_ *config.Config) bool {
 	return true
 }
 
-// SetFocused toggles the step's focus state.
 func (b *BaseStep) SetFocused(focused bool) {
 	b.focused = focused
 }
 
-// SetSize records the available width and height for rendering.
 func (b *BaseStep) SetSize(width, height int) {
 	b.width = width
 	b.height = height
 }
 
-// ShortHelp returns the default key/help pairs shown in the wizard footer.
 func (b *BaseStep) ShortHelp() []KeyBinding {
 	return []KeyBinding{
 		{Key: "↑↓", Help: "navigate"},
@@ -171,7 +162,6 @@ func (b *BaseStep) ShortHelp() []KeyBinding {
 	}
 }
 
-// AutoCompletes returns false so BaseStep doesn't auto-advance by default.
 func (b *BaseStep) AutoCompletes() bool {
 	return false
 }

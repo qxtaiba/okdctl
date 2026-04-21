@@ -11,7 +11,6 @@ import (
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 )
 
-// Step IDs for the post-install phase, ordered as they execute.
 const (
 	StepVerifyHealth        distribution.StepID = "verify-health"
 	StepCleanupBootstrap    distribution.StepID = "cleanup-bootstrap"

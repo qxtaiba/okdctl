@@ -35,7 +35,6 @@ func TestExecutor_Cleanup_PreservesTFState(t *testing.T) {
 		}
 	}
 
-	// The invariant.
 	body, err := os.ReadFile(filepath.Join(workDir, "terraform.tfstate"))
 	if err != nil {
 		t.Fatalf("terraform.tfstate removed (DATA LOSS): %v", err)

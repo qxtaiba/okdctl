@@ -12,7 +12,6 @@ import (
 // Loader reads and writes cluster Config YAML files.
 type Loader struct{}
 
-// NewLoader returns a zero-value Loader.
 func NewLoader() *Loader { return &Loader{} }
 
 // LoadFile parses the YAML config at path and returns the merged Config.
@@ -20,9 +19,6 @@ func NewLoader() *Loader { return &Loader{} }
 // host from influencing deploy behavior. Unknown top-level keys and wrong
 // schemaVersion values produce errors rather than silent defaults.
 func (l *Loader) LoadFile(path string) (*Config, error) {
-	// Reject world- or group-writable config files. The YAML is not
-	// supposed to carry secrets, but if a bug ever leaks one we don't
-	// want an attacker-writable file on the deploy host to matter.
 	fi, err := os.Stat(path)
 	if err != nil {
 		return nil, fmt.Errorf("error stating config file %s: %w", path, err)
@@ -49,9 +45,8 @@ func (l *Loader) LoadFile(path string) (*Config, error) {
 	return cfg, nil
 }
 
-// Save writes cfg to path with 0o600 perms via AtomicWrite. Callers should
-// ensure cfg.SchemaVersion is set; DefaultConfig and MinimalConfig handle
-// that automatically.
+// Save writes cfg to path with 0o600 perms via AtomicWrite. SchemaVersion is
+// set to SchemaVersionV1 when empty.
 func (l *Loader) Save(cfg *Config, path string) error {
 	if cfg.SchemaVersion == "" {
 		cfg.SchemaVersion = SchemaVersionV1

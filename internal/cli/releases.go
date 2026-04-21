@@ -93,9 +93,6 @@ func runReleasesList(cmd *cobra.Command, _ []string) error {
 	return printVersionList(cmd.OutOrStdout(), versions)
 }
 
-// releasesListFormat, releasesShowFormat are owned by releasesListCmd /
-// releasesShowCmd's --format/-F flag.
-
 func runReleasesShow(cmd *cobra.Command, args []string) error {
 	if err := validateFormat(releasesShowFormat); err != nil {
 		return err

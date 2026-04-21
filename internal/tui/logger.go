@@ -19,8 +19,6 @@ type LogField struct {
 	Value any
 }
 
-// LF is a shorthand constructor for LogField, producing concise call sites
-// for the Debug/Info/Warn/Error helpers.
 func LF(key string, value any) LogField {
 	return LogField{Key: key, Value: value}
 }
@@ -67,13 +65,10 @@ func fieldsToArgs(fields []LogField) []any {
 // Records pass through logutil.RedactHandler via stderrSlog.
 func Debug(msg string, fields ...LogField) { stderrSlog.Debug(msg, fieldsToArgs(fields)...) }
 
-// Info emits an info-level record on stderr.
 func Info(msg string, fields ...LogField) { stderrSlog.Info(msg, fieldsToArgs(fields)...) }
 
-// Warn emits a warn-level record on stderr.
 func Warn(msg string, fields ...LogField) { stderrSlog.Warn(msg, fieldsToArgs(fields)...) }
 
-// Error emits an error-level record on stderr.
 func Error(msg string, fields ...LogField) { stderrSlog.Error(msg, fieldsToArgs(fields)...) }
 
 // stderrHandler is a slog.Handler that writes every record to stderr.
@@ -163,8 +158,6 @@ func SetRunID(id string) {
 	stderrSlog = buildStderrSlog()
 }
 
-// RunID returns the correlation ID set by SetRunID, or the empty
-// string if SetRunID has not been called in this process.
 func RunID() string {
 	return runID
 }

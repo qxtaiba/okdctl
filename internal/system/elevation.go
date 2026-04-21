@@ -43,8 +43,8 @@ type sudoIDs struct {
 	uid, gid int
 }
 
-// invokingUserIDs returns the SUDO_UID / SUDO_GID pair. Returns nil if the
-// process was not re-exec'd under sudo, meaning chown is unnecessary.
+// invokingUserIDs returns the SUDO_UID/SUDO_GID pair, or nil if the process
+// was not re-exec'd under sudo (chown is then unnecessary).
 func invokingUserIDs() (*sudoIDs, error) {
 	uidStr := os.Getenv("SUDO_UID")
 	gidStr := os.Getenv("SUDO_GID")
@@ -114,10 +114,6 @@ func ChownTreeToInvokingUser(root string) error {
 		return err
 	}
 	var errs []error
-	// root points at the deploy workdir, which is created by okdctl during
-	// the same process. We're not walking an attacker-controlled tree.
-	// Lchown (not Chown) means symlinks are chowned themselves, not their
-	// targets, so a malicious symlink cannot redirect the chown to /etc.
 	walkErr := filepath.WalkDir(root, func(path string, _ os.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			errs = append(errs, walkErr)
