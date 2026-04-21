@@ -16,9 +16,8 @@ const (
 	defaultKeyColWidth  = 45
 )
 
-// stepDisplayStatus is the three-state tag the summary prints next to
-// each step line. It exists so the display logic has a single source of
-// truth rather than ad-hoc string literals at multiple call sites.
+// stepDisplayStatus is the three-state tag printed next to each step
+// line in the summary.
 type stepDisplayStatus string
 
 const (

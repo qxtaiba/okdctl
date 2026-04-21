@@ -16,13 +16,11 @@ import (
 // nil when --log-file is not set.
 var logFileCloser io.Closer
 
-// openLogFile refuses to open a path that already resolves through a
-// symlink, then opens with O_NOFOLLOW so a symlink planted between the
-// lstat and the open still loses the race. Matters because configureLogging
-// runs twice on root-required commands — once as the invoking user and
-// once post-sudo-re-exec — and a pre-sudo attacker with write access to
-// the invoking user's PWD could otherwise redirect root-authored log
-// lines onto an arbitrary file.
+// openLogFile refuses a symlink path via lstat, then opens with
+// O_NOFOLLOW so a symlink planted between lstat and open still loses
+// the race. Needed because configureLogging runs twice on root-required
+// commands (invoking user + sudo re-exec) and a pre-sudo attacker could
+// otherwise redirect root-authored log lines via a planted symlink.
 func openLogFile(path string) (*os.File, error) {
 	if info, err := os.Lstat(path); err == nil {
 		if info.Mode()&os.ModeSymlink != 0 {

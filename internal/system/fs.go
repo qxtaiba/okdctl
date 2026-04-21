@@ -208,12 +208,10 @@ func AtomicWrite(path string, data []byte, perm os.FileMode) error {
 		return fmt.Errorf("failed to rename temp file: %w", err)
 	}
 
-	// fsync the parent directory so the rename's directory-entry update is
-	// durable across crash. Without this, a power loss after a successful
-	// rename can leave the directory listing the old name while the file
-	// content is the new one — matters for trust-boundary files
-	// (kubeconfig, .env, install-config.yaml) that are consumed immediately
-	// after AtomicWrite returns.
+	// fsync the parent so the rename's directory-entry update is crash-
+	// durable. Without this, post-crash the listing can still point at
+	// the old name — matters for kubeconfig / .env / install-config.yaml
+	// which are consumed immediately after AtomicWrite returns.
 	if err := fsyncDir(dir); err != nil {
 		return fmt.Errorf("failed to fsync directory: %w", err)
 	}

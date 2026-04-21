@@ -1,15 +1,11 @@
 // Package errtypes defines the typed error hierarchy used by okdctl.
-// U4 (internal/cli/root.go) uses errors.As against these types to map
-// failures to structured exit codes: ConfigError=2, NetworkError=3,
-// ClusterError=4, AuthError=5.
+// exitCodeFor in internal/cli/root.go maps these types to structured
+// exit codes: ConfigError=2, NetworkError=3, ClusterError=4, AuthError=5.
 //
-// Error() returns only e.Msg (no %v of Err): if a caller wraps a
-// credential-bearing error, interpolating e.Err into the string would
-// route the credential past logutil.RedactHandler (which scrubs slog
-// attrs, not error strings). Callers that need the inner text walk the
-// chain via errors.Unwrap / errors.As; errors.Is over wrapped sentinels
-// (os.ErrNotExist, context.DeadlineExceeded) still works because Unwrap
-// is intact.
+// Error() surfaces only e.Msg. The inner Err is reachable via Unwrap
+// (so errors.Is / errors.As walks to wrapped sentinels) but never
+// string-interpolated — a credential-bearing inner error cannot leak
+// past logutil.RedactHandler through the .Error() path.
 package errtypes
 
 import (

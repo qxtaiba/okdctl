@@ -92,12 +92,11 @@ func (m *Manager) Remove(ctx context.Context, packages []string, _ *slog.Logger)
 	return runCaptured(ctx, m.pkgCmd, args)
 }
 
-// IsInstalled reports whether pkg is present using the backend's query
-// command. For dpkg, stale "rc" entries are filtered out. A non-zero
-// exit from the query binary (rpm/dpkg typically exit 1 when the
-// package is not installed) is mapped to (false, nil). Any other
-// failure — ctx cancellation, LookPath, I/O — is propagated so callers
-// don't silently treat a broken query backend as "not installed".
+// IsInstalled reports whether pkg is present via the backend's query
+// command (for dpkg, stale "rc" entries are filtered). A non-zero exit
+// maps to (false, nil); other failures (ctx cancellation, LookPath,
+// I/O) propagate so callers don't treat a broken query backend as
+// "not installed".
 func (m *Manager) IsInstalled(ctx context.Context, pkg string) (bool, error) {
 	args := append(append([]string{}, m.queryArgs...), pkg)
 	cmd := exec.CommandContext(ctx, m.queryCmd, args...) //nolint:gosec // queryCmd/queryArgs are set only from the literal constructors in NewPackageManager
