@@ -55,6 +55,20 @@ var releasesShowCmd = &cobra.Command{
 	Example: `  okdctl releases show 4.21.3
   okdctl releases show 4.21.3 --format json`,
 	Args: cobra.ExactArgs(1),
+	ValidArgsFunction: func(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
+		fetcher := releases.NewOKDVersionFetcher()
+		series, err := fetcher.FetchVersions(context.Background())
+		if err != nil {
+			return nil, cobra.ShellCompDirectiveError
+		}
+		var versions []string
+		for _, s := range series {
+			for _, v := range s.Versions {
+				versions = append(versions, v.Version)
+			}
+		}
+		return versions, cobra.ShellCompDirectiveNoFileComp
+	},
 	RunE: runReleasesShow,
 }
 

@@ -8,7 +8,7 @@ import (
 )
 
 var completionCmd = &cobra.Command{
-	Use:   "completion [bash|zsh|fish|powershell]",
+	Use:   "completion <bash|zsh|fish|powershell>",
 	Short: "Generate shell completion script",
 	Long: `Generate a shell completion script for okdctl and write it to stdout.
 
