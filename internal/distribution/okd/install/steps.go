@@ -76,7 +76,7 @@ func (p *Phase) installSteps(cfg *config.Config, opts *Options) []distribution.S
 				p.Log.Info("install: this process typically takes 30-60 minutes")
 			},
 			Exec: func(ctx context.Context) error {
-				if err := p.MonitorInstallation(ctx, clusterDir, opts); err != nil {
+				if err := p.MonitorInstallation(ctx, clusterDir, opts, nil); err != nil {
 					return &errtypes.ClusterError{Msg: "installation monitoring failed", Err: err}
 				}
 				return nil

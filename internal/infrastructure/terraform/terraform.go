@@ -51,6 +51,11 @@ func WithVerbose(v bool) Option {
 	}
 }
 
+// WithVarFile overrides the default var-file path (<workDir>/terraform.tfvars).
+func WithVarFile(path string) Option {
+	return func(e *Executor) { e.VarFile = path }
+}
+
 // WithEnv appends environment variables to be passed to all terraform subprocess calls.
 // At execution time they are appended after the executor's allowlist-filtered
 // parent env, so entries here override allowlist values for the same key.
@@ -110,21 +115,6 @@ func New(workDir string, opts ...Option) *Executor {
 	e := &Executor{
 		WorkDir: workDir,
 		VarFile: filepath.Join(workDir, "terraform.tfvars"),
-		exec:    executor.New(executor.WithWorkDir(workDir)),
-		logger:  logutil.NopLogger,
-	}
-	for _, opt := range opts {
-		opt(e)
-	}
-	executor.WithLogger(e.logger)(e.exec)
-	return e
-}
-
-// NewWithVarFile constructs an Executor with an explicit var-file path.
-func NewWithVarFile(workDir, varFile string, opts ...Option) *Executor {
-	e := &Executor{
-		WorkDir: workDir,
-		VarFile: varFile,
 		exec:    executor.New(executor.WithWorkDir(workDir)),
 		logger:  logutil.NopLogger,
 	}

@@ -49,18 +49,28 @@ func (p *Phase) WaitForBootstrap(ctx context.Context, clusterDir string, opts *O
 	return nil
 }
 
+// csrApprover is the subset of cluster.K8sClient MonitorInstallation uses.
+// Accepting the interface instead of the concrete type lets tests inject a
+// stub without a real kubeconfig.
+type csrApprover interface {
+	ApprovePendingCSRs(ctx context.Context) (int, error)
+}
+
 // MonitorInstallation watches the post-bootstrap install until all cluster
-// operators are Available, bounded by opts.InstallTimeout.
-func (p *Phase) MonitorInstallation(ctx context.Context, clusterDir string, opts *Options) error {
+// operators are Available, bounded by opts.InstallTimeout. If approver is
+// nil a real cluster.K8sClient is constructed from clusterDir/auth/kubeconfig.
+func (p *Phase) MonitorInstallation(ctx context.Context, clusterDir string, opts *Options, approver csrApprover) error {
 	ctx, cancel := context.WithTimeout(ctx, opts.InstallTimeout)
 	defer cancel()
 
-	kubeconfigPath := filepath.Join(clusterDir, "auth", "kubeconfig")
-	k8sClient := cluster.NewK8sClient(
-		cluster.WithCLI("oc"),
-		cluster.WithKubeconfig(kubeconfigPath),
-		cluster.WithLogger(p.Log),
-	)
+	if approver == nil {
+		kubeconfigPath := filepath.Join(clusterDir, "auth", "kubeconfig")
+		approver = cluster.NewK8sClient(
+			cluster.WithCLI("oc"),
+			cluster.WithKubeconfig(kubeconfigPath),
+			cluster.WithLogger(p.Log),
+		)
+	}
 
 	installCmd := osExec.CommandContext(ctx, "openshift-install", "wait-for", "install-complete", "--dir", clusterDir, "--log-level=debug")
 	installCmd.Stdout = os.Stdout
@@ -111,7 +121,7 @@ func (p *Phase) MonitorInstallation(ctx context.Context, clusterDir string, opts
 				return &errtypes.ClusterError{Msg: "installation failed", Err: err}
 			}
 
-			approved, csrErr := k8sClient.ApprovePendingCSRs(ctx)
+			approved, csrErr := approver.ApprovePendingCSRs(ctx)
 			if csrErr != nil {
 				p.Log.Warn("csr: final approval had issues", "err", csrErr)
 			}
@@ -121,7 +131,7 @@ func (p *Phase) MonitorInstallation(ctx context.Context, clusterDir string, opts
 			return nil
 
 		case <-ticker.C:
-			approved, err := k8sClient.ApprovePendingCSRs(ctx)
+			approved, err := approver.ApprovePendingCSRs(ctx)
 			if err != nil {
 				msg := err.Error()
 				if msg != lastCSRWarnMsg {

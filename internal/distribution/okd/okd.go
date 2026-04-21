@@ -28,6 +28,7 @@ type Provisioner struct {
 	version     string
 	projectRoot string
 	executor    *executor.Executor
+	pendingEnv  []string
 	logger      *slog.Logger
 	recorder    distribution.MetricsRecorder
 }
@@ -62,17 +63,14 @@ func WithMetricsRecorder(rec distribution.MetricsRecorder) ProvisionerOption {
 // avoiding modification of the global process environment.
 func WithEnv(env []string) ProvisionerOption {
 	return func(p *Provisioner) {
-		if p.executor == nil {
-			p.executor = executor.New(executor.WithEnv(env))
-		} else {
-			p.executor.Env = append(p.executor.Env, env...)
-		}
+		p.pendingEnv = append(p.pendingEnv, env...)
 	}
 }
 
 // New constructs a Provisioner for the given okdctl version with options
-// applied in order. Normalizes a nil logger to NopLogger and guarantees an
-// executor is attached even when WithEnv did not allocate one.
+// applied in order. Normalizes a nil logger to NopLogger and builds the
+// executor once after all options are applied so WithEnv/WithLogger
+// ordering does not matter.
 func New(version string, opts ...ProvisionerOption) *Provisioner {
 	projectRoot, _ := os.Getwd()
 
@@ -86,13 +84,11 @@ func New(version string, opts ...ProvisionerOption) *Provisioner {
 		opt(p)
 	}
 
-	if p.executor == nil {
-		p.executor = executor.New(executor.WithLogger(p.logger))
-	} else {
-		// WithEnv may have constructed the executor before WithLogger was
-		// applied; ensure the final logger is attached either way.
-		executor.WithLogger(p.logger)(p.executor)
+	execOpts := []executor.Option{executor.WithLogger(p.logger)}
+	if len(p.pendingEnv) > 0 {
+		execOpts = append(execOpts, executor.WithEnv(p.pendingEnv))
 	}
+	p.executor = executor.New(execOpts...)
 
 	return p
 }
@@ -109,7 +105,7 @@ func (p *Provisioner) Validate(cfg *config.Config) error {
 
 // Prepare cleans up previous artifacts and runs the setup phase.
 func (p *Provisioner) Prepare(ctx context.Context, cfg *config.Config) ([]distribution.StepResult, error) {
-	opts := setup.DefaultOptions(p.projectRoot)
+	opts := setup.NewOptions(cfg, p.projectRoot)
 
 	if system.DirExists(opts.WorkDir) {
 		p.logger.Info("setup: cleaning up previous artifacts")
