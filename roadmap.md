@@ -153,6 +153,125 @@ These made the audit but are not scheduled now. Re-evaluate on
 | L6 | OpenTelemetry tracing hooks | N8 step-timing covers 80% of value |
 | N27 | `--log-file` sudo-re-exec hardening (abs-path resolution + chown post-write) | Defense-in-depth on top of `sec:00000002` lstat + `O_NOFOLLOW` fix; attack window closed, broader refactor pending |
 
+### Tier E — architectural deferrals from 2026-04-20 audit
+
+Items from `.claude/audits/FULL_REPORT-2026-04-20.md` whose fix requires
+material design work (new config fields, workflow changes, new
+subsystems) rather than a one-file surgical edit. Filed here so
+`/roadmap-pickup` can schedule them; each carries the originating
+audit finding ID so diff tracking stays tight.
+
+#### E1 — Concurrent-run lock with stale-PID detection
+
+**Status:** not started
+**Audit:** `state:4c092fce:no-concurrent-run-guard`
+**Evidence:** `internal/infrastructure/terraform/terraform.go:119`
+**Problem:** Two concurrent `okdctl deploy` or `okdctl destroy` runs in
+the same project root both target
+`infrastructure/terraform/environments/<env>/terraform.tfstate` with no
+mutual exclusion. Terraform's own state lock fires only per-operation,
+so racing `okdctl apply` → `tf plan` → `tf apply` against a sibling
+`okdctl destroy` yields interleaved applies and a corrupted state.
+**Scope:** Add a process-level advisory lock under
+`<projectRoot>/.okdctl.lock` taken in `cli/deploy.go` and
+`cli/destroy.go` before the phase orchestrator runs. Must detect stale
+locks (prior run died via SIGKILL) without racing a live sibling; the
+usual PID-file + `kill -0` trick has a reuse window. Consider
+`flock(LOCK_EX|LOCK_NB)` with the PID written into the file for
+human diagnostics. Must unlock on normal exit and on ctx cancel.
+**Effort:** days. Why it's filed here not done inline: stale-detection
+design has to be thought through (PID reuse, cross-host NFS homes, the
+sudo-re-exec crossing).
+
+#### E2 — Ring-buffered / streamed executor output
+
+**Status:** not started
+**Audit:** `sub:7b2829bb:unbounded-output-buffer`,
+`sub:4c092fce:terraform-buffered-through-executor`
+**Evidence:** `internal/executor/executor.go:116`,
+`internal/infrastructure/terraform/terraform.go:148`
+**Problem:** `executor.Executor.Run` buffers full stdout+stderr into
+`bytes.Buffer` with no cap. `terraform apply` on a cluster with many
+VMs, or `openshift-install` on a long bootstrap, materializes tens of
+MB in RAM before returning. Plus the user sees nothing until it
+completes.
+**Scope:** Ring-buffered trail (keep only the last N lines) for error
+messages plus a streaming variant (`RunStreamed`) that pipes live to
+stdout/stderr. Already have `PlanStreamed` and `ApplyStreamed` on the
+terraform wrapper for progress visibility; generalize the pattern at
+the executor layer. Keep `RunChecked` semantics for short-output
+callers.
+**Effort:** days.
+
+#### E3 — HTTPS ignition + pinned CA kargs
+
+**Status:** not started
+**Audit:** `sec:00000001:http-ignition-pullsecret`
+**Evidence:** `internal/distribution/okd/setup/phase.go:48`,
+`internal/distribution/okd/setup/apache.go:27`
+**Problem:** `BuildIgnitionURL` returns `http://…/ignition`, and the
+rendered `.ign` files embed the full OKD pullSecret. Every node boot
+broadcasts the pullSecret cleartext over the machine-network VLAN.
+**Scope:** Serve ignition over HTTPS with a self-signed cert, pin the
+cert via `coreos.inst.ca` kargs, and flip
+`coreos.inst.insecure=no`. Apache needs a vhost on :443 with the cert;
+the wizard needs a field (or implicit decision) for the cert CN; the
+Terraform cloud-init kargs need the CA material. Cross-cutting: apache
+cert lifecycle, kargs templating, wizard.
+**Effort:** days.
+
+#### E4 — SSH/SCP host-key pinning for Proxmox
+
+**Status:** not started
+**Audit:** `sec:27088eab:ssh-accept-new-proxmox`,
+`sec:eb479d86:scp-accept-new-proxmox`
+**Evidence:** `internal/distribution/okd/phase/ssh.go:27`,
+`internal/distribution/okd/setup/upload.go:42`
+**Problem:** `SSHRun` and `uploadISOsViaSCP` use
+`StrictHostKeyChecking=accept-new` — TOFU. A MITM on the first handshake
+pins the attacker as root@proxmox forever.
+**Scope:** Add `provider.proxmox.ssh_host_fingerprint` config field
+(SHA256 hex). When set, write a single-entry known_hosts to a temp
+path, pass `-o UserKnownHostsFile=<file> -o StrictHostKeyChecking=yes`,
+and refuse on mismatch. When unset, keep accept-new with an explicit
+one-time warning. The wizard should learn and persist the fingerprint
+after the first successful handshake.
+**Effort:** hours.
+
+#### E5 — Flux SSH known-hosts fingerprint pinning
+
+**Status:** not started
+**Audit:** `sec:98723e5d:ssh-keyscan-tofu`
+**Evidence:** `internal/addon/catalog/flux/flux.go:329`
+**Problem:** `createDeployKeySecret` runs `ssh-keyscan <host>` and
+stuffs the raw output verbatim into the Flux deploy-key Secret. A DNS
+poisoner at install time pins themselves as the git host forever,
+enabling silent GitOps code substitution.
+**Scope:** Add `addons.flux.settings.known_hosts_fingerprint` config
+field. Compute SHA256 of ssh-keyscan output, compare against the
+configured value, refuse on mismatch. Without the config, emit a WARN
+with the observed fingerprint and require `--accept-hostkey` to
+proceed.
+**Effort:** hours.
+
+#### E6 — kube-vip probe TLS: use cluster CA once available
+
+**Status:** not started
+**Audit:** `sec:cfcdee2d:tls-insecure-vip-probe`
+**Evidence:** `internal/httputil/httputil.go:22`,
+`internal/distribution/okd/postinstall/haproxy.go:65`,
+`internal/distribution/okd/postinstall/verify.go:193`
+**Problem:** `httputil.NewInsecure` is used at two post-install sites
+that target the kube-vip healthz. At those points the cluster CA is
+already available under `clusterDir/auth/kubeconfig` but the code
+doesn't consume it.
+**Scope:** Add `httputil.NewWithCA(pool, timeout)`. Flip the post-install
+call sites to parse the CA bundle out of kubeconfig and use NewWithCA.
+Keep `NewInsecure` only for the strict pre-install-config window (VIP
+not yet in cert SANs) and audit each remaining call site for
+reachability of the post-install CA.
+**Effort:** hours.
+
 ### Tier D — dependency items from 2026-04-18 audit
 
 Filed as roadmap items so `/roadmap-pickup` can fan them out when
