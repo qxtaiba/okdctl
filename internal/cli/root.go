@@ -108,7 +108,7 @@ func execute() int {
 
 	err := rootCmd.ExecuteContext(ctx)
 	if err != nil {
-		if ctx.Err() != nil {
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 			if sig, _ := caughtSig.Load().(os.Signal); sig == syscall.SIGTERM {
 				return 143
 			}

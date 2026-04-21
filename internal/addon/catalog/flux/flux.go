@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/qxtaiba/okdctl/internal/addon"
+	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/executor"
 	"github.com/qxtaiba/okdctl/internal/system"
 )
@@ -69,7 +70,7 @@ func (f *Flux) Info() addon.AddonInfo {
 // controllers and the initial git sync.
 func (f *Flux) Install(ctx context.Context, env *addon.Environment) error {
 	if !executor.CommandExists("helm") {
-		return fmt.Errorf("helm is required to install Flux")
+		return &errtypes.ConfigError{Msg: "helm is required to install Flux"}
 	}
 
 	decoded, err := f.DecodeSettings(env.AddonConfig.Settings)
@@ -145,7 +146,7 @@ func (f *Flux) installOperator(ctx context.Context, env *addon.Environment) erro
 func (f *Flux) installInstance(ctx context.Context, env *addon.Environment, fs Settings) error {
 	env.Logger.Info("flux: installing instance for gitops sync")
 	if fs.Repository == "" {
-		return fmt.Errorf("flux repository not configured - set addons.flux.settings.repository in config")
+		return &errtypes.ConfigError{Msg: "flux repository not configured - set addons.flux.settings.repository in config"}
 	}
 	return f.helmUpgradeInstall(ctx, env, "flux-instance",
 		"oci://ghcr.io/controlplaneio-fluxcd/charts/flux-instance",
@@ -329,7 +330,7 @@ func (f *Flux) waitForGitSync(ctx context.Context, env *addon.Environment) error
 func (f *Flux) createDeployKeySecret(ctx context.Context, env *addon.Environment, fs Settings) error {
 	repoURL := fs.Repository
 	if repoURL == "" {
-		return fmt.Errorf("flux repository not configured - set addons.flux.settings.repository in config")
+		return &errtypes.ConfigError{Msg: "flux repository not configured - set addons.flux.settings.repository in config"}
 	}
 	host, err := gitHost(repoURL)
 	if err != nil {
@@ -388,7 +389,7 @@ func (f *Flux) createDeployKeySecret(ctx context.Context, env *addon.Environment
 func gitHost(repoURL string) (string, error) {
 	repoURL = strings.TrimSpace(repoURL)
 	if repoURL == "" {
-		return "", fmt.Errorf("empty repository URL")
+		return "", &errtypes.ConfigError{Msg: "empty repository URL"}
 	}
 	// scp-style: user@host:path (no scheme, has @ and : before any /)
 	if !strings.Contains(repoURL, "://") {

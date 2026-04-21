@@ -179,7 +179,7 @@ func (p *Provider) Provision(ctx context.Context, cfg *config.Config, opts Provi
 	}
 
 	if len(result.VMs) == 0 {
-		return nil, fmt.Errorf("terraform apply succeeded but no VMs were provisioned; check config")
+		return nil, &errtypes.ClusterError{Msg: "terraform apply succeeded but no VMs were provisioned; check config"}
 	}
 
 	p.logger.Info("terraform: vms provisioned", "count", len(result.VMs))
@@ -234,7 +234,7 @@ func (p *Provider) retrieveProvisionResult(cfg *config.Config) (*ProvisionResult
 
 	startIP := cfg.Networking.StaticIP.Start
 	if startIP == "" {
-		return nil, fmt.Errorf("static IP start address is required for OKD deployments")
+		return nil, &errtypes.ConfigError{Msg: "static IP start address is required for OKD deployments"}
 	}
 
 	totalNodes := 1 + cfg.Topology.ControlPlane.Count + cfg.Topology.Workers.Count
