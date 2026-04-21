@@ -9,7 +9,6 @@ import (
 
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/dns"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/firewall"
-	"github.com/qxtaiba/okdctl/internal/distribution/okd/packages"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/netutil"
@@ -38,7 +37,7 @@ func stopAndDisableService(ctx context.Context, serviceName string, logger *slog
 func removePackage(ctx context.Context, pkg string, logger *slog.Logger) {
 	logger = logutil.OrNop(logger)
 	pm := detectPackageManager(logger)
-	if err := packages.Remove(ctx, pm, []string{pkg}, logger); err != nil {
+	if err := pm.Remove(ctx, []string{pkg}, logger); err != nil {
 		logger.Warn("cleanup: failed to remove package", "pkg", pkg, "err", err)
 	}
 }

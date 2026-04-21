@@ -9,7 +9,6 @@ import (
 	"github.com/qxtaiba/okdctl/internal/distribution"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/dns"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/firewall"
-	"github.com/qxtaiba/okdctl/internal/distribution/okd/packages"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/templates"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
@@ -302,7 +301,7 @@ func (p *Phase) installSystemPackages(ctx context.Context) error {
 	}
 
 	p.Log.Info(fmt.Sprintf("packages: installing %d missing package(s)", len(toInstall)))
-	if err := packages.Install(ctx, p.Pkg, toInstall, "system dependencies", p.Log); err != nil {
+	if err := p.Pkg.Install(ctx, toInstall, p.Log); err != nil {
 		p.Log.Warn("packages: installation had warnings", "err", err)
 	}
 	return nil

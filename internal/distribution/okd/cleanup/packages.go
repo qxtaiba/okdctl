@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/qxtaiba/okdctl/internal/distribution/okd/packages"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/logutil"
@@ -64,7 +63,7 @@ func Packages(ctx context.Context, binDir string, logger *slog.Logger) error {
 	pm := detectPackageManager(logger)
 
 	pkgList := InstalledPackages()
-	if err := packages.Remove(ctx, pm, pkgList, logger); err != nil {
+	if err := pm.Remove(ctx, pkgList, logger); err != nil {
 		logger.Warn("cleanup: some packages could not be removed (may require manual cleanup)")
 		hasErrors = true
 	}
