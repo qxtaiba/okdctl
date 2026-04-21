@@ -107,6 +107,9 @@ func (m *Manager) InstallAll(ctx context.Context) error {
 		}
 	}
 
+	if ctxErr := ctx.Err(); ctxErr != nil && len(errs) > 0 {
+		errs = append(errs, ctxErr)
+	}
 	return errors.Join(errs...)
 }
 

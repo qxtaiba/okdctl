@@ -183,8 +183,8 @@ type Result struct {
 
 // ExitError is the typed error RunChecked / RunWithStdinChecked return when
 // a subprocess exits non-zero. Callers can errors.As to inspect ExitCode
-// without re-parsing the error message, and errors.Is to compare against
-// Unwrap chain values. Mirrors terraform.ExecError for consistency.
+// without re-parsing the error message. Mirrors terraform.ExecError for
+// consistency.
 type ExitError struct {
 	Command  string
 	ExitCode int

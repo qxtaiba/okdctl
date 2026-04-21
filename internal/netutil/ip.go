@@ -41,8 +41,11 @@ func ValidateIPRangeInCIDR(startIP string, count int, cidr string) error {
 	}
 
 	start, err := netip.ParseAddr(startIP)
-	if err != nil || !start.Is4() {
-		return fmt.Errorf("invalid IPv4 address: %s", startIP)
+	if err != nil {
+		return fmt.Errorf("invalid IPv4 address %q: %w", startIP, err)
+	}
+	if !start.Is4() {
+		return fmt.Errorf("IPv6 not supported: %q", startIP)
 	}
 
 	if !prefix.Contains(start) {
@@ -70,8 +73,11 @@ func CalculateVMIP(startIP string, index int) (string, error) {
 	}
 
 	addr, err := netip.ParseAddr(startIP)
-	if err != nil || !addr.Is4() {
-		return "", fmt.Errorf("invalid IPv4 address: %s", startIP)
+	if err != nil {
+		return "", fmt.Errorf("invalid IPv4 address %q: %w", startIP, err)
+	}
+	if !addr.Is4() {
+		return "", fmt.Errorf("IPv6 not supported: %q", startIP)
 	}
 
 	raw := addr.As4()
@@ -93,8 +99,11 @@ func CalculateVMIP(startIP string, index int) (string, error) {
 func ResolveVIP(explicitVIP, staticIPStart string) (string, error) {
 	if explicitVIP != "" {
 		addr, err := netip.ParseAddr(explicitVIP)
-		if err != nil || !addr.Is4() {
-			return "", fmt.Errorf("invalid VIP address: %s", explicitVIP)
+		if err != nil {
+			return "", fmt.Errorf("invalid VIP address %q: %w", explicitVIP, err)
+		}
+		if !addr.Is4() {
+			return "", fmt.Errorf("IPv6 VIP not supported: %q", explicitVIP)
 		}
 		return addr.String(), nil
 	}
@@ -105,8 +114,11 @@ func ResolveVIP(explicitVIP, staticIPStart string) (string, error) {
 // DefaultVIPLastOctet to yield a conventional VIP in the same /24.
 func DeriveVIPFromStaticIP(staticIPStart string) (string, error) {
 	addr, err := netip.ParseAddr(staticIPStart)
-	if err != nil || !addr.Is4() {
-		return "", fmt.Errorf("invalid IPv4 address %q", staticIPStart)
+	if err != nil {
+		return "", fmt.Errorf("invalid IPv4 address %q: %w", staticIPStart, err)
+	}
+	if !addr.Is4() {
+		return "", fmt.Errorf("IPv6 not supported: %q", staticIPStart)
 	}
 	octets := addr.As4()
 	return fmt.Sprintf("%d.%d.%d.%d", octets[0], octets[1], octets[2], DefaultVIPLastOctet), nil
