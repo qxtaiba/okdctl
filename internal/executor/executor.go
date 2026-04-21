@@ -4,7 +4,6 @@
 package executor
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -20,6 +19,13 @@ import (
 
 // Executor wraps os/exec with context-aware command execution, output
 // capture, and structured logging for setup/install/postinstall phases.
+//
+// Output capture: Run and RunChecked capture stdout/stderr into a ring
+// buffer capped at constMaxLines (200) lines. Result.Stdout and
+// Result.Stderr carry the tail of the output, not the full stream.
+// Callers that need the full stream should use RunStreamed or
+// RunStreamedChecked, which tee live output to e.Stdout/e.Stderr while
+// still returning a ring-buffered tail in the Result.
 //
 // Environment handling: by default the Executor passes only a curated
 // allowlist of the parent environment down to subprocesses — credentials
@@ -221,10 +227,11 @@ func (e *Executor) run(ctx context.Context, stdin io.Reader, name string, args .
 
 	cmd.Env = e.buildEnv()
 
-	var stdout, stderr bytes.Buffer
+	rout := newRingWriter(constMaxLines)
+	rerr := newRingWriter(constMaxLines)
 	cmd.Stdin = stdin
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
+	cmd.Stdout = rout
+	cmd.Stderr = rerr
 
 	if e.Verbose {
 		e.logger.Debug(fmt.Sprintf("+ %s %s", name, strings.Join(args, " ")))
@@ -234,8 +241,8 @@ func (e *Executor) run(ctx context.Context, stdin io.Reader, name string, args .
 
 	result := &Result{
 		ExitCode: 0,
-		Stdout:   stdout.String(),
-		Stderr:   stderr.String(),
+		Stdout:   rout.tail(),
+		Stderr:   rerr.tail(),
 		Duration: time.Since(start),
 	}
 
@@ -248,6 +255,60 @@ func (e *Executor) run(ctx context.Context, stdin io.Reader, name string, args .
 		}
 	}
 
+	return result, nil
+}
+
+// RunStreamed executes a command, piping its stdout and stderr live to
+// e.Stdout and e.Stderr while also retaining the last constMaxLines lines
+// in Result.Stdout and Result.Stderr for error reporting. The returned
+// *Result is always non-nil.
+func (e *Executor) RunStreamed(ctx context.Context, name string, args ...string) (*Result, error) {
+	start := time.Now()
+	cmd := exec.CommandContext(ctx, name, args...)
+
+	if e.WorkDir != "" {
+		cmd.Dir = e.WorkDir
+	}
+	cmd.Env = e.buildEnv()
+
+	rout := newRingWriter(constMaxLines)
+	rerr := newRingWriter(constMaxLines)
+	cmd.Stdout = io.MultiWriter(e.Stdout, rout)
+	cmd.Stderr = io.MultiWriter(e.Stderr, rerr)
+
+	e.logger.Debug("exec: started", "cmd", name, "argc", len(args))
+	err := cmd.Run()
+
+	result := &Result{
+		ExitCode: 0,
+		Stdout:   rout.tail(),
+		Stderr:   rerr.tail(),
+		Duration: time.Since(start),
+	}
+	e.logger.Debug("exec: completed", "cmd", name, "duration", result.Duration)
+
+	if err != nil {
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			result.ExitCode = exitErr.ExitCode()
+		} else {
+			return result, err
+		}
+	}
+
+	return result, nil
+}
+
+// RunStreamedChecked is RunStreamed with RunChecked semantics: non-zero
+// exit returns an *ExitError carrying the tail of stderr.
+func (e *Executor) RunStreamedChecked(ctx context.Context, name string, args ...string) (*Result, error) {
+	result, err := e.RunStreamed(ctx, name, args...)
+	if err != nil {
+		return result, err
+	}
+	if result.ExitCode != 0 {
+		return result, &ExitError{Command: name, ExitCode: result.ExitCode, Stderr: result.Stderr}
+	}
 	return result, nil
 }
 
