@@ -16,6 +16,28 @@ const (
 	defaultKeyColWidth  = 45
 )
 
+// stepDisplayStatus is the three-state tag the summary prints next to
+// each step line. It exists so the display logic has a single source of
+// truth rather than ad-hoc string literals at multiple call sites.
+type stepDisplayStatus string
+
+const (
+	stepStatusSkip stepDisplayStatus = "skip"
+	stepStatusOK   stepDisplayStatus = "ok"
+	stepStatusFail stepDisplayStatus = "fail"
+)
+
+func displayStatus(s *distribution.StepResult) stepDisplayStatus {
+	switch {
+	case s.Skipped:
+		return stepStatusSkip
+	case s.Success:
+		return stepStatusOK
+	default:
+		return stepStatusFail
+	}
+}
+
 type summaryBuilder struct {
 	b        strings.Builder
 	keyWidth int
@@ -152,17 +174,8 @@ func PostDeploySummary(cfg *config.Config, result *postinstall.Result, steps []d
 		var total time.Duration
 		for _, s := range steps {
 			total += s.Duration
-			var status string
-			switch {
-			case s.Skipped:
-				status = "skip"
-			case s.Success:
-				status = "ok"
-			default:
-				status = "fail"
-			}
 			d := s.Duration.Truncate(time.Millisecond).String()
-			sb.kv(string(s.StepID), fmt.Sprintf("%-4s  %s", status, d))
+			sb.kv(string(s.StepID), fmt.Sprintf("%-4s  %s", displayStatus(&s), d))
 		}
 		sb.kv("total", total.Truncate(time.Millisecond).String())
 		sb.newline()
@@ -202,17 +215,8 @@ func InterruptSummary(steps []distribution.StepResult, resumeCmd, runID string) 
 	if len(steps) > 0 {
 		sb.section("partial progress")
 		for _, s := range steps {
-			var status string
-			switch {
-			case s.Skipped:
-				status = "skip"
-			case s.Success:
-				status = "ok"
-			default:
-				status = "fail"
-			}
 			d := s.Duration.Truncate(time.Millisecond).String()
-			sb.kv(string(s.StepID), fmt.Sprintf("%-4s  %s", status, d))
+			sb.kv(string(s.StepID), fmt.Sprintf("%-4s  %s", displayStatus(&s), d))
 		}
 		sb.newline()
 	}
