@@ -8,6 +8,7 @@ import (
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/postinstall"
+	"github.com/qxtaiba/okdctl/internal/runlock"
 	"github.com/qxtaiba/okdctl/internal/tui"
 )
 
@@ -91,6 +92,13 @@ func runUpdateIngress(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
+
+	lock, err := runlock.Acquire(projectRoot, "update-ingress")
+	if err != nil {
+		return err
+	}
+	defer lock.Release()
+
 	p := createOKDProvisioner(cfg, nil, projectRoot)
 
 	tui.Info("detecting ingress strategy and loadbalancer ips...")

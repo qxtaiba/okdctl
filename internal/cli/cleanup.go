@@ -9,6 +9,7 @@ import (
 
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/cleanup"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
+	"github.com/qxtaiba/okdctl/internal/runlock"
 	"github.com/qxtaiba/okdctl/internal/system"
 	"github.com/qxtaiba/okdctl/internal/tui"
 )
@@ -83,6 +84,12 @@ func runCleanup(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
+
+	lock, err := runlock.Acquire(projectRoot, "cleanup")
+	if err != nil {
+		return err
+	}
+	defer lock.Release()
 
 	workDir := filepath.Join(projectRoot, "okd-install")
 	defer func() {
