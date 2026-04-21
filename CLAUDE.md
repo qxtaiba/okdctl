@@ -139,6 +139,31 @@ write the comment — then it carries real information.
   when its tests land; the `test-go` CI job will fail on regression.
 - Pre-commit hooks run via `lefthook`.
 
+## Concurrency
+
+- **Every goroutine needs a stop signal or a documented leak bound.**
+  Fire-and-forget is acceptable only when (a) the work is bounded by
+  `ctx` and (b) the call site documents the leak bound. See
+  `internal/version/updatecheck.go` (100ms wait at caller) for the
+  canonical example.
+- **Prefer `errgroup` over `sync.WaitGroup`** when errors must bubble up.
+  `sync.WaitGroup` + a shared error variable is a footgun.
+- **No `time.Sleep` in retry loops.** Use `select { case <-ctx.Done(): ... case <-time.After(d): ... }`
+  or `wait.ExponentialBackoffWithContext`. A bare `time.Sleep` ignores
+  cancellation and stretches shutdown time unbounded.
+- **`context.Background()` / `context.TODO()` in production code needs
+  a justification comment** — almost every call site should be
+  receiving a ctx from its caller. Root-level exceptions live in
+  `internal/cli/root.go::execute()` (signal-watched context creation)
+  and test-only helpers.
+- **Canonical patterns:**
+  - `cmd.Wait` reap-with-deadline: `internal/distribution/okd/install/monitor.go`
+    (`killInstall` + `reapTimer`).
+  - Ticker-backed background worker: `internal/tui/spinner.go`.
+  - Signal-watched cancellation: `internal/cli/root.go::execute()` —
+    `defer close(sigCh)` after `signal.Stop` so the receiver returns
+    cleanly on the happy path.
+
 ## Credentials and secrets
 
 - Never commit secrets. `.env` files live alongside `configs/*.yaml` and are
