@@ -131,6 +131,12 @@ type ProxmoxConfig struct {
 	NUMAEnabled        bool                `json:"numa_enabled,omitempty"`
 	MasterNodes        []string            `json:"master_nodes,omitempty"`
 	WorkerNodes        []string            `json:"worker_nodes,omitempty"`
+
+	// SSHHostFingerprint is the SHA256 hex of the Proxmox host's SSH public
+	// key(s), used to pin TOFU. When set, deploy aborts if the observed
+	// fingerprint does not match. When unset, the first SSH connection logs
+	// the observed fingerprint so the operator can pin it on the next run.
+	SSHHostFingerprint string `json:"ssh_host_fingerprint,omitempty"`
 }
 
 // FilesConfig points at the pull-secret and SSH public key files injected

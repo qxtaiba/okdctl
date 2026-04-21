@@ -75,6 +75,10 @@ func (p *Phase) UploadCustomISOsToProxmox(ctx context.Context, cfg *config.Confi
 	user := "root"
 	remotePath := phase.DefaultProxmoxISODir
 
+	if err := phase.VerifyProxmoxHostKey(ctx, p.Exec, host, cfg.Provider.Proxmox.SSHHostFingerprint, p.Log); err != nil {
+		return &errtypes.NetworkError{Msg: "proxmox host-key verification failed", Err: err}
+	}
+
 	totalSizeMB := float64(calculateTotalSize(isoFiles)) / 1024 / 1024
 	p.Log.Info("iso: uploading", "count", len(isoFiles), "size_mb", fmt.Sprintf("%.1f", totalSizeMB), "user", user, "host", host, "path", remotePath)
 

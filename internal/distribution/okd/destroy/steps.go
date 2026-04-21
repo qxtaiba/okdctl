@@ -64,7 +64,7 @@ func (p *Phase) destroySteps(cfg *config.Config, opts *Options) []distribution.S
 					Exec: p.Exec,
 					Log:  p.Log,
 				}
-				return phase.RemoveFCOSISOFromProxmox(ctx, params, phase.DefaultProxmoxISODir)
+				return phase.RemoveFCOSISOFromProxmox(ctx, params, phase.DefaultProxmoxISODir, cfg.Provider.Proxmox.SSHHostFingerprint)
 			},
 			OnError: track("iso removal"),
 		},

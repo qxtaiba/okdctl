@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/qxtaiba/okdctl/internal/addon"
+	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/executor"
 	"github.com/qxtaiba/okdctl/internal/system"
 )
@@ -33,6 +34,15 @@ const (
 	SettingProvider          = "provider"
 	SettingControllerTimeout = "controller_timeout"
 	SettingGitSyncTimeout    = "git_sync_timeout"
+	// SettingKnownHostsSHA256 pins the git host's SSH host key. When set,
+	// createDeployKeySecret hashes the observed ssh-keyscan output and
+	// refuses on mismatch, preventing a DNS-poisoner-at-install-time from
+	// pinning an attacker as the git host.
+	SettingKnownHostsSHA256 = "known_hosts_sha256"
+	// SettingAcceptHostKey, when "true", explicitly accepts the observed
+	// host key at install time without pinning. Use only for first-deploy
+	// bootstrap where the fingerprint cannot yet be known.
+	SettingAcceptHostKey = "accept_host_key"
 )
 
 // k8sBoolTrue is the literal Kubernetes returns for boolean-valued status
@@ -366,7 +376,10 @@ func (f *Flux) createDeployKeySecret(ctx context.Context, env *addon.Environment
 
 	knownHostsResult, err := env.Exec.RunChecked(ctx, "ssh-keyscan", host)
 	if err != nil {
-		return fmt.Errorf("failed to get host key for %s: %w", host, err)
+		return &errtypes.ConfigError{Msg: fmt.Sprintf("failed to get host key for %s", host), Err: err}
+	}
+	if verifyErr := verifyKnownHostsFingerprint(knownHostsResult.Stdout, fs, env.Logger, host); verifyErr != nil {
+		return verifyErr
 	}
 
 	manifest, err := buildFluxDeployKeySecret("flux-system", "flux-system",
