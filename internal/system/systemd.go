@@ -41,7 +41,7 @@ func ManageService(ctx context.Context, action ServiceAction, serviceName, _ str
 		return cmd.Run()
 
 	default:
-		return exec.CommandContext(ctx, "systemctl", actionStr, serviceName).Run()
+		return RunCaptured(ctx, "systemctl", actionStr, serviceName)
 	}
 }
 
