@@ -51,13 +51,7 @@ func boxedSectionCore(content, title string, width int, cfg boxConfig) string {
 		minWidthForTitle = titleLen + TitlePadding
 	}
 
-	innerWidth := width - ContentPadding
-	if maxContentWidth+ContentPadding > innerWidth {
-		innerWidth = maxContentWidth + ContentPadding
-	}
-	if minWidthForTitle > innerWidth {
-		innerWidth = minWidthForTitle
-	}
+	innerWidth := max(width-ContentPadding, maxContentWidth+ContentPadding, minWidthForTitle)
 
 	var topBorder string
 	var titleRow string
@@ -97,11 +91,7 @@ func boxedSectionCore(content, title string, width int, cfg boxConfig) string {
 
 	var contentRows []string
 	for _, line := range lines {
-		lineWidth := lipgloss.Width(line)
-		padding := innerWidth - lineWidth
-		if padding < 0 {
-			padding = 0
-		}
+		padding := max(innerWidth-lipgloss.Width(line), 0)
 		row := borderStyle.Render("│") + line + strings.Repeat(" ", padding) + borderStyle.Render("│")
 		contentRows = append(contentRows, row)
 	}

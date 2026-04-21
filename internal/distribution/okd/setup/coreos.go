@@ -68,8 +68,7 @@ func (p *Phase) findOrDownloadFCOSISO(ctx context.Context, cfg *config.Config, o
 			continue
 		}
 		if len(matches) > 0 {
-			slices.Sort(matches)
-			isoPath := matches[len(matches)-1]
+			isoPath := slices.Max(matches) // newest by lexicographic version
 			p.Log.Info(fmt.Sprintf("coreos: found existing iso at %s", filepath.Base(isoPath)))
 			return isoPath, nil
 		}

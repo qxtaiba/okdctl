@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"os"
 	"os/exec"
+	"slices"
 	"strings"
 
 	"github.com/qxtaiba/okdctl/internal/system"
@@ -98,7 +99,7 @@ func (m *Manager) Remove(ctx context.Context, packages []string, _ *slog.Logger)
 // I/O) propagate so callers don't treat a broken query backend as
 // "not installed".
 func (m *Manager) IsInstalled(ctx context.Context, pkg string) (bool, error) {
-	args := append(append([]string{}, m.queryArgs...), pkg)
+	args := slices.Concat(m.queryArgs, []string{pkg})
 	cmd := exec.CommandContext(ctx, m.queryCmd, args...) //nolint:gosec // queryCmd/queryArgs are set only from the literal constructors in NewPackageManager
 	output, err := cmd.Output()
 	if err != nil {
