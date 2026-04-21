@@ -64,22 +64,18 @@ ambitions found in the code.
 
 ## Sprint 1 — active work
 
-**Scope warning:** Sprint 1 currently contains ~40 items selected during
-triage. This is realistically 3–6 months of work at one engineer. Whoever
-picks this up should further sequence using the themes below. Recommended
-intra-sprint order: Theme A (urgent correctness) → Theme B (CLI surface) →
-Theme D (wizard) → Theme F (errors/types) → remaining themes in parallel.
+The 2026-04-18 Sprint 1 triage (~40 items across Themes A/B/D/E/F/G) has
+drained. Every N/M/U/L/D item from that triage is now Done, Deferred, or
+Skipped — see the Appendix ledger at the bottom of this file.
 
-### Theme A — urgent correctness bugs
+Remaining active work has migrated to the tiered structure under "Deferred
+— revisit next quarter" below, which groups findings by audit run rather
+than by theme. Recommended pickup order for the live tiers:
 
-### Theme B — CLI subcommand expansion
-
-Motto for this theme: "finish the last mile of the manager/fetcher
-scaffolding the internal code already holds."
-
-### Theme E — config ergonomics, rootless
-
-### Theme G — CI, tooling, distribution
+1. Tier F (docs, 2026-04-21 audit) — smallest, mostly minutes-to-hours.
+2. Tier E (architectural deferrals, 2026-04-20 audit) — E1–E6, days each.
+3. Tier G (full `/audit-all` findings, 2026-04-21) — triage by severity
+   (critical → major → minor → suggestion) before picking up.
 
 ## Addon category refactor — dedicated workstream
 
@@ -253,7 +249,7 @@ audit finding ID so diff tracking stays tight.
 
 #### E1 — Concurrent-run lock with stale-PID detection
 
-**Status:** not started
+**Status:** in review — PR #118
 **Audit:** `state:4c092fce:no-concurrent-run-guard`
 **Evidence:** `internal/infrastructure/terraform/terraform.go:119`
 **Problem:** Two concurrent `okdctl deploy` or `okdctl destroy` runs in
@@ -275,7 +271,7 @@ sudo-re-exec crossing).
 
 #### E2 — Ring-buffered / streamed executor output
 
-**Status:** not started
+**Status:** in review — PR #119
 **Audit:** `sub:7b2829bb:unbounded-output-buffer`,
 `sub:4c092fce:terraform-buffered-through-executor`
 **Evidence:** `internal/executor/executor.go:116`,
@@ -312,7 +308,7 @@ cert lifecycle, kargs templating, wizard.
 
 #### E4 — SSH/SCP host-key pinning for Proxmox
 
-**Status:** not started
+**Status:** in review — PR #117
 **Audit:** `sec:27088eab:ssh-accept-new-proxmox`,
 `sec:eb479d86:scp-accept-new-proxmox`
 **Evidence:** `internal/distribution/okd/phase/ssh.go:27`,
@@ -330,7 +326,7 @@ after the first successful handshake.
 
 #### E5 — Flux SSH known-hosts fingerprint pinning
 
-**Status:** not started
+**Status:** in review — PR #117
 **Audit:** `sec:98723e5d:ssh-keyscan-tofu`
 **Evidence:** `internal/addon/catalog/flux/flux.go:329`
 **Problem:** `createDeployKeySecret` runs `ssh-keyscan <host>` and
@@ -346,7 +342,7 @@ proceed.
 
 #### E6 — kube-vip probe TLS: use cluster CA once available
 
-**Status:** not started
+**Status:** in review — PR #117
 **Audit:** `sec:cfcdee2d:tls-insecure-vip-probe`
 **Evidence:** `internal/httputil/httputil.go:22`,
 `internal/distribution/okd/postinstall/haproxy.go:65`,
@@ -361,11 +357,6 @@ Keep `NewInsecure` only for the strict pre-install-config window (VIP
 not yet in cert SANs) and audit each remaining call site for
 reachability of the post-install CA.
 **Effort:** hours.
-
-### Tier D — dependency items from 2026-04-18 audit
-
-Filed as roadmap items so `/roadmap-pickup` can fan them out when
-bandwidth opens. Each references the audit finding ID for diff tracking.
 
 ### Tier G — findings from 2026-04-21 /audit-all run
 
