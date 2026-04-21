@@ -1,16 +1,7 @@
 // Package proxmox implements the Proxmox VE provider for OKD deployment.
-//
-// Typical lifecycle:
-//
-//	p := New(opts...)      // create provider with logger, env, project root
-//	p.Connect(ctx, cfg)    // validate config and record host/node (no network I/O)
-//	p.Provision(ctx, cfg, provOpts)  // init + plan + apply terraform, return VM IPs
-//	p.Disconnect(ctx)      // release resources, nil out executor
-//
-// Connect does not verify Proxmox reachability because authentication is
-// handled entirely via environment variables forwarded to terraform
-// (PROXMOX_VE_ENDPOINT, PROXMOX_VE_API_TOKEN, etc.). The provider has no
-// direct Proxmox HTTP client.
+// The Provider drives Connect/Provision/Disconnect over a Terraform
+// executor; authentication is handled entirely via environment variables
+// forwarded to terraform (PROXMOX_VE_ENDPOINT, PROXMOX_VE_API_TOKEN).
 package proxmox
 
 import (
