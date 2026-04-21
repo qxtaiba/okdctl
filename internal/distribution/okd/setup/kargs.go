@@ -38,6 +38,9 @@ func BuildDestKargs(params *LiveKargsParams) []string {
 	}
 }
 
+// ExtractNetworkConfig returns the networking kargs seed values derived
+// from cfg, applying the 255.255.255.0 / bastion-IP / "ens18" defaults
+// when unset.
 func ExtractNetworkConfig(cfg *config.Config) (gateway, netmask, dns, iface string) {
 	staticCfg := cfg.Networking.StaticIP
 

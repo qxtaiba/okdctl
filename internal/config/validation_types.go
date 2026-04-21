@@ -38,10 +38,12 @@ type ValidationResult struct {
 	Errors []ValidationError
 }
 
+// IsValid reports whether the result has no errors.
 func (r *ValidationResult) IsValid() bool {
 	return len(r.Errors) == 0
 }
 
+// AddError appends a ValidationError built from field/message.
 func (r *ValidationResult) AddError(field, message string) {
 	r.Errors = append(r.Errors, ValidationError{Field: field, Message: message})
 }
@@ -62,6 +64,9 @@ func (r *ValidationResult) Error() string {
 // set used during interactive editing.
 type ValidationScope uint64
 
+// Validation scope flags. Combine with bitwise-OR; ScopeAll enables
+// every validator, ScopeQuick runs the required/enum/networking set
+// used during interactive editing.
 const (
 	ScopeRequired ValidationScope = 1 << iota
 	ScopeNetworking
@@ -78,6 +83,7 @@ const (
 	ScopeQuick = ScopeRequired | ScopeEnums | ScopeNetworking
 )
 
+// HasScope reports whether s has flag set.
 func (s ValidationScope) HasScope(flag ValidationScope) bool {
 	return s&flag != 0
 }
@@ -129,6 +135,8 @@ func (cfg *Config) Validate(opts ...ValidationOptions) *ValidationResult {
 	return ValidateWithOptions(cfg, opts[0])
 }
 
+// ValidateWithOptions runs the validator set selected by opts.Scope and
+// returns the accumulated ValidationResult.
 func ValidateWithOptions(cfg *Config, opts ValidationOptions) *ValidationResult {
 	return runValidators(cfg, opts)
 }

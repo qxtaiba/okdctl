@@ -12,6 +12,7 @@ import (
 // Loader reads and writes cluster Config YAML files.
 type Loader struct{}
 
+// NewLoader returns a Loader suitable for reading okdctl YAML configs.
 func NewLoader() *Loader { return &Loader{} }
 
 // LoadFile parses the YAML config at path and returns the merged Config.

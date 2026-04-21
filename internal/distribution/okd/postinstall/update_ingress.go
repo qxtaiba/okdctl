@@ -14,6 +14,11 @@ import (
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
+// DefaultIngressLBTimeout caps how long update-ingress waits for the
+// ingress LB service to report a ready external IP. 10 minutes is the
+// empirical upper bound observed on kube-vip-managed deployments; the
+// conversion timeout is shorter because the delete-then-create cycle
+// doesn't wait for pods to schedule.
 const (
 	DefaultIngressLBTimeout  = 10 * time.Minute
 	defaultConversionTimeout = 5 * time.Minute
@@ -28,6 +33,8 @@ type UpdateIngressOptions struct {
 	ConfirmConversion func(hostNetworkICs []string) bool
 }
 
+// IngressEntry describes one IngressController observed (or converted)
+// during update-ingress.
 type IngressEntry struct {
 	Name        string
 	Domain      string
@@ -36,6 +43,7 @@ type IngressEntry struct {
 	HostNetwork bool
 }
 
+// UpdateIngressResult summarises the outcome of an update-ingress run.
 type UpdateIngressResult struct {
 	Entries        []IngressEntry
 	KubeVipIP      string

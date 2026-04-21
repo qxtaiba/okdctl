@@ -13,6 +13,8 @@ const osLinux = "linux"
 // verbatim so they must stay lowercase and syntactically valid.
 type ServiceAction string
 
+// ServiceActions passable to ManageService. Each maps to a systemctl
+// subcommand.
 const (
 	ServiceEnable  ServiceAction = "enable"
 	ServiceDisable ServiceAction = "disable"

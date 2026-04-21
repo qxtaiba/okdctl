@@ -82,6 +82,8 @@ func (p *Phase) GenerateInstallConfig(_ context.Context, cfg *config.Config, out
 	return nil
 }
 
+// GenerateManifests invokes "openshift-install create manifests" to expand
+// install-config.yaml into the full manifest set under clusterDir.
 func (p *Phase) GenerateManifests(ctx context.Context, clusterDir string) error {
 	_, err := p.Exec.RunChecked(ctx, "openshift-install", "create", "manifests", "--dir", clusterDir)
 	if err != nil {

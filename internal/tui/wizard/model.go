@@ -68,12 +68,16 @@ type Result struct {
 // Action names the user's choice at the wizard's terminal step.
 type Action string
 
+// Actions the user can pick at the wizard's terminal step.
 const (
 	ActionDeploy    Action = "deploy"
 	ActionPreflight Action = "preflight"
 	ActionExit      Action = "exit"
 )
 
+// KeyMap binds wizard-level actions to keystrokes. Per-step help is
+// contributed via the HelpProvider interface; global keys (Quit, Back)
+// always apply.
 type KeyMap struct {
 	Next     key.Binding
 	Back     key.Binding
@@ -137,6 +141,8 @@ func defaultKeyMap() KeyMap {
 	}
 }
 
+// NewModel constructs a wizard Model bound to cfg. steps must be
+// non-empty; the first step is focused and sized to the terminal.
 func NewModel(steps []WizardStep, cfg *config.Config) *Model {
 	w, h := getTerminalSize()
 
@@ -176,6 +182,7 @@ func getTerminalSize() (width, height int) {
 	return w, h
 }
 
+// Init implements tea.Model; it fires the first step's Init command.
 func (m *Model) Init() tea.Cmd {
 	var cmds []tea.Cmd
 
@@ -255,14 +262,19 @@ func stepAutoCompletes(step WizardStep) bool {
 	return false
 }
 
+// Result returns the wizard's terminal state. Valid only after tea.Quit.
 func (m *Model) Result() Result {
 	return m.result
 }
 
+// Config returns the live config being assembled. Steps mutate it in place
+// via their Apply hooks.
 func (m *Model) Config() *config.Config {
 	return m.config
 }
 
+// CurrentStep returns the step the user is interacting with now, or nil
+// if steps is empty or the cursor is out of range.
 func (m *Model) CurrentStep() WizardStep {
 	if len(m.steps) > 0 && m.currentStep < len(m.steps) {
 		return m.steps[m.currentStep]

@@ -19,6 +19,8 @@ type LogField struct {
 	Value any
 }
 
+// LF is the short-form constructor for a LogField. Prefer structured
+// attrs over fmt.Sprintf so RedactHandler can scrub secret-bearing values.
 func LF(key string, value any) LogField {
 	return LogField{Key: key, Value: value}
 }
@@ -65,10 +67,13 @@ func fieldsToArgs(fields []LogField) []any {
 // Records pass through logutil.RedactHandler via stderrSlog.
 func Debug(msg string, fields ...LogField) { stderrSlog.Debug(msg, fieldsToArgs(fields)...) }
 
+// Info logs at INFO through the RedactHandler-wrapped stderr slog.
 func Info(msg string, fields ...LogField) { stderrSlog.Info(msg, fieldsToArgs(fields)...) }
 
+// Warn logs at WARN through the RedactHandler-wrapped stderr slog.
 func Warn(msg string, fields ...LogField) { stderrSlog.Warn(msg, fieldsToArgs(fields)...) }
 
+// Error logs at ERROR through the RedactHandler-wrapped stderr slog.
 func Error(msg string, fields ...LogField) { stderrSlog.Error(msg, fieldsToArgs(fields)...) }
 
 // stderrHandler is a slog.Handler that writes every record to stderr.
@@ -158,6 +163,8 @@ func SetRunID(id string) {
 	stderrSlog = buildStderrSlog()
 }
 
+// RunID returns the correlation ID pinned by the most recent SetRunID
+// call, or "" before SetRunID is invoked.
 func RunID() string {
 	return runID
 }

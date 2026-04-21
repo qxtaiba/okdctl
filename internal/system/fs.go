@@ -11,6 +11,8 @@ import (
 	"syscall"
 )
 
+// FileExists reports whether path refers to an existing regular file
+// (returns false for directories).
 func FileExists(path string) bool {
 	info, err := os.Stat(path)
 	if err != nil {
@@ -19,6 +21,7 @@ func FileExists(path string) bool {
 	return !info.IsDir()
 }
 
+// DirExists reports whether path refers to an existing directory.
 func DirExists(path string) bool {
 	info, err := os.Stat(path)
 	if err != nil {
@@ -32,6 +35,8 @@ func EnsureDir(path string) error {
 	return os.MkdirAll(path, 0o755)
 }
 
+// EnsureDirForFile creates the parent directory of filePath, including any
+// missing intermediate directories, with mode 0o755.
 func EnsureDirForFile(filePath string) error {
 	dir := filepath.Dir(filePath)
 	return EnsureDir(dir)
@@ -232,6 +237,8 @@ func fsyncDir(dir string) error {
 	return closeErr
 }
 
+// AtomicWriteString is a string-typed convenience wrapper around
+// AtomicWrite; the fsync + rename invariants are the same.
 func AtomicWriteString(path, content string, perm os.FileMode) error {
 	return AtomicWrite(path, []byte(content), perm)
 }

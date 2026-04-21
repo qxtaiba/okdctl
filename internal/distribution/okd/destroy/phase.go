@@ -49,10 +49,14 @@ func NewOptions(cfg *config.Config, projectRoot string) Options {
 	}
 }
 
+// Phase drives the destroy flow: terraform destroy, host-file cleanup,
+// firewall teardown, and ISO removal.
 type Phase struct {
 	phase.BasePhase
 }
 
+// New constructs a destroy Phase bound to exec/logger and the okdctl
+// version tag.
 func New(exec *executor.Executor, logger *slog.Logger, version string) *Phase {
 	return &Phase{
 		BasePhase: phase.NewBasePhase(version, phase.WithExecutor(exec), phase.WithLogger(logger)),
