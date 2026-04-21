@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/usr/bin/env bash
 # okdctl installer
 # ---------------------
 # Downloads the latest (or a pinned) okdctl release from GitHub,
@@ -16,12 +16,7 @@
 #
 # Requires: curl, tar, sha256sum. Optionally: cosign (highly recommended).
 
-set -eu
-# pipefail is POSIX-optional but supported by bash/ash/dash 0.5.8+. Enable
-# when available so a failure in any pipe stage (curl | sed, sha | awk)
-# propagates instead of silently producing empty output.
-# shellcheck disable=SC3040
-(set -o pipefail 2>/dev/null) && set -o pipefail
+set -euo pipefail
 
 REPO="qxtaiba/okdctl"
 BINARY="okdctl"

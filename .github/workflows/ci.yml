@@ -101,12 +101,12 @@ jobs:
       - uses: terraform-linters/setup-tflint@b480b8fcdaa6f2c577f8e4fa799e89e756bb7c93 # v6.2.2
       - working-directory: infrastructure/terraform/modules/proxmox-okd
         run: |
-          tflint --init
-          tflint -f compact
+          tflint --init --config="${GITHUB_WORKSPACE}/infrastructure/terraform/.tflint.hcl"
+          tflint -f compact --config="${GITHUB_WORKSPACE}/infrastructure/terraform/.tflint.hcl"
       - working-directory: infrastructure/terraform/environments/production
         run: |
-          tflint --init
-          tflint -f compact
+          tflint --init --config="${GITHUB_WORKSPACE}/infrastructure/terraform/.tflint.hcl"
+          tflint -f compact --config="${GITHUB_WORKSPACE}/infrastructure/terraform/.tflint.hcl"
   # Shell
   lint-shell:
     runs-on: ubuntu-latest
