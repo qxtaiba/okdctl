@@ -157,16 +157,29 @@ func (p *Provisioner) UpdateIngress(ctx context.Context, cfg *config.Config, opt
 	return postPhase.UpdateIngress(ctx, cfg, opts)
 }
 
-// Destroy tears down the cluster and its infrastructure. removePackages=true
-// also uninstalls host packages (haproxy, dnsmasq, httpd); keepISOs=true
-// preserves uploaded FCOS ISOs so a subsequent install can skip the upload.
-func (p *Provisioner) Destroy(ctx context.Context, cfg *config.Config, removePackages, keepISOs bool) ([]distribution.StepResult, error) {
+// DestroyOpts configures a Provisioner.Destroy run. Zero-value runs a
+// full teardown; Skip* flags carve out individual steps so operators
+// can retry a partial run (e.g. SkipTerraform=true to re-run just the
+// file cleanup after a successful terraform destroy).
+type DestroyOpts struct {
+	RemovePackages bool
+	KeepISOs       bool
+	SkipTerraform  bool
+	SkipCleanup    bool
+	SkipFirewall   bool
+}
+
+// Destroy tears down the cluster and its infrastructure.
+func (p *Provisioner) Destroy(ctx context.Context, cfg *config.Config, opts DestroyOpts) ([]distribution.StepResult, error) {
 	destroyPhase := destroy.New(p.executor, p.logger, p.version)
 	destroyOpts := destroy.NewOptions(cfg, p.projectRoot)
 	destroyOpts.AutoApprove = true
 	destroyOpts.Force = true
-	destroyOpts.RemovePackages = removePackages
-	destroyOpts.KeepISOs = keepISOs
+	destroyOpts.RemovePackages = opts.RemovePackages
+	destroyOpts.KeepISOs = opts.KeepISOs
+	destroyOpts.SkipTerraform = opts.SkipTerraform
+	destroyOpts.SkipCleanup = opts.SkipCleanup
+	destroyOpts.SkipFirewall = opts.SkipFirewall
 
 	return destroyPhase.Execute(ctx, cfg, &destroyOpts)
 }

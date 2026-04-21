@@ -11,6 +11,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/distribution/okd"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/infrastructure/terraform"
@@ -23,6 +24,9 @@ var (
 	destroyKeepISOs       bool
 	destroyDryRun         bool
 	destroyConfirmCluster string
+	destroySkipTerraform  bool
+	destroySkipCleanup    bool
+	destroySkipFirewall   bool
 )
 
 var destroyCmd = &cobra.Command{
@@ -50,6 +54,9 @@ func init() {
 	destroyCmd.Flags().BoolVar(&destroyDryRun, "dry-run", false, "preview terraform destroy plan without running destroy")
 	destroyCmd.Flags().StringVar(&destroyConfirmCluster, "confirm-cluster", "",
 		"required with --yes; must equal cfg.Cluster.Name (typo guard for scripted destroys)")
+	destroyCmd.Flags().BoolVar(&destroySkipTerraform, "skip-terraform", false, "skip terraform destroy (resume from file cleanup)")
+	destroyCmd.Flags().BoolVar(&destroySkipCleanup, "skip-cleanup", false, "skip host file cleanup (leaves haproxy/dnsmasq config in place)")
+	destroyCmd.Flags().BoolVar(&destroySkipFirewall, "skip-firewall", false, "skip firewall rule cleanup")
 }
 
 func runDestroy(cmd *cobra.Command, _ []string) error {
@@ -119,7 +126,13 @@ func runDestroy(cmd *cobra.Command, _ []string) error {
 	tui.Info("destroying cluster...")
 	startTime := time.Now()
 
-	steps, err := p.Destroy(ctx, cfg, true, destroyKeepISOs)
+	steps, err := p.Destroy(ctx, cfg, okd.DestroyOpts{
+		RemovePackages: true,
+		KeepISOs:       destroyKeepISOs,
+		SkipTerraform:  destroySkipTerraform,
+		SkipCleanup:    destroySkipCleanup,
+		SkipFirewall:   destroySkipFirewall,
+	})
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
 			fmt.Println(InterruptSummary(steps, "okdctl destroy", tui.RunID()))
