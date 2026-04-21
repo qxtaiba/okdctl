@@ -127,6 +127,7 @@ func (o *Orchestrator) executeStep(ctx context.Context, step ProvisioningStep) S
 	}
 
 	o.rec.StepStarted(step.ID())
+	o.logger.Info("step: started", "step", step.ID(), "name", step.Name())
 	step.OnStart()
 
 	if err := step.Execute(ctx); err != nil {
@@ -138,6 +139,7 @@ func (o *Orchestrator) executeStep(ctx context.Context, step ProvisioningStep) S
 			StartedAt: startedAt,
 			Duration:  time.Since(startedAt),
 		}
+		o.logger.Info("step: completed", "step", step.ID(), "duration", r.Duration, "success", false)
 		o.rec.StepFinished(&r)
 		return r
 	}
@@ -149,6 +151,7 @@ func (o *Orchestrator) executeStep(ctx context.Context, step ProvisioningStep) S
 		StartedAt: startedAt,
 		Duration:  time.Since(startedAt),
 	}
+	o.logger.Info("step: completed", "step", step.ID(), "duration", r.Duration, "success", true)
 	o.rec.StepFinished(&r)
 	return r
 }

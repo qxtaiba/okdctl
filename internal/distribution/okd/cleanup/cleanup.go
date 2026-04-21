@@ -48,7 +48,7 @@ func (opts *Options) getLogger() *slog.Logger {
 // failures are accumulated and returned as a joined error; a partial run
 // still attempts the remaining steps.
 func Execute(ctx context.Context, opts *Options) error {
-	logger := opts.getLogger()
+	logger := opts.getLogger().With("phase", "cleanup")
 	var errs []error
 
 	switch opts.Kind {

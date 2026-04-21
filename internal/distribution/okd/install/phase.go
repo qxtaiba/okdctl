@@ -15,6 +15,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/executor"
 	"github.com/qxtaiba/okdctl/internal/infrastructure/proxmox"
+	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
@@ -86,8 +87,9 @@ type Phase struct {
 // New constructs an install Phase bound to exec/logger and the okdctl
 // version tag.
 func New(exec *executor.Executor, logger *slog.Logger, version string) *Phase {
+	phaseLogger := logutil.OrNop(logger).With("phase", "install")
 	return &Phase{
-		BasePhase: phase.NewBasePhase(version, phase.WithExecutor(exec), phase.WithLogger(logger)),
+		BasePhase: phase.NewBasePhase(version, phase.WithExecutor(exec), phase.WithLogger(phaseLogger)),
 	}
 }
 

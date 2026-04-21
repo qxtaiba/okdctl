@@ -32,7 +32,7 @@ func (p *Phase) destroySteps(cfg *config.Config, opts *Options) []distribution.S
 	track := func(label string) func(err error) {
 		return func(err error) {
 			failures = append(failures, label)
-			phase.WarnOnError(p.Log, label+": "+err.Error())(err)
+			phase.WarnOnError(p.Log, label)(err)
 		}
 	}
 	return []distribution.StepDef{

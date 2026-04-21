@@ -82,9 +82,10 @@ type NodeInfo struct {
 // ignition upload, and bastion service configuration.
 type Phase struct {
 	phase.BasePhase
-	OS     platform.OS
-	Pkg    platform.PackageManager
-	BinDir string
+	OS         platform.OS
+	Pkg        platform.PackageManager
+	BinDir     string
+	loggedISOs map[string]bool
 }
 
 // New constructs a setup Phase with the given executor, logger, and okdctl

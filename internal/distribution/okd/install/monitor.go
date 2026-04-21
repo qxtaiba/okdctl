@@ -93,6 +93,10 @@ func (p *Phase) MonitorInstallation(ctx context.Context, clusterDir string, opts
 	defer ticker.Stop()
 
 	totalApproved := 0
+	// Dedup identical consecutive tick errors: Warn once, then Debug the
+	// repeats so a 60-minute install doesn't spam the log with the same
+	// transient approve-check failure.
+	var lastCSRWarnMsg string
 
 	for {
 		select {
@@ -113,13 +117,21 @@ func (p *Phase) MonitorInstallation(ctx context.Context, clusterDir string, opts
 			}
 			totalApproved += approved
 
-			p.Log.Info(fmt.Sprintf("install: completed successfully - approved %d csrs total", totalApproved))
+			p.Log.Info("install: completed successfully", "csrs_approved", totalApproved)
 			return nil
 
 		case <-ticker.C:
 			approved, err := k8sClient.ApprovePendingCSRs(ctx)
 			if err != nil {
-				p.Log.Warn("csr: approval check failed", "err", err)
+				msg := err.Error()
+				if msg != lastCSRWarnMsg {
+					p.Log.Warn("csr: approval check failed", "err", err)
+					lastCSRWarnMsg = msg
+				} else {
+					p.Log.Debug("csr: approval check failed (repeated)", "err", err)
+				}
+			} else {
+				lastCSRWarnMsg = ""
 			}
 			if approved > 0 {
 				totalApproved += approved
