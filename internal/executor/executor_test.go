@@ -123,7 +123,7 @@ func TestAllowlist_ExactAndPrefix(t *testing.T) {
 		{"", false},
 	}
 	for _, tc := range cases {
-		got := defaultEnvAllowlist.allows(tc.key)
+		got := DefaultEnvAllowlist.allows(tc.key)
 		if got != tc.want {
 			t.Errorf("allows(%q) = %v; want %v", tc.key, got, tc.want)
 		}

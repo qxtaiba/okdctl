@@ -28,7 +28,9 @@ const (
 func (p *Phase) ensureIgnitionDir(_ context.Context, webRoot string) (string, error) {
 	ignitionDir := filepath.Join(webRoot, "ignition")
 
-	if err := os.MkdirAll(ignitionDir, 0o755); err != nil {
+	// 0o750: apache user owns and reads; local non-apache users cannot read
+	// ignition files which embed the cluster pull-secret.
+	if err := os.MkdirAll(ignitionDir, 0o750); err != nil {
 		return "", &errtypes.ConfigError{Msg: "failed to create ignition directory", Err: err}
 	}
 
@@ -36,8 +38,7 @@ func (p *Phase) ensureIgnitionDir(_ context.Context, webRoot string) (string, er
 	if err := system.ChownByName(ignitionDir, apacheUser+":"+apacheUser); err != nil {
 		p.Log.Warn("apache: failed to set ignition dir ownership", "err", err)
 	}
-	// Explicit chmod in case ignitionDir pre-existed with narrower perms.
-	if err := os.Chmod(ignitionDir, 0o755); err != nil {
+	if err := os.Chmod(ignitionDir, 0o750); err != nil {
 		p.Log.Warn("apache: failed to set ignition dir permissions", "err", err)
 	}
 
@@ -179,12 +180,9 @@ func (p *Phase) DeployToWebServer(ctx context.Context, cfg *config.Config, clust
 		}
 
 		destPath := filepath.Join(ignitionDir, file)
-		if err := system.CopyFile(srcPath, destPath); err != nil {
+		// 0o640: apache group readable only; ignition files carry pullSecret.
+		if err := system.CopyFileMode(srcPath, destPath, 0o640); err != nil {
 			return &errtypes.ConfigError{Msg: fmt.Sprintf("failed to copy %s", file), Err: err}
-		}
-
-		if err := os.Chmod(destPath, 0o644); err != nil {
-			return &errtypes.ConfigError{Msg: fmt.Sprintf("failed to set permissions on %s", file), Err: err}
 		}
 	}
 

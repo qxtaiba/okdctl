@@ -261,6 +261,16 @@ func isSopsEncrypted(path string) bool {
 
 func readSecret(ctx context.Context, env *addon.Environment, path string) (string, error) {
 	if !isSopsEncrypted(path) {
+		// Refuse plaintext secret files that any other user can read —
+		// mirrors the check in internal/credentials/envfile.go:loadEnvFileOnce.
+		fi, err := os.Stat(path)
+		if err != nil {
+			return "", err
+		}
+		if perm := fi.Mode().Perm(); perm&0o077 != 0 {
+			return "", fmt.Errorf("secret file %s has insecure permissions %#o; run 'chmod 600 %s' to fix",
+				filepath.Base(path), perm, path)
+		}
 		env.Logger.Info(fmt.Sprintf("secretstore: reading plaintext file %s", filepath.Base(path)))
 		data, err := os.ReadFile(path)
 		if err != nil {
