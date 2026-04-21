@@ -75,11 +75,15 @@ func (r *Recorder) DeployFinished(total time.Duration) {
 func (r *Recorder) Handler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; version=0.0.4")
+		// Snapshot under lock, write outside: holding mu across net I/O
+		// blocks every StepStarted/StepFinished call in the deploy path
+		// on a slow scraper.
 		r.mu.Lock()
-		defer r.mu.Unlock()
 		var b strings.Builder
 		r.writeMetrics(&b)
-		fmt.Fprint(w, b.String())
+		out := b.String()
+		r.mu.Unlock()
+		fmt.Fprint(w, out)
 	})
 }
 

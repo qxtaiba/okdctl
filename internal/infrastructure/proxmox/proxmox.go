@@ -144,6 +144,7 @@ func (p *Provider) Provision(ctx context.Context, cfg *config.Config, opts Provi
 	if err := p.terraformExec.Plan(ctx, planOpts); err != nil {
 		return nil, fmt.Errorf("terraform plan failed: %w", err)
 	}
+	defer func() { _ = p.terraformExec.Cleanup() }()
 
 	totalNodes := 1 + cfg.Topology.ControlPlane.Count + cfg.Topology.Workers.Count
 	p.logger.Info("terraform: plan will create virtual machines", "count", totalNodes)
