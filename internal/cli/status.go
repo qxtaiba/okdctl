@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"path/filepath"
+	"slices"
 	"strings"
 	"text/tabwriter"
 
@@ -72,26 +73,25 @@ type statusNodeList struct {
 	Items []statusNode `json:"items"`
 }
 
+type statusCondition struct {
+	Type   phase.ConditionType   `json:"type"`
+	Status phase.ConditionStatus `json:"status"`
+}
+
 type statusNode struct {
 	Metadata struct {
 		Name   string            `json:"name"`
 		Labels map[string]string `json:"labels"`
 	} `json:"metadata"`
 	Status struct {
-		Conditions []struct {
-			Type   phase.ConditionType   `json:"type"`
-			Status phase.ConditionStatus `json:"status"`
-		} `json:"conditions"`
+		Conditions []statusCondition `json:"conditions"`
 	} `json:"status"`
 }
 
 func (n *statusNode) isReady() bool {
-	for _, c := range n.Status.Conditions {
-		if c.Type == phase.ConditionTypeReady && c.Status == phase.ConditionStatusTrue {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(n.Status.Conditions, func(c statusCondition) bool {
+		return c.Type == phase.ConditionTypeReady && c.Status == phase.ConditionStatusTrue
+	})
 }
 
 func (n *statusNode) role() string {
