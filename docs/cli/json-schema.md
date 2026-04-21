@@ -15,10 +15,11 @@ Top-level cluster snapshot.
 
 ```json
 {
-  "cluster_name": "homelab",
-  "version": "4.21.0",
-  "ready_nodes": 4,
-  "total_nodes": 4,
+  "api_reachable": true,
+  "nodes": [
+    {"name": "master-0", "role": "master", "ready": true},
+    {"name": "worker-0", "role": "worker", "ready": true}
+  ],
   "degraded_operators": 0,
   "addons": [
     {"name": "flux", "healthy": true},
@@ -29,56 +30,67 @@ Top-level cluster snapshot.
 
 | Field | Type | Notes |
 |---|---|---|
-| `cluster_name` | string | from configuration |
-| `version` | string | OKD release version reported by the cluster |
-| `ready_nodes` | int | nodes whose `Ready` condition is `True` |
-| `total_nodes` | int | total nodes in the cluster |
+| `api_reachable` | bool | `true` when `kube-apiserver /healthz` returns 200 |
+| `nodes[].name` | string | node name from `kubectl get nodes` |
+| `nodes[].role` | string | `master`, `worker`, or `unknown` |
+| `nodes[].ready` | bool | node's `Ready` condition is `True` |
 | `degraded_operators` | int | cluster-operators with `Degraded=True` |
 | `addons[].name` | string | registered addon name |
-| `addons[].healthy` | bool | true when verify returned no error |
+| `addons[].healthy` | bool | `true` when verify returned no error |
 | `addons[].error` | string | present only when `healthy=false` |
 
 ## `okdctl releases list --format=json`
 
-Catalog of OKD releases grouped by minor series.
+Flat array of OKD releases (newest first). The CLI's human-readable mode
+groups by minor series, but the JSON mode intentionally flattens for simple
+`jq`-style filtering.
 
 ```json
-{
-  "series": [
-    {
-      "minor": "4.21",
-      "latest": {"version": "4.21.3", "tag": "4.21.0-okd-scos.0", "stable": true, "release_date": "2026-04-12T15:00:00Z"},
-      "versions": [
-        {"version": "4.21.3", "tag": "4.21.3-okd-scos.0", "stable": true, "release_date": "2026-04-12T15:00:00Z", "latest": true},
-        {"version": "4.21.2", "tag": "4.21.2-okd-scos.0", "stable": true, "release_date": "2026-03-08T11:00:00Z"}
-      ]
-    }
-  ]
-}
+[
+  {
+    "version": "4.21.3",
+    "tag": "4.21.3-okd-scos.0",
+    "release_date": "2026-04-12T15:00:00Z",
+    "stable": true,
+    "latest": true,
+    "release_type": "stable"
+  },
+  {
+    "version": "4.21.2",
+    "tag": "4.21.2-okd-scos.0",
+    "release_date": "2026-03-08T11:00:00Z",
+    "stable": true,
+    "latest": false,
+    "release_type": "stable"
+  }
+]
 ```
 
 | Field | Type | Notes |
 |---|---|---|
-| `series[].minor` | string | major.minor identifier (e.g. `4.21`) |
-| `series[].latest` | object | newest stable release within the series |
-| `series[].versions[].version` | string | semver-shaped release version |
-| `series[].versions[].tag` | string | upstream Git tag |
-| `series[].versions[].stable` | bool | true for GA releases; false for previews |
-| `series[].versions[].release_date` | RFC3339 string | upstream `published_at` |
-| `series[].versions[].latest` | bool | present (and true) only on the newest stable in the series |
+| `version` | string | semver-shaped release version |
+| `tag` | string | upstream Git tag |
+| `release_date` | RFC3339 string | upstream `published_at` |
+| `stable` | bool | `true` for GA releases, `false` for previews |
+| `latest` | bool | `true` only for the newest stable in its minor series |
+| `release_type` | string | `stable`, `prerelease`, or similar display classification |
+
+When invoked with `--channel stable` (the default), only `stable=true`
+releases appear. Use `--channel all` to include prereleases.
 
 ## `okdctl releases show <version> --format=json`
 
-Single release detail.
+Single release detail — same `OKDVersion` shape as an element of
+`releases list`.
 
 ```json
 {
   "version": "4.21.3",
   "tag": "4.21.3-okd-scos.0",
-  "stable": true,
   "release_date": "2026-04-12T15:00:00Z",
-  "minor": "4.21",
-  "short_version": "4.21"
+  "stable": true,
+  "latest": true,
+  "release_type": "stable"
 }
 ```
 
@@ -103,6 +115,10 @@ Single release detail.
   "health": "healthy"
 }
 ```
+
+> Note: `display-name` uses a hyphen for historical reasons. Other fields in
+> this schema use snake_case; consumers piping between commands may need to
+> normalize.
 
 ## Conventions
 

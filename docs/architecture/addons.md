@@ -138,7 +138,7 @@ Most addons install into their own namespace (`flux-system`,
 creates the namespace idempotently. Similar helpers live in
 `internal/addon/helpers.go`:
 
-- `addon.BuildOpaqueSecret(name, namespace, data)` — canonical k8s
+- `addon.BuildOpaqueSecret(namespace, name, data)` — canonical k8s
   Opaque Secret manifest builder for addons
 - `addon.EnsureNamespace(ctx, env, name)` — idempotent namespace
   creation with retries

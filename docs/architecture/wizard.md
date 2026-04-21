@@ -36,7 +36,7 @@ The wizard package lives under `internal/tui/wizard/`:
 Each step's file declares a single `StepDefinition` literal plus its
 helper validators. Adding a new step is mostly additive: create the
 file, register the step in the wizard assembly in
-`internal/tui/wizard/wizard.go`, and you're done.
+`internal/tui/wizard/builder.go`, and you're done.
 
 ## FieldDefinition: the smallest unit
 

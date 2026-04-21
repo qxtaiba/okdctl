@@ -206,7 +206,7 @@ example to method docs on `Connect`/`Provision`/`Disconnect`.
 
 #### F3 — Regenerate docs/cli/okdctl_destroy.md
 
-**Status:** not started
+**Status:** done — 2026-04-21 (WIP, pre-commit)
 **Audit:** `doc:54654337:destroy-cli-ref-stale`
 **Evidence:** `docs/cli/okdctl_destroy.md:26-32`.
 **Problem:** The generated CLI reference is missing the three
@@ -219,7 +219,7 @@ skipping that step when landing afa579b.
 
 #### F4 — Fix BuildOpaqueSecret arg-order doc drift
 
-**Status:** not started
+**Status:** done — 2026-04-21 (WIP, pre-commit)
 **Audit:** `doc:66cb1c69:addons-buildopaquesecret-sig`
 **Evidence:** `docs/architecture/addons.md:141-142` vs
 `internal/addon/helpers.go:46`.
@@ -234,7 +234,7 @@ fix the doc, not the API.
 
 #### F5 — Fix wizard-registration doc stale path
 
-**Status:** not started
+**Status:** done — 2026-04-21 (WIP, pre-commit)
 **Audit:** `doc:70b3bae2:wizard-registration-stale`
 **Evidence:** `docs/architecture/wizard.md:38-39`.
 **Problem:** Doc tells step authors to register in
@@ -523,7 +523,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `ux:024a2c32:json-schema-doc-drift` — json schema doc drift
 
-**Status:** not started  
+**Status:** done — 2026-04-21 (WIP, pre-commit) — docs/cli/json-schema.md rewritten to match actual marshaled shapes; golden-test deferral tracked via audit-tests gap entry  
 **Severity:** major  
 **Evidence:** `docs/cli/json-schema.md:12-67`  
 **Problem:** docs/cli/json-schema.md documents field shapes that do not match what the code emits. `okdctl status --format=json` is documented with cluster_name/version/ready_nodes/total_nodes but emits api_reachable/nodes/degraded_operators/addons.  
@@ -532,7 +532,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `ux:54654337:readme-flag-drift` — readme flag drift
 
-**Status:** not started  
+**Status:** done — 2026-04-21 (WIP, pre-commit) — `make docs` regenerated docs/cli/okdctl_destroy.md with the three skip-* flags  
 **Severity:** minor  
 **Evidence:** `docs/cli/okdctl_destroy.md:26-33`  
 **Problem:** Generated CLI reference for `okdctl destroy` is stale: commit afsd79b added --skip-terraform, --skip-cleanup, --skip-firewall to destroy.go, but docs/cli/okdctl_destroy.md still lists only --confirm-cluster, --dry-run, -h/--help, --keep-isos, -y/--yes. CI's docs-drift check (.github/workflows/ci.yml: `git diff --quiet docs/cli/`) would fail on this state.  

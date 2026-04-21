@@ -16,18 +16,21 @@ okdctl destroy [flags]
 ### Examples
 
 ```
-  okdctl destroy
-  okdctl destroy --yes
+  okdctl destroy                              # interactive prompt
+  okdctl destroy --yes --confirm-cluster=prod # scripted destroy
   okdctl destroy --dry-run
 ```
 
 ### Options
 
 ```
-      --confirm-cluster string   name of the cluster being destroyed; required with --yes to guard against typos in scripted destroys
+      --confirm-cluster string   required with --yes; must equal cfg.Cluster.Name (typo guard for scripted destroys)
       --dry-run                  preview terraform destroy plan without running destroy
   -h, --help                     help for destroy
       --keep-isos                do not remove the FCOS ISO from the Proxmox host
+      --skip-cleanup             skip host file cleanup — leaves haproxy/dnsmasq config in place (no-op with --dry-run)
+      --skip-firewall            skip firewall rule cleanup (no-op with --dry-run)
+      --skip-terraform           skip terraform destroy — intended for resuming after a successful terraform-destroy phase (no-op with --dry-run)
   -y, --yes                      skip confirmation prompt
 ```
 
