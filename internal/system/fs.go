@@ -221,9 +221,7 @@ func AtomicWrite(path string, data []byte, perm os.FileMode) error {
 }
 
 // fsyncDir opens dir read-only and calls fsync so the directory inode
-// update (from a rename) is durable. On non-Unix platforms where
-// O_RDONLY of a directory is rejected, callers still get a best-effort
-// (the pre-rename file contents are durable from the earlier tmpFile.Sync).
+// update from a rename is crash-durable.
 func fsyncDir(dir string) error {
 	f, err := os.OpenFile(dir, os.O_RDONLY|syscall.O_DIRECTORY, 0)
 	if err != nil {

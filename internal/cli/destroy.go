@@ -54,9 +54,9 @@ func init() {
 	destroyCmd.Flags().BoolVar(&destroyDryRun, "dry-run", false, "preview terraform destroy plan without running destroy")
 	destroyCmd.Flags().StringVar(&destroyConfirmCluster, "confirm-cluster", "",
 		"required with --yes; must equal cfg.Cluster.Name (typo guard for scripted destroys)")
-	destroyCmd.Flags().BoolVar(&destroySkipTerraform, "skip-terraform", false, "skip terraform destroy (resume from file cleanup)")
-	destroyCmd.Flags().BoolVar(&destroySkipCleanup, "skip-cleanup", false, "skip host file cleanup (leaves haproxy/dnsmasq config in place)")
-	destroyCmd.Flags().BoolVar(&destroySkipFirewall, "skip-firewall", false, "skip firewall rule cleanup")
+	destroyCmd.Flags().BoolVar(&destroySkipTerraform, "skip-terraform", false, "skip terraform destroy — intended for resuming after a successful terraform-destroy phase (no-op with --dry-run)")
+	destroyCmd.Flags().BoolVar(&destroySkipCleanup, "skip-cleanup", false, "skip host file cleanup — leaves haproxy/dnsmasq config in place (no-op with --dry-run)")
+	destroyCmd.Flags().BoolVar(&destroySkipFirewall, "skip-firewall", false, "skip firewall rule cleanup (no-op with --dry-run)")
 }
 
 func runDestroy(cmd *cobra.Command, _ []string) error {
