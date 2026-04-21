@@ -107,9 +107,13 @@ func (c *ProxmoxCredentials) GoString() string {
 }
 
 // Env returns credential env vars for subprocess execution, avoiding
-// modification of the global process environment. The returned strings
-// contain the secret bytes — they are copies, and the original byte
-// slices remain wipeable via Zeroize.
+// modification of the global process environment.
+//
+// os/exec requires []string for cmd.Env, so each secret byte slice is
+// converted to an immutable Go string that Zeroize cannot overwrite.
+// Callers MUST not retain the returned slice beyond the cmd.Run (or
+// equivalent) call — pass it directly to WithEnv and let it go out of
+// scope. The source []byte fields remain wipeable via Zeroize.
 func (c *ProxmoxCredentials) Env() []string {
 	if !c.IsValid() {
 		return nil
@@ -206,26 +210,10 @@ func GetProxmoxCredentials(cfg *config.Config) *ProxmoxCredentials {
 		return creds
 	}
 
-	// Priority 2: Config file fields (legacy support).
-	// When APIToken already carries the "tokenid=secret" concatenation,
-	// TokenID is ignored to avoid "tokenid=tokenid=secret". Otherwise,
-	// if TokenID is populated separately, compose it here.
-	if px.APIToken != "" {
-		token := px.APIToken
-		if px.TokenID != "" && !strings.Contains(px.APIToken, "=") {
-			token = px.TokenID + "=" + px.APIToken
-		}
-		creds.APIToken = []byte(token)
-		creds.Source = SourceConfig
-		return creds
-	}
-
-	if px.Username != "" && px.Password != "" {
-		creds.Username = px.Username
-		creds.Password = []byte(px.Password)
-		creds.Source = SourceConfig
-		return creds
-	}
-
+	// Config-file credentials are NO LONGER a fallback. The okdctl design is
+	// env/.env-only so string residue of px.Password / px.APIToken does not
+	// linger in heap for the Config's lifetime. configHasCredentials still
+	// reads the fields to set ConfigCredentialsOverridden (a provenance flag,
+	// not a credential copy).
 	return creds
 }

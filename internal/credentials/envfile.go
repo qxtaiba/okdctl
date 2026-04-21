@@ -1,6 +1,7 @@
 package credentials
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"strings"
@@ -39,32 +40,48 @@ func EnvFilePath(configPath string) string {
 
 // WriteEnvFile persists credentials in KEY=VALUE format compatible with
 // standard .env tooling, with 0600 permissions.
+//
+// Content is built via bytes.Buffer so the credential bytes are appended
+// directly without creating an intermediate immutable string copy. The
+// buffer is zeroed after AtomicWrite returns so the in-memory residue
+// doesn't outlive the write.
 func WriteEnvFile(path string, creds *ProxmoxCredentials) error {
-	lines := []string{
-		"# Proxmox credentials (managed by okdctl)",
-		"# This file has restricted permissions (0600). Do not commit to git.",
-	}
+	var buf bytes.Buffer
+	buf.WriteString("# Proxmox credentials (managed by okdctl)\n")
+	buf.WriteString("# This file has restricted permissions (0600). Do not commit to git.\n")
 
 	if creds.Endpoint != "" {
-		lines = append(lines, "PROXMOX_VE_ENDPOINT="+creds.Endpoint)
+		buf.WriteString("PROXMOX_VE_ENDPOINT=")
+		buf.WriteString(creds.Endpoint)
+		buf.WriteByte('\n')
 	}
 	if creds.Username != "" {
-		lines = append(lines, "PROXMOX_VE_USERNAME="+creds.Username)
+		buf.WriteString("PROXMOX_VE_USERNAME=")
+		buf.WriteString(creds.Username)
+		buf.WriteByte('\n')
 	}
 	if len(creds.Password) > 0 {
-		// On-disk .env format is plain text — string() conversion here is
-		// unavoidable. The in-memory []byte can still be wiped via Zeroize.
-		lines = append(lines, "PROXMOX_VE_PASSWORD="+string(creds.Password))
+		buf.WriteString("PROXMOX_VE_PASSWORD=")
+		buf.Write(creds.Password)
+		buf.WriteByte('\n')
 	}
 	if len(creds.APIToken) > 0 {
-		lines = append(lines, "PROXMOX_VE_API_TOKEN="+string(creds.APIToken))
+		buf.WriteString("PROXMOX_VE_API_TOKEN=")
+		buf.Write(creds.APIToken)
+		buf.WriteByte('\n')
 	}
 	if creds.Insecure {
-		lines = append(lines, "PROXMOX_VE_INSECURE=true")
+		buf.WriteString("PROXMOX_VE_INSECURE=true\n")
 	}
 
-	content := strings.Join(lines, "\n") + "\n"
-	return system.AtomicWrite(path, []byte(content), 0o600)
+	data := buf.Bytes()
+	err := system.AtomicWrite(path, data, 0o600)
+	// Zero the buffer's backing store so the credential bytes don't
+	// linger after the file write completes.
+	for i := range data {
+		data[i] = 0
+	}
+	return err
 }
 
 // LoadEnvFile loads a .env file into the process environment.

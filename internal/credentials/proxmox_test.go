@@ -246,31 +246,20 @@ func TestGetProxmoxCredentials(t *testing.T) {
 		}
 	})
 
-	t.Run("config fallback: api token", func(t *testing.T) {
+	t.Run("no env creds returns SourceNone even when config has credentials", func(t *testing.T) {
 		clearProxmoxEnv(t)
 		cfg := cfgWithHost()
 		cfg.Provider.Proxmox.APIToken = "cfg-token"
+		cfg.Provider.Proxmox.Password = "cfg-pw"
+		cfg.Provider.Proxmox.Username = "cfg-user"
 
 		creds := GetProxmoxCredentials(cfg)
 
-		if creds.Source != SourceConfig {
-			t.Errorf("Source = %v, want SourceConfig", creds.Source)
+		if creds.Source != SourceNone {
+			t.Errorf("Source = %v, want SourceNone (config-file fallback removed)", creds.Source)
 		}
-		if string(creds.APIToken) != "cfg-token" {
-			t.Errorf("APIToken = %q", creds.APIToken)
-		}
-	})
-
-	t.Run("config fallback: tokenid is composed with secret", func(t *testing.T) {
-		clearProxmoxEnv(t)
-		cfg := cfgWithHost()
-		cfg.Provider.Proxmox.TokenID = "root@pam!tok"
-		cfg.Provider.Proxmox.APIToken = "secret-value"
-
-		creds := GetProxmoxCredentials(cfg)
-
-		if got := string(creds.APIToken); got != "root@pam!tok=secret-value" {
-			t.Errorf("APIToken composition = %q", got)
+		if len(creds.APIToken) != 0 {
+			t.Errorf("APIToken should be empty without env creds; got %q", creds.APIToken)
 		}
 	})
 
