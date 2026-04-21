@@ -95,13 +95,11 @@ func (n *statusNode) isReady() bool {
 }
 
 func (n *statusNode) role() string {
-	for k := range n.Metadata.Labels {
-		if k == "node-role.kubernetes.io/master" {
-			return "master"
-		}
-		if k == "node-role.kubernetes.io/worker" {
-			return "worker"
-		}
+	if _, ok := n.Metadata.Labels["node-role.kubernetes.io/master"]; ok {
+		return "master"
+	}
+	if _, ok := n.Metadata.Labels["node-role.kubernetes.io/worker"]; ok {
+		return "worker"
 	}
 	return "unknown"
 }
@@ -168,7 +166,7 @@ func runStatus(cmd *cobra.Command, _ []string) error {
 
 	degraded := 0
 	if coRaw, ocErr := bp.OcOutput(ctx, "get", "clusteroperators", "--no-headers"); ocErr == nil {
-		for _, line := range strings.Split(strings.TrimSpace(coRaw), "\n") {
+		for line := range strings.Lines(strings.TrimSpace(coRaw)) {
 			fields := strings.Fields(line)
 			if len(fields) >= 5 && phase.ConditionStatus(fields[4]) == phase.ConditionStatusTrue {
 				degraded++
@@ -335,18 +333,18 @@ func runDescribeAddon(cmd *cobra.Command, args []string) error {
 		health = "not enabled"
 	}
 
-	lines := []struct{ k, v string }{
-		{"name", info.Name},
-		{"display-name", info.DisplayName},
-		{"description", info.Description},
-		{"category", info.Category},
-		{"health", health},
+	lines := []struct{ k, jsonKey, v string }{
+		{"name", "name", info.Name},
+		{"display-name", "display_name", info.DisplayName},
+		{"description", "description", info.Description},
+		{"category", "category", info.Category},
+		{"health", "health", health},
 	}
 
 	if describeFormat == outputJSON {
 		payload := map[string]string{}
 		for _, ln := range lines {
-			payload[ln.k] = ln.v
+			payload[ln.jsonKey] = ln.v
 		}
 		enc := json.NewEncoder(cmd.OutOrStdout())
 		enc.SetIndent("", "  ")
