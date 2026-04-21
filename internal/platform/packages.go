@@ -27,15 +27,10 @@ type PackageManager interface {
 // drives the AddRepo branch.
 type Manager struct {
 	family    string
-	pkgCmd    string   // "dnf" | "apt-get"
-	queryCmd  string   // "rpm" | "dpkg"
-	queryArgs []string // ["-q"] | ["-l"]
-	// queryMatch is the substring that must appear in queryCmd stdout for a
-	// package to count as installed. Empty → exit code alone is sufficient
-	// (rpm -q exits 0 iff installed); non-empty → the exit must be 0 *and*
-	// the output must contain this substring (dpkg -l prints stale entries
-	// with "rc " state for purged packages).
-	queryMatch string
+	pkgCmd    string                               // "dnf" | "apt-get"
+	queryCmd  string                               // "rpm" | "dpkg"
+	queryArgs []string                             // ["-q"] | ["-l"]
+	postCheck func(stdout []byte, pkg string) bool // nil → exit code alone is sufficient
 }
 
 // NewPackageManager returns a Manager wired to the appropriate backend for
@@ -43,11 +38,13 @@ type Manager struct {
 func NewPackageManager(detected OS) PackageManager {
 	if detected.Family == FamilyDebian {
 		return &Manager{
-			family:     FamilyDebian,
-			pkgCmd:     "apt-get",
-			queryCmd:   "dpkg",
-			queryArgs:  []string{"-l"},
-			queryMatch: "ii  ",
+			family:    FamilyDebian,
+			pkgCmd:    "apt-get",
+			queryCmd:  "dpkg",
+			queryArgs: []string{"-l"},
+			postCheck: func(stdout []byte, pkg string) bool {
+				return bytes.Contains(stdout, []byte("ii  "+pkg))
+			},
 		}
 	}
 	return &Manager{
@@ -108,10 +105,10 @@ func (m *Manager) IsInstalled(ctx context.Context, pkg string) (bool, error) {
 		}
 		return false, fmt.Errorf("%s query: %w", m.queryCmd, err)
 	}
-	if m.queryMatch == "" {
+	if m.postCheck == nil {
 		return true, nil
 	}
-	return strings.Contains(string(output), m.queryMatch+pkg), nil
+	return m.postCheck(output, pkg), nil
 }
 
 // AddRepo registers a new package repository with the backend: dnf

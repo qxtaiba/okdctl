@@ -138,6 +138,21 @@ func mergeTargetPath() string {
 	return filepath.Join(home, ".kube", "config")
 }
 
+// namedEntries converts a raw YAML list ([]any of map[string]any) into a
+// name→item map. Entries without a string "name" key are skipped.
+func namedEntries(v any) map[string]any {
+	items, _ := v.([]any)
+	result := make(map[string]any, len(items))
+	for _, item := range items {
+		if m, ok := item.(map[string]any); ok {
+			if name, ok := m["name"].(string); ok {
+				result[name] = item
+			}
+		}
+	}
+	return result
+}
+
 // mergeNamedList appends entries from src into dest, skipping any src entry
 // whose .name already appears in dest. Both arguments are the raw YAML
 // unmarshalled representation ([]any of map[string]any).
@@ -148,18 +163,10 @@ func mergeNamedList(dest, src any) any {
 		return dest
 	}
 
-	existing := map[string]bool{}
-	for _, item := range destSlice {
-		if m, ok := item.(map[string]any); ok {
-			if name, ok := m["name"].(string); ok {
-				existing[name] = true
-			}
-		}
-	}
-
+	existing := namedEntries(dest)
 	for _, item := range srcSlice {
 		if m, ok := item.(map[string]any); ok {
-			if name, ok := m["name"].(string); ok && !existing[name] {
+			if name, ok := m["name"].(string); ok && existing[name] == nil {
 				destSlice = append(destSlice, item)
 			}
 		}

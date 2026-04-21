@@ -2,6 +2,8 @@ package releases
 
 import (
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -58,16 +60,20 @@ type diskCache struct {
 
 // Major returns the major version component, or 0 for unparsable input.
 func (v *OKDVersion) Major() int {
-	var major int
-	_, _ = fmt.Sscanf(v.Version, "%d.", &major)
-	return major
+	before, _, _ := strings.Cut(v.Version, ".")
+	n, _ := strconv.Atoi(before)
+	return n
 }
 
 // Minor returns the minor version component, or 0 for unparsable input.
 func (v *OKDVersion) Minor() int {
-	var major, minor int
-	_, _ = fmt.Sscanf(v.Version, "%d.%d", &major, &minor)
-	return minor
+	_, after, ok := strings.Cut(v.Version, ".")
+	if !ok {
+		return 0
+	}
+	before, _, _ := strings.Cut(after, ".")
+	n, _ := strconv.Atoi(before)
+	return n
 }
 
 // DisplayName returns the version string with a release-type suffix

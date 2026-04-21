@@ -17,34 +17,40 @@ import (
 // virt and vector extensions (AVX2, AES-NI) required by OKD nodes work.
 const DefaultProxmoxCPUType = "host"
 
-func buildISOStrings(isoStorage string, role phase.NodeRole, count int) []string {
-	isos := make([]string, count)
+func buildQuotedRoleList(format, prefix string, role phase.NodeRole, count int) []string {
+	result := make([]string, count)
 	for i := range count {
-		isos[i] = fmt.Sprintf(`"%s:iso/%s%d.iso"`, isoStorage, role, i)
+		result[i] = fmt.Sprintf(format, prefix, role, i)
 	}
-	return isos
+	return result
+}
+
+func buildISOStrings(isoStorage string, role phase.NodeRole, count int) []string {
+	return buildQuotedRoleList(`"%s:iso/%s%d.iso"`, isoStorage, role, count)
 }
 
 func buildNodeNames(clusterName string, role phase.NodeRole, count int) []string {
-	names := make([]string, count)
-	for i := range count {
-		names[i] = fmt.Sprintf(`"%s-%s%d"`, clusterName, role, i)
-	}
-	return names
+	return buildQuotedRoleList(`"%s-%s%d"`, clusterName, role, count)
 }
 
-func getDiskSizes(cfg *config.Config) (cpDisk, workerDisk, workerDataDisk, masterDataDisk int) {
-	cpDisk = cfg.Topology.ControlPlane.Disk
-	if cpDisk == 0 {
-		cpDisk = 50
+type diskSizes struct {
+	cpOS, workerOS, workerData, masterData int
+}
+
+func getDiskSizes(cfg *config.Config) diskSizes {
+	d := diskSizes{
+		cpOS:       cfg.Topology.ControlPlane.Disk,
+		workerData: cfg.Disks.WorkerDataSizeGB,
+		masterData: cfg.Disks.MasterDataSizeGB,
 	}
-	workerDisk = cfg.Topology.Workers.Disk
-	if workerDisk == 0 {
-		workerDisk = cpDisk
+	if d.cpOS == 0 {
+		d.cpOS = 50
 	}
-	workerDataDisk = cfg.Disks.WorkerDataSizeGB
-	masterDataDisk = cfg.Disks.MasterDataSizeGB
-	return cpDisk, workerDisk, workerDataDisk, masterDataDisk
+	d.workerOS = cfg.Topology.Workers.Disk
+	if d.workerOS == 0 {
+		d.workerOS = d.cpOS
+	}
+	return d
 }
 
 func getBootstrapResources(cfg *config.Config) (cpu, mem int) {
@@ -61,7 +67,7 @@ func getBootstrapResources(cfg *config.Config) (cpu, mem int) {
 
 func buildTerraformVarsData(cfg *config.Config) templates.TerraformVarsData {
 	proxmox := cfg.Provider.Proxmox
-	cpDisk, workerDisk, workerDataDisk, masterDataDisk := getDiskSizes(cfg)
+	disks := getDiskSizes(cfg)
 	bootstrapCPU, bootstrapMem := getBootstrapResources(cfg)
 
 	masterISOs := buildISOStrings(proxmox.ISOStorage, phase.RoleMaster, cfg.Topology.ControlPlane.Count)
@@ -86,11 +92,11 @@ func buildTerraformVarsData(cfg *config.Config) templates.TerraformVarsData {
 		VMIDBase:             cfg.Topology.VMIDBase,
 		MasterCount:          cfg.Topology.ControlPlane.Count,
 		WorkerCount:          cfg.Topology.Workers.Count,
-		OSDiskSizeGB:         cpDisk,
-		MasterOSDiskSizeGB:   cpDisk,
-		WorkerOSDiskSizeGB:   workerDisk,
-		WorkerDataDiskSizeGB: workerDataDisk,
-		MasterDataDiskSizeGB: masterDataDisk,
+		OSDiskSizeGB:         disks.cpOS,
+		MasterOSDiskSizeGB:   disks.cpOS,
+		WorkerOSDiskSizeGB:   disks.workerOS,
+		WorkerDataDiskSizeGB: disks.workerData,
+		MasterDataDiskSizeGB: disks.masterData,
 		BootstrapCPUCores:    bootstrapCPU,
 		BootstrapMemoryMB:    bootstrapMem,
 		MasterCPUCores:       cfg.Topology.ControlPlane.CPU,
