@@ -2,6 +2,14 @@
 // U4 (internal/cli/root.go) uses errors.As against these types to map
 // failures to structured exit codes: ConfigError=2, NetworkError=3,
 // ClusterError=4, AuthError=5.
+//
+// Error() returns only e.Msg (no %v of Err): if a caller wraps a
+// credential-bearing error, interpolating e.Err into the string would
+// route the credential past logutil.RedactHandler (which scrubs slog
+// attrs, not error strings). Callers that need the inner text walk the
+// chain via errors.Unwrap / errors.As; errors.Is over wrapped sentinels
+// (os.ErrNotExist, context.DeadlineExceeded) still works because Unwrap
+// is intact.
 package errtypes
 
 import (
@@ -19,9 +27,6 @@ type ConfigError struct {
 }
 
 func (e *ConfigError) Error() string {
-	if e.Err != nil {
-		return fmt.Sprintf("config error: %s: %v", e.Msg, e.Err)
-	}
 	return fmt.Sprintf("config error: %s", e.Msg)
 }
 
@@ -34,9 +39,6 @@ type NetworkError struct {
 }
 
 func (e *NetworkError) Error() string {
-	if e.Err != nil {
-		return fmt.Sprintf("network error: %s: %v", e.Msg, e.Err)
-	}
 	return fmt.Sprintf("network error: %s", e.Msg)
 }
 
@@ -50,9 +52,6 @@ type ClusterError struct {
 }
 
 func (e *ClusterError) Error() string {
-	if e.Err != nil {
-		return fmt.Sprintf("cluster error: %s: %v", e.Msg, e.Err)
-	}
 	return fmt.Sprintf("cluster error: %s", e.Msg)
 }
 
@@ -66,9 +65,6 @@ type AuthError struct {
 }
 
 func (e *AuthError) Error() string {
-	if e.Err != nil {
-		return fmt.Sprintf("auth error: %s: %v", e.Msg, e.Err)
-	}
 	return fmt.Sprintf("auth error: %s", e.Msg)
 }
 
