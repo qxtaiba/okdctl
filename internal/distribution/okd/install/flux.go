@@ -105,6 +105,14 @@ func (p *Phase) addKubeconfigToBashrc(homeDir, kubeconfigPath string) error {
 		created = true
 	}
 
+	// Lstat before ReadFile: refuse to follow a symlink that could redirect
+	// a privileged write to an attacker-controlled path under sudo re-exec.
+	if lfi, lstatErr := os.Lstat(bashrcPath); lstatErr == nil {
+		if lfi.Mode()&os.ModeSymlink != 0 {
+			return fmt.Errorf("refusing to modify %s: path is a symlink", bashrcPath)
+		}
+	}
+
 	content, err := os.ReadFile(bashrcPath)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -123,21 +131,10 @@ func (p *Phase) addKubeconfigToBashrc(homeDir, kubeconfigPath string) error {
 		return nil
 	}
 
-	f, err := os.OpenFile(bashrcPath, os.O_APPEND|os.O_WRONLY, 0o644)
-	if err != nil {
-		return err
+	newContent := string(content)
+	if len(newContent) > 0 && newContent[len(newContent)-1] != '\n' {
+		newContent += "\n"
 	}
-	defer func() { _ = f.Close() }()
-
-	if len(content) > 0 && content[len(content)-1] != '\n' {
-		if _, err := f.WriteString("\n"); err != nil {
-			return err
-		}
-	}
-
-	if _, err := fmt.Fprintf(f, "\n# Added by okdctl\n%s\n", exportLine); err != nil {
-		return err
-	}
-
-	return f.Sync()
+	newContent += "\n# Added by okdctl\n" + exportLine + "\n"
+	return system.AtomicWriteString(bashrcPath, newContent, mode)
 }

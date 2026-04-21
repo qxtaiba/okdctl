@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/qxtaiba/okdctl/internal/errtypes"
+	"github.com/qxtaiba/okdctl/internal/executor"
 )
 
 // rootRequiredCmds lists subcommand names that perform privileged operations
@@ -73,5 +74,9 @@ func ensureRoot(cmd *cobra.Command) error {
 	// args are forwarded to sudo as an argv slice (no shell interpolation),
 	// and the `--` separator pins the binary. cobra validated the args
 	// before this PreRunE runs; callers cannot inject flags into sudo itself.
-	return syscall.Exec(sudoPath, args, os.Environ()) //nolint:gosec // argv slice, no shell
+	//
+	// Filter the environment to the same allowlist used by Executor
+	// subprocesses so unrelated tokens (AWS, GCP, shell plumbing) do not
+	// reach the privileged re-exec'd process.
+	return syscall.Exec(sudoPath, args, executor.FilterParentEnv(executor.DefaultEnvAllowlist)) //nolint:gosec // argv slice, no shell
 }

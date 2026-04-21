@@ -91,8 +91,12 @@ func New(opts ...Option) *Executor {
 // Tighten this list only after a targeted audit finds a specific var
 // leaking credentials in practice; every entry here gets a docstring
 // justification if removed later.
-var defaultEnvAllowlist = envAllowlist{
-	exact: map[string]bool{
+// DefaultEnvAllowlist is the canonical env filter used by both Executor
+// subprocesses and the sudo re-exec in internal/cli/elevation.go. It
+// passes tooling plumbing and provider namespaces; everything else is
+// dropped to prevent unrelated tokens reaching privileged processes.
+var DefaultEnvAllowlist = EnvAllowlist{
+	Exact: map[string]bool{
 		"PATH": true, "HOME": true, "USER": true, "LOGNAME": true, "SHELL": true,
 		"LANG": true, "LANGUAGE": true, "LC_ALL": true, "LC_CTYPE": true, "LC_MESSAGES": true,
 		"TERM": true, "TZ": true, "HOSTNAME": true,
@@ -107,7 +111,7 @@ var defaultEnvAllowlist = envAllowlist{
 		"XDG_CACHE_HOME": true, "XDG_RUNTIME_DIR": true,
 		"DBUS_SESSION_BUS_ADDRESS": true,
 	},
-	prefixes: []string{
+	Prefixes: []string{
 		"KUBE",       // KUBECONFIG, KUBE_*
 		"OC_",        // openshift-client
 		"TF_",        // terraform TF_VAR_*, TF_LOG, TF_PLUGIN_*
@@ -120,17 +124,19 @@ var defaultEnvAllowlist = envAllowlist{
 	},
 }
 
-// envAllowlist is a dual exact-match + prefix-match filter.
-type envAllowlist struct {
-	exact    map[string]bool
-	prefixes []string
+// EnvAllowlist is a dual exact-match + prefix-match filter for environment
+// variables. Exported so callers outside this package (e.g. cli/elevation.go)
+// can reuse the same canonical list rather than duplicating it.
+type EnvAllowlist struct {
+	Exact    map[string]bool
+	Prefixes []string
 }
 
-func (a envAllowlist) allows(key string) bool {
-	if a.exact[key] {
+func (a EnvAllowlist) allows(key string) bool {
+	if a.Exact[key] {
 		return true
 	}
-	for _, p := range a.prefixes {
+	for _, p := range a.Prefixes {
 		if strings.HasPrefix(key, p) {
 			return true
 		}
@@ -138,9 +144,10 @@ func (a envAllowlist) allows(key string) bool {
 	return false
 }
 
-// filterParentEnv returns the entries of os.Environ() whose keys pass the
-// allowlist. Called once per Run; cheap at ~50-200 entries typical.
-func filterParentEnv(a envAllowlist) []string {
+// FilterParentEnv returns the entries of os.Environ() whose keys pass the
+// allowlist. Exported so the sudo re-exec path in cli/elevation.go can use
+// the same filter without duplicating the allowlist.
+func FilterParentEnv(a EnvAllowlist) []string {
 	parent := os.Environ()
 	out := make([]string, 0, len(parent))
 	for _, kv := range parent {
@@ -166,7 +173,7 @@ func (e *Executor) buildEnv() []string {
 		}
 		return append(os.Environ(), e.Env...)
 	}
-	base := filterParentEnv(defaultEnvAllowlist)
+	base := FilterParentEnv(DefaultEnvAllowlist)
 	if len(e.Env) == 0 {
 		return base
 	}
