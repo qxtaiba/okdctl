@@ -6,6 +6,12 @@ Verify health of all enabled addons
 okdctl addon verify [flags]
 ```
 
+### Examples
+
+```
+  okdctl addon verify
+```
+
 ### Options
 
 ```

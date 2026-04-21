@@ -62,7 +62,7 @@ func Detect() (OS, error) {
 
 func parseOSRelease(content string) (OS, error) {
 	fields := make(map[string]string)
-	for _, line := range strings.Split(content, "\n") {
+	for line := range strings.Lines(content) {
 		line = strings.TrimSpace(line)
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue

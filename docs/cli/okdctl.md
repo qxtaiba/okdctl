@@ -17,10 +17,6 @@ Highlights:
   • Automated preflight checks and validation
   • Single binary distribution
 
-```
-okdctl [flags]
-```
-
 ### Options
 
 ```

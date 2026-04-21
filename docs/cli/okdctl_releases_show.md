@@ -6,6 +6,13 @@ Show release info for a single OKD version
 okdctl releases show <version> [flags]
 ```
 
+### Examples
+
+```
+  okdctl releases show 4.21.3
+  okdctl releases show 4.21.3 --format json
+```
+
 ### Options
 
 ```

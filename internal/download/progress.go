@@ -48,14 +48,8 @@ func (pw *progressWriter) Close() error {
 }
 
 func (pw *progressWriter) render() {
-	pct := float64(pw.written) / float64(pw.total)
-	if pct > 1 {
-		pct = 1
-	}
-	barWidth := pw.width - len(pw.desc) - 12
-	if barWidth < 4 {
-		barWidth = 4
-	}
+	pct := min(float64(pw.written)/float64(pw.total), 1.0)
+	barWidth := max(pw.width-len(pw.desc)-12, 4)
 	filled := int(pct * float64(barWidth))
 	bar := strings.Repeat("=", filled) + strings.Repeat(" ", barWidth-filled)
 	_, _ = fmt.Fprintf(os.Stderr, "\r[%s] %3.0f%%  %s", bar, pct*100, pw.desc)

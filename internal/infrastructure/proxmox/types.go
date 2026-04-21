@@ -1,6 +1,10 @@
 package proxmox
 
-import "errors"
+import (
+	"errors"
+
+	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
+)
 
 // Provider sentinel errors.
 var (
@@ -33,14 +37,16 @@ type VMStatus struct {
 	IPAddress string
 }
 
-// VMRole classifies a VM's cluster role (bootstrap/master/worker).
-type VMRole string
+// VMRole classifies a VM's cluster role; aliased to phase.NodeRole so the
+// two enums never drift. The Role* constants below are package-local
+// re-exports of the canonical phase constants.
+type VMRole = phase.NodeRole
 
-// VM role values.
+// Role* mirror phase's canonical values so existing call sites stay terse.
 const (
-	RoleBootstrap VMRole = "bootstrap"
-	RoleMaster    VMRole = "master"
-	RoleWorker    VMRole = "worker"
+	RoleBootstrap = phase.RoleBootstrap
+	RoleMaster    = phase.RoleMaster
+	RoleWorker    = phase.RoleWorker
 )
 
 // VMState classifies a VM's lifecycle state.

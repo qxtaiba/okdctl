@@ -38,6 +38,9 @@ const (
 	DefaultBinDir = "/usr/local/bin"
 	// DefaultDNSMasqConfigDir is where per-cluster dnsmasq fragments live.
 	DefaultDNSMasqConfigDir = "/etc/dnsmasq.d"
+	// DefaultProxmoxISODir is the default Proxmox-managed path where downloaded
+	// CoreOS ISOs are uploaded via scp and referenced by `qm importdisk`.
+	DefaultProxmoxISODir = "/var/lib/vz/template/iso"
 )
 
 // ResolveBinDir returns the tool-install directory: OKDCTL_BIN_DIR env >

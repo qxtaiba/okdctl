@@ -35,12 +35,20 @@ archives:
 checksum:
   name_template: "SHA256SUMS"
   algorithm: sha256
-# SBOM attached to every release; syft produces CycloneDX JSON
+# SBOM attached to every release; syft produces CycloneDX JSON.
+# Separate entries for archives and packages so apt/dnf users get
+# machine-readable dependency manifests alongside tar.gz users.
 sboms:
-  - id: default
+  - id: archive
     artifacts: archive
     documents:
       - "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}.sbom.json"
+    cmd: syft
+    args: ["$artifact", "--output", "cyclonedx-json=$document"]
+  - id: package
+    artifacts: package
+    documents:
+      - "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}.pkg.sbom.json"
     cmd: syft
     args: ["$artifact", "--output", "cyclonedx-json=$document"]
 # Sigstore keyless signing of checksum file + artifacts.

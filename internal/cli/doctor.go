@@ -278,9 +278,7 @@ func checkBinaries(_ context.Context) checkResult {
 	probe := func(name string, missingSev severity, note string) {
 		if _, err := exec.LookPath(name); err != nil {
 			items = append(items, checkItem{sev: missingSev, name: name, note: note})
-			if missingSev > worst {
-				worst = missingSev
-			}
+			worst = max(worst, missingSev)
 			return
 		}
 		items = append(items, checkItem{sev: sevPass, name: name})
@@ -309,9 +307,7 @@ func checkBinaries(_ context.Context) checkResult {
 		items = append(items, checkItem{sev: sevPass, name: "apache"})
 	} else {
 		items = append(items, checkItem{sev: sevWarn, name: "apache", note: "will be installed via package manager"})
-		if sevWarn > worst {
-			worst = sevWarn
-		}
+		worst = max(worst, sevWarn)
 	}
 
 	return checkResult{sev: worst, items: items}

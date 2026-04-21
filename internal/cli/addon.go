@@ -23,15 +23,20 @@ var addonCmd = &cobra.Command{
 }
 
 var addonListCmd = &cobra.Command{
-	Use:   "list",
-	Short: "List registered addons and their config state",
-	RunE:  runAddonList,
+	Use:     "list",
+	Short:   "List registered addons and their config state",
+	Example: "  okdctl addon list",
+	RunE:    runAddonList,
 }
 
 var addonInstallCmd = &cobra.Command{
-	Use:         "install [name]",
+	Use:         "install [name | --all]",
 	Short:       "Install one addon (or all enabled addons with --all)",
+	Example:     "  okdctl addon install flux\n  okdctl addon install --all",
 	Annotations: map[string]string{"requiresRoot": "true"},
+	ValidArgsFunction: func(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
+		return addon.Names(), cobra.ShellCompDirectiveNoFileComp
+	},
 	Long: `Install an addon onto the live cluster.
 
 install <name>  installs the named addon and its transitive dependencies.
@@ -61,7 +66,11 @@ install --all   installs every addon enabled in the configuration file in
 var addonUninstallCmd = &cobra.Command{
 	Use:         "uninstall <name>",
 	Short:       "Uninstall a named addon",
+	Example:     "  okdctl addon uninstall flux",
 	Annotations: map[string]string{"requiresRoot": "true"},
+	ValidArgsFunction: func(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
+		return addon.Names(), cobra.ShellCompDirectiveNoFileComp
+	},
 	Long: `Remove an addon from the cluster.
 
 Uninstall is blocked when any other enabled addon transitively depends on the
@@ -71,9 +80,10 @@ target. Disable or uninstall the dependent addon first.`,
 }
 
 var addonVerifyCmd = &cobra.Command{
-	Use:   "verify",
-	Short: "Verify health of all enabled addons",
-	RunE:  runAddonVerify,
+	Use:     "verify",
+	Short:   "Verify health of all enabled addons",
+	Example: "  okdctl addon verify",
+	RunE:    runAddonVerify,
 }
 
 func init() {

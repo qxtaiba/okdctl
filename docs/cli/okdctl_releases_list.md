@@ -6,6 +6,14 @@ List available OKD versions
 okdctl releases list [flags]
 ```
 
+### Examples
+
+```
+  okdctl releases list
+  okdctl releases list --channel all
+  okdctl releases list --format json
+```
+
 ### Options
 
 ```

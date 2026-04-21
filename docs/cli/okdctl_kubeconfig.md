@@ -11,6 +11,14 @@ or merge it into an existing kubeconfig.
 okdctl kubeconfig [flags]
 ```
 
+### Examples
+
+```
+  okdctl kubeconfig                       # print to stdout
+  okdctl kubeconfig -o ~/.kube/okd.cfg    # write to file
+  okdctl kubeconfig --merge               # merge into $KUBECONFIG
+```
+
 ### Options
 
 ```

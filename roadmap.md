@@ -151,6 +151,7 @@ These made the audit but are not scheduled now. Re-evaluate on
 | M18 | Homebrew tap | Post-1.0 distribution item |
 | L4 | `okdctl upgrade` (in-place OKD upgrade) | Strategic; needs design |
 | L6 | OpenTelemetry tracing hooks | N8 step-timing covers 80% of value |
+| N27 | `--log-file` sudo-re-exec hardening (abs-path resolution + chown post-write) | Defense-in-depth on top of `sec:00000002` lstat + `O_NOFOLLOW` fix; attack window closed, broader refactor pending |
 
 ### Tier D — dependency items from 2026-04-18 audit
 

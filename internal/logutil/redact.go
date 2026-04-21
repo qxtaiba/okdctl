@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"net/url"
+	"slices"
 	"strings"
 )
 
@@ -116,10 +117,7 @@ func keyIsSecret(key string) bool {
 		return false
 	}
 	lower := strings.ToLower(key)
-	for _, f := range secretKeyFragments {
-		if strings.Contains(lower, f) {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(secretKeyFragments, func(f string) bool {
+		return strings.Contains(lower, f)
+	})
 }

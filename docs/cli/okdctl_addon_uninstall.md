@@ -13,6 +13,12 @@ target. Disable or uninstall the dependent addon first.
 okdctl addon uninstall <name> [flags]
 ```
 
+### Examples
+
+```
+  okdctl addon uninstall flux
+```
+
 ### Options
 
 ```

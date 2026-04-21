@@ -24,13 +24,11 @@ type boxConfig struct {
 }
 
 func maxLineWidth(content string) int {
-	maxWidth := 0
-	for _, line := range strings.Split(content, "\n") {
-		if w := lipgloss.Width(line); w > maxWidth {
-			maxWidth = w
-		}
+	var m int
+	for line := range strings.Lines(content) {
+		m = max(m, lipgloss.Width(line))
 	}
-	return maxWidth
+	return m
 }
 
 func boxedSectionCore(content, title string, width int, cfg boxConfig) string {

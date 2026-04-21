@@ -2,13 +2,13 @@ package destroy
 
 import (
 	"context"
+	"strings"
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/distribution"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/cleanup"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/firewall"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
-	"github.com/qxtaiba/okdctl/internal/distribution/okd/setup"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 )
 
@@ -22,6 +22,19 @@ const (
 )
 
 func (p *Phase) destroySteps(cfg *config.Config, opts *Options) []distribution.StepDef {
+	// failures lets the final summary step report accurate state when an
+	// earlier NonFatal step errored. Without this the prior summary said
+	// "cluster teardown completed" even after terraform destroy failed —
+	// a misleading-success regression after StepDestroyInfra became NonFatal.
+	// Safe without a mutex because Orchestrator.Run iterates steps serially;
+	// add a sync.Mutex if step parallelism ever lands.
+	var failures []string
+	track := func(label string) func(err error) {
+		return func(err error) {
+			failures = append(failures, label)
+			phase.WarnOnError(p.Log, label+": "+err.Error())(err)
+		}
+	}
 	return []distribution.StepDef{
 		{
 			ID: StepDestroyInfra, Name: "destroy infrastructure",
@@ -36,7 +49,7 @@ func (p *Phase) destroySteps(cfg *config.Config, opts *Options) []distribution.S
 				p.Log.Info("terraform: infrastructure destruction completed")
 				return nil
 			},
-			OnError: phase.WarnOnError(p.Log, "terraform: destruction failed; continuing with file/firewall cleanup (re-run 'okdctl destroy' to retry infrastructure)"),
+			OnError: track("terraform destroy"),
 		},
 		{
 			ID: StepRemoveRemoteISO, Name: "remove remote ISO",
@@ -51,9 +64,9 @@ func (p *Phase) destroySteps(cfg *config.Config, opts *Options) []distribution.S
 					Exec: p.Exec,
 					Log:  p.Log,
 				}
-				return phase.RemoveFCOSISOFromProxmox(ctx, params, setup.DefaultProxmoxISODir)
+				return phase.RemoveFCOSISOFromProxmox(ctx, params, phase.DefaultProxmoxISODir)
 			},
-			OnError: phase.WarnOnError(p.Log, "iso: remote removal incomplete"),
+			OnError: track("iso removal"),
 		},
 		{
 			ID: StepCleanupFiles, Name: "cleanup files",
@@ -86,7 +99,7 @@ func (p *Phase) destroySteps(cfg *config.Config, opts *Options) []distribution.S
 				}
 				return nil
 			},
-			OnError: phase.WarnOnError(p.Log, "cleanup: file removal failed"),
+			OnError: track("file cleanup"),
 		},
 		{
 			ID: StepCleanupFirewall, Name: "cleanup firewall",
@@ -100,13 +113,19 @@ func (p *Phase) destroySteps(cfg *config.Config, opts *Options) []distribution.S
 				p.Log.Info("firewall: okd rules removed from firewalld")
 				return nil
 			},
-			OnError: phase.WarnOnError(p.Log, "firewall: cleanup incomplete"),
+			OnError: track("firewall cleanup"),
 		},
 		{
 			ID: StepPrintSummary, Name: "print summary",
 			Desc: "printing destruction summary", NonFatal: true,
 			Exec: func(_ context.Context) error {
-				p.Log.Info("destroy: cluster teardown completed")
+				if len(failures) == 0 {
+					p.Log.Info("destroy: cluster teardown completed")
+				} else {
+					p.Log.Warn("destroy: teardown finished with non-fatal failures",
+						"steps", strings.Join(failures, ", "),
+						"hint", "re-run 'okdctl destroy' to retry the failed steps")
+				}
 				return nil
 			},
 		},

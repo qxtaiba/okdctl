@@ -18,6 +18,14 @@ during the deploy so the bundle captures the relevant logs.
 okdctl debug-bundle [flags]
 ```
 
+### Examples
+
+```
+  okdctl debug-bundle
+  okdctl debug-bundle -o my-cluster.tgz
+  okdctl debug-bundle --skip-must-gather
+```
+
 ### Options
 
 ```

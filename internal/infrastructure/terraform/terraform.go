@@ -20,20 +20,10 @@ import (
 // PlanFileName is the default plan file name used by Plan, Apply, and Cleanup.
 const PlanFileName = "tfplan"
 
-// ExecError reports a non-zero exit from a terraform subprocess, carrying
-// the subcommand name, exit code, and captured stderr.
-type ExecError struct {
-	Command  string
-	ExitCode int
-	Stderr   string
-}
-
-func (e *ExecError) Error() string {
-	if e.Stderr != "" {
-		return fmt.Sprintf("terraform %s failed (exit code %d): %s", e.Command, e.ExitCode, e.Stderr)
-	}
-	return fmt.Sprintf("terraform %s failed with exit code %d", e.Command, e.ExitCode)
-}
+// ExecError reports a non-zero exit from a terraform subprocess. Aliased to
+// the canonical executor.ExitError so callers can errors.As against either
+// shape and so the two types do not drift.
+type ExecError = executor.ExitError
 
 // Executor wraps terraform subcommand execution for a single working
 // directory with an optional var-file and verbose-logging toggle.
@@ -62,9 +52,9 @@ func WithVerbose(v bool) Option {
 }
 
 // WithEnv appends environment variables to be passed to all terraform subprocess calls.
-// At execution time they are appended after os.Environ(), so entries here override
-// identically-named variables from the inherited environment. Multiple calls to
-// WithEnv are cumulative; later entries for the same key win.
+// At execution time they are appended after the executor's allowlist-filtered
+// parent env, so entries here override allowlist values for the same key.
+// Multiple calls to WithEnv are cumulative; later entries for the same key win.
 func WithEnv(env []string) Option {
 	return func(e *Executor) {
 		e.exec.Env = append(e.exec.Env, env...)
@@ -156,7 +146,7 @@ func (t *Executor) run(ctx context.Context, args ...string) error {
 	}
 	if result.ExitCode != 0 {
 		return &ExecError{
-			Command:  args[0],
+			Command:  "terraform " + args[0],
 			ExitCode: result.ExitCode,
 			Stderr:   result.Stderr,
 		}

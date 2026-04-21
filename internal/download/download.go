@@ -137,7 +137,11 @@ func fetchToFile(ctx context.Context, client *http.Client, opts *Options, filena
 		}
 	}
 
-	outFile, err := os.OpenFile(opts.OutputPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
+	// 0o600 — downloaded artifacts may include release tarballs that
+	// contain the okdctl binary itself before signature verification.
+	// install.sh + setup.installBinaryToPath copy the binary to its
+	// final mode, so a tighter download mode is harmless to consumers.
+	outFile, err := os.OpenFile(opts.OutputPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
 	if err != nil {
 		return fmt.Errorf("create output file: %w", err)
 	}

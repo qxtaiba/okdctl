@@ -6,10 +6,17 @@ Show detail for a registered addon
 okdctl describe addon <name> [flags]
 ```
 
+### Examples
+
+```
+  okdctl describe addon flux
+```
+
 ### Options
 
 ```
-  -h, --help   help for addon
+  -F, --format string   output format: text|json (default "text")
+  -h, --help            help for addon
 ```
 
 ### Options inherited from parent commands

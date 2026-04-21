@@ -31,6 +31,9 @@ IngressController, which causes a brief outage (~30s) for routes on
 affected controllers.
 
 Run this after deploying a LoadBalancer provider (e.g., MetalLB).`,
+	Example: `  okdctl update-ingress
+  okdctl update-ingress --yes --remove-haproxy=false
+  okdctl update-ingress --dry-run`,
 	RunE: runUpdateIngress,
 }
 

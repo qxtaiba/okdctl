@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/qxtaiba/okdctl/internal/config"
@@ -92,9 +93,17 @@ func (p *Phase) configureSELinuxForApache(ctx context.Context) {
 	if !executor.CommandExists("semanage") {
 		return
 	}
-	// Try -a first; if port already exists, -m modifies the existing entry
+	// Try -a first; if the port label already exists semanage exits non-zero
+	// and we fall through to -m which modifies it. The -m result is the one
+	// that determines final state — log it at warn level so a "policy not
+	// loaded" / SELinux-disabled / missing-perm failure isn't invisible.
 	_, _ = p.Exec.Run(ctx, "semanage", "port", "-a", "-t", "http_port_t", "-p", "tcp", "8080")
-	_, _ = p.Exec.Run(ctx, "semanage", "port", "-m", "-t", "http_port_t", "-p", "tcp", "8080")
+	if r, err := p.Exec.Run(ctx, "semanage", "port", "-m", "-t", "http_port_t", "-p", "tcp", "8080"); err != nil {
+		p.Log.Warn("apache: semanage port modify failed", "err", err)
+	} else if r.ExitCode != 0 {
+		p.Log.Warn("apache: semanage port modify exited non-zero",
+			"exit", r.ExitCode, "stderr", strings.TrimSpace(r.Stderr))
+	}
 }
 
 func enableAndStartApache(ctx context.Context, serviceName string) error {

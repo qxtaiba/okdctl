@@ -25,6 +25,12 @@ See docs/doctor-checks.md for per-check fail messages and fix guidance.
 okdctl doctor [flags]
 ```
 
+### Examples
+
+```
+  okdctl doctor
+```
+
 ### Options
 
 ```

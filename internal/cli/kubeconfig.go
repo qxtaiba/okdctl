@@ -23,6 +23,9 @@ var kubeconfigCmd = &cobra.Command{
 	Short: "Print or export the cluster kubeconfig",
 	Long: `Print the cluster kubeconfig to stdout, write it to a file,
 or merge it into an existing kubeconfig.`,
+	Example: `  okdctl kubeconfig                       # print to stdout
+  okdctl kubeconfig -o ~/.kube/okd.cfg    # write to file
+  okdctl kubeconfig --merge               # merge into $KUBECONFIG`,
 	RunE: runKubeconfig,
 }
 

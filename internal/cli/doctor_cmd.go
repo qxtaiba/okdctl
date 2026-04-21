@@ -27,6 +27,7 @@ Exit code is 0 if there are no [fail] results ([warn] is tolerated),
 1 otherwise. Designed to be rerun until clean.
 
 See docs/doctor-checks.md for per-check fail messages and fix guidance.`,
+	Example: "  okdctl doctor",
 }
 
 func init() {

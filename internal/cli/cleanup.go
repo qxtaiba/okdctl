@@ -24,6 +24,8 @@ Proxmox infrastructure.
 
 Use this after a manual Terraform destroy, or to reset a failed deployment
 to a clean state.`,
+	Example: `  okdctl cleanup
+  okdctl cleanup --yes`,
 	RunE: runCleanup,
 }
 

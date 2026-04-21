@@ -6,10 +6,17 @@ Show detail for a cluster node
 okdctl describe node <name> [flags]
 ```
 
+### Examples
+
+```
+  okdctl describe node master-0
+```
+
 ### Options
 
 ```
-  -h, --help   help for node
+  -F, --format string   output format: text|json (default "text")
+  -h, --help            help for node
 ```
 
 ### Options inherited from parent commands

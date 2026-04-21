@@ -6,6 +6,12 @@ List registered addons and their config state
 okdctl addon list [flags]
 ```
 
+### Examples
+
+```
+  okdctl addon list
+```
+
 ### Options
 
 ```

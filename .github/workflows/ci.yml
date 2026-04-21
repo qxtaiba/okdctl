@@ -94,3 +94,25 @@ jobs:
         run: terraform init -backend=false && terraform validate
       - working-directory: infrastructure/terraform/environments/production
         run: terraform init -backend=false && terraform validate
+  lint-terraform:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: terraform-linters/setup-tflint@b480b8fcdaa6f2c577f8e4fa799e89e756bb7c93 # v6.2.2
+      - working-directory: infrastructure/terraform/modules/proxmox-okd
+        run: |
+          tflint --init
+          tflint -f compact
+      - working-directory: infrastructure/terraform/environments/production
+        run: |
+          tflint --init
+          tflint -f compact
+  # Shell
+  lint-shell:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: ludeeus/action-shellcheck@00cae500b08a931fb5698e11e79bfbd38e612a38 # 2.0.0
+        with:
+          severity: warning
+          scandir: "./scripts"

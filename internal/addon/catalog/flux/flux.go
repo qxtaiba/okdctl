@@ -319,7 +319,7 @@ func (f *Flux) waitForGitSync(ctx context.Context, env *addon.Environment) error
 		}
 		return strings.TrimSpace(result.Stdout) == k8sBoolTrue
 	}, timeout, env.Logger); err != nil {
-		return fmt.Errorf("git repository sync not ready within %v", timeout)
+		return fmt.Errorf("git repository sync not ready within %v: %w", timeout, err)
 	}
 
 	env.Logger.Info("flux: git repository synced successfully")

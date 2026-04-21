@@ -4,13 +4,35 @@
 package system
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"log/slog"
+	"os/exec"
+	"strings"
 	"time"
 
 	"github.com/qxtaiba/okdctl/internal/logutil"
 )
+
+// RunCaptured runs bin with args, capturing stderr into the returned error on
+// non-zero exit. Use this at sites where the audit shows operators see bare
+// exit codes instead of nmcli/firewall-cmd/semanage diagnostics on failure.
+// Context cancellation is respected; stdout is discarded (callers that need
+// it should use internal/executor.Executor instead).
+func RunCaptured(ctx context.Context, bin string, args ...string) error {
+	cmd := exec.CommandContext(ctx, bin, args...)
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		msg := strings.TrimSpace(stderr.String())
+		if msg == "" {
+			return fmt.Errorf("%s: %w", bin, err)
+		}
+		return fmt.Errorf("%s: %w: %s", bin, err, msg)
+	}
+	return nil
+}
 
 // WaitForOptions configures the polling loop driven by WaitFor.
 type WaitForOptions struct {
@@ -71,7 +93,10 @@ func WaitFor(ctx context.Context, prefix, description string, check func() bool,
 			if err := ctx.Err(); err != nil {
 				return fmt.Errorf("waiting for %s %s: %w", prefix, description, err)
 			}
-			return fmt.Errorf("timeout waiting for %s %s after %v", prefix, description, opts.Timeout)
+			// Wrap context.DeadlineExceeded so callers can errors.Is the
+			// timeout shape — the elapsed budget IS a deadline-exceeded.
+			return fmt.Errorf("timeout waiting for %s %s after %v: %w",
+				prefix, description, opts.Timeout, context.DeadlineExceeded)
 		case <-ticker.C:
 			elapsed := time.Since(startTime)
 			if check() {
@@ -82,7 +107,11 @@ func WaitFor(ctx context.Context, prefix, description string, check func() bool,
 			if err := ctx.Err(); err != nil {
 				return fmt.Errorf("waiting for %s %s: %w", prefix, description, err)
 			}
-			logger.Info(prefix+": waiting", "for", description, "elapsed", elapsed.Round(time.Second))
+			// Demoted to Debug: the per-tick "still waiting" line spammed the
+			// log on long polls; the periodic state is captured in the
+			// initial Info ("waiting for X") plus the eventual Info ("X is
+			// ready") or the timeout error.
+			logger.Debug(prefix+": waiting", "for", description, "elapsed", elapsed.Round(time.Second))
 		}
 	}
 }

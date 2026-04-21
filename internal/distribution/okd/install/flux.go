@@ -33,8 +33,7 @@ func (p *Phase) ValidateClusterAccess(ctx context.Context) error {
 
 	result, err = cmdRunner.Run(ctx, "oc", "version")
 	if err == nil && result.ExitCode == 0 {
-		lines := strings.Split(result.Stdout, "\n")
-		for _, line := range lines {
+		for line := range strings.Lines(result.Stdout) {
 			if strings.HasPrefix(line, "Server Version:") {
 				p.Log.Info(fmt.Sprintf("cluster: %s", strings.ToLower(strings.TrimSpace(line))))
 				break

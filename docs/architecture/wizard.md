@@ -46,7 +46,7 @@ type FieldDefinition struct {
     Label    string
     Default  string
     Help     string
-    Type     FieldType   // Text, Password, Number, Bool, Select
+    Type     FieldType   // see FieldType constants in datadriven.go
     Options  []string    // populated only when Type == FieldTypeSelect
     Required bool
     Validate func(string) error

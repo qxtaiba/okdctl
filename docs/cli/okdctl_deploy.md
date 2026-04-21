@@ -10,6 +10,14 @@ Deploy an OKD/OpenShift cluster through an interactive wizard.
 okdctl deploy [flags]
 ```
 
+### Examples
+
+```
+  okdctl deploy
+  okdctl deploy --yes --config my-cluster.yaml
+  okdctl deploy --dry-run
+```
+
 ### Options
 
 ```

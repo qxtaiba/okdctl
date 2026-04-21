@@ -15,6 +15,13 @@ to a clean state.
 okdctl cleanup [flags]
 ```
 
+### Examples
+
+```
+  okdctl cleanup
+  okdctl cleanup --yes
+```
+
 ### Options
 
 ```

@@ -168,7 +168,7 @@ func (p *Phase) GenerateIgnitionConfigs(ctx context.Context, clusterDir string) 
 		return &errtypes.ClusterError{Msg: "openshift-install create ignition-configs failed", Err: err}
 	}
 
-	if err := p.ValidateIgnitionFiles(clusterDir); err != nil {
+	if err := p.ValidateIgnitionFiles(ctx, clusterDir); err != nil {
 		return &errtypes.ConfigError{Msg: "ignition file validation failed", Err: err}
 	}
 
@@ -177,7 +177,10 @@ func (p *Phase) GenerateIgnitionConfigs(ctx context.Context, clusterDir string) 
 
 // ValidateIgnitionFiles verifies that bootstrap.ign, master.ign, and
 // worker.ign exist in clusterDir and are at least 1 KiB.
-func (p *Phase) ValidateIgnitionFiles(clusterDir string) error {
+func (p *Phase) ValidateIgnitionFiles(ctx context.Context, clusterDir string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	requiredFiles := []string{"bootstrap.ign", "master.ign", "worker.ign"}
 	minSize := int64(1024) // ignition files are typically much larger
 

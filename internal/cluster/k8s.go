@@ -108,8 +108,13 @@ func (c *K8sClient) runCheck(ctx context.Context, args ...string) error {
 		if stderr == "" {
 			stderr = strings.TrimSpace(result.Stdout)
 		}
-		return fmt.Errorf("%s %s failed (exit %d): %s",
-			c.CLI, subcommand(args), result.ExitCode, stderr)
+		// Return a typed *executor.ExitError so callers can errors.As to
+		// inspect ExitCode without re-parsing the message.
+		return &executor.ExitError{
+			Command:  c.CLI + " " + subcommand(args),
+			ExitCode: result.ExitCode,
+			Stderr:   stderr,
+		}
 	}
 	return nil
 }

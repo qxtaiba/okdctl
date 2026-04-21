@@ -6,6 +6,7 @@ coverage.html
 
 # Local worktrees for parallel agent work
 .worktrees/
+.claude/worktrees/
 
 # Environment files
 .env

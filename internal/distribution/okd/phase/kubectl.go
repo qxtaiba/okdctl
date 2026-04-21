@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/qxtaiba/okdctl/internal/executor"
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
@@ -23,24 +24,42 @@ func (p *BasePhase) OcResourceExists(ctx context.Context, errPrefix string, args
 }
 
 // OcOutput runs `oc <args...>` once and returns trimmed stdout.
-// A non-zero exit code is returned as an error wrapping the stderr text.
+// A non-zero exit code is returned as an *executor.ExitError so callers
+// can errors.As to inspect ExitCode without re-parsing the message.
 func (p *BasePhase) OcOutput(ctx context.Context, args ...string) (string, error) {
 	result, err := p.Exec.Run(ctx, "oc", args...)
 	if err != nil {
 		return "", err
 	}
 	if result.ExitCode != 0 {
-		return "", fmt.Errorf("oc %s failed (exit %d): %s", args[0], result.ExitCode, strings.TrimSpace(result.Stderr))
+		return "", &executor.ExitError{
+			Command:  "oc " + args[0],
+			ExitCode: result.ExitCode,
+			Stderr:   strings.TrimSpace(result.Stderr),
+		}
 	}
 	return strings.TrimSpace(result.Stdout), nil
 }
 
-// OcPollOutput polls `oc <args...>` until predicate matches the trimmed
-// stdout, and returns the first matching value. Polls on the default
-// WaitFor interval bounded by timeout.
+// OcPollOutput polls `oc <args...>` at the WaitFor default interval (30s)
+// until predicate matches the trimmed stdout, and returns the first
+// matching value. timeout bounds the wait.
 func (p *BasePhase) OcPollOutput(ctx context.Context, prefix, desc string, timeout time.Duration, predicate func(stdout string) bool, args ...string) (string, error) {
+	return p.OcPollOutputInterval(ctx, prefix, desc, timeout, 0, predicate, args...)
+}
+
+// OcPollOutputInterval is OcPollOutput with an explicit poll interval. Pass
+// 0 to use the WaitFor default (30s). Tests pass small intervals to keep
+// runs fast; production code typically uses the default.
+func (p *BasePhase) OcPollOutputInterval(ctx context.Context, prefix, desc string, timeout, interval time.Duration, predicate func(stdout string) bool, args ...string) (string, error) {
 	var captured string
-	err := system.WaitForWithTimeout(ctx, prefix, desc, func() bool {
+	opts := system.DefaultWaitForOptions()
+	opts.Timeout = timeout
+	if interval > 0 {
+		opts.Interval = interval
+	}
+	opts.Logger = p.Log
+	err := system.WaitFor(ctx, prefix, desc, func() bool {
 		result, _ := p.Exec.Run(ctx, "oc", args...)
 		if result.ExitCode != 0 {
 			return false
@@ -51,6 +70,6 @@ func (p *BasePhase) OcPollOutput(ctx context.Context, prefix, desc string, timeo
 		}
 		captured = value
 		return true
-	}, timeout, p.Log)
+	}, opts)
 	return captured, err
 }

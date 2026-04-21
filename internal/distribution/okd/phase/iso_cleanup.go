@@ -44,6 +44,25 @@ func shellSingleQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
+// validateProxmoxName is a defense-in-depth guard at the call site for
+// pvesh commands interpolated over ssh. config.ValidateOKDConfig already
+// rejects malformed node / storage names at load time; this catches the
+// case where a hand-edited YAML bypasses validation and reaches the
+// remote-shell path through okdctl destroy.
+func validateProxmoxName(name string) error {
+	if name == "" {
+		return fmt.Errorf("must not be empty")
+	}
+	for i, r := range name {
+		ok := (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') ||
+			(r >= '0' && r <= '9') || r == '-' || r == '_'
+		if !ok {
+			return fmt.Errorf("character %q at position %d not in [A-Za-z0-9_-]", string(r), i)
+		}
+	}
+	return nil
+}
+
 // validateISODir rejects isoDir values that contain shell metacharacters or
 // are not absolute paths.
 func validateISODir(isoDir string) error {
@@ -97,6 +116,9 @@ func configDevicesReferenceISO(data []byte, isoBase string) (bool, error) {
 }
 
 func listProxmoxVMIDs(ctx context.Context, p *RemoteISOParams) ([]int, error) {
+	if err := validateProxmoxName(p.Node); err != nil {
+		return nil, fmt.Errorf("proxmox node %q invalid: %w", p.Node, err)
+	}
 	result, err := SSHRun(ctx, p.Exec, p.Host,
 		fmt.Sprintf("pvesh get /nodes/%s/qemu --output-format json", p.Node),
 	)
@@ -110,6 +132,9 @@ func listProxmoxVMIDs(ctx context.Context, p *RemoteISOParams) ([]int, error) {
 // if any device-mapping field references isoBase. If the config call fails,
 // it returns true (fail-closed) to prevent removing an ISO whose usage is unknown.
 func vmConfigReferencesISO(ctx context.Context, p *RemoteISOParams, vmid int, isoBase string) (bool, error) {
+	if err := validateProxmoxName(p.Node); err != nil {
+		return true, fmt.Errorf("proxmox node %q invalid: %w", p.Node, err)
+	}
 	result, err := SSHRun(ctx, p.Exec, p.Host,
 		fmt.Sprintf("pvesh get /nodes/%s/qemu/%d/config --output-format json 2>/dev/null", p.Node, vmid),
 	)

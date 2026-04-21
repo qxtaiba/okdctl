@@ -17,15 +17,17 @@ var configCmd = &cobra.Command{
 }
 
 var configShowCmd = &cobra.Command{
-	Use:   "show",
-	Short: "Print the resolved configuration with secrets redacted",
-	RunE:  runConfigShow,
+	Use:     "show",
+	Short:   "Print the resolved configuration with secrets redacted",
+	Example: "  okdctl config show",
+	RunE:    runConfigShow,
 }
 
 var configValidateCmd = &cobra.Command{
-	Use:   "validate",
-	Short: "Validate the configuration file and report errors",
-	RunE:  runConfigValidate,
+	Use:     "validate",
+	Short:   "Validate the configuration file and report errors",
+	Example: "  okdctl config validate",
+	RunE:    runConfigValidate,
 }
 
 func init() {

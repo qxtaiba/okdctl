@@ -64,16 +64,10 @@ Highlights:
 		}
 		return ensureRoot(cmd)
 	},
-	Run: func(_ *cobra.Command, _ []string) {
-		fmt.Println(tui.TitleStyle.Render("homelab k8s"))
-		fmt.Println()
-		fmt.Println(tui.MutedStyle.Render("quick start:"))
-		fmt.Println("  " + tui.HighlightStyle.Render("okdctl deploy") + "           deploy a cluster")
-		fmt.Println("  " + tui.HighlightStyle.Render("okdctl destroy") + "          destroy the cluster")
-		fmt.Println("  " + tui.HighlightStyle.Render("okdctl update-ingress") + "   switch ingress to loadbalancer ips")
-		fmt.Println()
-		fmt.Println(tui.MutedStyle.Render("run 'okdctl --help' for all commands"))
-	},
+	// No Run defined — cobra's default behavior surfaces the full subcommand
+	// tree on bare `okdctl`. A previous custom Run printed a curated welcome
+	// banner but hid all 13 subcommands; the audit flagged that as the
+	// dominant discoverability gap.
 }
 
 // Execute is the process-level entry point. It wires the default slog logger,
@@ -93,7 +87,13 @@ func execute() int {
 	// SIGTERM (→143). signal.NotifyContext would collapse them.
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
-	defer signal.Stop(sigCh)
+	defer func() {
+		signal.Stop(sigCh)
+		// Close after Stop so the receiver's !ok branch returns on the
+		// happy path. Without this, the goroutine blocks on sigCh until
+		// process exit — a bounded leak but still a leak.
+		close(sigCh)
+	}()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -118,7 +118,10 @@ func execute() int {
 			}
 			return 130
 		}
-		tui.Error(err.Error())
+		// Pass err as a structured attr so logutil.RedactHandler gets the
+		// chance to scrub credentials in the chain. tui.Error(err.Error())
+		// would stringify before the handler sees it.
+		tui.Error("command failed", tui.LF("err", err))
 		return exitCodeFor(err)
 	}
 

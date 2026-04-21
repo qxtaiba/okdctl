@@ -80,8 +80,7 @@ func (p *Phase) VerifyClusterHealth(ctx context.Context, _ *Options) (*ClusterHe
 		return nil, &errtypes.ClusterError{Msg: "failed to get cluster operators", Err: err}
 	}
 
-	lines := strings.Split(strings.TrimSpace(cmdResult.Stdout), "\n")
-	for _, line := range lines {
+	for line := range strings.Lines(cmdResult.Stdout) {
 		fields := strings.Fields(line)
 		if len(fields) >= 5 {
 			if phase.ConditionStatus(fields[4]) == phase.ConditionStatusTrue { // DEGRADED column
@@ -202,7 +201,9 @@ func (p *Phase) verifyKubeVIPAPIHealth(ctx context.Context, vip string) error {
 	}
 	response := strings.TrimSpace(string(body))
 	if response != "ok" {
-		return fmt.Errorf("api health check returned unexpected response: %s (expected 'ok')", response)
+		return &errtypes.ClusterError{
+			Msg: fmt.Sprintf("api health check returned unexpected response: %s (expected 'ok')", response),
+		}
 	}
 
 	p.Log.Info(fmt.Sprintf("kubevip: api server responding at %s", healthURL))

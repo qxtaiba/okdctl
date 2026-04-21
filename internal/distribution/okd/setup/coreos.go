@@ -19,12 +19,8 @@ import (
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
-// DefaultProxmoxISODir is the default Proxmox-managed path where downloaded
-// FCOS ISOs land when no explicit Proxmox storage reference is provided.
-const DefaultProxmoxISODir = "/var/lib/vz/template/iso"
-
 func (p *Phase) findOrDownloadFCOSISO(ctx context.Context, cfg *config.Config, opts *Options) (string, error) {
-	isoDir := DefaultProxmoxISODir
+	isoDir := phase.DefaultProxmoxISODir
 
 	if cfg.Provider.Proxmox != nil && cfg.Provider.Proxmox.FCOSIso != "" {
 		fcosISO := cfg.Provider.Proxmox.FCOSIso
@@ -59,8 +55,7 @@ func (p *Phase) findOrDownloadFCOSISO(ctx context.Context, cfg *config.Config, o
 			continue
 		}
 		if len(matches) > 0 {
-			slices.Sort(matches)
-			isoPath := matches[len(matches)-1] // newest by lexicographic version
+			isoPath := slices.Max(matches) // newest by lexicographic version
 			p.Log.Info(fmt.Sprintf("coreos: found existing iso at %s", filepath.Base(isoPath)))
 			return isoPath, nil
 		}

@@ -61,7 +61,7 @@ func (p *Phase) installSteps(cfg *config.Config, opts *Options) []distribution.S
 		{
 			ID: StepSetupKubeconfig, Name: "setup kubeconfig",
 			Desc: "configuring cluster access",
-			Exec: func(_ context.Context) error { return p.SetupKubeconfig(clusterDir) },
+			Exec: func(ctx context.Context) error { return p.SetupKubeconfig(ctx, clusterDir) },
 		},
 		{
 			ID: StepValidateAccess, Name: "validate cluster access",

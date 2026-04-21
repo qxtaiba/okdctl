@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"slices"
 	"strings"
 
 	"github.com/qxtaiba/okdctl/internal/config"
@@ -34,8 +35,10 @@ func RestartDnsmasq(ctx context.Context) error {
 }
 
 // ValidateDnsmasqConfig runs "dnsmasq --test" to verify the on-disk config.
+// stderr is captured so the returned error carries dnsmasq's actual
+// syntax-error message, not just "exit status 1".
 func ValidateDnsmasqConfig(ctx context.Context) error {
-	return exec.CommandContext(ctx, "dnsmasq", "--test").Run()
+	return system.RunCaptured(ctx, "dnsmasq", "--test")
 }
 
 func validateConfigName(name string) error {
@@ -51,7 +54,10 @@ func validateConfigName(name string) error {
 // WriteDnsmasqConfig writes content to /etc/dnsmasq.d/<name>.conf. An
 // existing file is copied to <path>.backup first so validateAndRestartDnsmasq
 // can roll back on failure.
-func WriteDnsmasqConfig(_ context.Context, name, content string) error {
+func WriteDnsmasqConfig(ctx context.Context, name, content string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	if err := validateConfigName(name); err != nil {
 		return fmt.Errorf("invalid config name: %w", err)
 	}
@@ -112,7 +118,7 @@ func getActiveConnection(ctx context.Context) (string, error) {
 		return "", fmt.Errorf("failed to list network connections: %w", err)
 	}
 
-	for _, line := range strings.Split(string(out), "\n") {
+	for line := range strings.Lines(string(out)) {
 		line = strings.TrimSpace(line)
 		if line != "" && line != "lo" {
 			return line, nil
@@ -146,17 +152,16 @@ func ConfigureSystemResolver(ctx context.Context, fallbackDNS []string, logger *
 			return err
 		}
 
-		dnsList := []string{"127.0.0.1"}
-		dnsList = append(dnsList, fallbackDNS...)
+		dnsList := slices.Concat([]string{"127.0.0.1"}, fallbackDNS)
 		dnsConfig := strings.Join(dnsList, ",")
 
 		logger.Info(fmt.Sprintf("resolver: configuring %s to use local dnsmasq", conn))
 
-		if err := exec.CommandContext(ctx, "nmcli", "connection", "modify", conn, "ipv4.dns", dnsConfig, "ipv4.ignore-auto-dns", "yes").Run(); err != nil {
+		if err := system.RunCaptured(ctx, "nmcli", "connection", "modify", conn, "ipv4.dns", dnsConfig, "ipv4.ignore-auto-dns", "yes"); err != nil {
 			return fmt.Errorf("failed to configure DNS for connection: %w", err)
 		}
 
-		if err := exec.CommandContext(ctx, "nmcli", "connection", "up", conn).Run(); err != nil {
+		if err := system.RunCaptured(ctx, "nmcli", "connection", "up", conn); err != nil {
 			return fmt.Errorf("failed to apply DNS configuration: %w", err)
 		}
 
@@ -184,7 +189,7 @@ func ConfigureSystemResolver(ctx context.Context, fallbackDNS []string, logger *
 		if err := system.CopyFile(tmpPath, confPath); err != nil {
 			return fmt.Errorf("failed to install dnsmasq.conf: %w", err)
 		}
-		return exec.CommandContext(ctx, "systemctl", "restart", "systemd-resolved").Run()
+		return system.RunCaptured(ctx, "systemctl", "restart", "systemd-resolved")
 	}
 
 	logger.Warn("dns: neither NetworkManager nor systemd-resolved found, skipping system resolver configuration")
@@ -204,11 +209,11 @@ func RestoreSystemResolver(ctx context.Context, logger *slog.Logger) error {
 
 		logger.Info(fmt.Sprintf("resolver: restoring DHCP DNS for %s", conn))
 
-		if err := exec.CommandContext(ctx, "nmcli", "connection", "modify", conn, "ipv4.dns", "", "ipv4.ignore-auto-dns", "no").Run(); err != nil {
+		if err := system.RunCaptured(ctx, "nmcli", "connection", "modify", conn, "ipv4.dns", "", "ipv4.ignore-auto-dns", "no"); err != nil {
 			logger.Warn("resolver: failed to clear DNS settings", "err", err)
 		}
 
-		if err := exec.CommandContext(ctx, "nmcli", "connection", "up", conn).Run(); err != nil {
+		if err := system.RunCaptured(ctx, "nmcli", "connection", "up", conn); err != nil {
 			logger.Warn("resolver: failed to apply DNS configuration", "err", err)
 		}
 

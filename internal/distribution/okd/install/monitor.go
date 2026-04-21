@@ -31,7 +31,13 @@ func (p *Phase) WaitForBootstrap(ctx context.Context, clusterDir string, opts *O
 	stopSpinner()
 	if err != nil {
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-			return &errtypes.ClusterError{Msg: fmt.Sprintf("bootstrap timed out after %v", opts.BootstrapTimeout)}
+			// Preserve cancellation identity through the typed error so
+			// callers can errors.Is(err, context.DeadlineExceeded) to
+			// distinguish "we ran out of budget" from "command failed".
+			return &errtypes.ClusterError{
+				Msg: fmt.Sprintf("bootstrap timed out after %v", opts.BootstrapTimeout),
+				Err: ctx.Err(),
+			}
 		}
 		if errors.Is(ctx.Err(), context.Canceled) {
 			return fmt.Errorf("bootstrap cancelled: %w", ctx.Err())

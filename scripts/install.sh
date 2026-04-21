@@ -105,12 +105,15 @@ if [ -z "$INSECURE" ] && [ -n "$SHA_CMD" ]; then
             die "failed to download SHA256SUMS.sig (release missing signature? rerun with INSECURE=1 if you accept the risk)"
         curl -sSfL -o "$TMP/SHA256SUMS.pem" "$BASE_URL/SHA256SUMS.pem" ||
             die "failed to download SHA256SUMS.pem"
+        # stderr is intentionally passed through — on verification failure the
+        # user needs to see cosign's diagnostic (cert identity, OIDC issuer,
+        # signature mismatch) rather than a bare "verification failed".
         COSIGN_EXPERIMENTAL=1 cosign verify-blob \
             --certificate="$TMP/SHA256SUMS.pem" \
             --signature="$TMP/SHA256SUMS.sig" \
             --certificate-identity-regexp='https://github\.com/qxtaiba/okdctl/' \
             --certificate-oidc-issuer='https://token.actions.githubusercontent.com' \
-            "$TMP/SHA256SUMS" >/dev/null 2>&1 ||
+            "$TMP/SHA256SUMS" >/dev/null ||
             die "cosign signature verification failed on SHA256SUMS"
         info "cosign signature verified"
     else
@@ -119,7 +122,10 @@ if [ -z "$INSECURE" ] && [ -n "$SHA_CMD" ]; then
     fi
 
     info "verifying SHA256"
-    EXPECTED=$(grep " $ARCHIVE_NAME\$" "$TMP/SHA256SUMS" | awk '{print $1}')
+    # awk field-equality (not grep) avoids treating '.' in the filename as a
+    # regex wildcard. Cosign already protects SHA256SUMS integrity so this
+    # is defense-in-depth rather than a standalone guard.
+    EXPECTED=$(awk -v name="$ARCHIVE_NAME" '$2 == name || $2 == "*"name {print $1}' "$TMP/SHA256SUMS")
     [ -n "$EXPECTED" ] || die "no checksum found for $ARCHIVE_NAME in SHA256SUMS"
     ACTUAL=$($SHA_CMD "$TMP/$ARCHIVE_NAME" | awk '{print $1}')
     [ "$EXPECTED" = "$ACTUAL" ] ||
@@ -127,10 +133,12 @@ if [ -z "$INSECURE" ] && [ -n "$SHA_CMD" ]; then
     info "checksum verified"
 fi
 
-# Extract the archive.
+# Extract the archive. --no-same-owner and --no-same-permissions harden
+# against a release tarball that encodes unexpected ownership. The cosign
+# + sha256 verification above is the primary guard; these are defense-in-depth.
 info "extracting"
 cd "$TMP"
-tar -xzf "$ARCHIVE_NAME"
+tar --no-same-owner --no-same-permissions -xzf "$ARCHIVE_NAME"
 
 [ -f "$BINARY" ] || die "$BINARY not found in archive"
 

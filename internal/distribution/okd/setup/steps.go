@@ -230,8 +230,8 @@ func (p *Phase) setupInfraSteps(cfg *config.Config, opts *Options) []distributio
 		{
 			ID: StepGenerateTfvars, Name: "generate terraform variables",
 			Desc: "generating terraform variables",
-			Exec: func(_ context.Context) error {
-				if err := p.GenerateTerraformVars(cfg, opts); err != nil {
+			Exec: func(ctx context.Context) error {
+				if err := p.GenerateTerraformVars(ctx, cfg, opts); err != nil {
 					return &errtypes.ConfigError{Msg: "failed to generate Terraform variables", Err: err}
 				}
 				tfvarsPath := filepath.Join(opts.ProjectRoot, "infrastructure", "terraform", "environments", phase.GetTerraformEnv(cfg), "terraform.tfvars")
@@ -291,9 +291,9 @@ func (p *Phase) installSystemPackages(ctx context.Context) error {
 	for _, pkg := range sysPkgs {
 		if !executor.CommandExists(pkg) {
 			toInstall = append(toInstall, pkg)
-			p.Log.Info(fmt.Sprintf("packages: %s not found", pkg))
+			p.Log.Debug(fmt.Sprintf("packages: %s not found", pkg))
 		} else {
-			p.Log.Info(fmt.Sprintf("packages: %s already installed", pkg))
+			p.Log.Debug(fmt.Sprintf("packages: %s already installed", pkg))
 		}
 	}
 

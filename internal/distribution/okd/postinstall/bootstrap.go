@@ -37,6 +37,15 @@ func (p *Phase) CleanupBootstrap(ctx context.Context, cfg *config.Config, opts *
 
 	p.Log.Info("bootstrap: planning vm destruction")
 	planFile := "bootstrap-destroy.tfplan"
+	planPath := filepath.Join(terraformDir, planFile)
+	// Always sweep the plan file at function exit. Without this a plan
+	// or apply error left the .tfplan in place; the next bootstrap-destroy
+	// run would refuse to overwrite it or re-use stale targets.
+	defer func() {
+		if err := system.SafeRemove(planPath); err != nil {
+			p.Log.Warn("bootstrap: plan file cleanup failed", "err", err)
+		}
+	}()
 	if err := tf.Plan(ctx, terraform.PlanOptions{
 		OutputPlanFile: planFile,
 		Vars:           vars,
@@ -47,14 +56,9 @@ func (p *Phase) CleanupBootstrap(ctx context.Context, cfg *config.Config, opts *
 
 	p.Log.Info("bootstrap: applying — destroying bootstrap vm")
 	if err := tf.Apply(ctx, terraform.ApplyOptions{
-		PlanFile: filepath.Join(terraformDir, planFile),
+		PlanFile: planPath,
 	}); err != nil {
 		return &errtypes.ClusterError{Msg: "bootstrap: terraform apply failed", Err: err}
-	}
-
-	// Clean up plan file.
-	if err := system.SafeRemove(filepath.Join(terraformDir, planFile)); err != nil {
-		p.Log.Warn("bootstrap: plan file cleanup failed", "err", err)
 	}
 
 	p.Log.Info(fmt.Sprintf("bootstrap: vm destroyed (no longer needed for %s)", cfg.Cluster.Name))

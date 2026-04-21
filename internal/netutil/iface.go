@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"os/exec"
 	"strings"
+
+	"github.com/qxtaiba/okdctl/internal/system"
 )
 
 // RemoveSecondaryIP strips ip from the active NetworkManager connection bound
@@ -34,11 +36,11 @@ func RemoveSecondaryIP(ctx context.Context, ip, iface string) error {
 		return fmt.Errorf("failed to find networkmanager connection for %s: %w", iface, err)
 	}
 
-	if err := exec.CommandContext(ctx, "nmcli", "connection", "modify", conn, "-ipv4.addresses", ip+"/32").Run(); err != nil {
+	if err := system.RunCaptured(ctx, "nmcli", "connection", "modify", conn, "-ipv4.addresses", ip+"/32"); err != nil {
 		return fmt.Errorf("failed to remove IP %s from connection %s: %w", ip, conn, err)
 	}
 
-	if err := exec.CommandContext(ctx, "nmcli", "device", "reapply", iface).Run(); err != nil {
+	if err := system.RunCaptured(ctx, "nmcli", "device", "reapply", iface); err != nil {
 		return fmt.Errorf("failed to apply IP change on %s: %w", iface, err)
 	}
 
@@ -71,7 +73,8 @@ func connectionForDevice(ctx context.Context, iface string) (string, error) {
 		return "", fmt.Errorf("failed to list networkmanager connections: %w", err)
 	}
 
-	for _, line := range strings.Split(strings.TrimSpace(string(output)), "\n") {
+	for line := range strings.Lines(string(output)) {
+		line = strings.TrimRight(line, "\n")
 		unescaped := strings.ReplaceAll(line, `\:`, "\x00")
 		parts := strings.SplitN(unescaped, ":", 2)
 		if len(parts) == 2 && parts[1] == iface {

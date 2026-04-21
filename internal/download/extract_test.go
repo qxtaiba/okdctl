@@ -1,0 +1,186 @@
+package download
+
+import (
+	"archive/tar"
+	"bytes"
+	"compress/gzip"
+	"context"
+	"errors"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+// tarBuilder writes a tar.gz archive in memory for zip-slip tests.
+type tarEntry struct {
+	Name     string
+	Mode     int64
+	Typeflag byte
+	Linkname string
+	Data     []byte
+}
+
+func buildTarGz(t *testing.T, entries []tarEntry) string {
+	t.Helper()
+	var buf bytes.Buffer
+	gz := gzip.NewWriter(&buf)
+	tw := tar.NewWriter(gz)
+	for _, e := range entries {
+		hdr := &tar.Header{
+			Name:     e.Name,
+			Mode:     e.Mode,
+			Size:     int64(len(e.Data)),
+			Typeflag: e.Typeflag,
+			Linkname: e.Linkname,
+		}
+		if hdr.Typeflag == 0 {
+			hdr.Typeflag = tar.TypeReg
+		}
+		if err := tw.WriteHeader(hdr); err != nil {
+			t.Fatal(err)
+		}
+		if len(e.Data) > 0 {
+			if _, err := tw.Write(e.Data); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	if err := tw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := gz.Close(); err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	path := filepath.Join(dir, "test.tar.gz")
+	if err := os.WriteFile(path, buf.Bytes(), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+func TestExtractTarGz_ZipSlipRejected(t *testing.T) {
+	cases := []struct {
+		name    string
+		entries []tarEntry
+		wantMsg string
+	}{
+		{
+			name: "parent-dir traversal in entry name",
+			entries: []tarEntry{
+				{Name: "../escape.txt", Mode: 0o644, Data: []byte("bad")},
+			},
+			wantMsg: "escape destination",
+		},
+		{
+			name: "absolute symlink target",
+			entries: []tarEntry{
+				{Name: "link", Mode: 0o777, Typeflag: tar.TypeSymlink, Linkname: "/etc/passwd"},
+			},
+			wantMsg: "absolute symlink",
+		},
+		{
+			name: "relative symlink escaping dest",
+			entries: []tarEntry{
+				{Name: "link", Mode: 0o777, Typeflag: tar.TypeSymlink, Linkname: "../../../etc/passwd"},
+			},
+			wantMsg: "escape",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			archive := buildTarGz(t, tc.entries)
+			dest := realTempDir(t)
+			err := ExtractTarGz(context.Background(), ExtractOptions{
+				ArchivePath: archive,
+				DestDir:     dest,
+			})
+			if err == nil {
+				t.Fatalf("expected rejection")
+			}
+			// tc.wantMsg is one plausible rejection phrasing; any non-nil
+			// error containing either that phrase or a generic "escape"
+			// / "outside" / "not allowed" token is acceptable since the
+			// guard has several phrasings depending on entry type.
+			lower := strings.ToLower(err.Error())
+			if !strings.Contains(lower, strings.ToLower(tc.wantMsg)) &&
+				!strings.Contains(lower, "outside") &&
+				!strings.Contains(lower, "not allowed") {
+				t.Errorf("err = %v; want contains %q or generic escape phrasing", err, tc.wantMsg)
+			}
+
+			// Nothing escaped outside dest.
+			if _, statErr := os.Stat(filepath.Join(filepath.Dir(dest), "escape.txt")); !os.IsNotExist(statErr) {
+				t.Errorf("escape file materialized outside dest: %v", statErr)
+			}
+		})
+	}
+}
+
+// realTempDir returns a fully-resolved temp dir path so the extractor's
+// EvalSymlinks-based prefix check sees identical paths on both sides. On
+// macOS, t.TempDir() returns a symlink under /var that resolves to
+// /private/var — resolving once up front is the simplest fix.
+func realTempDir(t *testing.T) string {
+	t.Helper()
+	d := t.TempDir()
+	real, err := filepath.EvalSymlinks(d)
+	if err != nil {
+		return d
+	}
+	return real
+}
+
+func TestExtractTarGz_HappyPath(t *testing.T) {
+	archive := buildTarGz(t, []tarEntry{
+		{Name: "dir/", Mode: 0o755, Typeflag: tar.TypeDir},
+		{Name: "dir/file.txt", Mode: 0o644, Data: []byte("hello")},
+	})
+	dest := realTempDir(t)
+	if err := ExtractTarGz(context.Background(), ExtractOptions{
+		ArchivePath: archive,
+		DestDir:     dest,
+	}); err != nil {
+		t.Fatalf("extract: %v", err)
+	}
+	body, err := os.ReadFile(filepath.Join(dest, "dir", "file.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(body) != "hello" {
+		t.Errorf("body = %q", body)
+	}
+}
+
+func TestExtractTarGz_ContextCancellation(t *testing.T) {
+	archive := buildTarGz(t, []tarEntry{
+		{Name: "a.txt", Mode: 0o644, Data: []byte("x")},
+	})
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	err := ExtractTarGz(ctx, ExtractOptions{
+		ArchivePath: archive,
+		DestDir:     t.TempDir(),
+	})
+	if !errors.Is(err, context.Canceled) {
+		t.Errorf("err = %v; want context.Canceled", err)
+	}
+}
+
+func TestExtractTarGz_StripComponents(t *testing.T) {
+	archive := buildTarGz(t, []tarEntry{
+		{Name: "top/inner/file.txt", Mode: 0o644, Data: []byte("data")},
+	})
+	dest := realTempDir(t)
+	if err := ExtractTarGz(context.Background(), ExtractOptions{
+		ArchivePath:     archive,
+		DestDir:         dest,
+		StripComponents: 2,
+	}); err != nil {
+		t.Fatalf("extract: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dest, "file.txt")); err != nil {
+		t.Errorf("expected stripped file at dest root: %v", err)
+	}
+}

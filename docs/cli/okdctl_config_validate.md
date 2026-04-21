@@ -6,6 +6,12 @@ Validate the configuration file and report errors
 okdctl config validate [flags]
 ```
 
+### Examples
+
+```
+  okdctl config validate
+```
+
 ### Options
 
 ```

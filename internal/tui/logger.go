@@ -13,17 +13,6 @@ import (
 	"github.com/qxtaiba/okdctl/internal/logutil"
 )
 
-// LogLevel enumerates the severity thresholds accepted by the TUI logger.
-type LogLevel int
-
-// LogLevel values ordered from most to least verbose.
-const (
-	LogLevelDebug LogLevel = iota
-	LogLevelInfo
-	LogLevelWarn
-	LogLevelError
-)
-
 // LogField is a single structured key/value pair attached to a log record.
 type LogField struct {
 	Key   string
@@ -37,11 +26,20 @@ func LF(key string, value any) LogField {
 }
 
 var (
-	stdoutLogger       = buildLogger(os.Stdout)
-	stderrLogger       = buildLogger(os.Stderr)
+	stdoutLogger = buildLogger(os.Stdout)
+	stderrLogger = buildLogger(os.Stderr)
+	// stderrSlog routes Debug/Info/Warn/Error through logutil.RedactHandler
+	// so secret-bearing structured attrs (password/token/secret/api_key)
+	// are scrubbed before reaching charmlog. SetRunID rebuilds this wrapper
+	// whenever stderrLogger is rebound via .With().
+	stderrSlog         = buildStderrSlog()
 	progressBarsActive = true
 	runID              string
 )
+
+func buildStderrSlog() *slog.Logger {
+	return slog.New(logutil.NewRedactHandler(&stderrHandler{h: stderrLogger}))
+}
 
 func buildLogger(w io.Writer) *charmlog.Logger {
 	l := charmlog.New(w)
@@ -66,16 +64,17 @@ func fieldsToArgs(fields []LogField) []any {
 
 // Debug emits a debug-level record on stderr. Stdout is reserved for data
 // the user explicitly asked for (config show, kubeconfig, JSON output).
-func Debug(msg string, fields ...LogField) { stderrLogger.Debug(msg, fieldsToArgs(fields)...) }
+// Records pass through logutil.RedactHandler via stderrSlog.
+func Debug(msg string, fields ...LogField) { stderrSlog.Debug(msg, fieldsToArgs(fields)...) }
 
 // Info emits an info-level record on stderr.
-func Info(msg string, fields ...LogField) { stderrLogger.Info(msg, fieldsToArgs(fields)...) }
+func Info(msg string, fields ...LogField) { stderrSlog.Info(msg, fieldsToArgs(fields)...) }
 
 // Warn emits a warn-level record on stderr.
-func Warn(msg string, fields ...LogField) { stderrLogger.Warn(msg, fieldsToArgs(fields)...) }
+func Warn(msg string, fields ...LogField) { stderrSlog.Warn(msg, fieldsToArgs(fields)...) }
 
 // Error emits an error-level record on stderr.
-func Error(msg string, fields ...LogField) { stderrLogger.Error(msg, fieldsToArgs(fields)...) }
+func Error(msg string, fields ...LogField) { stderrSlog.Error(msg, fieldsToArgs(fields)...) }
 
 // stderrHandler is a slog.Handler that writes every record to stderr.
 // stdoutLogger is retained in the package only so ConfigureLoggers has a
@@ -160,6 +159,8 @@ func SetRunID(id string) {
 	runID = id
 	stdoutLogger = stdoutLogger.With("run_id", id)
 	stderrLogger = stderrLogger.With("run_id", id)
+	// Rebuild the slog wrapper so it captures the new stderrLogger value.
+	stderrSlog = buildStderrSlog()
 }
 
 // RunID returns the correlation ID set by SetRunID, or the empty

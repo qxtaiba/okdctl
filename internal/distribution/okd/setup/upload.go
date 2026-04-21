@@ -73,7 +73,7 @@ func (p *Phase) UploadCustomISOsToProxmox(ctx context.Context, cfg *config.Confi
 
 	host := phase.ProxmoxBareHost(cfg.Provider.Proxmox.Host)
 	user := "root"
-	remotePath := DefaultProxmoxISODir
+	remotePath := phase.DefaultProxmoxISODir
 
 	totalSizeMB := float64(calculateTotalSize(isoFiles)) / 1024 / 1024
 	p.Log.Info("iso: uploading", "count", len(isoFiles), "size_mb", fmt.Sprintf("%.1f", totalSizeMB), "user", user, "host", host, "path", remotePath)

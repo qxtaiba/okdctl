@@ -155,7 +155,7 @@ func (p *Provider) Provision(ctx context.Context, cfg *config.Config, opts Provi
 	}
 
 	totalNodes := 1 + cfg.Topology.ControlPlane.Count + cfg.Topology.Workers.Count
-	p.logger.Info(fmt.Sprintf("terraform: plan will create %d virtual machines", totalNodes))
+	p.logger.Info("terraform: plan will create virtual machines", "count", totalNodes)
 
 	p.logger.Info("terraform: applying infrastructure changes")
 	stopSpinner := tui.StartSpinner(ctx, "applying terraform infrastructure")
@@ -182,7 +182,7 @@ func (p *Provider) Provision(ctx context.Context, cfg *config.Config, opts Provi
 		return nil, fmt.Errorf("terraform apply succeeded but no VMs were provisioned; check config")
 	}
 
-	p.logger.Info(fmt.Sprintf("terraform: provisioned %d vms", len(result.VMs)))
+	p.logger.Info("terraform: vms provisioned", "count", len(result.VMs))
 	for _, vm := range result.VMs {
 		if vm.IPAddress != "" {
 			p.logger.Info("terraform: vm provisioned", "vm", vm.Name, "ip", vm.IPAddress)

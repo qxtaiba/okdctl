@@ -1,6 +1,7 @@
 package releases
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -159,13 +160,11 @@ func sortAndClassifySeries(seriesMap map[string]*OKDReleaseSeries) []OKDReleaseS
 		// string, so the ordering is stable regardless of the input order
 		// returned by the GitHub API.
 		slices.SortFunc(series.Versions, func(a, b OKDVersion) int {
-			if cmp := semver.Compare("v"+a.Version, "v"+b.Version); cmp != 0 {
-				return -cmp // descending
-			}
-			if !a.ReleaseDate.Equal(b.ReleaseDate) {
-				return b.ReleaseDate.Compare(a.ReleaseDate)
-			}
-			return strings.Compare(b.Version, a.Version)
+			return cmp.Or(
+				-semver.Compare("v"+a.Version, "v"+b.Version), // descending by semver
+				b.ReleaseDate.Compare(a.ReleaseDate),          // newest first
+				strings.Compare(b.Version, a.Version),         // descending raw tag
+			)
 		})
 
 		foundLatestStable := false

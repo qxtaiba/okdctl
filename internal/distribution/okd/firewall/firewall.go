@@ -111,7 +111,7 @@ func Configure(ctx context.Context, ports []Port, permanent bool, logger *slog.L
 	}
 
 	if backend == Firewalld && permanent {
-		if err := exec.CommandContext(ctx, "firewall-cmd", "--reload").Run(); err != nil {
+		if err := system.RunCaptured(ctx, "firewall-cmd", "--reload"); err != nil {
 			return fmt.Errorf("failed to reload firewall: %w", err)
 		}
 	}
@@ -165,7 +165,7 @@ func RemoveRules(ctx context.Context, ports []Port, permanent bool, logger *slog
 	}
 
 	if backend == Firewalld && permanent {
-		_ = exec.CommandContext(ctx, "firewall-cmd", "--reload").Run()
+		_ = system.RunCaptured(ctx, "firewall-cmd", "--reload")
 	}
 
 	return nil
@@ -191,13 +191,14 @@ func modifyPort(ctx context.Context, backend Backend, port Port, permanent bool,
 		}
 		// Port/protocol validated by validatePort above; args are an argv
 		// slice (no shell interpolation).
-		return exec.CommandContext(ctx, args[0], args[1:]...).Run() //nolint:gosec // validated argv
+		// Port/protocol validated by validatePort above; argv slice (no shell).
+		return system.RunCaptured(ctx, args[0], args[1:]...)
 
 	case UFW:
 		if action == actionRemove {
-			return exec.CommandContext(ctx, "ufw", "delete", "allow", portStr).Run()
+			return system.RunCaptured(ctx, "ufw", "delete", "allow", portStr)
 		}
-		return exec.CommandContext(ctx, "ufw", "allow", portStr).Run()
+		return system.RunCaptured(ctx, "ufw", "allow", portStr)
 
 	case IPTables:
 		chainAction := "-I"
@@ -208,7 +209,8 @@ func modifyPort(ctx context.Context, backend Backend, port Port, permanent bool,
 			"iptables", chainAction, "INPUT", "-p", port.Protocol,
 			"--dport", fmt.Sprintf("%d", port.Number), "-j", "ACCEPT",
 		}
-		return exec.CommandContext(ctx, args[0], args[1:]...).Run() //nolint:gosec // validated argv
+		// Port/protocol validated by validatePort above; argv slice (no shell).
+		return system.RunCaptured(ctx, args[0], args[1:]...)
 	}
 
 	return nil

@@ -68,5 +68,8 @@ func (f *OKDVersionFetcher) saveToDiskCache(series []OKDReleaseSeries) {
 		return // Serialization failed, skip silently
 	}
 
-	_ = system.WriteAsInvokingUser(cachePath, data, 0o644)
+	// 0o600: cache may sit in $HOME/.cache. OKD version metadata is public,
+	// but tightening avoids surprising readability if a future field ends up
+	// in this file.
+	_ = system.WriteAsInvokingUser(cachePath, data, 0o600)
 }

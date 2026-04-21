@@ -127,7 +127,7 @@ func (p *Phase) installTerraform(ctx context.Context) error {
 		}
 	default: // rhel family
 		repoURL := "https://rpm.releases.hashicorp.com/RHEL/hashicorp.repo"
-		if err := exec.CommandContext(ctx, "dnf", "config-manager", "--add-repo", repoURL).Run(); err != nil {
+		if _, err := p.Exec.RunChecked(ctx, "dnf", "config-manager", "--add-repo", repoURL); err != nil {
 			return fmt.Errorf("failed to add HashiCorp repository: %w", err)
 		}
 	}
@@ -247,7 +247,7 @@ func installHashiCorpDebianRepo(ctx context.Context) error {
 	}
 	defer func() { _ = os.Remove(gpgTmp) }()
 
-	if err := exec.CommandContext(ctx, "gpg", "--dearmor", "-o", gpgPath, gpgTmp).Run(); err != nil {
+	if err := system.RunCaptured(ctx, "gpg", "--dearmor", "-o", gpgPath, gpgTmp); err != nil {
 		return fmt.Errorf("failed to dearmor HashiCorp GPG key: %w", err)
 	}
 
@@ -272,5 +272,5 @@ func installHashiCorpDebianRepo(ctx context.Context) error {
 	if err := system.CopyFile(listTmp, listPath); err != nil {
 		return fmt.Errorf("failed to install HashiCorp repo list: %w", err)
 	}
-	return exec.CommandContext(ctx, "apt-get", "update").Run()
+	return system.RunCaptured(ctx, "apt-get", "update")
 }

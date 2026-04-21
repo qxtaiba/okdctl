@@ -6,6 +6,12 @@ Print the resolved configuration with secrets redacted
 okdctl config show [flags]
 ```
 
+### Examples
+
+```
+  okdctl config show
+```
+
 ### Options
 
 ```

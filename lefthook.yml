@@ -8,6 +8,14 @@ pre-commit:
       stage_fixed: true
     govet:
       run: go vet ./...
+    shellcheck:
+      glob: "*.sh"
+      run: |
+        if command -v shellcheck >/dev/null 2>&1; then
+          shellcheck {staged_files}
+        else
+          echo "shellcheck not installed; skipping shell lint" >&2
+        fi
 pre-push:
   parallel: true
   commands:

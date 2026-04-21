@@ -25,6 +25,8 @@ var statusCmd = &cobra.Command{
 	Short: "Print a post-deploy cluster summary",
 	Long: `Print API reachability, node counts by role, cluster operator
 health, and addon status for the deployed cluster.`,
+	Example: `  okdctl status
+  okdctl status --format json | jq .ready_nodes`,
 	RunE: runStatus,
 }
 
@@ -34,21 +36,30 @@ var describeCmd = &cobra.Command{
 }
 
 var describeNodeCmd = &cobra.Command{
-	Use:   "node <name>",
-	Short: "Show detail for a cluster node",
-	Args:  cobra.ExactArgs(1),
-	RunE:  runDescribeNode,
+	Use:     "node <name>",
+	Short:   "Show detail for a cluster node",
+	Example: "  okdctl describe node master-0",
+	Args:    cobra.ExactArgs(1),
+	RunE:    runDescribeNode,
 }
 
 var describeAddonCmd = &cobra.Command{
-	Use:   "addon <name>",
-	Short: "Show detail for a registered addon",
-	Args:  cobra.ExactArgs(1),
-	RunE:  runDescribeAddon,
+	Use:     "addon <name>",
+	Short:   "Show detail for a registered addon",
+	Example: "  okdctl describe addon flux",
+	Args:    cobra.ExactArgs(1),
+	RunE:    runDescribeAddon,
+	ValidArgsFunction: func(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
+		return addon.Names(), cobra.ShellCompDirectiveNoFileComp
+	},
 }
+
+var describeFormat string
 
 func init() {
 	statusCmd.Flags().StringVarP(&statusFormat, "format", "F", outputText, "output format: text|json")
+	describeNodeCmd.Flags().StringVarP(&describeFormat, "format", "F", outputText, "output format: text|json")
+	describeAddonCmd.Flags().StringVarP(&describeFormat, "format", "F", outputText, "output format: text|json")
 	describeCmd.AddCommand(describeNodeCmd)
 	describeCmd.AddCommand(describeAddonCmd)
 	rootCmd.AddCommand(statusCmd)
@@ -266,6 +277,17 @@ func runDescribeNode(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("parse node json: %w", err)
 	}
 
+	if describeFormat == outputJSON {
+		payload := map[string]any{
+			"name":  n.Metadata.Name,
+			"role":  n.role(),
+			"ready": n.isReady(),
+		}
+		enc := json.NewEncoder(cmd.OutOrStdout())
+		enc.SetIndent("", "  ")
+		return enc.Encode(payload)
+	}
+
 	tw := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
 	fmt.Fprintf(tw, "NAME\t%s\n", n.Metadata.Name)
 	fmt.Fprintf(tw, "ROLE\t%s\n", n.role())
@@ -319,6 +341,16 @@ func runDescribeAddon(cmd *cobra.Command, args []string) error {
 		{"description", info.Description},
 		{"category", info.Category},
 		{"health", health},
+	}
+
+	if describeFormat == outputJSON {
+		payload := map[string]string{}
+		for _, ln := range lines {
+			payload[ln.k] = ln.v
+		}
+		enc := json.NewEncoder(cmd.OutOrStdout())
+		enc.SetIndent("", "  ")
+		return enc.Encode(payload)
 	}
 
 	for _, ln := range lines {

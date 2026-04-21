@@ -20,13 +20,22 @@ import (
 
 // Executor wraps os/exec with context-aware command execution, output
 // capture, and structured logging for setup/install/postinstall phases.
+//
+// Environment handling: by default the Executor passes only a curated
+// allowlist of the parent environment down to subprocesses — credentials
+// that happen to be exported (unrelated AWS/GCP tokens, shell history
+// plumbing, etc.) do not reach every shellout. Callers append extra
+// vars via WithEnv. The rare caller that needs the full parent env
+// (e.g. a tool that consumes a non-allowlisted variable) opts out via
+// WithInheritedEnv.
 type Executor struct {
-	WorkDir string
-	Env     []string
-	Stdout  io.Writer
-	Stderr  io.Writer
-	Verbose bool
-	logger  *slog.Logger
+	WorkDir    string
+	Env        []string
+	Stdout     io.Writer
+	Stderr     io.Writer
+	Verbose    bool
+	inheritEnv bool
+	logger     *slog.Logger
 }
 
 // Option configures an Executor at construction time.
@@ -37,8 +46,9 @@ func WithWorkDir(dir string) Option {
 	return func(e *Executor) { e.WorkDir = dir }
 }
 
-// WithEnv appends environment variables; they are merged with os.Environ()
-// at execution time rather than replacing the inherited environment.
+// WithEnv appends environment variables; they are appended after the
+// allowlist-filtered parent env (or the full inherited env when
+// WithInheritedEnv is set), so caller-supplied keys win on duplicates.
 func WithEnv(env []string) Option {
 	return func(e *Executor) { e.Env = append(e.Env, env...) }
 }
@@ -47,6 +57,15 @@ func WithEnv(env []string) Option {
 // Nil logger falls back to logutil.NopLogger.
 func WithLogger(l *slog.Logger) Option {
 	return func(e *Executor) { e.logger = logutil.OrNop(l) }
+}
+
+// WithInheritedEnv disables the default env allowlist and passes the
+// parent's full environment to subprocesses. Use sparingly — prefer
+// WithEnv for well-known variables. Use cases: a tool that consumes a
+// variable not on the allowlist, or a test that needs a custom env that
+// the allowlist would filter.
+func WithInheritedEnv() Option {
+	return func(e *Executor) { e.inheritEnv = true }
 }
 
 // New builds an Executor with defaults wired to os.Stdout/os.Stderr and a
@@ -61,6 +80,97 @@ func New(opts ...Option) *Executor {
 		opt(e)
 	}
 	return e
+}
+
+// defaultEnvAllowlist controls which parent-env variables reach subprocesses
+// when the caller has not opted into WithInheritedEnv. Errs generous:
+// deploy needs tooling plumbing (HOME, PATH, KUBECONFIG), proxy vars,
+// SUDO_* for the re-exec model, and every provider-prefixed namespace
+// commonly used with terraform / openshift-install / oc / helm.
+//
+// Tighten this list only after a targeted audit finds a specific var
+// leaking credentials in practice; every entry here gets a docstring
+// justification if removed later.
+var defaultEnvAllowlist = envAllowlist{
+	exact: map[string]bool{
+		"PATH": true, "HOME": true, "USER": true, "LOGNAME": true, "SHELL": true,
+		"LANG": true, "LANGUAGE": true, "LC_ALL": true, "LC_CTYPE": true, "LC_MESSAGES": true,
+		"TERM": true, "TZ": true, "HOSTNAME": true,
+		"TMPDIR": true, "TMP": true, "TEMP": true,
+		"SSH_AUTH_SOCK": true, "SSH_AGENT_PID": true,
+		"HTTP_PROXY": true, "HTTPS_PROXY": true, "NO_PROXY": true,
+		"http_proxy": true, "https_proxy": true, "no_proxy": true,
+		"SUDO_USER": true, "SUDO_UID": true, "SUDO_GID": true,
+		"COLORTERM": true, "NO_COLOR": true, "FORCE_COLOR": true,
+		"PAGER": true, "EDITOR": true,
+		"XDG_CONFIG_HOME": true, "XDG_DATA_HOME": true,
+		"XDG_CACHE_HOME": true, "XDG_RUNTIME_DIR": true,
+		"DBUS_SESSION_BUS_ADDRESS": true,
+	},
+	prefixes: []string{
+		"KUBE",       // KUBECONFIG, KUBE_*
+		"OC_",        // openshift-client
+		"TF_",        // terraform TF_VAR_*, TF_LOG, TF_PLUGIN_*
+		"TERRAFORM_", // terraform built-ins
+		"PROXMOX_",   // bpg/proxmox provider + PROXMOX_VE_*
+		"HELM_",      // helm
+		"GIT_",       // git auth + paths
+		"GITHUB_",    // gh CLI
+		"GH_",        // gh CLI
+	},
+}
+
+// envAllowlist is a dual exact-match + prefix-match filter.
+type envAllowlist struct {
+	exact    map[string]bool
+	prefixes []string
+}
+
+func (a envAllowlist) allows(key string) bool {
+	if a.exact[key] {
+		return true
+	}
+	for _, p := range a.prefixes {
+		if strings.HasPrefix(key, p) {
+			return true
+		}
+	}
+	return false
+}
+
+// filterParentEnv returns the entries of os.Environ() whose keys pass the
+// allowlist. Called once per Run; cheap at ~50-200 entries typical.
+func filterParentEnv(a envAllowlist) []string {
+	parent := os.Environ()
+	out := make([]string, 0, len(parent))
+	for _, kv := range parent {
+		key, _, ok := strings.Cut(kv, "=")
+		if !ok {
+			continue
+		}
+		if a.allows(key) {
+			out = append(out, kv)
+		}
+	}
+	return out
+}
+
+// buildEnv composes the subprocess env for a single Run. Inherit mode passes
+// os.Environ() through unchanged. Default mode filters through
+// defaultEnvAllowlist, then appends caller-supplied e.Env (later wins in
+// the duplicate-key tie).
+func (e *Executor) buildEnv() []string {
+	if e.inheritEnv {
+		if len(e.Env) == 0 {
+			return nil // nil means os.Environ() by os/exec contract
+		}
+		return append(os.Environ(), e.Env...)
+	}
+	base := filterParentEnv(defaultEnvAllowlist)
+	if len(e.Env) == 0 {
+		return base
+	}
+	return append(base, e.Env...)
 }
 
 // Result is the captured outcome of a Run-style invocation.
@@ -109,9 +219,7 @@ func (e *Executor) run(ctx context.Context, stdin io.Reader, name string, args .
 		cmd.Dir = e.WorkDir
 	}
 
-	if len(e.Env) > 0 {
-		cmd.Env = append(os.Environ(), e.Env...)
-	}
+	cmd.Env = e.buildEnv()
 
 	var stdout, stderr bytes.Buffer
 	cmd.Stdin = stdin
@@ -152,9 +260,7 @@ func (e *Executor) RunInteractive(ctx context.Context, name string, args ...stri
 		cmd.Dir = e.WorkDir
 	}
 
-	if len(e.Env) > 0 {
-		cmd.Env = append(os.Environ(), e.Env...)
-	}
+	cmd.Env = e.buildEnv()
 
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = e.Stdout

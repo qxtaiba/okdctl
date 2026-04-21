@@ -29,10 +29,7 @@ func dottedKV(key, value string, keyColWidth int, opts dottedKVOpts) string {
 	}
 
 	keyLen := lipgloss.Width(key)
-	dotsNeeded := keyColWidth - keyLen - 2 // -2 for spaces around dots
-	if dotsNeeded < 3 {
-		dotsNeeded = 3
-	}
+	dotsNeeded := max(keyColWidth-keyLen-2, 3) // -2 for spaces around dots; floor 3
 
 	result := keyStyle.Render(key) + " " +
 		dotStyle.Render(strings.Repeat(".", dotsNeeded)) + " " +

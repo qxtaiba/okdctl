@@ -7,12 +7,13 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/credentials"
 	"github.com/qxtaiba/okdctl/internal/deploymetrics"
-	"github.com/qxtaiba/okdctl/internal/distribution"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/install"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
@@ -133,9 +134,17 @@ type deploymentOptions struct {
 // when addr is empty). Returns a stop closure that shuts the server down with
 // a 5-second deadline, plus any provisioner options the caller must apply so
 // orchestrated phases feed observations to the recorder.
+//
+// The bare ":port" shorthand binds every interface; we rewrite it to
+// "127.0.0.1:port" by default so an unauth listener does not leak to the
+// network. Operators who explicitly want a wildcard bind can pass
+// "0.0.0.0:port".
 func startMetricsServer(addr string) (func(), []okd.ProvisionerOption) {
 	if addr == "" {
 		return func() {}, nil
+	}
+	if strings.HasPrefix(addr, ":") {
+		addr = "127.0.0.1" + addr
 	}
 	rec := deploymetrics.NewRecorder()
 	mux := http.NewServeMux()
@@ -204,9 +213,7 @@ func executeFullDeployment(ctx context.Context, cfg *config.Config, opts deploym
 	installSteps, err := p.Install(ctx, cfg, &installOpts)
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
-			combined := make([]distribution.StepResult, 0, len(setupSteps)+len(installSteps))
-			combined = append(combined, setupSteps...)
-			combined = append(combined, installSteps...)
+			combined := slices.Concat(setupSteps, installSteps)
 			fmt.Println(InterruptSummary(combined, "okdctl deploy", runID))
 			return err
 		}
@@ -217,10 +224,7 @@ func executeFullDeployment(ctx context.Context, cfg *config.Config, opts deploym
 	result, configureSteps, err := p.Configure(ctx, cfg)
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
-			combined := make([]distribution.StepResult, 0, len(setupSteps)+len(installSteps)+len(configureSteps))
-			combined = append(combined, setupSteps...)
-			combined = append(combined, installSteps...)
-			combined = append(combined, configureSteps...)
+			combined := slices.Concat(setupSteps, installSteps, configureSteps)
 			fmt.Println(InterruptSummary(combined, "okdctl deploy", runID))
 			return err
 		}
@@ -228,10 +232,7 @@ func executeFullDeployment(ctx context.Context, cfg *config.Config, opts deploym
 		return fmt.Errorf("deployment failed: %w", err)
 	}
 
-	allSteps := make([]distribution.StepResult, 0, len(setupSteps)+len(installSteps)+len(configureSteps))
-	allSteps = append(allSteps, setupSteps...)
-	allSteps = append(allSteps, installSteps...)
-	allSteps = append(allSteps, configureSteps...)
+	allSteps := slices.Concat(setupSteps, installSteps, configureSteps)
 
 	duration := time.Since(startTime).Round(time.Second)
 

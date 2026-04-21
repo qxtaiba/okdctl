@@ -1,6 +1,7 @@
 package setup
 
 import (
+	"context"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -139,7 +140,10 @@ func formatAdditionalNetworks(networks []config.AdditionalNetwork) string {
 
 // GenerateTerraformVars renders terraform.tfvars for the Proxmox provider
 // into the environment directory derived from cfg.
-func (p *Phase) GenerateTerraformVars(cfg *config.Config, opts *Options) error {
+func (p *Phase) GenerateTerraformVars(ctx context.Context, cfg *config.Config, opts *Options) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	if cfg.Provider.Proxmox == nil {
 		return &errtypes.ConfigError{Msg: "proxmox provider configuration required"}
 	}

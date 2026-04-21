@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"slices"
 	"strings"
 	"text/tabwriter"
 
@@ -40,7 +41,10 @@ var releasesCmd = &cobra.Command{
 var releasesListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List available OKD versions",
-	RunE:  runReleasesList,
+	Example: `  okdctl releases list
+  okdctl releases list --channel all
+  okdctl releases list --format json`,
+	RunE: runReleasesList,
 }
 
 // releasesShowCmd prints release info for a single version matching either
@@ -48,8 +52,10 @@ var releasesListCmd = &cobra.Command{
 var releasesShowCmd = &cobra.Command{
 	Use:   "show <version>",
 	Short: "Show release info for a single OKD version",
-	Args:  cobra.ExactArgs(1),
-	RunE:  runReleasesShow,
+	Example: `  okdctl releases show 4.21.3
+  okdctl releases show 4.21.3 --format json`,
+	Args: cobra.ExactArgs(1),
+	RunE: runReleasesShow,
 }
 
 func init() {
@@ -136,12 +142,13 @@ func filterStable(versions []releases.OKDVersion) []releases.OKDVersion {
 
 func findVersion(versions []releases.OKDVersion, query string) (releases.OKDVersion, bool) {
 	query = strings.TrimSpace(query)
-	for _, v := range versions {
-		if v.Version == query || v.Tag == query {
-			return v, true
-		}
+	i := slices.IndexFunc(versions, func(v releases.OKDVersion) bool {
+		return v.Version == query || v.Tag == query
+	})
+	if i < 0 {
+		return releases.OKDVersion{}, false
 	}
-	return releases.OKDVersion{}, false
+	return versions[i], true
 }
 
 func validateChannel(ch string) error {

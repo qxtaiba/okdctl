@@ -60,7 +60,10 @@ func ensureRoot(cmd *cobra.Command) error {
 	}
 	sudoPath, err := exec.LookPath("sudo")
 	if err != nil {
-		return &errtypes.AuthError{Msg: fmt.Sprintf("%s requires root and sudo is not installed; run as root", cmd.Name())}
+		return &errtypes.AuthError{
+			Msg: fmt.Sprintf("%s requires root and sudo is not installed; run as root", cmd.Name()),
+			Err: err,
+		}
 	}
 	self, err := os.Executable()
 	if err != nil {

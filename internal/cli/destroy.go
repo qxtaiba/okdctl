@@ -19,9 +19,10 @@ import (
 )
 
 var (
-	destroyForce    bool
-	destroyKeepISOs bool
-	destroyDryRun   bool
+	destroyForce          bool
+	destroyKeepISOs       bool
+	destroyDryRun         bool
+	destroyConfirmCluster string
 )
 
 var destroyCmd = &cobra.Command{
@@ -31,13 +32,24 @@ var destroyCmd = &cobra.Command{
 This operation is idempotent and safe to re-run if a previous destroy was interrupted.
 
 Use --dry-run to preview the terraform destroy plan without modifying infra.`,
+	Example: `  okdctl destroy                              # interactive prompt
+  okdctl destroy --yes --confirm-cluster=prod # scripted destroy
+  okdctl destroy --dry-run`,
 	RunE: runDestroy,
 }
 
 func init() {
-	destroyCmd.Flags().BoolVarP(&destroyForce, "force", "y", false, "skip confirmation prompt")
+	// Primary flag is --yes (matches the other commands' idiom); --force is
+	// kept as an alias so existing scripts do not break.
+	destroyCmd.Flags().BoolVarP(&destroyForce, "yes", "y", false, "skip confirmation prompt")
+	destroyCmd.Flags().BoolVar(&destroyForce, "force", false, "deprecated alias for --yes")
+	if err := destroyCmd.Flags().MarkDeprecated("force", "use --yes instead"); err != nil {
+		panic(err) // flag is statically defined above; unreachable
+	}
 	destroyCmd.Flags().BoolVar(&destroyKeepISOs, "keep-isos", false, "do not remove the FCOS ISO from the Proxmox host")
 	destroyCmd.Flags().BoolVar(&destroyDryRun, "dry-run", false, "preview terraform destroy plan without running destroy")
+	destroyCmd.Flags().StringVar(&destroyConfirmCluster, "confirm-cluster", "",
+		"required with --yes; must equal cfg.Cluster.Name (typo guard for scripted destroys)")
 }
 
 func runDestroy(cmd *cobra.Command, _ []string) error {
@@ -54,6 +66,24 @@ func runDestroy(cmd *cobra.Command, _ []string) error {
 	}
 
 	tui.Warn(fmt.Sprintf("this will destroy cluster '%s' and all associated resources", cfg.Cluster.Name))
+
+	// Typo guard for non-interactive destroys: --confirm-cluster is REQUIRED
+	// with --yes and must match the live cluster name. Skipping the prompt
+	// without asserting the cluster name is the documented foot-gun for
+	// scripts that get pointed at the wrong config file.
+	if destroyForce {
+		if destroyConfirmCluster == "" {
+			return &errtypes.ConfigError{
+				Msg: fmt.Sprintf("--yes requires --confirm-cluster=%q to guard against scripted destroys against the wrong cluster", cfg.Cluster.Name),
+			}
+		}
+		if destroyConfirmCluster != cfg.Cluster.Name {
+			return &errtypes.ConfigError{
+				Msg: fmt.Sprintf("--confirm-cluster %q does not match config cluster %q; refusing destroy",
+					destroyConfirmCluster, cfg.Cluster.Name),
+			}
+		}
+	}
 
 	if !destroyForce {
 		confirmed, err := promptForConfirmation(ctx, "proceed with destroy? [y/N]: ")

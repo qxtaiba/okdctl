@@ -11,6 +11,13 @@ health, and addon status for the deployed cluster.
 okdctl status [flags]
 ```
 
+### Examples
+
+```
+  okdctl status
+  okdctl status --format json | jq .ready_nodes
+```
+
 ### Options
 
 ```

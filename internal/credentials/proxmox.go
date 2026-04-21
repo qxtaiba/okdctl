@@ -206,14 +206,13 @@ func GetProxmoxCredentials(cfg *config.Config) *ProxmoxCredentials {
 		return creds
 	}
 
-	// Priority 2: Config file fields (legacy support)
+	// Priority 2: Config file fields (legacy support).
+	// When APIToken already carries the "tokenid=secret" concatenation,
+	// TokenID is ignored to avoid "tokenid=tokenid=secret". Otherwise,
+	// if TokenID is populated separately, compose it here.
 	if px.APIToken != "" {
 		token := px.APIToken
-		if strings.Contains(px.APIToken, "=") && px.TokenID != "" {
-			// APIToken already contains the full "tokenid=secret" format;
-			// ignore the separate TokenID to avoid "tokenid=tokenid=secret".
-			_ = px.TokenID
-		} else if px.TokenID != "" {
+		if px.TokenID != "" && !strings.Contains(px.APIToken, "=") {
 			token = px.TokenID + "=" + px.APIToken
 		}
 		creds.APIToken = []byte(token)

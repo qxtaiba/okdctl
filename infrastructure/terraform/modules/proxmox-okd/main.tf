@@ -126,6 +126,9 @@ resource "proxmox_virtual_environment_vm" "bootstrap" {
       startup,
       cdrom,
       boot_order,
+      # efi_disk holds nvram/boot-order state across reboots; replacing the
+      # disk on a force-new attribute change would reset bootloader picks.
+      efi_disk,
     ]
   }
 }
@@ -244,6 +247,9 @@ resource "proxmox_virtual_environment_vm" "master" {
       startup,
       cdrom,
       boot_order,
+      # efi_disk holds nvram/boot-order state across reboots; replacing the
+      # disk on a force-new attribute change would reset bootloader picks.
+      efi_disk,
     ]
   }
 }
@@ -364,6 +370,9 @@ resource "proxmox_virtual_environment_vm" "worker" {
       startup,
       cdrom,
       boot_order,
+      # efi_disk holds nvram/boot-order state across reboots; replacing the
+      # disk on a force-new attribute change would reset bootloader picks.
+      efi_disk,
     ]
   }
 }

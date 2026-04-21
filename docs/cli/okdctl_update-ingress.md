@@ -20,6 +20,14 @@ Run this after deploying a LoadBalancer provider (e.g., MetalLB).
 okdctl update-ingress [flags]
 ```
 
+### Examples
+
+```
+  okdctl update-ingress
+  okdctl update-ingress --yes --remove-haproxy=false
+  okdctl update-ingress --dry-run
+```
+
 ### Options
 
 ```

@@ -41,10 +41,7 @@ type Options struct {
 }
 
 func (opts *Options) getLogger() *slog.Logger {
-	if opts.Logger != nil {
-		return opts.Logger
-	}
-	return logutil.NopLogger
+	return logutil.OrNop(opts.Logger)
 }
 
 // Execute runs the cleanup steps selected by opts.Kind. Individual step

@@ -41,10 +41,7 @@ func (c *K8sClient) PendingCSRs(ctx context.Context) ([]CSR, error) {
 	var pendingCSRs []CSR
 	for _, item := range csrList.Items {
 		if len(item.Status.Conditions) == 0 {
-			pendingCSRs = append(pendingCSRs, CSR{
-				Name:    item.Metadata.Name,
-				Pending: true,
-			})
+			pendingCSRs = append(pendingCSRs, CSR{Name: item.Metadata.Name})
 		}
 	}
 

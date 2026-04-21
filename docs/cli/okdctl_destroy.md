@@ -13,13 +13,22 @@ Use --dry-run to preview the terraform destroy plan without modifying infra.
 okdctl destroy [flags]
 ```
 
+### Examples
+
+```
+  okdctl destroy
+  okdctl destroy --yes
+  okdctl destroy --dry-run
+```
+
 ### Options
 
 ```
-      --dry-run     preview terraform destroy plan without running destroy
-  -y, --force       skip confirmation prompt
-  -h, --help        help for destroy
-      --keep-isos   do not remove the FCOS ISO from the Proxmox host
+      --confirm-cluster string   name of the cluster being destroyed; required with --yes to guard against typos in scripted destroys
+      --dry-run                  preview terraform destroy plan without running destroy
+  -h, --help                     help for destroy
+      --keep-isos                do not remove the FCOS ISO from the Proxmox host
+  -y, --yes                      skip confirmation prompt
 ```
 
 ### Options inherited from parent commands
