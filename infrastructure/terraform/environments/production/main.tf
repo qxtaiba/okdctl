@@ -9,14 +9,14 @@ module "okd_cluster" {
   # PROXMOX INFRASTRUCTURE
   # =============================================================================
 
-  target_node       = var.target_node
-  bridge            = var.bridge
-  os_storage        = var.os_storage
-  data_storage      = var.data_storage
-  os_disk_size_gb   = var.os_disk_size_gb
-  bootstrap_iso     = var.bootstrap_iso
-  master_isos       = var.master_isos
-  worker_isos       = var.worker_isos
+  target_node     = var.target_node
+  bridge          = var.bridge
+  os_storage      = var.os_storage
+  data_storage    = var.data_storage
+  os_disk_size_gb = var.os_disk_size_gb
+  bootstrap_iso   = var.bootstrap_iso
+  master_isos     = var.master_isos
+  worker_isos     = var.worker_isos
 
   # =============================================================================
   # CLUSTER CONFIGURATION
