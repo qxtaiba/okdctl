@@ -68,16 +68,6 @@ variable "data_storage" {
   default     = "local-lvm"
 }
 
-variable "data_disk_size_gb" {
-  description = "deprecated: use worker_data_disk_size_gb"
-  type        = number
-  default     = 0
-  validation {
-    condition     = var.data_disk_size_gb >= 0 && var.data_disk_size_gb <= 5000
-    error_message = "data disk size must be between 0gb and 5000gb."
-  }
-}
-
 variable "worker_data_disk_size_gb" {
   description = "size of data disk for worker nodes (0 = no data disk)"
   type        = number

@@ -44,6 +44,7 @@ resource "proxmox_virtual_environment_vm" "bootstrap" {
     cores   = local.bootstrap_cpu
     sockets = 1
     type    = var.cpu_type
+    numa    = var.numa_enabled
   }
 
   memory {
@@ -150,6 +151,7 @@ resource "proxmox_virtual_environment_vm" "master" {
     cores   = local.master_cpu
     sockets = 1
     type    = var.cpu_type
+    numa    = var.numa_enabled
   }
 
   memory {
@@ -273,6 +275,7 @@ resource "proxmox_virtual_environment_vm" "worker" {
     cores   = local.worker_cpu
     sockets = 1
     type    = var.cpu_type
+    numa    = var.numa_enabled
   }
 
   memory {

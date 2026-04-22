@@ -40,12 +40,6 @@ variable "data_storage" {
   default     = "local-lvm"
 }
 
-variable "data_disk_size_gb" {
-  description = "size of data disk in gb for ceph osd storage"
-  type        = number
-  default     = 500
-}
-
 variable "bootstrap_iso" {
   description = "custom fedora coreos iso path for bootstrap node"
   type        = string

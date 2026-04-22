@@ -14,7 +14,6 @@ module "okd_cluster" {
   os_storage        = var.os_storage
   data_storage      = var.data_storage
   os_disk_size_gb   = var.os_disk_size_gb
-  data_disk_size_gb = var.data_disk_size_gb
   bootstrap_iso     = var.bootstrap_iso
   master_isos       = var.master_isos
   worker_isos       = var.worker_isos
