@@ -46,7 +46,7 @@ func init() {
 
 // runUpdateIngressDryRun prints the mutations update-ingress would perform
 // without connecting to the cluster or modifying any host configuration.
-func runUpdateIngressDryRun(cfg *config.Config) error {
+func runUpdateIngressDryRun(cfg *config.Config) error { //nolint:unparam // error return preserved for symmetry with non-dry-run path
 	clusterFQDN := cfg.Cluster.Name + "." + cfg.Cluster.Domain
 	tui.Info(fmt.Sprintf("dry-run: update-ingress for cluster '%s'", clusterFQDN))
 	fmt.Println("  would: query IngressControllers (oc get ingresscontroller -n openshift-ingress-operator)")

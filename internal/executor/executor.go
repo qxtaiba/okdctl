@@ -88,15 +88,6 @@ func New(opts ...Option) *Executor {
 	return e
 }
 
-// defaultEnvAllowlist controls which parent-env variables reach subprocesses
-// when the caller has not opted into WithInheritedEnv. Errs generous:
-// deploy needs tooling plumbing (HOME, PATH, KUBECONFIG), proxy vars,
-// SUDO_* for the re-exec model, and every provider-prefixed namespace
-// commonly used with terraform / openshift-install / oc / helm.
-//
-// Tighten this list only after a targeted audit finds a specific var
-// leaking credentials in practice; every entry here gets a docstring
-// justification if removed later.
 // DefaultEnvAllowlist is the canonical env filter used by both Executor
 // subprocesses and the sudo re-exec in internal/cli/elevation.go. It
 // passes tooling plumbing and provider namespaces; everything else is

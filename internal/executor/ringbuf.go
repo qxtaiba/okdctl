@@ -20,7 +20,7 @@ type ringWriter struct {
 	partial string
 }
 
-func newRingWriter(maxLines int) *ringWriter {
+func newRingWriter(maxLines int) *ringWriter { //nolint:unparam // parameterised for test injection
 	return &ringWriter{lines: make([]string, maxLines), max: maxLines}
 }
 

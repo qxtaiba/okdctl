@@ -132,7 +132,7 @@ func (p *Phase) addKubeconfigToBashrc(homeDir, kubeconfigPath string) error {
 	}
 
 	newContent := string(content)
-	if len(newContent) > 0 && newContent[len(newContent)-1] != '\n' {
+	if newContent != "" && newContent[len(newContent)-1] != '\n' {
 		newContent += "\n"
 	}
 	newContent += "\n# Added by okdctl\n" + exportLine + "\n"

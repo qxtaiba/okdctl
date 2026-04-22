@@ -20,13 +20,16 @@ okdctl cleanup [flags]
 ```
   okdctl cleanup
   okdctl cleanup --yes
+  okdctl cleanup --dry-run
 ```
 
 ### Options
 
 ```
-  -h, --help   help for cleanup
-  -y, --yes    skip confirmation prompt
+      --confirm-cluster string   required with --yes; must equal cfg.Cluster.Name (typo guard for scripted cleanups)
+      --dry-run                  preview what would be removed without making changes
+  -h, --help                     help for cleanup
+  -y, --yes                      skip confirmation prompt
 ```
 
 ### Options inherited from parent commands

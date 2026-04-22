@@ -21,7 +21,7 @@ PowerShell (add to $PROFILE):
   okdctl completion powershell | Out-String | Invoke-Expression
 
 ```
-okdctl completion [bash|zsh|fish|powershell]
+okdctl completion <bash|zsh|fish|powershell>
 ```
 
 ### Options
