@@ -308,7 +308,7 @@ cert lifecycle, kargs templating, wizard.
 
 #### E4 — SSH/SCP host-key pinning for Proxmox
 
-**Status:** in review — PR #117
+**Status:** not started (first attempt closed — see postmortem)
 **Audit:** `sec:27088eab:ssh-accept-new-proxmox`,
 `sec:eb479d86:scp-accept-new-proxmox`
 **Evidence:** `internal/distribution/okd/phase/ssh.go:27`,
@@ -317,32 +317,56 @@ cert lifecycle, kargs templating, wizard.
 `StrictHostKeyChecking=accept-new` — TOFU. A MITM on the first handshake
 pins the attacker as root@proxmox forever.
 **Scope:** Add `provider.proxmox.ssh_host_fingerprint` config field
-(SHA256 hex). When set, write a single-entry known_hosts to a temp
-path, pass `-o UserKnownHostsFile=<file> -o StrictHostKeyChecking=yes`,
-and refuse on mismatch. When unset, keep accept-new with an explicit
-one-time warning. The wizard should learn and persist the fingerprint
-after the first successful handshake.
+accepting the standard `SHA256:<base64>` format from `ssh-keygen -lf` /
+Proxmox UI / `ssh-keyscan host | ssh-keygen -lf -`. Implementation must
+compute per-key fingerprints via `golang.org/x/crypto/ssh.FingerprintSHA256`
+on parsed keys from `ssh-keyscan` output (NOT a single SHA256 over the
+raw stdout — see postmortem). When the pinned value matches any one of
+the host's advertised keys, accept; otherwise refuse. When unset, log
+the observed fingerprints at WARN so the operator can pin one. Pass
+the matched key to ssh via a temp `known_hosts` file with
+`-o UserKnownHostsFile=<file> -o StrictHostKeyChecking=yes`. Unit tests
+must cover a fixed keyscan-output string so non-determinism regressions
+get caught.
 **Effort:** hours.
+**First attempt (PR #117, closed 2026-04-22):** Hashed the entire
+`ssh-keyscan -H -T 5 <host>` stdout with SHA256. Two blockers: (1) `-H`
+uses a random salt per invocation, so the computed value changes every
+run and every deploy-after-first aborts; (2) even without `-H`, the
+banner comment line position and occasional key re-ordering make the
+whole-stdout hash flaky. Plus the computed value matched nothing a user
+could produce via standard SSH tooling. See PR #117 review for detail.
 
 #### E5 — Flux SSH known-hosts fingerprint pinning
 
-**Status:** in review — PR #117
+**Status:** not started (first attempt closed — see postmortem)
 **Audit:** `sec:98723e5d:ssh-keyscan-tofu`
 **Evidence:** `internal/addon/catalog/flux/flux.go:329`
 **Problem:** `createDeployKeySecret` runs `ssh-keyscan <host>` and
 stuffs the raw output verbatim into the Flux deploy-key Secret. A DNS
 poisoner at install time pins themselves as the git host forever,
 enabling silent GitOps code substitution.
-**Scope:** Add `addons.flux.settings.known_hosts_fingerprint` config
-field. Compute SHA256 of ssh-keyscan output, compare against the
-configured value, refuse on mismatch. Without the config, emit a WARN
-with the observed fingerprint and require `--accept-hostkey` to
-proceed.
+**Scope:** Add `addons.flux.settings.known_hosts_sha256` accepting the
+standard `SHA256:<base64>` format (same vocabulary as E4). Parse each
+line of `ssh-keyscan` output, compute per-key fingerprints via
+`golang.org/x/crypto/ssh.FingerprintSHA256`, match against the pin.
+Without the config, require `addons.flux.settings.accept_host_key=true`
+and log the observed fingerprints so the operator can pin one. The
+known_hosts bytes written into the Flux Secret must be the key-only
+lines (filter `#` comments) so flux's sync is not sensitive to
+keyscan's banner-line ordering. Unit tests with a fixed keyscan string
+are required.
 **Effort:** hours.
+**First attempt (PR #117, closed 2026-04-22):** Same whole-stdout
+SHA256 approach as E4. Non-deterministic in the wild because
+`ssh-keyscan` output interleaves a `# host SSH-2.0-…` banner whose
+position shifts between runs, and occasional key-line re-ordering. The
+helper would work ~75% of the time and abort the remaining 25% with a
+spurious mismatch.
 
 #### E6 — kube-vip probe TLS: use cluster CA once available
 
-**Status:** in review — PR #117
+**Status:** not started (first attempt closed with E4/E5)
 **Audit:** `sec:cfcdee2d:tls-insecure-vip-probe`
 **Evidence:** `internal/httputil/httputil.go:22`,
 `internal/distribution/okd/postinstall/haproxy.go:65`,
