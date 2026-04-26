@@ -370,7 +370,7 @@ spurious mismatch.
 
 #### E6 — kube-vip probe TLS: use cluster CA once available
 
-**Status:** in review — PR #124
+**Status:** done — PR #124
 **Audit:** `sec:cfcdee2d:tls-insecure-vip-probe`
 **Evidence:** `internal/httputil/httputil.go:22`,
 `internal/distribution/okd/postinstall/haproxy.go:65`,
@@ -1595,7 +1595,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sec:35abd54e:input-url-scheme-not-checked` — input url scheme not checked
 
-**Status:** in review — PR #128  
+**Status:** done — PR #128  
 **Severity:** major  
 **Cluster:** input-validation  
 **Evidence:** `internal/credentials/proxmox.go:182-194`  
@@ -1605,7 +1605,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sec:98723e5d:bashrc-chown-leak` — bashrc chown leak
 
-**Status:** in review — PR #123  
+**Status:** done — PR #123  
 **Severity:** major  
 **Cluster:** privilege-escalation  
 **Evidence:** `internal/distribution/okd/install/flux.go:117-140`  
@@ -3369,36 +3369,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 #### audit-tests
 
-##### `tst:d9f7733e:debug-bundle-tar-no-test` — debug bundle tar no test
-
-**Status:** in review — PR #125  
-**Severity:** blocker  
-**Cluster:** cred-path-untested  
-**Evidence:** `internal/cli/debug_bundle.go:74-295`  
-**Problem:** runDebugBundle is the user-facing 'safe to attach to a support ticket' tarball builder. It explicitly redacts config (via redactConfig — tested) and reads recent log files into the bundle. The orchestration itself is untested: tar/gzip header writing, manifest section ordering, partial-failure recording, must-gather skip flag. A regression that writes the raw config (not the redacted copy) ships credentials in support bundles silently.  
-**Fix:** Add debug_bundle_test.go with bytes.Buffer-backed test driver that calls runDebugBundle equivalents in isolation: (1) bundleConfig with cfg carrying password→pulls bytes back out of the tar and asserts the password is NOT present, *** is; (2) bundleLogFile with --log-file pointing at a t.TempDir log; (3) tarDirInto with a symlink-out-of-srcDir → assert escape rejected (the OpenRoot guard); (4) skip-must-gather flag → manifest carries the right Status/Message.  
-**Effort:** hours
-
-##### `tst:0f076161:destroy-confirm-cluster-untested` — destroy confirm cluster untested
-
-**Status:** in review — PR #126  
-**Severity:** blocker  
-**Cluster:** destructive-untested  
-**Evidence:** `internal/cli/destroy.go:82-94`  
-**Problem:** runDestroy enforces --confirm-cluster equality with --yes as the typo guard for scripted destroys against the wrong cluster. This is the single load-bearing check between a misconfigured CI job and irreversible terraform destroy on the wrong infra. There is no test asserting (a) --yes without --confirm-cluster errors, (b) --yes with a mismatched value errors, (c) --yes with the right value proceeds. cli/root_test.go does not cover this path.  
-**Fix:** Refactor the typo-guard block into a small unexported func validateConfirmCluster(force bool, confirm, name string) error so it can be tested without instantiating cobra. Add destroy_test.go with cases: empty confirm + force=true → ConfigError; mismatched confirm → ConfigError; correct confirm → nil; force=false short-circuits → nil. The same pattern applies to cleanup.go (mirror in a follow-up).  
-**Effort:** hours
-
-##### `tst:41a9d4eb:redact-handler-no-test` — redact handler no test
-
-**Status:** in review — PR #127  
-**Severity:** blocker  
-**Cluster:** cred-path-untested — seam→audit-observability  
-**Evidence:** `internal/logutil/redact.go:30-123`  
-**Problem:** RedactHandler is the install-once slog middleware that scrubs password/token/secret/api_key keys, *url.URL userinfo, and types implementing Redacted() any from every log record. It has zero tests. A regression in keyIsSecret's substring match (e.g. case sensitivity flip), a missed Group recursion, or a *url.URL nil-receiver bug silently leaks credentials to every CI log and debug-bundle.  
-**Fix:** Add internal/logutil/redact_test.go with bytes.Buffer-backed slog.NewTextHandler wrapped in NewRedactHandler. Cases: (1) Info("", "password", "hunter2") emits [redacted]; (2) case-insensitive — "PASSWORD", "PaSsWoRd", "api_token" all redact; (3) slog.Group("creds", "password", pw) recurses; (4) *url.URL with userinfo strips password but keeps username; (5) nil *url.URL passes through unchanged; (6) types implementing Redacted() any are honored; (7) WithAttrs applies redaction to deferred attrs; (8) WithGroup propagates handler. Stdlib only — bytes.Buffer + json.Unmarshal of emitted lines.  
-**Effort:** hours
-
 ##### `tst:40d315ad:flux-deploy-key-secret-no-test` — flux deploy key secret no test
 
 **Status:** not started  
@@ -3891,6 +3861,38 @@ Items that have reached `done` status, ordered by close date. New
 entries land here when a PR merges, or when an item is closed without
 code (audit error, done-by-prior-work). Keep the explanation terse
 but link evidence.
+
+- **`tst:d9f7733e:debug-bundle-tar-no-test`** — done 2026-04-26 — PR #125,
+  merge commit `7689169`. Tier H blocker. Added `internal/cli/debug_bundle_test.go`
+  covering bundleConfig credential redaction (Proxmox `TokenID` absent, `***`
+  present), bundleLogFile content, tarDirInto symlink-escape outcome (dual:
+  `os.Root` blocks OR WalkDir skips dir symlink as non-regular), and the
+  skip-must-gather manifest entry. Source-side: extracted inline section list
+  into `collectSections` so the skip path is reachable without cobra.
+  Caveat: the symlink test does not exercise `os.Root.Open` because
+  WalkDir skips dir symlinks before that call — a follow-up could add a file
+  symlink variant to actually trip the OpenRoot guard.
+- **`tst:0f076161:destroy-confirm-cluster-untested`** — done 2026-04-26 —
+  PR #126, merge commit `966a694`. Tier H blocker. Hoisted the `destroy.go`
+  inline typo-guard at the old lines 82-94 into unexported
+  `validateConfirmCluster(force bool, confirm, name string) error` so a
+  cobra-free table test can exercise the four states (force-off short-circuit,
+  empty confirm, mismatched confirm, correct confirm). Error messages
+  preserved bit-for-bit so the related cleanup mirror item
+  `tst:93957c53:cleanup-confirm-cluster-untested` can later hoist both sites
+  into a shared `cli/confirm.go` without behaviour change.
+- **`tst:41a9d4eb:redact-handler-no-test`** — done 2026-04-26 — PR #127,
+  merge commit `7dfa0dc`. Tier H blocker (seam→`audit-observability`).
+  Added `internal/logutil/redact_test.go` with eight tests covering the
+  full RedactHandler contract: secret-key redaction, case-insensitive key
+  matching, `slog.Group` recursion, `*url.URL` userinfo stripping
+  (preserving username), nil `*url.URL` passthrough, the
+  `interface{ Redacted() any }` opt-out, `WithAttrs` and `WithGroup`
+  propagation. Source unchanged. Caveat surfaced during implementation:
+  slog's JSON handler reflection-walks `*url.URL` struct fields rather
+  than calling `(*url.URL).String()`, so cases (4)/(5) call the
+  package-private `redactAttr` directly to test the handler's actual
+  output value rather than the JSON renderer's interpretation.
 
 - **M40 — Air-gap workstream removed** — done 2026-04-20. The entire
   L15 air-gap workstream (M21–M27, M33) was ripped out in one pass.
