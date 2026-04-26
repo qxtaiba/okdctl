@@ -120,7 +120,7 @@ func (p *Provisioner) Prepare(ctx context.Context, cfg *config.Config) ([]distri
 			Logger:         p.logger,
 		}
 		if err := cleanup.Execute(ctx, cleanupOpts); err != nil {
-			p.logger.Warn("cleanup warning", "err", err)
+			p.logger.Warn("cleanup: pre-deploy artifact removal incomplete", "phase", "prepare", "err", err)
 		}
 	}
 
