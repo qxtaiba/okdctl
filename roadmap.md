@@ -2957,7 +2957,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `mod:f55b9c27:use-builtin-clear` — use builtin clear
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/mod-clear-credentials  
 **Severity:** minor  
 **Cluster:** any-interface-builtins  
 **Evidence:** `internal/credentials/envfile.go:81-83`  
@@ -2967,7 +2967,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `mod:35abd54e:use-builtin-clear` — use builtin clear
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/mod-clear-credentials  
 **Severity:** minor  
 **Cluster:** any-interface-builtins  
 **Evidence:** `internal/credentials/proxmox.go:82-89`  
@@ -2987,7 +2987,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `mod:7b2829bb:use-slices-containsfunc` — use slices containsfunc
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/mod-7b2829bb-slices-containsfunc  
 **Severity:** suggestion  
 **Cluster:** slices-maps  
 **Evidence:** `internal/executor/executor.go:132-142`  
@@ -3079,7 +3079,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `smell:2f70d7df:magic-default-port` — magic default port
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/smell-2f70d7df-default-ignition-port  
 **Severity:** minor  
 **Cluster:** magic-strings  
 **Evidence:** `internal/distribution/okd/setup/kargs.go:73-73`  
