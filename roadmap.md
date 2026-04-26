@@ -370,21 +370,7 @@ spurious mismatch.
 
 #### E6 — kube-vip probe TLS: use cluster CA once available
 
-**Status:** done — PR #124
-**Audit:** `sec:cfcdee2d:tls-insecure-vip-probe`
-**Evidence:** `internal/httputil/httputil.go:22`,
-`internal/distribution/okd/postinstall/haproxy.go:65`,
-`internal/distribution/okd/postinstall/verify.go:193`
-**Problem:** `httputil.NewInsecure` is used at two post-install sites
-that target the kube-vip healthz. At those points the cluster CA is
-already available under `clusterDir/auth/kubeconfig` but the code
-doesn't consume it.
-**Scope:** Add `httputil.NewWithCA(pool, timeout)`. Flip the post-install
-call sites to parse the CA bundle out of kubeconfig and use NewWithCA.
-Keep `NewInsecure` only for the strict pre-install-config window (VIP
-not yet in cert SANs) and audit each remaining call site for
-reachability of the post-install CA.
-**Effort:** hours.
+**Status:** done — PR #124 (moved to Completed)
 
 ### Tier G — findings from 2026-04-21 /audit-all run
 
@@ -1595,23 +1581,11 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sec:35abd54e:input-url-scheme-not-checked` — input url scheme not checked
 
-**Status:** done — PR #128  
-**Severity:** major  
-**Cluster:** input-validation  
-**Evidence:** `internal/credentials/proxmox.go:182-194`  
-**Problem:** GetProxmoxCredentials accepts `http://...` as a Proxmox host. When the user-typed host is already prefixed with `http://`, it is preserved verbatim into PROXMOX_VE_ENDPOINT, which is then passed to terraform's bpg/proxmox provider. Proxmox basic-auth (PROXMOX_VE_USERNAME/PASSWORD or PROXMOX_VE_API_TOKEN) flows over plaintext on that endpoint. Only schemeless hosts get the https:// prefix.  
-**Fix:** Reject `http://` outright unless an explicit `proxmox.insecure_http` config knob is set (analogous to the existing `Insecure` for TLS verification). Recommended: error out with a ConfigError pointing at the field; an authenticated downgrade to plaintext should never be a silent default.  
-**Effort:** hours
+**Status:** done — PR #128 (moved to Completed)
 
 ##### `sec:98723e5d:bashrc-chown-leak` — bashrc chown leak
 
-**Status:** done — PR #123  
-**Severity:** major  
-**Cluster:** privilege-escalation  
-**Evidence:** `internal/distribution/okd/install/flux.go:117-140`  
-**Problem:** addKubeconfigToBashrc reads the user's existing .bashrc with os.ReadFile (so we know its content), but appends the new line via system.AtomicWriteString. AtomicWrite uses CreateTemp+rename, which under the sudo-re-exec model creates a root-owned tmpfile in the user's home directory. After rename the file is root-owned. Because the function only chowns when `created==true` (i.e. the bashrc didn't exist before), an existing user-owned bashrc becomes root-owned after every deploy. The user can no longer edit their own bashrc without sudo.  
-**Fix:** Always ChownToInvokingUser(bashrcPath) on the success path, not only when `created`. Mirror the deploy.go workdir-chown defer pattern. Same fix needed for any other invoking-user file that AtomicWrite touches under root (the ~/.kube/config one already chowns explicitly via ChownToInvokingUser at line 82-83).  
-**Effort:** hours
+**Status:** done — PR #123 (moved to Completed)
 
 ##### `sec:696d6b0e:shellinj-pattern` — shellinj pattern
 
@@ -3861,6 +3835,83 @@ Items that have reached `done` status, ordered by close date. New
 entries land here when a PR merges, or when an item is closed without
 code (audit error, done-by-prior-work). Keep the explanation terse
 but link evidence.
+
+- **`sec:35abd54e:input-url-scheme-not-checked`** — done 2026-04-26 —
+  PR #128, merge commit `b1bf4e4`. Tier H major. Added
+  `ProxmoxConfig.InsecureHTTP bool` (json `insecure_http,omitempty`)
+  mirroring the existing `Insecure` TLS-skip flag, plus
+  `FieldProxmoxInsecureHTTP` constant. `validateProxmoxConfig`
+  (ScopeProvider, in ScopeAll, runs before any credential is built)
+  refuses an `http://` Proxmox host unless the flag is set, with an
+  error pointing at the YAML path: *"set provider.proxmox.insecure_http:
+  true to opt in"*. The schemeless-host happy path is unchanged;
+  `GetProxmoxCredentials:187` still adds `https://` to bare hostnames.
+  Added a four-case matrix test (schemeless / bare hostname / http
+  rejected / http accepted with flag) in
+  `internal/credentials/proxmox_test.go`. Linter side-effects: the new
+  third branch turned the `if/else` into a chain that gocritic preferred
+  as a `switch`, and gofumpt re-aligned the struct tag column — both
+  folded into the same commit. **Postmortem lesson:** the field-name
+  choice (`InsecureHTTP` mirroring `Insecure`) was good pattern-matching
+  — reviewer flagged it as the right shape on first round. Auditing for
+  "do we have an existing analogue field" before naming a new knob saves
+  bikeshedding and keeps the schema discoverable.
+
+- **E6 — kube-vip probe TLS uses cluster CA after install** — done
+  2026-04-26 — PR #124, merge commit `c421069`. Audit
+  `sec:cfcdee2d:tls-insecure-vip-probe`. Added
+  `httputil.NewWithCA(pool, timeout)` (RootCAs + MinVersion=TLS 1.2)
+  and `httputil.KubeconfigCAPool(path)` (base64-decode
+  `clusters[0].cluster.certificate-authority-data` into
+  `*x509.CertPool` via stdlib `crypto/x509` + `sigs.k8s.io/yaml` —
+  already in go.mod, no new dep). Both production callers
+  (`postinstall/verify.go::verifyKubeVIPAPIHealth`,
+  `postinstall/haproxy.go::RemoveHAProxy`) now load the CA from
+  `<clusterDir>/auth/kubeconfig` and verify TLS against it.
+  `NewInsecure` survives only as a fallback when `KubeconfigCAPool`
+  errors — i.e., the genuine pre-install / VIP-not-yet-in-SANs window.
+  Plumbing: added `clusterDir` parameter to both probe functions,
+  `UpdateIngressOptions.WorkDir` field for the update-ingress flow, and
+  a default-fill in `Provisioner.UpdateIngress`
+  (`filepath.Join(p.projectRoot, "okd-install")`) so existing CLI call
+  sites stay unchanged. Tests: `TestNewWithCA` checks RootCAs identity
+  and MinVersion; `TestKubeconfigCAPool` synthesises a real ECDSA
+  self-signed CA, encodes it as base64 PEM into a YAML kubeconfig, and
+  asserts pool extraction plus error paths (missing file, no clusters).
+  E4 first-attempt postmortem above (`-H` salt non-determinism) doesn't
+  apply here — kubeconfig parse is deterministic. **Postmortem lesson:**
+  the existing `// TLS verification is skipped because the VIP is not
+  yet in cert SANs` comment was true at first-install time and stale by
+  post-install time — comments that name a phase-specific invariant rot
+  when the function gets reused across phases. The fix moves the
+  invariant note to `NewInsecure` itself (where it is permanent) rather
+  than the caller (where it isn't).
+
+- **`sec:98723e5d:bashrc-chown-leak`** — done 2026-04-26 — PR #123,
+  merge commit `2eb7396`. Tier H major. `addKubeconfigToBashrc` had two
+  write paths: when `.bashrc` did not yet exist, `AtomicWriteString`
+  was followed by `ChownToInvokingUser`; when `.bashrc` existed and was
+  being appended, the chown was missing. Under the sudo re-exec model,
+  `os.CreateTemp` + `os.Rename` produces a root-owned file, so every
+  deploy after the first silently chown'd the user's `.bashrc` to root
+  (the user could no longer edit their own bashrc without sudo).
+  Two-line fix at `internal/distribution/okd/install/flux.go:139`:
+  propagate the AtomicWrite error, then call `ChownToInvokingUser`
+  unconditionally on the success path. `ChownToInvokingUser` is a
+  no-op when not under sudo (`internal/system/elevation.go:50-53`), so
+  the unconditional call is safe in non-sudo invocations. Audit of every
+  other `AtomicWrite*` call site confirmed this was the only user-home
+  file missing the chown — `version/updatecheck.go:151`,
+  `credentials/envfile.go:78`, `config/loader.go:59`,
+  `cli/kubeconfig.go:69+120` all run pre-elevation; the system-config
+  sites in `setup/*` are intentionally root-owned; `WriteAsInvokingUser`
+  already chains chown internally. **Postmortem lesson:** the
+  new-file branch and the update-file branch had structurally different
+  chown handling — easy to miss because tests ran the new-file branch
+  and the update-file branch only fires on a re-deploy. Fix patterns
+  that must apply to *every* write path want a single chained helper
+  (which `WriteAsInvokingUser` already is for the simple case), not
+  duplicated per-branch chown calls.
 
 - **`tst:d9f7733e:debug-bundle-tar-no-test`** — done 2026-04-26 — PR #125,
   merge commit `7689169`. Tier H blocker. Added `internal/cli/debug_bundle_test.go`
