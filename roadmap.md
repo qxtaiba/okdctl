@@ -1662,26 +1662,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Differentiate resolution failures: macOS-temp-dir noise (an os.IsNotExist component) is the documented benign case; everything else is an error. Or always resolve and return; failure to resolve a project root before mutating its descendants under sudo is itself a refusal condition. Add a final check that the resolved root contains a marker (the okdctl.yaml or .git directory) so a path-traversal symlink doesn't redirect the workdir.  
 **Effort:** hours
 
-##### `sec:f55b9c27:input-path-not-prefix-checked` — input path not prefix checked
-
-**Status:** in review — PR #151  
-**Severity:** minor  
-**Cluster:** input-validation  
-**Evidence:** `internal/credentials/envfile.go:48-85`  
-**Problem:** WriteEnvFile passes path directly to system.AtomicWrite, which writes via tempfile-then-rename. There is no path validation: a caller passing a relative path or a path-traversal-friendly value lets an attacker who controls the config-resolved path overwrite arbitrary files at AtomicWrite mode 0o600. The actual call site (deploy.go writeCredentialsEnv) derives path from EnvFilePath(configPath) where configPath is the deploy-output flag; if a user supplies `--output=../../etc/passwd.bak` the .env lands there. Also, no symlink-resolve check before write — a planted symlink at ...  
-**Fix:** Lstat the target path before writing; if it is a symlink, refuse (mirror the openLogFile pattern in cli/logging.go:25-32). For path traversal, EnvFilePath should reject paths that escape the user's deploy directory or only accept the cwd-relative shape — `okdctl deploy --output ../../etc/...` is already a footgun on saveConfig too, but the .env carries credentials so this site is most sensitive.  
-**Effort:** hours
-
-##### `sec:35abd54e:cred-struct-bare-format` — cred struct bare format
-
-**Status:** in review — PR #150  
-**Severity:** minor  
-**Cluster:** credentials  
-**Evidence:** `internal/credentials/proxmox.go:92-107`  
-**Problem:** ProxmoxCredentials.String redacts Password/APIToken to *** in fmt %v / %s. But the field set is masked by hand-rolled fmt.Sprintf — a future field addition (e.g. ClientSecret, RefreshToken) requires the developer to remember to add it to the redact format string, with no compile-time signal. The Redacted() any interface that logutil.redactAny supports would enforce structural redaction.  
-**Fix:** Implement `Redacted() any` returning a struct shape without secret fields, and have String/GoString call into it. The logutil.redactAny path already special-cases this interface (logutil/redact.go:107) — implementing it here makes credentials redaction structural rather than format-string-based. Future fields default to leak-not-redact only if the developer explicitly adds them to the Redacted() output struct.  
-**Effort:** hours
-
 ##### `sec:15ba17da:cred-no-zeroize` — cred no zeroize
 
 **Status:** not started  
@@ -1840,16 +1820,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/distribution/okd/postinstall/verify.go:118-138`  
 **Problem:** VerifyKubeVIP / verifyKubeVIPAPIHealth pair lives in the kube-vip handoff path. The TLS skip is structurally tied to the VIP-not-in-SAN window. After the kube-apiserver re-issues its serving cert (typically 1-3 minutes after kube-vip takes over, controlled by kubelet/cluster-version-operator), the SAN includes the VIP and TLS verification could succeed. The current implementation never retries with verification — it always skips. A continuous monitoring path that calls this function later (e.g. status command, debug-bundle) inherits the InsecureSkip even after the cert is valid.  
 **Fix:** Try-with-verification first, fall back to insecure only if the cert is missing the VIP SAN. Or move the InsecureSkip into a one-time bootstrap helper and have post-bootstrap callers use the kubeconfig-CA verified client. Same shape as the haproxy.go finding (sec:761e5126:tls-insecure-skip) — companion fix.  
-**Effort:** hours
-
-##### `sec:1e8ffb91:tls-insecure-vip-name` — tls insecure vip name
-
-**Status:** in review — PR #152  
-**Severity:** suggestion  
-**Cluster:** tls-network  
-**Evidence:** `internal/distribution/okd/postinstall/verify.go:182-211`  
-**Problem:** verifyKubeVIPAPIHealth uses httputil.NewInsecure to GET the VIP healthz. Comment explicitly justifies the skip: VIP is not in cert SANs during the bootstrap-to-kube-vip transition. This is correct for THIS exact moment but the function name does not encode the temporal precondition — a future caller using the same helper at any other phase inherits the skip.  
-**Fix:** Rename verifyKubeVIPAPIHealth to verifyKubeVIPAPIHealthBootstrap (or extract a `httputil.NewBootstrapInsecure` factory whose name encodes the time-bound contract). Acceptable if scoped tighter than 'NewInsecure can be used anywhere'.  
 **Effort:** hours
 
 ##### `sec:8ea706f6:cred-env-leak-to-child` — cred env leak to child
@@ -4755,6 +4725,82 @@ but link evidence.
   `cleanup.ErrKindNotSet` which uses the same package-local sentinel
   shape. Single caller of `CleanupBootstrap` (`postinstall/steps.go`),
   so no other contract broken. Reviewer PASS first round.
+
+- **`sec:f55b9c27:input-path-not-prefix-checked`** — done 2026-04-26 —
+  PR #151, merge commit `a8056b7`. Tier H minor (input-validation).
+  `WriteEnvFile` passed the destination path straight to
+  `system.AtomicWrite` with no `lstat` check; an attacker who could
+  plant a symlink at the .env path before the rename could redirect
+  the credential bytes (mode 0o600) to an attacker-chosen target.
+  Mirrored the canonical `openLogFile` shape at `cli/logging.go:25-32`:
+  `os.Lstat` first, refuse with `*errtypes.AuthError` if
+  `info.Mode()&os.ModeSymlink != 0`; non-`NotExist` lstat errors also
+  short-circuit (writing credentials to an unstat-able path is unsafe);
+  `NotExist` falls through normally for the first-write case. New
+  `TestWriteEnvFile_SymlinkRefused` locks the regression in (skips
+  under root, mirroring the existing `TestLoadEnvFile_PermRefusal`
+  guard at `envfile_test.go:131-132`). **Scope-down recorded in PR
+  body:** the Fix's second clause (path-traversal validation in
+  `EnvFilePath` to reject `--output=../../etc/...`) was deferred — it
+  is a cobra-flag-validation concern symmetric across `saveConfig`,
+  not a credentials-write concern. **Postmortem lesson:** when a
+  Fix bundles a load-bearing security clause with an architectural
+  one, scope the PR to the load-bearing clause and surface the
+  deferred clause in the PR body. Splitting prevents the architectural
+  decision from blocking the urgent fix; the deferred clause becomes a
+  fresh roadmap item naturally on the next audit. Reviewer PASS first
+  round.
+
+- **`sec:35abd54e:cred-struct-bare-format`** — done 2026-04-26 —
+  PR #150, merge commit `c28a3bd`. Tier H minor (credentials).
+  `ProxmoxCredentials.String` hand-rolled a `fmt.Sprintf` masking only
+  the four fields it remembered to list; a future secret field added
+  to the struct (`ClientSecret`, `RefreshToken`, etc.) would have
+  leaked through `%v` / `%s` with no compile-time signal. Added a
+  private `redactedCredentials` struct holding only the six safe
+  fields (`Endpoint`, `Username`, `Insecure`, `Source`,
+  `EndpointFromConfig`, `ConfigCredentialsOverridden`) and implemented
+  `Redacted() any` returning a populated value of it. The
+  `logutil.redactAny` path at `logutil/redact.go:107` already
+  type-switches on `interface{ Redacted() any }`, so any slog record
+  carrying a `*ProxmoxCredentials` now hits the structural-redact arm
+  instead of relying on the `String()` format string. `String()` /
+  `GoString()` delegate to `Redacted()` via
+  `fmt.Sprintf("%+v", c.Redacted())` so `%v`, `%s`, `%+v`, `%#v` all
+  share one safe-field whitelist. Existing
+  `TestProxmoxCredentials_StringMasks` still passes (the new `%+v`
+  output still contains the non-secret fields it asserts on, and
+  never contains the secret bytes). New
+  `TestProxmoxCredentials_Redacted` asserts the type shape, every
+  preserved field, and nil-receiver safety. **Postmortem lesson:**
+  when the redactor protocol is an *interface* (`Redacted() any`),
+  the type that owns the secret should *implement* it rather than
+  every call site wrapping. Format-string discipline is per-call and
+  fragile under refactoring; interface satisfaction is per-type and
+  forces the developer to consciously add a new field to the safe
+  whitelist. Reviewer PASS first round.
+
+- **`sec:1e8ffb91:tls-insecure-vip-name`** — done 2026-04-26 —
+  PR #152, merge commit `b501017`. Tier H suggestion (tls-network).
+  `verifyKubeVIPAPIHealth` falls back to `httputil.NewInsecure` when
+  the kubeconfig CA is unavailable because the VIP is not yet in the
+  apiserver certificate SANs during the bootstrap-to-kube-vip
+  transition. The function name did not encode that temporal
+  precondition; a future caller at any other phase would inherit the
+  TLS skip silently. Pure rename to `verifyKubeVIPAPIHealthBootstrap`
+  with a tightened doc comment that names the bootstrap-phase
+  contract and explicitly tells later-phase callers to use a verified
+  client instead. Picked the rename option over extracting a
+  `httputil.NewBootstrapInsecure` factory: the helper itself is
+  correctly named for what it does (skip TLS), the misuse risk lives
+  at the caller, and the function is unexported with a single
+  intra-file caller — zero blast radius. The companion finding
+  `sec:761e5126:tls-insecure-skip` for `haproxy.go` is intentionally
+  separate and untouched. **Postmortem lesson:** when a function's
+  safety contract is *temporal* (only safe during a specific phase),
+  encode the precondition in the function name. A reviewer scanning
+  call sites should see the constraint without having to read the
+  doc.
 
 ## Appendix — full item ledger
 
