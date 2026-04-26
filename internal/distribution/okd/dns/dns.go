@@ -219,8 +219,9 @@ func validateAndRestartDnsmasq(ctx context.Context, configName string) error {
 		if !system.FileExists(backupPath) {
 			return
 		}
+		// No follow-up os.Chmod: system.CopyFile preserves the source mode
+		// at open time, and os.Chmod follows symlinks at the destination.
 		_ = system.CopyFile(backupPath, configPath)
-		_ = os.Chmod(configPath, 0o644)
 	}
 
 	if err := ValidateDnsmasqConfig(ctx); err != nil {
