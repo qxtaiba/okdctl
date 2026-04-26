@@ -7,6 +7,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -131,7 +132,7 @@ func (p *Phase) VerifyKubeVIP(ctx context.Context, cfg *config.Config, opts *Opt
 		return "", &errtypes.ClusterError{Msg: "kube-vip vip not reachable", Err: err}
 	}
 
-	if err := p.verifyKubeVIPAPIHealth(ctx, vip); err != nil {
+	if err := p.verifyKubeVIPAPIHealth(ctx, vip, phase.ClusterConfigDir(opts.WorkDir)); err != nil {
 		return "", &errtypes.ClusterError{Msg: "kube-vip api health check failed", Err: err}
 	}
 
@@ -178,18 +179,31 @@ func (p *Phase) waitForKubeVIPPing(ctx context.Context, vip string, opts *Option
 	return nil
 }
 
-// verifyKubeVIPAPIHealth verifies the API server responds via the VIP. TLS
-// verification is skipped because the VIP is not yet in the API server's
-// certificate SANs during the bootstrap-to-kube-vip transition.
-func (p *Phase) verifyKubeVIPAPIHealth(ctx context.Context, vip string) error {
+// verifyKubeVIPAPIHealth verifies the API server responds via the VIP.
+// clusterDir is the openshift-install output directory; its auth/kubeconfig
+// CA bundle is used for TLS. Falls back to InsecureSkipVerify when the
+// kubeconfig is not yet present (pre-install-config window — VIP not in SANs).
+func (p *Phase) verifyKubeVIPAPIHealth(ctx context.Context, vip, clusterDir string) error {
 	healthURL := fmt.Sprintf("https://%s:6443/healthz", vip)
-	p.Log.Info(fmt.Sprintf("verify: checking vip health at %s (tls verification skipped, vip not yet in cert SANs)", healthURL))
+
+	var client *http.Client
+	kubeconfigPath := filepath.Join(clusterDir, "auth", "kubeconfig")
+	pool, err := httputil.KubeconfigCAPool(kubeconfigPath)
+	if err != nil {
+		// kubeconfig CA unavailable — VIP not yet in apiserver SANs; skip verify.
+		p.Log.Warn("verify: kubeconfig CA unavailable, TLS verification skipped", "err", err)
+		client = httputil.NewInsecure(5 * time.Second)
+	} else {
+		client = httputil.NewWithCA(pool, 5*time.Second)
+	}
+
+	p.Log.Info(fmt.Sprintf("verify: checking vip health at %s", healthURL))
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, healthURL, http.NoBody)
 	if err != nil {
 		return fmt.Errorf("failed to build health request: %w", err)
 	}
-	resp, err := httputil.NewInsecure(5 * time.Second).Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		return fmt.Errorf("failed to check api health at %s: %w", healthURL, err)
 	}

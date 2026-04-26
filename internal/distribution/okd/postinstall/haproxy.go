@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -20,7 +21,8 @@ import (
 // RemoveHAProxy stops and disables HAProxy on the bastion. If vip is non-empty,
 // the secondary IP is removed from the bastion's interface and the API is
 // re-verified via the VIP after teardown to ensure kube-vip is handling traffic.
-func (p *Phase) RemoveHAProxy(ctx context.Context, vip string) error {
+// clusterDir is the openshift-install output directory used to load the cluster CA.
+func (p *Phase) RemoveHAProxy(ctx context.Context, vip, clusterDir string) error {
 	if system.IsServiceActive(ctx, "haproxy") {
 		p.Log.Info("haproxy: stopping service")
 		if err := system.ManageService(ctx, system.ServiceStop, "haproxy", "haproxy service"); err != nil {
@@ -58,7 +60,15 @@ func (p *Phase) RemoveHAProxy(ctx context.Context, vip string) error {
 		}
 
 		p.Log.Info("haproxy: verifying api reachable via vip after teardown")
-		healthClient := httputil.NewInsecure(5 * time.Second)
+		kubeconfigPath := filepath.Join(clusterDir, "auth", "kubeconfig")
+		var healthClient *http.Client
+		if pool, caErr := httputil.KubeconfigCAPool(kubeconfigPath); caErr != nil {
+			// CA unavailable post-install — warn; kubeconfig should exist at this point.
+			p.Log.Warn("haproxy: kubeconfig CA unavailable, TLS verification skipped", "err", caErr)
+			healthClient = httputil.NewInsecure(5 * time.Second)
+		} else {
+			healthClient = httputil.NewWithCA(pool, 5*time.Second)
+		}
 		healthURL := fmt.Sprintf("https://%s:6443/healthz", vip)
 		if waitErr := system.WaitForWithTimeout(ctx, "haproxy", "api-via-vip", func() bool {
 			req, rErr := http.NewRequestWithContext(ctx, http.MethodGet, healthURL, http.NoBody)

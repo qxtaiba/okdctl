@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/distribution"
@@ -150,6 +151,9 @@ func (p *Provisioner) Configure(ctx context.Context, cfg *config.Config) (*posti
 // re-running the full postinstall phase. Used by the update-ingress CLI verb.
 func (p *Provisioner) UpdateIngress(ctx context.Context, cfg *config.Config, opts postinstall.UpdateIngressOptions) (*postinstall.UpdateIngressResult, error) {
 	postPhase := postinstall.New(p.executor, p.logger, p.version)
+	if opts.WorkDir == "" {
+		opts.WorkDir = filepath.Join(p.projectRoot, "okd-install")
+	}
 	return postPhase.UpdateIngress(ctx, cfg, opts)
 }
 
