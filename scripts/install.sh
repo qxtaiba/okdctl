@@ -10,11 +10,14 @@
 #   curl -sSfL https://raw.githubusercontent.com/qxtaiba/okdctl/main/scripts/install.sh | sh
 #
 # Environment variables:
-#   VERSION      - pin to a specific release, e.g. VERSION=v0.1.0 (default: latest)
-#   INSTALL_DIR  - where to put the binary (default: /usr/local/bin)
-#   INSECURE     - set to "1" to skip checksum verification (NOT recommended)
+#   VERSION       - pin to a specific release, e.g. VERSION=v0.1.0 (default: latest)
+#   INSTALL_DIR   - where to put the binary (default: /usr/local/bin)
+#   INSECURE      - set to "1" to skip checksum verification (NOT recommended)
+#   GITHUB_TOKEN  - bearer token injected when resolving the latest release;
+#                   lifts the GitHub API rate limit from 60 to 5 000 req/hr/IP,
+#                   which matters on shared CI runners with many co-tenants.
 #
-# Requires: curl, tar, sha256sum. Optionally: cosign (highly recommended).
+# Requires: bash, curl, tar, sha256sum. Optionally: cosign (highly recommended).
 
 set -euo pipefail
 
@@ -34,6 +37,10 @@ red()   { printf '\033[31m%s\033[0m\n' "$*" >&2; }
 green() { printf '\033[32m%s\033[0m\n' "$*"; }
 info()  { printf '  %s\n' "$*"; }
 die()   { red "error: $*"; exit 1; }
+
+# curl_safe wraps curl with hardened defaults: HTTPS-only, TLS 1.2 floor,
+# connect + transfer timeouts, and two retries on connection refusal.
+curl_safe() { curl --proto '=https' --tlsv1.2 --connect-timeout 10 --max-time 120 --retry 2 --retry-connrefused "$@"; }
 
 require() {
     command -v "$1" >/dev/null 2>&1 || die "$1 is required but not installed"
@@ -68,10 +75,18 @@ esac
 # JSON key reordering or whitespace variation in the API response.
 if [ -z "$VERSION" ]; then
     info "resolving latest release..."
-    VERSION=$(curl -sSfL "https://api.github.com/repos/$REPO/releases/latest" |
+    # Inject a bearer token when available to lift the GitHub API rate limit
+    # from 60 to 5 000 req/hr per IP — relevant on shared CI runners.
+    _gh_auth_header=()
+    if [ -n "${GITHUB_TOKEN:-}" ]; then
+        _gh_auth_header=(-H "Authorization: Bearer $GITHUB_TOKEN")
+    fi
+    VERSION=$(curl -sSfL --proto '=https' --tlsv1.2 --connect-timeout 10 --max-time 30 \
+        "${_gh_auth_header[@]}" \
+        "https://api.github.com/repos/$REPO/releases/latest" |
         sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' |
         head -1)
-    [ -n "$VERSION" ] || die "failed to resolve latest release from GitHub API"
+    [ -n "$VERSION" ] || die "failed to resolve latest release from GitHub API; pin VERSION=vX.Y.Z or set GITHUB_TOKEN to avoid rate-limiting"
     info "latest: $VERSION"
 fi
 
@@ -86,13 +101,13 @@ TMP=$(mktemp -d 2>/dev/null || mktemp -d -t "$BINARY")
 trap 'rm -rf "$TMP"' EXIT INT TERM
 
 info "downloading $ARCHIVE_NAME"
-curl -sSfL -o "$TMP/$ARCHIVE_NAME" "$ARCHIVE_URL" ||
+curl_safe -sSfL -o "$TMP/$ARCHIVE_NAME" "$ARCHIVE_URL" ||
     die "failed to download $ARCHIVE_URL"
 
 # Verify SHA256 unless explicitly skipped.
 if [ -z "$INSECURE" ] && [ -n "$SHA_CMD" ]; then
     info "downloading SHA256SUMS"
-    curl -sSfL -o "$TMP/SHA256SUMS" "$SHA_URL" ||
+    curl_safe -sSfL -o "$TMP/SHA256SUMS" "$SHA_URL" ||
         die "failed to download SHA256SUMS from $SHA_URL"
 
     # Cosign verify-blob against the sigstore-published signature.
@@ -101,9 +116,9 @@ if [ -z "$INSECURE" ] && [ -n "$SHA_CMD" ]; then
     # controls release-asset upload can swap both archive and SHA256SUMS.
     if command -v cosign >/dev/null 2>&1; then
         info "verifying cosign signature on SHA256SUMS"
-        curl -sSfL -o "$TMP/SHA256SUMS.sig" "$BASE_URL/SHA256SUMS.sig" ||
+        curl_safe -sSfL -o "$TMP/SHA256SUMS.sig" "$BASE_URL/SHA256SUMS.sig" ||
             die "failed to download SHA256SUMS.sig (release missing signature? rerun with INSECURE=1 if you accept the risk)"
-        curl -sSfL -o "$TMP/SHA256SUMS.pem" "$BASE_URL/SHA256SUMS.pem" ||
+        curl_safe -sSfL -o "$TMP/SHA256SUMS.pem" "$BASE_URL/SHA256SUMS.pem" ||
             die "failed to download SHA256SUMS.pem"
         # stderr is intentionally passed through — on verification failure the
         # user needs to see cosign's diagnostic (cert identity, OIDC issuer,
