@@ -293,3 +293,48 @@ func clearProxmoxEnv(t *testing.T) {
 		_ = os.Unsetenv(k)
 	}
 }
+
+func TestProxmoxHostSchemeValidation(t *testing.T) {
+	makeConfig := func(host string, insecureHTTP bool) *config.Config {
+		return &config.Config{
+			Provider: config.ProviderConfig{
+				Type: config.ProviderProxmox,
+				Proxmox: &config.ProxmoxConfig{
+					Host:         host,
+					Node:         "pve",
+					Storage:      "local-lvm",
+					InsecureHTTP: insecureHTTP,
+				},
+			},
+		}
+	}
+	cases := []struct {
+		name          string
+		host          string
+		insecureHTTP  bool
+		wantSchemeErr bool
+	}{
+		{"schemeless host accepted", "192.168.1.100", false, false},
+		{"bare hostname accepted", "pve.example", false, false},
+		{"http rejected without flag", "http://pve.example", false, true},
+		{"http accepted with flag", "http://pve.example", true, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := makeConfig(tc.host, tc.insecureHTTP)
+			result := config.ValidateWithOptions(cfg, config.ValidationOptions{Scope: config.ScopeProvider})
+			hasSchemeErr := false
+			for _, e := range result.Errors {
+				if strings.Contains(e.Message, "insecure_http") {
+					hasSchemeErr = true
+				}
+			}
+			if tc.wantSchemeErr && !hasSchemeErr {
+				t.Errorf("host %q insecureHTTP=%v: expected scheme error; got %v", tc.host, tc.insecureHTTP, result.Errors)
+			}
+			if !tc.wantSchemeErr && hasSchemeErr {
+				t.Errorf("host %q insecureHTTP=%v: unexpected scheme error; got %v", tc.host, tc.insecureHTTP, result.Errors)
+			}
+		})
+	}
+}
