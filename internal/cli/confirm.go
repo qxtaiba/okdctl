@@ -3,10 +3,13 @@ package cli
 import (
 	"bufio"
 	"context"
+	"fmt"
 	"os"
 	"strings"
 
 	"golang.org/x/term"
+
+	"github.com/qxtaiba/okdctl/internal/errtypes"
 )
 
 // promptForConfirmation reads a y/N answer from stdin with context awareness.
@@ -46,4 +49,26 @@ func promptForConfirmation(ctx context.Context, prompt string) (bool, error) {
 
 func isConfirmResponse(response string) bool {
 	return response == "y" || response == "Y" || response == "yes"
+}
+
+// confirmClusterMatches enforces the --yes / --confirm-cluster pairing used
+// by destructive commands. When force is false the check is skipped (the
+// interactive promptForConfirmation path handles that case). Returns
+// *errtypes.ConfigError when the guard is violated; nil otherwise.
+func confirmClusterMatches(force bool, confirm, name, verb string) error {
+	if !force {
+		return nil
+	}
+	if confirm == "" {
+		return &errtypes.ConfigError{
+			Msg: fmt.Sprintf("--yes requires --confirm-cluster=%q to guard against scripted %ss against the wrong cluster", name, verb),
+		}
+	}
+	if confirm != name {
+		return &errtypes.ConfigError{
+			Msg: fmt.Sprintf("--confirm-cluster %q does not match config cluster %q; refusing %s",
+				confirm, name, verb),
+		}
+	}
+	return nil
 }
