@@ -161,7 +161,7 @@ func (p *Provider) Provision(ctx context.Context, cfg *config.Config, opts Provi
 		if errors.Is(ctx.Err(), context.Canceled) {
 			return nil, fmt.Errorf("terraform apply interrupted: %w", applyErr)
 		}
-		p.logger.Warn("terraform: apply failed; partial infrastructure may exist. run 'okdctl destroy' to clean up")
+		p.logger.Warn("terraform: apply failed; partial infrastructure may exist. run 'okdctl destroy' to clean up", "err", applyErr)
 		return nil, fmt.Errorf("terraform apply failed: %w", applyErr)
 	}
 
