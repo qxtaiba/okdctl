@@ -370,7 +370,7 @@ spurious mismatch.
 
 #### E6 — kube-vip probe TLS: use cluster CA once available
 
-**Status:** not started (first attempt closed with E4/E5)
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/e6-kubevip-tls
 **Audit:** `sec:cfcdee2d:tls-insecure-vip-probe`
 **Evidence:** `internal/httputil/httputil.go:22`,
 `internal/distribution/okd/postinstall/haproxy.go:65`,
@@ -1595,7 +1595,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sec:35abd54e:input-url-scheme-not-checked` — input url scheme not checked
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-35abd54e-http-scheme  
 **Severity:** major  
 **Cluster:** input-validation  
 **Evidence:** `internal/credentials/proxmox.go:182-194`  
@@ -1605,7 +1605,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sec:98723e5d:bashrc-chown-leak` — bashrc chown leak
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-98723e5d-bashrc-chown  
 **Severity:** major  
 **Cluster:** privilege-escalation  
 **Evidence:** `internal/distribution/okd/install/flux.go:117-140`  
