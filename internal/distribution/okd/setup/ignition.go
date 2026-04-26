@@ -1,6 +1,7 @@
 package setup
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -60,7 +61,7 @@ func (p *Phase) GenerateInstallConfig(_ context.Context, cfg *config.Config, out
 		HostPrefix:     hostPrefix,
 		MachineCIDR:    cfg.Networking.MachineCIDR,
 		ServiceCIDR:    cfg.Networking.ServiceCIDR,
-		PullSecret:     strings.TrimSpace(string(pullSecret)),
+		PullSecret:     string(bytes.TrimSpace(pullSecret)),
 		SSHKey:         strings.TrimSpace(string(sshKey)),
 		Architecture:   runtime.GOARCH,
 	}
@@ -77,6 +78,11 @@ func (p *Phase) GenerateInstallConfig(_ context.Context, cfg *config.Config, out
 	backupPath := outputPath + ".backup"
 	if err := system.CopyFileMode(outputPath, backupPath, 0o600); err != nil {
 		return &errtypes.ConfigError{Msg: "failed to backup install-config.yaml", Err: err}
+	}
+
+	// Wipe the pull-secret buffer to bound its lifetime in process memory.
+	for i := range pullSecret {
+		pullSecret[i] = 0
 	}
 
 	return nil
