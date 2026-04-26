@@ -70,7 +70,7 @@ func BuildIgnitionURLForNode(cfg *config.Config, role phase.NodeRole) string {
 	ignitionIP := cfg.HTTPServer.IgnitionServerIP
 	ignitionPort := cfg.HTTPServer.Port
 	if ignitionPort == 0 {
-		ignitionPort = 8080
+		ignitionPort = DefaultIgnitionPort
 	}
 	ignitionFile := role.String() + ".ign"
 	return fmt.Sprintf("http://%s:%d/ignition/%s", ignitionIP, ignitionPort, ignitionFile)
