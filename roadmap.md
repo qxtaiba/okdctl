@@ -2226,7 +2226,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `con:f5d703ab:install-tools-to-system-no-ctx` — install tools to system no ctx
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/con-f5d703ab-install-tools-ctx  
 **Severity:** minor  
 **Cluster:** ctx-ignored  
 **Evidence:** `internal/distribution/okd/setup/artifacts.go:41-69`  
@@ -2236,7 +2236,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `con:ab9b764a:validate-ignition-only-checks-ctx-once` — validate ignition only checks ctx once
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/con-ab9b764a-validate-ignition-ctx  
 **Severity:** minor  
 **Cluster:** ctx-ignored  
 **Evidence:** `internal/distribution/okd/setup/ignition.go:181-215`  
@@ -2368,7 +2368,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `api:0934cf1b:should-be-exported` — should be exported
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/api-0934cf1b-platform-runcaptured  
 **Severity:** minor  
 **Cluster:** exported-surface — seam→audit-code-smells; related: sub:0934cf1b:duplicate-runcaptured  
 **Evidence:** `internal/platform/packages.go:151-163`  
@@ -2470,7 +2470,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `ux:6424733c:no-tty-prompt-returns-false-silently` — no tty prompt returns false silently
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/ux-6424733c-tty-prompt  
 **Severity:** minor  
 **Cluster:** signals  
 **Evidence:** `internal/cli/confirm.go:22-25`  
@@ -2480,7 +2480,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `ux:0f076161:destroy-force-deprecated-but-still-default-binding` — destroy force deprecated but still default binding
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/ux-0f076161-destroy-force  
 **Severity:** minor  
 **Cluster:** flag-conventions  
 **Evidence:** `internal/cli/destroy.go:49-53`  
@@ -2530,7 +2530,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `ux:08c49fc4:remove-haproxy-no-x-bool-default-true` — remove haproxy no x bool default true
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/ux-08c49fc4-keep-haproxy  
 **Severity:** minor  
 **Cluster:** flag-conventions  
 **Evidence:** `internal/cli/update_ingress.go:43-43`  
@@ -2682,7 +2682,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `obs:660d83a5:run-id-mutation-race` — run id mutation race
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/obs-660d83a5-runid-mutex  
 **Severity:** minor  
 **Cluster:** handler-setup — seam→audit-concurrency  
 **Evidence:** `internal/tui/logger.go:158-164`  
@@ -2702,7 +2702,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `obs:ed55ee90:summary-keys-leading-whitespace` — summary keys leading whitespace
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/obs-ed55ee90-summary-keys  
 **Severity:** suggestion  
 **Cluster:** field-stability  
 **Evidence:** `internal/distribution/okd/cleanup/summary.go:65-80`  
