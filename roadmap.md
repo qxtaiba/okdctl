@@ -2170,6 +2170,16 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Either (a) make WaitFor return &errtypes.ClusterError{Msg, Err: context.DeadlineExceeded} directly; or (b) leave the bare wrap and require every caller to map (the pattern in postinstall/haproxy.go lines 76, 91 already does the latter). Option (a) is the canonical fix because the function name (WaitFor) doesn't tell the caller "you must retype."  
 **Effort:** hours
 
+##### `err:aa84670c:deadline-exit-code-not-gated-on-signal` — deadline exit code not gated on signal
+
+**Status:** not started  
+**Severity:** major  
+**Cluster:** cancellation-identity — follow-up to err:ae5b624c (PR #137); blocks err:97cb8adf from achieving its stated user-visible goal too  
+**Evidence:** `internal/cli/root.go:111`  
+**Problem:** root.go's exit-code mapping checks `errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)` BEFORE running the typed-error matcher in exitCodeFor, and returns 130 (or 143 on SIGTERM) regardless of whether a real signal was caught (`caughtSig` is not consulted). PR #137 wrapped MonitorInstallation's two timeout paths in `*errtypes.ClusterError{Err: ctx.Err()}` so error consumers see a consistent shape — but `errors.Is(err, context.DeadlineExceeded)` still walks through `ClusterError.Unwrap()` and matches at line 111, so a 60-minute install-budget exhaustion still exits 130 instead of 4. Same mis-mapping currently hides any other ClusterError-wrapped DeadlineExceeded path. The audit-errors finding `err:ae5b624c` named the goal but the in-scope monitor.go fix alone cannot reach it without a root.go change.  
+**Fix:** Gate the line-111 early-return on `caughtSig.Load() != nil`. When no signal was caught, fall through to `exitCodeFor(err)` so a typed `*errtypes.ClusterError{Err: ctx.DeadlineExceeded}` resolves to exit 4 via the existing typed-error mapping. Keep the SIGINT/SIGTERM paths (where `caughtSig` IS set) returning 130/143 unchanged. Add a unit test in cli/root_test.go (if present) or a new one that exercises both branches with a fake `caughtSig` and asserts exit codes. Scope is small (~5 lines + test) but load-bearing — run it after err:97cb8adf so both ClusterError-wrapping fixes are landed and the integration test covers the full chain.  
+**Effort:** hours
+
 ##### `err:6424733c:wrap-double-context-deployment` — wrap double context deployment
 
 **Status:** not started  
