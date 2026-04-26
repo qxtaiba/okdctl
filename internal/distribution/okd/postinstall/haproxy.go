@@ -81,7 +81,7 @@ func (p *Phase) RemoveHAProxy(ctx context.Context, vip, clusterDir string) error
 			}
 			defer resp.Body.Close()
 			body, _ := io.ReadAll(resp.Body)
-			return resp.StatusCode == http.StatusOK && strings.TrimSpace(string(body)) == "ok"
+			return resp.StatusCode == http.StatusOK && strings.TrimSpace(string(body)) == healthzOKBody
 		}, DefaultKubeVIPVIPTimeout, p.Log); waitErr != nil {
 			return &errtypes.NetworkError{Msg: fmt.Sprintf("api not reachable via vip %s after haproxy removal", vip), Err: waitErr}
 		}
@@ -96,7 +96,7 @@ func (p *Phase) RemoveHAProxy(ctx context.Context, vip, clusterDir string) error
 		p.Log.Info("haproxy: verifying api reachable via hostname after teardown")
 		if waitErr := system.WaitForWithTimeout(ctx, "haproxy", "api-via-hostname", func() bool {
 			r, _ := p.Exec.Run(ctx, "oc", "get", "--raw", "/healthz")
-			return r.ExitCode == 0 && strings.TrimSpace(r.Stdout) == "ok"
+			return r.ExitCode == 0 && strings.TrimSpace(r.Stdout) == healthzOKBody
 		}, DefaultKubeVIPVIPTimeout, p.Log); waitErr != nil {
 			return &errtypes.ClusterError{Msg: "api not reachable via hostname after haproxy removal", Err: waitErr}
 		}
