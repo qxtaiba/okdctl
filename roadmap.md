@@ -1906,23 +1906,11 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sub:97cb8adf:no-cmd-env` — no cmd env
 
-**Status:** in review — PR #147  
-**Severity:** major  
-**Cluster:** io-handling — seam→audit-security  
-**Evidence:** `internal/system/exec.go:21-33`  
-**Problem:** system.RunCaptured creates exec.CommandContext without setting cmd.Env, so the full parent environment (including any unrelated provider tokens, shell secrets, or paths the user happens to have exported) is forwarded to every child it spawns. The canonical executor.Executor goes to deliberate effort to filter the parent env through DefaultEnvAllowlist before spawning a subprocess; RunCaptured is the second-tier wrapper used by ~15 callsites in firewall/dnsmasq/packages/tools/systemd and bypasses that allowlist entirely.  
-**Fix:** Set cmd.Env = executor.FilterParentEnv(executor.DefaultEnvAllowlist) before cmd.Run(). The allowlist is already exported (executor.DefaultEnvAllowlist + FilterParentEnv) for exactly this kind of cross-package reuse — see executor.go:91-122 and the existing reuse from cli/elevation.go:81. Optionally accept an EnvAllowlist parameter so callers that need a tighter list can override.  
-**Effort:** hours
+**Status:** done — 2026-04-26 — PR #147 (moved to Completed)
 
 ##### `sub:ae5b624c:bypass-canonical-executor` — bypass canonical executor
 
-**Status:** in review — PR #148  
-**Severity:** minor  
-**Cluster:** io-handling  
-**Evidence:** `internal/distribution/okd/install/monitor.go:24-30`  
-**Problem:** WaitForBootstrap shells out to openshift-install via raw os/exec rather than the package-canonical p.Exec wrapper, so it loses (a) the env allowlist, (b) the ring-buffered stderr tail that would otherwise feed errtypes.ClusterError, and (c) the structured exec-trace logging Executor adds. The sibling MonitorInstallation at line 75 is the cited canonical kill+reap example in CLAUDE.md but still skips the wrapper for the same reason — direct cmd.Stdout=os.Stdout streaming.  
-**Fix:** Use p.Exec.RunStreamedChecked(ctx, "openshift-install", ...) which already provides MultiWriter to e.Stdout + a ring-buffered tail for the returned *Result. The kill mechanism in MonitorInstallation (line 75-100) needs explicit retention because of the CSR-tick loop, but WaitForBootstrap has no such concurrent work and can use the simpler RunStreamedChecked.  
-**Effort:** hours
+**Status:** done — 2026-04-26 — PR #148 (moved to Completed)
 
 ##### `sub:ae5b624c:no-cmd-env-install` — no cmd env install
 
@@ -1978,13 +1966,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `state:b804b2ec:bootstrap-destroy-skip-tfvars-silent` — bootstrap destroy skip tfvars silent
 
-**Status:** in review — PR #149  
-**Severity:** major  
-**Cluster:** crash-recoverability  
-**Evidence:** `internal/distribution/okd/postinstall/bootstrap.go:21-24`  
-**Problem:** CleanupBootstrap silently returns nil when terraform.tfvars is missing, with only a Warn. If a previous cleanup wiped tfvars but tfstate is still present, the bootstrap VM remains alive and StepCleanupBootstrap reports success. The orchestrator pctx.BootstrapCleaned flips to true in the calling step (postinstall/steps.go:50-52), surfacing 'bootstrap cleaned' in the Result struct and any downstream summary even though the VM is still running.  
-**Fix:** Either (a) return a typed error so the calling step does NOT set BootstrapCleaned=true (caller is the owner of that signal), or (b) introduce a tri-state result (cleaned / skipped / unknown) and wire postinstall/steps.go to set BootstrapCleaned only on the cleaned branch. (a) is simpler and matches the SkipWhen idiom — bootstrap.go would return a sentinel that postinstall/steps.go's OnError hook downgrades to a SkipReason without flipping BootstrapCleaned.  
-**Effort:** hours
+**Status:** done — 2026-04-26 — PR #149 (moved to Completed)
 
 ##### `state:fb54208a:postinstall-no-rollback-path` — postinstall no rollback path
 
@@ -4708,6 +4690,71 @@ but link evidence.
   expansion, `PreflightBinDir` vs `checkPath` consistency), round
   6 (malformed-config demote, stat error branch, comment density),
   final PASS on round 7.
+
+- **`sub:97cb8adf:no-cmd-env`** — done 2026-04-26 — PR #147, merge
+  commit `f7091b3`. Tier H major (io-handling, seam→audit-security).
+  `system.RunCaptured` built `exec.CommandContext` without setting
+  `cmd.Env`, so the os/exec nil-Env contract forwarded the full parent
+  environment to ~19 firewall/dnsmasq/packages/tools/systemd callsites.
+  The canonical `executor.Executor` already filters env through
+  `executor.DefaultEnvAllowlist` via `executor.FilterParentEnv`, and
+  `cli/elevation.go` reuses the same exported helpers for the sudo
+  re-exec path — `RunCaptured` was the lone second-tier hole. Fix is
+  one line: `cmd.Env = executor.FilterParentEnv(executor.DefaultEnvAllowlist)`
+  immediately after `exec.CommandContext`. Signature unchanged; all
+  callsites compile unaltered. Added `TestRunCaptured_EnvFiltered`
+  guard: plant `OKDCTL_SECRET_CANARY` via `t.Setenv`, assert child
+  `sh -c '[ -z "$OKDCTL_SECRET_CANARY" ] || exit 42'` returns 0 — the
+  canary must not reach the child. Verified import-cycle safety
+  (executor → system was already not imported; only `logutil` was
+  shared). Reviewer PASS first round.
+
+- **`sub:ae5b624c:bypass-canonical-executor`** — done 2026-04-26 —
+  PR #148, merge commit `f9808f6`. Tier H minor (io-handling).
+  `WaitForBootstrap` shelled out to `openshift-install` via raw
+  `osExec.CommandContext` with `cmd.Stdout = os.Stdout` /
+  `cmd.Stderr = os.Stderr`, bypassing three Executor amenities: env
+  allowlist (via `e.buildEnv()`), the ring-buffered stderr tail that
+  feeds `*ExitError.Stderr`, and the structured `exec: started` /
+  `exec: completed` debug logs. Replaced with a single
+  `p.Exec.RunStreamedChecked(ctx, "openshift-install", "wait-for",
+  "bootstrap-complete", "--dir", clusterDir, "--log-level=debug")`.
+  `RunStreamed` wires `cmd.Stdout = io.MultiWriter(e.Stdout, ringWriter)`
+  / `cmd.Stderr = io.MultiWriter(e.Stderr, ringWriter)`, so live TTY
+  streaming is unchanged for the user; the spinner lifecycle is
+  preserved. Cancellation identity preserved through the swap because
+  `RunStreamed`'s non-`*exec.ExitError` branch returns the wrapped
+  ctx error verbatim, so `errors.Is(ctx.Err(), context.DeadlineExceeded)`
+  and `context.Canceled` still fire on the receiving branches.
+  `MonitorInstallation` deliberately untouched — its CSR-tick loop
+  needs explicit `cmd.Process` retention for the `killInstall`+`reapTimer`
+  pattern, and a separate roadmap item `sub:ae5b624c:no-cmd-env-install`
+  covers it. `os` and `osExec "os/exec"` imports retained because
+  `MonitorInstallation` still uses both. Reviewer PASS first round.
+  6-line deletion, 1-line addition.
+
+- **`state:b804b2ec:bootstrap-destroy-skip-tfvars-silent`** — done
+  2026-04-26 — PR #149, merge commit `52c848b`. Tier H major
+  (crash-recoverability). `CleanupBootstrap` returned `nil` when
+  `terraform.tfvars` was missing, with only a Warn — and the caller
+  in `postinstall/steps.go` unconditionally flipped
+  `pctx.BootstrapCleaned = true` on `nil`. Result: if a previous
+  cleanup wiped tfvars but the bootstrap VM was still running, the
+  postinstall summary lied about the teardown. Adopted fix path (a)
+  from the roadmap: a package-local exported sentinel
+  `var ErrBootstrapTfvarsNotFound = errors.New("bootstrap cleanup
+  skipped: terraform.tfvars not found")` returned bare (not wrapped)
+  from `CleanupBootstrap` on the missing-tfvars branch, plus an
+  `errors.Is` guard in the step's `Exec` body that returns `nil`
+  without calling `pctx.Update` — `BootstrapCleaned` stays false, no
+  spurious failure surfaced to the user, the existing
+  `OnError: phase.WarnOnError` hook does not fire (Exec returns nil).
+  Real terraform errors keep the `errtypes.ClusterError` wrap. No
+  canonical `errtypes.RecoverableSkipped` exists yet (verified by
+  reading `internal/errtypes/errtypes.go`); the nearest prior art is
+  `cleanup.ErrKindNotSet` which uses the same package-local sentinel
+  shape. Single caller of `CleanupBootstrap` (`postinstall/steps.go`),
+  so no other contract broken. Reviewer PASS first round.
 
 ## Appendix — full item ledger
 
