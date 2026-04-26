@@ -8,7 +8,7 @@ import (
 )
 
 var completionCmd = &cobra.Command{
-	Use:   "completion <bash|zsh|fish|powershell>",
+	Use:   "completion <bash|zsh|fish>",
 	Short: "Generate shell completion script",
 	Long: `Generate a shell completion script for okdctl and write it to stdout.
 
@@ -21,12 +21,9 @@ Zsh (add to ~/.zshrc):
   # or: source <(okdctl completion zsh)
 
 Fish:
-  okdctl completion fish > ~/.config/fish/completions/okdctl.fish
-
-PowerShell (add to $PROFILE):
-  okdctl completion powershell | Out-String | Invoke-Expression`,
+  okdctl completion fish > ~/.config/fish/completions/okdctl.fish`,
 	DisableFlagsInUseLine: true,
-	ValidArgs:             []string{"bash", "zsh", "fish", "powershell"},
+	ValidArgs:             []string{"bash", "zsh", "fish"},
 	Args:                  cobra.MatchAll(cobra.ExactArgs(1), cobra.OnlyValidArgs),
 	RunE:                  runCompletion,
 }
@@ -44,8 +41,6 @@ func runCompletion(cmd *cobra.Command, args []string) error {
 		return cmd.Root().GenZshCompletion(os.Stdout)
 	case "fish":
 		return cmd.Root().GenFishCompletion(os.Stdout, true)
-	case "powershell":
-		return cmd.Root().GenPowerShellCompletionWithDesc(os.Stdout)
 	default:
 		return fmt.Errorf("unknown shell %q", args[0])
 	}
