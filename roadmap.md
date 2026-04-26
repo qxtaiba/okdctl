@@ -3371,7 +3371,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `tst:d9f7733e:debug-bundle-tar-no-test` — debug bundle tar no test
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/tst-d9f7733e-debug-bundle  
+**Status:** in review — PR #125  
 **Severity:** blocker  
 **Cluster:** cred-path-untested  
 **Evidence:** `internal/cli/debug_bundle.go:74-295`  
@@ -3381,7 +3381,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `tst:0f076161:destroy-confirm-cluster-untested` — destroy confirm cluster untested
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/tst-0f076161-destroy-confirm  
+**Status:** in review — PR #126  
 **Severity:** blocker  
 **Cluster:** destructive-untested  
 **Evidence:** `internal/cli/destroy.go:82-94`  
@@ -3391,7 +3391,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `tst:41a9d4eb:redact-handler-no-test` — redact handler no test
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/tst-41a9d4eb-redact-handler  
+**Status:** in review — PR #127  
 **Severity:** blocker  
 **Cluster:** cred-path-untested — seam→audit-observability  
 **Evidence:** `internal/logutil/redact.go:30-123`  
