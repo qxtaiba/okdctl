@@ -311,13 +311,14 @@ func (t *Executor) HasState() bool {
 	return system.FileExists(stateFile)
 }
 
-// Cleanup returns an aggregated error if any removal fails (non-existent files are ignored).
-func (t *Executor) Cleanup() error {
+// CleanupPlans removes tfplan and destroy.tfplan; non-existent files are
+// ignored. terraform.tfstate.backup is intentionally left so the operator
+// retains a rollback artefact if the live tfstate is later corrupted.
+func (t *Executor) CleanupPlans() error {
 	var errs []error
 	files := []string{
 		filepath.Join(t.WorkDir, PlanFileName),
 		filepath.Join(t.WorkDir, "destroy.tfplan"),
-		filepath.Join(t.WorkDir, "terraform.tfstate.backup"),
 	}
 	for _, f := range files {
 		if err := system.SafeRemove(f); err != nil && !os.IsNotExist(err) {
