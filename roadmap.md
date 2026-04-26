@@ -2216,7 +2216,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `con:bdf5a873:safe-remove-ignores-ctx` — safe remove ignores ctx
 
-**Status:** not started  
+**Status:** in review — PR #175  
 **Severity:** minor  
 **Cluster:** ctx-ignored  
 **Evidence:** `internal/distribution/okd/cleanup/artifacts.go:33-57`  
@@ -2256,7 +2256,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `con:e7db1220:releases-completion-bg-ctx` — releases completion bg ctx
 
-**Status:** not started  
+**Status:** in review — PR #172  
 **Severity:** suggestion  
 **Cluster:** ctx-todo  
 **Evidence:** `internal/cli/releases.go:58-71`  
@@ -2652,7 +2652,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `obs:33579dd5:err-stringified-bypasses-handler` — err stringified bypasses handler
 
-**Status:** not started  
+**Status:** in review — PR #176  
 **Severity:** minor  
 **Cluster:** field-stability — seam→audit-errors; related: err:a4001485:errtype-msg-vs-error-asymmetry  
 **Evidence:** `internal/distribution/okd/cleanup/services.go:147-147`  
@@ -2722,7 +2722,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `obs:97cb8adf:waitfor-no-retry-count` — waitfor no retry count
 
-**Status:** not started  
+**Status:** in review — PR #173  
 **Severity:** suggestion  
 **Cluster:** span-retry-boundary  
 **Evidence:** `internal/system/exec.go:54-108`  
@@ -2826,7 +2826,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `smell:9d79b841:strconv-fallback-to-zero` — strconv fallback to zero
 
-**Status:** not started  
+**Status:** in review — PR #174  
 **Severity:** minor  
 **Cluster:** stringified-numbers  
 **Evidence:** `internal/distribution/okd/setup/coreos.go:134-138`  
