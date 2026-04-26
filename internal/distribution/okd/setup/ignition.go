@@ -41,6 +41,7 @@ func (p *Phase) GenerateInstallConfig(_ context.Context, cfg *config.Config, out
 	if err != nil {
 		return &errtypes.AuthError{Msg: "failed to read pull secret", Err: err}
 	}
+	defer system.ZeroBytes(pullSecret)
 
 	sshKey, err := os.ReadFile(cfg.Files.SSHPublicKey)
 	if err != nil {
@@ -74,15 +75,13 @@ func (p *Phase) GenerateInstallConfig(_ context.Context, cfg *config.Config, out
 		return &errtypes.ConfigError{Msg: "failed to render install-config.yaml", Err: err}
 	}
 
-	// openshift-install consumes install-config.yaml during manifest generation
+	// openshift-install consumes install-config.yaml during manifest generation;
+	// .backup is the rollback artifact and inherits the 0o600 on-disk gate. The
+	// in-memory pull-secret buffer is wiped via the defer above on every return
+	// path; deleting .backup once manifests succeed is tracked separately.
 	backupPath := outputPath + ".backup"
 	if err := system.CopyFileMode(outputPath, backupPath, 0o600); err != nil {
 		return &errtypes.ConfigError{Msg: "failed to backup install-config.yaml", Err: err}
-	}
-
-	// Wipe the pull-secret buffer to bound its lifetime in process memory.
-	for i := range pullSecret {
-		pullSecret[i] = 0
 	}
 
 	return nil
