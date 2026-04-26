@@ -11,7 +11,6 @@ import (
 	"github.com/qxtaiba/okdctl/internal/distribution"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/executor"
-	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/platform"
 )
 
@@ -93,11 +92,7 @@ type Phase struct {
 // version tag. Host OS detection populates OS and Pkg; detection errors
 // fall back to RHEL/dnf.
 func New(exec *executor.Executor, logger *slog.Logger, version string) *Phase {
-	detectedOS, err := platform.Detect()
-	if err != nil {
-		logutil.OrNop(logger).Warn("platform: detect failed", "err", err)
-		detectedOS = platform.OS{Family: platform.FamilyRHEL, ID: "unknown", Version: ""}
-	}
+	detectedOS := platform.DetectOrDefault(logger)
 	return &Phase{
 		BasePhase: phase.NewBasePhase(version, phase.WithExecutor(exec), phase.WithLogger(logger)),
 		OS:        detectedOS,

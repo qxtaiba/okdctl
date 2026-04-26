@@ -8,9 +8,12 @@ package platform
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 	"runtime"
 	"strings"
+
+	"github.com/qxtaiba/okdctl/internal/logutil"
 )
 
 // Platform OS-family identifiers and supported arch literals.
@@ -49,6 +52,18 @@ var rhelIDs = map[string]bool{
 
 var debianIDs = map[string]bool{
 	"debian": true, "ubuntu": true,
+}
+
+// DetectOrDefault returns the detected OS, falling back to
+// OS{Family: FamilyRHEL, ID: "unknown"} and warning via logger when
+// detection fails. A nil logger is treated as no-op.
+func DetectOrDefault(logger *slog.Logger) OS {
+	detected, err := Detect()
+	if err != nil {
+		logutil.OrNop(logger).Warn("platform: detect failed; defaulting to rhel", "err", err)
+		return OS{Family: FamilyRHEL, ID: "unknown"}
+	}
+	return detected
 }
 
 // Detect reads /etc/os-release and returns the detected OS.

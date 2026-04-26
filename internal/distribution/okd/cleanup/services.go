@@ -12,6 +12,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/netutil"
+	"github.com/qxtaiba/okdctl/internal/platform"
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
@@ -90,7 +91,7 @@ func Apache(ctx context.Context, logger *slog.Logger) error {
 	logger = logutil.OrNop(logger)
 	logger.Info("cleanup: apache httpd service")
 
-	detectedOS := detectOS(logger)
+	detectedOS := platform.DetectOrDefault(logger)
 	svcName := detectedOS.ApacheServiceName()
 	pkgName := detectedOS.ApachePackageName()
 
