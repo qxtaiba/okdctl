@@ -76,7 +76,7 @@ func Packages(ctx context.Context, binDir string, logger *slog.Logger) error {
 			continue
 		}
 		if guardErr := refuseCriticalPath(binPath); guardErr != nil {
-			logger.Warn(guardErr.Error())
+			logger.Warn("cleanup: refusing critical path", "err", guardErr)
 			hasErrors = true
 			continue
 		}
