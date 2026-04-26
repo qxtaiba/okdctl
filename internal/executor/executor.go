@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"os"
 	"os/exec"
+	"slices"
 	"strings"
 	"time"
 
@@ -130,15 +131,7 @@ type EnvAllowlist struct {
 }
 
 func (a EnvAllowlist) allows(key string) bool {
-	if a.Exact[key] {
-		return true
-	}
-	for _, p := range a.Prefixes {
-		if strings.HasPrefix(key, p) {
-			return true
-		}
-	}
-	return false
+	return a.Exact[key] || slices.ContainsFunc(a.Prefixes, func(p string) bool { return strings.HasPrefix(key, p) })
 }
 
 // FilterParentEnv returns the entries of os.Environ() whose keys pass the
