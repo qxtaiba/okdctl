@@ -79,13 +79,9 @@ func (c *ProxmoxCredentials) Zeroize() {
 	if c == nil {
 		return
 	}
-	for i := range c.Password {
-		c.Password[i] = 0
-	}
+	clear(c.Password)
 	c.Password = nil
-	for i := range c.APIToken {
-		c.APIToken[i] = 0
-	}
+	clear(c.APIToken)
 	c.APIToken = nil
 }
 
