@@ -64,6 +64,9 @@ const (
 	DefaultKubeVIPVIPTimeout       = 2 * time.Minute
 )
 
+// healthzOKBody is the plain-text body kube-apiserver /healthz returns on success.
+const healthzOKBody = "ok"
+
 // ClusterHealthResult summarizes a cluster-health probe.
 type ClusterHealthResult struct {
 	DegradedOperators int
@@ -215,7 +218,7 @@ func (p *Phase) verifyKubeVIPAPIHealthBootstrap(ctx context.Context, vip, cluste
 		return fmt.Errorf("failed to read health response: %w", err)
 	}
 	response := strings.TrimSpace(string(body))
-	if response != "ok" {
+	if response != healthzOKBody {
 		return &errtypes.ClusterError{
 			Msg: fmt.Sprintf("api health check returned unexpected response: %s (expected 'ok')", response),
 		}
@@ -232,7 +235,7 @@ func (p *Phase) verifyAPIHealthCheck(ctx context.Context) error {
 	if err != nil {
 		return &errtypes.ClusterError{Msg: "api health check failed", Err: err}
 	}
-	if strings.TrimSpace(result.Stdout) != "ok" {
+	if strings.TrimSpace(result.Stdout) != healthzOKBody {
 		return &errtypes.ClusterError{Msg: fmt.Sprintf("api returned unexpected health status: %s", strings.TrimSpace(result.Stdout))}
 	}
 	return nil
