@@ -124,9 +124,11 @@ func execute() int {
 
 func printUpdateNotice(ch <-chan version.CheckResult) {
 	var result version.CheckResult
+	t := time.NewTimer(100 * time.Millisecond)
+	defer t.Stop()
 	select {
 	case result = <-ch:
-	case <-time.After(100 * time.Millisecond):
+	case <-t.C:
 		return
 	}
 	if result.LatestTag == "" {
