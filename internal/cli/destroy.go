@@ -75,7 +75,7 @@ func runDestroy(cmd *cobra.Command, _ []string) error {
 
 	tui.Warn(fmt.Sprintf("this will destroy cluster '%s' and all associated resources", cfg.Cluster.Name))
 
-	if err := validateConfirmCluster(destroyForce, destroyConfirmCluster, cfg.Cluster.Name); err != nil {
+	if err := confirmClusterMatches(destroyForce, destroyConfirmCluster, cfg.Cluster.Name, "destroy"); err != nil {
 		return err
 	}
 
@@ -137,27 +137,6 @@ func runDestroy(cmd *cobra.Command, _ []string) error {
 	duration := time.Since(startTime).Round(time.Second)
 	tui.Info(fmt.Sprintf("cluster destroyed (%s)", duration))
 
-	return nil
-}
-
-// validateConfirmCluster enforces the --yes / --confirm-cluster pairing that
-// guards scripted destroys against the wrong cluster. When force is false the
-// check is skipped. Returns *errtypes.ConfigError when the guard is violated.
-func validateConfirmCluster(force bool, confirm, name string) error {
-	if !force {
-		return nil
-	}
-	if confirm == "" {
-		return &errtypes.ConfigError{
-			Msg: fmt.Sprintf("--yes requires --confirm-cluster=%q to guard against scripted destroys against the wrong cluster", name),
-		}
-	}
-	if confirm != name {
-		return &errtypes.ConfigError{
-			Msg: fmt.Sprintf("--confirm-cluster %q does not match config cluster %q; refusing destroy",
-				confirm, name),
-		}
-	}
 	return nil
 }
 

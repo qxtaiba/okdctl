@@ -9,7 +9,6 @@ import (
 
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/cleanup"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
-	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/runlock"
 	"github.com/qxtaiba/okdctl/internal/system"
 	"github.com/qxtaiba/okdctl/internal/tui"
@@ -73,21 +72,8 @@ func runCleanup(cmd *cobra.Command, _ []string) error {
 
 	tui.Warn(fmt.Sprintf("this will remove all local artifacts for cluster '%s'", cfg.Cluster.Name))
 
-	// Typo guard for non-interactive cleanups: --confirm-cluster is REQUIRED
-	// with --yes and must match the live cluster name. Cleanup wipes services,
-	// terraform state, and bin-dir binaries — same blast radius as destroy.
-	if cleanupYes {
-		if cleanupConfirmCluster == "" {
-			return &errtypes.ConfigError{
-				Msg: fmt.Sprintf("--yes requires --confirm-cluster=%q to guard against scripted cleanups against the wrong cluster", cfg.Cluster.Name),
-			}
-		}
-		if cleanupConfirmCluster != cfg.Cluster.Name {
-			return &errtypes.ConfigError{
-				Msg: fmt.Sprintf("--confirm-cluster %q does not match config cluster %q; refusing cleanup",
-					cleanupConfirmCluster, cfg.Cluster.Name),
-			}
-		}
+	if err := confirmClusterMatches(cleanupYes, cleanupConfirmCluster, cfg.Cluster.Name, "cleanup"); err != nil {
+		return err
 	}
 
 	if !cleanupYes {
