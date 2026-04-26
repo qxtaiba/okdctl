@@ -1614,7 +1614,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sec:8ea706f6:dl-yq-unpinned-no-checksum` — dl yq unpinned no checksum
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-8ea706f6-yq-pin  
+**Status:** in review — PR #158  
 **Severity:** major  
 **Cluster:** tls-network  
 **Evidence:** `internal/distribution/okd/setup/tools.go:33-35`  
@@ -2094,7 +2094,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `err:aa84670c:deadline-exit-code-not-gated-on-signal` — deadline exit code not gated on signal
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/err-aa84670c-exit-code-gate  
+**Status:** in review — PR #156  
 **Severity:** major  
 **Cluster:** cancellation-identity — follow-up to err:ae5b624c (PR #137); blocks err:97cb8adf from achieving its stated user-visible goal too  
 **Evidence:** `internal/cli/root.go:111`  
@@ -3152,7 +3152,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `tst:93957c53:cleanup-confirm-cluster-untested` — cleanup confirm cluster untested
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/tst-93957c53-confirm-cluster  
+**Status:** in review — PR #157  
 **Severity:** major  
 **Cluster:** destructive-untested — related: tst:0f076161:destroy-confirm-cluster-untested  
 **Evidence:** `internal/cli/cleanup.go:79-91`  
