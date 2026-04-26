@@ -3,12 +3,14 @@ package setup
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
+	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/executor"
 	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/platform"
@@ -65,20 +67,36 @@ func newTestPhase(t *testing.T) *Phase {
 
 func TestParseOKDMinor(t *testing.T) {
 	cases := []struct {
-		in   string
-		want int
+		in     string
+		want   int
+		wantOK bool
 	}{
-		{"4.19.0-0.okd-2025-05-01-123456", 19},
-		{"4.21.0-okd-scos.10", 21},
-		{"4.20.0-0.okd-2025-07-01-000000", 20},
-		{"4.15.0-0.okd-2024-01-27-040212", 15},
-		{"not-a-version", 0},
-		{"", 0},
+		{"4.19.0-0.okd-2025-05-01-123456", 19, true},
+		{"4.21.0-okd-scos.10", 21, true},
+		{"4.20.0-0.okd-2025-07-01-000000", 20, true},
+		{"4.15.0-0.okd-2024-01-27-040212", 15, true},
+		{"not-a-version", 0, false},
+		{"", 0, false},
 	}
 	for _, tt := range cases {
-		got := parseOKDMinor(tt.in)
-		if got != tt.want {
-			t.Errorf("parseOKDMinor(%q) = %d, want %d", tt.in, got, tt.want)
+		got, ok := parseOKDMinor(tt.in)
+		if ok != tt.wantOK || got != tt.want {
+			t.Errorf("parseOKDMinor(%q) = (%d, %v), want (%d, %v)", tt.in, got, ok, tt.want, tt.wantOK)
+		}
+	}
+}
+
+func TestDetectCoreOSVersion_malformedVersion(t *testing.T) {
+	p := newTestPhase(t)
+	for _, v := range []string{"not-a-version", "", "x.y.0"} {
+		_, err := p.DetectCoreOSVersion(context.Background(), v)
+		if err == nil {
+			t.Errorf("DetectCoreOSVersion(%q): expected error, got nil", v)
+			continue
+		}
+		var ce *errtypes.ConfigError
+		if !errors.As(err, &ce) {
+			t.Errorf("DetectCoreOSVersion(%q): want *errtypes.ConfigError, got %T: %v", v, err, err)
 		}
 	}
 }

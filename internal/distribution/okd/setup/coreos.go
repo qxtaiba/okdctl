@@ -131,11 +131,12 @@ type coreOSStreamData struct {
 }
 
 // parseOKDMinor extracts the minor from an OKD version like
-// "4.19.0-0.okd-2025-…". Returns 0 on parse failure.
-func parseOKDMinor(version string) int {
+// "4.19.0-0.okd-2025-…". The bool is true only when both major and minor
+// scanned successfully; callers must refuse the request when it is false.
+func parseOKDMinor(version string) (int, bool) {
 	var major, minor int
-	_, _ = fmt.Sscanf(version, "%d.%d", &major, &minor)
-	return minor
+	n, _ := fmt.Sscanf(version, "%d.%d", &major, &minor)
+	return minor, n == 2
 }
 
 // streamFileForMinor returns the data file an OKD minor publishes:
@@ -193,9 +194,13 @@ func coreOSInfoFromStream(sd *coreOSStreamData) (*CoreOSInfo, error) {
 // DetectCoreOSVersion returns the CoreOS ISO location, checksum, and release
 // for the host architecture. okdVersion picks the right upstream data file:
 // 4.15-4.18 → fcos.json (Fedora CoreOS), 4.19+ → scos.json (Stream CoreOS).
-// A malformed okdVersion parses to minor 0 and resolves to fcos.json.
+// A malformed okdVersion fails fast as a typed ConfigError; callers used to
+// see a 404 from release-4.0/... when minor silently fell back to 0.
 func (p *Phase) DetectCoreOSVersion(ctx context.Context, okdVersion string) (*CoreOSInfo, error) {
-	minor := parseOKDMinor(okdVersion)
+	minor, ok := parseOKDMinor(okdVersion)
+	if !ok {
+		return nil, &errtypes.ConfigError{Msg: fmt.Sprintf("invalid OKD version %q: cannot parse major.minor", okdVersion)}
+	}
 	streamURL := fmt.Sprintf(
 		"%s/openshift/installer/release-4.%d/data/data/coreos/%s",
 		streamRawBaseURL, minor, streamFileForMinor(minor),
