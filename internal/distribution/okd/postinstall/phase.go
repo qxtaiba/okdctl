@@ -84,7 +84,7 @@ func (p *Phase) Execute(ctx context.Context, cfg *config.Config, opts *Options) 
 		addon.WithLogger(p.Log),
 		addon.WithProjectRoot(opts.ProjectRoot),
 	)
-	pctx := distribution.NewPhaseContext(PostInstallContext{})
+	pctx := distribution.NewPhaseContext(postInstallContext{})
 
 	orchestrator := distribution.NewOrchestrator(distribution.BuildSteps(p.postinstallSteps(cfg, opts, pctx, addonMgr))...)
 	orchestrator.SetLogger(p.Log)
