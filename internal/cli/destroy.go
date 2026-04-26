@@ -21,6 +21,7 @@ import (
 )
 
 var (
+	destroyYes            bool
 	destroyForce          bool
 	destroyKeepISOs       bool
 	destroyDryRun         bool
@@ -45,8 +46,9 @@ Use --dry-run to preview the terraform destroy plan without modifying infra.`,
 
 func init() {
 	// Primary flag is --yes (matches the other commands' idiom); --force is
-	// kept as an alias so existing scripts do not break.
-	destroyCmd.Flags().BoolVarP(&destroyForce, "yes", "y", false, "skip confirmation prompt")
+	// kept as a deprecated alias backed by its own var so both flags are
+	// additive rather than last-write-wins.
+	destroyCmd.Flags().BoolVarP(&destroyYes, "yes", "y", false, "skip confirmation prompt")
 	destroyCmd.Flags().BoolVar(&destroyForce, "force", false, "deprecated alias for --yes")
 	if err := destroyCmd.Flags().MarkDeprecated("force", "use --yes instead"); err != nil {
 		panic(err) // flag is statically defined above; unreachable
@@ -75,11 +77,12 @@ func runDestroy(cmd *cobra.Command, _ []string) error {
 
 	tui.Warn(fmt.Sprintf("this will destroy cluster '%s' and all associated resources", cfg.Cluster.Name))
 
-	if err := confirmClusterMatches(destroyForce, destroyConfirmCluster, cfg.Cluster.Name, "destroy"); err != nil {
+	effective := destroyYes || destroyForce
+	if err := confirmClusterMatches(effective, destroyConfirmCluster, cfg.Cluster.Name, "destroy"); err != nil {
 		return err
 	}
 
-	if !destroyForce {
+	if !effective {
 		confirmed, err := promptForConfirmation(ctx, "proceed with destroy? [y/N]: ")
 		if err != nil {
 			return err
