@@ -81,9 +81,10 @@ func WaitFor(ctx context.Context, prefix, description string, check func() bool,
 	}
 
 	startTime := time.Now()
+	polls := 0
 
 	if check() {
-		logger.Info(readyMsg)
+		logger.Info(readyMsg, "polls", polls, "elapsed", time.Since(startTime).Round(time.Second))
 		return nil
 	}
 
@@ -97,12 +98,13 @@ func WaitFor(ctx context.Context, prefix, description string, check func() bool,
 			}
 			// Wrap context.DeadlineExceeded so callers can errors.Is the
 			// timeout shape — the elapsed budget IS a deadline-exceeded.
-			return fmt.Errorf("timeout waiting for %s %s after %v: %w",
-				prefix, description, opts.Timeout, context.DeadlineExceeded)
+			return fmt.Errorf("timeout waiting for %s %s after %v (%d polls): %w",
+				prefix, description, opts.Timeout, polls, context.DeadlineExceeded)
 		case <-ticker.C:
+			polls++
 			elapsed := time.Since(startTime)
 			if check() {
-				logger.Info(readyMsg)
+				logger.Info(readyMsg, "polls", polls, "elapsed", elapsed.Round(time.Second))
 				return nil
 			}
 			if err := ctx.Err(); err != nil {
