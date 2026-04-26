@@ -2570,7 +2570,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `ux:8d8faa80:completion-powershell-on-linux-only-tool` — completion powershell on linux only tool
 
-**Status:** in review — PR #164  
+**Status:** done — PR #164 (moved to Completed)  
 **Severity:** suggestion  
 **Cluster:** verb-noun  
 **Evidence:** `internal/cli/completion.go:11-31`  
@@ -2672,7 +2672,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `obs:48688e63:apply-failure-no-err-attr` — apply failure no err attr
 
-**Status:** in review — PR #165  
+**Status:** done — PR #165 (moved to Completed)  
 **Severity:** minor  
 **Cluster:** field-stability  
 **Evidence:** `internal/infrastructure/proxmox/proxmox.go:164-164`  
@@ -2712,7 +2712,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `obs:c287d5c0:cleanup-warning-key-vague` — cleanup warning key vague
 
-**Status:** in review — PR #166  
+**Status:** done — PR #166 (moved to Completed)  
 **Severity:** suggestion  
 **Cluster:** field-stability  
 **Evidence:** `internal/distribution/okd/okd.go:122-122`  
@@ -2734,7 +2734,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `mod:f55b9c27:use-builtin-clear` — use builtin clear
 
-**Status:** in review — PR #159  
+**Status:** done — PR #159 (moved to Completed)  
 **Severity:** minor  
 **Cluster:** any-interface-builtins  
 **Evidence:** `internal/credentials/envfile.go:81-83`  
@@ -2744,7 +2744,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `mod:35abd54e:use-builtin-clear` — use builtin clear
 
-**Status:** in review — PR #160  
+**Status:** done — PR #160 (moved to Completed)  
 **Severity:** minor  
 **Cluster:** any-interface-builtins  
 **Evidence:** `internal/credentials/proxmox.go:82-89`  
@@ -2764,7 +2764,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `mod:7b2829bb:use-slices-containsfunc` — use slices containsfunc
 
-**Status:** in review — PR #161  
+**Status:** done — PR #161 (moved to Completed)  
 **Severity:** suggestion  
 **Cluster:** slices-maps  
 **Evidence:** `internal/executor/executor.go:132-142`  
@@ -2814,16 +2814,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Add `func DetectOrDefault(logger *slog.Logger) OS` to internal/platform/platform.go encapsulating the warn+fallback. Replace the cleanup detectOS function and the setup inline block with a call. Net: -8 LOC, single source of truth for the 'platform-detect failed' decision.  
 **Effort:** hours
 
-##### `smell:25fa1be8:asymmetric-action-constant` — asymmetric action constant
-
-**Status:** in review — PR #167  
-**Severity:** minor  
-**Cluster:** magic-strings  
-**Evidence:** `internal/distribution/okd/firewall/firewall.go:27-213`  
-**Problem:** modifyPort takes a string `action` parameter compared with the typed const actionRemove and the bare literal "add". Only one of the two values gets a constant — the other is sprinkled three times as raw "add". A typo on either side silently no-ops the firewall mutation.  
-**Fix:** Either (a) add `const actionAdd = "add"` and use it in openPort/modifyPort consistently, or (b) replace the string parameter with `type firewallAction int` enum (Add/Remove). Option (b) is the durable form — the boolean spread between "add"/actionRemove is exactly what enums prevent.  
-**Effort:** hours
-
 ##### `smell:1e8ffb91:repeated-port-literal` — repeated port literal
 
 **Status:** not started  
@@ -2846,7 +2836,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `smell:2f70d7df:magic-default-port` — magic default port
 
-**Status:** in review — PR #162  
+**Status:** done — PR #162 (moved to Completed)  
 **Severity:** minor  
 **Cluster:** magic-strings  
 **Evidence:** `internal/distribution/okd/setup/kargs.go:73-73`  
@@ -2876,7 +2866,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `smell:8aa632a6:duplicate-platform-string` — duplicate platform string
 
-**Status:** in review — PR #163  
+**Status:** done — PR #163 (moved to Completed)  
 **Severity:** suggestion  
 **Cluster:** helper-package-no-value  
 **Evidence:** `internal/cli/debug_bundle.go:144-144`  
@@ -2954,26 +2944,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `go.mod:14-14`  
 **Problem:** `github.com/luthermonson/go-proxmox v0.4.1` (released 2026-04-03) is the only path to Proxmox VE node discovery (1 file: internal/tui/wizard/steps/proxmox_discovery.go). v0.x means minor bumps may break the API; bus-factor 1. CLAUDE.md §dependencies names this as the canonical v0.x exposure with a documented ~200 LOC REST-only fallback. The dep also drags in 12 transitives (buger/goterm, jinzhu/copier, diskfs/go-diskfs, djherbis/times, gorilla/websocket, etc.) for narrow REST use. Umbrella entry for traceability.  
 **Fix:** No action this run. Track go-proxmox releases each audit cycle (currently v0.4.1, last commit 2026-04-03). When a v1.0 lands, evaluate the bump. If go-proxmox is abandoned for >12 months, execute the CLAUDE.md fallback: replace with a hand-rolled REST-only client (~200 LOC) — drops 12 transitive packages and removes the v0.x exposure. Severity is `minor` not `blocker` because the abandonment plan is documented and recent (2026-04-03) commit activity shows the upstream is still alive.  
-**Effort:** hours
-
-##### `dep:33ef32bf:stale-indirect-mage` — stale indirect mage
-
-**Status:** in review — PR #171  
-**Severity:** minor  
-**Cluster:** module-hygiene  
-**Evidence:** `go.mod:47-47`  
-**Problem:** `github.com/magefile/mage` is listed as indirect but `go mod why` reports `(main module does not need package github.com/magefile/mage)`; absent from `go list -deps`. It is part of go-proxmox's mage build helpers (a build-time tool inside go-proxmox, never compiled into okdctl's binary). The line in go.mod is dead weight from older minimum-version computation and should be tidied.  
-**Fix:** Run `go mod tidy`; same run that prunes `golang.org/x/exp` will prune mage. No code change required.  
-**Effort:** hours
-
-##### `dep:33ef32bf:stale-indirect-x-exp` — stale indirect x exp
-
-**Status:** in review — PR #171  
-**Severity:** minor  
-**Cluster:** module-hygiene  
-**Evidence:** `go.mod:60-60`  
-**Problem:** `golang.org/x/exp` is listed as indirect but `go mod why golang.org/x/exp` reports `(main module does not need package golang.org/x/exp)`; it is also absent from `go list -deps` output, so it is not in the build graph. This is leftover residue from a removed dep and should be removed by `go mod tidy`.  
-**Fix:** Run `go mod tidy` and commit the cleaned go.mod / go.sum. The same run will likely also drop `github.com/magefile/mage` (see related finding).  
 **Effort:** hours
 
 ##### `dep:33ef32bf:xo-terminfo-untagged` — xo terminfo untagged

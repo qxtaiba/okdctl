@@ -1366,3 +1366,97 @@ but link evidence.
   rule when the audit-observability finding is picked up.
   Reviewer PASS first round.
 
+- **`mod:f55b9c27:use-builtin-clear`** — done 2026-04-26 — PR #159,
+  merge commit `d141cd5`. Tier H minor (any-interface-builtins).
+  `WriteEnvFile` zeroed the bytes.Buffer's backing store via a
+  three-line `for i := range data { data[i] = 0 }` loop after the
+  atomic write to disk. Swapped for the Go 1.21 `clear(data)`
+  builtin: identical semantics on `[]byte`, signals "this is a
+  wipe" at the call site (load-bearing on a credential-handling
+  path), and preserves the existing two-line WHY comment unchanged.
+  Net delta: -2 lines. Reviewer PASS first round.
+
+- **`mod:35abd54e:use-builtin-clear`** — done 2026-04-26 — PR #160,
+  merge commit `24a4c1f`. Tier H minor (any-interface-builtins).
+  `ProxmoxCredentials.Zeroize` hand-rolled two
+  `for i := range slice { slice[i] = 0 }` loops between the
+  `c.Password = nil` / `c.APIToken = nil` assignments. Replaced
+  each loop with `clear(c.Password)` / `clear(c.APIToken)`; the
+  nil-assignments stay so the backing array can be GC'd. Net
+  delta: -4 lines. Reviewer PASS first round.
+
+- **`mod:7b2829bb:use-slices-containsfunc`** — done 2026-04-26 —
+  PR #161, merge commit `6f8647c`. Tier H suggestion (slices-maps).
+  `EnvAllowlist.allows` walked `a.Prefixes` with a hand-rolled
+  `for/strings.HasPrefix` loop where `slices.ContainsFunc` is the
+  canonical shape; the codebase already adopts it at
+  `internal/cli/status.go` and `internal/logutil/redact.go`.
+  Replaced the body with
+  `return a.Exact[key] || slices.ContainsFunc(a.Prefixes, func(p string) bool { return strings.HasPrefix(key, p) })`
+  and added `"slices"` to imports. Exact-then-prefix short-circuit
+  preserved via `||`. Net delta: -7 LOC. Reviewer PASS first round.
+
+- **`smell:2f70d7df:magic-default-port`** — done 2026-04-26 —
+  PR #162, merge commit `6457aa4`. Tier H minor (magic-strings).
+  `BuildIgnitionURLForNode` fell back to the literal `8080` when
+  `cfg.HTTPServer.Port` was unset, duplicating the canonical
+  `DefaultIgnitionPort = 8080` constant declared one file over in
+  the same `package setup`'s `phase.go`. Replaced the literal with
+  the named constant — no import needed (same package). One-line
+  change, no behavioral diff. Reviewer PASS first round.
+
+- **`smell:8aa632a6:duplicate-platform-string`** — done 2026-04-26
+  — PR #163, merge commit `7ec51d0`. Tier H suggestion
+  (helper-package-no-value). `debug_bundle.go` constructed the
+  manifest's `Platform` via inline
+  `fmt.Sprintf("%s/%s", runtime.GOOS, runtime.GOARCH)` even though
+  `version.Platform` (computed once at package init from the same
+  expression) was already imported. Replaced with
+  `Platform: version.Platform`. The `runtime` import stays —
+  `bundleSystemMeta` (lines 335-337) still reads `GOOS`, `GOARCH`,
+  and `NumCPU()` directly. One-line change, byte-identical output.
+  Reviewer PASS first round.
+
+- **`ux:8d8faa80:completion-powershell-on-linux-only-tool`** —
+  done 2026-04-26 — PR #164, merge commit `4600c24`. Tier H
+  suggestion (verb-noun). `completionCmd` advertised `powershell`
+  as a valid arg in `Use`, `ValidArgs`, the `Long` description,
+  and the `runCompletion` switch — but okdctl is Linux-only
+  (CLAUDE.md, README), so the powershell branch was dishonest help
+  text. Dropped powershell from all four sites in `completion.go`,
+  removed the `okdctl completion powershell | Out-String |
+  Invoke-Expression` hint from README, and regenerated
+  `docs/cli/okdctl_completion.md` via `make docs` (CI's
+  `git diff --quiet docs/cli/` check stayed green).
+  **Postmortem lesson:** when a roadmap fix touches a generated
+  CLI doc, the planner's "either direct edit or `make docs`" caveat
+  resolved cleanly here — `make docs` produced output identical to
+  what hand-edits would have. The dual-path plan is overcautious for
+  cobra-generated refs; future doc-touching items can drop the
+  direct-edit fallback and trust `make docs`. Reviewer PASS first
+  round.
+
+- **`obs:48688e63:apply-failure-no-err-attr`** — done 2026-04-26 —
+  PR #165, merge commit `4358b7e`. Tier H minor (field-stability).
+  `Provider.Provision`'s terraform-apply-failed Warn carried only
+  the user-facing recovery hint, not `applyErr` itself, so slog
+  records had no `err` field for log-aggregation filtering. Added
+  `"err", applyErr` as a structured attr alongside the existing
+  message; the `fmt.Errorf("terraform apply failed: %w", applyErr)`
+  wrap on the next line is unchanged so callers still receive the
+  typed error. `applyErr` is a typed Go error with no credential
+  content; `RedactHandler` only scrubs password/token/secret/api_key
+  keys, so `"err"` passes through unmodified. Reviewer PASS first
+  round.
+
+- **`obs:c287d5c0:cleanup-warning-key-vague`** — done 2026-04-26 —
+  PR #166, merge commit `48bde66`. Tier H suggestion
+  (field-stability). `Provisioner.Prepare`'s post-cleanup Warn
+  read `p.logger.Warn("cleanup warning", "err", err)` — the
+  unkeyed message broke the cleanup package's `cleanup: <verb>
+  <object>` convention and gave structured consumers no field
+  identifying which operation failed. Replaced with
+  `p.logger.Warn("cleanup: pre-deploy artifact removal incomplete", "phase", "prepare", "err", err)`,
+  matching the orchestrator's `step` key style. One-line change.
+  Reviewer PASS first round.
+
