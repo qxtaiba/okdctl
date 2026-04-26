@@ -1914,7 +1914,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sub:e552bb7d:iface-output-discards-stderr` — iface output discards stderr
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sub-e552bb7d-iface-stderr  
 **Severity:** suggestion  
 **Cluster:** io-handling  
 **Evidence:** `internal/netutil/iface.go:25-29`  
@@ -2174,7 +2174,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `err:d5915b0c:naked-ctx-err-return` — naked ctx err return
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/err-d5915b0c-naked-ctx-err  
 **Severity:** suggestion  
 **Cluster:** cancellation-identity  
 **Evidence:** `internal/distribution/okd/install/phase.go:157-168`  
@@ -2540,7 +2540,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `ux:e45c2239:preflight-tui-error-uses-exit-1` — preflight tui error uses exit 1
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/ux-e45c2239-preflight-exit-77  
 **Severity:** suggestion  
 **Cluster:** exit-codes  
 **Evidence:** `cmd/okdctl/main.go:32-35`  
@@ -2692,7 +2692,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `obs:8154ab0f:doctor-error-not-blocker` — doctor error not blocker
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/obs-8154ab0f-doctor-recap-level  
 **Severity:** suggestion  
 **Cluster:** level-discipline — seam→audit-cli-ux  
 **Evidence:** `internal/cli/doctor.go:103-103`  
@@ -2856,7 +2856,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `smell:c19ee328:duplicate-iface-default` — duplicate iface default
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/smell-c19ee328-iface-netmask-defaults  
 **Severity:** minor  
 **Cluster:** magic-strings  
 **Evidence:** `internal/distribution/okd/setup/kargs.go:59-62`  
@@ -2866,7 +2866,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `smell:c19ee328:duplicate-netmask-default` — duplicate netmask default
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/smell-c19ee328-iface-netmask-defaults  
 **Severity:** minor  
 **Cluster:** magic-strings  
 **Evidence:** `internal/distribution/okd/setup/kargs.go:49-52`  
@@ -2882,26 +2882,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/cli/debug_bundle.go:144-144`  
 **Problem:** debug_bundle.go:144 rebuilds `fmt.Sprintf("%s/%s", runtime.GOOS, runtime.GOARCH)` even though version.Platform — a package-level var holding the exact same expression — is already imported at line 24. Two byte-identical builds of the same string from the same inputs.  
 **Fix:** Replace `Platform: fmt.Sprintf("%s/%s", runtime.GOOS, runtime.GOARCH)` with `Platform: version.Platform` and remove the unused `runtime` import (debug_bundle.go:12) if no other code references it.  
-**Effort:** hours
-
-##### `smell:26a430ee:bool-config-map-instead-of-set` — bool config map instead of set
-
-**Status:** in review — PR #168  
-**Severity:** suggestion  
-**Cluster:** bool-should-be-enum  
-**Evidence:** `internal/cli/elevation.go:23-28`  
-**Problem:** rootRequiredCmds is map[string]bool with every value `true` — a `map[string]struct{}{}` set or a `slices.Contains([]string{...}, name)` slice would carry the same information without the false/true vs zero-value confusion (a missing key returns false from rootRequiredCmds[name] which is what 'not present' means here, but the bool value is purely decorative).  
-**Fix:** Replace with `var rootRequiredCmds = []string{"deploy", "destroy", "cleanup", "update-ingress"}` and the predicate becomes `slices.Contains(rootRequiredCmds, c.Name())`. Or use `map[string]struct{}{}` if O(1) lookup matters at >10 entries — currently four, so the slice is clearer.  
-**Effort:** hours
-
-##### `smell:6424733c:single-caller-wrapper` — single caller wrapper
-
-**Status:** in review — PR #169  
-**Severity:** suggestion  
-**Cluster:** helper-package-no-value  
-**Evidence:** `internal/cli/helpers.go:105-109`  
-**Problem:** createOKDProvisioner is a single-caller wrapper that just delegates to createOKDProvisionerWithOpts with no extra args. update_ingress.go:102 is the only call site; every other caller uses createOKDProvisionerWithOpts directly. The wrapper adds a comment but no behaviour and is itself triple-named, making greps noisier.  
-**Fix:** Inline at the one call site: replace `p := createOKDProvisioner(cfg, nil, projectRoot)` with `p := createOKDProvisionerWithOpts(cfg, nil, projectRoot)` and delete createOKDProvisioner. Two lines of comment migrate to the WithOpts variant if they're worth keeping.  
 **Effort:** hours
 
 ##### `smell:7f86cbe2:any-return-second-value` — any return second value
@@ -2942,16 +2922,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/distribution/okd/phase/kubectl.go:47-49`  
 **Problem:** OcPollOutput is a one-line wrapper that calls OcPollOutputInterval with interval=0. OcPollOutputInterval is itself only called from this wrapper and from kubectl_test.go. Two near-identical methods on BasePhase where one variadic-option-style helper would suffice. (Kept as 'suggestion' per MEMORY.md scaffolding rule — the test-only OcPollOutputInterval is a test-family helper.)  
 **Fix:** Either keep both as a deliberate test-injection seam (current state — explicitly tag the test-only purpose in OcPollOutputInterval's doc), or fold the two into a single OcPollOutput with a poll-interval option struct. Current naming hints at API symmetry, but only OcPollOutput has production callers, so it is functionally a test-family helper.  
-**Effort:** hours
-
-##### `smell:1e8ffb91:string-equals-ok` — string equals ok
-
-**Status:** in review — PR #170  
-**Severity:** suggestion  
-**Cluster:** magic-strings  
-**Evidence:** `internal/distribution/okd/postinstall/verify.go:203-220`  
-**Problem:** Three sites compare HTTP healthz response body against the literal "ok" — verify.go:203, verify.go:220, postinstall/haproxy.go:74 + postinstall/haproxy.go:89. Kubernetes /healthz is documented to return "ok" but the constant is undeclared, so any future schema drift (or a healthz=Ready cluster) silently false-negatives. Same probe-success vocabulary repeated 4×.  
-**Fix:** Add `const healthzOKBody = "ok"` near DefaultKubeVIPVIPTimeout in verify.go and reference at all 4 comparison sites. Document the upstream contract: kube-apiserver /healthz returns "ok" plain-text on success.  
 **Effort:** hours
 
 #### audit-dependencies
