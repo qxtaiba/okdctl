@@ -340,10 +340,15 @@ run and every deploy-after-first aborts; (2) even without `-H`, the
 banner comment line position and occasional key re-ordering make the
 whole-stdout hash flaky. Plus the computed value matched nothing a user
 could produce via standard SSH tooling. See PR #117 review for detail.
+**Second attempt (PR #142, closed 2026-04-26):** Implementation passed
+independent review — `internal/sshpin` package with per-key
+`ssh.FingerprintSHA256`, fixture-based tests, refuse-on-no-match. Closed
+by maintainer call (not a technical regression); recoverable from the
+PR #142 diff if the team revisits.
 
 #### E5 — Flux SSH known-hosts fingerprint pinning
 
-**Status:** in review — PR #142
+**Status:** not started (first attempt closed; second attempt PR #142 closed by maintainer call — see E4 postmortem)
 **Audit:** `sec:98723e5d:ssh-keyscan-tofu`
 **Evidence:** `internal/addon/catalog/flux/flux.go:329`
 **Problem:** `createDeployKeySecret` runs `ssh-keyscan <host>` and
@@ -2019,16 +2024,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Either (a) route through p.Exec.RunStreamedChecked which uses the existing ring-buffer + stream pattern, or (b) wrap the strings.Builder in an io.LimitWriter capped at e.g. 64 KiB for error reporting purposes — the human-readable failure tail is what matters, not the full multi-minute stream.  
 **Effort:** hours
 
-##### `sub:0934cf1b:duplicate-runcaptured` — duplicate runcaptured
-
-**Status:** in review — PR #130  
-**Severity:** minor  
-**Cluster:** io-handling — seam→audit-code-smells  
-**Evidence:** `internal/platform/packages.go:151-163`  
-**Problem:** platform.runCaptured (lowercase) duplicates internal/system.RunCaptured almost verbatim — same exec.CommandContext + bytes.Buffer + TrimSpace pattern, just slightly different error formatting. Two canonical helpers for the same job is exactly what CLAUDE.md §architecture-notes warns against. The only behavioral difference is that this version embeds args[0] in the error message; the same effect is achievable by passing the full bin+args[0] to system.RunCaptured callers, or by exporting a thin variant.  
-**Fix:** Delete platform.runCaptured and replace its three callers (lines 67, 90, 121, 144) with system.RunCaptured. If the `bin args[0]` prefix is load-bearing for log scraping, extend system.RunCaptured to accept an optional 'op' label, or wrap the system.RunCaptured error at the call site with fmt.Errorf("%s: %w", op, err).  
-**Effort:** hours
-
 ##### `sub:de572c63:nmcli-output-discards-stderr` — nmcli output discards stderr
 
 **Status:** not started  
@@ -2101,26 +2096,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Add `--target=<resource>` (repeatable) flag that maps to terraform.DestroyOptions{Targets: ...}. Validate against an allowlist (module.okd_cluster.proxmox_virtual_environment_vm.{bootstrap,master,worker}[<n>]) so a typo doesn't widen scope. Mirror the postinstall/bootstrap.go pattern. With --target, --confirm-cluster MUST still be required so a script can't sneak past the typo guard.  
 **Effort:** hours
 
-##### `state:368b892b:cleanup-tfstate-explicit-only-implicit` — cleanup tfstate explicit only implicit
-
-**Status:** in review — PR #135  
-**Severity:** minor  
-**Cluster:** state-schema-evolution — seam→audit-tests  
-**Evidence:** `internal/distribution/okd/cleanup/infra.go:47-74`  
-**Problem:** cleanupTerraformEnv has the right invariant (preserve terraform.tfstate so destroy can run later) but expresses it as a comment in the filesToRemove slice rather than as a tested constant or assertion. A future refactor that adds 'terraform.tfstate' to the slice would silently break destroy recoverability with no compile-time or test-time signal.  
-**Fix:** Hoist the slice to a package-level var, add a unit test that asserts `slices.Contains(cleanup.TerraformFilesToRemove, "terraform.tfstate") == false`. The test names the invariant; future refactors break the test before they break destroy. Same pattern for terraform.tfstate.backup if state:4c092fce:tf-state-backup-removed-on-success is also fixed (it should also NOT be removed by cleanup).  
-**Effort:** hours
-
-##### `state:62cb8a95:destroy-init-without-state` — destroy init without state
-
-**Status:** in review — PR #136  
-**Severity:** minor  
-**Cluster:** tf-state-atomicity  
-**Evidence:** `internal/distribution/okd/destroy/helpers.go:26-33`  
-**Problem:** destroyInfrastructure short-circuits when HasState() is false but proceeds to tf.Init() when state IS present without first checking the state's lock status (.terraform.tfstate.lock.info). On NFS / shared filesystems, a stale state lock from a crashed prior run blocks Init+Plan with an opaque error. There is no `terraform force-unlock` plumbing or hint in the error path; operators have to recognise the upstream Terraform error string and run force-unlock manually.  
-**Fix:** After Init failure, sniff the upstream error for 'state is locked' / 'lock.info' substrings (or stat the lock file directly) and surface a typed `*errtypes.ConfigError{Msg: "terraform state locked — re-run with --force-unlock or run 'terraform force-unlock <id>' in <dir>"}`. Do NOT auto-unlock without operator confirmation. The default local backend writes lock.info next to tfstate, so a stat()/age-check is precise.  
-**Effort:** hours
-
 ##### `state:15ba17da:destroy-no-precondition-resume` — destroy no precondition resume
 
 **Status:** not started  
@@ -2129,16 +2104,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/distribution/okd/destroy/steps.go:24-133`  
 **Problem:** destroySteps() correctly carved out --skip-terraform / --skip-cleanup / --skip-firewall flags so a partial-failed destroy can be resumed. But the steps themselves do not auto-detect 'already done' state. After a successful tf.Destroy() the next destroy run still calls Init+HasState — HasState() returns false (state file absent), step skips with a Warn. Other steps (StepCleanupFiles, StepCleanupFirewall) blindly re-execute even when their target is already absent. Forces operators to combine flags rather than letting destroy converge.  
 **Fix:** Add a per-step AlreadyDone hook (see state:4f69fc9d). For destroy specifically: StepCleanupFirewall queries firewall backend before issuing remove; StepCleanupFiles checks workDir presence first. Today these steps already log warnings on absent targets — fold the same logic into a SkipWhen-style check so the orchestrator emits Skipped instead of Success-with-warning. Improves resume UX without changing destroy semantics.  
-**Effort:** hours
-
-##### `state:b38ec9cc:install-workers-targets-omitted` — install workers targets omitted
-
-**Status:** in review — PR #131  
-**Severity:** minor  
-**Cluster:** phase-idempotency  
-**Evidence:** `internal/distribution/okd/install/workers.go:34-42`  
-**Problem:** StartWorkerVMs runs `terraform apply -var start_workers_immediately=true` against the FULL state — no `-target=` scoping. If the operator hand-edited tfvars between deploy steps (or if any other resource has drifted), this apply quietly reconciles the drift along with starting workers. The intent is 'start workers' but the blast radius is 'reconcile everything Terraform sees'. Not a blocker because the canonical flow is single-shot, but it surprises operators trying to resume a partial install.  
-**Fix:** Add Targets: []string{"module.okd_cluster.proxmox_virtual_environment_vm.worker"} to the ApplyOptions, mirroring postinstall/bootstrap.go:36. Same change keeps the var=true semantics but bounds the apply to the worker resource graph.  
 **Effort:** hours
 
 ##### `state:4f69fc9d:no-resume-checkpoint` — no resume checkpoint
@@ -2213,16 +2178,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Add a `lifecycle { precondition { ... } }` to the parent VM resource that fails the plan when `var.<role>_data_disk_size_gb` transitions from >0 to 0 — but Terraform preconditions evaluate against current vars only, so the cleaner fix is README documentation plus a tfvars-level guard in the wizard / okdctl Go layer (the latter is in the audit-state-and-recovery seam). At the HCL level, replace `> 0` with `>= var.minimum_data_disk_size_gb` (default 0) and document the destructive-shrink path in the variable description.  
 **Effort:** hours
 
-##### `iac:e076e43c:curl-no-timeout` — curl no timeout
-
-**Status:** in review — PR #129  
-**Severity:** minor  
-**Cluster:** install-sh-fail-closed  
-**Evidence:** `scripts/install.sh:89-107`  
-**Problem:** Every curl call uses -sSfL but none specify --max-time or --connect-timeout. A hung GitHub API endpoint, release CDN, or sigstore endpoint stalls the installer indefinitely without an interrupt — set -euo pipefail does nothing for an open TCP socket that never returns bytes.  
-**Fix:** Add `--connect-timeout 10 --max-time 120` to every curl invocation in install.sh. For the latest-release lookup keep the timeout shorter (e.g. --max-time 30). Optionally factor a `curl_safe()` helper that wires the standard flags + tries 2 retries with `--retry 2 --retry-connrefused`.  
-**Effort:** hours
-
 ##### `iac:e076e43c:insecure-skips-cosign` — insecure skips cosign
 
 **Status:** not started  
@@ -2251,16 +2206,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `infrastructure/terraform/modules/proxmox-okd/main.tf:125-134`  
 **Problem:** All three VM resources `ignore_changes = [network_device, ...]`. Once a VM exists, drift on `var.bridge` or VLAN tag becomes invisible to `terraform plan`. The reason (bpg/proxmox dynamic-block diff confusion when network_device + dynamic network_device coexist) is real but unannotated — a future maintainer auditing the lifecycle block has no way to know the rationale, and may delete the entry assuming it is leftover scaffolding.  
 **Fix:** Add a one-line comment above `network_device,` in each ignore_changes block explaining the bpg/proxmox dynamic-block diff quirk — same shape as the existing `efi_disk` rationale comment. Without context, an auditor or a future Terraform upgrade reviewer cannot tell which entries are still load-bearing.  
-**Effort:** hours
-
-##### `iac:e076e43c:curl-no-tls-pin` — curl no tls pin
-
-**Status:** in review — PR #129  
-**Severity:** suggestion  
-**Cluster:** install-sh-integrity  
-**Evidence:** `scripts/install.sh:89-107`  
-**Problem:** curl invocations do not use `--proto '=https'` or `--tlsv1.2`. The URLs are hardcoded HTTPS so a downgrade attack would also require a host-header rewrite, but defense-in-depth on a sudo-tier installer that processes a release tarball is cheap.  
-**Fix:** Add `--proto '=https' --tlsv1.2` to the standard curl flags (e.g. via a `curl_safe()` helper alongside the timeout fix). Pairs naturally with the curl-no-timeout finding.  
 **Effort:** hours
 
 ##### `iac:e076e43c:gh-api-unauth-rate-limit` — gh api unauth rate limit
@@ -3835,6 +3780,39 @@ Items that have reached `done` status, ordered by close date. New
 entries land here when a PR merges, or when an item is closed without
 code (audit error, done-by-prior-work). Keep the explanation terse
 but link evidence.
+
+- **`sec:d9f7733e:input-path-not-prefix-checked`** — done 2026-04-26 —
+  PR #138. Tier H minor (file-toctou). `runDebugBundle` opened the
+  bundle output path with `O_CREATE|O_WRONLY|O_TRUNC|0o600` and no
+  `O_NOFOLLOW`, so a planted symlink at `outPath` would redirect the
+  bundle write. Mirrored the canonical pattern in
+  `internal/cli/logging.go::openLogFile` (lines 19-33): `os.Lstat`
+  refuses a symlink up front, then `os.OpenFile` adds
+  `syscall.O_NOFOLLOW` to close the TOCTOU window. Flag delta from
+  openLogFile is `O_TRUNC` (fresh bundle file) instead of `O_APPEND`
+  (log file). Added `errors` and `syscall` to the import block.
+  **Postmortem lesson:** when a canonical pattern already exists for
+  the same hazard at a sibling call site, mirroring beats extracting —
+  the two sites have different flag combinations and error message
+  prefixes, so a shared helper would have hidden the meaningful delta
+  behind an option struct.
+
+- **`sec:de572c63:toctou-chmod`** — done 2026-04-26 — PR #139. Tier H
+  minor (file-toctou). `validateAndRestartDnsmasq`'s restore closure
+  did `system.CopyFile(backup, configPath)` then
+  `os.Chmod(configPath, 0o644)`. The chmod was redundant — `CopyFile`
+  delegates to `CopyFileMode` which sets the mode at file-open time —
+  and `os.Chmod` follows symlinks on Linux, so a planted symlink at
+  `/etc/dnsmasq.d/<name>` would have had its target's mode changed
+  instead of the configured path. Roadmap evidence pointed at
+  `dnsmasq.go` but the function lives in `dns.go:218-224`; corrected
+  in commit. Considered `system.CopyFileMode(b, c, 0o644)` to force
+  0o644 atomically — rejected because it would silently overwrite an
+  operator's hardening (e.g., a 0o600 dnsmasq config). **Postmortem
+  lesson:** dropping a redundant op is safer than replacing it. The
+  follow-up chmod read like a guard rail but actually opened a
+  symlink-redirect hole that the canonical helper had already closed.
+
 
 - **`sec:35abd54e:input-url-scheme-not-checked`** — done 2026-04-26 —
   PR #128, merge commit `b1bf4e4`. Tier H major. Added
