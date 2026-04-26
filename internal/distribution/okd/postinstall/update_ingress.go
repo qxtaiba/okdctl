@@ -31,6 +31,9 @@ const (
 type UpdateIngressOptions struct {
 	RemoveHAProxy     bool
 	ConfirmConversion func(hostNetworkICs []string) bool
+	// WorkDir is the okdctl work directory (parent of cluster-config/); used to
+	// locate the kubeconfig CA when re-verifying the VIP after HAProxy removal.
+	WorkDir string
 }
 
 // IngressEntry describes one IngressController observed (or converted)
@@ -219,7 +222,7 @@ func (p *Phase) finalizeIngress(
 	// controllers still require the bastion to front :80/:443.
 	if opts.RemoveHAProxy && hostNetworkCount == 0 {
 		p.Log.Info("update-ingress: removing haproxy from bastion")
-		if err := p.RemoveHAProxy(ctx, vip); err != nil {
+		if err := p.RemoveHAProxy(ctx, vip, phase.ClusterConfigDir(opts.WorkDir)); err != nil {
 			p.Log.Warn("update-ingress: haproxy removal failed", "err", err)
 		} else {
 			result.HAProxyRemoved = true
