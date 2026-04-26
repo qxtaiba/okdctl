@@ -136,5 +136,9 @@ func (p *Phase) addKubeconfigToBashrc(homeDir, kubeconfigPath string) error {
 		newContent += "\n"
 	}
 	newContent += "\n# Added by okdctl\n" + exportLine + "\n"
-	return system.AtomicWriteString(bashrcPath, newContent, mode)
+	if err := system.AtomicWriteString(bashrcPath, newContent, mode); err != nil {
+		return err
+	}
+	// AtomicWrite under sudo leaves the file root-owned — restore invoking-user ownership.
+	return system.ChownToInvokingUser(bashrcPath)
 }
