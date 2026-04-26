@@ -108,7 +108,12 @@ func execute() int {
 
 	err := rootCmd.ExecuteContext(ctx)
 	if err != nil {
-		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		// Gate on caughtSig: only short-circuit to a signal exit code when an
+		// OS signal was actually received. Without this, a ClusterError
+		// wrapping context.DeadlineExceeded (e.g. install-budget exhaustion)
+		// matches errors.Is and exits 130 instead of falling through to
+		// exitCodeFor → 4.
+		if caughtSig.Load() != nil && (errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)) {
 			if sig, _ := caughtSig.Load().(os.Signal); sig == syscall.SIGTERM {
 				return 143
 			}
