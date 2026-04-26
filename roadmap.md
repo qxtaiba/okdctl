@@ -2653,7 +2653,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `ux:fd2125dd:addon-uninstall-no-confirm` — addon uninstall no confirm
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/ux-fd2125dd-addon-uninstall-confirm  
 **Severity:** major  
 **Cluster:** verb-noun  
 **Evidence:** `internal/cli/addon.go:66-80`  
