@@ -2062,7 +2062,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `iac:18a795d5:network-device-ignored` — network device ignored
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/iac-18a795d5-network-ignore-comment  
 **Severity:** suggestion  
 **Cluster:** hcl-destroy-ordering  
 **Evidence:** `infrastructure/terraform/modules/proxmox-okd/main.tf:125-134`  
@@ -2328,7 +2328,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `api:2c4d8e6b:should-be-exported` — should be exported
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/api-2c4d8e6b-addon-info  
 **Severity:** minor  
 **Cluster:** exported-surface  
 **Evidence:** `internal/addon/addon.go:29-37`  
@@ -2490,7 +2490,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `ux:e7db1220:json-flag-shorthand-collision-risk` — json flag shorthand collision risk
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/ux-e7db1220-drop-f-shorthand  
 **Severity:** minor  
 **Cluster:** flag-conventions  
 **Evidence:** `internal/cli/releases.go:78-81`  
@@ -2776,7 +2776,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `smell:d9f7733e:stringly-typed-status-enum` — stringly typed status enum
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/smell-d9f7733e-bundle-status-enum  
 **Severity:** minor  
 **Cluster:** magic-strings  
 **Evidence:** `internal/cli/debug_bundle.go:68-300`  
@@ -2816,7 +2816,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `smell:1e8ffb91:repeated-port-literal` — repeated port literal
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/smell-1e8ffb91-kubeapi-port  
 **Severity:** minor  
 **Cluster:** magic-strings  
 **Evidence:** `internal/distribution/okd/postinstall/verify.go:166-185`  
