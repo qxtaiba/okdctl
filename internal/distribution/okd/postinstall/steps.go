@@ -22,7 +22,7 @@ const (
 	StepInstallAddons       distribution.StepID = "install-addons"
 )
 
-func (p *Phase) postinstallSteps(cfg *config.Config, opts *Options, pctx *distribution.PhaseContext[PostInstallContext], mgr *addon.Manager) []distribution.StepDef {
+func (p *Phase) postinstallSteps(cfg *config.Config, opts *Options, pctx *distribution.PhaseContext[postInstallContext], mgr *addon.Manager) []distribution.StepDef {
 	return []distribution.StepDef{
 		{
 			ID: StepVerifyHealth, Name: "verify cluster health",
@@ -34,7 +34,7 @@ func (p *Phase) postinstallSteps(cfg *config.Config, opts *Options, pctx *distri
 				if err != nil {
 					return &errtypes.ClusterError{Msg: "cluster health verification failed", Err: err}
 				}
-				pctx.Update(func(c *PostInstallContext) {
+				pctx.Update(func(c *postInstallContext) {
 					c.ClusterHealth = result
 				})
 				p.Log.Info("cluster: health check passed", "ready", result.ReadyNodes, "total", result.TotalNodes)
@@ -51,7 +51,7 @@ func (p *Phase) postinstallSteps(cfg *config.Config, opts *Options, pctx *distri
 					}
 					return &errtypes.ClusterError{Msg: "bootstrap cleanup failed", Err: err}
 				}
-				pctx.Update(func(c *PostInstallContext) {
+				pctx.Update(func(c *postInstallContext) {
 					c.BootstrapCleaned = true
 				})
 				return nil
@@ -68,7 +68,7 @@ func (p *Phase) postinstallSteps(cfg *config.Config, opts *Options, pctx *distri
 				if err != nil {
 					return &errtypes.ClusterError{Msg: "kube-vip verification failed", Err: err}
 				}
-				pctx.Update(func(c *PostInstallContext) {
+				pctx.Update(func(c *postInstallContext) {
 					c.KubeVIPVerified = true
 					c.KubeVipIP = kubeVipIP
 				})
@@ -88,7 +88,7 @@ func (p *Phase) postinstallSteps(cfg *config.Config, opts *Options, pctx *distri
 				if err := p.deployProductionDNS(ctx, cfg, bastionIP, state.KubeVipIP, nil); err != nil {
 					return &errtypes.ClusterError{Msg: "production dns deployment failed", Err: err}
 				}
-				pctx.Update(func(c *PostInstallContext) {
+				pctx.Update(func(c *postInstallContext) {
 					c.DNSDeployed = true
 				})
 				p.Log.Info("dns: api.* → vip, *.apps → bastion (haproxy)", "vip", state.KubeVipIP, "bastion", bastionIP)
