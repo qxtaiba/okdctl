@@ -118,11 +118,8 @@ func (p *Phase) ConfigureHAProxy(ctx context.Context, cfg *config.Config, _ *Opt
 			return cause
 		}
 		p.Log.Warn(fmt.Sprintf("haproxy: %s, restoring from backup", reason))
-		if restoreErr := system.CopyFile(haproxyBackupPath, haproxyConfigPath); restoreErr != nil {
+		if restoreErr := system.CopyFileMode(haproxyBackupPath, haproxyConfigPath, 0o644); restoreErr != nil {
 			return errors.Join(cause, fmt.Errorf("rollback restore failed: %w", restoreErr))
-		}
-		if chmodErr := os.Chmod(haproxyConfigPath, 0o644); chmodErr != nil {
-			p.Log.Warn("haproxy: rollback chmod failed", "err", chmodErr)
 		}
 		// Restart with the old config so the node isn't left serving the
 		// rejected one.
