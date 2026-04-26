@@ -44,6 +44,17 @@ func Terraform(ctx context.Context, projectRoot, terraformEnv string, logger *sl
 	return nil
 }
 
+// terraformFilesToRemove lists the generated Terraform artefacts that cleanup
+// may delete. terraform.tfstate is intentionally absent: it must survive so
+// that destroy can still run against existing infrastructure resources.
+var terraformFilesToRemove = []string{
+	"terraform.tfvars",
+	"tfplan",
+	"destroy.tfplan",
+	"terraform.tfstate.backup",
+	".terraform.lock.hcl",
+}
+
 func cleanupTerraformEnv(ctx context.Context, envDir, envName string, logger *slog.Logger) error {
 	if _, err := os.Stat(envDir); os.IsNotExist(err) {
 		return nil
@@ -52,19 +63,7 @@ func cleanupTerraformEnv(ctx context.Context, envDir, envName string, logger *sl
 	logger = logutil.OrNop(logger)
 	logger.Info(fmt.Sprintf("cleanup: terraform artifacts for environment %s", envName))
 
-	// Note: We intentionally do NOT remove terraform.tfstate here!
-	// The state file is needed to track existing resources for destroy operations.
-	// Only remove it after a successful terraform destroy.
-	filesToRemove := []string{
-		"terraform.tfvars",
-		"tfplan",
-		"destroy.tfplan",
-		// "terraform.tfstate" - KEEP THIS! Needed for destroy
-		"terraform.tfstate.backup",
-		".terraform.lock.hcl",
-	}
-
-	for _, f := range filesToRemove {
+	for _, f := range terraformFilesToRemove {
 		_ = SafeRemoveWithLogger(ctx, filepath.Join(envDir, f), fmt.Sprintf("terraform %s", f), logger)
 	}
 

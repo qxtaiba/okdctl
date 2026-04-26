@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/qxtaiba/okdctl/internal/logutil"
@@ -67,6 +68,15 @@ func TestCleanupTerraformEnv_MissingDirIsNoOp(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "never-existed")
 	if err := cleanupTerraformEnv(context.Background(), dir, "prod", logutil.NopLogger); err != nil {
 		t.Errorf("missing dir must be nil; got %v", err)
+	}
+}
+
+// TestTerraformFilesToRemove_DoesNotIncludeTfstate pins the structural
+// invariant: terraform.tfstate must never appear in the cleanup list, or
+// destroy loses its only handle on existing infrastructure.
+func TestTerraformFilesToRemove_DoesNotIncludeTfstate(t *testing.T) {
+	if slices.Contains(terraformFilesToRemove, "terraform.tfstate") {
+		t.Fatal("terraform.tfstate must not be in terraformFilesToRemove: would break destroy recoverability")
 	}
 }
 
