@@ -1722,16 +1722,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** After bootstrap, the kube-vip endpoint serves the same kube-apiserver cert. Read the kubeconfig's certificate-authority-data and construct an http.Client that trusts only that CA. The 'vip not in SAN' note in verify.go's verifyKubeVIPAPIHealth is true during the bootstrap-to-kube-vip transition; by the time RemoveHAProxy runs the SAN includes the VIP. Worst case, fall back to the in-cluster `oc get --raw /healthz` check that already exists in the same function.  
 **Effort:** hours
 
-##### `sec:29293401:toctou-chmod` — toctou chmod
-
-**Status:** in review — PR #146  
-**Severity:** minor  
-**Cluster:** file-toctou  
-**Evidence:** `internal/distribution/okd/setup/haproxy.go:116-134`  
-**Problem:** haproxy.go's rollback closure does `system.CopyFile(haproxyBackupPath, haproxyConfigPath)` then `os.Chmod(haproxyConfigPath, 0o644)`. Same shape as the dnsmasq finding: os.Chmod follows symlinks under linux on the privileged path /etc/haproxy/haproxy.cfg, and the chmod is redundant on the CopyFile path which already preserves mode. Worth fixing as a pair so the canonical helper guarantees mode-after-copy without a second syscall.  
-**Fix:** Replace the `system.CopyFile + os.Chmod` pair with a single `system.CopyFileMode(haproxyBackupPath, haproxyConfigPath, 0o644)` call. The mode is set at open time, no follow-up os.Chmod, no symlink-follow window.  
-**Effort:** hours
-
 ##### `sec:5013fea6:cred-env-leak-to-child` — cred env leak to child
 
 **Status:** not started  
@@ -1760,26 +1750,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/executor/executor.go:111-122`  
 **Problem:** DefaultEnvAllowlist permits the prefix `GIT_` and `GITHUB_` to flow through to every subprocess (including `oc`, `helm`, `terraform`, `dnf`, `apt-get`). GIT_ASKPASS, GITHUB_TOKEN, GH_TOKEN, GIT_SSH_COMMAND etc. carry user-level creds that none of these subprocesses need. KUBE prefix similarly forwards KUBECONFIG (intended) but also any KUBE-prefixed token a user may have exported.  
 **Fix:** Narrow GIT_ to only the paths/auth keys actually needed (GIT_TERMINAL_PROMPT, GIT_SSH_COMMAND if used). Move GITHUB_/GH_ to an addon-only allowlist that activates only when the addon flux is enabled — the deploy phase doesn't speak GitHub. The audit-subprocess seam owns per-call allowlisting; this finding is the policy companion.  
-**Effort:** hours
-
-##### `sec:cfcdee2d:tls-no-redirect-cap` — tls no redirect cap
-
-**Status:** in review — PR #144  
-**Severity:** minor  
-**Cluster:** tls-network  
-**Evidence:** `internal/httputil/httputil.go:17-32`  
-**Problem:** httputil.New returns &http.Client{Timeout: timeout} with no CheckRedirect cap. Go's stdlib default allows 10 redirects and copies Authorization headers to same-host redirects. Most call sites are unauthenticated (mirror.openshift.com, raw.githubusercontent.com), but the same client factory backs every credentialed-or-not GET in the codebase — a future caller adding Authorization headers (or using netrc) would silently follow 10 redirects to anywhere.  
-**Fix:** Add a `CheckRedirect` callback that caps at 5 redirects and refuses any cross-host redirect that would carry an Authorization header. Apply uniformly so future credentialed callers inherit the policy.  
-**Effort:** hours
-
-##### `sec:881d089e:input-path-not-prefix-checked` — input path not prefix checked
-
-**Status:** in review — PR #145  
-**Severity:** minor  
-**Cluster:** file-toctou  
-**Evidence:** `internal/runlock/runlock.go:29-47`  
-**Problem:** Acquire opens projectRoot/.okdctl.lock with O_RDWR|O_CREATE|0o600 — but no O_NOFOLLOW. Under the deploy/destroy sudo re-exec model, this open runs as root and the projectRoot may be writable by the invoking user. A symlink planted at projectRoot/.okdctl.lock before deploy starts redirects the open to an attacker-chosen path (the file is then written with `PID=... VERB=... TIME=...` diagnostics — low value to leak, but the open happens regardless and a write-target symlink to /etc/<critical> hands ownership change to root).  
-**Fix:** Add `syscall.O_NOFOLLOW` to the OpenFile flags (mirrors the openLogFile pattern in internal/cli/logging.go:32). Lstat the path beforehand and refuse if it is a symlink — same pattern as cli/logging.go:25-30. Defense-in-depth: the projectRoot itself is user-controlled so a malicious user creating their own lockfile symlink trivially harms only their own deploy, but under shared-tenant scenarios the root-write window is real.  
 **Effort:** hours
 
 ##### `sec:451be4fa:sudo-cp-no-p` — sudo cp no p
@@ -3690,6 +3660,69 @@ Items that have reached `done` status, ordered by close date. New
 entries land here when a PR merges, or when an item is closed without
 code (audit error, done-by-prior-work). Keep the explanation terse
 but link evidence.
+
+- **`sec:cfcdee2d:tls-no-redirect-cap`** — done 2026-04-26 — PR #144,
+  merge commit `459a9a8`. Tier H minor (tls-network). All three
+  `httputil` factories (`New`, `NewInsecure`, `NewWithCA`) returned
+  `&http.Client{}` with no `CheckRedirect`, so Go's stdlib default
+  allowed 10 hops and only stripped `Authorization` for headers it
+  managed internally — a header set explicitly via `req.Header.Set`
+  survived cross-host redirects. Added a shared unexported
+  `capRedirects` referenced from all three factories: caps at 5 hops
+  via `len(via) >= 5`, refuses cross-host redirects that carry
+  `Authorization`. Added `TestCapRedirects` (six sub-cases covering
+  same-host below cap, cross-host without auth, cross-host with auth
+  refusal, cap boundary, four redirects below cap, cap-precedes-cross-host).
+  No call site sets `Authorization` today, so the policy is
+  backward-compatible and forward-protective. **Postmortem lesson:**
+  `.github/scripts/coverage-check.sh` averages per-function coverage
+  percents (not statement-weighted), so the 95% floor on `internal/httputil`
+  is a *function-shape* invariant — every exported func must be near
+  100% covered, otherwise even one 80%-covered function (here
+  `KubeconfigCAPool`) drags the average. Adding the well-tested
+  `capRedirects` *raised* the average from 95.0% → 96.0% rather than
+  lowering it; without the new test the cap would have held but the
+  margin would be zero. Read the floor script before assuming
+  coverage tradeoffs.
+
+- **`sec:881d089e:input-path-not-prefix-checked`** — done 2026-04-26
+  — PR #145, merge commit `e161c6b`. Tier H minor (file-toctou).
+  `runlock.Acquire` opened `<projectRoot>/.okdctl.lock` with
+  `O_RDWR|O_CREATE|0o600` and no `O_NOFOLLOW`; under the deploy/destroy
+  sudo re-exec model the open runs as root while `projectRoot` is
+  user-writable, so a planted symlink at the lock path would redirect
+  the root-authored `PID=…/VERB=…/TIME=…` write. Mirrored the
+  canonical pattern at `cli/logging.go:24-32`: `os.Lstat` first and
+  refuse a symlink with a `*errtypes.ConfigError`, otherwise add
+  `syscall.O_NOFOLLOW` to the existing `O_RDWR|O_CREATE` flags so a
+  symlink swapped in between lstat and open still loses the race. Kept
+  `O_RDWR|O_CREATE` rather than copying logging.go's `O_WRONLY|O_APPEND`
+  — the lock file uses RDWR for diagnostic read-back; the log file
+  uses APPEND for tailing. **Postmortem lesson:** when reusing a
+  security pattern from a sibling call site, copy the *structural
+  shape* (lstat-refuse-symlink → NOFOLLOW open) but keep the
+  call-site-specific flags. A shared helper here would have hidden
+  the meaningful flag-set difference behind an option struct.
+
+- **`sec:29293401:toctou-chmod`** — done 2026-04-26 — PR #146, merge
+  commit `9398863`. Tier H minor (file-toctou). The HAProxy rollback
+  closure paired `system.CopyFile(backup, configPath)` with
+  `os.Chmod(configPath, 0o644)`. `os.Chmod` follows symlinks on Linux,
+  and on the privileged `/etc/haproxy/haproxy.cfg` path the chmod
+  could redirect via a planted symlink between the copy and the
+  chmod. Replaced the pair with a single
+  `system.CopyFileMode(backup, configPath, 0o644)` call: mode is set
+  at open time in one syscall, removing both the redundant chmod and
+  the symlink-follow window. The `chmodErr` warn-only branch is gone
+  too. **Postmortem lesson:** the paired finding `sec:de572c63`
+  (dnsmasq) chose a different resolution for the same TOCTOU shape —
+  it dropped the chmod entirely (`CopyFile` only) to preserve any
+  operator hardening on the dnsmasq drop-in. Two valid resolutions
+  for the same hazard at different sites: dnsmasq trusts operator
+  intent, haproxy enforces 0o644 because that's the audit baseline
+  for haproxy.cfg. The roadmap's per-item Fix is the authority on
+  which resolution applies where; don't assume a fix recipe transfers
+  unchanged across audit-paired entries.
 
 - **`sec:5013fea6:dl-no-checksum`** — done 2026-04-26 — PR #134, merge
   commit `d179101`. Tier H major (tls-network). Replaced unchecked
