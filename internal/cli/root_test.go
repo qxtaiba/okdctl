@@ -45,18 +45,59 @@ func TestExitCodeForTaxonomy(t *testing.T) {
 	}
 }
 
-// TestSignalGateCondition verifies the caughtSig gate predicate used in
-// execute(): a zero atomic.Value returns nil from Load (no signal caught),
-// and a stored os.Signal returns non-nil. This distinguishes signal-driven
-// cancellation from deadline/budget exhaustion with no signal.
-func TestSignalGateCondition(t *testing.T) {
-	var v atomic.Value
-	if v.Load() != nil {
-		t.Fatal("zero atomic.Value: Load() must be nil before any Store")
+func TestSignalExitCode(t *testing.T) {
+	storeSignal := func(sig os.Signal) *atomic.Value {
+		var v atomic.Value
+		v.Store(sig)
+		return &v
 	}
-	var sig os.Signal = syscall.SIGINT
-	v.Store(sig)
-	if v.Load() == nil {
-		t.Fatal("after Store: Load() must be non-nil")
+	var empty atomic.Value
+
+	cases := []struct {
+		name        string
+		caughtSig   *atomic.Value
+		err         error
+		wantCode    int
+		wantHandled bool
+	}{
+		{
+			name:        "no signal DeadlineExceeded falls through",
+			caughtSig:   &empty,
+			err:         context.DeadlineExceeded,
+			wantCode:    0,
+			wantHandled: false,
+		},
+		{
+			name:        "SIGINT Canceled returns 130",
+			caughtSig:   storeSignal(syscall.SIGINT),
+			err:         context.Canceled,
+			wantCode:    130,
+			wantHandled: true,
+		},
+		{
+			name:        "SIGTERM Canceled returns 143",
+			caughtSig:   storeSignal(syscall.SIGTERM),
+			err:         context.Canceled,
+			wantCode:    143,
+			wantHandled: true,
+		},
+		{
+			name:        "SIGINT ClusterError wrapping DeadlineExceeded returns 130",
+			caughtSig:   storeSignal(syscall.SIGINT),
+			err:         &errtypes.ClusterError{Msg: "budget", Err: context.DeadlineExceeded},
+			wantCode:    130,
+			wantHandled: true,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			code, handled := signalExitCode(tc.caughtSig, tc.err)
+			if handled != tc.wantHandled {
+				t.Fatalf("handled=%v, want %v", handled, tc.wantHandled)
+			}
+			if handled && code != tc.wantCode {
+				t.Fatalf("code=%d, want %d", code, tc.wantCode)
+			}
+		})
 	}
 }
