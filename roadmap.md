@@ -3681,6 +3681,69 @@ entries land here when a PR merges, or when an item is closed without
 code (audit error, done-by-prior-work). Keep the explanation terse
 but link evidence.
 
+- **`sec:5013fea6:dl-no-checksum`** — done 2026-04-26 — PR #134, merge
+  commit `d179101`. Tier H major (tls-network). Replaced unchecked
+  `mirror.openshift.com/.../latest/linux/oc.tar.gz` fetch with a
+  SHA-256-verified download from a pinned okd-scos GitHub release.
+  Introduced `bootstrapOCVersion = "4.18.0-okd-scos.8"` as a
+  compile-time constant in `release_extract.go`, decoupled from
+  `cfg.Cluster.Version`: bootstrap-oc only runs `oc adm release
+  extract` once before the cluster oc swaps in, so coupling them was
+  unnecessary and would have broken against the project default
+  version (`4.18.0-okd-scos.10` has no GitHub release — verified 404
+  live during planning). `bootstrapOC` derives the asset name and
+  `sha256sum.txt` URL from the pinned constant, fetches the digest via
+  `download.FetchChecksum`, and passes it to
+  `download.Options.ExpectedChecksum`. Failure is fail-closed (no
+  fallback to unverified bytes). **Postmortem lesson:** the first
+  planner draft tied the bootstrap-oc URL to `cfg.Cluster.Version`
+  because that was the most "obvious" version source — but bootstrap-oc
+  and cluster-oc serve different roles. Always interrogate "does this
+  knob actually need to track that knob?" before adding the wiring.
+
+- **`sec:8ea706f6:dl-helm-sops-no-checksum`** — done 2026-04-26 — PR
+  #133, merge commit `0e120c5`. Tier H major (tls-network). helm and
+  sops binary downloads landed in `/usr/local/bin` without integrity
+  verification despite version-pinning. Added `checksumURLTemplate` +
+  `checksumFilenameTemplate` to `binaryToolMeta` for `toolHelm` and
+  `toolSops`; `installTool` resolves the per-arch URLs alongside the
+  existing `urlTemplate`; `installBinary` calls
+  `download.FetchChecksum` before `download.Download` and passes the
+  digest as `ExpectedChecksum`. Helm uses
+  `https://get.helm.sh/helm-vX.Y.Z-linux-{arch}.tar.gz.sha256sum`; sops
+  uses `https://github.com/getsops/sops/releases/download/vX.Y.Z/sops-vX.Y.Z.checksums.txt`.
+  `toolYQ` is intentionally untouched (separate roadmap item); the
+  `checksumURL == ""` gate keeps the non-pinned path a clean no-op.
+  Fail-closed on upstream sums fetch error. **Postmortem lesson:** the
+  canonical `download.FetchChecksum` already existed in the repo with
+  full test coverage but had zero production callers — scaffolding
+  waiting for a use case. When closing a security gap, audit the
+  existing helper surface before introducing new abstractions; the
+  whole change was 47 lines because the right helper was already
+  there.
+
+- **`sec:ab9b764a:cred-as-string`** — done 2026-04-26 — PR #132, merge
+  commits `44bf6d1` (initial) and `28c901a` (review delta). Tier H
+  major (credentials). `GenerateInstallConfig` held the pull-secret
+  bytes on the heap until GC because the `os.ReadFile` buffer flowed
+  through `string(...)` before `TrimSpace`, materialising an immutable
+  copy nothing could zeroize. Two-commit landing: first wired
+  `bytes.TrimSpace` directly on the buffer and added a success-path
+  zero loop. Reviewer flagged that error-path returns leaked, the loop
+  duplicated `credentials.ProxmoxCredentials.Zeroize`'s pattern, and
+  the new wipe was untested. Delta commit hoisted the zero loop into
+  `internal/system.ZeroBytes` (with focused unit test), switched the
+  call site to `defer system.ZeroBytes(pullSecret)` placed immediately
+  after `os.ReadFile` (so every return path wipes), and added a
+  doc-block on the `.backup` write explaining the on-disk lifecycle
+  (rollback artifact gated by 0o600; full removal post-manifest is a
+  separate item). **Postmortem lesson:** for buffer-lifetime
+  invariants, `defer` is the canonical Go idiom — a success-path-only
+  wipe is a footgun the reviewer caught immediately. Self-merge note:
+  the reviewer for the delta couldn't be dispatched (subagent quota);
+  the merge proceeded under user-instructed override per memory
+  `feedback_merge_authority.md`.
+
 - **`mod:bb81a5b0:use-range-int`** — done 2026-04-26 — PR #140, merge
   commit `3811fd4`. Tier H suggestion. Replaced the sole remaining
   classic counted `for i := 0; i < r.max; i++` loop in
