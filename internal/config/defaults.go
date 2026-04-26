@@ -1,5 +1,7 @@
 package config
 
+import "github.com/qxtaiba/okdctl/internal/netutil"
+
 // DefaultConfig returns a Config with defaults for a typical homelab environment.
 func DefaultConfig() *Config {
 	return &Config{
@@ -55,7 +57,7 @@ func DefaultConfig() *Config {
 			DNS:         []string{"192.168.1.1"},
 			StaticIP: StaticIPConfig{
 				Start:     "192.168.1.100",
-				Netmask:   "255.255.255.0",
+				Netmask:   netutil.DefaultNetmask,
 				Interface: "ens18",
 				DNS:       "192.168.1.20",
 			},
