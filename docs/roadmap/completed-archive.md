@@ -1301,3 +1301,68 @@ but link evidence.
   to amd64/arm64, but a future arch addition needs a corresponding
   map entry or the verification silently regresses.
 
+- **`err:c287d5c0:vocab-ad-hoc-distribution-type`** — done 2026-04-26
+  — PR #153, merge commit `eca0949`. Tier H minor (domain-vocabulary).
+  `Provisioner.Validate` returned a bare `fmt.Errorf("invalid
+  distribution type: …")` for a config-shape error, so
+  `cli/root.go::exitCodeFor` fell through to exit 1 instead of the
+  documented "config error → 2" contract from the `errtypes` package
+  doc. Wrapped the error in `&errtypes.ConfigError{Msg:
+  fmt.Sprintf(…)}`; the `%w` chain through the helpers.go re-wrap
+  preserves identity for `errors.As`, so `exitCodeFor`'s
+  `*errtypes.ConfigError` arm now matches and returns 2.
+  **Postmortem lesson:** every error a CLI verb can return is a
+  contract about an exit code. Bare `fmt.Errorf` at a typed-error
+  boundary silently violates that contract — pre-merge, grep
+  `fmt.Errorf` near `cli/root.go`'s exit-code-mapped errtypes and
+  ask whether the surface error is one of the typed sentinels.
+  Reviewer PASS first round.
+
+- **`state:4c092fce:tf-state-backup-removed-on-success`** — done
+  2026-04-26 — PR #154, merge commit `1105be4`. Tier H major
+  (tf-state-atomicity). `Executor.Cleanup()` unconditionally deleted
+  `terraform.tfstate.backup` alongside `tfplan` and `destroy.tfplan`
+  after every successful apply or destroy, sweeping away the
+  operator's only built-in rollback artefact if the live tfstate was
+  later corrupted. Renamed the method to `CleanupPlans()`, dropped
+  `.backup` from its file list, updated both call sites
+  (`destroy/helpers.go`, `proxmox/proxmox.go`) and the existing
+  `TestExecutor_Cleanup_PreservesTFState` assertion to expect
+  `.backup` to survive. The Fix bullet allowed two shapes —
+  CleanupPlans+CleanupBackup pair, OR keep `.backup` until the next
+  successful run. Picked the latter (no `CleanupBackup()` method
+  added) because an exported method with zero callers is dead-API
+  per CLAUDE.md "don't introduce abstractions beyond what the task
+  requires." The okdctl cleanup phase
+  (`internal/distribution/okd/cleanup`) still removes `.backup` via
+  its own `terraformFilesToRemove` list — that is operator-triggered
+  and intentional. Reviewer round-1 FAIL was a false positive from
+  grepping the main checkout (which still showed un-renamed callers
+  on develop, not in the worktree); re-dispatched with diff-only
+  scope → PASS. **Postmortem lesson 1:** when a roadmap Fix bullet
+  proposes a method-pair (`X` + `Y`) but only one half has a real
+  caller, the unused half is dead-API; implement the behavioral
+  shape, not the literal proposal. **Postmortem lesson 2:** when
+  briefing a code-reviewer agent about a worktree branch, scope it
+  to the diff text, not to grep against the on-disk checkout — the
+  on-disk state is the pre-merge develop branch and will produce
+  false positives on rename-style refactors.
+
+- **`obs:6424733c:string-concat-err-error-in-tui`** — done
+  2026-04-26 — PR #155, merge commit `2b7d5b5`. Tier H minor
+  (field-stability). Two `tui.Warn` calls in `cmd/okdctl/main.go`'s
+  `preflight()` built their messages via `+`-string concatenation,
+  collapsing the err's chain into the message body before
+  `logutil.RedactHandler` saw it. Replaced both with structured
+  `tui.LF("k", v)` attrs (`OKDCTL_BIN_DIR ignored` carries `value`
+  + `err`; `failed to prepend bin dir to PATH` carries `bin_dir` +
+  `err`). The second site now passes the `err` value directly
+  rather than `err.Error()`, preserving type info for the
+  `Redacted() any` interface path. **Postmortem lesson:** the
+  message-vs-attr split is the redaction boundary. A `+ err.Error()`
+  on a tui.Warn is structurally indistinguishable from a
+  `fmt.Sprintf("…%v", err)`, and both sit upstream of
+  `logutil.RedactHandler`. Codify the discipline as a `forbidigo`
+  rule when the audit-observability finding is picked up.
+  Reviewer PASS first round.
+
