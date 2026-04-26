@@ -22,17 +22,25 @@ import (
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
-// Tool binary fetch URLs. helm + sops are version-pinned; yq uses GitHub's
-// /releases/latest redirect so the binary is always the newest upstream tag
-// at fetch time. The {arch} placeholder is expanded via strings.NewReplacer.
+// Tool binary fetch URLs and version pins. The {arch} placeholder is
+// expanded via strings.NewReplacer at install time.
 const (
 	helmVersion = "v3.17.3"
 	sopsVersion = "v3.9.4"
+	// yqVersion is a trust anchor: changing it requires updating yqChecksumsByArch.
+	yqVersion = "v4.45.1"
 
 	helmURLTemplate = "https://get.helm.sh/helm-" + helmVersion + "-linux-{arch}.tar.gz"
 	sopsURLTemplate = "https://github.com/getsops/sops/releases/download/" + sopsVersion + "/sops-" + sopsVersion + ".linux.{arch}"
-	yqURLTemplate   = "https://github.com/mikefarah/yq/releases/latest/download/yq_linux_{arch}"
+	yqURLTemplate   = "https://github.com/mikefarah/yq/releases/download/" + yqVersion + "/yq_linux_{arch}"
 )
+
+// yqChecksumsByArch holds the SHA-256 for the yq_linux_<arch> binary at yqVersion,
+// sourced from the official checksums release asset. Must be updated with yqVersion.
+var yqChecksumsByArch = map[string]string{
+	"amd64": "654d2943ca1d3be2024089eb4f270f4070f491a0610481d128509b2834870049",
+	"arm64": "ceea73d4c86f2e5c91926ee0639157121f5360da42beeb8357783d79c2cc6a1d",
+}
 
 type externalTool string
 
@@ -86,8 +94,9 @@ var binaryToolMeta = map[externalTool]struct {
 	urlTemplate              string
 	checksumURLTemplate      string
 	checksumFilenameTemplate string
+	checksumsByArch          map[string]string
 }{
-	toolYQ: {name: "yq", versionFlag: "--version", urlTemplate: yqURLTemplate},
+	toolYQ: {name: "yq", versionFlag: "--version", urlTemplate: yqURLTemplate, checksumsByArch: yqChecksumsByArch},
 	toolHelm: {
 		name: "helm", versionFlag: "version", archiveBinary: "helm", stripComponents: 1,
 		urlTemplate:              helmURLTemplate,
@@ -118,7 +127,8 @@ func (p *Phase) installTool(ctx context.Context, tool externalTool) error {
 		return nil
 	}
 
-	archReplacer := strings.NewReplacer("{arch}", platform.DownloadArch())
+	arch := platform.DownloadArch()
+	archReplacer := strings.NewReplacer("{arch}", arch)
 	spec := binaryInstallSpec{
 		name:             meta.name,
 		url:              archReplacer.Replace(meta.urlTemplate),
@@ -127,6 +137,7 @@ func (p *Phase) installTool(ctx context.Context, tool externalTool) error {
 		stripComponents:  meta.stripComponents,
 		checksumURL:      archReplacer.Replace(meta.checksumURLTemplate),
 		checksumFilename: archReplacer.Replace(meta.checksumFilenameTemplate),
+		embeddedChecksum: meta.checksumsByArch[arch],
 	}
 	return p.installBinary(ctx, &spec)
 }
@@ -169,13 +180,15 @@ type binaryInstallSpec struct {
 	stripComponents  int
 	checksumURL      string // if non-empty, SHA-256 is fetched and verified before the binary is installed
 	checksumFilename string // filename to look up in the checksums file
+	embeddedChecksum string // used when the vendor does not publish a compatible sha256sum file
 }
 
 func (p *Phase) installBinary(ctx context.Context, spec *binaryInstallSpec) error {
 	p.Log.Info(fmt.Sprintf("tools: installing %s", spec.name))
 
 	var expectedChecksum string
-	if spec.checksumURL != "" {
+	switch {
+	case spec.checksumURL != "":
 		// Verify the binary against the vendor-published SHA-256 before
 		// it lands in BinDir; prevents silent compromise on a poisoned CDN.
 		var err error
@@ -183,6 +196,8 @@ func (p *Phase) installBinary(ctx context.Context, spec *binaryInstallSpec) erro
 		if err != nil {
 			return fmt.Errorf("failed to fetch checksum for %s: %w", spec.name, err)
 		}
+	case spec.embeddedChecksum != "":
+		expectedChecksum = spec.embeddedChecksum
 	}
 
 	tempFile := filepath.Join(os.TempDir(), spec.name+"-download")
