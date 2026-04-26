@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"slices"
 	"syscall"
 
 	"github.com/spf13/cobra"
@@ -19,13 +20,8 @@ import (
 //
 // Matching walks the cobra parent chain, so a future nested layout like
 // `okdctl cluster deploy` still triggers the gate as long as `deploy`
-// stays in this set.
-var rootRequiredCmds = map[string]bool{
-	"deploy":         true,
-	"destroy":        true,
-	"cleanup":        true,
-	"update-ingress": true,
-}
+// stays in this slice.
+var rootRequiredCmds = []string{"deploy", "destroy", "cleanup", "update-ingress"}
 
 // requiresRoot returns true if cmd carries the requiresRoot annotation or
 // any ancestor is in rootRequiredCmds. --dry-run escapes the gate so
@@ -38,7 +34,7 @@ func requiresRoot(cmd *cobra.Command) bool {
 		return true
 	}
 	for c := cmd; c != nil; c = c.Parent() {
-		if rootRequiredCmds[c.Name()] {
+		if slices.Contains(rootRequiredCmds, c.Name()) {
 			return true
 		}
 	}
