@@ -370,7 +370,7 @@ spurious mismatch.
 
 #### E6 — kube-vip probe TLS: use cluster CA once available
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/e6-kubevip-tls
+**Status:** in review — PR #124
 **Audit:** `sec:cfcdee2d:tls-insecure-vip-probe`
 **Evidence:** `internal/httputil/httputil.go:22`,
 `internal/distribution/okd/postinstall/haproxy.go:65`,
@@ -1605,7 +1605,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sec:98723e5d:bashrc-chown-leak` — bashrc chown leak
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-98723e5d-bashrc-chown  
+**Status:** in review — PR #123  
 **Severity:** major  
 **Cluster:** privilege-escalation  
 **Evidence:** `internal/distribution/okd/install/flux.go:117-140`  
@@ -1625,7 +1625,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sec:ab9b764a:cred-as-string` — cred as string
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-ab9b764a-pullsecret-bytes  
 **Severity:** major  
 **Cluster:** credentials  
 **Evidence:** `internal/distribution/okd/setup/ignition.go:39-83`  
@@ -1635,7 +1635,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sec:5013fea6:dl-no-checksum` — dl no checksum
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-5013fea6-oc-checksum  
 **Severity:** major  
 **Cluster:** tls-network  
 **Evidence:** `internal/distribution/okd/setup/release_extract.go:27-76`  
