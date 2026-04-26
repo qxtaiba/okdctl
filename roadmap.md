@@ -3018,7 +3018,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `dep:33ef32bf:stale-indirect-x-exp` — stale indirect x exp
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/dep-33ef32bf-mod-tidy  
 **Severity:** minor  
 **Cluster:** module-hygiene  
 **Evidence:** `go.mod:60-60`  
