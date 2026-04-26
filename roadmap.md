@@ -2047,7 +2047,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sub:0934cf1b:duplicate-runcaptured` — duplicate runcaptured
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sub-0934cf1b-runcaptured-dedup  
+**Status:** in review — PR #130  
 **Severity:** minor  
 **Cluster:** io-handling — seam→audit-code-smells  
 **Evidence:** `internal/platform/packages.go:151-163`  
@@ -2159,7 +2159,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `state:b38ec9cc:install-workers-targets-omitted` — install workers targets omitted
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/state-b38ec9cc-workers-target  
+**Status:** in review — PR #131  
 **Severity:** minor  
 **Cluster:** phase-idempotency  
 **Evidence:** `internal/distribution/okd/install/workers.go:34-42`  
@@ -2241,7 +2241,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `iac:e076e43c:curl-no-timeout` — curl no timeout
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/iac-curl-hardening  
+**Status:** in review — PR #129  
 **Severity:** minor  
 **Cluster:** install-sh-fail-closed  
 **Evidence:** `scripts/install.sh:89-107`  
@@ -2281,7 +2281,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `iac:e076e43c:curl-no-tls-pin` — curl no tls pin
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/iac-curl-hardening  
+**Status:** in review — PR #129  
 **Severity:** suggestion  
 **Cluster:** install-sh-integrity  
 **Evidence:** `scripts/install.sh:89-107`  
@@ -2291,7 +2291,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `iac:e076e43c:gh-api-unauth-rate-limit` — gh api unauth rate limit
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/iac-curl-hardening  
+**Status:** in review — PR #129  
 **Severity:** suggestion  
 **Cluster:** install-sh-integrity  
 **Evidence:** `scripts/install.sh:71-76`  
