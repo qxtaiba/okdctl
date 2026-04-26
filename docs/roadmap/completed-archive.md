@@ -1,0 +1,1216 @@
+# Completed roadmap items — archive
+
+This file is the historical record of completed roadmap items, archived
+out of `roadmap.md` to keep the active file readable and to keep
+`/roadmap-pickup` sessions from ingesting ~1,000 lines of postmortem prose
+on every run.
+
+The active `roadmap.md` keeps a short pointer in its `## Completed`
+section. The Appendix ledger at the bottom of `roadmap.md` is the
+canonical "is dep X done?" lookup; this file is for incident review,
+postmortem search, and pattern reuse.
+
+## Provenance
+
+- Archived from `roadmap.md` on 2026-04-26.
+- New completions append here directly. When a PR merges (or an item is
+  closed without code), add the entry below in the same shape as the
+  existing entries — close date, PR / merge commit, terse evidence,
+  postmortem lesson when one exists.
+
+## Entries
+
+Items that have reached `done` status, ordered by close date. New
+entries land here when a PR merges, or when an item is closed without
+code (audit error, done-by-prior-work). Keep the explanation terse
+but link evidence.
+
+- **`sec:cfcdee2d:tls-no-redirect-cap`** — done 2026-04-26 — PR #144,
+  merge commit `459a9a8`. Tier H minor (tls-network). All three
+  `httputil` factories (`New`, `NewInsecure`, `NewWithCA`) returned
+  `&http.Client{}` with no `CheckRedirect`, so Go's stdlib default
+  allowed 10 hops and only stripped `Authorization` for headers it
+  managed internally — a header set explicitly via `req.Header.Set`
+  survived cross-host redirects. Added a shared unexported
+  `capRedirects` referenced from all three factories: caps at 5 hops
+  via `len(via) >= 5`, refuses cross-host redirects that carry
+  `Authorization`. Added `TestCapRedirects` (six sub-cases covering
+  same-host below cap, cross-host without auth, cross-host with auth
+  refusal, cap boundary, four redirects below cap, cap-precedes-cross-host).
+  No call site sets `Authorization` today, so the policy is
+  backward-compatible and forward-protective. **Postmortem lesson:**
+  `.github/scripts/coverage-check.sh` averages per-function coverage
+  percents (not statement-weighted), so the 95% floor on `internal/httputil`
+  is a *function-shape* invariant — every exported func must be near
+  100% covered, otherwise even one 80%-covered function (here
+  `KubeconfigCAPool`) drags the average. Adding the well-tested
+  `capRedirects` *raised* the average from 95.0% → 96.0% rather than
+  lowering it; without the new test the cap would have held but the
+  margin would be zero. Read the floor script before assuming
+  coverage tradeoffs.
+
+- **`sec:881d089e:input-path-not-prefix-checked`** — done 2026-04-26
+  — PR #145, merge commit `e161c6b`. Tier H minor (file-toctou).
+  `runlock.Acquire` opened `<projectRoot>/.okdctl.lock` with
+  `O_RDWR|O_CREATE|0o600` and no `O_NOFOLLOW`; under the deploy/destroy
+  sudo re-exec model the open runs as root while `projectRoot` is
+  user-writable, so a planted symlink at the lock path would redirect
+  the root-authored `PID=…/VERB=…/TIME=…` write. Mirrored the
+  canonical pattern at `cli/logging.go:24-32`: `os.Lstat` first and
+  refuse a symlink with a `*errtypes.ConfigError`, otherwise add
+  `syscall.O_NOFOLLOW` to the existing `O_RDWR|O_CREATE` flags so a
+  symlink swapped in between lstat and open still loses the race. Kept
+  `O_RDWR|O_CREATE` rather than copying logging.go's `O_WRONLY|O_APPEND`
+  — the lock file uses RDWR for diagnostic read-back; the log file
+  uses APPEND for tailing. **Postmortem lesson:** when reusing a
+  security pattern from a sibling call site, copy the *structural
+  shape* (lstat-refuse-symlink → NOFOLLOW open) but keep the
+  call-site-specific flags. A shared helper here would have hidden
+  the meaningful flag-set difference behind an option struct.
+
+- **`sec:29293401:toctou-chmod`** — done 2026-04-26 — PR #146, merge
+  commit `9398863`. Tier H minor (file-toctou). The HAProxy rollback
+  closure paired `system.CopyFile(backup, configPath)` with
+  `os.Chmod(configPath, 0o644)`. `os.Chmod` follows symlinks on Linux,
+  and on the privileged `/etc/haproxy/haproxy.cfg` path the chmod
+  could redirect via a planted symlink between the copy and the
+  chmod. Replaced the pair with a single
+  `system.CopyFileMode(backup, configPath, 0o644)` call: mode is set
+  at open time in one syscall, removing both the redundant chmod and
+  the symlink-follow window. The `chmodErr` warn-only branch is gone
+  too. **Postmortem lesson:** the paired finding `sec:de572c63`
+  (dnsmasq) chose a different resolution for the same TOCTOU shape —
+  it dropped the chmod entirely (`CopyFile` only) to preserve any
+  operator hardening on the dnsmasq drop-in. Two valid resolutions
+  for the same hazard at different sites: dnsmasq trusts operator
+  intent, haproxy enforces 0o644 because that's the audit baseline
+  for haproxy.cfg. The roadmap's per-item Fix is the authority on
+  which resolution applies where; don't assume a fix recipe transfers
+  unchanged across audit-paired entries.
+
+- **`sec:5013fea6:dl-no-checksum`** — done 2026-04-26 — PR #134, merge
+  commit `d179101`. Tier H major (tls-network). Replaced unchecked
+  `mirror.openshift.com/.../latest/linux/oc.tar.gz` fetch with a
+  SHA-256-verified download from a pinned okd-scos GitHub release.
+  Introduced `bootstrapOCVersion = "4.18.0-okd-scos.8"` as a
+  compile-time constant in `release_extract.go`, decoupled from
+  `cfg.Cluster.Version`: bootstrap-oc only runs `oc adm release
+  extract` once before the cluster oc swaps in, so coupling them was
+  unnecessary and would have broken against the project default
+  version (`4.18.0-okd-scos.10` has no GitHub release — verified 404
+  live during planning). `bootstrapOC` derives the asset name and
+  `sha256sum.txt` URL from the pinned constant, fetches the digest via
+  `download.FetchChecksum`, and passes it to
+  `download.Options.ExpectedChecksum`. Failure is fail-closed (no
+  fallback to unverified bytes). **Postmortem lesson:** the first
+  planner draft tied the bootstrap-oc URL to `cfg.Cluster.Version`
+  because that was the most "obvious" version source — but bootstrap-oc
+  and cluster-oc serve different roles. Always interrogate "does this
+  knob actually need to track that knob?" before adding the wiring.
+
+- **`sec:8ea706f6:dl-helm-sops-no-checksum`** — done 2026-04-26 — PR
+  #133, merge commit `0e120c5`. Tier H major (tls-network). helm and
+  sops binary downloads landed in `/usr/local/bin` without integrity
+  verification despite version-pinning. Added `checksumURLTemplate` +
+  `checksumFilenameTemplate` to `binaryToolMeta` for `toolHelm` and
+  `toolSops`; `installTool` resolves the per-arch URLs alongside the
+  existing `urlTemplate`; `installBinary` calls
+  `download.FetchChecksum` before `download.Download` and passes the
+  digest as `ExpectedChecksum`. Helm uses
+  `https://get.helm.sh/helm-vX.Y.Z-linux-{arch}.tar.gz.sha256sum`; sops
+  uses `https://github.com/getsops/sops/releases/download/vX.Y.Z/sops-vX.Y.Z.checksums.txt`.
+  `toolYQ` is intentionally untouched (separate roadmap item); the
+  `checksumURL == ""` gate keeps the non-pinned path a clean no-op.
+  Fail-closed on upstream sums fetch error. **Postmortem lesson:** the
+  canonical `download.FetchChecksum` already existed in the repo with
+  full test coverage but had zero production callers — scaffolding
+  waiting for a use case. When closing a security gap, audit the
+  existing helper surface before introducing new abstractions; the
+  whole change was 47 lines because the right helper was already
+  there.
+
+- **`sec:ab9b764a:cred-as-string`** — done 2026-04-26 — PR #132, merge
+  commits `44bf6d1` (initial) and `28c901a` (review delta). Tier H
+  major (credentials). `GenerateInstallConfig` held the pull-secret
+  bytes on the heap until GC because the `os.ReadFile` buffer flowed
+  through `string(...)` before `TrimSpace`, materialising an immutable
+  copy nothing could zeroize. Two-commit landing: first wired
+  `bytes.TrimSpace` directly on the buffer and added a success-path
+  zero loop. Reviewer flagged that error-path returns leaked, the loop
+  duplicated `credentials.ProxmoxCredentials.Zeroize`'s pattern, and
+  the new wipe was untested. Delta commit hoisted the zero loop into
+  `internal/system.ZeroBytes` (with focused unit test), switched the
+  call site to `defer system.ZeroBytes(pullSecret)` placed immediately
+  after `os.ReadFile` (so every return path wipes), and added a
+  doc-block on the `.backup` write explaining the on-disk lifecycle
+  (rollback artifact gated by 0o600; full removal post-manifest is a
+  separate item). **Postmortem lesson:** for buffer-lifetime
+  invariants, `defer` is the canonical Go idiom — a success-path-only
+  wipe is a footgun the reviewer caught immediately. Self-merge note:
+  the reviewer for the delta couldn't be dispatched (subagent quota);
+  the merge proceeded under user-instructed override per memory
+  `feedback_merge_authority.md`.
+
+- **`mod:bb81a5b0:use-range-int`** — done 2026-04-26 — PR #140, merge
+  commit `3811fd4`. Tier H suggestion. Replaced the sole remaining
+  classic counted `for i := 0; i < r.max; i++` loop in
+  `internal/executor/ringbuf.go:58` with Go 1.22 range-over-int
+  (`for i := range r.max`). One-line change; `r.max` is `int` set
+  from `newRingWriter(constMaxLines=200)`, so range semantics match
+  exactly. Aligns ringbuf with the form already adopted in
+  `internal/distribution/okd/phase/iso_cleanup.go` and
+  `internal/distribution/okd/dns/dns.go`.
+
+- **`ux:b3356305:readme-flag-drift-deploy-options`** — done 2026-04-26
+  — PR #141, merge commit `2518d98`. Tier H minor. README Usage block
+  listed 5 of the 14 top-level commands; readers formed a wrong mental
+  model (`addon`, `kubeconfig`, `status`, `releases`, `debug-bundle`
+  hidden until they read `--help`). Added a single Reference line
+  below the Usage block pointing to `docs/cli/okdctl.md` — the
+  cobra-generated reference that already lists all 14. Chose the link
+  over expanding the block: lower-maintenance, never drifts when new
+  verbs land.
+
+- **`smell:92553fff:sprintf-d-instead-of-itoa`** — done 2026-04-26 —
+  PR #143, merge commit `24f5f11`. Tier H suggestion. Replaced
+  `fmt.Sprintf("%d", x)` with `strconv.Itoa(x)` at six sites across
+  three files: `internal/cli/status.go` (4 sites: masters / workers /
+  total / degraded), `internal/cli/doctor.go` (1 site: busy port in
+  preflight), `internal/distribution/okd/firewall/firewall.go` (1
+  site: iptables `--dport`). All operands verified plain `int` —
+  type-safe substitution at every site. Note: audit Evidence said
+  `setup/firewall.go` but the actual path is
+  `internal/distribution/okd/firewall/firewall.go`; the file moved
+  between audit and now. Three additional candidates in
+  `internal/tui/wizard/...` (`model_view.go:157`,
+  `steps/review.go:230,409`) left for a follow-on sweep.
+
+- **`sec:d9f7733e:input-path-not-prefix-checked`** — done 2026-04-26 —
+  PR #138. Tier H minor (file-toctou). `runDebugBundle` opened the
+  bundle output path with `O_CREATE|O_WRONLY|O_TRUNC|0o600` and no
+  `O_NOFOLLOW`, so a planted symlink at `outPath` would redirect the
+  bundle write. Mirrored the canonical pattern in
+  `internal/cli/logging.go::openLogFile` (lines 19-33): `os.Lstat`
+  refuses a symlink up front, then `os.OpenFile` adds
+  `syscall.O_NOFOLLOW` to close the TOCTOU window. Flag delta from
+  openLogFile is `O_TRUNC` (fresh bundle file) instead of `O_APPEND`
+  (log file). Added `errors` and `syscall` to the import block.
+  **Postmortem lesson:** when a canonical pattern already exists for
+  the same hazard at a sibling call site, mirroring beats extracting —
+  the two sites have different flag combinations and error message
+  prefixes, so a shared helper would have hidden the meaningful delta
+  behind an option struct.
+
+- **`sec:de572c63:toctou-chmod`** — done 2026-04-26 — PR #139. Tier H
+  minor (file-toctou). `validateAndRestartDnsmasq`'s restore closure
+  did `system.CopyFile(backup, configPath)` then
+  `os.Chmod(configPath, 0o644)`. The chmod was redundant — `CopyFile`
+  delegates to `CopyFileMode` which sets the mode at file-open time —
+  and `os.Chmod` follows symlinks on Linux, so a planted symlink at
+  `/etc/dnsmasq.d/<name>` would have had its target's mode changed
+  instead of the configured path. Roadmap evidence pointed at
+  `dnsmasq.go` but the function lives in `dns.go:218-224`; corrected
+  in commit. Considered `system.CopyFileMode(b, c, 0o644)` to force
+  0o644 atomically — rejected because it would silently overwrite an
+  operator's hardening (e.g., a 0o600 dnsmasq config). **Postmortem
+  lesson:** dropping a redundant op is safer than replacing it. The
+  follow-up chmod read like a guard rail but actually opened a
+  symlink-redirect hole that the canonical helper had already closed.
+
+
+- **`err:ae5b624c:ctx-timeout-loses-cluster-identity`** — done
+  2026-04-26 — PR #137, merge commit `78e7fb5`. Tier H major.
+  Wrapped both `MonitorInstallation` `DeadlineExceeded` paths (the
+  `installDone` branch and the `ctx.Done` reap fallthrough) in
+  `*errtypes.ClusterError{Msg, Err: ctx.Err()}`, mirroring
+  `WaitForBootstrap`'s pattern in the same file. The Canceled
+  branches stay bare `fmt.Errorf` so a SIGINT still resolves cleanly.
+  `ctx.Err()` rides through `ClusterError.Unwrap`, so any caller's
+  `errors.Is(err, context.DeadlineExceeded)` still matches.
+  **Caveat / follow-up needed:** the audit's stated user-visible
+  goal (exit 4 instead of 130 on install-budget exhaustion) is not
+  yet achieved — `internal/cli/root.go:111` maps
+  `errors.Is(err, context.DeadlineExceeded)` → 130 unconditionally,
+  without checking `caughtSig`. This PR aligns the error type;
+  gating the exit-code mapping on `caughtSig` is the missing
+  follow-up worth filing as a separate roadmap item.
+  **Postmortem lesson:** when a planner finds the audit's premise
+  about caller behavior is wrong, document the partial-fix scope in
+  the PR body rather than expanding into the caller — keeps PR
+  scope tight and surfaces the follow-up cleanly.
+
+- **`state:62cb8a95:destroy-init-without-state`** — done 2026-04-26
+  — PR #136, merge commit `9b77906`. Tier H minor. Added
+  `stateLockHint(dir string) error` — stats
+  `<dir>/.terraform.tfstate.lock.info` and returns a typed
+  `*errtypes.ConfigError` naming the lock path and dir when present.
+  Called from `destroyInfrastructure` after `tf.Init` failure, so a
+  stale-lock signal becomes an actionable message instead of a
+  generic `ClusterError`. Never auto-unlocks. Two unit tests cover
+  both branches.
+  **Deviation from audit:** the suggested message referenced an
+  okdctl `--force-unlock` flag that does not exist; the
+  implementation references only the real `terraform force-unlock`
+  CLI command. If a future okdctl-side flag lands, the message can
+  incorporate it.
+
+- **`state:368b892b:cleanup-tfstate-explicit-only-implicit`** —
+  done 2026-04-26 — PR #135, merge commit `5a417c5`. Tier H minor.
+  Hoisted the local `filesToRemove` slice in `cleanupTerraformEnv`
+  to a package-level unexported `terraformFilesToRemove` var. Added
+  `TestTerraformFilesToRemove_DoesNotIncludeTfstate` whose name and
+  `t.Fatal` message both spell out the destroy-recoverability
+  invariant — a future edit that adds `terraform.tfstate` to the
+  slice now fails at test time instead of silently breaking destroy.
+  Var stays unexported per MEMORY.md §scaffolding (test lives in
+  same package). When `state:4c092fce:tf-state-backup-removed-on-success`
+  lands, the assertion can extend to cover `.backup`.
+
+- **`state:b38ec9cc:install-workers-targets-omitted`** — done
+  2026-04-26 — PR #131, merge commit `d5b0eb9`. Tier H minor. Added
+  `Targets: ["module.okd_cluster.proxmox_virtual_environment_vm.worker"]`
+  to `StartWorkerVMs`'s `ApplyOptions`, mirroring the precaution
+  already in `postinstall/bootstrap.go`. A stray hand-edit elsewhere
+  in tfvars no longer rides along with the worker-start apply.
+  Terraform's count-resource targeting expands an unindexed
+  reference to all instances, so all workers still start. Four-line
+  change with a comment block explaining the WHY.
+
+- **`sub:0934cf1b:duplicate-runcaptured`** — done 2026-04-26 —
+  PR #130, merge commit `05e97d1`. Tier H minor. The private
+  `platform.runCaptured` was a verbatim structural duplicate of
+  `system.RunCaptured`. Deleted it; routed the four call sites
+  (`Install`, `Remove`, two `AddRepo` paths) through the canonical
+  `system.RunCaptured`, matching every other caller in the repo.
+  Trade-off: error prefix narrows from `dnf install: …` to
+  `dnf: …` — the operation context is preserved via the surrounding
+  `fmt.Errorf` chain at each caller; no other `system.RunCaptured`
+  caller in the repo embeds args[0] either.
+  **Postmortem lesson:** the planner initially proposed dropping
+  the `bytes` import along with `runCaptured`, but `bytes.Contains`
+  was still in use by the Debian `postCheck`. A pre-apply `grep`
+  for every import-removal candidate would have caught this — caught
+  during application instead. Add to the import-removal checklist.
+
+- **`iac:e076e43c:curl-no-timeout`** — done 2026-04-26 — PR #129
+  (bundled with `curl-no-tls-pin` and `gh-api-unauth-rate-limit`),
+  merge commit `d9af1bf`. Tier H minor. Added `curl_safe()` wrapper
+  in `scripts/install.sh` that pins
+  `--connect-timeout 10 --max-time 120 --retry 2 --retry-connrefused`.
+  The four asset downloads (archive + SHA256SUMS + sig + pem) now
+  route through it; the GitHub API release-tag lookup keeps inline
+  flags so it can carry a shorter 30s budget alongside the optional
+  bearer header. Closes the indefinite-stall window on hung CDN or
+  sigstore endpoints.
+
+- **`iac:e076e43c:curl-no-tls-pin`** — done 2026-04-26 — PR #129
+  (bundled with `curl-no-timeout` and `gh-api-unauth-rate-limit`),
+  merge commit `d9af1bf`. Tier H suggestion. `curl_safe()` includes
+  `--proto '=https'` and `--tlsv1.2`; the inline API call carries
+  the same flags directly. All five active curl call sites in
+  `scripts/install.sh` now enforce HTTPS-only and TLS 1.2 floor.
+  Defense-in-depth on a sudo-tier installer.
+
+- **`iac:e076e43c:gh-api-unauth-rate-limit`** — done 2026-04-26 —
+  PR #129 (bundled with `curl-no-timeout` and `curl-no-tls-pin`),
+  merge commit `d9af1bf`. Tier H suggestion. When `GITHUB_TOKEN`
+  is set in the environment, the release-tag lookup now sends
+  `Authorization: Bearer $GITHUB_TOKEN` (via a bash array so the
+  header argument is only added when the variable is non-empty,
+  shellcheck-safe). Lifts the GitHub API rate cap from 60 to 5 000
+  req/hr/IP — relevant on shared CI runners. Improved `die` message
+  hints at `VERSION=` pinning or `GITHUB_TOKEN` on lookup failure.
+  `GITHUB_TOKEN` is documented in the script header comment.
+
+- **`sec:35abd54e:input-url-scheme-not-checked`** — done 2026-04-26 —
+  PR #128, merge commit `b1bf4e4`. Tier H major. Added
+  `ProxmoxConfig.InsecureHTTP bool` (json `insecure_http,omitempty`)
+  mirroring the existing `Insecure` TLS-skip flag, plus
+  `FieldProxmoxInsecureHTTP` constant. `validateProxmoxConfig`
+  (ScopeProvider, in ScopeAll, runs before any credential is built)
+  refuses an `http://` Proxmox host unless the flag is set, with an
+  error pointing at the YAML path: *"set provider.proxmox.insecure_http:
+  true to opt in"*. The schemeless-host happy path is unchanged;
+  `GetProxmoxCredentials:187` still adds `https://` to bare hostnames.
+  Added a four-case matrix test (schemeless / bare hostname / http
+  rejected / http accepted with flag) in
+  `internal/credentials/proxmox_test.go`. Linter side-effects: the new
+  third branch turned the `if/else` into a chain that gocritic preferred
+  as a `switch`, and gofumpt re-aligned the struct tag column — both
+  folded into the same commit. **Postmortem lesson:** the field-name
+  choice (`InsecureHTTP` mirroring `Insecure`) was good pattern-matching
+  — reviewer flagged it as the right shape on first round. Auditing for
+  "do we have an existing analogue field" before naming a new knob saves
+  bikeshedding and keeps the schema discoverable.
+
+- **E6 — kube-vip probe TLS uses cluster CA after install** — done
+  2026-04-26 — PR #124, merge commit `c421069`. Audit
+  `sec:cfcdee2d:tls-insecure-vip-probe`. Added
+  `httputil.NewWithCA(pool, timeout)` (RootCAs + MinVersion=TLS 1.2)
+  and `httputil.KubeconfigCAPool(path)` (base64-decode
+  `clusters[0].cluster.certificate-authority-data` into
+  `*x509.CertPool` via stdlib `crypto/x509` + `sigs.k8s.io/yaml` —
+  already in go.mod, no new dep). Both production callers
+  (`postinstall/verify.go::verifyKubeVIPAPIHealth`,
+  `postinstall/haproxy.go::RemoveHAProxy`) now load the CA from
+  `<clusterDir>/auth/kubeconfig` and verify TLS against it.
+  `NewInsecure` survives only as a fallback when `KubeconfigCAPool`
+  errors — i.e., the genuine pre-install / VIP-not-yet-in-SANs window.
+  Plumbing: added `clusterDir` parameter to both probe functions,
+  `UpdateIngressOptions.WorkDir` field for the update-ingress flow, and
+  a default-fill in `Provisioner.UpdateIngress`
+  (`filepath.Join(p.projectRoot, "okd-install")`) so existing CLI call
+  sites stay unchanged. Tests: `TestNewWithCA` checks RootCAs identity
+  and MinVersion; `TestKubeconfigCAPool` synthesises a real ECDSA
+  self-signed CA, encodes it as base64 PEM into a YAML kubeconfig, and
+  asserts pool extraction plus error paths (missing file, no clusters).
+  E4 first-attempt postmortem above (`-H` salt non-determinism) doesn't
+  apply here — kubeconfig parse is deterministic. **Postmortem lesson:**
+  the existing `// TLS verification is skipped because the VIP is not
+  yet in cert SANs` comment was true at first-install time and stale by
+  post-install time — comments that name a phase-specific invariant rot
+  when the function gets reused across phases. The fix moves the
+  invariant note to `NewInsecure` itself (where it is permanent) rather
+  than the caller (where it isn't).
+
+- **`sec:98723e5d:bashrc-chown-leak`** — done 2026-04-26 — PR #123,
+  merge commit `2eb7396`. Tier H major. `addKubeconfigToBashrc` had two
+  write paths: when `.bashrc` did not yet exist, `AtomicWriteString`
+  was followed by `ChownToInvokingUser`; when `.bashrc` existed and was
+  being appended, the chown was missing. Under the sudo re-exec model,
+  `os.CreateTemp` + `os.Rename` produces a root-owned file, so every
+  deploy after the first silently chown'd the user's `.bashrc` to root
+  (the user could no longer edit their own bashrc without sudo).
+  Two-line fix at `internal/distribution/okd/install/flux.go:139`:
+  propagate the AtomicWrite error, then call `ChownToInvokingUser`
+  unconditionally on the success path. `ChownToInvokingUser` is a
+  no-op when not under sudo (`internal/system/elevation.go:50-53`), so
+  the unconditional call is safe in non-sudo invocations. Audit of every
+  other `AtomicWrite*` call site confirmed this was the only user-home
+  file missing the chown — `version/updatecheck.go:151`,
+  `credentials/envfile.go:78`, `config/loader.go:59`,
+  `cli/kubeconfig.go:69+120` all run pre-elevation; the system-config
+  sites in `setup/*` are intentionally root-owned; `WriteAsInvokingUser`
+  already chains chown internally. **Postmortem lesson:** the
+  new-file branch and the update-file branch had structurally different
+  chown handling — easy to miss because tests ran the new-file branch
+  and the update-file branch only fires on a re-deploy. Fix patterns
+  that must apply to *every* write path want a single chained helper
+  (which `WriteAsInvokingUser` already is for the simple case), not
+  duplicated per-branch chown calls.
+
+- **`tst:d9f7733e:debug-bundle-tar-no-test`** — done 2026-04-26 — PR #125,
+  merge commit `7689169`. Tier H blocker. Added `internal/cli/debug_bundle_test.go`
+  covering bundleConfig credential redaction (Proxmox `TokenID` absent, `***`
+  present), bundleLogFile content, tarDirInto symlink-escape outcome (dual:
+  `os.Root` blocks OR WalkDir skips dir symlink as non-regular), and the
+  skip-must-gather manifest entry. Source-side: extracted inline section list
+  into `collectSections` so the skip path is reachable without cobra.
+  Caveat: the symlink test does not exercise `os.Root.Open` because
+  WalkDir skips dir symlinks before that call — a follow-up could add a file
+  symlink variant to actually trip the OpenRoot guard.
+- **`tst:0f076161:destroy-confirm-cluster-untested`** — done 2026-04-26 —
+  PR #126, merge commit `966a694`. Tier H blocker. Hoisted the `destroy.go`
+  inline typo-guard at the old lines 82-94 into unexported
+  `validateConfirmCluster(force bool, confirm, name string) error` so a
+  cobra-free table test can exercise the four states (force-off short-circuit,
+  empty confirm, mismatched confirm, correct confirm). Error messages
+  preserved bit-for-bit so the related cleanup mirror item
+  `tst:93957c53:cleanup-confirm-cluster-untested` can later hoist both sites
+  into a shared `cli/confirm.go` without behaviour change.
+- **`tst:41a9d4eb:redact-handler-no-test`** — done 2026-04-26 — PR #127,
+  merge commit `7dfa0dc`. Tier H blocker (seam→`audit-observability`).
+  Added `internal/logutil/redact_test.go` with eight tests covering the
+  full RedactHandler contract: secret-key redaction, case-insensitive key
+  matching, `slog.Group` recursion, `*url.URL` userinfo stripping
+  (preserving username), nil `*url.URL` passthrough, the
+  `interface{ Redacted() any }` opt-out, `WithAttrs` and `WithGroup`
+  propagation. Source unchanged. Caveat surfaced during implementation:
+  slog's JSON handler reflection-walks `*url.URL` struct fields rather
+  than calling `(*url.URL).String()`, so cases (4)/(5) call the
+  package-private `redactAttr` directly to test the handler's actual
+  output value rather than the JSON renderer's interpretation.
+
+- **M40 — Air-gap workstream removed** — done 2026-04-20. The entire
+  L15 air-gap workstream (M21–M27, M33) was ripped out in one pass.
+  Deleted: `internal/fetchplan/`, `internal/addon/mirror/`,
+  `internal/cli/airgap.go` + test + `testdata/airgap/`,
+  `internal/cli/doctor_airgap.go` + test, the `--airgap` flag on
+  deploy/destroy/doctor, `OKDCTL_AIRGAP` / `OKDCTL_MIRROR_BASE` /
+  `OKDCTL_SCOS_*` / `OKDCTL_BOOTSTRAP_OC_URL` / `OKDCTL_UPDATE_CHECK_URL`
+  env vars, `Deployment.MirrorBase` + `Deployment.ToolVersions` config
+  fields, `okd.WithAirgap`, `addon.MirrorableAddon` / `MirrorSpec` /
+  `ChartRef`, `addon.Environment.Resolver`, `flux.resolveChartRef` +
+  `flux.MirrorArtifacts`, `secretstore.MirrorArtifacts`,
+  `addon.WithResolver`, `fetchplan.PickResolver` / `IsAirgap` /
+  `ResolveMirrorBase`, both resolver chains, the 9 Plan builders, the
+  9 Purpose constants, the 4 per-fetch Env*URL constants, the two
+  scoping docs under `docs/superpowers/plans/`, the airgap doctor
+  checks section in `docs/doctor-checks.md`. Kept: M22's
+  `oc adm release extract --tools` path (it's the current OKD-binary
+  fetch mechanism; the release-image URL is now a hardcoded constant,
+  no resolver wrap) and M23's direct scos.json/fcos.json fetch (same
+  deal — URLs inlined). Tool URLs (helm, sops, yq) moved from fetchplan
+  overrides back to hardcoded template constants in
+  `setup/tools.go`. `version.BackgroundCheck` signature reverted to
+  `(ctx) <-chan CheckResult`; direct `api.github.com` call. M29 (GitHub
+  Attestations) stays — it was an adjacent supply-chain item, not an
+  L15 item. **Rationale:** after shipping M21–M27 + M33 and writing
+  the M34 architectural review (PR #102), the conclusion was that
+  okdctl should not own mirror configuration. Operators doing air-gap
+  installs are sophisticated users who already own their staging
+  pipeline (`oc-mirror`, `skopeo`, Harbor, zot, Hauler, whatever);
+  okdctl's `MirrorBase` + rewrite-table + `airgap plan` emission was
+  paternalism the user base didn't need. The `Plan`/`Resolver`
+  abstraction was elegant but earned its keep only to support the
+  rewrite logic being deleted; without air-gap it was empty ceremony.
+  Net deletion: ~1,800 LOC of production code + 4 goldens + 2 scoping
+  docs + 2 CLI reference entries. Build and test suite green after the
+  sweep. **Postmortem lesson:** L15 (scoping doc, 2026-04-19) locked
+  an architecture the product didn't want. The failure mode was
+  premature commitment: a well-researched scoping doc became
+  load-bearing for M21–M27 implementation weeks before any operator
+  had deployed the feature. Next time: ship a one-knob MVP (a single
+  per-purpose URL override, wizard-configurable) before designing a
+  resolver chain. Zero operator feedback is a strong signal to keep
+  the abstraction surface tiny.
+
+- **M29 — GitHub Artifact Attestations for release binaries** — done
+  PR #94, merged 2026-04-20. New `actions/attest-build-provenance@v4.1.0`
+  step in `.github/workflows/release.yml` after goreleaser (SHA-pinned
+  `a2bbfa25...`); permissions were pre-provisioned at lines 7-10 so no
+  scope change. `subject-path` covers all four shipped artifact globs
+  (`dist/okdctl_*.tar.gz`, `*.deb`, `*.rpm`, `SHA256SUMS`); SBOMs
+  intentionally excluded per acceptance. Additive to the existing
+  cosign + SLSA flows; `install.sh` untouched. README gains a one-line
+  `gh attestation verify <file> --repo qxtaiba/okdctl` snippet next to
+  the existing cosign block. Tagged release will publish attestations
+  at `https://github.com/qxtaiba/okdctl/attestations/<n>`.
+- **U1 — Cleanup phase leaves FCOS ISO cache** — closed 2026-04-18 as
+  audit error; no code change required. Local `downloads/` cache is
+  already removed by `internal/distribution/okd/cleanup/artifacts.go:84,92`
+  in both `preserveConfig` branches. The real gap — remote Proxmox
+  ISO cleanup — is now tracked as **U1b**.
+- **U5 — `cmd.Run()` without `CommandContext` in two sites** — closed
+  2026-04-18 as done-by-prior-work. Both sites already use
+  `exec.CommandContext(ctx, ...)`: `internal/distribution/okd/setup/tools.go`
+  builds every cmd with `CommandContext` across lines 112/193/210/223/227/248,
+  and `internal/system/elevation.go:142` constructs its cmd via
+  `exec.CommandContext(ctx, "sudo", "-n", "true")` — the `cmd.Run()` at
+  line 146 is the method call on that ctx-aware cmd (the audit misread
+  it). Fix landed as a side-effect of commit `65d8fce refactor(platform):
+  thread ctx through PackageManager and tool version lookup`
+  (elevation-refactor-and-hardening plan).
+- **U3 — HTTP downloads have no retry** — done PR #49, merged 2026-04-18.
+  `internal/download` now retries 5xx, 408, 429, and transport errors with
+  exponential backoff (5s base, factor 2, jitter 0.5, 3 steps, 5-minute
+  cap). 4xx and context cancellation fail fast. Retry helper kept local
+  to `internal/download/retry.go` rather than importing `addon` so the
+  package layering stays low-level → nothing. Attempt count and last
+  error are logged on exhaustion.
+- **U6 — `BuildOpaqueSecret` panics on YAML marshal error** — done PR #50,
+  merged 2026-04-18. `addon.BuildOpaqueSecret` now returns
+  `(string, error)`; secretstore and flux callers propagate. The two
+  remaining `panic(err)` sites in `internal/addon/catalog/*` init paths
+  are `addon.Register` duplicate-name guards — distinct from the
+  YAML-marshal panic U6 addressed. Pre-existing doc drift in
+  `docs/architecture/addons.md:109` (arg order shown reversed) left for
+  a follow-up.
+- **N2 — Wire `okdctl releases list/show`** — done PR #51, merged
+  2026-04-18. New `internal/cli/releases.go` wires
+  `releases.OKDVersionFetcher` to two subcommands. `list --channel
+  stable|all --output text|json` uses `text/tabwriter` so alignment holds
+  for long tags like `4.21.0-okd-scos.10`. `show <version>` matches by
+  `Version` or `Tag` and prints via `tui.DottedKeyValueFull`. Both honour
+  the fetcher's existing disk cache; neither is added to
+  `rootRequiredCmds` (read-only commands).
+- **N5 — `okdctl kubeconfig`** — done PR #55, merged 2026-04-18. New
+  `internal/cli/kubeconfig.go` prints the post-install cluster kubeconfig
+  to stdout (default), writes it to a file via `--output`, or merges it
+  into the first `$KUBECONFIG` path (falling back to `~/.kube/config`)
+  via `--merge`. Structural YAML merge through `sigs.k8s.io/yaml`
+  deduplicates `clusters`/`users`/`contexts` by `.name`; `current-context`
+  is only adopted when the destination has none. Read-only — not added
+  to `rootRequiredCmds`.
+- **N17 — Wizard review renders all fields** — done PR #56, merged
+  2026-04-18. `internal/tui/wizard/steps/review.go` now renders
+  `HostPrefix` and `StaticIP.DNS`, and displays the API VIP with an
+  `(auto)` suffix when the user left it blank but static IPs are
+  configured — derived via `netutil.DeriveVIPFromStaticIP` at render
+  time so the review doesn't silently omit the effective value.
+- **N18 — Gateway-in-CIDR wizard validation** — done PR #57, merged
+  2026-04-18. New exported `config.ValidateGatewayInCIDR(gateway, cidr)`
+  in `internal/config/validators.go`, invoked from
+  `NetworkingStepDefinition.Validate` so users cannot advance past the
+  networking wizard page when the gateway falls outside the machine
+  CIDR. Defers to per-field validators when either input is empty or
+  malformed so the user doesn't see two errors for one bad field.
+- **N4 — `okdctl cleanup` standalone** — done PR #58, merged 2026-04-18.
+  New `internal/cli/cleanup.go` runs the full cleanup phase
+  (`cleanup.Execute` with `Kind=Full`) against a config without a
+  destroy flow, reusing `phase.ResolveClusterVIP`, `phase.BaseOptions`,
+  `phase.GetTerraformEnv`, and `phase.DefaultHAProxyConfigPath`. Named
+  `cleanup` so the existing `rootRequiredCmds` entry at
+  `internal/cli/elevation.go:23` drives the sudo re-exec gate; no
+  elevation edits needed. `--yes`/`-y` skips the confirmation prompt.
+- **N6 — `okdctl config show`** — done PR #59, merged 2026-04-18.
+  New `internal/cli/config.go` adds a `config` parent with a `show`
+  subcommand that prints the resolved YAML to stdout with Proxmox
+  `TokenID` redacted to `***`. `Username`/`Password`/`APIToken` on
+  `ProxmoxConfig` already carry `json:"-"` so they never marshal —
+  `redactConfig` only needs to shallow-copy and scrub `TokenID`. Read-only,
+  not added to `rootRequiredCmds`.
+- **N7 — `okdctl completion`** — done PR #60, merged 2026-04-18. New
+  `internal/cli/completion.go` exposes `okdctl completion
+  <bash|zsh|fish|powershell>` via cobra's built-in generators
+  (`GenBashCompletionV2`, `GenZshCompletion`, `GenFishCompletion`,
+  `GenPowerShellCompletionWithDesc`). Cobra's auto-registered bare
+  `completion` command is suppressed via
+  `rootCmd.CompletionOptions.DisableDefaultCmd = true` in favour of one
+  with activation docs. README install section gains per-shell
+  one-liners.
+- **N9 — `--log-level`/`--log-format`/`--log-file` flags** — done PR #65,
+  merged 2026-04-18. Three persistent flags on `rootCmd` wire through a
+  new `configureLogging` helper called from `PersistentPreRunE`, which
+  calls `tui.ConfigureLoggers` to mutate `stdoutLogger`/`stderrLogger`
+  in place (charmlog's `SetLevel`/`SetFormatter`/`SetOutput`).
+  `--log-format=json` uses `charmlog.JSONFormatter` (NDJSON).
+  `--log-file` opens with `O_CREATE|O_WRONLY|O_APPEND` mode 0600 and
+  duplicates both streams via `io.MultiWriter`. `tui.ProgressBarsEnabled()`
+  is the new predicate consulted by `internal/download/download.go`,
+  gated on stderr TTY (where `progressbar.DefaultBytes` renders) AND
+  non-JSON format. A follow-up fix commit corrected an initial version
+  that probed stdout TTY — the gate was wrong because the bar writes
+  to stderr.
+- **N15 — Wizard collects `Deployment` fields** — done PR #66, merged
+  2026-04-18. New "deployment options" section in the advanced step of
+  `internal/tui/wizard/steps/advanced.go` captures `Debug`,
+  `SkipDepsCheck`, `TerraformEnv`, and `AutoApprove`. Bool fields use
+  the existing `FieldTypeSelect` + `valYes`/`valNo` + `wizard.SetBool`
+  pattern; `TerraformEnv` is a text input validated by new exported
+  `config.ValidateTerraformEnv` (accepts empty or a terraform-workspace
+  identifier `^[A-Za-z_][A-Za-z0-9_-]*$`). Review step renders each
+  with `skip` gates so the all-defaults common case stays clean. Blank
+  `TerraformEnv` is semantically correct for "no override" — the
+  `GetTerraformEnv` helper in `phase/paths.go` already supplies the
+  `production` fallback at runtime.
+- **N20 — Doctor-check reference doc** — done PR #67, merged 2026-04-18.
+  New `docs/doctor-checks.md` documents all 9 preflight checks (`host
+  os`, `root check`, `path`, `tools and packages`, `sudo`, `ssh public
+  key`, `pull secret`, `disk space`, `host ports`) with what each
+  checks, the exact fail/warn strings extracted from
+  `internal/cli/doctor.go`, and concrete fix commands. The doctor
+  command's `Long` help gains a one-line pointer to the doc. No check
+  implementations were touched. The roadmap cited `doctor.go:16-24`
+  for the check list but the actual registry is at `:98-108` — stale
+  line reference, valid item.
+- **M4 — OKD release URL override** — done PR #61, merged 2026-04-18.
+  New `Deployment.OKDReleaseBaseURL` YAML field and
+  `OKDCTL_OKD_RELEASE_URL` env var override the hardcoded GitHub
+  release URL. Resolution order in `setup.ResolveReleaseBaseURL`:
+  env > config > default
+  `https://github.com/okd-project/okd/releases/download`.
+  `strings.TrimRight` normalizes trailing slashes. Mirrors that
+  preserve upstream path layout (`<base>/<version>/<filename>`) work
+  out of the box; full URL-template overrides for non-standard mirror
+  shapes are scoped to M5.
+- **N23 — HTTP error surface** — done PR #62, merged 2026-04-18.
+  `httpStatusError` now carries `Method` and a ≤256-byte `Body`
+  excerpt; `Error()` emits `HTTP <status> <method> <url>: <body>`.
+  `fetchToFile` reads up to 256 bytes via `io.LimitReader` before
+  returning the error. `bodySnippet` strips non-printable bytes
+  (defense against terminal escape sequences in an error body) and
+  trims whitespace; no credential scrubbing — an earlier bare-token
+  heuristic was dropped because it caught only one narrow case while
+  missing JSON/JWT/prose embeddings, and logs are not shipped today.
+  A key-based scrubber (`token=`, `password=`, etc.) is the right
+  follow-up when M2 (debug-bundle) or `--log-file` persistence lands.
+  Retry behaviour unchanged — `isRetryable` still switches on
+  `httpErr.Status`.
+- **N8 — Step timing + per-step deploy summary** — done PR #64,
+  merged 2026-04-18. `StepResult` gains `StartedAt time.Time` and
+  `Duration time.Duration`. `Orchestrator.executeStep` captures
+  `time.Now()` before the skip/execute branch and sets both fields
+  on all three return paths (skip, fail, success); new `Results()`
+  getter returns a copy of the slice under `RLock`. Each phase's
+  `Execute` returns `[]distribution.StepResult` alongside existing
+  returns; `executeFullDeployment` concatenates across setup +
+  install + postinstall and passes the slice to `PostDeploySummary`,
+  which renders a "steps" section (step id | ok/skip/fail | duration)
+  with a total row. Destroy not instrumented — it does not flow
+  through the post-deploy summary. Unblocks L5 (Prometheus metrics),
+  N10 (Ctrl-C partial-progress summary), and M1 (`okdctl status`).
+- **N11 — `--yes`/`--force` parity on deploy and update-ingress** — done
+  PR #68, merged 2026-04-19. `internal/cli/deploy.go` gains `--yes`/`-y`
+  that sets `deployNonInteractive = true` at `runDeploy` entry so the
+  flag surface matches destroy (`--force`/`-y`) and update-ingress
+  (`--yes`/`-y`). `internal/cli/confirm.go:promptForConfirmation`
+  short-circuits to `(false, nil)` when
+  `term.IsTerminal(os.Stdin.Fd())` is false, preventing the prompt
+  goroutine from dead-locking in CI or piped invocations. All three
+  existing call sites (destroy, update-ingress main, update-ingress
+  HostNetwork-conversion) inherit the fix through the shared helper.
+  `//nolint:gosec // G115` matches the existing
+  `internal/tui/wizard/model.go:163` suppression for the uintptr→int
+  cast.
+- **L13 — Auto-update version check on startup** — done PR #69, merged
+  2026-04-19. New `internal/version/updatecheck.go` with
+  `BackgroundCheck(ctx)` fires a goroutine that queries
+  `/repos/qxtaiba/okdctl/releases/latest` under a 4s
+  `context.WithTimeout`; results are cached 24h under
+  `$UserCacheDir/okdctl/update-check.json` (atomic tmp + `os.Rename`,
+  mode 0600). `OKDCTL_NO_UPDATE_CHECK=1` short-circuits before the
+  goroutine starts. `internal/cli/root.go:execute()` fires the check
+  before `rootCmd.ExecuteContext` and drains the buffered channel via
+  a `select` with `time.After(100ms)` after the command returns —
+  only on exit 0, so error paths stay clean. Non-2xx responses,
+  non-semver current version, and cache I/O errors all fail silently
+  via `slog.Debug`.
+- **M13 — Typed error hierarchy** — done PR #70, merged 2026-04-18.
+  New `internal/errtypes` package defines `ConfigError`, `NetworkError`,
+  `ClusterError`, and `AuthError` as concrete pointer-receiver structs
+  (`Msg string`, `Err error`) with `Error()` and `Unwrap()` so
+  `errors.As`/`errors.Is` both work across the chain.
+  `WrapValidation(*config.ValidationResult) error` bridges the existing
+  validation output into `*ConfigError` without touching the
+  `ValidationResult` API. Five exemplar sites wrapped in this PR
+  (`loadConfig`, `Download`, `ValidateClusterAccess`, `ensureRoot`,
+  envfile insecure-perms check). Broader migration across remaining
+  phase/addon error returns is tracked as **M13b** so U4's dispatch
+  eventually covers every error path.
+- **U4 — Exit codes collapse everything to 0/1/130** — done PR #70,
+  merged 2026-04-18. `internal/cli/root.go:execute()` now dispatches
+  exit codes via `errors.As` against the `internal/errtypes` types:
+  `ConfigError`=2, `NetworkError`=3, `ClusterError`=4, `AuthError`=5,
+  other=1. SIGINT/SIGTERM still return 130 via the existing
+  `ctx.Err()` guard. The exit-code table is documented in the
+  `internal/cli` package doc (authoritative for operators and CI
+  scripts); the `internal/errtypes` package doc mirrors the same
+  mapping from the type-producer side. Coverage is partial until
+  M13b lands — sites not yet wrapped fall through to exit 1.
+- **N19 — Addon-specific docs in `docs/addons/`** — done PR #71,
+  merged 2026-04-18. New `docs/addons/flux.md` and
+  `docs/addons/secretstore.md` cover purpose, when-to-use, defaults,
+  configuration, common failure modes, and uninstall behaviour. All
+  defaults are quoted from `internal/addon/catalog/{flux,secretstore}/`
+  with source line refs. The flux doc explicitly distinguishes the
+  warn-on-query-fail vs fatal-zero-replicas paths in
+  `Verify` (an earlier draft conflated them). README's addon-system
+  sentence gains two per-addon links; no new addon section was created
+  since one did not exist.
+- **M17 — Architecture diagrams (Mermaid)** — done PR #72, merged
+  2026-04-18. Inline Mermaid `flowchart` blocks added to the three
+  existing `docs/architecture/*.md`: `phases.md` shows
+  setup→install→postinstall plus the inverse destroy→cleanup path;
+  `wizard.md` shows all 11 wizard steps with explicit conditional
+  routing for `node-placement` (Proxmox-only) and `files` (OKD-only)
+  via separate "step or skip" branches; `addons.md` mirrors the
+  `Manager.InstallAll` loop including dep-failed skip and rollback on
+  install/verify error. No new docs created.
+- **N1 — Wire `okdctl addon list/install/uninstall/verify`** — done
+  PR #73, merged 2026-04-18. New `internal/cli/addon.go` registers
+  four subcommands. `list` enumerates `addon.All()` + `cfg.Addons` and
+  prints a tabwriter table named `CONFIG-ENABLED` (with a footer
+  pointing at `verify` for live cluster state — the column is config
+  truth, not cluster truth). `install [name]` and `install --all` map
+  to `Manager.InstallOne` / `InstallAll`; the `Long` text documents
+  the asymmetric rollback (single = all-or-nothing, `--all` =
+  per-addon continuation). `uninstall <name>` surfaces
+  `Manager.Uninstall`'s dependency-block error verbatim. `verify`
+  consumes a new `Manager.VerifyAll` shape — `([]VerifyResult, error)`
+  — so the CLI can render NAME/STATUS rows without losing per-addon
+  detail; aggregated error is replaced by a sentinel
+  `N addon(s) failed verification` so cobra doesn't double-print.
+  Elevation gate refactored: instead of adding `"addon"` to
+  `rootRequiredCmds` (which would force sudo on `list`/`verify`), the
+  mutating leaves carry `Annotations["requiresRoot"] = "true"`, and
+  `requiresRoot` checks the leaf annotation before walking ancestors.
+  Other commands (`deploy`, `destroy`, `cleanup`, `update-ingress`)
+  unchanged.
+- **N3 — `okdctl config validate` standalone** — done PR #74, merged
+  2026-04-18. New `configValidateCmd` under the existing `config` parent
+  (`internal/cli/config.go`) loads the config, prints
+  `ValidationSummary(result)` (the same renderer the deploy flow uses),
+  and returns `errtypes.WrapValidation(result)` — nil on success (exit 0),
+  `*ConfigError` on failure (exit 2 via `root.exitCodeFor`). No new flag
+  needed; the persistent `--config`/`-c` on rootCmd is inherited.
+- **M5 — Tool binary versions / URLs overridable** — done PR #75, merged
+  2026-04-18. New `Deployment.ToolVersions` YAML map
+  (`ToolVersionOverride{Version, URLTemplate}`) plus env vars
+  `OKDCTL_{HELM,SOPS,YQ}_{VERSION,URL}`. `ResolveToolURL` and
+  `ResolveToolVersion` in
+  `internal/distribution/okd/setup/artifacts.go` mirror M4's
+  env > config > default resolution. URL templates use named `{version}`
+  and `{arch}` placeholders substituted via `strings.NewReplacer` — safe
+  with zero, one, or both placeholders. An earlier draft used
+  `fmt.Sprintf`; it emitted `%!(EXTRA …)` on verbatim-URL overrides and
+  was dropped in the review-round refactor. yq keeps the
+  `/releases/latest/download/` GitHub redirect (the only path that
+  resolves without a concrete tag), so its `Version` override is a silent
+  no-op unless the operator also supplies a URLTemplate containing
+  `{version}`. Scope is intentionally narrow: terraform, OS packages, and
+  FCOS still hit upstream repos.
+- **M16 — Autogenerated CLI reference** — done PR #76, merged 2026-04-18.
+  New `cmd/okdctl-gen-docs` binary generates 18 Markdown files under
+  `docs/cli/` via `doc.GenMarkdownTree`. Exported `cli.RootCmd()` in
+  `internal/cli/docs.go` surfaces the package-private root tree for
+  offline tooling. `DisableAutoGenTag = true` suppresses cobra's
+  date-stamped footer so regeneration is deterministic — without it the
+  drift check is a false-positive factory. Makefile `docs`/`docs-check`
+  targets and the new CI `docs-go` job fail on drift, checking both
+  tracked-file diff and `git ls-files --others` (so new subcommands can't
+  land without updating docs). README gains a release-checklist section.
+  Doctor command metadata split out of `doctor.go` (still Linux-only,
+  untouched) into `doctor_cmd.go` (shared, no build tag) and
+  `doctor_stub.go` (`!linux`) so the cobra tree is platform-consistent
+  for doc gen — preserving the "doctor is Linux-only at runtime"
+  invariant while fixing a macOS/Linux drift that would have made the
+  drift check unresolvable.
+- **N10 — Ctrl-C partial-progress summary + resume hint** — done PR #77,
+  merged 2026-04-19. New `InterruptSummary` in `internal/cli/summary.go`
+  reuses the N8 `StepResult` plumbing to render a partial-progress box
+  plus "resume with okdctl deploy/destroy" hint. `executeFullDeployment`
+  (helpers.go) and `runDestroy` (destroy.go) detect `errors.Is(err,
+  context.Canceled)` and print the box before returning the bare
+  cancellation error so root.go's `ctx.Err() != nil → exit 130` dispatch
+  still fires. `destroy.Phase.Execute` and `okd.Provisioner.Destroy`
+  widened to return `([]distribution.StepResult, error)` so destroy has
+  the same step data the deploy summary already used.
+- **N25 — Progress bars for long-running operations** — done PR #78,
+  merged 2026-04-19. New `tui.StartSpinner(ctx, desc) func()` in
+  `internal/tui/spinner.go` renders a stderr spinner gated on
+  `tui.ProgressBarsEnabled()` (the N9 predicate). Terraform apply
+  (`internal/infrastructure/proxmox/proxmox.go`), bootstrap wait, and
+  install monitor (`internal/distribution/okd/install/monitor.go`) wrap
+  their long-running call with start/stop. No new third-party dep —
+  stdlib goroutine + 120ms ticker; `sync.Once` guards the stop closure;
+  `ctx.Done()` is one of the select cases so the spinner exits on
+  cancel. Determinate progress wasn't viable: terraform buffers output
+  through `executor.Run`, and openshift-install emits unparseable
+  log lines.
+- **N16 — Wizard collects `FCOSIso` / `TokenID` / `AdditionalNetworks`** —
+  done PR #79, merged 2026-04-19. Three new fields wired into the
+  wizard: `token_id` text field in the Proxmox credentials section;
+  `fcos_iso` storage-ref `FieldTypeSelect` populated by walking
+  ISO-capable storage pools and listing volids with `.iso` suffix
+  (proxmox_discovery.go uses go-proxmox `Storage(...).GetContent(...)`);
+  `additional_networks` `FieldTypeMultiSelect` over discovered bridges,
+  with a new `MultiSelectField` component (j/k cursor, space toggle).
+  `parseAdditionalNetworks` is a bridge-keyed merge — hand-authored
+  `Model` and `VLANTag` survive a wizard re-run (caught in code review).
+  Discovery error path distinguishes "token-only credentials" from
+  generic missing-credentials so users understand wizard discovery
+  still requires password auth (token id is saved for deploy use with
+  `PROXMOX_VE_API_TOKEN_SECRET`).
+- **D1 — document go-proxmox v0.x abandonment plan** — closed 2026-04-19
+  as done-by-prior-work. `CLAUDE.md:154-182` already contains a complete
+  `## Dependencies` section covering the permissive-license rule
+  (MIT/Apache-2.0/BSD only), the v0.x justification format with the
+  go-proxmox v0.4.x entry and its ~200-LOC REST-only fallback, the
+  GitHub-Actions SHA-pin expectation with version-trailer format, and
+  the stdlib-first rule. Landed in commit `d69c36d refactor(repo):
+  resolve 2026-04-18 audit findings (tiers a+b)`.
+- **D3 — pin tool-install @latest references** — closed 2026-04-19 as
+  done-by-prior-work. `Makefile:60` pins `air@v1.61.7`, `Makefile:80`
+  pins `golangci-lint@v2.11.4`, `ci.yml:54` pins `govulncheck@v1.1.4`,
+  `ci.yml:80` pins `yamlfmt@v0.14.0`. Zero `@latest` left in tool-install
+  sites. Landed in commit `d69c36d`.
+- **D4 — tighten terraform version floor in CI** — closed 2026-04-19 as
+  done-by-prior-work. `ci.yml:89` is `terraform_version: "1.10.3"` (was
+  `"1.10"`). Landed in commit `d69c36d`.
+- **D5 — plan gorilla/websocket removal path** — closed 2026-04-19 as
+  done-by-prior-work. `CLAUDE.md:167-171` documents non-reachability
+  (okdctl's Go source contains zero `websocket` references outside
+  `go.mod`/`go.sum`) and records the tracking signal for the
+  go-proxmox → `coder/websocket` upstream bump so the transitive
+  update lands without local code changes. Audit ledger
+  `.claude/audits/resolved-2026-04-18.jsonl:75` records this as
+  resolved under `task-21-D5`. Landed in commit `d69c36d`.
+- **M14 — Correlation ID per deploy run** — done PR #82, merged
+  2026-04-19. `uuid.NewString()` is minted at the top of `runDeploy`
+  and `runDestroy` (before credential/config/wizard log lines) and
+  pinned on the package-level charmlog loggers via new
+  `tui.SetRunID`. Subsequent `tui.X` calls and every slog record from
+  the provisioner's `SimpleLogger()` snapshot carry `run_id`
+  automatically. `tui.RunID()` reads the pinned value back for the
+  summary renderer; `PostDeploySummary` and `InterruptSummary` gained
+  a `runID string` parameter and render it via `sb.kv("run_id",
+  runID)`. `github.com/google/uuid` promoted from transitive (via
+  go-proxmox) to direct require.
+- **M13b — Complete errtypes migration across phase code** — done PR
+  #83, merged 2026-04-19. Wraps every exported phase/addon boundary
+  in `internal/distribution/okd/{setup,install,postinstall,destroy,
+  cleanup}`, `internal/addon/manager.go`, and
+  `internal/credentials/envfile.go` with the appropriate `errtypes.*`
+  type. ~30 files touched, ~100 wrapping sites. `ctx.Err()` paths in
+  `install/monitor.go` left as raw `fmt.Errorf` so
+  `errors.Is(err, context.Canceled)` still resolves and root.go's
+  exit-130 dispatch stays intact. U4's `errors.As` now routes the
+  full failure surface to exit codes 2–5 instead of falling through
+  to 1. Cleanup destroy paths are NonFatal steps so those wraps are
+  belt-and-braces; every other site is a Fatal boundary. Sweep took
+  three review rounds — gap narrowed from ~30 sites (round 1) → 14
+  (round 2) → 9 (round 3), all addressed inline.
+- **M12 — Generalize SecretStore beyond 1Password** — done PR #81,
+  merged 2026-04-19. New package-private `provider` interface in
+  `internal/addon/catalog/secretstore/providers.go` with three impls:
+  `onepassword` (default, preserves existing behavior and file
+  names), `vault` (full — `vault-token.txt` + ESO SecretStore CRD
+  with token auth), `bitwarden` (full — Bitwarden Secrets Manager /
+  Vaultwarden-compatible, requires an in-cluster
+  `bitwarden-sdk-server` sidecar not provisioned by this addon).
+  Install now applies both the provider's auth Secrets AND an ESO
+  `SecretStore` CRD named `okdctl-secretstore` (previously only
+  Opaque Secrets). `ValidateSettings` dispatches to the provider's
+  validator so misconfig surfaces before `oc apply`.
+  `onepassword_vaults` setting exposes the 1P vault map as CSV
+  (`"homelab=1,shared=2"`) with default `"homelab=1"`; a structured
+  key-value editor is tracked as N26. Design investigation returned
+  M19 (typed decoder) and M20 (grouped wizard fields) as the
+  follow-on items.
+- **M19 — Typed addon settings via per-addon decoder method** — done
+  PR #89, merged 2026-04-19. `ConfigurableAddon` grows
+  `DecodeSettings(map[string]string) (any, error)`; `flux.Settings`
+  and `secretstore.Settings` are the per-addon typed structs.
+  `secretstore.Settings` carries three provider sub-structs
+  (`OnePasswordSettings`, `VaultSettings`, `BitwardenSettings`);
+  `DecodeSettings` populates only the sub-struct matching the active
+  `Provider`, so `s.Bitwarden.OrganizationID == ""` is structurally
+  scoped to the bitwarden provider — no more string-prefix matching.
+  `Install` and `ValidateSettings` on both addons call `DecodeSettings`
+  once at entry and operate on typed fields. Linter required two
+  renames: `flux.FluxSettings` → `flux.Settings` and
+  `secretstore.SecretStoreSettings` → `secretstore.Settings` (revive
+  stutter); provider names (`onepassword`/`vault`/`bitwarden`) got
+  package-private constants (goconst). Design choice B (added to
+  `ConfigurableAddon` directly) over design choice A (sub-interface
+  `TypedConfigurableAddon`) — repo has only two addon implementers,
+  both in-tree, no external type assertions to break.
+- **M20 — Grouped wizard fields for structured addon settings** — done
+  PR #89, merged 2026-04-19. `addon.WizardField` grows an optional
+  `Group string`. Secretstore's `WizardFields()` annotates each field
+  with its provider group and surfaces 10 provider-specific settings
+  that were previously absent from the hardcoded wizard. The
+  `AddonsStepDefinition` at `internal/tui/wizard/steps/addons.go`
+  splits the single "1password secret store" section into four
+  sections — common (`enabled`, `provider` dropdown, `secrets_dir`),
+  onepassword, vault, bitwarden — each with a group-level title.
+  Approach A (static `SectionDefinition` entries) chosen over approach
+  B (dynamic renderer walking `WizardProvider`) — every other wizard
+  step is hand-authored; a dynamic renderer just for secretstore would
+  create asymmetry. Optional per-group hiding based on the selected
+  provider is deferred: `DataDrivenStep` has no per-section
+  `ShouldShow` and plumbing one exceeds M20 scope. Group headers alone
+  materially improve UX over the previous flat 2-field view. Flux
+  unchanged.
+- **M2 — `okdctl debug-bundle`** — done PR #90, merged 2026-04-19.
+  New `internal/cli/debug_bundle.go` collects redacted config
+  (via N6's `redactConfig`), the `--log-file` from N9, `oc adm
+  must-gather` output, `terraform state list` (raw `terraform.tfstate`
+  excluded — it carries Proxmox credentials), `okdctl doctor` output,
+  and runtime/version metadata into a gzip tarball with a top-level
+  `manifest.yaml`. Each section returns a `manifestEntry` instead of
+  fatally erroring, so a partial bundle is still useful in the exact
+  scenario (broken cluster) where bundles are needed most.
+  Doctor collection is build-tag-split (`debug_bundle_doctor.go` /
+  `debug_bundle_doctor_stub.go`), mirroring the `doctor_cmd.go` /
+  `doctor_stub.go` pattern from M16. Must-gather is bounded by a
+  5-minute context timeout and a `--skip-must-gather` flag; output
+  is archived through `os.OpenRoot`-scoped reads so symlinks cannot
+  redirect reads outside the temp dir (TOCTOU-safe). Bundle
+  correlation id minted via `uuid.NewString()`; `github.com/google/uuid`
+  promoted from indirect to direct in `go.mod` (M14 had left this
+  drift). Not added to `rootRequiredCmds` — read-only collection.
+  Review round 1 caught three issues: double `loadConfig` print,
+  tar/gzip not deferred (truncation risk on mid-run failure), and
+  the go.mod tidy drift; round 2 PASSed.
+- **L14 — Coverage thresholds + codecov in CI** — done PR #85, merged
+  2026-04-19. New `.github/scripts/coverage-check.sh` reads `coverage.out`
+  and enforces per-package floors from `.github/coverage-floors.conf`
+  (key=value, `*` is default, `total` gates the aggregate). All floors
+  start at 0 so the scaffolding passes vacuously today; N12/N13 tighten
+  specific packages one line at a time when tests land. Self-contained
+  shell check chosen over codecov SaaS — no token, no third-party
+  dashboard, acceptance's "or equivalent" allows the substitution.
+- **D2 — evaluate progressbar swap for bubbles/progress** — done PR #86,
+  merged 2026-04-19. Dropped `schollz/progressbar/v3` in favour of a
+  ~60 LOC hand-rolled `io.WriteCloser` in
+  `internal/download/progress.go` that reuses `tui.ProgressBarsEnabled()`
+  and `golang.org/x/term` for width. Cleanup removes
+  `mitchellh/colorstring` (2019-stale) and `chengxilo/virtualterm` from
+  the transitive graph. `bubbles/v2/progress` swap was re-rejected as
+  still-strictly-heavier (requires bubbletea Program); CLAUDE.md §Deps
+  note updated from "Kept" to "Removed".
+- **M1 — `okdctl status` / `describe`** — done PR #84, merged 2026-04-19.
+  New `internal/cli/status.go` wires three subcommands. `status` prints
+  API reachability (`oc get --raw /healthz`), node counts by role
+  (master/worker from `node-role.kubernetes.io/*` labels via
+  `oc get nodes -o json`), cluster-operator degraded count
+  (`oc get clusteroperators --no-headers`), and addon VerifyAll results.
+  `describe node <name>` and `describe addon <name>` drill into a single
+  resource with tabwriter output. Reuses `phase.BasePhase` + executor
+  via a new `OcOutput` one-shot helper added next to `OcPollOutput` in
+  `phase/kubectl.go` (polling helper was the wrong shape for a one-shot
+  describe). Read-only — not added to `rootRequiredCmds`.
+- **M3 — `--dry-run` / `--plan` mode** — done PR #87, merged 2026-04-19.
+  New `--dry-run` flag on `deploy`, `destroy`, and `update-ingress`.
+  Re-exec-as-root gate in `cli/elevation.go` already probed
+  `cmd.Flags().GetBool("dry-run")` — adding the flag on the three
+  commands activates the bypass. New `terraform.Executor.PlanStreamed`
+  wires terraform stdout/stderr directly to the terminal via
+  `executor.RunInteractive`; new `proxmox.Provider.PlanOnly` does
+  Init + PlanStreamed. Deploy dry-run renders a 31-entry step listing
+  through new `DryRunSummary`. Plan failures wrap as
+  `*errtypes.ConfigError` → exit 2 via the U4 taxonomy.
+- **L5 — Prometheus metrics endpoint during deploy** — done PR #87,
+  merged 2026-04-19. New `--metrics-addr :9090` on deploy starts an
+  HTTP server serving `/metrics` in Prometheus text format for the
+  lifetime of the run; disabled when empty. Four metric families —
+  `okdctl_deploy_step_total` (counter, success/failure labels),
+  `okdctl_deploy_step_duration_seconds` (histogram, 12 buckets),
+  `okdctl_deploy_current_step` (gauge, set by StepStarted/StepFinished
+  on the new `MetricsRecorder` interface), `okdctl_deploy_duration_seconds`
+  (gauge). Hand-rolled text renderer in `internal/deploymetrics/`
+  (no `prometheus/client_golang` dep — the four metrics don't justify
+  ~15 transitive packages). Orchestrator `MetricsRecorder` interface
+  with a no-op default means existing callers are unaffected;
+  `BasePhase.Recorder` propagates through setup/install/postinstall.
+- **N26 — TUI key-value map editor component** — done PR #92, merged
+  2026-04-19. New `components.KeyValueField` in
+  `internal/tui/wizard/components/key_value_field.go` renders a focused
+  (key, value) table mirroring the `MultiSelectField` shape — `j/k`
+  moves rows, `h/l` switches column, `a` adds, `d` deletes, `ctrl+e`
+  toggles edit mode (the host `DataDrivenStep` consumes `enter`/`tab`/
+  `shift+tab` for inter-field navigation, same constraint documented
+  on `MultiSelectField`). `FieldDefinition` gains `Type:
+  FieldTypeKeyValue` and `KVAsDelimitedString bool` — true = CSV
+  `"k1=v1,k2=v2"`, false = YAML-map `"k1: v1\nk2: v2"`. Secretstore
+  wizard's `secretstore_op_vaults` retrofit as the first consumer in
+  CSV mode; `Default: "homelab=1"` round-trips unchanged so existing
+  YAMLs keep working. Review round 1 flagged 11 findings (empty-key
+  pair emission in `Value()`, sentinel-vs-dynamic error, redundant doc
+  comments, dead `defaultValue` field, file-name snake_case, host-step
+  key-consumption type doc, one-frame width drift in `addRow`,
+  delimiter-round-trip doc on `Value`/`SetValue`, blink-cmd plumbing
+  through `syncInputFocus`/`Focus`/`toggleEditMode`, 73→60-char commit
+  subject) — all addressed in round 2. Develop merged 7 items
+  (M19/M20/M2/M1/M3/L5/L14/D2) during this session; rebase caught the
+  drift and moved the retrofit target onto M20's grouped
+  `secretstore_op_vaults` field in the onepassword section rather than
+  adding a duplicate-binding field in the earlier "common" layout.
+- **U2 — Wizard never sets `Provider.Type`** — done PR #52, merged
+  2026-04-18. `ProxmoxStepDefinition` replaced its `ShouldShow`
+  catch-22 (hidden when `Provider.Type` was unset → step never ran →
+  type stayed unset) with an `Apply` hook that assigns
+  `config.ProviderProxmox`. Mirrors `DistributionStep.Apply` at
+  `internal/tui/wizard/steps/distribution.go:236` and the Apply hooks
+  already in `networking.go` / `files.go` / `node_placement.go`.
+  Single-distribution assumption is encoded in the hook body; revisit
+  if L1–L3 ever move out of Skipped.
+- **U1b — Clean remote Proxmox FCOS ISO on destroy** — done PR #54,
+  merged 2026-04-18. New `StepRemoveRemoteISO` in the destroy phase
+  SSHs to the Proxmox host, enumerates `<isoDir>/fedora-coreos-*.iso`
+  via `find -print0`, checks the running-VM set via `pvesh` per-vmid
+  config queries, and removes the file only if no running VM
+  references it. Shared SSH plumbing extracted to new `phase/ssh.go`
+  (`ProxmoxBareHost`, `SSHRun`); `setup/upload.go` now uses the same
+  helper. Safety layers: `validateISODir` rejects shell
+  metacharacters / whitespace / quotes; `refuseUnsafeISOPath`
+  restricts filenames to `<isoDir>/fedora-coreos-*.iso`; paths are
+  single-quoted before shell interpolation. VM-reference scan walks
+  device fields (`ide*`, `sata*`, `scsi*`, `virtio*`, `boot`,
+  `bootdisk`) with `file=`-prefix strip and suffix match; fails
+  closed on any pvesh error. New `--keep-isos` flag on `destroy`
+  preserves the ISO for users chaining destroy → re-deploy. Four
+  review rounds resolved 15+ findings (helper duplication, `rm`/
+  `find` injection, wrong pvesh endpoint, fail-open parse, comment
+  density).
+- **N14 — `go vet ./...` in CI** — done PR #53, merged 2026-04-18.
+  New `vet-go` job in `.github/workflows/ci.yml` mirrors
+  `lint-go` / `build-go` (same pinned action SHAs, `go-version-file:
+  go.mod`, `ubuntu-latest`). Closes the gap where `make vet` existed
+  locally but CI never invoked it.
+- **L15 — Air-gap feasibility + scoping doc** — superseded by **M40**
+  (2026-04-20). L15 locked a `FetchPlan` + `Resolver` + `oc-mirror`-wrapper
+  architecture that was subsequently ripped out. The scoping doc is
+  deleted alongside the implementation. Retained here for roadmap
+  archaeology; see M40 for the postmortem.
+- **M6 — `DefaultBinDir` configurable (rootless support)** — done PR
+  #93, merged 2026-04-20. New `DeploymentConfig.BinDir` YAML field and
+  `OKDCTL_BIN_DIR` env var override the hardcoded `/usr/local/bin`,
+  resolved via a new `phase.ResolveBinDir(cfg)` helper
+  (env > config > default, mirroring M4's `ResolveReleaseBaseURL`
+  pattern). `system.ExpandPath` is applied before validation so
+  `~/bin` matches pull_secret / ssh_public_key ergonomics. Setup
+  install sites (`InstallToolsToSystem`, `installBinaryToPath`) and
+  the cleanup binary-removal path thread the resolved value through
+  `okd.go:Prepare`, `cli/cleanup.go`, and `destroy/steps.go`; a shared
+  `phase.BinDirOrDefault` replaces three copies of the zero-value
+  fallback. `phase.PreflightBinDir` encapsulates the env-only
+  resolution `main.preflight` uses (config isn't parsed at startup)
+  so doctor's renamed `bin dir on path` check can compare against
+  exactly what preflight chose. New doctor `bin dir` check probes
+  existence and writability separately (stat errors reported with
+  raw error); user-configured fail text makes the sudo re-exec
+  semantics explicit (binaries are root-owned; chown to manage
+  later). `resolveBinDirForDoctor` memoises the config load via
+  `sync.OnceValue` and surfaces load failures via a detail suffix
+  plus pass→warn demotion so a malformed YAML never reads as green.
+  Elevation is **not** rewired: acceptance bullet 2 is satisfied
+  machinery-only (ResolveBinDir / IsDirWritable / checkBinDir all
+  ship) — a blanket re-exec skip would bypass sudo for
+  deploy/destroy/cleanup/update-ingress, which also write to
+  `/etc/haproxy`, `/etc/dnsmasq.d`, `/var/www/html` and run `dnf`.
+  Future standalone `okdctl install-tools` subcommand is the
+  correct home for the scoped skip. Seven review rounds resolved
+  the full surface: round 3 (destroy cleanup.Options missing
+  BinDir, setup zero-value), round 4 (`ResolveBinDir` bypassed
+  `ValidateBinDir`, path-vs-default equality fragility,
+  preflight/doctor contradiction when env set), round 5
+  (missing-dir vs not-writable distinction, `checkPath` warn-gate
+  on post-validation env, docs parametric fix snippet, tilde
+  expansion, `PreflightBinDir` vs `checkPath` consistency), round
+  6 (malformed-config demote, stat error branch, comment density),
+  final PASS on round 7.
+
+- **`sub:97cb8adf:no-cmd-env`** — done 2026-04-26 — PR #147, merge
+  commit `f7091b3`. Tier H major (io-handling, seam→audit-security).
+  `system.RunCaptured` built `exec.CommandContext` without setting
+  `cmd.Env`, so the os/exec nil-Env contract forwarded the full parent
+  environment to ~19 firewall/dnsmasq/packages/tools/systemd callsites.
+  The canonical `executor.Executor` already filters env through
+  `executor.DefaultEnvAllowlist` via `executor.FilterParentEnv`, and
+  `cli/elevation.go` reuses the same exported helpers for the sudo
+  re-exec path — `RunCaptured` was the lone second-tier hole. Fix is
+  one line: `cmd.Env = executor.FilterParentEnv(executor.DefaultEnvAllowlist)`
+  immediately after `exec.CommandContext`. Signature unchanged; all
+  callsites compile unaltered. Added `TestRunCaptured_EnvFiltered`
+  guard: plant `OKDCTL_SECRET_CANARY` via `t.Setenv`, assert child
+  `sh -c '[ -z "$OKDCTL_SECRET_CANARY" ] || exit 42'` returns 0 — the
+  canary must not reach the child. Verified import-cycle safety
+  (executor → system was already not imported; only `logutil` was
+  shared). Reviewer PASS first round.
+
+- **`sub:ae5b624c:bypass-canonical-executor`** — done 2026-04-26 —
+  PR #148, merge commit `f9808f6`. Tier H minor (io-handling).
+  `WaitForBootstrap` shelled out to `openshift-install` via raw
+  `osExec.CommandContext` with `cmd.Stdout = os.Stdout` /
+  `cmd.Stderr = os.Stderr`, bypassing three Executor amenities: env
+  allowlist (via `e.buildEnv()`), the ring-buffered stderr tail that
+  feeds `*ExitError.Stderr`, and the structured `exec: started` /
+  `exec: completed` debug logs. Replaced with a single
+  `p.Exec.RunStreamedChecked(ctx, "openshift-install", "wait-for",
+  "bootstrap-complete", "--dir", clusterDir, "--log-level=debug")`.
+  `RunStreamed` wires `cmd.Stdout = io.MultiWriter(e.Stdout, ringWriter)`
+  / `cmd.Stderr = io.MultiWriter(e.Stderr, ringWriter)`, so live TTY
+  streaming is unchanged for the user; the spinner lifecycle is
+  preserved. Cancellation identity preserved through the swap because
+  `RunStreamed`'s non-`*exec.ExitError` branch returns the wrapped
+  ctx error verbatim, so `errors.Is(ctx.Err(), context.DeadlineExceeded)`
+  and `context.Canceled` still fire on the receiving branches.
+  `MonitorInstallation` deliberately untouched — its CSR-tick loop
+  needs explicit `cmd.Process` retention for the `killInstall`+`reapTimer`
+  pattern, and a separate roadmap item `sub:ae5b624c:no-cmd-env-install`
+  covers it. `os` and `osExec "os/exec"` imports retained because
+  `MonitorInstallation` still uses both. Reviewer PASS first round.
+  6-line deletion, 1-line addition.
+
+- **`state:b804b2ec:bootstrap-destroy-skip-tfvars-silent`** — done
+  2026-04-26 — PR #149, merge commit `52c848b`. Tier H major
+  (crash-recoverability). `CleanupBootstrap` returned `nil` when
+  `terraform.tfvars` was missing, with only a Warn — and the caller
+  in `postinstall/steps.go` unconditionally flipped
+  `pctx.BootstrapCleaned = true` on `nil`. Result: if a previous
+  cleanup wiped tfvars but the bootstrap VM was still running, the
+  postinstall summary lied about the teardown. Adopted fix path (a)
+  from the roadmap: a package-local exported sentinel
+  `var ErrBootstrapTfvarsNotFound = errors.New("bootstrap cleanup
+  skipped: terraform.tfvars not found")` returned bare (not wrapped)
+  from `CleanupBootstrap` on the missing-tfvars branch, plus an
+  `errors.Is` guard in the step's `Exec` body that returns `nil`
+  without calling `pctx.Update` — `BootstrapCleaned` stays false, no
+  spurious failure surfaced to the user, the existing
+  `OnError: phase.WarnOnError` hook does not fire (Exec returns nil).
+  Real terraform errors keep the `errtypes.ClusterError` wrap. No
+  canonical `errtypes.RecoverableSkipped` exists yet (verified by
+  reading `internal/errtypes/errtypes.go`); the nearest prior art is
+  `cleanup.ErrKindNotSet` which uses the same package-local sentinel
+  shape. Single caller of `CleanupBootstrap` (`postinstall/steps.go`),
+  so no other contract broken. Reviewer PASS first round.
+
+- **`sec:f55b9c27:input-path-not-prefix-checked`** — done 2026-04-26 —
+  PR #151, merge commit `a8056b7`. Tier H minor (input-validation).
+  `WriteEnvFile` passed the destination path straight to
+  `system.AtomicWrite` with no `lstat` check; an attacker who could
+  plant a symlink at the .env path before the rename could redirect
+  the credential bytes (mode 0o600) to an attacker-chosen target.
+  Mirrored the canonical `openLogFile` shape at `cli/logging.go:25-32`:
+  `os.Lstat` first, refuse with `*errtypes.AuthError` if
+  `info.Mode()&os.ModeSymlink != 0`; non-`NotExist` lstat errors also
+  short-circuit (writing credentials to an unstat-able path is unsafe);
+  `NotExist` falls through normally for the first-write case. New
+  `TestWriteEnvFile_SymlinkRefused` locks the regression in (skips
+  under root, mirroring the existing `TestLoadEnvFile_PermRefusal`
+  guard at `envfile_test.go:131-132`). **Scope-down recorded in PR
+  body:** the Fix's second clause (path-traversal validation in
+  `EnvFilePath` to reject `--output=../../etc/...`) was deferred — it
+  is a cobra-flag-validation concern symmetric across `saveConfig`,
+  not a credentials-write concern. **Postmortem lesson:** when a
+  Fix bundles a load-bearing security clause with an architectural
+  one, scope the PR to the load-bearing clause and surface the
+  deferred clause in the PR body. Splitting prevents the architectural
+  decision from blocking the urgent fix; the deferred clause becomes a
+  fresh roadmap item naturally on the next audit. Reviewer PASS first
+  round.
+
+- **`sec:35abd54e:cred-struct-bare-format`** — done 2026-04-26 —
+  PR #150, merge commit `c28a3bd`. Tier H minor (credentials).
+  `ProxmoxCredentials.String` hand-rolled a `fmt.Sprintf` masking only
+  the four fields it remembered to list; a future secret field added
+  to the struct (`ClientSecret`, `RefreshToken`, etc.) would have
+  leaked through `%v` / `%s` with no compile-time signal. Added a
+  private `redactedCredentials` struct holding only the six safe
+  fields (`Endpoint`, `Username`, `Insecure`, `Source`,
+  `EndpointFromConfig`, `ConfigCredentialsOverridden`) and implemented
+  `Redacted() any` returning a populated value of it. The
+  `logutil.redactAny` path at `logutil/redact.go:107` already
+  type-switches on `interface{ Redacted() any }`, so any slog record
+  carrying a `*ProxmoxCredentials` now hits the structural-redact arm
+  instead of relying on the `String()` format string. `String()` /
+  `GoString()` delegate to `Redacted()` via
+  `fmt.Sprintf("%+v", c.Redacted())` so `%v`, `%s`, `%+v`, `%#v` all
+  share one safe-field whitelist. Existing
+  `TestProxmoxCredentials_StringMasks` still passes (the new `%+v`
+  output still contains the non-secret fields it asserts on, and
+  never contains the secret bytes). New
+  `TestProxmoxCredentials_Redacted` asserts the type shape, every
+  preserved field, and nil-receiver safety. **Postmortem lesson:**
+  when the redactor protocol is an *interface* (`Redacted() any`),
+  the type that owns the secret should *implement* it rather than
+  every call site wrapping. Format-string discipline is per-call and
+  fragile under refactoring; interface satisfaction is per-type and
+  forces the developer to consciously add a new field to the safe
+  whitelist. Reviewer PASS first round.
+
+- **`sec:1e8ffb91:tls-insecure-vip-name`** — done 2026-04-26 —
+  PR #152, merge commit `b501017`. Tier H suggestion (tls-network).
+  `verifyKubeVIPAPIHealth` falls back to `httputil.NewInsecure` when
+  the kubeconfig CA is unavailable because the VIP is not yet in the
+  apiserver certificate SANs during the bootstrap-to-kube-vip
+  transition. The function name did not encode that temporal
+  precondition; a future caller at any other phase would inherit the
+  TLS skip silently. Pure rename to `verifyKubeVIPAPIHealthBootstrap`
+  with a tightened doc comment that names the bootstrap-phase
+  contract and explicitly tells later-phase callers to use a verified
+  client instead. Picked the rename option over extracting a
+  `httputil.NewBootstrapInsecure` factory: the helper itself is
+  correctly named for what it does (skip TLS), the misuse risk lives
+  at the caller, and the function is unexported with a single
+  intra-file caller — zero blast radius. The companion finding
+  `sec:761e5126:tls-insecure-skip` for `haproxy.go` is intentionally
+  separate and untouched. **Postmortem lesson:** when a function's
+  safety contract is *temporal* (only safe during a specific phase),
+  encode the precondition in the function name. A reviewer scanning
+  call sites should see the constraint without having to read the
+  doc.
+
