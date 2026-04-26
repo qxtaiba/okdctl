@@ -1460,3 +1460,87 @@ but link evidence.
   matching the orchestrator's `step` key style. One-line change.
   Reviewer PASS first round.
 
+- **`con:e7db1220:releases-completion-bg-ctx`** — done 2026-04-26
+  — PR #172, merge commit `0ddb998`. Tier H suggestion (ctx-todo).
+  `releasesShowCmd.ValidArgsFunction` discarded its `*cobra.Command`
+  parameter and called `fetcher.FetchVersions(context.Background())`,
+  so a hung GitHub fetch during tab completion blocked the user's
+  shell until the http client's own 4-second timeout expired —
+  Ctrl-C had no effect. Renamed the closure's first parameter to
+  `cmd` and replaced `context.Background()` with `cmd.Context()`,
+  which is the signal-watched ctx installed by
+  `internal/cli/root.go::execute()`. **Postmortem lesson:**
+  the planner's first-pass YAML proposed deleting the
+  `"context"` import alongside the closure change. Caught at
+  apply time because `fetchFlatVersions(ctx context.Context)` at
+  line 131 still needs the import. Reviewers can't see the full
+  file the planner is reasoning about, so a "remove unused
+  import" delta from the planner needs the orchestrator to verify
+  every site, not just the one being edited. Reviewer PASS first
+  round.
+
+- **`obs:97cb8adf:waitfor-no-retry-count`** — done 2026-04-26 —
+  PR #173, merge commit `b537ca7`. Tier H suggestion
+  (span-retry-boundary). `WaitFor`'s ready/timeout span carried
+  no iteration count — operators tailing structured logs saw
+  "X is ready" / "timeout waiting for X" but not how many polls
+  had fired. Added a `polls` counter declared before the
+  pre-loop check, incremented at the top of the ticker case
+  before `check()`, and surfaced as a `"polls"` attr on both
+  `logger.Info(readyMsg, …)` sites plus an embedded `(%d polls)`
+  in the timeout `fmt.Errorf`. The timeout uses string embedding
+  rather than a structured attr because the timeout site returns
+  an error, not a log call — `RedactHandler` operates on slog
+  records, not error chains. Reviewer PASS first round.
+
+- **`smell:9d79b841:strconv-fallback-to-zero`** — done
+  2026-04-26 — PR #174, merge commit `570e6c8`. Tier H minor
+  (stringified-numbers). `parseOKDMinor` discarded `fmt.Sscanf`'s
+  err and treated minor==0 as a successful parse, so a malformed
+  version string like `"4.x.0"` silently fell through to a fetch
+  against `release-4.0/data/data/coreos/fcos.json` which 404s.
+  Changed the signature to `(int, bool)` keyed off Sscanf's `n
+  == 2` discriminant, and `DetectCoreOSVersion` now returns a
+  typed `errtypes.ConfigError` early when ok is false. Test
+  table updated for the new signature; new
+  `TestDetectCoreOSVersion_malformedVersion` covers
+  "not-a-version", "", and "x.y.0". **Postmortem lesson:** when
+  `fmt.Sscanf`'s docstring promises "returns the number of
+  items successfully parsed", treating that count as the
+  validity discriminant is more honest than discarding the err
+  and the result and hoping the zero-value happens to be
+  invalid. Reviewer PASS first round.
+
+- **`con:bdf5a873:safe-remove-ignores-ctx`** — done 2026-04-26
+  — PR #175, merge commit `dda6440`. Tier H minor
+  (ctx-ignored). `SafeRemoveWithLogger` accepted `_
+  context.Context` and discarded it, so an `os.RemoveAll` against
+  a hung NFS or stuck FUSE mount during destroy could stall
+  indefinitely while the destroy ctx had a meaningful cancel
+  point. Picked option (b) from the roadmap: rename `_` to
+  `ctx`, add `if err := ctx.Err(); err != nil { return err }`
+  immediately before the `os.RemoveAll`. Three lines added; no
+  caller signature change because the parameter was already
+  there (just discarded). The `os.Stat` upstream of the guard
+  can also stall on a hung mount — out of scope for this fix
+  per the roadmap, but flagged as a follow-up if the
+  destroy-stall recurs. Reviewer PASS first round.
+
+- **`obs:33579dd5:err-stringified-bypasses-handler`** — done
+  2026-04-26 — PR #176, merge commit `bf1602e`. Tier H minor
+  (field-stability). Four cleanup sites — `services.go:147`,
+  `services.go:160`, `services.go:170`, `packages.go:79` —
+  passed `guardErr.Error()` as the slog message rather than as
+  an `"err"` attr. `RedactHandler` walks attr values for
+  `Redacted() any` interface implementations and credential-key
+  scrubbing; a flat message string is opaque to it. Replaced
+  all four with `logger.Warn("cleanup: refusing critical
+  path", "err", guardErr)` matching the canonical idiom at
+  `artifacts.go:36` and `services.go:139`. **Postmortem
+  lesson:** the canonical idiom search (in this case
+  `git grep -n 'logger.Warn("cleanup'`) was load-bearing —
+  finding the existing-idiom site in the same package gave
+  the planner the exact message string and attr key shape, so
+  the four edits collapsed to byte-identical patterns instead
+  of four ad-hoc rewrites. Reviewer PASS first round.
+
