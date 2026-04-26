@@ -62,22 +62,22 @@ func printSummary(opts *Options, logger *slog.Logger) {
 	logger.Info("cleanup: summary")
 
 	if summary.RemainingWorkFiles == 0 {
-		logger.Info("  work directory: clean (0 files)")
+		logger.Info("cleanup: work directory clean", "files", 0)
 	} else {
-		logger.Info("  work directory: files remaining", "count", summary.RemainingWorkFiles, "size", summary.WorkDirSize)
+		logger.Info("cleanup: work directory files remaining", "count", summary.RemainingWorkFiles, "size", summary.WorkDirSize)
 	}
 
 	if summary.RemainingIgnitionFiles == 0 {
-		logger.Info("  ignition files: clean (0 files)")
+		logger.Info("cleanup: ignition files clean", "files", 0)
 	} else {
-		logger.Info("  ignition files: files remaining", "count", summary.RemainingIgnitionFiles)
+		logger.Info("cleanup: ignition files remaining", "count", summary.RemainingIgnitionFiles)
 	}
 
 	if opts.Kind == Full || opts.Kind == TerraformOnly {
 		if summary.RemainingTerraformFiles == 0 {
-			logger.Info("  terraform: clean (0 files)")
+			logger.Info("cleanup: terraform clean", "files", 0)
 		} else {
-			logger.Info("  terraform: files remaining", "count", summary.RemainingTerraformFiles)
+			logger.Info("cleanup: terraform files remaining", "count", summary.RemainingTerraformFiles)
 		}
 	}
 
