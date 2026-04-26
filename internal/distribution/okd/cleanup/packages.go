@@ -13,21 +13,10 @@ import (
 	"github.com/qxtaiba/okdctl/internal/platform"
 )
 
-// detectOS returns the detected host OS, falling back to RHEL if detection
-// fails (cleanup runs on the bastion, which is typically RHEL-family).
-func detectOS(logger *slog.Logger) platform.OS {
-	detectedOS, err := platform.Detect()
-	if err != nil {
-		logutil.OrNop(logger).Warn("platform: detect failed; defaulting to rhel", "err", err)
-		return platform.OS{Family: platform.FamilyRHEL, ID: "unknown", Version: ""}
-	}
-	return detectedOS
-}
-
 // detectPackageManager returns a PackageManager for the current host OS,
 // falling back to RHEL/dnf if detection fails (cleanup runs on the bastion).
 func detectPackageManager(logger *slog.Logger) platform.PackageManager {
-	return platform.NewPackageManager(detectOS(logger))
+	return platform.NewPackageManager(platform.DetectOrDefault(logger))
 }
 
 // InstalledPackages returns the scoped list of dnf packages cleanup will
