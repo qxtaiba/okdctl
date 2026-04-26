@@ -2606,16 +2606,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Change Example to a jq path that exists in the schema, e.g. `okdctl status --format json | jq '[.nodes[] | select(.ready)] | length'` or simpler `jq '.nodes'`. Update docs/cli/okdctl_status.md by `make docs`.  
 **Effort:** hours
 
-##### `ux:b3356305:readme-flag-drift-deploy-options` — readme flag drift deploy options
-
-**Status:** in review — PR #141  
-**Severity:** minor  
-**Cluster:** help-text  
-**Evidence:** `README.md:81-85`  
-**Problem:** README Usage block lists 5 commands (deploy/destroy/update-ingress/doctor/--version) but the actual CLI has 14: addon, cleanup, completion, config, debug-bundle, deploy, describe, destroy, doctor, kubeconfig, releases, status, update-ingress, version. README readers form a wrong mental model — addon, kubeconfig, status, releases, debug-bundle are all hidden until they read --help.  
-**Fix:** Either expand README's Usage block to all top-level commands (with one-line short help each) or add a 'Reference' link to docs/cli/okdctl.md (which is already complete and current). Two-line README addition is enough.  
-**Effort:** hours
-
 ##### `ux:6424733c:no-tty-prompt-returns-false-silently` — no tty prompt returns false silently
 
 **Status:** not started  
@@ -2920,16 +2910,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Replace the loop body with `return a.Exact[key] || slices.ContainsFunc(a.Prefixes, func(p string) bool { return strings.HasPrefix(key, p) })`. Add `"slices"` to imports. Net result: -7 LOC, same behavior, matches in-tree usage.  
 **Effort:** hours
 
-##### `mod:bb81a5b0:use-range-int` — use range int
-
-**Status:** in review — PR #140  
-**Severity:** suggestion  
-**Cluster:** range-idioms  
-**Evidence:** `internal/executor/ringbuf.go:58-60`  
-**Problem:** Counted three-clause `for i := 0; i < r.max; i++` is the only remaining classic counted loop in scope. Go 1.22 introduced range-over-int: `for i := range r.max` carries the same semantics with one less repetition of the bound and aligns with the rest of the codebase, which has already adopted the form (e.g. `internal/distribution/okd/phase/iso_cleanup.go:173-182`, `internal/distribution/okd/dns/dns.go:74,86`).  
-**Fix:** Replace `for i := 0; i < r.max; i++ {` with `for i := range r.max {`. No semantic change; matches the in-tree convention.  
-**Effort:** hours
-
 #### audit-code-smells
 
 ##### `smell:d9f7733e:stringly-typed-status-enum` — stringly typed status enum
@@ -3060,16 +3040,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/cli/helpers.go:105-109`  
 **Problem:** createOKDProvisioner is a single-caller wrapper that just delegates to createOKDProvisionerWithOpts with no extra args. update_ingress.go:102 is the only call site; every other caller uses createOKDProvisionerWithOpts directly. The wrapper adds a comment but no behaviour and is itself triple-named, making greps noisier.  
 **Fix:** Inline at the one call site: replace `p := createOKDProvisioner(cfg, nil, projectRoot)` with `p := createOKDProvisionerWithOpts(cfg, nil, projectRoot)` and delete createOKDProvisioner. Two lines of comment migrate to the WithOpts variant if they're worth keeping.  
-**Effort:** hours
-
-##### `smell:92553fff:sprintf-d-instead-of-itoa` — sprintf d instead of itoa
-
-**Status:** in review — PR #143  
-**Severity:** suggestion  
-**Cluster:** magic-strings  
-**Evidence:** `internal/cli/status.go:224-233`  
-**Problem:** fmt.Sprintf("%d", n) used to render an int as a string; strconv.Itoa(n) is the idiomatic, allocation-cheaper form. Same pattern repeats in firewall.go:210 and doctor.go:441. Each site is one allocation and a Sprintf parse for what is a single function call.  
-**Fix:** s/fmt.Sprintf("%d", x)/strconv.Itoa(x)/ at all sites. Mechanical change, ~5 sites total.  
 **Effort:** hours
 
 ##### `smell:7f86cbe2:any-return-second-value` — any return second value
@@ -3760,6 +3730,40 @@ Items that have reached `done` status, ordered by close date. New
 entries land here when a PR merges, or when an item is closed without
 code (audit error, done-by-prior-work). Keep the explanation terse
 but link evidence.
+
+- **`mod:bb81a5b0:use-range-int`** — done 2026-04-26 — PR #140, merge
+  commit `3811fd4`. Tier H suggestion. Replaced the sole remaining
+  classic counted `for i := 0; i < r.max; i++` loop in
+  `internal/executor/ringbuf.go:58` with Go 1.22 range-over-int
+  (`for i := range r.max`). One-line change; `r.max` is `int` set
+  from `newRingWriter(constMaxLines=200)`, so range semantics match
+  exactly. Aligns ringbuf with the form already adopted in
+  `internal/distribution/okd/phase/iso_cleanup.go` and
+  `internal/distribution/okd/dns/dns.go`.
+
+- **`ux:b3356305:readme-flag-drift-deploy-options`** — done 2026-04-26
+  — PR #141, merge commit `2518d98`. Tier H minor. README Usage block
+  listed 5 of the 14 top-level commands; readers formed a wrong mental
+  model (`addon`, `kubeconfig`, `status`, `releases`, `debug-bundle`
+  hidden until they read `--help`). Added a single Reference line
+  below the Usage block pointing to `docs/cli/okdctl.md` — the
+  cobra-generated reference that already lists all 14. Chose the link
+  over expanding the block: lower-maintenance, never drifts when new
+  verbs land.
+
+- **`smell:92553fff:sprintf-d-instead-of-itoa`** — done 2026-04-26 —
+  PR #143, merge commit `24f5f11`. Tier H suggestion. Replaced
+  `fmt.Sprintf("%d", x)` with `strconv.Itoa(x)` at six sites across
+  three files: `internal/cli/status.go` (4 sites: masters / workers /
+  total / degraded), `internal/cli/doctor.go` (1 site: busy port in
+  preflight), `internal/distribution/okd/firewall/firewall.go` (1
+  site: iptables `--dport`). All operands verified plain `int` —
+  type-safe substitution at every site. Note: audit Evidence said
+  `setup/firewall.go` but the actual path is
+  `internal/distribution/okd/firewall/firewall.go`; the file moved
+  between audit and now. Three additional candidates in
+  `internal/tui/wizard/...` (`model_view.go:157`,
+  `steps/review.go:230,409`) left for a follow-on sweep.
 
 - **`sec:d9f7733e:input-path-not-prefix-checked`** — done 2026-04-26 —
   PR #138. Tier H minor (file-toctou). `runDebugBundle` opened the
