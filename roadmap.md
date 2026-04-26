@@ -1980,7 +1980,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `state:4c092fce:tf-state-backup-removed-on-success` — tf state backup removed on success
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/state-4c092fce-tf-backup  
 **Severity:** major  
 **Cluster:** tf-state-atomicity  
 **Evidence:** `internal/infrastructure/terraform/terraform.go:314-328`  
@@ -2174,7 +2174,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `err:c287d5c0:vocab-ad-hoc-distribution-type` — vocab ad hoc distribution type
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/err-c287d5c0-distribution-type  
 **Severity:** minor  
 **Cluster:** domain-vocabulary  
 **Evidence:** `internal/distribution/okd/okd.go:99-103`  
@@ -2692,7 +2692,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `obs:6424733c:string-concat-err-error-in-tui` — string concat err error in tui
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/obs-6424733c-tui-concat  
 **Severity:** minor  
 **Cluster:** field-stability  
 **Evidence:** `cmd/okdctl/main.go:52-52`  
