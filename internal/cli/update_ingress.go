@@ -117,6 +117,7 @@ func runUpdateIngress(cmd *cobra.Command, _ []string) error {
 			prompt := fmt.Sprintf("convert %d HostNetwork controller(s) to LoadBalancerService? [y/N]: ", len(hostNetworkICs))
 			confirmed, err := promptForConfirmation(ctx, prompt)
 			if err != nil {
+				tui.Warn("skipping HostNetwork conversion: " + err.Error())
 				return false
 			}
 			return confirmed
