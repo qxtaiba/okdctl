@@ -124,8 +124,10 @@ type ProxmoxConfig struct {
 	Password string `json:"-"`
 	APIToken string `json:"-"`
 
-	TokenID            string              `json:"token_id,omitempty"`
-	Insecure           bool                `json:"insecure,omitempty"`
+	TokenID  string `json:"token_id,omitempty"`
+	Insecure bool   `json:"insecure,omitempty"`
+	// InsecureHTTP allows http:// endpoints — basic-auth over plaintext, opt-in only.
+	InsecureHTTP       bool                `json:"insecure_http,omitempty"`
 	CPUType            string              `json:"cpu_type,omitempty"`
 	AdditionalNetworks []AdditionalNetwork `json:"additional_networks,omitempty"`
 	NUMAEnabled        bool                `json:"numa_enabled,omitempty"`

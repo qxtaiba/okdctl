@@ -231,10 +231,14 @@ func validateProxmoxConfig(proxmox *ProxmoxConfig, result *ValidationResult) {
 		return
 	}
 
-	if proxmox.Host == "" {
+	switch {
+	case proxmox.Host == "":
 		result.AddError(FieldProxmoxHost, "proxmox host is required")
-	} else {
-		host := proxmox.Host
+	case strings.HasPrefix(proxmox.Host, "http://") && !proxmox.InsecureHTTP:
+		result.AddError(FieldProxmoxHost,
+			"http:// endpoint transmits credentials in plaintext; set provider.proxmox.insecure_http: true to opt in")
+	default:
+		host := strings.TrimPrefix(proxmox.Host, "http://")
 		if strings.Contains(host, ":") {
 			h, _, err := net.SplitHostPort(host)
 			if err != nil {
