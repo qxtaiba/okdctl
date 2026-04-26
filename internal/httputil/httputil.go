@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -22,7 +23,7 @@ const (
 
 // New returns an *http.Client configured with the given request timeout.
 func New(timeout time.Duration) *http.Client {
-	return &http.Client{Timeout: timeout}
+	return &http.Client{Timeout: timeout, CheckRedirect: capRedirects}
 }
 
 // NewInsecure returns a client that skips TLS verification. Use only for
@@ -31,7 +32,8 @@ func New(timeout time.Duration) *http.Client {
 // the VIP appears in its SANs).
 func NewInsecure(timeout time.Duration) *http.Client {
 	return &http.Client{
-		Timeout: timeout,
+		Timeout:       timeout,
+		CheckRedirect: capRedirects,
 		Transport: &http.Transport{
 			TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec // bootstrap self-signed cert; see doc
 		},
@@ -43,7 +45,8 @@ func NewInsecure(timeout time.Duration) *http.Client {
 // roots in pool or the request fails.
 func NewWithCA(pool *x509.CertPool, timeout time.Duration) *http.Client {
 	return &http.Client{
-		Timeout: timeout,
+		Timeout:       timeout,
+		CheckRedirect: capRedirects,
 		Transport: &http.Transport{
 			TLSClientConfig: &tls.Config{
 				RootCAs:    pool,
@@ -51,6 +54,24 @@ func NewWithCA(pool *x509.CertPool, timeout time.Duration) *http.Client {
 			},
 		},
 	}
+}
+
+// capRedirects is the CheckRedirect policy installed on every client this
+// package returns. It caps at 5 redirects and refuses to follow any
+// cross-host redirect that carries an Authorization header — Go's stdlib
+// strips Authorization on cross-host redirects for headers it manages
+// internally, but a header set explicitly via req.Header.Set survives,
+// which would silently leak a bearer token to an attacker-controlled host.
+// Five redirects is half the Go default of ten and matches hardened client
+// guidance; legitimate CDN chains rarely exceed two hops.
+func capRedirects(req *http.Request, via []*http.Request) error {
+	if len(via) >= 5 {
+		return errors.New("httputil: stopped after 5 redirects")
+	}
+	if req.URL.Host != via[0].URL.Host && req.Header.Get("Authorization") != "" {
+		return errors.New("httputil: refusing cross-host redirect with Authorization header")
+	}
+	return nil
 }
 
 // kubeconfigCA is the minimal kubeconfig shape needed to extract the cluster CA.

@@ -11,6 +11,7 @@ import (
 	"encoding/pem"
 	"math/big"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"testing"
@@ -24,6 +25,9 @@ func TestNew(t *testing.T) {
 	}
 	if c.Transport != nil {
 		t.Errorf("New() should leave Transport nil for default (verified TLS)")
+	}
+	if c.CheckRedirect == nil {
+		t.Error("CheckRedirect not installed; redirect cap policy is missing")
 	}
 }
 
@@ -57,6 +61,10 @@ func TestNewInsecure(t *testing.T) {
 	// Minor: ensure the tls config type is what we expect (guards against a
 	// future refactor that swaps to a different package).
 	var _ *tls.Config = tr.TLSClientConfig
+
+	if c.CheckRedirect == nil {
+		t.Error("CheckRedirect not installed on NewInsecure client")
+	}
 }
 
 func TestNewWithCA(t *testing.T) {
@@ -81,6 +89,71 @@ func TestNewWithCA(t *testing.T) {
 	if tr.TLSClientConfig.MinVersion != tls.VersionTLS12 {
 		t.Errorf("MinVersion = %d, want TLS 1.2 (%d)", tr.TLSClientConfig.MinVersion, tls.VersionTLS12)
 	}
+	if c.CheckRedirect == nil {
+		t.Error("CheckRedirect not installed on NewWithCA client")
+	}
+}
+
+func TestCapRedirects(t *testing.T) {
+	mkReq := func(host, auth string) *http.Request {
+		return &http.Request{
+			URL:    &url.URL{Scheme: "https", Host: host, Path: "/x"},
+			Header: http.Header{"Authorization": []string{auth}},
+		}
+	}
+	mkVia := func(n int, host string) []*http.Request {
+		via := make([]*http.Request, n)
+		for i := range via {
+			via[i] = &http.Request{URL: &url.URL{Scheme: "https", Host: host, Path: "/x"}}
+		}
+		return via
+	}
+
+	t.Run("same host below cap is allowed", func(t *testing.T) {
+		req := mkReq("example.com", "Bearer x")
+		if err := capRedirects(req, mkVia(1, "example.com")); err != nil {
+			t.Errorf("expected nil, got %v", err)
+		}
+	})
+
+	t.Run("cross host without auth is allowed", func(t *testing.T) {
+		req := mkReq("other.com", "")
+		if err := capRedirects(req, mkVia(1, "example.com")); err != nil {
+			t.Errorf("expected nil, got %v", err)
+		}
+	})
+
+	t.Run("cross host with auth is refused", func(t *testing.T) {
+		req := mkReq("other.com", "Bearer x")
+		err := capRedirects(req, mkVia(1, "example.com"))
+		if err == nil {
+			t.Fatal("expected refusal, got nil")
+		}
+	})
+
+	t.Run("five redirects hits cap", func(t *testing.T) {
+		req := mkReq("example.com", "")
+		err := capRedirects(req, mkVia(5, "example.com"))
+		if err == nil {
+			t.Fatal("expected cap error, got nil")
+		}
+	})
+
+	t.Run("four redirects below cap is allowed", func(t *testing.T) {
+		req := mkReq("example.com", "")
+		if err := capRedirects(req, mkVia(4, "example.com")); err != nil {
+			t.Errorf("expected nil, got %v", err)
+		}
+	})
+
+	t.Run("cap precedes cross-host check", func(t *testing.T) {
+		// At cap with cross-host + auth, the cap fires first.
+		req := mkReq("other.com", "Bearer x")
+		err := capRedirects(req, mkVia(5, "example.com"))
+		if err == nil {
+			t.Fatal("expected cap error, got nil")
+		}
+	})
 }
 
 func TestKubeconfigCAPool(t *testing.T) {
