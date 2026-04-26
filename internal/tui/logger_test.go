@@ -17,7 +17,7 @@ func TestStderrSlog_RedactsSecrets(t *testing.T) {
 	// ConfigureLoggers only touches stdoutLogger/stderrLogger's output;
 	// stderrSlog is already built from stderrLogger pointer so its output
 	// follows SetOutput. Rebuild defensively to be explicit.
-	stderrSlog = buildStderrSlog()
+	stderrSlog.Store(buildStderrSlog())
 
 	cases := []struct {
 		key   string
@@ -50,7 +50,7 @@ func TestStderrSlog_NonSecretsPassThrough(t *testing.T) {
 	if err := ConfigureLoggers("debug", "text", &buf, &buf, false); err != nil {
 		t.Fatal(err)
 	}
-	stderrSlog = buildStderrSlog()
+	stderrSlog.Store(buildStderrSlog())
 
 	buf.Reset()
 	Info("test message", LF("cluster", "prod"), LF("ip", "10.0.0.1"))
@@ -68,7 +68,7 @@ func TestSetRunID_RefreshesRedactionWrapper(t *testing.T) {
 	if err := ConfigureLoggers("debug", "text", &buf, &buf, false); err != nil {
 		t.Fatal(err)
 	}
-	stderrSlog = buildStderrSlog()
+	stderrSlog.Store(buildStderrSlog())
 
 	SetRunID("run-42")
 	buf.Reset()
