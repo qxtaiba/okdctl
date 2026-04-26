@@ -113,7 +113,10 @@ func (p *Phase) MonitorInstallation(ctx context.Context, clusterDir string, opts
 		case err := <-installDone:
 			if err != nil {
 				if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-					return fmt.Errorf("installation timed out after %v: %w", opts.InstallTimeout, ctx.Err())
+					return &errtypes.ClusterError{
+						Msg: fmt.Sprintf("installation timed out after %v", opts.InstallTimeout),
+						Err: ctx.Err(),
+					}
 				}
 				if errors.Is(ctx.Err(), context.Canceled) {
 					return fmt.Errorf("installation cancelled: %w", ctx.Err())
@@ -166,7 +169,10 @@ func (p *Phase) MonitorInstallation(ctx context.Context, clusterDir string, opts
 			if errors.Is(ctx.Err(), context.Canceled) {
 				return fmt.Errorf("installation cancelled: %w", ctx.Err())
 			}
-			return fmt.Errorf("installation timed out after %v: %w", opts.InstallTimeout, ctx.Err())
+			return &errtypes.ClusterError{
+				Msg: fmt.Sprintf("installation timed out after %v", opts.InstallTimeout),
+				Err: ctx.Err(),
+			}
 		}
 	}
 }
