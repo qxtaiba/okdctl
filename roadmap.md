@@ -1664,7 +1664,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sec:f55b9c27:input-path-not-prefix-checked` — input path not prefix checked
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-f55b9c27-envfile-symlink-guard  
+**Status:** in review — PR #151  
 **Severity:** minor  
 **Cluster:** input-validation  
 **Evidence:** `internal/credentials/envfile.go:48-85`  
@@ -1674,7 +1674,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sec:35abd54e:cred-struct-bare-format` — cred struct bare format
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-35abd54e-cred-redacted  
+**Status:** in review — PR #150  
 **Severity:** minor  
 **Cluster:** credentials  
 **Evidence:** `internal/credentials/proxmox.go:92-107`  
@@ -1844,7 +1844,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sec:1e8ffb91:tls-insecure-vip-name` — tls insecure vip name
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-1e8ffb91-vip-name  
+**Status:** in review — PR #152  
 **Severity:** suggestion  
 **Cluster:** tls-network  
 **Evidence:** `internal/distribution/okd/postinstall/verify.go:182-211`  
