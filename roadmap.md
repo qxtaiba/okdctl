@@ -1769,7 +1769,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sec:29293401:toctou-chmod` — toctou chmod
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-29293401-haproxy-chmod  
 **Severity:** minor  
 **Cluster:** file-toctou  
 **Evidence:** `internal/distribution/okd/setup/haproxy.go:116-134`  
@@ -1809,7 +1809,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sec:cfcdee2d:tls-no-redirect-cap` — tls no redirect cap
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-cfcdee2d-httputil-redirect-cap  
 **Severity:** minor  
 **Cluster:** tls-network  
 **Evidence:** `internal/httputil/httputil.go:17-32`  
@@ -1819,7 +1819,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sec:881d089e:input-path-not-prefix-checked` — input path not prefix checked
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-881d089e-runlock-nofollow  
 **Severity:** minor  
 **Cluster:** file-toctou  
 **Evidence:** `internal/runlock/runlock.go:29-47`  
