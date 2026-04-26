@@ -66,9 +66,6 @@ source <(okdctl completion zsh)
 
 # fish
 okdctl completion fish > ~/.config/fish/completions/okdctl.fish
-
-# powershell — add to $PROFILE for persistence
-okdctl completion powershell | Out-String | Invoke-Expression
 ```
 
 Don't run `okdctl` as root. It refuses to start under `sudo` and
