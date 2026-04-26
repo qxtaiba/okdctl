@@ -1602,36 +1602,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Extract a typed `pvesh.Run(ctx, p, subcommand, argv...)` helper that builds the remote command from validated atoms (the validateProxmoxName atoms + the static subcommand string) and invokes ssh with `argv` mode. Then no caller is allowed to fmt.Sprintf into a remote shell string. Each existing call becomes `pvesh.Run(ctx, p, "get", "/nodes/"+p.Node+"/qemu")`. The audit-subprocess skill has the per-site catalog; this finding cross-references to those.  
 **Effort:** hours
 
-##### `sec:ab9b764a:cred-as-string` — cred as string
-
-**Status:** in review — PR #132  
-**Severity:** major  
-**Cluster:** credentials  
-**Evidence:** `internal/distribution/okd/setup/ignition.go:39-83`  
-**Problem:** GenerateInstallConfig reads the pull-secret JSON via os.ReadFile, then trims it via strings.TrimSpace — this materialises the secret as an immutable Go string (`strings.TrimSpace(string(pullSecret))`) and passes it through the templating pipeline as `data.PullSecret string`. The templated install-config.yaml is written 0o600 + .backup, but the in-memory string survives until GC and cannot be wiped.  
-**Fix:** Pass templated content through []byte all the way: change templates.InstallConfigData.PullSecret to []byte, render via text/template's struct-method that writes the bytes (or use bytes.TrimSpace before string-conversion, then zero the original buffer post-render). Lower-effort alternative: explicitly zero `pullSecret` after AtomicWrite returns. The .backup copy is secret too — same lifecycle applies.  
-**Effort:** hours
-
-##### `sec:5013fea6:dl-no-checksum` — dl no checksum
-
-**Status:** in review — PR #134  
-**Severity:** major  
-**Cluster:** tls-network  
-**Evidence:** `internal/distribution/okd/setup/release_extract.go:27-76`  
-**Problem:** bootstrapOC fetches `oc.tar.gz` over HTTPS from mirror.openshift.com with no checksum/signature verification — the binary is then exec'd as root (under the sudo re-exec deploy model) and used to extract every other release tool. A compromised mirror or a man-in-the-middle that defeats TLS gives arbitrary local-privileged code execution.  
-**Fix:** Pin a known-good cosign-signed oc release (or fetch the SHA256SUMS published by mirror.openshift.com alongside the tarball, e.g. https://mirror.openshift.com/.../sha256sum.txt) and pass it as ExpectedChecksum. Better: switch to the OKD release's own oc — pull the cluster-version-specific oc binary from quay.io/okd/scos-release via the existing extractReleaseImage path, and only use a tiny purpose-built bootstrap binary for that.  
-**Effort:** hours
-
-##### `sec:8ea706f6:dl-helm-sops-no-checksum` — dl helm sops no checksum
-
-**Status:** in review — PR #133  
-**Severity:** major  
-**Cluster:** tls-network  
-**Evidence:** `internal/distribution/okd/setup/tools.go:29-35`  
-**Problem:** helm and sops are version-pinned (helmVersion = v3.17.3, sopsVersion = v3.9.4) but not checksum-pinned. Helm publishes signed helm-X.Y.Z-linux-arch.tar.gz.asc + sha256sum.txt for every release. Sops publishes .sig files signed by the cosign trusted-root chain. Neither is verified — the binaries land in /usr/local/bin without integrity check.  
-**Fix:** For helm, pin the SHA256 alongside the version (helm publishes it at https://get.helm.sh/helm-vX.Y.Z-linux-arch.tar.gz.sha256sum). For sops, fetch the .sig file and verify with the cosign keyless verification (the okdctl install.sh already does this for okdctl itself).  
-**Effort:** hours
-
 ##### `sec:8ea706f6:dl-no-checksum` — dl no checksum
 
 **Status:** not started  
@@ -3797,6 +3767,110 @@ but link evidence.
   follow-up chmod read like a guard rail but actually opened a
   symlink-redirect hole that the canonical helper had already closed.
 
+
+- **`err:ae5b624c:ctx-timeout-loses-cluster-identity`** — done
+  2026-04-26 — PR #137, merge commit `78e7fb5`. Tier H major.
+  Wrapped both `MonitorInstallation` `DeadlineExceeded` paths (the
+  `installDone` branch and the `ctx.Done` reap fallthrough) in
+  `*errtypes.ClusterError{Msg, Err: ctx.Err()}`, mirroring
+  `WaitForBootstrap`'s pattern in the same file. The Canceled
+  branches stay bare `fmt.Errorf` so a SIGINT still resolves cleanly.
+  `ctx.Err()` rides through `ClusterError.Unwrap`, so any caller's
+  `errors.Is(err, context.DeadlineExceeded)` still matches.
+  **Caveat / follow-up needed:** the audit's stated user-visible
+  goal (exit 4 instead of 130 on install-budget exhaustion) is not
+  yet achieved — `internal/cli/root.go:111` maps
+  `errors.Is(err, context.DeadlineExceeded)` → 130 unconditionally,
+  without checking `caughtSig`. This PR aligns the error type;
+  gating the exit-code mapping on `caughtSig` is the missing
+  follow-up worth filing as a separate roadmap item.
+  **Postmortem lesson:** when a planner finds the audit's premise
+  about caller behavior is wrong, document the partial-fix scope in
+  the PR body rather than expanding into the caller — keeps PR
+  scope tight and surfaces the follow-up cleanly.
+
+- **`state:62cb8a95:destroy-init-without-state`** — done 2026-04-26
+  — PR #136, merge commit `9b77906`. Tier H minor. Added
+  `stateLockHint(dir string) error` — stats
+  `<dir>/.terraform.tfstate.lock.info` and returns a typed
+  `*errtypes.ConfigError` naming the lock path and dir when present.
+  Called from `destroyInfrastructure` after `tf.Init` failure, so a
+  stale-lock signal becomes an actionable message instead of a
+  generic `ClusterError`. Never auto-unlocks. Two unit tests cover
+  both branches.
+  **Deviation from audit:** the suggested message referenced an
+  okdctl `--force-unlock` flag that does not exist; the
+  implementation references only the real `terraform force-unlock`
+  CLI command. If a future okdctl-side flag lands, the message can
+  incorporate it.
+
+- **`state:368b892b:cleanup-tfstate-explicit-only-implicit`** —
+  done 2026-04-26 — PR #135, merge commit `5a417c5`. Tier H minor.
+  Hoisted the local `filesToRemove` slice in `cleanupTerraformEnv`
+  to a package-level unexported `terraformFilesToRemove` var. Added
+  `TestTerraformFilesToRemove_DoesNotIncludeTfstate` whose name and
+  `t.Fatal` message both spell out the destroy-recoverability
+  invariant — a future edit that adds `terraform.tfstate` to the
+  slice now fails at test time instead of silently breaking destroy.
+  Var stays unexported per MEMORY.md §scaffolding (test lives in
+  same package). When `state:4c092fce:tf-state-backup-removed-on-success`
+  lands, the assertion can extend to cover `.backup`.
+
+- **`state:b38ec9cc:install-workers-targets-omitted`** — done
+  2026-04-26 — PR #131, merge commit `d5b0eb9`. Tier H minor. Added
+  `Targets: ["module.okd_cluster.proxmox_virtual_environment_vm.worker"]`
+  to `StartWorkerVMs`'s `ApplyOptions`, mirroring the precaution
+  already in `postinstall/bootstrap.go`. A stray hand-edit elsewhere
+  in tfvars no longer rides along with the worker-start apply.
+  Terraform's count-resource targeting expands an unindexed
+  reference to all instances, so all workers still start. Four-line
+  change with a comment block explaining the WHY.
+
+- **`sub:0934cf1b:duplicate-runcaptured`** — done 2026-04-26 —
+  PR #130, merge commit `05e97d1`. Tier H minor. The private
+  `platform.runCaptured` was a verbatim structural duplicate of
+  `system.RunCaptured`. Deleted it; routed the four call sites
+  (`Install`, `Remove`, two `AddRepo` paths) through the canonical
+  `system.RunCaptured`, matching every other caller in the repo.
+  Trade-off: error prefix narrows from `dnf install: …` to
+  `dnf: …` — the operation context is preserved via the surrounding
+  `fmt.Errorf` chain at each caller; no other `system.RunCaptured`
+  caller in the repo embeds args[0] either.
+  **Postmortem lesson:** the planner initially proposed dropping
+  the `bytes` import along with `runCaptured`, but `bytes.Contains`
+  was still in use by the Debian `postCheck`. A pre-apply `grep`
+  for every import-removal candidate would have caught this — caught
+  during application instead. Add to the import-removal checklist.
+
+- **`iac:e076e43c:curl-no-timeout`** — done 2026-04-26 — PR #129
+  (bundled with `curl-no-tls-pin` and `gh-api-unauth-rate-limit`),
+  merge commit `d9af1bf`. Tier H minor. Added `curl_safe()` wrapper
+  in `scripts/install.sh` that pins
+  `--connect-timeout 10 --max-time 120 --retry 2 --retry-connrefused`.
+  The four asset downloads (archive + SHA256SUMS + sig + pem) now
+  route through it; the GitHub API release-tag lookup keeps inline
+  flags so it can carry a shorter 30s budget alongside the optional
+  bearer header. Closes the indefinite-stall window on hung CDN or
+  sigstore endpoints.
+
+- **`iac:e076e43c:curl-no-tls-pin`** — done 2026-04-26 — PR #129
+  (bundled with `curl-no-timeout` and `gh-api-unauth-rate-limit`),
+  merge commit `d9af1bf`. Tier H suggestion. `curl_safe()` includes
+  `--proto '=https'` and `--tlsv1.2`; the inline API call carries
+  the same flags directly. All five active curl call sites in
+  `scripts/install.sh` now enforce HTTPS-only and TLS 1.2 floor.
+  Defense-in-depth on a sudo-tier installer.
+
+- **`iac:e076e43c:gh-api-unauth-rate-limit`** — done 2026-04-26 —
+  PR #129 (bundled with `curl-no-timeout` and `curl-no-tls-pin`),
+  merge commit `d9af1bf`. Tier H suggestion. When `GITHUB_TOKEN`
+  is set in the environment, the release-tag lookup now sends
+  `Authorization: Bearer $GITHUB_TOKEN` (via a bash array so the
+  header argument is only added when the variable is non-empty,
+  shellcheck-safe). Lifts the GitHub API rate cap from 60 to 5 000
+  req/hr/IP — relevant on shared CI runners. Improved `die` message
+  hints at `VERSION=` pinning or `GITHUB_TOKEN` on lookup failure.
+  `GITHUB_TOKEN` is documented in the script header comment.
 
 - **`sec:35abd54e:input-url-scheme-not-checked`** — done 2026-04-26 —
   PR #128, merge commit `b1bf4e4`. Tier H major. Added
