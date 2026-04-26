@@ -9,6 +9,10 @@ import (
 // a static-IP range without an explicit override.
 const DefaultVIPLastOctet = 10
 
+// DefaultNetmask is the /24 subnet mask applied when no explicit netmask is
+// configured — matches the typical homelab /24 and the Proxmox default bridge.
+const DefaultNetmask = "255.255.255.0"
+
 // CIDRToNetmask converts an IPv4 CIDR like "192.168.1.0/24" to its dotted
 // netmask form "255.255.255.0" as consumed by HAProxy and dnsmasq templates.
 // IPv6 CIDRs are rejected because downstream templates are IPv4-only.

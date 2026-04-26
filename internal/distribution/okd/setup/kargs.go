@@ -5,6 +5,7 @@ import (
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
+	"github.com/qxtaiba/okdctl/internal/netutil"
 )
 
 // LiveKargsParams carries the per-node values embedded as kernel arguments
@@ -48,7 +49,7 @@ func ExtractNetworkConfig(cfg *config.Config) (gateway, netmask, dns, iface stri
 
 	netmask = staticCfg.Netmask
 	if netmask == "" {
-		netmask = "255.255.255.0"
+		netmask = netutil.DefaultNetmask
 	}
 
 	dns = staticCfg.DNS
