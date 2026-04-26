@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"text/tabwriter"
 
@@ -221,16 +222,16 @@ func printClusterStatus(cmd *cobra.Command, st clusterStatus) error {
 		}
 	}
 	sb.section("nodes")
-	sb.kv("masters", fmt.Sprintf("%d", masters))
-	sb.kv("workers", fmt.Sprintf("%d", workers))
-	sb.kv("total", fmt.Sprintf("%d", len(st.Nodes)))
+	sb.kv("masters", strconv.Itoa(masters))
+	sb.kv("workers", strconv.Itoa(workers))
+	sb.kv("total", strconv.Itoa(len(st.Nodes)))
 	sb.newline()
 
 	sb.section("cluster operators")
 	if st.DegradedOperators == 0 {
 		sb.kv("degraded", "0 (all healthy)")
 	} else {
-		sb.kv("degraded", fmt.Sprintf("%d", st.DegradedOperators))
+		sb.kv("degraded", strconv.Itoa(st.DegradedOperators))
 	}
 	sb.newline()
 

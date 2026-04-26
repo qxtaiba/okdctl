@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"os/exec"
 	"runtime"
+	"strconv"
 	"strings"
 
 	"github.com/qxtaiba/okdctl/internal/system"
@@ -207,7 +208,7 @@ func modifyPort(ctx context.Context, backend Backend, port Port, permanent bool,
 		}
 		args := []string{
 			"iptables", chainAction, "INPUT", "-p", port.Protocol,
-			"--dport", fmt.Sprintf("%d", port.Number), "-j", "ACCEPT",
+			"--dport", strconv.Itoa(port.Number), "-j", "ACCEPT",
 		}
 		// Port/protocol validated by validatePort above; argv slice (no shell).
 		return system.RunCaptured(ctx, args[0], args[1:]...)
