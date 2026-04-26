@@ -64,7 +64,7 @@ func (m *Manager) Install(ctx context.Context, packages []string, logger *slog.L
 	}
 	logger.Info(fmt.Sprintf("packages: installing %s", strings.Join(packages, ", ")))
 	args := append([]string{"install", "-y"}, packages...)
-	return runCaptured(ctx, m.pkgCmd, args)
+	return system.RunCaptured(ctx, m.pkgCmd, args...)
 }
 
 // Remove uninstalls only the packages in packages that are currently
@@ -87,7 +87,7 @@ func (m *Manager) Remove(ctx context.Context, packages []string, _ *slog.Logger)
 		return nil
 	}
 	args := append([]string{"remove", "-y"}, installed...)
-	return runCaptured(ctx, m.pkgCmd, args)
+	return system.RunCaptured(ctx, m.pkgCmd, args...)
 }
 
 // IsInstalled reports whether pkg is present via the backend's query
@@ -118,7 +118,7 @@ func (m *Manager) AddRepo(ctx context.Context, name, url string, logger *slog.Lo
 	logger.Info(fmt.Sprintf("packages: adding repository %s", name))
 
 	if m.family == FamilyRHEL {
-		return runCaptured(ctx, m.pkgCmd, []string{"config-manager", "--add-repo", url})
+		return system.RunCaptured(ctx, m.pkgCmd, "config-manager", "--add-repo", url)
 	}
 
 	arch, err := dpkgArch(ctx)
@@ -141,25 +141,7 @@ func (m *Manager) AddRepo(ctx context.Context, name, url string, logger *slog.Lo
 	if err := system.CopyFile(tmpPath, listPath); err != nil {
 		return fmt.Errorf("failed to install repo list: %w", err)
 	}
-	return runCaptured(ctx, m.pkgCmd, []string{"update"})
-}
-
-// runCaptured runs a subprocess capturing stderr into the returned error so
-// callers (setup, install flows) see the upstream apt/dnf message instead of
-// a bare exit-code wrap. Stdout is discarded — package managers' stdout is
-// progress text, not useful in an error path.
-func runCaptured(ctx context.Context, bin string, args []string) error {
-	cmd := exec.CommandContext(ctx, bin, args...)
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-	if err := cmd.Run(); err != nil {
-		msg := strings.TrimSpace(stderr.String())
-		if msg == "" {
-			return fmt.Errorf("%s %s: %w", bin, args[0], err)
-		}
-		return fmt.Errorf("%s %s: %w: %s", bin, args[0], err, msg)
-	}
-	return nil
+	return system.RunCaptured(ctx, m.pkgCmd, "update")
 }
 
 func dpkgArch(ctx context.Context) (string, error) {
