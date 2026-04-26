@@ -40,8 +40,8 @@ func BuildDestKargs(params *LiveKargsParams) []string {
 }
 
 // ExtractNetworkConfig returns the networking kargs seed values derived
-// from cfg, applying the 255.255.255.0 / bastion-IP / "ens18" defaults
-// when unset.
+// from cfg, applying netutil defaults for netmask/interface and the
+// bastion IP for DNS when unset.
 func ExtractNetworkConfig(cfg *config.Config) (gateway, netmask, dns, iface string) {
 	staticCfg := cfg.Networking.StaticIP
 
@@ -59,7 +59,7 @@ func ExtractNetworkConfig(cfg *config.Config) (gateway, netmask, dns, iface stri
 
 	iface = staticCfg.Interface
 	if iface == "" {
-		iface = "ens18"
+		iface = netutil.DefaultProxmoxIface
 	}
 
 	return gateway, netmask, dns, iface

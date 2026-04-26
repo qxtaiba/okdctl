@@ -13,6 +13,10 @@ const DefaultVIPLastOctet = 10
 // configured — matches the typical homelab /24 and the Proxmox default bridge.
 const DefaultNetmask = "255.255.255.0"
 
+// DefaultProxmoxIface is the virtio NIC name Proxmox assigns by default.
+// Changing it requires updating the NetworkManager connection name in tandem.
+const DefaultProxmoxIface = "ens18"
+
 // CIDRToNetmask converts an IPv4 CIDR like "192.168.1.0/24" to its dotted
 // netmask form "255.255.255.0" as consumed by HAProxy and dnsmasq templates.
 // IPv6 CIDRs are rejected because downstream templates are IPv4-only.
