@@ -2683,7 +2683,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `ux:b3356305:readme-flag-drift-deploy-options` — readme flag drift deploy options
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/ux-b3356305-readme-flag-drift  
+**Status:** in review — PR #141  
 **Severity:** minor  
 **Cluster:** help-text  
 **Evidence:** `README.md:81-85`  
@@ -2997,7 +2997,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `mod:bb81a5b0:use-range-int` — use range int
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/mod-bb81a5b0-range-int  
+**Status:** in review — PR #140  
 **Severity:** suggestion  
 **Cluster:** range-idioms  
 **Evidence:** `internal/executor/ringbuf.go:58-60`  
@@ -3139,7 +3139,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `smell:92553fff:sprintf-d-instead-of-itoa` — sprintf d instead of itoa
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/smell-92553fff-sprintf-itoa  
+**Status:** in review — PR #143  
 **Severity:** suggestion  
 **Cluster:** magic-strings  
 **Evidence:** `internal/cli/status.go:224-233`  
