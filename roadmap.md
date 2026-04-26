@@ -2570,7 +2570,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `ux:8d8faa80:completion-powershell-on-linux-only-tool` — completion powershell on linux only tool
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/ux-8d8faa80-drop-powershell  
+**Status:** in review — PR #164  
 **Severity:** suggestion  
 **Cluster:** verb-noun  
 **Evidence:** `internal/cli/completion.go:11-31`  
@@ -2672,7 +2672,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `obs:48688e63:apply-failure-no-err-attr` — apply failure no err attr
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/obs-48688e63-apply-err-attr  
+**Status:** in review — PR #165  
 **Severity:** minor  
 **Cluster:** field-stability  
 **Evidence:** `internal/infrastructure/proxmox/proxmox.go:164-164`  
@@ -2712,7 +2712,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `obs:c287d5c0:cleanup-warning-key-vague` — cleanup warning key vague
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/obs-c287d5c0-cleanup-warn-key  
+**Status:** in review — PR #166  
 **Severity:** suggestion  
 **Cluster:** field-stability  
 **Evidence:** `internal/distribution/okd/okd.go:122-122`  
@@ -2734,7 +2734,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `mod:f55b9c27:use-builtin-clear` — use builtin clear
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/mod-f55b9c27-clear-envfile  
+**Status:** in review — PR #159  
 **Severity:** minor  
 **Cluster:** any-interface-builtins  
 **Evidence:** `internal/credentials/envfile.go:81-83`  
@@ -2744,7 +2744,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `mod:35abd54e:use-builtin-clear` — use builtin clear
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/mod-35abd54e-clear-proxmox-creds  
+**Status:** in review — PR #160  
 **Severity:** minor  
 **Cluster:** any-interface-builtins  
 **Evidence:** `internal/credentials/proxmox.go:82-89`  
@@ -2764,7 +2764,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `mod:7b2829bb:use-slices-containsfunc` — use slices containsfunc
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/mod-7b2829bb-slices-containsfunc  
+**Status:** in review — PR #161  
 **Severity:** suggestion  
 **Cluster:** slices-maps  
 **Evidence:** `internal/executor/executor.go:132-142`  
@@ -2846,7 +2846,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `smell:2f70d7df:magic-default-port` — magic default port
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/smell-2f70d7df-ignition-port  
+**Status:** in review — PR #162  
 **Severity:** minor  
 **Cluster:** magic-strings  
 **Evidence:** `internal/distribution/okd/setup/kargs.go:73-73`  
@@ -2876,7 +2876,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `smell:8aa632a6:duplicate-platform-string` — duplicate platform string
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/smell-8aa632a6-platform-string  
+**Status:** in review — PR #163  
 **Severity:** suggestion  
 **Cluster:** helper-package-no-value  
 **Evidence:** `internal/cli/debug_bundle.go:144-144`  
