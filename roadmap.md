@@ -2103,7 +2103,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `state:368b892b:cleanup-tfstate-explicit-only-implicit` — cleanup tfstate explicit only implicit
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/state-368b892b-tfstate-invariant  
+**Status:** in review — PR #135  
 **Severity:** minor  
 **Cluster:** state-schema-evolution — seam→audit-tests  
 **Evidence:** `internal/distribution/okd/cleanup/infra.go:47-74`  
@@ -2113,7 +2113,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `state:62cb8a95:destroy-init-without-state` — destroy init without state
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/state-62cb8a95-locked-state-hint  
+**Status:** in review — PR #136  
 **Severity:** minor  
 **Cluster:** tf-state-atomicity  
 **Evidence:** `internal/distribution/okd/destroy/helpers.go:26-33`  
@@ -2277,7 +2277,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `err:ae5b624c:ctx-timeout-loses-cluster-identity` — ctx timeout loses cluster identity
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/err-ae5b624c-monitor-typed-timeout  
+**Status:** in review — PR #137  
 **Severity:** major  
 **Cluster:** cancellation-identity  
 **Evidence:** `internal/distribution/okd/install/monitor.go:113-121`  
