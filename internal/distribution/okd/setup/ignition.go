@@ -191,6 +191,9 @@ func (p *Phase) ValidateIgnitionFiles(ctx context.Context, clusterDir string) er
 	minSize := int64(1024) // ignition files are typically much larger
 
 	for _, file := range requiredFiles {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		path := filepath.Join(clusterDir, file)
 
 		info, err := os.Stat(path)
