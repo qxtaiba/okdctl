@@ -21,15 +21,19 @@ import (
 // completes. 10 minutes leaves margin for the realistic worst case.
 const ocExtractTimeout = 10 * time.Minute
 
-// bootstrapOCURL is the mirror.openshift.com path for the universal oc client
-// used to run `oc adm release extract`. No upstream checksum is published for
-// this URL; post-extraction binary-exists verification is the integrity gate.
-const bootstrapOCURL = "https://mirror.openshift.com/pub/openshift-v4/clients/oc/latest/linux/oc.tar.gz"
+// bootstrapOCVersion pins the okd-scos GitHub release used to fetch a
+// known-good oc binary for `oc adm release extract`. Independent of the
+// user-configured cluster OKD version — the cluster oc is later swapped
+// in from the release image. Bumping this requires a release whose
+// sha256sum.txt and openshift-client-linux-<v>.tar.gz are published.
+const bootstrapOCVersion = "4.18.0-okd-scos.8"
 
-// bootstrapOC ensures oc is available in downloadDir. If a non-empty cached
-// binary is present it is reused; an empty or missing file falls through to
-// re-download. No upstream checksum is published for the bootstrap-oc URL;
-// binary-exists+nonzero-size is the integrity gate.
+// bootstrapOC ensures oc is available in downloadDir. If a non-empty
+// cached binary is present it is reused; otherwise the openshift-client
+// tarball is fetched from the pinned okd-scos GitHub release and
+// verified against the SHA-256 published alongside it. A failure to
+// retrieve or match the checksum is a hard error — there is no silent
+// fallback to an unverified binary.
 func (p *Phase) bootstrapOC(ctx context.Context, downloadDir string) (string, error) {
 	ocPath := filepath.Join(downloadDir, "oc")
 	if fi, statErr := os.Stat(ocPath); statErr == nil && fi.Size() > 0 {
@@ -37,15 +41,26 @@ func (p *Phase) bootstrapOC(ctx context.Context, downloadDir string) (string, er
 		return ocPath, nil
 	}
 
-	archivePath := filepath.Join(downloadDir, "oc.tar.gz")
-	p.Log.Info("tools: fetching bootstrap oc", "url", bootstrapOCURL)
+	assetName := "openshift-client-linux-" + bootstrapOCVersion + ".tar.gz"
+	baseURL := "https://github.com/okd-project/okd-scos/releases/download/" + bootstrapOCVersion
+	sumsURL := baseURL + "/sha256sum.txt"
+	tarballURL := baseURL + "/" + assetName
+
+	checksum, err := download.FetchChecksum(ctx, sumsURL, assetName)
+	if err != nil {
+		return "", &errtypes.NetworkError{Msg: "failed to fetch bootstrap oc checksum", Err: err}
+	}
+
+	archivePath := filepath.Join(downloadDir, assetName)
+	p.Log.Info("tools: fetching bootstrap oc", "url", tarballURL)
 
 	if err := download.Download(ctx, &download.Options{
-		URL:         bootstrapOCURL,
-		OutputPath:  archivePath,
-		Description: "bootstrap-oc",
-		Timeout:     3 * time.Minute,
-		Logger:      p.Log,
+		URL:              tarballURL,
+		OutputPath:       archivePath,
+		ExpectedChecksum: checksum,
+		Description:      "bootstrap-oc",
+		Timeout:          3 * time.Minute,
+		Logger:           p.Log,
 	}); err != nil {
 		return "", &errtypes.NetworkError{Msg: "failed to download bootstrap oc", Err: err}
 	}
