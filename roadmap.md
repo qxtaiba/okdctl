@@ -312,7 +312,7 @@ cert lifecycle, kargs templating, wizard.
 
 #### E4 — SSH/SCP host-key pinning for Proxmox
 
-**Status:** in review — PR #142
+**Status:** not started (first attempt closed; second attempt PR #142 closed by maintainer call — see postmortem)
 **Audit:** `sec:27088eab:ssh-accept-new-proxmox`,
 `sec:eb479d86:scp-accept-new-proxmox`
 **Evidence:** `internal/distribution/okd/phase/ssh.go:27`,
@@ -1642,16 +1642,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Refuse repository URLs that contain `://user:password@` userinfo at validate-time (already partially constrained by ValidateSettings). Document that flux SSH-key auth is the only supported credential channel. If basic-auth must be supported, plumb it through a Kubernetes Secret (which BuildOpaqueSecret already supports) instead of helm --set.  
 **Effort:** hours
 
-##### `sec:d9f7733e:input-path-not-prefix-checked` — input path not prefix checked
-
-**Status:** in review — PR #138  
-**Severity:** minor  
-**Cluster:** file-toctou  
-**Evidence:** `internal/cli/debug_bundle.go:83-92`  
-**Problem:** runDebugBundle opens outPath (user-supplied via -o flag, default `okdctl-debug-<ts>.tgz`) with O_CREATE|O_WRONLY|O_TRUNC|0o600 — no O_NOFOLLOW. A symlink planted at outPath redirects the bundle write through the link. Less severe than the kubeconfig/credential cases because the bundle contents are already redacted, but the bundle still contains terraform-state-list output and must-gather data which can be sensitive.  
-**Fix:** Add `syscall.O_NOFOLLOW` to the OpenFile flags, mirroring openLogFile in cli/logging.go:32. Lstat the path first and refuse a symlink (cli/logging.go:25-30 pattern).  
-**Effort:** hours
-
 ##### `sec:0f076161:cred-no-zeroize` — cred no zeroize
 
 **Status:** not started  
@@ -1700,16 +1690,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/distribution/okd/destroy/steps.go:24-133`  
 **Problem:** Destroy cleanup uses opts.SkipFirewall / opts.SkipCleanup / opts.SkipTerraform flags wired from the CLI. The credential lifecycle on destroy: handleCredentials creates ProxmoxCredentials, defers creds.Zeroize, then plumbs creds.Env() into createOKDProvisionerWithOpts. Same Env() string-residue issue as the deploy path (sec:6424733c:cred-no-zeroize) — destroy holds the credential strings on the executor for its full duration. Less long-running than deploy (terraform destroy is faster), but the credential is held for the entire teardown sequence including ssh-based ISO removal.  
 **Fix:** Companion fix to sec:6424733c:cred-no-zeroize. Once a ZeroizeEnv helper exists on the provisioner, destroy.go calls it in the same defer chain.  
-**Effort:** hours
-
-##### `sec:de572c63:toctou-chmod` — toctou chmod
-
-**Status:** in review — PR #139  
-**Severity:** minor  
-**Cluster:** file-toctou  
-**Evidence:** `internal/distribution/okd/dns/dnsmasq.go:211-245`  
-**Problem:** validateAndRestartDnsmasq's `restore` closure does `system.CopyFile(backupPath, configPath)` then `os.Chmod(configPath, 0o644)`. CopyFile creates dest with the source's mode (CopyFileMode pattern), so the follow-up Chmod is redundant on the copy path — but `os.Chmod` follows symlinks on linux. If the configPath in /etc/dnsmasq.d/ is somehow already a symlink (an attacker-influenced operator action, or a residual symlink from a manually-edited config), the Chmod targets the symlink destination, not configPath itself. Low-likelihood but the os.Chmod is doubly suspect because ...  
-**Fix:** Drop the os.Chmod call entirely — system.CopyFile already preserves mode bits via CopyFileMode and the source backup file was created with 0o644 by the original write. If the chmod is load-bearing, switch to `system.CopyFileMode(backupPath, configPath, 0o644)` which sets the open-time mode atomically and uses os.OpenFile (not os.Chmod) so symlinks at the dst don't redirect the perm change.  
 **Effort:** hours
 
 ##### `sec:696d6b0e:input-url-scheme-not-checked` — input url scheme not checked
