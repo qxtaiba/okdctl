@@ -82,6 +82,30 @@ func TestWriteEnvFile_APITokenOnly(t *testing.T) {
 	}
 }
 
+func TestWriteEnvFile_SymlinkRefused(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root bypasses symlink restrictions")
+	}
+	dir := t.TempDir()
+	target := filepath.Join(dir, "real.env")
+	link := filepath.Join(dir, "okdctl.env")
+	if err := os.WriteFile(target, []byte(""), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, link); err != nil {
+		t.Fatal(err)
+	}
+	creds := &ProxmoxCredentials{Endpoint: "https://pve:8006"}
+	err := WriteEnvFile(link, creds)
+	if err == nil {
+		t.Fatal("WriteEnvFile should have refused symlink target")
+	}
+	var authErr *errtypes.AuthError
+	if !errors.As(err, &authErr) {
+		t.Errorf("err = %v; want *errtypes.AuthError", err)
+	}
+}
+
 func TestLoadEnvFile_PermRefusal(t *testing.T) {
 	tests := []struct {
 		name string

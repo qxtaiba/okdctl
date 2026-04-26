@@ -46,6 +46,23 @@ func EnvFilePath(configPath string) string {
 // buffer is zeroed after AtomicWrite returns so the in-memory residue
 // doesn't outlive the write.
 func WriteEnvFile(path string, creds *ProxmoxCredentials) error {
+	// Refuse symlinks: an attacker-planted symlink at the .env path would
+	// redirect credential bytes to an attacker-chosen target. Lstat the
+	// path before writing; a missing file is the normal first-write case.
+	if info, err := os.Lstat(path); err == nil {
+		if info.Mode()&os.ModeSymlink != 0 {
+			return &errtypes.AuthError{
+				Msg: fmt.Sprintf("env file path %q is a symlink; refusing to write credentials", path),
+				Err: os.ErrPermission,
+			}
+		}
+	} else if !os.IsNotExist(err) {
+		return &errtypes.AuthError{
+			Msg: fmt.Sprintf("failed to lstat env file path %q before write", path),
+			Err: err,
+		}
+	}
+
 	var buf bytes.Buffer
 	buf.WriteString("# Proxmox credentials (managed by okdctl)\n")
 	buf.WriteString("# This file has restricted permissions (0600). Do not commit to git.\n")
