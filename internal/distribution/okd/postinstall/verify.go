@@ -132,7 +132,7 @@ func (p *Phase) VerifyKubeVIP(ctx context.Context, cfg *config.Config, opts *Opt
 		return "", &errtypes.ClusterError{Msg: "kube-vip vip not reachable", Err: err}
 	}
 
-	if err := p.verifyKubeVIPAPIHealth(ctx, vip, phase.ClusterConfigDir(opts.WorkDir)); err != nil {
+	if err := p.verifyKubeVIPAPIHealthBootstrap(ctx, vip, phase.ClusterConfigDir(opts.WorkDir)); err != nil {
 		return "", &errtypes.ClusterError{Msg: "kube-vip api health check failed", Err: err}
 	}
 
@@ -179,11 +179,12 @@ func (p *Phase) waitForKubeVIPPing(ctx context.Context, vip string, opts *Option
 	return nil
 }
 
-// verifyKubeVIPAPIHealth verifies the API server responds via the VIP.
-// clusterDir is the openshift-install output directory; its auth/kubeconfig
-// CA bundle is used for TLS. Falls back to InsecureSkipVerify when the
-// kubeconfig is not yet present (pre-install-config window — VIP not in SANs).
-func (p *Phase) verifyKubeVIPAPIHealth(ctx context.Context, vip, clusterDir string) error {
+// verifyKubeVIPAPIHealthBootstrap verifies the API server responds via the VIP
+// during the bootstrap-to-kube-vip transition, before the VIP appears in the
+// apiserver certificate SANs. Falls back to InsecureSkipVerify only when the
+// kubeconfig CA is not yet available; callers at later phases must use a
+// verified client instead.
+func (p *Phase) verifyKubeVIPAPIHealthBootstrap(ctx context.Context, vip, clusterDir string) error {
 	healthURL := fmt.Sprintf("https://%s:6443/healthz", vip)
 
 	var client *http.Client
