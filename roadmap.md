@@ -1774,7 +1774,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sec:29293401:toctou-chmod` — toctou chmod
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-29293401-haproxy-chmod  
+**Status:** in review — PR #146  
 **Severity:** minor  
 **Cluster:** file-toctou  
 **Evidence:** `internal/distribution/okd/setup/haproxy.go:116-134`  
@@ -1814,7 +1814,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sec:cfcdee2d:tls-no-redirect-cap` — tls no redirect cap
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-cfcdee2d-httputil-redirect-cap  
+**Status:** in review — PR #144  
 **Severity:** minor  
 **Cluster:** tls-network  
 **Evidence:** `internal/httputil/httputil.go:17-32`  
@@ -1824,7 +1824,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sec:881d089e:input-path-not-prefix-checked` — input path not prefix checked
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-881d089e-runlock-nofollow  
+**Status:** in review — PR #145  
 **Severity:** minor  
 **Cluster:** file-toctou  
 **Evidence:** `internal/runlock/runlock.go:29-47`  
@@ -2208,27 +2208,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Add a one-line comment above `network_device,` in each ignore_changes block explaining the bpg/proxmox dynamic-block diff quirk — same shape as the existing `efi_disk` rationale comment. Without context, an auditor or a future Terraform upgrade reviewer cannot tell which entries are still load-bearing.  
 **Effort:** hours
 
-##### `iac:e076e43c:gh-api-unauth-rate-limit` — gh api unauth rate limit
-
-**Status:** in review — PR #129  
-**Severity:** suggestion  
-**Cluster:** install-sh-integrity  
-**Evidence:** `scripts/install.sh:71-76`  
-**Problem:** Resolving the latest release tag uses an unauthenticated GitHub API call. GitHub limits unauthenticated API access to 60 requests per hour per IP. CI runners (especially shared-IP cloud build farms) will hit this limit and the installer will fail with a confusing curl error. Pinning VERSION sidesteps the issue but undocumented in the on-screen output when the resolution fails.  
-**Fix:** When VERSION is unset, allow `GITHUB_TOKEN` if present in env: `curl -H "Authorization: Bearer $GITHUB_TOKEN" ...` to lift the cap to 5000/hr. Surface a clearer error on rate-limit response (HTTP 403 with X-RateLimit-Remaining: 0) — `die "GitHub API rate-limited; pin VERSION=v0.x.y or set GITHUB_TOKEN"`.  
-**Effort:** hours
-
 #### audit-errors
-
-##### `err:ae5b624c:ctx-timeout-loses-cluster-identity` — ctx timeout loses cluster identity
-
-**Status:** in review — PR #137  
-**Severity:** major  
-**Cluster:** cancellation-identity  
-**Evidence:** `internal/distribution/okd/install/monitor.go:113-121`  
-**Problem:** MonitorInstallation wraps a 60-minute install timeout with bare fmt.Errorf("installation timed out after %v: %w", ..., ctx.Err()) instead of an &errtypes.ClusterError{Err: ctx.Err()}. At cli/root.go:111 the typed-error mapping runs only after errors.Is(err, context.DeadlineExceeded) check, so the timeout exits 130 (signal-cancelled) instead of 4 (cluster). WaitForBootstrap (lines 33-40) wraps the same identity correctly into ClusterError — the inconsistency hides install-budget failures behind the SIGINT exit code.  
-**Fix:** Wrap both timeout/cancellation paths in &errtypes.ClusterError{Msg: "installation timed out after " + d, Err: ctx.Err()} mirroring monitor.go:37-40. errors.Is(err, context.DeadlineExceeded) still walks through ClusterError.Unwrap() so cli/root.go's signal-vs-cluster distinction relies on the order of checks (signal first), which is already correct. Same pattern at lines 167-169.  
-**Effort:** hours
 
 ##### `err:97cb8adf:waitfor-timeout-loses-cluster-identity` — waitfor timeout loses cluster identity
 
