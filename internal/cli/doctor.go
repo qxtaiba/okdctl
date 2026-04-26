@@ -12,6 +12,7 @@ import (
 	"os/user"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -438,7 +439,7 @@ func checkPorts(ctx context.Context) checkResult {
 	var busy []string
 	for _, p := range ports {
 		if isPortInUse(ctx, p) {
-			busy = append(busy, fmt.Sprintf("%d", p))
+			busy = append(busy, strconv.Itoa(p))
 		}
 	}
 	if len(busy) > 0 {
