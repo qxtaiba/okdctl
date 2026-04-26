@@ -108,16 +108,8 @@ func execute() int {
 
 	err := rootCmd.ExecuteContext(ctx)
 	if err != nil {
-		// Gate on caughtSig: only short-circuit to a signal exit code when an
-		// OS signal was actually received. Without this, a ClusterError
-		// wrapping context.DeadlineExceeded (e.g. install-budget exhaustion)
-		// matches errors.Is and exits 130 instead of falling through to
-		// exitCodeFor → 4.
-		if caughtSig.Load() != nil && (errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)) {
-			if sig, _ := caughtSig.Load().(os.Signal); sig == syscall.SIGTERM {
-				return 143
-			}
-			return 130
+		if code, handled := signalExitCode(&caughtSig, err); handled {
+			return code
 		}
 		// Pass err as a structured attr so logutil.RedactHandler gets the
 		// chance to scrub credentials in the chain. tui.Error(err.Error())
@@ -144,6 +136,23 @@ func printUpdateNotice(ch <-chan version.CheckResult) {
 	fmt.Println(tui.WarningStyle.Render("update available:") + " " +
 		tui.MutedStyle.Render(version.Version) + " → " +
 		tui.HighlightStyle.Render(result.LatestTag))
+}
+
+// signalExitCode reports whether err was caused by a caught OS signal and,
+// if so, returns the corresponding exit code (130 for SIGINT, 143 for SIGTERM).
+// When no signal was received, handled is false and the caller resolves the
+// exit code via exitCodeFor.
+func signalExitCode(caughtSig *atomic.Value, err error) (int, bool) {
+	if caughtSig.Load() == nil {
+		return 0, false
+	}
+	if !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
+		return 0, false
+	}
+	if sig, _ := caughtSig.Load().(os.Signal); sig == syscall.SIGTERM {
+		return 143, true
+	}
+	return 130, true
 }
 
 func exitCodeFor(err error) int {
