@@ -79,15 +79,27 @@ func (p *Phase) InstallExternalTools(ctx context.Context, cfg *config.Config) er
 }
 
 var binaryToolMeta = map[externalTool]struct {
-	name            string
-	versionFlag     string
-	archiveBinary   string
-	stripComponents int
-	urlTemplate     string
+	name                     string
+	versionFlag              string
+	archiveBinary            string
+	stripComponents          int
+	urlTemplate              string
+	checksumURLTemplate      string
+	checksumFilenameTemplate string
 }{
-	toolYQ:   {name: "yq", versionFlag: "--version", urlTemplate: yqURLTemplate},
-	toolHelm: {name: "helm", versionFlag: "version", archiveBinary: "helm", stripComponents: 1, urlTemplate: helmURLTemplate},
-	toolSops: {name: "sops", versionFlag: "--version", urlTemplate: sopsURLTemplate},
+	toolYQ: {name: "yq", versionFlag: "--version", urlTemplate: yqURLTemplate},
+	toolHelm: {
+		name: "helm", versionFlag: "version", archiveBinary: "helm", stripComponents: 1,
+		urlTemplate:              helmURLTemplate,
+		checksumURLTemplate:      "https://get.helm.sh/helm-" + helmVersion + "-linux-{arch}.tar.gz.sha256sum",
+		checksumFilenameTemplate: "helm-" + helmVersion + "-linux-{arch}.tar.gz",
+	},
+	toolSops: {
+		name: "sops", versionFlag: "--version",
+		urlTemplate:              sopsURLTemplate,
+		checksumURLTemplate:      "https://github.com/getsops/sops/releases/download/" + sopsVersion + "/sops-" + sopsVersion + ".checksums.txt",
+		checksumFilenameTemplate: "sops-" + sopsVersion + ".linux.{arch}",
+	},
 }
 
 func (p *Phase) installTool(ctx context.Context, tool externalTool) error {
@@ -106,13 +118,15 @@ func (p *Phase) installTool(ctx context.Context, tool externalTool) error {
 		return nil
 	}
 
-	url := strings.NewReplacer("{arch}", platform.DownloadArch()).Replace(meta.urlTemplate)
+	archReplacer := strings.NewReplacer("{arch}", platform.DownloadArch())
 	spec := binaryInstallSpec{
-		name:            meta.name,
-		url:             url,
-		versionFlag:     meta.versionFlag,
-		archiveBinary:   meta.archiveBinary,
-		stripComponents: meta.stripComponents,
+		name:             meta.name,
+		url:              archReplacer.Replace(meta.urlTemplate),
+		versionFlag:      meta.versionFlag,
+		archiveBinary:    meta.archiveBinary,
+		stripComponents:  meta.stripComponents,
+		checksumURL:      archReplacer.Replace(meta.checksumURLTemplate),
+		checksumFilename: archReplacer.Replace(meta.checksumFilenameTemplate),
 	}
 	return p.installBinary(ctx, &spec)
 }
@@ -148,19 +162,32 @@ func (p *Phase) installTerraform(ctx context.Context) error {
 }
 
 type binaryInstallSpec struct {
-	name            string
-	url             string
-	versionFlag     string
-	archiveBinary   string // if non-empty, download is a tar.gz; value is the binary path within the archive
-	stripComponents int
+	name             string
+	url              string
+	versionFlag      string
+	archiveBinary    string // if non-empty, download is a tar.gz; value is the binary path within the archive
+	stripComponents  int
+	checksumURL      string // if non-empty, SHA-256 is fetched and verified before the binary is installed
+	checksumFilename string // filename to look up in the checksums file
 }
 
 func (p *Phase) installBinary(ctx context.Context, spec *binaryInstallSpec) error {
 	p.Log.Info(fmt.Sprintf("tools: installing %s", spec.name))
 
+	var expectedChecksum string
+	if spec.checksumURL != "" {
+		// Verify the binary against the vendor-published SHA-256 before
+		// it lands in BinDir; prevents silent compromise on a poisoned CDN.
+		var err error
+		expectedChecksum, err = download.FetchChecksum(ctx, spec.checksumURL, spec.checksumFilename)
+		if err != nil {
+			return fmt.Errorf("failed to fetch checksum for %s: %w", spec.name, err)
+		}
+	}
+
 	tempFile := filepath.Join(os.TempDir(), spec.name+"-download")
 	if err := download.Download(ctx, &download.Options{
-		URL: spec.url, OutputPath: tempFile,
+		URL: spec.url, OutputPath: tempFile, ExpectedChecksum: expectedChecksum,
 		Description: spec.name, Timeout: 2 * time.Minute, Logger: p.Log,
 	}); err != nil {
 		return fmt.Errorf("failed to download %s: %w", spec.name, err)
