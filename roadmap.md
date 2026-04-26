@@ -312,7 +312,7 @@ cert lifecycle, kargs templating, wizard.
 
 #### E4 — SSH/SCP host-key pinning for Proxmox
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/e4-e5-ssh-fingerprint
+**Status:** in review — PR #142
 **Audit:** `sec:27088eab:ssh-accept-new-proxmox`,
 `sec:eb479d86:scp-accept-new-proxmox`
 **Evidence:** `internal/distribution/okd/phase/ssh.go:27`,
@@ -343,7 +343,7 @@ could produce via standard SSH tooling. See PR #117 review for detail.
 
 #### E5 — Flux SSH known-hosts fingerprint pinning
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/e4-e5-ssh-fingerprint
+**Status:** in review — PR #142
 **Audit:** `sec:98723e5d:ssh-keyscan-tofu`
 **Evidence:** `internal/addon/catalog/flux/flux.go:329`
 **Problem:** `createDeployKeySecret` runs `ssh-keyscan <host>` and
@@ -1669,7 +1669,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sec:d9f7733e:input-path-not-prefix-checked` — input path not prefix checked
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-d9f7733e-debug-bundle-nofollow  
+**Status:** in review — PR #138  
 **Severity:** minor  
 **Cluster:** file-toctou  
 **Evidence:** `internal/cli/debug_bundle.go:83-92`  
@@ -1729,7 +1729,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sec:de572c63:toctou-chmod` — toctou chmod
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-de572c63-dnsmasq-chmod  
+**Status:** in review — PR #139  
 **Severity:** minor  
 **Cluster:** file-toctou  
 **Evidence:** `internal/distribution/okd/dns/dnsmasq.go:211-245`  
