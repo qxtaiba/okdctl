@@ -89,16 +89,45 @@ func (c *ProxmoxCredentials) Zeroize() {
 	c.APIToken = nil
 }
 
+// redactedCredentials is the safe projection of ProxmoxCredentials returned
+// by Redacted(). It omits Password and APIToken so that any code path that
+// receives a ProxmoxCredentials value — including slog's redactAny switch —
+// cannot reach the secret bytes. Future safe fields belong here; future
+// secret fields must be omitted.
+type redactedCredentials struct {
+	Endpoint                    string
+	Username                    string
+	Insecure                    bool
+	Source                      Source
+	EndpointFromConfig          bool
+	ConfigCredentialsOverridden bool
+}
+
+// Redacted returns a struct that contains only the non-secret fields of c,
+// satisfying the interface{ Redacted() any } that logutil.redactAny detects.
+// This makes credential redaction structural: new secret fields default to
+// absent from the safe view unless explicitly added here.
+func (c *ProxmoxCredentials) Redacted() any {
+	if c == nil {
+		return nil
+	}
+	return redactedCredentials{
+		Endpoint:                    c.Endpoint,
+		Username:                    c.Username,
+		Insecure:                    c.Insecure,
+		Source:                      c.Source,
+		EndpointFromConfig:          c.EndpointFromConfig,
+		ConfigCredentialsOverridden: c.ConfigCredentialsOverridden,
+	}
+}
+
 // String masks secret fields so accidental %v / %s / log calls can't leak
 // the password or token.
 func (c *ProxmoxCredentials) String() string {
 	if c == nil {
 		return "ProxmoxCredentials(nil)"
 	}
-	return fmt.Sprintf(
-		"ProxmoxCredentials{Endpoint: %s, Username: %s, Password: ***, APIToken: ***, Source: %s}",
-		c.Endpoint, c.Username, c.Source,
-	)
+	return fmt.Sprintf("%+v", c.Redacted())
 }
 
 // GoString mirrors String so %#v also masks secrets.

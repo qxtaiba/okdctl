@@ -276,6 +276,47 @@ func TestGetProxmoxCredentials(t *testing.T) {
 	})
 }
 
+func TestProxmoxCredentials_Redacted(t *testing.T) {
+	c := &ProxmoxCredentials{
+		Endpoint:                    "https://pve.example:8006",
+		Username:                    "root@pam",
+		Password:                    []byte("s3cret"),
+		APIToken:                    []byte("tok"),
+		Insecure:                    true,
+		Source:                      SourceEnv,
+		EndpointFromConfig:          true,
+		ConfigCredentialsOverridden: true,
+	}
+
+	got, ok := c.Redacted().(redactedCredentials)
+	if !ok {
+		t.Fatalf("Redacted() type = %T; want redactedCredentials", c.Redacted())
+	}
+	if got.Endpoint != c.Endpoint {
+		t.Errorf("Endpoint = %q; want %q", got.Endpoint, c.Endpoint)
+	}
+	if got.Username != c.Username {
+		t.Errorf("Username = %q; want %q", got.Username, c.Username)
+	}
+	if got.Insecure != c.Insecure {
+		t.Errorf("Insecure = %v; want %v", got.Insecure, c.Insecure)
+	}
+	if got.Source != c.Source {
+		t.Errorf("Source = %v; want %v", got.Source, c.Source)
+	}
+	if got.EndpointFromConfig != c.EndpointFromConfig {
+		t.Errorf("EndpointFromConfig = %v; want %v", got.EndpointFromConfig, c.EndpointFromConfig)
+	}
+	if got.ConfigCredentialsOverridden != c.ConfigCredentialsOverridden {
+		t.Errorf("ConfigCredentialsOverridden = %v; want %v", got.ConfigCredentialsOverridden, c.ConfigCredentialsOverridden)
+	}
+
+	var nilCreds *ProxmoxCredentials
+	if nilCreds.Redacted() != nil {
+		t.Errorf("nil.Redacted() = %v; want nil", nilCreds.Redacted())
+	}
+}
+
 // clearProxmoxEnv ensures no PROXMOX_VE_* vars leak from the host shell into
 // test scope. We Setenv first (so t auto-restores on test completion) then
 // Unsetenv — Setenv("", "") leaves the var present-and-empty, which
