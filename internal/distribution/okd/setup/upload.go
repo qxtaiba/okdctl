@@ -3,6 +3,7 @@ package setup
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 
@@ -39,8 +40,28 @@ func calculateTotalSize(files []string) int64 {
 	return totalSize
 }
 
-func uploadISOsViaSCP(ctx context.Context, cmdRunner *executor.Executor, isoFiles []string, user, host, remotePath string) error {
-	args := []string{"-o", "StrictHostKeyChecking=accept-new"}
+func uploadISOsViaSCP(ctx context.Context, cmdRunner *executor.Executor, log *slog.Logger, isoFiles []string, user, host, fingerprint, remotePath string) error {
+	var args []string
+	if fingerprint == "" {
+		if log != nil {
+			if obs, err := phase.ObserveSSHFingerprints(ctx, cmdRunner, host); err == nil && len(obs) > 0 {
+				log.Warn("scp: host key not pinned; set provider.proxmox.ssh.host_fingerprint to one of the observed values",
+					"host", host, "observed", obs)
+			}
+		}
+		args = []string{"-o", "StrictHostKeyChecking=accept-new"}
+	} else {
+		path, cleanup, err := phase.PinnedKnownHostsFile(ctx, cmdRunner, host, fingerprint)
+		if err != nil {
+			return err
+		}
+		defer cleanup()
+		args = []string{
+			"-o", "UserKnownHostsFile=" + path,
+			"-o", "StrictHostKeyChecking=yes",
+			"-o", "BatchMode=yes",
+		}
+	}
 	args = append(args, isoFiles...)
 	args = append(args, fmt.Sprintf("%s@%s:%s/", user, host, remotePath))
 
@@ -78,7 +99,8 @@ func (p *Phase) UploadCustomISOsToProxmox(ctx context.Context, cfg *config.Confi
 	totalSizeMB := float64(calculateTotalSize(isoFiles)) / 1024 / 1024
 	p.Log.Info("iso: uploading", "count", len(isoFiles), "size_mb", fmt.Sprintf("%.1f", totalSizeMB), "user", user, "host", host, "path", remotePath)
 
-	if err := uploadISOsViaSCP(ctx, p.Exec, isoFiles, user, host, remotePath); err != nil {
+	fingerprint := cfg.Provider.Proxmox.SSH.HostFingerprint
+	if err := uploadISOsViaSCP(ctx, p.Exec, p.Log, isoFiles, user, host, fingerprint, remotePath); err != nil {
 		return &errtypes.NetworkError{Msg: "scp upload to proxmox failed", Err: err}
 	}
 

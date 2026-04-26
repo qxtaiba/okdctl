@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/qxtaiba/okdctl/internal/netutil"
+	"github.com/qxtaiba/okdctl/internal/sshpin"
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
@@ -272,6 +273,12 @@ func validateProxmoxConfig(proxmox *ProxmoxConfig, result *ValidationResult) {
 	for i, node := range proxmox.WorkerNodes {
 		if node != "" && !proxmoxNamePattern.MatchString(node) {
 			result.AddError(fmt.Sprintf("proxmox.worker_nodes[%d]", i), "must be a valid Proxmox node name")
+		}
+	}
+
+	if proxmox.SSH.HostFingerprint != "" {
+		if _, err := sshpin.Parse(proxmox.SSH.HostFingerprint); err != nil {
+			result.AddError("proxmox.ssh.host_fingerprint", err.Error())
 		}
 	}
 }

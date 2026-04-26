@@ -59,10 +59,11 @@ func (p *Phase) destroySteps(cfg *config.Config, opts *Options) []distribution.S
 			SkipReason: isoSkipReason(opts, cfg),
 			Exec: func(ctx context.Context) error {
 				params := &phase.RemoteISOParams{
-					Host: phase.ProxmoxBareHost(cfg.Provider.Proxmox.Host),
-					Node: cfg.Provider.Proxmox.Node,
-					Exec: p.Exec,
-					Log:  p.Log,
+					Host:            phase.ProxmoxBareHost(cfg.Provider.Proxmox.Host),
+					Node:            cfg.Provider.Proxmox.Node,
+					HostFingerprint: cfg.Provider.Proxmox.SSH.HostFingerprint,
+					Exec:            p.Exec,
+					Log:             p.Log,
 				}
 				return phase.RemoveFCOSISOFromProxmox(ctx, params, phase.DefaultProxmoxISODir)
 			},

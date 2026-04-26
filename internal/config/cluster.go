@@ -133,6 +133,18 @@ type ProxmoxConfig struct {
 	NUMAEnabled        bool                `json:"numa_enabled,omitempty"`
 	MasterNodes        []string            `json:"master_nodes,omitempty"`
 	WorkerNodes        []string            `json:"worker_nodes,omitempty"`
+
+	SSH ProxmoxSSHConfig `json:"ssh,omitempty"`
+}
+
+// ProxmoxSSHConfig groups SSH knobs for talking to the Proxmox host. Carved
+// off ProxmoxConfig so future SSH options have a home.
+type ProxmoxSSHConfig struct {
+	// HostFingerprint pins the Proxmox SSH host key in the
+	// `SHA256:<base64>` form that `ssh-keygen -lf` emits. When empty,
+	// SSHRun falls back to accept-new TOFU and warns with the observed
+	// fingerprints so the operator can pin one.
+	HostFingerprint string `json:"host_fingerprint,omitempty"`
 }
 
 // FilesConfig points at the pull-secret and SSH public key files injected

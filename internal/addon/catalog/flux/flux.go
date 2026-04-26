@@ -17,6 +17,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/addon"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/executor"
+	"github.com/qxtaiba/okdctl/internal/sshpin"
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
@@ -34,6 +35,14 @@ const (
 	SettingProvider          = "provider"
 	SettingControllerTimeout = "controller_timeout"
 	SettingGitSyncTimeout    = "git_sync_timeout"
+	// SettingKnownHostsSHA256 pins the git host's SSH key to a `SHA256:<base64>`
+	// fingerprint. When set, createDeployKeySecret refuses any host key whose
+	// fingerprint does not match.
+	SettingKnownHostsSHA256 = "known_hosts_sha256"
+	// SettingAcceptHostKey opts into TOFU acceptance when KnownHostsSHA256 is
+	// unset. Without either knob the addon refuses to install — silent
+	// pin-anything behaviour was the failure mode of the first attempt.
+	SettingAcceptHostKey = "accept_host_key"
 )
 
 // k8sBoolTrue is the literal Kubernetes returns for boolean-valued status
@@ -369,9 +378,39 @@ func (f *Flux) createDeployKeySecret(ctx context.Context, env *addon.Environment
 	if err != nil {
 		return fmt.Errorf("failed to get host key for %s: %w", host, err)
 	}
+	matches, err := sshpin.MatchKeyscan(knownHostsResult.Stdout)
+	if err != nil {
+		return fmt.Errorf("parse ssh-keyscan output for %s: %w", host, err)
+	}
+	if len(matches) == 0 {
+		return fmt.Errorf("ssh-keyscan returned no usable host keys for %s", host)
+	}
+
+	var trustedLines []sshpin.Match
+	switch {
+	case fs.KnownHostsSHA256 != "":
+		pin, err := sshpin.Parse(fs.KnownHostsSHA256)
+		if err != nil {
+			return fmt.Errorf("addons.flux.settings.%s: %w", SettingKnownHostsSHA256, err)
+		}
+		trustedLines = sshpin.FilterByPin(matches, pin)
+		if len(trustedLines) == 0 {
+			return fmt.Errorf(
+				"flux: pinned fingerprint %s for %s does not match any advertised key (observed %v)",
+				pin, host, sshpin.Fingerprints(matches))
+		}
+	case fs.AcceptHostKey:
+		env.Logger.Warn("flux: accepting unpinned git host key — set addons.flux.settings.known_hosts_sha256 to one of the observed values",
+			"host", host, "observed", sshpin.Fingerprints(matches))
+		trustedLines = matches
+	default:
+		return fmt.Errorf(
+			"flux: refusing to install with unpinned git host key for %s — set addons.flux.settings.%s to one of %v, or addons.flux.settings.%s=true to opt into TOFU",
+			host, SettingKnownHostsSHA256, sshpin.Fingerprints(matches), SettingAcceptHostKey)
+	}
 
 	manifest, err := buildFluxDeployKeySecret("flux-system", "flux-system",
-		string(privateKey), string(publicKey), knownHostsResult.Stdout)
+		string(privateKey), string(publicKey), string(sshpin.KnownHostsBytes(trustedLines)))
 	if err != nil {
 		return fmt.Errorf("build deploy key secret: %w", err)
 	}

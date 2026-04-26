@@ -13,11 +13,14 @@ import (
 
 // RemoteISOParams carries the connection parameters needed to clean ISOs from
 // a Proxmox host over SSH. Host must be the bare hostname or IP (no port).
+// HostFingerprint, when non-empty, is the `SHA256:<base64>` host key pin
+// applied at every SSHRun call; empty means accept-new TOFU plus WARN.
 type RemoteISOParams struct {
-	Host string
-	Node string
-	Exec *executor.Executor
-	Log  *slog.Logger
+	Host            string
+	Node            string
+	HostFingerprint string
+	Exec            *executor.Executor
+	Log             *slog.Logger
 }
 
 // refuseUnsafeISOPath rejects any path that is not exactly
@@ -119,7 +122,7 @@ func listProxmoxVMIDs(ctx context.Context, p *RemoteISOParams) ([]int, error) {
 	if err := validateProxmoxName(p.Node); err != nil {
 		return nil, fmt.Errorf("proxmox node %q invalid: %w", p.Node, err)
 	}
-	result, err := SSHRun(ctx, p.Exec, p.Host,
+	result, err := SSHRun(ctx, p.Exec, p.Log, p.Host, p.HostFingerprint,
 		fmt.Sprintf("pvesh get /nodes/%s/qemu --output-format json", p.Node),
 	)
 	if err != nil {
@@ -135,7 +138,7 @@ func vmConfigReferencesISO(ctx context.Context, p *RemoteISOParams, vmid int, is
 	if err := validateProxmoxName(p.Node); err != nil {
 		return true, fmt.Errorf("proxmox node %q invalid: %w", p.Node, err)
 	}
-	result, err := SSHRun(ctx, p.Exec, p.Host,
+	result, err := SSHRun(ctx, p.Exec, p.Log, p.Host, p.HostFingerprint,
 		fmt.Sprintf("pvesh get /nodes/%s/qemu/%d/config --output-format json 2>/dev/null", p.Node, vmid),
 	)
 	if err != nil {
@@ -224,7 +227,7 @@ func RemoveFCOSISOFromProxmox(ctx context.Context, p *RemoteISOParams, isoDir st
 		"find %s -maxdepth 1 -name 'fedora-coreos-*.iso' -type f -print0 2>/dev/null || true",
 		shellSingleQuote(isoDir),
 	)
-	result, err := SSHRun(ctx, p.Exec, p.Host, findCmd)
+	result, err := SSHRun(ctx, p.Exec, p.Log, p.Host, p.HostFingerprint, findCmd)
 	if err != nil {
 		return fmt.Errorf("ssh find failed: %w", err)
 	}
@@ -254,7 +257,7 @@ func RemoveFCOSISOFromProxmox(ctx context.Context, p *RemoteISOParams, isoDir st
 
 		// Shell-single-quote the path so filenames with spaces or metacharacters
 		// reach rm as a single literal argument.
-		if _, rmErr := SSHRun(ctx, p.Exec, p.Host, "rm -f "+shellSingleQuote(f)); rmErr != nil {
+		if _, rmErr := SSHRun(ctx, p.Exec, p.Log, p.Host, p.HostFingerprint, "rm -f "+shellSingleQuote(f)); rmErr != nil {
 			p.Log.Warn("iso: failed to remove", "iso", isoBase, "err", rmErr)
 			continue
 		}
