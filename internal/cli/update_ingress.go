@@ -99,7 +99,7 @@ func runUpdateIngress(cmd *cobra.Command, _ []string) error {
 	}
 	defer lock.Release()
 
-	p := createOKDProvisioner(cfg, nil, projectRoot)
+	p := createOKDProvisionerWithOpts(cfg, nil, projectRoot)
 
 	tui.Info("detecting ingress strategy and loadbalancer ips...")
 	startTime := time.Now()
