@@ -17,6 +17,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/postinstall"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/setup"
+	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/executor"
 	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/system"
@@ -99,7 +100,7 @@ func New(version string, opts ...ProvisionerOption) *Provisioner {
 // is enforced (config-load time and provisioner entry both hit it).
 func (p *Provisioner) Validate(cfg *config.Config) error {
 	if cfg.Distribution.Type != config.DistributionOKD {
-		return fmt.Errorf("invalid distribution type: expected okd, got %s", cfg.Distribution.Type)
+		return &errtypes.ConfigError{Msg: fmt.Sprintf("invalid distribution type: expected okd, got %s", cfg.Distribution.Type)}
 	}
 	return nil
 }
