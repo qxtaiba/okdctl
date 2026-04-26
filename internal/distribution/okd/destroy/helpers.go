@@ -65,8 +65,8 @@ func (p *Phase) destroyInfrastructure(ctx context.Context, opts *Options) error 
 		return &errtypes.ClusterError{Msg: "terraform destroy failed", Err: err}
 	}
 
-	if err := tf.Cleanup(); err != nil {
-		p.Log.Warn("terraform: plan file cleanup warning (remove stale tfplan/destroy.tfplan/terraform.tfstate.backup manually if needed)", "dir", terraformDir, "err", err)
+	if err := tf.CleanupPlans(); err != nil {
+		p.Log.Warn("terraform: plan file cleanup warning (remove stale tfplan/destroy.tfplan manually if needed)", "dir", terraformDir, "err", err)
 	}
 
 	return nil

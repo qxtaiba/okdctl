@@ -6,10 +6,11 @@ import (
 	"testing"
 )
 
-// TestExecutor_Cleanup_PreservesTFState locks that Executor.Cleanup removes
-// plan files and the backup but NEVER touches terraform.tfstate. Mirrors
-// cleanup.cleanupTerraformEnv's contract; the two must not drift.
-func TestExecutor_Cleanup_PreservesTFState(t *testing.T) {
+// TestExecutor_CleanupPlans_PreservesBackupAndState locks that CleanupPlans
+// removes only plan files and never touches terraform.tfstate or
+// terraform.tfstate.backup — the backup is the operator's rollback artefact
+// and must survive a successful run.
+func TestExecutor_CleanupPlans_PreservesBackupAndState(t *testing.T) {
 	workDir := t.TempDir()
 	files := map[string]string{
 		PlanFileName:               "plan",
@@ -24,30 +25,37 @@ func TestExecutor_Cleanup_PreservesTFState(t *testing.T) {
 	}
 
 	e := &Executor{WorkDir: workDir}
-	if err := e.Cleanup(); err != nil {
-		t.Fatalf("Cleanup: %v", err)
+	if err := e.CleanupPlans(); err != nil {
+		t.Fatalf("CleanupPlans: %v", err)
 	}
 
-	mustBeGone := []string{PlanFileName, "destroy.tfplan", "terraform.tfstate.backup"}
+	mustBeGone := []string{PlanFileName, "destroy.tfplan"}
 	for _, f := range mustBeGone {
 		if _, err := os.Stat(filepath.Join(workDir, f)); !os.IsNotExist(err) {
 			t.Errorf("%s not removed: %v", f, err)
 		}
 	}
 
+	mustSurvive := []string{"terraform.tfstate.backup", "terraform.tfstate"}
+	for _, f := range mustSurvive {
+		if _, err := os.Stat(filepath.Join(workDir, f)); err != nil {
+			t.Fatalf("%s removed (DATA LOSS): %v", f, err)
+		}
+	}
+
 	body, err := os.ReadFile(filepath.Join(workDir, "terraform.tfstate"))
 	if err != nil {
-		t.Fatalf("terraform.tfstate removed (DATA LOSS): %v", err)
+		t.Fatalf("terraform.tfstate read after cleanup: %v", err)
 	}
 	if string(body) != `{"version":4,"resources":[]}` {
 		t.Errorf("terraform.tfstate mutated: %q", body)
 	}
 }
 
-func TestExecutor_Cleanup_MissingFilesIgnored(t *testing.T) {
+func TestExecutor_CleanupPlans_MissingFilesIgnored(t *testing.T) {
 	workDir := t.TempDir()
 	e := &Executor{WorkDir: workDir}
-	if err := e.Cleanup(); err != nil {
+	if err := e.CleanupPlans(); err != nil {
 		t.Errorf("expected nil for empty dir; got %v", err)
 	}
 }
