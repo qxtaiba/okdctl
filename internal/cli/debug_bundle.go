@@ -123,18 +123,7 @@ func runDebugBundle(cmd *cobra.Command, _ []string) (retErr error) {
 
 	projectRoot, prErr := resolveProjectRoot()
 
-	sections := []manifestEntry{
-		bundleConfig(addFile, cfg, cfgErr),
-		bundleLogFile(addFile),
-		bundleTerraformState(ctx, addFile, projectRoot, prErr, cfg),
-		bundleDoctor(ctx, addFile),
-		bundleSystemMeta(addFile, bundleID, bundleAt),
-	}
-	if debugBundleSkipMustGather {
-		sections = append(sections, manifestEntry{Name: "must-gather", Status: "skipped", Message: "--skip-must-gather flag set"})
-	} else {
-		sections = append(sections, bundleMustGather(ctx, addFile, projectRoot, prErr))
-	}
+	sections := collectSections(ctx, addFile, cfg, cfgErr, projectRoot, prErr, bundleAt, bundleID, debugBundleSkipMustGather)
 
 	manifest := bundleManifest{
 		BundleID:  bundleID,
@@ -154,6 +143,22 @@ func runDebugBundle(cmd *cobra.Command, _ []string) (retErr error) {
 
 	tui.Info("debug bundle written", tui.LF("path", outPath), tui.LF("bundle_id", bundleID))
 	return nil
+}
+
+func collectSections(ctx context.Context, addFile func(string, []byte) error, cfg *config.Config, cfgErr error, projectRoot string, prErr error, bundleAt time.Time, bundleID string, skipMustGather bool) []manifestEntry {
+	secs := []manifestEntry{
+		bundleConfig(addFile, cfg, cfgErr),
+		bundleLogFile(addFile),
+		bundleTerraformState(ctx, addFile, projectRoot, prErr, cfg),
+		bundleDoctor(ctx, addFile),
+		bundleSystemMeta(addFile, bundleID, bundleAt),
+	}
+	if skipMustGather {
+		secs = append(secs, manifestEntry{Name: "must-gather", Status: "skipped", Message: "--skip-must-gather flag set"})
+	} else {
+		secs = append(secs, bundleMustGather(ctx, addFile, projectRoot, prErr))
+	}
+	return secs
 }
 
 func bundleConfig(addFile func(string, []byte) error, cfg *config.Config, cfgErr error) manifestEntry {
