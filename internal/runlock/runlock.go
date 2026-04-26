@@ -5,6 +5,7 @@
 package runlock
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -29,7 +30,22 @@ type Lock struct {
 func Acquire(projectRoot, verb string) (*Lock, error) {
 	path := filepath.Join(projectRoot, lockFile)
 
-	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0o600)
+	// Refuse a symlink at the lock path and open with O_NOFOLLOW so a symlink
+	// planted between lstat and open still loses the race. Needed because
+	// Acquire runs as root under the deploy/destroy sudo re-exec model and a
+	// pre-sudo attacker could otherwise redirect the root-owned write via a
+	// planted symlink.
+	if info, err := os.Lstat(path); err == nil {
+		if info.Mode()&os.ModeSymlink != 0 {
+			return nil, &errtypes.ConfigError{
+				Msg: fmt.Sprintf("project lock %s is a symlink; refusing to follow", path),
+			}
+		}
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return nil, fmt.Errorf("runlock: lstat %s: %w", path, err)
+	}
+
+	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|syscall.O_NOFOLLOW, 0o600)
 	if err != nil {
 		return nil, fmt.Errorf("runlock: open %s: %w", path, err)
 	}
