@@ -95,9 +95,7 @@ func WriteEnvFile(path string, creds *ProxmoxCredentials) error {
 	err := system.AtomicWrite(path, data, 0o600)
 	// Zero the buffer's backing store so the credential bytes don't
 	// linger after the file write completes.
-	for i := range data {
-		data[i] = 0
-	}
+	clear(data)
 	return err
 }
 
