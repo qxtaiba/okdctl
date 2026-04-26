@@ -1,0 +1,149 @@
+package logutil
+
+import (
+	"bytes"
+	"encoding/json"
+	"log/slog"
+	"net/url"
+	"testing"
+)
+
+// jsonLogger builds a RedactHandler over a JSON sink backed by buf.
+func jsonLogger(buf *bytes.Buffer) *slog.Logger {
+	inner := slog.NewJSONHandler(buf, &slog.HandlerOptions{Level: slog.LevelDebug})
+	return slog.New(NewRedactHandler(inner))
+}
+
+func parseOne(t *testing.T, buf *bytes.Buffer) map[string]any {
+	t.Helper()
+	var m map[string]any
+	if err := json.Unmarshal(buf.Bytes(), &m); err != nil {
+		t.Fatalf("json.Unmarshal: %v (raw: %q)", err, buf.String())
+	}
+	return m
+}
+
+// TestRedactHandler_PasswordKeyIsRedacted covers Fix case (1): the
+// password key emits the [redacted] sentinel in place of the value.
+func TestRedactHandler_PasswordKeyIsRedacted(t *testing.T) {
+	var buf bytes.Buffer
+	jsonLogger(&buf).Info("msg", "password", "hunter2")
+	m := parseOne(t, &buf)
+	if got := m["password"]; got != Redacted {
+		t.Errorf("password = %v; want %q", got, Redacted)
+	}
+}
+
+// TestRedactHandler_CaseInsensitiveKeys covers Fix case (2): mixed-case
+// secret-key fragments still match.
+func TestRedactHandler_CaseInsensitiveKeys(t *testing.T) {
+	for _, key := range []string{"PASSWORD", "PaSsWoRd", "api_token"} {
+		t.Run(key, func(t *testing.T) {
+			var buf bytes.Buffer
+			jsonLogger(&buf).Info("msg", key, "s3cr3t")
+			m := parseOne(t, &buf)
+			if got := m[key]; got != Redacted {
+				t.Errorf("key %q = %v; want %q", key, got, Redacted)
+			}
+		})
+	}
+}
+
+// TestRedactHandler_GroupRecursion covers Fix case (3): redaction
+// descends into nested slog.Group attrs.
+func TestRedactHandler_GroupRecursion(t *testing.T) {
+	var buf bytes.Buffer
+	jsonLogger(&buf).Info("msg", slog.Group("creds", "password", "hunter2"))
+	m := parseOne(t, &buf)
+	creds, ok := m["creds"].(map[string]any)
+	if !ok {
+		t.Fatalf("creds not a JSON object: %T %v", m["creds"], m["creds"])
+	}
+	if got := creds["password"]; got != Redacted {
+		t.Errorf("creds.password = %v; want %q", got, Redacted)
+	}
+}
+
+// TestRedactHandler_URLUserinfoStripped covers Fix case (4): *url.URL
+// userinfo loses its password but keeps the username.
+func TestRedactHandler_URLUserinfoStripped(t *testing.T) {
+	u, err := url.Parse("https://alice:hunter2@host/path")
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := redactAttr(slog.Any("endpoint", u))
+	got, ok := out.Value.Any().(*url.URL)
+	if !ok {
+		t.Fatalf("redactAttr returned non-*url.URL: %T", out.Value.Any())
+	}
+	if got.User.Username() != "alice" {
+		t.Errorf("username = %q; want %q", got.User.Username(), "alice")
+	}
+	if _, hasPwd := got.User.Password(); hasPwd {
+		t.Errorf("password must be absent after redaction")
+	}
+}
+
+// TestRedactHandler_NilURLPassesThrough covers Fix case (5): a typed-nil
+// *url.URL must not panic and must pass through as a typed-nil *url.URL.
+func TestRedactHandler_NilURLPassesThrough(t *testing.T) {
+	defer func() {
+		if p := recover(); p != nil {
+			t.Errorf("panic on nil *url.URL: %v", p)
+		}
+	}()
+	var u *url.URL
+	out := redactAttr(slog.Any("endpoint", u))
+	got, ok := out.Value.Any().(*url.URL)
+	if !ok {
+		t.Fatalf("redactAttr returned non-*url.URL: %T", out.Value.Any())
+	}
+	if got != nil {
+		t.Errorf("nil *url.URL should pass through as nil, got %v", got)
+	}
+}
+
+// redactor satisfies the inline interface{ Redacted() any } that
+// redactAny matches at redact.go:107.
+type redactor struct{ public string }
+
+func (r redactor) Redacted() any { return r.public }
+
+// TestRedactHandler_RedactedInterfaceHonored covers Fix case (6).
+func TestRedactHandler_RedactedInterfaceHonored(t *testing.T) {
+	v := redactor{public: "safe-value"}
+	var buf bytes.Buffer
+	jsonLogger(&buf).Info("msg", slog.Any("obj", v))
+	m := parseOne(t, &buf)
+	if got, ok := m["obj"].(string); !ok || got != "safe-value" {
+		t.Errorf("obj = %v; want %q", m["obj"], "safe-value")
+	}
+}
+
+// TestRedactHandler_WithAttrsRedacts covers Fix case (7): attrs added
+// via logger.With are redacted before reaching the inner sink.
+func TestRedactHandler_WithAttrsRedacts(t *testing.T) {
+	var buf bytes.Buffer
+	logger := jsonLogger(&buf).With("password", "hunter2")
+	logger.Info("msg")
+	m := parseOne(t, &buf)
+	if got := m["password"]; got != Redacted {
+		t.Errorf("password = %v; want %q", got, Redacted)
+	}
+}
+
+// TestRedactHandler_WithGroupPropagates covers Fix case (8): keys
+// inside a group from WithGroup still get redacted.
+func TestRedactHandler_WithGroupPropagates(t *testing.T) {
+	var buf bytes.Buffer
+	logger := jsonLogger(&buf).WithGroup("grp")
+	logger.Info("msg", "password", "hunter2")
+	m := parseOne(t, &buf)
+	grp, ok := m["grp"].(map[string]any)
+	if !ok {
+		t.Fatalf("grp not a JSON object: %T %v", m["grp"], m["grp"])
+	}
+	if got := grp["password"]; got != Redacted {
+		t.Errorf("grp.password = %v; want %q", got, Redacted)
+	}
+}
