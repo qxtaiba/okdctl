@@ -2266,7 +2266,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `con:aa84670c:time-after-update-notice-ok` — time after update notice ok
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/con-aa84670c-update-notice-timer  
+**Status:** in review — PR #179  
 **Severity:** suggestion  
 **Cluster:** time-sleep-retry  
 **Evidence:** `internal/cli/root.go:128-134`  
@@ -2348,7 +2348,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `api:dd75bdeb:export-no-caller` — export no caller
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/api-dd75bdeb-lowercase-context  
+**Status:** in review — PR #181  
 **Severity:** minor  
 **Cluster:** exported-surface  
 **Evidence:** `internal/distribution/okd/postinstall/context.go:4-10`  
@@ -2662,7 +2662,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `obs:366b3f2d:step-completed-info-on-failure` — step completed info on failure
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/obs-366b3f2d-step-failure-level  
+**Status:** in review — PR #180  
 **Severity:** minor  
 **Cluster:** level-discipline — seam→audit-cli-ux  
 **Evidence:** `internal/distribution/orchestrator.go:142-142`  
@@ -2796,7 +2796,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `smell:d31d1b9d:role-string-instead-of-enum` — role string instead of enum
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/smell-d31d1b9d-role-enum  
+**Status:** in review — PR #178  
 **Severity:** minor  
 **Cluster:** magic-strings  
 **Evidence:** `internal/cli/status.go:97-222`  
@@ -2806,7 +2806,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `smell:830d4653:duplicate-os-fallback` — duplicate os fallback
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/smell-830d4653-detect-or-default  
+**Status:** in review — PR #177  
 **Severity:** minor  
 **Cluster:** helper-package-no-value  
 **Evidence:** `internal/distribution/okd/cleanup/packages.go:17-25`  
