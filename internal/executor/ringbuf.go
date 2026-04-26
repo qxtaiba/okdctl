@@ -55,7 +55,7 @@ func (r *ringWriter) tail() string {
 	var parts []string
 	if r.full {
 		parts = make([]string, 0, r.max)
-		for i := 0; i < r.max; i++ {
+		for i := range r.max {
 			parts = append(parts, r.lines[(r.pos+i)%r.max])
 		}
 	} else {
