@@ -38,11 +38,15 @@ func (p *Phase) DownloadOKDTools(ctx context.Context, version string, opts *Opti
 
 // InstallToolsToSystem copies the downloaded OKD binaries from srcDir into
 // p.BinDir (empty falls back to phase.DefaultBinDir) with executable mode.
-func (p *Phase) InstallToolsToSystem(_ context.Context, srcDir string) error {
+func (p *Phase) InstallToolsToSystem(ctx context.Context, srcDir string) error {
 	binaries := []string{"openshift-install", "oc", "kubectl"}
 	destDir := phase.BinDirOrDefault(p.BinDir)
 
 	for _, binary := range binaries {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+
 		srcPath := filepath.Join(srcDir, binary)
 		if !system.FileExists(srcPath) {
 			continue
