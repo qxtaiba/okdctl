@@ -12,14 +12,19 @@ import (
 	"strings"
 	"time"
 
+	"github.com/qxtaiba/okdctl/internal/executor"
 	"github.com/qxtaiba/okdctl/internal/logutil"
 )
 
 // RunCaptured runs bin with args, capturing stderr into the returned error on
 // non-zero exit. Context cancellation is respected; stdout is discarded
 // (callers that need it should use internal/executor.Executor instead).
+//
+// env is filtered through executor.DefaultEnvAllowlist so unrelated shell
+// tokens exported by the caller do not reach privileged child processes.
 func RunCaptured(ctx context.Context, bin string, args ...string) error {
 	cmd := exec.CommandContext(ctx, bin, args...)
+	cmd.Env = executor.FilterParentEnv(executor.DefaultEnvAllowlist)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {

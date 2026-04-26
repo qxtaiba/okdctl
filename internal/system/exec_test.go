@@ -11,6 +11,17 @@ import (
 	"github.com/qxtaiba/okdctl/internal/logutil"
 )
 
+// Guards the env-allowlist forwarding contract for RunCaptured; the wrapper
+// must not pass arbitrary parent env to privileged subprocesses.
+func TestRunCaptured_EnvFiltered(t *testing.T) {
+	t.Setenv("OKDCTL_SECRET_CANARY", "must-not-leak")
+	err := RunCaptured(context.Background(), "sh", "-c",
+		`[ -z "$OKDCTL_SECRET_CANARY" ] || exit 42`)
+	if err != nil {
+		t.Fatalf("canary env var leaked into child process: %v", err)
+	}
+}
+
 func TestWaitFor_ReadyOnFirstCheck(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		ctx := context.Background()
