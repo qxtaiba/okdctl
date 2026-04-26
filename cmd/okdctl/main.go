@@ -42,14 +42,14 @@ func preflight() {
 			if strings.HasPrefix(v, "~") && expanded == v {
 				detail = "tilde expansion failed (home dir unresolved); " + detail
 			}
-			tui.Warn("OKDCTL_BIN_DIR=" + v + " ignored: " + detail)
+			tui.Warn("OKDCTL_BIN_DIR ignored", tui.LF("value", v), tui.LF("err", detail))
 		}
 	}
 	binDir := phase.PreflightBinDir()
 	path := os.Getenv("PATH")
 	if !slices.Contains(filepath.SplitList(path), binDir) {
 		if err := os.Setenv("PATH", binDir+":"+path); err != nil {
-			tui.Warn("failed to prepend " + binDir + " to PATH: " + err.Error())
+			tui.Warn("failed to prepend bin dir to PATH", tui.LF("bin_dir", binDir), tui.LF("err", err))
 		}
 	}
 }
