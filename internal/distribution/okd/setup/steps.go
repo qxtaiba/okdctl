@@ -13,6 +13,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/templates"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/executor"
+	"github.com/qxtaiba/okdctl/internal/netutil"
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
@@ -315,7 +316,7 @@ func (p *Phase) generateKubeVIPManifests(cfg *config.Config, clusterDir string) 
 
 	iface := cfg.Networking.StaticIP.Interface
 	if iface == "" {
-		iface = "ens18" // default virtio interface on Proxmox VMs
+		iface = netutil.DefaultProxmoxIface
 	}
 
 	openshiftDir := filepath.Join(clusterDir, "openshift")
