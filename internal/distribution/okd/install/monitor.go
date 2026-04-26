@@ -21,13 +21,8 @@ func (p *Phase) WaitForBootstrap(ctx context.Context, clusterDir string, opts *O
 	ctx, cancel := context.WithTimeout(ctx, opts.BootstrapTimeout)
 	defer cancel()
 
-	cmd := osExec.CommandContext(ctx, "openshift-install", "wait-for", "bootstrap-complete", "--dir", clusterDir, "--log-level=debug")
-
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-
 	stopSpinner := tui.StartSpinner(ctx, "waiting for bootstrap complete")
-	err := cmd.Run()
+	_, err := p.Exec.RunStreamedChecked(ctx, "openshift-install", "wait-for", "bootstrap-complete", "--dir", clusterDir, "--log-level=debug")
 	stopSpinner()
 	if err != nil {
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
