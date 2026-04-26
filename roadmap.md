@@ -2816,7 +2816,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `smell:25fa1be8:asymmetric-action-constant` — asymmetric action constant
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/smell-25fa1be8-firewall-action-const  
+**Status:** in review — PR #167  
 **Severity:** minor  
 **Cluster:** magic-strings  
 **Evidence:** `internal/distribution/okd/firewall/firewall.go:27-213`  
@@ -2886,7 +2886,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `smell:26a430ee:bool-config-map-instead-of-set` — bool config map instead of set
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/smell-26a430ee-rootcmds-slice  
+**Status:** in review — PR #168  
 **Severity:** suggestion  
 **Cluster:** bool-should-be-enum  
 **Evidence:** `internal/cli/elevation.go:23-28`  
@@ -2896,7 +2896,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `smell:6424733c:single-caller-wrapper` — single caller wrapper
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/smell-6424733c-inline-createprovisioner  
+**Status:** in review — PR #169  
 **Severity:** suggestion  
 **Cluster:** helper-package-no-value  
 **Evidence:** `internal/cli/helpers.go:105-109`  
@@ -2946,7 +2946,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `smell:1e8ffb91:string-equals-ok` — string equals ok
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/smell-1e8ffb91-healthz-const  
+**Status:** in review — PR #170  
 **Severity:** suggestion  
 **Cluster:** magic-strings  
 **Evidence:** `internal/distribution/okd/postinstall/verify.go:203-220`  
@@ -2988,7 +2988,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `dep:33ef32bf:stale-indirect-mage` — stale indirect mage
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/dep-33ef32bf-mod-tidy  
+**Status:** in review — PR #171  
 **Severity:** minor  
 **Cluster:** module-hygiene  
 **Evidence:** `go.mod:47-47`  
@@ -2998,7 +2998,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `dep:33ef32bf:stale-indirect-x-exp` — stale indirect x exp
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/dep-33ef32bf-mod-tidy  
+**Status:** in review — PR #171  
 **Severity:** minor  
 **Cluster:** module-hygiene  
 **Evidence:** `go.mod:60-60`  
