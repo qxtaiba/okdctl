@@ -36,6 +36,10 @@ func (p *Phase) StartWorkerVMs(ctx context.Context, cfg *config.Config, opts *Op
 		Vars: map[string]string{
 			"start_workers_immediately": "true",
 		},
+		// Without scoping, this apply reconciles the full state — a stray
+		// tfvars edit elsewhere would be silently applied alongside the
+		// worker start. Bootstrap takes the same precaution.
+		Targets: []string{"module.okd_cluster.proxmox_virtual_environment_vm.worker"},
 	}
 
 	if err := tf.Apply(ctx, applyOpts); err != nil {
