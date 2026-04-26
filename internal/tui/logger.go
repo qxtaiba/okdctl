@@ -6,6 +6,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"sync/atomic"
 
 	"charm.land/lipgloss/v2"
 	charmlog "charm.land/log/v2"
@@ -26,19 +27,25 @@ func LF(key string, value any) LogField {
 }
 
 var (
-	stdoutLogger = buildLogger(os.Stdout)
-	stderrLogger = buildLogger(os.Stderr)
+	stdoutLogger atomic.Pointer[charmlog.Logger]
+	stderrLogger atomic.Pointer[charmlog.Logger]
 	// stderrSlog routes Debug/Info/Warn/Error through logutil.RedactHandler
 	// so secret-bearing structured attrs (password/token/secret/api_key)
 	// are scrubbed before reaching charmlog. SetRunID rebuilds this wrapper
 	// whenever stderrLogger is rebound via .With().
-	stderrSlog         = buildStderrSlog()
+	stderrSlog         atomic.Pointer[slog.Logger]
 	progressBarsActive = true
-	runID              string
+	runID              atomic.Pointer[string]
 )
 
+func init() {
+	stdoutLogger.Store(buildLogger(os.Stdout))
+	stderrLogger.Store(buildLogger(os.Stderr))
+	stderrSlog.Store(buildStderrSlog())
+}
+
 func buildStderrSlog() *slog.Logger {
-	return slog.New(logutil.NewRedactHandler(&stderrHandler{h: stderrLogger}))
+	return slog.New(logutil.NewRedactHandler(&stderrHandler{h: stderrLogger.Load()}))
 }
 
 func buildLogger(w io.Writer) *charmlog.Logger {
@@ -65,16 +72,16 @@ func fieldsToArgs(fields []LogField) []any {
 // Debug emits a debug-level record on stderr. Stdout is reserved for data
 // the user explicitly asked for (config show, kubeconfig, JSON output).
 // Records pass through logutil.RedactHandler via stderrSlog.
-func Debug(msg string, fields ...LogField) { stderrSlog.Debug(msg, fieldsToArgs(fields)...) }
+func Debug(msg string, fields ...LogField) { stderrSlog.Load().Debug(msg, fieldsToArgs(fields)...) }
 
 // Info logs at INFO through the RedactHandler-wrapped stderr slog.
-func Info(msg string, fields ...LogField) { stderrSlog.Info(msg, fieldsToArgs(fields)...) }
+func Info(msg string, fields ...LogField) { stderrSlog.Load().Info(msg, fieldsToArgs(fields)...) }
 
 // Warn logs at WARN through the RedactHandler-wrapped stderr slog.
-func Warn(msg string, fields ...LogField) { stderrSlog.Warn(msg, fieldsToArgs(fields)...) }
+func Warn(msg string, fields ...LogField) { stderrSlog.Load().Warn(msg, fieldsToArgs(fields)...) }
 
 // Error logs at ERROR through the RedactHandler-wrapped stderr slog.
-func Error(msg string, fields ...LogField) { stderrSlog.Error(msg, fieldsToArgs(fields)...) }
+func Error(msg string, fields ...LogField) { stderrSlog.Load().Error(msg, fieldsToArgs(fields)...) }
 
 // stderrHandler is a slog.Handler that writes every record to stderr.
 // stdoutLogger is retained in the package only so ConfigureLoggers has a
@@ -105,7 +112,7 @@ func (h *stderrHandler) WithGroup(name string) slog.Handler {
 // --format=json`). Every record passes through logutil.RedactHandler so
 // credentials in structured attrs never reach the sink.
 func SimpleLogger() *slog.Logger {
-	return slog.New(logutil.NewRedactHandler(&stderrHandler{h: stderrLogger}))
+	return slog.New(logutil.NewRedactHandler(&stderrHandler{h: stderrLogger.Load()}))
 }
 
 // ConfigureLoggers applies level, formatter, and writer settings to the
@@ -130,13 +137,15 @@ func ConfigureLoggers(level, format string, stdoutW, stderrW io.Writer, progress
 		return fmt.Errorf("unknown log format %q: must be text or json", format)
 	}
 
-	stdoutLogger.SetLevel(lvl)
-	stdoutLogger.SetFormatter(formatter)
-	stdoutLogger.SetOutput(stdoutW)
+	sl := stdoutLogger.Load()
+	sl.SetLevel(lvl)
+	sl.SetFormatter(formatter)
+	sl.SetOutput(stdoutW)
 
-	stderrLogger.SetLevel(lvl)
-	stderrLogger.SetFormatter(formatter)
-	stderrLogger.SetOutput(stderrW)
+	el := stderrLogger.Load()
+	el.SetLevel(lvl)
+	el.SetFormatter(formatter)
+	el.SetOutput(stderrW)
 
 	progressBarsActive = progressBars
 	return nil
@@ -156,15 +165,18 @@ func ProgressBarsEnabled() bool {
 // pinned loggers at createOKDProvisioner time. Not safe for concurrent
 // callers.
 func SetRunID(id string) {
-	runID = id
-	stdoutLogger = stdoutLogger.With("run_id", id)
-	stderrLogger = stderrLogger.With("run_id", id)
+	runID.Store(&id)
+	stdoutLogger.Store(stdoutLogger.Load().With("run_id", id))
+	stderrLogger.Store(stderrLogger.Load().With("run_id", id))
 	// Rebuild the slog wrapper so it captures the new stderrLogger value.
-	stderrSlog = buildStderrSlog()
+	stderrSlog.Store(buildStderrSlog())
 }
 
 // RunID returns the correlation ID pinned by the most recent SetRunID
 // call, or "" before SetRunID is invoked.
 func RunID() string {
-	return runID
+	if p := runID.Load(); p != nil {
+		return *p
+	}
+	return ""
 }
