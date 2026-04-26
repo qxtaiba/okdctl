@@ -102,12 +102,7 @@ func resolveProjectRootOrDie() (string, error) {
 	return root, nil
 }
 
-// createOKDProvisioner creates a provisioner, optionally with Proxmox credentials.
 // Pass nil for creds when the operation only needs local tools (oc, dnsmasq, systemctl).
-func createOKDProvisioner(cfg *config.Config, creds *credentials.ProxmoxCredentials, projectRoot string) *okd.Provisioner {
-	return createOKDProvisionerWithOpts(cfg, creds, projectRoot)
-}
-
 func createOKDProvisionerWithOpts(cfg *config.Config, creds *credentials.ProxmoxCredentials, projectRoot string, extra ...okd.ProvisionerOption) *okd.Provisioner {
 	opts := []okd.ProvisionerOption{
 		okd.WithProjectRoot(projectRoot),
