@@ -121,10 +121,11 @@ func (m *Manager) AddRepo(ctx context.Context, name, url string, logger *slog.Lo
 		return system.RunCaptured(ctx, m.pkgCmd, "config-manager", "--add-repo", url)
 	}
 
-	arch, err := dpkgArch(ctx)
+	dpkgOut, err := exec.CommandContext(ctx, "dpkg", "--print-architecture").Output()
 	if err != nil {
 		return fmt.Errorf("failed to detect architecture: %w", err)
 	}
+	arch := strings.TrimSpace(string(dpkgOut))
 
 	listContent := fmt.Sprintf("deb [arch=%s] %s any main\n", arch, url)
 	listPath := fmt.Sprintf("/etc/apt/sources.list.d/%s.list", name)
@@ -142,13 +143,4 @@ func (m *Manager) AddRepo(ctx context.Context, name, url string, logger *slog.Lo
 		return fmt.Errorf("failed to install repo list: %w", err)
 	}
 	return system.RunCaptured(ctx, m.pkgCmd, "update")
-}
-
-func dpkgArch(ctx context.Context) (string, error) {
-	cmd := exec.CommandContext(ctx, "dpkg", "--print-architecture")
-	out, err := cmd.Output()
-	if err != nil {
-		return "", err
-	}
-	return strings.TrimSpace(string(out)), nil
 }
