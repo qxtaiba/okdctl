@@ -139,7 +139,7 @@ func runDebugBundle(cmd *cobra.Command, _ []string) (retErr error) {
 		BundleAt:  bundleAt.Format(time.RFC3339),
 		Version:   version.Version,
 		GitCommit: version.GitCommit,
-		Platform:  fmt.Sprintf("%s/%s", runtime.GOOS, runtime.GOARCH),
+		Platform:  version.Platform,
 		Sections:  sections,
 	}
 	manifestBytes, err := yaml.Marshal(manifest)
