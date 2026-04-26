@@ -1625,7 +1625,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sec:ab9b764a:cred-as-string` — cred as string
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-ab9b764a-pullsecret-bytes  
+**Status:** in review — PR #132  
 **Severity:** major  
 **Cluster:** credentials  
 **Evidence:** `internal/distribution/okd/setup/ignition.go:39-83`  
@@ -1635,7 +1635,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sec:5013fea6:dl-no-checksum` — dl no checksum
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-5013fea6-oc-checksum  
+**Status:** in review — PR #134  
 **Severity:** major  
 **Cluster:** tls-network  
 **Evidence:** `internal/distribution/okd/setup/release_extract.go:27-76`  
@@ -1645,7 +1645,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sec:8ea706f6:dl-helm-sops-no-checksum` — dl helm sops no checksum
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-8ea706f6-helm-sops-checksum  
+**Status:** in review — PR #133  
 **Severity:** major  
 **Cluster:** tls-network  
 **Evidence:** `internal/distribution/okd/setup/tools.go:29-35`  
