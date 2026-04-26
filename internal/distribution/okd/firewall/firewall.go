@@ -25,7 +25,10 @@ const (
 	None      Backend = "none"
 )
 
-const actionRemove = "remove"
+const (
+	actionAdd    = "add"
+	actionRemove = "remove"
+)
 
 // OKDRequiredPorts is the authoritative port list opened by setup;
 // HAProxyFrontendPorts() derives its subset from this slice.
@@ -141,7 +144,7 @@ func validatePort(port Port) error {
 }
 
 func openPort(ctx context.Context, backend Backend, port Port, permanent bool, logger *slog.Logger) error {
-	if err := modifyPort(ctx, backend, port, permanent, "add"); err != nil {
+	if err := modifyPort(ctx, backend, port, permanent, actionAdd); err != nil {
 		return err
 	}
 	logger.Info("firewall: opened port", "port", port.Number, "proto", port.Protocol, "desc", port.Description)
@@ -172,7 +175,7 @@ func RemoveRules(ctx context.Context, ports []Port, permanent bool, logger *slog
 	return nil
 }
 
-// modifyPort adds or removes a single firewall rule. action is "add" or "remove".
+// modifyPort adds or removes a single firewall rule. action is actionAdd or actionRemove.
 func modifyPort(ctx context.Context, backend Backend, port Port, permanent bool, action string) error {
 	if err := validatePort(port); err != nil {
 		return err
