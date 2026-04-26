@@ -95,14 +95,14 @@ func (n *statusNode) isReady() bool {
 	})
 }
 
-func (n *statusNode) role() string {
+func (n *statusNode) role() phase.NodeRole {
 	if _, ok := n.Metadata.Labels["node-role.kubernetes.io/master"]; ok {
-		return "master"
+		return phase.RoleMaster
 	}
 	if _, ok := n.Metadata.Labels["node-role.kubernetes.io/worker"]; ok {
-		return "worker"
+		return phase.RoleWorker
 	}
-	return "unknown"
+	return phase.RoleUnknown
 }
 
 type clusterStatus struct {
@@ -113,9 +113,9 @@ type clusterStatus struct {
 }
 
 type nodeStatusEntry struct {
-	Name  string `json:"name"`
-	Role  string `json:"role"`
-	Ready bool   `json:"ready"`
+	Name  string         `json:"name"`
+	Role  phase.NodeRole `json:"role"`
+	Ready bool           `json:"ready"`
 }
 
 type addonStatusEntry struct {
@@ -215,9 +215,9 @@ func printClusterStatus(cmd *cobra.Command, st clusterStatus) error {
 	workers := 0
 	for _, n := range st.Nodes {
 		switch n.Role {
-		case "master":
+		case phase.RoleMaster:
 			masters++
-		case "worker":
+		case phase.RoleWorker:
 			workers++
 		}
 	}

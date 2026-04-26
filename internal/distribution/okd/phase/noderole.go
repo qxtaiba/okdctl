@@ -15,6 +15,7 @@ const (
 	RoleBootstrap NodeRole = "bootstrap"
 	RoleMaster    NodeRole = "master"
 	RoleWorker    NodeRole = "worker"
+	RoleUnknown   NodeRole = "unknown"
 )
 
 // ParseNodeRole converts a string to NodeRole, erroring on unknown values.
