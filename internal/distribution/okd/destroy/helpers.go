@@ -10,6 +10,25 @@ import (
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
+// stateLockHint returns a *errtypes.ConfigError when the Terraform local
+// backend lock file is present in dir, indicating a stale state lock from a
+// prior crashed run. NFS / shared filesystems are the common trigger.
+// Returns nil when the lock file is absent. The caller never auto-unlocks —
+// the message names the lock so the operator can run terraform force-unlock
+// after confirming no live process is holding it.
+func stateLockHint(dir string) error {
+	lockFile := filepath.Join(dir, ".terraform.tfstate.lock.info")
+	if !system.FileExists(lockFile) {
+		return nil
+	}
+	return &errtypes.ConfigError{
+		Msg: fmt.Sprintf(
+			"terraform state locked at %s — run 'terraform force-unlock <id>' in %s after confirming no other okdctl run is active",
+			lockFile, dir,
+		),
+	}
+}
+
 func (p *Phase) destroyInfrastructure(ctx context.Context, opts *Options) error {
 	terraformDir := filepath.Join(opts.ProjectRoot, "infrastructure", "terraform", "environments", opts.TerraformEnv)
 
@@ -29,6 +48,9 @@ func (p *Phase) destroyInfrastructure(ctx context.Context, opts *Options) error 
 	}
 
 	if err := tf.Init(ctx); err != nil {
+		if hint := stateLockHint(terraformDir); hint != nil {
+			return hint
+		}
 		return &errtypes.ClusterError{Msg: "terraform init failed", Err: err}
 	}
 
