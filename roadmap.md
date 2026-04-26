@@ -1612,16 +1612,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Hard-code HashiCorp's published key fingerprint (`AA16FCBC A621E701 39936A4C 798AEC65 4FA7E1A1`) and verify with `gpg --with-fingerprint --with-colons` before installing to /usr/share/keyrings. Or ship the key bytes in the binary (it changes rarely) and skip the network fetch entirely.  
 **Effort:** hours
 
-##### `sec:8ea706f6:dl-yq-unpinned-no-checksum` — dl yq unpinned no checksum
-
-**Status:** in review — PR #158  
-**Severity:** major  
-**Cluster:** tls-network  
-**Evidence:** `internal/distribution/okd/setup/tools.go:33-35`  
-**Problem:** yqURLTemplate uses GitHub's `/releases/latest/download/` redirect — every install pulls whatever yq tag is current at fetch time. There is no checksum, no signature verification, and no version pinning despite helm and sops being version-pinned in the same file. A compromised yq release tag (or upstream account compromise) gets installed silently into BinDir = /usr/local/bin, which is exec-on-PATH for every subsequent okdctl command and the operator's interactive shell.  
-**Fix:** Pin a yq version (e.g. yqVersion = "v4.45.1") and pull yq's published `checksums` file from the same release to validate. yq publishes SHA256 sums for every release; minio-of-the-mirror, fetch and verify before chmod+x.  
-**Effort:** hours
-
 ##### `sec:40d315ad:cred-flux-deploykey-as-string` — cred flux deploykey as string
 
 **Status:** not started  
@@ -2090,16 +2080,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/system/exec.go:85-108`  
 **Problem:** WaitFor wraps the deadline-exceeded path with bare fmt.Errorf("timeout waiting for %s %s after %v: %w", ..., context.DeadlineExceeded). Every postinstall and update-ingress kube-vip / api-via-vip / api-via-hostname / svc-LB poll routes through this. Like the install monitor, the resulting error has no errtypes.ClusterError shell, so a kube-vip 2-minute timeout exits 130 (signal) instead of 4 (cluster) at cli/root.go:111.  
 **Fix:** Either (a) make WaitFor return &errtypes.ClusterError{Msg, Err: context.DeadlineExceeded} directly; or (b) leave the bare wrap and require every caller to map (the pattern in postinstall/haproxy.go lines 76, 91 already does the latter). Option (a) is the canonical fix because the function name (WaitFor) doesn't tell the caller "you must retype."  
-**Effort:** hours
-
-##### `err:aa84670c:deadline-exit-code-not-gated-on-signal` — deadline exit code not gated on signal
-
-**Status:** in review — PR #156  
-**Severity:** major  
-**Cluster:** cancellation-identity — follow-up to err:ae5b624c (PR #137); blocks err:97cb8adf from achieving its stated user-visible goal too  
-**Evidence:** `internal/cli/root.go:111`  
-**Problem:** root.go's exit-code mapping checks `errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)` BEFORE running the typed-error matcher in exitCodeFor, and returns 130 (or 143 on SIGTERM) regardless of whether a real signal was caught (`caughtSig` is not consulted). PR #137 wrapped MonitorInstallation's two timeout paths in `*errtypes.ClusterError{Err: ctx.Err()}` so error consumers see a consistent shape — but `errors.Is(err, context.DeadlineExceeded)` still walks through `ClusterError.Unwrap()` and matches at line 111, so a 60-minute install-budget exhaustion still exits 130 instead of 4. Same mis-mapping currently hides any other ClusterError-wrapped DeadlineExceeded path. The audit-errors finding `err:ae5b624c` named the goal but the in-scope monitor.go fix alone cannot reach it without a root.go change.  
-**Fix:** Gate the line-111 early-return on `caughtSig.Load() != nil`. When no signal was caught, fall through to `exitCodeFor(err)` so a typed `*errtypes.ClusterError{Err: ctx.DeadlineExceeded}` resolves to exit 4 via the existing typed-error mapping. Keep the SIGINT/SIGTERM paths (where `caughtSig` IS set) returning 130/143 unchanged. Add a unit test in cli/root_test.go (if present) or a new one that exercises both branches with a fake `caughtSig` and asserts exit codes. Scope is small (~5 lines + test) but load-bearing — run it after err:97cb8adf so both ClusterError-wrapping fixes are landed and the integration test covers the full chain.  
 **Effort:** hours
 
 ##### `err:6424733c:wrap-double-context-deployment` — wrap double context deployment
@@ -3148,16 +3128,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/addon/resolver.go:12-70`  
 **Problem:** Resolve implements Kahn's topological sort over addon dependencies. The function is the gate between operator-declared addons and install ordering — a false negative on circular dependency would cause Manager.InstallAll to deadlock or install in the wrong order (e.g. SecretStore before Flux that depends on it). No test today covers (a) circular detection, (b) priority ordering, (c) missing-dependency error.  
 **Fix:** Add resolver_test.go with a tiny stubAddon: cases — (1) no deps + same priority sorts by name; (2) priority breaks ties; (3) A→B→C orders C before B before A; (4) missing dep returns error containing "depends on" and addon names; (5) circular A→B→A returns "circular dependency detected". Pure logic — a fakeAddon{name, deps, priority} struct + addon.Addon interface stub is enough.  
-**Effort:** hours
-
-##### `tst:93957c53:cleanup-confirm-cluster-untested` — cleanup confirm cluster untested
-
-**Status:** in review — PR #157  
-**Severity:** major  
-**Cluster:** destructive-untested — related: tst:0f076161:destroy-confirm-cluster-untested  
-**Evidence:** `internal/cli/cleanup.go:79-91`  
-**Problem:** runCleanup mirrors destroy's --confirm-cluster typo guard verbatim, with the same blast radius (services stopped, terraform state files removed, /usr/local/bin binaries deleted). No test asserts the guard fires when --yes is set without a matching cluster name. A divergence between this site and destroy.go (e.g. typo in a refactor) would silently let scripted cleanups proceed against the wrong cluster.  
-**Fix:** Hoist the typo-guard logic shared between cleanup.go:79-91 and destroy.go:82-94 into cli/confirm.go as func confirmClusterMatches(force bool, confirm, name, verb string) error, then reuse from both sites. Add a single confirm_test.go covering the three cases. This both shrinks duplication and gives a single point of test coverage.  
 **Effort:** hours
 
 ##### `tst:daf5bee9:merge-kubeconfig-secret-survival-untested` — merge kubeconfig secret survival untested

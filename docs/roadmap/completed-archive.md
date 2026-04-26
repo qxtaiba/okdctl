@@ -1214,3 +1214,90 @@ but link evidence.
   call sites should see the constraint without having to read the
   doc.
 
+- **`err:aa84670c:deadline-exit-code-not-gated-on-signal`** — done
+  2026-04-26 — PR #156, merge commits `6aea3e8` (gate) + `9c825d0`
+  (extract+test). Tier H major (cancellation-identity). Follow-up to
+  `err:ae5b624c` (PR #137): that earlier fix wrapped
+  MonitorInstallation's two timeout paths in
+  `*errtypes.ClusterError{Err: ctx.Err()}` so error consumers saw a
+  consistent shape. But `root.go::execute()` short-circuited on
+  `errors.Is(err, context.Canceled || DeadlineExceeded)` BEFORE
+  calling `exitCodeFor`, and `errors.Is` walks through
+  `ClusterError.Unwrap()` — so a 60-minute install-budget exhaustion
+  exited 130 (signal) instead of 4 (cluster) even though no signal
+  was caught. Fix gated the short-circuit on `caughtSig.Load() != nil`,
+  letting ClusterError-wrapped sentinels fall through to `exitCodeFor`'s
+  typed-error mapping. Round-1 reviewer FAIL caught that the initial
+  test only asserted `atomic.Value` stdlib semantics, not the actual
+  130/143 branches; round-2 delta extracted the predicate into
+  `signalExitCode(*atomic.Value, error) (int, bool)` and added a
+  4-row table-driven test covering every caughtSig×err combination.
+  **Postmortem lesson 1:** an `errors.Is` early-return on the
+  signal-meaning sentinels is only safe when the signal-meaning
+  pathway is *also* present — gate the sentinel match on the
+  out-of-band signal channel, not just the error value, otherwise
+  any wrapping of `ctx.Err()` becomes a silent exit-code reclassifier.
+  **Postmortem lesson 2:** when a unit test asserts predicate
+  semantics, prove it by *calling the predicate*. The first test
+  exercised `atomic.Value` (stdlib) instead of the gate logic,
+  which is exactly what the reviewer caught — extracting the
+  predicate function made it trivially testable. Reviewer PASS
+  second round.
+
+- **`tst:93957c53:cleanup-confirm-cluster-untested`** — done
+  2026-04-26 — PR #157, merge commit `60bc7bb`. Tier H major
+  (destructive-untested). `runCleanup` and `runDestroy` carried
+  nearly-verbatim `--yes` / `--confirm-cluster` typo guards with the
+  same blast radius (services stopped, terraform state files removed,
+  /usr/local/bin binaries deleted). The `cleanup.go` site had no
+  tests; `destroy.go` had a `validateConfirmCluster` extraction and a
+  test, but a divergence between the two sites in a future refactor
+  would silently let scripted cleanups proceed against the wrong
+  cluster. Fix hoisted the guard into
+  `cli/confirm.go::confirmClusterMatches(force, confirm, name, verb)`,
+  parameterising the verb so the existing operator-facing strings
+  ("scripted cleanups", "refusing destroy", etc.) reproduce verbatim
+  for both call sites. Deleted `validateConfirmCluster` from
+  `destroy.go` and migrated its test to a new `confirm_test.go` with
+  6 table rows covering the four logical branches across both verbs.
+  Error type (`*errtypes.ConfigError`) preserved at both sites.
+  **Postmortem lesson:** when two destructive sites duplicate the
+  same guard, the test that anchors one site does not protect the
+  other — extract the guard so a single unit-test row catches both.
+  Verb-string parameterisation works cleanly when the existing
+  messages already follow `<verb>s` plural / `<verb>` singular
+  conventions; future verbs with irregular pluralisation would need
+  to pass the pluralised form explicitly. Reviewer PASS first round.
+
+- **`sec:8ea706f6:dl-yq-unpinned-no-checksum`** — done 2026-04-26 —
+  PR #158, merge commit `60a1fec`. Tier H major (tls-network).
+  `yqURLTemplate` used GitHub's `/releases/latest/download/`
+  redirect with no checksum and no version pin, while helm and sops
+  in the same file were both pinned and checksum-verified. A
+  compromised yq release tag (or upstream-account compromise) would
+  silently land in BinDir = /usr/local/bin and sit on PATH for every
+  subsequent okdctl invocation and the operator's interactive shell.
+  Fix pinned `yqVersion = "v4.45.1"` and embedded per-arch SHA-256
+  constants (amd64, arm64) sourced from yq's official `checksums`
+  release asset, wired through new `binaryToolMeta.checksumsByArch` →
+  `binaryInstallSpec.embeddedChecksum` → `installBinary` switch.
+  Helm/sops paths preserved unchanged via the first switch case.
+  **Design note:** the obvious "fetch the checksums file at install
+  time" approach (matching helm/sops) does not work for yq —
+  `download.FetchChecksum` expects a two-column `<hash>  <filename>`
+  format, but yq publishes a 31-column multi-algorithm matrix where
+  SHA-256 sits in column 19. The choice was: extend the checksum
+  parser to handle yq's matrix (heavier, more brittle, only one
+  consumer) or embed the SHA-256 as a constant tied to `yqVersion`.
+  Embedding chosen with a maintenance comment on the version
+  constant. **Postmortem lesson:** "fetch a vendor-published
+  checksums file" assumes the vendor's file is parseable by the
+  shared helper. When it isn't, embedding the constant — with a
+  clear maintenance pointer to the source URL — is a smaller and
+  more auditable trust anchor than carrying a per-vendor parser.
+  Reviewer PASS first round; flagged a defense-in-depth note that
+  `checksumsByArch[unmapped-arch]` returns "" and skips verification
+  — acceptable today since `platform.DownloadArch()` is constrained
+  to amd64/arm64, but a future arch addition needs a corresponding
+  map entry or the verification silently regresses.
+
