@@ -1906,7 +1906,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sub:97cb8adf:no-cmd-env` — no cmd env
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sub-97cb8adf-runcaptured-env  
+**Status:** in review — PR #147  
 **Severity:** major  
 **Cluster:** io-handling — seam→audit-security  
 **Evidence:** `internal/system/exec.go:21-33`  
@@ -1916,7 +1916,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sub:ae5b624c:bypass-canonical-executor` — bypass canonical executor
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sub-ae5b624c-waitforbootstrap-executor  
+**Status:** in review — PR #148  
 **Severity:** minor  
 **Cluster:** io-handling  
 **Evidence:** `internal/distribution/okd/install/monitor.go:24-30`  
@@ -1978,7 +1978,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `state:b804b2ec:bootstrap-destroy-skip-tfvars-silent` — bootstrap destroy skip tfvars silent
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/state-b804b2ec-bootstrap-cleanup-sentinel  
+**Status:** in review — PR #149  
 **Severity:** major  
 **Cluster:** crash-recoverability  
 **Evidence:** `internal/distribution/okd/postinstall/bootstrap.go:21-24`  
