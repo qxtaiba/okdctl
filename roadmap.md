@@ -1595,7 +1595,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sec:35abd54e:input-url-scheme-not-checked` — input url scheme not checked
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-35abd54e-http-scheme  
+**Status:** in review — PR #128  
 **Severity:** major  
 **Cluster:** input-validation  
 **Evidence:** `internal/credentials/proxmox.go:182-194`  
