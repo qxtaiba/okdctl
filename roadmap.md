@@ -2508,7 +2508,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `ux:fd2125dd:addon-uninstall-no-confirm` — addon uninstall no confirm
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/ux-fd2125dd-addon-uninstall-confirm  
+**Status:** not started  
 **Severity:** major  
 **Cluster:** verb-noun  
 **Evidence:** `internal/cli/addon.go:66-80`  
@@ -2802,7 +2802,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `mod:f55b9c27:use-builtin-clear` — use builtin clear
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/mod-clear-credentials  
+**Status:** not started  
 **Severity:** minor  
 **Cluster:** any-interface-builtins  
 **Evidence:** `internal/credentials/envfile.go:81-83`  
@@ -2812,7 +2812,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `mod:35abd54e:use-builtin-clear` — use builtin clear
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/mod-clear-credentials  
+**Status:** not started  
 **Severity:** minor  
 **Cluster:** any-interface-builtins  
 **Evidence:** `internal/credentials/proxmox.go:82-89`  
@@ -2832,7 +2832,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `mod:7b2829bb:use-slices-containsfunc` — use slices containsfunc
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/mod-7b2829bb-slices-containsfunc  
+**Status:** not started  
 **Severity:** suggestion  
 **Cluster:** slices-maps  
 **Evidence:** `internal/executor/executor.go:132-142`  
@@ -2914,7 +2914,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `smell:2f70d7df:magic-default-port` — magic default port
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/smell-2f70d7df-default-ignition-port  
+**Status:** not started  
 **Severity:** minor  
 **Cluster:** magic-strings  
 **Evidence:** `internal/distribution/okd/setup/kargs.go:73-73`  
