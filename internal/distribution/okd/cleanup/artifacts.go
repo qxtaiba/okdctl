@@ -30,7 +30,7 @@ func refuseCriticalPath(path string) error {
 // failures via the provided logger. Returns nil if the path didn't exist or
 // was removed successfully. Runs as root under the re-exec model so there
 // is no fallback path to worry about.
-func SafeRemoveWithLogger(_ context.Context, path, description string, logger *slog.Logger) error {
+func SafeRemoveWithLogger(ctx context.Context, path, description string, logger *slog.Logger) error {
 	logger = logutil.OrNop(logger)
 	if err := refuseCriticalPath(path); err != nil {
 		logger.Warn("cleanup: refusing critical path", "err", err)
@@ -40,6 +40,9 @@ func SafeRemoveWithLogger(_ context.Context, path, description string, logger *s
 		return nil
 	}
 
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	if err := os.RemoveAll(path); err != nil {
 		logger.Warn("cleanup: could not remove", "target", description, "err", err)
 		return &errtypes.ConfigError{Msg: fmt.Sprintf("could not remove %s", description), Err: err}
