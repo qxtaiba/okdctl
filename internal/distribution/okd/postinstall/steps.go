@@ -2,6 +2,7 @@ package postinstall
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/qxtaiba/okdctl/internal/addon"
@@ -45,6 +46,9 @@ func (p *Phase) postinstallSteps(cfg *config.Config, opts *Options, pctx *distri
 			Desc: "destroying bootstrap vm via terraform", NonFatal: true,
 			Exec: func(ctx context.Context) error {
 				if err := p.CleanupBootstrap(ctx, cfg, opts); err != nil {
+					if errors.Is(err, ErrBootstrapTfvarsNotFound) {
+						return nil
+					}
 					return &errtypes.ClusterError{Msg: "bootstrap cleanup failed", Err: err}
 				}
 				pctx.Update(func(c *PostInstallContext) {
