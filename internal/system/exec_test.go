@@ -8,6 +8,7 @@ import (
 	"testing/synctest"
 	"time"
 
+	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/logutil"
 )
 
@@ -73,6 +74,10 @@ func TestWaitFor_Timeout(t *testing.T) {
 		}
 		if !errors.Is(err, context.DeadlineExceeded) {
 			t.Errorf("err = %v; want errors.Is(_, context.DeadlineExceeded)", err)
+		}
+		var clusterErr *errtypes.ClusterError
+		if !errors.As(err, &clusterErr) {
+			t.Errorf("err = %v; want errors.As(_, *errtypes.ClusterError)", err)
 		}
 	})
 }

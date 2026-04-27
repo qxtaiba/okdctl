@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/executor"
 	"github.com/qxtaiba/okdctl/internal/logutil"
 )
@@ -117,10 +118,13 @@ func WaitFor(ctx context.Context, prefix, description string, check func() bool,
 			if err := ctx.Err(); err != nil {
 				return fmt.Errorf("waiting for %s %s: %w", prefix, description, err)
 			}
-			// Wrap context.DeadlineExceeded so callers can errors.Is the
-			// timeout shape — the elapsed budget IS a deadline-exceeded.
-			return fmt.Errorf("timeout waiting for %s %s after %v (%d polls): %w",
-				prefix, description, opts.Timeout, polls, context.DeadlineExceeded)
+			// Return a ClusterError so exitCodeFor maps this to exit 4 rather
+			// than 130. Unwrap chains to context.DeadlineExceeded so
+			// errors.Is checks still work.
+			return &errtypes.ClusterError{
+				Msg: fmt.Sprintf("timeout waiting for %s %s after %v (%d polls)", prefix, description, opts.Timeout, polls),
+				Err: context.DeadlineExceeded,
+			}
 		case <-ticker.C:
 			polls++
 			elapsed := time.Since(startTime)
