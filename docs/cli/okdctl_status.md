@@ -15,7 +15,8 @@ okdctl status [flags]
 
 ```
   okdctl status
-  okdctl status --format json | jq .ready_nodes
+  okdctl status --format json | jq '.nodes'
+  okdctl status --format json | jq '[.nodes[] | select(.ready)] | length'
 ```
 
 ### Options

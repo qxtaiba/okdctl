@@ -28,7 +28,8 @@ var statusCmd = &cobra.Command{
 	Long: `Print API reachability, node counts by role, cluster operator
 health, and addon status for the deployed cluster.`,
 	Example: `  okdctl status
-  okdctl status --format json | jq .ready_nodes`,
+  okdctl status --format json | jq '.nodes'
+  okdctl status --format json | jq '[.nodes[] | select(.ready)] | length'`,
 	RunE: runStatus,
 }
 
