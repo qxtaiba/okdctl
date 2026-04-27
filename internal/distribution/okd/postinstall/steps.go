@@ -72,7 +72,7 @@ func (p *Phase) postinstallSteps(cfg *config.Config, opts *Options, pctx *distri
 					c.KubeVIPVerified = true
 					c.KubeVipIP = kubeVipIP
 				})
-				p.Log.Info(fmt.Sprintf("kubevip: vip %s is responding on port 6443", kubeVipIP))
+				p.Log.Info(fmt.Sprintf("kubevip: vip %s is responding on port %d", kubeVipIP, phase.KubeAPIPort))
 				return nil
 			},
 			OnError: phase.WarnOnError(p.Log, "kubevip: verification failed"),

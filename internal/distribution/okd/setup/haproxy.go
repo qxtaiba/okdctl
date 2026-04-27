@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/qxtaiba/okdctl/internal/config"
@@ -150,7 +151,7 @@ func (p *Phase) VerifyHAProxyPorts(ctx context.Context) error {
 		port        string
 		description string
 	}{
-		{"6443", "Kubernetes API"},
+		{strconv.Itoa(phase.KubeAPIPort), "Kubernetes API"},
 		{"22623", "Machine Config Server"},
 		{"80", "HTTP ingress"},
 		{"443", "HTTPS ingress"},

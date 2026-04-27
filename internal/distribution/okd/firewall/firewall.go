@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
@@ -35,7 +36,7 @@ const (
 var OKDRequiredPorts = []Port{
 	{Number: 53, Protocol: "udp", Description: "dns"},
 	{Number: 53, Protocol: "tcp", Description: "dns"},
-	{Number: 6443, Protocol: "tcp", Description: "kubernetes api"},
+	{Number: phase.KubeAPIPort, Protocol: "tcp", Description: "kubernetes api"},
 	{Number: 22623, Protocol: "tcp", Description: "machine config server"},
 	{Number: 80, Protocol: "tcp", Description: "http ingress"},
 	{Number: 443, Protocol: "tcp", Description: "https ingress"},
@@ -43,7 +44,7 @@ var OKDRequiredPorts = []Port{
 }
 
 // haproxyPortNumbers is the set of port numbers HAProxy binds on the bastion.
-var haproxyPortNumbers = map[int]bool{6443: true, 22623: true, 80: true, 443: true}
+var haproxyPortNumbers = map[int]bool{phase.KubeAPIPort: true, 22623: true, 80: true, 443: true}
 
 // HAProxyFrontendPorts returns the subset of OKDRequiredPorts that HAProxy
 // binds on the bastion. Postinstall uses this to tear down firewall rules when
