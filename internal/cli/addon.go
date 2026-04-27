@@ -14,7 +14,11 @@ import (
 	"github.com/qxtaiba/okdctl/internal/tui"
 )
 
-var addonInstallAll bool
+var (
+	addonInstallAll              bool
+	addonUninstallYes            bool
+	addonUninstallConfirmCluster string
+)
 
 var addonCmd = &cobra.Command{
 	Use:   "addon",
@@ -64,9 +68,10 @@ install --all   installs every addon enabled in the configuration file in
 }
 
 var addonUninstallCmd = &cobra.Command{
-	Use:         "uninstall <name>",
-	Short:       "Uninstall a named addon",
-	Example:     "  okdctl addon uninstall flux",
+	Use:   "uninstall <name>",
+	Short: "Uninstall a named addon",
+	Example: "  okdctl addon uninstall flux\n" +
+		"  okdctl addon uninstall flux --yes --confirm-cluster=prod",
 	Annotations: map[string]string{"requiresRoot": "true"},
 	ValidArgsFunction: func(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
 		return addon.Names(), cobra.ShellCompDirectiveNoFileComp
@@ -88,6 +93,9 @@ var addonVerifyCmd = &cobra.Command{
 
 func init() {
 	addonInstallCmd.Flags().BoolVar(&addonInstallAll, "all", false, "install all enabled addons (per-addon continuation on failure)")
+	addonUninstallCmd.Flags().BoolVarP(&addonUninstallYes, "yes", "y", false, "skip confirmation prompt")
+	addonUninstallCmd.Flags().StringVar(&addonUninstallConfirmCluster, "confirm-cluster", "",
+		"required with --yes; must equal cfg.Cluster.Name (typo guard for scripted uninstalls)")
 
 	addonCmd.AddCommand(addonListCmd)
 	addonCmd.AddCommand(addonInstallCmd)
@@ -125,6 +133,23 @@ func runAddonUninstall(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+
+	tui.Warn(fmt.Sprintf("this will uninstall addon %q from cluster %q", args[0], cfg.Cluster.Name))
+
+	if err := confirmClusterMatches(addonUninstallYes, addonUninstallConfirmCluster, cfg.Cluster.Name, "uninstall"); err != nil {
+		return err
+	}
+	if !addonUninstallYes {
+		ok, err := promptForConfirmation(cmd.Context(), "proceed with uninstall? [y/N]: ")
+		if err != nil {
+			return err
+		}
+		if !ok {
+			tui.Info("cancelled")
+			return nil
+		}
+	}
+
 	projectRoot, err := resolveProjectRootOrDie()
 	if err != nil {
 		return err
