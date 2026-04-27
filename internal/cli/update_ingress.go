@@ -13,10 +13,9 @@ import (
 )
 
 var (
-	updateIngressYes           bool
-	updateIngressRemoveHAProxy bool
-	updateIngressKeepHAProxy   bool
-	updateIngressDryRun        bool
+	updateIngressYes         bool
+	updateIngressKeepHAProxy bool
+	updateIngressDryRun      bool
 )
 
 var updateIngressCmd = &cobra.Command{
@@ -42,10 +41,6 @@ Run this after deploying a LoadBalancer provider (e.g., MetalLB).`,
 func init() {
 	updateIngressCmd.Flags().BoolVarP(&updateIngressYes, "yes", "y", false, "skip confirmation prompts")
 	updateIngressCmd.Flags().BoolVar(&updateIngressKeepHAProxy, "keep-haproxy", false, "keep haproxy running on the bastion after dns switch")
-	updateIngressCmd.Flags().BoolVar(&updateIngressRemoveHAProxy, "remove-haproxy", true, "deprecated: use --keep-haproxy instead")
-	if err := updateIngressCmd.Flags().MarkDeprecated("remove-haproxy", "use --keep-haproxy instead"); err != nil {
-		panic(err) // flag is statically defined above; unreachable
-	}
 	updateIngressCmd.Flags().BoolVar(&updateIngressDryRun, "dry-run", false, "preview update-ingress mutations without touching the cluster")
 }
 
@@ -57,7 +52,7 @@ func runUpdateIngressDryRun(cfg *config.Config) error { //nolint:unparam // erro
 	fmt.Println("  would: query IngressControllers (oc get ingresscontroller -n openshift-ingress-operator)")
 	fmt.Println("  would: wait for LoadBalancer IPs on router-* services in openshift-ingress")
 	fmt.Println("  would: deploy production dnsmasq config pointing *.apps at LoadBalancer IPs")
-	if updateIngressRemoveHAProxy && !updateIngressKeepHAProxy {
+	if !updateIngressKeepHAProxy {
 		fmt.Println("  would: stop and disable haproxy on the bastion (if all controllers are LB-type)")
 	}
 	tui.Info("dry-run: re-run without --dry-run to execute update-ingress")
@@ -78,8 +73,7 @@ func runUpdateIngress(cmd *cobra.Command, _ []string) error {
 
 	clusterFQDN := cfg.Cluster.Name + "." + cfg.Cluster.Domain
 	tui.Warn(fmt.Sprintf("this will update dns for '%s' to use loadbalancer ips", clusterFQDN))
-	effectiveRemoveHAProxy := updateIngressRemoveHAProxy && !updateIngressKeepHAProxy
-	if effectiveRemoveHAProxy {
+	if !updateIngressKeepHAProxy {
 		tui.Warn("haproxy will be stopped and disabled on the bastion (pass --keep-haproxy to skip)")
 	}
 
@@ -111,7 +105,7 @@ func runUpdateIngress(cmd *cobra.Command, _ []string) error {
 	startTime := time.Now()
 
 	result, err := p.UpdateIngress(ctx, cfg, postinstall.UpdateIngressOptions{
-		RemoveHAProxy: effectiveRemoveHAProxy,
+		RemoveHAProxy: !updateIngressKeepHAProxy,
 		ConfirmConversion: func(hostNetworkICs []string) bool {
 			tui.Warn(fmt.Sprintf("converting %d HostNetwork controller(s) to LoadBalancerService requires deleting and recreating them.", len(hostNetworkICs)))
 			tui.Warn("this will cause a brief outage (~30s) for routes on affected controllers.")
