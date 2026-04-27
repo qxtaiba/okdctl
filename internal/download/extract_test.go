@@ -62,9 +62,10 @@ func buildTarGz(t *testing.T, entries []tarEntry) string {
 
 func TestExtractTarGz_ZipSlipRejected(t *testing.T) {
 	cases := []struct {
-		name    string
-		entries []tarEntry
-		wantMsg string
+		name        string
+		entries     []tarEntry
+		wantMsg     string
+		escapedFile string // relative to filepath.Dir(dest); must not exist after call
 	}{
 		{
 			name: "parent-dir traversal in entry name",
@@ -86,6 +87,15 @@ func TestExtractTarGz_ZipSlipRejected(t *testing.T) {
 				{Name: "link", Mode: 0o777, Typeflag: tar.TypeSymlink, Linkname: "../../../etc/passwd"},
 			},
 			wantMsg: "escape",
+		},
+		{
+			name: "symlink-then-write redirects through escaped link",
+			entries: []tarEntry{
+				{Name: "link", Mode: 0o777, Typeflag: tar.TypeSymlink, Linkname: "../escape-dir"},
+				{Name: "link/file.txt", Mode: 0o644, Data: []byte("bad")},
+			},
+			wantMsg:     "escape",
+			escapedFile: "escape-dir/file.txt",
 		},
 	}
 	for _, tc := range cases {
@@ -113,6 +123,12 @@ func TestExtractTarGz_ZipSlipRejected(t *testing.T) {
 			// Nothing escaped outside dest.
 			if _, statErr := os.Stat(filepath.Join(filepath.Dir(dest), "escape.txt")); !os.IsNotExist(statErr) {
 				t.Errorf("escape file materialized outside dest: %v", statErr)
+			}
+			if tc.escapedFile != "" {
+				escaped := filepath.Join(filepath.Dir(dest), tc.escapedFile)
+				if _, statErr := os.Stat(escaped); !os.IsNotExist(statErr) {
+					t.Errorf("escaped file materialized outside dest at %s: %v", escaped, statErr)
+				}
 			}
 		})
 	}
