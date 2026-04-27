@@ -1851,3 +1851,84 @@ but link evidence.
   in-flight PR), so all four destructive verbs harden in one
   shot. Reviewer PASS first round.
 
+- **`iac:18a795d5:network-device-ignored`** — done 2026-04-27 —
+  PR #209, merge commit `3bcf7c5`. Tier H suggestion
+  (hcl-destroy-ordering). All three VM resources
+  (bootstrap/master/worker) had `network_device,` in
+  `ignore_changes` with no rationale, so an auditor or future
+  Terraform upgrade reviewer could not tell the entry from stale
+  scaffolding. Added a 2-line `#`-prefixed comment above each
+  `network_device,` matching the existing `efi_disk` rationale
+  shape, naming the upstream cause (bpg/terraform-provider-proxmox
+  emits spurious diffs when static + dynamic network_device
+  coexist) and the consequence. **Postmortem lesson:** when a
+  workaround sits in a lifecycle/ignore_changes block, attach the
+  upstream-bug rationale at the call site — without it, future
+  cleanup passes will treat the entry as cruft. Reviewer PASS
+  first round.
+
+- **`smell:d9f7733e:stringly-typed-status-enum`** — done
+  2026-04-27 — PR #210, merge commit `4e97662`. Tier H minor
+  (magic-strings). `manifestEntry.Status` was free-form `string`;
+  the codebase only ever assigned `"ok"`, `"skipped"`, `"failed"`
+  but a typo at any of 24 sites silently shipped a malformed
+  manifest.yaml — the support engineer's first read on a debug
+  bundle. Introduced `type bundleStatus string` + three constants
+  (`bundleStatusOK`/`Skipped`/`Failed`), retyped the field, and
+  swept all 24 assignments. Mirrors the existing
+  `stepDisplayStatus` shape in `cli/summary.go`. Wire format
+  byte-identical because Go marshals named string types as plain
+  strings; existing tests compare typed field against untyped
+  string literals (Go-spec-compliant). **Postmortem lesson:**
+  named-string enums cost zero in Go (no runtime overhead, no
+  wire-format change, untyped literal compares still work), so
+  the bar for promoting a `string` field to a named type is low
+  whenever the value space is fixed. Reviewer PASS first round.
+
+- **`api:2c4d8e6b:should-be-exported`** — done 2026-04-27 —
+  PR #211, merge commit `9837584`. Tier H minor
+  (exported-surface). `addon.AddonInfo` carried a
+  `//nolint:revive` "stutter is established public API" suppression
+  but the package lives under `internal/`, where rename has no
+  external-API cost. Renamed to `addon.Metadata` (avoids the
+  `Info() Info` method/type collision that `addon.Info` would
+  produce) and dropped the nolint. Three files touched, no public
+  surface affected. **Postmortem lesson:** //nolint suppressions
+  on internal/ types should be reviewed against the actual import
+  graph — internal/ has no consumers outside the module, so the
+  "breaking change" framing is wrong. The right mental model is:
+  treat internal/ stutter the same as any other package-private
+  rename. Reviewer PASS first round.
+
+- **`smell:1e8ffb91:repeated-port-literal`** — done 2026-04-27 —
+  PR #207, merge commit `fa313e6`. Tier H minor (magic-strings).
+  Port 6443 (kube-apiserver) was repeated as a raw literal across
+  postinstall verify/haproxy/steps, setup haproxy, and firewall
+  package — 9 sites total (the roadmap evidence count of 7 was
+  off; grep found 9). Added `const KubeAPIPort = 6443` to
+  `phase/paths.go` (canonical phase-level constant location) and
+  swept all 9 sites; firewall picked up a new `phase` import (no
+  cycle: phase does not import firewall). **Postmortem lesson:**
+  introducing a constant where a literal repeats across ≥3 call
+  sites pays for itself even if the value never changes — it
+  documents the *role* of the number, which `6443` does not. The
+  audit-claimed count was an undercount; always verify with
+  `grep -rn` rather than trusting the roadmap evidence list.
+  Reviewer PASS first round.
+
+- **`ux:e7db1220:json-flag-shorthand-collision-risk`** — done
+  2026-04-27 — PR #212, merge commit `2c52d65`. Tier H minor
+  (flag-conventions). `releases list/show`, `status`, and
+  `describe node/addon` all bound `--format` to a `-F` shorthand,
+  which collided with the kubectl/docker/gh `-o` muscle memory
+  and confused the existing `-o output-path` semantics on
+  deploy/debug-bundle/kubeconfig. Dropped `-F` (lower blast
+  radius than re-purposing `-o`) on all 5 sites; regenerated
+  docs/cli/ via `make docs`; updated the `-F json` prose mention
+  in `docs/cli/json-schema.md`. **Postmortem lesson:**
+  flag-shorthand decisions should anchor on the ecosystem's
+  prevailing convention (kubectl/docker/gh `-o`) before inventing
+  local shorthand; `-F` was unique-but-confusing. Reviewer PASS
+  first round; PR #208 was opened against the wrong branch by
+  mistake during the parallel push and closed immediately.
+

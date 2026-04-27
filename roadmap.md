@@ -2139,16 +2139,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Add an opt-in `var.protect_masters` (default false to preserve current ergonomics for `okdctl destroy` flows) and gate `prevent_destroy = var.protect_masters` on the master resource's lifecycle. NOTE: prevent_destroy must be a literal boolean — gating on a variable is currently a Terraform limitation. Alternative: document in README that production deployments should add a tfvars-driven override module that wraps with `prevent_destroy = true`. Real fix lives at the okdctl-Go layer (see seam: audit-state-and-recovery).  
 **Effort:** hours
 
-##### `iac:18a795d5:network-device-ignored` — network device ignored
-
-**Status:** in review — PR #209  
-**Severity:** suggestion  
-**Cluster:** hcl-destroy-ordering  
-**Evidence:** `infrastructure/terraform/modules/proxmox-okd/main.tf:125-134`  
-**Problem:** All three VM resources `ignore_changes = [network_device, ...]`. Once a VM exists, drift on `var.bridge` or VLAN tag becomes invisible to `terraform plan`. The reason (bpg/proxmox dynamic-block diff confusion when network_device + dynamic network_device coexist) is real but unannotated — a future maintainer auditing the lifecycle block has no way to know the rationale, and may delete the entry assuming it is leftover scaffolding.  
-**Fix:** Add a one-line comment above `network_device,` in each ignore_changes block explaining the bpg/proxmox dynamic-block diff quirk — same shape as the existing `efi_disk` rationale comment. Without context, an auditor or a future Terraform upgrade reviewer cannot tell which entries are still load-bearing.  
-**Effort:** hours
-
 #### audit-errors
 
 ##### `err:97cb8adf:waitfor-timeout-loses-cluster-identity` — waitfor timeout loses cluster identity
@@ -2393,16 +2383,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Define VMRole as a string type local to internal/infrastructure/proxmox (or move it to a neutral internal/cluster/role package) and let okd's setup/destroy code translate between phase.NodeRole and proxmox.VMRole at the boundary. The two enums currently share string values ('bootstrap','master','worker'); a thin string-typed alias in proxmox plus a one-line ParseRole call site at the okd→proxmox edge keeps the canonical phase.NodeRole role enum intact.  
 **Effort:** hours
 
-##### `api:2c4d8e6b:should-be-exported` — should be exported
-
-**Status:** in review — PR #211  
-**Severity:** minor  
-**Cluster:** exported-surface  
-**Evidence:** `internal/addon/addon.go:29-37`  
-**Problem:** addon.AddonInfo carries a //nolint:revive 'stutter-named type is the established public API; rename is a breaking change' suppression. Since this is internal/, there is no breaking-change cost — internal/ packages can rename freely. The nolint is treating an internal-only type as if it were a public-API contract.  
-**Fix:** Rename addon.AddonInfo → addon.Info (or addon.Metadata) and update the two consumers in internal/addon/catalog/{flux,secretstore}/*.go. The Addon interface's Info() method already conflicts with a type named Info — addon.Metadata is cleaner. Net delta: ~6 line touches across 3 files; no public-API breakage because nothing in module is externally importable.  
-**Effort:** hours
-
 ##### `api:262af6e4:opt-inconsistent` — opt inconsistent
 
 **Status:** not started  
@@ -2536,16 +2516,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 ##### `ux:0f076161:destroy-force-deprecated-but-still-default-binding` — destroy force deprecated but still default binding
 
 **Status:** done — PRs #185 + #192 (moved to Completed)
-
-##### `ux:e7db1220:json-flag-shorthand-collision-risk` — json flag shorthand collision risk
-
-**Status:** in review — PR #212  
-**Severity:** minor  
-**Cluster:** flag-conventions  
-**Evidence:** `internal/cli/releases.go:78-81`  
-**Problem:** `releases list/show` and `status`/`describe` use `-F` shorthand for `--format`. Capital-F is non-conventional; kubectl/docker/gh use `-o` for output format. Mixing both `-o` (kubeconfig/deploy/debug-bundle output paths) and `-F` (format toggle) inside the same CLI fragments user muscle memory.  
-**Fix:** Either drop `-F` shorthand (use long-form `--format` only — easier to grep, no collision) or align with kubectl convention by re-purposing `-o` for format and renaming the existing `-o output` flags. Pick one across the CLI; current state is split.  
-**Effort:** hours
 
 ##### `ux:aa84670c:exit-taxonomy-doc-only-in-package-doc` — exit taxonomy doc only in package doc
 
@@ -2805,16 +2775,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 #### audit-code-smells
 
-##### `smell:d9f7733e:stringly-typed-status-enum` — stringly typed status enum
-
-**Status:** in review — PR #210  
-**Severity:** minor  
-**Cluster:** magic-strings  
-**Evidence:** `internal/cli/debug_bundle.go:68-300`  
-**Problem:** manifestEntry.Status is a free-form string but the codebase only ever assigns three values: "ok", "skipped", "failed". The literal appears 25+ times across runDebugBundle / bundleConfig / bundleLogFile / bundleTerraformState / bundleMustGather / bundleDoctor / bundleSystemMeta. Any typo silently downgrades the bundle's machine-readability — manifest.yaml is the support engineer's first read.  
-**Fix:** Introduce `type bundleStatus string` with constants `bundleStatusOK = "ok"`, `bundleStatusSkipped = "skipped"`, `bundleStatusFailed = "failed"` and re-type manifestEntry.Status to bundleStatus. JSON-tag stays unchanged so emitted manifest.yaml is byte-identical. Mirrors the existing stepDisplayStatus pattern in internal/cli/summary.go:L21-L27.  
-**Effort:** hours
-
 ##### `smell:073d24ed:duplicate-step-id-table` — duplicate step id table
 
 **Status:** not started  
@@ -2843,16 +2803,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/distribution/okd/cleanup/packages.go:17-25`  
 **Problem:** detectOS in cleanup/packages.go and the inline equivalent in setup/phase.go::New both call platform.Detect(), Warn on error, and fall back to platform.OS{Family: FamilyRHEL, ID: "unknown"}. The exact fallback literal is duplicated in two phases. A canonical platform.DetectOrDefault helper is one-of-each.  
 **Fix:** Add `func DetectOrDefault(logger *slog.Logger) OS` to internal/platform/platform.go encapsulating the warn+fallback. Replace the cleanup detectOS function and the setup inline block with a call. Net: -8 LOC, single source of truth for the 'platform-detect failed' decision.  
-**Effort:** hours
-
-##### `smell:1e8ffb91:repeated-port-literal` — repeated port literal
-
-**Status:** in review — PR #207  
-**Severity:** minor  
-**Cluster:** magic-strings  
-**Evidence:** `internal/distribution/okd/postinstall/verify.go:166-185`  
-**Problem:** Port 6443 (the kube-apiserver port) is repeated as a raw int/string literal in verify.go (3x), haproxy.go (2x), update_ingress.go (1x), setup/haproxy.go (1x), firewall.go (3x). The firewall package already defines OKDRequiredPorts including 6443 — but no exported KubeAPIPort constant exists. A future move (kube-vip on a non-default port for some homelab) needs a 7-site sweep.  
-**Fix:** Add `const KubeAPIPort = 6443` to phase/paths.go (alongside other shared phase constants) and replace literal occurrences across verify.go / haproxy.go / firewall.go / setup/haproxy.go. Keep the firewall.OKDRequiredPorts entry referencing the constant. Net effect: 7 literals → 1 constant + 7 references.  
 **Effort:** hours
 
 ##### `smell:9d79b841:strconv-fallback-to-zero` — strconv fallback to zero
