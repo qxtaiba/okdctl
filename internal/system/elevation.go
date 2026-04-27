@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"os/user"
@@ -100,31 +101,31 @@ func WriteAsInvokingUser(path string, data []byte, mode os.FileMode) error {
 // ChownTreeToInvokingUser recursively chowns root and all descendants to the
 // invoking user. No-op if the process was not re-exec'd under sudo. Errors
 // on individual entries are collected; the walk does not abort so a single
-// unreadable symlink doesn't leave the rest of the tree root-owned.
+// unreadable entry doesn't leave the rest of the tree root-owned.
 //
-// CALLER CONTRACT: root must be a path whose subtree was created by okdctl
-// during this same process (the deploy/destroy workdir). Passing an
-// attacker-influenced path lets a malicious symlink redirect Lchown — the
-// function uses Lchown (symlink-safe) but the walk itself can still
-// traverse into directories the invoking user should not own. Audit any
-// new caller against this contract.
+// The walk runs through os.Root so directory-component symlinks cannot
+// redirect any Lchown outside the trust root.
 func ChownTreeToInvokingUser(root string) error {
 	ids, err := invokingUserIDs()
 	if err != nil || ids == nil {
 		return err
 	}
+	osRoot, openErr := os.OpenRoot(root)
+	if openErr != nil {
+		return fmt.Errorf("open root %s: %w", root, openErr)
+	}
+	defer func() { _ = osRoot.Close() }()
 	var errs []error
-	walkErr := filepath.WalkDir(root, func(path string, _ os.DirEntry, walkErr error) error {
+	if walkErr := fs.WalkDir(osRoot.FS(), ".", func(path string, _ fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			errs = append(errs, walkErr)
 			return nil
 		}
-		if chownErr := os.Lchown(path, ids.uid, ids.gid); chownErr != nil { //nolint:gosec // see function-level doc: Lchown + trusted workdir
+		if chownErr := osRoot.Lchown(path, ids.uid, ids.gid); chownErr != nil {
 			errs = append(errs, fmt.Errorf("chown %s: %w", path, chownErr))
 		}
 		return nil
-	})
-	if walkErr != nil {
+	}); walkErr != nil {
 		errs = append(errs, walkErr)
 	}
 	return errors.Join(errs...)

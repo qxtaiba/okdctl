@@ -1,10 +1,59 @@
 package system
 
 import (
+	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
+
+// TestChownTreeToInvokingUser_SymlinkEscape verifies that the os.Root-based
+// walk does not descend into a symlink pointing outside the root.
+func TestChownTreeToInvokingUser_SymlinkEscape(t *testing.T) {
+	inside := t.TempDir()
+	outside := t.TempDir()
+
+	if err := os.WriteFile(filepath.Join(inside, "real.txt"), []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(inside, "escape")); err != nil {
+		t.Skip("cannot create symlink:", err)
+	}
+	if err := os.WriteFile(filepath.Join(outside, "secret.txt"), []byte("s"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	r, err := os.OpenRoot(inside)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = r.Close() }()
+
+	var visited []string
+	_ = fs.WalkDir(r.FS(), ".", func(path string, _ fs.DirEntry, ferr error) error {
+		if ferr != nil {
+			return nil
+		}
+		visited = append(visited, path)
+		return nil
+	})
+
+	for _, p := range visited {
+		if strings.HasPrefix(p, "escape/") {
+			t.Errorf("walk escaped root via symlink: visited %q", p)
+		}
+	}
+	found := false
+	for _, p := range visited {
+		if p == "real.txt" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("real.txt not visited; walk may be broken")
+	}
+}
 
 func TestInvokingUser(t *testing.T) {
 	t.Run("SUDO_USER unset falls back to current user", func(t *testing.T) {
