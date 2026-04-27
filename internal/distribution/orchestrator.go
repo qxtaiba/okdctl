@@ -155,7 +155,7 @@ func (o *Orchestrator) executeStep(ctx context.Context, step ProvisioningStep) S
 		StartedAt: startedAt,
 		Duration:  time.Since(startedAt),
 	}
-	o.logger.Info("step: completed", "step", step.ID(), "duration", r.Duration, "success", true)
+	o.logger.Info("step: succeeded", "step", step.ID(), "duration", r.Duration)
 	o.rec.StepFinished(&r)
 	return r
 }
