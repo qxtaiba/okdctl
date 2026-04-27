@@ -1544,3 +1544,111 @@ but link evidence.
   the four edits collapsed to byte-identical patterns instead
   of four ad-hoc rewrites. Reviewer PASS first round.
 
+- **`smell:830d4653:duplicate-os-fallback`** — done 2026-04-27
+  — PR #177, merge commit `1147759`. Tier H minor
+  (helper-package-no-value). The platform.Detect()
+  warn-and-fallback pattern was duplicated in two phases:
+  `cleanup/packages.go::detectOS` (called from
+  `detectPackageManager` and `Apache`) and an inline block in
+  `setup/phase.go::New`. Both warned via `logutil.OrNop(logger)`
+  and fell back to `OS{Family: FamilyRHEL, ID: "unknown"}`.
+  Hoisted into `platform.DetectOrDefault(*slog.Logger) OS` —
+  the platform package gained an internal `logutil` import (no
+  cycle: logutil only depends on stdlib). Removed the cleanup
+  detectOS wrapper, migrated its three call sites, replaced the
+  setup inline block, and dropped logutil from setup/phase.go's
+  imports (no remaining use after the inline block went away).
+  Unified warn message to "platform: detect failed; defaulting
+  to rhel" (cleanup's prior phrasing). **Postmortem lesson:**
+  when a planner removes a function, audit every import the
+  function's package owns — logutil stays needed in
+  cleanup/packages.go because `Packages()` still calls
+  `logutil.OrNop`, but it goes away from setup/phase.go because
+  the inline block was its only user. The Edit tool would not
+  catch an unused-import bug; only `go build` does.
+  Reviewer PASS first round.
+
+- **`smell:d31d1b9d:role-string-instead-of-enum`** — done
+  2026-04-27 — PR #178, merge commit `a8f0b40`. Tier H minor
+  (magic-strings). `statusNode.role()` returned bare strings
+  ("master" / "worker" / "unknown") and the
+  `printClusterStatus` switch compared against the same
+  literals — one rename upstream away from a silent drift.
+  Changed `role()`'s return type to `phase.NodeRole`, added
+  `phase.RoleUnknown` to the const block as a display-path
+  sentinel, typed `nodeStatusEntry.Role` as `phase.NodeRole`,
+  and made the switch arms `case phase.RoleMaster:` / `case
+  phase.RoleWorker:`. JSON wire format preserved because
+  `phase.NodeRole` is `type NodeRole string` with no custom
+  marshaler — the underlying string serialises unchanged.
+  `ParseNodeRole` deliberately still rejects "unknown" since it
+  is not a value openshift-install ever produces; only the
+  display path uses the sentinel. **Postmortem lesson:**
+  enum-widening can stay scoped to the consuming path —
+  parsers and emitters do not need to share the same accept
+  set. If a planner proposes adding a sentinel to the enum,
+  ask whether it should also flow into the parser; here the
+  answer was no, and the asymmetry is load-bearing.
+  Reviewer PASS first round.
+
+- **`con:aa84670c:time-after-update-notice-ok`** — done
+  2026-04-27 — PR #179, merge commit `3680eb0`. Tier H
+  suggestion (time-sleep-retry). `printUpdateNotice` used a
+  bare `<-time.After(100 * time.Millisecond)` in a select.
+  Bare time.After leaks the underlying Timer until it fires;
+  for this site (called once at process exit, 100ms cap) the
+  cost is zero, but the pattern violates CLAUDE.md
+  §Concurrency's canonical reapTimer reference. Replaced with
+  `t := time.NewTimer(100 * time.Millisecond); defer t.Stop()`
+  and switched the case to `<-t.C`. Two-line addition; no
+  behavioral diff. **Note:** chose `defer t.Stop()` over the
+  reapTimer's explicit `Stop()` on the win path because
+  `printUpdateNotice` returns immediately after the select
+  resolves, so defer fires as expected — reapTimer uses
+  explicit Stop because it sits inside a for-loop where
+  defer would not run per iteration. Reviewer PASS first round.
+
+- **`obs:366b3f2d:step-completed-info-on-failure`** — done
+  2026-04-27 — PR #180 (follow-up PR #191), merge commits
+  `081d112` and `9f6bd22`. Tier H minor (level-discipline).
+  `Orchestrator.executeStep` logged `step: completed` at Info
+  for both success AND failure paths, so consumers using
+  `--log-level=warn` filters silently missed every step
+  failure. Branched the failure path on `step.IsFatal()`:
+  fatal → Error, non-fatal → Warn, both with `"err", err`
+  attrs so log-aggregation can filter by error class. Dropped
+  the redundant `"success", false` attr from the failure path
+  because the level itself now carries that signal. **Follow-up
+  PR #191** completed the symmetry by renaming the success
+  path message from `"step: completed"` to `"step: succeeded"`
+  and dropping its `"success", true` attr — the planner
+  initially preserved the old message "for backward
+  compatibility for any log parsers keyed on the string,"
+  which the user (correctly) rejected as unnecessary
+  back-compat. **Postmortem lesson:** "preserve the old string
+  for back-compat" is a reflex that needs a real consumer to
+  justify it. okdctl has no published log-string contract, so
+  the symmetry win (succeeded/failed naming pair) wins
+  outright. Surface back-compat decisions in caveats so the
+  user can reject them before merge. Reviewer PASS first round
+  on both PRs.
+
+- **`api:dd75bdeb:export-no-caller`** — done 2026-04-27 —
+  PR #181, merge commit `2f47170`. Tier H minor
+  (exported-surface). `PostInstallContext` was exported with a
+  `//nolint:revive` directive that suppressed the stutter
+  lint, but no caller outside the postinstall package
+  referenced the type by name — it only flowed through
+  `distribution.PhaseContext[T any]` as a type parameter, and
+  generics happily hold unexported types. Lowercased to
+  `postInstallContext`, dropped the nolint directive (and the
+  doc comment that was solely a stutter-rename justification —
+  no semantic content), updated the constructor call in
+  `phase.go` and four `pctx.Update(func(c *...) { ... })`
+  closures in `steps.go`. **Postmortem lesson:** a
+  `//nolint:revive` whose justification text is "established
+  internal API; rename deferred" is a deferred TODO, not a
+  load-bearing suppression. Internal packages have no
+  external contract — the rename should land the moment the
+  audit notices it. Reviewer PASS first round.
+
