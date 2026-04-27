@@ -22,7 +22,6 @@ import (
 
 var (
 	destroyYes            bool
-	destroyForce          bool
 	destroyKeepISOs       bool
 	destroyDryRun         bool
 	destroyConfirmCluster string
@@ -45,14 +44,7 @@ Use --dry-run to preview the terraform destroy plan without modifying infra.`,
 }
 
 func init() {
-	// Primary flag is --yes (matches the other commands' idiom); --force is
-	// kept as a deprecated alias backed by its own var so both flags are
-	// additive rather than last-write-wins.
 	destroyCmd.Flags().BoolVarP(&destroyYes, "yes", "y", false, "skip confirmation prompt")
-	destroyCmd.Flags().BoolVar(&destroyForce, "force", false, "deprecated alias for --yes")
-	if err := destroyCmd.Flags().MarkDeprecated("force", "use --yes instead"); err != nil {
-		panic(err) // flag is statically defined above; unreachable
-	}
 	destroyCmd.Flags().BoolVar(&destroyKeepISOs, "keep-isos", false, "do not remove the FCOS ISO from the Proxmox host")
 	destroyCmd.Flags().BoolVar(&destroyDryRun, "dry-run", false, "preview terraform destroy plan without running destroy")
 	destroyCmd.Flags().StringVar(&destroyConfirmCluster, "confirm-cluster", "",
@@ -77,12 +69,11 @@ func runDestroy(cmd *cobra.Command, _ []string) error {
 
 	tui.Warn(fmt.Sprintf("this will destroy cluster '%s' and all associated resources", cfg.Cluster.Name))
 
-	effective := destroyYes || destroyForce
-	if err := confirmClusterMatches(effective, destroyConfirmCluster, cfg.Cluster.Name, "destroy"); err != nil {
+	if err := confirmClusterMatches(destroyYes, destroyConfirmCluster, cfg.Cluster.Name, "destroy"); err != nil {
 		return err
 	}
 
-	if !effective {
+	if !destroyYes {
 		confirmed, err := promptForConfirmation(ctx, "proceed with destroy? [y/N]: ")
 		if err != nil {
 			return err
