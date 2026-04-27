@@ -6,6 +6,7 @@ import (
 
 	"sigs.k8s.io/yaml"
 
+	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
@@ -22,26 +23,29 @@ func NewLoader() *Loader { return &Loader{} }
 func (l *Loader) LoadFile(path string) (*Config, error) {
 	fi, err := os.Stat(path)
 	if err != nil {
-		return nil, fmt.Errorf("error stating config file %s: %w", path, err)
+		return nil, &errtypes.ConfigError{Msg: fmt.Sprintf("error stating config file %s", path), Err: err}
 	}
 	if perm := fi.Mode().Perm(); perm&0o022 != 0 {
-		return nil, fmt.Errorf("config file %s has insecure permissions %#o; run 'chmod go-w %s' to fix: %w", path, perm, path, os.ErrPermission)
+		return nil, &errtypes.AuthError{
+			Msg: fmt.Sprintf("config file %s has insecure permissions %#o; run 'chmod go-w %s' to fix", path, perm, path),
+			Err: os.ErrPermission,
+		}
 	}
 
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return nil, fmt.Errorf("error reading config file %s: %w", path, err)
+		return nil, &errtypes.ConfigError{Msg: fmt.Sprintf("error reading config file %s", path), Err: err}
 	}
 
 	cfg := DefaultConfig()
 	if err := yaml.UnmarshalStrict(data, cfg); err != nil {
-		return nil, fmt.Errorf("error parsing config: %w", err)
+		return nil, &errtypes.ConfigError{Msg: "error parsing config", Err: err}
 	}
 	if cfg.SchemaVersion == "" {
-		return nil, fmt.Errorf("config file %s missing required schemaVersion (expected %q)", path, SchemaVersionV1)
+		return nil, &errtypes.ConfigError{Msg: fmt.Sprintf("config file %s missing required schemaVersion (expected %q)", path, SchemaVersionV1)}
 	}
 	if cfg.SchemaVersion != SchemaVersionV1 {
-		return nil, fmt.Errorf("config file %s has unsupported schemaVersion %q (expected %q)", path, cfg.SchemaVersion, SchemaVersionV1)
+		return nil, &errtypes.ConfigError{Msg: fmt.Sprintf("config file %s has unsupported schemaVersion %q (expected %q)", path, cfg.SchemaVersion, SchemaVersionV1)}
 	}
 	return cfg, nil
 }
