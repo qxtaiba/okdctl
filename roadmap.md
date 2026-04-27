@@ -2305,23 +2305,11 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `con:f5d703ab:install-tools-to-system-no-ctx` — install tools to system no ctx
 
-**Status:** in review — PR #182  
-**Severity:** minor  
-**Cluster:** ctx-ignored  
-**Evidence:** `internal/distribution/okd/setup/artifacts.go:41-69`  
-**Problem:** InstallToolsToSystem accepts `_ context.Context` and loops over three large binaries (oc, openshift-install, kubectl can be hundreds of MB combined) calling system.CopyFile + system.MakeExecutable. CopyFile + permission mutation on multi-hundred-MB binaries is several-second work; a ctx cancel arriving here is ignored. The function is on the deploy hot path (tools-download → install).  
-**Fix:** Thread ctx: rename param to `ctx context.Context` and add `if err := ctx.Err(); err != nil { return err }` at the top of the for-loop body. system.CopyFile already accepts no ctx; once it gains one (or is replaced with an io.Copy under a ctx-aware reader), thread that too.  
-**Effort:** hours
+**Status:** done — PR #182 (moved to Completed)
 
 ##### `con:ab9b764a:validate-ignition-only-checks-ctx-once` — validate ignition only checks ctx once
 
-**Status:** in review — PR #183  
-**Severity:** minor  
-**Cluster:** ctx-ignored  
-**Evidence:** `internal/distribution/okd/setup/ignition.go:181-215`  
-**Problem:** ValidateIgnitionFiles checks `ctx.Err()` once at function entry, then loops over three files reading + json.Unmarshal-ing each. A ctx cancellation arriving mid-loop is ignored until the loop ends. The ignition files are typically small (<1 MiB) so the practical leak is short, but the pattern "check ctx once, then ignore it" is the same shape as the time.Sleep-in-retry pattern CLAUDE.md §concurrency calls out.  
-**Fix:** Add a `if err := ctx.Err(); err != nil { return err }` at the top of the for-loop body. Three lines, makes the cancellation contract honest.  
-**Effort:** hours
+**Status:** done — PR #183 (moved to Completed)
 
 ##### `con:6424733c:metrics-shutdown-bg-ctx` — metrics shutdown bg ctx
 
@@ -2447,13 +2435,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `api:0934cf1b:should-be-exported` — should be exported
 
-**Status:** in review — PR #184  
-**Severity:** minor  
-**Cluster:** exported-surface — seam→audit-code-smells; related: sub:0934cf1b:duplicate-runcaptured  
-**Evidence:** `internal/platform/packages.go:151-163`  
-**Problem:** platform.runCaptured (unexported) is a near-duplicate of system.RunCaptured (exported). Two stderr-captured exec wrappers with the same shape live in sibling packages because system.RunCaptured cannot be reused without an import — but platform already imports internal/system. The local copy is not a coincidence; it's an unmissed extraction.  
-**Fix:** Delete platform.runCaptured (and the dpkgArch helper that uses it) and call system.RunCaptured(ctx, bin, args...) directly. The args[0] subcommand label that platform.runCaptured wraps in 'apt-get install: ...' is a marginal extra; %w on the error already names 'apt-get' and the stderr text already names the subcommand. The signature variant ([]string vs ...string) is trivially adapted with `system.RunCaptured(ctx, m.pkgCmd, args...)`.  
-**Effort:** hours
+**Status:** done — PR #184 (moved to Completed)
 
 ##### `api:35abd54e:export-no-caller-scaffolding` — export no caller scaffolding (scaffolding — verify intent only)
 
@@ -2549,23 +2531,11 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `ux:6424733c:no-tty-prompt-returns-false-silently` — no tty prompt returns false silently
 
-**Status:** in review — PR #186  
-**Severity:** minor  
-**Cluster:** signals  
-**Evidence:** `internal/cli/confirm.go:22-25`  
-**Problem:** promptForConfirmation returns (false, nil) when stdin is not a TTY. Combined with destroy/cleanup/update-ingress callers that also check non-TTY behavior — the callers don't distinguish 'declined at TTY' from 'piped, no input'. A piped `echo n | okdctl destroy` and a piped `okdctl destroy </dev/null` both hit the same 'cancelled' path. CI scripts can mistakenly think they cancelled when really there was no TTY at all.  
-**Fix:** When stdin is not a TTY AND --yes is not set, return an error (e.g. 'no TTY and --yes not set; refusing destructive op'). Caller can already render that distinctly; today destroy.go L96-L104 says 'cancelled' for both cases.  
-**Effort:** hours
+**Status:** done — PR #186 (moved to Completed)
 
 ##### `ux:0f076161:destroy-force-deprecated-but-still-default-binding` — destroy force deprecated but still default binding
 
-**Status:** in review — PR #185  
-**Severity:** minor  
-**Cluster:** flag-conventions  
-**Evidence:** `internal/cli/destroy.go:49-53`  
-**Problem:** `destroyForce` is bound by both `--yes` and `--force`; the latter is MarkDeprecated. Two BoolVarP calls share a single `*bool` so `--yes=false --force=true` and `--yes=true --force=false` both yield true (last-write-wins). The deprecation warning prints, but operators get no hint that `--yes=false --force` is silently 'force on' — surprising. Recommend a separate var for `--force` plus an OR at runtime, or drop `--force` since the message says 'use --yes'.  
-**Fix:** Either drop --force entirely (the deprecation has shipped — schedule removal next minor) or back it with its own bool var and OR them: `effective := destroyYes || destroyForce`. Avoids last-write-wins ambiguity. Same pattern check on cleanup.go (clean: only --yes there).  
-**Effort:** hours
+**Status:** done — PRs #185 + #192 (moved to Completed)
 
 ##### `ux:e7db1220:json-flag-shorthand-collision-risk` — json flag shorthand collision risk
 
@@ -2609,13 +2579,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `ux:08c49fc4:remove-haproxy-no-x-bool-default-true` — remove haproxy no x bool default true
 
-**Status:** in review — PR #187  
-**Severity:** minor  
-**Cluster:** flag-conventions  
-**Evidence:** `internal/cli/update_ingress.go:43-43`  
-**Problem:** `--remove-haproxy=true` is the default; the only way to keep haproxy is `--remove-haproxy=false`. This is a no-X-style boolean masquerading as a positive: the user must set the flag to a negation to opt out. Cobra/posix-style would be `--keep-haproxy` (default false), inverting the polarity so the destructive default still ships but the opt-out reads naturally.  
-**Fix:** Rename to `--keep-haproxy` (default false), invert the variable, update Long/Example text and the warn message at L77. Keep `--remove-haproxy` as MarkDeprecated alias for one minor cycle.  
-**Effort:** hours
+**Status:** done — PRs #187 + #193 (moved to Completed)
 
 ##### `ux:e45c2239:preflight-tui-error-uses-exit-1` — preflight tui error uses exit 1
 
@@ -2761,13 +2725,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `obs:660d83a5:run-id-mutation-race` — run id mutation race
 
-**Status:** in review — PR #188  
-**Severity:** minor  
-**Cluster:** handler-setup — seam→audit-concurrency  
-**Evidence:** `internal/tui/logger.go:158-164`  
-**Problem:** `SetRunID` mutates package-level `stdoutLogger`, `stderrLogger`, and `stderrSlog` without synchronization. The doc says "Not safe for concurrent callers," but tui.Debug/Info/Warn/Error read `stderrSlog` from any goroutine after SetRunID runs — concurrent reads against the rebound pointer cross goroutine boundaries with no happens-before edge.  
-**Fix:** Either (a) wrap the three loggers in an atomic.Pointer the readers load once per call, or (b) gate SetRunID with a sync.Once so a second call panics or no-ops loudly. Both are 5-10 LOC and surface the single-init invariant in code rather than only in the doc.  
-**Effort:** hours
+**Status:** done — PR #188 (moved to Completed)
 
 ##### `obs:8154ab0f:doctor-error-not-blocker` — doctor error not blocker
 
@@ -2781,13 +2739,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `obs:ed55ee90:summary-keys-leading-whitespace` — summary keys leading whitespace
 
-**Status:** in review — PR #189  
-**Severity:** suggestion  
-**Cluster:** field-stability  
-**Evidence:** `internal/distribution/okd/cleanup/summary.go:65-80`  
-**Problem:** Cleanup summary lines use leading whitespace inside the message ("  work directory: clean") for visual indentation. Under JSON formatter the indentation becomes part of the message field; downstream log parsers can't reliably key off the message because leading spaces are syntactically significant in YAML/JSON.  
-**Fix:** Move the indentation into a structured attr or use group prefix on the keys: `logger.Info("cleanup: work directory clean", "files", 0)` and let the styled charmlog formatter handle visual indentation. Alternative: wrap the printSummary calls in `slog.WithGroup("summary")` so JSON consumers get a nested structure.  
-**Effort:** hours
+**Status:** done — PR #189 (moved to Completed)
 
 ##### `obs:c287d5c0:cleanup-warning-key-vague` — cleanup warning key vague
 
