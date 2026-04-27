@@ -1,6 +1,7 @@
 // Package main is the entry point for the okdctl binary, which deploys
-// OKD clusters on Proxmox. It refuses to run as root and delegates all CLI
-// handling to internal/cli.
+// OKD clusters on Proxmox. Root-rejection policy lives in internal/cli
+// (ensureRoot) so it can distinguish commands that require root from those
+// that do not.
 package main
 
 import (
@@ -29,11 +30,6 @@ func main() {
 // SIGINT disposition (no summary printed), which is acceptable given
 // preflight's sub-second runtime.
 func preflight() {
-	if os.Geteuid() == 0 {
-		tui.Error("do not run as root/sudo. this tool uses sudo internally when needed.")
-		os.Exit(77) // EX_NOPERM from BSD sysexits.h — root-rejection is a privilege error, not a generic failure
-	}
-
 	// Warn before OKDCTL_BIN_DIR is silently dropped downstream.
 	if v := os.Getenv("OKDCTL_BIN_DIR"); v != "" {
 		expanded := system.ExpandPath(v)
