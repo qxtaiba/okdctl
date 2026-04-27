@@ -1,6 +1,6 @@
 # okdctl JSON output schema
 
-`okdctl` commands that accept `--format=json` (`-F json`) emit machine-readable
+`okdctl` commands that accept `--format=json` emit machine-readable
 output suitable for piping into `jq`, parsers, or higher-level automation.
 This page documents the stable shape of every JSON-producing command so that
 consumers can pin against a known contract.
