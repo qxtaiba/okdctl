@@ -6,7 +6,6 @@ package netutil
 import (
 	"context"
 	"fmt"
-	"os/exec"
 	"strings"
 
 	"github.com/qxtaiba/okdctl/internal/system"
@@ -22,8 +21,7 @@ func RemoveSecondaryIP(ctx context.Context, ip, iface string) error {
 		return fmt.Errorf("interface name is required")
 	}
 
-	checkCmd := exec.CommandContext(ctx, "ip", "addr", "show", "dev", iface)
-	output, err := checkCmd.Output()
+	output, err := system.OutputCaptured(ctx, "ip", "addr", "show", "dev", iface)
 	if err != nil {
 		return fmt.Errorf("failed to check IP presence on device %s: %w", iface, err)
 	}
@@ -50,8 +48,7 @@ func RemoveSecondaryIP(ctx context.Context, ip, iface string) error {
 // GetDefaultInterface returns the interface name that carries the host's
 // default IPv4 route.
 func GetDefaultInterface(ctx context.Context) (string, error) {
-	cmd := exec.CommandContext(ctx, "ip", "route", "show", "default")
-	output, err := cmd.Output()
+	output, err := system.OutputCaptured(ctx, "ip", "route", "show", "default")
 	if err != nil {
 		return "", fmt.Errorf("failed to get default route: %w", err)
 	}
@@ -67,8 +64,7 @@ func GetDefaultInterface(ctx context.Context) (string, error) {
 }
 
 func connectionForDevice(ctx context.Context, iface string) (string, error) {
-	cmd := exec.CommandContext(ctx, "nmcli", "-t", "-f", "NAME,DEVICE", "connection", "show", "--active")
-	output, err := cmd.Output()
+	output, err := system.OutputCaptured(ctx, "nmcli", "-t", "-f", "NAME,DEVICE", "connection", "show", "--active")
 	if err != nil {
 		return "", fmt.Errorf("failed to list networkmanager connections: %w", err)
 	}

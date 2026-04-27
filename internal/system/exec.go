@@ -37,6 +37,27 @@ func RunCaptured(ctx context.Context, bin string, args ...string) error {
 	return nil
 }
 
+// OutputCaptured runs bin with args and returns stdout. On non-zero exit,
+// stderr is captured into the returned error so callers see ip/nmcli
+// diagnostics rather than a bare exit-status.
+//
+// env is filtered through executor.DefaultEnvAllowlist.
+func OutputCaptured(ctx context.Context, bin string, args ...string) ([]byte, error) {
+	cmd := exec.CommandContext(ctx, bin, args...)
+	cmd.Env = executor.FilterParentEnv(executor.DefaultEnvAllowlist)
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	out, err := cmd.Output()
+	if err != nil {
+		msg := strings.TrimSpace(stderr.String())
+		if msg == "" {
+			return nil, fmt.Errorf("%s: %w", bin, err)
+		}
+		return nil, fmt.Errorf("%s: %w: %s", bin, err, msg)
+	}
+	return out, nil
+}
+
 // WaitForOptions configures the polling loop driven by WaitFor.
 type WaitForOptions struct {
 	Interval time.Duration // Default: 30 seconds
