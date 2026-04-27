@@ -159,7 +159,11 @@ func fetchCoreOSStream(ctx context.Context, url string) (*coreOSStreamData, erro
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("coreos stream: HTTP %d", resp.StatusCode)
+		return nil, fmt.Errorf("coreos stream: %w", &download.HTTPStatusError{
+			Status: resp.StatusCode,
+			Method: http.MethodGet,
+			URL:    url,
+		})
 	}
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
 	if err != nil {
