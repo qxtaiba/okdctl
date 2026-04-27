@@ -12,19 +12,18 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 )
 
-// httpStatusError carries the HTTP status returned from a download attempt
-// so isRetryable can tell 4xx (fail fast) from 5xx (retry).
-type httpStatusError struct {
+// HTTPStatusError carries the HTTP status returned from a failed request so
+// isRetryable can tell 4xx (fail fast) from 5xx (retry). Body is a ≤256-byte
+// excerpt of the response body with non-printable bytes stripped; no credential
+// scrubbing — callers who persist these errors are responsible for redaction.
+type HTTPStatusError struct {
 	Status int
 	Method string
 	URL    string
-	// Body is a ≤256-byte excerpt of the response body with non-printable
-	// bytes stripped. No credential scrubbing — callers who persist these
-	// errors (debug-bundle, log files) are responsible for redaction.
-	Body string
+	Body   string
 }
 
-func (e *httpStatusError) Error() string {
+func (e *HTTPStatusError) Error() string {
 	if e.Body != "" {
 		return fmt.Sprintf("HTTP %d %s %s: %s", e.Status, e.Method, e.URL, e.Body)
 	}
@@ -63,7 +62,7 @@ func isRetryable(err error) bool {
 	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		return false
 	}
-	var httpErr *httpStatusError
+	var httpErr *HTTPStatusError
 	if errors.As(err, &httpErr) {
 		switch {
 		case httpErr.Status >= http.StatusInternalServerError:

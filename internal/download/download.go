@@ -129,7 +129,7 @@ func fetchToFile(ctx context.Context, client *http.Client, opts *Options, filena
 
 	if resp.StatusCode != http.StatusOK {
 		raw, _ := io.ReadAll(io.LimitReader(resp.Body, 256))
-		return &httpStatusError{
+		return &HTTPStatusError{
 			Status: resp.StatusCode,
 			Method: http.MethodGet,
 			URL:    opts.URL,
