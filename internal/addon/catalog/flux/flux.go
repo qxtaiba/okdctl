@@ -54,8 +54,8 @@ func init() {
 type Flux struct{}
 
 // Info returns the addon metadata.
-func (f *Flux) Info() addon.AddonInfo {
-	return addon.AddonInfo{
+func (f *Flux) Info() addon.Metadata {
+	return addon.Metadata{
 		Name:           "flux",
 		DisplayName:    "Flux GitOps",
 		Description:    "Continuous delivery using Flux GitOps controller",
