@@ -2183,7 +2183,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `err:a55b4592:vocab-ad-hoc-config-perm` — vocab ad hoc config perm
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/err-a55b4592-loader-typed  
+**Status:** in review — PR #204  
 **Severity:** minor  
 **Cluster:** domain-vocabulary  
 **Evidence:** `internal/config/loader.go:22-47`  
@@ -2213,7 +2213,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `err:5013fea6:str-sniff-tool-msg` — str sniff tool msg
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/err-5013fea6-release-extract-exitcode  
+**Status:** in review — PR #205  
 **Severity:** minor  
 **Cluster:** string-sniffing  
 **Evidence:** `internal/distribution/okd/setup/release_extract.go:81-127`  
@@ -2273,7 +2273,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `err:9d79b841:fcos-stream-status-bare` — fcos stream status bare
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/err-9d79b841-fcos-stream-httpstatus  
+**Status:** in review — PR #203  
 **Severity:** suggestion  
 **Cluster:** wrapping  
 **Evidence:** `internal/distribution/okd/setup/coreos.go:150-172`  
@@ -2313,7 +2313,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `con:6424733c:metrics-shutdown-bg-ctx` — metrics shutdown bg ctx
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/con-6424733c-metrics-bgctx-doc  
+**Status:** in review — PR #202  
 **Severity:** suggestion  
 **Cluster:** ctx-todo  
 **Evidence:** `internal/cli/helpers.go:140-159`  
@@ -2501,7 +2501,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `ux:fd2125dd:addon-uninstall-no-confirm` — addon uninstall no confirm
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/ux-fd2125dd-addon-uninstall-confirm  
+**Status:** in review — PR #206  
 **Severity:** major  
 **Cluster:** verb-noun  
 **Evidence:** `internal/cli/addon.go:66-80`  
