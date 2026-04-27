@@ -72,14 +72,93 @@ Remaining active work has migrated to the tiered structure under "Deferred
 — revisit next quarter" below, which groups findings by audit run rather
 than by theme. Recommended pickup order for the live tiers:
 
-1. Tier F (docs, 2026-04-21 audit) — smallest, mostly minutes-to-hours.
-2. Tier E (architectural deferrals, 2026-04-20 audit) — E1–E6, days each.
-3. Tier G (full `/audit-all` findings, 2026-04-21) — triage by severity
+1. **Tier 0 (live bugs)** below — anything blocker-severity here jumps
+   the queue.
+2. Tier F (docs, 2026-04-21 audit) — smallest, mostly minutes-to-hours.
+3. Tier E (architectural deferrals, 2026-04-20 audit) — E1–E6, days each.
+4. Tier G (full `/audit-all` findings, 2026-04-21) — triage by severity
    (critical → major → minor → suggestion) before picking up.
-4. Tier H (full `/audit-all` findings, 2026-04-25) — 226 items
+5. Tier H (full `/audit-all` findings, 2026-04-25) — 226 items
    (3 blocker, 44 major, 100 minor, 79 suggestion). Triage by severity;
    the 3 blockers are all `audit-tests` gaps on the credential / destroy
    path and should land first.
+
+### Tier 0 — live bugs
+
+Bugs found by running the binary, not by an audit. Blocker-severity
+items here gate the next release.
+
+#### `bug:elevation-preflight-deadlock` — preflight blocks own sudo re-exec on deploy/destroy/cleanup/update-ingress
+
+**Status:** not started  
+**Severity:** blocker  
+**Cluster:** elevation — seam→audit-cli-ux  
+**Discovered:** 2026-04-27 — `./bin/okdctl deploy` reproduces. Every
+root-required subcommand (`deploy`, `destroy`, `cleanup`,
+`update-ingress`) is broken end-to-end at HEAD.  
+**Evidence:** `cmd/okdctl/main.go:32-35` (the `Geteuid() == 0` exit) and
+`internal/cli/elevation.go:55-82` (the sudo re-exec path).  
+**Problem:** `main.preflight()` exits 77 whenever `os.Geteuid() == 0`,
+running BEFORE `cli.Execute()`. `ensureRoot()` (cobra
+`PersistentPreRunE`) `syscall.Exec`s `sudo -- okdctl <args>` for any
+command in `rootRequiredCmds`. The re-exec'd process starts at
+`main.main()`, hits `preflight()` first, sees euid=0, and exits with
+"do not run as root/sudo. this tool uses sudo internally when needed."
+The two gates have been mutually incompatible since the elevation
+feature shipped (`f00f08a`, 2026-04-18); deploy/destroy/cleanup/update-ingress
+have never worked end-to-end at HEAD without a manual workaround. The
+sudo re-exec strips env via
+`executor.FilterParentEnv(executor.DefaultEnvAllowlist)`
+(`elevation.go:81`), so no breadcrumb survives unless the fix
+explicitly preserves one.  
+**Fix (planner: pick one and scope it):**
+
+- **Option A (preferred — structural):** delete the root-rejection from
+  `main.preflight()` and move it into `ensureRoot()`. Reject `euid=0`
+  only when the command does NOT require root:
+  ```go
+  if os.Geteuid() == 0 {
+      if !requiresRoot(cmd) {
+          return &errtypes.AuthError{Msg: "do not run as root/sudo; this tool escalates internally", Err: os.ErrPermission}
+      }
+      return nil
+  }
+  ```
+  The check then lives where the policy is decided. Side effect:
+  `okdctl --help` / `okdctl wizard` invoked under sudo become silently
+  successful instead of erroring — arguably more correct.
+
+- **Option B (preserves literal "no root, ever" entry-point intent):**
+  pass a re-exec marker through sudo. In `elevation.go`, add
+  `--preserve-env=OKDCTL_REEXEC` to the sudo argv and append
+  `OKDCTL_REEXEC=1` to the envp passed to `syscall.Exec`. In
+  `preflight`, skip the gate when that var is set. Risk: depends on
+  sudoers `env_reset` not aggressively stripping; `--preserve-env=`
+  is honored by sudo 1.8.21+ which is universal on supported
+  distros, but a hardened sudoers config could still strip it.
+
+**Acceptance:**
+1. `./bin/okdctl deploy` (non-root) prompts for sudo, escalates, and
+   reaches the deploy path without the "do not run as root/sudo" error.
+2. `sudo ./bin/okdctl deploy` (user-typed) — planner decides whether
+   this should still be rejected (option A: it's allowed; option B: it's
+   rejected because OKDCTL_REEXEC is unset). Either is defensible;
+   document the decision.
+3. `sudo ./bin/okdctl wizard` — must NOT silently succeed if the chosen
+   policy says wizard should refuse root. Option A makes this succeed;
+   if that's wrong, refine ensureRoot to reject when
+   `!requiresRoot(cmd) && euid==0` regardless of `SUDO_USER`.
+4. Add a unit test (`internal/cli/elevation_test.go`) covering the
+   matrix: euid=0 ∧ requiresRoot=true → allow; euid=0 ∧
+   requiresRoot=false → reject; euid≠0 ∧ requiresRoot=true → triggers
+   sudo lookup (mock `exec.LookPath`); euid≠0 ∧ requiresRoot=false →
+   no-op.
+5. `make build`, `make vet`, `make lint` clean. `make docs` no diff.
+
+**Depends on:** none. Gates the next release — every privileged
+subcommand is broken at HEAD.  
+**Effort:** hours (option A is a ~20-line shuffle plus tests; option B
+is similar plus an env-passing test).
 
 ## Addon category refactor — dedicated workstream
 
