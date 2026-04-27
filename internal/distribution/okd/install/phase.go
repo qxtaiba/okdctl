@@ -156,7 +156,7 @@ func (p *Phase) DeployInfrastructure(ctx context.Context, cfg *config.Config, op
 // after this runs must pass cluster.WithKubeconfig explicitly.
 func (p *Phase) SetupKubeconfig(ctx context.Context, clusterDir string) error {
 	if err := ctx.Err(); err != nil {
-		return err
+		return fmt.Errorf("setup kubeconfig: %w", err)
 	}
 	kubeconfigPath := filepath.Join(clusterDir, "auth", "kubeconfig")
 	if !system.FileExists(kubeconfigPath) {
