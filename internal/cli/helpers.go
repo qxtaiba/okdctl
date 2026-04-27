@@ -146,6 +146,8 @@ func startMetricsServer(addr string) (func(), []okd.ProvisionerOption) {
 	go func() { _ = srv.ListenAndServe() }()
 	tui.Info("metrics endpoint listening", tui.LF("addr", addr))
 	stop := func() {
+		// Use Background, not the caller's ctx: by stop() time the parent ctx
+		// is already cancelled by SIGINT, and we need the 5s drain to complete.
 		shutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		_ = srv.Shutdown(shutCtx)
