@@ -3,11 +3,7 @@
 // exit codes: ConfigError=2, NetworkError=3, ClusterError=4, AuthError=5.
 package errtypes
 
-import (
-	"fmt"
-
-	"github.com/qxtaiba/okdctl/internal/config"
-)
+import "fmt"
 
 // ConfigError wraps a configuration-related failure (missing file, parse
 // error, validation failure). Unwrap chains to the underlying error so
@@ -66,12 +62,3 @@ func (e *AuthError) Error() string {
 }
 
 func (e *AuthError) Unwrap() error { return e.Err }
-
-// WrapValidation returns a *ConfigError wrapping the full validation message
-// from result. Returns nil when result is nil or valid.
-func WrapValidation(result *config.ValidationResult) error {
-	if result == nil || result.IsValid() {
-		return nil
-	}
-	return &ConfigError{Msg: result.Error()}
-}

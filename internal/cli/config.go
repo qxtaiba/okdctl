@@ -44,7 +44,10 @@ func runConfigValidate(_ *cobra.Command, _ []string) error {
 
 	result := cfg.Validate()
 	fmt.Println(ValidationSummary(result))
-	return errtypes.WrapValidation(result)
+	if result == nil || result.IsValid() {
+		return nil
+	}
+	return &errtypes.ConfigError{Msg: result.Error()}
 }
 
 func runConfigShow(_ *cobra.Command, _ []string) error {
