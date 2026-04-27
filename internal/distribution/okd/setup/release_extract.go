@@ -2,6 +2,7 @@ package setup
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -122,7 +123,12 @@ func (p *Phase) extractReleaseImage(ctx context.Context, ocPath, ref, destDir st
 	if runErr := cmd.Run(); runErr != nil {
 		msg := strings.TrimSpace(stderr.String())
 		p.Log.Error("tools: oc adm release extract failed", "ref", ref, "stderr", msg)
-		if isAuthError(msg) {
+		// Exit code is the primary signal; stderr-text is a secondary lift.
+		// oc exits 1 for most runtime errors including auth; 125 is the
+		// container-runtime "failed to start" code. Widen this set if upstream
+		// oc changes its exit-code contract (roadmap err:5013fea6).
+		var ee *exec.ExitError
+		if errors.As(runErr, &ee) && (ee.ExitCode() == 1 || ee.ExitCode() == 125) && isAuthError(msg) {
 			return &errtypes.AuthError{Msg: fmt.Sprintf("release extract: registry auth failed for %s", ref), Err: runErr}
 		}
 		return &errtypes.ClusterError{Msg: fmt.Sprintf("release extract failed for %s", ref), Err: runErr}
