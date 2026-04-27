@@ -39,3 +39,19 @@ func SSHRun(ctx context.Context, exec *executor.Executor, host, cmd string) (*ex
 	}
 	return result, nil
 }
+
+// SSHRunArgv passes each argv element to ssh as a separate non-option
+// argument. ssh(1) joins the trailing args with spaces and sends one
+// command string to the remote login shell — argv mode does NOT bypass
+// the shell. Callers MUST validate every atom for shell metacharacters
+// before calling; pveshRun is the canonical example.
+func SSHRunArgv(ctx context.Context, exec *executor.Executor, host string, argv ...string) (*executor.Result, error) {
+	args := make([]string, 0, 4+len(argv))
+	args = append(args, "-o", "StrictHostKeyChecking=accept-new", "-o", "BatchMode=yes", "root@"+host)
+	args = append(args, argv...)
+	result, err := exec.Run(ctx, "ssh", args...)
+	if err != nil {
+		return result, fmt.Errorf("ssh %s: %w", host, err)
+	}
+	return result, nil
+}
