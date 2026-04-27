@@ -1932,3 +1932,118 @@ but link evidence.
   first round; PR #208 was opened against the wrong branch by
   mistake during the parallel push and closed immediately.
 
+- **`smell:c19ee328:duplicate-iface-default`** — done 2026-04-27
+  — PR #195, merge commit `3953e7c`. Tier H minor (magic-strings).
+  `"ens18"` literal duplicated between
+  `internal/distribution/okd/setup/kargs.go:61`
+  (ExtractNetworkConfig fallback) and
+  `internal/distribution/okd/setup/steps.go:318`
+  (generateKubeVIPManifests fallback). Hoisted to
+  `netutil.DefaultProxmoxIface` with a doc comment naming the
+  NM-interlock invariant — changing it requires updating the
+  NetworkManager connection name in tandem. Wizard package
+  (`internal/tui/wizard/steps/defaults.go:44-45` and
+  `internal/tui/wizard/steps/networking.go:117`) carries its own
+  `DefaultInterface` and a third literal — explicitly out of
+  scope per the audit Evidence which named only the two setup
+  sites. Reviewer first round FAILED on wrong-worktree audit
+  (the reviewer read paths from a sibling worktree); re-dispatch
+  with explicit absolute path and out-of-scope clarification
+  passed. Doc-comment refinement during re-dispatch preserved
+  the bastion-IP-for-DNS signal that the original "package-level
+  defaults when unset" wording lost. **Postmortem lesson:**
+  reviewer prompts must pin an absolute worktree path or the
+  agent picks a worktree at random when verifying against on-disk
+  state — the skill template should hard-require this for every
+  reviewer dispatch.
+
+- **`smell:c19ee328:duplicate-netmask-default`** — done 2026-04-27
+  — PR #195, merge commit `3953e7c`. Tier H minor (magic-strings).
+  `"255.255.255.0"` literal duplicated between
+  `internal/config/defaults.go:58` (DefaultConfig StaticIP) and
+  `internal/distribution/okd/setup/kargs.go:51`
+  (ExtractNetworkConfig fallback). Hoisted to
+  `netutil.DefaultNetmask` with a doc comment naming the
+  homelab-/24 / Proxmox-default-bridge rationale. Audit
+  suggested removing the kargs.go fallback ("DefaultConfig
+  populates it before save"); kept it because
+  ExtractNetworkConfig accepts any `*config.Config` including
+  user-edited YAML where `StaticIP.Netmask` may be empty —
+  defence-in-depth at the consumer is the right shape.
+  Two-commit PR (netmask first, iface second) so build is clean
+  at every commit boundary. **Postmortem lesson:** an "and
+  remove the redundant fallback" suggestion in audit text is
+  worth challenging — the audit can't see every caller, so
+  consumer-side defaults often remain load-bearing.
+
+- **`obs:8154ab0f:doctor-error-not-blocker`** — done 2026-04-27
+  — PR #197, merge commit `ec6ec03`. Tier H suggestion
+  (level-discipline, seam→audit-cli-ux). `runDoctor` recap line
+  used `tui.Error(fmt.Sprintf(...))` to embed failing/warning
+  counts in the message string, collapsing them past
+  `logutil.RedactHandler` and bypassing the structured-attr
+  path the rest of the codebase uses. Replaced with
+  `tui.Error("doctor: failing checks block deploy",
+  tui.LF("failing", fails), tui.LF("warnings", warns))`. Error
+  level retained because deploy is genuinely blocked; the
+  per-check loop above (lines 91-100) carries the actionable
+  "fix it" guidance that the recap deliberately drops. Sibling
+  Warn at line 107 uses the same fmt.Sprintf pattern but is
+  outside this item's scope (Warn level is correct for warnings
+  recap). Reviewer PASS first round.
+
+- **`ux:e45c2239:preflight-tui-error-uses-exit-1`** — done
+  2026-04-27 — PR #198, merge commit `d68b8f1`. Tier H
+  suggestion (exit-codes). `cmd/okdctl/main.go::preflight()`
+  exited 1 (reserved for "other error") when invoked as root,
+  conflating the root-rejection path with generic command
+  failure for wrapper scripts. Changed to `os.Exit(77)`
+  (EX_NOPERM from BSD sysexits.h) with an inline WHY comment
+  anchoring the literal. cli package-doc taxonomy in
+  `internal/cli/root.go` updated to record code 77. The audit
+  also said "adjust docs/cli/exit-codes.md" — that file does
+  not exist; two larger items (`ux:aa84670c:exit-taxonomy-
+  doc-only-in-package-doc`, `ux:aa84670c:exit-code-66-65-78-
+  unmapped`) own its creation. Updating the in-code taxonomy
+  comment is the minimal non-overlapping action; when the
+  aa84670c items create the docs file they will pick up code 77
+  from this comment. Verified no collision with `exitCodeFor`
+  (returns 0/1/2/3/4/5/64/130/143). Reviewer PASS first round.
+
+- **`err:d5915b0c:naked-ctx-err-return`** — done 2026-04-27
+  — PR #199, merge commit `9e52552`. Tier H suggestion
+  (cancellation-identity). `SetupKubeconfig` at
+  `internal/distribution/okd/install/phase.go:158` returned bare
+  `ctx.Err()` on cancellation — correct behaviourally (cli
+  signal-exit-code mapping at root.go:149 uses `errors.Is(err,
+  context.Canceled)` which still routes to 130) but
+  cosmetically inconsistent with the in-tree wrap pattern at
+  `system/exec.go::WaitFor`. Wrapped as
+  `fmt.Errorf("setup kubeconfig: %w", err)`, matching the
+  StepID string at `install/steps.go:62`. `%w` preserves
+  `errors.Is` identity through Unwrap so the signal-exit-code
+  mapping continues to route correctly. No tests assert on the
+  bare error string. Reviewer PASS first round.
+
+- **`sub:e552bb7d:iface-output-discards-stderr`** — done
+  2026-04-27 — PR #200, merge commit `ece7685`. Tier H
+  suggestion (io-handling). Three `exec.CommandContext(...).Output()`
+  sites in `internal/netutil/iface.go` (RemoveSecondaryIP,
+  GetDefaultInterface, connectionForDevice) discarded
+  stderr-not-fall-through-to-ExitError on failure, so ip and
+  nmcli diagnostics ("Cannot find device", "NetworkManager not
+  running") were lost in the wrapped errors. Picked option (a)
+  from the audit menu — extracted `system.OutputCaptured`
+  symmetric with existing `RunCaptured` (same env-allowlist
+  filtering via `executor.DefaultEnvAllowlist`, same
+  `bin: %w: stderr` error format) — over option (b) errors.As
+  at call sites (which would scatter three identical exitErr
+  blocks) and option (c) cmd.Output's implicit stderr fallback
+  (which only works when cmd.Stderr is unset and is reachable
+  only via errors.As anyway). Behaviour change: env is now
+  filtered (the original raw `exec.CommandContext` calls did
+  not filter), but `DBUS_SESSION_BUS_ADDRESS` is in
+  `DefaultEnvAllowlist` so nmcli's D-Bus path remains intact.
+  Drops `os/exec` import from iface.go. Reviewer PASS first
+  round.
+
