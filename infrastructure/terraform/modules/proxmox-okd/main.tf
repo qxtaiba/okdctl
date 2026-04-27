@@ -123,6 +123,8 @@ resource "proxmox_virtual_environment_vm" "bootstrap" {
       error_message = "bootstrap_iso must be provided when bootstrap is enabled."
     }
     ignore_changes = [
+      # bpg/terraform-provider-proxmox dynamic + static network_device coexist;
+      # the provider produces spurious diffs unless the static block is ignored.
       network_device,
       startup,
       cdrom,
@@ -245,6 +247,8 @@ resource "proxmox_virtual_environment_vm" "master" {
       error_message = "master_isos must have at least master_count (${var.master_count}) entries, got ${length(var.master_isos)}."
     }
     ignore_changes = [
+      # bpg/terraform-provider-proxmox dynamic + static network_device coexist;
+      # the provider produces spurious diffs unless the static block is ignored.
       network_device,
       startup,
       cdrom,
@@ -369,6 +373,8 @@ resource "proxmox_virtual_environment_vm" "worker" {
       error_message = "worker_isos must have at least worker_count (${var.worker_count}) entries, got ${length(var.worker_isos)}."
     }
     ignore_changes = [
+      # bpg/terraform-provider-proxmox dynamic + static network_device coexist;
+      # the provider produces spurious diffs unless the static block is ignored.
       network_device,
       startup,
       cdrom,
