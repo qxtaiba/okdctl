@@ -1993,7 +1993,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sub:e552bb7d:iface-output-discards-stderr` — iface output discards stderr
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sub-e552bb7d-iface-stderr  
+**Status:** in review — PR #200  
 **Severity:** suggestion  
 **Cluster:** io-handling  
 **Evidence:** `internal/netutil/iface.go:25-29`  
@@ -2253,7 +2253,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `err:d5915b0c:naked-ctx-err-return` — naked ctx err return
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/err-d5915b0c-naked-ctx-err  
+**Status:** in review — PR #199  
 **Severity:** suggestion  
 **Cluster:** cancellation-identity  
 **Evidence:** `internal/distribution/okd/install/phase.go:157-168`  
@@ -2583,7 +2583,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `ux:e45c2239:preflight-tui-error-uses-exit-1` — preflight tui error uses exit 1
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/ux-e45c2239-preflight-exit-77  
+**Status:** in review — PR #198  
 **Severity:** suggestion  
 **Cluster:** exit-codes  
 **Evidence:** `cmd/okdctl/main.go:32-35`  
@@ -2729,7 +2729,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `obs:8154ab0f:doctor-error-not-blocker` — doctor error not blocker
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/obs-8154ab0f-doctor-recap-level  
+**Status:** in review — PR #197  
 **Severity:** suggestion  
 **Cluster:** level-discipline — seam→audit-cli-ux  
 **Evidence:** `internal/cli/doctor.go:103-103`  
@@ -2877,7 +2877,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `smell:c19ee328:duplicate-iface-default` — duplicate iface default
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/smell-c19ee328-iface-netmask-defaults  
+**Status:** in review — PR #195  
 **Severity:** minor  
 **Cluster:** magic-strings  
 **Evidence:** `internal/distribution/okd/setup/kargs.go:59-62`  
@@ -2887,7 +2887,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `smell:c19ee328:duplicate-netmask-default` — duplicate netmask default
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/smell-c19ee328-iface-netmask-defaults  
+**Status:** in review — PR #195  
 **Severity:** minor  
 **Cluster:** magic-strings  
 **Evidence:** `internal/distribution/okd/setup/kargs.go:49-52`  
