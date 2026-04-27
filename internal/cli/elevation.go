@@ -23,6 +23,18 @@ import (
 // stays in this slice.
 var rootRequiredCmds = []string{"deploy", "destroy", "cleanup", "update-ingress"}
 
+// lookPath is the exec.LookPath indirection used by ensureRoot.
+// Tests replace it with a stub to avoid real PATH lookups.
+var lookPath = exec.LookPath
+
+type elevAction int
+
+const (
+	elevAllow   elevAction = iota // already root and command requires it, or no root needed
+	elevReject                    // euid=0 on a command that must not run as root
+	elevElevate                   // must re-exec under sudo
+)
+
 // requiresRoot returns true if cmd carries the requiresRoot annotation or
 // any ancestor is in rootRequiredCmds. --dry-run escapes the gate so
 // `okdctl destroy --dry-run` prints the preview without a sudo prompt.
@@ -41,21 +53,40 @@ func requiresRoot(cmd *cobra.Command) bool {
 	return false
 }
 
-// ensureRoot is wired into the root cobra command's PersistentPreRunE. It
-// is a no-op for unprivileged commands (wizard, doctor, --help, --version)
-// and for invocations that already have euid=0. For root-required commands
-// invoked as a non-root user, it re-execs the same binary under sudo with
-// the same args and environment. syscall.Exec replaces the current process,
-// so a successful re-exec never returns. The euid=0 check prevents re-exec
-// loops.
+// elevationDecision returns the action ensureRoot should take for the given
+// command and effective UID.
+func elevationDecision(cmd *cobra.Command, euid int) elevAction {
+	needsRoot := requiresRoot(cmd)
+	if euid == 0 {
+		if needsRoot {
+			return elevAllow
+		}
+		return elevReject
+	}
+	if !needsRoot {
+		return elevAllow
+	}
+	return elevElevate
+}
+
+// ensureRoot is wired into the root cobra command's PersistentPreRunE.
+// Policy:
+//
+//	euid=0 ∧  requiresRoot → allow (re-exec'd process running the privileged body)
+//	euid=0 ∧ !requiresRoot → reject (e.g. `sudo okdctl wizard`)
+//	euid≠0 ∧  requiresRoot → re-exec under sudo
+//	euid≠0 ∧ !requiresRoot → allow
 func ensureRoot(cmd *cobra.Command) error {
-	if !requiresRoot(cmd) {
+	switch elevationDecision(cmd, os.Geteuid()) {
+	case elevAllow:
 		return nil
+	case elevReject:
+		return &errtypes.AuthError{
+			Msg: "do not run as root/sudo; this tool escalates internally",
+			Err: os.ErrPermission,
+		}
 	}
-	if os.Geteuid() == 0 {
-		return nil
-	}
-	sudoPath, err := exec.LookPath("sudo")
+	sudoPath, err := lookPath("sudo")
 	if err != nil {
 		return &errtypes.AuthError{
 			Msg: fmt.Sprintf("%s requires root and sudo is not installed; run as root", cmd.Name()),
