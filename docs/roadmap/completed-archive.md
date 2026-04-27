@@ -1652,3 +1652,118 @@ but link evidence.
   external contract — the rename should land the moment the
   audit notices it. Reviewer PASS first round.
 
+- **`con:f5d703ab:install-tools-to-system-no-ctx`** — done
+  2026-04-27 — PR #182, merge commit `d61bb63`. Tier H minor
+  (ctx-ignored). `InstallToolsToSystem` accepted `_ context.Context`
+  and looped over three multi-hundred-MB binaries calling
+  `system.CopyFile` + `system.MakeExecutable`; a deploy ctx cancel
+  was silently dropped. Renamed `_ → ctx` and added `if err :=
+  ctx.Err(); err != nil { return err }` at the top of the loop body.
+  `system.CopyFile` itself still has no ctx — mid-copy cancellation
+  is bounded only by binary count, not file size. Filed as a known
+  caveat for a later `system.CopyFile` ctx-aware refactor. Reviewer
+  PASS first round.
+
+- **`con:ab9b764a:validate-ignition-only-checks-ctx-once`** — done
+  2026-04-27 — PR #183, merge commit `834afd0`. Tier H minor
+  (ctx-ignored). `ValidateIgnitionFiles` checked `ctx.Err()` at
+  function entry then iterated three files with `os.Stat` +
+  `os.ReadFile` + `json.Unmarshal`; mid-loop cancellation was
+  ignored. Inserted the canonical guard at the top of the loop
+  body (3 LOC). Three-file loop bound + small (<1 MiB) file size
+  means the practical leak was short, but the pattern was the same
+  shape CLAUDE.md §concurrency calls out for retry sleeps. Reviewer
+  PASS first round.
+
+- **`api:0934cf1b:should-be-exported`** — done 2026-04-27 — PR #184,
+  merge commit `935efb2`. Tier H minor (exported-surface;
+  helper-package-no-value). `platform.runCaptured` had already been
+  removed in a prior commit; only `dpkgArch` (single caller, captures
+  stdout via `exec.CommandContext.Output()`) remained. `system.RunCaptured`
+  cannot substitute because it discards stdout, so inlined the
+  two-line `dpkg --print-architecture` body directly into `AddRepo`
+  and deleted the helper. **Postmortem lesson:** roadmap evidence
+  drifts within hours during multi-agent runs — the planner's first
+  inspection found the audit's primary target (`runCaptured`) already
+  gone. Audit findings should grep current state before committing
+  to a plan; the salvageable subset was preserved by adapting the
+  fix to the surviving helper. Reviewer PASS first round.
+
+- **`ux:6424733c:no-tty-prompt-returns-false-silently`** — done
+  2026-04-27 — PR #186, merge commit `e41f86f`. Tier H minor
+  (signals). `promptForConfirmation` returned `(false, nil)` when
+  stdin was not a TTY, indistinguishable from a user typing 'n'.
+  CI scripts piping to a destructive command silently aborted with
+  "cancelled" instead of failing fast. Returns
+  `&errtypes.ConfigError{Msg: "no TTY and --yes not set; refusing
+  destructive op"}` on the no-TTY+no-yes path; existing callers
+  (destroy/cleanup/update-ingress) already check `if err != nil`
+  before consulting `confirmed`, so the typed error propagates to
+  exit code 2 via `cli/root.go`'s `exitCodeFor`. The inner
+  `ConfirmConversion` closure (`func([]string) bool`, cannot
+  propagate errors) surfaces the message via `tui.Warn` before
+  returning false. Reviewer PASS first round.
+
+- **`ux:0f076161:destroy-force-deprecated-but-still-default-binding`**
+  — done 2026-04-27 — PRs #185 + #192, merge commits `a2ecca4` +
+  `8bfd698`. Tier H minor (flag-conventions). `--yes` and `--force`
+  were both bound to a single `*bool` (`destroyForce`); cobra's
+  last-write-wins meant `--yes=false --force=true` and
+  `--yes=true --force=false` both yielded `true`. PR #185 split the
+  binding (separate `destroyYes` var, `effective := destroyYes ||
+  destroyForce`); PR #192 followed the maintainer's "no back-compat"
+  call and dropped `--force` entirely (one minor cycle compressed
+  to zero — okdctl is pre-1.0 and has no shipped users requiring
+  the alias). **Postmortem lesson:** the planner's instinct to
+  preserve a deprecated alias for a release cycle is correct for
+  shipping software but wrong for pre-1.0 internal tools — surface
+  the pre-1.0 status at planner-prompt time so the default plan
+  drops shims rather than adding them. Reviewer PASS first round.
+
+- **`ux:08c49fc4:remove-haproxy-no-x-bool-default-true`** — done
+  2026-04-27 — PRs #187 + #193, merge commits `d16ff51` + `f90a8f0`.
+  Tier H minor (flag-conventions). `--remove-haproxy=true` default
+  meant the only opt-out was `--remove-haproxy=false` — a
+  no-X-style boolean masquerading as a positive. PR #187 added
+  `--keep-haproxy` (default false) as the canonical opt-out and
+  kept `--remove-haproxy` as a `MarkDeprecated` alias with
+  `effectiveRemoveHAProxy := updateIngressRemoveHAProxy &&
+  !updateIngressKeepHAProxy`; PR #193 dropped the deprecated alias
+  entirely per the same maintainer call as `ux:0f076161`. Final
+  state: `--keep-haproxy` is the only flag, `!updateIngressKeepHAProxy`
+  drives the dry-run print, the warn message, and
+  `RemoveHAProxy` postinstall option. Same pre-1.0 lesson as the
+  destroy-force pair. Reviewer PASS first round.
+
+- **`obs:660d83a5:run-id-mutation-race`** — done 2026-04-27 —
+  PR #188, merge commit `f658dc6`. Tier H minor (handler-setup,
+  seam→audit-concurrency). `SetRunID` rebound package-level
+  `stdoutLogger`, `stderrLogger`, `stderrSlog`, and `runID` with
+  plain `=` operators. Readers (tui.Debug/Info/Warn/Error,
+  buildStderrSlog, SimpleLogger, ConfigureLoggers) had no
+  happens-before edge against the writer. Wrapped all four vars in
+  `sync/atomic.Pointer[T]`, moved initial values to package
+  `init()`, swapped reads to `.Load()` and writes to `.Store()`.
+  ConfigureLoggers' in-place SetLevel/SetFormatter/SetOutput calls
+  on the loaded `*charmlog.Logger` are still covered by charmlog's
+  own internal mu — no further synchronization required.
+  `logger_test.go` had three direct assignments (sed-replaced to
+  `.Store(...)`). RunID() guards against nil Load result with `""`
+  fallback. Race-detector tests pass. Reviewer PASS first round.
+
+- **`obs:ed55ee90:summary-keys-leading-whitespace`** — done
+  2026-04-27 — PR #189, merge commit `b18d55e`. Tier H suggestion
+  (field-stability). Six summary log lines in `printSummary` used
+  leading whitespace inside the message string ("  work directory:
+  clean") for visual indentation; under JSON formatter the indent
+  becomes part of the `msg` field, breaking parser keys. Rewrote
+  all six to terse `cleanup: <verb> <object>` messages with
+  structured `files`/`count`/`size` attrs (matching the rest of
+  the cleanup package's idiom). The "(0 files)" parenthetical was
+  promoted to a `files` attr so JSON consumers gain a queryable
+  field. **Postmortem note:** TTY visual output flattens (no more
+  two-space indent under section header); the styled charmlog
+  formatter doesn't re-indent. If indent is wanted later, push
+  it to the formatter, not the message string. Reviewer PASS
+  first round.
+
