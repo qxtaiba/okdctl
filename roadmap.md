@@ -1991,16 +1991,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Optional: log a Debug-level message with the captured stderr when the probe fails so doctor / debug-bundle output reflects the reason ufw was skipped. Probe-style fall-through is acceptable since DetectBackend deliberately tries multiple backends; the cost is just observability.  
 **Effort:** hours
 
-##### `sub:e552bb7d:iface-output-discards-stderr` — iface output discards stderr
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sub-e552bb7d-iface-stderr  
-**Severity:** suggestion  
-**Cluster:** io-handling  
-**Evidence:** `internal/netutil/iface.go:25-29`  
-**Problem:** Three exec.CommandContext sites in this file use .Output() (lines 25, 53, 70) and discard stderr-not-fall-through-to-ExitError on failure. ip and nmcli emit useful failure context to stderr (`Cannot find device`, `Error: NetworkManager is not running`) — the wrapped errors here surface only the bare exit-status.  
-**Fix:** Three options: (a) extract a small helper `outputCaptured(ctx, bin, args...) ([]byte, error)` that mirrors RunCaptured but returns stdout, (b) unwrap *exec.ExitError.Stderr at the call site via errors.As, or (c) use cmd.Output()'s built-in stderr fallback (up to ~10 KiB) — already present when cmd.Stderr is unset.  
-**Effort:** hours
-
 #### audit-state-and-recovery
 
 ##### `state:b804b2ec:bootstrap-destroy-skip-tfvars-silent` — bootstrap destroy skip tfvars silent
@@ -2239,16 +2229,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/distribution/okd/cleanup/cleanup.go:47-108`  
 **Problem:** ErrKindNotSet is exported ("Callers can test for it with errors.Is") but NO caller uses errors.Is(err, cleanup.ErrKindNotSet) anywhere in the repo. Internal use at line 106 wraps it inside ConfigError{Err: ErrKindNotSet}, which preserves identity correctly — but no consumer leverages that. Same scaffolding-vs-stale tension as err:d6b325cb.  
 **Fix:** Verify intent: search roadmap.md for cli/cleanup work that would consume errors.Is(err, ErrKindNotSet); if absent, drop ErrKindNotSet entirely and replace line 106 with bare &errtypes.ConfigError{Msg}. Keep iff a doctor/preflight surfaces it.  
-**Effort:** hours
-
-##### `err:d5915b0c:naked-ctx-err-return` — naked ctx err return
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/err-d5915b0c-naked-ctx-err  
-**Severity:** suggestion  
-**Cluster:** cancellation-identity  
-**Evidence:** `internal/distribution/okd/install/phase.go:157-168`  
-**Problem:** SetupKubeconfig returns ctx.Err() bare on context cancellation. Identity is preserved (caller can errors.Is); but the consistent pattern elsewhere wraps with fmt.Errorf for context (e.g. addon/manager.go:85, system/exec.go:88-91). Bare ctx.Err() at the cli/root.go boundary is matched first and exits 130, so behavior is correct — the smell is cosmetic inconsistency, NOT a correctness break. Calling out for sentinel awareness only.  
-**Fix:** Optional consistency: wrap as `return fmt.Errorf("setup kubeconfig: %w", err)`. NOT a correctness fix — bare ctx.Err() preserves identity. Skip if you prefer the terse early-return style; this is a sub-suggestion-tier note.  
 **Effort:** hours
 
 ##### `err:b804b2ec:bootstrap-skip-tfvars-nil-as-success` — bootstrap skip tfvars nil as success
@@ -2551,16 +2531,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 **Status:** done — PRs #187 + #193 (moved to Completed)
 
-##### `ux:e45c2239:preflight-tui-error-uses-exit-1` — preflight tui error uses exit 1
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/ux-e45c2239-preflight-exit-77  
-**Severity:** suggestion  
-**Cluster:** exit-codes  
-**Evidence:** `cmd/okdctl/main.go:32-35`  
-**Problem:** preflight() exits with `os.Exit(1)` when invoked as root — but the documented taxonomy reserves 1 for 'other'. EX_USAGE (64) or a domain-specific code (running as wrong user is closer to EX_NOPERM=77) would be more precise. This is a tiny scriptability paper-cut: a wrapper script that distinguishes 'exec failed' (1) vs 'invoked-as-root rejection' (77) cannot today.  
-**Fix:** Use os.Exit(77) (EX_NOPERM) for the root-rejection branch. Adjust docs/cli/exit-codes.md to record it. Same applies to the OKDCTL_BIN_DIR Warn path which already proceeds without exiting.  
-**Effort:** hours
-
 ##### `ux:024a2c32:json-schema-display-name-hyphen-inconsistent` — json schema display name hyphen inconsistent
 
 **Status:** not started  
@@ -2697,16 +2667,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 **Status:** done — PR #188 (moved to Completed)
 
-##### `obs:8154ab0f:doctor-error-not-blocker` — doctor error not blocker
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/obs-8154ab0f-doctor-recap-level  
-**Severity:** suggestion  
-**Cluster:** level-discipline — seam→audit-cli-ux  
-**Evidence:** `internal/cli/doctor.go:103-103`  
-**Problem:** `tui.Error(fmt.Sprintf("doctor: %d failing check(s), %d warning(s): fix before deploying", fails, warns))` uses Error-level for an advisory exit summary. SKILL.md §1 reserves Error for user-visible *failures*; doctor is a read-only diagnostic, the surfaced failure is in the per-check loop above this — this line is the recap.  
-**Fix:** Either drop to `tui.Warn(...)` (recap is not a new failure) or, more idiomatic, keep Error but make it structured: `tui.Error("doctor: failing checks block deploy", tui.LF("failing", fails), tui.LF("warnings", warns))` so log-aggregation can plot the count.  
-**Effort:** hours
-
 ##### `obs:ed55ee90:summary-keys-leading-whitespace` — summary keys leading whitespace
 
 **Status:** done — PR #189 (moved to Completed)
@@ -2823,26 +2783,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/distribution/okd/setup/kargs.go:73-73`  
 **Problem:** BuildIgnitionURLForNode falls back to the literal 8080 when cfg.HTTPServer.Port is unset, but the canonical DefaultIgnitionPort = 8080 constant lives one file over in setup/phase.go. Two sources of truth — bump the constant and this fallback drifts silently.  
 **Fix:** Replace `ignitionPort = 8080` with `ignitionPort = DefaultIgnitionPort`. Both files are in package setup so no import is needed.  
-**Effort:** hours
-
-##### `smell:c19ee328:duplicate-iface-default` — duplicate iface default
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/smell-c19ee328-iface-netmask-defaults  
-**Severity:** minor  
-**Cluster:** magic-strings  
-**Evidence:** `internal/distribution/okd/setup/kargs.go:59-62`  
-**Problem:** Default Proxmox virtio interface name "ens18" is hard-coded in two places — kargs.go:61 and steps.go:318 — without a shared constant. Two strings, one truth; if Proxmox renames the device or the user runs on a board where the default differs, both sites need to change in lockstep.  
-**Fix:** Add `const DefaultProxmoxIface = "ens18"` to setup/phase.go (or a netutil.DefaultProxmoxIface) and reference it from both kargs.go and steps.go. The doc comment from steps.go:318 belongs on the constant.  
-**Effort:** hours
-
-##### `smell:c19ee328:duplicate-netmask-default` — duplicate netmask default
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/smell-c19ee328-iface-netmask-defaults  
-**Severity:** minor  
-**Cluster:** magic-strings  
-**Evidence:** `internal/distribution/okd/setup/kargs.go:49-52`  
-**Problem:** Default netmask "255.255.255.0" is duplicated between config/defaults.go:58 (DefaultConfig literal) and setup/kargs.go:51 (ExtractNetworkConfig fallback). Either side bumping to a different default silently desynchronises the two — config-saved values would no longer match the path taken when Netmask is empty.  
-**Fix:** Introduce `const DefaultNetmask = "255.255.255.0"` in netutil (or config) and reference from both sites. Keeping the literal in defaults.go is fine if kargs.go is its only consumer; remove the redundant fallback in kargs.go since DefaultConfig already populates it before save.  
 **Effort:** hours
 
 ##### `smell:8aa632a6:duplicate-platform-string` — duplicate platform string
