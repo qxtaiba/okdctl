@@ -1767,3 +1767,87 @@ but link evidence.
   it to the formatter, not the message string. Reviewer PASS
   first round.
 
+- **`con:6424733c:metrics-shutdown-bg-ctx`** — done 2026-04-27 —
+  PR #202, merge commit `481f2b8`. Tier H suggestion (ctx-todo).
+  `startMetricsServer`'s stop closure builds `shutCtx` with
+  `context.Background()` rather than the caller's ctx. The
+  Background choice is correct — by the time `stop()` runs, the
+  parent ctx is already cancelled by SIGINT and we need the 5s
+  graceful drain to complete — but CLAUDE.md §concurrency
+  requires every production `context.Background()` to carry a
+  justification comment. Added a 2-line WHY comment above the
+  `WithTimeout(Background(), ...)` call, mirroring monitor.go's
+  reapTimer style. Pure documentation; zero behavior change.
+  Reviewer PASS first round.
+
+- **`err:9d79b841:fcos-stream-status-bare`** — done 2026-04-27 —
+  PR #203, merge commit `f0a47fb`. Tier H suggestion (wrapping).
+  `fetchCoreOSStream` returned a bare
+  `fmt.Errorf("coreos stream: HTTP %d", ...)` for non-200 — opaque
+  to `errors.As`, drifting from the rest of the download layer
+  which already had the typed `httpStatusError` for this exact
+  shape. Renamed `httpStatusError` → `HTTPStatusError` (pure
+  capitalization; no field/behavior change), updated download.go's
+  constructor + retry.go's `errors.As` var, and rewrote the coreos
+  fetch to `fmt.Errorf("coreos stream: %w", &download.HTTPStatusError{...})`.
+  `%w` wrap means the chain unwraps through the surrounding
+  `errtypes.ClusterError` so callers can `errors.As` end-to-end.
+  Body field stays empty on the coreos path (body only read on
+  200 for JSON parsing); could be enriched later. Reviewer PASS
+  first round.
+
+- **`err:a55b4592:vocab-ad-hoc-config-perm`** — done 2026-04-27 —
+  PR #204, merge commit `af31d2c`. Tier H minor
+  (domain-vocabulary). `Loader.LoadFile` returned bare `fmt.Errorf`
+  for stat/perm/read/parse failures while
+  `internal/credentials/envfile.go` already returned
+  `*errtypes.AuthError{Err: os.ErrPermission}` for the analogous
+  perm check. Two security-critical perm checks shipped two
+  different error shapes — one mapped to exit 1, one to exit 5.
+  Typed insecure-perm as `AuthError(ErrPermission)`; stat/read/
+  parse as `ConfigError(err)`; schema-version drift as `ConfigError`
+  with no inner sentinel. **Side effect:** removing
+  `errtypes.WrapValidation` was required to break the new
+  `config→errtypes` import edge — `WrapValidation` referenced
+  `*config.ValidationResult`, so adding `errtypes` to loader.go's
+  imports would have created a `config↔errtypes` cycle. Inlined
+  WrapValidation's sole call site (`cli/config.go:47`) into a
+  3-line `if !result.IsValid() { return ConfigError{Msg:
+  result.Error()} }` block. **Postmortem lesson:** when one
+  package's helper grows to import another package's type, that
+  helper has chosen sides — moving it back across the import edge
+  is cheaper than deferring the cycle. Reviewer PASS first round.
+
+- **`err:5013fea6:str-sniff-tool-msg`** — done 2026-04-27 —
+  PR #205, merge commit `1ea7374`. Tier H minor (string-sniffing).
+  `isAuthError(stderr)` was the SOLE gate for AuthError vs
+  ClusterError on `oc adm release extract` failures. oc's
+  auth-failure wording drifts across minor versions, so a future
+  oc could fall through silently OR a non-auth failure whose
+  stderr happens to mention "401" could misfire. Made exit code
+  the **primary** signal: `errors.As(runErr, &exec.ExitError{})`
+  + `ExitCode() ∈ {1, 125}` AND `isAuthError(msg)` for AuthError;
+  everything else → ClusterError. The TODO references
+  `err:5013fea6` and notes the heuristic exit-code set; widen if
+  upstream oc changes its exit-code contract. Note: the command
+  runs through bare `os/exec.CommandContext`, not
+  `executor.Executor`, so the asserted type is `*exec.ExitError`.
+  If a future PR migrates this call site to `executor.Executor`,
+  the type assertion needs updating. Reviewer PASS first round.
+
+- **`ux:fd2125dd:addon-uninstall-no-confirm`** — done 2026-04-27
+  — PR #206, merge commit `9a6ab6d`. Tier H major (verb-noun).
+  `okdctl addon uninstall` deletes manifests, namespaces, and
+  secrets but had no confirmation gate while sibling destructive
+  verbs (destroy, cleanup, update-ingress) all gate on a TTY
+  prompt or `--yes`+`--confirm-cluster` pair. Mirrored destroy.go's
+  two-phase guard: `confirmClusterMatches(yes, confirm,
+  cfg.Cluster.Name, "uninstall")` errors when `--yes` lacks a
+  matching `--confirm-cluster`; otherwise `promptForConfirmation`
+  reads y/N from TTY. `tui.Warn` summarizes the addon+cluster
+  before the gate. Non-TTY without `--yes` returns nil
+  (cancelled) per existing destroy/cleanup behavior — the
+  systemic non-TTY refusal lands via `ux:6424733c` (separate
+  in-flight PR), so all four destructive verbs harden in one
+  shot. Reviewer PASS first round.
+
