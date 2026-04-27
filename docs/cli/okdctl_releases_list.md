@@ -18,7 +18,7 @@ okdctl releases list [flags]
 
 ```
       --channel string   filter versions: stable|all (default "stable")
-  -F, --format string    output format: text|json (default "text")
+      --format string    output format: text|json (default "text")
   -h, --help             help for list
 ```
 

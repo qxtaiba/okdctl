@@ -75,9 +75,9 @@ var releasesShowCmd = &cobra.Command{
 func init() {
 	releasesListCmd.Flags().StringVar(&releasesListChannel, "channel", channelStable,
 		"filter versions: stable|all")
-	releasesListCmd.Flags().StringVarP(&releasesListFormat, "format", "F", outputText,
+	releasesListCmd.Flags().StringVar(&releasesListFormat, "format", outputText,
 		"output format: text|json")
-	releasesShowCmd.Flags().StringVarP(&releasesShowFormat, "format", "F", outputText,
+	releasesShowCmd.Flags().StringVar(&releasesShowFormat, "format", outputText,
 		"output format: text|json")
 
 	releasesCmd.AddCommand(releasesListCmd)

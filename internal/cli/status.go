@@ -59,9 +59,9 @@ var describeAddonCmd = &cobra.Command{
 var describeFormat string
 
 func init() {
-	statusCmd.Flags().StringVarP(&statusFormat, "format", "F", outputText, "output format: text|json")
-	describeNodeCmd.Flags().StringVarP(&describeFormat, "format", "F", outputText, "output format: text|json")
-	describeAddonCmd.Flags().StringVarP(&describeFormat, "format", "F", outputText, "output format: text|json")
+	statusCmd.Flags().StringVar(&statusFormat, "format", outputText, "output format: text|json")
+	describeNodeCmd.Flags().StringVar(&describeFormat, "format", outputText, "output format: text|json")
+	describeAddonCmd.Flags().StringVar(&describeFormat, "format", outputText, "output format: text|json")
 	describeCmd.AddCommand(describeNodeCmd)
 	describeCmd.AddCommand(describeAddonCmd)
 	rootCmd.AddCommand(statusCmd)
