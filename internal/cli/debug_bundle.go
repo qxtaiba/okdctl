@@ -67,10 +67,18 @@ type bundleManifest struct {
 	Sections  []manifestEntry `json:"sections"`
 }
 
+type bundleStatus string
+
+const (
+	bundleStatusOK      bundleStatus = "ok"
+	bundleStatusSkipped bundleStatus = "skipped"
+	bundleStatusFailed  bundleStatus = "failed"
+)
+
 type manifestEntry struct {
-	Name    string `json:"name"`
-	Status  string `json:"status"`
-	Message string `json:"message,omitempty"`
+	Name    string       `json:"name"`
+	Status  bundleStatus `json:"status"`
+	Message string       `json:"message,omitempty"`
 }
 
 func runDebugBundle(cmd *cobra.Command, _ []string) (retErr error) {
@@ -163,7 +171,7 @@ func collectSections(ctx context.Context, addFile func(string, []byte) error, cf
 		bundleSystemMeta(addFile, bundleID, bundleAt),
 	}
 	if skipMustGather {
-		secs = append(secs, manifestEntry{Name: "must-gather", Status: "skipped", Message: "--skip-must-gather flag set"})
+		secs = append(secs, manifestEntry{Name: "must-gather", Status: bundleStatusSkipped, Message: "--skip-must-gather flag set"})
 	} else {
 		secs = append(secs, bundleMustGather(ctx, addFile, projectRoot, prErr))
 	}
@@ -172,40 +180,40 @@ func collectSections(ctx context.Context, addFile func(string, []byte) error, cf
 
 func bundleConfig(addFile func(string, []byte) error, cfg *config.Config, cfgErr error) manifestEntry {
 	if cfgErr != nil {
-		return manifestEntry{Name: "config", Status: "skipped", Message: fmt.Sprintf("load config: %v", cfgErr)}
+		return manifestEntry{Name: "config", Status: bundleStatusSkipped, Message: fmt.Sprintf("load config: %v", cfgErr)}
 	}
 	redacted := redactConfig(cfg)
 	data, err := yaml.Marshal(redacted)
 	if err != nil {
-		return manifestEntry{Name: "config", Status: "failed", Message: fmt.Sprintf("marshal: %v", err)}
+		return manifestEntry{Name: "config", Status: bundleStatusFailed, Message: fmt.Sprintf("marshal: %v", err)}
 	}
 	if err := addFile("config.yaml", data); err != nil {
-		return manifestEntry{Name: "config", Status: "failed", Message: err.Error()}
+		return manifestEntry{Name: "config", Status: bundleStatusFailed, Message: err.Error()}
 	}
-	return manifestEntry{Name: "config", Status: "ok"}
+	return manifestEntry{Name: "config", Status: bundleStatusOK}
 }
 
 func bundleLogFile(addFile func(string, []byte) error) manifestEntry {
 	if logFile == "" {
 		return manifestEntry{
 			Name:    "log-file",
-			Status:  "skipped",
+			Status:  bundleStatusSkipped,
 			Message: "no --log-file set on this invocation; re-run the failing command with --log-file to persist logs",
 		}
 	}
 	data, err := os.ReadFile(logFile)
 	if err != nil {
-		return manifestEntry{Name: "log-file", Status: "failed", Message: fmt.Sprintf("read %s: %v", logFile, err)}
+		return manifestEntry{Name: "log-file", Status: bundleStatusFailed, Message: fmt.Sprintf("read %s: %v", logFile, err)}
 	}
 	if err := addFile("okdctl.log", data); err != nil {
-		return manifestEntry{Name: "log-file", Status: "failed", Message: err.Error()}
+		return manifestEntry{Name: "log-file", Status: bundleStatusFailed, Message: err.Error()}
 	}
-	return manifestEntry{Name: "log-file", Status: "ok", Message: logFile}
+	return manifestEntry{Name: "log-file", Status: bundleStatusOK, Message: logFile}
 }
 
 func bundleTerraformState(ctx context.Context, addFile func(string, []byte) error, projectRoot string, prErr error, cfg *config.Config) manifestEntry {
 	if prErr != nil {
-		return manifestEntry{Name: "terraform-state", Status: "skipped", Message: fmt.Sprintf("project root: %v", prErr)}
+		return manifestEntry{Name: "terraform-state", Status: bundleStatusSkipped, Message: fmt.Sprintf("project root: %v", prErr)}
 	}
 	tfEnv := "production"
 	if cfg != nil {
@@ -213,41 +221,41 @@ func bundleTerraformState(ctx context.Context, addFile func(string, []byte) erro
 	}
 	tfDir := filepath.Join(projectRoot, "infrastructure", "terraform", "environments", tfEnv)
 	if _, err := os.Stat(filepath.Join(tfDir, "terraform.tfstate")); os.IsNotExist(err) {
-		return manifestEntry{Name: "terraform-state", Status: "skipped", Message: "no terraform.tfstate in " + tfDir}
+		return manifestEntry{Name: "terraform-state", Status: bundleStatusSkipped, Message: "no terraform.tfstate in " + tfDir}
 	}
 	tfExec := executor.New(executor.WithWorkDir(tfDir))
 	result, runErr := tfExec.Run(ctx, "terraform", "state", "list")
 	if runErr != nil {
-		return manifestEntry{Name: "terraform-state", Status: "failed", Message: fmt.Sprintf("terraform state list: %v", runErr)}
+		return manifestEntry{Name: "terraform-state", Status: bundleStatusFailed, Message: fmt.Sprintf("terraform state list: %v", runErr)}
 	}
 	if result.ExitCode != 0 {
 		msg := strings.TrimSpace(result.Stderr)
 		if msg == "" {
 			msg = fmt.Sprintf("terraform state list exited %d", result.ExitCode)
 		}
-		return manifestEntry{Name: "terraform-state", Status: "failed", Message: msg}
+		return manifestEntry{Name: "terraform-state", Status: bundleStatusFailed, Message: msg}
 	}
 	if err := addFile("terraform-state-list.txt", []byte(result.Stdout)); err != nil {
-		return manifestEntry{Name: "terraform-state", Status: "failed", Message: err.Error()}
+		return manifestEntry{Name: "terraform-state", Status: bundleStatusFailed, Message: err.Error()}
 	}
-	return manifestEntry{Name: "terraform-state", Status: "ok"}
+	return manifestEntry{Name: "terraform-state", Status: bundleStatusOK}
 }
 
 func bundleMustGather(ctx context.Context, addFile func(string, []byte) error, projectRoot string, prErr error) manifestEntry {
 	if prErr != nil {
-		return manifestEntry{Name: "must-gather", Status: "skipped", Message: fmt.Sprintf("project root: %v", prErr)}
+		return manifestEntry{Name: "must-gather", Status: bundleStatusSkipped, Message: fmt.Sprintf("project root: %v", prErr)}
 	}
 	if _, err := osexec.LookPath("oc"); err != nil {
-		return manifestEntry{Name: "must-gather", Status: "skipped", Message: "oc not found on PATH; install oc or run okdctl deploy first"}
+		return manifestEntry{Name: "must-gather", Status: bundleStatusSkipped, Message: "oc not found on PATH; install oc or run okdctl deploy first"}
 	}
 	workDir := filepath.Join(projectRoot, "okd-install")
 	kubeconfig := filepath.Join(phase.ClusterConfigDir(workDir), "auth", "kubeconfig")
 	if _, err := os.Stat(kubeconfig); err != nil {
-		return manifestEntry{Name: "must-gather", Status: "skipped", Message: "kubeconfig not found at " + kubeconfig}
+		return manifestEntry{Name: "must-gather", Status: bundleStatusSkipped, Message: "kubeconfig not found at " + kubeconfig}
 	}
 	mgDir, err := os.MkdirTemp("", "okdctl-must-gather-*")
 	if err != nil {
-		return manifestEntry{Name: "must-gather", Status: "failed", Message: fmt.Sprintf("create temp dir: %v", err)}
+		return manifestEntry{Name: "must-gather", Status: bundleStatusFailed, Message: fmt.Sprintf("create temp dir: %v", err)}
 	}
 	defer func() { _ = os.RemoveAll(mgDir) }()
 
@@ -260,19 +268,19 @@ func bundleMustGather(ctx context.Context, addFile func(string, []byte) error, p
 		"--dest-dir="+mgDir,
 	)
 	if mgErr != nil {
-		return manifestEntry{Name: "must-gather", Status: "failed", Message: fmt.Sprintf("oc adm must-gather: %v", mgErr)}
+		return manifestEntry{Name: "must-gather", Status: bundleStatusFailed, Message: fmt.Sprintf("oc adm must-gather: %v", mgErr)}
 	}
 	if mgResult.ExitCode != 0 {
 		msg := strings.TrimSpace(mgResult.Stderr)
 		if msg == "" {
 			msg = fmt.Sprintf("oc adm must-gather exited %d", mgResult.ExitCode)
 		}
-		return manifestEntry{Name: "must-gather", Status: "failed", Message: msg}
+		return manifestEntry{Name: "must-gather", Status: bundleStatusFailed, Message: msg}
 	}
 	if err := tarDirInto(addFile, mgDir, "must-gather/"); err != nil {
-		return manifestEntry{Name: "must-gather", Status: "failed", Message: fmt.Sprintf("archive must-gather: %v", err)}
+		return manifestEntry{Name: "must-gather", Status: bundleStatusFailed, Message: fmt.Sprintf("archive must-gather: %v", err)}
 	}
-	return manifestEntry{Name: "must-gather", Status: "ok"}
+	return manifestEntry{Name: "must-gather", Status: bundleStatusOK}
 }
 
 // tarDirInto walks srcDir and calls addFile for each regular file, prefixing
@@ -311,15 +319,15 @@ func tarDirInto(addFile func(string, []byte) error, srcDir, bundlePrefix string)
 func bundleDoctor(ctx context.Context, addFile func(string, []byte) error) manifestEntry {
 	data, err := collectDoctorOutput(ctx)
 	if err != nil {
-		return manifestEntry{Name: "doctor", Status: "failed", Message: err.Error()}
+		return manifestEntry{Name: "doctor", Status: bundleStatusFailed, Message: err.Error()}
 	}
 	if data == nil {
-		return manifestEntry{Name: "doctor", Status: "skipped", Message: "doctor is only supported on linux"}
+		return manifestEntry{Name: "doctor", Status: bundleStatusSkipped, Message: "doctor is only supported on linux"}
 	}
 	if err := addFile("doctor.txt", data); err != nil {
-		return manifestEntry{Name: "doctor", Status: "failed", Message: err.Error()}
+		return manifestEntry{Name: "doctor", Status: bundleStatusFailed, Message: err.Error()}
 	}
-	return manifestEntry{Name: "doctor", Status: "ok"}
+	return manifestEntry{Name: "doctor", Status: bundleStatusOK}
 }
 
 func bundleSystemMeta(addFile func(string, []byte) error, bundleID string, bundleAt time.Time) manifestEntry {
@@ -339,10 +347,10 @@ func bundleSystemMeta(addFile func(string, []byte) error, bundleID string, bundl
 	}
 	data, err := yaml.Marshal(meta)
 	if err != nil {
-		return manifestEntry{Name: "system-meta", Status: "failed", Message: fmt.Sprintf("marshal: %v", err)}
+		return manifestEntry{Name: "system-meta", Status: bundleStatusFailed, Message: fmt.Sprintf("marshal: %v", err)}
 	}
 	if err := addFile("system-meta.yaml", data); err != nil {
-		return manifestEntry{Name: "system-meta", Status: "failed", Message: err.Error()}
+		return manifestEntry{Name: "system-meta", Status: bundleStatusFailed, Message: err.Error()}
 	}
-	return manifestEntry{Name: "system-meta", Status: "ok"}
+	return manifestEntry{Name: "system-meta", Status: bundleStatusOK}
 }
