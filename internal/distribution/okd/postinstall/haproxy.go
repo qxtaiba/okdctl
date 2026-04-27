@@ -69,7 +69,7 @@ func (p *Phase) RemoveHAProxy(ctx context.Context, vip, clusterDir string) error
 		} else {
 			healthClient = httputil.NewWithCA(pool, 5*time.Second)
 		}
-		healthURL := fmt.Sprintf("https://%s:6443/healthz", vip)
+		healthURL := fmt.Sprintf("https://%s:%d/healthz", vip, phase.KubeAPIPort)
 		if waitErr := system.WaitForWithTimeout(ctx, "haproxy", "api-via-vip", func() bool {
 			req, rErr := http.NewRequestWithContext(ctx, http.MethodGet, healthURL, http.NoBody)
 			if rErr != nil {

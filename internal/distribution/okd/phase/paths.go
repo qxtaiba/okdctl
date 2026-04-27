@@ -23,6 +23,9 @@ type BaseOptions struct {
 	TerraformEnv string
 }
 
+// KubeAPIPort is the kube-apiserver port served by HAProxy and kube-vip.
+const KubeAPIPort = 6443
+
 // Default paths for artifacts the bastion phase code writes or removes.
 // Values follow the stock RHEL-family layout; Debian-family paths are
 // resolved through platform.OS helpers instead.

@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -167,15 +168,15 @@ func (p *Phase) waitForKubeVIPPing(ctx context.Context, vip string, opts *Option
 	}
 
 	dialer := &net.Dialer{Timeout: 2 * time.Second}
-	if err := system.WaitForWithTimeout(ctx, "kubevip", "port 6443", func() bool {
-		conn, dErr := dialer.DialContext(ctx, "tcp", net.JoinHostPort(vip, "6443"))
+	if err := system.WaitForWithTimeout(ctx, "kubevip", "port "+strconv.Itoa(phase.KubeAPIPort), func() bool {
+		conn, dErr := dialer.DialContext(ctx, "tcp", net.JoinHostPort(vip, strconv.Itoa(phase.KubeAPIPort)))
 		if dErr != nil {
 			return false
 		}
 		_ = conn.Close()
 		return true
 	}, timeout, p.Log); err != nil {
-		return fmt.Errorf("vip %s is not accepting tcp:6443: %w", vip, err)
+		return fmt.Errorf("vip %s is not accepting tcp:%d: %w", vip, phase.KubeAPIPort, err)
 	}
 
 	p.Log.Info(fmt.Sprintf("kubevip: vip %s is reachable", vip))
@@ -188,7 +189,7 @@ func (p *Phase) waitForKubeVIPPing(ctx context.Context, vip string, opts *Option
 // kubeconfig CA is not yet available; callers at later phases must use a
 // verified client instead.
 func (p *Phase) verifyKubeVIPAPIHealthBootstrap(ctx context.Context, vip, clusterDir string) error {
-	healthURL := fmt.Sprintf("https://%s:6443/healthz", vip)
+	healthURL := fmt.Sprintf("https://%s:%d/healthz", vip, phase.KubeAPIPort)
 
 	var client *http.Client
 	kubeconfigPath := filepath.Join(clusterDir, "auth", "kubeconfig")
