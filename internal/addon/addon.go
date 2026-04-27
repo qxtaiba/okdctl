@@ -14,19 +14,17 @@ import (
 // Implementations self-register via init() and are installed in dependency
 // order by Manager.
 type Addon interface {
-	Info() AddonInfo
+	Info() Metadata
 
 	Install(ctx context.Context, env *Environment) error
 	Verify(ctx context.Context, env *Environment) error
 	Uninstall(ctx context.Context, env *Environment) error
 }
 
-// AddonInfo is the metadata block an Addon returns from Info(). Name is the
+// Metadata is the addon descriptor an Addon returns from Info(). Name is the
 // config key ("flux"); Priority is the install-order weight (lower first);
 // Dependencies names other addons that must be installed first.
-//
-//nolint:revive // stutter-named type is the established public API; rename is a breaking change tracked separately
-type AddonInfo struct {
+type Metadata struct {
 	Name           string
 	DisplayName    string
 	Description    string

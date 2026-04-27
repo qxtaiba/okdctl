@@ -48,8 +48,8 @@ func init() {
 type SecretStore struct{}
 
 // Info returns the addon metadata block used by the registry.
-func (s *SecretStore) Info() addon.AddonInfo {
-	return addon.AddonInfo{
+func (s *SecretStore) Info() addon.Metadata {
+	return addon.Metadata{
 		Name:           "secretstore",
 		DisplayName:    "External Secrets Operator Secret Store",
 		Description:    "Bootstrap ESO provider credentials and SecretStore CRD (onepassword, vault, bitwarden)",
