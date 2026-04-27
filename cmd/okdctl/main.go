@@ -31,7 +31,7 @@ func main() {
 func preflight() {
 	if os.Geteuid() == 0 {
 		tui.Error("do not run as root/sudo. this tool uses sudo internally when needed.")
-		os.Exit(1)
+		os.Exit(77) // EX_NOPERM from BSD sysexits.h — root-rejection is a privilege error, not a generic failure
 	}
 
 	// Warn before OKDCTL_BIN_DIR is silently dropped downstream.

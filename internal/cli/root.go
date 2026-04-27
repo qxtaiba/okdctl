@@ -4,6 +4,7 @@
 // unknown-flag error=64 (EX_USAGE, via SetFlagErrorFunc), other error=1
 // (includes unknown subcommands, arg-count violations, and mutually-
 // exclusive-flag conflicts which cobra surfaces outside the flag-parser),
+// invoked-as-root rejection=77 (EX_NOPERM, set in cmd/okdctl/main.go),
 // SIGINT=130, SIGTERM=143, success=0.
 package cli
 
