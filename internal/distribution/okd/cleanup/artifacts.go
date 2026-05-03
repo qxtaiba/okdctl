@@ -14,7 +14,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/logutil"
 )
 
-var criticalPaths = []string{"/", "/etc", "/var", "/usr", "/bin", "/sbin", "/lib", "/home", "/root", "/boot", "/dev", "/proc", "/sys"}
+var criticalPaths = []string{"/", "/etc", "/var", "/usr", "/usr/local", "/bin", "/sbin", "/lib", "/home", "/root", "/boot", "/dev", "/proc", "/sys"}
 
 // refuseCriticalPath aborts if path resolves to a root-of-system location.
 // Defense-in-depth against a config-file typo pointing cleanup at the wrong
