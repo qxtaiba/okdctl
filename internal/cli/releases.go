@@ -92,6 +92,7 @@ func runReleasesList(cmd *cobra.Command, _ []string) error {
 	if err := validateFormat(releasesListFormat); err != nil {
 		return err
 	}
+	quietForJSON(releasesListFormat)
 
 	versions, err := fetchFlatVersions(cmd.Context())
 	if err != nil {
@@ -111,6 +112,7 @@ func runReleasesShow(cmd *cobra.Command, args []string) error {
 	if err := validateFormat(releasesShowFormat); err != nil {
 		return err
 	}
+	quietForJSON(releasesShowFormat)
 
 	versions, err := fetchFlatVersions(cmd.Context())
 	if err != nil {
