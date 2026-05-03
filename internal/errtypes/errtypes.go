@@ -32,9 +32,12 @@ var ErrSudoMissing = errors.New("sudo not found")
 // past logutil.RedactHandler through the .Error() path. The same
 // redaction invariant applies to NetworkError, ClusterError, AuthError.
 //
-// Msg must never include credentials (passwords, tokens, secrets). Pass
-// credential-bearing context only through Err so it stays in the Unwrap
-// chain and out of the Error() surface string.
+// Msg must never include credentials. Construction-site scanning enforces
+// password and api_key fragments via TestMsgFieldNoCredentialInterpolation;
+// the broader "tokens / secrets" axis is enforced only by reviewer
+// discipline because those substrings collide with benign descriptive
+// words ("pull secret", "csrf token"). Pass credential-bearing context only
+// through Err so it stays in the Unwrap chain and out of Error().
 type ConfigError struct {
 	Msg string
 	Err error
