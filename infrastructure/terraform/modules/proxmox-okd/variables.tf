@@ -324,6 +324,7 @@ variable "start_workers_immediately" {
 # wrap this module in an override (override.tf) that sets
 # `lifecycle { prevent_destroy = true }` on the master resource. The
 # authoritative destroy-safety guard lives in the okdctl Go layer.
+# tflint-ignore: terraform_unused_declarations
 variable "protect_masters" {
   description = "operator intent flag: production clusters should set true and apply prevent_destroy via an override module"
   type        = bool
