@@ -47,6 +47,9 @@ func InstalledBinaries() []string {
 func Packages(ctx context.Context, binDir string, logger *slog.Logger) error {
 	binDir = phase.BinDirOrDefault(binDir)
 	logger = logutil.OrNop(logger)
+	if err := refuseCriticalPath(binDir); err != nil {
+		return &errtypes.ClusterError{Msg: "refusing binary removal from critical path"}
+	}
 	var hasErrors bool
 
 	pm := detectPackageManager(logger)

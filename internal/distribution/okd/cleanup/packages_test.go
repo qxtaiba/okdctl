@@ -1,0 +1,63 @@
+package cleanup
+
+import (
+	"context"
+	"os"
+	"path/filepath"
+	"runtime"
+	"testing"
+
+	"github.com/qxtaiba/okdctl/internal/logutil"
+)
+
+func installFakePkgTools(t *testing.T) {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("fake pkg-tool scripts require POSIX sh")
+	}
+	dir := t.TempDir()
+	for _, name := range []string{"rpm", "dnf", "dpkg", "apt-get"} {
+		p := filepath.Join(dir, name)
+		if err := os.WriteFile(p, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+}
+
+func TestPackages_RemovesScopedBinariesOnly(t *testing.T) {
+	installFakePkgTools(t)
+	binDir := t.TempDir()
+
+	for _, name := range InstalledBinaries() {
+		if err := os.WriteFile(filepath.Join(binDir, name), []byte("bin"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	unrelated := filepath.Join(binDir, "unrelated-tool")
+	if err := os.WriteFile(unrelated, []byte("keep"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := Packages(context.Background(), binDir, logutil.NopLogger); err != nil {
+		t.Fatalf("Packages: %v", err)
+	}
+
+	for _, name := range InstalledBinaries() {
+		if _, err := os.Stat(filepath.Join(binDir, name)); !os.IsNotExist(err) {
+			t.Errorf("binary %q still present after cleanup", name)
+		}
+	}
+	if _, err := os.Stat(unrelated); err != nil {
+		t.Errorf("unrelated-tool was removed (should survive): %v", err)
+	}
+}
+
+func TestPackages_RefusesCriticalBinDir(t *testing.T) {
+	installFakePkgTools(t)
+	for _, dir := range []string{"/", "/usr/local"} {
+		if err := Packages(context.Background(), dir, logutil.NopLogger); err == nil {
+			t.Errorf("Packages(binDir=%q) returned nil; want rejection", dir)
+		}
+	}
+}
