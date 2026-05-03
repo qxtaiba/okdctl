@@ -4,6 +4,7 @@ package firewall
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os/exec"
@@ -74,8 +75,9 @@ type Port struct {
 
 // DetectBackend returns the active firewall backend, preferring firewalld,
 // then ufw, then iptables. Returns None on non-Linux hosts or when no
-// backend is present.
-func DetectBackend(ctx context.Context) Backend {
+// backend is present. logger may be nil; when nil, no probe-failure
+// observability is emitted.
+func DetectBackend(ctx context.Context, logger *slog.Logger) Backend {
 	if runtime.GOOS != "linux" {
 		return None
 	}
@@ -92,6 +94,14 @@ func DetectBackend(ctx context.Context) Backend {
 			if strings.Contains(string(output), "Status: active") {
 				return UFW
 			}
+		} else if logger != nil {
+			// probe-style fall-through: log stderr so doctor / debug-bundle reflect why ufw was skipped.
+			var ee *exec.ExitError
+			var stderr string
+			if errors.As(err, &ee) {
+				stderr = string(ee.Stderr)
+			}
+			logger.Debug("ufw probe failed, falling through to next backend", "err", err, "stderr", stderr, "backend", "ufw")
 		}
 	}
 
@@ -105,7 +115,7 @@ func DetectBackend(ctx context.Context) Backend {
 // Configure opens each port in ports on the active backend. When permanent
 // is true, firewalld rules persist across reloads. A None backend no-ops.
 func Configure(ctx context.Context, ports []Port, permanent bool, logger *slog.Logger) error {
-	backend := DetectBackend(ctx)
+	backend := DetectBackend(ctx, logger)
 
 	if backend == None {
 		logger.Warn("no active firewall detected, skipping firewall configuration")
@@ -160,7 +170,7 @@ func openPort(ctx context.Context, backend Backend, port Port, permanent bool, l
 // RemoveRules deletes each port in ports from the active backend. Missing
 // rules are logged as warnings rather than returned as errors.
 func RemoveRules(ctx context.Context, ports []Port, permanent bool, logger *slog.Logger) error {
-	backend := DetectBackend(ctx)
+	backend := DetectBackend(ctx, logger)
 
 	if backend == None {
 		return nil
