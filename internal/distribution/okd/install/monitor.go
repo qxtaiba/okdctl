@@ -21,28 +21,28 @@ import (
 // wires stdout/stderr to the current TTY, and returns a buffered done channel
 // and an idempotent kill function. log receives any kill-error warning when
 // Kill() itself fails.
-func defaultStartMonitorCmd(ctx context.Context, clusterDir string, log *slog.Logger) (<-chan error, func(), error) {
+func defaultStartMonitorCmd(ctx context.Context, clusterDir string, log *slog.Logger) (done <-chan error, kill func(), err error) {
 	cmd := osExec.CommandContext(ctx, "openshift-install", "wait-for", "install-complete", "--dir", clusterDir, "--log-level=debug")
 	// Filter env so openshift-install does not inherit AWS_*/GCP_*/AZURE_* etc. from the user shell.
 	cmd.Env = executor.FilterParentEnv(executor.DefaultEnvAllowlist)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	if err := cmd.Start(); err != nil {
-		return nil, func() {}, err
+	if startErr := cmd.Start(); startErr != nil {
+		return nil, func() {}, startErr
 	}
-	done := make(chan error, 1)
+	doneCh := make(chan error, 1)
 	go func() {
-		defer close(done)
-		done <- cmd.Wait()
+		defer close(doneCh)
+		doneCh <- cmd.Wait()
 	}()
-	kill := sync.OnceFunc(func() {
+	kill = sync.OnceFunc(func() {
 		if cmd.Process != nil {
 			if killErr := cmd.Process.Kill(); killErr != nil {
 				log.Warn("install: failed to kill process", "err", killErr)
 			}
 		}
 	})
-	return done, kill, nil
+	return doneCh, kill, nil
 }
 
 // WaitForBootstrap runs "openshift-install wait-for bootstrap-complete",
