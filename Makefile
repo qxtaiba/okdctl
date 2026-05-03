@@ -116,10 +116,10 @@ clean-all: clean ## Clean everything including dependencies
 ## Docs targets
 
 docs: ## Regenerate CLI reference pages under docs/cli/
-	$(GOCMD) run ./cmd/okdctl-gen-docs
+	$(GOCMD) run -tags docs ./cmd/okdctl-gen-docs
 
 docs-check: ## Regenerate CLI reference and fail on drift
-	$(GOCMD) run ./cmd/okdctl-gen-docs
+	$(GOCMD) run -tags docs ./cmd/okdctl-gen-docs
 	@if ! git diff --quiet docs/cli/ || \
 	    [ -n "$$(git ls-files --others --exclude-standard docs/cli/)" ]; then \
 	  echo "CLI reference is out of date. Commit docs/cli/."; \

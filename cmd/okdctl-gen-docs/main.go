@@ -1,6 +1,8 @@
+//go:build docs
+
 // Package main generates Markdown reference pages for every okdctl
 // subcommand and writes them to an output directory (default: docs/cli).
-// Run via: go run ./cmd/okdctl-gen-docs [-o <dir>]
+// Run via: go run -tags docs ./cmd/okdctl-gen-docs [-o <dir>]
 package main
 
 import (
