@@ -1,11 +1,9 @@
 // Package cleanup provides utilities for removing OKD cluster artifacts.
-// Cleanup is best-effort: individual step errors are accumulated and returned
-// via errors.Join, but a mid-run crash leaves workDir in a partially-removed
-// state with no resume capability. Steps run in dependency order
-// (services → files → terraform-cache) so that tfstate remains intact as
-// long as earlier steps have not yet touched it, keeping destroy re-runnable.
-// A two-pass design with a .cleanup-plan.json checkpoint would convert the
-// flow to declarative resume; that is not yet implemented.
+// Cleanup is best-effort: a mid-run crash leaves workDir in a partially-removed
+// state with no resume capability. Terraform state is removed last so destroy
+// stays re-runnable as long as earlier steps have not corrupted it. A two-pass
+// design with a .cleanup-plan.json checkpoint would convert the flow to
+// declarative resume; that is not yet implemented.
 package cleanup
 
 import (
