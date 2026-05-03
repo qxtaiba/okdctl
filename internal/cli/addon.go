@@ -27,8 +27,12 @@ var addonCmd = &cobra.Command{
 }
 
 var addonListCmd = &cobra.Command{
-	Use:     "list",
-	Short:   "List registered addons and their config state",
+	Use:   "list",
+	Short: "List registered addons and their config state",
+	Long: `List all registered addons with their display name, dependencies, and
+whether they are enabled in the configuration file.
+
+See also: addon verify`,
 	Example: "  okdctl addon list",
 	RunE:    runAddonList,
 }
@@ -213,7 +217,7 @@ func printAddonList(w io.Writer, cfg *config.Config) error {
 		return err
 	}
 	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
-	_, _ = fmt.Fprintln(tw, "NAME\tDISPLAY-NAME\tDEPS\tCONFIG-ENABLED")
+	_, _ = fmt.Fprintln(tw, "NAME\tDISPLAY-NAME\tDEPS\tIN-CONFIG")
 	for _, a := range all {
 		info := a.Info()
 		deps := "-"
@@ -226,6 +230,6 @@ func printAddonList(w io.Writer, cfg *config.Config) error {
 	if err := tw.Flush(); err != nil {
 		return err
 	}
-	_, _ = fmt.Fprintln(w, "\nCONFIG-ENABLED reflects the configuration file only. Run 'addon verify' for live cluster state.")
+	_, _ = fmt.Fprintln(w, "\nIN-CONFIG reflects the configuration file only. Run 'addon verify' for live cluster state.")
 	return nil
 }
