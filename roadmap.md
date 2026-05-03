@@ -1601,7 +1601,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sec:8ea706f6:dl-no-checksum` — dl no checksum
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-8ea706f6-dl-no-checksum  
 **Severity:** major  
 **Cluster:** tls-network  
 **Evidence:** `internal/distribution/okd/setup/tools.go:224-275`  
@@ -1611,7 +1611,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sec:40d315ad:cred-flux-deploykey-as-string` — cred flux deploykey as string
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-40d315ad-flux-deploykey  
 **Severity:** minor  
 **Cluster:** credentials  
 **Evidence:** `internal/addon/catalog/flux/flux.go:353-380`  
@@ -1861,7 +1861,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sub:ae5b624c:no-cmd-env-install` — no cmd env install
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sub-ae5b624c-monitor-env  
 **Severity:** minor  
 **Cluster:** io-handling  
 **Evidence:** `internal/distribution/okd/install/monitor.go:75-78`  
@@ -1891,7 +1891,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sub:25fa1be8:ufw-output-discards-stderr` — ufw output discards stderr
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sub-25fa1be8-ufw-stderr  
 **Severity:** suggestion  
 **Cluster:** io-handling  
 **Evidence:** `internal/distribution/okd/firewall/firewall.go:79-86`  
@@ -1977,7 +1977,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `state:48688e63:proxmox-no-retry-layer` — proxmox no retry layer
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/state-48688e63-proxmox-retry  
 **Severity:** suggestion  
 **Cluster:** proxmox-api-idempotency  
 **Evidence:** `internal/infrastructure/proxmox/proxmox.go:131-193`  
@@ -2051,7 +2051,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `err:b804b2ec:bootstrap-skip-tfvars-nil-as-success` — bootstrap skip tfvars nil as success
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/err-b804b2ec-bootstrap-skip  
 **Severity:** suggestion  
 **Cluster:** sentinel-vs-typed — related: state:b804b2ec:bootstrap-destroy-skip-tfvars-silent  
 **Evidence:** `internal/distribution/okd/postinstall/bootstrap.go:17-24`  
@@ -2287,7 +2287,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `ux:aa84670c:flag-error-os-exit-bypasses-defers` — flag error os exit bypasses defers
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/ux-aa84670c-flag-error  
 **Severity:** minor  
 **Cluster:** exit-codes  
 **Evidence:** `internal/cli/root.go:189-193`  
@@ -2297,7 +2297,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `ux:d31d1b9d:status-degraded-operators-parsing-fragile` — status degraded operators parsing fragile
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/ux-d31d1b9d-status-degraded  
 **Severity:** minor  
 **Cluster:** json-stability  
 **Evidence:** `internal/cli/status.go:167-175`  
@@ -2321,7 +2321,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `ux:fd2125dd:addon-list-config-enabled-column-cryptic` — addon list config enabled column cryptic
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/ux-fd2125dd-addon-list-help  
 **Severity:** suggestion  
 **Cluster:** help-text  
 **Evidence:** `internal/cli/addon.go:191-204`  
@@ -2361,7 +2361,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `ux:8154ab0f:doctor-exits-1-on-fails-no-typed-error` — doctor exits 1 on fails no typed error
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/ux-8154ab0f-doctor-exit  
 **Severity:** suggestion  
 **Cluster:** exit-codes — seam→audit-errors  
 **Evidence:** `internal/cli/doctor.go:102-110`  
@@ -2371,7 +2371,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `ux:daf5bee9:kubeconfig-merge-no-y-flag-no-prompt` — kubeconfig merge no y flag no prompt
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/ux-daf5bee9-kubeconfig-merge-doc  
 **Severity:** suggestion  
 **Cluster:** flag-conventions  
 **Evidence:** `internal/cli/kubeconfig.go:21-36`  
@@ -2381,7 +2381,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `ux:e7db1220:json-output-not-suppressed-by-quiet` — json output not suppressed by quiet
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/ux-e7db1220-json-quiet  
 **Severity:** suggestion  
 **Cluster:** streams  
 **Evidence:** `internal/cli/releases.go:104-106`  
@@ -2731,7 +2731,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `tst:de572c63:validate-config-name-no-test` — validate config name no test
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/tst-de572c63-validate-config-name  
 **Severity:** major  
 **Cluster:** trust-boundary-untested  
 **Evidence:** `internal/distribution/okd/dns/dnsmasq.go:44-52`  
@@ -2741,7 +2741,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `tst:696d6b0e:remove-fcos-iso-from-proxmox-no-test` — remove fcos iso from proxmox no test
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/tst-696d6b0e-remove-fcos-iso  
 **Severity:** major  
 **Cluster:** destructive-untested  
 **Evidence:** `internal/distribution/okd/phase/iso_cleanup.go:218-265`  
@@ -2791,7 +2791,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `tst:0b188cab:retry-default-cancel-untested` — retry default cancel untested
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/tst-0b188cab-retry-default  
 **Severity:** minor  
 **Cluster:** canonical-helper-untested  
 **Evidence:** `internal/addon/helpers.go:23-41`  
@@ -2801,7 +2801,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `tst:26a430ee:requires-root-dryrun-escape-untested` — requires root dryrun escape untested
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/tst-26a430ee-requires-root  
 **Severity:** minor  
 **Cluster:** canonical-helper-untested  
 **Evidence:** `internal/cli/elevation.go:33-46`  
@@ -2811,7 +2811,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `tst:08c49fc4:update-ingress-confirm-callback-untested` — update ingress confirm callback untested
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/tst-08c49fc4-update-ingress-confirm  
 **Severity:** minor  
 **Cluster:** destructive-untested  
 **Evidence:** `internal/cli/update_ingress.go:107-124`  
@@ -2831,7 +2831,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `tst:bdf5a873:work-directory-preserve-config-untested` — work directory preserve config untested
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/tst-bdf5a873-workdir-preserve  
 **Severity:** minor  
 **Cluster:** destructive-untested  
 **Evidence:** `internal/distribution/okd/cleanup/artifacts.go:62-92`  
@@ -2961,7 +2961,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `tst:e3782ee7:safe-remove-no-test` — safe remove no test
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/tst-e3782ee7-safe-remove  
 **Severity:** minor  
 **Cluster:** canonical-helper-untested  
 **Evidence:** `internal/system/fs.go:146-152`  
@@ -2981,7 +2981,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `tst:9d79b841:logged-iso-once-untested` — logged iso once untested
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/tst-9d79b841-logged-iso  
 **Severity:** suggestion  
 **Cluster:** canonical-helper-untested  
 **Evidence:** `internal/distribution/okd/setup/coreos.go:25-35`  
