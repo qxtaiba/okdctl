@@ -1987,27 +1987,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 #### audit-iac-and-shell
 
-##### `iac:18a795d5:master-no-prevent-destroy` — master no prevent destroy
-
-**Status:** in review — PR #240  
-**Severity:** suggestion  
-**Cluster:** hcl-destroy-ordering — seam→audit-state-and-recovery  
-**Evidence:** `infrastructure/terraform/modules/proxmox-okd/main.tf:141-257`  
-**Problem:** Master VMs run the etcd quorum for the OKD cluster. There is no `lifecycle { prevent_destroy = true }` (or a `prevent_destroy = var.production` toggle) on `proxmox_virtual_environment_vm.master`. A `terraform destroy` from the wrong workspace or an accidental `-target` removes etcd nodes irreversibly. Per seams.md §5 destroy safety is owned by audit-state-and-recovery — but the HCL-idiom-level guard is `prevent_destroy`, which this module does not use.  
-**Fix:** Add an opt-in `var.protect_masters` (default false to preserve current ergonomics for `okdctl destroy` flows) and gate `prevent_destroy = var.protect_masters` on the master resource's lifecycle. NOTE: prevent_destroy must be a literal boolean — gating on a variable is currently a Terraform limitation. Alternative: document in README that production deployments should add a tfvars-driven override module that wraps with `prevent_destroy = true`. Real fix lives at the okdctl-Go layer (see seam: audit-state-and-recovery).  
-**Effort:** hours
-
 #### audit-errors
-
-##### `err:6424733c:wrap-double-context-deployment` — wrap double context deployment
-
-**Status:** in review — PR #236  
-**Severity:** minor  
-**Cluster:** wrapping  
-**Evidence:** `internal/cli/helpers.go:206-237`  
-**Problem:** executeFullDeployment wraps each phase error as fmt.Errorf("deployment failed: %w", err) before returning to cobra. The inner error is already typed (errtypes.ClusterError or errtypes.NetworkError) and likely already wraps with "failed to X" context. Surface message becomes "deployment failed: cluster error: bootstrap failed: ...". errors.As walks past the outer fmt.Errorf so exit code is preserved, but the user reads three layers of "failed" prefix.  
-**Fix:** Drop the outer fmt.Errorf — the inner errtypes.* error is already informative and structured. The tui.Info hint above carries the human "run destroy" instruction; the error itself doesn't need a redundant deployment-failed prefix. Same pattern at lines 213, 225, 236.  
-**Effort:** hours
 
 ##### `err:a55b4592:vocab-ad-hoc-config-perm` — vocab ad hoc config perm
 
@@ -2047,16 +2027,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/distribution/okd/setup/release_extract.go:81-127`  
 **Problem:** isAuthError() does strings.Contains(lower, marker) over a fixed list against `oc adm release extract` stderr to choose between AuthError (exit 5) and ClusterError (exit 4). The exact wording of these markers ("unauthorized", "401", "no basic auth") is upstream-tooling output; oc has changed wording across minors. The author flagged this as best-effort in the comment, but the user-visible exit-code branches on it.  
 **Fix:** Two-step: (1) parse the executor.ExitError exit code — non-zero exit codes 1 and 125 are typical for auth failure on most container runtimes; (2) keep the string match as a secondary heuristic but downgrade unmatched-fail to ClusterError. The single-source-of-truth is the exit code; stderr-text is the fallback. Document the risk in a TODO with a roadmap link if the exit-code path needs upstream investigation.  
-**Effort:** hours
-
-##### `err:a4001485:errtype-msg-vs-error-asymmetry` — errtype msg vs error asymmetry
-
-**Status:** in review — PR #237  
-**Severity:** minor  
-**Cluster:** domain-vocabulary — related: sec:f55b9c27:err-type-carries-cred  
-**Evidence:** `internal/errtypes/errtypes.go:21-68`  
-**Problem:** All four errtypes (ConfigError, NetworkError, ClusterError, AuthError) carry both Msg and Err but Error() returns only Msg — the Err is reachable via Unwrap (deliberately, per the doc comment, to keep credentials out of the surface message). However: nothing in the type prevents Msg itself from carrying credentials. Several construction sites pass fmt.Sprintf with user-supplied values into Msg (e.g. install/phase.go:122 fmt.Sprintf("terraform environment directory not found: %s", terraformDir)). Path leakage at the Msg level bypasses RedactHandler because Error() returns the raw Msg.  
-**Fix:** Either (a) document explicitly that Msg must never include credentials and add a unit-test that scans construction sites; or (b) implement Redacted() on each errtypes.* type that returns the same message but with an explicit pass-through to the redaction layer. (a) is lower-risk; (b) is the structural fix. The user instruction (rule §5/must-preserve) prohibits adding any credential-storage path, so Msg-redaction at the constructor level is the only correct path.  
 **Effort:** hours
 
 ##### `err:ddf885f4:errors-join-opportunity` — errors join opportunity
@@ -2521,16 +2491,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Replace each loop with `clear(c.Password)` / `clear(c.APIToken)`. Go spec guarantees `clear` on a `[]T` sets every element to T's zero value, which for `[]byte` is the same byte-by-byte zeroize. Keep the subsequent `c.Password = nil` / `c.APIToken = nil` assignments unchanged — they release the backing array.  
 **Effort:** hours
 
-##### `mod:377f1dcd:use-synctest` — use synctest
-
-**Status:** in review — PR #238  
-**Severity:** suggestion  
-**Cluster:** any-interface-builtins — seam→audit-tests  
-**Evidence:** `internal/distribution/okd/phase/kubectl_test.go:113-162`  
-**Problem:** `TestOcPollOutput` exercises the polling loop with real wall-clock budgets (`30*time.Second`, `500*time.Millisecond`, `5*time.Second`, `50*time.Millisecond`). Each subtest pays real time on every CI run and is non-deterministic under loaded runners. `internal/system/exec_test.go` already adopts `testing/synctest.Test` for the same shape — the helper is in scope per Go 1.25.  Note: the user-supplied scope rules list `_test.go` as OUT for this audit; recording as suggestion-only.  
-**Fix:** Wrap each `t.Run` body in `synctest.Test(t, func(t *testing.T) { ... })` (Go 1.25). This makes the bubble's clock advance only when all goroutines block, which makes the timeout/predicate edge cases deterministic and zero-cost. Caveat: the underlying poll path forks `oc` via os/exec — synctest only stubs Go runtime time, not subprocess wall-clock; verify the fake-oc helper installed by `installFakeOC` does not itself use real timers before adopting. Prefer to hoist the timer+ticker mocking through dependency injection if synctest doesn't fully tame the test.  
-**Effort:** hours
-
 ##### `mod:7b2829bb:use-slices-containsfunc` — use slices containsfunc
 
 **Status:** done — PR #161 (moved to Completed)  
@@ -2769,26 +2729,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 #### audit-tests
 
-##### `tst:40d315ad:flux-deploy-key-secret-no-test` — flux deploy key secret no test
-
-**Status:** in review — PR #250  
-**Severity:** major  
-**Cluster:** cred-path-untested  
-**Evidence:** `internal/addon/catalog/flux/flux.go:330-429`  
-**Problem:** createDeployKeySecret reads ~/.ssh/flux-deploy-key (private key) and constructs a Kubernetes Opaque Secret via addon.BuildOpaqueSecret. The flow is: read file → string conversion → BuildOpaqueSecret → oc apply. The intermediate string([]byte) conversion creates a heap copy that survives even if the read buffer is later wiped. There is no test asserting (a) optional .pub absent, (b) ssh-keyscan failure aborts, (c) the secret YAML round-trips with identity field set.  
-**Fix:** Add TestBuildFluxDeployKeySecret: (1) all three fields → identity, identity.pub, known_hosts present; values base64-encoded so plaintext keys NOT in YAML; (2) empty publicKey omits identity.pub from data map; (3) namespace and name landed correctly. Pure helper, no fixtures. Adds a TestGitHost set covering ssh://git@host/x, https://host/x, scp-style git@host:x, edge cases.  
-**Effort:** hours
-
-##### `tst:ddf885f4:manager-rollback-untested` — manager rollback untested
-
-**Status:** in review — PR #252  
-**Severity:** major  
-**Cluster:** destructive-untested  
-**Evidence:** `internal/addon/manager.go:62-196`  
-**Problem:** Manager.InstallAll rolls back ONE failed addon in isolation; Manager.InstallOne does ALL-OR-NOTHING rollback in reverse order. The two flows have load-bearing different rollback semantics — the function comments name this as a deliberate design split. Neither rollback path has a test. A regression that mixes the semantics (e.g. ALL-OR-NOTHING in InstallAll) cascades a single addon failure into wiping the entire enabled set, possibly disabling existing in-cluster services.  
-**Fix:** Add manager_test.go using a stubAddon{Install/Verify/Uninstall hooks → spy counters}. Cases — (1) InstallAll with three independent addons where the middle fails: middle uninstall fires, others stay; (2) InstallAll with A→B chain where B fails: only B uninstall fires; (3) InstallOne with A→B→C where C fails: C, B, A uninstalls fire in reverse; (4) ctx cancel mid-install returns ctx error and does NOT roll back already-installed addons in InstallAll (per its loose-rollback semantics).  
-**Effort:** hours
-
 ##### `tst:79e2cbc4:resolver-circular-deps-untested` — resolver circular deps untested
 
 **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/tst-79e2cbc4-resolver-circular  
@@ -2829,26 +2769,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Add TestExecute_FullKind_AggregatesErrors that points each site at a writable t.TempDir but seeds a deliberately read-only file inside HAProxyConfig so that step errors. Assert: every other step still runs (WorkDir empty, ignition removed, tfstate preserved), and errors.Join carries exactly one wrapped *ConfigError. Adds RemovePackages=false case + RemovePackages=true case asserting Packages is/is-not called via PATH-injected fake dnf.  
 **Effort:** hours
 
-##### `tst:368b892b:cleanup-tfstate-explicit-only-no-implicit-test` — cleanup tfstate explicit only no implicit test
-
-**Status:** in review — PR #239  
-**Severity:** major  
-**Cluster:** destructive-untested — seam→audit-state-and-recovery; related: state:368b892b:cleanup-tfstate-explicit-only-implicit  
-**Evidence:** `internal/distribution/okd/cleanup/infra.go:18-45`  
-**Problem:** Terraform() iterates ReadDir when terraformEnv == "" and cleans every env dir found. The tfstate-preservation invariant is locked in TestCleanupTerraformEnv_PreservesState only on the single-env explicit path; there is no test asserting the multi-env implicit walk behaves the same. A regression that mistakenly removes terraform.tfstate during the walk would silently brick destroy on multi-env setups.  
-**Fix:** Add TestTerraform_AllEnvs_PreservesEachState that creates two env dirs (production + staging) with terraform.tfstate seeded in each, calls Terraform(ctx, projectRoot, "") with empty env name, then asserts both tfstate files survive with original contents while plan/lock files are removed in both. Mirror the existing single-env test's structure.  
-**Effort:** hours
-
-##### `tst:830d4653:packages-binary-removal-untested` — packages binary removal untested
-
-**Status:** in review — PR #243  
-**Severity:** major  
-**Cluster:** destructive-untested  
-**Evidence:** `internal/distribution/okd/cleanup/packages.go:59-96`  
-**Problem:** Packages walks InstalledBinaries() and os.RemoveAll's each filepath.Join(binDir, b). If binDir is empty, BinDirOrDefault hands back /usr/local/bin — i.e. cleanup is one BinDirOrDefault bug away from rm-rf'ing /usr/local/bin/openshift-install + oc + kubectl + every external tool. There is no test asserting (a) refuseCriticalPath fires when binDir resolves to a critical root, (b) only the named binaries (not the whole binDir) are removed.  
-**Fix:** Add TestPackages_RemovesScopedBinariesOnly that seeds a t.TempDir with all InstalledBinaries() filenames + one unrelated file (e.g. "unrelated-tool"), calls Packages with that dir as binDir and a fake dnf in PATH that exits 0. Assert: each named binary is gone, the unrelated file survives, refuseCriticalPath rejects binDir=="/" / binDir=="/usr/local".  
-**Effort:** hours
-
 ##### `tst:33579dd5:safe-remove-with-logger-error-paths-untested` — safe remove with logger error paths untested
 
 **Status:** in review — PR #242  
@@ -2857,36 +2777,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/distribution/okd/cleanup/services.go:134-181`  
 **Problem:** cleanup.Dnsmasq removes /etc/dnsmasq.d/okd-*.conf via filepath.Glob then loops with refuseCriticalPath checks before os.RemoveAll. If a future refactor pre-resolves the loop variable wrong (Go pre-1.22 closure-capture bug), the same .backup pattern walk could remove the wrong file. There is no test that exercises Dnsmasq's glob-and-remove loop with multiple matching files.  
 **Fix:** Refactor the hard-coded /etc/dnsmasq.d/* pattern into a package var so tests can override it. Add TestDnsmasq_GlobLoopRemovesAllMatches that drops three okd-*.conf files in a t.TempDir, points the var at it, calls Dnsmasq, and asserts each is gone. Bonus: assert that a critical-path symlink (e.g. /tmp/.../link → /etc) inside the glob result is refused, not followed.  
-**Effort:** hours
-
-##### `tst:62cb8a95:destroy-infrastructure-tf-failure-untested` — destroy infrastructure tf failure untested
-
-**Status:** in review — PR #245  
-**Severity:** major  
-**Cluster:** destructive-untested  
-**Evidence:** `internal/distribution/okd/destroy/helpers.go:13-51`  
-**Problem:** destroyInfrastructure has tests for the missing-env-dir and empty-state branches, but no test for the path where tf.Init succeeds, tf.Destroy fails, and Cleanup is invoked. The NonFatal step contract requires that a TF destroy failure surfaces as ClusterError but does NOT prevent subsequent cleanup steps from running. A regression that turns the error into a fatal early-return hides accumulated failure-state from the summary.  
-**Fix:** Add a test that injects a fake `terraform` binary in PATH (per kubectl_test.go's installFakeOC pattern) which exits 0 on init and 1 on destroy. Assert the returned err is *errtypes.ClusterError, that errors.Is unwraps to *terraform.ExecError, and that the destroy_steps.go OnError tracker callback was actually invoked when the step ran (use a custom step iterator in the test that captures failure labels).  
-**Effort:** hours
-
-##### `tst:15ba17da:destroy-steps-failure-tracker-untested` — destroy steps failure tracker untested
-
-**Status:** in review — PR #246  
-**Severity:** major  
-**Cluster:** destructive-untested  
-**Evidence:** `internal/distribution/okd/destroy/steps.go:24-133`  
-**Problem:** The failures slice + track() closure in destroySteps is THE post-mortem signal that the summary step uses to decide between "cluster teardown completed" (data-loss-on-misleading-success regression the comment cites) and "finished with non-fatal failures". The tracker has no test. A future refactor that breaks the OnError callback wiring silently restores the misleading-success bug.  
-**Fix:** Add steps_test.go that constructs destroySteps() with a fake exec/log, manually drives each StepDef.Exec to return a sentinel error, calls each StepDef.OnError, then invokes the StepPrintSummary.Exec and asserts the captured log line carries the expected step labels ("terraform destroy", "iso removal", etc.). Pure functional — no subprocess needed.  
-**Effort:** hours
-
-##### `tst:d7ce9d16:dns-package-no-tests` — dns package no tests
-
-**Status:** in review — PR #244  
-**Severity:** major  
-**Cluster:** destructive-untested  
-**Evidence:** `internal/distribution/okd/dns/dns.go:102-245`  
-**Problem:** The dns/ package writes to /etc/dnsmasq.d/* and /etc/systemd/resolved.conf.d/* under sudo and has zero tests. validateAndRestartDnsmasq's restore-on-failure path (CopyFile from .backup back to the live config when validation fails) is the only protection against a corrupt cluster DNS config; without a test, a refactor that drops the restore block silently leaves operators with a non-resolving bastion.  
-**Fix:** Add internal/distribution/okd/dns/dnsmasq_test.go covering pure-function paths first: (1) validateConfigName accepts okd-prod, rejects empty/dots/path-traversal/special chars; (2) DnsmasqConfigPath rejects ../etc/passwd; (3) configName("prod") == "okd-prod". Then a writeDnsmasqConfig integration test that points dnsmasqConfigDir at t.TempDir() (it is a const today — extract to a package var so tests can override) and asserts the .backup → live restore path executes when ValidateDnsmasqConfig fails. Use a fake-dnsmasq script in PATH per kubectl_test.go's installFakeOC pattern.  
 **Effort:** hours
 
 ##### `tst:de572c63:validate-config-name-no-test` — validate config name no test
@@ -2927,16 +2817,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/distribution/okd/phase/iso_cleanup.go:52-64`  
 **Problem:** validateProxmoxName gates pvesh interpolation over ssh — the function comment names this as defense-in-depth for hand-edited YAML. The byte-by-byte allowlist enforces [A-Za-z0-9_-] but no test asserts the actual rejection set: empty string, leading digit, dot, slash, semicolon, backtick, dollar sign, space, unicode, null byte. Without coverage, a future refactor that swaps to a regex with the wrong anchor (^[a-z]+ vs ^[a-z]+$) silently relaxes the gate.  
 **Fix:** Add TestValidateProxmoxName cases: accept ("pve", "pve-1", "node_a", "PVE0"); reject ("", "1pve", "pve.example", "pve/etc", "pve;rm", "pve`id`", "pve$(id)", "pve space", "pvé", "pve\x00"). Pure function — no fixtures.  
-**Effort:** hours
-
-##### `tst:632c9087:build-lb-ingress-controller-no-test` — build lb ingress controller no test
-
-**Status:** in review — PR #247  
-**Severity:** major  
-**Cluster:** destructive-untested  
-**Evidence:** `internal/distribution/okd/postinstall/update_ingress.go:406-507`  
-**Problem:** buildLBIngressController and buildRollbackJSON are the JSON manipulation that drives the destructive HostNetwork→LoadBalancerService conversion: oc delete then oc create, with rollback if create fails. Both are pure JSON-in/JSON-out functions and both have zero tests. A regression in field preservation (defaultCertificate, routeAdmission, routeSelector, nodePlacement) silently widens the surface or breaks rollback.  
-**Fix:** Add update_ingress_test.go with table-driven cases for both helpers: (1) buildLBIngressController preserves Domain, Replicas, DefaultCertificate, RouteSelector, RouteAdmission, NodePlacement when present; (2) absent optional fields stay omitted (omitempty); (3) Type field is exactly LoadBalancerService; (4) buildRollbackJSON strips creationTimestamp / resourceVersion / status / managedFields; (5) round-trip buildRollbackJSON(buildLBIngressController(ic)) recovers a JSON shape with Type from the original. Pure JSON manipulation — stdlib encoding/json only.  
 **Effort:** hours
 
 ##### `tst:451be4fa:chown-tree-error-aggregation-untested` — chown tree error aggregation untested

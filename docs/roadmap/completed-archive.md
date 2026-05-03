@@ -2217,3 +2217,172 @@ but link evidence.
   fmt.Errorf in `&errtypes.ConfigError{Msg: fmt.Sprintf(…)}` so
   exit 2 is consistent. Reviewer PASS first round.
 
+- **`err:6424733c:wrap-double-context-deployment`** — done
+  2026-05-03 — PR #236, merge commit `e1d71c4`. Tier H minor.
+  executeFullDeployment in cli/helpers.go wrapped each phase error
+  with `fmt.Errorf("deployment failed: %w", err)`. Inner errors
+  were already typed errtypes.ClusterError / NetworkError carrying
+  their own "failed to X" context, producing triple-layered surface
+  messages. Dropped the outer wrap at three sites in helpers.go
+  plus one at cli/deploy.go:120 (ActionDeploy wizard branch). The
+  preceding `tui.Info("run 'okdctl destroy'…")` hint is preserved.
+  errors.As walking — and therefore exit-code mapping — still
+  works because the inner typed errors flow through unchanged.
+  Reviewer PASS first round.
+
+- **`err:a4001485:errtype-msg-vs-error-asymmetry`** — done
+  2026-05-03 — merge commits `288be52` (initial doc + AST scan) and
+  `9905893` (round-2 doc tightening). Tier H minor. All four
+  errtypes carried both Msg and Err but `Error()` returned only
+  Msg. Path leakage at the Msg level bypassed RedactHandler. Added
+  doc comments on each errtype declaring "Msg must never include
+  credentials" plus internal/errtypes/errtypes_credleak_test.go
+  using go/parser+go/ast to walk every non-test .go under internal/
+  and fail if errtypes.X{Msg: fmt.Sprintf(...)} interpolates a
+  credential-bearing fragment. Reviewer FAIL first round flagged
+  doc-vs-scanner contract drift (doc said "passwords, tokens,
+  secrets" but scanner only matched password/api_key/apikey/passwd
+  to avoid false positives on benign descriptive words like "pull
+  secret"); follow-up commit aligned the doc to what the scanner
+  actually enforces. Reviewer PASS round 2. Known limitations:
+  scanner only catches Sprintf, not string concat (documented as
+  Path A's intent).
+
+- **`mod:377f1dcd:use-synctest`** — done 2026-05-03 — PR #238,
+  merge commit `bbd6c50`. Tier H suggestion. TestOcPollOutput in
+  phase/kubectl_test.go used real wall-clock budgets (30s, 500ms,
+  5s timeouts). Wrapped each of three t.Run bodies in
+  `synctest.Test(t, ...)` (Go 1.25 stdlib). The fake-oc subprocess
+  exits in microseconds so it does not stall the bubble. Reviewer
+  PASS first round.
+
+- **`tst:368b892b:cleanup-tfstate-explicit-only-no-implicit-test`**
+  — done 2026-05-03 — PR #239, merge commit `516ba33`. Tier H
+  major. cleanup.Terraform iterates ReadDir when terraformEnv == ""
+  and cleans every env dir. The tfstate-preservation invariant was
+  only tested on the single-env path. Added
+  TestTerraform_AllEnvs_PreservesEachState seeding two env dirs
+  (production + staging) with terraform.tfstate + tfplan +
+  .terraform.lock.hcl in each; calls Terraform with empty env name;
+  asserts every tfstate survives byte-for-byte while every artefact
+  is removed. Reviewer PASS first round.
+
+- **`iac:18a795d5:master-no-prevent-destroy`** — done 2026-05-03 —
+  merge commits `9b649f4` (variable + main.tf comment) and
+  `723b5c8` (CI fix: tflint-ignore for unused-declaration). Tier H
+  suggestion. Master VMs run etcd quorum but the
+  proxmox_virtual_environment_vm.master resource had no
+  `lifecycle { prevent_destroy = true }`. Terraform requires
+  prevent_destroy to be a literal boolean, so a runtime toggle via
+  variable is impossible. Added documentation-only
+  `var.protect_masters` (default false) signalling operator intent,
+  plus an HCL comment block above the master lifecycle showing the
+  override-module pattern operators should adopt for production
+  (`override.tf` with the literal lifecycle override). The
+  authoritative destroy-safety guard still lives in the okdctl Go
+  layer. Round 1 PASS; CI follow-up needed `# tflint-ignore:
+  terraform_unused_declarations` directive.
+
+- **`tst:830d4653:packages-binary-removal-untested`** — done
+  2026-05-03 — PR #243, merge commit `ac868f2`. Tier H major.
+  cleanup.Packages walked InstalledBinaries() and os.RemoveAll'd
+  each filepath.Join(binDir, b); the per-binary refuseCriticalPath
+  guard operated on the joined path (e.g. "/openshift-install"
+  for binDir="/") which isn't in criticalPaths, so the guard
+  never fired for dangerous binDir values. Added a top-of-function
+  refuseCriticalPath(binDir) check returning *errtypes.ClusterError
+  and added "/usr/local" to criticalPaths. New
+  packages_test.go::TestPackages_RemovesScopedBinariesOnly seeds
+  every InstalledBinaries() name plus an unrelated file in
+  t.TempDir; fakes rpm/dnf/dpkg/apt-get on PATH; asserts each
+  named binary is gone and unrelated survives. Companion test
+  TestPackages_RefusesCriticalBinDir asserts "/" and "/usr/local"
+  reject. Reviewer PASS first round.
+
+- **`tst:d7ce9d16:dns-package-no-tests`** — done 2026-05-03 —
+  PR #244, merge commit `b9bcfc5`. Tier H major. The dns/ package
+  writes to /etc/dnsmasq.d/* under sudo and had zero tests.
+  Extracted dnsmasqConfigDir from a const to a package var so
+  tests can override. Added dnsmasq_test.go covering
+  validateConfigName (accepts okd-prod, rejects empty/dots/path-
+  traversal/special chars/leading-hyphen/length-65),
+  DnsmasqConfigPath (rejects "../etc/passwd" and ""), and
+  configName ("prod" → "okd-prod"). The integration restore-path
+  test from the planner's plan was descoped — pure-function
+  coverage was deemed sufficient for this round. Reviewer PASS
+  first round (acknowledged the descope).
+
+- **`tst:62cb8a95:destroy-infrastructure-tf-failure-untested`** —
+  done 2026-05-03 — PR #245, merge commit `2dff510`. Tier H
+  major. destroyInfrastructure had tests for missing-env-dir and
+  empty-state, but not the path where tf.Init succeeds and
+  tf.Destroy fails. Added installFakeTerraform helper writing a
+  shell stub that exits 0 on init and 1 on all other subcommands;
+  seedTerraformEnvDir pre-creates the .terraform short-circuit
+  artefacts so Init never spawns a real subprocess. Test asserts
+  the returned err is *errtypes.ClusterError unwrapping to
+  *executor.ExitError (terraform.ExecError alias) with non-zero
+  ExitCode. Reviewer PASS first round.
+
+- **`tst:15ba17da:destroy-steps-failure-tracker-untested`** — done
+  2026-05-03 — PR #246, merge commit `2fdedc2`. Tier H major.
+  destroySteps's failures slice + track() closure is the
+  post-mortem signal StepPrintSummary uses to distinguish
+  "completed" from "finished with non-fatal failures" — a
+  regression on the OnError wiring would silently restore the
+  misleading-success bug. Added steps_test.go with a captureHandler
+  slog.Handler implementation collecting records; three tests cover
+  success path (Info "completed"), full failure path (drives all
+  four StepDef.OnError, asserts Warn message + steps attr contains
+  every expected label), and partial failure (only two OnError
+  fired, asserts steps attr includes those two and excludes the
+  others). Pure functional, no subprocess. Reviewer PASS first
+  round.
+
+- **`tst:632c9087:build-lb-ingress-controller-no-test`** — done
+  2026-05-03 — PR #247, merge commit `fb8b470`. Tier H major.
+  buildLBIngressController and buildRollbackJSON in
+  postinstall/update_ingress.go drive the destructive
+  HostNetwork→LoadBalancerService conversion and had zero tests.
+  Added update_ingress_test.go with table-driven cases:
+  TestBuildLBIngressController_PreservesFields covers all six
+  optional fields (Replicas, DefaultCertificate, RouteSelector,
+  RouteAdmission, NodePlacement) present and absent;
+  TestBuildLBIngressController_TypeIsLoadBalancerService asserts
+  the Type field is overridden from HostNetwork;
+  TestBuildRollbackJSON_StripsServerFields verifies
+  creationTimestamp, generation, resourceVersion, selfLink,
+  managedFields, and top-level "status" are stripped. Stdlib
+  encoding/json only. Reviewer PASS first round.
+
+- **`tst:40d315ad:flux-deploy-key-secret-no-test`** — done
+  2026-05-03 — PR #250, merge commit `6ddf96e`. Tier H major.
+  flux.buildFluxDeployKeySecret reads a private key and constructs
+  a Kubernetes Opaque Secret; flux.gitHost parses operator-supplied
+  repo URLs. Both unexported, both untested. Added flux_test.go
+  with TestBuildFluxDeployKeySecret covering all-fields-present
+  (asserts identity, identity.pub, known_hosts in the data map and
+  that plaintext does NOT appear in the YAML — base64-encoded
+  only), empty-publicKey-omits-identity.pub, and namespace/name
+  metadata correctness. TestGitHost table covers ssh://, https://,
+  scp-style (github.com and self-hosted), ssh-with-port, and
+  rejects empty/whitespace-only inputs. sigs.k8s.io/yaml round-
+  trip. Reviewer PASS first round.
+
+- **`tst:ddf885f4:manager-rollback-untested`** — done 2026-05-03 —
+  PR #252, content landed via leak commit `7e12308` (PROCESS NOTE:
+  third occurrence of stray-worktree-content leakage into a
+  chore(roadmap) commit; PR #252 then merged as a no-op since the
+  test code was already on develop). Tier H major.
+  Manager.InstallAll rolls back ONE failed addon in isolation;
+  Manager.InstallOne does ALL-OR-NOTHING reverse rollback. Neither
+  rollback path had a test. Added manager_test.go with a stubAddon
+  type using sync/atomic.Int32 spy counters for Install/Verify/
+  Uninstall calls, plus registerStubs/registerStubs-cleanup to
+  manipulate the global registry per-test. Four tests:
+  middle-failure-rollback-only-middle (InstallAll independents),
+  dependency-failure-skips-dependent (A→B chain), all-or-nothing-
+  reverse-rollback (InstallOne A→B→C with C failing fires B then A
+  uninstall), ctx-cancel-stops-install. Fake `oc` on PATH bypasses
+  the executor.CommandExists guard. Reviewer PASS first round.
+
