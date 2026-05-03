@@ -68,14 +68,24 @@ variable "data_storage" {
   default     = "local-lvm"
 }
 
+variable "minimum_data_disk_size_gb" {
+  description = "floor for data-disk activation; setting to 1 prevents a re-apply that zeros master_data_disk_size_gb or worker_data_disk_size_gb from silently destroying existing disks"
+  type        = number
+  default     = 0
+  validation {
+    condition     = var.minimum_data_disk_size_gb >= 0
+    error_message = "minimum_data_disk_size_gb must be >= 0."
+  }
+}
+
 variable "worker_data_disk_size_gb" {
-  description = "size of data disk for worker nodes (0 = no data disk)"
+  description = "size of data disk for worker nodes in gb; 0 (or any value below minimum_data_disk_size_gb) omits the disk — lowering this after initial apply destroys the ceph data disk"
   type        = number
   default     = 500
 }
 
 variable "master_data_disk_size_gb" {
-  description = "size of data disk for master nodes (0 = no data disk)"
+  description = "size of data disk for master nodes in gb; 0 (or any value below minimum_data_disk_size_gb) omits the disk — lowering this after initial apply destroys the ceph data disk"
   type        = number
   default     = 0
 }

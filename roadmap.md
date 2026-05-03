@@ -90,7 +90,7 @@ items here gate the next release.
 
 #### `bug:elevation-preflight-deadlock` — preflight blocks own sudo re-exec on deploy/destroy/cleanup/update-ingress
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/elevation-preflight-deadlock  
+**Status:** in review — PR #217  
 **Severity:** blocker  
 **Cluster:** elevation — seam→audit-cli-ux  
 **Discovered:** 2026-04-27 — `./bin/okdctl deploy` reproduces. Every
@@ -1673,7 +1673,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sec:696d6b0e:shellinj-pattern` — shellinj pattern
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/696d6b0e-pvesh-helper  
+**Status:** in review — PR #219  
 **Severity:** major  
 **Cluster:** shell-injection — seam→audit-subprocess  
 **Evidence:** `internal/distribution/okd/phase/iso_cleanup.go:118-169`  
@@ -1803,7 +1803,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sec:451be4fa:sudo-cp-no-p` — sudo cp no p
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/451be4fa-os-root-walk  
+**Status:** in review — PR #227  
 **Severity:** minor  
 **Cluster:** privilege-escalation  
 **Evidence:** `internal/system/elevation.go:111-131`  
@@ -2029,7 +2029,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `state:0f076161:destroy-no-scoped-only` — destroy no scoped only
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/0f076161-destroy-target  
+**Status:** in review — PR #226  
 **Severity:** minor  
 **Cluster:** destroy-safety  
 **Evidence:** `internal/cli/destroy.go:33-61`  
@@ -2059,7 +2059,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `state:881d089e:runlock-stale-pid-no-recovery` — runlock stale pid no recovery
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/881d089e-runlock-hostname  
+**Status:** in review — PR #228  
 **Severity:** minor  
 **Cluster:** tf-state-atomicity  
 **Evidence:** `internal/runlock/runlock.go:29-54`  
@@ -2111,7 +2111,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `iac:18a795d5:dynamic-disk-no-precondition` — dynamic disk no precondition
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/18a795d5-data-disk-floor  
+**Status:** in review — PR #229  
 **Severity:** minor  
 **Cluster:** hcl-destroy-ordering — seam→audit-state-and-recovery  
 **Evidence:** `infrastructure/terraform/modules/proxmox-okd/main.tf:188-199`  
@@ -2121,7 +2121,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `iac:e076e43c:insecure-skips-cosign` — insecure skips cosign
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/e076e43c-cosign-independent  
+**Status:** in review — PR #230  
 **Severity:** minor  
 **Cluster:** install-sh-integrity  
 **Evidence:** `scripts/install.sh:93-134`  
@@ -2143,7 +2143,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `err:97cb8adf:waitfor-timeout-loses-cluster-identity` — waitfor timeout loses cluster identity
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/97cb8adf-waitfor-cluster-error  
+**Status:** in review — PR #221  
 **Severity:** major  
 **Cluster:** cancellation-identity — related: err:ae5b624c:ctx-timeout-loses-cluster-identity  
 **Evidence:** `internal/system/exec.go:85-108`  
@@ -2491,7 +2491,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `ux:aa84670c:exit-code-66-65-78-unmapped` — exit code 66 65 78 unmapped
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/aa84670c-sysexits-mapping  
+**Status:** in review — PR #223  
 **Severity:** major  
 **Cluster:** exit-codes — seam→audit-errors  
 **Evidence:** `internal/cli/root.go:144-165`  
@@ -2501,7 +2501,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `ux:d31d1b9d:status-example-mismatches-schema` — status example mismatches schema
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/d31d1b9d-status-example  
+**Status:** in review — PR #224  
 **Severity:** major  
 **Cluster:** json-stability  
 **Evidence:** `internal/cli/status.go:29-31`  
@@ -2645,7 +2645,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `obs:0934cf1b:sprintf-bypasses-redact-handler` — sprintf bypasses redact handler
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/0934cf1b-structured-attrs  
+**Status:** in review — PR #222  
 **Severity:** major  
 **Cluster:** redaction-sink — related: err:a4001485:errtype-msg-vs-error-asymmetry  
 **Evidence:** `internal/platform/packages.go:65-65`  
@@ -3183,7 +3183,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `tst:761e5126:remove-haproxy-no-test` — remove haproxy no test
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/761e5126-remove-haproxy  
+**Status:** in review — PR #225  
 **Severity:** major  
 **Cluster:** destructive-untested  
 **Evidence:** `internal/distribution/okd/postinstall/haproxy.go:23-97`  
@@ -3203,7 +3203,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `tst:1e8ffb91:parse-node-readiness-no-test` — parse node readiness no test
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/1e8ffb91-parse-node-readiness  
+**Status:** in review — PR #220  
 **Severity:** major  
 **Cluster:** canonical-helper-untested  
 **Evidence:** `internal/distribution/okd/postinstall/verify.go:43-58`  
@@ -3213,7 +3213,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `tst:c8b28673:extract-tar-strip-symlink-resolved-untested` — extract tar strip symlink resolved untested
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/c8b28673-extract-tar-symlink  
+**Status:** in review — PR #218  
 **Severity:** major  
 **Cluster:** trust-boundary-untested  
 **Evidence:** `internal/download/extract.go:38-134`  
@@ -3313,7 +3313,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `tst:25fa1be8:firewall-haproxy-frontend-ports-no-test` — firewall haproxy frontend ports no test
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/25fa1be8-haproxy-frontend-ports  
+**Status:** in review — PR #231  
 **Severity:** minor  
 **Cluster:** canonical-helper-untested  
 **Evidence:** `internal/distribution/okd/firewall/firewall.go:42-55`  
