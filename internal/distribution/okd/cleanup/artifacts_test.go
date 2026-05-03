@@ -104,3 +104,35 @@ func TestSafeRemoveWithLogger(t *testing.T) {
 		}
 	})
 }
+
+func TestWorkDirectory_PreservesConfigYaml(t *testing.T) {
+	workDir := t.TempDir()
+	ctx := context.Background()
+
+	configFile := filepath.Join(workDir, "okdctl.yaml")
+	if err := os.WriteFile(configFile, []byte("cluster: test\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	subTrees := []string{"tmp", "downloads", "installer", "custom-isos"}
+	for _, sub := range subTrees {
+		if err := os.MkdirAll(filepath.Join(workDir, sub), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if err := WorkDirectory(ctx, workDir, true, logutil.NopLogger); err != nil {
+		t.Fatalf("WorkDirectory returned error: %v", err)
+	}
+
+	if _, err := os.Stat(configFile); err != nil {
+		t.Errorf("okdctl.yaml was removed; want it preserved: %v", err)
+	}
+
+	for _, sub := range subTrees {
+		p := filepath.Join(workDir, sub)
+		if _, err := os.Stat(p); !os.IsNotExist(err) {
+			t.Errorf("sub-tree %q still present after cleanup; want removed", sub)
+		}
+	}
+}
