@@ -1,11 +1,14 @@
 // Package cli wires together the cobra command tree and drives the
 // top-level event loop. Process exit codes follow a documented contract:
 // config error=2, network error=3, cluster error=4, auth error=5,
-// unknown-flag error=64 (EX_USAGE, via SetFlagErrorFunc), other error=1
-// (includes unknown subcommands, arg-count violations, and mutually-
-// exclusive-flag conflicts which cobra surfaces outside the flag-parser),
-// invoked-as-root rejection=77 (EX_NOPERM, set in cmd/okdctl/main.go),
+// config file not found=66 (EX_NOINPUT), invalid pull secret JSON=65
+// (EX_DATAERR), sudo not found=71 (EX_OSERR), unknown-flag error=64
+// (EX_USAGE, via SetFlagErrorFunc), other error=1 (includes unknown
+// subcommands, arg-count violations, and mutually-exclusive-flag conflicts
+// which cobra surfaces outside the flag-parser), invoked-as-root
+// rejection=77 (EX_NOPERM, set in cmd/okdctl/main.go),
 // SIGINT=130, SIGTERM=143, success=0.
+// See docs/cli/exit-codes.md for the full taxonomy table.
 package cli
 
 import (
@@ -161,6 +164,18 @@ func signalExitCode(caughtSig *atomic.Value, err error) (int, bool) {
 func exitCodeFor(err error) int {
 	if err == nil {
 		return 0
+	}
+	// Granular BSD sysexits sentinels take precedence over the broad typed
+	// error categories below; a sentinel wrapped inside a ConfigError or
+	// AuthError must resolve to the specific code, not the category code.
+	if errors.Is(err, errtypes.ErrConfigMissing) {
+		return 66
+	}
+	if errors.Is(err, errtypes.ErrPullSecretInvalid) {
+		return 65
+	}
+	if errors.Is(err, errtypes.ErrSudoMissing) {
+		return 71
 	}
 	var cfgErr *errtypes.ConfigError
 	if errors.As(err, &cfgErr) {

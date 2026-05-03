@@ -42,6 +42,9 @@ func (p *Phase) GenerateInstallConfig(_ context.Context, cfg *config.Config, out
 		return &errtypes.AuthError{Msg: "failed to read pull secret", Err: err}
 	}
 	defer system.ZeroBytes(pullSecret)
+	if !json.Valid(pullSecret) {
+		return &errtypes.AuthError{Msg: "pull secret is not valid JSON", Err: errtypes.ErrPullSecretInvalid}
+	}
 
 	sshKey, err := os.ReadFile(cfg.Files.SSHPublicKey)
 	if err != nil {
