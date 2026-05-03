@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -13,6 +14,41 @@ import (
 	"github.com/qxtaiba/okdctl/internal/executor"
 	"github.com/qxtaiba/okdctl/internal/logutil"
 )
+
+func installFakeTerraform(t *testing.T) {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("fake-terraform script relies on POSIX sh")
+	}
+	dir := t.TempDir()
+	script := "#!/bin/sh\ncase \"$1\" in\n  init) exit 0 ;;\n  *) echo \"fake terraform: $1 failed\" >&2; exit 1 ;;\nesac\n"
+	path := filepath.Join(dir, "terraform")
+	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+}
+
+func seedTerraformEnvDir(t *testing.T, projectRoot, env string) {
+	t.Helper()
+	envDir := filepath.Join(projectRoot, "infrastructure", "terraform", "environments", env)
+	for _, sub := range []string{
+		envDir,
+		filepath.Join(envDir, ".terraform", "providers"),
+	} {
+		if err := os.MkdirAll(sub, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, f := range []string{
+		filepath.Join(envDir, "terraform.tfstate"),
+		filepath.Join(envDir, ".terraform.lock.hcl"),
+	} {
+		if err := os.WriteFile(f, []byte("{}"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
 
 func TestStateLockHint_NoLockFile(t *testing.T) {
 	if err := stateLockHint(t.TempDir()); err != nil {
@@ -99,5 +135,47 @@ func TestDestroyInfrastructure_EmptyStateReturnsNil(t *testing.T) {
 
 	if err := p.destroyInfrastructure(context.Background(), opts); err != nil {
 		t.Errorf("expected nil (no state = already destroyed); got %v", err)
+	}
+}
+
+// TestDestroyInfrastructure_TFDestroyFails injects a fake terraform binary that
+// exits 0 on init and 1 on all other subcommands. It locks that the returned
+// error is *errtypes.ClusterError unwrapping to *executor.ExitError.
+func TestDestroyInfrastructure_TFDestroyFails(t *testing.T) {
+	installFakeTerraform(t)
+	projectRoot := t.TempDir()
+	seedTerraformEnvDir(t, projectRoot, "production")
+
+	p := &Phase{
+		BasePhase: phase.NewBasePhase(
+			"test",
+			phase.WithExecutor(executor.New()),
+			phase.WithLogger(logutil.NopLogger),
+		),
+	}
+	opts := &Options{
+		BaseOptions: phase.BaseOptions{
+			ProjectRoot:  projectRoot,
+			TerraformEnv: "production",
+		},
+		AutoApprove: true,
+	}
+
+	err := p.destroyInfrastructure(context.Background(), opts)
+	if err == nil {
+		t.Fatal("expected error when terraform destroy fails")
+	}
+
+	var clusterErr *errtypes.ClusterError
+	if !errors.As(err, &clusterErr) {
+		t.Fatalf("err = %v; want *errtypes.ClusterError", err)
+	}
+
+	var execErr *executor.ExitError
+	if !errors.As(err, &execErr) {
+		t.Errorf("err = %v; want *executor.ExitError in chain", err)
+	}
+	if execErr != nil && execErr.ExitCode == 0 {
+		t.Errorf("ExitCode = 0; want non-zero from failed plan")
 	}
 }
