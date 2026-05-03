@@ -21,6 +21,12 @@ import (
 
 // Provider drives the Proxmox VE infrastructure lifecycle (connect, provision,
 // disconnect) via a Terraform executor.
+//
+// Mutation invariant (state:48688e63): all Proxmox mutations MUST flow through
+// terraform.Executor. Direct Proxmox HTTP calls are forbidden in deploy/destroy
+// paths — the bpg/proxmox terraform provider owns 5xx/408/429 retry/backoff.
+// If status reads are added later, route them through internal/download's
+// retryDownload/isRetryable helpers (exponential backoff, 4xx fail-fast).
 type Provider struct {
 	connected     bool
 	host          string
