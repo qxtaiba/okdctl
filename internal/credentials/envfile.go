@@ -79,27 +79,27 @@ func buildEnvFileBody(creds *ProxmoxCredentials) []byte {
 	buf.WriteString("# This file has restricted permissions (0600). Do not commit to git.\n")
 
 	if creds.Endpoint != "" {
-		buf.WriteString("PROXMOX_VE_ENDPOINT=")
+		buf.WriteString(envProxmoxEndpoint + "=")
 		buf.WriteString(creds.Endpoint)
 		buf.WriteByte('\n')
 	}
 	if creds.Username != "" {
-		buf.WriteString("PROXMOX_VE_USERNAME=")
+		buf.WriteString(envProxmoxUsername + "=")
 		buf.WriteString(creds.Username)
 		buf.WriteByte('\n')
 	}
 	if len(creds.Password) > 0 {
-		buf.WriteString("PROXMOX_VE_PASSWORD=")
+		buf.WriteString(envProxmoxPassword + "=")
 		buf.Write(creds.Password)
 		buf.WriteByte('\n')
 	}
 	if len(creds.APIToken) > 0 {
-		buf.WriteString("PROXMOX_VE_API_TOKEN=")
+		buf.WriteString(envProxmoxAPIToken + "=")
 		buf.Write(creds.APIToken)
 		buf.WriteByte('\n')
 	}
 	if creds.Insecure {
-		buf.WriteString("PROXMOX_VE_INSECURE=true\n")
+		buf.WriteString(envProxmoxInsecure + "=true\n")
 	}
 	return buf.Bytes()
 }
