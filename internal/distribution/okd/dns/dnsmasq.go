@@ -114,7 +114,7 @@ func IsNetworkManagerActive(ctx context.Context) bool {
 }
 
 func getActiveConnection(ctx context.Context) (string, error) {
-	out, err := exec.CommandContext(ctx, "nmcli", "-t", "-f", "NAME", "connection", "show", "--active").Output()
+	out, err := system.OutputCaptured(ctx, "nmcli", "-t", "-f", "NAME", "connection", "show", "--active")
 	if err != nil {
 		return "", fmt.Errorf("failed to list network connections: %w", err)
 	}
