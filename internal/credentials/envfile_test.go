@@ -1,6 +1,7 @@
 package credentials
 
 import (
+	"bytes"
 	"errors"
 	"os"
 	"path/filepath"
@@ -9,6 +10,54 @@ import (
 
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 )
+
+func TestWriteEnvFile_BufferZeroedAfterWrite(t *testing.T) {
+	const pw = "s3cret-pw"
+	creds := &ProxmoxCredentials{
+		Endpoint: "https://pve:8006",
+		Username: "root@pam",
+		Password: []byte(pw),
+	}
+
+	t.Run("buildEnvFileBody embeds password in mutable slice", func(t *testing.T) {
+		data := buildEnvFileBody(creds)
+		if !bytes.Contains(data, []byte(pw)) {
+			t.Fatalf("buildEnvFileBody output missing password; got %q", data)
+		}
+		clear(data)
+		for i, b := range data {
+			if b != 0 {
+				t.Errorf("data[%d] = %d after clear; want 0", i, b)
+			}
+		}
+	})
+
+	t.Run("WriteEnvFile writes password and pre-call slice is independent", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "zeroize.env")
+
+		pre := buildEnvFileBody(creds)
+		if !bytes.Contains(pre, []byte(pw)) {
+			t.Fatalf("pre-call body missing password; got %q", pre)
+		}
+
+		if err := WriteEnvFile(path, creds); err != nil {
+			t.Fatalf("WriteEnvFile: %v", err)
+		}
+
+		body, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read: %v", err)
+		}
+		if !bytes.Contains(body, []byte(pw)) {
+			t.Errorf("written file missing password; got %q", body)
+		}
+
+		if !bytes.Contains(pre, []byte(pw)) {
+			t.Errorf("pre slice was zeroed by WriteEnvFile; allocations must be independent")
+		}
+	})
+}
 
 func TestEnvFilePath(t *testing.T) {
 	cases := map[string]string{

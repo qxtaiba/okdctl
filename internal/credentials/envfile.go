@@ -63,6 +63,17 @@ func WriteEnvFile(path string, creds *ProxmoxCredentials) error {
 		}
 	}
 
+	data := buildEnvFileBody(creds)
+	err := system.AtomicWrite(path, data, 0o600)
+	// Zero the buffer's backing store so the credential bytes don't
+	// linger after the file write completes.
+	clear(data)
+	return err
+}
+
+// buildEnvFileBody serialises creds into KEY=VALUE format. The caller owns
+// the returned slice and must clear it after use.
+func buildEnvFileBody(creds *ProxmoxCredentials) []byte {
 	var buf bytes.Buffer
 	buf.WriteString("# Proxmox credentials (managed by okdctl)\n")
 	buf.WriteString("# This file has restricted permissions (0600). Do not commit to git.\n")
@@ -90,13 +101,7 @@ func WriteEnvFile(path string, creds *ProxmoxCredentials) error {
 	if creds.Insecure {
 		buf.WriteString("PROXMOX_VE_INSECURE=true\n")
 	}
-
-	data := buf.Bytes()
-	err := system.AtomicWrite(path, data, 0o600)
-	// Zero the buffer's backing store so the credential bytes don't
-	// linger after the file write completes.
-	clear(data)
-	return err
+	return buf.Bytes()
 }
 
 // LoadEnvFile loads a .env file into the process environment.
