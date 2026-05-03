@@ -36,7 +36,9 @@ type cacheEntry struct {
 // BackgroundCheck starts a goroutine that checks for a newer release.
 // It returns a buffered channel (capacity 1) that receives exactly one
 // CheckResult. If OKDCTL_NO_UPDATE_CHECK=1 the goroutine is not started
-// and the channel already holds a zero result.
+// and the channel already holds a zero result. If the caller's select
+// expires before the result arrives, the buffered send in the goroutine
+// never blocks; the goroutine reaps within httpTimeout (4 s).
 func BackgroundCheck(ctx context.Context) <-chan CheckResult {
 	ch := make(chan CheckResult, 1)
 
