@@ -17,10 +17,11 @@ import (
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
-const (
-	dnsmasqConfigDir = phase.DefaultDNSMasqConfigDir
-	dnsmasqService   = "dnsmasq"
-)
+const dnsmasqService = "dnsmasq"
+
+// dnsmasqConfigDir is the directory for per-cluster dnsmasq fragments.
+// Tests override this var to redirect writes to a t.TempDir().
+var dnsmasqConfigDir = phase.DefaultDNSMasqConfigDir
 
 var validConfigNameRegex = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$`)
 
