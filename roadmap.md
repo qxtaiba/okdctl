@@ -2739,16 +2739,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Add resolver_test.go with a tiny stubAddon: cases — (1) no deps + same priority sorts by name; (2) priority breaks ties; (3) A→B→C orders C before B before A; (4) missing dep returns error containing "depends on" and addon names; (5) circular A→B→A returns "circular dependency detected". Pure logic — a fakeAddon{name, deps, priority} struct + addon.Addon interface stub is enough.  
 **Effort:** hours
 
-##### `tst:f55b9c27:write-env-file-zeroize-buf-untested` — write env file zeroize buf untested
-
-**Status:** in review — PR #248  
-**Severity:** major  
-**Cluster:** cred-path-untested  
-**Evidence:** `internal/credentials/envfile.go:48-85`  
-**Problem:** WriteEnvFile builds the credential file body in a bytes.Buffer, calls system.AtomicWrite, then loops `for i := range data { data[i] = 0 }` to wipe the buffer's backing store. The wipe is the credential-hygiene contract — the function comment promises buffer doesn't outlive the write. There is no test asserting the wipe actually fires. A regression where the loop is moved before AtomicWrite or replaced with `_ = data` ships hot credential bytes in the heap until GC.  
-**Fix:** Add TestWriteEnvFile_BufferZeroedAfterWrite that captures the bytes.Buffer reference via a small refactor (extract the body-building into a buildEnvFileBody(*ProxmoxCredentials) []byte helper, then in WriteEnvFile call helper, AtomicWrite, then wipe). Test: call WriteEnvFile with a known password, scan the returned []byte for the password substring after the call, assert all zeros.  
-**Effort:** hours
-
 ##### `tst:262af6e4:cleanup-execute-full-kind-untested` — cleanup execute full kind untested
 
 **Status:** in review — PR #241  

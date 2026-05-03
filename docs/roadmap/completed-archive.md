@@ -2369,6 +2369,24 @@ but link evidence.
   rejects empty/whitespace-only inputs. sigs.k8s.io/yaml round-
   trip. Reviewer PASS first round.
 
+- **`tst:f55b9c27:write-env-file-zeroize-buf-untested`** — done
+  2026-05-03 — PR #248, merge commit `1c67be9`. Tier H major.
+  credentials.WriteEnvFile builds the .env body in a bytes.Buffer,
+  AtomicWrites, then `clear(data)` to zero the backing store.
+  Without a test asserting the wipe fires, a regression that
+  moves the clear before the write or replaces it with `_ = data`
+  would silently leak hot credential bytes on the heap. Extracted
+  buildEnvFileBody(*ProxmoxCredentials) []byte so the test can
+  hold a reference to the same backing slice WriteEnvFile uses.
+  TestWriteEnvFile_BufferZeroedAfterWrite verifies the helper
+  embeds the password as expected, then `clear`s and confirms every
+  byte is zero. A second sub-test confirms WriteEnvFile writes the
+  password to disk and the test's independently-allocated pre-call
+  slice is NOT zeroed (i.e. WriteEnvFile clears its own allocation,
+  not aliased external state). CI flake on the rebase: an unrelated
+  test in another package hung for 60s — recovered by re-pushing
+  the rebased branch. Reviewer PASS first round.
+
 - **`tst:33579dd5:safe-remove-with-logger-error-paths-untested`**
   — done 2026-05-03 — merge commits `c01be98` (initial extract +
   test) and `01f50d3` (CI fix: gofumpt-format the var block
