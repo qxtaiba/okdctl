@@ -193,6 +193,12 @@ func exitCodeFor(err error) int {
 	if errors.As(err, &authErr) {
 		return 5
 	}
+	var usageErr *errtypes.UsageError
+	// 64 = EX_USAGE (BSD sysexits.h): command-line usage error. Returned by
+	// SetFlagErrorFunc via UsageError so deferred closes run before exit.
+	if errors.As(err, &usageErr) {
+		return 64
+	}
 	return 1
 }
 
@@ -217,11 +223,11 @@ func init() {
 	rootCmd.PersistentFlags().BoolVarP(&logVerbose, "verbose", "v", false, "enable debug logging (alias for --log-level=debug)")
 	rootCmd.MarkFlagsMutuallyExclusive("quiet", "verbose")
 
-	// EX_USAGE (64, per BSD sysexits.h) for cobra arg-parse failures.
+	// Return UsageError instead of os.Exit so Execute's deferred
+	// logFileCloser.Close() runs before the process exits.
 	rootCmd.SetFlagErrorFunc(func(_ *cobra.Command, err error) error {
 		tui.Error("flag error", tui.LF("err", err))
-		os.Exit(64)
-		return err
+		return &errtypes.UsageError{Msg: err.Error(), Err: err}
 	})
 
 	rootCmd.AddCommand(deployCmd)

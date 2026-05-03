@@ -89,3 +89,18 @@ func (e *AuthError) Error() string {
 }
 
 func (e *AuthError) Unwrap() error { return e.Err }
+
+// UsageError wraps a command-line flag-parse failure. exitCodeFor maps it to
+// 64 (EX_USAGE per BSD sysexits.h). SetFlagErrorFunc returns this instead of
+// calling os.Exit so Execute's deferred logFileCloser.Close() runs first.
+// Msg must never include credentials; see ConfigError for the full contract.
+type UsageError struct {
+	Msg string
+	Err error
+}
+
+func (e *UsageError) Error() string {
+	return fmt.Sprintf("usage error: %s", e.Msg)
+}
+
+func (e *UsageError) Unwrap() error { return e.Err }

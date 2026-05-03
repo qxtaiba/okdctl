@@ -80,7 +80,7 @@ func isErrtype(lit *ast.CompositeLit) bool {
 		return false
 	}
 	switch sel.Sel.Name {
-	case "ConfigError", "NetworkError", "ClusterError", "AuthError":
+	case "ConfigError", "NetworkError", "ClusterError", "AuthError", "UsageError":
 		return true
 	}
 	return false
