@@ -18,8 +18,10 @@ import (
 
 // dnsmasqConfPattern and dnsmasqBackupPattern are package-level vars so
 // tests can redirect Dnsmasq's glob-and-remove loop to t.TempDir().
-var dnsmasqConfPattern = "/etc/dnsmasq.d/okd-*.conf"
-var dnsmasqBackupPattern = "/etc/dnsmasq.d/*.backup"
+var (
+	dnsmasqConfPattern   = "/etc/dnsmasq.d/okd-*.conf"
+	dnsmasqBackupPattern = "/etc/dnsmasq.d/*.backup"
+)
 
 func stopAndDisableService(ctx context.Context, serviceName string, logger *slog.Logger) {
 	logger = logutil.OrNop(logger)
