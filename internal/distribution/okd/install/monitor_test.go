@@ -19,13 +19,16 @@ func installFakeOpenShift(t *testing.T) {
 		t.Skip("fake binary relies on POSIX sh")
 	}
 	dir := t.TempDir()
+	// exec sleep so the shell process is replaced — SIGKILL on the script
+	// kills the sleep directly, preventing an orphaned child from holding
+	// stdout/stderr pipes open and stalling `go test` shutdown.
 	script := `#!/bin/sh
 case "${OC_FAKE_MODE:-ok}" in
   ok)
     exit 0
     ;;
   sleep)
-    sleep 300
+    exec sleep 300 < /dev/null > /dev/null 2>&1
     ;;
 esac
 exit 0
