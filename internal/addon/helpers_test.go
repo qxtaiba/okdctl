@@ -1,11 +1,69 @@
 package addon
 
 import (
+	"context"
+	"errors"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"testing/synctest"
+	"time"
 
+	"k8s.io/apimachinery/pkg/util/wait"
 	"sigs.k8s.io/yaml"
 )
+
+func Test_RetryDefault_SucceedsOnAttemptN(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		var calls atomic.Int32
+		err := RetryDefault(context.Background(), func() error {
+			n := calls.Add(1)
+			if n < 3 {
+				return errors.New("not yet")
+			}
+			return nil
+		})
+		if err != nil {
+			t.Errorf("err = %v; want nil", err)
+		}
+		if calls.Load() != 3 {
+			t.Errorf("calls = %d; want 3", calls.Load())
+		}
+	})
+}
+
+func Test_RetryDefault_AllFailures(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		var calls atomic.Int32
+		err := RetryDefault(context.Background(), func() error {
+			calls.Add(1)
+			return errors.New("always fails")
+		})
+		if !wait.Interrupted(err) {
+			t.Errorf("err = %v; want wait.Interrupted error", err)
+		}
+		if calls.Load() != DefaultRetryCount {
+			t.Errorf("calls = %d; want %d", calls.Load(), DefaultRetryCount)
+		}
+	})
+}
+
+func Test_RetryDefault_CtxCancel(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		go func() {
+			time.Sleep(DefaultRetryBackoff / 2)
+			cancel()
+		}()
+		err := RetryDefault(ctx, func() error {
+			return errors.New("fail")
+		})
+		if !errors.Is(err, context.Canceled) {
+			t.Errorf("err = %v; want context.Canceled", err)
+		}
+	})
+}
 
 func TestBuildOpaqueSecret(t *testing.T) {
 	data := map[string][]byte{
