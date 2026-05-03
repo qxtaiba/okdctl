@@ -315,7 +315,7 @@ func runDescribeAddon(cmd *cobra.Command, args []string) error {
 	name := args[0]
 	a := addon.Get(name)
 	if a == nil {
-		return fmt.Errorf("addon %q not registered; run 'okdctl addon list' to see available addons", name)
+		return &errtypes.ConfigError{Msg: fmt.Sprintf("addon %q not registered; run 'okdctl addon list' to see available addons", name)}
 	}
 
 	info := a.Info()
