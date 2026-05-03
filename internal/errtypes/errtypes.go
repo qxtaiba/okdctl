@@ -1,9 +1,26 @@
 // Package errtypes defines the typed error hierarchy used by okdctl.
 // exitCodeFor in internal/cli/root.go maps these types to structured
 // exit codes: ConfigError=2, NetworkError=3, ClusterError=4, AuthError=5.
+// Granular BSD sysexits.h sentinels (ErrConfigMissing, ErrPullSecretInvalid,
+// ErrSudoMissing) refine specific failure modes within those broad categories.
 package errtypes
 
-import "fmt"
+import (
+	"errors"
+	"fmt"
+)
+
+// ErrConfigMissing is wrapped inside a ConfigError when the config file does
+// not exist on disk. exitCodeFor maps it to 66 (EX_NOINPUT).
+var ErrConfigMissing = errors.New("config file not found")
+
+// ErrPullSecretInvalid is wrapped inside an AuthError when the pull secret
+// file exists but contains invalid JSON. exitCodeFor maps it to 65 (EX_DATAERR).
+var ErrPullSecretInvalid = errors.New("pull secret is not valid JSON")
+
+// ErrSudoMissing is wrapped inside an AuthError when sudo cannot be located
+// on PATH. exitCodeFor maps it to 71 (EX_OSERR).
+var ErrSudoMissing = errors.New("sudo not found")
 
 // ConfigError wraps a configuration-related failure (missing file, parse
 // error, validation failure). Unwrap chains to the underlying error so

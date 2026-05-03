@@ -26,14 +26,14 @@ func loadConfig(configFile string) (*config.Config, error) {
 	loader := config.NewLoader()
 	cfg, err := loader.LoadFile(configFile)
 	if err != nil {
-		if os.IsNotExist(err) {
+		if errors.Is(err, os.ErrNotExist) {
 			tui.Error(fmt.Sprintf("configuration file not found: %s", configFile))
 			if configFile == "okdctl.yaml" {
 				tui.Info("run 'okdctl deploy' to create a configuration file")
 			} else {
 				tui.Info(fmt.Sprintf("run 'okdctl deploy --output %s' to create it", configFile))
 			}
-			return nil, &errtypes.ConfigError{Msg: fmt.Sprintf("configuration file not found: %s", configFile), Err: err}
+			return nil, &errtypes.ConfigError{Msg: fmt.Sprintf("configuration file not found: %s", configFile), Err: errtypes.ErrConfigMissing}
 		}
 		return nil, &errtypes.ConfigError{Msg: "load configuration", Err: err}
 	}
