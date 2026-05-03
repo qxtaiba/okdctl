@@ -108,6 +108,10 @@ var DefaultEnvAllowlist = EnvAllowlist{
 		"XDG_CONFIG_HOME": true, "XDG_DATA_HOME": true,
 		"XDG_CACHE_HOME": true, "XDG_RUNTIME_DIR": true,
 		"DBUS_SESSION_BUS_ADDRESS": true,
+		// Broader GIT_/GITHUB_/GH_ prefixes are intentionally excluded —
+		// GITHUB_TOKEN, GH_TOKEN, and GIT_ASKPASS carry credentials no
+		// subprocess in this tree needs.
+		"GIT_SSH_COMMAND": true, "GIT_TERMINAL_PROMPT": true,
 	},
 	Prefixes: []string{
 		"KUBE",       // KUBECONFIG, KUBE_*
@@ -116,9 +120,6 @@ var DefaultEnvAllowlist = EnvAllowlist{
 		"TERRAFORM_", // terraform built-ins
 		"PROXMOX_",   // bpg/proxmox provider + PROXMOX_VE_*
 		"HELM_",      // helm
-		"GIT_",       // git auth + paths
-		"GITHUB_",    // gh CLI
-		"GH_",        // gh CLI
 	},
 }
 
