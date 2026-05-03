@@ -2,17 +2,16 @@ package setup
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/qxtaiba/okdctl/internal/download"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
+	"github.com/qxtaiba/okdctl/internal/executor"
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
@@ -105,33 +104,33 @@ var authMarkers = []string{
 }
 
 // extractReleaseImage runs `oc adm release extract --tools <ref> --to <destDir>`
-// with a bounded timeout. Best-effort registry-auth detection produces
-// *errtypes.AuthError; other failures produce *errtypes.ClusterError.
+// through the canonical Executor so DefaultEnvAllowlist filters the child env.
+// Best-effort registry-auth detection produces *errtypes.AuthError; other
+// failures produce *errtypes.ClusterError.
 func (p *Phase) extractReleaseImage(ctx context.Context, ocPath, ref, destDir string) error {
 	extractCtx, cancel := context.WithTimeout(ctx, ocExtractTimeout)
 	defer cancel()
 
-	cmd := exec.CommandContext(extractCtx, ocPath,
+	result, err := p.Exec.RunStreamed(extractCtx, ocPath,
 		"adm", "release", "extract",
 		"--tools", ref,
 		"--to", destDir,
 	)
-
-	var stderr strings.Builder
-	cmd.Stderr = &stderr
-
-	if runErr := cmd.Run(); runErr != nil {
-		msg := strings.TrimSpace(stderr.String())
+	if err != nil {
+		return &errtypes.ClusterError{Msg: fmt.Sprintf("release extract failed for %s", ref), Err: err}
+	}
+	if result.ExitCode != 0 {
+		msg := strings.TrimSpace(result.Stderr)
 		p.Log.Error("tools: oc adm release extract failed", "ref", ref, "stderr", msg)
 		// Exit code is the primary signal; stderr-text is a secondary lift.
 		// oc exits 1 for most runtime errors including auth; 125 is the
 		// container-runtime "failed to start" code. Widen this set if upstream
 		// oc changes its exit-code contract (roadmap err:5013fea6).
-		var ee *exec.ExitError
-		if errors.As(runErr, &ee) && (ee.ExitCode() == 1 || ee.ExitCode() == 125) && isAuthError(msg) {
-			return &errtypes.AuthError{Msg: fmt.Sprintf("release extract: registry auth failed for %s", ref), Err: runErr}
+		execErr := &executor.ExitError{Command: ocPath, ExitCode: result.ExitCode, Stderr: msg}
+		if (result.ExitCode == 1 || result.ExitCode == 125) && isAuthError(msg) {
+			return &errtypes.AuthError{Msg: fmt.Sprintf("release extract: registry auth failed for %s", ref), Err: execErr}
 		}
-		return &errtypes.ClusterError{Msg: fmt.Sprintf("release extract failed for %s", ref), Err: runErr}
+		return &errtypes.ClusterError{Msg: fmt.Sprintf("release extract failed for %s", ref), Err: execErr}
 	}
 
 	return extractReleaseTarballs(ctx, destDir, p.Log)
