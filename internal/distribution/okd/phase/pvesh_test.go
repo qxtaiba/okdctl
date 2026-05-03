@@ -35,3 +35,42 @@ func TestPveshRun_RejectsInvalidNode(t *testing.T) {
 		t.Errorf("err = %q; want substring 'invalid'", err.Error())
 	}
 }
+
+func TestValidateProxmoxName_RejectsBadNode(t *testing.T) {
+	bad := []string{
+		"",
+		".",
+		"..",
+		"/",
+		"node/name",
+		"node;name",
+		"node name",
+		"node\tname",
+		"node`cmd`",
+		"$(reboot)",
+		"node|pipe",
+		"node&bg",
+	}
+	for _, name := range bad {
+		if err := validateProxmoxName(name); err == nil {
+			t.Errorf("validateProxmoxName(%q) accepted; want error", name)
+		}
+	}
+}
+
+func TestValidateProxmoxName_AcceptsValidNames(t *testing.T) {
+	good := []string{
+		"pve",
+		"pve-01",
+		"pve_01",
+		"PVE01",
+		"proxmox-node-1",
+		"A",
+		"node123",
+	}
+	for _, name := range good {
+		if err := validateProxmoxName(name); err != nil {
+			t.Errorf("validateProxmoxName(%q) rejected; want nil: %v", name, err)
+		}
+	}
+}
