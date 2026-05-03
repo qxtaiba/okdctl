@@ -7,6 +7,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/qxtaiba/okdctl/internal/executor"
@@ -115,48 +116,54 @@ func TestOcPollOutput(t *testing.T) {
 	p := newTestPhase(t)
 
 	t.Run("ready-after-N-polls returns captured value", func(t *testing.T) {
-		dir := t.TempDir()
-		counter := filepath.Join(dir, "counter")
-		t.Setenv("OC_FAKE_MODE", "ticker")
-		t.Setenv("OC_CALL_FILE", counter)
-		t.Setenv("OC_READY_AT", "2")
+		synctest.Test(t, func(t *testing.T) {
+			dir := t.TempDir()
+			counter := filepath.Join(dir, "counter")
+			t.Setenv("OC_FAKE_MODE", "ticker")
+			t.Setenv("OC_CALL_FILE", counter)
+			t.Setenv("OC_READY_AT", "2")
 
-		got, err := p.OcPollOutputInterval(context.Background(), "test", "ready check", 30*time.Second, 50*time.Millisecond, func(s string) bool {
-			return s == "ready"
-		}, "get", "deploy", "-o", "jsonpath={.status.availableReplicas}")
-		if err != nil {
-			t.Fatalf("unexpected err: %v", err)
-		}
-		if got != "ready" {
-			t.Errorf("captured value = %q; want ready", got)
-		}
+			got, err := p.OcPollOutputInterval(context.Background(), "test", "ready check", 30*time.Second, 50*time.Millisecond, func(s string) bool {
+				return s == "ready"
+			}, "get", "deploy", "-o", "jsonpath={.status.availableReplicas}")
+			if err != nil {
+				t.Fatalf("unexpected err: %v", err)
+			}
+			if got != "ready" {
+				t.Errorf("captured value = %q; want ready", got)
+			}
+		})
 	})
 
 	t.Run("predicate never true → timeout", func(t *testing.T) {
-		dir := t.TempDir()
-		counter := filepath.Join(dir, "counter")
-		t.Setenv("OC_FAKE_MODE", "ticker")
-		t.Setenv("OC_CALL_FILE", counter)
-		t.Setenv("OC_READY_AT", "9999")
+		synctest.Test(t, func(t *testing.T) {
+			dir := t.TempDir()
+			counter := filepath.Join(dir, "counter")
+			t.Setenv("OC_FAKE_MODE", "ticker")
+			t.Setenv("OC_CALL_FILE", counter)
+			t.Setenv("OC_READY_AT", "9999")
 
-		_, err := p.OcPollOutputInterval(context.Background(), "test", "never", 500*time.Millisecond, 50*time.Millisecond, func(s string) bool {
-			return s == "will-not-happen"
-		}, "get", "deploy")
-		if err == nil {
-			t.Fatal("expected timeout error")
-		}
-		if !strings.Contains(err.Error(), "timeout") && !strings.Contains(err.Error(), "waiting") {
-			t.Errorf("err = %q; want timeout/waiting phrasing", err.Error())
-		}
+			_, err := p.OcPollOutputInterval(context.Background(), "test", "never", 500*time.Millisecond, 50*time.Millisecond, func(s string) bool {
+				return s == "will-not-happen"
+			}, "get", "deploy")
+			if err == nil {
+				t.Fatal("expected timeout error")
+			}
+			if !strings.Contains(err.Error(), "timeout") && !strings.Contains(err.Error(), "waiting") {
+				t.Errorf("err = %q; want timeout/waiting phrasing", err.Error())
+			}
+		})
 	})
 
 	t.Run("ctx cancellation returns ctx error", func(t *testing.T) {
-		t.Setenv("OC_FAKE_MODE", "empty")
-		ctx, cancel := context.WithCancel(context.Background())
-		cancel()
-		_, err := p.OcPollOutputInterval(ctx, "test", "cancelled", 5*time.Second, 50*time.Millisecond, func(string) bool { return false }, "get")
-		if err == nil {
-			t.Fatal("expected ctx error")
-		}
+		synctest.Test(t, func(t *testing.T) {
+			t.Setenv("OC_FAKE_MODE", "empty")
+			ctx, cancel := context.WithCancel(context.Background())
+			cancel()
+			_, err := p.OcPollOutputInterval(ctx, "test", "cancelled", 5*time.Second, 50*time.Millisecond, func(string) bool { return false }, "get")
+			if err == nil {
+				t.Fatal("expected ctx error")
+			}
+		})
 	})
 }
