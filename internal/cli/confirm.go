@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 
@@ -11,6 +12,11 @@ import (
 
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 )
+
+// testStdinReader, when non-nil, replaces os.Stdin as the input source for
+// promptForConfirmation and bypasses the TTY guard. Tests set this; production
+// code never touches it.
+var testStdinReader io.Reader
 
 // promptForConfirmation reads a y/N answer from stdin with context awareness.
 //
@@ -23,14 +29,18 @@ import (
 // a bounded leak scoped to the lifetime of the parent process, not a true
 // resource leak.
 func promptForConfirmation(ctx context.Context, prompt string) (bool, error) {
-	if !term.IsTerminal(int(os.Stdin.Fd())) {
-		return false, &errtypes.ConfigError{Msg: "no TTY and --yes not set; refusing destructive op"}
+	r := testStdinReader
+	if r == nil {
+		if !term.IsTerminal(int(os.Stdin.Fd())) {
+			return false, &errtypes.ConfigError{Msg: "no TTY and --yes not set; refusing destructive op"}
+		}
+		r = os.Stdin
 	}
 	_, _ = os.Stderr.WriteString(prompt)
 
 	inputCh := make(chan string, 1)
 	go func() {
-		reader := bufio.NewReader(os.Stdin)
+		reader := bufio.NewReader(r)
 		line, err := reader.ReadString('\n')
 		if err != nil {
 			inputCh <- ""
