@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"slices"
 	"strconv"
-	"strings"
 	"text/tabwriter"
 
 	"github.com/spf13/cobra"
@@ -92,6 +91,18 @@ type statusNode struct {
 	} `json:"status"`
 }
 
+// statusClusterOperatorList is a minimal view of `oc get clusteroperators -o json`
+// for degraded-condition parsing. Reuses statusCondition for the conditions slice.
+type statusClusterOperatorList struct {
+	Items []statusClusterOperator `json:"items"`
+}
+
+type statusClusterOperator struct {
+	Status struct {
+		Conditions []statusCondition `json:"conditions"`
+	} `json:"status"`
+}
+
 func (n *statusNode) isReady() bool {
 	return slices.ContainsFunc(n.Status.Conditions, func(c statusCondition) bool {
 		return c.Type == phase.ConditionTypeReady && c.Status == phase.ConditionStatusTrue
@@ -169,11 +180,15 @@ func runStatus(cmd *cobra.Command, _ []string) error {
 	}
 
 	degraded := 0
-	if coRaw, ocErr := bp.OcOutput(ctx, "get", "clusteroperators", "--no-headers"); ocErr == nil {
-		for line := range strings.Lines(strings.TrimSpace(coRaw)) {
-			fields := strings.Fields(line)
-			if len(fields) >= 5 && phase.ConditionStatus(fields[4]) == phase.ConditionStatusTrue {
-				degraded++
+	if coRaw, ocErr := bp.OcOutput(ctx, "get", "clusteroperators", "-o", "json"); ocErr == nil {
+		var col statusClusterOperatorList
+		if jsonErr := json.Unmarshal([]byte(coRaw), &col); jsonErr == nil {
+			for _, co := range col.Items {
+				if slices.ContainsFunc(co.Status.Conditions, func(c statusCondition) bool {
+					return c.Type == phase.ConditionTypeDegraded && c.Status == phase.ConditionStatusTrue
+				}) {
+					degraded++
+				}
 			}
 		}
 	}
