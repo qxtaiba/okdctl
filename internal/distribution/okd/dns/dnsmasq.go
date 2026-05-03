@@ -155,7 +155,7 @@ func ConfigureSystemResolver(ctx context.Context, fallbackDNS []string, logger *
 		dnsList := slices.Concat([]string{"127.0.0.1"}, fallbackDNS)
 		dnsConfig := strings.Join(dnsList, ",")
 
-		logger.Info(fmt.Sprintf("resolver: configuring %s to use local dnsmasq", conn))
+		logger.Info("resolver: configuring connection to use local dnsmasq", "conn", conn)
 
 		if err := system.RunCaptured(ctx, "nmcli", "connection", "modify", conn, "ipv4.dns", dnsConfig, "ipv4.ignore-auto-dns", "yes"); err != nil {
 			return fmt.Errorf("failed to configure DNS for connection: %w", err)
@@ -207,7 +207,7 @@ func RestoreSystemResolver(ctx context.Context, logger *slog.Logger) error {
 			return nil // best-effort restore; no active connection is non-fatal
 		}
 
-		logger.Info(fmt.Sprintf("resolver: restoring DHCP DNS for %s", conn))
+		logger.Info("resolver: restoring DHCP DNS", "conn", conn)
 
 		if err := system.RunCaptured(ctx, "nmcli", "connection", "modify", conn, "ipv4.dns", "", "ipv4.ignore-auto-dns", "no"); err != nil {
 			logger.Warn("resolver: failed to clear DNS settings", "err", err)

@@ -128,7 +128,7 @@ func New(workDir string, opts ...Option) *Executor {
 func (t *Executor) run(ctx context.Context, args ...string) error {
 	t.exec.Verbose = t.Verbose
 
-	t.logger.Info(fmt.Sprintf("terraform: running %s", args[0]))
+	t.logger.Info("terraform: running", "cmd", args[0])
 
 	result, err := t.exec.Run(ctx, "terraform", args...)
 	if err != nil {
@@ -180,7 +180,7 @@ func (t *Executor) buildVarArgs(varFile string, vars map[string]string) []string
 		if system.FileExists(vf) {
 			args = append(args, "-var-file="+vf)
 		} else {
-			t.logger.Warn(fmt.Sprintf("terraform: var file %s not found, skipping", vf))
+			t.logger.Warn("terraform: var file not found, skipping", "path", vf)
 		}
 	}
 

@@ -23,7 +23,7 @@ func stopAndDisableService(ctx context.Context, serviceName string, logger *slog
 			logger.Warn("cleanup: failed to stop service", "svc", serviceName, "err", err)
 		}
 	} else {
-		logger.Info(fmt.Sprintf("cleanup: %s service not running", serviceName))
+		logger.Info("cleanup: service not running", "svc", serviceName)
 	}
 
 	if system.IsServiceEnabled(ctx, serviceName) {
@@ -31,7 +31,7 @@ func stopAndDisableService(ctx context.Context, serviceName string, logger *slog
 			logger.Warn("cleanup: failed to disable service", "svc", serviceName, "err", err)
 		}
 	} else {
-		logger.Info(fmt.Sprintf("cleanup: %s service not enabled", serviceName))
+		logger.Info("cleanup: service not enabled", "svc", serviceName)
 	}
 }
 
@@ -121,7 +121,7 @@ func WebServer(ctx context.Context, httpServerRoot string, logger *slog.Logger) 
 		return nil
 	}
 
-	logger.Info(fmt.Sprintf("cleanup: removing %d ignition files from web server", len(ignitionFiles)))
+	logger.Info("cleanup: removing ignition files from web server", "count", len(ignitionFiles))
 
 	for _, f := range ignitionFiles {
 		_ = SafeRemoveWithLogger(ctx, f, filepath.Base(f), logger)

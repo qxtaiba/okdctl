@@ -62,7 +62,7 @@ func (m *Manager) Install(ctx context.Context, packages []string, logger *slog.L
 	if len(packages) == 0 {
 		return nil
 	}
-	logger.Info(fmt.Sprintf("packages: installing %s", strings.Join(packages, ", ")))
+	logger.Info("packages: installing", "packages", packages)
 	args := append([]string{"install", "-y"}, packages...)
 	return system.RunCaptured(ctx, m.pkgCmd, args...)
 }
@@ -115,7 +115,7 @@ func (m *Manager) IsInstalled(ctx context.Context, pkg string) (bool, error) {
 // AddRepo registers a new package repository with the backend: dnf
 // config-manager on RHEL, an /etc/apt/sources.list.d entry on Debian.
 func (m *Manager) AddRepo(ctx context.Context, name, url string, logger *slog.Logger) error {
-	logger.Info(fmt.Sprintf("packages: adding repository %s", name))
+	logger.Info("packages: adding repository", "name", name)
 
 	if m.family == FamilyRHEL {
 		return system.RunCaptured(ctx, m.pkgCmd, "config-manager", "--add-repo", url)
