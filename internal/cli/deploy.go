@@ -10,7 +10,10 @@ import (
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/credentials"
+	"github.com/qxtaiba/okdctl/internal/distribution/okd/install"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
+	"github.com/qxtaiba/okdctl/internal/distribution/okd/postinstall"
+	"github.com/qxtaiba/okdctl/internal/distribution/okd/setup"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/infrastructure/proxmox"
 	"github.com/qxtaiba/okdctl/internal/tui"
@@ -171,37 +174,37 @@ func runDeployDryRun(ctx context.Context, cfg *config.Config) error {
 // postinstall phases in execution order.
 func deployDryRunSteps() []DryRunStep {
 	return []DryRunStep{
-		{ID: "install-packages", Name: "install system packages"},
-		{ID: "install-tools", Name: "install external tools"},
-		{ID: "ensure-workdir", Name: "ensure work directory"},
-		{ID: "download-tools", Name: "download okd tools"},
-		{ID: "generate-config", Name: "generate install config"},
-		{ID: "generate-manifests", Name: "generate manifests"},
-		{ID: "generate-kubevip-manifests", Name: "generate kube-vip manifests"},
-		{ID: "inject-manifests", Name: "inject custom manifests"},
-		{ID: "compact-cluster-manifests", Name: "inject compact cluster manifests"},
-		{ID: "generate-ignition", Name: "generate ignition"},
-		{ID: "install-apache", Name: "install apache"},
-		{ID: "deploy-ignition", Name: "deploy ignition"},
-		{ID: "verify-webserver", Name: "verify web server"},
-		{ID: "build-isos", Name: "build isos"},
-		{ID: "upload-isos", Name: "upload isos"},
-		{ID: "generate-tfvars", Name: "generate terraform variables"},
-		{ID: "configure-haproxy", Name: "configure haproxy"},
-		{ID: "configure-firewall", Name: "configure firewall"},
-		{ID: "configure-dns", Name: "configure dns"},
-		{ID: "deploy-infrastructure", Name: "deploy infrastructure"},
-		{ID: "wait-bootstrap", Name: "wait for bootstrap"},
-		{ID: "start-workers", Name: "start worker nodes"},
-		{ID: "setup-kubeconfig", Name: "setup kubeconfig"},
-		{ID: "validate-access", Name: "validate cluster access"},
-		{ID: "monitor-install", Name: "monitor installation"},
-		{ID: "setup-access", Name: "setup cluster access"},
-		{ID: "verify-health", Name: "verify cluster health"},
-		{ID: "cleanup-bootstrap", Name: "cleanup bootstrap vm"},
-		{ID: "verify-kubevip", Name: "verify kube-vip"},
-		{ID: "deploy-production-dns", Name: "deploy production dns"},
-		{ID: "install-addons", Name: "install addons"},
+		{ID: string(setup.StepInstallPackages), Name: "install system packages"},
+		{ID: string(setup.StepInstallTools), Name: "install external tools"},
+		{ID: string(setup.StepEnsureWorkDir), Name: "ensure work directory"},
+		{ID: string(setup.StepDownloadTools), Name: "download okd tools"},
+		{ID: string(setup.StepGenerateConfig), Name: "generate install config"},
+		{ID: string(setup.StepGenerateManifests), Name: "generate manifests"},
+		{ID: string(setup.StepGenerateKubeVIP), Name: "generate kube-vip manifests"},
+		{ID: string(setup.StepInjectManifests), Name: "inject custom manifests"},
+		{ID: string(setup.StepCompactCluster), Name: "inject compact cluster manifests"},
+		{ID: string(setup.StepGenerateIgnition), Name: "generate ignition"},
+		{ID: string(setup.StepInstallApache), Name: "install apache"},
+		{ID: string(setup.StepDeployIgnition), Name: "deploy ignition"},
+		{ID: string(setup.StepVerifyWebServer), Name: "verify web server"},
+		{ID: string(setup.StepBuildISOs), Name: "build isos"},
+		{ID: string(setup.StepUploadISOs), Name: "upload isos"},
+		{ID: string(setup.StepGenerateTfvars), Name: "generate terraform variables"},
+		{ID: string(setup.StepConfigureHAProxy), Name: "configure haproxy"},
+		{ID: string(setup.StepConfigureFirewall), Name: "configure firewall"},
+		{ID: string(setup.StepConfigureDNS), Name: "configure dns"},
+		{ID: string(install.StepDeployInfra), Name: "deploy infrastructure"},
+		{ID: string(install.StepWaitBootstrap), Name: "wait for bootstrap"},
+		{ID: string(install.StepStartWorkers), Name: "start worker nodes"},
+		{ID: string(install.StepSetupKubeconfig), Name: "setup kubeconfig"},
+		{ID: string(install.StepValidateAccess), Name: "validate cluster access"},
+		{ID: string(install.StepMonitorInstall), Name: "monitor installation"},
+		{ID: string(install.StepSetupAccess), Name: "setup cluster access"},
+		{ID: string(postinstall.StepVerifyHealth), Name: "verify cluster health"},
+		{ID: string(postinstall.StepCleanupBootstrap), Name: "cleanup bootstrap vm"},
+		{ID: string(postinstall.StepVerifyKubeVIP), Name: "verify kube-vip"},
+		{ID: string(postinstall.StepDeployProductionDNS), Name: "deploy production dns"},
+		{ID: string(postinstall.StepInstallAddons), Name: "install addons"},
 	}
 }
 
