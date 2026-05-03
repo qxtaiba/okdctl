@@ -2198,3 +2198,12 @@ but link evidence.
   no DNS udp/53, length matches haproxyPortNumbers cardinality.
   Reviewer PASS first round.
 
+- **`con:ab9b764a:inject-custom-manifests-no-ctx`** — done
+  2026-05-03 — PR #233, merge commit `f593cbf`. Tier H suggestion.
+  setup.InjectCustomManifests took `_ context.Context` and looped
+  copying user-supplied YAML files via system.CopyFile; an unbounded
+  number of files meant a cancelled deploy still ran to completion.
+  Renamed the parameter to `ctx` and added `if err := ctx.Err(); err
+  != nil { return count, err }` at the top of the loop body. Mirrors
+  the ValidateIgnitionFiles pattern. Reviewer PASS first round.
+

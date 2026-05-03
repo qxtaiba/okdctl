@@ -2179,16 +2179,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Add monitor_test.go using `synctest.Test` to fake the openshift-install subprocess (extract a `wait()` interface to inject), advance virtual time across the CSRApprovalInterval, and assert: (a) ticker tick triggers ApprovePendingCSRs, (b) ctx-cancel triggers killInstall + reapTimer race, (c) reap-timeout path logs the abandon message. The exec_test.go pattern is the template.  
 **Effort:** hours
 
-##### `con:ab9b764a:inject-custom-manifests-no-ctx` — inject custom manifests no ctx
-
-**Status:** in review — PR #233  
-**Severity:** suggestion  
-**Cluster:** ctx-ignored  
-**Evidence:** `internal/distribution/okd/setup/ignition.go:99-137`  
-**Problem:** InjectCustomManifests accepts `_ context.Context` and loops copying files via system.CopyFile. The number of files is user-controlled (whatever lives under automation/config/manifests) so the loop is unbounded in principle. If a deploy is cancelled mid-inject, the loop runs to completion. Same shape as ValidateIgnitionFiles.  
-**Fix:** Rename `_ context.Context` → `ctx context.Context` and add `if err := ctx.Err(); err != nil { return count, err }` at top of the loop body.  
-**Effort:** hours
-
 ##### `con:48688e63:proxmox-connect-discards-ctx` — proxmox connect discards ctx (scaffolding — verify intent only)
 
 **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/con-48688e63-proxmox-ctx  
