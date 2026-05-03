@@ -2739,16 +2739,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Add resolver_test.go with a tiny stubAddon: cases — (1) no deps + same priority sorts by name; (2) priority breaks ties; (3) A→B→C orders C before B before A; (4) missing dep returns error containing "depends on" and addon names; (5) circular A→B→A returns "circular dependency detected". Pure logic — a fakeAddon{name, deps, priority} struct + addon.Addon interface stub is enough.  
 **Effort:** hours
 
-##### `tst:daf5bee9:merge-kubeconfig-secret-survival-untested` — merge kubeconfig secret survival untested
-
-**Status:** in review — PR #249  
-**Severity:** major  
-**Cluster:** cred-path-untested  
-**Evidence:** `internal/cli/kubeconfig.go:80-125`  
-**Problem:** mergeKubeconfig writes the merged kubeconfig (which may carry user-token, client-certificate-data, client-key-data) via system.AtomicWrite at 0o600. The existing test covers mergeNamedList but not the file-perm or the secret-preservation path. A regression that calls AtomicWrite with 0o644 silently widens permissions on a file that may carry the user's cluster bearer token.  
-**Fix:** Add TestMergeKubeconfig_Perms: seed a t.TempDir with a 0o600 ~/.kube/config carrying users/user/token: real-token; call mergeKubeconfig with srcData containing a different-name user; assert (a) dest file mode is 0o600, (b) the original token is preserved verbatim (no-clobber), (c) src user token is appended, (d) a follow-up Cleanup of dest file actually removes it (no leftover .tmp-*).  
-**Effort:** hours
-
 ##### `tst:f55b9c27:write-env-file-zeroize-buf-untested` — write env file zeroize buf untested
 
 **Status:** in review — PR #248  
@@ -2769,16 +2759,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Add TestExecute_FullKind_AggregatesErrors that points each site at a writable t.TempDir but seeds a deliberately read-only file inside HAProxyConfig so that step errors. Assert: every other step still runs (WorkDir empty, ignition removed, tfstate preserved), and errors.Join carries exactly one wrapped *ConfigError. Adds RemovePackages=false case + RemovePackages=true case asserting Packages is/is-not called via PATH-injected fake dnf.  
 **Effort:** hours
 
-##### `tst:33579dd5:safe-remove-with-logger-error-paths-untested` — safe remove with logger error paths untested
-
-**Status:** in review — PR #242  
-**Severity:** major  
-**Cluster:** destructive-untested  
-**Evidence:** `internal/distribution/okd/cleanup/services.go:134-181`  
-**Problem:** cleanup.Dnsmasq removes /etc/dnsmasq.d/okd-*.conf via filepath.Glob then loops with refuseCriticalPath checks before os.RemoveAll. If a future refactor pre-resolves the loop variable wrong (Go pre-1.22 closure-capture bug), the same .backup pattern walk could remove the wrong file. There is no test that exercises Dnsmasq's glob-and-remove loop with multiple matching files.  
-**Fix:** Refactor the hard-coded /etc/dnsmasq.d/* pattern into a package var so tests can override it. Add TestDnsmasq_GlobLoopRemovesAllMatches that drops three okd-*.conf files in a t.TempDir, points the var at it, calls Dnsmasq, and asserts each is gone. Bonus: assert that a critical-path symlink (e.g. /tmp/.../link → /etc) inside the glob result is refused, not followed.  
-**Effort:** hours
-
 ##### `tst:de572c63:validate-config-name-no-test` — validate config name no test
 
 **Status:** not started  
@@ -2787,16 +2767,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/distribution/okd/dns/dnsmasq.go:44-52`  
 **Problem:** validateConfigName is the trust boundary between cluster.Name (operator-supplied YAML) and a path written under /etc/dnsmasq.d/. The regex enforces ^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$ but no test asserts it actually rejects the obvious attacker shapes (empty, ../escape, dots, slashes, null bytes, unicode, leading hyphen, length > 64).  
 **Fix:** Add TestValidateConfigName to a new dnsmasq_test.go: accept ("okd-prod", "a", "a1", strings.Repeat("a", 64)); reject ("", "-leading", "a/b", "../escape", "a.b", strings.Repeat("a", 65), "\u00e9", "a\x00b"). Pure function — no fixtures needed.  
-**Effort:** hours
-
-##### `tst:ae5b624c:monitor-installation-no-test` — monitor installation no test
-
-**Status:** in review — PR #251  
-**Severity:** major  
-**Cluster:** destructive-untested — seam→audit-concurrency; related: con:98723e5d:monitor-installation-no-test  
-**Evidence:** `internal/distribution/okd/install/monitor.go:62-172`  
-**Problem:** Phase.MonitorInstallation drives the longest privileged loop in the binary (60+ minute openshift-install wait, ticker-driven CSR approval, sync.OnceFunc kill, reapTimer-bounded ctx-cancel reap) and has zero tests. The csrApprover interface was specifically introduced for stub-injection; nobody wired the stub to a test. A regression in the ctx.Done branch that fails to fire killInstall would hang every cancelled deploy.  
-**Fix:** Add monitor_test.go with three table-driven cases using a fakeApprover (1) install completes — final ApprovePendingCSRs is called and result.csrs_approved counts; (2) installDone errors with ctx.DeadlineExceeded — returns ClusterError wrapping context.DeadlineExceeded; (3) ctx.Cancel mid-loop — killInstall fires once (assert via int counter), reapTimer fires (use synctest), error wraps context.Canceled. Use os/exec stub by setting the openshift-install lookup to a sleep script in PATH per kubectl_test.go's pattern.  
 **Effort:** hours
 
 ##### `tst:696d6b0e:remove-fcos-iso-from-proxmox-no-test` — remove fcos iso from proxmox no test

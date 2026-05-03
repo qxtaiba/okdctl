@@ -2369,6 +2369,55 @@ but link evidence.
   rejects empty/whitespace-only inputs. sigs.k8s.io/yaml round-
   trip. Reviewer PASS first round.
 
+- **`tst:33579dd5:safe-remove-with-logger-error-paths-untested`**
+  — done 2026-05-03 — merge commits `c01be98` (initial extract +
+  test) and `01f50d3` (CI fix: gofumpt-format the var block
+  introduced by the extract). Tier H major. cleanup.Dnsmasq's
+  hard-coded `/etc/dnsmasq.d/okd-*.conf` and `*.backup` glob
+  patterns prevented testing the glob-and-remove loop. Extracted
+  both into package vars (`dnsmasqConfPattern`,
+  `dnsmasqBackupPattern`) so tests can redirect to t.TempDir().
+  Added services_test.go::TestDnsmasq_GlobLoopRemovesAllMatches
+  seeding 3 conf + 2 backup files, overriding the vars (with
+  t.Cleanup restore), and asserting each is removed. The bonus
+  symlink-into-critical-path assertion was descoped per the item's
+  "Bonus" wording. Reviewer PASS first round.
+
+- **`tst:daf5bee9:merge-kubeconfig-secret-survival-untested`** —
+  done 2026-05-03 — PR #249, merge commit `ca554e9`. Tier H major.
+  cli/kubeconfig.go's mergeKubeconfig writes via
+  system.AtomicWrite(0o600) but the existing test only covered
+  mergeNamedList. A regression to 0o644 would silently widen perms
+  on a file that may carry the user's bearer token. Added
+  TestMergeKubeconfig_Perms that seeds a t.TempDir kubeconfig with
+  `token: real-token`, sets KUBECONFIG to that path (so
+  mergeTargetPath resolves to it without touching real
+  ~/.kube/config), calls mergeKubeconfig with a different-name
+  src user, then asserts: dest mode 0o600, original `real-token`
+  preserved, src `new-token` appended, no `.tmp-*` artefacts left
+  by AtomicWrite. Reviewer PASS first round.
+
+- **`tst:ae5b624c:monitor-installation-no-test`** — done
+  2026-05-03 — merge commits `dd9b73f` (initial monitor_test.go)
+  and `4f1eb0e` (CI fix: `exec sleep` + redirect stdio to avoid
+  orphan-pipe stall). Tier H major. install.MonitorInstallation
+  is the longest privileged loop in the binary (60-min
+  openshift-install wait, ticker-driven CSR approval, sync.OnceFunc
+  kill, reapTimer ctx-cancel reap) — zero tests. Added
+  monitor_test.go with three cases using a fakeApprover (atomic
+  counter for ApprovePendingCSRs invocations) and a PATH-injected
+  `openshift-install` shell stub keyed off OC_FAKE_MODE: success
+  (asserts final ApprovePendingCSRs >= 1), DeadlineExceeded (20ms
+  inner timeout against `sleep 300`; asserts errors.Is to
+  DeadlineExceeded + errors.As to *errtypes.ClusterError),
+  ctx.Cancel mid-loop (parent cancelled after 20ms; asserts
+  errors.Is to context.Canceled, no ClusterError wrap). Round 1
+  PASS, round 2 fixed CI hang: the original `sleep 300` shell
+  child became orphaned after SIGKILL on the wrapper script and
+  held stdout/stderr pipes, stalling `go test` shutdown 60s. Fix
+  was `exec sleep 300 < /dev/null > /dev/null 2>&1` so the script
+  process is replaced by sleep directly.
+
 - **`tst:ddf885f4:manager-rollback-untested`** — done 2026-05-03 —
   PR #252, content landed via leak commit `7e12308` (PROCESS NOTE:
   third occurrence of stray-worktree-content leakage into a
