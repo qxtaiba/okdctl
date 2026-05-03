@@ -168,6 +168,10 @@ type DestroyOpts struct {
 	SkipTerraform  bool
 	SkipCleanup    bool
 	SkipFirewall   bool
+	// TerraformTargets, when non-empty, limits the terraform destroy to
+	// the named resource addresses. Each entry must pass the CLI-layer
+	// allowlist before reaching this struct.
+	TerraformTargets []string
 }
 
 // Destroy tears down the cluster and its infrastructure.
@@ -181,6 +185,7 @@ func (p *Provisioner) Destroy(ctx context.Context, cfg *config.Config, opts Dest
 	destroyOpts.SkipTerraform = opts.SkipTerraform
 	destroyOpts.SkipCleanup = opts.SkipCleanup
 	destroyOpts.SkipFirewall = opts.SkipFirewall
+	destroyOpts.TerraformTargets = opts.TerraformTargets
 
 	return destroyPhase.Execute(ctx, cfg, &destroyOpts)
 }

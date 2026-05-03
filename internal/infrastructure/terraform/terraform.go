@@ -103,6 +103,8 @@ type DestroyOptions struct {
 	VarFile     string
 	AutoApprove bool
 	Parallelism int
+	// Targets limits the destroy to specific resource addresses.
+	Targets []string
 	// UsePlan creates a destroy plan first, then applies it.
 	// Safer because it previews changes. Plan failures surface as errors
 	// rather than silently degrading to direct destroy.
@@ -273,6 +275,7 @@ func (t *Executor) destroyWithPlan(ctx context.Context, opts DestroyOptions) err
 		VarFile:        opts.VarFile,
 		OutputPlanFile: planFile,
 		Destroy:        true,
+		Targets:        opts.Targets,
 	})
 
 	if planErr != nil {
@@ -299,6 +302,9 @@ func (t *Executor) destroyDirect(ctx context.Context, opts DestroyOptions) error
 	}
 	if opts.Parallelism > 0 {
 		args = append(args, fmt.Sprintf("-parallelism=%d", opts.Parallelism))
+	}
+	for _, target := range opts.Targets {
+		args = append(args, "-target="+target)
 	}
 
 	return t.run(ctx, args...)

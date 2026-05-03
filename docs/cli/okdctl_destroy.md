@@ -31,6 +31,7 @@ okdctl destroy [flags]
       --skip-cleanup             skip host file cleanup — leaves haproxy/dnsmasq config in place (no-op with --dry-run)
       --skip-firewall            skip firewall rule cleanup (no-op with --dry-run)
       --skip-terraform           skip terraform destroy — intended for resuming after a successful terraform-destroy phase (no-op with --dry-run)
+      --target stringArray       limit terraform destroy to this resource address (repeatable); must match the okd_cluster VM allowlist
   -y, --yes                      skip confirmation prompt
 ```
 
