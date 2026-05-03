@@ -2771,3 +2771,35 @@ but link evidence.
   related-id status before applying a plan would have caught this
   earlier in the session.
 
+- **`con:98723e5d:monitor-installation-no-test`** — done 2026-05-03
+  — PR #283, merge commit `97624b5`. Tier H suggestion
+  (time-sleep-retry, seam→audit-tests). MonitorInstallation is the
+  most concurrency-dense function in the codebase (Wait-reaper
+  goroutine, sync.OnceFunc kill, CSR-approval ticker, reapTimer
+  with deadline, three-way select) but had zero tests; the existing
+  TestMonitorInstallation_CtxCanceled also violated CLAUDE.md by
+  using a bare `time.Sleep(20ms)` to delay cancellation. Extracted
+  `defaultStartMonitorCmd` to monitor.go and added a
+  `startMonitorCmd func(...) (done <-chan error, kill func(), err
+  error)` field on Phase as a test-injection seam (production path
+  unchanged when nil). Fixed CtxCanceled to cancel before entering
+  MonitorInstallation. Added three synctest.Test cases:
+  TickerApproveCSRs (advance 2s past 1s interval, assert
+  approver.calls >= 1), CtxCancelReapsGracefully (cancel + advance
+  5s + send done; assert context.Canceled returned and kill
+  invocations == 1, no abandon-log), ReapTimeout (cancel + advance
+  31s without firing done; assert kill invocations == 1 and
+  abandon-log message captured). Round-1 reviewer FAILed on
+  gocritic unnamedResult lint and missing kill-invocation
+  assertion; both fixed in dc9be5b (named returns
+  `(done <-chan error, kill func(), err error)` + atomic.Int32
+  killed counter). Final merge required a manual rebase against
+  develop's `d7260a6 fix(install): filter env on openshift-install
+  monitor` which had landed independently and added
+  `cmd.Env = executor.FilterParentEnv(executor.DefaultEnvAllowlist)`
+  directly to MonitorInstallation; conflict resolved by porting
+  the env filter into defaultStartMonitorCmd so the seam preserves
+  the env-allowlist behaviour. Lesson: when a long-running PR
+  touches a hot file (monitor.go), expect parallel agents to land
+  independent fixes there — rebase early and rebase often.
+

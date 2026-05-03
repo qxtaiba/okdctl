@@ -2049,16 +2049,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Replace with: `t := time.NewTimer(100 * time.Millisecond); defer t.Stop(); select { case result = <-ch: case <-t.C: return }`. Two extra lines for pattern consistency with internal/distribution/okd/install/monitor.go's reapTimer.  
 **Effort:** hours
 
-##### `con:98723e5d:monitor-installation-no-test` — monitor installation no test
-
-**Status:** in review — PR #283  
-**Severity:** suggestion  
-**Cluster:** time-sleep-retry — seam→audit-tests  
-**Evidence:** `internal/distribution/okd/install/monitor.go:62-172`  
-**Problem:** MonitorInstallation is the most concurrency-dense function in the codebase: a Wait-reaper goroutine, a sync.OnceFunc kill, a CSR-approval ticker, a reap timer with deadline, and a select with three cases. internal/system/exec_test.go already uses Go 1.25 testing/synctest (six tests covering WaitFor). Identical patterns in MonitorInstallation have NO tests — this is the canonical synctest opportunity per audit-concurrency rule catalog.  
-**Fix:** Add monitor_test.go using `synctest.Test` to fake the openshift-install subprocess (extract a `wait()` interface to inject), advance virtual time across the CSRApprovalInterval, and assert: (a) ticker tick triggers ApprovePendingCSRs, (b) ctx-cancel triggers killInstall + reapTimer race, (c) reap-timeout path logs the abandon message. The exec_test.go pattern is the template.  
-**Effort:** hours
-
 ##### `con:48688e63:proxmox-connect-discards-ctx` — proxmox connect discards ctx (scaffolding — verify intent only)
 
 **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/con-48688e63-proxmox-ctx  
