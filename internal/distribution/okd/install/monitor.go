@@ -12,6 +12,7 @@ import (
 
 	"github.com/qxtaiba/okdctl/internal/cluster"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
+	"github.com/qxtaiba/okdctl/internal/executor"
 	"github.com/qxtaiba/okdctl/internal/tui"
 )
 
@@ -68,6 +69,8 @@ func (p *Phase) MonitorInstallation(ctx context.Context, clusterDir string, opts
 	}
 
 	installCmd := osExec.CommandContext(ctx, "openshift-install", "wait-for", "install-complete", "--dir", clusterDir, "--log-level=debug")
+	// Filter env so openshift-install does not inherit AWS_*/GCP_*/AZURE_* etc. from the user shell.
+	installCmd.Env = executor.FilterParentEnv(executor.DefaultEnvAllowlist)
 	installCmd.Stdout = os.Stdout
 	installCmd.Stderr = os.Stderr
 
