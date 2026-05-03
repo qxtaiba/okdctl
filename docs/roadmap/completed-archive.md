@@ -2369,6 +2369,35 @@ but link evidence.
   rejects empty/whitespace-only inputs. sigs.k8s.io/yaml round-
   trip. Reviewer PASS first round.
 
+- **`con:8e65d574:update-check-bounded-leak-doc`** — done
+  2026-05-03 — PR #235, merge commit `0ccc208`. Tier H suggestion.
+  version.BackgroundCheck is the canonical fire-and-forget pattern
+  CLAUDE.md §concurrency points to; the leak bound (httpTimeout =
+  4s) was implicit. Extended the function's doc comment to record
+  the contract: if the caller's 100ms select expires, the buffered
+  send in the goroutine never blocks; the goroutine reaps within
+  4s. No code change. Reviewer PASS first round.
+
+- **`tst:262af6e4:cleanup-execute-full-kind-untested`** — done
+  2026-05-03 — PR #241, merge commit `a0d6cce`. Tier H major.
+  cleanup.Execute(Full) chains seven destructive helpers but
+  tests only covered the partial-kind paths. Added three tests:
+  TestExecute_FullKind_AllStepsRun (happy path: tfstate preserved,
+  workDir + ignition removed), TestExecute_FullKind_AggregatesErrors
+  (planted a regular file at the terraform environments path so
+  ReadDir returns ENOTDIR; asserts *errtypes.ConfigError in the
+  joined error and that prior steps still ran),
+  TestExecute_FullKind_RemovePackagesGating (PATH-injected fake
+  dnf+rpm+dpkg+apt-get assert package removal fires only when
+  RemovePackages=true). CI required two follow-ups: (a) the initial
+  fakes were dnf+rpm only, but Linux CI runs Debian → switched to
+  family-agnostic apt-get/dpkg + dnf/rpm logging to a single
+  `pkg.called` file; (b) the dpkg fake initially exited 0 with
+  empty stdout but the platform postCheck requires `ii  <pkg>` in
+  output to consider a package installed — fake now emits one
+  `ii  <pkg> 1.0 amd64 fake` line per non-flag arg. Reviewer PASS
+  first round; CI debugging took two rounds.
+
 - **`tst:f55b9c27:write-env-file-zeroize-buf-untested`** — done
   2026-05-03 — PR #248, merge commit `1c67be9`. Tier H major.
   credentials.WriteEnvFile builds the .env body in a bytes.Buffer,

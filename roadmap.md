@@ -2149,16 +2149,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Verify intent: keep the ctx parameter on the Connect/Disconnect contract. No code change required. (Optionally add a comment: "// ctx accepted for symmetry with future network-bound providers; this implementation is local-only.")  
 **Effort:** hours
 
-##### `con:8e65d574:update-check-bounded-leak-doc` — update check bounded leak doc
-
-**Status:** in review — PR #235  
-**Severity:** suggestion  
-**Cluster:** goroutine-lifetime  
-**Evidence:** `internal/version/updatecheck.go:40-53`  
-**Problem:** BackgroundCheck spawns a goroutine that writes to a buffered chan; the caller race-reads the chan against time.After(100ms). If runCheck still has an in-flight HTTP call when the 100ms expires, the goroutine remains alive until the http client's 4s timeout fires (httpTimeout). The buffered chan means the abandoned send never blocks, so the goroutine reaps cleanly. CLAUDE.md §concurrency calls this exact pattern out as the canonical fire-and-forget shape ("100ms wait at caller is the canonical example"). The leak bound is documented (httpTimeout = 4s). Flagging for visibility, not action.  
-**Fix:** No change. This is the canonical bounded-leak pattern called out in CLAUDE.md. Listed in the goroutine inventory only so the audit footer's coverage statement is honest.  
-**Effort:** hours
-
 #### audit-api-design
 
 ##### `api:d6b325cb:pkg-sibling-reach-through` — pkg sibling reach through
@@ -2737,16 +2727,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/addon/resolver.go:12-70`  
 **Problem:** Resolve implements Kahn's topological sort over addon dependencies. The function is the gate between operator-declared addons and install ordering — a false negative on circular dependency would cause Manager.InstallAll to deadlock or install in the wrong order (e.g. SecretStore before Flux that depends on it). No test today covers (a) circular detection, (b) priority ordering, (c) missing-dependency error.  
 **Fix:** Add resolver_test.go with a tiny stubAddon: cases — (1) no deps + same priority sorts by name; (2) priority breaks ties; (3) A→B→C orders C before B before A; (4) missing dep returns error containing "depends on" and addon names; (5) circular A→B→A returns "circular dependency detected". Pure logic — a fakeAddon{name, deps, priority} struct + addon.Addon interface stub is enough.  
-**Effort:** hours
-
-##### `tst:262af6e4:cleanup-execute-full-kind-untested` — cleanup execute full kind untested
-
-**Status:** in review — PR #241  
-**Severity:** major  
-**Cluster:** destructive-untested — related: tst:368b892b:cleanup-tfstate-explicit-only-no-implicit-test  
-**Evidence:** `internal/distribution/okd/cleanup/cleanup.go:58-83`  
-**Problem:** cleanup.Execute(Full) chains seven destructive site-specific helpers (WorkDirectory, WebServer, HAProxy, Apache, Dnsmasq, Terraform, optionally Packages). Tests cover WorkOnly, WebOnly, TerraformOnly, and bad-kind only. The Full path — the one operators actually run — has no test asserting (a) ordering, (b) errors.Join aggregation, (c) opts.RemovePackages gating Packages.  
-**Fix:** Add TestExecute_FullKind_AggregatesErrors that points each site at a writable t.TempDir but seeds a deliberately read-only file inside HAProxyConfig so that step errors. Assert: every other step still runs (WorkDir empty, ignition removed, tfstate preserved), and errors.Join carries exactly one wrapped *ConfigError. Adds RemovePackages=false case + RemovePackages=true case asserting Packages is/is-not called via PATH-injected fake dnf.  
 **Effort:** hours
 
 ##### `tst:de572c63:validate-config-name-no-test` — validate config name no test
