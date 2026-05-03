@@ -16,6 +16,11 @@ import (
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
+// dnsmasqConfPattern and dnsmasqBackupPattern are package-level vars so
+// tests can redirect Dnsmasq's glob-and-remove loop to t.TempDir().
+var dnsmasqConfPattern = "/etc/dnsmasq.d/okd-*.conf"
+var dnsmasqBackupPattern = "/etc/dnsmasq.d/*.backup"
+
 func stopAndDisableService(ctx context.Context, serviceName string, logger *slog.Logger) {
 	logger = logutil.OrNop(logger)
 	if system.IsServiceActive(ctx, serviceName) {
@@ -154,8 +159,7 @@ func Dnsmasq(ctx context.Context, clusterName string, logger *slog.Logger) error
 		}
 	}
 
-	configPattern := "/etc/dnsmasq.d/okd-*.conf"
-	configs, _ := filepath.Glob(configPattern)
+	configs, _ := filepath.Glob(dnsmasqConfPattern)
 	for _, cfg := range configs {
 		if guardErr := refuseCriticalPath(cfg); guardErr != nil {
 			logger.Warn("cleanup: refusing critical path", "err", guardErr)
@@ -164,8 +168,7 @@ func Dnsmasq(ctx context.Context, clusterName string, logger *slog.Logger) error
 		_ = os.RemoveAll(cfg)
 	}
 
-	backupPattern := "/etc/dnsmasq.d/*.backup"
-	backups, _ := filepath.Glob(backupPattern)
+	backups, _ := filepath.Glob(dnsmasqBackupPattern)
 	for _, backup := range backups {
 		if guardErr := refuseCriticalPath(backup); guardErr != nil {
 			logger.Warn("cleanup: refusing critical path", "err", guardErr)
