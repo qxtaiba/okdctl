@@ -54,15 +54,22 @@ func handleCredentials(cfg *config.Config) *credentials.ProxmoxCredentials {
 		tui.Info("  PROXMOX_VE_USERNAME + PROXMOX_VE_PASSWORD")
 		tui.Info("  or PROXMOX_VE_API_TOKEN")
 	} else {
-		tui.Info(fmt.Sprintf("using credentials from %s", creds.Source))
-		if creds.ConfigCredentialsOverridden {
-			tui.Warn("environment credentials override proxmox credentials in config file")
-		}
-		if creds.EndpointFromConfig {
-			tui.Warn("PROXMOX_VE_ENDPOINT not set; endpoint falling back to config file (mixed source)")
-		}
+		reportCredentialProvenance(creds)
 	}
 	return creds
+}
+
+// reportCredentialProvenance logs the resolved credential source plus any
+// mixed-provenance warnings the operator should see (env-overrides-config,
+// endpoint falling back to config). Callers must check creds.IsValid first.
+func reportCredentialProvenance(creds *credentials.ProxmoxCredentials) {
+	tui.Info(fmt.Sprintf("using credentials from %s", creds.Source))
+	if creds.ConfigCredentialsOverridden {
+		tui.Warn("environment credentials override proxmox credentials in config file")
+	}
+	if creds.EndpointFromConfig {
+		tui.Warn("PROXMOX_VE_ENDPOINT not set; endpoint falling back to config file (mixed source)")
+	}
 }
 
 func validateConfig(cfg *config.Config) *config.ValidationResult {
