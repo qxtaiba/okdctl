@@ -49,14 +49,16 @@ const (
 	RoleWorker    = phase.RoleWorker
 )
 
-// VMState classifies a VM's lifecycle state.
-type VMState string
+// VMState aliases phase.VMState so iso_cleanup (phase) and proxmox share
+// a single canonical lifecycle enum. The State* constants below mirror the
+// canonical phase values.
+type VMState = phase.VMState
 
-// VM lifecycle state values.
+// State* mirror phase's canonical values so existing call sites stay terse.
 const (
-	StateRunning  VMState = "running"
-	StateStopped  VMState = "stopped"
-	StateCreating VMState = "creating"
-	StateDeleting VMState = "deleting"
-	StateUnknown  VMState = "unknown"
+	StateRunning  = phase.StateRunning
+	StateStopped  = phase.StateStopped
+	StateCreating = phase.StateCreating
+	StateDeleting = phase.StateDeleting
+	StateUnknown  = phase.StateUnknown
 )
