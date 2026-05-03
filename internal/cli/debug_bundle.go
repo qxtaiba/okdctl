@@ -59,7 +59,7 @@ during the deploy so the bundle captures the relevant logs.`,
 }
 
 func init() {
-	debugBundleCmd.Flags().StringVarP(&debugBundleOutput, "output", "o", "", "write bundle to this path (default: okdctl-debug-<ts>.tgz)")
+	debugBundleCmd.Flags().StringVarP(&debugBundleOutput, flagOutput, "o", "", "write bundle to this path (default: okdctl-debug-<ts>.tgz)")
 	debugBundleCmd.Flags().BoolVar(&debugBundleSkipMustGather, "skip-must-gather", false, "skip oc adm must-gather (faster, omits cluster diagnostics)")
 	rootCmd.AddCommand(debugBundleCmd)
 }

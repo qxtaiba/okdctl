@@ -37,7 +37,7 @@ to a clean state.`,
 
 func init() {
 	cleanupCmd.Flags().BoolVarP(&cleanupYes, "yes", "y", false, "skip confirmation prompt")
-	cleanupCmd.Flags().BoolVar(&cleanupDryRun, "dry-run", false, "preview what would be removed without making changes")
+	cleanupCmd.Flags().BoolVar(&cleanupDryRun, flagDryRun, false, "preview what would be removed without making changes")
 	cleanupCmd.Flags().StringVar(&cleanupConfirmCluster, "confirm-cluster", "",
 		"required with --yes; must equal cfg.Cluster.Name (typo guard for scripted cleanups)")
 	rootCmd.AddCommand(cleanupCmd)

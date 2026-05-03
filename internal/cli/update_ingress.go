@@ -41,7 +41,7 @@ Run this after deploying a LoadBalancer provider (e.g., MetalLB).`,
 func init() {
 	updateIngressCmd.Flags().BoolVarP(&updateIngressYes, "yes", "y", false, "skip confirmation prompts")
 	updateIngressCmd.Flags().BoolVar(&updateIngressKeepHAProxy, "keep-haproxy", false, "keep haproxy running on the bastion after dns switch")
-	updateIngressCmd.Flags().BoolVar(&updateIngressDryRun, "dry-run", false, "preview update-ingress mutations without touching the cluster")
+	updateIngressCmd.Flags().BoolVar(&updateIngressDryRun, flagDryRun, false, "preview update-ingress mutations without touching the cluster")
 }
 
 // runUpdateIngressDryRun prints the mutations update-ingress would perform

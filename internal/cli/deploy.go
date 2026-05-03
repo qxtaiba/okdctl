@@ -37,10 +37,10 @@ var deployCmd = &cobra.Command{
 }
 
 func init() {
-	deployCmd.Flags().StringVarP(&deployOutputFile, "output", "o", "okdctl.yaml", "output file for configuration")
+	deployCmd.Flags().StringVarP(&deployOutputFile, flagOutput, "o", "okdctl.yaml", "output file for configuration")
 	deployCmd.Flags().BoolVar(&deployMinimal, "minimal", false, "use minimal defaults (single-node cluster)")
 	deployCmd.Flags().BoolVarP(&deployYes, "yes", "y", false, "skip prompts, use defaults")
-	deployCmd.Flags().BoolVar(&deployDryRun, "dry-run", false, "preview terraform plan and step listing without deploying")
+	deployCmd.Flags().BoolVar(&deployDryRun, flagDryRun, false, "preview terraform plan and step listing without deploying")
 	deployCmd.Flags().StringVar(&deployMetricsAddr, "metrics-addr", "", "address for Prometheus metrics endpoint (e.g. :9090); disabled when empty")
 }
 
@@ -234,13 +234,7 @@ func runFullDeployment(ctx context.Context, cfg *config.Config) error {
 	if !creds.IsValid() {
 		tui.Warn("no proxmox credentials found")
 	} else {
-		tui.Info(fmt.Sprintf("using credentials from %s", creds.Source))
-		if creds.ConfigCredentialsOverridden {
-			tui.Warn("environment credentials override proxmox credentials in config file")
-		}
-		if creds.EndpointFromConfig {
-			tui.Warn("PROXMOX_VE_ENDPOINT not set; endpoint falling back to config file (mixed source)")
-		}
+		reportCredentialProvenance(creds)
 	}
 
 	return executeFullDeployment(ctx, cfg, deploymentOptions{
