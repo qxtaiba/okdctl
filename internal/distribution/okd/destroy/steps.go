@@ -29,10 +29,22 @@ func (p *Phase) destroySteps(cfg *config.Config, opts *Options) []distribution.S
 	// Safe without a mutex because Orchestrator.Run iterates steps serially;
 	// add a sync.Mutex if step parallelism ever lands.
 	var failures []string
+	var skipped []string
 	track := func(label string) func(err error) {
 		return func(err error) {
 			failures = append(failures, label)
 			phase.WarnOnError(p.Log, label)(err)
+		}
+	}
+	// trackSkip wraps a SkipWhen predicate to record the step label when skipped.
+	// Safe without a mutex: same serial-execution invariant as failures.
+	trackSkip := func(label string, fn func() bool) func() bool {
+		return func() bool {
+			if fn() {
+				skipped = append(skipped, label)
+				return true
+			}
+			return false
 		}
 	}
 	return []distribution.StepDef{
@@ -40,7 +52,7 @@ func (p *Phase) destroySteps(cfg *config.Config, opts *Options) []distribution.S
 			ID: StepDestroyInfra, Name: "destroy infrastructure",
 			Desc:       "destroying proxmox infrastructure using terraform",
 			NonFatal:   true, // orchestrator continues through cleanup steps on TF failure
-			SkipWhen:   func() bool { return opts.SkipTerraform },
+			SkipWhen:   trackSkip("terraform", func() bool { return opts.SkipTerraform }),
 			SkipReason: "terraform destroy disabled",
 			Exec: func(ctx context.Context) error {
 				if err := p.destroyInfrastructure(ctx, opts); err != nil {
@@ -55,7 +67,7 @@ func (p *Phase) destroySteps(cfg *config.Config, opts *Options) []distribution.S
 			ID: StepRemoveRemoteISO, Name: "remove remote ISO",
 			Desc:       "removing fedora-coreos iso from proxmox host",
 			NonFatal:   true,
-			SkipWhen:   func() bool { return opts.KeepISOs || cfg.Provider.Proxmox == nil },
+			SkipWhen:   trackSkip("iso removal", func() bool { return opts.KeepISOs || cfg.Provider.Proxmox == nil }),
 			SkipReason: isoSkipReason(opts, cfg),
 			Exec: func(ctx context.Context) error {
 				params := &phase.RemoteISOParams{
@@ -71,7 +83,7 @@ func (p *Phase) destroySteps(cfg *config.Config, opts *Options) []distribution.S
 		{
 			ID: StepCleanupFiles, Name: "cleanup files",
 			Desc: "performing comprehensive cleanup", NonFatal: true,
-			SkipWhen:   func() bool { return opts.SkipCleanup || opts.CleanupKind == "" },
+			SkipWhen:   trackSkip("file cleanup", func() bool { return opts.SkipCleanup || opts.CleanupKind == "" }),
 			SkipReason: cleanupFilesSkipReason(opts),
 			Exec: func(ctx context.Context) error {
 				vip, err := phase.ResolveClusterVIP(cfg)
@@ -104,7 +116,7 @@ func (p *Phase) destroySteps(cfg *config.Config, opts *Options) []distribution.S
 		{
 			ID: StepCleanupFirewall, Name: "cleanup firewall",
 			Desc: "removing firewall rules", NonFatal: true,
-			SkipWhen:   func() bool { return opts.SkipFirewall },
+			SkipWhen:   trackSkip("firewall", func() bool { return opts.SkipFirewall }),
 			SkipReason: "firewall cleanup disabled",
 			Exec: func(ctx context.Context) error {
 				if err := firewall.RemoveOKDRules(ctx, true, p.Log); err != nil {
@@ -119,12 +131,15 @@ func (p *Phase) destroySteps(cfg *config.Config, opts *Options) []distribution.S
 			ID: StepPrintSummary, Name: "print summary",
 			Desc: "printing destruction summary", NonFatal: true,
 			Exec: func(_ context.Context) error {
-				if len(failures) == 0 {
-					p.Log.Info("destroy: cluster teardown completed")
-				} else {
+				switch {
+				case len(failures) > 0:
 					p.Log.Warn("destroy: teardown finished with non-fatal failures",
-						"steps", strings.Join(failures, ", "),
-						"hint", "re-run 'okdctl destroy' to retry the failed steps")
+						"steps", strings.Join(failures, ", "))
+				case len(skipped) > 0:
+					p.Log.Info("destroy: cluster teardown completed",
+						"skipped", strings.Join(skipped, ", "))
+				default:
+					p.Log.Info("destroy: cluster teardown completed")
 				}
 				return nil
 			},
