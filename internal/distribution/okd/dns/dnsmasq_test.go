@@ -25,6 +25,10 @@ func TestValidateConfigName(t *testing.T) {
 		{name: "special chars", input: "okd@prod!", wantErr: true},
 		{name: "leading hyphen", input: "-leading", wantErr: true},
 		{name: "too long", input: strings.Repeat("a", 65), wantErr: true},
+		{name: "single char", input: "a"},
+		{name: "two chars", input: "a1"},
+		{name: "unicode", input: "é", wantErr: true},
+		{name: "null byte", input: "a\x00b", wantErr: true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
