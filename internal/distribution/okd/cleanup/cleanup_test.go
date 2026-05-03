@@ -133,18 +133,25 @@ func TestExecute_NilLoggerOk(t *testing.T) {
 	}
 }
 
-// installFakeDNF prepends a temp dir containing rpm + dnf shell stubs to PATH.
-// dnf appends its argv to dnf.called in the same dir; rpm always exits 0 so
-// IsInstalled returns true for every package and Remove proceeds to dnf.
-func installFakeDNF(t *testing.T) string {
+// installFakePkg prepends a temp dir containing rpm/dnf/dpkg/apt-get shell
+// stubs to PATH. dnf and apt-get append their argv to pkg.called in the same
+// dir so the assertion is package-manager-agnostic; rpm and dpkg always exit
+// 0 so IsInstalled returns true on both Debian and RHEL CI runners.
+func installFakePkg(t *testing.T) string {
 	t.Helper()
 	if runtime.GOOS == "windows" {
-		t.Skip("fake-dnf script relies on POSIX sh")
+		t.Skip("fake pkg-tool scripts rely on POSIX sh")
 	}
 	dir := t.TempDir()
-	dnfScript := "#!/bin/sh\necho \"$@\" >> \"$(dirname \"$0\")/dnf.called\"\nexit 0\n"
-	rpmScript := "#!/bin/sh\nexit 0\n"
-	for name, body := range map[string]string{"dnf": dnfScript, "rpm": rpmScript} {
+	logScript := "#!/bin/sh\necho \"$@\" >> \"$(dirname \"$0\")/pkg.called\"\nexit 0\n"
+	exitOK := "#!/bin/sh\nexit 0\n"
+	scripts := map[string]string{
+		"dnf":     logScript,
+		"apt-get": logScript,
+		"rpm":     exitOK,
+		"dpkg":    exitOK,
+	}
+	for name, body := range scripts {
 		p := filepath.Join(dir, name)
 		if err := os.WriteFile(p, []byte(body), 0o755); err != nil {
 			t.Fatal(err)
@@ -175,28 +182,28 @@ func fullOptsWithFreshDirs(t *testing.T) *Options {
 	}
 }
 
-func assertDNFCalled(t *testing.T, binDir, pkg string) {
+func assertPkgCalled(t *testing.T, binDir, pkg string) {
 	t.Helper()
-	data, err := os.ReadFile(filepath.Join(binDir, "dnf.called"))
+	data, err := os.ReadFile(filepath.Join(binDir, "pkg.called"))
 	if err != nil {
-		t.Fatalf("dnf was not called (dnf.called absent): %v", err)
+		t.Fatalf("pkg manager was not called (pkg.called absent): %v", err)
 	}
 	if !strings.Contains(string(data), pkg) {
-		t.Errorf("dnf called but %q not in args: %s", pkg, data)
+		t.Errorf("pkg manager called but %q not in args: %s", pkg, data)
 	}
 }
 
-func assertDNFNotCalled(t *testing.T, binDir, pkg string) {
+func assertPkgNotCalled(t *testing.T, binDir, pkg string) {
 	t.Helper()
-	data, err := os.ReadFile(filepath.Join(binDir, "dnf.called"))
+	data, err := os.ReadFile(filepath.Join(binDir, "pkg.called"))
 	if os.IsNotExist(err) {
 		return
 	}
 	if err != nil {
-		t.Fatalf("reading dnf.called: %v", err)
+		t.Fatalf("reading pkg.called: %v", err)
 	}
 	if strings.Contains(string(data), pkg) {
-		t.Errorf("dnf called with %q but RemovePackages=false should skip Packages(): %s", pkg, data)
+		t.Errorf("pkg manager called with %q but RemovePackages=false should skip Packages(): %s", pkg, data)
 	}
 }
 
@@ -315,7 +322,7 @@ func TestExecute_FullKind_AggregatesErrors(t *testing.T) {
 
 func TestExecute_FullKind_RemovePackagesGating(t *testing.T) {
 	t.Run("false", func(t *testing.T) {
-		binDir := installFakeDNF(t)
+		binDir := installFakePkg(t)
 		opts := fullOptsWithFreshDirs(t)
 		opts.RemovePackages = false
 		opts.BinDir = binDir
@@ -323,11 +330,11 @@ func TestExecute_FullKind_RemovePackagesGating(t *testing.T) {
 		if err := Execute(context.Background(), opts); err != nil {
 			t.Errorf("unexpected error: %v", err)
 		}
-		assertDNFNotCalled(t, binDir, "coreos-installer")
+		assertPkgNotCalled(t, binDir, "coreos-installer")
 	})
 
 	t.Run("true", func(t *testing.T) {
-		binDir := installFakeDNF(t)
+		binDir := installFakePkg(t)
 		opts := fullOptsWithFreshDirs(t)
 		opts.RemovePackages = true
 		opts.BinDir = binDir
@@ -335,6 +342,6 @@ func TestExecute_FullKind_RemovePackagesGating(t *testing.T) {
 		if err := Execute(context.Background(), opts); err != nil {
 			t.Errorf("unexpected error: %v", err)
 		}
-		assertDNFCalled(t, binDir, "coreos-installer")
+		assertPkgCalled(t, binDir, "coreos-installer")
 	})
 }
