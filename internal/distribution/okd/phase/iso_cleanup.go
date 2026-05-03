@@ -80,26 +80,21 @@ func validateISODir(isoDir string) error {
 	return nil
 }
 
-// vmStatus is the "status" field value in pvesh qemu list output.
-type vmStatus string
-
-const vmStatusRunning vmStatus = "running"
-
 // parseVMIDsFromSummary parses the JSON array returned by
 // pvesh get /nodes/<node>/qemu and returns the vmid of each running VM.
 // Stopped VMs are excluded: yanking a cdrom from a running VM disrupts it,
 // but a stopped VM that still references an ISO can be destroyed cleanly.
 func parseVMIDsFromSummary(data []byte) ([]int, error) {
 	var vms []struct {
-		VMID   int      `json:"vmid"`
-		Status vmStatus `json:"status"`
+		VMID   int     `json:"vmid"`
+		Status VMState `json:"status"`
 	}
 	if err := json.Unmarshal(data, &vms); err != nil {
 		return nil, fmt.Errorf("pvesh qemu list output not valid json: %w", err)
 	}
 	var ids []int
 	for _, vm := range vms {
-		if vm.Status == vmStatusRunning {
+		if vm.Status == StateRunning {
 			ids = append(ids, vm.VMID)
 		}
 	}
