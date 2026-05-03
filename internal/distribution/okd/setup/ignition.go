@@ -104,7 +104,7 @@ func (p *Phase) GenerateManifests(ctx context.Context, clusterDir string) error 
 // InjectCustomManifests copies user-supplied YAML from
 // automation/config/manifests into clusterDir/openshift/, returning the
 // count of files injected.
-func (p *Phase) InjectCustomManifests(_ context.Context, projectRoot, clusterDir string) (int, error) {
+func (p *Phase) InjectCustomManifests(ctx context.Context, projectRoot, clusterDir string) (int, error) {
 	customDir := filepath.Join(projectRoot, "automation", "config", "manifests")
 
 	if !system.DirExists(customDir) {
@@ -123,6 +123,9 @@ func (p *Phase) InjectCustomManifests(_ context.Context, projectRoot, clusterDir
 
 	count := 0
 	for _, entry := range entries {
+		if err := ctx.Err(); err != nil {
+			return count, err
+		}
 		if entry.IsDir() {
 			continue
 		}
