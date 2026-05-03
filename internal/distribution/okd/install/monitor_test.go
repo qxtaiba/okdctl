@@ -3,13 +3,16 @@ package install
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"runtime"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
+	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 )
 
@@ -101,10 +104,7 @@ func TestMonitorInstallation_CtxCanceled(t *testing.T) {
 	approver := &fakeApprover{}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	go func() {
-		time.Sleep(20 * time.Millisecond)
-		cancel()
-	}()
+	cancel()
 
 	err := p.MonitorInstallation(ctx, t.TempDir(), baseOpts(30*time.Second), approver)
 	if err == nil {
@@ -113,4 +113,101 @@ func TestMonitorInstallation_CtxCanceled(t *testing.T) {
 	if !errors.Is(err, context.Canceled) {
 		t.Errorf("err = %v; want errors.Is(_, context.Canceled)", err)
 	}
+}
+
+// monitorCaptureHandler records slog.Records so synctest tests can assert log
+// output produced by MonitorInstallation.
+type monitorCaptureHandler struct {
+	records []slog.Record
+}
+
+func (h *monitorCaptureHandler) Enabled(_ context.Context, _ slog.Level) bool { return true }
+func (h *monitorCaptureHandler) Handle(_ context.Context, r slog.Record) error {
+	h.records = append(h.records, r)
+	return nil
+}
+func (h *monitorCaptureHandler) WithAttrs(_ []slog.Attr) slog.Handler { return h }
+func (h *monitorCaptureHandler) WithGroup(_ string) slog.Handler      { return h }
+
+func (h *monitorCaptureHandler) hasMessage(msg string) bool {
+	for _, r := range h.records {
+		if r.Message == msg {
+			return true
+		}
+	}
+	return false
+}
+
+func newPhaseSynctest(t *testing.T, start func(context.Context, string) (<-chan error, func(), error)) (*Phase, *monitorCaptureHandler) {
+	t.Helper()
+	h := &monitorCaptureHandler{}
+	return &Phase{
+		BasePhase:       phase.NewBasePhase("test", phase.WithLogger(slog.New(h))),
+		startMonitorCmd: start,
+	}, h
+}
+
+func TestMonitorInstallation_TickerApproveCSRs(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		done := make(chan error, 1)
+		p, _ := newPhaseSynctest(t, func(_ context.Context, _ string) (<-chan error, func(), error) {
+			return done, func() {}, nil
+		})
+		approver := &fakeApprover{approveN: 1}
+		opts := &Options{
+			InstallTimeout:      5 * time.Minute,
+			CSRApprovalInterval: 1 * time.Second,
+		}
+
+		ctx, cancel := context.WithCancel(context.Background())
+		errc := make(chan error, 1)
+		go func() {
+			errc <- p.MonitorInstallation(ctx, t.TempDir(), opts, approver)
+		}()
+
+		synctest.Wait()
+		time.Sleep(2 * time.Second)
+		synctest.Wait()
+
+		cancel()
+		synctest.Wait()
+		close(done)
+		<-errc
+
+		if approver.calls.Load() < 1 {
+			t.Errorf("ApprovePendingCSRs calls = %d; want >= 1", approver.calls.Load())
+		}
+	})
+}
+
+func TestMonitorInstallation_ReapTimeout(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		done := make(chan error, 1)
+		p, h := newPhaseSynctest(t, func(_ context.Context, _ string) (<-chan error, func(), error) {
+			return done, func() {}, nil
+		})
+		approver := &fakeApprover{}
+		opts := &Options{
+			InstallTimeout:      5 * time.Minute,
+			CSRApprovalInterval: 1 * time.Minute,
+		}
+
+		ctx, cancel := context.WithCancel(context.Background())
+		errc := make(chan error, 1)
+		go func() {
+			errc <- p.MonitorInstallation(ctx, t.TempDir(), opts, approver)
+		}()
+
+		synctest.Wait()
+		cancel()
+		synctest.Wait()
+		time.Sleep(31 * time.Second)
+		synctest.Wait()
+
+		<-errc
+
+		if !h.hasMessage("install: process did not exit after kill, abandoning reap") {
+			t.Error("expected abandon-reap log message; not found in captured records")
+		}
+	})
 }

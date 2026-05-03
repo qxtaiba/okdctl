@@ -82,6 +82,10 @@ func NewOptions(cfg *config.Config, projectRoot string) Options {
 // monitor, and cluster-up poll.
 type Phase struct {
 	phase.BasePhase
+	// startMonitorCmd, when non-nil, replaces the default subprocess
+	// start-and-wait used by MonitorInstallation. Tests inject a pure-Go
+	// implementation to avoid spawning real processes.
+	startMonitorCmd func(ctx context.Context, clusterDir string) (<-chan error, func(), error)
 }
 
 // New constructs an install Phase bound to exec/logger and the okdctl
