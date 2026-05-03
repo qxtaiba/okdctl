@@ -1,7 +1,10 @@
 package cli
 
 import (
+	"os"
+	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -82,4 +85,73 @@ func TestMergeNamedList(t *testing.T) {
 			t.Errorf("len = %d, want 1 (only named map survives)", len(got))
 		}
 	})
+}
+
+func TestMergeKubeconfig_Perms(t *testing.T) {
+	dir := t.TempDir()
+	dest := filepath.Join(dir, "config")
+
+	existingKubeconfig := `apiVersion: v1
+kind: Config
+users:
+- name: existing-user
+  user:
+    token: real-token
+clusters: []
+contexts: []
+current-context: ""
+`
+	if err := os.WriteFile(dest, []byte(existingKubeconfig), 0o600); err != nil {
+		t.Fatalf("seed dest kubeconfig: %v", err)
+	}
+
+	t.Setenv("KUBECONFIG", dest)
+
+	srcKubeconfig := []byte(`apiVersion: v1
+kind: Config
+users:
+- name: new-user
+  user:
+    token: new-token
+clusters: []
+contexts: []
+current-context: new-context
+`)
+
+	if err := mergeKubeconfig(srcKubeconfig); err != nil {
+		t.Fatalf("mergeKubeconfig: %v", err)
+	}
+
+	info, err := os.Stat(dest)
+	if err != nil {
+		t.Fatalf("stat dest: %v", err)
+	}
+	if got := info.Mode().Perm(); got != 0o600 {
+		t.Errorf("dest mode = %04o, want 0600", got)
+	}
+
+	merged, err := os.ReadFile(dest)
+	if err != nil {
+		t.Fatalf("read dest: %v", err)
+	}
+	mergedStr := string(merged)
+
+	if !strings.Contains(mergedStr, "real-token") {
+		t.Errorf("original token not preserved in merged kubeconfig:\n%s", mergedStr)
+	}
+	if !strings.Contains(mergedStr, "new-token") {
+		t.Errorf("src user token not appended in merged kubeconfig:\n%s", mergedStr)
+	}
+
+	leftovers, err := filepath.Glob(filepath.Join(dir, ".tmp-*"))
+	if err != nil {
+		t.Fatalf("glob .tmp-*: %v", err)
+	}
+	if len(leftovers) != 0 {
+		t.Errorf("AtomicWrite left temp artifacts: %v", leftovers)
+	}
+
+	if err := os.Remove(dest); err != nil {
+		t.Errorf("remove dest: %v", err)
+	}
 }
