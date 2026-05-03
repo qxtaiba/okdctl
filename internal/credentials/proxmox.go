@@ -10,6 +10,18 @@ import (
 	"github.com/qxtaiba/okdctl/internal/config"
 )
 
+// Proxmox env-var names consumed by the bpg/proxmox terraform provider and
+// read by GetProxmoxCredentials. Writes (envfile.go) and reads (proxmox.go)
+// must use the same identifiers — a typo on either side silently breaks
+// env-file round-trip, so both sites reference these constants.
+const (
+	envProxmoxEndpoint = "PROXMOX_VE_ENDPOINT"
+	envProxmoxUsername = "PROXMOX_VE_USERNAME"
+	envProxmoxPassword = "PROXMOX_VE_PASSWORD" //nolint:gosec // G101: env-var name, not a credential value
+	envProxmoxAPIToken = "PROXMOX_VE_API_TOKEN" //nolint:gosec // G101: env-var name, not a credential value
+	envProxmoxInsecure = "PROXMOX_VE_INSECURE"
+)
+
 // Source tracks where a credential came from so the CLI can warn on mixed-
 // provenance situations (env overriding config silently).
 type Source int
@@ -144,19 +156,19 @@ func (c *ProxmoxCredentials) Env() []string {
 		return nil
 	}
 
-	env := []string{"PROXMOX_VE_ENDPOINT=" + c.Endpoint}
+	env := []string{envProxmoxEndpoint + "=" + c.Endpoint}
 
 	if c.UseAPIToken() {
-		env = append(env, "PROXMOX_VE_API_TOKEN="+string(c.APIToken))
+		env = append(env, envProxmoxAPIToken+"="+string(c.APIToken))
 	} else {
 		env = append(env,
-			"PROXMOX_VE_USERNAME="+c.Username,
-			"PROXMOX_VE_PASSWORD="+string(c.Password),
+			envProxmoxUsername+"="+c.Username,
+			envProxmoxPassword+"="+string(c.Password),
 		)
 	}
 
 	if c.Insecure {
-		env = append(env, "PROXMOX_VE_INSECURE=true")
+		env = append(env, envProxmoxInsecure+"=true")
 	}
 
 	return env
@@ -175,12 +187,12 @@ func configHasCredentials(px *config.ProxmoxConfig) bool {
 func applyEnvSource(creds *ProxmoxCredentials, configHadCreds bool) {
 	creds.Source = SourceEnv
 	creds.ConfigCredentialsOverridden = configHadCreds
-	if endpoint := os.Getenv("PROXMOX_VE_ENDPOINT"); endpoint != "" {
+	if endpoint := os.Getenv(envProxmoxEndpoint); endpoint != "" {
 		creds.Endpoint = endpoint
 	} else {
 		creds.EndpointFromConfig = true
 	}
-	if v, ok := os.LookupEnv("PROXMOX_VE_INSECURE"); ok {
+	if v, ok := os.LookupEnv(envProxmoxInsecure); ok {
 		creds.Insecure = v == "true"
 	}
 }
@@ -222,13 +234,13 @@ func GetProxmoxCredentials(cfg *config.Config) *ProxmoxCredentials {
 	configHadCreds := configHasCredentials(px)
 
 	// Priority 1: Environment variables (includes values loaded from .env file)
-	if token := os.Getenv("PROXMOX_VE_API_TOKEN"); token != "" {
+	if token := os.Getenv(envProxmoxAPIToken); token != "" {
 		creds.APIToken = []byte(token)
 		applyEnvSource(creds, configHadCreds)
 		return creds
 	}
 
-	if username, password := os.Getenv("PROXMOX_VE_USERNAME"), os.Getenv("PROXMOX_VE_PASSWORD"); username != "" && password != "" {
+	if username, password := os.Getenv(envProxmoxUsername), os.Getenv(envProxmoxPassword); username != "" && password != "" {
 		creds.Username = username
 		creds.Password = []byte(password)
 		applyEnvSource(creds, configHadCreds)
