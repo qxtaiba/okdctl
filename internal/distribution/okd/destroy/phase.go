@@ -28,6 +28,10 @@ type Options struct {
 	SkipCleanup   bool
 	SkipFirewall  bool
 
+	// TerraformTargets limits terraform destroy to specific resource addresses.
+	// When non-empty only the named resources (and their dependents) are destroyed.
+	TerraformTargets []string
+
 	// RemovePackages removes system packages installed during setup.
 	// When true, packages like haproxy, httpd, dnsmasq, etc. will be uninstalled.
 	RemovePackages bool

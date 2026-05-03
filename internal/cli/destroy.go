@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"regexp"
 	"time"
 
 	"github.com/google/uuid"
@@ -28,7 +29,26 @@ var (
 	destroySkipTerraform  bool
 	destroySkipCleanup    bool
 	destroySkipFirewall   bool
+	destroyTargets        []string
 )
+
+// destroyTargetRE matches valid terraform resource addresses for OKD VMs.
+// Anchored to prevent partial matches that would silently widen scope.
+var destroyTargetRE = regexp.MustCompile(
+	`^module\.okd_cluster\.proxmox_virtual_environment_vm\.(bootstrap|master|worker)(\[\d+\])?$`,
+)
+
+func validateDestroyTargets(targets []string) error {
+	for _, t := range targets {
+		if !destroyTargetRE.MatchString(t) {
+			return &errtypes.ConfigError{
+				Msg: fmt.Sprintf("--target %q is not an allowed resource address; "+
+					"must match module.okd_cluster.proxmox_virtual_environment_vm.{bootstrap|master|worker}[<n>]", t),
+			}
+		}
+	}
+	return nil
+}
 
 var destroyCmd = &cobra.Command{
 	Use:   "destroy",
@@ -52,6 +72,8 @@ func init() {
 	destroyCmd.Flags().BoolVar(&destroySkipTerraform, "skip-terraform", false, "skip terraform destroy — intended for resuming after a successful terraform-destroy phase (no-op with --dry-run)")
 	destroyCmd.Flags().BoolVar(&destroySkipCleanup, "skip-cleanup", false, "skip host file cleanup — leaves haproxy/dnsmasq config in place (no-op with --dry-run)")
 	destroyCmd.Flags().BoolVar(&destroySkipFirewall, "skip-firewall", false, "skip firewall rule cleanup (no-op with --dry-run)")
+	destroyCmd.Flags().StringArrayVar(&destroyTargets, "target", nil,
+		"limit terraform destroy to this resource address (repeatable); must match the okd_cluster VM allowlist")
 }
 
 func runDestroy(cmd *cobra.Command, _ []string) error {
@@ -61,6 +83,18 @@ func runDestroy(cmd *cobra.Command, _ []string) error {
 	cfg, err := loadConfig(cfgFile)
 	if err != nil {
 		return err
+	}
+
+	if err := validateDestroyTargets(destroyTargets); err != nil {
+		return err
+	}
+
+	// --target without --confirm-cluster lets a typo silently scope a destroy;
+	// require an explicit cluster-name acknowledgement regardless of --yes.
+	if len(destroyTargets) > 0 && destroyConfirmCluster == "" {
+		return &errtypes.ConfigError{
+			Msg: fmt.Sprintf("--target requires --confirm-cluster=%q to guard against targeted destroys on the wrong cluster", cfg.Cluster.Name),
+		}
 	}
 
 	if destroyDryRun {
@@ -114,11 +148,12 @@ func runDestroy(cmd *cobra.Command, _ []string) error {
 	startTime := time.Now()
 
 	steps, err := p.Destroy(ctx, cfg, okd.DestroyOpts{
-		RemovePackages: true,
-		KeepISOs:       destroyKeepISOs,
-		SkipTerraform:  destroySkipTerraform,
-		SkipCleanup:    destroySkipCleanup,
-		SkipFirewall:   destroySkipFirewall,
+		RemovePackages:   true,
+		KeepISOs:         destroyKeepISOs,
+		SkipTerraform:    destroySkipTerraform,
+		SkipCleanup:      destroySkipCleanup,
+		SkipFirewall:     destroySkipFirewall,
+		TerraformTargets: destroyTargets,
 	})
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
@@ -161,7 +196,7 @@ func runDestroyDryRun(ctx context.Context, cfg *config.Config) error {
 		return &errtypes.ConfigError{Msg: "terraform init failed in dry-run", Err: err}
 	}
 
-	if err := tf.PlanStreamed(ctx, terraform.PlanOptions{Destroy: true}); err != nil {
+	if err := tf.PlanStreamed(ctx, terraform.PlanOptions{Destroy: true, Targets: destroyTargets}); err != nil {
 		return &errtypes.ConfigError{Msg: "terraform destroy plan failed", Err: err}
 	}
 

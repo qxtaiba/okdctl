@@ -60,6 +60,7 @@ func (p *Phase) destroyInfrastructure(ctx context.Context, opts *Options) error 
 	if err := tf.Destroy(ctx, terraform.DestroyOptions{
 		AutoApprove: opts.AutoApprove,
 		Parallelism: opts.Parallelism,
+		Targets:     opts.TerraformTargets,
 		UsePlan:     true, // use safer plan-then-apply approach
 	}); err != nil {
 		return &errtypes.ClusterError{Msg: "terraform destroy failed", Err: err}
