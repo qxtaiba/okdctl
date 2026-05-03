@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -15,6 +16,57 @@ import (
 	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/platform"
 )
+
+type isoCapture struct {
+	records []slog.Record
+	attrs   []slog.Attr
+}
+
+func (h *isoCapture) Enabled(_ context.Context, _ slog.Level) bool { return true }
+
+func (h *isoCapture) Handle(_ context.Context, r slog.Record) error {
+	r.AddAttrs(h.attrs...)
+	h.records = append(h.records, r)
+	return nil
+}
+
+func (h *isoCapture) WithAttrs(attrs []slog.Attr) slog.Handler {
+	merged := append(append([]slog.Attr{}, h.attrs...), attrs...)
+	return &isoCapture{records: h.records, attrs: merged}
+}
+
+func (h *isoCapture) WithGroup(_ string) slog.Handler { return h }
+
+func newPhaseWithISOCapture(h *isoCapture) *Phase {
+	return &Phase{
+		BasePhase: phase.NewBasePhase(
+			"test",
+			phase.WithExecutor(executor.New(executor.WithLogger(logutil.NopLogger))),
+			phase.WithLogger(slog.New(h)),
+		),
+	}
+}
+
+func TestLogISOFound(t *testing.T) {
+	h := &isoCapture{}
+	p := newPhaseWithISOCapture(h)
+
+	p.logISOFound("/path/a/foo.iso")
+	p.logISOFound("/path/b/foo.iso")
+	if got := len(h.records); got != 1 {
+		t.Fatalf("after two calls with basename foo.iso: got %d records, want 1", got)
+	}
+
+	p.logISOFound("/path/a/bar.iso")
+	if got := len(h.records); got != 2 {
+		t.Fatalf("after adding bar.iso: got %d records, want 2", got)
+	}
+
+	p.logISOFound("/different/dir/foo.iso")
+	if got := len(h.records); got != 2 {
+		t.Fatalf("after repeat foo.iso from different dir: got %d records, want 2 (basename dedup)", got)
+	}
+}
 
 func makeStreamJSON(arch, release, isoURL string) []byte {
 	type disk struct {
