@@ -263,6 +263,12 @@ func getToolVersion(ctx context.Context, tool, flag string) string {
 	return "unknown"
 }
 
+// expectedHashiCorpGPGFingerprint is the canonical fingerprint for the
+// HashiCorp release signing key. Verified against the key before it is
+// installed as a system trust root; a mismatch aborts the deploy so a MITM
+// during key fetch cannot plant a persistent malicious trust root.
+const expectedHashiCorpGPGFingerprint = "AA16FCBCA621E70139936A4C798AEC654FA7E1A1"
+
 func installHashiCorpDebianRepo(ctx context.Context) error {
 	gpgPath := "/usr/share/keyrings/hashicorp-archive-keyring.gpg"
 
@@ -288,6 +294,10 @@ func installHashiCorpDebianRepo(ctx context.Context) error {
 		return fmt.Errorf("failed to download HashiCorp GPG key: %w", err)
 	}
 	defer func() { _ = os.Remove(gpgTmp) }()
+
+	if err := verifyHashiCorpGPGFingerprint(ctx, gpgTmp); err != nil {
+		return err
+	}
 
 	if err := system.RunCaptured(ctx, "gpg", "--dearmor", "-o", gpgPath, gpgTmp); err != nil {
 		return fmt.Errorf("failed to dearmor HashiCorp GPG key: %w", err)
@@ -315,4 +325,31 @@ func installHashiCorpDebianRepo(ctx context.Context) error {
 		return fmt.Errorf("failed to install HashiCorp repo list: %w", err)
 	}
 	return system.RunCaptured(ctx, "apt-get", "update")
+}
+
+func verifyHashiCorpGPGFingerprint(ctx context.Context, armoredKeyPath string) error {
+	out, err := system.OutputCaptured(ctx,
+		"gpg", "--with-fingerprint", "--with-colons",
+		"--import-options", "show-only", "--import", armoredKeyPath,
+	)
+	if err != nil {
+		return fmt.Errorf("gpg fingerprint check: %w", err)
+	}
+	for _, line := range strings.Split(string(out), "\n") {
+		if !strings.HasPrefix(line, "fpr:") {
+			continue
+		}
+		fields := strings.Split(line, ":")
+		if len(fields) < 10 {
+			continue
+		}
+		got := strings.ToUpper(strings.ReplaceAll(fields[9], " ", ""))
+		if got == expectedHashiCorpGPGFingerprint {
+			return nil
+		}
+		return &errtypes.ConfigError{
+			Msg: fmt.Sprintf("hashicorp gpg key fingerprint mismatch: got %s, want %s", got, expectedHashiCorpGPGFingerprint),
+		}
+	}
+	return &errtypes.ConfigError{Msg: "hashicorp gpg key fingerprint not found in gpg output"}
 }
