@@ -1669,16 +1669,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Add an opt-in `proxmox.host_fingerprint` config field (sha256-of-pubkey form). When set, run `ssh-keyscan` once at first contact, validate the fingerprint matches the configured value, write to a per-project known_hosts file, and pass `-o StrictHostKeyChecking=yes -o UserKnownHostsFile=<path>` for every subsequent ssh/scp call. accept-new should be the explicit fallback only when the fingerprint is unset.  
 **Effort:** hours
 
-##### `sec:5013fea6:cred-env-leak-to-child` — cred env leak to child
-
-**Status:** in review — PR #282  
-**Severity:** minor  
-**Cluster:** credentials — seam→audit-subprocess  
-**Evidence:** `internal/distribution/okd/setup/release_extract.go:94-117`  
-**Problem:** extractReleaseImage uses raw exec.CommandContext (not the Executor) to run oc adm release extract. This bypasses Executor.buildEnv's allowlist filter — the child process inherits the FULL parent env (os.Environ pass-through, unfiltered). Under the deploy sudo re-exec, that includes whatever env was preserved through ensureRoot's FilterParentEnv, which still includes KUBE*, PROXMOX_*, etc. — but also any env the user exported that started with those prefixes (e.g. KUBE_TOKEN). Subprocess sees them.  
-**Fix:** Switch this site to use the Executor (p.Exec.Run) so the env-allowlist filter applies. The current bypass is intentional because oc-extract needs registry-auth env vars, but those are already covered by KUBE/OC_/PROXMOX prefixes in DefaultEnvAllowlist. Audit-subprocess seam owns the per-call hygiene; this finding is the policy companion.  
-**Effort:** hours
-
 ##### `sec:6424733c:cred-in-log` — cred in log
 
 **Status:** not started  
@@ -1893,16 +1883,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/distribution/step.go:178-212`  
 **Problem:** StepDef has no 'already-done' precondition hook. The Orchestrator runs every step in order; on a mid-phase crash the next invocation starts from step 1 and re-runs every step (download tools, regenerate manifests, regenerate ignition, rebuild ISOs). Some steps tolerate the re-run; others (StepBuildISOs, StepUploadISOs, StepDeployIgnition) are slow or wasteful. Idempotency today is implicit per-Exec rather than declared and verified.  
 **Fix:** Add `ReRunSafe bool` to StepDef (default false) — every StepDef must declare it. BuildSteps panics if a step omits it. For false-marked steps, also require an `AlreadyDone func(ctx) (bool, error)` hook the orchestrator consults before Exec. Stretch: persist completed StepIDs to <workDir>/.okdctl/run-state.json (AtomicWrite, 0o600) so resume is durable across PID restarts. See roadmap state:4f69fc9d:no-resume-checkpoint.  
-**Effort:** hours
-
-##### `state:15ba17da:destroy-summary-misleading-on-skip` — destroy summary misleading on skip
-
-**Status:** in review — PR #277  
-**Severity:** suggestion  
-**Cluster:** crash-recoverability  
-**Evidence:** `internal/distribution/okd/destroy/steps.go:118-131`  
-**Problem:** StepPrintSummary classifies the destroy as 'completed' iff len(failures)==0. But Skipped steps don't append to failures, so SkipTerraform=true (resume-after-tf-destroy) leads to the summary saying 'cluster teardown completed' even though the operator skipped the only step that touches infra. The hint 're-run okdctl destroy to retry the failed steps' is also misleading on the skip path.  
-**Fix:** Track skipped steps in addition to failed steps. Summary message should distinguish: (a) all attempted, all succeeded → 'cluster teardown completed', (b) some skipped → 'cluster teardown completed (skipped: terraform, firewall)', (c) some failed → 'teardown finished with non-fatal failures (...)'. The Orchestrator already records Skipped per StepResult — read it back at summary time instead of the local failures slice.  
 **Effort:** hours
 
 ##### `state:c19ee328:setup-no-precondition-for-iso-rebuild` — setup no precondition for iso rebuild
@@ -2432,16 +2412,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Effort:** hours
 
 #### audit-code-smells
-
-##### `smell:073d24ed:duplicate-step-id-table` — duplicate step id table
-
-**Status:** in review — PR #279  
-**Severity:** minor  
-**Cluster:** magic-strings  
-**Evidence:** `internal/cli/deploy.go:172-206`  
-**Problem:** deployDryRunSteps() hand-rolls the entire phase step list as raw "install-packages"/"deploy-infrastructure"/"verify-kubevip" string literals while the canonical StepID constants already exist in setup/steps.go, install/steps.go, postinstall/steps.go (StepInstallPackages, StepDeployInfra, StepVerifyKubeVIP, etc.). The dry-run summary will silently drift from the real phase order whenever a phase reorders or renames a step.  
-**Fix:** Reuse the canonical step constants. Either (a) add a phase-level `Steps() []DryRunStep` method on each Phase that returns ID + Name from the actual StepDef list, or (b) build deployDryRunSteps from `string(setup.StepInstallPackages)` etc. Option (a) is the durable fix — dry-run should walk the same source-of-truth StepDef tables that Run uses, eliminating the double-entry book-keeping.  
-**Effort:** hours
 
 ##### `smell:d31d1b9d:role-string-instead-of-enum` — role string instead of enum
 

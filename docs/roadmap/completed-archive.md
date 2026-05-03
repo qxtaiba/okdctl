@@ -2705,3 +2705,52 @@ but link evidence.
   insecure_fallback_when_kubeconfig_absent verifies the fallback
   path is non-fatal. Reviewer PASS first round.
 
+- **`state:15ba17da:destroy-summary-misleading-on-skip`** — done
+  2026-05-03 — PR #277, merge commit `ae57e2c`. Tier H suggestion
+  (crash-recoverability). StepPrintSummary classified the destroy
+  as 'completed' iff len(failures)==0 — but Skipped steps don't
+  append to failures, so SkipTerraform=true reported false success
+  ("cluster teardown completed" even though terraform — the only
+  infra-touching step — was skipped). Added a `skipped []string`
+  slice alongside `failures`, plus a `trackSkip(label, fn)` helper
+  that wraps each SkipWhen predicate so the label gets recorded
+  when the predicate fires. StepPrintSummary now switches on three
+  variants: failures>0 → Warn with `steps` attr; skipped>0 →
+  Info with `skipped` attr; both empty → bare Info. Removed the
+  now-misleading "re-run okdctl destroy to retry" hint from the
+  failure path. New TestDestroySteps_SkipPath asserts all four
+  skippable steps populate the slice and Info+skipped attr fires.
+  Reviewer PASS first round.
+
+- **`smell:073d24ed:duplicate-step-id-table`** — done 2026-05-03 —
+  PR #279, merge commit `707c4dc`. Tier H minor (magic-strings).
+  deployDryRunSteps hand-rolled 31 raw step ID strings while the
+  canonical `StepID` constants already exist in setup/install/
+  postinstall — silent-drift hazard whenever a phase renames a
+  step. Replaced every literal with `string(setup.StepXxx)` /
+  `string(install.StepXxx)` / `string(postinstall.StepXxx)` so a
+  rename now produces a compile error. Added new deploy_test.go
+  with TestDeployDryRunSteps_IDs as a compile-time guarantee that
+  the dry-run list stays in sync. Round-2 fix: branch was rebased
+  twice onto current develop because parallel session activity
+  kept landing in-review status updates that produced noisy
+  roadmap.md hunks; the second rebase + force-push cleared the
+  diff. Reviewer PASS on round 2.
+
+- **`sec:5013fea6:cred-env-leak-to-child`** — done 2026-05-03 —
+  PR #282, merge commit `01fdb02`. Tier H minor (credentials,
+  seam→audit-subprocess). extractReleaseImage used raw
+  exec.CommandContext, bypassing Executor.buildEnv's allowlist —
+  the child inherited the FULL parent env (KUBE_TOKEN, AWS_*,
+  etc.) for the duration of the long-running release extract.
+  Switched to `p.Exec.RunStreamed` so DefaultEnvAllowlist filters
+  the env (KUBE/OC_/PROXMOX prefixes already cover legitimate
+  registry-auth needs). result.Stderr's ring-buffered tail
+  replaced the unbounded strings.Builder accumulator (also
+  resolves sub:5013fea6:unbounded-stderr-builder at this call
+  site). Constructed *executor.ExitError from the Result so
+  errors.As callers retain ExitCode visibility. Dropped now-unused
+  `errors` and `os/exec` imports. Reviewer PASS first round (with
+  a non-blocking note about stale-base roadmap.md noise that the
+  later rebase-merge resolved).
+
