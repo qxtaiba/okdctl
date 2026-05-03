@@ -2754,3 +2754,20 @@ but link evidence.
   a non-blocking note about stale-base roadmap.md noise that the
   later rebase-merge resolved).
 
+- **`doc:dd75bdeb:exported-doc-missing-type`** — done 2026-05-03 —
+  closed without code (resolved by prior work). Tier H minor
+  (exported-doc, seam→audit-api-design). The finding flagged the
+  exported `PostInstallContext` struct in
+  `internal/distribution/okd/postinstall/context.go` as needing a
+  type doc — but PR #181 (api:dd75bdeb:export-no-caller) had
+  already lowercased the type to `postInstallContext`, removing
+  the export entirely. Verified by `grep` — only the lowercase
+  symbol exists; CLAUDE.md §code-comments rule 2 (which requires
+  docs on exported API) no longer applies. The roadmap-pickup
+  planner caught the obsolescence and surfaced it via
+  `unresolved_questions:`. No code change. Lesson: when a
+  dependent item lands first, follow-up audit findings can be
+  silently invalidated — a roadmap-pickup planner check on
+  related-id status before applying a plan would have caught this
+  earlier in the session.
+

@@ -2577,16 +2577,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 #### audit-documentation
 
-##### `doc:dd75bdeb:exported-doc-missing-type` — exported doc missing type
-
-**Status:** not started (likely obsolete — type was lowercased to `postInstallContext` in PR #181, removing the export; needs roadmap-level decision before re-claim)  
-**Severity:** minor  
-**Cluster:** exported-doc — seam→audit-api-design; related: api:dd75bdeb:export-no-caller  
-**Evidence:** `internal/distribution/okd/postinstall/context.go:4-10`  
-**Problem:** Exported PostInstallContext struct has no doc comment despite a //nolint:revive that suppresses the lint enforcement of the same rule. CLAUDE.md §code-comments rule 2 requires docs on exported API with non-obvious behavior; the five fields (ClusterHealth, KubeVIPVerified, KubeVipIP, BootstrapCleaned, DNSDeployed) are state flags whose semantics are not evident from the names — what does KubeVIPVerified=false mean, who clears these, and is the zero-value valid?  
-**Fix:** Add a type doc above the //nolint:revive directive: 'PostInstallContext threads per-step verification state through the post-install phase: which check has run and what it found. Fields are zero-valued until the corresponding step populates them; nil ClusterHealth means cluster-health-check did not run yet.' Also doc each field with one line on what the populator step is.  
-**Effort:** hours
-
 ##### `doc:35abd54e:doc-claim-vs-impl-drift` — doc claim vs impl drift (scaffolding — verify intent only)
 
 **Status:** not started  
