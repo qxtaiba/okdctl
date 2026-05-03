@@ -2009,16 +2009,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Drop the outer fmt.Errorf — the inner errtypes.* error is already informative and structured. The tui.Info hint above carries the human "run destroy" instruction; the error itself doesn't need a redundant deployment-failed prefix. Same pattern at lines 213, 225, 236.  
 **Effort:** hours
 
-##### `err:d31d1b9d:vocab-ad-hoc-unknown-addon` — vocab ad hoc unknown addon
-
-**Status:** in review — PR #234  
-**Severity:** minor  
-**Cluster:** domain-vocabulary  
-**Evidence:** `internal/cli/status.go:311-315`  
-**Problem:** runDescribeAddon returns a bare fmt.Errorf for the "unknown addon" case while the same condition in addon/manager.go:152, 235 returns &errtypes.ConfigError{Msg: fmt.Sprintf("unknown addon: %s", name)}. The cli boundary at cli/root.go:144-164 maps ConfigError → exit 2 and bare → exit 1, so the same user error exits with two different codes depending on entry point.  
-**Fix:** Replace with &errtypes.ConfigError{Msg: fmt.Sprintf("addon %q not registered; run 'okdctl addon list' to see available addons", name)} to match addon/manager.go:152.  
-**Effort:** hours
-
 ##### `err:a55b4592:vocab-ad-hoc-config-perm` — vocab ad hoc config perm
 
 **Status:** done — PR #204 (moved to Completed)  

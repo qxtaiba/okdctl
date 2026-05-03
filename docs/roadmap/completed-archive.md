@@ -2207,3 +2207,13 @@ but link evidence.
   != nil { return count, err }` at the top of the loop body. Mirrors
   the ValidateIgnitionFiles pattern. Reviewer PASS first round.
 
+- **`err:d31d1b9d:vocab-ad-hoc-unknown-addon`** — done 2026-05-03 —
+  PR #234, merge commit `239bb5d`. Tier H minor. cli/status.go's
+  runDescribeAddon returned a bare `fmt.Errorf("addon %q not
+  registered…")` while the same condition in addon/manager.go:152
+  returned `&errtypes.ConfigError{…}`. cli/root.go's exitCodeFor
+  maps ConfigError → 2 and bare → 1, so the same user error exited
+  with different codes depending on entry point. Wrapped the bare
+  fmt.Errorf in `&errtypes.ConfigError{Msg: fmt.Sprintf(…)}` so
+  exit 2 is consistent. Reviewer PASS first round.
+
