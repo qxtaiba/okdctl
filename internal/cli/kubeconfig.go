@@ -31,7 +31,7 @@ or merge it into an existing kubeconfig.`,
 
 func init() {
 	kubeconfigCmd.Flags().StringVarP(&kubeconfigOutput, flagOutput, "o", "-", "write kubeconfig to file ('-' for stdout)")
-	kubeconfigCmd.Flags().BoolVar(&kubeconfigMerge, "merge", false, "merge into $KUBECONFIG or ~/.kube/config instead of replacing")
+	kubeconfigCmd.Flags().BoolVar(&kubeconfigMerge, "merge", false, "merge into $KUBECONFIG or ~/.kube/config (non-destructive: existing entries preserved)")
 	rootCmd.AddCommand(kubeconfigCmd)
 }
 
