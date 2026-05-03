@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	osExec "os/exec"
 	"path/filepath"
@@ -15,6 +16,34 @@ import (
 	"github.com/qxtaiba/okdctl/internal/executor"
 	"github.com/qxtaiba/okdctl/internal/tui"
 )
+
+// defaultStartMonitorCmd starts "openshift-install wait-for install-complete",
+// wires stdout/stderr to the current TTY, and returns a buffered done channel
+// and an idempotent kill function. log receives any kill-error warning when
+// Kill() itself fails.
+func defaultStartMonitorCmd(ctx context.Context, clusterDir string, log *slog.Logger) (<-chan error, func(), error) {
+	cmd := osExec.CommandContext(ctx, "openshift-install", "wait-for", "install-complete", "--dir", clusterDir, "--log-level=debug")
+	// Filter env so openshift-install does not inherit AWS_*/GCP_*/AZURE_* etc. from the user shell.
+	cmd.Env = executor.FilterParentEnv(executor.DefaultEnvAllowlist)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Start(); err != nil {
+		return nil, func() {}, err
+	}
+	done := make(chan error, 1)
+	go func() {
+		defer close(done)
+		done <- cmd.Wait()
+	}()
+	kill := sync.OnceFunc(func() {
+		if cmd.Process != nil {
+			if killErr := cmd.Process.Kill(); killErr != nil {
+				log.Warn("install: failed to kill process", "err", killErr)
+			}
+		}
+	})
+	return done, kill, nil
+}
 
 // WaitForBootstrap runs "openshift-install wait-for bootstrap-complete",
 // bounded by opts.BootstrapTimeout, streaming output to the current TTY.
@@ -68,34 +97,21 @@ func (p *Phase) MonitorInstallation(ctx context.Context, clusterDir string, opts
 		)
 	}
 
-	installCmd := osExec.CommandContext(ctx, "openshift-install", "wait-for", "install-complete", "--dir", clusterDir, "--log-level=debug")
-	// Filter env so openshift-install does not inherit AWS_*/GCP_*/AZURE_* etc. from the user shell.
-	installCmd.Env = executor.FilterParentEnv(executor.DefaultEnvAllowlist)
-	installCmd.Stdout = os.Stdout
-	installCmd.Stderr = os.Stderr
+	startCmd := p.startMonitorCmd
+	if startCmd == nil {
+		log := p.Log
+		startCmd = func(ctx context.Context, dir string) (<-chan error, func(), error) {
+			return defaultStartMonitorCmd(ctx, dir, log)
+		}
+	}
 
 	stopSpinner := tui.StartSpinner(ctx, "monitoring cluster operators")
 	defer stopSpinner()
 
-	if err := installCmd.Start(); err != nil {
+	installDone, killInstall, err := startCmd(ctx, clusterDir)
+	if err != nil {
 		return &errtypes.ClusterError{Msg: "failed to start installation monitor", Err: err}
 	}
-
-	installDone := make(chan error, 1)
-	go func() {
-		defer close(installDone)
-		installDone <- installCmd.Wait()
-	}()
-
-	// sync.OnceFunc keeps kill idempotent if a future signal handler or
-	// additional select case ends up invoking killInstall twice.
-	killInstall := sync.OnceFunc(func() {
-		if installCmd.Process != nil {
-			if killErr := installCmd.Process.Kill(); killErr != nil {
-				p.Log.Warn("install: failed to kill process", "err", killErr)
-			}
-		}
-	})
 
 	ticker := time.NewTicker(opts.CSRApprovalInterval)
 	defer ticker.Stop()
