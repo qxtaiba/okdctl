@@ -61,7 +61,7 @@ func cleanupTerraformEnv(ctx context.Context, envDir, envName string, logger *sl
 	}
 
 	logger = logutil.OrNop(logger)
-	logger.Info(fmt.Sprintf("cleanup: terraform artifacts for environment %s", envName))
+	logger.Info("cleanup: terraform artifacts for environment", "env", envName)
 
 	for _, f := range terraformFilesToRemove {
 		_ = SafeRemoveWithLogger(ctx, filepath.Join(envDir, f), fmt.Sprintf("terraform %s", f), logger)

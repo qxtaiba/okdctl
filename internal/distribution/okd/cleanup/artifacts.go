@@ -49,7 +49,7 @@ func SafeRemoveWithLogger(ctx context.Context, path, description string, logger 
 	}
 
 	if _, err := os.Stat(path); err == nil {
-		logger.Warn(fmt.Sprintf("%s still exists after removal", description))
+		logger.Warn("cleanup: still exists after removal", "target", description)
 		return &errtypes.ConfigError{Msg: fmt.Sprintf("%s still exists after removal", description)}
 	} else if !os.IsNotExist(err) {
 		// Cannot verify removal (e.g. permission denied on parent); assume success.

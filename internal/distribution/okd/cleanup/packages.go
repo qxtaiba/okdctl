@@ -2,7 +2,6 @@ package cleanup
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -74,7 +73,7 @@ func Packages(ctx context.Context, binDir string, logger *slog.Logger) error {
 			logger.Warn("cleanup: failed to remove binary", "path", binPath, "err", err)
 			hasErrors = true
 		} else {
-			logger.Info(fmt.Sprintf("cleanup: removed %s", binPath))
+			logger.Info("cleanup: removed", "path", binPath)
 		}
 	}
 

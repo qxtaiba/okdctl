@@ -117,7 +117,7 @@ func verifyDownloadedFile(path, expectedChecksum string, logger *slog.Logger) er
 
 	filename := filepath.Base(path)
 
-	logger.Info(fmt.Sprintf("download: verifying checksum for %s", filename))
+	logger.Info("download: verifying checksum", "file", filename)
 
 	actualChecksum, err := CalculateChecksum(path)
 	if err != nil {
@@ -131,7 +131,7 @@ func verifyDownloadedFile(path, expectedChecksum string, logger *slog.Logger) er
 			filename, expectedChecksum, actualChecksum)
 	}
 
-	logger.Info(fmt.Sprintf("download: checksum verified for %s", filename))
+	logger.Info("download: checksum verified", "file", filename)
 
 	return nil
 }
