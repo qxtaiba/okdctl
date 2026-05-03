@@ -17,7 +17,7 @@ import (
 const (
 	envProxmoxEndpoint = "PROXMOX_VE_ENDPOINT"
 	envProxmoxUsername = "PROXMOX_VE_USERNAME"
-	envProxmoxPassword = "PROXMOX_VE_PASSWORD" //nolint:gosec // G101: env-var name, not a credential value
+	envProxmoxPassword = "PROXMOX_VE_PASSWORD"  //nolint:gosec // G101: env-var name, not a credential value
 	envProxmoxAPIToken = "PROXMOX_VE_API_TOKEN" //nolint:gosec // G101: env-var name, not a credential value
 	envProxmoxInsecure = "PROXMOX_VE_INSECURE"
 )
