@@ -20,6 +20,14 @@ const (
 	phasePlacing
 )
 
+// Field-key prefixes for per-node form fields. The constructor and the
+// Apply function must agree on these — drift here silently breaks
+// per-node placement read-back from the wizard step.
+const (
+	fieldPrefixMaster = "master"
+	fieldPrefixWorker = "worker"
+)
+
 type discoveryCompleteMsg struct {
 	discovery *proxmoxDiscovery
 	err       error
@@ -160,12 +168,12 @@ func (s *NodePlacementStep) buildInnerStep(disc *proxmoxDiscovery, nodeNames []s
 
 	cpCount := s.cfg.Topology.ControlPlane.Count
 	if cpCount > 0 {
-		sections = append(sections, nodePlacementSection("control plane", "master", clusterName, cpCount, px.MasterNodes, defaultNode, nodeNames))
+		sections = append(sections, nodePlacementSection("control plane", fieldPrefixMaster, clusterName, cpCount, px.MasterNodes, defaultNode, nodeNames))
 	}
 
 	wCount := s.cfg.Topology.Workers.Count
 	if wCount > 0 {
-		sections = append(sections, nodePlacementSection("workers", "worker", clusterName, wCount, px.WorkerNodes, defaultNode, nodeNames))
+		sections = append(sections, nodePlacementSection("workers", fieldPrefixWorker, clusterName, wCount, px.WorkerNodes, defaultNode, nodeNames))
 	}
 
 	def := wizard.StepDefinition{
@@ -175,13 +183,12 @@ func (s *NodePlacementStep) buildInnerStep(disc *proxmoxDiscovery, nodeNames []s
 		Description:  "auto-discovered from your proxmox cluster",
 		Sections:     sections,
 		Apply: func(step *wizard.DataDrivenStep, cfg *config.Config) error {
-			// Master/worker nodes from individual fields
 			var masterNodes, workerNodes []string
 			for i := range cpCount {
-				masterNodes = append(masterNodes, step.Value(fmt.Sprintf("master_%d", i)))
+				masterNodes = append(masterNodes, step.Value(fmt.Sprintf("%s_%d", fieldPrefixMaster, i)))
 			}
 			for i := range wCount {
-				workerNodes = append(workerNodes, step.Value(fmt.Sprintf("worker_%d", i)))
+				workerNodes = append(workerNodes, step.Value(fmt.Sprintf("%s_%d", fieldPrefixWorker, i)))
 			}
 			cfg.Provider.Proxmox.MasterNodes = masterNodes
 			cfg.Provider.Proxmox.WorkerNodes = workerNodes
