@@ -200,19 +200,25 @@ func (p *Phase) installBinary(ctx context.Context, spec *binaryInstallSpec) erro
 		expectedChecksum = spec.embeddedChecksum
 	}
 
-	tempFile := filepath.Join(os.TempDir(), spec.name+"-download")
+	tmpF, err := os.CreateTemp(os.TempDir(), spec.name+"-download-*")
+	if err != nil {
+		return fmt.Errorf("failed to create temp file for %s: %w", spec.name, err)
+	}
+	tempFile := tmpF.Name()
+	_ = tmpF.Close()
 	if err := download.Download(ctx, &download.Options{
 		URL: spec.url, OutputPath: tempFile, ExpectedChecksum: expectedChecksum,
 		Description: spec.name, Timeout: 2 * time.Minute, Logger: p.Log,
 	}); err != nil {
+		_ = os.Remove(tempFile)
 		return fmt.Errorf("failed to download %s: %w", spec.name, err)
 	}
 	defer func() { _ = os.Remove(tempFile) }()
 
 	srcPath := tempFile
 	if spec.archiveBinary != "" {
-		extractDir := filepath.Join(os.TempDir(), spec.name+"-extract")
-		if err := os.MkdirAll(extractDir, 0o755); err != nil {
+		extractDir, err := os.MkdirTemp(os.TempDir(), spec.name+"-extract-*")
+		if err != nil {
 			return fmt.Errorf("failed to create extract directory: %w", err)
 		}
 		defer func() { _ = os.RemoveAll(extractDir) }()
