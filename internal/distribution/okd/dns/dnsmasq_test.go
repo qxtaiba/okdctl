@@ -1,7 +1,10 @@
 package dns
 
 import (
+	"context"
+	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -70,5 +73,29 @@ func TestConfigName(t *testing.T) {
 	got := configName("prod")
 	if got != "okd-prod" {
 		t.Errorf("configName(%q) = %q; want %q", "prod", got, "okd-prod")
+	}
+}
+
+func installFakeNmcli(t *testing.T, script string) {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("fake-nmcli script relies on POSIX sh")
+	}
+	dir := t.TempDir()
+	path := filepath.Join(dir, "nmcli")
+	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+}
+
+func TestGetActiveConnectionStderr(t *testing.T) {
+	installFakeNmcli(t, "#!/bin/sh\necho 'Error: NetworkManager is not running' >&2\nexit 10\n")
+	_, err := getActiveConnection(context.Background())
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "NetworkManager is not running") {
+		t.Errorf("error does not contain nmcli stderr: %q", err.Error())
 	}
 }
