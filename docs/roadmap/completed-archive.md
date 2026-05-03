@@ -2482,3 +2482,66 @@ but link evidence.
   uninstall), ctx-cancel-stops-install. Fake `oc` on PATH bypasses
   the executor.CommandExists guard. Reviewer PASS first round.
 
+- **`smell:696d6b0e:redundant-vmstatus-enum`** — done 2026-05-03 —
+  PR #266, merge commit `cb35802`. Tier G suggestion (magic-strings).
+  `phase/iso_cleanup.go` declared a private `type vmStatus string;
+  const vmStatusRunning vmStatus = "running"` parallel to
+  `infrastructure/proxmox/types.go`'s `type VMState string;
+  StateRunning VMState = "running"` — same Proxmox wire-protocol
+  value, two definitions. Picked option (a) from the roadmap fix
+  notes: created `phase/vmstate.go` with the canonical type +
+  five constants (Running/Stopped/Creating/Deleting/Unknown) and
+  reduced `proxmox/types.go` to `type VMState = phase.VMState` plus
+  re-exported constants, mirroring the existing
+  `type VMRole = phase.NodeRole` pattern. iso_cleanup.go now
+  unmarshals JSON into `VMState` directly and compares against
+  `StateRunning`. proxmox already imported phase for NodeRole, so
+  no new edges in the import graph. Reviewer pre-merge: all 14 CI
+  checks green.
+
+  Bundled bonus extractions in the same PR (each was a duplicated
+  string-literal surface that a typo on either side would have
+  silently broken at runtime — Go has no compile-time check across
+  string keys):
+  - **wizard field-key prefixes** — `node_placement.go` had `"master"`
+    / `"worker"` repeated across `nodePlacementSection` constructor
+    args and the Apply read-back loop. Extracted `fieldPrefixMaster`
+    / `fieldPrefixWorker` package-level consts.
+  - **openshift subdir + binary** — `"openshift"` (3 sites in
+    setup/steps.go + setup/ignition.go x2) and `"openshift-install"`
+    (2 sites in setup/ignition.go) extracted to `openshiftSubdir` /
+    `openshiftInstallBin` consts in setup/phase.go.
+  - **PROXMOX\_VE\_\* env-var names** — five names duplicated
+    between `credentials/envfile.go` (writes the names as literals
+    when serialising a .env file) and `credentials/proxmox.go`
+    (reads them back via `os.Getenv`). Extracted to
+    `envProxmox{Endpoint,Username,Password,APIToken,Insecure}` in
+    proxmox.go. Password and APIToken constants carry
+    `//nolint:gosec // G101: env-var name, not a credential value`
+    because gosec keys off the substring "PASSWORD"/"TOKEN" in any
+    string literal regardless of whether it's a name or a value.
+  - **cli flag names** — `"dry-run"` (4 registration sites + 1
+    read-back via `cmd.Flags().GetBool` in `elevation.go`) and
+    `"output"` (3 sites). Extracted `flagDryRun` / `flagOutput`
+    in new `internal/cli/flags.go`. The dry-run drift was the
+    highest-value catch in the sweep — a typo in the registration
+    or in the elevation gate's GetBool would have silently routed
+    a `--dry-run` invocation through the privileged code path.
+  - **dup creds-warning chain** — the mixed-source
+    "PROXMOX\_VE\_ENDPOINT not set; endpoint falling back to
+    config file" warning (plus the override + provenance lines)
+    was duplicated byte-for-byte in `cli/deploy.go` and
+    `cli/helpers.go`. Lifted into `reportCredentialProvenance` in
+    helpers.go; both call sites now invoke the helper.
+
+  CI lint round-trip caveat: local golangci-lint v2.11.4 didn't
+  flag the alignment quirk that v2.12.1 (CI) caught — gofumpt
+  wanted two-space alignment between the `envProxmoxPassword` and
+  `envProxmoxAPIToken` lines because the trailing nolint comments
+  needed to align across the two consecutive lines. Fixed in a
+  follow-up commit (`be71617`); no behaviour change. Lesson for
+  future agents: when a CI lint version differs from local, expect
+  formatting-class issues to surface in CI, not local. Make the
+  Makefile pin the version to v2.12.1 to close this gap (out of
+  scope for this PR).
+

@@ -2575,7 +2575,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `smell:696d6b0e:redundant-vmstatus-enum` — redundant vmstatus enum
 
-**Status:** not started  
+**Status:** done — PR #266  
 **Severity:** suggestion  
 **Cluster:** magic-strings — related: api:262af6e4:opt-inconsistent  
 **Evidence:** `internal/distribution/okd/phase/iso_cleanup.go:81-105`  
