@@ -2,6 +2,13 @@
 
 List registered addons and their config state
 
+### Synopsis
+
+List all registered addons with their display name, dependencies, and
+whether they are enabled in the configuration file.
+
+See also: addon verify
+
 ```
 okdctl addon list [flags]
 ```
