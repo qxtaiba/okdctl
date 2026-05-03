@@ -117,7 +117,7 @@ func runDeploy(cmd *cobra.Command, _ []string) error {
 	switch result.Action {
 	case wizard.ActionDeploy:
 		if err := runFullDeployment(ctx, cfg); err != nil {
-			return fmt.Errorf("deployment failed: %w", err)
+			return err
 		}
 	case wizard.ActionExit:
 		showExitSummary(deployOutputFile)

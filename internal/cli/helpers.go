@@ -207,7 +207,7 @@ func executeFullDeployment(ctx context.Context, cfg *config.Config, opts deploym
 			return err
 		}
 		tui.Info("run 'okdctl destroy' to clean up resources")
-		return fmt.Errorf("deployment failed: %w", err)
+		return err
 	}
 
 	installOpts := install.NewOptions(cfg, projectRoot)
@@ -219,7 +219,7 @@ func executeFullDeployment(ctx context.Context, cfg *config.Config, opts deploym
 			return err
 		}
 		tui.Info("run 'okdctl destroy' to clean up resources")
-		return fmt.Errorf("deployment failed: %w", err)
+		return err
 	}
 
 	result, configureSteps, err := p.Configure(ctx, cfg)
@@ -230,7 +230,7 @@ func executeFullDeployment(ctx context.Context, cfg *config.Config, opts deploym
 			return err
 		}
 		tui.Info("run 'okdctl destroy' to clean up resources")
-		return fmt.Errorf("deployment failed: %w", err)
+		return err
 	}
 
 	allSteps := slices.Concat(setupSteps, installSteps, configureSteps)
