@@ -3,7 +3,34 @@ package firewall
 import (
 	"strings"
 	"testing"
+
+	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 )
+
+func TestHAProxyFrontendPorts(t *testing.T) {
+	ports := HAProxyFrontendPorts()
+
+	wantNumbers := map[int]bool{phase.KubeAPIPort: true, 22623: true, 80: true, 443: true}
+
+	if len(ports) != len(haproxyPortNumbers) {
+		t.Errorf("len=%d, want %d (haproxyPortNumbers cardinality)", len(ports), len(haproxyPortNumbers))
+	}
+
+	for _, p := range ports {
+		if !wantNumbers[p.Number] {
+			t.Errorf("unexpected port number %d", p.Number)
+		}
+		if p.Protocol != "tcp" {
+			t.Errorf("port %d: protocol=%q, want tcp", p.Number, p.Protocol)
+		}
+	}
+
+	for _, p := range ports {
+		if p.Number == 53 && p.Protocol == "udp" {
+			t.Error("DNS udp/53 must not appear in HAProxyFrontendPorts")
+		}
+	}
+}
 
 func TestValidatePort(t *testing.T) {
 	valid := []Port{
