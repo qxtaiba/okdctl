@@ -88,78 +88,6 @@ than by theme. Recommended pickup order for the live tiers:
 Bugs found by running the binary, not by an audit. Blocker-severity
 items here gate the next release.
 
-#### `bug:elevation-preflight-deadlock` — preflight blocks own sudo re-exec on deploy/destroy/cleanup/update-ingress
-
-**Status:** in review — PR #217  
-**Severity:** blocker  
-**Cluster:** elevation — seam→audit-cli-ux  
-**Discovered:** 2026-04-27 — `./bin/okdctl deploy` reproduces. Every
-root-required subcommand (`deploy`, `destroy`, `cleanup`,
-`update-ingress`) is broken end-to-end at HEAD.  
-**Evidence:** `cmd/okdctl/main.go:32-35` (the `Geteuid() == 0` exit) and
-`internal/cli/elevation.go:55-82` (the sudo re-exec path).  
-**Problem:** `main.preflight()` exits 77 whenever `os.Geteuid() == 0`,
-running BEFORE `cli.Execute()`. `ensureRoot()` (cobra
-`PersistentPreRunE`) `syscall.Exec`s `sudo -- okdctl <args>` for any
-command in `rootRequiredCmds`. The re-exec'd process starts at
-`main.main()`, hits `preflight()` first, sees euid=0, and exits with
-"do not run as root/sudo. this tool uses sudo internally when needed."
-The two gates have been mutually incompatible since the elevation
-feature shipped (`f00f08a`, 2026-04-18); deploy/destroy/cleanup/update-ingress
-have never worked end-to-end at HEAD without a manual workaround. The
-sudo re-exec strips env via
-`executor.FilterParentEnv(executor.DefaultEnvAllowlist)`
-(`elevation.go:81`), so no breadcrumb survives unless the fix
-explicitly preserves one.  
-**Fix (planner: pick one and scope it):**
-
-- **Option A (preferred — structural):** delete the root-rejection from
-  `main.preflight()` and move it into `ensureRoot()`. Reject `euid=0`
-  only when the command does NOT require root:
-  ```go
-  if os.Geteuid() == 0 {
-      if !requiresRoot(cmd) {
-          return &errtypes.AuthError{Msg: "do not run as root/sudo; this tool escalates internally", Err: os.ErrPermission}
-      }
-      return nil
-  }
-  ```
-  The check then lives where the policy is decided. Side effect:
-  `okdctl --help` / `okdctl wizard` invoked under sudo become silently
-  successful instead of erroring — arguably more correct.
-
-- **Option B (preserves literal "no root, ever" entry-point intent):**
-  pass a re-exec marker through sudo. In `elevation.go`, add
-  `--preserve-env=OKDCTL_REEXEC` to the sudo argv and append
-  `OKDCTL_REEXEC=1` to the envp passed to `syscall.Exec`. In
-  `preflight`, skip the gate when that var is set. Risk: depends on
-  sudoers `env_reset` not aggressively stripping; `--preserve-env=`
-  is honored by sudo 1.8.21+ which is universal on supported
-  distros, but a hardened sudoers config could still strip it.
-
-**Acceptance:**
-1. `./bin/okdctl deploy` (non-root) prompts for sudo, escalates, and
-   reaches the deploy path without the "do not run as root/sudo" error.
-2. `sudo ./bin/okdctl deploy` (user-typed) — planner decides whether
-   this should still be rejected (option A: it's allowed; option B: it's
-   rejected because OKDCTL_REEXEC is unset). Either is defensible;
-   document the decision.
-3. `sudo ./bin/okdctl wizard` — must NOT silently succeed if the chosen
-   policy says wizard should refuse root. Option A makes this succeed;
-   if that's wrong, refine ensureRoot to reject when
-   `!requiresRoot(cmd) && euid==0` regardless of `SUDO_USER`.
-4. Add a unit test (`internal/cli/elevation_test.go`) covering the
-   matrix: euid=0 ∧ requiresRoot=true → allow; euid=0 ∧
-   requiresRoot=false → reject; euid≠0 ∧ requiresRoot=true → triggers
-   sudo lookup (mock `exec.LookPath`); euid≠0 ∧ requiresRoot=false →
-   no-op.
-5. `make build`, `make vet`, `make lint` clean. `make docs` no diff.
-
-**Depends on:** none. Gates the next release — every privileged
-subcommand is broken at HEAD.  
-**Effort:** hours (option A is a ~20-line shuffle plus tests; option B
-is similar plus an env-passing test).
-
 ## Addon category refactor — dedicated workstream
 
 This is **design-doc-first**. No code lands until the plan is reviewed.
@@ -1671,16 +1599,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 **Status:** done — PR #123 (moved to Completed)
 
-##### `sec:696d6b0e:shellinj-pattern` — shellinj pattern
-
-**Status:** in review — PR #219  
-**Severity:** major  
-**Cluster:** shell-injection — seam→audit-subprocess  
-**Evidence:** `internal/distribution/okd/phase/iso_cleanup.go:118-169`  
-**Problem:** Umbrella policy finding for the `pvesh ... over ssh` shell-string interpolation pattern. Three sites in iso_cleanup.go (listProxmoxVMIDs, vmConfigReferencesISO, RemoveFCOSISOFromProxmox) plus the upload site in setup/upload.go assemble shell strings and ship them through SSHRun, which executes `ssh root@host '<string>'`. Each call validates inputs via validateProxmoxName / validateISODir / shellSingleQuote — the discipline is tight, but it is *call-site-by-call-site* discipline. Adding a fourth pvesh call without remembering to call validateProxmoxName at the new site would...  
-**Fix:** Extract a typed `pvesh.Run(ctx, p, subcommand, argv...)` helper that builds the remote command from validated atoms (the validateProxmoxName atoms + the static subcommand string) and invokes ssh with `argv` mode. Then no caller is allowed to fmt.Sprintf into a remote shell string. Each existing call becomes `pvesh.Run(ctx, p, "get", "/nodes/"+p.Node+"/qemu")`. The audit-subprocess skill has the per-site catalog; this finding cross-references to those.  
-**Effort:** hours
-
 ##### `sec:8ea706f6:dl-no-checksum` — dl no checksum
 
 **Status:** not started  
@@ -1799,16 +1717,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/executor/executor.go:111-122`  
 **Problem:** DefaultEnvAllowlist permits the prefix `GIT_` and `GITHUB_` to flow through to every subprocess (including `oc`, `helm`, `terraform`, `dnf`, `apt-get`). GIT_ASKPASS, GITHUB_TOKEN, GH_TOKEN, GIT_SSH_COMMAND etc. carry user-level creds that none of these subprocesses need. KUBE prefix similarly forwards KUBECONFIG (intended) but also any KUBE-prefixed token a user may have exported.  
 **Fix:** Narrow GIT_ to only the paths/auth keys actually needed (GIT_TERMINAL_PROMPT, GIT_SSH_COMMAND if used). Move GITHUB_/GH_ to an addon-only allowlist that activates only when the addon flux is enabled — the deploy phase doesn't speak GitHub. The audit-subprocess seam owns per-call allowlisting; this finding is the policy companion.  
-**Effort:** hours
-
-##### `sec:451be4fa:sudo-cp-no-p` — sudo cp no p
-
-**Status:** in review — PR #227  
-**Severity:** minor  
-**Cluster:** privilege-escalation  
-**Evidence:** `internal/system/elevation.go:111-131`  
-**Problem:** ChownTreeToInvokingUser walks `root` and Lchown's every entry. The doc warns that root must be a workdir created by okdctl in the same process; but the actual call sites pass projectRoot+"/okd-install" — a directory that, on a deploy resumed after partial failure, may have been touched by a different process or a manual rm. The Lchown is symlink-safe but the walk itself follows directories. A malicious symlink/dir-replacement at any level under workDir hands the chown tree to attacker-chosen paths.  
-**Fix:** Use `os.Root` (Go 1.24+) for the WalkDir traversal so directory-component symlinks cannot redirect outside the trust root. The debug_bundle.go tarDirInto already uses os.OpenRoot for the same reason (debug_bundle.go:268-272). Apply the same pattern here for consistency.  
 **Effort:** hours
 
 ##### `sec:6424733c:cred-in-log` — cred in log
@@ -2017,16 +1925,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Split Cleanup() into two methods: CleanupPlans() removes only tfplan + destroy.tfplan, CleanupBackup() removes terraform.tfstate.backup. Call CleanupPlans() at the existing site (destroy/helpers.go:46, proxmox/proxmox.go:147). Never call CleanupBackup() — let the operator decide. Or: keep .backup until the *next* successful run, mirroring git's reflog policy.  
 **Effort:** hours
 
-##### `state:0f076161:destroy-no-scoped-only` — destroy no scoped only
-
-**Status:** in review — PR #226  
-**Severity:** minor  
-**Cluster:** destroy-safety  
-**Evidence:** `internal/cli/destroy.go:33-61`  
-**Problem:** `okdctl destroy` is all-or-nothing: SkipTerraform / SkipCleanup / SkipFirewall toggles are coarse-grained 'don't run this whole step' switches, not 'only destroy these resources'. There is no `--only=vms` or `--target=master` to remove a single broken VM and re-bootstrap, which is the documented Terraform pattern for partial recovery. The bootstrap.go path already uses `-target=` internally; there is no parallel exposed at the CLI.  
-**Fix:** Add `--target=<resource>` (repeatable) flag that maps to terraform.DestroyOptions{Targets: ...}. Validate against an allowlist (module.okd_cluster.proxmox_virtual_environment_vm.{bootstrap,master,worker}[<n>]) so a typo doesn't widen scope. Mirror the postinstall/bootstrap.go pattern. With --target, --confirm-cluster MUST still be required so a script can't sneak past the typo guard.  
-**Effort:** hours
-
 ##### `state:15ba17da:destroy-no-precondition-resume` — destroy no precondition resume
 
 **Status:** not started  
@@ -2045,16 +1943,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/distribution/step.go:178-212`  
 **Problem:** StepDef has no 'already-done' precondition hook. The Orchestrator runs every step in order; on a mid-phase crash the next invocation starts from step 1 and re-runs every step (download tools, regenerate manifests, regenerate ignition, rebuild ISOs). Some steps tolerate the re-run; others (StepBuildISOs, StepUploadISOs, StepDeployIgnition) are slow or wasteful. Idempotency today is implicit per-Exec rather than declared and verified.  
 **Fix:** Add `ReRunSafe bool` to StepDef (default false) — every StepDef must declare it. BuildSteps panics if a step omits it. For false-marked steps, also require an `AlreadyDone func(ctx) (bool, error)` hook the orchestrator consults before Exec. Stretch: persist completed StepIDs to <workDir>/.okdctl/run-state.json (AtomicWrite, 0o600) so resume is durable across PID restarts. See roadmap state:4f69fc9d:no-resume-checkpoint.  
-**Effort:** hours
-
-##### `state:881d089e:runlock-stale-pid-no-recovery` — runlock stale pid no recovery
-
-**Status:** in review — PR #228  
-**Severity:** minor  
-**Cluster:** tf-state-atomicity  
-**Evidence:** `internal/runlock/runlock.go:29-54`  
-**Problem:** runlock relies on flock() releasing automatically on fd close — correct for SIGKILL. But the human-readable diagnostic body (PID, VERB, TIME) is only consulted via Read on conflict, never validated. If the process holding the flock is unkillable (D-state on a stuck NFS mount), the only operator recourse is to delete the lock file by hand. There is no `okdctl unlock` verb and no documented recovery path. The lock-holder identity also includes only PID — no hostname / project-root, so a shared NFS mount running flock from multiple hosts produces lock conflicts whose diagnostic is misleading.  
-**Fix:** (a) Add hostname to the lock body so cross-host conflicts on NFS are diagnosable. (b) Document in package doc that flock() on NFS pre-v4 is advisory-only and may not enforce mutual exclusion. (c) Optional: `okdctl unlock` verb that asserts no PID matches the lock body's PID before unlinking. Skill SKILL.md §tf-state-atomicity calls out concurrent-run guard explicitly.  
 **Effort:** hours
 
 ##### `state:262af6e4:cleanup-tfstate-removal-window` — cleanup tfstate removal window
@@ -2099,26 +1987,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 #### audit-iac-and-shell
 
-##### `iac:18a795d5:dynamic-disk-no-precondition` — dynamic disk no precondition
-
-**Status:** in review — PR #229  
-**Severity:** minor  
-**Cluster:** hcl-destroy-ordering — seam→audit-state-and-recovery  
-**Evidence:** `infrastructure/terraform/modules/proxmox-okd/main.tf:188-199`  
-**Problem:** The `dynamic "disk"` block for the Ceph data disk on master and worker VMs is gated on `var.master_data_disk_size_gb > 0` / `var.worker_data_disk_size_gb > 0`. Lowering either to 0 in a re-apply silently strips the data-disk block from the VM. Because the disk is inside a `dynamic` block, no `lifecycle { prevent_destroy = true }` can attach to it. A typo in tfvars during re-apply is a destructive path with no plan-time warning beyond "-1 disk".  
-**Fix:** Add a `lifecycle { precondition { ... } }` to the parent VM resource that fails the plan when `var.<role>_data_disk_size_gb` transitions from >0 to 0 — but Terraform preconditions evaluate against current vars only, so the cleaner fix is README documentation plus a tfvars-level guard in the wizard / okdctl Go layer (the latter is in the audit-state-and-recovery seam). At the HCL level, replace `> 0` with `>= var.minimum_data_disk_size_gb` (default 0) and document the destructive-shrink path in the variable description.  
-**Effort:** hours
-
-##### `iac:e076e43c:insecure-skips-cosign` — insecure skips cosign
-
-**Status:** in review — PR #230  
-**Severity:** minor  
-**Cluster:** install-sh-integrity  
-**Evidence:** `scripts/install.sh:93-134`  
-**Problem:** The cosign verify-blob branch is nested inside `if [ -z "$INSECURE" ] && [ -n "$SHA_CMD" ]`, so setting INSECURE=1 disables BOTH sha256 verification AND cosign signature verification. A user who lacks `sha256sum` (uncommon) or wants to skip the checksum dependency for some reason loses the stronger sigstore guarantee as a side effect — even though cosign is independent of sha256sum.  
-**Fix:** Hoist the cosign verify-blob block out of the `INSECURE` conditional so cosign always runs when the binary is present. Keep the sha256-only block guarded by INSECURE — they are independent integrity layers. The current nesting also conflicts with the on-screen INSECURE warning which says "SHA256 and cosign signature verification SKIPPED" — that is currently true, but the design choice is overly broad.  
-**Effort:** hours
-
 ##### `iac:18a795d5:master-no-prevent-destroy` — master no prevent destroy
 
 **Status:** not started  
@@ -2130,16 +1998,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Effort:** hours
 
 #### audit-errors
-
-##### `err:97cb8adf:waitfor-timeout-loses-cluster-identity` — waitfor timeout loses cluster identity
-
-**Status:** in review — PR #221  
-**Severity:** major  
-**Cluster:** cancellation-identity — related: err:ae5b624c:ctx-timeout-loses-cluster-identity  
-**Evidence:** `internal/system/exec.go:85-108`  
-**Problem:** WaitFor wraps the deadline-exceeded path with bare fmt.Errorf("timeout waiting for %s %s after %v: %w", ..., context.DeadlineExceeded). Every postinstall and update-ingress kube-vip / api-via-vip / api-via-hostname / svc-LB poll routes through this. Like the install monitor, the resulting error has no errtypes.ClusterError shell, so a kube-vip 2-minute timeout exits 130 (signal) instead of 4 (cluster) at cli/root.go:111.  
-**Fix:** Either (a) make WaitFor return &errtypes.ClusterError{Msg, Err: context.DeadlineExceeded} directly; or (b) leave the bare wrap and require every caller to map (the pattern in postinstall/haproxy.go lines 76, 91 already does the latter). Option (a) is the canonical fix because the function name (WaitFor) doesn't tell the caller "you must retype."  
-**Effort:** hours
 
 ##### `err:6424733c:wrap-double-context-deployment` — wrap double context deployment
 
@@ -2469,26 +2327,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Add `--yes` boolean (default false) and `--confirm-cluster` (typo guard, same pattern as destroy.go L82-94). When non-TTY without --yes, refuse. When --yes, require --confirm-cluster matches cfg.Cluster.Name. Copy promptForConfirmation pattern.  
 **Effort:** hours
 
-##### `ux:aa84670c:exit-code-66-65-78-unmapped` — exit code 66 65 78 unmapped
-
-**Status:** in review — PR #223  
-**Severity:** major  
-**Cluster:** exit-codes — seam→audit-errors  
-**Evidence:** `internal/cli/root.go:144-165`  
-**Problem:** exitCodeFor only branches on four typed errors (ConfigError=2, NetworkError=3, ClusterError=4, AuthError=5) and falls through to 1 for everything else. The taxonomy doc-string at L1-L8 promises a structured exit code contract but the BSD sysexits.h slots that match okdctl's actual failure modes — EX_DATAERR=65 (invalid pull secret JSON), EX_NOINPUT=66 (missing config), EX_UNAVAILABLE=69 (proxmox unreachable), EX_OSERR=71 (sudo missing), EX_IOERR=74 (kubeconfig write failed), EX_TEMPFAIL=75 (terraform proxmox flake), EX_PROTOCOL=76 (kube-apiserver unreachable), EX_NOPERM=77 ...  
-**Fix:** Publish the taxonomy table (in this audit's report). Then in errtypes add granular sentinels (e.g. ErrPullSecretInvalid → 65, ErrConfigMissing → 66) and have exitCodeFor map them. Defer the typed-error mapping to audit-errors per seams.md §4. Document the table in docs/cli/exit-codes.md.  
-**Effort:** hours
-
-##### `ux:d31d1b9d:status-example-mismatches-schema` — status example mismatches schema
-
-**Status:** in review — PR #224  
-**Severity:** major  
-**Cluster:** json-stability  
-**Evidence:** `internal/cli/status.go:29-31`  
-**Problem:** `okdctl status` Example shows `jq .ready_nodes` but the documented JSON schema has no `ready_nodes` field — it has `nodes[]` with per-node `ready` booleans. The example will silently emit `null` for every consumer who copies it.  
-**Fix:** Change Example to a jq path that exists in the schema, e.g. `okdctl status --format json | jq '[.nodes[] | select(.ready)] | length'` or simpler `jq '.nodes'`. Update docs/cli/okdctl_status.md by `make docs`.  
-**Effort:** hours
-
 ##### `ux:6424733c:no-tty-prompt-returns-false-silently` — no tty prompt returns false silently
 
 **Status:** done — PR #186 (moved to Completed)
@@ -2612,16 +2450,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Effort:** hours
 
 #### audit-observability
-
-##### `obs:0934cf1b:sprintf-bypasses-redact-handler` — sprintf bypasses redact handler
-
-**Status:** in review — PR #222  
-**Severity:** major  
-**Cluster:** redaction-sink — related: err:a4001485:errtype-msg-vs-error-asymmetry  
-**Evidence:** `internal/platform/packages.go:65-65`  
-**Problem:** 38 log sites pre-stringify the message via fmt.Sprintf instead of attaching structured attrs. CLAUDE.md §credentials-and-secrets directs callers to prefer structured attrs so RedactHandler can inspect values; Sprintf collapses the value into the message string before the handler runs, so a cred-bearing field rendered with %v/%s is emitted verbatim.  
-**Fix:** Replace `logger.Info(fmt.Sprintf("x: %s", v))` with `logger.Info("x", "key", v)` (or `tui.Info("x", tui.LF("key", v))`). For multi-value templates, expand to multiple structured attrs. Wrap the sweep in a single PR keyed off the grep `logger.(Info|Warn|Error)(fmt.Sprintf` so reviewers can verify each mechanically.  
-**Effort:** hours
 
 ##### `obs:6424733c:string-concat-err-error-in-tui` — string concat err error in tui
 
@@ -3121,16 +2949,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Add TestValidateProxmoxName cases: accept ("pve", "pve-1", "node_a", "PVE0"); reject ("", "1pve", "pve.example", "pve/etc", "pve;rm", "pve`id`", "pve$(id)", "pve space", "pvé", "pve\x00"). Pure function — no fixtures.  
 **Effort:** hours
 
-##### `tst:761e5126:remove-haproxy-no-test` — remove haproxy no test
-
-**Status:** in review — PR #225  
-**Severity:** major  
-**Cluster:** destructive-untested  
-**Evidence:** `internal/distribution/okd/postinstall/haproxy.go:23-97`  
-**Problem:** RemoveHAProxy stops/disables the haproxy service, removes /etc/haproxy/conf.d/haproxy.cfg, removes firewall rules, removes the bastion VIP, and verifies API reachability via VIP+hostname. Six destructive subprocess sites, fail-modes documented per case, no test. The dual verify-via-VIP-then-hostname check is the load-bearing assertion that traffic actually moved off HAProxy; a regression that drops the second check ships a half-removed HAProxy that still routes traffic.  
-**Fix:** Add a haproxy_test.go that uses httptest.Server for the VIP /healthz check, a fake `systemctl` and `firewall-cmd` in PATH per the kubectl_test.go pattern. Cases: (1) happy path — service stop, config remove, firewall remove, VIP remove, healthz==ok via VIP, then via hostname (oc fake script); (2) healthz!=ok via VIP returns NetworkError; (3) VIP removed but hostname check fails returns ClusterError; (4) vip=="" path skips both verify blocks.  
-**Effort:** hours
-
 ##### `tst:632c9087:build-lb-ingress-controller-no-test` — build lb ingress controller no test
 
 **Status:** not started  
@@ -3139,26 +2957,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/distribution/okd/postinstall/update_ingress.go:406-507`  
 **Problem:** buildLBIngressController and buildRollbackJSON are the JSON manipulation that drives the destructive HostNetwork→LoadBalancerService conversion: oc delete then oc create, with rollback if create fails. Both are pure JSON-in/JSON-out functions and both have zero tests. A regression in field preservation (defaultCertificate, routeAdmission, routeSelector, nodePlacement) silently widens the surface or breaks rollback.  
 **Fix:** Add update_ingress_test.go with table-driven cases for both helpers: (1) buildLBIngressController preserves Domain, Replicas, DefaultCertificate, RouteSelector, RouteAdmission, NodePlacement when present; (2) absent optional fields stay omitted (omitempty); (3) Type field is exactly LoadBalancerService; (4) buildRollbackJSON strips creationTimestamp / resourceVersion / status / managedFields; (5) round-trip buildRollbackJSON(buildLBIngressController(ic)) recovers a JSON shape with Type from the original. Pure JSON manipulation — stdlib encoding/json only.  
-**Effort:** hours
-
-##### `tst:1e8ffb91:parse-node-readiness-no-test` — parse node readiness no test
-
-**Status:** in review — PR #220  
-**Severity:** major  
-**Cluster:** canonical-helper-untested  
-**Evidence:** `internal/distribution/okd/postinstall/verify.go:43-58`  
-**Problem:** parseNodeReadiness was specifically introduced to replace a buggy strings.Contains line-parser that misclassified "SchedulingDisabled Ready" — the function comment names this regression. The replacement has zero tests. A future refactor that re-introduces the substring shape would silently regress the very bug the function exists to prevent.  
-**Fix:** Add TestParseNodeReadiness cases using static JSON literals: (1) all 3 nodes Ready=True → 3,3; (2) 1 SchedulingDisabled with Ready=True → counts as ready (the regression case); (3) 1 NotReady → ready=0, total=1; (4) malformed JSON → error wraps with parse phrasing; (5) empty list → 0,0.  
-**Effort:** hours
-
-##### `tst:c8b28673:extract-tar-strip-symlink-resolved-untested` — extract tar strip symlink resolved untested
-
-**Status:** in review — PR #218  
-**Severity:** major  
-**Cluster:** trust-boundary-untested  
-**Evidence:** `internal/download/extract.go:38-134`  
-**Problem:** verifyResolvedPath re-evaluates symlinks AFTER directory creation to catch the 'previously-extracted symlink redirects writes' attacker shape. The existing TestExtractTarGz_ZipSlipRejected covers absolute and relative symlinks but NOT the symlink-then-write attack: an entry creates a symlink dir/, then a subsequent entry writes dir/x. Without a test, a refactor that calls verifyResolvedPath only on declared symlink type (not on regular file parent dirs) reopens this hole.  
-**Fix:** Extend TestExtractTarGz_ZipSlipRejected with a case: archive contains [{Typeflag: TypeSymlink, Name: "link", Linkname: "../escape-dir"}, {Typeflag: TypeReg, Name: "link/file.txt"}]. Assert the regular-file write fails (verifyResolvedPath catches the symlink redirection) and no file lands at /tmp/escape-dir/file.txt outside the dest.  
 **Effort:** hours
 
 ##### `tst:451be4fa:chown-tree-error-aggregation-untested` — chown tree error aggregation untested
@@ -3249,16 +3047,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/distribution/okd/dns/dnsmasq.go:94-101`  
 **Problem:** DnsmasqConfigPath is the public-API gate that builds /etc/dnsmasq.d/<name>.conf paths consumed by cleanup.Dnsmasq's _ = os.RemoveAll(configPath). It validates the name through validateConfigName but no test asserts (a) a clean okd-prod returns the canonical path, (b) ../escape returns an error not a path, (c) the returned path is always under the configured dnsmasqConfigDir (no traversal).  
 **Fix:** Once the dns package gets its first test file (per tst:d7ce9d16), add TestDnsmasqConfigPath: (1) okd-prod → /etc/dnsmasq.d/okd-prod.conf; (2) ../etc/passwd → error; (3) empty → error.  
-**Effort:** hours
-
-##### `tst:25fa1be8:firewall-haproxy-frontend-ports-no-test` — firewall haproxy frontend ports no test
-
-**Status:** in review — PR #231  
-**Severity:** minor  
-**Cluster:** canonical-helper-untested  
-**Evidence:** `internal/distribution/okd/firewall/firewall.go:42-55`  
-**Problem:** HAProxyFrontendPorts derives a subset of OKDRequiredPorts (TCP 6443/22623/80/443) for postinstall.RemoveHAProxy to remove only haproxy-bound rules. firewall_test.go covers validatePort but not this derivation. A future refactor that drops a port from haproxyPortNumbers (or adds an extra one) silently changes which firewall rules survive the haproxy removal — leaving stale rules or yanking ones still needed (DNS/ignition).  
-**Fix:** Add TestHAProxyFrontendPorts that asserts (a) returned ports have exactly the four numbers (6443, 22623, 80, 443) and Protocol==tcp, (b) DNS udp/53 NOT present, (c) length matches the haproxyPortNumbers map cardinality.  
 **Effort:** hours
 
 ##### `tst:73ad30ef:resolve-cluster-vip-no-test` — resolve cluster vip no test

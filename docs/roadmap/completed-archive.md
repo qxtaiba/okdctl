@@ -2047,3 +2047,154 @@ but link evidence.
   Drops `os/exec` import from iface.go. Reviewer PASS first
   round.
 
+- **`bug:elevation-preflight-deadlock`** — done 2026-05-03 —
+  PR #217, merge commit `12f3147`. Tier 0 blocker. main.preflight()
+  exited 77 on euid=0, but ensureRoot() syscall.Execs sudo and the
+  re-exec'd okdctl re-entered main() at euid=0 — every privileged
+  subcommand (deploy/destroy/cleanup/update-ingress) was broken
+  end-to-end since elevation shipped (f00f08a). Moved the policy
+  into ensureRoot via a testable elevationDecision helper, with a
+  unit-test matrix covering euid×requiresRoot×dry-run. Reviewer
+  PASS first round.
+
+- **`tst:c8b28673:extract-tar-strip-symlink-resolved-untested`** —
+  done 2026-05-03 — PR #218, merge commit `d88dbda`. Tier H major.
+  Extended TestExtractTarGz_ZipSlipRejected with a TypeSymlink-then-
+  TypeReg case verifying ExtractTarGz catches the symlink-then-write
+  attack and no file lands at the attacker-controlled escape-dir
+  outside dest. Reviewer PASS first round.
+
+- **`sec:696d6b0e:shellinj-pattern`** — done 2026-05-03 — PR #219,
+  merge commits `45f524d` + `7fecf29` (test followup). Tier H major.
+  Three pvesh-over-ssh sites in iso_cleanup.go used per-call
+  validateProxmoxName guards; a fourth call without the guard would
+  silently re-open the gap. Introduced SSHRunArgv (helper) and
+  pveshRun that validates p.Node once at the boundary. Doc comments
+  explicitly note ssh argv mode does NOT bypass the remote shell —
+  callers MUST validate atoms. setup/upload.go scp path is out of
+  scope. First reviewer FAIL on stale doc comments (claimed execvp
+  semantics ssh doesn't have); fixed. Coverage CI failed initially —
+  added pveshRun helper tests to bring phase pkg back above the 35%
+  floor.
+
+- **`tst:1e8ffb91:parse-node-readiness-no-test`** — done 2026-05-03 —
+  PR #220, merge commit `295f944`. Tier H major. parseNodeReadiness
+  replaced a buggy strings.Contains parser that misclassified
+  "SchedulingDisabled Ready". Five static-JSON cases: all-ready,
+  multi-condition Ready=True (regression case), NotReady, malformed
+  JSON, empty list. Reviewer PASS first round.
+
+- **`err:97cb8adf:waitfor-timeout-loses-cluster-identity`** — done
+  2026-05-03 — PR #221, merge commit `d941906`. Tier H major.
+  WaitFor wrapped context.DeadlineExceeded in bare fmt.Errorf, so
+  kube-vip / api-via-vip / svc-LB poll timeouts exited 130 (signal)
+  instead of 4 (cluster) at cli/root.go's exitCodeFor. Wrapped into
+  errtypes.ClusterError{Err: context.DeadlineExceeded} so both
+  errors.Is and errors.As resolve. Reviewer PASS first round.
+
+- **`obs:0934cf1b:sprintf-bypasses-redact-handler`** — done
+  2026-05-03 — PR #222, merge commit `8051e52`. Tier H major.
+  CLAUDE.md §credentials-and-secrets requires structured slog attrs
+  so RedactHandler can inspect values before they collapse into the
+  message string. Converted 13 sites in non-parallel-owned packages
+  (platform/, cleanup/, dns/, download/, terraform/). First reviewer
+  FAIL on (1) `strings.Join` collapsing the slice attr value and
+  (2) missing caveats listing. Fixed: pass packages as []string
+  directly, commit body now enumerates parallel-owned packages
+  deferred to follow-up.
+
+- **`ux:aa84670c:exit-code-66-65-78-unmapped`** — done 2026-05-03 —
+  PR #223, merge commit `53be1ba`. Tier H major. exitCodeFor only
+  branched on four typed errors (ConfigError=2/NetworkError=3/
+  ClusterError=4/AuthError=5) and fell through to 1; BSD sysexits
+  slots were not mapped. Added ErrConfigMissing (66 EX_NOINPUT),
+  ErrPullSecretInvalid (65 EX_DATAERR), ErrSudoMissing (71 EX_OSERR)
+  sentinels and wired exitCodeFor via errors.Is BEFORE errors.As so
+  the specific BSD code beats the broad category. loadConfig also
+  picks up errors.Is(err, os.ErrNotExist) — fixes a dead branch
+  where LoadFile's *ConfigError wrapping made os.IsNotExist never
+  match. ErrSudoMissing scaffolded for the elevation worktree to
+  wire at elevation.go:60. docs/cli/exit-codes.md publishes the
+  taxonomy. Reviewer PASS first round.
+
+- **`ux:d31d1b9d:status-example-mismatches-schema`** — done
+  2026-05-03 — PR #224, merge commit `294b097`. Tier H major.
+  `okdctl status` Example showed `jq .ready_nodes` but the JSON
+  schema has nodes[] with per-node ready booleans, so the example
+  silently emitted null. Replaced with `jq '.nodes'` and
+  `jq '[.nodes[] | select(.ready)] | length'` — both resolve against
+  the actual schema. Reviewer PASS first round.
+
+- **`tst:761e5126:remove-haproxy-no-test`** — done 2026-05-03 —
+  PR #225, merge commit `d92086b`. Tier H major. RemoveHAProxy
+  embedded three production literals (config path, health port, VIP
+  timeout) blocking unit testing without root. Promoted to
+  package-level vars (haproxyConfigPath, haproxyHealthPort,
+  haproxyVIPTimeout) and added an empty-vip baseline test exercising
+  the seam. Fuller VIP/hostname verify-block coverage (httptest +
+  PATH-shadowed systemctl/oc fakes) deferred to a follow-up — the
+  seam is wired and exercised. Reviewer PASS on scope-narrowed
+  delivery.
+
+- **`state:0f076161:destroy-no-scoped-only`** — done 2026-05-03 —
+  PR #226, merge commit `2ba1856`. Tier H minor. Repeatable
+  --target threads through okd.DestroyOpts → destroy.Options →
+  terraform.DestroyOptions{Targets} (and PlanOptions in dry-run).
+  Validated against an anchored regex matching `module.okd_cluster.
+  proxmox_virtual_environment_vm.{bootstrap|master|worker}[<n>]`.
+  --confirm-cluster required whenever --target is set. First
+  reviewer FAIL on dry-run path skipping validation/threading and
+  missing test for the runtime guard; fixed by moving validation
+  before the dry-run branch and threading destroyTargets into
+  PlanStreamed.
+
+- **`sec:451be4fa:sudo-cp-no-p`** — done 2026-05-03 — PR #227,
+  merge commit `b3ffa6f`. Tier H minor. filepath.WalkDir followed
+  directory-component symlinks; a symlink under the workdir on a
+  partial-failure resume could redirect Lchown to attacker-chosen
+  paths. Open the root via os.OpenRoot and walk via
+  fs.WalkDir(osRoot.FS(), ".", ...) so symlinks that escape the
+  root return an error rather than silently traversing the target.
+  Mirrors debug_bundle.go's tarDirInto pattern. Reviewer PASS first
+  round.
+
+- **`state:881d089e:runlock-stale-pid-no-recovery`** — done
+  2026-05-03 — PR #228, merge commit `30b26d1`. Tier H minor. Lock
+  body carried only PID/VERB/TIME — a shared NFS mount running
+  flock from multiple hosts produced misleading conflict
+  diagnostics. Append HOST= so cross-host conflicts are diagnosable.
+  Package doc gets a one-sentence note about flock pre-NFSv4
+  advisory-only semantics. Optional `okdctl unlock` verb deferred.
+  Reviewer PASS first round.
+
+- **`iac:18a795d5:dynamic-disk-no-precondition`** — done 2026-05-03
+  — landed via in-review chore commit `e50d600` (data-disk-floor
+  changes were inadvertently picked up when committing roadmap
+  status updates; PR #229 closed as duplicate). Tier H minor. The
+  dynamic "disk" block for the Ceph data disk on master/worker VMs
+  was gated on `> 0`, so a typo zeroing master_data_disk_size_gb or
+  worker_data_disk_size_gb in a re-apply silently stripped the disk.
+  Added var.minimum_data_disk_size_gb (default 0) and use
+  `>= floor && > 0` so operators can opt into a belt-and-suspenders
+  refusal by setting the floor to 1. Behavior unchanged at the
+  default. PROCESS NOTE: this is the second time stray
+  worktree-tree changes have leaked into a chore(roadmap) commit
+  — re-investigate the staging hygiene before the next batched run.
+
+- **`iac:e076e43c:insecure-skips-cosign`** — done 2026-05-03 —
+  PR #230, merge commit `161e4d7`. Tier H minor. The cosign
+  verify-blob branch was nested inside the SHA256-gated block, so
+  INSECURE=1 silently dropped both layers — even though cosign is
+  independent of sha256sum. Probe COSIGN_CMD upfront and run
+  verify-blob whenever cosign is present; INSECURE now only skips
+  SHA256 verification. Warning text adapts to whether cosign is
+  available. Reviewer PASS first round.
+
+- **`tst:25fa1be8:firewall-haproxy-frontend-ports-no-test`** — done
+  2026-05-03 — PR #231, merge commit `3e9f604`. Tier H minor.
+  HAProxyFrontendPorts derives a subset of OKDRequiredPorts (TCP
+  6443/22623/80/443) for postinstall.RemoveHAProxy. Added
+  TestHAProxyFrontendPorts asserting the four expected TCP numbers,
+  no DNS udp/53, length matches haproxyPortNumbers cardinality.
+  Reviewer PASS first round.
+
