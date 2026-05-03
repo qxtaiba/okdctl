@@ -2803,3 +2803,223 @@ but link evidence.
   touches a hot file (monitor.go), expect parallel agents to land
   independent fixes there — rebase early and rebase often.
 
+- **`state:48688e63:proxmox-no-retry-layer`** — done 2026-05-03 —
+  PR #267, merge commit `73cb954`. Tier H suggestion
+  (proxmox-api-idempotency). Doc-only addition: a six-line block on
+  `proxmox.Provider` codifying the must-route-through-terraform
+  invariant and naming `internal/download`'s retryDownload/
+  isRetryable as the future-status-read path. Closes the gap where
+  a future status-query patch could land an unprotected 5xx/429
+  HTTP call.
+
+- **`sec:8ea706f6:dl-no-checksum`** — done 2026-05-03 — PR #268,
+  merge commit `0a1b06c`. Tier H major (tls-network). Hard-codes
+  HashiCorp's published GPG fingerprint
+  `AA16FCBCA621E70139936A4C798AEC654FA7E1A1` and verifies the
+  fetched armored key via `gpg --with-fingerprint --with-colons
+  --import-options show-only --import` before dearmoring to
+  /usr/share/keyrings. Closes the MITM-during-deploy →
+  permanent-apt-trust-root attack. Considered embedding the
+  dearmored key bytes via go:embed; rejected because shipping a
+  vendored copy of an upstream key okdctl can't independently
+  validate is its own supply-chain risk.
+
+- **`sec:40d315ad:cred-flux-deploykey-as-string`** — done
+  2026-05-03 — PR #269, merge commit `c6c17fd`. Tier H minor
+  (credentials). `buildFluxDeployKeySecret` now takes `[]byte` for
+  privateKey/publicKey/knownHosts; eliminates the round-trip
+  through Go strings. Added `clear(privateKey)` after
+  `RunWithStdinChecked` returns so the caller's local buffer
+  releases immediately. Caveat: yaml.Marshal still creates
+  intermediate base64-string copies inside sigs.k8s.io/yaml;
+  perfect zeroization is unreachable through the third-party
+  library, but our local buffer is reclaimable.
+
+- **`sub:ae5b624c:no-cmd-env-install`** — done 2026-05-03 —
+  PR #270, merge commit `d7260a6`. Tier H minor (io-handling).
+  MonitorInstallation built `installCmd` with raw
+  exec.CommandContext and inherited the full parent env unfiltered;
+  bypassed cli/elevation.go's allowlist when sudo re-exec was
+  bypassed (test harnesses, already-root runs). Set
+  `installCmd.Env = executor.FilterParentEnv(executor.DefaultEnvAllowlist)`
+  before Start so AWS_*/GCP_*/AZURE_* and similar provider env
+  can't reach openshift-install. Wait/reaper concurrency structure
+  unchanged.
+
+- **`sub:25fa1be8:ufw-output-discards-stderr`** — done 2026-05-03
+  — PR #271, merge commit `69759fc`. Tier H suggestion
+  (io-handling). `DetectBackend` previously fell through silently
+  from ufw to iptables when `ufw status` failed. Threaded the
+  package logger into `DetectBackend` (both internal callers
+  Configure/RemoveRules updated), extracted stderr via
+  `errors.As(*exec.ExitError)`, and emit a Debug-level record with
+  err+stderr+backend keys so doctor and debug-bundle reflect why
+  ufw was skipped. Probe-style fall-through preserved.
+
+- **`err:b804b2ec:bootstrap-skip-tfvars-nil-as-success`** — done
+  2026-05-03 — PR #272, merge commit `23fc1e4`. Tier H suggestion
+  (sentinel-vs-typed). Removed the `ErrBootstrapTfvarsNotFound`
+  sentinel and the in-body Warn+nil branch from `CleanupBootstrap`.
+  Wired the tfvars-existence check into `StepDef.SkipWhen` so the
+  orchestrator now records `Skipped=true` with a SkipReason rather
+  than fake-success — distinguishing genuine "skipped because not
+  applicable" from "successfully cleaned" in StepResult. Mirrors
+  `internal/distribution/okd/destroy/steps.go:43-44`.
+
+- **`ux:aa84670c:flag-error-os-exit-bypasses-defers`** — done
+  2026-05-03 — PR #273, merge commit `8bffca0`. Tier H minor
+  (exit-codes). `SetFlagErrorFunc` previously called `os.Exit(64)`
+  directly, bypassing `Execute`'s deferred `logFileCloser.Close()`
+  — any partial log written to `--log-file` was never flushed.
+  Added `errtypes.UsageError` (Msg+Err with Error/Unwrap shape
+  matching the existing four typed errors), mapped it to 64
+  (EX_USAGE per BSD sysexits.h) in `exitCodeFor`, and replaced
+  the os.Exit body with `return &errtypes.UsageError{Msg: err.Error(),
+  Err: err}`. Updated the credleak AST scan, errtypes_test.go,
+  and root_test.go for the new type. Reviewer note (non-blocking):
+  flow now logs the flag-error twice — once in SetFlagErrorFunc
+  body, once via execute()'s "command failed" handler; cosmetic
+  follow-up.
+
+- **`ux:d31d1b9d:status-degraded-operators-parsing-fragile`** —
+  done 2026-05-03 — PR #274, merge commit `8ed0445`. Tier H minor
+  (json-stability). `runStatus` parsed
+  `oc get clusteroperators --no-headers` text by field index;
+  column order is not stable across oc versions. Switched to
+  `-o json` + `json.Unmarshal` into a `statusClusterOperatorList`
+  struct, filtered via `slices.ContainsFunc` for type=Degraded
+  status=True using the existing `phase.ConditionTypeDegraded` /
+  `phase.ConditionStatusTrue` constants (also pays down their
+  scaffolding lifetime). Mirrors the existing node-parsing shape.
+
+- **`ux:fd2125dd:addon-list-config-enabled-column-cryptic`** —
+  done 2026-05-03 — PR #275, merge commit `e3e7e0a`. Tier H
+  suggestion (help-text). Added a `Long` description on
+  `addonListCmd` with a `See also: addon verify` cross-link,
+  renamed the table column from `CONFIG-ENABLED` to `IN-CONFIG`,
+  updated the footnote to match. Required a follow-up commit
+  `ac662d5` to regenerate `docs/cli/okdctl_addon_list.md` after
+  the initial commit failed CI's docs-go drift check (caveat the
+  planner had flagged).
+
+- **`ux:8154ab0f:doctor-exits-1-on-fails-no-typed-error`** — done
+  2026-05-03 — PR #276, merge commit `a9bd185`. Tier H suggestion
+  (exit-codes). `runDoctor` returned a bare `fmt.Errorf` which
+  exitCodeFor mapped to 1 (unclassified); broke the documented
+  exit-code taxonomy. Wrapped with `&errtypes.ConfigError{Msg:
+  "preflight checks failed"}` so doctor exits 2. Updated
+  `doctor_cmd.go` Long ("1 otherwise" → "2 (configuration error)
+  otherwise"), `docs/cli/exit-codes.md`, and regenerated
+  `docs/cli/okdctl_doctor.md` in follow-up commit `37658f7` after
+  initial push failed CI's docs-go drift check.
+
+- **`ux:daf5bee9:kubeconfig-merge-no-y-flag-no-prompt`** — done
+  2026-05-03 — PR #278, merge commit `948099d`. Tier H suggestion
+  (flag-conventions). Single-line update to the `--merge` flag
+  help: documents the non-destructive merge semantic
+  ("(non-destructive: existing entries preserved)") so operators
+  don't conflate `--merge` with destroy/cleanup which prompt.
+  Required a rebase against develop's `5137de2 chore(deps): gate
+  okdctl-gen-docs behind docs build tag` (resolved a kubeconfig.go
+  conflict where develop introduced a `flagOutput` constant), plus
+  a regen with `go run -tags docs ./cmd/okdctl-gen-docs`.
+
+- **`ux:e7db1220:json-output-not-suppressed-by-quiet`** — done
+  2026-05-03 — PR #280, merge commit `0d1e8b3`. Tier H suggestion
+  (streams). `runReleasesList`/`runReleasesShow`/`runStatus` emit
+  JSON to stdout while `tui.Info` chatter still flowed to stderr,
+  breaking `2>&1 | jq` pipelines. Added `tui.SuppressInfo()`
+  (raises stderr logger to ErrorLevel via
+  `stderrLogger.Load().SetLevel`) and a `quietForJSON(format)`
+  helper in cli/logging.go that calls SuppressInfo when
+  `format==outputJSON && !logVerbose`. Wired into the three RunE
+  funcs immediately after format validation. Reviewer note
+  (non-blocking): no test added for the predicate; risk is low
+  because the helper is one-line, but worth a follow-up.
+
+- **`tst:de572c63:validate-config-name-no-test`** — done
+  2026-05-03 — PR #281, merge commit `da36eae`. Tier H major
+  (trust-boundary-untested). Extended `TestValidateConfigName`
+  with four cases the existing table missed: single-char accept
+  ("a"), two-char accept ("a1"), unicode reject ("é"), null-byte
+  reject ("a\x00b"). Locks the regex enforcement against a future
+  refactor that drifts the first-char anchor or the byte-class.
+  Pure function, no fixtures.
+
+- **`tst:696d6b0e:remove-fcos-iso-from-proxmox-no-test`** — done
+  2026-05-03 — PR #284, merge commit `d48dbf3`. Tier H major
+  (destructive-untested). Added three integration-level tests for
+  `RemoveFCOSISOFromProxmox` using a fake `ssh` script in PATH
+  (installFakeOC pattern from kubectl_test.go). The script
+  switches on $6 to dispatch SSHRun vs SSHRunArgv calls, returns
+  canned pvesh JSON, and writes to a counter file when `rm` is
+  invoked. Cases: (1) ISO with no VM reference → counter==1;
+  (2) ISO referenced by a running VM → counter file absent (skip
+  path); (3) refuseUnsafeISOPath rejects /etc/passwd before rm
+  fires. Used `executor.WithInheritedEnv()` to pass SSH_FAKE_MODE /
+  SSH_RM_COUNTER through (neither is on DefaultEnvAllowlist).
+
+- **`tst:0b188cab:retry-default-cancel-untested`** — done
+  2026-05-03 — PR #285, merge commit `94040b2`. Tier H minor
+  (canonical-helper-untested). Added three synctest-based tests
+  for `addon.RetryDefault`: success on attempt N (asserts
+  counter==3 with fn returning nil on call 3); all-failures
+  returns `wait.Interrupted` with counter==DefaultRetryCount;
+  ctx-cancel mid-sleep (goroutine cancels after
+  DefaultRetryBackoff/2 fake) returns context.Canceled. Used
+  Go 1.26 `testing/synctest` so the 5s default backoff doesn't
+  extend test runtime. wait.Interrupted is the canonical check
+  per upstream error.go:52-61 (deprecates direct ErrWaitTimeout
+  comparison).
+
+- **`tst:26a430ee:requires-root-dryrun-escape-untested`** — done
+  2026-05-03 — PR #286, merge commit `f38e684`. Tier H minor
+  (canonical-helper-untested). Added `TestRequiresRoot` covering
+  all four canonical paths: destroy+dry-run=true → false (escape
+  via flag), destroy+dry-run=false → true (membership wins on
+  flag-present-but-false), deploy without dry-run flag → true
+  (membership wins via GetBool err path), status (not in
+  rootRequiredCmds) → false. Reused existing `newCmd` /
+  `newDryRunCmd` helpers in elevation_test.go.
+
+- **`tst:bdf5a873:work-directory-preserve-config-untested`** —
+  done 2026-05-03 — PR #287, merge commit `4c20cde`. Tier H minor
+  (destructive-untested). Added
+  `TestWorkDirectory_PreservesConfigYaml` seeding workDir with
+  okdctl.yaml + the four removable sub-trees (tmp, downloads,
+  installer, custom-isos), calling WorkDirectory with
+  preserveConfig=true, and asserting the config persists at the
+  root while every sub-tree is gone. Catches a regression where
+  preserveConfig is silently inverted and silently destroys
+  operator-edited okdctl.yaml during partial cleanup.
+
+- **`tst:e3782ee7:safe-remove-no-test`** — done 2026-05-03 —
+  PR #288, merge commit `4809a90`. Tier H minor
+  (canonical-helper-untested). Added `TestSafeRemove` with four
+  subtests: missing path → nil (no-op); regular file → removed;
+  directory tree → removed recursively; symlink → link removed
+  but target preserved (RemoveAll does not follow symlinks into
+  the target). Documents the symlink boundary so a future caller
+  doesn't assume target preservation through the helper.
+
+- **`tst:9d79b841:logged-iso-once-untested`** — done 2026-05-03 —
+  PR #289, merge commit `4775152`. Tier H suggestion
+  (canonical-helper-untested). Added `TestLogISOFound` using a
+  custom `slog.Handler` as a record counter. Locks the basename
+  dedup contract: two calls with the same basename emit one
+  record; adding a new basename emits a second; a third call with
+  the same basename from a different directory is suppressed
+  (basename key, not full-path key). Catches the regression where
+  the dedup key drifts from basename to full path.
+
+- **`tst:08c49fc4:update-ingress-confirm-callback-untested`** —
+  done 2026-05-03 — PR #290, merge commit `d3a23f6`. Tier H minor
+  (destructive-untested). Refactored the inline ConfirmConversion
+  closure in `runUpdateIngress` into `buildConvertConfirm(ctx, yes)`
+  at file scope so it can be unit-tested. Added a `testStdinReader`
+  package var to confirm.go — when non-nil, replaces os.Stdin and
+  bypasses the TTY guard; production code never touches it. Tests
+  cover yes=true (returns true regardless of input) and yes=false
+  with y/n/EOF inputs via the stdin reader seam. Tests must run
+  sequentially because the seam is package-global; no t.Parallel().
+
