@@ -197,6 +197,9 @@ write the comment — then it carries real information.
   uses REST discovery only, not shell/console websockets. Safe to keep
   until go-proxmox migrates to `coder/websocket`, at which point take the
   bump without local code changes.
+- **`github.com/joho/godotenv` ships its license file as `LICENCE`
+  (British spelling) — a valid MIT license; SBOM scanners that grep for
+  `LICENSE` will flag a false positive.**
 - **Removed transitive-weight deps.** `schollz/progressbar/v3` was dropped
   in favour of a ~30 LOC hand-rolled byte-progress writer in
   `internal/download/progress.go`. The writer reuses
