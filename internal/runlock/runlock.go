@@ -1,12 +1,14 @@
 // Package runlock provides a process-level advisory lock for okdctl
 // operations that mutate shared project state. The lock is flock-based
 // so the kernel releases it automatically on fd close — including SIGKILL —
-// eliminating the PID-reuse race of pure pid-file schemes.
+// eliminating the PID-reuse race of pure pid-file schemes. On NFS pre-v4
+// flock is advisory only and may not enforce mutual exclusion across hosts.
 package runlock
 
 import (
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"syscall"
@@ -62,9 +64,14 @@ func Acquire(projectRoot, verb string) (*Lock, error) {
 		}
 	}
 
+	host, hostErr := os.Hostname()
+	if hostErr != nil {
+		slog.Warn("runlock: os.Hostname failed, using unknown", "err", hostErr)
+		host = "unknown"
+	}
 	// Truncate then write diagnostics; failures are best-effort.
 	_ = f.Truncate(0)
-	_, _ = fmt.Fprintf(f, "PID=%d VERB=%s TIME=%s\n", os.Getpid(), verb, time.Now().UTC().Format(time.RFC3339))
+	_, _ = fmt.Fprintf(f, "PID=%d VERB=%s TIME=%s HOST=%s\n", os.Getpid(), verb, time.Now().UTC().Format(time.RFC3339), host)
 
 	return &Lock{f: f}, nil
 }
