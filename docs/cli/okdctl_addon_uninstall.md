@@ -17,12 +17,15 @@ okdctl addon uninstall <name> [flags]
 
 ```
   okdctl addon uninstall flux
+  okdctl addon uninstall flux --yes --confirm-cluster=prod
 ```
 
 ### Options
 
 ```
-  -h, --help   help for uninstall
+      --confirm-cluster string   required with --yes; must equal cfg.Cluster.Name (typo guard for scripted uninstalls)
+  -h, --help                     help for uninstall
+  -y, --yes                      skip confirmation prompt
 ```
 
 ### Options inherited from parent commands
