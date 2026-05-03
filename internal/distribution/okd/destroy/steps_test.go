@@ -148,6 +148,51 @@ func TestDestroySteps_FailurePath(t *testing.T) {
 	}
 }
 
+func TestDestroySteps_SkipPath(t *testing.T) {
+	h := &captureHandler{}
+	defs := newPhaseWithCapture(h).destroySteps(minimalConfig(), minimalOpts())
+
+	for i := 0; i < 4; i++ {
+		if defs[i].SkipWhen == nil {
+			t.Fatalf("defs[%d] has nil SkipWhen", i)
+		}
+		defs[i].SkipWhen()
+	}
+
+	if err := defs[4].Exec(context.Background()); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	rec, ok := h.last()
+	if !ok {
+		t.Fatal("no log records captured")
+	}
+	if rec.Level != slog.LevelInfo {
+		t.Errorf("level = %v; want Info", rec.Level)
+	}
+	const wantMsg = "destroy: cluster teardown completed"
+	if rec.Message != wantMsg {
+		t.Errorf("message = %q; want %q", rec.Message, wantMsg)
+	}
+
+	var skippedVal string
+	rec.Attrs(func(a slog.Attr) bool {
+		if a.Key == "skipped" {
+			skippedVal = a.Value.String()
+			return false
+		}
+		return true
+	})
+	if skippedVal == "" {
+		t.Fatal("skipped attr missing from log record")
+	}
+	for _, label := range []string{"terraform", "iso removal", "file cleanup", "firewall"} {
+		if !strings.Contains(skippedVal, label) {
+			t.Errorf("skipped attr %q missing label %q", skippedVal, label)
+		}
+	}
+}
+
 func TestDestroySteps_PartialFailure(t *testing.T) {
 	h := &captureHandler{}
 	defs := newPhaseWithCapture(h).destroySteps(minimalConfig(), minimalOpts())
