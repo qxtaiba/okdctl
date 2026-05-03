@@ -48,9 +48,10 @@ func (p *BasePhase) OcPollOutput(ctx context.Context, prefix, desc string, timeo
 	return p.OcPollOutputInterval(ctx, prefix, desc, timeout, 0, predicate, args...)
 }
 
-// OcPollOutputInterval is OcPollOutput with an explicit poll interval. Pass
-// 0 to use the WaitFor default (30s). Tests pass small intervals to keep
-// runs fast; production code typically uses the default.
+// OcPollOutputInterval is the test-injection seam used by phase/kubectl_test.go
+// to override the default polling cadence. Production code MUST use OcPollOutput,
+// which fixes interval=0 (immediate first probe). Renaming or deleting this
+// method requires updating phase/kubectl_test.go.
 func (p *BasePhase) OcPollOutputInterval(ctx context.Context, prefix, desc string, timeout, interval time.Duration, predicate func(stdout string) bool, args ...string) (string, error) {
 	var captured string
 	opts := system.DefaultWaitForOptions()
