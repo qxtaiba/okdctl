@@ -371,12 +371,14 @@ func (f *Flux) createDeployKeySecret(ctx context.Context, env *addon.Environment
 	}
 
 	manifest, err := buildFluxDeployKeySecret("flux-system", "flux-system",
-		string(privateKey), string(publicKey), knownHostsResult.Stdout)
+		privateKey, publicKey, []byte(knownHostsResult.Stdout))
 	if err != nil {
 		return fmt.Errorf("build deploy key secret: %w", err)
 	}
-	if _, err := env.Exec.RunWithStdinChecked(ctx, manifest, "oc", "apply", "-f", "-"); err != nil {
-		return fmt.Errorf("failed to apply deploy key secret: %w", err)
+	_, applyErr := env.Exec.RunWithStdinChecked(ctx, manifest, "oc", "apply", "-f", "-")
+	clear(privateKey)
+	if applyErr != nil {
+		return fmt.Errorf("failed to apply deploy key secret: %w", applyErr)
 	}
 
 	env.Logger.Info("flux: deploy key secret applied")
@@ -416,14 +418,15 @@ func gitHost(repoURL string) (string, error) {
 
 // buildFluxDeployKeySecret renders a Secret manifest containing the SSH deploy
 // key material. publicKey is optional — flux only requires identity and
-// known_hosts, so the identity.pub field is omitted when empty.
-func buildFluxDeployKeySecret(namespace, name, privateKey, publicKey, knownHosts string) (string, error) {
+// known_hosts, so the identity.pub field is omitted when empty. Inputs are
+// []byte so callers can clear the private key buffer after use.
+func buildFluxDeployKeySecret(namespace, name string, privateKey, publicKey, knownHosts []byte) (string, error) {
 	data := map[string][]byte{
-		"identity":    []byte(privateKey),
-		"known_hosts": []byte(knownHosts),
+		"identity":    privateKey,
+		"known_hosts": knownHosts,
 	}
-	if publicKey != "" {
-		data["identity.pub"] = []byte(publicKey)
+	if len(publicKey) != 0 {
+		data["identity.pub"] = publicKey
 	}
 	return addon.BuildOpaqueSecret(namespace, name, data)
 }
