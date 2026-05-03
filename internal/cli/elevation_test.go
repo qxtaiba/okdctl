@@ -55,6 +55,35 @@ func TestElevationDecision(t *testing.T) {
 	}
 }
 
+func TestRequiresRoot(t *testing.T) {
+	destroyDry := newDryRunCmd("destroy")
+
+	destroyFalseDry := newCmd("destroy")
+	destroyFalseDry.Flags().Bool("dry-run", false, "")
+
+	deployNoFlag := newCmd("deploy")
+	statusCmd := newCmd("status")
+
+	cases := []struct {
+		name string
+		cmd  *cobra.Command
+		want bool
+	}{
+		{"destroy dry-run=true escapes gate", destroyDry, false},
+		{"destroy dry-run=false stays in gate", destroyFalseDry, true},
+		{"deploy without dry-run flag triggers gate", deployNoFlag, true},
+		{"status not in rootRequiredCmds", statusCmd, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := requiresRoot(tc.cmd)
+			if got != tc.want {
+				t.Fatalf("requiresRoot(%s) = %v, want %v", tc.cmd.Name(), got, tc.want)
+			}
+		})
+	}
+}
+
 func TestEnsureRoot_SudoNotFound(t *testing.T) {
 	if os.Geteuid() == 0 {
 		t.Skip("only meaningful when test process is non-root")
