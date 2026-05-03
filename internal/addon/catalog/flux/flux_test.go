@@ -11,7 +11,7 @@ func TestBuildFluxDeployKeySecret(t *testing.T) {
 	t.Run("all fields present", func(t *testing.T) {
 		manifest, err := buildFluxDeployKeySecret(
 			"flux-system", "flux-system",
-			"PRIVATE_KEY_DATA\n", "PUBLIC_KEY_DATA\n", "github.com ssh-ed25519 AAAA\n",
+			[]byte("PRIVATE_KEY_DATA\n"), []byte("PUBLIC_KEY_DATA\n"), []byte("github.com ssh-ed25519 AAAA\n"),
 		)
 		if err != nil {
 			t.Fatal(err)
@@ -50,7 +50,7 @@ func TestBuildFluxDeployKeySecret(t *testing.T) {
 	t.Run("empty publicKey omits identity.pub", func(t *testing.T) {
 		manifest, err := buildFluxDeployKeySecret(
 			"flux-system", "flux-system",
-			"PRIVATE_KEY_DATA\n", "", "github.com ssh-ed25519 AAAA\n",
+			[]byte("PRIVATE_KEY_DATA\n"), nil, []byte("github.com ssh-ed25519 AAAA\n"),
 		)
 		if err != nil {
 			t.Fatal(err)
@@ -76,7 +76,7 @@ func TestBuildFluxDeployKeySecret(t *testing.T) {
 	})
 
 	t.Run("namespace and name set correctly", func(t *testing.T) {
-		manifest, err := buildFluxDeployKeySecret("my-ns", "my-secret", "key\n", "", "host key\n")
+		manifest, err := buildFluxDeployKeySecret("my-ns", "my-secret", []byte("key\n"), nil, []byte("host key\n"))
 		if err != nil {
 			t.Fatal(err)
 		}
