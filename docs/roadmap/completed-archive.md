@@ -2545,3 +2545,163 @@ but link evidence.
   Makefile pin the version to v2.12.1 to close this gap (out of
   scope for this PR).
 
+- **`state:262af6e4:cleanup-tfstate-removal-window`** — done 2026-05-03
+  — PR #253, merge commit `1ec954e`. Tier H suggestion
+  (tf-state-atomicity). Documentation-only resolution per the item's
+  Fix bullet ("Out-of-scope for a release fix; document the failure
+  mode in the package doc as a known limitation"). Expanded the
+  cleanup package doc at `internal/distribution/okd/cleanup/cleanup.go:1`
+  with a paragraph naming the best-effort failure mode, the
+  Terraform-removed-last invariant that keeps destroy re-runnable,
+  and a `.cleanup-plan.json` checkpoint as future-work pointer.
+  Round-2 fix: original draft asserted "services → files →
+  terraform-cache" but the actual code orders WorkDirectory (files)
+  → service shutdowns → Terraform; the misleading order claim was
+  removed in commit `a620e27` after reviewer caught it.
+
+- **`dep:33ef32bf:godotenv-license-filename`** — done 2026-05-03 —
+  PR #254, merge commit `8003eed`. Tier H suggestion (license-compat).
+  `github.com/joho/godotenv@v1.5.1` ships its MIT license under the
+  British-English filename `LICENCE`; naïve SBOM scanners that grep
+  for `LICENSE` flag a false positive. Added a one-line note in
+  `CLAUDE.md §Dependencies` documenting the spelling so future
+  scanner work knows the false positive is intentional. No code
+  change. Reviewer PASS first round.
+
+- **`tst:40d315ad:git-host-no-test`** — done 2026-05-03 — PR #255,
+  merge commit `248a960`. Tier H minor (trust-boundary-untested).
+  Added 5 missing edge-case rows to the existing TestGitHost table
+  in `internal/addon/catalog/flux/flux_test.go`: ssh+port
+  (`ssh://git@host:2222/o/r` → `host`), IPv6+port
+  (`ssh://git@[2001:db8::1]:2222/o/r` → `2001:db8::1`,
+  bracket-stripped per Go's url.URL.Hostname()), no-host scp,
+  malformed-scheme (`://nope`), scheme-only (`http://`). Reviewer
+  PASS first round.
+
+- **`tst:35abd54e:env-method-zeroize-survives-no-explicit-test`** —
+  done 2026-05-03 — PR #256, merge commit `532fa4a`. Tier H minor
+  (cred-path-untested). Existing TestProxmoxCredentials_Env covered
+  password backing not shared with the env string but had no parallel
+  case for APIToken — a future refactor that swaps `string(c.APIToken)`
+  for a zero-copy cast would silently break Zeroize. Added an
+  `api_token_backing_not_shared_with_env_string` subtest that wipes
+  the underlying `[]byte` after Env() and asserts the env entry
+  preserves the original literal. Removed the now-redundant inline
+  `string(pw) copies` comment per CLAUDE.md "don't narrate next
+  line" — subtest name carries the contract. Reviewer PASS first
+  round.
+
+- **`smell:9ce5434c:single-caller-poll-wrapper`** — done 2026-05-03
+  — PR #257, merge commit `935ba90`. Tier H suggestion
+  (helper-package-no-value, scaffolding). Per MEMORY.md
+  feedback_scaffolding the symmetric OcPollOutput / OcPollOutputInterval
+  pair stays. Replaced the existing weaker doc on
+  `internal/distribution/okd/phase/kubectl.go:51` to explicitly tag
+  OcPollOutputInterval as the test-injection seam used by
+  `phase/kubectl_test.go`, named the production rule (callers MUST
+  use OcPollOutput which fixes interval=0), and noted the
+  rename/delete coupling. Reviewer PASS first round.
+
+- **`tst:9ce5434c:oc-output-typed-exit-error-untested`** — done
+  2026-05-03 — PR #258, merge commit `4deecc7`. Tier H minor
+  (canonical-helper-untested). OcOutput is the third canonical Oc*
+  helper; tests covered OcResourceExists and OcPollOutput but not
+  OcOutput's typed `*executor.ExitError` return. Added TestOcOutput
+  with three subtests reusing installFakeOC: OC_FAKE_MODE=exists →
+  trimmed stdout; OC_FAKE_MODE=error → errors.As to
+  `*executor.ExitError`, ExitCode==1, Stderr contains
+  "cluster unreachable"; ctx-cancel → propagates context.Canceled
+  (not an ExitError). Reviewer PASS first round.
+
+- **`sec:696d6b0e:input-url-scheme-not-checked`** — done 2026-05-03
+  — PR #259, merge commit `812e7da`. Tier H minor (input-validation).
+  pveshRun + SSHRunArgv (post-`d92086b`) already centralise the
+  validateProxmoxName guard at the boundary between operator config
+  and remote shell — the structural fix had landed; the gap was
+  test coverage. Added TestValidateProxmoxName_RejectsBadNode and
+  TestValidateProxmoxName_AcceptsValidNames to
+  `internal/distribution/okd/phase/pvesh_test.go` covering the
+  exact dangerous-character classes the item enumerates: empty,
+  `.`, `..`, `/`, `node/name`, `node;name`, whitespace, backtick,
+  `$()`, pipe, ampersand. Reviewer PASS first round.
+
+- **`sec:7b2829bb:cred-env-leak-to-child`** — done 2026-05-03 —
+  PR #260, merge commit `8a92bb8`. Tier H minor (credentials).
+  DefaultEnvAllowlist's broad `GIT_`, `GITHUB_`, `GH_` prefixes
+  forwarded GITHUB_TOKEN, GH_TOKEN, GIT_ASKPASS to every subprocess
+  (`oc`, `helm`, `terraform`, `dnf`, `apt-get`) despite zero
+  in-tree consumers. Verified by grep that no production code
+  reads those vars. Replaced the prefixes with two exact-match
+  keys actually needed: GIT_SSH_COMMAND (path-override) and
+  GIT_TERMINAL_PROMPT (suppress git interactive prompts in CI).
+  Updated TestAllowlist_ExactAndPrefix table: GITHUB_TOKEN/GH_TOKEN
+  flipped to false. Reviewer PASS first round.
+
+- **`sec:8ea706f6:input-path-not-prefix-checked`** — done 2026-05-03
+  — PR #261, merge commit `c526dc9`. Tier H minor (file-toctou).
+  installBinary used predictable `os.TempDir()/<name>-download`
+  and `<name>-extract` paths — TOCTOU-vulnerable before the
+  `system.CopyFile` to `/usr/local/bin` under sudo. Replaced both
+  with `os.CreateTemp(os.TempDir(), <name>-download-*)` (handle
+  closed before download, kept defer Remove, added explicit
+  Remove on download-error path) and `os.MkdirTemp(os.TempDir(),
+  <name>-extract-*)`. system.WriteTempFile was not the right fit
+  because download.Download owns the OutputPath open/write itself.
+  Reviewer PASS first round.
+
+- **`sub:de572c63:nmcli-output-discards-stderr`** — done 2026-05-03
+  — PR #262, merge commit `3e519ee`. Tier H suggestion
+  (io-handling). `getActiveConnection` ran nmcli via `cmd.Output()`
+  which discards stderr, so a `Error: NetworkManager is not running`
+  diagnostic vanished into a bare exit-status error. Switched to
+  `system.OutputCaptured` (the canonical helper, already used by
+  `internal/netutil/iface.go` for the analogous nmcli call) so
+  stderr lands in the wrapped error message. Added
+  TestGetActiveConnectionStderr installing a fake nmcli that exits
+  10 with the diagnostic on stderr and asserting the message
+  reaches the error string. Reviewer PASS first round.
+
+- **`tst:98bcb208:collect-doctor-output-no-test`** — done 2026-05-03
+  — PR #263, merge commit `7e55dfe`. Tier H suggestion
+  (canonical-helper-untested). collectDoctorOutput re-execs the
+  binary as `doctor` and intentionally ignores `cmd.Run` error
+  (failing preflight should still reach the debug bundle). Added
+  linux-gated debug_bundle_doctor_test.go using the TestMain
+  subprocess-hijack pattern: when `TEST_DOCTOR_SUBPROCESS` env is
+  set the test binary acts as the fake doctor command (prints the
+  env value, exits 1) before `m.Run()` parses test flags.
+  TestCollectDoctorOutputBuffersOnFail proves the buffer survives
+  non-zero exit; TestCollectDoctorOutputEmptyIsNonNil proves no
+  panic on empty output. The os.Executable error path is not
+  covered (no seam for it; out of Acceptance scope). Reviewer
+  PASS first round.
+
+- **`dep:33ef32bf:dup-yaml-engines`** — done 2026-05-03 — PR #264,
+  merge commit `5137de2`. Tier H suggestion (duplicate-engine).
+  cmd/okdctl-gen-docs's cobra/doc import transitively pulled
+  `go.yaml.in/yaml/v3` into the release binary's linker graph
+  (sigs.k8s.io/yaml's runtime parser is yaml/v2, not v3 — v3 was
+  pure tax). Added `//go:build docs` to
+  `cmd/okdctl-gen-docs/main.go` (only file in the package),
+  switched Makefile `docs`/`docs-check` targets to invoke with
+  `-tags docs`, updated CI `docs-go` job to do the same. Default
+  `make build` / `go build ./...` no longer drags yaml/v3 through
+  the linker; `go run -tags docs ./cmd/okdctl-gen-docs` still works.
+  Reviewer PASS first round.
+
+- **`sec:761e5126:tls-insecure-skip`** — done 2026-05-03 — PR #265,
+  merge commit `182733c`. Tier H minor (tls-network). The production
+  fix landed earlier in commit `c421069`
+  (`fix(httputil): pin kube-vip TLS to cluster CA after install`) —
+  RemoveHAProxy now uses httputil.KubeconfigCAPool +
+  httputil.NewWithCA with a NewInsecure fallback when the CA is
+  unavailable. This PR closed the roadmap item by adding the
+  regression test the original fix shipped without. New
+  TestRemoveHAProxy_KubeVIPHealthcheck builds a synthetic kubeconfig
+  from a httptest.NewTLSServer cert (testcert SANs include 127.0.0.1)
+  and asserts the VIP healthz check passes (advancing to the oc
+  hostname check → ClusterError); a NetworkError from the VIP
+  check would prove TLS was skipped. Subtest
+  insecure_fallback_when_kubeconfig_absent verifies the fallback
+  path is non-fatal. Reviewer PASS first round.
+

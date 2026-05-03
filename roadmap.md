@@ -1659,16 +1659,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Companion fix to sec:6424733c:cred-no-zeroize. Once a ZeroizeEnv helper exists on the provisioner, destroy.go calls it in the same defer chain.  
 **Effort:** hours
 
-##### `sec:696d6b0e:input-url-scheme-not-checked` — input url scheme not checked
-
-**Status:** in review — PR #259  
-**Severity:** minor  
-**Cluster:** input-validation  
-**Evidence:** `internal/distribution/okd/phase/iso_cleanup.go:52-79`  
-**Problem:** validateProxmoxName + validateISODir + shellSingleQuote pattern is solid for the destroy ISO path. But anyVMReferencesISO interpolates `vmid` (an int parsed from JSON) and `p.Node` directly into a remote shell `pvesh get /nodes/%s/qemu/%d/config` string — vmid is type-safe int, but if Node validation is bypassed via a future code path, the interpolation reaches the remote shell. Defense-in-depth requires the validateProxmoxName guard at every call site that hits the same buffer.  
-**Fix:** The validateProxmoxName guards already exist in vmConfigReferencesISO and listProxmoxVMIDs. As a hardening pass, change the SSH transport to pvesh-via-argv: `ssh root@host pvesh get /nodes/<node>/qemu/<vmid>/config -- --output-format json` where ssh treats the trailing args as a single shlex-quoted argv, removing the format-string vector entirely. Or extract the cmd string builder into one helper so adding new pvesh calls cannot drift from the validation contract.  
-**Effort:** hours
-
 ##### `sec:27088eab:input-kubeconfig-not-resolved` — input kubeconfig not resolved
 
 **Status:** not started  
@@ -1679,16 +1669,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Add an opt-in `proxmox.host_fingerprint` config field (sha256-of-pubkey form). When set, run `ssh-keyscan` once at first contact, validate the fingerprint matches the configured value, write to a per-project known_hosts file, and pass `-o StrictHostKeyChecking=yes -o UserKnownHostsFile=<path>` for every subsequent ssh/scp call. accept-new should be the explicit fallback only when the fingerprint is unset.  
 **Effort:** hours
 
-##### `sec:761e5126:tls-insecure-skip` — tls insecure skip
-
-**Status:** in review — PR #265  
-**Severity:** minor  
-**Cluster:** tls-network  
-**Evidence:** `internal/distribution/okd/postinstall/haproxy.go:61-76`  
-**Problem:** RemoveHAProxy uses httputil.NewInsecure to GET https://<vip>:6443/healthz — the doc on httputil.NewInsecure constrains its use to bootstrap-phase self-signed kube-vip checks, but RemoveHAProxy runs at update-ingress time when the cluster is fully up and kube-apiserver has its own valid cert. The TLS-skip is structurally permanent for this code path; a kube-apiserver cert mismatch (rotation, mis-renewal, MITM) goes unflagged.  
-**Fix:** After bootstrap, the kube-vip endpoint serves the same kube-apiserver cert. Read the kubeconfig's certificate-authority-data and construct an http.Client that trusts only that CA. The 'vip not in SAN' note in verify.go's verifyKubeVIPAPIHealth is true during the bootstrap-to-kube-vip transition; by the time RemoveHAProxy runs the SAN includes the VIP. Worst case, fall back to the in-cluster `oc get --raw /healthz` check that already exists in the same function.  
-**Effort:** hours
-
 ##### `sec:5013fea6:cred-env-leak-to-child` — cred env leak to child
 
 **Status:** in review — PR #282  
@@ -1697,26 +1677,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/distribution/okd/setup/release_extract.go:94-117`  
 **Problem:** extractReleaseImage uses raw exec.CommandContext (not the Executor) to run oc adm release extract. This bypasses Executor.buildEnv's allowlist filter — the child process inherits the FULL parent env (os.Environ pass-through, unfiltered). Under the deploy sudo re-exec, that includes whatever env was preserved through ensureRoot's FilterParentEnv, which still includes KUBE*, PROXMOX_*, etc. — but also any env the user exported that started with those prefixes (e.g. KUBE_TOKEN). Subprocess sees them.  
 **Fix:** Switch this site to use the Executor (p.Exec.Run) so the env-allowlist filter applies. The current bypass is intentional because oc-extract needs registry-auth env vars, but those are already covered by KUBE/OC_/PROXMOX prefixes in DefaultEnvAllowlist. Audit-subprocess seam owns the per-call hygiene; this finding is the policy companion.  
-**Effort:** hours
-
-##### `sec:8ea706f6:input-path-not-prefix-checked` — input path not prefix checked
-
-**Status:** in review — PR #261  
-**Severity:** minor  
-**Cluster:** file-toctou  
-**Evidence:** `internal/distribution/okd/setup/tools.go:160-210`  
-**Problem:** installBinary writes the downloaded binary to `os.TempDir() + "/" + spec.name + "-download"` — a predictable path under /tmp. Two parallel okdctl invocations (or a malicious local user racing on /tmp) could collide on this exact filename. The defer cleanup is fine, but the predictable filename in /tmp is a TOCTOU vector before the install runs `system.CopyFile` to /usr/local/bin under sudo.  
-**Fix:** Use system.WriteTempFile (the canonical helper) which produces a random-suffixed name. Or os.CreateTemp(os.TempDir(), spec.name+"-download-*"). The predictable-name pattern is already not used by the dnsmasq drop-in code — apply uniformly.  
-**Effort:** hours
-
-##### `sec:7b2829bb:cred-env-leak-to-child` — cred env leak to child
-
-**Status:** in review — PR #260  
-**Severity:** minor  
-**Cluster:** credentials — seam→audit-subprocess  
-**Evidence:** `internal/executor/executor.go:111-122`  
-**Problem:** DefaultEnvAllowlist permits the prefix `GIT_` and `GITHUB_` to flow through to every subprocess (including `oc`, `helm`, `terraform`, `dnf`, `apt-get`). GIT_ASKPASS, GITHUB_TOKEN, GH_TOKEN, GIT_SSH_COMMAND etc. carry user-level creds that none of these subprocesses need. KUBE prefix similarly forwards KUBECONFIG (intended) but also any KUBE-prefixed token a user may have exported.  
-**Fix:** Narrow GIT_ to only the paths/auth keys actually needed (GIT_TERMINAL_PROMPT, GIT_SSH_COMMAND if used). Move GITHUB_/GH_ to an addon-only allowlist that activates only when the addon flux is enabled — the deploy phase doesn't speak GitHub. The audit-subprocess seam owns per-call allowlisting; this finding is the policy companion.  
 **Effort:** hours
 
 ##### `sec:6424733c:cred-in-log` — cred in log
@@ -1879,16 +1839,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Either (a) route through p.Exec.RunStreamedChecked which uses the existing ring-buffer + stream pattern, or (b) wrap the strings.Builder in an io.LimitWriter capped at e.g. 64 KiB for error reporting purposes — the human-readable failure tail is what matters, not the full multi-minute stream.  
 **Effort:** hours
 
-##### `sub:de572c63:nmcli-output-discards-stderr` — nmcli output discards stderr
-
-**Status:** in review — PR #262  
-**Severity:** suggestion  
-**Cluster:** io-handling  
-**Evidence:** `internal/distribution/okd/dns/dnsmasq.go:115-128`  
-**Problem:** getActiveConnection runs `nmcli ... --active` via .Output() which discards stderr-not-captured-by-ExitError. nmcli prints diagnostic context to stderr (e.g. `Error: NetworkManager is not running`) that would help the user understand why connection-discovery failed; the wrapped error here loses it.  
-**Fix:** Switch to system.RunCaptured-style capture: build the cmd, set cmd.Stderr = &bytes.Buffer{}, then read both. Or accept the *exec.ExitError.Stderr fallback (which Output() does populate when Stderr is unset, up to a small cap) and unwrap it via errors.As(err, &ee) at the call site.  
-**Effort:** hours
-
 ##### `sub:25fa1be8:ufw-output-discards-stderr` — ufw output discards stderr
 
 **Status:** in review — PR #271  
@@ -1943,16 +1893,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/distribution/step.go:178-212`  
 **Problem:** StepDef has no 'already-done' precondition hook. The Orchestrator runs every step in order; on a mid-phase crash the next invocation starts from step 1 and re-runs every step (download tools, regenerate manifests, regenerate ignition, rebuild ISOs). Some steps tolerate the re-run; others (StepBuildISOs, StepUploadISOs, StepDeployIgnition) are slow or wasteful. Idempotency today is implicit per-Exec rather than declared and verified.  
 **Fix:** Add `ReRunSafe bool` to StepDef (default false) — every StepDef must declare it. BuildSteps panics if a step omits it. For false-marked steps, also require an `AlreadyDone func(ctx) (bool, error)` hook the orchestrator consults before Exec. Stretch: persist completed StepIDs to <workDir>/.okdctl/run-state.json (AtomicWrite, 0o600) so resume is durable across PID restarts. See roadmap state:4f69fc9d:no-resume-checkpoint.  
-**Effort:** hours
-
-##### `state:262af6e4:cleanup-tfstate-removal-window` — cleanup tfstate removal window
-
-**Status:** in review — PR #253  
-**Severity:** suggestion  
-**Cluster:** tf-state-atomicity  
-**Evidence:** `internal/distribution/okd/cleanup/cleanup.go:54-113`  
-**Problem:** `cleanup.Execute` (Full kind) calls Terraform() AFTER WorkDirectory(), WebServer(), HAProxy(), Apache(), Dnsmasq(). cleanupTerraformEnv documents 'preserve tfstate so destroy can run' (good), but if WorkDirectory()'s removal of <workDir> partially fails midway, the operator may already have lost setup-time artefacts (kubeconfig, install-config) that are required to re-run a destroy IF tfstate is then ALSO partially removed by a future invocation. Order is correct (services down before files, files before terraform-cache); the residual gap is that there is no transaction bou...  
-**Fix:** Two-pass cleanup: pass 1 = compute every removal target and capture an inventory snapshot to <workDir>/.cleanup-plan.json (AtomicWrite, 0o600). Pass 2 = execute removals against that snapshot. On crash mid-pass-2, the next invocation reads .cleanup-plan.json and resumes. This converts cleanup from 'best-effort' to 'declarative checkpointed'. Out-of-scope for a release fix; document the failure mode in the package doc as a known limitation.  
 **Effort:** hours
 
 ##### `state:15ba17da:destroy-summary-misleading-on-skip` — destroy summary misleading on skip
@@ -2583,16 +2523,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Either (a) move VMState into a shared package (e.g. phase/) so iso_cleanup.go and proxmox/proxmox.go both reference proxmox.StateRunning, or (b) accept that iso_cleanup parses pvesh JSON (a Proxmox-specific surface) and document the duplication intentionally with a // matches proxmox.StateRunning comment. The current state has neither share-of-truth nor a written reason for the split.  
 **Effort:** hours
 
-##### `smell:9ce5434c:single-caller-poll-wrapper` — single caller poll wrapper (scaffolding — verify intent only)
-
-**Status:** in review — PR #257  
-**Severity:** suggestion  
-**Cluster:** helper-package-no-value  
-**Evidence:** `internal/distribution/okd/phase/kubectl.go:47-49`  
-**Problem:** OcPollOutput is a one-line wrapper that calls OcPollOutputInterval with interval=0. OcPollOutputInterval is itself only called from this wrapper and from kubectl_test.go. Two near-identical methods on BasePhase where one variadic-option-style helper would suffice. (Kept as 'suggestion' per MEMORY.md scaffolding rule — the test-only OcPollOutputInterval is a test-family helper.)  
-**Fix:** Either keep both as a deliberate test-injection seam (current state — explicitly tag the test-only purpose in OcPollOutputInterval's doc), or fold the two into a single OcPollOutput with a poll-interval option struct. Current naming hints at API symmetry, but only OcPollOutput has production callers, so it is functionally a test-family helper.  
-**Effort:** hours
-
 #### audit-dependencies
 
 ##### `dep:33ef32bf:atotto-clipboard-stale` — atotto clipboard stale
@@ -2653,26 +2583,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `go.mod:11-66`  
 **Problem:** Four log engines link into the binary: stdlib `log/slog` (canonical), `charm.land/log/v2 v2.0.0` (one call site, internal/tui/logger.go), `k8s.io/klog/v2` and `go-logr/logr` (transitive via k8s.io/api). klog/logr are unavoidable while k8s.io/api is direct. charm.land/log/v2 exists only to color level prefixes; a hand-rolled slog.Handler in internal/logutil (~40 LOC, lipgloss already direct) could replace it and drop charm.land/log/v2 + go-logfmt/logfmt from the binary.  
 **Fix:** Optional: replace `charm.land/log/v2` with a hand-rolled `slog.Handler` in `internal/logutil` that colors level prefixes via lipgloss (already a direct dep). Drops charm.land/log/v2 + go-logfmt/logfmt from the binary. Risk: bubbletea TUI integration relies on the styled output — verify visual parity in dev/staging before merge. Keep `log/slog` + the k8s.io transitives as-is.  
-**Effort:** hours
-
-##### `dep:33ef32bf:dup-yaml-engines` — dup yaml engines
-
-**Status:** in review — PR #264  
-**Severity:** suggestion  
-**Cluster:** duplicate-engine  
-**Evidence:** `go.mod:20-59`  
-**Problem:** Three YAML decoders link into the release binary: `sigs.k8s.io/yaml v1.6.0` (direct, used by internal/{addon,cli,config}), `go.yaml.in/yaml/v2 v2.4.3` (transitive — sigs.k8s.io/yaml's parser), and `go.yaml.in/yaml/v3 v3.0.4` (transitive — `cobra/doc` in cmd/okdctl-gen-docs). The v2 and v3 paths are not callable from okdctl code. sigs.k8s.io/yaml is must-preserve. The gen-docs v3 tax is avoidable by gating cobra/doc behind a `//go:build docs` tag.  
-**Fix:** Optional: gate the cobra/doc import behind a build tag (`//go:build docs`) so `go.yaml.in/yaml/v3` does not enter the release binary's linker graph; today it is pulled in because `cmd/okdctl-gen-docs` lives in the same module. The v2 path stays — it is sigs.k8s.io/yaml's runtime parser. No change to direct deps.  
-**Effort:** hours
-
-##### `dep:33ef32bf:godotenv-license-filename` — godotenv license filename
-
-**Status:** in review — PR #254  
-**Severity:** suggestion  
-**Cluster:** license-compat  
-**Evidence:** `go.mod:13-13`  
-**Problem:** `github.com/joho/godotenv@v1.5.1` ships its license under the British-English filename `LICENCE` (not `LICENSE`). Naïve license scanners (`find . -iname LICENSE`, some SBOM tools) will report a missing-license false positive. The file itself is a clean MIT header (`Copyright (c) 2013 John Barton  MIT License ...`). Flagging because okdctl's release pipeline runs `syft` for SBOMs (.goreleaser.yaml `sboms` section) and downstream apt/rpm packagers may use simpler scanners; a one-line note in CLAUDE.md or the SBOM verification step prevents future false-positive churn.  
-**Fix:** Either (a) drop godotenv per `dep:33ef32bf:transitive-narrow-godotenv` (then the issue evaporates), or (b) add a one-line note in `CLAUDE.md §dependencies` documenting that `godotenv` ships LICENCE-with-a-C, so future SBOM scanner work knows it is intentional.  
 **Effort:** hours
 
 ##### `dep:33ef32bf:transitive-narrow-godotenv` — transitive narrow godotenv
@@ -2779,16 +2689,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Add TestRunCaptured cases: (1) command exits 0 → nil; (2) command exits 1 with stderr="oops" → err contains "oops" and errors.Is unwraps to *exec.ExitError; (3) command exits 1 with empty stderr → err carries the bin name only; (4) ctx cancel returns ctx err. Use a fake script in PATH per kubectl_test.go's installFakeOC pattern.  
 **Effort:** hours
 
-##### `tst:40d315ad:git-host-no-test` — git host no test
-
-**Status:** in review — PR #255  
-**Severity:** minor  
-**Cluster:** trust-boundary-untested  
-**Evidence:** `internal/addon/catalog/flux/flux.go:389-415`  
-**Problem:** gitHost parses operator-supplied addons.flux.settings.repository (which crosses an external trust boundary at config-load time) and feeds the result to ssh-keyscan host. ssh-keyscan does not interpret the host as a shell argument, but the wider invariant (host must be a real DNS name, not an arbitrary string) is unchecked. No test asserts the parser handles edge cases: ssh:// without user, ssh://[ipv6]:port, scp-style with port, malformed.  
-**Fix:** Add TestGitHost (alongside TestBuildFluxDeployKeySecret in a new flux_test.go): accept ssh://git@github.com/o/r, https://github.com/o/r, git@github.com:o/r, ssh://git@host:2222/o/r → all return correct host. Reject "", "   ", "no-host", "://nope", "http://". Pure function.  
-**Effort:** hours
-
 ##### `tst:0b188cab:retry-default-cancel-untested` — retry default cancel untested
 
 **Status:** in review — PR #285  
@@ -2819,16 +2719,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Refactor the inline closure into a small helper buildConvertConfirm(ctx, yes bool) func([]string) bool. Add test cases: yes=true returns true regardless; yes=false delegates to promptForConfirmation. Stub stdin via os.Pipe to feed 'y\n' / 'n\n' / EOF.  
 **Effort:** hours
 
-##### `tst:35abd54e:env-method-zeroize-survives-no-explicit-test` — env method zeroize survives no explicit test
-
-**Status:** in review — PR #256  
-**Severity:** minor  
-**Cluster:** cred-path-untested  
-**Evidence:** `internal/credentials/proxmox.go:117-138`  
-**Problem:** Env() builds os/exec env strings via string([]byte) — the immutable copy survives caller Zeroize. Existing test TestProxmoxCredentials_Env/password_backing_not_shared_with_env_string covers password but NOT APIToken. The contract is identical (string copy) but if a future refactor replaces string(c.APIToken) with bytesconv.BString or similar zero-copy trick, the env entry would become Zeroize-fragile. No test asserts the APIToken survives a wipe.  
-**Fix:** Extend TestProxmoxCredentials_Env's password_backing subtest into two parallel subtests: api_token_backing_not_shared and password_backing_not_shared. Each wipes the underlying []byte after Env() and asserts the env entry still carries the original literal. Pure mechanical extension of the existing test.  
-**Effort:** hours
-
 ##### `tst:bdf5a873:work-directory-preserve-config-untested` — work directory preserve config untested
 
 **Status:** in review — PR #287  
@@ -2857,16 +2747,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/distribution/okd/phase/helpers.go:24-30`  
 **Problem:** ResolveClusterVIP is the canonical 'resolve VIP from cfg' wrapper used by destroy, postinstall, dns, update_ingress (5 sites per the comment). It thin-wraps netutil.ResolveVIP with a fixed error prefix. netutil.ResolveVIP IS tested but the prefix wrap and the netutil-to-config field mapping (cfg.Networking.Bastion.VIP first, then StaticIP.Start) are not.  
 **Fix:** Add TestResolveClusterVIP: (1) explicit VIP wins; (2) static-IP-derived VIP when no explicit; (3) malformed VIP wraps with "failed to resolve VIP" prefix and underlying error stays errors.Is-able. Pure function — no fixtures.  
-**Effort:** hours
-
-##### `tst:9ce5434c:oc-output-typed-exit-error-untested` — oc output typed exit error untested
-
-**Status:** in review — PR #258  
-**Severity:** minor  
-**Cluster:** canonical-helper-untested  
-**Evidence:** `internal/distribution/okd/phase/kubectl.go:29-42`  
-**Problem:** OcOutput is the third canonical Oc* helper alongside OcResourceExists and OcPollOutput. Tests cover the latter two but not OcOutput's typed *executor.ExitError return. Callers (e.g. update_ingress, addon catalog) errors.As against ExitError to read ExitCode; a regression that returns a plain fmt.Errorf would break the typed-error contract silently.  
-**Fix:** Add TestOcOutput cases reusing installFakeOC: (1) OC_FAKE_MODE=exists → trimmed stdout; (2) OC_FAKE_MODE=error → errors.As to *executor.ExitError, ExitCode==1, Stderr contains "cluster unreachable"; (3) ctx cancel → propagates ctx error.  
 **Effort:** hours
 
 ##### `tst:27088eab:ssh-run-no-test` — ssh run no test
@@ -2967,16 +2847,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/system/fs.go:146-152`  
 **Problem:** system.SafeRemove is the canonical "rm -rf if exists" helper used by terraform.Cleanup, postinstall.CleanupBootstrap, and the cleanup package. It has no test. The (existence check, then RemoveAll) pattern has the obvious TOCTOU foot-gun the comment doesn't acknowledge — if a symlink is created between Stat and RemoveAll, RemoveAll follows it. A test would lock the no-op-on-missing branch and document the TOCTOU behavior so a future caller doesn't assume protection.  
 **Fix:** Add TestSafeRemove subtests: missing → nil; regular file → removed; directory tree → removed recursively; symlink → target NOT followed (this asserts the TOCTOU window is small but the function does follow Stat-then-RemoveAll, so document via assertion). Stdlib testing/fstest can fake the FS for the symlink case.  
-**Effort:** hours
-
-##### `tst:98bcb208:collect-doctor-output-no-test` — collect doctor output no test
-
-**Status:** in review — PR #263  
-**Severity:** suggestion  
-**Cluster:** canonical-helper-untested  
-**Evidence:** `internal/cli/debug_bundle_doctor.go:17-28`  
-**Problem:** collectDoctorOutput re-execs the current binary as 'doctor' to embed the doctor preflight in the debug bundle. The function ignores cmd.Run's error (intentionally — failing preflight should still be in the bundle) and returns the buffer regardless. There is no test asserting (a) buffer is non-empty even when the subprocess fails, (b) os.Executable error is wrapped.  
-**Fix:** Add a build-tagged test that injects a fake-self via a tiny TestMain trick: write a test binary that, when invoked with argv[1]=="doctor", prints a known string and exits 1. Call collectDoctorOutput, assert the known string is in the buffer despite the non-zero exit.  
 **Effort:** hours
 
 ##### `tst:9d79b841:logged-iso-once-untested` — logged iso once untested
