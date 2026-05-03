@@ -1989,7 +1989,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `iac:18a795d5:master-no-prevent-destroy` — master no prevent destroy
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/iac-18a795d5-master-protect  
 **Severity:** suggestion  
 **Cluster:** hcl-destroy-ordering — seam→audit-state-and-recovery  
 **Evidence:** `infrastructure/terraform/modules/proxmox-okd/main.tf:141-257`  
@@ -2001,7 +2001,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `err:6424733c:wrap-double-context-deployment` — wrap double context deployment
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/err-6424733c-wrap-deploy  
 **Severity:** minor  
 **Cluster:** wrapping  
 **Evidence:** `internal/cli/helpers.go:206-237`  
@@ -2011,7 +2011,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `err:d31d1b9d:vocab-ad-hoc-unknown-addon` — vocab ad hoc unknown addon
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/err-d31d1b9d-unknown-addon  
 **Severity:** minor  
 **Cluster:** domain-vocabulary  
 **Evidence:** `internal/cli/status.go:311-315`  
@@ -2061,7 +2061,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `err:a4001485:errtype-msg-vs-error-asymmetry` — errtype msg vs error asymmetry
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/err-a4001485-errtype-msg  
 **Severity:** minor  
 **Cluster:** domain-vocabulary — related: sec:f55b9c27:err-type-carries-cred  
 **Evidence:** `internal/errtypes/errtypes.go:21-68`  
@@ -2181,7 +2181,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `con:ab9b764a:inject-custom-manifests-no-ctx` — inject custom manifests no ctx
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/con-ab9b764a-inject-ctx  
 **Severity:** suggestion  
 **Cluster:** ctx-ignored  
 **Evidence:** `internal/distribution/okd/setup/ignition.go:99-137`  
@@ -2201,7 +2201,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `con:8e65d574:update-check-bounded-leak-doc` — update check bounded leak doc
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/con-8e65d574-update-check  
 **Severity:** suggestion  
 **Cluster:** goroutine-lifetime  
 **Evidence:** `internal/version/updatecheck.go:40-53`  
@@ -2543,7 +2543,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `mod:377f1dcd:use-synctest` — use synctest
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/mod-377f1dcd-synctest  
 **Severity:** suggestion  
 **Cluster:** any-interface-builtins — seam→audit-tests  
 **Evidence:** `internal/distribution/okd/phase/kubectl_test.go:113-162`  
@@ -2791,7 +2791,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `tst:40d315ad:flux-deploy-key-secret-no-test` — flux deploy key secret no test
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/tst-40d315ad-flux-deploy-key-secret  
 **Severity:** major  
 **Cluster:** cred-path-untested  
 **Evidence:** `internal/addon/catalog/flux/flux.go:330-429`  
@@ -2801,7 +2801,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `tst:ddf885f4:manager-rollback-untested` — manager rollback untested
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/tst-ddf885f4-manager-rollback  
 **Severity:** major  
 **Cluster:** destructive-untested  
 **Evidence:** `internal/addon/manager.go:62-196`  
@@ -2821,7 +2821,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `tst:daf5bee9:merge-kubeconfig-secret-survival-untested` — merge kubeconfig secret survival untested
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/tst-daf5bee9-merge-kubeconfig  
 **Severity:** major  
 **Cluster:** cred-path-untested  
 **Evidence:** `internal/cli/kubeconfig.go:80-125`  
@@ -2831,7 +2831,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `tst:f55b9c27:write-env-file-zeroize-buf-untested` — write env file zeroize buf untested
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/tst-f55b9c27-write-env-file  
 **Severity:** major  
 **Cluster:** cred-path-untested  
 **Evidence:** `internal/credentials/envfile.go:48-85`  
@@ -2841,7 +2841,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `tst:262af6e4:cleanup-execute-full-kind-untested` — cleanup execute full kind untested
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/tst-262af6e4-cleanup-execute-full  
 **Severity:** major  
 **Cluster:** destructive-untested — related: tst:368b892b:cleanup-tfstate-explicit-only-no-implicit-test  
 **Evidence:** `internal/distribution/okd/cleanup/cleanup.go:58-83`  
@@ -2851,7 +2851,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `tst:368b892b:cleanup-tfstate-explicit-only-no-implicit-test` — cleanup tfstate explicit only no implicit test
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/tst-368b892b-cleanup-tfstate-implicit  
 **Severity:** major  
 **Cluster:** destructive-untested — seam→audit-state-and-recovery; related: state:368b892b:cleanup-tfstate-explicit-only-implicit  
 **Evidence:** `internal/distribution/okd/cleanup/infra.go:18-45`  
@@ -2861,7 +2861,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `tst:830d4653:packages-binary-removal-untested` — packages binary removal untested
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/tst-830d4653-packages-binary  
 **Severity:** major  
 **Cluster:** destructive-untested  
 **Evidence:** `internal/distribution/okd/cleanup/packages.go:59-96`  
@@ -2871,7 +2871,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `tst:33579dd5:safe-remove-with-logger-error-paths-untested` — safe remove with logger error paths untested
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/tst-33579dd5-services-glob  
 **Severity:** major  
 **Cluster:** destructive-untested  
 **Evidence:** `internal/distribution/okd/cleanup/services.go:134-181`  
@@ -2881,7 +2881,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `tst:62cb8a95:destroy-infrastructure-tf-failure-untested` — destroy infrastructure tf failure untested
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/tst-62cb8a95-destroy-tf-failure  
 **Severity:** major  
 **Cluster:** destructive-untested  
 **Evidence:** `internal/distribution/okd/destroy/helpers.go:13-51`  
@@ -2891,7 +2891,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `tst:15ba17da:destroy-steps-failure-tracker-untested` — destroy steps failure tracker untested
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/tst-15ba17da-destroy-failure-tracker  
 **Severity:** major  
 **Cluster:** destructive-untested  
 **Evidence:** `internal/distribution/okd/destroy/steps.go:24-133`  
@@ -2901,7 +2901,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `tst:d7ce9d16:dns-package-no-tests` — dns package no tests
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/tst-d7ce9d16-dns-package  
 **Severity:** major  
 **Cluster:** destructive-untested  
 **Evidence:** `internal/distribution/okd/dns/dns.go:102-245`  
@@ -2921,7 +2921,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `tst:ae5b624c:monitor-installation-no-test` — monitor installation no test
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/tst-ae5b624c-monitor-installation  
 **Severity:** major  
 **Cluster:** destructive-untested — seam→audit-concurrency; related: con:98723e5d:monitor-installation-no-test  
 **Evidence:** `internal/distribution/okd/install/monitor.go:62-172`  
@@ -2951,7 +2951,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `tst:632c9087:build-lb-ingress-controller-no-test` — build lb ingress controller no test
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/tst-632c9087-update-ingress-build  
 **Severity:** major  
 **Cluster:** destructive-untested  
 **Evidence:** `internal/distribution/okd/postinstall/update_ingress.go:406-507`  
