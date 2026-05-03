@@ -2,7 +2,6 @@ package postinstall
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"path/filepath"
 
@@ -12,22 +11,13 @@ import (
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
-// ErrBootstrapTfvarsNotFound is returned by CleanupBootstrap when
-// terraform.tfvars is absent. The calling step must not set
-// BootstrapCleaned=true on this sentinel — the VM may still be running.
-var ErrBootstrapTfvarsNotFound = errors.New("bootstrap cleanup skipped: terraform.tfvars not found")
-
 // CleanupBootstrap destroys the bootstrap VM by re-applying terraform with bootstrap_enabled=false.
 // Uses -target to scope the operation to the bootstrap resource only, preventing
 // unintended side effects on other resources (e.g., workers being shut down).
+// Caller must ensure terraform.tfvars exists; wire the precondition via
+// StepDef.SkipWhen rather than checking inside this function.
 func (p *Phase) CleanupBootstrap(ctx context.Context, cfg *config.Config, opts *Options) error {
 	terraformDir := filepath.Join(opts.ProjectRoot, "infrastructure", "terraform", "environments", opts.TerraformEnv)
-	tfvarsFile := filepath.Join(terraformDir, "terraform.tfvars")
-
-	if !system.FileExists(tfvarsFile) {
-		p.Log.Warn("bootstrap: terraform.tfvars not found — skipping bootstrap cleanup")
-		return ErrBootstrapTfvarsNotFound
-	}
 
 	tf := terraform.New(terraformDir,
 		terraform.WithLogger(p.Log),
