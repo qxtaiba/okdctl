@@ -319,7 +319,7 @@ func (p *Phase) generateKubeVIPManifests(cfg *config.Config, clusterDir string) 
 		iface = netutil.DefaultProxmoxIface
 	}
 
-	openshiftDir := filepath.Join(clusterDir, "openshift")
+	openshiftDir := filepath.Join(clusterDir, openshiftSubdir)
 	if err := system.EnsureDir(openshiftDir); err != nil {
 		return fmt.Errorf("failed to ensure openshift manifests directory: %w", err)
 	}
