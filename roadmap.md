@@ -1691,7 +1691,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sec:5013fea6:cred-env-leak-to-child` — cred env leak to child
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-5013fea6-release-extract-env  
 **Severity:** minor  
 **Cluster:** credentials — seam→audit-subprocess  
 **Evidence:** `internal/distribution/okd/setup/release_extract.go:94-117`  
@@ -1957,7 +1957,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `state:15ba17da:destroy-summary-misleading-on-skip` — destroy summary misleading on skip
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/state-15ba17da-destroy-summary  
 **Severity:** suggestion  
 **Cluster:** crash-recoverability  
 **Evidence:** `internal/distribution/okd/destroy/steps.go:118-131`  
@@ -2131,7 +2131,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `con:98723e5d:monitor-installation-no-test` — monitor installation no test
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/con-98723e5d-monitor  
 **Severity:** suggestion  
 **Cluster:** time-sleep-retry — seam→audit-tests  
 **Evidence:** `internal/distribution/okd/install/monitor.go:62-172`  
@@ -2495,7 +2495,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `smell:073d24ed:duplicate-step-id-table` — duplicate step id table
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/smell-073d24ed-stepid  
 **Severity:** minor  
 **Cluster:** magic-strings  
 **Evidence:** `internal/cli/deploy.go:172-206`  
