@@ -18,6 +18,12 @@ import (
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
+var (
+	haproxyConfigPath = phase.DefaultHAProxyConfigPath
+	haproxyHealthPort = phase.KubeAPIPort
+	haproxyVIPTimeout = DefaultKubeVIPVIPTimeout
+)
+
 // RemoveHAProxy stops and disables HAProxy on the bastion. If vip is non-empty,
 // the secondary IP is removed from the bastion's interface and the API is
 // re-verified via the VIP after teardown to ensure kube-vip is handling traffic.
@@ -37,7 +43,7 @@ func (p *Phase) RemoveHAProxy(ctx context.Context, vip, clusterDir string) error
 	}
 
 	p.Log.Info("haproxy: removing configuration")
-	if err := os.RemoveAll(phase.DefaultHAProxyConfigPath); err != nil {
+	if err := os.RemoveAll(haproxyConfigPath); err != nil {
 		p.Log.Warn("haproxy: failed to remove config", "err", err)
 	}
 
@@ -69,7 +75,7 @@ func (p *Phase) RemoveHAProxy(ctx context.Context, vip, clusterDir string) error
 		} else {
 			healthClient = httputil.NewWithCA(pool, 5*time.Second)
 		}
-		healthURL := fmt.Sprintf("https://%s:%d/healthz", vip, phase.KubeAPIPort)
+		healthURL := fmt.Sprintf("https://%s:%d/healthz", vip, haproxyHealthPort)
 		if waitErr := system.WaitForWithTimeout(ctx, "haproxy", "api-via-vip", func() bool {
 			req, rErr := http.NewRequestWithContext(ctx, http.MethodGet, healthURL, http.NoBody)
 			if rErr != nil {
@@ -82,7 +88,7 @@ func (p *Phase) RemoveHAProxy(ctx context.Context, vip, clusterDir string) error
 			defer resp.Body.Close()
 			body, _ := io.ReadAll(resp.Body)
 			return resp.StatusCode == http.StatusOK && strings.TrimSpace(string(body)) == healthzOKBody
-		}, DefaultKubeVIPVIPTimeout, p.Log); waitErr != nil {
+		}, haproxyVIPTimeout, p.Log); waitErr != nil {
 			return &errtypes.NetworkError{Msg: fmt.Sprintf("api not reachable via vip %s after haproxy removal", vip), Err: waitErr}
 		}
 		if !vipRemoved {
@@ -97,7 +103,7 @@ func (p *Phase) RemoveHAProxy(ctx context.Context, vip, clusterDir string) error
 		if waitErr := system.WaitForWithTimeout(ctx, "haproxy", "api-via-hostname", func() bool {
 			r, _ := p.Exec.Run(ctx, "oc", "get", "--raw", "/healthz")
 			return r.ExitCode == 0 && strings.TrimSpace(r.Stdout) == healthzOKBody
-		}, DefaultKubeVIPVIPTimeout, p.Log); waitErr != nil {
+		}, haproxyVIPTimeout, p.Log); waitErr != nil {
 			return &errtypes.ClusterError{Msg: "api not reachable via hostname after haproxy removal", Err: waitErr}
 		}
 		p.Log.Info("haproxy: api confirmed reachable via hostname")
