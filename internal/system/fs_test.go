@@ -155,6 +155,70 @@ func TestAtomicWrite(t *testing.T) {
 	})
 }
 
+func TestSafeRemove(t *testing.T) {
+	dir := t.TempDir()
+
+	t.Run("missing", func(t *testing.T) {
+		err := SafeRemove(filepath.Join(dir, "does-not-exist"))
+		if err != nil {
+			t.Fatalf("missing path: got %v, want nil", err)
+		}
+	})
+
+	t.Run("regular_file", func(t *testing.T) {
+		f := filepath.Join(dir, "file.txt")
+		if err := os.WriteFile(f, []byte("x"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := SafeRemove(f); err != nil {
+			t.Fatalf("regular file: %v", err)
+		}
+		if _, err := os.Stat(f); !os.IsNotExist(err) {
+			t.Errorf("file still present after SafeRemove")
+		}
+	})
+
+	t.Run("directory_tree", func(t *testing.T) {
+		sub := filepath.Join(dir, "tree", "nested")
+		if err := os.MkdirAll(sub, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(sub, "leaf.txt"), []byte("y"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		root := filepath.Join(dir, "tree")
+		if err := SafeRemove(root); err != nil {
+			t.Fatalf("directory tree: %v", err)
+		}
+		if _, err := os.Stat(root); !os.IsNotExist(err) {
+			t.Errorf("tree still present after SafeRemove")
+		}
+	})
+
+	// os.RemoveAll on a symlink removes the link itself, not the target.
+	// SafeRemove(link) leaves target.txt intact, demonstrating that the
+	// Stat→RemoveAll sequence does not follow symlinks into the target.
+	t.Run("symlink_to_target", func(t *testing.T) {
+		target := filepath.Join(dir, "target.txt")
+		if err := os.WriteFile(target, []byte("data"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		link := filepath.Join(dir, "link")
+		if err := os.Symlink(target, link); err != nil {
+			t.Fatal(err)
+		}
+		if err := SafeRemove(link); err != nil {
+			t.Fatalf("symlink: %v", err)
+		}
+		if _, err := os.Lstat(link); !os.IsNotExist(err) {
+			t.Errorf("symlink still present after SafeRemove")
+		}
+		if _, err := os.Stat(target); err != nil {
+			t.Errorf("target removed by SafeRemove; want it intact: %v", err)
+		}
+	})
+}
+
 func TestChownByName(t *testing.T) {
 	cases := []struct {
 		name    string
