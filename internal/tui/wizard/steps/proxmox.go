@@ -35,8 +35,8 @@ var ProxmoxStepDefinition = wizard.StepDefinition{
 			Title: "connection",
 			Fields: []wizard.FieldDefinition{
 				{
-					Key:       "host",
-					Label:     "host",
+					Key:       fieldHost,
+					Label:     fieldHost,
 					Default:   "192.168.1.100:8006",
 					Help:      "proxmox host ip:port (e.g., 192.168.1.100:8006)",
 					Required:  true,

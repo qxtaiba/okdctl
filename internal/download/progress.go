@@ -28,7 +28,7 @@ func newProgressWriter(dst io.Writer, total int64, desc string) io.WriteCloser {
 	if !tui.ProgressBarsEnabled() || total <= 0 {
 		return nopCloser{dst}
 	}
-	w, _, err := term.GetSize(int(os.Stderr.Fd())) //nolint:gosec // G115: Fd() fits int on all supported platforms
+	w, _, err := term.GetSize(int(os.Stderr.Fd()))
 	if err != nil || w < 20 {
 		w = 72
 	}

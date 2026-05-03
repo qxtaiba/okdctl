@@ -169,7 +169,7 @@ func NewModel(steps []WizardStep, cfg *config.Config) *Model {
 }
 
 func getTerminalSize() (width, height int) {
-	w, h, err := term.GetSize(int(os.Stdout.Fd())) //nolint:gosec // G115: Fd() returns uintptr; always fits in int on supported platforms
+	w, h, err := term.GetSize(int(os.Stdout.Fd()))
 	if err != nil {
 		return minWidth, minHeight
 	}

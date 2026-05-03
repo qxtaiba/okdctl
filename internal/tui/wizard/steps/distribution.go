@@ -252,13 +252,13 @@ func (s *DistributionStep) ShortHelp() []wizard.KeyBinding {
 		return []wizard.KeyBinding{
 			{Key: "↑↓", Help: "select"},
 			{Key: "tab", Help: "expand/collapse"},
-			{Key: "enter", Help: "confirm"},
-			{Key: "esc", Help: "back"},
+			{Key: helpEnter, Help: helpConfirm},
+			{Key: helpEsc, Help: helpBack},
 		}
 	}
 	return []wizard.KeyBinding{
-		{Key: "esc", Help: "back"},
-		{Key: "ctrl+c", Help: "quit"},
+		{Key: helpEsc, Help: helpBack},
+		{Key: helpCtrlC, Help: helpQuit},
 	}
 }
 

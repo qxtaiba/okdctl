@@ -2,6 +2,11 @@ package config
 
 import "github.com/qxtaiba/okdctl/internal/netutil"
 
+const (
+	defaultBastionIP = "192.168.1.20"
+	defaultFluxAddon = "flux"
+)
+
 // DefaultConfig returns a Config with defaults for a typical homelab environment.
 func DefaultConfig() *Config {
 	return &Config{
@@ -59,15 +64,15 @@ func DefaultConfig() *Config {
 				Start:     "192.168.1.100",
 				Netmask:   netutil.DefaultNetmask,
 				Interface: "ens18",
-				DNS:       "192.168.1.20",
+				DNS:       defaultBastionIP,
 			},
 			Bastion: BastionConfig{
-				IP: "192.168.1.20",
+				IP: defaultBastionIP,
 			},
 		},
 		Addons: map[string]AddonConfig{
-			"flux": {Enabled: false, Settings: map[string]string{
-				"provider": "flux", "branch": "main", "path": "kubernetes/clusters/production",
+			defaultFluxAddon: {Enabled: false, Settings: map[string]string{
+				"provider": defaultFluxAddon, "branch": "main", "path": "kubernetes/clusters/production",
 			}},
 			"secretstore": {Enabled: false, Settings: map[string]string{ //nolint:gosec // G101: addon name, not a credential
 				"secrets_dir":              "automation/config/secrets",
@@ -87,7 +92,7 @@ func DefaultConfig() *Config {
 		HTTPServer: HTTPServerConfig{
 			Port:             8080,
 			Root:             "/var/www/html",
-			IgnitionServerIP: "192.168.1.20",
+			IgnitionServerIP: defaultBastionIP,
 		},
 		Deployment: DeploymentConfig{
 			TerraformEnv:     "production",
@@ -113,7 +118,7 @@ func MinimalConfig() *Config {
 		Workers:      NodeConfig{Count: 0, CPU: 0, Memory: 0, Disk: 0},
 	}
 	cfg.Addons = map[string]AddonConfig{
-		"flux": {Enabled: false},
+		defaultFluxAddon: {Enabled: false},
 	}
 	return cfg
 }

@@ -23,6 +23,11 @@ import (
 // stays in this slice.
 var rootRequiredCmds = []string{"deploy", "destroy", "cleanup", "update-ingress"}
 
+// annotationValueTrue is the canonical truthy value for cobra annotations
+// (e.g. requiresRoot). Cobra annotations are map[string]string, so callers
+// must compare against a string; this constant is the single source of truth.
+const annotationValueTrue = "true"
+
 // lookPath is the exec.LookPath indirection used by ensureRoot.
 // Tests replace it with a stub to avoid real PATH lookups.
 var lookPath = exec.LookPath
@@ -42,7 +47,7 @@ func requiresRoot(cmd *cobra.Command) bool {
 	if dry, err := cmd.Flags().GetBool("dry-run"); err == nil && dry {
 		return false
 	}
-	if cmd.Annotations["requiresRoot"] == "true" {
+	if cmd.Annotations["requiresRoot"] == annotationValueTrue {
 		return true
 	}
 	for c := cmd; c != nil; c = c.Parent() {

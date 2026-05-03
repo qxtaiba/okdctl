@@ -30,8 +30,8 @@ var NetworkingStepDefinition = wizard.StepDefinition{
 					ConfigGet: wizard.GetString(func(c *config.Config) string { return c.Networking.MachineCIDR }),
 				},
 				{
-					Key:       "gateway",
-					Label:     "gateway",
+					Key:       fieldGateway,
+					Label:     fieldGateway,
 					Default:   "192.168.1.1",
 					Help:      "network gateway ip address",
 					Required:  true,
@@ -112,8 +112,8 @@ var NetworkingStepDefinition = wizard.StepDefinition{
 					ConfigGet: wizard.GetString(func(c *config.Config) string { return c.Networking.StaticIP.Start }),
 				},
 				{
-					Key:       "interface",
-					Label:     "interface",
+					Key:       fieldInterface,
+					Label:     fieldInterface,
 					Default:   "ens18",
 					Help:      "network interface inside vms — ens18 is the proxmox/virtio default; use ip link in a vm to verify",
 					Required:  true,
@@ -172,7 +172,7 @@ var NetworkingStepDefinition = wizard.StepDefinition{
 		} else if overlap {
 			return errors.New("pod cidr and service cidr must not overlap")
 		}
-		if err := config.ValidateGatewayInCIDR(values["gateway"], machineCIDR); err != nil {
+		if err := config.ValidateGatewayInCIDR(values[fieldGateway], machineCIDR); err != nil {
 			return err
 		}
 		return nil

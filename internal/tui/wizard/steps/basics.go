@@ -26,8 +26,8 @@ var BasicsStepDefinition = wizard.StepDefinition{
 					ConfigGet: wizard.GetString(func(c *config.Config) string { return c.Cluster.Name }),
 				},
 				{
-					Key:       "domain",
-					Label:     "domain",
+					Key:       fieldDomain,
+					Label:     fieldDomain,
 					Default:   "k8s.local",
 					Help:      "base domain for cluster services",
 					Required:  true,

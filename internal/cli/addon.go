@@ -37,7 +37,7 @@ var addonInstallCmd = &cobra.Command{
 	Use:         "install [name | --all]",
 	Short:       "Install one addon (or all enabled addons with --all)",
 	Example:     "  okdctl addon install flux\n  okdctl addon install --all",
-	Annotations: map[string]string{"requiresRoot": "true"},
+	Annotations: map[string]string{"requiresRoot": annotationValueTrue},
 	ValidArgsFunction: func(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
 		return addon.Names(), cobra.ShellCompDirectiveNoFileComp
 	},
@@ -72,7 +72,7 @@ var addonUninstallCmd = &cobra.Command{
 	Short: "Uninstall a named addon",
 	Example: "  okdctl addon uninstall flux\n" +
 		"  okdctl addon uninstall flux --yes --confirm-cluster=prod",
-	Annotations: map[string]string{"requiresRoot": "true"},
+	Annotations: map[string]string{"requiresRoot": annotationValueTrue},
 	ValidArgsFunction: func(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
 		return addon.Names(), cobra.ShellCompDirectiveNoFileComp
 	},

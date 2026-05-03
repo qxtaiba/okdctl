@@ -408,10 +408,10 @@ func (s *ReviewStep) renderAdvanced(st *sectionStyles) string {
 	return renderSection(st, "advanced", []kvEntry{
 		{label: "vm id base", value: fmt.Sprintf("%d", vmid), skip: vmid <= 0},
 		{label: "timeouts", value: timeouts, skip: bt <= 0},
-		{label: "debug mode", value: "yes", skip: !dep.Debug},
-		{label: "skip deps check", value: "yes", skip: !dep.SkipDepsCheck},
+		{label: "debug mode", value: valYes, skip: !dep.Debug},
+		{label: "skip deps check", value: valYes, skip: !dep.SkipDepsCheck},
 		{label: "terraform workspace", value: dep.TerraformEnv, skip: dep.TerraformEnv == ""},
-		{label: "auto approve", value: "yes", skip: !dep.AutoApprove},
+		{label: "auto approve", value: valYes, skip: !dep.AutoApprove},
 	})
 }
 
@@ -467,9 +467,9 @@ func (s *ReviewStep) Apply(_ *config.Config) error {
 func (s *ReviewStep) ShortHelp() []wizard.KeyBinding {
 	return []wizard.KeyBinding{
 		{Key: "↑↓", Help: "select action"},
-		{Key: "enter", Help: "confirm"},
-		{Key: "esc", Help: "back"},
-		{Key: "ctrl+c", Help: "quit"},
+		{Key: helpEnter, Help: helpConfirm},
+		{Key: helpEsc, Help: helpBack},
+		{Key: helpCtrlC, Help: helpQuit},
 	}
 }
 

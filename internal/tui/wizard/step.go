@@ -165,10 +165,10 @@ func (b *BaseStep) SetSize(width, height int) {
 // concrete steps override to contribute step-specific keys.
 func (b *BaseStep) ShortHelp() []KeyBinding {
 	return []KeyBinding{
-		{Key: "↑↓", Help: "navigate"},
-		{Key: "enter", Help: "confirm"},
-		{Key: "esc", Help: "back"},
-		{Key: "ctrl+c", Help: "quit"},
+		{Key: "↑↓", Help: helpNavigate},
+		{Key: helpEnter, Help: helpConfirm},
+		{Key: helpEsc, Help: helpBack},
+		{Key: helpCtrlC, Help: helpQuit},
 	}
 }
 

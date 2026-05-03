@@ -103,7 +103,7 @@ func (s *NodePlacementStep) buildInnerStep(disc *proxmoxDiscovery, nodeNames []s
 		if bridges := bridgeNames(disc.Bridges); len(bridges) > 0 {
 			infraFields = append(infraFields,
 				wizard.FieldDefinition{
-					Key: "bridge", Label: "bridge", Default: firstMatch(bridges, px.Bridge, "vmbr0"),
+					Key: fieldBridge, Label: fieldBridge, Default: firstMatch(bridges, px.Bridge, "vmbr0"),
 					Help: "network bridge for vms", Type: wizard.FieldTypeSelect, Options: bridges,
 					ConfigSet: func(cfg *config.Config, v string) error { cfg.Provider.Proxmox.Bridge = v; return nil },
 					ConfigGet: func(cfg *config.Config) string { return cfg.Provider.Proxmox.Bridge },
@@ -120,7 +120,7 @@ func (s *NodePlacementStep) buildInnerStep(disc *proxmoxDiscovery, nodeNames []s
 					ConfigGet: func(cfg *config.Config) string { return cfg.Provider.Proxmox.Storage },
 				},
 				wizard.FieldDefinition{
-					Key: "data_storage", Label: "data storage", Default: firstMatch(pools, px.DataStorage, "local-lvm"),
+					Key: "data_storage", Label: fieldDataStorage, Default: firstMatch(pools, px.DataStorage, "local-lvm"),
 					Help: "storage pool for data/ceph disks", Type: wizard.FieldTypeSelect, Options: pools,
 					ConfigSet: func(cfg *config.Config, v string) error { cfg.Provider.Proxmox.DataStorage = v; return nil },
 					ConfigGet: func(cfg *config.Config) string { return cfg.Provider.Proxmox.DataStorage },
@@ -283,10 +283,10 @@ func (s *NodePlacementStep) ShortHelp() []wizard.KeyBinding {
 		return nil
 	}
 	return []wizard.KeyBinding{
-		{Key: "↑↓", Help: "navigate"},
+		{Key: "↑↓", Help: helpNavigate},
 		{Key: "← →", Help: "change value"},
-		{Key: "enter", Help: "confirm"},
-		{Key: "esc", Help: "back"},
+		{Key: helpEnter, Help: helpConfirm},
+		{Key: helpEsc, Help: helpBack},
 	}
 }
 

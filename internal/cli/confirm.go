@@ -23,7 +23,7 @@ import (
 // a bounded leak scoped to the lifetime of the parent process, not a true
 // resource leak.
 func promptForConfirmation(ctx context.Context, prompt string) (bool, error) {
-	if !term.IsTerminal(int(os.Stdin.Fd())) { //nolint:gosec // G115: Fd() returns uintptr; always fits in int on supported platforms
+	if !term.IsTerminal(int(os.Stdin.Fd())) {
 		return false, &errtypes.ConfigError{Msg: "no TTY and --yes not set; refusing destructive op"}
 	}
 	_, _ = os.Stderr.WriteString(prompt)
