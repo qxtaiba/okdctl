@@ -65,3 +65,12 @@ func configureLogging() error {
 
 	return tui.ConfigureLoggers(effectiveLevel, logFormat, stdoutW, stderrW, progressBars)
 }
+
+// quietForJSON raises the stderr log level to error when --format=json is
+// active and the user has not requested verbose output. Without this,
+// 2>&1 | jq pipelines see Info chatter mixed into the JSON stream.
+func quietForJSON(format string) {
+	if format == outputJSON && !logVerbose {
+		tui.SuppressInfo()
+	}
+}

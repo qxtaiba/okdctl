@@ -131,6 +131,7 @@ func runStatus(cmd *cobra.Command, _ []string) error {
 	if err := validateFormat(statusFormat); err != nil {
 		return err
 	}
+	quietForJSON(statusFormat)
 
 	cfg, err := loadConfig(cfgFile)
 	if err != nil {

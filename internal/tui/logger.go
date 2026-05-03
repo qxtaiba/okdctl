@@ -157,6 +157,13 @@ func ProgressBarsEnabled() bool {
 	return progressBarsActive
 }
 
+// SuppressInfo raises the stderr logger to ErrorLevel, silencing Info and
+// Warn records. When --format=json, callers use this so 2>&1 | jq pipelines
+// don't see info chatter mixed with the JSON document.
+func SuppressInfo() {
+	stderrLogger.Load().SetLevel(charmlog.ErrorLevel)
+}
+
 // SetRunID pins run_id on the package-level loggers so every subsequent
 // tui.X call carries the correlation ID. Call once at the top of a
 // deploy/destroy run — before credential loading, config loading, or
