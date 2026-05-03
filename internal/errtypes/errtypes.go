@@ -31,6 +31,10 @@ var ErrSudoMissing = errors.New("sudo not found")
 // string-interpolated — a credential-bearing inner error cannot leak
 // past logutil.RedactHandler through the .Error() path. The same
 // redaction invariant applies to NetworkError, ClusterError, AuthError.
+//
+// Msg must never include credentials (passwords, tokens, secrets). Pass
+// credential-bearing context only through Err so it stays in the Unwrap
+// chain and out of the Error() surface string.
 type ConfigError struct {
 	Msg string
 	Err error
@@ -43,6 +47,7 @@ func (e *ConfigError) Error() string {
 func (e *ConfigError) Unwrap() error { return e.Err }
 
 // NetworkError wraps a network-level failure (HTTP, DNS, TLS, download).
+// Msg must never include credentials; see ConfigError for the full contract.
 type NetworkError struct {
 	Msg string
 	Err error
@@ -56,6 +61,7 @@ func (e *NetworkError) Unwrap() error { return e.Err }
 
 // ClusterError wraps a cluster-level failure (oc/kubectl command failure,
 // API unreachable, install-monitor timeout).
+// Msg must never include credentials; see ConfigError for the full contract.
 type ClusterError struct {
 	Msg string
 	Err error
@@ -69,6 +75,7 @@ func (e *ClusterError) Unwrap() error { return e.Err }
 
 // AuthError wraps an authentication or privilege-escalation failure
 // (missing sudo, insecure credential file, proxmox token rejected).
+// Msg must never include credentials; see ConfigError for the full contract.
 type AuthError struct {
 	Msg string
 	Err error
