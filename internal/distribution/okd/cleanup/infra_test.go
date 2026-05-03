@@ -91,6 +91,57 @@ func TestTerraform_BaseDirMissing(t *testing.T) {
 	}
 }
 
+// TestTerraform_AllEnvs_PreservesEachState asserts the implicit multi-env
+// walk (terraformEnv == "") preserves terraform.tfstate in every env dir
+// while still removing generated artefacts. A regression here silently
+// bricks destroy on multi-env setups.
+func TestTerraform_AllEnvs_PreservesEachState(t *testing.T) {
+	projectRoot := t.TempDir()
+	envBase := filepath.Join(projectRoot, "infrastructure", "terraform", "environments")
+
+	envs := map[string]string{
+		"production": `{"version":4,"serial":1}`,
+		"staging":    `{"version":4,"serial":2}`,
+	}
+	for env, stateBody := range envs {
+		envDir := filepath.Join(envBase, env)
+		if err := os.MkdirAll(envDir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(envDir, "terraform.tfstate"), []byte(stateBody), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(envDir, "tfplan"), []byte("plan"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(envDir, ".terraform.lock.hcl"), []byte("lock"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if err := Terraform(context.Background(), projectRoot, "", logutil.NopLogger); err != nil {
+		t.Fatalf("Terraform all-envs: %v", err)
+	}
+
+	for env, stateBody := range envs {
+		envDir := filepath.Join(envBase, env)
+
+		for _, artifact := range []string{"tfplan", ".terraform.lock.hcl"} {
+			if _, err := os.Stat(filepath.Join(envDir, artifact)); !os.IsNotExist(err) {
+				t.Errorf("env %s: %s not removed: %v", env, artifact, err)
+			}
+		}
+
+		got, err := os.ReadFile(filepath.Join(envDir, "terraform.tfstate"))
+		if err != nil {
+			t.Fatalf("env %s: terraform.tfstate removed (DATA LOSS): %v", env, err)
+		}
+		if string(got) != stateBody {
+			t.Errorf("env %s: terraform.tfstate mutated: got %q, want %q", env, got, stateBody)
+		}
+	}
+}
+
 // TestTerraform_SingleEnv_PreservesState combines the Terraform() entry
 // point with the tfstate-preservation contract.
 func TestTerraform_SingleEnv_PreservesState(t *testing.T) {
