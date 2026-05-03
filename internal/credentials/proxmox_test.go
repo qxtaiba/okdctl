@@ -148,8 +148,6 @@ func TestProxmoxCredentials_Env(t *testing.T) {
 			Password: pw,
 		}
 		env := creds.Env()
-		// Wipe underlying buffer — string(pw) copies, so the env entry must
-		// survive the wipe.
 		for i := range pw {
 			pw[i] = 0
 		}
@@ -161,6 +159,27 @@ func TestProxmoxCredentials_Env(t *testing.T) {
 		}
 		if !found {
 			t.Errorf("env password corrupted after Zeroize-style wipe: %v", env)
+		}
+	})
+
+	t.Run("api token backing not shared with env string", func(t *testing.T) {
+		tok := []byte("tok-alive")
+		creds := ProxmoxCredentials{
+			Endpoint: "https://pve:8006",
+			APIToken: tok,
+		}
+		env := creds.Env()
+		for i := range tok {
+			tok[i] = 0
+		}
+		found := false
+		for _, kv := range env {
+			if kv == "PROXMOX_VE_API_TOKEN=tok-alive" {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("env api token corrupted after Zeroize-style wipe: %v", env)
 		}
 	})
 }
