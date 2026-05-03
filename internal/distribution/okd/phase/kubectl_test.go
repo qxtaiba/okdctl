@@ -2,6 +2,7 @@ package phase
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -165,5 +166,56 @@ func TestOcPollOutput(t *testing.T) {
 				t.Fatal("expected ctx error")
 			}
 		})
+	})
+}
+
+func TestOcOutput(t *testing.T) {
+	installFakeOC(t)
+	p := newTestPhase(t)
+
+	t.Run("exit 0 returns trimmed stdout", func(t *testing.T) {
+		t.Setenv("OC_FAKE_MODE", "exists")
+		out, err := p.OcOutput(context.Background(), "get", "pods")
+		if err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+		if out != "pod/foo Running" {
+			t.Errorf("stdout = %q; want %q", out, "pod/foo Running")
+		}
+	})
+
+	t.Run("exit 1 returns typed ExitError", func(t *testing.T) {
+		t.Setenv("OC_FAKE_MODE", "error")
+		_, err := p.OcOutput(context.Background(), "get", "pods")
+		if err == nil {
+			t.Fatal("expected error on exit 1")
+		}
+		var ee *executor.ExitError
+		if !errors.As(err, &ee) {
+			t.Fatalf("err is %T; want *executor.ExitError", err)
+		}
+		if ee.ExitCode != 1 {
+			t.Errorf("ExitCode = %d; want 1", ee.ExitCode)
+		}
+		if !strings.Contains(ee.Stderr, "cluster unreachable") {
+			t.Errorf("Stderr = %q; want to contain %q", ee.Stderr, "cluster unreachable")
+		}
+	})
+
+	t.Run("ctx cancel propagates context error", func(t *testing.T) {
+		t.Setenv("OC_FAKE_MODE", "exists")
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		_, err := p.OcOutput(ctx, "get", "pods")
+		if err == nil {
+			t.Fatal("expected error on cancelled ctx")
+		}
+		var ee *executor.ExitError
+		if errors.As(err, &ee) {
+			t.Errorf("cancelled ctx produced ExitError; want a context error")
+		}
+		if !errors.Is(err, context.Canceled) {
+			t.Errorf("err = %v; want context.Canceled in chain", err)
+		}
 	})
 }
