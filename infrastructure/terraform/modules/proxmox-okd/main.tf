@@ -241,6 +241,9 @@ resource "proxmox_virtual_environment_vm" "master" {
 
   depends_on = [proxmox_virtual_environment_vm.bootstrap]
 
+  # prevent_destroy cannot reference var.protect_masters (Terraform requires a
+  # literal boolean). Production operators: wrap this module in an override
+  # (override.tf) with `lifecycle { prevent_destroy = true }` on this resource.
   lifecycle {
     precondition {
       condition     = length(var.master_isos) >= var.master_count
