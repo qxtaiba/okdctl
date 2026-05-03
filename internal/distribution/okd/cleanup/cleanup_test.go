@@ -135,8 +135,9 @@ func TestExecute_NilLoggerOk(t *testing.T) {
 
 // installFakePkg prepends a temp dir containing rpm/dnf/dpkg/apt-get shell
 // stubs to PATH. dnf and apt-get append their argv to pkg.called in the same
-// dir so the assertion is package-manager-agnostic; rpm and dpkg always exit
-// 0 so IsInstalled returns true on both Debian and RHEL CI runners.
+// dir so the assertion is package-manager-agnostic. rpm exits 0 (RHEL
+// IsInstalled treats 0 = installed); dpkg prints "ii  <pkg>" so the Debian
+// postCheck (`bytes.Contains(stdout, "ii  "+pkg)`) returns true.
 func installFakePkg(t *testing.T) string {
 	t.Helper()
 	if runtime.GOOS == "windows" {
@@ -144,12 +145,15 @@ func installFakePkg(t *testing.T) string {
 	}
 	dir := t.TempDir()
 	logScript := "#!/bin/sh\necho \"$@\" >> \"$(dirname \"$0\")/pkg.called\"\nexit 0\n"
-	exitOK := "#!/bin/sh\nexit 0\n"
+	rpmScript := "#!/bin/sh\nexit 0\n"
+	// dpkg -l <pkg>  must print a line containing "ii  <pkg>" so platform's
+	// postCheck (bytes.Contains) treats the package as installed.
+	dpkgScript := "#!/bin/sh\nfor a in \"$@\"; do\n  case \"$a\" in -*) continue ;; esac\n  echo \"ii  $a 1.0 amd64 fake\"\ndone\nexit 0\n"
 	scripts := map[string]string{
 		"dnf":     logScript,
 		"apt-get": logScript,
-		"rpm":     exitOK,
-		"dpkg":    exitOK,
+		"rpm":     rpmScript,
+		"dpkg":    dpkgScript,
 	}
 	for name, body := range scripts {
 		p := filepath.Join(dir, name)
