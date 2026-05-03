@@ -52,7 +52,7 @@ func Acquire(projectRoot, verb string) (*Lock, error) {
 		return nil, fmt.Errorf("runlock: open %s: %w", path, err)
 	}
 
-	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil { //nolint:gosec // fd fits in int
+	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
 		body, _ := os.ReadFile(path)
 		_ = f.Close()
 		holder := string(body)

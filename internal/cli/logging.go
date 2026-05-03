@@ -56,8 +56,8 @@ func configureLogging() error {
 		effectiveLevel = "debug"
 	}
 
-	stderrIsTTY := term.IsTerminal(int(os.Stderr.Fd())) //nolint:gosec // G115: Fd() always fits int on supported platforms
-	stdoutIsTTY := term.IsTerminal(int(os.Stdout.Fd())) //nolint:gosec // G115: Fd() always fits int on supported platforms
+	stderrIsTTY := term.IsTerminal(int(os.Stderr.Fd()))
+	stdoutIsTTY := term.IsTerminal(int(os.Stdout.Fd()))
 	// Honor https://no-color.org and FORCE_COLOR; either disables progress
 	// bars regardless of TTY detection.
 	noColor := os.Getenv("NO_COLOR") != ""

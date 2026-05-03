@@ -8,6 +8,8 @@ import (
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 )
 
+const cpuTypeHost = "host"
+
 // AdvancedStepDefinition declares the advanced-settings step fields.
 var AdvancedStepDefinition = wizard.StepDefinition{
 	ID:           wizard.StepIDAdvanced,
@@ -36,10 +38,10 @@ var AdvancedStepDefinition = wizard.StepDefinition{
 				{
 					Key:     "cpu_type",
 					Label:   "cpu type",
-					Default: "host",
+					Default: cpuTypeHost,
 					Help:    "host gives best performance, x86-64-v2 or kvm64 allow live migration",
 					Type:    wizard.FieldTypeSelect,
-					Options: []string{"host", "x86-64-v2", "x86-64-v3", "kvm64"},
+					Options: []string{cpuTypeHost, "x86-64-v2", "x86-64-v3", "kvm64"},
 					ConfigSet: func(cfg *config.Config, value string) error {
 						if cfg.Provider.Proxmox != nil {
 							cfg.Provider.Proxmox.CPUType = value
@@ -50,27 +52,27 @@ var AdvancedStepDefinition = wizard.StepDefinition{
 						if cfg.Provider.Proxmox != nil && cfg.Provider.Proxmox.CPUType != "" {
 							return cfg.Provider.Proxmox.CPUType
 						}
-						return "host"
+						return cpuTypeHost
 					},
 				},
 				{
 					Key:     "numa_enabled",
 					Label:   "enable numa",
-					Default: "no",
+					Default: valNo,
 					Help:    "enable numa topology for vms — improves performance on multi-socket hosts",
 					Type:    wizard.FieldTypeSelect,
-					Options: []string{"no", "yes"},
+					Options: []string{valNo, valYes},
 					ConfigSet: func(cfg *config.Config, value string) error {
 						if cfg.Provider.Proxmox != nil {
-							cfg.Provider.Proxmox.NUMAEnabled = value == "yes"
+							cfg.Provider.Proxmox.NUMAEnabled = value == valYes
 						}
 						return nil
 					},
 					ConfigGet: func(cfg *config.Config) string {
 						if cfg.Provider.Proxmox != nil && cfg.Provider.Proxmox.NUMAEnabled {
-							return "yes"
+							return valYes
 						}
-						return "no"
+						return valNo
 					},
 				},
 			},

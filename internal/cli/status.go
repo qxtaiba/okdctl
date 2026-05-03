@@ -20,6 +20,8 @@ import (
 	"github.com/qxtaiba/okdctl/internal/version"
 )
 
+const colName = "name"
+
 var statusFormat string
 
 var statusCmd = &cobra.Command{
@@ -279,7 +281,7 @@ func runDescribeNode(cmd *cobra.Command, args []string) error {
 
 	if describeFormat == outputJSON {
 		payload := map[string]any{
-			"name":  n.Metadata.Name,
+			colName: n.Metadata.Name,
 			"role":  n.role(),
 			"ready": n.isReady(),
 		}
@@ -336,7 +338,7 @@ func runDescribeAddon(cmd *cobra.Command, args []string) error {
 	}
 
 	lines := []struct{ k, jsonKey, v string }{
-		{"name", "name", info.Name},
+		{colName, colName, info.Name},
 		{"display-name", "display_name", info.DisplayName},
 		{"description", "description", info.Description},
 		{"category", "category", info.Category},

@@ -11,8 +11,10 @@ import (
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 )
 
+const cfgVerb = "config"
+
 var configCmd = &cobra.Command{
-	Use:   "config",
+	Use:   cfgVerb,
 	Short: "Inspect okdctl configuration",
 }
 

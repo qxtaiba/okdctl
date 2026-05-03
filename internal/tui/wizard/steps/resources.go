@@ -98,7 +98,7 @@ var ResourcesStepDefinition = wizard.StepDefinition{
 			},
 		},
 		{
-			Title: "data storage",
+			Title: fieldDataStorage,
 			Fields: []wizard.FieldDefinition{
 				{
 					Key:       "worker_data_disk",

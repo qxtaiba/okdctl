@@ -319,9 +319,9 @@ func (s *DataDrivenStep) SetFocused(focused bool) {
 // ShortHelp returns the key bindings shown in the step's help footer.
 func (s *DataDrivenStep) ShortHelp() []KeyBinding {
 	return []KeyBinding{
-		{Key: "↑↓/tab", Help: "navigate"},
-		{Key: "enter", Help: "continue"},
-		{Key: "esc", Help: "back"},
+		{Key: "↑↓/tab", Help: helpNavigate},
+		{Key: helpEnter, Help: helpContinue},
+		{Key: helpEsc, Help: helpBack},
 	}
 }
 

@@ -9,7 +9,7 @@ import "github.com/spf13/cobra"
 // for offline tooling (notably cmd/okdctl-gen-docs); the RunE body is
 // wired per-platform in doctor.go (Linux) and doctor_stub.go (non-Linux).
 var doctorCmd = &cobra.Command{
-	Use:   "doctor",
+	Use:   categoryDoctor,
 	Short: "Check that your environment is ready to deploy a cluster",
 	Long: `Run preflight checks on the local environment before a deploy.
 
@@ -27,7 +27,7 @@ Exit code is 0 if there are no [fail] results ([warn] is tolerated),
 1 otherwise. Designed to be rerun until clean.
 
 See docs/doctor-checks.md for per-check fail messages and fix guidance.`,
-	Example: "  okdctl doctor",
+	Example: "  okdctl " + categoryDoctor,
 }
 
 func init() {

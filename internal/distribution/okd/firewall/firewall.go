@@ -31,16 +31,21 @@ const (
 	actionRemove = "remove"
 )
 
+const (
+	protoTCP = "tcp"
+	protoUDP = "udp"
+)
+
 // OKDRequiredPorts is the authoritative port list opened by setup;
 // HAProxyFrontendPorts() derives its subset from this slice.
 var OKDRequiredPorts = []Port{
-	{Number: 53, Protocol: "udp", Description: "dns"},
-	{Number: 53, Protocol: "tcp", Description: "dns"},
-	{Number: phase.KubeAPIPort, Protocol: "tcp", Description: "kubernetes api"},
-	{Number: 22623, Protocol: "tcp", Description: "machine config server"},
-	{Number: 80, Protocol: "tcp", Description: "http ingress"},
-	{Number: 443, Protocol: "tcp", Description: "https ingress"},
-	{Number: 8080, Protocol: "tcp", Description: "ignition server"},
+	{Number: 53, Protocol: protoUDP, Description: "dns"},
+	{Number: 53, Protocol: protoTCP, Description: "dns"},
+	{Number: phase.KubeAPIPort, Protocol: protoTCP, Description: "kubernetes api"},
+	{Number: 22623, Protocol: protoTCP, Description: "machine config server"},
+	{Number: 80, Protocol: protoTCP, Description: "http ingress"},
+	{Number: 443, Protocol: protoTCP, Description: "https ingress"},
+	{Number: 8080, Protocol: protoTCP, Description: "ignition server"},
 }
 
 // haproxyPortNumbers is the set of port numbers HAProxy binds on the bastion.
@@ -52,7 +57,7 @@ var haproxyPortNumbers = map[int]bool{phase.KubeAPIPort: true, 22623: true, 80: 
 func HAProxyFrontendPorts() []Port {
 	var ports []Port
 	for _, p := range OKDRequiredPorts {
-		if haproxyPortNumbers[p.Number] && p.Protocol == "tcp" {
+		if haproxyPortNumbers[p.Number] && p.Protocol == protoTCP {
 			ports = append(ports, p)
 		}
 	}
@@ -138,7 +143,7 @@ func validatePort(port Port) error {
 	if port.Number < 1 || port.Number > 65535 {
 		return fmt.Errorf("invalid port number: %d", port.Number)
 	}
-	if port.Protocol != "tcp" && port.Protocol != "udp" {
+	if port.Protocol != protoTCP && port.Protocol != protoUDP {
 		return fmt.Errorf("invalid protocol: %q (must be tcp or udp)", port.Protocol)
 	}
 	return nil
