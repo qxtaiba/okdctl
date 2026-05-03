@@ -35,6 +35,7 @@ func TestExitCodeForTaxonomy(t *testing.T) {
 		// errors.Is short-circuit fires only when a real signal was caught.
 		{"ClusterErrorWrapsDeadline", &errtypes.ClusterError{Msg: "budget", Err: context.DeadlineExceeded}, 4},
 		{"ClusterErrorWrapsCanceled", &errtypes.ClusterError{Msg: "canceled", Err: context.Canceled}, 4},
+		{"UsageError", &errtypes.UsageError{Msg: "unknown flag"}, 64},
 		// Granular BSD sysexits sentinels: specific code beats broad category.
 		{"ErrConfigMissing_direct", &errtypes.ConfigError{Msg: "not found", Err: errtypes.ErrConfigMissing}, 66},
 		{"ErrConfigMissing_wrapped", fmt.Errorf("load: %w", &errtypes.ConfigError{Msg: "not found", Err: errtypes.ErrConfigMissing}), 66},

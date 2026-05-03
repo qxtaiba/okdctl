@@ -24,6 +24,7 @@ func TestErrorStringOmitsInner(t *testing.T) {
 		{"network", &errtypes.NetworkError{Msg: "dial failed", Err: inner}, "network error: dial failed"},
 		{"cluster", &errtypes.ClusterError{Msg: "oc get failed", Err: inner}, "cluster error: oc get failed"},
 		{"auth", &errtypes.AuthError{Msg: "sudo rejected", Err: inner}, "auth error: sudo rejected"},
+		{"usage", &errtypes.UsageError{Msg: "unknown flag", Err: inner}, "usage error: unknown flag"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
