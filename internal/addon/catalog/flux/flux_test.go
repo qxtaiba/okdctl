@@ -109,8 +109,13 @@ func TestGitHost(t *testing.T) {
 		{name: "scp style", url: "git@github.com:org/repo.git", want: "github.com"},
 		{name: "scp self-hosted", url: "git@gitlab.internal.example.com:team/repo.git", want: "gitlab.internal.example.com"},
 		{name: "ssh with port", url: "ssh://git@bitbucket.org:7999/proj/repo.git", want: "bitbucket.org"},
+		{name: "ssh with short host and port", url: "ssh://git@host:2222/o/r", want: "host"},
+		{name: "ssh with ipv6 and port", url: "ssh://git@[2001:db8::1]:2222/o/r", want: "2001:db8::1"},
 		{name: "empty", url: "", wantErr: true},
 		{name: "whitespace only", url: "   ", wantErr: true},
+		{name: "no-host scp", url: "no-host", wantErr: true},
+		{name: "malformed scheme", url: "://nope", wantErr: true},
+		{name: "scheme only", url: "http://", wantErr: true},
 	}
 
 	for _, tc := range cases {
