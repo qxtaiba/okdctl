@@ -12,7 +12,8 @@
 # Environment variables:
 #   VERSION       - pin to a specific release, e.g. VERSION=v0.1.0 (default: latest)
 #   INSTALL_DIR   - where to put the binary (default: /usr/local/bin)
-#   INSECURE      - set to "1" to skip checksum verification (NOT recommended)
+#   INSECURE      - set to "1" to skip SHA256 checksum verification (NOT recommended);
+#                   cosign signature verification still runs when cosign is installed.
 #   GITHUB_TOKEN  - bearer token injected when resolving the latest release;
 #                   lifts the GitHub API rate limit from 60 to 5 000 req/hr/IP,
 #                   which matters on shared CI runners with many co-tenants.
@@ -26,12 +27,6 @@ BINARY="okdctl"
 VERSION="${VERSION:-}"
 INSTALL_DIR="${INSTALL_DIR:-/usr/local/bin}"
 INSECURE="${INSECURE:-}"
-
-if [ -n "$INSECURE" ]; then
-    printf '\033[31mWARNING: INSECURE=1 is set — SHA256 and cosign signature verification SKIPPED.\033[0m\n' >&2
-    printf '\033[31m         A compromised GitHub release or CDN can substitute arbitrary binaries.\033[0m\n' >&2
-    printf '\033[31m         Unset INSECURE to re-enable verification.\033[0m\n' >&2
-fi
 
 red()   { printf '\033[31m%s\033[0m\n' "$*" >&2; }
 green() { printf '\033[32m%s\033[0m\n' "$*"; }
@@ -54,6 +49,21 @@ if command -v sha256sum >/dev/null 2>&1; then
 else
     [ -n "$INSECURE" ] || die "sha256sum is required (or set INSECURE=1 to skip checksum verification)"
     SHA_CMD=""
+fi
+
+COSIGN_CMD=""
+if command -v cosign >/dev/null 2>&1; then
+    COSIGN_CMD="cosign"
+fi
+
+if [ -n "$INSECURE" ]; then
+    if [ -n "$COSIGN_CMD" ]; then
+        printf '\033[31mWARNING: INSECURE=1 is set — SHA256 verification SKIPPED (cosign signature verification still active).\033[0m\n' >&2
+    else
+        printf '\033[31mWARNING: INSECURE=1 is set — SHA256 and cosign signature verification SKIPPED.\033[0m\n' >&2
+    fi
+    printf '\033[31m         A compromised GitHub release or CDN can substitute arbitrary binaries.\033[0m\n' >&2
+    printf '\033[31m         Unset INSECURE to re-enable SHA256 verification.\033[0m\n' >&2
 fi
 
 # okdctl is Linux-only. Refuse to install on anything else.
@@ -104,38 +114,40 @@ info "downloading $ARCHIVE_NAME"
 curl_safe -sSfL -o "$TMP/$ARCHIVE_NAME" "$ARCHIVE_URL" ||
     die "failed to download $ARCHIVE_URL"
 
-# Verify SHA256 unless explicitly skipped.
-if [ -z "$INSECURE" ] && [ -n "$SHA_CMD" ]; then
+# Download SHA256SUMS when at least one verification layer will consume it.
+if [ -n "$COSIGN_CMD" ] || { [ -z "$INSECURE" ] && [ -n "$SHA_CMD" ]; }; then
     info "downloading SHA256SUMS"
     curl_safe -sSfL -o "$TMP/SHA256SUMS" "$SHA_URL" ||
         die "failed to download SHA256SUMS from $SHA_URL"
+fi
 
-    # Cosign verify-blob against the sigstore-published signature.
-    # goreleaser publishes SHA256SUMS.sig + SHA256SUMS.pem for every
-    # release — verifying these closes the window where an attacker who
-    # controls release-asset upload can swap both archive and SHA256SUMS.
-    if command -v cosign >/dev/null 2>&1; then
-        info "verifying cosign signature on SHA256SUMS"
-        curl_safe -sSfL -o "$TMP/SHA256SUMS.sig" "$BASE_URL/SHA256SUMS.sig" ||
-            die "failed to download SHA256SUMS.sig (release missing signature? rerun with INSECURE=1 if you accept the risk)"
-        curl_safe -sSfL -o "$TMP/SHA256SUMS.pem" "$BASE_URL/SHA256SUMS.pem" ||
-            die "failed to download SHA256SUMS.pem"
-        # stderr is intentionally passed through — on verification failure the
-        # user needs to see cosign's diagnostic (cert identity, OIDC issuer,
-        # signature mismatch) rather than a bare "verification failed".
-        COSIGN_EXPERIMENTAL=1 cosign verify-blob \
-            --certificate="$TMP/SHA256SUMS.pem" \
-            --signature="$TMP/SHA256SUMS.sig" \
-            --certificate-identity-regexp='https://github\.com/qxtaiba/okdctl/' \
-            --certificate-oidc-issuer='https://token.actions.githubusercontent.com' \
-            "$TMP/SHA256SUMS" >/dev/null ||
-            die "cosign signature verification failed on SHA256SUMS"
-        info "cosign signature verified"
-    else
-        info "cosign not installed — skipping signature verification (checksum still enforced)"
-        info "install cosign from https://docs.sigstore.dev/system_config/installation/ to enable signature verification"
-    fi
+# Cosign verify-blob against the sigstore-published signature; runs whenever
+# cosign is present — independent of INSECURE so the stronger sigstore
+# guarantee is not silently dropped by the sha256-skip flag.
+if [ -n "$COSIGN_CMD" ]; then
+    info "verifying cosign signature on SHA256SUMS"
+    curl_safe -sSfL -o "$TMP/SHA256SUMS.sig" "$BASE_URL/SHA256SUMS.sig" ||
+        die "failed to download SHA256SUMS.sig (release missing signature? uninstall cosign if you accept the risk)"
+    curl_safe -sSfL -o "$TMP/SHA256SUMS.pem" "$BASE_URL/SHA256SUMS.pem" ||
+        die "failed to download SHA256SUMS.pem"
+    # stderr is intentionally passed through — on verification failure the
+    # user needs to see cosign's diagnostic (cert identity, OIDC issuer,
+    # signature mismatch) rather than a bare "verification failed".
+    COSIGN_EXPERIMENTAL=1 cosign verify-blob \
+        --certificate="$TMP/SHA256SUMS.pem" \
+        --signature="$TMP/SHA256SUMS.sig" \
+        --certificate-identity-regexp='https://github\.com/qxtaiba/okdctl/' \
+        --certificate-oidc-issuer='https://token.actions.githubusercontent.com' \
+        "$TMP/SHA256SUMS" >/dev/null ||
+        die "cosign signature verification failed on SHA256SUMS"
+    info "cosign signature verified"
+else
+    info "cosign not installed — skipping signature verification"
+    info "install cosign from https://docs.sigstore.dev/system_config/installation/ to enable signature verification"
+fi
 
+# Verify SHA256 unless explicitly skipped.
+if [ -z "$INSECURE" ] && [ -n "$SHA_CMD" ]; then
     info "verifying SHA256"
     # awk field-equality (not grep) avoids treating '.' in the filename as a
     # regex wildcard. Cosign already protects SHA256SUMS integrity so this
