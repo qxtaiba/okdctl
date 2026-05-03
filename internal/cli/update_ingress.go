@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -59,6 +60,25 @@ func runUpdateIngressDryRun(cfg *config.Config) error { //nolint:unparam // erro
 	return nil
 }
 
+func buildConvertConfirm(ctx context.Context, yes bool) func([]string) bool {
+	return func(hostNetworkICs []string) bool {
+		tui.Warn(fmt.Sprintf("converting %d HostNetwork controller(s) to LoadBalancerService requires deleting and recreating them.", len(hostNetworkICs)))
+		tui.Warn("this will cause a brief outage (~30s) for routes on affected controllers.")
+
+		if yes {
+			return true
+		}
+
+		prompt := fmt.Sprintf("convert %d HostNetwork controller(s) to LoadBalancerService? [y/N]: ", len(hostNetworkICs))
+		confirmed, err := promptForConfirmation(ctx, prompt)
+		if err != nil {
+			tui.Warn("skipping HostNetwork conversion: " + err.Error())
+			return false
+		}
+		return confirmed
+	}
+}
+
 func runUpdateIngress(cmd *cobra.Command, _ []string) error {
 	ctx := cmd.Context()
 
@@ -105,23 +125,8 @@ func runUpdateIngress(cmd *cobra.Command, _ []string) error {
 	startTime := time.Now()
 
 	result, err := p.UpdateIngress(ctx, cfg, postinstall.UpdateIngressOptions{
-		RemoveHAProxy: !updateIngressKeepHAProxy,
-		ConfirmConversion: func(hostNetworkICs []string) bool {
-			tui.Warn(fmt.Sprintf("converting %d HostNetwork controller(s) to LoadBalancerService requires deleting and recreating them.", len(hostNetworkICs)))
-			tui.Warn("this will cause a brief outage (~30s) for routes on affected controllers.")
-
-			if updateIngressYes {
-				return true
-			}
-
-			prompt := fmt.Sprintf("convert %d HostNetwork controller(s) to LoadBalancerService? [y/N]: ", len(hostNetworkICs))
-			confirmed, err := promptForConfirmation(ctx, prompt)
-			if err != nil {
-				tui.Warn("skipping HostNetwork conversion: " + err.Error())
-				return false
-			}
-			return confirmed
-		},
+		RemoveHAProxy:     !updateIngressKeepHAProxy,
+		ConfirmConversion: buildConvertConfirm(ctx, updateIngressYes),
 	})
 	if err != nil {
 		return err
