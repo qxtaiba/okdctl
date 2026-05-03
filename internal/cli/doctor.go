@@ -22,6 +22,7 @@ import (
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
+	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/platform"
 	"github.com/qxtaiba/okdctl/internal/system"
 	"github.com/qxtaiba/okdctl/internal/tui"
@@ -102,7 +103,7 @@ func runDoctor(cmd *cobra.Command, _ []string) error {
 	switch {
 	case fails > 0:
 		tui.Error("doctor: failing checks block deploy", tui.LF("failing", fails), tui.LF("warnings", warns))
-		return fmt.Errorf("preflight checks failed")
+		return &errtypes.ConfigError{Msg: "preflight checks failed"}
 	case warns > 0:
 		tui.Warn(fmt.Sprintf("doctor: %d warning(s): deploy may proceed but review the warnings above", warns))
 	default:

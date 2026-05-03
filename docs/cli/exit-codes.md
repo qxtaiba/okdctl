@@ -4,7 +4,7 @@
 |------|--------------|--------------------------------------------------------------|
 | 0    | EX_OK        | success                                                      |
 | 1    | —            | unclassified error (unknown subcommand, arg-count violation) |
-| 2    | —            | configuration error (parse failure, schema mismatch)         |
+| 2    | —            | configuration error (parse failure, schema mismatch, doctor preflight [fail]) |
 | 3    | —            | network error (HTTP, DNS, TLS, download failure)             |
 | 4    | —            | cluster error (oc/kubectl failure, install timeout)          |
 | 5    | —            | auth error (proxmox token rejected, insecure file perms)     |
