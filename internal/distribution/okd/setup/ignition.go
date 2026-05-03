@@ -93,7 +93,7 @@ func (p *Phase) GenerateInstallConfig(_ context.Context, cfg *config.Config, out
 // GenerateManifests invokes "openshift-install create manifests" to expand
 // install-config.yaml into the full manifest set under clusterDir.
 func (p *Phase) GenerateManifests(ctx context.Context, clusterDir string) error {
-	_, err := p.Exec.RunChecked(ctx, "openshift-install", "create", "manifests", "--dir", clusterDir)
+	_, err := p.Exec.RunChecked(ctx, openshiftInstallBin, "create", "manifests", "--dir", clusterDir)
 	if err != nil {
 		return &errtypes.ClusterError{Msg: "openshift-install create manifests failed", Err: err}
 	}
@@ -116,7 +116,7 @@ func (p *Phase) InjectCustomManifests(ctx context.Context, projectRoot, clusterD
 		return 0, &errtypes.ConfigError{Msg: "failed to read custom manifests directory", Err: err}
 	}
 
-	openshiftDir := filepath.Join(clusterDir, "openshift")
+	openshiftDir := filepath.Join(clusterDir, openshiftSubdir)
 	if err := system.EnsureDir(openshiftDir); err != nil {
 		return 0, &errtypes.ConfigError{Msg: "failed to ensure openshift manifests directory", Err: err}
 	}
@@ -155,7 +155,7 @@ func (p *Phase) InjectCompactClusterManifests(_ context.Context, clusterDir stri
 		return nil
 	}
 
-	openshiftDir := filepath.Join(clusterDir, "openshift")
+	openshiftDir := filepath.Join(clusterDir, openshiftSubdir)
 	if err := system.EnsureDir(openshiftDir); err != nil {
 		return &errtypes.ConfigError{Msg: "failed to ensure openshift manifests directory", Err: err}
 	}
@@ -175,7 +175,7 @@ func (p *Phase) InjectCompactClusterManifests(_ context.Context, clusterDir stri
 // GenerateIgnitionConfigs invokes "openshift-install create ignition-configs"
 // and validates that each expected .ign file exists and is non-trivial in size.
 func (p *Phase) GenerateIgnitionConfigs(ctx context.Context, clusterDir string) error {
-	_, err := p.Exec.RunChecked(ctx, "openshift-install", "create", "ignition-configs", "--dir", clusterDir)
+	_, err := p.Exec.RunChecked(ctx, openshiftInstallBin, "create", "ignition-configs", "--dir", clusterDir)
 	if err != nil {
 		return &errtypes.ClusterError{Msg: "openshift-install create ignition-configs failed", Err: err}
 	}

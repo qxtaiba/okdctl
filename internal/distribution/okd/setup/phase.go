@@ -21,6 +21,14 @@ const (
 	HTTPDefaultPort     = 80
 )
 
+// openshift-install integration points. openshiftSubdir is the manifests
+// subdirectory openshift-install creates beneath clusterDir; openshiftInstallBin
+// is the binary name invoked for manifest and ignition generation.
+const (
+	openshiftSubdir     = "openshift"
+	openshiftInstallBin = "openshift-install"
+)
+
 // Options configures a setup run: download and upload toggles plus an
 // AutoDownloadISO switch that skips the "is the ISO present?" prompt.
 type Options struct {
