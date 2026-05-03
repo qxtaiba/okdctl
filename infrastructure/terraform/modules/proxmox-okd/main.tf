@@ -188,7 +188,7 @@ resource "proxmox_virtual_environment_vm" "master" {
   }
 
   dynamic "disk" {
-    for_each = var.master_data_disk_size_gb > 0 ? [1] : []
+    for_each = var.master_data_disk_size_gb >= var.minimum_data_disk_size_gb && var.master_data_disk_size_gb > 0 ? [1] : []
     content {
       datastore_id = var.data_storage
       size         = var.master_data_disk_size_gb
@@ -314,7 +314,7 @@ resource "proxmox_virtual_environment_vm" "worker" {
   }
 
   dynamic "disk" {
-    for_each = var.worker_data_disk_size_gb > 0 ? [1] : []
+    for_each = var.worker_data_disk_size_gb >= var.minimum_data_disk_size_gb && var.worker_data_disk_size_gb > 0 ? [1] : []
     content {
       datastore_id = var.data_storage
       size         = var.worker_data_disk_size_gb
