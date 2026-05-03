@@ -23,7 +23,7 @@ okdctl kubeconfig [flags]
 
 ```
   -h, --help            help for kubeconfig
-      --merge           merge into $KUBECONFIG or ~/.kube/config instead of replacing
+      --merge           merge into $KUBECONFIG or ~/.kube/config (non-destructive: existing entries preserved)
   -o, --output string   write kubeconfig to file ('-' for stdout) (default "-")
 ```
 
