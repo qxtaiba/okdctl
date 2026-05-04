@@ -5,6 +5,36 @@ import (
 	"testing"
 )
 
+// TestValidateProxmoxName locks the current [A-Za-z0-9_-] allowlist so a
+// future refactor (e.g. swapping to a regex with a wrong anchor) cannot
+// silently relax the gate. Leading-digit names are accepted today; if a
+// hardening pass tightens that, both this test and the impl move together.
+func TestValidateProxmoxName(t *testing.T) {
+	accept := []string{"pve", "pve-1", "node_a", "PVE0", "1pve"}
+	for _, name := range accept {
+		if err := validateProxmoxName(name); err != nil {
+			t.Errorf("validateProxmoxName(%q) rejected; want nil: %v", name, err)
+		}
+	}
+
+	reject := []string{
+		"",
+		"pve.example",
+		"pve/etc",
+		"pve;rm",
+		"pve`id`",
+		"pve$(id)",
+		"pve space",
+		"pvé",
+		"pve\x00",
+	}
+	for _, name := range reject {
+		if err := validateProxmoxName(name); err == nil {
+			t.Errorf("validateProxmoxName(%q) accepted; want error", name)
+		}
+	}
+}
+
 func TestRefuseUnsafeISOPath(t *testing.T) {
 	const isoDir = "/var/lib/vz/template/iso"
 
