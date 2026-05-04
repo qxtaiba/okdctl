@@ -113,6 +113,24 @@ func IsNetworkManagerActive(ctx context.Context) bool {
 	return system.IsServiceActive(ctx, "NetworkManager")
 }
 
+// validateConnectionName rejects connection names containing characters
+// that would be dangerous in a shell context. argv invocations are safe
+// today, but these characters also indicate malformed or poisoned nmcli
+// output. Spaces are allowed: NetworkManager permits them in connection
+// names.
+func validateConnectionName(name string) error {
+	if name == "" {
+		return fmt.Errorf("connection name must not be empty")
+	}
+	const forbidden = ";\n\r\x00`$<>|&"
+	for _, r := range forbidden {
+		if strings.ContainsRune(name, r) {
+			return fmt.Errorf("connection name %q contains unsafe character %q", name, string(r))
+		}
+	}
+	return nil
+}
+
 func getActiveConnection(ctx context.Context) (string, error) {
 	out, err := system.OutputCaptured(ctx, "nmcli", "-t", "-f", "NAME", "connection", "show", "--active")
 	if err != nil {
@@ -121,9 +139,13 @@ func getActiveConnection(ctx context.Context) (string, error) {
 
 	for line := range strings.Lines(string(out)) {
 		line = strings.TrimSpace(line)
-		if line != "" && line != "lo" {
-			return line, nil
+		if line == "" || line == "lo" {
+			continue
 		}
+		if err := validateConnectionName(line); err != nil {
+			return "", fmt.Errorf("active connection name rejected: %w", err)
+		}
+		return line, nil
 	}
 	return "", fmt.Errorf("no active network connection found")
 }
