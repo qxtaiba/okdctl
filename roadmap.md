@@ -94,7 +94,7 @@ This is **design-doc-first**. No code lands until the plan is reviewed.
 
 ### R1 — Addon category model + design doc
 
-- **Status:** not started
+- **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/r1-design-doc
 - **Category:** feature-gap / half-done
 - **State:** design needed
 - **Effort:** weeks
@@ -1669,7 +1669,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `state:4f69fc9d:no-resume-checkpoint` — no resume checkpoint
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/state-4f69fc9d-rerunsafe  
 **Severity:** minor  
 **Cluster:** phase-idempotency  
 **Evidence:** `internal/distribution/step.go:178-212`  
@@ -1793,7 +1793,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `api:48688e63:pkg-facade-bypassed` — pkg facade bypassed
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/api-48688e63-progress-reporter  
 **Severity:** minor  
 **Cluster:** package-boundary  
 **Evidence:** `internal/infrastructure/proxmox/proxmox.go:153-159`  
