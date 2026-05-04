@@ -3194,3 +3194,235 @@ but link evidence.
   setter); renamed to `EXAMPLE-` prefixed values to satisfy the
   scanner.
 
+
+- **`api:d6b325cb:pkg-sibling-reach-through`** — done 2026-05-04
+  — PR #304, merge commit `95cf90c`. Tier G major
+  (package-boundary). `internal/infrastructure/proxmox/types.go`
+  was importing OKD-specific `internal/distribution/okd/phase` to
+  alias `VMRole = phase.NodeRole` and re-export Role/State
+  constants — inverted the directional invariant
+  (distribution depends on infrastructure, not the reverse).
+  Replaced both aliases with independent string-typed local
+  declarations carrying the same wire values. No translator
+  needed because no call site outside the proxmox package
+  consumes the types — `proxmox.go` constructs `VMStatus`
+  literals entirely from its own constants.
+
+- **`api:262af6e4:opt-inconsistent`** + **`err:262af6e4:sentinel-double-wrapped`**
+  — done 2026-05-04 — PR #305, merge commit `3dededd`. Tier G
+  minor (option-consistency / sentinel-vs-typed). Cleanup was
+  the only OKD phase exposed as a package-level function rather
+  than the `New(...)` + `Phase.Execute(ctx, *Options)` shape
+  used by setup/install/postinstall/destroy. Added
+  `cleanup.New(exec, logger, version) *Phase` mirroring
+  `destroy/phase.go::New` exactly; updated Provisioner-holding
+  callers (`okd.go::Prepare`, `destroy/steps.go`) to use it.
+  Kept the package-level `Execute` for the bare-CLI use case
+  (`cli/cleanup.go` doesn't have a Provisioner instance).
+  Dropped `ErrKindNotSet` sentinel — zero `errors.Is` callers
+  in repo; replaced its sole use site with a bare
+  `&errtypes.ConfigError{Msg}`. `errors` import preserved via
+  `errors.Join`.
+
+- **`api:35abd54e:export-no-caller-scaffolding`** + **`doc:35abd54e:doc-claim-vs-impl-drift`**
+  — done 2026-05-04 — PR #306, merge commit `5ed7cd7`. Tier G
+  suggestion (exported-surface / exported-doc). The Source enum
+  doc claimed `SourceConfig` was a reachable state, but
+  `GetProxmoxCredentials` never sets it (per the L250 comment
+  removing config-file fallback). Dropped `SourceConfig`
+  constant + its `String()` arm; simplified the switch into an
+  if/else. The doc commitment ("callers SHOULD warn on
+  EndpointFromConfig / ConfigCredentialsOverridden") was
+  already wired by `cli/helpers.go::reportCredentialProvenance`
+  — no new warning code needed.
+
+- **`smell:7f86cbe2:any-return-second-value`** — done 2026-05-04
+  — PR #307, merge commit `fd2fd32` (with delta commits
+  `5f1c0a1` and `fc7fe6f`). Tier G suggestion (interfaceany-lazy).
+  Replaced `func() (wizard.WizardStep, any)` factory return type
+  with `func() (wizard.WizardStep, wizard.StepState)` where
+  `StepState` is a marker interface (`interface{ IsWizardStepState() }`).
+  `*DataDrivenStep`, `*NodePlacementStep`, `*ResourcesStepState`
+  each gained the no-op marker. Cross-package interface
+  satisfaction required the marker method be exported (initial
+  unexported `wizardStateMarker` failed compile). Reviewer
+  delta caught two issues: (a) echo-signature comments with stale
+  identifier names — deleted; then (b) revive's `exported` rule
+  required comments back, so re-added one-line WHY comments.
+  Lesson: marker methods on exported types still need doc
+  comments per revive.
+
+- **`smell:125729c4:unused-public-field-force`** — done
+  2026-05-04 — PR #308, merge commit `b107bf5`. Tier G
+  suggestion (helper-package-no-value). `destroy.Options.Force`
+  was assigned `true` at `okd.go:182` but never read anywhere.
+  AutoApprove already covered the skip-prompt axis; investigation
+  found no roadmap entry planning a future `--force` destroy verb
+  (ux:0f076161 was already done covering `--force` flag
+  deprecation). Dropped the field, the assignment site, and the
+  stale `Execute` doc-comment that referenced `opts.Force`.
+
+- **`ux:aa84670c:exit-taxonomy-doc-only-in-package-doc`** —
+  done 2026-05-04 — PR #309, merge commit `666bbab`. Tier G
+  minor (exit-codes). Expanded `docs/cli/exit-codes.md` from a
+  22-line stub to a full reference page (intro, table, examples,
+  source anchor); linked from README. Reviewer flagged a stale
+  `77 | EX_NOPERM | invoked as root user` row faithfully copied
+  from `internal/cli/root.go:8-9`'s package doc — but `ensureRoot`
+  returns `errtypes.AuthError` mapped to exit 5, not `os.Exit(77)`.
+  Dropped the bogus row; added a clarifying paragraph that root
+  rejection lands at code 5. The pre-existing `root.go:8-9`
+  package-doc inaccuracy remains and should be a follow-up item.
+
+- **`con:48688e63:proxmox-connect-discards-ctx`** — done
+  2026-05-04 — PR #310, merge commit `ffc52a2`. Tier G
+  suggestion (ctx-ignored). `Provider.Connect`/`Disconnect`
+  accept `_ context.Context` for interface symmetry but never
+  use it (no I/O happens until Provision; auth flows through
+  terraform via env vars). Added one-sentence WHY comments to
+  both functions: "ctx is accepted for symmetry with future
+  network-bound providers; this implementation is local-only."
+  Per CLAUDE.md §concurrency, unused ctx params need a
+  justification comment.
+
+- **`tst:79e2cbc4:resolver-circular-deps-untested`** — done
+  2026-05-04 — PR #311, merge commit `9b843ca`. Tier H major
+  (destructive-untested). Resolver implements Kahn's topological
+  sort over addon dependencies; no test covered circular
+  detection, priority ordering, or missing-dependency paths.
+  Added `internal/addon/resolver_test.go` with a `fakeAddon`
+  fixture and 5 cases covering name-sort tiebreak, priority
+  tiebreak, A→B→C chain ordering, missing-dep error string, and
+  circular A↔B error message. Initial planner draft used a
+  placeholder `interface{ Done() <-chan struct{} }` for the
+  Install/Verify/Uninstall stubs; the corrected version uses
+  `context.Context` matching the real Addon interface.
+
+- **`tst:451be4fa:chown-tree-error-aggregation-untested`** —
+  done 2026-05-04 — PR #312, merge commit `c5463dd`. Tier H
+  major (canonical-helper-untested). `ChownTreeToInvokingUser`
+  uses `errors.Join` to aggregate per-entry chown failures and
+  continues the walk on individual EPERM. The existing test
+  only covered the no-SUDO_UID short-circuit. Added two
+  sub-tests: (1) no-op same-uid case asserting nil for a tree
+  with a regular file + dangling symlink; (2) unprivileged
+  uid 65534 case asserting `errors.Join` wraps ≥3 sub-errors
+  (proves the walk visited "." + 2 files rather than aborting
+  at first EPERM). Test branches on `os.Getuid()==0` to handle
+  root CI runners.
+
+- **`tst:97cb8adf:run-captured-no-test`** — done 2026-05-04
+  — PR #313, merge commit `f6aeb95`. Tier H major
+  (canonical-helper-untested). `system.RunCaptured` is the
+  canonical "run a command, surface stderr in the err" helper
+  (15+ call sites in firewall/dnsmasq/netutil); the
+  stderr-into-err shape is load-bearing for downstream
+  `errors.As` consumers. Added 4 cases via inline `sh -c`
+  invocations: exit 0 → nil; exit 1 with stderr → wrapped +
+  errors.As to `*exec.ExitError`; exit 1 empty stderr →
+  bin-name only; pre-cancelled ctx → `errors.Is(err, context.Canceled)`.
+
+- **`tst:73ad30ef:resolve-cluster-vip-no-test`** — done
+  2026-05-04 — PR #314, merge commit `ee90cd2`. Tier H minor
+  (canonical-helper-untested). `phase.ResolveClusterVIP` is the
+  5-call-site wrapper around `netutil.ResolveVIP` with a fixed
+  `"failed to resolve VIP"` prefix. Added `helpers_test.go`
+  with 3 sub-tests: explicit VIP wins; static-IP-derived VIP
+  uses `DefaultVIPLastOctet=10` (so `192.168.1.50` → `192.168.1.10`);
+  malformed VIP wraps with the canonical prefix.
+
+- **`tst:5e892064:download-checksum-fetch-paths`** — done
+  2026-05-04 — PR #315, merge commit `ba12a5a`. Tier H minor
+  (trust-boundary-untested). `verifyDownloadedFile` removes the
+  artifact on checksum mismatch — caller-side path was untested.
+  Added `TestVerifyDownloadedFile` with 3 cases: empty expected
+  → nil + file untouched; matching expected → nil + file intact;
+  mismatching expected → err + file gone. Uses canonical
+  `logutil.NopLogger` rather than inline
+  `slog.New(slog.DiscardHandler)`.
+
+- **`tst:7b2829bb:run-streamed-checked-no-test`** — done
+  2026-05-04 — PR #316, merge commit `cd0effa`. Tier H minor
+  (canonical-helper-untested). `RunStreamedChecked` is the
+  canonical "stream stdout+stderr live AND return ExitError on
+  non-zero" helper used by `terraform.Plan/Apply/Destroy`. Added
+  `TestRunStreamedChecked` with 3 sub-tests via `sh -c`: zero
+  exit streams + captures; non-zero returns `*ExitError` with
+  ring-buffered stderr tail; ctx cancel returns context error
+  unwrapped (NOT `*ExitError`). Uses
+  `New(WithInheritedEnv())` so the test's PATH propagates.
+
+- **`tst:4c092fce:terraform-build-var-args-untested`** — done
+  2026-05-04 — PR #317, merge commit `0615fb4`. Tier H minor
+  (canonical-helper-untested). `buildVarArgs` sorts vars
+  alphabetically before composing `-var k=v` — terraform plan
+  reproducibility depends on this. Added two tests: (1)
+  deterministic-order assertion against `{"z":"3","a":"1","m":"2"}`
+  → `["-var","a=1","-var","m=2","-var","z=3"]`; (2) missing-var-file
+  asserts no `-var-file=` token in result + Warn was logged.
+  Tests use a tiny `captureHandler` slog.Handler stub for the
+  Warn-capture assertion (canonical NopLogger insufficient
+  here).
+
+- **`tst:e552bb7d:remove-secondary-ip-no-test`** — done
+  2026-05-04 — PR #318, merge commit `96ecee8`. Tier H minor
+  (destructive-untested). `RemoveSecondaryIP` short-circuits to
+  nil when the IP is absent (avoids needless `nmcli device
+  reapply`). Added `iface_test.go` with `installFakeIPNmcli`
+  helper that writes POSIX shell scripts named `ip` and `nmcli`
+  into a `t.TempDir`, prepends to PATH (PATH is in
+  `executor.DefaultEnvAllowlist.Exact`). nmcli log path
+  embedded in the script body to bypass env-allowlist
+  filtering. 5 sub-tests: ip absent (0 nmcli calls); ip present
+  (3 nmcli calls: show + modify + reapply); ip exits 1 (wrapped
+  error with "failed to check IP presence"); empty-arg
+  validation × 2.
+
+- **`tst:881d089e:runlock-write-failure-untested`** — done
+  2026-05-04 — PR #319, merge commit `54d774b`. Tier H minor
+  (canonical-helper-untested). Acquire writes
+  `PID=%d VERB=%s TIME=%s HOST=%s\n` after successful flock;
+  prior tests asserted only HOST=. Extended TestAcquireAndRelease
+  to read the lock file post-acquire and assert PID=, VERB=deploy,
+  TIME= are present. Added TestConflictMessageContainsPID
+  asserting the conflict `*errtypes.ConfigError.Msg` contains
+  the prior holder's PID (proves the lock body was actually
+  read into the conflict message — guards against a regression
+  where truncate-then-write fails silently).
+
+- **`tst:e3782ee7:expand-path-no-test`** — done 2026-05-04
+  — PR #320, merge commit `1d2dc40`. Tier H minor
+  (canonical-helper-untested). `ExpandPath` resolves `~/foo` via
+  `InvokingUserHomeDir` (which uses `user.Lookup`, not
+  `$HOME`). Added 5 sub-tests: SUDO_USER=current → `~/x`
+  expands to `<homedir>/x`; bare `~` → unchanged; `~user/foo`
+  → unchanged (only `~/` prefix expands); absolute → unchanged;
+  relative → unchanged. Lesson: don't try to redirect ExpandPath
+  via `t.Setenv("HOME", ...)` — `user.Lookup` reads
+  `/etc/passwd`, so the test depends on a valid passwd entry
+  for the current user (always true in normal CI).
+
+- **`tst:eb479d86:upload-iso-via-scp-no-test`** — done
+  2026-05-04 — PR #321, merge commit `fab356e`. Tier H minor
+  (trust-boundary-untested). `uploadISOsViaSCP` composes scp
+  argv from `[]isoFiles + user/host/remotePath`; argv passes
+  through `os/exec` (no shell interpolation), but the lack of
+  test left a future `sh -c` retry refactor free to silently
+  introduce CWE-78. Added `installFakeSCP` helper that writes a
+  POSIX shell script printing each `$@` arg on its own line.
+  Two tests: (1) argv-shape asserts `-o
+  StrictHostKeyChecking=accept-new` pair, ISO paths as discrete
+  argv entries, destination `user@host:path/` with trailing
+  slash; (2) filename-with-spaces survives as one argv entry.
+  Used canonical `logutil.NopLogger`. No production code change
+  — `uploadISOsViaSCP` already accepted an Executor.
+
+- **`tst:f51f85bb:cidr-to-netmask-edge-no-test`** — done
+  2026-05-04 — PR #322, merge commit `f60208f`. Tier H
+  suggestion (trust-boundary-untested). `CIDRToNetmask` was
+  well-tested for typical CIDRs (/0 /8 /12 /24 /32) but missing
+  the off-by-one boundaries downstream HAProxy/dnsmasq template
+  substitution depends on. Added 3 table rows: `/1` →
+  `128.0.0.0`; `/31` → `255.255.255.254`; `/30` →
+  `255.255.255.252`. All three values verified by hand against
+  `^uint32(0) << (32 - bits)` arithmetic.

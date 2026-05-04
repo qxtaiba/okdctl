@@ -1801,16 +1801,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** No fix; audit-positive note. Documented as a baseline so future contributors keep using errors.Join.  
 **Effort:** hours
 
-##### `err:262af6e4:sentinel-double-wrapped` — sentinel double wrapped (scaffolding — verify intent only)
-
-**Status:** in review — PR #305  
-**Severity:** suggestion  
-**Cluster:** sentinel-vs-typed  
-**Evidence:** `internal/distribution/okd/cleanup/cleanup.go:47-108`  
-**Problem:** ErrKindNotSet is exported ("Callers can test for it with errors.Is") but NO caller uses errors.Is(err, cleanup.ErrKindNotSet) anywhere in the repo. Internal use at line 106 wraps it inside ConfigError{Err: ErrKindNotSet}, which preserves identity correctly — but no consumer leverages that. Same scaffolding-vs-stale tension as err:d6b325cb.  
-**Fix:** Verify intent: search roadmap.md for cli/cleanup work that would consume errors.Is(err, ErrKindNotSet); if absent, drop ErrKindNotSet entirely and replace line 106 with bare &errtypes.ConfigError{Msg}. Keep iff a doctor/preflight surfaces it.  
-**Effort:** hours
-
 ##### `err:9d79b841:fcos-stream-status-bare` — fcos stream status bare
 
 **Status:** done — PR #203 (moved to Completed)  
@@ -1881,37 +1871,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Replace with: `t := time.NewTimer(100 * time.Millisecond); defer t.Stop(); select { case result = <-ch: case <-t.C: return }`. Two extra lines for pattern consistency with internal/distribution/okd/install/monitor.go's reapTimer.  
 **Effort:** hours
 
-##### `con:48688e63:proxmox-connect-discards-ctx` — proxmox connect discards ctx (scaffolding — verify intent only)
-
-**Status:** in review — PR #310  
-**Severity:** suggestion  
-**Cluster:** ctx-ignored  
-**Evidence:** `internal/infrastructure/proxmox/proxmox.go:74-92`  
-**Problem:** Provider.Connect and Provider.Disconnect each accept `_ context.Context` for interface symmetry but never use it. Connect's body is pure validation + struct mutation (no I/O happens until Provision). The CLAUDE.md scaffolding-as-roadmap rule (MEMORY.md §scaffolding) covers this: the ctx is API scaffolding for the symmetric Connect/Disconnect shape used by future providers (the alternative would be a Connect signature without ctx, which then breaks symmetry with a network-bound Connect on a hypothetical AWS provider). Keep the param, but flag for review.  
-**Fix:** Verify intent: keep the ctx parameter on the Connect/Disconnect contract. No code change required. (Optionally add a comment: "// ctx accepted for symmetry with future network-bound providers; this implementation is local-only.")  
-**Effort:** hours
-
 #### audit-api-design
-
-##### `api:d6b325cb:pkg-sibling-reach-through` — pkg sibling reach through
-
-**Status:** in review — PR #304  
-**Severity:** major  
-**Cluster:** package-boundary  
-**Evidence:** `internal/infrastructure/proxmox/types.go:3-50`  
-**Problem:** Generic infrastructure package internal/infrastructure/proxmox imports OKD-specific internal/distribution/okd/phase to alias VMRole = phase.NodeRole and re-export Role* constants. The directional invariant is that distribution depends on infrastructure, not the reverse — making infrastructure pull a sibling distribution package's domain types couples future providers (Hyper-V, vSphere) to OKD vocabulary.  
-**Fix:** Define VMRole as a string type local to internal/infrastructure/proxmox (or move it to a neutral internal/cluster/role package) and let okd's setup/destroy code translate between phase.NodeRole and proxmox.VMRole at the boundary. The two enums currently share string values ('bootstrap','master','worker'); a thin string-typed alias in proxmox plus a one-line ParseRole call site at the okd→proxmox edge keeps the canonical phase.NodeRole role enum intact.  
-**Effort:** hours
-
-##### `api:262af6e4:opt-inconsistent` — opt inconsistent
-
-**Status:** in review — PR #305  
-**Severity:** minor  
-**Cluster:** option-consistency  
-**Evidence:** `internal/distribution/okd/cleanup/cleanup.go:54-54`  
-**Problem:** cleanup is the only OKD phase exposed as a package-level function (cleanup.Execute(ctx, opts)) rather than the {New(...)+Phase.Execute(ctx, ...)} object-oriented shape used by setup, install, postinstall, and destroy. The cleanup package even defines an Options struct embedding phase.BaseOptions like the others; only the constructor is missing. This forces callers to dance: destroy and the deploy pre-clean both fabricate cleanup.Options inline rather than calling cleanup.New(...).  
-**Fix:** Either (a) bring cleanup into line: add cleanup.New(exec, logger, version) *Phase with a Phase.Execute(ctx, *Options) — exactly mirroring setup/install/postinstall/destroy — and update the two callers (okd.go::Prepare, destroy/steps.go), OR (b) acknowledge cleanup is the odd one out by name (it's truly stateless; no executor/version needed) and leave it. Pick one; the current half-state where cleanup looks like a phase but isn't constructable as one is the worst of both. If keeping (b), drop the phase.BaseOptions embedding from cleanup.Options to make the divergence honest.  
-**Effort:** hours
 
 ##### `api:dd75bdeb:export-no-caller` — export no caller
 
@@ -1936,16 +1896,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 ##### `api:0934cf1b:should-be-exported` — should be exported
 
 **Status:** done — PR #184 (moved to Completed)
-
-##### `api:35abd54e:export-no-caller-scaffolding` — export no caller scaffolding (scaffolding — verify intent only)
-
-**Status:** in review — PR #306  
-**Severity:** suggestion  
-**Cluster:** exported-surface  
-**Evidence:** `internal/credentials/proxmox.go:15-36`  
-**Problem:** credentials.Source enum (SourceNone, SourceEnv, SourceConfig) plus String() are exported, but only ProxmoxCredentials.Source uses them and the enum's only consumer of the string form is ProxmoxCredentials.String() in this same file. The field Source is exposed for callers to display credential provenance, and the enum String() method is the natural rendering — but no external caller reads the field today (search shows zero hits in cli/ for credentials.Source/SourceEnv/etc.). The provenance flags EndpointFromConfig and ConfigCredentialsOverridden are similarly unused externally.  
-**Fix:** Verify intent. The struct doc-comment says callers SHOULD warn on EndpointFromConfig / ConfigCredentialsOverridden — that warning isn't wired anywhere yet. Either land the warning (cli/deploy.go and cli/destroy.go are the natural sites) so the surface earns its keep, or downgrade Source/EndpointFromConfig/ConfigCredentialsOverridden to package-private until a consumer materialises. Don't silently delete — the doc comment is a roadmap commitment.  
-**Effort:** hours
 
 ##### `api:8e65d574:iface-in-producer` — iface in producer
 
@@ -2016,16 +1966,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 ##### `ux:0f076161:destroy-force-deprecated-but-still-default-binding` — destroy force deprecated but still default binding
 
 **Status:** done — PRs #185 + #192 (moved to Completed)
-
-##### `ux:aa84670c:exit-taxonomy-doc-only-in-package-doc` — exit taxonomy doc only in package doc
-
-**Status:** in review — PR #309  
-**Severity:** minor  
-**Cluster:** exit-codes  
-**Evidence:** `internal/cli/root.go:1-8`  
-**Problem:** Exit-code taxonomy lives only in the cli package's package-doc comment. There is no docs/cli/exit-codes.md, no README mention, no man-page snippet — operators writing `okdctl deploy && X` cannot discover it without reading source.  
-**Fix:** Add docs/cli/exit-codes.md with the full table (codes, meanings, examples), reference it from README.md Usage section, and ensure cmd/okdctl-gen-docs picks it up if it adds a non-cobra reference page generator. Keep the package doc as a code-side anchor.  
-**Effort:** hours
 
 ##### `ux:08c49fc4:remove-haproxy-no-x-bool-default-true` — remove haproxy no x bool default true
 
@@ -2203,26 +2143,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Replace `Platform: fmt.Sprintf("%s/%s", runtime.GOOS, runtime.GOARCH)` with `Platform: version.Platform` and remove the unused `runtime` import (debug_bundle.go:12) if no other code references it.  
 **Effort:** hours
 
-##### `smell:7f86cbe2:any-return-second-value` — any return second value
-
-**Status:** in review — PR #307  
-**Severity:** suggestion  
-**Cluster:** interfaceany-lazy  
-**Evidence:** `internal/cli/wizard_setup.go:35-52`  
-**Problem:** stepRegistration.factory returns `(wizard.WizardStep, any)` but the second value is either a typed *State pointer (BasicsStep, ProxmoxStep, …) or the literal nil (WelcomeStep, DistributionStep, ReviewStep). The `any` defers all type checks to BuildSteps and forces every consumer to type-assert. A stronger signature is `(wizard.WizardStep, wizard.StepState)` with a marker interface or a generic factory keyed by StepType.  
-**Fix:** Define `type WizardStepState interface{ wizardStateMarker() }` (or use a generic StepBuilder.Register[T any]) so the factory's second return is structurally constrained. Alternative: split into two registration tables — one for steps with state (require non-nil), one for stateless. The current `any` lets a consumer accidentally register a string and only fail at runtime on the BuildSteps type assertion.  
-**Effort:** hours
-
-##### `smell:125729c4:unused-public-field-force` — unused public field force (scaffolding — verify intent only)
-
-**Status:** in review — PR #308  
-**Severity:** suggestion  
-**Cluster:** helper-package-no-value  
-**Evidence:** `internal/distribution/okd/destroy/phase.go:24-24`  
-**Problem:** destroy.Options.Force is exported, set in okd.go::Destroy via `destroyOpts.Force = true`, but never read anywhere — the field's only consumer is the doc-comment that says "by the time Execute runs, opts.Force is expected to be true". The actual confirmation guard is at the CLI layer using destroyForce, not via this field. Likely scaffolding for a future destroy --force semantic distinct from --yes.  
-**Fix:** Either (a) verify intent against roadmap.md and add a doc-comment naming the future verb, or (b) drop the field entirely. AutoApprove already covers the 'skip prompt' axis; Force as a distinct concept needs a written spec or it stays dead. Tagged scaffolding: a `--force` destroy that bypasses live-cluster guards is a plausible future verb.  
-**Effort:** hours
-
 ##### `smell:696d6b0e:redundant-vmstatus-enum` — redundant vmstatus enum
 
 **Status:** done — PR #266  
@@ -2317,277 +2237,4 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 #### audit-documentation
 
-##### `doc:35abd54e:doc-claim-vs-impl-drift` — doc claim vs impl drift (scaffolding — verify intent only)
-
-**Status:** in review — PR #306  
-**Severity:** suggestion  
-**Cluster:** exported-doc — seam→audit-api-design; related: api:35abd54e:export-no-caller-scaffolding  
-**Evidence:** `internal/credentials/proxmox.go:13-24`  
-**Problem:** Source enum doc claims SourceConfig is a reachable state ('SourceConfig means the credential came from the YAML config file') but the implementation never sets creds.Source = SourceConfig — the comment at L213 explicitly says 'Config-file credentials are NO LONGER a fallback'. Doc and implementation disagree, which makes the type misleading: callers reading the doc would write switch arms that are dead code.  
-**Fix:** Either (a) drop SourceConfig + its String() arm and accept this is env-or-nothing per the L213 comment, or (b) reinstate config-file fallback wired up to set creds.Source = SourceConfig. Option (a) is consistent with the security stance the rest of the package takes (no string residue of px.Password in heap). Per MEMORY.md scaffolding rule, prefer 'verify intent' (grep roadmap.md, ask the owner) before deletion. If kept, document it as reserved-for-future on the enum value.  
-**Effort:** hours
-
 #### audit-tests
-
-##### `tst:79e2cbc4:resolver-circular-deps-untested` — resolver circular deps untested
-
-**Status:** in review — PR #311  
-**Severity:** major  
-**Cluster:** destructive-untested  
-**Evidence:** `internal/addon/resolver.go:12-70`  
-**Problem:** Resolve implements Kahn's topological sort over addon dependencies. The function is the gate between operator-declared addons and install ordering — a false negative on circular dependency would cause Manager.InstallAll to deadlock or install in the wrong order (e.g. SecretStore before Flux that depends on it). No test today covers (a) circular detection, (b) priority ordering, (c) missing-dependency error.  
-**Fix:** Add resolver_test.go with a tiny stubAddon: cases — (1) no deps + same priority sorts by name; (2) priority breaks ties; (3) A→B→C orders C before B before A; (4) missing dep returns error containing "depends on" and addon names; (5) circular A→B→A returns "circular dependency detected". Pure logic — a fakeAddon{name, deps, priority} struct + addon.Addon interface stub is enough.  
-**Effort:** hours
-
-##### `tst:451be4fa:chown-tree-error-aggregation-untested` — chown tree error aggregation untested
-
-**Status:** in review — PR #312  
-**Severity:** major  
-**Cluster:** canonical-helper-untested  
-**Evidence:** `internal/system/elevation.go:111-131`  
-**Problem:** ChownTreeToInvokingUser is called with `defer` from cli/destroy.go, cli/cleanup.go, and cli/deploy.go to put the workdir back into the invoking user's hands after a sudo'd run. The function uses errors.Join to aggregate per-entry chown failures and continues the walk so a single bad symlink doesn't strand the whole tree root-owned. The existing test only covers the no-SUDO_UID short-circuit. The error-aggregation path — the actual point of the function — is untested.  
-**Fix:** Add TestChownTreeToInvokingUser_AggregatesErrors that (1) sets SUDO_UID/GID to the current process's uid/gid (no-op chown), (2) creates a tree with a regular file and a broken symlink, (3) asserts the walk completes and errors.Join returns nil for the no-op case. Then a parallel test that uses an unprivileged uid (e.g. 65534) and asserts errors.Join wraps multiple errs but the walk still visits all entries (count via a probe).  
-**Effort:** hours
-
-##### `tst:97cb8adf:run-captured-no-test` — run captured no test
-
-**Status:** in review — PR #313  
-**Severity:** major  
-**Cluster:** canonical-helper-untested  
-**Evidence:** `internal/system/exec.go:21-33`  
-**Problem:** system.RunCaptured is the canonical 'run a command, surface stderr in the err' helper used by every firewall, dnsmasq, and netutil call site (15+ sites). It has no test. The stderr-into-err shape is the load-bearing detail — consumers errors.As(err, &cfgErr) on the returned error and rely on the wrapped stderr being human-readable. A regression that drops the stderr-prefix or uses fmt.Errorf without %w breaks every error message downstream.  
-**Fix:** Add TestRunCaptured cases: (1) command exits 0 → nil; (2) command exits 1 with stderr="oops" → err contains "oops" and errors.Is unwraps to *exec.ExitError; (3) command exits 1 with empty stderr → err carries the bin name only; (4) ctx cancel returns ctx err. Use a fake script in PATH per kubectl_test.go's installFakeOC pattern.  
-**Effort:** hours
-
-##### `tst:73ad30ef:resolve-cluster-vip-no-test` — resolve cluster vip no test
-
-**Status:** in review — PR #314  
-**Severity:** minor  
-**Cluster:** canonical-helper-untested  
-**Evidence:** `internal/distribution/okd/phase/helpers.go:24-30`  
-**Problem:** ResolveClusterVIP is the canonical 'resolve VIP from cfg' wrapper used by destroy, postinstall, dns, update_ingress (5 sites per the comment). It thin-wraps netutil.ResolveVIP with a fixed error prefix. netutil.ResolveVIP IS tested but the prefix wrap and the netutil-to-config field mapping (cfg.Networking.Bastion.VIP first, then StaticIP.Start) are not.  
-**Fix:** Add TestResolveClusterVIP: (1) explicit VIP wins; (2) static-IP-derived VIP when no explicit; (3) malformed VIP wraps with "failed to resolve VIP" prefix and underlying error stays errors.Is-able. Pure function — no fixtures.  
-**Effort:** hours
-
-##### `tst:eb479d86:upload-iso-via-scp-no-test` — upload iso via scp no test
-
-**Status:** in review — PR #321  
-**Severity:** minor  
-**Cluster:** trust-boundary-untested  
-**Evidence:** `internal/distribution/okd/setup/upload.go:42-51`  
-**Problem:** uploadISOsViaSCP composes scp argv from operator-supplied isoFiles + user/host/remotePath. Local file paths are joined into one scp invocation 'scp -o StrictHostKeyChecking=accept-new f1 f2 ... root@host:/path/'. Argv is os/exec — no shell interpolation — but the lack of a test means a future refactor that adds an `sh -c` for retry logic would silently introduce CWE-78 via filenames. There is no test asserting the argv shape.  
-**Fix:** Refactor uploadISOsViaSCP to take an Executor injection and add a test using a fake `scp` script in PATH that prints argv to stdout; assert (a) StrictHostKeyChecking flag present, (b) ISO paths appear as separate argv entries (not joined), (c) destination is exactly user@host:remotePath/ with trailing slash, (d) filenames containing spaces survive as one argv entry.  
-**Effort:** hours
-
-##### `tst:5e892064:download-checksum-fetch-paths` — download checksum fetch paths
-
-**Status:** in review — PR #315  
-**Severity:** minor  
-**Cluster:** trust-boundary-untested  
-**Evidence:** `internal/download/checksum.go:59-111`  
-**Problem:** FetchChecksum has reasonable test coverage of the parser (TestFetchChecksum) but the caller-side verifyDownloadedFile path (which os.Removes the downloaded file on mismatch) is untested. A mismatch leaves the user with no artifact and a generic error — testing locks that the file is actually removed (so the next run re-downloads instead of trusting a corrupt cache).  
-**Fix:** Add TestVerifyDownloadedFile cases: (1) empty expected → nil, file untouched; (2) match → nil, file untouched; (3) mismatch → err, file gone. Pure function tests against a t.TempDir.  
-**Effort:** hours
-
-##### `tst:7b2829bb:run-streamed-checked-no-test` — run streamed checked no test
-
-**Status:** in review — PR #316  
-**Severity:** minor  
-**Cluster:** canonical-helper-untested  
-**Evidence:** `internal/executor/executor.go:300-311`  
-**Problem:** executor.RunStreamedChecked is the canonical 'stream stdout+stderr live AND return ExitError on non-zero' helper used by terraform.Plan/Apply/Destroy. The buildEnv allowlist and ringbuffer are tested, but the Streamed-Checked flow itself isn't — there's no assertion that on non-zero exit the returned err is *ExitError carrying the ringbuffer tail of stderr. A regression that returns nil on exit==0 with a write error to e.Stdout silently swallows the failure.  
-**Fix:** Add TestRunStreamedChecked cases parallel to TestBuildEnv_EndToEndWithEcho: (1) command exits 0 → result.ExitCode==0, err==nil, stdout streamed to e.Stdout AND captured in result.Stdout; (2) command exits 1 → err is *ExitError, ExitError.Stderr contains the last lines (ring tail); (3) ctx cancel mid-stream returns ctx error wrapped via cmd.Run.  
-**Effort:** hours
-
-##### `tst:4c092fce:terraform-build-var-args-untested` — terraform build var args untested
-
-**Status:** in review — PR #317  
-**Severity:** minor  
-**Cluster:** canonical-helper-untested  
-**Evidence:** `internal/infrastructure/terraform/terraform.go:172-192`  
-**Problem:** buildVarArgs sorts vars alphabetically (slices.Sorted(maps.Keys(vars))) before composing -var k=v. Deterministic ordering is the contract — terraform's plan output diffing relies on stable arg order for reproducible plans. There is no test asserting the sorted order, so a refactor swapping to a non-sorted iteration silently breaks plan-output stability.  
-**Fix:** Add TestExecutor_BuildVarArgs_DeterministicOrder: vars := {"z":"3", "a":"1", "m":"2"}; call buildVarArgs("", vars); assert returned slice matches ["-var","a=1","-var","m=2","-var","z=3"]. Also asserts varFile-not-found path issues a Warn and skips -var-file.  
-**Effort:** hours
-
-##### `tst:e552bb7d:remove-secondary-ip-no-test` — remove secondary ip no test
-
-**Status:** in review — PR #318  
-**Severity:** minor  
-**Cluster:** destructive-untested  
-**Evidence:** `internal/netutil/iface.go:17-48`  
-**Problem:** RemoveSecondaryIP is called from postinstall.RemoveHAProxy and cleanup.HAProxy to strip the bastion VIP. The flow is (ip addr show → grep ip+/ → nmcli connection modify -ipv4.addresses → nmcli device reapply). The early-return on 'IP not present' prevents needless reconfigure; a test would lock that this short-circuit fires (rather than silently issuing a remove on every cleanup).  
-**Fix:** Install fake `ip` and `nmcli` scripts in PATH per kubectl_test.go's installFakeOC pattern. Cases: (1) ip addr output contains "192.168.1.10/24" + ip arg "192.168.1.10" → fast-path nil, no nmcli invocation; (2) ip addr empty + ip arg → nmcli connection modify + nmcli device reapply called; (3) `ip` exits 1 → returns wrapped error. Verify fake invocation count via a counter file.  
-**Effort:** hours
-
-##### `tst:881d089e:runlock-write-failure-untested` — runlock write failure untested
-
-**Status:** in review — PR #319  
-**Severity:** minor  
-**Cluster:** canonical-helper-untested  
-**Evidence:** `internal/runlock/runlock.go:29-54`  
-**Problem:** Acquire's existing test covers create and conflict but not the diagnostic-write path: the function truncates the file, writes PID/VERB/TIME diagnostics, and ignores the write errors with `_, _ = fmt.Fprintf(...)`. A regression that fails the truncate-then-write would leave stale diagnostics from a previous holder, breaking the conflict error message ('another okdctl process holds the project lock: <stale>').  
-**Fix:** Extend the existing TestAcquireAndRelease — after acquire, read the file and assert the diagnostics carry PID=<currentPid>, VERB=deploy, TIME=<recent>. A second test acquires after a conflict and asserts the error string contains the prior holder's PID (the lock file body was actually read).  
-**Effort:** hours
-
-##### `tst:e3782ee7:expand-path-no-test` — expand path no test
-
-**Status:** in review — PR #320  
-**Severity:** minor  
-**Cluster:** canonical-helper-untested  
-**Evidence:** `internal/system/fs.go:154-165`  
-**Problem:** ExpandPath resolves leading ~/ via InvokingUserHomeDir so config-supplied PullSecret / SSHPublicKey paths (~/pull-secret.json) work correctly under sudo re-exec. The function gates a config-validation site (validators.go validateFiles) and an ignition-rendering site. There is no test asserting (a) ~/foo expands when SUDO_USER points at a real user, (b) ~ alone (no slash) is left intact, (c) absolute and relative paths pass through unchanged.  
-**Fix:** Add TestExpandPath cases: (1) SUDO_USER=current, ~/x → /home/<user>/x; (2) bare ~ → ~ unchanged; (3) ~user/foo → ~user/foo (only ~/ prefix expands); (4) /abs/path → unchanged; (5) relative/path → unchanged.  
-**Effort:** hours
-
-##### `tst:f51f85bb:cidr-to-netmask-edge-no-test` — cidr to netmask edge no test
-
-**Status:** in review — PR #322  
-**Severity:** suggestion  
-**Cluster:** trust-boundary-untested  
-**Evidence:** `internal/netutil/ip.go:15-29`  
-**Problem:** CIDRToNetmask is well-tested for typical CIDRs but missing edge-cases that cross the boundary into HAProxy/dnsmasq template substitution: /31, /32 (now passes), /1, /0 (now passes), and pathological inputs like 192.168.1.0/-1 (rejected) vs 192.168.1.0/33 (rejected). The existing test covers /0 /8 /12 /24 /32 but not /1 or /31, the off-by-one cases that template-substitution downstream could mis-render.  
-**Fix:** Extend TestCIDRToNetmask: 0.0.0.0/1 → 128.0.0.0; 192.168.1.0/31 → 255.255.255.254; 10.0.0.0/30 → 255.255.255.252.  
-**Effort:** hours
-
-
-## Explicitly skipped
-
-Do not revisit these without a strong new signal.
-
-| ID | Item | Rationale |
-|---|---|---|
-| L1 | libvirt / KVM provider | Proxmox-only is a product constraint |
-| L2 | vSphere / AWS / Equinix / bare-metal / Vagrant | Same |
-| L3 | Multi-distribution (RKE2, vanilla k8s) | Same |
-| M7 | Provider interface extraction | No longer needed given L1–L3 skipped |
-| L12 | Container image distribution (ghcr.io/...) | Deploy model is host-shell; container fit is poor |
-
-Also skipped by design (documented in audit, not user-driven):
-
-- macOS / Windows build targets (goreleaser ships linux/amd64 + linux/arm64 only).
-- `okdctl doctor` on non-Linux (Linux-only build tag is intentional).
-- Bootstrap as a separate wizard section (wizard intentionally mirrors
-  control-plane specs via `internal/tui/wizard/steps/resources.go:56`).
-- Manual addon registration via blank-import (pattern is documented in
-  `docs/architecture/addons.md:50-58`; scale does not yet justify codegen).
-- Terraform state file preservation during cleanup — deliberate in
-  `internal/distribution/okd/cleanup/infra.go:52-61`.
-- Hardcoded k8s ports (6443, 22623) — OKD spec-level; configurability
-  would break installer assumptions.
-
-## Completed
-
-Completed items are archived to **`docs/roadmap/completed-archive.md`**
-to keep this file readable. The archive preserves every postmortem
-verbatim — search there for incident review or pattern reuse.
-
-**Adding a new completion:** append the entry to the archive (same
-shape as existing entries — close date, PR / merge commit, terse
-evidence, postmortem lesson when one exists), then flip the item's
-Status in this file from `in review — PR #N` to `done`. Update the
-Appendix ledger row at the bottom of this file to `**Done** (PR #N)`
-so the ledger remains the canonical "is dep X done?" lookup.
-
-## Appendix — full item ledger
-
-| ID | Item | Disposition |
-|---|---|---|
-| U1 | Cleanup leaves FCOS ISO cache | **Done** (audit error — see Completed) |
-| U1b | Clean remote Proxmox FCOS ISO on destroy | **Done** (PR #54) |
-| U2 | Wizard never sets `Provider.Type` | **Done** (PR #52) |
-| U3 | HTTP downloads no retry | Sprint 1 |
-| U4 | Exit codes only 0/1/130 | **Done** (PR #70) |
-| U5 | `cmd.Run()` without ctx (2 sites) | **Done** (landed in 65d8fce — see Completed) |
-| U6 | `BuildOpaqueSecret` panic | Sprint 1 |
-| N1 | `okdctl addon list/install/uninstall/verify` | **Done** (PR #73) |
-| N2 | `okdctl releases list/show` | Sprint 1 |
-| N3 | `okdctl config validate` standalone | **Done** (PR #74) |
-| N4 | `okdctl cleanup` standalone | **Done** (PR #58) |
-| N5 | `okdctl kubeconfig` | **Done** (PR #55) |
-| N6 | `okdctl config show` | **Done** (PR #59) |
-| N7 | `okdctl completion` | **Done** (PR #60) |
-| N8 | Step timing + deploy summary | **Done** (PR #64) |
-| N9 | `--log-level/--log-format/--log-file` flags | **Done** (PR #65) |
-| N10 | Ctrl-C partial-progress summary | **Done** (PR #77) |
-| N11 | `--yes` parity on deploy/update-ingress | **Done** (PR #68) |
-| N12 | Unit tests for `netutil` | Deferred |
-| N13 | Unit tests for `config/validators` | Deferred |
-| N14 | `go vet` in CI | **Done** (PR #53) |
-| N15 | Wizard: Deployment fields | **Done** (PR #66) |
-| N16 | Wizard: FCOSIso/TokenID/AdditionalNetworks | **Done** (PR #79) |
-| N17 | Wizard review completeness | **Done** (PR #56) |
-| N18 | Gateway-in-CIDR validator | **Done** (PR #57) |
-| N19 | Addon-specific docs | **Done** (PR #71) |
-| N20 | Doctor-check reference doc | **Done** (PR #67) |
-| N21 | `CONTRIBUTING.md` | Deferred |
-| N22 | Troubleshooting / FAQ | Deferred |
-| N23 | HTTP error context | **Done** (PR #62) |
-| N25 | Progress bars for long ops | **Done** (PR #78) |
-| N26 | TUI key-value map editor component | **Done** (PR #92) |
-| M1 | `okdctl status` / `describe` | **Done** (PR #84) |
-| M2 | `okdctl debug-bundle` | **Done** (PR #90) |
-| M3 | `--dry-run` / `--plan` mode | **Done** (PR #87) |
-| M4 | OKD release URL override | **Done** (PR #61) |
-| M5 | Tool binary versions override | **Done** (PR #75) |
-| M6 | `DefaultBinDir` rootless | **Done** (PR #93) |
-| M7 | Provider interface extraction | **Skipped** |
-| M8 | MetalLB addon | Deferred (under R2) |
-| M9 | cert-manager addon | Deferred (under R2) |
-| M10 | ingress-nginx addon | Deferred (under R2) |
-| M11 | kube-prometheus-stack addon | Deferred (under R2) |
-| M12 | SecretStore multi-provider | **Done** (PR #81) |
-| M13 | Typed error hierarchy | **Done** (PR #70) |
-| M13b | Complete errtypes migration across phase code | **Done** (PR #83) |
-| M14 | Correlation ID | **Done** (PR #82) |
-| M15 | Integration test harness | Deferred |
-| M16 | Autogenerated CLI reference | **Done** (PR #76) |
-| M17 | Architecture diagrams | **Done** (PR #72) |
-| M18 | Homebrew tap | Deferred |
-| M19 | Typed addon settings (decoder method) | **Done** (PR #89) |
-| M20 | Grouped wizard fields for addons | **Done** (PR #89) |
-| M21-M27, M33 | Air-gap workstream (all superseded) | **Reverted** (M40) |
-| M29 | GitHub Artifact Attestations for release binaries | **Done** (PR #94) |
-| M31 | *(unassigned — was OKD version floor, reversed 2026-04-20)* | n/a |
-| M34 | *(unassigned — was air-gap colonoscopy audit, reverted under M40)* | n/a |
-| M40 | Air-gap workstream removed | **Done** |
-| L1 | libvirt/KVM provider | **Skipped** |
-| L2 | vSphere/AWS/Equinix/bare-metal/Vagrant | **Skipped** |
-| L3 | Multi-distribution (RKE2, vanilla) | **Skipped** |
-| L4 | `okdctl upgrade` | Deferred |
-| L5 | Prometheus metrics endpoint during deploy | **Done** (PR #87) |
-| L6 | OpenTelemetry tracing | Deferred |
-| L7 | Storage addons (Rook-Ceph) | Deferred (under R2) |
-| L8 | Backup addons (Velero / VolSync) | Deferred (under R2) |
-| L9 | Policy addons (Kyverno / Gatekeeper) | Deferred (under R2) |
-| L10 | Argo CD addon | Deferred (under R2) |
-| L11 | Service mesh addons | Deferred (under R2) |
-| L12 | Container image distribution | **Skipped** |
-| L13 | Auto-update version check | **Done** (PR #69) |
-| L14 | Coverage thresholds + codecov | **Done** (PR #85) |
-| L15 | Air-gap feasibility + scoping doc | **Done** (scoping complete — see Completed; M21–M28 filed) |
-| R1 | Addon category model + design doc | Workstream (design-doc-first) |
-| R2 | Specific addons after R1 | Deferred conversation |
-
-## Scaffolding — verify intent (no code change)
-
-Captured from the 2026-04-18 full audit. Per MEMORY.md §scaffolding, these
-are exported-but-unreferenced symbols that MAY be future-API-shaped. Do
-NOT delete without first confirming against the roadmap (either with a
-code owner or by resolving the symmetric-sibling it pairs with). Each
-entry lists the stable finding ID so subsequent audit runs mark it
-resolved when the symmetric caller lands.
-
-| Finding ID | Location | Why kept | Symmetric sibling |
-|---|---|---|---|
-| `api:25fa1be8:export-no-caller-configure` | `internal/distribution/okd/firewall/firewall.go:88` | `Configure` has no caller; `RemoveRules` (sibling) has one. Shaped for a future "configure an arbitrary port set" verb. | `RemoveRules` |
-| `api:66f217c9:export-no-caller-getlatestforminor` | `internal/distribution/okd/releases/okd.go:54` | `GetLatestForMinor` / `GetLatestStable` unreferenced; `FetchVersions` is used. Shaped for `okdctl releases latest [--minor N.M]`. | `FetchVersions` |
-| `api:1d5afa08:export-no-caller-shortversion` | `internal/distribution/okd/releases/types.go:76` | `ShortVersion` unreferenced; `DisplayName`, `Major`, `Minor` are used. | `DisplayName` |
-| `api:98723e5d:export-no-caller-validateclusteraccess` | `internal/distribution/okd/install/flux.go:15` | `ValidateClusterAccess` / `SetupClusterAccess` / `SetupKubeconfig` only called in-package; Phase itself is exported one hop away from the CLI. | `Phase` |
-| `smell:2c4d8e6b:unused-metadata-field` | `internal/addon/addon.go:24` | `AddonInfo.Category` populated ("gitops", "secrets") but unread. Shaped for a category-grouped addon listing. | — (see R1 Addon category model) |
-| `smell:2be6306e:scaffolding-registry-api` | `internal/addon/registry.go:78` | `addon.IsRegistered` unreferenced but is the symmetric sibling of `Register`/`Get`/`All`/`Enabled`/`Names`. | `Register` |
-| `err:d6b325cb:vocab-ad-hoc-sentinel` | `internal/infrastructure/proxmox/types.go:5` | `ErrNotConnected`, `ErrTerraformNotConfigured` exist with no `errors.Is` callers but pair symmetrically with a future `Connected()` probe. | `Connect` |
-| `err:a4001485:vocab-gap-cert-pending` | `internal/errtypes/errtypes.go:5` | errtypes vocabulary covers Config/Network/Cluster/Auth but has no typed error for `Recoverable` or `CertPending` — both concrete error states named in the coordinator memo. | `ConfigError`, `ClusterError` |
-
-**Review cadence:** re-check on every audit sweep. If a symmetric
-sibling never materialises for ≥6 months and no roadmap item targets
-the symbol, downgrade to a delete candidate then.
