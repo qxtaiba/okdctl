@@ -103,10 +103,6 @@ type fieldLocation struct {
 	field   int
 }
 
-// wizardStateMarker implements StepState; DataDrivenStep may serve as its
-// own state object when step and state are the same allocation.
-func (s *DataDrivenStep) IsWizardStepState() {}
-
 // DataDrivenStep renders a multi-section form built from a StepDefinition and
 // implements the WizardStep interface.
 type DataDrivenStep struct {
@@ -159,6 +155,8 @@ func NewDataDrivenStep(def *StepDefinition) *DataDrivenStep {
 
 	return step
 }
+
+func (s *DataDrivenStep) IsWizardStepState() {}
 
 func buildFormField(def *FieldDefinition) components.FormField {
 	if def.Type == FieldTypeKeyValue {
