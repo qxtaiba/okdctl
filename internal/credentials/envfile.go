@@ -142,8 +142,9 @@ func loadEnvFileOnce(path string) error {
 	}
 	if perm := fi.Mode().Perm(); perm&0o077 != 0 {
 		return &errtypes.AuthError{
-			Msg: fmt.Sprintf(".env file %s has insecure permissions %#o; run 'chmod 600 %s' to fix", path, perm, path),
-			Err: os.ErrPermission,
+			Msg:  fmt.Sprintf(".env file has insecure permissions %#o; run 'chmod 600 <path>' to fix", perm),
+			Path: path,
+			Err:  os.ErrPermission,
 		}
 	}
 

@@ -79,12 +79,19 @@ func (e *ClusterError) Unwrap() error { return e.Err }
 // AuthError wraps an authentication or privilege-escalation failure
 // (missing sudo, insecure credential file, proxmox token rejected).
 // Msg must never include credentials; see ConfigError for the full contract.
+// Path carries a filesystem path when the failure originates from a
+// permission check; it is structured so RedactHandler can apply uniform
+// path policy without re-parsing Msg.
 type AuthError struct {
-	Msg string
-	Err error
+	Msg  string
+	Path string
+	Err  error
 }
 
 func (e *AuthError) Error() string {
+	if e.Path != "" {
+		return fmt.Sprintf("auth error: %s (path: %s)", e.Msg, e.Path)
+	}
 	return fmt.Sprintf("auth error: %s", e.Msg)
 }
 
