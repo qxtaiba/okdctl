@@ -2,6 +2,8 @@ package setup
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -15,8 +17,24 @@ import (
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
+// nodeISOFingerprint hashes the coreos-installer inputs for one node ISO. The
+// base ISO path (filename encodes the FCOS version) is used instead of its
+// content to avoid hashing a multi-GB file on every invocation.
+func nodeISOFingerprint(liveKargs, destKargs []string, sshKey, basePath string) string {
+	h := sha256.New()
+	_, _ = fmt.Fprintf(h, "%s\x00%s\x00%s\x00%s",
+		strings.Join(liveKargs, "\x1f"),
+		strings.Join(destKargs, "\x1f"),
+		sshKey,
+		basePath,
+	)
+	return hex.EncodeToString(h.Sum(nil))
+}
+
 // BuildCustomISOs produces a per-node FCOS ISO with coreos-installer that
-// embeds the node's ignition URL, role, and static-IP kernel arguments.
+// embeds the node's ignition URL, role, and static-IP kernel arguments. A
+// node whose output ISO and .fp-<name> fingerprint both match the current
+// inputs is skipped; the fingerprint is written after a successful build.
 func (p *Phase) BuildCustomISOs(ctx context.Context, cfg *config.Config, opts *Options) error {
 	isoDir := filepath.Join(opts.WorkDir, "custom-isos")
 	if err := system.EnsureDir(isoDir); err != nil {
@@ -37,16 +55,55 @@ func (p *Phase) BuildCustomISOs(ctx context.Context, cfg *config.Config, opts *O
 		return &errtypes.ConfigError{Msg: "failed to build node list", Err: err}
 	}
 
+	var sshKey string
+	if cfg.Files.SSHPublicKey != "" {
+		keyPath := system.ExpandPath(cfg.Files.SSHPublicKey)
+		b, readErr := os.ReadFile(keyPath)
+		if readErr != nil {
+			return fmt.Errorf("failed to read ssh public key %s: %w", keyPath, readErr)
+		}
+		sshKey = strings.TrimSpace(string(b))
+	}
+
+	gateway, netmask, dns, iface := ExtractNetworkConfig(cfg)
+
 	for _, node := range nodes {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		default:
 		}
+
+		kargsParams := &LiveKargsParams{
+			NodeIP:      node.IP,
+			Gateway:     gateway,
+			Netmask:     netmask,
+			DNS:         dns,
+			Interface:   iface,
+			IgnitionURL: BuildIgnitionURLForNode(cfg, node.Role),
+		}
+		fp := nodeISOFingerprint(
+			BuildLiveKargs(kargsParams),
+			BuildDestKargs(kargsParams),
+			sshKey, fcosISO,
+		)
+
+		fpFile := filepath.Join(isoDir, ".fp-"+node.Name)
+		isoOut := filepath.Join(isoDir, node.Name+".iso")
+		if system.FileExists(isoOut) {
+			if stored, statErr := os.ReadFile(fpFile); statErr == nil && strings.TrimSpace(string(stored)) == fp {
+				p.Log.Info(fmt.Sprintf("iso: skipping unchanged %s", node.Name))
+				continue
+			}
+		}
+
 		p.Log.Info(fmt.Sprintf("iso: building custom coreos iso for %s", node.Name))
 
-		if err := p.buildNodeISO(ctx, cfg, node, fcosISO, isoDir); err != nil {
+		if err := p.buildNodeISO(ctx, cfg, node, fcosISO, isoDir, sshKey); err != nil {
 			return &errtypes.ClusterError{Msg: fmt.Sprintf("failed to build ISO for %s", node.Name), Err: err}
+		}
+		if writeErr := system.AtomicWriteString(fpFile, fp, 0o644); writeErr != nil {
+			p.Log.Warn("iso: failed to write build fingerprint", "node", node.Name, "err", writeErr)
 		}
 	}
 
@@ -131,7 +188,7 @@ func writeInstallerTriggerIgnition(sshKey string) (string, error) {
 	})
 }
 
-func (p *Phase) buildNodeISO(ctx context.Context, cfg *config.Config, node NodeInfo, fcosISO, outputDir string) error {
+func (p *Phase) buildNodeISO(ctx context.Context, cfg *config.Config, node NodeInfo, fcosISO, outputDir, sshKey string) error {
 	isoName := fmt.Sprintf("%s.iso", node.Name)
 	outputPath := filepath.Join(outputDir, isoName)
 
@@ -181,15 +238,6 @@ func (p *Phase) buildNodeISO(ctx context.Context, cfg *config.Config, node NodeI
 	// starts (its ConditionDirectoryNotEmpty fires before the pre-install
 	// script can populate it). Using a karg like coreos.inst.install_dev
 	// would override the serial-based disk discovery in the pre-install script.
-	var sshKey string
-	if cfg.Files.SSHPublicKey != "" {
-		keyPath := system.ExpandPath(cfg.Files.SSHPublicKey)
-		b, err := os.ReadFile(keyPath)
-		if err != nil {
-			return fmt.Errorf("failed to read ssh public key %s: %w", keyPath, err)
-		}
-		sshKey = strings.TrimSpace(string(b))
-	}
 	triggerPath, err := writeInstallerTriggerIgnition(sshKey)
 	if err != nil {
 		return err

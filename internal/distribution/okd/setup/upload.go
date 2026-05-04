@@ -5,13 +5,48 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
+	"github.com/qxtaiba/okdctl/internal/download"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/executor"
 	"github.com/qxtaiba/okdctl/internal/system"
 )
+
+// remoteISO256 runs sha256sum on remotePath/filename over SSH and returns the
+// hex digest. Any SSH or parse failure returns ("", err).
+func remoteISO256(ctx context.Context, exec *executor.Executor, host, remotePath, filename string) (string, error) {
+	target := remotePath + "/" + filename
+	result, err := phase.SSHRun(ctx, exec, host, "sha256sum "+target)
+	if err != nil {
+		return "", err
+	}
+	if result.ExitCode != 0 {
+		return "", fmt.Errorf("sha256sum %s exited %d", target, result.ExitCode)
+	}
+	fields := strings.Fields(result.Stdout)
+	if len(fields) == 0 {
+		return "", fmt.Errorf("sha256sum %s: empty output", target)
+	}
+	return fields[0], nil
+}
+
+// isoUploadNeeded returns false when the remote file's sha256 matches the
+// local file. Any error (SSH transport, parse, local hash failure) returns
+// true so the caller falls back to uploading.
+func isoUploadNeeded(ctx context.Context, exec *executor.Executor, host, remotePath, localPath string) bool {
+	localHash, err := download.CalculateChecksum(localPath)
+	if err != nil {
+		return true
+	}
+	remoteHash, err := remoteISO256(ctx, exec, host, remotePath, filepath.Base(localPath))
+	if err != nil {
+		return true
+	}
+	return localHash != remoteHash
+}
 
 func collectISOFiles(isoDir string) ([]string, error) {
 	entries, err := os.ReadDir(isoDir)
@@ -75,13 +110,27 @@ func (p *Phase) UploadCustomISOsToProxmox(ctx context.Context, cfg *config.Confi
 	user := "root"
 	remotePath := phase.DefaultProxmoxISODir
 
-	totalSizeMB := float64(calculateTotalSize(isoFiles)) / 1024 / 1024
-	p.Log.Info("iso: uploading", "count", len(isoFiles), "size_mb", fmt.Sprintf("%.1f", totalSizeMB), "user", user, "host", host, "path", remotePath)
+	var toUpload []string
+	for _, f := range isoFiles {
+		if isoUploadNeeded(ctx, p.Exec, host, remotePath, f) {
+			toUpload = append(toUpload, f)
+		} else {
+			p.Log.Info(fmt.Sprintf("iso: skipping unchanged %s", filepath.Base(f)))
+		}
+	}
 
-	if err := uploadISOsViaSCP(ctx, p.Exec, isoFiles, user, host, remotePath); err != nil {
+	if len(toUpload) == 0 {
+		p.Log.Info("iso: all isos already up to date on proxmox storage")
+		return nil
+	}
+
+	totalSizeMB := float64(calculateTotalSize(toUpload)) / 1024 / 1024
+	p.Log.Info("iso: uploading", "count", len(toUpload), "size_mb", fmt.Sprintf("%.1f", totalSizeMB), "user", user, "host", host, "path", remotePath)
+
+	if err := uploadISOsViaSCP(ctx, p.Exec, toUpload, user, host, remotePath); err != nil {
 		return &errtypes.NetworkError{Msg: "scp upload to proxmox failed", Err: err}
 	}
 
-	p.Log.Info(fmt.Sprintf("iso: uploaded %d files to proxmox storage", len(isoFiles)))
+	p.Log.Info(fmt.Sprintf("iso: uploaded %d files to proxmox storage", len(toUpload)))
 	return nil
 }
