@@ -2,7 +2,9 @@ package postinstall
 
 import (
 	"context"
+	"crypto/x509"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -220,41 +222,62 @@ func (p *Phase) waitForKubeVIPPing(ctx context.Context, vip string, opts *Option
 }
 
 // verifyKubeVIPAPIHealthBootstrap verifies the API server responds via the VIP
-// during the bootstrap-to-kube-vip transition, before the VIP appears in the
-// apiserver certificate SANs. Falls back to InsecureSkipVerify only when the
-// kubeconfig CA is not yet available; callers at later phases must use a
-// verified client instead.
+// during the bootstrap-to-kube-vip transition. It tries a CA-verified request
+// first; falls back to InsecureSkipVerify only when the error is
+// x509.HostnameError (VIP not yet in the apiserver SANs — expected during the
+// 1-3 minute kube-vip cert re-issue window). All other TLS errors propagate.
 func (p *Phase) verifyKubeVIPAPIHealthBootstrap(ctx context.Context, vip, clusterDir string) error {
 	healthURL := fmt.Sprintf("https://%s:%d/healthz", vip, phase.KubeAPIPort)
 
-	var client *http.Client
 	kubeconfigPath := filepath.Join(clusterDir, "auth", "kubeconfig")
-	pool, err := httputil.KubeconfigCAPool(kubeconfigPath)
-	if err != nil {
-		// kubeconfig CA unavailable — VIP not yet in apiserver SANs; skip verify.
-		p.Log.Warn("verify: kubeconfig CA unavailable, TLS verification skipped", "err", err)
-		client = httputil.NewInsecure(5 * time.Second)
-	} else {
-		client = httputil.NewWithCA(pool, 5*time.Second)
+	pool, caErr := httputil.KubeconfigCAPool(kubeconfigPath)
+	if caErr != nil {
+		p.Log.Warn("verify: kubeconfig CA unavailable, TLS verification skipped", "err", caErr)
 	}
 
 	p.Log.Info(fmt.Sprintf("verify: checking vip health at %s", healthURL))
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, healthURL, http.NoBody)
-	if err != nil {
-		return fmt.Errorf("failed to build health request: %w", err)
+	doRequest := func(client *http.Client) (string, error) {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, healthURL, http.NoBody)
+		if err != nil {
+			return "", fmt.Errorf("failed to build health request: %w", err)
+		}
+		resp, err := client.Do(req)
+		if err != nil {
+			return "", err
+		}
+		defer resp.Body.Close()
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return "", fmt.Errorf("failed to read health response: %w", err)
+		}
+		return strings.TrimSpace(string(body)), nil
 	}
-	resp, err := client.Do(req)
-	if err != nil {
-		return fmt.Errorf("failed to check api health at %s: %w", healthURL, err)
-	}
-	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return fmt.Errorf("failed to read health response: %w", err)
+	var response string
+	if pool != nil {
+		var err error
+		response, err = doRequest(httputil.NewWithCA(pool, 5*time.Second))
+		if err != nil {
+			var hostnameErr x509.HostnameError
+			if !errors.As(err, &hostnameErr) {
+				return fmt.Errorf("failed to check api health at %s: %w", healthURL, err)
+			}
+			// VIP not yet in apiserver SANs — transient during kube-vip cert re-issue; retry insecure.
+			p.Log.Warn("verify: vip not in apiserver sans yet, retrying without tls verification", "vip", vip)
+			response, err = doRequest(httputil.NewInsecure(5 * time.Second)) //nolint:gosec // SAN mismatch only; CA-verified attempt already confirmed cert is otherwise valid
+			if err != nil {
+				return fmt.Errorf("failed to check api health at %s: %w", healthURL, err)
+			}
+		}
+	} else {
+		var err error
+		response, err = doRequest(httputil.NewInsecure(5 * time.Second)) //nolint:gosec // kubeconfig CA absent at bootstrap; see doc comment
+		if err != nil {
+			return fmt.Errorf("failed to check api health at %s: %w", healthURL, err)
+		}
 	}
-	response := strings.TrimSpace(string(body))
+
 	if response != healthzOKBody {
 		return &errtypes.ClusterError{
 			Msg: fmt.Sprintf("api health check returned unexpected response: %s (expected 'ok')", response),
