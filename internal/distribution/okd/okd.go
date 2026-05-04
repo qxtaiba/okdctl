@@ -179,7 +179,6 @@ func (p *Provisioner) Destroy(ctx context.Context, cfg *config.Config, opts Dest
 	destroyPhase := destroy.New(p.executor, p.logger, p.version)
 	destroyOpts := destroy.NewOptions(cfg, p.projectRoot)
 	destroyOpts.AutoApprove = true
-	destroyOpts.Force = true
 	destroyOpts.RemovePackages = opts.RemovePackages
 	destroyOpts.KeepISOs = opts.KeepISOs
 	destroyOpts.SkipTerraform = opts.SkipTerraform
