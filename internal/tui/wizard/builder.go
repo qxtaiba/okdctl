@@ -11,9 +11,7 @@ type StepBuilder struct {
 
 // StepState is a marker interface for the optional state value a step
 // factory may return; it prevents accidental registration of an unrelated
-// type that would only fail at runtime on a type assertion. The
-// IsWizardStepState method is required only as a structural tag — types
-// satisfy it with an empty body.
+// type that would only fail at runtime on a type assertion.
 type StepState interface{ IsWizardStepState() }
 
 // StepBuilderFactory constructs a WizardStep and its backing state.
