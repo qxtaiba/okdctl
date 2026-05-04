@@ -1,13 +1,13 @@
 package credentials
 
 import (
+	"bufio"
 	"bytes"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 	"sync"
-
-	"github.com/joho/godotenv"
 
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/system"
@@ -130,7 +130,7 @@ func loadEnvFileOnce(path string) error {
 	// Refuse to load a .env that any other user can read. Proxmox tokens
 	// end up in here — a world-readable file defeats the whole point of
 	// moving secrets out of YAML. The permission check MUST happen before
-	// godotenv opens the file: once its contents are in our address space,
+	// the file is opened: once its contents are in our address space,
 	// the whole point of this check is to detect a file that other
 	// processes may already have been able to read.
 	fi, err := os.Stat(path)
@@ -148,10 +148,52 @@ func loadEnvFileOnce(path string) error {
 		}
 	}
 
-	// godotenv.Load does not overwrite already-set env vars, matching our
-	// "shell takes precedence" contract.
-	if err := godotenv.Load(path); err != nil {
-		return &errtypes.ConfigError{Msg: fmt.Sprintf("failed to load env file %s", path), Err: err}
+	f, err := os.Open(path)
+	if err != nil {
+		return &errtypes.ConfigError{Msg: fmt.Sprintf("failed to open env file %s", path), Err: err}
+	}
+	defer f.Close() //nolint:errcheck // read-only open; close error is not actionable
+
+	pairs, err := parseDotEnv(f)
+	if err != nil {
+		return &errtypes.ConfigError{Msg: fmt.Sprintf("failed to parse env file %s", path), Err: err}
+	}
+
+	// Shell environment takes precedence: set only keys that are absent.
+	for k, v := range pairs {
+		if _, exists := os.LookupEnv(k); !exists {
+			_ = os.Setenv(k, v)
+		}
 	}
 	return nil
+}
+
+// parseDotEnv reads key=value pairs from r. Blank lines and lines whose first
+// non-space character is '#' are skipped; lines without '=' return an error.
+// Surrounding single or double quotes are stripped from values.
+func parseDotEnv(r io.Reader) (map[string]string, error) {
+	pairs := make(map[string]string)
+	sc := bufio.NewScanner(r)
+	for sc.Scan() {
+		line := strings.TrimSpace(sc.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		idx := strings.IndexByte(line, '=')
+		if idx < 0 {
+			return nil, fmt.Errorf("malformed line (no '='): %q", line)
+		}
+		k := strings.TrimSpace(line[:idx])
+		v := strings.TrimSpace(line[idx+1:])
+		if len(v) >= 2 {
+			if (v[0] == '"' && v[len(v)-1] == '"') || (v[0] == '\'' && v[len(v)-1] == '\'') {
+				v = v[1 : len(v)-1]
+			}
+		}
+		pairs[k] = v
+	}
+	if err := sc.Err(); err != nil {
+		return nil, err
+	}
+	return pairs, nil
 }

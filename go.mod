@@ -10,7 +10,6 @@ require (
 	charm.land/lipgloss/v2 v2.0.3
 	charm.land/log/v2 v2.0.0
 	github.com/google/uuid v1.6.0
-	github.com/joho/godotenv v1.5.1
 	github.com/luthermonson/go-proxmox v0.4.1
 	github.com/spf13/cobra v1.10.2
 	golang.org/x/mod v0.35.0
