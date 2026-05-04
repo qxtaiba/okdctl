@@ -27,6 +27,7 @@ func (p *Phase) postinstallSteps(cfg *config.Config, opts *Options, pctx *distri
 	return []distribution.StepDef{
 		{
 			ID: StepVerifyHealth, Name: "verify cluster health",
+			ReRunSafe: distribution.ReRunSafeYes,
 			Desc:       "verifying cluster health",
 			SkipWhen:   func() bool { return opts.SkipClusterHealth },
 			SkipReason: "cluster health verification skipped by user",
@@ -44,6 +45,7 @@ func (p *Phase) postinstallSteps(cfg *config.Config, opts *Options, pctx *distri
 		},
 		{
 			ID: StepCleanupBootstrap, Name: "cleanup bootstrap vm",
+			ReRunSafe: distribution.ReRunSafeNo,
 			Desc:     "destroying bootstrap vm via terraform",
 			NonFatal: true,
 			// tfvars is absent when bootstrap was not provisioned by this run;
@@ -66,6 +68,7 @@ func (p *Phase) postinstallSteps(cfg *config.Config, opts *Options, pctx *distri
 		},
 		{
 			ID: StepVerifyKubeVIP, Name: "verify kube-vip",
+			ReRunSafe: distribution.ReRunSafeYes,
 			Desc: "verifying kube-vip api load balancer", NonFatal: true,
 			SkipWhen:   func() bool { return opts.SkipKubeVIP },
 			SkipReason: "kube-vip verification skipped by user",
@@ -85,6 +88,7 @@ func (p *Phase) postinstallSteps(cfg *config.Config, opts *Options, pctx *distri
 		},
 		{
 			ID: StepDeployProductionDNS, Name: "deploy production dns",
+			ReRunSafe: distribution.ReRunSafeYes,
 			Desc: "deploying production dns with api vip and apps on bastion", NonFatal: true,
 			SkipWhen:   func() bool { return !pctx.Get().KubeVIPVerified },
 			SkipReason: "kube-vip not verified, keeping bootstrap dns",
@@ -104,6 +108,7 @@ func (p *Phase) postinstallSteps(cfg *config.Config, opts *Options, pctx *distri
 		},
 		{
 			ID: StepInstallAddons, Name: "install addons",
+			ReRunSafe: distribution.ReRunSafeNo,
 			Desc: "installing enabled cluster addons", NonFatal: true,
 			Exec: func(ctx context.Context) error {
 				if err := p.verifyAPIHealthCheck(ctx); err != nil {

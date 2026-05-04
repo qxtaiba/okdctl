@@ -51,6 +51,7 @@ func (p *Phase) destroySteps(cfg *config.Config, opts *Options) []distribution.S
 	return []distribution.StepDef{
 		{
 			ID: StepDestroyInfra, Name: "destroy infrastructure",
+			ReRunSafe: distribution.ReRunSafeNo,
 			Desc:       "destroying proxmox infrastructure using terraform",
 			NonFatal:   true, // orchestrator continues through cleanup steps on TF failure
 			SkipWhen:   trackSkip("terraform", func() bool { return opts.SkipTerraform }),
@@ -66,6 +67,7 @@ func (p *Phase) destroySteps(cfg *config.Config, opts *Options) []distribution.S
 		},
 		{
 			ID: StepRemoveRemoteISO, Name: "remove remote ISO",
+			ReRunSafe: distribution.ReRunSafeYes,
 			Desc:       "removing fedora-coreos iso from proxmox host",
 			NonFatal:   true,
 			SkipWhen:   trackSkip("iso removal", func() bool { return opts.KeepISOs || cfg.Provider.Proxmox == nil }),
@@ -83,6 +85,7 @@ func (p *Phase) destroySteps(cfg *config.Config, opts *Options) []distribution.S
 		},
 		{
 			ID: StepCleanupFiles, Name: "cleanup files",
+			ReRunSafe: distribution.ReRunSafeYes,
 			Desc: "performing comprehensive cleanup", NonFatal: true,
 			SkipWhen:   trackSkip("file cleanup", func() bool { return opts.SkipCleanup || opts.CleanupKind == "" || !system.DirExists(opts.WorkDir) }),
 			SkipReason: cleanupFilesSkipReason(opts),
@@ -116,6 +119,7 @@ func (p *Phase) destroySteps(cfg *config.Config, opts *Options) []distribution.S
 		},
 		{
 			ID: StepCleanupFirewall, Name: "cleanup firewall",
+			ReRunSafe: distribution.ReRunSafeYes,
 			Desc: "removing firewall rules", NonFatal: true,
 			// context.Background() is safe: DetectBackend runs only exec.LookPath + a bounded systemctl probe.
 			SkipWhen: trackSkip("firewall", func() bool {
@@ -133,6 +137,7 @@ func (p *Phase) destroySteps(cfg *config.Config, opts *Options) []distribution.S
 		},
 		{
 			ID: StepPrintSummary, Name: "print summary",
+			ReRunSafe: distribution.ReRunSafeYes,
 			Desc: "printing destruction summary", NonFatal: true,
 			Exec: func(_ context.Context) error {
 				switch {

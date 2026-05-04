@@ -126,6 +126,25 @@ func (o *Orchestrator) executeStep(ctx context.Context, step ProvisioningStep) S
 		return r
 	}
 
+	if checker, ok := step.(AlreadyDoneChecker); ok {
+		done, err := checker.IsAlreadyDone(ctx)
+		if err != nil {
+			o.logger.Warn("step: already-done check failed, proceeding", "step", step.ID(), "err", err)
+		} else if done {
+			r := StepResult{
+				StepID:     step.ID(),
+				Success:    true,
+				Skipped:    true,
+				SkipReason: "already done",
+				StartedAt:  startedAt,
+				Duration:   time.Since(startedAt),
+			}
+			o.logger.Info("step: skipped (already done)", "step", step.Name())
+			o.rec.StepFinished(&r)
+			return r
+		}
+	}
+
 	o.rec.StepStarted(step.ID())
 	o.logger.Info("step: started", "step", step.ID(), "name", step.Name())
 	step.OnStart()
