@@ -17,6 +17,7 @@ type ResourcesStepState struct {
 	Cfg  *config.Config
 }
 
+// IsWizardStepState marks ResourcesStepState as a valid wizard.StepState.
 func (s *ResourcesStepState) IsWizardStepState() {}
 
 // ResourcesStepDefinition declares the node-resources step fields.

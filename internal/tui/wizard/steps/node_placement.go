@@ -51,6 +51,7 @@ type NodePlacementStep struct {
 	inner *wizard.DataDrivenStep
 }
 
+// IsWizardStepState marks NodePlacementStep as a valid wizard.StepState.
 func (s *NodePlacementStep) IsWizardStepState() {}
 
 // NewNodePlacementStep constructs the node placement wizard step.

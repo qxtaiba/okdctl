@@ -156,6 +156,8 @@ func NewDataDrivenStep(def *StepDefinition) *DataDrivenStep {
 	return step
 }
 
+// IsWizardStepState lets DataDrivenStep act as its own state when a step
+// factory returns the same allocation for both step and state.
 func (s *DataDrivenStep) IsWizardStepState() {}
 
 func buildFormField(def *FieldDefinition) components.FormField {
