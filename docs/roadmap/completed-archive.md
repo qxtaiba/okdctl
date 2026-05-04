@@ -3023,3 +3023,28 @@ but link evidence.
   with y/n/EOF inputs via the stdin reader seam. Tests must run
   sequentially because the seam is package-global; no t.Parallel().
 
+- **`sub:5013fea6:unbounded-stderr-builder`** — done 2026-05-04 —
+  merge commit `01fdb02`. Tier H minor (io-handling). Discovered
+  during /roadmap-pickup that the unbounded `strings.Builder` had
+  already been replaced by routing through `p.Exec.RunStreamed`,
+  which attaches `io.MultiWriter(e.Stderr, ringWriter)` capped at
+  200 lines (`internal/executor/executor.go:266-269`). Stderr is
+  now ring-bounded for both live streaming and the post-run
+  result.Stderr tail used for auth-error sniffing. RunStreamed
+  preferred over RunStreamedChecked because the auth-marker scan
+  in `setup/release_extract.go:130-133` reads result.Stderr
+  directly; RunStreamedChecked would fold non-zero exit into an
+  *ExitError needing errors.As extraction.
+
+- **`tst:de572c63:dnsmasq-config-path-no-test`** — done 2026-05-04 —
+  merge commit `b9bcfc5`. Tier H minor (trust-boundary-untested).
+  Discovered during /roadmap-pickup that `TestDnsmasqConfigPath`
+  was already in `internal/distribution/okd/dns/dnsmasq_test.go`
+  with all three required cases: clean `okd-prod` returns the
+  canonical `/etc/dnsmasq.d/okd-prod.conf` path; `../etc/passwd`
+  returns an error not a path (validateConfigName regex rejects
+  the slash before filepath.Join is reached); empty name returns
+  an error. Test uses `package dns` (white-box) to read
+  unexported `dnsmasqConfigDir` directly so the asserted path
+  stays in sync with phase.DefaultDNSMasqConfigDir.
+

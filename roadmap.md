@@ -1777,16 +1777,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 **Status:** done — 2026-04-26 — PR #148 (moved to Completed)
 
-##### `sub:5013fea6:unbounded-stderr-builder` — unbounded stderr builder
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sub-5013fea6-stderr-bounded  
-**Severity:** minor  
-**Cluster:** io-handling  
-**Evidence:** `internal/distribution/okd/setup/release_extract.go:104-113`  
-**Problem:** `oc adm release extract --tools` is bounded by a 10-minute context but its stderr is captured into an unbounded strings.Builder. The same package's executor.Executor uses ringWriter capped at 200 lines for exactly this reason; here a misbehaving registry or chatty oc release could grow the buffer unbounded over the 10-minute window.  
-**Fix:** Either (a) route through p.Exec.RunStreamedChecked which uses the existing ring-buffer + stream pattern, or (b) wrap the strings.Builder in an io.LimitWriter capped at e.g. 64 KiB for error reporting purposes — the human-readable failure tail is what matters, not the full multi-minute stream.  
-**Effort:** hours
-
 ##### `state:b804b2ec:bootstrap-destroy-skip-tfvars-silent` — bootstrap destroy skip tfvars silent
 
 **Status:** done — 2026-04-26 — PR #149 (moved to Completed)
@@ -2477,16 +2467,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/system/exec.go:21-33`  
 **Problem:** system.RunCaptured is the canonical 'run a command, surface stderr in the err' helper used by every firewall, dnsmasq, and netutil call site (15+ sites). It has no test. The stderr-into-err shape is the load-bearing detail — consumers errors.As(err, &cfgErr) on the returned error and rely on the wrapped stderr being human-readable. A regression that drops the stderr-prefix or uses fmt.Errorf without %w breaks every error message downstream.  
 **Fix:** Add TestRunCaptured cases: (1) command exits 0 → nil; (2) command exits 1 with stderr="oops" → err contains "oops" and errors.Is unwraps to *exec.ExitError; (3) command exits 1 with empty stderr → err carries the bin name only; (4) ctx cancel returns ctx err. Use a fake script in PATH per kubectl_test.go's installFakeOC pattern.  
-**Effort:** hours
-
-##### `tst:de572c63:dnsmasq-config-path-no-test` — dnsmasq config path no test
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/tst-de572c63-dnsmasq-path  
-**Severity:** minor  
-**Cluster:** trust-boundary-untested — related: tst:de572c63:validate-config-name-no-test  
-**Evidence:** `internal/distribution/okd/dns/dnsmasq.go:94-101`  
-**Problem:** DnsmasqConfigPath is the public-API gate that builds /etc/dnsmasq.d/<name>.conf paths consumed by cleanup.Dnsmasq's _ = os.RemoveAll(configPath). It validates the name through validateConfigName but no test asserts (a) a clean okd-prod returns the canonical path, (b) ../escape returns an error not a path, (c) the returned path is always under the configured dnsmasqConfigDir (no traversal).  
-**Fix:** Once the dns package gets its first test file (per tst:d7ce9d16), add TestDnsmasqConfigPath: (1) okd-prod → /etc/dnsmasq.d/okd-prod.conf; (2) ../etc/passwd → error; (3) empty → error.  
 **Effort:** hours
 
 ##### `tst:73ad30ef:resolve-cluster-vip-no-test` — resolve cluster vip no test
