@@ -109,16 +109,12 @@ Single release detail — same `OKDVersion` shape as an element of
 ```json
 {
   "name": "flux",
-  "display-name": "Flux GitOps",
+  "display_name": "Flux GitOps",
   "description": "GitOps toolkit for declarative cluster reconciliation",
   "category": "gitops",
   "health": "healthy"
 }
 ```
-
-> Note: `display-name` uses a hyphen for historical reasons. Other fields in
-> this schema use snake_case; consumers piping between commands may need to
-> normalize.
 
 ## Conventions
 

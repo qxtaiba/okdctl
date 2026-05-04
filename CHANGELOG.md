@@ -22,6 +22,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Community templates: issue forms, PR template, CODEOWNERS, FUNDING
 
 ### Changed
+- `describe addon --format=json` now emits `display_name` (snake_case) instead
+  of `display-name`; aligns with all other JSON fields
 - Release builds now use `-trimpath` for reproducibility
 - Project renamed from `openshitctl` (binary) and `okd-proxmox-cli`
   (module path) to `okdctl` for both. Module path is now
