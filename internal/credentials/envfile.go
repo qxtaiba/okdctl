@@ -152,7 +152,7 @@ func loadEnvFileOnce(path string) error {
 	if err != nil {
 		return &errtypes.ConfigError{Msg: fmt.Sprintf("failed to open env file %s", path), Err: err}
 	}
-	defer f.Close() //nolint:errcheck // read-only open; close error is not actionable
+	defer f.Close()
 
 	pairs, err := parseDotEnv(f)
 	if err != nil {
