@@ -56,7 +56,7 @@ func (p *Phase) destroySteps(cfg *config.Config, opts *Options) []distribution.S
 			SkipReason: "terraform destroy disabled",
 			Exec: func(ctx context.Context) error {
 				if err := p.destroyInfrastructure(ctx, opts); err != nil {
-					return &errtypes.ClusterError{Msg: "infrastructure destruction failed", Err: err}
+					return err
 				}
 				p.Log.Info("terraform: infrastructure destruction completed")
 				return nil

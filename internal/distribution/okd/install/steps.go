@@ -6,7 +6,6 @@ import (
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/distribution"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
-	"github.com/qxtaiba/okdctl/internal/errtypes"
 )
 
 // Step IDs for the install phase, ordered as they execute.
@@ -31,7 +30,7 @@ func (p *Phase) installSteps(cfg *config.Config, opts *Options) []distribution.S
 			SkipReason: "terraform deployment disabled",
 			Exec: func(ctx context.Context) error {
 				if err := p.DeployInfrastructure(ctx, cfg, opts); err != nil {
-					return &errtypes.ClusterError{Msg: "infrastructure deployment failed", Err: err}
+					return err
 				}
 				p.Log.Info("terraform: proxmox infrastructure deployed successfully")
 				return nil
@@ -45,10 +44,7 @@ func (p *Phase) installSteps(cfg *config.Config, opts *Options) []distribution.S
 				p.Log.Info("bootstrap: this process typically takes 15-30 minutes")
 			},
 			Exec: func(ctx context.Context) error {
-				if err := p.WaitForBootstrap(ctx, clusterDir, opts); err != nil {
-					return &errtypes.ClusterError{Msg: "bootstrap failed", Err: err}
-				}
-				return nil
+				return p.WaitForBootstrap(ctx, clusterDir, opts)
 			},
 		},
 		{
@@ -76,10 +72,7 @@ func (p *Phase) installSteps(cfg *config.Config, opts *Options) []distribution.S
 				p.Log.Info("install: this process typically takes 30-60 minutes")
 			},
 			Exec: func(ctx context.Context) error {
-				if err := p.MonitorInstallation(ctx, clusterDir, opts, nil); err != nil {
-					return &errtypes.ClusterError{Msg: "installation monitoring failed", Err: err}
-				}
-				return nil
+				return p.MonitorInstallation(ctx, clusterDir, opts, nil)
 			},
 		},
 		{

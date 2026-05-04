@@ -80,7 +80,7 @@ func (p *Phase) setupBaseSteps(cfg *config.Config, opts *Options) []distribution
 			SkipReason: "downloads disabled",
 			Exec: func(ctx context.Context) error {
 				if err := p.DownloadOKDTools(ctx, cfg.Distribution.Version, opts); err != nil {
-					return &errtypes.NetworkError{Msg: "failed to download OKD tools", Err: err}
+					return err
 				}
 				p.Log.Info("tools: sha256 checksums validated successfully")
 				return nil
