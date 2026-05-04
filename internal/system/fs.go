@@ -1,9 +1,10 @@
 package system
 
 import (
+	"crypto/rand"
+	"encoding/binary"
 	"fmt"
 	"io"
-	"math/rand"
 	"os"
 	"os/user"
 	"path/filepath"
@@ -78,8 +79,12 @@ func openTempFile(dir, pattern string, mode os.FileMode) (*os.File, error) {
 		dir = os.TempDir()
 	}
 	prefix, suffix, _ := strings.Cut(pattern, "*")
+	var seed [4]byte
 	for range 10000 {
-		name := filepath.Join(dir, prefix+strconv.FormatUint(uint64(rand.Uint32()), 10)+suffix)
+		if _, err := rand.Read(seed[:]); err != nil {
+			return nil, fmt.Errorf("read random temp suffix: %w", err)
+		}
+		name := filepath.Join(dir, prefix+strconv.FormatUint(uint64(binary.BigEndian.Uint32(seed[:])), 10)+suffix)
 		f, err := os.OpenFile(name, os.O_RDWR|os.O_CREATE|os.O_EXCL, mode)
 		if os.IsExist(err) {
 			continue
