@@ -65,7 +65,7 @@ var ProxmoxStepDefinition = wizard.StepDefinition{
 					Help:      "proxmox password",
 					Type:      wizard.FieldTypePassword,
 					Required:  true,
-					ConfigSet: proxmoxSet(func(p *config.ProxmoxConfig, v string) { p.Password = v }),
+					ConfigSet: proxmoxSet(func(p *config.ProxmoxConfig, v string) { p.Password.Set(v) }),
 					// Don't load password from config
 				},
 				{

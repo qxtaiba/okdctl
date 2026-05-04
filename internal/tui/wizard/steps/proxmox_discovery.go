@@ -55,9 +55,9 @@ func discoverProxmox(cfg *config.Config) (*proxmoxDiscovery, error) {
 	switch {
 	case px.Host == "" || px.Username == "":
 		return nil, fmt.Errorf("missing credentials — enter host and username in the proxmox step")
-	case px.Password == "" && px.TokenID != "":
+	case px.Password.IsEmpty() && px.TokenID != "":
 		return nil, fmt.Errorf("discovery uses password auth — enter a password in the proxmox step (token id is saved for deploy)")
-	case px.Password == "":
+	case px.Password.IsEmpty():
 		return nil, fmt.Errorf("missing credentials — enter host, username, and password in the proxmox step")
 	}
 
@@ -74,7 +74,7 @@ func discoverProxmox(cfg *config.Config) (*proxmoxDiscovery, error) {
 	client := proxmox.NewClient(
 		buildBaseURL(px.Host)+"/api2/json",
 		proxmox.WithHTTPClient(httpClient),
-		proxmox.WithCredentials(&proxmox.Credentials{Username: px.Username, Password: px.Password}),
+		proxmox.WithCredentials(&proxmox.Credentials{Username: px.Username, Password: string(px.Password.Bytes())}),
 	)
 
 	rawNodes, err := client.Nodes(ctx)

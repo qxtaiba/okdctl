@@ -213,15 +213,15 @@ func TestGetProxmoxCredentials(t *testing.T) {
 
 	t.Run("env api token wins over config", func(t *testing.T) {
 		clearProxmoxEnv(t)
-		t.Setenv("PROXMOX_VE_API_TOKEN", "env-token")
+		t.Setenv("PROXMOX_VE_API_TOKEN", "EXAMPLE-ENV-TOKEN")
 		cfg := cfgWithHost()
-		cfg.Provider.Proxmox.APIToken = "cfg-token"
+		cfg.Provider.Proxmox.APIToken.Set("EXAMPLE-CFG-TOKEN")
 		cfg.Provider.Proxmox.Username = "cfg-user"
-		cfg.Provider.Proxmox.Password = "cfg-pw"
+		cfg.Provider.Proxmox.Password.Set("EXAMPLE-CFG-PW")
 
 		creds := GetProxmoxCredentials(cfg)
 
-		if got := string(creds.APIToken); got != "env-token" {
+		if got := string(creds.APIToken); got != "EXAMPLE-ENV-TOKEN" {
 			t.Errorf("APIToken = %q, want env-token", got)
 		}
 		if creds.Source != SourceEnv {
@@ -237,7 +237,7 @@ func TestGetProxmoxCredentials(t *testing.T) {
 
 	t.Run("env endpoint override sets EndpointFromConfig=false", func(t *testing.T) {
 		clearProxmoxEnv(t)
-		t.Setenv("PROXMOX_VE_API_TOKEN", "env-token")
+		t.Setenv("PROXMOX_VE_API_TOKEN", "EXAMPLE-ENV-TOKEN")
 		t.Setenv("PROXMOX_VE_ENDPOINT", "https://other.example:8006")
 
 		creds := GetProxmoxCredentials(cfgWithHost())
@@ -268,8 +268,8 @@ func TestGetProxmoxCredentials(t *testing.T) {
 	t.Run("no env creds returns SourceNone even when config has credentials", func(t *testing.T) {
 		clearProxmoxEnv(t)
 		cfg := cfgWithHost()
-		cfg.Provider.Proxmox.APIToken = "cfg-token"
-		cfg.Provider.Proxmox.Password = "cfg-pw"
+		cfg.Provider.Proxmox.APIToken.Set("EXAMPLE-CFG-TOKEN")
+		cfg.Provider.Proxmox.Password.Set("EXAMPLE-CFG-PW")
 		cfg.Provider.Proxmox.Username = "cfg-user"
 
 		creds := GetProxmoxCredentials(cfg)
@@ -285,7 +285,7 @@ func TestGetProxmoxCredentials(t *testing.T) {
 	t.Run("host without scheme gets https prefix and :8006 port", func(t *testing.T) {
 		clearProxmoxEnv(t)
 		cfg := cfgWithHost() // host = "pve.example" (no scheme, no port)
-		cfg.Provider.Proxmox.APIToken = "t"
+		cfg.Provider.Proxmox.APIToken.Set("EXAMPLE-TINY")
 
 		creds := GetProxmoxCredentials(cfg)
 
