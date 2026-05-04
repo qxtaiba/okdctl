@@ -17,6 +17,9 @@ type ResourcesStepState struct {
 	Cfg  *config.Config
 }
 
+// wizardStateMarker implements wizard.StepState.
+func (s *ResourcesStepState) IsWizardStepState() {}
+
 // ResourcesStepDefinition declares the node-resources step fields.
 var ResourcesStepDefinition = wizard.StepDefinition{
 	ID:           wizard.StepIDResources,
