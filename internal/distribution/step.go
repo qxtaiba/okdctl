@@ -192,6 +192,9 @@ func (b *StepBuilder) MustBuild() ProvisioningStep {
 // every StepDef must commit to one or the other.
 type ReRunSafety int8
 
+// ReRunSafe values declare whether a step body may be re-executed mid-phase.
+// ReRunSafeUnset is the zero value and triggers the BuildSteps panic so every
+// StepDef literal must commit to ReRunSafeYes or ReRunSafeNo.
 const (
 	ReRunSafeUnset ReRunSafety = 0
 	ReRunSafeYes   ReRunSafety = 1

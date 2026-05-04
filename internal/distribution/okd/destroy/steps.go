@@ -2,6 +2,7 @@ package destroy
 
 import (
 	"context"
+	"log/slog"
 	"strings"
 
 	"github.com/qxtaiba/okdctl/internal/config"
@@ -22,36 +23,41 @@ const (
 	StepPrintSummary    distribution.StepID = "print-summary"
 )
 
+// destroyTracker buffers step-level failure and skip labels for the final
+// summary step. Without this the prior summary said "cluster teardown
+// completed" even after terraform destroy failed — a misleading-success
+// regression once StepDestroyInfra became NonFatal. Safe without a mutex
+// because Orchestrator.Run iterates steps serially; add sync.Mutex if step
+// parallelism ever lands.
+type destroyTracker struct {
+	log      *slog.Logger
+	failures []string
+	skipped  []string
+}
+
+func (t *destroyTracker) onError(label string) func(error) {
+	return func(err error) {
+		t.failures = append(t.failures, label)
+		phase.WarnOnError(t.log, label)(err)
+	}
+}
+
+func (t *destroyTracker) skipWhen(label string, fn func() bool) func() bool {
+	return func() bool {
+		if fn() {
+			t.skipped = append(t.skipped, label)
+			return true
+		}
+		return false
+	}
+}
+
 func (p *Phase) destroySteps(cfg *config.Config, opts *Options) []distribution.StepDef {
-	// failures lets the final summary step report accurate state when an
-	// earlier NonFatal step errored. Without this the prior summary said
-	// "cluster teardown completed" even after terraform destroy failed —
-	// a misleading-success regression after StepDestroyInfra became NonFatal.
-	// Safe without a mutex because Orchestrator.Run iterates steps serially;
-	// add a sync.Mutex if step parallelism ever lands.
-	var failures []string
-	var skipped []string
-	track := func(label string) func(err error) {
-		return func(err error) {
-			failures = append(failures, label)
-			phase.WarnOnError(p.Log, label)(err)
-		}
-	}
-	// trackSkip wraps a SkipWhen predicate to record the step label when skipped.
-	// Safe without a mutex: same serial-execution invariant as failures.
-	trackSkip := func(label string, fn func() bool) func() bool {
-		return func() bool {
-			if fn() {
-				skipped = append(skipped, label)
-				return true
-			}
-			return false
-		}
-	}
+	t := &destroyTracker{log: p.Log}
+	track, trackSkip := t.onError, t.skipWhen
 	return []distribution.StepDef{
 		{
-			ID: StepDestroyInfra, Name: "destroy infrastructure",
-			ReRunSafe: distribution.ReRunSafeNo,
+			ID: StepDestroyInfra, Name: "destroy infrastructure", ReRunSafe: distribution.ReRunSafeNo,
 			Desc:       "destroying proxmox infrastructure using terraform",
 			NonFatal:   true, // orchestrator continues through cleanup steps on TF failure
 			SkipWhen:   trackSkip("terraform", func() bool { return opts.SkipTerraform }),
@@ -66,8 +72,7 @@ func (p *Phase) destroySteps(cfg *config.Config, opts *Options) []distribution.S
 			OnError: track("terraform destroy"),
 		},
 		{
-			ID: StepRemoveRemoteISO, Name: "remove remote ISO",
-			ReRunSafe: distribution.ReRunSafeYes,
+			ID: StepRemoveRemoteISO, Name: "remove remote ISO", ReRunSafe: distribution.ReRunSafeYes,
 			Desc:       "removing fedora-coreos iso from proxmox host",
 			NonFatal:   true,
 			SkipWhen:   trackSkip("iso removal", func() bool { return opts.KeepISOs || cfg.Provider.Proxmox == nil }),
@@ -84,8 +89,7 @@ func (p *Phase) destroySteps(cfg *config.Config, opts *Options) []distribution.S
 			OnError: track("iso removal"),
 		},
 		{
-			ID: StepCleanupFiles, Name: "cleanup files",
-			ReRunSafe: distribution.ReRunSafeYes,
+			ID: StepCleanupFiles, Name: "cleanup files", ReRunSafe: distribution.ReRunSafeYes,
 			Desc: "performing comprehensive cleanup", NonFatal: true,
 			SkipWhen:   trackSkip("file cleanup", func() bool { return opts.SkipCleanup || opts.CleanupKind == "" || !system.DirExists(opts.WorkDir) }),
 			SkipReason: cleanupFilesSkipReason(opts),
@@ -118,8 +122,7 @@ func (p *Phase) destroySteps(cfg *config.Config, opts *Options) []distribution.S
 			OnError: track("file cleanup"),
 		},
 		{
-			ID: StepCleanupFirewall, Name: "cleanup firewall",
-			ReRunSafe: distribution.ReRunSafeYes,
+			ID: StepCleanupFirewall, Name: "cleanup firewall", ReRunSafe: distribution.ReRunSafeYes,
 			Desc: "removing firewall rules", NonFatal: true,
 			// context.Background() is safe: DetectBackend runs only exec.LookPath + a bounded systemctl probe.
 			SkipWhen: trackSkip("firewall", func() bool {
@@ -136,17 +139,16 @@ func (p *Phase) destroySteps(cfg *config.Config, opts *Options) []distribution.S
 			OnError: track("firewall cleanup"),
 		},
 		{
-			ID: StepPrintSummary, Name: "print summary",
-			ReRunSafe: distribution.ReRunSafeYes,
+			ID: StepPrintSummary, Name: "print summary", ReRunSafe: distribution.ReRunSafeYes,
 			Desc: "printing destruction summary", NonFatal: true,
 			Exec: func(_ context.Context) error {
 				switch {
-				case len(failures) > 0:
+				case len(t.failures) > 0:
 					p.Log.Warn("destroy: teardown finished with non-fatal failures",
-						"steps", strings.Join(failures, ", "))
-				case len(skipped) > 0:
+						"steps", strings.Join(t.failures, ", "))
+				case len(t.skipped) > 0:
 					p.Log.Info("destroy: cluster teardown completed",
-						"skipped", strings.Join(skipped, ", "))
+						"skipped", strings.Join(t.skipped, ", "))
 				default:
 					p.Log.Info("destroy: cluster teardown completed")
 				}
