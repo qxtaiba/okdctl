@@ -2,6 +2,7 @@ package executor
 
 import (
 	"context"
+	"errors"
 	"os"
 	"runtime"
 	"strings"
@@ -152,4 +153,81 @@ func TestBuildEnv_EndToEndWithEcho(t *testing.T) {
 		t.Errorf("PATH missing from subprocess env:\n%s", result.Stdout)
 	}
 	_ = os.Unsetenv("OKDCTL_SECRET_PROBE")
+}
+
+func TestRunStreamedChecked(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("needs POSIX sh")
+	}
+
+	t.Run("zero exit streams stdout and returns no error", func(t *testing.T) {
+		t.Parallel()
+		var out, errBuf strings.Builder
+		e := New(WithInheritedEnv())
+		e.Stdout = &out
+		e.Stderr = &errBuf
+
+		result, err := e.RunStreamedChecked(context.Background(), "sh", "-c", "printf 'hello\nworld\n'")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if result.ExitCode != 0 {
+			t.Errorf("ExitCode = %d; want 0", result.ExitCode)
+		}
+		if !strings.Contains(out.String(), "hello") {
+			t.Errorf("e.Stdout missing streamed output; got %q", out.String())
+		}
+		if !strings.Contains(result.Stdout, "hello") {
+			t.Errorf("result.Stdout missing captured output; got %q", result.Stdout)
+		}
+	})
+
+	t.Run("non-zero exit returns ExitError with stderr tail", func(t *testing.T) {
+		t.Parallel()
+		var out, errBuf strings.Builder
+		e := New(WithInheritedEnv())
+		e.Stdout = &out
+		e.Stderr = &errBuf
+
+		result, err := e.RunStreamedChecked(context.Background(), "sh", "-c",
+			"printf 'boom\n' >&2; exit 1")
+		if err == nil {
+			t.Fatal("expected error for exit 1; got nil")
+		}
+		var exitErr *ExitError
+		if !errors.As(err, &exitErr) {
+			t.Fatalf("err type = %T; want *ExitError", err)
+		}
+		if exitErr.ExitCode != 1 {
+			t.Errorf("ExitError.ExitCode = %d; want 1", exitErr.ExitCode)
+		}
+		if !strings.Contains(exitErr.Stderr, "boom") {
+			t.Errorf("ExitError.Stderr = %q; want it to contain 'boom'", exitErr.Stderr)
+		}
+		if result == nil {
+			t.Fatal("result must be non-nil on error")
+		}
+		if !strings.Contains(errBuf.String(), "boom") {
+			t.Errorf("e.Stderr missing streamed output; got %q", errBuf.String())
+		}
+	})
+
+	t.Run("ctx cancel returns context error", func(t *testing.T) {
+		t.Parallel()
+		e := New(WithInheritedEnv())
+		e.Stdout = &strings.Builder{}
+		e.Stderr = &strings.Builder{}
+
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+
+		_, err := e.RunStreamedChecked(ctx, "sh", "-c", "sleep 10")
+		if err == nil {
+			t.Fatal("expected error after ctx cancel; got nil")
+		}
+		var exitErr *ExitError
+		if errors.As(err, &exitErr) {
+			t.Errorf("got *ExitError on ctx cancel; want context error, got: %v", err)
+		}
+	})
 }
