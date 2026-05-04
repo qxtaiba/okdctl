@@ -3048,3 +3048,149 @@ but link evidence.
   unexported `dnsmasqConfigDir` directly so the asserted path
   stays in sync with phase.DefaultDNSMasqConfigDir.
 
+- **`ux:073d24ed:metrics-addr-no-bind-tty-gating`** — done 2026-05-04
+  — PR #303, merge commit `045d5c6`. Tier H suggestion
+  (flag-conventions). The `--metrics-addr` flag help said `e.g. :9090`
+  but `helpers.go:147` silently rewrites bare `:port` → `127.0.0.1:port`
+  for safety. Updated the help string to document both forms (loopback
+  default vs `0.0.0.0:port` wildcard) and regenerated the cobra-driven
+  reference docs to keep the docs-drift CI check green.
+
+- **`ux:024a2c32:json-schema-display-name-hyphen-inconsistent`** —
+  done 2026-05-04 — PR #300, merge commit `889ecc5`. Tier H suggestion
+  (json-stability). Encoder at `cli/status.go:358` already emitted
+  snake_case `display_name` for the JSON output; only the docs were
+  stale (`docs/cli/json-schema.md:107-121` still showed kebab-case
+  `display-name` with a "historical reasons" disclaimer). Updated the
+  example, removed the disclaimer, added a CHANGELOG entry. No code
+  change needed.
+
+- **`tst:696d6b0e:validate-proxmox-name-no-test`** — done 2026-05-04
+  — PR #292, merge commit `5c78944`. Tier H major
+  (trust-boundary-untested). Added `TestValidateProxmoxName` in
+  `phase/iso_cleanup_test.go` covering the byte-by-byte allowlist:
+  accept set `{"pve","pve-1","node_a","PVE0","1pve"}` and reject set
+  covering empty, dot, slash, semicolon, backtick, dollar, space,
+  unicode, null byte. Note: `1pve` (leading digit) is in the accept
+  list because the current impl allows digits in any position; the
+  test locks current behavior, not future-tightening intent.
+
+- **`tst:27088eab:ssh-run-no-test`** — done 2026-05-04 — PR #302,
+  merge commit `41c41ce`. Tier H minor (canonical-helper-untested).
+  Added `TestSSHRun` and `TestSSHRunArgv` plus `installFakeSSHEcho`
+  helper (named to avoid colliding with the existing mode-switching
+  `installFakeSSH` in `remove_fcos_iso_test.go`). Both tests assert
+  the canonical flag set (`-o StrictHostKeyChecking=accept-new`,
+  `-o BatchMode=yes`) and `root@<host>` survive the executor argv
+  unchanged.
+
+- **`tst:b804b2ec:cleanup-bootstrap-plan-file-leak-untested`** —
+  done 2026-05-04 — PR #301, merge commit `0b6bd3d`. Tier H minor
+  (destructive-untested). Added `bootstrap_test.go` covering the
+  three exit paths of `CleanupBootstrap` (success, plan-fail,
+  apply-fail) with a fake terraform binary keyed on `TF_FAKE_MODE`.
+  Each test pre-creates `bootstrap-destroy.tfplan` and asserts
+  `os.IsNotExist` after the call — pinning the deferred `SafeRemove`
+  invariant the doc comment names as a regression risk.
+
+- **`sec:d7ce9d16:input-validation`** — done 2026-05-04 — PR #298,
+  merge commit `92b93a3`. Tier H suggestion (input-validation).
+  Added `validateConnectionName` to `dns/dnsmasq.go` rejecting
+  `;\n\r\x00`$<>|&` while permitting spaces (NetworkManager allows
+  them). Validation lives in `getActiveConnection` so both
+  `ConfigureSystemResolver` and `RestoreSystemResolver` inherit
+  the guard at one chokepoint. Defense-in-depth against poisoned
+  nmcli output; today's argv invocations are safe but a future
+  shell-style call would be exposed.
+
+- **`sec:8ea706f6:dl-hashicorp-gpg-overwrite`** — done 2026-05-04
+  — PR #297, merge commit `fdd4ac4`. Tier H suggestion
+  (tls-network). `installHashiCorpDebianRepo` now stats the target
+  keyring path and re-runs `verifyHashiCorpGPGFingerprint` against
+  the on-disk binary keyring (`gpg --import-options show-only`
+  accepts both armored and binary). Mismatch returns
+  `*errtypes.ConfigError` (exit 2) instructing the operator to
+  remove the file. Match short-circuits the dearmor entirely,
+  making re-deploys idempotent.
+
+- **`sec:f55b9c27:err-type-carries-cred`** — done 2026-05-04 —
+  PR #296, merge commit `f86f5f6`. Tier H suggestion (redaction —
+  seam→audit-errors). Added `Path string` field to
+  `errtypes.AuthError`; `Error()` appends `(path: <Path>)` only
+  when set so existing callers' output stays stable when Path is
+  zero. `loadEnvFileOnce` populates `Path: path` instead of
+  embedding it in `Msg` via `fmt.Sprintf`. Other AuthError
+  construction sites (loader.go, ignition.go, release_extract.go,
+  elevation.go, WriteEnvFile) leave Path zero — staged migration
+  out of scope here.
+
+- **`sec:1e8ffb91:input-validation`** (clusteroperator-json) —
+  done 2026-05-04 — PR #299, merge commit `29dd0c9`. Tier H
+  suggestion (input-validation). Replaced the brittle
+  `oc get clusteroperators --no-headers` positional fields[4]
+  parse with `-o json` + structured walk over `status.conditions`
+  for type=Degraded status=True. New `clusterOperatorList` struct
+  + `parseOperatorDegradation` mirror the existing
+  `nodeList`/`parseNodeReadiness` pattern. Six-case test covers
+  no-degraded, one, multiple, missing-condition, malformed-json,
+  empty list.
+
+- **`sec:40d315ad:cred-flux-helm-set-leak`** — done 2026-05-04 —
+  PR #294, merge commit `13c94bd`. Tier H minor (credentials).
+  `flux.ValidateSettings` now rejects http/https URLs containing
+  userinfo (`https://user:token@host`) — these would land in
+  helm `--set` argv visible via `/proc/<pid>/cmdline`. Restricted
+  to http/https schemes so legitimate `ssh://git@host/` SSH
+  usernames still work; scp-style `git@host:path` bypasses
+  url.Parse and is also accepted. Wizard help text and doc
+  comment direct users toward SSH deploy-key auth.
+
+- **`err:45cf4e29:wrap-double-context-typed`** — done 2026-05-04
+  — PR #295, merge commit `4be25ef`. Tier H minor (wrapping).
+  Six step closures across `install/postinstall/setup/destroy
+  steps.go` were re-wrapping inner typed errors with
+  `&errtypes.ClusterError{...}` (or `NetworkError`), silently
+  reclassifying inner types and drifting exit codes. Each closure
+  now returns the inner error directly so `errors.As` in
+  `exitCodeFor` walks the chain and the inner type's exit code
+  surfaces (ConfigError → 2, NetworkError → 3, ClusterError → 4,
+  AuthError → 5). The biggest concrete win: AuthError from
+  `extractReleaseImage` now correctly surfaces as exit 5 instead
+  of buried under NetworkError → exit 3.
+
+- **`state:fb54208a:postinstall-no-rollback-path`** — done
+  2026-05-04 — PR #293, merge commit `85516cc`. Tier H major
+  (crash-recoverability). Added `dns.IsBootstrapDNS(cfg)` that
+  reads `/etc/dnsmasq.d/okd-<name>.conf` and detects when api.*
+  still resolves to the bastion IP rather than the kube-VIP,
+  using **line-exact matching** rather than substring
+  (substring false-positives `10.0.0.1` against `10.0.0.10` —
+  caught by the new test before merge). `UpdateIngress` logs a
+  warning when bootstrap-pointed DNS is detected and surfaces a
+  `DNSReconciled` flag in the result + summary line. The actual
+  production-DNS deploy already happens unconditionally inside
+  `finalizeIngress`; this commit makes the recovery path
+  discoverable rather than silent.
+
+- **`sec:6424733c:cred-as-string`** — done 2026-05-04 — PR #291,
+  merge commit `8e0be7c`. Tier H major (credentials). New
+  `config.SecretBytes` type owns a `[]byte` with
+  `Set/Zeroize/Bytes/IsEmpty/String/Redacted` so credentials
+  can be wiped after use rather than lingering as immutable Go
+  strings until GC. `ProxmoxConfig.Password` and `APIToken`
+  changed from `string` to `SecretBytes`; wizard, deploy,
+  destroy, and tests migrated. `clearConfigCredentials` now
+  calls `Zeroize()` on the wrapper. **Residual leak boundary:**
+  the wizard input pipeline still funnels the captured password
+  through a Go string at `bubbles.textinput.Value()`, and
+  `proxmox_discovery.go:77` converts back to string for the
+  third-party `go-proxmox.Credentials.Password string` field.
+  These are inherent to the upstream library boundaries and
+  bounded in lifetime (10s discovery timeout, single wizard
+  pass); follow-on work would require forking those libraries
+  or refactoring the wizard component model. GitGuardian
+  initially flagged the migrated test fixture strings (existing
+  `cfg-token` / `cfg-pw` values now adjacent to a `Set()`
+  setter); renamed to `EXAMPLE-` prefixed values to satisfy the
+  scanner.
+

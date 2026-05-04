@@ -1559,16 +1559,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 #### audit-security
 
-##### `sec:6424733c:cred-as-string` — cred as string
-
-**Status:** in review — PR #291  
-**Severity:** major  
-**Cluster:** credentials  
-**Evidence:** `internal/cli/helpers.go:272-286`  
-**Problem:** writeCredentialsEnv copies px.Password (a Go string) into a fresh []byte for ProxmoxCredentials.Password. The source string lives in the *config.Config heap object until clearConfigCredentials runs — and Go strings are immutable so the original string bytes remain on the heap until GC. Same applies to px.APIToken. The defer clearConfigCredentials in runDeploy closes most of this window, but the field-level *string* type cannot be Zeroize'd.  
-**Fix:** Change config.ProxmoxConfig.Password / APIToken to a wrapper type that owns []byte and a Zeroize method, populated only by the wizard's input fields. The wizard's input.Validate already scrubs; the field type just needs to never become a Go string in the first place. Keep `json:"-"` so YAML Marshal still excludes them. The clearConfigCredentials() helper then becomes Zeroize() on the wrapper.  
-**Effort:** hours
-
 ##### `sec:6424733c:cred-no-zeroize` — cred no zeroize
 
 **Status:** not started  
@@ -1586,16 +1576,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 ##### `sec:98723e5d:bashrc-chown-leak` — bashrc chown leak
 
 **Status:** done — PR #123 (moved to Completed)
-
-##### `sec:40d315ad:cred-flux-helm-set-leak` — cred flux helm set leak
-
-**Status:** in review — PR #294  
-**Severity:** minor  
-**Cluster:** credentials  
-**Evidence:** `internal/addon/catalog/flux/flux.go:78-113`  
-**Problem:** Flux Install passes the full git repository URL (which may include `https://USER:TOKEN@host/` form on private mirrors) into helm --set instance.sync.url=%s through an unredacted fmt.Sprintf. Helm's `--set` arguments are visible in /proc/<pid>/cmdline to other local users, and helm's verbose log output may echo them. The repository value comes from cfg.Addons.flux.settings.repository which is loaded from config; a user pasting a tokenised URL puts that token on every other local user's process listing.  
-**Fix:** Refuse repository URLs that contain `://user:password@` userinfo at validate-time (already partially constrained by ValidateSettings). Document that flux SSH-key auth is the only supported credential channel. If basic-auth must be supported, plumb it through a Kubernetes Secret (which BuildOpaqueSecret already supports) instead of helm --set.  
-**Effort:** hours
 
 ##### `sec:0f076161:cred-no-zeroize` — cred no zeroize
 
@@ -1667,26 +1647,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Already-hardened. Documenting as a counter-example reference: this file (cli/logging.go:25-32) is the canonical pattern other sites in this audit reference for O_NOFOLLOW + lstat. No action needed.  
 **Effort:** hours
 
-##### `sec:f55b9c27:err-type-carries-cred` — err type carries cred
-
-**Status:** in review — PR #296  
-**Severity:** suggestion  
-**Cluster:** redaction — seam→audit-errors  
-**Evidence:** `internal/credentials/envfile.go:121-134`  
-**Problem:** loadEnvFileOnce constructs error messages embedding `path` (e.g. fmt.Sprintf("failed to stat env file %s", path)) — path may be the deploy-output-derived .env path. Not credential-bearing in the typical case (path is a filesystem location), but if a user pointed --output at a path that *was* derived from a credential string (an unusual but possible misuse), the error chain leaks it. Stronger: errors.Is/As checks downstream cannot distinguish 'file does not exist' from 'permission denied' without re-parsing the wrapped error string.  
-**Fix:** Move `path` to a structured field in errtypes.AuthError (e.g. add Path string to the struct). Then logutil.RedactHandler can apply path-redaction policy uniformly across error types. Defers to audit-errors for the type-layer fix.  
-**Effort:** hours
-
-##### `sec:d7ce9d16:input-validation` — input validation
-
-**Status:** in review — PR #298  
-**Severity:** suggestion  
-**Cluster:** input-validation  
-**Evidence:** `internal/distribution/okd/dns/dns.go:143-197`  
-**Problem:** ConfigureSystemResolver passes `nmcli connection modify <conn> ipv4.dns <dnsConfig>` where conn is from `getActiveConnection()` (parsed nmcli output). The connection name is not validated for shell-metacharacters because RunCaptured uses argv (no shell). However, the dnsConfig string is built from `slices.Concat([]string{"127.0.0.1"}, fallbackDNS)` and fallbackDNS is validated via validateDNSAddresses. The nmcli command path is safe. Documenting because the connection-name path mixes a parsed external value into argv — argv-safe today, but a future shell-style invocation wo...  
-**Fix:** Document the argv-only rule on this path. Or validate `conn` to refuse names containing whitespace, semicolons, or newlines as defense-in-depth — getActiveConnection's strings.Lines + TrimSpace is brittle to NetworkManager output drift.  
-**Effort:** hours
-
 ##### `sec:696d6b0e:input-path-not-prefix-checked` — input path not prefix checked
 
 **Status:** not started  
@@ -1695,16 +1655,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/distribution/okd/phase/iso_cleanup.go:215-265`  
 **Problem:** RemoveFCOSISOFromProxmox fail-closed pattern is good: it validates isoDir, requires fedora-coreos-*.iso prefix, single-quotes the path, and skips files referenced by running VMs. But the skip-on-in-use logic uses the filename only (filepath.Base) for VM-config matching — two ISOs with the same basename in different paths would be aliased. Low-likelihood since isoDir is fixed at /var/lib/vz/template/iso, but the basename equality breaks if Proxmox Storage layouts use non-default ISO directories.  
 **Fix:** Pass the full f (already validated by refuseUnsafeISOPath) into anyVMReferencesISO and compare against the full Proxmox storage:iso/<file> form rather than basename. Defense-in-depth for non-default storage layouts.  
-**Effort:** hours
-
-##### `sec:1e8ffb91:input-validation` — input validation
-
-**Status:** in review — PR #299  
-**Severity:** suggestion  
-**Cluster:** input-validation  
-**Evidence:** `internal/distribution/okd/postinstall/verify.go:75-113`  
-**Problem:** VerifyClusterHealth parses `oc get clusteroperators --no-headers` line-by-line and indexes `fields[4]` as the DEGRADED column. The column index is positional and unstable across oc versions — newer oc may emit additional columns or reorder them. The check is functional but brittle; in the worst case a column shift causes false-negatives (degraded operators reported as healthy) which is a security-adjacent visibility issue.  
-**Fix:** Use `oc get clusteroperators -o json` and walk status.conditions for type=Degraded status=True. The same pattern is already used elsewhere in this file for nodes (parseNodeReadiness) — apply it here for consistency. Documented as the lesson learned in parseNodeReadiness's own comment: 'Replaces the prior strings.Contains(line, ...) text-parse which misclassified ...'  
 **Effort:** hours
 
 ##### `sec:1e8ffb91:tls-insecure-permanent-skip` — tls insecure permanent skip
@@ -1735,16 +1685,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/distribution/okd/setup/tools.go:227-248`  
 **Problem:** installHashiCorpDebianRepo writes the GPG key to a temp file via system.WriteTempFile with mode 0o600 then runs `gpg --dearmor -o /usr/share/keyrings/...gpg`. The temp-file handler closes the file before gpg reads it (per WriteTempFile semantics), but the os.Remove on defer happens after gpg has succeeded. The dearmored output goes to /usr/share/keyrings (world-readable 0o644 by gpg's default) — not a defect since it's a public key, but the original tmp may briefly carry the armored key in /tmp where any local user could race it via inotify before defer cleanup. Minor — sam...  
 **Fix:** Acceptable as-is — the GPG key is public. Document the cleanup contract for symmetric WriteTempFile usage.  
-**Effort:** hours
-
-##### `sec:8ea706f6:dl-hashicorp-gpg-overwrite` — dl hashicorp gpg overwrite
-
-**Status:** in review — PR #297  
-**Severity:** suggestion  
-**Cluster:** tls-network  
-**Evidence:** `internal/distribution/okd/setup/tools.go:228-250`  
-**Problem:** installHashiCorpDebianRepo's gpg --dearmor command writes to /usr/share/keyrings/hashicorp-archive-keyring.gpg unconditionally. If a previous okdctl deploy (or a system administrator) has placed a different key there, this overwrites it without warning. The path is also writable only via sudo; under the deploy re-exec model the call runs as root.  
-**Fix:** If gpgPath exists, run `gpg --with-colons --import-options show-only --import gpgPath` and compare the imported fingerprint to the expected HashiCorp fingerprint before re-writing. Refuse to overwrite if a different key is present.  
 **Effort:** hours
 
 ##### `sec:8ea706f6:input-validation` — input validation
@@ -1780,16 +1720,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 ##### `state:b804b2ec:bootstrap-destroy-skip-tfvars-silent` — bootstrap destroy skip tfvars silent
 
 **Status:** done — 2026-04-26 — PR #149 (moved to Completed)
-
-##### `state:fb54208a:postinstall-no-rollback-path` — postinstall no rollback path
-
-**Status:** in review — PR #293  
-**Severity:** major  
-**Cluster:** crash-recoverability  
-**Evidence:** `internal/distribution/okd/postinstall/steps.go:42-94`  
-**Problem:** StepCleanupBootstrap, StepVerifyKubeVIP, and StepDeployProductionDNS are all NonFatal. If StepCleanupBootstrap succeeds (bootstrap VM destroyed, terraform state mutated) but StepVerifyKubeVIP fails, StepDeployProductionDNS is skipped (gated on KubeVIPVerified). The cluster is left with bootstrap gone, VIP unverified, /etc/dnsmasq.d/ still pointing at bootstrap IP — no resume path is exposed (no `okdctl postinstall` subcommand or scoped re-run flag).  
-**Fix:** Two options (roadmap state:fb54208a documents both): (a) add `okdctl postinstall --step=dns` so the DNS substep is independently re-runnable once kube-vip is healthy; (b) extend update-ingress to detect bootstrap-pointed DNS and re-run dns.DeployProduction. Prefer (b) — update-ingress already owns DNS reconciliation.  
-**Effort:** hours
 
 ##### `state:4c092fce:tf-state-backup-removed-on-success` — tf state backup removed on success
 
@@ -1839,16 +1769,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/config/loader.go:22-47`  
 **Problem:** Loader.LoadFile wraps insecure-perm and parse failures with bare fmt.Errorf("...%w", err) instead of typing them as errtypes.ConfigError. The exact same security check in internal/credentials/envfile.go:122-128 returns &errtypes.AuthError{Err: os.ErrPermission}. Two security-critical perm checks; two different error shapes; one mapped to exit 2 (or 5), one to exit 1.  
 **Fix:** Wrap insecure-perm in &errtypes.AuthError{Msg, Err: os.ErrPermission} (matches envfile.go:124-127); wrap parse/read in &errtypes.ConfigError{Msg, Err: err}. Both preserve %w identity through Unwrap so callers can still errors.Is(err, os.ErrPermission).  
-**Effort:** hours
-
-##### `err:45cf4e29:wrap-double-context-typed` — wrap double context typed
-
-**Status:** in review — PR #295  
-**Severity:** minor  
-**Cluster:** wrapping  
-**Evidence:** `internal/distribution/okd/install/steps.go:33-83`  
-**Problem:** Phase step Exec closures re-wrap errors that the underlying function ALREADY typed. DeployInfrastructure already returns &errtypes.NetworkError or &errtypes.ClusterError, but installSteps wraps it AGAIN as &errtypes.ClusterError. errors.As still walks past the outer wrap, but the surface message duplicates context and the outer ClusterError silently reclassifies a NetworkError, drifting exit code 3 → 4 at cli/root.go.  
-**Fix:** Drop the outer typed-wrap in step closures whose inner function already returns errtypes — let the inner error pass through. If the step needs additional context, use &errtypes.ClusterError{Msg: "step %s failed", Err: err} ONLY when the inner is a bare error. Same pattern at postinstall/steps.go:34 (VerifyClusterHealth already typed), setup/steps.go:82 (DownloadOKDTools double-wraps NetworkError), destroy/steps.go:47.  
 **Effort:** hours
 
 ##### `err:c287d5c0:vocab-ad-hoc-distribution-type` — vocab ad hoc distribution type
@@ -2111,16 +2031,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 **Status:** done — PRs #187 + #193 (moved to Completed)
 
-##### `ux:024a2c32:json-schema-display-name-hyphen-inconsistent` — json schema display name hyphen inconsistent
-
-**Status:** in review — PR #300  
-**Severity:** suggestion  
-**Cluster:** json-stability  
-**Evidence:** `docs/cli/json-schema.md:107-121`  
-**Problem:** `describe addon --format=json` emits `display-name` (kebab-case) while every sibling field uses snake_case. The docs even call out the inconsistency as 'historical reasons' but ship it. Consumers piping `okdctl describe addon X --format=json | okdctl status --format=json` cross-command get a key-style mix that can't be jq-merged cleanly.  
-**Fix:** Pre-1.0, rename to `display_name` in the encoder (status.go runDescribeAddon at L337-L342). Update json-schema.md and add a note in CHANGELOG. README pins versions until 1.0 so this is the right window. Alternative (smaller blast radius): emit BOTH keys for one minor cycle, then drop the hyphen variant.  
-**Effort:** hours
-
 ##### `ux:8d8faa80:completion-powershell-on-linux-only-tool` — completion powershell on linux only tool
 
 **Status:** done — PR #164 (moved to Completed)  
@@ -2139,16 +2049,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/cli/debug_bundle.go:84-84`  
 **Problem:** debug-bundle writes the bundle to a file (`-o`) but tui.Info on L84/L155 still chatters on stderr. The output flag suggests the *primary* output is the bundle file; progress/status logs to stderr is fine, but there's no `--quiet`-style flag scoped to this command. Combined with the global --quiet (root.go L184), users CAN suppress, so this is a minor docs-affordance issue.  
 **Fix:** Document the global --quiet in this command's Long, or just leave as-is. The streams discipline is already correct (data → file, progress → stderr). Closing this as 'verify intent'.  
-**Effort:** hours
-
-##### `ux:073d24ed:metrics-addr-no-bind-tty-gating` — metrics addr no bind tty gating
-
-**Status:** in review — PR #303  
-**Severity:** suggestion  
-**Cluster:** flag-conventions  
-**Evidence:** `internal/cli/deploy.go:44-44`  
-**Problem:** `--metrics-addr` help says 'e.g. :9090' but the helpers.go at L141-L146 transparently rewrites bare ':9090' → '127.0.0.1:9090' for safety. The flag help should mention this, otherwise a user expecting wildcard bind from `:9090` is confused when prom doesn't scrape from off-host.  
-**Fix:** Update help to: 'address for Prometheus metrics endpoint; bare ":9090" binds 127.0.0.1; use "0.0.0.0:9090" for wildcard bind; disabled when empty'. The behavior is correct and security-sensible — only the docs are off.  
 **Effort:** hours
 
 ##### `obs:6424733c:string-concat-err-error-in-tui` — string concat err error in tui
@@ -2439,16 +2339,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Add resolver_test.go with a tiny stubAddon: cases — (1) no deps + same priority sorts by name; (2) priority breaks ties; (3) A→B→C orders C before B before A; (4) missing dep returns error containing "depends on" and addon names; (5) circular A→B→A returns "circular dependency detected". Pure logic — a fakeAddon{name, deps, priority} struct + addon.Addon interface stub is enough.  
 **Effort:** hours
 
-##### `tst:696d6b0e:validate-proxmox-name-no-test` — validate proxmox name no test
-
-**Status:** in review — PR #292  
-**Severity:** major  
-**Cluster:** trust-boundary-untested  
-**Evidence:** `internal/distribution/okd/phase/iso_cleanup.go:52-64`  
-**Problem:** validateProxmoxName gates pvesh interpolation over ssh — the function comment names this as defense-in-depth for hand-edited YAML. The byte-by-byte allowlist enforces [A-Za-z0-9_-] but no test asserts the actual rejection set: empty string, leading digit, dot, slash, semicolon, backtick, dollar sign, space, unicode, null byte. Without coverage, a future refactor that swaps to a regex with the wrong anchor (^[a-z]+ vs ^[a-z]+$) silently relaxes the gate.  
-**Fix:** Add TestValidateProxmoxName cases: accept ("pve", "pve-1", "node_a", "PVE0"); reject ("", "1pve", "pve.example", "pve/etc", "pve;rm", "pve`id`", "pve$(id)", "pve space", "pvé", "pve\x00"). Pure function — no fixtures.  
-**Effort:** hours
-
 ##### `tst:451be4fa:chown-tree-error-aggregation-untested` — chown tree error aggregation untested
 
 **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/tst-451be4fa-chown-tree  
@@ -2477,26 +2367,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/distribution/okd/phase/helpers.go:24-30`  
 **Problem:** ResolveClusterVIP is the canonical 'resolve VIP from cfg' wrapper used by destroy, postinstall, dns, update_ingress (5 sites per the comment). It thin-wraps netutil.ResolveVIP with a fixed error prefix. netutil.ResolveVIP IS tested but the prefix wrap and the netutil-to-config field mapping (cfg.Networking.Bastion.VIP first, then StaticIP.Start) are not.  
 **Fix:** Add TestResolveClusterVIP: (1) explicit VIP wins; (2) static-IP-derived VIP when no explicit; (3) malformed VIP wraps with "failed to resolve VIP" prefix and underlying error stays errors.Is-able. Pure function — no fixtures.  
-**Effort:** hours
-
-##### `tst:27088eab:ssh-run-no-test` — ssh run no test
-
-**Status:** in review — PR #302  
-**Severity:** minor  
-**Cluster:** canonical-helper-untested  
-**Evidence:** `internal/distribution/okd/phase/ssh.go:30-41`  
-**Problem:** SSHRun wraps every remote command in destroy / setup / iso-cleanup with a fixed flag set (StrictHostKeyChecking=accept-new + BatchMode=yes). The flag set is load-bearing — a future caller that copies+modifies it could downgrade to AcceptHostKey=no (MITM). There is no test asserting the canonical flags appear in the exec.Command argv.  
-**Fix:** Install a fake `ssh` script in PATH that prints argv to stdout. Call SSHRun with a fixed host+cmd, parse the resulting Result.Stdout, assert the canonical flag set and root@host appear verbatim. Mirrors kubectl_test.go's installFakeOC pattern.  
-**Effort:** hours
-
-##### `tst:b804b2ec:cleanup-bootstrap-plan-file-leak-untested` — cleanup bootstrap plan file leak untested
-
-**Status:** in review — PR #301  
-**Severity:** minor  
-**Cluster:** destructive-untested  
-**Evidence:** `internal/distribution/okd/postinstall/bootstrap.go:17-66`  
-**Problem:** CleanupBootstrap defers system.SafeRemove(planPath) — the comment specifically names a regression where a leftover .tfplan file 'refused to overwrite' on the next run. There is no test asserting the defer fires on every error path: (1) plan failure, (2) apply failure, (3) success. A refactor that moves SafeRemove out of defer (e.g. only calling it on success) re-introduces the named regression silently.  
-**Fix:** Inject a fake `terraform` binary in PATH that responds to init/plan/apply per OC_FAKE_MODE-style env var. Test (1) all-success: planPath gone after; (2) plan exits 1: planPath gone (the regression case); (3) plan succeeds, apply exits 1: planPath gone. Reuse phase.NewBasePhase + executor.New() pattern from existing destroy/helpers_test.go.  
 **Effort:** hours
 
 ##### `tst:eb479d86:upload-iso-via-scp-no-test` — upload iso via scp no test
