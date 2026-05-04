@@ -77,6 +77,8 @@ func New(opts ...Option) *Provider {
 // variables (PROXMOX_VE_ENDPOINT, PROXMOX_VE_API_TOKEN) passed directly to
 // terraform — the Provider has no Proxmox HTTP client. Connectivity issues
 // surface during terraform plan/apply with clear provider-level errors.
+// ctx is accepted for symmetry with future network-bound providers; this
+// implementation is local-only.
 func (p *Provider) Connect(_ context.Context, cfg *config.Config) error {
 	if cfg == nil {
 		return &errtypes.ConfigError{Msg: "configuration is required"}
@@ -90,7 +92,8 @@ func (p *Provider) Connect(_ context.Context, cfg *config.Config) error {
 	return nil
 }
 
-// Disconnect accepts a context for interface consistency but does not use it.
+// Disconnect resets connection state. ctx is accepted for symmetry with future
+// network-bound providers; this implementation is local-only.
 func (p *Provider) Disconnect(_ context.Context) error {
 	p.connected = false
 	p.terraformExec = nil
