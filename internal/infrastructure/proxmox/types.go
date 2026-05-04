@@ -1,10 +1,6 @@
 package proxmox
 
-import (
-	"errors"
-
-	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
-)
+import "errors"
 
 // Provider sentinel errors.
 var (
@@ -37,28 +33,26 @@ type VMStatus struct {
 	IPAddress string
 }
 
-// VMRole classifies a VM's cluster role; aliased to phase.NodeRole so the
-// two enums never drift. The Role* constants below are package-local
-// re-exports of the canonical phase constants.
-type VMRole = phase.NodeRole
+// VMRole classifies a VM's cluster role. String values match what
+// openshift-install, HAProxy templates, and ignition URLs expect verbatim.
+type VMRole string
 
-// Role* mirror phase's canonical values so existing call sites stay terse.
+// Role* are the valid VMRole values.
 const (
-	RoleBootstrap = phase.RoleBootstrap
-	RoleMaster    = phase.RoleMaster
-	RoleWorker    = phase.RoleWorker
+	RoleBootstrap VMRole = "bootstrap"
+	RoleMaster    VMRole = "master"
+	RoleWorker    VMRole = "worker"
 )
 
-// VMState aliases phase.VMState so iso_cleanup (phase) and proxmox share
-// a single canonical lifecycle enum. The State* constants below mirror the
-// canonical phase values.
-type VMState = phase.VMState
+// VMState classifies a Proxmox VM's lifecycle state. String values match the
+// "status" field in `pvesh get /nodes/<n>/qemu` output verbatim.
+type VMState string
 
-// State* mirror phase's canonical values so existing call sites stay terse.
+// State* are the valid VMState values.
 const (
-	StateRunning  = phase.StateRunning
-	StateStopped  = phase.StateStopped
-	StateCreating = phase.StateCreating
-	StateDeleting = phase.StateDeleting
-	StateUnknown  = phase.StateUnknown
+	StateRunning  VMState = "running"
+	StateStopped  VMState = "stopped"
+	StateCreating VMState = "creating"
+	StateDeleting VMState = "deleting"
+	StateUnknown  VMState = "unknown"
 )
