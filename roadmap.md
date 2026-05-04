@@ -1845,16 +1845,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Keep. Optional follow-up: prefer `phase.NewBasePhase(version, phase.WithExecutor(exec), phase.WithLogger(log), phase.WithRecorder(rec))` consistently in okd.go, install/postinstall/destroy New() funcs — that erases the field-assignment dance and exercises the symmetric option.  
 **Effort:** hours
 
-##### `api:a7f4383d:export-no-caller-scaffolding` — export no caller scaffolding (scaffolding — verify intent only)
-
-**Status:** in review — PR #336  
-**Severity:** suggestion  
-**Cluster:** exported-surface  
-**Evidence:** `internal/distribution/okd/types.go:1-57`  
-**Problem:** okd.ClusterStatus, NodeStatus, Condition, ClusterPhase plus six PhaseXxx constants are exported but no in-scope code references them. internal/cli/status.go has a parallel local clusterStatus type instead of consuming okd.ClusterStatus. Either status.go should use okd.ClusterStatus (and the exported types are scaffolding for a future status verb) or okd/types.go is dead code.  
-**Fix:** Verify intent before any change. If the status verb is on the roadmap (the file shape — ClusterStatus + ClusterPhase enum + lifecycle states matching `okdctl status` output — strongly suggests this), keep it as scaffolding; ideally migrate cli/status.go to use okd.ClusterStatus so the exported type has at least one consumer. If no roadmap entry references it, file an item to either adopt or delete in the next sprint.  
-**Effort:** hours
-
 #### audit-cli-ux
 
 ##### `ux:fd2125dd:addon-uninstall-no-confirm` — addon uninstall no confirm
@@ -1887,16 +1877,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/cli/completion.go:11-31`  
 **Problem:** completionCmd advertises `powershell` as a valid arg, but okdctl is Linux-only (README L24-L26, MEMORY.md). The shell completion is generated correctly by cobra but operators on Windows literally can't run okdctl, so listing powershell at all is dishonest help text.  
 **Fix:** Drop `powershell` from Use and ValidArgs. Update Long to 3 shells. Drop the powershell hint from README L70-72. (User memory says: skip Windows-compat suggestions; this is the inverse direction — *removing* a Windows-flavored thing on a Linux-only tool, which aligns with the memory note.)  
-**Effort:** hours
-
-##### `ux:d9f7733e:debug-bundle-skip-must-gather-no-quiet-suppress` — debug bundle skip must gather no quiet suppress
-
-**Status:** in review — PR #335  
-**Severity:** suggestion  
-**Cluster:** streams  
-**Evidence:** `internal/cli/debug_bundle.go:84-84`  
-**Problem:** debug-bundle writes the bundle to a file (`-o`) but tui.Info on L84/L155 still chatters on stderr. The output flag suggests the *primary* output is the bundle file; progress/status logs to stderr is fine, but there's no `--quiet`-style flag scoped to this command. Combined with the global --quiet (root.go L184), users CAN suppress, so this is a minor docs-affordance issue.  
-**Fix:** Document the global --quiet in this command's Long, or just leave as-is. The streams discipline is already correct (data → file, progress → stderr). Closing this as 'verify intent'.  
 **Effort:** hours
 
 ##### `obs:6424733c:string-concat-err-error-in-tui` — string concat err error in tui
