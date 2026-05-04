@@ -31,20 +31,14 @@ const (
 	SourceNone Source = iota
 	// SourceEnv means PROXMOX_VE_PASSWORD / PROXMOX_VE_API_TOKEN supplied it.
 	SourceEnv
-	// SourceConfig means the credential came from the YAML config file.
-	SourceConfig
 )
 
 // String returns a human-readable label used in status output.
 func (s Source) String() string {
-	switch s {
-	case SourceEnv:
+	if s == SourceEnv {
 		return "environment variables"
-	case SourceConfig:
-		return "configuration file"
-	default:
-		return "not found"
 	}
+	return "not found"
 }
 
 // ProxmoxCredentials holds Proxmox authentication material. Password and
