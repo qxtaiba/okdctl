@@ -94,7 +94,7 @@ This is **design-doc-first**. No code lands until the plan is reviewed.
 
 ### R1 — Addon category model + design doc
 
-- **Status:** not started
+- **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/r1-addon-category-model
 - **Category:** feature-gap / half-done
 - **State:** design needed
 - **Effort:** weeks
@@ -1939,7 +1939,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `api:a7f4383d:export-no-caller-scaffolding` — export no caller scaffolding (scaffolding — verify intent only)
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/api-a7f4383d-clusterstatus  
 **Severity:** suggestion  
 **Cluster:** exported-surface  
 **Evidence:** `internal/distribution/okd/types.go:1-57`  
@@ -1983,7 +1983,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `ux:d9f7733e:debug-bundle-skip-must-gather-no-quiet-suppress` — debug bundle skip must gather no quiet suppress
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/ux-d9f7733e-debug-bundle-quiet  
 **Severity:** suggestion  
 **Cluster:** streams  
 **Evidence:** `internal/cli/debug_bundle.go:84-84`  
