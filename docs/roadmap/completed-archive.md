@@ -3659,3 +3659,51 @@ but link evidence.
   shadow-risk variable name `status` in the addon-render loop was
   renamed `addonHealth` to avoid the appearance of shadowing the
   new `Status` field on `okd.NodeStatus`.
+
+- **`api:48688e63:pkg-facade-bypassed`** — done 2026-05-04 — PR
+  #338, merge commit `c8848ca`. Tier H minor (package-boundary).
+  Domain logic in `internal/infrastructure/proxmox` and
+  `internal/distribution/okd/install/monitor.go` imported
+  `internal/tui` to call `tui.StartSpinner`, leaking UI/presentation
+  concerns into provisioning logic and preventing reuse from a
+  non-TTY caller. Added `logutil.ProgressReporter` (callback type)
+  + `logutil.NopProgressReporter` (default no-op); threaded it
+  through `proxmox.Provider` (new `WithProgressReporter` option),
+  `install.Phase` (new exported `Reporter` field, set from
+  `okd.Install` alongside `Recorder`), and `okd.Provisioner`
+  (new `WithProgressReporter` option). CLI helpers added
+  `tuiReporter(ctx)` wrapping `tui.StartSpinner` and registered it
+  via `okd.WithProgressReporter` at the
+  `executeFullDeployment` provisioner-construction site
+  (`internal/cli/helpers.go:244`). Removed the `internal/tui`
+  import from both target packages. Two test struct-literals updated
+  to set `Reporter: logutil.NopProgressReporter` to avoid
+  nil-func panic. Lesson: for symmetry with the existing exported
+  `Recorder` field on `install.Phase`, keep `Reporter` as an
+  exported field assigned from the parent `Install()` call rather
+  than introducing a one-off functional option.
+
+- **`state:4f69fc9d:no-resume-checkpoint`** — done 2026-05-04 — PR
+  #339, merge commit `4db1375`. Tier H minor (phase-idempotency).
+  `StepDef` had no idempotency declaration; `Orchestrator.Run`
+  iterated every step from index 0 on each invocation, so a
+  mid-phase crash re-ran slow generators (ISO build, ignition gen,
+  manifest gen) on every retry. Added typed enum `ReRunSafety`
+  (`Unset`/`Yes`/`No`) plus a new `AlreadyDone func(ctx) (bool, error)`
+  field to `StepDef`; `BuildSteps` panics on `ReRunSafeUnset`
+  (zero value) so every literal must commit. All 36 existing
+  `StepDef` literals across `setup/install/postinstall/destroy`
+  declare `ReRunSafe` explicitly (setup 19, install 7, postinstall
+  5, destroy 5). New `AlreadyDoneChecker` interface
+  (`internal/distribution/step.go:55-57`); `Orchestrator.executeStep`
+  consults it after `SkipWhen` and before `Exec`, recording Skipped
+  with reason "already done" on a true return. `destroyTracker`
+  factored out of `destroySteps()` to clear the `funlen 120`
+  threshold after the new `ReRunSafe` lines pushed the function
+  over. Stretch run-state.json persistence is deferred — the panic
+  lever and `AlreadyDone` hook are the necessary scaffolding;
+  durable checkpoint can land in a follow-up. Lesson: typed enum
+  with zero-value-as-sentinel beats `*bool` for required-field
+  semantics — callers write `ReRunSafe: ReRunSafeYes` inline,
+  matching the existing `NonFatal: true` ergonomics in every
+  `StepDef`, while the zero value remains the panic trigger.

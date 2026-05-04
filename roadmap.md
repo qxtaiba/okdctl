@@ -1667,17 +1667,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Effort:** hours
 
 
-##### `state:4f69fc9d:no-resume-checkpoint` — no resume checkpoint
-
-**Status:** in review — PR #339  
-**Severity:** minor  
-**Cluster:** phase-idempotency  
-**Evidence:** `internal/distribution/step.go:178-212`  
-**Problem:** StepDef has no 'already-done' precondition hook. The Orchestrator runs every step in order; on a mid-phase crash the next invocation starts from step 1 and re-runs every step (download tools, regenerate manifests, regenerate ignition, rebuild ISOs). Some steps tolerate the re-run; others (StepBuildISOs, StepUploadISOs, StepDeployIgnition) are slow or wasteful. Idempotency today is implicit per-Exec rather than declared and verified.  
-**Fix:** Add `ReRunSafe bool` to StepDef (default false) — every StepDef must declare it. BuildSteps panics if a step omits it. For false-marked steps, also require an `AlreadyDone func(ctx) (bool, error)` hook the orchestrator consults before Exec. Stretch: persist completed StepIDs to <workDir>/.okdctl/run-state.json (AtomicWrite, 0o600) so resume is durable across PID restarts. See roadmap state:4f69fc9d:no-resume-checkpoint.  
-**Effort:** hours
-
-
 ##### `err:a55b4592:vocab-ad-hoc-config-perm` — vocab ad hoc config perm
 
 **Status:** done — PR #204 (moved to Completed)  
@@ -1791,15 +1780,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Lowercase to `postInstallContext`; the type only flows through distribution.PhaseContext[T any] which is generic over any T. The nolint:revive comment can be deleted in the same patch. distribution.PhaseContext can hold an unexported type just fine — generics don't care.  
 **Effort:** hours
 
-##### `api:48688e63:pkg-facade-bypassed` — pkg facade bypassed
-
-**Status:** in review — PR #338  
-**Severity:** minor  
-**Cluster:** package-boundary  
-**Evidence:** `internal/infrastructure/proxmox/proxmox.go:153-159`  
-**Problem:** Domain logic in infrastructure/proxmox imports internal/tui (a UI/presentation package) to call tui.StartSpinner. The same pattern recurs in internal/distribution/okd/install/monitor.go:L29,L79. UI concerns leaking into provisioning logic prevent reusing these packages from a non-TTY caller (an HTTP API or a test) without dragging in lipgloss/bubbletea via tui.  
-**Fix:** Inject a 'progress reporter' callback (or accept a context that an outer layer wraps with progress) so domain code emits a typed event and the CLI/TUI layer renders the spinner. Concretely: add a ProgressReporter func(desc string) (stop func()) field to terraform.Executor / proxmox.Provider Options, default to a no-op, and have CLI bind it to tui.StartSpinner. install/monitor.go can pass a progress reporter through the Options struct it already takes. Keeps tui out of the domain import graph and lets headless callers run silent.  
-**Effort:** hours
 
 ##### `api:0934cf1b:should-be-exported` — should be exported
 
