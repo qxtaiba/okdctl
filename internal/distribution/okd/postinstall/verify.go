@@ -19,6 +19,43 @@ import (
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
+// clusterOperatorList is a minimal view of `oc get clusteroperators -o json`
+// output. Decoupling from operator.openshift.io/v1 avoids pinning that schema
+// in lockstep with each OKD release.
+type clusterOperatorList struct {
+	Items []struct {
+		Metadata struct {
+			Name string `json:"name"`
+		} `json:"metadata"`
+		Status struct {
+			Conditions []struct {
+				Type   phase.ConditionType   `json:"type"`
+				Status phase.ConditionStatus `json:"status"`
+			} `json:"conditions"`
+		} `json:"status"`
+	} `json:"items"`
+}
+
+// parseOperatorDegradation returns the names of ClusterOperators carrying a
+// type=Degraded status=True condition. Replaces a positional fields[4] text
+// parse that broke whenever oc adjusted column ordering between releases.
+func parseOperatorDegradation(payload []byte) ([]string, error) {
+	var co clusterOperatorList
+	if err := json.Unmarshal(payload, &co); err != nil {
+		return nil, fmt.Errorf("parse clusteroperator list json: %w", err)
+	}
+	var degraded []string
+	for _, op := range co.Items {
+		for _, cond := range op.Status.Conditions {
+			if cond.Type == phase.ConditionTypeDegraded && cond.Status == phase.ConditionStatusTrue {
+				degraded = append(degraded, op.Metadata.Name)
+				break
+			}
+		}
+	}
+	return degraded, nil
+}
+
 // nodeList is a minimal view of `oc get nodes -o json` output — only the
 // fields we need for readiness counting. A local struct keeps the parse
 // decoupled from corev1 schema evolution; we'd need to pin a specific
@@ -80,19 +117,18 @@ type ClusterHealthResult struct {
 func (p *Phase) VerifyClusterHealth(ctx context.Context, _ *Options) (*ClusterHealthResult, error) {
 	result := &ClusterHealthResult{}
 
-	cmdResult, err := p.Exec.RunChecked(ctx, "oc", "get", "clusteroperators", "--no-headers")
+	cmdResult, err := p.Exec.RunChecked(ctx, "oc", "get", "clusteroperators", "-o", "json")
 	if err != nil {
 		return nil, &errtypes.ClusterError{Msg: "failed to get cluster operators", Err: err}
 	}
 
-	for line := range strings.Lines(cmdResult.Stdout) {
-		fields := strings.Fields(line)
-		if len(fields) >= 5 {
-			if phase.ConditionStatus(fields[4]) == phase.ConditionStatusTrue { // DEGRADED column
-				result.DegradedOperators++
-				p.Log.Warn(fmt.Sprintf("cluster: operator %s is degraded", fields[0]))
-			}
-		}
+	degraded, err := parseOperatorDegradation([]byte(cmdResult.Stdout))
+	if err != nil {
+		return nil, &errtypes.ClusterError{Msg: "failed to parse cluster operator status", Err: err}
+	}
+	result.DegradedOperators = len(degraded)
+	for _, name := range degraded {
+		p.Log.Warn(fmt.Sprintf("cluster: operator %s is degraded", name))
 	}
 
 	if result.DegradedOperators > 0 {
