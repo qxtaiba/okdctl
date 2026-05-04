@@ -1561,7 +1561,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sec:6424733c:cred-no-zeroize` — cred no zeroize
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-6424733c-zeroize-env  
 **Severity:** major  
 **Cluster:** credentials  
 **Evidence:** `internal/cli/helpers.go:117-119`  
@@ -1589,7 +1589,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sec:6424733c:input-path-not-prefix-checked` — input path not prefix checked
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-6424733c-projectroot-symlink  
 **Severity:** minor  
 **Cluster:** input-validation  
 **Evidence:** `internal/cli/helpers.go:76-92`  
@@ -1629,7 +1629,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sec:6424733c:input-validation` — input validation
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-6424733c-metrics-bind  
 **Severity:** suggestion  
 **Cluster:** input-validation  
 **Evidence:** `internal/cli/helpers.go:140-159`  
@@ -1649,7 +1649,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sec:696d6b0e:input-path-not-prefix-checked` — input path not prefix checked
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-696d6b0e-iso-fullpath  
 **Severity:** suggestion  
 **Cluster:** file-toctou  
 **Evidence:** `internal/distribution/okd/phase/iso_cleanup.go:215-265`  
@@ -1659,7 +1659,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sec:1e8ffb91:tls-insecure-permanent-skip` — tls insecure permanent skip
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-1e8ffb91-kubevip-tls-retry  
 **Severity:** suggestion  
 **Cluster:** tls-network — related: sec:761e5126:tls-insecure-skip  
 **Evidence:** `internal/distribution/okd/postinstall/verify.go:118-138`  
@@ -1669,7 +1669,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sec:8ea706f6:cred-env-leak-to-child` — cred env leak to child
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-8ea706f6-version-empty-env  
 **Severity:** suggestion  
 **Cluster:** credentials — seam→audit-subprocess  
 **Evidence:** `internal/distribution/okd/setup/tools.go:211-222`  
@@ -1699,7 +1699,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sec:e3782ee7:toctou-chmod` — toctou chmod
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-e3782ee7-tempfile-mode  
 **Severity:** suggestion  
 **Cluster:** file-toctou  
 **Evidence:** `internal/system/fs.go:49-71`  
@@ -1733,7 +1733,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `state:15ba17da:destroy-no-precondition-resume` — destroy no precondition resume
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/state-15ba17da-destroy-skipwhen  
 **Severity:** minor  
 **Cluster:** phase-idempotency  
 **Evidence:** `internal/distribution/okd/destroy/steps.go:24-133`  
@@ -1753,7 +1753,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `state:c19ee328:setup-no-precondition-for-iso-rebuild` — setup no precondition for iso rebuild
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/state-c19ee328-iso-fingerprint  
 **Severity:** suggestion  
 **Cluster:** phase-idempotency  
 **Evidence:** `internal/distribution/okd/setup/steps.go:199-222`  
@@ -1813,7 +1813,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `err:d6b325cb:sentinel-not-matched` — sentinel not matched (scaffolding — verify intent only)
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/err-d6b325cb-proxmox-wrap  
 **Severity:** suggestion  
 **Cluster:** sentinel-vs-typed  
 **Evidence:** `internal/infrastructure/proxmox/types.go:10-13`  
@@ -2217,7 +2217,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `dep:33ef32bf:transitive-narrow-godotenv` — transitive narrow godotenv
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/dep-33ef32bf-godotenv-stdlib  
 **Severity:** suggestion  
 **Cluster:** transitive-weight — seam→audit-modernization  
 **Evidence:** `go.mod:13-13`  
