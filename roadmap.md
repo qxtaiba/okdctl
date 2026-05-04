@@ -1893,7 +1893,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `err:262af6e4:sentinel-double-wrapped` — sentinel double wrapped (scaffolding — verify intent only)
 
-**Status:** not started  
+**Status:** in progress — branch: refactor/cleanup-262af6e4-phase-shape  
 **Severity:** suggestion  
 **Cluster:** sentinel-vs-typed  
 **Evidence:** `internal/distribution/okd/cleanup/cleanup.go:47-108`  
@@ -1985,7 +1985,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `api:d6b325cb:pkg-sibling-reach-through` — pkg sibling reach through
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/api-d6b325cb-vmrole-local  
 **Severity:** major  
 **Cluster:** package-boundary  
 **Evidence:** `internal/infrastructure/proxmox/types.go:3-50`  
@@ -1995,7 +1995,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `api:262af6e4:opt-inconsistent` — opt inconsistent
 
-**Status:** not started  
+**Status:** in progress — branch: refactor/cleanup-262af6e4-phase-shape  
 **Severity:** minor  
 **Cluster:** option-consistency  
 **Evidence:** `internal/distribution/okd/cleanup/cleanup.go:54-54`  
@@ -2029,7 +2029,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `api:35abd54e:export-no-caller-scaffolding` — export no caller scaffolding (scaffolding — verify intent only)
 
-**Status:** not started  
+**Status:** in progress — branch: refactor/credentials-35abd54e-source-enum  
 **Severity:** suggestion  
 **Cluster:** exported-surface  
 **Evidence:** `internal/credentials/proxmox.go:15-36`  
@@ -2079,7 +2079,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `api:a7f4383d:export-no-caller-scaffolding` — export no caller scaffolding (scaffolding — verify intent only)
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/api-a7f4383d-cluster-status-adopt  
 **Severity:** suggestion  
 **Cluster:** exported-surface  
 **Evidence:** `internal/distribution/okd/types.go:1-57`  
@@ -2429,7 +2429,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `doc:35abd54e:doc-claim-vs-impl-drift` — doc claim vs impl drift (scaffolding — verify intent only)
 
-**Status:** not started  
+**Status:** in progress — branch: refactor/credentials-35abd54e-source-enum  
 **Severity:** suggestion  
 **Cluster:** exported-doc — seam→audit-api-design; related: api:35abd54e:export-no-caller-scaffolding  
 **Evidence:** `internal/credentials/proxmox.go:13-24`  
