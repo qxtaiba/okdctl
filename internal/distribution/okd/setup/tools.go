@@ -257,8 +257,7 @@ func (p *Phase) installBinaryToPath(_ context.Context, srcPath, name string) err
 }
 
 func getToolVersion(ctx context.Context, tool, flag string) string {
-	cmd := exec.CommandContext(ctx, tool, flag)
-	output, err := cmd.Output()
+	output, err := system.OutputCaptured(ctx, tool, flag)
 	if err != nil {
 		return "unknown"
 	}
