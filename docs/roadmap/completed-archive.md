@@ -3620,3 +3620,42 @@ but link evidence.
   allowlist. Lesson: a sibling raw `exec.CommandContext` for
   `lsb_release` lives at line 322 — outside the cited evidence,
   deliberately left alone for a follow-up audit-positive sweep.
+
+- **`ux:d9f7733e:debug-bundle-skip-must-gather-no-quiet-suppress`**
+  — done 2026-05-04 — PR #335, merge commit `6208372`. Tier H
+  suggestion (streams). `debug-bundle`'s Long help text named
+  `-o` and `--log-file` but said nothing about progress logs going
+  to stderr or about the global `--quiet` flag suppressing them.
+  Added one paragraph to `internal/cli/debug_bundle.go:53-57`
+  pointing users at `--quiet` for clean script/CI output and
+  regenerated `docs/cli/okdctl_debug-bundle.md` to match. No code
+  logic change. Lesson: any Long-text edit needs `make docs` in
+  the same commit — CI's docs-drift gate fired on the first push
+  because the regenerated reference was missing; round-trip cost
+  one force-push. Fold `make docs` into the local pre-commit when
+  Long/Short text changes.
+
+- **`api:a7f4383d:export-no-caller-scaffolding`** — done 2026-05-04
+  — PR #336, merge commit `00b5cfc`. Tier H suggestion
+  (exported-surface; scaffolding — verify intent only). The
+  `okd.ClusterStatus` / `NodeStatus` / `Condition` / `ClusterPhase`
+  exports plus six `PhaseXxx` constants in `internal/distribution/okd/types.go`
+  had zero callers; `internal/cli/status.go` was carrying parallel
+  `clusterStatus` / `nodeStatusEntry` / `addonStatusEntry` types.
+  Migrated `runStatus` to build `okd.ClusterStatus`, deleted the
+  three local types, switched `printClusterStatus` to a pointer
+  receiver to satisfy gocritic's `hugeParam` (the type is now 168
+  bytes), added JSON tags + three additive fields (`APIReachable`,
+  `DegradedOperators`, `Addons`) plus a new `AddonStatus` helper
+  struct so the documented JSON keys are preserved. `phase` and
+  per-node `status` are additive keys allowed by `docs/cli/json-schema.md`'s
+  evolution policy. Three of six `PhaseXxx` constants
+  (`PhaseRunning`, `PhaseDegraded`, `PhaseUnknown`) are now wired
+  to runtime; the other three remain as scaffolding for future
+  deploy-state surfaces (per MEMORY.md `feedback_scaffolding`).
+  Lesson: gocritic's `hugeParam` threshold (~80 bytes) bites when
+  scaffolding types accrete fields — switch to pointer receivers
+  proactively when the struct grows past a handful of fields. Also:
+  shadow-risk variable name `status` in the addon-render loop was
+  renamed `addonHealth` to avoid the appearance of shadowing the
+  new `Status` field on `okd.NodeStatus`.
