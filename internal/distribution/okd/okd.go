@@ -120,7 +120,7 @@ func (p *Provisioner) Prepare(ctx context.Context, cfg *config.Config) ([]distri
 			HTTPServerRoot: cfg.HTTPServer.Root,
 			Logger:         p.logger,
 		}
-		if err := cleanup.Execute(ctx, cleanupOpts); err != nil {
+		if err := cleanup.New(p.executor, p.logger, p.version).Execute(ctx, cleanupOpts); err != nil {
 			p.logger.Warn("cleanup: pre-deploy artifact removal incomplete", "phase", "prepare", "err", err)
 		}
 	}
