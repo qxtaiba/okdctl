@@ -1561,7 +1561,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sec:6424733c:cred-as-string` — cred as string
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-6424733c-cred-as-string  
+**Status:** in review — PR #291  
 **Severity:** major  
 **Cluster:** credentials  
 **Evidence:** `internal/cli/helpers.go:272-286`  
@@ -1589,7 +1589,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sec:40d315ad:cred-flux-helm-set-leak` — cred flux helm set leak
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-40d315ad-flux-helm-cred  
+**Status:** in review — PR #294  
 **Severity:** minor  
 **Cluster:** credentials  
 **Evidence:** `internal/addon/catalog/flux/flux.go:78-113`  
@@ -1669,7 +1669,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sec:f55b9c27:err-type-carries-cred` — err type carries cred
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-f55b9c27-autherror-path  
+**Status:** in review — PR #296  
 **Severity:** suggestion  
 **Cluster:** redaction — seam→audit-errors  
 **Evidence:** `internal/credentials/envfile.go:121-134`  
@@ -1679,7 +1679,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sec:d7ce9d16:input-validation` — input validation
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-d7ce9d16-dns-conn  
+**Status:** in review — PR #298  
 **Severity:** suggestion  
 **Cluster:** input-validation  
 **Evidence:** `internal/distribution/okd/dns/dns.go:143-197`  
@@ -1699,7 +1699,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sec:1e8ffb91:input-validation` — input validation
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-1e8ffb91-co-json  
+**Status:** in review — PR #299  
 **Severity:** suggestion  
 **Cluster:** input-validation  
 **Evidence:** `internal/distribution/okd/postinstall/verify.go:75-113`  
@@ -1739,7 +1739,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sec:8ea706f6:dl-hashicorp-gpg-overwrite` — dl hashicorp gpg overwrite
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-8ea706f6-hashicorp-gpg  
+**Status:** in review — PR #297  
 **Severity:** suggestion  
 **Cluster:** tls-network  
 **Evidence:** `internal/distribution/okd/setup/tools.go:228-250`  
@@ -1783,7 +1783,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `state:fb54208a:postinstall-no-rollback-path` — postinstall no rollback path
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/state-fb54208a-postinstall-resume  
+**Status:** in review — PR #293  
 **Severity:** major  
 **Cluster:** crash-recoverability  
 **Evidence:** `internal/distribution/okd/postinstall/steps.go:42-94`  
@@ -1843,7 +1843,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `err:45cf4e29:wrap-double-context-typed` — wrap double context typed
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/err-45cf4e29-drop-step-wrap  
+**Status:** in review — PR #295  
 **Severity:** minor  
 **Cluster:** wrapping  
 **Evidence:** `internal/distribution/okd/install/steps.go:33-83`  
@@ -2113,7 +2113,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `ux:024a2c32:json-schema-display-name-hyphen-inconsistent` — json schema display name hyphen inconsistent
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/ux-024a2c32-display-name  
+**Status:** in review — PR #300  
 **Severity:** suggestion  
 **Cluster:** json-stability  
 **Evidence:** `docs/cli/json-schema.md:107-121`  
@@ -2143,7 +2143,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `ux:073d24ed:metrics-addr-no-bind-tty-gating` — metrics addr no bind tty gating
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/ux-073d24ed-metrics-help  
+**Status:** in review — PR #303  
 **Severity:** suggestion  
 **Cluster:** flag-conventions  
 **Evidence:** `internal/cli/deploy.go:44-44`  
@@ -2441,7 +2441,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `tst:696d6b0e:validate-proxmox-name-no-test` — validate proxmox name no test
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/tst-696d6b0e-validate-proxmox-name  
+**Status:** in review — PR #292  
 **Severity:** major  
 **Cluster:** trust-boundary-untested  
 **Evidence:** `internal/distribution/okd/phase/iso_cleanup.go:52-64`  
@@ -2481,7 +2481,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `tst:27088eab:ssh-run-no-test` — ssh run no test
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/tst-27088eab-ssh-run  
+**Status:** in review — PR #302  
 **Severity:** minor  
 **Cluster:** canonical-helper-untested  
 **Evidence:** `internal/distribution/okd/phase/ssh.go:30-41`  
@@ -2491,7 +2491,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `tst:b804b2ec:cleanup-bootstrap-plan-file-leak-untested` — cleanup bootstrap plan file leak untested
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/tst-b804b2ec-cleanup-bootstrap  
+**Status:** in review — PR #301  
 **Severity:** minor  
 **Cluster:** destructive-untested  
 **Evidence:** `internal/distribution/okd/postinstall/bootstrap.go:17-66`  
