@@ -51,6 +51,9 @@ type NodePlacementStep struct {
 	inner *wizard.DataDrivenStep
 }
 
+// wizardStateMarker implements wizard.StepState.
+func (s *NodePlacementStep) IsWizardStepState() {}
+
 // NewNodePlacementStep constructs the node placement wizard step.
 func NewNodePlacementStep() (step, state *NodePlacementStep) {
 	sp := spinner.New()

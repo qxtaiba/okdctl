@@ -9,11 +9,18 @@ type StepBuilder struct {
 	factories map[StepType]StepBuilderFactory
 }
 
+// StepState is a marker interface for the optional state value a step
+// factory may return; it prevents accidental registration of an unrelated
+// type that would only fail at runtime on a type assertion. The
+// IsWizardStepState method is required only as a structural tag — types
+// satisfy it with an empty body.
+type StepState interface{ IsWizardStepState() }
+
 // StepBuilderFactory constructs a WizardStep and its backing state.
-type StepBuilderFactory func() (WizardStep, any)
+type StepBuilderFactory func() (WizardStep, StepState)
 
 // StepInitializer seeds a built step with values derived from cfg.
-type StepInitializer func(step WizardStep, state any, cfg *config.Config)
+type StepInitializer func(step WizardStep, state StepState, cfg *config.Config)
 
 // NewStepBuilder returns an empty StepBuilder. Call Register per step
 // type, then BuildSteps to assemble a wizard.
@@ -30,7 +37,7 @@ func (b *StepBuilder) Register(stepType StepType, factory StepBuilderFactory) {
 }
 
 // Build invokes the factory for stepType, returning (nil, nil) when unknown.
-func (b *StepBuilder) Build(stepType StepType) (step WizardStep, state any) {
+func (b *StepBuilder) Build(stepType StepType) (step WizardStep, state StepState) {
 	if factory, ok := b.factories[stepType]; ok {
 		return factory()
 	}
@@ -41,7 +48,7 @@ func (b *StepBuilder) Build(stepType StepType) (step WizardStep, state any) {
 // associated state values keyed by StepType.
 type BuiltSteps struct {
 	Steps  []WizardStep
-	States map[StepType]any
+	States map[StepType]StepState
 }
 
 // BuildSteps walks wizardCfg.Steps, invokes the matching factory from
@@ -50,7 +57,7 @@ type BuiltSteps struct {
 func BuildSteps(wizardCfg Config, builder *StepBuilder) BuiltSteps {
 	result := BuiltSteps{
 		Steps:  make([]WizardStep, 0, len(wizardCfg.Steps)),
-		States: make(map[StepType]any),
+		States: make(map[StepType]StepState),
 	}
 
 	for _, stepCfg := range wizardCfg.Steps {

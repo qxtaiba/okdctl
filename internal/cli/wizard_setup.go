@@ -34,21 +34,21 @@ func runWizardWithMode(ctx context.Context, cfg *config.Config, configExists boo
 
 type stepRegistration struct {
 	stepType wizard.StepType
-	factory  func() (wizard.WizardStep, any)
+	factory  wizard.StepBuilderFactory
 }
 
 var defaultStepRegistrations = []stepRegistration{
-	{wizard.StepTypeWelcome, func() (wizard.WizardStep, any) { return steps.NewWelcomeStep(), nil }},
-	{wizard.StepTypeDistribution, func() (wizard.WizardStep, any) { return steps.NewDistributionStep(), nil }},
-	{wizard.StepTypeBasics, func() (wizard.WizardStep, any) { return steps.NewBasicsStep() }},
-	{wizard.StepTypeProxmox, func() (wizard.WizardStep, any) { return steps.NewProxmoxStep() }},
-	{wizard.StepTypeNodePlacement, func() (wizard.WizardStep, any) { return steps.NewNodePlacementStep() }},
-	{wizard.StepTypeNetworking, func() (wizard.WizardStep, any) { return steps.NewNetworkingStep() }},
-	{wizard.StepTypeResources, func() (wizard.WizardStep, any) { return steps.NewResourcesStep() }},
-	{wizard.StepTypeAddons, func() (wizard.WizardStep, any) { return steps.NewAddonsStep() }},
-	{wizard.StepTypeFiles, func() (wizard.WizardStep, any) { return steps.NewFilesStep() }},
-	{wizard.StepTypeAdvanced, func() (wizard.WizardStep, any) { return steps.NewAdvancedStep() }},
-	{wizard.StepTypeReview, func() (wizard.WizardStep, any) { return steps.NewReviewStep(), nil }},
+	{wizard.StepTypeWelcome, func() (wizard.WizardStep, wizard.StepState) { return steps.NewWelcomeStep(), nil }},
+	{wizard.StepTypeDistribution, func() (wizard.WizardStep, wizard.StepState) { return steps.NewDistributionStep(), nil }},
+	{wizard.StepTypeBasics, func() (wizard.WizardStep, wizard.StepState) { return steps.NewBasicsStep() }},
+	{wizard.StepTypeProxmox, func() (wizard.WizardStep, wizard.StepState) { return steps.NewProxmoxStep() }},
+	{wizard.StepTypeNodePlacement, func() (wizard.WizardStep, wizard.StepState) { return steps.NewNodePlacementStep() }},
+	{wizard.StepTypeNetworking, func() (wizard.WizardStep, wizard.StepState) { return steps.NewNetworkingStep() }},
+	{wizard.StepTypeResources, func() (wizard.WizardStep, wizard.StepState) { return steps.NewResourcesStep() }},
+	{wizard.StepTypeAddons, func() (wizard.WizardStep, wizard.StepState) { return steps.NewAddonsStep() }},
+	{wizard.StepTypeFiles, func() (wizard.WizardStep, wizard.StepState) { return steps.NewFilesStep() }},
+	{wizard.StepTypeAdvanced, func() (wizard.WizardStep, wizard.StepState) { return steps.NewAdvancedStep() }},
+	{wizard.StepTypeReview, func() (wizard.WizardStep, wizard.StepState) { return steps.NewReviewStep(), nil }},
 }
 
 func newDefaultStepBuilder() *wizard.StepBuilder {
