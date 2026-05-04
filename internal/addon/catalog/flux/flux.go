@@ -237,8 +237,11 @@ func (f *Flux) DefaultSettings() map[string]string {
 	}
 }
 
-// ValidateSettings checks the flux addon settings map. It requires a Git URL
-// and rejects malformed branch or path values.
+// ValidateSettings checks the flux addon settings map. It requires a Git URL,
+// rejects malformed branch or path values, and rejects URLs with embedded
+// userinfo (https://user:token@host) — helm --set arguments end up in
+// /proc/<pid>/cmdline, so SSH-key auth via a deploy-key Secret is the only
+// supported credential channel.
 func (f *Flux) ValidateSettings(settings map[string]string) []string {
 	decoded, err := f.DecodeSettings(settings)
 	if err != nil {
@@ -251,6 +254,9 @@ func (f *Flux) ValidateSettings(settings map[string]string) []string {
 	} else if !strings.HasPrefix(fs.Repository, "ssh://") && !strings.HasPrefix(fs.Repository, "https://") &&
 		!strings.HasPrefix(fs.Repository, "git://") && !strings.HasPrefix(fs.Repository, "git@") {
 		errs = append(errs, "repository must be a valid Git URL (ssh://, https://, git://, or git@)")
+	} else if u, parseErr := url.Parse(fs.Repository); parseErr == nil &&
+		(u.Scheme == "http" || u.Scheme == "https") && u.User != nil {
+		errs = append(errs, "repository URL must not contain credentials; use SSH deploy-key auth instead")
 	}
 	if fs.Branch != "" && strings.ContainsAny(fs.Branch, " \t") {
 		errs = append(errs, "branch name cannot contain spaces")
@@ -264,7 +270,7 @@ func (f *Flux) ValidateSettings(settings map[string]string) []string {
 // WizardFields returns the wizard input fields the flux addon contributes.
 func (f *Flux) WizardFields() []addon.WizardField {
 	return []addon.WizardField{
-		{Key: SettingRepository, Label: "Repository URL", Help: "ssh://git@github.com/org/repo.git", Required: true},
+		{Key: SettingRepository, Label: "Repository URL", Help: "ssh://git@github.com/org/repo.git (SSH deploy-key auth only; no https://user:token@ URLs)", Required: true},
 		{Key: SettingBranch, Label: "Branch", Default: "main", Help: "Branch to sync"},
 		{Key: SettingPath, Label: "Path", Default: "kubernetes/clusters/production", Help: "Path within repo"},
 	}
