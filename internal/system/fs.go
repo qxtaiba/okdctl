@@ -3,6 +3,7 @@ package system
 import (
 	"fmt"
 	"io"
+	"math/rand"
 	"os"
 	"os/user"
 	"path/filepath"
@@ -42,22 +43,21 @@ func EnsureDirForFile(filePath string) error {
 	return EnsureDir(dir)
 }
 
-// WriteTempFile creates a temp file matching pattern (os.CreateTemp), chmods
-// it to mode, then calls writeFn with the open handle. On any error the file
-// is closed and removed before returning. On success, the caller owns cleanup
-// (typically `defer os.Remove(path)`).
+// WriteTempFile creates a temp file matching pattern with mode applied at
+// open time (no create-then-chmod window), then calls writeFn with the open
+// handle. On any error the file is closed and removed before returning. On
+// success, the caller owns cleanup (typically `defer os.Remove(path)`).
+//
+// Pattern follows os.CreateTemp semantics: if it contains "*", the last "*"
+// is replaced by a random numeric suffix; otherwise the suffix is appended.
 func WriteTempFile(pattern string, mode os.FileMode, writeFn func(*os.File) error) (string, error) {
-	f, err := os.CreateTemp("", pattern)
+	f, err := openTempFile("", pattern, mode)
 	if err != nil {
 		return "", fmt.Errorf("failed to create %s: %w", pattern, err)
 	}
 	cleanup := func() {
 		_ = f.Close()
 		_ = os.Remove(f.Name())
-	}
-	if err := f.Chmod(mode); err != nil {
-		cleanup()
-		return "", fmt.Errorf("failed to chmod %s: %w", f.Name(), err)
 	}
 	if err := writeFn(f); err != nil {
 		cleanup()
@@ -68,6 +68,25 @@ func WriteTempFile(pattern string, mode os.FileMode, writeFn func(*os.File) erro
 		return "", fmt.Errorf("failed to close %s: %w", f.Name(), err)
 	}
 	return f.Name(), nil
+}
+
+// openTempFile opens a new exclusive temp file in dir (os.TempDir() if empty)
+// with mode set at open time. Replicates os.CreateTemp's "*" substitution and
+// collision-retry behaviour without leaving a create-then-chmod window.
+func openTempFile(dir, pattern string, mode os.FileMode) (*os.File, error) {
+	if dir == "" {
+		dir = os.TempDir()
+	}
+	prefix, suffix, _ := strings.Cut(pattern, "*")
+	for range 10000 {
+		name := filepath.Join(dir, prefix+strconv.FormatUint(uint64(rand.Uint32()), 10)+suffix)
+		f, err := os.OpenFile(name, os.O_RDWR|os.O_CREATE|os.O_EXCL, mode)
+		if os.IsExist(err) {
+			continue
+		}
+		return f, err
+	}
+	return nil, fmt.Errorf("could not allocate temp file in %s after 10000 tries", dir)
 }
 
 // CopyFile copies src to dst, preserving the source file's permission bits.
