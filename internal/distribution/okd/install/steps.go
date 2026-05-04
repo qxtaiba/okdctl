@@ -25,6 +25,7 @@ func (p *Phase) installSteps(cfg *config.Config, opts *Options) []distribution.S
 	return []distribution.StepDef{
 		{
 			ID: StepDeployInfra, Name: "deploy infrastructure",
+			ReRunSafe: distribution.ReRunSafeNo,
 			Desc:       "deploying proxmox infrastructure using terraform",
 			SkipWhen:   func() bool { return opts.SkipTerraform },
 			SkipReason: "terraform deployment disabled",
@@ -38,6 +39,7 @@ func (p *Phase) installSteps(cfg *config.Config, opts *Options) []distribution.S
 		},
 		{
 			ID: StepWaitBootstrap, Name: "wait for bootstrap",
+			ReRunSafe: distribution.ReRunSafeYes,
 			Desc: "waiting for bootstrap node to initialize",
 			OnStart: func() {
 				p.Log.Info("bootstrap: waiting for control plane initialization")
@@ -49,6 +51,7 @@ func (p *Phase) installSteps(cfg *config.Config, opts *Options) []distribution.S
 		},
 		{
 			ID: StepStartWorkers, Name: "start worker nodes",
+			ReRunSafe: distribution.ReRunSafeYes,
 			Desc:       "starting worker nodes after bootstrap complete",
 			SkipWhen:   func() bool { return opts.SkipTerraform },
 			SkipReason: "terraform deployment disabled",
@@ -56,16 +59,19 @@ func (p *Phase) installSteps(cfg *config.Config, opts *Options) []distribution.S
 		},
 		{
 			ID: StepSetupKubeconfig, Name: "setup kubeconfig",
+			ReRunSafe: distribution.ReRunSafeYes,
 			Desc: "configuring cluster access",
 			Exec: func(ctx context.Context) error { return p.SetupKubeconfig(ctx, clusterDir) },
 		},
 		{
 			ID: StepValidateAccess, Name: "validate cluster access",
+			ReRunSafe: distribution.ReRunSafeYes,
 			Desc: "validating cluster access",
 			Exec: func(ctx context.Context) error { return p.ValidateClusterAccess(ctx) },
 		},
 		{
 			ID: StepMonitorInstall, Name: "monitor installation",
+			ReRunSafe: distribution.ReRunSafeYes,
 			Desc: "monitoring installation and approving certificate requests",
 			OnStart: func() {
 				p.Log.Info("install: monitoring cluster operators and approving csrs")
@@ -77,6 +83,7 @@ func (p *Phase) installSteps(cfg *config.Config, opts *Options) []distribution.S
 		},
 		{
 			ID: StepSetupAccess, Name: "setup cluster access",
+			ReRunSafe: distribution.ReRunSafeYes,
 			Desc: "configuring persistent cluster access", NonFatal: true,
 			Exec:    func(ctx context.Context) error { return p.SetupClusterAccess(ctx, clusterDir) },
 			OnError: phase.WarnOnError(p.Log, "kubeconfig: failed to setup persistent access"),

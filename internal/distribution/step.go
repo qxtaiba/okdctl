@@ -51,6 +51,13 @@ type FatalChecker interface {
 	IsFatal() bool
 }
 
+// AlreadyDoneChecker lets a step report that its work product already exists,
+// allowing the Orchestrator to skip Execute on re-runs. Consulted only for
+// steps built with a non-nil AlreadyDone func.
+type AlreadyDoneChecker interface {
+	IsAlreadyDone(ctx context.Context) (bool, error)
+}
+
 // StepCallbacks are side-effect hooks the Orchestrator fires around Execute.
 // All three callbacks are optional and must be safe to call with no setup.
 type StepCallbacks interface {
@@ -77,6 +84,7 @@ type StepBuilder struct {
 	name        string
 	description string
 	fatal       bool
+	alreadyDone func(context.Context) (bool, error)
 	skipFn      func() bool
 	skipReason  string
 	onStart     func()
@@ -111,6 +119,13 @@ func (b *StepBuilder) Description(d string) *StepBuilder {
 // Steps default to fatal=true; call Fatal(false) for warn-and-continue steps.
 func (b *StepBuilder) Fatal(f bool) *StepBuilder {
 	b.fatal = f
+	return b
+}
+
+// AlreadyDone wires a precondition hook consulted by Orchestrator before
+// Execute; when it returns true the step is recorded as Skipped.
+func (b *StepBuilder) AlreadyDone(fn func(context.Context) (bool, error)) *StepBuilder {
+	b.alreadyDone = fn
 	return b
 }
 
@@ -172,30 +187,51 @@ func (b *StepBuilder) MustBuild() ProvisioningStep {
 	return step
 }
 
-// StepDef is a data-driven step definition. ID, Name, and Exec are required;
-// everything else is optional. Fatal is the default — set NonFatal to true
-// for steps that should log a warning on failure and continue.
+// ReRunSafety declares whether a step is safe to re-execute on a fresh
+// orchestrator run. BuildSteps panics on the zero value (ReRunSafeUnset) so
+// every StepDef must commit to one or the other.
+type ReRunSafety int8
+
+const (
+	ReRunSafeUnset ReRunSafety = 0
+	ReRunSafeYes   ReRunSafety = 1
+	ReRunSafeNo    ReRunSafety = 2
+)
+
+// StepDef is a data-driven step definition. ID, Name, Exec, and ReRunSafe are
+// required; everything else is optional. Fatal is the default — set NonFatal
+// to true for steps that should log a warning on failure and continue.
+//
+// AlreadyDone is consulted before Exec when present; a true return records
+// the step as Skipped. Useful for ReRunSafeNo steps that can detect their
+// work product after a partial-fail-and-resume.
 type StepDef struct {
-	ID         StepID
-	Name       string
-	Desc       string
-	NonFatal   bool
-	SkipWhen   func() bool
-	SkipReason string
-	OnStart    func()
-	Exec       func(ctx context.Context) error
-	OnError    func(error)
+	ID          StepID
+	Name        string
+	Desc        string
+	NonFatal    bool
+	ReRunSafe   ReRunSafety
+	AlreadyDone func(ctx context.Context) (bool, error)
+	SkipWhen    func() bool
+	SkipReason  string
+	OnStart     func()
+	Exec        func(ctx context.Context) error
+	OnError     func(error)
 }
 
 // BuildSteps converts a slice of StepDef into ProvisioningSteps ready for
-// NewOrchestrator. Panics via MustBuild if any StepDef has an empty ID or Name.
-// Fatal is set explicitly from !NonFatal so the guarantee does not depend on
-// NewStepBuilder's default — if that default ever changes, this helper still
-// produces the correct behavior.
+// NewOrchestrator. Panics when any StepDef has an empty ID, empty Name, or
+// ReRunSafe == ReRunSafeUnset — every step must declare idempotency intent.
 func BuildSteps(defs []StepDef) []ProvisioningStep {
 	steps := make([]ProvisioningStep, 0, len(defs))
 	for _, d := range defs {
+		if d.ReRunSafe == ReRunSafeUnset {
+			panic("BuildSteps: step " + string(d.ID) + " must declare ReRunSafe (ReRunSafeYes or ReRunSafeNo)")
+		}
 		b := NewStepBuilder(d.ID, d.Name).Description(d.Desc).Fatal(!d.NonFatal)
+		if d.AlreadyDone != nil {
+			b = b.AlreadyDone(d.AlreadyDone)
+		}
 		if d.SkipWhen != nil {
 			b = b.SkipWhen(d.SkipWhen).SkipReason(d.SkipReason)
 		}
@@ -222,6 +258,13 @@ func (s *builtStep) Name() string { return s.builder.name }
 func (s *builtStep) Description() string { return s.builder.description }
 
 func (s *builtStep) IsFatal() bool { return s.builder.fatal }
+
+func (s *builtStep) IsAlreadyDone(ctx context.Context) (bool, error) {
+	if s.builder.alreadyDone == nil {
+		return false, nil
+	}
+	return s.builder.alreadyDone(ctx)
+}
 
 func (s *builtStep) ShouldSkip() bool {
 	if s.builder.skipFn == nil {
