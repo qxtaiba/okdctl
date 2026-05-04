@@ -1803,7 +1803,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `err:262af6e4:sentinel-double-wrapped` — sentinel double wrapped (scaffolding — verify intent only)
 
-**Status:** in progress — branch: refactor/cleanup-262af6e4-phase-shape  
+**Status:** in review — PR #305  
 **Severity:** suggestion  
 **Cluster:** sentinel-vs-typed  
 **Evidence:** `internal/distribution/okd/cleanup/cleanup.go:47-108`  
@@ -1883,7 +1883,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `con:48688e63:proxmox-connect-discards-ctx` — proxmox connect discards ctx (scaffolding — verify intent only)
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/con-48688e63-proxmox-ctx  
+**Status:** in review — PR #310  
 **Severity:** suggestion  
 **Cluster:** ctx-ignored  
 **Evidence:** `internal/infrastructure/proxmox/proxmox.go:74-92`  
@@ -1895,7 +1895,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `api:d6b325cb:pkg-sibling-reach-through` — pkg sibling reach through
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/api-d6b325cb-vmrole-local  
+**Status:** in review — PR #304  
 **Severity:** major  
 **Cluster:** package-boundary  
 **Evidence:** `internal/infrastructure/proxmox/types.go:3-50`  
@@ -1905,7 +1905,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `api:262af6e4:opt-inconsistent` — opt inconsistent
 
-**Status:** in progress — branch: refactor/cleanup-262af6e4-phase-shape  
+**Status:** in review — PR #305  
 **Severity:** minor  
 **Cluster:** option-consistency  
 **Evidence:** `internal/distribution/okd/cleanup/cleanup.go:54-54`  
@@ -1939,7 +1939,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `api:35abd54e:export-no-caller-scaffolding` — export no caller scaffolding (scaffolding — verify intent only)
 
-**Status:** in progress — branch: refactor/credentials-35abd54e-source-enum  
+**Status:** in review — PR #306  
 **Severity:** suggestion  
 **Cluster:** exported-surface  
 **Evidence:** `internal/credentials/proxmox.go:15-36`  
@@ -2019,7 +2019,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `ux:aa84670c:exit-taxonomy-doc-only-in-package-doc` — exit taxonomy doc only in package doc
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/ux-aa84670c  
+**Status:** in review — PR #309  
 **Severity:** minor  
 **Cluster:** exit-codes  
 **Evidence:** `internal/cli/root.go:1-8`  
@@ -2205,7 +2205,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `smell:7f86cbe2:any-return-second-value` — any return second value
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/smell-7f86cbe2-wizard-step-state  
+**Status:** in review — PR #307  
 **Severity:** suggestion  
 **Cluster:** interfaceany-lazy  
 **Evidence:** `internal/cli/wizard_setup.go:35-52`  
@@ -2215,7 +2215,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `smell:125729c4:unused-public-field-force` — unused public field force (scaffolding — verify intent only)
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/smell-125729c4-destroy-force  
+**Status:** in review — PR #308  
 **Severity:** suggestion  
 **Cluster:** helper-package-no-value  
 **Evidence:** `internal/distribution/okd/destroy/phase.go:24-24`  
@@ -2319,7 +2319,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `doc:35abd54e:doc-claim-vs-impl-drift` — doc claim vs impl drift (scaffolding — verify intent only)
 
-**Status:** in progress — branch: refactor/credentials-35abd54e-source-enum  
+**Status:** in review — PR #306  
 **Severity:** suggestion  
 **Cluster:** exported-doc — seam→audit-api-design; related: api:35abd54e:export-no-caller-scaffolding  
 **Evidence:** `internal/credentials/proxmox.go:13-24`  
@@ -2331,7 +2331,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `tst:79e2cbc4:resolver-circular-deps-untested` — resolver circular deps untested
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/tst-79e2cbc4-resolver-circular  
+**Status:** in review — PR #311  
 **Severity:** major  
 **Cluster:** destructive-untested  
 **Evidence:** `internal/addon/resolver.go:12-70`  
@@ -2341,7 +2341,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `tst:451be4fa:chown-tree-error-aggregation-untested` — chown tree error aggregation untested
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/tst-451be4fa-chown-tree  
+**Status:** in review — PR #312  
 **Severity:** major  
 **Cluster:** canonical-helper-untested  
 **Evidence:** `internal/system/elevation.go:111-131`  
@@ -2351,7 +2351,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `tst:97cb8adf:run-captured-no-test` — run captured no test
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/tst-97cb8adf-run-captured  
+**Status:** in review — PR #313  
 **Severity:** major  
 **Cluster:** canonical-helper-untested  
 **Evidence:** `internal/system/exec.go:21-33`  
@@ -2361,7 +2361,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `tst:73ad30ef:resolve-cluster-vip-no-test` — resolve cluster vip no test
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/tst-73ad30ef-resolve-cluster-vip  
+**Status:** in review — PR #314  
 **Severity:** minor  
 **Cluster:** canonical-helper-untested  
 **Evidence:** `internal/distribution/okd/phase/helpers.go:24-30`  
@@ -2371,7 +2371,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `tst:eb479d86:upload-iso-via-scp-no-test` — upload iso via scp no test
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/tst-eb479d86-upload-iso-scp  
+**Status:** in review — PR #321  
 **Severity:** minor  
 **Cluster:** trust-boundary-untested  
 **Evidence:** `internal/distribution/okd/setup/upload.go:42-51`  
@@ -2381,7 +2381,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `tst:5e892064:download-checksum-fetch-paths` — download checksum fetch paths
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/tst-5e892064-download-checksum  
+**Status:** in review — PR #315  
 **Severity:** minor  
 **Cluster:** trust-boundary-untested  
 **Evidence:** `internal/download/checksum.go:59-111`  
@@ -2391,7 +2391,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `tst:7b2829bb:run-streamed-checked-no-test` — run streamed checked no test
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/tst-7b2829bb-run-streamed  
+**Status:** in review — PR #316  
 **Severity:** minor  
 **Cluster:** canonical-helper-untested  
 **Evidence:** `internal/executor/executor.go:300-311`  
@@ -2401,7 +2401,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `tst:4c092fce:terraform-build-var-args-untested` — terraform build var args untested
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/tst-4c092fce-tf-var-args  
+**Status:** in review — PR #317  
 **Severity:** minor  
 **Cluster:** canonical-helper-untested  
 **Evidence:** `internal/infrastructure/terraform/terraform.go:172-192`  
@@ -2411,7 +2411,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `tst:e552bb7d:remove-secondary-ip-no-test` — remove secondary ip no test
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/tst-e552bb7d-remove-secondary-ip  
+**Status:** in review — PR #318  
 **Severity:** minor  
 **Cluster:** destructive-untested  
 **Evidence:** `internal/netutil/iface.go:17-48`  
@@ -2421,7 +2421,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `tst:881d089e:runlock-write-failure-untested` — runlock write failure untested
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/tst-881d089e-runlock-write  
+**Status:** in review — PR #319  
 **Severity:** minor  
 **Cluster:** canonical-helper-untested  
 **Evidence:** `internal/runlock/runlock.go:29-54`  
@@ -2431,7 +2431,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `tst:e3782ee7:expand-path-no-test` — expand path no test
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/tst-e3782ee7-expand-path  
+**Status:** in review — PR #320  
 **Severity:** minor  
 **Cluster:** canonical-helper-untested  
 **Evidence:** `internal/system/fs.go:154-165`  
@@ -2441,7 +2441,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `tst:f51f85bb:cidr-to-netmask-edge-no-test` — cidr to netmask edge no test
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/tst-f51f85bb-cidr-netmask  
+**Status:** in review — PR #322  
 **Severity:** suggestion  
 **Cluster:** trust-boundary-untested  
 **Evidence:** `internal/netutil/ip.go:15-29`  
