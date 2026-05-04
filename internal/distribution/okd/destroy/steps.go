@@ -118,7 +118,9 @@ func (p *Phase) destroySteps(cfg *config.Config, opts *Options) []distribution.S
 			ID: StepCleanupFirewall, Name: "cleanup firewall",
 			Desc: "removing firewall rules", NonFatal: true,
 			// context.Background() is safe: DetectBackend runs only exec.LookPath + a bounded systemctl probe.
-			SkipWhen:   trackSkip("firewall", func() bool { return opts.SkipFirewall || firewall.DetectBackend(context.Background(), p.Log) == firewall.None }),
+			SkipWhen: trackSkip("firewall", func() bool {
+				return opts.SkipFirewall || firewall.DetectBackend(context.Background(), p.Log) == firewall.None
+			}),
 			SkipReason: "firewall cleanup disabled or no active backend",
 			Exec: func(ctx context.Context) error {
 				if err := firewall.RemoveOKDRules(ctx, true, p.Log); err != nil {
