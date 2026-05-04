@@ -6,13 +6,23 @@ import "github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 // endpoints, per-node conditions, and a free-form Message used by CLI status
 // commands.
 type ClusterStatus struct {
-	Phase        ClusterPhase
-	Version      string
-	APIServerURL string
-	ConsoleURL   string
-	Nodes        []NodeStatus
-	Conditions   []Condition
-	Message      string
+	Phase             ClusterPhase  `json:"phase"`
+	APIReachable      bool          `json:"api_reachable"`
+	Version           string        `json:"version,omitempty"`
+	APIServerURL      string        `json:"api_server_url,omitempty"`
+	ConsoleURL        string        `json:"console_url,omitempty"`
+	Nodes             []NodeStatus  `json:"nodes"`
+	DegradedOperators int           `json:"degraded_operators"`
+	Conditions        []Condition   `json:"conditions,omitempty"`
+	Addons            []AddonStatus `json:"addons,omitempty"`
+	Message           string        `json:"message,omitempty"`
+}
+
+// AddonStatus is a health snapshot for a single registered addon.
+type AddonStatus struct {
+	Name    string `json:"name"`
+	Healthy bool   `json:"healthy"`
+	Error   string `json:"error,omitempty"`
 }
 
 // ClusterPhase is the high-level lifecycle state the CLI renders in status
@@ -38,19 +48,20 @@ const (
 
 // NodeStatus is one cluster node's projected identity and health.
 type NodeStatus struct {
-	Name       string
-	Role       phase.NodeRole
-	Status     phase.NodeStatusPhase
-	Version    string
-	InternalIP string
-	Conditions []Condition
+	Name       string                `json:"name"`
+	Role       phase.NodeRole        `json:"role"`
+	Ready      bool                  `json:"ready"`
+	Status     phase.NodeStatusPhase `json:"status,omitempty"`
+	Version    string                `json:"version,omitempty"`
+	InternalIP string                `json:"internal_ip,omitempty"`
+	Conditions []Condition           `json:"conditions,omitempty"`
 }
 
 // Condition mirrors the k8s condition shape but carries project-local
 // ConditionType/Status values from internal/distribution/okd/phase.
 type Condition struct {
-	Type    phase.ConditionType
-	Status  phase.ConditionStatus
-	Reason  string
-	Message string
+	Type    phase.ConditionType   `json:"type"`
+	Status  phase.ConditionStatus `json:"status"`
+	Reason  string                `json:"reason,omitempty"`
+	Message string                `json:"message,omitempty"`
 }

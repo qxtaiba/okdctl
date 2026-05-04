@@ -11,6 +11,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/qxtaiba/okdctl/internal/addon"
+	"github.com/qxtaiba/okdctl/internal/distribution/okd"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/executor"
@@ -119,25 +120,6 @@ func (n *statusNode) role() phase.NodeRole {
 	return phase.RoleUnknown
 }
 
-type clusterStatus struct {
-	APIReachable      bool               `json:"api_reachable"`
-	Nodes             []nodeStatusEntry  `json:"nodes"`
-	DegradedOperators int                `json:"degraded_operators"`
-	Addons            []addonStatusEntry `json:"addons"`
-}
-
-type nodeStatusEntry struct {
-	Name  string         `json:"name"`
-	Role  phase.NodeRole `json:"role"`
-	Ready bool           `json:"ready"`
-}
-
-type addonStatusEntry struct {
-	Name    string `json:"name"`
-	Healthy bool   `json:"healthy"`
-	Error   string `json:"error,omitempty"`
-}
-
 func runStatus(cmd *cobra.Command, _ []string) error {
 	if err := validateFormat(statusFormat); err != nil {
 		return err
@@ -166,15 +148,21 @@ func runStatus(cmd *cobra.Command, _ []string) error {
 		apiOK = false
 	}
 
-	var nodes []nodeStatusEntry
+	var nodes []okd.NodeStatus
 	if raw, ocErr := bp.OcOutput(ctx, "get", "nodes", "-o", "json"); ocErr == nil {
 		var nl statusNodeList
 		if jsonErr := json.Unmarshal([]byte(raw), &nl); jsonErr == nil {
 			for _, n := range nl.Items {
-				nodes = append(nodes, nodeStatusEntry{
-					Name:  n.Metadata.Name,
-					Role:  n.role(),
-					Ready: n.isReady(),
+				ready := n.isReady()
+				nodePhase := phase.NodeStatusNotReady
+				if ready {
+					nodePhase = phase.NodeStatusReady
+				}
+				nodes = append(nodes, okd.NodeStatus{
+					Name:   n.Metadata.Name,
+					Role:   n.role(),
+					Ready:  ready,
+					Status: nodePhase,
 				})
 			}
 		}
@@ -194,18 +182,28 @@ func runStatus(cmd *cobra.Command, _ []string) error {
 		}
 	}
 
+	clusterPhase := okd.PhaseUnknown
+	allReady := len(nodes) > 0 && !slices.ContainsFunc(nodes, func(n okd.NodeStatus) bool { return !n.Ready })
+	switch {
+	case apiOK && allReady && degraded == 0:
+		clusterPhase = okd.PhaseRunning
+	case apiOK && degraded > 0:
+		clusterPhase = okd.PhaseDegraded
+	}
+
 	mgr := newAddonManager(cfg, projectRoot)
 	addonResults, _ := mgr.VerifyAll(ctx)
-	var addonEntries []addonStatusEntry
+	var addonEntries []okd.AddonStatus
 	for _, r := range addonResults {
-		e := addonStatusEntry{Name: r.Name, Healthy: r.Err == nil}
+		e := okd.AddonStatus{Name: r.Name, Healthy: r.Err == nil}
 		if r.Err != nil {
 			e.Error = r.Err.Error()
 		}
 		addonEntries = append(addonEntries, e)
 	}
 
-	st := clusterStatus{
+	cs := okd.ClusterStatus{
+		Phase:             clusterPhase,
 		APIReachable:      apiOK,
 		Nodes:             nodes,
 		DegradedOperators: degraded,
@@ -213,12 +211,12 @@ func runStatus(cmd *cobra.Command, _ []string) error {
 	}
 
 	if statusFormat == outputJSON {
-		return writeJSON(cmd.OutOrStdout(), st)
+		return writeJSON(cmd.OutOrStdout(), cs)
 	}
-	return printClusterStatus(cmd, st)
+	return printClusterStatus(cmd, &cs)
 }
 
-func printClusterStatus(cmd *cobra.Command, st clusterStatus) error {
+func printClusterStatus(cmd *cobra.Command, st *okd.ClusterStatus) error {
 	sb := newSummaryBuilder()
 	sb.b.WriteString("\n")
 
@@ -257,11 +255,11 @@ func printClusterStatus(cmd *cobra.Command, st clusterStatus) error {
 	if len(st.Addons) > 0 {
 		sb.section("addons")
 		for _, a := range st.Addons {
-			status := "healthy"
+			addonHealth := "healthy"
 			if !a.Healthy {
-				status = "degraded"
+				addonHealth = "degraded"
 			}
-			sb.kv(a.Name, status)
+			sb.kv(a.Name, addonHealth)
 		}
 		sb.newline()
 	}
