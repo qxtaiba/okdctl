@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/distribution/okd/dns"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/templates"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
@@ -47,11 +48,14 @@ type IngressEntry struct {
 }
 
 // UpdateIngressResult summarises the outcome of an update-ingress run.
+// DNSReconciled is true when update-ingress detected that the on-disk dnsmasq
+// config was still in bootstrap state and re-deployed production DNS.
 type UpdateIngressResult struct {
 	Entries        []IngressEntry
 	KubeVipIP      string
 	HAProxyRemoved bool
 	ConvertedCount int
+	DNSReconciled  bool
 }
 
 // UpdateIngress discovers all IngressControllers from the cluster, optionally
@@ -61,6 +65,14 @@ func (p *Phase) UpdateIngress(ctx context.Context, cfg *config.Config, opts Upda
 	vip, err := phase.ResolveClusterVIP(cfg)
 	if err != nil {
 		return nil, &errtypes.ConfigError{Msg: "failed to resolve cluster VIP", Err: err}
+	}
+
+	bootstrapDNS, err := dns.IsBootstrapDNS(cfg)
+	if err != nil {
+		p.Log.Warn("update-ingress: could not check dns state", "err", err)
+	}
+	if bootstrapDNS {
+		p.Log.Warn("update-ingress: dns is bootstrap-pointed — api.* resolves to bastion; will reconcile to vip after ingress detection")
 	}
 
 	postOpts := &Options{
@@ -130,7 +142,12 @@ func (p *Phase) UpdateIngress(ctx context.Context, cfg *config.Config, opts Upda
 		return nil, err
 	}
 
-	return p.finalizeIngress(ctx, cfg, opts, entries, customDomains, defaultAppsIP, vip, convertedCount, len(hostNetworkICs))
+	result, err := p.finalizeIngress(ctx, cfg, opts, entries, customDomains, defaultAppsIP, vip, convertedCount, len(hostNetworkICs))
+	if err != nil {
+		return nil, err
+	}
+	result.DNSReconciled = bootstrapDNS
+	return result, nil
 }
 
 // collectLBEntries waits for LoadBalancer IPs on all LB-type controllers.
