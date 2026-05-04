@@ -1559,15 +1559,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 #### audit-security
 
-##### `sec:6424733c:cred-no-zeroize` — cred no zeroize
-
-**Status:** in review — PR #323  
-**Severity:** major  
-**Cluster:** credentials  
-**Evidence:** `internal/cli/helpers.go:117-119`  
-**Problem:** createOKDProvisionerWithOpts calls creds.Env() which returns []string of "PROXMOX_VE_PASSWORD=<plaintext>" entries. The slice flows into okd.WithEnv() which appends to the persistent Provisioner.executor.Env that lives for the duration of the deploy (Prepare → Install → Configure, often 30-60 minutes). Even though the underlying creds.Password []byte is Zeroize'd via the deploy.go defer, the Env() output materialised an immutable Go string that is now resident in the executor.Env slice — and the Zeroize on creds does not reach that slice.  
-**Fix:** Add a `ZeroizeEnv` method on Provisioner (or executor.Executor) that overwrites the bytes of every string entry whose key matches the secret-key allowlist (`PROXMOX_VE_PASSWORD`, `PROXMOX_VE_API_TOKEN`, `KUBECONFIG` if it inlined creds). Call it from deploy.go's defer alongside creds.Zeroize. Better: thread the credentials object directly into terraform.WithEnv so each subprocess Run rebuilds env from the still-zeroizable []byte at exec time. The Env() return-as-strings contract is the structural problem.  
-**Effort:** hours
 
 ##### `sec:35abd54e:input-url-scheme-not-checked` — input url scheme not checked
 
@@ -1587,15 +1578,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Same fix as the deploy site (sec:6424733c:cred-no-zeroize). One canonical helper that builds and zeros credential-bearing env strings together.  
 **Effort:** hours
 
-##### `sec:6424733c:input-path-not-prefix-checked` — input path not prefix checked
-
-**Status:** in review — PR #324  
-**Severity:** minor  
-**Cluster:** input-validation  
-**Evidence:** `internal/cli/helpers.go:76-92`  
-**Problem:** resolveProjectRoot does `filepath.EvalSymlinks(abs)` and falls back to the un-resolved abs path on EvalSymlinks failure (with a //nolint:nilerr). The fallback path is then handed to `runlock.Acquire`, every cleanup helper, and ChownTreeToInvokingUser — the entire deploy/destroy assumes the projectRoot has been symlink-resolved. A symlink in the cwd that points outside the workdir gets the un-resolved path back, and root-mode cleanup operates on attacker-influenced paths.  
-**Fix:** Differentiate resolution failures: macOS-temp-dir noise (an os.IsNotExist component) is the documented benign case; everything else is an error. Or always resolve and return; failure to resolve a project root before mutating its descendants under sudo is itself a refusal condition. Add a final check that the resolved root contains a marker (the okdctl.yaml or .git directory) so a path-traversal symlink doesn't redirect the workdir.  
-**Effort:** hours
 
 ##### `sec:15ba17da:cred-no-zeroize` — cred no zeroize
 
@@ -1627,15 +1609,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** This is the audit-observability seam — the redaction handler scrubs structured attrs but cannot inspect a fmt-Sprintf message. Codify in CLAUDE.md (already partially done) and add a `forbidigo` lint rule that bans `tui.Info(fmt.Sprintf(...))` so the structured path is the only path. Defer to audit-observability for the per-site cleanup.  
 **Effort:** hours
 
-##### `sec:6424733c:input-validation` — input validation
-
-**Status:** in review — PR #325  
-**Severity:** suggestion  
-**Cluster:** input-validation  
-**Evidence:** `internal/cli/helpers.go:140-159`  
-**Problem:** startMetricsServer rewrites bare `:port` to `127.0.0.1:port`, but does not refuse `0.0.0.0:port` — the doc says operators 'who explicitly want a wildcard bind can pass 0.0.0.0:port', which is a documented escape hatch. The metrics endpoint is unauthenticated. An operator passing --metrics-addr=0.0.0.0:9090 (or a host-only string parsed as 0.0.0.0) exposes the Prometheus endpoint to the network.  
-**Fix:** As-documented. If hardening is desired: refuse `0.0.0.0:` and IPv6 wildcard (`[::]:`); require an explicit allow flag like `--metrics-allow-network` to bind beyond loopback.  
-**Effort:** hours
 
 ##### `sec:0d318f5c:cred-no-zeroize` — cred no zeroize
 
@@ -1647,35 +1620,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Already-hardened. Documenting as a counter-example reference: this file (cli/logging.go:25-32) is the canonical pattern other sites in this audit reference for O_NOFOLLOW + lstat. No action needed.  
 **Effort:** hours
 
-##### `sec:696d6b0e:input-path-not-prefix-checked` — input path not prefix checked
-
-**Status:** in review — PR #327  
-**Severity:** suggestion  
-**Cluster:** file-toctou  
-**Evidence:** `internal/distribution/okd/phase/iso_cleanup.go:215-265`  
-**Problem:** RemoveFCOSISOFromProxmox fail-closed pattern is good: it validates isoDir, requires fedora-coreos-*.iso prefix, single-quotes the path, and skips files referenced by running VMs. But the skip-on-in-use logic uses the filename only (filepath.Base) for VM-config matching — two ISOs with the same basename in different paths would be aliased. Low-likelihood since isoDir is fixed at /var/lib/vz/template/iso, but the basename equality breaks if Proxmox Storage layouts use non-default ISO directories.  
-**Fix:** Pass the full f (already validated by refuseUnsafeISOPath) into anyVMReferencesISO and compare against the full Proxmox storage:iso/<file> form rather than basename. Defense-in-depth for non-default storage layouts.  
-**Effort:** hours
-
-##### `sec:1e8ffb91:tls-insecure-permanent-skip` — tls insecure permanent skip
-
-**Status:** in review — PR #326  
-**Severity:** suggestion  
-**Cluster:** tls-network — related: sec:761e5126:tls-insecure-skip  
-**Evidence:** `internal/distribution/okd/postinstall/verify.go:118-138`  
-**Problem:** VerifyKubeVIP / verifyKubeVIPAPIHealth pair lives in the kube-vip handoff path. The TLS skip is structurally tied to the VIP-not-in-SAN window. After the kube-apiserver re-issues its serving cert (typically 1-3 minutes after kube-vip takes over, controlled by kubelet/cluster-version-operator), the SAN includes the VIP and TLS verification could succeed. The current implementation never retries with verification — it always skips. A continuous monitoring path that calls this function later (e.g. status command, debug-bundle) inherits the InsecureSkip even after the cert is valid.  
-**Fix:** Try-with-verification first, fall back to insecure only if the cert is missing the VIP SAN. Or move the InsecureSkip into a one-time bootstrap helper and have post-bootstrap callers use the kubeconfig-CA verified client. Same shape as the haproxy.go finding (sec:761e5126:tls-insecure-skip) — companion fix.  
-**Effort:** hours
-
-##### `sec:8ea706f6:cred-env-leak-to-child` — cred env leak to child
-
-**Status:** in review — PR #328  
-**Severity:** suggestion  
-**Cluster:** credentials — seam→audit-subprocess  
-**Evidence:** `internal/distribution/okd/setup/tools.go:211-222`  
-**Problem:** getToolVersion runs `terraform --version` / `oc --version` etc. via raw exec.CommandContext (no Executor). Same env-leak issue as the release_extract finding: the process inherits the full parent env. Trivially low-impact for `--version`, but the pattern is widespread enough to call out as a policy issue.  
-**Fix:** Use a tiny exec.New() instance just for version queries, with WithEnv([]string{}) to pass empty env (these tools don't need creds for --version). Or accept this as low-impact and document.  
-**Effort:** hours
 
 ##### `sec:8ea706f6:cred-no-zeroize` — cred no zeroize
 
@@ -1697,15 +1641,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Embed the .repo file content in the binary and write it via WriteAsInvokingUser to /etc/yum.repos.d/hashicorp.repo with the gpgkey URL pinned to a HashiCorp-controlled HTTPS path. Removes the on-the-fly fetch step entirely. Same pattern as the deb-side installHashiCorpDebianRepo, just consistent across families.  
 **Effort:** hours
 
-##### `sec:e3782ee7:toctou-chmod` — toctou chmod
-
-**Status:** in review — PR #330  
-**Severity:** suggestion  
-**Cluster:** file-toctou  
-**Evidence:** `internal/system/fs.go:49-71`  
-**Problem:** WriteTempFile creates a temp file via os.CreateTemp (mode 0o600 by default), then `f.Chmod(mode)` to widen — this opens a window between create and chmod. The window is microscopic (single goroutine) and CreateTemp's default 0o600 is already tight, but the canonical helper documents itself as 'creates a temp file matching pattern, chmods it to mode'. If a caller passes mode 0o600 the chmod is a no-op (no window); if a caller passes 0o644 there is a brief 0o600 window where world cannot read — that direction is safe. The reverse direction (caller asks for 0o400) is also safe...  
-**Fix:** As-is is acceptable today (no setuid callers). For uniformity with CopyFileMode, switch to os.OpenFile(<random-tempname>, O_RDWR|O_CREATE|O_EXCL, mode) — set the mode at open time. CreateTemp doesn't take a mode argument, so this is a small wrapper.  
-**Effort:** hours
 
 #### audit-subprocess
 
@@ -1731,15 +1666,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Split Cleanup() into two methods: CleanupPlans() removes only tfplan + destroy.tfplan, CleanupBackup() removes terraform.tfstate.backup. Call CleanupPlans() at the existing site (destroy/helpers.go:46, proxmox/proxmox.go:147). Never call CleanupBackup() — let the operator decide. Or: keep .backup until the *next* successful run, mirroring git's reflog policy.  
 **Effort:** hours
 
-##### `state:15ba17da:destroy-no-precondition-resume` — destroy no precondition resume
-
-**Status:** in review — PR #331  
-**Severity:** minor  
-**Cluster:** phase-idempotency  
-**Evidence:** `internal/distribution/okd/destroy/steps.go:24-133`  
-**Problem:** destroySteps() correctly carved out --skip-terraform / --skip-cleanup / --skip-firewall flags so a partial-failed destroy can be resumed. But the steps themselves do not auto-detect 'already done' state. After a successful tf.Destroy() the next destroy run still calls Init+HasState — HasState() returns false (state file absent), step skips with a Warn. Other steps (StepCleanupFiles, StepCleanupFirewall) blindly re-execute even when their target is already absent. Forces operators to combine flags rather than letting destroy converge.  
-**Fix:** Add a per-step AlreadyDone hook (see state:4f69fc9d). For destroy specifically: StepCleanupFirewall queries firewall backend before issuing remove; StepCleanupFiles checks workDir presence first. Today these steps already log warnings on absent targets — fold the same logic into a SkipWhen-style check so the orchestrator emits Skipped instead of Success-with-warning. Improves resume UX without changing destroy semantics.  
-**Effort:** hours
 
 ##### `state:4f69fc9d:no-resume-checkpoint` — no resume checkpoint
 
@@ -1751,15 +1677,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Add `ReRunSafe bool` to StepDef (default false) — every StepDef must declare it. BuildSteps panics if a step omits it. For false-marked steps, also require an `AlreadyDone func(ctx) (bool, error)` hook the orchestrator consults before Exec. Stretch: persist completed StepIDs to <workDir>/.okdctl/run-state.json (AtomicWrite, 0o600) so resume is durable across PID restarts. See roadmap state:4f69fc9d:no-resume-checkpoint.  
 **Effort:** hours
 
-##### `state:c19ee328:setup-no-precondition-for-iso-rebuild` — setup no precondition for iso rebuild
-
-**Status:** in review — PR #329  
-**Severity:** suggestion  
-**Cluster:** phase-idempotency  
-**Evidence:** `internal/distribution/okd/setup/steps.go:199-222`  
-**Problem:** StepBuildISOs and StepUploadISOs both run unconditionally on every setup invocation (only SkipISOs gates them). On a partial-fail-and-resume scenario, ISOs are rebuilt from scratch (slow, ~5min) and re-uploaded over SSH (also slow, multi-GB) even when the existing ones are byte-identical. There is no checksum / mtime / sha256-cache fast-path.  
-**Fix:** For StepBuildISOs: hash the (kargs, ignition-file-content, base-iso-checksum) tuple, write the hash to <customISOdir>/.iso-build-fingerprint, skip rebuild if fingerprint matches. For StepUploadISOs: a remote sha256 over SSH plus local sha256; skip upload when they match. Both are pure performance optimisations — no security or correctness impact, just developer-quality-of-life on partial resumes.  
-**Effort:** hours
 
 ##### `err:a55b4592:vocab-ad-hoc-config-perm` — vocab ad hoc config perm
 
@@ -1811,15 +1728,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Reuse internal/download.httpStatusError (or export it as download.HTTPStatusError) so the coreos stream fetch surfaces the same shape as the rest of the download retry layer. Bonus: makes isRetryable's logic shareable.  
 **Effort:** hours
 
-##### `err:d6b325cb:sentinel-not-matched` — sentinel not matched (scaffolding — verify intent only)
-
-**Status:** in review — PR #333  
-**Severity:** suggestion  
-**Cluster:** sentinel-vs-typed  
-**Evidence:** `internal/infrastructure/proxmox/types.go:10-13`  
-**Problem:** ErrNotConnected and ErrTerraformNotConfigured are exported sentinels but no caller uses errors.Is on them — every callsite returns them BARE (proxmox.go:124, 132, 192, 200), and the cli boundary maps bare error → exit 1. They are sentinels in name only; from cli/root.go's perspective they're indistinguishable from any other error. Either wrap them in errtypes.ConfigError so the exit code reflects the user-fixable nature, or downgrade them to package-local strings.  
-**Fix:** Two paths: (a) wrap each return in &errtypes.ConfigError{Msg: "proxmox provider not connected — call Connect() first", Err: ErrNotConnected} so the cli exits 2 AND callers retain errors.Is(err, ErrNotConnected) matching; or (b) make these unexported (errNotConnected) and let cli's outer wrap take over. Path (a) preserves both identity and exit code.  
-**Effort:** hours
 
 #### audit-concurrency
 
@@ -2215,15 +2123,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Optional: replace `charm.land/log/v2` with a hand-rolled `slog.Handler` in `internal/logutil` that colors level prefixes via lipgloss (already a direct dep). Drops charm.land/log/v2 + go-logfmt/logfmt from the binary. Risk: bubbletea TUI integration relies on the styled output — verify visual parity in dev/staging before merge. Keep `log/slog` + the k8s.io transitives as-is.  
 **Effort:** hours
 
-##### `dep:33ef32bf:transitive-narrow-godotenv` — transitive narrow godotenv
-
-**Status:** in review — PR #332  
-**Severity:** suggestion  
-**Cluster:** transitive-weight — seam→audit-modernization  
-**Evidence:** `go.mod:13-13`  
-**Problem:** `github.com/joho/godotenv v1.5.1` is a direct dep used at exactly one call site (`internal/credentials/envfile.go:132`: `godotenv.Load(path)`). The library is small (~400 LOC, MIT-licenced — file is `LICENCE`, British spelling, but a valid MIT header on read). Replacing it would be ~30 LOC of `bufio.Scanner` + `os.Setenv`. Suggesting because okdctl's `.env` consumption is narrow (single key=value reader, no template expansion, no overrides) and the dep is the kind of thing CLAUDE.md §dependencies asks to question (`check whether Go 1.25 stdlib covers it`).  
-**Fix:** Optional: replace `godotenv.Load` with a ~30 LOC `bufio.Scanner` reader in `internal/credentials/envfile.go` that handles `key=value`, comments, and `os.Setenv` (skipping already-set keys to match godotenv's no-overwrite semantics — already documented in the comment at envfile.go:130). Drops one direct dep. Seam to audit-modernization since the fix is a stdlib swap, not a dep policy issue. NOTE: godotenv's LICENSE file is named `LICENCE` (British spelling); this trips the naïve `find LICENSE` license-scanner pattern. Confirmed valid MIT.  
-**Effort:** hours
 
 ##### `dep:33ef32bf:transitive-narrow-uuid` — transitive narrow uuid
 

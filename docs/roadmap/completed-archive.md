@@ -3426,3 +3426,197 @@ but link evidence.
   `128.0.0.0`; `/31` → `255.255.255.254`; `/30` →
   `255.255.255.252`. All three values verified by hand against
   `^uint32(0) << (32 - bits)` arithmetic.
+
+- **`sec:6424733c:cred-no-zeroize`** — done 2026-05-04 — PR
+  #323, merge commit `d1d88d8`. Tier H major (credentials).
+  `creds.Env()` materialised `PROXMOX_VE_PASSWORD`/`API_TOKEN`
+  as immutable Go strings into `executor.Env`; the `deploy.go`
+  defer of `creds.Zeroize()` cleared the source `[]byte` but
+  could not reach the residual strings — plaintext credentials
+  lived for the full 30-60 min Prepare → Install → Configure
+  run. Added `Provisioner.ZeroizeEnv()`
+  (`internal/distribution/okd/okd.go:178-194`) which walks
+  `executor.Env`, blanks the credential-key entries, then
+  `clear()`s and nils the slice; wired via
+  `defer p.ZeroizeEnv()` after provisioner construction in
+  `executeFullDeployment`
+  (`internal/cli/helpers.go:198`). Lesson: `clear([]string)`
+  zeros string headers but not the backing bytes — best-effort
+  without `unsafe.Pointer`. Acceptable because the strings
+  become unreachable for the next GC; a true byte-level wipe
+  would need `unsafe` and there is currently no policy for
+  introducing it.
+
+- **`sec:696d6b0e:input-path-not-prefix-checked`** — done
+  2026-05-04 — PR #324, merge commit `68753a0`. Tier H
+  suggestion (file-toctou). `vmDevicesReferenceISO` matched
+  `HasSuffix(seg, isoBase)` against device-mapping segments, so
+  two ISOs sharing a basename across non-default Proxmox
+  storages would alias. Pass `"iso/"+filepath.Base(f)` as the
+  token from `RemoveFCOSISOFromProxmox`
+  (`internal/distribution/okd/phase/iso_cleanup.go:232`) so the
+  suffix anchors at the content-type boundary. Tests at
+  `iso_cleanup_test.go:131,134,195,211` updated to mirror the
+  new token form; the `.old`-suffix regression remains covered.
+  Defense-in-depth only — default `local:iso/<name>` storage
+  layout was unaffected. Lesson: helper parameters are still
+  named `isoBase` for minimum-diff; rename to `isoToken` is a
+  follow-up nit, not blocking.
+
+- **`sec:6424733c:input-validation`** — done 2026-05-04 — PR
+  #325, merge commit `21779e0`. Tier H suggestion
+  (input-validation). `startMetricsServer` rewrote bare
+  `:port` to `127.0.0.1:port` but accepted explicit
+  `0.0.0.0:port` / `[::]:port` silently — the metrics endpoint
+  is unauthenticated. Added `--metrics-allow-network` cobra
+  Bool flag (`internal/cli/deploy.go:49`) and gated wildcard
+  binds behind it via `net.SplitHostPort` +
+  `netip.IsUnspecified()` in `startMetricsServer`
+  (`internal/cli/helpers.go:152-160`); returns
+  `errtypes.ConfigError` for the disallowed case. Picked up
+  `con:6424733c:metrics-shutdown-bg-ctx` (missing
+  `context.Background()` justification comment) as a two-for-one
+  ratchet. Lesson: `make docs` regen is mandatory when adding a
+  cobra flag — first push failed CI on `docs-go` drift in
+  `docs/cli/okdctl_deploy.md`.
+
+- **`sec:6424733c:input-path-not-prefix-checked`** — done
+  2026-05-04 — PR #326, merge commit `860f8d6`. Tier H minor
+  (input-validation). `resolveProjectRoot` swallowed every
+  `EvalSymlinks` failure with `//nolint:nilerr`, returning the
+  unresolved abs path to `runlock.Acquire`, every cleanup
+  helper, and `ChownTreeToInvokingUser`. A symlink in cwd that
+  produced a non-`ENOENT` `EvalSymlinks` error gave attacker-
+  influenced paths to root-elevated code. Now only
+  `os.ErrNotExist` falls back to abs (the documented
+  macOS-temp-dir benign case); other errors propagate
+  (`internal/cli/helpers.go:92-97`).
+  `resolveProjectRootOrDie` additionally stats
+  `filepath.Join(root, filepath.Base(cfgFile))` so a symlink
+  resolving outside the project triggers
+  `&errtypes.ConfigError{Err: errtypes.ErrConfigMissing}` before
+  any sudo-elevated mutation runs
+  (`internal/cli/helpers.go:111-130`). Lesson:
+  `filepath.Base(cfgFile)` keeps the marker check inside `root`
+  even when `--config` is an absolute path, because Go's
+  `filepath.Join("/root", "/abs/file")` collapses to the
+  absolute argument.
+
+- **`sec:1e8ffb91:tls-insecure-permanent-skip`** — done
+  2026-05-04 — PR #327, merge commit `7048903`. Tier H
+  suggestion (tls-network). `verifyKubeVIPAPIHealthBootstrap`
+  always built an `InsecureSkipVerify` client when the
+  kubeconfig CA was unavailable; even after the apiserver
+  re-issued its cert with the VIP in SANs, a continuous-
+  monitoring caller would silently skip verification. Now the
+  function attempts CA-verified first and falls back to
+  insecure only on `errors.As(err, &x509.HostnameError{})` —
+  the expected transient during the kube-vip cert re-issue
+  window. Other TLS errors (expired, unknown CA) propagate
+  without silent downgrade
+  (`internal/distribution/okd/postinstall/verify.go:229-291`).
+  Lesson: golangci-lint's `nolintlint` rule fires on unused
+  `nolint:gosec` directives. `httputil.NewInsecure` is a
+  wrapper, so gosec G402 doesn't trigger on the call site by
+  name — the directives were nullops and had to be removed.
+
+- **`state:15ba17da:destroy-no-precondition-resume`** — done
+  2026-05-04 — PR #328, merge commit `e3e9a0b`. Tier H minor
+  (phase-idempotency). `destroySteps()` had no auto-skip when
+  cleanup targets were already absent — `StepCleanupFiles`
+  blindly invoked `cleanup.Execute` on a missing
+  `opts.WorkDir`, `StepCleanupFirewall` blindly ran
+  `RemoveOKDRules` with no backend installed; both produced
+  Success-with-warning instead of Skipped. Extended `SkipWhen`
+  predicates inline:
+  `system.DirExists(opts.WorkDir)` for files,
+  `firewall.DetectBackend(...) == firewall.None` for firewall
+  (`internal/distribution/okd/destroy/steps.go:86,118-121`).
+  `cleanupFilesSkipReason` gained a "work directory absent"
+  branch. Did NOT introduce the panic-on-missing `ReRunSafe`
+  field — that is `state:4f69fc9d`'s territory and out of
+  scope. Lesson: gofumpt rejects long single-line predicates
+  inside a struct literal; CI flagged after the first push and
+  the formatter wrapped the lambda body across two lines.
+
+- **`err:d6b325cb:sentinel-not-matched`** — done 2026-05-04 —
+  PR #329, merge commit `6663b81`. Tier H suggestion
+  (sentinel-vs-typed). `proxmox.ErrNotConnected` and
+  `ErrTerraformNotConfigured` were exported sentinels but every
+  call site in `Provision` / `PlanOnly` returned them BARE;
+  `cli/root.go::exitCodeFor` cannot match a bare sentinel via
+  `errors.As`, so user-fixable config errors fell through to
+  exit 1 instead of the documented exit 2. Wrapped each return
+  in `&errtypes.ConfigError{Msg, Err: <sentinel>}`
+  (`internal/infrastructure/proxmox/proxmox.go:133,141,201,209`);
+  sentinels remain exported so `errors.Is(err, ErrNotConnected)`
+  still matches via `Unwrap`. Lesson: the `feedback_scaffolding`
+  rule applies — keep API-shaped exports; the fix wraps callers,
+  it does not delete the symbol.
+
+- **`sec:e3782ee7:toctou-chmod`** — done 2026-05-04 — PR #330,
+  merge commit `fb33ee2`. Tier H suggestion (file-toctou).
+  `WriteTempFile` called `os.CreateTemp` (kernel default
+  0o600) then `f.Chmod(mode)` — a microscopic create-then-
+  chmod window inconsistent with the helper's own doc comment
+  promising mode-at-open semantics. Switched to `os.OpenFile`
+  + `O_RDWR|O_CREATE|O_EXCL` with the caller's mode set at
+  open time, replicating `os.CreateTemp`'s `*` substitution
+  and 10000-iteration collision retry
+  (`internal/system/fs.go:46-91`). Lesson: gosec G404 flags
+  `math/rand.Uint32()` for tempfile naming even though
+  `O_EXCL` provides the actual collision safety. Switched to
+  `crypto/rand.Read` + `binary.BigEndian.Uint32` to satisfy
+  the linter — not a security improvement, just a lint one.
+
+- **`dep:33ef32bf:transitive-narrow-godotenv`** — done
+  2026-05-04 — PR #331, merge commit `ce41e2f`. Tier H
+  suggestion (transitive-weight). `github.com/joho/godotenv
+  v1.5.1` was a single-call-site direct dep used only by
+  `loadEnvFileOnce`. Replaced with a ~30-LOC `bufio.Scanner`
+  parser
+  (`internal/credentials/envfile.go:158-185`) that handles
+  `key=value`, blank lines, `#` comments, and surrounding-quote
+  stripping; preserves the no-overwrite contract via
+  `os.LookupEnv` before `os.Setenv`. The new parser accepts
+  `io.Reader` so tests don't mutate process env. Drops the dep
+  from `go.mod`/`go.sum`. Lesson: golangci-lint's `nolintlint`
+  rejected `//nolint:errcheck` on `defer f.Close()` for the
+  read-only file; repo's `errcheck` config presumably already
+  allowlists `(*os.File).Close`, so the suppression was
+  redundant and had to be removed.
+
+- **`state:c19ee328:setup-no-precondition-for-iso-rebuild`** —
+  done 2026-05-04 — PR #332, merge commit `bc866ef`. Tier H
+  suggestion (phase-idempotency). On partial-fail-and-resume,
+  `StepBuildISOs` rebuilt every node ISO from scratch (~5 min)
+  and `StepUploadISOs` re-scp'd multi-GB even when nothing
+  changed. Added `nodeISOFingerprint`
+  (`internal/distribution/okd/setup/iso.go:21-32`) hashing the
+  (live kargs, dest kargs, sshKey, base ISO path) tuple per
+  node; persisted via `system.AtomicWriteString` to
+  `<isoDir>/.fp-<name>`. Skip path: output ISO exists AND
+  fingerprint matches. Upload path filters via new
+  `isoUploadNeeded` comparing local sha256 to remote
+  `sha256sum` over SSH
+  (`internal/distribution/okd/setup/upload.go:55-93`); fail-
+  open on any error to preserve correctness. Lesson: per-node
+  `.fp-<name>` files were a beneficial deviation from the
+  contract's single combined `.iso-build-fingerprint` —
+  granularity matches the per-node build loop and skips one
+  node at a time on partial resume.
+
+- **`sec:8ea706f6:cred-env-leak-to-child`** — done 2026-05-04
+  — PR #333, merge commit `d99fd0e`. Tier H suggestion
+  (credentials → seam→audit-subprocess). `getToolVersion` at
+  `internal/distribution/okd/setup/tools.go:259-270` used raw
+  `exec.CommandContext` with `cmd.Env` left nil — Go's
+  `os/exec` interprets `nil` as "inherit `os.Environ()`", so
+  every exported credential flowed into
+  `terraform/oc/openshift-install --version` probes. Routed
+  through canonical `system.OutputCaptured`, which sets
+  `cmd.Env = executor.FilterParentEnv(executor.DefaultEnvAllowlist)`
+  so child processes only see `PATH` and the documented
+  allowlist. Lesson: a sibling raw `exec.CommandContext` for
+  `lsb_release` lives at line 322 — outside the cited evidence,
+  deliberately left alone for a follow-up audit-positive sweep.
