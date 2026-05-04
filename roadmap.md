@@ -94,7 +94,7 @@ This is **design-doc-first**. No code lands until the plan is reviewed.
 
 ### R1 — Addon category model + design doc
 
-- **Status:** in review — PR #334
+- **Status:** not started
 - **Category:** feature-gap / half-done
 - **State:** design needed
 - **Effort:** weeks
