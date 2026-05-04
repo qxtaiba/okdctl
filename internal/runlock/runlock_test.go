@@ -2,6 +2,7 @@ package runlock_test
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -71,9 +72,48 @@ func TestAcquireAndRelease(t *testing.T) {
 	if _, statErr := os.Stat(lockPath); statErr != nil {
 		t.Fatalf("lock file not created: %v", statErr)
 	}
+
+	body, readErr := os.ReadFile(lockPath)
+	if readErr != nil {
+		t.Fatalf("read lock file: %v", readErr)
+	}
+	s := string(body)
+	pid := fmt.Sprintf("PID=%d", os.Getpid())
+	if !strings.Contains(s, pid) {
+		t.Fatalf("lock body missing %s: %q", pid, s)
+	}
+	if !strings.Contains(s, "VERB=deploy") {
+		t.Fatalf("lock body missing VERB=deploy: %q", s)
+	}
+	if !strings.Contains(s, "TIME=") {
+		t.Fatalf("lock body missing TIME= field: %q", s)
+	}
+
 	lock.Release()
 	if _, statErr := os.Stat(lockPath); !os.IsNotExist(statErr) {
 		t.Fatal("lock file not removed after Release")
+	}
+}
+
+func TestConflictMessageContainsPID(t *testing.T) {
+	dir := t.TempDir()
+	first, err := runlock.Acquire(dir, "deploy")
+	if err != nil {
+		t.Fatalf("first acquire failed: %v", err)
+	}
+	defer first.Release()
+
+	_, err = runlock.Acquire(dir, "destroy")
+	if err == nil {
+		t.Fatal("expected conflict error, got nil")
+	}
+	var cfgErr *errtypes.ConfigError
+	if !errors.As(err, &cfgErr) {
+		t.Fatalf("expected *errtypes.ConfigError, got %T: %v", err, err)
+	}
+	pid := fmt.Sprintf("PID=%d", os.Getpid())
+	if !strings.Contains(cfgErr.Msg, pid) {
+		t.Fatalf("conflict message missing holder PID %s: %q", pid, cfgErr.Msg)
 	}
 }
 
