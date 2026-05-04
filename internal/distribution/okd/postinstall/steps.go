@@ -33,7 +33,7 @@ func (p *Phase) postinstallSteps(cfg *config.Config, opts *Options, pctx *distri
 			Exec: func(ctx context.Context) error {
 				result, err := p.VerifyClusterHealth(ctx, opts)
 				if err != nil {
-					return &errtypes.ClusterError{Msg: "cluster health verification failed", Err: err}
+					return err
 				}
 				pctx.Update(func(c *postInstallContext) {
 					c.ClusterHealth = result
