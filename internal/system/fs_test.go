@@ -3,6 +3,7 @@ package system
 import (
 	"errors"
 	"os"
+	"os/user"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -263,4 +264,47 @@ func TestFileExists_DirExists(t *testing.T) {
 	if DirExists(f) {
 		t.Errorf("DirExists(file) = true")
 	}
+}
+
+func TestExpandPath(t *testing.T) {
+	t.Run("tilde_slash expands to invoking user home", func(t *testing.T) {
+		cur, err := user.Current()
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Setenv("SUDO_USER", cur.Username)
+		got := ExpandPath("~/x")
+		want := filepath.Join(cur.HomeDir, "x")
+		if got != want {
+			t.Errorf("ExpandPath(~/x) = %q, want %q", got, want)
+		}
+	})
+
+	t.Run("bare tilde passes through unchanged", func(t *testing.T) {
+		t.Setenv("SUDO_USER", "")
+		if got := ExpandPath("~"); got != "~" {
+			t.Errorf("ExpandPath(~) = %q, want ~", got)
+		}
+	})
+
+	t.Run("tilde_user prefix passes through unchanged", func(t *testing.T) {
+		t.Setenv("SUDO_USER", "")
+		if got := ExpandPath("~user/foo"); got != "~user/foo" {
+			t.Errorf("ExpandPath(~user/foo) = %q, want ~user/foo", got)
+		}
+	})
+
+	t.Run("absolute path passes through unchanged", func(t *testing.T) {
+		t.Setenv("SUDO_USER", "")
+		if got := ExpandPath("/abs/path"); got != "/abs/path" {
+			t.Errorf("ExpandPath(/abs/path) = %q, want /abs/path", got)
+		}
+	})
+
+	t.Run("relative path passes through unchanged", func(t *testing.T) {
+		t.Setenv("SUDO_USER", "")
+		if got := ExpandPath("relative/path"); got != "relative/path" {
+			t.Errorf("ExpandPath(relative/path) = %q, want relative/path", got)
+		}
+	})
 }
