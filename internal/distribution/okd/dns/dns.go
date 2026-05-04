@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
@@ -125,6 +126,36 @@ func GenerateBootstrapConfig(cfg *config.Config, outputDir string) (path, conten
 // configName returns the dnsmasq drop-in name for clusterName ("okd-<name>").
 func configName(clusterName string) string {
 	return fmt.Sprintf("okd-%s", clusterName)
+}
+
+// IsBootstrapDNS reports whether the on-disk dnsmasq config is still in
+// bootstrap state (api.* resolves to the bastion IP rather than the kube-vip
+// VIP). Returns false when the config file is absent so the caller can treat
+// missing config as "nothing to reconcile" rather than a hard error.
+//
+// Match is line-exact rather than substring because IP suffixes alias (a
+// production VIP of "10.0.0.10" would match the bastion "10.0.0.1" prefix).
+func IsBootstrapDNS(cfg *config.Config) (bool, error) {
+	cn := configName(cfg.Cluster.Name)
+	path, err := DnsmasqConfigPath(cn)
+	if err != nil {
+		return false, err
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return false, fmt.Errorf("failed to read dnsmasq config: %w", err)
+	}
+	clusterDomain := fmt.Sprintf("%s.%s", cfg.Cluster.Name, cfg.Cluster.Domain)
+	want := fmt.Sprintf("address=/api.%s/%s", clusterDomain, cfg.Networking.Bastion.IP)
+	for line := range strings.Lines(string(data)) {
+		if strings.TrimSpace(line) == want {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // Setup enables dnsmasq and points the system resolver at it, with

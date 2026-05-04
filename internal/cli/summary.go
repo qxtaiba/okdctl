@@ -259,6 +259,9 @@ func UpdateIngressSummary(result *postinstall.UpdateIngressResult) string {
 	sb.newline()
 
 	sb.section("status")
+	if result.DNSReconciled {
+		sb.kv("dns", "reconciled from bootstrap state")
+	}
 	if result.HAProxyRemoved {
 		sb.kv("haproxy", "stopped and disabled")
 	} else {
