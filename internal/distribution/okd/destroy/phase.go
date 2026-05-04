@@ -21,7 +21,6 @@ type Options struct {
 
 	AutoApprove bool
 	CleanupKind cleanup.Kind
-	Force       bool
 	Parallelism int
 
 	SkipTerraform bool
@@ -70,8 +69,7 @@ func New(exec *executor.Executor, logger *slog.Logger, version string) *Phase {
 }
 
 // Execute tears down the cluster. User confirmation is the CLI layer's
-// responsibility; by the time Execute runs, opts.Force is expected to
-// be true.
+// responsibility before this is called.
 func (p *Phase) Execute(ctx context.Context, cfg *config.Config, opts *Options) ([]distribution.StepResult, error) {
 	p.Log.Info("destroy: starting cluster teardown")
 	p.Log.Warn("destroy: this will permanently remove all vms and generated files")
