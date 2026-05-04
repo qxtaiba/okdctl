@@ -14,6 +14,9 @@ redacted and the raw terraform state file is never included.
 Run this after a failed deploy, passing the same --log-file you used
 during the deploy so the bundle captures the relevant logs.
 
+Pass --quiet to suppress progress logs to stderr when only the bundle
+file is needed (e.g. in scripts or CI).
+
 ```
 okdctl debug-bundle [flags]
 ```
