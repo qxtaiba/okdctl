@@ -22,11 +22,12 @@ import (
 )
 
 var (
-	deployOutputFile  string
-	deployMinimal     bool
-	deployYes         bool
-	deployDryRun      bool
-	deployMetricsAddr string
+	deployOutputFile          string
+	deployMinimal             bool
+	deployYes                 bool
+	deployDryRun              bool
+	deployMetricsAddr         string
+	deployMetricsAllowNetwork bool
 )
 
 var deployCmd = &cobra.Command{
@@ -44,7 +45,8 @@ func init() {
 	deployCmd.Flags().BoolVar(&deployMinimal, "minimal", false, "use minimal defaults (single-node cluster)")
 	deployCmd.Flags().BoolVarP(&deployYes, "yes", "y", false, "skip prompts, use defaults")
 	deployCmd.Flags().BoolVar(&deployDryRun, flagDryRun, false, "preview terraform plan and step listing without deploying")
-	deployCmd.Flags().StringVar(&deployMetricsAddr, "metrics-addr", "", `address for Prometheus metrics endpoint; bare ":9090" binds 127.0.0.1; use "0.0.0.0:9090" for wildcard bind; disabled when empty`)
+	deployCmd.Flags().StringVar(&deployMetricsAddr, "metrics-addr", "", `address for Prometheus metrics endpoint; bare ":9090" binds 127.0.0.1; disabled when empty`)
+	deployCmd.Flags().BoolVar(&deployMetricsAllowNetwork, "metrics-allow-network", false, "allow metrics endpoint to bind on a wildcard address (0.0.0.0 or [::])")
 }
 
 func runDeploy(cmd *cobra.Command, _ []string) error {
@@ -241,9 +243,10 @@ func runFullDeployment(ctx context.Context, cfg *config.Config) error {
 	}
 
 	return executeFullDeployment(ctx, cfg, deploymentOptions{
-		ShowStartMessage: true,
-		Credentials:      creds,
-		MetricsAddr:      deployMetricsAddr,
+		ShowStartMessage:    true,
+		Credentials:         creds,
+		MetricsAddr:         deployMetricsAddr,
+		AllowNetworkMetrics: deployMetricsAllowNetwork,
 	})
 }
 

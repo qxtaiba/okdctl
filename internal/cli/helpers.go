@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"slices"
@@ -125,9 +127,10 @@ func createOKDProvisionerWithOpts(cfg *config.Config, creds *credentials.Proxmox
 }
 
 type deploymentOptions struct {
-	ShowStartMessage bool
-	Credentials      *credentials.ProxmoxCredentials
-	MetricsAddr      string
+	ShowStartMessage    bool
+	Credentials         *credentials.ProxmoxCredentials
+	MetricsAddr         string
+	AllowNetworkMetrics bool
 }
 
 // startMetricsServer starts a Prometheus metrics HTTP server on addr (disabled
@@ -135,16 +138,26 @@ type deploymentOptions struct {
 // a 5-second deadline, plus any provisioner options the caller must apply so
 // orchestrated phases feed observations to the recorder.
 //
-// The bare ":port" shorthand binds every interface; we rewrite it to
-// "127.0.0.1:port" by default so an unauth listener does not leak to the
-// network. Operators who explicitly want a wildcard bind can pass
-// "0.0.0.0:port".
-func startMetricsServer(addr string) (func(), []okd.ProvisionerOption) {
+// Bare ":port" is rewritten to "127.0.0.1:port" so the unauthenticated
+// listener does not leak to the network by default. Wildcard addresses
+// (0.0.0.0 or [::]) are rejected unless allowNetwork is true; pass
+// --metrics-allow-network to opt in.
+func startMetricsServer(addr string, allowNetwork bool) (func(), []okd.ProvisionerOption, error) {
 	if addr == "" {
-		return func() {}, nil
+		return func() {}, nil, nil
 	}
 	if strings.HasPrefix(addr, ":") {
 		addr = "127.0.0.1" + addr
+	}
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		return nil, nil, &errtypes.ConfigError{Msg: fmt.Sprintf("invalid --metrics-addr %q: %s", addr, err)}
+	}
+	if host != "" {
+		parsed, parseErr := netip.ParseAddr(host)
+		if parseErr == nil && parsed.IsUnspecified() && !allowNetwork {
+			return nil, nil, &errtypes.ConfigError{Msg: "wildcard metrics bind requires --metrics-allow-network"}
+		}
 	}
 	rec := deploymetrics.NewRecorder()
 	mux := http.NewServeMux()
@@ -159,7 +172,7 @@ func startMetricsServer(addr string) (func(), []okd.ProvisionerOption) {
 		defer cancel()
 		_ = srv.Shutdown(shutCtx)
 	}
-	return stop, []okd.ProvisionerOption{okd.WithMetricsRecorder(rec)}
+	return stop, []okd.ProvisionerOption{okd.WithMetricsRecorder(rec)}, nil
 }
 
 func executeFullDeployment(ctx context.Context, cfg *config.Config, opts deploymentOptions) error {
@@ -192,7 +205,10 @@ func executeFullDeployment(ctx context.Context, cfg *config.Config, opts deploym
 
 	runID := tui.RunID()
 
-	stopMetrics, provOpts := startMetricsServer(opts.MetricsAddr)
+	stopMetrics, provOpts, err := startMetricsServer(opts.MetricsAddr, opts.AllowNetworkMetrics)
+	if err != nil {
+		return err
+	}
 	defer stopMetrics()
 
 	p := createOKDProvisionerWithOpts(cfg, opts.Credentials, projectRoot, provOpts...)
