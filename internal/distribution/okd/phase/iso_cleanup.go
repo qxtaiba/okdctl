@@ -229,7 +229,9 @@ func RemoveFCOSISOFromProxmox(ctx context.Context, p *RemoteISOParams, isoDir st
 		}
 
 		isoBase := filepath.Base(f)
-		inUse, err := anyVMReferencesISO(ctx, p, isoBase)
+		// Match against the full Proxmox content-path token "iso/<file>" so a
+		// non-default storage layout cannot alias two ISOs with the same basename.
+		inUse, err := anyVMReferencesISO(ctx, p, "iso/"+isoBase)
 		if err != nil {
 			p.Log.Warn("iso: could not check vm references — skipping", "iso", isoBase, "err", err)
 			continue

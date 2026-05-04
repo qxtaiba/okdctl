@@ -128,11 +128,11 @@ func TestVmDevicesReferenceISO(t *testing.T) {
 	vm := makeTestVM(map[string]string{
 		"ide2": "local:iso/fedora-coreos-40.iso,media=cdrom",
 	})
-	if !vmDevicesReferenceISO(vm, "fedora-coreos-40.iso") {
+	if !vmDevicesReferenceISO(vm, "iso/fedora-coreos-40.iso") {
 		t.Error("expected vm with ide2 cdrom to reference fedora-coreos-40.iso")
 	}
-	if vmDevicesReferenceISO(vm, "fedora-coreos-38.iso") {
-		t.Error("expected vm to NOT reference fedora-coreos-38.iso")
+	if vmDevicesReferenceISO(vm, "iso/fedora-coreos-38.iso") {
+		t.Error("expected vm to NOT reference iso/fedora-coreos-38.iso")
 	}
 
 	// .old suffix must not false-match against the base filename.
@@ -192,7 +192,7 @@ func TestConfigDevicesReferenceISO_found(t *testing.T) {
 		"cores": 4
 	}`)
 
-	found, err := configDevicesReferenceISO(configJSON, "fedora-coreos-40.iso")
+	found, err := configDevicesReferenceISO(configJSON, "iso/fedora-coreos-40.iso")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -208,7 +208,7 @@ func TestConfigDevicesReferenceISO_notFound(t *testing.T) {
 		"cores": 8
 	}`)
 
-	found, err := configDevicesReferenceISO(configJSON, "fedora-coreos-40.iso")
+	found, err := configDevicesReferenceISO(configJSON, "iso/fedora-coreos-40.iso")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
