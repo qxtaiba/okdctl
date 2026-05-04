@@ -120,9 +120,9 @@ type ProxmoxConfig struct {
 	// internal/credentials, never persisted in the YAML config. All three
 	// fields carry `json:"-"` so sigs.k8s.io/yaml excludes them from both
 	// load and save.
-	Username string `json:"-"`
-	Password string `json:"-"`
-	APIToken string `json:"-"`
+	Username string      `json:"-"`
+	Password SecretBytes `json:"-"`
+	APIToken SecretBytes `json:"-"`
 
 	TokenID  string `json:"token_id,omitempty"`
 	Insecure bool   `json:"insecure,omitempty"`

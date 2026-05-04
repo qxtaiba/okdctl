@@ -258,7 +258,7 @@ func writeCredentialsEnv(cfg *config.Config, configPath string) error {
 	}
 	px := cfg.Provider.Proxmox
 
-	if px.Password == "" && px.APIToken == "" {
+	if px.Password.IsEmpty() && px.APIToken.IsEmpty() {
 		return nil
 	}
 
@@ -269,8 +269,8 @@ func writeCredentialsEnv(cfg *config.Config, configPath string) error {
 	creds := &credentials.ProxmoxCredentials{
 		Endpoint: resolved.Endpoint,
 		Username: px.Username,
-		Password: []byte(px.Password),
-		APIToken: []byte(px.APIToken),
+		Password: append([]byte(nil), px.Password.Bytes()...),
+		APIToken: append([]byte(nil), px.APIToken.Bytes()...),
 		Insecure: px.Insecure,
 	}
 	defer creds.Zeroize()
@@ -284,11 +284,12 @@ func writeCredentialsEnv(cfg *config.Config, configPath string) error {
 	return nil
 }
 
-// clearConfigCredentials removes secrets so they are never serialized to YAML.
+// clearConfigCredentials wipes the in-memory credential bytes so they are
+// never serialized to YAML and do not linger as Go strings on the heap.
 func clearConfigCredentials(cfg *config.Config) {
 	if cfg.Provider.Proxmox == nil {
 		return
 	}
-	cfg.Provider.Proxmox.Password = ""
-	cfg.Provider.Proxmox.APIToken = ""
+	cfg.Provider.Proxmox.Password.Zeroize()
+	cfg.Provider.Proxmox.APIToken.Zeroize()
 }

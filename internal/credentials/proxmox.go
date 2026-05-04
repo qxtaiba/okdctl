@@ -178,10 +178,10 @@ func (c *ProxmoxCredentials) Env() []string {
 // credential set (API token or username+password). Used to detect when
 // environment credentials silently override a populated config.
 func configHasCredentials(px *config.ProxmoxConfig) bool {
-	if px.APIToken != "" {
+	if !px.APIToken.IsEmpty() {
 		return true
 	}
-	return px.Username != "" && px.Password != ""
+	return px.Username != "" && !px.Password.IsEmpty()
 }
 
 func applyEnvSource(creds *ProxmoxCredentials, configHadCreds bool) {

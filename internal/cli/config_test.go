@@ -64,18 +64,18 @@ func TestRedactConfig(t *testing.T) {
 				Proxmox: &config.ProxmoxConfig{
 					Host:     "pve.example",
 					Username: "root@pam",
-					Password: "plaintext-pw",
-					APIToken: "plaintext-token",
 					TokenID:  "tid",
 				},
 			},
 		}
+		cfg.Provider.Proxmox.Password.Set("EXAMPLE-PLAINTEXT-PW")
+		cfg.Provider.Proxmox.APIToken.Set("EXAMPLE-PLAINTEXT-TOKEN")
 		out, err := yaml.Marshal(redactConfig(cfg))
 		if err != nil {
 			t.Fatal(err)
 		}
 		s := string(out)
-		for _, forbidden := range []string{"plaintext-pw", "plaintext-token", "root@pam"} {
+		for _, forbidden := range []string{"EXAMPLE-PLAINTEXT-PW", "EXAMPLE-PLAINTEXT-TOKEN", "root@pam"} {
 			if strings.Contains(s, forbidden) {
 				t.Errorf("leaked %q in YAML output:\n%s", forbidden, s)
 			}
