@@ -130,7 +130,7 @@ func (p *Provider) setupTerraform(projectRoot, tfEnv string) {
 // returns ErrNotConnected.
 func (p *Provider) Provision(ctx context.Context, cfg *config.Config, opts ProvisionOptions) (*ProvisionResult, error) {
 	if !p.connected {
-		return nil, ErrNotConnected
+		return nil, &errtypes.ConfigError{Msg: "proxmox provider not connected — call Connect() first", Err: ErrNotConnected}
 	}
 
 	if opts.ProjectRoot != "" && opts.TerraformEnv != "" {
@@ -138,7 +138,7 @@ func (p *Provider) Provision(ctx context.Context, cfg *config.Config, opts Provi
 	}
 
 	if p.terraformExec == nil {
-		return nil, ErrTerraformNotConfigured
+		return nil, &errtypes.ConfigError{Msg: "terraform executor not configured — set ProjectRoot and TerraformEnv", Err: ErrTerraformNotConfigured}
 	}
 
 	p.logger.Info("terraform: initializing backend and providers")
@@ -198,7 +198,7 @@ func (p *Provider) Provision(ctx context.Context, cfg *config.Config, opts Provi
 // Plan output streams to the terminal via PlanStreamed. Used by --dry-run deploy.
 func (p *Provider) PlanOnly(ctx context.Context, cfg *config.Config, opts ProvisionOptions) error {
 	if !p.connected {
-		return ErrNotConnected
+		return &errtypes.ConfigError{Msg: "proxmox provider not connected — call Connect() first", Err: ErrNotConnected}
 	}
 
 	if opts.ProjectRoot != "" && opts.TerraformEnv != "" {
@@ -206,7 +206,7 @@ func (p *Provider) PlanOnly(ctx context.Context, cfg *config.Config, opts Provis
 	}
 
 	if p.terraformExec == nil {
-		return ErrTerraformNotConfigured
+		return &errtypes.ConfigError{Msg: "terraform executor not configured — set ProjectRoot and TerraformEnv", Err: ErrTerraformNotConfigured}
 	}
 
 	p.logger.Info("terraform: initializing backend and providers")
