@@ -91,9 +91,16 @@ func resolveProjectRoot() (string, error) {
 	}
 	resolved, err := filepath.EvalSymlinks(abs)
 	if err != nil {
-		// Symlink resolution can fail harmlessly (e.g., temp dirs on macOS).
-		// Fall back to the absolute path.
-		return abs, nil //nolint:nilerr // intentional fallback to abs path when symlink resolution fails
+		// EvalSymlinks fails with ErrNotExist when a path component does not
+		// exist yet (e.g., macOS temp dirs on startup). That case is benign:
+		// fall back to the absolute path. Any other error — EPERM, EIO, etc.
+		// — is a real filesystem problem that must not be silently swallowed,
+		// because abs may still be a symlink and handing it to sudo-elevated
+		// helpers would let an attacker redirect writes to arbitrary paths.
+		if !errors.Is(err, os.ErrNotExist) {
+			return "", fmt.Errorf("resolve project root symlinks: %w", err)
+		}
+		return abs, nil
 	}
 	return resolved, nil
 }
@@ -105,6 +112,21 @@ func resolveProjectRootOrDie() (string, error) {
 	}
 	if root == "" {
 		return "", fmt.Errorf("project root resolved to empty path")
+	}
+	// Project marker check: refuse if the resolved root does not contain the
+	// configured config file. This stops a symlink that resolves outside the
+	// project from redirecting sudo-elevated cleanup at arbitrary paths.
+	// filepath.Base ensures the check stays inside root even when --config is
+	// an absolute path.
+	marker := filepath.Join(root, filepath.Base(cfgFile))
+	if _, statErr := os.Stat(marker); statErr != nil {
+		if errors.Is(statErr, os.ErrNotExist) {
+			return "", &errtypes.ConfigError{
+				Msg: fmt.Sprintf("project marker not found at %s; run 'okdctl deploy' to initialise", marker),
+				Err: errtypes.ErrConfigMissing,
+			}
+		}
+		return "", fmt.Errorf("stat project marker %s: %w", marker, statErr)
 	}
 	return root, nil
 }
