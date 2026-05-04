@@ -305,7 +305,17 @@ func installHashiCorpDebianRepo(ctx context.Context) error {
 		return err
 	}
 
-	if err := system.RunCaptured(ctx, "gpg", "--dearmor", "-o", gpgPath, gpgTmp); err != nil {
+	// Refuse to overwrite an existing keyring belonging to a different key.
+	// gpg --import-options show-only accepts both armored and binary inputs,
+	// so the same fingerprint helper handles the on-disk dearmored form.
+	if _, statErr := os.Stat(gpgPath); statErr == nil {
+		if err := verifyHashiCorpGPGFingerprint(ctx, gpgPath); err != nil {
+			return &errtypes.ConfigError{
+				Msg: fmt.Sprintf("existing keyring %s has an unexpected fingerprint; remove it manually to proceed", gpgPath),
+				Err: err,
+			}
+		}
+	} else if err := system.RunCaptured(ctx, "gpg", "--dearmor", "-o", gpgPath, gpgTmp); err != nil {
 		return fmt.Errorf("failed to dearmor HashiCorp GPG key: %w", err)
 	}
 
