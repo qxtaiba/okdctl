@@ -137,16 +137,16 @@ type Category int
 
 const (
     CategoryNone        Category = iota // zero value — no addon selected
-    CategoryIngress                     // HTTP/HTTPS ingress controller
+    CategoryIngress                     // HTTP/HTTPS ingress controller; "None" means use OKD built-in router
     CategoryLoadBalancer                // bare-metal load balancer (L2/L3)
-    CategoryGitOps                      // continuous delivery controller
-    CategoryCert                        // certificate lifecycle manager
-    CategoryMonitoring                  // metrics, alerting, logging
-    CategoryStorage                     // persistent storage provisioner
-    CategoryBackup                      // cluster backup and restore
-    CategoryPolicy                      // admission policy engine
+    CategoryGitOps
+    CategoryCert
+    CategoryMonitoring
+    CategoryStorage
+    CategoryBackup
+    CategoryPolicy
     CategoryServiceMesh                 // service-to-service proxy mesh
-    CategorySecrets                     // external secret store bootstrap
+    CategorySecrets
 )
 ```
 
@@ -279,9 +279,11 @@ values. The BYO Helm chart is installed as if it were a built-in addon but
 okdctl does not know its internals (no Verify logic, no structured settings).
 
 BYO is represented as a special addon name sentinel in the config map:
-`"byo:<category>"`. For example, the BYO ingress slot is keyed as
-`"byo:ingress"` in `Config.Addons`. This lets the existing map structure carry
-BYO configuration without schema changes to the map key type.
+`"byo-<category>"`. For example, the BYO ingress slot is keyed as
+`"byo-ingress"` in `Config.Addons`. The hyphen separator is lex-safe in
+both YAML and JSON keys; no quoting is required. This lets the existing
+map structure carry BYO configuration without schema changes to the map
+key type.
 
 `AddonConfig` gains three new fields for BYO chart pinning:
 
@@ -290,17 +292,17 @@ type AddonConfig struct {
     Enabled  bool              `json:"enabled"`
     Settings map[string]string `json:"settings,omitempty"`
 
-    // BYO chart fields — only meaningful when the key is "byo:<category>".
-    Chart      string            `json:"chart,omitempty"`       // e.g. "ingress-nginx/ingress-nginx"
-    ChartRepo  string            `json:"chart_repo,omitempty"`  // e.g. "https://kubernetes.github.io/ingress-nginx"
-    ChartVersion string          `json:"chart_version,omitempty"` // pinned semver, e.g. "4.10.1"
-    Values     map[string]string `json:"values,omitempty"`      // inline Helm --set overrides
-    ValuesFile string            `json:"values_file,omitempty"` // path relative to project root
+    // BYO chart fields — only meaningful when the key is "byo-<category>".
+    Chart        string            `json:"chart,omitempty"`         // e.g. "ingress-nginx/ingress-nginx"
+    ChartRepo    string            `json:"chart_repo,omitempty"`    // e.g. "https://kubernetes.github.io/ingress-nginx"
+    ChartVersion string            `json:"chart_version,omitempty"` // pinned semver, e.g. "4.10.1"
+    Values       map[string]string `json:"values,omitempty"`        // inline Helm --set overrides
+    ValuesFile   string            `json:"values_file,omitempty"`   // path relative to project root
 }
 ```
 
 The BYO installer is a new built-in addon implementation registered as
-`byo:<category>` at startup (one registration per category with a BYO
+`byo-<category>` at startup (one registration per category with a BYO
 option). Its `Install` method calls `helm upgrade --install` with the fields
 above. Its `Verify` method checks that the release exists via `helm status`.
 Its `Category()` returns the appropriate category.
@@ -318,7 +320,7 @@ if len(addon.EnabledByCategory(cfg, addon.CategoryIngress)) == 0 {
 }
 ```
 
-In YAML, a cluster with no ingress addon has no `byo:ingress` or curated
+In YAML, a cluster with no ingress addon has no `byo-ingress` or curated
 ingress key under `addons:`, which is the natural zero value.
 
 ---
@@ -398,7 +400,7 @@ will control conditional field visibility without replacing the existing
 Config writes from the wizard selector: when the user picks a curated addon
 name, the wizard sets `cfg.Addons[addonName].Enabled = true` and clears any
 sibling addon's `Enabled` for the same category. When the user picks "byo",
-the wizard sets `cfg.Addons["byo:<category>"].Enabled = true` and populates
+the wizard sets `cfg.Addons["byo-<category>"].Enabled = true` and populates
 the BYO chart fields. When the user picks "none", any existing enabled addon
 for that category is set to `Enabled = false`.
 
@@ -444,7 +446,7 @@ addons:
 
 ```yaml
 addons:
-  byo:ingress:
+  byo-ingress:
     enabled: true
     chart: ingress-nginx/ingress-nginx
     chart_repo: https://kubernetes.github.io/ingress-nginx
@@ -454,11 +456,9 @@ addons:
     values_file: ""
 ```
 
-The colon in the key `byo:ingress` is valid YAML (quoted keys are not
-required for colons in mapping values when the key is unambiguous in Go's
-`encoding/json`). The JSON tag `json:"byo:ingress"` is produced naturally
-by the map key — no special serialization handling is needed since
-`Config.Addons` is `map[string]AddonConfig`.
+The key `byo-ingress` uses a hyphen separator, which is lex-safe for
+hand-editing and requires no quoting in YAML or JSON. `Config.Addons` is
+`map[string]AddonConfig`; no special serialization handling is needed.
 
 ### 7.4 Back-compat
 
@@ -523,19 +523,36 @@ A user who selects "byo (helm chart)" for a category slot must provide:
 | `values` | no | Inline `--set key=value` overrides as a map |
 | `values_file` | no | Path to a values YAML file, relative to project root |
 
-The BYO addon installer (registered as `"byo:<category>"`) executes:
+The BYO addon installer (registered as `"byo-<category>"`) executes:
 
 ```
-helm repo add byo-<category> <chart_repo>    # skipped for OCI URLs
-helm repo update byo-<category>
-helm upgrade --install byo-<category> <chart> \
-    --namespace byo-<category> \
-    --create-namespace \
-    --version <chart_version> \
-    [--set key=value ...]                    # from values map
-    [-f <values_file>]                       # if values_file non-empty
-    --wait
+if strings.HasPrefix(chart, "oci://") {
+    # OCI chart: no repo registration step; helm pulls directly from the
+    # OCI registry URL supplied in chart.
+    helm upgrade --install byo-<category> <chart> \
+        --namespace byo-<category> \
+        --create-namespace \
+        --version <chart_version> \
+        [--set key=value ...]
+        [-f <values_file>]
+        --wait
+} else {
+    # Standard Helm repo chart: register the repo, then install.
+    helm repo add byo-<category> <chart_repo>
+    helm repo update byo-<category>
+    helm upgrade --install byo-<category> <chart> \
+        --namespace byo-<category> \
+        --create-namespace \
+        --version <chart_version> \
+        [--set key=value ...]
+        [-f <values_file>]
+        --wait
+}
 ```
+
+For OCI charts (`chart` begins with `oci://`), `chart_repo` is ignored and
+must be left empty; `ValidateSettings` returns an error if both `chart_repo`
+and an OCI `chart` are supplied together.
 
 The BYO installer implements only `Install` and `Uninstall`. `Verify` checks
 that `helm status byo-<category>` exits 0 and the release is in `deployed`
@@ -666,8 +683,13 @@ per-category warning functions.
 - `flux`: add `Category()`, remove `Metadata.Category`, confirm no settings
   or install logic changes.
 - `secretstore`: same.
-- Update any call sites that read `a.Info().Category` (there are none outside
-  the addon packages themselves today — verify with grep before the PR).
+- Update all call sites that read `a.Info().Category` or `info.Category`:
+  - `internal/cli/status.go:360` — replace `info.Category` with
+    `a.Category().String()` in the tabwriter row for the describe command.
+  - Confirm no further call sites remain by running
+    `grep -r 'Info()\.Category\|info\.Category' ./internal` before opening
+    the PR; the grep must return zero results from outside the addon
+    packages.
 
 **Depends on:** phase (a) (interface exists). Can be done concurrently with
 phase (b) but must land before phase (d).
