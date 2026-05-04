@@ -17,3 +17,11 @@ func OrNop(l *slog.Logger) *slog.Logger {
 	}
 	return l
 }
+
+// ProgressReporter starts a progress indicator for desc and returns a stop
+// func. The stop func MUST be idempotent. Implementations may discard desc.
+type ProgressReporter func(desc string) (stop func())
+
+// NopProgressReporter is the no-op ProgressReporter; domain constructors use
+// it as the default so callers can invoke the reporter unconditionally.
+var NopProgressReporter ProgressReporter = func(string) func() { return func() {} }

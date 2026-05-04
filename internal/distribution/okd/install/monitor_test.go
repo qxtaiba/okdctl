@@ -14,6 +14,7 @@ import (
 
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
+	"github.com/qxtaiba/okdctl/internal/logutil"
 )
 
 func installFakeOpenShift(t *testing.T) {
@@ -143,6 +144,7 @@ func newPhaseSynctest(t *testing.T, start func(context.Context, string) (<-chan 
 	h := &monitorCaptureHandler{}
 	return &Phase{
 		BasePhase:       phase.NewBasePhase("test", phase.WithLogger(slog.New(h))),
+		Reporter:        logutil.NopProgressReporter,
 		startMonitorCmd: start,
 	}, h
 }

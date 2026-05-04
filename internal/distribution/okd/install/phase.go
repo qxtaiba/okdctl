@@ -82,6 +82,9 @@ func NewOptions(cfg *config.Config, projectRoot string) Options {
 // monitor, and cluster-up poll.
 type Phase struct {
 	phase.BasePhase
+	// Reporter signals long-running operations; defaults to NopProgressReporter
+	// so headless callers run silent. The CLI sets it to tui.StartSpinner.
+	Reporter logutil.ProgressReporter
 	// startMonitorCmd, when non-nil, replaces the default subprocess
 	// start-and-wait used by MonitorInstallation. Tests inject a pure-Go
 	// implementation to avoid spawning real processes.
@@ -94,6 +97,7 @@ func New(exec *executor.Executor, logger *slog.Logger, version string) *Phase {
 	phaseLogger := logutil.OrNop(logger).With("phase", "install")
 	return &Phase{
 		BasePhase: phase.NewBasePhase(version, phase.WithExecutor(exec), phase.WithLogger(phaseLogger)),
+		Reporter:  logutil.NopProgressReporter,
 	}
 }
 
@@ -134,6 +138,7 @@ func (p *Phase) DeployInfrastructure(ctx context.Context, cfg *config.Config, op
 		proxmox.WithProjectRoot(opts.ProjectRoot),
 		proxmox.WithLogger(p.Log),
 		proxmox.WithEnv(p.Exec.Env),
+		proxmox.WithProgressReporter(p.Reporter),
 	)
 	if err := prov.Connect(ctx, cfg); err != nil {
 		return &errtypes.NetworkError{Msg: "failed to connect to Proxmox", Err: err}

@@ -13,10 +13,13 @@ import (
 
 func newInstallPhase(t *testing.T) *Phase {
 	t.Helper()
-	return &Phase{BasePhase: phase.NewBasePhase("test",
-		phase.WithLogger(logutil.NopLogger),
-		phase.WithExecutor(executor.New(executor.WithLogger(logutil.NopLogger))),
-	)}
+	return &Phase{
+		BasePhase: phase.NewBasePhase("test",
+			phase.WithLogger(logutil.NopLogger),
+			phase.WithExecutor(executor.New(executor.WithLogger(logutil.NopLogger))),
+		),
+		Reporter: logutil.NopProgressReporter,
+	}
 }
 
 func TestAddKubeconfigToBashrc_Idempotent(t *testing.T) {
