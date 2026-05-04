@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/distribution"
@@ -172,6 +173,26 @@ type DestroyOpts struct {
 	// the named resource addresses. Each entry must pass the CLI-layer
 	// allowlist before reaching this struct.
 	TerraformTargets []string
+}
+
+// ZeroizeEnv overwrites and clears the credential strings stored in the
+// executor's Env slice. Entries whose key is PROXMOX_VE_PASSWORD or
+// PROXMOX_VE_API_TOKEN are blanked first; the full slice is then cleared so
+// all string headers are zeroed. Call this (typically via defer) after all
+// phases complete to bound the lifetime of plaintext credential strings in
+// process memory.
+func (p *Provisioner) ZeroizeEnv() {
+	if p.executor == nil {
+		return
+	}
+	for i, kv := range p.executor.Env {
+		key, _, _ := strings.Cut(kv, "=")
+		if key == "PROXMOX_VE_PASSWORD" || key == "PROXMOX_VE_API_TOKEN" {
+			p.executor.Env[i] = ""
+		}
+	}
+	clear(p.executor.Env)
+	p.executor.Env = nil
 }
 
 // Destroy tears down the cluster and its infrastructure.

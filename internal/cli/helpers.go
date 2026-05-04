@@ -196,6 +196,7 @@ func executeFullDeployment(ctx context.Context, cfg *config.Config, opts deploym
 	defer stopMetrics()
 
 	p := createOKDProvisionerWithOpts(cfg, opts.Credentials, projectRoot, provOpts...)
+	defer p.ZeroizeEnv()
 
 	if err := p.Validate(cfg); err != nil {
 		return fmt.Errorf("provisioner validation failed: %w", err)
