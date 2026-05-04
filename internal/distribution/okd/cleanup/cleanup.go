@@ -14,6 +14,7 @@ import (
 
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
+	"github.com/qxtaiba/okdctl/internal/executor"
 	"github.com/qxtaiba/okdctl/internal/logutil"
 )
 
@@ -49,9 +50,26 @@ func (opts *Options) getLogger() *slog.Logger {
 	return logutil.OrNop(opts.Logger)
 }
 
-// ErrKindNotSet is returned by Execute when opts.Kind is empty.
-// Callers can test for it with errors.Is.
-var ErrKindNotSet = errors.New("cleanup kind not set")
+// Phase drives a cleanup run.
+type Phase struct {
+	phase.BasePhase
+}
+
+// New constructs a cleanup Phase bound to exec/logger and the okdctl
+// version tag. It mirrors the shape of setup/install/postinstall/destroy.
+func New(exec *executor.Executor, logger *slog.Logger, version string) *Phase {
+	phaseLogger := logutil.OrNop(logger).With("phase", "cleanup")
+	return &Phase{
+		BasePhase: phase.NewBasePhase(version, phase.WithExecutor(exec), phase.WithLogger(phaseLogger)),
+	}
+}
+
+// Execute runs the cleanup steps selected by opts.Kind. Wraps the package-
+// level Execute so callers that hold a Provisioner can use the same shape
+// as setup/install/postinstall/destroy.
+func (p *Phase) Execute(ctx context.Context, opts *Options) error {
+	return Execute(ctx, opts)
+}
 
 // Execute runs the cleanup steps selected by opts.Kind. Individual step
 // failures are accumulated and returned as a joined error; a partial run
@@ -108,7 +126,7 @@ func Execute(ctx context.Context, opts *Options) error {
 
 	default:
 		if opts.Kind == "" {
-			return &errtypes.ConfigError{Msg: "cleanup kind not set", Err: ErrKindNotSet}
+			return &errtypes.ConfigError{Msg: "cleanup kind not set"}
 		}
 		return &errtypes.ConfigError{Msg: fmt.Sprintf("unknown cleanup type: %s (valid types: full, work-only, web-only, haproxy-only, terraform-only)", opts.Kind)}
 	}
