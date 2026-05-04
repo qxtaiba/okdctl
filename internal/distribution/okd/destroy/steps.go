@@ -10,6 +10,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/firewall"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
+	"github.com/qxtaiba/okdctl/internal/system"
 )
 
 // Step IDs for the destroy phase, ordered as they execute.
@@ -83,7 +84,7 @@ func (p *Phase) destroySteps(cfg *config.Config, opts *Options) []distribution.S
 		{
 			ID: StepCleanupFiles, Name: "cleanup files",
 			Desc: "performing comprehensive cleanup", NonFatal: true,
-			SkipWhen:   trackSkip("file cleanup", func() bool { return opts.SkipCleanup || opts.CleanupKind == "" }),
+			SkipWhen:   trackSkip("file cleanup", func() bool { return opts.SkipCleanup || opts.CleanupKind == "" || !system.DirExists(opts.WorkDir) }),
 			SkipReason: cleanupFilesSkipReason(opts),
 			Exec: func(ctx context.Context) error {
 				vip, err := phase.ResolveClusterVIP(cfg)
@@ -116,8 +117,9 @@ func (p *Phase) destroySteps(cfg *config.Config, opts *Options) []distribution.S
 		{
 			ID: StepCleanupFirewall, Name: "cleanup firewall",
 			Desc: "removing firewall rules", NonFatal: true,
-			SkipWhen:   trackSkip("firewall", func() bool { return opts.SkipFirewall }),
-			SkipReason: "firewall cleanup disabled",
+			// context.Background() is safe: DetectBackend runs only exec.LookPath + a bounded systemctl probe.
+			SkipWhen:   trackSkip("firewall", func() bool { return opts.SkipFirewall || firewall.DetectBackend(context.Background(), p.Log) == firewall.None }),
+			SkipReason: "firewall cleanup disabled or no active backend",
 			Exec: func(ctx context.Context) error {
 				if err := firewall.RemoveOKDRules(ctx, true, p.Log); err != nil {
 					return &errtypes.ClusterError{Msg: "firewall cleanup failed", Err: err}
@@ -151,7 +153,13 @@ func cleanupFilesSkipReason(opts *Options) string {
 	if opts.SkipCleanup {
 		return "cleanup disabled"
 	}
-	return "no cleanup type specified"
+	if opts.CleanupKind == "" {
+		return "no cleanup type specified"
+	}
+	if !system.DirExists(opts.WorkDir) {
+		return "work directory absent"
+	}
+	return ""
 }
 
 func isoSkipReason(opts *Options, cfg *config.Config) string {
