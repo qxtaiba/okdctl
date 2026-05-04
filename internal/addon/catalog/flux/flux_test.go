@@ -97,6 +97,39 @@ func TestBuildFluxDeployKeySecret(t *testing.T) {
 	})
 }
 
+func TestValidateSettingsUserinfo(t *testing.T) {
+	f := &Flux{}
+	cases := []struct {
+		name    string
+		repo    string
+		wantErr bool
+	}{
+		{name: "ssh scp style", repo: "git@github.com:org/repo.git", wantErr: false},
+		{name: "ssh scheme no creds", repo: "ssh://git@github.com/org/repo.git", wantErr: false},
+		{name: "https no creds", repo: "https://github.com/org/repo.git", wantErr: false},
+		{name: "https with token", repo: "https://user:ghp_token@github.com/org/repo.git", wantErr: true},
+		{name: "https user only", repo: "https://user@github.com/org/repo.git", wantErr: true},
+		{name: "empty repo", repo: "", wantErr: true},
+		{name: "bad scheme", repo: "ftp://example.com/repo", wantErr: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			settings := map[string]string{
+				SettingRepository: tc.repo,
+				SettingBranch:     "main",
+				SettingPath:       "kubernetes/clusters/production",
+			}
+			errs := f.ValidateSettings(settings)
+			if tc.wantErr && len(errs) == 0 {
+				t.Errorf("ValidateSettings(%q) = nil errors, want at least one", tc.repo)
+			}
+			if !tc.wantErr && len(errs) != 0 {
+				t.Errorf("ValidateSettings(%q) = %v, want no errors", tc.repo, errs)
+			}
+		})
+	}
+}
+
 func TestGitHost(t *testing.T) {
 	cases := []struct {
 		name    string
