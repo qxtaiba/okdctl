@@ -34,6 +34,7 @@ type Provisioner struct {
 	pendingEnv  []string
 	logger      *slog.Logger
 	recorder    distribution.MetricsRecorder
+	reporter    logutil.ProgressReporter
 }
 
 // ProvisionerOption configures a Provisioner. Options compose — pass multiple
@@ -62,6 +63,12 @@ func WithMetricsRecorder(rec distribution.MetricsRecorder) ProvisionerOption {
 	return func(p *Provisioner) { p.recorder = rec }
 }
 
+// WithProgressReporter sets the callback used by phases to signal long-running
+// operations. Defaults to logutil.NopProgressReporter when omitted.
+func WithProgressReporter(r logutil.ProgressReporter) ProvisionerOption {
+	return func(p *Provisioner) { p.reporter = r }
+}
+
 // WithEnv passes environment variables to the executor for all subprocess calls,
 // avoiding modification of the global process environment.
 func WithEnv(env []string) ProvisionerOption {
@@ -81,6 +88,7 @@ func New(version string, opts ...ProvisionerOption) *Provisioner {
 		version:     version,
 		projectRoot: projectRoot,
 		logger:      logutil.NopLogger,
+		reporter:    logutil.NopProgressReporter,
 	}
 
 	for _, opt := range opts {
@@ -137,6 +145,7 @@ func (p *Provisioner) Prepare(ctx context.Context, cfg *config.Config) ([]distri
 func (p *Provisioner) Install(ctx context.Context, cfg *config.Config, opts *install.Options) ([]distribution.StepResult, error) {
 	installPhase := install.New(p.executor, p.logger, p.version)
 	installPhase.Recorder = p.recorder
+	installPhase.Reporter = p.reporter
 	return installPhase.Execute(ctx, cfg, opts)
 }
 

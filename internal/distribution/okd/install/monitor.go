@@ -14,7 +14,6 @@ import (
 	"github.com/qxtaiba/okdctl/internal/cluster"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/executor"
-	"github.com/qxtaiba/okdctl/internal/tui"
 )
 
 // defaultStartMonitorCmd starts "openshift-install wait-for install-complete",
@@ -51,7 +50,7 @@ func (p *Phase) WaitForBootstrap(ctx context.Context, clusterDir string, opts *O
 	ctx, cancel := context.WithTimeout(ctx, opts.BootstrapTimeout)
 	defer cancel()
 
-	stopSpinner := tui.StartSpinner(ctx, "waiting for bootstrap complete")
+	stopSpinner := p.Reporter("waiting for bootstrap complete")
 	_, err := p.Exec.RunStreamedChecked(ctx, "openshift-install", "wait-for", "bootstrap-complete", "--dir", clusterDir, "--log-level=debug")
 	stopSpinner()
 	if err != nil {
@@ -105,7 +104,7 @@ func (p *Phase) MonitorInstallation(ctx context.Context, clusterDir string, opts
 		}
 	}
 
-	stopSpinner := tui.StartSpinner(ctx, "monitoring cluster operators")
+	stopSpinner := p.Reporter("monitoring cluster operators")
 	defer stopSpinner()
 
 	installDone, killInstall, err := startCmd(ctx, clusterDir)

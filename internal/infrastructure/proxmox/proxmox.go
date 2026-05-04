@@ -16,7 +16,6 @@ import (
 	"github.com/qxtaiba/okdctl/internal/infrastructure/terraform"
 	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/netutil"
-	"github.com/qxtaiba/okdctl/internal/tui"
 )
 
 // Provider drives the Proxmox VE infrastructure lifecycle (connect, provision,
@@ -36,6 +35,7 @@ type Provider struct {
 	tfEnv         string
 	logger        *slog.Logger
 	env           []string
+	reporter      logutil.ProgressReporter
 }
 
 // Option configures a Provider at construction time.
@@ -59,11 +59,19 @@ func WithEnv(env []string) Option {
 	}
 }
 
+// WithProgressReporter sets the callback used to signal long-running
+// operations. Defaults to logutil.NopProgressReporter when omitted, so
+// headless callers run silent.
+func WithProgressReporter(r logutil.ProgressReporter) Option {
+	return func(p *Provider) { p.reporter = r }
+}
+
 // New constructs a Provider with the given options. The logger defaults to
 // a no-op logger if WithLogger is not supplied.
 func New(opts ...Option) *Provider {
 	p := &Provider{
-		logger: logutil.NopLogger,
+		logger:   logutil.NopLogger,
+		reporter: logutil.NopProgressReporter,
 	}
 	for _, opt := range opts {
 		opt(p)
@@ -159,7 +167,7 @@ func (p *Provider) Provision(ctx context.Context, cfg *config.Config, opts Provi
 	p.logger.Info("terraform: plan will create virtual machines", "count", totalNodes)
 
 	p.logger.Info("terraform: applying infrastructure changes")
-	stopSpinner := tui.StartSpinner(ctx, "applying terraform infrastructure")
+	stopSpinner := p.reporter("applying terraform infrastructure")
 	applyOpts := terraform.ApplyOptions{
 		PlanFile:    filepath.Join(p.terraformExec.WorkDir, terraform.PlanFileName),
 		AutoApprove: opts.AutoApprove,

@@ -133,6 +133,14 @@ func resolveProjectRootOrDie() (string, error) {
 	return root, nil
 }
 
+// tuiReporter wraps tui.StartSpinner so domain code can call a callback that
+// captures the command ctx without taking an internal/tui dependency.
+func tuiReporter(ctx context.Context) func(string) func() {
+	return func(desc string) func() {
+		return tui.StartSpinner(ctx, desc)
+	}
+}
+
 // Pass nil for creds when the operation only needs local tools (oc, dnsmasq, systemctl).
 func createOKDProvisionerWithOpts(cfg *config.Config, creds *credentials.ProxmoxCredentials, projectRoot string, extra ...okd.ProvisionerOption) *okd.Provisioner {
 	opts := []okd.ProvisionerOption{
@@ -233,6 +241,7 @@ func executeFullDeployment(ctx context.Context, cfg *config.Config, opts deploym
 	}
 	defer stopMetrics()
 
+	provOpts = append(provOpts, okd.WithProgressReporter(tuiReporter(ctx)))
 	p := createOKDProvisionerWithOpts(cfg, opts.Credentials, projectRoot, provOpts...)
 	defer p.ZeroizeEnv()
 
