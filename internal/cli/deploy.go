@@ -44,7 +44,7 @@ func init() {
 	deployCmd.Flags().BoolVar(&deployMinimal, "minimal", false, "use minimal defaults (single-node cluster)")
 	deployCmd.Flags().BoolVarP(&deployYes, "yes", "y", false, "skip prompts, use defaults")
 	deployCmd.Flags().BoolVar(&deployDryRun, flagDryRun, false, "preview terraform plan and step listing without deploying")
-	deployCmd.Flags().StringVar(&deployMetricsAddr, "metrics-addr", "", "address for Prometheus metrics endpoint (e.g. :9090); disabled when empty")
+	deployCmd.Flags().StringVar(&deployMetricsAddr, "metrics-addr", "", `address for Prometheus metrics endpoint; bare ":9090" binds 127.0.0.1; use "0.0.0.0:9090" for wildcard bind; disabled when empty`)
 }
 
 func runDeploy(cmd *cobra.Command, _ []string) error {

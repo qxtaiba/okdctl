@@ -23,7 +23,7 @@ okdctl deploy [flags]
 ```
       --dry-run               preview terraform plan and step listing without deploying
   -h, --help                  help for deploy
-      --metrics-addr string   address for Prometheus metrics endpoint (e.g. :9090); disabled when empty
+      --metrics-addr string   address for Prometheus metrics endpoint; bare ":9090" binds 127.0.0.1; use "0.0.0.0:9090" for wildcard bind; disabled when empty
       --minimal               use minimal defaults (single-node cluster)
   -o, --output string         output file for configuration (default "okdctl.yaml")
   -y, --yes                   skip prompts, use defaults
