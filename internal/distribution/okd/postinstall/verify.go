@@ -232,7 +232,7 @@ func (p *Phase) verifyKubeVIPAPIHealthBootstrap(ctx context.Context, vip, cluste
 	kubeconfigPath := filepath.Join(clusterDir, "auth", "kubeconfig")
 	pool, caErr := httputil.KubeconfigCAPool(kubeconfigPath)
 	if caErr != nil {
-		p.Log.Warn("verify: kubeconfig CA unavailable, TLS verification skipped", "err", caErr)
+		return &errtypes.ClusterError{Msg: "kubeconfig CA unavailable for kube-vip api health check", Err: caErr}
 	}
 
 	p.Log.Info(fmt.Sprintf("verify: checking vip health at %s", healthURL))
@@ -254,24 +254,14 @@ func (p *Phase) verifyKubeVIPAPIHealthBootstrap(ctx context.Context, vip, cluste
 		return strings.TrimSpace(string(body)), nil
 	}
 
-	var response string
-	if pool != nil {
-		var err error
-		response, err = doRequest(httputil.NewWithCA(pool, 5*time.Second))
-		if err != nil {
-			var hostnameErr x509.HostnameError
-			if !errors.As(err, &hostnameErr) {
-				return fmt.Errorf("failed to check api health at %s: %w", healthURL, err)
-			}
-			// VIP not yet in apiserver SANs — transient during kube-vip cert re-issue; retry insecure.
-			p.Log.Warn("verify: vip not in apiserver sans yet, retrying without tls verification", "vip", vip)
-			response, err = doRequest(httputil.NewInsecure(5 * time.Second))
-			if err != nil {
-				return fmt.Errorf("failed to check api health at %s: %w", healthURL, err)
-			}
+	response, err := doRequest(httputil.NewWithCA(pool, 5*time.Second))
+	if err != nil {
+		var hostnameErr x509.HostnameError
+		if !errors.As(err, &hostnameErr) {
+			return fmt.Errorf("failed to check api health at %s: %w", healthURL, err)
 		}
-	} else {
-		var err error
+		// VIP not yet in apiserver SANs — transient during kube-vip cert re-issue; retry insecure.
+		p.Log.Warn("verify: vip not in apiserver sans yet, retrying without tls verification", "vip", vip)
 		response, err = doRequest(httputil.NewInsecure(5 * time.Second))
 		if err != nil {
 			return fmt.Errorf("failed to check api health at %s: %w", healthURL, err)
