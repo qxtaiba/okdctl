@@ -192,7 +192,7 @@ func (p *Phase) waitForKubeVIPDaemonSet(ctx context.Context, opts *Options) erro
 		"get", "daemonset", "-n", "kube-system", "kube-vip",
 		"-o", "jsonpath={.status.numberReady}")
 	if err != nil {
-		return fmt.Errorf("kube-vip daemonset not ready: %w", err)
+		return err
 	}
 	p.Log.Info(fmt.Sprintf("kubevip: daemonset running (%s pods ready)", ready))
 	return nil
