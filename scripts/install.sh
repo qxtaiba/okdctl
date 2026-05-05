@@ -7,7 +7,7 @@
 # binary to /usr/local/bin (or $INSTALL_DIR if set).
 #
 # Usage:
-#   curl -sSfL https://raw.githubusercontent.com/qxtaiba/okdctl/main/scripts/install.sh | sh
+#   curl -sSfL https://raw.githubusercontent.com/qxtaiba/okdctl/main/scripts/install.sh | bash
 #
 # Environment variables:
 #   VERSION       - pin to a specific release, e.g. VERSION=v0.1.0 (default: latest)
