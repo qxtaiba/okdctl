@@ -151,7 +151,7 @@ func (p *Provider) Provision(ctx context.Context, cfg *config.Config, opts Provi
 
 	p.logger.Info("terraform: initializing backend and providers")
 	if err := p.terraformExec.Init(ctx); err != nil {
-		return nil, fmt.Errorf("terraform init failed: %w", err)
+		return nil, &errtypes.ClusterError{Msg: "terraform init failed", Err: err}
 	}
 
 	p.logger.Info("terraform: creating execution plan")
@@ -159,7 +159,7 @@ func (p *Provider) Provision(ctx context.Context, cfg *config.Config, opts Provi
 		OutputPlanFile: terraform.PlanFileName,
 	}
 	if err := p.terraformExec.Plan(ctx, planOpts); err != nil {
-		return nil, fmt.Errorf("terraform plan failed: %w", err)
+		return nil, &errtypes.ClusterError{Msg: "terraform plan failed", Err: err}
 	}
 	defer func() { _ = p.terraformExec.CleanupPlans() }()
 
@@ -179,12 +179,12 @@ func (p *Provider) Provision(ctx context.Context, cfg *config.Config, opts Provi
 			return nil, fmt.Errorf("terraform apply interrupted: %w", applyErr)
 		}
 		p.logger.Warn("terraform: apply failed; partial infrastructure may exist. run 'okdctl destroy' to clean up", "err", applyErr)
-		return nil, fmt.Errorf("terraform apply failed: %w", applyErr)
+		return nil, &errtypes.ClusterError{Msg: "terraform apply failed", Err: applyErr}
 	}
 
 	result, err := p.retrieveProvisionResult(cfg)
 	if err != nil {
-		return nil, fmt.Errorf("terraform apply succeeded but IP retrieval failed; run 'okdctl destroy' to clean up: %w", err)
+		return nil, &errtypes.ClusterError{Msg: "terraform apply succeeded but IP retrieval failed; run 'okdctl destroy' to clean up", Err: err}
 	}
 
 	if len(result.VMs) == 0 {
@@ -219,14 +219,14 @@ func (p *Provider) PlanOnly(ctx context.Context, cfg *config.Config, opts Provis
 
 	p.logger.Info("terraform: initializing backend and providers")
 	if err := p.terraformExec.Init(ctx); err != nil {
-		return fmt.Errorf("terraform init failed: %w", err)
+		return &errtypes.ClusterError{Msg: "terraform init failed", Err: err}
 	}
 
 	totalNodes := 1 + cfg.Topology.ControlPlane.Count + cfg.Topology.Workers.Count
 	p.logger.Info("terraform: plan preview", "vm_count", totalNodes)
 
 	if err := p.terraformExec.PlanStreamed(ctx, terraform.PlanOptions{}); err != nil {
-		return fmt.Errorf("terraform plan failed: %w", err)
+		return &errtypes.ClusterError{Msg: "terraform plan failed", Err: err}
 	}
 
 	return nil
@@ -249,7 +249,7 @@ func (p *Provider) retrieveProvisionResult(cfg *config.Config) (*ProvisionResult
 	totalNodes := 1 + cfg.Topology.ControlPlane.Count + cfg.Topology.Workers.Count
 	if cfg.Networking.MachineCIDR != "" {
 		if err := netutil.ValidateIPRangeInCIDR(startIP, totalNodes, cfg.Networking.MachineCIDR); err != nil {
-			return nil, fmt.Errorf("IP range validation failed: %w", err)
+			return nil, &errtypes.ConfigError{Msg: "IP range validation failed", Err: err}
 		}
 	}
 
@@ -265,7 +265,7 @@ func (p *Provider) retrieveProvisionResult(cfg *config.Config) (*ProvisionResult
 	for i := range cfg.Topology.ControlPlane.Count {
 		ip, err := netutil.CalculateVMIP(startIP, 1+i)
 		if err != nil {
-			return nil, fmt.Errorf("failed to calculate %s%d IP: %w", RoleMaster, i, err)
+			return nil, &errtypes.ConfigError{Msg: fmt.Sprintf("failed to calculate %s%d IP", RoleMaster, i), Err: err}
 		}
 		result.ControlPlaneIPs = append(result.ControlPlaneIPs, ip)
 		result.VMs = append(result.VMs, VMStatus{
@@ -280,7 +280,7 @@ func (p *Provider) retrieveProvisionResult(cfg *config.Config) (*ProvisionResult
 	for i := range cfg.Topology.Workers.Count {
 		ip, err := netutil.CalculateVMIP(startIP, workerOffset+i)
 		if err != nil {
-			return nil, fmt.Errorf("failed to calculate %s%d IP: %w", RoleWorker, i, err)
+			return nil, &errtypes.ConfigError{Msg: fmt.Sprintf("failed to calculate %s%d IP", RoleWorker, i), Err: err}
 		}
 		result.WorkerIPs = append(result.WorkerIPs, ip)
 		result.VMs = append(result.VMs, VMStatus{
