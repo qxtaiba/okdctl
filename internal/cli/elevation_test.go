@@ -3,6 +3,7 @@ package cli
 import (
 	"errors"
 	"os"
+	"os/exec"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -90,13 +91,16 @@ func TestEnsureRoot_SudoNotFound(t *testing.T) {
 	}
 	orig := lookPath
 	t.Cleanup(func() { lookPath = orig })
-	lookPath = func(_ string) (string, error) { return "", errors.New("not found") }
+	lookPath = func(_ string) (string, error) { return "", exec.ErrNotFound }
 
 	cmd := newCmd("deploy")
 	err := ensureRoot(cmd)
 	var authErr *errtypes.AuthError
 	if !errors.As(err, &authErr) {
 		t.Fatalf("want AuthError, got %T: %v", err, err)
+	}
+	if !errors.Is(err, errtypes.ErrSudoMissing) {
+		t.Fatalf("want errtypes.ErrSudoMissing in chain; exitCodeFor would return 5 instead of 71")
 	}
 }
 

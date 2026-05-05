@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -95,7 +96,7 @@ func ensureRoot(cmd *cobra.Command) error {
 	if err != nil {
 		return &errtypes.AuthError{
 			Msg: fmt.Sprintf("%s requires root and sudo is not installed; run as root", cmd.Name()),
-			Err: err,
+			Err: errors.Join(err, errtypes.ErrSudoMissing),
 		}
 	}
 	self, err := os.Executable()
