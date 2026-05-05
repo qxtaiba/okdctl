@@ -4,6 +4,7 @@ package terraform
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -310,11 +311,30 @@ func (t *Executor) destroyDirect(ctx context.Context, opts DestroyOptions) error
 	return t.run(ctx, args...)
 }
 
-// HasState reports whether the working directory contains a non-empty
-// terraform.tfstate file.
+// HasState reports whether the working directory contains a terraform.tfstate
+// with at least one managed resource. A missing file, an empty state ({} or
+// {"resources":[]}), or a file that fails JSON parse all return false. On a
+// parse failure the file path is logged at Warn so the operator can inspect
+// or remove the corrupt state before retrying.
 func (t *Executor) HasState() bool {
 	stateFile := filepath.Join(t.WorkDir, "terraform.tfstate")
-	return system.FileExists(stateFile)
+	if !system.FileExists(stateFile) {
+		return false
+	}
+	data, err := os.ReadFile(stateFile)
+	if err != nil {
+		t.logger.Warn("terraform: cannot read state file", "path", stateFile, "err", err)
+		return false
+	}
+	var s struct {
+		Resources []json.RawMessage `json:"resources"`
+	}
+	if err := json.Unmarshal(data, &s); err != nil {
+		t.logger.Warn("terraform: state file is corrupt or unreadable; inspect before retrying destroy",
+			"path", stateFile, "err", err)
+		return false
+	}
+	return len(s.Resources) > 0
 }
 
 // CleanupPlans removes tfplan and destroy.tfplan; non-existent files are

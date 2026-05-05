@@ -128,17 +128,40 @@ func TestExecutor_BuildVarArgs_VarFileMissing(t *testing.T) {
 }
 
 func TestExecutor_HasState(t *testing.T) {
-	dir := t.TempDir()
-	e := &Executor{WorkDir: dir}
-
-	if e.HasState() {
-		t.Error("HasState() = true on empty dir")
+	cases := []struct {
+		name     string
+		content  string
+		write    bool
+		wantTrue bool
+		wantWarn bool
+	}{
+		{name: "no file", wantTrue: false},
+		{name: "empty JSON", content: `{}`, write: true, wantTrue: false},
+		{name: "empty resources array", content: `{"version":4,"resources":[]}`, write: true, wantTrue: false},
+		{name: "corrupt JSON", content: `{not valid json`, write: true, wantTrue: false, wantWarn: true},
+		{name: "populated", content: `{"version":4,"resources":[{"type":"aws_instance"}]}`, write: true, wantTrue: true},
 	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			h := &captureHandler{}
+			e := &Executor{WorkDir: dir, logger: slog.New(h)}
 
-	if err := os.WriteFile(filepath.Join(dir, "terraform.tfstate"), []byte("x"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if !e.HasState() {
-		t.Error("HasState() = false after tfstate written")
+			if tc.write {
+				if err := os.WriteFile(filepath.Join(dir, "terraform.tfstate"), []byte(tc.content), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			if got := e.HasState(); got != tc.wantTrue {
+				t.Errorf("HasState() = %v; want %v", got, tc.wantTrue)
+			}
+			if tc.wantWarn && !h.hasWarn() {
+				t.Error("expected a Warn log; got none")
+			}
+			if !tc.wantWarn && h.hasWarn() {
+				t.Errorf("unexpected Warn log emitted")
+			}
+		})
 	}
 }
