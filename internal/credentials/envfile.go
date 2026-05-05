@@ -174,14 +174,16 @@ func loadEnvFileOnce(path string) error {
 func parseDotEnv(r io.Reader) (map[string]string, error) {
 	pairs := make(map[string]string)
 	sc := bufio.NewScanner(r)
+	lineNum := 0
 	for sc.Scan() {
+		lineNum++
 		line := strings.TrimSpace(sc.Text())
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
 		idx := strings.IndexByte(line, '=')
 		if idx < 0 {
-			return nil, fmt.Errorf("malformed line (no '='): %q", line)
+			return nil, fmt.Errorf("malformed line %d (no '=')", lineNum)
 		}
 		k := strings.TrimSpace(line[:idx])
 		v := strings.TrimSpace(line[idx+1:])
