@@ -69,7 +69,7 @@ func processTarEntry(tarReader *tar.Reader, header *tar.Header, destDir string, 
 
 	switch header.Typeflag {
 	case tar.TypeDir:
-		if err := os.MkdirAll(targetPath, os.FileMode(header.Mode&0o777)); err != nil {
+		if err := os.MkdirAll(targetPath, os.FileMode(header.Mode&0o755)); err != nil {
 			return fmt.Errorf("failed to create directory: %w", err)
 		}
 		if err := verifyResolvedPath(targetPath, cleanDest); err != nil {
