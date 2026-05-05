@@ -13,6 +13,11 @@ type SecretBytes struct {
 // array is zeroized first so a re-Set call does not leak the old secret.
 // The argument string itself still lives on the heap until GC — the wizard
 // input pipeline is the inherent capture boundary.
+//
+// Authorised production caller: internal/tui/wizard/steps (password field
+// ConfigSet callback). Tests may call Set to seed fixture state. No other
+// production package should call Set; the credentials layer reads secrets
+// from env vars and assigns []byte directly to ProxmoxCredentials.
 func (s *SecretBytes) Set(v string) {
 	clear(s.b)
 	s.b = []byte(v)
