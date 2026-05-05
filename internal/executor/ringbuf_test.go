@@ -89,6 +89,26 @@ func TestRingWriter_PartialThenComplete(t *testing.T) {
 	}
 }
 
+func TestRingWriter_PartialBoundedAt64K(t *testing.T) {
+	r := newRingWriter(constMaxLines)
+	blob := strings.Repeat("x", 1024*1024) // 1 MiB, no newline
+	if _, err := r.Write([]byte(blob)); err != nil {
+		t.Fatal(err)
+	}
+	if len(r.partial) > maxPartial {
+		t.Errorf("partial len %d exceeds maxPartial %d", len(r.partial), maxPartial)
+	}
+	var total int
+	for _, line := range r.lines {
+		total += len(line)
+	}
+	total += len(r.partial)
+	limit := maxPartial * (constMaxLines + 1)
+	if total > limit {
+		t.Errorf("total retained bytes %d exceeds limit %d", total, limit)
+	}
+}
+
 func TestRingWriter_LargeOverCap(t *testing.T) {
 	const maxLines = 200
 	r := newRingWriter(maxLines)
