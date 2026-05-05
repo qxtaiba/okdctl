@@ -83,11 +83,20 @@ func (p *Phase) UpdateIngress(ctx context.Context, cfg *config.Config, opts Upda
 
 	controllers, err := p.discoverIngressControllers(ctx)
 	if err != nil {
-		return nil, &errtypes.ClusterError{Msg: "failed to discover IngressControllers", Err: err}
+		if !bootstrapDNS {
+			return nil, &errtypes.ClusterError{Msg: "failed to discover IngressControllers", Err: err}
+		}
+		p.Log.Warn("update-ingress: cluster unreachable — reconciling bootstrap dns to kube-vip only",
+			"err", err)
+		return p.reconcileBootstrapDNSOnly(ctx, cfg, vip)
 	}
 
 	if len(controllers) == 0 {
-		return nil, &errtypes.ClusterError{Msg: "no IngressControllers found in the cluster"}
+		if !bootstrapDNS {
+			return nil, &errtypes.ClusterError{Msg: "no IngressControllers found in the cluster"}
+		}
+		p.Log.Warn("update-ingress: no controllers found — reconciling bootstrap dns to kube-vip only")
+		return p.reconcileBootstrapDNSOnly(ctx, cfg, vip)
 	}
 
 	var descriptions []string
@@ -148,6 +157,23 @@ func (p *Phase) UpdateIngress(ctx context.Context, cfg *config.Config, opts Upda
 	}
 	result.DNSReconciled = bootstrapDNS
 	return result, nil
+}
+
+// reconcileBootstrapDNSOnly deploys production DNS without querying the cluster.
+// Used when bootstrap-state DNS is detected but ingress discovery fails or
+// returns no controllers (e.g. kube-vip-only deploys, or a cluster API that
+// is unreachable mid-postinstall). *.apps stays on the bastion until a
+// LoadBalancer addon is installed later.
+func (p *Phase) reconcileBootstrapDNSOnly(ctx context.Context, cfg *config.Config, vip string) (*UpdateIngressResult, error) {
+	appsIP := cfg.Networking.Bastion.IP
+	if err := p.deployProductionDNS(ctx, cfg, appsIP, vip, nil); err != nil {
+		return nil, err
+	}
+	p.Log.Info("update-ingress: dns updated (kube-vip only)", "apps", appsIP, "api", vip)
+	return &UpdateIngressResult{
+		KubeVipIP:     vip,
+		DNSReconciled: true,
+	}, nil
 }
 
 // collectLBEntries waits for LoadBalancer IPs on all LB-type controllers.
