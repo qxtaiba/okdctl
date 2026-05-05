@@ -13,7 +13,6 @@
 variable "target_node" {
   description = "proxmox node name where vms will be created"
   type        = string
-  default     = "pve01"
 }
 
 variable "bridge" {
@@ -73,13 +72,11 @@ variable "worker_isos" {
 variable "cluster_name" {
   description = "name of the okd cluster"
   type        = string
-  default     = "grappleberry"
 }
 
 variable "vmid_base" {
   description = "base vm id for vms"
   type        = number
-  default     = 7000
 }
 
 variable "bootstrap_enabled" {
