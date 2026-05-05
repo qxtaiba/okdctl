@@ -10,6 +10,12 @@ import (
 )
 
 // StartWorkerVMs starts worker VMs after bootstrap completes so they can reach the MCS.
+//
+// terraform.tfvars is the deploy-time snapshot written by setup.GenerateTerraformVars
+// and is not mutated here. start_workers_immediately defaults to false in that
+// snapshot; this call overrides it at apply time via -var. Operators running
+// `terraform plan` from the workdir will see a diff on that variable — that is
+// expected. The authoritative cluster state lives in tfstate, not in tfvars.
 func (p *Phase) StartWorkerVMs(ctx context.Context, cfg *config.Config, opts *Options) error {
 	if cfg.Topology.Workers.Count == 0 {
 		p.Log.Info("workers: no workers configured, skipping")
