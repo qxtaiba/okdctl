@@ -39,6 +39,9 @@ type cacheEntry struct {
 // and the channel already holds a zero result. If the caller's select
 // expires before the result arrives, the buffered send in the goroutine
 // never blocks; the goroutine reaps within httpTimeout (4 s).
+// Debug records emitted by the goroutine route through slog.Default();
+// callers that bypass cli.Execute must install logutil.RedactHandler
+// before calling this function.
 func BackgroundCheck(ctx context.Context) <-chan CheckResult {
 	ch := make(chan CheckResult, 1)
 
