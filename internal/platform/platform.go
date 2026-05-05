@@ -19,9 +19,10 @@ import (
 // Family identifies the host OS lineage (RHEL or Debian).
 type Family string
 
-// Platform OS-family identifiers and supported arch literals.
+const archARM64 = "arm64"
+
+// Platform OS-family identifiers.
 const (
-	archARM64    = "arm64"
 	FamilyRHEL   Family = "rhel"
 	FamilyDebian Family = "debian"
 )
