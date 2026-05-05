@@ -257,6 +257,8 @@ func (f *Flux) ValidateSettings(settings map[string]string) []string {
 	} else if u, parseErr := url.Parse(fs.Repository); parseErr == nil &&
 		(u.Scheme == "http" || u.Scheme == "https") && u.User != nil {
 		errs = append(errs, "repository URL must not contain credentials; use SSH deploy-key auth instead")
+	} else if _, hostErr := gitHost(fs.Repository); hostErr != nil {
+		errs = append(errs, fmt.Sprintf("repository URL has an invalid host: %v", hostErr))
 	}
 	if fs.Branch != "" && strings.ContainsAny(fs.Branch, " \t") {
 		errs = append(errs, "branch name cannot contain spaces")
@@ -409,6 +411,9 @@ func gitHost(repoURL string) (string, error) {
 		if !ok {
 			return "", fmt.Errorf("cannot parse host from %q", repoURL)
 		}
+		if host == "" || strings.HasPrefix(host, "-") {
+			return "", fmt.Errorf("repository host %q is invalid", host)
+		}
 		return host, nil
 	}
 	u, err := url.Parse(repoURL)
@@ -418,6 +423,9 @@ func gitHost(repoURL string) (string, error) {
 	host := u.Hostname()
 	if host == "" {
 		return "", fmt.Errorf("%q has no host component", repoURL)
+	}
+	if strings.HasPrefix(host, "-") {
+		return "", fmt.Errorf("repository host %q is invalid", host)
 	}
 	return host, nil
 }
