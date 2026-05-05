@@ -17,6 +17,32 @@ import (
 	"github.com/qxtaiba/okdctl/internal/logutil"
 )
 
+// SubprocessError is returned by RunCaptured and OutputCaptured when a
+// subprocess fails. StderrTail carries the raw subprocess stderr; callers
+// that need it programmatically can errors.As to this type. The Redacted
+// method omits StderrTail from structured log output, preventing subprocess
+// stderr from leaking through slog attrs.
+type SubprocessError struct {
+	Bin        string
+	Err        error
+	StderrTail string
+}
+
+func (e *SubprocessError) Error() string {
+	if e.StderrTail == "" {
+		return e.Bin + ": " + e.Err.Error()
+	}
+	return e.Bin + ": " + e.Err.Error() + ": " + e.StderrTail
+}
+
+func (e *SubprocessError) Unwrap() error { return e.Err }
+
+// Redacted omits StderrTail so subprocess stderr never reaches a
+// structured log sink via slog attrs.
+func (e *SubprocessError) Redacted() any {
+	return e.Bin + ": " + e.Err.Error()
+}
+
 // RunCaptured runs bin with args, capturing stderr into the returned error on
 // non-zero exit. Context cancellation is respected; stdout is discarded
 // (callers that need it should use internal/executor.Executor instead).
@@ -29,11 +55,11 @@ func RunCaptured(ctx context.Context, bin string, args ...string) error {
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
-		msg := strings.TrimSpace(stderr.String())
-		if msg == "" {
-			return fmt.Errorf("%s: %w", bin, err)
+		return &SubprocessError{
+			Bin:        bin,
+			Err:        err,
+			StderrTail: strings.TrimSpace(stderr.String()),
 		}
-		return fmt.Errorf("%s: %w: %s", bin, err, msg)
 	}
 	return nil
 }
@@ -50,11 +76,11 @@ func OutputCaptured(ctx context.Context, bin string, args ...string) ([]byte, er
 	cmd.Stderr = &stderr
 	out, err := cmd.Output()
 	if err != nil {
-		msg := strings.TrimSpace(stderr.String())
-		if msg == "" {
-			return nil, fmt.Errorf("%s: %w", bin, err)
+		return nil, &SubprocessError{
+			Bin:        bin,
+			Err:        err,
+			StderrTail: strings.TrimSpace(stderr.String()),
 		}
-		return nil, fmt.Errorf("%s: %w: %s", bin, err, msg)
 	}
 	return out, nil
 }
