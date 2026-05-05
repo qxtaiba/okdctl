@@ -5,7 +5,5 @@ package system
 // memory once the secret has been consumed. The method-bound equivalent
 // for credentials is internal/credentials.ProxmoxCredentials.Zeroize.
 func ZeroBytes(b []byte) {
-	for i := range b {
-		b[i] = 0
-	}
+	clear(b)
 }
