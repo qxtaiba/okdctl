@@ -43,7 +43,6 @@ func TestCleanupTerraformEnv_PreservesState(t *testing.T) {
 		"terraform.tfvars",
 		"tfplan",
 		"destroy.tfplan",
-		"terraform.tfstate.backup",
 		".terraform.lock.hcl",
 		".terraform",
 	}
@@ -61,6 +60,16 @@ func TestCleanupTerraformEnv_PreservesState(t *testing.T) {
 	}
 	if string(body) != `{"version":4,"resources":[]}` {
 		t.Errorf("terraform.tfstate mutated: %q", body)
+	}
+
+	// terraform.tfstate.backup is the operator's last-resort rollback artefact;
+	// cleanup must not touch it.
+	backup, err := os.ReadFile(filepath.Join(dir, "terraform.tfstate.backup"))
+	if err != nil {
+		t.Fatalf("terraform.tfstate.backup removed (DATA LOSS): %v", err)
+	}
+	if string(backup) != "backup" {
+		t.Errorf("terraform.tfstate.backup mutated: %q", backup)
 	}
 }
 

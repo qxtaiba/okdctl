@@ -51,7 +51,6 @@ var terraformFilesToRemove = []string{
 	"terraform.tfvars",
 	"tfplan",
 	"destroy.tfplan",
-	"terraform.tfstate.backup",
 	".terraform.lock.hcl",
 }
 
