@@ -148,6 +148,14 @@ func streamFileForMinor(minor int) string {
 	return "fcos.json"
 }
 
+// fetchCoreOSStream fetches and parses the CoreOS stream JSON at url.
+// Trust anchor: the request is made over HTTPS to raw.githubusercontent.com;
+// GitHub's TLS certificate is the sole guarantee of document authenticity.
+// The JSON carries no cryptographic signature and is not pinned to a commit
+// SHA. The ISO artifact URL and sha256 field within the returned data are
+// validated at download time by DownloadCoreOSISO, so the ISO binary itself
+// is integrity-checked — only the stream document that supplies those values
+// is unverified beyond TLS.
 func fetchCoreOSStream(ctx context.Context, url string) (*coreOSStreamData, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
 	if err != nil {
