@@ -816,7 +816,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sec:06f00bcb:ignition-pullsecret-served-unauth` — ignition pullsecret served unauth
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-06f00bcb-ignition-unauth  
 **Severity:** major  
 **Cluster:** credentials  
 **Evidence:** `internal/distribution/okd/setup/apache.go:175-188`  
@@ -826,7 +826,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sec:1e8ffb91:tls-fallback-skip-verify` — tls fallback skip verify
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-1e8ffb91-tls-skipverify  
 **Severity:** major  
 **Cluster:** tls-network  
 **Evidence:** `internal/distribution/okd/postinstall/verify.go:260-279`  
@@ -846,7 +846,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sec:40d315ad:argv-injection-leading-dash-host` — argv injection leading dash host
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-40d315ad-argv-dash-host  
 **Severity:** major  
 **Cluster:** shell-injection  
 **Evidence:** `internal/addon/catalog/flux/flux.go:374-378`  
@@ -856,7 +856,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sec:761e5126:haproxy-vip-tls-skip` — haproxy vip tls skip
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-761e5126-haproxy-tls-skip  
 **Severity:** major  
 **Cluster:** tls-network — related: sec:1e8ffb91:tls-fallback-skip-verify  
 **Evidence:** `internal/distribution/okd/postinstall/haproxy.go:68-78`  
@@ -1099,7 +1099,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sub:eb479d86:argv-concat-into-ssh-cmd` — argv concat into ssh cmd
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sub-eb479d86-argv-ssh  
 **Severity:** major  
 **Cluster:** argv-construction — seam→audit-security  
 **Evidence:** `internal/distribution/okd/setup/upload.go:20-34`  
@@ -1162,7 +1162,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `state:0f076161:dry-run-no-runlock` — dry run no runlock
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/state-0f076161-dry-run-runlock  
 **Severity:** major  
 **Cluster:** tf-state-atomicity  
 **Evidence:** `internal/cli/destroy.go:100-205`  
@@ -1172,7 +1172,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `state:15ba17da:partial-destroy-still-cleans` — partial destroy still cleans
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/state-15ba17da-partial-destroy  
 **Severity:** major  
 **Cluster:** destroy-safety  
 **Evidence:** `internal/distribution/okd/destroy/steps.go:58-140`  
@@ -1182,7 +1182,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `state:18a795d5:masters-no-prevent-destroy` — masters no prevent destroy
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/state-18a795d5-prevent-destroy  
 **Severity:** major  
 **Cluster:** destroy-safety — seam→audit-iac-and-shell  
 **Evidence:** `infrastructure/terraform/modules/proxmox-okd/main.tf:244-263`  
@@ -1192,7 +1192,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `state:29293401:haproxy-install-non-atomic` — haproxy install non atomic
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/state-29293401-haproxy-atomic  
 **Severity:** major  
 **Cluster:** crash-recoverability  
 **Evidence:** `internal/distribution/okd/setup/haproxy.go:67-76`  
@@ -1202,7 +1202,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `state:368b892b:tf-state-backup-still-cleaned` — tf state backup still cleaned
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/state-368b892b-tf-backup  
 **Severity:** major  
 **Cluster:** tf-state-atomicity  
 **Evidence:** `internal/distribution/okd/cleanup/infra.go:50-56`  
@@ -1212,7 +1212,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `state:4f69fc9d:rerunsafe-not-enforced` — rerunsafe not enforced
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/state-4f69fc9d-rerunsafe  
 **Severity:** major  
 **Cluster:** phase-idempotency  
 **Evidence:** `internal/distribution/step.go:228-251`  
@@ -1222,7 +1222,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `state:c19ee328:setup-iso-build-not-resumable` — setup iso build not resumable
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/state-c19ee328-iso-resumable  
 **Severity:** major  
 **Cluster:** crash-recoverability  
 **Evidence:** `internal/distribution/okd/setup/steps.go:212-240`  
@@ -1232,7 +1232,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `state:de572c63:dnsmasq-write-non-atomic` — dnsmasq write non atomic
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/state-de572c63-dnsmasq-atomic  
 **Severity:** major  
 **Cluster:** crash-recoverability  
 **Evidence:** `internal/distribution/okd/dns/dnsmasq.go:58-93`  
@@ -1395,7 +1395,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `iac:e076e43c:sh-bash-array-dash-incompat` — sh bash array dash incompat
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/iac-e076e43c-sh-bash-array  
 **Severity:** blocker  
 **Cluster:** install-sh-fail-closed  
 **Evidence:** `scripts/install.sh:90-95`  
@@ -1405,7 +1405,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `iac:b803fcb7:sh-shellcheck-scope-gap` — sh shellcheck scope gap
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/iac-b803fcb7-shellcheck-scope  
 **Severity:** major  
 **Cluster:** install-sh-fail-closed  
 **Evidence:** `.github/workflows/ci.yml:110-118`  
@@ -1488,7 +1488,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `err:26a430ee:sudo-missing-sentinel-not-wrapped` — sudo missing sentinel not wrapped
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/err-26a430ee-sudo-sentinel  
 **Severity:** major  
 **Cluster:** sentinel-vs-typed — seam→audit-cli-ux  
 **Evidence:** `internal/cli/elevation.go:94-100`  
@@ -1498,7 +1498,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `err:48688e63:terraform-bare-fmt-errorf` — terraform bare fmt errorf
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/err-48688e63-tf-typed-err  
 **Severity:** major  
 **Cluster:** domain-vocabulary — seam→audit-cli-ux  
 **Evidence:** `internal/infrastructure/proxmox/proxmox.go:150-188` + 3 more  
@@ -1757,7 +1757,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `ux:aa84670c:update-notice-on-stdout` — update notice on stdout
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/ux-aa84670c-update-notice  
 **Severity:** major  
 **Cluster:** streams  
 **Evidence:** `internal/cli/root.go:129-145`  
@@ -1767,7 +1767,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `ux:d31d1b9d:describe-format-unvalidated` — describe format unvalidated
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/ux-d31d1b9d-describe-format  
 **Severity:** major  
 **Cluster:** json-stability  
 **Evidence:** `internal/cli/status.go:272-376` + 1 more  
@@ -1777,7 +1777,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `ux:e7db1220:json-release-type-as-int` — json release type as int
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/ux-e7db1220-release-type-json  
 **Severity:** major  
 **Cluster:** json-stability  
 **Evidence:** `internal/distribution/okd/releases/types.go:31-40` + 1 more  
@@ -1920,7 +1920,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `obs:366b3f2d:step-key-id-vs-name-collision` — step key id vs name collision
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/obs-366b3f2d-step-key  
 **Severity:** major  
 **Cluster:** field-stability  
 **Evidence:** `internal/distribution/orchestrator.go:85-180`  
@@ -1930,7 +1930,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `obs:41a9d4eb:redact-handler-struct-fields-passthrough` — redact handler struct fields passthrough
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/obs-41a9d4eb-redact-struct  
 **Severity:** major  
 **Cluster:** redaction-sink — seam→audit-errors  
 **Evidence:** `internal/logutil/redact.go:91-112`  
@@ -2495,7 +2495,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `tst:881d089e:runlock-symlink-untested` — runlock symlink untested
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/tst-881d089e-runlock-symlink  
 **Severity:** blocker  
 **Cluster:** canonical-helper-untested  
 **Evidence:** `internal/runlock/runlock.go:40-50`  
