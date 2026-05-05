@@ -1,10 +1,6 @@
-// Package config defines the YAML-serializable deployment schema for
-// okdctl (cluster, distribution, provider, topology, networking, addons)
-// along with loaders, defaults, generators, and validators.
-//
-// Serialization uses sigs.k8s.io/yaml, which reads json struct tags as
-// YAML key names. Only json tags are authoritative here; there are no
-// separate yaml tags to maintain.
+// Package config defines the YAML-serializable deployment schema for okdctl.
+// Serialization uses sigs.k8s.io/yaml, which maps json struct tags to YAML key names.
+// Only json tags are authoritative; maintain no separate yaml tags.
 package config
 
 // SchemaVersionV1 is the current okdctl.yaml schema marker. Loader rejects
