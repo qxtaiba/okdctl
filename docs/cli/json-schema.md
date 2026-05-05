@@ -116,6 +116,44 @@ Single release detail — same `OKDVersion` shape as an element of
 }
 ```
 
+## `okdctl addon list --format=json`
+
+Flat array of registered addons with their config-file state.
+
+```json
+[
+  {"name": "flux", "display_name": "Flux GitOps", "deps": [], "in_config": true},
+  {"name": "secretstore", "display_name": "External Secrets Operator", "deps": ["flux"], "in_config": false}
+]
+```
+
+| Field | Type | Notes |
+|---|---|---|
+| `name` | string | addon registration key |
+| `display_name` | string | human-readable addon name |
+| `deps` | string array | names of addons that must be installed first; `[]` when none |
+| `in_config` | bool | `true` when the addon's `enabled` flag is set in the configuration file |
+
+## `okdctl addon verify --format=json`
+
+Flat array of health results for all enabled addons. Empty array (`[]`) when
+no addons are enabled.
+
+```json
+[
+  {"name": "flux", "healthy": true},
+  {"name": "secretstore", "healthy": false, "error": "ConditionStatus: False"}
+]
+```
+
+| Field | Type | Notes |
+|---|---|---|
+| `name` | string | addon registration key |
+| `healthy` | bool | `true` when verify returned no error |
+| `error` | string | present only when `healthy=false`; omitted otherwise |
+
+Identical shape to the `addons[]` entries in `okdctl status --format=json`.
+
 ## Conventions
 
 - All timestamps use RFC 3339 with a trailing `Z` for UTC.
