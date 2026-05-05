@@ -181,7 +181,7 @@ func startMetricsServer(addr string, allowNetwork bool) (func(), []okd.Provision
 	}
 	host, _, err := net.SplitHostPort(addr)
 	if err != nil {
-		return nil, nil, &errtypes.ConfigError{Msg: fmt.Sprintf("invalid --metrics-addr %q: %s", addr, err)}
+		return nil, nil, &errtypes.ConfigError{Msg: fmt.Sprintf("invalid --metrics-addr %q", addr), Err: err}
 	}
 	if host != "" {
 		parsed, parseErr := netip.ParseAddr(host)
