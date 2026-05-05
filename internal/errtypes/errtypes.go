@@ -1,8 +1,6 @@
 // Package errtypes defines the typed error hierarchy used by okdctl.
-// exitCodeFor in internal/cli/root.go maps these types to structured
-// exit codes: ConfigError=2, NetworkError=3, ClusterError=4, AuthError=5.
-// Granular BSD sysexits.h sentinels (ErrConfigMissing, ErrPullSecretInvalid,
-// ErrSudoMissing) refine specific failure modes within those broad categories.
+// exitCodeFor in internal/cli/root.go maps each type to a structured exit code:
+// ConfigError=2, NetworkError=3, ClusterError=4, AuthError=5, UsageError=64.
 package errtypes
 
 import (
