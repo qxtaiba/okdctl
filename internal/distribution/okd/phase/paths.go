@@ -150,6 +150,11 @@ func WithLogger(l *slog.Logger) BasePhaseOption {
 
 // WithRecorder attaches a MetricsRecorder. Nil is tolerated; phases pass
 // p.Recorder to orchestrator.SetMetricsRecorder which normalises nil to nop.
+//
+// No phase.New constructor threads this option today — okd.Provisioner
+// writes BasePhase.Recorder directly after construction. Roadmap api:beabab0c
+// will migrate every call site to the option and drop the exported field.
+// Kept as scaffolding per MEMORY.md: do not delete.
 func WithRecorder(rec distribution.MetricsRecorder) BasePhaseOption {
 	return func(p *BasePhase) { p.Recorder = rec }
 }
