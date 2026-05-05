@@ -99,7 +99,7 @@ func runReleasesList(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 	if releasesListChannel == channelStable {
-		versions = filterStable(versions)
+		versions = slices.DeleteFunc(versions, func(v releases.OKDVersion) bool { return !v.Stable })
 	}
 
 	if releasesListFormat == outputJSON {
@@ -141,16 +141,6 @@ func fetchFlatVersions(ctx context.Context) ([]releases.OKDVersion, error) {
 		out = append(out, s.Versions...)
 	}
 	return out, nil
-}
-
-func filterStable(versions []releases.OKDVersion) []releases.OKDVersion {
-	out := make([]releases.OKDVersion, 0, len(versions))
-	for _, v := range versions {
-		if v.Stable {
-			out = append(out, v)
-		}
-	}
-	return out
 }
 
 func findVersion(versions []releases.OKDVersion, query string) (releases.OKDVersion, bool) {
