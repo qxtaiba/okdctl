@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"regexp"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -113,6 +114,22 @@ func runDestroy(cmd *cobra.Command, _ []string) error {
 	}
 
 	if destroyDryRun {
+		var incompatible []string
+		if destroySkipTerraform {
+			incompatible = append(incompatible, "--skip-terraform")
+		}
+		if destroySkipCleanup {
+			incompatible = append(incompatible, "--skip-cleanup")
+		}
+		if destroySkipFirewall {
+			incompatible = append(incompatible, "--skip-firewall")
+		}
+		if len(incompatible) > 0 {
+			return &errtypes.ConfigError{
+				Msg: fmt.Sprintf("%s cannot be used with --dry-run (dry-run only previews terraform; skip flags have no effect)",
+					strings.Join(incompatible, ", ")),
+			}
+		}
 		return runDestroyDryRun(ctx, cfg)
 	}
 
