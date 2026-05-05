@@ -127,6 +127,7 @@ func runUpdateIngress(cmd *cobra.Command, _ []string) error {
 	result, err := p.UpdateIngress(ctx, cfg, postinstall.UpdateIngressOptions{
 		RemoveHAProxy:     !updateIngressKeepHAProxy,
 		ConfirmConversion: buildConvertConfirm(ctx, updateIngressYes),
+		WorkDir:           projectRoot,
 	})
 	if err != nil {
 		return err
