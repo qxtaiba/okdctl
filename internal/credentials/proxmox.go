@@ -141,10 +141,13 @@ func (c *ProxmoxCredentials) GoString() string {
 // modification of the global process environment.
 //
 // os/exec requires []string for cmd.Env, so each secret byte slice is
-// converted to an immutable Go string that Zeroize cannot overwrite.
-// Callers MUST not retain the returned slice beyond the cmd.Run (or
-// equivalent) call — pass it directly to WithEnv and let it go out of
-// scope. The source []byte fields remain wipeable via Zeroize.
+// converted to an immutable Go string that Zeroize cannot overwrite. The
+// strings live as long as any struct that stores the slice (Executor.Env,
+// Provider.env, Provisioner.pendingEnv) — typically the caller's function
+// frame, not just cmd.Run. Callers MUST pass the result directly to a
+// WithEnv option in the same frame as defer Zeroize() and MUST NOT pass
+// the slice to anything that outlives the current call stack (goroutine,
+// cache, persistent config). The source []byte fields remain wipeable.
 func (c *ProxmoxCredentials) Env() []string {
 	if !c.IsValid() {
 		return nil
