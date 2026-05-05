@@ -65,7 +65,11 @@ const (
 )
 
 func (p *Phase) installHAProxyConfig(ctx context.Context, tmpPath string) error {
-	if err := system.CopyFile(tmpPath, haproxyConfigPath); err != nil {
+	data, err := os.ReadFile(tmpPath)
+	if err != nil {
+		return &errtypes.ClusterError{Msg: "failed to read temp haproxy config", Err: err}
+	}
+	if err := system.AtomicWriteString(haproxyConfigPath, string(data), 0o644); err != nil {
 		return &errtypes.ClusterError{Msg: "failed to install haproxy config", Err: err}
 	}
 
@@ -119,7 +123,11 @@ func (p *Phase) ConfigureHAProxy(ctx context.Context, cfg *config.Config, _ *Opt
 			return cause
 		}
 		p.Log.Warn(fmt.Sprintf("haproxy: %s, restoring from backup", reason))
-		if restoreErr := system.CopyFileMode(haproxyBackupPath, haproxyConfigPath, 0o644); restoreErr != nil {
+		backupData, readErr := os.ReadFile(haproxyBackupPath)
+		if readErr != nil {
+			return errors.Join(cause, fmt.Errorf("rollback read backup failed: %w", readErr))
+		}
+		if restoreErr := system.AtomicWriteString(haproxyConfigPath, string(backupData), 0o644); restoreErr != nil {
 			return errors.Join(cause, fmt.Errorf("rollback restore failed: %w", restoreErr))
 		}
 		// Restart with the old config so the node isn't left serving the
