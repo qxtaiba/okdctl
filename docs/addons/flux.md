@@ -21,6 +21,7 @@ apply`) or if you have no Git repository to point it at.
 
 | key | default | notes |
 |---|---|---|
+| `provider` | `flux` | toolkit identifier; only `flux` is currently shipped |
 | `repository` | _(required)_ | Git URL; no default |
 | `branch` | `main` | branch to sync |
 | `path` | `kubernetes/clusters/production` | path within repo |
