@@ -77,7 +77,11 @@ func Acquire(projectRoot, verb string) (*Lock, error) {
 }
 
 // Release closes the fd (which releases the flock) and removes the lock file.
+// Release is a no-op on a nil receiver or a zero-value Lock.
 func (l *Lock) Release() {
+	if l == nil || l.f == nil {
+		return
+	}
 	path := l.f.Name()
 	_ = l.f.Close()
 	_ = os.Remove(path)
