@@ -192,7 +192,14 @@ func startMetricsServer(addr string, allowNetwork bool) (func(), []okd.Provision
 	rec := deploymetrics.NewRecorder()
 	mux := http.NewServeMux()
 	mux.Handle("/metrics", rec.Handler())
-	srv := &http.Server{Addr: addr, Handler: mux, ReadHeaderTimeout: 5 * time.Second}
+	srv := &http.Server{
+		Addr:              addr,
+		Handler:           mux,
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       10 * time.Second,
+		WriteTimeout:      10 * time.Second,
+		IdleTimeout:       60 * time.Second,
+	}
 	go func() { _ = srv.ListenAndServe() }()
 	tui.Info("metrics endpoint listening", tui.LF("addr", addr))
 	stop := func() {
