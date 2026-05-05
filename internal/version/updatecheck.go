@@ -121,6 +121,18 @@ func loadCache() (cacheEntry, bool) {
 		return cacheEntry{}, false
 	}
 
+	// Refuse group/world-writable cache: a writable cache dir lets a local
+	// user poison the entry if a future field ever drives behaviour.
+	if fi, err := os.Stat(path); err == nil {
+		if fi.Mode().Perm()&0o022 != 0 {
+			slog.Warn("update cache has unsafe permissions; ignoring",
+				"path", path,
+				"mode", fi.Mode().Perm(),
+			)
+			return cacheEntry{}, false
+		}
+	}
+
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return cacheEntry{}, false
