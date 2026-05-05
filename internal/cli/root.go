@@ -127,7 +127,7 @@ func execute() int {
 }
 
 func printUpdateNotice(ch <-chan version.CheckResult) {
-	if logQuiet || logFormat == "json" {
+	if logQuiet || logFormat == outputJSON {
 		return
 	}
 	var result version.CheckResult
