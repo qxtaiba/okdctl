@@ -125,6 +125,10 @@ write the comment — then it carries real information.
   writing local wrappers.
 - `addon.BuildOpaqueSecret` is the canonical k8s Opaque Secret manifest
   builder for addons.
+- SSH shell policy: new SSH operations MUST use `SSHRunArgv` (argv-mode).
+  `SSHRun` (sh -c with a string argument) is used only in
+  `phase/iso_cleanup.go::RemoveFCOSISOFromProxmox` — see that function for
+  the required `validateXxx` + `shellSingleQuote` layering pattern.
 
 ## Tooling
 
