@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -34,12 +35,13 @@ func TestRemoveHAProxy_EmptyVIPSkipsVerify(t *testing.T) {
 	}
 }
 
-// TestRemoveHAProxy_KubeVIPHealthcheck verifies that RemoveHAProxy selects
-// the CA-verified http.Client when the kubeconfig CA is present. The
-// discriminant: a successful TLS handshake lets the VIP check pass so
-// RemoveHAProxy advances to the oc hostname check, returning
-// *errtypes.ClusterError. A TLS verification failure would return
-// *errtypes.NetworkError from the VIP check instead.
+// TestRemoveHAProxy_KubeVIPHealthcheck verifies CA-pool handling in
+// RemoveHAProxy. With kubeconfig present, the CA-verified http.Client lets
+// the VIP /healthz check succeed and RemoveHAProxy advances to the oc
+// hostname check, returning *errtypes.ClusterError. With kubeconfig absent,
+// CA-pool retrieval fails and RemoveHAProxy MUST hard-error with
+// *errtypes.ClusterError naming the missing CA — never fall back to
+// InsecureSkipVerify (sec:761e5126).
 func TestRemoveHAProxy_KubeVIPHealthcheck(t *testing.T) {
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/healthz" {
@@ -88,18 +90,17 @@ func TestRemoveHAProxy_KubeVIPHealthcheck(t *testing.T) {
 		t.Fatalf("expected ClusterError from oc hostname check; got: %T %v", err, err)
 	}
 
-	t.Run("insecure_fallback_when_kubeconfig_absent", func(t *testing.T) {
+	t.Run("hard_errors_when_kubeconfig_absent", func(t *testing.T) {
 		emptyDir := t.TempDir()
 		p2 := New(executor.New(), logutil.NopLogger, "test")
 		err2 := p2.RemoveHAProxy(context.Background(), "127.0.0.1", emptyDir)
 
-		var net2 *errtypes.NetworkError
-		if errors.As(err2, &net2) {
-			t.Fatalf("insecure fallback returned NetworkError from VIP check: %v", err2)
-		}
 		var cluster2 *errtypes.ClusterError
 		if !errors.As(err2, &cluster2) {
-			t.Fatalf("expected ClusterError from oc hostname check; got: %T %v", err2, err2)
+			t.Fatalf("expected ClusterError from missing-CA hard-error path; got: %T %v", err2, err2)
+		}
+		if !strings.Contains(cluster2.Msg, "kubeconfig CA unavailable") {
+			t.Fatalf("ClusterError.Msg does not name the missing CA — fix may have regressed to InsecureSkipVerify fallback: %q", cluster2.Msg)
 		}
 	})
 }
