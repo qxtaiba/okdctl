@@ -3,14 +3,12 @@ package postinstall
 import (
 	"context"
 	"fmt"
-	"path/filepath"
 
 	"github.com/qxtaiba/okdctl/internal/addon"
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/distribution"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
-	"github.com/qxtaiba/okdctl/internal/system"
 )
 
 // Postinstall StepIDs. These identify each step in Phase.Run order
@@ -45,16 +43,9 @@ func (p *Phase) postinstallSteps(cfg *config.Config, opts *Options, pctx *distri
 		},
 		{
 			ID: StepCleanupBootstrap, Name: "cleanup bootstrap vm",
-			ReRunSafe: distribution.ReRunSafeNo,
+			ReRunSafe: distribution.ReRunSafeYes,
 			Desc:      "destroying bootstrap vm via terraform",
 			NonFatal:  true,
-			// tfvars is absent when bootstrap was not provisioned by this run;
-			// skip rather than return nil so the orchestrator records Skipped=true.
-			SkipWhen: func() bool {
-				tfvarsFile := filepath.Join(opts.ProjectRoot, "infrastructure", "terraform", "environments", opts.TerraformEnv, "terraform.tfvars")
-				return !system.FileExists(tfvarsFile)
-			},
-			SkipReason: "terraform.tfvars not present — bootstrap not provisioned by this run",
 			Exec: func(ctx context.Context) error {
 				if err := p.CleanupBootstrap(ctx, cfg, opts); err != nil {
 					return &errtypes.ClusterError{Msg: "bootstrap cleanup failed", Err: err}
