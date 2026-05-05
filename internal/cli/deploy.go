@@ -54,6 +54,12 @@ func runDeploy(cmd *cobra.Command, _ []string) error {
 	ctx := cmd.Context()
 	tui.SetRunID(uuid.NewString())
 
+	if deployMetricsAllowNetwork && deployMetricsAddr == "" {
+		return &errtypes.ConfigError{
+			Msg: "--metrics-allow-network requires --metrics-addr (the flag has no effect on its own)",
+		}
+	}
+
 	configExists := false
 	var cfg *config.Config
 
