@@ -68,13 +68,11 @@ func (p *Phase) RemoveHAProxy(ctx context.Context, vip, clusterDir string) error
 		p.Log.Info("haproxy: verifying api reachable via vip after teardown")
 		kubeconfigPath := filepath.Join(clusterDir, "auth", "kubeconfig")
 		var healthClient *http.Client
-		if pool, caErr := httputil.KubeconfigCAPool(kubeconfigPath); caErr != nil {
-			// CA unavailable post-install — warn; kubeconfig should exist at this point.
-			p.Log.Warn("haproxy: kubeconfig CA unavailable, TLS verification skipped", "err", caErr)
-			healthClient = httputil.NewInsecure(5 * time.Second)
-		} else {
-			healthClient = httputil.NewWithCA(pool, 5*time.Second)
+		pool, caErr := httputil.KubeconfigCAPool(kubeconfigPath)
+		if caErr != nil {
+			return &errtypes.ClusterError{Msg: "kubeconfig CA unavailable; cannot verify api via vip", Err: caErr}
 		}
+		healthClient = httputil.NewWithCA(pool, 5*time.Second)
 		healthURL := fmt.Sprintf("https://%s:%d/healthz", vip, haproxyHealthPort)
 		if waitErr := system.WaitForWithTimeout(ctx, "haproxy", "api-via-vip", func() bool {
 			req, rErr := http.NewRequestWithContext(ctx, http.MethodGet, healthURL, http.NoBody)
