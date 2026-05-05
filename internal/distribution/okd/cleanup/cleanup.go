@@ -1,9 +1,7 @@
 // Package cleanup provides utilities for removing OKD cluster artifacts.
 // Cleanup is best-effort: a mid-run crash leaves workDir in a partially-removed
 // state with no resume capability. Terraform state is removed last so destroy
-// stays re-runnable as long as earlier steps have not corrupted it. A two-pass
-// design with a .cleanup-plan.json checkpoint would convert the flow to
-// declarative resume; that is not yet implemented.
+// stays re-runnable as long as earlier steps have not corrupted it.
 package cleanup
 
 import (
