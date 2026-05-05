@@ -65,10 +65,6 @@ func writeDnsmasqConfig(ctx context.Context, name, content string) error {
 
 	configPath := filepath.Join(dnsmasqConfigDir, fmt.Sprintf("%s.conf", name))
 
-	if err := os.MkdirAll(dnsmasqConfigDir, 0o755); err != nil {
-		return fmt.Errorf("failed to create dnsmasq config directory: %w", err)
-	}
-
 	if system.FileExists(configPath) {
 		backupPath := configPath + ".backup"
 		if err := system.CopyFile(configPath, backupPath); err != nil {
@@ -76,17 +72,8 @@ func writeDnsmasqConfig(ctx context.Context, name, content string) error {
 		}
 	}
 
-	tmpPath, err := system.WriteTempFile("dnsmasq-*.conf", 0o644, func(f *os.File) error {
-		_, err := f.WriteString(content)
-		return err
-	})
-	if err != nil {
-		return fmt.Errorf("failed to write temp config: %w", err)
-	}
-	defer func() { _ = os.Remove(tmpPath) }()
-
-	if err := system.CopyFile(tmpPath, configPath); err != nil {
-		return fmt.Errorf("failed to copy config to %s: %w", configPath, err)
+	if err := system.AtomicWriteString(configPath, content, 0o644); err != nil {
+		return fmt.Errorf("failed to write config %s: %w", configPath, err)
 	}
 
 	return nil
