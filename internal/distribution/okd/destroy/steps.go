@@ -52,6 +52,15 @@ func (t *destroyTracker) skipWhen(label string, fn func() bool) func() bool {
 	}
 }
 
+func (t *destroyTracker) terraformFailed() bool {
+	for _, f := range t.failures {
+		if f == "terraform destroy" {
+			return true
+		}
+	}
+	return false
+}
+
 func (p *Phase) destroySteps(cfg *config.Config, opts *Options) []distribution.StepDef {
 	t := &destroyTracker{log: p.Log}
 	track, trackSkip := t.onError, t.skipWhen
@@ -98,13 +107,18 @@ func (p *Phase) destroySteps(cfg *config.Config, opts *Options) []distribution.S
 				if err != nil {
 					return err
 				}
+				kind := opts.CleanupKind
+				if t.terraformFailed() && kind == cleanup.Full {
+					p.Log.Warn("destroy: terraform failed, preserving tfvars / .terraform/ for retry — re-run okdctl destroy to retry")
+					kind = cleanup.WorkOnly
+				}
 				cleanupOpts := &cleanup.Options{
 					BaseOptions: phase.BaseOptions{
 						WorkDir:      opts.WorkDir,
 						ProjectRoot:  opts.ProjectRoot,
 						TerraformEnv: opts.TerraformEnv,
 					},
-					Kind:           opts.CleanupKind,
+					Kind:           kind,
 					HTTPServerRoot: cfg.HTTPServer.Root,
 					HAProxyConfig:  phase.DefaultHAProxyConfigPath,
 					VIP:            vip,
