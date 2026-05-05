@@ -127,6 +127,9 @@ func execute() int {
 }
 
 func printUpdateNotice(ch <-chan version.CheckResult) {
+	if logQuiet || logFormat == "json" {
+		return
+	}
 	var result version.CheckResult
 	t := time.NewTimer(100 * time.Millisecond)
 	defer t.Stop()
@@ -138,9 +141,9 @@ func printUpdateNotice(ch <-chan version.CheckResult) {
 	if result.LatestTag == "" {
 		return
 	}
-	fmt.Println()
-	fmt.Println(tui.WarningStyle.Render("update available:") + " " +
-		tui.MutedStyle.Render(version.Version) + " → " +
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, tui.WarningStyle.Render("update available:")+" "+
+		tui.MutedStyle.Render(version.Version)+" → "+
 		tui.HighlightStyle.Render(result.LatestTag))
 }
 
