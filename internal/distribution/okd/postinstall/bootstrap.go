@@ -14,8 +14,8 @@ import (
 // CleanupBootstrap destroys the bootstrap VM by re-applying terraform with bootstrap_enabled=false.
 // Uses -target to scope the operation to the bootstrap resource only, preventing
 // unintended side effects on other resources (e.g., workers being shut down).
-// Caller must ensure terraform.tfvars exists; wire the precondition via
-// StepDef.SkipWhen rather than checking inside this function.
+// Re-running after the VM is already gone is a no-op: terraform reports zero
+// changes and apply succeeds cleanly.
 func (p *Phase) CleanupBootstrap(ctx context.Context, cfg *config.Config, opts *Options) error {
 	terraformDir := filepath.Join(opts.ProjectRoot, "infrastructure", "terraform", "environments", opts.TerraformEnv)
 
