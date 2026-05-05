@@ -114,7 +114,11 @@ func TestValidateConnectionName(t *testing.T) {
 		{name: "with space", input: "Wired connection 1"},
 		{name: "hyphen underscore", input: "my-conn_1"},
 		{name: "dot and colon", input: "br0:1"},
+		{name: "slash in name", input: "br0/dnsmasq"},
+		{name: "dot hyphen underscore", input: "a.b-c_d"},
+		{name: "max length 128", input: strings.Repeat("a", 128)},
 		{name: "empty", input: "", wantErr: true},
+		{name: "too long 129", input: strings.Repeat("a", 129), wantErr: true},
 		{name: "semicolon", input: "eth0;id", wantErr: true},
 		{name: "newline", input: "eth0\nid", wantErr: true},
 		{name: "carriage return", input: "eth0\rid", wantErr: true},
@@ -125,6 +129,7 @@ func TestValidateConnectionName(t *testing.T) {
 		{name: "greater than", input: "eth>0", wantErr: true},
 		{name: "pipe", input: "eth0|id", wantErr: true},
 		{name: "ampersand", input: "eth0&id", wantErr: true},
+		{name: "shell injection", input: "; rm -rf /", wantErr: true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -145,7 +150,7 @@ func TestGetActiveConnectionRejectsUnsafeName(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for unsafe connection name, got nil")
 	}
-	if !strings.Contains(err.Error(), "unsafe character") {
-		t.Errorf("error does not mention unsafe character: %q", err.Error())
+	if !strings.Contains(err.Error(), "does not match allowed character set") {
+		t.Errorf("error does not mention allowlist rejection: %q", err.Error())
 	}
 }

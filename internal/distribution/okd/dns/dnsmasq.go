@@ -25,6 +25,13 @@ var dnsmasqConfigDir = phase.DefaultDNSMasqConfigDir
 
 var validConfigNameRegex = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$`)
 
+// validConnectionNameRegex is an allowlist for nmcli connection names. It
+// accepts the realistic NetworkManager name space (alphanumerics, space,
+// dot, underscore, slash, colon for interface aliases like br0:1, hyphen,
+// up to 128 chars) and rejects everything else, including all shell
+// metacharacters not enumerated.
+var validConnectionNameRegex = regexp.MustCompile(`^[A-Za-z0-9 ._/:-]{1,128}$`)
+
 // EnableDnsmasq enables and starts the dnsmasq service.
 func EnableDnsmasq(ctx context.Context) error {
 	return system.ManageService(ctx, system.ServiceEnable, dnsmasqService, "dnsmasq")
@@ -100,20 +107,16 @@ func IsNetworkManagerActive(ctx context.Context) bool {
 	return system.IsServiceActive(ctx, "NetworkManager")
 }
 
-// validateConnectionName rejects connection names containing characters
-// that would be dangerous in a shell context. argv invocations are safe
-// today, but these characters also indicate malformed or poisoned nmcli
-// output. Spaces are allowed: NetworkManager permits them in connection
-// names.
+// validateConnectionName accepts only names matching validConnectionNameRegex.
+// The allowlist fails-closed: any nmcli output containing characters outside
+// the realistic NetworkManager name space is rejected, including every shell
+// metacharacter (the previous denylist could grow stale).
 func validateConnectionName(name string) error {
 	if name == "" {
 		return fmt.Errorf("connection name must not be empty")
 	}
-	const forbidden = ";\n\r\x00`$<>|&"
-	for _, r := range forbidden {
-		if strings.ContainsRune(name, r) {
-			return fmt.Errorf("connection name %q contains unsafe character %q", name, string(r))
-		}
+	if !validConnectionNameRegex.MatchString(name) {
+		return fmt.Errorf("connection name %q does not match allowed character set", name)
 	}
 	return nil
 }
