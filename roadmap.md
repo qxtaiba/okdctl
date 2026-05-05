@@ -1667,16 +1667,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Replace with `tui.Warn("skipping HostNetwork conversion", tui.LF("err", err))`.  
 **Effort:** hours
 
-##### `obs:0d318f5c:no-tty-format-default-mismatch` — no tty format default mismatch
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/obs-0d318f5c-tty-format  
-**Severity:** minor  
-**Cluster:** handler-setup — seam→audit-cli-ux  
-**Evidence:** `internal/cli/logging.go:35-67`  
-**Problem:** configureLogging defaults `--log-format=text` regardless of TTY state. When stderr is piped (e.g. `okdctl deploy 2>&1 | tee log.txt`), text-formatted ANSI/colored output bleeds into the captured file unless the user explicitly passes `--log-format=json`. The repo correctly disables progress bars when stderr is non-TTY (L59-64), but the equivalent format auto-switch (text-when-TTY, json-when-pipe) is missing — this is the textbook 'handler-no-tty-switch' pattern. Note: progressBars already keys off stderrIsTTY; adding a parallel default-format switch is symmetric.  
-**Fix:** After the existing TTY detection (L59-60), if logFormat was not explicitly passed (track via a sentinel like '' or a separate flag-changed bool from cobra), default to 'json' when stderrIsTTY=false and 'text' otherwise. Document in the help text. Risk=medium because users with existing pipelines that grep text might see the format flip and complain; cushion with a one-release deprecation.  
-**Effort:** hours
-
 ##### `obs:1e8ffb91:degraded-operator-loop-could-aggregate` — degraded operator loop could aggregate
 
 **Status:** not started  
@@ -1976,16 +1966,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `docs/architecture/phases.md:40-51`  
 **Problem:** Documented StepDef shape is missing ReRunSafe (mandatory — BuildSteps panics if unset), AlreadyDone (consulted before Exec), and OnStart hook. Recent commit 1e505e9 'require ReRunSafe declaration on every StepDef' added the field; doc was not regenerated.  
 **Fix:** Update the StepDef code block in docs/architecture/phases.md to mirror the canonical struct in internal/distribution/step.go (add ReRunSafe, AlreadyDone, OnStart). Add a short note that ReRunSafe is mandatory — BuildSteps panics with 'must declare ReRunSafe' when unset.  
-**Effort:** hours
-
-##### `doc:aa84670c:exit-code-77-pkgdoc-drift` — exit code 77 pkgdoc drift
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/doc-aa84670c-exit-77  
-**Severity:** major  
-**Cluster:** package-doc  
-**Evidence:** `internal/cli/root.go:1-13`  
-**Problem:** Package doc claims invoked-as-root exits 77 (EX_NOPERM, set in cmd/okdctl/main.go) but cmd/okdctl/main.go contains no rejection code; ensureRoot in elevation.go returns errtypes.AuthError which exitCodeFor maps to 5. docs/cli/exit-codes.md correctly documents code 5; the package doc is the single source of drift.  
-**Fix:** Edit the package doc in internal/cli/root.go to drop the '77 (EX_NOPERM)' line — invoked-as-root rejection actually surfaces as AuthError -> 5, matching docs/cli/exit-codes.md. If 77 is desired (sysexits-style), introduce a sentinel and add to exitCodeFor; otherwise just remove the false claim.  
 **Effort:** hours
 
 ##### `doc:8f46b665:phases-basephase-missing-recorder` — phases basephase missing recorder
