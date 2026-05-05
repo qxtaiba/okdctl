@@ -63,7 +63,13 @@ func configureLogging() error {
 	noColor := os.Getenv("NO_COLOR") != ""
 	progressBars := stderrIsTTY && stdoutIsTTY && logFormat != "json" && !noColor
 
-	return tui.ConfigureLoggers(effectiveLevel, logFormat, stdoutW, stderrW, progressBars)
+	if err := tui.ConfigureLoggers(effectiveLevel, logFormat, stdoutW, stderrW, progressBars); err != nil {
+		return err
+	}
+	if logFormat == "json" && !logVerbose {
+		tui.SuppressInfo()
+	}
+	return nil
 }
 
 // quietForJSON raises the stderr log level to error when --format=json is
