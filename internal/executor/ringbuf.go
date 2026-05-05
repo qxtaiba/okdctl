@@ -7,6 +7,10 @@ import "strings"
 // output; earlier output is discarded once the buffer is full.
 const constMaxLines = 200
 
+// maxPartial caps the partial buffer so a subprocess that never emits a
+// newline cannot grow it without bound.
+const maxPartial = 64 * 1024
+
 // ringWriter is an io.Writer that retains only the last max lines written
 // to it. It is NOT thread-safe; os/exec writes to cmd.Stdout and cmd.Stderr
 // from a single goroutine per pipe, so no locking is needed for a single
@@ -37,6 +41,10 @@ func (r *ringWriter) Write(p []byte) (int, error) {
 		}
 		r.push(s[:idx])
 		s = s[idx+1:]
+	}
+	for len(r.partial) > maxPartial {
+		r.push(r.partial[:maxPartial])
+		r.partial = r.partial[maxPartial:]
 	}
 	return n, nil
 }
