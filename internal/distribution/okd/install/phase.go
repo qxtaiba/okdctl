@@ -84,6 +84,8 @@ type Phase struct {
 	phase.BasePhase
 	// Reporter signals long-running operations; defaults to NopProgressReporter
 	// so headless callers run silent. The CLI sets it to tui.StartSpinner.
+	// Roadmap api:beabab0c will replace this exported field with a
+	// WithReporter functional option threaded through New.
 	Reporter logutil.ProgressReporter
 	// startMonitorCmd, when non-nil, replaces the default subprocess
 	// start-and-wait used by MonitorInstallation. Tests inject a pure-Go
