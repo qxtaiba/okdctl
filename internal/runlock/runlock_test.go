@@ -134,3 +134,26 @@ func TestConflictReturnsConfigError(t *testing.T) {
 		t.Fatalf("expected *errtypes.ConfigError, got %T: %v", err, err)
 	}
 }
+
+func TestAcquire_RefusesSymlink(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root bypasses symlink restrictions; test is only meaningful as non-root")
+	}
+	dir := t.TempDir()
+	link := filepath.Join(dir, ".okdctl.lock")
+	if err := os.Symlink("/tmp/okdctl-sentinel", link); err != nil {
+		t.Fatalf("symlink: %v", err)
+	}
+
+	_, err := runlock.Acquire(dir, "deploy")
+	if err == nil {
+		t.Fatal("Acquire accepted a symlink at the lock path; symlink-refusal guard regressed")
+	}
+	var cfgErr *errtypes.ConfigError
+	if !errors.As(err, &cfgErr) {
+		t.Fatalf("expected *errtypes.ConfigError, got %T: %v", err, err)
+	}
+	if !strings.Contains(cfgErr.Msg, "symlink") {
+		t.Fatalf("ConfigError.Msg does not name rejection reason: %q", cfgErr.Msg)
+	}
+}
