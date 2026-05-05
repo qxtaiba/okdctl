@@ -9,7 +9,6 @@ import (
 	"os"
 	"os/exec"
 	"slices"
-	"strings"
 
 	"github.com/qxtaiba/okdctl/internal/system"
 )
@@ -121,13 +120,7 @@ func (m *Manager) AddRepo(ctx context.Context, name, url string, logger *slog.Lo
 		return system.RunCaptured(ctx, m.pkgCmd, "config-manager", "--add-repo", url)
 	}
 
-	dpkgOut, err := exec.CommandContext(ctx, "dpkg", "--print-architecture").Output()
-	if err != nil {
-		return fmt.Errorf("failed to detect architecture: %w", err)
-	}
-	arch := strings.TrimSpace(string(dpkgOut))
-
-	listContent := fmt.Sprintf("deb [arch=%s] %s any main\n", arch, url)
+	listContent := fmt.Sprintf("deb [arch=%s] %s any main\n", DownloadArch(), url)
 	listPath := fmt.Sprintf("/etc/apt/sources.list.d/%s.list", name)
 
 	tmpPath, err := system.WriteTempFile("apt-repo", 0o644, func(f *os.File) error {
