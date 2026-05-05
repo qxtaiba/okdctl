@@ -151,6 +151,57 @@ func TestTerraform_AllEnvs_PreservesEachState(t *testing.T) {
 	}
 }
 
+// TestCleanupTerraformEnv_PartialFailureDoesNotAbort verifies that an
+// EPERM on .terraform/providers does not abort the loop: tfvars is still
+// removed, terraform.tfstate still survives.
+func TestCleanupTerraformEnv_PartialFailureDoesNotAbort(t *testing.T) {
+	if os.Getuid() == 0 {
+		t.Skip("requires non-root for chmod-based EPERM")
+	}
+
+	dir := t.TempDir()
+	seed := map[string]string{
+		"terraform.tfvars":         "vars",
+		"terraform.tfstate":        `{"version":4,"resources":[]}`,
+		"terraform.tfstate.backup": "backup",
+	}
+	for name, body := range seed {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	dotTerraform := filepath.Join(dir, ".terraform")
+	if err := os.MkdirAll(filepath.Join(dotTerraform, "providers"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dotTerraform, "providers", "somefile"), []byte("prov"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(dotTerraform, 0o500); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(dotTerraform, 0o700) })
+
+	if err := cleanupTerraformEnv(context.Background(), dir, "production", logutil.NopLogger); err != nil {
+		t.Fatalf("cleanupTerraformEnv must return nil on partial failure; got %v", err)
+	}
+
+	if _, err := os.Stat(filepath.Join(dir, "terraform.tfvars")); !os.IsNotExist(err) {
+		t.Errorf("terraform.tfvars not removed despite being reachable: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "terraform.tfstate")); err != nil {
+		t.Fatalf("terraform.tfstate removed (DATA LOSS): %v", err)
+	}
+	body, err := os.ReadFile(filepath.Join(dir, "terraform.tfstate"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(body) != `{"version":4,"resources":[]}` {
+		t.Errorf("terraform.tfstate mutated: %q", body)
+	}
+}
+
 // TestTerraform_SingleEnv_PreservesState combines the Terraform() entry
 // point with the tfstate-preservation contract.
 func TestTerraform_SingleEnv_PreservesState(t *testing.T) {
