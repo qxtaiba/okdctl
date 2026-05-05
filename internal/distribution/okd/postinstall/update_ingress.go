@@ -505,13 +505,16 @@ func buildRollbackJSON(ic *ingressControllerInfo) (string, error) {
 	if metaRaw, ok := obj["metadata"]; ok {
 		var meta map[string]json.RawMessage
 		if err := json.Unmarshal(metaRaw, &meta); err == nil {
+			kept := make(map[string]json.RawMessage, 6)
 			for _, field := range []string{
-				"creationTimestamp", "generation", "resourceVersion",
-				"selfLink", "uid", "managedFields",
+				"name", "namespace", "labels", "annotations",
+				"ownerReferences", "finalizers",
 			} {
-				delete(meta, field)
+				if v, exists := meta[field]; exists {
+					kept[field] = v
+				}
 			}
-			if cleaned, err := json.Marshal(meta); err == nil {
+			if cleaned, err := json.Marshal(kept); err == nil {
 				obj["metadata"] = cleaned
 			}
 		}
