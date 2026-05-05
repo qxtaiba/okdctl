@@ -87,7 +87,7 @@ func (p *Phase) RemoveHAProxy(ctx context.Context, vip, clusterDir string) error
 			body, _ := io.ReadAll(resp.Body)
 			return resp.StatusCode == http.StatusOK && strings.TrimSpace(string(body)) == healthzOKBody
 		}, haproxyVIPTimeout, p.Log); waitErr != nil {
-			return &errtypes.NetworkError{Msg: fmt.Sprintf("api not reachable via vip %s after haproxy removal", vip), Err: waitErr}
+			return &errtypes.ClusterError{Msg: fmt.Sprintf("api not reachable via vip %s after haproxy removal", vip), Err: waitErr}
 		}
 		if !vipRemoved {
 			p.Log.Warn("haproxy: api is reachable but vip was not removed from bastion — traffic may still route through haproxy")
