@@ -34,26 +34,57 @@ func (p *Phase) logISOFound(isoPath string) {
 	p.Log.Info("coreos: iso found", "iso", base)
 }
 
+// isoResolution describes how a configured FCOSIso spec was resolved.
+type isoResolution int
+
+const (
+	isoEmpty    isoResolution = iota // unconfigured: caller globs
+	isoResolved                      // configured + present: return path
+	isoMissing                       // configured + absent: caller errors
+)
+
+// resolveConfiguredISO maps cfg.Provider.Proxmox.FCOSIso to one of three
+// states. ":iso/<file>" is resolved relative to phase.DefaultProxmoxISODir;
+// a bare "local:iso" pool reference (no filename) is treated as isoEmpty
+// so glob auto-detection still applies; bare paths are checked via
+// system.FileExists. Returning isoMissing prevents the previous silent
+// fallthrough to the glob loop on a misconfigured operator-pinned ISO.
+func resolveConfiguredISO(spec string) (string, isoResolution) {
+	if spec == "" {
+		return "", isoEmpty
+	}
+	switch {
+	case strings.Contains(spec, ":iso/"):
+		parts := strings.SplitN(spec, ":iso/", 2)
+		if len(parts) == 2 && parts[1] != "" {
+			resolved := filepath.Join(phase.DefaultProxmoxISODir, parts[1])
+			if system.FileExists(resolved) {
+				return resolved, isoResolved
+			}
+			return resolved, isoMissing
+		}
+		return "", isoEmpty
+	case strings.HasPrefix(spec, "local:iso"):
+		return "", isoEmpty
+	default:
+		if system.FileExists(spec) {
+			return spec, isoResolved
+		}
+		return spec, isoMissing
+	}
+}
+
 func (p *Phase) findOrDownloadFCOSISO(ctx context.Context, cfg *config.Config, opts *Options) (string, error) {
 	isoDir := phase.DefaultProxmoxISODir
 
-	if cfg.Provider.Proxmox != nil && cfg.Provider.Proxmox.FCOSIso != "" {
-		fcosISO := cfg.Provider.Proxmox.FCOSIso
-		// Handle Proxmox storage format like "local:iso/filename.iso"
-		switch {
-		case strings.Contains(fcosISO, ":iso/"):
-			parts := strings.SplitN(fcosISO, ":iso/", 2)
-			if len(parts) == 2 {
-				resolvedPath := filepath.Join(isoDir, parts[1])
-				if system.FileExists(resolvedPath) {
-					return resolvedPath, nil
-				}
-			}
-		case strings.HasPrefix(fcosISO, "local:iso"):
-			// Just storage reference without specific file - search for FCOS ISO
-		default:
-			if system.FileExists(fcosISO) {
-				return fcosISO, nil
+	if cfg.Provider.Proxmox != nil {
+		path, res := resolveConfiguredISO(cfg.Provider.Proxmox.FCOSIso)
+		switch res {
+		case isoResolved:
+			return path, nil
+		case isoMissing:
+			return "", &errtypes.ConfigError{
+				Msg: fmt.Sprintf("configured FCOS ISO not found: %s", cfg.Provider.Proxmox.FCOSIso),
 			}
 		}
 	}
