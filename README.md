@@ -25,10 +25,10 @@ okdctl is **Linux-only**. The deploy phase shells out to `dnf`/`apt`,
 `firewall-cmd`, `nmcli`, and `systemctl` — none of which exist on macOS or
 Windows. Install on the bastion host you intend to deploy from.
 
-**curl | sh** (verifies SHA256):
+**curl | bash** (verifies SHA256):
 
-```sh
-curl -sSfL https://raw.githubusercontent.com/qxtaiba/okdctl/main/scripts/install.sh | sh
+```bash
+curl -sSfL https://raw.githubusercontent.com/qxtaiba/okdctl/main/scripts/install.sh | bash
 ```
 
 **`.deb` / `.rpm`** from the [releases page](https://github.com/qxtaiba/okdctl/releases)
