@@ -16,11 +16,14 @@ import (
 	"github.com/qxtaiba/okdctl/internal/logutil"
 )
 
+// Family identifies the host OS lineage (RHEL or Debian).
+type Family string
+
 // Platform OS-family identifiers and supported arch literals.
 const (
 	archARM64    = "arm64"
-	FamilyRHEL   = "rhel"
-	FamilyDebian = "debian"
+	FamilyRHEL   Family = "rhel"
+	FamilyDebian Family = "debian"
 )
 
 // DownloadArch returns the architecture suffix for tool download URLs.
@@ -41,7 +44,7 @@ func CoreOSArch() string {
 
 // OS describes the detected host operating system.
 type OS struct {
-	Family  string // "rhel", "debian"
+	Family  Family
 	ID      string // "fedora", "ubuntu", "rocky", "almalinux", "rhel", "debian"
 	Version string // "39", "24.04"
 }
@@ -106,7 +109,7 @@ func parseOSRelease(content string) (OS, error) {
 	}, nil
 }
 
-func detectFamily(id, idLike string) string {
+func detectFamily(id, idLike string) Family {
 	if rhelIDs[id] {
 		return FamilyRHEL
 	}
