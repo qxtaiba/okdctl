@@ -5143,3 +5143,119 @@ callers.
 **Effort:** hours
 
 
+
+- **`tst:881d089e:runlock-symlink-untested`** — done 2026-05-05 — PR #341,
+  merge commit `0532dfd`. Tier I blocker (canonical-helper-untested).
+  Added `TestAcquire_RefusesSymlink` mirroring `cli/logging_test.go:TestOpenLogFileRefusesSymlink`. Plants a dangling symlink at `<dir>/.okdctl.lock`, calls `runlock.Acquire`, asserts `*errtypes.ConfigError` whose `Msg` contains `"symlink"`. Skips on `os.Geteuid()==0` since root bypasses the DAC restrictions. **Postmortem lesson:** dangling symlinks beat symlinks-to-existing-files in security tests — minimal surface, no filesystem state to mask regressions.
+
+- **`sec:1e8ffb91:tls-fallback-skip-verify`** — done 2026-05-05 — PR #342,
+  merge commit `29a3ad2`. Tier I major (tls-network).
+  `verifyKubeVIPAPIHealthBootstrap` previously fell back to `InsecureSkipVerify` when `KubeconfigCAPool` failed, even outside the documented `x509.HostnameError` window — an attacker with bastion-network access could spoof healthy responses. Made CA-pool retrieval a hard error returning `*errtypes.ClusterError`. **Postmortem lesson:** defense-in-depth fallbacks on credential-bearing probes are an anti-pattern when the probe outcome gates destructive state changes.
+
+- **`state:368b892b:tf-state-backup-still-cleaned`** — done 2026-05-05 — PR #344,
+  merge commit `3001b8b`. Tier I major (tf-state-atomicity).
+  `terraformFilesToRemove` was wiping `terraform.tfstate.backup` on every destroy. Removed entry and added positive assertion that backup survives. **Postmortem lesson:** distinguish user state (preserve), generated artefacts (delete), rollback metadata (preserve unless opt-in removed) — the third bucket is easy to miss in a denylist.
+
+- **`sub:eb479d86:argv-concat-into-ssh-cmd`** — done 2026-05-05 — PR #345,
+  merge commit `3f8dfae`. Tier I major (argv-construction).
+  `remoteISO256` was building the remote ssh command via raw string concat. Switched to `phase.SSHRunArgv(ctx, exec, host, "sha256sum", "--", target)`. **Postmortem lesson:** `SSHRunArgv` is not a silver bullet — its doc warns ssh joins atoms with spaces remotely. Filename-from-config sites should pair argv mode with an upstream allowlist.
+
+- **`state:0f076161:dry-run-no-runlock`** — done 2026-05-05 — PR #346,
+  merge commit `e50210b`. Tier I major (tf-state-atomicity).
+  `runDestroyDryRun` and `runDeployDryRun` ran `terraform init`+`plan` against the shared `.terraform/` directory without holding the project runlock. Added `runlock.Acquire(projectRoot, "<verb> --dry-run")` after `resolveProjectRootOrDie`. **Postmortem lesson:** dry-run paths share on-disk state with non-dry-run paths and need the same concurrency guards.
+
+- **`err:26a430ee:sudo-missing-sentinel-not-wrapped`** — done 2026-05-05 — PR #347,
+  merge commit `62ff3c7`. Tier I major (sentinel-vs-typed).
+  `ensureRoot` returned `&errtypes.AuthError{Err: lookPathErr}` so `errors.Is(err, errtypes.ErrSudoMissing)` was false at runtime — `exitCodeFor` returned 5 instead of 71 (sysexits EX_OSERR). Wrapped via `errors.Join(err, errtypes.ErrSudoMissing)`. **Postmortem lesson:** every production site that should map to a sentinel exit code must include the sentinel in its `Err` chain — the standalone `exitCodeFor` test doesn't catch the integration gap.
+
+- **`iac:b803fcb7:sh-shellcheck-scope-gap`** — done 2026-05-05 — PR #348,
+  merge commit `a1b9588`. Tier I major (install-sh-fail-closed).
+  lint-shell job restricted shellcheck `scandir` to `./scripts`, leaving `.github/scripts/coverage-check.sh` (82-line bash) unlinted. Dropped the `scandir` line. **Postmortem lesson:** every shell script in CI is a candidate for shellcheck — restricting scope to a single directory is fragile when scripts grow elsewhere.
+
+- **`ux:aa84670c:update-notice-on-stdout`** — done 2026-05-05 — PR #349,
+  merge commit `36658cd`. Tier I major (streams).
+  `printUpdateNotice` wrote the update banner via `fmt.Println` to stdout, corrupting JSON streams for `okdctl status --format=json | jq` consumers. Routed via `fmt.Fprintln(os.Stderr, ...)` and gated on `!logQuiet && logFormat != "json"`. **Postmortem lesson:** any stdout write outside the subcommand's declared output is a JSON-pipeline footgun.
+
+- **`sec:40d315ad:argv-injection-leading-dash-host`** — done 2026-05-05 — PR #350,
+  merge commit `63cb5c2`. Tier I major (shell-injection (CWE-88)).
+  Flux's `gitHost` parsed scp-style URLs (`git@-arg:path`) and returned `-arg`, which `ssh-keyscan` consumed as a flag. Added a guard in both scp and url-parse branches rejecting hosts beginning with `-` or empty, plus an `else if _, hostErr := gitHost(...)` in `ValidateSettings`. **Postmortem lesson:** the choke point for argv-injection is at the data shape level, not at the call site.
+
+- **`state:de572c63:dnsmasq-write-non-atomic`** — done 2026-05-05 — PR #351,
+  merge commit `52e0e92`. Tier I major (crash-recoverability).
+  `writeDnsmasqConfig` used `WriteTempFile` + `CopyFile` (not atomic). Replaced with `system.AtomicWriteString` (temp+fsync+rename+parent-fsync). **Postmortem lesson:** `WriteTempFile` is for callbacks needing a writeable handle; for pure string content the canonical helper is `AtomicWriteString`.
+
+- **`state:15ba17da:partial-destroy-still-cleans`** — done 2026-05-05 — PR #353,
+  merge commit `85232a5`. Tier I major (destroy-safety).
+  When `terraform destroy` failed mid-run, the orchestrator continued to `StepCleanupFiles` which wiped tfvars and `.terraform/`, breaking retry. Added `destroyTracker.terraformFailed()` and downgrade `Full → WorkOnly` when terraform destroy failed. **Postmortem lesson:** `NonFatal: true` step semantics need to inform downstream cleanup decisions — blindly running cleanup after a failed destroy makes the failure permanent.
+
+- **`err:48688e63:terraform-bare-fmt-errorf`** — done 2026-05-05 — PR #354,
+  merge commit `442479a`. Tier I major (domain-vocabulary).
+  `infrastructure/proxmox/proxmox.go` wrapped terraform init/plan/apply errors with bare `fmt.Errorf`, mapping to exit 1 instead of exit 4. Replaced 5 sites with `errtypes.ClusterError` and 3 with `errtypes.ConfigError`. The cancellation branch stays bare (signalExitCode runs first). **Postmortem lesson:** the exit-code taxonomy is only as consistent as the laziness of error wrapping in fan-out call sites.
+
+- **`obs:366b3f2d:step-key-id-vs-name-collision`** — done 2026-05-05 — PR #355,
+  merge commit `938ab87`. Tier I major (field-stability).
+  `orchestrator.go` had two log sites emitting `step.Name()` under the `"step"` key while five sibling sites used `step.ID()`, breaking JSON pipelines. Standardised on `step.ID()` under `"step"` and added `"name", step.Name()` for human display. **Postmortem lesson:** structured-log key stability is contractual for downstream consumers.
+
+- **`sec:761e5126:haproxy-vip-tls-skip`** — done 2026-05-05 — PR #356,
+  merge commit `620bead`. Tier I major (tls-network).
+  `RemoveHAProxy` fell back to `InsecureSkipVerify` when `KubeconfigCAPool` failed on a probe whose outcome gates HAProxy teardown. Replaced with hard `*errtypes.ClusterError`; renamed test from `insecure_fallback_when_kubeconfig_absent` to `hard_errors_when_kubeconfig_absent` and tightened the assertion via `Msg` substring match after initial reviewer rejected the diff because the test would have silently passed even if the fix regressed. **Postmortem lesson:** when changing behaviour, the test name and assertions must change too.
+
+- **`doc:66cb1c69:addons-info-renamed-type`** — done 2026-05-05 — PR #357,
+  merge commit `8e88e66`. Tier I major (readme-drift).
+  `docs/architecture/addons.md` showed `Info() AddonInfo` but the type was renamed to `Metadata`. Updated the snippet. **Postmortem lesson:** doc snippets that mirror an unexported type should be regenerated whenever the type changes.
+
+- **`doc:66cb1c69:addons-configurable-missing-decode`** — done 2026-05-05 — PR #357,
+  merge commit `8e88e66`. Tier I minor (readme-drift).
+  `docs/architecture/addons.md` documented `ConfigurableAddon` without `DecodeSettings`. Added the third method. **Postmortem lesson:** symmetric triplets must be documented as a triplet.
+
+- **`doc:66cb1c69:addons-environment-fields-stale`** — done 2026-05-05 — PR #357,
+  merge commit `8e88e66`. Tier I minor (readme-drift).
+  `docs/architecture/addons.md` claimed `Environment` carried `kubeconfig` (does not). Reworded the prose to list `AddonConfig`, `Exec`, `Logger`, `ProjectRoot`. **Postmortem lesson:** struct field lists in prose drift the fastest of all doc content.
+
+- **`tst:451be4fa:writeasinvokinguser-chown-fail`** — done 2026-05-05 — PR #358,
+  merge commit `2fd5448`. Tier I major (canonical-helper-untested).
+  `WriteAsInvokingUser`'s `AtomicWrite-succeeds-but-Chown-fails` branch was untested; deploy crashes mid-flight could leave a kubeconfig root-owned. Added a sub-test setting `SUDO_UID=65534` and asserting the file persists. **Postmortem lesson:** test the failure shapes that matter operationally, not just the happy path.
+
+- **`sec:632c9087:ingress-rollback-server-fields`** — done 2026-05-05 — PR #359,
+  merge commit `344e461`. Tier I suggestion (input-validation).
+  `buildRollbackJSON` used a denylist of server-managed metadata fields; future kube versions adding new fields would silently round-trip. Switched to allowlist (`name`, `namespace`, `labels`, `annotations`, `ownerReferences`, `finalizers`). **Postmortem lesson:** allowlist over denylist for security-sensitive paths.
+
+- **`sec:6424733c:metrics-server-no-readtimeout`** — done 2026-05-05 — PR #360,
+  merge commit `20ede42`. Tier I minor (tls-network).
+  `startMetricsServer` set only `ReadHeaderTimeout: 5s`, leaving the listener vulnerable to slow-body attacks especially when bound to network. Added `ReadTimeout: 10s`, `WriteTimeout: 10s`, `IdleTimeout: 60s`. **Postmortem lesson:** Go's `http.Server` zero-values are too generous for any production listener.
+
+- **`obs:8e65d574:slog-default-package-coupling`** — done 2026-05-05 — PR #361,
+  merge commit `29250f4`. Tier I minor (handler-setup).
+  `version.runCheck` calls package-level `slog.Debug` routing through `slog.Default()`. Future callers bypassing `cli.Execute` would silently bypass `RedactHandler`. Documented the implicit coupling on `BackgroundCheck`'s doc comment. **Postmortem lesson:** package-level `slog.Default()` calls are a foot-gun; document at minimum so future refactors recognise the invariant.
+
+- **`ux:0d318f5c:quiet-suppresses-only-info`** — done 2026-05-05 — PR #362,
+  merge commit `7b295eb`. Tier I minor (streams).
+  `--log-format=json` did not call `tui.SuppressInfo`, so JSON log streams interleaved `tui.Info` chatter with structured slog records. `configureLogging` now calls `tui.SuppressInfo` when `logFormat == "json" && !logVerbose`. **Postmortem lesson:** the `tui.Info`/`slog` split is two output channels through stderr; JSON consumers need both gated.
+
+- **`obs:b38ec9cc:per-record-string-format-vs-attrs`** — done 2026-05-05 — PR #365,
+  merge commit `27487de`. Tier I minor (field-stability).
+  `install/workers.go:20` interpolated `cfg.Topology.Workers.Count` into the message string via `fmt.Sprintf`. Replaced with `p.Log.Info("workers: starting", "count", N)`. **Postmortem lesson:** the broader `fmt.Sprintf`-into-message anti-pattern is tracked under `obs:6424733c:fmt-sprintf-message-pattern`.
+
+- **`iac:e076e43c:sh-bash-array-dash-incompat`** — done 2026-05-05 — PR #340,
+  merge commit `434b118`. Tier I blocker (install-sh-fail-closed).
+  `install.sh` declared bash arrays (`_gh_auth_header=()`/`${_gh_auth_header[@]}`) but the README and docstring directed users to pipe into `sh`. On Debian/Ubuntu (`/bin/sh` = dash) the script syntax-errors at the array declaration before any download starts. Updated README and the install.sh docstring to pipe to `bash` instead of `sh`, matching the helm.sh / k3s.io pattern. **Postmortem lesson:** the shebang `#!/usr/bin/env bash` is ignored when the script is read via stdin by `sh`; documentation must specify the interpreter explicitly.
+
+- **`state:29293401:haproxy-install-non-atomic`** — done 2026-05-05 — PR #343,
+  merge commit `3280e55`. Tier I major (crash-recoverability).
+  `installHAProxyConfig` and the rollback restore path used `system.CopyFile`/`CopyFileMode` (not atomic). A SIGKILL between truncate and io.Copy completion left the live `haproxy.cfg` empty and broke the bastion's kube-api fronting. Replaced both sites with `os.ReadFile` + `system.AtomicWriteString`. The backup snapshot at line 111 (not on the trust-boundary path) is unchanged. **Postmortem lesson:** any write to a file that a service re-reads on restart must be atomic — the truncate window is the failure mode that costs the bastion.
+
+- **`state:18a795d5:masters-no-prevent-destroy`** — done 2026-05-05 — PR #352,
+  merge commit `a4cc0fe`. Tier I major (destroy-safety).
+  Master VM resource had no `lifecycle { prevent_destroy = true }`. A rogue `--target=module.okd_cluster.proxmox_virtual_environment_vm.master[N]` passed `destroyTargetRE` and could destroy an etcd-quorum member with zero terraform-side guard. Added the lifecycle block; documented the override.tf escape hatch in the `destroy --help` long text. **Postmortem lesson:** `prevent_destroy` is a literal-only field in HCL; defense-in-depth via terraform requires hardcoding plus a documented opt-out path.
+
+- **`sec:c8b28673:archive-mkdirall-mode`** — done 2026-05-05 — PR #363,
+  merge commit `8946c52`. Tier I minor (file-toctou).
+  `processTarEntry` called `os.MkdirAll` with the archive-supplied mode (`header.Mode & 0o777`). A malicious archive declaring 0o777 on a directory created it world-writable, opening a TOCTOU window between MkdirAll and the subsequent file extraction. Masked against 0o755. **Postmortem lesson:** archive-supplied modes need a max-bound mask before any privileged write — `0o755` for directories matches `tar --no-same-permissions`.
+
+- **`sec:9d79b841:coreos-stream-no-pin`** — done 2026-05-05 — PR #364,
+  merge commit `11b675c`. Tier I minor (tls-network).
+  `fetchCoreOSStream` GETs `fcos.json`/`scos.json` from `raw.githubusercontent.com` over HTTPS with no out-of-band signature or commit pin — GitHub's TLS cert is the sole trust anchor. The ISO artefact itself is sha256-verified at download, but the JSON document supplying the checksum is not. Added a doc-comment on `fetchCoreOSStream` documenting the trust model so future maintainers don't try to add their own pinning without coordinating. README §security-considerations was skipped to avoid conflict with in-progress sec:06f00bcb. **Postmortem lesson:** when a fix is documentation-only because the right code change requires cross-cutting work, name the gap in the code comment so a future PR has a clear seam.
+
+- **`obs:ddf885f4:install-failure-drops-addon-attr`** — done 2026-05-05 — PR #366,
+  merge commit `114212d`. Tier I minor (field-stability).
+  `Manager.InstallAll`'s failure-log at line 98 dropped the `addon` attr that every neighbouring site emits. When two addons fail in the same run, the resulting log records were indistinguishable. Added `"addon", info.DisplayName`. **Postmortem lesson:** every record inside a per-element loop should carry the element identifier as a structured attr — without it, JSON pipelines can't group by element.

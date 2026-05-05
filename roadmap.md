@@ -824,16 +824,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Constrain Apache's ignition vhost to bind to the bastion's bridge IP (the IP FCOS nodes resolve from the kargs URL), not 0.0.0.0. Add iptables/firewalld INPUT rules limiting :8080 to machineCIDR. Optionally rotate to per-node ignition URLs via path tokens (`/ignition/<token>/master.ign`) created at apply time and dropped after bootstrap. Document the residual exposure window in README §security-considerations.  
 **Effort:** hours
 
-##### `sec:1e8ffb91:tls-fallback-skip-verify` — tls fallback skip verify
-
-**Status:** in review — PR #342  
-**Severity:** major  
-**Cluster:** tls-network  
-**Evidence:** `internal/distribution/okd/postinstall/verify.go:260-279`  
-**Problem:** verifyKubeVIPAPIHealthBootstrap falls back to InsecureSkipVerify when the kubeconfig CA is unavailable, even outside the documented x509.HostnameError window. The CA-unavailable branch (line 234) silently disables TLS verification end-to-end for kube-vip api health probes — a probe that decides whether to advance state. An attacker with bastion-network access could spoof :6443 healthz responses to advance the kube-vip handoff path during postinstall.  
-**Fix:** Make CA-pool retrieval failure a hard error in postinstall (the kubeconfig MUST exist by then) or, at minimum, disable the HAProxy-removal advancement when CA is unavailable. Keep the x509.HostnameError-only fallback (the documented kube-vip cert re-issue window) but remove the unconditional CA-missing fallback.  
-**Effort:** hours
-
 ##### `sec:21dc1103:download-no-nofollow` — download no nofollow
 
 **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-21dc1103-download-nofollow  
@@ -842,26 +832,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/download/download.go:140-148`  
 **Problem:** Download.fetchToFile opens OutputPath with O_CREATE|O_WRONLY|O_TRUNC but no syscall.O_NOFOLLOW. Tools/setup callers pass tempdir paths or workdir paths; under the sudo re-exec model the open runs as root, so a pre-created symlink at OutputPath would be followed and binary content written through it. extract.go already uses O_NOFOLLOW on archive entries (good); this site is the asymmetric counterpart on the same package.  
 **Fix:** Add syscall.O_NOFOLLOW to the OpenFile flags. If callers ever need to overwrite a real file at OutputPath, the symlink case should be a hard error — Lstat first or document the symlink rejection in Download's contract.  
-**Effort:** hours
-
-##### `sec:40d315ad:argv-injection-leading-dash-host` — argv injection leading dash host
-
-**Status:** in review — PR #350  
-**Severity:** major  
-**Cluster:** shell-injection  
-**Evidence:** `internal/addon/catalog/flux/flux.go:374-378`  
-**Problem:** ssh-keyscan is invoked with the host extracted from the user-supplied flux.repository URL. The scp-style fallback `gitHost("git@-arg:path")` returns `-arg`, which ssh-keyscan parses as a flag, enabling argument injection (CWE-88). ValidateSettings only checks scheme prefix, not the host shape.  
-**Fix:** Reject host strings beginning with `-` in gitHost (or pass `--` separator before the host: `RunChecked(ctx, "ssh-keyscan", "--", host)` if ssh-keyscan supports it; otherwise validate against an idn-like character set first). Add the same guard in ValidateSettings so wizard input is rejected up front.  
-**Effort:** hours
-
-##### `sec:761e5126:haproxy-vip-tls-skip` — haproxy vip tls skip
-
-**Status:** in review — PR #356  
-**Severity:** major  
-**Cluster:** tls-network — related: sec:1e8ffb91:tls-fallback-skip-verify  
-**Evidence:** `internal/distribution/okd/postinstall/haproxy.go:68-78`  
-**Problem:** RemoveHAProxy probes /healthz on the kube-vip with InsecureSkipVerify when KubeconfigCAPool fails. Same pattern as sec:1e8ffb91 — the probe outcome is load-bearing because it gates the HAProxy teardown. CA unavailable post-install should be a hard error, not a TLS-skip.  
-**Fix:** Return a typed error when the CA pool is unavailable; do not fall back to NewInsecure for credential-bearing probes that gate destructive state changes. Cross-link with sec:1e8ffb91 — both sites should be fixed together.  
 **Effort:** hours
 
 ##### `sec:27088eab:ssh-strict-host-key-tofu` — ssh strict host key tofu
@@ -904,16 +874,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Pin the SHA-256 of the bootstrap oc tarball at compile time (analogous to yqChecksumsByArch in setup/tools.go). Then sha256sum.txt becomes defense-in-depth, not the trust root.  
 **Effort:** hours
 
-##### `sec:6424733c:metrics-server-no-readtimeout` — metrics server no readtimeout
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-6424733c-metrics-timeouts  
-**Severity:** minor  
-**Cluster:** tls-network  
-**Evidence:** `internal/cli/helpers.go:192-206`  
-**Problem:** startMetricsServer constructs http.Server with ReadHeaderTimeout=5s but no ReadTimeout, WriteTimeout, or IdleTimeout. ReadHeaderTimeout alone leaves the process vulnerable to slow-body attacks (rare on a metrics endpoint, but the listener can be opted into 0.0.0.0 via --metrics-allow-network in which case the network exposure is real).  
-**Fix:** Set ReadTimeout: 10s, WriteTimeout: 10s, IdleTimeout: 60s on the http.Server. The metrics handler is small and synchronous so generous timeouts won't break it.  
-**Effort:** hours
-
 ##### `sec:8ea706f6:tools-tempdir-non-canonical` — tools tempdir non canonical
 
 **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-8ea706f6-tools-tempdir  
@@ -932,26 +892,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/distribution/okd/install/flux.go:146-159`  
 **Problem:** installInstance passes fs.Repository (operator-supplied) and other settings via `--set instance.sync.url=<url>` to helm. helm reads these as argv; --set values land in the helm-controller pod's process listing and are stored verbatim in the helm release secret. ValidateSettings forbids URLs with userinfo (good) but the URL itself may still encode tokens for non-https schemes (e.g. ssh://git+token@host). Defense is brittle.  
 **Fix:** Render a Values YAML to a 0o600 temp file and pass `-f <values.yaml>` instead of multiple --set flags. Removes credential-shaped values from /proc/<pid>/cmdline and from helm release secrets. ValidateSettings can keep its current scheme/userinfo gate.  
-**Effort:** hours
-
-##### `sec:9d79b841:coreos-stream-no-pin` — coreos stream no pin
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-9d79b841-coreos-trust-anchor  
-**Severity:** minor  
-**Cluster:** tls-network  
-**Evidence:** `internal/distribution/okd/setup/coreos.go:108-216`  
-**Problem:** DetectCoreOSVersion fetches https://raw.githubusercontent.com/openshift/installer/release-4.<minor>/data/data/coreos/<file>.json. There is no checksum/signature on the stream JSON itself; compromise of openshift/installer or raw.githubusercontent.com would allow an attacker to inject a malicious ISO Location whose published SHA256 chains to attacker-controlled content. Trust anchor is GitHub HTTPS only.  
-**Fix:** Pin a known-good commit SHA per OKD minor (or fetch via the openshift-install binary's embedded stream data, which okdctl already downloads with cosign-verified checksums). At minimum, document the GitHub-only trust anchor in README §security-considerations.  
-**Effort:** hours
-
-##### `sec:c8b28673:archive-mkdirall-mode` — archive mkdirall mode
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-c8b28673-archive-mode  
-**Severity:** minor  
-**Cluster:** file-toctou  
-**Evidence:** `internal/download/extract.go:70-80`  
-**Problem:** processTarEntry calls os.MkdirAll with the archive-supplied mode (header.Mode & 0o777). If the archive declares 0o777 on a directory containing sensitive files, the directory is created world-writable. Subsequent file writes use O_NOFOLLOW (good), but a parallel attacker who can write into the world-writable extracted dir between MkdirAll and the subsequent file extraction could plant files that survive the extraction.  
-**Fix:** Mask the archive-supplied directory mode against 0o755 (clear group/world write bits) before passing to MkdirAll. Aligns with tar(1) --no-same-permissions and matches the install.sh extraction flag.  
 **Effort:** hours
 
 ##### `sec:d9f7733e:debug-bundle-tar-readall` — debug bundle tar readall
@@ -1002,16 +942,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/distribution/okd/firewall/firewall.go:52-66`  
 **Problem:** haproxyPortNumbers is map[int]bool but HAProxyFrontendPorts() filters by both Number and Protocol == protoTCP. The rule is correct but the structure leaves a future-maintainer footgun: if anyone adds a UDP rule on those numbers (e.g. UDP 6443 for QUIC variants), HAProxyFrontendPorts() would silently include them only when their tcp filter passes. A pure allowlist of {Number, Protocol} pairs would be unambiguous.  
 **Fix:** Define haproxyFrontends as []Port literal (number+protocol pairs) instead of map[int]bool keyed only by number. Removes the implicit tcp-only assumption.  
-**Effort:** hours
-
-##### `sec:632c9087:ingress-rollback-server-fields` — ingress rollback server fields
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-632c9087-ingress-allowlist  
-**Severity:** suggestion  
-**Cluster:** input-validation  
-**Evidence:** `internal/distribution/okd/postinstall/update_ingress.go:498-527`  
-**Problem:** buildRollbackJSON strips a denylist of server-managed metadata fields (creationTimestamp, generation, resourceVersion, selfLink, uid, managedFields) before re-applying. Newer kube versions add fields to metadata; a forward-incompatible field would be passed back to the server during rollback and could be silently mishandled. Allowlist would be safer per CLAUDE.md §security-invariants.  
-**Fix:** Switch to an allowlist: keep only `name, namespace, labels, annotations, ownerReferences, finalizers` from metadata. Aligns with CLAUDE.md §security-invariants (allowlist on critical paths) and isolates rollback from forward-evolving server fields.  
 **Effort:** hours
 
 ##### `sec:696d6b0e:iso-cleanup-shellquote-policy` — iso cleanup shellquote policy
@@ -1097,16 +1027,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 #### audit-subprocess
 
-##### `sub:eb479d86:argv-concat-into-ssh-cmd` — argv concat into ssh cmd
-
-**Status:** in review — PR #345  
-**Severity:** major  
-**Cluster:** argv-construction — seam→audit-security  
-**Evidence:** `internal/distribution/okd/setup/upload.go:20-34`  
-**Problem:** remoteISO256 builds the remote ssh command via raw string concat ("sha256sum "+target where target = remotePath+"/"+filename), then calls phase.SSHRun which feeds the whole string to ssh's trailing arg — the remote login shell evaluates it. Sibling phase/iso_cleanup.go shellSingleQuote-wraps every atom; this site bypasses that template and accepts whatever metacharacters land in filename (filepath.Base of an ISO path derived from cluster machine names that flow from config).  
-**Fix:** Switch to phase.SSHRunArgv(ctx, exec, host, "sha256sum", "--", target) — argv mode still hands ssh a joined command but each atom is preserved verbatim, and a leading -- guards filenames starting with -. Or, mirror iso_cleanup.go: phase.SSHRun(ctx, exec, host, "sha256sum -- "+shellSingleQuote(target)).  
-**Effort:** hours
-
 ##### `sub:0934cf1b:coreutil-dpkg-arch` — coreutil dpkg arch
 
 **Status:** not started  
@@ -1160,56 +1080,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 #### audit-state-and-recovery
 
-##### `state:0f076161:dry-run-no-runlock` — dry run no runlock
-
-**Status:** in review — PR #346  
-**Severity:** major  
-**Cluster:** tf-state-atomicity  
-**Evidence:** `internal/cli/destroy.go:100-205`  
-**Problem:** runDestroyDryRun executes terraform init + terraform plan -destroy without acquiring the project runlock. A concurrent `okdctl deploy` running tf init in the same workDir can race the dry-run's tf init — both processes write to .terraform/, .terraform.lock.hcl, and providers/. Tf init has no internal mutex. Same hazard applies to runDeployDryRun (deploy.go:137). The runlock is the canonical concurrent-run guard (state:4c092fce, PR #118 landed it specifically for this).  
-**Fix:** Take a shared/non-blocking runlock in both runDestroyDryRun (destroy.go:175) and runDeployDryRun (deploy.go:137). On conflict, refuse with a clear message naming the holding verb. If dry-run + concurrent dry-run is desired, expose a runlock.AcquireShared helper using LOCK_SH instead of LOCK_EX — flock supports shared locks natively.  
-**Effort:** hours
-
-##### `state:15ba17da:partial-destroy-still-cleans` — partial destroy still cleans
-
-**Status:** in review — PR #353  
-**Severity:** major  
-**Cluster:** destroy-safety  
-**Evidence:** `internal/distribution/okd/destroy/steps.go:58-140`  
-**Problem:** StepDestroyInfra is NonFatal=true so when terraform destroy fails midway the orchestrator continues to StepCleanupFiles → cleanup.Terraform → wipes terraform.tfvars + .terraform.lock.hcl + .terraform/. The next destroy retry has neither tfvars nor an init'd backend; tfvars encoded vmid_base + master_names + worker_names matching what is still alive on Proxmox, so re-running destroy fails with 'terraform.tfvars not found' and recovery is by hand.  
-**Fix:** Make StepCleanupFiles consult the destroy tracker: if t.failures contains 'terraform destroy', set cleanupKind to a NEW 'TerraformPreserve' kind that skips Terraform() so the operator's tfvars stays. After a clean tf destroy success, run the full cleanup. Optionally also emit a clear log line: 'destroy: terraform failed, preserving tfvars / .terraform/ for retry — re-run okdctl destroy --skip-terraform=false to retry'.  
-**Effort:** hours
-
-##### `state:18a795d5:masters-no-prevent-destroy` — masters no prevent destroy
-
-**Status:** in review — PR #352  
-**Severity:** major  
-**Cluster:** destroy-safety — seam→audit-iac-and-shell  
-**Evidence:** `infrastructure/terraform/modules/proxmox-okd/main.tf:244-263`  
-**Problem:** Master resource has no `lifecycle { prevent_destroy = true }`. The block comment at line 244-246 acknowledges Terraform requires a literal boolean for prevent_destroy and recommends an override.tf as workaround — but the default ships unprotected. A rogue --target=module.okd_cluster.proxmox_virtual_environment_vm.master[N] passes the destroyTargetRE allowlist and destroys an etcd-quorum member with zero terraform-side guard. Roadmap iac:18a795d5 (deferred) covers this exactly.  
-**Fix:** Add `lifecycle { prevent_destroy = true }` to the master resource literal-mode (drop the var dependency). For the legitimate okdctl destroy path, gate behind a separate module flavour or document the override.tf escape hatch in the destroy CLI's --help. Cross-reference roadmap iac:18a795d5:hcl-no-prevent-destroy-masters.  
-**Effort:** hours
-
-##### `state:29293401:haproxy-install-non-atomic` — haproxy install non atomic
-
-**Status:** in review — PR #343  
-**Severity:** major  
-**Cluster:** crash-recoverability  
-**Evidence:** `internal/distribution/okd/setup/haproxy.go:67-76`  
-**Problem:** installHAProxyConfig calls system.CopyFile(tmpPath, /etc/haproxy/haproxy.cfg) — NOT atomic. A SIGKILL between truncate and io.Copy completion leaves the live haproxy.cfg empty or partial; next `systemctl restart haproxy` fails to parse and the bastion stops fronting kube-api. The rollback path also uses CopyFileMode (also non-atomic), so a crash during rollback leaves the config in a third bad state.  
-**Fix:** Replace the two CopyFile sites in haproxy.go (line 68 install, line 122 rollback restore) with system.AtomicWriteString(haproxyConfigPath, content, 0o644) reading the source file's content into memory first. Or factor a system.AtomicCopyFile that takes (src, dst, mode) and pipes the read into AtomicWrite. The backup snapshot at line 111 is not on the trust-boundary path so the existing CopyFile there is acceptable.  
-**Effort:** hours
-
-##### `state:368b892b:tf-state-backup-still-cleaned` — tf state backup still cleaned
-
-**Status:** in review — PR #344  
-**Severity:** major  
-**Cluster:** tf-state-atomicity  
-**Evidence:** `internal/distribution/okd/cleanup/infra.go:50-56`  
-**Problem:** terraformFilesToRemove still includes 'terraform.tfstate.backup'. Roadmap state:4c092fce:tf-state-backup-removed-on-success (marked done) split Cleanup → CleanupPlans in terraform.go to STOP wiping .backup, but cleanup/infra.go's Terraform cleanup hook still removes the backup directly. After destroy → orchestrator runs StepCleanupFiles → cleanup.Terraform → wipes terraform.tfstate.backup. The .backup file is the operator's last-resort rollback artefact when the live tfstate is later corrupted; sweeping it on every destroy makes stale-state recovery impossible.  
-**Fix:** Remove 'terraform.tfstate.backup' from terraformFilesToRemove. The .backup file is single-step rollback metadata; let the operator decide when to delete it (or add an explicit `okdctl cleanup --terraform-backup` flag). Net diff: -1 LOC.  
-**Effort:** hours
-
 ##### `state:4f69fc9d:rerunsafe-not-enforced` — rerunsafe not enforced
 
 **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/state-4f69fc9d-rerunsafe  
@@ -1228,16 +1098,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/distribution/okd/setup/steps.go:212-240`  
 **Problem:** StepBuildISOs and StepUploadISOs are ReRunSafeNo but neither declares AlreadyDone. A SIGKILL mid-ISO-build leaves a partial fedora-coreos-master0.iso in workDir; mid-upload leaves a partial ISO on the Proxmox host. The next deploy re-runs the orchestrator from step 1; cleanup.WorkOnly removes custom-isos/ locally, but the partial remote upload is never sha256-verified before being referenced by the cdrom block in the bootstrap/master/worker resources.  
 **Fix:** Add AlreadyDone to StepBuildISOs that verifies SHA256 of every expected output ISO matches the cached fedora-coreos image hash; on mismatch, treat as 'work not done' and re-build. For StepUploadISOs, add AlreadyDone that runs `pvesh get /nodes/<node>/storage/<storage>/content` filtered to iso/<expected-name>.iso and verifies the size matches the local ISO. Either pre-condition stops a half-uploaded artifact from being treated as ready.  
-**Effort:** hours
-
-##### `state:de572c63:dnsmasq-write-non-atomic` — dnsmasq write non atomic
-
-**Status:** in review — PR #351  
-**Severity:** major  
-**Cluster:** crash-recoverability  
-**Evidence:** `internal/distribution/okd/dns/dnsmasq.go:58-93`  
-**Problem:** writeDnsmasqConfig backs up the existing /etc/dnsmasq.d/<name>.conf via system.CopyFile (NOT atomic), then writes content to a temp file via system.WriteTempFile, then installs it via another system.CopyFile. CopyFile does Open+io.Copy+Sync+Close — NOT rename + fsync_dir. A SIGKILL between os.OpenFile(dst, O_TRUNC) and io.Copy completion leaves the live config truncated or partial. The validateAndRestartDnsmasq rollback hook fires only on validation/restart failure of the new config, not on process death. Next dnsmasq restart fails to parse and cluster DNS resolution breaks.  
-**Fix:** Replace the WriteTempFile + CopyFile sequence with a single system.AtomicWriteString(configPath, content, 0o644) call. AtomicWrite already does temp-file + fsync + rename + parent-fsync on the same filesystem. Keep the existing .backup snapshot for the validateAndRestartDnsmasq rollback path. Net diff: -10 LOC.  
 **Effort:** hours
 
 ##### `state:0f076161:dry-run-skip-flags-silent-noop` — dry run skip flags silent noop
@@ -1393,26 +1253,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 #### audit-iac-and-shell
 
-##### `iac:e076e43c:sh-bash-array-dash-incompat` — sh bash array dash incompat
-
-**Status:** in review — PR #340  
-**Severity:** blocker  
-**Cluster:** install-sh-fail-closed  
-**Evidence:** `scripts/install.sh:90-95`  
-**Problem:** install.sh declares and expands a bash array (`_gh_auth_header=()` / `${_gh_auth_header[@]}`) but the README and install.sh's own usage docstring direct users to pipe the script into `sh`. On Debian/Ubuntu where `/bin/sh` is `dash`, the script syntax-errors at the array declaration before any download starts, leaving the user with a cryptic `Syntax error: "(" unexpected` instead of an installed binary. The shebang `#!/usr/bin/env bash` is ignored when the script is read via stdin by `sh`.  
-**Fix:** Either (a) replace the README invocation with `| bash` (and update the install.sh docstring on line 10), matching helm.sh and k3s.io patterns; or (b) make the auth header POSIX-compatible by inlining the conditional: `if [ -n "${GITHUB_TOKEN:-}" ]; then VERSION=$(curl -H "Authorization: Bearer $GITHUB_TOKEN" ...); else VERSION=$(curl ...); fi`. Option (a) is one character per doc site and matches the shebang's intent.  
-**Effort:** days
-
-##### `iac:b803fcb7:sh-shellcheck-scope-gap` — sh shellcheck scope gap
-
-**Status:** in review — PR #348  
-**Severity:** major  
-**Cluster:** install-sh-fail-closed  
-**Evidence:** `.github/workflows/ci.yml:110-118`  
-**Problem:** The lint-shell job restricts shellcheck's `scandir` to `./scripts` only, so `.github/scripts/coverage-check.sh` (an 82-line bash script with associative arrays, process substitution, and bc-based arithmetic running in CI) is never linted. Any shellcheck-class regression in coverage-check.sh — quoting bug, unguarded var expansion, broken associative-array key — slips past CI and only manifests as a confusing CI failure when the floor logic mis-triggers.  
-**Fix:** Drop the `scandir: "./scripts"` line so action-shellcheck scans the whole tree (its default), or set `scandir: "."` explicitly. Optionally add `additional_files: ".github/scripts"` if you want to keep `./scripts` as the primary path. Net effect: one less line of config; coverage-check.sh becomes lint-protected.  
-**Effort:** hours
-
 ##### `iac:e076e43c:sh-insecure-fail-open` — sh insecure fail open
 
 **Status:** not started  
@@ -1485,26 +1325,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 
 #### audit-errors
-
-##### `err:26a430ee:sudo-missing-sentinel-not-wrapped` — sudo missing sentinel not wrapped
-
-**Status:** in review — PR #347  
-**Severity:** major  
-**Cluster:** sentinel-vs-typed — seam→audit-cli-ux  
-**Evidence:** `internal/cli/elevation.go:94-100`  
-**Problem:** ensureRoot returns &errtypes.AuthError{Msg: ..., Err: err} when sudo is missing, where err is the raw exec.LookPath error. errtypes.ErrSudoMissing is defined and tested for the 71/EX_OSERR exit-code mapping in root.go, but the production site never wraps the sentinel — so errors.Is(err, errtypes.ErrSudoMissing) returns false at runtime and the process exits 5 (AuthError) instead of 71 (sudo missing). The unit test in root_test.go covers the mapping in isolation; nothing wires through ensureRoot.  
-**Fix:** Wrap the sentinel: replace Err with errors.Join(err, errtypes.ErrSudoMissing) so errors.Is keeps matching both the lookPath cause and the exit-code sentinel. Add an integration test that runs ensureRoot with a stubbed lookPath returning exec.ErrNotFound and asserts exitCodeFor returns 71.  
-**Effort:** hours
-
-##### `err:48688e63:terraform-bare-fmt-errorf` — terraform bare fmt errorf
-
-**Status:** in review — PR #354  
-**Severity:** major  
-**Cluster:** domain-vocabulary — seam→audit-cli-ux  
-**Evidence:** `internal/infrastructure/proxmox/proxmox.go:150-188` + 3 more  
-**Problem:** Provision and PlanOnly wrap terraform init/plan/apply errors with bare fmt.Errorf instead of errtypes.ClusterError. Every other terraform-init / terraform-destroy site in the tree (destroy/helpers.go:54, postinstall/bootstrap.go:28, install/workers.go:31, cli/destroy.go:196) uses errtypes.ClusterError or ConfigError. The inconsistency leaks: terraform apply failure here becomes exit code 1 (generic), while the same failure in install/workers.go becomes exit code 4 (ClusterError).  
-**Fix:** Replace each `return ..., fmt.Errorf("terraform <verb> failed: %w", err)` with the matching errtypes-wrapped form already used by sibling packages: `&errtypes.ClusterError{Msg: "terraform <verb> failed", Err: err}`. Cancellation branches stay bare (signalExitCode runs first). Lines 252/268/283 (CalculateVMIP / IP-range failures) become ConfigError.  
-**Effort:** hours
 
 ##### `err:1e8ffb91:double-context-wrap-kubevip` — double context wrap kubevip
 
@@ -1755,16 +1575,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 #### audit-cli-ux
 
-##### `ux:aa84670c:update-notice-on-stdout` — update notice on stdout
-
-**Status:** in review — PR #349  
-**Severity:** major  
-**Cluster:** streams  
-**Evidence:** `internal/cli/root.go:129-145`  
-**Problem:** `printUpdateNotice` writes the update banner to stdout via `fmt.Println`, after the subcommand's stdout output has already finished. For any `--format=json` consumer (`okdctl status --format=json | jq`, `okdctl releases list --format=json | jq`), this corrupts the JSON stream with a blank line plus an ANSI-rendered `update available:` line.  
-**Fix:** Route the update banner to stderr (`fmt.Fprintln(os.Stderr, ...)` or `tui.Warn`). Suppress entirely when `logFormat == "json"`, when `logQuiet` is set, or when any subcommand-level format flag is `json`. Simplest fix: gate `printUpdateNotice` on `!logQuiet && logFormat != "json"` and switch the writes to `os.Stderr`. Add a regression test that asserts `okdctl --version --log-format=json` produces no `update available:` line on stdout.  
-**Effort:** hours
-
 ##### `ux:d31d1b9d:describe-format-unvalidated` — describe format unvalidated
 
 **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/ux-d31d1b9d-describe-format  
@@ -1793,16 +1603,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/cli/update_ingress.go:50-61`  
 **Problem:** `runUpdateIngressDryRun` mixes streams: opening/closing lines go through `tui.Info` (stderr), but the bulleted `would: …` previews use raw `fmt.Println` (stdout). Sibling dry-run helpers `runCleanupDryRun` (cleanup.go:46-54) and `runDeployDryRun` (deploy.go:160-172) consistently use `tui.Info` for every preview line. This is the only inconsistent dry-run path.  
 **Fix:** Replace each `fmt.Println("  would: ...")` with `tui.Info("would: ...")` to match `runCleanupDryRun` and `runDeployDryRun`. Result: every dry-run line lands on stderr, scripts that capture both with `> log 2>&1` see one ordered stream, and `--quiet` suppresses the preview consistently with the rest of the surface.  
-**Effort:** hours
-
-##### `ux:0d318f5c:quiet-suppresses-only-info` — quiet suppresses only info
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/ux-0d318f5c-quiet-json  
-**Severity:** minor  
-**Cluster:** streams  
-**Evidence:** `internal/cli/logging.go:69-76` + 2 more  
-**Problem:** `quietForJSON` calls `tui.SuppressInfo()`, which only suppresses Info — Warn and Error still flow to stderr. That's correct for stderr-readers, but `--log-format=json` (the persistent root flag) does NOT call `SuppressInfo` automatically; only the per-subcommand `--format=json` path does. So `okdctl deploy --log-format=json 2>&1 | jq` gets text-format Info chatter from `tui.Info(...)` in deploy.go interleaved with structured slog JSON.  
-**Fix:** In `configureLogging`, when `logFormat == "json"` route stderr through a json-text-stripped sink (suppress the styled tui.Info/Warn/Error human path entirely; rely on slog records). Either: (a) make `tui.Info/Warn/Error` no-ops when logFormat=json (slog still receives them via SimpleLogger); or (b) keep them but document that --log-format=json should be used with --quiet. Simpler short-term fix: have `configureLogging` call `tui.SuppressInfo()` whenever `logFormat == "json" && !logVerbose`, mirroring `quietForJSON`. Update the package-doc on root.go to spell out the contract.  
 **Effort:** hours
 
 ##### `ux:8154ab0f:doctor-no-machine-format` — doctor no machine format
@@ -1918,16 +1718,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 #### audit-observability
 
-##### `obs:366b3f2d:step-key-id-vs-name-collision` — step key id vs name collision
-
-**Status:** in review — PR #355  
-**Severity:** major  
-**Cluster:** field-stability  
-**Evidence:** `internal/distribution/orchestrator.go:85-180`  
-**Problem:** The 'step' attr key carries TWO distinct value types across sites in the same file: step.ID() (machine slug, e.g. 'destroy-infrastructure') at lines 132/149/162/164/177, and step.Name() (human label, e.g. 'destroy infrastructure') at lines 90/142. A JSON pipeline grouping by step cannot tell them apart and fanning out fails: the 'started' record carries id, the matching 'skipped' record carries the name.  
-**Fix:** Standardise on step.ID() under the 'step' key everywhere in this file; pass step.Name() under 'name' (already used at line 149) for human display. Lines 90 and 142 swap step.Name() to step.ID() and add 'name', step.Name() if the human label is still wanted.  
-**Effort:** hours
-
 ##### `obs:41a9d4eb:redact-handler-struct-fields-passthrough` — redact handler struct fields passthrough
 
 **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/obs-41a9d4eb-redact-struct  
@@ -1998,16 +1788,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Add `"path", configPath` (or `"path", cfg`, `"path", backup`) at each of the three sites so the path is queryable separately from the error chain.  
 **Effort:** hours
 
-##### `obs:8e65d574:slog-default-package-coupling` — slog default package coupling
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/obs-8e65d574-slog-thread  
-**Severity:** minor  
-**Cluster:** handler-setup  
-**Evidence:** `internal/version/updatecheck.go:72-78`  
-**Problem:** runCheck calls package-level slog.Debug (L72, L77) which routes through slog.Default(), implicitly coupled to cli.Execute setting `slog.SetDefault(tui.SimpleLogger())`. If a future caller embeds version.BackgroundCheck without going through cli.Execute (e.g. an alternate cmd/ entry point or an in-process test that does not set the default), these records bypass the redaction handler and emit through stdlib text handler — which lacks the RedactHandler middleware. The internal/runlock/runlock.go:L69 site has the same shape.  
-**Fix:** Either (a) thread a *slog.Logger through BackgroundCheck/Acquire so the caller controls the sink (matches every other domain package — orchestrator, addon, terraform), or (b) accept the implicit coupling and add a one-line doc comment on each package-level slog call: 'depends on cli.Execute setting slog.Default; safe in the okdctl process'. Option (a) is symmetric with the rest of the codebase.  
-**Effort:** hours
-
 ##### `obs:aa84670c:run-id-not-on-pre-runid-records` — run id not on pre runid records
 
 **Status:** not started  
@@ -2018,16 +1798,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Generate run_id at the top of execute() (before BackgroundCheck), call tui.SetRunID(id) immediately, then emit a single `tui.Info("okdctl: started", tui.LF("argv", strings.Join(os.Args[1:], " ")))` and a matching `tui.Info("okdctl: finished", tui.LF("duration", elapsed), tui.LF("exit_code", code))` in the deferred-exit path. Pulls run_id earlier in the lifecycle so preflight records carry it too (requires moving cmd/okdctl/main.go preflight after run_id init).  
 **Effort:** hours
 
-##### `obs:b38ec9cc:per-record-string-format-vs-attrs` — per record string format vs attrs
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/obs-b38ec9cc-workers-attr  
-**Severity:** minor  
-**Cluster:** field-stability — related: obs:6424733c:fmt-sprintf-message-pattern  
-**Evidence:** `internal/distribution/okd/install/workers.go:20-20`  
-**Problem:** `p.Log.Info(fmt.Sprintf("workers: starting %d worker nodes", cfg.Topology.Workers.Count))` — count goes into the message, not as an attr. Specific instance of obs:6424733c worth flagging because it is the only 'span: started' marker for the workers step and wants `count` as a queryable attr (alert thresholds, dashboards).  
-**Fix:** `p.Log.Info("workers: starting", "count", cfg.Topology.Workers.Count)`  
-**Effort:** hours
-
 ##### `obs:c19ee328:debug-fmt-sprintf-package-loop` — debug fmt sprintf package loop
 
 **Status:** not started  
@@ -2036,16 +1806,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/distribution/okd/setup/steps.go:312-323`  
 **Problem:** installSystemPackages emits Debug per package via `p.Log.Debug(fmt.Sprintf("packages: %s not found", pkg))` and likewise for 'already installed'. Same fmt.Sprintf-into-message anti-pattern as obs:6424733c, but this one is in a tight per-element loop that runs at deploy time. Same fix pattern; called out separately because Debug-level traffic is the primary signal new operators turn on with --verbose, and structured attrs make `--log-format=json | jq` immediately useful.  
 **Fix:** L312: `p.Log.Debug("packages: not found", "pkg", pkg)`. L314: `p.Log.Debug("packages: already installed", "pkg", pkg)`. L323: `p.Log.Info("packages: installing missing", "count", len(toInstall))`. Caller can then `jq 'select(.pkg=="haproxy")'` cleanly.  
-**Effort:** hours
-
-##### `obs:ddf885f4:install-failure-drops-addon-attr` — install failure drops addon attr
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/obs-ddf885f4-addon-attr  
-**Severity:** minor  
-**Cluster:** field-stability  
-**Evidence:** `internal/addon/manager.go:98-98`  
-**Problem:** Manager.InstallAll failure-log at line 98 drops the `addon` attr that every neighbouring site emits (L90, L101, L103, L120, L128, L184, L186). When two addons fail in the same run, the resulting log records are indistinguishable — no way to grep `addon=flux` to see all events for one addon.  
-**Fix:** Add `"addon", info.DisplayName` to the L98 attr list, matching the shape of L101 and L103 in the same loop.  
 **Effort:** hours
 
 ##### `obs:ae5b624c:per-tick-csr-warn-already-deduped` — per tick csr warn already deduped
@@ -2320,16 +2080,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 #### audit-documentation
 
-##### `doc:66cb1c69:addons-info-renamed-type` — addons info renamed type
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/doc-66cb1c69-addons-arch  
-**Severity:** major  
-**Cluster:** readme-drift  
-**Evidence:** `docs/architecture/addons.md:23-29`  
-**Problem:** Documented Addon interface uses Info() AddonInfo, but the type was renamed to Metadata (the old name is removed from the codebase entirely). roadmap/completed-archive.md even records the rename, but the architecture doc was not updated.  
-**Fix:** Replace AddonInfo with Metadata throughout the doc. Confirm rename is fully reflected in any prose paragraphs that reference the type.  
-**Effort:** hours
-
 ##### `doc:8f46b665:phases-add-step-missing-rerunsafe` — phases add step missing rerunsafe
 
 **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/doc-8f46b665-phases-arch  
@@ -2378,26 +2128,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `docs/doctor-checks.md:4-7`  
 **Problem:** docs/doctor-checks.md says doctor exits '1 otherwise' on [fail] results, but the implementation returns errtypes.ConfigError which exitCodeFor maps to 2. The companion docs/cli/okdctl_doctor.md correctly says 2.  
 **Fix:** Edit docs/doctor-checks.md to say '2 (configuration error) otherwise' matching the actual exit code and the okdctl_doctor.md companion doc.  
-**Effort:** hours
-
-##### `doc:66cb1c69:addons-configurable-missing-decode` — addons configurable missing decode
-
-**Status:** not started  
-**Severity:** minor  
-**Cluster:** readme-drift  
-**Evidence:** `docs/architecture/addons.md:35-41`  
-**Problem:** Documented ConfigurableAddon interface lacks DecodeSettings, which has been part of the contract since the typed-settings refactor. Writers of new configurable addons miss the typed-decode requirement.  
-**Fix:** Add DecodeSettings to the documented interface block and a one-line description: 'converts the flat settings map into a typed struct'.  
-**Effort:** hours
-
-##### `doc:66cb1c69:addons-environment-fields-stale` — addons environment fields stale
-
-**Status:** not started  
-**Severity:** minor  
-**Cluster:** readme-drift  
-**Evidence:** `docs/architecture/addons.md:42-47`  
-**Problem:** Doc claims Environment carries 'an executor, logger, kubeconfig, and per-addon settings'. Actual Environment has AddonConfig, Exec, Logger, ProjectRoot — no kubeconfig field.  
-**Fix:** Replace 'kubeconfig' with 'project root' (and note the AddonConfig is the per-addon settings slice). Kubeconfig is reached transitively via env.Exec, not directly from Environment.  
 **Effort:** hours
 
 ##### `doc:8f46b665:phases-basephase-missing-recorder` — phases basephase missing recorder
@@ -2493,16 +2223,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Add internal/download/download_test.go: (1) httptest.Server-backed happy-path covering Download → file written at 0o600 with expected bytes; (2) checksum-mismatch retry → second attempt wins; (3) HTTP non-200 returns *HTTPStatusError; (4) ctx-cancel mid-download cleans the partial file (no .partial leftover); (5) symlink at OutputPath path is refused (locks the future O_NOFOLLOW guard from sec:21dc1103); (6) canSkipDownload returns true on existing file with matching checksum, false on size=0, false on checksum mismatch. Use httptest + t.TempDir; no third-party libs.  
 **Effort:** days
 
-##### `tst:881d089e:runlock-symlink-untested` — runlock symlink untested
-
-**Status:** in review — PR #341  
-**Severity:** blocker  
-**Cluster:** canonical-helper-untested  
-**Evidence:** `internal/runlock/runlock.go:40-50`  
-**Problem:** runlock.Acquire's symlink-refusal guard (Lstat → reject ModeSymlink, then OpenFile with O_NOFOLLOW) is exercised by no test. Acquire runs as root under the deploy/destroy sudo re-exec; a regression that drops the Lstat would let a pre-sudo attacker redirect the root-owned lock file write via a planted symlink. Existing tests (TestAcquireAndRelease, TestConflictMessageContainsHostname, etc.) only cover the happy path and conflict path.  
-**Fix:** Add TestAcquire_RefusesSymlink to runlock_test.go: create dir, symlink .okdctl.lock → /tmp/sentinel, call Acquire(dir, "deploy"), assert *errtypes.ConfigError whose Msg contains "symlink". Skip if os.Geteuid()==0 (root bypasses some symlink restrictions). Mirror cli/logging_test.go:TestOpenLogFileRefusesSymlink as the template — same shape, same skip predicate.  
-**Effort:** days
-
 ##### `tst:39c75e91:promptconfirm-untested` — promptconfirm untested
 
 **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/tst-39c75e91-promptconfirm  
@@ -2511,16 +2231,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/cli/confirm.go:21-62`  
 **Problem:** promptForConfirmation is called by every destructive subcommand (deploy, destroy, cleanup, addon uninstall, update-ingress) but has zero direct test coverage. The function has three load-bearing branches that are unverified: (a) no-TTY refusal returning *errtypes.ConfigError, (b) ctx-cancel race vs the inputCh select, (c) isConfirmResponse only accepts y/Y/yes (not 'YES', not 'true'). A regression that loosened isConfirmResponse to strings.HasPrefix('y') would silently swallow ambiguous answers as confirms.  
 **Fix:** Add tests using the existing testStdinReader hook: (1) testStdinReader=strings.NewReader('y\n') → (true, nil); (2) testStdinReader=strings.NewReader('yes\n') → (true, nil); (3) testStdinReader=strings.NewReader('n\n') → (false, nil); (4) testStdinReader=strings.NewReader('YES\n') → (false, nil) (locks case-sensitivity); (5) ctx pre-cancelled → (false, ctx.Err()); (6) testStdinReader=strings.NewReader('') → (false, nil) (EOF treated as not-confirmed). Skip the no-TTY branch since term.IsTerminal can't be stubbed without exposing a hook.  
-**Effort:** hours
-
-##### `tst:451be4fa:writeasinvokinguser-chown-fail` — writeasinvokinguser chown fail
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/tst-451be4fa-chown-fail  
-**Severity:** major  
-**Cluster:** canonical-helper-untested  
-**Evidence:** `internal/system/elevation.go:83-99`  
-**Problem:** WriteAsInvokingUser tests cover the no-sudo and missing-parent-dir branches, but no test exercises the failure mode 'AtomicWrite succeeds, ChownToInvokingUser fails' — in that case the function returns the chown error but leaves the freshly-written file root-owned. That is the operationally important case: deploy crashes mid-flight and the user (no sudo) can't read or rm the kubeconfig the next morning. A test that sets SUDO_UID to an unprivileged uid (65534) on a non-root run, asserts that AtomicWrite succeeded and that the chown error is returned, would lock the failure-shape contract.  
-**Fix:** In elevation_test.go add t.Run('chown-fails-after-write returns the chown error and file persists'): t.Setenv SUDO_UID/SUDO_GID to 65534, call WriteAsInvokingUser on t.TempDir()/x, assert os.Geteuid()!=0 then assert (a) the call returns an error and (b) os.Stat(x) succeeds (file written before chown). Skip when running as root since the chown will succeed.  
 **Effort:** hours
 
 ##### `tst:e3782ee7:make-executable-untested` — make executable untested
