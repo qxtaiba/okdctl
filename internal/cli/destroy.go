@@ -181,6 +181,12 @@ func runDestroyDryRun(ctx context.Context, cfg *config.Config) error {
 		return err
 	}
 
+	lock, err := runlock.Acquire(projectRoot, "destroy --dry-run")
+	if err != nil {
+		return err
+	}
+	defer lock.Release()
+
 	tfEnv := phase.GetTerraformEnv(cfg)
 	terraformDir := filepath.Join(projectRoot, "infrastructure", "terraform", "environments", tfEnv)
 

@@ -16,6 +16,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/setup"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/infrastructure/proxmox"
+	"github.com/qxtaiba/okdctl/internal/runlock"
 	"github.com/qxtaiba/okdctl/internal/tui"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard/steps"
@@ -147,6 +148,12 @@ func runDeployDryRun(ctx context.Context, cfg *config.Config) error {
 	if err != nil {
 		return err
 	}
+
+	lock, err := runlock.Acquire(projectRoot, "deploy --dry-run")
+	if err != nil {
+		return err
+	}
+	defer lock.Release()
 
 	prov := proxmox.New(
 		proxmox.WithProjectRoot(projectRoot),
