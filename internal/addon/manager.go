@@ -95,7 +95,7 @@ func (m *Manager) InstallAll(ctx context.Context) error {
 		env, err := m.installAndVerify(ctx, a)
 		if err != nil {
 			failed[info.Name] = true
-			m.logger.Warn("addons: install and verify failed", "err", err)
+			m.logger.Warn("addons: install and verify failed", "addon", info.DisplayName, "err", err)
 			errs = append(errs, err)
 
 			m.logger.Info("addons: rolling back", "addon", info.DisplayName)
