@@ -58,7 +58,10 @@ func (l *Loader) Save(cfg *Config, path string) error {
 	}
 	data, err := yaml.Marshal(cfg)
 	if err != nil {
-		return err
+		return &errtypes.ConfigError{Msg: "failed to marshal config", Err: err}
 	}
-	return system.AtomicWrite(path, data, 0o600)
+	if err := system.AtomicWrite(path, data, 0o600); err != nil {
+		return &errtypes.ConfigError{Msg: fmt.Sprintf("failed to write config to %s", path), Err: err}
+	}
+	return nil
 }
