@@ -112,7 +112,7 @@ Phase internals, addon system, and wizard architecture live in
 Use the wizard. If you'd rather edit YAML directly, reference configs live in
 [`configs/examples/`](configs/examples/):
 
-- `minimal.yaml` — 3 control-plane nodes, 0 workers (compact cluster)
+- `minimal.yaml` — 1 control-plane node, 0 workers (single-node cluster)
 - `production.yaml` — 3 control-plane, 3 worker layout
 - `media-server.yaml` — homelab setup with storage-heavy workers
 
