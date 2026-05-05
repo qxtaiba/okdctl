@@ -1,13 +1,12 @@
 // Package cli wires together the cobra command tree and drives the
 // top-level event loop. Process exit codes follow a documented contract:
-// config error=2, network error=3, cluster error=4, auth error=5,
-// config file not found=66 (EX_NOINPUT), invalid pull secret JSON=65
-// (EX_DATAERR), sudo not found=71 (EX_OSERR), unknown-flag error=64
-// (EX_USAGE, via SetFlagErrorFunc), other error=1 (includes unknown
-// subcommands, arg-count violations, and mutually-exclusive-flag conflicts
-// which cobra surfaces outside the flag-parser), invoked-as-root
-// rejection=77 (EX_NOPERM, set in cmd/okdctl/main.go),
-// SIGINT=130, SIGTERM=143, success=0.
+// config error=2, network error=3, cluster error=4, auth error=5
+// (includes invoked-as-root rejection via AuthError), config file not
+// found=66 (EX_NOINPUT), invalid pull secret JSON=65 (EX_DATAERR),
+// sudo not found=71 (EX_OSERR), unknown-flag error=64 (EX_USAGE, via
+// SetFlagErrorFunc), other error=1 (includes unknown subcommands,
+// arg-count violations, and mutually-exclusive-flag conflicts which cobra
+// surfaces outside the flag-parser), SIGINT=130, SIGTERM=143, success=0.
 // See docs/cli/exit-codes.md for the full taxonomy table.
 package cli
 
