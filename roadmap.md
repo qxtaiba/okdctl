@@ -1328,7 +1328,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `err:1e8ffb91:double-context-wrap-kubevip` — double context wrap kubevip
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/err-1e8ffb91-kubevip-wrap  
 **Severity:** minor  
 **Cluster:** wrapping  
 **Evidence:** `internal/distribution/okd/postinstall/verify.go:169-196`  
@@ -1338,7 +1338,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `err:6424733c:metrics-addr-loses-chain` — metrics addr loses chain
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/err-6424733c-metrics-addr  
 **Severity:** minor  
 **Cluster:** wrapping  
 **Evidence:** `internal/cli/helpers.go:182-185`  
@@ -1348,7 +1348,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `err:761e5126:network-vs-cluster-inconsistent` — network vs cluster inconsistent
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/err-761e5126-haproxy-types  
 **Severity:** minor  
 **Cluster:** domain-vocabulary — seam→audit-cli-ux — related: err:48688e63:terraform-bare-fmt-errorf  
 **Evidence:** `internal/distribution/okd/postinstall/haproxy.go:90-108`  
@@ -1358,7 +1358,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `err:97cb8adf:stderr-tail-in-error-text` — stderr tail in error text
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/err-97cb8adf-stderr-tail  
 **Severity:** minor  
 **Cluster:** redaction-in-error — seam→audit-observability  
 **Evidence:** `internal/system/exec.go:31-60`  
@@ -1378,7 +1378,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `err:a55b4592:loader-save-no-typed-wrap` — loader save no typed wrap
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/err-a55b4592-loader-save  
 **Severity:** suggestion  
 **Cluster:** domain-vocabulary — seam→audit-api-design  
 **Evidence:** `internal/config/loader.go:55-64`  
@@ -1398,7 +1398,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `err:f55b9c27:envfile-parsedotenv-leaks-line` — envfile parsedotenv leaks line
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/err-f55b9c27-envfile-line  
 **Severity:** suggestion  
 **Cluster:** redaction-in-error — seam→audit-security  
 **Evidence:** `internal/credentials/envfile.go:182-185`  
@@ -1411,7 +1411,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `con:15ba17da:detect-backend-ctx-bg` — detect backend ctx bg
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/con-15ba17da-firewall-ctx  
 **Severity:** minor  
 **Cluster:** ctx-todo  
 **Evidence:** `internal/distribution/okd/destroy/steps.go:127-130`  
@@ -1534,7 +1534,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `api:881d089e:lock-method-on-zero-value` — lock method on zero value
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/api-881d089e-runlock-zero  
 **Severity:** suggestion  
 **Cluster:** zero-value-usability  
 **Evidence:** `internal/runlock/runlock.go:24-85`  
@@ -1750,7 +1750,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `obs:0d318f5c:no-tty-format-default-mismatch` — no tty format default mismatch
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/obs-0d318f5c-tty-format  
 **Severity:** minor  
 **Cluster:** handler-setup — seam→audit-cli-ux  
 **Evidence:** `internal/cli/logging.go:35-67`  
@@ -1823,7 +1823,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `mod:04f0e35f:use-builtins` — use builtins
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/mod-04f0e35f-clear-builtin  
 **Severity:** suggestion  
 **Cluster:** any-interface-builtins  
 **Evidence:** `internal/system/zeroize.go:7-11`  
@@ -1896,7 +1896,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `smell:6fc3d91e:stringly-typed-enum` — stringly typed enum
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/smell-6fc3d91e-family-enum  
 **Severity:** minor  
 **Cluster:** magic-strings  
 **Evidence:** `internal/platform/platform.go:21-47`  
@@ -1986,7 +1986,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `smell:e7db1220:abstraction-single-caller` — abstraction single caller
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/smell-e7db1220-filter-stable  
 **Severity:** suggestion  
 **Cluster:** helper-package-no-value  
 **Evidence:** `internal/cli/releases.go:146-154`  
@@ -2009,7 +2009,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `dep:b803fcb7:golangci-lint-version-drift` — golangci lint version drift
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/dep-b803fcb7-lint-pin  
 **Severity:** minor  
 **Cluster:** pin-stability  
 **Evidence:** `.github/workflows/ci.yml:18-21` + 1 more  
@@ -2102,7 +2102,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `doc:aa84670c:exit-code-77-pkgdoc-drift` — exit code 77 pkgdoc drift
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/doc-aa84670c-exit-77  
 **Severity:** major  
 **Cluster:** package-doc  
 **Evidence:** `internal/cli/root.go:1-13`  
@@ -2112,7 +2112,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `doc:23d812fa:flux-doc-missing-provider-setting` — flux doc missing provider setting
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/doc-23d812fa-flux-provider  
 **Severity:** minor  
 **Cluster:** readme-drift  
 **Evidence:** `docs/addons/flux.md:22-31`  
@@ -2122,7 +2122,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `doc:3229e1a6:doctor-checks-exit-code-drift` — doctor checks exit code drift
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/doc-3229e1a6-doctor-exit  
 **Severity:** minor  
 **Cluster:** readme-drift — seam→audit-cli-ux  
 **Evidence:** `docs/doctor-checks.md:4-7`  
@@ -2142,7 +2142,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `doc:b3356305:readme-minimal-yaml-drift` — readme minimal yaml drift
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/doc-b3356305-readme-min  
 **Severity:** minor  
 **Cluster:** readme-drift — seam→audit-cli-ux — related: ux:b3356305:readme-14-commands-claim  
 **Evidence:** `README.md:115-115`  
@@ -2182,7 +2182,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `doc:262af6e4:cleanup-pkgdoc-over-3-sentences` — cleanup pkgdoc over 3 sentences
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/doc-262af6e4-cleanup-pkg  
 **Severity:** suggestion  
 **Cluster:** package-doc  
 **Evidence:** `internal/distribution/okd/cleanup/cleanup.go:1-4`  
@@ -2192,7 +2192,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `doc:88fd3050:cluster-pkgdoc-over-3-sentences` — cluster pkgdoc over 3 sentences
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/doc-88fd3050-cluster-pkg  
 **Severity:** suggestion  
 **Cluster:** package-doc  
 **Evidence:** `internal/config/cluster.go:1-4`  
@@ -2202,7 +2202,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `doc:a4001485:errtypes-pkgdoc-over-3-sentences` — errtypes pkgdoc over 3 sentences
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/doc-a4001485-errtypes-pkg  
 **Severity:** suggestion  
 **Cluster:** package-doc  
 **Evidence:** `internal/errtypes/errtypes.go:1-6`  
