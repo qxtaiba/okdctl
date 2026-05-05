@@ -856,7 +856,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sec:35abd54e:env-string-immutable-residue` — env string immutable residue
 
-**Status:** not started  
+**Status:** in review — PR #388  
 **Severity:** minor  
 **Cluster:** credentials  
 **Evidence:** `internal/credentials/proxmox.go:148-169`  
@@ -916,7 +916,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sec:eb479d86:scp-strict-host-key-tofu` — scp strict host key tofu
 
-**Status:** not started  
+**Status:** in review — PR #389  
 **Severity:** minor  
 **Cluster:** tls-network  
 **Evidence:** `internal/distribution/okd/setup/upload.go:77-86`  
@@ -946,7 +946,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sec:696d6b0e:iso-cleanup-shellquote-policy` — iso cleanup shellquote policy
 
-**Status:** not started  
+**Status:** in review — PR #390  
 **Severity:** suggestion  
 **Cluster:** shell-injection — seam→audit-subprocess  
 **Evidence:** `internal/distribution/okd/phase/iso_cleanup.go:205-253`  
@@ -956,7 +956,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sec:8e65d574:updatecheck-cache-no-perm-check` — updatecheck cache no perm check
 
-**Status:** not started  
+**Status:** in review — PR #391  
 **Severity:** suggestion  
 **Cluster:** credentials  
 **Evidence:** `internal/version/updatecheck.go:115-135`  
@@ -966,7 +966,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sec:bdf5a873:secretbytes-string-immutable-leak` — secretbytes string immutable leak
 
-**Status:** not started  
+**Status:** in review — PR #392  
 **Severity:** suggestion  
 **Cluster:** credentials  
 **Evidence:** `internal/config/secret.go:16-19`  
@@ -976,7 +976,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sec:cfcdee2d:newinsecure-policy-umbrella` — newinsecure policy umbrella
 
-**Status:** not started  
+**Status:** in review — PR #393  
 **Severity:** suggestion  
 **Cluster:** tls-network — related: sec:1e8ffb91:tls-fallback-skip-verify, sec:761e5126:haproxy-vip-tls-skip  
 **Evidence:** `internal/httputil/httputil.go:33-41`  
@@ -986,7 +986,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sec:de572c63:nm-active-conn-shellable-name` — nm active conn shellable name
 
-**Status:** not started  
+**Status:** in review — PR #394  
 **Severity:** suggestion  
 **Cluster:** input-validation  
 **Evidence:** `internal/distribution/okd/dns/dnsmasq.go:121-151`  
@@ -1029,7 +1029,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sub:0934cf1b:coreutil-dpkg-arch` — coreutil dpkg arch
 
-**Status:** not started  
+**Status:** in review — PR #395  
 **Severity:** minor  
 **Cluster:** coreutils-shellout  
 **Evidence:** `internal/platform/packages.go:124-128`  
@@ -1069,7 +1069,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sub:bb81a5b0:unbounded-partial-line` — unbounded partial line
 
-**Status:** not started  
+**Status:** in review — PR #396  
 **Severity:** minor  
 **Cluster:** io-handling  
 **Evidence:** `internal/executor/ringbuf.go:14-42`  
@@ -1102,7 +1102,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `state:0f076161:dry-run-skip-flags-silent-noop` — dry run skip flags silent noop
 
-**Status:** not started  
+**Status:** in review — PR #397  
 **Severity:** minor  
 **Cluster:** destroy-safety — seam→audit-cli-ux  
 **Evidence:** `internal/cli/destroy.go:67-102`  
@@ -1142,7 +1142,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `state:62cb8a95:destroy-hasstate-empty-state` — destroy hasstate empty state
 
-**Status:** not started  
+**Status:** in review — PR #398  
 **Severity:** minor  
 **Cluster:** tf-state-atomicity  
 **Evidence:** `internal/distribution/okd/destroy/helpers.go:45-48`  
@@ -1172,7 +1172,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `state:b804b2ec:bootstrap-cleanup-tfvars-precondition` — bootstrap cleanup tfvars precondition
 
-**Status:** not started  
+**Status:** in review — PR #399  
 **Severity:** minor  
 **Cluster:** phase-idempotency  
 **Evidence:** `internal/distribution/okd/postinstall/bootstrap.go:14-62`  
@@ -1182,7 +1182,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `state:fb54208a:postinstall-mutates-skipped-cleanup` — postinstall mutates skipped cleanup
 
-**Status:** not started  
+**Status:** in review — PR #400  
 **Severity:** minor  
 **Cluster:** crash-recoverability  
 **Evidence:** `internal/distribution/okd/postinstall/steps.go:42-108`  
@@ -1212,7 +1212,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `state:48688e63:no-state-version-check` — no state version check
 
-**Status:** not started  
+**Status:** in review — PR #401  
 **Severity:** suggestion  
 **Cluster:** state-schema-evolution — seam→audit-iac-and-shell  
 **Evidence:** `internal/infrastructure/proxmox/proxmox.go:111-134`  
@@ -1242,7 +1242,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `state:b38ec9cc:install-workers-tfvars-mutation` — install workers tfvars mutation
 
-**Status:** not started  
+**Status:** in review — PR #402  
 **Severity:** suggestion  
 **Cluster:** phase-idempotency  
 **Evidence:** `internal/distribution/okd/install/workers.go:14-51`  
@@ -1255,7 +1255,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `iac:e076e43c:sh-insecure-fail-open` — sh insecure fail open
 
-**Status:** not started  
+**Status:** in review — PR #403  
 **Severity:** major  
 **Cluster:** install-sh-integrity — seam→audit-security  
 **Evidence:** `scripts/install.sh:29-67`  
@@ -1265,7 +1265,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `iac:90de5406:hcl-prod-defaults-baked` — hcl prod defaults baked
 
-**Status:** not started  
+**Status:** in review — PR #404  
 **Severity:** minor  
 **Cluster:** hcl-credential-hygiene  
 **Evidence:** `infrastructure/terraform/environments/production/variables.tf:13-83`  
@@ -1423,7 +1423,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `api:c287d5c0:public-fields-bypass-options` — public fields bypass options
 
-**Status:** not started  
+**Status:** in review — PR #405  
 **Severity:** minor  
 **Cluster:** option-consistency — seam→audit-code-smells — related: api:beabab0c:phase-new-positional-args  
 **Evidence:** `internal/distribution/okd/okd.go:137-159`  
@@ -1433,7 +1433,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `api:fde34e0c:k8sclient-construction-side-effect` — k8sclient construction side effect
 
-**Status:** not started  
+**Status:** in review — PR #406  
 **Severity:** minor  
 **Cluster:** zero-value-usability  
 **Evidence:** `internal/cluster/k8s.go:52-81`  
@@ -1463,7 +1463,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `api:8aa632a6:version-globals-mutable` — version globals mutable
 
-**Status:** not started  
+**Status:** in review — PR #407  
 **Severity:** suggestion  
 **Cluster:** zero-value-usability  
 **Evidence:** `internal/version/version.go:9-16`  
@@ -1483,7 +1483,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `api:c4182b1c:phasecontext-no-reentry-footgun` — phasecontext no reentry footgun
 
-**Status:** not started  
+**Status:** in review — PR #408  
 **Severity:** suggestion  
 **Cluster:** zero-value-usability  
 **Evidence:** `internal/distribution/context.go:1-33`  
@@ -1566,7 +1566,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `ux:fd2125dd:addon-list-no-json-format` — addon list no json format
 
-**Status:** not started  
+**Status:** in review — PR #409  
 **Severity:** minor  
 **Cluster:** json-stability  
 **Evidence:** `internal/cli/addon.go:29-38` + 2 more  
@@ -1576,7 +1576,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `ux:073d24ed:metrics-allow-network-unguarded` — metrics allow network unguarded
 
-**Status:** not started  
+**Status:** in review — PR #410  
 **Severity:** suggestion  
 **Cluster:** flag-conventions  
 **Evidence:** `internal/cli/deploy.go:48-50` + 1 more  
@@ -1805,7 +1805,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `smell:9d79b841:bool-should-be-3state` — bool should be 3state
 
-**Status:** not started  
+**Status:** in review — PR #411  
 **Severity:** minor  
 **Cluster:** bool-should-be-enum  
 **Evidence:** `internal/distribution/okd/setup/coreos.go:37-100`  
@@ -2052,7 +2052,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `tst:368b892b:cleanup-tf-partial-untested` — cleanup tf partial untested
 
-**Status:** not started  
+**Status:** in review — PR #412  
 **Severity:** minor  
 **Cluster:** destructive-untested — seam→audit-state-and-recovery — related: state:368b892b:tf-state-backup-still-cleaned  
 **Evidence:** `internal/distribution/okd/cleanup/infra.go:58-73`  
