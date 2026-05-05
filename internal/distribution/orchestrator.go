@@ -87,7 +87,7 @@ func (o *Orchestrator) Run(ctx context.Context) error {
 		o.mu.Unlock()
 
 		if result.Skipped {
-			o.logger.Info("step: skipped", "step", step.Name(), "reason", result.SkipReason)
+			o.logger.Info("step: skipped", "step", step.ID(), "name", step.Name(), "reason", result.SkipReason)
 			continue
 		}
 
@@ -139,7 +139,7 @@ func (o *Orchestrator) executeStep(ctx context.Context, step ProvisioningStep) S
 				StartedAt:  startedAt,
 				Duration:   time.Since(startedAt),
 			}
-			o.logger.Info("step: skipped (already done)", "step", step.Name())
+			o.logger.Info("step: skipped (already done)", "step", step.ID(), "name", step.Name(), "reason", "already done")
 			o.rec.StepFinished(&r)
 			return r
 		}
