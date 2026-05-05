@@ -77,7 +77,7 @@ test-cover: test ## Run tests with coverage report
 ## Quality targets
 
 lint: ## Run linter
-	@which golangci-lint > /dev/null || (echo "Installing golangci-lint..." && go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.11.4)
+	@which golangci-lint > /dev/null || (echo "Installing golangci-lint..." && go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.1)
 	golangci-lint run ./...
 
 fmt: ## Format code
