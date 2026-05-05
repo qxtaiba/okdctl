@@ -67,7 +67,7 @@ func minimalOpts() *Options {
 
 func TestDestroySteps_SuccessPath(t *testing.T) {
 	h := &captureHandler{}
-	defs := newPhaseWithCapture(h).destroySteps(minimalConfig(), minimalOpts())
+	defs := newPhaseWithCapture(h).destroySteps(context.Background(), minimalConfig(), minimalOpts())
 
 	if defs[4].ID != StepPrintSummary {
 		t.Fatalf("defs[4].ID = %q; want %q", defs[4].ID, StepPrintSummary)
@@ -90,7 +90,7 @@ func TestDestroySteps_SuccessPath(t *testing.T) {
 
 func TestDestroySteps_FailurePath(t *testing.T) {
 	h := &captureHandler{}
-	defs := newPhaseWithCapture(h).destroySteps(minimalConfig(), minimalOpts())
+	defs := newPhaseWithCapture(h).destroySteps(context.Background(), minimalConfig(), minimalOpts())
 
 	tracked := []struct {
 		idx   int
@@ -150,7 +150,7 @@ func TestDestroySteps_FailurePath(t *testing.T) {
 
 func TestDestroySteps_SkipPath(t *testing.T) {
 	h := &captureHandler{}
-	defs := newPhaseWithCapture(h).destroySteps(minimalConfig(), minimalOpts())
+	defs := newPhaseWithCapture(h).destroySteps(context.Background(), minimalConfig(), minimalOpts())
 
 	for i := 0; i < 4; i++ {
 		if defs[i].SkipWhen == nil {
@@ -195,7 +195,7 @@ func TestDestroySteps_SkipPath(t *testing.T) {
 
 func TestDestroySteps_PartialFailure(t *testing.T) {
 	h := &captureHandler{}
-	defs := newPhaseWithCapture(h).destroySteps(minimalConfig(), minimalOpts())
+	defs := newPhaseWithCapture(h).destroySteps(context.Background(), minimalConfig(), minimalOpts())
 
 	defs[0].OnError(errors.New("tf-fail"))
 	defs[3].OnError(errors.New("fw-fail"))
