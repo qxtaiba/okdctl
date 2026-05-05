@@ -7,6 +7,7 @@ import (
 	"os"
 	"syscall"
 
+	"github.com/spf13/cobra"
 	"golang.org/x/term"
 
 	"github.com/qxtaiba/okdctl/internal/tui"
@@ -32,7 +33,7 @@ func openLogFile(path string) (*os.File, error) {
 	return os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND|syscall.O_NOFOLLOW, 0o600)
 }
 
-func configureLogging() error {
+func configureLogging(cmd *cobra.Command) error {
 	stdoutW := io.Writer(os.Stdout)
 	stderrW := io.Writer(os.Stderr)
 
@@ -61,6 +62,13 @@ func configureLogging() error {
 	// Honor https://no-color.org and FORCE_COLOR; either disables progress
 	// bars regardless of TTY detection.
 	noColor := os.Getenv("NO_COLOR") != ""
+
+	// Auto-switch to json when stderr is piped and the user has not
+	// explicitly set --log-format, mirroring the progress-bar TTY gate.
+	if !cmd.Root().PersistentFlags().Changed("log-format") && !stderrIsTTY {
+		logFormat = "json"
+	}
+
 	progressBars := stderrIsTTY && stdoutIsTTY && logFormat != "json" && !noColor
 
 	if err := tui.ConfigureLoggers(effectiveLevel, logFormat, stdoutW, stderrW, progressBars); err != nil {
