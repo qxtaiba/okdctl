@@ -202,6 +202,12 @@ func vmDevicesReferenceISO(vm map[string]json.RawMessage, isoBase string) bool {
 // RemoveFCOSISOFromProxmox removes fedora-coreos-*.iso files from isoDir on
 // the Proxmox host over SSH. Files still referenced by a running VM are
 // skipped with a warning. The path safety check runs before every rm.
+//
+// Shell-injection policy of record: this function is the only place in the
+// repo that passes a constructed string to a remote shell via SSHRun (sh -c).
+// All other SSH operations MUST use SSHRunArgv. Any new sh -c usage MUST
+// layer its own validateXxx guard (see validateISODir, refuseUnsafeISOPath)
+// and wrap every variable token with shellSingleQuote before interpolation.
 func RemoveFCOSISOFromProxmox(ctx context.Context, p *RemoteISOParams, isoDir string) error {
 	if err := validateISODir(isoDir); err != nil {
 		return err
