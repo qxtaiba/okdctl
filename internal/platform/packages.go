@@ -27,7 +27,7 @@ type PackageManager interface {
 // selects between RHEL (dnf/rpm) and Debian (apt-get/dpkg) binaries and
 // drives the AddRepo branch.
 type Manager struct {
-	family    string
+	family    Family
 	pkgCmd    string                               // "dnf" | "apt-get"
 	queryCmd  string                               // "rpm" | "dpkg"
 	queryArgs []string                             // ["-q"] | ["-l"]
