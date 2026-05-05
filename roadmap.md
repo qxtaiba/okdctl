@@ -1326,46 +1326,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 #### audit-errors
 
-##### `err:1e8ffb91:double-context-wrap-kubevip` — double context wrap kubevip
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/err-1e8ffb91-kubevip-wrap  
-**Severity:** minor  
-**Cluster:** wrapping  
-**Evidence:** `internal/distribution/okd/postinstall/verify.go:169-196`  
-**Problem:** VerifyKubeVIP wraps errors from waitForKubeVIPDaemonSet/waitForKubeVIPPing with errtypes.ClusterError.Msg = 'kube-vip daemonset not ready' / 'kube-vip vip not reachable' / 'kube-vip api health check failed', but each inner function ALREADY returns fmt.Errorf with the identical phrase. The user sees 'cluster error: kube-vip daemonset not ready: kube-vip daemonset not ready: <real cause>' — same context prefixed twice.  
-**Fix:** Pick one site to own the message. Preferred: drop the inner prefix — replace `fmt.Errorf("kube-vip daemonset not ready: %w", err)` at L195 with bare `return err` (the OcPollOutput / WaitForWithTimeout caller already names the operation). Same fix at L217 ('vip is not accepting tcp'). Outer ClusterError keeps its Msg so exit code 4 is unchanged.  
-**Effort:** hours
-
-##### `err:6424733c:metrics-addr-loses-chain` — metrics addr loses chain
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/err-6424733c-metrics-addr  
-**Severity:** minor  
-**Cluster:** wrapping  
-**Evidence:** `internal/cli/helpers.go:182-185`  
-**Problem:** startMetricsServer formats the SplitHostPort error into Msg with %s instead of carrying it via Err: errors.Is/As against the underlying net.AddrError is impossible downstream because the chain is broken. The error reaches root.go's exitCodeFor where the AddrError can never be inspected.  
-**Fix:** Move err into the Err field: &errtypes.ConfigError{Msg: fmt.Sprintf("invalid --metrics-addr %q", addr), Err: err}. Drops the duplicated message tail, preserves the chain.  
-**Effort:** hours
-
-##### `err:761e5126:network-vs-cluster-inconsistent` — network vs cluster inconsistent
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/err-761e5126-haproxy-types  
-**Severity:** minor  
-**Cluster:** domain-vocabulary — seam→audit-cli-ux — related: err:48688e63:terraform-bare-fmt-errorf  
-**Evidence:** `internal/distribution/okd/postinstall/haproxy.go:90-108`  
-**Problem:** Two adjacent post-haproxy-removal verifications return DIFFERENT typed errors for the same conceptual failure ('api not reachable'): line 92 returns *errtypes.NetworkError (exit 3), line 107 returns *errtypes.ClusterError (exit 4). The first probes via VIP, the second via cluster hostname; both timeouts mean the same thing to the operator (cluster lost reachability after teardown), but the exit code differs.  
-**Fix:** Pick one. Both probes are testing cluster post-cutover health, not raw network reachability — convert line 92's NetworkError to ClusterError so both teardown-verifications map to exit 4. NetworkError stays appropriate when the failure is at the network layer (DNS, TCP, TLS handshake); these timeouts are about cluster API availability.  
-**Effort:** hours
-
-##### `err:97cb8adf:stderr-tail-in-error-text` — stderr tail in error text
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/err-97cb8adf-stderr-tail  
-**Severity:** minor  
-**Cluster:** redaction-in-error — seam→audit-observability  
-**Evidence:** `internal/system/exec.go:31-60`  
-**Problem:** RunCaptured and OutputCaptured fold subprocess stderr text into the returned error string via fmt.Errorf("%s: %w: %s", bin, err, msg). The %s verb stringifies the stderr tail without going through any redaction layer; if a future caller pipes a credential into a child process and the child echoes it on stderr, the credential lands in the error message. Any caller that string-renders the error (or stores it in a manifest) will leak it. The %w preserves identity for errors.Is/As, but the appended %s does not.  
-**Fix:** Move stderr into a typed error: define system.SubprocessError{Bin, Err, StderrTail} with Error() that stringifies and a Redacted()/String() that returns only "<bin>: <inner>" (omitting StderrTail). Existing callers that need stderr can errors.As to the typed struct. Alternatively, route through executor.ExitError, which already carries Stderr but is shaped for non-zero exits, not Run-failed-to-launch.  
-**Effort:** hours
-
 ##### `err:08c49fc4:tui-warn-stringifies-err` — tui warn stringifies err
 
 **Status:** not started  
@@ -1374,16 +1334,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/cli/update_ingress.go:73-76`  
 **Problem:** tui.Warn("skipping HostNetwork conversion: " + err.Error()) concatenates err.Error() into the message string, bypassing logutil.RedactHandler — the handler only inspects structured slog attrs and *url.URL / Redacted() values. If the error chain ever carries a credential-bearing inner error (today it carries only ctx.Err and a TTY-config error, but the surface is exposed to refactor drift), the credential prints verbatim.  
 **Fix:** Pass err as a structured attr so the redact handler sees it: tui.Warn("skipping HostNetwork conversion", tui.LF("err", err)). Matches the canonical pattern in cli/root.go:121 and the redaction-handler doc-comment in CLAUDE.md.  
-**Effort:** hours
-
-##### `err:a55b4592:loader-save-no-typed-wrap` — loader save no typed wrap
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/err-a55b4592-loader-save  
-**Severity:** suggestion  
-**Cluster:** domain-vocabulary — seam→audit-api-design  
-**Evidence:** `internal/config/loader.go:55-64`  
-**Problem:** Loader.Save returns the raw yaml.Marshal error and AtomicWrite error without wrapping in errtypes.ConfigError, while Loader.LoadFile (5 sites in the same file) consistently uses errtypes.ConfigError. Save is currently called only by the wizard on a happy-path config write, but the asymmetry means a Save failure surfacing through to root.go would map to exit 1 instead of exit 2. Symmetric API drift inside one type.  
-**Fix:** Wrap both error paths: return &errtypes.ConfigError{Msg: "failed to marshal config", Err: err} and return &errtypes.ConfigError{Msg: fmt.Sprintf("failed to write config to %s", path), Err: err}. Matches the LoadFile siblings two functions up.  
 **Effort:** hours
 
 ##### `err:ae5b624c:install-cancelled-no-typed-wrap` — install cancelled no typed wrap
@@ -1396,28 +1346,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Either keep the bare wrap and add a doc-comment naming the signalExitCode shortcut, or convert to typed: &errtypes.ClusterError{Msg: "installation cancelled", Err: ctx.Err()} — signalExitCode still wins because it walks the err chain via errors.Is(err, context.Canceled). Preferred: add the doc-comment (lower risk, no behavior change).  
 **Effort:** hours
 
-##### `err:f55b9c27:envfile-parsedotenv-leaks-line` — envfile parsedotenv leaks line
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/err-f55b9c27-envfile-line  
-**Severity:** suggestion  
-**Cluster:** redaction-in-error — seam→audit-security  
-**Evidence:** `internal/credentials/envfile.go:182-185`  
-**Problem:** parseDotEnv returns fmt.Errorf("malformed line (no '='): %q", line). This branch only triggers when a line has NO '=', so the line cannot contain a KEY=VALUE secret today. But the function is the canonical parser for an oft-touched credential file and the line-with-no-= guard is the only thing keeping a 'PASSWORD=secret' from reaching the error. A future change that admits more line shapes (continuation lines, single-quoted KEYs) silently leaks a credential into an error string.  
-**Fix:** Replace the line content with a position-only error: fmt.Errorf("malformed line %d (no '=')", lineNum) (track lineNum from sc.Scan). Removes the foot-gun: a future change that admits a wider input class still cannot leak the original line. Slightly worse for debugging but safe-by-default.  
-**Effort:** hours
-
-
 #### audit-concurrency
-
-##### `con:15ba17da:detect-backend-ctx-bg` — detect backend ctx bg
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/con-15ba17da-firewall-ctx  
-**Severity:** minor  
-**Cluster:** ctx-todo  
-**Evidence:** `internal/distribution/okd/destroy/steps.go:127-130`  
-**Problem:** StepCleanupFirewall.SkipWhen calls `firewall.DetectBackend(context.Background(), p.Log)`. The justification comment claims the probe is bounded, but DetectBackend invokes `ufw status` and `system.IsServiceActive(ctx, "firewalld")`, both of which spawn systemctl/ufw subprocesses. systemctl is known to hang on a wedged systemd; with Background instead of the run ctx, a Ctrl-C during a stuck probe leaves SkipWhen blocked indefinitely and wedges the orchestrator's serial step loop.  
-**Fix:** Capture the orchestrator's running ctx at the destroySteps call site by adding ctx as a parameter to (p *Phase).destroySteps and threading it into the SkipWhen closure: `SkipWhen: trackSkip("firewall", func() bool { return opts.SkipFirewall || firewall.DetectBackend(ctx, p.Log) == firewall.None })`. Phase.Execute already has ctx in hand at the BuildSteps boundary.  
-**Effort:** hours
 
 ##### `con:6424733c:metrics-server-no-basecontext` — metrics server no basecontext
 
@@ -1530,16 +1459,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/executor/executor.go:69-76`  
 **Problem:** executor.WithInheritedEnv has no callers in the production tree — every executor.New call goes through WithEnv, WithWorkDir, or WithLogger. The function exists as a documented escape hatch ('a tool that consumes a variable not on the allowlist') but no such tool currently exists.  
 **Fix:** Verify intent (grep roadmap.md, confirm parallel siblings) — do not delete; per MEMORY.md §scaffolding.  
-**Effort:** hours
-
-##### `api:881d089e:lock-method-on-zero-value` — lock method on zero value
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/api-881d089e-runlock-zero  
-**Severity:** suggestion  
-**Cluster:** zero-value-usability  
-**Evidence:** `internal/runlock/runlock.go:24-85`  
-**Problem:** runlock.Lock has a single unexported pointer field f *os.File. The zero value (Lock{}) is constructible by callers (var l runlock.Lock) but Release would nil-deref on l.f.Name(). Acquire is the only constructor and returns *Lock — the type doesn't enforce that.  
-**Fix:** Add a nil-and-zero guard at the top of Release: if l == nil || l.f == nil { return }. Cheap, makes the zero-value safe-but-no-op. Net delta +3 LOC. Alternative: panic with a clear message on the zero value if you want to enforce constructor-only construction.  
 **Effort:** hours
 
 ##### `api:8aa632a6:version-globals-mutable` — version globals mutable
@@ -1821,16 +1740,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 #### audit-modernization
 
-##### `mod:04f0e35f:use-builtins` — use builtins
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/mod-04f0e35f-clear-builtin  
-**Severity:** suggestion  
-**Cluster:** any-interface-builtins  
-**Evidence:** `internal/system/zeroize.go:7-11`  
-**Problem:** ZeroBytes uses an explicit index loop to zero a []byte; the Go 1.21 clear() builtin does exactly this and signals intent more clearly. Both forms compile to runtime.memclrNoHeapPointers so behavioural and security semantics are identical, and the rest of the credentials path already uses clear (envfile.go:70, okd.go:203, proxmox.go:88).  
-**Fix:** Replace body with `clear(b)`. The doc comment can stay — it explains intent. Tests in zeroize_test.go cover nil and empty inputs; clear() handles both as no-ops. Optionally inline the helper at the single call site (internal/distribution/okd/setup/ignition.go:44 `defer system.ZeroBytes(pullSecret)` becomes `defer clear(pullSecret)`) and delete the package — but keeping the helper is fine if the named symbol aids grep-for-credential-handling.  
-**Effort:** hours
-
 ##### `mod:1e8ffb91:use-slices-containsfunc` — use slices containsfunc
 
 **Status:** not started  
@@ -1892,16 +1801,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/distribution/okd/cleanup/cleanup.go:127-132`  
 **Problem:** The cleanup-kind validation hardcodes the valid-values list as a literal string `(valid types: full, work-only, web-only, haproxy-only, terraform-only)` separate from the `Full` / `WorkOnly` / `WebOnly` / `HAProxyOnly` / `TerraformOnly` typed-enum constants. Add a kind to the type → forget to add it to the error message → silently misleading user-facing error.  
 **Fix:** Add `var validKinds = []Kind{Full, WorkOnly, WebOnly, HAProxyOnly, TerraformOnly}` and `func (k Kind) IsValid() bool` plus a `KindStrings() []string` helper. Format the error via `strings.Join(KindStrings(), ", ")`. Self-maintaining when a new kind ships.  
-**Effort:** hours
-
-##### `smell:6fc3d91e:stringly-typed-enum` — stringly typed enum
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/smell-6fc3d91e-family-enum  
-**Severity:** minor  
-**Cluster:** magic-strings  
-**Evidence:** `internal/platform/platform.go:21-47`  
-**Problem:** OS.Family is an untyped `string` even though only two values (`FamilyRHEL`, `FamilyDebian`) are valid. The repo defines typed enums for every other comparable concept — NodeRole (`phase/noderole.go`), VMRole (`proxmox/types.go`), VMState (`phase/vmstate.go`), ClusterPhase (`distribution/okd/types.go`) — so this site is the only stringly-typed enum left in the platform layer.  
-**Fix:** Define `type Family string`, change the constants to `FamilyRHEL Family = "rhel"` / `FamilyDebian Family = "debian"`, retype OS.Family. Touches ~7 callsites in setup/tools.go, packages.go, and platform.go.  
 **Effort:** hours
 
 ##### `smell:8ea706f6:abstraction-table-meta` — abstraction table meta
@@ -1984,17 +1883,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** No fix — bools are correctly orthogonal. Add a one-line doc comment to the struct stating 'these flags are independent; do not collapse into a phase enum' to head off a future refactor regression.  
 **Effort:** hours
 
-##### `smell:e7db1220:abstraction-single-caller` — abstraction single caller
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/smell-e7db1220-filter-stable  
-**Severity:** suggestion  
-**Cluster:** helper-package-no-value  
-**Evidence:** `internal/cli/releases.go:146-154`  
-**Problem:** `filterStable` is a 6-LOC helper used exactly once. Per CLAUDE.md §code-comments §do-not-comment-when, factoring helpers with one caller is the kind of premature decomposition the docs flag — the body inlines as a single `slices.DeleteFunc` call.  
-**Fix:** Inline at the call site as `versions = slices.DeleteFunc(versions, func(v releases.OKDVersion) bool { return !v.Stable })`. Keeps fetchFlatVersions which has 2 callers.  
-**Effort:** hours
-
-
 #### audit-dependencies
 
 ##### `dep:33ef32bf:proxmox-bus-factor-1` — proxmox bus factor 1
@@ -2005,16 +1893,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `go.mod:13-13`  
 **Problem:** github.com/luthermonson/go-proxmox v0.4.1 is the sole Proxmox discovery dep and exhibits bus-factor 1 (top contributor 159 commits, next 20). v0.x semver means any minor bump may break the API. Pre-known per CLAUDE.md §dependencies; re-confirmed: 28 commits in last 6 months, latest tag v0.4.1 dated 2026-04-03, license Apache-2.0, no archive marker. Abandonment plan (~200 LOC REST rewrite using net/http) still valid.  
 **Fix:** No code change. Re-confirm CLAUDE.md §dependencies justification annually; bump on each upstream release; keep the documented REST-only fallback (~200 LOC) ready. Open an internal tracking issue if commit cadence drops below 4/quarter or top contributor goes inactive >6mo.  
-**Effort:** hours
-
-##### `dep:b803fcb7:golangci-lint-version-drift` — golangci lint version drift
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/dep-b803fcb7-lint-pin  
-**Severity:** minor  
-**Cluster:** pin-stability  
-**Evidence:** `.github/workflows/ci.yml:18-21` + 1 more  
-**Problem:** CI pins golangci-lint to v2.12.1 (.github/workflows/ci.yml line 21) but Makefile pins to v2.11.4 (Makefile line 80). Local `make lint` runs a different linter version than CI, so contributors can pass locally and fail in CI on rule deltas (or vice versa).  
-**Fix:** Bump Makefile install pin to v2.12.1 to match CI: `go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.1`. Better yet, add a single source of truth (e.g. `.tool-versions` or a `GOLANGCI_LINT_VERSION` Makefile var) consumed by both CI and the local install path, so future bumps touch one line.  
 **Effort:** hours
 
 ##### `dep:33ef32bf:dual-log-engines` — dual log engines
@@ -2110,26 +1988,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Edit the package doc in internal/cli/root.go to drop the '77 (EX_NOPERM)' line — invoked-as-root rejection actually surfaces as AuthError -> 5, matching docs/cli/exit-codes.md. If 77 is desired (sysexits-style), introduce a sentinel and add to exitCodeFor; otherwise just remove the false claim.  
 **Effort:** hours
 
-##### `doc:23d812fa:flux-doc-missing-provider-setting` — flux doc missing provider setting
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/doc-23d812fa-flux-provider  
-**Severity:** minor  
-**Cluster:** readme-drift  
-**Evidence:** `docs/addons/flux.md:22-31`  
-**Problem:** docs/addons/flux.md 'default settings' table omits the `provider` setting, which is the first key returned by Flux.DefaultSettings (default 'flux'). Operators reading the table miss that they can override the provider.  
-**Fix:** Add a `provider | flux | toolkit identifier; only `flux` is currently shipped` row at the top of the default-settings table.  
-**Effort:** hours
-
-##### `doc:3229e1a6:doctor-checks-exit-code-drift` — doctor checks exit code drift
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/doc-3229e1a6-doctor-exit  
-**Severity:** minor  
-**Cluster:** readme-drift — seam→audit-cli-ux  
-**Evidence:** `docs/doctor-checks.md:4-7`  
-**Problem:** docs/doctor-checks.md says doctor exits '1 otherwise' on [fail] results, but the implementation returns errtypes.ConfigError which exitCodeFor maps to 2. The companion docs/cli/okdctl_doctor.md correctly says 2.  
-**Fix:** Edit docs/doctor-checks.md to say '2 (configuration error) otherwise' matching the actual exit code and the okdctl_doctor.md companion doc.  
-**Effort:** hours
-
 ##### `doc:8f46b665:phases-basephase-missing-recorder` — phases basephase missing recorder
 
 **Status:** not started  
@@ -2138,16 +1996,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `docs/architecture/phases.md:79-85`  
 **Problem:** Documented BasePhase struct is missing the Recorder field (distribution.MetricsRecorder). The metrics-recorder wiring is load-bearing for the deploymetrics path; readers cloning the doc shape will miss it.  
 **Fix:** Add Recorder field to the documented BasePhase code block and a one-line note explaining its role (per-step + overall observation sink, defaults to nopMetricsRecorder via WithRecorder).  
-**Effort:** hours
-
-##### `doc:b3356305:readme-minimal-yaml-drift` — readme minimal yaml drift
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/doc-b3356305-readme-min  
-**Severity:** minor  
-**Cluster:** readme-drift — seam→audit-cli-ux — related: ux:b3356305:readme-14-commands-claim  
-**Evidence:** `README.md:115-115`  
-**Problem:** README claims 'minimal.yaml — 3 control-plane nodes, 0 workers (compact cluster)' but configs/examples/minimal.yaml has control_plane.count: 1. Cardinality drift.  
-**Fix:** Edit README to say 'minimal.yaml — 1 control-plane node, 0 workers (single-node cluster)' matching minimal.yaml. The flag help text for --minimal also says 'single-node cluster', so the README is the only drift site.  
 **Effort:** hours
 
 ##### `doc:b3356305:readme-production-yaml-worker-drift` — readme production yaml worker drift
@@ -2179,37 +2027,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Problem:** docs cites `flux.go:223-231` for DefaultSettings — actual range is 230-238 (off by 7). Cites `flux.go:22-25` for duration constants — actual is 23-26. Stale anchors rot every refactor; a structural reference (function name, no line numbers) is more durable.  
 **Fix:** Drop line numbers; cite by symbol (`Flux.DefaultSettings` and `defaultControllerTimeout/defaultGitRepoSyncTimeout`). Or run a CI check that grep's the doc anchors against the source.  
 **Effort:** hours
-
-##### `doc:262af6e4:cleanup-pkgdoc-over-3-sentences` — cleanup pkgdoc over 3 sentences
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/doc-262af6e4-cleanup-pkg  
-**Severity:** suggestion  
-**Cluster:** package-doc  
-**Evidence:** `internal/distribution/okd/cleanup/cleanup.go:1-4`  
-**Problem:** Package cleanup doc has 6 sentences and includes a forward-looking design note ('A two-pass design with a .cleanup-plan.json checkpoint would convert the flow to declarative resume; that is not yet implemented'). CLAUDE.md target is 1-3 sentences; aspirational notes belong in the roadmap, not in the package doc.  
-**Fix:** Tighten to 3 sentences: (1) what the package does, (2) best-effort partial-fail behavior, (3) ordering invariant (terraform state removed last). Move the two-pass design note to roadmap.md.  
-**Effort:** hours
-
-##### `doc:88fd3050:cluster-pkgdoc-over-3-sentences` — cluster pkgdoc over 3 sentences
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/doc-88fd3050-cluster-pkg  
-**Severity:** suggestion  
-**Cluster:** package-doc  
-**Evidence:** `internal/config/cluster.go:1-4`  
-**Problem:** Package config doc spans 5 sentences (CLAUDE.md target: 1-3 unless a real invariant requires more). The yaml-tag invariant is real but the prose can be tightened to 3 sentences without losing it.  
-**Fix:** Tighten to: (1) what the package defines, (2) the YAML serialization library used, (3) the json-tag-only invariant. Drop the parenthetical schema enumeration.  
-**Effort:** hours
-
-##### `doc:a4001485:errtypes-pkgdoc-over-3-sentences` — errtypes pkgdoc over 3 sentences
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/doc-a4001485-errtypes-pkg  
-**Severity:** suggestion  
-**Cluster:** package-doc  
-**Evidence:** `internal/errtypes/errtypes.go:1-6`  
-**Problem:** Package errtypes doc spans 5 sentences. The exit-code mapping is a real invariant (justifies length), but the package-level doc duplicates information also carried by docs/cli/exit-codes.md and the per-sentinel var docs. CLAUDE.md target is 1-3 unless real invariant.  
-**Fix:** Borderline acceptable as-is — the exit-code map is load-bearing for reviewers. If tightened, keep 'maps to structured exit codes (see exitCodeFor in internal/cli/root.go)' and let per-sentinel doc carry the specific codes.  
-**Effort:** hours
-
 
 #### audit-tests
 
