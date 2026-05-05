@@ -74,6 +74,10 @@ func calculateTotalSize(files []string) int64 {
 	return totalSize
 }
 
+// uploadISOsViaSCP scps ISOs to the Proxmox host. The first call uses
+// StrictHostKeyChecking=accept-new (TOFU); a planned proxmox.host_fingerprint
+// config field will pre-seed known_hosts and close that window. See
+// README §security-considerations.
 func uploadISOsViaSCP(ctx context.Context, cmdRunner *executor.Executor, isoFiles []string, user, host, remotePath string) error {
 	args := []string{"-o", "StrictHostKeyChecking=accept-new"}
 	args = append(args, isoFiles...)
