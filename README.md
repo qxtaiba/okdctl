@@ -219,6 +219,27 @@ Pre-1.0. The schema changes between minor versions, and the tool refuses to
 run against a schema it doesn't understand rather than corrupt state silently.
 The [`CHANGELOG`](CHANGELOG.md) documents every break. Pin a version until 1.0.
 
+## Security considerations
+
+### SSH/SCP host-key trust on first run (TOFU window)
+
+The first `okdctl deploy` run scps CoreOS ISOs to the Proxmox host using
+`-o StrictHostKeyChecking=accept-new`, which trusts and pins the Proxmox host
+key without prior verification. Every subsequent SSH/SCP call (Proxmox shell
+commands, ISO removal) reuses that cached key.
+
+A machine-in-the-middle on the bastion-to-Proxmox path during the very first
+SCP call can substitute an attacker key that is then trusted for the lifetime
+of the cluster. Mitigations until a `proxmox.host_fingerprint` config field
+ships:
+
+- Run `okdctl deploy` from a bastion with a trusted L2 path to the Proxmox
+  host (no NAT or L3 hop an attacker can position on).
+- Before the first deploy, manually SSH to the Proxmox host and verify its
+  fingerprint out-of-band (Proxmox UI → Node → Shell → `ssh-keygen -lf
+  /etc/ssh/ssh_host_ed25519_key.pub`). Once the correct entry is in
+  `~/.ssh/known_hosts`, `accept-new` will not override it.
+
 ## Contributing
 
 PRs welcome. Run `make test && make lint` before submitting. The issue forms
