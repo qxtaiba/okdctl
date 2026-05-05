@@ -4,7 +4,7 @@
 before a deploy. The command is Linux-only (it reads `/etc/os-release`
 and uses Linux syscalls). Checks run in the order listed below; results
 are reported per-check. Exit code is 0 when there are no `[fail]`
-results (`[warn]` is tolerated), 1 otherwise.
+results (`[warn]` is tolerated), 2 (configuration error) otherwise.
 
 ## Table of contents
 
