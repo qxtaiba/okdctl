@@ -46,27 +46,34 @@ func WithLogger(l *slog.Logger) Option {
 	return func(c *K8sClient) { c.logger = logutil.OrNop(l) }
 }
 
-// NewK8sClient builds a K8sClient using KUBECONFIG from the environment when
-// no explicit path is provided and prefers "oc" over "kubectl" when both are
-// on PATH.
+// WithEnvFallback applies environment-driven defaults when no explicit option
+// has set them: reads KUBECONFIG from the process env when Kubeconfig is
+// still empty, and upgrades the binary from "kubectl" to "oc" when "oc" is
+// on PATH. Pass this option only when env-driven discovery is intentional;
+// production callers (install, postinstall) supply WithCLI/WithKubeconfig
+// explicitly so they get reproducible construction.
+func WithEnvFallback() Option {
+	return func(c *K8sClient) {
+		if c.Kubeconfig == "" {
+			c.Kubeconfig = os.Getenv("KUBECONFIG")
+		}
+		if c.CLI == "kubectl" && executor.CommandExists("oc") {
+			c.CLI = "oc"
+		}
+	}
+}
+
+// NewK8sClient builds a K8sClient applying the supplied options in order.
+// It does not read the process environment or probe PATH; callers wanting
+// those defaults must pass WithEnvFallback() explicitly.
 func NewK8sClient(opts ...Option) *K8sClient {
 	c := &K8sClient{
 		CLI:    "kubectl",
 		logger: logutil.NopLogger,
 	}
 
-	if envKubeconfig := os.Getenv("KUBECONFIG"); envKubeconfig != "" {
-		c.Kubeconfig = envKubeconfig
-	}
-
 	for _, opt := range opts {
 		opt(c)
-	}
-
-	if c.CLI == "kubectl" {
-		if executor.CommandExists("oc") {
-			c.CLI = "oc"
-		}
 	}
 
 	if c.exec == nil {
