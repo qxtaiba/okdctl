@@ -74,7 +74,7 @@ func (p *Phase) Execute(ctx context.Context, cfg *config.Config, opts *Options) 
 	p.Log.Info("destroy: starting cluster teardown")
 	p.Log.Warn("destroy: this will permanently remove all vms and generated files")
 
-	orchestrator := distribution.NewOrchestrator(distribution.BuildSteps(p.destroySteps(cfg, opts))...)
+	orchestrator := distribution.NewOrchestrator(distribution.BuildSteps(p.destroySteps(ctx, cfg, opts))...)
 	orchestrator.SetLogger(p.Log)
 
 	if err := orchestrator.Run(ctx); err != nil {

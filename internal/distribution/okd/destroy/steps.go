@@ -61,7 +61,7 @@ func (t *destroyTracker) terraformFailed() bool {
 	return false
 }
 
-func (p *Phase) destroySteps(cfg *config.Config, opts *Options) []distribution.StepDef {
+func (p *Phase) destroySteps(ctx context.Context, cfg *config.Config, opts *Options) []distribution.StepDef {
 	t := &destroyTracker{log: p.Log}
 	track, trackSkip := t.onError, t.skipWhen
 	return []distribution.StepDef{
@@ -138,9 +138,8 @@ func (p *Phase) destroySteps(cfg *config.Config, opts *Options) []distribution.S
 		{
 			ID: StepCleanupFirewall, Name: "cleanup firewall", ReRunSafe: distribution.ReRunSafeYes,
 			Desc: "removing firewall rules", NonFatal: true,
-			// context.Background() is safe: DetectBackend runs only exec.LookPath + a bounded systemctl probe.
 			SkipWhen: trackSkip("firewall", func() bool {
-				return opts.SkipFirewall || firewall.DetectBackend(context.Background(), p.Log) == firewall.None
+				return opts.SkipFirewall || firewall.DetectBackend(ctx, p.Log) == firewall.None
 			}),
 			SkipReason: "firewall cleanup disabled or no active backend",
 			Exec: func(ctx context.Context) error {
