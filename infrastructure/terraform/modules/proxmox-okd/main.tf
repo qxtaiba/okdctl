@@ -241,10 +241,11 @@ resource "proxmox_virtual_environment_vm" "master" {
 
   depends_on = [proxmox_virtual_environment_vm.bootstrap]
 
-  # prevent_destroy cannot reference var.protect_masters (Terraform requires a
-  # literal boolean). Production operators: wrap this module in an override
-  # (override.tf) with `lifecycle { prevent_destroy = true }` on this resource.
+  # prevent_destroy must be a literal boolean. To run okdctl destroy against a
+  # protected cluster, place an override.tf in this module directory that
+  # removes or overrides this lifecycle block, then remove it after destroy.
   lifecycle {
+    prevent_destroy = true
     precondition {
       condition     = length(var.master_isos) >= var.master_count
       error_message = "master_isos must have at least master_count (${var.master_count}) entries, got ${length(var.master_isos)}."

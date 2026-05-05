@@ -9,6 +9,21 @@ This operation is idempotent and safe to re-run if a previous destroy was interr
 
 Use --dry-run to preview the terraform destroy plan without modifying infra.
 
+Master nodes ship with prevent_destroy = true in the Terraform module to
+guard against accidental etcd-quorum loss. To run a full or targeted
+destroy, place an override.tf in
+infrastructure/terraform/modules/proxmox-okd/ disabling prevent_destroy on
+the master resource:
+
+  resource "proxmox_virtual_environment_vm" "master" {
+    lifecycle {
+      prevent_destroy = false
+    }
+  }
+
+Remove the override.tf after destroy completes. Alternatively, pass
+--skip-terraform to bypass Terraform entirely and remove VMs by hand.
+
 ```
 okdctl destroy [flags]
 ```
