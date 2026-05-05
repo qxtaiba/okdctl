@@ -2,7 +2,6 @@ package install
 
 import (
 	"context"
-	"fmt"
 	"path/filepath"
 
 	"github.com/qxtaiba/okdctl/internal/config"
@@ -17,7 +16,7 @@ func (p *Phase) StartWorkerVMs(ctx context.Context, cfg *config.Config, opts *Op
 		return nil
 	}
 
-	p.Log.Info(fmt.Sprintf("workers: starting %d worker nodes", cfg.Topology.Workers.Count))
+	p.Log.Info("workers: starting", "count", cfg.Topology.Workers.Count)
 
 	terraformDir := filepath.Join(opts.ProjectRoot, "infrastructure", "terraform", "environments", opts.TerraformEnv)
 
