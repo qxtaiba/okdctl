@@ -12,8 +12,8 @@
 # Environment variables:
 #   VERSION       - pin to a specific release, e.g. VERSION=v0.1.0 (default: latest)
 #   INSTALL_DIR   - where to put the binary (default: /usr/local/bin)
-#   INSECURE      - set to "1" to skip SHA256 checksum verification (NOT recommended);
-#                   cosign signature verification still runs when cosign is installed.
+#   INSECURE      - set to "1" to skip cosign signature verification (NOT recommended);
+#                   SHA256 verification always runs and sha256sum (coreutils) is required.
 #   GITHUB_TOKEN  - bearer token injected when resolving the latest release;
 #                   lifts the GitHub API rate limit from 60 to 5 000 req/hr/IP,
 #                   which matters on shared CI runners with many co-tenants.
@@ -44,11 +44,12 @@ require() {
 require curl
 require tar
 
+# sha256sum ships with coreutils on every supported Linux distro; refuse
+# early rather than offering an env-var bypass when it is absent.
 if command -v sha256sum >/dev/null 2>&1; then
     SHA_CMD="sha256sum"
 else
-    [ -n "$INSECURE" ] || die "sha256sum is required (or set INSECURE=1 to skip checksum verification)"
-    SHA_CMD=""
+    die "sha256sum is required but not installed; install coreutils (e.g. apt-get install coreutils, dnf install coreutils)"
 fi
 
 COSIGN_CMD=""
@@ -57,13 +58,9 @@ if command -v cosign >/dev/null 2>&1; then
 fi
 
 if [ -n "$INSECURE" ]; then
-    if [ -n "$COSIGN_CMD" ]; then
-        printf '\033[31mWARNING: INSECURE=1 is set — SHA256 verification SKIPPED (cosign signature verification still active).\033[0m\n' >&2
-    else
-        printf '\033[31mWARNING: INSECURE=1 is set — SHA256 and cosign signature verification SKIPPED.\033[0m\n' >&2
-    fi
-    printf '\033[31m         A compromised GitHub release or CDN can substitute arbitrary binaries.\033[0m\n' >&2
-    printf '\033[31m         Unset INSECURE to re-enable SHA256 verification.\033[0m\n' >&2
+    printf '\033[31mWARNING: INSECURE=1 is set — cosign signature verification SKIPPED.\033[0m\n' >&2
+    printf '\033[31m         SHA256 verification still runs; only cosign is bypassed.\033[0m\n' >&2
+    printf '\033[31m         Unset INSECURE to re-enable cosign verification.\033[0m\n' >&2
 fi
 
 # okdctl is Linux-only. Refuse to install on anything else.
@@ -114,12 +111,10 @@ info "downloading $ARCHIVE_NAME"
 curl_safe -sSfL -o "$TMP/$ARCHIVE_NAME" "$ARCHIVE_URL" ||
     die "failed to download $ARCHIVE_URL"
 
-# Download SHA256SUMS when at least one verification layer will consume it.
-if [ -n "$COSIGN_CMD" ] || { [ -z "$INSECURE" ] && [ -n "$SHA_CMD" ]; }; then
-    info "downloading SHA256SUMS"
-    curl_safe -sSfL -o "$TMP/SHA256SUMS" "$SHA_URL" ||
-        die "failed to download SHA256SUMS from $SHA_URL"
-fi
+# sha256sum is now required, so SHA256SUMS is always consumed.
+info "downloading SHA256SUMS"
+curl_safe -sSfL -o "$TMP/SHA256SUMS" "$SHA_URL" ||
+    die "failed to download SHA256SUMS from $SHA_URL"
 
 # Cosign verify-blob against the sigstore-published signature; runs whenever
 # cosign is present — independent of INSECURE so the stronger sigstore
@@ -146,19 +141,16 @@ else
     info "install cosign from https://docs.sigstore.dev/system_config/installation/ to enable signature verification"
 fi
 
-# Verify SHA256 unless explicitly skipped.
-if [ -z "$INSECURE" ] && [ -n "$SHA_CMD" ]; then
-    info "verifying SHA256"
-    # awk field-equality (not grep) avoids treating '.' in the filename as a
-    # regex wildcard. Cosign already protects SHA256SUMS integrity so this
-    # is defense-in-depth rather than a standalone guard.
-    EXPECTED=$(awk -v name="$ARCHIVE_NAME" '$2 == name || $2 == "*"name {print $1}' "$TMP/SHA256SUMS")
-    [ -n "$EXPECTED" ] || die "no checksum found for $ARCHIVE_NAME in SHA256SUMS"
-    ACTUAL=$($SHA_CMD "$TMP/$ARCHIVE_NAME" | awk '{print $1}')
-    [ "$EXPECTED" = "$ACTUAL" ] ||
-        die "checksum mismatch: expected $EXPECTED, got $ACTUAL"
-    info "checksum verified"
-fi
+# SHA256 verification is mandatory; sha256sum was required at startup.
+# awk field-equality (not grep) avoids treating '.' in the filename as a
+# regex wildcard.
+info "verifying SHA256"
+EXPECTED=$(awk -v name="$ARCHIVE_NAME" '$2 == name || $2 == "*"name {print $1}' "$TMP/SHA256SUMS")
+[ -n "$EXPECTED" ] || die "no checksum found for $ARCHIVE_NAME in SHA256SUMS"
+ACTUAL=$($SHA_CMD "$TMP/$ARCHIVE_NAME" | awk '{print $1}')
+[ "$EXPECTED" = "$ACTUAL" ] ||
+    die "checksum mismatch: expected $EXPECTED, got $ACTUAL"
+info "checksum verified"
 
 # Extract the archive. --no-same-owner and --no-same-permissions harden
 # against a release tarball that encodes unexpected ownership. The cosign
