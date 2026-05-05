@@ -162,6 +162,24 @@ func TestWriteAsInvokingUser(t *testing.T) {
 			t.Errorf("file not created: %v", err)
 		}
 	})
+
+	t.Run("chown-fails-after-write returns the chown error and file persists", func(t *testing.T) {
+		if os.Getuid() == 0 {
+			t.Skip("running as root: chown to 65534 succeeds, cannot exercise failure path")
+		}
+		t.Setenv("SUDO_UID", strconv.Itoa(65534))
+		t.Setenv("SUDO_GID", strconv.Itoa(65534))
+
+		dir := t.TempDir()
+		path := filepath.Join(dir, "x")
+		err := WriteAsInvokingUser(path, []byte("content"), 0o600)
+		if err == nil {
+			t.Fatal("expected chown error; got nil")
+		}
+		if _, statErr := os.Stat(path); statErr != nil {
+			t.Errorf("file must persist after failed chown; Stat: %v", statErr)
+		}
+	})
 }
 
 func TestChownTreeToInvokingUser_NoSudo(t *testing.T) {
