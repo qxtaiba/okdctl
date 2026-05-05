@@ -66,15 +66,15 @@ func configureLogging(cmd *cobra.Command) error {
 	// Auto-switch to json when stderr is piped and the user has not
 	// explicitly set --log-format, mirroring the progress-bar TTY gate.
 	if !cmd.Root().PersistentFlags().Changed("log-format") && !stderrIsTTY {
-		logFormat = "json"
+		logFormat = outputJSON
 	}
 
-	progressBars := stderrIsTTY && stdoutIsTTY && logFormat != "json" && !noColor
+	progressBars := stderrIsTTY && stdoutIsTTY && logFormat != outputJSON && !noColor
 
 	if err := tui.ConfigureLoggers(effectiveLevel, logFormat, stdoutW, stderrW, progressBars); err != nil {
 		return err
 	}
-	if logFormat == "json" && !logVerbose {
+	if logFormat == outputJSON && !logVerbose {
 		tui.SuppressInfo()
 	}
 	return nil
