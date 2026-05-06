@@ -38,14 +38,14 @@ func checkStateMajorVersion(stateFile string, log *slog.Logger) error {
 	if err := json.Unmarshal(raw, &state); err != nil || state.TerraformVersion == "" {
 		log.Warn("terraform: state version unreadable; skipping major-version preflight",
 			"file", stateFile)
-		return nil
+		return nil //nolint:nilerr // parse failure is non-fatal: terraform's own init/plan path surfaces it
 	}
 	parts := strings.SplitN(state.TerraformVersion, ".", 2)
 	major, err := strconv.Atoi(parts[0])
 	if err != nil {
 		log.Warn("terraform: state version unparseable; skipping major-version preflight",
 			"version", state.TerraformVersion)
-		return nil
+		return nil //nolint:nilerr // semver parse failure is non-fatal: caller continues to terraform init
 	}
 	if major < stateMajorMin || major > stateMajorMax {
 		return &errtypes.ConfigError{
