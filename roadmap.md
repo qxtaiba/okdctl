@@ -854,16 +854,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Replace the predictable name + AtomicWriteString with system.WriteTempFile("haproxy-*.cfg", 0o644, writer) to use the canonical mode-at-open temp helper.  
 **Effort:** hours
 
-##### `sec:35abd54e:env-string-immutable-residue` — env string immutable residue
-
-**Status:** in review — PR #388  
-**Severity:** minor  
-**Cluster:** credentials  
-**Evidence:** `internal/credentials/proxmox.go:148-169`  
-**Problem:** Env() converts the []byte Password / APIToken to string for embedding in cmd.Env. The string is now an immutable Go-heap value that Zeroize cannot wipe; the file documents this as deliberate, but the conversion happens INSIDE a method called from non-deferred call sites (e.g. cli/destroy.go inside terraform.WithEnv). The lifetime of those string copies is therefore the parent's GC cycle, not Zeroize's defer scope.  
-**Fix:** Document this lifecycle gap explicitly in the Env() doc and audit each caller to ensure the returned []string never leaks past the immediate cmd.Run/terraform.WithEnv boundary. Consider returning an iter.Seq2[string,string] or a wipeable wrapper that callers must consume in a closure.  
-**Effort:** hours
-
 ##### `sec:5013fea6:bootstrap-oc-no-signature` — bootstrap oc no signature
 
 **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-5013fea6-bootstrap-oc-pin  
@@ -914,16 +904,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Remove the INSECURE=1 path entirely, OR require both cosign AND sha256sum to be present before honoring INSECURE=1 (refuse to install when integrity checks are skipped without an alternative trust anchor). Per CLAUDE.md §security-invariants we should never recommend disabling verification on a trust-boundary download.  
 **Effort:** hours
 
-##### `sec:eb479d86:scp-strict-host-key-tofu` — scp strict host key tofu
-
-**Status:** in review — PR #389  
-**Severity:** minor  
-**Cluster:** tls-network  
-**Evidence:** `internal/distribution/okd/setup/upload.go:77-86`  
-**Problem:** uploadISOsViaSCP passes -o StrictHostKeyChecking=accept-new — TOFU on first connect to the Proxmox host. A first-run MITM between bastion and Proxmox can plant an attacker key permanently into known_hosts. The Proxmox host is the target of multiple subsequent SSH/SCP mutations (pveshRun, RemoveFCOSISOFromProxmox), so first-run trust establishment is the lever.  
-**Fix:** Document the TOFU window in README §security-considerations and offer an opt-in --proxmox-known-hosts flag (or a per-cluster `proxmox.host_fingerprint` config field) that pre-seeds known_hosts before the first scp/ssh.  
-**Effort:** hours
-
 ##### `sec:0d318f5c:logfile-mode-fixed` — logfile mode fixed
 
 **Status:** not started  
@@ -942,56 +922,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/distribution/okd/firewall/firewall.go:52-66`  
 **Problem:** haproxyPortNumbers is map[int]bool but HAProxyFrontendPorts() filters by both Number and Protocol == protoTCP. The rule is correct but the structure leaves a future-maintainer footgun: if anyone adds a UDP rule on those numbers (e.g. UDP 6443 for QUIC variants), HAProxyFrontendPorts() would silently include them only when their tcp filter passes. A pure allowlist of {Number, Protocol} pairs would be unambiguous.  
 **Fix:** Define haproxyFrontends as []Port literal (number+protocol pairs) instead of map[int]bool keyed only by number. Removes the implicit tcp-only assumption.  
-**Effort:** hours
-
-##### `sec:696d6b0e:iso-cleanup-shellquote-policy` — iso cleanup shellquote policy
-
-**Status:** in review — PR #390  
-**Severity:** suggestion  
-**Cluster:** shell-injection — seam→audit-subprocess  
-**Evidence:** `internal/distribution/okd/phase/iso_cleanup.go:205-253`  
-**Problem:** RemoveFCOSISOFromProxmox is the only `sh -c <variable>` shape in the repo (find -print0, rm -f), guarded by validateISODir + refuseUnsafeISOPath (allowlist of fedora-coreos-*.iso) + shellSingleQuote. Per CLAUDE.md §architecture-notes the canonical SSH path is SSHRunArgv. Policy: future SSH operations against the Proxmox host MUST use SSHRunArgv unless shell metacharacter expansion is required.  
-**Fix:** Add a doc-of-record at the top of phase/iso_cleanup.go: 'Only sh-c flow in repo. New SSH operations MUST use SSHRunArgv unless shell metacharacter expansion is required, AND must layer their own validateXxx + shellSingleQuote.' Cross-link from CLAUDE.md §architecture-notes.  
-**Effort:** hours
-
-##### `sec:8e65d574:updatecheck-cache-no-perm-check` — updatecheck cache no perm check
-
-**Status:** in review — PR #391  
-**Severity:** suggestion  
-**Cluster:** credentials  
-**Evidence:** `internal/version/updatecheck.go:115-135`  
-**Problem:** loadCache reads ~/.cache/okdctl/update-check.json without verifying its mode. The cache holds public release-tag data so the consequence is bounded — but if a future field is added that influences behavior (e.g. an auto-update target), an attacker who can write to the user's cache dir could poison it.  
-**Fix:** Add an os.Stat + perm check before reading; mirror the loadEnvFileOnce pattern. Or accept the public-data argument and add a comment-of-record so a future reviewer doesn't re-flag.  
-**Effort:** hours
-
-##### `sec:bdf5a873:secretbytes-string-immutable-leak` — secretbytes string immutable leak
-
-**Status:** in review — PR #392  
-**Severity:** suggestion  
-**Cluster:** credentials  
-**Evidence:** `internal/config/secret.go:16-19`  
-**Problem:** SecretBytes.Set takes a string and copies it via `[]byte(v)`. The ARGUMENT string still lives on the Go heap until GC. Comment on line 14 explicitly acknowledges this: 'The argument string itself still lives on the heap until GC — the wizard input pipeline is the inherent capture boundary.' This is correct documentation; the audit-level concern is whether any non-wizard caller violates the boundary.  
-**Fix:** Audit grep `Provider.Proxmox.Password.Set\|Provider.Proxmox.APIToken.Set` to ensure all call sites are wizard input (out-of-scope per audit-security); spot-check shows only wizard callers today. Add an assertion test that no non-wizard package imports config and calls Set.  
-**Effort:** hours
-
-##### `sec:cfcdee2d:newinsecure-policy-umbrella` — newinsecure policy umbrella
-
-**Status:** in review — PR #393  
-**Severity:** suggestion  
-**Cluster:** tls-network — related: sec:1e8ffb91:tls-fallback-skip-verify, sec:761e5126:haproxy-vip-tls-skip  
-**Evidence:** `internal/httputil/httputil.go:33-41`  
-**Problem:** NewInsecure exists as a public constructor on the httputil surface. Three sites call it (postinstall/verify.go x2, postinstall/haproxy.go x1) — sec:1e8ffb91 and sec:761e5126 are per-site; this is the policy umbrella. Making the insecure-client constructor part of the public API normalises its use; a future wizard or addon could reach for it without owning the security review.  
-**Fix:** Either move NewInsecure to an internal-only file (lowercase newInsecure) and surface the bootstrap-window probe via a higher-level helper that explicitly takes the kubeconfig path for CA fallback, OR add a build-tag-gated test that asserts no caller outside postinstall/ imports it. Forces future callers to add the TLS-skip rationale to the policy review.  
-**Effort:** hours
-
-##### `sec:de572c63:nm-active-conn-shellable-name` — nm active conn shellable name
-
-**Status:** in review — PR #394  
-**Severity:** suggestion  
-**Cluster:** input-validation  
-**Evidence:** `internal/distribution/okd/dns/dnsmasq.go:121-151`  
-**Problem:** validateConnectionName allows spaces but rejects ;\n\r\x00`$<>|&. The denylist approach is the wrong shape per CLAUDE.md §security-invariants. Today getActiveConnection passes the result via argv (safe), but the comment notes 'argv invocations are safe today, but these characters also indicate malformed or poisoned nmcli output' — flagging future-fragility.  
-**Fix:** Switch to an allowlist regex (e.g. `^[A-Za-z0-9 ._/-]{1,128}$`) that NetworkManager's own valid-name space subsumes. Then any future nmcli output redirected through validateConnectionName fails-closed.  
 **Effort:** hours
 
 ##### `sec:e3782ee7:atomicwrite-create-then-chmod` — atomicwrite create then chmod
@@ -1027,16 +957,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 #### audit-subprocess
 
-##### `sub:0934cf1b:coreutil-dpkg-arch` — coreutil dpkg arch
-
-**Status:** in review — PR #395  
-**Severity:** minor  
-**Cluster:** coreutils-shellout  
-**Evidence:** `internal/platform/packages.go:124-128`  
-**Problem:** AddRepo shells out to dpkg --print-architecture to derive the apt sources.list arch=… token. Go stdlib's runtime.GOARCH is the same value for the architectures okdctl ships (amd64, arm64) and is already used in internal/platform/platform.go DownloadArch / CoreOSArch — so this subprocess adds a runtime dep on dpkg and a fork+exec for a constant-at-build value.  
-**Fix:** Replace with platform.DownloadArch() (or runtime.GOARCH directly): both already resolve amd64/arm64 the same way Debian dpkg does. Removes one fork+exec from every AddRepo and removes a hard dep on dpkg being on PATH.  
-**Effort:** hours
-
 ##### `sub:25fa1be8:bypass-canonical-wrapper-ufw` — bypass canonical wrapper ufw
 
 **Status:** not started  
@@ -1067,17 +987,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Set cmd.Cancel = func() error { return cmd.Process.Signal(syscall.SIGTERM) } and cmd.WaitDelay = 30 * time.Second before cmd.Start(). Drop the hand-rolled kill / sync.OnceFunc — exec already coordinates the cancel-then-wait-then-kill flow. Then the reapTimer in MonitorInstallation also collapses.  
 **Effort:** hours
 
-##### `sub:bb81a5b0:unbounded-partial-line` — unbounded partial line
-
-**Status:** in review — PR #396  
-**Severity:** minor  
-**Cluster:** io-handling  
-**Evidence:** `internal/executor/ringbuf.go:14-42`  
-**Problem:** ringWriter caps retained completed lines at constMaxLines=200 but the partial buffer (incomplete current line, no trailing newline yet) grows without bound. A subprocess that writes a long blob without a newline (e.g. a single JSON object spanning megabytes, or a binary that streams progress without newlines) would balloon partial — and Result.Stdout/Stderr emit the full partial as the tail's last entry. Affects every Run / RunChecked / RunStreamed site.  
-**Fix:** Cap r.partial at e.g. 64 KiB: if len(r.partial) > maxPartial, push the truncated chunk as a synthetic line (or drop it and start over). One safe shape: when partial would exceed the cap, r.push(r.partial[:maxPartial]); r.partial = r.partial[maxPartial:]. Subprocesses that misbehave now lose the newline-less tail — an acceptable trade for a hard memory bound.  
-**Effort:** hours
-
-
 #### audit-state-and-recovery
 
 ##### `state:4f69fc9d:rerunsafe-not-enforced` — rerunsafe not enforced
@@ -1098,16 +1007,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/distribution/okd/setup/steps.go:212-240`  
 **Problem:** StepBuildISOs and StepUploadISOs are ReRunSafeNo but neither declares AlreadyDone. A SIGKILL mid-ISO-build leaves a partial fedora-coreos-master0.iso in workDir; mid-upload leaves a partial ISO on the Proxmox host. The next deploy re-runs the orchestrator from step 1; cleanup.WorkOnly removes custom-isos/ locally, but the partial remote upload is never sha256-verified before being referenced by the cdrom block in the bootstrap/master/worker resources.  
 **Fix:** Add AlreadyDone to StepBuildISOs that verifies SHA256 of every expected output ISO matches the cached fedora-coreos image hash; on mismatch, treat as 'work not done' and re-build. For StepUploadISOs, add AlreadyDone that runs `pvesh get /nodes/<node>/storage/<storage>/content` filtered to iso/<expected-name>.iso and verifies the size matches the local ISO. Either pre-condition stops a half-uploaded artifact from being treated as ready.  
-**Effort:** hours
-
-##### `state:0f076161:dry-run-skip-flags-silent-noop` — dry run skip flags silent noop
-
-**Status:** in review — PR #397  
-**Severity:** minor  
-**Cluster:** destroy-safety — seam→audit-cli-ux  
-**Evidence:** `internal/cli/destroy.go:67-102`  
-**Problem:** --skip-terraform / --skip-cleanup / --skip-firewall are documented as 'no-op with --dry-run' but the dry-run path silently ignores them. destroyDryRun branches at line 100 and never inspects the skip flags. An operator running `okdctl destroy --dry-run --skip-terraform` reasonably expects a preview of what cleanup would do without terraform; instead they get only the terraform plan and zero hint that --skip-terraform was thrown away.  
-**Fix:** Either (a) make destroyDryRun honor the skip-* flags and emit a preview of what cleanup-files / cleanup-firewall WOULD do (e.g. list dnsmasq drop-in path, haproxy backup glob, firewall ports); or (b) at the entry point of runDestroy, when destroyDryRun is true and any skip-* flag is set, return a *errtypes.ConfigError so the operator sees 'flag X is incompatible with --dry-run' instead of silent acceptance. (b) is the safer default; (a) is the more useful UX but takes more LOC.  
 **Effort:** hours
 
 ##### `state:15ba17da:destroy-no-only-scope` — destroy no only scope
@@ -1140,16 +1039,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Add a `tf output -json` call after Apply succeeds (Provider.Provision around terraform.go:175). Compare each derived IP against the terraform-reported address (when terraform exposes it via outputs.tf — which it currently does for control_plane_ips/worker_ips). Mismatch → log a Warn naming both values and prefer the terraform-reported one. Cheap, defense-in-depth, no architectural change.  
 **Effort:** hours
 
-##### `state:62cb8a95:destroy-hasstate-empty-state` — destroy hasstate empty state
-
-**Status:** in review — PR #398  
-**Severity:** minor  
-**Cluster:** tf-state-atomicity  
-**Evidence:** `internal/distribution/okd/destroy/helpers.go:45-48`  
-**Problem:** tf.HasState() returns true for any non-empty terraform.tfstate file — but it's only checking system.FileExists, which doesn't distinguish a fresh empty `{}` state file from a populated one. After a tf init crashes mid-state-write, the file may exist with garbage or partial JSON. Destroy then runs `terraform plan -destroy` against a corrupt state and either fails confusingly or claims 'no changes' — the operator does not learn the state is corrupt.  
-**Fix:** Either (a) parse the file as JSON and verify .resources is an array, or (b) shell out to `terraform state list` and check exit + non-empty output. (b) is safer because it handles all backend types (local, remote, http) without okdctl having to know the file shape.  
-**Effort:** hours
-
 ##### `state:6424733c:cancel-mid-deploy-no-state-marker` — cancel mid deploy no state marker
 
 **Status:** not started  
@@ -1168,26 +1057,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/cli/helpers.go:110-134`  
 **Problem:** resolveProjectRootOrDie refuses any directory whose Base(cfgFile) is missing — defense-in-depth against running cleanup against the wrong root. But after a partial-failed deploy that wipes okdctl.yaml (cleanup.WorkDirectory removes the cluster-config dir first in Full kind), the operator can no longer run `okdctl destroy` because the marker is gone. The cluster's terraform state still exists, the VMs still exist, but okdctl refuses to recognise its own project. Recovery requires recreating an okdctl.yaml shell.  
 **Fix:** Accept any of {okdctl.yaml, okdctl.env, infrastructure/terraform/environments/<env>/terraform.tfstate} as a project marker — at least one is present after deploy starts. Document the broadened marker set in the doc comment so the security argument is preserved (any of these files only exists in an okdctl project).  
-**Effort:** hours
-
-##### `state:b804b2ec:bootstrap-cleanup-tfvars-precondition` — bootstrap cleanup tfvars precondition
-
-**Status:** in review — PR #399  
-**Severity:** minor  
-**Cluster:** phase-idempotency  
-**Evidence:** `internal/distribution/okd/postinstall/bootstrap.go:14-62`  
-**Problem:** CleanupBootstrap re-init's terraform and runs `tf plan -target=module.okd_cluster.proxmox_virtual_environment_vm.bootstrap -var bootstrap_enabled=false`. The SkipWhen guard at postinstall/steps.go:53-56 only checks tfvars existence — but if tfvars exists with bootstrap_enabled already false (e.g. operator re-ran update-ingress after a prior successful bootstrap cleanup), the plan is a no-op and the apply silently succeeds. There's no AlreadyDone that asks 'is the bootstrap VM still alive?' before planning.  
-**Fix:** Add AlreadyDone that probes Proxmox for the bootstrap VM's existence (via a pvesh lookup). Or downgrade to ReRunSafeYes since terraform -target apply with a destroy diff is idempotent. The cheapest fix: change ReRunSafe to ReRunSafeYes (matches reality) and drop the SkipWhen tfvars-existence guard since tf init will fail loudly if tfvars are missing.  
-**Effort:** hours
-
-##### `state:fb54208a:postinstall-mutates-skipped-cleanup` — postinstall mutates skipped cleanup
-
-**Status:** in review — PR #400  
-**Severity:** minor  
-**Cluster:** crash-recoverability  
-**Evidence:** `internal/distribution/okd/postinstall/steps.go:42-108`  
-**Problem:** StepCleanupBootstrap and StepDeployProductionDNS are NonFatal=true and mutate cluster-external state. If StepCleanupBootstrap succeeds (bootstrap VM gone) but StepVerifyKubeVIP fails, StepDeployProductionDNS skips on KubeVIPVerified=false. Result: bootstrap destroyed, DNS still pointing at bastion. Re-running deploy misses the bootstrap; re-running update-ingress can't reconcile production DNS because there is no resume-from-postinstall verb. Roadmap state:fb54208a (deferred) covers this.  
-**Fix:** Per roadmap fb54208a fix (b): expand `okdctl update-ingress` to handle the bootstrap→production DNS transition when DNS is still bootstrap-pointed (dns.IsBootstrapDNS already exists at update_ingress.go:70). Today update-ingress reconciles bootstrap-DNS → production-DNS only when LBs are detected; teach it to also handle the kube-vip-only path.  
 **Effort:** hours
 
 ##### `state:08c49fc4:update-ingress-no-dryrun-state-probe` — update ingress no dryrun state probe
@@ -1210,16 +1079,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Either (a) add a sync.Mutex now (3 LOC) and stop reasoning about parallelism, or (b) replace the comment with `// TODO(@qxtaiba): see #<issue>` linking a real issue per CLAUDE.md §code-comments.  
 **Effort:** hours
 
-##### `state:48688e63:no-state-version-check` — no state version check
-
-**Status:** in review — PR #401  
-**Severity:** suggestion  
-**Cluster:** state-schema-evolution — seam→audit-iac-and-shell  
-**Evidence:** `internal/infrastructure/proxmox/proxmox.go:111-134`  
-**Problem:** No code path in okdctl reads `.terraform_version` from terraform.tfstate. If a checkout uses Terraform 1.10 (versions.tf >= 1.10, < 2.0) but the existing state was written by a future 1.x where the schema bumps, okdctl's destroy path runs tf init → tf plan -destroy and trusts terraform's compatibility behaviour. Terraform 1.x is mostly forward-compat but cross-major boundary is enforced only at terraform itself; okdctl should stat the state's recorded terraform_version and refuse on a mismatch with versions.tf bound, not silently let terraform issue an error after init succeeds.  
-**Fix:** Pre-flight: jq .terraform_version terraform.tfstate, parse semver, refuse if it crosses the major boundary declared in versions.tf. Optional — terraform itself issues a clear error.  
-**Effort:** hours
-
 ##### `state:48688e63:proxmox-no-eventual-consistency` — proxmox no eventual consistency
 
 **Status:** not started  
@@ -1240,38 +1099,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Read the lock.info JSON, parse the .ID field, and substitute it into the message. Lock.info is small (~200 bytes) and fixed-shape (Terraform documents it). Net diff: +6 LOC, a sharper diagnostic.  
 **Effort:** hours
 
-##### `state:b38ec9cc:install-workers-tfvars-mutation` — install workers tfvars mutation
-
-**Status:** in review — PR #402  
-**Severity:** suggestion  
-**Cluster:** phase-idempotency  
-**Evidence:** `internal/distribution/okd/install/workers.go:14-51`  
-**Problem:** StartWorkerVMs runs `tf apply -var start_workers_immediately=true -target=module.okd_cluster.proxmox_virtual_environment_vm.worker` — passing the override as a -var flag, NOT as a terraform.tfvars edit. The on-disk tfvars still says `start_workers_immediately = false` (or whatever the default was). The next `okdctl destroy --target=…worker[N]` re-applies tfvars cleanly, but a manual `terraform plan` from the workdir would diff against the in-memory -var override. Operators reading state-as-source-of-truth see a stale on-disk tfvars vs the actual cluster.  
-**Fix:** Either (a) regenerate tfvars with start_workers_immediately=true before the apply (matches setup.GenerateTerraformVars convention), or (b) document in the StartWorkerVMs doc that the on-disk tfvars is the deploy-time snapshot and runtime overrides flow through -var.  
-**Effort:** hours
-
-
 #### audit-iac-and-shell
-
-##### `iac:e076e43c:sh-insecure-fail-open` — sh insecure fail open
-
-**Status:** in review — PR #403  
-**Severity:** major  
-**Cluster:** install-sh-integrity — seam→audit-security  
-**Evidence:** `scripts/install.sh:29-67`  
-**Problem:** `INSECURE=1` is an env-var fail-open switch that disables SHA256 verification across the entire install. When cosign is not present (the common case on a clean dev box), setting INSECURE=1 disables BOTH the cosign signature check AND the sha256 check, leaving zero integrity guards. The warning printed is loud but the install still proceeds; an attacker who can prepend env vars to a piped invocation (`INSECURE=1 curl … | sh` in pasted instructions) bypasses every guard.  
-**Fix:** Either (a) require `INSECURE=1` AND a separate `I_UNDERSTAND_THE_RISK=yes` to bypass; (b) when sha256sum is missing, refuse and tell the user to install coreutils rather than offering an env-var skip; or (c) when cosign is absent AND INSECURE is set, fail-closed and require `--no-cosign --no-sha256` on a wrapper rather than a single env var. Option (b) is smallest change with largest gain — sha256sum ships with coreutils on every Linux distro install.sh supports.  
-**Effort:** hours
-
-##### `iac:90de5406:hcl-prod-defaults-baked` — hcl prod defaults baked
-
-**Status:** in review — PR #404  
-**Severity:** minor  
-**Cluster:** hcl-credential-hygiene  
-**Evidence:** `infrastructure/terraform/environments/production/variables.tf:13-83`  
-**Problem:** `environments/production/variables.tf` ships hardcoded defaults that look operator-specific: `target_node = "pve01"`, `cluster_name = "grappleberry"`, `vmid_base = 7000`. terraform.tfvars is gitignored, but anyone running `terraform apply` without overrides would deploy with these defaults silently. The `production` directory name implies this is the canonical example for prod deploys; defaults should be intentionally absent for variables with no sensible cross-environment value, so terraform errors with `target_node is required`.  
-**Fix:** For variables with no sensible cross-environment default (target_node, cluster_name, vmid_base), drop the `default` attribute so terraform fails fast with a missing-required error. Keep defaults on infrastructure shape vars (cpu_cores, memory_mb). Net change: ~5 deletions in variables.tf.  
-**Effort:** hours
 
 ##### `iac:e076e43c:sh-curl-bypass-wrapper` — sh curl bypass wrapper
 
@@ -1421,26 +1249,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Pick one shape for the okd phase family. Recommend functional options (matches NewBasePhase + okd.Provisioner): replace setup/install/postinstall/destroy/cleanup New(exec, logger, version) with New(version, ...PhaseOption) using WithExecutor/WithLogger/WithRecorder/WithReporter shared via phase package. okd.Provisioner.Prepare/Install/etc become single-line forwarders. Net delta ~+15 LOC of option types, -20 LOC of struct-field writes in okd.go.  
 **Effort:** hours
 
-##### `api:c287d5c0:public-fields-bypass-options` — public fields bypass options
-
-**Status:** in review — PR #405  
-**Severity:** minor  
-**Cluster:** option-consistency — seam→audit-code-smells — related: api:beabab0c:phase-new-positional-args  
-**Evidence:** `internal/distribution/okd/okd.go:137-159`  
-**Problem:** phase.WithRecorder and the install Phase's logutil.NopProgressReporter default exist as functional options on BasePhase, but okd.Provisioner sets them by writing the embedded BasePhase.Recorder field and install.Phase.Reporter field directly (okd.go:L138/L147-L148/L156). Net effect: the option exists, no caller uses it, and the struct fields are intentionally exported to enable post-construction mutation — a hand-written workaround for the option discoverability the constructor is supposed to provide.  
-**Fix:** Either thread Recorder/Reporter into each phase.New as functional options (matches the api:beabab0c fix) and drop the public Recorder/Reporter fields, or remove phase.WithRecorder since nothing calls it. Don't ship both. If WithRecorder stays for a future caller, document the future usage in MEMORY.md §scaffolding so the next audit recognises it.  
-**Effort:** hours
-
-##### `api:fde34e0c:k8sclient-construction-side-effect` — k8sclient construction side effect
-
-**Status:** in review — PR #406  
-**Severity:** minor  
-**Cluster:** zero-value-usability  
-**Evidence:** `internal/cluster/k8s.go:52-81`  
-**Problem:** NewK8sClient reads os.Getenv(KUBECONFIG) and runs executor.CommandExists(oc) inside the constructor. Both side effects make zero-value construction (var c cluster.K8sClient) produce a non-equivalent object, and the env probe leaks into tests. The install phase already documents this hazard (install/phase.go:L162-L165: K8sClient reads os.Environ at construction and will NOT see this — callers must pass cluster.WithKubeconfig explicitly).  
-**Fix:** Move the env-var read and CommandExists probe into a separate WithDefaults() option (or a default-applying helper invoked only when no WithCLI/WithKubeconfig is supplied). Better still, accept the kubeconfig path as a required arg to NewK8sClient (config-driven, not env-driven) and have callers explicitly pass cluster.WithKubeconfigFromEnv when they want env fallback. The install phase's SetupKubeconfig already warns about exactly this gotcha.  
-**Effort:** hours
-
 ##### `api:0139cb3f:bindirordefault-symmetric-helper` — bindirordefault symmetric helper
 
 **Status:** not started  
@@ -1461,16 +1269,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Verify intent (grep roadmap.md, confirm parallel siblings) — do not delete; per MEMORY.md §scaffolding.  
 **Effort:** hours
 
-##### `api:8aa632a6:version-globals-mutable` — version globals mutable
-
-**Status:** in review — PR #407  
-**Severity:** suggestion  
-**Cluster:** zero-value-usability  
-**Evidence:** `internal/version/version.go:9-16`  
-**Problem:** version package exports five mutable package-level variables (Version, GitCommit, BuildDate, GoVersion, Platform). They are intended to be set once via -ldflags at build time but the type system permits any caller to write to them at runtime, racing with version.BackgroundCheck which reads Version. The package doc mentions ldflags but doesn't enforce the immutability.  
-**Fix:** Either (a) accept the convention — every Go binary uses ldflags this way and var is the canonical shape; or (b) introduce unexported buildVersion / buildCommit and exported getter functions Version() / Commit() that snapshot the build vars under a sync.Once. (a) is the prevailing Go pattern; (b) is more correct but heavier. Recommend (a) plus a comment forbidding writes from non-test callers.  
-**Effort:** hours
-
 ##### `api:a55b4592:loader-stateless-struct` — loader stateless struct
 
 **Status:** in review — PR #424  
@@ -1480,17 +1278,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Problem:** config.Loader is a stateless struct (zero fields). NewLoader returns &Loader{}, LoadFile and Save read no state. Six call sites — cli/deploy.go, cli/helpers.go, cli/doctor.go (twice) — all do loader := config.NewLoader(); loader.LoadFile(p), the no-state equivalent of two package-level functions LoadFile and Save.  
 **Fix:** Verify intent (grep roadmap.md, confirm parallel siblings) — do not delete; per MEMORY.md §scaffolding.  
 **Effort:** hours
-
-##### `api:c4182b1c:phasecontext-no-reentry-footgun` — phasecontext no reentry footgun
-
-**Status:** in review — PR #408  
-**Severity:** suggestion  
-**Cluster:** zero-value-usability  
-**Evidence:** `internal/distribution/context.go:1-33`  
-**Problem:** PhaseContext[T].Update takes a func(*T) under a write lock, with a doc warning that fn must not call Get or Update on the same PhaseContext because sync.RWMutex is not reentrant. That's a footgun on an exported public API: caller closures can transitively reach Get through any helper that takes the same context, deadlocking the orchestrator. Zero value is constructible (var c PhaseContext[T]) but the no-reentrancy invariant is unenforceable beyond a doc comment.  
-**Fix:** Either (a) make NewPhaseContext required by panicking on a sentinel zero value and surface the no-reentrancy invariant on the Update method itself rather than buried in a doc comment; or (b) accept zero-value usability and switch to a sync.Mutex with a callback-only API that returns the new value (no nested-call deadlock if fn is a pure transform). Today's only consumer (postinstall) goes through NewPhaseContext, so (a) is cheap.  
-**Effort:** hours
-
 
 #### audit-cli-ux
 
@@ -1562,26 +1349,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/cli/releases.go:133-144`  
 **Problem:** `fetchFlatVersions` returns `[]releases.OKDVersion` and feeds `writeJSON`. The encoder then emits `null` for an empty input (Go's encoding of nil slice). `docs/cli/json-schema.md` documents "`null` is never emitted — fields that are absent are omitted entirely" — but the top-level body of `releases list --format=json` returns literal `null\n` when the upstream feed has zero stable entries. Consumers that `jq '.[0]'` get `null` instead of `[]`.  
 **Fix:** In `fetchFlatVersions` initialize `out := []releases.OKDVersion{}` (or `make([]releases.OKDVersion, 0, ...)`) so an empty result encodes as `[]` not `null`. Mirror in `filterStable` (line 146-154) which already uses `make` of length 0. Add a regression test that runs `runReleasesList` with a stub fetcher returning zero versions and asserts the JSON body is `[]\n`.  
-**Effort:** hours
-
-##### `ux:fd2125dd:addon-list-no-json-format` — addon list no json format
-
-**Status:** in review — PR #409  
-**Severity:** minor  
-**Cluster:** json-stability  
-**Evidence:** `internal/cli/addon.go:29-38` + 2 more  
-**Problem:** `addon list` and `addon verify` are read-only inspection commands but ship without `--format=json`. Sibling read-only commands `releases list`, `releases show`, `status`, `describe node`, `describe addon` all do. A user automating addon health (`okdctl addon verify --format=json | jq '[.[] | select(.healthy==false)]'`) has to scrape the tabwriter output. The text format hides per-addon error chains behind a single `STATUS` column with the error stringified inline.  
-**Fix:** Add `--format=text|json` to both `addonListCmd` and `addonVerifyCmd`; route through the existing `validateFormat` + `quietForJSON` helpers. Document the JSON shape in `docs/cli/json-schema.md`. Recommended JSON shape for verify: `[{"name":"flux","healthy":true}]` — matches the existing `okd.AddonStatus` already emitted by `status --format=json`. Reuse the same struct for stability across surfaces.  
-**Effort:** hours
-
-##### `ux:073d24ed:metrics-allow-network-unguarded` — metrics allow network unguarded
-
-**Status:** in review — PR #410  
-**Severity:** suggestion  
-**Cluster:** flag-conventions  
-**Evidence:** `internal/cli/deploy.go:48-50` + 1 more  
-**Problem:** `--metrics-allow-network` only takes effect when `--metrics-addr` is set. If a user passes `--metrics-allow-network` alone, the flag is silently ignored — a footgun for someone copy-pasting from an issue thread that says "set --metrics-allow-network to expose metrics" without realising both flags are required. Cobra has `MarkFlagsRequiredTogether` for exactly this case.  
-**Fix:** Add either (a) `deployCmd.MarkFlagsRequiredTogether("metrics-allow-network", "metrics-addr")` so cobra rejects the misuse with EX_USAGE, or (b) an explicit guard at the top of `runDeploy` that warns via `tui.Warn` when allow-network is set without addr. Option (a) is the clearer contract.  
 **Effort:** hours
 
 ##### `ux:aa84670c:version-printf-not-via-cmd-out` — version printf not via cmd out
@@ -1801,16 +1568,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/distribution/okd/setup/tools.go:89-143`  
 **Problem:** `binaryToolMeta` is a 25-LOC table indexed by `externalTool` whose only consumer is `installTool`. With three concrete entries (yq/helm/sops) the indirection adds a layer over what could be three explicit functions — `installYQ`, `installHelm`, `installSops` — sharing a common `installBinary(spec)` helper which already exists. The lookup table also creates a per-tool maintenance trap: forgetting to add an entry silently warns at runtime instead of failing at compile time.  
 **Fix:** Replace the map with a `switch tool` in installTool that builds the binaryInstallSpec inline. Each case is ~6 LOC; total drops by ~10 LOC and missing-tool becomes a default-case panic instead of a runtime warn.  
-**Effort:** hours
-
-##### `smell:9d79b841:bool-should-be-3state` — bool should be 3state
-
-**Status:** in review — PR #411  
-**Severity:** minor  
-**Cluster:** bool-should-be-enum  
-**Evidence:** `internal/distribution/okd/setup/coreos.go:37-100`  
-**Problem:** findOrDownloadFCOSISO has a load-bearing implicit three-state for the configured FCOS ISO: (a) `cfg.Provider.Proxmox.FCOSIso == ""` (auto-detect), (b) configured-and-resolves (return path), (c) configured-but-not-found (silently falls through to glob search). The third state is encoded by control flow (case fallthrough + system.FileExists check + missing else) rather than a value, so a misconfigured path silently downloads instead of erroring. Adding an explicit Resolution enum (Empty/Resolved/Missing) would make the three-state explicit and let callers refuse to fall through on Missing.  
-**Fix:** Extract a `resolveConfiguredISO(spec) (path string, present bool, err error)` helper that returns Empty / Resolved / Missing semantics. Caller decides whether Missing falls through to glob (current) or returns a typed error (safer for production deploys with operator-pinned ISOs).  
 **Effort:** hours
 
 ##### `smell:d31d1b9d:stringly-typed-enum` — stringly typed enum
@@ -2048,16 +1805,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/distribution/okd/cleanup/services.go:142-187`  
 **Problem:** Dnsmasq() has TestDnsmasq_GlobLoopRemovesAllMatches but no test for the cluster-name-driven path: line 153 builds configPath via dns.DnsmasqConfigPath('okd-'+clusterName) and calls os.RemoveAll on it under refuseCriticalPath guard. ClusterName comes from cfg and is validated at config-load, but a hand-edited YAML with an attacker-shaped clusterName (e.g. '../../etc' or 'okd-..%2f..') is the threat the refuseCriticalPath guard exists to catch — and there is no test for that intersection.  
 **Fix:** Add t.Run('clusterName containing path-traversal segments hits refuseCriticalPath') to services_test.go: monkey-patch dnsmasqConfPattern + dnsmasqBackupPattern (already done by sibling test) and pass clusterName='../../../../etc/okd-x'. Assert that no os.RemoveAll touched anything outside t.TempDir(). Use a t.TempDir() decoy with a sentinel file and check it survives.  
-**Effort:** hours
-
-##### `tst:368b892b:cleanup-tf-partial-untested` — cleanup tf partial untested
-
-**Status:** in review — PR #412  
-**Severity:** minor  
-**Cluster:** destructive-untested — seam→audit-state-and-recovery — related: state:368b892b:tf-state-backup-still-cleaned  
-**Evidence:** `internal/distribution/okd/cleanup/infra.go:58-73`  
-**Problem:** cleanupTerraformEnv is well-tested for the happy path and for tfstate preservation (TestCleanupTerraformEnv_PreservesState), but no test covers the partial-failure shape: when SafeRemoveWithLogger fails on terraform.tfstate.backup (e.g. EPERM under non-root tests), the loop continues and the next iteration may also fail — yet the function returns nil because every error is swallowed via discard-assign. A regression where an early failure prevents the .terraform cache directory from being removed would silently leak state across deploys.  
-**Fix:** Add t.Run('non-removable file logs but does not abort') to infra_test.go: chmod the env-dir parent to 0o500 so .terraform/providers can't be removed but tfvars can; assert (a) err == nil from cleanupTerraformEnv, (b) tfvars was removed, (c) terraform.tfstate still survives. Skip when running as root.  
 **Effort:** hours
 
 ##### `tst:4c092fce:terraform-destroy-direct-untested` — terraform destroy direct untested
