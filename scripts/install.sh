@@ -116,10 +116,10 @@ info "downloading SHA256SUMS"
 curl_safe -sSfL -o "$TMP/SHA256SUMS" "$SHA_URL" ||
     die "failed to download SHA256SUMS from $SHA_URL"
 
-# Cosign verify-blob against the sigstore-published signature; runs whenever
-# cosign is present — independent of INSECURE so the stronger sigstore
-# guarantee is not silently dropped by the sha256-skip flag.
-if [ -n "$COSIGN_CMD" ]; then
+# Cosign verify-blob against the sigstore-published signature. Runs when
+# cosign is present and INSECURE is unset; SHA256 verification below always
+# runs, so INSECURE=1 only sheds the cosign layer.
+if [ -n "$COSIGN_CMD" ] && [ -z "$INSECURE" ]; then
     info "verifying cosign signature on SHA256SUMS"
     curl_safe -sSfL -o "$TMP/SHA256SUMS.sig" "$BASE_URL/SHA256SUMS.sig" ||
         die "failed to download SHA256SUMS.sig (release missing signature? uninstall cosign if you accept the risk)"
@@ -136,6 +136,8 @@ if [ -n "$COSIGN_CMD" ]; then
         "$TMP/SHA256SUMS" >/dev/null ||
         die "cosign signature verification failed on SHA256SUMS"
     info "cosign signature verified"
+elif [ -n "$INSECURE" ]; then
+    info "cosign signature verification skipped (INSECURE=1)"
 else
     info "cosign not installed — skipping signature verification"
     info "install cosign from https://docs.sigstore.dev/system_config/installation/ to enable signature verification"
