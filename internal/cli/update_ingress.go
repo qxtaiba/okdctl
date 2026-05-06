@@ -8,8 +8,10 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/distribution/okd/dns"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/postinstall"
 	"github.com/qxtaiba/okdctl/internal/runlock"
+	"github.com/qxtaiba/okdctl/internal/system"
 	"github.com/qxtaiba/okdctl/internal/tui"
 )
 
@@ -47,14 +49,30 @@ func init() {
 
 // runUpdateIngressDryRun prints the mutations update-ingress would perform
 // without connecting to the cluster or modifying any host configuration.
-func runUpdateIngressDryRun(cfg *config.Config) error { //nolint:unparam // error return preserved for symmetry with non-dry-run path
+// It probes on-disk dnsmasq state and the haproxy service to label any
+// steps that would already be no-ops on the live system.
+func runUpdateIngressDryRun(ctx context.Context, cfg *config.Config) error {
 	clusterFQDN := cfg.Cluster.Name + "." + cfg.Cluster.Domain
 	tui.Info(fmt.Sprintf("dry-run: update-ingress for cluster '%s'", clusterFQDN))
 	fmt.Println("  would: query IngressControllers (oc get ingresscontroller -n openshift-ingress-operator)")
 	fmt.Println("  would: wait for LoadBalancer IPs on router-* services in openshift-ingress")
-	fmt.Println("  would: deploy production dnsmasq config pointing *.apps at LoadBalancer IPs")
+
+	isBootstrap, err := dns.IsBootstrapDNS(cfg)
+	if err != nil {
+		return fmt.Errorf("dry-run: failed to probe dnsmasq state: %w", err)
+	}
+	if isBootstrap {
+		fmt.Println("  would: deploy production dnsmasq config pointing *.apps at LoadBalancer IPs")
+	} else {
+		fmt.Println("  would: deploy production dnsmasq config pointing *.apps at LoadBalancer IPs (no-op: dns already cut over)")
+	}
+
 	if !updateIngressKeepHAProxy {
-		fmt.Println("  would: stop and disable haproxy on the bastion (if all controllers are LB-type)")
+		if system.IsServiceActive(ctx, "haproxy") {
+			fmt.Println("  would: stop and disable haproxy on the bastion (if all controllers are LB-type)")
+		} else {
+			fmt.Println("  would: stop and disable haproxy on the bastion (no-op: haproxy already stopped)")
+		}
 	}
 	tui.Info("dry-run: re-run without --dry-run to execute update-ingress")
 	return nil
@@ -88,7 +106,7 @@ func runUpdateIngress(cmd *cobra.Command, _ []string) error {
 	}
 
 	if updateIngressDryRun {
-		return runUpdateIngressDryRun(cfg)
+		return runUpdateIngressDryRun(ctx, cfg)
 	}
 
 	clusterFQDN := cfg.Cluster.Name + "." + cfg.Cluster.Domain
