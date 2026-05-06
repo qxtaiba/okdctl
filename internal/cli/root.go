@@ -98,14 +98,7 @@ func execute() int {
 	defer cancel()
 
 	var caughtSig atomic.Value // os.Signal
-	go func() {
-		sig, ok := <-sigCh
-		if !ok {
-			return
-		}
-		caughtSig.Store(sig)
-		cancel()
-	}()
+	go signalLoop(sigCh, cancel, &caughtSig, os.Exit)
 
 	updateCh := version.BackgroundCheck(ctx)
 
@@ -123,6 +116,27 @@ func execute() int {
 
 	printUpdateNotice(updateCh)
 	return 0
+}
+
+// signalLoop runs the two-strike shutdown handler in execute()'s goroutine.
+// First signal: store, cancel, and print the escape-hatch hint. Second signal:
+// call exit(130) immediately — the user has explicitly asked for a hard kill,
+// so deferred cleanup (logFileCloser.Close) is intentionally bypassed. On the
+// happy path execute()'s defer close(sigCh) fires after signal.Stop, causing
+// the second receive to observe !ok and return cleanly (bounded goroutine leak).
+func signalLoop(sigCh <-chan os.Signal, cancel context.CancelFunc, caughtSig *atomic.Value, exit func(int)) {
+	sig, ok := <-sigCh
+	if !ok {
+		return
+	}
+	caughtSig.Store(sig)
+	cancel()
+	tui.Warn("shutdown in progress; press ctrl-c again to force quit")
+	_, ok = <-sigCh
+	if !ok {
+		return
+	}
+	exit(130)
 }
 
 func printUpdateNotice(ch <-chan version.CheckResult) {
