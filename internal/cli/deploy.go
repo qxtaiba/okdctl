@@ -144,7 +144,7 @@ func runDeploy(cmd *cobra.Command, _ []string) error {
 func runDeployDryRun(ctx context.Context, cfg *config.Config) error {
 	envPath := credentials.EnvFilePath(deployOutputFile)
 	if err := credentials.LoadEnvFile(envPath); err != nil {
-		tui.Warn("failed to load credentials", tui.LF("path", envPath), tui.LF("err", err))
+		return fmt.Errorf("load env file %s: %w", envPath, err)
 	}
 
 	creds := credentials.GetProxmoxCredentials(cfg)
@@ -243,7 +243,7 @@ func runFullDeployment(ctx context.Context, cfg *config.Config) error {
 
 	envPath := credentials.EnvFilePath(deployOutputFile)
 	if err := credentials.LoadEnvFile(envPath); err != nil {
-		tui.Warn("failed to load credentials", tui.LF("path", envPath), tui.LF("err", err))
+		return fmt.Errorf("load env file %s: %w", envPath, err)
 	}
 
 	creds := credentials.GetProxmoxCredentials(cfg)

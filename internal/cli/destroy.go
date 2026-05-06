@@ -150,7 +150,10 @@ func runDestroy(cmd *cobra.Command, _ []string) error {
 		}
 	}
 
-	creds := handleCredentials(cfg)
+	creds, err := handleCredentials(cfg)
+	if err != nil {
+		return err
+	}
 	defer creds.Zeroize()
 	projectRoot, err := resolveProjectRootOrDie()
 	if err != nil {
@@ -205,7 +208,10 @@ func runDestroy(cmd *cobra.Command, _ []string) error {
 // would be removed. Returns *errtypes.ConfigError on plan failure so the process
 // exits 2.
 func runDestroyDryRun(ctx context.Context, cfg *config.Config) error {
-	creds := handleCredentials(cfg)
+	creds, err := handleCredentials(cfg)
+	if err != nil {
+		return err
+	}
 	defer creds.Zeroize()
 
 	projectRoot, err := resolveProjectRootOrDie()

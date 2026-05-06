@@ -113,6 +113,10 @@ func buildEnvFileBody(creds *ProxmoxCredentials) []byte {
 // is invoked. Subsequent calls return the first call's error. This is
 // intentional — mutating os.Environ from multiple sources is a footgun,
 // and the .env file is a per-process resource.
+//
+// A non-nil return always means credentials were not loaded. Callers must
+// treat any error as fatal and abort the operation rather than proceeding
+// with potentially missing credentials.
 func LoadEnvFile(path string) error {
 	loadOnce.Do(func() {
 		loadedPath = path

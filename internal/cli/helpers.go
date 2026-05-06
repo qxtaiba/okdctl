@@ -42,11 +42,13 @@ func loadConfig(configFile string) (*config.Config, error) {
 	return cfg, nil
 }
 
-// Loads .env first (non-overwriting) so env vars always win.
-func handleCredentials(cfg *config.Config) *credentials.ProxmoxCredentials {
+// handleCredentials loads the .env file (non-overwriting) then resolves
+// Proxmox credentials from environment and config. Returns an error if the
+// .env could not be loaded — callers must not proceed in that case.
+func handleCredentials(cfg *config.Config) (*credentials.ProxmoxCredentials, error) {
 	envPath := credentials.EnvFilePath(cfgFile)
 	if err := credentials.LoadEnvFile(envPath); err != nil {
-		tui.Warn("failed to load credentials", tui.LF("path", envPath), tui.LF("err", err))
+		return nil, fmt.Errorf("load env file %s: %w", envPath, err)
 	}
 
 	creds := credentials.GetProxmoxCredentials(cfg)
@@ -58,7 +60,7 @@ func handleCredentials(cfg *config.Config) *credentials.ProxmoxCredentials {
 	} else {
 		reportCredentialProvenance(creds)
 	}
-	return creds
+	return creds, nil
 }
 
 // reportCredentialProvenance logs the resolved credential source plus any
