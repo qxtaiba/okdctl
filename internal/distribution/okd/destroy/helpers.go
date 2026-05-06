@@ -28,6 +28,8 @@ func checkStateMajorVersion(stateFile string, log *slog.Logger) error {
 
 	raw, err := os.ReadFile(stateFile)
 	if err != nil {
+		log.Warn("terraform: state file read failed; skipping major-version preflight",
+			"file", stateFile, "err", err)
 		return nil
 	}
 	var state struct {
