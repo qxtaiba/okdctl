@@ -696,7 +696,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `api:0fc0041d:export-no-caller-scaffolding` — export no caller scaffolding (scaffolding — verify intent only)
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/api-0fc0041d-condition-export  
+**Status:** in review — PR #420  
 **Severity:** suggestion  
 **Cluster:** exported-surface  
 **Evidence:** `internal/distribution/okd/phase/condition.go:10-35`  
@@ -706,7 +706,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `api:859eea6f:export-no-caller-scaffolding` — export no caller scaffolding (scaffolding — verify intent only)
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/api-859eea6f-noderole-export  
+**Status:** in review — PR #421  
 **Severity:** suggestion  
 **Cluster:** exported-surface  
 **Evidence:** `internal/distribution/okd/phase/noderole.go:22-29`  
@@ -716,7 +716,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `api:0139cb3f:export-no-caller-scaffolding` — export no caller scaffolding (scaffolding — verify intent only)
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/api-0139cb3f-paths-export  
+**Status:** in review — PR #422  
 **Severity:** suggestion  
 **Cluster:** exported-surface  
 **Evidence:** `internal/distribution/okd/phase/paths.go:150-152`  
@@ -846,7 +846,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sec:29293401:predictable-tmp-pid` — predictable tmp pid
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-29293401-tmp-pid  
+**Status:** in review — PR #427  
 **Severity:** minor  
 **Cluster:** file-toctou  
 **Evidence:** `internal/distribution/okd/setup/haproxy.go:101-105`  
@@ -1006,7 +1006,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sec:f55b9c27:envfile-once-cross-config` — envfile once cross config
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-f55b9c27-envfile-once  
+**Status:** in review — PR #432  
 **Severity:** suggestion  
 **Cluster:** credentials  
 **Evidence:** `internal/credentials/envfile.go:116-125`  
@@ -1112,7 +1112,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `state:15ba17da:destroy-no-only-scope` — destroy no only scope
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/state-15ba17da-destroy-only-scope  
+**Status:** in review — PR #434  
 **Severity:** minor  
 **Cluster:** destroy-safety — seam→audit-cli-ux  
 **Evidence:** `internal/distribution/okd/destroy/steps.go:58-72`  
@@ -1192,7 +1192,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `state:08c49fc4:update-ingress-no-dryrun-state-probe` — update ingress no dryrun state probe
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/state-08c49fc4-update-ingress-dryrun  
+**Status:** in review — PR #433  
 **Severity:** suggestion  
 **Cluster:** destroy-safety — seam→audit-cli-ux  
 **Evidence:** `internal/cli/update_ingress.go:48-61`  
@@ -1295,7 +1295,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `iac:90de5406:hcl-prod-no-validation` — hcl prod no validation
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/iac-90de5406-prod-validation  
+**Status:** in review — PR #428  
 **Severity:** suggestion  
 **Cluster:** hcl-credential-hygiene  
 **Evidence:** `infrastructure/terraform/environments/production/variables.tf:13-246`  
@@ -1370,7 +1370,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `con:98723e5d:setupclusteraccess-ctx-ignored` — setupclusteraccess ctx ignored
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/con-98723e5d-flux-ctx  
+**Status:** in review — PR #429  
 **Severity:** suggestion  
 **Cluster:** ctx-ignored  
 **Evidence:** `internal/distribution/okd/install/flux.go:50-91`  
@@ -1453,7 +1453,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `api:7b2829bb:executor-with-inherited-env-no-callers` — executor with inherited env no callers
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/api-7b2829bb-executor-inherited-env  
+**Status:** in review — PR #423  
 **Severity:** suggestion  
 **Cluster:** exported-surface  
 **Evidence:** `internal/executor/executor.go:69-76`  
@@ -1473,7 +1473,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `api:a55b4592:loader-stateless-struct` — loader stateless struct
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/api-a55b4592-loader-stateless  
+**Status:** in review — PR #424  
 **Severity:** suggestion  
 **Cluster:** exported-surface — seam→audit-code-smells  
 **Evidence:** `internal/config/loader.go:13-64`  
@@ -1546,7 +1546,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `ux:aa84670c:no-second-ctrl-c-escape` — no second ctrl c escape
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/ux-aa84670c-second-ctrl-c  
+**Status:** in review — PR #430  
 **Severity:** minor  
 **Cluster:** signals  
 **Evidence:** `internal/cli/root.go:86-109`  
@@ -1669,7 +1669,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `obs:1e8ffb91:degraded-operator-loop-could-aggregate` — degraded operator loop could aggregate
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/obs-1e8ffb91-degraded-aggregate  
+**Status:** in review — PR #426  
 **Severity:** minor  
 **Cluster:** log-once  
 **Evidence:** `internal/distribution/okd/postinstall/verify.go:131-137`  
@@ -1825,7 +1825,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `smell:d6b325cb:enum-ad-hoc` — enum ad hoc
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/smell-d6b325cb-proxmox-vmstate  
+**Status:** in review — PR #431  
 **Severity:** minor  
 **Cluster:** magic-strings — seam→audit-api-design  
 **Evidence:** `internal/infrastructure/proxmox/types.go:47-58`  
@@ -1845,7 +1845,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `smell:2be6306e:abstraction-single-caller` — abstraction single caller
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/smell-2be6306e-addon-registry  
+**Status:** in review — PR #418  
 **Severity:** suggestion  
 **Cluster:** helper-package-no-value  
 **Evidence:** `internal/addon/registry.go:86-92`  
@@ -1865,7 +1865,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `smell:dd75bdeb:multi-bool-not-exclusive` — multi bool not exclusive
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/smell-dd75bdeb-postinstall-bools  
+**Status:** in review — PR #419  
 **Severity:** suggestion  
 **Cluster:** bool-should-be-enum  
 **Evidence:** `internal/distribution/okd/postinstall/context.go:1-10`  
@@ -1990,7 +1990,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `doc:b3356305:readme-sbom-filename-drift` — readme sbom filename drift
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/doc-b3356305-readme-sbom  
+**Status:** in review — PR #417  
 **Severity:** minor  
 **Cluster:** readme-drift  
 **Evidence:** `README.md:182-183`  
@@ -2000,7 +2000,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `doc:23d812fa:flux-doc-stale-line-numbers` — flux doc stale line numbers
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/doc-23d812fa-flux-line-nums  
+**Status:** in review — PR #416  
 **Severity:** suggestion  
 **Cluster:** readme-drift  
 **Evidence:** `docs/addons/flux.md:30-31`  
@@ -2062,7 +2062,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `tst:4c092fce:terraform-destroy-direct-untested` — terraform destroy direct untested
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/tst-4c092fce-tf-destroy-direct  
+**Status:** in review — PR #425  
 **Severity:** suggestion  
 **Cluster:** destructive-untested  
 **Evidence:** `internal/infrastructure/terraform/terraform.go:260-311`  
