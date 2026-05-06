@@ -22,7 +22,8 @@ okdctl addon list [flags]
 ### Options
 
 ```
-  -h, --help   help for list
+      --format string   output format: text|json (default "text")
+  -h, --help            help for list
 ```
 
 ### Options inherited from parent commands

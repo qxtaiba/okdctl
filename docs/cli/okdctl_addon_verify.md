@@ -15,7 +15,8 @@ okdctl addon verify [flags]
 ### Options
 
 ```
-  -h, --help   help for verify
+      --format string   output format: text|json (default "text")
+  -h, --help            help for verify
 ```
 
 ### Options inherited from parent commands
