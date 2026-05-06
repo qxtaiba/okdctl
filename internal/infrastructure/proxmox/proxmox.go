@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 
 	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/infrastructure/terraform"
 	"github.com/qxtaiba/okdctl/internal/logutil"
@@ -259,7 +260,7 @@ func (p *Provider) retrieveProvisionResult(cfg *config.Config) (*ProvisionResult
 		Name:      string(RoleBootstrap),
 		Role:      RoleBootstrap,
 		IPAddress: bootstrapIP,
-		Status:    StateRunning,
+		Status:    phase.StateRunning,
 	})
 
 	for i := range cfg.Topology.ControlPlane.Count {
@@ -272,7 +273,7 @@ func (p *Provider) retrieveProvisionResult(cfg *config.Config) (*ProvisionResult
 			Name:      fmt.Sprintf("%s%d", RoleMaster, i),
 			Role:      RoleMaster,
 			IPAddress: ip,
-			Status:    StateRunning,
+			Status:    phase.StateRunning,
 		})
 	}
 
@@ -287,7 +288,7 @@ func (p *Provider) retrieveProvisionResult(cfg *config.Config) (*ProvisionResult
 			Name:      fmt.Sprintf("%s%d", RoleWorker, i),
 			Role:      RoleWorker,
 			IPAddress: ip,
-			Status:    StateRunning,
+			Status:    phase.StateRunning,
 		})
 	}
 
