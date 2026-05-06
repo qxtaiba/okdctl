@@ -294,6 +294,11 @@ func (t *Executor) destroyWithPlan(ctx context.Context, opts DestroyOptions) err
 	return nil
 }
 
+// destroyDirect runs terraform destroy without an intermediate plan file.
+// Currently no caller — Destroy is always invoked with UsePlan=true today —
+// but retained as the canonical "emergency destroy" path so the argv shape
+// (parallelism, -target injection) stays locked under regression coverage
+// when an opt-in future caller lands.
 func (t *Executor) destroyDirect(ctx context.Context, opts DestroyOptions) error {
 	args := []string{"destroy"}
 	args = append(args, t.buildVarArgs(opts.VarFile, nil)...)
