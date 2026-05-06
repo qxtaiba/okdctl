@@ -6,7 +6,11 @@ package phase
 // cycle through okd → subpackage → okd.
 type ConditionType string
 
-// Condition types mirroring the standard Kubernetes status.conditions values.
+// Scaffolding: the three const groups below form the complete Kubernetes
+// condition matrix (Ready/Available/Progressing/Degraded × True/False/Unknown)
+// and are kept symmetric for the future status verb that surfaces non-Ready
+// operator conditions. Removing the currently-unreferenced constants would
+// lopside the enum and force a second PR when that caller lands.
 const (
 	ConditionTypeReady       ConditionType = "Ready"
 	ConditionTypeAvailable   ConditionType = "Available"
