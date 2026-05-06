@@ -148,8 +148,12 @@ func WithLogger(l *slog.Logger) BasePhaseOption {
 	return func(p *BasePhase) { p.Log = l }
 }
 
-// WithRecorder attaches a MetricsRecorder. Nil is tolerated; phases pass
-// p.Recorder to orchestrator.SetMetricsRecorder which normalises nil to nop.
+// WithRecorder is the symmetric companion to WithExecutor and WithLogger.
+// Nil is tolerated; phases pass p.Recorder to
+// orchestrator.SetMetricsRecorder which normalises nil to nop. Currently
+// no callers — okd.go assigns BasePhase.Recorder directly — but kept
+// exported as the canonical functional option so a future refactor can
+// collapse the field-assignment dance into NewBasePhase(...).
 func WithRecorder(rec distribution.MetricsRecorder) BasePhaseOption {
 	return func(p *BasePhase) { p.Recorder = rec }
 }
