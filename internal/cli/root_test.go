@@ -12,6 +12,48 @@ import (
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 )
 
+// TestSignalLoopFirstSignalCancels verifies that a single signal cancels the
+// context and stores caughtSig without calling exit.
+func TestSignalLoopFirstSignalCancels(t *testing.T) {
+	sigCh := make(chan os.Signal, 2)
+	ctx, cancel := context.WithCancel(context.Background())
+	var caughtSig atomic.Value
+	exitCalled := false
+	fakeExit := func(_ int) { exitCalled = true }
+
+	sigCh <- syscall.SIGINT
+	close(sigCh)
+	signalLoop(sigCh, cancel, &caughtSig, fakeExit)
+
+	if ctx.Err() == nil {
+		t.Fatal("expected context to be canceled after first signal")
+	}
+	if exitCalled {
+		t.Fatal("exit should not be called when only one signal is delivered")
+	}
+	if caughtSig.Load() == nil {
+		t.Fatal("caughtSig should be stored after first signal")
+	}
+}
+
+// TestSignalLoopSecondSignalForcesExit verifies that a second signal triggers
+// exit(130) immediately.
+func TestSignalLoopSecondSignalForcesExit(t *testing.T) {
+	sigCh := make(chan os.Signal, 2)
+	_, cancel := context.WithCancel(context.Background())
+	var caughtSig atomic.Value
+	exitCode := -1
+	fakeExit := func(code int) { exitCode = code }
+
+	sigCh <- syscall.SIGINT
+	sigCh <- syscall.SIGINT
+	signalLoop(sigCh, cancel, &caughtSig, fakeExit)
+
+	if exitCode != 130 {
+		t.Fatalf("expected exit(130) on second signal, got exit(%d)", exitCode)
+	}
+}
+
 // TestExitCodeForTaxonomy locks the published exit-code contract from
 // root.go's package doc: ConfigError=2, NetworkError=3, ClusterError=4,
 // AuthError=5, everything else=1. Scripts consuming okdctl's exit codes
