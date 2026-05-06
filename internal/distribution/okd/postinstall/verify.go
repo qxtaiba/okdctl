@@ -129,12 +129,8 @@ func (p *Phase) VerifyClusterHealth(ctx context.Context, _ *Options) (*ClusterHe
 		return nil, &errtypes.ClusterError{Msg: "failed to parse cluster operator status", Err: err}
 	}
 	result.DegradedOperators = len(degraded)
-	for _, name := range degraded {
-		p.Log.Warn(fmt.Sprintf("cluster: operator %s is degraded", name))
-	}
-
 	if result.DegradedOperators > 0 {
-		p.Log.Warn(fmt.Sprintf("cluster: %d operators are degraded", result.DegradedOperators))
+		p.Log.Warn("cluster: operators degraded", "count", result.DegradedOperators, "names", degraded)
 	} else {
 		p.Log.Info("cluster: all operators are healthy")
 	}
