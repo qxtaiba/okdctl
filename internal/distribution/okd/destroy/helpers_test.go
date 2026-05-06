@@ -40,13 +40,14 @@ func seedTerraformEnvDir(t *testing.T, projectRoot, env string) {
 			t.Fatal(err)
 		}
 	}
-	for _, f := range []string{
-		filepath.Join(envDir, "terraform.tfstate"),
-		filepath.Join(envDir, ".terraform.lock.hcl"),
-	} {
-		if err := os.WriteFile(f, []byte("{}"), 0o600); err != nil {
-			t.Fatal(err)
-		}
+	stateFile := filepath.Join(envDir, "terraform.tfstate")
+	// Populated state so HasState() returns true; tests that need an
+	// empty-state behaviour seed their own tfstate.
+	if err := os.WriteFile(stateFile, []byte(`{"version":4,"resources":[{"type":"x"}]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(envDir, ".terraform.lock.hcl"), []byte("{}"), 0o600); err != nil {
+		t.Fatal(err)
 	}
 }
 
