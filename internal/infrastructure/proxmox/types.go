@@ -1,6 +1,10 @@
 package proxmox
 
-import "errors"
+import (
+	"errors"
+
+	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
+)
 
 // Provider sentinel errors.
 var (
@@ -29,7 +33,7 @@ type VMStatus struct {
 	ID        string
 	Name      string
 	Role      VMRole
-	Status    VMState
+	Status    phase.VMState
 	IPAddress string
 }
 
@@ -42,17 +46,4 @@ const (
 	RoleBootstrap VMRole = "bootstrap"
 	RoleMaster    VMRole = "master"
 	RoleWorker    VMRole = "worker"
-)
-
-// VMState classifies a Proxmox VM's lifecycle state. String values match the
-// "status" field in `pvesh get /nodes/<n>/qemu` output verbatim.
-type VMState string
-
-// State* are the valid VMState values.
-const (
-	StateRunning  VMState = "running"
-	StateStopped  VMState = "stopped"
-	StateCreating VMState = "creating"
-	StateDeleting VMState = "deleting"
-	StateUnknown  VMState = "unknown"
 )
