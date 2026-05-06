@@ -113,7 +113,6 @@ func init() {
 	rootCmd.AddCommand(addonCmd)
 }
 
-// addonListEntry is the JSON shape for a single addon list entry.
 type addonListEntry struct {
 	Name        string   `json:"name"`
 	DisplayName string   `json:"display_name"`
