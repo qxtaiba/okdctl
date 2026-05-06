@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -102,8 +101,11 @@ func (p *Phase) ConfigureHAProxy(ctx context.Context, cfg *config.Config, _ *Opt
 
 	// A user-writable temp file is required because the final install step
 	// runs under sudo, so the write here cannot target /etc/haproxy directly.
-	tmpPath := filepath.Join(os.TempDir(), fmt.Sprintf("haproxy-%d.cfg", os.Getpid()))
-	if err := system.AtomicWriteString(tmpPath, content, 0o644); err != nil {
+	tmpPath, err := system.WriteTempFile("haproxy-*.cfg", 0o644, func(f *os.File) error {
+		_, werr := f.WriteString(content)
+		return werr
+	})
+	if err != nil {
 		return &errtypes.ConfigError{Msg: "failed to write temp haproxy config", Err: err}
 	}
 	defer func() { _ = os.Remove(tmpPath) }()
