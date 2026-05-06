@@ -43,6 +43,7 @@ okdctl destroy [flags]
       --dry-run                  preview terraform destroy plan without running destroy
   -h, --help                     help for destroy
       --keep-isos                do not remove the FCOS ISO from the Proxmox host
+      --only string              scope destroy to a node group: vms, workers, masters, bootstrap (expands into --target; mutually exclusive with --target)
       --skip-cleanup             skip host file cleanup — leaves haproxy/dnsmasq config in place (no-op with --dry-run)
       --skip-firewall            skip firewall rule cleanup (no-op with --dry-run)
       --skip-terraform           skip terraform destroy — intended for resuming after a successful terraform-destroy phase (no-op with --dry-run)
