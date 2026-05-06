@@ -31,6 +31,7 @@ var (
 	destroySkipCleanup    bool
 	destroySkipFirewall   bool
 	destroyTargets        []string
+	destroyOnly           string
 )
 
 // destroyTargetRE matches valid terraform resource addresses for OKD VMs.
@@ -38,6 +39,44 @@ var (
 var destroyTargetRE = regexp.MustCompile(
 	`^module\.okd_cluster\.proxmox_virtual_environment_vm\.(bootstrap|master|worker)(\[\d+\])?$`,
 )
+
+// expandOnlyFlag converts --only into the equivalent --target list for the
+// given cluster topology. Workers and masters use count-indexed addresses;
+// bootstrap is always index 0.
+func expandOnlyFlag(only string, cfg *config.Config) ([]string, error) {
+	const prefix = "module.okd_cluster.proxmox_virtual_environment_vm."
+	var targets []string
+	switch only {
+	case "bootstrap":
+		targets = []string{prefix + "bootstrap[0]"}
+	case "masters":
+		for i := range cfg.Topology.ControlPlane.Count {
+			targets = append(targets, fmt.Sprintf("%smaster[%d]", prefix, i))
+		}
+	case "workers":
+		for i := range cfg.Topology.Workers.Count {
+			targets = append(targets, fmt.Sprintf("%sworker[%d]", prefix, i))
+		}
+	case "vms":
+		targets = []string{prefix + "bootstrap[0]"}
+		for i := range cfg.Topology.ControlPlane.Count {
+			targets = append(targets, fmt.Sprintf("%smaster[%d]", prefix, i))
+		}
+		for i := range cfg.Topology.Workers.Count {
+			targets = append(targets, fmt.Sprintf("%sworker[%d]", prefix, i))
+		}
+	default:
+		return nil, &errtypes.ConfigError{
+			Msg: fmt.Sprintf("--only %q is not valid; choose one of: vms, workers, masters, bootstrap", only),
+		}
+	}
+	if len(targets) == 0 {
+		return nil, &errtypes.ConfigError{
+			Msg: fmt.Sprintf("--only=%s produced no targets; check topology counts in config", only),
+		}
+	}
+	return targets, nil
+}
 
 func validateDestroyTargets(targets []string) error {
 	for _, t := range targets {
@@ -90,6 +129,9 @@ func init() {
 	destroyCmd.Flags().BoolVar(&destroySkipFirewall, "skip-firewall", false, "skip firewall rule cleanup (no-op with --dry-run)")
 	destroyCmd.Flags().StringArrayVar(&destroyTargets, "target", nil,
 		"limit terraform destroy to this resource address (repeatable); must match the okd_cluster VM allowlist")
+	destroyCmd.Flags().StringVar(&destroyOnly, "only", "",
+		"scope destroy to a node group: vms, workers, masters, bootstrap (expands into --target; mutually exclusive with --target)")
+	destroyCmd.MarkFlagsMutuallyExclusive("only", "target")
 }
 
 func runDestroy(cmd *cobra.Command, _ []string) error {
@@ -101,15 +143,23 @@ func runDestroy(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
+	if destroyOnly != "" {
+		expanded, err := expandOnlyFlag(destroyOnly, cfg)
+		if err != nil {
+			return err
+		}
+		destroyTargets = expanded
+	}
+
 	if err := validateDestroyTargets(destroyTargets); err != nil {
 		return err
 	}
 
-	// --target without --confirm-cluster lets a typo silently scope a destroy;
-	// require an explicit cluster-name acknowledgement regardless of --yes.
+	// --target/--only without --confirm-cluster lets a typo silently scope a
+	// destroy; require an explicit cluster-name acknowledgement regardless of --yes.
 	if len(destroyTargets) > 0 && destroyConfirmCluster == "" {
 		return &errtypes.ConfigError{
-			Msg: fmt.Sprintf("--target requires --confirm-cluster=%q to guard against targeted destroys on the wrong cluster", cfg.Cluster.Name),
+			Msg: fmt.Sprintf("--target/--only requires --confirm-cluster=%q to guard against targeted destroys on the wrong cluster", cfg.Cluster.Name),
 		}
 	}
 

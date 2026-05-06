@@ -4,8 +4,70 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 )
+
+func TestExpandOnlyFlag(t *testing.T) {
+	cfg := &config.Config{}
+	cfg.Topology.ControlPlane.Count = 3
+	cfg.Topology.Workers.Count = 2
+
+	const prefix = "module.okd_cluster.proxmox_virtual_environment_vm."
+
+	tests := []struct {
+		only string
+		want []string
+	}{
+		{only: "bootstrap", want: []string{prefix + "bootstrap[0]"}},
+		{only: "masters", want: []string{prefix + "master[0]", prefix + "master[1]", prefix + "master[2]"}},
+		{only: "workers", want: []string{prefix + "worker[0]", prefix + "worker[1]"}},
+		{only: "vms", want: []string{prefix + "bootstrap[0]", prefix + "master[0]", prefix + "master[1]", prefix + "master[2]", prefix + "worker[0]", prefix + "worker[1]"}},
+	}
+
+	for _, tc := range tests {
+		got, err := expandOnlyFlag(tc.only, cfg)
+		if err != nil {
+			t.Errorf("--only=%s: unexpected error: %v", tc.only, err)
+			continue
+		}
+		if len(got) != len(tc.want) {
+			t.Errorf("--only=%s: got %d targets, want %d: %v", tc.only, len(got), len(tc.want), got)
+			continue
+		}
+		for i, addr := range got {
+			if addr != tc.want[i] {
+				t.Errorf("--only=%s [%d]: got %q, want %q", tc.only, i, addr, tc.want[i])
+			}
+			if err := validateDestroyTargets([]string{addr}); err != nil {
+				t.Errorf("--only=%s [%d]: expanded addr %q fails destroyTargetRE: %v", tc.only, i, addr, err)
+			}
+		}
+	}
+}
+
+func TestExpandOnlyFlagInvalid(t *testing.T) {
+	cfg := &config.Config{}
+	cfg.Topology.ControlPlane.Count = 3
+	cfg.Topology.Workers.Count = 2
+	_, err := expandOnlyFlag("nodes", cfg)
+	if err == nil {
+		t.Fatal("--only=nodes: want error, got nil")
+	}
+	var cfgErr *errtypes.ConfigError
+	if !errors.As(err, &cfgErr) {
+		t.Errorf("--only=nodes: want *errtypes.ConfigError, got %T", err)
+	}
+}
+
+func TestExpandOnlyFlagZeroCount(t *testing.T) {
+	cfg := &config.Config{}
+	cfg.Topology.Workers.Count = 0
+	_, err := expandOnlyFlag("workers", cfg)
+	if err == nil {
+		t.Error("--only=workers with zero workers: want error, got nil")
+	}
+}
 
 func TestValidateDestroyTargets_Valid(t *testing.T) {
 	valid := []string{
