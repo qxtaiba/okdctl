@@ -47,7 +47,10 @@ func (p *Phase) ValidateClusterAccess(ctx context.Context) error {
 // SetupClusterAccess installs the generated kubeconfig into the invoking
 // user's ~/.kube/config, chowning paths so the file is usable after any
 // sudo re-exec returns.
-func (p *Phase) SetupClusterAccess(_ context.Context, clusterDir string) error {
+func (p *Phase) SetupClusterAccess(ctx context.Context, clusterDir string) error {
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("setup cluster access: %w", err)
+	}
 	// Resolve the invoking user's home (not root's) so files land where
 	// the user will look for them after the re-exec'd deploy returns.
 	homeDir, err := system.InvokingUserHomeDir()
@@ -63,6 +66,9 @@ func (p *Phase) SetupClusterAccess(_ context.Context, clusterDir string) error {
 		p.Log.Warn("kubeconfig: could not chown .kube dir", "err", err)
 	}
 
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("setup cluster access: %w", err)
+	}
 	srcKubeconfig := filepath.Join(clusterDir, "auth", "kubeconfig")
 	destKubeconfig := filepath.Join(kubeDir, "config")
 
@@ -76,6 +82,9 @@ func (p *Phase) SetupClusterAccess(_ context.Context, clusterDir string) error {
 		}
 	}
 
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("setup cluster access: %w", err)
+	}
 	if err := system.CopyFileMode(srcKubeconfig, destKubeconfig, 0o600); err != nil {
 		return &errtypes.ConfigError{Msg: "failed to copy kubeconfig", Err: err}
 	}
@@ -83,6 +92,9 @@ func (p *Phase) SetupClusterAccess(_ context.Context, clusterDir string) error {
 		p.Log.Warn("kubeconfig: could not chown config", "err", err)
 	}
 
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("setup cluster access: %w", err)
+	}
 	if err := p.addKubeconfigToBashrc(homeDir, destKubeconfig); err != nil {
 		p.Log.Warn("kubeconfig: could not update .bashrc", "err", err)
 	}
