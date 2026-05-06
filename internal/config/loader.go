@@ -11,6 +11,10 @@ import (
 )
 
 // Loader reads and writes cluster Config YAML files.
+// It is intentionally stateless today; the struct shape is the
+// canonical surface so a future stateful Loader (e.g. caching parsed
+// configs across CLI subcommands, decryption keyring) can land without
+// breaking call-site shapes. Do not collapse to package-level functions.
 type Loader struct{}
 
 // NewLoader returns a Loader suitable for reading okdctl YAML configs.
