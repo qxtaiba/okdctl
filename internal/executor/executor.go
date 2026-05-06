@@ -70,7 +70,8 @@ func WithLogger(l *slog.Logger) Option {
 // parent's full environment to subprocesses. Use sparingly — prefer
 // WithEnv for well-known variables. Use cases: a tool that consumes a
 // variable not on the allowlist, or a test that needs a custom env that
-// the allowlist would filter.
+// the allowlist would filter. Symmetric with WithEnv as the canonical
+// inherit-vs-filter option pair.
 func WithInheritedEnv() Option {
 	return func(e *Executor) { e.inheritEnv = true }
 }
