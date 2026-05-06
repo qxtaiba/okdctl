@@ -28,8 +28,7 @@ apply`) or if you have no Git repository to point it at.
 | `controller_timeout` | `300` (seconds) | how long to wait for controllers |
 | `git_sync_timeout` | `180` (seconds) | how long to wait for first git sync |
 
-Sources: `flux.go:223-231` (`DefaultSettings`), `flux.go:22-25` (duration
-constants).
+Sources: `Flux.DefaultSettings` (defaults map) and `defaultControllerTimeout`/`defaultGitRepoSyncTimeout` (duration constants) in `internal/addon/catalog/flux/flux.go`.
 
 `repository` accepts `ssh://`, `https://`, `git://`, and `git@host:path`
 forms. Branch names cannot contain whitespace (spaces or tabs). Path is
