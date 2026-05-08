@@ -854,26 +854,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Replace io.ReadAll with io.LimitReader-bounded streaming via tw.WriteHeader + io.Copy, or per-file size cap (e.g. 50MB). Also tag oversized files in the manifest so support engineers see why a file was truncated.  
 **Effort:** hours
 
-##### `sec:e076e43c:install-sh-insecure-flag-trust` — install sh insecure flag trust
-
-**Status:** in review — PR #439  
-**Severity:** minor  
-**Cluster:** tls-network — seam→audit-iac-and-shell  
-**Evidence:** `scripts/install.sh:59-67`  
-**Problem:** INSECURE=1 disables SHA256 verification of the release tarball even though SHA256SUMS is the canonical integrity guard when cosign is unavailable. The flag also exists when cosign IS installed (then sha256 is skipped, cosign still runs) — but a user setting INSECURE=1 with no cosign installed accepts an unverified binary. Defense-in-depth is sacrificed on a curl|sh distribution path.  
-**Fix:** Remove the INSECURE=1 path entirely, OR require both cosign AND sha256sum to be present before honoring INSECURE=1 (refuse to install when integrity checks are skipped without an alternative trust anchor). Per CLAUDE.md §security-invariants we should never recommend disabling verification on a trust-boundary download.  
-**Effort:** hours
-
-##### `sec:0d318f5c:logfile-mode-fixed` — logfile mode fixed
-
-**Status:** in review — PR #442  
-**Severity:** suggestion  
-**Cluster:** credentials  
-**Evidence:** `internal/cli/logging.go:24-33`  
-**Problem:** openLogFile creates the log file with 0o600 — correct. But the logfile path is operator-supplied (--log-file flag) and not validated for traversal. Combined with the sudo re-exec model, an operator could --log-file=/etc/cron.d/anything and writes to that file as root. The Lstat-then-OpenFile-O_NOFOLLOW guard rejects symlinks (good), but does not refuse a path inside a sensitive directory. The implicit privilege escalation should at least be documented.  
-**Fix:** Document --log-file's privilege contract (operator chooses; runs as root). If hardening is desired, restrict to paths under workDir or the invoking user's home, with an explicit override flag for system paths. The 0o600 mode + O_APPEND already prevent overwrite of regular files, so the practical risk is bounded.  
-**Effort:** hours
-
 ##### `sec:25fa1be8:firewall-haproxy-port-only-tcp` — firewall haproxy port only tcp
 
 **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-25fa1be8-firewall-allowlist  
@@ -882,16 +862,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/distribution/okd/firewall/firewall.go:52-66`  
 **Problem:** haproxyPortNumbers is map[int]bool but HAProxyFrontendPorts() filters by both Number and Protocol == protoTCP. The rule is correct but the structure leaves a future-maintainer footgun: if anyone adds a UDP rule on those numbers (e.g. UDP 6443 for QUIC variants), HAProxyFrontendPorts() would silently include them only when their tcp filter passes. A pure allowlist of {Number, Protocol} pairs would be unambiguous.  
 **Fix:** Define haproxyFrontends as []Port literal (number+protocol pairs) instead of map[int]bool keyed only by number. Removes the implicit tcp-only assumption.  
-**Effort:** hours
-
-##### `sec:e3782ee7:atomicwrite-create-then-chmod` — atomicwrite create then chmod
-
-**Status:** in review — PR #441  
-**Severity:** suggestion  
-**Cluster:** file-toctou  
-**Evidence:** `internal/system/fs.go:196-247`  
-**Problem:** AtomicWrite calls os.CreateTemp(dir, ".tmp-*") which opens the temp file with mode 0o600 (Go default), then later calls os.Chmod(tmpPath, perm). For perm tighter than 0o600 (rare in this repo), the create-then-chmod window is benign because the file starts tighter. For perm wider (0o644 for haproxy.cfg, dnsmasq.conf), the temp file is briefly readable only to owner (root under sudo). The pattern only becomes a problem if a future caller passes 0o600 expecting the helper guarantees it; today the helper happens to satisfy that.  
-**Fix:** Switch to OpenFile(tmpPath, O_RDWR|O_CREATE|O_EXCL, perm) to apply mode at open time (mirroring system.openTempFile in the same file at line 77). Eliminates the Chmod-window concern and aligns with the canonical CopyFileMode pattern.  
 **Effort:** hours
 
 ##### `sec:fde34e0c:k8sclient-env-direct-write` — k8sclient env direct write
@@ -927,16 +897,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Add a VERSION_CODENAME field to platform.Detect()'s output (it already parses /etc/os-release) or expose a small parseOSReleaseField(VERSION_CODENAME) helper, then call it here. Removes the lsb_release dep — older Debian/RHEL installations don't ship it by default.  
 **Effort:** hours
 
-##### `sub:ae5b624c:no-graceful-cancel` — no graceful cancel
-
-**Status:** in review — PR #445  
-**Severity:** minor  
-**Cluster:** timeout-cancel — seam→audit-concurrency  
-**Evidence:** `internal/distribution/okd/install/monitor.go:23-45`  
-**Problem:** defaultStartMonitorCmd uses exec.CommandContext (defaults to SIGKILL on ctx cancel) AND a hand-rolled kill func that the orchestrator calls on <-ctx.Done(). On install timeout, openshift-install gets SIGKILL'd before it can flush its in-flight diagnostic output (the very thing the operator needs to debug a 60-minute install that just timed out). Go 1.20 cmd.Cancel + cmd.WaitDelay supersede the hand-rolled kill: SIGTERM first, then a bounded wait, then SIGKILL.  
-**Fix:** Set cmd.Cancel = func() error { return cmd.Process.Signal(syscall.SIGTERM) } and cmd.WaitDelay = 30 * time.Second before cmd.Start(). Drop the hand-rolled kill / sync.OnceFunc — exec already coordinates the cancel-then-wait-then-kill flow. Then the reapTimer in MonitorInstallation also collapses.  
-**Effort:** hours
-
 #### audit-state-and-recovery
 
 ##### `state:4f69fc9d:rerunsafe-not-enforced` — rerunsafe not enforced
@@ -957,16 +917,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/distribution/okd/setup/steps.go:212-240`  
 **Problem:** StepBuildISOs and StepUploadISOs are ReRunSafeNo but neither declares AlreadyDone. A SIGKILL mid-ISO-build leaves a partial fedora-coreos-master0.iso in workDir; mid-upload leaves a partial ISO on the Proxmox host. The next deploy re-runs the orchestrator from step 1; cleanup.WorkOnly removes custom-isos/ locally, but the partial remote upload is never sha256-verified before being referenced by the cdrom block in the bootstrap/master/worker resources.  
 **Fix:** Add AlreadyDone to StepBuildISOs that verifies SHA256 of every expected output ISO matches the cached fedora-coreos image hash; on mismatch, treat as 'work not done' and re-build. For StepUploadISOs, add AlreadyDone that runs `pvesh get /nodes/<node>/storage/<storage>/content` filtered to iso/<expected-name>.iso and verifies the size matches the local ISO. Either pre-condition stops a half-uploaded artifact from being treated as ready.  
-**Effort:** hours
-
-##### `state:262af6e4:cleanup-best-effort-no-resume` — cleanup best effort no resume
-
-**Status:** in review — PR #444  
-**Severity:** minor  
-**Cluster:** crash-recoverability  
-**Evidence:** `internal/distribution/okd/cleanup/cleanup.go:1-138`  
-**Problem:** The package doc admits the design honestly: 'Cleanup is best-effort: a mid-run crash leaves workDir in a partially-removed state with no resume capability.' A two-pass design with .cleanup-plan.json was sketched but never implemented. The Full Kind runs WorkDirectory → WebServer → HAProxy → Apache → Dnsmasq → Terraform → Packages serially; a SIGKILL after WebServer leaves haproxy/apache/dnsmasq running with stale config, terraform.tfvars present, and no resume signal in the workDir.  
-**Fix:** Lift cleanup.Execute's switch onto distribution.StepDef + BuildSteps so each subsystem cleanup becomes a step with AlreadyDone hooks. Subsystem-specific 'is removed' check: dnsmasq → !system.FileExists(/etc/dnsmasq.d/okd-<name>.conf), haproxy → !system.FileExists(haproxy backup) AND !system.IsServiceActive(haproxy), terraform → !system.FileExists(terraform.tfvars). A re-run becomes naturally resumable. Cross-references roadmap state:4f69fc9d.  
 **Effort:** hours
 
 ##### `state:48688e63:provision-no-output-readback` — provision no output readback
@@ -1017,16 +967,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/infrastructure/proxmox/proxmox.go:138-202`  
 **Problem:** Provider.Provision returns from terraform.Apply, then immediately calls retrieveProvisionResult which derives IPs by arithmetic — no readiness probe against Proxmox to confirm the VM is created and visible via the Proxmox API. The VMs may exist in tfstate before they're listable via `pvesh get /nodes/<n>/qemu`. Downstream callers (install.WaitForBootstrap) poll the IP — they will retry — but the immediate logger.Info('vm provisioned', ip) is misleading if the VM isn't yet enumerable.  
 **Fix:** After Apply succeeds, run a single bounded `pvesh get /nodes/<node>/qemu` lookup to confirm vmid_base is enumerated. On miss, log Info 'vm not yet enumerable, install phase will retry' instead of the misleading 'provisioned' log. Mutation invariant remains intact (this is a read-only probe through pvesh, which is already used by phase.iso_cleanup.go).  
-**Effort:** hours
-
-##### `state:62cb8a95:helper-stale-lock-message` — helper stale lock message
-
-**Status:** in review — PR #443  
-**Severity:** suggestion  
-**Cluster:** tf-state-atomicity  
-**Evidence:** `internal/distribution/okd/destroy/helpers.go:19-30`  
-**Problem:** stateLockHint detects .terraform.tfstate.lock.info but only fires when tf init returns an error. Terraform's local backend places the lock during operations and removes it on success — a stale lock today usually means a prior crash. The hint message says 'run terraform force-unlock <id>' but provides NO way to extract the <id> automatically (it's in the lock.info JSON). Operators reading this hit the cookbook trail of 'how do I find the lock id', which they could read from the file directly.  
-**Fix:** Read the lock.info JSON, parse the .ID field, and substitute it into the message. Lock.info is small (~200 bytes) and fixed-shape (Terraform documents it). Net diff: +6 LOC, a sharper diagnostic.  
 **Effort:** hours
 
 #### audit-iac-and-shell
@@ -1270,16 +1210,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Option A (recommended pre-1.0): rename `--format` to `--output`/`-o` everywhere it acts as a format selector; rename the file-destination uses to `--output-file` so the `-o` shorthand is reserved kubectl-style. Option B (zero-break): add `--output`/`-o` as a hidden alias for `--format` on status/describe/releases; document one canonical name. Pick before 1.0; add the chosen convention to CLAUDE.md §architecture-notes.  
 **Effort:** hours
 
-##### `ux:fd2125dd:addon-uninstall-stdout-msg` — addon uninstall stdout msg
-
-**Status:** in review — PR #446  
-**Severity:** suggestion  
-**Cluster:** streams  
-**Evidence:** `internal/cli/addon.go:165-167`  
-**Problem:** `runAddonUninstall` writes `addon X uninstalled` to stdout via `cmd.OutOrStdout()`. Sibling write paths (`destroy`: `tui.Info("cluster destroyed (...)")`, `cleanup`: `tui.Info("cleanup complete (...)")`) emit equivalent post-action confirmation to stderr. A consumer parsing addon-uninstall stdout for verification has a stable line; but the whole repo otherwise treats post-action confirmation as a stderr concern.  
-**Fix:** Replace with `tui.Info(fmt.Sprintf("addon %s uninstalled", args[0]))`. One-line change; aligns with destroy/cleanup/update-ingress.  
-**Effort:** hours
-
 
 #### audit-observability
 
@@ -1459,16 +1389,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Add `func (k Kind) Validate() error` and `func ValidKinds() []Kind` mirroring config.SupportedDistributions / config.SupportedProviders. Eliminates the hard-coded string list in the default branch of Execute.  
 **Effort:** hours
 
-##### `smell:c4182b1c:abstraction-single-caller` — abstraction single caller
-
-**Status:** in review — PR #447  
-**Severity:** suggestion  
-**Cluster:** helper-package-no-value  
-**Evidence:** `internal/distribution/context.go:1-33`  
-**Problem:** PhaseContext is a generic mu+Get/Update wrapper used by exactly one caller (postinstall.Phase.Execute), holding a 5-field non-shared struct mutated serially by the orchestrator. The orchestrator runs steps serially, so the RWMutex protects against a concurrency that does not exist. Either inline the wrapped struct as a Phase field, or document the future-symmetric-API intent explicitly in the doc comment.  
-**Fix:** Verify intent (grep roadmap.md, confirm parallel siblings) — do not delete; per MEMORY.md §scaffolding.  
-**Effort:** hours
-
 #### audit-dependencies
 
 ##### `dep:33ef32bf:proxmox-bus-factor-1` — proxmox bus factor 1
@@ -1552,26 +1472,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `docs/architecture/phases.md:102-117`  
 **Problem:** 'Adding a new step' instructions list NonFatal and SkipWhen but never mention ReRunSafe, which BuildSteps requires. A reader following these steps verbatim will hit 'BuildSteps: step <id> must declare ReRunSafe (ReRunSafeYes or ReRunSafeNo)' panic at first run.  
 **Fix:** Add a step '0' or first-class step explaining ReRunSafe: every StepDef must set ReRunSafeYes (idempotent across re-runs — preferred default) or ReRunSafeNo (combined with AlreadyDone for resume safety). Note the panic in BuildSteps.  
-**Effort:** hours
-
-##### `doc:8f46b665:phases-stepdef-missing-fields` — phases stepdef missing fields
-
-**Status:** in review — PR #449  
-**Severity:** major  
-**Cluster:** readme-drift  
-**Evidence:** `docs/architecture/phases.md:40-51`  
-**Problem:** Documented StepDef shape is missing ReRunSafe (mandatory — BuildSteps panics if unset), AlreadyDone (consulted before Exec), and OnStart hook. Recent commit 1e505e9 'require ReRunSafe declaration on every StepDef' added the field; doc was not regenerated.  
-**Fix:** Update the StepDef code block in docs/architecture/phases.md to mirror the canonical struct in internal/distribution/step.go (add ReRunSafe, AlreadyDone, OnStart). Add a short note that ReRunSafe is mandatory — BuildSteps panics with 'must declare ReRunSafe' when unset.  
-**Effort:** hours
-
-##### `doc:8f46b665:phases-basephase-missing-recorder` — phases basephase missing recorder
-
-**Status:** in review — PR #449  
-**Severity:** minor  
-**Cluster:** readme-drift  
-**Evidence:** `docs/architecture/phases.md:79-85`  
-**Problem:** Documented BasePhase struct is missing the Recorder field (distribution.MetricsRecorder). The metrics-recorder wiring is load-bearing for the deploymetrics path; readers cloning the doc shape will miss it.  
-**Fix:** Add Recorder field to the documented BasePhase code block and a one-line note explaining its role (per-step + overall observation sink, defaults to nopMetricsRecorder via WithRecorder).  
 **Effort:** hours
 
 ##### `doc:b3356305:readme-production-yaml-worker-drift` — readme production yaml worker drift
