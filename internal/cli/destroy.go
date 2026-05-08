@@ -226,6 +226,7 @@ func runDestroy(cmd *cobra.Command, _ []string) error {
 	}()
 
 	p := createOKDProvisionerWithOpts(cfg, creds, projectRoot)
+	defer p.ZeroizeEnv()
 
 	announceDeployState(filepath.Join(workDir, deployStateFile))
 
