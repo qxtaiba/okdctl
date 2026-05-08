@@ -8,7 +8,7 @@ import (
 	"os"
 	osExec "os/exec"
 	"path/filepath"
-	"sync"
+	"syscall"
 	"time"
 
 	"github.com/qxtaiba/okdctl/internal/cluster"
@@ -18,14 +18,19 @@ import (
 
 // defaultStartMonitorCmd starts "openshift-install wait-for install-complete",
 // wires stdout/stderr to the current TTY, and returns a buffered done channel
-// and an idempotent kill function. log receives any kill-error warning when
-// Kill() itself fails.
-func defaultStartMonitorCmd(ctx context.Context, clusterDir string, log *slog.Logger) (done <-chan error, kill func(), err error) {
+// and a no-op kill function. cmd.Cancel + cmd.WaitDelay handle the
+// SIGTERM-then-SIGKILL escalation natively; the returned kill func remains
+// for API compatibility with injected stubs.
+func defaultStartMonitorCmd(ctx context.Context, clusterDir string, _ *slog.Logger) (done <-chan error, kill func(), err error) {
 	cmd := osExec.CommandContext(ctx, "openshift-install", "wait-for", "install-complete", "--dir", clusterDir, "--log-level=debug")
 	// Filter env so openshift-install does not inherit AWS_*/GCP_*/AZURE_* etc. from the user shell.
 	cmd.Env = executor.FilterParentEnv(executor.DefaultEnvAllowlist)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
+	// Send SIGTERM on ctx cancellation so openshift-install can flush its
+	// in-flight diagnostics. WaitDelay gives it 30 s before SIGKILL fires.
+	cmd.Cancel = func() error { return cmd.Process.Signal(syscall.SIGTERM) }
+	cmd.WaitDelay = 30 * time.Second
 	if startErr := cmd.Start(); startErr != nil {
 		return nil, func() {}, startErr
 	}
@@ -34,14 +39,7 @@ func defaultStartMonitorCmd(ctx context.Context, clusterDir string, log *slog.Lo
 		defer close(doneCh)
 		doneCh <- cmd.Wait()
 	}()
-	kill = sync.OnceFunc(func() {
-		if cmd.Process != nil {
-			if killErr := cmd.Process.Kill(); killErr != nil {
-				log.Warn("install: failed to kill process", "err", killErr)
-			}
-		}
-	})
-	return doneCh, kill, nil
+	return doneCh, func() {}, nil
 }
 
 // WaitForBootstrap runs "openshift-install wait-for bootstrap-complete",
@@ -107,7 +105,7 @@ func (p *Phase) MonitorInstallation(ctx context.Context, clusterDir string, opts
 	stopSpinner := p.Reporter("monitoring cluster operators")
 	defer stopSpinner()
 
-	installDone, killInstall, err := startCmd(ctx, clusterDir)
+	installDone, _, err := startCmd(ctx, clusterDir)
 	if err != nil {
 		return &errtypes.ClusterError{Msg: "failed to start installation monitor", Err: err}
 	}
@@ -165,20 +163,6 @@ func (p *Phase) MonitorInstallation(ctx context.Context, clusterDir string, opts
 			}
 
 		case <-ctx.Done():
-			killInstall()
-			// Give the just-killed openshift-install 30s to exit and flush
-			// its final output; then give up rather than blocking shutdown.
-			// The goroutine above still holds Wait() on the dead process —
-			// it will eventually return and send to installDone, but the
-			// buffered channel means we don't leak a blocked sender if we
-			// abandon early.
-			reapTimer := time.NewTimer(30 * time.Second)
-			select {
-			case <-installDone:
-				reapTimer.Stop()
-			case <-reapTimer.C:
-				p.Log.Warn("install: process did not exit after kill, abandoning reap")
-			}
 			if errors.Is(ctx.Err(), context.Canceled) {
 				return fmt.Errorf("installation cancelled: %w", ctx.Err())
 			}

@@ -161,8 +161,8 @@ write the comment — then it carries real information.
   `internal/cli/root.go::execute()` (signal-watched context creation)
   and test-only helpers.
 - **Canonical patterns:**
-  - `cmd.Wait` reap-with-deadline: `internal/distribution/okd/install/monitor.go`
-    (`killInstall` + `reapTimer`).
+  - graceful subprocess cancel: `internal/distribution/okd/install/monitor.go`
+    (`cmd.Cancel` SIGTERM + `cmd.WaitDelay` 30 s, Go 1.20+).
   - Ticker-backed background worker: `internal/tui/spinner.go`.
   - Signal-watched cancellation: `internal/cli/root.go::execute()` —
     `defer close(sigCh)` after `signal.Stop` so the receiver returns
