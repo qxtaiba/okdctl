@@ -272,15 +272,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Move the os.Getenv('KUBECONFIG') read inside c.run — evaluate the env lazily on each exec.Run so a mid-process KUBECONFIG mutation IS seen. Alternatively drop the env fallback and require WithKubeconfig explicitly.  
 **Effort:** hours
 
-##### `api:de572c63:ctx-not-first-write-dnsmasq` — ctx not first write dnsmasq
-
-**Status:** in review — PR #480  
-**Severity:** suggestion  
-**Evidence:** `internal/distribution/okd/dns/dnsmasq.go:54-92`  
-**Problem:** WriteDnsmasqConfig now takes ctx and checks ctx.Err() at entry (progress from prior run), but still does not thread ctx into os.MkdirAll / system.WriteTempFile / system.CopyFile — the body advertises cancellation only via the entry-gate, not per-step. Either plumb ctx into the underlying helpers or select on ctx.Done between the steps.  
-**Fix:** Add `select { case <-ctx.Done(): return ctx.Err(); default: }` between the mkdir / WriteTempFile / CopyFile steps so a mid-op cancellation is honored. Alternatively accept the entry-check as sufficient and add a one-line comment explaining why later operations are not gated.  
-**Effort:** hours
-
 ##### `api:dd75bdeb:stutter-postinstall-context` — stutter postinstall context
 
 **Status:** deferred  
@@ -288,15 +279,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/distribution/okd/postinstall/context.go:1-10`  
 **Problem:** postinstall.PostInstallContext stutters (package.PostInstall…). The struct is already suppressed with //nolint:revive and a 'rename deferred to a dedicated refactor' note, so this finding is a reminder that the deferred rename is still pending.  
 **Fix:** Rename postinstall.PostInstallContext -> postinstall.State (preferred) or postinstall.Context. Callers: phase.go:76 (distribution.NewPhaseContext(State{})), steps.go (4x pctx.Update(func(c *State) {...})), and the PhaseContext[State] type parameter.  
-**Effort:** hours
-
-##### `api:761e5126:export-no-caller-removehaproxy` — export no caller removehaproxy (scaffolding — verify intent only)
-
-**Status:** in review — PR #481  
-**Severity:** suggestion  
-**Evidence:** `internal/distribution/okd/postinstall/haproxy.go:23-97`  
-**Problem:** postinstall.Phase.RemoveHAProxy is exported but the only caller is the package-private finalizeIngress path in update_ingress.go:214. No external consumer references it.  
-**Fix:** Verify intent against roadmap.md. If a standalone `okdctl haproxy remove` verb is planned, keep exported and add a one-line doc referencing it.  
 **Effort:** hours
 
 ##### `api:4f69fc9d:iface-fragmented-step` — iface fragmented step
@@ -341,36 +323,9 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 #### audit-iac-and-shell
 
-##### `iac:b803fcb7:ci-no-tflint-tfsec` — ci no tflint tfsec
-
-**Status:** in review — PR #482  
-**Severity:** minor  
-**Evidence:** `.github/workflows/ci.yml:97-109`  
-**Problem:** `validate-terraform` + `lint-terraform` jobs now run `terraform fmt`, `terraform validate`, and `tflint -f compact` — but no secret/policy scanner (tfsec, checkov, or trivy config). tflint catches terraform_* idiom issues; tfsec/checkov catch misconfigured provider secrets, missing `sensitive = true`, and public-exposure antipatterns that the HCL surface will grow into as the module adds network/firewall rules.  
-**Fix:** Add a `tfsec` or `trivy config` step to the validate-terraform/lint-terraform job. tfsec has a maintained action `aquasecurity/tfsec-action@...`; `trivy config infrastructure/terraform` is a single call.  
-**Effort:** hours
-
-##### `iac:18a795d5:hcl-no-prevent-destroy-masters` — hcl no prevent destroy masters
-
-**Status:** in review — PR #483  
-**Severity:** suggestion  
-**Evidence:** `infrastructure/terraform/modules/proxmox-okd/main.tf:140-255`  
-**Problem:** Master VMs (OKD control plane carrying etcd quorum state) have no `lifecycle { prevent_destroy = true }` guard. A misconfigured `terraform apply` that perturbs a force-new attribute (e.g.  
-**Fix:** Add `prevent_destroy = true` to the master VM resource's `lifecycle` block, gated by a variable (e.g. `var.allow_master_destroy`, default false) that `okdctl destroy` flips before running Terraform.  
-**Effort:** hours
-
 #### audit-modernization
 
 #### audit-observability
-
-##### `obs:0d318f5c:handler-no-tty-switch` — handler no tty switch
-
-**Status:** deferred  (already on develop — needs archive sweep)  
-**Severity:** minor  
-**Evidence:** `internal/cli/logging.go:35-67`  
-**Problem:** configureLogging still does not auto-select JSON format when stderr is not a TTY. Operators piping `okdctl deploy 2>&1 | jq .` get charmlog text with ANSI escapes by default and must remember `--log-format json`.  
-**Fix:** Route cobra's cmd into configureLogging so `cmd.Flags().Changed("log-format")` is available. If not set and !stderrIsTTY, default logFormat to "json".  
-**Effort:** hours
 
 #### audit-security
 
@@ -381,15 +336,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/config/cluster.go:107-134`  
 **Problem:** ProxmoxConfig.Password and ProxmoxConfig.APIToken are typed as `string` (with `json:"-"`). The credentials.GetProxmoxCredentials legacy fallback reads them when the env path is empty (proxmox.go:213-228), converting via []byte(px.Password) — the new slice is wipeable but the original string residue persists for the Config's lifetime.  
 **Fix:** Option A (safer): remove the config-file credential path entirely — env/.env is the documented mechanism and the comment already says 'never persisted'; honour that by deleting the legacy fallback branch in GetProxmoxCredentials. Option B (if kept): retype ProxmoxConfig.Password and APIToken to []byte, adjust the loader path, and Zeroize during Config teardown.  
-**Effort:** hours
-
-##### `sec:f55b9c27:cred-string-copy-envfile` — cred string copy envfile
-
-**Status:** deferred  (already on develop — needs archive sweep)  
-**Severity:** major  
-**Evidence:** `internal/credentials/envfile.go:42-68`  
-**Problem:** WriteEnvFile converts password and API-token []byte to an immutable Go string via string concatenation before calling AtomicWrite. The string copy survives Zeroize on the source []byte.  
-**Fix:** Use a []byte buffer (bytes.Buffer / manual append) keyed off the raw []byte fields, then pass the buffer to AtomicWrite and scrub the buffer after the call returns. Keeps credential bytes on the wipeable path throughout.  
 **Effort:** hours
 
 ##### `sec:35abd54e:cred-string-copy-env` — cred string copy env
@@ -410,15 +356,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Either (a) pin bootstrapOCURL to a specific release tag and ship a baked-in sha256 in the okdctl binary (matches the 'explicit versions — never @latest' rule in CLAUDE.md §Dependencies), or (b) verify a cosign signature on the tarball if Red Hat publishes one for the client tarball set, or (c) fall through to `oc adm release extract` via the distribution-packaged `openshift-client` rpm/deb instead of curl-to-bash. Document the trust decision in CLAUDE.md §security-invariants.  
 **Effort:** hours
 
-##### `sec:00000006:debug-bundle-redact-partial` — debug bundle redact partial
-
-**Status:** in review — PR #484  
-**Severity:** minor  
-**Evidence:** `internal/cli/config.go:65-79`  
-**Problem:** redactConfig in cli/config.go only masks Provider.Proxmox.TokenID and leaves every other config field unchanged. Password and APIToken carry `json:"-"` so they never marshal into the bundle (correct today), but the function signature encourages a future 'add a field, forget to redact' regression.  
-**Fix:** Walk the config via reflection and mask every string field whose struct-tag name matches the RedactHandler denylist (password, token, secret, api_key, apikey). Alternative: add an explicit `okdctl:"sensitive"` struct tag and have redactConfig honour it — future fields opt in by tagging.  
-**Effort:** hours
-
 ##### `sec:7b2829bb:env-append-os-environ` — env append os environ
 
 **Status:** deferred  
@@ -426,15 +363,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/executor/executor.go:85-174`  
 **Problem:** Executor now applies a defaultEnvAllowlist (good — previously-flagged broadcast of unrelated env vars is closed). But PROXMOX_ is in the prefix allowlist, so PROXMOX_VE_PASSWORD / PROXMOX_VE_API_TOKEN still reach EVERY subprocess the executor spawns — including coreutils shellouts that don't need Proxmox credentials (lsb_release, dpkg, gpg, rpm, ss, systemctl, semanage, find, rm, ssh-keyscan).  
 **Fix:** Split Executor.Env into two slices: AuthEnv (credential-bearing PROXMOX_*, KUBECONFIG, GIT_*, GITHUB_TOKEN) and Env (general). Add WithAuthEnv(...) and a per-Run toggle so credential vars only reach terraform + oc + helm + sops.  
-**Effort:** hours
-
-##### `sec:451be4fa:chowntree-symlink-audit` — chowntree symlink audit
-
-**Status:** in review — PR #485  
-**Severity:** minor  
-**Evidence:** `internal/system/elevation.go:100-131`  
-**Problem:** ChownTreeToInvokingUser uses filepath.WalkDir + os.Lchown (symlink-safe). The docstring explicitly requires the caller to only pass paths whose subtree okdctl itself created in this process.  
-**Fix:** Add a runtime guard: ChownTreeToInvokingUser should refuse root if it does not match a short allowlist (projectRoot/okd-install, projectRoot/infrastructure, user-home subdirs). Alternative: introduce a typed workdir handle (type WorkDir string) produced only by the orchestrator, so the function signature statically excludes callers that pass cfg.HTTPServer.Root.  
 **Effort:** hours
 
 ##### `sec:d5915b0c:kubeconfig-env-leak` — kubeconfig env leak
@@ -468,33 +396,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Effort:** hours
 
 #### audit-tests
-
-##### `tst:daf5bee9:no-test-kubeconfig-merge-full` — no test kubeconfig merge full
-
-**Status:** in review — PR #486  
-**Severity:** blocker  
-**Evidence:** `internal/cli/kubeconfig.go:77-125`  
-**Problem:** mergeNamedList now has unit coverage (TestMergeNamedList) but mergeKubeconfig itself — the full merge pipeline including (a) source/dest YAML parse, (b) three-key merge (clusters/users/contexts), (c) current-context preservation invariant (set from src only when dest has none), (d) AtomicWrite at mode 0o600 — remains untested end-to-end. The current-context and 0o600 perm guarantees are the load-bearing invariants for kubectl-default-cluster preservation and on-disk kubeconfig perms.  
-**Fix:** Extend internal/cli/kubeconfig_test.go: TestMergeKubeconfig_PreservesCurrentContext — seed dest YAML with current-context=prod + one cluster 'prod', pass srcData with current-context=okd-test + clusters [okd-test,dev] via t.Setenv(KUBECONFIG, tmp) to redirect mergeTargetPath, call mergeKubeconfig(srcData), read-back YAML, assert current-context == 'prod' AND clusters contains both 'prod' and 'okd-test'. TestMergeKubeconfig_EmptyDestTakesSrcCurrentContext — empty dest → dest's current-context becomes src's.  
-**Effort:** days
-
-##### `tst:6b533f2d:no-test-approve-pending-csrs` — no test approve pending csrs
-
-**Status:** in review — PR #487  
-**Severity:** major  
-**Evidence:** `internal/cluster/k8s_csrs.go:51-74`  
-**Problem:** ApprovePendingCSRs drives MonitorInstallation's CSR-approval loop. No test covers (a) PendingCSRs returns [] → (0, nil) fast path, (b) non-empty list → single `oc adm certificate approve` with all names in one argv (the batching is load-bearing — N separate approve calls per tick would rate-limit the API), (c) PendingCSRs error → (0, err) propagates; (d) runCheck failure wraps with "failed to approve CSRs" prefix.  
-**Fix:** Use the fake-oc pattern already landed in phase/kubectl_test.go: install a PATH-shadowed 'oc' that records argv to a temp file, then assert (a) 0 CSRs → 0 runs; (b) 3 CSRs → 1 run with argv ["adm","certificate","approve","csr-1","csr-2","csr-3"]; (c) PendingCSRs returns error → propagate; (d) approve exit !=0 → *errtypes.ClusterError wrapping. Shares the test-harness idiom with the existing kubectl_test.go suite.  
-**Effort:** hours
-
-##### `tst:830d4653:no-test-packages-cleanup-guard` — no test packages cleanup guard
-
-**Status:** in review — PR #488  
-**Severity:** major  
-**Evidence:** `internal/distribution/okd/cleanup/packages.go:59-96`  
-**Problem:** cleanup.Packages composes ResolveBinDir → filepath.Join → refuseCriticalPath → os.RemoveAll for each installer-managed binary (yq/helm/sops/oc/kubectl/openshift-install). The per-iter refuseCriticalPath guard is the only thing stopping an OKDCTL_BIN_DIR=/etc environment variable from walking os.RemoveAll into /etc/yq.  
-**Fix:** Add internal/distribution/okd/cleanup/packages_test.go: (1) TestPackages_RefusesCriticalBinDir — pass binDir="/" (via option or env t.Setenv), stub detectPackageManager to a no-op, assert returned error is *errtypes.ClusterError (guard fires per iter, hasErrors=true); (2) TestPackages_HappyPath — binDir=t.TempDir() populated with fake `yq`, `helm`, `sops` executables, assert each is gone post-call; (3) TestPackages_MissingBinariesNoError — empty binDir → no error. Stub the package-manager dnf path to avoid requiring root.  
-**Effort:** days
 
 ##### `tst:33579dd5:no-test-cleanup-haproxy` — no test cleanup haproxy
 
@@ -541,33 +442,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Requires the csrApprover interface extraction from api:fde34e0c. Once MonitorInstallation accepts a csrApprover + an injected command runner, use testing/synctest to cover: (a) installDone(nil) → final ApprovePendingCSRs called, returns nil; (b) installDone(err) under ctx.DeadlineExceeded → error wraps DeadlineExceeded; (c) installDone(err) under ctx.Canceled → error wraps Canceled; (d) ctx cancel → kill + reap within 30s succeeds; (e) ctx cancel + kill ignored → 30s elapses + warn logged.  
 **Effort:** days
 
-##### `tst:761e5126:no-test-removehaproxy` — no test removehaproxy
-
-**Status:** in review — PR #481  
-**Severity:** major  
-**Evidence:** `internal/distribution/okd/postinstall/haproxy.go:23-97`  
-**Problem:** RemoveHAProxy calls os.RemoveAll(phase.DefaultHAProxyConfigPath) (= /etc/haproxy/haproxy.cfg) then tears down firewall rules, the bastion VIP, and verifies API reachability. The /etc removal has no guard against an attacker-influenced DefaultHAProxyConfigPath (currently a const, but consumed indirectly), no partial-failure test (what if firewall.RemoveRules fails?), no idempotency test (second call on an already-removed haproxy).  
-**Fix:** Add postinstall/haproxy_test.go with a fake Exec / Log and an injectable haproxyConfigPath variable (apply the same test-injection pattern setup/haproxy.go uses). Cases: (a) happy path — service stopped, config file gone, firewall rules removed; (b) empty VIP skips the kube-vip verification branch; (c) os.RemoveAll error is logged but does not abort (resilience); (d) API-via-VIP wait returning non-ok yields *errtypes.NetworkError.  
-**Effort:** days
-
-##### `tst:632c9087:no-test-buildlb-ingresscontroller` — no test buildlb ingresscontroller
-
-**Status:** in review — PR #490  
-**Severity:** major  
-**Evidence:** `internal/distribution/okd/postinstall/update_ingress.go:371-467`  
-**Problem:** convertToLoadBalancer is a destructive conversion (`oc delete ingresscontroller` then `oc create` a rebuilt one) with an explicit rollback path via attemptRollback. The two load-bearing JSON transforms — buildLBIngressController (which must preserve domain/replicas/defaultCertificate/routeSelector/routeAdmission/nodePlacement from the original spec while swapping strategy to LoadBalancerService) and buildRollbackJSON (which must strip server-managed fields to let `oc create` succeed) — are pure, in-memory functions that feed a destructive external call, and neither has a test.  
-**Fix:** Add internal/distribution/okd/postinstall/update_ingress_test.go with stdlib testing only: (1) TestBuildLBIngressController_PreservesSpecFields — craft an ingressControllerInfo with RawJSON containing all six optional spec fields populated; assert the returned JSON unmarshals to a doc whose spec.endpointPublishingStrategy.type == LoadBalancerService AND each of domain/replicas/defaultCertificate/routeSelector/routeAdmission/nodePlacement round-trips intact; (2) TestBuildLBIngressController_EmptyNamespaceDefaults — Metadata.Namespace="" → output namespace == "openshift-ingress-operator"; (3) TestBuildRollbackJSON_StripsServerFields — seed RawJSON with creationTimestamp/generation/resourceVersion/uid/managedFields + a status block; assert each field is absent from the result AND non-server fields (spec, name, namespace) remain.  
-**Effort:** days
-
-##### `tst:29293401:no-test-haproxy-rollback` — no test haproxy rollback
-
-**Status:** in review — PR #489  
-**Severity:** major  
-**Evidence:** `internal/distribution/okd/setup/haproxy.go:87-146`  
-**Problem:** ConfigureHAProxy writes to /etc/haproxy/haproxy.cfg — a root-required file on the live system — and has a rollback path that restores from backup on validation/restart failure. No test covers the rollback: (a) no prior config → no backup taken, no rollback; (b) validation fails → backup restored, service restarted with old config; (c) rollback chmod/restart failure surfaces joined errors.  
-**Fix:** Requires swapping the hard-coded /etc/haproxy paths + ManageService subprocess calls for injected seams. Practical test: extract the rollback lambda into a package-local helper attemptHAProxyRollback(cause, haproxyCfgPath, backupPath, chmodFn, restartFn) error and table-drive: (a) restore fails → joined error; (b) restore OK, restart fails → joined; (c) happy rollback → cause returned.  
-**Effort:** days
-
 ##### `tst:41a9d4eb:no-test-redact-handler` — no test redact handler
 
 **Status:** deferred  
@@ -577,32 +451,12 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Add internal/logutil/redact_test.go with stdlib testing + bytes.Buffer + slog.NewTextHandler as the wrapped inner. Cases: (1) TestRedactAttr_SecretKeys — feed password/PASSWORD/api_token/bearer_token; assert all replaced with "[redacted]"; (2) TestRedactAttr_NonSecret — cluster/user (non-secret) pass through; (3) TestRedactAny_URL — *url.URL with User=url.UserPassword("u","p") → output has u@ but no :p@; (4) TestRedactAny_RedactedInterface — struct with Redacted() any returning "<masked>" → replaced; (5) TestWithAttrs_RedactsDerivedLogger — logger.With("password", "x").Info(...) → output has [redacted], never "x"; (6) TestWithGroup — group propagation preserves redaction; (7) TestGroupKind — nested slog.Group with a secret key inside is redacted.  
 **Effort:** days
 
-##### `tst:451be4fa:no-test-writeasinvoking` — no test writeasinvoking
-
-**Status:** in review — PR #485  
-**Severity:** minor  
-**Evidence:** `internal/system/elevation.go:82-98`  
-**Problem:** WriteAsInvokingUser combines AtomicWrite + chown-back. The "parent dir chowned iff it did not pre-exist" logic (line 84-86 + 94-96) is a subtle invariant — exists to avoid silently chowning a pre-existing dir the user created with different ownership.  
-**Fix:** Skip the actual chown (root required); test only the parentExisted flag path by extracting the existence probe into a seam OR by checking behaviour via fs inspection. Minimal value unless the chown-back is mocked — consider this an acknowledgement rather than an emit-to-fix.  
-**Effort:** hours
-
-
 ### Tier H — findings from 2026-04-25 /audit-all run
 
 Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when bandwidth opens. Each references the audit finding ID for diff tracking; when a finding recurs in a later run, its entry Status+Evidence updates here rather than being duplicated. Total: 226 findings (3 blocker, 44 major, 100 minor, 79 suggestion).
 
 #### audit-security
 
-
-##### `sec:15ba17da:cred-no-zeroize` — cred no zeroize
-
-**Status:** in review — PR #479  
-**Severity:** minor  
-**Cluster:** credentials — related: sec:6424733c:cred-no-zeroize  
-**Evidence:** `internal/distribution/okd/destroy/steps.go:24-133`  
-**Problem:** Destroy cleanup uses opts.SkipFirewall / opts.SkipCleanup / opts.SkipTerraform flags wired from the CLI. The credential lifecycle on destroy: handleCredentials creates ProxmoxCredentials, defers creds.Zeroize, then plumbs creds.Env() into createOKDProvisionerWithOpts. Same Env() string-residue issue as the deploy path (sec:6424733c:cred-no-zeroize) — destroy holds the credential strings on the executor for its full duration. Less long-running than deploy (terraform destroy is faster), but the credential is held for the entire teardown sequence including ssh-based ISO removal.  
-**Fix:** Companion fix to sec:6424733c:cred-no-zeroize. Once a ZeroizeEnv helper exists on the provisioner, destroy.go calls it in the same defer chain.  
-**Effort:** hours
 
 ##### `sec:27088eab:input-kubeconfig-not-resolved` — input kubeconfig not resolved
 
@@ -1015,36 +869,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 #### audit-code-smells
 
-##### `smell:262af6e4:dual-cleanup-tracker` — dual cleanup tracker
-
-**Status:** in review — PR #491  
-**Severity:** minor  
-**Cluster:** helper-package-no-value  
-**Evidence:** `internal/distribution/okd/cleanup/cleanup.go:67-137`  
-**Problem:** Two parallel cleanup-tracking surfaces exist: the package-level `Execute` function in cleanup.go (which uses an `errs []error` accumulator and a switch over Kind) and `destroyTracker` in destroy/steps.go (which buffers failures+skipped labels for a printSummary step). Neither uses the canonical orchestrator `StepDef`/`BuildSteps` even though cleanup.Execute runs a fixed pipeline of named steps. The `cleanup.Phase.Execute` wrapper at line 71 does NOT actually use BuildSteps — it just calls the package-level Execute.  
-**Fix:** Migrate cleanup.Execute to declare its steps as []distribution.StepDef and run via distribution.BuildSteps + Orchestrator. Reuses the destroyTracker pattern (failures + skipped labels) for the summary step instead of duplicating it.  
-**Effort:** hours
-
-##### `smell:262af6e4:pipeline-explicit-errors` — pipeline explicit errors
-
-**Status:** in review — PR #491  
-**Severity:** minor  
-**Cluster:** arrow-anti  
-**Evidence:** `internal/distribution/okd/cleanup/cleanup.go:77-137`  
-**Problem:** Execute() repeats the same `if err := X(...); err != nil { errs = append(errs, err) }` shape eight times for the Full cleanup case and once each for the *Only kinds. The cleanup pipeline is a fixed, declared list of named steps; iterating over a slice of (label, fn) pairs would shrink the body to ~10 LOC and make the kind→steps mapping data-driven.  
-**Fix:** Replace the switch with a `cleanupStep` struct ({label, fn func() error}) and a kind→[]cleanupStep map. A single loop calls each fn and accumulates errs. Drops ~30 LOC and makes adding a new kind one map entry instead of a new switch arm.  
-**Effort:** hours
-
-##### `smell:262af6e4:pipeline-explicit-errors-cleanupkind` — pipeline explicit errors cleanupkind
-
-**Status:** in review — PR #491  
-**Severity:** minor  
-**Cluster:** magic-strings  
-**Evidence:** `internal/distribution/okd/cleanup/cleanup.go:127-132`  
-**Problem:** The cleanup-kind validation hardcodes the valid-values list as a literal string `(valid types: full, work-only, web-only, haproxy-only, terraform-only)` separate from the `Full` / `WorkOnly` / `WebOnly` / `HAProxyOnly` / `TerraformOnly` typed-enum constants. Add a kind to the type → forget to add it to the error message → silently misleading user-facing error.  
-**Fix:** Add `var validKinds = []Kind{Full, WorkOnly, WebOnly, HAProxyOnly, TerraformOnly}` and `func (k Kind) IsValid() bool` plus a `KindStrings() []string` helper. Format the error via `strings.Join(KindStrings(), ", ")`. Self-maintaining when a new kind ships.  
-**Effort:** hours
-
 ##### `smell:8ea706f6:abstraction-table-meta` — abstraction table meta
 
 **Status:** not started  
@@ -1063,16 +887,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/cli/status.go:297-314`  
 **Problem:** runDescribeNode renders node readiness as raw `"True"` / `"False"` literals (matching kube-style ConditionStatus output) but does so by ad-hoc if/else over the bool returned by isReady(), not by reusing phase.ConditionStatusTrue / phase.ConditionStatusFalse. The literal `"True"` and `"False"` here are the same enum spelled twice with no type backing the second site.  
 **Fix:** Replace with `string(phase.ConditionStatusFalse)` / `string(phase.ConditionStatusTrue)` or factor a `boolToConditionStatus(bool) phase.ConditionStatus` helper. Keeps the one-line text path intact while ensuring future enum changes propagate.  
-**Effort:** hours
-
-##### `smell:262af6e4:enum-ad-hoc-cleanup-kind` — enum ad hoc cleanup kind
-
-**Status:** in review — PR #491  
-**Severity:** suggestion  
-**Cluster:** magic-strings  
-**Evidence:** `internal/distribution/okd/cleanup/cleanup.go:21-32`  
-**Problem:** Cleanup `Kind` is a typed enum with 5 valid values (Full, WorkOnly, WebOnly, HAProxyOnly, TerraformOnly) — but unlike NodeRole / VMRole / ClusterPhase the type does not expose a `Validate() error` or `String() string` method or a `SupportedKinds()` slice. Combined with the cleanup-kind error string finding, this leaves the validation as inline switch defaults that drift from the constants.  
-**Fix:** Add `func (k Kind) Validate() error` and `func ValidKinds() []Kind` mirroring config.SupportedDistributions / config.SupportedProviders. Eliminates the hard-coded string list in the default branch of Execute.  
 **Effort:** hours
 
 #### audit-dependencies
