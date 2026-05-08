@@ -39,16 +39,24 @@ orchestrator stops and returns the error — later steps do not run.
 
 ```go
 type StepDef struct {
-    ID         StepID                          // stable identifier used in logs
-    Name       string                          // human-readable name ("Install Packages")
-    Desc       string                          // progress text ("installing required packages")
-    Exec       func(context.Context) error     // the actual work
-    SkipWhen   func() bool                     // optional predicate; true == skip
-    SkipReason string                          // shown when SkipWhen returns true
-    NonFatal   bool                            // errors become warnings, orchestrator continues
-    OnError    func(error)                     // optional hook invoked on error
+    ID          StepID
+    Name        string
+    Desc        string
+    NonFatal    bool
+    ReRunSafe   ReRunSafety                              // required — BuildSteps panics on zero value
+    AlreadyDone func(ctx context.Context) (bool, error)  // optional; consulted before Exec on re-runs
+    SkipWhen    func() bool
+    SkipReason  string
+    OnStart     func()                                   // optional hook fired before Exec
+    Exec        func(ctx context.Context) error
+    OnError     func(error)
 }
 ```
+
+`ReRunSafe` is mandatory. `BuildSteps` panics with
+`"must declare ReRunSafe"` when the field is left at its zero value
+(`ReRunSafeUnset`). Every `StepDef` literal must commit to either
+`ReRunSafeYes` or `ReRunSafeNo`.
 
 Each phase has a method that returns `[]StepDef`. See `internal/distribution/
 okd/setup/steps.go` for a representative example — the setup phase declares
@@ -78,9 +86,10 @@ every phase needs:
 
 ```go
 type BasePhase struct {
-    Exec    *executor.Executor  // subprocess runner (oc, terraform, etc.)
-    Log     *slog.Logger        // structured logger
-    Version string              // OKD version string, for display
+    Exec     *executor.Executor           // subprocess runner (oc, terraform, etc.)
+    Log      *slog.Logger                 // structured logger
+    Version  string                       // OKD version string, for display
+    Recorder distribution.MetricsRecorder // per-step + overall observation sink (nil → nopMetricsRecorder via WithRecorder)
 }
 ```
 
