@@ -77,11 +77,11 @@ func NewK8sClient(opts ...Option) *K8sClient {
 	}
 
 	if c.exec == nil {
-		cmdRunner := executor.New(executor.WithLogger(c.logger))
+		opts := []executor.Option{executor.WithLogger(c.logger)}
 		if c.Kubeconfig != "" {
-			cmdRunner.Env = []string{fmt.Sprintf("KUBECONFIG=%s", c.Kubeconfig)}
+			opts = append(opts, executor.WithEnv([]string{fmt.Sprintf("KUBECONFIG=%s", c.Kubeconfig)}))
 		}
-		c.exec = cmdRunner
+		c.exec = executor.New(opts...)
 	}
 
 	return c
