@@ -99,7 +99,9 @@ func (p *Phase) postinstallSteps(cfg *config.Config, opts *Options, pctx *distri
 		},
 		{
 			ID: StepInstallAddons, Name: "install addons",
-			ReRunSafe: distribution.ReRunSafeNo,
+			// Addon installation uses helm upgrade --install / kubectl apply
+			// semantics; re-applying is a safe no-op for already-installed addons.
+			ReRunSafe: distribution.ReRunSafeYes,
 			Desc:      "installing enabled cluster addons", NonFatal: true,
 			Exec: func(ctx context.Context) error {
 				if err := p.verifyAPIHealthCheck(ctx); err != nil {

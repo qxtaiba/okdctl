@@ -25,7 +25,9 @@ func (p *Phase) installSteps(cfg *config.Config, opts *Options) []distribution.S
 	return []distribution.StepDef{
 		{
 			ID: StepDeployInfra, Name: "deploy infrastructure",
-			ReRunSafe:  distribution.ReRunSafeNo,
+			// terraform apply is idempotent: re-running against existing infra
+			// is a safe no-op per the Terraform execution model.
+			ReRunSafe:  distribution.ReRunSafeYes,
 			Desc:       "deploying proxmox infrastructure using terraform",
 			SkipWhen:   func() bool { return opts.SkipTerraform },
 			SkipReason: "terraform deployment disabled",

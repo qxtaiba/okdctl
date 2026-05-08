@@ -72,8 +72,11 @@ func (p *Phase) destroySteps(ctx context.Context, cfg *config.Config, opts *Opti
 	track, trackSkip := t.onError, t.skipWhen
 	return []distribution.StepDef{
 		{
-			ID: StepDestroyInfra, Name: "destroy infrastructure", ReRunSafe: distribution.ReRunSafeNo,
-			Desc:       "destroying proxmox infrastructure using terraform",
+			ID: StepDestroyInfra, Name: "destroy infrastructure", ReRunSafe: distribution.ReRunSafeYes,
+			Desc: "destroying proxmox infrastructure using terraform",
+			// terraform destroy on already-destroyed infra exits cleanly (no
+			// resources to remove), so re-runs are safe. NonFatal further limits
+			// blast radius if the second run encounters a transient TF error.
 			NonFatal:   true, // orchestrator continues through cleanup steps on TF failure
 			SkipWhen:   trackSkip("terraform", func() bool { return opts.SkipTerraform }),
 			SkipReason: "terraform destroy disabled",
