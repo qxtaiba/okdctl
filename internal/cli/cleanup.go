@@ -9,9 +9,11 @@ import (
 
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/cleanup"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
+	"github.com/qxtaiba/okdctl/internal/executor"
 	"github.com/qxtaiba/okdctl/internal/runlock"
 	"github.com/qxtaiba/okdctl/internal/system"
 	"github.com/qxtaiba/okdctl/internal/tui"
+	"github.com/qxtaiba/okdctl/internal/version"
 )
 
 var (
@@ -130,7 +132,8 @@ func runCleanup(cmd *cobra.Command, _ []string) error {
 	tui.Info("cleaning up cluster artifacts...")
 	startTime := time.Now()
 
-	if err := cleanup.New(nil, opts.Logger, "").Execute(ctx, opts); err != nil {
+	exec := executor.New(executor.WithWorkDir(projectRoot))
+	if err := cleanup.New(exec, opts.Logger, version.Version).Execute(ctx, opts); err != nil {
 		return err
 	}
 
