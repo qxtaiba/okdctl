@@ -67,7 +67,7 @@ func (h *RedactHandler) WithGroup(name string) slog.Handler {
 
 // redactAttr returns a sanitized copy of a for logging.
 func redactAttr(a slog.Attr) slog.Attr {
-	if keyIsSecret(a.Key) {
+	if KeyIsSecret(a.Key) {
 		return slog.String(a.Key, Redacted)
 	}
 	switch a.Value.Kind() {
@@ -111,8 +111,11 @@ func redactAny(v any) any {
 	}
 }
 
-// keyIsSecret reports whether the slog key looks like it names a credential.
-func keyIsSecret(key string) bool {
+// KeyIsSecret reports whether key looks like it names a credential — a
+// case-insensitive substring match against the denylist fragments. Exported
+// so redactConfig in cli/config.go can share the same rule without
+// duplicating the fragment list.
+func KeyIsSecret(key string) bool {
 	if key == "" {
 		return false
 	}

@@ -84,4 +84,46 @@ func TestRedactConfig(t *testing.T) {
 			t.Errorf("expected *** placeholder in YAML; got:\n%s", s)
 		}
 	})
+
+	t.Run("non-sensitive field passes through unchanged", func(t *testing.T) {
+		cfg := &config.Config{
+			Provider: config.ProviderConfig{
+				Proxmox: &config.ProxmoxConfig{
+					Host: "pve.example",
+				},
+			},
+		}
+		got := redactConfig(cfg)
+		if got.Provider.Proxmox.Host != "pve.example" {
+			t.Errorf("Host = %q; want pve.example", got.Provider.Proxmox.Host)
+		}
+	})
+
+	t.Run("nested struct secret field masked via reflection walker", func(t *testing.T) {
+		cfg := &config.Config{
+			Provider: config.ProviderConfig{
+				Proxmox: &config.ProxmoxConfig{
+					Host:    "pve.example",
+					TokenID: "nested-token-value",
+				},
+			},
+		}
+		got := redactConfig(cfg)
+		if got.Provider.Proxmox.TokenID != "***" {
+			t.Errorf("nested TokenID = %q; want ***", got.Provider.Proxmox.TokenID)
+		}
+		if got.Provider.Proxmox.Host != "pve.example" {
+			t.Errorf("non-sensitive Host altered to %q", got.Provider.Proxmox.Host)
+		}
+	})
+
+	t.Run("nil pointer fields do not panic", func(t *testing.T) {
+		defer func() {
+			if r := recover(); r != nil {
+				t.Errorf("redactConfig panicked on nil pointer: %v", r)
+			}
+		}()
+		cfg := &config.Config{}
+		_ = redactConfig(cfg)
+	})
 }

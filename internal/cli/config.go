@@ -3,12 +3,15 @@ package cli
 import (
 	"fmt"
 	"os"
+	"reflect"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"sigs.k8s.io/yaml"
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
+	"github.com/qxtaiba/okdctl/internal/logutil"
 )
 
 const cfgVerb = "config"
@@ -67,18 +70,53 @@ func runConfigShow(_ *cobra.Command, _ []string) error {
 	return err
 }
 
-// redactConfig returns a copy of cfg with sensitive Proxmox credential fields
-// replaced by "***". Username, Password, and APIToken already carry json:"-"
-// and are excluded from marshaling; only TokenID requires explicit redaction
-// because it is emitted under the token_id key.
+// redactConfig returns a deep copy of cfg with every string field whose JSON
+// tag name matches the secret-key denylist replaced by "***". Fields tagged
+// json:"-" (Password, APIToken, Username) are skipped — they never marshal
+// into the bundle.
 func redactConfig(cfg *config.Config) config.Config {
 	out := *cfg
-	if cfg.Provider.Proxmox != nil {
-		px := *cfg.Provider.Proxmox
-		if px.TokenID != "" {
-			px.TokenID = "***"
-		}
-		out.Provider.Proxmox = &px
-	}
+	redactValue(reflect.ValueOf(&out))
 	return out
+}
+
+// redactValue walks v (must be addressable) masking secret-keyed string fields.
+func redactValue(v reflect.Value) {
+	switch v.Kind() {
+	case reflect.Ptr:
+		if v.IsNil() {
+			return
+		}
+		redactValue(v.Elem())
+	case reflect.Struct:
+		t := v.Type()
+		for i := range t.NumField() {
+			f := t.Field(i)
+			jsonTag := f.Tag.Get("json")
+			if jsonTag == "-" {
+				continue
+			}
+			name := strings.SplitN(jsonTag, ",", 2)[0]
+			fv := v.Field(i)
+			if !fv.CanSet() {
+				continue
+			}
+			switch fv.Kind() {
+			case reflect.String:
+				if logutil.KeyIsSecret(name) && fv.String() != "" {
+					fv.SetString("***")
+				}
+			case reflect.Ptr:
+				if fv.IsNil() {
+					continue
+				}
+				clone := reflect.New(fv.Type().Elem())
+				clone.Elem().Set(fv.Elem())
+				fv.Set(clone)
+				redactValue(fv)
+			case reflect.Struct:
+				redactValue(fv)
+			}
+		}
+	}
 }
