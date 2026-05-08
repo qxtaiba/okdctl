@@ -672,7 +672,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `err:ddf885f4:errors-join-opportunity` — errors join opportunity
 
-**Status:** in review — PR #448  
+**Status:** deferred (audit-positive baseline; no code change needed — PR #448 closed by reviewer call)  
 **Severity:** suggestion  
 **Cluster:** wrapping  
 **Evidence:** `internal/addon/manager.go:99-113`  
