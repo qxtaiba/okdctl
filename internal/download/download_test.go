@@ -58,15 +58,13 @@ func TestDownload_HappyPath(t *testing.T) {
 	}
 }
 
-// TestRetryDownload_SecondAttemptWins drives retryDownload directly so the
-// test does not depend on HTTP transport behaviour. The first-failure backoff
-// is fixed at ~5-10 s with jitter; gated behind testing.Short so the regular
-// suite stays fast.
-func TestRetryDownload_SecondAttemptWins(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping: first-failure backoff is ~5-10 s")
-	}
-
+// TestRetryDownload_RetriableHTTPErrorSecondAttemptWins drives retryDownload
+// with a 503 (retriable transport error). The roadmap framed this as
+// "checksum-mismatch retry" but verifyDownloadedFile does not retry on
+// mismatch — it removes the file and returns. Retry is a transport-tier
+// concern only; this test exercises that path. First-failure backoff is
+// ~2.5-7.5 s with jitter; the sleep is intentional, not gated, so CI sees it.
+func TestRetryDownload_RetriableHTTPErrorSecondAttemptWins(t *testing.T) {
 	calls := 0
 	retryable := &HTTPStatusError{Status: http.StatusServiceUnavailable, Method: http.MethodGet, URL: "http://example.invalid/f"}
 
@@ -161,6 +159,51 @@ func TestDownload_CtxCancelCleansPartialFile(t *testing.T) {
 
 	if _, err := os.Stat(out); !os.IsNotExist(err) {
 		t.Errorf("partial file must not exist after ctx cancel; Stat err = %v", err)
+	}
+}
+
+// TestDownload_SymlinkAtOutputPath documents current behavior: without
+// O_NOFOLLOW, the write follows the symlink to its target. Once sec:21dc1103
+// installs O_NOFOLLOW on fetchToFile, flip the assertion below to require a
+// non-nil error and unchanged target — that is the lock the future guard
+// will land against.
+func TestDownload_SymlinkAtOutputPath(t *testing.T) {
+	body := []byte("symlink-content")
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(body)
+	}))
+	defer srv.Close()
+
+	dir := t.TempDir()
+	target := filepath.Join(dir, "real-target.bin")
+	if err := os.WriteFile(target, []byte("original"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	link := filepath.Join(dir, "link.bin")
+	if err := os.Symlink(target, link); err != nil {
+		t.Fatal(err)
+	}
+
+	opts := &Options{
+		URL:        srv.URL + "/artifact.bin",
+		OutputPath: link,
+		Logger:     logutil.NopLogger,
+	}
+
+	// sec:21dc1103: when O_NOFOLLOW lands, replace the next two assertions with
+	// `if err == nil { t.Fatal("expected error refusing symlink at OutputPath") }`
+	// and a check that target content is unchanged.
+	if err := Download(context.Background(), opts); err != nil {
+		t.Fatalf("Download through symlink: %v", err)
+	}
+	got, err := os.ReadFile(target)
+	if err != nil {
+		t.Fatalf("ReadFile target: %v", err)
+	}
+	if string(got) != string(body) {
+		t.Errorf("target content = %q; want %q", got, body)
 	}
 }
 
