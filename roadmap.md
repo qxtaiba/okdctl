@@ -509,7 +509,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `ux:e7db1220:format-vs-output-flag-name-drift` — format vs output flag name drift
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/ux-e7db1220-output-flag  
 **Severity:** suggestion  
 **Cluster:** flag-conventions  
 **Evidence:** `internal/cli/releases.go:76-82` + 1 more  
@@ -522,7 +522,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `obs:6424733c:fmt-sprintf-message-pattern` — fmt sprintf message pattern
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/obs-6424733c-sprintf-sweep  
 **Severity:** major  
 **Cluster:** field-stability  
 **Evidence:** `internal/cli/helpers.go:32-296` + 5 more  
