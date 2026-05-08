@@ -6,6 +6,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"sigs.k8s.io/yaml"
 )
 
 func TestMergeNamedList(t *testing.T) {
@@ -153,5 +155,138 @@ current-context: new-context
 
 	if err := os.Remove(dest); err != nil {
 		t.Errorf("remove dest: %v", err)
+	}
+}
+
+func TestMergeKubeconfig_PreservesCurrentContext(t *testing.T) {
+	dir := t.TempDir()
+	dest := filepath.Join(dir, "config")
+
+	destYAML := `apiVersion: v1
+kind: Config
+clusters:
+- name: prod
+  cluster:
+    server: https://prod.example
+users: []
+contexts: []
+current-context: prod
+`
+	if err := os.WriteFile(dest, []byte(destYAML), 0o600); err != nil {
+		t.Fatalf("seed dest kubeconfig: %v", err)
+	}
+
+	t.Setenv("KUBECONFIG", dest)
+
+	srcData := []byte(`apiVersion: v1
+kind: Config
+clusters:
+- name: okd-test
+  cluster:
+    server: https://okd-test.example
+- name: dev
+  cluster:
+    server: https://dev.example
+users: []
+contexts: []
+current-context: okd-test
+`)
+
+	if err := mergeKubeconfig(srcData); err != nil {
+		t.Fatalf("mergeKubeconfig: %v", err)
+	}
+
+	raw, err := os.ReadFile(dest)
+	if err != nil {
+		t.Fatalf("read merged dest: %v", err)
+	}
+
+	var merged map[string]any
+	if err := yaml.Unmarshal(raw, &merged); err != nil {
+		t.Fatalf("parse merged kubeconfig: %v", err)
+	}
+
+	if got, _ := merged["current-context"].(string); got != "prod" {
+		t.Errorf("current-context = %q, want %q", got, "prod")
+	}
+
+	clusters, _ := merged["clusters"].([]any)
+	wantNames := []string{"prod", "okd-test", "dev"}
+	if len(clusters) != len(wantNames) {
+		t.Fatalf("clusters len = %d, want %d: %+v", len(clusters), len(wantNames), clusters)
+	}
+	for i, wantName := range wantNames {
+		m, _ := clusters[i].(map[string]any)
+		if got, _ := m["name"].(string); got != wantName {
+			t.Errorf("clusters[%d].name = %q, want %q", i, got, wantName)
+		}
+	}
+
+	info, err := os.Stat(dest)
+	if err != nil {
+		t.Fatalf("stat dest: %v", err)
+	}
+	if got := info.Mode().Perm(); got != 0o600 {
+		t.Errorf("dest mode = %04o, want 0600", got)
+	}
+}
+
+func TestMergeKubeconfig_EmptyDestTakesSrcCurrentContext(t *testing.T) {
+	dir := t.TempDir()
+	dest := filepath.Join(dir, "config")
+
+	t.Setenv("KUBECONFIG", dest)
+
+	srcData := []byte(`apiVersion: v1
+kind: Config
+clusters:
+- name: okd-test
+  cluster:
+    server: https://okd-test.example
+users:
+- name: admin
+  user:
+    token: some-token
+contexts:
+- name: okd-test
+  context:
+    cluster: okd-test
+    user: admin
+current-context: okd-test
+`)
+
+	if err := mergeKubeconfig(srcData); err != nil {
+		t.Fatalf("mergeKubeconfig: %v", err)
+	}
+
+	raw, err := os.ReadFile(dest)
+	if err != nil {
+		t.Fatalf("read merged dest: %v", err)
+	}
+
+	var merged map[string]any
+	if err := yaml.Unmarshal(raw, &merged); err != nil {
+		t.Fatalf("parse merged kubeconfig: %v", err)
+	}
+
+	if got, _ := merged["current-context"].(string); got != "okd-test" {
+		t.Errorf("current-context = %q, want %q", got, "okd-test")
+	}
+
+	clusters, _ := merged["clusters"].([]any)
+	if len(clusters) != 1 {
+		t.Fatalf("clusters len = %d, want 1: %+v", len(clusters), clusters)
+	}
+	m, _ := clusters[0].(map[string]any)
+	if got, _ := m["name"].(string); got != "okd-test" {
+		t.Errorf("clusters[0].name = %q, want %q", got, "okd-test")
+	}
+
+	info, err := os.Stat(dest)
+	if err != nil {
+		t.Fatalf("stat dest: %v", err)
+	}
+	if got := info.Mode().Perm(); got != 0o600 {
+		t.Errorf("dest mode = %04o, want 0600", got)
 	}
 }
