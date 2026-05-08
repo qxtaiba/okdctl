@@ -16,7 +16,6 @@ import (
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/dns"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
-	"github.com/qxtaiba/okdctl/internal/executor"
 	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/system"
 )
@@ -100,13 +99,11 @@ type Phase struct {
 	phase.BasePhase
 }
 
-// New constructs a cleanup Phase bound to exec/logger and the okdctl
-// version tag. It mirrors the shape of setup/install/postinstall/destroy.
-func New(exec *executor.Executor, logger *slog.Logger, version string) *Phase {
-	phaseLogger := logutil.OrNop(logger).With("phase", "cleanup")
-	return &Phase{
-		BasePhase: phase.NewBasePhase(version, phase.WithExecutor(exec), phase.WithLogger(phaseLogger)),
-	}
+// New constructs a cleanup Phase with the given version tag and options.
+func New(version string, opts ...phase.BasePhaseOption) *Phase {
+	bp := phase.NewBasePhase(version, opts...)
+	bp.Log = bp.Log.With("phase", "cleanup")
+	return &Phase{BasePhase: bp}
 }
 
 // Execute runs the cleanup steps selected by opts.Kind. Individual step

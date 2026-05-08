@@ -4,15 +4,12 @@ package destroy
 
 import (
 	"context"
-	"log/slog"
 	"path/filepath"
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/distribution"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/cleanup"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
-	"github.com/qxtaiba/okdctl/internal/executor"
-	"github.com/qxtaiba/okdctl/internal/logutil"
 )
 
 // Options configures the destroy phase.
@@ -59,13 +56,11 @@ type Phase struct {
 	phase.BasePhase
 }
 
-// New constructs a destroy Phase bound to exec/logger and the okdctl
-// version tag.
-func New(exec *executor.Executor, logger *slog.Logger, version string) *Phase {
-	phaseLogger := logutil.OrNop(logger).With("phase", "destroy")
-	return &Phase{
-		BasePhase: phase.NewBasePhase(version, phase.WithExecutor(exec), phase.WithLogger(phaseLogger)),
-	}
+// New constructs a destroy Phase with the given version tag and options.
+func New(version string, opts ...phase.BasePhaseOption) *Phase {
+	bp := phase.NewBasePhase(version, opts...)
+	bp.Log = bp.Log.With("phase", "destroy")
+	return &Phase{BasePhase: bp}
 }
 
 // Execute tears down the cluster. User confirmation is the CLI layer's

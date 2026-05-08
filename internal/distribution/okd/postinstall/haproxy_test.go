@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/executor"
 	"github.com/qxtaiba/okdctl/internal/logutil"
@@ -29,7 +30,7 @@ func TestRemoveHAProxy_EmptyVIPSkipsVerify(t *testing.T) {
 	t.Cleanup(func() { haproxyConfigPath = origConfig })
 	haproxyConfigPath = filepath.Join(t.TempDir(), "haproxy.cfg")
 
-	p := New(executor.New(), logutil.NopLogger, "test")
+	p := New("test", phase.WithExecutor(executor.New()), phase.WithLogger(logutil.NopLogger))
 	if err := p.RemoveHAProxy(context.Background(), "", t.TempDir()); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -47,7 +48,7 @@ func TestRemoveHAProxy_HappyPath_ConfigFileRemoved(t *testing.T) {
 	t.Cleanup(func() { haproxyConfigPath = origConfig })
 	haproxyConfigPath = cfgFile
 
-	p := New(executor.New(), logutil.NopLogger, "test")
+	p := New("test", phase.WithExecutor(executor.New()), phase.WithLogger(logutil.NopLogger))
 	if err := p.RemoveHAProxy(context.Background(), "", t.TempDir()); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -81,7 +82,7 @@ func TestRemoveHAProxy_ConfigRemoveAllError_DoesNotAbort(t *testing.T) {
 	t.Cleanup(func() { haproxyConfigPath = origConfig })
 	haproxyConfigPath = cfgFile
 
-	p := New(executor.New(), logutil.NopLogger, "test")
+	p := New("test", phase.WithExecutor(executor.New()), phase.WithLogger(logutil.NopLogger))
 	if err := p.RemoveHAProxy(context.Background(), "", t.TempDir()); err != nil {
 		t.Fatalf("RemoveHAProxy must not abort on os.RemoveAll failure; got: %v", err)
 	}
@@ -130,7 +131,7 @@ func TestRemoveHAProxy_KubeVIPHealthcheck(t *testing.T) {
 	haproxyHealthPort = port
 	haproxyVIPTimeout = 1 * time.Second
 
-	p := New(executor.New(), logutil.NopLogger, "test")
+	p := New("test", phase.WithExecutor(executor.New()), phase.WithLogger(logutil.NopLogger))
 	err := p.RemoveHAProxy(context.Background(), "127.0.0.1", dir)
 
 	var networkErr *errtypes.NetworkError
@@ -144,7 +145,7 @@ func TestRemoveHAProxy_KubeVIPHealthcheck(t *testing.T) {
 
 	t.Run("hard_errors_when_kubeconfig_absent", func(t *testing.T) {
 		emptyDir := t.TempDir()
-		p2 := New(executor.New(), logutil.NopLogger, "test")
+		p2 := New("test", phase.WithExecutor(executor.New()), phase.WithLogger(logutil.NopLogger))
 		err2 := p2.RemoveHAProxy(context.Background(), "127.0.0.1", emptyDir)
 
 		var cluster2 *errtypes.ClusterError
