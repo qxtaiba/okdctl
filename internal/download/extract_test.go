@@ -175,6 +175,38 @@ func TestExtractTarGz_ContextCancellation(t *testing.T) {
 	}
 }
 
+func TestExtractTarGz_ModeMask(t *testing.T) {
+	cases := []struct {
+		name     string
+		mode     int64
+		wantMode os.FileMode
+	}{
+		{"setgid bit stripped", 0o2755, 0o0755},
+		{"setuid bit stripped", 0o4755, 0o0755},
+		{"normal exec preserved", 0o755, 0o0755},
+		{"normal rw preserved", 0o644, 0o0644},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			archive := buildTarGz(t, []tarEntry{
+				{Name: "file.bin", Mode: tc.mode, Data: []byte("data")},
+			})
+			dest := realTempDir(t)
+			if err := ExtractTarGz(context.Background(), archive, dest); err != nil {
+				t.Fatalf("extract: %v", err)
+			}
+			info, err := os.Stat(filepath.Join(dest, "file.bin"))
+			if err != nil {
+				t.Fatalf("stat: %v", err)
+			}
+			got := info.Mode().Perm()
+			if got & ^tc.wantMode != 0 {
+				t.Errorf("mode = %04o; want subset of %04o (setuid/setgid/sticky stripped)", got, tc.wantMode)
+			}
+		})
+	}
+}
+
 func TestExtractTarGz_StripComponents(t *testing.T) {
 	archive := buildTarGz(t, []tarEntry{
 		{Name: "top/inner/file.txt", Mode: 0o644, Data: []byte("data")},
