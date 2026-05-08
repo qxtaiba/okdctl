@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/qxtaiba/okdctl/internal/errtypes"
 )
 
 func TestWriteTempFile(t *testing.T) {
@@ -139,6 +141,35 @@ func TestAtomicWrite(t *testing.T) {
 		body, _ := os.ReadFile(path)
 		if string(body) != "new" {
 			t.Errorf("body = %q", body)
+		}
+	})
+
+	t.Run("refuses symlink target", func(t *testing.T) {
+		target := filepath.Join(dir, "symlink-target.txt")
+		if err := os.WriteFile(target, []byte("original"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		link := filepath.Join(dir, "symlink-write.txt")
+		if err := os.Symlink(target, link); err != nil {
+			t.Fatal(err)
+		}
+		err := AtomicWrite(link, []byte("overwrite"), 0o600)
+		if err == nil {
+			t.Fatal("AtomicWrite via symlink: expected error, got nil")
+		}
+		var authErr *errtypes.AuthError
+		if !errors.As(err, &authErr) {
+			t.Errorf("err type = %T, want *errtypes.AuthError", err)
+		}
+		if !errors.Is(err, os.ErrPermission) {
+			t.Errorf("err does not wrap os.ErrPermission: %v", err)
+		}
+		body, readErr := os.ReadFile(target)
+		if readErr != nil {
+			t.Fatalf("read target: %v", readErr)
+		}
+		if string(body) != "original" {
+			t.Errorf("target body = %q; symlink target was overwritten", body)
 		}
 	})
 
