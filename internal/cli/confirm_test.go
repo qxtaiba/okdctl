@@ -1,11 +1,88 @@
 package cli
 
 import (
+	"context"
 	"errors"
+	"io"
+	"strings"
 	"testing"
 
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 )
+
+func TestPromptForConfirmation(t *testing.T) {
+	cases := []struct {
+		name   string
+		input  string
+		wantOK bool
+	}{
+		{"y confirms", "y\n", true},
+		{"yes confirms", "yes\n", true},
+		{"n denies", "n\n", false},
+		{"YES does not confirm", "YES\n", false},
+		{"EOF treated as denial", "", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			testStdinReader = strings.NewReader(tc.input)
+			t.Cleanup(func() { testStdinReader = nil })
+
+			ok, err := promptForConfirmation(context.Background(), "")
+			if err != nil {
+				t.Fatalf("want nil error, got %v", err)
+			}
+			if ok != tc.wantOK {
+				t.Fatalf("want %v, got %v", tc.wantOK, ok)
+			}
+		})
+	}
+}
+
+func TestPromptForConfirmation_CtxCancel(t *testing.T) {
+	pr, pw := io.Pipe()
+	testStdinReader = pr
+	t.Cleanup(func() {
+		_ = pw.Close()
+		_ = pr.Close()
+		testStdinReader = nil
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	ok, err := promptForConfirmation(ctx, "")
+	if ok {
+		t.Fatal("want false, got true")
+	}
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("want context.Canceled, got %v", err)
+	}
+}
+
+func TestIsConfirmResponse(t *testing.T) {
+	cases := []struct {
+		input string
+		want  bool
+	}{
+		{"y", true},
+		{"Y", true},
+		{"yes", true},
+		{"YES", false},
+		{"Yes", false},
+		{"n", false},
+		{"no", false},
+		{"", false},
+		{"true", false},
+		{"1", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.input, func(t *testing.T) {
+			if got := isConfirmResponse(tc.input); got != tc.want {
+				t.Fatalf("isConfirmResponse(%q) = %v; want %v", tc.input, got, tc.want)
+			}
+		})
+	}
+}
 
 func TestConfirmClusterMatches(t *testing.T) {
 	cases := []struct {
