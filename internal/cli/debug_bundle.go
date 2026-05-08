@@ -15,13 +15,13 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/spf13/cobra"
 	"sigs.k8s.io/yaml"
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/executor"
+	"github.com/qxtaiba/okdctl/internal/system"
 	"github.com/qxtaiba/okdctl/internal/tui"
 	"github.com/qxtaiba/okdctl/internal/version"
 )
@@ -101,7 +101,7 @@ type manifestEntry struct {
 
 func runDebugBundle(cmd *cobra.Command, _ []string) (retErr error) {
 	ctx := cmd.Context()
-	bundleID := uuid.NewString()
+	bundleID := system.NewUUIDv4()
 	bundleAt := time.Now().UTC()
 
 	outPath := debugBundleOutput
