@@ -189,10 +189,10 @@ func ExpandPath(path string) string {
 }
 
 // AtomicWrite writes data to path via a temp file in the same directory,
-// fsyncs it, chmods it to perm, then renames it into place. Concurrent
-// readers see either the old file or the new file, never a partial write.
-// The rename is only atomic on the same filesystem — the temp file is
-// created next to path to guarantee that.
+// created with perm at open time, fsyncs it, then renames it into place.
+// Concurrent readers see either the old file or the new file, never a
+// partial write. The rename is only atomic on the same filesystem — the
+// temp file is created next to path to guarantee that.
 func AtomicWrite(path string, data []byte, perm os.FileMode) error {
 	if err := EnsureDirForFile(path); err != nil {
 		return fmt.Errorf("failed to create directory: %w", err)
