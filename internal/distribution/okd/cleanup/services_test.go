@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/qxtaiba/okdctl/internal/distribution/okd/dns"
 	"github.com/qxtaiba/okdctl/internal/logutil"
 )
 
@@ -45,15 +46,18 @@ func TestDnsmasq_GlobLoopRemovesAllMatches(t *testing.T) {
 	}
 }
 
-func TestDnsmasq_RefusesClusterNamePathTraversal(t *testing.T) {
-	// Traversal-shaped clusterName is rejected by dns.DnsmasqConfigPath's
-	// allowlist regex before reaching os.RemoveAll, so a sentinel file outside
-	// the expected glob directories must survive Dnsmasq().
-	sentinel := filepath.Join(t.TempDir(), "sentinel")
-	if err := os.WriteFile(sentinel, []byte("safe"), 0o600); err != nil {
-		t.Fatal(err)
+func TestDnsmasq_RejectsClusterNameTraversalAtRegex(t *testing.T) {
+	// Traversal-shaped clusterName is blocked upstream of os.RemoveAll by
+	// dns.DnsmasqConfigPath's validConfigNameRegex. Asserting the rejection
+	// directly catches a regression that loosens the regex — the prior
+	// sentinel-in-tempdir shape was vacuous because the resolved path could
+	// never reach the sentinel.
+	if _, err := dns.DnsmasqConfigPath("okd-../../../../etc/okd-x"); err == nil {
+		t.Fatal("DnsmasqConfigPath accepted traversal-shaped name; want error from validConfigNameRegex")
 	}
 
+	// Dnsmasq() must not propagate the rejection as an error — it logs a
+	// warning and continues per services.go:159-161.
 	globDir := t.TempDir()
 	orig1 := dnsmasqConfPattern
 	orig2 := dnsmasqBackupPattern
@@ -65,10 +69,6 @@ func TestDnsmasq_RefusesClusterNamePathTraversal(t *testing.T) {
 	})
 
 	if err := Dnsmasq(context.Background(), "../../../../etc/okd-x", logutil.NopLogger); err != nil {
-		t.Fatalf("Dnsmasq: %v", err)
-	}
-
-	if _, err := os.Stat(sentinel); err != nil {
-		t.Errorf("sentinel removed or inaccessible; traversal guard did not hold: %v", err)
+		t.Fatalf("Dnsmasq returned unexpected error for traversal cluster name: %v", err)
 	}
 }
