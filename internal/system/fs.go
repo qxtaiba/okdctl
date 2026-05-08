@@ -199,7 +199,7 @@ func AtomicWrite(path string, data []byte, perm os.FileMode) error {
 	}
 
 	dir := filepath.Dir(path)
-	tmpFile, err := os.CreateTemp(dir, ".tmp-*")
+	tmpFile, err := openTempFile(dir, ".tmp-*", perm)
 	if err != nil {
 		return fmt.Errorf("failed to create temp file: %w", err)
 	}
@@ -224,10 +224,6 @@ func AtomicWrite(path string, data []byte, perm os.FileMode) error {
 
 	if err := tmpFile.Close(); err != nil {
 		return fmt.Errorf("failed to close temp file: %w", err)
-	}
-
-	if err := os.Chmod(tmpPath, perm); err != nil {
-		return fmt.Errorf("failed to set permissions: %w", err)
 	}
 
 	if err := os.Rename(tmpPath, path); err != nil {
