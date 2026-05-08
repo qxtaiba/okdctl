@@ -458,16 +458,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 #### audit-security
 
 
-##### `sec:27088eab:input-kubeconfig-not-resolved` — input kubeconfig not resolved
-
-**Status:** not started  
-**Severity:** minor  
-**Cluster:** input-validation  
-**Evidence:** `internal/distribution/okd/phase/ssh.go:29-41`  
-**Problem:** SSHRun uses `-o StrictHostKeyChecking=accept-new` everywhere (uploads, ISO removal, custom commands), which is TOFU. There is no provision for a per-cluster known_hosts file and no enforcement that the Proxmox host fingerprint match an operator-pinned value. A first-deploy MITM permanently locks in an attacker's host key; the destroy path also relies on this same SSH transport and inherits the trust.  
-**Fix:** Add an opt-in `proxmox.host_fingerprint` config field (sha256-of-pubkey form). When set, run `ssh-keyscan` once at first contact, validate the fingerprint matches the configured value, write to a per-project known_hosts file, and pass `-o StrictHostKeyChecking=yes -o UserKnownHostsFile=<path>` for every subsequent ssh/scp call. accept-new should be the explicit fallback only when the fingerprint is unset.  
-**Effort:** hours
-
 #### audit-subprocess
 
 ##### `err:ddf885f4:errors-join-opportunity` — errors join opportunity
@@ -492,16 +482,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 #### audit-dependencies
 
-##### `dep:33ef32bf:transitive-narrow-uuid` — transitive narrow uuid
-
-**Status:** in review — PR #517  
-**Severity:** suggestion  
-**Cluster:** transitive-weight — seam→audit-modernization  
-**Evidence:** `go.mod:12-12`  
-**Problem:** `github.com/google/uuid v1.6.0` is a direct dep used in three files (`internal/cli/{deploy,destroy,debug_bundle}.go`) at three call sites — all `uuid.NewString()` for run-IDs / bundle-IDs. UUID v4 from `crypto/rand` is ~10 LOC stdlib. Flagging as suggestion only because the dep is small, BSD-3-clause, well-maintained, and the savings are marginal (one dep entry). Worth listing because it falls inside CLAUDE.md's `check whether stdlib covers it` policy.  
-**Fix:** Optional: replace with `crypto/rand` + `fmt.Sprintf` UUIDv4 helper in `internal/system` (~15 LOC) and drop the dep. Risk is low because UUIDs are non-load-bearing here (run-ID telemetry only, not security tokens). Seam to audit-modernization. Lower priority than godotenv because google/uuid is a stable, widely-vendored dep with no maintenance signal issues.  
-**Effort:** hours
-
 #### audit-documentation
 
 #### audit-tests
@@ -513,50 +493,9 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 #### audit-security
 
-##### `sec:27088eab:ssh-strict-host-key-tofu` — ssh strict host key tofu
-
-**Status:** in review — PR #518  
-**Severity:** minor  
-**Cluster:** tls-network — seam→audit-subprocess — related: sec:eb479d86:scp-strict-host-key-tofu  
-**Evidence:** `internal/distribution/okd/phase/ssh.go:31-57`  
-**Problem:** SSHRun and SSHRunArgv install StrictHostKeyChecking=accept-new for every Proxmox-bastion ssh hop (pvesh, rm -f, sha256sum). Same TOFU concern as scp upload — paired with sec:eb479d86, this is the policy-level finding for the SSH side.  
-**Fix:** Same fix as sec:eb479d86 — surface a per-cluster known_hosts pinning option. Replace accept-new with strict mode once a verified known_hosts line is established; the wizard could ssh-keyscan + display the fingerprint to the operator on first run for confirmation.  
-**Effort:** hours
-
-##### `sec:25fa1be8:firewall-haproxy-port-only-tcp` — firewall haproxy port only tcp
-
-**Status:** in review — PR #514  
-**Severity:** suggestion  
-**Cluster:** input-validation  
-**Evidence:** `internal/distribution/okd/firewall/firewall.go:52-66`  
-**Problem:** haproxyPortNumbers is map[int]bool but HAProxyFrontendPorts() filters by both Number and Protocol == protoTCP. The rule is correct but the structure leaves a future-maintainer footgun: if anyone adds a UDP rule on those numbers (e.g. UDP 6443 for QUIC variants), HAProxyFrontendPorts() would silently include them only when their tcp filter passes. A pure allowlist of {Number, Protocol} pairs would be unambiguous.  
-**Fix:** Define haproxyFrontends as []Port literal (number+protocol pairs) instead of map[int]bool keyed only by number. Removes the implicit tcp-only assumption.  
-**Effort:** hours
-
-
 #### audit-subprocess
 
-##### `sub:8ea706f6:coreutil-lsb-release` — coreutil lsb release
-
-**Status:** in review — PR #513  
-**Severity:** minor  
-**Cluster:** coreutils-shellout  
-**Evidence:** `internal/distribution/okd/setup/tools.go:321-326`  
-**Problem:** installHashiCorpDebianRepo shells out to lsb_release -cs to read the Debian codename, but /etc/os-release VERSION_CODENAME exposes the same value and is already parsed by internal/platform/platform.go (Detect). lsb_release is a Python script that ships separately on Debian/Ubuntu — relying on it adds a runtime dep and a fork+exec for data already in memory.  
-**Fix:** Add a VERSION_CODENAME field to platform.Detect()'s output (it already parses /etc/os-release) or expose a small parseOSReleaseField(VERSION_CODENAME) helper, then call it here. Removes the lsb_release dep — older Debian/RHEL installations don't ship it by default.  
-**Effort:** hours
-
 #### audit-state-and-recovery
-
-##### `state:4f69fc9d:rerunsafe-not-enforced` — rerunsafe not enforced
-
-**Status:** in review — PR #512  
-**Severity:** major  
-**Cluster:** phase-idempotency  
-**Evidence:** `internal/distribution/step.go:228-251`  
-**Problem:** BuildSteps panics on ReRunSafeUnset but never propagates the value to builtStep, and Orchestrator.Run never queries it. ReRunSafeNo is decorative metadata — a step is still re-executed on a fresh run unless the StepDef ALSO supplies AlreadyDone. Out of 5 ReRunSafeNo steps in the codebase, only one (postinstall.StepCleanupBootstrap) provides a precondition guard.  
-**Fix:** Either (a) make ReRunSafeNo + missing AlreadyDone fail BuildSteps so authors must wire a precondition, or (b) require a logger.Warn at orchestrator entry for ReRunSafeNo steps without AlreadyDone. Option (a) gives the contract teeth — every ReRunSafeNo step gets an AlreadyDone or the build panics. Cross-reference roadmap state:4f69fc9d (deferred).  
-**Effort:** hours
 
 #### audit-iac-and-shell
 
@@ -566,47 +505,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 #### audit-api-design
 
-##### `api:4f69fc9d:rerunsafe-declarative-only` — rerunsafe declarative only
-
-**Status:** in review — PR #512  
-**Severity:** major  
-**Cluster:** exported-surface — seam→audit-state-and-recovery  
-**Evidence:** `internal/distribution/step.go:190-251`  
-**Problem:** StepDef.ReRunSafe is enforced at declaration time (BuildSteps panics on ReRunSafeUnset) but never consulted at execution time — StepBuilder discards it and Orchestrator.Run never branches on it. The field is decorative metadata that the type system mandates without backing semantics, so a ReRunSafeNo step is treated identically to a ReRunSafeYes step on a partial-fail-and-resume.  
-**Fix:** Either (a) propagate ReRunSafe into builtStep and have Orchestrator.executeStep skip ReRunSafeNo steps that have no AlreadyDone hook on a recovery rerun, or (b) demote the field to a doc-only label and replace the BuildSteps panic with a //nolint comment + roadmap entry. Today's setup phase has 6 ReRunSafeNo steps with no AlreadyDone — option (a) requires writing those checks; option (b) is honest about the current state.  
-**Effort:** hours
-
-##### `api:21dc1103:options-struct-vs-functional` — options struct vs functional
-
-**Status:** in review — PR #515  
-**Severity:** minor  
-**Cluster:** option-consistency  
-**Evidence:** `internal/download/download.go:24-113` + 2 more  
-**Problem:** download.Options, download.ExtractOptions, and cleanup.Options pass an optional *slog.Logger as a struct field with a getter (o.logger() / opts.getLogger()), while every sibling — executor.WithLogger, terraform.WithLogger, proxmox.WithLogger, addon.WithLogger, cluster.WithLogger, phase.WithLogger — uses functional options. The struct-field shape forces every Download/Extract/cleanup call site to allocate a struct-with-pointer and routes nil through a getter, while the option shape has logutil.OrNop applied once at construction.  
-**Fix:** Either (a) commit the codebase to options-struct everywhere — uniform but loses at-construction nil-normalisation; or (b) commit to functional options — replace download.Download(ctx, *Options) with download.Fetch(ctx, url, dst string, opts ...Option). Recommend (b): three of the four call sites set ≤2 fields, so the per-call-site delta is small and matches the prevailing pattern. cleanup.Options stays a struct (its fields are required workdir/path data, not optional knobs) but Logger should move to a functional WithLogger.  
-**Effort:** hours
-
-##### `api:beabab0c:phase-new-positional-args` — phase new positional args
-
-**Status:** in review — PR #519  
-**Severity:** minor  
-**Cluster:** option-consistency — related: api:c287d5c0:public-fields-bypass-options  
-**Evidence:** `internal/distribution/okd/setup/phase.go:102-109` + 4 more  
-**Problem:** All five sibling phase constructors take positional (exec, logger, version) args, while their shared base phase.NewBasePhase and the parent okd.New use functional options (WithExecutor/WithLogger/WithVersion, ProvisionerOption). The split forces each phase.New to internally translate positional args into option calls and prevents callers from passing optional knobs (Recorder, Reporter) at construction — they end up writing exported fields directly (okd.go:L138, L147-L148, L156).  
-**Fix:** Pick one shape for the okd phase family. Recommend functional options (matches NewBasePhase + okd.Provisioner): replace setup/install/postinstall/destroy/cleanup New(exec, logger, version) with New(version, ...PhaseOption) using WithExecutor/WithLogger/WithRecorder/WithReporter shared via phase package. okd.Provisioner.Prepare/Install/etc become single-line forwarders. Net delta ~+15 LOC of option types, -20 LOC of struct-field writes in okd.go.  
-**Effort:** hours
-
 #### audit-cli-ux
-
-##### `ux:aa84670c:version-printf-not-via-cmd-out` — version printf not via cmd out
-
-**Status:** in review — PR #520  
-**Severity:** suggestion  
-**Cluster:** streams  
-**Evidence:** `internal/cli/root.go:208-215` + 3 more  
-**Problem:** `versionCmd.Run` writes via `fmt.Printf(...)` directly to `os.Stdout`, ignoring `cmd.OutOrStdout()`. Same pattern across deploy/destroy/cleanup/helpers using package-global `fmt.Println`. This makes cobra-test `cmd.SetOut(buf); cmd.Execute()` impossible — every test that wants to assert command output has to swap `os.Stdout` globally (and most tests in this repo do exactly that). Cobra's idiomatic shape is `fmt.Fprintln(cmd.OutOrStdout(), ...)`.  
-**Fix:** Migrate every `fmt.Println(X)` and `fmt.Printf(X...)` site inside a cobra `Run`/`RunE` to `fmt.Fprintln(cmd.OutOrStdout(), X)` / `fmt.Fprintf(cmd.OutOrStdout(), X...)`. Sites outside RunE (e.g. summary builders) take a writer argument. The few legitimate stderr writes (e.g. `kubeconfig.go:72,123`) already use `fmt.Fprintf(os.Stderr, ...)` and are correct.  
-**Effort:** hours
 
 ##### `ux:e7db1220:format-vs-output-flag-name-drift` — format vs output flag name drift
 
@@ -635,26 +534,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 
 #### audit-code-smells
-
-##### `smell:8ea706f6:abstraction-table-meta` — abstraction table meta
-
-**Status:** in review — PR #513  
-**Severity:** minor  
-**Cluster:** helper-package-no-value  
-**Evidence:** `internal/distribution/okd/setup/tools.go:89-143`  
-**Problem:** `binaryToolMeta` is a 25-LOC table indexed by `externalTool` whose only consumer is `installTool`. With three concrete entries (yq/helm/sops) the indirection adds a layer over what could be three explicit functions — `installYQ`, `installHelm`, `installSops` — sharing a common `installBinary(spec)` helper which already exists. The lookup table also creates a per-tool maintenance trap: forgetting to add an entry silently warns at runtime instead of failing at compile time.  
-**Fix:** Replace the map with a `switch tool` in installTool that builds the binaryInstallSpec inline. Each case is ~6 LOC; total drops by ~10 LOC and missing-tool becomes a default-case panic instead of a runtime warn.  
-**Effort:** hours
-
-##### `smell:d31d1b9d:stringly-typed-enum` — stringly typed enum
-
-**Status:** in review — PR #516  
-**Severity:** minor  
-**Cluster:** magic-strings  
-**Evidence:** `internal/cli/status.go:297-314`  
-**Problem:** runDescribeNode renders node readiness as raw `"True"` / `"False"` literals (matching kube-style ConditionStatus output) but does so by ad-hoc if/else over the bool returned by isReady(), not by reusing phase.ConditionStatusTrue / phase.ConditionStatusFalse. The literal `"True"` and `"False"` here are the same enum spelled twice with no type backing the second site.  
-**Fix:** Replace with `string(phase.ConditionStatusFalse)` / `string(phase.ConditionStatusTrue)` or factor a `boolToConditionStatus(bool) phase.ConditionStatus` helper. Keeps the one-line text path intact while ensuring future enum changes propagate.  
-**Effort:** hours
 
 #### audit-dependencies
 
