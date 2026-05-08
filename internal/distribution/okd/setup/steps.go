@@ -184,7 +184,7 @@ func (p *Phase) setupManifestSteps(cfg *config.Config, opts *Options, clusterDir
 			ReRunSafe: distribution.ReRunSafeNo,
 			Desc:      "generating ignition files",
 			AlreadyDone: func(_ context.Context) (bool, error) {
-				for _, f := range []string{"bootstrap.ign", "master.ign", "worker.ign"} {
+				for _, f := range ignitionFilenames {
 					if !system.FileExists(filepath.Join(clusterDir, f)) {
 						return false, nil
 					}
@@ -222,7 +222,7 @@ func (p *Phase) setupWebSteps(cfg *config.Config, opts *Options, clusterDir stri
 				if webRoot == "" {
 					webRoot = phase.DefaultHTTPServerRoot
 				}
-				return system.FileExists(filepath.Join(webRoot, "ignition", "bootstrap.ign")), nil
+				return system.FileExists(filepath.Join(webRoot, "ignition", ignitionFilenames[0])), nil
 			},
 			Exec: func(ctx context.Context) error {
 				if err := p.DeployToWebServer(ctx, cfg, clusterDir); err != nil {
