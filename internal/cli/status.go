@@ -315,9 +315,9 @@ func runDescribeNode(cmd *cobra.Command, args []string) error {
 	tw := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
 	fmt.Fprintf(tw, "NAME\t%s\n", n.Metadata.Name)
 	fmt.Fprintf(tw, "ROLE\t%s\n", n.role())
-	ready := "False"
+	ready := string(phase.ConditionStatusFalse)
 	if n.isReady() {
-		ready = "True"
+		ready = string(phase.ConditionStatusTrue)
 	}
 	fmt.Fprintf(tw, "READY\t%s\n", ready)
 	return tw.Flush()

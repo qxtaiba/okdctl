@@ -1,6 +1,19 @@
 package cli
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
+)
+
+func TestConditionStatusLiterals(t *testing.T) {
+	if got := string(phase.ConditionStatusTrue); got != "True" {
+		t.Fatalf("ConditionStatusTrue = %q, want %q", got, "True")
+	}
+	if got := string(phase.ConditionStatusFalse); got != "False" {
+		t.Fatalf("ConditionStatusFalse = %q, want %q", got, "False")
+	}
+}
 
 func TestValidateFormat_DescribeNode(t *testing.T) {
 	cases := []struct {
