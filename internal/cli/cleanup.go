@@ -130,7 +130,7 @@ func runCleanup(cmd *cobra.Command, _ []string) error {
 	tui.Info("cleaning up cluster artifacts...")
 	startTime := time.Now()
 
-	if err := cleanup.Execute(ctx, opts); err != nil {
+	if err := cleanup.New(nil, opts.Logger, "").Execute(ctx, opts); err != nil {
 		return err
 	}
 
