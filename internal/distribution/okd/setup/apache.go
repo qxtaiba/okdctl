@@ -184,8 +184,7 @@ func (p *Phase) DeployToWebServer(ctx context.Context, cfg *config.Config, clust
 		return err
 	}
 
-	ignitionFiles := []string{"bootstrap.ign", "master.ign", "worker.ign"}
-	for _, file := range ignitionFiles {
+	for _, file := range ignitionFilenames {
 		srcPath := filepath.Join(clusterDir, file)
 		if !system.FileExists(srcPath) {
 			continue

@@ -16,6 +16,10 @@ import (
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
+// ignitionFilenames is the canonical list openshift-install emits into
+// clusterDir; index 0 is the bootstrap file used as a deploy-readiness sentinel.
+var ignitionFilenames = []string{"bootstrap.ign", "master.ign", "worker.ign"}
+
 // renderAndWrite calls render and atomically writes the result to path,
 // wrapping errors with errLabel.
 func renderAndWrite(render func() (string, error), path string, mode os.FileMode, errLabel string) error {
@@ -193,10 +197,9 @@ func (p *Phase) ValidateIgnitionFiles(ctx context.Context, clusterDir string) er
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	requiredFiles := []string{"bootstrap.ign", "master.ign", "worker.ign"}
 	minSize := int64(1024) // ignition files are typically much larger
 
-	for _, file := range requiredFiles {
+	for _, file := range ignitionFilenames {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
