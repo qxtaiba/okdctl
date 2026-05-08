@@ -189,7 +189,10 @@ func TestDownload_SymlinkAtOutputPath(t *testing.T) {
 	opts := &Options{
 		URL:        srv.URL + "/artifact.bin",
 		OutputPath: link,
-		Logger:     logutil.NopLogger,
+		// Overwrite=true bypasses canSkipDownload, which would otherwise stat
+		// through the symlink, see size>0, and short-circuit (no ExpectedChecksum).
+		Overwrite: true,
+		Logger:    logutil.NopLogger,
 	}
 
 	// sec:21dc1103: when O_NOFOLLOW lands, replace the next two assertions with
