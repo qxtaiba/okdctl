@@ -156,9 +156,10 @@ func (p *Phase) installTerraform(ctx context.Context) error {
 		}
 	default: // rhel family
 		// Build-time-pinned .repo content avoids trusting the .repo URL at deploy
-		// time; the embedded gpgkey URL anchors signature verification.
+		// time. Written root-owned (AtomicWrite) so a non-root invoking user cannot
+		// later edit the gpgkey URL and poison subsequent dnf operations.
 		repoPath := "/etc/yum.repos.d/hashicorp.repo"
-		if err := system.WriteAsInvokingUser(repoPath, hashicorpRPMRepo, 0o644); err != nil {
+		if err := system.AtomicWrite(repoPath, hashicorpRPMRepo, 0o644); err != nil {
 			return fmt.Errorf("failed to write HashiCorp repository file: %w", err)
 		}
 	}
