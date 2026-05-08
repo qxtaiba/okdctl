@@ -290,9 +290,7 @@ func executeFullDeployment(ctx context.Context, cfg *config.Config, opts deploym
 	startTime := time.Now()
 	markerPath := filepath.Join(workDir, deployStateFile)
 
-	if err := writeDeployState(markerPath, "prepare", runID); err != nil {
-		tui.Warn("could not write deploy state marker", tui.LF("err", err))
-	}
+	markDeployPhase(markerPath, "prepare", runID)
 	setupSteps, err := p.Prepare(ctx, cfg)
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
@@ -304,9 +302,7 @@ func executeFullDeployment(ctx context.Context, cfg *config.Config, opts deploym
 		return err
 	}
 
-	if err := writeDeployState(markerPath, "install", runID); err != nil {
-		tui.Warn("could not write deploy state marker", tui.LF("err", err))
-	}
+	markDeployPhase(markerPath, "install", runID)
 	installOpts := install.NewOptions(cfg, projectRoot)
 	installSteps, err := p.Install(ctx, cfg, &installOpts)
 	if err != nil {
@@ -320,9 +316,7 @@ func executeFullDeployment(ctx context.Context, cfg *config.Config, opts deploym
 		return err
 	}
 
-	if err := writeDeployState(markerPath, "configure", runID); err != nil {
-		tui.Warn("could not write deploy state marker", tui.LF("err", err))
-	}
+	markDeployPhase(markerPath, "configure", runID)
 	result, configureSteps, err := p.Configure(ctx, cfg)
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
