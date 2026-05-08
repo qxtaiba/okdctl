@@ -10,6 +10,7 @@ import (
 	"net"
 	"net/http"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -21,6 +22,11 @@ import (
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
+type clusterOperatorCondition struct {
+	Type   phase.ConditionType   `json:"type"`
+	Status phase.ConditionStatus `json:"status"`
+}
+
 // clusterOperatorList is a minimal view of `oc get clusteroperators -o json`
 // output. Decoupling from operator.openshift.io/v1 avoids pinning that schema
 // in lockstep with each OKD release.
@@ -30,10 +36,7 @@ type clusterOperatorList struct {
 			Name string `json:"name"`
 		} `json:"metadata"`
 		Status struct {
-			Conditions []struct {
-				Type   phase.ConditionType   `json:"type"`
-				Status phase.ConditionStatus `json:"status"`
-			} `json:"conditions"`
+			Conditions []clusterOperatorCondition `json:"conditions"`
 		} `json:"status"`
 	} `json:"items"`
 }
@@ -48,14 +51,18 @@ func parseOperatorDegradation(payload []byte) ([]string, error) {
 	}
 	var degraded []string
 	for _, op := range co.Items {
-		for _, cond := range op.Status.Conditions {
-			if cond.Type == phase.ConditionTypeDegraded && cond.Status == phase.ConditionStatusTrue {
-				degraded = append(degraded, op.Metadata.Name)
-				break
-			}
+		if slices.ContainsFunc(op.Status.Conditions, func(c clusterOperatorCondition) bool {
+			return c.Type == phase.ConditionTypeDegraded && c.Status == phase.ConditionStatusTrue
+		}) {
+			degraded = append(degraded, op.Metadata.Name)
 		}
 	}
 	return degraded, nil
+}
+
+type nodeCondition struct {
+	Type   phase.ConditionType   `json:"type"`
+	Status phase.ConditionStatus `json:"status"`
 }
 
 // nodeList is a minimal view of `oc get nodes -o json` output — only the
@@ -68,10 +75,7 @@ type nodeList struct {
 			Name string `json:"name"`
 		} `json:"metadata"`
 		Status struct {
-			Conditions []struct {
-				Type   phase.ConditionType   `json:"type"`
-				Status phase.ConditionStatus `json:"status"`
-			} `json:"conditions"`
+			Conditions []nodeCondition `json:"conditions"`
 		} `json:"status"`
 	} `json:"items"`
 }
@@ -88,11 +92,10 @@ func parseNodeReadiness(payload []byte) (ready, total int, err error) {
 	}
 	for _, node := range n.Items {
 		total++
-		for _, cond := range node.Status.Conditions {
-			if cond.Type == phase.ConditionTypeReady && cond.Status == phase.ConditionStatusTrue {
-				ready++
-				break
-			}
+		if slices.ContainsFunc(node.Status.Conditions, func(c nodeCondition) bool {
+			return c.Type == phase.ConditionTypeReady && c.Status == phase.ConditionStatusTrue
+		}) {
+			ready++
 		}
 	}
 	return ready, total, nil
