@@ -12,6 +12,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/releases"
+	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/tui"
 )
 
@@ -157,7 +158,7 @@ func validateChannel(ch string) error {
 	case channelStable, channelAll:
 		return nil
 	default:
-		return fmt.Errorf("invalid --channel %q (want stable|all)", ch)
+		return &errtypes.UsageError{Msg: fmt.Sprintf("invalid --channel %q (want stable|all)", ch)}
 	}
 }
 
@@ -166,7 +167,7 @@ func validateFormat(format string) error {
 	case outputText, outputJSON:
 		return nil
 	default:
-		return fmt.Errorf("invalid --output %q (want text|json)", format)
+		return &errtypes.UsageError{Msg: fmt.Sprintf("invalid --output %q (want text|json)", format)}
 	}
 }
 
