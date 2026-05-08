@@ -69,12 +69,33 @@ func stateLockHint(dir string) error {
 	if !system.FileExists(lockFile) {
 		return nil
 	}
+	id := parseLockID(lockFile)
+	if id == "" {
+		id = "<id>"
+	}
 	return &errtypes.ConfigError{
 		Msg: fmt.Sprintf(
-			"terraform state locked at %s — run 'terraform force-unlock <id>' in %s after confirming no other okdctl run is active",
-			lockFile, dir,
+			"terraform state locked at %s — run 'terraform force-unlock %s' in %s after confirming no other okdctl run is active",
+			lockFile, id, dir,
 		),
 	}
+}
+
+// parseLockID reads the Terraform local-backend lock file and returns the
+// lock ID. Returns "" when the file cannot be read or the ID field is absent,
+// so callers can fall back to a generic placeholder.
+func parseLockID(lockFile string) string {
+	raw, err := os.ReadFile(lockFile)
+	if err != nil {
+		return ""
+	}
+	var info struct {
+		ID string `json:"ID"`
+	}
+	if err := json.Unmarshal(raw, &info); err != nil {
+		return ""
+	}
+	return info.ID
 }
 
 func (p *Phase) destroyInfrastructure(ctx context.Context, opts *Options) error {
