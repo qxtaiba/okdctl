@@ -967,16 +967,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Add `--format=text|json` to `doctorCmd` (Linux side; the stub stays as-is since doctor is Linux-only). Promote `checkResult` and `checkItem` to JSON-tagged exported types (or local-to-cli copies); on `--format=json` emit `{"checks":[{"name":"host os","severity":"ok","detail":"..."},...],"failed":N,"warned":N}`. Document the schema in `docs/cli/json-schema.md`. Update `internal/cli/debug_bundle_doctor.go` to call `--format=json --log-format=json` so the bundle stores structured doctor output instead of ANSI text.  
 **Effort:** hours
 
-##### `ux:aa84670c:exit-code-package-doc-drift` — exit code package doc drift
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/ux-aa84670c-exit-code-doc  
-**Severity:** minor  
-**Cluster:** exit-codes — seam→audit-errors  
-**Evidence:** `internal/cli/root.go:1-12`  
-**Problem:** The package doc claims `invoked-as-root rejection=77 (EX_NOPERM, set in cmd/okdctl/main.go)` but `cmd/okdctl/main.go` never sets exit 77 — root rejection in `ensureRoot` (`elevation.go:88-92`) returns `errtypes.AuthError`, which `exitCodeFor` maps to 5. The user-facing `docs/cli/exit-codes.md` correctly documents 5; the canonical anchor comment in `root.go` is stale and is the file `exit-codes.md` points at as source of truth.  
-**Fix:** Drop the `rejection=77 (EX_NOPERM, set in cmd/okdctl/main.go)` clause from the package doc on `internal/cli/root.go`. Replace with: `invoked-as-root rejection → 5 (AuthError, in elevation.go ensureRoot)`. Optionally promote 77/EX_NOPERM as a real exit code by routing the `elevReject` decision through a sentinel `errtypes.ErrInvokedAsRoot` and adding `errors.Is(err, errtypes.ErrInvokedAsRoot) → 77` to `exitCodeFor` — that matches BSD sysexits semantics and is what the comment originally intended.  
-**Effort:** hours
-
 ##### `ux:aa84670c:version-printf-not-via-cmd-out` — version printf not via cmd out
 
 **Status:** not started  
