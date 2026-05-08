@@ -190,16 +190,17 @@ type deploymentOptions struct {
 
 // startMetricsServer starts a Prometheus metrics HTTP server on addr (disabled
 // when addr is empty). Returns a stop closure that shuts the server down with
-// a 5-second deadline, plus any provisioner options the caller must apply so
-// orchestrated phases feed observations to the recorder.
+// a 5-second deadline and surfaces any bind error, plus any provisioner
+// options the caller must apply so orchestrated phases feed observations to
+// the recorder.
 //
 // Bare ":port" is rewritten to "127.0.0.1:port" so the unauthenticated
 // listener does not leak to the network by default. Wildcard addresses
 // (0.0.0.0 or [::]) are rejected unless allowNetwork is true; pass
 // --metrics-allow-network to opt in.
-func startMetricsServer(addr string, allowNetwork bool) (func(), []okd.ProvisionerOption, error) {
+func startMetricsServer(ctx context.Context, addr string, allowNetwork bool) (func() error, []okd.ProvisionerOption, error) {
 	if addr == "" {
-		return func() {}, nil, nil
+		return func() error { return nil }, nil, nil
 	}
 	if strings.HasPrefix(addr, ":") {
 		addr = "127.0.0.1" + addr
@@ -218,21 +219,37 @@ func startMetricsServer(addr string, allowNetwork bool) (func(), []okd.Provision
 	mux := http.NewServeMux()
 	mux.Handle("/metrics", rec.Handler())
 	srv := &http.Server{
-		Addr:              addr,
-		Handler:           mux,
+		Addr:    addr,
+		Handler: mux,
+		// BaseContext propagates the deploy ctx so in-flight scrape connections
+		// are cancelled when the parent context is cancelled.
+		BaseContext:       func(net.Listener) context.Context { return ctx },
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       10 * time.Second,
 		WriteTimeout:      10 * time.Second,
 		IdleTimeout:       60 * time.Second,
 	}
-	go func() { _ = srv.ListenAndServe() }()
+	// errCh cap=1: the goroutine sends exactly once and never blocks, so it
+	// exits cleanly even if stop is never called (early return on phase error).
+	errCh := make(chan error, 1)
+	go func() { errCh <- srv.ListenAndServe() }()
 	tui.Info("metrics endpoint listening", tui.LF("addr", addr))
-	stop := func() {
+	stop := func() error {
 		// Use Background, not the caller's ctx: by stop() time the parent ctx
 		// is already cancelled by SIGINT, and we need the 5s drain to complete.
 		shutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		_ = srv.Shutdown(shutCtx)
+		// Shutdown's return guarantees ListenAndServe has exited; drain errCh.
+		select {
+		case err := <-errCh:
+			if errors.Is(err, http.ErrServerClosed) {
+				return nil
+			}
+			return err
+		default:
+			return nil
+		}
 	}
 	return stop, []okd.ProvisionerOption{okd.WithMetricsRecorder(rec)}, nil
 }
@@ -267,11 +284,15 @@ func executeFullDeployment(ctx context.Context, cfg *config.Config, opts deploym
 
 	runID := tui.RunID()
 
-	stopMetrics, provOpts, err := startMetricsServer(opts.MetricsAddr, opts.AllowNetworkMetrics)
+	stopMetrics, provOpts, err := startMetricsServer(ctx, opts.MetricsAddr, opts.AllowNetworkMetrics)
 	if err != nil {
 		return err
 	}
-	defer stopMetrics()
+	defer func() {
+		if stopErr := stopMetrics(); stopErr != nil {
+			tui.Warn("metrics server stopped with error", tui.LF("err", stopErr))
+		}
+	}()
 
 	provOpts = append(provOpts, okd.WithProgressReporter(tuiReporter(ctx)))
 	p := createOKDProvisionerWithOpts(cfg, opts.Credentials, projectRoot, provOpts...)
