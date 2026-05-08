@@ -36,6 +36,6 @@ See docs/doctor-checks.md for per-check fail messages and fix guidance.`,
 }
 
 func init() {
-	doctorCmd.Flags().StringVarP(&doctorOutput, "output", "o", outputText, "output format: text|json")
+	doctorCmd.Flags().StringVarP(&doctorOutput, flagOutput, flagOutputShort, outputText, "output format: text|json")
 	rootCmd.AddCommand(doctorCmd)
 }

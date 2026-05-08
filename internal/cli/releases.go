@@ -18,8 +18,6 @@ import (
 const (
 	channelStable = "stable"
 	channelAll    = "all"
-	outputText    = "text"
-	outputJSON    = "json"
 )
 
 var (
@@ -75,9 +73,9 @@ var releasesShowCmd = &cobra.Command{
 func init() {
 	releasesListCmd.Flags().StringVar(&releasesListChannel, "channel", channelStable,
 		"filter versions: stable|all")
-	releasesListCmd.Flags().StringVarP(&releasesListOutput, "output", "o", outputText,
+	releasesListCmd.Flags().StringVarP(&releasesListOutput, flagOutput, flagOutputShort, outputText,
 		"output format: text|json")
-	releasesShowCmd.Flags().StringVarP(&releasesShowOutput, "output", "o", outputText,
+	releasesShowCmd.Flags().StringVarP(&releasesShowOutput, flagOutput, flagOutputShort, outputText,
 		"output format: text|json")
 
 	releasesCmd.AddCommand(releasesListCmd)
@@ -184,7 +182,7 @@ func printVersionList(w io.Writer, versions []releases.OKDVersion) error {
 			v.Version,
 			v.ReleaseDate.Format("2006-01-02"),
 			yesNo(v.Stable),
-			releaseTypeLabel(v.Type),
+			releases.LabelForReleaseType(v.Type),
 		)
 	}
 	return tw.Flush()
@@ -198,29 +196,12 @@ func printVersionDetail(w io.Writer, v releases.OKDVersion) error {
 		{"released", v.ReleaseDate.Format("2006-01-02")},
 		{"stable", yesNo(v.Stable)},
 		{"latest-in-series", yesNo(v.Latest)},
-		{"release-type", releaseTypeLabel(v.Type)},
+		{"release-type", releases.LabelForReleaseType(v.Type)},
 	}
 	for _, ln := range lines {
 		fmt.Fprintln(w, tui.DottedKeyValueFull(ln.k, ln.val, tui.DefaultKeyColWidth, 0))
 	}
 	return nil
-}
-
-func releaseTypeLabel(t releases.ReleaseType) string {
-	switch t {
-	case releases.ReleaseTypeStable:
-		return "stable"
-	case releases.ReleaseTypeLatestStable:
-		return "latest-stable"
-	case releases.ReleaseTypePreview:
-		return "preview"
-	case releases.ReleaseTypeLatestPreview:
-		return "latest-preview"
-	case releases.ReleaseTypeLTS:
-		return "lts"
-	default:
-		return "unknown"
-	}
 }
 
 func yesNo(b bool) string {

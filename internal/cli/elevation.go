@@ -48,7 +48,7 @@ func requiresRoot(cmd *cobra.Command) bool {
 	if dry, err := cmd.Flags().GetBool(flagDryRun); err == nil && dry {
 		return false
 	}
-	if cmd.Annotations["requiresRoot"] == annotationValueTrue {
+	if cmd.Annotations[annotationKeyRequiresRoot] == annotationValueTrue {
 		return true
 	}
 	for c := cmd; c != nil; c = c.Parent() {

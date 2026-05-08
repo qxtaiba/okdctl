@@ -68,7 +68,7 @@ file is needed (e.g. in scripts or CI).`,
 }
 
 func init() {
-	debugBundleCmd.Flags().StringVar(&debugBundleOutput, flagOutput, "", "write bundle to this path (default: okdctl-debug-<ts>.tgz)")
+	debugBundleCmd.Flags().StringVar(&debugBundleOutput, flagOutputFile, "", "write bundle to this path (default: okdctl-debug-<ts>.tgz)")
 	debugBundleCmd.Flags().BoolVar(&debugBundleSkipMustGather, "skip-must-gather", false, "skip oc adm must-gather (faster, omits cluster diagnostics)")
 	rootCmd.AddCommand(debugBundleCmd)
 }

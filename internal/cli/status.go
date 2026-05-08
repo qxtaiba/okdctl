@@ -65,9 +65,9 @@ var (
 )
 
 func init() {
-	statusCmd.Flags().StringVarP(&statusOutput, "output", "o", outputText, "output format: text|json")
-	describeNodeCmd.Flags().StringVarP(&describeNodeOutput, "output", "o", outputText, "output format: text|json")
-	describeAddonCmd.Flags().StringVarP(&describeAddonOutput, "output", "o", outputText, "output format: text|json")
+	statusCmd.Flags().StringVarP(&statusOutput, flagOutput, flagOutputShort, outputText, "output format: text|json")
+	describeNodeCmd.Flags().StringVarP(&describeNodeOutput, flagOutput, flagOutputShort, outputText, "output format: text|json")
+	describeAddonCmd.Flags().StringVarP(&describeAddonOutput, flagOutput, flagOutputShort, outputText, "output format: text|json")
 	describeCmd.AddCommand(describeNodeCmd)
 	describeCmd.AddCommand(describeAddonCmd)
 	rootCmd.AddCommand(statusCmd)

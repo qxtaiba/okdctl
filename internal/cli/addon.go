@@ -44,7 +44,7 @@ var addonInstallCmd = &cobra.Command{
 	Use:         "install [name | --all]",
 	Short:       "Install one addon (or all enabled addons with --all)",
 	Example:     "  okdctl addon install flux\n  okdctl addon install --all",
-	Annotations: map[string]string{"requiresRoot": annotationValueTrue},
+	Annotations: map[string]string{annotationKeyRequiresRoot: annotationValueTrue},
 	ValidArgsFunction: func(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
 		return addon.Names(), cobra.ShellCompDirectiveNoFileComp
 	},
@@ -79,7 +79,7 @@ var addonUninstallCmd = &cobra.Command{
 	Short: "Uninstall a named addon",
 	Example: "  okdctl addon uninstall flux\n" +
 		"  okdctl addon uninstall flux --yes --confirm-cluster=prod",
-	Annotations: map[string]string{"requiresRoot": annotationValueTrue},
+	Annotations: map[string]string{annotationKeyRequiresRoot: annotationValueTrue},
 	ValidArgsFunction: func(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
 		return addon.Names(), cobra.ShellCompDirectiveNoFileComp
 	},
@@ -99,8 +99,8 @@ var addonVerifyCmd = &cobra.Command{
 }
 
 func init() {
-	addonListCmd.Flags().StringVarP(&addonListOutput, "output", "o", outputText, "output format: text|json")
-	addonVerifyCmd.Flags().StringVarP(&addonVerifyOutput, "output", "o", outputText, "output format: text|json")
+	addonListCmd.Flags().StringVarP(&addonListOutput, flagOutput, flagOutputShort, outputText, "output format: text|json")
+	addonVerifyCmd.Flags().StringVarP(&addonVerifyOutput, flagOutput, flagOutputShort, outputText, "output format: text|json")
 	addonInstallCmd.Flags().BoolVar(&addonInstallAll, "all", false, "install all enabled addons (per-addon continuation on failure)")
 	addonUninstallCmd.Flags().BoolVarP(&addonUninstallYes, "yes", "y", false, "skip confirmation prompt")
 	addonUninstallCmd.Flags().StringVar(&addonUninstallConfirmCluster, "confirm-cluster", "",

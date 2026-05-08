@@ -138,7 +138,7 @@ write the comment — then it carries real information.
 
 - `go.mod` targets Go 1.25 / toolchain 1.26.2. Don't downgrade.
 - `.golangci.yml` is authoritative for lint config. Key thresholds:
-  `funlen.lines: 120`, `gocyclo.min-complexity: 30`, `dupl.threshold: 200`.
+  `funlen.lines: 120`, `gocyclo.min-complexity: 30`, `dupl.threshold: 100`.
 - CI runs `lint-go`, `test-go`, `build-go`, `security` (govulncheck),
   `lint-yaml`, `validate-terraform`. All must be green before merging to
   `develop`.
