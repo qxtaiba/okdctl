@@ -113,7 +113,7 @@ Use the wizard. If you'd rather edit YAML directly, reference configs live in
 [`configs/examples/`](configs/examples/):
 
 - `minimal.yaml` — 1 control-plane node, 0 workers (single-node cluster)
-- `production.yaml` — 3 control-plane, 3 worker layout
+- `production.yaml` — 3 control-plane, 5 worker layout
 - `media-server.yaml` — homelab setup with storage-heavy workers
 
 Proxmox credentials live in a `.env` file next to the config, never in the
