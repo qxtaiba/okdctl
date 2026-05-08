@@ -59,12 +59,15 @@ var describeAddonCmd = &cobra.Command{
 	},
 }
 
-var describeFormat string
+var (
+	describeNodeFormat  string
+	describeAddonFormat string
+)
 
 func init() {
 	statusCmd.Flags().StringVar(&statusFormat, "format", outputText, "output format: text|json")
-	describeNodeCmd.Flags().StringVar(&describeFormat, "format", outputText, "output format: text|json")
-	describeAddonCmd.Flags().StringVar(&describeFormat, "format", outputText, "output format: text|json")
+	describeNodeCmd.Flags().StringVar(&describeNodeFormat, "format", outputText, "output format: text|json")
+	describeAddonCmd.Flags().StringVar(&describeAddonFormat, "format", outputText, "output format: text|json")
 	describeCmd.AddCommand(describeNodeCmd)
 	describeCmd.AddCommand(describeAddonCmd)
 	rootCmd.AddCommand(statusCmd)
@@ -293,7 +296,7 @@ func runDescribeNode(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("parse node json: %w", err)
 	}
 
-	if describeFormat == outputJSON {
+	if describeNodeFormat == outputJSON {
 		payload := map[string]any{
 			colName: n.Metadata.Name,
 			"role":  n.role(),
@@ -359,7 +362,7 @@ func runDescribeAddon(cmd *cobra.Command, args []string) error {
 		{"health", "health", health},
 	}
 
-	if describeFormat == outputJSON {
+	if describeAddonFormat == outputJSON {
 		payload := map[string]string{}
 		for _, ln := range lines {
 			payload[ln.jsonKey] = ln.v
