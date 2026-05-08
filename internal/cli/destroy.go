@@ -283,6 +283,7 @@ func runDestroyDryRun(ctx context.Context, cfg *config.Config) error {
 		tfOpts = append(tfOpts, terraform.WithEnv(creds.Env()))
 	}
 	tf := terraform.New(terraformDir, tfOpts...)
+	defer tf.ZeroizeEnv()
 
 	tui.Info(fmt.Sprintf("dry-run: terraform destroy plan for cluster '%s'", cfg.Cluster.Name))
 
