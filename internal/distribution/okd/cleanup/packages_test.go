@@ -2,11 +2,13 @@ package cleanup
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
 	"testing"
 
+	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/logutil"
 )
 
@@ -56,8 +58,22 @@ func TestPackages_RemovesScopedBinariesOnly(t *testing.T) {
 func TestPackages_RefusesCriticalBinDir(t *testing.T) {
 	installFakePkgTools(t)
 	for _, dir := range []string{"/", "/usr/local"} {
-		if err := Packages(context.Background(), dir, logutil.NopLogger); err == nil {
+		err := Packages(context.Background(), dir, logutil.NopLogger)
+		if err == nil {
 			t.Errorf("Packages(binDir=%q) returned nil; want rejection", dir)
+			continue
 		}
+		var clusterErr *errtypes.ClusterError
+		if !errors.As(err, &clusterErr) {
+			t.Errorf("Packages(binDir=%q) returned %T; want *errtypes.ClusterError", dir, err)
+		}
+	}
+}
+
+func TestPackages_MissingBinariesNoError(t *testing.T) {
+	installFakePkgTools(t)
+	binDir := t.TempDir()
+	if err := Packages(context.Background(), binDir, logutil.NopLogger); err != nil {
+		t.Fatalf("Packages with empty binDir returned error; want nil: %v", err)
 	}
 }
