@@ -62,6 +62,9 @@ func (p *Phase) WaitForBootstrap(ctx context.Context, clusterDir string, opts *O
 			}
 		}
 		if errors.Is(ctx.Err(), context.Canceled) {
+			// Bare wrap intentional: cli/root.go::signalExitCode walks the chain
+			// via errors.Is(err, context.Canceled) before exitCodeFor runs,
+			// mapping SIGINT→130 / SIGTERM→143 without a typed error.
 			return fmt.Errorf("bootstrap cancelled: %w", ctx.Err())
 		}
 		return &errtypes.ClusterError{Msg: "bootstrap failed", Err: err}
@@ -130,6 +133,9 @@ func (p *Phase) MonitorInstallation(ctx context.Context, clusterDir string, opts
 					}
 				}
 				if errors.Is(ctx.Err(), context.Canceled) {
+					// Bare wrap intentional: cli/root.go::signalExitCode walks the
+					// chain via errors.Is(err, context.Canceled) before exitCodeFor
+					// runs, mapping SIGINT→130 / SIGTERM→143 without a typed error.
 					return fmt.Errorf("installation cancelled: %w", ctx.Err())
 				}
 				return &errtypes.ClusterError{Msg: "installation failed", Err: err}
@@ -164,6 +170,9 @@ func (p *Phase) MonitorInstallation(ctx context.Context, clusterDir string, opts
 
 		case <-ctx.Done():
 			if errors.Is(ctx.Err(), context.Canceled) {
+				// Bare wrap intentional: cli/root.go::signalExitCode walks the chain
+				// via errors.Is(err, context.Canceled) before exitCodeFor runs,
+				// mapping SIGINT→130 / SIGTERM→143 without a typed error.
 				return fmt.Errorf("installation cancelled: %w", ctx.Err())
 			}
 			return &errtypes.ClusterError{
