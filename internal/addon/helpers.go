@@ -2,13 +2,17 @@ package addon
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"os/exec"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"sigs.k8s.io/yaml"
+
+	"github.com/qxtaiba/okdctl/internal/errtypes"
 )
 
 // Default retry policy shared by all addons using RetryDefault.
@@ -19,7 +23,9 @@ const (
 
 // RetryDefault retries fn up to DefaultRetryCount times with exponential
 // backoff starting at DefaultRetryBackoff. Context cancellation is checked
-// between retries.
+// between retries. Permanent failures (typed config/auth errors, missing
+// binary, ctx cancellation) abort immediately; transient failures consume
+// the full backoff budget.
 func RetryDefault(ctx context.Context, fn func() error) error {
 	return wait.ExponentialBackoffWithContext(ctx, wait.Backoff{
 		Duration: DefaultRetryBackoff,
@@ -28,16 +34,39 @@ func RetryDefault(ctx context.Context, fn func() error) error {
 		Steps:    DefaultRetryCount,
 		Cap:      5 * time.Minute,
 	}, func(_ context.Context) (bool, error) {
-		// Returning (false, nil) on error asks wait to retry; returning
-		// the error would abort the retry loop. Non-retryable errors
-		// aren't distinguished today — all fn failures are retried
-		// through the full backoff budget, matching the previous
-		// cenkalti/backoff behavior.
 		if err := fn(); err != nil {
-			return false, nil //nolint:nilerr // intentional: retry on any error
+			if !addonIsRetryable(err) {
+				return false, err
+			}
+			return false, nil
 		}
 		return true, nil
 	})
+}
+
+// addonIsRetryable reports whether err should trigger another retry attempt.
+// Permanent failures — typed config/auth errors, missing binary, context
+// cancellation — return false so the caller aborts immediately. Transient
+// executor failures (non-zero exit, connection errors) return true.
+func addonIsRetryable(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return false
+	}
+	if errors.Is(err, exec.ErrNotFound) {
+		return false
+	}
+	var cfgErr *errtypes.ConfigError
+	if errors.As(err, &cfgErr) {
+		return false
+	}
+	var authErr *errtypes.AuthError
+	if errors.As(err, &authErr) {
+		return false
+	}
+	return true
 }
 
 // BuildOpaqueSecret returns a Kubernetes Secret manifest YAML of type Opaque.
