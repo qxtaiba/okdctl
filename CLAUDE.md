@@ -187,6 +187,12 @@ write the comment — then it carries real information.
   implement `Redacted() any` control their own output. Prefer structured
   attrs (`logger.Warn("…", "err", err)`) over `fmt.Sprintf(…%v…)` so the
   handler can inspect values.
+- **Never** call `tui.Info(fmt.Sprintf(...))`, `tui.Warn(fmt.Sprintf(...))`,
+  `p.Log.Info(fmt.Sprintf(...))`, or any `X(fmt.Sprintf(...))` log form.
+  `RedactHandler` scrubs attr keys/values; it cannot inspect a pre-rendered
+  string, so a future field that interpolates a credential into the message
+  silently leaks. Use the structured form: `tui.Info("using credentials",
+  tui.LF("source", creds.Source))` or `p.Log.Info("…", "key", val)`.
 
 ## Dependencies
 
