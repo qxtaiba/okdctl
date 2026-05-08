@@ -3,6 +3,8 @@ package addon
 import (
 	"context"
 	"errors"
+	"fmt"
+	"os/exec"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -11,7 +13,53 @@ import (
 
 	"k8s.io/apimachinery/pkg/util/wait"
 	"sigs.k8s.io/yaml"
+
+	"github.com/qxtaiba/okdctl/internal/errtypes"
 )
+
+func Test_addonIsRetryable(t *testing.T) {
+	cases := []struct {
+		name      string
+		err       error
+		retryable bool
+	}{
+		{"nil", nil, false},
+		{"generic transient", errors.New("connection refused"), true},
+		{"context canceled", context.Canceled, false},
+		{"context deadline", context.DeadlineExceeded, false},
+		{"wrapped context canceled", fmt.Errorf("wrap: %w", context.Canceled), false},
+		{"exec not found", exec.ErrNotFound, false},
+		{"wrapped exec not found", fmt.Errorf("oc: %w", exec.ErrNotFound), false},
+		{"config error", &errtypes.ConfigError{Msg: "bad config"}, false},
+		{"wrapped config error", fmt.Errorf("outer: %w", &errtypes.ConfigError{Msg: "bad"}), false},
+		{"auth error", &errtypes.AuthError{Msg: "denied"}, false},
+		{"wrapped auth error", fmt.Errorf("outer: %w", &errtypes.AuthError{Msg: "denied"}), false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := addonIsRetryable(tc.err); got != tc.retryable {
+				t.Errorf("addonIsRetryable(%v) = %v; want %v", tc.err, got, tc.retryable)
+			}
+		})
+	}
+}
+
+func Test_RetryDefault_NonRetryableAbortsImmediately(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		var calls atomic.Int32
+		permErr := &errtypes.ConfigError{Msg: "oc binary missing"}
+		err := RetryDefault(context.Background(), func() error {
+			calls.Add(1)
+			return permErr
+		})
+		if !errors.Is(err, permErr) {
+			t.Errorf("err = %v; want permErr", err)
+		}
+		if calls.Load() != 1 {
+			t.Errorf("calls = %d; want 1 (no retry on non-retryable)", calls.Load())
+		}
+	})
+}
 
 func Test_RetryDefault_SucceedsOnAttemptN(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
