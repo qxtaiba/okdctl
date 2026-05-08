@@ -86,7 +86,7 @@ func (s *SecretStore) Install(ctx context.Context, env *addon.Environment) error
 		return err
 	}
 
-	env.Logger.Info(fmt.Sprintf("secretstore: installing %s provider", ts.Provider))
+	env.Logger.Info("secretstore: installing provider", "provider", ts.Provider)
 
 	manifests, err := p.buildResources(ctx, env, ts)
 	if err != nil {
@@ -104,7 +104,7 @@ func (s *SecretStore) Install(ctx context.Context, env *addon.Environment) error
 		}
 	}
 
-	env.Logger.Info(fmt.Sprintf("secretstore: %s provider installed", ts.Provider))
+	env.Logger.Info("secretstore: provider installed", "provider", ts.Provider)
 	return nil
 }
 
@@ -119,7 +119,7 @@ func (s *SecretStore) installPrereqCheck(env *addon.Environment, providerName st
 		credPath := filepath.Join(dir, opCredentialsFile)
 		tokenPath := filepath.Join(dir, opTokenFile)
 		if !system.FileExists(credPath) && !system.FileExists(tokenPath) {
-			env.Logger.Warn(fmt.Sprintf("secretstore: no secret files found in %s, skipping", dir))
+			env.Logger.Warn("secretstore: no secret files found, skipping", "dir", dir)
 			env.Logger.Info("secretstore: to set up 1password connect secrets:")
 			env.Logger.Info("  1. download 1password-credentials.json from Settings > Automation in 1password.com")
 			env.Logger.Info("  2. create a connect token and save it:")
@@ -136,7 +136,7 @@ func (s *SecretStore) installPrereqCheck(env *addon.Environment, providerName st
 	case providerVault:
 		tokenPath := filepath.Join(dir, vaultTokenFile)
 		if !system.FileExists(tokenPath) {
-			env.Logger.Warn(fmt.Sprintf("secretstore: vault-token.txt not found in %s, skipping", dir))
+			env.Logger.Warn("secretstore: vault-token.txt not found, skipping", "dir", dir)
 			env.Logger.Info("secretstore: write your Vault token to " + tokenPath)
 			env.Logger.Info("secretstore: re-run: okdctl addon install secretstore")
 			return true, nil
@@ -147,7 +147,7 @@ func (s *SecretStore) installPrereqCheck(env *addon.Environment, providerName st
 	case providerBitwarden:
 		tokenPath := filepath.Join(dir, bitwardenTokenFile)
 		if !system.FileExists(tokenPath) {
-			env.Logger.Warn(fmt.Sprintf("secretstore: bitwarden-token.txt not found in %s, skipping", dir))
+			env.Logger.Warn("secretstore: bitwarden-token.txt not found, skipping", "dir", dir)
 			env.Logger.Info("secretstore: write your Bitwarden machine-account access token to " + tokenPath)
 			env.Logger.Info("secretstore: re-run: okdctl addon install secretstore")
 			return true, nil
@@ -180,7 +180,7 @@ func (s *SecretStore) Verify(ctx context.Context, env *addon.Environment) error 
 func (s *SecretStore) Uninstall(ctx context.Context, env *addon.Environment) error {
 	p, providerName := resolveProvider(env.AddonConfig.Settings)
 	ns := defaultNamespace
-	env.Logger.Info(fmt.Sprintf("secretstore: removing %s provider resources", providerName))
+	env.Logger.Info("secretstore: removing provider resources", "provider", providerName)
 	if p != nil {
 		for _, name := range p.secretNames() {
 			if _, err := env.Exec.Run(ctx, "oc", "delete", "secret", name, "-n", ns); err != nil {
@@ -271,7 +271,7 @@ func readSecret(ctx context.Context, env *addon.Environment, path string) (strin
 			return "", fmt.Errorf("secret file %s has insecure permissions %#o; run 'chmod 600 %s' to fix",
 				filepath.Base(path), perm, path)
 		}
-		env.Logger.Info(fmt.Sprintf("secretstore: reading plaintext file %s", filepath.Base(path)))
+		env.Logger.Info("secretstore: reading plaintext file", "file", filepath.Base(path))
 		data, err := os.ReadFile(path)
 		if err != nil {
 			return "", err
@@ -279,7 +279,7 @@ func readSecret(ctx context.Context, env *addon.Environment, path string) (strin
 		return string(data), nil
 	}
 
-	env.Logger.Info(fmt.Sprintf("secretstore: decrypting %s with sops", filepath.Base(path)))
+	env.Logger.Info("secretstore: decrypting with sops", "file", filepath.Base(path))
 	result, err := env.Exec.RunChecked(ctx, "sops", "-d", path)
 	if err != nil {
 		return "", fmt.Errorf("sops decryption failed (is the age key at ~/.config/sops/age/keys.txt?): %w", err)

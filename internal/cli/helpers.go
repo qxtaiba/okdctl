@@ -32,11 +32,11 @@ func loadConfig(configFile string) (*config.Config, error) {
 	cfg, err := loader.LoadFile(configFile)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			tui.Error(fmt.Sprintf("configuration file not found: %s", configFile))
+			tui.Error("configuration file not found", tui.LF("file", configFile))
 			if configFile == "okdctl.yaml" {
 				tui.Info("run 'okdctl deploy' to create a configuration file")
 			} else {
-				tui.Info(fmt.Sprintf("run 'okdctl deploy --output-file %s' to create it", configFile))
+				tui.Info("run 'okdctl deploy --output-file <file>' to create it", tui.LF("file", configFile))
 			}
 			return nil, &errtypes.ConfigError{Msg: fmt.Sprintf("configuration file not found: %s", configFile), Err: errtypes.ErrConfigMissing}
 		}
@@ -57,7 +57,7 @@ func handleCredentials(cfg *config.Config) (*credentials.ProxmoxCredentials, err
 	creds := credentials.GetProxmoxCredentials(cfg)
 	if !creds.IsValid() {
 		tui.Warn("no proxmox credentials found")
-		tui.Info(fmt.Sprintf("set credentials via environment variables or %s:", envPath))
+		tui.Info("set credentials via environment variables or env file", tui.LF("path", envPath))
 		tui.Info("  PROXMOX_VE_USERNAME + PROXMOX_VE_PASSWORD")
 		tui.Info("  or PROXMOX_VE_API_TOKEN")
 	} else {
@@ -70,7 +70,7 @@ func handleCredentials(cfg *config.Config) (*credentials.ProxmoxCredentials, err
 // mixed-provenance warnings the operator should see (env-overrides-config,
 // endpoint falling back to config). Callers must check creds.IsValid first.
 func reportCredentialProvenance(creds *credentials.ProxmoxCredentials) {
-	tui.Info(fmt.Sprintf("using credentials from %s", creds.Source))
+	tui.Info("using credentials", tui.LF("source", creds.Source))
 	if creds.ConfigCredentialsOverridden {
 		tui.Warn("environment credentials override proxmox credentials in config file")
 	}
@@ -357,7 +357,7 @@ func executeFullDeployment(ctx context.Context, cfg *config.Config, opts deploym
 	duration := time.Since(startTime).Round(time.Second)
 
 	fmt.Fprintln(w)
-	tui.Info(fmt.Sprintf("deployment complete (total time: %s)", duration))
+	tui.Info("deployment complete", tui.LF("duration", duration))
 	fmt.Fprintln(w, PostDeploySummary(cfg, result, allSteps, runID))
 
 	return nil

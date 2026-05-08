@@ -181,7 +181,7 @@ func runDestroy(cmd *cobra.Command, _ []string) error {
 		return runDestroyDryRun(ctx, cfg)
 	}
 
-	tui.Warn(fmt.Sprintf("this will destroy cluster '%s' and all associated resources", cfg.Cluster.Name))
+	tui.Warn("this will destroy cluster and all associated resources", tui.LF("cluster", cfg.Cluster.Name))
 
 	if err := confirmClusterMatches(destroyYes, destroyConfirmCluster, cfg.Cluster.Name, "destroy"); err != nil {
 		return err
@@ -250,7 +250,7 @@ func runDestroy(cmd *cobra.Command, _ []string) error {
 	}
 
 	duration := time.Since(startTime).Round(time.Second)
-	tui.Info(fmt.Sprintf("cluster destroyed (%s)", duration))
+	tui.Info("cluster destroyed", tui.LF("duration", duration))
 
 	return nil
 }
@@ -286,7 +286,7 @@ func runDestroyDryRun(ctx context.Context, cfg *config.Config) error {
 	tf := terraform.New(terraformDir, tfOpts...)
 	defer tf.ZeroizeEnv()
 
-	tui.Info(fmt.Sprintf("dry-run: terraform destroy plan for cluster '%s'", cfg.Cluster.Name))
+	tui.Info("dry-run: terraform destroy plan", tui.LF("cluster", cfg.Cluster.Name))
 
 	if err := tf.Init(ctx); err != nil {
 		return &errtypes.ConfigError{Msg: "terraform init failed in dry-run", Err: err}

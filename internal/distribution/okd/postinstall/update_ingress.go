@@ -191,7 +191,7 @@ func (p *Phase) collectLBEntries(
 
 	for _, ic := range lbICs {
 		svcName := fmt.Sprintf("router-%s", ic.Name)
-		p.Log.Info(fmt.Sprintf("update-ingress: waiting for %s loadbalancer ip", svcName))
+		p.Log.Info("update-ingress: waiting for loadbalancer ip", "svc", svcName)
 
 		ip, err := p.waitForServiceLB(ctx, svcName, postOpts)
 		if err != nil {
@@ -326,13 +326,13 @@ func (p *Phase) handleHostNetworkConversion(
 
 	for i := range hostNetworkICs {
 		ic := &hostNetworkICs[i]
-		p.Log.Info(fmt.Sprintf("update-ingress: converting %q from hostnetwork to loadbalancerservice...", ic.Name))
+		p.Log.Info("update-ingress: converting from hostnetwork to loadbalancerservice", "name", ic.Name)
 		if err := p.convertToLoadBalancer(ctx, ic, timeout); err != nil {
 			return convertedCount, names, fmt.Errorf("failed to convert IngressController %q: %w", ic.Name, err)
 		}
 		names[ic.Name] = true
 		convertedCount++
-		p.Log.Info(fmt.Sprintf("update-ingress: %q converted successfully", ic.Name))
+		p.Log.Info("update-ingress: converted successfully", "name", ic.Name)
 	}
 
 	return convertedCount, names, nil
@@ -434,7 +434,7 @@ func (p *Phase) convertToLoadBalancer(ctx context.Context, ic *ingressController
 		return fmt.Errorf("failed to delete IngressController %q: %w", ic.Name, err)
 	}
 
-	p.Log.Info(fmt.Sprintf("update-ingress: waiting for router-%s deployment to terminate...", ic.Name))
+	p.Log.Info("update-ingress: waiting for router deployment to terminate", "name", ic.Name)
 	if err := p.waitForRouterGone(ctx, ic.Name, timeout); err != nil {
 		return fmt.Errorf("router-%s did not terminate: %w", ic.Name, err)
 	}
@@ -570,7 +570,7 @@ func (p *Phase) attemptRollback(ctx context.Context, ic *ingressControllerInfo) 
 		return
 	}
 
-	p.Log.Info(fmt.Sprintf("update-ingress: rollback succeeded — %q restored with original strategy", ic.Name))
+	p.Log.Info("update-ingress: rollback succeeded — restored with original strategy", "name", ic.Name)
 }
 
 func (p *Phase) waitForRouterGone(ctx context.Context, icName string, timeout time.Duration) error {

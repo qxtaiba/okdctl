@@ -202,7 +202,7 @@ func (f *Flux) Verify(ctx context.Context, env *addon.Environment) error {
 	if ready == "" || ready == "0" {
 		return fmt.Errorf("flux-operator has no ready replicas")
 	}
-	env.Logger.Info(fmt.Sprintf("flux: operator ready (%s replicas)", ready))
+	env.Logger.Info("flux: operator ready", "replicas", ready)
 
 	result, err = env.Exec.Run(ctx, "oc", "get", "deployment", "source-controller",
 		"-n", "flux-system", "-o", "jsonpath={.status.readyReplicas}")
@@ -213,7 +213,7 @@ func (f *Flux) Verify(ctx context.Context, env *addon.Environment) error {
 		if scReady == "" || scReady == "0" {
 			return fmt.Errorf("source-controller has no ready replicas")
 		}
-		env.Logger.Info(fmt.Sprintf("flux: source-controller ready (%s replicas)", scReady))
+		env.Logger.Info("flux: source-controller ready", "replicas", scReady)
 	}
 
 	// Check GitRepository sync status (informational, not fatal for verify)
@@ -224,7 +224,7 @@ func (f *Flux) Verify(ctx context.Context, env *addon.Environment) error {
 		if syncStatus == k8sBoolTrue {
 			env.Logger.Info("flux: git repository synced")
 		} else {
-			env.Logger.Warn(fmt.Sprintf("flux: git repository not yet synced (status: %s)", syncStatus))
+			env.Logger.Warn("flux: git repository not yet synced", "status", syncStatus)
 		}
 	}
 

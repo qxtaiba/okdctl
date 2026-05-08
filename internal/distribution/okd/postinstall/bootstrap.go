@@ -2,7 +2,6 @@ package postinstall
 
 import (
 	"context"
-	"fmt"
 	"path/filepath"
 
 	"github.com/qxtaiba/okdctl/internal/config"
@@ -57,6 +56,6 @@ func (p *Phase) CleanupBootstrap(ctx context.Context, cfg *config.Config, opts *
 		return &errtypes.ClusterError{Msg: "bootstrap: terraform apply failed", Err: err}
 	}
 
-	p.Log.Info(fmt.Sprintf("bootstrap: vm destroyed (no longer needed for %s)", cfg.Cluster.Name))
+	p.Log.Info("bootstrap: vm destroyed", "cluster", cfg.Cluster.Name)
 	return nil
 }

@@ -246,7 +246,7 @@ func RemoveFCOSISOFromProxmox(ctx context.Context, p *RemoteISOParams, isoDir st
 			continue
 		}
 		if inUse {
-			p.Log.Warn(fmt.Sprintf("iso: %s is still referenced by a running vm — skipping removal", isoBase))
+			p.Log.Warn("iso: still referenced by a running vm — skipping removal", "iso", isoBase)
 			continue
 		}
 
@@ -256,7 +256,7 @@ func RemoveFCOSISOFromProxmox(ctx context.Context, p *RemoteISOParams, isoDir st
 			p.Log.Warn("iso: failed to remove", "iso", isoBase, "err", rmErr)
 			continue
 		}
-		p.Log.Info(fmt.Sprintf("iso: removed %s from proxmox host", isoBase))
+		p.Log.Info("iso: removed from proxmox host", "iso", isoBase)
 	}
 
 	return nil

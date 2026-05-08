@@ -160,7 +160,7 @@ func (p *Phase) setupManifestSteps(cfg *config.Config, opts *Options, clusterDir
 					return &errtypes.ConfigError{Msg: "failed to inject custom manifests", Err: err}
 				}
 				if count > 0 {
-					p.Log.Info(fmt.Sprintf("manifests: injected %d custom manifest(s) from automation/config/manifests", count))
+					p.Log.Info("manifests: injected custom manifests", "count", count)
 				}
 				return nil
 			},
@@ -229,7 +229,7 @@ func (p *Phase) setupWebSteps(cfg *config.Config, opts *Options, clusterDir stri
 					return &errtypes.ConfigError{Msg: "failed to deploy to web server", Err: err}
 				}
 				webURL := BuildIgnitionURL(cfg.HTTPServer.IgnitionServerIP, cfg.HTTPServer.Port)
-				p.Log.Info(fmt.Sprintf("ignition: deployed to web server at %s", webURL))
+				p.Log.Info("ignition: deployed to web server", "url", webURL)
 				return nil
 			},
 		},
@@ -288,7 +288,7 @@ func (p *Phase) setupInfraSteps(cfg *config.Config, opts *Options) []distributio
 					return &errtypes.ConfigError{Msg: "failed to generate Terraform variables", Err: err}
 				}
 				tfvarsPath := filepath.Join(opts.ProjectRoot, "infrastructure", "terraform", "environments", phase.GetTerraformEnv(cfg), "terraform.tfvars")
-				p.Log.Info(fmt.Sprintf("terraform: configuration written to %s", tfvarsPath))
+				p.Log.Info("terraform: configuration written", "path", tfvarsPath)
 				return nil
 			},
 		},
@@ -429,6 +429,6 @@ func (p *Phase) configureDNS(ctx context.Context, cfg *config.Config, opts *Opti
 	if err != nil {
 		return fmt.Errorf("failed to resolve dnsmasq config path: %w", err)
 	}
-	p.Log.Info(fmt.Sprintf("dns: dnsmasq configured at %s", configPath))
+	p.Log.Info("dns: dnsmasq configured", "path", configPath)
 	return nil
 }

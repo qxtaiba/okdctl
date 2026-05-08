@@ -128,7 +128,7 @@ func (p *Phase) destroyInfrastructure(ctx context.Context, opts *Options) error 
 		return &errtypes.ClusterError{Msg: "terraform init failed", Err: err}
 	}
 
-	p.Log.Info(fmt.Sprintf("terraform: destroying infrastructure in %s", opts.TerraformEnv))
+	p.Log.Info("terraform: destroying infrastructure", "env", opts.TerraformEnv)
 	p.Log.Warn("terraform: this operation cannot be undone")
 
 	if err := tf.Destroy(ctx, terraform.DestroyOptions{
