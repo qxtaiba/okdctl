@@ -67,9 +67,42 @@ type check struct {
 	fn   func(context.Context) checkResult
 }
 
+// doctorJSONCheck is one entry in the JSON output's checks array. For
+// multi-item checks, every sub-item becomes its own entry; detail is omitted
+// when empty.
+type doctorJSONCheck struct {
+	Name     string `json:"name"`
+	Severity string `json:"severity"`
+	Detail   string `json:"detail,omitempty"`
+}
+
+// doctorJSONOutput is the top-level envelope emitted by --format=json.
+type doctorJSONOutput struct {
+	Checks []doctorJSONCheck `json:"checks"`
+	Failed int               `json:"failed"`
+	Warned int               `json:"warned"`
+}
+
+func sevString(s severity) string {
+	switch s {
+	case sevPass:
+		return "ok"
+	case sevWarn:
+		return "warn"
+	case sevFail:
+		return "fail"
+	default:
+		return "unknown"
+	}
+}
+
 func runDoctor(cmd *cobra.Command, _ []string) error {
+	if err := validateFormat(doctorFormat); err != nil {
+		return err
+	}
+	quietForJSON(doctorFormat)
+
 	ctx := cmd.Context()
-	defer fmt.Println()
 
 	checks := []check{
 		{"host os", "platform and operator-mode detection", checkHostOS},
@@ -84,20 +117,62 @@ func runDoctor(cmd *cobra.Command, _ []string) error {
 		{"host ports", "53, 80, 443, 6443, 22623, 8080 available for bind", checkPorts},
 	}
 
-	fmt.Println()
-	fmt.Println("🩺 " + tui.HighlightStyle.Render(fmt.Sprintf("doctor: running %d environment checks", len(checks))))
-	fmt.Println()
-
+	type collectedResult struct {
+		c check
+		r checkResult
+	}
+	results := make([]collectedResult, 0, len(checks))
 	var fails, warns int
 	for _, c := range checks {
 		r := c.fn(ctx)
-		printResult(c, r)
+		results = append(results, collectedResult{c, r})
 		switch r.sev {
 		case sevFail:
 			fails++
 		case sevWarn:
 			warns++
 		}
+	}
+
+	if doctorFormat == outputJSON {
+		var jsonChecks []doctorJSONCheck
+		for _, cr := range results {
+			if len(cr.r.items) > 0 {
+				for _, item := range cr.r.items {
+					entry := doctorJSONCheck{
+						Name:     cr.c.name + "/" + item.name,
+						Severity: sevString(item.sev),
+					}
+					if item.note != "" {
+						entry.Detail = item.note
+					}
+					jsonChecks = append(jsonChecks, entry)
+				}
+			} else {
+				jsonChecks = append(jsonChecks, doctorJSONCheck{
+					Name:     cr.c.name,
+					Severity: sevString(cr.r.sev),
+					Detail:   cr.r.detail,
+				})
+			}
+		}
+		out := doctorJSONOutput{Checks: jsonChecks, Failed: fails, Warned: warns}
+		if encErr := writeJSON(cmd.OutOrStdout(), out); encErr != nil {
+			return encErr
+		}
+		if fails > 0 {
+			return &errtypes.ConfigError{Msg: "preflight checks failed"}
+		}
+		return nil
+	}
+
+	defer fmt.Println()
+	fmt.Println()
+	fmt.Println("🩺 " + tui.HighlightStyle.Render(fmt.Sprintf("doctor: running %d environment checks", len(checks))))
+	fmt.Println()
+
+	for _, cr := range results {
+		printResult(cr.c, cr.r)
 	}
 
 	switch {

@@ -336,7 +336,7 @@ func bundleDoctor(ctx context.Context, addFile func(string, []byte) error) manif
 	if data == nil {
 		return manifestEntry{Name: categoryDoctor, Status: bundleStatusSkipped, Message: "doctor is only supported on linux"}
 	}
-	if err := addFile("doctor.txt", data); err != nil {
+	if err := addFile("doctor.json", data); err != nil {
 		return manifestEntry{Name: categoryDoctor, Status: bundleStatusFailed, Message: err.Error()}
 	}
 	return manifestEntry{Name: categoryDoctor, Status: bundleStatusOK}
