@@ -22,10 +22,10 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/spf13/cobra"
 
 	"github.com/qxtaiba/okdctl/internal/errtypes"
+	"github.com/qxtaiba/okdctl/internal/system"
 	"github.com/qxtaiba/okdctl/internal/tui"
 	"github.com/qxtaiba/okdctl/internal/version"
 )
@@ -84,7 +84,7 @@ func Execute() {
 }
 
 func execute() (code int) {
-	tui.SetRunID(uuid.NewString())
+	tui.SetRunID(system.NewUUIDv4())
 	start := time.Now()
 	tui.Info("okdctl: started", tui.LF("argv", strings.Join(os.Args[1:], " ")))
 	defer func() {
