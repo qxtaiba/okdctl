@@ -120,25 +120,15 @@ func (p *Phase) ConfigureHAProxy(ctx context.Context, cfg *config.Config, _ *Opt
 		hasBackup = true
 	}
 
+	restartFn := func() error {
+		return system.ManageService(ctx, system.ServiceRestart, "haproxy", "haproxy load balancer")
+	}
 	rollback := func(reason string, cause error) error {
 		if !hasBackup {
 			return cause
 		}
-		p.Log.Warn(fmt.Sprintf("haproxy: %s, restoring from backup", reason))
-		backupData, readErr := os.ReadFile(haproxyBackupPath)
-		if readErr != nil {
-			return errors.Join(cause, fmt.Errorf("rollback read backup failed: %w", readErr))
-		}
-		if restoreErr := system.AtomicWriteString(haproxyConfigPath, string(backupData), 0o644); restoreErr != nil {
-			return errors.Join(cause, fmt.Errorf("rollback restore failed: %w", restoreErr))
-		}
-		// Restart with the old config so the node isn't left serving the
-		// rejected one.
-		if restartErr := system.ManageService(ctx, system.ServiceRestart, "haproxy", "haproxy load balancer"); restartErr != nil {
-			p.Log.Warn("haproxy: rollback restart failed", "err", restartErr)
-			return errors.Join(cause, fmt.Errorf("rollback restart failed: %w", restartErr))
-		}
-		return cause
+		p.Log.Warn("haproxy: restoring from backup", "reason", reason)
+		return attemptHAProxyRollback(cause, haproxyConfigPath, haproxyBackupPath, system.AtomicWriteString, restartFn)
 	}
 
 	if err := p.installHAProxyConfig(ctx, tmpPath); err != nil {
@@ -151,6 +141,28 @@ func (p *Phase) ConfigureHAProxy(ctx context.Context, cfg *config.Config, _ *Opt
 
 	p.Log.Info("haproxy: configuration validated, service enabled and restarted")
 	return nil
+}
+
+// attemptHAProxyRollback reads backupPath, writes its content to cfgPath via
+// writeFn, then calls restartFn. On any failure cause is joined with the
+// rollback error; on success only cause is returned.
+func attemptHAProxyRollback(
+	cause error,
+	cfgPath, backupPath string,
+	writeFn func(string, string, os.FileMode) error,
+	restartFn func() error,
+) error {
+	backupData, readErr := os.ReadFile(backupPath)
+	if readErr != nil {
+		return errors.Join(cause, fmt.Errorf("rollback read backup failed: %w", readErr))
+	}
+	if restoreErr := writeFn(cfgPath, string(backupData), 0o644); restoreErr != nil {
+		return errors.Join(cause, fmt.Errorf("rollback restore failed: %w", restoreErr))
+	}
+	if restartErr := restartFn(); restartErr != nil {
+		return errors.Join(cause, fmt.Errorf("rollback restart failed: %w", restartErr))
+	}
+	return cause
 }
 
 // VerifyHAProxyPorts checks that haproxy is listening on the API, machine
