@@ -12,8 +12,8 @@
 # Environment variables:
 #   VERSION       - pin to a specific release, e.g. VERSION=v0.1.0 (default: latest)
 #   INSTALL_DIR   - where to put the binary (default: /usr/local/bin)
-#   INSECURE      - set to "1" to skip cosign signature verification (NOT recommended);
-#                   SHA256 verification always runs and sha256sum (coreutils) is required.
+#   INSECURE      - set to "1" to skip cosign signature verification; requires cosign to
+#                   be installed as a trust anchor — refused when cosign is absent.
 #   GITHUB_TOKEN  - bearer token injected when resolving the latest release;
 #                   lifts the GitHub API rate limit from 60 to 5 000 req/hr/IP,
 #                   which matters on shared CI runners with many co-tenants.
@@ -58,9 +58,11 @@ if command -v cosign >/dev/null 2>&1; then
 fi
 
 if [ -n "$INSECURE" ]; then
+    if [ -z "$COSIGN_CMD" ]; then
+        die "INSECURE=1 refused: cosign is not installed and no alternative trust anchor exists; install cosign or unset INSECURE"
+    fi
     printf '\033[31mWARNING: INSECURE=1 is set — cosign signature verification SKIPPED.\033[0m\n' >&2
-    printf '\033[31m         SHA256 verification still runs; only cosign is bypassed.\033[0m\n' >&2
-    printf '\033[31m         Unset INSECURE to re-enable cosign verification.\033[0m\n' >&2
+    printf '\033[31m         SHA256 verification still runs; unset INSECURE to re-enable cosign.\033[0m\n' >&2
 fi
 
 # okdctl is Linux-only. Refuse to install on anything else.
@@ -117,8 +119,8 @@ curl_safe -sSfL -o "$TMP/SHA256SUMS" "$SHA_URL" ||
     die "failed to download SHA256SUMS from $SHA_URL"
 
 # Cosign verify-blob against the sigstore-published signature. Runs when
-# cosign is present and INSECURE is unset; SHA256 verification below always
-# runs, so INSECURE=1 only sheds the cosign layer.
+# cosign is present and INSECURE is unset. INSECURE=1 is only reachable here
+# when cosign is installed (enforced above), so the shed layer is a user choice.
 if [ -n "$COSIGN_CMD" ] && [ -z "$INSECURE" ]; then
     info "verifying cosign signature on SHA256SUMS"
     curl_safe -sSfL -o "$TMP/SHA256SUMS.sig" "$BASE_URL/SHA256SUMS.sig" ||
