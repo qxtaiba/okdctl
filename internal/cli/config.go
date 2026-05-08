@@ -83,7 +83,7 @@ func redactConfig(cfg *config.Config) config.Config {
 // redactValue walks v (must be addressable) masking secret-keyed string fields.
 func redactValue(v reflect.Value) {
 	switch v.Kind() {
-	case reflect.Ptr:
+	case reflect.Pointer:
 		if v.IsNil() {
 			return
 		}
@@ -106,7 +106,7 @@ func redactValue(v reflect.Value) {
 				if logutil.KeyIsSecret(name) && fv.String() != "" {
 					fv.SetString("***")
 				}
-			case reflect.Ptr:
+			case reflect.Pointer:
 				if fv.IsNil() {
 					continue
 				}
