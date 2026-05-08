@@ -76,12 +76,25 @@ func calculateTotalSize(files []string) int64 {
 	return totalSize
 }
 
-// uploadISOsViaSCP scps ISOs to the Proxmox host. The first call uses
-// StrictHostKeyChecking=accept-new (TOFU); a planned proxmox.host_fingerprint
-// config field will pre-seed known_hosts and close that window. See
-// README §security-considerations.
-func uploadISOsViaSCP(ctx context.Context, cmdRunner *executor.Executor, isoFiles []string, user, host, remotePath string) error {
-	args := []string{"-o", "StrictHostKeyChecking=accept-new"}
+// uploadISOsViaSCP scps ISOs to the Proxmox host. When knownHostsPath is
+// non-empty the scp call enforces strict host-key checking against that file,
+// matching sshBaseArgs policy in phase/ssh.go. An empty path falls back to
+// accept-new TOFU, preserving behaviour for operators without a configured
+// fingerprint.
+func uploadISOsViaSCP(ctx context.Context, cmdRunner *executor.Executor, isoFiles []string, user, host, remotePath, knownHostsPath string) error {
+	var args []string
+	if knownHostsPath != "" {
+		args = []string{
+			"-o", "UserKnownHostsFile=" + knownHostsPath,
+			"-o", "StrictHostKeyChecking=yes",
+			"-o", "BatchMode=yes",
+		}
+	} else {
+		args = []string{
+			"-o", "StrictHostKeyChecking=accept-new",
+			"-o", "BatchMode=yes",
+		}
+	}
 	args = append(args, isoFiles...)
 	args = append(args, fmt.Sprintf("%s@%s:%s/", user, host, remotePath))
 
@@ -138,7 +151,7 @@ func (p *Phase) UploadCustomISOsToProxmox(ctx context.Context, cfg *config.Confi
 	totalSizeMB := float64(calculateTotalSize(toUpload)) / 1024 / 1024
 	p.Log.Info("iso: uploading", "count", len(toUpload), "size_mb", fmt.Sprintf("%.1f", totalSizeMB), "user", user, "host", host, "path", remotePath)
 
-	if err := uploadISOsViaSCP(ctx, p.Exec, toUpload, user, host, remotePath); err != nil {
+	if err := uploadISOsViaSCP(ctx, p.Exec, toUpload, user, host, remotePath, knownHostsPath); err != nil {
 		return &errtypes.NetworkError{Msg: "scp upload to proxmox failed", Err: err}
 	}
 

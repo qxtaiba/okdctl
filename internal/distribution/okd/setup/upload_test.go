@@ -56,7 +56,7 @@ func TestUploadISOsViaSCP_argvShape(t *testing.T) {
 	exec := newUploadExecutor()
 	exec.Stdout = &buf
 
-	if err := uploadISOsViaSCP(context.Background(), exec, isoFiles, user, host, remotePath); err != nil {
+	if err := uploadISOsViaSCP(context.Background(), exec, isoFiles, user, host, remotePath, ""); err != nil {
 		t.Fatalf("uploadISOsViaSCP: %v", err)
 	}
 
@@ -99,6 +99,45 @@ func TestUploadISOsViaSCP_argvShape(t *testing.T) {
 	}
 }
 
+func TestUploadISOsViaSCP_pinnedUsesStrictChecking(t *testing.T) {
+	installFakeSCP(t)
+	const (
+		user           = "root"
+		host           = "pve.example"
+		remotePath     = "/var/lib/vz/template/iso"
+		knownHostsPath = "/tmp/okdctl-known-hosts-pinned"
+	)
+	isoFiles := []string{"/tmp/isos/coreos.iso"}
+
+	var buf bytes.Buffer
+	exec := newUploadExecutor()
+	exec.Stdout = &buf
+
+	if err := uploadISOsViaSCP(context.Background(), exec, isoFiles, user, host, remotePath, knownHostsPath); err != nil {
+		t.Fatalf("uploadISOsViaSCP: %v", err)
+	}
+
+	lines := strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
+
+	wantOpts := []string{
+		"UserKnownHostsFile=" + knownHostsPath,
+		"StrictHostKeyChecking=yes",
+		"BatchMode=yes",
+	}
+	for _, opt := range wantOpts {
+		found := false
+		for i, l := range lines {
+			if l == "-o" && i+1 < len(lines) && lines[i+1] == opt {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("argv missing -o %s pair; got: %v", opt, lines)
+		}
+	}
+}
+
 func TestUploadISOsViaSCP_spaceInFilename(t *testing.T) {
 	installFakeSCP(t)
 
@@ -114,7 +153,7 @@ func TestUploadISOsViaSCP_spaceInFilename(t *testing.T) {
 	exec := newUploadExecutor()
 	exec.Stdout = &buf
 
-	if err := uploadISOsViaSCP(context.Background(), exec, isoFiles, user, host, remotePath); err != nil {
+	if err := uploadISOsViaSCP(context.Background(), exec, isoFiles, user, host, remotePath, ""); err != nil {
 		t.Fatalf("uploadISOsViaSCP: %v", err)
 	}
 
