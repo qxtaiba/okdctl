@@ -596,7 +596,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sec:0f076161:cred-no-zeroize` — cred no zeroize
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-0f076161-dryrun-zeroize  
 **Severity:** minor  
 **Cluster:** credentials — related: sec:6424733c:cred-no-zeroize  
 **Evidence:** `internal/cli/destroy.go:172-175`  
@@ -1033,7 +1033,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `iac:e076e43c:sh-curl-bypass-wrapper` — sh curl bypass wrapper
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/iac-e076e43c-install-sh-hardening  
 **Severity:** minor  
 **Cluster:** install-sh-fail-closed  
 **Evidence:** `scripts/install.sh:94-98`  
@@ -1063,7 +1063,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `iac:e076e43c:sh-tar-no-confinement` — sh tar no confinement
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/iac-e076e43c-install-sh-hardening  
 **Severity:** suggestion  
 **Cluster:** install-sh-integrity  
 **Evidence:** `scripts/install.sh:166-170`  
