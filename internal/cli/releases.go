@@ -136,7 +136,7 @@ func fetchFlatVersions(ctx context.Context) ([]releases.OKDVersion, error) {
 	if err != nil {
 		return nil, fmt.Errorf("fetch OKD versions: %w", err)
 	}
-	var out []releases.OKDVersion
+	out := make([]releases.OKDVersion, 0, len(series))
 	for _, s := range series {
 		out = append(out, s.Versions...)
 	}
