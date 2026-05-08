@@ -44,7 +44,6 @@ func (p *Phase) postinstallSteps(cfg *config.Config, opts *Options, pctx *distri
 			ID: StepCleanupBootstrap, Name: "cleanup bootstrap vm",
 			ReRunSafe: distribution.ReRunSafeYes,
 			Desc:      "destroying bootstrap vm via terraform",
-			NonFatal:  true,
 			Exec: func(ctx context.Context) error {
 				if err := p.CleanupBootstrap(ctx, cfg, opts); err != nil {
 					return &errtypes.ClusterError{Msg: "bootstrap cleanup failed", Err: err}
@@ -54,7 +53,6 @@ func (p *Phase) postinstallSteps(cfg *config.Config, opts *Options, pctx *distri
 				})
 				return nil
 			},
-			OnError: phase.WarnOnError(p.Log, "bootstrap: cleanup failed (non-critical)"),
 		},
 		{
 			ID: StepVerifyKubeVIP, Name: "verify kube-vip",
