@@ -23,10 +23,16 @@ const Redacted = "[redacted]"
 var secretKeyFragments = []string{"password", "token", "secret", "api_key", "apikey"}
 
 // RedactHandler wraps an inner slog.Handler and rewrites attr values that
-// look like credentials — ProxmoxCredentials, byte slices keyed with
-// password/token/secret, or *url.URL values carrying userinfo. Install via
-// tui.SimpleLogger so every slog caller inherits the sweep without touching
-// call sites.
+// look like credentials — *url.URL values carrying userinfo, or any type
+// implementing Redacted() any — and rewrites attrs whose keys match
+// secretKeyFragments to the Redacted sentinel. Install via tui.SimpleLogger
+// so every slog caller inherits the sweep without touching call sites.
+//
+// Credential types (e.g. ProxmoxCredentials) MUST implement Redacted() any
+// and return a struct that omits all secret fields. This is the only
+// mechanism that protects credentials passed under a benign slog key such
+// as slog.Any("creds", &credentials.ProxmoxCredentials{...}); key-based
+// redaction alone cannot protect them.
 type RedactHandler struct {
 	inner slog.Handler
 }

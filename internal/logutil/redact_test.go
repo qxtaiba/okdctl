@@ -120,6 +120,55 @@ func TestRedactHandler_RedactedInterfaceHonored(t *testing.T) {
 	}
 }
 
+// credStub mirrors the production ProxmoxCredentials shape: a struct with a
+// secret field, plus Redacted() any that omits it.
+type credStub struct {
+	Endpoint string
+	Password string
+}
+
+type safeCredStub struct{ Endpoint string }
+
+func (c *credStub) Redacted() any {
+	if c == nil {
+		return nil
+	}
+	return safeCredStub{Endpoint: c.Endpoint}
+}
+
+// TestRedactHandler_StructFieldsStrippedViaBenignKey covers the failure mode
+// from obs:41a9d4eb: a credential struct passed under a benign key like
+// "creds" must have its secret fields stripped via Redacted().
+func TestRedactHandler_StructFieldsStrippedViaBenignKey(t *testing.T) {
+	cred := &credStub{Endpoint: "https://host:8006", Password: "hunter2"}
+	var buf bytes.Buffer
+	jsonLogger(&buf).Info("msg", slog.Any("creds", cred))
+	m := parseOne(t, &buf)
+	credsVal, ok := m["creds"].(map[string]any)
+	if !ok {
+		t.Fatalf("creds is %T %v, want JSON object", m["creds"], m["creds"])
+	}
+	if _, hasPassword := credsVal["Password"]; hasPassword {
+		t.Errorf("Password field must be absent after Redacted() strip, got %v", credsVal)
+	}
+	if ep, ok := credsVal["Endpoint"].(string); !ok || ep != "https://host:8006" {
+		t.Errorf("Endpoint = %v; want %q", credsVal["Endpoint"], "https://host:8006")
+	}
+}
+
+func TestRedactHandler_NilRedactablePassesThrough(t *testing.T) {
+	defer func() {
+		if p := recover(); p != nil {
+			t.Errorf("panic on nil credStub: %v", p)
+		}
+	}()
+	var cred *credStub
+	out := redactAttr(slog.Any("creds", cred))
+	if got := out.Value.Any(); got != nil {
+		t.Errorf("nil credStub Redacted() should return nil, got %v", got)
+	}
+}
+
 // TestRedactHandler_WithAttrsRedacts covers Fix case (7): attrs added
 // via logger.With are redacted before reaching the inner sink.
 func TestRedactHandler_WithAttrsRedacts(t *testing.T) {
