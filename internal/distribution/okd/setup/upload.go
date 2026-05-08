@@ -151,8 +151,10 @@ func (p *Phase) isoUploadAlreadyDone(ctx context.Context, cfg *config.Config, op
 		return false, nil
 	}
 	isoFiles, err := collectISOFiles(isoDir)
+	// Conservative: any error or empty list means "not done" so Exec runs and
+	// surfaces the real failure mode.
 	if err != nil || len(isoFiles) == 0 {
-		return false, nil
+		return false, nil //nolint:nilerr // intentional: caller treats false as "Exec must run"
 	}
 	host := phase.ProxmoxBareHost(cfg.Provider.Proxmox.Host)
 	remotePath := phase.DefaultProxmoxISODir
