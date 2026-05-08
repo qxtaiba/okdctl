@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
+	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
@@ -115,6 +116,7 @@ func DetectBackend(ctx context.Context, logger *slog.Logger) Backend {
 // Configure opens each port in ports on the active backend. When permanent
 // is true, firewalld rules persist across reloads. A None backend no-ops.
 func Configure(ctx context.Context, ports []Port, permanent bool, logger *slog.Logger) error {
+	logger = logutil.OrNop(logger)
 	backend := DetectBackend(ctx, logger)
 
 	if backend == None {
@@ -160,6 +162,7 @@ func validatePort(port Port) error {
 }
 
 func openPort(ctx context.Context, backend Backend, port Port, permanent bool, logger *slog.Logger) error {
+	logger = logutil.OrNop(logger)
 	if err := modifyPort(ctx, backend, port, permanent, actionAdd); err != nil {
 		return err
 	}
@@ -170,6 +173,7 @@ func openPort(ctx context.Context, backend Backend, port Port, permanent bool, l
 // RemoveRules deletes each port in ports from the active backend. Missing
 // rules are logged as warnings rather than returned as errors.
 func RemoveRules(ctx context.Context, ports []Port, permanent bool, logger *slog.Logger) error {
+	logger = logutil.OrNop(logger)
 	backend := DetectBackend(ctx, logger)
 
 	if backend == None {
