@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/spf13/cobra"
@@ -51,6 +52,7 @@ func init() {
 
 func runDeploy(cmd *cobra.Command, _ []string) error {
 	ctx := cmd.Context()
+	out := cmd.OutOrStdout()
 
 	if deployMetricsAllowNetwork && deployMetricsAddr == "" {
 		return &errtypes.ConfigError{
@@ -86,11 +88,11 @@ func runDeploy(cmd *cobra.Command, _ []string) error {
 	}
 
 	if deployDryRun {
-		return runDeployDryRun(ctx, cfg)
+		return runDeployDryRun(ctx, cfg, out)
 	}
 
 	if deployYes {
-		return saveConfig(cfg, deployOutputFile)
+		return saveConfig(cfg, deployOutputFile, out)
 	}
 
 	result, welcomeMode, err := runWizardWithMode(ctx, cfg, configExists)
@@ -104,7 +106,7 @@ func runDeploy(cmd *cobra.Command, _ []string) error {
 	}
 
 	if welcomeMode == steps.WelcomeModeDeploy {
-		return runFullDeployment(ctx, cfg)
+		return runFullDeployment(ctx, cfg, out)
 	}
 
 	cfg = result.Config
@@ -120,17 +122,17 @@ func runDeploy(cmd *cobra.Command, _ []string) error {
 	// The defer above is a safety net; this is the primary clear.
 	clearConfigCredentials(cfg)
 
-	if err := saveConfig(cfg, deployOutputFile); err != nil {
+	if err := saveConfig(cfg, deployOutputFile, out); err != nil {
 		return fmt.Errorf("failed to save configuration: %w", err)
 	}
 
 	switch result.Action {
 	case wizard.ActionDeploy:
-		if err := runFullDeployment(ctx, cfg); err != nil {
+		if err := runFullDeployment(ctx, cfg, out); err != nil {
 			return err
 		}
 	case wizard.ActionExit:
-		showExitSummary(deployOutputFile)
+		showExitSummary(deployOutputFile, out)
 	}
 
 	return nil
@@ -139,7 +141,7 @@ func runDeploy(cmd *cobra.Command, _ []string) error {
 // runDeployDryRun previews a deploy: runs terraform plan and lists every phase
 // step. Requires terraform.tfvars from a prior setup run; absent tfvars causes
 // plan failure and exits 2.
-func runDeployDryRun(ctx context.Context, cfg *config.Config) error {
+func runDeployDryRun(ctx context.Context, cfg *config.Config, w io.Writer) error {
 	envPath := credentials.EnvFilePath(deployOutputFile)
 	if err := credentials.LoadEnvFile(envPath); err != nil {
 		return fmt.Errorf("load env file %s: %w", envPath, err)
@@ -178,7 +180,7 @@ func runDeployDryRun(ctx context.Context, cfg *config.Config) error {
 		return &errtypes.ConfigError{Msg: "dry-run: terraform plan failed", Err: planErr}
 	}
 
-	fmt.Println(DryRunSummary("deploy step listing", deployDryRunSteps()))
+	fmt.Fprintln(w, DryRunSummary("deploy step listing", deployDryRunSteps()))
 	tui.Info("dry-run: re-run without --dry-run to execute deploy")
 	return nil
 }
@@ -221,8 +223,8 @@ func deployDryRunSteps() []DryRunStep {
 	}
 }
 
-func saveConfig(cfg *config.Config, path string) error {
-	if result := validateConfig(cfg); !result.IsValid() {
+func saveConfig(cfg *config.Config, path string, w io.Writer) error {
+	if result := validateConfig(cfg, w); !result.IsValid() {
 		tui.Warn("configuration has validation warnings but will still be saved")
 	}
 
@@ -234,9 +236,9 @@ func saveConfig(cfg *config.Config, path string) error {
 	return nil
 }
 
-func runFullDeployment(ctx context.Context, cfg *config.Config) error {
+func runFullDeployment(ctx context.Context, cfg *config.Config, w io.Writer) error {
 	if deployDryRun {
-		return runDeployDryRun(ctx, cfg)
+		return runDeployDryRun(ctx, cfg, w)
 	}
 
 	envPath := credentials.EnvFilePath(deployOutputFile)
@@ -258,11 +260,11 @@ func runFullDeployment(ctx context.Context, cfg *config.Config) error {
 		Credentials:         creds,
 		MetricsAddr:         deployMetricsAddr,
 		AllowNetworkMetrics: deployMetricsAllowNetwork,
-	})
+	}, w)
 }
 
-func showExitSummary(path string) {
-	fmt.Println()
+func showExitSummary(path string, w io.Writer) {
+	fmt.Fprintln(w)
 	tui.Info(fmt.Sprintf("configuration saved to %s", path))
 }
 

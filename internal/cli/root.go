@@ -236,8 +236,8 @@ func exitCodeFor(err error) int {
 var versionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "Print version, git commit, build date",
-	Run: func(_ *cobra.Command, _ []string) {
-		fmt.Printf("okdctl %s\nGit Commit: %s\nBuild Date: %s\nGo Version: %s\nPlatform:   %s\n",
+	Run: func(cmd *cobra.Command, _ []string) {
+		fmt.Fprintf(cmd.OutOrStdout(), "okdctl %s\nGit Commit: %s\nBuild Date: %s\nGo Version: %s\nPlatform:   %s\n",
 			version.Version, version.GitCommit, version.BuildDate, version.GoVersion, version.Platform)
 	},
 }
