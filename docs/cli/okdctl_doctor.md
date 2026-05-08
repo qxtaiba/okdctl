@@ -19,6 +19,8 @@ with a bracketed label:
 Exit code is 0 if there are no [fail] results ([warn] is tolerated),
 2 (configuration error) otherwise. Designed to be rerun until clean.
 
+Pass --format=json for machine-readable output (see docs/cli/json-schema.md).
+
 See docs/doctor-checks.md for per-check fail messages and fix guidance.
 
 ```
@@ -29,12 +31,14 @@ okdctl doctor [flags]
 
 ```
   okdctl doctor
+  okdctl doctor --format json | jq '.failed'
 ```
 
 ### Options
 
 ```
-  -h, --help   help for doctor
+      --format string   output format: text|json (default "text")
+  -h, --help            help for doctor
 ```
 
 ### Options inherited from parent commands
