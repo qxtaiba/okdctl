@@ -35,6 +35,58 @@ func TestRemoveHAProxy_EmptyVIPSkipsVerify(t *testing.T) {
 	}
 }
 
+// TestRemoveHAProxy_HappyPath_ConfigFileRemoved verifies that RemoveHAProxy
+// deletes haproxyConfigPath when the file exists and vip is empty.
+func TestRemoveHAProxy_HappyPath_ConfigFileRemoved(t *testing.T) {
+	cfgFile := filepath.Join(t.TempDir(), "haproxy.cfg")
+	if err := os.WriteFile(cfgFile, []byte("# stub"), 0o644); err != nil {
+		t.Fatalf("write stub config: %v", err)
+	}
+
+	origConfig := haproxyConfigPath
+	t.Cleanup(func() { haproxyConfigPath = origConfig })
+	haproxyConfigPath = cfgFile
+
+	p := New(executor.New(), logutil.NopLogger, "test")
+	if err := p.RemoveHAProxy(context.Background(), "", t.TempDir()); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if _, err := os.Stat(cfgFile); !os.IsNotExist(err) {
+		t.Errorf("haproxy config still present after RemoveHAProxy")
+	}
+}
+
+// TestRemoveHAProxy_ConfigRemoveAllError_DoesNotAbort verifies that an
+// os.RemoveAll failure (unwritable parent dir) is logged as a warning and
+// does not cause RemoveHAProxy to return an error.
+func TestRemoveHAProxy_ConfigRemoveAllError_DoesNotAbort(t *testing.T) {
+	if os.Getuid() == 0 {
+		t.Skip("root bypasses 0o555 perm; resilience branch unreachable as root")
+	}
+	parentDir := t.TempDir()
+	protectedDir := filepath.Join(parentDir, "protected")
+	if err := os.Mkdir(protectedDir, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	cfgFile := filepath.Join(protectedDir, "haproxy.cfg")
+	if err := os.WriteFile(cfgFile, []byte("# stub"), 0o644); err != nil {
+		t.Fatalf("write stub config: %v", err)
+	}
+	if err := os.Chmod(protectedDir, 0o555); err != nil {
+		t.Fatalf("chmod protected dir: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(protectedDir, 0o755) })
+
+	origConfig := haproxyConfigPath
+	t.Cleanup(func() { haproxyConfigPath = origConfig })
+	haproxyConfigPath = cfgFile
+
+	p := New(executor.New(), logutil.NopLogger, "test")
+	if err := p.RemoveHAProxy(context.Background(), "", t.TempDir()); err != nil {
+		t.Fatalf("RemoveHAProxy must not abort on os.RemoveAll failure; got: %v", err)
+	}
+}
+
 // TestRemoveHAProxy_KubeVIPHealthcheck verifies CA-pool handling in
 // RemoveHAProxy. With kubeconfig present, the CA-verified http.Client lets
 // the VIP /healthz check succeed and RemoveHAProxy advances to the oc
