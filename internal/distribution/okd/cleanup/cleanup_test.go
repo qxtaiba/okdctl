@@ -18,9 +18,8 @@ func TestExecute_UnknownKind(t *testing.T) {
 	opts := &Options{
 		BaseOptions: phase.BaseOptions{WorkDir: t.TempDir()},
 		Kind:        "unknown",
-		Logger:      logutil.NopLogger,
 	}
-	err := execute(context.Background(), opts)
+	err := execute(context.Background(), opts, logutil.NopLogger)
 	if err == nil {
 		t.Fatal("expected error for unknown kind")
 	}
@@ -47,10 +46,9 @@ func TestExecute_WorkOnlyKindScopesToWorkDirOnly(t *testing.T) {
 		BaseOptions:    phase.BaseOptions{WorkDir: workDir, ProjectRoot: t.TempDir()},
 		Kind:           WorkOnly,
 		PreserveConfig: false,
-		Logger:         logutil.NopLogger,
 	}
 
-	if err := execute(context.Background(), opts); err != nil {
+	if err := execute(context.Background(), opts, logutil.NopLogger); err != nil {
 		t.Errorf("WorkOnly run errored: %v", err)
 	}
 	if _, err := os.Stat(workDir); !os.IsNotExist(err) {
@@ -74,10 +72,9 @@ func TestExecute_WebOnlyKindScopesToWebServerOnly(t *testing.T) {
 		BaseOptions:    phase.BaseOptions{WorkDir: t.TempDir()},
 		Kind:           WebOnly,
 		HTTPServerRoot: httpRoot,
-		Logger:         logutil.NopLogger,
 	}
 
-	if err := execute(context.Background(), opts); err != nil {
+	if err := execute(context.Background(), opts, logutil.NopLogger); err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
 	entries, _ := os.ReadDir(ignDir)
@@ -107,10 +104,9 @@ func TestExecute_TerraformOnlyPreservesTFState(t *testing.T) {
 			TerraformEnv: "production",
 		},
 		Kind:   TerraformOnly,
-		Logger: logutil.NopLogger,
 	}
 
-	if err := execute(context.Background(), opts); err != nil {
+	if err := execute(context.Background(), opts, logutil.NopLogger); err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
 	body, err := os.ReadFile(filepath.Join(envDir, "terraform.tfstate"))
@@ -126,9 +122,8 @@ func TestExecute_NilLoggerOk(t *testing.T) {
 	opts := &Options{
 		BaseOptions: phase.BaseOptions{WorkDir: t.TempDir()},
 		Kind:        WorkOnly,
-		Logger:      nil, // must not panic; Options.getLogger handles nil
 	}
-	if err := execute(context.Background(), opts); err != nil {
+	if err := execute(context.Background(), opts, logutil.NopLogger); err != nil {
 		t.Errorf("nil logger caused error: %v", err)
 	}
 }
@@ -182,7 +177,6 @@ func fullOptsWithFreshDirs(t *testing.T) *Options {
 		Kind:           Full,
 		HTTPServerRoot: t.TempDir(),
 		HAProxyConfig:  filepath.Join(t.TempDir(), "haproxy.cfg"),
-		Logger:         logutil.NopLogger,
 	}
 }
 
@@ -247,10 +241,9 @@ func TestExecute_FullKind_AllStepsRun(t *testing.T) {
 		HTTPServerRoot: httpRoot,
 		HAProxyConfig:  filepath.Join(t.TempDir(), "haproxy.cfg"),
 		RemovePackages: false,
-		Logger:         logutil.NopLogger,
 	}
 
-	if err := execute(context.Background(), opts); err != nil {
+	if err := execute(context.Background(), opts, logutil.NopLogger); err != nil {
 		t.Errorf("Full kind errored unexpectedly: %v", err)
 	}
 	if _, err := os.Stat(workDir); !os.IsNotExist(err) {
@@ -305,10 +298,9 @@ func TestExecute_FullKind_AggregatesErrors(t *testing.T) {
 		HTTPServerRoot: httpRoot,
 		HAProxyConfig:  filepath.Join(t.TempDir(), "haproxy.cfg"),
 		RemovePackages: false,
-		Logger:         logutil.NopLogger,
 	}
 
-	err := execute(context.Background(), opts)
+	err := execute(context.Background(), opts, logutil.NopLogger)
 	if err == nil {
 		t.Fatal("expected error from Full kind with bad terraform environments path")
 	}
@@ -331,7 +323,7 @@ func TestExecute_FullKind_RemovePackagesGating(t *testing.T) {
 		opts.RemovePackages = false
 		opts.BinDir = binDir
 
-		if err := execute(context.Background(), opts); err != nil {
+		if err := execute(context.Background(), opts, logutil.NopLogger); err != nil {
 			t.Errorf("unexpected error: %v", err)
 		}
 		assertPkgNotCalled(t, binDir, "coreos-installer")
@@ -343,7 +335,7 @@ func TestExecute_FullKind_RemovePackagesGating(t *testing.T) {
 		opts.RemovePackages = true
 		opts.BinDir = binDir
 
-		if err := execute(context.Background(), opts); err != nil {
+		if err := execute(context.Background(), opts, logutil.NopLogger); err != nil {
 			t.Errorf("unexpected error: %v", err)
 		}
 		assertPkgCalled(t, binDir, "coreos-installer")

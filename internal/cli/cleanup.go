@@ -112,6 +112,7 @@ func runCleanup(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
+	logger := tui.SimpleLogger()
 	opts := &cleanup.Options{
 		BaseOptions: phase.BaseOptions{
 			WorkDir:      workDir,
@@ -126,14 +127,13 @@ func runCleanup(cmd *cobra.Command, _ []string) error {
 		PreserveConfig: false,
 		RemovePackages: false,
 		BinDir:         phase.ResolveBinDir(cfg),
-		Logger:         tui.SimpleLogger(),
 	}
 
 	tui.Info("cleaning up cluster artifacts...")
 	startTime := time.Now()
 
 	exec := executor.New(executor.WithWorkDir(projectRoot))
-	if err := cleanup.New(exec, opts.Logger, version.Version).Execute(ctx, opts); err != nil {
+	if err := cleanup.New(exec, logger, version.Version).Execute(ctx, opts, cleanup.WithLogger(logger)); err != nil {
 		return err
 	}
 

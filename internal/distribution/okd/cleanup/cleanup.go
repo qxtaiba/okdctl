@@ -82,11 +82,17 @@ type Options struct {
 	ClusterName    string
 	RemovePackages bool
 	BinDir         string
-	Logger         *slog.Logger
 }
 
-func (opts *Options) getLogger() *slog.Logger {
-	return logutil.OrNop(opts.Logger)
+// cleanupConfig carries the resolved logger applied via WithLogger.
+type cleanupConfig struct{ logger *slog.Logger }
+
+// Option configures optional knobs on an Execute call.
+type Option func(*cleanupConfig)
+
+// WithLogger injects a structured logger for the cleanup run; nil falls back to logutil.NopLogger.
+func WithLogger(l *slog.Logger) Option {
+	return func(c *cleanupConfig) { c.logger = logutil.OrNop(l) }
 }
 
 // Phase drives a cleanup run.
@@ -106,8 +112,12 @@ func New(exec *executor.Executor, logger *slog.Logger, version string) *Phase {
 // Execute runs the cleanup steps selected by opts.Kind. Individual step
 // failures are accumulated and returned as a joined error; a partial run
 // still attempts the remaining steps.
-func (p *Phase) Execute(ctx context.Context, opts *Options) error {
-	return execute(ctx, opts)
+func (p *Phase) Execute(ctx context.Context, opts *Options, options ...Option) error {
+	cfg := &cleanupConfig{logger: logutil.NopLogger}
+	for _, o := range options {
+		o(cfg)
+	}
+	return execute(ctx, opts, cfg.logger)
 }
 
 // Step IDs for the cleanup phase, ordered as they execute within Full.
@@ -137,17 +147,17 @@ func (t *cleanupTracker) onError() func(error) {
 	}
 }
 
-func execute(ctx context.Context, opts *Options) error {
+func execute(ctx context.Context, opts *Options, logger *slog.Logger) error {
 	if opts.Kind == "" {
 		return &errtypes.ConfigError{Msg: "cleanup kind not set"}
 	}
 	if err := opts.Kind.Validate(); err != nil {
 		return err
 	}
-	logger := opts.getLogger().With("phase", "cleanup")
-	defs := cleanupSteps(opts, logger)
+	l := logger.With("phase", "cleanup")
+	defs := cleanupSteps(opts, l)
 	o := distribution.NewOrchestrator(distribution.BuildSteps(defs)...)
-	o.SetLogger(logger)
+	o.SetLogger(l)
 	return o.Run(ctx)
 }
 

@@ -102,10 +102,7 @@ func TestExtractTarGz_ZipSlipRejected(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			archive := buildTarGz(t, tc.entries)
 			dest := realTempDir(t)
-			err := ExtractTarGz(context.Background(), ExtractOptions{
-				ArchivePath: archive,
-				DestDir:     dest,
-			})
+			err := ExtractTarGz(context.Background(), archive, dest)
 			if err == nil {
 				t.Fatalf("expected rejection")
 			}
@@ -154,10 +151,7 @@ func TestExtractTarGz_HappyPath(t *testing.T) {
 		{Name: "dir/file.txt", Mode: 0o644, Data: []byte("hello")},
 	})
 	dest := realTempDir(t)
-	if err := ExtractTarGz(context.Background(), ExtractOptions{
-		ArchivePath: archive,
-		DestDir:     dest,
-	}); err != nil {
+	if err := ExtractTarGz(context.Background(), archive, dest); err != nil {
 		t.Fatalf("extract: %v", err)
 	}
 	body, err := os.ReadFile(filepath.Join(dest, "dir", "file.txt"))
@@ -175,10 +169,7 @@ func TestExtractTarGz_ContextCancellation(t *testing.T) {
 	})
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	err := ExtractTarGz(ctx, ExtractOptions{
-		ArchivePath: archive,
-		DestDir:     t.TempDir(),
-	})
+	err := ExtractTarGz(ctx, archive, t.TempDir())
 	if !errors.Is(err, context.Canceled) {
 		t.Errorf("err = %v; want context.Canceled", err)
 	}
@@ -189,11 +180,7 @@ func TestExtractTarGz_StripComponents(t *testing.T) {
 		{Name: "top/inner/file.txt", Mode: 0o644, Data: []byte("data")},
 	})
 	dest := realTempDir(t)
-	if err := ExtractTarGz(context.Background(), ExtractOptions{
-		ArchivePath:     archive,
-		DestDir:         dest,
-		StripComponents: 2,
-	}); err != nil {
+	if err := ExtractTarGz(context.Background(), archive, dest, WithStripComponents(2)); err != nil {
 		t.Fatalf("extract: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(dest, "file.txt")); err != nil {

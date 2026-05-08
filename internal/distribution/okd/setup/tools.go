@@ -208,10 +208,12 @@ func (p *Phase) installBinary(ctx context.Context, spec *binaryInstallSpec) erro
 	}
 
 	tempFile, err := system.WriteTempFile(spec.name+"-download-*", 0o600, func(f *os.File) error {
-		return download.Download(ctx, &download.Options{
-			URL: spec.url, OutputPath: f.Name(), ExpectedChecksum: expectedChecksum,
-			Description: spec.name, Timeout: 2 * time.Minute, Logger: p.Log,
-		})
+		return download.Fetch(ctx, spec.url, f.Name(),
+			download.WithChecksum(expectedChecksum),
+			download.WithDescription(spec.name),
+			download.WithTimeout(2*time.Minute),
+			download.WithLogger(p.Log),
+		)
 	})
 	if err != nil {
 		return fmt.Errorf("failed to download %s: %w", spec.name, err)
@@ -225,10 +227,11 @@ func (p *Phase) installBinary(ctx context.Context, spec *binaryInstallSpec) erro
 			return fmt.Errorf("failed to create extract directory: %w", err)
 		}
 		defer func() { _ = os.RemoveAll(extractDir) }()
-		if err := download.ExtractTarGz(ctx, download.ExtractOptions{
-			ArchivePath: tempFile, DestDir: extractDir,
-			StripComponents: spec.stripComponents, CleanupArchive: true, Logger: p.Log,
-		}); err != nil {
+		if err := download.ExtractTarGz(ctx, tempFile, extractDir,
+			download.WithStripComponents(spec.stripComponents),
+			download.WithCleanupArchive(true),
+			download.WithExtractLogger(p.Log),
+		); err != nil {
 			return fmt.Errorf("failed to extract %s: %w", spec.name, err)
 		}
 		srcPath = filepath.Join(extractDir, spec.archiveBinary)

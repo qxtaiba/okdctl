@@ -57,23 +57,19 @@ func (p *Phase) bootstrapOC(ctx context.Context, downloadDir string) (string, er
 	archivePath := filepath.Join(downloadDir, assetName)
 	p.Log.Info("tools: fetching bootstrap oc", "url", tarballURL)
 
-	if err := download.Download(ctx, &download.Options{
-		URL:              tarballURL,
-		OutputPath:       archivePath,
-		ExpectedChecksum: bootstrapOCChecksum,
-		Description:      "bootstrap-oc",
-		Timeout:          3 * time.Minute,
-		Logger:           p.Log,
-	}); err != nil {
+	if err := download.Fetch(ctx, tarballURL, archivePath,
+		download.WithChecksum(bootstrapOCChecksum),
+		download.WithDescription("bootstrap-oc"),
+		download.WithTimeout(3*time.Minute),
+		download.WithLogger(p.Log),
+	); err != nil {
 		return "", &errtypes.NetworkError{Msg: "failed to download bootstrap oc", Err: err}
 	}
 
-	if err := download.ExtractTarGz(ctx, download.ExtractOptions{
-		ArchivePath:    archivePath,
-		DestDir:        downloadDir,
-		CleanupArchive: true,
-		Logger:         p.Log,
-	}); err != nil {
+	if err := download.ExtractTarGz(ctx, archivePath, downloadDir,
+		download.WithCleanupArchive(true),
+		download.WithExtractLogger(p.Log),
+	); err != nil {
 		return "", &errtypes.NetworkError{Msg: "failed to extract bootstrap oc", Err: err}
 	}
 
@@ -153,11 +149,9 @@ func extractReleaseTarballs(ctx context.Context, destDir string, logger *slog.Lo
 		return fmt.Errorf("glob release tarballs: %w", err)
 	}
 	for _, archivePath := range matches {
-		if err := download.ExtractTarGz(ctx, download.ExtractOptions{
-			ArchivePath:    archivePath,
-			DestDir:        destDir,
-			CleanupArchive: true,
-		}); err != nil {
+		if err := download.ExtractTarGz(ctx, archivePath, destDir,
+			download.WithCleanupArchive(true),
+		); err != nil {
 			return fmt.Errorf("extract %s: %w", filepath.Base(archivePath), err)
 		}
 		logger.Info("tools: extracted release tarball", "file", filepath.Base(archivePath))
