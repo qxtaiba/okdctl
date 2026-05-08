@@ -107,6 +107,14 @@ jobs:
         run: |
           tflint --init --config="${GITHUB_WORKSPACE}/infrastructure/terraform/.tflint.hcl"
           tflint -f compact --config="${GITHUB_WORKSPACE}/infrastructure/terraform/.tflint.hcl"
+  scan-terraform:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: aquasecurity/tfsec-action@b466648d6e39e7c75324f25d83891162a721f2d6 # v1.0.3
+        with:
+          working_directory: infrastructure/terraform
+          soft_fail: true
   # Shell
   lint-shell:
     runs-on: ubuntu-latest
