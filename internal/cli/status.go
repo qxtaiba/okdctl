@@ -273,6 +273,11 @@ func printClusterStatus(cmd *cobra.Command, st *okd.ClusterStatus) error {
 }
 
 func runDescribeNode(cmd *cobra.Command, args []string) error {
+	if err := validateFormat(describeNodeFormat); err != nil {
+		return err
+	}
+	quietForJSON(describeNodeFormat)
+
 	projectRoot, err := resolveProjectRootOrDie()
 	if err != nil {
 		return err
@@ -319,6 +324,11 @@ func runDescribeNode(cmd *cobra.Command, args []string) error {
 }
 
 func runDescribeAddon(cmd *cobra.Command, args []string) error {
+	if err := validateFormat(describeAddonFormat); err != nil {
+		return err
+	}
+	quietForJSON(describeAddonFormat)
+
 	cfg, err := loadConfig(cfgFile)
 	if err != nil {
 		return err
