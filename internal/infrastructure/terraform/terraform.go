@@ -363,6 +363,28 @@ func (t *Executor) ZeroizeEnv() {
 	t.exec.Env = nil
 }
 
+// Output runs "terraform output -json" and returns the decoded top-level
+// map. Each value remains JSON-encoded; callers unmarshal individual entries.
+func (t *Executor) Output(ctx context.Context) (map[string]json.RawMessage, error) {
+	t.exec.Verbose = t.Verbose
+	result, err := t.exec.Run(ctx, "terraform", "output", "-json")
+	if err != nil {
+		return nil, fmt.Errorf("terraform output failed: %w", err)
+	}
+	if result.ExitCode != 0 {
+		return nil, &ExecError{
+			Command:  "terraform output",
+			ExitCode: result.ExitCode,
+			Stderr:   result.Stderr,
+		}
+	}
+	var out map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(result.Stdout), &out); err != nil {
+		return nil, fmt.Errorf("terraform output: invalid json: %w", err)
+	}
+	return out, nil
+}
+
 // CleanupPlans removes tfplan and destroy.tfplan; non-existent files are
 // ignored. terraform.tfstate.backup is intentionally left so the operator
 // retains a rollback artefact if the live tfstate is later corrupted.
