@@ -896,7 +896,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sec:e076e43c:install-sh-insecure-flag-trust` — install sh insecure flag trust
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-e076e43c-install-sh-insecure  
 **Severity:** minor  
 **Cluster:** tls-network — seam→audit-iac-and-shell  
 **Evidence:** `scripts/install.sh:59-67`  
@@ -906,7 +906,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sec:0d318f5c:logfile-mode-fixed` — logfile mode fixed
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-0d318f5c-logfile-mode  
 **Severity:** suggestion  
 **Cluster:** credentials  
 **Evidence:** `internal/cli/logging.go:24-33`  
@@ -926,7 +926,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sec:e3782ee7:atomicwrite-create-then-chmod` — atomicwrite create then chmod
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-e3782ee7-atomicwrite-mode  
 **Severity:** suggestion  
 **Cluster:** file-toctou  
 **Evidence:** `internal/system/fs.go:196-247`  
@@ -946,7 +946,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sec:fde34e0c:k8sclient-env-direct-write` — k8sclient env direct write
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-fde34e0c-k8s-with-env  
 **Severity:** suggestion  
 **Cluster:** credentials  
 **Evidence:** `internal/cluster/k8s.go:71-81`  
@@ -979,7 +979,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sub:ae5b624c:no-graceful-cancel` — no graceful cancel
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sub-ae5b624c-graceful-cancel  
 **Severity:** minor  
 **Cluster:** timeout-cancel — seam→audit-concurrency  
 **Evidence:** `internal/distribution/okd/install/monitor.go:23-45`  
@@ -1021,7 +1021,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `state:262af6e4:cleanup-best-effort-no-resume` — cleanup best effort no resume
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/state-262af6e4-cleanup-resume  
 **Severity:** minor  
 **Cluster:** crash-recoverability  
 **Evidence:** `internal/distribution/okd/cleanup/cleanup.go:1-138`  
@@ -1091,7 +1091,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `state:62cb8a95:helper-stale-lock-message` — helper stale lock message
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/state-62cb8a95-stale-lock-id  
 **Severity:** suggestion  
 **Cluster:** tf-state-atomicity  
 **Evidence:** `internal/distribution/okd/destroy/helpers.go:19-30`  
@@ -1393,7 +1393,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `ux:fd2125dd:addon-uninstall-stdout-msg` — addon uninstall stdout msg
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/ux-fd2125dd-addon-stderr  
 **Severity:** suggestion  
 **Cluster:** streams  
 **Evidence:** `internal/cli/addon.go:165-167`  
@@ -1612,7 +1612,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `smell:c4182b1c:abstraction-single-caller` — abstraction single caller
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/smell-c4182b1c-context-doc  
 **Severity:** suggestion  
 **Cluster:** helper-package-no-value  
 **Evidence:** `internal/distribution/context.go:1-33`  
