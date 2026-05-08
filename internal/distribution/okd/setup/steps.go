@@ -309,9 +309,9 @@ func (p *Phase) installSystemPackages(ctx context.Context) error {
 	for _, pkg := range sysPkgs {
 		if !executor.CommandExists(pkg) {
 			toInstall = append(toInstall, pkg)
-			p.Log.Debug(fmt.Sprintf("packages: %s not found", pkg))
+			p.Log.Debug("packages: not found", "pkg", pkg)
 		} else {
-			p.Log.Debug(fmt.Sprintf("packages: %s already installed", pkg))
+			p.Log.Debug("packages: already installed", "pkg", pkg)
 		}
 	}
 
@@ -320,7 +320,7 @@ func (p *Phase) installSystemPackages(ctx context.Context) error {
 		return nil
 	}
 
-	p.Log.Info(fmt.Sprintf("packages: installing %d missing package(s)", len(toInstall)))
+	p.Log.Info("packages: installing missing", "count", len(toInstall))
 	if err := p.Pkg.Install(ctx, toInstall, p.Log); err != nil {
 		p.Log.Warn("packages: installation had warnings", "err", err)
 	}
