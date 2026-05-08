@@ -672,7 +672,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `err:ddf885f4:errors-join-opportunity` — errors join opportunity
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/err-ddf885f4-errors-join  
+**Status:** in review — PR #448  
 **Severity:** suggestion  
 **Cluster:** wrapping  
 **Evidence:** `internal/addon/manager.go:99-113`  
@@ -1556,7 +1556,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `doc:8f46b665:phases-stepdef-missing-fields` — phases stepdef missing fields
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/doc-8f46b665-phases-doc-fix  
+**Status:** in review — PR #449  
 **Severity:** major  
 **Cluster:** readme-drift  
 **Evidence:** `docs/architecture/phases.md:40-51`  
@@ -1566,7 +1566,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `doc:8f46b665:phases-basephase-missing-recorder` — phases basephase missing recorder
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/doc-8f46b665-phases-doc-fix  
+**Status:** in review — PR #449  
 **Severity:** minor  
 **Cluster:** readme-drift  
 **Evidence:** `docs/architecture/phases.md:79-85`  
