@@ -7,6 +7,46 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
+func TestBuildInstanceValues(t *testing.T) {
+	fs := Settings{
+		Repository: "ssh://git@github.com/org/repo.git",
+		Branch:     "feature",
+		Path:       "k8s/prod",
+	}
+	b, err := buildInstanceValues(fs)
+	if err != nil {
+		t.Fatalf("buildInstanceValues: %v", err)
+	}
+	var v map[string]any
+	if err := yaml.Unmarshal(b, &v); err != nil {
+		t.Fatalf("unmarshal: %v\n%s", err, b)
+	}
+	inst, _ := v["instance"].(map[string]any)
+	if inst == nil {
+		t.Fatal("instance key missing")
+	}
+	sync, _ := inst["sync"].(map[string]any)
+	if sync == nil {
+		t.Fatal("instance.sync key missing")
+	}
+	if sync["url"] != fs.Repository {
+		t.Errorf("url = %v, want %v", sync["url"], fs.Repository)
+	}
+	if sync["ref"] != "refs/heads/feature" {
+		t.Errorf("ref = %v, want refs/heads/feature", sync["ref"])
+	}
+	if sync["path"] != "k8s/prod" {
+		t.Errorf("path = %v, want k8s/prod", sync["path"])
+	}
+	cluster, _ := inst["cluster"].(map[string]any)
+	if cluster == nil {
+		t.Fatal("instance.cluster key missing")
+	}
+	if cluster["type"] != "openshift" {
+		t.Errorf("cluster.type = %v, want openshift", cluster["type"])
+	}
+}
+
 func TestBuildFluxDeployKeySecret(t *testing.T) {
 	t.Run("all fields present", func(t *testing.T) {
 		manifest, err := buildFluxDeployKeySecret(

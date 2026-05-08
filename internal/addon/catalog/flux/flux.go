@@ -14,6 +14,8 @@ import (
 	"strings"
 	"time"
 
+	"sigs.k8s.io/yaml"
+
 	"github.com/qxtaiba/okdctl/internal/addon"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/executor"
@@ -115,8 +117,8 @@ func (f *Flux) Install(ctx context.Context, env *addon.Environment) error {
 
 // helmUpgradeInstall wraps the shared "helm upgrade --install ... --wait"
 // invocation used for both flux-operator and flux-instance. extraArgs is
-// appended after the common --namespace flag (so callers can pass --set
-// pairs or --create-namespace).
+// appended after the common --namespace flag (so callers can pass -f
+// <values-file> or --create-namespace).
 func (f *Flux) helmUpgradeInstall(ctx context.Context, env *addon.Environment, release, chart, errLabel string, extraArgs ...string) error {
 	return addon.RetryDefault(ctx, func() error {
 		args := []string{"upgrade", "--install", release, chart, "--namespace", "flux-system"}
@@ -148,15 +150,44 @@ func (f *Flux) installInstance(ctx context.Context, env *addon.Environment, fs S
 	if fs.Repository == "" {
 		return &errtypes.ConfigError{Msg: "flux repository not configured - set addons.flux.settings.repository in config"}
 	}
+	valuesYAML, err := buildInstanceValues(fs)
+	if err != nil {
+		return fmt.Errorf("flux: build instance values: %w", err)
+	}
+	valuesPath, err := system.WriteTempFile("okdctl-flux-instance-*.yaml", 0o600, func(f *os.File) error {
+		_, writeErr := f.Write(valuesYAML)
+		return writeErr
+	})
+	if err != nil {
+		return fmt.Errorf("flux: write instance values file: %w", err)
+	}
+	defer func() { _ = os.Remove(valuesPath) }()
 	return f.helmUpgradeInstall(ctx, env, "flux-instance",
 		"oci://ghcr.io/controlplaneio-fluxcd/charts/flux-instance",
 		"flux instance",
-		"--set", "instance.cluster.type=openshift",
-		"--set", fmt.Sprintf("instance.sync.url=%s", fs.Repository),
-		"--set", fmt.Sprintf("instance.sync.ref=refs/heads/%s", fs.Branch),
-		"--set", fmt.Sprintf("instance.sync.path=%s", fs.Path),
-		"--set", "instance.sync.pullSecret=flux-system",
+		"-f", valuesPath,
 	)
+}
+
+// buildInstanceValues marshals the flux-instance helm chart values from
+// Settings into YAML bytes. Keeping values in a file rather than --set argv
+// prevents repository URLs from appearing in /proc/<pid>/cmdline and in helm
+// release Secrets.
+func buildInstanceValues(fs Settings) ([]byte, error) {
+	v := map[string]any{
+		"instance": map[string]any{
+			"cluster": map[string]any{
+				"type": "openshift",
+			},
+			"sync": map[string]any{
+				"url":        fs.Repository,
+				"ref":        "refs/heads/" + fs.Branch,
+				"path":       fs.Path,
+				"pullSecret": "flux-system",
+			},
+		},
+	}
+	return yaml.Marshal(v)
 }
 
 // Verify reports whether the flux-operator and source-controller deployments
