@@ -468,28 +468,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Add an opt-in `proxmox.host_fingerprint` config field (sha256-of-pubkey form). When set, run `ssh-keyscan` once at first contact, validate the fingerprint matches the configured value, write to a per-project known_hosts file, and pass `-o StrictHostKeyChecking=yes -o UserKnownHostsFile=<path>` for every subsequent ssh/scp call. accept-new should be the explicit fallback only when the fingerprint is unset.  
 **Effort:** hours
 
-##### `sec:0d318f5c:cred-no-zeroize` — cred no zeroize
-
-**Status:** not started  
-**Severity:** suggestion  
-**Cluster:** credentials  
-**Evidence:** `internal/cli/logging.go:35-67`  
-**Problem:** configureLogging is called by PersistentPreRunE — including for the deploy/destroy/cleanup/update-ingress paths under sudo re-exec. If --log-file is set and the file already exists, configureLogging opens it append-mode 0o600. Under sudo re-exec, the file existed before the re-exec (created by the unprivileged invocation) and is now opened by root. Subsequent log lines (which include redacted attrs but also raw env / path strings) get appended to a file the user owns. After the re-exec returns, the file is still user-owned — no chown back needed because root only appended. ...  
-**Fix:** Already-hardened. Documenting as a counter-example reference: this file (cli/logging.go:25-32) is the canonical pattern other sites in this audit reference for O_NOFOLLOW + lstat. No action needed.  
-**Effort:** hours
-
-
-##### `sec:8ea706f6:cred-no-zeroize` — cred no zeroize
-
-**Status:** not started  
-**Severity:** suggestion  
-**Cluster:** credentials  
-**Evidence:** `internal/distribution/okd/setup/tools.go:227-248`  
-**Problem:** installHashiCorpDebianRepo writes the GPG key to a temp file via system.WriteTempFile with mode 0o600 then runs `gpg --dearmor -o /usr/share/keyrings/...gpg`. The temp-file handler closes the file before gpg reads it (per WriteTempFile semantics), but the os.Remove on defer happens after gpg has succeeded. The dearmored output goes to /usr/share/keyrings (world-readable 0o644 by gpg's default) — not a defect since it's a public key, but the original tmp may briefly carry the armored key in /tmp where any local user could race it via inotify before defer cleanup. Minor — sam...  
-**Fix:** Acceptable as-is — the GPG key is public. Document the cleanup contract for symmetric WriteTempFile usage.  
-**Effort:** hours
-
-
 #### audit-subprocess
 
 ##### `err:ddf885f4:errors-join-opportunity` — errors join opportunity
@@ -506,16 +484,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 #### audit-api-design
 
-##### `api:8e65d574:iface-in-producer` — iface in producer
-
-**Status:** not started  
-**Severity:** suggestion  
-**Cluster:** interface-location  
-**Evidence:** `internal/distribution/okd/install/monitor.go:52-56`  
-**Problem:** csrApprover is defined consumer-side (good — Go idiom), but cluster.K8sClient (the producer) returns a concrete type that requires NewK8sClient(...) at the call site. The producer-side option struct WithCLI/WithKubeconfig/WithLogger is fine; the issue is that this consumer-side interface is unique to monitor.go yet ApprovePendingCSRs is exactly the kind of operation that other phases (postinstall verify, status) already use through the same K8sClient. If/when a second consumer needs the same shape, they'll re-declare it.  
-**Fix:** Leave as-is for now (single consumer = correct Go idiom). Watch for a second consumer; promote to internal/cluster.CSRApprover only when a second site declares the same shape. Filing a tracking item is enough.  
-**Effort:** hours
-
 #### audit-cli-ux
 
 #### audit-modernization
@@ -523,67 +491,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 #### audit-code-smells
 
 #### audit-dependencies
-
-##### `dep:33ef32bf:atotto-clipboard-stale` — atotto clipboard stale
-
-**Status:** not started  
-**Severity:** minor  
-**Cluster:** maintenance-signal  
-**Evidence:** `go.mod:24-24`  
-**Problem:** `github.com/atotto/clipboard v0.1.4` is dated 2021-02-24 (5+ years), v0.x, BSD-3-Clause-style permissive license. Pulled transitively via `charm.land/bubbles/v2/textinput` for paste-into-input support. Bus-factor 1 (single maintainer @atotto). Charm libs depend on it directly so okdctl has no agency over the choice — it stays as long as bubbles does. Recorded for traceability; the abandonment plan is `wait for charm to swap or fork their dep tree`.  
-**Fix:** No action. okdctl has no direct usage; the dep is a transitive of `charm.land/bubbles/v2`. Track via the same charm-libs pin policy already in CLAUDE.md §must-preserve (`Charm libs (charm.land/*) — intentional UI stack; don't propose swapping`). Re-evaluate if charm.land/bubbles releases a version that drops the clipboard dep.  
-**Effort:** hours
-
-##### `dep:33ef32bf:gorilla-websocket-stale` — gorilla websocket stale
-
-**Status:** not started  
-**Severity:** minor  
-**Cluster:** maintenance-signal  
-**Evidence:** `go.mod:41-41`  
-**Problem:** `github.com/gorilla/websocket v1.4.2` is dated 2020-03-19 — six years old at audit time. Pulled transitively via `github.com/luthermonson/go-proxmox` for shell/console websocket support. CLAUDE.md §dependencies explicitly addresses this (`okdctl does not reach it — wizard uses REST discovery only`), so the dep is documented as transitive-weight only and the abandonment plan defers to go-proxmox migrating to `coder/websocket`. This finding is recorded so the entry surfaces in the audit history each run, but no action is required.  
-**Fix:** No action. CLAUDE.md §dependencies already documents the policy: `Safe to keep until go-proxmox migrates to coder/websocket, at which point take the bump without local code changes`. Re-evaluate every six months alongside the go-proxmox v0.4.x abandonment plan.  
-**Effort:** hours
-
-##### `dep:33ef32bf:proxmox-v0x-bus-factor` — proxmox v0x bus factor
-
-**Status:** not started  
-**Severity:** minor  
-**Cluster:** maintenance-signal  
-**Evidence:** `go.mod:14-14`  
-**Problem:** `github.com/luthermonson/go-proxmox v0.4.1` (released 2026-04-03) is the only path to Proxmox VE node discovery (1 file: internal/tui/wizard/steps/proxmox_discovery.go). v0.x means minor bumps may break the API; bus-factor 1. CLAUDE.md §dependencies names this as the canonical v0.x exposure with a documented ~200 LOC REST-only fallback. The dep also drags in 12 transitives (buger/goterm, jinzhu/copier, diskfs/go-diskfs, djherbis/times, gorilla/websocket, etc.) for narrow REST use. Umbrella entry for traceability.  
-**Fix:** No action this run. Track go-proxmox releases each audit cycle (currently v0.4.1, last commit 2026-04-03). When a v1.0 lands, evaluate the bump. If go-proxmox is abandoned for >12 months, execute the CLAUDE.md fallback: replace with a hand-rolled REST-only client (~200 LOC) — drops 12 transitive packages and removes the v0.x exposure. Severity is `minor` not `blocker` because the abandonment plan is documented and recent (2026-04-03) commit activity shows the upstream is still alive.  
-**Effort:** hours
-
-##### `dep:33ef32bf:xo-terminfo-untagged` — xo terminfo untagged
-
-**Status:** not started  
-**Severity:** minor  
-**Cluster:** maintenance-signal  
-**Evidence:** `go.mod:57-57`  
-**Problem:** `github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e` is an untagged pseudo-version from 2022-09-10 (3+ years), MIT-licensed, pulled transitively via `charm.land/lipgloss/v2 -> github.com/charmbracelet/colorprofile`. No upstream releases since 2022 means new Go versions / new terminal escape sequences land downstream without an upstream cut. Same pattern as gorilla/websocket and atotto/clipboard: okdctl has no agency, charm-libs control the pin.  
-**Fix:** No action. Same policy as atotto-clipboard-stale: charm-libs control the choice. Re-evaluate if charm.land/lipgloss/v2 swaps or vendors the terminfo lookup.  
-**Effort:** hours
-
-##### `dep:b803fcb7:tflint-action-no-version-trailer` — tflint action no version trailer
-
-**Status:** not started  
-**Severity:** suggestion  
-**Cluster:** pin-stability  
-**Evidence:** `.github/workflows/ci.yml:101-101`  
-**Problem:** `terraform-linters/setup-tflint@b480b8fcdaa6f2c577f8e4fa799e89e756bb7c93 # v6.2.2` is SHA-pinned correctly, but the convention CLAUDE.md §dependencies states is `uses: owner/action@<40-hex-sha> # vX.Y.Z` — every other action in this repo's workflows follows it. This one is the only `setup-tflint` line and follows the pattern, so the pin is correct. Re-checked: pin is valid. NO ACTION. Recorded for audit-history completeness as a pin-audit walkthrough confirmation.  
-**Fix:** No action. The pin matches the SHA + version-trailer convention. This row exists so future audit runs can trace the pin-audit decision.  
-**Effort:** hours
-
-##### `dep:33ef32bf:dup-log-engines` — dup log engines
-
-**Status:** not started  
-**Severity:** suggestion  
-**Cluster:** duplicate-engine — seam→audit-modernization  
-**Evidence:** `go.mod:11-66`  
-**Problem:** Four log engines link into the binary: stdlib `log/slog` (canonical), `charm.land/log/v2 v2.0.0` (one call site, internal/tui/logger.go), `k8s.io/klog/v2` and `go-logr/logr` (transitive via k8s.io/api). klog/logr are unavoidable while k8s.io/api is direct. charm.land/log/v2 exists only to color level prefixes; a hand-rolled slog.Handler in internal/logutil (~40 LOC, lipgloss already direct) could replace it and drop charm.land/log/v2 + go-logfmt/logfmt from the binary.  
-**Fix:** Optional: replace `charm.land/log/v2` with a hand-rolled `slog.Handler` in `internal/logutil` that colors level prefixes via lipgloss (already a direct dep). Drops charm.land/log/v2 + go-logfmt/logfmt from the binary. Risk: bubbletea TUI integration relies on the styled output — verify visual parity in dev/staging before merge. Keep `log/slog` + the k8s.io transitives as-is.  
-**Effort:** hours
-
 
 ##### `dep:33ef32bf:transitive-narrow-uuid` — transitive narrow uuid
 
@@ -733,16 +640,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 #### audit-iac-and-shell
 
-##### `iac:e076e43c:sh-doc-line-stale` — sh doc line stale
-
-**Status:** not started  
-**Severity:** suggestion  
-**Cluster:** install-sh-integrity — related: iac:e076e43c:sh-bash-array-dash-incompat  
-**Evidence:** `scripts/install.sh:21-21`  
-**Problem:** The script's `Requires:` docstring lists `bash, curl, tar, sha256sum` — but does not mention that the script ALSO requires bash specifically (not sh) when invoked via `curl | sh`. Combined with the array-syntax issue (separate finding), users on Debian/Ubuntu reading only the README never learn the dependency until the script crashes.  
-**Fix:** If the bash-array fix is option (a) `| bash`, this finding resolves automatically when the README and docstring update. If option (b) (POSIX-compatible auth), this finding becomes moot. Either way, no separate fix needed once `iac:e076e43c:sh-bash-array-dash-incompat` is addressed.  
-**Effort:** hours
-
 #### audit-errors
 
 #### audit-concurrency
@@ -890,66 +787,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Effort:** hours
 
 #### audit-dependencies
-
-##### `dep:33ef32bf:proxmox-bus-factor-1` — proxmox bus factor 1
-
-**Status:** not started  
-**Severity:** minor  
-**Cluster:** maintenance-signal  
-**Evidence:** `go.mod:13-13`  
-**Problem:** github.com/luthermonson/go-proxmox v0.4.1 is the sole Proxmox discovery dep and exhibits bus-factor 1 (top contributor 159 commits, next 20). v0.x semver means any minor bump may break the API. Pre-known per CLAUDE.md §dependencies; re-confirmed: 28 commits in last 6 months, latest tag v0.4.1 dated 2026-04-03, license Apache-2.0, no archive marker. Abandonment plan (~200 LOC REST rewrite using net/http) still valid.  
-**Fix:** No code change. Re-confirm CLAUDE.md §dependencies justification annually; bump on each upstream release; keep the documented REST-only fallback (~200 LOC) ready. Open an internal tracking issue if commit cadence drops below 4/quarter or top contributor goes inactive >6mo.  
-**Effort:** hours
-
-##### `dep:33ef32bf:dual-log-engines` — dual log engines
-
-**Status:** not started  
-**Severity:** suggestion  
-**Cluster:** duplicate-engine  
-**Evidence:** `go.mod:11-11` + 1 more  
-**Problem:** Two logging engines: stdlib `log/slog` is the primary (44 source-file imports) and `charm.land/log/v2 v2.0.0` is the styled stderr formatter installed in internal/tui/logger.go. Intentional per CLAUDE.md (charm libs are the canonical TUI stack and listed under audit-dependencies §5 must-preserve). Re-confirming, not flagging.  
-**Fix:** No action. Single charm.land/log/v2 site is the slog-handler implementation, not a parallel logging API. The TUI surface relies on charm styling; swapping it for a plain text/handler would regress UX. Document this as the intentional baseline if a future audit re-flags.  
-**Effort:** hours
-
-##### `dep:33ef32bf:exp-stale-transitive` — exp stale transitive
-
-**Status:** not started  
-**Severity:** suggestion  
-**Cluster:** justified-version-floor  
-**Evidence:** `go.mod:57-57`  
-**Problem:** golang.org/x/exp v0.0.0-20231006140011 is an October 2023 pseudo-version pulled transitively via charm/k8s. golang.org/x/exp gets weekly pseudo-versions; the pinned timestamp is ~2.5 years stale. Not reached directly by okdctl (no source import). Floor is justified by transitive usage, but a `go mod tidy` after a charm/k8s bump should advance it.  
-**Fix:** On the next k8s.io/apimachinery or charm.land/* bump run `go mod tidy` and re-check; the transitive pin will move. No targeted action needed.  
-**Effort:** hours
-
-##### `dep:33ef32bf:go-proxmox-transitive-weight` — go proxmox transitive weight
-
-**Status:** not started  
-**Severity:** suggestion  
-**Cluster:** transitive-weight  
-**Evidence:** `go.mod:13-13`  
-**Problem:** go-proxmox v0.4.1 pulls 7 transitive deps okdctl never reaches: gorilla/websocket v1.4.2 (2020), buger/goterm (last commit 2023-02), jinzhu/copier, magefile/mage, diskfs/go-diskfs, djherbis/times, h2non/parth. okdctl's single call site (proxmox_discovery.go) only uses REST discovery. The hand-rolled REST fallback noted in CLAUDE.md would shed all 7. Documenting the cost shape; not proposing the swap mid-audit.  
-**Fix:** Track go-proxmox upstream releases. When the bus-factor or breaking-change risk crosses the threshold documented in CLAUDE.md §dependencies, execute the ~200 LOC REST-only rewrite plan; that swap removes 7 transitive deps in one move. Until then, hold.  
-**Effort:** hours
-
-##### `dep:33ef32bf:gorilla-websocket-stale` — gorilla websocket stale
-
-**Status:** not started  
-**Severity:** suggestion  
-**Cluster:** maintenance-signal  
-**Evidence:** `go.mod:39-39`  
-**Problem:** gorilla/websocket v1.4.2 is from 2020 and the latest upstream release is v1.5.3 (2024-06). Pulled transitively via go-proxmox, which pins it; okdctl never reaches it (REST-only Proxmox discovery, no shell/console websocket). Pre-known per CLAUDE.md §dependencies; documenting the version-floor delta for the next refresh of the dependency note.  
-**Fix:** No local action — okdctl cannot pin a transitive without a `replace` directive, and replacing it would diverge from go-proxmox's tested set. Wait for go-proxmox to bump (or migrate to coder/websocket) and take the transitive bump for free. Re-flag only if a CVE lands that govulncheck flags as called.  
-**Effort:** hours
-
-##### `dep:33ef32bf:goterm-stale-transitive` — goterm stale transitive
-
-**Status:** not started  
-**Severity:** suggestion  
-**Cluster:** maintenance-signal  
-**Evidence:** `go.mod:24-24`  
-**Problem:** buger/goterm v1.0.4 last commit 2023-02-25 (~3 years stale). Pulled transitively via go-proxmox for terminal helpers that okdctl never reaches. Not archived, but >18mo since last push triggers SKILL.md §7 maint-stale. Same disposition as gorilla/websocket: not reachable, leaves with the eventual go-proxmox swap.  
-**Fix:** No action. Lives or dies with go-proxmox per CLAUDE.md fallback plan. Track via the dep audit footer so the next reviewer sees the staleness without re-deriving it.  
-**Effort:** hours
 
 #### audit-documentation
 
