@@ -600,7 +600,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `ux:aa84670c:version-printf-not-via-cmd-out` — version printf not via cmd out
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/ux-aa84670c-cmd-out  
+**Status:** in review — PR #520  
 **Severity:** suggestion  
 **Cluster:** streams  
 **Evidence:** `internal/cli/root.go:208-215` + 3 more  
