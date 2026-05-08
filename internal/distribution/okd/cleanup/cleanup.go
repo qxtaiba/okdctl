@@ -66,11 +66,11 @@ func New(exec *executor.Executor, logger *slog.Logger, version string) *Phase {
 	}
 }
 
-// Execute runs the cleanup steps selected by opts.Kind. Wraps the package-
-// level Execute so callers that hold a Provisioner can use the same shape
-// as setup/install/postinstall/destroy.
+// Execute runs the cleanup steps selected by opts.Kind. Individual step
+// failures are accumulated and returned as a joined error; a partial run
+// still attempts the remaining steps.
 func (p *Phase) Execute(ctx context.Context, opts *Options) error {
-	return Execute(ctx, opts)
+	return execute(ctx, opts)
 }
 
 // Step IDs for the cleanup phase, ordered as they execute within Full.
@@ -100,10 +100,7 @@ func (t *cleanupTracker) onError() func(error) {
 	}
 }
 
-// Execute runs the cleanup steps selected by opts.Kind. Individual step
-// failures are accumulated and returned as a joined error; a partial run
-// still attempts the remaining steps.
-func Execute(ctx context.Context, opts *Options) error {
+func execute(ctx context.Context, opts *Options) error {
 	if opts.Kind == "" {
 		return &errtypes.ConfigError{Msg: "cleanup kind not set"}
 	}
