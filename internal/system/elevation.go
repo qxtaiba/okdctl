@@ -112,8 +112,8 @@ func canonicalizePath(p string) string {
 	if p == "" {
 		return p
 	}
-	if real, err := filepath.EvalSymlinks(p); err == nil {
-		return real
+	if resolved, err := filepath.EvalSymlinks(p); err == nil {
+		return resolved
 	}
 	return p
 }
