@@ -513,26 +513,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 #### audit-security
 
-##### `sec:06f00bcb:ignition-pullsecret-served-unauth` — ignition pullsecret served unauth
-
-**Status:** in review — PR #494  
-**Severity:** major  
-**Cluster:** credentials  
-**Evidence:** `internal/distribution/okd/setup/apache.go:175-188`  
-**Problem:** bootstrap.ign / master.ign / worker.ign embed the OKD pull-secret JSON and are deployed to /var/www/html/ignition with 0o640 owned by apache, served by Apache on http://<bastion>:8080/ignition without authentication. Anyone on the machine network can fetch them during the bootstrap window (15-30 min) and harvest the pull secret. Apache is started with default vhost (binds 0.0.0.0:8080).  
-**Fix:** Constrain Apache's ignition vhost to bind to the bastion's bridge IP (the IP FCOS nodes resolve from the kargs URL), not 0.0.0.0. Add iptables/firewalld INPUT rules limiting :8080 to machineCIDR. Optionally rotate to per-node ignition URLs via path tokens (`/ignition/<token>/master.ign`) created at apply time and dropped after bootstrap. Document the residual exposure window in README §security-considerations.  
-**Effort:** hours
-
-##### `sec:21dc1103:download-no-nofollow` — download no nofollow
-
-**Status:** in review — PR #495  
-**Severity:** major  
-**Cluster:** file-toctou  
-**Evidence:** `internal/download/download.go:140-148`  
-**Problem:** Download.fetchToFile opens OutputPath with O_CREATE|O_WRONLY|O_TRUNC but no syscall.O_NOFOLLOW. Tools/setup callers pass tempdir paths or workdir paths; under the sudo re-exec model the open runs as root, so a pre-created symlink at OutputPath would be followed and binary content written through it. extract.go already uses O_NOFOLLOW on archive entries (good); this site is the asymmetric counterpart on the same package.  
-**Fix:** Add syscall.O_NOFOLLOW to the OpenFile flags. If callers ever need to overwrite a real file at OutputPath, the symlink case should be a hard error — Lstat first or document the symlink rejection in Download's contract.  
-**Effort:** hours
-
 ##### `sec:27088eab:ssh-strict-host-key-tofu` — ssh strict host key tofu
 
 **Status:** not started  
@@ -541,46 +521,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/distribution/okd/phase/ssh.go:31-57`  
 **Problem:** SSHRun and SSHRunArgv install StrictHostKeyChecking=accept-new for every Proxmox-bastion ssh hop (pvesh, rm -f, sha256sum). Same TOFU concern as scp upload — paired with sec:eb479d86, this is the policy-level finding for the SSH side.  
 **Fix:** Same fix as sec:eb479d86 — surface a per-cluster known_hosts pinning option. Replace accept-new with strict mode once a verified known_hosts line is established; the wizard could ssh-keyscan + display the fingerprint to the operator on first run for confirmation.  
-**Effort:** hours
-
-##### `sec:5013fea6:bootstrap-oc-no-signature` — bootstrap oc no signature
-
-**Status:** in review — PR #503  
-**Severity:** minor  
-**Cluster:** tls-network  
-**Evidence:** `internal/distribution/okd/setup/release_extract.go:29-91`  
-**Problem:** bootstrapOC fetches openshift-client from https://github.com/okd-project/okd-scos/releases/download/<bootstrapOCVersion>/<asset>.tar.gz and verifies via sha256sum.txt fetched from the same release URL. The sha256sum.txt has no signature (cosign or otherwise) — a release-asset compromise that swaps both the tarball and the sums file would not be caught. okdctl's own release pipeline ships cosign signatures (good); the bootstrap-oc dependency does not.  
-**Fix:** Pin the SHA-256 of the bootstrap oc tarball at compile time (analogous to yqChecksumsByArch in setup/tools.go). Then sha256sum.txt becomes defense-in-depth, not the trust root.  
-**Effort:** hours
-
-##### `sec:8ea706f6:tools-tempdir-non-canonical` — tools tempdir non canonical
-
-**Status:** in review — PR #504  
-**Severity:** minor  
-**Cluster:** file-toctou — related: sec:21dc1103:download-no-nofollow  
-**Evidence:** `internal/distribution/okd/setup/tools.go:203-216`  
-**Problem:** installBinary uses os.CreateTemp + immediate Close + later download.Download writing to that path. Bypasses the canonical system.WriteTempFile per CLAUDE.md §architecture-notes. Combined with sec:21dc1103 (download.Download lacks O_NOFOLLOW), the create-then-rewrite path runs as root with a temp file mode established by os.CreateTemp's default — fine today but fragile against future caller errors.  
-**Fix:** Refactor to system.WriteTempFile so all binary downloads thread through the canonical helper. Pair with sec:21dc1103 (add O_NOFOLLOW in download.fetchToFile).  
-**Effort:** hours
-
-##### `sec:98723e5d:helm-set-cred-via-argv` — helm set cred via argv
-
-**Status:** in review — PR #505  
-**Severity:** minor  
-**Cluster:** credentials  
-**Evidence:** `internal/distribution/okd/install/flux.go:146-159`  
-**Problem:** installInstance passes fs.Repository (operator-supplied) and other settings via `--set instance.sync.url=<url>` to helm. helm reads these as argv; --set values land in the helm-controller pod's process listing and are stored verbatim in the helm release secret. ValidateSettings forbids URLs with userinfo (good) but the URL itself may still encode tokens for non-https schemes (e.g. ssh://git+token@host). Defense is brittle.  
-**Fix:** Render a Values YAML to a 0o600 temp file and pass `-f <values.yaml>` instead of multiple --set flags. Removes credential-shaped values from /proc/<pid>/cmdline and from helm release secrets. ValidateSettings can keep its current scheme/userinfo gate.  
-**Effort:** hours
-
-##### `sec:d9f7733e:debug-bundle-tar-readall` — debug bundle tar readall
-
-**Status:** in review — PR #506  
-**Severity:** minor  
-**Cluster:** file-toctou  
-**Evidence:** `internal/cli/debug_bundle.go:301-329`  
-**Problem:** tarDirInto walks srcDir and reads each regular file with io.ReadAll into memory. The os.Root protection (good) prevents symlink redirection out of srcDir, but unbounded ReadAll on must-gather output can OOM the process — must-gather routinely emits multi-GB dumps. The bundleMustGather caller has a 5-minute timeout but no size cap.  
-**Fix:** Replace io.ReadAll with io.LimitReader-bounded streaming via tw.WriteHeader + io.Copy, or per-file size cap (e.g. 50MB). Also tag oversized files in the manifest so support engineers see why a file was truncated.  
 **Effort:** hours
 
 ##### `sec:25fa1be8:firewall-haproxy-port-only-tcp` — firewall haproxy port only tcp
@@ -595,16 +535,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 
 #### audit-subprocess
-
-##### `sub:25fa1be8:bypass-canonical-wrapper-ufw` — bypass canonical wrapper ufw
-
-**Status:** in review — PR #507  
-**Severity:** minor  
-**Cluster:** io-handling  
-**Evidence:** `internal/distribution/okd/firewall/firewall.go:91-106`  
-**Problem:** DetectBackend probes ufw with a raw exec.CommandContext + cmd.Output() and a manual *exec.ExitError unwrap, while every other shellout in the same file (Configure, modifyPort, etc.) goes through system.RunCaptured / system.OutputCaptured. The canonical wrappers already filter env through executor.DefaultEnvAllowlist, capture stderr into the returned error, and centralise diagnostics — bypassing them on this one path inherits the parent shell's env (including AWS_*/GH_TOKEN/GITHUB_TOKEN tokens that the allowlist drops).  
-**Fix:** Replace with output, err := system.OutputCaptured(ctx, ufw, status); on err, log via the same debug fall-through (system.OutputCaptured already wraps stderr into the returned error). Same env-filter and stderr-into-err semantics as the rest of this file.  
-**Effort:** hours
 
 ##### `sub:8ea706f6:coreutil-lsb-release` — coreutil lsb release
 
@@ -626,16 +556,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/distribution/step.go:228-251`  
 **Problem:** BuildSteps panics on ReRunSafeUnset but never propagates the value to builtStep, and Orchestrator.Run never queries it. ReRunSafeNo is decorative metadata — a step is still re-executed on a fresh run unless the StepDef ALSO supplies AlreadyDone. Out of 5 ReRunSafeNo steps in the codebase, only one (postinstall.StepCleanupBootstrap) provides a precondition guard.  
 **Fix:** Either (a) make ReRunSafeNo + missing AlreadyDone fail BuildSteps so authors must wire a precondition, or (b) require a logger.Warn at orchestrator entry for ReRunSafeNo steps without AlreadyDone. Option (a) gives the contract teeth — every ReRunSafeNo step gets an AlreadyDone or the build panics. Cross-reference roadmap state:4f69fc9d (deferred).  
-**Effort:** hours
-
-##### `state:c19ee328:setup-iso-build-not-resumable` — setup iso build not resumable
-
-**Status:** in review — PR #496  
-**Severity:** major  
-**Cluster:** crash-recoverability  
-**Evidence:** `internal/distribution/okd/setup/steps.go:212-240`  
-**Problem:** StepBuildISOs and StepUploadISOs are ReRunSafeNo but neither declares AlreadyDone. A SIGKILL mid-ISO-build leaves a partial fedora-coreos-master0.iso in workDir; mid-upload leaves a partial ISO on the Proxmox host. The next deploy re-runs the orchestrator from step 1; cleanup.WorkOnly removes custom-isos/ locally, but the partial remote upload is never sha256-verified before being referenced by the cdrom block in the bootstrap/master/worker resources.  
-**Fix:** Add AlreadyDone to StepBuildISOs that verifies SHA256 of every expected output ISO matches the cached fedora-coreos image hash; on mismatch, treat as 'work not done' and re-build. For StepUploadISOs, add AlreadyDone that runs `pvesh get /nodes/<node>/storage/<storage>/content` filtered to iso/<expected-name>.iso and verifies the size matches the local ISO. Either pre-condition stops a half-uploaded artifact from being treated as ready.  
 **Effort:** hours
 
 #### audit-iac-and-shell
@@ -678,36 +598,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 #### audit-cli-ux
 
-##### `ux:d31d1b9d:describe-format-unvalidated` — describe format unvalidated
-
-**Status:** in review — PR #497  
-**Severity:** major  
-**Cluster:** json-stability  
-**Evidence:** `internal/cli/status.go:272-376` + 1 more  
-**Problem:** `runDescribeNode` and `runDescribeAddon` accept `--format=json|text` but skip both `validateFormat(describeFormat)` and `quietForJSON(describeFormat)`. Result: `okdctl describe node x --format=foo` silently falls through to text mode (no error), and `okdctl describe node x --format=json` mixes `tui.Info` chatter from `loadConfig` / `resolveProjectRootOrDie` into the same fd as the JSON document — `2>&1 | jq` breaks. `runStatus` and `runReleasesList`/`Show` get this right; describe is the outlier.  
-**Fix:** At the top of `runDescribeNode` and `runDescribeAddon` add `if err := validateFormat(describeFormat); err != nil { return err }` then `quietForJSON(describeFormat)`. Promote `describeFormat` to two separate vars (`describeNodeFormat`, `describeAddonFormat`) — sharing one package global is brittle. Add a table-driven test that exercises every `--format=foo` value (`text`, `json`, garbage) for both subcommands.  
-**Effort:** hours
-
-##### `ux:e7db1220:json-release-type-as-int` — json release type as int
-
-**Status:** in review — PR #498  
-**Severity:** major  
-**Cluster:** json-stability  
-**Evidence:** `internal/distribution/okd/releases/types.go:31-40` + 1 more  
-**Problem:** `OKDVersion.Type` is `ReleaseType int` with no `MarshalJSON`, so `okdctl releases list --format=json` emits `"release_type": 0` (raw enum int). The published JSON schema in docs/cli/json-schema.md documents the field as the string `"stable"`/`"prerelease"`. Live output drifts from the documented contract.  
-**Fix:** Add `MarshalJSON` to `releases.ReleaseType` returning the same labels as `releaseTypeLabel(t)` (`stable`, `latest-stable`, `preview`, `latest-preview`, `lts`). Or change the field type to `string` and store the label directly. Optional: add `UnmarshalJSON` for symmetry with the cache file. Add a snapshot test that asserts the JSON byte-for-byte against the documented schema.  
-**Effort:** hours
-
-##### `ux:8154ab0f:doctor-no-machine-format` — doctor no machine format
-
-**Status:** in review — PR #508  
-**Severity:** minor  
-**Cluster:** json-stability  
-**Evidence:** `internal/cli/doctor.go:70-113` + 1 more  
-**Problem:** `okdctl doctor` is the documented preflight that scripts and CI need to gate on, but it ships text-only — no `--format=json`. The published exit-code contract says `okdctl doctor` returns 2 on fail and 0 otherwise; consumers that want per-check granularity (CI dashboards, the `okdctl debug-bundle` collector itself) have to scrape ANSI-coloured tabwriter output. The same data already flows through internal `checkResult` structs that are JSON-shapeable.  
-**Fix:** Add `--format=text|json` to `doctorCmd` (Linux side; the stub stays as-is since doctor is Linux-only). Promote `checkResult` and `checkItem` to JSON-tagged exported types (or local-to-cli copies); on `--format=json` emit `{"checks":[{"name":"host os","severity":"ok","detail":"..."},...],"failed":N,"warned":N}`. Document the schema in `docs/cli/json-schema.md`. Update `internal/cli/debug_bundle_doctor.go` to call `--format=json --log-format=json` so the bundle stores structured doctor output instead of ANSI text.  
-**Effort:** hours
-
 ##### `ux:aa84670c:version-printf-not-via-cmd-out` — version printf not via cmd out
 
 **Status:** not started  
@@ -731,16 +621,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 #### audit-observability
 
-##### `obs:41a9d4eb:redact-handler-struct-fields-passthrough` — redact handler struct fields passthrough
-
-**Status:** in review — PR #499  
-**Severity:** major  
-**Cluster:** redaction-sink — seam→audit-errors  
-**Evidence:** `internal/logutil/redact.go:91-112`  
-**Problem:** redactAny only catches *url.URL/url.URL with userinfo and types implementing Redacted(); does NOT catch raw structs whose fields are credential-bearing (e.g. `slog.Any("creds", credentials.ProxmoxCredentials{Password: pwd})`). The CLAUDE.md guarantee — slog records pass through internal/logutil.RedactHandler ... attrs whose keys contain password/token/secret/api_key are rewritten to [redacted] — applies only when the credential is the direct value of a secret-keyed attr, not when it is a field inside a struct passed under a benign key like 'creds' or 'config'.  
-**Fix:** Two complementary defences: (1) verify credentials.ProxmoxCredentials implements Redacted() any (audit-errors should already cover this); (2) add a type-switch case for known credential types in redactAny (`case *credentials.ProxmoxCredentials:` returning a redacted clone) as defence-in-depth — caller mistakes do not leak. Document the contract: 'credential types must implement Redacted()' in logutil/redact.go package doc.  
-**Effort:** hours
-
 ##### `obs:6424733c:fmt-sprintf-message-pattern` — fmt sprintf message pattern
 
 **Status:** not started  
@@ -749,16 +629,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/cli/helpers.go:32-296` + 5 more  
 **Problem:** Pervasive `tui.Info(fmt.Sprintf(...))` / `p.Log.Info(fmt.Sprintf(...))` pattern across ~50 sites in cli/ and distribution/okd/. Stringifying interpolated values into the message text bypasses RedactHandler structured-attr scrub (which only rewrites attr keys/values), kills slog-handler ability to filter by field, and prevents downstream JSON pipelines from extracting the dynamic value (path, cluster name, count, duration). CLAUDE.md is explicit: prefer structured attrs over fmt.Sprintf so the handler can inspect values.  
 **Fix:** Mechanical sweep: every `tui.X(fmt.Sprintf("prefix: %s", v))` becomes `tui.X("prefix", tui.LF("key", v))`; every `p.Log.X(fmt.Sprintf("prefix: %s", v))` becomes `p.Log.X("prefix", "key", v)`. ~50 sites; one PR per package keeps churn reviewable. Roll-up message stays static; values move to attrs.  
-**Effort:** hours
-
-##### `obs:33579dd5:refusing-critical-path-no-target` — refusing critical path no target
-
-**Status:** in review — PR #509  
-**Severity:** minor  
-**Cluster:** field-stability  
-**Evidence:** `internal/distribution/okd/cleanup/services.go:155-176`  
-**Problem:** services.Dnsmasq logs `cleanup: refusing critical path` three times in close succession (L155, L167, L176) without including which path was refused. The error message inside guardErr names the path, but a structured attr is missing — operators reading text logs see three identical lines with different `err` values; JSON pipelines cannot group by 'which file was rejected'.  
-**Fix:** Add `"path", configPath` (or `"path", cfg`, `"path", backup`) at each of the three sites so the path is queryable separately from the error chain.  
 **Effort:** hours
 
 #### audit-modernization
@@ -790,37 +660,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 #### audit-documentation
 
-##### `doc:8f46b665:phases-add-step-missing-rerunsafe` — phases add step missing rerunsafe
-
-**Status:** in review — PR #500  
-**Severity:** major  
-**Cluster:** readme-drift  
-**Evidence:** `docs/architecture/phases.md:102-117`  
-**Problem:** 'Adding a new step' instructions list NonFatal and SkipWhen but never mention ReRunSafe, which BuildSteps requires. A reader following these steps verbatim will hit 'BuildSteps: step <id> must declare ReRunSafe (ReRunSafeYes or ReRunSafeNo)' panic at first run.  
-**Fix:** Add a step '0' or first-class step explaining ReRunSafe: every StepDef must set ReRunSafeYes (idempotent across re-runs — preferred default) or ReRunSafeNo (combined with AlreadyDone for resume safety). Note the panic in BuildSteps.  
-**Effort:** hours
-
 #### audit-tests
-
-##### `tst:39c75e91:promptconfirm-untested` — promptconfirm untested
-
-**Status:** in review — PR #501  
-**Severity:** major  
-**Cluster:** destructive-untested  
-**Evidence:** `internal/cli/confirm.go:21-62`  
-**Problem:** promptForConfirmation is called by every destructive subcommand (deploy, destroy, cleanup, addon uninstall, update-ingress) but has zero direct test coverage. The function has three load-bearing branches that are unverified: (a) no-TTY refusal returning *errtypes.ConfigError, (b) ctx-cancel race vs the inputCh select, (c) isConfirmResponse only accepts y/Y/yes (not 'YES', not 'true'). A regression that loosened isConfirmResponse to strings.HasPrefix('y') would silently swallow ambiguous answers as confirms.  
-**Fix:** Add tests using the existing testStdinReader hook: (1) testStdinReader=strings.NewReader('y\n') → (true, nil); (2) testStdinReader=strings.NewReader('yes\n') → (true, nil); (3) testStdinReader=strings.NewReader('n\n') → (false, nil); (4) testStdinReader=strings.NewReader('YES\n') → (false, nil) (locks case-sensitivity); (5) ctx pre-cancelled → (false, ctx.Err()); (6) testStdinReader=strings.NewReader('') → (false, nil) (EOF treated as not-confirmed). Skip the no-TTY branch since term.IsTerminal can't be stubbed without exposing a hook.  
-**Effort:** hours
-
-##### `tst:e3782ee7:make-executable-untested` — make executable untested
-
-**Status:** in review — PR #502  
-**Severity:** major  
-**Cluster:** canonical-helper-untested  
-**Evidence:** `internal/system/fs.go:284-290`  
-**Problem:** system.MakeExecutable has no test. It is the canonical 'chmod +x' helper called by setup/release_extract.go (sets +x on extracted oc binary), setup/tools.go (downloaded helper binaries), and setup/artifacts.go — all running as root under the sudo re-exec, all writing to paths that end up in PATH. A bug where mode|0o111 silently degrades to mode (e.g. an off-by-one bit-shift refactor) would land non-executable binaries that fail at runtime mid-deploy.  
-**Fix:** Add to fs_test.go: (1) MakeExecutable on a 0o600 file → mode becomes 0o711 (owner exec preserved through bit-OR); (2) MakeExecutable on a 0o644 file → 0o755; (3) MakeExecutable on 0o600 in a t.TempDir() preserves contents (read body before/after); (4) MakeExecutable on a missing path → wrapped error containing the path. ~30 LOC, table-driven.  
-**Effort:** hours
 
 ## Completed
 
