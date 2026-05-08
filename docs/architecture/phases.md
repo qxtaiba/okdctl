@@ -67,11 +67,11 @@ top-level `setupSteps` function.
 ## Orchestration
 
 `distribution.BuildSteps` converts `[]StepDef` into the orchestrator's
-internal representation. `distribution.NewOrchestrator(...)` creates the
-runner. `orchestrator.Run(ctx)` iterates, emitting progress events and
-invoking each step's `Exec`. If `ctx` is cancelled mid-run (SIGINT /
-SIGTERM), the current step finishes but later steps are skipped — no
-forced kills.
+internal representation — it panics if any `StepDef` omits `ReRunSafe`.
+`distribution.NewOrchestrator(...)` creates the runner. `orchestrator.Run(ctx)`
+iterates, emitting progress events and invoking each step's `Exec`. If `ctx`
+is cancelled mid-run (SIGINT / SIGTERM), the current step finishes but later
+steps are skipped — no forced kills.
 
 The orchestrator is intentionally simple. It does **not** do parallelism,
 DAG scheduling, or resumable checkpoints. Each phase's step list is
@@ -116,11 +116,21 @@ The ordinary case: you want to add a step to an existing phase.
 2. Append a new `StepDef` literal to the appropriate sub-method (e.g.,
    `setupBaseSteps` for host-level operations, `setupInfraSteps` for
    network configuration)
-3. If the step body is longer than ~15 lines, extract it to a named
+3. Set `ReRunSafe` — this field is **required**; `BuildSteps` panics with
+   `"must declare ReRunSafe (ReRunSafeYes or ReRunSafeNo)"` when it is left
+   at its zero value:
+   - `ReRunSafeYes` — the step is idempotent; re-running it after a partial
+     failure is safe. Prefer this default wherever possible.
+   - `ReRunSafeNo` — the step has side-effects that must not repeat (e.g.,
+     generating ignition files, deploying terraform infra). For resume
+     safety, wire an `AlreadyDone` func that detects whether the work
+     product already exists; the orchestrator skips `Exec` when it returns
+     true.
+4. If the step body is longer than ~15 lines, extract it to a named
    method on the phase (e.g., `generateKubeVIPManifests`)
-4. Set `NonFatal: true` only if the step is genuinely optional (a warning
+5. Set `NonFatal: true` only if the step is genuinely optional (a warning
    is acceptable when it fails)
-5. Set `SkipWhen` for steps gated on config flags
+6. Set `SkipWhen` for steps gated on config flags
 
 Do **not** introduce new per-step builder functions or new orchestrators.
 The `StepDef` literal form is the one and only way to declare steps.
