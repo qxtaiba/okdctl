@@ -13,11 +13,14 @@ import (
 
 // RemoteISOParams carries the connection parameters needed to clean ISOs from
 // a Proxmox host over SSH. Host must be the bare hostname or IP (no port).
+// KnownHostsPath, when non-empty, enables strict host-key checking; empty
+// preserves accept-new TOFU.
 type RemoteISOParams struct {
-	Host string
-	Node string
-	Exec *executor.Executor
-	Log  *slog.Logger
+	Host           string
+	Node           string
+	Exec           *executor.Executor
+	Log            *slog.Logger
+	KnownHostsPath string
 }
 
 // refuseUnsafeISOPath rejects any path that is not exactly
@@ -217,7 +220,7 @@ func RemoveFCOSISOFromProxmox(ctx context.Context, p *RemoteISOParams, isoDir st
 		"find %s -maxdepth 1 -name 'fedora-coreos-*.iso' -type f -print0 2>/dev/null || true",
 		shellSingleQuote(isoDir),
 	)
-	result, err := SSHRun(ctx, p.Exec, p.Host, findCmd)
+	result, err := SSHRun(ctx, p.Exec, p.Host, p.KnownHostsPath, findCmd)
 	if err != nil {
 		return fmt.Errorf("ssh find failed: %w", err)
 	}
@@ -249,7 +252,7 @@ func RemoveFCOSISOFromProxmox(ctx context.Context, p *RemoteISOParams, isoDir st
 
 		// Shell-single-quote the path so filenames with spaces or metacharacters
 		// reach rm as a single literal argument.
-		if _, rmErr := SSHRun(ctx, p.Exec, p.Host, "rm -f "+shellSingleQuote(f)); rmErr != nil {
+		if _, rmErr := SSHRun(ctx, p.Exec, p.Host, p.KnownHostsPath, "rm -f "+shellSingleQuote(f)); rmErr != nil {
 			p.Log.Warn("iso: failed to remove", "iso", isoBase, "err", rmErr)
 			continue
 		}

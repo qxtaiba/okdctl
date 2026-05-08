@@ -13,7 +13,7 @@ func pveshRun(ctx context.Context, p *RemoteISOParams, subcommand, path string) 
 	if err := validateProxmoxName(p.Node); err != nil {
 		return nil, fmt.Errorf("proxmox node %q invalid: %w", p.Node, err)
 	}
-	result, err := SSHRunArgv(ctx, p.Exec, p.Host,
+	result, err := SSHRunArgv(ctx, p.Exec, p.Host, p.KnownHostsPath,
 		"pvesh", subcommand, path, "--output-format", "json",
 	)
 	if err != nil {
