@@ -49,20 +49,23 @@ var OKDRequiredPorts = []Port{
 	{Number: 8080, Protocol: protoTCP, Description: "ignition server"},
 }
 
-// haproxyPortNumbers is the set of port numbers HAProxy binds on the bastion.
-var haproxyPortNumbers = map[int]bool{phase.KubeAPIPort: true, 22623: true, 80: true, 443: true}
+// haproxyFrontends is the authoritative list of {number, protocol} pairs
+// HAProxy binds on the bastion. Protocol is explicit so a future UDP rule
+// on the same number cannot be silently included.
+var haproxyFrontends = []Port{
+	{Number: phase.KubeAPIPort, Protocol: protoTCP, Description: "kubernetes api"},
+	{Number: 22623, Protocol: protoTCP, Description: "machine config server"},
+	{Number: 80, Protocol: protoTCP, Description: "http ingress"},
+	{Number: 443, Protocol: protoTCP, Description: "https ingress"},
+}
 
-// HAProxyFrontendPorts returns the subset of OKDRequiredPorts that HAProxy
-// binds on the bastion. Postinstall uses this to tear down firewall rules when
-// HAProxy is removed, without touching DNS and ignition rules.
+// HAProxyFrontendPorts returns the ports HAProxy binds on the bastion.
+// Postinstall uses this to tear down firewall rules when HAProxy is removed,
+// without touching DNS and ignition rules. The result is a defensive copy.
 func HAProxyFrontendPorts() []Port {
-	var ports []Port
-	for _, p := range OKDRequiredPorts {
-		if haproxyPortNumbers[p.Number] && p.Protocol == protoTCP {
-			ports = append(ports, p)
-		}
-	}
-	return ports
+	out := make([]Port, len(haproxyFrontends))
+	copy(out, haproxyFrontends)
+	return out
 }
 
 // Port describes a single firewall rule: number + protocol, with a

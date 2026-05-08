@@ -12,8 +12,8 @@ func TestHAProxyFrontendPorts(t *testing.T) {
 
 	wantNumbers := map[int]bool{phase.KubeAPIPort: true, 22623: true, 80: true, 443: true}
 
-	if len(ports) != len(haproxyPortNumbers) {
-		t.Errorf("len=%d, want %d (haproxyPortNumbers cardinality)", len(ports), len(haproxyPortNumbers))
+	if len(ports) != len(haproxyFrontends) {
+		t.Errorf("len=%d, want %d (haproxyFrontends cardinality)", len(ports), len(haproxyFrontends))
 	}
 
 	for _, p := range ports {
@@ -28,6 +28,14 @@ func TestHAProxyFrontendPorts(t *testing.T) {
 	for _, p := range ports {
 		if p.Number == 53 && p.Protocol == "udp" {
 			t.Error("DNS udp/53 must not appear in HAProxyFrontendPorts")
+		}
+	}
+
+	if len(ports) > 0 {
+		ports[0].Number = 9999
+		fresh := HAProxyFrontendPorts()
+		if fresh[0].Number == 9999 {
+			t.Error("HAProxyFrontendPorts returned reference into haproxyFrontends; want defensive copy")
 		}
 	}
 }
