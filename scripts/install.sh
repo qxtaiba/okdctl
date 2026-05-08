@@ -90,7 +90,7 @@ if [ -z "$VERSION" ]; then
     if [ -n "${GITHUB_TOKEN:-}" ]; then
         _gh_auth_header=(-H "Authorization: Bearer $GITHUB_TOKEN")
     fi
-    VERSION=$(curl -sSfL --proto '=https' --tlsv1.2 --connect-timeout 10 --max-time 30 \
+    VERSION=$(curl_safe -sSfL --max-time 30 \
         "${_gh_auth_header[@]}" \
         "https://api.github.com/repos/$REPO/releases/latest" |
         sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' |
@@ -161,7 +161,11 @@ info "checksum verified"
 # + sha256 verification above is the primary guard; these are defense-in-depth.
 info "extracting"
 cd "$TMP"
-tar --no-same-owner --no-same-permissions -xzf "$ARCHIVE_NAME"
+# Defense-in-depth: reject archives containing absolute paths or parent-traversal
+# entries before any bytes hit the filesystem. Goreleaser tarballs are flat, so
+# a match here means a tampered or malformed archive slipped past the sha256 check.
+tar -tzf "$ARCHIVE_NAME" | grep -qE '^(\.\.|/)' && die "archive contains absolute or parent-traversal paths"
+tar --no-same-owner --no-same-permissions --no-overwrite-dir -xzf "$ARCHIVE_NAME"
 
 [ -f "$BINARY" ] || die "$BINARY not found in archive"
 
