@@ -117,8 +117,7 @@ func execute() (code int) {
 	err := rootCmd.ExecuteContext(ctx)
 	if err != nil {
 		if sigCode, handled := signalExitCode(&caughtSig, err); handled {
-			code = sigCode
-			return
+			return sigCode
 		}
 		// Pass err as a structured attr so logutil.RedactHandler gets the
 		// chance to scrub credentials in the chain. tui.Error(err.Error())
