@@ -281,15 +281,11 @@ func (p *Phase) DownloadCoreOSISO(ctx context.Context, info *CoreOSInfo, destPat
 		return &errtypes.ConfigError{Msg: "failed to ensure CoreOS ISO destination directory", Err: err}
 	}
 
-	opts := &download.Options{
-		URL:              info.ISOUrl,
-		OutputPath:       destPath,
-		ExpectedChecksum: info.ISOChecksum,
-		Description:      "CoreOS ISO",
-		Logger:           p.Log,
-	}
-
-	if err := download.Download(ctx, opts); err != nil {
+	if err := download.Fetch(ctx, info.ISOUrl, destPath,
+		download.WithChecksum(info.ISOChecksum),
+		download.WithDescription("CoreOS ISO"),
+		download.WithLogger(p.Log),
+	); err != nil {
 		return &errtypes.NetworkError{Msg: "failed to download CoreOS ISO", Err: err}
 	}
 

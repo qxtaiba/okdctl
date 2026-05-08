@@ -19,96 +19,113 @@ import (
 	"github.com/qxtaiba/okdctl/internal/logutil"
 )
 
-// Options configures a Download call. An empty ExpectedChecksum disables
-// checksum verification; an Overwrite=false call skips the fetch when a
-// matching file already exists.
-type Options struct {
-	URL              string
-	OutputPath       string
-	ExpectedChecksum string // SHA256 checksum; if set, download is verified against it
-	Description      string
-	Timeout          time.Duration // Default: 5 minutes
-	Overwrite        bool          // If false and file exists with correct checksum, download is skipped
-	Logger           *slog.Logger
-}
-
-func (o *Options) logger() *slog.Logger {
-	if o.Logger != nil {
-		return o.Logger
-	}
-	return logutil.NopLogger
-}
-
-// DefaultTimeout bounds a single Download call when Options.Timeout is zero.
+// DefaultTimeout bounds a single Fetch call when no WithTimeout option is set.
 const DefaultTimeout = 5 * time.Minute
 
-func canSkipDownload(opts *Options) bool {
-	info, err := os.Stat(opts.OutputPath)
+// dlConfig holds the resolved configuration for a Fetch call. logger is
+// normalised via logutil.OrNop once at Fetch construction.
+type dlConfig struct {
+	url              string
+	outputPath       string
+	expectedChecksum string
+	description      string
+	timeout          time.Duration
+	overwrite        bool
+	logger           *slog.Logger
+}
+
+// Option configures a Fetch call.
+type Option func(*dlConfig)
+
+// WithChecksum sets the expected SHA-256 hex digest; empty disables verification.
+func WithChecksum(sum string) Option { return func(c *dlConfig) { c.expectedChecksum = sum } }
+
+// WithDescription sets the human-readable name used in log and error messages.
+func WithDescription(d string) Option { return func(c *dlConfig) { c.description = d } }
+
+// WithTimeout overrides the per-fetch HTTP timeout (default: DefaultTimeout).
+func WithTimeout(d time.Duration) Option { return func(c *dlConfig) { c.timeout = d } }
+
+// WithOverwrite forces a re-download even when a file with a matching checksum exists.
+func WithOverwrite(v bool) Option { return func(c *dlConfig) { c.overwrite = v } }
+
+// WithLogger injects a structured logger; nil falls back to logutil.NopLogger.
+func WithLogger(l *slog.Logger) Option { return func(c *dlConfig) { c.logger = logutil.OrNop(l) } }
+
+func canSkipDownload(cfg *dlConfig) bool {
+	info, err := os.Stat(cfg.outputPath)
 	if err != nil || info.Size() == 0 {
 		return false
 	}
 
-	filename := filepath.Base(opts.OutputPath)
+	filename := filepath.Base(cfg.outputPath)
 
-	if opts.ExpectedChecksum == "" {
-		opts.logger().Info(fmt.Sprintf("download: using existing file %s (no checksum)", filename))
+	if cfg.expectedChecksum == "" {
+		cfg.logger.Info(fmt.Sprintf("download: using existing file %s (no checksum)", filename))
 		return true
 	}
 
-	opts.logger().Info(fmt.Sprintf("download: validating existing file %s", filename))
+	cfg.logger.Info(fmt.Sprintf("download: validating existing file %s", filename))
 
-	actualChecksum, err := CalculateChecksum(opts.OutputPath)
+	actualChecksum, err := CalculateChecksum(cfg.outputPath)
 	if err != nil {
 		return false // can't read file; re-download instead of failing
 	}
 
-	if actualChecksum == opts.ExpectedChecksum {
-		opts.logger().Info(fmt.Sprintf("download: checksum verified for %s", filename))
+	if actualChecksum == cfg.expectedChecksum {
+		cfg.logger.Info(fmt.Sprintf("download: checksum verified for %s", filename))
 		return true
 	}
 
-	opts.logger().Warn(fmt.Sprintf("download: checksum mismatch, re-downloading %s", filename))
-	if err := os.Remove(opts.OutputPath); err != nil && !os.IsNotExist(err) {
-		opts.logger().Warn("download: failed to remove mismatched file", "file", filename, "err", err)
+	cfg.logger.Warn(fmt.Sprintf("download: checksum mismatch, re-downloading %s", filename))
+	if err := os.Remove(cfg.outputPath); err != nil && !os.IsNotExist(err) {
+		cfg.logger.Warn("download: failed to remove mismatched file", "file", filename, "err", err)
 	}
 	return false
 }
 
-// Download fetches opts.URL to opts.OutputPath with bounded retries and
-// optional SHA-256 verification. A partially-written file is removed on any
-// mid-attempt failure so retries start clean.
-func Download(ctx context.Context, opts *Options) error {
-	if opts.Timeout == 0 {
-		opts.Timeout = DefaultTimeout
+// Fetch downloads the artifact at url to dst with bounded retries and optional
+// SHA-256 verification. A partially-written file is removed on any mid-attempt
+// failure so retries start clean.
+func Fetch(ctx context.Context, url, dst string, opts ...Option) error {
+	cfg := &dlConfig{
+		url:        url,
+		outputPath: dst,
+		logger:     logutil.NopLogger,
+	}
+	for _, o := range opts {
+		o(cfg)
+	}
+	if cfg.timeout == 0 {
+		cfg.timeout = DefaultTimeout
+	}
+	if cfg.description == "" {
+		cfg.description = filepath.Base(dst)
 	}
 
-	if opts.Description == "" {
-		opts.Description = filepath.Base(opts.OutputPath)
-	}
-
-	if !opts.Overwrite && canSkipDownload(opts) {
+	if !cfg.overwrite && canSkipDownload(cfg) {
 		return nil
 	}
 
-	if err := os.MkdirAll(filepath.Dir(opts.OutputPath), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
 		return fmt.Errorf("failed to create output directory: %w", err)
 	}
 
-	filename := filepath.Base(opts.OutputPath)
-	opts.logger().Info(fmt.Sprintf("download: %s", filename))
+	filename := filepath.Base(dst)
+	cfg.logger.Info(fmt.Sprintf("download: %s", filename))
 
-	client := httputil.New(opts.Timeout)
+	client := httputil.New(cfg.timeout)
 
 	attempts, err := retryDownload(ctx, func() error {
-		return fetchToFile(ctx, client, opts, filename)
+		return fetchToFile(ctx, client, cfg, filename)
 	})
 	if err != nil {
-		opts.logger().Error("download: giving up after retries", "desc", opts.Description, "attempts", attempts, "err", err)
-		return &errtypes.NetworkError{Msg: fmt.Sprintf("download failed for %s", opts.Description), Err: err}
+		cfg.logger.Error("download: giving up after retries", "desc", cfg.description, "attempts", attempts, "err", err)
+		return &errtypes.NetworkError{Msg: fmt.Sprintf("download failed for %s", cfg.description), Err: err}
 	}
 
-	if err := verifyDownloadedFile(opts.OutputPath, opts.ExpectedChecksum, opts.logger()); err != nil {
-		_ = os.Remove(opts.OutputPath)
+	if err := verifyDownloadedFile(dst, cfg.expectedChecksum, cfg.logger); err != nil {
+		_ = os.Remove(dst)
 		return err
 	}
 	return nil
@@ -116,8 +133,8 @@ func Download(ctx context.Context, opts *Options) error {
 
 // fetchToFile runs one download attempt. On any mid-attempt failure the
 // partial file is removed so the next retry starts from a clean slate.
-func fetchToFile(ctx context.Context, client *http.Client, opts *Options, filename string) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, opts.URL, http.NoBody)
+func fetchToFile(ctx context.Context, client *http.Client, cfg *dlConfig, filename string) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, cfg.url, http.NoBody)
 	if err != nil {
 		return fmt.Errorf("build request: %w", err)
 	}
@@ -133,7 +150,7 @@ func fetchToFile(ctx context.Context, client *http.Client, opts *Options, filena
 		return &HTTPStatusError{
 			Status: resp.StatusCode,
 			Method: http.MethodGet,
-			URL:    opts.URL,
+			URL:    cfg.url,
 			Body:   bodySnippet(raw, len(raw) == 256),
 		}
 	}
@@ -145,7 +162,7 @@ func fetchToFile(ctx context.Context, client *http.Client, opts *Options, filena
 	// O_NOFOLLOW rejects a symlink at OutputPath; under the sudo re-exec
 	// model the open runs as root, so following a symlink would write
 	// binary content to an attacker-chosen path.
-	outFile, err := os.OpenFile(opts.OutputPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC|syscall.O_NOFOLLOW, 0o600)
+	outFile, err := os.OpenFile(cfg.outputPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC|syscall.O_NOFOLLOW, 0o600)
 	if err != nil {
 		return fmt.Errorf("create output file: %w", err)
 	}
@@ -154,18 +171,18 @@ func fetchToFile(ctx context.Context, client *http.Client, opts *Options, filena
 	if _, err := io.Copy(pw, resp.Body); err != nil {
 		_ = pw.Close()
 		_ = outFile.Close()
-		_ = os.Remove(opts.OutputPath)
+		_ = os.Remove(cfg.outputPath)
 		return fmt.Errorf("write file: %w", err)
 	}
 	_ = pw.Close()
 
 	if err := outFile.Sync(); err != nil {
 		_ = outFile.Close()
-		_ = os.Remove(opts.OutputPath)
+		_ = os.Remove(cfg.outputPath)
 		return fmt.Errorf("sync output file: %w", err)
 	}
 	if err := outFile.Close(); err != nil {
-		_ = os.Remove(opts.OutputPath)
+		_ = os.Remove(cfg.outputPath)
 		return fmt.Errorf("close output file: %w", err)
 	}
 	return nil

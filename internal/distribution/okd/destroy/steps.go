@@ -132,9 +132,8 @@ func (p *Phase) destroySteps(ctx context.Context, cfg *config.Config, opts *Opti
 					PreserveConfig: false,
 					RemovePackages: opts.RemovePackages,
 					BinDir:         phase.ResolveBinDir(cfg),
-					Logger:         p.Log,
 				}
-				if err := cleanup.New(p.Exec, p.Log, p.Version).Execute(ctx, cleanupOpts); err != nil {
+				if err := cleanup.New(p.Exec, p.Log, p.Version).Execute(ctx, cleanupOpts, cleanup.WithLogger(p.Log)); err != nil {
 					return &errtypes.ClusterError{Msg: "cleanup failed", Err: err}
 				}
 				return nil

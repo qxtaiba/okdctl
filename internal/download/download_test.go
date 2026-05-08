@@ -31,14 +31,11 @@ func TestDownload_HappyPath(t *testing.T) {
 	dir := t.TempDir()
 	out := filepath.Join(dir, "artifact.bin")
 
-	opts := &Options{
-		URL:              srv.URL + "/artifact.bin",
-		OutputPath:       out,
-		ExpectedChecksum: sha256Hex(body),
-		Logger:           logutil.NopLogger,
-	}
-	if err := Download(context.Background(), opts); err != nil {
-		t.Fatalf("Download: %v", err)
+	if err := Fetch(context.Background(), srv.URL+"/artifact.bin", out,
+		WithChecksum(sha256Hex(body)),
+		WithLogger(logutil.NopLogger),
+	); err != nil {
+		t.Fatalf("Fetch: %v", err)
 	}
 
 	got, err := os.ReadFile(out)
@@ -90,13 +87,9 @@ func TestDownload_NonOKStatusReturnsHTTPStatusError(t *testing.T) {
 	defer srv.Close()
 
 	dir := t.TempDir()
-	opts := &Options{
-		URL:        srv.URL + "/missing",
-		OutputPath: filepath.Join(dir, "out.bin"),
-		Logger:     logutil.NopLogger,
-	}
-
-	err := Download(context.Background(), opts)
+	err := Fetch(context.Background(), srv.URL+"/missing", filepath.Join(dir, "out.bin"),
+		WithLogger(logutil.NopLogger),
+	)
 	if err == nil {
 		t.Fatal("expected error for HTTP 404; got nil")
 	}
@@ -133,12 +126,10 @@ func TestDownload_CtxCancelCleansPartialFile(t *testing.T) {
 
 	done := make(chan error, 1)
 	go func() {
-		done <- Download(ctx, &Options{
-			URL:        srv.URL + "/big",
-			OutputPath: out,
-			Timeout:    30 * time.Second,
-			Logger:     logutil.NopLogger,
-		})
+		done <- Fetch(ctx, srv.URL+"/big", out,
+			WithTimeout(30*time.Second),
+			WithLogger(logutil.NopLogger),
+		)
 	}()
 
 	select {
@@ -181,16 +172,12 @@ func TestDownload_SymlinkAtOutputPath(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	opts := &Options{
-		URL:        srv.URL + "/artifact.bin",
-		OutputPath: link,
-		// Overwrite=true bypasses canSkipDownload, which would otherwise stat
+	if err := Fetch(context.Background(), srv.URL+"/artifact.bin", link,
+		// WithOverwrite bypasses canSkipDownload, which would otherwise stat
 		// through the symlink, see size>0, and short-circuit (no ExpectedChecksum).
-		Overwrite: true,
-		Logger:    logutil.NopLogger,
-	}
-
-	if err := Download(context.Background(), opts); err == nil {
+		WithOverwrite(true),
+		WithLogger(logutil.NopLogger),
+	); err == nil {
 		t.Fatal("expected error when OutputPath is a symlink; O_NOFOLLOW must reject it")
 	}
 
@@ -210,12 +197,12 @@ func TestCanSkipDownload(t *testing.T) {
 
 	t.Run("file absent returns false", func(t *testing.T) {
 		dir := t.TempDir()
-		opts := &Options{
-			OutputPath:       filepath.Join(dir, "nope.bin"),
-			ExpectedChecksum: goodSum,
-			Logger:           logutil.NopLogger,
+		cfg := &dlConfig{
+			outputPath:       filepath.Join(dir, "nope.bin"),
+			expectedChecksum: goodSum,
+			logger:           logutil.NopLogger,
 		}
-		if canSkipDownload(opts) {
+		if canSkipDownload(cfg) {
 			t.Error("expected false for absent file")
 		}
 	})
@@ -226,12 +213,12 @@ func TestCanSkipDownload(t *testing.T) {
 		if err := os.WriteFile(path, []byte{}, 0o600); err != nil {
 			t.Fatal(err)
 		}
-		opts := &Options{
-			OutputPath:       path,
-			ExpectedChecksum: goodSum,
-			Logger:           logutil.NopLogger,
+		cfg := &dlConfig{
+			outputPath:       path,
+			expectedChecksum: goodSum,
+			logger:           logutil.NopLogger,
 		}
-		if canSkipDownload(opts) {
+		if canSkipDownload(cfg) {
 			t.Error("expected false for zero-size file")
 		}
 	})
@@ -242,12 +229,12 @@ func TestCanSkipDownload(t *testing.T) {
 		if err := os.WriteFile(path, body, 0o600); err != nil {
 			t.Fatal(err)
 		}
-		opts := &Options{
-			OutputPath:       path,
-			ExpectedChecksum: goodSum,
-			Logger:           logutil.NopLogger,
+		cfg := &dlConfig{
+			outputPath:       path,
+			expectedChecksum: goodSum,
+			logger:           logutil.NopLogger,
 		}
-		if !canSkipDownload(opts) {
+		if !canSkipDownload(cfg) {
 			t.Error("expected true for matching checksum")
 		}
 	})
@@ -258,12 +245,12 @@ func TestCanSkipDownload(t *testing.T) {
 		if err := os.WriteFile(path, body, 0o600); err != nil {
 			t.Fatal(err)
 		}
-		opts := &Options{
-			OutputPath:       path,
-			ExpectedChecksum: badSum,
-			Logger:           logutil.NopLogger,
+		cfg := &dlConfig{
+			outputPath:       path,
+			expectedChecksum: badSum,
+			logger:           logutil.NopLogger,
 		}
-		if canSkipDownload(opts) {
+		if canSkipDownload(cfg) {
 			t.Error("expected false for checksum mismatch")
 		}
 		if _, err := os.Stat(path); !os.IsNotExist(err) {

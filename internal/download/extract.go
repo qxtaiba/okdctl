@@ -16,21 +16,38 @@ import (
 	"github.com/qxtaiba/okdctl/internal/logutil"
 )
 
-// ExtractOptions configures an ExtractTarGz call.
-type ExtractOptions struct {
-	ArchivePath      string
-	DestDir          string
-	ExpectedChecksum string // SHA256 checksum of the archive (optional)
-	StripComponents  int    // Removes leading path components (like tar --strip-components)
-	CleanupArchive   bool   // Removes the archive after successful extraction
-	Logger           *slog.Logger
+// extractConfig holds the resolved configuration for an ExtractTarGz call.
+// logger is normalised via logutil.OrNop once at ExtractTarGz construction.
+type extractConfig struct {
+	archivePath      string
+	destDir          string
+	expectedChecksum string
+	stripComponents  int
+	cleanupArchive   bool
+	logger           *slog.Logger
 }
 
-func (o ExtractOptions) logger() *slog.Logger {
-	if o.Logger != nil {
-		return o.Logger
-	}
-	return logutil.NopLogger
+// ExtractOption configures an ExtractTarGz call.
+type ExtractOption func(*extractConfig)
+
+// WithExtractChecksum sets the expected SHA-256 hex digest for the archive; empty disables verification.
+func WithExtractChecksum(sum string) ExtractOption {
+	return func(c *extractConfig) { c.expectedChecksum = sum }
+}
+
+// WithStripComponents removes n leading path components from archive entries, like tar --strip-components.
+func WithStripComponents(n int) ExtractOption {
+	return func(c *extractConfig) { c.stripComponents = n }
+}
+
+// WithCleanupArchive removes the archive file after successful extraction.
+func WithCleanupArchive(v bool) ExtractOption {
+	return func(c *extractConfig) { c.cleanupArchive = v }
+}
+
+// WithExtractLogger injects a structured logger; nil falls back to logutil.NopLogger.
+func WithExtractLogger(l *slog.Logger) ExtractOption {
+	return func(c *extractConfig) { c.logger = logutil.OrNop(l) }
 }
 
 // verifyResolvedPath checks that path, after resolving symlinks on the real
@@ -133,37 +150,46 @@ func processTarEntry(tarReader *tar.Reader, header *tar.Header, destDir string, 
 	return nil
 }
 
-// ExtractTarGz extracts opts.ArchivePath into opts.DestDir. Zip-slip and
+// ExtractTarGz extracts archivePath into destDir. Zip-slip and
 // symlink-traversal escapes are rejected; path prefixes are rechecked after
 // os.EvalSymlinks so writes through previously-extracted links also fail.
-func ExtractTarGz(ctx context.Context, opts ExtractOptions) error {
-	filename := filepath.Base(opts.ArchivePath)
+func ExtractTarGz(ctx context.Context, archivePath, destDir string, opts ...ExtractOption) error {
+	cfg := &extractConfig{
+		archivePath: archivePath,
+		destDir:     destDir,
+		logger:      logutil.NopLogger,
+	}
+	for _, o := range opts {
+		o(cfg)
+	}
 
-	if opts.ExpectedChecksum != "" {
-		opts.logger().Info(fmt.Sprintf("download: validating sha256 checksum for %s", filename))
+	filename := filepath.Base(archivePath)
 
-		if err := ValidateChecksum(opts.ArchivePath, opts.ExpectedChecksum); err != nil {
+	if cfg.expectedChecksum != "" {
+		cfg.logger.Info(fmt.Sprintf("download: validating sha256 checksum for %s", filename))
+
+		if err := ValidateChecksum(archivePath, cfg.expectedChecksum); err != nil {
 			return fmt.Errorf("checksum validation failed for %s: %w", filename, err)
 		}
 
-		opts.logger().Info(fmt.Sprintf("download: checksum validated for %s", filename))
+		cfg.logger.Info(fmt.Sprintf("download: checksum validated for %s", filename))
 	}
 
-	file, err := os.Open(opts.ArchivePath)
+	file, err := os.Open(archivePath)
 	if err != nil {
-		return fmt.Errorf("failed to open archive %s: %w", opts.ArchivePath, err)
+		return fmt.Errorf("failed to open archive %s: %w", archivePath, err)
 	}
 	defer func() { _ = file.Close() }()
 
 	gzipReader, err := gzip.NewReader(file)
 	if err != nil {
-		return fmt.Errorf("failed to decompress archive %s: %w", opts.ArchivePath, err)
+		return fmt.Errorf("failed to decompress archive %s: %w", archivePath, err)
 	}
 	defer func() { _ = gzipReader.Close() }()
 
 	tarReader := tar.NewReader(gzipReader)
 
-	if err := os.MkdirAll(opts.DestDir, 0o755); err != nil {
+	if err := os.MkdirAll(destDir, 0o755); err != nil {
 		return fmt.Errorf("failed to create destination directory: %w", err)
 	}
 
@@ -179,21 +205,21 @@ func ExtractTarGz(ctx context.Context, opts ExtractOptions) error {
 			break
 		}
 		if err != nil {
-			return fmt.Errorf("failed to read tar entry from %s: %w", opts.ArchivePath, err)
+			return fmt.Errorf("failed to read tar entry from %s: %w", archivePath, err)
 		}
 
-		if err := processTarEntry(tarReader, header, opts.DestDir, opts.StripComponents); err != nil {
+		if err := processTarEntry(tarReader, header, destDir, cfg.stripComponents); err != nil {
 			return err
 		}
 	}
 
-	if opts.CleanupArchive {
-		if err := os.Remove(opts.ArchivePath); err != nil {
-			opts.logger().Warn(fmt.Sprintf("download: failed to cleanup archive %s", filename))
+	if cfg.cleanupArchive {
+		if err := os.Remove(archivePath); err != nil {
+			cfg.logger.Warn(fmt.Sprintf("download: failed to cleanup archive %s", filename))
 		}
 	}
 
-	opts.logger().Info(fmt.Sprintf("download: extracted %s", filename))
+	cfg.logger.Info(fmt.Sprintf("download: extracted %s", filename))
 
 	return nil
 }
