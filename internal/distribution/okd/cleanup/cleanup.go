@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"log/slog"
 	"path/filepath"
+	"strings"
 
 	"github.com/qxtaiba/okdctl/internal/distribution"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/dns"
@@ -32,6 +33,42 @@ const (
 	HAProxyOnly   Kind = "haproxy-only"
 	TerraformOnly Kind = "terraform-only"
 )
+
+// ValidKinds returns every recognised cleanup Kind.
+func ValidKinds() []Kind {
+	return []Kind{Full, WorkOnly, WebOnly, HAProxyOnly, TerraformOnly}
+}
+
+// KindStrings returns the string representations of ValidKinds, suitable for
+// error messages and help text.
+func KindStrings() []string {
+	ks := ValidKinds()
+	ss := make([]string, len(ks))
+	for i, k := range ks {
+		ss[i] = string(k)
+	}
+	return ss
+}
+
+// IsValid reports whether k is a recognised cleanup Kind.
+func (k Kind) IsValid() bool {
+	for _, v := range ValidKinds() {
+		if k == v {
+			return true
+		}
+	}
+	return false
+}
+
+// Validate returns a *errtypes.ConfigError when k is not a recognised Kind.
+func (k Kind) Validate() error {
+	if k.IsValid() {
+		return nil
+	}
+	return &errtypes.ConfigError{
+		Msg: fmt.Sprintf("unknown cleanup type: %s (valid: %s)", k, strings.Join(KindStrings(), ", ")),
+	}
+}
 
 // Options configures a cleanup run.
 type Options struct {
@@ -104,8 +141,8 @@ func execute(ctx context.Context, opts *Options) error {
 	if opts.Kind == "" {
 		return &errtypes.ConfigError{Msg: "cleanup kind not set"}
 	}
-	if opts.Kind != Full && opts.Kind != WorkOnly && opts.Kind != WebOnly && opts.Kind != HAProxyOnly && opts.Kind != TerraformOnly {
-		return &errtypes.ConfigError{Msg: fmt.Sprintf("unknown cleanup type: %s (valid types: full, work-only, web-only, haproxy-only, terraform-only)", opts.Kind)}
+	if err := opts.Kind.Validate(); err != nil {
+		return err
 	}
 	logger := opts.getLogger().With("phase", "cleanup")
 	defs := cleanupSteps(opts, logger)
