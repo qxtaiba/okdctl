@@ -117,22 +117,45 @@ func resolveProjectRootOrDie() (string, error) {
 	if root == "" {
 		return "", fmt.Errorf("project root resolved to empty path")
 	}
-	// Project marker check: refuse if the resolved root does not contain the
-	// configured config file. This stops a symlink that resolves outside the
-	// project from redirecting sudo-elevated cleanup at arbitrary paths.
-	// filepath.Base ensures the check stays inside root even when --config is
-	// an absolute path.
-	marker := filepath.Join(root, filepath.Base(cfgFile))
-	if _, statErr := os.Stat(marker); statErr != nil {
-		if errors.Is(statErr, os.ErrNotExist) {
-			return "", &errtypes.ConfigError{
-				Msg: fmt.Sprintf("project marker not found at %s; run 'okdctl deploy' to initialise", marker),
-				Err: errtypes.ErrConfigMissing,
-			}
+	// Project marker check: at least one of {okdctl.yaml, okdctl.env,
+	// infrastructure/terraform/environments/*/terraform.tfstate} must be
+	// present. All three files are only written by okdctl inside a project
+	// root, so the symlink-redirect defence is preserved. After a partial
+	// deploy that removes okdctl.yaml, the env file or tfstate still lets
+	// destroy and cleanup run.
+	if !hasProjectMarker(root) {
+		return "", &errtypes.ConfigError{
+			Msg: fmt.Sprintf(
+				"no project marker found in %s "+
+					"(checked okdctl.yaml, okdctl.env, "+
+					"infrastructure/terraform/environments/*/terraform.tfstate); "+
+					"run 'okdctl deploy' to initialise",
+				root,
+			),
+			Err: errtypes.ErrConfigMissing,
 		}
-		return "", fmt.Errorf("stat project marker %s: %w", marker, statErr)
 	}
 	return root, nil
+}
+
+// hasProjectMarker reports whether root contains at least one okdctl project
+// file. It checks the configured config-file name, okdctl.env, and any
+// terraform.tfstate under infrastructure/terraform/environments/. All three
+// are exclusively written by okdctl inside a project root.
+func hasProjectMarker(root string) bool {
+	candidates := []string{
+		filepath.Join(root, filepath.Base(cfgFile)),
+		filepath.Join(root, "okdctl.env"),
+	}
+	for _, c := range candidates {
+		if _, err := os.Stat(c); err == nil {
+			return true
+		}
+	}
+	matches, _ := filepath.Glob(
+		filepath.Join(root, "infrastructure", "terraform", "environments", "*", "terraform.tfstate"),
+	)
+	return len(matches) > 0
 }
 
 // tuiReporter wraps tui.StartSpinner so domain code can call a callback that
