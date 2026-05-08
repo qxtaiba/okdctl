@@ -460,7 +460,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sec:27088eab:input-kubeconfig-not-resolved` — input kubeconfig not resolved
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-27088eab-ssh-known-hosts  
+**Status:** not started  
 **Severity:** minor  
 **Cluster:** input-validation  
 **Evidence:** `internal/distribution/okd/phase/ssh.go:29-41`  
@@ -608,7 +608,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sec:06f00bcb:ignition-pullsecret-served-unauth` — ignition pullsecret served unauth
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-06f00bcb-ignition-unauth  
+**Status:** not started  
 **Severity:** major  
 **Cluster:** credentials  
 **Evidence:** `internal/distribution/okd/setup/apache.go:175-188`  
@@ -618,7 +618,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sec:21dc1103:download-no-nofollow` — download no nofollow
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-21dc1103-download-nofollow  
+**Status:** not started  
 **Severity:** major  
 **Cluster:** file-toctou  
 **Evidence:** `internal/download/download.go:140-148`  
@@ -638,7 +638,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sec:5013fea6:bootstrap-oc-no-signature` — bootstrap oc no signature
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-5013fea6-bootstrap-oc-pin  
+**Status:** not started  
 **Severity:** minor  
 **Cluster:** tls-network  
 **Evidence:** `internal/distribution/okd/setup/release_extract.go:29-91`  
@@ -648,7 +648,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sec:8ea706f6:tools-tempdir-non-canonical` — tools tempdir non canonical
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-8ea706f6-tools-tempdir  
+**Status:** not started  
 **Severity:** minor  
 **Cluster:** file-toctou — related: sec:21dc1103:download-no-nofollow  
 **Evidence:** `internal/distribution/okd/setup/tools.go:203-216`  
@@ -658,7 +658,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sec:98723e5d:helm-set-cred-via-argv` — helm set cred via argv
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-98723e5d-helm-values-file  
+**Status:** not started  
 **Severity:** minor  
 **Cluster:** credentials  
 **Evidence:** `internal/distribution/okd/install/flux.go:146-159`  
@@ -668,7 +668,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sec:d9f7733e:debug-bundle-tar-readall` — debug bundle tar readall
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-d9f7733e-bundle-stream  
+**Status:** not started  
 **Severity:** minor  
 **Cluster:** file-toctou  
 **Evidence:** `internal/cli/debug_bundle.go:301-329`  
@@ -678,7 +678,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sec:25fa1be8:firewall-haproxy-port-only-tcp` — firewall haproxy port only tcp
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-25fa1be8-firewall-allowlist  
+**Status:** not started  
 **Severity:** suggestion  
 **Cluster:** input-validation  
 **Evidence:** `internal/distribution/okd/firewall/firewall.go:52-66`  
@@ -713,7 +713,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `state:4f69fc9d:rerunsafe-not-enforced` — rerunsafe not enforced
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/state-4f69fc9d-rerunsafe  
+**Status:** not started  
 **Severity:** major  
 **Cluster:** phase-idempotency  
 **Evidence:** `internal/distribution/step.go:228-251`  
@@ -723,7 +723,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `state:c19ee328:setup-iso-build-not-resumable` — setup iso build not resumable
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/state-c19ee328-iso-resumable  
+**Status:** not started  
 **Severity:** major  
 **Cluster:** crash-recoverability  
 **Evidence:** `internal/distribution/okd/setup/steps.go:212-240`  
@@ -783,7 +783,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `ux:d31d1b9d:describe-format-unvalidated` — describe format unvalidated
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/ux-d31d1b9d-describe-format  
+**Status:** not started  
 **Severity:** major  
 **Cluster:** json-stability  
 **Evidence:** `internal/cli/status.go:272-376` + 1 more  
@@ -793,7 +793,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `ux:e7db1220:json-release-type-as-int` — json release type as int
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/ux-e7db1220-release-type-json  
+**Status:** not started  
 **Severity:** major  
 **Cluster:** json-stability  
 **Evidence:** `internal/distribution/okd/releases/types.go:31-40` + 1 more  
@@ -803,7 +803,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `ux:8154ab0f:doctor-no-machine-format` — doctor no machine format
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/ux-8154ab0f-doctor-json  
+**Status:** not started  
 **Severity:** minor  
 **Cluster:** json-stability  
 **Evidence:** `internal/cli/doctor.go:70-113` + 1 more  
@@ -836,7 +836,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `obs:41a9d4eb:redact-handler-struct-fields-passthrough` — redact handler struct fields passthrough
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/obs-41a9d4eb-redact-struct  
+**Status:** not started  
 **Severity:** major  
 **Cluster:** redaction-sink — seam→audit-errors  
 **Evidence:** `internal/logutil/redact.go:91-112`  
@@ -856,7 +856,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `obs:33579dd5:refusing-critical-path-no-target` — refusing critical path no target
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/obs-33579dd5-path-attr  
+**Status:** not started  
 **Severity:** minor  
 **Cluster:** field-stability  
 **Evidence:** `internal/distribution/okd/cleanup/services.go:155-176`  
@@ -955,7 +955,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `doc:8f46b665:phases-add-step-missing-rerunsafe` — phases add step missing rerunsafe
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/doc-8f46b665-phases-arch  
+**Status:** not started  
 **Severity:** major  
 **Cluster:** readme-drift  
 **Evidence:** `docs/architecture/phases.md:102-117`  
@@ -967,7 +967,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `tst:39c75e91:promptconfirm-untested` — promptconfirm untested
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/tst-39c75e91-promptconfirm  
+**Status:** not started  
 **Severity:** major  
 **Cluster:** destructive-untested  
 **Evidence:** `internal/cli/confirm.go:21-62`  
@@ -977,7 +977,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `tst:e3782ee7:make-executable-untested` — make executable untested
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/tst-e3782ee7-makeexecutable  
+**Status:** not started  
 **Severity:** major  
 **Cluster:** canonical-helper-untested  
 **Evidence:** `internal/system/fs.go:284-290`  
