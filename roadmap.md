@@ -635,16 +635,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Acceptable as-is — the GPG key is public. Document the cleanup contract for symmetric WriteTempFile usage.  
 **Effort:** hours
 
-##### `sec:8ea706f6:input-validation` — input validation
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-8ea706f6-rhel-repo-pin  
-**Severity:** suggestion  
-**Cluster:** input-validation  
-**Evidence:** `internal/distribution/okd/setup/tools.go:129-133`  
-**Problem:** installTerraform on RHEL: the repoURL `https://rpm.releases.hashicorp.com/RHEL/hashicorp.repo` is hardcoded. dnf config-manager --add-repo trusts the repo file fetched at this URL — the file declares the gpgkey URL inside it. dnf signature-check then validates packages with that gpgkey. The chain is: HTTPS-trust-on-fetch → gpgkey-trust-on-fetch → package-signature. The first link is HTTPS-only; no signature on the .repo file itself.  
-**Fix:** Embed the .repo file content in the binary and write it via WriteAsInvokingUser to /etc/yum.repos.d/hashicorp.repo with the gpgkey URL pinned to a HashiCorp-controlled HTTPS path. Removes the on-the-fly fetch step entirely. Same pattern as the deb-side installHashiCorpDebianRepo, just consistent across families.  
-**Effort:** hours
-
 
 #### audit-subprocess
 
@@ -977,16 +967,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Migrate every `fmt.Println(X)` and `fmt.Printf(X...)` site inside a cobra `Run`/`RunE` to `fmt.Fprintln(cmd.OutOrStdout(), X)` / `fmt.Fprintf(cmd.OutOrStdout(), X...)`. Sites outside RunE (e.g. summary builders) take a writer argument. The few legitimate stderr writes (e.g. `kubeconfig.go:72,123`) already use `fmt.Fprintf(os.Stderr, ...)` and are correct.  
 **Effort:** hours
 
-##### `ux:d31d1b9d:describe-format-shared-global` — describe format shared global
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/ux-d31d1b9d-describe-format-split  
-**Severity:** suggestion  
-**Cluster:** flag-conventions  
-**Evidence:** `internal/cli/status.go:62-67`  
-**Problem:** `describeNodeCmd` and `describeAddonCmd` both write into the same package-level `describeFormat` string. cobra parses each subcommand independently, so this works in single-shot CLI usage. But: tests that run subcommands in sequence (`runDescribeNode` then `runDescribeAddon` in the same process) inherit stale state, and adding a third describe subcommand later will compound the problem. The other `--format` sites use per-command state (`statusFormat`, `releasesListFormat`, `releasesShowFormat`).  
-**Fix:** Split `describeFormat` into `describeNodeFormat` and `describeAddonFormat` to match `releasesListFormat`/`releasesShowFormat` (releases.go:25-29). One ten-line change.  
-**Effort:** hours
-
 ##### `ux:e7db1220:format-vs-output-flag-name-drift` — format vs output flag name drift
 
 **Status:** not started  
@@ -1020,16 +1000,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Mechanical sweep: every `tui.X(fmt.Sprintf("prefix: %s", v))` becomes `tui.X("prefix", tui.LF("key", v))`; every `p.Log.X(fmt.Sprintf("prefix: %s", v))` becomes `p.Log.X("prefix", "key", v)`. ~50 sites; one PR per package keeps churn reviewable. Roll-up message stays static; values move to attrs.  
 **Effort:** hours
 
-##### `obs:25fa1be8:nil-logger-deref` — nil logger deref
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/obs-25fa1be8-firewall-nil-logger  
-**Severity:** minor  
-**Cluster:** handler-setup  
-**Evidence:** `internal/distribution/okd/firewall/firewall.go:117-192`  
-**Problem:** firewall.Configure / firewall.RemoveRules / openPort take a *slog.Logger but never normalise nil through logutil.OrNop. DetectBackend (L80) explicitly tolerates nil; the rest of the package does not. Today every caller passes non-nil p.Log so the latent panic is unreachable — but the *slog.Logger nil-tolerance contract diverges within the file (DetectBackend says nil-tolerant, everyone else assumes non-nil), inviting a future caller to honour the documented nil-tolerance and crash.  
-**Fix:** At the top of Configure, RemoveRules, openPort, modifyPort: `logger = logutil.OrNop(logger)`. Or remove the 'logger may be nil' clause from DetectBackend doc and require non-nil everywhere. Pick one nil-policy and apply it package-wide.  
-**Effort:** hours
-
 ##### `obs:33579dd5:refusing-critical-path-no-target` — refusing critical path no target
 
 **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/obs-33579dd5-path-attr  
@@ -1040,27 +1010,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Add `"path", configPath` (or `"path", cfg`, `"path", backup`) at each of the three sites so the path is queryable separately from the error chain.  
 **Effort:** hours
 
-##### `obs:c19ee328:debug-fmt-sprintf-package-loop` — debug fmt sprintf package loop
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/obs-c19ee328-pkg-loop-slog  
-**Severity:** minor  
-**Cluster:** field-stability — related: obs:6424733c:fmt-sprintf-message-pattern  
-**Evidence:** `internal/distribution/okd/setup/steps.go:312-323`  
-**Problem:** installSystemPackages emits Debug per package via `p.Log.Debug(fmt.Sprintf("packages: %s not found", pkg))` and likewise for 'already installed'. Same fmt.Sprintf-into-message anti-pattern as obs:6424733c, but this one is in a tight per-element loop that runs at deploy time. Same fix pattern; called out separately because Debug-level traffic is the primary signal new operators turn on with --verbose, and structured attrs make `--log-format=json | jq` immediately useful.  
-**Fix:** L312: `p.Log.Debug("packages: not found", "pkg", pkg)`. L314: `p.Log.Debug("packages: already installed", "pkg", pkg)`. L323: `p.Log.Info("packages: installing missing", "count", len(toInstall))`. Caller can then `jq 'select(.pkg=="haproxy")'` cleanly.  
-**Effort:** hours
-
 #### audit-modernization
-
-##### `mod:5013fea6:use-slices-containsfunc` — use slices containsfunc
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/mod-5013fea6-slices-containsfunc  
-**Severity:** suggestion  
-**Cluster:** slices-maps  
-**Evidence:** `internal/distribution/okd/setup/release_extract.go:139-147`  
-**Problem:** isAuthError hand-rolls a contains-by-predicate loop over authMarkers. slices.ContainsFunc (Go 1.21) expresses the same intent in one expression and matches the pattern already in use elsewhere in this repo (status.go uses slices.ContainsFunc on cluster operator conditions).  
-**Fix:** Replace body with: `lower := strings.ToLower(msg); return slices.ContainsFunc(authMarkers, func(m string) bool { return strings.Contains(lower, m) })`. Add `slices` to the existing import block (already includes strings, fmt, log/slog).  
-**Effort:** hours
 
 
 #### audit-code-smells
@@ -1201,16 +1151,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 #### audit-tests
 
-##### `tst:21dc1103:download-no-test` — download no test
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/tst-21dc1103-download-tests  
-**Severity:** blocker  
-**Cluster:** canonical-helper-untested — related: sec:21dc1103:download-no-nofollow  
-**Evidence:** `internal/download/download.go:79-168`  
-**Problem:** Download/fetchToFile/canSkipDownload have no tests at all (only checksum.go and extract.go are covered). The function writes binaries that install.sh and setup.installBinaryToPath then chmod +x and copy into /usr/local/bin under sudo — a wrong code path here lands an attacker-controlled binary in the system PATH. The lack of a symlink-refusal test is also why sec:21dc1103 (no O_NOFOLLOW) survived multiple passes.  
-**Fix:** Add internal/download/download_test.go: (1) httptest.Server-backed happy-path covering Download → file written at 0o600 with expected bytes; (2) checksum-mismatch retry → second attempt wins; (3) HTTP non-200 returns *HTTPStatusError; (4) ctx-cancel mid-download cleans the partial file (no .partial leftover); (5) symlink at OutputPath path is refused (locks the future O_NOFOLLOW guard from sec:21dc1103); (6) canSkipDownload returns true on existing file with matching checksum, false on size=0, false on checksum mismatch. Use httptest + t.TempDir; no third-party libs.  
-**Effort:** days
-
 ##### `tst:39c75e91:promptconfirm-untested` — promptconfirm untested
 
 **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/tst-39c75e91-promptconfirm  
@@ -1229,16 +1169,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/system/fs.go:284-290`  
 **Problem:** system.MakeExecutable has no test. It is the canonical 'chmod +x' helper called by setup/release_extract.go (sets +x on extracted oc binary), setup/tools.go (downloaded helper binaries), and setup/artifacts.go — all running as root under the sudo re-exec, all writing to paths that end up in PATH. A bug where mode|0o111 silently degrades to mode (e.g. an off-by-one bit-shift refactor) would land non-executable binaries that fail at runtime mid-deploy.  
 **Fix:** Add to fs_test.go: (1) MakeExecutable on a 0o600 file → mode becomes 0o711 (owner exec preserved through bit-OR); (2) MakeExecutable on a 0o644 file → 0o755; (3) MakeExecutable on 0o600 in a t.TempDir() preserves contents (read body before/after); (4) MakeExecutable on a missing path → wrapped error containing the path. ~30 LOC, table-driven.  
-**Effort:** hours
-
-##### `tst:33579dd5:dnsmasq-config-path-untested` — dnsmasq config path untested
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/tst-33579dd5-dnsmasq-traversal  
-**Severity:** minor  
-**Cluster:** trust-boundary-untested  
-**Evidence:** `internal/distribution/okd/cleanup/services.go:142-187`  
-**Problem:** Dnsmasq() has TestDnsmasq_GlobLoopRemovesAllMatches but no test for the cluster-name-driven path: line 153 builds configPath via dns.DnsmasqConfigPath('okd-'+clusterName) and calls os.RemoveAll on it under refuseCriticalPath guard. ClusterName comes from cfg and is validated at config-load, but a hand-edited YAML with an attacker-shaped clusterName (e.g. '../../etc' or 'okd-..%2f..') is the threat the refuseCriticalPath guard exists to catch — and there is no test for that intersection.  
-**Fix:** Add t.Run('clusterName containing path-traversal segments hits refuseCriticalPath') to services_test.go: monkey-patch dnsmasqConfPattern + dnsmasqBackupPattern (already done by sibling test) and pass clusterName='../../../../etc/okd-x'. Assert that no os.RemoveAll touched anything outside t.TempDir(). Use a t.TempDir() decoy with a sentinel file and check it survives.  
 **Effort:** hours
 
 ## Completed
