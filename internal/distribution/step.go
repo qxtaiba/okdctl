@@ -84,6 +84,7 @@ type StepBuilder struct {
 	name        string
 	description string
 	fatal       bool
+	reRunSafe   ReRunSafety
 	alreadyDone func(context.Context) (bool, error)
 	skipFn      func() bool
 	skipReason  string
@@ -119,6 +120,14 @@ func (b *StepBuilder) Description(d string) *StepBuilder {
 // Steps default to fatal=true; call Fatal(false) for warn-and-continue steps.
 func (b *StepBuilder) Fatal(f bool) *StepBuilder {
 	b.fatal = f
+	return b
+}
+
+// SetReRunSafe records the idempotency intent for this step. BuildSteps
+// calls this automatically; direct StepBuilder users may call it for
+// documentation and future Orchestrator branching.
+func (b *StepBuilder) SetReRunSafe(r ReRunSafety) *StepBuilder {
+	b.reRunSafe = r
 	return b
 }
 
@@ -172,7 +181,7 @@ func (b *StepBuilder) Build() (ProvisioningStep, error) {
 	if b == nil {
 		return nil, fmt.Errorf("StepBuilder is nil")
 	}
-	return &builtStep{builder: b}, nil
+	return &builtStep{builder: b, reRunSafe: b.reRunSafe}, nil
 }
 
 // MustBuild is Build without error return; it panics if the builder is
@@ -223,15 +232,19 @@ type StepDef struct {
 }
 
 // BuildSteps converts a slice of StepDef into ProvisioningSteps ready for
-// NewOrchestrator. Panics when any StepDef has an empty ID, empty Name, or
-// ReRunSafe == ReRunSafeUnset — every step must declare idempotency intent.
+// NewOrchestrator. Panics when any StepDef has an empty ID, empty Name,
+// ReRunSafe == ReRunSafeUnset, or ReRunSafe == ReRunSafeNo with a nil
+// AlreadyDone — every ReRunSafeNo step must provide a precondition guard.
 func BuildSteps(defs []StepDef) []ProvisioningStep {
 	steps := make([]ProvisioningStep, 0, len(defs))
 	for _, d := range defs {
 		if d.ReRunSafe == ReRunSafeUnset {
 			panic("BuildSteps: step " + string(d.ID) + " must declare ReRunSafe (ReRunSafeYes or ReRunSafeNo)")
 		}
-		b := NewStepBuilder(d.ID, d.Name).Description(d.Desc).Fatal(!d.NonFatal)
+		if d.ReRunSafe == ReRunSafeNo && d.AlreadyDone == nil {
+			panic("BuildSteps: step " + string(d.ID) + " is ReRunSafeNo but has no AlreadyDone guard")
+		}
+		b := NewStepBuilder(d.ID, d.Name).Description(d.Desc).Fatal(!d.NonFatal).SetReRunSafe(d.ReRunSafe)
 		if d.AlreadyDone != nil {
 			b = b.AlreadyDone(d.AlreadyDone)
 		}
@@ -251,8 +264,14 @@ func BuildSteps(defs []StepDef) []ProvisioningStep {
 }
 
 type builtStep struct {
-	builder *StepBuilder
+	builder   *StepBuilder
+	reRunSafe ReRunSafety
 }
+
+// ReRunSafe returns the idempotency declaration for this step, propagated
+// from StepDef.ReRunSafe by BuildSteps. A future Orchestrator change may
+// branch on this to skip ReRunSafeNo steps on recovery reruns.
+func (s *builtStep) ReRunSafe() ReRunSafety { return s.reRunSafe }
 
 func (s *builtStep) ID() StepID { return s.builder.id }
 

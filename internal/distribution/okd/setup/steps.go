@@ -82,6 +82,15 @@ func (p *Phase) setupBaseSteps(cfg *config.Config, opts *Options) []distribution
 			Desc:       fmt.Sprintf("downloading OKD tools version %s", cfg.Distribution.Version),
 			SkipWhen:   func() bool { return opts.SkipDownloads },
 			SkipReason: "downloads disabled",
+			AlreadyDone: func(_ context.Context) (bool, error) {
+				binDir := phase.BinDirOrDefault(p.BinDir)
+				for _, bin := range []string{"openshift-install", "oc", "kubectl"} {
+					if !system.FileExists(filepath.Join(binDir, bin)) {
+						return false, nil
+					}
+				}
+				return true, nil
+			},
 			Exec: func(ctx context.Context) error {
 				if err := p.DownloadOKDTools(ctx, cfg.Distribution.Version, opts); err != nil {
 					return err
@@ -101,6 +110,11 @@ func (p *Phase) setupManifestSteps(cfg *config.Config, opts *Options, clusterDir
 			ID: StepGenerateConfig, Name: "generate install config",
 			ReRunSafe: distribution.ReRunSafeNo,
 			Desc:      "generating install-config.yaml",
+			// install-config.yaml is consumed by openshift-install during manifest
+			// generation; .backup is the stable post-state sentinel.
+			AlreadyDone: func(_ context.Context) (bool, error) {
+				return system.FileExists(filepath.Join(clusterDir, "install-config.yaml.backup")), nil
+			},
 			Exec: func(ctx context.Context) error {
 				if err := p.GenerateInstallConfig(ctx, cfg, clusterDir); err != nil {
 					return &errtypes.ConfigError{Msg: "failed to generate install-config", Err: err}
@@ -114,6 +128,9 @@ func (p *Phase) setupManifestSteps(cfg *config.Config, opts *Options, clusterDir
 			ID: StepGenerateManifests, Name: "generate manifests",
 			ReRunSafe: distribution.ReRunSafeNo,
 			Desc:      "generating kubernetes manifests",
+			AlreadyDone: func(_ context.Context) (bool, error) {
+				return system.DirExists(filepath.Join(clusterDir, "manifests")), nil
+			},
 			Exec: func(ctx context.Context) error {
 				if err := p.GenerateManifests(ctx, clusterDir); err != nil {
 					return &errtypes.ClusterError{Msg: "failed to generate manifests", Err: err}
@@ -166,6 +183,14 @@ func (p *Phase) setupManifestSteps(cfg *config.Config, opts *Options, clusterDir
 			ID: StepGenerateIgnition, Name: "generate ignition",
 			ReRunSafe: distribution.ReRunSafeNo,
 			Desc:      "generating ignition files",
+			AlreadyDone: func(_ context.Context) (bool, error) {
+				for _, f := range []string{"bootstrap.ign", "master.ign", "worker.ign"} {
+					if !system.FileExists(filepath.Join(clusterDir, f)) {
+						return false, nil
+					}
+				}
+				return true, nil
+			},
 			Exec: func(ctx context.Context) error {
 				if err := p.GenerateIgnitionConfigs(ctx, clusterDir); err != nil {
 					return &errtypes.ClusterError{Msg: "failed to generate ignition configs", Err: err}
@@ -192,6 +217,13 @@ func (p *Phase) setupWebSteps(cfg *config.Config, opts *Options, clusterDir stri
 			ID: StepDeployIgnition, Name: "deploy ignition",
 			ReRunSafe: distribution.ReRunSafeNo,
 			Desc:      "deploying ignition files to apache web server",
+			AlreadyDone: func(_ context.Context) (bool, error) {
+				webRoot := cfg.HTTPServer.Root
+				if webRoot == "" {
+					webRoot = phase.DefaultHTTPServerRoot
+				}
+				return system.FileExists(filepath.Join(webRoot, "ignition", "bootstrap.ign")), nil
+			},
 			Exec: func(ctx context.Context) error {
 				if err := p.DeployToWebServer(ctx, cfg, clusterDir); err != nil {
 					return &errtypes.ConfigError{Msg: "failed to deploy to web server", Err: err}
@@ -211,7 +243,9 @@ func (p *Phase) setupWebSteps(cfg *config.Config, opts *Options, clusterDir stri
 		},
 		{
 			ID: StepBuildISOs, Name: "build isos",
-			ReRunSafe:  distribution.ReRunSafeNo,
+			// BuildCustomISOs fingerprint-checks per node (iso.go) and skips
+			// unchanged ISOs, making repeated invocations safe.
+			ReRunSafe:  distribution.ReRunSafeYes,
 			Desc:       "building custom CoreOS ISOs",
 			SkipWhen:   func() bool { return opts.SkipISOs },
 			SkipReason: "iso building disabled",
