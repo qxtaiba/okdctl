@@ -98,6 +98,7 @@ type Phase struct {
 // Host OS detection populates OS and Pkg; detection errors fall back to RHEL/dnf.
 func New(version string, opts ...phase.BasePhaseOption) *Phase {
 	bp := phase.NewBasePhase(version, opts...)
+	bp.Log = bp.Log.With("phase", "setup")
 	detectedOS := platform.DetectOrDefault(bp.Log)
 	return &Phase{
 		BasePhase: bp,
