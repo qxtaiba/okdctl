@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/spf13/cobra"
 
 	"github.com/qxtaiba/okdctl/internal/config"
@@ -136,7 +135,6 @@ func init() {
 
 func runDestroy(cmd *cobra.Command, _ []string) error {
 	ctx := cmd.Context()
-	tui.SetRunID(uuid.NewString())
 
 	cfg, err := loadConfig(cfgFile)
 	if err != nil {

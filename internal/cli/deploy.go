@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/google/uuid"
 	"github.com/spf13/cobra"
 
 	"github.com/qxtaiba/okdctl/internal/config"
@@ -52,7 +51,6 @@ func init() {
 
 func runDeploy(cmd *cobra.Command, _ []string) error {
 	ctx := cmd.Context()
-	tui.SetRunID(uuid.NewString())
 
 	if deployMetricsAllowNetwork && deployMetricsAddr == "" {
 		return &errtypes.ConfigError{
