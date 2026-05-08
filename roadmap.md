@@ -694,16 +694,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Leave as-is for now (single consumer = correct Go idiom). Watch for a second consumer; promote to internal/cluster.CSRApprover only when a second site declares the same shape. Filing a tracking item is enough.  
 **Effort:** hours
 
-##### `api:0fc0041d:export-no-caller-scaffolding` — export no caller scaffolding (scaffolding — verify intent only)
-
-**Status:** in review — PR #420  
-**Severity:** suggestion  
-**Cluster:** exported-surface  
-**Evidence:** `internal/distribution/okd/phase/condition.go:10-35`  
-**Problem:** Several Condition* and NodeStatus* constants in phase/condition.go are declared but only a subset is referenced (ConditionTypeReady, ConditionStatusTrue used in cli/status.go and postinstall/verify.go). ConditionTypeAvailable, ConditionTypeProgressing, ConditionTypeDegraded, ConditionStatusFalse, ConditionStatusUnknown, NodeStatusReady, NodeStatusNotReady, NodeStatusUnknown have no in-scope callers.  
-**Fix:** Keep — these are part of the symmetric Kubernetes condition enum (Ready/Available/Progressing/Degraded × True/False/Unknown). Removing partials would make the enum lopsided and break the next caller. Same scaffolding rationale as okd.ClusterStatus (api:a7f4383d): future status verb will surface non-Ready conditions in operator-degraded reporting.  
-**Effort:** hours
-
 #### audit-cli-ux
 
 #### audit-modernization
