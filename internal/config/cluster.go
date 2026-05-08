@@ -129,6 +129,12 @@ type ProxmoxConfig struct {
 	NUMAEnabled        bool                `json:"numa_enabled,omitempty"`
 	MasterNodes        []string            `json:"master_nodes,omitempty"`
 	WorkerNodes        []string            `json:"worker_nodes,omitempty"`
+	// SSHHostFingerprint pins the Proxmox host's SSH key in standard
+	// SHA256:<base64> format (from ssh-keygen -lf or the Proxmox UI). When
+	// set, every SSH connection is verified and refused on mismatch. When
+	// unset, accept-new TOFU applies and the observed fingerprints are
+	// logged at WARN so the operator can pin one.
+	SSHHostFingerprint string `json:"ssh_host_fingerprint,omitempty"`
 }
 
 // FilesConfig points at the pull-secret and SSH public key files injected

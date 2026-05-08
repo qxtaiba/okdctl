@@ -12,14 +12,15 @@ import (
 	"github.com/qxtaiba/okdctl/internal/download"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/executor"
+	"github.com/qxtaiba/okdctl/internal/sshpin"
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
 // remoteISO256 runs sha256sum on remotePath/filename over SSH and returns the
 // hex digest. Any SSH or parse failure returns ("", err).
-func remoteISO256(ctx context.Context, exec *executor.Executor, host, remotePath, filename string) (string, error) {
+func remoteISO256(ctx context.Context, exec *executor.Executor, host, knownHostsPath, remotePath, filename string) (string, error) {
 	target := remotePath + "/" + filename
-	result, err := phase.SSHRunArgv(ctx, exec, host, "sha256sum", "--", target)
+	result, err := phase.SSHRunArgv(ctx, exec, host, knownHostsPath, "sha256sum", "--", target)
 	if err != nil {
 		return "", err
 	}
@@ -36,12 +37,12 @@ func remoteISO256(ctx context.Context, exec *executor.Executor, host, remotePath
 // isoUploadNeeded returns false when the remote file's sha256 matches the
 // local file. Any error (SSH transport, parse, local hash failure) returns
 // true so the caller falls back to uploading.
-func isoUploadNeeded(ctx context.Context, exec *executor.Executor, host, remotePath, localPath string) bool {
+func isoUploadNeeded(ctx context.Context, exec *executor.Executor, host, knownHostsPath, remotePath, localPath string) bool {
 	localHash, err := download.CalculateChecksum(localPath)
 	if err != nil {
 		return true
 	}
-	remoteHash, err := remoteISO256(ctx, exec, host, remotePath, filepath.Base(localPath))
+	remoteHash, err := remoteISO256(ctx, exec, host, knownHostsPath, remotePath, filepath.Base(localPath))
 	if err != nil {
 		return true
 	}
@@ -114,9 +115,14 @@ func (p *Phase) UploadCustomISOsToProxmox(ctx context.Context, cfg *config.Confi
 	user := "root"
 	remotePath := phase.DefaultProxmoxISODir
 
+	knownHostsPath, err := sshpin.Verify(ctx, host, cfg.Provider.Proxmox.SSHHostFingerprint, p.Log)
+	if err != nil {
+		return &errtypes.NetworkError{Msg: "proxmox host key verification failed", Err: err}
+	}
+
 	var toUpload []string
 	for _, f := range isoFiles {
-		if isoUploadNeeded(ctx, p.Exec, host, remotePath, f) {
+		if isoUploadNeeded(ctx, p.Exec, host, knownHostsPath, remotePath, f) {
 			toUpload = append(toUpload, f)
 		} else {
 			p.Log.Info(fmt.Sprintf("iso: skipping unchanged %s", filepath.Base(f)))
@@ -158,8 +164,12 @@ func (p *Phase) isoUploadAlreadyDone(ctx context.Context, cfg *config.Config, op
 	}
 	host := phase.ProxmoxBareHost(cfg.Provider.Proxmox.Host)
 	remotePath := phase.DefaultProxmoxISODir
+	knownHostsPath, err := sshpin.Verify(ctx, host, cfg.Provider.Proxmox.SSHHostFingerprint, p.Log)
+	if err != nil {
+		return false, err
+	}
 	for _, f := range isoFiles {
-		if isoUploadNeeded(ctx, p.Exec, host, remotePath, f) {
+		if isoUploadNeeded(ctx, p.Exec, host, knownHostsPath, remotePath, f) {
 			return false, nil
 		}
 	}

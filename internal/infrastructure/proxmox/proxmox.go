@@ -19,6 +19,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/infrastructure/terraform"
 	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/netutil"
+	"github.com/qxtaiba/okdctl/internal/sshpin"
 )
 
 // Provider drives the Proxmox VE infrastructure lifecycle (connect, provision,
@@ -30,16 +31,17 @@ import (
 // If status reads are added later, route them through internal/download's
 // retryDownload/isRetryable helpers (exponential backoff, 4xx fail-fast).
 type Provider struct {
-	connected     bool
-	host          string
-	node          string
-	terraformExec *terraform.Executor
-	projectRoot   string
-	tfEnv         string
-	logger        *slog.Logger
-	env           []string
-	reporter      logutil.ProgressReporter
-	sshExec       *executor.Executor
+	connected      bool
+	host           string
+	node           string
+	knownHostsPath string
+	terraformExec  *terraform.Executor
+	projectRoot    string
+	tfEnv          string
+	logger         *slog.Logger
+	env            []string
+	reporter       logutil.ProgressReporter
+	sshExec        *executor.Executor
 }
 
 // Option configures a Provider at construction time.
@@ -98,7 +100,7 @@ func New(opts ...Option) *Provider {
 // surface during terraform plan/apply with clear provider-level errors.
 // ctx is accepted for symmetry with future network-bound providers; this
 // implementation is local-only.
-func (p *Provider) Connect(_ context.Context, cfg *config.Config) error {
+func (p *Provider) Connect(ctx context.Context, cfg *config.Config) error {
 	if cfg == nil {
 		return &errtypes.ConfigError{Msg: "configuration is required"}
 	}
@@ -107,6 +109,13 @@ func (p *Provider) Connect(_ context.Context, cfg *config.Config) error {
 	}
 	p.host = cfg.Provider.Proxmox.Host
 	p.node = cfg.Provider.Proxmox.Node
+	if p.sshExec != nil && cfg.Provider.Proxmox.SSHHostFingerprint != "" {
+		path, err := sshpin.Verify(ctx, phase.ProxmoxBareHost(p.host), cfg.Provider.Proxmox.SSHHostFingerprint, p.logger)
+		if err != nil {
+			return &errtypes.NetworkError{Msg: "proxmox host key verification failed", Err: err}
+		}
+		p.knownHostsPath = path
+	}
 	p.connected = true
 	return nil
 }
@@ -366,7 +375,7 @@ func (p *Provider) probeVMEnumeration(ctx context.Context, cfg *config.Config) b
 		vmidBase = 6000
 	}
 	host := phase.ProxmoxBareHost(p.host)
-	result, err := phase.SSHRunArgv(ctx, p.sshExec, host,
+	result, err := phase.SSHRunArgv(ctx, p.sshExec, host, p.knownHostsPath,
 		"pvesh", "get", "/nodes/"+p.node+"/qemu", "--output-format", "json",
 	)
 	if err != nil {

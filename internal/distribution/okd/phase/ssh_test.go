@@ -28,11 +28,11 @@ func installFakeSSHEcho(t *testing.T) {
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 }
 
-func TestSSHRun(t *testing.T) {
+func TestSSHRun_acceptNew(t *testing.T) {
 	installFakeSSHEcho(t)
 	exec := executor.New()
 
-	result, err := SSHRun(context.Background(), exec, "10.0.0.1", "uptime")
+	result, err := SSHRun(context.Background(), exec, "10.0.0.1", "", "uptime")
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -50,11 +50,34 @@ func TestSSHRun(t *testing.T) {
 	}
 }
 
-func TestSSHRunArgv(t *testing.T) {
+func TestSSHRun_strictMode(t *testing.T) {
 	installFakeSSHEcho(t)
 	exec := executor.New()
 
-	result, err := SSHRunArgv(context.Background(), exec, "10.0.0.2", "pvesh", "get", "/nodes")
+	result, err := SSHRun(context.Background(), exec, "10.0.0.1", "/tmp/known_hosts", "uptime")
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	argv := strings.TrimSpace(result.Stdout)
+	for _, want := range []string{
+		"-o UserKnownHostsFile=/tmp/known_hosts",
+		"-o StrictHostKeyChecking=yes",
+		"-o BatchMode=yes",
+		"root@10.0.0.1",
+		"uptime",
+	} {
+		if !strings.Contains(argv, want) {
+			t.Errorf("argv = %q; missing %q", argv, want)
+		}
+	}
+}
+
+func TestSSHRunArgv_acceptNew(t *testing.T) {
+	installFakeSSHEcho(t)
+	exec := executor.New()
+
+	result, err := SSHRunArgv(context.Background(), exec, "10.0.0.2", "", "pvesh", "get", "/nodes")
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -62,6 +85,31 @@ func TestSSHRunArgv(t *testing.T) {
 	argv := strings.TrimSpace(result.Stdout)
 	for _, want := range []string{
 		"-o StrictHostKeyChecking=accept-new",
+		"-o BatchMode=yes",
+		"root@10.0.0.2",
+		"pvesh",
+		"get",
+		"/nodes",
+	} {
+		if !strings.Contains(argv, want) {
+			t.Errorf("argv = %q; missing %q", argv, want)
+		}
+	}
+}
+
+func TestSSHRunArgv_strictMode(t *testing.T) {
+	installFakeSSHEcho(t)
+	exec := executor.New()
+
+	result, err := SSHRunArgv(context.Background(), exec, "10.0.0.2", "/tmp/known_hosts", "pvesh", "get", "/nodes")
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	argv := strings.TrimSpace(result.Stdout)
+	for _, want := range []string{
+		"-o UserKnownHostsFile=/tmp/known_hosts",
+		"-o StrictHostKeyChecking=yes",
 		"-o BatchMode=yes",
 		"root@10.0.0.2",
 		"pvesh",
