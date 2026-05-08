@@ -242,9 +242,16 @@ resource "proxmox_virtual_environment_vm" "master" {
 
   depends_on = [proxmox_virtual_environment_vm.bootstrap]
 
-  # prevent_destroy must be a literal boolean. To run okdctl destroy against a
-  # protected cluster, place an override.tf in this module directory that
-  # removes or overrides this lifecycle block, then remove it after destroy.
+  # prevent_destroy must be a literal boolean (hashicorp/terraform#3116 — not
+  # gatable via variable). To destroy a protected cluster either:
+  #   a) run: terraform state rm 'module.okd.proxmox_virtual_environment_vm.master[N]'
+  #      for each master index, then re-run okdctl destroy; or
+  #   b) create infrastructure/terraform/environments/production/override.tf
+  #      (gitignored) containing:
+  #        resource "proxmox_virtual_environment_vm" "master" {
+  #          lifecycle { prevent_destroy = false }
+  #        }
+  #      apply the override, run okdctl destroy, then delete the file.
   lifecycle {
     prevent_destroy = true
     precondition {

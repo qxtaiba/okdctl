@@ -321,10 +321,9 @@ variable "start_workers_immediately" {
 
 # protect_masters is a documentation-only signal. Terraform requires
 # prevent_destroy to be a literal boolean, so it cannot be toggled via a
-# variable. Production operators who need hard destroy protection should
-# wrap this module in an override (override.tf) that sets
-# `lifecycle { prevent_destroy = true }` on the master resource. The
-# authoritative destroy-safety guard lives in the okdctl Go layer.
+# variable. The guard is hard-pinned to true in main.tf. To override for
+# an intentional destroy, see the comment above the master lifecycle block
+# in main.tf for the terraform state rm and override.tf procedures.
 # tflint-ignore: terraform_unused_declarations
 variable "protect_masters" {
   description = "operator intent flag: production clusters should set true and apply prevent_destroy via an override module"
