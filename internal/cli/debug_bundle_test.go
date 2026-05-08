@@ -168,10 +168,16 @@ func TestTarDirIntoRejectsSymlinkEscape(t *testing.T) {
 }
 
 func TestTarDirIntoTruncatesOversizedFile(t *testing.T) {
+	// Override the production cap with a tiny one so the test doesn't allocate
+	// tens of MB of zeros into a bytes.Buffer.
+	orig := maxBundleFileBytes
+	maxBundleFileBytes = 1024
+	t.Cleanup(func() { maxBundleFileBytes = orig })
+
 	srcDir := t.TempDir()
 	bigPath := filepath.Join(srcDir, "big.log")
 
-	bigSize := maxBundleFileBytes + 1024
+	bigSize := maxBundleFileBytes + 64
 	f, err := os.Create(bigPath)
 	if err != nil {
 		t.Fatal(err)

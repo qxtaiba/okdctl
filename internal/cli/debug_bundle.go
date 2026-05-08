@@ -33,12 +33,13 @@ const (
 	categoryConfig         = "config"
 	categoryLogFile        = "log-file"
 	categorySystemMeta     = "system-meta"
-
-	// maxBundleFileBytes caps individual file reads in tarDirInto.
-	// must-gather routinely emits multi-GB dumps; the bundle is for
-	// troubleshooting, not full dump retention.
-	maxBundleFileBytes int64 = 50 * 1024 * 1024
 )
+
+// maxBundleFileBytes caps individual file reads in tarDirInto.
+// must-gather routinely emits multi-GB dumps; the bundle is for troubleshooting,
+// not full dump retention. var (not const) so tests can lower it without
+// allocating tens of MB of zeros.
+var maxBundleFileBytes int64 = 50 * 1024 * 1024
 
 var (
 	debugBundleOutput         string
