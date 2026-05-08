@@ -971,7 +971,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `state:48688e63:provision-no-output-readback` — provision no output readback
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/state-48688e63-readback  
 **Severity:** minor  
 **Cluster:** proxmox-api-idempotency  
 **Evidence:** `internal/infrastructure/proxmox/proxmox.go:237-299`  
@@ -991,7 +991,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `state:6424733c:projectroot-marker-restrictive` — projectroot marker restrictive
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/state-6424733c-projectroot  
 **Severity:** minor  
 **Cluster:** crash-recoverability  
 **Evidence:** `internal/cli/helpers.go:110-134`  
@@ -1001,7 +1001,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `state:15ba17da:nofatal-tracker-sync-todo` — nofatal tracker sync todo
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/state-15ba17da-tracker  
 **Severity:** suggestion  
 **Cluster:** phase-idempotency — seam→audit-concurrency  
 **Evidence:** `internal/distribution/okd/destroy/steps.go:30-54`  
@@ -1011,7 +1011,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `state:48688e63:proxmox-no-eventual-consistency` — proxmox no eventual consistency
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/state-48688e63-readback  
 **Severity:** suggestion  
 **Cluster:** proxmox-api-idempotency  
 **Evidence:** `internal/infrastructure/proxmox/proxmox.go:138-202`  
@@ -1043,7 +1043,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `iac:18a795d5:hcl-tls-skip-doc-no-warning` — hcl tls skip doc no warning
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/iac-18a795d5-tls-warn  
 **Severity:** suggestion  
 **Cluster:** hcl-credential-hygiene — seam→audit-security  
 **Evidence:** `infrastructure/terraform/modules/proxmox-okd/main.tf:5-10` + 2 more  
@@ -1076,7 +1076,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `err:08c49fc4:tui-warn-stringifies-err` — tui warn stringifies err
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/08c49fc4-update-ingress  
 **Severity:** suggestion  
 **Cluster:** redaction-in-error — seam→audit-observability  
 **Evidence:** `internal/cli/update_ingress.go:73-76`  
@@ -1160,7 +1160,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `api:0139cb3f:bindirordefault-symmetric-helper` — bindirordefault symmetric helper
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/api-0139cb3f-bindir  
 **Severity:** suggestion  
 **Cluster:** exported-surface  
 **Evidence:** `internal/distribution/okd/phase/paths.go:73-79`  
@@ -1192,7 +1192,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `ux:08c49fc4:dryrun-mixed-streams` — dryrun mixed streams
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/08c49fc4-update-ingress  
 **Severity:** minor  
 **Cluster:** streams  
 **Evidence:** `internal/cli/update_ingress.go:50-61`  
@@ -1212,7 +1212,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `ux:aa84670c:exit-code-package-doc-drift` — exit code package doc drift
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/ux-aa84670c-exit-doc  
 **Severity:** minor  
 **Cluster:** exit-codes — seam→audit-errors  
 **Evidence:** `internal/cli/root.go:1-12`  
@@ -1305,7 +1305,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `obs:08c49fc4:hostnetwork-ic-message-text` — hostnetwork ic message text
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/08c49fc4-update-ingress  
 **Severity:** minor  
 **Cluster:** field-stability — seam→audit-errors  
 **Evidence:** `internal/cli/update_ingress.go:75-75`  
@@ -1355,7 +1355,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `obs:ae5b624c:per-tick-csr-warn-already-deduped` — per tick csr warn already deduped
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/claude-md-notes  
 **Severity:** suggestion  
 **Cluster:** log-once  
 **Evidence:** `internal/distribution/okd/install/monitor.go:118-165`  
@@ -1368,7 +1368,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `mod:1e8ffb91:use-slices-containsfunc` — use slices containsfunc
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/mod-1e8ffb91-slices  
 **Severity:** suggestion  
 **Cluster:** slices-maps  
 **Evidence:** `internal/distribution/okd/postinstall/verify.go:50-57`  
@@ -1378,7 +1378,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `mod:1e8ffb91:use-slices-containsfunc-readiness` — use slices containsfunc readiness
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/mod-1e8ffb91-slices  
 **Severity:** suggestion  
 **Cluster:** slices-maps — related: mod:1e8ffb91:use-slices-containsfunc  
 **Evidence:** `internal/distribution/okd/postinstall/verify.go:89-97`  
@@ -1533,7 +1533,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `dep:33ef32bf:yaml-triple-engines` — yaml triple engines
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/claude-md-notes  
 **Severity:** suggestion  
 **Cluster:** duplicate-engine  
 **Evidence:** `go.mod:19-19` + 1 more  
@@ -1576,7 +1576,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `doc:b3356305:readme-production-yaml-worker-drift` — readme production yaml worker drift
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/doc-b3356305-readme-worker  
 **Severity:** minor  
 **Cluster:** readme-drift — seam→audit-cli-ux — related: ux:b3356305:readme-14-commands-claim  
 **Evidence:** `README.md:116-116`  
