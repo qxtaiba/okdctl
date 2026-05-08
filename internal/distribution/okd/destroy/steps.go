@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"strings"
+	"sync"
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/distribution"
@@ -26,10 +27,9 @@ const (
 // destroyTracker buffers step-level failure and skip labels for the final
 // summary step. Without this the prior summary said "cluster teardown
 // completed" even after terraform destroy failed — a misleading-success
-// regression once StepDestroyInfra became NonFatal. Safe without a mutex
-// because Orchestrator.Run iterates steps serially; add sync.Mutex if step
-// parallelism ever lands.
+// regression once StepDestroyInfra became NonFatal.
 type destroyTracker struct {
+	mu       sync.RWMutex // guards failures and skipped
 	log      *slog.Logger
 	failures []string
 	skipped  []string
@@ -37,7 +37,9 @@ type destroyTracker struct {
 
 func (t *destroyTracker) onError(label string) func(error) {
 	return func(err error) {
+		t.mu.Lock()
 		t.failures = append(t.failures, label)
+		t.mu.Unlock()
 		phase.WarnOnError(t.log, label)(err)
 	}
 }
@@ -45,7 +47,9 @@ func (t *destroyTracker) onError(label string) func(error) {
 func (t *destroyTracker) skipWhen(label string, fn func() bool) func() bool {
 	return func() bool {
 		if fn() {
+			t.mu.Lock()
 			t.skipped = append(t.skipped, label)
+			t.mu.Unlock()
 			return true
 		}
 		return false
@@ -53,6 +57,8 @@ func (t *destroyTracker) skipWhen(label string, fn func() bool) func() bool {
 }
 
 func (t *destroyTracker) terraformFailed() bool {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
 	for _, f := range t.failures {
 		if f == "terraform destroy" {
 			return true
@@ -155,13 +161,17 @@ func (p *Phase) destroySteps(ctx context.Context, cfg *config.Config, opts *Opti
 			ID: StepPrintSummary, Name: "print summary", ReRunSafe: distribution.ReRunSafeYes,
 			Desc: "printing destruction summary", NonFatal: true,
 			Exec: func(_ context.Context) error {
+				t.mu.RLock()
+				failures := t.failures
+				skipped := t.skipped
+				t.mu.RUnlock()
 				switch {
-				case len(t.failures) > 0:
+				case len(failures) > 0:
 					p.Log.Warn("destroy: teardown finished with non-fatal failures",
-						"steps", strings.Join(t.failures, ", "))
-				case len(t.skipped) > 0:
+						"steps", strings.Join(failures, ", "))
+				case len(skipped) > 0:
 					p.Log.Info("destroy: cluster teardown completed",
-						"skipped", strings.Join(t.skipped, ", "))
+						"skipped", strings.Join(skipped, ", "))
 				default:
 					p.Log.Info("destroy: cluster teardown completed")
 				}
