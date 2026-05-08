@@ -4,13 +4,11 @@ package setup
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"path/filepath"
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/distribution"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
-	"github.com/qxtaiba/okdctl/internal/executor"
 	"github.com/qxtaiba/okdctl/internal/platform"
 )
 
@@ -96,13 +94,13 @@ type Phase struct {
 	loggedISOs map[string]bool
 }
 
-// New constructs a setup Phase with the given executor, logger, and okdctl
-// version tag. Host OS detection populates OS and Pkg; detection errors
-// fall back to RHEL/dnf.
-func New(exec *executor.Executor, logger *slog.Logger, version string) *Phase {
-	detectedOS := platform.DetectOrDefault(logger)
+// New constructs a setup Phase with the given version tag and options.
+// Host OS detection populates OS and Pkg; detection errors fall back to RHEL/dnf.
+func New(version string, opts ...phase.BasePhaseOption) *Phase {
+	bp := phase.NewBasePhase(version, opts...)
+	detectedOS := platform.DetectOrDefault(bp.Log)
 	return &Phase{
-		BasePhase: phase.NewBasePhase(version, phase.WithExecutor(exec), phase.WithLogger(logger)),
+		BasePhase: bp,
 		OS:        detectedOS,
 		Pkg:       platform.NewPackageManager(detectedOS),
 	}

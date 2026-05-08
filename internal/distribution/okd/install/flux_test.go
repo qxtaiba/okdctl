@@ -17,8 +17,8 @@ func newInstallPhase(t *testing.T) *Phase {
 		BasePhase: phase.NewBasePhase("test",
 			phase.WithLogger(logutil.NopLogger),
 			phase.WithExecutor(executor.New(executor.WithLogger(logutil.NopLogger))),
+			phase.WithReporter(logutil.NopProgressReporter),
 		),
-		Reporter: logutil.NopProgressReporter,
 	}
 }
 

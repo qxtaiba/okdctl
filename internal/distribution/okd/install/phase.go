@@ -4,7 +4,6 @@ package install
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"path/filepath"
 	"strings"
 	"time"
@@ -13,9 +12,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/distribution"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
-	"github.com/qxtaiba/okdctl/internal/executor"
 	"github.com/qxtaiba/okdctl/internal/infrastructure/proxmox"
-	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
@@ -82,25 +79,17 @@ func NewOptions(cfg *config.Config, projectRoot string) Options {
 // monitor, and cluster-up poll.
 type Phase struct {
 	phase.BasePhase
-	// Reporter signals long-running operations; defaults to NopProgressReporter
-	// so headless callers run silent. The CLI sets it to tui.StartSpinner.
-	// Roadmap api:beabab0c will replace this exported field with a
-	// WithReporter functional option threaded through New.
-	Reporter logutil.ProgressReporter
 	// startMonitorCmd, when non-nil, replaces the default subprocess
 	// start-and-wait used by MonitorInstallation. Tests inject a pure-Go
 	// implementation to avoid spawning real processes.
 	startMonitorCmd func(ctx context.Context, clusterDir string) (<-chan error, func(), error)
 }
 
-// New constructs an install Phase bound to exec/logger and the okdctl
-// version tag.
-func New(exec *executor.Executor, logger *slog.Logger, version string) *Phase {
-	phaseLogger := logutil.OrNop(logger).With("phase", "install")
-	return &Phase{
-		BasePhase: phase.NewBasePhase(version, phase.WithExecutor(exec), phase.WithLogger(phaseLogger)),
-		Reporter:  logutil.NopProgressReporter,
-	}
+// New constructs an install Phase with the given version tag and options.
+func New(version string, opts ...phase.BasePhaseOption) *Phase {
+	bp := phase.NewBasePhase(version, opts...)
+	bp.Log = bp.Log.With("phase", "install")
+	return &Phase{BasePhase: bp}
 }
 
 // Execute runs the install phase step sequence and returns each step's

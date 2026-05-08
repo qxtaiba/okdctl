@@ -128,13 +128,16 @@ func (p *Provisioner) Prepare(ctx context.Context, cfg *config.Config) ([]distri
 			Kind:           cleanup.WorkOnly,
 			HTTPServerRoot: cfg.HTTPServer.Root,
 		}
-		if err := cleanup.New(p.executor, p.logger, p.version).Execute(ctx, cleanupOpts, cleanup.WithLogger(p.logger)); err != nil {
+		if err := cleanup.New(p.version, phase.WithExecutor(p.executor), phase.WithLogger(p.logger)).Execute(ctx, cleanupOpts, cleanup.WithLogger(p.logger)); err != nil {
 			p.logger.Warn("cleanup: pre-deploy artifact removal incomplete", "phase", "prepare", "err", err)
 		}
 	}
 
-	setupPhase := setup.New(p.executor, p.logger, p.version)
-	setupPhase.Recorder = p.recorder
+	setupPhase := setup.New(p.version,
+		phase.WithExecutor(p.executor),
+		phase.WithLogger(p.logger),
+		phase.WithRecorder(p.recorder),
+	)
 	setupPhase.BinDir = phase.ResolveBinDir(cfg)
 	return setupPhase.Execute(ctx, cfg, &opts)
 }
@@ -142,17 +145,23 @@ func (p *Provisioner) Prepare(ctx context.Context, cfg *config.Config) ([]distri
 // Install runs the install phase: ignition delivery, bootstrap wait, and
 // install-complete monitor. Must be called after Prepare.
 func (p *Provisioner) Install(ctx context.Context, cfg *config.Config, opts *install.Options) ([]distribution.StepResult, error) {
-	installPhase := install.New(p.executor, p.logger, p.version)
-	installPhase.Recorder = p.recorder
-	installPhase.Reporter = p.reporter
+	installPhase := install.New(p.version,
+		phase.WithExecutor(p.executor),
+		phase.WithLogger(p.logger),
+		phase.WithRecorder(p.recorder),
+		phase.WithReporter(p.reporter),
+	)
 	return installPhase.Execute(ctx, cfg, opts)
 }
 
 // Configure runs the postinstall phase: kube-vip verification, production
 // DNS cutover, bootstrap cleanup. Returns the result alongside per-step records.
 func (p *Provisioner) Configure(ctx context.Context, cfg *config.Config) (*postinstall.Result, []distribution.StepResult, error) {
-	postPhase := postinstall.New(p.executor, p.logger, p.version)
-	postPhase.Recorder = p.recorder
+	postPhase := postinstall.New(p.version,
+		phase.WithExecutor(p.executor),
+		phase.WithLogger(p.logger),
+		phase.WithRecorder(p.recorder),
+	)
 	opts := postinstall.NewOptions(cfg, p.projectRoot)
 	return postPhase.Execute(ctx, cfg, &opts)
 }
@@ -160,7 +169,10 @@ func (p *Provisioner) Configure(ctx context.Context, cfg *config.Config) (*posti
 // UpdateIngress re-points haproxy at a fresh set of backend nodes without
 // re-running the full postinstall phase. Used by the update-ingress CLI verb.
 func (p *Provisioner) UpdateIngress(ctx context.Context, cfg *config.Config, opts postinstall.UpdateIngressOptions) (*postinstall.UpdateIngressResult, error) {
-	postPhase := postinstall.New(p.executor, p.logger, p.version)
+	postPhase := postinstall.New(p.version,
+		phase.WithExecutor(p.executor),
+		phase.WithLogger(p.logger),
+	)
 	if opts.WorkDir == "" {
 		opts.WorkDir = filepath.Join(p.projectRoot, "okd-install")
 	}
@@ -205,7 +217,7 @@ func (p *Provisioner) ZeroizeEnv() {
 
 // Destroy tears down the cluster and its infrastructure.
 func (p *Provisioner) Destroy(ctx context.Context, cfg *config.Config, opts DestroyOpts) ([]distribution.StepResult, error) {
-	destroyPhase := destroy.New(p.executor, p.logger, p.version)
+	destroyPhase := destroy.New(p.version, phase.WithExecutor(p.executor), phase.WithLogger(p.logger))
 	destroyOpts := destroy.NewOptions(cfg, p.projectRoot)
 	destroyOpts.AutoApprove = true
 	destroyOpts.RemovePackages = opts.RemovePackages
