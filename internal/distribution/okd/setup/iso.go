@@ -256,3 +256,21 @@ func (p *Phase) buildNodeISO(ctx context.Context, cfg *config.Config, node NodeI
 
 	return nil
 }
+
+// isoBuildAlreadyDone returns true when every expected node ISO and its
+// fingerprint sentinel both exist, indicating a prior BuildCustomISOs
+// completed without interruption.
+func (p *Phase) isoBuildAlreadyDone(cfg *config.Config, opts *Options) (bool, error) {
+	nodes, err := p.BuildNodeList(cfg)
+	if err != nil {
+		return false, err
+	}
+	isoDir := filepath.Join(opts.WorkDir, "custom-isos")
+	for _, node := range nodes {
+		if !system.FileExists(filepath.Join(isoDir, node.Name+".iso")) ||
+			!system.FileExists(filepath.Join(isoDir, ".fp-"+node.Name)) {
+			return false, nil
+		}
+	}
+	return len(nodes) > 0, nil
+}
