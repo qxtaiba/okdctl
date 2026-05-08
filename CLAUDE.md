@@ -167,6 +167,11 @@ write the comment — then it carries real information.
   - Signal-watched cancellation: `internal/cli/root.go::execute()` —
     `defer close(sigCh)` after `signal.Stop` so the receiver returns
     cleanly on the happy path.
+  - Poll-loop log-once: `internal/distribution/okd/install/monitor.go`
+    (CSR approval loop, L122–L161) — first occurrence of an error
+    string logs at Warn and sets `lastCSRWarnMsg`; identical repeats
+    demote to Debug; a clean tick resets the gate. Follow this shape
+    in every new poll/retry loop.
 
 ## Credentials and secrets
 
@@ -215,5 +220,11 @@ write the comment — then it carries real information.
   trailer (`uses: owner/action@<40-hex-sha> # vX.Y.Z`). Tool installs
   from Go must be explicit versions — never `@latest`. Terraform versions
   in CI are patch-pinned (`terraform_version: "1.10.3"`, not `"1.10"`).
+- **YAML engine baseline (tripwire).** Three YAML engines are in the dep
+  tree: `sigs.k8s.io/yaml` v1.6.0 (direct, required by k8s.io/api) +
+  `go.yaml.in/yaml/v{2,3}` (transitive, pinned by k8s.io/apimachinery).
+  Count is down from four — `gopkg.in/yaml.v3` was dropped from
+  `go.mod` require. Do not add a fourth engine without a recorded
+  justification here.
 - **Before adding a dep,** check whether Go 1.25 stdlib covers it
   (`slices`, `maps`, `net/netip`, `log/slog`, `sync.OnceFunc`, etc.).
