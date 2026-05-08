@@ -648,7 +648,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sec:8ea706f6:input-validation` — input validation
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-8ea706f6-rhel-repo-pin  
 **Severity:** suggestion  
 **Cluster:** input-validation  
 **Evidence:** `internal/distribution/okd/setup/tools.go:129-133`  
@@ -1070,7 +1070,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `ux:d31d1b9d:describe-format-shared-global` — describe format shared global
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/ux-d31d1b9d-describe-format-split  
 **Severity:** suggestion  
 **Cluster:** flag-conventions  
 **Evidence:** `internal/cli/status.go:62-67`  
@@ -1113,7 +1113,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `obs:25fa1be8:nil-logger-deref` — nil logger deref
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/obs-25fa1be8-firewall-nil-logger  
 **Severity:** minor  
 **Cluster:** handler-setup  
 **Evidence:** `internal/distribution/okd/firewall/firewall.go:117-192`  
@@ -1143,7 +1143,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `obs:c19ee328:debug-fmt-sprintf-package-loop` — debug fmt sprintf package loop
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/obs-c19ee328-pkg-loop-slog  
 **Severity:** minor  
 **Cluster:** field-stability — related: obs:6424733c:fmt-sprintf-message-pattern  
 **Evidence:** `internal/distribution/okd/setup/steps.go:312-323`  
@@ -1155,7 +1155,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `mod:5013fea6:use-slices-containsfunc` — use slices containsfunc
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/mod-5013fea6-slices-containsfunc  
 **Severity:** suggestion  
 **Cluster:** slices-maps  
 **Evidence:** `internal/distribution/okd/setup/release_extract.go:139-147`  
@@ -1304,7 +1304,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `tst:21dc1103:download-no-test` — download no test
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/tst-21dc1103-download-tests  
 **Severity:** blocker  
 **Cluster:** canonical-helper-untested — related: sec:21dc1103:download-no-nofollow  
 **Evidence:** `internal/download/download.go:79-168`  
@@ -1334,7 +1334,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `tst:33579dd5:dnsmasq-config-path-untested` — dnsmasq config path untested
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/tst-33579dd5-dnsmasq-traversal  
 **Severity:** minor  
 **Cluster:** trust-boundary-untested  
 **Evidence:** `internal/distribution/okd/cleanup/services.go:142-187`  
