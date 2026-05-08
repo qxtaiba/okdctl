@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"syscall"
 	"time"
 
 	"github.com/qxtaiba/okdctl/internal/errtypes"
@@ -141,7 +142,10 @@ func fetchToFile(ctx context.Context, client *http.Client, opts *Options, filena
 	// contain the okdctl binary itself before signature verification.
 	// install.sh + setup.installBinaryToPath copy the binary to its
 	// final mode, so a tighter download mode is harmless to consumers.
-	outFile, err := os.OpenFile(opts.OutputPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
+	// O_NOFOLLOW rejects a symlink at OutputPath; under the sudo re-exec
+	// model the open runs as root, so following a symlink would write
+	// binary content to an attacker-chosen path.
+	outFile, err := os.OpenFile(opts.OutputPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC|syscall.O_NOFOLLOW, 0o600)
 	if err != nil {
 		return fmt.Errorf("create output file: %w", err)
 	}

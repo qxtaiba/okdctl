@@ -162,11 +162,6 @@ func TestDownload_CtxCancelCleansPartialFile(t *testing.T) {
 	}
 }
 
-// TestDownload_SymlinkAtOutputPath documents current behavior: without
-// O_NOFOLLOW, the write follows the symlink to its target. Once sec:21dc1103
-// installs O_NOFOLLOW on fetchToFile, flip the assertion below to require a
-// non-nil error and unchanged target — that is the lock the future guard
-// will land against.
 func TestDownload_SymlinkAtOutputPath(t *testing.T) {
 	body := []byte("symlink-content")
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -195,18 +190,16 @@ func TestDownload_SymlinkAtOutputPath(t *testing.T) {
 		Logger:    logutil.NopLogger,
 	}
 
-	// sec:21dc1103: when O_NOFOLLOW lands, replace the next two assertions with
-	// `if err == nil { t.Fatal("expected error refusing symlink at OutputPath") }`
-	// and a check that target content is unchanged.
-	if err := Download(context.Background(), opts); err != nil {
-		t.Fatalf("Download through symlink: %v", err)
+	if err := Download(context.Background(), opts); err == nil {
+		t.Fatal("expected error when OutputPath is a symlink; O_NOFOLLOW must reject it")
 	}
+
 	got, err := os.ReadFile(target)
 	if err != nil {
 		t.Fatalf("ReadFile target: %v", err)
 	}
-	if string(got) != string(body) {
-		t.Errorf("target content = %q; want %q", got, body)
+	if string(got) != "original" {
+		t.Errorf("symlink target must be unchanged; got %q", got)
 	}
 }
 
