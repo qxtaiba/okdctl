@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -138,12 +139,7 @@ func (p *Phase) extractReleaseImage(ctx context.Context, ocPath, ref, destDir st
 
 func isAuthError(msg string) bool {
 	lower := strings.ToLower(msg)
-	for _, marker := range authMarkers {
-		if strings.Contains(lower, marker) {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(authMarkers, func(m string) bool { return strings.Contains(lower, m) })
 }
 
 // extractReleaseTarballs extracts the versioned tarballs that
