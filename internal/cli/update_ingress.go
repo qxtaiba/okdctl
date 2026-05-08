@@ -54,24 +54,24 @@ func init() {
 func runUpdateIngressDryRun(ctx context.Context, cfg *config.Config) error {
 	clusterFQDN := cfg.Cluster.Name + "." + cfg.Cluster.Domain
 	tui.Info(fmt.Sprintf("dry-run: update-ingress for cluster '%s'", clusterFQDN))
-	fmt.Println("  would: query IngressControllers (oc get ingresscontroller -n openshift-ingress-operator)")
-	fmt.Println("  would: wait for LoadBalancer IPs on router-* services in openshift-ingress")
+	tui.Info("would: query IngressControllers (oc get ingresscontroller -n openshift-ingress-operator)")
+	tui.Info("would: wait for LoadBalancer IPs on router-* services in openshift-ingress")
 
 	isBootstrap, err := dns.IsBootstrapDNS(cfg)
 	if err != nil {
 		return fmt.Errorf("dry-run: failed to probe dnsmasq state: %w", err)
 	}
 	if isBootstrap {
-		fmt.Println("  would: deploy production dnsmasq config pointing *.apps at LoadBalancer IPs")
+		tui.Info("would: deploy production dnsmasq config pointing *.apps at LoadBalancer IPs")
 	} else {
-		fmt.Println("  would: deploy production dnsmasq config pointing *.apps at LoadBalancer IPs (no-op: dns already cut over)")
+		tui.Info("would: deploy production dnsmasq config pointing *.apps at LoadBalancer IPs (no-op: dns already cut over)")
 	}
 
 	if !updateIngressKeepHAProxy {
 		if system.IsServiceActive(ctx, "haproxy") {
-			fmt.Println("  would: stop and disable haproxy on the bastion (if all controllers are LB-type)")
+			tui.Info("would: stop and disable haproxy on the bastion (if all controllers are LB-type)")
 		} else {
-			fmt.Println("  would: stop and disable haproxy on the bastion (no-op: haproxy already stopped)")
+			tui.Info("would: stop and disable haproxy on the bastion (no-op: haproxy already stopped)")
 		}
 	}
 	tui.Info("dry-run: re-run without --dry-run to execute update-ingress")
@@ -90,7 +90,7 @@ func buildConvertConfirm(ctx context.Context, yes bool) func([]string) bool {
 		prompt := fmt.Sprintf("convert %d HostNetwork controller(s) to LoadBalancerService? [y/N]: ", len(hostNetworkICs))
 		confirmed, err := promptForConfirmation(ctx, prompt)
 		if err != nil {
-			tui.Warn("skipping HostNetwork conversion: " + err.Error())
+			tui.Warn("skipping HostNetwork conversion", tui.LF("err", err))
 			return false
 		}
 		return confirmed
