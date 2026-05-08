@@ -944,16 +944,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Wire `srv.BaseContext = func(net.Listener) context.Context { return ctx }` so in-flight scrapes inherit deploy-cancel; capture ListenAndServe's err on a buffered chan errCh and have stop() return errors.Is(err, http.ErrServerClosed) ? nil : err so a bind failure surfaces to executeFullDeployment instead of disappearing.  
 **Effort:** hours
 
-##### `con:ae5b624c:reap-reimplements-cmd-cancel` — reap reimplements cmd cancel
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/con-ae5b624c-cmd-cancel  
-**Severity:** minor  
-**Cluster:** goroutine-lifetime — seam→audit-subprocess — related: sub:ae5b624c:openshift-install-sigkill  
-**Evidence:** `internal/distribution/okd/install/monitor.go:167-188`  
-**Problem:** MonitorInstallation hand-rolls the kill-then-reap pattern with `kill = sync.OnceFunc(...Process.Kill)` plus a 30s `reapTimer` race against installDone. Go 1.20 added `cmd.Cancel` and `cmd.WaitDelay` which express the same intent declaratively: when ctx is cancelled, exec.Cmd sends Cancel and forces SIGKILL after WaitDelay, then Wait returns. The current code reimplements this around exec.CommandContext, doubling the surface area for kill bugs (e.g. the `if cmd.Process != nil` guard is redundant after Start succeeded).  
-**Fix:** In defaultStartMonitorCmd, set `cmd.Cancel = func() error { return cmd.Process.Signal(syscall.SIGTERM) }` and `cmd.WaitDelay = 30 * time.Second`. Drop the kill closure and the reapTimer block in MonitorInstallation; on ctx.Done the os/exec runtime sends SIGTERM, waits up to WaitDelay, then SIGKILL, and Wait returns ctx.Err. The doneCh goroutine still owns Wait → installDone, so the for-loop's installDone branch fires naturally on ctx cancel.  
-**Effort:** hours
-
 #### audit-api-design
 
 ##### `api:4f69fc9d:rerunsafe-declarative-only` — rerunsafe declarative only
