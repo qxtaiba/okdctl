@@ -138,3 +138,28 @@ func (p *Phase) UploadCustomISOsToProxmox(ctx context.Context, cfg *config.Confi
 	p.Log.Info(fmt.Sprintf("iso: uploaded %d files to proxmox storage", len(toUpload)))
 	return nil
 }
+
+// isoUploadAlreadyDone returns true when every local ISO has an identical
+// sha256 on the Proxmox host. Any SSH failure or absent Proxmox config
+// conservatively returns (false, nil).
+func (p *Phase) isoUploadAlreadyDone(ctx context.Context, cfg *config.Config, opts *Options) (bool, error) {
+	if cfg.Provider.Proxmox == nil {
+		return false, nil
+	}
+	isoDir := filepath.Join(opts.WorkDir, "custom-isos")
+	if !system.DirExists(isoDir) {
+		return false, nil
+	}
+	isoFiles, err := collectISOFiles(isoDir)
+	if err != nil || len(isoFiles) == 0 {
+		return false, nil
+	}
+	host := phase.ProxmoxBareHost(cfg.Provider.Proxmox.Host)
+	remotePath := phase.DefaultProxmoxISODir
+	for _, f := range isoFiles {
+		if isoUploadNeeded(ctx, p.Exec, host, remotePath, f) {
+			return false, nil
+		}
+	}
+	return true, nil
+}
