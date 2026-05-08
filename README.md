@@ -82,7 +82,7 @@ okdctl doctor           environment preflight check
 okdctl --version        print version, git commit, build date
 ```
 
-Full command reference (all 14 commands): [`docs/cli/okdctl.md`](docs/cli/okdctl.md).
+Full command reference: [`docs/cli/okdctl.md`](docs/cli/okdctl.md).
 Exit codes and shell-script idioms: [`docs/cli/exit-codes.md`](docs/cli/exit-codes.md).
 
 First run of `deploy` launches the wizard and writes `okdctl.yaml` plus
