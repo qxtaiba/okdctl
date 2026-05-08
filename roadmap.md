@@ -614,17 +614,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Add an opt-in `proxmox.host_fingerprint` config field (sha256-of-pubkey form). When set, run `ssh-keyscan` once at first contact, validate the fingerprint matches the configured value, write to a per-project known_hosts file, and pass `-o StrictHostKeyChecking=yes -o UserKnownHostsFile=<path>` for every subsequent ssh/scp call. accept-new should be the explicit fallback only when the fingerprint is unset.  
 **Effort:** hours
 
-##### `sec:6424733c:cred-in-log` — cred in log
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-6424733c-cred-log-rule  
-**Severity:** suggestion  
-**Cluster:** redaction — seam→audit-observability  
-**Evidence:** `internal/cli/helpers.go:56-63`  
-**Problem:** handleCredentials logs `tui.Info(fmt.Sprintf("using credentials from %s", creds.Source))`. The fmt.Sprintf bypasses the structured logging path that logutil.RedactHandler operates on. creds.Source is a Source enum (no secrets), so this specific call is safe — but the pattern of `fmt.Sprintf` into a log message is the umbrella concern: a future field added to Source.String() that interpolates a credential would silently leak. The codebase repeatedly mixes `tui.Info(fmt.Sprintf(...))` with `tui.Info("...", tui.LF("k", v))`.  
-**Fix:** This is the audit-observability seam — the redaction handler scrubs structured attrs but cannot inspect a fmt-Sprintf message. Codify in CLAUDE.md (already partially done) and add a `forbidigo` lint rule that bans `tui.Info(fmt.Sprintf(...))` so the structured path is the only path. Defer to audit-observability for the per-site cleanup.  
-**Effort:** hours
-
-
 ##### `sec:0d318f5c:cred-no-zeroize` — cred no zeroize
 
 **Status:** not started  
@@ -898,16 +887,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Add AlreadyDone to StepBuildISOs that verifies SHA256 of every expected output ISO matches the cached fedora-coreos image hash; on mismatch, treat as 'work not done' and re-build. For StepUploadISOs, add AlreadyDone that runs `pvesh get /nodes/<node>/storage/<storage>/content` filtered to iso/<expected-name>.iso and verifies the size matches the local ISO. Either pre-condition stops a half-uploaded artifact from being treated as ready.  
 **Effort:** hours
 
-##### `state:6424733c:cancel-mid-deploy-no-state-marker` — cancel mid deploy no state marker
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/state-6424733c-deploy-marker  
-**Severity:** minor  
-**Cluster:** crash-recoverability  
-**Evidence:** `internal/cli/helpers.go:258-290`  
-**Problem:** executeFullDeployment catches errors.Is(err, context.Canceled) at three phase boundaries (Prepare, Install, Configure) and prints InterruptSummary + 'run okdctl destroy to clean up'. But the workdir at this point may have partial ISOs, partial ignition, partial terraform state. The user is told 'run destroy' but destroy then runs through cleanup which wipes terraform.tfvars (see state:15ba17da above), so the *first* destroy retry might fail. There's no 'partial-deploy-detected' diagnostic and no checkpoint file to drive a smarter cleanup decision.  
-**Fix:** Persist a small .okdctl-deploy-state.json under workDir on each phase entry (just the phase name + run-id + timestamp) and read it back at destroy time. If the file says 'install phase' or 'postinstall phase', destroy emits 'partial deploy detected — terraform state likely populated, will run destroy first' versus 'cancel during setup — terraform state is empty, run okdctl cleanup instead'. Cross-references roadmap state:4f69fc9d resume-checkpoint.  
-**Effort:** hours
-
 #### audit-iac-and-shell
 
 ##### `iac:e076e43c:sh-doc-line-stale` — sh doc line stale
@@ -922,27 +901,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 #### audit-errors
 
-##### `err:ae5b624c:install-cancelled-no-typed-wrap` — install cancelled no typed wrap
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/err-ae5b624c-cancel-typed  
-**Severity:** suggestion  
-**Cluster:** cancellation-identity — seam→audit-concurrency — related: sub:ae5b624c:no-graceful-cancel  
-**Evidence:** `internal/distribution/okd/install/monitor.go:66-135` + 2 more  
-**Problem:** WaitForBootstrap and MonitorInstallation return bare fmt.Errorf("installation cancelled: %w", ctx.Err()) for the context.Canceled branch, while every other branch returns *errtypes.ClusterError. signalExitCode in root.go catches Canceled before exitCodeFor runs (mapping to 130/143), so behavior is correct, but tests exercising the function in isolation see two unrelated error types. Chain identity is preserved via %w; this is a domain-vocabulary nit, not a correctness bug.  
-**Fix:** Either keep the bare wrap and add a doc-comment naming the signalExitCode shortcut, or convert to typed: &errtypes.ClusterError{Msg: "installation cancelled", Err: ctx.Err()} — signalExitCode still wins because it walks the err chain via errors.Is(err, context.Canceled). Preferred: add the doc-comment (lower risk, no behavior change).  
-**Effort:** hours
-
 #### audit-concurrency
-
-##### `con:6424733c:metrics-server-no-basecontext` — metrics server no basecontext
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/con-6424733c-metrics-basectx  
-**Severity:** minor  
-**Cluster:** goroutine-lifetime  
-**Evidence:** `internal/cli/helpers.go:195-206`  
-**Problem:** startMetricsServer launches `go func() { _ = srv.ListenAndServe() }()` with no ctx wiring on the http.Server. The only shutdown signal is the deferred stop closure at the call site; there is no BaseContext/ConnContext linking parent-ctx cancellation to in-flight scrape connections, and ListenAndServe's error is silently swallowed so a bind failure surfaces as a missing /metrics endpoint rather than a deploy failure.  
-**Fix:** Wire `srv.BaseContext = func(net.Listener) context.Context { return ctx }` so in-flight scrapes inherit deploy-cancel; capture ListenAndServe's err on a buffered chan errCh and have stop() return errors.Is(err, http.ErrServerClosed) ? nil : err so a bind failure surfaces to executeFullDeployment instead of disappearing.  
-**Effort:** hours
 
 #### audit-api-design
 
@@ -964,16 +923,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/download/download.go:24-113` + 2 more  
 **Problem:** download.Options, download.ExtractOptions, and cleanup.Options pass an optional *slog.Logger as a struct field with a getter (o.logger() / opts.getLogger()), while every sibling — executor.WithLogger, terraform.WithLogger, proxmox.WithLogger, addon.WithLogger, cluster.WithLogger, phase.WithLogger — uses functional options. The struct-field shape forces every Download/Extract/cleanup call site to allocate a struct-with-pointer and routes nil through a getter, while the option shape has logutil.OrNop applied once at construction.  
 **Fix:** Either (a) commit the codebase to options-struct everywhere — uniform but loses at-construction nil-normalisation; or (b) commit to functional options — replace download.Download(ctx, *Options) with download.Fetch(ctx, url, dst string, opts ...Option). Recommend (b): three of the four call sites set ≤2 fields, so the per-call-site delta is small and matches the prevailing pattern. cleanup.Options stays a struct (its fields are required workdir/path data, not optional knobs) but Logger should move to a functional WithLogger.  
-**Effort:** hours
-
-##### `api:262af6e4:cleanup-double-execute` — cleanup double execute
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/api-262af6e4-cleanup-exec  
-**Severity:** minor  
-**Cluster:** exported-surface — related: api:beabab0c:phase-new-positional-args  
-**Evidence:** `internal/distribution/okd/cleanup/cleanup.go:60-137`  
-**Problem:** cleanup package ships two Execute entry points: a method (p *Phase) Execute(ctx, *Options) and a package-level Execute(ctx, *Options). The method is a one-line forwarder to the package func. Three callers consume the package func directly (destroy/steps.go via cleanup.New(...).Execute, okd.go:L132 via the same pattern, and tests). The dual surface forces callers to choose, and the comment 'mirrors the shape of setup/install/postinstall/destroy' (cleanup.go:L57) explicitly admits the method exists for symmetry, not for use.  
-**Fix:** Pick one shape. Either (a) collapse to a single package-level cleanup.Execute(ctx, opts) and remove cleanup.Phase + cleanup.New (callers in okd.go:L132 and destroy/steps.go:L117 already accept the function-only form); or (b) keep cleanup.Phase as the canonical surface for symmetry with setup/install/postinstall/destroy and unexport the package-level Execute. (b) matches the comment's intent and the api:beabab0c sibling-shape preference; the dual surface is what's wrong, not which one stays.  
 **Effort:** hours
 
 ##### `api:beabab0c:phase-new-positional-args` — phase new positional args
@@ -1028,16 +977,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Drop the `rejection=77 (EX_NOPERM, set in cmd/okdctl/main.go)` clause from the package doc on `internal/cli/root.go`. Replace with: `invoked-as-root rejection → 5 (AuthError, in elevation.go ensureRoot)`. Optionally promote 77/EX_NOPERM as a real exit code by routing the `elevReject` decision through a sentinel `errtypes.ErrInvokedAsRoot` and adding `errors.Is(err, errtypes.ErrInvokedAsRoot) → 77` to `exitCodeFor` — that matches BSD sysexits semantics and is what the comment originally intended.  
 **Effort:** hours
 
-##### `ux:e7db1220:releases-list-omitted-vs-flat` — releases list omitted vs flat
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/ux-e7db1220-releases-flat  
-**Severity:** minor  
-**Cluster:** json-stability  
-**Evidence:** `internal/cli/releases.go:133-144`  
-**Problem:** `fetchFlatVersions` returns `[]releases.OKDVersion` and feeds `writeJSON`. The encoder then emits `null` for an empty input (Go's encoding of nil slice). `docs/cli/json-schema.md` documents "`null` is never emitted — fields that are absent are omitted entirely" — but the top-level body of `releases list --format=json` returns literal `null\n` when the upstream feed has zero stable entries. Consumers that `jq '.[0]'` get `null` instead of `[]`.  
-**Fix:** In `fetchFlatVersions` initialize `out := []releases.OKDVersion{}` (or `make([]releases.OKDVersion, 0, ...)`) so an empty result encodes as `[]` not `null`. Mirror in `filterStable` (line 146-154) which already uses `make` of length 0. Add a regression test that runs `runReleasesList` with a stub fetcher returning zero versions and asserts the JSON body is `[]\n`.  
-**Effort:** hours
-
 ##### `ux:aa84670c:version-printf-not-via-cmd-out` — version printf not via cmd out
 
 **Status:** not started  
@@ -1046,16 +985,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/cli/root.go:208-215` + 3 more  
 **Problem:** `versionCmd.Run` writes via `fmt.Printf(...)` directly to `os.Stdout`, ignoring `cmd.OutOrStdout()`. Same pattern across deploy/destroy/cleanup/helpers using package-global `fmt.Println`. This makes cobra-test `cmd.SetOut(buf); cmd.Execute()` impossible — every test that wants to assert command output has to swap `os.Stdout` globally (and most tests in this repo do exactly that). Cobra's idiomatic shape is `fmt.Fprintln(cmd.OutOrStdout(), ...)`.  
 **Fix:** Migrate every `fmt.Println(X)` and `fmt.Printf(X...)` site inside a cobra `Run`/`RunE` to `fmt.Fprintln(cmd.OutOrStdout(), X)` / `fmt.Fprintf(cmd.OutOrStdout(), X...)`. Sites outside RunE (e.g. summary builders) take a writer argument. The few legitimate stderr writes (e.g. `kubeconfig.go:72,123`) already use `fmt.Fprintf(os.Stderr, ...)` and are correct.  
-**Effort:** hours
-
-##### `ux:b3356305:readme-14-commands-claim` — readme 14 commands claim
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/ux-b3356305-readme-cmd-count  
-**Severity:** suggestion  
-**Cluster:** flag-conventions — seam→audit-documentation  
-**Evidence:** `README.md:85-86` + 1 more  
-**Problem:** README claims "Full command reference (all 14 commands)". The actual surface is: 10 leaf commands at root + 4 group nouns (addon, config, describe, releases) + 11 subcommands under those groups. The number 14 is plausible (10 leaves + 4 groups = 14) but the count is fragile and will silently drift the next time a subcommand lands.  
-**Fix:** Replace with a maintenance-free phrasing: "Full command reference: [`docs/cli/okdctl.md`](docs/cli/okdctl.md)." Drop the count. Or add a CI check that diffs `find docs/cli -name 'okdctl_*.md' | wc -l` against the README number — but the simpler fix is to delete the count.  
 **Effort:** hours
 
 ##### `ux:d31d1b9d:describe-format-shared-global` — describe format shared global
@@ -1119,16 +1048,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/distribution/okd/cleanup/services.go:155-176`  
 **Problem:** services.Dnsmasq logs `cleanup: refusing critical path` three times in close succession (L155, L167, L176) without including which path was refused. The error message inside guardErr names the path, but a structured attr is missing — operators reading text logs see three identical lines with different `err` values; JSON pipelines cannot group by 'which file was rejected'.  
 **Fix:** Add `"path", configPath` (or `"path", cfg`, `"path", backup`) at each of the three sites so the path is queryable separately from the error chain.  
-**Effort:** hours
-
-##### `obs:aa84670c:run-id-not-on-pre-runid-records` — run id not on pre runid records
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/obs-aa84670c-run-id-span  
-**Severity:** minor  
-**Cluster:** span-retry-boundary — seam→audit-cli-ux  
-**Evidence:** `internal/cli/root.go:85-127`  
-**Problem:** execute() pins run_id via tui.SetRunID for every subsequent slog record (good — set later in phase entry points), but the cobra command tree itself (rootCmd.ExecuteContext at L113) does NOT log a 'started okdctl <verb>' / 'finished okdctl <verb> in <duration>' span pair around its execution. No top-level span boundary in stderr text logs; a JSON pipeline parsing mid-run records cannot tell which invocation a record belongs to until SetRunID lands. Preflight records, configureLogging errors emit before run_id is set.  
-**Fix:** Generate run_id at the top of execute() (before BackgroundCheck), call tui.SetRunID(id) immediately, then emit a single `tui.Info("okdctl: started", tui.LF("argv", strings.Join(os.Args[1:], " ")))` and a matching `tui.Info("okdctl: finished", tui.LF("duration", elapsed), tui.LF("exit_code", code))` in the deferred-exit path. Pulls run_id earlier in the lifecycle so preflight records carry it too (requires moving cmd/okdctl/main.go preflight after run_id init).  
 **Effort:** hours
 
 ##### `obs:c19ee328:debug-fmt-sprintf-package-loop` — debug fmt sprintf package loop

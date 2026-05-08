@@ -27,6 +27,14 @@ func markDeployPhase(path, phase, runID string) {
 	}
 }
 
+// clearDeployMarker removes the marker on clean completion. ErrNotExist is
+// expected (write may have failed silently) and is not warned.
+func clearDeployMarker(path string) {
+	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+		tui.Warn("could not remove deploy state marker", tui.LF("err", err))
+	}
+}
+
 func writeDeployState(path, phase, runID string) error {
 	data, err := json.Marshal(deployState{
 		Phase:     phase,

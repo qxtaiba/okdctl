@@ -351,10 +351,7 @@ func executeFullDeployment(ctx context.Context, cfg *config.Config, opts deploym
 	}
 
 	allSteps := slices.Concat(setupSteps, installSteps, configureSteps)
-
-	if err := os.Remove(markerPath); err != nil && !errors.Is(err, os.ErrNotExist) {
-		tui.Warn("could not remove deploy state marker", tui.LF("err", err))
-	}
+	clearDeployMarker(markerPath)
 
 	duration := time.Since(startTime).Round(time.Second)
 
