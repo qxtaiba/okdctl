@@ -898,16 +898,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Add AlreadyDone to StepBuildISOs that verifies SHA256 of every expected output ISO matches the cached fedora-coreos image hash; on mismatch, treat as 'work not done' and re-build. For StepUploadISOs, add AlreadyDone that runs `pvesh get /nodes/<node>/storage/<storage>/content` filtered to iso/<expected-name>.iso and verifies the size matches the local ISO. Either pre-condition stops a half-uploaded artifact from being treated as ready.  
 **Effort:** hours
 
-##### `state:48688e63:provision-no-output-readback` — provision no output readback
-
-**Status:** in review — PR #453  
-**Severity:** minor  
-**Cluster:** proxmox-api-idempotency  
-**Evidence:** `internal/infrastructure/proxmox/proxmox.go:237-299`  
-**Problem:** retrieveProvisionResult derives every VM IP from cfg.Networking.StaticIP.Start by IP arithmetic — it never asks Proxmox or terraform output what the apply ACTUALLY produced. If a network ordering bug or a parallel-apply race causes terraform to assign a different IP (or fail to assign one), okdctl's downstream wait-for-bootstrap polls a phantom IP and times out at 30 minutes with no diagnostic that the IP scheme drifted. The mutation invariant ('all Proxmox mutations MUST flow through terraform.Executor') does NOT forbid reads from `terraform output -json`.  
-**Fix:** Add a `tf output -json` call after Apply succeeds (Provider.Provision around terraform.go:175). Compare each derived IP against the terraform-reported address (when terraform exposes it via outputs.tf — which it currently does for control_plane_ips/worker_ips). Mismatch → log a Warn naming both values and prefer the terraform-reported one. Cheap, defense-in-depth, no architectural change.  
-**Effort:** hours
-
 ##### `state:6424733c:cancel-mid-deploy-no-state-marker` — cancel mid deploy no state marker
 
 **Status:** not started  
@@ -918,47 +908,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Persist a small .okdctl-deploy-state.json under workDir on each phase entry (just the phase name + run-id + timestamp) and read it back at destroy time. If the file says 'install phase' or 'postinstall phase', destroy emits 'partial deploy detected — terraform state likely populated, will run destroy first' versus 'cancel during setup — terraform state is empty, run okdctl cleanup instead'. Cross-references roadmap state:4f69fc9d resume-checkpoint.  
 **Effort:** hours
 
-##### `state:6424733c:projectroot-marker-restrictive` — projectroot marker restrictive
-
-**Status:** in review — PR #452  
-**Severity:** minor  
-**Cluster:** crash-recoverability  
-**Evidence:** `internal/cli/helpers.go:110-134`  
-**Problem:** resolveProjectRootOrDie refuses any directory whose Base(cfgFile) is missing — defense-in-depth against running cleanup against the wrong root. But after a partial-failed deploy that wipes okdctl.yaml (cleanup.WorkDirectory removes the cluster-config dir first in Full kind), the operator can no longer run `okdctl destroy` because the marker is gone. The cluster's terraform state still exists, the VMs still exist, but okdctl refuses to recognise its own project. Recovery requires recreating an okdctl.yaml shell.  
-**Fix:** Accept any of {okdctl.yaml, okdctl.env, infrastructure/terraform/environments/<env>/terraform.tfstate} as a project marker — at least one is present after deploy starts. Document the broadened marker set in the doc comment so the security argument is preserved (any of these files only exists in an okdctl project).  
-**Effort:** hours
-
-##### `state:15ba17da:nofatal-tracker-sync-todo` — nofatal tracker sync todo
-
-**Status:** in review — PR #460  
-**Severity:** suggestion  
-**Cluster:** phase-idempotency — seam→audit-concurrency  
-**Evidence:** `internal/distribution/okd/destroy/steps.go:30-54`  
-**Problem:** destroyTracker buffers failure labels for a final summary step but the tracker comment notes 'safe without a mutex because Orchestrator.Run iterates steps serially'. If a future patch parallelizes destroy (or an addon-cleanup phase adopts the tracker pattern) the failures slice corrupts. The comment hedges with 'add sync.Mutex if step parallelism ever lands' — a bare TODO without owner/issue per CLAUDE.md §code-comments.  
-**Fix:** Either (a) add a sync.Mutex now (3 LOC) and stop reasoning about parallelism, or (b) replace the comment with `// TODO(@qxtaiba): see #<issue>` linking a real issue per CLAUDE.md §code-comments.  
-**Effort:** hours
-
-##### `state:48688e63:proxmox-no-eventual-consistency` — proxmox no eventual consistency
-
-**Status:** in review — PR #453  
-**Severity:** suggestion  
-**Cluster:** proxmox-api-idempotency  
-**Evidence:** `internal/infrastructure/proxmox/proxmox.go:138-202`  
-**Problem:** Provider.Provision returns from terraform.Apply, then immediately calls retrieveProvisionResult which derives IPs by arithmetic — no readiness probe against Proxmox to confirm the VM is created and visible via the Proxmox API. The VMs may exist in tfstate before they're listable via `pvesh get /nodes/<n>/qemu`. Downstream callers (install.WaitForBootstrap) poll the IP — they will retry — but the immediate logger.Info('vm provisioned', ip) is misleading if the VM isn't yet enumerable.  
-**Fix:** After Apply succeeds, run a single bounded `pvesh get /nodes/<node>/qemu` lookup to confirm vmid_base is enumerated. On miss, log Info 'vm not yet enumerable, install phase will retry' instead of the misleading 'provisioned' log. Mutation invariant remains intact (this is a read-only probe through pvesh, which is already used by phase.iso_cleanup.go).  
-**Effort:** hours
-
 #### audit-iac-and-shell
-
-##### `iac:18a795d5:hcl-tls-skip-doc-no-warning` — hcl tls skip doc no warning
-
-**Status:** in review — PR #454  
-**Severity:** suggestion  
-**Cluster:** hcl-credential-hygiene — seam→audit-security  
-**Evidence:** `infrastructure/terraform/modules/proxmox-okd/main.tf:5-10` + 2 more  
-**Problem:** The HCL header documents `PROXMOX_VE_INSECURE` as "set to 'true' to disable tls verification" without a security warning. The bpg/proxmox provider supports this env var; documenting it without flagging it as a development-only knob normalizes TLS-disable as a routine operator action. Same comment is duplicated in `variables.tf` and the production environment's variables.tf.  
-**Fix:** Append a one-line warning to the comment in all three sites: `# - PROXMOX_VE_INSECURE  (DEV ONLY: disables TLS verification — never set in prod; use a CA-signed cert or add the proxmox CA to your trust store)`.  
-**Effort:** hours
 
 ##### `iac:e076e43c:sh-doc-line-stale` — sh doc line stale
 
@@ -971,16 +921,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Effort:** hours
 
 #### audit-errors
-
-##### `err:08c49fc4:tui-warn-stringifies-err` — tui warn stringifies err
-
-**Status:** in review — PR #455  
-**Severity:** suggestion  
-**Cluster:** redaction-in-error — seam→audit-observability  
-**Evidence:** `internal/cli/update_ingress.go:73-76`  
-**Problem:** tui.Warn("skipping HostNetwork conversion: " + err.Error()) concatenates err.Error() into the message string, bypassing logutil.RedactHandler — the handler only inspects structured slog attrs and *url.URL / Redacted() values. If the error chain ever carries a credential-bearing inner error (today it carries only ctx.Err and a TTY-config error, but the surface is exposed to refactor drift), the credential prints verbatim.  
-**Fix:** Pass err as a structured attr so the redact handler sees it: tui.Warn("skipping HostNetwork conversion", tui.LF("err", err)). Matches the canonical pattern in cli/root.go:121 and the redaction-handler doc-comment in CLAUDE.md.  
-**Effort:** hours
 
 ##### `err:ae5b624c:install-cancelled-no-typed-wrap` — install cancelled no typed wrap
 
@@ -1056,16 +996,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Pick one shape for the okd phase family. Recommend functional options (matches NewBasePhase + okd.Provisioner): replace setup/install/postinstall/destroy/cleanup New(exec, logger, version) with New(version, ...PhaseOption) using WithExecutor/WithLogger/WithRecorder/WithReporter shared via phase package. okd.Provisioner.Prepare/Install/etc become single-line forwarders. Net delta ~+15 LOC of option types, -20 LOC of struct-field writes in okd.go.  
 **Effort:** hours
 
-##### `api:0139cb3f:bindirordefault-symmetric-helper` — bindirordefault symmetric helper
-
-**Status:** in review — PR #456  
-**Severity:** suggestion  
-**Cluster:** exported-surface  
-**Evidence:** `internal/distribution/okd/phase/paths.go:73-79`  
-**Problem:** phase.BinDirOrDefault is a 6-line helper consumed by 3 sibling sites (setup/artifacts.go, setup/tools.go, cleanup/packages.go). Together with PreflightBinDir and ResolveBinDir it forms a three-function bin-dir-resolution surface; each function differs only in which input source is consulted. The shape is correct (small symmetric API) but BinDirOrDefault is invoked on a struct field that's already populated by ResolveBinDir at construction — the second call is redundant defense.  
-**Fix:** Verify intent (grep roadmap.md, confirm parallel siblings) — do not delete; per MEMORY.md §scaffolding.  
-**Effort:** hours
-
 #### audit-cli-ux
 
 ##### `ux:d31d1b9d:describe-format-unvalidated` — describe format unvalidated
@@ -1086,16 +1016,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/distribution/okd/releases/types.go:31-40` + 1 more  
 **Problem:** `OKDVersion.Type` is `ReleaseType int` with no `MarshalJSON`, so `okdctl releases list --format=json` emits `"release_type": 0` (raw enum int). The published JSON schema in docs/cli/json-schema.md documents the field as the string `"stable"`/`"prerelease"`. Live output drifts from the documented contract.  
 **Fix:** Add `MarshalJSON` to `releases.ReleaseType` returning the same labels as `releaseTypeLabel(t)` (`stable`, `latest-stable`, `preview`, `latest-preview`, `lts`). Or change the field type to `string` and store the label directly. Optional: add `UnmarshalJSON` for symmetry with the cache file. Add a snapshot test that asserts the JSON byte-for-byte against the documented schema.  
-**Effort:** hours
-
-##### `ux:08c49fc4:dryrun-mixed-streams` — dryrun mixed streams
-
-**Status:** in review — PR #455  
-**Severity:** minor  
-**Cluster:** streams  
-**Evidence:** `internal/cli/update_ingress.go:50-61`  
-**Problem:** `runUpdateIngressDryRun` mixes streams: opening/closing lines go through `tui.Info` (stderr), but the bulleted `would: …` previews use raw `fmt.Println` (stdout). Sibling dry-run helpers `runCleanupDryRun` (cleanup.go:46-54) and `runDeployDryRun` (deploy.go:160-172) consistently use `tui.Info` for every preview line. This is the only inconsistent dry-run path.  
-**Fix:** Replace each `fmt.Println("  would: ...")` with `tui.Info("would: ...")` to match `runCleanupDryRun` and `runDeployDryRun`. Result: every dry-run line lands on stderr, scripts that capture both with `> log 2>&1` see one ordered stream, and `--quiet` suppresses the preview consistently with the rest of the surface.  
 **Effort:** hours
 
 ##### `ux:8154ab0f:doctor-no-machine-format` — doctor no machine format
@@ -1191,16 +1111,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Mechanical sweep: every `tui.X(fmt.Sprintf("prefix: %s", v))` becomes `tui.X("prefix", tui.LF("key", v))`; every `p.Log.X(fmt.Sprintf("prefix: %s", v))` becomes `p.Log.X("prefix", "key", v)`. ~50 sites; one PR per package keeps churn reviewable. Roll-up message stays static; values move to attrs.  
 **Effort:** hours
 
-##### `obs:08c49fc4:hostnetwork-ic-message-text` — hostnetwork ic message text
-
-**Status:** in review — PR #455  
-**Severity:** minor  
-**Cluster:** field-stability — seam→audit-errors  
-**Evidence:** `internal/cli/update_ingress.go:75-75`  
-**Problem:** `tui.Warn("skipping HostNetwork conversion: " + err.Error())` concatenates the err string into the message text (string-melt), bypassing RedactHandler structured-attr scrub. The error-stringification pattern (CLAUDE.md flags `slog.String("error", err.Error())` as 'kills structured handling'); the same anti-pattern in concat form.  
-**Fix:** Replace with `tui.Warn("skipping HostNetwork conversion", tui.LF("err", err))`.  
-**Effort:** hours
-
 ##### `obs:25fa1be8:nil-logger-deref` — nil logger deref
 
 **Status:** not started  
@@ -1241,38 +1151,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** L312: `p.Log.Debug("packages: not found", "pkg", pkg)`. L314: `p.Log.Debug("packages: already installed", "pkg", pkg)`. L323: `p.Log.Info("packages: installing missing", "count", len(toInstall))`. Caller can then `jq 'select(.pkg=="haproxy")'` cleanly.  
 **Effort:** hours
 
-##### `obs:ae5b624c:per-tick-csr-warn-already-deduped` — per tick csr warn already deduped
-
-**Status:** in review — PR #457  
-**Severity:** suggestion  
-**Cluster:** log-once  
-**Evidence:** `internal/distribution/okd/install/monitor.go:118-165`  
-**Problem:** Acceptable per-attempt logging in the CSR-approval poll loop already de-duplicates identical consecutive errors via lastCSRWarnMsg (L122-L161): first occurrence at Warn, repeats demoted to Debug. This is the canonical correct shape for a poll/retry loop. Flagged here as a positive counter-example so the audit does not accidentally regress this on a later sweep — fix is to document the idiom, not to change the code.  
-**Fix:** Document this de-duplication idiom (msg == lastWarnMsg means Debug, else Warn) in CLAUDE.md §concurrency or §logging-conventions as the repo canonical poll-loop log-once pattern. Reference from any future poll-loop site review.  
-**Effort:** hours
-
-
 #### audit-modernization
-
-##### `mod:1e8ffb91:use-slices-containsfunc` — use slices containsfunc
-
-**Status:** in review — PR #458  
-**Severity:** suggestion  
-**Cluster:** slices-maps  
-**Evidence:** `internal/distribution/okd/postinstall/verify.go:50-57`  
-**Problem:** parseOperatorDegradation uses a nested find-first loop with an explicit break — the inner loop is exactly slices.ContainsFunc applied to op.Status.Conditions. The same shape is already migrated in internal/cli/status.go:175-181 (slices.ContainsFunc on the same struct family); this site lags behind the repo's own modernization.  
-**Fix:** Inner loop becomes one call: `if slices.ContainsFunc(op.Status.Conditions, func(c clusterOperatorCondition) bool { return c.Type == phase.ConditionTypeDegraded && c.Status == phase.ConditionStatusTrue }) { degraded = append(degraded, op.Metadata.Name) }`. Add `slices` to imports.  
-**Effort:** hours
-
-##### `mod:1e8ffb91:use-slices-containsfunc-readiness` — use slices containsfunc readiness
-
-**Status:** in review — PR #458  
-**Severity:** suggestion  
-**Cluster:** slices-maps — related: mod:1e8ffb91:use-slices-containsfunc  
-**Evidence:** `internal/distribution/okd/postinstall/verify.go:89-97`  
-**Problem:** parseNodeReadiness uses the same nested find-first-with-break pattern as parseOperatorDegradation a few lines above. Both are slices.ContainsFunc; modernizing one without the other leaves the file inconsistent.  
-**Fix:** Inner loop becomes: `if slices.ContainsFunc(node.Status.Conditions, func(c nodeCondition) bool { return c.Type == phase.ConditionTypeReady && c.Status == phase.ConditionStatusTrue }) { ready++ }`. Pair with the parseOperatorDegradation rewrite so a single import-add covers both sites in one diff.  
-**Effort:** hours
 
 ##### `mod:5013fea6:use-slices-containsfunc` — use slices containsfunc
 
@@ -1409,17 +1288,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** No action. Lives or dies with go-proxmox per CLAUDE.md fallback plan. Track via the dep audit footer so the next reviewer sees the staleness without re-deriving it.  
 **Effort:** hours
 
-##### `dep:33ef32bf:yaml-triple-engines` — yaml triple engines
-
-**Status:** in review — PR #457  
-**Severity:** suggestion  
-**Cluster:** duplicate-engine  
-**Evidence:** `go.mod:19-19` + 1 more  
-**Problem:** Three YAML engines in the dep tree: `sigs.k8s.io/yaml v1.6.0` (direct, 9 source-file imports), `go.yaml.in/yaml/v2 v2.4.3` (transitive), `go.yaml.in/yaml/v3 v3.0.4` (transitive). Down from four (the prior `gopkg.in/yaml.v3` test-only dep is still in go.sum but not in go.mod require). Each engine ships its own scanner/encoder code path. Tier-H acceptance per CLAUDE.md §5a, but worth re-flagging since the count changed (4 → 3) since last documented baseline.  
-**Fix:** No code action — sigs.k8s.io/yaml is required by k8s.io/api and pins go.yaml.in/yaml/v{2,3} transitively as part of the k8s.io/apimachinery serializer stack. Update CLAUDE.md §5a baseline note from 'four YAML engines' to 'three YAML engines (down from four after gopkg.in/yaml.v3 dropped from required)' to keep the acceptance fingerprint current.  
-**Effort:** hours
-
-
 #### audit-documentation
 
 ##### `doc:8f46b665:phases-add-step-missing-rerunsafe` — phases add step missing rerunsafe
@@ -1430,16 +1298,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `docs/architecture/phases.md:102-117`  
 **Problem:** 'Adding a new step' instructions list NonFatal and SkipWhen but never mention ReRunSafe, which BuildSteps requires. A reader following these steps verbatim will hit 'BuildSteps: step <id> must declare ReRunSafe (ReRunSafeYes or ReRunSafeNo)' panic at first run.  
 **Fix:** Add a step '0' or first-class step explaining ReRunSafe: every StepDef must set ReRunSafeYes (idempotent across re-runs — preferred default) or ReRunSafeNo (combined with AlreadyDone for resume safety). Note the panic in BuildSteps.  
-**Effort:** hours
-
-##### `doc:b3356305:readme-production-yaml-worker-drift` — readme production yaml worker drift
-
-**Status:** in review — PR #459  
-**Severity:** minor  
-**Cluster:** readme-drift — seam→audit-cli-ux — related: ux:b3356305:readme-14-commands-claim  
-**Evidence:** `README.md:116-116`  
-**Problem:** README claims 'production.yaml — 3 control-plane, 3 worker layout' but configs/examples/production.yaml has workers.count: 5.  
-**Fix:** Edit README to say 'production.yaml — 3 control-plane, 5 worker layout' matching production.yaml. Or change production.yaml back to 3 workers if the README cardinality is the intended doc.  
 **Effort:** hours
 
 #### audit-tests
