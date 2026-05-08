@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"os/exec"
@@ -166,13 +167,14 @@ func runDoctor(cmd *cobra.Command, _ []string) error {
 		return nil
 	}
 
-	defer fmt.Println()
-	fmt.Println()
-	fmt.Println("🩺 " + tui.HighlightStyle.Render(fmt.Sprintf("doctor: running %d environment checks", len(checks))))
-	fmt.Println()
+	w := cmd.OutOrStdout()
+	defer fmt.Fprintln(w)
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "🩺 "+tui.HighlightStyle.Render(fmt.Sprintf("doctor: running %d environment checks", len(checks))))
+	fmt.Fprintln(w)
 
 	for _, cr := range results {
-		printResult(cr.c, cr.r)
+		printResult(cr.c, cr.r, w)
 	}
 
 	switch {
@@ -211,14 +213,14 @@ func severityMarkers(sev severity) (icon, label, rawLabel string) {
 // printResult renders one check as either a two-line block (title + single
 // result line) or a title followed by a per-item sub-list. A blank line
 // follows either shape so check blocks remain visually distinct.
-func printResult(c check, r checkResult) {
+func printResult(c check, r checkResult, w io.Writer) {
 	icon, aggregateLabel, _ := severityMarkers(r.sev)
 
 	title := c.name
 	if c.desc != "" {
 		title += tui.MutedStyle.Render(": " + c.desc)
 	}
-	fmt.Println("  " + icon + " " + title)
+	fmt.Fprintln(w, "  "+icon+" "+title)
 
 	if len(r.items) > 0 {
 		// Sub-list: each item on its own line, labels aligned to the
@@ -231,13 +233,13 @@ func printResult(c check, r checkResult) {
 			if item.note != "" {
 				line += tui.MutedStyle.Render(" (" + item.note + ")")
 			}
-			fmt.Println(line)
+			fmt.Fprintln(w, line)
 		}
 	} else {
-		fmt.Println("      " + aggregateLabel + " " + r.detail)
+		fmt.Fprintln(w, "      "+aggregateLabel+" "+r.detail)
 	}
 
-	fmt.Println()
+	fmt.Fprintln(w)
 }
 
 // checkHostOS identifies the host OS by parsing /etc/os-release.

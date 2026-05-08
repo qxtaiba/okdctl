@@ -41,14 +41,14 @@ func init() {
 	rootCmd.AddCommand(configCmd)
 }
 
-func runConfigValidate(_ *cobra.Command, _ []string) error {
+func runConfigValidate(cmd *cobra.Command, _ []string) error {
 	cfg, err := loadConfig(cfgFile)
 	if err != nil {
 		return err
 	}
 
 	result := cfg.Validate()
-	fmt.Println(ValidationSummary(result))
+	fmt.Fprintln(cmd.OutOrStdout(), ValidationSummary(result))
 	if result == nil || result.IsValid() {
 		return nil
 	}

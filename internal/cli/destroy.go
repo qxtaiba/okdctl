@@ -243,7 +243,7 @@ func runDestroy(cmd *cobra.Command, _ []string) error {
 	})
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
-			fmt.Println(InterruptSummary(steps, "okdctl destroy", tui.RunID()))
+			fmt.Fprintln(cmd.OutOrStdout(), InterruptSummary(steps, "okdctl destroy", tui.RunID()))
 			return err
 		}
 		return err

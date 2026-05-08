@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/netip"
@@ -78,10 +79,10 @@ func reportCredentialProvenance(creds *credentials.ProxmoxCredentials) {
 	}
 }
 
-func validateConfig(cfg *config.Config) *config.ValidationResult {
+func validateConfig(cfg *config.Config, w io.Writer) *config.ValidationResult {
 	result := cfg.Validate()
 	if !result.IsValid() {
-		fmt.Println(ValidationSummary(result))
+		fmt.Fprintln(w, ValidationSummary(result))
 	}
 	return result
 }
@@ -256,7 +257,7 @@ func startMetricsServer(ctx context.Context, addr string, allowNetwork bool) (fu
 	return stop, []okd.ProvisionerOption{okd.WithMetricsRecorder(rec)}, nil
 }
 
-func executeFullDeployment(ctx context.Context, cfg *config.Config, opts deploymentOptions) error {
+func executeFullDeployment(ctx context.Context, cfg *config.Config, opts deploymentOptions, w io.Writer) error {
 	clusterFQDN := cfg.Cluster.Name + "." + cfg.Cluster.Domain
 	projectRoot, err := resolveProjectRootOrDie()
 	if err != nil {
@@ -315,7 +316,7 @@ func executeFullDeployment(ctx context.Context, cfg *config.Config, opts deploym
 	setupSteps, err := p.Prepare(ctx, cfg)
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
-			fmt.Println(InterruptSummary(setupSteps, "okdctl deploy", runID))
+			fmt.Fprintln(w, InterruptSummary(setupSteps, "okdctl deploy", runID))
 			tui.Info("cancelled during prepare — terraform state is empty; run 'okdctl cleanup' to remove local files")
 			return err
 		}
@@ -329,7 +330,7 @@ func executeFullDeployment(ctx context.Context, cfg *config.Config, opts deploym
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
 			combined := slices.Concat(setupSteps, installSteps)
-			fmt.Println(InterruptSummary(combined, "okdctl deploy", runID))
+			fmt.Fprintln(w, InterruptSummary(combined, "okdctl deploy", runID))
 			tui.Info("cancelled during install — terraform state likely populated; run 'okdctl destroy' to clean up")
 			return err
 		}
@@ -342,7 +343,7 @@ func executeFullDeployment(ctx context.Context, cfg *config.Config, opts deploym
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
 			combined := slices.Concat(setupSteps, installSteps, configureSteps)
-			fmt.Println(InterruptSummary(combined, "okdctl deploy", runID))
+			fmt.Fprintln(w, InterruptSummary(combined, "okdctl deploy", runID))
 			tui.Info("cancelled during configure — terraform state likely populated; run 'okdctl destroy' to clean up")
 			return err
 		}
@@ -355,9 +356,9 @@ func executeFullDeployment(ctx context.Context, cfg *config.Config, opts deploym
 
 	duration := time.Since(startTime).Round(time.Second)
 
-	fmt.Println()
+	fmt.Fprintln(w)
 	tui.Info(fmt.Sprintf("deployment complete (total time: %s)", duration))
-	fmt.Println(PostDeploySummary(cfg, result, allSteps, runID))
+	fmt.Fprintln(w, PostDeploySummary(cfg, result, allSteps, runID))
 
 	return nil
 }
