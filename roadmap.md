@@ -616,7 +616,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sec:6424733c:cred-in-log` — cred in log
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-6424733c-cred-log-rule  
 **Severity:** suggestion  
 **Cluster:** redaction — seam→audit-observability  
 **Evidence:** `internal/cli/helpers.go:56-63`  
@@ -900,7 +900,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `state:6424733c:cancel-mid-deploy-no-state-marker` — cancel mid deploy no state marker
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/state-6424733c-deploy-marker  
 **Severity:** minor  
 **Cluster:** crash-recoverability  
 **Evidence:** `internal/cli/helpers.go:258-290`  
@@ -924,7 +924,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `err:ae5b624c:install-cancelled-no-typed-wrap` — install cancelled no typed wrap
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/err-ae5b624c-cancel-typed  
 **Severity:** suggestion  
 **Cluster:** cancellation-identity — seam→audit-concurrency — related: sub:ae5b624c:no-graceful-cancel  
 **Evidence:** `internal/distribution/okd/install/monitor.go:66-135` + 2 more  
@@ -936,7 +936,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `con:6424733c:metrics-server-no-basecontext` — metrics server no basecontext
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/con-6424733c-metrics-basectx  
 **Severity:** minor  
 **Cluster:** goroutine-lifetime  
 **Evidence:** `internal/cli/helpers.go:195-206`  
@@ -946,7 +946,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `con:ae5b624c:reap-reimplements-cmd-cancel` — reap reimplements cmd cancel
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/con-ae5b624c-cmd-cancel  
 **Severity:** minor  
 **Cluster:** goroutine-lifetime — seam→audit-subprocess — related: sub:ae5b624c:openshift-install-sigkill  
 **Evidence:** `internal/distribution/okd/install/monitor.go:167-188`  
@@ -978,7 +978,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `api:262af6e4:cleanup-double-execute` — cleanup double execute
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/api-262af6e4-cleanup-exec  
 **Severity:** minor  
 **Cluster:** exported-surface — related: api:beabab0c:phase-new-positional-args  
 **Evidence:** `internal/distribution/okd/cleanup/cleanup.go:60-137`  
@@ -1030,7 +1030,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `ux:aa84670c:exit-code-package-doc-drift` — exit code package doc drift
 
-**Status:** not started (code already merged in commit b41600a — needs archive sweep)  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/ux-aa84670c-exit-code-doc  
 **Severity:** minor  
 **Cluster:** exit-codes — seam→audit-errors  
 **Evidence:** `internal/cli/root.go:1-12`  
@@ -1040,7 +1040,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `ux:e7db1220:releases-list-omitted-vs-flat` — releases list omitted vs flat
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/ux-e7db1220-releases-flat  
 **Severity:** minor  
 **Cluster:** json-stability  
 **Evidence:** `internal/cli/releases.go:133-144`  
@@ -1060,7 +1060,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `ux:b3356305:readme-14-commands-claim` — readme 14 commands claim
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/ux-b3356305-readme-cmd-count  
 **Severity:** suggestion  
 **Cluster:** flag-conventions — seam→audit-documentation  
 **Evidence:** `README.md:85-86` + 1 more  
@@ -1133,7 +1133,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `obs:aa84670c:run-id-not-on-pre-runid-records` — run id not on pre runid records
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/obs-aa84670c-run-id-span  
 **Severity:** minor  
 **Cluster:** span-retry-boundary — seam→audit-cli-ux  
 **Evidence:** `internal/cli/root.go:85-127`  
