@@ -6,6 +6,7 @@ package proxmox
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -14,6 +15,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
+	"github.com/qxtaiba/okdctl/internal/executor"
 	"github.com/qxtaiba/okdctl/internal/infrastructure/terraform"
 	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/netutil"
@@ -37,6 +39,7 @@ type Provider struct {
 	logger        *slog.Logger
 	env           []string
 	reporter      logutil.ProgressReporter
+	sshExec       *executor.Executor
 }
 
 // Option configures a Provider at construction time.
@@ -65,6 +68,13 @@ func WithEnv(env []string) Option {
 // headless callers run silent.
 func WithProgressReporter(r logutil.ProgressReporter) Option {
 	return func(p *Provider) { p.reporter = r }
+}
+
+// WithSSHExec sets the executor used for post-apply pvesh enumeration probes.
+// When omitted the probe is skipped and Provision relies on the terraform
+// output cross-check alone.
+func WithSSHExec(exec *executor.Executor) Option {
+	return func(p *Provider) { p.sshExec = exec }
 }
 
 // New constructs a Provider with the given options. The logger defaults to
@@ -192,6 +202,9 @@ func (p *Provider) Provision(ctx context.Context, cfg *config.Config, opts Provi
 		return nil, &errtypes.ClusterError{Msg: "terraform apply succeeded but no VMs were provisioned; check config"}
 	}
 
+	p.checkTerraformOutputs(ctx, cfg)
+	p.probeVMEnumeration(ctx, cfg)
+
 	p.logger.Info("terraform: vms provisioned", "count", len(result.VMs))
 	for _, vm := range result.VMs {
 		if vm.IPAddress != "" {
@@ -297,4 +310,65 @@ func (p *Provider) retrieveProvisionResult(cfg *config.Config) (*ProvisionResult
 	}
 
 	return result, nil
+}
+
+func (p *Provider) checkTerraformOutputs(ctx context.Context, cfg *config.Config) {
+	outputs, err := p.terraformExec.Output(ctx)
+	if err != nil {
+		p.logger.Warn("terraform: output readback failed; ip arithmetic may address phantom nodes", "err", err)
+		return
+	}
+	raw, ok := outputs["vm_ids"]
+	if !ok {
+		return
+	}
+	var wrapper struct {
+		Value struct {
+			Bootstrap *int  `json:"bootstrap"`
+			Masters   []int `json:"masters"`
+			Workers   []int `json:"workers"`
+		} `json:"value"`
+	}
+	if err := json.Unmarshal(raw, &wrapper); err != nil {
+		return
+	}
+	v := wrapper.Value
+	wantMasters := cfg.Topology.ControlPlane.Count
+	wantWorkers := cfg.Topology.Workers.Count
+	if v.Bootstrap == nil || len(v.Masters) != wantMasters || len(v.Workers) != wantWorkers {
+		p.logger.Warn("terraform: vm_ids count mismatch; ip arithmetic may address phantom nodes",
+			"want_masters", wantMasters, "got_masters", len(v.Masters),
+			"want_workers", wantWorkers, "got_workers", len(v.Workers),
+			"bootstrap_present", v.Bootstrap != nil)
+	}
+}
+
+func (p *Provider) probeVMEnumeration(ctx context.Context, cfg *config.Config) {
+	if p.sshExec == nil {
+		return
+	}
+	vmidBase := cfg.Topology.VMIDBase
+	if vmidBase == 0 {
+		vmidBase = 6000
+	}
+	host := phase.ProxmoxBareHost(p.host)
+	result, err := phase.SSHRunArgv(ctx, p.sshExec, host,
+		"pvesh", "get", "/nodes/"+p.node+"/qemu", "--output-format", "json",
+	)
+	if err != nil {
+		p.logger.Info("terraform: pvesh probe skipped", "err", err)
+		return
+	}
+	var vms []struct {
+		VMID int `json:"vmid"`
+	}
+	if err := json.Unmarshal([]byte(result.Stdout), &vms); err != nil {
+		return
+	}
+	for _, vm := range vms {
+		if vm.VMID == vmidBase {
+			return
+		}
+	}
+	p.logger.Info("terraform: vm not yet enumerable, install phase will retry", "vmid", vmidBase)
 }
