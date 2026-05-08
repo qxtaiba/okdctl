@@ -4,7 +4,6 @@ package firewall
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"os/exec"
@@ -90,19 +89,12 @@ func DetectBackend(ctx context.Context, logger *slog.Logger) Backend {
 	}
 
 	if _, err := exec.LookPath("ufw"); err == nil {
-		cmd := exec.CommandContext(ctx, "ufw", "status")
-		if output, err := cmd.Output(); err == nil {
+		if output, err := system.OutputCaptured(ctx, "ufw", "status"); err == nil {
 			if strings.Contains(string(output), "Status: active") {
 				return UFW
 			}
 		} else if logger != nil {
-			// probe-style fall-through: log stderr so doctor / debug-bundle reflect why ufw was skipped.
-			var ee *exec.ExitError
-			var stderr string
-			if errors.As(err, &ee) {
-				stderr = string(ee.Stderr)
-			}
-			logger.Debug("ufw probe failed, falling through to next backend", "err", err, "stderr", stderr, "backend", "ufw")
+			logger.Debug("ufw probe failed, falling through to next backend", "err", err, "backend", "ufw")
 		}
 	}
 
