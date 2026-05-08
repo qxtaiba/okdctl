@@ -36,7 +36,12 @@ func SafeRemoveWithLogger(ctx context.Context, path, description string, logger 
 		logger.Warn("cleanup: refusing critical path", "err", err)
 		return &errtypes.ConfigError{Msg: "cleanup refused critical path", Err: err}
 	}
-	if _, err := os.Stat(path); os.IsNotExist(err) {
+	if info, err := os.Lstat(path); err == nil {
+		if info.Mode()&os.ModeSymlink != 0 {
+			logger.Warn("cleanup: refusing symlink target; remove the link manually", "path", path)
+			return &errtypes.ConfigError{Msg: fmt.Sprintf("refusing to remove symlink %s", path)}
+		}
+	} else if os.IsNotExist(err) {
 		return nil
 	}
 
