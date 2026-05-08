@@ -61,11 +61,11 @@ func canSkipDownload(cfg *dlConfig) bool {
 	filename := filepath.Base(cfg.outputPath)
 
 	if cfg.expectedChecksum == "" {
-		cfg.logger.Info(fmt.Sprintf("download: using existing file %s (no checksum)", filename))
+		cfg.logger.Info("download: using existing file (no checksum)", "file", filename)
 		return true
 	}
 
-	cfg.logger.Info(fmt.Sprintf("download: validating existing file %s", filename))
+	cfg.logger.Info("download: validating existing file", "file", filename)
 
 	actualChecksum, err := CalculateChecksum(cfg.outputPath)
 	if err != nil {
@@ -73,11 +73,11 @@ func canSkipDownload(cfg *dlConfig) bool {
 	}
 
 	if actualChecksum == cfg.expectedChecksum {
-		cfg.logger.Info(fmt.Sprintf("download: checksum verified for %s", filename))
+		cfg.logger.Info("download: checksum verified", "file", filename)
 		return true
 	}
 
-	cfg.logger.Warn(fmt.Sprintf("download: checksum mismatch, re-downloading %s", filename))
+	cfg.logger.Warn("download: checksum mismatch, re-downloading", "file", filename)
 	if err := os.Remove(cfg.outputPath); err != nil && !os.IsNotExist(err) {
 		cfg.logger.Warn("download: failed to remove mismatched file", "file", filename, "err", err)
 	}
@@ -112,7 +112,7 @@ func Fetch(ctx context.Context, url, dst string, opts ...Option) error {
 	}
 
 	filename := filepath.Base(dst)
-	cfg.logger.Info(fmt.Sprintf("download: %s", filename))
+	cfg.logger.Info("download", "file", filename)
 
 	client := httputil.New(cfg.timeout)
 

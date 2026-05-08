@@ -166,7 +166,7 @@ func (p *Phase) ConfigureApache(ctx context.Context, cfg *config.Config) error {
 		return err
 	}
 
-	p.Log.Info(fmt.Sprintf("apache: ignition directory created at %s", ignitionDir))
+	p.Log.Info("apache: ignition directory created", "path", ignitionDir)
 	return nil
 }
 
@@ -240,7 +240,7 @@ func (p *Phase) VerifyWebServer(ctx context.Context, baseURL string) error {
 
 	client := httputil.New(httputil.TimeoutShort)
 
-	p.Log.Info(fmt.Sprintf("apache: verifying web server at %s", testURL))
+	p.Log.Info("apache: verifying web server", "url", testURL)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, testURL, http.NoBody)
 	if err != nil {

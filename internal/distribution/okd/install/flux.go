@@ -29,13 +29,13 @@ func (p *Phase) ValidateClusterAccess(ctx context.Context) error {
 		return &errtypes.ClusterError{Msg: "cluster authentication returned empty user"}
 	}
 
-	p.Log.Info(fmt.Sprintf("cluster: authenticated as %s", user))
+	p.Log.Info("cluster: authenticated", "user", user)
 
 	result, err = cmdRunner.Run(ctx, "oc", "version")
 	if err == nil && result.ExitCode == 0 {
 		for line := range strings.Lines(result.Stdout) {
 			if strings.HasPrefix(line, "Server Version:") {
-				p.Log.Info(fmt.Sprintf("cluster: %s", strings.ToLower(strings.TrimSpace(line))))
+				p.Log.Info("cluster: server version", "version", strings.ToLower(strings.TrimSpace(line)))
 				break
 			}
 		}
@@ -78,7 +78,7 @@ func (p *Phase) SetupClusterAccess(ctx context.Context, clusterDir string) error
 			p.Log.Warn("kubeconfig: could not backup existing file", "err", err)
 		} else {
 			_ = system.ChownToInvokingUser(backupPath)
-			p.Log.Info(fmt.Sprintf("kubeconfig: backed up existing file to %s", backupPath))
+			p.Log.Info("kubeconfig: backed up existing file", "path", backupPath)
 		}
 	}
 

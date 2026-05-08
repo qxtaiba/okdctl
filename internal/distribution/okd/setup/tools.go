@@ -165,7 +165,7 @@ func (p *Phase) installTerraform(ctx context.Context) error {
 	}
 
 	version := getToolVersion(ctx, "terraform", "--version")
-	p.Log.Info(fmt.Sprintf("tools: terraform installed (%s)", version))
+	p.Log.Info("tools: terraform installed", "version", version)
 	return nil
 }
 

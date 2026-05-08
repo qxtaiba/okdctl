@@ -173,7 +173,7 @@ func runAddonUninstall(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	tui.Warn(fmt.Sprintf("this will uninstall addon %q from cluster %q", args[0], cfg.Cluster.Name))
+	tui.Warn("this will uninstall addon from cluster", tui.LF("addon", args[0]), tui.LF("cluster", cfg.Cluster.Name))
 
 	if err := confirmClusterMatches(addonUninstallYes, addonUninstallConfirmCluster, cfg.Cluster.Name, "uninstall"); err != nil {
 		return err
@@ -197,7 +197,7 @@ func runAddonUninstall(cmd *cobra.Command, args []string) error {
 	if err := mgr.Uninstall(cmd.Context(), args[0]); err != nil {
 		return err
 	}
-	tui.Info(fmt.Sprintf("addon %s uninstalled", args[0]))
+	tui.Info("addon uninstalled", tui.LF("addon", args[0]))
 	return nil
 }
 

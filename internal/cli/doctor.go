@@ -182,7 +182,7 @@ func runDoctor(cmd *cobra.Command, _ []string) error {
 		tui.Error("doctor: failing checks block deploy", tui.LF("failing", fails), tui.LF("warnings", warns))
 		return &errtypes.ConfigError{Msg: "preflight checks failed"}
 	case warns > 0:
-		tui.Warn(fmt.Sprintf("doctor: %d warning(s): deploy may proceed but review the warnings above", warns))
+		tui.Warn("doctor: deploy may proceed but review warnings above", tui.LF("warnings", warns))
 	default:
 		tui.Info("doctor: environment looks ready")
 	}

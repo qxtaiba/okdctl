@@ -166,13 +166,13 @@ func ExtractTarGz(ctx context.Context, archivePath, destDir string, opts ...Extr
 	filename := filepath.Base(archivePath)
 
 	if cfg.expectedChecksum != "" {
-		cfg.logger.Info(fmt.Sprintf("download: validating sha256 checksum for %s", filename))
+		cfg.logger.Info("download: validating sha256 checksum", "file", filename)
 
 		if err := ValidateChecksum(archivePath, cfg.expectedChecksum); err != nil {
 			return fmt.Errorf("checksum validation failed for %s: %w", filename, err)
 		}
 
-		cfg.logger.Info(fmt.Sprintf("download: checksum validated for %s", filename))
+		cfg.logger.Info("download: checksum validated", "file", filename)
 	}
 
 	file, err := os.Open(archivePath)
@@ -215,11 +215,11 @@ func ExtractTarGz(ctx context.Context, archivePath, destDir string, opts ...Extr
 
 	if cfg.cleanupArchive {
 		if err := os.Remove(archivePath); err != nil {
-			cfg.logger.Warn(fmt.Sprintf("download: failed to cleanup archive %s", filename))
+			cfg.logger.Warn("download: failed to cleanup archive", "file", filename)
 		}
 	}
 
-	cfg.logger.Info(fmt.Sprintf("download: extracted %s", filename))
+	cfg.logger.Info("download: extracted", "file", filename)
 
 	return nil
 }

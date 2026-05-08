@@ -158,7 +158,7 @@ func (p *Phase) VerifyKubeVIP(ctx context.Context, cfg *config.Config, opts *Opt
 		return "", &errtypes.ConfigError{Msg: "failed to resolve cluster VIP", Err: err}
 	}
 
-	p.Log.Info(fmt.Sprintf("kubevip: checking vip %s", vip))
+	p.Log.Info("kubevip: checking vip", "vip", vip)
 
 	if err := p.waitForKubeVIPDaemonSet(ctx, opts); err != nil {
 		return "", &errtypes.ClusterError{Msg: "kube-vip daemonset not ready", Err: err}
@@ -188,7 +188,7 @@ func (p *Phase) waitForKubeVIPDaemonSet(ctx context.Context, opts *Options) erro
 	if err != nil {
 		return err
 	}
-	p.Log.Info(fmt.Sprintf("kubevip: daemonset running (%s pods ready)", ready))
+	p.Log.Info("kubevip: daemonset running", "pods_ready", ready)
 	return nil
 }
 
@@ -211,7 +211,7 @@ func (p *Phase) waitForKubeVIPPing(ctx context.Context, vip string, opts *Option
 		return fmt.Errorf("vip %s is not accepting tcp:%d: %w", vip, phase.KubeAPIPort, err)
 	}
 
-	p.Log.Info(fmt.Sprintf("kubevip: vip %s is reachable", vip))
+	p.Log.Info("kubevip: vip is reachable", "vip", vip)
 	return nil
 }
 
@@ -229,7 +229,7 @@ func (p *Phase) verifyKubeVIPAPIHealthBootstrap(ctx context.Context, vip, cluste
 		return &errtypes.ClusterError{Msg: "kubeconfig CA unavailable for kube-vip api health check", Err: caErr}
 	}
 
-	p.Log.Info(fmt.Sprintf("verify: checking vip health at %s", healthURL))
+	p.Log.Info("verify: checking vip health", "url", healthURL)
 
 	doRequest := func(client *http.Client) (string, error) {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, healthURL, http.NoBody)
@@ -268,7 +268,7 @@ func (p *Phase) verifyKubeVIPAPIHealthBootstrap(ctx context.Context, vip, cluste
 		}
 	}
 
-	p.Log.Info(fmt.Sprintf("kubevip: api server responding at %s", healthURL))
+	p.Log.Info("kubevip: api server responding", "url", healthURL)
 	return nil
 }
 

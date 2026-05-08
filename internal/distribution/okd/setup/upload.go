@@ -125,7 +125,7 @@ func (p *Phase) UploadCustomISOsToProxmox(ctx context.Context, cfg *config.Confi
 		if isoUploadNeeded(ctx, p.Exec, host, knownHostsPath, remotePath, f) {
 			toUpload = append(toUpload, f)
 		} else {
-			p.Log.Info(fmt.Sprintf("iso: skipping unchanged %s", filepath.Base(f)))
+			p.Log.Info("iso: skipping unchanged", "file", filepath.Base(f))
 		}
 	}
 
@@ -141,7 +141,7 @@ func (p *Phase) UploadCustomISOsToProxmox(ctx context.Context, cfg *config.Confi
 		return &errtypes.NetworkError{Msg: "scp upload to proxmox failed", Err: err}
 	}
 
-	p.Log.Info(fmt.Sprintf("iso: uploaded %d files to proxmox storage", len(toUpload)))
+	p.Log.Info("iso: uploaded files to proxmox storage", "count", len(toUpload))
 	return nil
 }
 

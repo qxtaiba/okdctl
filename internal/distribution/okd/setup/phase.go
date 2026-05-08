@@ -131,6 +131,6 @@ func (p *Phase) PrintSetupCompletionSummary(cfg *config.Config, opts *Options) {
 	clusterDir := phase.ClusterConfigDir(opts.WorkDir)
 	tfEnv := phase.GetTerraformEnv(cfg)
 
-	p.Log.Info(fmt.Sprintf("setup: cluster config saved to %s", clusterDir))
-	p.Log.Info(fmt.Sprintf("setup: terraform environment set to %s", tfEnv))
+	p.Log.Info("setup: cluster config saved", "path", clusterDir)
+	p.Log.Info("setup: terraform environment set", "env", tfEnv)
 }

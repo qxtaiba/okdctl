@@ -2,7 +2,6 @@ package postinstall
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/qxtaiba/okdctl/internal/addon"
 	"github.com/qxtaiba/okdctl/internal/config"
@@ -72,7 +71,7 @@ func (p *Phase) postinstallSteps(cfg *config.Config, opts *Options, pctx *distri
 					c.KubeVIPVerified = true
 					c.KubeVipIP = kubeVipIP
 				})
-				p.Log.Info(fmt.Sprintf("kubevip: vip %s is responding on port %d", kubeVipIP, phase.KubeAPIPort))
+				p.Log.Info("kubevip: vip is responding", "vip", kubeVipIP, "port", phase.KubeAPIPort)
 				return nil
 			},
 			OnError: phase.WarnOnError(p.Log, "kubevip: verification failed"),

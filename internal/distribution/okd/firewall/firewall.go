@@ -119,7 +119,7 @@ func Configure(ctx context.Context, ports []Port, permanent bool, logger *slog.L
 		return nil
 	}
 
-	logger.Info(fmt.Sprintf("firewall: configuring using %s", backend))
+	logger.Info("firewall: configuring", "backend", backend)
 
 	for _, port := range ports {
 		if err := openPort(ctx, backend, port, permanent, logger); err != nil {

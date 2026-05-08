@@ -92,12 +92,12 @@ func (p *Phase) BuildCustomISOs(ctx context.Context, cfg *config.Config, opts *O
 		isoOut := filepath.Join(isoDir, node.Name+".iso")
 		if system.FileExists(isoOut) {
 			if stored, statErr := os.ReadFile(fpFile); statErr == nil && strings.TrimSpace(string(stored)) == fp {
-				p.Log.Info(fmt.Sprintf("iso: skipping unchanged %s", node.Name))
+				p.Log.Info("iso: skipping unchanged", "node", node.Name)
 				continue
 			}
 		}
 
-		p.Log.Info(fmt.Sprintf("iso: building custom coreos iso for %s", node.Name))
+		p.Log.Info("iso: building custom coreos iso", "node", node.Name)
 
 		if err := p.buildNodeISO(ctx, cfg, node, fcosISO, isoDir, sshKey); err != nil {
 			return &errtypes.ClusterError{Msg: fmt.Sprintf("failed to build ISO for %s", node.Name), Err: err}

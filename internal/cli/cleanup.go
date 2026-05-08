@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"fmt"
 	"path/filepath"
 	"time"
 
@@ -47,11 +46,11 @@ func init() {
 
 func runCleanupDryRun(projectRoot string) {
 	workDir := filepath.Join(projectRoot, "okd-install")
-	tui.Info(fmt.Sprintf("dry-run: would remove work directory: %s", workDir))
-	tui.Info(fmt.Sprintf("dry-run: would remove haproxy config block: %s", phase.DefaultHAProxyConfigPath))
-	tui.Info(fmt.Sprintf("dry-run: would remove dnsmasq drop-in: %s/okd-<cluster>.conf", phase.DefaultDNSMasqConfigDir))
-	tui.Info(fmt.Sprintf("dry-run: would remove packages: %v", cleanup.InstalledPackages()))
-	tui.Info(fmt.Sprintf("dry-run: would remove binaries: %v", cleanup.InstalledBinaries()))
+	tui.Info("dry-run: would remove work directory", tui.LF("path", workDir))
+	tui.Info("dry-run: would remove haproxy config block", tui.LF("path", phase.DefaultHAProxyConfigPath))
+	tui.Info("dry-run: would remove dnsmasq drop-in", tui.LF("dir", phase.DefaultDNSMasqConfigDir))
+	tui.Info("dry-run: would remove packages", tui.LF("packages", cleanup.InstalledPackages()))
+	tui.Info("dry-run: would remove binaries", tui.LF("binaries", cleanup.InstalledBinaries()))
 	tui.Info("dry-run: re-run without --dry-run to execute cleanup")
 }
 
@@ -72,7 +71,7 @@ func runCleanup(cmd *cobra.Command, _ []string) error {
 		return nil
 	}
 
-	tui.Warn(fmt.Sprintf("this will remove all local artifacts for cluster '%s'", cfg.Cluster.Name))
+	tui.Warn("this will remove all local artifacts for cluster", tui.LF("cluster", cfg.Cluster.Name))
 
 	if err := confirmClusterMatches(cleanupYes, cleanupConfirmCluster, cfg.Cluster.Name, "cleanup"); err != nil {
 		return err
@@ -138,7 +137,7 @@ func runCleanup(cmd *cobra.Command, _ []string) error {
 	}
 
 	duration := time.Since(startTime).Round(time.Second)
-	tui.Info(fmt.Sprintf("cleanup complete (%s)", duration))
+	tui.Info("cleanup complete", tui.LF("duration", duration))
 
 	return nil
 }

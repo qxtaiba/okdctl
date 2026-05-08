@@ -113,8 +113,8 @@ func (p *Phase) DeployInfrastructure(ctx context.Context, cfg *config.Config, op
 	tfvarsFile := filepath.Join(terraformDir, "terraform.tfvars")
 
 	if opts.Debug {
-		p.Log.Debug(fmt.Sprintf("terraform: directory %s", terraformDir))
-		p.Log.Debug(fmt.Sprintf("terraform: tfvars file %s", tfvarsFile))
+		p.Log.Debug("terraform: directory", "path", terraformDir)
+		p.Log.Debug("terraform: tfvars file", "path", tfvarsFile)
 	}
 
 	if !system.DirExists(terraformDir) {

@@ -274,8 +274,8 @@ func (p *Phase) DownloadCoreOSISO(ctx context.Context, info *CoreOSInfo, destPat
 		}
 	}
 
-	p.Log.Info(fmt.Sprintf("coreos: downloading iso version %s", info.Version))
-	p.Log.Info(fmt.Sprintf("coreos: url %s", info.ISOUrl))
+	p.Log.Info("coreos: downloading iso", "version", info.Version)
+	p.Log.Info("coreos: iso url", "url", info.ISOUrl)
 
 	if err := system.EnsureDir(filepath.Dir(destPath)); err != nil {
 		return &errtypes.ConfigError{Msg: "failed to ensure CoreOS ISO destination directory", Err: err}
@@ -289,7 +289,7 @@ func (p *Phase) DownloadCoreOSISO(ctx context.Context, info *CoreOSInfo, destPat
 		return &errtypes.NetworkError{Msg: "failed to download CoreOS ISO", Err: err}
 	}
 
-	p.Log.Info(fmt.Sprintf("coreos: iso downloaded to %s", destPath))
+	p.Log.Info("coreos: iso downloaded", "path", destPath)
 
 	return nil
 }
@@ -308,7 +308,7 @@ func (p *Phase) EnsureCoreOSISO(ctx context.Context, cfg *config.Config, opts *O
 		return "", err
 	}
 
-	p.Log.Info(fmt.Sprintf("coreos: detected version %s", info.Version))
+	p.Log.Info("coreos: detected version", "version", info.Version)
 
 	// Separate from custom-isos directory which gets uploaded to Proxmox
 	downloadsDir := filepath.Join(opts.WorkDir, "downloads")

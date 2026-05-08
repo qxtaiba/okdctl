@@ -265,7 +265,7 @@ func runFullDeployment(ctx context.Context, cfg *config.Config, w io.Writer) err
 
 func showExitSummary(path string, w io.Writer) {
 	fmt.Fprintln(w)
-	tui.Info(fmt.Sprintf("configuration saved to %s", path))
+	tui.Info("configuration saved", tui.LF("path", path))
 }
 
 func writeCredentialsEnv(cfg *config.Config, configPath string) error {
@@ -296,7 +296,7 @@ func writeCredentialsEnv(cfg *config.Config, configPath string) error {
 		return err
 	}
 
-	tui.Info(fmt.Sprintf("credentials saved to %s", envPath))
+	tui.Info("credentials saved", tui.LF("path", envPath))
 	return nil
 }
 
