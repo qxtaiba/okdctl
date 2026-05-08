@@ -129,6 +129,10 @@ write the comment — then it carries real information.
   `SSHRun` (sh -c with a string argument) is used only in
   `phase/iso_cleanup.go::RemoveFCOSISOFromProxmox` — see that function for
   the required `validateXxx` + `shellSingleQuote` layering pattern.
+- Flag naming convention: `--output`/`-o` selects the output format (values:
+  `text`, `json`), mirroring kubectl/oc convention. `--output-file` (no
+  shorthand) writes data to a file path. Never register `-o` as a shorthand
+  for a file-destination flag; reserve it exclusively for format selection.
 
 ## Tooling
 

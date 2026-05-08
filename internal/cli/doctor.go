@@ -77,7 +77,7 @@ type doctorJSONCheck struct {
 	Detail   string `json:"detail,omitempty"`
 }
 
-// doctorJSONOutput is the top-level envelope emitted by --format=json.
+// doctorJSONOutput is the top-level envelope emitted by --output=json.
 type doctorJSONOutput struct {
 	Checks []doctorJSONCheck `json:"checks"`
 	Failed int               `json:"failed"`
@@ -98,10 +98,10 @@ func sevString(s severity) string {
 }
 
 func runDoctor(cmd *cobra.Command, _ []string) error {
-	if err := validateFormat(doctorFormat); err != nil {
+	if err := validateFormat(doctorOutput); err != nil {
 		return err
 	}
-	quietForJSON(doctorFormat)
+	quietForJSON(doctorOutput)
 
 	ctx := cmd.Context()
 
@@ -135,7 +135,7 @@ func runDoctor(cmd *cobra.Command, _ []string) error {
 		}
 	}
 
-	if doctorFormat == outputJSON {
+	if doctorOutput == outputJSON {
 		var jsonChecks []doctorJSONCheck
 		for _, cr := range results {
 			if len(cr.r.items) > 0 {

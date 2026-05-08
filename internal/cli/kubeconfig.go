@@ -24,13 +24,13 @@ var kubeconfigCmd = &cobra.Command{
 	Long: `Print the cluster kubeconfig to stdout, write it to a file,
 or merge it into an existing kubeconfig.`,
 	Example: `  okdctl kubeconfig                       # print to stdout
-  okdctl kubeconfig -o ~/.kube/okd.cfg    # write to file
+  okdctl kubeconfig --output-file ~/.kube/okd.cfg    # write to file
   okdctl kubeconfig --merge               # merge into $KUBECONFIG`,
 	RunE: runKubeconfig,
 }
 
 func init() {
-	kubeconfigCmd.Flags().StringVarP(&kubeconfigOutput, flagOutput, "o", "-", "write kubeconfig to file ('-' for stdout)")
+	kubeconfigCmd.Flags().StringVar(&kubeconfigOutput, flagOutput, "-", "write kubeconfig to file ('-' for stdout)")
 	kubeconfigCmd.Flags().BoolVar(&kubeconfigMerge, "merge", false, "merge into $KUBECONFIG or ~/.kube/config (non-destructive: existing entries preserved)")
 	rootCmd.AddCommand(kubeconfigCmd)
 }

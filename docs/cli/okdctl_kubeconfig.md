@@ -15,16 +15,16 @@ okdctl kubeconfig [flags]
 
 ```
   okdctl kubeconfig                       # print to stdout
-  okdctl kubeconfig -o ~/.kube/okd.cfg    # write to file
+  okdctl kubeconfig --output-file ~/.kube/okd.cfg    # write to file
   okdctl kubeconfig --merge               # merge into $KUBECONFIG
 ```
 
 ### Options
 
 ```
-  -h, --help            help for kubeconfig
-      --merge           merge into $KUBECONFIG or ~/.kube/config (non-destructive: existing entries preserved)
-  -o, --output string   write kubeconfig to file ('-' for stdout) (default "-")
+  -h, --help                 help for kubeconfig
+      --merge                merge into $KUBECONFIG or ~/.kube/config (non-destructive: existing entries preserved)
+      --output-file string   write kubeconfig to file ('-' for stdout) (default "-")
 ```
 
 ### Options inherited from parent commands

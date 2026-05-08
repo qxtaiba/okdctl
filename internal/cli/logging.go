@@ -85,7 +85,7 @@ func configureLogging(cmd *cobra.Command) error {
 	return nil
 }
 
-// quietForJSON raises the stderr log level to error when --format=json is
+// quietForJSON raises the stderr log level to error when --output=json is
 // active and the user has not requested verbose output. Without this,
 // 2>&1 | jq pipelines see Info chatter mixed into the JSON stream.
 func quietForJSON(format string) {

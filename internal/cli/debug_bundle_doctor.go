@@ -20,7 +20,7 @@ func collectDoctorOutput(ctx context.Context) ([]byte, error) {
 		return nil, fmt.Errorf("resolve binary path: %w", err)
 	}
 	var buf bytes.Buffer
-	cmd := exec.CommandContext(ctx, self, "doctor", "--format", "json", "--log-format", "json", "--log-level", "warn")
+	cmd := exec.CommandContext(ctx, self, "doctor", "--output", "json", "--log-format", "json", "--log-level", "warn")
 	cmd.Stdout = &buf
 	cmd.Stderr = &buf
 	_ = cmd.Run()

@@ -1,6 +1,6 @@
 # okdctl JSON output schema
 
-`okdctl` commands that accept `--format=json` emit machine-readable
+`okdctl` commands that accept `--output=json` emit machine-readable
 output suitable for piping into `jq`, parsers, or higher-level automation.
 This page documents the stable shape of every JSON-producing command so that
 consumers can pin against a known contract.
@@ -9,7 +9,7 @@ consumers can pin against a known contract.
 > releases. New fields may be added (consumers must tolerate unknown keys);
 > existing fields are not renamed or removed without a major bump.
 
-## `okdctl status --format=json`
+## `okdctl status --output=json`
 
 Top-level cluster snapshot.
 
@@ -39,7 +39,7 @@ Top-level cluster snapshot.
 | `addons[].healthy` | bool | `true` when verify returned no error |
 | `addons[].error` | string | present only when `healthy=false` |
 
-## `okdctl releases list --format=json`
+## `okdctl releases list --output=json`
 
 Flat array of OKD releases (newest first). The CLI's human-readable mode
 groups by minor series, but the JSON mode intentionally flattens for simple
@@ -78,7 +78,7 @@ groups by minor series, but the JSON mode intentionally flattens for simple
 When invoked with `--channel stable` (the default), only `stable=true`
 releases appear. Use `--channel all` to include prereleases.
 
-## `okdctl releases show <version> --format=json`
+## `okdctl releases show <version> --output=json`
 
 Single release detail — same `OKDVersion` shape as an element of
 `releases list`.
@@ -94,7 +94,7 @@ Single release detail — same `OKDVersion` shape as an element of
 }
 ```
 
-## `okdctl describe node <name> --format=json`
+## `okdctl describe node <name> --output=json`
 
 ```json
 {
@@ -104,7 +104,7 @@ Single release detail — same `OKDVersion` shape as an element of
 }
 ```
 
-## `okdctl describe addon <name> --format=json`
+## `okdctl describe addon <name> --output=json`
 
 ```json
 {
@@ -116,7 +116,7 @@ Single release detail — same `OKDVersion` shape as an element of
 }
 ```
 
-## `okdctl addon list --format=json`
+## `okdctl addon list --output=json`
 
 Flat array of registered addons with their config-file state.
 
@@ -134,7 +134,7 @@ Flat array of registered addons with their config-file state.
 | `deps` | string array | names of addons that must be installed first; `[]` when none |
 | `in_config` | bool | `true` when the addon's `enabled` flag is set in the configuration file |
 
-## `okdctl addon verify --format=json`
+## `okdctl addon verify --output=json`
 
 Flat array of health results for all enabled addons. Empty array (`[]`) when
 no addons are enabled.
@@ -152,9 +152,9 @@ no addons are enabled.
 | `healthy` | bool | `true` when verify returned no error |
 | `error` | string | present only when `healthy=false`; omitted otherwise |
 
-Identical shape to the `addons[]` entries in `okdctl status --format=json`.
+Identical shape to the `addons[]` entries in `okdctl status --output=json`.
 
-## `okdctl doctor --format=json`
+## `okdctl doctor --output=json`
 
 Preflight check envelope. Exit code follows the documented contract (0 = no
 failures, 2 = one or more failing checks) regardless of format.

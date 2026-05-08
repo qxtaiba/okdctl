@@ -24,8 +24,8 @@ const (
 
 var (
 	releasesListChannel string
-	releasesListFormat  string
-	releasesShowFormat  string
+	releasesListOutput  string
+	releasesShowOutput  string
 )
 
 // releasesCmd groups the read-only subcommands that query the OKD releases
@@ -43,7 +43,7 @@ var releasesListCmd = &cobra.Command{
 	Short: "List available OKD versions",
 	Example: `  okdctl releases list
   okdctl releases list --channel all
-  okdctl releases list --format json`,
+  okdctl releases list --output json`,
 	RunE: runReleasesList,
 }
 
@@ -53,7 +53,7 @@ var releasesShowCmd = &cobra.Command{
 	Use:   "show <version>",
 	Short: "Show release info for a single OKD version",
 	Example: `  okdctl releases show 4.21.3
-  okdctl releases show 4.21.3 --format json`,
+  okdctl releases show 4.21.3 --output json`,
 	Args: cobra.ExactArgs(1),
 	ValidArgsFunction: func(cmd *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
 		fetcher := releases.NewOKDVersionFetcher()
@@ -75,9 +75,9 @@ var releasesShowCmd = &cobra.Command{
 func init() {
 	releasesListCmd.Flags().StringVar(&releasesListChannel, "channel", channelStable,
 		"filter versions: stable|all")
-	releasesListCmd.Flags().StringVar(&releasesListFormat, "format", outputText,
+	releasesListCmd.Flags().StringVarP(&releasesListOutput, "output", "o", outputText,
 		"output format: text|json")
-	releasesShowCmd.Flags().StringVar(&releasesShowFormat, "format", outputText,
+	releasesShowCmd.Flags().StringVarP(&releasesShowOutput, "output", "o", outputText,
 		"output format: text|json")
 
 	releasesCmd.AddCommand(releasesListCmd)
@@ -89,10 +89,10 @@ func runReleasesList(cmd *cobra.Command, _ []string) error {
 	if err := validateChannel(releasesListChannel); err != nil {
 		return err
 	}
-	if err := validateFormat(releasesListFormat); err != nil {
+	if err := validateFormat(releasesListOutput); err != nil {
 		return err
 	}
-	quietForJSON(releasesListFormat)
+	quietForJSON(releasesListOutput)
 
 	versions, err := fetchFlatVersions(cmd.Context())
 	if err != nil {
@@ -102,17 +102,17 @@ func runReleasesList(cmd *cobra.Command, _ []string) error {
 		versions = slices.DeleteFunc(versions, func(v releases.OKDVersion) bool { return !v.Stable })
 	}
 
-	if releasesListFormat == outputJSON {
+	if releasesListOutput == outputJSON {
 		return writeJSON(cmd.OutOrStdout(), versions)
 	}
 	return printVersionList(cmd.OutOrStdout(), versions)
 }
 
 func runReleasesShow(cmd *cobra.Command, args []string) error {
-	if err := validateFormat(releasesShowFormat); err != nil {
+	if err := validateFormat(releasesShowOutput); err != nil {
 		return err
 	}
-	quietForJSON(releasesShowFormat)
+	quietForJSON(releasesShowOutput)
 
 	versions, err := fetchFlatVersions(cmd.Context())
 	if err != nil {
@@ -124,7 +124,7 @@ func runReleasesShow(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("version %q not found; try `okdctl releases list --channel all`", args[0])
 	}
 
-	if releasesShowFormat == outputJSON {
+	if releasesShowOutput == outputJSON {
 		return writeJSON(cmd.OutOrStdout(), v)
 	}
 	return printVersionDetail(cmd.OutOrStdout(), v)
@@ -168,7 +168,7 @@ func validateFormat(format string) error {
 	case outputText, outputJSON:
 		return nil
 	default:
-		return fmt.Errorf("invalid --format %q (want text|json)", format)
+		return fmt.Errorf("invalid --output %q (want text|json)", format)
 	}
 }
 

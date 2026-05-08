@@ -25,16 +25,16 @@ okdctl debug-bundle [flags]
 
 ```
   okdctl debug-bundle
-  okdctl debug-bundle -o my-cluster.tgz
+  okdctl debug-bundle --output-file my-cluster.tgz
   okdctl debug-bundle --skip-must-gather
 ```
 
 ### Options
 
 ```
-  -h, --help               help for debug-bundle
-  -o, --output string      write bundle to this path (default: okdctl-debug-<ts>.tgz)
-      --skip-must-gather   skip oc adm must-gather (faster, omits cluster diagnostics)
+  -h, --help                 help for debug-bundle
+      --output-file string   write bundle to this path (default: okdctl-debug-<ts>.tgz)
+      --skip-must-gather     skip oc adm must-gather (faster, omits cluster diagnostics)
 ```
 
 ### Options inherited from parent commands

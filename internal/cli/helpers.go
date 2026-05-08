@@ -36,7 +36,7 @@ func loadConfig(configFile string) (*config.Config, error) {
 			if configFile == "okdctl.yaml" {
 				tui.Info("run 'okdctl deploy' to create a configuration file")
 			} else {
-				tui.Info(fmt.Sprintf("run 'okdctl deploy --output %s' to create it", configFile))
+				tui.Info(fmt.Sprintf("run 'okdctl deploy --output-file %s' to create it", configFile))
 			}
 			return nil, &errtypes.ConfigError{Msg: fmt.Sprintf("configuration file not found: %s", configFile), Err: errtypes.ErrConfigMissing}
 		}
