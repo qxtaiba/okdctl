@@ -170,9 +170,11 @@ func (p *Phase) ConfigureApache(ctx context.Context, cfg *config.Config) error {
 	return nil
 }
 
-// DeployToWebServer copies the generated ignition files and the auth
-// directory (kubeconfig, kubeadmin-password) from clusterDir into the
-// httpd web root, preserving file modes so sensitive files stay protected.
+// DeployToWebServer copies the generated ignition files from clusterDir
+// into the httpd web root. Auth credentials (kubeconfig, kubeadmin-password)
+// are intentionally not copied here — they are consumed directly from
+// clusterDir by the install and postinstall phases and must not be placed
+// under the apache DocumentRoot.
 func (p *Phase) DeployToWebServer(ctx context.Context, cfg *config.Config, clusterDir string) error {
 	webRoot := cfg.HTTPServer.Root
 	if webRoot == "" {
@@ -197,40 +199,7 @@ func (p *Phase) DeployToWebServer(ctx context.Context, cfg *config.Config, clust
 		}
 	}
 
-	authSrc := filepath.Join(clusterDir, "auth")
-	if system.FileExists(authSrc) {
-		authDest := filepath.Join(webRoot, "auth")
-		if err := copyAuthTree(authSrc, authDest); err != nil {
-			return &errtypes.ConfigError{Msg: fmt.Sprintf("failed to copy auth directory %s to web root %s", authSrc, authDest), Err: err}
-		}
-	}
-
 	return nil
-}
-
-// copyAuthTree copies the install-config auth/ directory (kubeadmin-password,
-// kubeconfig) into the web root, preserving each file's mode bits. `cp -r`
-// would lose mode because it doesn't imply `-p`, leaving the htpasswd-class
-// files world-readable under the apache user's umask.
-func copyAuthTree(src, dst string) error {
-	return filepath.WalkDir(src, func(path string, d os.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		rel, err := filepath.Rel(src, path)
-		if err != nil {
-			return err
-		}
-		target := filepath.Join(dst, rel)
-		if d.IsDir() {
-			info, err := os.Stat(path)
-			if err != nil {
-				return err
-			}
-			return os.MkdirAll(target, info.Mode().Perm())
-		}
-		return system.CopyFile(path, target)
-	})
 }
 
 // VerifyWebServer fetches bootstrap.ign from baseURL and checks the response
