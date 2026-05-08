@@ -22,6 +22,11 @@ var logFileCloser io.Closer
 // the race. Needed because configureLogging runs twice on root-required
 // commands (invoking user + sudo re-exec) and a pre-sudo attacker could
 // otherwise redirect root-authored log lines via a planted symlink.
+// Privilege contract: --log-file is operator-supplied and the file is
+// opened as root post-sudo-re-exec. The operator is trusted; no
+// path-location restriction is enforced. O_APPEND + 0o600 bound the
+// risk: existing file content cannot be overwritten, and the resulting
+// file is readable only by root.
 func openLogFile(path string) (*os.File, error) {
 	if info, err := os.Lstat(path); err == nil {
 		if info.Mode()&os.ModeSymlink != 0 {
