@@ -365,7 +365,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `obs:0d318f5c:handler-no-tty-switch` — handler no tty switch
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/obs-0d318f5c-tty-format-default  
+**Status:** deferred  (already on develop — needs archive sweep)  
 **Severity:** minor  
 **Evidence:** `internal/cli/logging.go:35-67`  
 **Problem:** configureLogging still does not auto-select JSON format when stderr is not a TTY. Operators piping `okdctl deploy 2>&1 | jq .` get charmlog text with ANSI escapes by default and must remember `--log-format json`.  
@@ -385,7 +385,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sec:f55b9c27:cred-string-copy-envfile` — cred string copy envfile
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-f55b9c27-envfile-bytes  
+**Status:** deferred  (already on develop — needs archive sweep)  
 **Severity:** major  
 **Evidence:** `internal/credentials/envfile.go:42-68`  
 **Problem:** WriteEnvFile converts password and API-token []byte to an immutable Go string via string concatenation before calling AtomicWrite. The string copy survives Zeroize on the source []byte.  
