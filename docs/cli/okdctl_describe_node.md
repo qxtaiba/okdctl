@@ -15,8 +15,8 @@ okdctl describe node <name> [flags]
 ### Options
 
 ```
-      --format string   output format: text|json (default "text")
   -h, --help            help for node
+  -o, --output string   output format: text|json (default "text")
 ```
 
 ### Options inherited from parent commands

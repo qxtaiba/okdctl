@@ -6,5 +6,5 @@ package cli
 // flag-set string key — so both sites reference these constants.
 const (
 	flagDryRun = "dry-run"
-	flagOutput = "output"
+	flagOutput = "output-file"
 )

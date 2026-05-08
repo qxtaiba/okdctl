@@ -15,15 +15,15 @@ okdctl status [flags]
 
 ```
   okdctl status
-  okdctl status --format json | jq '.nodes'
-  okdctl status --format json | jq '[.nodes[] | select(.ready)] | length'
+  okdctl status --output json | jq '.nodes'
+  okdctl status --output json | jq '[.nodes[] | select(.ready)] | length'
 ```
 
 ### Options
 
 ```
-      --format string   output format: text|json (default "text")
   -h, --help            help for status
+  -o, --output string   output format: text|json (default "text")
 ```
 
 ### Options inherited from parent commands

@@ -26,7 +26,7 @@ okdctl deploy [flags]
       --metrics-addr string     address for Prometheus metrics endpoint; bare ":9090" binds 127.0.0.1; disabled when empty
       --metrics-allow-network   allow metrics endpoint to bind on a wildcard address (0.0.0.0 or [::])
       --minimal                 use minimal defaults (single-node cluster)
-  -o, --output string           output file for configuration (default "okdctl.yaml")
+      --output-file string      output file for configuration (default "okdctl.yaml")
   -y, --yes                     skip prompts, use defaults
 ```
 

@@ -15,8 +15,8 @@ okdctl describe addon <name> [flags]
 ### Options
 
 ```
-      --format string   output format: text|json (default "text")
   -h, --help            help for addon
+  -o, --output string   output format: text|json (default "text")
 ```
 
 ### Options inherited from parent commands

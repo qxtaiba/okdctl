@@ -22,7 +22,7 @@ import (
 
 const colName = "name"
 
-var statusFormat string
+var statusOutput string
 
 var statusCmd = &cobra.Command{
 	Use:   "status",
@@ -30,8 +30,8 @@ var statusCmd = &cobra.Command{
 	Long: `Print API reachability, node counts by role, cluster operator
 health, and addon status for the deployed cluster.`,
 	Example: `  okdctl status
-  okdctl status --format json | jq '.nodes'
-  okdctl status --format json | jq '[.nodes[] | select(.ready)] | length'`,
+  okdctl status --output json | jq '.nodes'
+  okdctl status --output json | jq '[.nodes[] | select(.ready)] | length'`,
 	RunE: runStatus,
 }
 
@@ -60,14 +60,14 @@ var describeAddonCmd = &cobra.Command{
 }
 
 var (
-	describeNodeFormat  string
-	describeAddonFormat string
+	describeNodeOutput  string
+	describeAddonOutput string
 )
 
 func init() {
-	statusCmd.Flags().StringVar(&statusFormat, "format", outputText, "output format: text|json")
-	describeNodeCmd.Flags().StringVar(&describeNodeFormat, "format", outputText, "output format: text|json")
-	describeAddonCmd.Flags().StringVar(&describeAddonFormat, "format", outputText, "output format: text|json")
+	statusCmd.Flags().StringVarP(&statusOutput, "output", "o", outputText, "output format: text|json")
+	describeNodeCmd.Flags().StringVarP(&describeNodeOutput, "output", "o", outputText, "output format: text|json")
+	describeAddonCmd.Flags().StringVarP(&describeAddonOutput, "output", "o", outputText, "output format: text|json")
 	describeCmd.AddCommand(describeNodeCmd)
 	describeCmd.AddCommand(describeAddonCmd)
 	rootCmd.AddCommand(statusCmd)
@@ -124,10 +124,10 @@ func (n *statusNode) role() phase.NodeRole {
 }
 
 func runStatus(cmd *cobra.Command, _ []string) error {
-	if err := validateFormat(statusFormat); err != nil {
+	if err := validateFormat(statusOutput); err != nil {
 		return err
 	}
-	quietForJSON(statusFormat)
+	quietForJSON(statusOutput)
 
 	cfg, err := loadConfig(cfgFile)
 	if err != nil {
@@ -213,7 +213,7 @@ func runStatus(cmd *cobra.Command, _ []string) error {
 		Addons:            addonEntries,
 	}
 
-	if statusFormat == outputJSON {
+	if statusOutput == outputJSON {
 		return writeJSON(cmd.OutOrStdout(), cs)
 	}
 	return printClusterStatus(cmd, &cs)
@@ -273,10 +273,10 @@ func printClusterStatus(cmd *cobra.Command, st *okd.ClusterStatus) error {
 }
 
 func runDescribeNode(cmd *cobra.Command, args []string) error {
-	if err := validateFormat(describeNodeFormat); err != nil {
+	if err := validateFormat(describeNodeOutput); err != nil {
 		return err
 	}
-	quietForJSON(describeNodeFormat)
+	quietForJSON(describeNodeOutput)
 
 	projectRoot, err := resolveProjectRootOrDie()
 	if err != nil {
@@ -301,7 +301,7 @@ func runDescribeNode(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("parse node json: %w", err)
 	}
 
-	if describeNodeFormat == outputJSON {
+	if describeNodeOutput == outputJSON {
 		payload := map[string]any{
 			colName: n.Metadata.Name,
 			"role":  n.role(),
@@ -324,10 +324,10 @@ func runDescribeNode(cmd *cobra.Command, args []string) error {
 }
 
 func runDescribeAddon(cmd *cobra.Command, args []string) error {
-	if err := validateFormat(describeAddonFormat); err != nil {
+	if err := validateFormat(describeAddonOutput); err != nil {
 		return err
 	}
-	quietForJSON(describeAddonFormat)
+	quietForJSON(describeAddonOutput)
 
 	cfg, err := loadConfig(cfgFile)
 	if err != nil {
@@ -372,7 +372,7 @@ func runDescribeAddon(cmd *cobra.Command, args []string) error {
 		{"health", "health", health},
 	}
 
-	if describeAddonFormat == outputJSON {
+	if describeAddonOutput == outputJSON {
 		payload := map[string]string{}
 		for _, ln := range lines {
 			payload[ln.jsonKey] = ln.v

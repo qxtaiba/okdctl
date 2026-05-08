@@ -19,8 +19,8 @@ var (
 	addonInstallAll              bool
 	addonUninstallYes            bool
 	addonUninstallConfirmCluster string
-	addonListFormat              string
-	addonVerifyFormat            string
+	addonListOutput              string
+	addonVerifyOutput            string
 )
 
 var addonCmd = &cobra.Command{
@@ -99,8 +99,8 @@ var addonVerifyCmd = &cobra.Command{
 }
 
 func init() {
-	addonListCmd.Flags().StringVar(&addonListFormat, "format", outputText, "output format: text|json")
-	addonVerifyCmd.Flags().StringVar(&addonVerifyFormat, "format", outputText, "output format: text|json")
+	addonListCmd.Flags().StringVarP(&addonListOutput, "output", "o", outputText, "output format: text|json")
+	addonVerifyCmd.Flags().StringVarP(&addonVerifyOutput, "output", "o", outputText, "output format: text|json")
 	addonInstallCmd.Flags().BoolVar(&addonInstallAll, "all", false, "install all enabled addons (per-addon continuation on failure)")
 	addonUninstallCmd.Flags().BoolVarP(&addonUninstallYes, "yes", "y", false, "skip confirmation prompt")
 	addonUninstallCmd.Flags().StringVar(&addonUninstallConfirmCluster, "confirm-cluster", "",
@@ -121,17 +121,17 @@ type addonListEntry struct {
 }
 
 func runAddonList(cmd *cobra.Command, _ []string) error {
-	if err := validateFormat(addonListFormat); err != nil {
+	if err := validateFormat(addonListOutput); err != nil {
 		return err
 	}
-	quietForJSON(addonListFormat)
+	quietForJSON(addonListOutput)
 
 	cfg, err := loadConfig(cfgFile)
 	if err != nil {
 		return err
 	}
 
-	if addonListFormat == outputJSON {
+	if addonListOutput == outputJSON {
 		all := addon.All()
 		entries := make([]addonListEntry, 0, len(all))
 		for _, a := range all {
@@ -202,10 +202,10 @@ func runAddonUninstall(cmd *cobra.Command, args []string) error {
 }
 
 func runAddonVerify(cmd *cobra.Command, _ []string) error {
-	if err := validateFormat(addonVerifyFormat); err != nil {
+	if err := validateFormat(addonVerifyOutput); err != nil {
 		return err
 	}
-	quietForJSON(addonVerifyFormat)
+	quietForJSON(addonVerifyOutput)
 
 	cfg, err := loadConfig(cfgFile)
 	if err != nil {
@@ -218,7 +218,7 @@ func runAddonVerify(cmd *cobra.Command, _ []string) error {
 	mgr := newAddonManager(cfg, projectRoot)
 	results, vErr := mgr.VerifyAll(cmd.Context())
 
-	if addonVerifyFormat == outputJSON {
+	if addonVerifyOutput == outputJSON {
 		entries := make([]okd.AddonStatus, 0, len(results))
 		for _, r := range results {
 			e := okd.AddonStatus{Name: r.Name, Healthy: r.Err == nil}

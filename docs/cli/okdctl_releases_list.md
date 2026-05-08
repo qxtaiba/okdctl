@@ -11,15 +11,15 @@ okdctl releases list [flags]
 ```
   okdctl releases list
   okdctl releases list --channel all
-  okdctl releases list --format json
+  okdctl releases list --output json
 ```
 
 ### Options
 
 ```
       --channel string   filter versions: stable|all (default "stable")
-      --format string    output format: text|json (default "text")
   -h, --help             help for list
+  -o, --output string    output format: text|json (default "text")
 ```
 
 ### Options inherited from parent commands

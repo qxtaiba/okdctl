@@ -62,13 +62,13 @@ during the deploy so the bundle captures the relevant logs.
 Pass --quiet to suppress progress logs to stderr when only the bundle
 file is needed (e.g. in scripts or CI).`,
 	Example: `  okdctl debug-bundle
-  okdctl debug-bundle -o my-cluster.tgz
+  okdctl debug-bundle --output-file my-cluster.tgz
   okdctl debug-bundle --skip-must-gather`,
 	RunE: runDebugBundle,
 }
 
 func init() {
-	debugBundleCmd.Flags().StringVarP(&debugBundleOutput, flagOutput, "o", "", "write bundle to this path (default: okdctl-debug-<ts>.tgz)")
+	debugBundleCmd.Flags().StringVar(&debugBundleOutput, flagOutput, "", "write bundle to this path (default: okdctl-debug-<ts>.tgz)")
 	debugBundleCmd.Flags().BoolVar(&debugBundleSkipMustGather, "skip-must-gather", false, "skip oc adm must-gather (faster, omits cluster diagnostics)")
 	rootCmd.AddCommand(debugBundleCmd)
 }

@@ -42,7 +42,7 @@ var deployCmd = &cobra.Command{
 }
 
 func init() {
-	deployCmd.Flags().StringVarP(&deployOutputFile, flagOutput, "o", "okdctl.yaml", "output file for configuration")
+	deployCmd.Flags().StringVar(&deployOutputFile, flagOutput, "okdctl.yaml", "output file for configuration")
 	deployCmd.Flags().BoolVar(&deployMinimal, "minimal", false, "use minimal defaults (single-node cluster)")
 	deployCmd.Flags().BoolVarP(&deployYes, "yes", "y", false, "skip prompts, use defaults")
 	deployCmd.Flags().BoolVar(&deployDryRun, flagDryRun, false, "preview terraform plan and step listing without deploying")

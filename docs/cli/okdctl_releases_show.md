@@ -10,14 +10,14 @@ okdctl releases show <version> [flags]
 
 ```
   okdctl releases show 4.21.3
-  okdctl releases show 4.21.3 --format json
+  okdctl releases show 4.21.3 --output json
 ```
 
 ### Options
 
 ```
-      --format string   output format: text|json (default "text")
   -h, --help            help for show
+  -o, --output string   output format: text|json (default "text")
 ```
 
 ### Options inherited from parent commands
