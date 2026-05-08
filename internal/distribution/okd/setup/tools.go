@@ -191,7 +191,7 @@ type binaryInstallSpec struct {
 }
 
 func (p *Phase) installBinary(ctx context.Context, spec *binaryInstallSpec) error {
-	p.Log.Info(fmt.Sprintf("tools: installing %s", spec.name))
+	p.Log.Info("tools: installing", "tool", spec.name)
 
 	var expectedChecksum string
 	switch {
@@ -207,17 +207,13 @@ func (p *Phase) installBinary(ctx context.Context, spec *binaryInstallSpec) erro
 		expectedChecksum = spec.embeddedChecksum
 	}
 
-	tmpF, err := os.CreateTemp(os.TempDir(), spec.name+"-download-*")
+	tempFile, err := system.WriteTempFile(spec.name+"-download-*", 0o600, func(f *os.File) error {
+		return download.Download(ctx, &download.Options{
+			URL: spec.url, OutputPath: f.Name(), ExpectedChecksum: expectedChecksum,
+			Description: spec.name, Timeout: 2 * time.Minute, Logger: p.Log,
+		})
+	})
 	if err != nil {
-		return fmt.Errorf("failed to create temp file for %s: %w", spec.name, err)
-	}
-	tempFile := tmpF.Name()
-	_ = tmpF.Close()
-	if err := download.Download(ctx, &download.Options{
-		URL: spec.url, OutputPath: tempFile, ExpectedChecksum: expectedChecksum,
-		Description: spec.name, Timeout: 2 * time.Minute, Logger: p.Log,
-	}); err != nil {
-		_ = os.Remove(tempFile)
 		return fmt.Errorf("failed to download %s: %w", spec.name, err)
 	}
 	defer func() { _ = os.Remove(tempFile) }()
