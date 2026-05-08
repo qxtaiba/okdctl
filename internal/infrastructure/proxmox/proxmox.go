@@ -203,12 +203,14 @@ func (p *Provider) Provision(ctx context.Context, cfg *config.Config, opts Provi
 	}
 
 	p.checkTerraformOutputs(ctx, cfg)
-	p.probeVMEnumeration(ctx, cfg)
+	vmidEnumerable := p.probeVMEnumeration(ctx, cfg)
 
 	p.logger.Info("terraform: vms provisioned", "count", len(result.VMs))
-	for _, vm := range result.VMs {
-		if vm.IPAddress != "" {
-			p.logger.Info("terraform: vm provisioned", "vm", vm.Name, "ip", vm.IPAddress)
+	if vmidEnumerable {
+		for _, vm := range result.VMs {
+			if vm.IPAddress != "" {
+				p.logger.Info("terraform: vm provisioned", "vm", vm.Name, "ip", vm.IPAddress)
+			}
 		}
 	}
 
@@ -312,6 +314,10 @@ func (p *Provider) retrieveProvisionResult(cfg *config.Config) (*ProvisionResult
 	return result, nil
 }
 
+// checkTerraformOutputs cross-checks the vm_ids counts from terraform output
+// against the topology config. IP-address comparison is deferred: outputs.tf
+// today exposes only vm_ids; adding control_plane_ips/worker_ips requires
+// HCL changes not in scope of the current fix.
 func (p *Provider) checkTerraformOutputs(ctx context.Context, cfg *config.Config) {
 	outputs, err := p.terraformExec.Output(ctx)
 	if err != nil {
@@ -320,6 +326,7 @@ func (p *Provider) checkTerraformOutputs(ctx context.Context, cfg *config.Config
 	}
 	raw, ok := outputs["vm_ids"]
 	if !ok {
+		p.logger.Warn("terraform: vm_ids output missing; outputs.tf may have drifted from applied HCL")
 		return
 	}
 	var wrapper struct {
@@ -330,6 +337,7 @@ func (p *Provider) checkTerraformOutputs(ctx context.Context, cfg *config.Config
 		} `json:"value"`
 	}
 	if err := json.Unmarshal(raw, &wrapper); err != nil {
+		p.logger.Warn("terraform: vm_ids output unparseable; schema may have drifted", "err", err)
 		return
 	}
 	v := wrapper.Value
@@ -343,9 +351,15 @@ func (p *Provider) checkTerraformOutputs(ctx context.Context, cfg *config.Config
 	}
 }
 
-func (p *Provider) probeVMEnumeration(ctx context.Context, cfg *config.Config) {
+// probeVMEnumeration queries pvesh over SSH to check whether vmidBase is
+// visible in the Proxmox QEMU list. Returns true when the vmid is found or
+// when the probe cannot run (no sshExec, SSH error, parse error) — callers
+// treat those cases as "do not suppress per-VM logs". Returns false only when
+// the probe ran and parsed successfully but vmidBase was not present, meaning
+// the VMs are not yet enumerable.
+func (p *Provider) probeVMEnumeration(ctx context.Context, cfg *config.Config) bool {
 	if p.sshExec == nil {
-		return
+		return true
 	}
 	vmidBase := cfg.Topology.VMIDBase
 	if vmidBase == 0 {
@@ -357,18 +371,20 @@ func (p *Provider) probeVMEnumeration(ctx context.Context, cfg *config.Config) {
 	)
 	if err != nil {
 		p.logger.Info("terraform: pvesh probe skipped", "err", err)
-		return
+		return true
 	}
 	var vms []struct {
 		VMID int `json:"vmid"`
 	}
 	if err := json.Unmarshal([]byte(result.Stdout), &vms); err != nil {
-		return
+		p.logger.Info("terraform: pvesh probe payload unparseable", "err", err)
+		return true
 	}
 	for _, vm := range vms {
 		if vm.VMID == vmidBase {
-			return
+			return true
 		}
 	}
 	p.logger.Info("terraform: vm not yet enumerable, install phase will retry", "vmid", vmidBase)
+	return false
 }
