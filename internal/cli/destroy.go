@@ -229,6 +229,22 @@ func runDestroy(cmd *cobra.Command, _ []string) error {
 
 	p := createOKDProvisionerWithOpts(cfg, creds, projectRoot)
 
+	markerPath := filepath.Join(workDir, deployStateFile)
+	if ds, err := readDeployState(markerPath); err != nil {
+		tui.Warn("could not read deploy state marker", tui.LF("err", err))
+	} else if ds != nil {
+		switch ds.Phase {
+		case "prepare":
+			tui.Warn("partial deploy detected — cancelled during prepare; terraform state is empty",
+				tui.LF("run_id", ds.RunID))
+			tui.Info("if VMs were not created, prefer 'okdctl cleanup' over destroy")
+		case "install", "configure":
+			tui.Warn("partial deploy detected — terraform state likely populated",
+				tui.LF("phase", ds.Phase), tui.LF("run_id", ds.RunID))
+			tui.Info("running destroy to remove provisioned resources")
+		}
+	}
+
 	tui.Info("destroying cluster...")
 	startTime := time.Now()
 

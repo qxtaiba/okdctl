@@ -24,6 +24,8 @@ import (
 	"github.com/qxtaiba/okdctl/internal/tui"
 )
 
+const deployStateFile = ".okdctl-deploy-state.json"
+
 func loadConfig(configFile string) (*config.Config, error) {
 	loader := config.NewLoader()
 	cfg, err := loader.LoadFile(configFile)
@@ -286,34 +288,47 @@ func executeFullDeployment(ctx context.Context, cfg *config.Config, opts deploym
 	}
 
 	startTime := time.Now()
+	markerPath := filepath.Join(workDir, deployStateFile)
 
+	if err := writeDeployState(markerPath, "prepare", runID); err != nil {
+		tui.Warn("could not write deploy state marker", tui.LF("err", err))
+	}
 	setupSteps, err := p.Prepare(ctx, cfg)
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
 			fmt.Println(InterruptSummary(setupSteps, "okdctl deploy", runID))
+			tui.Info("cancelled during prepare — terraform state is empty; run 'okdctl cleanup' to remove local files")
 			return err
 		}
 		tui.Info("run 'okdctl destroy' to clean up resources")
 		return err
 	}
 
+	if err := writeDeployState(markerPath, "install", runID); err != nil {
+		tui.Warn("could not write deploy state marker", tui.LF("err", err))
+	}
 	installOpts := install.NewOptions(cfg, projectRoot)
 	installSteps, err := p.Install(ctx, cfg, &installOpts)
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
 			combined := slices.Concat(setupSteps, installSteps)
 			fmt.Println(InterruptSummary(combined, "okdctl deploy", runID))
+			tui.Info("cancelled during install — terraform state likely populated; run 'okdctl destroy' to clean up")
 			return err
 		}
 		tui.Info("run 'okdctl destroy' to clean up resources")
 		return err
 	}
 
+	if err := writeDeployState(markerPath, "configure", runID); err != nil {
+		tui.Warn("could not write deploy state marker", tui.LF("err", err))
+	}
 	result, configureSteps, err := p.Configure(ctx, cfg)
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
 			combined := slices.Concat(setupSteps, installSteps, configureSteps)
 			fmt.Println(InterruptSummary(combined, "okdctl deploy", runID))
+			tui.Info("cancelled during configure — terraform state likely populated; run 'okdctl destroy' to clean up")
 			return err
 		}
 		tui.Info("run 'okdctl destroy' to clean up resources")
@@ -321,6 +336,10 @@ func executeFullDeployment(ctx context.Context, cfg *config.Config, opts deploym
 	}
 
 	allSteps := slices.Concat(setupSteps, installSteps, configureSteps)
+
+	if err := os.Remove(markerPath); err != nil && !errors.Is(err, os.ErrNotExist) {
+		tui.Warn("could not remove deploy state marker", tui.LF("err", err))
+	}
 
 	duration := time.Since(startTime).Round(time.Second)
 
