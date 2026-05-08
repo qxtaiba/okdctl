@@ -28,6 +28,8 @@ var (
 // the secondary IP is removed from the bastion's interface and the API is
 // re-verified via the VIP after teardown to ensure kube-vip is handling traffic.
 // clusterDir is the openshift-install output directory used to load the cluster CA.
+// Exported for the reserved okdctl haproxy subcommand space; the only in-tree
+// caller today is finalizeIngress in update_ingress.go.
 func (p *Phase) RemoveHAProxy(ctx context.Context, vip, clusterDir string) error {
 	if system.IsServiceActive(ctx, "haproxy") {
 		p.Log.Info("haproxy: stopping service")
