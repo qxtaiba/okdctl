@@ -32,6 +32,17 @@ func stubAddFile(tw *tar.Writer) func(string, []byte) error {
 	}
 }
 
+// stubAddStream writes stream callbacks as tar entries into tw.
+func stubAddStream(tw *tar.Writer) func(*tar.Header, io.Reader) error {
+	return func(hdr *tar.Header, r io.Reader) error {
+		if err := tw.WriteHeader(hdr); err != nil {
+			return err
+		}
+		_, err := io.Copy(tw, r)
+		return err
+	}
+}
+
 // readTarEntries closes tw, then reads every entry into the returned map.
 // Callers must not use tw after calling readTarEntries.
 func readTarEntries(t *testing.T, tw *tar.Writer, buf *bytes.Buffer) map[string][]byte {
@@ -132,7 +143,7 @@ func TestTarDirIntoRejectsSymlinkEscape(t *testing.T) {
 
 	var buf bytes.Buffer
 	tw := tar.NewWriter(&buf)
-	err := tarDirInto(stubAddFile(tw), srcDir, "test/")
+	_, err := tarDirInto(stubAddStream(tw), srcDir, "test/")
 	_ = tw.Close()
 
 	if err != nil {
@@ -156,13 +167,60 @@ func TestTarDirIntoRejectsSymlinkEscape(t *testing.T) {
 	}
 }
 
+func TestTarDirIntoTruncatesOversizedFile(t *testing.T) {
+	srcDir := t.TempDir()
+	bigPath := filepath.Join(srcDir, "big.log")
+
+	bigSize := maxBundleFileBytes + 1024
+	f, err := os.Create(bigPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Truncate(bigSize); err != nil {
+		_ = f.Close()
+		t.Fatal(err)
+	}
+	_ = f.Close()
+
+	var buf bytes.Buffer
+	tw := tar.NewWriter(&buf)
+	truncated, tarErr := tarDirInto(stubAddStream(tw), srcDir, "mg/")
+	if cerr := tw.Close(); cerr != nil {
+		t.Fatalf("tw.Close: %v", cerr)
+	}
+	if tarErr != nil {
+		t.Fatalf("tarDirInto: %v", tarErr)
+	}
+	if len(truncated) != 1 || truncated[0] != "big.log" {
+		t.Errorf("truncated = %v, want [big.log]", truncated)
+	}
+
+	tr := tar.NewReader(bytes.NewReader(buf.Bytes()))
+	hdr, nextErr := tr.Next()
+	if nextErr != nil {
+		t.Fatalf("tar.Next: %v", nextErr)
+	}
+	if hdr.Size != maxBundleFileBytes {
+		t.Errorf("tar entry Size = %d, want %d", hdr.Size, maxBundleFileBytes)
+	}
+	content, readErr := io.ReadAll(tr)
+	if readErr != nil {
+		t.Fatalf("io.ReadAll: %v", readErr)
+	}
+	if int64(len(content)) != maxBundleFileBytes {
+		t.Errorf("tar entry content length = %d, want %d", len(content), maxBundleFileBytes)
+	}
+}
+
 func TestCollectSectionsSkipMustGather(t *testing.T) {
 	add := func(string, []byte) error { return nil }
+	addStream := func(*tar.Header, io.Reader) error { return nil }
 	// cfgErr/prErr non-nil so bundleConfig and bundleTerraformState skip
 	// without dereferencing nil cfg or stat-ing an empty path.
 	secs := collectSections(
 		context.Background(),
 		add,
+		addStream,
 		nil,
 		errors.New("no config"),
 		"",

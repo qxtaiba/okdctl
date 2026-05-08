@@ -33,6 +33,11 @@ const (
 	categoryConfig         = "config"
 	categoryLogFile        = "log-file"
 	categorySystemMeta     = "system-meta"
+
+	// maxBundleFileBytes caps individual file reads in tarDirInto.
+	// must-gather routinely emits multi-GB dumps; the bundle is for
+	// troubleshooting, not full dump retention.
+	maxBundleFileBytes int64 = 50 * 1024 * 1024
 )
 
 var (
@@ -150,9 +155,19 @@ func runDebugBundle(cmd *cobra.Command, _ []string) (retErr error) {
 		return nil
 	}
 
+	addStream := func(hdr *tar.Header, r io.Reader) error {
+		if wErr := tw.WriteHeader(hdr); wErr != nil {
+			return fmt.Errorf("tar header %s: %w", hdr.Name, wErr)
+		}
+		if _, wErr := io.Copy(tw, r); wErr != nil {
+			return fmt.Errorf("tar write %s: %w", hdr.Name, wErr)
+		}
+		return nil
+	}
+
 	projectRoot, prErr := resolveProjectRoot()
 
-	sections := collectSections(ctx, addFile, cfg, cfgErr, projectRoot, prErr, bundleAt, bundleID, debugBundleSkipMustGather)
+	sections := collectSections(ctx, addFile, addStream, cfg, cfgErr, projectRoot, prErr, bundleAt, bundleID, debugBundleSkipMustGather)
 
 	manifest := bundleManifest{
 		BundleID:  bundleID,
@@ -174,7 +189,7 @@ func runDebugBundle(cmd *cobra.Command, _ []string) (retErr error) {
 	return nil
 }
 
-func collectSections(ctx context.Context, addFile func(string, []byte) error, cfg *config.Config, cfgErr error, projectRoot string, prErr error, bundleAt time.Time, bundleID string, skipMustGather bool) []manifestEntry {
+func collectSections(ctx context.Context, addFile func(string, []byte) error, addStream func(*tar.Header, io.Reader) error, cfg *config.Config, cfgErr error, projectRoot string, prErr error, bundleAt time.Time, bundleID string, skipMustGather bool) []manifestEntry {
 	secs := []manifestEntry{
 		bundleConfig(addFile, cfg, cfgErr),
 		bundleLogFile(addFile),
@@ -185,7 +200,7 @@ func collectSections(ctx context.Context, addFile func(string, []byte) error, cf
 	if skipMustGather {
 		secs = append(secs, manifestEntry{Name: categoryMustGather, Status: bundleStatusSkipped, Message: "--skip-must-gather flag set"})
 	} else {
-		secs = append(secs, bundleMustGather(ctx, addFile, projectRoot, prErr))
+		secs = append(secs, bundleMustGather(ctx, addStream, projectRoot, prErr))
 	}
 	return secs
 }
@@ -253,7 +268,7 @@ func bundleTerraformState(ctx context.Context, addFile func(string, []byte) erro
 	return manifestEntry{Name: categoryTerraformState, Status: bundleStatusOK}
 }
 
-func bundleMustGather(ctx context.Context, addFile func(string, []byte) error, projectRoot string, prErr error) manifestEntry {
+func bundleMustGather(ctx context.Context, addStream func(*tar.Header, io.Reader) error, projectRoot string, prErr error) manifestEntry {
 	if prErr != nil {
 		return manifestEntry{Name: categoryMustGather, Status: bundleStatusSkipped, Message: fmt.Sprintf("project root: %v", prErr)}
 	}
@@ -289,24 +304,31 @@ func bundleMustGather(ctx context.Context, addFile func(string, []byte) error, p
 		}
 		return manifestEntry{Name: categoryMustGather, Status: bundleStatusFailed, Message: msg}
 	}
-	if err := tarDirInto(addFile, mgDir, "must-gather/"); err != nil {
-		return manifestEntry{Name: categoryMustGather, Status: bundleStatusFailed, Message: fmt.Sprintf("archive must-gather: %v", err)}
+	truncated, archErr := tarDirInto(addStream, mgDir, "must-gather/")
+	if archErr != nil {
+		return manifestEntry{Name: categoryMustGather, Status: bundleStatusFailed, Message: fmt.Sprintf("archive must-gather: %v", archErr)}
+	}
+	if len(truncated) > 0 {
+		tui.Warn("must-gather files truncated to 50 MB", tui.LF("files", strings.Join(truncated, ", ")))
+		return manifestEntry{Name: categoryMustGather, Status: bundleStatusOK, Message: "truncated (>50 MB): " + strings.Join(truncated, ", ")}
 	}
 	return manifestEntry{Name: categoryMustGather, Status: bundleStatusOK}
 }
 
-// tarDirInto walks srcDir and calls addFile for each regular file, prefixing
-// each entry name with bundlePrefix. Reads go through os.Root so symlinks
-// cannot redirect reads outside srcDir (TOCTOU-safe).
-func tarDirInto(addFile func(string, []byte) error, srcDir, bundlePrefix string) error {
-	root, err := os.OpenRoot(srcDir)
-	if err != nil {
-		return fmt.Errorf("open root %s: %w", srcDir, err)
+// tarDirInto walks srcDir and streams each regular file into addStream,
+// prefixing entry names with bundlePrefix. Reads go through os.Root so
+// symlinks cannot redirect reads outside srcDir (TOCTOU-safe). Files larger
+// than maxBundleFileBytes are capped; their relative paths are returned in
+// the truncated slice so callers can record the truncation.
+func tarDirInto(addStream func(*tar.Header, io.Reader) error, srcDir, bundlePrefix string) (truncated []string, err error) {
+	root, openErr := os.OpenRoot(srcDir)
+	if openErr != nil {
+		return nil, fmt.Errorf("open root %s: %w", srcDir, openErr)
 	}
 	defer func() { _ = root.Close() }()
-	return filepath.WalkDir(srcDir, func(path string, d os.DirEntry, err error) error {
-		if err != nil {
-			return err
+	walkErr := filepath.WalkDir(srcDir, func(path string, d os.DirEntry, wErr error) error {
+		if wErr != nil {
+			return wErr
 		}
 		if !d.Type().IsRegular() {
 			return nil
@@ -315,17 +337,36 @@ func tarDirInto(addFile func(string, []byte) error, srcDir, bundlePrefix string)
 		if relErr != nil {
 			return relErr
 		}
-		f, openErr := root.Open(rel)
-		if openErr != nil {
-			return fmt.Errorf("open %s: %w", path, openErr)
+		info, infoErr := d.Info()
+		if infoErr != nil {
+			return fmt.Errorf("stat %s: %w", path, infoErr)
 		}
-		data, readErr := io.ReadAll(f)
+		actualSize := info.Size()
+		cappedSize := actualSize
+		if cappedSize > maxBundleFileBytes {
+			cappedSize = maxBundleFileBytes
+		}
+		f, openFErr := root.Open(rel)
+		if openFErr != nil {
+			return fmt.Errorf("open %s: %w", path, openFErr)
+		}
+		hdr := &tar.Header{
+			Name:    bundlePrefix + rel,
+			Mode:    0o600,
+			Size:    cappedSize,
+			ModTime: info.ModTime(),
+		}
+		streamErr := addStream(hdr, io.LimitReader(f, maxBundleFileBytes))
 		_ = f.Close()
-		if readErr != nil {
-			return fmt.Errorf("read %s: %w", path, readErr)
+		if streamErr != nil {
+			return fmt.Errorf("stream %s: %w", path, streamErr)
 		}
-		return addFile(bundlePrefix+rel, data)
+		if actualSize > maxBundleFileBytes {
+			truncated = append(truncated, rel)
+		}
+		return nil
 	})
+	return truncated, walkErr
 }
 
 func bundleDoctor(ctx context.Context, addFile func(string, []byte) error) manifestEntry {
