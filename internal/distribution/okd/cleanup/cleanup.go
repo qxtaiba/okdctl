@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"log/slog"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/qxtaiba/okdctl/internal/distribution"
@@ -51,12 +52,7 @@ func KindStrings() []string {
 
 // IsValid reports whether k is a recognised cleanup Kind.
 func (k Kind) IsValid() bool {
-	for _, v := range ValidKinds() {
-		if k == v {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(ValidKinds(), k)
 }
 
 // Validate returns a *errtypes.ConfigError when k is not a recognised Kind.

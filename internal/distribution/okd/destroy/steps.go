@@ -3,6 +3,7 @@ package destroy
 import (
 	"context"
 	"log/slog"
+	"slices"
 	"strings"
 	"sync"
 
@@ -60,12 +61,7 @@ func (t *destroyTracker) skipWhen(label string, fn func() bool) func() bool {
 func (t *destroyTracker) terraformFailed() bool {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
-	for _, f := range t.failures {
-		if f == "terraform destroy" {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(t.failures, "terraform destroy")
 }
 
 func (p *Phase) destroySteps(ctx context.Context, cfg *config.Config, opts *Options) []distribution.StepDef {

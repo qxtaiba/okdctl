@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/qxtaiba/okdctl/internal/config"
@@ -168,10 +169,10 @@ func (p *Phase) isoUploadAlreadyDone(ctx context.Context, cfg *config.Config, op
 	if err != nil {
 		return false, err
 	}
-	for _, f := range isoFiles {
-		if isoUploadNeeded(ctx, p.Exec, host, knownHostsPath, remotePath, f) {
-			return false, nil
-		}
+	if slices.ContainsFunc(isoFiles, func(f string) bool {
+		return isoUploadNeeded(ctx, p.Exec, host, knownHostsPath, remotePath, f)
+	}) {
+		return false, nil
 	}
 	return true, nil
 }

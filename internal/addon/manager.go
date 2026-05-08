@@ -264,10 +264,11 @@ func (m *Manager) dependsOn(addonName, target string, visited map[string]bool) b
 	if a == nil {
 		return false
 	}
-	for _, dep := range a.Info().Dependencies {
-		if dep == target {
-			return true
-		}
+	deps := a.Info().Dependencies
+	if slices.Contains(deps, target) {
+		return true
+	}
+	for _, dep := range deps {
 		if m.dependsOn(dep, target, visited) {
 			return true
 		}
