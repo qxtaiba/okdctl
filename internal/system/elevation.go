@@ -10,6 +10,9 @@ import (
 	"os/user"
 	"path/filepath"
 	"strconv"
+	"strings"
+
+	"github.com/qxtaiba/okdctl/internal/errtypes"
 )
 
 // InvokingUser returns the user who invoked the command. When the process
@@ -74,6 +77,10 @@ func ChownToInvokingUser(path string) error {
 	return os.Chown(path, ids.uid, ids.gid)
 }
 
+// statFn is the os.Stat seam used by WriteAsInvokingUser; tests override it
+// to drive the parentExisted flag without filesystem setup.
+var statFn = os.Stat
+
 // WriteAsInvokingUser atomically writes data to path with mode, then chowns
 // the file to the invoking user (if running under sudo). If AtomicWrite had
 // to create the immediate parent directory (i.e. it didn't exist before),
@@ -83,7 +90,7 @@ func ChownToInvokingUser(path string) error {
 func WriteAsInvokingUser(path string, data []byte, mode os.FileMode) error {
 	parentDir := filepath.Dir(path)
 	parentExisted := true
-	if _, err := os.Stat(parentDir); os.IsNotExist(err) {
+	if _, err := statFn(parentDir); os.IsNotExist(err) {
 		parentExisted = false
 	}
 	if err := AtomicWrite(path, data, mode); err != nil {
@@ -98,6 +105,42 @@ func WriteAsInvokingUser(path string, data []byte, mode os.FileMode) error {
 	return nil
 }
 
+// canonicalizePath resolves symlinks to a stable form so /tmp vs
+// /private/tmp (macOS) does not split the allowlist comparison. Falls back
+// to the input on EvalSymlinks failure (e.g. path not yet on disk).
+func canonicalizePath(p string) string {
+	if p == "" {
+		return p
+	}
+	if real, err := filepath.EvalSymlinks(p); err == nil {
+		return real
+	}
+	return p
+}
+
+// isAllowedChownRoot reports whether absPath is a permitted target for a
+// recursive chown. Guard against caller passing /etc or similar — chowntree
+// running as root would corrupt system ownership. Allowed: paths whose Base
+// is "okd-install" or "infrastructure" (the only trees okdctl creates as
+// root), any subpath of homeDir (kubeconfig install + .okdctl cache), and
+// any subpath of tmpDir (test/ephemeral flows).
+func isAllowedChownRoot(absPath, homeDir, tmpDir string) bool {
+	base := filepath.Base(absPath)
+	if base == "okd-install" || base == "infrastructure" {
+		return true
+	}
+	hasPrefix := func(prefix string) bool {
+		if prefix == "" {
+			return false
+		}
+		if absPath == prefix {
+			return true
+		}
+		return strings.HasPrefix(absPath, prefix+string(filepath.Separator))
+	}
+	return hasPrefix(homeDir) || hasPrefix(tmpDir)
+}
+
 // ChownTreeToInvokingUser recursively chowns root and all descendants to the
 // invoking user. No-op if the process was not re-exec'd under sudo. Errors
 // on individual entries are collected; the walk does not abort so a single
@@ -109,6 +152,18 @@ func ChownTreeToInvokingUser(root string) error {
 	ids, err := invokingUserIDs()
 	if err != nil || ids == nil {
 		return err
+	}
+	absRoot, err := filepath.Abs(root)
+	if err != nil {
+		return fmt.Errorf("resolve path %s: %w", root, err)
+	}
+	homeDir, _ := InvokingUserHomeDir()
+	tmpDir := os.TempDir()
+	if !isAllowedChownRoot(canonicalizePath(absRoot), canonicalizePath(homeDir), canonicalizePath(tmpDir)) {
+		return &errtypes.AuthError{
+			Msg:  "chown tree refused: path is not in an okdctl-managed subtree",
+			Path: absRoot,
+		}
 	}
 	osRoot, openErr := os.OpenRoot(root)
 	if openErr != nil {
