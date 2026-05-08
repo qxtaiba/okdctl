@@ -9,11 +9,15 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"path/filepath"
 
+	"github.com/qxtaiba/okdctl/internal/distribution"
+	"github.com/qxtaiba/okdctl/internal/distribution/okd/dns"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/executor"
 	"github.com/qxtaiba/okdctl/internal/logutil"
+	"github.com/qxtaiba/okdctl/internal/system"
 )
 
 // Kind selects which cleanup steps run.
@@ -69,67 +73,156 @@ func (p *Phase) Execute(ctx context.Context, opts *Options) error {
 	return Execute(ctx, opts)
 }
 
+// Step IDs for the cleanup phase, ordered as they execute within Full.
+const (
+	StepCleanupWorkDir   distribution.StepID = "cleanup-workdir"
+	StepCleanupWebServer distribution.StepID = "cleanup-webserver"
+	StepCleanupHAProxy   distribution.StepID = "cleanup-haproxy"
+	StepCleanupApache    distribution.StepID = "cleanup-apache"
+	StepCleanupDnsmasq   distribution.StepID = "cleanup-dnsmasq"
+	StepCleanupTerraform distribution.StepID = "cleanup-terraform"
+	StepCleanupPackages  distribution.StepID = "cleanup-packages"
+	StepCleanupSummary   distribution.StepID = "cleanup-summary"
+)
+
+// cleanupTracker buffers per-step errors for the final summary step.
+// Orchestrator.Run does not propagate NonFatal step errors; the summary step
+// returns errors.Join(t.errs...) so callers receive a joined error when one
+// or more subsystem cleanups fail. Safe without a mutex because
+// Orchestrator.Run executes steps serially.
+type cleanupTracker struct {
+	errs []error
+}
+
+func (t *cleanupTracker) onError() func(error) {
+	return func(err error) {
+		t.errs = append(t.errs, err)
+	}
+}
+
 // Execute runs the cleanup steps selected by opts.Kind. Individual step
 // failures are accumulated and returned as a joined error; a partial run
 // still attempts the remaining steps.
 func Execute(ctx context.Context, opts *Options) error {
-	logger := opts.getLogger().With("phase", "cleanup")
-	var errs []error
-
-	switch opts.Kind {
-	case Full:
-		if err := WorkDirectory(ctx, opts.WorkDir, opts.PreserveConfig, logger); err != nil {
-			errs = append(errs, err)
-		}
-		if err := WebServer(ctx, opts.HTTPServerRoot, logger); err != nil {
-			errs = append(errs, err)
-		}
-		if err := HAProxy(ctx, opts.HAProxyConfig, opts.VIP, logger); err != nil {
-			errs = append(errs, err)
-		}
-		if err := Apache(ctx, logger); err != nil {
-			errs = append(errs, err)
-		}
-		if err := Dnsmasq(ctx, opts.ClusterName, logger); err != nil {
-			errs = append(errs, err)
-		}
-		if err := Terraform(ctx, opts.ProjectRoot, opts.TerraformEnv, logger); err != nil {
-			errs = append(errs, err)
-		}
-		if opts.RemovePackages {
-			if err := Packages(ctx, opts.BinDir, logger); err != nil {
-				errs = append(errs, err)
-			}
-		}
-
-	case WorkOnly:
-		if err := WorkDirectory(ctx, opts.WorkDir, opts.PreserveConfig, logger); err != nil {
-			errs = append(errs, err)
-		}
-
-	case WebOnly:
-		if err := WebServer(ctx, opts.HTTPServerRoot, logger); err != nil {
-			errs = append(errs, err)
-		}
-
-	case HAProxyOnly:
-		if err := HAProxy(ctx, opts.HAProxyConfig, opts.VIP, logger); err != nil {
-			errs = append(errs, err)
-		}
-
-	case TerraformOnly:
-		if err := Terraform(ctx, opts.ProjectRoot, opts.TerraformEnv, logger); err != nil {
-			errs = append(errs, err)
-		}
-
-	default:
-		if opts.Kind == "" {
-			return &errtypes.ConfigError{Msg: "cleanup kind not set"}
-		}
+	if opts.Kind == "" {
+		return &errtypes.ConfigError{Msg: "cleanup kind not set"}
+	}
+	if opts.Kind != Full && opts.Kind != WorkOnly && opts.Kind != WebOnly && opts.Kind != HAProxyOnly && opts.Kind != TerraformOnly {
 		return &errtypes.ConfigError{Msg: fmt.Sprintf("unknown cleanup type: %s (valid types: full, work-only, web-only, haproxy-only, terraform-only)", opts.Kind)}
 	}
+	logger := opts.getLogger().With("phase", "cleanup")
+	defs := cleanupSteps(opts, logger)
+	o := distribution.NewOrchestrator(distribution.BuildSteps(defs)...)
+	o.SetLogger(logger)
+	return o.Run(ctx)
+}
 
-	printSummary(opts, logger)
+func cleanupSteps(opts *Options, logger *slog.Logger) []distribution.StepDef {
+	t := &cleanupTracker{}
 
-	return errors.Join(errs...)
+	workDirStep := distribution.StepDef{
+		ID: StepCleanupWorkDir, Name: "cleanup work directory",
+		Desc: "removing generated artifacts from work directory", NonFatal: true,
+		ReRunSafe: distribution.ReRunSafeNo,
+		AlreadyDone: func(_ context.Context) (bool, error) {
+			return !system.DirExists(opts.WorkDir), nil
+		},
+		Exec:    func(ctx context.Context) error { return WorkDirectory(ctx, opts.WorkDir, opts.PreserveConfig, logger) },
+		OnError: t.onError(),
+	}
+
+	webServerStep := distribution.StepDef{
+		ID: StepCleanupWebServer, Name: "cleanup web server",
+		Desc: "removing ignition files from web server", NonFatal: true,
+		ReRunSafe: distribution.ReRunSafeYes,
+		Exec:      func(ctx context.Context) error { return WebServer(ctx, opts.HTTPServerRoot, logger) },
+		OnError:   t.onError(),
+	}
+
+	haproxyStep := distribution.StepDef{
+		ID: StepCleanupHAProxy, Name: "cleanup haproxy",
+		Desc: "stopping haproxy and removing its configuration", NonFatal: true,
+		ReRunSafe: distribution.ReRunSafeNo,
+		AlreadyDone: func(ctx context.Context) (bool, error) {
+			return !system.FileExists(opts.HAProxyConfig) && !system.IsServiceActive(ctx, "haproxy"), nil
+		},
+		Exec:    func(ctx context.Context) error { return HAProxy(ctx, opts.HAProxyConfig, opts.VIP, logger) },
+		OnError: t.onError(),
+	}
+
+	apacheStep := distribution.StepDef{
+		ID: StepCleanupApache, Name: "cleanup apache",
+		Desc: "stopping apache httpd service", NonFatal: true,
+		ReRunSafe: distribution.ReRunSafeYes,
+		Exec:      func(ctx context.Context) error { return Apache(ctx, logger) },
+		OnError:   t.onError(),
+	}
+
+	dnsmasqStep := distribution.StepDef{
+		ID: StepCleanupDnsmasq, Name: "cleanup dnsmasq",
+		Desc: "stopping dnsmasq and removing cluster dns configuration", NonFatal: true,
+		ReRunSafe: distribution.ReRunSafeNo,
+		AlreadyDone: func(_ context.Context) (bool, error) {
+			if opts.ClusterName == "" {
+				return false, nil
+			}
+			confPath, err := dns.DnsmasqConfigPath(fmt.Sprintf("okd-%s", opts.ClusterName))
+			if err != nil {
+				return false, nil
+			}
+			return !system.FileExists(confPath), nil
+		},
+		Exec:    func(ctx context.Context) error { return Dnsmasq(ctx, opts.ClusterName, logger) },
+		OnError: t.onError(),
+	}
+
+	terraformStep := distribution.StepDef{
+		ID: StepCleanupTerraform, Name: "cleanup terraform",
+		Desc: "removing generated terraform artifacts", NonFatal: true,
+		ReRunSafe: distribution.ReRunSafeNo,
+		AlreadyDone: func(_ context.Context) (bool, error) {
+			if opts.TerraformEnv == "" {
+				return false, nil
+			}
+			tfvars := filepath.Join(opts.ProjectRoot, "infrastructure", "terraform", "environments", opts.TerraformEnv, "terraform.tfvars")
+			return !system.FileExists(tfvars), nil
+		},
+		Exec:    func(ctx context.Context) error { return Terraform(ctx, opts.ProjectRoot, opts.TerraformEnv, logger) },
+		OnError: t.onError(),
+	}
+
+	packagesStep := distribution.StepDef{
+		ID: StepCleanupPackages, Name: "cleanup packages",
+		Desc: "removing installed packages and tool binaries", NonFatal: true,
+		ReRunSafe:  distribution.ReRunSafeYes,
+		SkipWhen:   func() bool { return !opts.RemovePackages },
+		SkipReason: "package removal disabled",
+		Exec:       func(ctx context.Context) error { return Packages(ctx, opts.BinDir, logger) },
+		OnError:    t.onError(),
+	}
+
+	summaryStep := distribution.StepDef{
+		ID: StepCleanupSummary, Name: "cleanup summary",
+		Desc: "printing cleanup summary", NonFatal: false,
+		ReRunSafe: distribution.ReRunSafeYes,
+		Exec: func(_ context.Context) error {
+			printSummary(opts, logger)
+			return errors.Join(t.errs...)
+		},
+	}
+
+	var defs []distribution.StepDef
+	switch opts.Kind {
+	case Full:
+		defs = []distribution.StepDef{workDirStep, webServerStep, haproxyStep, apacheStep, dnsmasqStep, terraformStep, packagesStep}
+	case WorkOnly:
+		defs = []distribution.StepDef{workDirStep}
+	case WebOnly:
+		defs = []distribution.StepDef{webServerStep}
+	case HAProxyOnly:
+		defs = []distribution.StepDef{haproxyStep}
+	case TerraformOnly:
+		defs = []distribution.StepDef{terraformStep}
+	}
+	return append(defs, summaryStep)
 }
