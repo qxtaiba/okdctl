@@ -197,7 +197,7 @@ func runAddonUninstall(cmd *cobra.Command, args []string) error {
 	if err := mgr.Uninstall(cmd.Context(), args[0]); err != nil {
 		return err
 	}
-	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "addon %s uninstalled\n", args[0])
+	tui.Info(fmt.Sprintf("addon %s uninstalled", args[0]))
 	return nil
 }
 
