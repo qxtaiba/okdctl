@@ -45,9 +45,10 @@ func CoreOSArch() string {
 
 // OS describes the detected host operating system.
 type OS struct {
-	Family  Family
-	ID      string // "fedora", "ubuntu", "rocky", "almalinux", "rhel", "debian"
-	Version string // "39", "24.04"
+	Family   Family
+	ID       string // "fedora", "ubuntu", "rocky", "almalinux", "rhel", "debian"
+	Version  string // "39", "24.04"
+	Codename string // VERSION_CODENAME, e.g. "noble", "bookworm"; "" on RHEL family
 }
 
 var rhelIDs = map[string]bool{
@@ -104,9 +105,10 @@ func parseOSRelease(content string) (OS, error) {
 	}
 
 	return OS{
-		Family:  family,
-		ID:      id,
-		Version: fields["VERSION_ID"],
+		Family:   family,
+		ID:       id,
+		Version:  fields["VERSION_ID"],
+		Codename: fields["VERSION_CODENAME"],
 	}, nil
 }
 
