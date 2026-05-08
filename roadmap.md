@@ -494,7 +494,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `dep:33ef32bf:transitive-narrow-uuid` — transitive narrow uuid
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/dep-33ef32bf-uuid-stdlib  
+**Status:** in review — PR #517  
 **Severity:** suggestion  
 **Cluster:** transitive-weight — seam→audit-modernization  
 **Evidence:** `go.mod:12-12`  
@@ -515,7 +515,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sec:27088eab:ssh-strict-host-key-tofu` — ssh strict host key tofu
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-27088eab-ssh-pin  
+**Status:** in review — PR #518  
 **Severity:** minor  
 **Cluster:** tls-network — seam→audit-subprocess — related: sec:eb479d86:scp-strict-host-key-tofu  
 **Evidence:** `internal/distribution/okd/phase/ssh.go:31-57`  
@@ -525,7 +525,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sec:25fa1be8:firewall-haproxy-port-only-tcp` — firewall haproxy port only tcp
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-25fa1be8-firewall-port  
+**Status:** in review — PR #514  
 **Severity:** suggestion  
 **Cluster:** input-validation  
 **Evidence:** `internal/distribution/okd/firewall/firewall.go:52-66`  
@@ -538,7 +538,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sub:8ea706f6:coreutil-lsb-release` — coreutil lsb release
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sub-8ea706f6-tools  
+**Status:** in review — PR #513  
 **Severity:** minor  
 **Cluster:** coreutils-shellout  
 **Evidence:** `internal/distribution/okd/setup/tools.go:321-326`  
@@ -550,7 +550,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `state:4f69fc9d:rerunsafe-not-enforced` — rerunsafe not enforced
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/state-4f69fc9d-rerunsafe  
+**Status:** in review — PR #512  
 **Severity:** major  
 **Cluster:** phase-idempotency  
 **Evidence:** `internal/distribution/step.go:228-251`  
@@ -568,7 +568,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `api:4f69fc9d:rerunsafe-declarative-only` — rerunsafe declarative only
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/state-4f69fc9d-rerunsafe  
+**Status:** in review — PR #512  
 **Severity:** major  
 **Cluster:** exported-surface — seam→audit-state-and-recovery  
 **Evidence:** `internal/distribution/step.go:190-251`  
@@ -578,7 +578,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `api:21dc1103:options-struct-vs-functional` — options struct vs functional
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/api-21dc1103-options-functional  
+**Status:** in review — PR #515  
 **Severity:** minor  
 **Cluster:** option-consistency  
 **Evidence:** `internal/download/download.go:24-113` + 2 more  
@@ -588,7 +588,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `api:beabab0c:phase-new-positional-args` — phase new positional args
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/api-beabab0c-phase-options  
+**Status:** in review — PR #519  
 **Severity:** minor  
 **Cluster:** option-consistency — related: api:c287d5c0:public-fields-bypass-options  
 **Evidence:** `internal/distribution/okd/setup/phase.go:102-109` + 4 more  
@@ -638,7 +638,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `smell:8ea706f6:abstraction-table-meta` — abstraction table meta
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sub-8ea706f6-tools  
+**Status:** in review — PR #513  
 **Severity:** minor  
 **Cluster:** helper-package-no-value  
 **Evidence:** `internal/distribution/okd/setup/tools.go:89-143`  
@@ -648,7 +648,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `smell:d31d1b9d:stringly-typed-enum` — stringly typed enum
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/smell-d31d1b9d-condition-status  
+**Status:** in review — PR #516  
 **Severity:** minor  
 **Cluster:** magic-strings  
 **Evidence:** `internal/cli/status.go:297-314`  
