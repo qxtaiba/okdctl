@@ -77,6 +77,31 @@ func TestStateLockHint_LockFilePresent(t *testing.T) {
 	if !strings.Contains(cfgErr.Msg, dir) {
 		t.Errorf("Msg = %q; want substring %q (dir)", cfgErr.Msg, dir)
 	}
+	if !strings.Contains(cfgErr.Msg, "abc") {
+		t.Errorf("Msg = %q; want lock ID 'abc' embedded", cfgErr.Msg)
+	}
+}
+
+func TestStateLockHint_CorruptLockFile(t *testing.T) {
+	dir := t.TempDir()
+	lockPath := filepath.Join(dir, ".terraform.tfstate.lock.info")
+	if err := os.WriteFile(lockPath, []byte(`not-json`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	err := stateLockHint(dir)
+	if err == nil {
+		t.Fatal("expected error; got nil")
+	}
+	var cfgErr *errtypes.ConfigError
+	if !errors.As(err, &cfgErr) {
+		t.Fatalf("err = %v; want *errtypes.ConfigError", err)
+	}
+	if !strings.Contains(cfgErr.Msg, "force-unlock") {
+		t.Errorf("Msg = %q; want substring 'force-unlock'", cfgErr.Msg)
+	}
+	if !strings.Contains(cfgErr.Msg, "<id>") {
+		t.Errorf("Msg = %q; want fallback placeholder '<id>'", cfgErr.Msg)
+	}
 }
 
 // TestDestroyInfrastructure_MissingEnvDir locks that missing env dir
