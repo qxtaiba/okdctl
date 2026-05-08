@@ -93,6 +93,25 @@ func TestSafeRemoveWithLogger(t *testing.T) {
 		}
 	})
 
+	t.Run("refuses symlink target and link survives", func(t *testing.T) {
+		dir := t.TempDir()
+		target := filepath.Join(dir, "real-dir")
+		if err := os.Mkdir(target, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		link := filepath.Join(dir, "link-to-dir")
+		if err := os.Symlink(target, link); err != nil {
+			t.Fatal(err)
+		}
+		err := SafeRemoveWithLogger(ctx, link, "symlink", logger)
+		if err == nil {
+			t.Fatal("expected error for symlink target; got nil")
+		}
+		if _, lerr := os.Lstat(link); os.IsNotExist(lerr) {
+			t.Error("symlink was removed; want it to survive")
+		}
+	})
+
 	t.Run("nil logger does not panic", func(t *testing.T) {
 		dir := t.TempDir()
 		p := filepath.Join(dir, "f")
