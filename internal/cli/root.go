@@ -17,10 +17,12 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"strings"
 	"sync/atomic"
 	"syscall"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/spf13/cobra"
 
 	"github.com/qxtaiba/okdctl/internal/errtypes"
@@ -81,7 +83,17 @@ func Execute() {
 	os.Exit(code)
 }
 
-func execute() int {
+func execute() (code int) {
+	tui.SetRunID(uuid.NewString())
+	start := time.Now()
+	tui.Info("okdctl: started", tui.LF("argv", strings.Join(os.Args[1:], " ")))
+	defer func() {
+		tui.Info("okdctl: finished",
+			tui.LF("duration", time.Since(start).Round(time.Millisecond).String()),
+			tui.LF("exit_code", code),
+		)
+	}()
+
 	// Roll our own signal handling so we can tell SIGINT (→130) apart from
 	// SIGTERM (→143). signal.NotifyContext would collapse them.
 	sigCh := make(chan os.Signal, 1)
@@ -104,8 +116,9 @@ func execute() int {
 
 	err := rootCmd.ExecuteContext(ctx)
 	if err != nil {
-		if code, handled := signalExitCode(&caughtSig, err); handled {
-			return code
+		if sigCode, handled := signalExitCode(&caughtSig, err); handled {
+			code = sigCode
+			return
 		}
 		// Pass err as a structured attr so logutil.RedactHandler gets the
 		// chance to scrub credentials in the chain. tui.Error(err.Error())
