@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/qxtaiba/okdctl/internal/system"
+	"github.com/qxtaiba/okdctl/internal/tui"
 )
 
 // deployState records which deploy phase was active when the process last
@@ -16,6 +17,14 @@ type deployState struct {
 	Phase     string    `json:"phase"`
 	RunID     string    `json:"run_id"`
 	Timestamp time.Time `json:"timestamp"`
+}
+
+// markDeployPhase writes the marker for the given phase, warn-logging on
+// failure (non-fatal — the marker is advisory).
+func markDeployPhase(path, phase, runID string) {
+	if err := writeDeployState(path, phase, runID); err != nil {
+		tui.Warn("could not write deploy state marker", tui.LF("err", err))
+	}
 }
 
 func writeDeployState(path, phase, runID string) error {
@@ -43,4 +52,27 @@ func readDeployState(path string) (*deployState, error) {
 		return nil, fmt.Errorf("parse deploy state: %w", err)
 	}
 	return &s, nil
+}
+
+// announceDeployState emits a partial-deploy diagnostic on destroy entry.
+// No-op when no marker exists.
+func announceDeployState(path string) {
+	ds, err := readDeployState(path)
+	if err != nil {
+		tui.Warn("could not read deploy state marker", tui.LF("err", err))
+		return
+	}
+	if ds == nil {
+		return
+	}
+	switch ds.Phase {
+	case "prepare":
+		tui.Warn("partial deploy detected — cancelled during prepare; terraform state is empty",
+			tui.LF("run_id", ds.RunID))
+		tui.Info("if VMs were not created, prefer 'okdctl cleanup' over destroy")
+	case "install", "configure":
+		tui.Warn("partial deploy detected — terraform state likely populated",
+			tui.LF("phase", ds.Phase), tui.LF("run_id", ds.RunID))
+		tui.Info("running destroy to remove provisioned resources")
+	}
 }
