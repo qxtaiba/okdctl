@@ -1,6 +1,7 @@
 package releases
 
 import (
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
@@ -56,6 +57,53 @@ type githubRelease struct {
 type diskCache struct {
 	CachedAt time.Time          `json:"cached_at"`
 	Series   []OKDReleaseSeries `json:"series"`
+}
+
+func labelForReleaseType(t ReleaseType) string {
+	switch t {
+	case ReleaseTypeStable:
+		return "stable"
+	case ReleaseTypeLatestStable:
+		return "latest-stable"
+	case ReleaseTypePreview:
+		return "preview"
+	case ReleaseTypeLatestPreview:
+		return "latest-preview"
+	case ReleaseTypeLTS:
+		return "lts"
+	default:
+		return "unknown"
+	}
+}
+
+// MarshalJSON encodes ReleaseType as its string label so OKDVersion serialises
+// with "release_type": "stable" rather than a raw integer.
+func (t ReleaseType) MarshalJSON() ([]byte, error) {
+	return json.Marshal(labelForReleaseType(t))
+}
+
+// UnmarshalJSON decodes the string label back into the typed constant.
+// Required for round-trip correctness of the on-disk release cache.
+func (t *ReleaseType) UnmarshalJSON(data []byte) error {
+	var s string
+	if err := json.Unmarshal(data, &s); err != nil {
+		return err
+	}
+	switch s {
+	case "stable":
+		*t = ReleaseTypeStable
+	case "latest-stable":
+		*t = ReleaseTypeLatestStable
+	case "preview":
+		*t = ReleaseTypePreview
+	case "latest-preview":
+		*t = ReleaseTypeLatestPreview
+	case "lts":
+		*t = ReleaseTypeLTS
+	default:
+		*t = ReleaseTypeStable
+	}
+	return nil
 }
 
 // Major returns the major version component, or 0 for unparsable input.
