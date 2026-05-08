@@ -150,9 +150,9 @@ func (p *Phase) destroySteps(ctx context.Context, cfg *config.Config, opts *Opti
 			ID: StepCleanupFirewall, Name: "cleanup firewall", ReRunSafe: distribution.ReRunSafeYes,
 			Desc: "removing firewall rules", NonFatal: true,
 			SkipWhen: trackSkip("firewall", func() bool {
-				return opts.SkipFirewall || firewall.DetectBackend(ctx, p.Log) == firewall.None
+				return opts.SkipFirewall || t.terraformFailed() || firewall.DetectBackend(ctx, p.Log) == firewall.None
 			}),
-			SkipReason: "firewall cleanup disabled or no active backend",
+			SkipReason: "firewall cleanup disabled, terraform owns live vms, or no active backend",
 			Exec: func(ctx context.Context) error {
 				if err := firewall.RemoveOKDRules(ctx, true, p.Log); err != nil {
 					return &errtypes.ClusterError{Msg: "firewall cleanup failed", Err: err}
