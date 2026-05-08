@@ -154,6 +154,31 @@ no addons are enabled.
 
 Identical shape to the `addons[]` entries in `okdctl status --format=json`.
 
+## `okdctl doctor --format=json`
+
+Preflight check envelope. Exit code follows the documented contract (0 = no
+failures, 2 = one or more failing checks) regardless of format.
+
+```json
+{
+  "checks": [
+    {"name": "host os", "severity": "ok", "detail": "fedora 41 (rhel family)"},
+    {"name": "tools and packages/oc", "severity": "warn", "detail": "will be downloaded during setup"},
+    {"name": "host ports", "severity": "fail", "detail": "in use: 80, 443 (stop the conflicting service before deploy)"}
+  ],
+  "failed": 1,
+  "warned": 1
+}
+```
+
+| Field | Type | Notes |
+|---|---|---|
+| `checks[].name` | string | check name; multi-item checks use `<check>/<item>` notation |
+| `checks[].severity` | string | `ok`, `warn`, or `fail` |
+| `checks[].detail` | string | human-readable result text; omitted when empty |
+| `failed` | int | number of checks with severity `fail` |
+| `warned` | int | number of checks with severity `warn` |
+
 ## Conventions
 
 - All timestamps use RFC 3339 with a trailing `Z` for UTC.

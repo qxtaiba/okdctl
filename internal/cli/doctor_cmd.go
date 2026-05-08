@@ -8,6 +8,8 @@ import "github.com/spf13/cobra"
 // The command metadata lives here so the cobra tree is platform-consistent
 // for offline tooling (notably cmd/okdctl-gen-docs); the RunE body is
 // wired per-platform in doctor.go (Linux) and doctor_stub.go (non-Linux).
+var doctorFormat string
+
 var doctorCmd = &cobra.Command{
 	Use:   categoryDoctor,
 	Short: "Check that your environment is ready to deploy a cluster",
@@ -26,10 +28,14 @@ with a bracketed label:
 Exit code is 0 if there are no [fail] results ([warn] is tolerated),
 2 (configuration error) otherwise. Designed to be rerun until clean.
 
+Pass --format=json for machine-readable output (see docs/cli/json-schema.md).
+
 See docs/doctor-checks.md for per-check fail messages and fix guidance.`,
-	Example: "  okdctl " + categoryDoctor,
+	Example: `  okdctl ` + categoryDoctor + `
+  okdctl ` + categoryDoctor + ` --format json | jq '.failed'`,
 }
 
 func init() {
+	doctorCmd.Flags().StringVar(&doctorFormat, "format", outputText, "output format: text|json")
 	rootCmd.AddCommand(doctorCmd)
 }
