@@ -79,6 +79,12 @@ func writeDnsmasqConfig(ctx context.Context, name, content string) error {
 		}
 	}
 
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+	}
+
 	if err := system.AtomicWriteString(configPath, content, 0o644); err != nil {
 		return fmt.Errorf("failed to write config %s: %w", configPath, err)
 	}
@@ -191,12 +197,22 @@ func ConfigureSystemResolver(ctx context.Context, fallbackDNS []string, logger *
 		if err := os.MkdirAll(confDir, 0o755); err != nil {
 			return fmt.Errorf("failed to create resolved.conf.d: %w", err)
 		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
 		tmpPath, err := system.WriteTempFile("resolved-conf", 0o644, func(f *os.File) error {
 			_, err := f.WriteString(confContent)
 			return err
 		})
 		if err != nil {
 			return fmt.Errorf("failed to write dnsmasq.conf: %w", err)
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
 		}
 		defer func() { _ = os.Remove(tmpPath) }()
 		if err := system.CopyFile(tmpPath, confPath); err != nil {
