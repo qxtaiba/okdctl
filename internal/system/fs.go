@@ -11,6 +11,8 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+
+	"github.com/qxtaiba/okdctl/internal/errtypes"
 )
 
 // FileExists reports whether path refers to an existing regular file
@@ -196,6 +198,20 @@ func ExpandPath(path string) string {
 func AtomicWrite(path string, data []byte, perm os.FileMode) error {
 	if err := EnsureDirForFile(path); err != nil {
 		return fmt.Errorf("failed to create directory: %w", err)
+	}
+
+	if info, err := os.Lstat(path); err == nil {
+		if info.Mode()&os.ModeSymlink != 0 {
+			return &errtypes.AuthError{
+				Msg: fmt.Sprintf("write target %q is a symlink; refusing to write", path),
+				Err: os.ErrPermission,
+			}
+		}
+	} else if !os.IsNotExist(err) {
+		return &errtypes.AuthError{
+			Msg: fmt.Sprintf("failed to lstat write target %q before write", path),
+			Err: err,
+		}
 	}
 
 	dir := filepath.Dir(path)
