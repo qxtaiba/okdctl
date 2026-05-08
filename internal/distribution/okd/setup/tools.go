@@ -7,7 +7,6 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -90,34 +89,9 @@ func (p *Phase) InstallExternalTools(ctx context.Context, cfg *config.Config) er
 	return nil
 }
 
-var binaryToolMeta = map[externalTool]struct {
-	name                     string
-	versionFlag              string
-	archiveBinary            string
-	stripComponents          int
-	urlTemplate              string
-	checksumURLTemplate      string
-	checksumFilenameTemplate string
-	checksumsByArch          map[string]string
-}{
-	toolYQ: {name: "yq", versionFlag: "--version", urlTemplate: yqURLTemplate, checksumsByArch: yqChecksumsByArch},
-	toolHelm: {
-		name: "helm", versionFlag: "version", archiveBinary: "helm", stripComponents: 1,
-		urlTemplate:              helmURLTemplate,
-		checksumURLTemplate:      "https://get.helm.sh/helm-" + helmVersion + "-linux-{arch}.tar.gz.sha256sum",
-		checksumFilenameTemplate: "helm-" + helmVersion + "-linux-{arch}.tar.gz",
-	},
-	toolSops: {
-		name: "sops", versionFlag: "--version",
-		urlTemplate:              sopsURLTemplate,
-		checksumURLTemplate:      "https://github.com/getsops/sops/releases/download/" + sopsVersion + "/sops-" + sopsVersion + ".checksums.txt",
-		checksumFilenameTemplate: "sops-" + sopsVersion + ".linux.{arch}",
-	},
-}
-
 func (p *Phase) installTool(ctx context.Context, tool externalTool) error {
 	if isToolInstalled(tool) {
-		p.Log.Info(fmt.Sprintf("tools: %s already installed", tool))
+		p.Log.Info("tools: already installed", "tool", string(tool))
 		return nil
 	}
 
@@ -125,24 +99,40 @@ func (p *Phase) installTool(ctx context.Context, tool externalTool) error {
 		return p.installTerraform(ctx)
 	}
 
-	meta, ok := binaryToolMeta[tool]
-	if !ok {
-		p.Log.Warn(fmt.Sprintf("tools: no installer for %s, skipping (install manually)", tool))
-		return nil
-	}
-
 	arch := platform.DownloadArch()
 	archReplacer := strings.NewReplacer("{arch}", arch)
-	spec := binaryInstallSpec{
-		name:             meta.name,
-		url:              archReplacer.Replace(meta.urlTemplate),
-		versionFlag:      meta.versionFlag,
-		archiveBinary:    meta.archiveBinary,
-		stripComponents:  meta.stripComponents,
-		checksumURL:      archReplacer.Replace(meta.checksumURLTemplate),
-		checksumFilename: archReplacer.Replace(meta.checksumFilenameTemplate),
-		embeddedChecksum: meta.checksumsByArch[arch],
+
+	var spec binaryInstallSpec
+	switch tool {
+	case toolYQ:
+		spec = binaryInstallSpec{
+			name:             "yq",
+			versionFlag:      "--version",
+			url:              archReplacer.Replace(yqURLTemplate),
+			embeddedChecksum: yqChecksumsByArch[arch],
+		}
+	case toolHelm:
+		spec = binaryInstallSpec{
+			name:             "helm",
+			versionFlag:      "version",
+			archiveBinary:    "helm",
+			stripComponents:  1,
+			url:              archReplacer.Replace(helmURLTemplate),
+			checksumURL:      archReplacer.Replace("https://get.helm.sh/helm-" + helmVersion + "-linux-{arch}.tar.gz.sha256sum"),
+			checksumFilename: archReplacer.Replace("helm-" + helmVersion + "-linux-{arch}.tar.gz"),
+		}
+	case toolSops:
+		spec = binaryInstallSpec{
+			name:             "sops",
+			versionFlag:      "--version",
+			url:              archReplacer.Replace(sopsURLTemplate),
+			checksumURL:      archReplacer.Replace("https://github.com/getsops/sops/releases/download/" + sopsVersion + "/sops-" + sopsVersion + ".checksums.txt"),
+			checksumFilename: archReplacer.Replace("sops-" + sopsVersion + ".linux.{arch}"),
+		}
+	default:
+		return fmt.Errorf("tools: no installer for %s (install manually)", tool)
 	}
+
 	return p.installBinary(ctx, &spec)
 }
 
@@ -151,7 +141,7 @@ func (p *Phase) installTerraform(ctx context.Context) error {
 
 	switch p.OS.Family {
 	case platform.FamilyDebian:
-		if err := installHashiCorpDebianRepo(ctx); err != nil {
+		if err := installHashiCorpDebianRepo(ctx, p.OS.Codename); err != nil {
 			return err
 		}
 	default: // rhel family
@@ -277,7 +267,7 @@ func getToolVersion(ctx context.Context, tool, flag string) string {
 // during key fetch cannot plant a persistent malicious trust root.
 const expectedHashiCorpGPGFingerprint = "AA16FCBCA621E70139936A4C798AEC654FA7E1A1"
 
-func installHashiCorpDebianRepo(ctx context.Context) error {
+func installHashiCorpDebianRepo(ctx context.Context, codename string) error {
 	gpgPath := "/usr/share/keyrings/hashicorp-archive-keyring.gpg"
 
 	gpgTmp, err := system.WriteTempFile("hashicorp-gpg", 0o600, func(f *os.File) error {
@@ -321,12 +311,9 @@ func installHashiCorpDebianRepo(ctx context.Context) error {
 		return fmt.Errorf("failed to dearmor HashiCorp GPG key: %w", err)
 	}
 
-	codeCmd := exec.CommandContext(ctx, "lsb_release", "-cs")
-	codeOut, err := codeCmd.Output()
-	if err != nil {
-		return fmt.Errorf("failed to detect debian codename: %w", err)
+	if codename == "" {
+		return fmt.Errorf("failed to detect debian codename: VERSION_CODENAME not set in /etc/os-release")
 	}
-	codename := strings.TrimSpace(string(codeOut))
 
 	listContent := fmt.Sprintf("deb [signed-by=%s] https://apt.releases.hashicorp.com %s main\n", gpgPath, codename)
 	listPath := "/etc/apt/sources.list.d/hashicorp.list"
