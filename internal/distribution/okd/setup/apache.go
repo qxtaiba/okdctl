@@ -45,10 +45,17 @@ func (p *Phase) ensureIgnitionDir(_ context.Context, webRoot string) (string, er
 	return ignitionDir, nil
 }
 
-func (p *Phase) configureApachePort(_ context.Context) {
+func (p *Phase) configureApachePort(_ context.Context, bindIP string) {
 	httpdConf := p.OS.ApacheConfigPath()
 	if !system.FileExists(httpdConf) {
 		return
+	}
+
+	listenDirective := "Listen 8080"
+	if bindIP != "" {
+		// Bind to the bastion bridge IP only; ignition files carry the pull-secret
+		// and must not be served on every interface during the bootstrap window.
+		listenDirective = fmt.Sprintf("Listen %s:8080", bindIP)
 	}
 
 	backupPath := fmt.Sprintf("%s.backup.%d", httpdConf, time.Now().Unix())
@@ -69,7 +76,7 @@ func (p *Phase) configureApachePort(_ context.Context) {
 	for scanner.Scan() {
 		line := scanner.Text()
 		if line == "Listen 80" {
-			line = "Listen 8080"
+			line = listenDirective
 			changed = true
 		}
 		buf.WriteString(line)
@@ -83,7 +90,7 @@ func (p *Phase) configureApachePort(_ context.Context) {
 		return
 	}
 	if err := system.AtomicWrite(httpdConf, buf.Bytes(), 0o644); err != nil {
-		p.Log.Warn("apache: could not modify httpd.conf to listen on port 8080", "err", err)
+		p.Log.Warn("apache: could not modify httpd.conf", "err", err)
 	}
 }
 
@@ -120,9 +127,13 @@ func enableAndStartApache(ctx context.Context, serviceName string) error {
 	return nil
 }
 
-func (p *Phase) verifyApacheListening(ctx context.Context) {
+func (p *Phase) verifyApacheListening(ctx context.Context, bindIP string) {
+	addr := "127.0.0.1:8080"
+	if bindIP != "" {
+		addr = net.JoinHostPort(bindIP, "8080")
+	}
 	dialer := &net.Dialer{Timeout: 1 * time.Second}
-	conn, err := dialer.DialContext(ctx, "tcp", "127.0.0.1:8080")
+	conn, err := dialer.DialContext(ctx, "tcp", addr)
 	if err != nil {
 		p.Log.Warn("apache: httpd may not be listening on port 8080 - check configuration")
 		return
@@ -136,14 +147,15 @@ func (p *Phase) verifyApacheListening(ctx context.Context) {
 func (p *Phase) ConfigureApache(ctx context.Context, cfg *config.Config) error {
 	p.Log.Info("apache: configuring httpd for serving ignition files")
 
-	p.configureApachePort(ctx)
+	bindIP := cfg.HTTPServer.IgnitionServerIP
+	p.configureApachePort(ctx, bindIP)
 	p.configureSELinuxForApache(ctx)
 
 	if err := enableAndStartApache(ctx, p.OS.ApacheServiceName()); err != nil {
 		return &errtypes.ClusterError{Msg: "failed to enable and start apache", Err: err}
 	}
 
-	p.verifyApacheListening(ctx)
+	p.verifyApacheListening(ctx, bindIP)
 
 	webRoot := cfg.HTTPServer.Root
 	if webRoot == "" {
