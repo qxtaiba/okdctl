@@ -4,6 +4,7 @@
 # - PROXMOX_VE_USERNAME    (username, e.g., root@pam)
 # - PROXMOX_VE_PASSWORD    (password)
 # - PROXMOX_VE_INSECURE    (optional, set to "true" to disable tls verification)
+# - PROXMOX_VE_INSECURE  (DEV ONLY: disables TLS verification — never set in prod; use a CA-signed cert or add the proxmox CA to your trust store)
 # =============================================================================
 
 
