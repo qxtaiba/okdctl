@@ -25,9 +25,17 @@ const ocExtractTimeout = 10 * time.Minute
 // bootstrapOCVersion pins the okd-scos GitHub release used to fetch a
 // known-good oc binary for `oc adm release extract`. Independent of the
 // user-configured cluster OKD version — the cluster oc is later swapped
-// in from the release image. Bumping this requires a release whose
-// sha256sum.txt and openshift-client-linux-<v>.tar.gz are published.
+// in from the release image. Bumping this requires updating
+// bootstrapOCChecksum to match the new release's sha256sum.txt entry for
+// openshift-client-linux-<v>.tar.gz.
 const bootstrapOCVersion = "4.18.0-okd-scos.8"
+
+// bootstrapOCChecksum is the SHA-256 of openshift-client-linux-<bootstrapOCVersion>.tar.gz,
+// sourced from the release sha256sum.txt at pin time. Must be updated with
+// bootstrapOCVersion. Pinning at compile time means a release-asset swap
+// that also replaces sha256sum.txt is caught before any network-fetched
+// value is consulted.
+const bootstrapOCChecksum = "00c15ce878b6cfa6c93702e79374e56f93e02a0ec300d9095bc92832e207b7f3"
 
 // bootstrapOC ensures oc is available in downloadDir. If a non-empty
 // cached binary is present it is reused; otherwise the openshift-client
@@ -44,13 +52,7 @@ func (p *Phase) bootstrapOC(ctx context.Context, downloadDir string) (string, er
 
 	assetName := "openshift-client-linux-" + bootstrapOCVersion + ".tar.gz"
 	baseURL := "https://github.com/okd-project/okd-scos/releases/download/" + bootstrapOCVersion
-	sumsURL := baseURL + "/sha256sum.txt"
 	tarballURL := baseURL + "/" + assetName
-
-	checksum, err := download.FetchChecksum(ctx, sumsURL, assetName)
-	if err != nil {
-		return "", &errtypes.NetworkError{Msg: "failed to fetch bootstrap oc checksum", Err: err}
-	}
 
 	archivePath := filepath.Join(downloadDir, assetName)
 	p.Log.Info("tools: fetching bootstrap oc", "url", tarballURL)
@@ -58,7 +60,7 @@ func (p *Phase) bootstrapOC(ctx context.Context, downloadDir string) (string, er
 	if err := download.Download(ctx, &download.Options{
 		URL:              tarballURL,
 		OutputPath:       archivePath,
-		ExpectedChecksum: checksum,
+		ExpectedChecksum: bootstrapOCChecksum,
 		Description:      "bootstrap-oc",
 		Timeout:          3 * time.Minute,
 		Logger:           p.Log,
