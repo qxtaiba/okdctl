@@ -864,16 +864,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Define haproxyFrontends as []Port literal (number+protocol pairs) instead of map[int]bool keyed only by number. Removes the implicit tcp-only assumption.  
 **Effort:** hours
 
-##### `sec:fde34e0c:k8sclient-env-direct-write` — k8sclient env direct write
-
-**Status:** in review — PR #440  
-**Severity:** suggestion  
-**Cluster:** credentials  
-**Evidence:** `internal/cluster/k8s.go:71-81`  
-**Problem:** NewK8sClient builds a fresh executor.Executor and sets `cmdRunner.Env = []string{"KUBECONFIG=..."}` directly, BYPASSING WithEnv. Today the side-channel mutation is benign because the executor's buildEnv() prepends the allowlist-filtered parent env. But a future option added via WithEnv would compose strangely with this direct Env-write — the canonical option-funnel should be honored.  
-**Fix:** Replace direct field write with `cmdRunner = executor.New(executor.WithLogger(c.logger), executor.WithEnv([]string{...}))` so the canonical option-funnel is honored. Documents the env-allowlist invariant for future maintainers.  
-**Effort:** hours
-
 
 #### audit-subprocess
 
