@@ -594,17 +594,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 #### audit-security
 
 
-##### `sec:0f076161:cred-no-zeroize` — cred no zeroize
-
-**Status:** in review — PR #450  
-**Severity:** minor  
-**Cluster:** credentials — related: sec:6424733c:cred-no-zeroize  
-**Evidence:** `internal/cli/destroy.go:172-175`  
-**Problem:** runDestroyDryRun also appends creds.Env() to terraform.WithEnv. Same lifecycle issue as the deploy createOKDProvisionerWithOpts site: the env strings outlive the Zeroize call. Less impact than the long-running deploy because dry-run is short, but the same architectural pattern.  
-**Fix:** Same fix as the deploy site (sec:6424733c:cred-no-zeroize). One canonical helper that builds and zeros credential-bearing env strings together.  
-**Effort:** hours
-
-
 ##### `sec:15ba17da:cred-no-zeroize` — cred no zeroize
 
 **Status:** not started  
@@ -961,16 +950,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 #### audit-iac-and-shell
 
-##### `iac:e076e43c:sh-curl-bypass-wrapper` — sh curl bypass wrapper
-
-**Status:** in review — PR #451  
-**Severity:** minor  
-**Cluster:** install-sh-fail-closed  
-**Evidence:** `scripts/install.sh:94-98`  
-**Problem:** The `curl_safe` wrapper centralizes hardened curl flags (HTTPS-only, TLS 1.2 floor, connect/transfer timeouts, retry policy), but the latest-release resolution call does not use it — it inlines a partial subset of those flags. The retry-on-connrefused behavior the wrapper provides is silently absent at exactly the call site most likely to fail (GitHub API rate-limit / transient 5xx).  
-**Fix:** Replace the inline curl with `curl_safe -sSfL --max-time 30 "${_gh_auth_header[@]}" "..."`. The wrapper's `--max-time 120` is overridden by the second `--max-time 30` (curl uses last value). Net change: ~3 lines.  
-**Effort:** hours
-
 ##### `iac:18a795d5:hcl-tls-skip-doc-no-warning` — hcl tls skip doc no warning
 
 **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/iac-18a795d5-tls-warn  
@@ -990,17 +969,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Problem:** The script's `Requires:` docstring lists `bash, curl, tar, sha256sum` — but does not mention that the script ALSO requires bash specifically (not sh) when invoked via `curl | sh`. Combined with the array-syntax issue (separate finding), users on Debian/Ubuntu reading only the README never learn the dependency until the script crashes.  
 **Fix:** If the bash-array fix is option (a) `| bash`, this finding resolves automatically when the README and docstring update. If option (b) (POSIX-compatible auth), this finding becomes moot. Either way, no separate fix needed once `iac:e076e43c:sh-bash-array-dash-incompat` is addressed.  
 **Effort:** hours
-
-##### `iac:e076e43c:sh-tar-no-confinement` — sh tar no confinement
-
-**Status:** in review — PR #451  
-**Severity:** suggestion  
-**Cluster:** install-sh-integrity  
-**Evidence:** `scripts/install.sh:166-170`  
-**Problem:** The tar extraction uses `--no-same-owner --no-same-permissions` for hardening but does not pass `--no-overwrite-dir` or pre-validate the archive contents (`tar -tzf` listing) before extracting. A malicious archive could in theory contain `..`-prefixed entries or symlinks that escape `$TMP`. The cosign + sha256 chain is the primary guard so this is genuine defense-in-depth, but GNU tar's default behavior on `..` entries varies by version and a one-line listing-validation costs nothing.  
-**Fix:** Add `--no-overwrite-dir` and consider pre-listing: `tar -tzf "$ARCHIVE_NAME" | grep -qE '^(\.\.|/)' && die 'archive contains absolute or parent-traversal paths'`. Goreleaser tarballs are flat and clean today, but a single line cheaply enforces it.  
-**Effort:** hours
-
 
 #### audit-errors
 
