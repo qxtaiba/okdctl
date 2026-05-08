@@ -2,6 +2,7 @@ package setup
 
 import (
 	"context"
+	_ "embed"
 	"fmt"
 	"io"
 	"net/http"
@@ -41,6 +42,9 @@ var yqChecksumsByArch = map[string]string{
 	"amd64": "654d2943ca1d3be2024089eb4f270f4070f491a0610481d128509b2834870049",
 	"arm64": "ceea73d4c86f2e5c91926ee0639157121f5360da42beeb8357783d79c2cc6a1d",
 }
+
+//go:embed hashicorp.repo
+var hashicorpRPMRepo []byte
 
 type externalTool string
 
@@ -151,9 +155,11 @@ func (p *Phase) installTerraform(ctx context.Context) error {
 			return err
 		}
 	default: // rhel family
-		repoURL := "https://rpm.releases.hashicorp.com/RHEL/hashicorp.repo"
-		if _, err := p.Exec.RunChecked(ctx, "dnf", "config-manager", "--add-repo", repoURL); err != nil {
-			return fmt.Errorf("failed to add HashiCorp repository: %w", err)
+		// Build-time-pinned .repo content avoids trusting the .repo URL at deploy
+		// time; the embedded gpgkey URL anchors signature verification.
+		repoPath := "/etc/yum.repos.d/hashicorp.repo"
+		if err := system.WriteAsInvokingUser(repoPath, hashicorpRPMRepo, 0o644); err != nil {
+			return fmt.Errorf("failed to write HashiCorp repository file: %w", err)
 		}
 	}
 
