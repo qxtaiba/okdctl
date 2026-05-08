@@ -215,10 +215,7 @@ func (p *Phase) setupWebSteps(cfg *config.Config, opts *Options, clusterDir stri
 			Desc:       "building custom CoreOS ISOs",
 			SkipWhen:   func() bool { return opts.SkipISOs },
 			SkipReason: "iso building disabled",
-			AlreadyDone: func(_ context.Context) (bool, error) {
-				return p.isoBuildAlreadyDone(cfg, opts)
-			},
-			Exec: func(ctx context.Context) error { return p.BuildCustomISOs(ctx, cfg, opts) },
+			Exec:       func(ctx context.Context) error { return p.BuildCustomISOs(ctx, cfg, opts) },
 		},
 		{
 			ID: StepUploadISOs, Name: "upload isos",
