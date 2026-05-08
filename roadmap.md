@@ -274,7 +274,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `api:de572c63:ctx-not-first-write-dnsmasq` — ctx not first write dnsmasq
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/api-de572c63-dnsmasq-ctx  
+**Status:** in review — PR #480  
 **Severity:** suggestion  
 **Evidence:** `internal/distribution/okd/dns/dnsmasq.go:54-92`  
 **Problem:** WriteDnsmasqConfig now takes ctx and checks ctx.Err() at entry (progress from prior run), but still does not thread ctx into os.MkdirAll / system.WriteTempFile / system.CopyFile — the body advertises cancellation only via the entry-gate, not per-step. Either plumb ctx into the underlying helpers or select on ctx.Done between the steps.  
@@ -292,7 +292,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `api:761e5126:export-no-caller-removehaproxy` — export no caller removehaproxy (scaffolding — verify intent only)
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/api-761e5126-haproxy  
+**Status:** in review — PR #481  
 **Severity:** suggestion  
 **Evidence:** `internal/distribution/okd/postinstall/haproxy.go:23-97`  
 **Problem:** postinstall.Phase.RemoveHAProxy is exported but the only caller is the package-private finalizeIngress path in update_ingress.go:214. No external consumer references it.  
@@ -343,7 +343,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `iac:b803fcb7:ci-no-tflint-tfsec` — ci no tflint tfsec
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/iac-b803fcb7-tfsec  
+**Status:** in review — PR #482  
 **Severity:** minor  
 **Evidence:** `.github/workflows/ci.yml:97-109`  
 **Problem:** `validate-terraform` + `lint-terraform` jobs now run `terraform fmt`, `terraform validate`, and `tflint -f compact` — but no secret/policy scanner (tfsec, checkov, or trivy config). tflint catches terraform_* idiom issues; tfsec/checkov catch misconfigured provider secrets, missing `sensitive = true`, and public-exposure antipatterns that the HCL surface will grow into as the module adds network/firewall rules.  
@@ -352,7 +352,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `iac:18a795d5:hcl-no-prevent-destroy-masters` — hcl no prevent destroy masters
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/iac-18a795d5-prevent-destroy  
+**Status:** in review — PR #483  
 **Severity:** suggestion  
 **Evidence:** `infrastructure/terraform/modules/proxmox-okd/main.tf:140-255`  
 **Problem:** Master VMs (OKD control plane carrying etcd quorum state) have no `lifecycle { prevent_destroy = true }` guard. A misconfigured `terraform apply` that perturbs a force-new attribute (e.g.  
@@ -412,7 +412,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sec:00000006:debug-bundle-redact-partial` — debug bundle redact partial
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-00000006-redact-walk  
+**Status:** in review — PR #484  
 **Severity:** minor  
 **Evidence:** `internal/cli/config.go:65-79`  
 **Problem:** redactConfig in cli/config.go only masks Provider.Proxmox.TokenID and leaves every other config field unchanged. Password and APIToken carry `json:"-"` so they never marshal into the bundle (correct today), but the function signature encourages a future 'add a field, forget to redact' regression.  
@@ -430,7 +430,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sec:451be4fa:chowntree-symlink-audit` — chowntree symlink audit
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-451be4fa-chowntree  
+**Status:** in review — PR #485  
 **Severity:** minor  
 **Evidence:** `internal/system/elevation.go:100-131`  
 **Problem:** ChownTreeToInvokingUser uses filepath.WalkDir + os.Lchown (symlink-safe). The docstring explicitly requires the caller to only pass paths whose subtree okdctl itself created in this process.  
@@ -471,7 +471,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `tst:daf5bee9:no-test-kubeconfig-merge-full` — no test kubeconfig merge full
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/tst-daf5bee9-mergekubeconfig  
+**Status:** in review — PR #486  
 **Severity:** blocker  
 **Evidence:** `internal/cli/kubeconfig.go:77-125`  
 **Problem:** mergeNamedList now has unit coverage (TestMergeNamedList) but mergeKubeconfig itself — the full merge pipeline including (a) source/dest YAML parse, (b) three-key merge (clusters/users/contexts), (c) current-context preservation invariant (set from src only when dest has none), (d) AtomicWrite at mode 0o600 — remains untested end-to-end. The current-context and 0o600 perm guarantees are the load-bearing invariants for kubectl-default-cluster preservation and on-disk kubeconfig perms.  
@@ -480,7 +480,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `tst:6b533f2d:no-test-approve-pending-csrs` — no test approve pending csrs
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/tst-6b533f2d-approve-csrs  
+**Status:** in review — PR #487  
 **Severity:** major  
 **Evidence:** `internal/cluster/k8s_csrs.go:51-74`  
 **Problem:** ApprovePendingCSRs drives MonitorInstallation's CSR-approval loop. No test covers (a) PendingCSRs returns [] → (0, nil) fast path, (b) non-empty list → single `oc adm certificate approve` with all names in one argv (the batching is load-bearing — N separate approve calls per tick would rate-limit the API), (c) PendingCSRs error → (0, err) propagates; (d) runCheck failure wraps with "failed to approve CSRs" prefix.  
@@ -489,7 +489,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `tst:830d4653:no-test-packages-cleanup-guard` — no test packages cleanup guard
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/tst-830d4653-packages-cleanup  
+**Status:** in review — PR #488  
 **Severity:** major  
 **Evidence:** `internal/distribution/okd/cleanup/packages.go:59-96`  
 **Problem:** cleanup.Packages composes ResolveBinDir → filepath.Join → refuseCriticalPath → os.RemoveAll for each installer-managed binary (yq/helm/sops/oc/kubectl/openshift-install). The per-iter refuseCriticalPath guard is the only thing stopping an OKDCTL_BIN_DIR=/etc environment variable from walking os.RemoveAll into /etc/yq.  
@@ -543,7 +543,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `tst:761e5126:no-test-removehaproxy` — no test removehaproxy
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/api-761e5126-haproxy  
+**Status:** in review — PR #481  
 **Severity:** major  
 **Evidence:** `internal/distribution/okd/postinstall/haproxy.go:23-97`  
 **Problem:** RemoveHAProxy calls os.RemoveAll(phase.DefaultHAProxyConfigPath) (= /etc/haproxy/haproxy.cfg) then tears down firewall rules, the bastion VIP, and verifies API reachability. The /etc removal has no guard against an attacker-influenced DefaultHAProxyConfigPath (currently a const, but consumed indirectly), no partial-failure test (what if firewall.RemoveRules fails?), no idempotency test (second call on an already-removed haproxy).  
@@ -552,7 +552,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `tst:632c9087:no-test-buildlb-ingresscontroller` — no test buildlb ingresscontroller
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/tst-632c9087-buildlb  
+**Status:** in review — PR #490  
 **Severity:** major  
 **Evidence:** `internal/distribution/okd/postinstall/update_ingress.go:371-467`  
 **Problem:** convertToLoadBalancer is a destructive conversion (`oc delete ingresscontroller` then `oc create` a rebuilt one) with an explicit rollback path via attemptRollback. The two load-bearing JSON transforms — buildLBIngressController (which must preserve domain/replicas/defaultCertificate/routeSelector/routeAdmission/nodePlacement from the original spec while swapping strategy to LoadBalancerService) and buildRollbackJSON (which must strip server-managed fields to let `oc create` succeed) — are pure, in-memory functions that feed a destructive external call, and neither has a test.  
@@ -561,7 +561,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `tst:29293401:no-test-haproxy-rollback` — no test haproxy rollback
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/tst-29293401-haproxy-rollback  
+**Status:** in review — PR #489  
 **Severity:** major  
 **Evidence:** `internal/distribution/okd/setup/haproxy.go:87-146`  
 **Problem:** ConfigureHAProxy writes to /etc/haproxy/haproxy.cfg — a root-required file on the live system — and has a rollback path that restores from backup on validation/restart failure. No test covers the rollback: (a) no prior config → no backup taken, no rollback; (b) validation fails → backup restored, service restarted with old config; (c) rollback chmod/restart failure surfaces joined errors.  
@@ -579,7 +579,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `tst:451be4fa:no-test-writeasinvoking` — no test writeasinvoking
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-451be4fa-chowntree  
+**Status:** in review — PR #485  
 **Severity:** minor  
 **Evidence:** `internal/system/elevation.go:82-98`  
 **Problem:** WriteAsInvokingUser combines AtomicWrite + chown-back. The "parent dir chowned iff it did not pre-exist" logic (line 84-86 + 94-96) is a subtle invariant — exists to avoid silently chowning a pre-existing dir the user created with different ownership.  
@@ -596,7 +596,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sec:15ba17da:cred-no-zeroize` — cred no zeroize
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-15ba17da-zeroize-destroy  
+**Status:** in review — PR #479  
 **Severity:** minor  
 **Cluster:** credentials — related: sec:6424733c:cred-no-zeroize  
 **Evidence:** `internal/distribution/okd/destroy/steps.go:24-133`  
@@ -1017,7 +1017,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `smell:262af6e4:dual-cleanup-tracker` — dual cleanup tracker
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/smell-262af6e4-cleanup  
+**Status:** in review — PR #491  
 **Severity:** minor  
 **Cluster:** helper-package-no-value  
 **Evidence:** `internal/distribution/okd/cleanup/cleanup.go:67-137`  
@@ -1027,7 +1027,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `smell:262af6e4:pipeline-explicit-errors` — pipeline explicit errors
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/smell-262af6e4-cleanup  
+**Status:** in review — PR #491  
 **Severity:** minor  
 **Cluster:** arrow-anti  
 **Evidence:** `internal/distribution/okd/cleanup/cleanup.go:77-137`  
@@ -1037,7 +1037,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `smell:262af6e4:pipeline-explicit-errors-cleanupkind` — pipeline explicit errors cleanupkind
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/smell-262af6e4-cleanup  
+**Status:** in review — PR #491  
 **Severity:** minor  
 **Cluster:** magic-strings  
 **Evidence:** `internal/distribution/okd/cleanup/cleanup.go:127-132`  
@@ -1067,7 +1067,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `smell:262af6e4:enum-ad-hoc-cleanup-kind` — enum ad hoc cleanup kind
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/smell-262af6e4-cleanup  
+**Status:** in review — PR #491  
 **Severity:** suggestion  
 **Cluster:** magic-strings  
 **Evidence:** `internal/distribution/okd/cleanup/cleanup.go:21-32`  
