@@ -704,26 +704,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Keep — these are part of the symmetric Kubernetes condition enum (Ready/Available/Progressing/Degraded × True/False/Unknown). Removing partials would make the enum lopsided and break the next caller. Same scaffolding rationale as okd.ClusterStatus (api:a7f4383d): future status verb will surface non-Ready conditions in operator-degraded reporting.  
 **Effort:** hours
 
-##### `api:859eea6f:export-no-caller-scaffolding` — export no caller scaffolding (scaffolding — verify intent only)
-
-**Status:** in review — PR #421  
-**Severity:** suggestion  
-**Cluster:** exported-surface  
-**Evidence:** `internal/distribution/okd/phase/noderole.go:22-29`  
-**Problem:** phase.ParseNodeRole is exported with no in-scope callers. NodeRole has String() and the Role* constants, so ParseNodeRole completes the symmetric serializer pair. Future deserialization (status JSON, terraform output, persisted state) will need it.  
-**Fix:** Keep — symmetric String() / Parse pair is canonical. Verify intent: if no roadmap item adds a JSON-deserialization path within 6 months, demote to a test-only helper.  
-**Effort:** hours
-
-##### `api:0139cb3f:export-no-caller-scaffolding` — export no caller scaffolding (scaffolding — verify intent only)
-
-**Status:** in review — PR #422  
-**Severity:** suggestion  
-**Cluster:** exported-surface  
-**Evidence:** `internal/distribution/okd/phase/paths.go:150-152`  
-**Problem:** phase.WithRecorder is exported but every existing caller assigns BasePhase.Recorder directly via field write (e.g. setupPhase.Recorder = p.recorder in okd.go::Prepare). The functional-option exists in symmetric pair with WithExecutor and WithLogger, both of which are heavily used.  
-**Fix:** Keep. Optional follow-up: prefer `phase.NewBasePhase(version, phase.WithExecutor(exec), phase.WithLogger(log), phase.WithRecorder(rec))` consistently in okd.go, install/postinstall/destroy New() funcs — that erases the field-assignment dance and exercises the symmetric option.  
-**Effort:** hours
-
 #### audit-cli-ux
 
 #### audit-modernization
@@ -844,16 +824,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Same fix as sec:eb479d86 — surface a per-cluster known_hosts pinning option. Replace accept-new with strict mode once a verified known_hosts line is established; the wizard could ssh-keyscan + display the fingerprint to the operator on first run for confirmation.  
 **Effort:** hours
 
-##### `sec:29293401:predictable-tmp-pid` — predictable tmp pid
-
-**Status:** in review — PR #427  
-**Severity:** minor  
-**Cluster:** file-toctou  
-**Evidence:** `internal/distribution/okd/setup/haproxy.go:101-105`  
-**Problem:** Temp file path is built from os.TempDir() and os.Getpid() — a predictable name (`/tmp/haproxy-<pid>.cfg`). Although /tmp's sticky bit and the root re-exec model block non-root takeover today, the canonical helper system.WriteTempFile (per CLAUDE.md §architecture-notes) avoids the predictable-name footgun and centralises the secure-temp pattern.  
-**Fix:** Replace the predictable name + AtomicWriteString with system.WriteTempFile("haproxy-*.cfg", 0o644, writer) to use the canonical mode-at-open temp helper.  
-**Effort:** hours
-
 ##### `sec:5013fea6:bootstrap-oc-no-signature` — bootstrap oc no signature
 
 **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-5013fea6-bootstrap-oc-pin  
@@ -934,16 +904,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Switch to OpenFile(tmpPath, O_RDWR|O_CREATE|O_EXCL, perm) to apply mode at open time (mirroring system.openTempFile in the same file at line 77). Eliminates the Chmod-window concern and aligns with the canonical CopyFileMode pattern.  
 **Effort:** hours
 
-##### `sec:f55b9c27:envfile-once-cross-config` — envfile once cross config
-
-**Status:** in review — PR #432  
-**Severity:** suggestion  
-**Cluster:** credentials  
-**Evidence:** `internal/credentials/envfile.go:116-125`  
-**Problem:** LoadEnvFile is sync.Once-guarded — once loaded with one path, subsequent calls with a different path return an error. The deploy at cli/helpers.go:48 swallows that error to a log line; the deploy then proceeds and only fails later when GetProxmoxCredentials returns IsValid()==false. A misconfigured deploy could therefore proceed without the env credentials it expected.  
-**Fix:** Decide whether the cross-path-mismatch is fatal or warn-only at the call site, not in the helper. Currently helpers.go:48 swallows the error to a log line; consider failing-fast on the cross-path case, OR document the path-mismatch as an error explicitly in the GetProxmoxCredentials docstring so callers know to abort.  
-**Effort:** hours
-
 ##### `sec:fde34e0c:k8sclient-env-direct-write` — k8sclient env direct write
 
 **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-fde34e0c-k8s-with-env  
@@ -1009,16 +969,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Add AlreadyDone to StepBuildISOs that verifies SHA256 of every expected output ISO matches the cached fedora-coreos image hash; on mismatch, treat as 'work not done' and re-build. For StepUploadISOs, add AlreadyDone that runs `pvesh get /nodes/<node>/storage/<storage>/content` filtered to iso/<expected-name>.iso and verifies the size matches the local ISO. Either pre-condition stops a half-uploaded artifact from being treated as ready.  
 **Effort:** hours
 
-##### `state:15ba17da:destroy-no-only-scope` — destroy no only scope
-
-**Status:** in review — PR #434  
-**Severity:** minor  
-**Cluster:** destroy-safety — seam→audit-cli-ux  
-**Evidence:** `internal/distribution/okd/destroy/steps.go:58-72`  
-**Problem:** destroy is all-or-nothing at the cluster level. The CLI accepts --target=module.okd_cluster.proxmox_virtual_environment_vm.{bootstrap|master|worker}[N] (validated against the destroyTargetRE allowlist) but offers NO higher-level scoping like 'destroy only workers' or 'destroy only the bootstrap'. An operator who wants to bring up a fresh worker pool without disturbing masters must hand-craft N --target args matching destroyTargetRE.  
-**Fix:** Add a --only={vms,workers,masters,bootstrap} flag that expands into the destroyTargetRE-matching --target list. Existing --target stays for power users; --only is the ergonomic alias.  
-**Effort:** hours
-
 ##### `state:262af6e4:cleanup-best-effort-no-resume` — cleanup best effort no resume
 
 **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/state-262af6e4-cleanup-resume  
@@ -1057,16 +1007,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/cli/helpers.go:110-134`  
 **Problem:** resolveProjectRootOrDie refuses any directory whose Base(cfgFile) is missing — defense-in-depth against running cleanup against the wrong root. But after a partial-failed deploy that wipes okdctl.yaml (cleanup.WorkDirectory removes the cluster-config dir first in Full kind), the operator can no longer run `okdctl destroy` because the marker is gone. The cluster's terraform state still exists, the VMs still exist, but okdctl refuses to recognise its own project. Recovery requires recreating an okdctl.yaml shell.  
 **Fix:** Accept any of {okdctl.yaml, okdctl.env, infrastructure/terraform/environments/<env>/terraform.tfstate} as a project marker — at least one is present after deploy starts. Document the broadened marker set in the doc comment so the security argument is preserved (any of these files only exists in an okdctl project).  
-**Effort:** hours
-
-##### `state:08c49fc4:update-ingress-no-dryrun-state-probe` — update ingress no dryrun state probe
-
-**Status:** in review — PR #433  
-**Severity:** suggestion  
-**Cluster:** destroy-safety — seam→audit-cli-ux  
-**Evidence:** `internal/cli/update_ingress.go:48-61`  
-**Problem:** runUpdateIngressDryRun prints the would-do list and returns nil. It does NOT consult the existing dnsmasq state. If on-disk dnsmasq config is currently in production-DNS mode (post-cutover) and an operator runs `okdctl update-ingress --dry-run` again, the dry-run preview says 'would deploy production dnsmasq config' even though it would be a no-op. Pure UX/recoverability gap — the dry-run lies about what the live run would do.  
-**Fix:** Have runUpdateIngressDryRun call dns.IsBootstrapDNS(cfg) and conditionally emit '(no-op: dns already cut over)' for the deploy-production-dnsmasq line. Same for haproxy: probe `system.IsServiceActive(ctx, haproxy)` and label that line accordingly.  
 **Effort:** hours
 
 ##### `state:15ba17da:nofatal-tracker-sync-todo` — nofatal tracker sync todo
@@ -1119,16 +1059,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `infrastructure/terraform/modules/proxmox-okd/main.tf:5-10` + 2 more  
 **Problem:** The HCL header documents `PROXMOX_VE_INSECURE` as "set to 'true' to disable tls verification" without a security warning. The bpg/proxmox provider supports this env var; documenting it without flagging it as a development-only knob normalizes TLS-disable as a routine operator action. Same comment is duplicated in `variables.tf` and the production environment's variables.tf.  
 **Fix:** Append a one-line warning to the comment in all three sites: `# - PROXMOX_VE_INSECURE  (DEV ONLY: disables TLS verification — never set in prod; use a CA-signed cert or add the proxmox CA to your trust store)`.  
-**Effort:** hours
-
-##### `iac:90de5406:hcl-prod-no-validation` — hcl prod no validation
-
-**Status:** in review — PR #428  
-**Severity:** suggestion  
-**Cluster:** hcl-credential-hygiene  
-**Evidence:** `infrastructure/terraform/environments/production/variables.tf:13-246`  
-**Problem:** The production environment's variables redeclare every module variable but drop the `validation` blocks present on the module (cpu_cores 2-32, memory_mb >= 8192, master_count odd 1-5, vmid_base 100-9000, etc.). The module's validation will fire eventually but only AFTER terraform plan resolves the module reference, producing later/less-pinpointed errors. The duplicated-but-loosened variables here are a missed early-validation opportunity and create two specs that can drift.  
-**Fix:** Either (a) delete the duplicated env-level vars and let the module own validation (the env's main.tf passes them straight through anyway); or (b) mirror the module's validation blocks here for fail-fast errors. Option (a) is the smaller diff and aligns with module-as-source-of-truth.  
 **Effort:** hours
 
 ##### `iac:e076e43c:sh-doc-line-stale` — sh doc line stale
@@ -1196,17 +1126,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** In defaultStartMonitorCmd, set `cmd.Cancel = func() error { return cmd.Process.Signal(syscall.SIGTERM) }` and `cmd.WaitDelay = 30 * time.Second`. Drop the kill closure and the reapTimer block in MonitorInstallation; on ctx.Done the os/exec runtime sends SIGTERM, waits up to WaitDelay, then SIGKILL, and Wait returns ctx.Err. The doneCh goroutine still owns Wait → installDone, so the for-loop's installDone branch fires naturally on ctx cancel.  
 **Effort:** hours
 
-##### `con:98723e5d:setupclusteraccess-ctx-ignored` — setupclusteraccess ctx ignored
-
-**Status:** in review — PR #429  
-**Severity:** suggestion  
-**Cluster:** ctx-ignored  
-**Evidence:** `internal/distribution/okd/install/flux.go:50-91`  
-**Problem:** Phase.SetupClusterAccess accepts ctx but discards it via `_ context.Context`. The body chains AtomicWriteString on bashrc, CopyFileMode on kubeconfig, ChownToInvokingUser, Lstat checks, and a final addKubeconfigToBashrc — file IO that runs as the final install step, after a 60-minute install monitor. A Ctrl-C between MonitorInstallation returning and SetupClusterAccess completing will not interrupt the bashrc write because no inner call honours ctx.  
-**Fix:** Rename the parameter to `ctx context.Context` and add `if err := ctx.Err(); err != nil { return err }` between the four logical sub-steps (kubeconfig copy, chown, bashrc), matching the pattern in install.SetupKubeconfig at flux.go:166-169 and ignition.ValidateIgnitionFiles. Alternative: document the ctx-ignored choice with a symmetric-API comment matching the proxmox.Connect/Disconnect doc at proxmox.go:88-89.  
-**Effort:** hours
-
-
 #### audit-api-design
 
 ##### `api:4f69fc9d:rerunsafe-declarative-only` — rerunsafe declarative only
@@ -1256,26 +1175,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Cluster:** exported-surface  
 **Evidence:** `internal/distribution/okd/phase/paths.go:73-79`  
 **Problem:** phase.BinDirOrDefault is a 6-line helper consumed by 3 sibling sites (setup/artifacts.go, setup/tools.go, cleanup/packages.go). Together with PreflightBinDir and ResolveBinDir it forms a three-function bin-dir-resolution surface; each function differs only in which input source is consulted. The shape is correct (small symmetric API) but BinDirOrDefault is invoked on a struct field that's already populated by ResolveBinDir at construction — the second call is redundant defense.  
-**Fix:** Verify intent (grep roadmap.md, confirm parallel siblings) — do not delete; per MEMORY.md §scaffolding.  
-**Effort:** hours
-
-##### `api:7b2829bb:executor-with-inherited-env-no-callers` — executor with inherited env no callers
-
-**Status:** in review — PR #423  
-**Severity:** suggestion  
-**Cluster:** exported-surface  
-**Evidence:** `internal/executor/executor.go:69-76`  
-**Problem:** executor.WithInheritedEnv has no callers in the production tree — every executor.New call goes through WithEnv, WithWorkDir, or WithLogger. The function exists as a documented escape hatch ('a tool that consumes a variable not on the allowlist') but no such tool currently exists.  
-**Fix:** Verify intent (grep roadmap.md, confirm parallel siblings) — do not delete; per MEMORY.md §scaffolding.  
-**Effort:** hours
-
-##### `api:a55b4592:loader-stateless-struct` — loader stateless struct
-
-**Status:** in review — PR #424  
-**Severity:** suggestion  
-**Cluster:** exported-surface — seam→audit-code-smells  
-**Evidence:** `internal/config/loader.go:13-64`  
-**Problem:** config.Loader is a stateless struct (zero fields). NewLoader returns &Loader{}, LoadFile and Save read no state. Six call sites — cli/deploy.go, cli/helpers.go, cli/doctor.go (twice) — all do loader := config.NewLoader(); loader.LoadFile(p), the no-state equivalent of two package-level functions LoadFile and Save.  
 **Fix:** Verify intent (grep roadmap.md, confirm parallel siblings) — do not delete; per MEMORY.md §scaffolding.  
 **Effort:** hours
 
@@ -1329,16 +1228,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/cli/root.go:1-12`  
 **Problem:** The package doc claims `invoked-as-root rejection=77 (EX_NOPERM, set in cmd/okdctl/main.go)` but `cmd/okdctl/main.go` never sets exit 77 — root rejection in `ensureRoot` (`elevation.go:88-92`) returns `errtypes.AuthError`, which `exitCodeFor` maps to 5. The user-facing `docs/cli/exit-codes.md` correctly documents 5; the canonical anchor comment in `root.go` is stale and is the file `exit-codes.md` points at as source of truth.  
 **Fix:** Drop the `rejection=77 (EX_NOPERM, set in cmd/okdctl/main.go)` clause from the package doc on `internal/cli/root.go`. Replace with: `invoked-as-root rejection → 5 (AuthError, in elevation.go ensureRoot)`. Optionally promote 77/EX_NOPERM as a real exit code by routing the `elevReject` decision through a sentinel `errtypes.ErrInvokedAsRoot` and adding `errors.Is(err, errtypes.ErrInvokedAsRoot) → 77` to `exitCodeFor` — that matches BSD sysexits semantics and is what the comment originally intended.  
-**Effort:** hours
-
-##### `ux:aa84670c:no-second-ctrl-c-escape` — no second ctrl c escape
-
-**Status:** in review — PR #430  
-**Severity:** minor  
-**Cluster:** signals  
-**Evidence:** `internal/cli/root.go:86-109`  
-**Problem:** The signal goroutine reads exactly one signal then returns: `sig, ok := <-sigCh; ...; cancel()`. A second SIGINT during a long graceful shutdown (terraform destroy hung on Proxmox API drop, must-gather mid-archive) has no escape — the user cannot kill the in-flight cobra tree without `kill -9`. kubectl/docker/gh implement two-strikes: first ctrl-C cancels gracefully, second forces `os.Exit(130)` immediately.  
-**Fix:** Replace the single-receive goroutine with a loop: first signal stores+cancels (current behavior); subsequent signals call `os.Exit(130)` directly bypassing the deferred `logFileCloser.Close()` since the user has explicitly asked for a hard kill. Print one `tui.Warn("shutdown in progress; press ctrl-c again to force quit")` after the first signal so the escape hatch is discoverable. Add a test using `os/signal.Notify` faking that asserts second-signal forces exit.  
 **Effort:** hours
 
 ##### `ux:e7db1220:releases-list-omitted-vs-flat` — releases list omitted vs flat
@@ -1432,16 +1321,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/cli/update_ingress.go:75-75`  
 **Problem:** `tui.Warn("skipping HostNetwork conversion: " + err.Error())` concatenates the err string into the message text (string-melt), bypassing RedactHandler structured-attr scrub. The error-stringification pattern (CLAUDE.md flags `slog.String("error", err.Error())` as 'kills structured handling'); the same anti-pattern in concat form.  
 **Fix:** Replace with `tui.Warn("skipping HostNetwork conversion", tui.LF("err", err))`.  
-**Effort:** hours
-
-##### `obs:1e8ffb91:degraded-operator-loop-could-aggregate` — degraded operator loop could aggregate
-
-**Status:** in review — PR #426  
-**Severity:** minor  
-**Cluster:** log-once  
-**Evidence:** `internal/distribution/okd/postinstall/verify.go:131-137`  
-**Problem:** verify.go iterates degraded operators and emits one Warn per operator (L132-134), then immediately a summary Warn with the count (L136-137). On a 30-operator cluster this is 31 Warn lines for the same event. The aggregated form would be one Warn carrying the slice of degraded names — sufficient signal for an alert pipeline, easier to read in a TTY.  
-**Fix:** Drop the per-operator loop; emit one structured warn carrying the list: `p.Log.Warn("cluster: operators degraded", "count", len(degraded), "names", degraded)`. Loses one fewer log line per operator and gains a queryable list attr.  
 **Effort:** hours
 
 ##### `obs:25fa1be8:nil-logger-deref` — nil logger deref
@@ -1580,16 +1459,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Replace with `string(phase.ConditionStatusFalse)` / `string(phase.ConditionStatusTrue)` or factor a `boolToConditionStatus(bool) phase.ConditionStatus` helper. Keeps the one-line text path intact while ensuring future enum changes propagate.  
 **Effort:** hours
 
-##### `smell:d6b325cb:enum-ad-hoc` — enum ad hoc
-
-**Status:** in review — PR #431  
-**Severity:** minor  
-**Cluster:** magic-strings — seam→audit-api-design  
-**Evidence:** `internal/infrastructure/proxmox/types.go:47-58`  
-**Problem:** `VMState` is defined twice with the same five string literals — once here in `proxmox` and once in `internal/distribution/okd/phase/vmstate.go`. The phase/vmstate.go header comment says it lives there 'so iso_cleanup (phase) and proxmox can share a single source of truth without an import cycle' but the proxmox package has not adopted it; both packages still ship parallel typed-enum copies. The proxmox copy of `StateCreating` / `StateDeleting` / `StateUnknown` has zero internal references.  
-**Fix:** Have proxmox import phase.VMState (or move VMState to a leaf package both can import). Either (a) `type VMState = phase.VMState` re-export with `var StateRunning = phase.StateRunning` aliases, or (b) remove the proxmox copy and update VMStatus.Status to phase.VMState, fixing the 3 callers in proxmox/proxmox.go. The api-design audit should be the final owner if a leaf-package extraction is preferred.  
-**Effort:** hours
-
 ##### `smell:262af6e4:enum-ad-hoc-cleanup-kind` — enum ad hoc cleanup kind
 
 **Status:** not started  
@@ -1600,16 +1469,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Add `func (k Kind) Validate() error` and `func ValidKinds() []Kind` mirroring config.SupportedDistributions / config.SupportedProviders. Eliminates the hard-coded string list in the default branch of Execute.  
 **Effort:** hours
 
-##### `smell:2be6306e:abstraction-single-caller` — abstraction single caller
-
-**Status:** in review — PR #418  
-**Severity:** suggestion  
-**Cluster:** helper-package-no-value  
-**Evidence:** `internal/addon/registry.go:86-92`  
-**Problem:** `IsRegistered(name)` has no callers in the tree. Symmetric with Get/Names/All so it qualifies as scaffolding under MEMORY.md §scaffolding — a future `okdctl addon validate` or wizard pre-check would naturally use it. Mark intent rather than delete.  
-**Fix:** Verify intent (grep roadmap.md, confirm parallel siblings) — do not delete; per MEMORY.md §scaffolding.  
-**Effort:** hours
-
 ##### `smell:c4182b1c:abstraction-single-caller` — abstraction single caller
 
 **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/smell-c4182b1c-context-doc  
@@ -1618,16 +1477,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/distribution/context.go:1-33`  
 **Problem:** PhaseContext is a generic mu+Get/Update wrapper used by exactly one caller (postinstall.Phase.Execute), holding a 5-field non-shared struct mutated serially by the orchestrator. The orchestrator runs steps serially, so the RWMutex protects against a concurrency that does not exist. Either inline the wrapped struct as a Phase field, or document the future-symmetric-API intent explicitly in the doc comment.  
 **Fix:** Verify intent (grep roadmap.md, confirm parallel siblings) — do not delete; per MEMORY.md §scaffolding.  
-**Effort:** hours
-
-##### `smell:dd75bdeb:multi-bool-not-exclusive` — multi bool not exclusive
-
-**Status:** in review — PR #419  
-**Severity:** suggestion  
-**Cluster:** bool-should-be-enum  
-**Evidence:** `internal/distribution/okd/postinstall/context.go:1-10`  
-**Problem:** postInstallContext carries three independent stage-completion booleans (KubeVIPVerified, BootstrapCleaned, DNSDeployed). They are NOT mutually exclusive (multiple can be true simultaneously) so this is correctly modeled as parallel bools — but worth surfacing in the audit so a future refactor doesn't fold them into a single 'phase' enum and silently break the parallel-progress reporting in the deploy summary.  
-**Fix:** No fix — bools are correctly orthogonal. Add a one-line doc comment to the struct stating 'these flags are independent; do not collapse into a phase enum' to head off a future refactor regression.  
 **Effort:** hours
 
 #### audit-dependencies
@@ -1745,26 +1594,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Edit README to say 'production.yaml — 3 control-plane, 5 worker layout' matching production.yaml. Or change production.yaml back to 3 workers if the README cardinality is the intended doc.  
 **Effort:** hours
 
-##### `doc:b3356305:readme-sbom-filename-drift` — readme sbom filename drift
-
-**Status:** in review — PR #417  
-**Severity:** minor  
-**Cluster:** readme-drift  
-**Evidence:** `README.md:182-183`  
-**Problem:** README's 'Verifying a release' section claims a single SBOM artifact `okdctl.sbom.json`, but goreleaser produces per-archive SBOMs named `okdctl_<version>_<os>_<arch>.sbom.json` and per-package `okdctl_<version>_<os>_<arch>.pkg.sbom.json`. Verifiers grepping for `okdctl.sbom.json` in releases get nothing.  
-**Fix:** Edit README to reflect actual goreleaser-produced filenames: `okdctl_<version>_linux_<arch>.sbom.json` and `.pkg.sbom.json`. Mirror the existing tar.gz line's `<version>_<arch>` template style.  
-**Effort:** hours
-
-##### `doc:23d812fa:flux-doc-stale-line-numbers` — flux doc stale line numbers
-
-**Status:** in review — PR #416  
-**Severity:** suggestion  
-**Cluster:** readme-drift  
-**Evidence:** `docs/addons/flux.md:30-31`  
-**Problem:** docs cites `flux.go:223-231` for DefaultSettings — actual range is 230-238 (off by 7). Cites `flux.go:22-25` for duration constants — actual is 23-26. Stale anchors rot every refactor; a structural reference (function name, no line numbers) is more durable.  
-**Fix:** Drop line numbers; cite by symbol (`Flux.DefaultSettings` and `defaultControllerTimeout/defaultGitRepoSyncTimeout`). Or run a CI check that grep's the doc anchors against the source.  
-**Effort:** hours
-
 #### audit-tests
 
 ##### `tst:21dc1103:download-no-test` — download no test
@@ -1805,16 +1634,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/distribution/okd/cleanup/services.go:142-187`  
 **Problem:** Dnsmasq() has TestDnsmasq_GlobLoopRemovesAllMatches but no test for the cluster-name-driven path: line 153 builds configPath via dns.DnsmasqConfigPath('okd-'+clusterName) and calls os.RemoveAll on it under refuseCriticalPath guard. ClusterName comes from cfg and is validated at config-load, but a hand-edited YAML with an attacker-shaped clusterName (e.g. '../../etc' or 'okd-..%2f..') is the threat the refuseCriticalPath guard exists to catch — and there is no test for that intersection.  
 **Fix:** Add t.Run('clusterName containing path-traversal segments hits refuseCriticalPath') to services_test.go: monkey-patch dnsmasqConfPattern + dnsmasqBackupPattern (already done by sibling test) and pass clusterName='../../../../etc/okd-x'. Assert that no os.RemoveAll touched anything outside t.TempDir(). Use a t.TempDir() decoy with a sentinel file and check it survives.  
-**Effort:** hours
-
-##### `tst:4c092fce:terraform-destroy-direct-untested` — terraform destroy direct untested
-
-**Status:** in review — PR #425  
-**Severity:** suggestion  
-**Cluster:** destructive-untested  
-**Evidence:** `internal/infrastructure/terraform/terraform.go:260-311`  
-**Problem:** Executor.Destroy(UsePlan=true) is exercised by destroy/helpers_test.go:TestDestroyInfrastructure_TFDestroyFails, but the destroyDirect path (UsePlan=false) is dead in tests. okdctl always passes UsePlan=true today (destroy/helpers.go:64), so direct-destroy is scaffolding-shaped: present for future use cases (e.g. emergency destroy without a plan). Lock its argv shape so a regression that flips parallelism handling or target injection is caught.  
-**Fix:** Verify intent (grep roadmap.md, confirm parallel siblings) — do not delete; per MEMORY.md §scaffolding.  
 **Effort:** hours
 
 ## Completed
