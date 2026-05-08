@@ -308,3 +308,69 @@ func TestExpandPath(t *testing.T) {
 		}
 	})
 }
+
+func TestMakeExecutable(t *testing.T) {
+	dir := t.TempDir()
+
+	cases := []struct {
+		name     string
+		initial  os.FileMode
+		wantPerm os.FileMode
+	}{
+		{"0o600_becomes_0o711", 0o600, 0o711},
+		{"0o644_becomes_0o755", 0o644, 0o755},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			path := filepath.Join(dir, tc.name)
+			if err := os.WriteFile(path, []byte("binary"), tc.initial); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Chmod(path, tc.initial); err != nil {
+				t.Fatal(err)
+			}
+			if err := MakeExecutable(path); err != nil {
+				t.Fatalf("MakeExecutable: %v", err)
+			}
+			fi, err := os.Stat(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if perm := fi.Mode().Perm(); perm != tc.wantPerm {
+				t.Errorf("perm = %#o, want %#o", perm, tc.wantPerm)
+			}
+		})
+	}
+
+	t.Run("preserves_contents", func(t *testing.T) {
+		path := filepath.Join(dir, "binary-content")
+		body := []byte("#!/bin/sh\necho hello\n")
+		if err := os.WriteFile(path, body, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chmod(path, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := MakeExecutable(path); err != nil {
+			t.Fatalf("MakeExecutable: %v", err)
+		}
+		got, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(got) != string(body) {
+			t.Errorf("body changed after MakeExecutable: got %q", got)
+		}
+	})
+
+	t.Run("missing_path_error_contains_path", func(t *testing.T) {
+		missing := filepath.Join(dir, "does-not-exist")
+		err := MakeExecutable(missing)
+		if err == nil {
+			t.Fatal("expected error for missing path, got nil")
+		}
+		if !strings.Contains(err.Error(), missing) {
+			t.Errorf("error %q does not contain path %q", err.Error(), missing)
+		}
+	})
+}
