@@ -44,3 +44,31 @@ func TestDnsmasq_GlobLoopRemovesAllMatches(t *testing.T) {
 		}
 	}
 }
+
+func TestDnsmasq_RefusesClusterNamePathTraversal(t *testing.T) {
+	// Traversal-shaped clusterName is rejected by dns.DnsmasqConfigPath's
+	// allowlist regex before reaching os.RemoveAll, so a sentinel file outside
+	// the expected glob directories must survive Dnsmasq().
+	sentinel := filepath.Join(t.TempDir(), "sentinel")
+	if err := os.WriteFile(sentinel, []byte("safe"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	globDir := t.TempDir()
+	orig1 := dnsmasqConfPattern
+	orig2 := dnsmasqBackupPattern
+	dnsmasqConfPattern = filepath.Join(globDir, "okd-*.conf")
+	dnsmasqBackupPattern = filepath.Join(globDir, "*.backup")
+	t.Cleanup(func() {
+		dnsmasqConfPattern = orig1
+		dnsmasqBackupPattern = orig2
+	})
+
+	if err := Dnsmasq(context.Background(), "../../../../etc/okd-x", logutil.NopLogger); err != nil {
+		t.Fatalf("Dnsmasq: %v", err)
+	}
+
+	if _, err := os.Stat(sentinel); err != nil {
+		t.Errorf("sentinel removed or inaccessible; traversal guard did not hold: %v", err)
+	}
+}
