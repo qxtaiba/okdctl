@@ -2,6 +2,7 @@ package install
 
 import (
 	"context"
+	"fmt"
 	"path/filepath"
 
 	"github.com/qxtaiba/okdctl/internal/config"
@@ -47,8 +48,17 @@ func (p *Phase) StartWorkerVMs(ctx context.Context, cfg *config.Config, opts *Op
 		Targets: []string{"module.okd_cluster.proxmox_virtual_environment_vm.worker"},
 	}
 
+	snapPath, snapErr := tf.SnapshotState(ctx)
+	if snapErr != nil {
+		return &errtypes.ClusterError{Msg: "workers: state snapshot failed", Err: snapErr}
+	}
+
 	if err := tf.Apply(ctx, applyOpts); err != nil {
-		return &errtypes.ClusterError{Msg: "failed to start worker VMs", Err: err}
+		msg := "failed to start worker VMs"
+		if snapPath != "" {
+			msg = fmt.Sprintf("failed to start worker VMs (state backup: %s)", snapPath)
+		}
+		return &errtypes.ClusterError{Msg: msg, Err: err}
 	}
 
 	p.Log.Info("workers: all worker nodes started successfully")
