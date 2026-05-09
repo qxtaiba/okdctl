@@ -131,7 +131,7 @@ func defaultKeyMap() KeyMap {
 			key.WithHelp("↓/j", "down"),
 		),
 		Select: key.NewBinding(
-			key.WithKeys(" "),
+			key.WithKeys("space"),
 			key.WithHelp("space", "select"),
 		),
 		PageUp: key.NewBinding(
