@@ -2,9 +2,11 @@ package setup
 
 import (
 	"fmt"
+	"net/netip"
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
+	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/netutil"
 )
 
@@ -66,13 +68,26 @@ func ExtractNetworkConfig(cfg *config.Config) (gateway, netmask, dns, iface stri
 }
 
 // BuildIgnitionURLForNode builds the http:// ignition URL a node of the
-// given role fetches during FCOS first-boot.
-func BuildIgnitionURLForNode(cfg *config.Config, role phase.NodeRole) string {
+// given role fetches during FCOS first-boot. The payload contains the
+// cluster pull-secret, SSH authorized keys, and machine-config tokens;
+// the sole defence against passive credential capture is a private VLAN.
+// IgnitionServerIP must therefore be RFC1918, loopback, or link-local —
+// a public IP is rejected to prevent accidental credential exposure.
+func BuildIgnitionURLForNode(cfg *config.Config, role phase.NodeRole) (string, error) {
 	ignitionIP := cfg.HTTPServer.IgnitionServerIP
+
+	addr, err := netip.ParseAddr(ignitionIP)
+	if err != nil {
+		return "", &errtypes.ConfigError{Msg: fmt.Sprintf("ignition server IP %q is not a valid IP address", ignitionIP), Err: err}
+	}
+	if !addr.IsPrivate() && !addr.IsLoopback() && !addr.IsLinkLocalUnicast() {
+		return "", &errtypes.ConfigError{Msg: fmt.Sprintf("ignition server IP %q must be RFC1918, loopback, or link-local — HTTP ignition on a public address exposes cluster credentials", ignitionIP)}
+	}
+
 	ignitionPort := cfg.HTTPServer.Port
 	if ignitionPort == 0 {
 		ignitionPort = DefaultIgnitionPort
 	}
 	ignitionFile := role.String() + ".ign"
-	return fmt.Sprintf("http://%s:%d/ignition/%s", ignitionIP, ignitionPort, ignitionFile)
+	return fmt.Sprintf("http://%s:%d/ignition/%s", ignitionIP, ignitionPort, ignitionFile), nil
 }

@@ -144,7 +144,11 @@ func (p *Phase) verifyApacheListening(ctx context.Context, bindIP string) {
 }
 
 // ConfigureApache configures httpd for serving ignition payloads: port,
-// SELinux context, service enable, and ignition directory creation.
+// SELinux context, service enable, and ignition directory creation. The
+// payloads contain the cluster pull-secret, SSH authorized keys, and
+// machine-config tokens; confidentiality depends on the bastion being
+// isolated to a private VLAN — BuildIgnitionURLForNode enforces the
+// RFC1918 invariant at config time.
 func (p *Phase) ConfigureApache(ctx context.Context, cfg *config.Config) error {
 	p.Log.Info("apache: configuring httpd for serving ignition files")
 
