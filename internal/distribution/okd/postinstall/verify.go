@@ -200,7 +200,7 @@ func (p *Phase) waitForKubeVIPPing(ctx context.Context, vip string, opts *Option
 	}
 
 	dialer := &net.Dialer{Timeout: 2 * time.Second}
-	if err := system.WaitForWithTimeout(ctx, "kubevip", "port "+strconv.Itoa(phase.KubeAPIPort), func() bool {
+	if err := system.WaitForWithTimeout(ctx, "kubevip", "port "+strconv.Itoa(phase.KubeAPIPort), func(context.Context) bool {
 		conn, dErr := dialer.DialContext(ctx, "tcp", net.JoinHostPort(vip, strconv.Itoa(phase.KubeAPIPort)))
 		if dErr != nil {
 			return false

@@ -104,7 +104,7 @@ func DefaultWaitForOptions() WaitForOptions {
 // WaitFor polls check at opts.Interval until it returns true, ctx is
 // cancelled, or opts.Timeout elapses. A timeout that races with ctx
 // cancellation reports ctx.Err as the primary cause.
-func WaitFor(ctx context.Context, prefix, description string, check func() bool, opts WaitForOptions) error {
+func WaitFor(ctx context.Context, prefix, description string, check func(context.Context) bool, opts WaitForOptions) error {
 	if opts.Interval == 0 {
 		opts.Interval = 30 * time.Second
 	}
@@ -131,7 +131,7 @@ func WaitFor(ctx context.Context, prefix, description string, check func() bool,
 	startTime := time.Now()
 	polls := 0
 
-	if check() {
+	if check(ctx) {
 		logger.Info(readyMsg, "polls", polls, "elapsed", time.Since(startTime).Round(time.Second))
 		return nil
 	}
@@ -154,7 +154,7 @@ func WaitFor(ctx context.Context, prefix, description string, check func() bool,
 		case <-ticker.C:
 			polls++
 			elapsed := time.Since(startTime)
-			if check() {
+			if check(ctx) {
 				logger.Info(readyMsg, "polls", polls, "elapsed", elapsed.Round(time.Second))
 				return nil
 			}
@@ -168,7 +168,7 @@ func WaitFor(ctx context.Context, prefix, description string, check func() bool,
 
 // WaitForWithTimeout is a convenience wrapper around WaitFor that sets
 // opts.Timeout and opts.Logger without the caller building WaitForOptions.
-func WaitForWithTimeout(ctx context.Context, prefix, description string, check func() bool, timeout time.Duration, logger *slog.Logger) error {
+func WaitForWithTimeout(ctx context.Context, prefix, description string, check func(context.Context) bool, timeout time.Duration, logger *slog.Logger) error {
 	opts := DefaultWaitForOptions()
 	opts.Timeout = timeout
 	opts.Logger = logger

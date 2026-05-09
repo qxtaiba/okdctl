@@ -73,7 +73,7 @@ func TestRunCaptured_CtxCancel(t *testing.T) {
 func TestWaitFor_ReadyOnFirstCheck(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		ctx := context.Background()
-		err := WaitFor(ctx, "test", "initial check", func() bool { return true }, WaitForOptions{
+		err := WaitFor(ctx, "test", "initial check", func(context.Context) bool { return true }, WaitForOptions{
 			Interval: time.Second,
 			Timeout:  5 * time.Second,
 			Logger:   logutil.NopLogger,
@@ -87,7 +87,7 @@ func TestWaitFor_ReadyOnFirstCheck(t *testing.T) {
 func TestWaitFor_ReadyAfterTicks(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		calls := 0
-		check := func() bool {
+		check := func(context.Context) bool {
 			calls++
 			return calls >= 3
 		}
@@ -108,7 +108,7 @@ func TestWaitFor_ReadyAfterTicks(t *testing.T) {
 
 func TestWaitFor_Timeout(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		err := WaitFor(context.Background(), "test", "never-ready", func() bool { return false }, WaitForOptions{
+		err := WaitFor(context.Background(), "test", "never-ready", func(context.Context) bool { return false }, WaitForOptions{
 			Interval: 1 * time.Second,
 			Timeout:  5 * time.Second,
 			Logger:   logutil.NopLogger,
@@ -136,7 +136,7 @@ func TestWaitFor_CtxCancellation(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
 
-		err := WaitFor(ctx, "test", "cancelled", func() bool { return false }, WaitForOptions{
+		err := WaitFor(ctx, "test", "cancelled", func(context.Context) bool { return false }, WaitForOptions{
 			Interval: 1 * time.Second,
 			Timeout:  5 * time.Second,
 			Logger:   logutil.NopLogger,
@@ -152,7 +152,7 @@ func TestWaitFor_CtxCancellation(t *testing.T) {
 
 func TestWaitFor_DefaultInterval(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		err := WaitFor(context.Background(), "test", "default-interval", func() bool { return true }, WaitForOptions{
+		err := WaitFor(context.Background(), "test", "default-interval", func(context.Context) bool { return true }, WaitForOptions{
 			Interval: 0,
 			Timeout:  1 * time.Minute,
 			Logger:   logutil.NopLogger,
@@ -165,7 +165,7 @@ func TestWaitFor_DefaultInterval(t *testing.T) {
 
 func TestWaitForWithTimeout_Convenience(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		err := WaitForWithTimeout(context.Background(), "test", "convenience", func() bool { return true }, 5*time.Second, logutil.NopLogger)
+		err := WaitForWithTimeout(context.Background(), "test", "convenience", func(context.Context) bool { return true }, 5*time.Second, logutil.NopLogger)
 		if err != nil {
 			t.Errorf("err = %v", err)
 		}

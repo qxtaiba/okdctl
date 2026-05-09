@@ -581,7 +581,7 @@ func (p *Phase) attemptRollback(ctx context.Context, ic *ingressControllerInfo) 
 func (p *Phase) waitForRouterGone(ctx context.Context, icName string, timeout time.Duration) error {
 	deployName := fmt.Sprintf("router-%s", icName)
 
-	return system.WaitFor(ctx, "ingress", deployName+" termination", func() bool {
+	return system.WaitFor(ctx, "ingress", deployName+" termination", func(context.Context) bool {
 		result, _ := p.Exec.Run(ctx, "oc", "get", "deployment", deployName,
 			"-n", "openshift-ingress", "--no-headers", "--ignore-not-found")
 		// --ignore-not-found returns empty stdout when the deployment is gone.
