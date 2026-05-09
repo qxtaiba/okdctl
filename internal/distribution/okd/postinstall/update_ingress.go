@@ -443,6 +443,7 @@ func (p *Phase) convertToLoadBalancer(ctx context.Context, ic *ingressController
 	if err := p.waitForRouterGone(ctx, ic.Name, timeout); err != nil {
 		return fmt.Errorf("router-%s did not terminate: %w", ic.Name, err)
 	}
+	p.Log.Info("update-ingress: router terminated", "name", ic.Name)
 
 	_, err = p.Exec.RunWithStdinChecked(ctx, replacementJSON, "oc", "create", "-f", "-")
 	if err != nil {
@@ -563,6 +564,7 @@ func buildRollbackJSON(ic *ingressControllerInfo) (string, error) {
 // attemptRollback recreates the original IngressController from its captured
 // RawJSON. Errors are logged only — the caller already has a primary error.
 func (p *Phase) attemptRollback(ctx context.Context, ic *ingressControllerInfo) {
+	p.Log.Info("update-ingress: rollback: starting", "name", ic.Name)
 	rollbackJSON, err := buildRollbackJSON(ic)
 	if err != nil {
 		p.Log.Warn("update-ingress: rollback failed — could not build rollback json", "err", err)
