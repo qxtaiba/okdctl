@@ -36,7 +36,10 @@ func renderAndWrite(render func() (string, error), path string, mode os.FileMode
 // GenerateInstallConfig renders install-config.yaml into outputDir using
 // pull-secret and SSH key paths from cfg, then keeps a .backup copy before
 // openshift-install consumes the original during manifest generation.
-func (p *Phase) GenerateInstallConfig(_ context.Context, cfg *config.Config, outputDir string) error {
+func (p *Phase) GenerateInstallConfig(ctx context.Context, cfg *config.Config, outputDir string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	if err := system.EnsureDir(outputDir); err != nil {
 		return &errtypes.ConfigError{Msg: "failed to create output directory", Err: err}
 	}
@@ -174,7 +177,10 @@ func (p *Phase) InjectCustomManifests(ctx context.Context, projectRoot, clusterD
 // InjectCompactClusterManifests adds an ingress-controller placement
 // manifest when the cluster has no workers (compact topology). With
 // workers present, this is a no-op.
-func (p *Phase) InjectCompactClusterManifests(_ context.Context, clusterDir string, workerCount, masterCount int) error {
+func (p *Phase) InjectCompactClusterManifests(ctx context.Context, clusterDir string, workerCount, masterCount int) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	if workerCount > 0 {
 		return nil
 	}
