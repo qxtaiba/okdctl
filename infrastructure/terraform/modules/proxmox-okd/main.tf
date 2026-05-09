@@ -239,9 +239,6 @@ resource "proxmox_virtual_environment_vm" "master" {
     type         = "4m"
   }
 
-
-  depends_on = [proxmox_virtual_environment_vm.bootstrap]
-
   # prevent_destroy must be a literal boolean (hashicorp/terraform#3116 — not
   # gatable via variable). To destroy a protected cluster either:
   #   a) run: terraform state rm 'module.okd.proxmox_virtual_environment_vm.master[N]'
@@ -375,9 +372,6 @@ resource "proxmox_virtual_environment_vm" "worker" {
     datastore_id = var.os_storage
     type         = "4m"
   }
-
-
-  depends_on = [proxmox_virtual_environment_vm.master]
 
   lifecycle {
     precondition {
