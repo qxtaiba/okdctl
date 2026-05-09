@@ -44,12 +44,18 @@ func Acquire(projectRoot, verb string) (*Lock, error) {
 			}
 		}
 	} else if !errors.Is(err, os.ErrNotExist) {
-		return nil, fmt.Errorf("runlock: lstat %s: %w", path, err)
+		return nil, &errtypes.ConfigError{
+			Msg: fmt.Sprintf("runlock: lstat %s", path),
+			Err: err,
+		}
 	}
 
 	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|syscall.O_NOFOLLOW, 0o600)
 	if err != nil {
-		return nil, fmt.Errorf("runlock: open %s: %w", path, err)
+		return nil, &errtypes.ConfigError{
+			Msg: fmt.Sprintf("runlock: open %s", path),
+			Err: err,
+		}
 	}
 
 	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
