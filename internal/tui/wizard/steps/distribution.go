@@ -162,7 +162,7 @@ func (s *DistributionStep) handleNavigationKey(msg tea.KeyPressMsg) (wizard.Wiza
 	var cmd tea.Cmd
 	s.versionSelector, cmd = s.versionSelector.Update(msg)
 	selected := s.versionSelector.Selected()
-	s.syncSelectedVersion(selected)
+	s.syncSelectedVersion(&selected)
 
 	cmds := []tea.Cmd{cmd, func() tea.Msg { return wizard.ConfigSyncMsg{StepID: s.ID()} }}
 	if !selected.InDropdown {
@@ -175,8 +175,8 @@ func (s *DistributionStep) handleNavigationKey(msg tea.KeyPressMsg) (wizard.Wiza
 // the patch version for a patch row, or the latest patch for a minor row.
 // Called after every cursor move so the live cfg / context badge tracks
 // the cursor like SelectField's Value() does (cursor IS the live pick).
-func (s *DistributionStep) syncSelectedVersion(selected components.Option) {
-	if selected.ID == "" {
+func (s *DistributionStep) syncSelectedVersion(selected *components.Option) {
+	if selected == nil || selected.ID == "" {
 		return
 	}
 	if strings.HasPrefix(selected.ID, "minor:") {
