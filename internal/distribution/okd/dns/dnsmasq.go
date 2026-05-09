@@ -23,6 +23,13 @@ const dnsmasqService = "dnsmasq"
 // Tests override this var to redirect writes to a t.TempDir().
 var dnsmasqConfigDir = phase.DefaultDNSMasqConfigDir
 
+// validateDnsmasqConfigFn and restartDnsmasqFn are package-level vars so
+// tests can inject fakes without a real dnsmasq binary on PATH.
+var (
+	validateDnsmasqConfigFn = ValidateDnsmasqConfig
+	restartDnsmasqFn        = RestartDnsmasq
+)
+
 var validConfigNameRegex = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$`)
 
 // validConnectionNameRegex is an allowlist for nmcli connection names. It

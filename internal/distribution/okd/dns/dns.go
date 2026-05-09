@@ -255,7 +255,7 @@ func validateAndRestartDnsmasq(ctx context.Context, configName string) error {
 		_ = system.CopyFile(backupPath, configPath)
 	}
 
-	if err := ValidateDnsmasqConfig(ctx); err != nil {
+	if err := validateDnsmasqConfigFn(ctx); err != nil {
 		restore()
 		return errors.Join(
 			fmt.Errorf("dnsmasq config validation failed — previous config restored"),
@@ -263,7 +263,7 @@ func validateAndRestartDnsmasq(ctx context.Context, configName string) error {
 		)
 	}
 
-	if err := RestartDnsmasq(ctx); err != nil {
+	if err := restartDnsmasqFn(ctx); err != nil {
 		restore()
 		return fmt.Errorf("failed to restart dnsmasq — previous config restored: %w", err)
 	}
