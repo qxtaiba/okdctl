@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/qxtaiba/okdctl/internal/executor"
 	"github.com/qxtaiba/okdctl/internal/logutil"
@@ -341,6 +342,61 @@ func (t *Executor) HasState() bool {
 		return false
 	}
 	return len(s.Resources) > 0
+}
+
+// SnapshotState copies terraform.tfstate to terraform.tfstate.<timestamp>.bak
+// in WorkDir immediately before a destructive operation. Returns the snapshot
+// path so callers can include it in error messages. Returns ("", nil) when no
+// state file is present — callers treat an empty path as "nothing to snapshot".
+// A write failure is a hard error; callers must not proceed with the
+// destructive operation without a saved backup.
+func (t *Executor) SnapshotState(ctx context.Context) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+	src := filepath.Join(t.WorkDir, "terraform.tfstate")
+	if !system.FileExists(src) {
+		return "", nil
+	}
+	data, err := os.ReadFile(src)
+	if err != nil {
+		return "", fmt.Errorf("terraform snapshot: read state: %w", err)
+	}
+	ts := strings.ReplaceAll(time.Now().UTC().Format(time.RFC3339), ":", "-")
+	dst := filepath.Join(t.WorkDir, "terraform.tfstate."+ts+".bak")
+	if err := system.AtomicWrite(dst, data, 0o600); err != nil {
+		return "", fmt.Errorf("terraform snapshot: write %s: %w", dst, err)
+	}
+	t.pruneSnapshots()
+	return dst, nil
+}
+
+// pruneSnapshots removes older terraform.tfstate.*.bak files from WorkDir,
+// keeping only the 5 most recent. os.ReadDir returns entries sorted by name;
+// because names encode UTC timestamps (lexicographic == chronological), no
+// additional sort step is needed.
+func (t *Executor) pruneSnapshots() {
+	entries, err := os.ReadDir(t.WorkDir)
+	if err != nil {
+		t.logger.Warn("terraform: snapshot prune: cannot read workdir", "dir", t.WorkDir, "err", err)
+		return
+	}
+	const retain = 5
+	var snaps []string
+	for _, e := range entries {
+		name := e.Name()
+		if strings.HasPrefix(name, "terraform.tfstate.") && strings.HasSuffix(name, ".bak") {
+			snaps = append(snaps, filepath.Join(t.WorkDir, name))
+		}
+	}
+	if len(snaps) <= retain {
+		return
+	}
+	for _, old := range snaps[:len(snaps)-retain] {
+		if err := os.Remove(old); err != nil && !os.IsNotExist(err) {
+			t.logger.Warn("terraform: snapshot prune: remove failed", "path", old, "err", err)
+		}
+	}
 }
 
 // ZeroizeEnv overwrites and clears the credential strings stored in the

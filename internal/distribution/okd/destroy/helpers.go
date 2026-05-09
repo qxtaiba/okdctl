@@ -128,6 +128,11 @@ func (p *Phase) destroyInfrastructure(ctx context.Context, opts *Options) error 
 		return &errtypes.ClusterError{Msg: "terraform init failed", Err: err}
 	}
 
+	snapPath, snapErr := tf.SnapshotState(ctx)
+	if snapErr != nil {
+		return &errtypes.ClusterError{Msg: "terraform destroy: state snapshot failed", Err: snapErr}
+	}
+
 	p.Log.Info("terraform: destroying infrastructure", "env", opts.TerraformEnv)
 	p.Log.Warn("terraform: this operation cannot be undone")
 
@@ -137,7 +142,11 @@ func (p *Phase) destroyInfrastructure(ctx context.Context, opts *Options) error 
 		Targets:     opts.TerraformTargets,
 		UsePlan:     true, // use safer plan-then-apply approach
 	}); err != nil {
-		return &errtypes.ClusterError{Msg: "terraform destroy failed", Err: err}
+		msg := "terraform destroy failed"
+		if snapPath != "" {
+			msg = fmt.Sprintf("terraform destroy failed (state backup: %s)", snapPath)
+		}
+		return &errtypes.ClusterError{Msg: msg, Err: err}
 	}
 
 	if err := tf.CleanupPlans(); err != nil {

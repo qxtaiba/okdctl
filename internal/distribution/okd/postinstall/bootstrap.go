@@ -2,6 +2,7 @@ package postinstall
 
 import (
 	"context"
+	"fmt"
 	"path/filepath"
 
 	"github.com/qxtaiba/okdctl/internal/config"
@@ -49,11 +50,20 @@ func (p *Phase) CleanupBootstrap(ctx context.Context, cfg *config.Config, opts *
 		return &errtypes.ClusterError{Msg: "bootstrap: terraform plan failed", Err: err}
 	}
 
+	snapPath, snapErr := tf.SnapshotState(ctx)
+	if snapErr != nil {
+		return &errtypes.ClusterError{Msg: "bootstrap: state snapshot failed", Err: snapErr}
+	}
+
 	p.Log.Info("bootstrap: applying — destroying bootstrap vm")
 	if err := tf.Apply(ctx, terraform.ApplyOptions{
 		PlanFile: planPath,
 	}); err != nil {
-		return &errtypes.ClusterError{Msg: "bootstrap: terraform apply failed", Err: err}
+		msg := "bootstrap: terraform apply failed"
+		if snapPath != "" {
+			msg = fmt.Sprintf("bootstrap: terraform apply failed (state backup: %s)", snapPath)
+		}
+		return &errtypes.ClusterError{Msg: msg, Err: err}
 	}
 
 	p.Log.Info("bootstrap: vm destroyed", "cluster", cfg.Cluster.Name)
