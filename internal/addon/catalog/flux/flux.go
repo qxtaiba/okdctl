@@ -4,8 +4,10 @@
 package flux
 
 import (
+	"bufio"
 	"context"
 	"fmt"
+	"log/slog"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -14,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/crypto/ssh"
 	"sigs.k8s.io/yaml"
 
 	"github.com/qxtaiba/okdctl/internal/addon"
@@ -30,12 +33,13 @@ const (
 // Settings keys consumed by the Flux addon. Named here so callers (install
 // wizard, validators, gitops bootstrap) reference the same string.
 const (
-	SettingRepository        = "repository"
-	SettingBranch            = "branch"
-	SettingPath              = "path"
-	SettingProvider          = "provider"
-	SettingControllerTimeout = "controller_timeout"
-	SettingGitSyncTimeout    = "git_sync_timeout"
+	SettingRepository         = "repository"
+	SettingBranch             = "branch"
+	SettingPath               = "path"
+	SettingProvider           = "provider"
+	SettingControllerTimeout  = "controller_timeout"
+	SettingGitSyncTimeout     = "git_sync_timeout"
+	SettingGitHostFingerprint = "git_host_fingerprint"
 )
 
 // k8sBoolTrue is the literal Kubernetes returns for boolean-valued status
@@ -409,6 +413,10 @@ func (f *Flux) createDeployKeySecret(ctx context.Context, env *addon.Environment
 		return fmt.Errorf("failed to get host key for %s: %w", host, err)
 	}
 
+	if err := verifyKeyscanFingerprint(knownHostsResult.Stdout, host, fs.GitHostFingerprint, env.Logger); err != nil {
+		return fmt.Errorf("flux: host key verification failed: %w", err)
+	}
+
 	manifest, err := buildFluxDeployKeySecret("flux-system", "flux-system",
 		privateKey, publicKey, []byte(knownHostsResult.Stdout))
 	if err != nil {
@@ -422,6 +430,39 @@ func (f *Flux) createDeployKeySecret(ctx context.Context, env *addon.Environment
 
 	env.Logger.Info("flux: deploy key secret applied")
 	return nil
+}
+
+// verifyKeyscanFingerprint validates the output of ssh-keyscan against an
+// operator-configured SHA256 pin. When expected is non-empty, every parsed
+// key's fingerprint is compared; a match returns nil. When expected is empty,
+// observed fingerprints log at Warn so the operator can pin on the next
+// deploy and nil is returned (TOFU preserved). A non-empty expected that
+// matches no key returns an error naming both expected and observed values.
+func verifyKeyscanFingerprint(keyscanOut, host, expected string, log *slog.Logger) error {
+	var observed []string
+	sc := bufio.NewScanner(strings.NewReader(keyscanOut))
+	for sc.Scan() {
+		line := sc.Text()
+		if strings.HasPrefix(line, "#") || strings.TrimSpace(line) == "" {
+			continue
+		}
+		key, _, _, _, err := ssh.ParseAuthorizedKey([]byte(line))
+		if err != nil {
+			continue
+		}
+		fp := ssh.FingerprintSHA256(key)
+		if expected != "" && fp == expected {
+			return nil
+		}
+		observed = append(observed, fp)
+	}
+	if expected == "" {
+		log.Warn("flux: git host fingerprint not pinned — set addons.flux.settings.git_host_fingerprint to pin",
+			"host", host, "observed_fingerprints", strings.Join(observed, ", "))
+		return nil
+	}
+	return fmt.Errorf("git host key mismatch for %s: expected %s, observed [%s]",
+		host, expected, strings.Join(observed, ", "))
 }
 
 // gitHost extracts the host portion of a git repository URL. It supports

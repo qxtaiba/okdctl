@@ -2,17 +2,19 @@ package flux
 
 // Settings is the typed representation of the flux addon's settings map.
 type Settings struct {
-	Repository string
-	Branch     string
-	Path       string
+	Repository         string
+	Branch             string
+	Path               string
+	GitHostFingerprint string
 }
 
 // DecodeSettings converts the flat settings map into a Settings value.
 func (f *Flux) DecodeSettings(settings map[string]string) (any, error) {
 	return Settings{
-		Repository: settings[SettingRepository],
-		Branch:     orDefault(settings[SettingBranch], "main"),
-		Path:       orDefault(settings[SettingPath], "kubernetes/clusters/production"),
+		Repository:         settings[SettingRepository],
+		Branch:             orDefault(settings[SettingBranch], "main"),
+		Path:               orDefault(settings[SettingPath], "kubernetes/clusters/production"),
+		GitHostFingerprint: settings[SettingGitHostFingerprint],
 	}, nil
 }
 
