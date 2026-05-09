@@ -166,6 +166,7 @@ func runDeployDryRun(ctx context.Context, cfg *config.Config, w io.Writer) error
 		proxmox.WithLogger(tui.SimpleLogger()),
 		proxmox.WithEnv(creds.Env()),
 	)
+	defer prov.ZeroizeEnv()
 	if connErr := prov.Connect(ctx, cfg); connErr != nil {
 		return &errtypes.ConfigError{Msg: "dry-run: provider connect failed", Err: connErr}
 	}
