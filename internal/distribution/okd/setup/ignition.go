@@ -94,14 +94,34 @@ func (p *Phase) GenerateInstallConfig(_ context.Context, cfg *config.Config, out
 	return nil
 }
 
+// ManifestsSentinel is the path of the completion sentinel written by
+// GenerateManifests on success. AlreadyDone for StepGenerateManifests
+// requires both the manifests/ directory and this file to exist.
+func ManifestsSentinel(clusterDir string) string {
+	return filepath.Join(clusterDir, "manifests", ".complete")
+}
+
+// IgnitionSentinel is the path of the completion sentinel written by
+// GenerateIgnitionConfigs on success. AlreadyDone for StepGenerateIgnition
+// keys on this file rather than the implicit presence of every .ign file —
+// a partial mid-write state would leave the .ign files present but
+// malformed.
+func IgnitionSentinel(clusterDir string) string {
+	return filepath.Join(clusterDir, ".ignition.complete")
+}
+
 // GenerateManifests invokes "openshift-install create manifests" to expand
-// install-config.yaml into the full manifest set under clusterDir.
+// install-config.yaml into the full manifest set under clusterDir, then
+// writes ManifestsSentinel to mark a clean completion.
 func (p *Phase) GenerateManifests(ctx context.Context, clusterDir string) error {
 	_, err := p.Exec.RunChecked(ctx, openshiftInstallBin, "create", "manifests", "--dir", clusterDir)
 	if err != nil {
 		return &errtypes.ClusterError{Msg: "openshift-install create manifests failed", Err: err}
 	}
 
+	if err := system.AtomicWrite(ManifestsSentinel(clusterDir), nil, 0o644); err != nil {
+		return &errtypes.ClusterError{Msg: "failed to write manifests sentinel", Err: err}
+	}
 	return nil
 }
 
@@ -176,8 +196,9 @@ func (p *Phase) InjectCompactClusterManifests(_ context.Context, clusterDir stri
 	return nil
 }
 
-// GenerateIgnitionConfigs invokes "openshift-install create ignition-configs"
-// and validates that each expected .ign file exists and is non-trivial in size.
+// GenerateIgnitionConfigs invokes "openshift-install create ignition-configs",
+// validates that each expected .ign file exists and is non-trivial in size,
+// then writes IgnitionSentinel to mark a clean completion.
 func (p *Phase) GenerateIgnitionConfigs(ctx context.Context, clusterDir string) error {
 	_, err := p.Exec.RunChecked(ctx, openshiftInstallBin, "create", "ignition-configs", "--dir", clusterDir)
 	if err != nil {
@@ -188,6 +209,9 @@ func (p *Phase) GenerateIgnitionConfigs(ctx context.Context, clusterDir string) 
 		return &errtypes.ConfigError{Msg: "ignition file validation failed", Err: err}
 	}
 
+	if err := system.AtomicWrite(IgnitionSentinel(clusterDir), nil, 0o644); err != nil {
+		return &errtypes.ClusterError{Msg: "failed to write ignition sentinel", Err: err}
+	}
 	return nil
 }
 
