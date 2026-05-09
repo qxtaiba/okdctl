@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"slices"
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/distribution"
@@ -84,12 +85,11 @@ func (p *Phase) setupBaseSteps(cfg *config.Config, opts *Options) []distribution
 			SkipReason: "downloads disabled",
 			AlreadyDone: func(_ context.Context) (bool, error) {
 				binDir := phase.BinDirOrDefault(p.BinDir)
-				for _, bin := range []string{"openshift-install", "oc", "kubectl"} {
-					if !system.FileExists(filepath.Join(binDir, bin)) {
-						return false, nil
-					}
-				}
-				return true, nil
+				bins := []string{"openshift-install", "oc", "kubectl"}
+				missing := slices.ContainsFunc(bins, func(b string) bool {
+					return !system.FileExists(filepath.Join(binDir, b))
+				})
+				return !missing, nil
 			},
 			Exec: func(ctx context.Context) error {
 				if err := p.DownloadOKDTools(ctx, cfg.Distribution.Version, opts); err != nil {
