@@ -260,7 +260,6 @@ spurious mismatch.
 
 Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when bandwidth opens. Each references the audit finding ID for diff tracking; when a finding recurs in a later run, its entry Status+Evidence updates here rather than being duplicated.
 
-
 #### audit-api-design
 
 ##### `api:fde34e0c:opt-kubeconfig-env-binding` — opt kubeconfig env binding
@@ -298,7 +297,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Problem:** Provider struct still has public methods (Connect, Disconnect, Provision, PlanOnly) but no consumer-side interface. cli/helpers.go and install/phase.go take the concrete *okd.Provisioner.  
 **Fix:** If/when a second provider lands, define InfrastructureProvider interface in the distribution package (the consumer). Proxmox implements it structurally — no code change in proxmox/.  
 **Effort:** hours
-
 
 #### audit-cli-ux
 
@@ -373,7 +371,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Problem:** SetupKubeconfig appends `KUBECONFIG=<path>` to p.Exec.Env, making the kubeconfig path visible to every subprocess the executor spawns from that point forward — including unrelated tools (helm, ssh-keyscan, lsb_release, dpkg, rpm). The kubeconfig file contains bearer credentials for the cluster.  
 **Fix:** Couple with sec:7b2829bb: split Executor.Env into AuthEnv + Env, and push KUBECONFIG into AuthEnv. Only oc / helm / openshift-install invocations see AuthEnv; dpkg / rpm / lsb_release / ssh-keyscan do not.  
 **Effort:** hours
-
 
 #### audit-state-and-recovery
 
@@ -457,7 +454,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 #### audit-security
 
-
 #### audit-subprocess
 
 ##### `err:ddf885f4:errors-join-opportunity` — errors join opportunity
@@ -490,7 +486,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when bandwidth opens. Each references the audit finding ID for diff tracking; when a finding recurs in a later run, its entry Status+Evidence updates here rather than being duplicated. Total: 171 findings (3 blocker, 32 major, 77 minor, 59 suggestion).
 
-
 #### audit-security
 
 #### audit-subprocess
@@ -510,7 +505,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 #### audit-observability
 
 #### audit-modernization
-
 
 #### audit-code-smells
 
@@ -596,16 +590,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Add a unit test that asserts expectedHashiCorpGPGFingerprint is the canonical HashiCorp release-signing-key fingerprint at the time of the test. Could be a string-equality check against a comment-in-code citation of the canonical source, or a network-gated test that fetches from apt.releases.hashicorp.com/gpg and re-derives the fingerprint via gpg.  
 **Effort:** hours
 
-##### `sec:bbc23e42:noplogger-no-redact` — noplogger no redact
-
-**Status:** not started  
-**Severity:** suggestion  
-**Cluster:** redaction  
-**Evidence:** `internal/logutil/logutil.go:1-28`  
-**Problem:** NopLogger is the canonical no-op logger but is slog.New(slog.DiscardHandler) — it does NOT have RedactHandler installed. Production code paths that fall back to NopLogger (constructor's nil-logger argument) silently lose redaction even if the surrounding code thought it was protected. Today's call sites are bounded (test helpers, unconfigured-constructor fallback), but the pattern is brittle: a future logger.Info('...', 'password', secret) reaching NopLogger would silently bypass RedactHandler.  
-**Fix:** Change NopLogger to slog.New(NewRedactHandler(slog.DiscardHandler)) so any future redirection still applies redaction. Effectively a no-op change today; ensures the NopLogger contract stays consistent with SimpleLogger's policy.  
-**Effort:** hours
-
 ##### `sec:cfcdee2d:newinsecure-blast-radius` — newinsecure blast radius
 
 **Status:** not started  
@@ -646,16 +630,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/executor/executor.go:310-329`  
 **Problem:** RunInteractive calls exec.CommandContext but does not set cmd.Cancel + cmd.WaitDelay, so on ctx cancellation Go's default behaviour is SIGKILL the process. terraform.PlanStreamed flows through this path — a kill-9 mid-plan/apply leaves .terraform.tfstate.lock.info orphaned because terraform never receives SIGINT to release it gracefully. install/monitor.go::defaultStartMonitorCmd at L25-L33 is the canonical pattern this site should mirror.  
 **Fix:** Mirror monitor.go: set cmd.Cancel = func() error { return cmd.Process.Signal(syscall.SIGINT) } (terraform's documented soft-cancel signal) and cmd.WaitDelay = 30 * time.Second. Apply the same pair to Run/RunStreamed if they ever spawn a child that holds external locks.  
-**Effort:** hours
-
-##### `sub:0934cf1b:no-stderr-capture` — no stderr capture
-
-**Status:** not started  
-**Severity:** minor  
-**Cluster:** io-handling  
-**Evidence:** `internal/platform/packages.go:97-112`  
-**Problem:** IsInstalled calls cmd.Output() which captures stdout but discards stderr; a non-ExitError failure (queryCmd missing from PATH, ctx cancellation, I/O fault) yields fmt.Errorf('%s query: %w', m.queryCmd, err) with no diagnostic context. Sibling Install/Remove use system.RunCaptured which preserves stderr inside *SubprocessError.  
-**Fix:** Replace cmd.Output() with system.OutputCaptured(ctx, m.queryCmd, args...) and unwrap *SubprocessError when distinguishing ExitError vs not-found. Same gosec exemption (queryCmd is constructor-set) but stderr now flows.  
 **Effort:** hours
 
 ##### `sub:a6e38cc7:no-stderr-capture` — no stderr capture
@@ -792,16 +766,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 #### audit-iac-and-shell
 
-##### `iac:18a795d5:depends-on-bootstrap-artificial` — depends on bootstrap artificial
-
-**Status:** not started  
-**Severity:** minor  
-**Cluster:** hcl-destroy-ordering — seam→audit-state-and-recovery  
-**Evidence:** `infrastructure/terraform/modules/proxmox-okd/main.tf:243-243` + 1 more  
-**Problem:** master declares depends_on = [bootstrap]; worker declares depends_on = [master]. Neither references the other's attributes; at the Proxmox API level the resources are independent. The OKD-installer-level dependency (masters need bootstrap to come up to fetch ignition) is not a Terraform-graph concern. Hashicorp guidance: depends_on only when the dep cannot be expressed via attribute reference.  
-**Fix:** Drop both depends_on. Document destroy sequence in README or rely on okdctl's own two-phase destroy in internal/distribution/okd/destroy/. Verify with a dev destroy/apply cycle to rule out a Proxmox storage-release race.  
-**Effort:** hours
-
 ##### `iac:18a795d5:worker-data-disk-no-prevent-destroy` — worker data disk no prevent destroy
 
 **Status:** not started  
@@ -810,16 +774,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `infrastructure/terraform/modules/proxmox-okd/main.tf:328-339`  
 **Problem:** Workers attach a 500 GiB Ceph data disk by default (worker_data_disk_size_gb = 500 in variables.tf:85) under a dynamic disk block. Variable description warns that lowering destroys the disk, but the worker resource has no prevent_destroy = true (unlike masters), and disk is not in lifecycle.ignore_changes — only network_device, startup, cdrom, boot_order, efi_disk are. terraform apply with worker_data_disk_size_gb = 0 silently destroys the data disk. The variable description warns; the IaC layer doesn't.  
 **Fix:** Either (a) add prevent_destroy = true on the worker resource for production-mode (matching the master pattern + override.tf escape hatch documented at main.tf:245-254), or (b) extend lifecycle.ignore_changes to include disk for the data-disk attributes so subsequent applies do not size-down. Option (b) is narrower; option (a) is operator-grade.  
-**Effort:** hours
-
-##### `iac:04b033b9:provider-insecure-not-pinned-false` — provider insecure not pinned false
-
-**Status:** not started  
-**Severity:** suggestion  
-**Cluster:** hcl-credential-hygiene — seam→audit-security  
-**Evidence:** `infrastructure/terraform/environments/production/versions.tf:1-10`  
-**Problem:** Production env declares the bpg/proxmox provider via required_providers but has no provider "proxmox" {} block. The provider therefore consumes PROXMOX_VE_INSECURE from env. variables.tf:7 / main.tf:10 say DEV ONLY — but production HCL doesn't enforce that. An operator who exports PROXMOX_VE_INSECURE=true silently disables TLS verification with no audit trail in the .tf files.  
-**Fix:** Add an explicit provider "proxmox" {} block in production env that pins insecure = false. Endpoint / username / password keep coming from PROXMOX_VE_* env vars. Dev environments (when added) leave insecure unset.  
 **Effort:** hours
 
 #### audit-errors
@@ -915,16 +869,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Effort:** hours
 
 #### audit-concurrency
-
-##### `con:06f00bcb:ctx-ignored-file-io` — ctx ignored file io
-
-**Status:** not started  
-**Severity:** minor  
-**Cluster:** ctx-ignored  
-**Evidence:** `internal/distribution/okd/setup/apache.go:48-95` + 1 more  
-**Problem:** configureApachePort(_ context.Context, bindIP string) accepts ctx but never reads it. The body does substantial file I/O (system.CopyFile, os.ReadFile, bufio.Scanner of 1MiB buffer, AtomicWrite) that could hold the deploy ctx past a SIGINT. ensureIgnitionDir at L28 has the same shape. ConfigureApache (the caller) propagates a real ctx; dropping it inside the body breaks cancellation responsiveness for the whole apache-config step.  
-**Fix:** Either rename the param to a real `ctx context.Context` and check `if err := ctx.Err(); err != nil { return }` at the top of each branch (cheap cancellation gate), or drop the ctx parameter from the signature entirely if cancellation responsiveness is genuinely a non-goal here. The `_ context.Context` placeholder is the worst of both worlds — looks like ctx threading without delivering it.  
-**Effort:** hours
 
 ##### `con:8ea706f6:ctx-ignored-install-binary` — ctx ignored install binary
 
@@ -1150,26 +1094,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Wrap each return in &errtypes.UsageError{Msg: ..., Err: ...} so exitCodeFor() resolves to 64 (EX_USAGE), matching the documented taxonomy and the SetFlagErrorFunc pattern in root.go:256-259. Apply the same pattern to any other Args validator that returns a raw fmt.Errorf for arg-shape violations.  
 **Effort:** hours
 
-##### `ux:024a2c32:json-schema-status-incomplete` — json schema status incomplete
-
-**Status:** not started  
-**Severity:** minor  
-**Cluster:** json-stability — seam→audit-documentation  
-**Evidence:** `docs/cli/json-schema.md:12-40`  
-**Problem:** docs/cli/json-schema.md describes `okdctl status --output=json` with four top-level fields (api_reachable, nodes, degraded_operators, addons). The Go type emitted is okd.ClusterStatus (internal/distribution/okd/types.go) which carries six more documented fields: phase, version, api_server_url, console_url, conditions, message. Several are tagged `omitempty` and so may genuinely be absent on a healthy cluster, but `phase` is always emitted (it's a non-omitempty enum) and is missing from the schema doc.  
-**Fix:** Update docs/cli/json-schema.md `okdctl status --output=json` to include `phase` (always present) and the omitempty-tagged fields (version, api_server_url, console_url, conditions, message) with a 'present when non-empty' note. Per seam #13 this is single-command drift, not pattern-wide; the markdown owns it (audit-documentation). Logged here only because it touches the published JSON contract this skill declares stable.  
-**Effort:** hours
-
-##### `ux:073d24ed:deploy-example-uses-config-not-output-file` — deploy example uses config not output file
-
-**Status:** not started  
-**Severity:** minor  
-**Cluster:** flag-conventions — seam→audit-documentation  
-**Evidence:** `internal/cli/deploy.go:38-40`  
-**Problem:** deploy Example shows `okdctl deploy --yes --config my-cluster.yaml`. --config is the read-side persistent flag (root); --output-file is the deploy-specific write-side flag (defaults to okdctl.yaml). On --yes (non-interactive) deploy never enters the wizard and writes nothing through --output-file, so the example happens to work — but it conflates the two halves of the convention codified in CLAUDE.md §architecture (--output-file is the file destination). A user who copies this idiom thinks --config controls write destination.  
-**Fix:** Either drop the --config flag from the second example (default config file is okdctl.yaml — implicit reuse) or split into two: one showing read (`okdctl deploy --config my-cluster.yaml`) and one showing write (`okdctl deploy --yes --output-file my-cluster.yaml`). Regenerate docs/cli/ via `make docs`.  
-**Effort:** hours
-
 ##### `ux:4583b75b:config-describe-missing-long` — config describe missing long
 
 **Status:** not started  
@@ -1178,16 +1102,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/cli/config.go:19-22` + 1 more  
 **Problem:** configCmd is a parent verb (config show, config validate) and registers only a Short. The sibling parent groups in this repo (addonCmd L26-L30, releasesCmd L33-L37) all carry a Long that orients the user before they run a subcommand. describeCmd in status.go has the same omission. With no Long the help screen lists subcommands without context — fine for a power user, jarring for a first-timer.  
 **Fix:** Add a one-sentence Long to both configCmd and describeCmd that names the subcommands and points at the typical entry point. Mirrors the pattern in addonCmd and releasesCmd. Regenerate docs/cli/ via `make docs`.  
-**Effort:** hours
-
-##### `ux:8d8faa80:completion-bypasses-outorstdout` — completion bypasses outorstdout
-
-**Status:** not started  
-**Severity:** minor  
-**Cluster:** streams  
-**Evidence:** `internal/cli/completion.go:36-47`  
-**Problem:** runCompletion writes the generated shell script directly to os.Stdout via cmd.Root().GenBashCompletionV2(os.Stdout, true) instead of cmd.OutOrStdout(). The siblings (status, releases, addon list, addon verify, doctor) all funnel JSON/text through cmd.OutOrStdout(); completion is the lone exception. Tests cannot capture the output without process-level redirection, and the mismatch is a future trap when a maintainer adds output piping behaviour.  
-**Fix:** Pass cmd.OutOrStdout() (or cmd.Root().OutOrStdout() since cobra reuses the root writer) to all three Gen*Completion calls. Test-side wins: a captured-output test can assert on the first ~20 bytes of each shell's preamble.  
 **Effort:** hours
 
 ##### `ux:daf5bee9:kubeconfig-status-msg-bypasses-tui` — kubeconfig status msg bypasses tui
@@ -1250,27 +1164,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Decision needed, not a code change yet. Either (a) keep the current shape (warn-then-fail) and document doctor as orientation-only, or (b) escalate the no-config branch to sevFail so doctor's exit code is honest. Option (b) breaks `okdctl doctor && okdctl deploy` chained-on-success scripts. Recommend (a) plus a doc note in docs/doctor-checks.md naming this as the intended split.  
 **Effort:** hours
 
-##### `ux:aa84670c:version-cmd-uses-run-not-rune` — version cmd uses run not rune
-
-**Status:** not started  
-**Severity:** suggestion  
-**Cluster:** verb-noun  
-**Evidence:** `internal/cli/root.go:236-243`  
-**Problem:** versionCmd uses Run rather than RunE. Every other leaf command in the tree uses RunE so cobra propagates the error to ExecuteContext where exitCodeFor maps it. fmt.Fprintf return values are dropped (Run signature has no err). A failed write to a closed pipe (e.g. `okdctl version | head -c 0`) silently exits 0 instead of 141/EPIPE-shaped 1.  
-**Fix:** Convert Run to RunE returning the fmt.Fprintf error. Aligns with deployCmd, destroyCmd, etc. Net effect: a broken-pipe write becomes a tracked error rather than a silent zero exit.  
-**Effort:** hours
-
 #### audit-observability
-
-##### `obs:97cb8adf:fmt-sprintf-message-pattern` — fmt sprintf message pattern
-
-**Status:** not started  
-**Severity:** minor  
-**Cluster:** redaction-sink  
-**Evidence:** `internal/system/exec.go:117-135`  
-**Problem:** system.WaitFor builds the slog message via fmt.Sprintf and passes the rendered string as the message arg to logger.Info. Both 'prefix' and 'description' come from the caller and may grow to include cluster/path/host substrings — CLAUDE.md §credentials forbids X(fmt.Sprintf(...)) precisely because RedactHandler can only inspect attr keys/values, not pre-rendered message text. Today's call sites pass static prefix='ingress' and description='router-X termination'; tomorrow a description like fmt.Sprintf('VIP %s health', creds.Endpoint) silently leaks. The c07157e migration swept ~85 sites but missed this canonical helper.  
-**Fix:** Move prefix and description to slog attrs and keep the message static. Replace `waitMsg := fmt.Sprintf("%s: waiting for %s...", prefix, description); logger.Info(waitMsg)` with `logger.Info("waiting", "for", description, "prefix", prefix)`. Same shape for readyMsg → `logger.Info("ready", "for", description, "prefix", prefix, "polls", polls, "elapsed", elapsed.Round(time.Second))`. Net -2 LOC. Consider also folding the L164 Debug similarly. Verify the tui formatter renders 'prefix' as a leading group.  
-**Effort:** hours
 
 ##### `obs:eb479d86:sprintf-attr-value` — sprintf attr value
 
@@ -1302,27 +1196,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Drop both probe-fallback Info calls to Debug. L397 ('vm not yet enumerable, install phase will retry') stays at Info — it announces a deferred operation. Net 0 LOC.  
 **Effort:** hours
 
-##### `obs:632c9087:rollback-pair-not-spanned` — rollback pair not spanned
-
-**Status:** not started  
-**Severity:** suggestion  
-**Cluster:** span-retry-boundary  
-**Evidence:** `internal/distribution/okd/postinstall/update_ingress.go:444-573`  
-**Problem:** convertToLoadBalancer (L425+) is a destructive multi-step op (delete IC -> wait for router gone -> create replacement -> wait for new router up). The success path logs span boundaries ('converting ...', 'converted successfully'). The rollback path (attemptRollback at L560-L574) logs only the leaf success/failure outcomes — it does NOT log the entry into rollback. An operator following a JSON log stream sees 'failed to create replacement, attempting rollback' (L444) followed (much later) by 'rollback succeeded'. The intermediate rollback-build, rollback-apply moments are silent.  
-**Fix:** Add `p.Log.Info("update-ingress: rollback: starting", "name", ic.Name)` at the top of attemptRollback (L560). The existing trailing logs serve as the end-of-span. Symmetrically, the convertToLoadBalancer L437 'waiting for router deployment to terminate' span has no end log on success — add one. Net +2 LOC.  
-**Effort:** hours
-
 #### audit-modernization
-
-##### `mod:15ba17da:use-slices-contains` — use slices contains
-
-**Status:** not started  
-**Severity:** minor  
-**Cluster:** slices-maps — related: mod:262af6e4:use-slices-contains  
-**Evidence:** `internal/distribution/okd/destroy/steps.go:60-69`  
-**Problem:** destroyTracker.terraformFailed iterates t.failures looking for a literal string match — slices.Contains expresses the intent in one line. Identical pattern to the cleanup.Kind.IsValid case (mod:262af6e4); both reflect the same pre-1.21 idiom not yet migrated.  
-**Fix:** Replace the inner loop with `return slices.Contains(t.failures, "terraform destroy")`. Keeps the lock take/defer wrapping unchanged. Net delete: ~5 LOC.  
-**Effort:** hours
 
 ##### `mod:ddf885f4:use-slices-contains` — use slices contains
 
@@ -1362,26 +1236,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/distribution/okd/setup/tools.go:260-264`  
 **Problem:** getToolVersion calls `strings.Split(strings.TrimSpace(string(output)), "\n")` only to read the first line. With strings.Lines the read becomes a single-iteration loop with no allocation; the surrounding `if len(lines) > 0` guard goes away because the iterator yields zero times for an empty TrimSpace result.  
 **Fix:** Replace with `for line := range strings.Lines(string(output)) { return strings.TrimSpace(line) }; return "unknown"`. No slice materialisation, ~3 LOC removed.  
-**Effort:** hours
-
-##### `mod:b8687976:slices-clip-dedup` — slices clip dedup
-
-**Status:** not started  
-**Severity:** suggestion  
-**Cluster:** slices-maps  
-**Evidence:** `internal/distribution/okd/releases/fetcher.go:101-113`  
-**Problem:** deduplicateReleases hand-rolls a seen-set + filtered-result loop. With sortAndClassifySeries fully reordering downstream, a sort+slices.CompactFunc shape would dedup with smaller surface area. Flagging as low-confidence because preserving input order is the seen-set form's distinguishing property — only valid if downstream is provably order-insensitive.  
-**Fix:** Optional. The seen-set form preserves input order, which slices.CompactFunc does not without a prior sort — so the swap is NOT semantics-preserving for callers that depend on iteration order downstream. Audit the callers (sortAndClassifySeries fully reorders so it appears safe). If yes: `slices.SortFunc(releases, ...); return slices.CompactFunc(releases, func(a, b githubRelease) bool { return a.TagName == b.TagName })`. Risk medium because of the order-dependency check.  
-**Effort:** hours
-
-##### `mod:c19ee328:slices-containsfunc-allexist` — slices containsfunc allexist
-
-**Status:** not started  
-**Severity:** suggestion  
-**Cluster:** slices-maps  
-**Evidence:** `internal/distribution/okd/setup/steps.go:85-93`  
-**Problem:** AlreadyDone for the install-binaries step iterates [openshift-install, oc, kubectl] and returns false on the first missing entry. slices.ContainsFunc with negation expresses 'all-of' cleanly and matches the repo's any-of/all-of style elsewhere.  
-**Fix:** Rewrite as `bins := []string{"openshift-install", "oc", "kubectl"}; missing := slices.ContainsFunc(bins, func(b string) bool { return !system.FileExists(filepath.Join(binDir, b)) }); return !missing, nil`. Same short-circuit semantics. Net -3 LOC.  
 **Effort:** hours
 
 ##### `mod:c19ee328:slices-containsfunc-ignition` — slices containsfunc ignition
@@ -1456,29 +1310,9 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Either expand cli/flags.go to hold every shared flag-name constant (`flagOutputFormat`, `flagOutputFormatShort`, `flagConfig`, `flagLogLevel`, `flagLogFormat`, `flagLogFile`, `annotationRequiresRoot`) — see related smell:fd2125dd / smell:26a430ee — or inline the two existing constants back to their use sites and delete the file. The half-and-half state is the smell.  
 **Effort:** hours
 
-##### `smell:0f076161:destroy-only-stringly-typed` — destroy only stringly typed
-
-**Status:** not started  
-**Severity:** suggestion  
-**Cluster:** magic-strings — seam→audit-cli-ux  
-**Evidence:** `internal/cli/destroy.go:45-78`  
-**Problem:** The `--only` flag accepts the bare strings "bootstrap"/"masters"/"workers"/"vms" via a switch. Compared to the parallel `--target` flag (which is regex-validated against a typed allowlist), `--only` reads as ad-hoc — there is no constant set, the help text duplicates the switch arms, and a future scope (e.g. "control-plane-only") would need updates in 3 places (the switch, the error message, and the help string).  
-**Fix:** Define `type destroyScope string` with constants {scopeBootstrap, scopeMasters, scopeWorkers, scopeVMs} plus `validDestroyScopes()` so the help text, switch, and error message all read from one source. Cobra completion can return validDestroyScopes().  
-**Effort:** hours
-
-##### `smell:1d5afa08:release-type-unknown-default` — release type unknown default
-
-**Status:** not started  
-**Severity:** suggestion  
-**Cluster:** magic-strings — seam→audit-errors  
-**Evidence:** `internal/distribution/okd/releases/types.go:85-107`  
-**Problem:** `UnmarshalJSON` for `ReleaseType` falls through to `*t = ReleaseTypeStable` on any unknown string. The label function returns "unknown" for the same out-of-range input on the marshal side. The asymmetry — produce "unknown" but consume by silent downgrade to "stable" — is a footgun: a feed entry with a typed-as-LTS-but-spelled-wrong field is round-tripped as Stable.  
-**Fix:** Either reject unknown values with `return fmt.Errorf("unknown release type %q", s)` (caller's UnmarshalJSON branches on this) or add an explicit `ReleaseTypeUnknown` constant and round-trip through it. Today's implicit-stable default loses information on cache-format drift.  
-**Effort:** hours
-
 ##### `smell:39c75e91:yes-no-magic-strings` — yes no magic strings
 
-**Status:** not started  
+**Status:** not started (proposed EqualFold fix would break confirm_test.go YES/Yes→false assertions; needs maintainer decision: tighten tests or accept case-insensitive)  
 **Severity:** suggestion  
 **Cluster:** magic-strings  
 **Evidence:** `internal/cli/confirm.go:60-62`  
@@ -1516,16 +1350,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Lift the four durations to package-level `const metricsReadHeaderTimeout = 5 * time.Second` etc. above startMetricsServer, with a single doc comment explaining 'Prometheus scrapers reconnect every interval; idle 60s leaves slack for slow scrapers'.  
 **Effort:** hours
 
-##### `smell:8154ab0f:doctor-severity-string-roundtrip` — doctor severity string roundtrip
-
-**Status:** not started  
-**Severity:** suggestion  
-**Cluster:** magic-strings  
-**Evidence:** `internal/cli/doctor.go:87-98`  
-**Problem:** `severity` is a typed iota with three values; `sevString` switches on it and returns "ok"/"warn"/"fail"/"unknown". The three printable forms also exist as styled strings in `severityMarkers` ("[ok]"/"[warn]"/"[fail]") and as JSON values via sevString again. Three independent surface forms diverged from a common 3-state — risk is low but the JSON contract has zero test coverage of the unknown branch.  
-**Fix:** Add `func (s severity) String() string` (with the existing body), drop sevString. severityMarkers can call .String() to derive the bracketed label. The 'unknown' branch is unreachable if severity is constructed via the iota constants — replace with a panic guard or document why it's reachable.  
-**Effort:** hours
-
 ##### `smell:92553fff:summary-hardcoded-3state-fmt` — summary hardcoded 3state fmt
 
 **Status:** not started  
@@ -1534,26 +1358,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/cli/summary.go:177-177` + 1 more  
 **Problem:** `fmt.Sprintf("%-4s  %s", displayStatus(&s), d)` — the width 4 is the length of "fail" / "skip" rounded up; "%-4s" hardcodes the longest current value of stepDisplayStatus. Adding a fourth state ("warn") would silently cause column drift. Width should be max(len(stepStatus*)) computed once.  
 **Fix:** Compute `const stepStatusColWidth = 4` at the top of summary.go alongside the stepDisplayStatus declarations, with a doc comment naming why 4 (= max len of current values). Replace both "%-4s" sites. Or use tabwriter as the rest of the package does for columnar output.  
-**Effort:** hours
-
-##### `smell:d31d1b9d:health-stringly-typed` — health stringly typed
-
-**Status:** not started  
-**Severity:** suggestion  
-**Cluster:** magic-strings  
-**Evidence:** `internal/cli/status.go:258-268` + 1 more  
-**Problem:** Addon health is encoded as the bare strings "healthy" / "degraded" / "not enabled" at two sites. The same vocabulary already has a typed home — `okd.AddonStatus.Healthy` is a bool plus an `Error` string. The string literals should be a small typed enum (or a method on AddonStatus) so the printer cannot drift from the JSON output.  
-**Fix:** Add `func (a AddonStatus) Label() string` to internal/distribution/okd/types.go returning healthy/degraded/not-enabled. Replace both call sites in status.go with a.Label() (the describe path also keeps appending err.Error()).  
-**Effort:** hours
-
-##### `smell:d9f7733e:bundle-category-magic-string-pair` — bundle category magic string pair
-
-**Status:** not started  
-**Severity:** suggestion  
-**Cluster:** magic-strings  
-**Evidence:** `internal/cli/debug_bundle.go:29-36`  
-**Problem:** `categoryMustGather` / `categoryTerraformState` / `categoryDoctor` / `categoryConfig` / `categoryLogFile` / `categorySystemMeta` are typed `string` constants used as `manifestEntry.Name` slot keys. They're already centralized — the smell is the missing typed wrapper. Adjacent code wraps `bundleStatus` as a typed string with constants; `categoryX` should follow the same shape (`type bundleCategory string`) so a future entry that puts a category-typed value into manifestEntry.Name is compile-checked.  
-**Fix:** Add `type bundleCategory string`, retag the 6 constants as `bundleCategory`, change manifestEntry.Name to `bundleCategory`. JSON wire format is unchanged because Go marshals string-typed values as strings.  
 **Effort:** hours
 
 ##### `smell:daf5bee9:any-yaml-traversal` — any yaml traversal
@@ -1576,16 +1380,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `go.sum:125-153`  
 **Problem:** go.sum still lists four YAML engines: sigs.k8s.io/yaml v1.6.0 (direct), go.yaml.in/yaml/v2 v2.4.3 (transitive), go.yaml.in/yaml/v3 v3.0.4 (transitive), and gopkg.in/yaml.v3 v3.0.1 (transitive via testify/check.v1). CLAUDE.md tripwire claims the count is 'down from four' to three, but the fourth (gopkg.in/yaml.v3) is still pulled via testify's gopkg.in/check.v1 dep tree.  
 **Fix:** Either (a) update CLAUDE.md §dependencies tripwire text to read 'four YAML engines (one direct + three transitive)' so the running count matches reality, or (b) prune testify→gopkg.in/check.v1 by dropping testify if it is not actually used in okdctl tests (grep finds zero call sites). No code change either way; this is a doc/policy reconciliation.  
-**Effort:** hours
-
-##### `dep:b803fcb7:golangci-version-drift` — golangci version drift
-
-**Status:** not started  
-**Severity:** minor  
-**Cluster:** pin-stability  
-**Evidence:** `.github/workflows/ci.yml:19-21` + 1 more  
-**Problem:** Makefile installs golangci-lint v2.12.1; ci.yml job lint-go pins golangci-lint-action with version v2.12.2. A developer running `make lint` locally executes a different linter than CI, so a clean local run can fail in CI on a rule that landed in v2.12.2 (or vice versa). The pre-commit lefthook hook does not run golangci-lint at all (only gofumpt + go vet), so the local feedback loop relies on `make lint`.  
-**Fix:** Bump Makefile install line to @v2.12.2 (or whatever ci.yml currently pins). Better: extract the version into a file (e.g. .golangci-version) and have both Makefile and ci.yml read it, so future bumps are atomic. Lowest-risk fix is the literal sync.  
 **Effort:** hours
 
 ##### `dep:3295df72:transitive-test-deps-from-proxmox` — transitive test deps from proxmox
@@ -1712,26 +1506,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 #### audit-tests
 
-##### `tst:40d315ad:destructive-happy-untested` — destructive happy untested
-
-**Status:** not started  
-**Severity:** major  
-**Cluster:** destructive-untested  
-**Evidence:** `internal/addon/catalog/flux/flux.go:237-251`  
-**Problem:** Flux.Uninstall calls helm uninstall flux-instance + flux-operator and 'oc delete ns flux-system'. There is no test exercising Uninstall even though flux is the only addon registered today and Manager.installAndVerify rolls back via Uninstall on every install failure. Manager rollback is tested with stubs, but the real Flux.Uninstall body is unguarded. A regression that swaps 'oc delete ns flux-system' for 'oc delete ns' (typo loses the namespace arg) would propagate through manager rollback and delete every namespace.  
-**Fix:** Add internal/addon/catalog/flux/flux_uninstall_test.go installing fake oc/helm via PATH (pattern-match cli/cleanup_test.go::installFakeOC), running Uninstall, and asserting: (1) the three commands fire in order, (2) each carries its expected argv ('helm uninstall flux-instance --namespace flux-system', 'oc delete ns flux-system'), (3) per-command failures are logged but do not abort the sequence (warnOnErr contract).  
-**Effort:** hours
-
-##### `tst:d7ce9d16:destructive-happy-untested` — destructive happy untested
-
-**Status:** not started  
-**Severity:** major  
-**Cluster:** destructive-untested — seam→audit-state-and-recovery  
-**Evidence:** `internal/distribution/okd/dns/dns.go:175-277`  
-**Problem:** DeployBootstrap, DeployProduction, validateAndRestartDnsmasq, and the rollback-on-failure path that re-CopyFiles the .backup over /etc/dnsmasq.d/<name>.conf are all untested. validateAndRestartDnsmasq is the rollback-on-validation-failure shape that haproxy_rollback_test.go locks for the parallel haproxy path, but the dnsmasq twin has no test — a regression that silently drops the restore() call in the validation-fail branch leaves the cluster with broken DNS and no way to recover.  
-**Fix:** Add internal/distribution/okd/dns/dns_destructive_test.go redirecting dnsmasqConfigDir to t.TempDir(), seeding a fixture, and exercising: (1) validateAndRestartDnsmasq happy path leaves config in place and removes .backup, (2) ValidateDnsmasqConfig failure restores from .backup, (3) RestartDnsmasq failure restores from .backup, (4) missing .backup is not a precondition. Inject ValidateDnsmasqConfig/RestartDnsmasq via package vars (or extract a small struct) so the test doesn't need a real dnsmasq binary. Pattern-match setup/haproxy_rollback_test.go::TestAttemptHAProxyRollback.  
-**Effort:** days
-
 ##### `tst:de572c63:destructive-happy-untested` — destructive happy untested
 
 **Status:** not started  
@@ -1741,7 +1515,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Problem:** RestoreSystemResolver removes /etc/systemd/resolved.conf.d/dnsmasq.conf and restarts systemd-resolved. The /etc-touching write is gated by a hardcoded path const with no package-var indirection — there is no test seam, and consequently no test. A regression that loosens the FileExists guard would attempt RemoveAll on a path the cleanup never owned.  
 **Fix:** Lift the resolvedConf const to a package-level var so a test can redirect it to t.TempDir(). Then add internal/distribution/okd/dns/restore_resolver_test.go covering: (1) missing drop-in is a no-op, (2) present drop-in is removed, (3) RemoveAll error is logged but not propagated. Mirror cleanup/services_test.go::TestDnsmasq_GlobLoopRemovesAllMatches for the var-redirection pattern.  
 **Effort:** hours
-
 
 ## Completed
 
