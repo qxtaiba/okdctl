@@ -173,6 +173,9 @@ type coreOSStreamPin struct {
 //
 //nolint:goconst,nolintlint // see comment above re: 4.15-4.18 sha-equal-by-design
 var streamPins = map[int]coreOSStreamPin{
+	12: {CommitSHA: "b86064a94ccd47a4547bd16771de98dc36a4abb0", JSONSHA256: "31c97633aed443b33f9e3282b416750c9f4a43ce9fd2c8b3f716052045e0c869"},
+	13: {CommitSHA: "b3d2f7b8834666c220b88f7aee46ec9160274bcc", JSONSHA256: "7d84d832e0e8c28f52fda566318bb5afdb60829f7e6317cae9e163536e2706e4"},
+	14: {CommitSHA: "4dd5abdf12a97ef0f32f6774ab79fa8dc6482f34", JSONSHA256: "bbb0651c7363d416c7e38e1f4129345f0804913f736f842cfa2156733e3c7f41"},
 	15: {CommitSHA: "83c823bf5cb70c42dcbbc93306a570759ac6aaf8", JSONSHA256: "57f52e71f3f351bfdac77b1708e725a287e8df0239df7f6ff0b2883d73b10302"},
 	16: {CommitSHA: "441e0e5469d5698ce147c092c7c802d7c44b1557", JSONSHA256: "57f52e71f3f351bfdac77b1708e725a287e8df0239df7f6ff0b2883d73b10302"},
 	17: {CommitSHA: "b102c3acc6afdc1aed628f8d5604a467fba9b8c4", JSONSHA256: "57f52e71f3f351bfdac77b1708e725a287e8df0239df7f6ff0b2883d73b10302"},
@@ -180,6 +183,8 @@ var streamPins = map[int]coreOSStreamPin{
 	19: {CommitSHA: "9cdc31344d455cbc638d490cdc32c978e0b822c1", JSONSHA256: "734ab37d8ac19e8b4c5535c11b1432ffefad9403032d37eda873b1168595ab2c"},
 	20: {CommitSHA: "13a5f6b91e1636b63bb0956c6fa49fab236e71c1", JSONSHA256: "cc5912af5ae98f6fed3e09e545bc8409ce83843a9fc3b11d06ef315c903d925d"},
 	21: {CommitSHA: "9a415c497e70d5234c473325cf17aeef78c03544", JSONSHA256: "3bfc32f58e48880e3fb6ef56b19f8ba41411ba35416fef2d881d5adaf474600c"},
+	22: {CommitSHA: "b8a967b9336275a333e96a658dcccebbc0fb8fea", JSONSHA256: "3bfc32f58e48880e3fb6ef56b19f8ba41411ba35416fef2d881d5adaf474600c"},
+	23: {CommitSHA: "51977d88a06e9e2c95d31f5e33543e72cbd38dfa", JSONSHA256: "3bfc32f58e48880e3fb6ef56b19f8ba41411ba35416fef2d881d5adaf474600c"},
 }
 
 // coreOSStreamData is the subset of fcos.json / scos.json DetectCoreOSVersion
