@@ -328,8 +328,7 @@ func (p *Phase) DownloadCoreOSISO(ctx context.Context, info *CoreOSInfo, destPat
 		}
 	}
 
-	p.Log.Info("coreos: downloading iso", "version", info.Version)
-	p.Log.Info("coreos: iso url", "url", info.ISOUrl)
+	p.Log.Info("coreos: downloading iso", "version", info.Version, "url", info.ISOUrl)
 
 	if err := system.EnsureDir(filepath.Dir(destPath)); err != nil {
 		return &errtypes.ConfigError{Msg: "failed to ensure CoreOS ISO destination directory", Err: err}
