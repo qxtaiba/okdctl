@@ -1,3 +1,4 @@
+---
 # tfsec configuration — fail-closed by default.
 #
 # Policy: tfsec is a gating CI check (soft_fail is NOT set in ci.yml).
