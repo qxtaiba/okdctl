@@ -35,11 +35,20 @@ const (
 	yqURLTemplate   = "https://github.com/mikefarah/yq/releases/download/" + yqVersion + "/yq_linux_{arch}"
 )
 
+// archAMD64 / archARM64 are the two arch keys okdctl ships (Linux amd64,
+// Linux arm64). They appear as map keys in every per-tool checksum table —
+// extracted as constants so a typo in any one site is a compile error
+// rather than a silent miss.
+const (
+	archAMD64 = "amd64"
+	archARM64 = "arm64"
+)
+
 // yqChecksumsByArch holds the SHA-256 for the yq_linux_<arch> binary at yqVersion,
 // sourced from the official checksums release asset. Must be updated with yqVersion.
 var yqChecksumsByArch = map[string]string{
-	"amd64": "654d2943ca1d3be2024089eb4f270f4070f491a0610481d128509b2834870049",
-	"arm64": "ceea73d4c86f2e5c91926ee0639157121f5360da42beeb8357783d79c2cc6a1d",
+	archAMD64: "654d2943ca1d3be2024089eb4f270f4070f491a0610481d128509b2834870049",
+	archARM64: "ceea73d4c86f2e5c91926ee0639157121f5360da42beeb8357783d79c2cc6a1d",
 }
 
 // helmChecksumsByArch holds the SHA-256 for the helm-<helmVersion>-linux-<arch>.tar.gz
@@ -47,16 +56,16 @@ var yqChecksumsByArch = map[string]string{
 // helmVersion changes — pinning the checksum locally removes the runtime
 // FetchChecksum dependency on the same origin as the artifact.
 var helmChecksumsByArch = map[string]string{
-	"amd64": "ee88b3c851ae6466a3de507f7be73fe94d54cbf2987cbaa3d1a3832ea331f2cd",
-	"arm64": "7944e3defd386c76fd92d9e6fec5c2d65a323f6fadc19bfb5e704e3eee10348e",
+	archAMD64: "ee88b3c851ae6466a3de507f7be73fe94d54cbf2987cbaa3d1a3832ea331f2cd",
+	archARM64: "7944e3defd386c76fd92d9e6fec5c2d65a323f6fadc19bfb5e704e3eee10348e",
 }
 
 // sopsChecksumsByArch holds the SHA-256 for the sops-<sopsVersion>.linux.<arch>
 // binary, sourced from github.com/getsops/sops/releases/download/<v>/sops-<v>.checksums.txt.
 // Must be updated when sopsVersion changes.
 var sopsChecksumsByArch = map[string]string{
-	"amd64": "5488e32bc471de7982ad895dd054bbab3ab91c417a118426134551e9626e4e85",
-	"arm64": "16564c6b181d88505d9e0dfef62771894293d85cde5884d9b1a843859eee174b",
+	archAMD64: "5488e32bc471de7982ad895dd054bbab3ab91c417a118426134551e9626e4e85",
+	archARM64: "16564c6b181d88505d9e0dfef62771894293d85cde5884d9b1a843859eee174b",
 }
 
 //go:embed hashicorp.repo
