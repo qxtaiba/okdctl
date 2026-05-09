@@ -29,9 +29,6 @@ var (
 
 	FooterStyle = lipgloss.NewStyle().
 			Padding(0, 2).
-			BorderTop(true).
-			BorderStyle(lipgloss.NormalBorder()).
-			BorderForeground(tui.ColorSlate700).
 			Foreground(tui.ColorSlate500)
 )
 

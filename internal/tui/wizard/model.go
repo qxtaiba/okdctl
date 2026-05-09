@@ -18,10 +18,13 @@ const (
 	minWidth  = 80
 	minHeight = 24
 
-	headerHeight          = 3 // logo + tagline + step indicator
-	scrollIndicatorHeight = 1 // scroll arrows and percentage
-	footerHeight          = 2 // help bar + padding
-	outerVerticalPadding  = 4 // wizard border (2) + outer padding (2)
+	headerHeight = 3 // logo + tagline + step indicator
+	// footer is 2 rows: scroll-indicator/divider + help bar. The
+	// scroll-indicator now doubles as the footer's top-border divider so
+	// what was previously a separate scrollIndicatorHeight row plus a
+	// footerHeight=2 BorderTop+helpBar collapses into a single 2-row block.
+	footerHeight         = 2
+	outerVerticalPadding = 4 // wizard border (2) + outer padding (2)
 
 	// outerHorizontalPadding is the horizontal cells consumed by
 	// OuterContainerStyle.Padding(1, 2): 2 left + 2 right.
@@ -31,7 +34,7 @@ const (
 	// WizardBorderStyle.Border(): 1 left + 1 right.
 	wizardBorderHorizontal = 2
 
-	fixedLayoutOverhead = headerHeight + scrollIndicatorHeight + footerHeight + outerVerticalPadding
+	fixedLayoutOverhead = headerHeight + footerHeight + outerVerticalPadding
 )
 
 type earlyExiter interface {
