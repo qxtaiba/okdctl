@@ -63,10 +63,7 @@ func addonIsRetryable(err error) bool {
 		return false
 	}
 	var authErr *errtypes.AuthError
-	if errors.As(err, &authErr) {
-		return false
-	}
-	return true
+	return !errors.As(err, &authErr)
 }
 
 // BuildOpaqueSecret returns a Kubernetes Secret manifest YAML of type Opaque.
