@@ -13,6 +13,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/download"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/executor"
+	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
@@ -120,7 +121,7 @@ func (p *Phase) extractReleaseImage(ctx context.Context, ocPath, ref, destDir st
 	}
 	if result.ExitCode != 0 {
 		msg := strings.TrimSpace(result.Stderr)
-		p.Log.Error("tools: oc adm release extract failed", "ref", ref, "stderr", msg)
+		p.Log.Error("tools: oc adm release extract failed", "ref", ref, "stderr", logutil.RedactableStderr(msg))
 		// Exit code is the primary signal; stderr-text is a secondary lift.
 		// oc exits 1 for most runtime errors including auth; 125 is the
 		// container-runtime "failed to start" code. Widen this set if upstream

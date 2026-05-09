@@ -117,6 +117,27 @@ func redactAny(v any) any {
 	}
 }
 
+// RedactableStderr is a named string type for subprocess stderr text. Pass
+// it as slog.Any("stderr", rs) — the attr is then KindAny and routes through
+// RedactHandler's Redacted() any dispatch instead of leaving the raw string
+// unbounded. The handler emits at most a head/tail excerpt, preventing
+// multi-kilobyte auth diagnostics or registry-config snippets from reaching
+// the log sink verbatim.
+type RedactableStderr string
+
+// Redacted returns at most the first 200 and last 200 bytes of the stderr
+// text, joined by a truncation marker when the text exceeds 400 characters.
+// The caller sees enough context to diagnose the error without exposing a
+// full credential dump.
+func (s RedactableStderr) Redacted() any {
+	const half = 200
+	r := string(s)
+	if len(r) <= half*2 {
+		return r
+	}
+	return r[:half] + " … [truncated] … " + r[len(r)-half:]
+}
+
 // KeyIsSecret reports whether key looks like it names a credential — a
 // case-insensitive substring match against the denylist fragments. Exported
 // so redactConfig in cli/config.go can share the same rule without

@@ -5,8 +5,40 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/url"
+	"strings"
 	"testing"
 )
+
+func TestRedactableStderr_TruncatesLongOutput(t *testing.T) {
+	const secret = "MY_PULL_SECRET_VALUE"
+	prefix := strings.Repeat("a", 250)
+	suffix := strings.Repeat("b", 250)
+	raw := prefix + secret + suffix
+
+	var buf bytes.Buffer
+	jsonLogger(&buf).Warn("subprocess failed", slog.Any("stderr", RedactableStderr(raw)))
+	m := parseOne(t, &buf)
+	got, ok := m["stderr"].(string)
+	if !ok {
+		t.Fatalf("stderr is %T; want string", m["stderr"])
+	}
+	if strings.Contains(got, secret) {
+		t.Errorf("raw secret found in log output: %q", got)
+	}
+	if !strings.Contains(got, "[truncated]") {
+		t.Errorf("expected truncation marker in output: %q", got)
+	}
+}
+
+func TestRedactableStderr_ShortOutputPassesThrough(t *testing.T) {
+	const msg = "permission denied"
+	var buf bytes.Buffer
+	jsonLogger(&buf).Warn("subprocess failed", slog.Any("stderr", RedactableStderr(msg)))
+	m := parseOne(t, &buf)
+	if got := m["stderr"]; got != msg {
+		t.Errorf("stderr = %v; want %q", got, msg)
+	}
+}
 
 // jsonLogger builds a RedactHandler over a JSON sink backed by buf.
 func jsonLogger(buf *bytes.Buffer) *slog.Logger {
