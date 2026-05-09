@@ -183,7 +183,7 @@ func printVersionList(w io.Writer, versions []releases.OKDVersion) error {
 			v.Version,
 			v.ReleaseDate.Format("2006-01-02"),
 			yesNo(v.Stable),
-			releases.LabelForReleaseType(v.Type),
+			v.Type.String(),
 		)
 	}
 	return tw.Flush()
@@ -197,7 +197,7 @@ func printVersionDetail(w io.Writer, v releases.OKDVersion) error {
 		{"released", v.ReleaseDate.Format("2006-01-02")},
 		{"stable", yesNo(v.Stable)},
 		{"latest-in-series", yesNo(v.Latest)},
-		{"release-type", releases.LabelForReleaseType(v.Type)},
+		{"release-type", v.Type.String()},
 	}
 	for _, ln := range lines {
 		fmt.Fprintln(w, tui.DottedKeyValueFull(ln.k, ln.val, tui.DefaultKeyColWidth, 0))
