@@ -21,8 +21,17 @@ const (
 	headerHeight          = 3 // logo + tagline + step indicator
 	scrollIndicatorHeight = 1 // scroll arrows and percentage
 	footerHeight          = 2 // help bar + padding
-	outerVerticalPadding  = 4 // top (2) + bottom (2)
-	fixedLayoutOverhead   = headerHeight + scrollIndicatorHeight + footerHeight + outerVerticalPadding
+	outerVerticalPadding  = 4 // wizard border (2) + outer padding (2)
+
+	// outerHorizontalPadding is the horizontal cells consumed by
+	// OuterContainerStyle.Padding(1, 2): 2 left + 2 right.
+	outerHorizontalPadding = 4
+
+	// wizardBorderHorizontal is the horizontal cells consumed by
+	// WizardBorderStyle.Border(): 1 left + 1 right.
+	wizardBorderHorizontal = 2
+
+	fixedLayoutOverhead = headerHeight + scrollIndicatorHeight + footerHeight + outerVerticalPadding
 )
 
 type earlyExiter interface {

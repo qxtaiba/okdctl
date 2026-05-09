@@ -44,23 +44,33 @@ func (m *Model) View() tea.View {
 
 	content.WriteString(m.renderFooter())
 
-	borderWidth := m.width - 6
-	if borderWidth < minWidth {
-		borderWidth = minWidth
+	// In lipgloss v2, Style.Width(N) sets OUTER width — the border is
+	// counted INSIDE N, so the content area is N - 2. Pass contentWidth + 2
+	// as the .Width() argument so the inner content area equals contentWidth
+	// (what every render*() helper sizes itself to). Without this offset,
+	// every full-width line wraps by 2 chars and the wraps push the bottom
+	// of the box off the visible terminal.
+	innerWidth := m.contentWidth()
+	if innerWidth < minWidth {
+		innerWidth = minWidth
 	}
 
 	bordered := WizardBorderStyle.
-		Width(borderWidth).
+		Width(innerWidth + wizardBorderHorizontal).
 		Render(content.String())
 
 	v.Content = OuterContainerStyle.Render(bordered)
 	return v
 }
 
-// contentWidth must match borderWidth (m.width - 6) so content fills the
-// border exactly.
+// contentWidth is the inner content area inside the wizard's border —
+// what header/viewport/scrollIndicator/footer must size themselves to.
+// It accounts for outerHorizontalPadding (4) and wizardBorderHorizontal (2).
+// View() passes contentWidth + wizardBorderHorizontal to WizardBorderStyle's
+// .Width() because in lipgloss v2 that argument is the OUTER width (border
+// inclusive); both sides agree on what fits.
 func (m *Model) contentWidth() int {
-	width := m.width - 6
+	width := m.width - outerHorizontalPadding - wizardBorderHorizontal
 	if width < 60 {
 		width = 60
 	}
