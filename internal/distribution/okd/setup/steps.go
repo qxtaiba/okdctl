@@ -128,8 +128,12 @@ func (p *Phase) setupManifestSteps(cfg *config.Config, opts *Options, clusterDir
 			ID: StepGenerateManifests, Name: "generate manifests",
 			ReRunSafe: distribution.ReRunSafeNo,
 			Desc:      "generating kubernetes manifests",
+			// manifests/ directory alone is unsafe: openshift-install can exit
+			// non-zero mid-write, leaving a partial directory the next run sees
+			// as "already done". Require both directory + .complete sentinel.
 			AlreadyDone: func(_ context.Context) (bool, error) {
-				return system.DirExists(filepath.Join(clusterDir, "manifests")), nil
+				return system.DirExists(filepath.Join(clusterDir, "manifests")) &&
+					system.FileExists(ManifestsSentinel(clusterDir)), nil
 			},
 			Exec: func(ctx context.Context) error {
 				if err := p.GenerateManifests(ctx, clusterDir); err != nil {
@@ -184,12 +188,7 @@ func (p *Phase) setupManifestSteps(cfg *config.Config, opts *Options, clusterDir
 			ReRunSafe: distribution.ReRunSafeNo,
 			Desc:      "generating ignition files",
 			AlreadyDone: func(_ context.Context) (bool, error) {
-				for _, f := range ignitionFilenames {
-					if !system.FileExists(filepath.Join(clusterDir, f)) {
-						return false, nil
-					}
-				}
-				return true, nil
+				return system.FileExists(IgnitionSentinel(clusterDir)), nil
 			},
 			Exec: func(ctx context.Context) error {
 				if err := p.GenerateIgnitionConfigs(ctx, clusterDir); err != nil {
