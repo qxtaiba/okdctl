@@ -15,29 +15,49 @@ Top-level cluster snapshot.
 
 ```json
 {
+  "phase": "Running",
   "api_reachable": true,
+  "version": "4.21.3",
+  "api_server_url": "https://api.okd.example.com:6443",
+  "console_url": "https://console-openshift-console.apps.okd.example.com",
   "nodes": [
     {"name": "master-0", "role": "master", "ready": true},
     {"name": "worker-0", "role": "worker", "ready": true}
   ],
   "degraded_operators": 0,
+  "conditions": [
+    {"type": "Available", "status": "True"},
+    {"type": "Progressing", "status": "False"}
+  ],
   "addons": [
     {"name": "flux", "healthy": true},
     {"name": "secretstore", "healthy": false, "error": "ConditionStatus: False"}
-  ]
+  ],
+  "message": "cluster healthy"
 }
 ```
 
 | Field | Type | Notes |
 |---|---|---|
+| `phase` | string | lifecycle state: `Pending`, `Installing`, `Running`, `Degraded`, `Failed`, or `Unknown`; always present |
 | `api_reachable` | bool | `true` when `kube-apiserver /healthz` returns 200 |
+| `version` | string | OKD version string; present when non-empty |
+| `api_server_url` | string | API server endpoint; present when non-empty |
+| `console_url` | string | web console URL; present when non-empty |
 | `nodes[].name` | string | node name from `kubectl get nodes` |
 | `nodes[].role` | string | `master`, `worker`, or `unknown` |
 | `nodes[].ready` | bool | node's `Ready` condition is `True` |
 | `degraded_operators` | int | cluster-operators with `Degraded=True` |
+| `conditions[].type` | string | condition type (e.g. `Available`, `Progressing`) |
+| `conditions[].status` | string | `True`, `False`, or `Unknown` |
+| `conditions[].reason` | string | machine-readable reason; present when non-empty |
+| `conditions[].message` | string | human-readable detail; present when non-empty |
+| `conditions` | array | cluster-level conditions; present when non-empty |
 | `addons[].name` | string | registered addon name |
 | `addons[].healthy` | bool | `true` when verify returned no error |
 | `addons[].error` | string | present only when `healthy=false` |
+| `addons` | array | addon health snapshots; present when non-empty |
+| `message` | string | free-form status message; present when non-empty |
 
 ## `okdctl releases list --output=json`
 
