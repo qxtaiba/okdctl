@@ -11,7 +11,7 @@ import "github.com/spf13/cobra"
 var doctorOutput string
 
 var doctorCmd = &cobra.Command{
-	Use:   categoryDoctor,
+	Use:   string(categoryDoctor),
 	Short: "Check that your environment is ready to deploy a cluster",
 	Long: `Run preflight checks on the local environment before a deploy.
 
@@ -31,8 +31,8 @@ Exit code is 0 if there are no [fail] results ([warn] is tolerated),
 Pass --output=json for machine-readable output (see docs/cli/json-schema.md).
 
 See docs/doctor-checks.md for per-check fail messages and fix guidance.`,
-	Example: `  okdctl ` + categoryDoctor + `
-  okdctl ` + categoryDoctor + ` --output json | jq '.failed'`,
+	Example: `  okdctl ` + string(categoryDoctor) + `
+  okdctl ` + string(categoryDoctor) + ` --output json | jq '.failed'`,
 }
 
 func init() {

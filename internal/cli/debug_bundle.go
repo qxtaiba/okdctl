@@ -26,13 +26,15 @@ import (
 	"github.com/qxtaiba/okdctl/internal/version"
 )
 
+type bundleCategory string
+
 const (
-	categoryMustGather     = "must-gather"
-	categoryTerraformState = "terraform-state"
-	categoryDoctor         = "doctor"
-	categoryConfig         = "config"
-	categoryLogFile        = "log-file"
-	categorySystemMeta     = "system-meta"
+	categoryMustGather     bundleCategory = "must-gather"
+	categoryTerraformState bundleCategory = "terraform-state"
+	categoryDoctor         bundleCategory = "doctor"
+	categoryConfig         bundleCategory = "config"
+	categoryLogFile        bundleCategory = "log-file"
+	categorySystemMeta     bundleCategory = "system-meta"
 )
 
 // maxBundleFileBytes caps individual file reads in tarDirInto.
@@ -94,9 +96,9 @@ const (
 )
 
 type manifestEntry struct {
-	Name    string       `json:"name"`
-	Status  bundleStatus `json:"status"`
-	Message string       `json:"message,omitempty"`
+	Name    bundleCategory `json:"name"`
+	Status  bundleStatus   `json:"status"`
+	Message string         `json:"message,omitempty"`
 }
 
 func runDebugBundle(cmd *cobra.Command, _ []string) (retErr error) {
