@@ -245,6 +245,14 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.autoScrollToField(msg.FieldIndex, msg.TotalFields)
 		}
 		return m, nil
+
+	case ConfigSyncMsg:
+		if len(m.steps) > 0 && m.currentStep >= 0 && m.currentStep < len(m.steps) {
+			if a, ok := m.steps[m.currentStep].(ConfigApplier); ok {
+				_ = a.Apply(m.config)
+			}
+		}
+		return m, nil
 	}
 
 	if len(m.steps) > 0 && m.currentStep < len(m.steps) {

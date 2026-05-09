@@ -221,7 +221,8 @@ func (m *Model) renderScrollIndicator() string {
 	badgeWidth := 0
 	if contextBadge != "" {
 		badgeStyled = lipgloss.NewStyle().
-			Foreground(tui.ColorSlate500).
+			Foreground(tui.ColorSuccess).
+			Bold(true).
 			Render(" ▸ " + contextBadge + " ")
 		badgeWidth = lipgloss.Width(badgeStyled)
 	}

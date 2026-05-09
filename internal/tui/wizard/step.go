@@ -200,3 +200,10 @@ type FocusChangedMsg struct {
 	FieldIndex  int
 	TotalFields int
 }
+
+// ConfigSyncMsg requests the wizard to call step.Apply(cfg) on the active
+// step *without* advancing — used so a step can publish a tentative
+// selection (e.g. for a status badge) while the user is still on the step.
+type ConfigSyncMsg struct {
+	StepID StepID
+}
