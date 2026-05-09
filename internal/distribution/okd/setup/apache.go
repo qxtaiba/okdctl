@@ -26,7 +26,10 @@ const (
 	minIgnitionFileSize = 1000 // bytes
 )
 
-func (p *Phase) ensureIgnitionDir(_ context.Context, webRoot string) (string, error) {
+func (p *Phase) ensureIgnitionDir(ctx context.Context, webRoot string) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
 	ignitionDir := filepath.Join(webRoot, "ignition")
 
 	// 0o750: apache user owns and reads; local non-apache users cannot read
@@ -46,7 +49,10 @@ func (p *Phase) ensureIgnitionDir(_ context.Context, webRoot string) (string, er
 	return ignitionDir, nil
 }
 
-func (p *Phase) configureApachePort(_ context.Context, bindIP string) {
+func (p *Phase) configureApachePort(ctx context.Context, bindIP string) {
+	if err := ctx.Err(); err != nil {
+		return
+	}
 	httpdConf := p.OS.ApacheConfigPath()
 	if !system.FileExists(httpdConf) {
 		return
