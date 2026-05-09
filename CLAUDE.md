@@ -203,6 +203,12 @@ write the comment — then it carries real information.
   string, so a future field that interpolates a credential into the message
   silently leaks. Use the structured form: `tui.Info("using credentials",
   tui.LF("source", creds.Source))` or `p.Log.Info("…", "key", val)`.
+- **ZeroizeEnv defer pattern.** Any type that stores credential-bearing env
+  entries (`[]string` of `KEY=value` pairs) must expose a `ZeroizeEnv()` method
+  that blanks secret-keyed entries via `logutil.KeyIsSecret`, then `clear()`s
+  and nils the slice. Call it with `defer x.ZeroizeEnv()` immediately after the
+  object is constructed and before any subprocess operation, bounding the
+  plaintext lifetime to the enclosing function scope.
 
 ## Dependencies
 

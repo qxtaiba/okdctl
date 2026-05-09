@@ -155,6 +155,43 @@ func TestBuildEnv_EndToEndWithEcho(t *testing.T) {
 	_ = os.Unsetenv("OKDCTL_SECRET_PROBE")
 }
 
+func TestZeroizeEnv(t *testing.T) {
+	t.Run("blanks cred entries and nils slice", func(t *testing.T) {
+		e := New(WithEnv([]string{
+			"PROXMOX_VE_PASSWORD=secret",
+			"PROXMOX_VE_API_TOKEN=tok123",
+			"KUBECONFIG=/etc/kube",
+		}))
+		e.ZeroizeEnv()
+		if e.Env != nil {
+			t.Errorf("Env not nil after ZeroizeEnv; got %v", e.Env)
+		}
+	})
+
+	t.Run("non-cred entries are blanked by clear before nil", func(t *testing.T) {
+		e := New(WithEnv([]string{
+			"PROXMOX_VE_PASSWORD=hunter2",
+			"KUBECONFIG=/etc/kube",
+		}))
+		snap := e.Env
+		e.ZeroizeEnv()
+		if snap[0] != "" {
+			t.Errorf("cred entry not blanked before clear; got %q", snap[0])
+		}
+		if snap[1] != "" {
+			t.Errorf("non-cred entry not zeroed by clear; got %q", snap[1])
+		}
+	})
+
+	t.Run("nil and empty Env are no-ops", func(t *testing.T) {
+		e1 := New()
+		e1.ZeroizeEnv()
+
+		e2 := New(WithEnv([]string{}))
+		e2.ZeroizeEnv()
+	})
+}
+
 func TestRunStreamedChecked(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("needs POSIX sh")
