@@ -369,6 +369,22 @@ func (e *Executor) RunWithStdinChecked(ctx context.Context, input, name string, 
 	return result, nil
 }
 
+// ZeroizeEnv blanks env entries whose key matches logutil.KeyIsSecret, then
+// clears and nils the slice. Credential-bearing strings (PROXMOX_VE_PASSWORD,
+// PROXMOX_VE_API_TOKEN, etc.) would otherwise persist as immutable heap
+// objects until GC; this bounds their plaintext lifetime. Call via defer
+// after all subprocess operations are complete.
+func (e *Executor) ZeroizeEnv() {
+	for i, kv := range e.Env {
+		key, _, _ := strings.Cut(kv, "=")
+		if logutil.KeyIsSecret(key) {
+			e.Env[i] = ""
+		}
+	}
+	clear(e.Env)
+	e.Env = nil
+}
+
 // CommandExists reports whether name resolves on the current PATH.
 func CommandExists(name string) bool {
 	_, err := exec.LookPath(name)
