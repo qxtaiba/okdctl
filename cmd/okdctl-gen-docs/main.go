@@ -5,9 +5,12 @@
 // Run via: go run -tags docs ./cmd/okdctl-gen-docs [-o <dir>]
 package main
 
+// Uses stdlib `log` instead of slog/tui: this generator runs only under
+// `go run -tags docs` and is never linked into the okdctl binary, so
+// pulling in the project's logger import graph would be dead weight.
 import (
 	"flag"
-	"fmt"
+	"log"
 	"os"
 
 	_ "github.com/qxtaiba/okdctl/internal/addon/catalog"
@@ -20,8 +23,7 @@ func main() {
 	flag.Parse()
 
 	if err := os.MkdirAll(*outDir, 0o755); err != nil {
-		fmt.Fprintf(os.Stderr, "create output dir: %v\n", err)
-		os.Exit(1)
+		log.Fatalf("create output dir: %v", err)
 	}
 
 	root := cli.RootCmd()
@@ -31,7 +33,6 @@ func main() {
 	root.DisableAutoGenTag = true
 
 	if err := doc.GenMarkdownTree(root, *outDir); err != nil {
-		fmt.Fprintf(os.Stderr, "generate docs: %v\n", err)
-		os.Exit(1)
+		log.Fatalf("generate docs: %v", err)
 	}
 }
