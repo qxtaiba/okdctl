@@ -234,6 +234,7 @@ func runDestroy(cmd *cobra.Command, _ []string) error {
 	startTime := time.Now()
 
 	steps, err := p.Destroy(ctx, cfg, okd.DestroyOpts{
+		AutoApprove:      true,
 		RemovePackages:   true,
 		KeepISOs:         destroyKeepISOs,
 		SkipTerraform:    destroySkipTerraform,

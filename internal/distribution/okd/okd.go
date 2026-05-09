@@ -184,6 +184,7 @@ func (p *Provisioner) UpdateIngress(ctx context.Context, cfg *config.Config, opt
 // can retry a partial run (e.g. SkipTerraform=true to re-run just the
 // file cleanup after a successful terraform destroy).
 type DestroyOpts struct {
+	AutoApprove    bool
 	RemovePackages bool
 	KeepISOs       bool
 	SkipTerraform  bool
@@ -219,7 +220,7 @@ func (p *Provisioner) ZeroizeEnv() {
 func (p *Provisioner) Destroy(ctx context.Context, cfg *config.Config, opts DestroyOpts) ([]distribution.StepResult, error) {
 	destroyPhase := destroy.New(p.version, phase.WithExecutor(p.executor), phase.WithLogger(p.logger))
 	destroyOpts := destroy.NewOptions(cfg, p.projectRoot)
-	destroyOpts.AutoApprove = true
+	destroyOpts.AutoApprove = opts.AutoApprove
 	destroyOpts.RemovePackages = opts.RemovePackages
 	destroyOpts.KeepISOs = opts.KeepISOs
 	destroyOpts.SkipTerraform = opts.SkipTerraform
