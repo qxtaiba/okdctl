@@ -528,7 +528,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sec:2f70d7df:ignition-over-http` — ignition over http
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-2f70d7df-ignition-https  
+**Status:** in review — PR #544  
 **Severity:** major  
 **Cluster:** tls-network  
 **Evidence:** `internal/distribution/okd/setup/kargs.go:68-78`  
@@ -548,7 +548,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sec:7b2829bb:executor-no-zeroize` — executor no zeroize
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-7b2829bb-zeroize-env  
+**Status:** in review — PR #545  
 **Severity:** major  
 **Cluster:** credentials  
 **Evidence:** `internal/executor/executor.go:38-92`  
@@ -660,7 +660,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sub:48688e63:argv-concat` — argv concat
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sub-48688e63-pveshrun  
+**Status:** in review — PR #546  
 **Severity:** major  
 **Cluster:** argv-construction — seam→audit-security  
 **Evidence:** `internal/infrastructure/proxmox/proxmox.go:378-380`  
@@ -710,7 +710,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sub:eb479d86:argv-unclean-path` — argv unclean path
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sub-eb479d86-iso-filename-validation  
+**Status:** in review — PR #547  
 **Severity:** minor  
 **Cluster:** argv-construction — seam→audit-security  
 **Evidence:** `internal/distribution/okd/setup/upload.go:21-35`  
@@ -722,7 +722,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `state:4c092fce:tf-state-no-lock` — tf state no lock
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/state-4c092fce-tf-lock-timeout  
+**Status:** in review — PR #548  
 **Severity:** major  
 **Cluster:** tf-state-atomicity  
 **Evidence:** `internal/infrastructure/terraform/terraform.go:118-174`  
@@ -742,7 +742,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `state:0f076161:destroy-target-no-precondition` — destroy target no precondition
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/state-0f076161-destroy-target-bounds  
+**Status:** in review — PR #549  
 **Severity:** minor  
 **Cluster:** destroy-safety  
 **Evidence:** `internal/cli/destroy.go:80-162`  
@@ -752,7 +752,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `state:33579dd5:cleanup-haproxy-firewall-double` — cleanup haproxy firewall double
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/state-33579dd5-firewall-double-call  
+**Status:** in review — PR #550  
 **Severity:** minor  
 **Cluster:** phase-idempotency  
 **Evidence:** `internal/distribution/okd/cleanup/services.go:56-93`  
@@ -782,7 +782,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `state:632c9087:update-ingress-no-rollback-on-dns` — update ingress no rollback on dns
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/state-632c9087-ingress-rollback  
+**Status:** in review — PR #551  
 **Severity:** minor  
 **Cluster:** crash-recoverability  
 **Evidence:** `internal/distribution/okd/postinstall/update_ingress.go:237-279`  
@@ -842,7 +842,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `state:c287d5c0:destroy-auto-approve-hardcoded` — destroy auto approve hardcoded
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/state-c287d5c0-destroy-autoapprove-opt  
+**Status:** in review — PR #552  
 **Severity:** minor  
 **Cluster:** destroy-safety  
 **Evidence:** `internal/distribution/okd/okd.go:219-231`  
@@ -904,7 +904,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `iac:b803fcb7:tflint-version-unpinned` — tflint version unpinned
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/iac-b803fcb7-tflint-pin  
+**Status:** in review — PR #553  
 **Severity:** minor  
 **Cluster:** hcl-provider-hygiene — seam→audit-dependencies  
 **Evidence:** `.github/workflows/ci.yml:101-101`  
@@ -914,7 +914,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `iac:e076e43c:tar-zipslip-incomplete` — tar zipslip incomplete
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/iac-e076e43c-tar-zipslip  
+**Status:** in review — PR #554  
 **Severity:** minor  
 **Cluster:** install-sh-integrity  
 **Evidence:** `scripts/install.sh:165-167`  
@@ -924,7 +924,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `iac:ef8f2924:bootstrap-default-shadows-coalesce` — bootstrap default shadows coalesce
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/iac-ef8f2924-tfvar-defaults  
+**Status:** in review — PR #555  
 **Severity:** minor  
 **Cluster:** hcl-credential-hygiene  
 **Evidence:** `infrastructure/terraform/modules/proxmox-okd/variables.tf:200-228`  
@@ -976,7 +976,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `err:62cb8a95:state-lock-hint-drops-init-cause` — state lock hint drops init cause
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/err-62cb8a95-init-cause  
+**Status:** in review — PR #556  
 **Severity:** minor  
 **Cluster:** wrapping — seam→audit-state-and-recovery  
 **Evidence:** `internal/distribution/okd/destroy/helpers.go:124-129`  
@@ -996,7 +996,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `err:881d089e:runlock-untyped-errors` — runlock untyped errors
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/err-881d089e-runlock-typed  
+**Status:** in review — PR #557  
 **Severity:** minor  
 **Cluster:** sentinel-vs-typed — related: err:fd2125dd:cli-bare-errors-skip-typed-mapping  
 **Evidence:** `internal/runlock/runlock.go:47-52`  
@@ -1078,7 +1078,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `con:ab9b764a:ctx-ignored-install-config` — ctx ignored install config
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/con-ab9b764a-ctx-install-config  
+**Status:** in review — PR #558  
 **Severity:** minor  
 **Cluster:** ctx-ignored  
 **Evidence:** `internal/distribution/okd/setup/ignition.go:39-106` + 1 more  
@@ -1148,7 +1148,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `con:97cb8adf:waitfor-check-no-ctx` — waitfor check no ctx
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/con-97cb8adf-waitfor-ctx  
+**Status:** in review — PR #559  
 **Severity:** suggestion  
 **Cluster:** ctx-ignored  
 **Evidence:** `internal/system/exec.go:107-167`  
@@ -1474,7 +1474,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `obs:660d83a5:setrunid-not-symmetric-with-stderrslog` — setrunid not symmetric with stderrslog
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/obs-660d83a5-runid-default  
+**Status:** in review — PR #560  
 **Severity:** suggestion  
 **Cluster:** handler-setup  
 **Evidence:** `internal/tui/logger.go:174-180`  
@@ -1484,7 +1484,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `obs:9d79b841:double-log-iso-download` — double log iso download
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/obs-9d79b841-iso-download-fold  
+**Status:** in review — PR #561  
 **Severity:** suggestion  
 **Cluster:** span-retry-boundary  
 **Evidence:** `internal/distribution/okd/setup/coreos.go:277-278`  
@@ -1516,7 +1516,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `mod:5e892064:strings-lines-checksum` — strings lines checksum
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/mod-5e892064-checksum-lines  
+**Status:** in review — PR #562  
 **Severity:** suggestion  
 **Cluster:** slices-maps  
 **Evidence:** `internal/download/checksum.go:83-84`  
@@ -1556,7 +1556,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `mod:983f67f0:strings-lines-mixed` — strings lines mixed
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/mod-983f67f0-layouts-lines  
+**Status:** in review — PR #563  
 **Severity:** suggestion  
 **Cluster:** slices-maps  
 **Evidence:** `internal/tui/layouts.go:28-113`  
@@ -1596,7 +1596,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `mod:c87d0b1f:log-fatal-in-cli-entrypoint` — log fatal in cli entrypoint
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/mod-c87d0b1f-gendocs-log  
+**Status:** in review — PR #564  
 **Severity:** suggestion  
 **Cluster:** slog-over-3p  
 **Evidence:** `cmd/okdctl-gen-docs/main.go:18-35`  
@@ -1618,7 +1618,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `smell:26a430ee:requires-root-annotation-key` — requires root annotation key
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/smell-26a430ee-requires-root-const  
+**Status:** deferred — already implemented; constant defined at internal/cli/flags.go:29 with all 3 sites already using it  
 **Severity:** minor  
 **Cluster:** magic-strings  
 **Evidence:** `internal/cli/elevation.go:51-51` + 2 more  
@@ -1658,7 +1658,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `smell:e7db1220:duplicate-enum-label-fn` — duplicate enum label fn
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/smell-e7db1220-release-stringer  
+**Status:** in review — PR #565  
 **Severity:** minor  
 **Cluster:** helper-package-no-value  
 **Evidence:** `internal/cli/releases.go:209-224` + 1 more  
@@ -1902,7 +1902,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `doc:0139cb3f:pkg-doc-canonical-helpers` — pkg doc canonical helpers
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/doc-0139cb3f-phase-pkg  
+**Status:** in review — PR #566  
 **Severity:** minor  
 **Cluster:** package-doc  
 **Evidence:** `internal/distribution/okd/phase/paths.go:1-1`  
@@ -1922,7 +1922,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `doc:8aa632a6:pkg-doc-name-echo` — pkg doc name echo
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/doc-8aa632a6-version-pkg  
+**Status:** in review — PR #567  
 **Severity:** minor  
 **Cluster:** package-doc  
 **Evidence:** `internal/version/version.go:1-1`  
