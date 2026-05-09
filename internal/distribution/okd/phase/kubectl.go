@@ -60,7 +60,7 @@ func (p *BasePhase) OcPollOutputInterval(ctx context.Context, prefix, desc strin
 		opts.Interval = interval
 	}
 	opts.Logger = p.Log
-	err := system.WaitFor(ctx, prefix, desc, func() bool {
+	err := system.WaitFor(ctx, prefix, desc, func(context.Context) bool {
 		result, _ := p.Exec.Run(ctx, "oc", args...)
 		if result.ExitCode != 0 {
 			return false

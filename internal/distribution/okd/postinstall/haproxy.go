@@ -76,7 +76,7 @@ func (p *Phase) RemoveHAProxy(ctx context.Context, vip, clusterDir string) error
 		}
 		healthClient = httputil.NewWithCA(pool, 5*time.Second)
 		healthURL := fmt.Sprintf("https://%s:%d/healthz", vip, haproxyHealthPort)
-		if waitErr := system.WaitForWithTimeout(ctx, "haproxy", "api-via-vip", func() bool {
+		if waitErr := system.WaitForWithTimeout(ctx, "haproxy", "api-via-vip", func(context.Context) bool {
 			req, rErr := http.NewRequestWithContext(ctx, http.MethodGet, healthURL, http.NoBody)
 			if rErr != nil {
 				return false
@@ -100,7 +100,7 @@ func (p *Phase) RemoveHAProxy(ctx context.Context, vip, clusterDir string) error
 		// Removing the secondary IP can transiently restart the local DNS
 		// forwarder, causing hostname resolution to lag — verify separately.
 		p.Log.Info("haproxy: verifying api reachable via hostname after teardown")
-		if waitErr := system.WaitForWithTimeout(ctx, "haproxy", "api-via-hostname", func() bool {
+		if waitErr := system.WaitForWithTimeout(ctx, "haproxy", "api-via-hostname", func(context.Context) bool {
 			r, _ := p.Exec.Run(ctx, "oc", "get", "--raw", "/healthz")
 			return r.ExitCode == 0 && strings.TrimSpace(r.Stdout) == healthzOKBody
 		}, haproxyVIPTimeout, p.Log); waitErr != nil {
