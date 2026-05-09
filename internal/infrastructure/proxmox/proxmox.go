@@ -383,10 +383,13 @@ func (p *Provider) probeVMEnumeration(ctx context.Context, cfg *config.Config) b
 	if vmidBase == 0 {
 		vmidBase = 6000
 	}
-	host := phase.ProxmoxBareHost(p.host)
-	result, err := phase.SSHRunArgv(ctx, p.sshExec, host, p.knownHostsPath,
-		"pvesh", "get", "/nodes/"+p.node+"/qemu", "--output-format", "json",
-	)
+	params := &phase.RemoteISOParams{
+		Host:           phase.ProxmoxBareHost(p.host),
+		Node:           p.node,
+		Exec:           p.sshExec,
+		KnownHostsPath: p.knownHostsPath,
+	}
+	stdout, err := phase.PveshRun(ctx, params, "get", "/nodes/"+p.node+"/qemu")
 	if err != nil {
 		p.logger.Info("terraform: pvesh probe skipped", "err", err)
 		return true
@@ -394,7 +397,7 @@ func (p *Provider) probeVMEnumeration(ctx context.Context, cfg *config.Config) b
 	var vms []struct {
 		VMID int `json:"vmid"`
 	}
-	if err := json.Unmarshal([]byte(result.Stdout), &vms); err != nil {
+	if err := json.Unmarshal([]byte(stdout), &vms); err != nil {
 		p.logger.Info("terraform: pvesh probe payload unparseable", "err", err)
 		return true
 	}
