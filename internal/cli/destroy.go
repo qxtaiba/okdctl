@@ -289,10 +289,16 @@ func runDestroyDryRun(ctx context.Context, cfg *config.Config) error {
 	tui.Info("dry-run: terraform destroy plan", tui.LF("cluster", cfg.Cluster.Name))
 
 	if err := tf.Init(ctx); err != nil {
+		if hint := tf.LockHint(); hint != nil {
+			return errors.Join(hint, &errtypes.ConfigError{Msg: "terraform init failed in dry-run", Err: err})
+		}
 		return &errtypes.ConfigError{Msg: "terraform init failed in dry-run", Err: err}
 	}
 
 	if err := tf.PlanStreamed(ctx, terraform.PlanOptions{Destroy: true, Targets: destroyTargets}); err != nil {
+		if hint := tf.LockHint(); hint != nil {
+			return errors.Join(hint, &errtypes.ConfigError{Msg: "terraform destroy plan failed", Err: err})
+		}
 		return &errtypes.ConfigError{Msg: "terraform destroy plan failed", Err: err}
 	}
 

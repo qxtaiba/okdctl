@@ -133,6 +133,12 @@ write the comment — then it carries real information.
   `text`, `json`), mirroring kubectl/oc convention. `--output-file` (no
   shorthand) writes data to a file path. Never register `-o` as a shorthand
   for a file-destination flag; reserve it exclusively for format selection.
+- `internal/runlock` serialises concurrent okdctl invocations via flock, which
+  is advisory on NFSv3 and bypassed entirely across hosts; never rely on it as
+  a cross-host correctness guarantee. Terraform's own state lock is the
+  authoritative guard: every state-locking subcommand (plan, apply, destroy)
+  passes `-lock-timeout=120s` so a stale lock from a SIGKILL-ed prior run
+  waits and fails with a clean diagnostic rather than failing immediately.
 
 ## Tooling
 

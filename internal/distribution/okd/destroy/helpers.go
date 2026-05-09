@@ -3,6 +3,7 @@ package destroy
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -58,46 +59,6 @@ func checkStateMajorVersion(stateFile string, log *slog.Logger) error {
 	return nil
 }
 
-// stateLockHint returns a *errtypes.ConfigError when the Terraform local
-// backend lock file is present in dir, indicating a stale state lock from a
-// prior crashed run. NFS / shared filesystems are the common trigger.
-// Returns nil when the lock file is absent. The caller never auto-unlocks —
-// the message names the lock so the operator can run terraform force-unlock
-// after confirming no live process is holding it.
-func stateLockHint(dir string) error {
-	lockFile := filepath.Join(dir, ".terraform.tfstate.lock.info")
-	if !system.FileExists(lockFile) {
-		return nil
-	}
-	id := parseLockID(lockFile)
-	if id == "" {
-		id = "<id>"
-	}
-	return &errtypes.ConfigError{
-		Msg: fmt.Sprintf(
-			"terraform state locked at %s — run 'terraform force-unlock %s' in %s after confirming no other okdctl run is active",
-			lockFile, id, dir,
-		),
-	}
-}
-
-// parseLockID reads the Terraform local-backend lock file and returns the
-// lock ID. Returns "" when the file cannot be read or the ID field is absent,
-// so callers can fall back to a generic placeholder.
-func parseLockID(lockFile string) string {
-	raw, err := os.ReadFile(lockFile)
-	if err != nil {
-		return ""
-	}
-	var info struct {
-		ID string `json:"ID"`
-	}
-	if err := json.Unmarshal(raw, &info); err != nil {
-		return ""
-	}
-	return info.ID
-}
-
 func (p *Phase) destroyInfrastructure(ctx context.Context, opts *Options) error {
 	terraformDir := filepath.Join(opts.ProjectRoot, "infrastructure", "terraform", "environments", opts.TerraformEnv)
 
@@ -122,8 +83,8 @@ func (p *Phase) destroyInfrastructure(ctx context.Context, opts *Options) error 
 	}
 
 	if err := tf.Init(ctx); err != nil {
-		if hint := stateLockHint(terraformDir); hint != nil {
-			return hint
+		if hint := tf.LockHint(); hint != nil {
+			return errors.Join(hint, &errtypes.ClusterError{Msg: "terraform init failed", Err: err})
 		}
 		return &errtypes.ClusterError{Msg: "terraform init failed", Err: err}
 	}

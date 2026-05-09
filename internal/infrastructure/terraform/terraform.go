@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/executor"
 	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/system"
@@ -22,6 +23,11 @@ import (
 
 // PlanFileName is the default plan file name used by Plan, Apply, and Cleanup.
 const PlanFileName = "tfplan"
+
+// defaultLockTimeout is passed as -lock-timeout to every state-locking
+// terraform subcommand so a stale lock from a SIGKILL-ed prior run waits
+// then fails with a clean diagnostic instead of failing immediately.
+const defaultLockTimeout = "120s"
 
 // ExecError reports a non-zero exit from a terraform subprocess. Aliased to
 // the canonical executor.ExitError so callers can errors.As against either
@@ -196,10 +202,46 @@ func (t *Executor) buildVarArgs(varFile string, vars map[string]string) []string
 	return args
 }
 
+// LockHint returns a *errtypes.ConfigError when the Terraform local-backend
+// lock file (.terraform.tfstate.lock.info) is present in WorkDir, indicating
+// a stale lock from a prior crashed run. Returns nil when absent. Callers
+// must not auto-unlock — the message names the lock ID so the operator can
+// run terraform force-unlock after confirming no live process holds it.
+func (t *Executor) LockHint() error {
+	lockFile := filepath.Join(t.WorkDir, ".terraform.tfstate.lock.info")
+	if !system.FileExists(lockFile) {
+		return nil
+	}
+	id := parseLockID(lockFile)
+	if id == "" {
+		id = "<id>"
+	}
+	return &errtypes.ConfigError{
+		Msg: fmt.Sprintf(
+			"terraform state locked at %s — run 'terraform force-unlock %s' in %s after confirming no other okdctl run is active",
+			lockFile, id, t.WorkDir,
+		),
+	}
+}
+
+func parseLockID(lockFile string) string {
+	raw, err := os.ReadFile(lockFile)
+	if err != nil {
+		return ""
+	}
+	var info struct {
+		ID string `json:"ID"`
+	}
+	if err := json.Unmarshal(raw, &info); err != nil {
+		return ""
+	}
+	return info.ID
+}
+
 // Plan runs "terraform plan" with the options in opts. When Destroy is true
 // the plan is a destruction plan.
 func (t *Executor) Plan(ctx context.Context, opts PlanOptions) error {
-	args := []string{"plan"}
+	args := []string{"plan", "-lock-timeout=" + defaultLockTimeout}
 	args = append(args, t.buildVarArgs(opts.VarFile, opts.Vars)...)
 
 	if opts.Destroy {
@@ -219,7 +261,7 @@ func (t *Executor) Plan(ctx context.Context, opts PlanOptions) error {
 // terminal. Use instead of Plan when the operator must see the plan output —
 // Plan captures into internal buffers and only surfaces stderr on failure.
 func (t *Executor) PlanStreamed(ctx context.Context, opts PlanOptions) error {
-	args := []string{"plan"}
+	args := []string{"plan", "-lock-timeout=" + defaultLockTimeout}
 	args = append(args, t.buildVarArgs(opts.VarFile, opts.Vars)...)
 
 	if opts.Destroy {
@@ -239,7 +281,7 @@ func (t *Executor) PlanStreamed(ctx context.Context, opts PlanOptions) error {
 // Apply runs "terraform apply". When opts.PlanFile is set, Vars, VarFile,
 // and AutoApprove are ignored — the plan file encodes the full change set.
 func (t *Executor) Apply(ctx context.Context, opts ApplyOptions) error {
-	args := []string{"apply"}
+	args := []string{"apply", "-lock-timeout=" + defaultLockTimeout}
 
 	if opts.PlanFile != "" {
 		args = append(args, opts.PlanFile)
@@ -302,7 +344,7 @@ func (t *Executor) destroyWithPlan(ctx context.Context, opts DestroyOptions) err
 // (parallelism, -target injection) stays locked under regression coverage
 // when an opt-in future caller lands.
 func (t *Executor) destroyDirect(ctx context.Context, opts DestroyOptions) error {
-	args := []string{"destroy"}
+	args := []string{"destroy", "-lock-timeout=" + defaultLockTimeout}
 	args = append(args, t.buildVarArgs(opts.VarFile, nil)...)
 
 	if opts.AutoApprove {
