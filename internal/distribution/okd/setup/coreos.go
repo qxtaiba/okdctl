@@ -158,12 +158,20 @@ type coreOSStreamPin struct {
 // rewrite the JSON on that branch can also rewrite the sha256 field, making
 // DownloadCoreOSISO's integrity check meaningless.
 //
+// 4.15-4.18 share an identical fcos.json sha256 (the file content is
+// byte-equal on those four release branches at their pinned tips); goconst
+// is suppressed because the duplication is mechanical, machine-rewritten by
+// scripts/update-coreos-pins.sh, and any per-minor drift would surface as
+// a real diff in the next bump PR.
+//
 // To add or update a pin:
 //  1. git ls-remote https://github.com/openshift/installer release-4.X
 //  2. curl -sSfL https://raw.githubusercontent.com/openshift/installer/<SHA>/data/data/coreos/<fcos|scos>.json | sha256sum
 //  3. update CommitSHA and JSONSHA256 below; run make test.
 //
 // Tests may override this var to inject hermetic pin entries.
+//
+//nolint:goconst,nolintlint // see comment above re: 4.15-4.18 sha-equal-by-design
 var streamPins = map[int]coreOSStreamPin{
 	15: {CommitSHA: "83c823bf5cb70c42dcbbc93306a570759ac6aaf8", JSONSHA256: "57f52e71f3f351bfdac77b1708e725a287e8df0239df7f6ff0b2883d73b10302"},
 	16: {CommitSHA: "441e0e5469d5698ce147c092c7c802d7c44b1557", JSONSHA256: "57f52e71f3f351bfdac77b1708e725a287e8df0239df7f6ff0b2883d73b10302"},
