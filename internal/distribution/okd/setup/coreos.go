@@ -2,6 +2,8 @@ package setup
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -140,6 +142,38 @@ const minSCOSStreamMinor = 19
 // Tests override this to an httptest.Server URL for hermetic mocking.
 var streamRawBaseURL = "https://raw.githubusercontent.com"
 
+// coreOSStreamPin is the compile-time anchor for one OKD minor's stream JSON.
+// CommitSHA pins the openshift/installer tree (immutable); JSONSHA256 is the
+// SHA-256 of the JSON file at that commit, verified before the body is parsed.
+// Both must update together on OKD minor bumps — see README "Bumping the
+// CoreOS stream pin".
+type coreOSStreamPin struct {
+	CommitSHA  string
+	JSONSHA256 string
+}
+
+// streamPins maps each supported OKD minor to a pinned openshift/installer
+// commit SHA and the expected SHA-256 of its stream JSON file. Fetching from
+// release-4.X branch (mutable) is intentionally absent: an attacker who can
+// rewrite the JSON on that branch can also rewrite the sha256 field, making
+// DownloadCoreOSISO's integrity check meaningless.
+//
+// To add or update a pin:
+//  1. git ls-remote https://github.com/openshift/installer release-4.X
+//  2. curl -sSfL https://raw.githubusercontent.com/openshift/installer/<SHA>/data/data/coreos/<fcos|scos>.json | sha256sum
+//  3. update CommitSHA and JSONSHA256 below; run make test.
+//
+// Tests may override this var to inject hermetic pin entries.
+var streamPins = map[int]coreOSStreamPin{
+	15: {CommitSHA: "83c823bf5cb70c42dcbbc93306a570759ac6aaf8", JSONSHA256: "57f52e71f3f351bfdac77b1708e725a287e8df0239df7f6ff0b2883d73b10302"},
+	16: {CommitSHA: "441e0e5469d5698ce147c092c7c802d7c44b1557", JSONSHA256: "57f52e71f3f351bfdac77b1708e725a287e8df0239df7f6ff0b2883d73b10302"},
+	17: {CommitSHA: "b102c3acc6afdc1aed628f8d5604a467fba9b8c4", JSONSHA256: "57f52e71f3f351bfdac77b1708e725a287e8df0239df7f6ff0b2883d73b10302"},
+	18: {CommitSHA: "488926dc2c95d96460ee9939929a76ed23e1c596", JSONSHA256: "57f52e71f3f351bfdac77b1708e725a287e8df0239df7f6ff0b2883d73b10302"},
+	19: {CommitSHA: "9cdc31344d455cbc638d490cdc32c978e0b822c1", JSONSHA256: "734ab37d8ac19e8b4c5535c11b1432ffefad9403032d37eda873b1168595ab2c"},
+	20: {CommitSHA: "13a5f6b91e1636b63bb0956c6fa49fab236e71c1", JSONSHA256: "cc5912af5ae98f6fed3e09e545bc8409ce83843a9fc3b11d06ef315c903d925d"},
+	21: {CommitSHA: "9a415c497e70d5234c473325cf17aeef78c03544", JSONSHA256: "3bfc32f58e48880e3fb6ef56b19f8ba41411ba35416fef2d881d5adaf474600c"},
+}
+
 // coreOSStreamData is the subset of fcos.json / scos.json DetectCoreOSVersion
 // consumes. Both files share the schema at this path; the parser does not
 // read the top-level stream field, so c9s/c10s and stable all work.
@@ -179,15 +213,11 @@ func streamFileForMinor(minor int) string {
 	return "fcos.json"
 }
 
-// fetchCoreOSStream fetches and parses the CoreOS stream JSON at url.
-// Trust anchor: the request is made over HTTPS to raw.githubusercontent.com;
-// GitHub's TLS certificate is the sole guarantee of document authenticity.
-// The JSON carries no cryptographic signature and is not pinned to a commit
-// SHA. The ISO artifact URL and sha256 field within the returned data are
-// validated at download time by DownloadCoreOSISO, so the ISO binary itself
-// is integrity-checked — only the stream document that supplies those values
-// is unverified beyond TLS.
-func fetchCoreOSStream(ctx context.Context, url string) (*coreOSStreamData, error) {
+// fetchCoreOSStream fetches and parses the CoreOS stream JSON at url. When
+// expectedSHA256 is non-empty the response body is verified against it before
+// parsing; a mismatch is a hard error. Production callers always pass the
+// compile-time constant from streamPins; tests may pass "" to skip.
+func fetchCoreOSStream(ctx context.Context, url, expectedSHA256 string) (*coreOSStreamData, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
 	if err != nil {
 		return nil, fmt.Errorf("build request: %w", err)
@@ -207,6 +237,12 @@ func fetchCoreOSStream(ctx context.Context, url string) (*coreOSStreamData, erro
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
 	if err != nil {
 		return nil, fmt.Errorf("read coreos stream: %w", err)
+	}
+	if expectedSHA256 != "" {
+		sum := sha256.Sum256(body)
+		if got := hex.EncodeToString(sum[:]); got != expectedSHA256 {
+			return nil, fmt.Errorf("coreos stream: sha256 mismatch: got %s, want %s", got, expectedSHA256)
+		}
 	}
 	var sd coreOSStreamData
 	if err := json.Unmarshal(body, &sd); err != nil {
@@ -237,18 +273,21 @@ func coreOSInfoFromStream(sd *coreOSStreamData) (*CoreOSInfo, error) {
 // DetectCoreOSVersion returns the CoreOS ISO location, checksum, and release
 // for the host architecture. okdVersion picks the right upstream data file:
 // 4.15-4.18 → fcos.json (Fedora CoreOS), 4.19+ → scos.json (Stream CoreOS).
-// A malformed okdVersion fails fast as a typed ConfigError; callers used to
-// see a 404 from release-4.0/... when minor silently fell back to 0.
+// A malformed okdVersion or an unpinned minor fails fast as a ConfigError.
 func (p *Phase) DetectCoreOSVersion(ctx context.Context, okdVersion string) (*CoreOSInfo, error) {
 	minor, ok := parseOKDMinor(okdVersion)
 	if !ok {
 		return nil, &errtypes.ConfigError{Msg: fmt.Sprintf("invalid OKD version %q: cannot parse major.minor", okdVersion)}
 	}
+	pin, ok := streamPins[minor]
+	if !ok {
+		return nil, &errtypes.ConfigError{Msg: fmt.Sprintf("OKD minor 4.%d is not pinned; update streamPins in coreos.go", minor)}
+	}
 	streamURL := fmt.Sprintf(
-		"%s/openshift/installer/release-4.%d/data/data/coreos/%s",
-		streamRawBaseURL, minor, streamFileForMinor(minor),
+		"%s/openshift/installer/%s/data/data/coreos/%s",
+		streamRawBaseURL, pin.CommitSHA, streamFileForMinor(minor),
 	)
-	sd, err := fetchCoreOSStream(ctx, streamURL)
+	sd, err := fetchCoreOSStream(ctx, streamURL, pin.JSONSHA256)
 	if err != nil {
 		return nil, &errtypes.ClusterError{Msg: "failed to fetch CoreOS stream info", Err: err}
 	}

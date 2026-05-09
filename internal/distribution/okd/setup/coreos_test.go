@@ -2,6 +2,8 @@ package setup
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"log/slog"
@@ -183,7 +185,7 @@ func TestFetchCoreOSStream_ok(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	sd, err := fetchCoreOSStream(context.Background(), srv.URL+"/scos.json")
+	sd, err := fetchCoreOSStream(context.Background(), srv.URL+"/scos.json", "")
 	if err != nil {
 		t.Fatalf("fetchCoreOSStream: %v", err)
 	}
@@ -205,17 +207,21 @@ func TestFetchCoreOSStream_non200(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	if _, err := fetchCoreOSStream(context.Background(), srv.URL+"/scos.json"); err == nil {
+	if _, err := fetchCoreOSStream(context.Background(), srv.URL+"/scos.json", ""); err == nil {
 		t.Fatal("expected error for HTTP 500, got nil")
 	}
 }
 
 func TestDetectCoreOSVersion_scosFor419(t *testing.T) {
 	arch := platform.CoreOSArch()
+	body := makeStreamJSON(arch, "9.0.20250510-0", "https://example.com/scos419.iso")
+	sum := sha256.Sum256(body)
+	const testSHA = "testpin0000000000000000000000000000000419"
+
 	var requestedPath string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requestedPath = r.URL.Path
-		_, _ = w.Write(makeStreamJSON(arch, "9.0.20250510-0", "https://example.com/scos419.iso"))
+		_, _ = w.Write(body)
 	}))
 	t.Cleanup(srv.Close)
 
@@ -223,13 +229,19 @@ func TestDetectCoreOSVersion_scosFor419(t *testing.T) {
 	streamRawBaseURL = srv.URL
 	t.Cleanup(func() { streamRawBaseURL = old })
 
+	oldPins := streamPins
+	streamPins = map[int]coreOSStreamPin{
+		19: {CommitSHA: testSHA, JSONSHA256: hex.EncodeToString(sum[:])},
+	}
+	t.Cleanup(func() { streamPins = oldPins })
+
 	p := newTestPhase(t)
 	info, err := p.DetectCoreOSVersion(context.Background(), "4.19.0-0.okd-2025-05-01-000000")
 	if err != nil {
 		t.Fatalf("DetectCoreOSVersion 4.19: %v", err)
 	}
-	if !strings.HasSuffix(requestedPath, "/release-4.19/data/data/coreos/scos.json") {
-		t.Errorf("4.19 should fetch scos.json; got %q", requestedPath)
+	if !strings.Contains(requestedPath, "/openshift/installer/"+testSHA+"/data/data/coreos/scos.json") {
+		t.Errorf("4.19 should fetch scos.json at pinned commit; got %q", requestedPath)
 	}
 	if info.ISOUrl != "https://example.com/scos419.iso" {
 		t.Errorf("ISOUrl = %q, want https://example.com/scos419.iso", info.ISOUrl)
@@ -238,10 +250,14 @@ func TestDetectCoreOSVersion_scosFor419(t *testing.T) {
 
 func TestDetectCoreOSVersion_fcosFor418(t *testing.T) {
 	arch := platform.CoreOSArch()
+	body := makeStreamJSON(arch, "39.20231101.3.0", "https://example.com/fcos418.iso")
+	sum := sha256.Sum256(body)
+	const testSHA = "testpin0000000000000000000000000000000418"
+
 	var requestedPath string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requestedPath = r.URL.Path
-		_, _ = w.Write(makeStreamJSON(arch, "39.20231101.3.0", "https://example.com/fcos418.iso"))
+		_, _ = w.Write(body)
 	}))
 	t.Cleanup(srv.Close)
 
@@ -249,13 +265,19 @@ func TestDetectCoreOSVersion_fcosFor418(t *testing.T) {
 	streamRawBaseURL = srv.URL
 	t.Cleanup(func() { streamRawBaseURL = old })
 
+	oldPins := streamPins
+	streamPins = map[int]coreOSStreamPin{
+		18: {CommitSHA: testSHA, JSONSHA256: hex.EncodeToString(sum[:])},
+	}
+	t.Cleanup(func() { streamPins = oldPins })
+
 	p := newTestPhase(t)
 	info, err := p.DetectCoreOSVersion(context.Background(), "4.18.0-0.okd-2024-12-01-000000")
 	if err != nil {
 		t.Fatalf("DetectCoreOSVersion 4.18: %v", err)
 	}
-	if !strings.HasSuffix(requestedPath, "/release-4.18/data/data/coreos/fcos.json") {
-		t.Errorf("4.18 should fetch fcos.json; got %q", requestedPath)
+	if !strings.Contains(requestedPath, "/openshift/installer/"+testSHA+"/data/data/coreos/fcos.json") {
+		t.Errorf("4.18 should fetch fcos.json at pinned commit; got %q", requestedPath)
 	}
 	if info.ISOUrl != "https://example.com/fcos418.iso" {
 		t.Errorf("ISOUrl = %q, want https://example.com/fcos418.iso", info.ISOUrl)
@@ -271,6 +293,12 @@ func TestDetectCoreOSVersion_fetchFailErrors(t *testing.T) {
 	old := streamRawBaseURL
 	streamRawBaseURL = srv.URL
 	t.Cleanup(func() { streamRawBaseURL = old })
+
+	oldPins := streamPins
+	streamPins = map[int]coreOSStreamPin{
+		19: {CommitSHA: "testpin0000000000000000000000000000000419", JSONSHA256: "aaaa"},
+	}
+	t.Cleanup(func() { streamPins = oldPins })
 
 	p := newTestPhase(t)
 	if _, err := p.DetectCoreOSVersion(context.Background(), "4.19.0-0.okd-2025-05-01-000000"); err == nil {
