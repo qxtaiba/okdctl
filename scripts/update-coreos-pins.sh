@@ -16,7 +16,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 COREOS_GO="$ROOT/internal/distribution/okd/setup/coreos.go"
-SUPPORTED_MINORS=(12 13 14 15 16 17 18 19 20 21 22 23)
+SUPPORTED_MINORS=(10 11 12 13 14 15 16 17 18 19 20 21 22 23)
 
 require() { command -v "$1" >/dev/null 2>&1 || { echo "missing: $1" >&2; exit 1; }; }
 require curl
