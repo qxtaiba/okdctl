@@ -1,5 +1,7 @@
-// Package version exposes the okdctl build identity (Version, GitCommit, BuildDate, GoVersion, Platform).
-// All values are -ldflags-injected before main and read race-free at runtime; tests must save/restore via t.Cleanup to avoid leaking mutations across boundaries.
+// Package version exposes the okdctl build identity: Version, GitCommit,
+// BuildDate, GoVersion, and Platform. All values are -ldflags-injected
+// before main and read race-free at runtime; tests must save/restore via
+// t.Cleanup to avoid leaking mutations across boundaries.
 package version
 
 import (
