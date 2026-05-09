@@ -22,6 +22,19 @@ import (
 	"github.com/qxtaiba/okdctl/internal/tui"
 )
 
+type destroyScope string
+
+const (
+	scopeBootstrap destroyScope = "bootstrap"
+	scopeMasters   destroyScope = "masters"
+	scopeWorkers   destroyScope = "workers"
+	scopeVMs       destroyScope = "vms"
+)
+
+func validDestroyScopes() []string {
+	return []string{string(scopeVMs), string(scopeWorkers), string(scopeMasters), string(scopeBootstrap)}
+}
+
 var (
 	destroyYes            bool
 	destroyKeepISOs       bool
@@ -46,18 +59,18 @@ var destroyTargetRE = regexp.MustCompile(
 func expandOnlyFlag(only string, cfg *config.Config) ([]string, error) {
 	const prefix = "module.okd_cluster.proxmox_virtual_environment_vm."
 	var targets []string
-	switch only {
-	case "bootstrap":
+	switch destroyScope(only) {
+	case scopeBootstrap:
 		targets = []string{prefix + "bootstrap[0]"}
-	case "masters":
+	case scopeMasters:
 		for i := range cfg.Topology.ControlPlane.Count {
 			targets = append(targets, fmt.Sprintf("%smaster[%d]", prefix, i))
 		}
-	case "workers":
+	case scopeWorkers:
 		for i := range cfg.Topology.Workers.Count {
 			targets = append(targets, fmt.Sprintf("%sworker[%d]", prefix, i))
 		}
-	case "vms":
+	case scopeVMs:
 		targets = []string{prefix + "bootstrap[0]"}
 		for i := range cfg.Topology.ControlPlane.Count {
 			targets = append(targets, fmt.Sprintf("%smaster[%d]", prefix, i))
@@ -67,7 +80,7 @@ func expandOnlyFlag(only string, cfg *config.Config) ([]string, error) {
 		}
 	default:
 		return nil, &errtypes.ConfigError{
-			Msg: fmt.Sprintf("--only %q is not valid; choose one of: vms, workers, masters, bootstrap", only),
+			Msg: fmt.Sprintf("--only %q is not valid; choose one of: %s", only, strings.Join(validDestroyScopes(), ", ")),
 		}
 	}
 	if len(targets) == 0 {
@@ -159,8 +172,11 @@ func init() {
 	destroyCmd.Flags().StringArrayVar(&destroyTargets, "target", nil,
 		"limit terraform destroy to this resource address (repeatable); must match the okd_cluster VM allowlist")
 	destroyCmd.Flags().StringVar(&destroyOnly, "only", "",
-		"scope destroy to a node group: vms, workers, masters, bootstrap (expands into --target; mutually exclusive with --target)")
+		"scope destroy to a node group: "+strings.Join(validDestroyScopes(), ", ")+" (expands into --target; mutually exclusive with --target)")
 	destroyCmd.MarkFlagsMutuallyExclusive("only", "target")
+	_ = destroyCmd.RegisterFlagCompletionFunc("only", func(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
+		return validDestroyScopes(), cobra.ShellCompDirectiveNoFileComp
+	})
 }
 
 func runDestroy(cmd *cobra.Command, _ []string) error {
