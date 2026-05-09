@@ -96,12 +96,14 @@ func (m *Manager) Remove(ctx context.Context, packages []string, _ *slog.Logger)
 // "not installed".
 func (m *Manager) IsInstalled(ctx context.Context, pkg string) (bool, error) {
 	args := slices.Concat(m.queryArgs, []string{pkg})
-	cmd := exec.CommandContext(ctx, m.queryCmd, args...) //nolint:gosec // queryCmd/queryArgs are set only from the literal constructors in NewPackageManager
-	output, err := cmd.Output()
+	output, err := system.OutputCaptured(ctx, m.queryCmd, args...)
 	if err != nil {
-		var exitErr *exec.ExitError
-		if errors.As(err, &exitErr) {
-			return false, nil
+		var subErr *system.SubprocessError
+		if errors.As(err, &subErr) {
+			var exitErr *exec.ExitError
+			if errors.As(subErr.Err, &exitErr) {
+				return false, nil
+			}
 		}
 		return false, fmt.Errorf("%s query: %w", m.queryCmd, err)
 	}
