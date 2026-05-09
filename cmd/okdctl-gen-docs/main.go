@@ -7,7 +7,7 @@ package main
 
 import (
 	"flag"
-	"log"
+	"fmt"
 	"os"
 
 	_ "github.com/qxtaiba/okdctl/internal/addon/catalog"
@@ -20,7 +20,8 @@ func main() {
 	flag.Parse()
 
 	if err := os.MkdirAll(*outDir, 0o755); err != nil {
-		log.Fatalf("create output dir: %v", err)
+		fmt.Fprintf(os.Stderr, "create output dir: %v\n", err)
+		os.Exit(1)
 	}
 
 	root := cli.RootCmd()
@@ -30,6 +31,7 @@ func main() {
 	root.DisableAutoGenTag = true
 
 	if err := doc.GenMarkdownTree(root, *outDir); err != nil {
-		log.Fatalf("generate docs: %v", err)
+		fmt.Fprintf(os.Stderr, "generate docs: %v\n", err)
+		os.Exit(1)
 	}
 }
