@@ -41,7 +41,6 @@ func boxedSectionCore(content, title string, width int, cfg boxConfig) string {
 	borderStyle := lipgloss.NewStyle().Foreground(cfg.borderColor)
 	titleStyle := lipgloss.NewStyle().Foreground(cfg.titleColor).Bold(true)
 
-	lines := strings.Split(content, "\n")
 	maxContentWidth := maxLineWidth(content)
 
 	titleUpper := strings.ToUpper(title)
@@ -93,7 +92,7 @@ func boxedSectionCore(content, title string, width int, cfg boxConfig) string {
 	}
 
 	var contentRows []string
-	for _, line := range lines {
+	for line := range strings.Lines(content) {
 		padding := max(innerWidth-lipgloss.Width(line), 0)
 		row := borderStyle.Render("│") + line + strings.Repeat(" ", padding) + borderStyle.Render("│")
 		contentRows = append(contentRows, row)
