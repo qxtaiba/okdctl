@@ -18,6 +18,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/executor"
 	"github.com/qxtaiba/okdctl/internal/httputil"
+	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
@@ -110,7 +111,7 @@ func (p *Phase) configureSELinuxForApache(ctx context.Context) {
 		p.Log.Warn("apache: semanage port modify failed", "err", err)
 	} else if r.ExitCode != 0 {
 		p.Log.Warn("apache: semanage port modify exited non-zero",
-			"exit", r.ExitCode, "stderr", strings.TrimSpace(r.Stderr))
+			"exit", r.ExitCode, "stderr", logutil.RedactableStderr(strings.TrimSpace(r.Stderr)))
 	}
 }
 

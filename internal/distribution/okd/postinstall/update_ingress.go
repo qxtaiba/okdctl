@@ -12,6 +12,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/templates"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
+	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
@@ -566,7 +567,7 @@ func (p *Phase) attemptRollback(ctx context.Context, ic *ingressControllerInfo) 
 
 	result, err := p.Exec.RunWithStdin(ctx, rollbackJSON, "oc", "create", "-f", "-")
 	if err != nil || result.ExitCode != 0 {
-		p.Log.Warn("update-ingress: rollback create failed", "err", err, "stderr", result.Stderr)
+		p.Log.Warn("update-ingress: rollback create failed", "err", err, "stderr", logutil.RedactableStderr(result.Stderr))
 		return
 	}
 
