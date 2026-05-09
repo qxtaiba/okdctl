@@ -99,17 +99,12 @@ func (f *OKDVersionFetcher) fetchAllPages(ctx context.Context, repo string) ([]g
 }
 
 func (f *OKDVersionFetcher) deduplicateReleases(releases []githubRelease) []githubRelease {
-	seen := make(map[string]bool)
-	result := make([]githubRelease, 0, len(releases))
-
-	for _, rel := range releases {
-		if !seen[rel.TagName] {
-			seen[rel.TagName] = true
-			result = append(result, rel)
-		}
-	}
-
-	return result
+	slices.SortFunc(releases, func(a, b githubRelease) int {
+		return strings.Compare(a.TagName, b.TagName)
+	})
+	return slices.CompactFunc(releases, func(a, b githubRelease) bool {
+		return a.TagName == b.TagName
+	})
 }
 
 func (f *OKDVersionFetcher) parseReleases(releases []githubRelease) []OKDReleaseSeries {
