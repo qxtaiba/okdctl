@@ -20,6 +20,9 @@ import (
 // remoteISO256 runs sha256sum on remotePath/filename over SSH and returns the
 // hex digest. Any SSH or parse failure returns ("", err).
 func remoteISO256(ctx context.Context, exec *executor.Executor, host, knownHostsPath, remotePath, filename string) (string, error) {
+	if err := phase.ValidateRemoteFilename(filename); err != nil {
+		return "", fmt.Errorf("remoteISO256: %w", err)
+	}
 	target := remotePath + "/" + filename
 	result, err := phase.SSHRunArgv(ctx, exec, host, knownHostsPath, "sha256sum", "--", target)
 	if err != nil {
