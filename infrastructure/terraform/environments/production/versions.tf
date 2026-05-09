@@ -8,3 +8,10 @@ terraform {
     }
   }
 }
+
+# insecure = false is explicit so PROXMOX_VE_INSECURE cannot silently
+# disable TLS verification in production. Endpoint and credentials are
+# still sourced from PROXMOX_VE_* env vars.
+provider "proxmox" {
+  insecure = false
+}
