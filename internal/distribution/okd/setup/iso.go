@@ -74,13 +74,17 @@ func (p *Phase) BuildCustomISOs(ctx context.Context, cfg *config.Config, opts *O
 		default:
 		}
 
+		ignitionURL, err := BuildIgnitionURLForNode(cfg, node.Role)
+		if err != nil {
+			return err
+		}
 		kargsParams := &LiveKargsParams{
 			NodeIP:      node.IP,
 			Gateway:     gateway,
 			Netmask:     netmask,
 			DNS:         dns,
 			Interface:   iface,
-			IgnitionURL: BuildIgnitionURLForNode(cfg, node.Role),
+			IgnitionURL: ignitionURL,
 		}
 		fp := nodeISOFingerprint(
 			BuildLiveKargs(kargsParams),
@@ -199,7 +203,10 @@ func (p *Phase) buildNodeISO(ctx context.Context, cfg *config.Config, node NodeI
 	}
 
 	gateway, netmask, dns, iface := ExtractNetworkConfig(cfg)
-	ignitionURL := BuildIgnitionURLForNode(cfg, node.Role)
+	ignitionURL, err := BuildIgnitionURLForNode(cfg, node.Role)
+	if err != nil {
+		return err
+	}
 
 	kargsParams := &LiveKargsParams{
 		NodeIP:      node.IP,
