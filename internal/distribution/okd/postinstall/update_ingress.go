@@ -262,16 +262,20 @@ func (p *Phase) finalizeIngress(
 		ConvertedCount: convertedCount,
 	}
 
-	// Only remove HAProxy if every IC is LoadBalancerService — HostNetwork
-	// controllers still require the bastion to front :80/:443.
+	// DNS swap must precede HAProxy removal: RemoveHAProxy verifies the new
+	// path by resolving api.* via dnsmasq, which must already point at the
+	// VIP — not the bastion — before HAProxy stops listening.
 	if opts.RemoveHAProxy && hostNetworkCount == 0 {
 		p.Log.Info("update-ingress: removing haproxy from bastion")
 		if err := p.RemoveHAProxy(ctx, vip, phase.ClusterConfigDir(opts.WorkDir)); err != nil {
-			p.Log.Warn("update-ingress: haproxy removal failed", "err", err)
-		} else {
-			result.HAProxyRemoved = true
-			p.Log.Info("update-ingress: haproxy removed from bastion")
+			p.Log.Warn("update-ingress: haproxy removal failed — rolling back dns to bootstrap", "err", err)
+			if rbErr := dns.DeployBootstrap(ctx, cfg); rbErr != nil {
+				p.Log.Warn("update-ingress: dns rollback to bootstrap failed", "err", rbErr)
+			}
+			return nil, &errtypes.ClusterError{Msg: "haproxy removal failed after dns swap — dns rolled back to bootstrap", Err: err}
 		}
+		result.HAProxyRemoved = true
+		p.Log.Info("update-ingress: haproxy removed from bastion")
 	} else if opts.RemoveHAProxy && hostNetworkCount > 0 {
 		p.Log.Warn("update-ingress: skipping haproxy removal — hostnetwork controllers still active")
 	}
