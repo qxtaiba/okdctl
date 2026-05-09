@@ -25,6 +25,20 @@ type AddonStatus struct {
 	Error   string `json:"error,omitempty"`
 }
 
+// Label returns the user-visible health string for text output.
+// Healthy → "healthy"; unhealthy with an error → "degraded";
+// zero-value (not in verify results) → "not enabled".
+func (a AddonStatus) Label() string {
+	switch {
+	case a.Healthy:
+		return "healthy"
+	case a.Error != "":
+		return "degraded"
+	default:
+		return "not enabled"
+	}
+}
+
 // ClusterPhase is the high-level lifecycle state the CLI renders in status
 // output and uses for exit-code mapping. Values are title-cased to match the
 // conventions used by kube-style tooling.

@@ -258,11 +258,7 @@ func printClusterStatus(cmd *cobra.Command, st *okd.ClusterStatus) error {
 	if len(st.Addons) > 0 {
 		sb.section("addons")
 		for _, a := range st.Addons {
-			addonHealth := "healthy"
-			if !a.Healthy {
-				addonHealth = "degraded"
-			}
-			sb.kv(a.Name, addonHealth)
+			sb.kv(a.Name, a.Label())
 		}
 		sb.newline()
 	}
@@ -349,19 +345,19 @@ func runDescribeAddon(cmd *cobra.Command, args []string) error {
 	mgr := newAddonManager(cfg, projectRoot)
 	results, _ := mgr.VerifyAll(cmd.Context())
 
-	var health string
+	as := okd.AddonStatus{}
 	for _, r := range results {
 		if r.Name == name {
-			if r.Err == nil {
-				health = "healthy"
-			} else {
-				health = "degraded: " + r.Err.Error()
+			as = okd.AddonStatus{Name: r.Name, Healthy: r.Err == nil}
+			if r.Err != nil {
+				as.Error = r.Err.Error()
 			}
 			break
 		}
 	}
-	if health == "" {
-		health = "not enabled"
+	health := as.Label()
+	if !as.Healthy && as.Error != "" {
+		health += ": " + as.Error
 	}
 
 	lines := []struct{ k, jsonKey, v string }{
