@@ -22,6 +22,17 @@ func pveshRun(ctx context.Context, p *RemoteISOParams, subcommand, path string) 
 	return &pveshResult{stdout: result.Stdout}, nil
 }
 
+// PveshRun is the exported entry point for callers outside package phase.
+// It inherits pveshRun's validateProxmoxName guard, so callers must not
+// validate p.Node themselves. Returns the raw JSON stdout on success.
+func PveshRun(ctx context.Context, p *RemoteISOParams, subcommand, path string) (string, error) {
+	result, err := pveshRun(ctx, p, subcommand, path)
+	if err != nil {
+		return "", err
+	}
+	return result.stdout, nil
+}
+
 type pveshResult struct {
 	stdout string
 }
