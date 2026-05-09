@@ -36,7 +36,8 @@ var deployCmd = &cobra.Command{
 	Short: "Deploy a Kubernetes cluster",
 	Long:  `Deploy an OKD/OpenShift cluster through an interactive wizard.`,
 	Example: `  okdctl deploy
-  okdctl deploy --yes --config my-cluster.yaml
+  okdctl deploy --config my-cluster.yaml
+  okdctl deploy --yes --output-file my-cluster.yaml
   okdctl deploy --dry-run`,
 	RunE: runDeploy,
 }
