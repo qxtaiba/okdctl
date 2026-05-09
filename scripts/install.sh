@@ -164,7 +164,7 @@ cd "$TMP"
 # Defense-in-depth: reject archives containing absolute paths or parent-traversal
 # entries before any bytes hit the filesystem. Goreleaser tarballs are flat, so
 # a match here means a tampered or malformed archive slipped past the sha256 check.
-tar -tzf "$ARCHIVE_NAME" | grep -qE '^(\.\.|/)' && die "archive contains absolute or parent-traversal paths"
+tar -tzf "$ARCHIVE_NAME" | grep -qE '(^|/)\.\.(/|$)|^/' && die "archive contains absolute or parent-traversal paths"
 tar --no-same-owner --no-same-permissions --no-overwrite-dir -xzf "$ARCHIVE_NAME"
 
 [ -f "$BINARY" ] || die "$BINARY not found in archive"
