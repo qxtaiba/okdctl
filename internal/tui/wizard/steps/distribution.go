@@ -104,6 +104,8 @@ func (s *DistributionStep) handleKeyMsg(msg tea.KeyPressMsg) (wizard.WizardStep,
 		return s.handleEnterKey()
 	case key.Matches(msg, key.NewBinding(key.WithKeys("tab"))):
 		return s.handleTabKey()
+	case key.Matches(msg, key.NewBinding(key.WithKeys(" "))):
+		return s.handleSpaceKey()
 	case key.Matches(msg, key.NewBinding(key.WithKeys("up", "k", "down", "j"))):
 		return s.handleNavigationKey(msg)
 	}
@@ -134,6 +136,38 @@ func (s *DistributionStep) handleEnterKey() (wizard.WizardStep, tea.Cmd) {
 	return s, func() tea.Msg {
 		return wizard.StepCompleteMsg{StepID: s.ID()}
 	}
+}
+
+// handleSpaceKey picks (or unpicks) the currently-highlighted version
+// without advancing the wizard. It emits ConfigSyncMsg so the wizard's
+// model can call step.Apply(m.config) and the bottom-right context badge
+// reflects the live selection.
+func (s *DistributionStep) handleSpaceKey() (wizard.WizardStep, tea.Cmd) {
+	selected := s.versionSelector.Selected()
+	if selected.ID == "" {
+		return s, nil
+	}
+
+	var newVersion string
+	if strings.HasPrefix(selected.ID, "minor:") {
+		minor := s.getMinorFromOptionID(selected.ID)
+		for _, series := range s.okdSeries {
+			if series.Minor == minor {
+				newVersion = series.Latest.Version
+				break
+			}
+		}
+	} else {
+		newVersion = selected.ID
+	}
+
+	if s.selectedVersion == newVersion {
+		s.selectedVersion = ""
+	} else {
+		s.selectedVersion = newVersion
+	}
+
+	return s, func() tea.Msg { return wizard.ConfigSyncMsg{StepID: s.ID()} }
 }
 
 func (s *DistributionStep) handleTabKey() (wizard.WizardStep, tea.Cmd) {
@@ -220,13 +254,13 @@ func (s *DistributionStep) viewVersionPhase() string {
 			lipgloss.NewStyle().
 				Foreground(tui.ColorSlate500).
 				Italic(true).
-				Render("press tab to collapse"),
+				Render("press tab to collapse · space to pick"),
 		)
 	} else {
 		hints = append(hints, lipgloss.NewStyle().
 			Foreground(tui.ColorSlate500).
 			Italic(true).
-			Render("press tab to expand patch versions"))
+			Render("press tab to expand patch versions · space to pick"))
 	}
 
 	content.WriteString(strings.Join(hints, "\n"))
@@ -250,8 +284,9 @@ func (s *DistributionStep) Apply(cfg *config.Config) error {
 func (s *DistributionStep) ShortHelp() []wizard.KeyBinding {
 	if s.phase == phaseVersionSelect {
 		return []wizard.KeyBinding{
-			{Key: "↑↓", Help: "select"},
+			{Key: "↑↓", Help: "navigate"},
 			{Key: "tab", Help: "expand/collapse"},
+			{Key: "space", Help: "pick"},
 			{Key: helpEnter, Help: helpConfirm},
 			{Key: helpEsc, Help: helpBack},
 		}
