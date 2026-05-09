@@ -3,6 +3,7 @@ package destroy
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -123,7 +124,7 @@ func (p *Phase) destroyInfrastructure(ctx context.Context, opts *Options) error 
 
 	if err := tf.Init(ctx); err != nil {
 		if hint := stateLockHint(terraformDir); hint != nil {
-			return hint
+			return errors.Join(hint, &errtypes.ClusterError{Msg: "terraform init failed", Err: err})
 		}
 		return &errtypes.ClusterError{Msg: "terraform init failed", Err: err}
 	}
