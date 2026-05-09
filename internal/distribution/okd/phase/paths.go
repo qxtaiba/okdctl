@@ -1,4 +1,8 @@
-// Package phase provides shared base types and path utilities for OKD phases.
+// Package phase hosts BasePhase plus the cross-phase helpers (OcResourceExists,
+// OcPollOutput, NodeRole, ConditionStatus, VMState, SSHRunArgv) shared by the
+// setup, install, postinstall, destroy, and cleanup phases. New cross-phase
+// helpers belong here per CLAUDE.md §architecture-notes — not in a specific
+// phase package — to keep the import graph one-directional.
 package phase
 
 import (
