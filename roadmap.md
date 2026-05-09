@@ -526,26 +526,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 #### audit-security
 
-##### `sec:06f00bcb:auth-tree-in-webroot` — auth tree in webroot
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-06f00bcb-auth-tree-webroot  
-**Severity:** blocker  
-**Cluster:** file-toctou  
-**Evidence:** `internal/distribution/okd/setup/apache.go:174-234`  
-**Problem:** DeployToWebServer copies the openshift-install auth/ tree (kubeconfig + kubeadmin-password) into the apache DocumentRoot at webRoot/auth/, alongside the ignition files. The deployment relies entirely on the source mode bits (0o600) to keep apache from serving them — there is no Apache <Location /auth> deny rule. A future schema bump in openshift-install that emits a more permissive mode, an operator who runs `chmod -R go+r` to debug, or any DocumentRoot override that re-renders perms turns the kubeadmin password into a bastion-network HTTP fetch.  
-**Fix:** Stop copying the auth/ tree into webRoot. The kubeconfig + kubeadmin-password are consumed by install/SetupClusterAccess (~/.kube/config) and the postinstall verifyKubeVIPAPIHealthBootstrap (kubeconfigPath in clusterDir). No phase NEEDS them under apache. If a future caller does, render a one-line drop-in `<Location /auth>Require all denied</Location>` snippet alongside the configureApachePort write so the deny rule is colocated with the document root.  
-**Effort:** days
-
-##### `sec:eb479d86:ssh-pin-bypass` — ssh pin bypass
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-eb479d86-ssh-pin-bypass  
-**Severity:** blocker  
-**Cluster:** tls-network  
-**Evidence:** `internal/distribution/okd/setup/upload.go:78-91`  
-**Problem:** uploadISOsViaSCP hardcodes StrictHostKeyChecking=accept-new and ignores the knownHostsPath that the caller obtained from sshpin.Verify. When proxmox.ssh_host_fingerprint is set, the rest of the system enforces strict host-key checking, but this scp call still trusts whatever key the network presents — defeating the pin on the very phase that uploads custom ISOs containing per-node ignition kargs.  
-**Fix:** Thread knownHostsPath into uploadISOsViaSCP. When non-empty: pass `-o UserKnownHostsFile=<path>` and `-o StrictHostKeyChecking=yes`; only fall back to accept-new when the path is empty. Mirror the sshBaseArgs() shape used in phase/ssh.go so the policy matches the SSH path that ALREADY honors the pin.  
-**Effort:** days
-
 ##### `sec:2f70d7df:ignition-over-http` — ignition over http
 
 **Status:** not started  
@@ -606,16 +586,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Pin the openshift/installer reference to a known-good commit SHA (not a branch) and embed the expected JSON sha256 at compile time, similar to bootstrapOCChecksum/bootstrapOCVersion in release_extract.go. Bumping the OKD minor in CI requires explicit re-pin. Alternatively, fetch from a release tag that is itself signed via cosign and verify the tag's sigstore bundle before parsing.  
 **Effort:** hours
 
-##### `sec:e3782ee7:atomicwrite-symlink-race` — atomicwrite symlink race
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-e3782ee7-atomicwrite-symlink  
-**Severity:** major  
-**Cluster:** file-toctou  
-**Evidence:** `internal/system/fs.go:196-243`  
-**Problem:** AtomicWrite creates the destination via openTempFile (O_CREATE|O_EXCL) then os.Rename. There is no os.Lstat/O_NOFOLLOW pre-check on path itself; if path pre-exists as a symlink, os.Rename atomically replaces the symlink (good) but the directory containing path can still be symlink-redirected by an attacker who controls a parent component. Critical writes (kubeconfig, .env, install-config.yaml) under the sudo re-exec model use AtomicWrite. Compare to envfile.go:L52-58 and runlock.go:L40-50 which both Lstat + O_NOFOLLOW on the path itself.  
-**Fix:** In AtomicWrite, before the openTempFile call, run os.Lstat(path) and refuse if the result reports a symlink (mirroring credentials/envfile.go:WriteEnvFile L52-58). os.Rename's replace-target semantics already overwrite the link atomically once the temp file exists, but the explicit refusal makes the policy auditable and removes the TOCTOU window between EnsureDirForFile and Rename.  
-**Effort:** hours
-
 ##### `sec:48688e63:proxmox-host-no-revalidate` — proxmox host no revalidate
 
 **Status:** not started  
@@ -634,26 +604,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/sshpin/sshpin.go:31-80`  
 **Problem:** sshpin.Verify's empty-fingerprint branch is the documented fallback when proxmox.ssh_host_fingerprint is unset — but it logs a WARN and returns ('', nil), letting accept-new TOFU proceed. There is no operator-facing config gate (e.g. proxmox.require_pinned_fingerprint: true) that fails closed for security-sensitive deploys. A homelab without operator discipline silently runs every deploy on first-seen-key trust.  
 **Fix:** Add provider.proxmox.require_pinned_fingerprint bool to ProxmoxConfig. When true and SSHHostFingerprint is empty, sshpin.Verify returns *errtypes.AuthError instead of the WARN+continue path. Default false to preserve current behaviour.  
-**Effort:** hours
-
-##### `sec:bdf5a873:cleanup-symlink-traversal` — cleanup symlink traversal
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-bdf5a873-cleanup-symlink  
-**Severity:** minor  
-**Cluster:** file-toctou  
-**Evidence:** `internal/distribution/okd/cleanup/artifacts.go:33-60`  
-**Problem:** SafeRemoveWithLogger calls os.RemoveAll(path) under sudo re-exec without lstat-checking if path is itself a symlink. The refuseCriticalPath allowlist guards /, /etc, etc., but a symlink at <workDir>/okd-install→/etc passes the check (Base is 'okd-install') and would direct the unlink at /etc — bounded because Go's os.RemoveAll does not follow symlinks during recursion, but the symlink itself is unlinked rather than what the operator intended.  
-**Fix:** Add an Lstat check at the head of SafeRemoveWithLogger: if the entry is a symlink, log Warn and Refuse to RemoveAll, requiring the operator to remove the link manually. Mirrors the symlink refusal pattern in envfile.go:WriteEnvFile and runlock.go:Acquire.  
-**Effort:** hours
-
-##### `sec:c8b28673:tar-mode-trust` — tar mode trust
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-c8b28673-tar-mode-mask  
-**Severity:** minor  
-**Cluster:** file-toctou  
-**Evidence:** `internal/download/extract.go:89-110`  
-**Problem:** processTarEntry uses os.MkdirAll(targetPath, os.FileMode(header.Mode&0o755)) and OpenFile(...os.FileMode(header.Mode&0o777)) — the file mode is read from the tar header without a floor. A malicious tarball containing a 0o000 directory entry can prevent extraction of subsequent files inside it; a 0o4755 setuid file is masked off by &0o777, but 0o2xxx setgid bits ARE preserved. okdctl extracts release tarballs from quay.io/okd/scos-release (already-fetched, cosign-anchored), so reachability is bounded by upstream poisoning, but the helper is generic.  
-**Fix:** Tighten the file mask from &0o777 to &0o755 for regular files and &0o755 for dirs. Setgid/sticky bits in archive entries have no legitimate use in the binary tarballs okdctl consumes; mask them off explicitly.  
 **Effort:** hours
 
 ##### `sec:451be4fa:invokinguser-fallback-doc` — invokinguser fallback doc
@@ -800,16 +750,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 #### audit-state-and-recovery
 
-##### `state:15ba17da:destroy-iso-cleanup-before-tf` — destroy iso cleanup before tf
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/state-15ba17da-destroy-cleanup-order  
-**Severity:** major  
-**Cluster:** destroy-safety  
-**Evidence:** `internal/distribution/okd/destroy/steps.go:74-167`  
-**Problem:** Step ordering is StepDestroyInfra → StepRemoveRemoteISO → StepCleanupFiles → StepCleanupFirewall, but with NonFatal=true on every step the orchestrator continues even after `terraform destroy` fails. RemoveRemoteISO then runs against running VMs (because TF destroy didn't complete) — the safety check `anyVMReferencesISO` will skip ISO removal correctly, but file cleanup goes ahead and removes terraform.tfvars / cluster-config that an operator's retry would need. The terraformFailed() guard at L127 catches the cleanup-Kind downgrade but does NOT change the step ordering — irreversible host-file cleanup still runs after a TF failure that left VMs alive.  
-**Fix:** When destroyTracker.terraformFailed() is true, also skip StepCleanupFirewall and the haproxy/dnsmasq subset of StepCleanupFiles (keep only the workdir cleanup). Today the WorkOnly downgrade is correct shape — extend it to skip the firewall step and the haproxy/dnsmasq cleanup helpers when VMs may still be alive. Surface a clearer summary message: 'destroy.terraform.failed = true; preserved haproxy/dnsmasq for retry'.  
-**Effort:** hours
-
 ##### `state:48688e63:tf-state-no-backup` — tf state no backup
 
 **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/state-48688e63-tf-state-backup  
@@ -848,16 +788,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/distribution/okd/setup/steps.go:109-201`  
 **Problem:** StepGenerateConfig.AlreadyDone keys on `install-config.yaml.backup` — correct. StepGenerateManifests.AlreadyDone keys on `clusterDir/manifests` directory existing. StepGenerateIgnition keys on every .ign file. But manifests directory existing does NOT mean manifests are valid — `openshift-install create manifests` exits non-zero mid-write and leaves a partial manifests/ that the next run sees as 'already done'. Re-run skips manifest generation; subsequent ignition step then operates on partial manifests and produces malformed ignition. The AlreadyDone check is too coarse.  
 **Fix:** Tighten the manifests-AlreadyDone to require BOTH the directory AND a sentinel file like `<clusterDir>/manifests/.complete` written via AtomicWrite by GenerateManifests on success. Pattern matches the install-config.yaml.backup sentinel already used by StepGenerateConfig. Same idea for StepGenerateIgnition: add a `.ignition.complete` sentinel after ValidateIgnitionFiles passes, instead of the implicit 'all .ign files >1024 bytes' check that runs every time.  
-**Effort:** hours
-
-##### `state:fb54208a:postinstall-bootstrap-cleanup-nonfatal` — postinstall bootstrap cleanup nonfatal
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/state-fb54208a-bootstrap-cleanup-fatal  
-**Severity:** major  
-**Cluster:** phase-idempotency  
-**Evidence:** `internal/distribution/okd/postinstall/steps.go:43-58`  
-**Problem:** StepCleanupBootstrap is NonFatal=true. If terraform apply -target=bootstrap fails (e.g. proxmox API auth glitch), postinstall continues and reports 'deployment complete' even though the bootstrap VM is still running, eating control-plane resources and risking etcd quorum confusion if it rebooted into the cluster. A subsequent `okdctl destroy` will catch it via terraform — but a user who 'just deploys' and doesn't destroy is left with a zombie bootstrap. Result.BootstrapCleaned tracks the success but isn't surfaced in the deploy-complete summary as a warning.  
-**Fix:** Either elevate NonFatal=false (preferred — bootstrap cleanup failure is an operator-must-act event) OR keep NonFatal but surface result.BootstrapCleaned=false prominently in PostDeploySummary with a 'run okdctl destroy --only=bootstrap' hint. Today the post-deploy summary only shows the cleanup status if it succeeded.  
 **Effort:** hours
 
 ##### `state:0f076161:destroy-target-no-precondition` — destroy target no precondition
@@ -1001,26 +931,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Effort:** hours
 
 #### audit-iac-and-shell
-
-##### `iac:b803fcb7:tfsec-soft-fail` — tfsec soft fail
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/iac-b803fcb7-tfsec-fail-closed  
-**Severity:** major  
-**Cluster:** hcl-provider-hygiene  
-**Evidence:** `.github/workflows/ci.yml:114-117`  
-**Problem:** tfsec-action runs with soft_fail: true, so HCL security findings produce job logs but never fail scan-terraform. CLAUDE.md §Tooling states all CI checks must be green before merging — soft_fail makes tfsec un-gating, so the green check is cosmetic.  
-**Fix:** Drop soft_fail: true (or set false). Add .tfsec/config.yml to suppress known-acceptable findings by rule code with documented justification — but the default must be gating.  
-**Effort:** hours
-
-##### `iac:e076e43c:cosign-optional-when-absent` — cosign optional when absent
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/iac-e076e43c-cosign-required  
-**Severity:** major  
-**Cluster:** install-sh-integrity — seam→audit-security  
-**Evidence:** `scripts/install.sh:141-146`  
-**Problem:** When cosign is not installed and INSECURE is unset, the script silently downgrades to sha256-only trust. SHA256SUMS is fetched from the same release origin as the binary, so a single compromised release host (or a defeated TLS chain) replaces both. CWE-494: download without integrity check. The INSECURE=1 branch at L60-L66 enforces opt-in when cosign IS present, but the cosign-absent path bypasses that gate.  
-**Fix:** Either (a) require cosign as a hard prerequisite (mirror the sha256sum require at L49-L53 — die early with an install-cosign hint), or (b) print the cosign-absent message at WARN level via red() so the trust-degradation is visible. Option (a) matches helm/kind/terraform installer conventions.  
-**Effort:** hours
 
 ##### `iac:18a795d5:depends-on-bootstrap-artificial` — depends on bootstrap artificial
 
@@ -1195,16 +1105,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Effort:** hours
 
 #### audit-concurrency
-
-##### `con:0b188cab:retry-eats-non-retryable` — retry eats non retryable
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/con-0b188cab-retry-fast-fail  
-**Severity:** major  
-**Cluster:** time-sleep-retry  
-**Evidence:** `internal/addon/helpers.go:23-41`  
-**Problem:** RetryDefault retries every fn() error through the full backoff budget (3 steps, 5s base, factor 2, jitter 0.5, 5min cap). The //nolint:nilerr suppresses errcheck but documents the bug: a permanent failure (auth denied, oc binary missing, malformed addon manifest) consumes the full ~35s of backoff before surfacing. EnsureNamespace is one caller — a missing oc binary should fail fast, not after 3 retries.  
-**Fix:** Mirror download/retry.go::isRetryable: add an Addon-level isRetryable(error) check (oc-binary-missing, ctx-canceled, ConfigError, AuthError → fail-fast). Return (false, fnErr) for non-retryable so wait aborts immediately; return (false, nil) only for transient (5xx, connection refused, transient executor.ExitError).  
-**Effort:** hours
 
 ##### `con:06f00bcb:ctx-ignored-file-io` — ctx ignored file io
 
@@ -1450,16 +1350,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 #### audit-cli-ux
 
-##### `ux:e7db1220:releases-validate-flag-error-not-usageerror` — releases validate flag error not usageerror
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/ux-e7db1220-releases-usageerror  
-**Severity:** major  
-**Cluster:** exit-codes — seam→audit-errors — related: ux:fd2125dd:args-validator-not-usageerror  
-**Evidence:** `internal/cli/releases.go:157-173` + 2 more  
-**Problem:** validateChannel and validateFormat both return plain fmt.Errorf on rejected --channel / --output values. Reaches exitCodeFor → 1, not 64 (EX_USAGE). Same shape as the addon-install Args bug. These are flag-value-shape errors and should map to the documented usage-class code so scripted callers can branch consistently. Pattern: ≥3 sites (releases.go:L157, L166, plus addon Args:L62-L73). Umbrella per-pattern finding referencing the per-site addon finding.  
-**Fix:** Wrap both validators' returns in &errtypes.UsageError{Msg: ..., Err: ...}. Single change in releases.go validates eight call sites at once. Updates the taxonomy alignment for --channel and --output across the read-only command surface.  
-**Effort:** hours
-
 ##### `ux:fd2125dd:args-validator-not-usageerror` — args validator not usageerror
 
 **Status:** not started  
@@ -1602,16 +1492,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Move prefix and description to slog attrs and keep the message static. Replace `waitMsg := fmt.Sprintf("%s: waiting for %s...", prefix, description); logger.Info(waitMsg)` with `logger.Info("waiting", "for", description, "prefix", prefix)`. Same shape for readyMsg → `logger.Info("ready", "for", description, "prefix", prefix, "polls", polls, "elapsed", elapsed.Round(time.Second))`. Net -2 LOC. Consider also folding the L164 Debug similarly. Verify the tui formatter renders 'prefix' as a leading group.  
 **Effort:** hours
 
-##### `obs:beabab0c:phase-attr-missing-on-setup` — phase attr missing on setup
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/obs-beabab0c-setup-phase-attr  
-**Severity:** minor  
-**Cluster:** field-stability  
-**Evidence:** `internal/distribution/okd/setup/phase.go:99-107`  
-**Problem:** Setup Phase.New does not call `bp.Log = bp.Log.With("phase", "setup")` even though install/postinstall/destroy/cleanup all do. Every setup-phase log line therefore lacks the 'phase' attr while the other four phases emit it consistently — operators filtering JSON logs by phase=setup get an empty result. Field-stability regression: the same conceptual key is present in 4/5 phases.  
-**Fix:** Add `bp.Log = bp.Log.With("phase", "setup")` between the NewBasePhase call (L100) and the platform detection at L101 — pattern matches install/phase.go:L91, postinstall/phase.go:L68, destroy/phase.go:L62, cleanup/cleanup.go:L105. Net +1 LOC.  
-**Effort:** hours
-
 ##### `obs:eb479d86:sprintf-attr-value` — sprintf attr value
 
 **Status:** not started  
@@ -1682,16 +1562,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/distribution/okd/destroy/steps.go:60-69`  
 **Problem:** destroyTracker.terraformFailed iterates t.failures looking for a literal string match — slices.Contains expresses the intent in one line. Identical pattern to the cleanup.Kind.IsValid case (mod:262af6e4); both reflect the same pre-1.21 idiom not yet migrated.  
 **Fix:** Replace the inner loop with `return slices.Contains(t.failures, "terraform destroy")`. Keeps the lock take/defer wrapping unchanged. Net delete: ~5 LOC.  
-**Effort:** hours
-
-##### `mod:262af6e4:use-slices-contains` — use slices contains
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/mod-262af6e4-cleanup-slices-contains  
-**Severity:** minor  
-**Cluster:** slices-maps  
-**Evidence:** `internal/distribution/okd/cleanup/cleanup.go:52-60`  
-**Problem:** Kind.IsValid hand-rolls a contains loop over ValidKinds() — the textbook slices.Contains use case. The repo already uses slices.Contains for the equivalent check in internal/cli/elevation.go::requiresRoot (rootRequiredCmds) and internal/config/validators.go::isValidDistribution / isValidProvider, so this site is the inconsistent outlier.  
-**Fix:** Collapse the body to `return slices.Contains(ValidKinds(), k)`. ValidKinds returns []Kind which slices.Contains supports natively (Kind is comparable). Net delete: ~6 LOC.  
 **Effort:** hours
 
 ##### `mod:ddf885f4:use-slices-contains` — use slices contains
@@ -2151,16 +2021,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Effort:** hours
 
 #### audit-tests
-
-##### `tst:bfdaf5e3:cred-bytes-type-untested` — cred bytes type untested
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/tst-bfdaf5e3-cred-bytes  
-**Severity:** blocker  
-**Cluster:** cred-path-untested  
-**Evidence:** `internal/config/secret.go:1-53`  
-**Problem:** config.SecretBytes is the credential-bearing wrapper used for ProxmoxConfig.Password and ProxmoxConfig.APIToken (cluster.go:120-121). It exposes Set/Bytes/Zeroize/IsEmpty/String/Redacted, all of which are untested. The String()=='[redacted]' invariant and the Zeroize-overwrites-prior-Set-buffer invariant are both unguarded — a future refactor that drops Redacted() or returns Bytes() from String() would silently leak credentials through every fmt.Sprintf log site that takes a config value.  
-**Fix:** Add internal/config/secret_test.go covering: (1) String() returns the literal '[redacted]' for any populated buffer, (2) Set replaces the prior buffer and Zeroizes the old backing array, (3) %v / %s / %+v fmt verbs all emit '[redacted]', (4) Redacted() returns '[redacted]', (5) IsEmpty toggles around Set/Zeroize, (6) Bytes() returns the live slice and a follow-up Zeroize wipes the bytes the caller still holds (caller-must-not-retain contract). Pattern-match credentials/proxmox_test.go::TestProxmoxCredentials_StringMasks for the fmt-verb sweep.  
-**Effort:** days
 
 ##### `tst:40d315ad:destructive-happy-untested` — destructive happy untested
 
