@@ -30,8 +30,6 @@ func (m *Model) View() tea.View {
 	content.WriteString("\n")
 	content.WriteString(m.viewport.View())
 	content.WriteString("\n")
-	content.WriteString(m.renderScrollIndicator())
-	content.WriteString("\n")
 
 	if m.err != nil {
 		errorStyle := lipgloss.NewStyle().
@@ -42,6 +40,9 @@ func (m *Model) View() tea.View {
 		content.WriteString("\n")
 	}
 
+	// renderFooter prepends the scroll indicator to the help bar so the
+	// scroll-indicator line doubles as the footer's top divider — one row
+	// of vertical real estate instead of two.
 	content.WriteString(m.renderFooter())
 
 	// In lipgloss v2, Style.Width(N) sets OUTER width — the border is
@@ -190,7 +191,9 @@ func (m *Model) renderFooter() string {
 	}
 
 	helpBar := RenderHelpBar(bindings)
-	return FooterStyle.Width(width).Render(helpBar)
+	helpBarRendered := FooterStyle.Width(width).Render(helpBar)
+
+	return m.renderScrollIndicator() + "\n" + helpBarRendered
 }
 
 func defaultKeyBindings() []KeyBinding {
