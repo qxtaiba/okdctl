@@ -39,7 +39,7 @@ func TestExpandOnlyFlag(t *testing.T) {
 			if addr != tc.want[i] {
 				t.Errorf("--only=%s [%d]: got %q, want %q", tc.only, i, addr, tc.want[i])
 			}
-			if err := validateDestroyTargets([]string{addr}); err != nil {
+			if err := validateDestroyTargets([]string{addr}, cfg); err != nil {
 				t.Errorf("--only=%s [%d]: expanded addr %q fails destroyTargetRE: %v", tc.only, i, addr, err)
 			}
 		}
@@ -70,6 +70,9 @@ func TestExpandOnlyFlagZeroCount(t *testing.T) {
 }
 
 func TestValidateDestroyTargets_Valid(t *testing.T) {
+	cfg := &config.Config{}
+	cfg.Topology.ControlPlane.Count = 3
+	cfg.Topology.Workers.Count = 3
 	valid := []string{
 		"module.okd_cluster.proxmox_virtual_environment_vm.bootstrap",
 		"module.okd_cluster.proxmox_virtual_environment_vm.master",
@@ -79,7 +82,7 @@ func TestValidateDestroyTargets_Valid(t *testing.T) {
 		"module.okd_cluster.proxmox_virtual_environment_vm.bootstrap[0]",
 	}
 	for _, addr := range valid {
-		if err := validateDestroyTargets([]string{addr}); err != nil {
+		if err := validateDestroyTargets([]string{addr}, cfg); err != nil {
 			t.Errorf("addr %q: want nil, got %v", addr, err)
 		}
 	}
@@ -95,8 +98,11 @@ func TestValidateDestroyTargets_Invalid(t *testing.T) {
 		"module.okd_cluster.*",
 		"module.okd_cluster.proxmox_virtual_environment_vm.worker[abc]",
 	}
+	cfg := &config.Config{}
+	cfg.Topology.ControlPlane.Count = 3
+	cfg.Topology.Workers.Count = 2
 	for _, addr := range invalid {
-		err := validateDestroyTargets([]string{addr})
+		err := validateDestroyTargets([]string{addr}, cfg)
 		if err == nil {
 			t.Errorf("addr %q: want error, got nil", addr)
 			continue
@@ -109,11 +115,52 @@ func TestValidateDestroyTargets_Invalid(t *testing.T) {
 }
 
 func TestValidateDestroyTargets_Empty(t *testing.T) {
-	if err := validateDestroyTargets(nil); err != nil {
+	cfg := &config.Config{}
+	cfg.Topology.ControlPlane.Count = 3
+	cfg.Topology.Workers.Count = 2
+	if err := validateDestroyTargets(nil, cfg); err != nil {
 		t.Errorf("nil targets: want nil, got %v", err)
 	}
-	if err := validateDestroyTargets([]string{}); err != nil {
+	if err := validateDestroyTargets([]string{}, cfg); err != nil {
 		t.Errorf("empty targets: want nil, got %v", err)
+	}
+}
+
+func TestValidateDestroyTargets_Bounds(t *testing.T) {
+	cfg := &config.Config{}
+	cfg.Topology.ControlPlane.Count = 3
+	cfg.Topology.Workers.Count = 2
+
+	oob := []string{
+		"module.okd_cluster.proxmox_virtual_environment_vm.master[3]",
+		"module.okd_cluster.proxmox_virtual_environment_vm.master[7]",
+		"module.okd_cluster.proxmox_virtual_environment_vm.worker[2]",
+		"module.okd_cluster.proxmox_virtual_environment_vm.worker[9]",
+		"module.okd_cluster.proxmox_virtual_environment_vm.bootstrap[1]",
+	}
+	for _, addr := range oob {
+		err := validateDestroyTargets([]string{addr}, cfg)
+		if err == nil {
+			t.Errorf("addr %q: want error, got nil", addr)
+			continue
+		}
+		var usageErr *errtypes.UsageError
+		if !errors.As(err, &usageErr) {
+			t.Errorf("addr %q: want *errtypes.UsageError, got %T: %v", addr, err, err)
+		}
+	}
+
+	inRange := []string{
+		"module.okd_cluster.proxmox_virtual_environment_vm.master[0]",
+		"module.okd_cluster.proxmox_virtual_environment_vm.master[2]",
+		"module.okd_cluster.proxmox_virtual_environment_vm.worker[0]",
+		"module.okd_cluster.proxmox_virtual_environment_vm.worker[1]",
+		"module.okd_cluster.proxmox_virtual_environment_vm.bootstrap[0]",
+	}
+	for _, addr := range inRange {
+		if err := validateDestroyTargets([]string{addr}, cfg); err != nil {
+			t.Errorf("addr %q (in range): want nil, got %v", addr, err)
+		}
 	}
 }
 

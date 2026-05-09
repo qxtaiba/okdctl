@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -77,12 +78,41 @@ func expandOnlyFlag(only string, cfg *config.Config) ([]string, error) {
 	return targets, nil
 }
 
-func validateDestroyTargets(targets []string) error {
+func validateDestroyTargets(targets []string, cfg *config.Config) error {
 	for _, t := range targets {
-		if !destroyTargetRE.MatchString(t) {
+		m := destroyTargetRE.FindStringSubmatch(t)
+		if m == nil {
 			return &errtypes.ConfigError{
 				Msg: fmt.Sprintf("--target %q is not an allowed resource address; "+
 					"must match module.okd_cluster.proxmox_virtual_environment_vm.{bootstrap|master|worker}[<n>]", t),
+			}
+		}
+		nodeType := m[1]
+		bracket := m[2]
+		if bracket == "" {
+			continue
+		}
+		idx, _ := strconv.Atoi(bracket[1 : len(bracket)-1])
+		switch nodeType {
+		case "bootstrap":
+			if idx != 0 {
+				return &errtypes.UsageError{
+					Msg: fmt.Sprintf("--target bootstrap index %d is out of range; bootstrap has exactly one node (index 0)", idx),
+				}
+			}
+		case "master":
+			if idx >= cfg.Topology.ControlPlane.Count {
+				return &errtypes.UsageError{
+					Msg: fmt.Sprintf("--target master[%d] is out of range; cluster has %d master(s) (valid: 0-%d)",
+						idx, cfg.Topology.ControlPlane.Count, cfg.Topology.ControlPlane.Count-1),
+				}
+			}
+		case "worker":
+			if idx >= cfg.Topology.Workers.Count {
+				return &errtypes.UsageError{
+					Msg: fmt.Sprintf("--target worker[%d] is out of range; cluster has %d worker(s) (valid: 0-%d)",
+						idx, cfg.Topology.Workers.Count, cfg.Topology.Workers.Count-1),
+				}
 			}
 		}
 	}
@@ -149,7 +179,7 @@ func runDestroy(cmd *cobra.Command, _ []string) error {
 		destroyTargets = expanded
 	}
 
-	if err := validateDestroyTargets(destroyTargets); err != nil {
+	if err := validateDestroyTargets(destroyTargets, cfg); err != nil {
 		return err
 	}
 
