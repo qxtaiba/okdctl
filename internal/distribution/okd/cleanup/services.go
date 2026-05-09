@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/dns"
-	"github.com/qxtaiba/okdctl/internal/distribution/okd/firewall"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/netutil"
@@ -50,9 +49,10 @@ func removePackage(ctx context.Context, pkg string, logger *slog.Logger) {
 	}
 }
 
-// HAProxy stops the haproxy service, removes its config and backups, tears
-// down okdctl-managed firewall rules, releases the VIP (when set), and
-// uninstalls the haproxy package.
+// HAProxy stops the haproxy service, removes its config and backups,
+// releases the VIP (when set), and uninstalls the haproxy package.
+// Firewall rule removal is delegated to StepCleanupFirewall so destroy
+// summary doesn't double-count the same operation.
 func HAProxy(ctx context.Context, haproxyConfig, vip string, logger *slog.Logger) error {
 	logger = logutil.OrNop(logger)
 	logger.Info("cleanup: haproxy service and configuration")
@@ -65,13 +65,6 @@ func HAProxy(ctx context.Context, haproxyConfig, vip string, logger *slog.Logger
 	backups, _ := filepath.Glob(backupPattern)
 	for _, backup := range backups {
 		_ = SafeRemoveWithLogger(ctx, backup, "haproxy backup configuration", logger)
-	}
-
-	logger.Info("cleanup: removing okd firewall rules")
-	if err := firewall.RemoveOKDRules(ctx, true, logger); err != nil {
-		logger.Warn("cleanup: firewall rules incomplete", "err", err)
-	} else {
-		logger.Info("cleanup: firewall rules removed")
 	}
 
 	if vip != "" {
