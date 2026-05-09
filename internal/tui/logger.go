@@ -111,6 +111,10 @@ func (h *stderrHandler) WithGroup(name string) slog.Handler {
 // user-requested data (`okdctl config show`, kubeconfig, `releases list
 // --format=json`). Every record passes through logutil.RedactHandler so
 // credentials in structured attrs never reach the sink.
+//
+// The returned logger is a snapshot of the current stderrLogger binding.
+// It does not auto-update if SetRunID is called after SimpleLogger
+// returns. Callers that need run_id must be invoked after SetRunID.
 func SimpleLogger() *slog.Logger {
 	return slog.New(logutil.NewRedactHandler(&stderrHandler{h: stderrLogger.Load()}))
 }
@@ -177,6 +181,9 @@ func SetRunID(id string) {
 	stderrLogger.Store(stderrLogger.Load().With("run_id", id))
 	// Rebuild the slog wrapper so it captures the new stderrLogger value.
 	stderrSlog.Store(buildStderrSlog())
+	// Rebind slog.SetDefault so third-party libs and background goroutines
+	// that captured slog.Default() before SetRunID also observe run_id.
+	slog.SetDefault(stderrSlog.Load())
 }
 
 // RunID returns the correlation ID pinned by the most recent SetRunID
