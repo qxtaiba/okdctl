@@ -80,8 +80,7 @@ func FetchChecksum(ctx context.Context, checksumsURL, filename string) (string, 
 		return "", fmt.Errorf("failed to read checksums response: %w", err)
 	}
 
-	lines := strings.Split(string(body), "\n")
-	for _, line := range lines {
+	for line := range strings.Lines(string(body)) {
 		line = strings.TrimSpace(line)
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
