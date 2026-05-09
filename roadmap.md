@@ -546,26 +546,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Add executor.Executor.ZeroizeEnv() mirroring terraform.Executor.ZeroizeEnv (terraform.go:L347-L364). Update internal/distribution/okd/install/* and internal/infrastructure/proxmox/proxmox.go to defer e.Exec.ZeroizeEnv() at end of phases that pass creds.Env(). Document the residual-string boundary in CLAUDE.md §credentials-and-secrets so future env-passing sites follow the same defer pattern.  
 **Effort:** hours
 
-##### `sec:40d315ad:flux-keyscan-tofu` — flux keyscan tofu
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-40d315ad-flux-keyscan-pin  
-**Severity:** major  
-**Cluster:** tls-network  
-**Evidence:** `internal/addon/catalog/flux/flux.go:407-421`  
-**Problem:** createDeployKeySecret runs `ssh-keyscan host` and bakes the result directly into the flux-system Secret as known_hosts. There is no fingerprint pin, no DNSSEC check, no fallback — whatever key the network returns at deploy time becomes the perpetual trust anchor for every flux git pull. An on-path attacker during deploy can substitute their host key and intercept every subsequent git operation.  
-**Fix:** Add an `addons.flux.settings.git_host_fingerprint` setting (SHA256:...). When set, validate the keyscan output against it before writing the Secret (mirror sshpin.Verify's pattern). When unset, log a Warn naming the observed fingerprint so operators can pin it on the next deploy. The okdctl Proxmox SSH path already follows this exact pattern (sshpin.Verify) — use it as the counter-example.  
-**Effort:** hours
-
-##### `sec:5e892064:checksum-no-signature` — checksum no signature
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-5e892064-checksum-pin  
-**Severity:** major  
-**Cluster:** tls-network  
-**Evidence:** `internal/download/checksum.go:59-111`  
-**Problem:** FetchChecksum downloads a sha256sum.txt-style file over HTTPS and trusts whatever the server returns. There is no signature verification on the checksum file itself — an attacker who poisons the CDN serving the checksum AND the artifact controls both. okdctl install.sh does cosign-verify SHA256SUMS for okdctl's own artifacts, but the in-tree download path used by setup.installBinary (helm, sops checksums from get.helm.sh and getsops/sops releases) does not.  
-**Fix:** Either: (a) compile-time-pin embedded SHA-256s for helm/sops at known versions (the yqChecksumsByArch pattern in tools.go:L40-43 already exists), removing the runtime FetchChecksum dependency entirely; (b) add a cosign verify-blob step against the checksums file's signature for vendors that publish one. Option (a) is the lower-risk fix and matches the existing yq pattern.  
-**Effort:** hours
-
 ##### `sec:7b2829bb:executor-no-zeroize` — executor no zeroize
 
 **Status:** not started  
@@ -574,16 +554,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/executor/executor.go:38-92`  
 **Problem:** Executor.Env is []string and there is no Zeroize/ZeroizeEnv method. Cred-bearing env entries (PROXMOX_VE_PASSWORD=..., PROXMOX_VE_API_TOKEN=...) are appended via WithEnv(creds.Env()) and live as immutable strings until the Executor is GC'd. terraform.Executor has the parallel ZeroizeEnv (terraform.go:L347-364) and proxmox.Provider.env is also never zeroized. Cross-references with sec:35abd54e (env-string-residue policy).  
 **Fix:** Add executor.Executor.ZeroizeEnv() that walks e.Env, blanks any entry whose key matches secretKeyFragments (re-use logutil.KeyIsSecret), then clear()s and nils the slice. Wire it into the defer chain in createOKDProvisionerWithOpts (cli/helpers.go) alongside p.ZeroizeEnv(). Update CLAUDE.md to document the defer pattern.  
-**Effort:** hours
-
-##### `sec:9d79b841:coreos-stream-no-pin` — coreos stream no pin
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-9d79b841-coreos-pin  
-**Severity:** major  
-**Cluster:** tls-network  
-**Evidence:** `internal/distribution/okd/setup/coreos.go:182-216`  
-**Problem:** fetchCoreOSStream pulls fcos.json/scos.json from raw.githubusercontent.com and trusts the ISO URL + SHA256 it returns wholesale — only TLS to GitHub anchors authenticity. The ISO checksum verification (DownloadCoreOSISO) is then meaningless against an upstream poisoning of openshift/installer's release-4.X branch: the attacker rewrites both the location and the sha256 in the same JSON, and our fetch passes both checks.  
-**Fix:** Pin the openshift/installer reference to a known-good commit SHA (not a branch) and embed the expected JSON sha256 at compile time, similar to bootstrapOCChecksum/bootstrapOCVersion in release_extract.go. Bumping the OKD minor in CI requires explicit re-pin. Alternatively, fetch from a release tag that is itself signed via cosign and verify the tag's sigstore bundle before parsing.  
 **Effort:** hours
 
 ##### `sec:48688e63:proxmox-host-no-revalidate` — proxmox host no revalidate
@@ -750,16 +720,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 #### audit-state-and-recovery
 
-##### `state:48688e63:tf-state-no-backup` — tf state no backup
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/state-48688e63-tf-state-backup  
-**Severity:** major  
-**Cluster:** tf-state-atomicity  
-**Evidence:** `internal/infrastructure/terraform/terraform.go:325-344`  
-**Problem:** HasState reads terraform.tfstate but okdctl never snapshots it before invoking `terraform apply` or `terraform destroy`. terraform itself writes a `terraform.tfstate.backup` only across the apply boundary, leaving zero okdctl-managed history for the operator to roll back to after a corrupt state lands. The cleanup code's comment promises terraform.tfstate.backup as a rollback artefact, but on a fresh install there is none until the second apply.  
-**Fix:** Add `Executor.SnapshotState(ctx)` that copies terraform.tfstate to terraform.tfstate.<UTC-timestamp>.bak via system.AtomicWrite immediately before every apply / destroy entrypoint (Provision, CleanupBootstrap, destroyInfrastructure, StartWorkerVMs). Retain N=5 most recent snapshots; surface the latest path in destroy / cleanup error messages so the operator can `cp` it back. Today HasState already exists at the right boundary — extend it.  
-**Effort:** hours
-
 ##### `state:4c092fce:tf-state-no-lock` — tf state no lock
 
 **Status:** not started  
@@ -778,16 +738,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/distribution/okd/destroy/helpers.go:26-59`  
 **Problem:** checkStateMajorVersion only runs on the destroy path. The deploy / install / postinstall paths invoke terraform.Init -> Apply against the same tfstate without ever validating its terraform_version. A user who upgraded terraform from 1.x to 2.x mid-deploy (or downgraded for hotfix) hits a silent state-format issue at apply time with terraform's own confusing error rather than okdctl's clear 'major mismatch' message. The deploy-time symmetry is missing.  
 **Fix:** Move checkStateMajorVersion (and parseLockID/stateLockHint) into internal/infrastructure/terraform/state.go and call it once from Executor.Init when the state file already exists. Both deploy and destroy paths benefit; the destroy-only call site becomes a no-op symmetry trim. Keep the existing constants stateMajorMin/Max and the user-facing message verbatim — the test in helpers_test.go pins it.  
-**Effort:** hours
-
-##### `state:c19ee328:setup-installer-already-done-only-bootstrap` — setup installer already done only bootstrap
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/state-c19ee328-manifests-sentinel  
-**Severity:** major  
-**Cluster:** phase-idempotency  
-**Evidence:** `internal/distribution/okd/setup/steps.go:109-201`  
-**Problem:** StepGenerateConfig.AlreadyDone keys on `install-config.yaml.backup` — correct. StepGenerateManifests.AlreadyDone keys on `clusterDir/manifests` directory existing. StepGenerateIgnition keys on every .ign file. But manifests directory existing does NOT mean manifests are valid — `openshift-install create manifests` exits non-zero mid-write and leaves a partial manifests/ that the next run sees as 'already done'. Re-run skips manifest generation; subsequent ignition step then operates on partial manifests and produces malformed ignition. The AlreadyDone check is too coarse.  
-**Fix:** Tighten the manifests-AlreadyDone to require BOTH the directory AND a sentinel file like `<clusterDir>/manifests/.complete` written via AtomicWrite by GenerateManifests on success. Pattern matches the install-config.yaml.backup sentinel already used by StepGenerateConfig. Same idea for StepGenerateIgnition: add a `.ignition.complete` sentinel after ValidateIgnitionFiles passes, instead of the implicit 'all .ign files >1024 bytes' check that runs every time.  
 **Effort:** hours
 
 ##### `state:0f076161:destroy-target-no-precondition` — destroy target no precondition
@@ -1471,16 +1421,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Effort:** hours
 
 #### audit-observability
-
-##### `obs:5013fea6:stderr-attr-leaks-subprocess-output` — stderr attr leaks subprocess output
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/obs-5013fea6-stderr-redact  
-**Severity:** major  
-**Cluster:** redaction-sink — seam→audit-errors — related: err:7b2829bb:exit-error-no-redact  
-**Evidence:** `internal/distribution/okd/setup/release_extract.go:121-123` + 2 more  
-**Problem:** Three log sites pass raw subprocess Stderr under the benign attr key 'stderr', which is not in logutil.secretKeyFragments (password/token/secret/api_key/apikey). The most exposed call is `oc adm release extract` whose stderr can carry --registry-config paths, partial auth diagnostics, or pull-secret excerpts on failure. RedactHandler cannot rewrite a generic 'stderr' key, and the value is a plain string — Redacted() is never consulted. This is the observability-side mirror of audit-errors err:7b2829bb (executor.ExitError lacking Redacted()): even when the error type is fixed, sites that pull `result.Stderr` out of *executor.Result and pass it as a separate slog attr bypass any type-level fix.  
-**Fix:** Two options. (a) Stop logging raw subprocess stderr at the sink — let the typed error handle redaction; replace 'stderr', msg with 'err', execErr after err:7b2829bb adds Redacted() to executor.ExitError. (b) If a structured stderr attr is genuinely useful, route it through a redactable wrapper type (e.g. a new system.RedactableStderr string with Redacted() any returning a fixed-length head/tail). Net 0 LOC for option (a). Same fragment list lives in logutil/redact.go:23 — adding 'stderr' there would over-redact legitimate kubectl/terraform stderr that contains no secrets, so prefer not to widen secretKeyFragments.  
-**Effort:** hours
 
 ##### `obs:97cb8adf:fmt-sprintf-message-pattern` — fmt sprintf message pattern
 
