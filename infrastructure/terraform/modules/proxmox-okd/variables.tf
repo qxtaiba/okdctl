@@ -200,7 +200,7 @@ variable "bootstrap_cpu_cores" {
 variable "bootstrap_memory_mb" {
   description = "memory for bootstrap node (defaults to memory_mb if not set)"
   type        = number
-  default     = 8192
+  default     = null
 }
 
 variable "master_cpu_cores" {
@@ -218,13 +218,13 @@ variable "master_memory_mb" {
 variable "worker_cpu_cores" {
   description = "cpu cores for worker nodes (defaults to cpu_cores if not set)"
   type        = number
-  default     = 8
+  default     = null
 }
 
 variable "worker_memory_mb" {
   description = "memory for worker nodes (defaults to memory_mb if not set)"
   type        = number
-  default     = 20480
+  default     = null
 }
 
 
