@@ -59,9 +59,8 @@ type diskCache struct {
 	Series   []OKDReleaseSeries `json:"series"`
 }
 
-// LabelForReleaseType returns the canonical human-readable label for a
-// ReleaseType. Used by the JSON marshaller and by CLI table renderers.
-func LabelForReleaseType(t ReleaseType) string {
+// String returns the canonical human-readable label for the release type.
+func (t ReleaseType) String() string {
 	switch t {
 	case ReleaseTypeStable:
 		return "stable"
@@ -81,7 +80,7 @@ func LabelForReleaseType(t ReleaseType) string {
 // MarshalJSON encodes ReleaseType as its string label so OKDVersion serialises
 // with "release_type": "stable" rather than a raw integer.
 func (t ReleaseType) MarshalJSON() ([]byte, error) {
-	return json.Marshal(LabelForReleaseType(t))
+	return json.Marshal(t.String())
 }
 
 // UnmarshalJSON decodes the string label back into the typed constant.
