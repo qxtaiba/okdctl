@@ -104,8 +104,6 @@ func (s *DistributionStep) handleKeyMsg(msg tea.KeyPressMsg) (wizard.WizardStep,
 		return s.handleEnterKey()
 	case key.Matches(msg, key.NewBinding(key.WithKeys("tab"))):
 		return s.handleTabKey()
-	case key.Matches(msg, key.NewBinding(key.WithKeys("space"))):
-		return s.handleSpaceKey()
 	case key.Matches(msg, key.NewBinding(key.WithKeys("up", "k", "down", "j"))):
 		return s.handleNavigationKey(msg)
 	}
@@ -138,38 +136,6 @@ func (s *DistributionStep) handleEnterKey() (wizard.WizardStep, tea.Cmd) {
 	}
 }
 
-// handleSpaceKey picks (or unpicks) the currently-highlighted version
-// without advancing the wizard. It emits ConfigSyncMsg so the wizard's
-// model can call step.Apply(m.config) and the bottom-right context badge
-// reflects the live selection.
-func (s *DistributionStep) handleSpaceKey() (wizard.WizardStep, tea.Cmd) {
-	selected := s.versionSelector.Selected()
-	if selected.ID == "" {
-		return s, nil
-	}
-
-	var newVersion string
-	if strings.HasPrefix(selected.ID, "minor:") {
-		minor := s.getMinorFromOptionID(selected.ID)
-		for _, series := range s.okdSeries {
-			if series.Minor == minor {
-				newVersion = series.Latest.Version
-				break
-			}
-		}
-	} else {
-		newVersion = selected.ID
-	}
-
-	if s.selectedVersion == newVersion {
-		s.selectedVersion = ""
-	} else {
-		s.selectedVersion = newVersion
-	}
-
-	return s, func() tea.Msg { return wizard.ConfigSyncMsg{StepID: s.ID()} }
-}
-
 func (s *DistributionStep) handleTabKey() (wizard.WizardStep, tea.Cmd) {
 	selected := s.versionSelector.Selected()
 	selectedMinor := s.getMinorFromOptionID(selected.ID)
@@ -196,10 +162,34 @@ func (s *DistributionStep) handleNavigationKey(msg tea.KeyPressMsg) (wizard.Wiza
 	var cmd tea.Cmd
 	s.versionSelector, cmd = s.versionSelector.Update(msg)
 	selected := s.versionSelector.Selected()
+	s.syncSelectedVersion(selected)
+
+	cmds := []tea.Cmd{cmd, func() tea.Msg { return wizard.ConfigSyncMsg{StepID: s.ID()} }}
 	if !selected.InDropdown {
-		return s, tea.Batch(cmd, s.emitFocusChanged())
+		cmds = append(cmds, s.emitFocusChanged())
 	}
-	return s, cmd
+	return s, tea.Batch(cmds...)
+}
+
+// syncSelectedVersion sets s.selectedVersion to whatever the cursor is on:
+// the patch version for a patch row, or the latest patch for a minor row.
+// Called after every cursor move so the live cfg / context badge tracks
+// the cursor like SelectField's Value() does (cursor IS the live pick).
+func (s *DistributionStep) syncSelectedVersion(selected components.Option) {
+	if selected.ID == "" {
+		return
+	}
+	if strings.HasPrefix(selected.ID, "minor:") {
+		minor := s.getMinorFromOptionID(selected.ID)
+		for _, series := range s.okdSeries {
+			if series.Minor == minor {
+				s.selectedVersion = series.Latest.Version
+				return
+			}
+		}
+		return
+	}
+	s.selectedVersion = selected.ID
 }
 
 // View renders either the loading indicator or the version selector.
@@ -254,13 +244,13 @@ func (s *DistributionStep) viewVersionPhase() string {
 			lipgloss.NewStyle().
 				Foreground(tui.ColorSlate500).
 				Italic(true).
-				Render("press tab to collapse · space to pick"),
+				Render("press tab to collapse"),
 		)
 	} else {
 		hints = append(hints, lipgloss.NewStyle().
 			Foreground(tui.ColorSlate500).
 			Italic(true).
-			Render("press tab to expand patch versions · space to pick"))
+			Render("press tab to expand patch versions"))
 	}
 
 	content.WriteString(strings.Join(hints, "\n"))
@@ -284,9 +274,8 @@ func (s *DistributionStep) Apply(cfg *config.Config) error {
 func (s *DistributionStep) ShortHelp() []wizard.KeyBinding {
 	if s.phase == phaseVersionSelect {
 		return []wizard.KeyBinding{
-			{Key: "↑↓", Help: "navigate"},
+			{Key: "↑↓", Help: "select"},
 			{Key: "tab", Help: "expand/collapse"},
-			{Key: "space", Help: "pick"},
 			{Key: helpEnter, Help: helpConfirm},
 			{Key: helpEsc, Help: helpBack},
 		}
