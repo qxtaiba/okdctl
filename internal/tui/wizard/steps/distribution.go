@@ -104,7 +104,7 @@ func (s *DistributionStep) handleKeyMsg(msg tea.KeyPressMsg) (wizard.WizardStep,
 		return s.handleEnterKey()
 	case key.Matches(msg, key.NewBinding(key.WithKeys("tab"))):
 		return s.handleTabKey()
-	case key.Matches(msg, key.NewBinding(key.WithKeys(" "))):
+	case key.Matches(msg, key.NewBinding(key.WithKeys("space"))):
 		return s.handleSpaceKey()
 	case key.Matches(msg, key.NewBinding(key.WithKeys("up", "k", "down", "j"))):
 		return s.handleNavigationKey(msg)

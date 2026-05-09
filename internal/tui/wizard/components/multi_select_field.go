@@ -122,7 +122,7 @@ func (f *MultiSelectField) Update(msg tea.Msg) (FormField, tea.Cmd) {
 			if f.cursor >= len(f.Options) {
 				f.cursor = 0
 			}
-		case key.Matches(keyMsg, key.NewBinding(key.WithKeys(" "))):
+		case key.Matches(keyMsg, key.NewBinding(key.WithKeys("space"))):
 			if f.cursor >= 0 && f.cursor < len(f.selected) {
 				f.selected[f.cursor] = !f.selected[f.cursor]
 				f.isDefault = false
