@@ -12,6 +12,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/executor"
+	"github.com/qxtaiba/okdctl/internal/infrastructure/terraform"
 	"github.com/qxtaiba/okdctl/internal/logutil"
 )
 
@@ -52,7 +53,8 @@ func seedTerraformEnvDir(t *testing.T, projectRoot, env string) {
 }
 
 func TestStateLockHint_NoLockFile(t *testing.T) {
-	if err := stateLockHint(t.TempDir()); err != nil {
+	tf := &terraform.Executor{WorkDir: t.TempDir()}
+	if err := tf.LockHint(); err != nil {
 		t.Errorf("expected nil; got %v", err)
 	}
 }
@@ -63,7 +65,8 @@ func TestStateLockHint_LockFilePresent(t *testing.T) {
 	if err := os.WriteFile(lockPath, []byte(`{"ID":"abc"}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	err := stateLockHint(dir)
+	tf := &terraform.Executor{WorkDir: dir}
+	err := tf.LockHint()
 	if err == nil {
 		t.Fatal("expected error; got nil")
 	}
@@ -88,7 +91,8 @@ func TestStateLockHint_CorruptLockFile(t *testing.T) {
 	if err := os.WriteFile(lockPath, []byte(`not-json`), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	err := stateLockHint(dir)
+	tf := &terraform.Executor{WorkDir: dir}
+	err := tf.LockHint()
 	if err == nil {
 		t.Fatal("expected error; got nil")
 	}

@@ -2,6 +2,7 @@ package install
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"path/filepath"
 
@@ -34,6 +35,9 @@ func (p *Phase) StartWorkerVMs(ctx context.Context, cfg *config.Config, opts *Op
 	)
 
 	if err := tf.Init(ctx); err != nil {
+		if hint := tf.LockHint(); hint != nil {
+			return errors.Join(hint, &errtypes.ClusterError{Msg: "terraform init failed", Err: err})
+		}
 		return &errtypes.ClusterError{Msg: "terraform init failed", Err: err}
 	}
 
@@ -58,7 +62,11 @@ func (p *Phase) StartWorkerVMs(ctx context.Context, cfg *config.Config, opts *Op
 		if snapPath != "" {
 			msg = fmt.Sprintf("failed to start worker VMs (state backup: %s)", snapPath)
 		}
-		return &errtypes.ClusterError{Msg: msg, Err: err}
+		wrapped := &errtypes.ClusterError{Msg: msg, Err: err}
+		if hint := tf.LockHint(); hint != nil {
+			return errors.Join(hint, wrapped)
+		}
+		return wrapped
 	}
 
 	p.Log.Info("workers: all worker nodes started successfully")
