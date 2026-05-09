@@ -132,6 +132,7 @@ func (p *Phase) DeployInfrastructure(ctx context.Context, cfg *config.Config, op
 		proxmox.WithProgressReporter(p.Reporter),
 		proxmox.WithSSHExec(p.Exec),
 	)
+	defer prov.ZeroizeEnv()
 	if err := prov.Connect(ctx, cfg); err != nil {
 		return &errtypes.NetworkError{Msg: "failed to connect to Proxmox", Err: err}
 	}

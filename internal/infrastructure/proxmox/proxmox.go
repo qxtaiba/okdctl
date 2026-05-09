@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"log/slog"
 	"path/filepath"
+	"strings"
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
@@ -77,6 +78,22 @@ func WithProgressReporter(r logutil.ProgressReporter) Option {
 // output cross-check alone.
 func WithSSHExec(exec *executor.Executor) Option {
 	return func(p *Provider) { p.sshExec = exec }
+}
+
+// ZeroizeEnv overwrites and clears the credential strings stored in the
+// Provider's env slice. Entries whose key matches logutil.KeyIsSecret are
+// blanked first; the full slice is then cleared so all string headers are
+// zeroed. Call via defer immediately after construction so even
+// Connect/Provision failures still wipe plaintext credentials.
+func (p *Provider) ZeroizeEnv() {
+	for i, kv := range p.env {
+		key, _, _ := strings.Cut(kv, "=")
+		if logutil.KeyIsSecret(key) {
+			p.env[i] = ""
+		}
+	}
+	clear(p.env)
+	p.env = nil
 }
 
 // New constructs a Provider with the given options. The logger defaults to
