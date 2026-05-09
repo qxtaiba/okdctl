@@ -83,6 +83,26 @@ func validateISODir(isoDir string) error {
 	return nil
 }
 
+// ValidateRemoteFilename rejects filenames that contain shell metacharacters,
+// path separators, or the traversal atom ".." — any of which would let a
+// hostile filesystem entry inject commands into the remote sshd login shell
+// when interpolated into an SSHRunArgv argument.
+func ValidateRemoteFilename(name string) error {
+	if name == "" {
+		return fmt.Errorf("remote filename must not be empty")
+	}
+	if name == ".." || strings.Contains(name, "/") || strings.Contains(name, "\\") {
+		return fmt.Errorf("remote filename %q must be a plain filename (no path separators or traversal)", name)
+	}
+	const dangerous = ";|&$`\\\"!(){}<>~*?[]# \t\n\r'"
+	for _, r := range dangerous {
+		if strings.ContainsRune(name, r) {
+			return fmt.Errorf("remote filename %q contains unsafe character %q", name, string(r))
+		}
+	}
+	return nil
+}
+
 // parseVMIDsFromSummary parses the JSON array returned by
 // pvesh get /nodes/<node>/qemu and returns the vmid of each running VM.
 // Stopped VMs are excluded: yanking a cdrom from a running VM disrupts it,

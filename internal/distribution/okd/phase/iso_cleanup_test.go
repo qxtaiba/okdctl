@@ -115,6 +115,43 @@ func TestValidateISODir(t *testing.T) {
 	}
 }
 
+func TestValidateRemoteFilename(t *testing.T) {
+	accept := []string{
+		"coreos.iso",
+		"fedora-coreos-40.20240101.3.0-x86_64.iso",
+		"custom_image-v1.iso",
+		"MY-ISO.ISO",
+	}
+	for _, name := range accept {
+		if err := ValidateRemoteFilename(name); err != nil {
+			t.Errorf("ValidateRemoteFilename(%q) rejected; want nil: %v", name, err)
+		}
+	}
+
+	reject := []string{
+		"",
+		"..",
+		"foo/bar.iso",
+		"foo\\bar.iso",
+		"../etc/passwd",
+		"foo;rm -rf /.iso",
+		"foo|tee /tmp/x.iso",
+		"foo&background.iso",
+		"foo`id`.iso",
+		"foo$(id).iso",
+		"foo bar.iso",
+		"foo\t.iso",
+		"foo\n.iso",
+		"foo$.iso",
+		"foo!.iso",
+	}
+	for _, name := range reject {
+		if err := ValidateRemoteFilename(name); err == nil {
+			t.Errorf("ValidateRemoteFilename(%q) accepted; want error", name)
+		}
+	}
+}
+
 func makeTestVM(fields map[string]string) map[string]json.RawMessage {
 	m := make(map[string]json.RawMessage)
 	for k, v := range fields {
