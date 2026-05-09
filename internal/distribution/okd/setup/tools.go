@@ -42,6 +42,23 @@ var yqChecksumsByArch = map[string]string{
 	"arm64": "ceea73d4c86f2e5c91926ee0639157121f5360da42beeb8357783d79c2cc6a1d",
 }
 
+// helmChecksumsByArch holds the SHA-256 for the helm-<helmVersion>-linux-<arch>.tar.gz
+// archive, sourced from get.helm.sh/<archive>.sha256sum. Must be updated when
+// helmVersion changes — pinning the checksum locally removes the runtime
+// FetchChecksum dependency on the same origin as the artifact.
+var helmChecksumsByArch = map[string]string{
+	"amd64": "ee88b3c851ae6466a3de507f7be73fe94d54cbf2987cbaa3d1a3832ea331f2cd",
+	"arm64": "7944e3defd386c76fd92d9e6fec5c2d65a323f6fadc19bfb5e704e3eee10348e",
+}
+
+// sopsChecksumsByArch holds the SHA-256 for the sops-<sopsVersion>.linux.<arch>
+// binary, sourced from github.com/getsops/sops/releases/download/<v>/sops-<v>.checksums.txt.
+// Must be updated when sopsVersion changes.
+var sopsChecksumsByArch = map[string]string{
+	"amd64": "5488e32bc471de7982ad895dd054bbab3ab91c417a118426134551e9626e4e85",
+	"arm64": "16564c6b181d88505d9e0dfef62771894293d85cde5884d9b1a843859eee174b",
+}
+
 //go:embed hashicorp.repo
 var hashicorpRPMRepo []byte
 
@@ -118,16 +135,14 @@ func (p *Phase) installTool(ctx context.Context, tool externalTool) error {
 			archiveBinary:    "helm",
 			stripComponents:  1,
 			url:              archReplacer.Replace(helmURLTemplate),
-			checksumURL:      archReplacer.Replace("https://get.helm.sh/helm-" + helmVersion + "-linux-{arch}.tar.gz.sha256sum"),
-			checksumFilename: archReplacer.Replace("helm-" + helmVersion + "-linux-{arch}.tar.gz"),
+			embeddedChecksum: helmChecksumsByArch[arch],
 		}
 	case toolSops:
 		spec = binaryInstallSpec{
 			name:             "sops",
 			versionFlag:      "--version",
 			url:              archReplacer.Replace(sopsURLTemplate),
-			checksumURL:      archReplacer.Replace("https://github.com/getsops/sops/releases/download/" + sopsVersion + "/sops-" + sopsVersion + ".checksums.txt"),
-			checksumFilename: archReplacer.Replace("sops-" + sopsVersion + ".linux.{arch}"),
+			embeddedChecksum: sopsChecksumsByArch[arch],
 		}
 	default:
 		return fmt.Errorf("tools: no installer for %s (install manually)", tool)
