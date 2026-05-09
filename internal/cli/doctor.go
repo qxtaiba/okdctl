@@ -84,7 +84,7 @@ type doctorJSONOutput struct {
 	Warned int               `json:"warned"`
 }
 
-func sevString(s severity) string {
+func (s severity) String() string {
 	switch s {
 	case sevPass:
 		return "ok"
@@ -93,6 +93,7 @@ func sevString(s severity) string {
 	case sevFail:
 		return "fail"
 	default:
+		// unreachable with the current three-value iota; guards future additions
 		return "unknown"
 	}
 }
@@ -142,7 +143,7 @@ func runDoctor(cmd *cobra.Command, _ []string) error {
 				for _, item := range cr.r.items {
 					entry := doctorJSONCheck{
 						Name:     cr.c.name + "/" + item.name,
-						Severity: sevString(item.sev),
+						Severity: item.sev.String(),
 					}
 					if item.note != "" {
 						entry.Detail = item.note
@@ -152,7 +153,7 @@ func runDoctor(cmd *cobra.Command, _ []string) error {
 			} else {
 				jsonChecks = append(jsonChecks, doctorJSONCheck{
 					Name:     cr.c.name,
-					Severity: sevString(cr.r.sev),
+					Severity: cr.r.sev.String(),
 					Detail:   cr.r.detail,
 				})
 			}
@@ -193,17 +194,15 @@ func runDoctor(cmd *cobra.Command, _ []string) error {
 // and the raw (unstyled) label text for a given severity. Callers use the
 // raw text for column-width math when rendering aligned sub-item lists.
 func severityMarkers(sev severity) (icon, label, rawLabel string) {
+	rawLabel = "[" + sev.String() + "]"
 	switch sev {
 	case sevPass:
-		rawLabel = "[ok]"
 		icon = tui.SuccessStyle.Render("✓")
 		label = tui.SuccessStyle.Render(rawLabel)
 	case sevWarn:
-		rawLabel = "[warn]"
 		icon = tui.WarningStyle.Render("⚠")
 		label = tui.WarningStyle.Render(rawLabel)
 	case sevFail:
-		rawLabel = "[fail]"
 		icon = tui.ErrorStyle.Render("✗")
 		label = tui.ErrorStyle.Render(rawLabel)
 	}
