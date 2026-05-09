@@ -102,7 +102,7 @@ func (t *ReleaseType) UnmarshalJSON(data []byte) error {
 	case "lts":
 		*t = ReleaseTypeLTS
 	default:
-		*t = ReleaseTypeStable
+		return fmt.Errorf("unknown release type %q", s)
 	}
 	return nil
 }
