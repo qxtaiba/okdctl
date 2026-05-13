@@ -14,8 +14,8 @@ require (
 	golang.org/x/crypto v0.51.0
 	golang.org/x/mod v0.36.0
 	golang.org/x/term v0.43.0
-	k8s.io/api v0.36.0
-	k8s.io/apimachinery v0.36.0
+	k8s.io/api v0.36.1
+	k8s.io/apimachinery v0.36.1
 	sigs.k8s.io/yaml v1.6.0
 )
 
