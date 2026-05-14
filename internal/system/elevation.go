@@ -21,6 +21,10 @@ import (
 // the current user is returned. If SUDO_USER names a user that no longer
 // exists (deleted mid-run), we fall back to the current user rather than
 // failing the deploy — a late-stage chown-back is best-effort.
+//
+// Under direct root invocation (SUDO_USER unset) this returns the root
+// user. Callers that require the original-not-root identity MUST guard
+// with os.Geteuid() == 0 before relying on the result.
 func InvokingUser() (*user.User, error) {
 	if name := os.Getenv("SUDO_USER"); name != "" {
 		if u, err := user.Lookup(name); err == nil {
@@ -35,6 +39,10 @@ func InvokingUser() (*user.User, error) {
 // must read back (kubeconfig, releases cache, .bashrc). os.UserHomeDir()
 // returns /root under sudo's default env reset, which would land files in
 // the wrong place.
+//
+// Under direct root invocation (SUDO_USER unset) this returns /root.
+// Callers that must not write artifacts to /root MUST check
+// os.Geteuid() == 0 and gate accordingly.
 func InvokingUserHomeDir() (string, error) {
 	u, err := InvokingUser()
 	if err != nil {
