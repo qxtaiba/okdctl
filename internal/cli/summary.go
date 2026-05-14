@@ -26,6 +26,10 @@ const (
 	stepStatusFail stepDisplayStatus = "fail"
 )
 
+// stepStatusColWidth is the pad width for the status column; must equal
+// max(len(stepStatus*)) so all values align without truncation.
+const stepStatusColWidth = 4
+
 func displayStatus(s *distribution.StepResult) stepDisplayStatus {
 	switch {
 	case s.Skipped:
@@ -174,7 +178,7 @@ func PostDeploySummary(cfg *config.Config, result *postinstall.Result, steps []d
 		for _, s := range steps {
 			total += s.Duration
 			d := s.Duration.Truncate(time.Millisecond).String()
-			sb.kv(string(s.StepID), fmt.Sprintf("%-4s  %s", displayStatus(&s), d))
+			sb.kv(string(s.StepID), fmt.Sprintf("%-*s  %s", stepStatusColWidth, displayStatus(&s), d))
 		}
 		sb.kv("total", total.Truncate(time.Millisecond).String())
 		sb.newline()
@@ -215,7 +219,7 @@ func InterruptSummary(steps []distribution.StepResult, resumeCmd, runID string) 
 		sb.section("partial progress")
 		for _, s := range steps {
 			d := s.Duration.Truncate(time.Millisecond).String()
-			sb.kv(string(s.StepID), fmt.Sprintf("%-4s  %s", displayStatus(&s), d))
+			sb.kv(string(s.StepID), fmt.Sprintf("%-*s  %s", stepStatusColWidth, displayStatus(&s), d))
 		}
 		sb.newline()
 	}
