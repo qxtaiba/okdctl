@@ -110,7 +110,7 @@ func (s *SecretStore) Install(ctx context.Context, env *addon.Environment) error
 
 // installPrereqCheck validates provider-specific file prerequisites. It
 // returns (true, nil) to signal a non-fatal skip when required files are
-// absent — install logs setup instructions and returns success so the
+// absent — install warns and points at docs/addons/secretstore.md so the
 // caller can rerun after placing the files.
 func (s *SecretStore) installPrereqCheck(env *addon.Environment, providerName string) (skip bool, err error) {
 	dir := resolveSecretsDir(env)
@@ -119,15 +119,9 @@ func (s *SecretStore) installPrereqCheck(env *addon.Environment, providerName st
 		credPath := filepath.Join(dir, opCredentialsFile)
 		tokenPath := filepath.Join(dir, opTokenFile)
 		if !system.FileExists(credPath) && !system.FileExists(tokenPath) {
-			env.Logger.Warn("secretstore: no secret files found, skipping", "dir", dir)
-			env.Logger.Info("secretstore: to set up 1password connect secrets:")
-			env.Logger.Info("  1. download 1password-credentials.json from Settings > Automation in 1password.com")
-			env.Logger.Info("  2. create a connect token and save it:")
-			env.Logger.Info("     echo -n 'YOUR_TOKEN' > " + filepath.Join(dir, opTokenFile))
-			env.Logger.Info("  3. copy the credentials file:")
-			env.Logger.Info("     cp ~/Downloads/1password-credentials.json " + dir + "/")
-			env.Logger.Info("  4. (optional) encrypt with sops: sops -e -i <file>")
-			env.Logger.Info("  5. re-run: okdctl addon install secretstore")
+			env.Logger.Warn("secretstore: no secret files found, skipping",
+				"dir", dir,
+				"docs", "docs/addons/secretstore.md")
 			return true, nil
 		}
 		if (isSopsEncrypted(credPath) || isSopsEncrypted(tokenPath)) && !executor.CommandExists("sops") {
@@ -136,9 +130,9 @@ func (s *SecretStore) installPrereqCheck(env *addon.Environment, providerName st
 	case providerVault:
 		tokenPath := filepath.Join(dir, vaultTokenFile)
 		if !system.FileExists(tokenPath) {
-			env.Logger.Warn("secretstore: vault-token.txt not found, skipping", "dir", dir)
-			env.Logger.Info("secretstore: write your Vault token to " + tokenPath)
-			env.Logger.Info("secretstore: re-run: okdctl addon install secretstore")
+			env.Logger.Warn("secretstore: vault-token.txt not found, skipping",
+				"dir", dir,
+				"docs", "docs/addons/secretstore.md")
 			return true, nil
 		}
 		if isSopsEncrypted(tokenPath) && !executor.CommandExists("sops") {
@@ -147,9 +141,9 @@ func (s *SecretStore) installPrereqCheck(env *addon.Environment, providerName st
 	case providerBitwarden:
 		tokenPath := filepath.Join(dir, bitwardenTokenFile)
 		if !system.FileExists(tokenPath) {
-			env.Logger.Warn("secretstore: bitwarden-token.txt not found, skipping", "dir", dir)
-			env.Logger.Info("secretstore: write your Bitwarden machine-account access token to " + tokenPath)
-			env.Logger.Info("secretstore: re-run: okdctl addon install secretstore")
+			env.Logger.Warn("secretstore: bitwarden-token.txt not found, skipping",
+				"dir", dir,
+				"docs", "docs/addons/secretstore.md")
 			return true, nil
 		}
 		if isSopsEncrypted(tokenPath) && !executor.CommandExists("sops") {
