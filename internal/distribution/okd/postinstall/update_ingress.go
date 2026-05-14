@@ -351,6 +351,19 @@ const (
 	strategyLoadBalancer IngressStrategy = "LoadBalancerService"
 )
 
+// parseIngressStrategy returns the typed constant for s when s is one of
+// the handled strategies, and ok=false for any other non-empty value.
+// Callers must handle ok=false: unknown strategies should be skipped with
+// a warning rather than silently routing through HostNetwork logic.
+func parseIngressStrategy(s string) (IngressStrategy, bool) {
+	switch IngressStrategy(s) {
+	case strategyHostNetwork, strategyLoadBalancer:
+		return IngressStrategy(s), true
+	default:
+		return "", false
+	}
+}
+
 type ingressControllerInfo struct {
 	Name      string
 	Domain    string
@@ -399,7 +412,14 @@ func (p *Phase) discoverIngressControllers(ctx context.Context) ([]ingressContro
 		// treat null/empty as HostNetwork.
 		strategy := strategyHostNetwork
 		if item.Spec.EndpointPublishingStrategy != nil && item.Spec.EndpointPublishingStrategy.Type != "" {
-			strategy = item.Spec.EndpointPublishingStrategy.Type
+			raw := string(item.Spec.EndpointPublishingStrategy.Type)
+			parsed, ok := parseIngressStrategy(raw)
+			if !ok {
+				p.Log.Warn("update-ingress: skipping controller with unrecognised ingress strategy",
+					"name", item.Metadata.Name, "strategy", raw)
+				continue
+			}
+			strategy = parsed
 		}
 
 		if item.Metadata.Name == "" {
