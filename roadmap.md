@@ -1136,7 +1136,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `ux:08ec0042:flag-output-name-collision-risk` — flag output name collision risk
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/ux-08ec0042-flag-output  
+**Status:** not started  
 **Severity:** suggestion  
 **Cluster:** flag-conventions  
 **Evidence:** `internal/cli/flags.go:7-10`  
@@ -1240,7 +1240,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `mod:c19ee328:slices-containsfunc-ignition` — slices containsfunc ignition
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/mod-c19ee328-containsfunc  
+**Status:** not started  
 **Severity:** suggestion  
 **Cluster:** slices-maps — related: mod:c19ee328:slices-containsfunc-allexist  
 **Evidence:** `internal/distribution/okd/setup/steps.go:186-192`  
