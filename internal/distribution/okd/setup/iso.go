@@ -103,11 +103,8 @@ func (p *Phase) BuildCustomISOs(ctx context.Context, cfg *config.Config, opts *O
 
 		p.Log.Info("iso: building custom coreos iso", "node", node.Name)
 
-		if err := p.buildNodeISO(ctx, cfg, node, fcosISO, isoDir, sshKey); err != nil {
+		if err := p.buildNodeISO(ctx, cfg, node, fcosISO, isoDir, sshKey, fp, fpFile); err != nil {
 			return &errtypes.ClusterError{Msg: fmt.Sprintf("failed to build ISO for %s", node.Name), Err: err}
-		}
-		if writeErr := system.AtomicWriteString(fpFile, fp, 0o644); writeErr != nil {
-			p.Log.Warn("iso: failed to write build fingerprint", "node", node.Name, "err", writeErr)
 		}
 	}
 
@@ -192,7 +189,7 @@ func writeInstallerTriggerIgnition(sshKey string) (string, error) {
 	})
 }
 
-func (p *Phase) buildNodeISO(ctx context.Context, cfg *config.Config, node NodeInfo, fcosISO, outputDir, sshKey string) error {
+func (p *Phase) buildNodeISO(ctx context.Context, cfg *config.Config, node NodeInfo, fcosISO, outputDir, sshKey, fp, fpFile string) error {
 	isoName := fmt.Sprintf("%s.iso", node.Name)
 	outputPath := filepath.Join(outputDir, isoName)
 
@@ -259,6 +256,10 @@ func (p *Phase) buildNodeISO(ctx context.Context, cfg *config.Config, node NodeI
 	_, err = p.Exec.RunChecked(ctx, "coreos-installer", args...)
 	if err != nil {
 		return &errtypes.ClusterError{Msg: "coreos-installer failed", Err: err}
+	}
+
+	if writeErr := system.AtomicWriteString(fpFile, fp, 0o644); writeErr != nil {
+		p.Log.Warn("iso: failed to write build fingerprint", "node", node.Name, "err", writeErr)
 	}
 
 	return nil
