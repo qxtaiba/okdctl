@@ -246,7 +246,8 @@ var versionCmd = &cobra.Command{
 func init() {
 	rootCmd.PersistentFlags().StringVarP(&cfgFile, "config", "c", "okdctl.yaml", "configuration file")
 	rootCmd.PersistentFlags().StringVar(&logLevel, "log-level", "info", "log verbosity (debug, info, warn, error)")
-	rootCmd.PersistentFlags().StringVar(&logFormat, "log-format", "text", "log output format (text, json); defaults to json when stderr is not a TTY (pass --log-format=text to keep text output in pipes)")
+	rootCmd.PersistentFlags().StringVar(&logFormat, "log-format", "text", "log output format: text (TTY default) | json (auto-selected when stderr is piped)")
+	rootCmd.PersistentFlags().Lookup("log-format").DefValue = ""
 	rootCmd.PersistentFlags().StringVar(&logFile, "log-file", "", "write log output to this file in addition to stderr")
 	rootCmd.PersistentFlags().BoolVarP(&logQuiet, "quiet", "q", false, "suppress info/warn logs (alias for --log-level=error)")
 	rootCmd.PersistentFlags().BoolVarP(&logVerbose, "verbose", "v", false, "enable debug logging (alias for --log-level=debug)")
