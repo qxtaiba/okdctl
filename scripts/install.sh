@@ -19,6 +19,23 @@
 #                   which matters on shared CI runners with many co-tenants.
 #
 # Requires: bash, curl, tar, sha256sum. Optionally: cosign (highly recommended).
+#
+# Supply-chain trust layers (in order):
+#   1. TLS to GitHub Releases — curl_safe enforces --proto =https and
+#      --tlsv1.2; a downgrade or MITM is rejected at the transport layer.
+#   2. Cosign on SHA256SUMS — sigstore keyless signature ties SHA256SUMS to
+#      a specific GitHub Actions workflow run; a forged or substituted
+#      SHA256SUMS file fails certificate-identity verification.
+#   3. SHA256 on archive — the downloaded tarball is byte-compared against
+#      the cosign-verified checksum; a corrupted or swapped archive is
+#      rejected before any bytes land on the filesystem.
+#   4. --no-same-permissions on tar extraction — drops extracted file modes
+#      to the caller's umask (typically 0o755 for executables), preventing
+#      a tarball that encodes setuid/setgid bits from elevating privileges
+#      even when the sha256 check passes.
+#   5. install -m 0755 final write — regardless of the mode produced by
+#      step 4, the binary is written to $INSTALL_DIR with an explicit
+#      0755 mode, so the installed binary always has a known, safe mode.
 
 set -euo pipefail
 
