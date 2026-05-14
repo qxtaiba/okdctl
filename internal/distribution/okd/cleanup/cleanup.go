@@ -17,6 +17,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/dns"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
+	"github.com/qxtaiba/okdctl/internal/infrastructure/terraform"
 	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/system"
 )
@@ -77,6 +78,9 @@ type Options struct {
 	ClusterName    string
 	RemovePackages bool
 	BinDir         string
+	// PostDestroy gates removal of an empty terraform.tfstate after a
+	// successful terraform destroy. Must not be set on prepare-flow runs.
+	PostDestroy bool
 }
 
 // cleanupConfig carries the resolved logger applied via WithLogger.
@@ -224,7 +228,20 @@ func cleanupSteps(opts *Options, logger *slog.Logger) []distribution.StepDef {
 			tfvars := filepath.Join(opts.ProjectRoot, "infrastructure", "terraform", "environments", opts.TerraformEnv, "terraform.tfvars")
 			return !system.FileExists(tfvars), nil
 		},
-		Exec:    func(ctx context.Context) error { return Terraform(ctx, opts.ProjectRoot, opts.TerraformEnv, logger) },
+		Exec: func(ctx context.Context) error {
+			if err := Terraform(ctx, opts.ProjectRoot, opts.TerraformEnv, logger); err != nil {
+				return err
+			}
+			if !opts.PostDestroy || opts.TerraformEnv == "" {
+				return nil
+			}
+			envDir := filepath.Join(opts.ProjectRoot, "infrastructure", "terraform", "environments", opts.TerraformEnv)
+			tf := terraform.New(envDir, terraform.WithLogger(logger))
+			if !tf.HasState() {
+				_ = SafeRemoveWithLogger(ctx, filepath.Join(envDir, "terraform.tfstate"), "terraform state file", logger)
+			}
+			return nil
+		},
 		OnError: t.onError(),
 	}
 
