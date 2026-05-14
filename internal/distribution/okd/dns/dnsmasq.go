@@ -25,9 +25,16 @@ var dnsmasqConfigDir = phase.DefaultDNSMasqConfigDir
 
 // validateDnsmasqConfigFn and restartDnsmasqFn are package-level vars so
 // tests can inject fakes without a real dnsmasq binary on PATH.
+// resolvedConf is the systemd-resolved drop-in written by ConfigureSystemResolver.
+// Tests override this var to redirect operations to a t.TempDir().
+var resolvedConf = "/etc/systemd/resolved.conf.d/dnsmasq.conf"
+
 var (
 	validateDnsmasqConfigFn = ValidateDnsmasqConfig
 	restartDnsmasqFn        = RestartDnsmasq
+	// removeAllFn is the os.RemoveAll indirection used by RestoreSystemResolver.
+	// Tests inject a failing func to cover the logged-but-not-propagated error path.
+	removeAllFn = os.RemoveAll
 )
 
 var validConfigNameRegex = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$`)
@@ -258,10 +265,9 @@ func RestoreSystemResolver(ctx context.Context, logger *slog.Logger) error {
 	}
 
 	// Clean up systemd-resolved drop-in if it exists.
-	const resolvedConf = "/etc/systemd/resolved.conf.d/dnsmasq.conf"
 	if system.FileExists(resolvedConf) {
 		logger.Info("resolver: removing systemd-resolved dnsmasq configuration")
-		if err := os.RemoveAll(resolvedConf); err != nil {
+		if err := removeAllFn(resolvedConf); err != nil {
 			logger.Warn("resolver: failed to remove", "path", resolvedConf, "err", err)
 		}
 		if system.IsServiceActive(ctx, "systemd-resolved") {
