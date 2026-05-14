@@ -26,10 +26,24 @@ func New(timeout time.Duration) *http.Client {
 	return &http.Client{Timeout: timeout, CheckRedirect: capRedirects}
 }
 
-// NewInsecure returns a client that skips TLS verification. Use only for
-// probes against endpoints whose cert is not yet trusted (bootstrap-phase
-// kube-vip, cluster healthz served by a self-signed kube-apiserver before
-// the VIP appears in its SANs).
+// NewInsecure returns a client that skips TLS verification. It exists
+// exclusively for the bootstrap-window kube-vip healthcheck, where the
+// VIP is not yet in the apiserver SANs and x509.HostnameError is the
+// expected failure mode on the secure path.
+//
+// Contract: callers MUST attempt the secure path first (httputil.New or
+// httputil.NewWithCA) and reach NewInsecure only on x509.HostnameError.
+// Falling back on any other error class (network timeout, 5xx, connection
+// refused) is incorrect and must not use this client.
+//
+// Adding a new caller requires two things:
+//  1. Add the caller's package path to allowedPrefixes in
+//     httputil_newinsecure_policy_test.go (TestNewInsecureCallerPolicy).
+//  2. Add a parallel test that asserts (a) the secure path succeeds when
+//     the cert is valid and (b) the insecure fallback is reached only on
+//     x509.HostnameError. See internal/distribution/okd/postinstall/
+//     haproxy_test.go:97-158 (TestRemoveHAProxy_KubeVIPHealthcheck) for
+//     the template.
 func NewInsecure(timeout time.Duration) *http.Client {
 	return &http.Client{
 		Timeout:       timeout,
