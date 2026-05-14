@@ -53,11 +53,12 @@ func (p *Phase) installSteps(cfg *config.Config, opts *Options) []distribution.S
 		},
 		{
 			ID: StepStartWorkers, Name: "start worker nodes",
-			ReRunSafe:  distribution.ReRunSafeYes,
-			Desc:       "starting worker nodes after bootstrap complete",
-			SkipWhen:   func() bool { return opts.SkipTerraform },
-			SkipReason: "terraform deployment disabled",
-			Exec:       func(ctx context.Context) error { return p.StartWorkerVMs(ctx, cfg, opts) },
+			ReRunSafe:   distribution.ReRunSafeYes,
+			Desc:        "starting worker nodes after bootstrap complete",
+			AlreadyDone: func(ctx context.Context) (bool, error) { return p.workersAlreadyRunning(ctx, cfg) },
+			SkipWhen:    func() bool { return opts.SkipTerraform },
+			SkipReason:  "terraform deployment disabled",
+			Exec:        func(ctx context.Context) error { return p.StartWorkerVMs(ctx, cfg, opts) },
 		},
 		{
 			ID: StepSetupKubeconfig, Name: "setup kubeconfig",

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"strings"
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
@@ -71,4 +72,26 @@ func (p *Phase) StartWorkerVMs(ctx context.Context, cfg *config.Config, opts *Op
 
 	p.Log.Info("workers: all worker nodes started successfully")
 	return nil
+}
+
+// workersAlreadyRunning returns true when cfg.Topology.Workers.Count or more
+// worker nodes are registered in the cluster. A cluster-unreachable error
+// returns false so StartWorkerVMs runs as the safe fallback.
+func (p *Phase) workersAlreadyRunning(ctx context.Context, cfg *config.Config) (bool, error) {
+	if cfg.Topology.Workers.Count == 0 {
+		return true, nil
+	}
+	out, err := p.OcOutput(ctx, "get", "nodes",
+		"-l", "node-role.kubernetes.io/worker",
+		"--no-headers", "--ignore-not-found")
+	if err != nil {
+		return false, nil
+	}
+	count := 0
+	for _, line := range strings.Split(out, "\n") {
+		if strings.TrimSpace(line) != "" {
+			count++
+		}
+	}
+	return count >= cfg.Topology.Workers.Count, nil
 }
