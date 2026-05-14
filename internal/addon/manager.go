@@ -82,6 +82,9 @@ func (m *Manager) InstallAll(ctx context.Context) error {
 
 	for _, a := range ordered {
 		info := a.Info()
+		// Bare ctx.Err so cli/root.go::signalExitCode resolves SIGINT→130
+		// without a typed wrap; once any addon fails errs is non-empty and
+		// this branch is unreachable — L110 joins ctxErr into the aggregate.
 		if err := ctx.Err(); err != nil {
 			return err
 		}
