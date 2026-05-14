@@ -158,6 +158,11 @@ func (t *Executor) run(ctx context.Context, args ...string) error {
 // Init runs "terraform init" when the working directory is not already
 // initialized. A partial init (some artifacts missing) triggers a re-init.
 func (t *Executor) Init(ctx context.Context) error {
+	stateFile := filepath.Join(t.WorkDir, "terraform.tfstate")
+	if err := checkStateMajorVersion(stateFile, t.logger); err != nil {
+		return err
+	}
+
 	terraformDir := filepath.Join(t.WorkDir, ".terraform")
 	lockFile := filepath.Join(t.WorkDir, ".terraform.lock.hcl")
 	providersDir := filepath.Join(terraformDir, "providers")
