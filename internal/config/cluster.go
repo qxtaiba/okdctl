@@ -100,6 +100,55 @@ type ProviderConfig struct {
 	Proxmox *ProxmoxConfig `json:"proxmox,omitempty"`
 }
 
+// redactedProxmoxConfig is the safe projection of ProxmoxConfig returned by
+// Redacted(). It omits Username, Password, and APIToken so a slog.Any call
+// carrying a *ProxmoxConfig cannot reach those fields through RedactHandler's
+// interface dispatch.
+type redactedProxmoxConfig struct {
+	Host               string
+	Node               string
+	Storage            string
+	DataStorage        string
+	ISOStorage         string
+	Bridge             string
+	FCOSIso            string
+	TokenID            string
+	Insecure           bool
+	InsecureHTTP       bool
+	CPUType            string
+	AdditionalNetworks []AdditionalNetwork
+	NUMAEnabled        bool
+	MasterNodes        []string
+	WorkerNodes        []string
+	SSHHostFingerprint string
+}
+
+// Redacted returns a struct containing only the non-credential fields of p,
+// satisfying the interface{ Redacted() any } that logutil.redactAny detects.
+func (p *ProxmoxConfig) Redacted() any {
+	if p == nil {
+		return nil
+	}
+	return redactedProxmoxConfig{
+		Host:               p.Host,
+		Node:               p.Node,
+		Storage:            p.Storage,
+		DataStorage:        p.DataStorage,
+		ISOStorage:         p.ISOStorage,
+		Bridge:             p.Bridge,
+		FCOSIso:            p.FCOSIso,
+		TokenID:            p.TokenID,
+		Insecure:           p.Insecure,
+		InsecureHTTP:       p.InsecureHTTP,
+		CPUType:            p.CPUType,
+		AdditionalNetworks: p.AdditionalNetworks,
+		NUMAEnabled:        p.NUMAEnabled,
+		MasterNodes:        p.MasterNodes,
+		WorkerNodes:        p.WorkerNodes,
+		SSHHostFingerprint: p.SSHHostFingerprint,
+	}
+}
+
 // ProxmoxConfig configures the Proxmox VE provider. Credential fields carry
 // json:"-" and are populated from env/config separately — never persisted
 // to okdctl.yaml.
