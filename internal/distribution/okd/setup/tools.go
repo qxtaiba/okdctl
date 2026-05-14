@@ -261,7 +261,10 @@ func (p *Phase) installBinary(ctx context.Context, spec *binaryInstallSpec) erro
 	return nil
 }
 
-func (p *Phase) installBinaryToPath(_ context.Context, srcPath, name string) error {
+func (p *Phase) installBinaryToPath(ctx context.Context, srcPath, name string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	binDir := phase.BinDirOrDefault(p.BinDir)
 	destPath := filepath.Join(binDir, name)
 
