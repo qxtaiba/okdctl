@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -65,9 +66,15 @@ func Acquire(projectRoot, verb string) (*Lock, error) {
 		if holder == "" {
 			holder = "(unknown)"
 		}
-		return nil, &errtypes.ConfigError{
-			Msg: fmt.Sprintf("another okdctl process holds the project lock: %s", holder),
+		localHost, hostErr := os.Hostname()
+		if hostErr != nil {
+			localHost = "unknown"
 		}
+		msg := fmt.Sprintf("another okdctl process holds the project lock: %s", holder)
+		if hint := crossHostHint(holder, localHost); hint != "" {
+			msg += "; " + hint
+		}
+		return nil, &errtypes.ConfigError{Msg: msg}
 	}
 
 	host, hostErr := os.Hostname()
@@ -80,6 +87,24 @@ func Acquire(projectRoot, verb string) (*Lock, error) {
 	_, _ = fmt.Fprintf(f, "PID=%d VERB=%s TIME=%s HOST=%s\n", os.Getpid(), verb, time.Now().UTC().Format(time.RFC3339), host)
 
 	return &Lock{f: f}, nil
+}
+
+// crossHostHint returns a non-empty advisory string when the HOST= field
+// parsed from body differs from localHost, indicating an NFSv3 cross-host
+// stale-lock situation where kernel flock does not propagate.
+func crossHostHint(body, localHost string) string {
+	for _, field := range strings.Fields(body) {
+		val, ok := strings.CutPrefix(field, "HOST=")
+		if !ok {
+			continue
+		}
+		if val != "" && val != localHost {
+			return "lock holder is on a different host (NFS-detected). " +
+				"On NFSv3 flock is advisory across hosts — verify with 'fuser .okdctl.lock' before deleting"
+		}
+		return ""
+	}
+	return ""
 }
 
 // Release closes the fd (which releases the flock) and removes the lock file.
