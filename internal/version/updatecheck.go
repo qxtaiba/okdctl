@@ -42,6 +42,11 @@ type cacheEntry struct {
 // Debug records emitted by the goroutine route through slog.Default();
 // callers that bypass cli.Execute must install logutil.RedactHandler
 // before calling this function.
+//
+// Security note: the GitHub Releases API response is unsigned; the sole
+// trust anchor is TLS to api.github.com. The resulting notice is advisory
+// only — before upgrading, verify the binary via cosign or the published
+// checksums file.
 func BackgroundCheck(ctx context.Context) <-chan CheckResult {
 	ch := make(chan CheckResult, 1)
 
