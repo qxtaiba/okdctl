@@ -1,4 +1,10 @@
-// Package setup provides the setup phase for OKD cluster provisioning.
+// Package setup runs the OKD setup phase: install host packages and the
+// tool trio (oc, openshift-install, terraform), render install-config and
+// Kubernetes manifests (including kube-vip), generate ignition files, build
+// custom CoreOS ISOs with embedded kargs, and configure HAProxy, dnsmasq,
+// and the bastion firewall. Steps are declared in setupBaseSteps,
+// setupManifestSteps, setupWebSteps, and setupInfraSteps, concatenated by
+// setupSteps.
 package setup
 
 import (
