@@ -19,6 +19,7 @@ const cfgVerb = "config"
 var configCmd = &cobra.Command{
 	Use:   cfgVerb,
 	Short: "Inspect okdctl configuration",
+	Long:  "Show and validate the resolved okdctl configuration; start with 'config show' to see the active values.",
 }
 
 var configShowCmd = &cobra.Command{

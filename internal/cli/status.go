@@ -38,6 +38,7 @@ health, and addon status for the deployed cluster.`,
 var describeCmd = &cobra.Command{
 	Use:   "describe",
 	Short: "Drill into a specific node or addon",
+	Long:  "Inspect a cluster node or registered addon in detail; start with 'describe node <name>'.",
 }
 
 var describeNodeCmd = &cobra.Command{

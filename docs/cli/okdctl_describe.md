@@ -2,6 +2,10 @@
 
 Drill into a specific node or addon
 
+### Synopsis
+
+Inspect a cluster node or registered addon in detail; start with 'describe node <name>'.
+
 ### Options
 
 ```
