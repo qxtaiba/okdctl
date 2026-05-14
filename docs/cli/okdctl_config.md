@@ -2,6 +2,10 @@
 
 Inspect okdctl configuration
 
+### Synopsis
+
+Show and validate the resolved okdctl configuration; start with 'config show' to see the active values.
+
 ### Options
 
 ```
