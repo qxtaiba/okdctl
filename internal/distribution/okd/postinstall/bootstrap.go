@@ -12,6 +12,12 @@ import (
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
+// bootstrapStateFile is the auto-loaded tfvars override that records
+// bootstrap_enabled=false after the VM is destroyed. Terraform loads
+// *.auto.tfvars.json automatically, so subsequent plan/destroy runs see
+// a clean diff without any change to the user-authored terraform.tfvars.
+const bootstrapStateFile = "bootstrap-state.auto.tfvars.json"
+
 // CleanupBootstrap destroys the bootstrap VM by re-applying terraform with bootstrap_enabled=false.
 // Uses -target to scope the operation to the bootstrap resource only, preventing
 // unintended side effects on other resources (e.g., workers being shut down).
@@ -78,5 +84,10 @@ func (p *Phase) CleanupBootstrap(ctx context.Context, cfg *config.Config, opts *
 	}
 
 	p.Log.Info("bootstrap: vm destroyed", "cluster", cfg.Cluster.Name)
+
+	statePath := filepath.Join(terraformDir, bootstrapStateFile)
+	if err := system.AtomicWriteString(statePath, `{"bootstrap_enabled": false}`, 0o600); err != nil {
+		return &errtypes.ClusterError{Msg: "bootstrap: failed to write state override", Err: err}
+	}
 	return nil
 }
