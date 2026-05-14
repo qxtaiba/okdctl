@@ -388,6 +388,9 @@ resource "proxmox_virtual_environment_vm" "worker" {
       # efi_disk holds nvram/boot-order state across reboots; replacing the
       # disk on a force-new attribute change would reset bootloader picks.
       efi_disk,
+      # disk topology is fixed at first apply; lowering worker_data_disk_size_gb
+      # would silently destroy the Ceph data disk without this guard.
+      disk,
     ]
   }
 }
