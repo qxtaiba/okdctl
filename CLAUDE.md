@@ -224,7 +224,7 @@ write the comment — then it carries real information.
   LICENSE.
 - **v0.x deps need a justification and an abandonment plan.** v0.x APIs
   may break on any minor bump. Today's entries:
-  - `github.com/luthermonson/go-proxmox` v0.4.x — sole Proxmox discovery
+  - `github.com/luthermonson/go-proxmox` v0.5.x — sole Proxmox discovery
     path (`internal/tui/wizard/steps/proxmox_discovery.go`). Bus-factor 1.
     Fallback: ~200 LOC REST-only rewrite using `net/http` + the documented
     Proxmox API. Track upstream releases; bump on each.
