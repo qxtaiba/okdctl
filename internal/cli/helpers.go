@@ -348,7 +348,7 @@ func executeFullDeployment(ctx context.Context, cfg *config.Config, opts deploym
 	startTime := time.Now()
 	markerPath := filepath.Join(workDir, deployStateFile)
 
-	if err := markDeployPhaseFatal(markerPath, "prepare", runID, cfg.Cluster.Name); err != nil {
+	if err := markDeployPhaseFatal(markerPath, phasePrepare, runID, cfg.Cluster.Name); err != nil {
 		return err
 	}
 	setupSteps, err := p.Prepare(ctx, cfg)
@@ -362,7 +362,7 @@ func executeFullDeployment(ctx context.Context, cfg *config.Config, opts deploym
 		return err
 	}
 
-	markDeployPhase(markerPath, "install", runID, cfg.Cluster.Name)
+	markDeployPhase(markerPath, phaseInstall, runID, cfg.Cluster.Name)
 	installOpts := install.NewOptions(cfg, projectRoot)
 	installSteps, err := p.Install(ctx, cfg, &installOpts)
 	if err != nil {
@@ -376,7 +376,7 @@ func executeFullDeployment(ctx context.Context, cfg *config.Config, opts deploym
 		return err
 	}
 
-	markDeployPhase(markerPath, "configure", runID, cfg.Cluster.Name)
+	markDeployPhase(markerPath, phaseConfigure, runID, cfg.Cluster.Name)
 	result, configureSteps, err := p.Configure(ctx, cfg)
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
