@@ -49,7 +49,7 @@ func TestExecutor_CleanupPlans_PreservesBackupAndState(t *testing.T) {
 		}
 	}
 
-	e := &Executor{WorkDir: workDir}
+	e := &Executor{workDir: workDir}
 	if err := e.CleanupPlans(); err != nil {
 		t.Fatalf("CleanupPlans: %v", err)
 	}
@@ -79,7 +79,7 @@ func TestExecutor_CleanupPlans_PreservesBackupAndState(t *testing.T) {
 
 func TestExecutor_CleanupPlans_MissingFilesIgnored(t *testing.T) {
 	workDir := t.TempDir()
-	e := &Executor{WorkDir: workDir}
+	e := &Executor{workDir: workDir}
 	if err := e.CleanupPlans(); err != nil {
 		t.Errorf("expected nil for empty dir; got %v", err)
 	}
@@ -92,7 +92,7 @@ func TestExecutor_BuildVarArgs_DeterministicOrder(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	e := &Executor{WorkDir: workDir, VarFile: vf, logger: slog.New(&captureHandler{})}
+	e := &Executor{workDir: workDir, varFile: vf, logger: slog.New(&captureHandler{})}
 	got := e.buildVarArgs("", map[string]string{"z": "3", "a": "1", "m": "2"})
 
 	want := []string{"-var-file=" + vf, "-var", "a=1", "-var", "m=2", "-var", "z=3"}
@@ -110,15 +110,15 @@ func TestExecutor_BuildVarArgs_VarFileMissing(t *testing.T) {
 	workDir := t.TempDir()
 	h := &captureHandler{}
 	e := &Executor{
-		WorkDir: workDir,
-		VarFile: filepath.Join(workDir, "does-not-exist.tfvars"),
+		workDir: workDir,
+		varFile: filepath.Join(workDir, "does-not-exist.tfvars"),
 		logger:  slog.New(h),
 	}
 
 	got := e.buildVarArgs("", nil)
 
 	for _, s := range got {
-		if s == "-var-file="+e.VarFile {
+		if s == "-var-file="+e.varFile {
 			t.Errorf("buildVarArgs included -var-file for missing file")
 		}
 	}
@@ -145,7 +145,7 @@ func TestExecutor_HasState(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			dir := t.TempDir()
 			h := &captureHandler{}
-			e := &Executor{WorkDir: dir, logger: slog.New(h)}
+			e := &Executor{workDir: dir, logger: slog.New(h)}
 
 			if tc.write {
 				if err := os.WriteFile(filepath.Join(dir, "terraform.tfstate"), []byte(tc.content), 0o600); err != nil {

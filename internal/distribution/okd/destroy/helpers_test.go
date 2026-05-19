@@ -53,7 +53,7 @@ func seedTerraformEnvDir(t *testing.T, projectRoot, env string) {
 }
 
 func TestStateLockHint_NoLockFile(t *testing.T) {
-	tf := &terraform.Executor{WorkDir: t.TempDir()}
+	tf := terraform.New(t.TempDir())
 	if err := tf.LockHint(); err != nil {
 		t.Errorf("expected nil; got %v", err)
 	}
@@ -65,7 +65,7 @@ func TestStateLockHint_LockFilePresent(t *testing.T) {
 	if err := os.WriteFile(lockPath, []byte(`{"ID":"abc"}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	tf := &terraform.Executor{WorkDir: dir}
+	tf := terraform.New(dir)
 	err := tf.LockHint()
 	if err == nil {
 		t.Fatal("expected error; got nil")
@@ -91,7 +91,7 @@ func TestStateLockHint_CorruptLockFile(t *testing.T) {
 	if err := os.WriteFile(lockPath, []byte(`not-json`), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	tf := &terraform.Executor{WorkDir: dir}
+	tf := terraform.New(dir)
 	err := tf.LockHint()
 	if err == nil {
 		t.Fatal("expected error; got nil")
