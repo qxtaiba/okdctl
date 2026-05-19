@@ -27,7 +27,7 @@ item **must** edit this field so other sessions know the item is claimed.
 | `in progress — branch: <name>` | A session is actively working on it. |
 | `in progress — worktree: <path>` | A parallel agent owns an isolated worktree. |
 | `in review — PR #<n>` | Implementation done, awaiting merge. |
-| `done — PR #<n>` | Merged. After merge, move the item entry under a `## Completed` section at the bottom of this file and record the merge date. |
+| `done — PR #<n>` | Merged. After merge, append a postmortem entry to `docs/roadmap/completed-archive.md` and remove the item block from this file. |
 | `blocked — waiting on <ID>` | Dependency not yet in `done`; skip for now. |
 | `deferred` | Scheduled for a later quarter; do not pick up. |
 
