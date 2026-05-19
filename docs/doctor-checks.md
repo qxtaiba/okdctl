@@ -266,6 +266,15 @@ secret for a private registry, download it from
 `https://console.redhat.com/openshift/install/pull-secret` and save it to the
 path configured in `okdctl.yaml` under `files.pull_secret`.
 
+**Warn vs fail split (by design):** `okdctl doctor` is an orientation tool,
+not a strict preflight gate. When no config file exists yet, the pull-secret
+check emits `[warn]` and exits 0 so a first-time user can read the full
+doctor output without a blocking failure. Once a config exists with
+`files.pull_secret` unset or pointing at an invalid file, the check escalates
+to `[fail]` (exit 2). The same validation runs again during `okdctl deploy`,
+which exits 65 (EX_DATAERR) on the same condition — the split is intentional:
+doctor surfaces orientation, deploy enforces correctness.
+
 ---
 
 ## disk space
