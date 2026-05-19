@@ -11,6 +11,7 @@ import (
 
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/system"
+	"github.com/qxtaiba/okdctl/internal/tui"
 )
 
 var (
@@ -69,7 +70,7 @@ func runKubeconfig(_ *cobra.Command, _ []string) error {
 	if err := system.AtomicWrite(kubeconfigOutput, data, 0o600); err != nil {
 		return fmt.Errorf("write kubeconfig: %w", err)
 	}
-	fmt.Fprintf(os.Stderr, "kubeconfig written to %s\n", kubeconfigOutput)
+	tui.Info("kubeconfig written", tui.LF("path", kubeconfigOutput))
 	return nil
 }
 
@@ -120,7 +121,7 @@ func mergeKubeconfig(srcData []byte) error {
 	if err := system.AtomicWrite(dest, out, 0o600); err != nil {
 		return fmt.Errorf("write merged kubeconfig: %w", err)
 	}
-	fmt.Fprintf(os.Stderr, "kubeconfig merged into %s\n", dest)
+	tui.Info("kubeconfig merged", tui.LF("path", dest))
 	return nil
 }
 
