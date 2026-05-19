@@ -600,7 +600,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `err:fde34e0c:exit-error-no-ctx-identity` — exit error no ctx identity
 
-**Status:** in progress — branch: refactor/executor-terraform-api-cluster  
+**Status:** in review — PR #663  
 **Severity:** minor  
 **Cluster:** cancellation-identity — seam→audit-concurrency — related: err:48688e63:cancel-identity-lost-on-tf-apply  
 **Evidence:** `internal/cluster/k8s.go:108-127` + 6 more  
@@ -684,7 +684,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `api:4c092fce:terraform-mixed-shape` — terraform mixed shape
 
-**Status:** in progress — branch: refactor/executor-terraform-api-cluster  
+**Status:** in review — PR #663  
 **Severity:** minor  
 **Cluster:** option-consistency — related: api:7b2829bb:exposed-fields-no-callers  
 **Evidence:** `internal/infrastructure/terraform/terraform.go:32-59`  
@@ -694,7 +694,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `api:7b2829bb:exposed-fields-no-callers` — exposed fields no callers
 
-**Status:** in progress — branch: refactor/executor-terraform-api-cluster  
+**Status:** in review — PR #663  
 **Severity:** minor  
 **Cluster:** exported-surface — related: api:7b2829bb:zeroize-asymmetry, api:d5915b0c:exec-env-direct-mutation  
 **Evidence:** `internal/executor/executor.go:38-46`  
@@ -704,7 +704,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `api:d5915b0c:exec-env-direct-mutation` — exec env direct mutation
 
-**Status:** in progress — branch: refactor/executor-terraform-api-cluster  
+**Status:** in review — PR #663  
 **Severity:** minor  
 **Cluster:** package-boundary — related: api:7b2829bb:zeroize-asymmetry  
 **Evidence:** `internal/distribution/okd/install/phase.go:166-166`  
@@ -910,16 +910,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `go.mod:12-12`  
 **Problem:** luthermonson/go-proxmox v0.5.0: single maintainer (bus factor 1), v0.x API instability, sole Proxmox API client used in one 203-LOC file (internal/tui/wizard/steps/proxmox_discovery.go) calling client.Nodes/client.Node/Storages/Networks/GetContent. Pulls gorilla/websocket, magefile/mage, jinzhu/copier, buger/goterm, h2non/gock, h2non/parth — heavy transitive set for narrow REST-only usage. CLAUDE.md documents the ~200-LOC REST fallback and instructs not to rip out without the rewrite landing first.  
 **Fix:** Re-confirm only — do NOT propose a swap this run. Keep the v0.5.0 pin; bump on each upstream release; track the documented ~200-LOC net/http rewrite in roadmap.md so the fallback exists when go-proxmox abandons. SKILL §5a explicitly forbids re-discovery and rip-out without the rewrite plan landing first.  
-**Effort:** hours
-
-##### `dep:6ebdb617:claudemd-yaml-tripwire-stale` — claudemd yaml tripwire stale
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/dep-6ebdb617-yaml-tripwire  
-**Severity:** suggestion  
-**Cluster:** duplicate-engine  
-**Evidence:** `CLAUDE.md:196-201`  
-**Problem:** CLAUDE.md §dependencies tripwire claims 'Count is down from four — gopkg.in/yaml.v3 was dropped from go.mod require.' That is technically accurate (it is no longer in the require block) but misleading: gopkg.in/yaml.v3 v3.0.1 still appears in go.sum via testify→gopkg.in/check.v1, so the operative engine count remains four. The tripwire fires only on a fourth direct add, masking the real duplicate.  
-**Fix:** Edit CLAUDE.md §dependencies to either (a) say 'four YAML engines: sigs.k8s.io/yaml direct + go.yaml.in/yaml/v{2,3} via apimachinery + gopkg.in/yaml.v3 via testify/check.v1 — keep stable, do not add a fifth' or (b) actually drop testify by replacing test-only assertions with stdlib + go-cmp, then update the tripwire to say three.  
 **Effort:** hours
 
 #### audit-documentation
