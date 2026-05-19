@@ -191,6 +191,19 @@ type deploymentOptions struct {
 	AllowNetworkMetrics bool
 }
 
+// metricsReadHeaderTimeout / metricsReadTimeout / metricsWriteTimeout set
+// conservative HTTP server bounds for the unauthenticated /metrics endpoint.
+// metricsIdleTimeout leaves slack for Prometheus scrapers that reconnect on
+// their configured scrape_interval (typically 15–60 s); metricsShutdownTimeout
+// gives in-flight scrapes time to drain on graceful stop.
+const (
+	metricsReadHeaderTimeout = 5 * time.Second
+	metricsReadTimeout       = 10 * time.Second
+	metricsWriteTimeout      = 10 * time.Second
+	metricsIdleTimeout       = 60 * time.Second
+	metricsShutdownTimeout   = 5 * time.Second
+)
+
 // startMetricsServer starts a Prometheus metrics HTTP server on addr (disabled
 // when addr is empty). Returns a stop closure that shuts the server down with
 // a 5-second deadline and surfaces any bind error, plus any provisioner
@@ -227,10 +240,10 @@ func startMetricsServer(ctx context.Context, addr string, allowNetwork bool) (fu
 		// BaseContext propagates the deploy ctx so in-flight scrape connections
 		// are cancelled when the parent context is cancelled.
 		BaseContext:       func(net.Listener) context.Context { return ctx },
-		ReadHeaderTimeout: 5 * time.Second,
-		ReadTimeout:       10 * time.Second,
-		WriteTimeout:      10 * time.Second,
-		IdleTimeout:       60 * time.Second,
+		ReadHeaderTimeout: metricsReadHeaderTimeout,
+		ReadTimeout:       metricsReadTimeout,
+		WriteTimeout:      metricsWriteTimeout,
+		IdleTimeout:       metricsIdleTimeout,
 	}
 	// errCh cap=1: the goroutine sends exactly once and never blocks, so it
 	// exits cleanly even if stop is never called (early return on phase error).
@@ -240,7 +253,7 @@ func startMetricsServer(ctx context.Context, addr string, allowNetwork bool) (fu
 	stop := func() error {
 		// Use Background, not the caller's ctx: by stop() time the parent ctx
 		// is already cancelled by SIGINT, and we need the 5s drain to complete.
-		shutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		shutCtx, cancel := context.WithTimeout(context.Background(), metricsShutdownTimeout)
 		defer cancel()
 		_ = srv.Shutdown(shutCtx)
 		// Shutdown's return guarantees ListenAndServe has exited; drain errCh.
