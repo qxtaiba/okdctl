@@ -113,19 +113,25 @@ const (
 	StepCleanupSummary   distribution.StepID = "cleanup-summary"
 )
 
-// cleanupTracker buffers per-step errors for the final summary step.
-// Orchestrator.Run does not propagate NonFatal step errors; the summary step
-// returns errors.Join(t.errs...) so callers receive a joined error when one
-// or more subsystem cleanups fail. Safe without a mutex because
-// Orchestrator.Run executes steps serially.
+// cleanupTracker buffers per-step errors and the names of failed subsystems
+// for the final summary step. Orchestrator.Run does not propagate NonFatal
+// step errors; the summary step returns errors.Join(t.errs...) so callers
+// receive a joined error when one or more subsystem cleanups fail. Safe
+// without a mutex because Orchestrator.Run executes steps serially.
 type cleanupTracker struct {
-	errs []error
+	errs  []error
+	names []string
 }
 
-func (t *cleanupTracker) onError() func(error) {
+func (t *cleanupTracker) onError(name string) func(error) {
 	return func(err error) {
 		t.errs = append(t.errs, err)
+		t.names = append(t.names, name)
 	}
+}
+
+func (t *cleanupTracker) failedNames() []string {
+	return t.names
 }
 
 func execute(ctx context.Context, opts *Options, logger *slog.Logger) error {
@@ -152,7 +158,7 @@ func cleanupSteps(opts *Options, logger *slog.Logger) []distribution.StepDef {
 			return !system.DirExists(opts.WorkDir), nil
 		},
 		Exec:    func(ctx context.Context) error { return WorkDirectory(ctx, opts.WorkDir, opts.PreserveConfig, logger) },
-		OnError: t.onError(),
+		OnError: t.onError("work directory"),
 	}
 
 	webServerStep := distribution.StepDef{
@@ -160,7 +166,7 @@ func cleanupSteps(opts *Options, logger *slog.Logger) []distribution.StepDef {
 		Desc: "removing ignition files from web server", NonFatal: true,
 		ReRunSafe: distribution.ReRunSafeYes,
 		Exec:      func(ctx context.Context) error { return WebServer(ctx, opts.HTTPServerRoot, logger) },
-		OnError:   t.onError(),
+		OnError:   t.onError("web server"),
 	}
 
 	haproxyStep := distribution.StepDef{
@@ -171,7 +177,7 @@ func cleanupSteps(opts *Options, logger *slog.Logger) []distribution.StepDef {
 			return !system.FileExists(opts.HAProxyConfig) && !system.IsServiceActive(ctx, "haproxy"), nil
 		},
 		Exec:    func(ctx context.Context) error { return HAProxy(ctx, opts.HAProxyConfig, opts.VIP, logger) },
-		OnError: t.onError(),
+		OnError: t.onError("haproxy"),
 	}
 
 	apacheStep := distribution.StepDef{
@@ -179,7 +185,7 @@ func cleanupSteps(opts *Options, logger *slog.Logger) []distribution.StepDef {
 		Desc: "stopping apache httpd service", NonFatal: true,
 		ReRunSafe: distribution.ReRunSafeYes,
 		Exec:      func(ctx context.Context) error { return Apache(ctx, logger) },
-		OnError:   t.onError(),
+		OnError:   t.onError("apache"),
 	}
 
 	dnsmasqStep := distribution.StepDef{
@@ -197,7 +203,7 @@ func cleanupSteps(opts *Options, logger *slog.Logger) []distribution.StepDef {
 			return !system.FileExists(confPath), nil
 		},
 		Exec:    func(ctx context.Context) error { return Dnsmasq(ctx, opts.ClusterName, logger) },
-		OnError: t.onError(),
+		OnError: t.onError("dnsmasq"),
 	}
 
 	terraformStep := distribution.StepDef{
@@ -225,7 +231,7 @@ func cleanupSteps(opts *Options, logger *slog.Logger) []distribution.StepDef {
 			}
 			return nil
 		},
-		OnError: t.onError(),
+		OnError: t.onError("terraform"),
 	}
 
 	packagesStep := distribution.StepDef{
@@ -235,7 +241,7 @@ func cleanupSteps(opts *Options, logger *slog.Logger) []distribution.StepDef {
 		SkipWhen:   func() bool { return !opts.RemovePackages },
 		SkipReason: "package removal disabled",
 		Exec:       func(ctx context.Context) error { return Packages(ctx, opts.BinDir, logger) },
-		OnError:    t.onError(),
+		OnError:    t.onError("packages"),
 	}
 
 	summaryStep := distribution.StepDef{
@@ -243,7 +249,7 @@ func cleanupSteps(opts *Options, logger *slog.Logger) []distribution.StepDef {
 		Desc: "printing cleanup summary", NonFatal: false,
 		ReRunSafe: distribution.ReRunSafeYes,
 		Exec: func(_ context.Context) error {
-			printSummary(opts, logger)
+			printSummary(opts, t, logger)
 			return errors.Join(t.errs...)
 		},
 	}

@@ -133,6 +133,7 @@ func runCleanup(cmd *cobra.Command, _ []string) error {
 
 	exec := executor.New(executor.WithWorkDir(projectRoot))
 	if err := cleanup.New(version.Version, phase.WithExecutor(exec), phase.WithLogger(logger)).Execute(ctx, opts); err != nil {
+		tui.Warn("partial cleanup; rerun to retry")
 		return err
 	}
 
