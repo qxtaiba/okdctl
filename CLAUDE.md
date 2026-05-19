@@ -133,6 +133,11 @@ write the comment — then it carries real information.
   `text`, `json`), mirroring kubectl/oc convention. `--output-file` (no
   shorthand) writes data to a file path. Never register `-o` as a shorthand
   for a file-destination flag; reserve it exclusively for format selection.
+  Shorthand allowlist: only `--yes`/`-y`, `--quiet`/`-q`, `--verbose`/`-v`,
+  `--output`/`-o`, and `--config`/`-c` carry single-letter shorthands.
+  Per-command boolean tail flags (`--keep-haproxy`, `--keep-isos`,
+  `--skip-terraform`, `--skip-must-gather`, `--dry-run`, etc.) are
+  intentionally long-form only; do not add a shorthand to new ones.
 - `internal/runlock` serialises concurrent okdctl invocations via flock, which
   is advisory on NFSv3 and bypassed entirely across hosts; never rely on it as
   a cross-host correctness guarantee. Terraform's own state lock is the
