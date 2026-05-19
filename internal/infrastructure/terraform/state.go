@@ -12,15 +12,15 @@ import (
 )
 
 // checkStateMajorVersion reads stateFile, extracts .terraform_version, and
-// returns *errtypes.ConfigError when the parsed major component falls outside
-// [stateMajorMin, stateMajorMax]. Bounds match
+// returns *errtypes.ConfigError when the parsed major component does not equal
+// requiredTerraformMajor. Matches the constraint in
 // infrastructure/terraform/environments/production/versions.tf
-// (required_version = ">= 1.10, < 2.0"). Update both constants if the
+// (required_version = ">= 1.10, < 2.0"). Update the constant if the
 // constraint ever crosses a major boundary. Parsing failures are non-fatal:
 // they are logged and the caller continues so terraform itself can surface
 // the issue.
 func checkStateMajorVersion(stateFile string, log *slog.Logger) error {
-	const stateMajorMin, stateMajorMax = 1, 1
+	const requiredTerraformMajor = 1
 
 	raw, err := os.ReadFile(stateFile)
 	if err != nil {
@@ -43,11 +43,11 @@ func checkStateMajorVersion(stateFile string, log *slog.Logger) error {
 			"version", state.TerraformVersion)
 		return nil //nolint:nilerr // semver parse failure is non-fatal: caller continues to terraform init
 	}
-	if major < stateMajorMin || major > stateMajorMax {
+	if major != requiredTerraformMajor {
 		return &errtypes.ConfigError{
 			Msg: fmt.Sprintf(
 				"terraform state was written by terraform v%s (major %d); versions.tf requires major %d — upgrade terraform or migrate the state before destroying",
-				state.TerraformVersion, major, stateMajorMin,
+				state.TerraformVersion, major, requiredTerraformMajor,
 			),
 		}
 	}
