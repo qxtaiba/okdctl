@@ -90,13 +90,12 @@ func (p *Phase) bootstrapOC(ctx context.Context, downloadDir string) (string, er
 	return ocPath, nil
 }
 
-// authMarkers names substrings that registries and oc emit for credential
-// failures. Best-effort — a registry whose error envelope drifts from these
-// patterns will fall through to *errtypes.ClusterError instead of AuthError.
+// authMarkers names HTTP-status-aligned substrings that registries and oc
+// emit for credential failures. Best-effort — a registry whose error
+// envelope drifts from these patterns will fall through to
+// *errtypes.ClusterError instead of AuthError.
 var authMarkers = []string{
 	"unauthorized",
-	"authentication",
-	"denied",
 	"forbidden",
 	"no basic auth",
 	"401",
