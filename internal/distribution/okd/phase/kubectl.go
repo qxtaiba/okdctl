@@ -23,20 +23,17 @@ func (p *BasePhase) OcResourceExists(ctx context.Context, errPrefix string, args
 	return result.ExitCode == 0 && strings.TrimSpace(result.Stdout) != "", nil
 }
 
-// OcOutput runs `oc <args...>` once and returns trimmed stdout.
-// A non-zero exit code is returned as an *executor.ExitError so callers
-// can errors.As to inspect ExitCode without re-parsing the message.
+// OcOutput runs `oc <args...>` once and returns trimmed stdout. A non-zero
+// exit code is returned as an *executor.ExitError (callers can errors.As to
+// inspect ExitCode) unless ctx is cancelled, in which case the ctx error
+// propagates so SIGINT maps to exit 130.
 func (p *BasePhase) OcOutput(ctx context.Context, args ...string) (string, error) {
 	result, err := p.Exec.Run(ctx, "oc", args...)
 	if err != nil {
 		return "", err
 	}
 	if result.ExitCode != 0 {
-		return "", &executor.ExitError{
-			Command:  "oc " + args[0],
-			ExitCode: result.ExitCode,
-			Stderr:   strings.TrimSpace(result.Stderr),
-		}
+		return "", executor.NewExitError(ctx, "oc "+args[0], result.ExitCode, strings.TrimSpace(result.Stderr))
 	}
 	return strings.TrimSpace(result.Stdout), nil
 }
