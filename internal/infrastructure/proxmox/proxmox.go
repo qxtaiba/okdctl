@@ -125,6 +125,9 @@ func (p *Provider) Connect(ctx context.Context, cfg *config.Config) error {
 		return &errtypes.ConfigError{Msg: "proxmox configuration is required"}
 	}
 	p.host = cfg.Provider.Proxmox.Host
+	if err := config.ValidateProxmoxHost(p.host); err != nil {
+		return &errtypes.ConfigError{Msg: "proxmox host is invalid", Err: err}
+	}
 	p.node = cfg.Provider.Proxmox.Node
 	if p.sshExec != nil && cfg.Provider.Proxmox.SSHHostFingerprint != "" {
 		path, err := sshpin.Verify(ctx, phase.ProxmoxBareHost(p.host), cfg.Provider.Proxmox.SSHHostFingerprint, p.logger)
