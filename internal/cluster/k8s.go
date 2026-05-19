@@ -15,10 +15,10 @@ import (
 	"github.com/qxtaiba/okdctl/internal/logutil"
 )
 
-// K8sClient is a thin kubectl/oc wrapper used by the install and
+// Client is a thin kubectl/oc wrapper used by the install and
 // postinstall phases for CSR approval, readiness checks, and resource
 // queries.
-type K8sClient struct {
+type Client struct {
 	CLI string
 
 	Kubeconfig string
@@ -27,24 +27,24 @@ type K8sClient struct {
 	logger *slog.Logger
 }
 
-// Option configures a K8sClient at construction time.
-type Option func(*K8sClient)
+// Option configures a Client at construction time.
+type Option func(*Client)
 
 // WithCLI overrides the CLI binary name (defaults to "kubectl", upgraded to
 // "oc" when available).
 func WithCLI(cli string) Option {
-	return func(c *K8sClient) { c.CLI = cli }
+	return func(c *Client) { c.CLI = cli }
 }
 
 // WithKubeconfig points the client at a specific kubeconfig path.
 func WithKubeconfig(path string) Option {
-	return func(c *K8sClient) { c.Kubeconfig = path }
+	return func(c *Client) { c.Kubeconfig = path }
 }
 
 // WithLogger injects a structured logger. Nil logger falls back to
 // logutil.NopLogger.
 func WithLogger(l *slog.Logger) Option {
-	return func(c *K8sClient) { c.logger = logutil.OrNop(l) }
+	return func(c *Client) { c.logger = logutil.OrNop(l) }
 }
 
 // WithEnvFallback applies environment-driven defaults when no explicit option
@@ -54,7 +54,7 @@ func WithLogger(l *slog.Logger) Option {
 // production callers (install, postinstall) supply WithCLI/WithKubeconfig
 // explicitly so they get reproducible construction.
 func WithEnvFallback() Option {
-	return func(c *K8sClient) {
+	return func(c *Client) {
 		if c.Kubeconfig == "" {
 			if kc := os.Getenv("KUBECONFIG"); kc != "" {
 				if err := validateKubeconfigEnv(kc); err != nil {
@@ -96,11 +96,11 @@ func validateKubeconfigEnv(path string) error {
 	return fmt.Errorf("kubeconfig path outside allowed prefixes ($HOME, /etc)")
 }
 
-// NewK8sClient builds a K8sClient applying the supplied options in order.
+// New builds a Client applying the supplied options in order.
 // It does not read the process environment or probe PATH; callers wanting
 // those defaults must pass WithEnvFallback() explicitly.
-func NewK8sClient(opts ...Option) *K8sClient {
-	c := &K8sClient{
+func New(opts ...Option) *Client {
+	c := &Client{
 		CLI:    "kubectl",
 		logger: logutil.NopLogger,
 	}
@@ -130,7 +130,7 @@ func subcommand(args []string) string {
 	return args[0]
 }
 
-func (c *K8sClient) run(ctx context.Context, args ...string) (*executor.Result, error) {
+func (c *Client) run(ctx context.Context, args ...string) (*executor.Result, error) {
 	result, err := c.exec.Run(ctx, c.CLI, args...)
 	if err != nil {
 		return nil, fmt.Errorf("%s %s failed: %w", c.CLI, subcommand(args), err)
@@ -138,7 +138,7 @@ func (c *K8sClient) run(ctx context.Context, args ...string) (*executor.Result, 
 	return result, nil
 }
 
-func (c *K8sClient) runCheck(ctx context.Context, args ...string) error {
+func (c *Client) runCheck(ctx context.Context, args ...string) error {
 	result, err := c.run(ctx, args...)
 	if err != nil {
 		return err
