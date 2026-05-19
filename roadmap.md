@@ -532,7 +532,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sec:a6e38cc7:keyscan-no-strict-baseline` — keyscan no strict baseline
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-a6e38cc7-require-pinned-fp  
 **Severity:** minor  
 **Cluster:** input-validation  
 **Evidence:** `internal/sshpin/sshpin.go:31-80`  
@@ -542,7 +542,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sec:8ea706f6:hashicorp-gpg-trust-doc` — hashicorp gpg trust doc
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-8ea706f6-gpg-fp-test  
 **Severity:** suggestion  
 **Cluster:** tls-network  
 **Evidence:** `internal/distribution/okd/setup/tools.go:273-336`  
@@ -586,7 +586,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `state:48688e63:proxmox-no-retry-on-init-apply` — proxmox no retry on init apply
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/state-48688e63-tf-init-retry  
 **Severity:** minor  
 **Cluster:** proxmox-api-idempotency  
 **Evidence:** `internal/infrastructure/proxmox/proxmox.go:159-227`  
@@ -606,7 +606,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `state:eb479d86:upload-resume-not-supported` — upload resume not supported
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/state-eb479d86-scp-per-file  
 **Severity:** minor  
 **Cluster:** phase-idempotency  
 **Evidence:** `internal/distribution/okd/setup/upload.go:82-146`  
