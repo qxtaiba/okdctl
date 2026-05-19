@@ -200,9 +200,7 @@ func TestRunStreamedChecked(t *testing.T) {
 	t.Run("zero exit streams stdout and returns no error", func(t *testing.T) {
 		t.Parallel()
 		var out, errBuf strings.Builder
-		e := New(WithInheritedEnv())
-		e.Stdout = &out
-		e.Stderr = &errBuf
+		e := New(WithInheritedEnv(), WithStdout(&out), WithStderr(&errBuf))
 
 		result, err := e.RunStreamedChecked(context.Background(), "sh", "-c", "printf 'hello\nworld\n'")
 		if err != nil {
@@ -222,9 +220,7 @@ func TestRunStreamedChecked(t *testing.T) {
 	t.Run("non-zero exit returns ExitError with stderr tail", func(t *testing.T) {
 		t.Parallel()
 		var out, errBuf strings.Builder
-		e := New(WithInheritedEnv())
-		e.Stdout = &out
-		e.Stderr = &errBuf
+		e := New(WithInheritedEnv(), WithStdout(&out), WithStderr(&errBuf))
 
 		result, err := e.RunStreamedChecked(context.Background(), "sh", "-c",
 			"printf 'boom\n' >&2; exit 1")
@@ -251,9 +247,7 @@ func TestRunStreamedChecked(t *testing.T) {
 
 	t.Run("ctx cancel returns context error", func(t *testing.T) {
 		t.Parallel()
-		e := New(WithInheritedEnv())
-		e.Stdout = &strings.Builder{}
-		e.Stderr = &strings.Builder{}
+		e := New(WithInheritedEnv(), WithStdout(&strings.Builder{}), WithStderr(&strings.Builder{}))
 
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
