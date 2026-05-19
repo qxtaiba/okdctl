@@ -532,7 +532,8 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sec:8ea706f6:hashicorp-gpg-trust-doc` — hashicorp gpg trust doc
 
-**Status:** blocked — needs maintainer decision: planner-added test revealed `expectedHashiCorpGPGFingerprint` = `AA16FCBCA621E70139936A4C798AEC654FA7E1A1` is NOT the canonical HashiCorp signing key fingerprint `798AEC654E5C15428C8E42EEAA16FCBCA621E701` (verified 2026-05-19 against hashicorp.com/trust/security). The test-only scope of this item would red CI; making it green requires correcting a GPG trust-anchor constant in setup/tools.go:299 — a security-sensitive change beyond this item's scope. The wrong constant means installHashiCorpDebianRepo currently rejects the genuine key (apt-repo install path is broken). Maintainer must decide: (a) widen this item to also fix the constant, or (b) file a separate Tier-0 bug for the trust-anchor correction.  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-8ea706f6-gpg-fp-fix  
+**Scope (widened by maintainer 2026-05-20):** in addition to the unit test, correct `expectedHashiCorpGPGFingerprint` (setup/tools.go:299) from `AA16FCBCA621E70139936A4C798AEC654FA7E1A1` to the canonical `798AEC654E5C15428C8E42EEAA16FCBCA621E701` (verified against hashicorp.com/trust/security). The wrong constant means installHashiCorpDebianRepo currently rejects the genuine key.  
 **Severity:** suggestion  
 **Cluster:** tls-network  
 **Evidence:** `internal/distribution/okd/setup/tools.go:273-336`  
