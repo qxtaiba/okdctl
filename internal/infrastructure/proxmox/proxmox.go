@@ -12,6 +12,9 @@ import (
 	"log/slog"
 	"path/filepath"
 	"strings"
+	"time"
+
+	"k8s.io/apimachinery/pkg/util/wait"
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
@@ -190,7 +193,7 @@ func (p *Provider) Provision(ctx context.Context, cfg *config.Config, opts Provi
 	}
 
 	p.logger.Info("terraform: initializing backend and providers")
-	if err := p.terraformExec.Init(ctx); err != nil {
+	if err := p.initWithRetry(ctx); err != nil {
 		return nil, &errtypes.ClusterError{Msg: "terraform init failed", Err: err}
 	}
 
@@ -272,7 +275,7 @@ func (p *Provider) PlanOnly(ctx context.Context, cfg *config.Config, opts Provis
 	}
 
 	p.logger.Info("terraform: initializing backend and providers")
-	if err := p.terraformExec.Init(ctx); err != nil {
+	if err := p.initWithRetry(ctx); err != nil {
 		return &errtypes.ClusterError{Msg: "terraform init failed", Err: err}
 	}
 
@@ -387,6 +390,59 @@ func (p *Provider) checkTerraformOutputs(ctx context.Context, cfg *config.Config
 			"want_workers", wantWorkers, "got_workers", len(v.Workers),
 			"bootstrap_present", v.Bootstrap != nil)
 	}
+}
+
+// initWithRetry wraps terraform init in a bounded retry for transient
+// failures (network blips during provider-plugin download, brief Proxmox
+// API unavailability). 3 attempts, exponential backoff starting at 5 s,
+// factor 2, jitter 0.5, 5-minute cap. Permanent failures (config/auth
+// errors, context cancellation) abort on the first attempt.
+func (p *Provider) initWithRetry(ctx context.Context) error {
+	backoff := wait.Backoff{
+		Duration: 5 * time.Second,
+		Factor:   2,
+		Jitter:   0.5,
+		Steps:    3,
+		Cap:      5 * time.Minute,
+	}
+	var lastWarnMsg string
+	var attempt int
+	return wait.ExponentialBackoffWithContext(ctx, backoff, func(_ context.Context) (bool, error) {
+		attempt++
+		if err := p.terraformExec.Init(ctx); err != nil {
+			if !initIsRetryable(err) {
+				return false, err
+			}
+			msg := err.Error()
+			if msg != lastWarnMsg {
+				p.logger.Warn("terraform: init failed, retrying", "attempt", attempt, "err", err)
+				lastWarnMsg = msg
+			} else {
+				p.logger.Debug("terraform: init failed (repeated), retrying", "attempt", attempt, "err", err)
+			}
+			return false, nil
+		}
+		return true, nil
+	})
+}
+
+// initIsRetryable reports whether an error from terraform init should
+// trigger another attempt. Config/auth errors and context cancellation
+// are permanent; everything else (non-zero exit, network/DNS failure) is
+// transient and worth retrying.
+func initIsRetryable(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return false
+	}
+	var cfgErr *errtypes.ConfigError
+	if errors.As(err, &cfgErr) {
+		return false
+	}
+	var authErr *errtypes.AuthError
+	return !errors.As(err, &authErr)
 }
 
 // probeVMEnumeration queries pvesh over SSH to check whether vmidBase is
