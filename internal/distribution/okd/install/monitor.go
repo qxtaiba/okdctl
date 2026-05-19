@@ -74,7 +74,7 @@ func (p *Phase) WaitForBootstrap(ctx context.Context, clusterDir string, opts *O
 	return nil
 }
 
-// csrApprover is the subset of cluster.K8sClient MonitorInstallation uses.
+// csrApprover is the subset of cluster.Client MonitorInstallation uses.
 // Accepting the interface instead of the concrete type lets tests inject a
 // stub without a real kubeconfig.
 type csrApprover interface {
@@ -83,14 +83,14 @@ type csrApprover interface {
 
 // MonitorInstallation watches the post-bootstrap install until all cluster
 // operators are Available, bounded by opts.InstallTimeout. If approver is
-// nil a real cluster.K8sClient is constructed from clusterDir/auth/kubeconfig.
+// nil a real cluster.Client is constructed from clusterDir/auth/kubeconfig.
 func (p *Phase) MonitorInstallation(ctx context.Context, clusterDir string, opts *Options, approver csrApprover) error {
 	ctx, cancel := context.WithTimeout(ctx, opts.InstallTimeout)
 	defer cancel()
 
 	if approver == nil {
 		kubeconfigPath := filepath.Join(clusterDir, "auth", "kubeconfig")
-		approver = cluster.NewK8sClient(
+		approver = cluster.New(
 			cluster.WithCLI("oc"),
 			cluster.WithKubeconfig(kubeconfigPath),
 			cluster.WithLogger(p.Log),

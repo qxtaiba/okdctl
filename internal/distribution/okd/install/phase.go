@@ -157,8 +157,8 @@ func (p *Phase) DeployInfrastructure(ctx context.Context, cfg *config.Config, op
 }
 
 // SetupKubeconfig appends KUBECONFIG=<path> to Exec.Env so subprocesses
-// launched via p.Exec.Run inherit it. K8sClient reads os.Environ at
-// construction and will NOT see this — callers constructing a K8sClient
+// launched via p.Exec.Run inherit it. Client reads os.Environ at
+// construction and will NOT see this — callers constructing a Client
 // after this runs must pass cluster.WithKubeconfig explicitly.
 func (p *Phase) SetupKubeconfig(ctx context.Context, clusterDir string) error {
 	if err := ctx.Err(); err != nil {

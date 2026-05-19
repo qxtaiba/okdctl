@@ -53,9 +53,9 @@ esac
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 }
 
-func newTestK8sClient(t *testing.T) *K8sClient {
+func newTestClient(t *testing.T) *Client {
 	t.Helper()
-	return NewK8sClient(
+	return New(
 		WithCLI("oc"),
 		WithLogger(logutil.NopLogger),
 	)
@@ -68,7 +68,7 @@ func TestApprovePendingCSRs_EmptyList(t *testing.T) {
 	t.Setenv("OC_ARGV_FILE", argvFile)
 	t.Setenv("OC_CSR_JSON", `{"items":[]}`)
 
-	c := newTestK8sClient(t)
+	c := newTestClient(t)
 	n, err := c.ApprovePendingCSRs(context.Background())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -91,7 +91,7 @@ func TestApprovePendingCSRs_BatchedSingleCall(t *testing.T) {
 		`{"metadata":{"name":"csr-2"},"status":{"conditions":[]}},`+
 		`{"metadata":{"name":"csr-3"},"status":{"conditions":[]}}]}`)
 
-	c := newTestK8sClient(t)
+	c := newTestClient(t)
 	n, err := c.ApprovePendingCSRs(context.Background())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -118,7 +118,7 @@ func TestApprovePendingCSRs_PendingCSRsError(t *testing.T) {
 	installFakeOCForCSRs(t)
 	t.Setenv("OC_GET_EXIT", "1")
 
-	c := newTestK8sClient(t)
+	c := newTestClient(t)
 	n, err := c.ApprovePendingCSRs(context.Background())
 	if err == nil {
 		t.Fatal("expected error when get csr exits non-zero")
@@ -137,7 +137,7 @@ func TestApprovePendingCSRs_ApproveFailureWrapped(t *testing.T) {
 	t.Setenv("OC_CSR_JSON", `{"items":[{"metadata":{"name":"csr-1"},"status":{"conditions":[]}}]}`)
 	t.Setenv("OC_APPROVE_EXIT", "1")
 
-	c := newTestK8sClient(t)
+	c := newTestClient(t)
 	n, err := c.ApprovePendingCSRs(context.Background())
 	if err == nil {
 		t.Fatal("expected error when approve exits non-zero")

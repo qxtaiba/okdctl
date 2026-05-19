@@ -12,7 +12,7 @@ import (
 // is how the kube-controller-manager represents a request that has neither
 // been approved nor denied. An Approved or Denied CSR carries at least one
 // condition entry and is excluded.
-func (c *K8sClient) PendingCSRs(ctx context.Context) ([]CSR, error) {
+func (c *Client) PendingCSRs(ctx context.Context) ([]CSR, error) {
 	result, err := c.run(ctx, "get", "csr", "-o", "json")
 	if err != nil {
 		return nil, err
@@ -50,7 +50,7 @@ func (c *K8sClient) PendingCSRs(ctx context.Context) ([]CSR, error) {
 
 // ApprovePendingCSRs approves every CSR returned by PendingCSRs in one
 // `oc adm certificate approve` invocation and returns the count approved.
-func (c *K8sClient) ApprovePendingCSRs(ctx context.Context) (int, error) {
+func (c *Client) ApprovePendingCSRs(ctx context.Context) (int, error) {
 	csrs, err := c.PendingCSRs(ctx)
 	if err != nil {
 		return 0, err
