@@ -218,7 +218,7 @@ func (p *Provider) Provision(ctx context.Context, cfg *config.Config, opts Provi
 	stopSpinner()
 	if applyErr != nil {
 		if errors.Is(ctx.Err(), context.Canceled) {
-			return nil, fmt.Errorf("terraform apply interrupted: %w", applyErr)
+			return nil, fmt.Errorf("terraform apply interrupted: %w", errors.Join(ctx.Err(), applyErr))
 		}
 		p.logger.Warn("terraform: apply failed; partial infrastructure may exist. run 'okdctl destroy' to clean up", "err", applyErr)
 		msg := "terraform apply failed"
