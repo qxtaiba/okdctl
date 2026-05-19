@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // Summary is the post-cleanup inventory the CLI renders for the operator.
@@ -56,7 +57,7 @@ func GenerateSummary(opts *Options) Summary {
 	return summary
 }
 
-func printSummary(opts *Options, logger *slog.Logger) {
+func printSummary(opts *Options, t *cleanupTracker, logger *slog.Logger) {
 	summary := GenerateSummary(opts)
 
 	logger.Info("cleanup: summary")
@@ -82,7 +83,10 @@ func printSummary(opts *Options, logger *slog.Logger) {
 	}
 
 	totalRemaining := summary.RemainingWorkFiles + summary.RemainingIgnitionFiles + summary.RemainingTerraformFiles
-	if totalRemaining == 0 {
+	if names := t.failedNames(); len(names) > 0 {
+		logger.Warn("cleanup: partial cleanup; rerun to retry; subsystems still active",
+			"subsystems", strings.Join(names, ", "))
+	} else if totalRemaining == 0 {
 		if opts.Kind == Full {
 			logger.Info("cleanup: completed successfully")
 			logger.Info("cleanup: system ready for fresh deployment")
