@@ -614,16 +614,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Iterate per-file in uploadISOsViaSCP; before each scp, run isoUploadNeeded specifically for that one file (skip already-matching). After SIGINT mid-batch, the next deploy resumes only the missing/corrupt tail. Keep the size logging summary; per-file logging adds <10 LOC.  
 **Effort:** hours
 
-##### `state:262af6e4:cleanup-no-resume-doc` — cleanup no resume doc
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/state-262af6e4-cleanup-resume  
-**Severity:** suggestion  
-**Cluster:** crash-recoverability  
-**Evidence:** `internal/distribution/okd/cleanup/cleanup.go:1-21`  
-**Problem:** Package doc says 'Cleanup is best-effort: a mid-run crash leaves workDir in a partially-removed state with no resume capability'. This is an acknowledged gap. The cleanupTracker accumulates errs into a joined error returned by StepCleanupSummary, but the `okdctl cleanup` command surfaces only the final error string — no per-step status the operator can use to decide which subsystems still need manual cleanup. After a SIGINT mid-cleanup, there's no diagnostic pointing at which steps succeeded.  
-**Fix:** In runCleanup (cli/cleanup.go), after the orchestrator returns, log a per-step status table from orchestrator.Results() at Info level. On error, also include in the user-facing message: 'partial cleanup; rerun to retry; subsystems still active: <names from t.errs>'. The Summary struct in cleanup/summary.go already shows the inverse (what's left); the orchestrator results show what was attempted. Tying the two is a 5-line change in printSummary.  
-**Effort:** hours
-
 #### audit-iac-and-shell
 
 #### audit-errors
@@ -686,16 +676,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/cluster/k8s.go:108-127` + 6 more  
 **Problem:** Every site that constructs an executor.ExitError on a non-zero exit code does so without consulting ctx.Err() — so a subprocess SIGTERM'd via cmd.Cancel that happens to exit non-zero produces an ExitError chain with no context.Canceled identity. Downstream errors.Is(err, context.Canceled) returns false at cli/root.go::signalExitCode, mapping the SIGINT to exit 4 (ClusterError) instead of 130. Pattern repeats at executor.go:L303,L355,L367, k8s.go:L120, phase/kubectl.go:L35, setup/release_extract.go:L128, setup/upload.go:L28. install/monitor.go has the canonical fix shape (check ctx.Err first).  
 **Fix:** Centralise: at every ExitError construction site, prefer ctx.Err() when ctx is cancelled. Cleanest landing is a helper in executor: 'func newExitError(ctx context.Context, cmd string, code int, stderr string) error { if err := ctx.Err(); err != nil { return err }; return &ExitError{Command: cmd, ExitCode: code, Stderr: stderr} }'. 7 call sites use it. Net +6 LOC.  
-**Effort:** hours
-
-##### `err:5013fea6:auth-error-string-sniffing` — auth error string sniffing
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/err-5013fea6-auth-string-sniff  
-**Severity:** suggestion  
-**Cluster:** string-sniffing  
-**Evidence:** `internal/distribution/okd/setup/release_extract.go:92-141`  
-**Problem:** isAuthError performs case-insensitive substring matching against an authMarkers list ('unauthorized','authentication','denied','forbidden','no basic auth','401','403') against subprocess stderr to classify ClusterError vs AuthError. The pattern is exactly what audit-errors string-sniffing rule catches: oc/registry stderr text is not a stable contract. Currently mitigated because exit code is the primary signal (L129) — string match is the secondary lift. Self-documented as best-effort with a roadmap link.  
-**Fix:** Track upstream openshift/oc for a typed registry-auth error envelope. Until then, accept the documented best-effort. Optionally tighten: prefer to drop the broad 'authentication'/'denied' markers (high false-positive rate vs benign network errors) and rely solely on '401'/'403'/'unauthorized' (HTTP-status-aligned). Net -3 LOC.  
 **Effort:** hours
 
 ##### `err:9f8e7d6c:errtypes-vocab-cert-pending` — errtypes vocab cert pending
@@ -800,16 +780,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/executor/executor.go:38-92` + 2 more  
 **Problem:** Sibling exec wrappers diverge on credential lifecycle: terraform.Executor.ZeroizeEnv (terraform.go:L346-L364) and okd.Provisioner.ZeroizeEnv (okd.go:L198-L216) both clear cred-bearing entries from their inner executor.Env, but executor.Executor itself has no ZeroizeEnv method — the canonical exec wrapper lacks the symmetric API its two consumers hand-roll. The duplicated bodies are byte-identical (PROXMOX_VE_PASSWORD/PROXMOX_VE_API_TOKEN allowlist) and parallel the well-formed Zeroize methods on credentials.ProxmoxCredentials.  
 **Fix:** Add executor.Executor.ZeroizeEnv() that walks e.Env, blanks any entry whose key is in a secretKeyAllowlist (PROXMOX_VE_PASSWORD, PROXMOX_VE_API_TOKEN at minimum; optionally widen to logutil.RedactHandler's secret-key fragments), then clear()s and nils the slice. Replace the bodies in terraform.go:L352-L364 and okd.go:L204-L216 with calls to the new method (`t.exec.ZeroizeEnv()`, `p.executor.ZeroizeEnv()`). Net LOC: -16 (two body removals replaced by single producer-side method).  
-**Effort:** hours
-
-##### `api:262af6e4:dual-option-types` — dual option types
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/api-262af6e4-dual-option  
-**Severity:** minor  
-**Cluster:** option-consistency  
-**Evidence:** `internal/distribution/okd/cleanup/cleanup.go:85-118`  
-**Problem:** cleanup.Phase has TWO option-pattern surfaces glued together: the canonical phase.BasePhaseOption used by New (line 103) and a second package-local cleanup.Option / cleanupConfig used by Execute (lines 89-95, 113). The Execute-time Option only carries a logger, which the BasePhase already has — so the second surface is pure noise. No sibling phase package (setup, install, postinstall, destroy) has a phase-local Option type beyond the inherited phase.BasePhaseOption.  
-**Fix:** Drop cleanup.Option, cleanup.WithLogger, cleanup.cleanupConfig. Change Execute signature to `func (p *Phase) Execute(ctx context.Context, opts *Options) error` and have the body use p.Log (set by phase.WithLogger at construction). Update the single caller (okd.go:L131 — `cleanup.New(...).Execute(ctx, cleanupOpts, cleanup.WithLogger(p.logger))`) to pass the logger via cleanup.New(phase.WithLogger(p.logger)).  
 **Effort:** hours
 
 ##### `api:4c092fce:terraform-mixed-shape` — terraform mixed shape
@@ -934,16 +904,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Rename the constant to `flagOutputFile` (paired with `flagOutputFormat = "output"` if you want the format-side codified too). Reads correctly at registration sites and removes the conceptual collision with cobra's StringVarP "output" literal.  
 **Effort:** hours
 
-##### `ux:8154ab0f:doctor-pull-secret-config-skew-warns` — doctor pull secret config skew warns
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/ux-8154ab0f-doctor-doc  
-**Severity:** suggestion  
-**Cluster:** exit-codes — seam→audit-state-and-recovery  
-**Evidence:** `internal/cli/doctor.go:428-476`  
-**Problem:** checkPullSecret returns sevWarn when no config file exists ('no config yet at ...; run okdctl deploy') but sevFail when the config exists with an empty pull_secret. doctor's documented contract is `Exit 0 if no [fail] results`. A first-time user runs `okdctl doctor` before `deploy` and sees mostly green plus one warn for pull-secret. They run `deploy`, which then re-validates and rejects with exit 65 (EX_DATAERR) on the same field. The taxonomy holds, but doctor's preflight value drops: it should fail loudly when an essential value is unset, not pass-with-warning.  
-**Fix:** Decision needed, not a code change yet. Either (a) keep the current shape (warn-then-fail) and document doctor as orientation-only, or (b) escalate the no-config branch to sevFail so doctor's exit code is honest. Option (b) breaks `okdctl doctor && okdctl deploy` chained-on-success scripts. Recommend (a) plus a doc note in docs/doctor-checks.md naming this as the intended split.  
-**Effort:** hours
-
 #### audit-observability
 
 ##### `obs:eb479d86:sprintf-attr-value` — sprintf attr value
@@ -1038,16 +998,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/cli/deploystate.go:75-86` + 1 more  
 **Problem:** The deploy-phase marker uses three bare strings ("prepare", "install", "configure") written by helpers.go and read by deploystate.go's switch. A producer/consumer string contract with no typed enum is exactly the shape the repo already replaced for cleanup.Kind, summary.stepDisplayStatus, debug_bundle.bundleStatus, and platform.Family.  
 **Fix:** Introduce `type deployPhase string` with `phasePrepare/phaseInstall/phaseConfigure` constants alongside `deployState` in deploystate.go. Update markDeployPhase signature and the three call sites in helpers.go. JSON wire format is unchanged because the values are unchanged strings.  
-**Effort:** hours
-
-##### `smell:d6b325cb:duplicate-role-enum` — duplicate role enum
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/smell-d6b325cb-role-enum  
-**Severity:** minor  
-**Cluster:** magic-strings — seam→audit-api-design  
-**Evidence:** `internal/infrastructure/proxmox/types.go:42-49` + 1 more  
-**Problem:** Two parallel typed enums name the same domain concept: `phase.NodeRole` (RoleBootstrap/RoleMaster/RoleWorker/RoleUnknown) and `proxmox.VMRole` (RoleBootstrap/RoleMaster/RoleWorker, no Unknown). They share the exact same string values verbatim. Each side has its own comment justifying the placement (avoiding an import cycle), yet phase already imports nothing from proxmox and proxmox already imports phase for VMState — the cycle excuse is one-directional.  
-**Fix:** Drop `VMRole` and the three constants; type-alias if a name change is needed (`type VMRole = phase.NodeRole`). proxmox/types.go already imports phase for VMState — adding NodeRole costs no new import. Update VMStatus.Role accordingly. Risk medium because callers may switch-exhaustive over the proxmox values today.  
 **Effort:** hours
 
 ##### `smell:fd2125dd:output-flag-magic-string` — output flag magic string
@@ -1152,16 +1102,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** No action — record in CLAUDE.md (or this audit) that four log engines is the steady state for any project that consumes both Charm UI stack and k8s.io/* clients. Re-flag only if a NEW direct log dep enters go.mod or if charmlog gets replaced.  
 **Effort:** hours
 
-##### `dep:33ef32bf:exp-floor-stale-pseudoversion` — exp floor stale pseudoversion
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/dep-33ef32bf-exp-floor  
-**Severity:** suggestion  
-**Cluster:** justified-version-floor  
-**Evidence:** `go.mod:57-57`  
-**Problem:** golang.org/x/exp pinned at pseudo-version v0.0.0-20231006140011-7918f672742d (commit dated 2023-10-06, > 18 months old at audit date 2026-05-08). It is transitive-only (zero okdctl call sites). Floor is whatever Minimum Version Selection picked from a transitive bring-up; latest x/exp commits move regularly. Worth a `go get golang.org/x/exp@latest && go mod tidy` to refresh the floor, especially since x/exp routinely promotes APIs to stdlib.  
-**Fix:** Run `go get golang.org/x/exp@latest && go mod tidy` and verify govulncheck + tests stay green. Or leave the floor as-is — MVS will lift it whenever a transitive consumer demands a newer commit. The dep adds zero direct surface to okdctl, so the lift is purely cosmetic.  
-**Effort:** hours
-
 ##### `dep:33ef32bf:gorilla-websocket-stale` — gorilla websocket stale
 
 **Status:** not started  
@@ -1190,16 +1130,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `go.mod:12-12`  
 **Problem:** luthermonson/go-proxmox v0.5.0: single maintainer (bus factor 1), v0.x API instability, sole Proxmox API client used in one 203-LOC file (internal/tui/wizard/steps/proxmox_discovery.go) calling client.Nodes/client.Node/Storages/Networks/GetContent. Pulls gorilla/websocket, magefile/mage, jinzhu/copier, buger/goterm, h2non/gock, h2non/parth — heavy transitive set for narrow REST-only usage. CLAUDE.md documents the ~200-LOC REST fallback and instructs not to rip out without the rewrite landing first.  
 **Fix:** Re-confirm only — do NOT propose a swap this run. Keep the v0.5.0 pin; bump on each upstream release; track the documented ~200-LOC net/http rewrite in roadmap.md so the fallback exists when go-proxmox abandons. SKILL §5a explicitly forbids re-discovery and rip-out without the rewrite plan landing first.  
-**Effort:** hours
-
-##### `dep:33ef32bf:proxmox-version-drift` — proxmox version drift
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/dep-33ef32bf-proxmox-version  
-**Severity:** suggestion  
-**Cluster:** maintenance-signal  
-**Evidence:** `go.mod:12-12`  
-**Problem:** CLAUDE.md §dependencies labels luthermonson/go-proxmox as 'v0.4.x — sole Proxmox discovery path. Bus-factor 1.' but go.mod has bumped to v0.5.0. The label and the constraint are both still accurate (still v0.x, still bus-factor 1, still single call site in proxmox_discovery.go), but the version sticker is stale. Re-confirmation per SKILL §5a, not novel.  
-**Fix:** Edit CLAUDE.md §dependencies to read 'v0.5.x' (or 'current v0.x') so the policy doc tracks the actual pin. The abandonment plan (~200 LOC REST-only rewrite) and bus-factor-1 caveat both remain valid — only the version label is stale.  
 **Effort:** hours
 
 ##### `dep:6ebdb617:claudemd-yaml-tripwire-stale` — claudemd yaml tripwire stale
