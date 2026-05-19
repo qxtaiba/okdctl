@@ -610,7 +610,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `err:fd2125dd:cli-bare-errors-skip-typed-mapping` — cli bare errors skip typed mapping
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/err-fd2125dd-cli-typed-errors  
+**Status:** in review — PR #658  
 **Severity:** major  
 **Cluster:** sentinel-vs-typed — seam→audit-cli-ux  
 **Evidence:** `internal/cli/addon.go:65-255` + 16 more  
@@ -630,7 +630,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `err:c19ee328:phase-step-bare-fmt-errorf` — phase step bare fmt errorf
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/err-c19ee328-phase-step-errors  
+**Status:** in review — PR #659  
 **Severity:** minor  
 **Cluster:** sentinel-vs-typed — seam→audit-cli-ux — related: err:fd2125dd:cli-bare-errors-skip-typed-mapping  
 **Evidence:** `internal/distribution/okd/setup/steps.go:380-430` + 55 more  
@@ -962,7 +962,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `smell:b5a79fda:deploy-phase-stringly-typed` — deploy phase stringly typed
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/smell-b5a79fda-deploy-phase-enum  
+**Status:** in review — PR #660  
 **Severity:** minor  
 **Cluster:** magic-strings  
 **Evidence:** `internal/cli/deploystate.go:75-86` + 1 more  
