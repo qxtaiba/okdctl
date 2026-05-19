@@ -23,6 +23,7 @@ func (p *Phase) destroyInfrastructure(ctx context.Context, opts *Options) error 
 		terraform.WithVerbose(opts.Debug),
 		terraform.WithEnv(p.Exec.Env),
 	)
+	defer tf.ZeroizeEnv()
 
 	if !tf.HasState() {
 		p.Log.Warn("terraform: no state file found - infrastructure may already be destroyed")

@@ -213,7 +213,11 @@ write the comment — then it carries real information.
   that blanks secret-keyed entries via `logutil.KeyIsSecret`, then `clear()`s
   and nils the slice. Call it with `defer x.ZeroizeEnv()` immediately after the
   object is constructed and before any subprocess operation, bounding the
-  plaintext lifetime to the enclosing function scope.
+  plaintext lifetime to the enclosing function scope. This includes
+  short-lived locals: a `terraform.Executor` built with
+  `terraform.WithEnv(creds env)` must also receive `defer tf.ZeroizeEnv()`
+  immediately after construction so error paths and early returns do not
+  leave credential strings reachable until GC.
 
 ## Dependencies
 
