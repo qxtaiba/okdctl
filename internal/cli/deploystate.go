@@ -11,19 +11,29 @@ import (
 	"github.com/qxtaiba/okdctl/internal/tui"
 )
 
+// deployPhase identifies which phase of the deploy sequence was active when
+// the state marker was last written.
+type deployPhase string
+
+const (
+	phasePrepare   deployPhase = "prepare"
+	phaseInstall   deployPhase = "install"
+	phaseConfigure deployPhase = "configure"
+)
+
 // deployState records which deploy phase was active when the process last
 // wrote the marker. runDestroy reads it back to emit a phase-specific hint.
 type deployState struct {
-	Phase       string    `json:"phase"`
-	RunID       string    `json:"run_id"`
-	Timestamp   time.Time `json:"timestamp"`
-	ClusterName string    `json:"cluster_name,omitempty"`
+	Phase       deployPhase `json:"phase"`
+	RunID       string      `json:"run_id"`
+	Timestamp   time.Time   `json:"timestamp"`
+	ClusterName string      `json:"cluster_name,omitempty"`
 }
 
 // markDeployPhaseFatal writes the marker for the prepare phase and returns
 // any write error. The first marker write is fatal so a write failure cannot
 // produce a silently-accumulated stale marker.
-func markDeployPhaseFatal(path, phase, runID, clusterName string) error {
+func markDeployPhaseFatal(path string, phase deployPhase, runID, clusterName string) error {
 	if err := writeDeployState(path, phase, runID, clusterName); err != nil {
 		return fmt.Errorf("write deploy state marker: %w", err)
 	}
@@ -32,7 +42,7 @@ func markDeployPhaseFatal(path, phase, runID, clusterName string) error {
 
 // markDeployPhase writes the marker for the given phase, warn-logging on
 // failure (non-fatal — the marker is advisory for subsequent phases).
-func markDeployPhase(path, phase, runID, clusterName string) {
+func markDeployPhase(path string, phase deployPhase, runID, clusterName string) {
 	if err := writeDeployState(path, phase, runID, clusterName); err != nil {
 		tui.Warn("could not write deploy state marker", tui.LF("err", err))
 	}
@@ -46,7 +56,7 @@ func clearDeployMarker(path string) {
 	}
 }
 
-func writeDeployState(path, phase, runID, clusterName string) error {
+func writeDeployState(path string, phase deployPhase, runID, clusterName string) error {
 	data, err := json.Marshal(deployState{
 		Phase:       phase,
 		RunID:       runID,
@@ -101,11 +111,11 @@ func announceDeployState(path, clusterName string) {
 		}
 	}
 	switch ds.Phase {
-	case "prepare":
+	case phasePrepare:
 		tui.Warn("partial deploy detected — cancelled during prepare; terraform state is empty",
 			append([]tui.LogField{tui.LF("run_id", ds.RunID)}, extra...)...)
 		tui.Info("if VMs were not created, prefer 'okdctl cleanup' over destroy")
-	case "install", "configure":
+	case phaseInstall, phaseConfigure:
 		tui.Warn("partial deploy detected — terraform state likely populated",
 			append([]tui.LogField{tui.LF("phase", ds.Phase), tui.LF("run_id", ds.RunID)}, extra...)...)
 		tui.Info("running destroy to remove provisioned resources")
