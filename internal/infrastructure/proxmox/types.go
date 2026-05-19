@@ -37,13 +37,12 @@ type VMStatus struct {
 	IPAddress string
 }
 
-// VMRole classifies a VM's cluster role. String values match what
-// openshift-install, HAProxy templates, and ignition URLs expect verbatim.
-type VMRole string
+// VMRole is an alias of phase.NodeRole; both name the same domain concept.
+type VMRole = phase.NodeRole
 
-// Role* are the valid VMRole values.
+// Role* re-export the phase.NodeRole values for proxmox-package callers.
 const (
-	RoleBootstrap VMRole = "bootstrap"
-	RoleMaster    VMRole = "master"
-	RoleWorker    VMRole = "worker"
+	RoleBootstrap VMRole = phase.RoleBootstrap
+	RoleMaster    VMRole = phase.RoleMaster
+	RoleWorker    VMRole = phase.RoleWorker
 )
