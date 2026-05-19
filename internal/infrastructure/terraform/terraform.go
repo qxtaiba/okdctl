@@ -1,5 +1,7 @@
 // Package terraform provides a high-level interface for Terraform operations.
-// It can be used by any infrastructure provider that uses Terraform.
+// Subcommands run via internal/executor with an env allowlist; state snapshots
+// are written atomically via system.AtomicWrite. Executor exposes Init, Plan,
+// Apply, Destroy, and Output as the primary call surface.
 package terraform
 
 import (
