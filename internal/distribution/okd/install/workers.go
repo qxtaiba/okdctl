@@ -85,7 +85,7 @@ func (p *Phase) workersAlreadyRunning(ctx context.Context, cfg *config.Config) (
 		"-l", "node-role.kubernetes.io/worker",
 		"--no-headers", "--ignore-not-found")
 	if err != nil {
-		return false, nil
+		return false, nil //nolint:nilerr // cluster-unreachable is non-fatal: report not-done so StartWorkerVMs runs as the safe fallback
 	}
 	count := 0
 	for _, line := range strings.Split(out, "\n") {
