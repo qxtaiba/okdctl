@@ -13,6 +13,7 @@ import (
 	"os/exec"
 	"slices"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/qxtaiba/okdctl/internal/logutil"
@@ -320,6 +321,12 @@ func (e *Executor) RunInteractive(ctx context.Context, name string, args ...stri
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = e.Stdout
 	cmd.Stderr = e.Stderr
+
+	// SIGINT is terraform's documented soft-cancel: it triggers a graceful
+	// plan/apply abort and releases the state lock before exit. WaitDelay
+	// gives the process 30 s to clean up before SIGKILL fires.
+	cmd.Cancel = func() error { return cmd.Process.Signal(syscall.SIGINT) }
+	cmd.WaitDelay = 30 * time.Second
 
 	e.logger.Debug("exec: started", "cmd", name, "argc", len(args))
 
