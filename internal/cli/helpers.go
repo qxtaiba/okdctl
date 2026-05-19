@@ -120,12 +120,12 @@ func resolveProjectRootOrDie() (string, error) {
 	if root == "" {
 		return "", fmt.Errorf("project root resolved to empty path")
 	}
-	// Project marker check: at least one of {okdctl.yaml, okdctl.env,
-	// infrastructure/terraform/environments/*/terraform.tfstate} must be
-	// present. All three files are only written by okdctl inside a project
-	// root, so the symlink-redirect defence is preserved. After a partial
-	// deploy that removes okdctl.yaml, the env file or tfstate still lets
-	// destroy and cleanup run.
+	// Project marker check: okdctl.yaml and okdctl.env are the primary
+	// markers. terraform.tfstate is a secondary recovery hint — it can
+	// outlive a successful destroy+cleanup, which preserves it for
+	// resumability. At least one of the three must be present; a lone
+	// tfstate triggers an explicit operator warning (warnIfTfStateOnly)
+	// because it may belong to a different cluster.
 	if !hasProjectMarker(root) {
 		return "", &errtypes.ConfigError{
 			Msg: fmt.Sprintf(
@@ -138,6 +138,7 @@ func resolveProjectRootOrDie() (string, error) {
 			Err: errtypes.ErrConfigMissing,
 		}
 	}
+	warnIfTfStateOnly(root)
 	return root, nil
 }
 
@@ -159,6 +160,29 @@ func hasProjectMarker(root string) bool {
 		filepath.Join(root, "infrastructure", "terraform", "environments", "*", "terraform.tfstate"),
 	)
 	return len(matches) > 0
+}
+
+// warnIfTfStateOnly emits a structured warning when the only project marker
+// is terraform.tfstate (okdctl.yaml and okdctl.env both absent). A lone
+// tfstate after destroy+cleanup may belong to a different cluster if the
+// operator removed the primary config files manually.
+func warnIfTfStateOnly(root string) {
+	for _, name := range []string{filepath.Base(cfgFile), "okdctl.env"} {
+		if _, err := os.Stat(filepath.Join(root, name)); err == nil {
+			return
+		}
+	}
+	matches, _ := filepath.Glob(
+		filepath.Join(root, "infrastructure", "terraform", "environments", "*", "terraform.tfstate"),
+	)
+	if len(matches) == 0 {
+		return
+	}
+	tui.Warn("okdctl.yaml and okdctl.env not found; accepting terraform.tfstate as a recovery hint",
+		tui.LF("tfstate", matches[0]),
+		tui.LF("root", root),
+	)
+	tui.Info("if this directory belongs to a different cluster, stop and run 'okdctl deploy' in the correct directory")
 }
 
 // tuiReporter wraps tui.StartSpinner so domain code can call a callback that
