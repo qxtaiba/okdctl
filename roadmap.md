@@ -532,7 +532,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sec:48688e63:proxmox-host-no-revalidate` — proxmox host no revalidate
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-48688e63-proxmox-host-validate  
+**Status:** in review — PR #631  
 **Severity:** minor  
 **Cluster:** input-validation  
 **Evidence:** `internal/infrastructure/proxmox/proxmox.go:103-121`  
@@ -574,7 +574,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sub:7b2829bb:no-cancel-func` — no cancel func
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sub-7b2829bb-runinteractive-cancel  
+**Status:** in review — PR #630  
 **Severity:** major  
 **Cluster:** timeout-cancel — seam→audit-concurrency  
 **Evidence:** `internal/executor/executor.go:310-329`  
@@ -616,7 +616,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `state:6424733c:project-marker-stale` — project marker stale
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/state-6424733c-project-marker  
+**Status:** in review — PR #632  
 **Severity:** minor  
 **Cluster:** crash-recoverability  
 **Evidence:** `internal/cli/helpers.go:115-162`  
@@ -834,7 +834,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `api:25fa1be8:positional-logger` — positional logger
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/api-25fa1be8-firewall-options  
+**Status:** in review — PR #634  
 **Severity:** minor  
 **Cluster:** option-consistency  
 **Evidence:** `internal/distribution/okd/firewall/firewall.go:83-246`  
@@ -914,7 +914,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `api:ddf885f4:nil-logger-not-normalized` — nil logger not normalized
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/api-ddf885f4-nil-logger  
+**Status:** in review — PR #633  
 **Severity:** suggestion  
 **Cluster:** zero-value-usability  
 **Evidence:** `internal/addon/manager.go:34-57`  
@@ -976,7 +976,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `ux:08c49fc4:keep-haproxy-no-shorthand-asymmetry` — keep haproxy no shorthand asymmetry
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/ux-08c49fc4-flag-convention-doc  
+**Status:** in review — PR #635  
 **Severity:** suggestion  
 **Cluster:** flag-conventions  
 **Evidence:** `internal/cli/update_ingress.go:45-47`  
