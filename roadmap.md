@@ -994,16 +994,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Rename the constant to `flagOutputFile` (paired with `flagOutputFormat = "output"` if you want the format-side codified too). Reads correctly at registration sites and removes the conceptual collision with cobra's StringVarP "output" literal.  
 **Effort:** hours
 
-##### `ux:0d318f5c:log-format-tty-default-help-noise` — log format tty default help noise
-
-**Status:** in review — PR #604  
-**Severity:** suggestion  
-**Cluster:** streams  
-**Evidence:** `internal/cli/logging.go:73-78`  
-**Problem:** configureLogging auto-switches --log-format to json when stderr is piped, but cobra still renders `(default "text")` in --help output. The behaviour itself is sound (matches 12-factor CLI / clig.dev); the help string lies. The mitigating prose in the StringVar help text at root.go:L248 spells out the auto-switch, but the cobra-default paren remains the strongest signal a hurried reader sees.  
-**Fix:** Two options: (a) leave as-is — the explanatory parenthetical above the cobra default already discloses the auto-switch; (b) suppress the cobra-default render with `Flag.DefValue = ""` after registration, replacing the truth-claim with a flag-help hint that names both behaviours. (a) is acceptable; (b) is more honest. No security or correctness impact either way.  
-**Effort:** hours
-
 ##### `ux:8154ab0f:doctor-pull-secret-config-skew-warns` — doctor pull secret config skew warns
 
 **Status:** not started  
