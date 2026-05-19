@@ -598,26 +598,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Add Redacted() any returning {Command, ExitCode} (drop Stderr) so logutil.RedactHandler's interface{ Redacted() any } switch (internal/logutil/redact.go:113) catches ExitError when it lands as a slog attr. Mirror system.SubprocessError.Redacted at internal/system/exec.go:42-44. Net +4 LOC. terraform.ExecError aliases ExitError so it inherits automatically.  
 **Effort:** hours
 
-##### `err:fd2125dd:cli-bare-errors-skip-typed-mapping` — cli bare errors skip typed mapping
-
-**Status:** in review — PR #658  
-**Severity:** major  
-**Cluster:** sentinel-vs-typed — seam→audit-cli-ux  
-**Evidence:** `internal/cli/addon.go:65-255` + 16 more  
-**Problem:** CLI subcommand RunE returns plain fmt.Errorf for what are clearly typed-error categories: usage misconfig (--all + named addon mutually exclusive, unknown shell, invalid --channel/--output), missing config artifact (kubeconfig not found at ...; run okdctl deploy first), or executable-resolution failure. exitCodeFor (cli/root.go:L192-L231) maps errtypes.UsageError→64, ErrConfigMissing→66, but these sites never hit the map and fall to exit 1. The CLI's documented exit-code contract (cli/root.go:L4-L10, docs/cli/exit-codes.md) silently fails for all these surfaces.  
-**Fix:** Wrap each in the right errtypes value: usage failures → &errtypes.UsageError{Msg: "..."} (exit 64); kubeconfig.go:49 → &errtypes.ConfigError{Msg: ..., Err: errtypes.ErrConfigMissing} (exit 66); addon.go:255 → &errtypes.ClusterError{...} (exit 4); elevation.go:104 → &errtypes.ConfigError{Msg: ..., Err: err} (exit 2). Mechanical, ~15 sites, ~+30 LOC.  
-**Effort:** hours
-
-##### `err:c19ee328:phase-step-bare-fmt-errorf` — phase step bare fmt errorf
-
-**Status:** in review — PR #659  
-**Severity:** minor  
-**Cluster:** sentinel-vs-typed — seam→audit-cli-ux — related: err:fd2125dd:cli-bare-errors-skip-typed-mapping  
-**Evidence:** `internal/distribution/okd/setup/steps.go:380-430` + 55 more  
-**Problem:** Phase step bodies return plain fmt.Errorf('failed to X: %w', err) for what semantically map to ConfigError (manifest write/render), ClusterError (oc/terraform/install), or NetworkError (download/scp). The orchestrator forwards them as-is to cli, which falls to exit 1. addon.Manager wraps step bodies into ClusterError at internal/addon/manager.go:L123, so addon catalog code is shielded — but every direct phase step (setup/install/postinstall) returns naked errors.  
-**Fix:** Pick a wrap site: either inside each step body (touching dozens of files), or in the orchestrator at the boundary where step.Execute returns (one place, retro-classifies via heuristic). The latter loses semantic precision; the former is correct. Pragmatic compromise: wrap at the phase-orchestrator entry (Phase.Execute or Provisioner.Install) so each phase has one ClusterError boundary. ~+10 LOC.  
-**Effort:** hours
-
 ##### `err:fde34e0c:exit-error-no-ctx-identity` — exit error no ctx identity
 
 **Status:** not started  
@@ -839,16 +819,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Effort:** hours
 
 #### audit-code-smells
-
-##### `smell:b5a79fda:deploy-phase-stringly-typed` — deploy phase stringly typed
-
-**Status:** in review — PR #660  
-**Severity:** minor  
-**Cluster:** magic-strings  
-**Evidence:** `internal/cli/deploystate.go:75-86` + 1 more  
-**Problem:** The deploy-phase marker uses three bare strings ("prepare", "install", "configure") written by helpers.go and read by deploystate.go's switch. A producer/consumer string contract with no typed enum is exactly the shape the repo already replaced for cleanup.Kind, summary.stepDisplayStatus, debug_bundle.bundleStatus, and platform.Family.  
-**Fix:** Introduce `type deployPhase string` with `phasePrepare/phaseInstall/phaseConfigure` constants alongside `deployState` in deploystate.go. Update markDeployPhase signature and the three call sites in helpers.go. JSON wire format is unchanged because the values are unchanged strings.  
-**Effort:** hours
 
 ##### `smell:fd2125dd:output-flag-magic-string` — output flag magic string
 
