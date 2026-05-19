@@ -197,6 +197,15 @@ func (e *ExitError) Error() string {
 	return fmt.Sprintf("%s failed (exit %d): %s", e.Command, e.ExitCode, strings.TrimSpace(e.Stderr))
 }
 
+// Redacted omits Stderr so subprocess stderr never reaches a structured
+// log sink via slog attrs.
+func (e *ExitError) Redacted() any {
+	return struct {
+		Command  string
+		ExitCode int
+	}{e.Command, e.ExitCode}
+}
+
 // Run executes a command and returns its result. The returned *Result is
 // always non-nil, even when error is non-nil — callers can safely access
 // result.ExitCode and result.Stderr without a nil guard.
