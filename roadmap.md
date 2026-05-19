@@ -986,7 +986,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `ux:08ec0042:flag-output-name-collision-risk` — flag output name collision risk
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/ux-08ec0042-flag-rename  
+**Status:** not started (already implemented in commit 08d3e35 — needs archive, not pickup)  
 **Severity:** suggestion  
 **Cluster:** flag-conventions  
 **Evidence:** `internal/cli/flags.go:7-10`  
@@ -1030,7 +1030,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `mod:ddf885f4:use-slices-contains` — use slices contains
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/mod-ddf885f4-slices-contains  
+**Status:** not started (already implemented in commit 239959e — needs archive, not pickup)  
 **Severity:** minor  
 **Cluster:** slices-maps — related: mod:262af6e4:use-slices-contains  
 **Evidence:** `internal/addon/manager.go:267-275`  
@@ -1070,7 +1070,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `mod:c19ee328:slices-containsfunc-ignition` — slices containsfunc ignition
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/mod-c19ee328-containsfunc-ignition  
+**Status:** not started (superseded by IgnitionSentinel sentinel-file approach — needs archive, not pickup)  
 **Severity:** suggestion  
 **Cluster:** slices-maps — related: mod:c19ee328:slices-containsfunc-allexist  
 **Evidence:** `internal/distribution/okd/setup/steps.go:186-192`  
