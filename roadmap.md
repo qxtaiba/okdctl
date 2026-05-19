@@ -522,7 +522,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sec:35abd54e:env-string-residue` — env string residue
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-35abd54e-env-string-residue  
 **Severity:** major  
 **Cluster:** credentials  
 **Evidence:** `internal/credentials/proxmox.go:151-172`  
@@ -822,7 +822,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `smell:fd2125dd:output-flag-magic-string` — output flag magic string
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/smell-fd2125dd-output-flag-magic-string  
 **Severity:** minor  
 **Cluster:** magic-strings  
 **Evidence:** `internal/cli/addon.go:102-103` + 5 more  
