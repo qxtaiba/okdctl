@@ -371,7 +371,8 @@ func verifyHashiCorpGPGFingerprint(ctx context.Context, armoredKeyPath string) e
 	if err != nil {
 		return fmt.Errorf("gpg fingerprint check: %w", err)
 	}
-	for _, line := range strings.Split(string(out), "\n") {
+	for line := range strings.Lines(string(out)) {
+		line = strings.TrimRight(line, "\n")
 		if !strings.HasPrefix(line, "fpr:") {
 			continue
 		}
