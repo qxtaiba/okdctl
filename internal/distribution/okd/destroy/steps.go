@@ -67,6 +67,7 @@ func (t *destroyTracker) terraformFailed() bool {
 func (p *Phase) destroySteps(ctx context.Context, cfg *config.Config, opts *Options) []distribution.StepDef {
 	t := &destroyTracker{log: p.Log}
 	track, trackSkip := t.onError, t.skipWhen
+	fw := firewall.New(firewall.WithLogger(p.Log))
 	return []distribution.StepDef{
 		{
 			ID: StepDestroyInfra, Name: "destroy infrastructure", ReRunSafe: distribution.ReRunSafeYes,
@@ -151,11 +152,11 @@ func (p *Phase) destroySteps(ctx context.Context, cfg *config.Config, opts *Opti
 			ID: StepCleanupFirewall, Name: "cleanup firewall", ReRunSafe: distribution.ReRunSafeYes,
 			Desc: "removing firewall rules", NonFatal: true,
 			SkipWhen: trackSkip("firewall", func() bool {
-				return opts.SkipFirewall || t.terraformFailed() || firewall.DetectBackend(ctx, p.Log) == firewall.None
+				return opts.SkipFirewall || t.terraformFailed() || fw.DetectBackend(ctx) == firewall.None
 			}),
 			SkipReason: "firewall cleanup disabled, terraform owns live vms, or no active backend",
 			Exec: func(ctx context.Context) error {
-				if err := firewall.RemoveOKDRules(ctx, true, p.Log); err != nil {
+				if err := fw.RemoveOKDRules(ctx, true); err != nil {
 					return &errtypes.ClusterError{Msg: "firewall cleanup failed", Err: err}
 				}
 				p.Log.Info("firewall: okd rules removed from firewalld")

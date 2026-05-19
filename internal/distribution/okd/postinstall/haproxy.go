@@ -49,7 +49,7 @@ func (p *Phase) RemoveHAProxy(ctx context.Context, vip, clusterDir string) error
 		p.Log.Warn("haproxy: failed to remove config", "err", err)
 	}
 
-	if err := firewall.RemoveRules(ctx, firewall.HAProxyFrontendPorts(), true, p.Log); err != nil {
+	if err := firewall.New(firewall.WithLogger(p.Log)).RemoveRules(ctx, firewall.HAProxyFrontendPorts(), true); err != nil {
 		p.Log.Warn("haproxy: firewall cleanup incomplete", "err", err)
 	}
 
