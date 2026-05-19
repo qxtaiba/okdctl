@@ -284,9 +284,10 @@ func getToolVersion(ctx context.Context, tool, flag string) string {
 	if err != nil {
 		return "unknown"
 	}
-	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
-	if len(lines) > 0 {
-		return lines[0]
+	for line := range strings.Lines(string(output)) {
+		if t := strings.TrimSpace(line); t != "" {
+			return t
+		}
 	}
 	return "unknown"
 }
