@@ -163,8 +163,8 @@ func TestZeroizeEnv(t *testing.T) {
 			"KUBECONFIG=/etc/kube",
 		}))
 		e.ZeroizeEnv()
-		if e.Env != nil {
-			t.Errorf("Env not nil after ZeroizeEnv; got %v", e.Env)
+		if e.env != nil {
+			t.Errorf("Env not nil after ZeroizeEnv; got %v", e.env)
 		}
 	})
 
@@ -173,7 +173,7 @@ func TestZeroizeEnv(t *testing.T) {
 			"PROXMOX_VE_PASSWORD=hunter2",
 			"KUBECONFIG=/etc/kube",
 		}))
-		snap := e.Env
+		snap := e.env
 		e.ZeroizeEnv()
 		if snap[0] != "" {
 			t.Errorf("cred entry not blanked before clear; got %q", snap[0])

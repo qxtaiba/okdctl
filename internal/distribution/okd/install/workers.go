@@ -32,7 +32,7 @@ func (p *Phase) StartWorkerVMs(ctx context.Context, cfg *config.Config, opts *Op
 	tf := terraform.New(
 		terraformDir,
 		terraform.WithLogger(p.Log),
-		terraform.WithEnv(p.Exec.Env),
+		terraform.WithEnv(p.Exec.SnapshotEnv()),
 	)
 	defer tf.ZeroizeEnv()
 

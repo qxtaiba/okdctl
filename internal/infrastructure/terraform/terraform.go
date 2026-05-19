@@ -73,7 +73,7 @@ func WithVarFile(path string) Option {
 // Multiple calls to WithEnv are cumulative; later entries for the same key win.
 func WithEnv(env []string) Option {
 	return func(e *Executor) {
-		e.exec.Env = append(e.exec.Env, env...)
+		e.exec.AppendEnv(env...)
 	}
 }
 
