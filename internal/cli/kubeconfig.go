@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -101,7 +102,8 @@ func mergeKubeconfig(srcData []byte) error {
 	}
 
 	for _, key := range []string{"clusters", "users", "contexts"} {
-		destMap[key] = mergeNamedList(destMap[key], srcMap[key])
+		merged := mergeNamedList(toKubeEntries(destMap[key]), toKubeEntries(srcMap[key]))
+		destMap[key] = fromKubeEntries(merged)
 	}
 
 	if cc, ok := srcMap["current-context"]; ok {
@@ -139,38 +141,71 @@ func mergeTargetPath() string {
 	return filepath.Join(home, ".kube", "config")
 }
 
-// namedEntries converts a raw YAML list ([]any of map[string]any) into a
-// name→item map. Entries without a string "name" key are skipped.
-func namedEntries(v any) map[string]any {
-	items, _ := v.([]any)
-	result := make(map[string]any, len(items))
+// kubeEntry is one element of a kubeconfig named list (clusters, users, or
+// contexts). json.RawMessage values preserve all fields — including unknown
+// extension keys — byte-for-byte through marshal→merge→marshal.
+type kubeEntry = map[string]json.RawMessage
+
+// toKubeEntries converts the raw []any produced by sigs.k8s.io/yaml into a
+// typed slice via a JSON round-trip so each field is captured verbatim.
+func toKubeEntries(v any) []kubeEntry {
+	if v == nil {
+		return nil
+	}
+	b, err := json.Marshal(v)
+	if err != nil {
+		return nil
+	}
+	var entries []kubeEntry
+	if err := json.Unmarshal(b, &entries); err != nil {
+		return nil
+	}
+	return entries
+}
+
+// fromKubeEntries converts a typed slice back to []any for storage in the
+// top-level map[string]any and marshalling by sigs.k8s.io/yaml.
+func fromKubeEntries(entries []kubeEntry) any {
+	if entries == nil {
+		return nil
+	}
+	b, err := json.Marshal(entries)
+	if err != nil {
+		return entries
+	}
+	var out []any
+	if err := json.Unmarshal(b, &out); err != nil {
+		return entries
+	}
+	return out
+}
+
+// namedEntries returns the set of names present in a typed entry slice.
+func namedEntries(items []kubeEntry) map[string]struct{} {
+	result := make(map[string]struct{}, len(items))
 	for _, item := range items {
-		if m, ok := item.(map[string]any); ok {
-			if name, ok := m["name"].(string); ok {
-				result[name] = item
-			}
+		var name string
+		if raw, ok := item["name"]; ok && json.Unmarshal(raw, &name) == nil {
+			result[name] = struct{}{}
 		}
 	}
 	return result
 }
 
 // mergeNamedList appends entries from src into dest, skipping any src entry
-// whose .name already appears in dest. Both arguments are the raw YAML
-// unmarshalled representation ([]any of map[string]any).
-func mergeNamedList(dest, src any) any {
-	destSlice, _ := dest.([]any)
-	srcSlice, _ := src.([]any)
-	if len(srcSlice) == 0 {
+// whose name already appears in dest.
+func mergeNamedList(dest, src []kubeEntry) []kubeEntry {
+	if len(src) == 0 {
 		return dest
 	}
-
 	existing := namedEntries(dest)
-	for _, item := range srcSlice {
-		if m, ok := item.(map[string]any); ok {
-			if name, ok := m["name"].(string); ok && existing[name] == nil {
-				destSlice = append(destSlice, item)
+	for _, item := range src {
+		var name string
+		if raw, ok := item["name"]; ok && json.Unmarshal(raw, &name) == nil {
+			if _, exists := existing[name]; !exists {
+				dest = append(dest, item)
 			}
 		}
 	}
-	return destSlice
+	return dest
 }
