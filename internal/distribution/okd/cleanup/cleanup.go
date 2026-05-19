@@ -18,7 +18,6 @@ import (
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/infrastructure/terraform"
-	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
@@ -83,17 +82,6 @@ type Options struct {
 	PostDestroy bool
 }
 
-// cleanupConfig carries the resolved logger applied via WithLogger.
-type cleanupConfig struct{ logger *slog.Logger }
-
-// Option configures optional knobs on an Execute call.
-type Option func(*cleanupConfig)
-
-// WithLogger injects a structured logger for the cleanup run; nil falls back to logutil.NopLogger.
-func WithLogger(l *slog.Logger) Option {
-	return func(c *cleanupConfig) { c.logger = logutil.OrNop(l) }
-}
-
 // Phase drives a cleanup run.
 type Phase struct {
 	phase.BasePhase
@@ -109,12 +97,8 @@ func New(version string, opts ...phase.BasePhaseOption) *Phase {
 // Execute runs the cleanup steps selected by opts.Kind. Individual step
 // failures are accumulated and returned as a joined error; a partial run
 // still attempts the remaining steps.
-func (p *Phase) Execute(ctx context.Context, opts *Options, options ...Option) error {
-	cfg := &cleanupConfig{logger: logutil.NopLogger}
-	for _, o := range options {
-		o(cfg)
-	}
-	return execute(ctx, opts, cfg.logger)
+func (p *Phase) Execute(ctx context.Context, opts *Options) error {
+	return execute(ctx, opts, p.Log)
 }
 
 // Step IDs for the cleanup phase, ordered as they execute within Full.
@@ -151,10 +135,9 @@ func execute(ctx context.Context, opts *Options, logger *slog.Logger) error {
 	if err := opts.Kind.Validate(); err != nil {
 		return err
 	}
-	l := logger.With("phase", "cleanup")
-	defs := cleanupSteps(opts, l)
+	defs := cleanupSteps(opts, logger)
 	o := distribution.NewOrchestrator(distribution.BuildSteps(defs)...)
-	o.SetLogger(l)
+	o.SetLogger(logger)
 	return o.Run(ctx)
 }
 

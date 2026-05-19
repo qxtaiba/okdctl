@@ -132,7 +132,7 @@ func runCleanup(cmd *cobra.Command, _ []string) error {
 	startTime := time.Now()
 
 	exec := executor.New(executor.WithWorkDir(projectRoot))
-	if err := cleanup.New(version.Version, phase.WithExecutor(exec), phase.WithLogger(logger)).Execute(ctx, opts, cleanup.WithLogger(logger)); err != nil {
+	if err := cleanup.New(version.Version, phase.WithExecutor(exec), phase.WithLogger(logger)).Execute(ctx, opts); err != nil {
 		return err
 	}
 
