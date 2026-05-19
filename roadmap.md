@@ -522,7 +522,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sec:35abd54e:env-string-residue` — env string residue
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-35abd54e-env-string-residue  
+**Status:** in review — PR #662  
 **Severity:** major  
 **Cluster:** credentials  
 **Evidence:** `internal/credentials/proxmox.go:151-172`  
@@ -819,16 +819,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Effort:** hours
 
 #### audit-code-smells
-
-##### `smell:fd2125dd:output-flag-magic-string` — output flag magic string
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/smell-fd2125dd-output-flag-magic-string  
-**Severity:** minor  
-**Cluster:** magic-strings  
-**Evidence:** `internal/cli/addon.go:102-103` + 5 more  
-**Problem:** The kubectl-style `--output`/`-o` format flag is registered with the bare string `"output"` (and shorthand `"o"`) at 7 call sites. cli/flags.go already holds the symmetric `flagOutput` constant for the file-destination flag (`--output-file`) with a doc comment naming the typo-guard rationale. The format flag has the same property and no constant.  
-**Fix:** Add `flagOutputFormat = "output"` and `flagOutputFormatShort = "o"` to cli/flags.go. Replace all 7 `StringVarP(&X, "output", "o", outputText, ...)` sites. Doc comment can quote CLAUDE.md §architecture-notes (kubectl/oc convention) so the convention is explicit.  
-**Effort:** hours
 
 ##### `smell:08ec0042:flags-package-not-canonical` — flags package not canonical
 
