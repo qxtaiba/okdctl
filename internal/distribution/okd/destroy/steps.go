@@ -31,7 +31,10 @@ const (
 // completed" even after terraform destroy failed — a misleading-success
 // regression once StepDestroyInfra became NonFatal.
 type destroyTracker struct {
-	mu       sync.RWMutex // guards failures and skipped
+	// Forward-looking: Orchestrator.Run is serial today so onError/skipWhen
+	// have no concurrent callers, but a parallel-step mode would need this
+	// lock without a retrofit — same rationale as distribution.PhaseContext.
+	mu       sync.RWMutex
 	log      *slog.Logger
 	failures []string
 	skipped  []string
