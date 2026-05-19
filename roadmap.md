@@ -530,19 +530,9 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Add executor.Executor.ZeroizeEnv() mirroring terraform.Executor.ZeroizeEnv (terraform.go:L347-L364). Update internal/distribution/okd/install/* and internal/infrastructure/proxmox/proxmox.go to defer e.Exec.ZeroizeEnv() at end of phases that pass creds.Env(). Document the residual-string boundary in CLAUDE.md §credentials-and-secrets so future env-passing sites follow the same defer pattern.  
 **Effort:** hours
 
-##### `sec:a6e38cc7:keyscan-no-strict-baseline` — keyscan no strict baseline
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-a6e38cc7-require-pinned-fp  
-**Severity:** minor  
-**Cluster:** input-validation  
-**Evidence:** `internal/sshpin/sshpin.go:31-80`  
-**Problem:** sshpin.Verify's empty-fingerprint branch is the documented fallback when proxmox.ssh_host_fingerprint is unset — but it logs a WARN and returns ('', nil), letting accept-new TOFU proceed. There is no operator-facing config gate (e.g. proxmox.require_pinned_fingerprint: true) that fails closed for security-sensitive deploys. A homelab without operator discipline silently runs every deploy on first-seen-key trust.  
-**Fix:** Add provider.proxmox.require_pinned_fingerprint bool to ProxmoxConfig. When true and SSHHostFingerprint is empty, sshpin.Verify returns *errtypes.AuthError instead of the WARN+continue path. Default false to preserve current behaviour.  
-**Effort:** hours
-
 ##### `sec:8ea706f6:hashicorp-gpg-trust-doc` — hashicorp gpg trust doc
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-8ea706f6-gpg-fp-test  
+**Status:** blocked — needs maintainer decision: planner-added test revealed `expectedHashiCorpGPGFingerprint` = `AA16FCBCA621E70139936A4C798AEC654FA7E1A1` is NOT the canonical HashiCorp signing key fingerprint `798AEC654E5C15428C8E42EEAA16FCBCA621E701` (verified 2026-05-19 against hashicorp.com/trust/security). The test-only scope of this item would red CI; making it green requires correcting a GPG trust-anchor constant in setup/tools.go:299 — a security-sensitive change beyond this item's scope. The wrong constant means installHashiCorpDebianRepo currently rejects the genuine key (apt-repo install path is broken). Maintainer must decide: (a) widen this item to also fix the constant, or (b) file a separate Tier-0 bug for the trust-anchor correction.  
 **Severity:** suggestion  
 **Cluster:** tls-network  
 **Evidence:** `internal/distribution/okd/setup/tools.go:273-336`  
@@ -584,16 +574,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 #### audit-state-and-recovery
 
-##### `state:48688e63:proxmox-no-retry-on-init-apply` — proxmox no retry on init apply
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/state-48688e63-tf-init-retry  
-**Severity:** minor  
-**Cluster:** proxmox-api-idempotency  
-**Evidence:** `internal/infrastructure/proxmox/proxmox.go:159-227`  
-**Problem:** Provider.Provision delegates retry/backoff to the bpg/proxmox terraform provider via the doc-comment 'mutation invariant' — fair. But there is no okdctl-side retry around `terraform init` itself: if the Proxmox API is briefly unreachable while terraform tries to download the provider plugin or fetch its initial schema, init fails with a network error, the orchestrator marks StepDeployInfra failed (fatal — only StepDeployInfra is the only fatal in install), and the operator must re-run the entire deploy. There's no per-step retry seam.  
-**Fix:** Wrap terraform.Executor.Init in a 3-attempt retry-with-jitter for transient errors (network EAI_AGAIN, 5xx-class executor.ExitError). Reuse internal/download's retryDownload pattern referenced in the proxmox.go doc-comment. Apply already retries via the provider; init is the gap.  
-**Effort:** hours
-
 ##### `state:b5a79fda:deploy-state-marker-stale` — deploy state marker stale
 
 **Status:** in review — PR #621  
@@ -602,16 +582,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/cli/deploystate.go:24-86`  
 **Problem:** announceDeployState reads .okdctl-deploy-state.json on destroy entry and emits 'partial deploy detected — cancelled during X'. But there's no TTL or mtime check: a marker left from a successful deploy whose clearDeployMarker failed (errno EBUSY, RO mount, signal during cleanup) misleads the operator on a totally unrelated destroy weeks later. The deploy marker also doesn't survive cross-run identity (RunID is per-process, not per-cluster), so two operators on the same project can't tell which one's partial deploy left this marker.  
 **Fix:** On readDeployState, also stat the file and emit the marker's age in the warning ('marker is 14 days old — likely stale'). Add a ClusterName field to deployState struct; on announceDeployState, when ds.ClusterName != cfg.Cluster.Name, emit 'marker is from a different cluster, ignoring'. Make markDeployPhase a fatal (not best-effort) on the first call so a write-failed marker can't accumulate.  
-**Effort:** hours
-
-##### `state:eb479d86:upload-resume-not-supported` — upload resume not supported
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/state-eb479d86-scp-per-file  
-**Severity:** minor  
-**Cluster:** phase-idempotency  
-**Evidence:** `internal/distribution/okd/setup/upload.go:82-146`  
-**Problem:** UploadCustomISOsToProxmox runs scp of every ISO whose remote sha256 differs from local in a single subprocess. If the operator Ctrl-C's mid-upload (or the network drops) after 3 of 4 ISOs landed, the partial 4th file remains on the Proxmox host with a corrupt content. The next AlreadyDone check (isoUploadAlreadyDone) hashes the remote — sees mismatch — and re-uploads ALL ISOs (not just the partial), because scp invocation is a single batch. Per-file scp would let resume only re-upload the corrupt tail. ISOs are 1-2 GiB; this matters on residential bastion uplinks.  
-**Fix:** Iterate per-file in uploadISOsViaSCP; before each scp, run isoUploadNeeded specifically for that one file (skip already-matching). After SIGINT mid-batch, the next deploy resumes only the missing/corrupt tail. Keep the size logging summary; per-file logging adds <10 LOC.  
 **Effort:** hours
 
 #### audit-iac-and-shell
