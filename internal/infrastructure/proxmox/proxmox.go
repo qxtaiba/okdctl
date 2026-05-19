@@ -406,24 +406,33 @@ func (p *Provider) initWithRetry(ctx context.Context) error {
 		Cap:      5 * time.Minute,
 	}
 	var lastWarnMsg string
+	var lastErr error
 	var attempt int
-	return wait.ExponentialBackoffWithContext(ctx, backoff, func(_ context.Context) (bool, error) {
+	err := wait.ExponentialBackoffWithContext(ctx, backoff, func(_ context.Context) (bool, error) {
 		attempt++
-		if err := p.terraformExec.Init(ctx); err != nil {
-			if !initIsRetryable(err) {
-				return false, err
+		if initErr := p.terraformExec.Init(ctx); initErr != nil {
+			if !initIsRetryable(initErr) {
+				return false, initErr
 			}
-			msg := err.Error()
+			lastErr = initErr
+			msg := initErr.Error()
 			if msg != lastWarnMsg {
-				p.logger.Warn("terraform: init failed, retrying", "attempt", attempt, "err", err)
+				p.logger.Warn("terraform: init failed, retrying", "attempt", attempt, "err", initErr)
 				lastWarnMsg = msg
 			} else {
-				p.logger.Debug("terraform: init failed (repeated), retrying", "attempt", attempt, "err", err)
+				p.logger.Debug("terraform: init failed (repeated), retrying", "attempt", attempt, "err", initErr)
 			}
 			return false, nil
 		}
 		return true, nil
 	})
+	if err == nil {
+		return nil
+	}
+	if lastErr != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
+		return lastErr
+	}
+	return err
 }
 
 // initIsRetryable reports whether an error from terraform init should
