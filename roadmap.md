@@ -588,16 +588,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Add Redacted() any returning {Command, ExitCode} (drop Stderr) so logutil.RedactHandler's interface{ Redacted() any } switch (internal/logutil/redact.go:113) catches ExitError when it lands as a slog attr. Mirror system.SubprocessError.Redacted at internal/system/exec.go:42-44. Net +4 LOC. terraform.ExecError aliases ExitError so it inherits automatically.  
 **Effort:** hours
 
-##### `err:fde34e0c:exit-error-no-ctx-identity` — exit error no ctx identity
-
-**Status:** in review — PR #663  
-**Severity:** minor  
-**Cluster:** cancellation-identity — seam→audit-concurrency — related: err:48688e63:cancel-identity-lost-on-tf-apply  
-**Evidence:** `internal/cluster/k8s.go:108-127` + 6 more  
-**Problem:** Every site that constructs an executor.ExitError on a non-zero exit code does so without consulting ctx.Err() — so a subprocess SIGTERM'd via cmd.Cancel that happens to exit non-zero produces an ExitError chain with no context.Canceled identity. Downstream errors.Is(err, context.Canceled) returns false at cli/root.go::signalExitCode, mapping the SIGINT to exit 4 (ClusterError) instead of 130. Pattern repeats at executor.go:L303,L355,L367, k8s.go:L120, phase/kubectl.go:L35, setup/release_extract.go:L128, setup/upload.go:L28. install/monitor.go has the canonical fix shape (check ctx.Err first).  
-**Fix:** Centralise: at every ExitError construction site, prefer ctx.Err() when ctx is cancelled. Cleanest landing is a helper in executor: 'func newExitError(ctx context.Context, cmd string, code int, stderr string) error { if err := ctx.Err(); err != nil { return err }; return &ExitError{Command: cmd, ExitCode: code, Stderr: stderr} }'. 7 call sites use it. Net +6 LOC.  
-**Effort:** hours
-
 #### audit-concurrency
 
 ##### `con:181efc90:spinner-canonical` — spinner canonical
@@ -671,36 +661,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Effort:** hours
 
 #### audit-api-design
-
-##### `api:4c092fce:terraform-mixed-shape` — terraform mixed shape
-
-**Status:** in review — PR #663  
-**Severity:** minor  
-**Cluster:** option-consistency — related: api:7b2829bb:exposed-fields-no-callers  
-**Evidence:** `internal/infrastructure/terraform/terraform.go:32-59`  
-**Problem:** terraform.Executor commits to functional options (WithLogger, WithVerbose, WithVarFile, WithEnv) yet exposes WorkDir, VarFile, Verbose as public fields. proxmox.go reads `p.terraformExec.WorkDir` (proxmox.go:L192) — the cross-package read encodes that the field IS part of the API, but the rest of the surface is shaped as if the struct were opaque. Pick one: either go full opaque (unexport, add WorkDir() method) or commit to options-as-public-struct (drop functional options, configure via field-set). The current half-half shape duplicates intent — VarFile/Verbose are both fields and With* options.  
-**Fix:** Unexport WorkDir/VarFile/Verbose (rename workDir/varFile/verbose); add a WorkDir() string getter for the proxmox.go:L192 read site. Drop redundant Verbose-as-both — keep WithVerbose only. Tests inside the package access fields directly (no public API change). Aligns terraform.Executor with executor.Executor (also flagged at api:7b2829bb) and the rest of the New + functional options pattern.  
-**Effort:** hours
-
-##### `api:7b2829bb:exposed-fields-no-callers` — exposed fields no callers
-
-**Status:** in review — PR #663  
-**Severity:** minor  
-**Cluster:** exported-surface — related: api:7b2829bb:zeroize-asymmetry, api:d5915b0c:exec-env-direct-mutation  
-**Evidence:** `internal/executor/executor.go:38-46`  
-**Problem:** Executor.Stdout, Executor.Stderr, Executor.WorkDir, Executor.Verbose are exported but no external caller mutates or reads them. Stdout/Stderr default to os.Stdout/os.Stderr in New() and are set there only; WorkDir is set via WithWorkDir; Verbose has no WithVerbose option and is not read anywhere in this package or callers. The fields look like the prefix of an option-struct API but the package committed to functional-options. Either complete the option API (WithStdout/WithStderr/WithVerbose) or unexport the fields.  
-**Fix:** Unexport Stdout, Stderr, WorkDir, Verbose (rename to stdout/stderr/workDir/verbose). Add executor.WithStdout(io.Writer), executor.WithStderr(io.Writer) for completeness. Verbose can be removed entirely (it is never read). RunStreamed reads e.Stdout/e.Stderr internally; that becomes e.stdout/e.stderr. No external code imports these names today, so the rename is local.  
-**Effort:** hours
-
-##### `api:d5915b0c:exec-env-direct-mutation` — exec env direct mutation
-
-**Status:** in review — PR #663  
-**Severity:** minor  
-**Cluster:** package-boundary — related: api:7b2829bb:zeroize-asymmetry  
-**Evidence:** `internal/distribution/okd/install/phase.go:166-166`  
-**Problem:** SetupKubeconfig appends to p.Exec.Env directly (`p.Exec.Env = append(p.Exec.Env, ...)`) — a public-field mutation that bypasses the executor.WithEnv functional-options API. The Executor exposes its Env field publicly (executor.go:L40) but every other call site uses WithEnv at construction; this is the only post-construction mutation in production code. It defeats any future invariant the Executor wants to enforce on Env (allowlist filtering, length cap, redaction on insert).  
-**Fix:** Add executor.Executor.AppendEnv(kvs ...string) (or executor.Executor.SetEnvVar(key, value string)) and have SetupKubeconfig call it instead of append-on-public-field. Then unexport Executor.Env (renaming to env) — the only remaining external readers (terraform.WithEnv(p.Exec.Env), proxmox.WithEnv(p.Exec.Env)) become callers of e.Exec.SnapshotEnv() or a getter. Pairs with api:7b2829bb (ZeroizeEnv) — the same refactor closes both gaps.  
-**Effort:** hours
 
 ##### `api:48688e63:ctx-symmetry-no-network` — ctx symmetry no network
 
