@@ -1,12 +1,14 @@
 package sshpin
 
 import (
+	"errors"
 	"os"
 	"strings"
 	"testing"
 
 	"golang.org/x/crypto/ssh"
 
+	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/logutil"
 )
 
@@ -23,7 +25,7 @@ func fingerprintFromFixture(t *testing.T) string {
 
 func TestParseAndMatch_Match(t *testing.T) {
 	fp := fingerprintFromFixture(t)
-	path, err := parseAndMatch(fixtureKeyscanLine, "pve.example", fp, logutil.NopLogger)
+	path, err := parseAndMatch(fixtureKeyscanLine, "pve.example", fp, false, logutil.NopLogger)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -43,7 +45,7 @@ func TestParseAndMatch_Match(t *testing.T) {
 func TestParseAndMatch_Mismatch(t *testing.T) {
 	fp := fingerprintFromFixture(t)
 	wrong := "SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
-	_, err := parseAndMatch(fixtureKeyscanLine, "pve.example", wrong, logutil.NopLogger)
+	_, err := parseAndMatch(fixtureKeyscanLine, "pve.example", wrong, false, logutil.NopLogger)
 	if err == nil {
 		t.Fatal("expected error for fingerprint mismatch; got nil")
 	}
@@ -56,11 +58,22 @@ func TestParseAndMatch_Mismatch(t *testing.T) {
 }
 
 func TestParseAndMatch_EmptyExpected(t *testing.T) {
-	path, err := parseAndMatch(fixtureKeyscanLine, "pve.example", "", logutil.NopLogger)
+	path, err := parseAndMatch(fixtureKeyscanLine, "pve.example", "", false, logutil.NopLogger)
 	if err != nil {
 		t.Fatalf("unexpected err for empty expected: %v", err)
 	}
 	if path != "" {
 		t.Errorf("want empty path for empty expected; got %q", path)
+	}
+}
+
+func TestParseAndMatch_EmptyExpected_RequirePinned(t *testing.T) {
+	_, err := parseAndMatch(fixtureKeyscanLine, "pve.example", "", true, logutil.NopLogger)
+	if err == nil {
+		t.Fatal("expected error when requirePinned=true and expected is empty; got nil")
+	}
+	var authErr *errtypes.AuthError
+	if !errors.As(err, &authErr) {
+		t.Errorf("want *errtypes.AuthError; got %T: %v", err, err)
 	}
 }

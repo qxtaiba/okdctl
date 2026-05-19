@@ -95,7 +95,7 @@ func (p *Phase) destroySteps(ctx context.Context, cfg *config.Config, opts *Opti
 			SkipReason: isoSkipReason(opts, cfg),
 			Exec: func(ctx context.Context) error {
 				host := phase.ProxmoxBareHost(cfg.Provider.Proxmox.Host)
-				knownHostsPath, verifyErr := sshpin.Verify(ctx, host, cfg.Provider.Proxmox.SSHHostFingerprint, p.Log)
+				knownHostsPath, verifyErr := sshpin.Verify(ctx, host, cfg.Provider.Proxmox.SSHHostFingerprint, cfg.Provider.Proxmox.RequirePinnedFingerprint, p.Log)
 				if verifyErr != nil {
 					return verifyErr
 				}
