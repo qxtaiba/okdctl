@@ -132,7 +132,7 @@ func (p *Phase) DeployInfrastructure(ctx context.Context, cfg *config.Config, op
 	prov := proxmox.New(
 		proxmox.WithProjectRoot(opts.ProjectRoot),
 		proxmox.WithLogger(p.Log),
-		proxmox.WithEnv(p.Exec.Env),
+		proxmox.WithEnv(p.Exec.SnapshotEnv()),
 		proxmox.WithProgressReporter(p.Reporter),
 		proxmox.WithSSHExec(p.Exec),
 	)
@@ -156,8 +156,8 @@ func (p *Phase) DeployInfrastructure(ctx context.Context, cfg *config.Config, op
 	return nil
 }
 
-// SetupKubeconfig appends KUBECONFIG=<path> to Exec.Env so subprocesses
-// launched via p.Exec.Run inherit it. Client reads os.Environ at
+// SetupKubeconfig appends KUBECONFIG=<path> to the phase executor env so
+// subprocesses launched via p.Exec.Run inherit it. Client reads os.Environ at
 // construction and will NOT see this — callers constructing a Client
 // after this runs must pass cluster.WithKubeconfig explicitly.
 func (p *Phase) SetupKubeconfig(ctx context.Context, clusterDir string) error {
@@ -168,7 +168,7 @@ func (p *Phase) SetupKubeconfig(ctx context.Context, clusterDir string) error {
 	if !system.FileExists(kubeconfigPath) {
 		return &errtypes.ClusterError{Msg: fmt.Sprintf("kubeconfig not found at %s", kubeconfigPath)}
 	}
-	p.Exec.Env = append(p.Exec.Env, "KUBECONFIG="+kubeconfigPath)
+	p.Exec.AppendEnv("KUBECONFIG=" + kubeconfigPath)
 	p.Log.Info("kubeconfig: configured for phase executor", "path", kubeconfigPath)
 	return nil
 }

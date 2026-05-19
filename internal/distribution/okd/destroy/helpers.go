@@ -21,7 +21,7 @@ func (p *Phase) destroyInfrastructure(ctx context.Context, opts *Options) error 
 	tf := terraform.New(terraformDir,
 		terraform.WithLogger(p.Log),
 		terraform.WithVerbose(opts.Debug),
-		terraform.WithEnv(p.Exec.Env),
+		terraform.WithEnv(p.Exec.SnapshotEnv()),
 	)
 
 	if !tf.HasState() {

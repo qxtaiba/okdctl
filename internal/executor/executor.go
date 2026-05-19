@@ -38,7 +38,7 @@ import (
 // WithInheritedEnv.
 type Executor struct {
 	workDir    string
-	Env        []string
+	env        []string
 	stdout     io.Writer
 	stderr     io.Writer
 	inheritEnv bool
@@ -67,7 +67,7 @@ func WithStderr(w io.Writer) Option {
 // allowlist-filtered parent env (or the full inherited env when
 // WithInheritedEnv is set), so caller-supplied keys win on duplicates.
 func WithEnv(env []string) Option {
-	return func(e *Executor) { e.Env = append(e.Env, env...) }
+	return func(e *Executor) { e.env = append(e.env, env...) }
 }
 
 // WithLogger injects a structured logger used for command-trace output.
@@ -166,20 +166,20 @@ func FilterParentEnv(a EnvAllowlist) []string {
 
 // buildEnv composes the subprocess env for a single Run. Inherit mode passes
 // os.Environ() through unchanged. Default mode filters through
-// defaultEnvAllowlist, then appends caller-supplied e.Env (later wins in
+// DefaultEnvAllowlist, then appends caller-supplied e.env (later wins in
 // the duplicate-key tie).
 func (e *Executor) buildEnv() []string {
 	if e.inheritEnv {
-		if len(e.Env) == 0 {
+		if len(e.env) == 0 {
 			return nil // nil means os.Environ() by os/exec contract
 		}
-		return append(os.Environ(), e.Env...)
+		return append(os.Environ(), e.env...)
 	}
 	base := FilterParentEnv(DefaultEnvAllowlist)
-	if len(e.Env) == 0 {
+	if len(e.env) == 0 {
 		return base
 	}
-	return append(base, e.Env...)
+	return append(base, e.env...)
 }
 
 // Result is the captured outcome of a Run-style invocation.
@@ -413,20 +413,39 @@ func (e *Executor) RunWithStdinChecked(ctx context.Context, input, name string, 
 	return result, nil
 }
 
+// AppendEnv appends KEY=VALUE entries to the executor's env after construction.
+// All post-construction env mutation must go through this method so future
+// invariants (allowlist filtering, credential redaction on insert) have a
+// single enforcement point.
+func (e *Executor) AppendEnv(kvs ...string) {
+	e.env = append(e.env, kvs...)
+}
+
+// SnapshotEnv returns a copy of the current env slice. The copy prevents
+// callers from mutating the executor's internal env through the returned
+// slice. Note: ZeroizeEnv operates on the live e.env slice; copies already
+// handed to callers (e.g. terraform.WithEnv) are not reached by it — callers
+// must call their own ZeroizeEnv to bound credential lifetime there.
+func (e *Executor) SnapshotEnv() []string {
+	out := make([]string, len(e.env))
+	copy(out, e.env)
+	return out
+}
+
 // ZeroizeEnv blanks env entries whose key matches logutil.KeyIsSecret, then
 // clears and nils the slice. Credential-bearing strings (PROXMOX_VE_PASSWORD,
 // PROXMOX_VE_API_TOKEN, etc.) would otherwise persist as immutable heap
 // objects until GC; this bounds their plaintext lifetime. Call via defer
 // after all subprocess operations are complete.
 func (e *Executor) ZeroizeEnv() {
-	for i, kv := range e.Env {
+	for i, kv := range e.env {
 		key, _, _ := strings.Cut(kv, "=")
 		if logutil.KeyIsSecret(key) {
-			e.Env[i] = ""
+			e.env[i] = ""
 		}
 	}
-	clear(e.Env)
-	e.Env = nil
+	clear(e.env)
+	e.env = nil
 }
 
 // CommandExists reports whether name resolves on the current PATH.
