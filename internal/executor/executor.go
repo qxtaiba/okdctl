@@ -227,6 +227,11 @@ func (e *Executor) run(ctx context.Context, stdin io.Reader, name string, args .
 	cmd.Stdout = rout
 	cmd.Stderr = rerr
 
+	// Soft-cancel via SIGINT (terraform's documented signal) so apply/destroy
+	// release the state lock before exit; see RunInteractive for the rationale.
+	cmd.Cancel = func() error { return cmd.Process.Signal(syscall.SIGINT) }
+	cmd.WaitDelay = 30 * time.Second
+
 	e.logger.Debug("exec: started", "cmd", name, "argc", len(args))
 
 	err := cmd.Run()
@@ -269,6 +274,9 @@ func (e *Executor) RunStreamed(ctx context.Context, name string, args ...string)
 	rerr := newRingWriter(constMaxLines)
 	cmd.Stdout = io.MultiWriter(e.Stdout, rout)
 	cmd.Stderr = io.MultiWriter(e.Stderr, rerr)
+
+	cmd.Cancel = func() error { return cmd.Process.Signal(syscall.SIGINT) }
+	cmd.WaitDelay = 30 * time.Second
 
 	e.logger.Debug("exec: started", "cmd", name, "argc", len(args))
 	err := cmd.Run()
