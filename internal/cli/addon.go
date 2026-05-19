@@ -253,7 +253,7 @@ func runAddonVerify(cmd *cobra.Command, _ []string) error {
 	_ = tw.Flush()
 
 	if failed > 0 {
-		return fmt.Errorf("%d addon(s) failed verification", failed)
+		return &errtypes.ClusterError{Msg: fmt.Sprintf("%d addon(s) failed verification", failed)}
 	}
 	return vErr
 }

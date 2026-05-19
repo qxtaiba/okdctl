@@ -101,7 +101,7 @@ func ensureRoot(cmd *cobra.Command) error {
 	}
 	self, err := os.Executable()
 	if err != nil {
-		return fmt.Errorf("resolve own binary: %w", err)
+		return &errtypes.ConfigError{Msg: "resolve own binary", Err: err}
 	}
 	args := append([]string{"sudo", "--", self}, os.Args[1:]...)
 	// args are forwarded to sudo as an argv slice (no shell interpolation),

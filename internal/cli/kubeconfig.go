@@ -11,6 +11,7 @@ import (
 	"sigs.k8s.io/yaml"
 
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
+	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/system"
 	"github.com/qxtaiba/okdctl/internal/tui"
 )
@@ -48,7 +49,10 @@ func runKubeconfig(_ *cobra.Command, _ []string) error {
 	src := filepath.Join(clusterDir, "auth", "kubeconfig")
 
 	if !system.FileExists(src) {
-		return fmt.Errorf("kubeconfig not found at %s; run `okdctl deploy` first", src)
+		return &errtypes.ConfigError{
+			Msg: fmt.Sprintf("kubeconfig not found at %s; run `okdctl deploy` first", src),
+			Err: errtypes.ErrConfigMissing,
+		}
 	}
 
 	data, err := os.ReadFile(src)

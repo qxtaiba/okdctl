@@ -120,7 +120,7 @@ func runReleasesShow(cmd *cobra.Command, args []string) error {
 
 	v, ok := findVersion(versions, args[0])
 	if !ok {
-		return fmt.Errorf("version %q not found; try `okdctl releases list --channel all`", args[0])
+		return &errtypes.UsageError{Msg: fmt.Sprintf("version %q not found; try `okdctl releases list --channel all`", args[0])}
 	}
 
 	if releasesShowOutput == outputJSON {
@@ -133,7 +133,7 @@ func fetchFlatVersions(ctx context.Context) ([]releases.OKDVersion, error) {
 	fetcher := releases.NewOKDVersionFetcher()
 	series, err := fetcher.FetchVersions(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("fetch OKD versions: %w", err)
+		return nil, &errtypes.NetworkError{Msg: "fetch OKD versions", Err: err}
 	}
 	out := make([]releases.OKDVersion, 0, len(series))
 	for _, s := range series {
