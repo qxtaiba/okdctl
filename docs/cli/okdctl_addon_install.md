@@ -17,7 +17,7 @@ install --all   installs every addon enabled in the configuration file in
                 (per-addon continuation).
 
 ```
-okdctl addon install [name | --all] [flags]
+okdctl addon install [name] [flags]
 ```
 
 ### Examples
