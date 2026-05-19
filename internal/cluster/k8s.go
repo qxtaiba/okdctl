@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/qxtaiba/okdctl/internal/executor"
@@ -55,12 +56,44 @@ func WithLogger(l *slog.Logger) Option {
 func WithEnvFallback() Option {
 	return func(c *K8sClient) {
 		if c.Kubeconfig == "" {
-			c.Kubeconfig = os.Getenv("KUBECONFIG")
+			if kc := os.Getenv("KUBECONFIG"); kc != "" {
+				if err := validateKubeconfigEnv(kc); err != nil {
+					c.logger.Debug("ignoring $KUBECONFIG env value", "reason", err.Error())
+				} else {
+					c.Kubeconfig = kc
+				}
+			}
 		}
 		if c.CLI == "kubectl" && executor.CommandExists("oc") {
 			c.CLI = "oc"
 		}
 	}
+}
+
+// validateKubeconfigEnv checks a KUBECONFIG path read from the process
+// environment. It rejects symlinks (Lstat does not follow the link,
+// eliminating the TOCTOU window that stat+open would leave) and paths
+// outside the $HOME or /etc prefix allowlist, preventing a hostile env var
+// from pointing the client at /dev/zero, /proc/self/environ, or similar.
+func validateKubeconfigEnv(path string) error {
+	clean := filepath.Clean(path)
+
+	fi, err := os.Lstat(clean)
+	if err != nil {
+		return fmt.Errorf("kubeconfig path inaccessible: %w", err)
+	}
+	if fi.Mode()&os.ModeSymlink != 0 {
+		return fmt.Errorf("kubeconfig path is a symlink")
+	}
+
+	home, _ := os.UserHomeDir()
+	sep := string(filepath.Separator)
+	for _, prefix := range []string{home, "/etc"} {
+		if prefix != "" && strings.HasPrefix(clean, prefix+sep) {
+			return nil
+		}
+	}
+	return fmt.Errorf("kubeconfig path outside allowed prefixes ($HOME, /etc)")
 }
 
 // NewK8sClient builds a K8sClient applying the supplied options in order.
