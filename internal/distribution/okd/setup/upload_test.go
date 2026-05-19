@@ -32,11 +32,12 @@ exit 0
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 }
 
-func newUploadExecutor() *executor.Executor {
-	return executor.New(
+func newUploadExecutor(extra ...executor.Option) *executor.Executor {
+	opts := append([]executor.Option{
 		executor.WithInheritedEnv(),
 		executor.WithLogger(logutil.NopLogger),
-	)
+	}, extra...)
+	return executor.New(opts...)
 }
 
 func TestUploadISOsViaSCP_argvShape(t *testing.T) {
@@ -53,8 +54,7 @@ func TestUploadISOsViaSCP_argvShape(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	exec := newUploadExecutor()
-	exec.Stdout = &buf
+	exec := newUploadExecutor(executor.WithStdout(&buf))
 
 	if err := uploadISOsViaSCP(context.Background(), exec, isoFiles, user, host, remotePath, ""); err != nil {
 		t.Fatalf("uploadISOsViaSCP: %v", err)
@@ -110,8 +110,7 @@ func TestUploadISOsViaSCP_pinnedUsesStrictChecking(t *testing.T) {
 	isoFiles := []string{"/tmp/isos/coreos.iso"}
 
 	var buf bytes.Buffer
-	exec := newUploadExecutor()
-	exec.Stdout = &buf
+	exec := newUploadExecutor(executor.WithStdout(&buf))
 
 	if err := uploadISOsViaSCP(context.Background(), exec, isoFiles, user, host, remotePath, knownHostsPath); err != nil {
 		t.Fatalf("uploadISOsViaSCP: %v", err)
@@ -150,8 +149,7 @@ func TestUploadISOsViaSCP_spaceInFilename(t *testing.T) {
 	isoFiles := []string{spaced}
 
 	var buf bytes.Buffer
-	exec := newUploadExecutor()
-	exec.Stdout = &buf
+	exec := newUploadExecutor(executor.WithStdout(&buf))
 
 	if err := uploadISOsViaSCP(context.Background(), exec, isoFiles, user, host, remotePath, ""); err != nil {
 		t.Fatalf("uploadISOsViaSCP: %v", err)

@@ -139,8 +139,6 @@ func New(workDir string, opts ...Option) *Executor {
 }
 
 func (t *Executor) run(ctx context.Context, args ...string) error {
-	t.exec.Verbose = t.Verbose
-
 	t.logger.Info("terraform: running", "cmd", args[0])
 
 	result, err := t.exec.Run(ctx, "terraform", args...)
@@ -461,7 +459,6 @@ func (t *Executor) ZeroizeEnv() {
 // Output runs "terraform output -json" and returns the decoded top-level
 // map. Each value remains JSON-encoded; callers unmarshal individual entries.
 func (t *Executor) Output(ctx context.Context) (map[string]json.RawMessage, error) {
-	t.exec.Verbose = t.Verbose
 	result, err := t.exec.Run(ctx, "terraform", "output", "-json")
 	if err != nil {
 		return nil, fmt.Errorf("terraform output failed: %w", err)

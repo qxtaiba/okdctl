@@ -26,7 +26,7 @@ import (
 // buffer capped at constMaxLines (200) lines. Result.Stdout and
 // Result.Stderr carry the tail of the output, not the full stream.
 // Callers that need the full stream should use RunStreamed or
-// RunStreamedChecked, which tee live output to e.Stdout/e.Stderr while
+// RunStreamedChecked, which tee live output to e.stdout/e.stderr while
 // still returning a ring-buffered tail in the Result.
 //
 // Environment handling: by default the Executor passes only a curated
@@ -37,11 +37,10 @@ import (
 // (e.g. a tool that consumes a non-allowlisted variable) opts out via
 // WithInheritedEnv.
 type Executor struct {
-	WorkDir    string
+	workDir    string
 	Env        []string
-	Stdout     io.Writer
-	Stderr     io.Writer
-	Verbose    bool
+	stdout     io.Writer
+	stderr     io.Writer
 	inheritEnv bool
 	logger     *slog.Logger
 }
@@ -51,7 +50,17 @@ type Option func(*Executor)
 
 // WithWorkDir sets the working directory for commands run by the Executor.
 func WithWorkDir(dir string) Option {
-	return func(e *Executor) { e.WorkDir = dir }
+	return func(e *Executor) { e.workDir = dir }
+}
+
+// WithStdout redirects streamed command output from the default os.Stdout.
+func WithStdout(w io.Writer) Option {
+	return func(e *Executor) { e.stdout = w }
+}
+
+// WithStderr redirects streamed command error output from the default os.Stderr.
+func WithStderr(w io.Writer) Option {
+	return func(e *Executor) { e.stderr = w }
 }
 
 // WithEnv appends environment variables; they are appended after the
@@ -81,8 +90,8 @@ func WithInheritedEnv() Option {
 // no-op logger, then applies the provided options.
 func New(opts ...Option) *Executor {
 	e := &Executor{
-		Stdout: os.Stdout,
-		Stderr: os.Stderr,
+		stdout: os.Stdout,
+		stderr: os.Stderr,
 		logger: logutil.NopLogger,
 	}
 	for _, opt := range opts {
@@ -224,8 +233,8 @@ func (e *Executor) run(ctx context.Context, stdin io.Reader, name string, args .
 
 	cmd := exec.CommandContext(ctx, name, args...)
 
-	if e.WorkDir != "" {
-		cmd.Dir = e.WorkDir
+	if e.workDir != "" {
+		cmd.Dir = e.workDir
 	}
 
 	cmd.Env = e.buildEnv()
@@ -267,22 +276,22 @@ func (e *Executor) run(ctx context.Context, stdin io.Reader, name string, args .
 }
 
 // RunStreamed executes a command, piping its stdout and stderr live to
-// e.Stdout and e.Stderr while also retaining the last constMaxLines lines
+// e.stdout and e.stderr while also retaining the last constMaxLines lines
 // in Result.Stdout and Result.Stderr for error reporting. The returned
 // *Result is always non-nil.
 func (e *Executor) RunStreamed(ctx context.Context, name string, args ...string) (*Result, error) {
 	start := time.Now()
 	cmd := exec.CommandContext(ctx, name, args...)
 
-	if e.WorkDir != "" {
-		cmd.Dir = e.WorkDir
+	if e.workDir != "" {
+		cmd.Dir = e.workDir
 	}
 	cmd.Env = e.buildEnv()
 
 	rout := newRingWriter(constMaxLines)
 	rerr := newRingWriter(constMaxLines)
-	cmd.Stdout = io.MultiWriter(e.Stdout, rout)
-	cmd.Stderr = io.MultiWriter(e.Stderr, rerr)
+	cmd.Stdout = io.MultiWriter(e.stdout, rout)
+	cmd.Stderr = io.MultiWriter(e.stderr, rerr)
 
 	cmd.Cancel = func() error { return cmd.Process.Signal(syscall.SIGINT) }
 	cmd.WaitDelay = 30 * time.Second
@@ -324,20 +333,20 @@ func (e *Executor) RunStreamedChecked(ctx context.Context, name string, args ...
 }
 
 // RunInteractive executes a command wired to the current process's stdin and
-// the Executor's Stdout/Stderr for user-facing prompts.
+// the Executor's stdout/stderr for user-facing prompts.
 func (e *Executor) RunInteractive(ctx context.Context, name string, args ...string) error {
 	start := time.Now()
 	cmd := exec.CommandContext(ctx, name, args...)
 
-	if e.WorkDir != "" {
-		cmd.Dir = e.WorkDir
+	if e.workDir != "" {
+		cmd.Dir = e.workDir
 	}
 
 	cmd.Env = e.buildEnv()
 
 	cmd.Stdin = os.Stdin
-	cmd.Stdout = e.Stdout
-	cmd.Stderr = e.Stderr
+	cmd.Stdout = e.stdout
+	cmd.Stderr = e.stderr
 
 	// SIGINT is terraform's documented soft-cancel: it triggers a graceful
 	// plan/apply abort and releases the state lock before exit. WaitDelay
