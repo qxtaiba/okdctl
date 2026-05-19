@@ -1,4 +1,10 @@
-// Package credentials provides credential management for infrastructure providers.
+// Package credentials owns the Proxmox credential lifecycle. Password and
+// APIToken are []byte (not string) so callers can defer Zeroize() to wipe
+// them after use; ProxmoxCredentials.Redacted() satisfies the
+// interface{ Redacted() any } that logutil.RedactHandler detects, ensuring
+// structured slog attrs never leak secret bytes. Call LoadEnvFile before
+// GetProxmoxCredentials — credentials are resolved from env vars only;
+// config-file credentials are not a fallback.
 package credentials
 
 import (
