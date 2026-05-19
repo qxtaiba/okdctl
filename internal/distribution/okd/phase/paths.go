@@ -156,7 +156,7 @@ func WithExecutor(exec *executor.Executor) BasePhaseOption {
 
 // WithLogger attaches the phase logger. Nil resolves to NopLogger.
 func WithLogger(l *slog.Logger) BasePhaseOption {
-	return func(p *BasePhase) { p.Log = l }
+	return func(p *BasePhase) { p.Log = logutil.OrNop(l) }
 }
 
 // WithVersion sets the okdctl version tag embedded in generated artifacts.
