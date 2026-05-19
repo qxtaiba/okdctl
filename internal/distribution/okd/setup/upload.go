@@ -3,6 +3,7 @@ package setup
 import (
 	"context"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"slices"
@@ -152,7 +153,8 @@ func (p *Phase) UploadCustomISOsToProxmox(ctx context.Context, cfg *config.Confi
 	}
 
 	totalSizeMB := float64(calculateTotalSize(toUpload)) / 1024 / 1024
-	p.Log.Info("iso: uploading", "count", len(toUpload), "size_mb", fmt.Sprintf("%.1f", totalSizeMB), "user", user, "host", host, "path", remotePath)
+	roundedMB := math.Round(totalSizeMB*10) / 10
+	p.Log.Info("iso: uploading", "count", len(toUpload), "size_mb", roundedMB, "user", user, "host", host, "path", remotePath)
 
 	if err := uploadISOsViaSCP(ctx, p.Exec, toUpload, user, host, remotePath, knownHostsPath); err != nil {
 		return &errtypes.NetworkError{Msg: "scp upload to proxmox failed", Err: err}
