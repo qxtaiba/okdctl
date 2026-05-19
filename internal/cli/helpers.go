@@ -51,7 +51,7 @@ func loadConfig(configFile string) (*config.Config, error) {
 func handleCredentials(cfg *config.Config) (*credentials.ProxmoxCredentials, error) {
 	envPath := credentials.EnvFilePath(cfgFile)
 	if err := credentials.LoadEnvFile(envPath); err != nil {
-		return nil, fmt.Errorf("load env file %s: %w", envPath, err)
+		return nil, err
 	}
 
 	creds := credentials.GetProxmoxCredentials(cfg)

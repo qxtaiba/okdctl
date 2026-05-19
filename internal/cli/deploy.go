@@ -145,7 +145,7 @@ func runDeploy(cmd *cobra.Command, _ []string) error {
 func runDeployDryRun(ctx context.Context, cfg *config.Config, w io.Writer) error {
 	envPath := credentials.EnvFilePath(deployOutputFile)
 	if err := credentials.LoadEnvFile(envPath); err != nil {
-		return fmt.Errorf("load env file %s: %w", envPath, err)
+		return err
 	}
 
 	creds := credentials.GetProxmoxCredentials(cfg)
@@ -245,7 +245,7 @@ func runFullDeployment(ctx context.Context, cfg *config.Config, w io.Writer) err
 
 	envPath := credentials.EnvFilePath(deployOutputFile)
 	if err := credentials.LoadEnvFile(envPath); err != nil {
-		return fmt.Errorf("load env file %s: %w", envPath, err)
+		return err
 	}
 
 	creds := credentials.GetProxmoxCredentials(cfg)
