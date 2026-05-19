@@ -650,7 +650,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `err:6424733c:env-file-double-context` — env file double context
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/err-6424733c-env-double-ctx  
 **Severity:** minor  
 **Cluster:** wrapping  
 **Evidence:** `internal/cli/helpers.go:53-55` + 2 more  
@@ -680,7 +680,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `err:9f8e7d6c:errtypes-vocab-cert-pending` — errtypes vocab cert pending
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/err-9f8e7d6c-errtypes-vocab  
 **Severity:** suggestion  
 **Cluster:** domain-vocabulary — seam→audit-cli-ux  
 **Evidence:** `internal/errtypes/errtypes.go:1-111`  
@@ -692,7 +692,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `con:15ba17da:tracker-mu-not-needed-yet` — tracker mu not needed yet
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/con-15ba17da-tracker-mu  
 **Severity:** suggestion  
 **Cluster:** waitgroup-vs-errgroup  
 **Evidence:** `internal/distribution/okd/destroy/steps.go:32-69`  
@@ -774,7 +774,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `api:7b2829bb:zeroize-asymmetry` — zeroize asymmetry
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/api-7b2829bb-zeroize-asymmetry  
 **Severity:** major  
 **Cluster:** exported-surface — seam→audit-security — related: sec:7b2829bb:executor-no-zeroize, sec:35abd54e:env-string-residue  
 **Evidence:** `internal/executor/executor.go:38-92` + 2 more  
@@ -814,7 +814,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `api:0139cb3f:bin-dir-fan-out` — bin dir fan out
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/api-0139cb3f-bindir-doc  
 **Severity:** suggestion  
 **Cluster:** exported-surface  
 **Evidence:** `internal/distribution/okd/phase/paths.go:52-97`  
@@ -844,7 +844,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `api:e2343d2c:unused-trailing-param` — unused trailing param
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/api-e2343d2c-unused-param  
 **Severity:** suggestion  
 **Cluster:** exported-surface  
 **Evidence:** `internal/system/systemd.go:31-46`  
@@ -854,7 +854,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `api:fde34e0c:k8sclient-pkg-stutter` — k8sclient pkg stutter
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/api-fde34e0c-k8sclient-rename  
 **Severity:** suggestion  
 **Cluster:** exported-surface  
 **Evidence:** `internal/cluster/k8s.go:20-88`  
@@ -886,7 +886,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `ux:fd2125dd:install-use-bracket-syntax` — install use bracket syntax
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/ux-fd2125dd-install-use  
 **Severity:** minor  
 **Cluster:** verb-noun  
 **Evidence:** `internal/cli/addon.go:44-44`  
@@ -918,7 +918,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `obs:48688e63:proxmox-probe-failure-as-info` — proxmox probe failure as info
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/obs-48688e63-probe-info  
 **Severity:** suggestion  
 **Cluster:** level-discipline  
 **Evidence:** `internal/infrastructure/proxmox/proxmox.go:382-397`  
@@ -950,7 +950,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `mod:8ea706f6:strings-lines-fingerprint` — strings lines fingerprint
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/mod-8ea706f6-strings-lines-fp  
 **Severity:** suggestion  
 **Cluster:** slices-maps — related: mod:8ea706f6:strings-lines-version  
 **Evidence:** `internal/distribution/okd/setup/tools.go:346-362`  
@@ -980,7 +980,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `mod:eb479d86:use-slices-containsfunc` — use slices containsfunc
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/mod-eb479d86-slices-containsfunc  
 **Severity:** suggestion  
 **Cluster:** slices-maps  
 **Evidence:** `internal/distribution/okd/setup/upload.go:171-176`  
@@ -1032,7 +1032,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `smell:5013fea6:auth-error-string-sniff` — auth error string sniff
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/smell-5013fea6-auth-sniff  
 **Severity:** suggestion  
 **Cluster:** magic-strings — seam→audit-errors  
 **Evidence:** `internal/distribution/okd/setup/release_extract.go:92-141`  
@@ -1062,7 +1062,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `smell:daf5bee9:any-yaml-traversal` — any yaml traversal
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/smell-daf5bee9-yaml-traversal  
 **Severity:** suggestion  
 **Cluster:** interfaceany-lazy  
 **Evidence:** `internal/cli/kubeconfig.go:141-175`  
@@ -1074,7 +1074,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `dep:33ef32bf:yaml-quad-engines` — yaml quad engines
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/dep-33ef32bf-yaml-engines-doc  
 **Severity:** minor  
 **Cluster:** duplicate-engine  
 **Evidence:** `go.sum:125-153`  
