@@ -33,13 +33,13 @@ var (
 func (p *Phase) RemoveHAProxy(ctx context.Context, vip, clusterDir string) error {
 	if system.IsServiceActive(ctx, "haproxy") {
 		p.Log.Info("haproxy: stopping service")
-		if err := system.ManageService(ctx, system.ServiceStop, "haproxy", "haproxy service"); err != nil {
+		if err := system.ManageService(ctx, system.ServiceStop, "haproxy"); err != nil {
 			p.Log.Warn("haproxy: stop failed", "err", err)
 		}
 	}
 	if system.IsServiceEnabled(ctx, "haproxy") {
 		p.Log.Info("haproxy: disabling service")
-		if err := system.ManageService(ctx, system.ServiceDisable, "haproxy", "haproxy service"); err != nil {
+		if err := system.ManageService(ctx, system.ServiceDisable, "haproxy"); err != nil {
 			p.Log.Warn("haproxy: disable failed", "err", err)
 		}
 	}

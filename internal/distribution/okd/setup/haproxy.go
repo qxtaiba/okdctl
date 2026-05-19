@@ -79,10 +79,10 @@ func (p *Phase) installHAProxyConfig(ctx context.Context, tmpPath string) error 
 }
 
 func enableAndRestartHAProxy(ctx context.Context) error {
-	if err := system.ManageService(ctx, system.ServiceEnable, "haproxy", "haproxy load balancer"); err != nil {
+	if err := system.ManageService(ctx, system.ServiceEnable, "haproxy"); err != nil {
 		return err
 	}
-	return system.ManageService(ctx, system.ServiceRestart, "haproxy", "haproxy load balancer")
+	return system.ManageService(ctx, system.ServiceRestart, "haproxy")
 }
 
 // ConfigureHAProxy renders haproxy.cfg, installs it, validates with
@@ -121,7 +121,7 @@ func (p *Phase) ConfigureHAProxy(ctx context.Context, cfg *config.Config, _ *Opt
 	}
 
 	restartFn := func() error {
-		return system.ManageService(ctx, system.ServiceRestart, "haproxy", "haproxy load balancer")
+		return system.ManageService(ctx, system.ServiceRestart, "haproxy")
 	}
 	rollback := func(reason string, cause error) error {
 		if !hasBackup {

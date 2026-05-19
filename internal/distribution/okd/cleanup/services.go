@@ -25,7 +25,7 @@ var (
 func stopAndDisableService(ctx context.Context, serviceName string, logger *slog.Logger) {
 	logger = logutil.OrNop(logger)
 	if system.IsServiceActive(ctx, serviceName) {
-		if err := system.ManageService(ctx, system.ServiceStop, serviceName, serviceName+" service"); err != nil {
+		if err := system.ManageService(ctx, system.ServiceStop, serviceName); err != nil {
 			logger.Warn("cleanup: failed to stop service", "svc", serviceName, "err", err)
 		}
 	} else {
@@ -33,7 +33,7 @@ func stopAndDisableService(ctx context.Context, serviceName string, logger *slog
 	}
 
 	if system.IsServiceEnabled(ctx, serviceName) {
-		if err := system.ManageService(ctx, system.ServiceDisable, serviceName, serviceName+" service"); err != nil {
+		if err := system.ManageService(ctx, system.ServiceDisable, serviceName); err != nil {
 			logger.Warn("cleanup: failed to disable service", "svc", serviceName, "err", err)
 		}
 	} else {

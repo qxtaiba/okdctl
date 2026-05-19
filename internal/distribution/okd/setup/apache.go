@@ -122,10 +122,10 @@ func (p *Phase) configureSELinuxForApache(ctx context.Context) {
 }
 
 func enableAndStartApache(ctx context.Context, serviceName string) error {
-	if err := system.ManageService(ctx, system.ServiceEnable, serviceName, "apache service"); err != nil {
+	if err := system.ManageService(ctx, system.ServiceEnable, serviceName); err != nil {
 		return fmt.Errorf("failed to enable %s: %w", serviceName, err)
 	}
-	if err := system.ManageService(ctx, system.ServiceStart, serviceName, "apache service"); err != nil {
+	if err := system.ManageService(ctx, system.ServiceStart, serviceName); err != nil {
 		return fmt.Errorf("failed to start %s: %w", serviceName, err)
 	}
 	if !system.IsServiceActive(ctx, serviceName) {
