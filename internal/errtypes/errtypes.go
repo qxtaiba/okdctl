@@ -1,6 +1,13 @@
 // Package errtypes defines the typed error hierarchy used by okdctl.
 // exitCodeFor in internal/cli/root.go maps each type to a structured exit code:
 // ConfigError=2, NetworkError=3, ClusterError=4, AuthError=5, UsageError=64.
+//
+// The taxonomy intentionally has no transient/recoverable concept. Failures
+// such as a VIP certificate not yet rotated or a CSR still pending are
+// classified as ClusterError (exit 4) until a retry-aware consumer exists
+// that needs to distinguish them from permanently-degraded states. Introducing
+// a TransientError type is deferred until that consumer lands (roadmap
+// err:9f8e7d6c).
 package errtypes
 
 import (
