@@ -2,10 +2,12 @@ package distribution
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"sync"
 	"time"
 
+	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/logutil"
 )
 
@@ -110,6 +112,26 @@ func (o *Orchestrator) Results() []StepResult {
 	return out
 }
 
+// classifyStepErr wraps a bare step error in ClusterError so the cli layer
+// maps it to exit 4 instead of the exit-1 default. Already-typed errtypes
+// values and context cancellation/deadline errors are returned unchanged.
+func classifyStepErr(err error) error {
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return err
+	}
+	var (
+		ce   *errtypes.ClusterError
+		ne   *errtypes.NetworkError
+		cfge *errtypes.ConfigError
+		ae   *errtypes.AuthError
+		ue   *errtypes.UsageError
+	)
+	if errors.As(err, &ce) || errors.As(err, &ne) || errors.As(err, &cfge) || errors.As(err, &ae) || errors.As(err, &ue) {
+		return err
+	}
+	return &errtypes.ClusterError{Msg: "step failed", Err: err}
+}
+
 func (o *Orchestrator) executeStep(ctx context.Context, step ProvisioningStep) StepResult {
 	startedAt := time.Now()
 
@@ -150,6 +172,7 @@ func (o *Orchestrator) executeStep(ctx context.Context, step ProvisioningStep) S
 	step.OnStart()
 
 	if err := step.Execute(ctx); err != nil {
+		err = classifyStepErr(err)
 		step.OnError(err)
 		r := StepResult{
 			StepID:    step.ID(),
