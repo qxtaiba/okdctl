@@ -448,24 +448,14 @@ func (t *Executor) pruneSnapshots() {
 	}
 }
 
-// ZeroizeEnv overwrites and clears the credential strings stored in the
-// executor's Env slice. Entries whose key is PROXMOX_VE_PASSWORD or
-// PROXMOX_VE_API_TOKEN are blanked first; the full slice is then cleared so
-// all string headers are zeroed. Call this (typically via defer) after all
-// terraform operations complete to bound the lifetime of plaintext credential
-// strings in process memory.
+// ZeroizeEnv delegates to the inner executor's ZeroizeEnv, bounding the
+// lifetime of plaintext credential strings in process memory. Call via defer
+// after all terraform operations complete.
 func (t *Executor) ZeroizeEnv() {
 	if t.exec == nil {
 		return
 	}
-	for i, kv := range t.exec.Env {
-		key, _, _ := strings.Cut(kv, "=")
-		if key == "PROXMOX_VE_PASSWORD" || key == "PROXMOX_VE_API_TOKEN" {
-			t.exec.Env[i] = ""
-		}
-	}
-	clear(t.exec.Env)
-	t.exec.Env = nil
+	t.exec.ZeroizeEnv()
 }
 
 // Output runs "terraform output -json" and returns the decoded top-level
