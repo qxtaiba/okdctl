@@ -296,7 +296,7 @@ func getToolVersion(ctx context.Context, tool, flag string) string {
 // HashiCorp release signing key. Verified against the key before it is
 // installed as a system trust root; a mismatch aborts the deploy so a MITM
 // during key fetch cannot plant a persistent malicious trust root.
-const expectedHashiCorpGPGFingerprint = "AA16FCBCA621E70139936A4C798AEC654FA7E1A1"
+const expectedHashiCorpGPGFingerprint = "798AEC654E5C15428C8E42EEAA16FCBCA621E701"
 
 func installHashiCorpDebianRepo(ctx context.Context, codename string) error {
 	gpgPath := "/usr/share/keyrings/hashicorp-archive-keyring.gpg"
