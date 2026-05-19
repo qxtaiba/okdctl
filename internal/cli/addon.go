@@ -11,6 +11,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/addon"
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd"
+	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/executor"
 	"github.com/qxtaiba/okdctl/internal/tui"
 )
@@ -62,12 +63,12 @@ install --all   installs every addon enabled in the configuration file in
 	Args: func(_ *cobra.Command, args []string) error {
 		if addonInstallAll {
 			if len(args) != 0 {
-				return fmt.Errorf("--all and a named addon are mutually exclusive")
+				return &errtypes.UsageError{Msg: "--all and a named addon are mutually exclusive"}
 			}
 			return nil
 		}
 		if len(args) != 1 {
-			return fmt.Errorf("expected exactly one addon name, or use --all")
+			return &errtypes.UsageError{Msg: "expected exactly one addon name, or use --all"}
 		}
 		return nil
 	},
