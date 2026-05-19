@@ -76,11 +76,32 @@ type Port struct {
 	Description string
 }
 
+// Firewall applies and removes host firewall rules using the active backend.
+type Firewall struct {
+	logger *slog.Logger
+}
+
+// Option configures a Firewall at construction time.
+type Option func(*Firewall)
+
+// WithLogger injects a structured logger. Nil resolves to logutil.NopLogger.
+func WithLogger(l *slog.Logger) Option {
+	return func(f *Firewall) { f.logger = logutil.OrNop(l) }
+}
+
+// New builds a Firewall with a no-op logger, then applies opts.
+func New(opts ...Option) *Firewall {
+	f := &Firewall{logger: logutil.NopLogger}
+	for _, opt := range opts {
+		opt(f)
+	}
+	return f
+}
+
 // DetectBackend returns the active firewall backend, preferring firewalld,
 // then ufw, then iptables. Returns None on non-Linux hosts or when no
-// backend is present. logger may be nil; when nil, no probe-failure
-// observability is emitted.
-func DetectBackend(ctx context.Context, logger *slog.Logger) Backend {
+// backend is present.
+func (f *Firewall) DetectBackend(ctx context.Context) Backend {
 	if runtime.GOOS != "linux" {
 		return None
 	}
@@ -96,8 +117,8 @@ func DetectBackend(ctx context.Context, logger *slog.Logger) Backend {
 			if strings.Contains(string(output), "Status: active") {
 				return UFW
 			}
-		} else if logger != nil {
-			logger.Debug("ufw probe failed, falling through to next backend", "err", err, "backend", "ufw")
+		} else {
+			f.logger.Debug("ufw probe failed, falling through to next backend", "err", err, "backend", "ufw")
 		}
 	}
 
@@ -110,19 +131,18 @@ func DetectBackend(ctx context.Context, logger *slog.Logger) Backend {
 
 // Configure opens each port in ports on the active backend. When permanent
 // is true, firewalld rules persist across reloads. A None backend no-ops.
-func Configure(ctx context.Context, ports []Port, permanent bool, logger *slog.Logger) error {
-	logger = logutil.OrNop(logger)
-	backend := DetectBackend(ctx, logger)
+func (f *Firewall) Configure(ctx context.Context, ports []Port, permanent bool) error {
+	backend := f.DetectBackend(ctx)
 
 	if backend == None {
-		logger.Warn("no active firewall detected, skipping firewall configuration")
+		f.logger.Warn("no active firewall detected, skipping firewall configuration")
 		return nil
 	}
 
-	logger.Info("firewall: configuring", "backend", backend)
+	f.logger.Info("firewall: configuring", "backend", backend)
 
 	for _, port := range ports {
-		if err := openPort(ctx, backend, port, permanent, logger); err != nil {
+		if err := openPort(ctx, backend, port, permanent, f.logger); err != nil {
 			return fmt.Errorf("failed to open port %d: %w", port.Number, err)
 		}
 	}
@@ -133,7 +153,7 @@ func Configure(ctx context.Context, ports []Port, permanent bool, logger *slog.L
 		}
 	}
 
-	logger.Info("firewall: configured successfully")
+	f.logger.Info("firewall: configured successfully")
 
 	return nil
 }
@@ -167,19 +187,18 @@ func openPort(ctx context.Context, backend Backend, port Port, permanent bool, l
 
 // RemoveRules deletes each port in ports from the active backend. Missing
 // rules are logged as warnings rather than returned as errors.
-func RemoveRules(ctx context.Context, ports []Port, permanent bool, logger *slog.Logger) error {
-	logger = logutil.OrNop(logger)
-	backend := DetectBackend(ctx, logger)
+func (f *Firewall) RemoveRules(ctx context.Context, ports []Port, permanent bool) error {
+	backend := f.DetectBackend(ctx)
 
 	if backend == None {
 		return nil
 	}
 
-	logger.Info("firewall: removing rules")
+	f.logger.Info("firewall: removing rules")
 
 	for _, port := range ports {
 		if err := modifyPort(ctx, backend, port, permanent, actionRemove); err != nil {
-			logger.Warn("firewall: could not remove port", "port", port.Number, "err", err)
+			f.logger.Warn("firewall: could not remove port", "port", port.Number, "err", err)
 		}
 	}
 
@@ -236,11 +255,11 @@ func modifyPort(ctx context.Context, backend Backend, port Port, permanent bool,
 }
 
 // ConfigureOKD opens all ports in OKDRequiredPorts.
-func ConfigureOKD(ctx context.Context, permanent bool, logger *slog.Logger) error {
-	return Configure(ctx, OKDRequiredPorts, permanent, logger)
+func (f *Firewall) ConfigureOKD(ctx context.Context, permanent bool) error {
+	return f.Configure(ctx, OKDRequiredPorts, permanent)
 }
 
 // RemoveOKDRules removes all ports in OKDRequiredPorts.
-func RemoveOKDRules(ctx context.Context, permanent bool, logger *slog.Logger) error {
-	return RemoveRules(ctx, OKDRequiredPorts, permanent, logger)
+func (f *Firewall) RemoveOKDRules(ctx context.Context, permanent bool) error {
+	return f.RemoveRules(ctx, OKDRequiredPorts, permanent)
 }

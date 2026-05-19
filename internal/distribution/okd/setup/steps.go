@@ -312,7 +312,7 @@ func (p *Phase) setupInfraSteps(cfg *config.Config, opts *Options) []distributio
 			SkipWhen:   func() bool { return opts.SkipFirewall },
 			SkipReason: "firewall configuration disabled",
 			Exec: func(ctx context.Context) error {
-				if err := firewall.ConfigureOKD(ctx, true, p.Log); err != nil {
+				if err := firewall.New(firewall.WithLogger(p.Log)).ConfigureOKD(ctx, true); err != nil {
 					return err
 				}
 				p.Log.Info("firewall: okd rules added to firewalld")
