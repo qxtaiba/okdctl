@@ -295,7 +295,6 @@ func startMetricsServer(ctx context.Context, addr string, allowNetwork bool) (fu
 }
 
 func executeFullDeployment(ctx context.Context, cfg *config.Config, opts deploymentOptions, w io.Writer) error {
-	clusterFQDN := cfg.Cluster.Name + "." + cfg.Cluster.Domain
 	projectRoot, err := resolveProjectRootOrDie()
 	if err != nil {
 		return err
@@ -343,13 +342,15 @@ func executeFullDeployment(ctx context.Context, cfg *config.Config, opts deploym
 	}
 
 	if opts.ShowStartMessage {
-		tui.Info("starting deployment...", tui.LF("cluster", clusterFQDN))
+		tui.Info("starting deployment...", tui.LF("cluster", cfg.Cluster.Name+"."+cfg.Cluster.Domain))
 	}
 
 	startTime := time.Now()
 	markerPath := filepath.Join(workDir, deployStateFile)
 
-	markDeployPhase(markerPath, "prepare", runID)
+	if err := markDeployPhaseFatal(markerPath, "prepare", runID, cfg.Cluster.Name); err != nil {
+		return err
+	}
 	setupSteps, err := p.Prepare(ctx, cfg)
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
@@ -361,7 +362,7 @@ func executeFullDeployment(ctx context.Context, cfg *config.Config, opts deploym
 		return err
 	}
 
-	markDeployPhase(markerPath, "install", runID)
+	markDeployPhase(markerPath, "install", runID, cfg.Cluster.Name)
 	installOpts := install.NewOptions(cfg, projectRoot)
 	installSteps, err := p.Install(ctx, cfg, &installOpts)
 	if err != nil {
@@ -375,7 +376,7 @@ func executeFullDeployment(ctx context.Context, cfg *config.Config, opts deploym
 		return err
 	}
 
-	markDeployPhase(markerPath, "configure", runID)
+	markDeployPhase(markerPath, "configure", runID, cfg.Cluster.Name)
 	result, configureSteps, err := p.Configure(ctx, cfg)
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
