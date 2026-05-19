@@ -530,17 +530,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Add executor.Executor.ZeroizeEnv() mirroring terraform.Executor.ZeroizeEnv (terraform.go:L347-L364). Update internal/distribution/okd/install/* and internal/infrastructure/proxmox/proxmox.go to defer e.Exec.ZeroizeEnv() at end of phases that pass creds.Env(). Document the residual-string boundary in CLAUDE.md §credentials-and-secrets so future env-passing sites follow the same defer pattern.  
 **Effort:** hours
 
-##### `sec:8ea706f6:hashicorp-gpg-trust-doc` — hashicorp gpg trust doc
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-8ea706f6-gpg-fp-fix  
-**Scope (widened by maintainer 2026-05-20):** in addition to the unit test, correct `expectedHashiCorpGPGFingerprint` (setup/tools.go:299) from `AA16FCBCA621E70139936A4C798AEC654FA7E1A1` to the canonical `798AEC654E5C15428C8E42EEAA16FCBCA621E701` (verified against hashicorp.com/trust/security). The wrong constant means installHashiCorpDebianRepo currently rejects the genuine key.  
-**Severity:** suggestion  
-**Cluster:** tls-network  
-**Evidence:** `internal/distribution/okd/setup/tools.go:273-336`  
-**Problem:** installHashiCorpDebianRepo fetches the GPG key from https://apt.releases.hashicorp.com/gpg via TLS and verifies the fingerprint against the embedded constant. The constant fingerprint pinning IS the trust anchor; flagging the absence of a unit test asserting expectedHashiCorpGPGFingerprint matches HashiCorp's published value (a typo in the constant would silently let any key through gpg's --import-options show-only output).  
-**Fix:** Add a unit test that asserts expectedHashiCorpGPGFingerprint is the canonical HashiCorp release-signing-key fingerprint at the time of the test. Could be a string-equality check against a comment-in-code citation of the canonical source, or a network-gated test that fetches from apt.releases.hashicorp.com/gpg and re-derives the fingerprint via gpg.  
-**Effort:** hours
-
 ##### `sec:fde34e0c:k8s-kubeconfig-env-no-validate` — k8s kubeconfig env no validate
 
 **Status:** in review — PR #628  
