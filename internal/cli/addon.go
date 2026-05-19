@@ -42,7 +42,7 @@ See also: addon verify`,
 }
 
 var addonInstallCmd = &cobra.Command{
-	Use:         "install [name | --all]",
+	Use:         "install [name]",
 	Short:       "Install one addon (or all enabled addons with --all)",
 	Example:     "  okdctl addon install flux\n  okdctl addon install --all",
 	Annotations: map[string]string{annotationKeyRequiresRoot: annotationValueTrue},
