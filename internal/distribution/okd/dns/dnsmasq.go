@@ -48,12 +48,12 @@ var validConnectionNameRegex = regexp.MustCompile(`^[A-Za-z0-9 ._/:-]{1,128}$`)
 
 // EnableDnsmasq enables and starts the dnsmasq service.
 func EnableDnsmasq(ctx context.Context) error {
-	return system.ManageService(ctx, system.ServiceEnable, dnsmasqService, "dnsmasq")
+	return system.ManageService(ctx, system.ServiceEnable, dnsmasqService)
 }
 
 // RestartDnsmasq restarts the dnsmasq service.
 func RestartDnsmasq(ctx context.Context) error {
-	return system.ManageService(ctx, system.ServiceRestart, dnsmasqService, "dnsmasq")
+	return system.ManageService(ctx, system.ServiceRestart, dnsmasqService)
 }
 
 // ValidateDnsmasqConfig runs "dnsmasq --test" to verify the on-disk config.
@@ -271,7 +271,7 @@ func RestoreSystemResolver(ctx context.Context, logger *slog.Logger) error {
 			logger.Warn("resolver: failed to remove", "path", resolvedConf, "err", err)
 		}
 		if system.IsServiceActive(ctx, "systemd-resolved") {
-			_ = system.ManageService(ctx, system.ServiceRestart, "systemd-resolved", "systemd-resolved")
+			_ = system.ManageService(ctx, system.ServiceRestart, "systemd-resolved")
 		}
 		logger.Info("resolver: systemd-resolved configuration restored")
 	}

@@ -27,7 +27,7 @@ const (
 // ManageService invokes systemctl for the given service on Linux. Non-Linux
 // hosts get an error rather than a silent no-op so callers don't assume the
 // action took effect.
-func ManageService(ctx context.Context, action ServiceAction, serviceName, _ string) error {
+func ManageService(ctx context.Context, action ServiceAction, serviceName string) error {
 	if runtime.GOOS != osLinux {
 		return fmt.Errorf("systemd services are only supported on Linux")
 	}
