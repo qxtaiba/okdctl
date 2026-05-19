@@ -4,6 +4,8 @@ import (
 	"fmt"
 
 	"github.com/spf13/cobra"
+
+	"github.com/qxtaiba/okdctl/internal/errtypes"
 )
 
 var completionCmd = &cobra.Command{
@@ -42,6 +44,6 @@ func runCompletion(cmd *cobra.Command, args []string) error {
 	case "fish":
 		return cmd.Root().GenFishCompletion(out, true)
 	default:
-		return fmt.Errorf("unknown shell %q", args[0])
+		return &errtypes.UsageError{Msg: fmt.Sprintf("unknown shell %q", args[0])}
 	}
 }
