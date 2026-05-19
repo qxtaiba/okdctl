@@ -520,16 +520,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 #### audit-security
 
-##### `sec:35abd54e:env-string-residue` — env string residue
-
-**Status:** in review — PR #662  
-**Severity:** major  
-**Cluster:** credentials  
-**Evidence:** `internal/credentials/proxmox.go:151-172`  
-**Problem:** ProxmoxCredentials.Env() returns []string with credential bytes converted to immutable Go strings (envProxmoxPassword+"="+string(c.Password)). The doc-comment correctly notes this and tells callers to defer Zeroize(). However the resulting strings live as long as any struct that stores cmd.Env (Executor.Env, Provider.env) and become heap garbage after the env slice is replaced. Zeroize() cleans the []byte source but cannot reach the strings. terraform.Executor.ZeroizeEnv() partially mitigates by overwriting the entry with empty before clear()ing — but executor.Executor has no equivalent.  
-**Fix:** Add executor.Executor.ZeroizeEnv() mirroring terraform.Executor.ZeroizeEnv (terraform.go:L347-L364). Update internal/distribution/okd/install/* and internal/infrastructure/proxmox/proxmox.go to defer e.Exec.ZeroizeEnv() at end of phases that pass creds.Env(). Document the residual-string boundary in CLAUDE.md §credentials-and-secrets so future env-passing sites follow the same defer pattern.  
-**Effort:** hours
-
 ##### `sec:fde34e0c:k8s-kubeconfig-env-no-validate` — k8s kubeconfig env no validate
 
 **Status:** in review — PR #628  
