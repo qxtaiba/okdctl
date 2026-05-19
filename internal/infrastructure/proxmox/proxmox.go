@@ -476,14 +476,14 @@ func (p *Provider) probeVMEnumeration(ctx context.Context, cfg *config.Config) b
 	}
 	stdout, err := phase.PveshRun(ctx, params, "get", "/nodes/"+p.node+"/qemu")
 	if err != nil {
-		p.logger.Info("terraform: pvesh probe skipped", "err", err)
+		p.logger.Debug("terraform: pvesh probe skipped", "err", err)
 		return true
 	}
 	var vms []struct {
 		VMID int `json:"vmid"`
 	}
 	if err := json.Unmarshal([]byte(stdout), &vms); err != nil {
-		p.logger.Info("terraform: pvesh probe payload unparseable", "err", err)
+		p.logger.Debug("terraform: pvesh probe payload unparseable", "err", err)
 		return true
 	}
 	for _, vm := range vms {
