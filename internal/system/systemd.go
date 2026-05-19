@@ -3,7 +3,6 @@ package system
 import (
 	"context"
 	"fmt"
-	"os/exec"
 	"runtime"
 )
 
@@ -37,8 +36,7 @@ func ManageService(ctx context.Context, action ServiceAction, serviceName, _ str
 
 	switch action {
 	case ServiceStatus:
-		cmd := exec.CommandContext(ctx, "systemctl", "is-active", serviceName)
-		return cmd.Run()
+		return RunCaptured(ctx, "systemctl", "is-active", serviceName)
 
 	default:
 		return RunCaptured(ctx, "systemctl", actionStr, serviceName)
@@ -53,8 +51,7 @@ func IsServiceActive(ctx context.Context, serviceName string) bool {
 		return false
 	}
 
-	cmd := exec.CommandContext(ctx, "systemctl", "is-active", "--quiet", serviceName)
-	return cmd.Run() == nil
+	return RunCaptured(ctx, "systemctl", "is-active", "--quiet", serviceName) == nil
 }
 
 // IsServiceEnabled reports whether systemctl considers the service enabled
@@ -64,6 +61,5 @@ func IsServiceEnabled(ctx context.Context, serviceName string) bool {
 		return false
 	}
 
-	cmd := exec.CommandContext(ctx, "systemctl", "is-enabled", "--quiet", serviceName)
-	return cmd.Run() == nil
+	return RunCaptured(ctx, "systemctl", "is-enabled", "--quiet", serviceName) == nil
 }
