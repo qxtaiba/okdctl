@@ -80,30 +80,39 @@ func calculateTotalSize(files []string) int64 {
 	return totalSize
 }
 
-// uploadISOsViaSCP scps ISOs to the Proxmox host. When knownHostsPath is
-// non-empty the scp call enforces strict host-key checking against that file,
-// matching sshBaseArgs policy in phase/ssh.go. An empty path falls back to
-// accept-new TOFU, preserving behaviour for operators without a configured
-// fingerprint.
+// uploadISOsViaSCP scps ISOs to the Proxmox host one file at a time.
+// Per-file invocations mean a SIGINT or network drop mid-batch leaves
+// already-uploaded files intact; the next run resumes only the corrupt tail.
+// When knownHostsPath is non-empty the scp call enforces strict host-key
+// checking against that file, matching sshBaseArgs policy in phase/ssh.go.
+// An empty path falls back to accept-new TOFU, preserving behaviour for
+// operators without a configured fingerprint.
 func uploadISOsViaSCP(ctx context.Context, cmdRunner *executor.Executor, isoFiles []string, user, host, remotePath, knownHostsPath string) error {
-	var args []string
+	var baseArgs []string
 	if knownHostsPath != "" {
-		args = []string{
+		baseArgs = []string{
 			"-o", "UserKnownHostsFile=" + knownHostsPath,
 			"-o", "StrictHostKeyChecking=yes",
 			"-o", "BatchMode=yes",
 		}
 	} else {
-		args = []string{
+		baseArgs = []string{
 			"-o", "StrictHostKeyChecking=accept-new",
 			"-o", "BatchMode=yes",
 		}
 	}
-	args = append(args, isoFiles...)
-	args = append(args, fmt.Sprintf("%s@%s:%s/", user, host, remotePath))
-
-	if err := cmdRunner.RunInteractive(ctx, "scp", args...); err != nil {
-		return fmt.Errorf("scp failed: %w", err)
+	dest := fmt.Sprintf("%s@%s:%s/", user, host, remotePath)
+	for _, f := range isoFiles {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if !isoUploadNeeded(ctx, cmdRunner, host, knownHostsPath, remotePath, f) {
+			continue
+		}
+		args := append(slices.Clone(baseArgs), f, dest)
+		if err := cmdRunner.RunInteractive(ctx, "scp", args...); err != nil {
+			return fmt.Errorf("scp %s failed: %w", filepath.Base(f), err)
+		}
 	}
 	return nil
 }
