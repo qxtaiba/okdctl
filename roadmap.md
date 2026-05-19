@@ -980,7 +980,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `mod:eb479d86:use-slices-containsfunc` — use slices containsfunc
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/mod-eb479d86-slices-containsfunc  
+**Status:** not started (already implemented in develop at upload.go:190-194 — needs archive, not pickup)  
 **Severity:** suggestion  
 **Cluster:** slices-maps  
 **Evidence:** `internal/distribution/okd/setup/upload.go:171-176`  
