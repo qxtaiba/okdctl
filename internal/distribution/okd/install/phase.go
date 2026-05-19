@@ -1,4 +1,8 @@
-// Package install provides the install phase for OKD cluster provisioning.
+// Package install drives the install phase: terraform-up, bootstrap monitor,
+// CSR approval, and cluster-operator settle. Default timeouts are 30 m for
+// bootstrap and 60 m for cluster-operator wait (both overridable via
+// Deployment.BootstrapTimeout / Deployment.InstallTimeout in the Config),
+// with a fixed 30 s CSR-approval poll cadence.
 package install
 
 import (
