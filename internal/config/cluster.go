@@ -100,6 +100,43 @@ type ProviderConfig struct {
 	Proxmox *ProxmoxConfig `json:"proxmox,omitempty"`
 }
 
+// ProxmoxConfig configures the Proxmox VE provider. Credential fields carry
+// json:"-" and are populated from env/config separately — never persisted
+// to okdctl.yaml.
+type ProxmoxConfig struct {
+	Host        string `json:"host"`
+	Node        string `json:"node"`
+	Storage     string `json:"storage"`
+	DataStorage string `json:"data_storage,omitempty"`
+	ISOStorage  string `json:"iso_storage,omitempty"`
+	Bridge      string `json:"bridge,omitempty"`
+	FCOSIso     string `json:"fcos_iso,omitempty"`
+
+	// Credentials are injected from okdctl.env / environment variables via
+	// internal/credentials, never persisted in the YAML config. All three
+	// fields carry `json:"-"` so sigs.k8s.io/yaml excludes them from both
+	// load and save.
+	Username string      `json:"-"`
+	Password SecretBytes `json:"-"`
+	APIToken SecretBytes `json:"-"`
+
+	TokenID  string `json:"token_id,omitempty"`
+	Insecure bool   `json:"insecure,omitempty"`
+	// InsecureHTTP allows http:// endpoints — basic-auth over plaintext, opt-in only.
+	InsecureHTTP       bool                `json:"insecure_http,omitempty"`
+	CPUType            string              `json:"cpu_type,omitempty"`
+	AdditionalNetworks []AdditionalNetwork `json:"additional_networks,omitempty"`
+	NUMAEnabled        bool                `json:"numa_enabled,omitempty"`
+	MasterNodes        []string            `json:"master_nodes,omitempty"`
+	WorkerNodes        []string            `json:"worker_nodes,omitempty"`
+	// SSHHostFingerprint pins the Proxmox host's SSH key in standard
+	// SHA256:<base64> format (from ssh-keygen -lf or the Proxmox UI). When
+	// set, every SSH connection is verified and refused on mismatch. When
+	// unset, accept-new TOFU applies and the observed fingerprints are
+	// logged at WARN so the operator can pin one.
+	SSHHostFingerprint string `json:"ssh_host_fingerprint,omitempty"`
+}
+
 // redactedProxmoxConfig is the safe projection of ProxmoxConfig returned by
 // Redacted(). It omits Username, Password, and APIToken so a slog.Any call
 // carrying a *ProxmoxConfig cannot reach those fields through RedactHandler's
@@ -147,43 +184,6 @@ func (p *ProxmoxConfig) Redacted() any {
 		WorkerNodes:        p.WorkerNodes,
 		SSHHostFingerprint: p.SSHHostFingerprint,
 	}
-}
-
-// ProxmoxConfig configures the Proxmox VE provider. Credential fields carry
-// json:"-" and are populated from env/config separately — never persisted
-// to okdctl.yaml.
-type ProxmoxConfig struct {
-	Host        string `json:"host"`
-	Node        string `json:"node"`
-	Storage     string `json:"storage"`
-	DataStorage string `json:"data_storage,omitempty"`
-	ISOStorage  string `json:"iso_storage,omitempty"`
-	Bridge      string `json:"bridge,omitempty"`
-	FCOSIso     string `json:"fcos_iso,omitempty"`
-
-	// Credentials are injected from okdctl.env / environment variables via
-	// internal/credentials, never persisted in the YAML config. All three
-	// fields carry `json:"-"` so sigs.k8s.io/yaml excludes them from both
-	// load and save.
-	Username string      `json:"-"`
-	Password SecretBytes `json:"-"`
-	APIToken SecretBytes `json:"-"`
-
-	TokenID  string `json:"token_id,omitempty"`
-	Insecure bool   `json:"insecure,omitempty"`
-	// InsecureHTTP allows http:// endpoints — basic-auth over plaintext, opt-in only.
-	InsecureHTTP       bool                `json:"insecure_http,omitempty"`
-	CPUType            string              `json:"cpu_type,omitempty"`
-	AdditionalNetworks []AdditionalNetwork `json:"additional_networks,omitempty"`
-	NUMAEnabled        bool                `json:"numa_enabled,omitempty"`
-	MasterNodes        []string            `json:"master_nodes,omitempty"`
-	WorkerNodes        []string            `json:"worker_nodes,omitempty"`
-	// SSHHostFingerprint pins the Proxmox host's SSH key in standard
-	// SHA256:<base64> format (from ssh-keygen -lf or the Proxmox UI). When
-	// set, every SSH connection is verified and refused on mismatch. When
-	// unset, accept-new TOFU applies and the observed fingerprints are
-	// logged at WARN so the operator can pin one.
-	SSHHostFingerprint string `json:"ssh_host_fingerprint,omitempty"`
 }
 
 // FilesConfig points at the pull-secret and SSH public key files injected
