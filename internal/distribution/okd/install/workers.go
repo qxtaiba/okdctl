@@ -34,6 +34,7 @@ func (p *Phase) StartWorkerVMs(ctx context.Context, cfg *config.Config, opts *Op
 		terraform.WithLogger(p.Log),
 		terraform.WithEnv(p.Exec.Env),
 	)
+	defer tf.ZeroizeEnv()
 
 	if err := tf.Init(ctx); err != nil {
 		if hint := tf.LockHint(); hint != nil {
