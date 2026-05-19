@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"os/exec"
 	"strings"
 
 	"golang.org/x/crypto/ssh"
@@ -39,7 +38,7 @@ func Verify(ctx context.Context, host, expected string, log *slog.Logger) (strin
 // runKeyscan invokes ssh-keyscan without -H so hostnames appear in plain
 // form, making output deterministic across invocations (no random salt).
 func runKeyscan(ctx context.Context, host string) (string, error) {
-	out, err := exec.CommandContext(ctx, "ssh-keyscan", "-T", "5", host).Output()
+	out, err := system.OutputCaptured(ctx, "ssh-keyscan", "-T", "5", host)
 	if err != nil {
 		return "", err
 	}
