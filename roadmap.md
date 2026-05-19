@@ -600,7 +600,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `err:fde34e0c:exit-error-no-ctx-identity` — exit error no ctx identity
 
-**Status:** not started  
+**Status:** in progress — branch: refactor/executor-terraform-api-cluster  
 **Severity:** minor  
 **Cluster:** cancellation-identity — seam→audit-concurrency — related: err:48688e63:cancel-identity-lost-on-tf-apply  
 **Evidence:** `internal/cluster/k8s.go:108-127` + 6 more  
@@ -684,7 +684,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `api:4c092fce:terraform-mixed-shape` — terraform mixed shape
 
-**Status:** not started  
+**Status:** in progress — branch: refactor/executor-terraform-api-cluster  
 **Severity:** minor  
 **Cluster:** option-consistency — related: api:7b2829bb:exposed-fields-no-callers  
 **Evidence:** `internal/infrastructure/terraform/terraform.go:32-59`  
@@ -694,7 +694,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `api:7b2829bb:exposed-fields-no-callers` — exposed fields no callers
 
-**Status:** not started  
+**Status:** in progress — branch: refactor/executor-terraform-api-cluster  
 **Severity:** minor  
 **Cluster:** exported-surface — related: api:7b2829bb:zeroize-asymmetry, api:d5915b0c:exec-env-direct-mutation  
 **Evidence:** `internal/executor/executor.go:38-46`  
@@ -704,7 +704,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `api:d5915b0c:exec-env-direct-mutation` — exec env direct mutation
 
-**Status:** not started  
+**Status:** in progress — branch: refactor/executor-terraform-api-cluster  
 **Severity:** minor  
 **Cluster:** package-boundary — related: api:7b2829bb:zeroize-asymmetry  
 **Evidence:** `internal/distribution/okd/install/phase.go:166-166`  
@@ -914,7 +914,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `dep:6ebdb617:claudemd-yaml-tripwire-stale` — claudemd yaml tripwire stale
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/dep-6ebdb617-yaml-tripwire  
 **Severity:** suggestion  
 **Cluster:** duplicate-engine  
 **Evidence:** `CLAUDE.md:196-201`  
