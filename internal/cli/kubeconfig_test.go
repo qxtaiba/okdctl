@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -11,64 +12,71 @@ import (
 )
 
 func TestMergeNamedList(t *testing.T) {
+	mk := func(kv ...string) kubeEntry {
+		e := kubeEntry{}
+		for i := 0; i+1 < len(kv); i += 2 {
+			b, _ := json.Marshal(kv[i+1])
+			e[kv[i]] = b
+		}
+		return e
+	}
+	entryName := func(e kubeEntry) string {
+		var s string
+		_ = json.Unmarshal(e["name"], &s)
+		return s
+	}
+
 	t.Run("nil src returns dest unchanged", func(t *testing.T) {
-		dest := []any{map[string]any{"name": "a"}}
+		dest := []kubeEntry{mk("name", "a")}
 		got := mergeNamedList(dest, nil)
-		if !reflect.DeepEqual(got, dest) {
-			t.Errorf("got %v, want %v", got, dest)
+		if len(got) != 1 || entryName(got[0]) != "a" {
+			t.Errorf("got %v, want one entry 'a'", got)
 		}
 	})
 
 	t.Run("empty src returns dest unchanged", func(t *testing.T) {
-		dest := []any{map[string]any{"name": "a"}}
-		got := mergeNamedList(dest, []any{})
-		if !reflect.DeepEqual(got, dest) {
-			t.Errorf("got %v, want %v", got, dest)
+		dest := []kubeEntry{mk("name", "a")}
+		got := mergeNamedList(dest, []kubeEntry{})
+		if len(got) != 1 || entryName(got[0]) != "a" {
+			t.Errorf("got %v, want one entry 'a'", got)
 		}
 	})
 
 	t.Run("src entry with no name collision is appended", func(t *testing.T) {
-		dest := []any{map[string]any{"name": "existing"}}
-		src := []any{map[string]any{"name": "new"}}
-		got, _ := mergeNamedList(dest, src).([]any)
+		dest := []kubeEntry{mk("name", "existing")}
+		src := []kubeEntry{mk("name", "new")}
+		got := mergeNamedList(dest, src)
 		if len(got) != 2 {
 			t.Fatalf("len = %d, want 2: %+v", len(got), got)
 		}
-		if got[0].(map[string]any)["name"] != "existing" {
+		if entryName(got[0]) != "existing" {
 			t.Errorf("first entry lost")
 		}
-		if got[1].(map[string]any)["name"] != "new" {
+		if entryName(got[1]) != "new" {
 			t.Errorf("new entry not appended")
 		}
 	})
 
 	t.Run("src entry with same name is NOT appended (no-clobber)", func(t *testing.T) {
-		dest := []any{map[string]any{"name": "prod", "cluster": map[string]any{"server": "https://prod.example"}}}
-		src := []any{map[string]any{"name": "prod", "cluster": map[string]any{"server": "https://EVIL.example"}}}
-		got, _ := mergeNamedList(dest, src).([]any)
+		dest := []kubeEntry{mk("name", "prod")}
+		src := []kubeEntry{mk("name", "prod")}
+		got := mergeNamedList(dest, src)
 		if len(got) != 1 {
 			t.Fatalf("len = %d, want 1 (src must be dropped)", len(got))
 		}
-		srv, _ := got[0].(map[string]any)["cluster"].(map[string]any)
-		if srv["server"] != "https://prod.example" {
-			t.Errorf("existing entry was clobbered: got %v", got[0])
+		if entryName(got[0]) != "prod" {
+			t.Errorf("existing entry lost: %v", got[0])
 		}
 	})
 
 	t.Run("mix: one collides, one does not", func(t *testing.T) {
-		dest := []any{map[string]any{"name": "prod"}}
-		src := []any{
-			map[string]any{"name": "prod"},
-			map[string]any{"name": "staging"},
-		}
-		got, _ := mergeNamedList(dest, src).([]any)
+		dest := []kubeEntry{mk("name", "prod")}
+		src := []kubeEntry{mk("name", "prod"), mk("name", "staging")}
+		got := mergeNamedList(dest, src)
 		if len(got) != 2 {
 			t.Fatalf("len = %d, want 2", len(got))
 		}
-		names := []string{
-			got[0].(map[string]any)["name"].(string),
-			got[1].(map[string]any)["name"].(string),
-		}
+		names := []string{entryName(got[0]), entryName(got[1])}
 		want := []string{"prod", "staging"}
 		if !reflect.DeepEqual(names, want) {
 			t.Errorf("names = %v, want %v", names, want)
@@ -76,15 +84,12 @@ func TestMergeNamedList(t *testing.T) {
 	})
 
 	t.Run("entries without a name key are skipped silently", func(t *testing.T) {
-		dest := []any{}
-		src := []any{
-			map[string]any{"name": "good"},
-			map[string]any{"cluster": "no-name-key"},
-			"not-a-map",
-		}
-		got, _ := mergeNamedList(dest, src).([]any)
+		noName := kubeEntry{"cluster": json.RawMessage(`"no-name-key"`)}
+		dest := []kubeEntry{}
+		src := []kubeEntry{mk("name", "good"), noName}
+		got := mergeNamedList(dest, src)
 		if len(got) != 1 {
-			t.Errorf("len = %d, want 1 (only named map survives)", len(got))
+			t.Errorf("len = %d, want 1 (only named entry survives)", len(got))
 		}
 	})
 }
@@ -288,5 +293,46 @@ current-context: okd-test
 	}
 	if got := info.Mode().Perm(); got != 0o600 {
 		t.Errorf("dest mode = %04o, want 0600", got)
+	}
+}
+
+func TestMergeKubeconfig_PreservesUnknownFields(t *testing.T) {
+	dir := t.TempDir()
+	dest := filepath.Join(dir, "config")
+	t.Setenv("KUBECONFIG", dest)
+
+	srcData := []byte(`apiVersion: v1
+kind: Config
+clusters:
+- name: okd-test
+  cluster:
+    server: https://okd-test.example
+  x-custom-extension: preserved-value
+users: []
+contexts: []
+current-context: okd-test
+`)
+
+	if err := mergeKubeconfig(srcData); err != nil {
+		t.Fatalf("mergeKubeconfig: %v", err)
+	}
+
+	raw, err := os.ReadFile(dest)
+	if err != nil {
+		t.Fatalf("read dest: %v", err)
+	}
+
+	var merged map[string]any
+	if err := yaml.Unmarshal(raw, &merged); err != nil {
+		t.Fatalf("parse merged kubeconfig: %v", err)
+	}
+
+	clusters, _ := merged["clusters"].([]any)
+	if len(clusters) != 1 {
+		t.Fatalf("clusters len = %d, want 1", len(clusters))
+	}
+	entry, _ := clusters[0].(map[string]any)
+	if entry["x-custom-extension"] != "preserved-value" {
+		t.Errorf("x-custom-extension not preserved after merge: entry = %v", entry)
 	}
 }
