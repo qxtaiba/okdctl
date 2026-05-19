@@ -646,7 +646,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `state:262af6e4:cleanup-no-resume-doc` — cleanup no resume doc
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/state-262af6e4-cleanup-resume  
 **Severity:** suggestion  
 **Cluster:** crash-recoverability  
 **Evidence:** `internal/distribution/okd/cleanup/cleanup.go:1-21`  
@@ -720,7 +720,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `err:5013fea6:auth-error-string-sniffing` — auth error string sniffing
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/err-5013fea6-auth-string-sniff  
 **Severity:** suggestion  
 **Cluster:** string-sniffing  
 **Evidence:** `internal/distribution/okd/setup/release_extract.go:92-141`  
@@ -844,7 +844,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `api:262af6e4:dual-option-types` — dual option types
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/api-262af6e4-dual-option  
 **Severity:** minor  
 **Cluster:** option-consistency  
 **Evidence:** `internal/distribution/okd/cleanup/cleanup.go:85-118`  
@@ -996,7 +996,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `ux:8154ab0f:doctor-pull-secret-config-skew-warns` — doctor pull secret config skew warns
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/ux-8154ab0f-doctor-doc  
 **Severity:** suggestion  
 **Cluster:** exit-codes — seam→audit-state-and-recovery  
 **Evidence:** `internal/cli/doctor.go:428-476`  
@@ -1102,7 +1102,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `smell:d6b325cb:duplicate-role-enum` — duplicate role enum
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/smell-d6b325cb-role-enum  
 **Severity:** minor  
 **Cluster:** magic-strings — seam→audit-api-design  
 **Evidence:** `internal/infrastructure/proxmox/types.go:42-49` + 1 more  
@@ -1214,7 +1214,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `dep:33ef32bf:exp-floor-stale-pseudoversion` — exp floor stale pseudoversion
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/dep-33ef32bf-exp-floor  
 **Severity:** suggestion  
 **Cluster:** justified-version-floor  
 **Evidence:** `go.mod:57-57`  
@@ -1254,7 +1254,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `dep:33ef32bf:proxmox-version-drift` — proxmox version drift
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/dep-33ef32bf-proxmox-version  
 **Severity:** suggestion  
 **Cluster:** maintenance-signal  
 **Evidence:** `go.mod:12-12`  
