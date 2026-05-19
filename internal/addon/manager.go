@@ -31,9 +31,9 @@ func WithExecutor(exec *executor.Executor) ManagerOption {
 	return func(m *Manager) { m.exec = exec }
 }
 
-// WithLogger attaches a logger.
+// WithLogger attaches a logger. Nil resolves to NopLogger.
 func WithLogger(l *slog.Logger) ManagerOption {
-	return func(m *Manager) { m.logger = l }
+	return func(m *Manager) { m.logger = logutil.OrNop(l) }
 }
 
 // WithProjectRoot sets the path the manager resolves addon-local resources
