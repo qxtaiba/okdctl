@@ -562,7 +562,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sec:fde34e0c:k8s-kubeconfig-env-no-validate` — k8s kubeconfig env no validate
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-fde34e0c-kubeconfig-validate  
 **Severity:** suggestion  
 **Cluster:** input-validation  
 **Evidence:** `internal/cluster/k8s.go:55-64`  
@@ -584,7 +584,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sub:a6e38cc7:no-stderr-capture` — no stderr capture
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sub-a6e38cc7-keyscan-stderr  
 **Severity:** minor  
 **Cluster:** io-handling  
 **Evidence:** `internal/sshpin/sshpin.go:41-47`  
@@ -594,7 +594,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sub:e2343d2c:no-cmd-env` — no cmd env
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sub-e2343d2c-systemd-env  
 **Severity:** minor  
 **Cluster:** io-handling  
 **Evidence:** `internal/system/systemd.go:40-68` + 2 more  
@@ -626,7 +626,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `state:b5a79fda:deploy-state-marker-stale` — deploy state marker stale
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/state-b5a79fda-deploy-marker  
 **Severity:** minor  
 **Cluster:** crash-recoverability  
 **Evidence:** `internal/cli/deploystate.go:24-86`  
@@ -660,7 +660,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `err:48688e63:cancel-identity-lost-on-tf-apply` — cancel identity lost on tf apply
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/err-48688e63-tf-cancel-identity  
 **Severity:** major  
 **Cluster:** cancellation-identity — seam→audit-concurrency  
 **Evidence:** `internal/infrastructure/proxmox/proxmox.go:195-203`  
@@ -670,7 +670,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `err:7b2829bb:exit-error-no-redact` — exit error no redact
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/err-7b2829bb-exit-error-redact  
 **Severity:** major  
 **Cluster:** redaction-in-error — seam→audit-observability — related: obs:6424733c:fmt-sprintf-message-pattern  
 **Evidence:** `internal/executor/executor.go:187-198`  
@@ -946,7 +946,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `ux:fd2125dd:args-validator-not-usageerror` — args validator not usageerror
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/ux-fd2125dd-args-usageerror  
 **Severity:** major  
 **Cluster:** exit-codes — seam→audit-errors  
 **Evidence:** `internal/cli/addon.go:62-73`  
@@ -956,7 +956,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `ux:daf5bee9:kubeconfig-status-msg-bypasses-tui` — kubeconfig status msg bypasses tui
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/ux-daf5bee9-kubeconfig-tui  
 **Severity:** minor  
 **Cluster:** streams — seam→audit-observability  
 **Evidence:** `internal/cli/kubeconfig.go:72-72`  
@@ -986,7 +986,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `ux:08ec0042:flag-output-name-collision-risk` — flag output name collision risk
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/ux-08ec0042-flag-rename  
 **Severity:** suggestion  
 **Cluster:** flag-conventions  
 **Evidence:** `internal/cli/flags.go:7-10`  
@@ -1008,7 +1008,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `obs:eb479d86:sprintf-attr-value` — sprintf attr value
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/obs-eb479d86-sprintf-attr  
 **Severity:** minor  
 **Cluster:** field-stability  
 **Evidence:** `internal/distribution/okd/setup/upload.go:138-138`  
@@ -1030,7 +1030,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `mod:ddf885f4:use-slices-contains` — use slices contains
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/mod-ddf885f4-slices-contains  
 **Severity:** minor  
 **Cluster:** slices-maps — related: mod:262af6e4:use-slices-contains  
 **Evidence:** `internal/addon/manager.go:267-275`  
@@ -1060,7 +1060,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `mod:8ea706f6:strings-lines-version` — strings lines version
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/mod-8ea706f6-strings-lines-version  
 **Severity:** suggestion  
 **Cluster:** slices-maps  
 **Evidence:** `internal/distribution/okd/setup/tools.go:260-264`  
@@ -1070,7 +1070,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `mod:c19ee328:slices-containsfunc-ignition` — slices containsfunc ignition
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/mod-c19ee328-containsfunc-ignition  
 **Severity:** suggestion  
 **Cluster:** slices-maps — related: mod:c19ee328:slices-containsfunc-allexist  
 **Evidence:** `internal/distribution/okd/setup/steps.go:186-192`  
@@ -1152,7 +1152,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `smell:62cb8a95:state-major-bounds-misnamed` — state major bounds misnamed
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/smell-62cb8a95-state-major-const  
 **Severity:** suggestion  
 **Cluster:** magic-strings  
 **Evidence:** `internal/distribution/okd/destroy/helpers.go:26-59`  
@@ -1162,7 +1162,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `smell:6424733c:metrics-shutdown-timeout-magic` — metrics shutdown timeout magic
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/smell-6424733c-metrics-timeouts  
 **Severity:** suggestion  
 **Cluster:** magic-strings  
 **Evidence:** `internal/cli/helpers.go:228-256`  
@@ -1276,7 +1276,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `doc:4c092fce:pkg-doc-name-echo` — pkg doc name echo
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/doc-4c092fce-terraform-pkgdoc  
 **Severity:** minor  
 **Cluster:** package-doc  
 **Evidence:** `internal/infrastructure/terraform/terraform.go:1-2`  
@@ -1286,7 +1286,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `doc:35abd54e:pkg-doc-thin` — pkg doc thin
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/doc-35abd54e-credentials-pkgdoc  
 **Severity:** suggestion  
 **Cluster:** package-doc  
 **Evidence:** `internal/credentials/proxmox.go:1-1`  
@@ -1296,7 +1296,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `doc:d5915b0c:pkg-doc-name-echo` — pkg doc name echo
 
-**Status:** not started  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/doc-d5915b0c-install-pkgdoc  
 **Severity:** suggestion  
 **Cluster:** package-doc  
 **Evidence:** `internal/distribution/okd/install/phase.go:1-1`  
