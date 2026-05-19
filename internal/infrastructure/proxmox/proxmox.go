@@ -212,7 +212,7 @@ func (p *Provider) Provision(ctx context.Context, cfg *config.Config, opts Provi
 	p.logger.Info("terraform: applying infrastructure changes")
 	stopSpinner := p.reporter("applying terraform infrastructure")
 	applyOpts := terraform.ApplyOptions{
-		PlanFile:    filepath.Join(p.terraformExec.WorkDir, terraform.PlanFileName),
+		PlanFile:    filepath.Join(p.terraformExec.WorkDir(), terraform.PlanFileName),
 		AutoApprove: opts.AutoApprove,
 	}
 	snapPath, snapErr := p.terraformExec.SnapshotState(ctx)

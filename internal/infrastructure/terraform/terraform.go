@@ -37,11 +37,10 @@ const defaultLockTimeout = "120s"
 type ExecError = executor.ExitError
 
 // Executor wraps terraform subcommand execution for a single working
-// directory with an optional var-file and verbose-logging toggle.
+// directory with an optional var-file override.
 type Executor struct {
-	WorkDir string
-	VarFile string
-	Verbose bool
+	workDir string
+	varFile string
 
 	exec   *executor.Executor
 	logger *slog.Logger
@@ -55,17 +54,13 @@ func WithLogger(l *slog.Logger) Option {
 	return func(e *Executor) { e.logger = logutil.OrNop(l) }
 }
 
-// WithVerbose toggles verbose subprocess logging.
-func WithVerbose(v bool) Option {
-	return func(e *Executor) {
-		e.Verbose = v
-	}
-}
-
 // WithVarFile overrides the default var-file path (<workDir>/terraform.tfvars).
 func WithVarFile(path string) Option {
-	return func(e *Executor) { e.VarFile = path }
+	return func(e *Executor) { e.varFile = path }
 }
+
+// WorkDir returns the working directory this Executor is rooted at.
+func (t *Executor) WorkDir() string { return t.workDir }
 
 // WithEnv appends environment variables to be passed to all terraform subprocess calls.
 // At execution time they are appended after the executor's allowlist-filtered
@@ -126,8 +121,8 @@ type DestroyOptions struct {
 // path (<workDir>/terraform.tfvars).
 func New(workDir string, opts ...Option) *Executor {
 	e := &Executor{
-		WorkDir: workDir,
-		VarFile: filepath.Join(workDir, "terraform.tfvars"),
+		workDir: workDir,
+		varFile: filepath.Join(workDir, "terraform.tfvars"),
 		exec:    executor.New(executor.WithWorkDir(workDir)),
 		logger:  logutil.NopLogger,
 	}
@@ -158,13 +153,13 @@ func (t *Executor) run(ctx context.Context, args ...string) error {
 // Init runs "terraform init" when the working directory is not already
 // initialized. A partial init (some artifacts missing) triggers a re-init.
 func (t *Executor) Init(ctx context.Context) error {
-	stateFile := filepath.Join(t.WorkDir, "terraform.tfstate")
+	stateFile := filepath.Join(t.workDir, "terraform.tfstate")
 	if err := checkStateMajorVersion(stateFile, t.logger); err != nil {
 		return err
 	}
 
-	terraformDir := filepath.Join(t.WorkDir, ".terraform")
-	lockFile := filepath.Join(t.WorkDir, ".terraform.lock.hcl")
+	terraformDir := filepath.Join(t.workDir, ".terraform")
+	lockFile := filepath.Join(t.workDir, ".terraform.lock.hcl")
 	providersDir := filepath.Join(terraformDir, "providers")
 
 	dirOK := system.DirExists(terraformDir)
@@ -190,7 +185,7 @@ func (t *Executor) buildVarArgs(varFile string, vars map[string]string) []string
 
 	vf := varFile
 	if vf == "" {
-		vf = t.VarFile
+		vf = t.varFile
 	}
 	if vf != "" {
 		if system.FileExists(vf) {
@@ -213,7 +208,7 @@ func (t *Executor) buildVarArgs(varFile string, vars map[string]string) []string
 // must not auto-unlock — the message names the lock ID so the operator can
 // run terraform force-unlock after confirming no live process holds it.
 func (t *Executor) LockHint() error {
-	lockFile := filepath.Join(t.WorkDir, ".terraform.tfstate.lock.info")
+	lockFile := filepath.Join(t.workDir, ".terraform.tfstate.lock.info")
 	if !system.FileExists(lockFile) {
 		return nil
 	}
@@ -224,7 +219,7 @@ func (t *Executor) LockHint() error {
 	return &errtypes.ConfigError{
 		Msg: fmt.Sprintf(
 			"terraform state locked at %s — run 'terraform force-unlock %s' in %s after confirming no other okdctl run is active",
-			lockFile, id, t.WorkDir,
+			lockFile, id, t.workDir,
 		),
 	}
 }
@@ -319,7 +314,7 @@ func (t *Executor) Destroy(ctx context.Context, opts DestroyOptions) error {
 // direct destroy because a plan failure usually signals an auth/state issue
 // the operator needs to see before mutating infra.
 func (t *Executor) destroyWithPlan(ctx context.Context, opts DestroyOptions) error {
-	planFile := filepath.Join(t.WorkDir, "destroy.tfplan")
+	planFile := filepath.Join(t.workDir, "destroy.tfplan")
 
 	planErr := t.Plan(ctx, PlanOptions{
 		VarFile:        opts.VarFile,
@@ -371,7 +366,7 @@ func (t *Executor) destroyDirect(ctx context.Context, opts DestroyOptions) error
 // parse failure the file path is logged at Warn so the operator can inspect
 // or remove the corrupt state before retrying.
 func (t *Executor) HasState() bool {
-	stateFile := filepath.Join(t.WorkDir, "terraform.tfstate")
+	stateFile := filepath.Join(t.workDir, "terraform.tfstate")
 	if !system.FileExists(stateFile) {
 		return false
 	}
@@ -401,7 +396,7 @@ func (t *Executor) SnapshotState(ctx context.Context) (string, error) {
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}
-	src := filepath.Join(t.WorkDir, "terraform.tfstate")
+	src := filepath.Join(t.workDir, "terraform.tfstate")
 	if !system.FileExists(src) {
 		return "", nil
 	}
@@ -410,7 +405,7 @@ func (t *Executor) SnapshotState(ctx context.Context) (string, error) {
 		return "", fmt.Errorf("terraform snapshot: read state: %w", err)
 	}
 	ts := strings.ReplaceAll(time.Now().UTC().Format(time.RFC3339), ":", "-")
-	dst := filepath.Join(t.WorkDir, "terraform.tfstate."+ts+".bak")
+	dst := filepath.Join(t.workDir, "terraform.tfstate."+ts+".bak")
 	if err := system.AtomicWrite(dst, data, 0o600); err != nil {
 		return "", fmt.Errorf("terraform snapshot: write %s: %w", dst, err)
 	}
@@ -423,9 +418,9 @@ func (t *Executor) SnapshotState(ctx context.Context) (string, error) {
 // because names encode UTC timestamps (lexicographic == chronological), no
 // additional sort step is needed.
 func (t *Executor) pruneSnapshots() {
-	entries, err := os.ReadDir(t.WorkDir)
+	entries, err := os.ReadDir(t.workDir)
 	if err != nil {
-		t.logger.Warn("terraform: snapshot prune: cannot read workdir", "dir", t.WorkDir, "err", err)
+		t.logger.Warn("terraform: snapshot prune: cannot read workdir", "dir", t.workDir, "err", err)
 		return
 	}
 	const retain = 5
@@ -433,7 +428,7 @@ func (t *Executor) pruneSnapshots() {
 	for _, e := range entries {
 		name := e.Name()
 		if strings.HasPrefix(name, "terraform.tfstate.") && strings.HasSuffix(name, ".bak") {
-			snaps = append(snaps, filepath.Join(t.WorkDir, name))
+			snaps = append(snaps, filepath.Join(t.workDir, name))
 		}
 	}
 	if len(snaps) <= retain {
@@ -483,8 +478,8 @@ func (t *Executor) Output(ctx context.Context) (map[string]json.RawMessage, erro
 func (t *Executor) CleanupPlans() error {
 	var errs []error
 	files := []string{
-		filepath.Join(t.WorkDir, PlanFileName),
-		filepath.Join(t.WorkDir, "destroy.tfplan"),
+		filepath.Join(t.workDir, PlanFileName),
+		filepath.Join(t.workDir, "destroy.tfplan"),
 	}
 	for _, f := range files {
 		if err := system.SafeRemove(f); err != nil && !os.IsNotExist(err) {
