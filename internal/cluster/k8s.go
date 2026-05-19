@@ -148,13 +148,9 @@ func (c *Client) runCheck(ctx context.Context, args ...string) error {
 		if stderr == "" {
 			stderr = strings.TrimSpace(result.Stdout)
 		}
-		// Return a typed *executor.ExitError so callers can errors.As to
-		// inspect ExitCode without re-parsing the message.
-		return &executor.ExitError{
-			Command:  c.CLI + " " + subcommand(args),
-			ExitCode: result.ExitCode,
-			Stderr:   stderr,
-		}
+		// On a cancelled ctx this yields context.Canceled; otherwise a
+		// typed *executor.ExitError callers can errors.As for ExitCode.
+		return executor.NewExitError(ctx, c.CLI+" "+subcommand(args), result.ExitCode, stderr)
 	}
 	return nil
 }

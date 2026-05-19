@@ -216,6 +216,17 @@ func (e *ExitError) Redacted() any {
 	}{e.Command, e.ExitCode}
 }
 
+// NewExitError returns the ctx error when ctx is already cancelled so
+// errors.Is(err, context.Canceled) propagates through the call chain,
+// letting cli/root.go::signalExitCode map SIGINT→130 / SIGTERM→143
+// instead of falling through to the generic ClusterError exit code 4.
+func NewExitError(ctx context.Context, cmd string, code int, stderr string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	return &ExitError{Command: cmd, ExitCode: code, Stderr: stderr}
+}
+
 // Run executes a command and returns its result. The returned *Result is
 // always non-nil, even when error is non-nil — callers can safely access
 // result.ExitCode and result.Stderr without a nil guard.
@@ -327,7 +338,7 @@ func (e *Executor) RunStreamedChecked(ctx context.Context, name string, args ...
 		return result, err
 	}
 	if result.ExitCode != 0 {
-		return result, &ExitError{Command: name, ExitCode: result.ExitCode, Stderr: result.Stderr}
+		return result, NewExitError(ctx, name, result.ExitCode, result.Stderr)
 	}
 	return result, nil
 }
@@ -385,7 +396,7 @@ func (e *Executor) RunChecked(ctx context.Context, name string, args ...string) 
 		return result, err
 	}
 	if result.ExitCode != 0 {
-		return result, &ExitError{Command: name, ExitCode: result.ExitCode, Stderr: result.Stderr}
+		return result, NewExitError(ctx, name, result.ExitCode, result.Stderr)
 	}
 	return result, nil
 }
@@ -397,7 +408,7 @@ func (e *Executor) RunWithStdinChecked(ctx context.Context, input, name string, 
 		return result, err
 	}
 	if result.ExitCode != 0 {
-		return result, &ExitError{Command: name, ExitCode: result.ExitCode, Stderr: result.Stderr}
+		return result, NewExitError(ctx, name, result.ExitCode, result.Stderr)
 	}
 	return result, nil
 }

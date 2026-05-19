@@ -119,6 +119,9 @@ func (p *Phase) extractReleaseImage(ctx context.Context, ocPath, ref, destDir st
 		return &errtypes.ClusterError{Msg: fmt.Sprintf("release extract failed for %s", ref), Err: err}
 	}
 	if result.ExitCode != 0 {
+		if err := extractCtx.Err(); err != nil {
+			return fmt.Errorf("release extract cancelled: %w", err)
+		}
 		msg := strings.TrimSpace(result.Stderr)
 		p.Log.Error("tools: oc adm release extract failed", "ref", ref, "stderr", logutil.RedactableStderr(msg))
 		// Exit code is the primary signal; stderr-text is a secondary lift.
