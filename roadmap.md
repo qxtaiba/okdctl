@@ -618,16 +618,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Wrap each in the right errtypes value: usage failures → &errtypes.UsageError{Msg: "..."} (exit 64); kubeconfig.go:49 → &errtypes.ConfigError{Msg: ..., Err: errtypes.ErrConfigMissing} (exit 66); addon.go:255 → &errtypes.ClusterError{...} (exit 4); elevation.go:104 → &errtypes.ConfigError{Msg: ..., Err: err} (exit 2). Mechanical, ~15 sites, ~+30 LOC.  
 **Effort:** hours
 
-##### `err:6424733c:env-file-double-context` — env file double context
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/err-6424733c-env-double-ctx  
-**Severity:** minor  
-**Cluster:** wrapping  
-**Evidence:** `internal/cli/helpers.go:53-55` + 2 more  
-**Problem:** loadEnvFile callers wrap with 'load env file <path>: %w' on top of an inner ConfigError/AuthError that already names the path ('failed to open env file <path>', '.env file has insecure permissions ...'). Result: 'load env file /home/x/okdctl.env: failed to open env file /home/x/okdctl.env: open /home/x/okdctl.env: ...'. errors.As traversal still finds the typed inner so exit code is preserved — the cost is purely operator-readability double-context. Three sites.  
-**Fix:** Drop the outer wrap and return err directly: 'if err := credentials.LoadEnvFile(envPath); err != nil { return nil, err }'. The inner ConfigError/AuthError already names the path. Three sites: helpers.go:53-55, deploy.go:147, deploy.go:246. Net -6 LOC.  
-**Effort:** hours
-
 ##### `err:c19ee328:phase-step-bare-fmt-errorf` — phase step bare fmt errorf
 
 **Status:** in review — PR #659  
@@ -648,27 +638,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Centralise: at every ExitError construction site, prefer ctx.Err() when ctx is cancelled. Cleanest landing is a helper in executor: 'func newExitError(ctx context.Context, cmd string, code int, stderr string) error { if err := ctx.Err(); err != nil { return err }; return &ExitError{Command: cmd, ExitCode: code, Stderr: stderr} }'. 7 call sites use it. Net +6 LOC.  
 **Effort:** hours
 
-##### `err:9f8e7d6c:errtypes-vocab-cert-pending` — errtypes vocab cert pending
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/err-9f8e7d6c-errtypes-vocab  
-**Severity:** suggestion  
-**Cluster:** domain-vocabulary — seam→audit-cli-ux  
-**Evidence:** `internal/errtypes/errtypes.go:1-111`  
-**Problem:** errtypes vocabulary has 5 concepts (Config/Network/Cluster/Auth/Usage) but no concept for 'transient' / 'recoverable' failures (a vip cert not yet rotated, a CSR pending approval, an oc operator still settling). Today these are forced into ClusterError, then cli maps to exit 4 and shell scripts cannot tell 'cluster permanently degraded' from 'wait and retry'. Suggestion-grade because no caller is forced to mis-classify today; the hole emerges when a retry-aware shell wrapper appears.  
-**Fix:** Verify intent (grep roadmap.md, ask owner) — do not delete; per MEMORY.md §scaffolding.  
-**Effort:** hours
-
 #### audit-concurrency
-
-##### `con:15ba17da:tracker-mu-not-needed-yet` — tracker mu not needed yet
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/con-15ba17da-tracker-mu  
-**Severity:** suggestion  
-**Cluster:** waitgroup-vs-errgroup  
-**Evidence:** `internal/distribution/okd/destroy/steps.go:32-69`  
-**Problem:** destroyTracker.mu sync.RWMutex guards two []string slices. Orchestrator.Run executes steps serially (orchestrator.go:L76-L98) — there is no concurrent caller of onError or skipWhen today. The mutex is forward-looking (consistent with internal/distribution/context.go:L13's documented forward-looking RWMutex), but unlike context.go this site has no comment naming the future parallel-step mode.  
-**Fix:** Verify intent (grep roadmap.md, ask owner) — do not delete; per MEMORY.md §scaffolding.  
-**Effort:** hours
 
 ##### `con:181efc90:spinner-canonical` — spinner canonical
 
@@ -742,16 +712,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 #### audit-api-design
 
-##### `api:7b2829bb:zeroize-asymmetry` — zeroize asymmetry
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/api-7b2829bb-zeroize-asymmetry  
-**Severity:** major  
-**Cluster:** exported-surface — seam→audit-security — related: sec:7b2829bb:executor-no-zeroize, sec:35abd54e:env-string-residue  
-**Evidence:** `internal/executor/executor.go:38-92` + 2 more  
-**Problem:** Sibling exec wrappers diverge on credential lifecycle: terraform.Executor.ZeroizeEnv (terraform.go:L346-L364) and okd.Provisioner.ZeroizeEnv (okd.go:L198-L216) both clear cred-bearing entries from their inner executor.Env, but executor.Executor itself has no ZeroizeEnv method — the canonical exec wrapper lacks the symmetric API its two consumers hand-roll. The duplicated bodies are byte-identical (PROXMOX_VE_PASSWORD/PROXMOX_VE_API_TOKEN allowlist) and parallel the well-formed Zeroize methods on credentials.ProxmoxCredentials.  
-**Fix:** Add executor.Executor.ZeroizeEnv() that walks e.Env, blanks any entry whose key is in a secretKeyAllowlist (PROXMOX_VE_PASSWORD, PROXMOX_VE_API_TOKEN at minimum; optionally widen to logutil.RedactHandler's secret-key fragments), then clear()s and nils the slice. Replace the bodies in terraform.go:L352-L364 and okd.go:L204-L216 with calls to the new method (`t.exec.ZeroizeEnv()`, `p.executor.ZeroizeEnv()`). Net LOC: -16 (two body removals replaced by single producer-side method).  
-**Effort:** hours
-
 ##### `api:4c092fce:terraform-mixed-shape` — terraform mixed shape
 
 **Status:** not started  
@@ -782,16 +742,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Add executor.Executor.AppendEnv(kvs ...string) (or executor.Executor.SetEnvVar(key, value string)) and have SetupKubeconfig call it instead of append-on-public-field. Then unexport Executor.Env (renaming to env) — the only remaining external readers (terraform.WithEnv(p.Exec.Env), proxmox.WithEnv(p.Exec.Env)) become callers of e.Exec.SnapshotEnv() or a getter. Pairs with api:7b2829bb (ZeroizeEnv) — the same refactor closes both gaps.  
 **Effort:** hours
 
-##### `api:0139cb3f:bin-dir-fan-out` — bin dir fan out
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/api-0139cb3f-bindir-doc  
-**Severity:** suggestion  
-**Cluster:** exported-surface  
-**Evidence:** `internal/distribution/okd/phase/paths.go:52-97`  
-**Problem:** phase.{ResolveBinDir, PreflightBinDir, BinDirOrDefault} is a three-function surface where each consults a different input source. The doc-comment on BinDirOrDefault explicitly names this as scaffolding ('three-function bin-dir-resolution surface; each function consults a different input source'). Defense-in-depth justification is plausible but the API forces every caller to pick one of three nearly-indistinguishable verbs.  
-**Fix:** Verify intent (grep roadmap.md, ask owner) — do not delete; per MEMORY.md §scaffolding.  
-**Effort:** hours
-
 ##### `api:48688e63:ctx-symmetry-no-network` — ctx symmetry no network
 
 **Status:** not started  
@@ -810,26 +760,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/distribution/okd/okd.go:198-216`  
 **Problem:** Provisioner.ZeroizeEnv is exported but its only caller is internal/cli/helpers.go (in defer chain). It mirrors terraform.Executor.ZeroizeEnv with byte-identical body. The api-design pressure: this is a credential-lifecycle method that belongs lower in the stack (executor.Executor, the field owner) — see api:7b2829bb. The current location is symmetric-with-terraform but redundant once executor exposes ZeroizeEnv.  
 **Fix:** Verify intent (grep roadmap.md, ask owner) — do not delete; per MEMORY.md §scaffolding.  
-**Effort:** hours
-
-##### `api:e2343d2c:unused-trailing-param` — unused trailing param
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/api-e2343d2c-unused-param  
-**Severity:** suggestion  
-**Cluster:** exported-surface  
-**Evidence:** `internal/system/systemd.go:31-46`  
-**Problem:** system.ManageService(ctx, action, serviceName, _ string) takes a fourth string parameter that is named `_` and has no documented purpose. The signature is exported so removing the param is a breaking change, but the param is genuinely unused (the function body never reads it). Either name and document it (does it carry a unit-file path? a target?) or remove it.  
-**Fix:** Drop the unused parameter; sweep callers (RHS of `ManageService(ctx, ServiceStop, "haproxy", ...)` becomes 3-arg). If a future use case (description? target?) is anticipated, leave a one-line comment naming the intent and the issue/roadmap entry that drives the addition.  
-**Effort:** hours
-
-##### `api:fde34e0c:k8sclient-pkg-stutter` — k8sclient pkg stutter
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/api-fde34e0c-k8sclient-rename  
-**Severity:** suggestion  
-**Cluster:** exported-surface  
-**Evidence:** `internal/cluster/k8s.go:20-88`  
-**Problem:** cluster.K8sClient and cluster.NewK8sClient — `cluster.K8sClient` stutters (the package is named cluster; the typename should be `Client`). Go style guide §Packages explicitly flags this: bufio.Reader, not bufio.BufReader. Constructor NewK8sClient is the sole exported constructor in the package; no other Client variants justify the qualifier.  
-**Fix:** Rename K8sClient → Client and NewK8sClient → New. cluster.Client / cluster.New(...) reads naturally and aligns with executor.Executor / executor.New, terraform.Executor / terraform.New, proxmox.Provider / proxmox.New. Five call sites (install/, postinstall/, cli/) plus one test file. revive's var-naming rule is enabled and would catch this in a fresh repo; suppression is implicit because the package was named first.  
 **Effort:** hours
 
 #### audit-cli-ux
@@ -854,16 +784,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Replace fmt.Fprintf(os.Stderr, ...) with tui.Info("kubeconfig written", tui.LF("path", kubeconfigOutput)) and tui.Info("kubeconfig merged", tui.LF("path", dest)). Matches CLAUDE.md §credentials-and-secrets directive that all log sinks pass through RedactHandler so future fields cannot leak.  
 **Effort:** hours
 
-##### `ux:fd2125dd:install-use-bracket-syntax` — install use bracket syntax
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/ux-fd2125dd-install-use  
-**Severity:** minor  
-**Cluster:** verb-noun  
-**Evidence:** `internal/cli/addon.go:44-44`  
-**Problem:** addonInstallCmd.Use is `install [name | --all]`. Cobra's Use field is a positional-arg signature, not a help-string; standard cobra renders flags via the Options block, not in the synopsis. The pipe-bar `|` is non-standard cobra and reads as if --all is itself a positional. The Args validator already enforces the mutual exclusion at runtime; the synopsis should be `install [name]` with --all surfacing in Long and Example.  
-**Fix:** Change Use to `install [name]`. The Long block already explains the --all flow (L51-L61); the Example block already shows both shapes. Matches releases show `Use: "show <version>"` and describe node `Use: "node <name>"` — flags never appear in cobra Use across the repo.  
-**Effort:** hours
-
 ##### `ux:08ec0042:flag-output-name-collision-risk` — flag output name collision risk
 
 **Status:** not started (already implemented in commit 08d3e35 — needs archive, not pickup)  
@@ -884,16 +804,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/distribution/okd/setup/upload.go:138-138`  
 **Problem:** `p.Log.Info("iso: uploading", "count", ..., "size_mb", fmt.Sprintf("%.1f", totalSizeMB), ...)` pre-renders a float to a string before the slog handler sees it. The c07157e migration swept message-arg fmt.Sprintf but missed this attr-value form. JSON output emits `"size_mb": "123.4"` (string) instead of `"size_mb": 123.4` (number), which breaks downstream tooling that types the field as a number and forces consumers to re-parse.  
 **Fix:** Drop the Sprintf wrapper and pass the float directly: `"size_mb", totalSizeMB`. Slog's JSON handler emits float64 with full precision; if the precision-1 rendering is load-bearing for the text formatter, push the rounding down by one level (compute roundedMB := math.Round(totalSizeMB*10)/10 and pass that float). Net 0 LOC.  
-**Effort:** hours
-
-##### `obs:48688e63:proxmox-probe-failure-as-info` — proxmox probe failure as info
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/obs-48688e63-probe-info  
-**Severity:** suggestion  
-**Cluster:** level-discipline  
-**Evidence:** `internal/infrastructure/proxmox/proxmox.go:382-397`  
-**Problem:** probeVMEnumeration logs three failure-or-fallback paths at Info: 'pvesh probe skipped' (L382), 'pvesh probe payload unparseable' (L389), 'vm not yet enumerable, install phase will retry' (L397). The first two are best-effort fallbacks (the function intentionally treats unreachable/parse-fail as 'do not suppress per-VM logs') — those belong at Debug. The third is genuine retry-pending state and is correct at Info. Today the function is called once per provision so the spam is bounded; if it ever moves into a poll loop the chatter compounds.  
-**Fix:** Drop both probe-fallback Info calls to Debug. L397 ('vm not yet enumerable, install phase will retry') stays at Info — it announces a deferred operation. Net 0 LOC.  
 **Effort:** hours
 
 #### audit-modernization
@@ -918,16 +828,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Optional. The for-i form is already clear. If a third+fourth callsite appear, land a small `mapSlice[T,U](in []T, fn func(T) U) []U` helper. Don't land in isolation — there's no Go 1.x-specific reason to migrate.  
 **Effort:** hours
 
-##### `mod:8ea706f6:strings-lines-fingerprint` — strings lines fingerprint
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/mod-8ea706f6-strings-lines-fp  
-**Severity:** suggestion  
-**Cluster:** slices-maps — related: mod:8ea706f6:strings-lines-version  
-**Evidence:** `internal/distribution/okd/setup/tools.go:346-362`  
-**Problem:** verifyHashiCorpGPGFingerprint uses `for _, line := range strings.Split(string(out), "\n")` to walk gpg --with-colons output. strings.Lines avoids the slice allocation and matches the repo norm. Same file already does this kind of split twice (L260 and here); both should land together.  
-**Fix:** Change to `for line := range strings.Lines(string(out)) { line = strings.TrimRight(line, "\n"); ... }`. Fingerprint comparison is unaffected — it operates on the trimmed field-9, not on the whole line.  
-**Effort:** hours
-
 ##### `mod:8ea706f6:strings-lines-version` — strings lines version
 
 **Status:** in review — PR #623  
@@ -946,16 +846,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/distribution/okd/setup/steps.go:186-192`  
 **Problem:** AlreadyDone for StepGenerateIgnition repeats the same all-files-present pattern: iterate ignitionFilenames, return false on the first missing one. Twin to mod:c19ee328:slices-containsfunc-allexist; both should land together.  
 **Fix:** `return !slices.ContainsFunc(ignitionFilenames, func(f string) bool { return !system.FileExists(filepath.Join(clusterDir, f)) }), nil`. Same semantics; matches the prevailing repo idiom.  
-**Effort:** hours
-
-##### `mod:eb479d86:use-slices-containsfunc` — use slices containsfunc
-
-**Status:** not started (already implemented in develop at upload.go:190-194 — needs archive, not pickup)  
-**Severity:** suggestion  
-**Cluster:** slices-maps  
-**Evidence:** `internal/distribution/okd/setup/upload.go:171-176`  
-**Problem:** isoUploadAlreadyDone iterates isoFiles short-circuiting on the first 'needs upload' result. slices.ContainsFunc expresses the same any-true-then-stop semantics in one line and matches the repo's prevailing pattern (verify.go, status.go, executor.go all use ContainsFunc for any-of checks).  
-**Fix:** Collapse to `if slices.ContainsFunc(isoFiles, func(f string) bool { return isoUploadNeeded(ctx, p.Exec, host, knownHostsPath, remotePath, f) }) { return false, nil }; return true, nil`. ContainsFunc preserves the short-circuit ordering of the SSH probes.  
 **Effort:** hours
 
 #### audit-code-smells
@@ -1000,16 +890,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Replace the body with `strings.EqualFold(response, "y") || strings.EqualFold(response, "yes")` for case-insensitive match in one shot. Three literals -> two with no semantic loss; keeps in this package because the wizard parser is intentionally separate (looser vocabulary).  
 **Effort:** hours
 
-##### `smell:5013fea6:auth-error-string-sniff` — auth error string sniff
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/smell-5013fea6-auth-sniff  
-**Severity:** suggestion  
-**Cluster:** magic-strings — seam→audit-errors  
-**Evidence:** `internal/distribution/okd/setup/release_extract.go:92-141`  
-**Problem:** `isAuthError` classifies registry failures by lowercase substring search of the stderr against ["unauthorized","authentication","denied","forbidden","no basic auth","401","403"]. Error-string sniffing is the canonical un-idiomatic pattern: a registry that drifts wording silently downgrades a credential failure to a generic ClusterError. The repo already wraps in errtypes.AuthError elsewhere; the dispatch from oc stderr should look at the typed exit code first (it does — 1 / 125) and a structured marker second (oc emits JSON --output=json envelopes for newer versions).  
-**Fix:** Document this site as the canonical 'string-sniff is acknowledged tech debt' boundary if no structured signal exists in oc, OR add `oc adm release extract --output=json` and parse the typed error envelope. If kept, deduplicate the lowercasing once outside the loop (already done) and add a TODO linking the upstream openshift/oc issue once filed.  
-**Effort:** hours
-
 ##### `smell:62cb8a95:state-major-bounds-misnamed` — state major bounds misnamed
 
 **Status:** in review — PR #629  
@@ -1030,27 +910,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Lift the four durations to package-level `const metricsReadHeaderTimeout = 5 * time.Second` etc. above startMetricsServer, with a single doc comment explaining 'Prometheus scrapers reconnect every interval; idle 60s leaves slack for slow scrapers'.  
 **Effort:** hours
 
-##### `smell:daf5bee9:any-yaml-traversal` — any yaml traversal
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/smell-daf5bee9-yaml-traversal  
-**Severity:** suggestion  
-**Cluster:** interfaceany-lazy  
-**Evidence:** `internal/cli/kubeconfig.go:141-175`  
-**Problem:** `namedEntries` and `mergeNamedList` walk an unmarshalled kubeconfig as `map[string]any` of `[]any` of `map[string]any`. The kubeconfig schema is small and stable (clusters/contexts/users with .name); a typed shape would let the merge avoid four `, ok := ... .(...)` assertions per call. The `any`-soup makes a typo on the "name" key impossible to catch.  
-**Fix:** Define a small private struct shape (`type namedItem struct { Name string `+"`"+`json:"name"`+"`"+`; raw map[string]any }`) and unmarshal both kubeconfigs into `struct { Clusters, Users, Contexts []namedItem }`. mergeNamedList becomes a typed loop. Risk medium because a typed model has to reproduce yaml round-trip fidelity for unknown fields — easy enough with raw json.RawMessage but worth a test.  
-**Effort:** hours
-
 #### audit-dependencies
-
-##### `dep:33ef32bf:yaml-quad-engines` — yaml quad engines
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/dep-33ef32bf-yaml-engines-doc  
-**Severity:** minor  
-**Cluster:** duplicate-engine  
-**Evidence:** `go.sum:125-153`  
-**Problem:** go.sum still lists four YAML engines: sigs.k8s.io/yaml v1.6.0 (direct), go.yaml.in/yaml/v2 v2.4.3 (transitive), go.yaml.in/yaml/v3 v3.0.4 (transitive), and gopkg.in/yaml.v3 v3.0.1 (transitive via testify/check.v1). CLAUDE.md tripwire claims the count is 'down from four' to three, but the fourth (gopkg.in/yaml.v3) is still pulled via testify's gopkg.in/check.v1 dep tree.  
-**Fix:** Either (a) update CLAUDE.md §dependencies tripwire text to read 'four YAML engines (one direct + three transitive)' so the running count matches reality, or (b) prune testify→gopkg.in/check.v1 by dropping testify if it is not actually used in okdctl tests (grep finds zero call sites). No code change either way; this is a doc/policy reconciliation.  
-**Effort:** hours
 
 ##### `dep:3295df72:transitive-test-deps-from-proxmox` — transitive test deps from proxmox
 
