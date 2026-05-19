@@ -142,7 +142,7 @@ func (p *Phase) UploadCustomISOsToProxmox(ctx context.Context, cfg *config.Confi
 	user := "root"
 	remotePath := phase.DefaultProxmoxISODir
 
-	knownHostsPath, err := sshpin.Verify(ctx, host, cfg.Provider.Proxmox.SSHHostFingerprint, p.Log)
+	knownHostsPath, err := sshpin.Verify(ctx, host, cfg.Provider.Proxmox.SSHHostFingerprint, cfg.Provider.Proxmox.RequirePinnedFingerprint, p.Log)
 	if err != nil {
 		return &errtypes.NetworkError{Msg: "proxmox host key verification failed", Err: err}
 	}
@@ -192,7 +192,7 @@ func (p *Phase) isoUploadAlreadyDone(ctx context.Context, cfg *config.Config, op
 	}
 	host := phase.ProxmoxBareHost(cfg.Provider.Proxmox.Host)
 	remotePath := phase.DefaultProxmoxISODir
-	knownHostsPath, err := sshpin.Verify(ctx, host, cfg.Provider.Proxmox.SSHHostFingerprint, p.Log)
+	knownHostsPath, err := sshpin.Verify(ctx, host, cfg.Provider.Proxmox.SSHHostFingerprint, cfg.Provider.Proxmox.RequirePinnedFingerprint, p.Log)
 	if err != nil {
 		return false, err
 	}

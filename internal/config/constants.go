@@ -33,10 +33,11 @@ const (
 	FieldNetworkingStaticIPNetmask = "networking.static_ip.netmask"
 	FieldNetworkingStaticIPIface   = "networking.static_ip.interface"
 
-	FieldProxmoxHost         = "provider.proxmox.host"
-	FieldProxmoxNode         = "provider.proxmox.node"
-	FieldProxmoxStorage      = "provider.proxmox.storage"
-	FieldProxmoxInsecureHTTP = "provider.proxmox.insecure_http"
+	FieldProxmoxHost                     = "provider.proxmox.host"
+	FieldProxmoxNode                     = "provider.proxmox.node"
+	FieldProxmoxStorage                  = "provider.proxmox.storage"
+	FieldProxmoxInsecureHTTP             = "provider.proxmox.insecure_http"
+	FieldProxmoxRequirePinnedFingerprint = "provider.proxmox.require_pinned_fingerprint"
 
 	FieldFilesSSHPublicKey = "files.ssh_public_key"
 	FieldFilesPullSecret   = "files.pull_secret" //nolint:gosec // field name constant, not a credential

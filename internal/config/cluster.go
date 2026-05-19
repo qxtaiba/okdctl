@@ -135,6 +135,11 @@ type ProxmoxConfig struct {
 	// unset, accept-new TOFU applies and the observed fingerprints are
 	// logged at WARN so the operator can pin one.
 	SSHHostFingerprint string `json:"ssh_host_fingerprint,omitempty"`
+	// RequirePinnedFingerprint fails closed when SSHHostFingerprint is not
+	// set: sshpin.Verify returns an AuthError instead of the WARN+TOFU
+	// fallback. Intended for security-sensitive deploys. Default false
+	// preserves existing accept-new behaviour.
+	RequirePinnedFingerprint bool `json:"require_pinned_fingerprint,omitempty"`
 }
 
 // redactedProxmoxConfig is the safe projection of ProxmoxConfig returned by
@@ -142,22 +147,23 @@ type ProxmoxConfig struct {
 // carrying a *ProxmoxConfig cannot reach those fields through RedactHandler's
 // interface dispatch.
 type redactedProxmoxConfig struct {
-	Host               string
-	Node               string
-	Storage            string
-	DataStorage        string
-	ISOStorage         string
-	Bridge             string
-	FCOSIso            string
-	TokenID            string
-	Insecure           bool
-	InsecureHTTP       bool
-	CPUType            string
-	AdditionalNetworks []AdditionalNetwork
-	NUMAEnabled        bool
-	MasterNodes        []string
-	WorkerNodes        []string
-	SSHHostFingerprint string
+	Host                     string
+	Node                     string
+	Storage                  string
+	DataStorage              string
+	ISOStorage               string
+	Bridge                   string
+	FCOSIso                  string
+	TokenID                  string
+	Insecure                 bool
+	InsecureHTTP             bool
+	CPUType                  string
+	AdditionalNetworks       []AdditionalNetwork
+	NUMAEnabled              bool
+	MasterNodes              []string
+	WorkerNodes              []string
+	SSHHostFingerprint       string
+	RequirePinnedFingerprint bool
 }
 
 // Redacted returns a struct containing only the non-credential fields of p,
@@ -167,22 +173,23 @@ func (p *ProxmoxConfig) Redacted() any {
 		return nil
 	}
 	return redactedProxmoxConfig{
-		Host:               p.Host,
-		Node:               p.Node,
-		Storage:            p.Storage,
-		DataStorage:        p.DataStorage,
-		ISOStorage:         p.ISOStorage,
-		Bridge:             p.Bridge,
-		FCOSIso:            p.FCOSIso,
-		TokenID:            p.TokenID,
-		Insecure:           p.Insecure,
-		InsecureHTTP:       p.InsecureHTTP,
-		CPUType:            p.CPUType,
-		AdditionalNetworks: p.AdditionalNetworks,
-		NUMAEnabled:        p.NUMAEnabled,
-		MasterNodes:        p.MasterNodes,
-		WorkerNodes:        p.WorkerNodes,
-		SSHHostFingerprint: p.SSHHostFingerprint,
+		Host:                     p.Host,
+		Node:                     p.Node,
+		Storage:                  p.Storage,
+		DataStorage:              p.DataStorage,
+		ISOStorage:               p.ISOStorage,
+		Bridge:                   p.Bridge,
+		FCOSIso:                  p.FCOSIso,
+		TokenID:                  p.TokenID,
+		Insecure:                 p.Insecure,
+		InsecureHTTP:             p.InsecureHTTP,
+		CPUType:                  p.CPUType,
+		AdditionalNetworks:       p.AdditionalNetworks,
+		NUMAEnabled:              p.NUMAEnabled,
+		MasterNodes:              p.MasterNodes,
+		WorkerNodes:              p.WorkerNodes,
+		SSHHostFingerprint:       p.SSHHostFingerprint,
+		RequirePinnedFingerprint: p.RequirePinnedFingerprint,
 	}
 }
 
