@@ -530,16 +530,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Add executor.Executor.ZeroizeEnv() mirroring terraform.Executor.ZeroizeEnv (terraform.go:L347-L364). Update internal/distribution/okd/install/* and internal/infrastructure/proxmox/proxmox.go to defer e.Exec.ZeroizeEnv() at end of phases that pass creds.Env(). Document the residual-string boundary in CLAUDE.md §credentials-and-secrets so future env-passing sites follow the same defer pattern.  
 **Effort:** hours
 
-##### `sec:48688e63:proxmox-host-no-revalidate` — proxmox host no revalidate
-
-**Status:** in review — PR #631  
-**Severity:** minor  
-**Cluster:** input-validation  
-**Evidence:** `internal/infrastructure/proxmox/proxmox.go:103-121`  
-**Problem:** Provider.Connect captures cfg.Provider.Proxmox.Host into p.host without re-validating, then passes it to phase.ProxmoxBareHost which strips scheme/port. config.validateProxmoxConfig (validators.go:L228-277) does validate on load, but a config struct constructed by other paths (wizard, programmatic test) can bypass that validation. The result threads into pveshRun's argv and into SSHRunArgv at the executor seam — the per-call validateProxmoxName guard catches Node, but Host has no equivalent.  
-**Fix:** In Provider.Connect, after p.host is captured, run config.ValidateProxmoxHost (already exported in validators.go) and return *errtypes.ConfigError on failure. Mirrors phase.validateProxmoxName at the pveshRun boundary.  
-**Effort:** hours
-
 ##### `sec:a6e38cc7:keyscan-no-strict-baseline` — keyscan no strict baseline
 
 **Status:** not started  
@@ -572,16 +562,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 #### audit-subprocess
 
-##### `sub:7b2829bb:no-cancel-func` — no cancel func
-
-**Status:** in review — PR #630  
-**Severity:** major  
-**Cluster:** timeout-cancel — seam→audit-concurrency  
-**Evidence:** `internal/executor/executor.go:310-329`  
-**Problem:** RunInteractive calls exec.CommandContext but does not set cmd.Cancel + cmd.WaitDelay, so on ctx cancellation Go's default behaviour is SIGKILL the process. terraform.PlanStreamed flows through this path — a kill-9 mid-plan/apply leaves .terraform.tfstate.lock.info orphaned because terraform never receives SIGINT to release it gracefully. install/monitor.go::defaultStartMonitorCmd at L25-L33 is the canonical pattern this site should mirror.  
-**Fix:** Mirror monitor.go: set cmd.Cancel = func() error { return cmd.Process.Signal(syscall.SIGINT) } (terraform's documented soft-cancel signal) and cmd.WaitDelay = 30 * time.Second. Apply the same pair to Run/RunStreamed if they ever spawn a child that holds external locks.  
-**Effort:** hours
-
 ##### `sub:a6e38cc7:no-stderr-capture` — no stderr capture
 
 **Status:** in review — PR #618  
@@ -612,16 +592,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/infrastructure/proxmox/proxmox.go:159-227`  
 **Problem:** Provider.Provision delegates retry/backoff to the bpg/proxmox terraform provider via the doc-comment 'mutation invariant' — fair. But there is no okdctl-side retry around `terraform init` itself: if the Proxmox API is briefly unreachable while terraform tries to download the provider plugin or fetch its initial schema, init fails with a network error, the orchestrator marks StepDeployInfra failed (fatal — only StepDeployInfra is the only fatal in install), and the operator must re-run the entire deploy. There's no per-step retry seam.  
 **Fix:** Wrap terraform.Executor.Init in a 3-attempt retry-with-jitter for transient errors (network EAI_AGAIN, 5xx-class executor.ExitError). Reuse internal/download's retryDownload pattern referenced in the proxmox.go doc-comment. Apply already retries via the provider; init is the gap.  
-**Effort:** hours
-
-##### `state:6424733c:project-marker-stale` — project marker stale
-
-**Status:** in review — PR #632  
-**Severity:** minor  
-**Cluster:** crash-recoverability  
-**Evidence:** `internal/cli/helpers.go:115-162`  
-**Problem:** hasProjectMarker accepts EITHER okdctl.yaml, okdctl.env, or any terraform.tfstate under environments/. After a successful destroy that ran the cleanup phase, terraform.tfstate may still be present (cleanup intentionally preserves it for resumability), AND okdctl.yaml may have been removed via `rm`, AND okdctl.env may have been deleted by an operator paranoid about credentials. The hasProjectMarker check then succeeds purely on a leftover terraform.tfstate, allowing okdctl deploy to run with a default config it just generated, against state from a different cluster. The marker is OR-of-three; nothing checks consistency across them.  
-**Fix:** When only terraform.tfstate is found (no okdctl.yaml, no okdctl.env), require an additional consistency check: parse the tfstate's outputs.cluster_name (if present) and warn the operator. OR demand okdctl.yaml as the primary marker and treat the tfstate as a secondary 'recovery hint' the resolveProjectRootOrDie message names explicitly.  
 **Effort:** hours
 
 ##### `state:b5a79fda:deploy-state-marker-stale` — deploy state marker stale
@@ -832,16 +802,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Add executor.Executor.ZeroizeEnv() that walks e.Env, blanks any entry whose key is in a secretKeyAllowlist (PROXMOX_VE_PASSWORD, PROXMOX_VE_API_TOKEN at minimum; optionally widen to logutil.RedactHandler's secret-key fragments), then clear()s and nils the slice. Replace the bodies in terraform.go:L352-L364 and okd.go:L204-L216 with calls to the new method (`t.exec.ZeroizeEnv()`, `p.executor.ZeroizeEnv()`). Net LOC: -16 (two body removals replaced by single producer-side method).  
 **Effort:** hours
 
-##### `api:25fa1be8:positional-logger` — positional logger
-
-**Status:** in review — PR #634  
-**Severity:** minor  
-**Cluster:** option-consistency  
-**Evidence:** `internal/distribution/okd/firewall/firewall.go:83-246`  
-**Problem:** Package-level firewall.{Configure, RemoveRules, ConfigureOKD, RemoveOKDRules, DetectBackend} all take *slog.Logger as the trailing positional parameter. Every other phase-helper package takes the logger via a constructor option (phase.WithLogger, addon.WithLogger, cluster.WithLogger, executor.WithLogger, terraform.WithLogger, proxmox.WithLogger). The mismatch forces 5 call sites in 4 packages to thread p.Log through the call rather than picking it up via the BasePhase. Five public functions in this package, all positional-logger.  
-**Fix:** Promote firewall to a small struct with functional options: `func New(opts ...Option) *Firewall` returning a struct that holds the logger, then methods (*Firewall).Configure(ctx, ports, permanent), .RemoveRules(...), .ConfigureOKD(...). Either keep the package-level free functions for backward compat or convert call sites in destroy/steps.go, postinstall/haproxy.go, cleanup/services.go, setup/steps.go (4 sites) to construct via firewall.New(firewall.WithLogger(p.Log)). Aligns with phase.BasePhaseOption / addon.ManagerOption / executor.Option naming.  
-**Effort:** hours
-
 ##### `api:262af6e4:dual-option-types` — dual option types
 
 **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/api-262af6e4-dual-option  
@@ -912,16 +872,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Verify intent (grep roadmap.md, ask owner) — do not delete; per MEMORY.md §scaffolding.  
 **Effort:** hours
 
-##### `api:ddf885f4:nil-logger-not-normalized` — nil logger not normalized
-
-**Status:** in review — PR #633  
-**Severity:** suggestion  
-**Cluster:** zero-value-usability  
-**Evidence:** `internal/addon/manager.go:34-57`  
-**Problem:** addon.WithLogger does not normalize nil to NopLogger — it sets m.logger = l verbatim. NewManager (L48-57) post-applies opts and only normalizes nil at construction-end. So the documented 'nil tolerated' contract works, but the option function itself isn't nil-safe in isolation: a future option-application order change could expose the nil to logger calls. cluster.WithLogger and terraform.WithLogger use logutil.OrNop inside the option function so nil-safety is option-local.  
-**Fix:** In manager.go:L35-37, change `m.logger = l` to `m.logger = logutil.OrNop(l)`. Aligns with cluster.WithLogger and terraform.WithLogger. Drops the construction-end nil guard at NewManager:L53-55 (unnecessary once each option is nil-safe). Sweep phase.WithLogger (paths.go:L154) for the same pattern — it is also field-direct rather than OrNop-wrapped, but NewBasePhase normalizes at construction-end. Either pattern is OK if applied uniformly across the audited siblings.  
-**Effort:** hours
-
 ##### `api:e2343d2c:unused-trailing-param` — unused trailing param
 
 **Status:** not started  
@@ -972,16 +922,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/cli/addon.go:44-44`  
 **Problem:** addonInstallCmd.Use is `install [name | --all]`. Cobra's Use field is a positional-arg signature, not a help-string; standard cobra renders flags via the Options block, not in the synopsis. The pipe-bar `|` is non-standard cobra and reads as if --all is itself a positional. The Args validator already enforces the mutual exclusion at runtime; the synopsis should be `install [name]` with --all surfacing in Long and Example.  
 **Fix:** Change Use to `install [name]`. The Long block already explains the --all flow (L51-L61); the Example block already shows both shapes. Matches releases show `Use: "show <version>"` and describe node `Use: "node <name>"` — flags never appear in cobra Use across the repo.  
-**Effort:** hours
-
-##### `ux:08c49fc4:keep-haproxy-no-shorthand-asymmetry` — keep haproxy no shorthand asymmetry
-
-**Status:** in review — PR #635  
-**Severity:** suggestion  
-**Cluster:** flag-conventions  
-**Evidence:** `internal/cli/update_ingress.go:45-47`  
-**Problem:** update-ingress registers --yes/-y, --keep-haproxy, --dry-run. Across destructive siblings (deploy, destroy, cleanup) the trio --yes/--dry-run is universal but the boolean tail flag (--keep-isos, --skip-terraform, --keep-haproxy, --skip-must-gather) never carries a shorthand. Consistent enough as policy; flag this only as a design observation so the convention is explicit when new boolean tails are added.  
-**Fix:** Codify the existing convention in CLAUDE.md §architecture-notes (Flag naming convention block): only the universal trio --yes/-y, --quiet/-q, --verbose/-v, --output/-o, --config/-c gets a shorthand. Per-command boolean tails stay long-form. No code change.  
 **Effort:** hours
 
 ##### `ux:08ec0042:flag-output-name-collision-risk` — flag output name collision risk
