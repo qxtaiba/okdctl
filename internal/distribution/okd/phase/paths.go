@@ -52,7 +52,8 @@ const (
 
 // ResolveBinDir returns the tool-install directory: OKDCTL_BIN_DIR env >
 // cfg.Deployment.BinDir > DefaultBinDir. cfg may be nil; non-absolute values
-// fall through. Paths are cleaned but `..` traversal is not rejected.
+// fall through. Paths are cleaned but `..` traversal is not rejected. See
+// BinDirOrDefault for the full three-function surface rationale.
 func ResolveBinDir(cfg *config.Config) string {
 	if v := envBinDir(); v != "" {
 		return v
@@ -65,8 +66,9 @@ func ResolveBinDir(cfg *config.Config) string {
 	return DefaultBinDir
 }
 
-// PreflightBinDir returns the env-only bin dir resolution; the config is not
-// yet parsed when main.preflight runs.
+// PreflightBinDir returns the env-only bin dir (OKDCTL_BIN_DIR > DefaultBinDir);
+// the config is not yet parsed when main.preflight runs. See BinDirOrDefault
+// for the full three-function surface rationale.
 func PreflightBinDir() string {
 	if v := envBinDir(); v != "" {
 		return v
@@ -75,9 +77,9 @@ func PreflightBinDir() string {
 }
 
 // BinDirOrDefault returns s when non-empty, else DefaultBinDir.
-// Scaffolding: together with PreflightBinDir and ResolveBinDir this forms
-// the three-function bin-dir-resolution surface; each function consults a
-// different input source (struct field, env+config, env-only). Call sites
+// Scaffolding (api:0139cb3f): together with PreflightBinDir and ResolveBinDir
+// this forms the three-function bin-dir-resolution surface; each function
+// consults a different input source (struct field, env+config, env-only). Call sites
 // in setup and cleanup use BinDirOrDefault as defense-in-depth — the field
 // is already populated by ResolveBinDir at construction, but the explicit
 // fallback documents that zero-value is safe and makes the resolution path
