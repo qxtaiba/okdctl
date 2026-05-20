@@ -176,86 +176,6 @@ subsystems) rather than a one-file surgical edit. Filed here so
 `/roadmap-pickup` can schedule them; each carries the originating
 audit finding ID so diff tracking stays tight.
 
-#### E3 — HTTPS ignition + pinned CA kargs
-
-**Status:** in review — PR #675
-**Audit:** `sec:00000001:http-ignition-pullsecret`
-**Evidence:** `internal/distribution/okd/setup/phase.go:48`,
-`internal/distribution/okd/setup/apache.go:27`
-**Problem:** `BuildIgnitionURL` returns `http://…/ignition`, and the
-rendered `.ign` files embed the full OKD pullSecret. Every node boot
-broadcasts the pullSecret cleartext over the machine-network VLAN.
-**Scope:** Serve ignition over HTTPS with a self-signed cert, pin the
-cert via `coreos.inst.ca` kargs, and flip
-`coreos.inst.insecure=no`. Apache needs a vhost on :443 with the cert;
-the wizard needs a field (or implicit decision) for the cert CN; the
-Terraform cloud-init kargs need the CA material. Cross-cutting: apache
-cert lifecycle, kargs templating, wizard.
-**Effort:** days.
-
-#### E4 — SSH/SCP host-key pinning for Proxmox
-
-**Status:** in review — PR #674 (bundled with E5)
-**Audit:** `sec:27088eab:ssh-accept-new-proxmox`,
-`sec:eb479d86:scp-accept-new-proxmox`
-**Evidence:** `internal/distribution/okd/phase/ssh.go:27`,
-`internal/distribution/okd/setup/upload.go:42`
-**Problem:** `SSHRun` and `uploadISOsViaSCP` use
-`StrictHostKeyChecking=accept-new` — TOFU. A MITM on the first handshake
-pins the attacker as root@proxmox forever.
-**Scope:** Add `provider.proxmox.ssh_host_fingerprint` config field
-accepting the standard `SHA256:<base64>` format from `ssh-keygen -lf` /
-Proxmox UI / `ssh-keyscan host | ssh-keygen -lf -`. Implementation must
-compute per-key fingerprints via `golang.org/x/crypto/ssh.FingerprintSHA256`
-on parsed keys from `ssh-keyscan` output (NOT a single SHA256 over the
-raw stdout — see postmortem). When the pinned value matches any one of
-the host's advertised keys, accept; otherwise refuse. When unset, log
-the observed fingerprints at WARN so the operator can pin one. Pass
-the matched key to ssh via a temp `known_hosts` file with
-`-o UserKnownHostsFile=<file> -o StrictHostKeyChecking=yes`. Unit tests
-must cover a fixed keyscan-output string so non-determinism regressions
-get caught.
-**Effort:** hours.
-**First attempt (PR #117, closed 2026-04-22):** Hashed the entire
-`ssh-keyscan -H -T 5 <host>` stdout with SHA256. Two blockers: (1) `-H`
-uses a random salt per invocation, so the computed value changes every
-run and every deploy-after-first aborts; (2) even without `-H`, the
-banner comment line position and occasional key re-ordering make the
-whole-stdout hash flaky. Plus the computed value matched nothing a user
-could produce via standard SSH tooling. See PR #117 review for detail.
-**Second attempt (PR #142, closed 2026-04-26):** Implementation passed
-independent review — `internal/sshpin` package with per-key
-`ssh.FingerprintSHA256`, fixture-based tests, refuse-on-no-match. Closed
-by maintainer call (not a technical regression); recoverable from the
-PR #142 diff if the team revisits.
-
-#### E5 — Flux SSH known-hosts fingerprint pinning
-
-**Status:** in review — PR #674 (bundled with E4)
-**Audit:** `sec:98723e5d:ssh-keyscan-tofu`
-**Evidence:** `internal/addon/catalog/flux/flux.go:329`
-**Problem:** `createDeployKeySecret` runs `ssh-keyscan <host>` and
-stuffs the raw output verbatim into the Flux deploy-key Secret. A DNS
-poisoner at install time pins themselves as the git host forever,
-enabling silent GitOps code substitution.
-**Scope:** Add `addons.flux.settings.known_hosts_sha256` accepting the
-standard `SHA256:<base64>` format (same vocabulary as E4). Parse each
-line of `ssh-keyscan` output, compute per-key fingerprints via
-`golang.org/x/crypto/ssh.FingerprintSHA256`, match against the pin.
-Without the config, require `addons.flux.settings.accept_host_key=true`
-and log the observed fingerprints so the operator can pin one. The
-known_hosts bytes written into the Flux Secret must be the key-only
-lines (filter `#` comments) so flux's sync is not sensitive to
-keyscan's banner-line ordering. Unit tests with a fixed keyscan string
-are required.
-**Effort:** hours.
-**First attempt (PR #117, closed 2026-04-22):** Same whole-stdout
-SHA256 approach as E4. Non-deterministic in the wild because
-`ssh-keyscan` output interleaves a `# host SSH-2.0-…` banner whose
-position shifts between runs, and occasional key-line re-ordering. The
-helper would work ~75% of the time and abort the remaining 25% with a
-spurious mismatch.
-
 ### Tier G — findings from 2026-04-21 /audit-all run
 
 Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when bandwidth opens. Each references the audit finding ID for diff tracking; when a finding recurs in a later run, its entry Status+Evidence updates here rather than being duplicated.
@@ -539,16 +459,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 #### audit-modernization
 
 #### audit-code-smells
-
-##### `smell:39c75e91:yes-no-magic-strings` — yes no magic strings
-
-**Status:** in review — PR #673  
-**Severity:** suggestion  
-**Cluster:** magic-strings  
-**Evidence:** `internal/cli/confirm.go:60-62`  
-**Problem:** `isConfirmResponse` encodes the Y/yes/y truthy set as three string literals inline. A second copy with a slightly different vocabulary lives in tui/wizard/datadriven.go (out of audit scope), but the smell at this site is that the canonical 'yes' parse for a destructive op is hand-rolled rather than going through `strconv.ParseBool` or a centralised helper.  
-**Fix:** Replace the body with `strings.EqualFold(response, "y") || strings.EqualFold(response, "yes")` for case-insensitive match in one shot. Three literals -> two with no semantic loss; keeps in this package because the wizard parser is intentionally separate (looser vocabulary).  
-**Effort:** hours
 
 #### audit-dependencies
 
