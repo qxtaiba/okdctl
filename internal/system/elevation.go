@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/qxtaiba/okdctl/internal/errtypes"
+	"github.com/qxtaiba/okdctl/internal/executor"
 )
 
 // InvokingUser returns the user who invoked the command. When the process
@@ -204,6 +205,7 @@ func ChownTreeToInvokingUser(root string) error {
 // only called by doctor; operational paths never call it.
 func HasPasswordlessSudo(ctx context.Context) error {
 	cmd := exec.CommandContext(ctx, "sudo", "-n", "true")
+	cmd.Env = executor.FilterParentEnv(executor.DefaultEnvAllowlist)
 	cmd.Stdin = nil
 	cmd.Stdout = nil
 	cmd.Stderr = nil
