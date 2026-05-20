@@ -704,16 +704,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Replace fmt.Fprintf(os.Stderr, ...) with tui.Info("kubeconfig written", tui.LF("path", kubeconfigOutput)) and tui.Info("kubeconfig merged", tui.LF("path", dest)). Matches CLAUDE.md §credentials-and-secrets directive that all log sinks pass through RedactHandler so future fields cannot leak.  
 **Effort:** hours
 
-##### `ux:08ec0042:flag-output-name-collision-risk` — flag output name collision risk
-
-**Status:** not started (already implemented in commit 08d3e35 — needs archive, not pickup)  
-**Severity:** suggestion  
-**Cluster:** flag-conventions  
-**Evidence:** `internal/cli/flags.go:7-10`  
-**Problem:** The constant `flagOutput = "output-file"` is used by deploy (--output-file = config dest) and debug-bundle (--output-file = bundle dest). Eight other commands register --output (not --output-file) for format selection via StringVarP. The repo convention codified in CLAUDE.md §architecture is correct, but a maintainer skimming `flagOutput` reads it as `--output` and will land on the wrong flag. The constant name aliases an existing flag-spelling; rename or split.  
-**Fix:** Rename the constant to `flagOutputFile` (paired with `flagOutputFormat = "output"` if you want the format-side codified too). Reads correctly at registration sites and removes the conceptual collision with cobra's StringVarP "output" literal.  
-**Effort:** hours
-
 #### audit-observability
 
 ##### `obs:eb479d86:sprintf-attr-value` — sprintf attr value
@@ -727,16 +717,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Effort:** hours
 
 #### audit-modernization
-
-##### `mod:ddf885f4:use-slices-contains` — use slices contains
-
-**Status:** not started (already implemented in commit 239959e — needs archive, not pickup)  
-**Severity:** minor  
-**Cluster:** slices-maps — related: mod:262af6e4:use-slices-contains  
-**Evidence:** `internal/addon/manager.go:267-275`  
-**Problem:** Manager.dependsOn does a hand-rolled contains check on a.Info().Dependencies before recursing — slices.Contains expresses the early-return cleanly. The same package already imports slices for the rollback path (L183 slices.Backward), so the import is free.  
-**Fix:** Hoist the equality short-circuit out: `if slices.Contains(a.Info().Dependencies, target) { return true }`. Then iterate only to recurse: `for _, dep := range a.Info().Dependencies { if m.dependsOn(dep, target, visited) { return true } }`. Approximate even LOC, clearer intent.  
-**Effort:** hours
 
 ##### `mod:6b533f2d:slices-collect-projection` — slices collect projection
 
@@ -756,16 +736,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/distribution/okd/setup/tools.go:260-264`  
 **Problem:** getToolVersion calls `strings.Split(strings.TrimSpace(string(output)), "\n")` only to read the first line. With strings.Lines the read becomes a single-iteration loop with no allocation; the surrounding `if len(lines) > 0` guard goes away because the iterator yields zero times for an empty TrimSpace result.  
 **Fix:** Replace with `for line := range strings.Lines(string(output)) { return strings.TrimSpace(line) }; return "unknown"`. No slice materialisation, ~3 LOC removed.  
-**Effort:** hours
-
-##### `mod:c19ee328:slices-containsfunc-ignition` — slices containsfunc ignition
-
-**Status:** not started (superseded by IgnitionSentinel sentinel-file approach — needs archive, not pickup)  
-**Severity:** suggestion  
-**Cluster:** slices-maps — related: mod:c19ee328:slices-containsfunc-allexist  
-**Evidence:** `internal/distribution/okd/setup/steps.go:186-192`  
-**Problem:** AlreadyDone for StepGenerateIgnition repeats the same all-files-present pattern: iterate ignitionFilenames, return false on the first missing one. Twin to mod:c19ee328:slices-containsfunc-allexist; both should land together.  
-**Fix:** `return !slices.ContainsFunc(ignitionFilenames, func(f string) bool { return !system.FileExists(filepath.Join(clusterDir, f)) }), nil`. Same semantics; matches the prevailing repo idiom.  
 **Effort:** hours
 
 #### audit-code-smells
@@ -811,56 +781,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Effort:** hours
 
 #### audit-dependencies
-
-##### `dep:3295df72:transitive-test-deps-from-proxmox` — transitive test deps from proxmox
-
-**Status:** not started  
-**Severity:** suggestion  
-**Cluster:** transitive-weight  
-**Evidence:** `go.sum:54-67`  
-**Problem:** go.sum carries h2non/gock v1.2.0 + h2non/parth (test HTTP-mock deps), go-test/deep v1.1.1, gopkg.in/check.v1 — none of these are in okdctl's go.mod require block, none have call sites in okdctl's internal/ or cmd/. They land via go-proxmox's test-time deps and can't be pruned at the consumer side without dropping go-proxmox or applying a replace directive. Cosmetic; flagged for completeness.  
-**Fix:** No action — Go's MVS pulls these because they appear in go-proxmox's test imports, even though okdctl doesn't compile or run those tests. They do not enter the release binary (test-only). Document as transitive-test-only acceptance.  
-**Effort:** hours
-
-##### `dep:33ef32bf:dup-log-engines-stack` — dup log engines stack
-
-**Status:** not started  
-**Severity:** suggestion  
-**Cluster:** duplicate-engine  
-**Evidence:** `go.mod:1-69`  
-**Problem:** Four log engines coexist: stdlib log/slog (used by okdctl directly), charm.land/log/v2 (direct, intentional TUI stack — internal/tui/logger.go), github.com/go-logr/logr v1.4.3 (transitive via k8s.io/klog/v2), and k8s.io/klog/v2 v2.140.0 (transitive via apimachinery). Consolidation is not possible: charmlog is intentional UI stack (CLAUDE.md must-preserve in SKILL §5); klog/logr are baseline for k8s.io/* and never owned by okdctl. Document and accept; do not propose stripping.  
-**Fix:** No action — record in CLAUDE.md (or this audit) that four log engines is the steady state for any project that consumes both Charm UI stack and k8s.io/* clients. Re-flag only if a NEW direct log dep enters go.mod or if charmlog gets replaced.  
-**Effort:** hours
-
-##### `dep:33ef32bf:gorilla-websocket-stale` — gorilla websocket stale
-
-**Status:** not started  
-**Severity:** suggestion  
-**Cluster:** maintenance-signal  
-**Evidence:** `go.sum:61-62`  
-**Problem:** gorilla/websocket v1.4.2 (released 2020-04, > 5 years old) is the transitive pin via go-proxmox. okdctl does not reach it (REST-only discovery, grep -r confirms zero call sites in internal/ and cmd/). Per CLAUDE.md §5a: keep until go-proxmox migrates to coder/websocket. Re-confirmation only.  
-**Fix:** No action — the dep is transitive-only with no okdctl reachability. Track go-proxmox upstream releases (per CLAUDE.md, fallback plan is the REST-rewrite); when go-proxmox itself adopts coder/websocket, the bump auto-cleans. Re-confirm in the next dep audit.  
-**Effort:** hours
-
-##### `dep:33ef32bf:k8s-pseudoversion-floor` — k8s pseudoversion floor
-
-**Status:** not started  
-**Severity:** suggestion  
-**Cluster:** justified-version-floor  
-**Evidence:** `go.mod:64-66`  
-**Problem:** k8s.io/kube-openapi v0.0.0-20260317180543-43fb72c5454a, k8s.io/utils v0.0.0-20260210185600-b8788abfbbc2, sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 are all pinned to commit-hash pseudoversions because k8s.io/* sub-modules ship without tagged releases. This is the upstream norm — apimachinery itself does this. Re-bump these three in lockstep when k8s.io/api is bumped, otherwise MVS can produce a mixed-vintage k8s tree. Note for future audits, no immediate action.  
-**Fix:** On every k8s.io/api bump, run `go get k8s.io/kube-openapi@<matching-commit> k8s.io/utils@<matching-commit>` from the k8s.io/api go.sum to keep all sub-modules in lockstep. Document this in a release-prep checklist. No code change.  
-**Effort:** hours
-
-##### `dep:33ef32bf:proxmox-bus-factor-reconfirm` — proxmox bus factor reconfirm
-
-**Status:** not started  
-**Severity:** suggestion  
-**Cluster:** maintenance-signal  
-**Evidence:** `go.mod:12-12`  
-**Problem:** luthermonson/go-proxmox v0.5.0: single maintainer (bus factor 1), v0.x API instability, sole Proxmox API client used in one 203-LOC file (internal/tui/wizard/steps/proxmox_discovery.go) calling client.Nodes/client.Node/Storages/Networks/GetContent. Pulls gorilla/websocket, magefile/mage, jinzhu/copier, buger/goterm, h2non/gock, h2non/parth — heavy transitive set for narrow REST-only usage. CLAUDE.md documents the ~200-LOC REST fallback and instructs not to rip out without the rewrite landing first.  
-**Fix:** Re-confirm only — do NOT propose a swap this run. Keep the v0.5.0 pin; bump on each upstream release; track the documented ~200-LOC net/http rewrite in roadmap.md so the fallback exists when go-proxmox abandons. SKILL §5a explicitly forbids re-discovery and rip-out without the rewrite plan landing first.  
-**Effort:** hours
 
 #### audit-documentation
 
