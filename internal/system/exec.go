@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"os/exec"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/qxtaiba/okdctl/internal/errtypes"
@@ -51,6 +52,10 @@ func (e *SubprocessError) Redacted() any {
 // tokens exported by the caller do not reach privileged child processes.
 func RunCaptured(ctx context.Context, bin string, args ...string) error {
 	cmd := exec.CommandContext(ctx, bin, args...)
+	// SIGTERM (not SIGINT) is the correct soft-cancel for non-terraform binaries;
+	// SIGINT is reserved for terraform's documented state-lock release path.
+	cmd.Cancel = func() error { return cmd.Process.Signal(syscall.SIGTERM) }
+	cmd.WaitDelay = 30 * time.Second
 	cmd.Env = executor.FilterParentEnv(executor.DefaultEnvAllowlist)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
@@ -71,6 +76,10 @@ func RunCaptured(ctx context.Context, bin string, args ...string) error {
 // env is filtered through executor.DefaultEnvAllowlist.
 func OutputCaptured(ctx context.Context, bin string, args ...string) ([]byte, error) {
 	cmd := exec.CommandContext(ctx, bin, args...)
+	// SIGTERM (not SIGINT) is the correct soft-cancel for non-terraform binaries;
+	// SIGINT is reserved for terraform's documented state-lock release path.
+	cmd.Cancel = func() error { return cmd.Process.Signal(syscall.SIGTERM) }
+	cmd.WaitDelay = 30 * time.Second
 	cmd.Env = executor.FilterParentEnv(executor.DefaultEnvAllowlist)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
