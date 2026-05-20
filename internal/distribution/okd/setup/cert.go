@@ -51,7 +51,7 @@ func EnsureIgnitionCert(projectRoot, ip string) (certPEM, keyPEM []byte, err err
 	return generateSelfSignedCert(certPath, keyPath, ip)
 }
 
-func loadExistingCert(certPath, keyPath, ip string) ([]byte, []byte, bool) {
+func loadExistingCert(certPath, keyPath, ip string) (certPEM, keyPEM []byte, ok bool) {
 	certRaw, err := os.ReadFile(certPath)
 	if err != nil {
 		return nil, nil, false
@@ -86,7 +86,7 @@ func loadExistingCert(certPath, keyPath, ip string) ([]byte, []byte, bool) {
 	return nil, nil, false
 }
 
-func generateSelfSignedCert(certPath, keyPath, ip string) ([]byte, []byte, error) {
+func generateSelfSignedCert(certPath, keyPath, ip string) (certPEM, keyPEM []byte, err error) {
 	parsed := net.ParseIP(ip)
 	if parsed == nil {
 		return nil, nil, fmt.Errorf("ignition cert host %q is not a valid IP address", ip)

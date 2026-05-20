@@ -52,58 +52,6 @@ func (p *Phase) ensureIgnitionDir(ctx context.Context, webRoot string) (string, 
 	return ignitionDir, nil
 }
 
-func (p *Phase) configureApachePort(ctx context.Context, bindIP string) {
-	if err := ctx.Err(); err != nil {
-		return
-	}
-	httpdConf := p.OS.ApacheConfigPath()
-	if !system.FileExists(httpdConf) {
-		return
-	}
-
-	listenDirective := "Listen 8080"
-	if bindIP != "" {
-		// Bind to the bastion bridge IP only; ignition files carry the pull-secret
-		// and must not be served on every interface during the bootstrap window.
-		listenDirective = fmt.Sprintf("Listen %s:8080", bindIP)
-	}
-
-	backupPath := fmt.Sprintf("%s.backup.%d", httpdConf, time.Now().Unix())
-	if err := system.CopyFile(httpdConf, backupPath); err != nil {
-		p.Log.Warn("apache: could not backup httpd.conf", "err", err)
-	}
-
-	original, err := os.ReadFile(httpdConf)
-	if err != nil {
-		p.Log.Warn("apache: could not read httpd.conf", "err", err)
-		return
-	}
-
-	var buf bytes.Buffer
-	changed := false
-	scanner := bufio.NewScanner(bytes.NewReader(original))
-	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
-	for scanner.Scan() {
-		line := scanner.Text()
-		if line == "Listen 80" {
-			line = listenDirective
-			changed = true
-		}
-		buf.WriteString(line)
-		buf.WriteByte('\n')
-	}
-	if err := scanner.Err(); err != nil {
-		p.Log.Warn("apache: scan of httpd.conf failed", "err", err)
-		return
-	}
-	if !changed {
-		return
-	}
-	if err := system.AtomicWrite(httpdConf, buf.Bytes(), 0o644); err != nil {
-		p.Log.Warn("apache: could not modify httpd.conf", "err", err)
-	}
-}
-
 func (p *Phase) configureSELinuxForApache(ctx context.Context) {
 	if !p.OS.HasSELinux() {
 		return
@@ -138,9 +86,9 @@ func enableAndStartApache(ctx context.Context, serviceName string) error {
 }
 
 func (p *Phase) verifyApacheListening(ctx context.Context, bindIP string) {
-	addr := "127.0.0.1:8080"
+	addr := "127.0.0.1:443"
 	if bindIP != "" {
-		addr = net.JoinHostPort(bindIP, "8080")
+		addr = net.JoinHostPort(bindIP, "443")
 	}
 	dialer := &net.Dialer{Timeout: 1 * time.Second}
 	conn, err := dialer.DialContext(ctx, "tcp", addr)
@@ -199,9 +147,8 @@ func (p *Phase) ConfigureApache(ctx context.Context, cfg *config.Config, project
 	bindIP := cfg.HTTPServer.IgnitionServerIP
 	// Listen :443 is provided by the platform's mod_ssl default conf
 	// (RHEL: /etc/httpd/conf.d/ssl.conf, Debian: ports.conf after a2enmod ssl).
-	// The legacy `configureApachePort` :8080 rewrite is dead for the HTTPS
-	// flow and intentionally not called here.
-	p.configureSELinuxForApache(ctx)
+	// 443 is already labeled https_port_t in the default RHEL SELinux policy,
+	// so configureSELinuxForApache is intentionally not called here.
 
 	webRoot := cfg.HTTPServer.Root
 	if webRoot == "" {

@@ -148,6 +148,19 @@ func execute(ctx context.Context, opts *Options, logger *slog.Logger) error {
 	return o.Run(ctx)
 }
 
+func ignitionCertsCleanupStep(opts *Options, t *cleanupTracker, logger *slog.Logger) distribution.StepDef {
+	return distribution.StepDef{
+		ID: StepCleanupIgnitionCerts, Name: "cleanup ignition certs",
+		Desc: "removing generated ignition TLS certs", NonFatal: true,
+		ReRunSafe: distribution.ReRunSafeYes,
+		AlreadyDone: func(_ context.Context) (bool, error) {
+			return !system.DirExists(filepath.Join(opts.ProjectRoot, "certs", "ignition")), nil
+		},
+		Exec:    func(ctx context.Context) error { return IgnitionCerts(ctx, opts.ProjectRoot, logger) },
+		OnError: t.onError("ignition-certs"),
+	}
+}
+
 func cleanupSteps(opts *Options, logger *slog.Logger) []distribution.StepDef {
 	t := &cleanupTracker{}
 
@@ -245,16 +258,7 @@ func cleanupSteps(opts *Options, logger *slog.Logger) []distribution.StepDef {
 		OnError:    t.onError("packages"),
 	}
 
-	ignitionCertsStep := distribution.StepDef{
-		ID: StepCleanupIgnitionCerts, Name: "cleanup ignition certs",
-		Desc: "removing generated ignition TLS certs", NonFatal: true,
-		ReRunSafe: distribution.ReRunSafeYes,
-		AlreadyDone: func(_ context.Context) (bool, error) {
-			return !system.DirExists(filepath.Join(opts.ProjectRoot, "certs", "ignition")), nil
-		},
-		Exec:    func(ctx context.Context) error { return IgnitionCerts(ctx, opts.ProjectRoot, logger) },
-		OnError: t.onError("ignition-certs"),
-	}
+	ignitionCertsStep := ignitionCertsCleanupStep(opts, t, logger)
 
 	summaryStep := distribution.StepDef{
 		ID: StepCleanupSummary, Name: "cleanup summary",
