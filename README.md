@@ -251,8 +251,16 @@ commands, ISO removal) reuses that cached key.
 
 A machine-in-the-middle on the bastion-to-Proxmox path during the very first
 SCP call can substitute an attacker key that is then trusted for the lifetime
-of the cluster. Mitigations until a `proxmox.host_fingerprint` config field
-ships:
+of the cluster.
+
+For deterministic verification, set `provider.proxmox.ssh_host_fingerprint`
+in `okdctl.yaml` (`SHA256:<base64>` format from `ssh-keygen -lf
+/etc/ssh/ssh_host_ed25519_key.pub` or the Proxmox UI) so every subsequent
+SSH/SCP call refuses on mismatch. Set
+`provider.proxmox.require_pinned_fingerprint: true` to fail closed when the
+pin is absent.
+
+Additional mitigations:
 
 - Run `okdctl deploy` from a bastion with a trusted L2 path to the Proxmox
   host (no NAT or L3 hop an attacker can position on).
