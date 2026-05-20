@@ -120,7 +120,7 @@ func parseOnepasswordVaults(input string) (map[string]int, error) {
 		return map[string]int{"homelab": 1}, nil
 	}
 	out := make(map[string]int)
-	for _, pair := range strings.Split(input, ",") {
+	for pair := range strings.SplitSeq(input, ",") {
 		pair = strings.TrimSpace(pair)
 		if pair == "" {
 			continue
