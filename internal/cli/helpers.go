@@ -77,6 +77,9 @@ func reportCredentialProvenance(creds *credentials.ProxmoxCredentials) {
 	if creds.EndpointFromConfig {
 		tui.Warn("PROXMOX_VE_ENDPOINT not set; endpoint falling back to config file (mixed source)")
 	}
+	if creds.Insecure {
+		tui.Warn("proxmox: TLS verification disabled (insecure=true in config)")
+	}
 }
 
 func validateConfig(cfg *config.Config, w io.Writer) *config.ValidationResult {
