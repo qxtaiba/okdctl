@@ -33,10 +33,14 @@ const bootstrapOCVersion = "4.18.0-okd-scos.8"
 
 // bootstrapOCChecksum is the SHA-256 of openshift-client-linux-<bootstrapOCVersion>.tar.gz,
 // sourced from the release sha256sum.txt at pin time. Must be updated with
-// bootstrapOCVersion. Pinning at compile time means a release-asset swap
-// that also replaces sha256sum.txt is caught before any network-fetched
-// value is consulted.
-const bootstrapOCChecksum = "00c15ce878b6cfa6c93702e79374e56f93e02a0ec300d9095bc92832e207b7f3"
+// bootstrapOCVersion. Declared as a var so tests can override the expected
+// digest when serving an in-memory tarball via httptest; production callers
+// never reassign it.
+var bootstrapOCChecksum = "00c15ce878b6cfa6c93702e79374e56f93e02a0ec300d9095bc92832e207b7f3"
+
+// bootstrapOCBaseURL is the GitHub releases base used to construct the
+// tarball URL. Overridable in tests via httptest.Server.
+var bootstrapOCBaseURL = "https://github.com/okd-project/okd-scos/releases/download/" + bootstrapOCVersion
 
 // bootstrapOC ensures oc is available in downloadDir. If a non-empty
 // cached binary is present it is reused; otherwise the openshift-client
@@ -52,8 +56,7 @@ func (p *Phase) bootstrapOC(ctx context.Context, downloadDir string) (string, er
 	}
 
 	assetName := "openshift-client-linux-" + bootstrapOCVersion + ".tar.gz"
-	baseURL := "https://github.com/okd-project/okd-scos/releases/download/" + bootstrapOCVersion
-	tarballURL := baseURL + "/" + assetName
+	tarballURL := bootstrapOCBaseURL + "/" + assetName
 
 	archivePath := filepath.Join(downloadDir, assetName)
 	p.Log.Info("tools: fetching bootstrap oc", "url", tarballURL)
