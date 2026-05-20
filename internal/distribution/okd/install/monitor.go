@@ -21,6 +21,7 @@ import (
 // and a no-op kill function. cmd.Cancel + cmd.WaitDelay handle the
 // SIGTERM-then-SIGKILL escalation natively; the returned kill func remains
 // for API compatibility with injected stubs.
+// con:ae5b624c — canonical cmd.Cancel pattern; sub:7b2829bb mirrors this shape.
 func defaultStartMonitorCmd(ctx context.Context, clusterDir string, _ *slog.Logger) (done <-chan error, kill func(), err error) {
 	cmd := osExec.CommandContext(ctx, "openshift-install", "wait-for", "install-complete", "--dir", clusterDir, "--log-level=debug")
 	// Filter env so openshift-install does not inherit AWS_*/GCP_*/AZURE_* etc. from the user shell.
