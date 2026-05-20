@@ -520,73 +520,13 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 #### audit-security
 
-##### `sec:fde34e0c:k8s-kubeconfig-env-no-validate` — k8s kubeconfig env no validate
-
-**Status:** in review — PR #628  
-**Severity:** suggestion  
-**Cluster:** input-validation  
-**Evidence:** `internal/cluster/k8s.go:55-64`  
-**Problem:** WithEnvFallback() reads $KUBECONFIG from the process environment without validation. A user-controlled KUBECONFIG pointing at /dev/zero, /proc/self/environ, or a 100MB malicious yaml is consumed by every K8sClient constructed with this option. Production callers (install/postinstall) explicitly pass WithKubeconfig with a project-rooted path, so reachability is bounded — flagging as a hardening suggestion for tools or future callers.  
-**Fix:** Add a simple sanity check inside WithEnvFallback: filepath.Clean the env value, refuse if it points outside $HOME or /etc, and Lstat-refuse symlinks. Match the resolveProjectRootOrDie pattern in cli/helpers.go.  
-**Effort:** hours
-
 #### audit-subprocess
 
-##### `sub:a6e38cc7:no-stderr-capture` — no stderr capture
-
-**Status:** in review — PR #618  
-**Severity:** minor  
-**Cluster:** io-handling  
-**Evidence:** `internal/sshpin/sshpin.go:41-47`  
-**Problem:** runKeyscan calls cmd.Output() which returns stdout but lets stderr inherit the parent fd (TTY in interactive runs, /dev/null in piped runs). When ssh-keyscan -T 5 fails because the remote port 22 is closed, the diagnostic line lands on the operator's terminal but never reaches the returned err — the wrapper just becomes 'ssh-keyscan host: exit status 1'. Sibling system.OutputCaptured at exec.go:73 captures stderr into the typed error.  
-**Fix:** Swap to system.OutputCaptured(ctx, "ssh-keyscan", "-T", "5", host) so stderr flows into a *SubprocessError and the structured log handler can redact + render it. Net: same return shape, better error.  
-**Effort:** hours
-
-##### `sub:e2343d2c:no-cmd-env` — no cmd env
-
-**Status:** in review — PR #619  
-**Severity:** minor  
-**Cluster:** io-handling  
-**Evidence:** `internal/system/systemd.go:40-68` + 2 more  
-**Problem:** systemd.go has three exec.CommandContext sites (ManageService ServiceStatus, IsServiceActive, IsServiceEnabled) that bypass the executor.FilterParentEnv allowlist used by sibling helper RunCaptured at exec.go:54. Under sudo re-exec these run as root, inheriting the unfiltered parent env (any GITHUB_TOKEN / GH_TOKEN / GIT_ASKPASS the operator's shell exported). Inconsistent with the env-isolation invariant the rest of the system package upholds.  
-**Fix:** Either set cmd.Env = executor.FilterParentEnv(executor.DefaultEnvAllowlist) at each site, or route through system.RunCaptured (drop the bare cmd.Run wrappers and let RunCaptured handle exit-code → bool conversion via errors.As against *SubprocessError).  
-**Effort:** hours
-
 #### audit-state-and-recovery
-
-##### `state:b5a79fda:deploy-state-marker-stale` — deploy state marker stale
-
-**Status:** in review — PR #621  
-**Severity:** minor  
-**Cluster:** crash-recoverability  
-**Evidence:** `internal/cli/deploystate.go:24-86`  
-**Problem:** announceDeployState reads .okdctl-deploy-state.json on destroy entry and emits 'partial deploy detected — cancelled during X'. But there's no TTL or mtime check: a marker left from a successful deploy whose clearDeployMarker failed (errno EBUSY, RO mount, signal during cleanup) misleads the operator on a totally unrelated destroy weeks later. The deploy marker also doesn't survive cross-run identity (RunID is per-process, not per-cluster), so two operators on the same project can't tell which one's partial deploy left this marker.  
-**Fix:** On readDeployState, also stat the file and emit the marker's age in the warning ('marker is 14 days old — likely stale'). Add a ClusterName field to deployState struct; on announceDeployState, when ds.ClusterName != cfg.Cluster.Name, emit 'marker is from a different cluster, ignoring'. Make markDeployPhase a fatal (not best-effort) on the first call so a write-failed marker can't accumulate.  
-**Effort:** hours
 
 #### audit-iac-and-shell
 
 #### audit-errors
-
-##### `err:48688e63:cancel-identity-lost-on-tf-apply` — cancel identity lost on tf apply
-
-**Status:** in review — PR #615  
-**Severity:** major  
-**Cluster:** cancellation-identity — seam→audit-concurrency  
-**Evidence:** `internal/infrastructure/proxmox/proxmox.go:195-203`  
-**Problem:** On terraform-apply cancellation, applyErr is the executor.ExitError from a SIGTERM'd subprocess — it does NOT carry context.Canceled in its chain. The wrap at L199 forwards applyErr only ('terraform apply interrupted: %w', applyErr); errors.Is(returned, context.Canceled) downstream returns false because the underlying chain is ExitError → exec.ExitError, no ctx identity. cli/root.go::signalExitCode (L183) gates the SIGINT→130 / SIGTERM→143 mapping on errors.Is(err, context.Canceled || DeadlineExceeded), so a Ctrl-C during terraform apply currently exits 1 instead of 130. install/monitor.go:68 has the canonical fix shape: 'fmt.Errorf(...: %w', ctx.Err())'.  
-**Fix:** Wrap ctx.Err() instead of (or alongside) applyErr: 'return nil, fmt.Errorf("terraform apply interrupted: %w", ctx.Err())'. Or use errors.Join(ctx.Err(), applyErr) so both identities walk through. Net +0 LOC. Apply the same fix to PlanOnly's plan / Init paths if they grow ctx-cancel checks.  
-**Effort:** hours
-
-##### `err:7b2829bb:exit-error-no-redact` — exit error no redact
-
-**Status:** in review — PR #616  
-**Severity:** major  
-**Cluster:** redaction-in-error — seam→audit-observability — related: obs:6424733c:fmt-sprintf-message-pattern  
-**Evidence:** `internal/executor/executor.go:187-198`  
-**Problem:** executor.ExitError carries a Stderr string field but does NOT implement Redacted() any. The sibling type SubprocessError at internal/system/exec.go:42 does — the asymmetry means subprocess stderr surfaced through ExitError reaches slog/tui sinks unredacted. ExitError is the canonical typed exit error returned by RunChecked, RunStreamedChecked, K8sClient.runCheck, terraform.run, and OcOutput; every site that wraps an oc/kubectl/terraform/sops failure into the cli error chain forwards the raw subprocess stderr.  
-**Fix:** Add Redacted() any returning {Command, ExitCode} (drop Stderr) so logutil.RedactHandler's interface{ Redacted() any } switch (internal/logutil/redact.go:113) catches ExitError when it lands as a slog attr. Mirror system.SubprocessError.Redacted at internal/system/exec.go:42-44. Net +4 LOC. terraform.ExecError aliases ExitError so it inherits automatically.  
-**Effort:** hours
 
 #### audit-concurrency
 
@@ -604,37 +544,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 #### audit-cli-ux
 
-##### `ux:fd2125dd:args-validator-not-usageerror` — args validator not usageerror
-
-**Status:** in review — PR #617  
-**Severity:** major  
-**Cluster:** exit-codes — seam→audit-errors  
-**Evidence:** `internal/cli/addon.go:62-73`  
-**Problem:** addonInstallCmd.Args returns plain fmt.Errorf for missing-or-conflicting positional args. The error reaches exitCodeFor without satisfying errors.As(*errtypes.UsageError), so the process exits 1 (generic) instead of 64 (EX_USAGE). The published taxonomy in docs/cli/exit-codes.md says 64 covers cobra flag-parse failures; positional-arg failures are the natural sibling and currently violate the taxonomy.  
-**Fix:** Wrap each return in &errtypes.UsageError{Msg: ..., Err: ...} so exitCodeFor() resolves to 64 (EX_USAGE), matching the documented taxonomy and the SetFlagErrorFunc pattern in root.go:256-259. Apply the same pattern to any other Args validator that returns a raw fmt.Errorf for arg-shape violations.  
-**Effort:** hours
-
-##### `ux:daf5bee9:kubeconfig-status-msg-bypasses-tui` — kubeconfig status msg bypasses tui
-
-**Status:** in review — PR #624  
-**Severity:** minor  
-**Cluster:** streams — seam→audit-observability  
-**Evidence:** `internal/cli/kubeconfig.go:72-72`  
-**Problem:** After AtomicWrite or merge succeeds, kubeconfig prints a free-form status line via fmt.Fprintf(os.Stderr, ...) instead of tui.Info. The repo's slog → RedactHandler chain is bypassed; future additions of attrs to that line silently lose redaction. Stream choice (stderr) is correct, but the sink should be tui so structured fields are honoured.  
-**Fix:** Replace fmt.Fprintf(os.Stderr, ...) with tui.Info("kubeconfig written", tui.LF("path", kubeconfigOutput)) and tui.Info("kubeconfig merged", tui.LF("path", dest)). Matches CLAUDE.md §credentials-and-secrets directive that all log sinks pass through RedactHandler so future fields cannot leak.  
-**Effort:** hours
-
 #### audit-observability
-
-##### `obs:eb479d86:sprintf-attr-value` — sprintf attr value
-
-**Status:** in review — PR #622  
-**Severity:** minor  
-**Cluster:** field-stability  
-**Evidence:** `internal/distribution/okd/setup/upload.go:138-138`  
-**Problem:** `p.Log.Info("iso: uploading", "count", ..., "size_mb", fmt.Sprintf("%.1f", totalSizeMB), ...)` pre-renders a float to a string before the slog handler sees it. The c07157e migration swept message-arg fmt.Sprintf but missed this attr-value form. JSON output emits `"size_mb": "123.4"` (string) instead of `"size_mb": 123.4` (number), which breaks downstream tooling that types the field as a number and forces consumers to re-parse.  
-**Fix:** Drop the Sprintf wrapper and pass the float directly: `"size_mb", totalSizeMB`. Slog's JSON handler emits float64 with full precision; if the precision-1 rendering is load-bearing for the text formatter, push the rounding down by one level (compute roundedMB := math.Round(totalSizeMB*10)/10 and pass that float). Net 0 LOC.  
-**Effort:** hours
 
 #### audit-modernization
 
@@ -646,16 +556,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/cluster/k8s_csrs.go:63-66`  
 **Problem:** ApprovePendingCSRs builds a names slice via index assignment in a counted-style loop. The same projection shape recurs in update_ingress.go::handleHostNetworkConversion (L292-295) and cleanup.go::KindStrings (L43-50). The repo could land a tiny mapSlice helper in internal/sliceutil and migrate all three, OR keep the make+loop form (already idiomatic Go).  
 **Fix:** Optional. The for-i form is already clear. If a third+fourth callsite appear, land a small `mapSlice[T,U](in []T, fn func(T) U) []U` helper. Don't land in isolation — there's no Go 1.x-specific reason to migrate.  
-**Effort:** hours
-
-##### `mod:8ea706f6:strings-lines-version` — strings lines version
-
-**Status:** in review — PR #623  
-**Severity:** suggestion  
-**Cluster:** slices-maps  
-**Evidence:** `internal/distribution/okd/setup/tools.go:260-264`  
-**Problem:** getToolVersion calls `strings.Split(strings.TrimSpace(string(output)), "\n")` only to read the first line. With strings.Lines the read becomes a single-iteration loop with no allocation; the surrounding `if len(lines) > 0` guard goes away because the iterator yields zero times for an empty TrimSpace result.  
-**Fix:** Replace with `for line := range strings.Lines(string(output)) { return strings.TrimSpace(line) }; return "unknown"`. No slice materialisation, ~3 LOC removed.  
 **Effort:** hours
 
 #### audit-code-smells
@@ -670,59 +570,9 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Replace the body with `strings.EqualFold(response, "y") || strings.EqualFold(response, "yes")` for case-insensitive match in one shot. Three literals -> two with no semantic loss; keeps in this package because the wizard parser is intentionally separate (looser vocabulary).  
 **Effort:** hours
 
-##### `smell:62cb8a95:state-major-bounds-misnamed` — state major bounds misnamed
-
-**Status:** in review — PR #629  
-**Severity:** suggestion  
-**Cluster:** magic-strings  
-**Evidence:** `internal/distribution/okd/destroy/helpers.go:26-59`  
-**Problem:** `stateMajorMin, stateMajorMax = 1, 1` — two constants whose values are identical, named asymmetrically, and used in `if major < stateMajorMin || major > stateMajorMax`. The 'min' / 'max' framing implies a range; the body is in fact 'major must equal 1'. A future widening (terraform v2 support) would change *one* of the two and read like the bound got tighter, not looser. This is the bool-should-be-enum cluster's twin: two scalars where one suffices.  
-**Fix:** Replace with `const requiredTerraformMajor = 1` and `if major != requiredTerraformMajor`. When v2 lands, change to a typed range struct then. The current spelling encodes a contract the body does not enforce — a 1.x match check.  
-**Effort:** hours
-
-##### `smell:6424733c:metrics-shutdown-timeout-magic` — metrics shutdown timeout magic
-
-**Status:** in review — PR #620  
-**Severity:** suggestion  
-**Cluster:** magic-strings  
-**Evidence:** `internal/cli/helpers.go:228-256`  
-**Problem:** `startMetricsServer` hardwires `5*time.Second`, `10*time.Second`, `60*time.Second` as ReadHeader/Read/Write/Idle/Shutdown timeouts. Per-timeout magic numbers in HTTP server construction are a frequent regression class — a future change wanting a tighter or looser default has to read the file to learn the implicit policy. The shutdown 5s in particular shows up as a comment hint, not a constant.  
-**Fix:** Lift the four durations to package-level `const metricsReadHeaderTimeout = 5 * time.Second` etc. above startMetricsServer, with a single doc comment explaining 'Prometheus scrapers reconnect every interval; idle 60s leaves slack for slow scrapers'.  
-**Effort:** hours
-
 #### audit-dependencies
 
 #### audit-documentation
-
-##### `doc:4c092fce:pkg-doc-name-echo` — pkg doc name echo
-
-**Status:** in review — PR #625  
-**Severity:** minor  
-**Cluster:** package-doc  
-**Evidence:** `internal/infrastructure/terraform/terraform.go:1-2`  
-**Problem:** Package doc's second sentence is vacuous: 'It can be used by any infrastructure provider that uses Terraform.' That's not a contract — it's a tautology. Replace with what the package actually owns: subprocess shape (PATH lookup, env-allowlist via executor), state-file invariants (atomic writes via system.AtomicWrite), or call surface (Init/Plan/Apply/Destroy/Output).  
-**Fix:** Replace the second sentence with a substantive description of the package's actual contract — e.g. 'Operations run via internal/executor with the default env allowlist; state files are written atomically via system.AtomicWrite. Provider packages drive it via Init / Plan / Apply / Destroy / Output.'  
-**Effort:** hours
-
-##### `doc:35abd54e:pkg-doc-thin` — pkg doc thin
-
-**Status:** in review — PR #626  
-**Severity:** suggestion  
-**Cluster:** package-doc  
-**Evidence:** `internal/credentials/proxmox.go:1-1`  
-**Problem:** Package credentials carries the load-bearing []byte/Zeroize/Redacted-interface contract for credential lifecycle, but the package doc is one vacuous sentence: 'Package credentials provides credential management for infrastructure providers.' The doc should announce the type-level invariants (Password/APIToken []byte for in-memory wipe, Redacted() interface for slog scrubbing, defer Zeroize() lifecycle) so a godoc-reading caller does not have to scan ProxmoxCredentials's type doc to discover them.  
-**Fix:** Expand to two-three sentences: 'Package credentials owns the Proxmox credential lifecycle. Password and APIToken are []byte (not string) so callers can defer Zeroize() to wipe them after use; ProxmoxCredentials.Redacted() satisfies logutil.RedactHandler so structured slog attrs never leak. See LoadEnvFile and GetProxmoxCredentials for the env-then-config resolution priority.'  
-**Effort:** hours
-
-##### `doc:d5915b0c:pkg-doc-name-echo` — pkg doc name echo
-
-**Status:** in review — PR #627  
-**Severity:** suggestion  
-**Cluster:** package-doc  
-**Evidence:** `internal/distribution/okd/install/phase.go:1-1`  
-**Problem:** Package doc echoes the package name with no added signal: 'Package install provides the install phase for OKD cluster provisioning.' The package owns the bootstrap-monitor + CSR-approval + cluster-operator-wait sequence with timeouts (DefaultBootstrapTimeout 30m, DefaultInstallTimeout 60m, DefaultCSRApprovalInterval 30s); the doc should surface the timeline, not the package name.  
-**Fix:** Expand: 'Package install drives the install phase: terraform-up, bootstrap monitor, CSR approval, cluster-operator settle. Default timeouts are 30 m for bootstrap, 60 m for the cluster-operator wait, and a 30 s CSR-approval poll cadence; all are overridable via Deployment.* in the Config.'  
-**Effort:** hours
 
 #### audit-tests
 
