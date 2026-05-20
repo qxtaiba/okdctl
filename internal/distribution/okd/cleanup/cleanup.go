@@ -224,7 +224,7 @@ func cleanupSteps(opts *Options, logger *slog.Logger) []distribution.StepDef {
 			}
 			confPath, err := dns.DnsmasqConfigPath(fmt.Sprintf("okd-%s", opts.ClusterName))
 			if err != nil {
-				return false, err
+				return false, &errtypes.ConfigError{Msg: "resolve dnsmasq config path", Err: err}
 			}
 			return !system.FileExists(confPath), nil
 		},
