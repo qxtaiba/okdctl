@@ -280,10 +280,27 @@ func validateProxmoxConfig(proxmox *ProxmoxConfig, result *ValidationResult) {
 	}
 }
 
+// httpRootUnsafe holds characters that carry meaning in Apache config
+// directives or a POSIX shell; any of them in a DocumentRoot value would
+// allow the operator to inject directives or break out of quoted contexts.
+const httpRootUnsafe = "\n\r\t \"'`$;<>\\"
+
 func validateHTTPServer(cfg *Config, result *ValidationResult) {
 	if cfg.HTTPServer.Port != 0 {
 		if cfg.HTTPServer.Port < 1 || cfg.HTTPServer.Port > 65535 {
 			result.AddError(FieldHTTPServerPort, "must be a valid port number (1-65535)")
+		}
+	}
+
+	if cfg.HTTPServer.IgnitionServerIP != "" && !IsValidIP(cfg.HTTPServer.IgnitionServerIP) {
+		result.AddError(FieldHTTPServerIP, "must be a valid IPv4 or IPv6 literal")
+	}
+
+	if cfg.HTTPServer.Root != "" {
+		if !filepath.IsAbs(cfg.HTTPServer.Root) {
+			result.AddError(FieldHTTPServerRoot, "must be an absolute path")
+		} else if strings.ContainsAny(cfg.HTTPServer.Root, httpRootUnsafe) {
+			result.AddError(FieldHTTPServerRoot, "must not contain shell or Apache directive metacharacters")
 		}
 	}
 }

@@ -44,6 +44,7 @@ const (
 
 	FieldHTTPServerIP   = "http_server.ip"
 	FieldHTTPServerPort = "http_server.port"
+	FieldHTTPServerRoot = "http_server.root"
 
 	FieldDeploymentAutoApprove  = "deployment.auto_approve"
 	FieldDeploymentTerraformEnv = "deployment.terraform_env"
