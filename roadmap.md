@@ -592,7 +592,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `con:181efc90:spinner-canonical` — spinner canonical
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/con-181efc90-spinner  
+**Status:** in review — PR #666  
 **Severity:** suggestion  
 **Cluster:** goroutine-lifetime  
 **Evidence:** `internal/tui/spinner.go:19-56`  
@@ -602,7 +602,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `con:39c75e91:confirm-stdin-leak-bounded` — confirm stdin leak bounded
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/con-39c75e91-confirm  
+**Status:** in review — PR #667  
 **Severity:** suggestion  
 **Cluster:** goroutine-lifetime  
 **Evidence:** `internal/cli/confirm.go:31-58`  
@@ -612,7 +612,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `con:48688e63:disconnect-ctx-ignored` — disconnect ctx ignored
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/proxmox-48688e63  
+**Status:** in review — PR #668  
 **Severity:** suggestion  
 **Cluster:** ctx-ignored  
 **Evidence:** `internal/infrastructure/proxmox/proxmox.go:123-129`  
@@ -632,7 +632,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `con:8e65d574:bgcheck-canonical-leak-bound` — bgcheck canonical leak bound
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/con-8e65d574-bgcheck  
+**Status:** in review — PR #669  
 **Severity:** suggestion  
 **Cluster:** goroutine-lifetime  
 **Evidence:** `internal/version/updatecheck.go:36-58`  
@@ -642,7 +642,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `con:aa84670c:signalloop-bounded-leak` — signalloop bounded leak
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/con-aa84670c-signalloop  
+**Status:** in review — PR #670  
 **Severity:** suggestion  
 **Cluster:** goroutine-lifetime  
 **Evidence:** `internal/cli/root.go:99-152`  
@@ -652,7 +652,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `con:ae5b624c:monitor-cmd-cancel-pattern` — monitor cmd cancel pattern
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/con-ae5b624c-monitor  
+**Status:** in review — PR #671  
 **Severity:** suggestion  
 **Cluster:** goroutine-lifetime — seam→audit-subprocess — related: sub:7b2829bb:no-cancel-func  
 **Evidence:** `internal/distribution/okd/install/monitor.go:24-43`  
@@ -664,7 +664,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `api:48688e63:ctx-symmetry-no-network` — ctx symmetry no network
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/proxmox-48688e63  
+**Status:** in review — PR #668  
 **Severity:** suggestion  
 **Cluster:** ctx-first  
 **Evidence:** `internal/infrastructure/proxmox/proxmox.go:103-129`  
@@ -674,7 +674,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `api:c287d5c0:zeroize-no-callers-yet` — zeroize no callers yet
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/api-c287d5c0-zeroize  
+**Status:** in review — PR #672  
 **Severity:** suggestion  
 **Cluster:** exported-surface — seam→audit-security — related: api:7b2829bb:zeroize-asymmetry, sec:7b2829bb:executor-no-zeroize  
 **Evidence:** `internal/distribution/okd/okd.go:198-216`  
@@ -772,7 +772,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `smell:08ec0042:flags-package-not-canonical` — flags package not canonical
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/smell-08ec0042-flags  
+**Status:** in review — PR #665  
 **Severity:** suggestion  
 **Cluster:** helper-package-no-value — related: smell:fd2125dd:output-flag-magic-string, smell:26a430ee:requires-root-annotation-key  
 **Evidence:** `internal/cli/flags.go:1-10`  
