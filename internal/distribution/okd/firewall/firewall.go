@@ -135,7 +135,7 @@ func (f *Firewall) Configure(ctx context.Context, ports []Port, permanent bool) 
 	backend := f.DetectBackend(ctx)
 
 	if backend == None {
-		f.logger.Warn("no active firewall detected, skipping firewall configuration")
+		f.logger.Info("firewall: no active backend detected, skipping configuration")
 		return nil
 	}
 
