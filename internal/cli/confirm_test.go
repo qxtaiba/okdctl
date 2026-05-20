@@ -19,7 +19,7 @@ func TestPromptForConfirmation(t *testing.T) {
 		{"y confirms", "y\n", true},
 		{"yes confirms", "yes\n", true},
 		{"n denies", "n\n", false},
-		{"YES does not confirm", "YES\n", false},
+		{"YES confirms", "YES\n", true},
 		{"EOF treated as denial", "", false},
 	}
 	for _, tc := range cases {
@@ -67,8 +67,8 @@ func TestIsConfirmResponse(t *testing.T) {
 		{"y", true},
 		{"Y", true},
 		{"yes", true},
-		{"YES", false},
-		{"Yes", false},
+		{"YES", true},
+		{"Yes", true},
 		{"n", false},
 		{"no", false},
 		{"", false},
