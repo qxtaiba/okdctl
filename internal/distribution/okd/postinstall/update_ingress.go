@@ -4,6 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -269,8 +272,15 @@ func (p *Phase) finalizeIngress(
 		p.Log.Info("update-ingress: removing haproxy from bastion")
 		if err := p.RemoveHAProxy(ctx, vip, phase.ClusterConfigDir(opts.WorkDir)); err != nil {
 			p.Log.Warn("update-ingress: haproxy removal failed — rolling back dns to bootstrap", "err", err)
+			dnsRolledBack := false
 			if rbErr := dns.DeployBootstrap(ctx, cfg); rbErr != nil {
 				p.Log.Warn("update-ingress: dns rollback to bootstrap failed", "err", rbErr)
+			} else {
+				dnsRolledBack = true
+			}
+			cfgRestored := p.restoreHAProxyBackup()
+			if dnsRolledBack && cfgRestored {
+				p.Log.Info("update-ingress: rollback complete — dns restored to bootstrap, haproxy config rehydrated")
 			}
 			return nil, &errtypes.ClusterError{Msg: "haproxy removal failed after dns swap — dns rolled back to bootstrap", Err: err}
 		}
@@ -598,6 +608,32 @@ func (p *Phase) attemptRollback(ctx context.Context, ic *ingressControllerInfo) 
 	}
 
 	p.Log.Info("update-ingress: rollback succeeded — restored with original strategy", "name", ic.Name)
+}
+
+// restoreHAProxyBackup finds the most recent haproxy.cfg.backup.* file left
+// by RemoveHAProxy and copies it back to haproxyConfigPath so DNS rollback
+// has a coherent recovery target. Returns true only when the restore
+// succeeds; errors are logged as warnings.
+func (p *Phase) restoreHAProxyBackup() bool {
+	pattern := haproxyConfigPath + ".backup.*"
+	matches, err := filepath.Glob(pattern)
+	if err != nil || len(matches) == 0 {
+		p.Log.Warn("update-ingress: rollback: no haproxy backup found", "pattern", pattern)
+		return false
+	}
+	sort.Strings(matches)
+	latest := matches[len(matches)-1]
+	data, err := os.ReadFile(latest)
+	if err != nil {
+		p.Log.Warn("update-ingress: rollback: could not read haproxy backup", "path", latest, "err", err)
+		return false
+	}
+	if err := os.WriteFile(haproxyConfigPath, data, 0o640); err != nil {
+		p.Log.Warn("update-ingress: rollback: could not restore haproxy config", "path", haproxyConfigPath, "err", err)
+		return false
+	}
+	p.Log.Info("update-ingress: rollback: haproxy config restored from backup", "backup", latest)
+	return true
 }
 
 func (p *Phase) waitForRouterGone(ctx context.Context, icName string, timeout time.Duration) error {
