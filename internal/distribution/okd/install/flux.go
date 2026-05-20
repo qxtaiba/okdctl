@@ -3,9 +3,11 @@ package install
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/qxtaiba/okdctl/internal/errtypes"
@@ -117,15 +119,16 @@ func (p *Phase) addKubeconfigToBashrc(homeDir, kubeconfigPath string) error {
 		created = true
 	}
 
-	// Lstat before ReadFile: refuse to follow a symlink that could redirect
-	// a privileged write to an attacker-controlled path under sudo re-exec.
+	// Lstat before open: defense-in-depth producing a clear diagnostic if a
+	// symlink is already present. O_NOFOLLOW on the open below closes the
+	// TOCTOU window for symlinks planted after this check.
 	if lfi, lstatErr := os.Lstat(bashrcPath); lstatErr == nil {
 		if lfi.Mode()&os.ModeSymlink != 0 {
 			return fmt.Errorf("refusing to modify %s: path is a symlink", bashrcPath)
 		}
 	}
 
-	content, err := os.ReadFile(bashrcPath)
+	f, err := os.OpenFile(bashrcPath, os.O_RDONLY|syscall.O_NOFOLLOW, 0)
 	if err != nil {
 		if os.IsNotExist(err) {
 			if writeErr := system.AtomicWriteString(bashrcPath, exportLine+"\n", mode); writeErr != nil {
@@ -136,6 +139,11 @@ func (p *Phase) addKubeconfigToBashrc(homeDir, kubeconfigPath string) error {
 			}
 			return nil
 		}
+		return err
+	}
+	defer f.Close()
+	content, err := io.ReadAll(f)
+	if err != nil {
 		return err
 	}
 
