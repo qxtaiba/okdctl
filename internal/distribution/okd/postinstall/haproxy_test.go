@@ -57,6 +57,42 @@ func TestRemoveHAProxy_HappyPath_ConfigFileRemoved(t *testing.T) {
 	}
 }
 
+// TestRemoveHAProxy_BackupCreated verifies that RemoveHAProxy writes a
+// timestamped backup matching the glob that cleanup/services.go uses to
+// sweep haproxy backup files during destroy.
+func TestRemoveHAProxy_BackupCreated(t *testing.T) {
+	dir := t.TempDir()
+	cfgFile := filepath.Join(dir, "haproxy.cfg")
+	if err := os.WriteFile(cfgFile, []byte("frontend test\n  bind *:6443\n"), 0o644); err != nil {
+		t.Fatalf("write stub config: %v", err)
+	}
+
+	origConfig := haproxyConfigPath
+	t.Cleanup(func() { haproxyConfigPath = origConfig })
+	haproxyConfigPath = cfgFile
+
+	p := New("test", phase.WithExecutor(executor.New()), phase.WithLogger(logutil.NopLogger))
+	if err := p.RemoveHAProxy(context.Background(), "", t.TempDir()); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	matches, err := filepath.Glob(cfgFile + ".backup.*")
+	if err != nil {
+		t.Fatalf("glob: %v", err)
+	}
+	if len(matches) != 1 {
+		t.Fatalf("expected exactly one backup file matching %q; got %v", cfgFile+".backup.*", matches)
+	}
+
+	got, err := os.ReadFile(matches[0])
+	if err != nil {
+		t.Fatalf("read backup: %v", err)
+	}
+	if string(got) != "frontend test\n  bind *:6443\n" {
+		t.Errorf("backup content mismatch: %q", string(got))
+	}
+}
+
 // TestRemoveHAProxy_ConfigRemoveAllError_DoesNotAbort verifies that an
 // os.RemoveAll failure (unwritable parent dir) is logged as a warning and
 // does not cause RemoveHAProxy to return an error.
