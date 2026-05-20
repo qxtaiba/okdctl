@@ -180,7 +180,7 @@ func runDoctor(cmd *cobra.Command, _ []string) error {
 
 	switch {
 	case fails > 0:
-		tui.Error("doctor: failing checks block deploy", tui.LF("failing", fails), tui.LF("warnings", warns))
+		tui.Warn("doctor: failing checks block deploy", tui.LF("failing", fails), tui.LF("warnings", warns))
 		return &errtypes.ConfigError{Msg: "preflight checks failed"}
 	case warns > 0:
 		tui.Warn("doctor: deploy may proceed but review warnings above", tui.LF("warnings", warns))
