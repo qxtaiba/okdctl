@@ -3,6 +3,7 @@ package setup
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -67,6 +68,12 @@ func (p *Phase) BuildCustomISOs(ctx context.Context, cfg *config.Config, opts *O
 
 	gateway, netmask, dns, iface := ExtractNetworkConfig(cfg)
 
+	certPEM, _, err := EnsureIgnitionCert(opts.ProjectRoot, cfg.HTTPServer.IgnitionServerIP)
+	if err != nil {
+		return fmt.Errorf("ignition cert unavailable: %w", err)
+	}
+	caCertBase64 := base64.StdEncoding.EncodeToString(certPEM)
+
 	for _, node := range nodes {
 		select {
 		case <-ctx.Done():
@@ -79,12 +86,13 @@ func (p *Phase) BuildCustomISOs(ctx context.Context, cfg *config.Config, opts *O
 			return err
 		}
 		kargsParams := &LiveKargsParams{
-			NodeIP:      node.IP,
-			Gateway:     gateway,
-			Netmask:     netmask,
-			DNS:         dns,
-			Interface:   iface,
-			IgnitionURL: ignitionURL,
+			NodeIP:       node.IP,
+			Gateway:      gateway,
+			Netmask:      netmask,
+			DNS:          dns,
+			Interface:    iface,
+			IgnitionURL:  ignitionURL,
+			CACertBase64: caCertBase64,
 		}
 		fp := nodeISOFingerprint(
 			BuildLiveKargs(kargsParams),
@@ -103,7 +111,7 @@ func (p *Phase) BuildCustomISOs(ctx context.Context, cfg *config.Config, opts *O
 
 		p.Log.Info("iso: building custom coreos iso", "node", node.Name)
 
-		if err := p.buildNodeISO(ctx, cfg, node, fcosISO, isoDir, sshKey, fp, fpFile); err != nil {
+		if err := p.buildNodeISO(ctx, cfg, node, fcosISO, isoDir, sshKey, fp, fpFile, caCertBase64); err != nil {
 			return &errtypes.ClusterError{Msg: fmt.Sprintf("failed to build ISO for %s", node.Name), Err: err}
 		}
 	}
@@ -189,7 +197,7 @@ func writeInstallerTriggerIgnition(sshKey string) (string, error) {
 	})
 }
 
-func (p *Phase) buildNodeISO(ctx context.Context, cfg *config.Config, node NodeInfo, fcosISO, outputDir, sshKey, fp, fpFile string) error {
+func (p *Phase) buildNodeISO(ctx context.Context, cfg *config.Config, node NodeInfo, fcosISO, outputDir, sshKey, fp, fpFile, caCertBase64 string) error {
 	isoName := fmt.Sprintf("%s.iso", node.Name)
 	outputPath := filepath.Join(outputDir, isoName)
 
@@ -206,12 +214,13 @@ func (p *Phase) buildNodeISO(ctx context.Context, cfg *config.Config, node NodeI
 	}
 
 	kargsParams := &LiveKargsParams{
-		NodeIP:      node.IP,
-		Gateway:     gateway,
-		Netmask:     netmask,
-		DNS:         dns,
-		Interface:   iface,
-		IgnitionURL: ignitionURL,
+		NodeIP:       node.IP,
+		Gateway:      gateway,
+		Netmask:      netmask,
+		DNS:          dns,
+		Interface:    iface,
+		IgnitionURL:  ignitionURL,
+		CACertBase64: caCertBase64,
 	}
 
 	args := []string{"iso", "customize"}

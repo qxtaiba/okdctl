@@ -103,14 +103,15 @@ func (p *Phase) Execute(ctx context.Context, opts *Options) error {
 
 // Step IDs for the cleanup phase, ordered as they execute within Full.
 const (
-	StepCleanupWorkDir   distribution.StepID = "cleanup-workdir"
-	StepCleanupWebServer distribution.StepID = "cleanup-webserver"
-	StepCleanupHAProxy   distribution.StepID = "cleanup-haproxy"
-	StepCleanupApache    distribution.StepID = "cleanup-apache"
-	StepCleanupDnsmasq   distribution.StepID = "cleanup-dnsmasq"
-	StepCleanupTerraform distribution.StepID = "cleanup-terraform"
-	StepCleanupPackages  distribution.StepID = "cleanup-packages"
-	StepCleanupSummary   distribution.StepID = "cleanup-summary"
+	StepCleanupWorkDir       distribution.StepID = "cleanup-workdir"
+	StepCleanupWebServer     distribution.StepID = "cleanup-webserver"
+	StepCleanupHAProxy       distribution.StepID = "cleanup-haproxy"
+	StepCleanupApache        distribution.StepID = "cleanup-apache"
+	StepCleanupDnsmasq       distribution.StepID = "cleanup-dnsmasq"
+	StepCleanupTerraform     distribution.StepID = "cleanup-terraform"
+	StepCleanupPackages      distribution.StepID = "cleanup-packages"
+	StepCleanupIgnitionCerts distribution.StepID = "cleanup-ignition-certs"
+	StepCleanupSummary       distribution.StepID = "cleanup-summary"
 )
 
 // cleanupTracker buffers per-step errors and the names of failed subsystems
@@ -244,6 +245,17 @@ func cleanupSteps(opts *Options, logger *slog.Logger) []distribution.StepDef {
 		OnError:    t.onError("packages"),
 	}
 
+	ignitionCertsStep := distribution.StepDef{
+		ID: StepCleanupIgnitionCerts, Name: "cleanup ignition certs",
+		Desc: "removing generated ignition TLS certs", NonFatal: true,
+		ReRunSafe: distribution.ReRunSafeYes,
+		AlreadyDone: func(_ context.Context) (bool, error) {
+			return !system.DirExists(filepath.Join(opts.ProjectRoot, "certs", "ignition")), nil
+		},
+		Exec:    func(ctx context.Context) error { return IgnitionCerts(ctx, opts.ProjectRoot, logger) },
+		OnError: t.onError("ignition-certs"),
+	}
+
 	summaryStep := distribution.StepDef{
 		ID: StepCleanupSummary, Name: "cleanup summary",
 		Desc: "printing cleanup summary", NonFatal: false,
@@ -257,7 +269,7 @@ func cleanupSteps(opts *Options, logger *slog.Logger) []distribution.StepDef {
 	var defs []distribution.StepDef
 	switch opts.Kind {
 	case Full:
-		defs = []distribution.StepDef{workDirStep, webServerStep, haproxyStep, apacheStep, dnsmasqStep, terraformStep, packagesStep}
+		defs = []distribution.StepDef{workDirStep, webServerStep, haproxyStep, apacheStep, dnsmasqStep, terraformStep, packagesStep, ignitionCertsStep}
 	case WorkOnly:
 		defs = []distribution.StepDef{workDirStep}
 	case WebOnly:

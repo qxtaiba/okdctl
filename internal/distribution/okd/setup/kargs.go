@@ -19,16 +19,25 @@ type LiveKargsParams struct {
 	DNS         string
 	Interface   string
 	IgnitionURL string
+	// CACertBase64 is the base64-encoded PEM of the ignition server's CA cert.
+	// When set, coreos.inst.ca pins the cert so the live env trusts the HTTPS
+	// ignition server without any external PKI.
+	CACertBase64 string
 }
 
 // BuildLiveKargs returns the kernel arguments used by the live ISO during
-// FCOS install (ignition URL plus static networking).
+// FCOS install (ignition URL plus static networking). When CACertBase64 is
+// set, coreos.inst.ca is appended to pin the ignition server's cert.
 func BuildLiveKargs(params *LiveKargsParams) []string {
-	return []string{
+	args := []string{
 		fmt.Sprintf("coreos.inst.ignition_url=%s", params.IgnitionURL),
 		fmt.Sprintf("ip=%s::%s:%s::%s:none", params.NodeIP, params.Gateway, params.Netmask, params.Interface),
 		fmt.Sprintf("nameserver=%s", params.DNS),
 	}
+	if params.CACertBase64 != "" {
+		args = append(args, fmt.Sprintf("coreos.inst.ca=%s", params.CACertBase64))
+	}
+	return args
 }
 
 // BuildDestKargs returns persistent networking kernel arguments for the
@@ -67,12 +76,12 @@ func ExtractNetworkConfig(cfg *config.Config) (gateway, netmask, dns, iface stri
 	return gateway, netmask, dns, iface
 }
 
-// BuildIgnitionURLForNode builds the http:// ignition URL a node of the
+// BuildIgnitionURLForNode builds the https:// ignition URL a node of the
 // given role fetches during FCOS first-boot. The payload contains the
 // cluster pull-secret, SSH authorized keys, and machine-config tokens;
-// the sole defence against passive credential capture is a private VLAN.
-// IgnitionServerIP must therefore be RFC1918, loopback, or link-local —
-// a public IP is rejected to prevent accidental credential exposure.
+// TLS with a pinned CA cert is the primary defence against credential
+// capture over the machine-network VLAN. IgnitionServerIP must be RFC1918,
+// loopback, or link-local to prevent exposure on public interfaces.
 func BuildIgnitionURLForNode(cfg *config.Config, role phase.NodeRole) (string, error) {
 	ignitionIP := cfg.HTTPServer.IgnitionServerIP
 
@@ -81,13 +90,16 @@ func BuildIgnitionURLForNode(cfg *config.Config, role phase.NodeRole) (string, e
 		return "", &errtypes.ConfigError{Msg: fmt.Sprintf("ignition server IP %q is not a valid IP address", ignitionIP), Err: err}
 	}
 	if !addr.IsPrivate() && !addr.IsLoopback() && !addr.IsLinkLocalUnicast() {
-		return "", &errtypes.ConfigError{Msg: fmt.Sprintf("ignition server IP %q must be RFC1918, loopback, or link-local — HTTP ignition on a public address exposes cluster credentials", ignitionIP)}
+		return "", &errtypes.ConfigError{Msg: fmt.Sprintf("ignition server IP %q must be RFC1918, loopback, or link-local — HTTPS ignition on a public address exposes cluster credentials", ignitionIP)}
 	}
 
 	ignitionPort := cfg.HTTPServer.Port
 	if ignitionPort == 0 {
-		ignitionPort = DefaultIgnitionPort
+		ignitionPort = DefaultIgnitionHTTPSPort
 	}
 	ignitionFile := role.String() + ".ign"
-	return fmt.Sprintf("http://%s:%d/ignition/%s", ignitionIP, ignitionPort, ignitionFile), nil
+	if ignitionPort == DefaultIgnitionHTTPSPort {
+		return fmt.Sprintf("https://%s/ignition/%s", ignitionIP, ignitionFile), nil
+	}
+	return fmt.Sprintf("https://%s:%d/ignition/%s", ignitionIP, ignitionPort, ignitionFile), nil
 }
