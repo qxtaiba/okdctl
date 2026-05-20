@@ -7,6 +7,7 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/url"
 	"os"
@@ -14,6 +15,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"golang.org/x/crypto/ssh"
@@ -396,11 +398,16 @@ func (f *Flux) createDeployKeySecret(ctx context.Context, env *addon.Environment
 	}
 	deployKeyFile := filepath.Join(homeDir, ".ssh", "flux-deploy-key")
 
-	if !system.FileExists(deployKeyFile) {
+	switch info, err := os.Lstat(deployKeyFile); {
+	case err != nil && os.IsNotExist(err):
 		return fmt.Errorf("deploy key not found at %s - generate with: ssh-keygen -t ed25519 -f ~/.ssh/flux-deploy-key -N ''", deployKeyFile)
+	case err != nil:
+		return fmt.Errorf("failed to stat deploy key: %w", err)
+	case info.Mode()&os.ModeSymlink != 0:
+		return fmt.Errorf("deploy key %s is a symlink; refusing to follow", deployKeyFile)
 	}
 
-	privateKey, err := os.ReadFile(deployKeyFile)
+	privateKey, err := readKeyFile(deployKeyFile)
 	if err != nil {
 		return fmt.Errorf("failed to read deploy key: %w", err)
 	}
@@ -409,7 +416,7 @@ func (f *Flux) createDeployKeySecret(ctx context.Context, env *addon.Environment
 	// and known_hosts. Users who only installed the private key should not fail.
 	publicKeyFile := deployKeyFile + ".pub"
 	var publicKey []byte
-	if b, err := os.ReadFile(publicKeyFile); err == nil {
+	if b, err := readKeyFile(publicKeyFile); err == nil {
 		publicKey = b
 	} else if !os.IsNotExist(err) {
 		return fmt.Errorf("failed to read deploy key public half: %w", err)
@@ -552,6 +559,20 @@ func buildFluxDeployKeySecret(namespace, name string, privateKey, publicKey, kno
 
 // getTimeout reads a timeout setting (in seconds) from the settings map,
 // falling back to the given default.
+// readKeyFile reads path while refusing to follow a symlink at the final
+// component. Mirrors the lstat-then-O_NOFOLLOW pattern in runlock.Acquire.
+func readKeyFile(path string) ([]byte, error) {
+	if info, err := os.Lstat(path); err == nil && info.Mode()&os.ModeSymlink != 0 {
+		return nil, fmt.Errorf("%s is a symlink; refusing to follow", path)
+	}
+	f, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NOFOLLOW, 0)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	return io.ReadAll(f)
+}
+
 func getTimeout(settings map[string]string, key string, defaultTimeout time.Duration) time.Duration {
 	if v, ok := settings[key]; ok && v != "" {
 		if secs, err := strconv.Atoi(v); err == nil && secs > 0 {
