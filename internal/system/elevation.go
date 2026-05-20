@@ -95,6 +95,10 @@ var statFn = os.Stat
 // that directory is also chowned — otherwise we leave pre-existing
 // directory ownership untouched to avoid silently chowning a directory the
 // user explicitly created with a different owner.
+//
+// Credential-bearing files (kubeconfigs, pull secrets, private keys) must
+// pass mode 0o600; a looser mode leaks secret content to other local users.
+// For copy-then-chown scenarios use CopyFileMode + ChownToInvokingUser instead.
 func WriteAsInvokingUser(path string, data []byte, mode os.FileMode) error {
 	parentDir := filepath.Dir(path)
 	parentExisted := true
