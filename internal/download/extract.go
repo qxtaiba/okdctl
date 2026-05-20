@@ -142,6 +142,12 @@ func processTarEntry(tarReader *tar.Reader, header *tar.Header, destDir string, 
 				return fmt.Errorf("failed to replace symlink: %w", err)
 			}
 		}
+		// Defense-in-depth: re-verify through EvalSymlinks after creation so a
+		// previously-extracted symlink in a parent component cannot redirect this
+		// link's resolved path outside cleanDest despite passing the textual check.
+		if err := verifyResolvedPath(targetPath, cleanDest); err != nil {
+			return fmt.Errorf("symlink %s: %w", name, err)
+		}
 
 	default:
 		// Skip unsupported entry types (hardlinks, char/block devices, FIFOs).
