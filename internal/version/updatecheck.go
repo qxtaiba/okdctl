@@ -42,6 +42,7 @@ type cacheEntry struct {
 // Debug records emitted by the goroutine route through slog.Default();
 // callers that bypass cli.Execute must install logutil.RedactHandler
 // before calling this function.
+// Audit-positive baseline; re-confirmed by con:8e65d574:bgcheck-canonical-leak-bound.
 //
 // Security note: the GitHub Releases API response is unsigned; the sole
 // trust anchor is TLS to api.github.com. The resulting notice is advisory
