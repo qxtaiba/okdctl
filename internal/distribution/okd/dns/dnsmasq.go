@@ -204,7 +204,7 @@ func ConfigureSystemResolver(ctx context.Context, fallbackDNS []string, logger *
 
 	// Fall back to systemd-resolved.
 	if system.IsServiceActive(ctx, "systemd-resolved") {
-		logger.Info("dns: configuring systemd-resolved to use dnsmasq")
+		logger.Info("resolver: configuring systemd-resolved to use dnsmasq")
 		confDir := "/etc/systemd/resolved.conf.d"
 		confPath := confDir + "/dnsmasq.conf"
 		confContent := "[Resolve]\nDNS=127.0.0.1\nDomains=~.\n"
@@ -235,7 +235,7 @@ func ConfigureSystemResolver(ctx context.Context, fallbackDNS []string, logger *
 		return system.RunCaptured(ctx, "systemctl", "restart", "systemd-resolved")
 	}
 
-	logger.Warn("dns: neither NetworkManager nor systemd-resolved found, skipping system resolver configuration")
+	logger.Warn("resolver: neither NetworkManager nor systemd-resolved found, skipping system resolver configuration")
 	return nil
 }
 
