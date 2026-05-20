@@ -590,36 +590,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 #### audit-concurrency
 
-##### `con:181efc90:spinner-canonical` — spinner canonical
-
-**Status:** in review — PR #666  
-**Severity:** suggestion  
-**Cluster:** goroutine-lifetime  
-**Evidence:** `internal/tui/spinner.go:19-56`  
-**Problem:** StartSpinner is a canonical ticker-backed background worker with two stop signals (stopCh closed by sync.OnceFunc, plus ctx.Done()) and a `done` channel the returned stop function blocks on for ordered teardown. CLAUDE.md §concurrency lists this as a canonical pattern. Recording so audit-code-smells or audit-modernization doesn't propose simplifying away the dual-signal shape.  
-**Fix:** No change. ticker.Stop is in defer; both stop signals are wired; sync.OnceFunc guards against double-close; done channel allows ordered teardown. Preserve as the canonical pattern.  
-**Effort:** hours
-
-##### `con:39c75e91:confirm-stdin-leak-bounded` — confirm stdin leak bounded
-
-**Status:** in review — PR #667  
-**Severity:** suggestion  
-**Cluster:** goroutine-lifetime  
-**Evidence:** `internal/cli/confirm.go:31-58`  
-**Problem:** promptForConfirmation spawns a stdin-reader goroutine that cannot be cancelled (Go has no portable way to interrupt an in-flight stdin read). On ctx cancel the function returns immediately while the goroutine remains blocked on Stdin.Read until the user hits enter or the process exits. The author documents the bounded leak at L21-L30. CLAUDE.md §concurrency explicitly permits this shape: 'fire-and-forget is acceptable when (a) the work is bounded by ctx and (b) the call site documents the leak bound.' inputCh has cap=1 so the eventual goroutine send never blocks.  
-**Fix:** No change. The goroutine has a documented leak bound (process lifetime), the channel is buffered cap=1, and CLAUDE.md §concurrency permits this shape with documentation. Preserving as canonical 'cancel-blocking-stdin-read' pattern for any future caller.  
-**Effort:** hours
-
-##### `con:48688e63:disconnect-ctx-ignored` — disconnect ctx ignored
-
-**Status:** in review — PR #668  
-**Severity:** suggestion  
-**Cluster:** ctx-ignored  
-**Evidence:** `internal/infrastructure/proxmox/proxmox.go:123-129`  
-**Problem:** Provider.Disconnect(_ context.Context) accepts ctx for symmetry with future network-bound providers (documented at L123-L125). The doc-comment makes the intent explicit, but the body is two assignments — the ctx parameter is pure scaffolding for an interface that does not yet exist. Symmetric with Connect at L103 which takes ctx and uses it for SSH host-key verification.  
-**Fix:** Verify intent (grep roadmap.md, ask owner) — do not delete; per MEMORY.md §scaffolding.  
-**Effort:** hours
-
 ##### `con:6424733c:metrics-stop-shutctx-background` — metrics stop shutctx background
 
 **Status:** not started  
@@ -630,57 +600,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Keep as-is. The justification comment matches CLAUDE.md §concurrency requirement that ctx.Background() needs a justification comment. This row exists so the next audit doesn't re-flag a documented deliberate choice as a bug.  
 **Effort:** hours
 
-##### `con:8e65d574:bgcheck-canonical-leak-bound` — bgcheck canonical leak bound
-
-**Status:** in review — PR #669  
-**Severity:** suggestion  
-**Cluster:** goroutine-lifetime  
-**Evidence:** `internal/version/updatecheck.go:36-58`  
-**Problem:** BackgroundCheck spawns a goroutine that does an HTTP GET with a 4s timeout and writes exactly one CheckResult into a buffered chan cap=1. The send never blocks (cap=1, single sender). The caller (cli/root.go::printUpdateNotice) waits at most 100ms before giving up. CLAUDE.md §concurrency explicitly cites this site as the canonical 'fire-and-forget with documented leak bound (httpTimeout=4s)' pattern.  
-**Fix:** No change. ctx propagates through fetchLatest → http.NewRequestWithContext, the chan is buffered cap=1, leak bound is httpTimeout=4s, doc comment names the leak bound. Preserve as canonical pattern.  
-**Effort:** hours
-
-##### `con:aa84670c:signalloop-bounded-leak` — signalloop bounded leak
-
-**Status:** in review — PR #670  
-**Severity:** suggestion  
-**Cluster:** goroutine-lifetime  
-**Evidence:** `internal/cli/root.go:99-152`  
-**Problem:** signalLoop is a documented bounded-leak goroutine: on the happy path execute()'s defer signal.Stop + close(sigCh) fires, the receiver observes !ok and returns. On the SIGINT-twice path the goroutine calls os.Exit(130) directly. Preserving as canonical signal-watched-ctx pattern. Recently fixed (L137-L138 comments) to add the close(sigCh) after signal.Stop so the receiver returns on happy path rather than blocking until process exit.  
-**Fix:** No change. The fix-up comment at L137-L138 was the result of the prior audit run (a `con` row likely flagged the bounded leak). Preserve as canonical signal-watched-ctx pattern.  
-**Effort:** hours
-
-##### `con:ae5b624c:monitor-cmd-cancel-pattern` — monitor cmd cancel pattern
-
-**Status:** in review — PR #671  
-**Severity:** suggestion  
-**Cluster:** goroutine-lifetime — seam→audit-subprocess — related: sub:7b2829bb:no-cancel-func  
-**Evidence:** `internal/distribution/okd/install/monitor.go:24-43`  
-**Problem:** defaultStartMonitorCmd is the canonical cmd.Cancel + cmd.WaitDelay pattern CLAUDE.md §concurrency points to. The goroutine at L38-L41 does `defer close(doneCh); doneCh <- cmd.Wait()` — clean, buffered chan cap=1, single sender, defer closes after send, no leak. Recorded as preservation of canonical helper so audit-modernization or audit-code-smells doesn't propose 'simplify' that breaks the pattern.  
-**Fix:** No change. This is the canonical pattern. Audit-subprocess sub:7b2829bb:no-cancel-func explicitly cites this site as the pattern executor.RunInteractive should mirror; preserving it bit-for-bit is load-bearing.  
-**Effort:** hours
-
 #### audit-api-design
-
-##### `api:48688e63:ctx-symmetry-no-network` — ctx symmetry no network
-
-**Status:** in review — PR #668  
-**Severity:** suggestion  
-**Cluster:** ctx-first  
-**Evidence:** `internal/infrastructure/proxmox/proxmox.go:103-129`  
-**Problem:** proxmox.Provider.Connect / Disconnect take ctx but the local-only implementation never uses it (sshpin.Verify uses ctx; the Disconnect body discards it via underscore). The doc-comment names this explicitly: 'ctx is accepted for symmetry with future network-bound providers; this implementation is local-only.' That IS the scaffolding rule from MEMORY.md §scaffolding — symmetric API for a future network-bound provider lifecycle. Flagging at suggestion to verify the intent is still live.  
-**Fix:** Verify intent (grep roadmap.md, ask owner) — do not delete; per MEMORY.md §scaffolding.  
-**Effort:** hours
-
-##### `api:c287d5c0:zeroize-no-callers-yet` — zeroize no callers yet
-
-**Status:** in review — PR #672  
-**Severity:** suggestion  
-**Cluster:** exported-surface — seam→audit-security — related: api:7b2829bb:zeroize-asymmetry, sec:7b2829bb:executor-no-zeroize  
-**Evidence:** `internal/distribution/okd/okd.go:198-216`  
-**Problem:** Provisioner.ZeroizeEnv is exported but its only caller is internal/cli/helpers.go (in defer chain). It mirrors terraform.Executor.ZeroizeEnv with byte-identical body. The api-design pressure: this is a credential-lifecycle method that belongs lower in the stack (executor.Executor, the field owner) — see api:7b2829bb. The current location is symmetric-with-terraform but redundant once executor exposes ZeroizeEnv.  
-**Fix:** Verify intent (grep roadmap.md, ask owner) — do not delete; per MEMORY.md §scaffolding.  
-**Effort:** hours
 
 #### audit-cli-ux
 
@@ -739,16 +659,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Effort:** hours
 
 #### audit-code-smells
-
-##### `smell:08ec0042:flags-package-not-canonical` — flags package not canonical
-
-**Status:** in review — PR #665  
-**Severity:** suggestion  
-**Cluster:** helper-package-no-value — related: smell:fd2125dd:output-flag-magic-string, smell:26a430ee:requires-root-annotation-key  
-**Evidence:** `internal/cli/flags.go:1-10`  
-**Problem:** cli/flags.go is a 10-line file holding two constants. The doc-comment correctly explains the typo-guard rationale, but the file holds only two flag names while the same package has at least 4 other repeated flag-name strings (`--output`, `-o`, `--config`, `requiresRoot`). The file is half-applied: it claims to be the canonical centralization point, but most of the package-level flag names live as bare strings in their registration sites.  
-**Fix:** Either expand cli/flags.go to hold every shared flag-name constant (`flagOutputFormat`, `flagOutputFormatShort`, `flagConfig`, `flagLogLevel`, `flagLogFormat`, `flagLogFile`, `annotationRequiresRoot`) — see related smell:fd2125dd / smell:26a430ee — or inline the two existing constants back to their use sites and delete the file. The half-and-half state is the smell.  
-**Effort:** hours
 
 ##### `smell:39c75e91:yes-no-magic-strings` — yes no magic strings
 
