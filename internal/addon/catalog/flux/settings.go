@@ -6,6 +6,9 @@ type Settings struct {
 	Branch             string
 	Path               string
 	GitHostFingerprint string
+	// AcceptHostKey opts into TOFU when GitHostFingerprint is empty. Without
+	// either field set, createDeployKeySecret fails closed.
+	AcceptHostKey bool
 }
 
 // DecodeSettings converts the flat settings map into a Settings value.
@@ -15,6 +18,7 @@ func (f *Flux) DecodeSettings(settings map[string]string) (any, error) {
 		Branch:             orDefault(settings[SettingBranch], "main"),
 		Path:               orDefault(settings[SettingPath], "kubernetes/clusters/production"),
 		GitHostFingerprint: settings[SettingGitHostFingerprint],
+		AcceptHostKey:      settings[SettingAcceptHostKey] == "true",
 	}, nil
 }
 

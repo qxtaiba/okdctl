@@ -274,6 +274,10 @@ func validateProxmoxConfig(proxmox *ProxmoxConfig, result *ValidationResult) {
 			result.AddError(fmt.Sprintf("proxmox.worker_nodes[%d]", i), "must be a valid Proxmox node name")
 		}
 	}
+
+	if err := ValidateSSHFingerprint(proxmox.SSHHostFingerprint); err != nil {
+		result.AddError("provider.proxmox.ssh_host_fingerprint", err.Error())
+	}
 }
 
 func validateHTTPServer(cfg *Config, result *ValidationResult) {
@@ -551,6 +555,19 @@ func ValidateTerraformEnv(value string) error {
 	}
 	if !terraformEnvPattern.MatchString(value) {
 		return errors.New("must start with a letter or underscore and contain only letters, digits, hyphens, or underscores")
+	}
+	return nil
+}
+
+// ValidateSSHFingerprint accepts an empty string (pin not set) or a value in
+// the standard SHA256:<base64> format produced by ssh-keygen -lf / ssh-keyscan.
+// This format is the only vocabulary accepted by sshpin.Verify.
+func ValidateSSHFingerprint(value string) error {
+	if value == "" {
+		return nil
+	}
+	if !strings.HasPrefix(value, "SHA256:") || len(value) <= len("SHA256:") {
+		return errors.New("must be in SHA256:<base64> format (from ssh-keygen -lf or ssh-keyscan | ssh-keygen -lf -)")
 	}
 	return nil
 }

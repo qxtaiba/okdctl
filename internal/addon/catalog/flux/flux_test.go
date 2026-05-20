@@ -4,7 +4,10 @@ import (
 	"strings"
 	"testing"
 
+	"golang.org/x/crypto/ssh"
 	"sigs.k8s.io/yaml"
+
+	"github.com/qxtaiba/okdctl/internal/logutil"
 )
 
 func TestBuildInstanceValues(t *testing.T) {
@@ -167,6 +170,71 @@ func TestValidateSettingsUserinfo(t *testing.T) {
 				t.Errorf("ValidateSettings(%q) = %v, want no errors", tc.repo, errs)
 			}
 		})
+	}
+}
+
+const fixtureGitKeyscanOutput = "# github.com:22 SSH-2.0-babeld-1234\n" +
+	"github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl\n" +
+	"github.com ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBEmKSENjQEezOmxkZMy7opKgwFB9nkt5YRrYMjNuG5N87uRgg6CLrbo5wAdT/y6v0mKV0U2w0WZ2YB/++Tpockg=\n"
+
+func gitFingerprintFromFixture(t *testing.T, keyLine string) string {
+	t.Helper()
+	key, _, _, _, err := ssh.ParseAuthorizedKey([]byte(keyLine))
+	if err != nil {
+		t.Fatalf("fixture key unparseable: %v", err)
+	}
+	return ssh.FingerprintSHA256(key)
+}
+
+func TestVerifyKeyscanFingerprint_Match(t *testing.T) {
+	keyLine := "github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl"
+	fp := gitFingerprintFromFixture(t, keyLine)
+	if err := verifyKeyscanFingerprint(fixtureGitKeyscanOutput, "github.com", fp, false, logutil.NopLogger); err != nil {
+		t.Fatalf("unexpected err on match: %v", err)
+	}
+}
+
+func TestVerifyKeyscanFingerprint_Mismatch(t *testing.T) {
+	wrong := "SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+	err := verifyKeyscanFingerprint(fixtureGitKeyscanOutput, "github.com", wrong, false, logutil.NopLogger)
+	if err == nil {
+		t.Fatal("expected error for mismatch; got nil")
+	}
+	if !strings.Contains(err.Error(), wrong) {
+		t.Errorf("error %q missing expected fingerprint", err.Error())
+	}
+}
+
+func TestVerifyKeyscanFingerprint_EmptyExpected_FailClosed(t *testing.T) {
+	err := verifyKeyscanFingerprint(fixtureGitKeyscanOutput, "github.com", "", false, logutil.NopLogger)
+	if err == nil {
+		t.Fatal("expected fail-closed error when expected empty and acceptHostKey=false; got nil")
+	}
+	if !strings.Contains(err.Error(), "accept_host_key=true") {
+		t.Errorf("fail-closed error %q should mention the accept_host_key opt-out", err.Error())
+	}
+}
+
+func TestVerifyKeyscanFingerprint_EmptyExpected_AcceptHostKey(t *testing.T) {
+	if err := verifyKeyscanFingerprint(fixtureGitKeyscanOutput, "github.com", "", true, logutil.NopLogger); err != nil {
+		t.Fatalf("unexpected err with acceptHostKey=true: %v", err)
+	}
+}
+
+func TestFilterKeyscanLines(t *testing.T) {
+	got := string(filterKeyscanLines(fixtureGitKeyscanOutput))
+	if strings.Contains(got, "#") {
+		t.Errorf("filterKeyscanLines output contains comment line: %q", got)
+	}
+	if !strings.Contains(got, "ssh-ed25519") {
+		t.Errorf("filterKeyscanLines output missing ed25519 key line")
+	}
+	if !strings.Contains(got, "ecdsa-sha2-nistp256") {
+		t.Errorf("filterKeyscanLines output missing ecdsa key line")
+	}
+	lines := strings.Split(strings.TrimRight(got, "\n"), "\n")
+	if len(lines) != 2 {
+		t.Errorf("filterKeyscanLines: got %d lines, want 2: %q", len(lines), got)
 	}
 }
 
