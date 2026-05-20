@@ -82,8 +82,8 @@ func parseAndMatch(keyscanOut, host, expected string, requirePinned bool, log *s
 		return "", nil
 	}
 
-	return "", fmt.Errorf("ssh host key mismatch for %s: expected %s, observed [%s]",
-		host, expected, strings.Join(observed, ", "))
+	return "", &errtypes.AuthError{Msg: fmt.Sprintf("ssh host key mismatch for %s: expected %s, observed [%s]",
+		host, expected, strings.Join(observed, ", "))}
 }
 
 func writeKnownHosts(matchedLine string) (string, error) {
