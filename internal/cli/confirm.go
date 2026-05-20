@@ -58,7 +58,7 @@ func promptForConfirmation(ctx context.Context, prompt string) (bool, error) {
 }
 
 func isConfirmResponse(response string) bool {
-	return response == "y" || response == "Y" || response == "yes"
+	return strings.EqualFold(response, "y") || strings.EqualFold(response, "yes")
 }
 
 // confirmClusterMatches enforces the --yes / --confirm-cluster pairing used
