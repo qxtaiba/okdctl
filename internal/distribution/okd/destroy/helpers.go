@@ -29,16 +29,18 @@ func (p *Phase) destroyInfrastructure(ctx context.Context, opts *Options) error 
 		return nil
 	}
 
+	// Snapshot before Init: terraform init may rewrite terraform_version on schema
+	// migration, making a post-init snapshot useless as a pre-run restore point.
+	snapPath, snapErr := tf.SnapshotState(ctx)
+	if snapErr != nil {
+		return &errtypes.ClusterError{Msg: "terraform destroy: state snapshot failed", Err: snapErr}
+	}
+
 	if err := tf.Init(ctx); err != nil {
 		if hint := tf.LockHint(); hint != nil {
 			return errors.Join(hint, &errtypes.ClusterError{Msg: "terraform init failed", Err: err})
 		}
 		return &errtypes.ClusterError{Msg: "terraform init failed", Err: err}
-	}
-
-	snapPath, snapErr := tf.SnapshotState(ctx)
-	if snapErr != nil {
-		return &errtypes.ClusterError{Msg: "terraform destroy: state snapshot failed", Err: snapErr}
 	}
 
 	p.Log.Info("terraform: destroying infrastructure", "env", opts.TerraformEnv)
