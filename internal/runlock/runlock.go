@@ -74,7 +74,7 @@ func Acquire(projectRoot, verb string) (*Lock, error) {
 		if hint := crossHostHint(holder, localHost); hint != "" {
 			msg += "; " + hint
 		}
-		return nil, &errtypes.ConfigError{Msg: msg}
+		return nil, &errtypes.ConfigError{Msg: msg, Err: err}
 	}
 
 	host, hostErr := os.Hostname()
