@@ -90,7 +90,7 @@ func DefaultConfig() *Config {
 			SSHPublicKey: "",
 		},
 		HTTPServer: HTTPServerConfig{
-			Port:             8080,
+			Port:             443,
 			Root:             "/var/www/html",
 			IgnitionServerIP: defaultBastionIP,
 		},

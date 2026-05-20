@@ -19,25 +19,18 @@ type LiveKargsParams struct {
 	DNS         string
 	Interface   string
 	IgnitionURL string
-	// CACertBase64 is the base64-encoded PEM of the ignition server's CA cert.
-	// When set, coreos.inst.ca pins the cert so the live env trusts the HTTPS
-	// ignition server without any external PKI.
-	CACertBase64 string
 }
 
 // BuildLiveKargs returns the kernel arguments used by the live ISO during
-// FCOS install (ignition URL plus static networking). When CACertBase64 is
-// set, coreos.inst.ca is appended to pin the ignition server's cert.
+// FCOS install (ignition URL plus static networking). The CA cert that
+// authenticates the HTTPS ignition server is embedded into the live ISO via
+// `coreos-installer iso customize --ignition-ca <file>` — not as a karg.
 func BuildLiveKargs(params *LiveKargsParams) []string {
-	args := []string{
+	return []string{
 		fmt.Sprintf("coreos.inst.ignition_url=%s", params.IgnitionURL),
 		fmt.Sprintf("ip=%s::%s:%s::%s:none", params.NodeIP, params.Gateway, params.Netmask, params.Interface),
 		fmt.Sprintf("nameserver=%s", params.DNS),
 	}
-	if params.CACertBase64 != "" {
-		args = append(args, fmt.Sprintf("coreos.inst.ca=%s", params.CACertBase64))
-	}
-	return args
 }
 
 // BuildDestKargs returns persistent networking kernel arguments for the

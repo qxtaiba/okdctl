@@ -197,7 +197,10 @@ func (p *Phase) ConfigureApache(ctx context.Context, cfg *config.Config, project
 	p.Log.Info("apache: configuring httpd for serving ignition files over https")
 
 	bindIP := cfg.HTTPServer.IgnitionServerIP
-	p.configureApachePort(ctx, bindIP)
+	// Listen :443 is provided by the platform's mod_ssl default conf
+	// (RHEL: /etc/httpd/conf.d/ssl.conf, Debian: ports.conf after a2enmod ssl).
+	// The legacy `configureApachePort` :8080 rewrite is dead for the HTTPS
+	// flow and intentionally not called here.
 	p.configureSELinuxForApache(ctx)
 
 	webRoot := cfg.HTTPServer.Root
@@ -259,17 +262,21 @@ func (p *Phase) DeployToWebServer(ctx context.Context, cfg *config.Config, clust
 
 // VerifyWebServer fetches bootstrap.ign over HTTPS from baseURL and verifies
 // the server certificate against caCertPEM. A mismatch causes the TLS handshake
-// to fail — confirming Apache is serving the cert that was baked into the ISO
-// kargs.
+// to fail — confirming Apache is serving the cert that was embedded into the
+// node ISOs via --ignition-ca.
 func (p *Phase) VerifyWebServer(ctx context.Context, baseURL string, caCertPEM []byte) error {
 	testURL := fmt.Sprintf("%s/bootstrap.ign", baseURL)
 
-	pool := x509.NewCertPool()
-	if block, _ := pem.Decode(caCertPEM); block != nil {
-		if cert, parseErr := x509.ParseCertificate(block.Bytes); parseErr == nil {
-			pool.AddCert(cert)
-		}
+	block, _ := pem.Decode(caCertPEM)
+	if block == nil {
+		return &errtypes.ConfigError{Msg: "ignition ca pem is not a valid PEM block"}
 	}
+	cert, parseErr := x509.ParseCertificate(block.Bytes)
+	if parseErr != nil {
+		return &errtypes.ConfigError{Msg: "failed to parse ignition ca cert", Err: parseErr}
+	}
+	pool := x509.NewCertPool()
+	pool.AddCert(cert)
 	client := httputil.NewWithCA(pool, httputil.TimeoutShort)
 
 	p.Log.Info("apache: verifying https web server", "url", testURL)

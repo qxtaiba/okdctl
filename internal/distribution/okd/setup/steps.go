@@ -15,6 +15,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/executor"
 	"github.com/qxtaiba/okdctl/internal/netutil"
+	"github.com/qxtaiba/okdctl/internal/platform"
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
@@ -344,9 +345,22 @@ func (p *Phase) setupInfraSteps(cfg *config.Config, opts *Options) []distributio
 
 func (p *Phase) installSystemPackages(ctx context.Context) error {
 	sysPkgs := []string{"coreos-installer", "haproxy", p.OS.ApachePackageName(), "dnsmasq"}
+	// mod_ssl is a separate rpm on RHEL/Fedora and is required for the HTTPS
+	// ignition vhost's SSLEngine directive; on Debian mod_ssl ships with the
+	// apache2 package and is enabled via `a2enmod ssl` instead.
+	if p.OS.Family == platform.FamilyRHEL {
+		sysPkgs = append(sysPkgs, "mod_ssl")
+	}
 
 	var toInstall []string
 	for _, pkg := range sysPkgs {
+		// mod_ssl is an apache module package, not a CLI tool — CommandExists
+		// can't detect it, so we always include it in toInstall on RHEL. The
+		// Pkg.Install path is idempotent so already-installed is a no-op.
+		if pkg == "mod_ssl" {
+			toInstall = append(toInstall, pkg)
+			continue
+		}
 		if !executor.CommandExists(pkg) {
 			toInstall = append(toInstall, pkg)
 			p.Log.Debug("packages: not found", "pkg", pkg)

@@ -55,7 +55,7 @@ const (
 // HTTP server defaults for ignition hosting.
 const (
 	DefaultIgnitionServerIP = "192.168.1.20"
-	DefaultHTTPPort         = 8080
+	DefaultHTTPPort         = 443
 	DefaultWebRoot          = "/var/www/html"
 )
 

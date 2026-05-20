@@ -1,5 +1,3 @@
-// Package setup — cert.go owns the self-signed cert lifecycle for the
-// ignition HTTPS server.
 package setup
 
 import (
@@ -88,6 +86,11 @@ func loadExistingCert(certPath, keyPath, ip string) ([]byte, []byte, bool) {
 }
 
 func generateSelfSignedCert(certPath, keyPath, ip string) ([]byte, []byte, error) {
+	parsed := net.ParseIP(ip)
+	if parsed == nil {
+		return nil, nil, fmt.Errorf("ignition cert host %q is not a valid IP address", ip)
+	}
+
 	priv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
 		return nil, nil, fmt.Errorf("generate ecdsa key: %w", err)
@@ -108,9 +111,7 @@ func generateSelfSignedCert(certPath, keyPath, ip string) ([]byte, []byte, error
 		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 		IsCA:                  true,
 		BasicConstraintsValid: true,
-	}
-	if parsed := net.ParseIP(ip); parsed != nil {
-		tmpl.IPAddresses = []net.IP{parsed}
+		IPAddresses:           []net.IP{parsed},
 	}
 
 	certDER, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &priv.PublicKey, priv)
@@ -129,6 +130,10 @@ func generateSelfSignedCert(certPath, keyPath, ip string) ([]byte, []byte, error
 	dir := filepath.Dir(certPath)
 	if err := system.EnsureDir(dir); err != nil {
 		return nil, nil, fmt.Errorf("ensure cert dir: %w", err)
+	}
+	// 0o700: keep the private key non-enumerable by other users on the bastion.
+	if err := os.Chmod(dir, 0o700); err != nil {
+		return nil, nil, fmt.Errorf("tighten cert dir perms: %w", err)
 	}
 	if err := system.AtomicWrite(certPath, certPEM, 0o644); err != nil {
 		return nil, nil, fmt.Errorf("write cert: %w", err)

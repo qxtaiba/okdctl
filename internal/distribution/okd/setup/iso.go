@@ -3,7 +3,6 @@ package setup
 import (
 	"context"
 	"crypto/sha256"
-	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -72,7 +71,9 @@ func (p *Phase) BuildCustomISOs(ctx context.Context, cfg *config.Config, opts *O
 	if err != nil {
 		return fmt.Errorf("ignition cert unavailable: %w", err)
 	}
-	caCertBase64 := base64.StdEncoding.EncodeToString(certPEM)
+	caCertSum := sha256.Sum256(certPEM)
+	caCertFP := hex.EncodeToString(caCertSum[:])
+	caCertPath, _ := IgnitionCertPaths(opts.ProjectRoot)
 
 	for _, node := range nodes {
 		select {
@@ -86,16 +87,15 @@ func (p *Phase) BuildCustomISOs(ctx context.Context, cfg *config.Config, opts *O
 			return err
 		}
 		kargsParams := &LiveKargsParams{
-			NodeIP:       node.IP,
-			Gateway:      gateway,
-			Netmask:      netmask,
-			DNS:          dns,
-			Interface:    iface,
-			IgnitionURL:  ignitionURL,
-			CACertBase64: caCertBase64,
+			NodeIP:      node.IP,
+			Gateway:     gateway,
+			Netmask:     netmask,
+			DNS:         dns,
+			Interface:   iface,
+			IgnitionURL: ignitionURL,
 		}
 		fp := nodeISOFingerprint(
-			BuildLiveKargs(kargsParams),
+			append(BuildLiveKargs(kargsParams), "ca:"+caCertFP),
 			BuildDestKargs(kargsParams),
 			sshKey, fcosISO,
 		)
@@ -111,7 +111,7 @@ func (p *Phase) BuildCustomISOs(ctx context.Context, cfg *config.Config, opts *O
 
 		p.Log.Info("iso: building custom coreos iso", "node", node.Name)
 
-		if err := p.buildNodeISO(ctx, cfg, node, fcosISO, isoDir, sshKey, fp, fpFile, caCertBase64); err != nil {
+		if err := p.buildNodeISO(ctx, cfg, node, fcosISO, isoDir, sshKey, fp, fpFile, caCertPath); err != nil {
 			return &errtypes.ClusterError{Msg: fmt.Sprintf("failed to build ISO for %s", node.Name), Err: err}
 		}
 	}
@@ -197,7 +197,7 @@ func writeInstallerTriggerIgnition(sshKey string) (string, error) {
 	})
 }
 
-func (p *Phase) buildNodeISO(ctx context.Context, cfg *config.Config, node NodeInfo, fcosISO, outputDir, sshKey, fp, fpFile, caCertBase64 string) error {
+func (p *Phase) buildNodeISO(ctx context.Context, cfg *config.Config, node NodeInfo, fcosISO, outputDir, sshKey, fp, fpFile, caCertPath string) error {
 	isoName := fmt.Sprintf("%s.iso", node.Name)
 	outputPath := filepath.Join(outputDir, isoName)
 
@@ -214,13 +214,12 @@ func (p *Phase) buildNodeISO(ctx context.Context, cfg *config.Config, node NodeI
 	}
 
 	kargsParams := &LiveKargsParams{
-		NodeIP:       node.IP,
-		Gateway:      gateway,
-		Netmask:      netmask,
-		DNS:          dns,
-		Interface:    iface,
-		IgnitionURL:  ignitionURL,
-		CACertBase64: caCertBase64,
+		NodeIP:      node.IP,
+		Gateway:     gateway,
+		Netmask:     netmask,
+		DNS:         dns,
+		Interface:   iface,
+		IgnitionURL: ignitionURL,
 	}
 
 	args := []string{"iso", "customize"}
@@ -230,6 +229,11 @@ func (p *Phase) buildNodeISO(ctx context.Context, cfg *config.Config, node NodeI
 	for _, karg := range BuildDestKargs(kargsParams) {
 		args = append(args, "--dest-karg-append", karg)
 	}
+	// --ignition-ca embeds the CA PEM into the live env's Ignition trust
+	// store, so the HTTPS fetch of the per-node .ign payload succeeds without
+	// any external PKI. The kernel command line has no equivalent karg —
+	// see coreos-installer iso customize docs.
+	args = append(args, "--ignition-ca", caCertPath)
 
 	// All nodes use a pre-install script that discovers the OS disk by serial
 	// via lsblk. Workers also get the data disk wiped; for bootstrap/masters
