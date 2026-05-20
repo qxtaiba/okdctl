@@ -192,6 +192,37 @@ func TestZeroizeEnv(t *testing.T) {
 	})
 }
 
+func TestSnapshotEnv(t *testing.T) {
+	t.Run("copy is independent of internal env", func(t *testing.T) {
+		e := New(WithEnv([]string{"KEY=v1"}))
+		s := e.SnapshotEnv()
+		s[0] = "KEY=v2"
+		if e.env[0] != "KEY=v1" {
+			t.Errorf("mutation of snapshot altered internal env: got %q", e.env[0])
+		}
+	})
+
+	t.Run("length matches internal env", func(t *testing.T) {
+		kvs := []string{"A=1", "B=2", "C=3"}
+		e := New(WithEnv(kvs))
+		s := e.SnapshotEnv()
+		if len(s) != len(e.env) {
+			t.Errorf("len(snapshot)=%d; want %d", len(s), len(e.env))
+		}
+	})
+
+	t.Run("empty env returns non-nil zero-length slice", func(t *testing.T) {
+		e := New(WithEnv([]string{}))
+		s := e.SnapshotEnv()
+		if s == nil {
+			t.Error("snapshot of empty env must be non-nil")
+		}
+		if len(s) != 0 {
+			t.Errorf("len(snapshot)=%d; want 0", len(s))
+		}
+	})
+}
+
 func TestRunStreamedChecked(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("needs POSIX sh")
