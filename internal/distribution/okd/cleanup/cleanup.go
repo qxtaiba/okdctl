@@ -148,6 +148,18 @@ func execute(ctx context.Context, opts *Options, logger *slog.Logger) error {
 	return o.Run(ctx)
 }
 
+func cleanupSummaryStep(opts *Options, t *cleanupTracker, logger *slog.Logger) distribution.StepDef {
+	return distribution.StepDef{
+		ID: StepCleanupSummary, Name: "cleanup summary",
+		Desc: "printing cleanup summary", NonFatal: false,
+		ReRunSafe: distribution.ReRunSafeYes,
+		Exec: func(_ context.Context) error {
+			printSummary(opts, t, logger)
+			return errors.Join(t.errs...)
+		},
+	}
+}
+
 func ignitionCertsCleanupStep(opts *Options, t *cleanupTracker, logger *slog.Logger) distribution.StepDef {
 	return distribution.StepDef{
 		ID: StepCleanupIgnitionCerts, Name: "cleanup ignition certs",
@@ -259,16 +271,7 @@ func cleanupSteps(opts *Options, logger *slog.Logger) []distribution.StepDef {
 	}
 
 	ignitionCertsStep := ignitionCertsCleanupStep(opts, t, logger)
-
-	summaryStep := distribution.StepDef{
-		ID: StepCleanupSummary, Name: "cleanup summary",
-		Desc: "printing cleanup summary", NonFatal: false,
-		ReRunSafe: distribution.ReRunSafeYes,
-		Exec: func(_ context.Context) error {
-			printSummary(opts, t, logger)
-			return errors.Join(t.errs...)
-		},
-	}
+	summaryStep := cleanupSummaryStep(opts, t, logger)
 
 	var defs []distribution.StepDef
 	switch opts.Kind {
