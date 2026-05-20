@@ -16,9 +16,10 @@ import (
 )
 
 var (
-	updateIngressYes         bool
-	updateIngressKeepHAProxy bool
-	updateIngressDryRun      bool
+	updateIngressYes            bool
+	updateIngressKeepHAProxy    bool
+	updateIngressDryRun         bool
+	updateIngressConfirmCluster string
 )
 
 var updateIngressCmd = &cobra.Command{
@@ -45,6 +46,8 @@ func init() {
 	updateIngressCmd.Flags().BoolVarP(&updateIngressYes, "yes", "y", false, "skip confirmation prompts")
 	updateIngressCmd.Flags().BoolVar(&updateIngressKeepHAProxy, "keep-haproxy", false, "keep haproxy running on the bastion after dns switch")
 	updateIngressCmd.Flags().BoolVar(&updateIngressDryRun, flagDryRun, false, "preview update-ingress mutations without touching the cluster")
+	updateIngressCmd.Flags().StringVar(&updateIngressConfirmCluster, "confirm-cluster", "",
+		"required with --yes; must equal cfg.Cluster.Name (typo guard for scripted update-ingress runs)")
 }
 
 // runUpdateIngressDryRun prints the mutations update-ingress would perform
@@ -107,6 +110,10 @@ func runUpdateIngress(cmd *cobra.Command, _ []string) error {
 
 	if updateIngressDryRun {
 		return runUpdateIngressDryRun(ctx, cfg)
+	}
+
+	if err := confirmClusterMatches(updateIngressYes, updateIngressConfirmCluster, cfg.Cluster.Name, "update-ingress"); err != nil {
+		return err
 	}
 
 	clusterFQDN := cfg.Cluster.Name + "." + cfg.Cluster.Domain
