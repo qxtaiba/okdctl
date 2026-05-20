@@ -5,10 +5,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"syscall"
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/templates"
@@ -19,6 +21,24 @@ import (
 // ignitionFilenames is the canonical list openshift-install emits into clusterDir.
 // AlreadyDone for StepDeployIgnition requires all three to exist in the webroot.
 var ignitionFilenames = []string{"bootstrap.ign", "master.ign", "worker.ign"}
+
+// readNoFollow reads path while refusing to follow a symlink at the final
+// component. Mirrors the lstat-then-O_NOFOLLOW pattern in runlock.Acquire.
+func readNoFollow(path string) ([]byte, error) {
+	info, err := os.Lstat(path)
+	if err != nil {
+		return nil, err
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		return nil, fmt.Errorf("path %q is a symlink; refusing to follow", path)
+	}
+	f, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NOFOLLOW, 0)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	return io.ReadAll(f)
+}
 
 // renderAndWrite calls render and atomically writes the result to path,
 // wrapping errors with errLabel.
@@ -44,7 +64,7 @@ func (p *Phase) GenerateInstallConfig(ctx context.Context, cfg *config.Config, o
 		return &errtypes.ConfigError{Msg: "failed to create output directory", Err: err}
 	}
 
-	pullSecret, err := os.ReadFile(cfg.Files.PullSecret)
+	pullSecret, err := readNoFollow(cfg.Files.PullSecret)
 	if err != nil {
 		return &errtypes.AuthError{Msg: "failed to read pull secret", Err: err}
 	}
@@ -53,7 +73,7 @@ func (p *Phase) GenerateInstallConfig(ctx context.Context, cfg *config.Config, o
 		return &errtypes.AuthError{Msg: "pull secret is not valid JSON", Err: errtypes.ErrPullSecretInvalid}
 	}
 
-	sshKey, err := os.ReadFile(cfg.Files.SSHPublicKey)
+	sshKey, err := readNoFollow(cfg.Files.SSHPublicKey)
 	if err != nil {
 		return &errtypes.ConfigError{Msg: "failed to read SSH key", Err: err}
 	}

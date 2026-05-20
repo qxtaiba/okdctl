@@ -63,3 +63,56 @@ func TestGenerateInstallConfig_PullSecretReadFail(t *testing.T) {
 		t.Errorf("error type = %T, want *errtypes.AuthError", err)
 	}
 }
+
+func TestGenerateInstallConfig_SymlinkRejected(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "target.txt")
+	if err := os.WriteFile(target, []byte("not a secret"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	pullSymlink := filepath.Join(dir, "pull-secret.json")
+	if err := os.Symlink(target, pullSymlink); err != nil {
+		t.Fatal(err)
+	}
+	sshKeyPath := filepath.Join(dir, "id_rsa.pub")
+	if err := os.WriteFile(sshKeyPath, []byte("ssh-rsa AAAAB3 test@host"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := config.DefaultConfig()
+	cfg.Files.PullSecret = pullSymlink
+	cfg.Files.SSHPublicKey = sshKeyPath
+	p := newTestPhase(t)
+
+	err := p.GenerateInstallConfig(t.Context(), cfg, t.TempDir())
+	if err == nil {
+		t.Fatal("want error for symlinked pull-secret, got nil")
+	}
+	var authErr *errtypes.AuthError
+	if !errors.As(err, &authErr) {
+		t.Errorf("pull-secret symlink: error type = %T, want *errtypes.AuthError", err)
+	}
+
+	realPS := filepath.Join(dir, "pull-secret-real.json")
+	if err := os.WriteFile(realPS, []byte(`{"auths":{}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	sshSymlink := filepath.Join(dir, "id_rsa-sym.pub")
+	if err := os.Symlink(target, sshSymlink); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg2 := config.DefaultConfig()
+	cfg2.Files.PullSecret = realPS
+	cfg2.Files.SSHPublicKey = sshSymlink
+
+	err = p.GenerateInstallConfig(t.Context(), cfg2, t.TempDir())
+	if err == nil {
+		t.Fatal("want error for symlinked SSH key, got nil")
+	}
+	var cfgErr *errtypes.ConfigError
+	if !errors.As(err, &cfgErr) {
+		t.Errorf("ssh-key symlink: error type = %T, want *errtypes.ConfigError", err)
+	}
+}
