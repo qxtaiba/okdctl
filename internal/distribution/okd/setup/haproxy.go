@@ -58,7 +58,7 @@ func (p *Phase) BuildHAProxyConfigData(cfg *config.Config) (templates.HAProxyCon
 	}, nil
 }
 
-const (
+var (
 	haproxyConfigPath = phase.DefaultHAProxyConfigPath
 	haproxyBackupPath = phase.DefaultHAProxyBackupPath
 )
@@ -77,6 +77,10 @@ func (p *Phase) installHAProxyConfig(ctx context.Context, tmpPath string) error 
 	}
 	return nil
 }
+
+// enableAndRestartHAProxyFn lets tests substitute the enable+restart step
+// without calling system.ManageService, which always errors on non-Linux.
+var enableAndRestartHAProxyFn = enableAndRestartHAProxy
 
 func enableAndRestartHAProxy(ctx context.Context) error {
 	if err := system.ManageService(ctx, system.ServiceEnable, "haproxy"); err != nil {
@@ -135,7 +139,7 @@ func (p *Phase) ConfigureHAProxy(ctx context.Context, cfg *config.Config, _ *Opt
 		return rollback("config install or validation failed", err)
 	}
 
-	if err := enableAndRestartHAProxy(ctx); err != nil {
+	if err := enableAndRestartHAProxyFn(ctx); err != nil {
 		return rollback("service restart failed", err)
 	}
 
