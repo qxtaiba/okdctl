@@ -209,7 +209,7 @@ func (p *Phase) setupWebSteps(cfg *config.Config, opts *Options, clusterDir stri
 			ID: StepInstallApache, Name: "install apache",
 			ReRunSafe: distribution.ReRunSafeYes,
 			Desc:      "installing and configuring apache web server", NonFatal: true,
-			Exec:    func(ctx context.Context) error { return p.ConfigureApache(ctx, cfg) },
+			Exec:    func(ctx context.Context) error { return p.ConfigureApache(ctx, cfg, opts.ProjectRoot) },
 			OnError: phase.WarnOnError(p.Log, "apache: installation skipped"),
 		},
 		{
@@ -235,9 +235,13 @@ func (p *Phase) setupWebSteps(cfg *config.Config, opts *Options, clusterDir stri
 		{
 			ID: StepVerifyWebServer, Name: "verify web server",
 			ReRunSafe: distribution.ReRunSafeYes,
-			Desc:      "verifying web server accessibility",
+			Desc:      "verifying https web server accessibility",
 			Exec: func(ctx context.Context) error {
-				return p.VerifyWebServer(ctx, BuildIgnitionURL(cfg.HTTPServer.IgnitionServerIP, cfg.HTTPServer.Port))
+				certPEM, _, err := EnsureIgnitionCert(opts.ProjectRoot, cfg.HTTPServer.IgnitionServerIP)
+				if err != nil {
+					return &errtypes.ConfigError{Msg: "failed to load ignition cert for verification", Err: err}
+				}
+				return p.VerifyWebServer(ctx, BuildIgnitionURL(cfg.HTTPServer.IgnitionServerIP, cfg.HTTPServer.Port), certPEM)
 			},
 		},
 		{

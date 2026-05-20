@@ -4,6 +4,8 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/x509"
+	"encoding/pem"
 	"fmt"
 	"io"
 	"net"
@@ -19,6 +21,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/executor"
 	"github.com/qxtaiba/okdctl/internal/httputil"
 	"github.com/qxtaiba/okdctl/internal/logutil"
+	"github.com/qxtaiba/okdctl/internal/platform"
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
@@ -149,18 +152,63 @@ func (p *Phase) verifyApacheListening(ctx context.Context, bindIP string) {
 	p.Log.Info("apache: httpd service listening on port 8080")
 }
 
-// ConfigureApache configures httpd for serving ignition payloads: port,
-// SELinux context, service enable, and ignition directory creation. The
-// payloads contain the cluster pull-secret, SSH authorized keys, and
-// machine-config tokens; confidentiality depends on the bastion being
-// isolated to a private VLAN — BuildIgnitionURLForNode enforces the
-// RFC1918 invariant at config time.
-func (p *Phase) ConfigureApache(ctx context.Context, cfg *config.Config) error {
-	p.Log.Info("apache: configuring httpd for serving ignition files")
+// configureApacheHTTPS writes the HTTPS vhost drop-in conf and, on Debian,
+// enables mod_ssl and the conf. On RHEL conf.d is auto-included by httpd.conf.
+func (p *Phase) configureApacheHTTPS(ctx context.Context, certPath, keyPath, webRoot, bindIP string) error {
+	vhostDir := p.OS.ApacheVhostConfDir()
+	if err := system.EnsureDir(vhostDir); err != nil {
+		return fmt.Errorf("apache: failed to ensure vhost conf dir: %w", err)
+	}
+
+	listen := "443"
+	if bindIP != "" {
+		listen = net.JoinHostPort(bindIP, "443")
+	}
+
+	vhostConf := fmt.Sprintf("<VirtualHost %s>\n  SSLEngine on\n  SSLCertificateFile    %s\n  SSLCertificateKeyFile %s\n  DocumentRoot %s\n  <Directory \"%s/ignition\">\n    Options None\n    AllowOverride None\n    Require all granted\n  </Directory>\n</VirtualHost>\n",
+		listen, certPath, keyPath, webRoot, webRoot)
+
+	confPath := filepath.Join(vhostDir, "ignition-ssl.conf")
+	if err := system.AtomicWriteString(confPath, vhostConf, 0o644); err != nil {
+		return fmt.Errorf("apache: failed to write HTTPS vhost conf: %w", err)
+	}
+
+	if p.OS.Family == platform.FamilyDebian {
+		if _, err := p.Exec.Run(ctx, "a2enmod", "ssl"); err != nil {
+			p.Log.Warn("apache: a2enmod ssl failed", "err", err)
+		}
+		if _, err := p.Exec.Run(ctx, "a2enconf", "ignition-ssl"); err != nil {
+			p.Log.Warn("apache: a2enconf ignition-ssl failed", "err", err)
+		}
+	}
+
+	p.Log.Info("apache: HTTPS vhost configured", "conf", confPath)
+	return nil
+}
+
+// ConfigureApache configures httpd for serving ignition payloads over HTTPS:
+// writes the TLS vhost conf, adjusts the port, enables the service, and
+// creates the ignition directory. The payloads contain the cluster
+// pull-secret, SSH authorized keys, and machine-config tokens; TLS with a
+// pinned CA cert is the primary defence against credential capture over the
+// machine-network VLAN — BuildIgnitionURLForNode enforces the RFC1918
+// invariant at config time.
+func (p *Phase) ConfigureApache(ctx context.Context, cfg *config.Config, projectRoot string) error {
+	p.Log.Info("apache: configuring httpd for serving ignition files over https")
 
 	bindIP := cfg.HTTPServer.IgnitionServerIP
 	p.configureApachePort(ctx, bindIP)
 	p.configureSELinuxForApache(ctx)
+
+	webRoot := cfg.HTTPServer.Root
+	if webRoot == "" {
+		webRoot = phase.DefaultHTTPServerRoot
+	}
+
+	certPath, keyPath := IgnitionCertPaths(projectRoot)
+	if err := p.configureApacheHTTPS(ctx, certPath, keyPath, webRoot, bindIP); err != nil {
+		return &errtypes.ClusterError{Msg: "failed to configure apache HTTPS vhost", Err: err}
+	}
 
 	if err := enableAndStartApache(ctx, p.OS.ApacheServiceName()); err != nil {
 		return &errtypes.ClusterError{Msg: "failed to enable and start apache", Err: err}
@@ -168,10 +216,6 @@ func (p *Phase) ConfigureApache(ctx context.Context, cfg *config.Config) error {
 
 	p.verifyApacheListening(ctx, bindIP)
 
-	webRoot := cfg.HTTPServer.Root
-	if webRoot == "" {
-		webRoot = phase.DefaultHTTPServerRoot
-	}
 	ignitionDir, err := p.ensureIgnitionDir(ctx, webRoot)
 	if err != nil {
 		return err
@@ -213,14 +257,22 @@ func (p *Phase) DeployToWebServer(ctx context.Context, cfg *config.Config, clust
 	return nil
 }
 
-// VerifyWebServer fetches bootstrap.ign from baseURL and checks the response
-// status and approximate size to catch misconfigured or empty deploys early.
-func (p *Phase) VerifyWebServer(ctx context.Context, baseURL string) error {
+// VerifyWebServer fetches bootstrap.ign over HTTPS from baseURL and verifies
+// the server certificate against caCertPEM. A mismatch causes the TLS handshake
+// to fail — confirming Apache is serving the cert that was baked into the ISO
+// kargs.
+func (p *Phase) VerifyWebServer(ctx context.Context, baseURL string, caCertPEM []byte) error {
 	testURL := fmt.Sprintf("%s/bootstrap.ign", baseURL)
 
-	client := httputil.New(httputil.TimeoutShort)
+	pool := x509.NewCertPool()
+	if block, _ := pem.Decode(caCertPEM); block != nil {
+		if cert, parseErr := x509.ParseCertificate(block.Bytes); parseErr == nil {
+			pool.AddCert(cert)
+		}
+	}
+	client := httputil.NewWithCA(pool, httputil.TimeoutShort)
 
-	p.Log.Info("apache: verifying web server", "url", testURL)
+	p.Log.Info("apache: verifying https web server", "url", testURL)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, testURL, http.NoBody)
 	if err != nil {
@@ -242,7 +294,7 @@ func (p *Phase) VerifyWebServer(ctx context.Context, baseURL string) error {
 		return &errtypes.NetworkError{Msg: fmt.Sprintf("bootstrap.ign appears too small (%d bytes)", resp.ContentLength)}
 	}
 
-	p.Log.Info("apache: web server accessible and serving ignition files")
+	p.Log.Info("apache: https web server accessible and serving ignition files")
 
 	return nil
 }

@@ -162,6 +162,16 @@ func (o OS) ApacheUser() string {
 	return "apache"
 }
 
+// ApacheVhostConfDir returns the directory where drop-in vhost conf files
+// land. On RHEL conf.d is auto-included by httpd.conf; on Debian the conf
+// is activated via a2enconf.
+func (o OS) ApacheVhostConfDir() string {
+	if o.Family == FamilyDebian {
+		return "/etc/apache2/conf-available"
+	}
+	return "/etc/httpd/conf.d"
+}
+
 // HasSELinux reports whether the detected family ships SELinux by default.
 func (o OS) HasSELinux() bool {
 	return o.Family == FamilyRHEL
