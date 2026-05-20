@@ -169,12 +169,12 @@ func init() {
 	destroyCmd.Flags().BoolVar(&destroySkipTerraform, "skip-terraform", false, "skip terraform destroy — intended for resuming after a successful terraform-destroy phase (no-op with --dry-run)")
 	destroyCmd.Flags().BoolVar(&destroySkipCleanup, "skip-cleanup", false, "skip host file cleanup — leaves haproxy/dnsmasq config in place (no-op with --dry-run)")
 	destroyCmd.Flags().BoolVar(&destroySkipFirewall, "skip-firewall", false, "skip firewall rule cleanup (no-op with --dry-run)")
-	destroyCmd.Flags().StringArrayVar(&destroyTargets, "target", nil,
+	destroyCmd.Flags().StringArrayVar(&destroyTargets, flagTarget, nil,
 		"limit terraform destroy to this resource address (repeatable); must match the okd_cluster VM allowlist")
-	destroyCmd.Flags().StringVar(&destroyOnly, "only", "",
+	destroyCmd.Flags().StringVar(&destroyOnly, flagOnly, "",
 		"scope destroy to a node group: "+strings.Join(validDestroyScopes(), ", ")+" (expands into --target; mutually exclusive with --target)")
-	destroyCmd.MarkFlagsMutuallyExclusive("only", "target")
-	_ = destroyCmd.RegisterFlagCompletionFunc("only", func(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
+	destroyCmd.MarkFlagsMutuallyExclusive(flagOnly, flagTarget)
+	_ = destroyCmd.RegisterFlagCompletionFunc(flagOnly, func(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
 		return validDestroyScopes(), cobra.ShellCompDirectiveNoFileComp
 	})
 }

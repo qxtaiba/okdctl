@@ -5,12 +5,19 @@ package cli
 // the zero value at runtime — Go has no compile-time check across the
 // flag-set string key — so both sites reference these constants.
 const (
+	flagConfig      = "config"
+	flagConfigShort = "c"
 	flagDryRun      = "dry-run"
-	flagOutput      = "output"
-	flagOutputShort = "o"
-	flagOutputFile  = "output-file"
+	flagLogFile     = "log-file"
+	flagLogFormat   = "log-format"
+	flagLogLevel    = "log-level"
 	flagOnly        = "only"
+	flagOutput      = "output"
+	flagOutputFile  = "output-file"
+	flagOutputShort = "o"
+	flagQuiet       = "quiet"
 	flagTarget      = "target"
+	flagVerbose     = "verbose"
 )
 
 // Output-format values for the --output/-o flag. Mirrors kubectl/oc:
