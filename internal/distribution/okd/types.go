@@ -2,20 +2,15 @@ package okd
 
 import "github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 
-// ClusterStatus is a read-only snapshot of an OKD cluster — phase, version,
-// endpoints, per-node conditions, and a free-form Message used by CLI status
-// commands.
+// ClusterStatus is a read-only snapshot of an OKD cluster: lifecycle phase,
+// API reachability, per-node health, operator degradation count, and addon
+// health results.
 type ClusterStatus struct {
 	Phase             ClusterPhase  `json:"phase"`
 	APIReachable      bool          `json:"api_reachable"`
-	Version           string        `json:"version,omitempty"`
-	APIServerURL      string        `json:"api_server_url,omitempty"`
-	ConsoleURL        string        `json:"console_url,omitempty"`
 	Nodes             []NodeStatus  `json:"nodes"`
 	DegradedOperators int           `json:"degraded_operators"`
-	Conditions        []Condition   `json:"conditions,omitempty"`
 	Addons            []AddonStatus `json:"addons,omitempty"`
-	Message           string        `json:"message,omitempty"`
 }
 
 // AddonStatus is a health snapshot for a single registered addon.
