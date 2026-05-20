@@ -94,8 +94,10 @@ func (p *Phase) destroySteps(ctx context.Context, cfg *config.Config, opts *Opti
 			ID: StepRemoveRemoteISO, Name: "remove remote ISO", ReRunSafe: distribution.ReRunSafeYes,
 			Desc:       "removing fedora-coreos iso from proxmox host",
 			NonFatal:   true,
-			SkipWhen:   trackSkip("iso removal", func() bool { return opts.KeepISOs || cfg.Provider.Proxmox == nil }),
-			SkipReason: isoSkipReason(opts, cfg),
+			SkipWhen: trackSkip("iso removal", func() bool {
+				return opts.KeepISOs || cfg.Provider.Proxmox == nil || t.terraformFailed()
+			}),
+			SkipReason: "iso removal disabled via --keep-isos, no proxmox provider, or terraform owns live vms that may still reference these isos",
 			Exec: func(ctx context.Context) error {
 				host := phase.ProxmoxBareHost(cfg.Provider.Proxmox.Host)
 				knownHostsPath, verifyErr := sshpin.Verify(ctx, host, cfg.Provider.Proxmox.SSHHostFingerprint, cfg.Provider.Proxmox.RequirePinnedFingerprint, p.Log)
@@ -204,12 +206,3 @@ func cleanupFilesSkipReason(opts *Options) string {
 	return ""
 }
 
-func isoSkipReason(opts *Options, cfg *config.Config) string {
-	if opts.KeepISOs {
-		return "iso removal skipped via --keep-isos"
-	}
-	if cfg.Provider.Proxmox == nil {
-		return "no proxmox provider configured"
-	}
-	return ""
-}
