@@ -57,6 +57,7 @@ run: ## Run the CLI directly
 	$(GOCMD) run ./cmd/okdctl $(ARGS)
 
 dev: ## Run with hot reload (requires air)
+	# air is dev-only (not in the release binary); pin to a known-good version rather than @latest.
 	@which air > /dev/null || (echo "Installing air..." && go install github.com/air-verse/air@v1.61.7)
 	air
 
