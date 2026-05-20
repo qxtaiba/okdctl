@@ -16,8 +16,8 @@ import (
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
-// ignitionFilenames is the canonical list openshift-install emits into
-// clusterDir; index 0 is the bootstrap file used as a deploy-readiness sentinel.
+// ignitionFilenames is the canonical list openshift-install emits into clusterDir.
+// AlreadyDone for StepDeployIgnition requires all three to exist in the webroot.
 var ignitionFilenames = []string{"bootstrap.ign", "master.ign", "worker.ign"}
 
 // renderAndWrite calls render and atomically writes the result to path,
