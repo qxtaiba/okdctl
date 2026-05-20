@@ -222,7 +222,13 @@ func (p *Phase) setupWebSteps(cfg *config.Config, opts *Options, clusterDir stri
 				if webRoot == "" {
 					webRoot = phase.DefaultHTTPServerRoot
 				}
-				return system.FileExists(filepath.Join(webRoot, "ignition", ignitionFilenames[0])), nil
+				// All files must exist: a partial-write resumes the full deploy.
+				for _, name := range ignitionFilenames {
+					if !system.FileExists(filepath.Join(webRoot, "ignition", name)) {
+						return false, nil
+					}
+				}
+				return true, nil
 			},
 			Exec: func(ctx context.Context) error {
 				if err := p.DeployToWebServer(ctx, cfg, clusterDir); err != nil {
