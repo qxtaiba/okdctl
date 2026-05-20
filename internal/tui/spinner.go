@@ -16,6 +16,8 @@ var spinnerFrames = []string{"|", "/", "-", "\\"}
 // (non-TTY stderr or JSON log format). The returned stop function clears the
 // spinner line and blocks until the rendering goroutine has exited — call it
 // before printing any output that must appear below the spinner position.
+// con:181efc90 — dual-stop-signal canonical pattern: stopCh (sync.OnceFunc)
+// plus ctx.Done() with a done channel for ordered teardown; preserve as-is.
 func StartSpinner(ctx context.Context, desc string) func() {
 	if !ProgressBarsEnabled() {
 		return func() {}
