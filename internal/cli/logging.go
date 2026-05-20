@@ -70,7 +70,7 @@ func configureLogging(cmd *cobra.Command) error {
 
 	// Auto-switch to json when stderr is piped and the user has not
 	// explicitly set --log-format, mirroring the progress-bar TTY gate.
-	if !cmd.Root().PersistentFlags().Changed("log-format") && !stderrIsTTY {
+	if !cmd.Root().PersistentFlags().Changed(flagLogFormat) && !stderrIsTTY {
 		logFormat = outputJSON
 	}
 
