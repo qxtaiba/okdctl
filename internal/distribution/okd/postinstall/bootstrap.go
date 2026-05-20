@@ -69,6 +69,16 @@ func (p *Phase) CleanupBootstrap(ctx context.Context, cfg *config.Config, opts *
 		return &errtypes.ClusterError{Msg: "bootstrap: state snapshot failed", Err: snapErr}
 	}
 
+	// Write the sentinel before apply so a crash between apply-success and
+	// file-write cannot leave the VM destroyed but tfvars still claiming
+	// bootstrap_enabled=true (which would trigger re-creation on the next plan).
+	// If apply fails, the sentinel is harmless: terraform state still tracks the
+	// VM as present, so the next plan is a correct retry.
+	statePath := filepath.Join(terraformDir, bootstrapStateFile)
+	if err := system.AtomicWriteString(statePath, `{"bootstrap_enabled": false}`, 0o600); err != nil {
+		return &errtypes.ClusterError{Msg: "bootstrap: failed to write state override", Err: err}
+	}
+
 	p.Log.Info("bootstrap: applying — destroying bootstrap vm")
 	if err := tf.Apply(ctx, terraform.ApplyOptions{
 		PlanFile: planPath,
@@ -85,10 +95,5 @@ func (p *Phase) CleanupBootstrap(ctx context.Context, cfg *config.Config, opts *
 	}
 
 	p.Log.Info("bootstrap: vm destroyed", "cluster", cfg.Cluster.Name)
-
-	statePath := filepath.Join(terraformDir, bootstrapStateFile)
-	if err := system.AtomicWriteString(statePath, `{"bootstrap_enabled": false}`, 0o600); err != nil {
-		return &errtypes.ClusterError{Msg: "bootstrap: failed to write state override", Err: err}
-	}
 	return nil
 }
