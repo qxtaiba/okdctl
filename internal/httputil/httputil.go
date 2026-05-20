@@ -70,6 +70,16 @@ func NewWithCA(pool *x509.CertPool, timeout time.Duration) *http.Client {
 	}
 }
 
+// ErrTooManyRedirects is returned by capRedirects after 5 consecutive hops.
+var ErrTooManyRedirects = errors.New("httputil: stopped after 5 redirects")
+
+// ErrCrossHostAuthHeader is returned when a redirect would carry an
+// Authorization header to a different host. Go's stdlib strips headers it
+// manages internally on cross-host redirects, but a header set via
+// req.Header.Set survives — without this guard it would silently forward
+// a bearer token to an attacker-controlled destination.
+var ErrCrossHostAuthHeader = errors.New("httputil: refusing cross-host redirect with Authorization header")
+
 // capRedirects is the CheckRedirect policy installed on every client this
 // package returns. It caps at 5 redirects and refuses to follow any
 // cross-host redirect that carries an Authorization header — Go's stdlib
@@ -80,10 +90,10 @@ func NewWithCA(pool *x509.CertPool, timeout time.Duration) *http.Client {
 // guidance; legitimate CDN chains rarely exceed two hops.
 func capRedirects(req *http.Request, via []*http.Request) error {
 	if len(via) >= 5 {
-		return errors.New("httputil: stopped after 5 redirects")
+		return ErrTooManyRedirects
 	}
 	if req.URL.Host != via[0].URL.Host && req.Header.Get("Authorization") != "" {
-		return errors.New("httputil: refusing cross-host redirect with Authorization header")
+		return ErrCrossHostAuthHeader
 	}
 	return nil
 }
