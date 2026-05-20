@@ -33,7 +33,7 @@ for minor in "${SUPPORTED_MINORS[@]}"; do
         echo "warn: no tip for release-4.$minor — skipping" >&2
         continue
     fi
-    json_sha=$(curl -sSfL "https://raw.githubusercontent.com/openshift/installer/${sha}/data/data/coreos/${flavor}.json" | sha256sum | awk '{print $1}')
+    json_sha=$(curl -sSfL --proto '=https' --tlsv1.2 --connect-timeout 10 --max-time 60 "https://raw.githubusercontent.com/openshift/installer/${sha}/data/data/coreos/${flavor}.json" | sha256sum | awk '{print $1}')
     env_args+=("PIN_SHA_${minor}=${sha}" "PIN_JSON_${minor}=${json_sha}")
 done
 
