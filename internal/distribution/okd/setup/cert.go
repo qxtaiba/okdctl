@@ -120,13 +120,13 @@ func generateSelfSignedCert(certPath, keyPath, ip string) (certPEM, keyPEM []byt
 		return nil, nil, fmt.Errorf("create certificate: %w", err)
 	}
 
-	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certDER})
+	certPEM = pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certDER})
 
 	keyDER, err := x509.MarshalECPrivateKey(priv)
 	if err != nil {
 		return nil, nil, fmt.Errorf("marshal ec key: %w", err)
 	}
-	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: keyDER})
+	keyPEM = pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: keyDER})
 
 	dir := filepath.Dir(certPath)
 	if err := system.EnsureDir(dir); err != nil {
