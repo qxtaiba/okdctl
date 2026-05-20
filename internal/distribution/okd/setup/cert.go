@@ -36,10 +36,11 @@ func IgnitionCertPaths(projectRoot string) (certPath, keyPath string) {
 // it is reused; otherwise a new ECDSA P-256 self-signed cert is generated
 // and written atomically.
 //
-// The returned cert doubles as the CA: nodes pin it via coreos.inst.ca so
-// they verify the ignition server during first-boot without any external
+// The returned cert doubles as the CA: it is embedded into each node's
+// live ISO via `coreos-installer iso customize --ignition-ca`, so nodes
+// trust the HTTPS ignition server during first-boot without any external
 // PKI. A self-signed leaf is sufficient because the cert is only presented
-// to the single trust anchor baked into the ISO kargs.
+// to the single trust anchor baked into the ISO.
 func EnsureIgnitionCert(projectRoot, ip string) (certPEM, keyPEM []byte, err error) {
 	certPath, keyPath := IgnitionCertPaths(projectRoot)
 
