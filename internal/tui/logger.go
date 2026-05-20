@@ -34,11 +34,12 @@ var (
 	// are scrubbed before reaching charmlog. SetRunID rebuilds this wrapper
 	// whenever stderrLogger is rebound via .With().
 	stderrSlog         atomic.Pointer[slog.Logger]
-	progressBarsActive = true
+	progressBarsActive atomic.Bool
 	runID              atomic.Pointer[string]
 )
 
 func init() {
+	progressBarsActive.Store(true)
 	stdoutLogger.Store(buildLogger(os.Stdout))
 	stderrLogger.Store(buildLogger(os.Stderr))
 	stderrSlog.Store(buildStderrSlog())
@@ -151,14 +152,14 @@ func ConfigureLoggers(level, format string, stdoutW, stderrW io.Writer, progress
 	el.SetFormatter(formatter)
 	el.SetOutput(stderrW)
 
-	progressBarsActive = progressBars
+	progressBarsActive.Store(progressBars)
 	return nil
 }
 
 // ProgressBarsEnabled reports whether progress bars should be rendered.
 // False when stdout is not a TTY or when JSON log format is active.
 func ProgressBarsEnabled() bool {
-	return progressBarsActive
+	return progressBarsActive.Load()
 }
 
 // SuppressInfo raises the stderr logger to ErrorLevel, silencing Info and
