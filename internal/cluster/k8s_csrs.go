@@ -3,9 +3,9 @@ package cluster
 import (
 	"context"
 	"encoding/json"
-	"strings"
 
 	"github.com/qxtaiba/okdctl/internal/errtypes"
+	"github.com/qxtaiba/okdctl/internal/executor"
 )
 
 // PendingCSRs returns CSRs whose status.conditions slice is empty, which
@@ -18,9 +18,10 @@ func (c *Client) PendingCSRs(ctx context.Context) ([]CSR, error) {
 		return nil, err
 	}
 	if result.ExitCode != 0 {
-		// c.run returns (*Result, nil) on non-zero exit, so there's no Go
-		// error value to wrap as Err — fold the stderr text into Msg instead.
-		return nil, &errtypes.ClusterError{Msg: "failed to get CSRs: " + strings.TrimSpace(result.Stderr)}
+		return nil, &errtypes.ClusterError{
+			Msg: "failed to get CSRs",
+			Err: executor.NewExitError(ctx, c.CLI+" get csr", result.ExitCode, result.Stderr),
+		}
 	}
 
 	var csrList struct {
