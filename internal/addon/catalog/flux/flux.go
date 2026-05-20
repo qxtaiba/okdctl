@@ -40,6 +40,10 @@ const (
 	SettingControllerTimeout  = "controller_timeout"
 	SettingGitSyncTimeout     = "git_sync_timeout"
 	SettingGitHostFingerprint = "git_host_fingerprint"
+	// SettingAcceptHostKey opts into TOFU when no git_host_fingerprint pin is
+	// set. Set to "true" only after reviewing the observed fingerprints logged
+	// at WARN on the first unauthenticated run.
+	SettingAcceptHostKey = "accept_host_key"
 )
 
 // k8sBoolTrue is the literal Kubernetes returns for boolean-valued status
@@ -301,6 +305,9 @@ func (f *Flux) ValidateSettings(settings map[string]string) []string {
 	if fs.Path != "" && !validSyncPath.MatchString(fs.Path) {
 		errs = append(errs, "path contains invalid characters (allowed: alphanumeric, /, _, ., -)")
 	}
+	if fp := fs.GitHostFingerprint; fp != "" && (!strings.HasPrefix(fp, "SHA256:") || len(fp) <= len("SHA256:")) {
+		errs = append(errs, "git_host_fingerprint must be in SHA256:<base64> format (from ssh-keygen -lf)")
+	}
 	return errs
 }
 
@@ -413,12 +420,12 @@ func (f *Flux) createDeployKeySecret(ctx context.Context, env *addon.Environment
 		return fmt.Errorf("failed to get host key for %s: %w", host, err)
 	}
 
-	if err := verifyKeyscanFingerprint(knownHostsResult.Stdout, host, fs.GitHostFingerprint, env.Logger); err != nil {
+	if err := verifyKeyscanFingerprint(knownHostsResult.Stdout, host, fs.GitHostFingerprint, fs.AcceptHostKey, env.Logger); err != nil {
 		return fmt.Errorf("flux: host key verification failed: %w", err)
 	}
 
 	manifest, err := buildFluxDeployKeySecret("flux-system", "flux-system",
-		privateKey, publicKey, []byte(knownHostsResult.Stdout))
+		privateKey, publicKey, filterKeyscanLines(knownHostsResult.Stdout))
 	if err != nil {
 		return fmt.Errorf("build deploy key secret: %w", err)
 	}
@@ -433,12 +440,17 @@ func (f *Flux) createDeployKeySecret(ctx context.Context, env *addon.Environment
 }
 
 // verifyKeyscanFingerprint validates the output of ssh-keyscan against an
-// operator-configured SHA256 pin. When expected is non-empty, every parsed
-// key's fingerprint is compared; a match returns nil. When expected is empty,
-// observed fingerprints log at Warn so the operator can pin on the next
-// deploy and nil is returned (TOFU preserved). A non-empty expected that
-// matches no key returns an error naming both expected and observed values.
-func verifyKeyscanFingerprint(keyscanOut, host, expected string, log *slog.Logger) error {
+// operator-configured SHA256 pin.
+//
+// When expected is non-empty: each parsed key's fingerprint is compared; a
+// match returns nil; no match returns an error naming expected and observed.
+//
+// When expected is empty and acceptHostKey is true: observed fingerprints
+// log at WARN and nil is returned (TOFU).
+//
+// When expected is empty and acceptHostKey is false: returns an error listing
+// observed fingerprints — fail closed without TOFU.
+func verifyKeyscanFingerprint(keyscanOut, host, expected string, acceptHostKey bool, log *slog.Logger) error {
 	var observed []string
 	sc := bufio.NewScanner(strings.NewReader(keyscanOut))
 	for sc.Scan() {
@@ -457,12 +469,33 @@ func verifyKeyscanFingerprint(keyscanOut, host, expected string, log *slog.Logge
 		observed = append(observed, fp)
 	}
 	if expected == "" {
+		if !acceptHostKey {
+			return fmt.Errorf("git host fingerprint not pinned for %s — set addons.flux.settings.git_host_fingerprint to one of the observed values [%s], or set accept_host_key=true to opt into TOFU",
+				host, strings.Join(observed, ", "))
+		}
 		log.Warn("flux: git host fingerprint not pinned — set addons.flux.settings.git_host_fingerprint to pin",
 			"host", host, "observed_fingerprints", strings.Join(observed, ", "))
 		return nil
 	}
 	return fmt.Errorf("git host key mismatch for %s: expected %s, observed [%s]",
 		host, expected, strings.Join(observed, ", "))
+}
+
+// filterKeyscanLines strips comment and blank lines from ssh-keyscan output,
+// returning only the host-key lines. The Flux Secret stays byte-stable across
+// keyscan runs whose banner-line ordering or comment content may vary.
+func filterKeyscanLines(keyscanOut string) []byte {
+	var b strings.Builder
+	sc := bufio.NewScanner(strings.NewReader(keyscanOut))
+	for sc.Scan() {
+		line := sc.Text()
+		if strings.HasPrefix(line, "#") || strings.TrimSpace(line) == "" {
+			continue
+		}
+		b.WriteString(line)
+		b.WriteByte('\n')
+	}
+	return []byte(b.String())
 }
 
 // gitHost extracts the host portion of a git repository URL. It supports
