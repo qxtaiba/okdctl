@@ -178,7 +178,7 @@ audit finding ID so diff tracking stays tight.
 
 #### E3 — HTTPS ignition + pinned CA kargs
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/e3-https-ignition
+**Status:** in review — PR #675
 **Audit:** `sec:00000001:http-ignition-pullsecret`
 **Evidence:** `internal/distribution/okd/setup/phase.go:48`,
 `internal/distribution/okd/setup/apache.go:27`
@@ -195,7 +195,7 @@ cert lifecycle, kargs templating, wizard.
 
 #### E4 — SSH/SCP host-key pinning for Proxmox
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/e4-e5-sshpin (bundled with E5)
+**Status:** in review — PR #674 (bundled with E5)
 **Audit:** `sec:27088eab:ssh-accept-new-proxmox`,
 `sec:eb479d86:scp-accept-new-proxmox`
 **Evidence:** `internal/distribution/okd/phase/ssh.go:27`,
@@ -231,7 +231,7 @@ PR #142 diff if the team revisits.
 
 #### E5 — Flux SSH known-hosts fingerprint pinning
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/e4-e5-sshpin (bundled with E4)
+**Status:** in review — PR #674 (bundled with E4)
 **Audit:** `sec:98723e5d:ssh-keyscan-tofu`
 **Evidence:** `internal/addon/catalog/flux/flux.go:329`
 **Problem:** `createDeployKeySecret` runs `ssh-keyscan <host>` and
@@ -542,7 +542,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `smell:39c75e91:yes-no-magic-strings` — yes no magic strings
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/smell-39c75e91-yes-fold  
+**Status:** in review — PR #673  
 **Severity:** suggestion  
 **Cluster:** magic-strings  
 **Evidence:** `internal/cli/confirm.go:60-62`  
