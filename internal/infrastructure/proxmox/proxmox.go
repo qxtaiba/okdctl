@@ -119,7 +119,8 @@ func New(opts ...Option) *Provider {
 // terraform — the Provider has no Proxmox HTTP client. Connectivity issues
 // surface during terraform plan/apply with clear provider-level errors.
 // ctx is accepted for symmetry with future network-bound providers; this
-// implementation is local-only.
+// implementation is local-only. See Disconnect for the scaffolding rationale
+// (api:48688e63, con:48688e63).
 func (p *Provider) Connect(ctx context.Context, cfg *config.Config) error {
 	if cfg == nil {
 		return &errtypes.ConfigError{Msg: "configuration is required"}
@@ -144,7 +145,13 @@ func (p *Provider) Connect(ctx context.Context, cfg *config.Config) error {
 }
 
 // Disconnect resets connection state. ctx is accepted for symmetry with future
-// network-bound providers; this implementation is local-only.
+// network-bound providers; this implementation is local-only. The _ receiver
+// is intentional — if Proxmox ever adds a graceful session-teardown handshake
+// (e.g., via the Proxmox VE API), ctx threads through without a signature
+// change. Multi-provider support is explicitly out of scope per roadmap
+// constraint 1 (single provider: Proxmox); this scaffolding is for a
+// future network-bound Proxmox disconnect, not a provider abstraction.
+// Tracked: api:48688e63, con:48688e63.
 func (p *Provider) Disconnect(_ context.Context) error {
 	p.connected = false
 	p.terraformExec = nil
