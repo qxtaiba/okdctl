@@ -178,7 +178,7 @@ audit finding ID so diff tracking stays tight.
 
 #### E3 — HTTPS ignition + pinned CA kargs
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/e3-https-ignition
 **Audit:** `sec:00000001:http-ignition-pullsecret`
 **Evidence:** `internal/distribution/okd/setup/phase.go:48`,
 `internal/distribution/okd/setup/apache.go:27`
@@ -195,7 +195,7 @@ cert lifecycle, kargs templating, wizard.
 
 #### E4 — SSH/SCP host-key pinning for Proxmox
 
-**Status:** not started (first attempt closed; second attempt PR #142 closed by maintainer call — see postmortem)
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/e4-e5-sshpin (bundled with E5)
 **Audit:** `sec:27088eab:ssh-accept-new-proxmox`,
 `sec:eb479d86:scp-accept-new-proxmox`
 **Evidence:** `internal/distribution/okd/phase/ssh.go:27`,
@@ -231,7 +231,7 @@ PR #142 diff if the team revisits.
 
 #### E5 — Flux SSH known-hosts fingerprint pinning
 
-**Status:** not started (first attempt closed; second attempt PR #142 closed by maintainer call — see E4 postmortem)
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/e4-e5-sshpin (bundled with E4)
 **Audit:** `sec:98723e5d:ssh-keyscan-tofu`
 **Evidence:** `internal/addon/catalog/flux/flux.go:329`
 **Problem:** `createDeployKeySecret` runs `ssh-keyscan <host>` and
@@ -530,16 +530,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 #### audit-concurrency
 
-##### `con:6424733c:metrics-stop-shutctx-background` — metrics stop shutctx background
-
-**Status:** not started  
-**Severity:** suggestion  
-**Cluster:** ctx-todo  
-**Evidence:** `internal/cli/helpers.go:240-256`  
-**Problem:** startMetricsServer.stop closure builds a 5-second shutdown ctx via context.Background() rather than the parent ctx. The author documents the choice (L241-L242: 'by stop() time the parent ctx is already cancelled by SIGINT, and we need the 5s drain to complete'). This is correct on the SIGINT path but means a parent timeout deadline >5s is silently ignored. The justification comment satisfies CLAUDE.md §concurrency's 'context.Background()/TODO() needs justification' rule, so this is recorded as a documented deliberate divergence rather than a bug.  
-**Fix:** Keep as-is. The justification comment matches CLAUDE.md §concurrency requirement that ctx.Background() needs a justification comment. This row exists so the next audit doesn't re-flag a documented deliberate choice as a bug.  
-**Effort:** hours
-
 #### audit-api-design
 
 #### audit-cli-ux
@@ -548,21 +538,11 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 #### audit-modernization
 
-##### `mod:6b533f2d:slices-collect-projection` — slices collect projection
-
-**Status:** not started  
-**Severity:** suggestion  
-**Cluster:** slices-maps  
-**Evidence:** `internal/cluster/k8s_csrs.go:63-66`  
-**Problem:** ApprovePendingCSRs builds a names slice via index assignment in a counted-style loop. The same projection shape recurs in update_ingress.go::handleHostNetworkConversion (L292-295) and cleanup.go::KindStrings (L43-50). The repo could land a tiny mapSlice helper in internal/sliceutil and migrate all three, OR keep the make+loop form (already idiomatic Go).  
-**Fix:** Optional. The for-i form is already clear. If a third+fourth callsite appear, land a small `mapSlice[T,U](in []T, fn func(T) U) []U` helper. Don't land in isolation — there's no Go 1.x-specific reason to migrate.  
-**Effort:** hours
-
 #### audit-code-smells
 
 ##### `smell:39c75e91:yes-no-magic-strings` — yes no magic strings
 
-**Status:** not started (proposed EqualFold fix would break confirm_test.go YES/Yes→false assertions; needs maintainer decision: tighten tests or accept case-insensitive)  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/smell-39c75e91-yes-fold  
 **Severity:** suggestion  
 **Cluster:** magic-strings  
 **Evidence:** `internal/cli/confirm.go:60-62`  
