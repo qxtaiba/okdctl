@@ -172,6 +172,8 @@ func printUpdateNotice(ch <-chan version.CheckResult) {
 	fmt.Fprintln(os.Stderr, tui.WarningStyle.Render("update available:")+" "+
 		tui.MutedStyle.Render(version.Version)+" → "+
 		tui.HighlightStyle.Render(result.LatestTag))
+	fmt.Fprintln(os.Stderr, tui.MutedStyle.Render("  to upgrade (sha256 + cosign verified):"))
+	fmt.Fprintln(os.Stderr, tui.MutedStyle.Render("  curl -sSfL https://raw.githubusercontent.com/qxtaiba/okdctl/main/scripts/install.sh | bash"))
 }
 
 // signalExitCode reports whether err was caused by a caught OS signal and,

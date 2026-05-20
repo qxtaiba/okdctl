@@ -65,6 +65,9 @@ func BackgroundCheck(ctx context.Context) <-chan CheckResult {
 
 func runCheck(ctx context.Context) CheckResult {
 	current := Version
+	if current == "" || current == "dev" {
+		return CheckResult{}
+	}
 	if !semver.IsValid(canonicalTag(current)) {
 		return CheckResult{}
 	}
