@@ -252,13 +252,13 @@ func (p *Phase) verifyKubeVIPAPIHealthBootstrap(ctx context.Context, vip, cluste
 	if err != nil {
 		var hostnameErr x509.HostnameError
 		if !errors.As(err, &hostnameErr) {
-			return fmt.Errorf("failed to check api health at %s: %w", healthURL, err)
+			return &errtypes.ClusterError{Msg: fmt.Sprintf("api health check at %s", healthURL), Err: err}
 		}
 		// VIP not yet in apiserver SANs — transient during kube-vip cert re-issue; retry insecure.
 		p.Log.Warn("verify: vip not in apiserver sans yet, retrying without tls verification", "vip", vip)
 		response, err = doRequest(httputil.NewInsecure(5 * time.Second))
 		if err != nil {
-			return fmt.Errorf("failed to check api health at %s: %w", healthURL, err)
+			return &errtypes.ClusterError{Msg: fmt.Sprintf("api health check at %s", healthURL), Err: err}
 		}
 	}
 
