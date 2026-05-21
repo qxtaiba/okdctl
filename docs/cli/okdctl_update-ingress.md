@@ -31,10 +31,11 @@ okdctl update-ingress [flags]
 ### Options
 
 ```
-      --dry-run        preview update-ingress mutations without touching the cluster
-  -h, --help           help for update-ingress
-      --keep-haproxy   keep haproxy running on the bastion after dns switch
-  -y, --yes            skip confirmation prompts
+      --confirm-cluster string   required with --yes; must equal cfg.Cluster.Name (typo guard for scripted update-ingress runs)
+      --dry-run                  preview update-ingress mutations without touching the cluster
+  -h, --help                     help for update-ingress
+      --keep-haproxy             keep haproxy running on the bastion after dns switch
+  -y, --yes                      skip confirmation prompts
 ```
 
 ### Options inherited from parent commands
