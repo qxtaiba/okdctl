@@ -472,26 +472,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 #### audit-security
 
-##### `sec:ab9b764a:input-path-not-prefix-checked` — input path not prefix checked
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-ab9b764a-ignition-path
-**Severity:** major
-**Cluster:** file-toctou
-**Evidence:** `internal/distribution/okd/setup/ignition.go:47-57`
-**Problem:** GenerateInstallConfig reads cfg.Files.PullSecret and cfg.Files.SSHPublicKey via os.ReadFile with no Lstat, O_NOFOLLOW, or owner check. Under the sudo re-exec model okdctl runs as root, so a planted symlink at the user-controlled path (e.g. ~/pull-secret.json -> /etc/shadow) lets root read an attacker-chosen file and bake its contents into install-config.yaml, which is then served via the Apache ignition vhost.
-**Fix:** Open cfg.Files.PullSecret and cfg.Files.SSHPublicKey via os.OpenFile(path, os.O_RDONLY|syscall.O_NOFOLLOW, 0). Or call os.Lstat first and refuse os.ModeSymlink. Mirror the runlock.Acquire pattern at internal/runlock/runlock.go:L41-L54 which lstat-then-O_NOFOLLOWs the path. The same pattern applies to credentials/envfile.go:L52-L58 (already correct).
-**Effort:** hours
-
-##### `sec:40d315ad:input-path-not-prefix-checked` — input path not prefix checked
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-40d315ad-flux-key-path
-**Severity:** major
-**Cluster:** file-toctou
-**Evidence:** `internal/addon/catalog/flux/flux.go:399-416`
-**Problem:** createDeployKeySecret reads the Flux deploy private key from filepath.Join(homeDir, ".ssh", "flux-deploy-key") with a plain os.ReadFile call after a system.FileExists existence check. Under sudo re-exec the read runs as root, so a malicious user-owned symlink at the deploy-key path can redirect the open to /root/.ssh/id_ed25519 or /etc/shadow, baking those bytes into a flux-system Kubernetes Secret and shipping them to the cluster.
-**Fix:** Replace os.ReadFile with os.Lstat (refuse symlinks) plus os.OpenFile(_, os.O_RDONLY|syscall.O_NOFOLLOW, 0). Same pattern as runlock.Acquire. Apply to both private and public key reads at L403 and L412.
-**Effort:** hours
-
 ##### `sec:fde34e0c:input-kubeconfig-not-resolved` — input kubeconfig not resolved
 
 **Status:** not started
@@ -555,16 +535,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 #### audit-subprocess
 
-##### `sub:97cb8adf:no-cancel-func` — no cancel func
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sub-97cb8adf-no-cancel
-**Severity:** major
-**Cluster:** timeout-cancel — related: `sub:ae5b624c:parallel-exec-wrapper`
-**Evidence:** `internal/system/exec.go:52-86` + 1 more
-**Problem:** RunCaptured and OutputCaptured build their *exec.Cmd without cmd.Cancel or cmd.WaitDelay. On ctx cancellation the os/exec default sends SIGKILL immediately, so a long-running callee mid-transaction (apt-get install, dnf install, gpg --dearmor) is hard-killed with no flush window. The canonical executor.Executor sets cmd.Cancel=SIGINT plus WaitDelay=30s for exactly this reason; the system/exec.go shim was never updated to match.
-**Fix:** In both RunCaptured and OutputCaptured, after `cmd := exec.CommandContext(ctx, bin, args...)`, mirror the canonical executor.Executor.run pattern: `cmd.Cancel = func() error { return cmd.Process.Signal(syscall.SIGTERM) }` (SIGTERM is appropriate for non-terraform binaries; SIGINT is reserved for terraform's documented soft-cancel) and `cmd.WaitDelay = 30 * time.Second`. Net LOC delta ~+6.
-**Effort:** hours
-
 ##### `sub:97cb8adf:unbounded-output` — unbounded output
 
 **Status:** not started
@@ -586,36 +556,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Effort:** hours
 
 #### audit-state-and-recovery
-
-##### `state:b804b2ec:bootstrap-sentinel-after-apply` — bootstrap sentinel after apply
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/state-b804b2ec-sentinel
-**Severity:** major
-**Cluster:** crash-recoverability
-**Evidence:** `internal/distribution/okd/postinstall/bootstrap.go:86-93`
-**Problem:** CleanupBootstrap destroys the bootstrap VM via tf.Apply on line 73, then writes bootstrap-state.auto.tfvars.json on line 90. A crash or partial-write between apply success and sentinel write leaves the system with the VM gone but tfvars still claiming bootstrap_enabled=true — the next plan attempts to RECREATE the bootstrap VM.
-**Fix:** Reverse the ordering: write bootstrap-state.auto.tfvars.json BEFORE tf.Apply runs (this declares intent — terraform itself sees bootstrap_enabled=false and plans correctly even on resume). If Apply succeeds, log; if Apply fails, the tfvars file is harmless because terraform's actual state still tracks the VM. The current order is wrong because the sentinel write is the only signal preventing re-creation, and the failure window between apply success and sentinel write is unrecoverable without manual operator intervention.
-**Effort:** hours
-
-##### `state:761e5126:remove-haproxy-config-before-verify` — remove haproxy config before verify
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/state-761e5126-haproxy-verify
-**Severity:** major
-**Cluster:** destroy-safety — related: `state:632c9087:update-ingress-haproxy-rollback-missing`
-**Evidence:** `internal/distribution/okd/postinstall/haproxy.go:47-113`
-**Problem:** RemoveHAProxy stops haproxy, removes /etc/haproxy/haproxy.cfg via os.RemoveAll, removes firewall rules, removes VIP, THEN verifies api-via-vip. If VIP verification fails, the cluster has lost HAProxy as a fallback (config file gone) AND there's no rollback — the function returns an error but the operator must rebuild haproxy.cfg from setup again.
-**Fix:** Two changes: (1) Save a copy of /etc/haproxy/haproxy.cfg to /etc/haproxy/haproxy.cfg.removed-by-update-ingress.<timestamp>.backup BEFORE removing it. (2) Verify VIP works FIRST (with haproxy still running — the VIP check uses the VIP address directly, not localhost, so haproxy doesn't intercept), then stop and disable haproxy, then remove the config. The current order treats VIP verification as a post-mortem; it should be a pre-flight check before any destructive op. Couple with the finalizeIngress dns-rollback path so both rollbacks happen on verification failure.
-**Effort:** hours
-
-##### `state:15ba17da:destroy-iso-removed-tf-failed` — destroy iso removed tf failed
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/state-15ba17da-iso-tf-failed
-**Severity:** major
-**Cluster:** destroy-safety
-**Evidence:** `internal/distribution/okd/destroy/steps.go:94-115`
-**Problem:** When StepDestroyInfra fails (terraform failed = true), the file cleanup is degraded to WorkOnly (preserving tfvars/.terraform/), but StepRemoveRemoteISO ran BEFORE StepCleanupFiles in the sequence and already removed ISOs that VMs (still alive on Proxmox because tf failed) may reference for their next boot. The terraform.RemoveFCOSISOFromProxmox call does skip ISOs in-use by RUNNING VMs, but stopped or rebooting VMs that need the ISO for their startup ordering will fail.
-**Fix:** Add a SkipWhen on StepRemoveRemoteISO: skip when terraformFailed() returns true, with reason 'terraform owns live VMs that may still reference these ISOs'. Mirrors the existing StepCleanupFirewall skip-on-tf-failed pattern at line 158. Keep the current SkipWhen logic (--keep-isos, no proxmox provider) and AND it with !t.terraformFailed(). The destroyTracker.terraformFailed() check is read-only and safe to invoke from a step SkipWhen.
-**Effort:** hours
 
 ##### `state:0f076161:destroy-no-cluster-confirm-without-yes` — destroy no cluster confirm without yes
 
@@ -727,16 +667,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** No code change. Optionally augment the docstring on destroyCmd.Long (line 138-156) to name the dry-run/skip orthogonality explicitly: 'dry-run is for previewing terraform-destroy; skip flags are for resuming after a partial terraform-destroy.'
 **Effort:** hours
 
-##### `state:632c9087:update-ingress-haproxy-rollback-missing` — update ingress haproxy rollback missing
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/state-632c9087-ingress-rollback
-**Severity:** major
-**Cluster:** destroy-safety — related: `state:761e5126:remove-haproxy-config-before-verify`
-**Evidence:** `internal/distribution/okd/postinstall/update_ingress.go:268-284`
-**Problem:** finalizeIngress orders DNS swap before HAProxy removal — good. If RemoveHAProxy fails, DNS is rolled back to bootstrap (line 271-275). BUT: HAProxy removal in RemoveHAProxy already deleted /etc/haproxy/haproxy.cfg by the time the error surfaces (see state:761e5126:remove-haproxy-config-before-verify). The DNS rollback restores api.* to bastion, but bastion's HAProxy is gone — clients pointed at bastion now hit nothing.
-**Fix:** This is the seam-pair of state:761e5126. Fix RemoveHAProxy to verify VIP BEFORE removing /etc/haproxy/haproxy.cfg; then the DNS rollback in finalizeIngress has a coherent recovery target (bastion HAProxy still alive). Add a defense-in-depth: in the rollback branch here, also rehydrate /etc/haproxy/haproxy.cfg from the .removed-by-update-ingress backup created by RemoveHAProxy (couples with the state:761e5126 fix). If both haproxy.cfg restore AND DNS rollback succeed, log a single 'rollback complete' message.
-**Effort:** hours
-
 ##### `state:d7ce9d16:dns-deploy-restart-fail-restore` — dns deploy restart fail restore
 
 **Status:** not started
@@ -749,16 +679,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 
 #### audit-iac-and-shell
-
-##### `iac:18a795d5:hcl-master-disk-no-ignore-changes` — hcl master disk no ignore changes
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/iac-18a795d5-disk-ignore
-**Severity:** major
-**Cluster:** hcl-destroy-ordering — seam→`audit-state-and-recovery`
-**Evidence:** `infrastructure/terraform/modules/proxmox-okd/main.tf:258-268`
-**Problem:** Master VM lifecycle ignore_changes omits `disk`, but the variable doc for master_data_disk_size_gb explicitly warns that lowering it 'destroys the ceph data disk'. The sibling worker block (line 393) lists `disk` in ignore_changes for exactly this reason (commit 710e2b4). Asymmetric guard — masters can silently lose Ceph data on a config edit.
-**Fix:** Append `disk,` to the master block's ignore_changes list (lines 258-268), mirroring the worker block at line 393 and matching the safety contract documented in variables.tf:88-92. One-line change, no behavior shift for unchanged master_data_disk_size_gb values.
-**Effort:** hours
 
 ##### `iac:e076e43c:sh-cosign-cert-identity-regex-loose` — sh cosign cert identity regex loose
 
@@ -851,26 +771,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/system/exec.go:25-44`
 **Problem:** SubprocessError stores raw StderrTail and Error() concatenates it: `e.Bin + ': ' + e.Err.Error() + ': ' + e.StderrTail`. Redacted() omits StderrTail so slog attrs are safe. But callers may wrap SubprocessError into outer errors with %w and then stringify. Symmetric concern with executor.ExitError; same fix shape.
 **Fix:** Apply logutil.RedactableStderr head/tail truncation inside Error() so the eyeball-rendered error caps at <=400 bytes regardless of sink. Today there is no proven leak — call sites for OutputCaptured (ssh-keyscan, ip-addr) do not handle credentials. The finding lives at the type to make the contract symmetric with the security invariant.
-**Effort:** hours
-
-##### `err:a6e38cc7:sshpin-keymatch-bare-errorf` — sshpin keymatch bare errorf
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/err-a6e38cc7-sshpin-errorf
-**Severity:** major
-**Cluster:** sentinel-vs-typed — seam→`audit-cli-ux`
-**Evidence:** `internal/sshpin/sshpin.go:85-87`
-**Problem:** On host-key mismatch sshpin returns a bare fmt.Errorf with host, expected, and observed fingerprints baked into the message. The 'pinned but missing' branch (L78) correctly uses &errtypes.AuthError. The mismatch case bypasses AuthError, so exit-code mapping classifies via classifyStepErr → ClusterError (exit 4) rather than AuthError (exit 5). A key-pin mismatch is exactly the auth-failure surface exit 5 should flag.
-**Fix:** Replace with `return "", &errtypes.AuthError{Msg: fmt.Sprintf("ssh host key mismatch for %s: expected %s, observed [%s]", host, expected, strings.Join(observed, ", "))}`. Fingerprints are public values (not credentials) so Msg-interpolation is safe per the errtypes credential-substring scan. Exit code becomes 5 (AuthError) per the documented taxonomy at internal/cli/root.go::exitCodeFor.
-**Effort:** hours
-
-##### `err:ddf885f4:cluster-csr-stderr-in-msg` — cluster csr stderr in msg
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/err-ddf885f4-csr-stderr
-**Severity:** major
-**Cluster:** redaction-in-error — seam→`audit-observability`
-**Evidence:** `internal/cluster/k8s_csrs.go:20-24`
-**Problem:** PendingCSRs interpolates raw `result.Stderr` from oc get csr into the ClusterError Msg via string concatenation: `&errtypes.ClusterError{Msg: 'failed to get CSRs: ' + strings.TrimSpace(result.Stderr)}`. ClusterError.Error() returns Msg verbatim. If the kubeconfig contained an embedded bearer token (config.users[].user.token is a documented kubectl field) and oc surfaced it in stderr on auth errors, the token reaches every sink that stringifies the error. RedactHandler scrubs structured attrs, not pre-rendered message bytes.
-**Fix:** Convert result.Stderr to executor.NewExitError(ctx, c.CLI, result.ExitCode, result.Stderr) and set Err to that ExitError; the Redacted() projection then applies when slog encounters the wrapped value. Alternative: head/tail-truncate stderr via logutil.RedactableStderr before splicing into Msg. The current shape lets a token-bearing stderr (e.g. RBAC denial with request context) end up in any caller's printed error. The 'no Go error value to wrap' comment IS the smell — ExitError exists for exactly this case.
 **Effort:** hours
 
 ##### `err:fde34e0c:k8s-subcommand-load-bearing-comment` — k8s subcommand load bearing comment
@@ -1372,26 +1272,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Add --output=text|json to configShowCmd. Default stays YAML (text), but --output=json emits the same redacted config as JSON via json.Marshal(redactConfig(cfg)). Document the JSON shape in docs/cli/json-schema.md. This is a pure addition — existing scripts continue to work.
 **Effort:** hours
 
-##### `ux:024a2c32:json-schema-undoc` — json schema undoc
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/ux-024a2c32-json-schema
-**Severity:** major
-**Cluster:** json-stability — seam→`audit-documentation`
-**Evidence:** `docs/cli/json-schema.md:12-61`
-**Problem:** docs/cli/json-schema.md for 'okdctl status --output=json' documents fields version, api_server_url, console_url, conditions, and message as part of the contract, but runStatus in internal/cli/status.go never populates them (the ClusterStatus literal sets only Phase, APIReachable, Nodes, DegradedOperators, Addons). The omitempty tags mean they are silently dropped, so the doc creates an expectation the runtime can never satisfy.
-**Fix:** Either implement the missing fields (query oc adm version + oc whoami --show-server + oc get clusterversion) so the doc reflects code, or remove the unimplemented fields from docs/cli/json-schema.md and from the okd.ClusterStatus struct. Preferred: implement, since the runtime already has the oc plumbing (BasePhase.OcOutput is reused below).
-**Effort:** hours
-
-##### `ux:08c49fc4:confirm-cluster-missing` — confirm cluster missing
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/ux-08c49fc4-confirm-cluster
-**Severity:** major
-**Cluster:** flag-conventions
-**Evidence:** `internal/cli/update_ingress.go:24-47`
-**Problem:** updateIngressCmd is operationally destructive (deletes and recreates IngressControllers, ~30s ingress outage per the Long doc) and exposes --yes to skip prompts, but lacks the --confirm-cluster typo guard that destroy/cleanup/addon uninstall all require with --yes. A scripted invocation in the wrong directory can outage a different cluster's ingress without any safeguard.
-**Fix:** Add a --confirm-cluster flag to updateIngressCmd and call confirmClusterMatches(updateIngressYes, updateIngressConfirmCluster, cfg.Cluster.Name, "update-ingress") before mutation. The helper already exists in internal/cli/confirm.go and is used by destroy.go, cleanup.go, and addon.go.
-**Effort:** hours
-
 ##### `ux:e7db1220:flag-completion-inconsistent` — flag completion inconsistent
 
 **Status:** not started
@@ -1777,16 +1657,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Rewrite the bullet to reference `okdctl deploy` (which encompasses the postinstall phase): 'After `okdctl deploy` completes, run `okdctl cleanup` which removes the ignition files from the web root.' Verify against the cobra command tree in `internal/cli/` before publishing.
 **Effort:** hours
 
-##### `doc:b3356305:readme-default-drift-fingerprint` — readme default drift fingerprint
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/doc-b3356305-default-drift
-**Severity:** major
-**Cluster:** readme-drift
-**Evidence:** `README.md:254-255`
-**Problem:** README describes a `proxmox.host_fingerprint` config field as a future enhancement (the only TOFU-window mitigation listed), but the field already ships as `provider.proxmox.ssh_host_fingerprint` together with `provider.proxmox.require_pinned_fingerprint` (see `internal/config/cluster.go:132-143`). Operators following the README will believe the SSH host-key pin is unavailable when it is in fact shipped.
-**Fix:** Replace the 'Mitigations until …' framing with text that documents the existing pinning mechanism. Suggested phrasing: 'For deterministic verification, set `provider.proxmox.ssh_host_fingerprint` in `okdctl.yaml` (SHA256:<base64> format from `ssh-keygen -lf` or the Proxmox UI) so every subsequent SSH/SCP call refuses on mismatch. Set `provider.proxmox.require_pinned_fingerprint: true` to fail closed when the pin is absent.' Verify field names against `internal/config/cluster.go:132-142` before publishing.
-**Effort:** hours
-
 ##### `doc:4ac0d12f:line-citation-drift` — line citation drift
 
 **Status:** not started
@@ -1799,76 +1669,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 
 #### audit-tests
-
-##### `tst:a55b4592:loader-perm-gate-untested` — loader perm gate untested
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/tst-a55b4592-loader-perm
-**Severity:** major
-**Cluster:** cred-path-untested
-**Evidence:** `internal/config/loader.go:27-55`
-**Problem:** Loader.LoadFile enforces a 0o022 world/group-writable perm gate and rejects unknown schemaVersion before parsing — both are credential-handling-adjacent (the config carries Proxmox host + may carry pull-secret paths) and the gate refuses an attacker-writable file. Nothing locks the gate, the schemaVersion enum, or the unmarshal-strict guard.
-**Fix:** Add internal/config/loader_test.go with: (a) 0o600/0o400 accepted; (b) 0o022/0o044/0o066 group/world-writable rejected with *errtypes.AuthError; (c) missing schemaVersion rejected with *errtypes.ConfigError naming SchemaVersionV1; (d) unsupported schemaVersion rejected; (e) yaml.UnmarshalStrict rejects unknown top-level keys; (f) Save round-trips through LoadFile with 0o600 perms. Use t.TempDir + os.Chmod. Template: internal/credentials/envfile_test.go::TestLoadEnvFile_PermRefusal.
-**Effort:** days
-
-##### `tst:a3577f6c:ignition-cert-keygen-untested` — ignition cert keygen untested
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/tst-a3577f6c-cert-keygen
-**Severity:** blocker
-**Cluster:** cred-path-untested
-**Evidence:** `internal/distribution/okd/setup/cert.go:44-148`
-**Problem:** EnsureIgnitionCert generates an ECDSA P-256 self-signed CA + private key, writes the key to disk at 0o600 inside a 0o700 directory, and the cert doubles as the trust anchor embedded into every node ISO. The cert/key pair governs ignition HTTPS trust for first-boot. No test locks (a) 0o600 key perm, (b) 0o700 dir perm, (c) reuse-when-valid + regen-when-IP-changes + regen-when-expired, (d) atomic write semantics.
-**Fix:** Add internal/distribution/okd/setup/cert_test.go with: (a) generateSelfSignedCert writes server.key at 0o600 and server.crt at 0o644, and the parent dir at 0o700; (b) loadExistingCert returns ok=false when cert.NotAfter has passed; (c) loadExistingCert returns ok=false when ip is not in IPAddresses and not the CN; (d) loadExistingCert returns ok=true for matching IP-SAN; (e) generateSelfSignedCert rejects non-IP ip arg; (f) round-trip x509.ParseCertificate verifies BasicConstraintsValid + IsCA. Template: internal/credentials/envfile_test.go::TestWriteEnvFile_Perms.
-**Effort:** days
-
-##### `tst:29293401:configure-haproxy-untested` — configure haproxy untested
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/tst-29293401-configure-haproxy
-**Severity:** major
-**Cluster:** destructive-untested
-**Evidence:** `internal/distribution/okd/setup/haproxy.go:91-144`
-**Problem:** ConfigureHAProxy is the only orchestrator that writes /etc/haproxy/haproxy.cfg (root-required, destructive) with backup + rollback semantics. attemptHAProxyRollback alone is tested; the surrounding flow (backup creation, system.AtomicWriteString of new config, haproxy -c validation gate, enable+restart, rollback-on-validation-fail, rollback-on-restart-fail) is untested. A regression that swaps mode 0o644 → 0o600 would lock root-only-readable haproxy out of its own config without surfacing.
-**Fix:** Add internal/distribution/okd/setup/haproxy_test.go::TestConfigureHAProxy with package-var seam (override haproxyConfigPath/haproxyBackupPath to t.TempDir paths, same shape postinstall/haproxy_test.go uses) + fake `haproxy` script via PATH (write to bin dir, t.Setenv PATH). Cover: (a) happy path writes new config at 0o644 + creates backup; (b) haproxy -c fails → AtomicWriteString restores from backup + restart fires; (c) restart fails post-install → rollback fires (already half-tested in haproxy_rollback_test.go); (d) hasBackup=false skips rollback. Template: internal/distribution/okd/postinstall/haproxy_test.go::TestRemoveHAProxy_HappyPath_ConfigFileRemoved.
-**Effort:** days
-
-##### `tst:5013fea6:release-extract-auth-untested` — release extract auth untested
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/tst-5013fea6-release-extract
-**Severity:** major
-**Cluster:** trust-boundary-untested
-**Evidence:** `internal/distribution/okd/setup/release_extract.go:97-144`
-**Problem:** bootstrapOC fetches+verifies an oc tarball against a compile-time SHA-256 (supply-chain trust anchor) and extractReleaseImage routes registry errors through isAuthError keyword matching (auth-vs-cluster taxonomy). Neither isAuthError's keyword set nor the bootstrap-checksum-mismatch path is tested. A regression that drops an authMarker entry (e.g. drops "401") would silently misclassify auth failures as ClusterError, hiding them from the auth-troubleshooting flow.
-**Fix:** Add internal/distribution/okd/setup/release_extract_test.go covering: (a) isAuthError table-test — accept '401 unauthorized', 'Forbidden', 'no basic auth provided', case-insensitive; reject 'connection refused', 'tls handshake failure'; (b) bootstrapOC with httptest.Server serving an in-memory tar.gz at the expected URL — checksum match path; (c) bootstrapOC with tampered body fails fast via download.ValidateChecksum (already tested in /internal/download/) but lock the bootstrap-specific NetworkError wrap. Use httptest.NewServer; template: internal/distribution/okd/setup/coreos_test.go.
-**Effort:** days
-
-##### `tst:fde34e0c:kubeconfig-env-validator-untested` — kubeconfig env validator untested
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/tst-fde34e0c-kubeconfig
-**Severity:** major
-**Cluster:** trust-boundary-untested
-**Evidence:** `internal/cluster/k8s.go:78-97`
-**Problem:** validateKubeconfigEnv is a trust-boundary validator (rejects symlinks via Lstat to avoid TOCTOU; restricts the env-supplied path to $HOME or /etc prefix allowlist; prevents a hostile KUBECONFIG=/dev/zero or KUBECONFIG=/proc/self/environ). No test locks the symlink-rejection, the prefix allowlist, or the path-traversal cases.
-**Fix:** Add internal/cluster/k8s_test.go::TestValidateKubeconfigEnv with attacker-shaped inputs: (a) /dev/zero rejected — outside prefix; (b) /proc/self/environ rejected; (c) symlink to /etc/passwd rejected with 'symlink' substring; (d) '/etc/foo' accepted; (e) $HOME/.kube/config accepted; (f) '../../../etc/passwd' canonicalised then rejected; (g) missing path rejected with 'inaccessible' substring; (h) prefix-spoof '/etcd/foo' rejected (the '/etc'+sep check guards this — lock it). Template: internal/distribution/okd/phase/iso_cleanup_test.go::TestValidateRemoteFilename.
-**Effort:** hours
-
-##### `tst:19a715fd:secretstore-manifest-untested` — secretstore manifest untested
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/tst-19a715fd-secretstore
-**Severity:** major
-**Cluster:** cred-path-untested
-**Evidence:** `internal/addon/catalog/secretstore/secretstore.go:284-307`
-**Problem:** secretManifestFromFile reads a plaintext token/credentials file from disk, base64-builds an Opaque Secret via the canonical addon.BuildOpaqueSecret, and the surrounding flow piping vault/op/bitwarden token files into k8s Secrets has no test. resolveSecretsDir also has no test for its absolute-vs-relative path resolution against env.ProjectRoot — a relative SecretsDir of '../etc' would escape ProjectRoot.
-**Fix:** Add internal/addon/catalog/secretstore/secretstore_test.go covering: (a) resolveSecretsDir returns absolute SecretsDir verbatim; (b) resolveSecretsDir joins relative SecretsDir under env.ProjectRoot; (c) resolveSecretsDir applies defaultSecretsDir on empty; (d) secretManifestFromFile reads file, trims newline, embeds bytes via BuildOpaqueSecret — verify YAML kind=Secret, data[dataKey] decodes to original bytes; (e) traversal: SecretsDir='../etc' is documented behaviour but verify a test asserts the resolved path so future allowlist work is anchored. Template: internal/addon/helpers_test.go::TestBuildOpaqueSecret.
-**Effort:** days
-
-##### `tst:4c092fce:tf-snapshot-state-untested` — tf snapshot state untested
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/tst-4c092fce-tf-snapshot
-**Severity:** blocker
-**Cluster:** destructive-untested — seam→`audit-state-and-recovery`
-**Evidence:** `internal/infrastructure/terraform/terraform.go:395-452`
-**Problem:** SnapshotState is the only safety net between `okdctl destroy` and a destructive `terraform destroy` — it copies terraform.tfstate to a timestamped .bak before destroy fires; failure to snapshot is a hard error that prevents the destructive op. ZeroizeEnv bounds credential lifetime in the terraform Executor's env slice. Neither has a direct test. pruneSnapshots and checkStateMajorVersion are also untested. A regression in SnapshotState (e.g. dropping the AtomicWrite hard-error on failure) silently proceeds with destroy and loses the only recovery path.
-**Fix:** Add internal/infrastructure/terraform/state_test.go and extend terraform_test.go: (a) SnapshotState writes terraform.tfstate.<ts>.bak with byte-equal payload and 0o600 perm; (b) SnapshotState returns ("", nil) when source state file is absent; (c) SnapshotState propagates AtomicWrite error as wrapped fmt.Errorf; (d) pruneSnapshots keeps the 5 most recent (seed 7 .bak files, verify 2 removed); (e) checkStateMajorVersion rejects major=2 with *errtypes.ConfigError; (f) checkStateMajorVersion returns nil on unparseable version (non-fatal contract). Use t.TempDir + executor.New. Template: internal/infrastructure/terraform/terraform_test.go::TestExecutor_HasState.
-**Effort:** days
 
 ##### `tst:a6e38cc7:sshpin-verify-shellout-untested` — sshpin verify shellout untested
 
