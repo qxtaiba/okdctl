@@ -628,7 +628,7 @@ func (p *Phase) restoreHAProxyBackup() bool {
 		p.Log.Warn("update-ingress: rollback: could not read haproxy backup", "path", latest, "err", err)
 		return false
 	}
-	if err := os.WriteFile(haproxyConfigPath, data, 0o640); err != nil {
+	if err := os.WriteFile(haproxyConfigPath, data, 0o600); err != nil {
 		p.Log.Warn("update-ingress: rollback: could not restore haproxy config", "path", haproxyConfigPath, "err", err)
 		return false
 	}
