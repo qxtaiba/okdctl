@@ -92,8 +92,8 @@ func (p *Phase) destroySteps(ctx context.Context, cfg *config.Config, opts *Opti
 		},
 		{
 			ID: StepRemoveRemoteISO, Name: "remove remote ISO", ReRunSafe: distribution.ReRunSafeYes,
-			Desc:       "removing fedora-coreos iso from proxmox host",
-			NonFatal:   true,
+			Desc:     "removing fedora-coreos iso from proxmox host",
+			NonFatal: true,
 			SkipWhen: trackSkip("iso removal", func() bool {
 				return opts.KeepISOs || cfg.Provider.Proxmox == nil || t.terraformFailed()
 			}),
@@ -205,4 +205,3 @@ func cleanupFilesSkipReason(opts *Options) string {
 	}
 	return ""
 }
-
