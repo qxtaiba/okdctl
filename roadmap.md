@@ -502,36 +502,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** After the Lstat and prefix check, validate `fi.Mode().Perm()&0o077 != 0` and reject with errtypes.AuthError. Match the pattern at internal/credentials/envfile.go:L147-L153 which gates the .env file. Kubeconfig holds the same cluster admin material and warrants the same gate.
 **Effort:** hours
 
-##### `sec:98723e5d:toctou-chmod` — toctou chmod
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-98723e5d-bashrc-nofollow
-**Severity:** minor
-**Cluster:** file-toctou
-**Evidence:** `internal/distribution/okd/install/flux.go:120-140`
-**Problem:** addKubeconfigToBashrc does os.Lstat(bashrcPath) to refuse symlinks, then os.ReadFile(bashrcPath) without O_NOFOLLOW. A symlink planted in the window between Lstat and ReadFile lets root read content from an attacker-chosen file (TOCTOU). The subsequent AtomicWrite path is safe (it re-Lstats), so the only leak is the read content used to skip the append when KUBECONFIG is already exported — but error returns would surface the read file path in logs.
-**Fix:** Replace os.ReadFile with os.OpenFile(bashrcPath, os.O_RDONLY|syscall.O_NOFOLLOW, 0) + io.ReadAll, eliminating the Lstat-then-Read TOCTOU. The Lstat block above becomes defense-in-depth.
-**Effort:** hours
-
-##### `sec:88fd3050:input-url-scheme-not-checked` — input url scheme not checked
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-88fd3050-insecure-warn
-**Severity:** minor
-**Cluster:** tls-network
-**Evidence:** `internal/config/cluster.go:124-127`
-**Problem:** ProxmoxConfig.Insecure (bool, json:"insecure") disables TLS verification for every Proxmox API call made by the bpg/proxmox terraform provider once written into PROXMOX_VE_INSECURE=true env. Unlike InsecureHTTP — which the validator (validators.go:L237-L239) requires as an explicit opt-in beyond the bare HTTP scheme — Insecure passes through silently with no log, warning, or operator-acknowledged confirmation. A typo or copy-pasted config flips TLS verification off across every plan/apply/destroy with no visible feedback.
-**Fix:** Emit a Warn-level slog message in credentials.GetProxmoxCredentials (or in cli/helpers.reportCredentialProvenance) when creds.Insecure is true. Document the operational risk and link to the secure path (NewWithCA over kubeconfig CA pool). Mirrors the existing tui.Warn for env-overrides-config provenance.
-**Effort:** hours
-
-##### `sec:c8b28673:zip-slip` — zip slip
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-c8b28673-zip-slip
-**Severity:** minor
-**Cluster:** file-toctou
-**Evidence:** `internal/download/extract.go:85-135`
-**Problem:** processTarEntry already enforces filepath.Clean prefix check + verifyResolvedPath through EvalSymlinks + O_NOFOLLOW on the leaf — a strong zip-slip defense. However, the symlink-entry handling (case tar.TypeSymlink) inserts the symlink without subsequently re-running verifyResolvedPath on the resolved target after creation. The verifyResolvedPath call at L103 covers the regular-file parent — symlinks don't re-verify after creation. Pre-extracted attacker symlinks at parent could theoretically redirect later entries despite the leaf O_NOFOLLOW.
-**Fix:** After os.Symlink succeeds, call verifyResolvedPath(targetPath, cleanDest) (or use os.Root from Go 1.24+ which forbids escapes). The current O_NOFOLLOW on file open is the primary defense, so this is hardening-in-depth, not a hot exploit path.
-**Effort:** hours
-
 ##### `sec:eb479d86:cred-in-argv` — cred in argv
 
 **Status:** not started
@@ -552,16 +522,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Defense-in-depth: after VERSION is resolved, validate it matches the regex ^v[0-9]+\.[0-9]+\.[0-9]+ before constructing URLs. This won't stop a creative attacker but bounds the URL grammar. The cosign cert-identity-regexp at L156 is the real trust root.
 **Effort:** hours
 
-##### `sec:8e65d574:dl-no-signature` — dl no signature
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-8e65d574-updatecheck
-**Severity:** suggestion
-**Cluster:** tls-network
-**Evidence:** `internal/version/updatecheck.go:51-93`
-**Problem:** BackgroundCheck advertises a 'new version available' notice based on api.github.com's tag_name field with no signature verification. The function doc already names this trust gap (L46-L50, 'verify the binary via cosign or the published checksums file'), but the notice is shown directly to the operator who may treat it as a trustworthy install signal. A compromised api.github.com response could prompt the operator to manually install a malicious version — relying entirely on operator discipline to re-verify.
-**Fix:** This is acknowledged in code documentation (good). Optional further hardening: include the published install.sh URL in the notice so the operator follows the cosign-verified install path. Or skip the version notice when the local Version is 'dev'/empty so dev binaries don't spam upgrade notices. No urgent action — the existing doc comment is the policy of record.
-**Effort:** hours
-
 ##### `sec:35abd54e:cred-env-leak-to-child` — cred env leak to child
 
 **Status:** not started
@@ -570,26 +530,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/credentials/proxmox.go:157-178`
 **Problem:** ProxmoxCredentials.Env() converts the secret []byte fields to Go strings via string(c.APIToken) and string(c.Password) on KEY=VALUE concatenation. Per the file's own doc at L150-L156, these Go strings can outlive the []byte sources and cannot be wiped. Executor.ZeroizeEnv (executor.go:L440) and Provider.ZeroizeEnv (proxmox.go:L91) blank the slice entries and clear() the slice — but only on the Executor's owned slice. If a copy of the returned []string is retained anywhere (logged, cached, sent to another goroutine), the immutable string headers persist. The architectural comment is good; one runtime mitigation would help.
 **Fix:** Defense-in-depth: add a runtime check that env-slice receivers (terraform.Executor, proxmox.Provider) install ZeroizeEnv defers immediately. Could be enforced by a small linter rule that flags any call site that uses creds.Env() without defer x.ZeroizeEnv() in the same function. The doc at L150-L156 already nails the rule; missing piece is mechanical enforcement.
-**Effort:** hours
-
-##### `sec:e3782ee7:env-file-perms-loose` — env file perms loose
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-e3782ee7-fs-perms-doc
-**Severity:** suggestion
-**Cluster:** credentials
-**Evidence:** `internal/system/fs.go:98-114`
-**Problem:** WriteAsInvokingUser writes data to path via AtomicWrite then chowns to the invoking user. AtomicWrite at L218 uses openTempFile(dir, .tmp-*, perm), which creates the temp file with mode set at open via os.OpenFile(_, _|O_EXCL, mode). Good. However, this helper preserves the caller's mode without enforcing a credentialled-file ceiling — the credential-handling callers (CopyFileMode at fs.go:L122, AtomicWrite at L198) tighten via 0o600 already, but WriteAsInvokingUser's signature accepts any mode and doesn't push back when a caller passes 0o644 with secret content.
-**Fix:** This helper is the canonical write-and-chown path. Add a doc note pointing callers at CopyFileMode + ChownToInvokingUser for credential-bearing files, or accept a mode-tightening hint (e.g. via a parameter Sensitive bool that ANDs mode with 0o600). The current pattern is fine for non-secrets — no callers today pass 0o644 with secret content — but the discipline isn't enforced at the helper boundary.
-**Effort:** hours
-
-##### `sec:06f00bcb:input-path-not-prefix-checked` — input path not prefix checked
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-06f00bcb-apache-validators
-**Severity:** minor
-**Cluster:** input-validation
-**Evidence:** `internal/distribution/okd/setup/apache.go:91-109`
-**Problem:** configureApacheHTTPS builds the Apache TLS vhost via fmt.Sprintf with operator-controlled certPath, keyPath, webRoot, bindIP, listen interpolated into raw HTTPD config text. While ignition cert paths are derived from projectRoot (trusted), bindIP and webRoot trace back to cfg.HTTPServer.IgnitionServerIP and cfg.HTTPServer.Root respectively — both YAML-sourced. validators.go does not validate IgnitionServerIP as an IPv4 literal or webRoot as a clean absolute path. A YAML config with malicious values would inject into the Apache config (which is then written at 0o644 and read by httpd).
-**Fix:** Add config validators: IgnitionServerIP must be a valid IPv4/IPv6 literal (via netip.ParseAddr); HTTPServer.Root must be an absolute path with no shell or Apache directive metacharacters. validateHTTPServer at validators.go:L283 already checks the port — extend to cover the path/IP fields.
 **Effort:** hours
 
 ##### `sec:4c092fce:toctou-chmod` — toctou chmod
@@ -645,17 +585,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Add an Executor method along the lines of `StartStreamed(ctx, name, args...) (done <-chan error, err error)` that wires Start + a Wait-into-channel goroutine while sharing buildEnv / Cancel / WaitDelay from the existing run pattern. Then defaultStartMonitorCmd shrinks to a single call: `return p.Exec.StartStreamed(ctx, "openshift-install", "wait-for", "install-complete", "--dir", clusterDir, "--log-level=debug")`. Net LOC delta ~-10 at this site (+15 in executor) for a real interface gain. The new method is symmetric with RunStreamed.
 **Effort:** hours
 
-##### `sub:451be4fa:no-cmd-env` — no cmd env
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sub-451be4fa-cmd-env
-**Severity:** suggestion
-**Cluster:** io-handling
-**Evidence:** `internal/system/elevation.go:197-207`
-**Problem:** HasPasswordlessSudo skips cmd.Env, so the `sudo -n true` probe inherits the full parent environment. Sudo's own env_reset clamps this in practice but the inconsistency with every other subprocess site in the repo (every other call sets cmd.Env via FilterParentEnv) is a footgun for the next person who copies this shape into a path that actually carries credentials. Probe is advisory-only (only called from doctor.go via system.HasPasswordlessSudo) so the real-world exposure is symbolic.
-**Fix:** Add `cmd.Env = executor.FilterParentEnv(executor.DefaultEnvAllowlist)` to align with internal/system/exec.go::RunCaptured. Sudo's secure_path will already strip most leakage, so this is hygiene rather than a fix — but it makes the implicit file rule (every subprocess site in the repo sets cmd.Env via the allowlist) actually total.
-**Effort:** hours
-
-
 #### audit-state-and-recovery
 
 ##### `state:b804b2ec:bootstrap-sentinel-after-apply` — bootstrap sentinel after apply
@@ -706,16 +635,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/distribution/okd/postinstall/steps.go:23-115`
 **Problem:** PhaseContext (pctx) is in-process memory only. The 5-step postinstall sequence — verify-health, cleanup-bootstrap, verify-kubevip, deploy-production-dns, install-addons — has no persistent checkpoint. A crash between StepCleanupBootstrap and StepDeployProductionDNS loses the KubeVipIP that StepVerifyKubeVIP computed; the next run starts at verify-health and recomputes everything from scratch, relying on filesystem sentinels (bootstrap-state.auto.tfvars.json for bootstrap, dnsmasq config for DNS state) for idempotency. Resume is fragile because the recovery path depends on multiple independent sentinels staying in sync.
 **Fix:** Two-stage fix tracked separately on roadmap: (1) lightweight — write a per-phase JSON checkpoint at <workDir>/.<phase>-checkpoint.json after each successful step containing the StepID and any pctx state needed for resume. AlreadyDone reads the checkpoint at orchestrator start. (2) heavier — extend StepDef with a Checkpoint hook and have Orchestrator persist after each success. Today's mitigation is the on-disk sentinels (bootstrap-state.auto.tfvars.json, dnsmasq conf state, kubeconfig presence) which each step's AlreadyDone consults independently. Defer per roadmap state:4f69fc9d; do not act now.
-**Effort:** hours
-
-##### `state:62cb8a95:destroy-snapshot-after-init-not-pre` — destroy snapshot after init not pre
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/state-62cb8a95-snapshot-pre-init
-**Severity:** minor
-**Cluster:** tf-state-atomicity
-**Evidence:** `internal/distribution/okd/destroy/helpers.go:32-42`
-**Problem:** destroyInfrastructure calls tf.Init() then tf.SnapshotState(). terraform init may rewrite the state file if it detects a schema migration (`terraform_version` field bump in tfstate). The snapshot in this case is the POST-init state, not the pre-init state — the operator cannot rewind through an unexpected init-driven migration.
-**Fix:** Take the snapshot BEFORE tf.Init: move the SnapshotState call to immediately after the HasState check (helpers.go:27-30) and before Init. The snapshot is then a pure pre-okdctl-run copy of the state file. If init succeeds and migrates the state, the snapshot still represents the operator's untouched starting point. The 5-snapshot retention policy means this is no extra disk; it just shifts the moment of capture.
 **Effort:** hours
 
 ##### `state:b5a79fda:deploy-state-marker-not-version-tagged` — deploy state marker not version tagged
@@ -786,16 +705,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/distribution/okd/postinstall/steps.go:42-96`
 **Problem:** Postinstall steps cleanup-bootstrap (destroys bootstrap VM via targeted apply) and deploy-production-dns (replaces /etc/dnsmasq.d/*.conf) are both NonFatal and mutate external state. If StepCleanupBootstrap succeeds, StepVerifyKubeVIP fails, StepDeployProductionDNS is skipped (SkipWhen reads !pctx.Get().KubeVIPVerified), the cluster is left with: bootstrap VM gone, kube-vip unverified, DNS still pointed at bootstrap. There is no rollback step that restores bootstrap DNS pointing at bastion. Already filed in roadmap (state:fb54208a:postinstall-no-rollback-path) as deferred minor.
 **Fix:** Recurring — see roadmap state:fb54208a:postinstall-no-rollback-path. Preferred fix: extend update-ingress to detect 'bootstrap-DNS + bootstrap-VM-gone' state and re-issue production DNS without depending on the postinstall pctx (update-ingress already owns dns.IsBootstrapDNS + dns.DeployProduction). No code change in this audit run; defer per roadmap.
-**Effort:** hours
-
-##### `state:c19ee328:setup-deploy-ignition-precondition-weak` — setup deploy ignition precondition weak
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/state-c19ee328-ignition-all-files
-**Severity:** minor
-**Cluster:** phase-idempotency
-**Evidence:** `internal/distribution/okd/setup/steps.go:216-234`
-**Problem:** StepDeployIgnition is ReRunSafeNo with AlreadyDone checking only the FIRST ignition file's existence at the webroot. The deploy step writes multiple .ign files (bootstrap, master*, worker*); a partial-write that died after the first .ign would set AlreadyDone=true on the next run, skipping the deploy, leaving the cluster boot path broken for the other roles. The DeployToWebServer function presumably writes atomically, but the precondition check is single-file.
-**Fix:** Strengthen AlreadyDone: check every entry in ignitionFilenames, not just [0]. Return false if any expected .ign is missing. Mirror the kube-vip / install-config sentinel pattern (sentinel-file marks completion AFTER all writes succeed). Or write a .complete sentinel at the end of DeployToWebServer and gate AlreadyDone on that single file. The .backup-sentinel pattern at StepGenerateConfig:116 is the cleaner shape.
 **Effort:** hours
 
 ##### `state:eb479d86:iso-upload-already-done-sha256` — iso upload already done sha256
@@ -871,16 +780,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** After resolving VERSION (line 117), add a regex guard: `[[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.-]+)?$ ]] || die "unexpected version tag: $VERSION"`. Run it both when VERSION is API-resolved and when user-supplied (lines 44, 122) so a user-set VERSION=v0.1.0/../../evil also fails closed.
 **Effort:** hours
 
-##### `iac:85dfab4d:sh-curl-no-tls-floor` — sh curl no tls floor
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/iac-85dfab4d-curl-tls
-**Severity:** minor
-**Cluster:** install-sh-integrity
-**Evidence:** `scripts/update-coreos-pins.sh:36-36`
-**Problem:** `curl -sSfL` lacks `--proto =https` and `--tlsv1.2`, the same TLS-hardening that install.sh wraps via curl_safe (install.sh:55). This runs in CI to pin CoreOS stream SHAs; a downgrade attack against the CI runner's egress could swap the JSON body, the script would compute its sha256, and the resulting PR would pin a tampered stream. Human PR review is the backstop, but the CI runner has no business accepting TLS<1.2.
-**Fix:** Either replicate `curl_safe()` here (one-liner from install.sh:55) or inline `--proto '=https' --tlsv1.2 --connect-timeout 10 --max-time 60` on each curl invocation. Only the raw.githubusercontent.com fetch needs hardening; the `git ls-remote` call at line 31 uses git's own TLS chain.
-**Effort:** hours
-
 ##### `iac:18a795d5:hcl-iso-list-no-empty-check` — hcl iso list no empty check
 
 **Status:** not started
@@ -912,16 +811,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/distribution/okd/dns/dns.go:24-215`
 **Problem:** buildConfigData and the surrounding DNS package return bare fmt.Errorf('cluster name is required') / fmt.Errorf('invalid apps IP address: %s', appsIP) etc. for config-shaped failures. They reach exit-code mapping only because orchestrator.classifyStepErr wraps non-typed errors in ClusterError (exit 4). These are config-shaped failures that should map to ConfigError (exit 2). When DeployBootstrap/DeployProduction are called outside the orchestrator (no current direct callers, but on the symmetric-API path) they lose the right exit code.
 **Fix:** Replace each bare fmt.Errorf in dns.go validation paths with &errtypes.ConfigError{Msg: ...}. classifyStepErr will still pass them through (no double-wrap because the As checks fire). Today this is invisible (exit code remains 4 via classify) but the audit calls it out so the dns package's contract matches the rest of the phase tree.
-**Effort:** hours
-
-##### `err:262af6e4:dnsmasq-path-error-not-typed` — dnsmasq path error not typed
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/err-262af6e4-dnsmasq-typed
-**Severity:** suggestion
-**Cluster:** sentinel-vs-typed
-**Evidence:** `internal/distribution/okd/cleanup/cleanup.go:221-230`
-**Problem:** dnsmasq AlreadyDone closure returns the bare error from dns.DnsmasqConfigPath unwrapped. AlreadyDone-checker failure is logged then proceeds anyway (orchestrator L154 'already-done check failed, proceeding'). Functionally fine but inconsistent with sibling closures which wrap path-resolution failures in errtypes.ConfigError.
-**Fix:** Wrap the err with &errtypes.ConfigError{Msg: "resolve dnsmasq config path", Err: err}. Pure stylistic alignment with other closures; the orchestrator's already-done branch tolerates either shape.
 **Effort:** hours
 
 ##### `err:48688e63:proxmox-apply-cancel-bare-wrap` — proxmox apply cancel bare wrap
@@ -964,16 +853,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Apply logutil.RedactableStderr head/tail truncation inside Error() so the eyeball-rendered error caps at <=400 bytes regardless of sink. Today there is no proven leak — call sites for OutputCaptured (ssh-keyscan, ip-addr) do not handle credentials. The finding lives at the type to make the contract symmetric with the security invariant.
 **Effort:** hours
 
-##### `err:cfcdee2d:httputil-tls-sentinels` — httputil tls sentinels
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/err-cfcdee2d-httputil-sentinels
-**Severity:** suggestion
-**Cluster:** sentinel-vs-typed
-**Evidence:** `internal/httputil/httputil.go:83-87`
-**Problem:** capRedirects returns errors.New() string-shaped errors for two distinct security failure modes (redirect cap exceeded, refusing cross-host redirect with Authorization). Callers cannot distinguish them with errors.Is; the only programmatic way to detect the auth-strip case is string matching. One caller chain today (BackgroundCheck → updatecheck.go) does not branch on the error, but the smell sits on a security-relevant boundary.
-**Fix:** Define package-local sentinels `var ErrTooManyRedirects = errors.New(...)` and `var ErrCrossHostAuthHeader = errors.New(...)` and return them. Callers gain errors.Is matching for security-sensitive branches.
-**Effort:** hours
-
 ##### `err:a6e38cc7:sshpin-keymatch-bare-errorf` — sshpin keymatch bare errorf
 
 **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/err-a6e38cc7-sshpin-errorf
@@ -1012,16 +891,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/distribution/okd/postinstall/bootstrap.go:89-92`
 **Problem:** bootstrap-state.auto.tfvars.json write failure surfaces as &errtypes.ClusterError. Symmetric concern with destroy/helpers.go:L41 (state snapshot → ClusterError). Documented here as the canonical example so reviewers do not reclassify state-write failures as ConfigError just because the file is config-shaped — the write happens after a successful bootstrap-vm destroy and is part of the cluster lifecycle, not a config the user edits.
 **Fix:** Leave as-is. ClusterError → exit 4 is correct here. Flagged for completeness because the rule slug suggests reviewers may second-guess; do not change.
-**Effort:** hours
-
-##### `err:881d089e:runlock-bare-msg-no-err` — runlock bare msg no err
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/err-881d089e-runlock-wrap
-**Severity:** suggestion
-**Cluster:** wrapping
-**Evidence:** `internal/runlock/runlock.go:62-78`
-**Problem:** On EBUSY (lock contention) Acquire returns &errtypes.ConfigError{Msg: msg} without setting Err. The flock syscall error is dropped — callers cannot errors.Is(err, syscall.EWOULDBLOCK) to distinguish 'lock held' from other failure modes. Only the cli/* RunE wrappers consume this today, but the type contract loses information.
-**Fix:** Set Err: err on the ConfigError so syscall.Errno walks through the chain. errors.Is(returned, syscall.EWOULDBLOCK) becomes meaningful; downstream code (debug-bundle, doctor) can branch on the syscall identity if it ever needs to. No exit-code change.
 **Effort:** hours
 
 ##### `err:632c9087:update-ingress-bare-fmt-errorf` — update ingress bare fmt errorf
@@ -1072,16 +941,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/addon/helpers.go:29-45`
 **Problem:** RetryDefault returns the *last* fn() error or wait.ErrWaitTimeout (whichever ExponentialBackoffWithContext yields). Compared with internal/download/retry.go::retryDownload which captures lastErr separately and returns it on cap-out so callers see the original failure rather than the timeout sentinel. The two retry helpers diverge on the lastErr-preservation pattern even though they are otherwise symmetric.
 **Fix:** Capture lastErr like internal/download/retry.go does, then on Backoff exhaustion return lastErr (wrapped) rather than the wait.ErrWaitTimeout. Symmetric helpers should have symmetric error surfaces. Note: not a fix-mandatory finding — the loop in retryDownload is the canonical pattern; this one diverges silently.
-**Effort:** hours
-
-##### `err:1e8ffb91:postinstall-verify-bare-fmt-errorf` — postinstall verify bare fmt errorf
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/err-1e8ffb91-postinstall-verify
-**Severity:** minor
-**Cluster:** sentinel-vs-typed
-**Evidence:** `internal/distribution/okd/postinstall/verify.go:211-268`
-**Problem:** verifyKubeVIPAPIHealthBootstrap returns bare fmt.Errorf for three cluster-health failure modes (build request, do request, read body). Sibling branches in the same file return &errtypes.ClusterError. classifyStepErr will wrap these into ClusterError → exit 4, but as with the dns and update_ingress findings, the package-internal contract is silently orchestrator-dependent.
-**Fix:** Wrap each bare fmt.Errorf in &errtypes.ClusterError{Msg: fmt.Sprintf('api health check at %s', healthURL), Err: err}. Aligns with surrounding code's classification pattern; no exit-code change today, but defends against future direct-test or rollback-path callers.
 **Effort:** hours
 
 ##### `err:f55b9c27:envfile-loadonce-no-sentinel` — envfile loadonce no sentinel
@@ -1136,16 +995,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 
 #### audit-concurrency
-
-##### `con:660d83a5:progressbars-active-non-atomic` — progressbars active non atomic
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/con-660d83a5-atomic-bool
-**Severity:** minor
-**Cluster:** waitgroup-vs-errgroup
-**Evidence:** `internal/tui/logger.go:29-154`
-**Problem:** progressBarsActive is a plain bool read by goroutines spawned after ConfigureLoggers writes it (spinner goroutine, download progress writer), while every peer field in the same var block is atomic.Pointer. The documented invariant ('not safe for concurrent calls') leans on happens-before via the cobra dispatch boundary, but the type signals the wrong invariant to future readers and race-detector is silent only because no two writes overlap.
-**Fix:** Replace `progressBarsActive bool` with `progressBarsActive atomic.Bool`. ConfigureLoggers calls `progressBarsActive.Store(progressBars)`; ProgressBarsEnabled returns `progressBarsActive.Load()`; init replaces the literal-true with `progressBarsActive.Store(true)` in the init() block. Matches the existing atomic.Pointer pattern for sibling state and gives the Go memory model a real happens-before edge.
-**Effort:** hours
 
 ##### `con:48688e63:disconnect-ctx-unused` — disconnect ctx unused
 
@@ -1606,16 +1455,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 #### audit-observability
 
-##### `obs:de572c63:key-inconsistent-casing` — key inconsistent casing
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/obs-de572c63-resolver-prefix
-**Severity:** minor
-**Cluster:** field-stability
-**Evidence:** `internal/distribution/okd/dns/dnsmasq.go:191-238`
-**Problem:** Within ConfigureSystemResolver and RestoreSystemResolver, the same logical operation (configuring the host DNS resolver) is logged under two different message prefixes — `resolver:` for the NetworkManager branch (L191, L201, L249-L276) and `dns:` for the systemd-resolved branch (L207, L238). Downstream log filters that group by prefix will treat these as two unrelated subsystems and double-bucket the lifecycle of one operation.
-**Fix:** Standardise on `resolver:` for the host-resolver subsystem in dnsmasq.go (the NetworkManager+systemd-resolved configuration of the local resolver). Rename the two `dns:` occurrences at L207 and L238 to `resolver:`. dns.go's other call sites keep `dns:` for the dnsmasq-config concern; the split is meaningful and worth preserving.
-**Effort:** hours
-
 ##### `obs:15ba17da:key-inconsistent-casing` — key inconsistent casing
 
 **Status:** not started
@@ -1654,26 +1493,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/system/exec.go:117-163`
 **Problem:** WaitFor's log messages `"waiting"` (L117, L162) and `"ready"` (L133, L156) lack the `<subsystem>:` prefix used everywhere else in the repo — every other log site uses `dns:`, `haproxy:`, `apache:`, `tools:`, etc. The first arg of WaitFor IS `prefix` and IS exposed as a structured attr, but the message itself loses the grep-anchor. Additionally, the attr key `"for"` is a Go-reserved word and an ambiguous identifier compared to canonical `target`/`desc`.
 **Fix:** Move the prefix into the message via concatenation: `logger.Info(prefix+": waiting", "target", description)`. Rename the attr key from `"for"` to `"target"` or `"desc"`. The change is mechanical and keeps the structured attrs intact while restoring the grep contract.
-**Effort:** hours
-
-##### `obs:25fa1be8:level-warn-should-info` — level warn should info
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/obs-25fa1be8-firewall-info
-**Severity:** suggestion
-**Cluster:** level-discipline
-**Evidence:** `internal/distribution/okd/firewall/firewall.go:138-138`
-**Problem:** `f.logger.Warn("no active firewall detected, skipping firewall configuration")` raises Warn for an expected, recoverable state on hosts without firewalld/ufw/iptables (the function then no-ops and returns nil). Warn should be reserved for recoverable degradation; a missing firewall on a non-Linux dev host is neither degraded nor unusual. The message also lacks the `firewall:` prefix used by every other log site in this file.
-**Fix:** Demote to Info and prefix the message: `f.logger.Info("firewall: no active backend detected, skipping configuration")`. The Warn at L138 is the only log line in firewall.go without the `firewall:` prefix; aligning it removes both the level and the spelling violation in one edit.
-**Effort:** hours
-
-##### `obs:8154ab0f:level-error-not-user-visible` — level error not user visible
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/obs-8154ab0f-doctor-warn
-**Severity:** suggestion
-**Cluster:** level-discipline
-**Evidence:** `internal/cli/doctor.go:183-184`
-**Problem:** `tui.Error("doctor: failing checks block deploy", ...)` runs in runDoctor and the function immediately returns `&errtypes.ConfigError{Msg: "preflight checks failed"}`. cli/root.go::execute() catches the returned error and emits `tui.Error("command failed", "err", err)` — so the user sees two Error lines for one failure event. The original Error log pre-empts the cli layer's exit-code mapping and double-counts.
-**Fix:** Demote to Warn (`tui.Warn("doctor: failing checks block deploy", ...)`) so the Info+Warn+Error trio represents a coherent severity ramp, and leave the user-visible Error emission to cli/root.go where it is already wired. Or remove this log entirely and let the typed error carry the diagnostic.
 **Effort:** hours
 
 ##### `obs:366b3f2d:level-error-not-user-visible` — level error not user visible
@@ -1727,16 +1546,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/distribution/okd/install/workers.go:91-97`
 **Problem:** Materialises strings.Split(out, newline) into a slice when only iterating to count non-blank lines. Go 1.24's strings.Lines is the iterator form; the repo already uses it in eight other sites.
 **Fix:** Replace `for _, line := range strings.Split(out, "\n")` with `for line := range strings.Lines(out)`. Matches the dominant pattern in internal/platform/platform.go:L85, internal/distribution/okd/install/flux.go:L36, internal/distribution/okd/setup/tools.go:L287. Note strings.Lines retains the trailing newline on each emitted line, so the TrimSpace check still works.
-**Effort:** hours
-
-##### `mod:696d6b0e:use-strings-splitseq` — use strings splitseq
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/mod-696d6b0e-splitseq
-**Severity:** minor
-**Cluster:** slices-maps
-**Evidence:** `internal/distribution/okd/phase/iso_cleanup.go:212-220` + 2 more
-**Problem:** Three sites materialise strings.Split(s, sep) into a slice when only iterating once. Go 1.24's strings.SplitSeq is the iterator form — no slice allocation, same body.
-**Fix:** Replace `for _, x := range strings.Split(s, sep)` with `for x := range strings.SplitSeq(s, sep)` at the three call sites. The repo already uses strings.SplitSeq in internal/tui/layouts.go:L30,L95 for the same pattern.
 **Effort:** hours
 
 ##### `mod:6fc3d91e:use-strings-fieldsseq` — use strings fieldsseq
@@ -1935,16 +1744,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Normalize to `tflint_version: "0.62.0"` to match the in-repo pattern for terraform_version. Cosmetic only — both forms are accepted by setup-tflint.
 **Effort:** hours
 
-##### `dep:76ed074a:make-air-pin-rationale` — make air pin rationale
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/dep-76ed074a-make-air
-**Severity:** suggestion
-**Cluster:** pin-stability
-**Evidence:** `Makefile:60-60`
-**Problem:** Makefile installs `github.com/air-verse/air@v1.61.7` for `make dev` hot-reload. Pin is explicit (good) but pin is from late 2024 — air's current is v1.62+. Dev-only tool, not in the release binary, so license/freshness risk is bounded.
-**Fix:** Bump air pin to the latest patch (or document that v1.61.7 is intentional). Low priority — air is only invoked when a contributor runs `make dev`. Skip if no contributor reports a hot-reload bug.
-**Effort:** hours
-
 ##### `dep:660d83a5:charm-log-vs-slog-policy` — charm log vs slog policy
 
 **Status:** not started
@@ -2070,16 +1869,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Problem:** SnapshotState is the only safety net between `okdctl destroy` and a destructive `terraform destroy` — it copies terraform.tfstate to a timestamped .bak before destroy fires; failure to snapshot is a hard error that prevents the destructive op. ZeroizeEnv bounds credential lifetime in the terraform Executor's env slice. Neither has a direct test. pruneSnapshots and checkStateMajorVersion are also untested. A regression in SnapshotState (e.g. dropping the AtomicWrite hard-error on failure) silently proceeds with destroy and loses the only recovery path.
 **Fix:** Add internal/infrastructure/terraform/state_test.go and extend terraform_test.go: (a) SnapshotState writes terraform.tfstate.<ts>.bak with byte-equal payload and 0o600 perm; (b) SnapshotState returns ("", nil) when source state file is absent; (c) SnapshotState propagates AtomicWrite error as wrapped fmt.Errorf; (d) pruneSnapshots keeps the 5 most recent (seed 7 .bak files, verify 2 removed); (e) checkStateMajorVersion rejects major=2 with *errtypes.ConfigError; (f) checkStateMajorVersion returns nil on unparseable version (non-fatal contract). Use t.TempDir + executor.New. Template: internal/infrastructure/terraform/terraform_test.go::TestExecutor_HasState.
 **Effort:** days
-
-##### `tst:7b2829bb:snapshot-env-untested` — snapshot env untested
-
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/tst-7b2829bb-snapshot-env
-**Severity:** major
-**Cluster:** cred-path-untested
-**Evidence:** `internal/executor/executor.go:429-433`
-**Problem:** SnapshotEnv returns a copy of the executor's env slice — callers (destroy/helpers.go, postinstall/bootstrap.go, install/workers.go) feed it through terraform.WithEnv where credential strings (PROXMOX_VE_PASSWORD, PROXMOX_VE_API_TOKEN) live. The copy-vs-reference invariant ("the copy prevents callers from mutating the executor's internal env through the returned slice") is doc-asserted but not test-locked. A regression to `return e.env` (alias instead of copy) means a downstream ZeroizeEnv would race the producer.
-**Fix:** Add internal/executor/executor_test.go::TestSnapshotEnv: (a) build executor with WithEnv([]string{"KEY=v1"}); take snapshot s; mutate s[0] = "KEY=v2"; assert executor's internal e.env[0] unchanged; (b) length matches len(e.env); (c) snapshot of empty env returns non-nil zero-length slice (or nil — lock current behaviour either way). Template: internal/executor/executor_test.go::TestZeroizeEnv.
-**Effort:** hours
 
 ##### `tst:a6e38cc7:sshpin-verify-shellout-untested` — sshpin verify shellout untested
 
