@@ -68,9 +68,9 @@ func validateProxmoxName(name string) error {
 	return nil
 }
 
-// validateISODir rejects isoDir values that contain shell metacharacters or
+// ValidateISODir rejects isoDir values that contain shell metacharacters or
 // are not absolute paths.
-func validateISODir(isoDir string) error {
+func ValidateISODir(isoDir string) error {
 	if !filepath.IsAbs(isoDir) {
 		return fmt.Errorf("isoDir must be an absolute path, got %q", isoDir)
 	}
@@ -229,10 +229,10 @@ func vmDevicesReferenceISO(vm map[string]json.RawMessage, isoBase string) bool {
 // Shell-injection policy of record: this function is the only place in the
 // repo that passes a constructed string to a remote shell via SSHRun (sh -c).
 // All other SSH operations MUST use SSHRunArgv. Any new sh -c usage MUST
-// layer its own validateXxx guard (see validateISODir, refuseUnsafeISOPath)
+// layer its own validateXxx guard (see ValidateISODir, refuseUnsafeISOPath)
 // and wrap every variable token with shellSingleQuote before interpolation.
 func RemoveFCOSISOFromProxmox(ctx context.Context, p *RemoteISOParams, isoDir string) error {
-	if err := validateISODir(isoDir); err != nil {
+	if err := ValidateISODir(isoDir); err != nil {
 		return err
 	}
 
