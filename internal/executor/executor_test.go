@@ -223,6 +223,29 @@ func TestSnapshotEnv(t *testing.T) {
 	})
 }
 
+func TestExitError_ErrorTruncatesLongStderr(t *testing.T) {
+	long := strings.Repeat("x", 500)
+	e := &ExitError{Command: "terraform apply", ExitCode: 1, Stderr: long}
+	got := e.Error()
+	if !strings.Contains(got, "[truncated]") {
+		t.Errorf("Error() missing truncation marker for 500-byte stderr; got: %q", got)
+	}
+	if strings.Contains(got, long) {
+		t.Errorf("Error() embedded full 500-byte stderr verbatim")
+	}
+}
+
+func TestExitError_ErrorShortStderrPassesThrough(t *testing.T) {
+	e := &ExitError{Command: "terraform plan", ExitCode: 2, Stderr: "permission denied"}
+	got := e.Error()
+	if !strings.Contains(got, "permission denied") {
+		t.Errorf("Error() dropped short stderr; got: %q", got)
+	}
+	if strings.Contains(got, "[truncated]") {
+		t.Errorf("Error() added truncation marker for short stderr; got: %q", got)
+	}
+}
+
 func TestRunStreamedChecked(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("needs POSIX sh")

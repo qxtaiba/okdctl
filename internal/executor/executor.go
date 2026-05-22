@@ -200,11 +200,12 @@ type ExitError struct {
 	Stderr   string
 }
 
-// Error returns a human-readable form matching the legacy bare
-// fmt.Errorf output so existing log/stringification sites are
-// unchanged.
+// Error truncates Stderr to at most 400 bytes via logutil.RedactableStderr
+// so a credential-bearing terraform provider diagnostic does not reach log
+// sinks verbatim when a caller stringifies outside slog.
 func (e *ExitError) Error() string {
-	return fmt.Sprintf("%s failed (exit %d): %s", e.Command, e.ExitCode, strings.TrimSpace(e.Stderr))
+	stderr := fmt.Sprint(logutil.RedactableStderr(strings.TrimSpace(e.Stderr)).Redacted())
+	return fmt.Sprintf("%s failed (exit %d): %s", e.Command, e.ExitCode, stderr)
 }
 
 // Redacted omits Stderr so subprocess stderr never reaches a structured
