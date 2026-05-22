@@ -474,7 +474,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sec:fde34e0c:input-kubeconfig-not-resolved` — input kubeconfig not resolved
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-fde34e0c-kubeconfig-perms
 **Severity:** minor
 **Cluster:** input-validation
 **Evidence:** `internal/cluster/k8s.go:78-97`
@@ -484,7 +484,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sec:eb479d86:cred-in-argv` — cred in argv
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-eb479d86-iso-validate
 **Severity:** suggestion
 **Cluster:** shell-injection
 **Evidence:** `internal/distribution/okd/setup/upload.go:23-40`
@@ -537,7 +537,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sub:97cb8adf:unbounded-output` — unbounded output
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sub-97cb8adf-output-cap
 **Severity:** minor
 **Cluster:** io-handling
 **Evidence:** `internal/system/exec.go:72-86`
@@ -692,7 +692,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `iac:e076e43c:sh-no-version-tag-validation` — sh no version tag validation
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/iac-e076e43c-version-validate
 **Severity:** minor
 **Cluster:** install-sh-fail-closed
 **Evidence:** `scripts/install.sh:113-123`
@@ -702,7 +702,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `iac:18a795d5:hcl-iso-list-no-empty-check` — hcl iso list no empty check
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/iac-18a795d5-iso-empty
 **Severity:** suggestion
 **Cluster:** hcl-destroy-ordering
 **Evidence:** `infrastructure/terraform/modules/proxmox-okd/main.tf:254-380`
@@ -715,7 +715,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `err:d7ce9d16:errors-join-bare-fmt-errorf` — errors join bare fmt errorf
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/err-d7ce9d16-dns-wrap
 **Severity:** minor
 **Cluster:** wrapping
 **Evidence:** `internal/distribution/okd/dns/dns.go:258-264`
@@ -755,7 +755,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `err:4c092fce:terraform-execerror-stderr-latent-leak` — terraform execerror stderr latent leak
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/err-4c092fce-tf-stderr
 **Severity:** major
 **Cluster:** redaction-in-error — seam→`audit-observability`
 **Evidence:** `internal/infrastructure/terraform/terraform.go:36-38`
@@ -795,7 +795,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `err:632c9087:update-ingress-bare-fmt-errorf` — update ingress bare fmt errorf
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/err-632c9087-ingress-classify
 **Severity:** minor
 **Cluster:** sentinel-vs-typed
 **Evidence:** `internal/distribution/okd/postinstall/update_ingress.go:336-472` + 1 more
@@ -911,7 +911,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `api:ddf885f4:opt-name-manager-option` — opt name manager option
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/api-ddf885f4-addon-option
 **Severity:** minor
 **Cluster:** option-consistency
 **Evidence:** `internal/addon/manager.go:26-43`
@@ -1214,7 +1214,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `ux:fd2125dd:help-long-missing` — help long missing
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/ux-fd2125dd-addon-verify-long
 **Severity:** minor
 **Cluster:** help-text
 **Evidence:** `internal/cli/addon.go:95-100`
@@ -1224,7 +1224,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `ux:aa84670c:help-long-missing` — help long missing
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/ux-aa84670c-version-cmd
 **Severity:** minor
 **Cluster:** help-text
 **Evidence:** `internal/cli/root.go:238-246`
@@ -1284,7 +1284,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `ux:e45c2239:stderr-stdout-mixed` — stderr stdout mixed
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/ux-e45c2239-preflight-logger
 **Severity:** minor
 **Cluster:** streams
 **Evidence:** `cmd/okdctl/main.go:32-51`
@@ -1337,7 +1337,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `obs:15ba17da:key-inconsistent-casing` — key inconsistent casing
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/obs-15ba17da-destroy-keys
 **Severity:** suggestion
 **Cluster:** field-stability
 **Evidence:** `internal/distribution/okd/destroy/steps.go:180-184`
@@ -1357,7 +1357,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `obs:5013fea6:level-error-not-user-visible` — level error not user visible
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/obs-5013fea6-extract-warn
 **Severity:** minor
 **Cluster:** level-discipline
 **Evidence:** `internal/distribution/okd/setup/release_extract.go:126-136`
@@ -1649,7 +1649,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `doc:b3356305:readme-flag-ghost` — readme flag ghost
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/doc-b3356305-readme-postinstall
 **Severity:** minor
 **Cluster:** readme-drift — seam→`audit-cli-ux`
 **Evidence:** `README.md:240-241`
@@ -1659,7 +1659,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `doc:4ac0d12f:line-citation-drift` — line citation drift
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/doc-4ac0d12f-secretstore-cite
 **Severity:** minor
 **Cluster:** readme-drift
 **Evidence:** `docs/addons/secretstore.md:34-35`
@@ -1672,7 +1672,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `tst:a6e38cc7:sshpin-verify-shellout-untested` — sshpin verify shellout untested
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/tst-a6e38cc7-sshpin-verify
 **Severity:** major
 **Cluster:** trust-boundary-untested
 **Evidence:** `internal/sshpin/sshpin.go:35-51`
@@ -1682,7 +1682,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `tst:ab9b764a:install-config-pull-secret-zeroize-untested` — install config pull secret zeroize untested
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/tst-ab9b764a-pullsecret
 **Severity:** major
 **Cluster:** cred-path-untested
 **Evidence:** `internal/distribution/okd/setup/ignition.go:39-98`
