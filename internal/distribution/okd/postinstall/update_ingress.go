@@ -343,7 +343,7 @@ func (p *Phase) handleHostNetworkConversion(
 		ic := &hostNetworkICs[i]
 		p.Log.Info("update-ingress: converting from hostnetwork to loadbalancerservice", "name", ic.Name)
 		if err := p.convertToLoadBalancer(ctx, ic, timeout); err != nil {
-			return convertedCount, names, fmt.Errorf("failed to convert IngressController %q: %w", ic.Name, err)
+			return convertedCount, names, &errtypes.ClusterError{Msg: fmt.Sprintf("failed to convert IngressController %q", ic.Name), Err: err}
 		}
 		names[ic.Name] = true
 		convertedCount++
@@ -460,18 +460,18 @@ func (p *Phase) checkMetalLBAvailable(ctx context.Context) (bool, error) {
 func (p *Phase) convertToLoadBalancer(ctx context.Context, ic *ingressControllerInfo, timeout time.Duration) error {
 	replacementJSON, err := buildLBIngressController(ic)
 	if err != nil {
-		return fmt.Errorf("failed to build replacement IngressController: %w", err)
+		return &errtypes.ClusterError{Msg: "failed to build replacement IngressController", Err: err}
 	}
 
 	_, err = p.Exec.RunChecked(ctx, "oc", "delete", "ingresscontroller", ic.Name,
 		"-n", "openshift-ingress-operator")
 	if err != nil {
-		return fmt.Errorf("failed to delete IngressController %q: %w", ic.Name, err)
+		return &errtypes.ClusterError{Msg: fmt.Sprintf("failed to delete IngressController %q", ic.Name), Err: err}
 	}
 
 	p.Log.Info("update-ingress: waiting for router deployment to terminate", "name", ic.Name)
 	if err := p.waitForRouterGone(ctx, ic.Name, timeout); err != nil {
-		return fmt.Errorf("router-%s did not terminate: %w", ic.Name, err)
+		return &errtypes.ClusterError{Msg: fmt.Sprintf("router-%s did not terminate", ic.Name), Err: err}
 	}
 	p.Log.Info("update-ingress: router terminated", "name", ic.Name)
 
@@ -479,7 +479,7 @@ func (p *Phase) convertToLoadBalancer(ctx context.Context, ic *ingressController
 	if err != nil {
 		p.Log.Warn("update-ingress: failed to create replacement, attempting rollback", "err", err)
 		p.attemptRollback(ctx, ic)
-		return fmt.Errorf("failed to create replacement IngressController: %w", err)
+		return &errtypes.ClusterError{Msg: "failed to create replacement IngressController", Err: err}
 	}
 
 	return nil
@@ -661,7 +661,7 @@ func (p *Phase) waitForServiceLB(ctx context.Context, svcName string, opts *Opti
 		"get", "svc", svcName, "-n", "openshift-ingress",
 		"-o", "jsonpath={.status.loadBalancer.ingress[0].ip}")
 	if err != nil {
-		return "", fmt.Errorf("%s did not receive a LoadBalancer IP within %v: %w", svcName, timeout, err)
+		return "", &errtypes.ClusterError{Msg: fmt.Sprintf("%s did not receive a LoadBalancer IP within %v", svcName, timeout), Err: err}
 	}
 	return ip, nil
 }
