@@ -31,8 +31,8 @@ post-install.
 | `bitwarden_identity_url` | `https://identity.bitwarden.com` | Bitwarden identity URL; override for self-hosted Vaultwarden (bitwarden provider only) |
 | `bitwarden_sdk_server_url` | `https://bitwarden-sdk-server.external-secrets.svc.cluster.local:9998` | In-cluster bitwarden-sdk-server sidecar URL (bitwarden provider only) |
 
-Source: `secretstore.go:19-30` (constants and setting keys),
-`secretstore.go:DefaultSettings`.
+Sources: the `Setting*` constants and `DefaultSettings` in
+`internal/addon/catalog/secretstore/secretstore.go`.
 
 ## providers
 
