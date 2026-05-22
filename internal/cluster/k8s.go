@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/executor"
 	"github.com/qxtaiba/okdctl/internal/logutil"
 )
@@ -84,6 +85,13 @@ func validateKubeconfigEnv(path string) error {
 	}
 	if fi.Mode()&os.ModeSymlink != 0 {
 		return fmt.Errorf("kubeconfig path is a symlink")
+	}
+	if perm := fi.Mode().Perm(); perm&0o077 != 0 {
+		return &errtypes.AuthError{
+			Msg:  fmt.Sprintf("kubeconfig has insecure permissions %#o; run 'chmod 600 <path>' to fix", perm),
+			Path: clean,
+			Err:  os.ErrPermission,
+		}
 	}
 
 	home, _ := os.UserHomeDir()
