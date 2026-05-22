@@ -237,7 +237,7 @@ retrieve the ignition files and harvest the pull-secret.
 Mitigations:
 - Ensure the bastion bridge network is isolated from untrusted hosts (VLAN, private
   bridge, or Proxmox SDN zone) before running `okdctl deploy`.
-- After `okdctl postinstall` completes, run `okdctl cleanup` which removes the
+- After `okdctl deploy` completes, run `okdctl cleanup` which removes the
   ignition files from the web root.
 - A future enhancement (tracked in the roadmap) will add a
   firewalld/iptables INPUT rule scoping port 8080 to `networking.machine_cidr`.
