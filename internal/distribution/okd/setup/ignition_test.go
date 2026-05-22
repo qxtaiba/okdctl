@@ -4,10 +4,12 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
+	"github.com/qxtaiba/okdctl/internal/system"
 )
 
 func makeCfgWithFiles(t *testing.T, pullSecretContent, sshKeyContent string) *config.Config {
@@ -25,6 +27,47 @@ func makeCfgWithFiles(t *testing.T, pullSecretContent, sshKeyContent string) *co
 	cfg.Files.PullSecret = pullSecretPath
 	cfg.Files.SSHPublicKey = sshKeyPath
 	return cfg
+}
+
+func TestGenerateInstallConfig_PullSecretInFileAndZeroed(t *testing.T) {
+	const pullSecretJSON = `{"auths":{"registry.example.com":{"auth":"dXNlcjpwYXNz"}}}`
+
+	var (
+		captured []byte
+		zeroed   bool
+	)
+	orig := zeroBytesFn
+	zeroBytesFn = func(b []byte) {
+		captured = b
+		system.ZeroBytes(b)
+		zeroed = true
+	}
+	t.Cleanup(func() { zeroBytesFn = orig })
+
+	cfg := makeCfgWithFiles(t, pullSecretJSON, "ssh-rsa AAAAB3 test@host")
+	outputDir := t.TempDir()
+	p := newTestPhase(t)
+
+	if err := p.GenerateInstallConfig(t.Context(), cfg, outputDir); err != nil {
+		t.Fatalf("GenerateInstallConfig: %v", err)
+	}
+
+	rendered, err := os.ReadFile(filepath.Join(outputDir, "install-config.yaml"))
+	if err != nil {
+		t.Fatalf("read install-config.yaml: %v", err)
+	}
+	if !strings.Contains(string(rendered), pullSecretJSON) {
+		t.Errorf("install-config.yaml does not contain pull-secret JSON")
+	}
+
+	if !zeroed {
+		t.Fatal("zeroBytesFn was not called; defer zeroBytesFn(pullSecret) may have been removed")
+	}
+	for i, b := range captured {
+		if b != 0 {
+			t.Errorf("pullSecret[%d] = %#x after zeroize, want 0x00", i, b)
+		}
+	}
 }
 
 func TestGenerateInstallConfig_Perms(t *testing.T) {
