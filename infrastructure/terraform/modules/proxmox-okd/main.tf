@@ -252,8 +252,8 @@ resource "proxmox_virtual_environment_vm" "master" {
   lifecycle {
     prevent_destroy = true
     precondition {
-      condition     = length(var.master_isos) >= var.master_count
-      error_message = "master_isos must have at least master_count (${var.master_count}) entries, got ${length(var.master_isos)}."
+      condition     = length(var.master_isos) >= var.master_count && alltrue([for iso in slice(var.master_isos, 0, var.master_count) : iso != ""])
+      error_message = "master_isos must have at least master_count (${var.master_count}) non-empty entries; got ${length(var.master_isos)} entries (check for empty strings in the first ${var.master_count})."
     }
     ignore_changes = [
       # bpg/terraform-provider-proxmox dynamic + static network_device coexist;
@@ -378,8 +378,8 @@ resource "proxmox_virtual_environment_vm" "worker" {
 
   lifecycle {
     precondition {
-      condition     = length(var.worker_isos) >= var.worker_count
-      error_message = "worker_isos must have at least worker_count (${var.worker_count}) entries, got ${length(var.worker_isos)}."
+      condition     = length(var.worker_isos) >= var.worker_count && alltrue([for iso in slice(var.worker_isos, 0, var.worker_count) : iso != ""])
+      error_message = "worker_isos must have at least worker_count (${var.worker_count}) non-empty entries; got ${length(var.worker_isos)} entries (check for empty strings in the first ${var.worker_count})."
     }
     ignore_changes = [
       # bpg/terraform-provider-proxmox dynamic + static network_device coexist;
