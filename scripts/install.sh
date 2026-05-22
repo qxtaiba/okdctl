@@ -119,6 +119,9 @@ if [ -z "$VERSION" ]; then
     info "latest: $VERSION"
 fi
 
+[[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.-]+)?$ ]] ||
+    die "unexpected version tag: $VERSION"
+
 VERSION_NOPREFIX="${VERSION#v}"
 ARCHIVE_NAME="${BINARY}_${VERSION_NOPREFIX}_${OS}_${ARCH}.tar.gz"
 BASE_URL="https://github.com/$REPO/releases/download/$VERSION"
