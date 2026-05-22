@@ -135,7 +135,7 @@ func TestDestroySteps_FailurePath(t *testing.T) {
 
 	var stepsVal string
 	rec.Attrs(func(a slog.Attr) bool {
-		if a.Key == "steps" {
+		if a.Key == "failed_steps" {
 			stepsVal = a.Value.String()
 			return false
 		}
@@ -143,7 +143,7 @@ func TestDestroySteps_FailurePath(t *testing.T) {
 	})
 	for _, tc := range tracked {
 		if !strings.Contains(stepsVal, tc.label) {
-			t.Errorf("steps attr %q missing label %q", stepsVal, tc.label)
+			t.Errorf("failed_steps attr %q missing label %q", stepsVal, tc.label)
 		}
 	}
 }
@@ -177,18 +177,18 @@ func TestDestroySteps_SkipPath(t *testing.T) {
 
 	var skippedVal string
 	rec.Attrs(func(a slog.Attr) bool {
-		if a.Key == "skipped" {
+		if a.Key == "skipped_steps" {
 			skippedVal = a.Value.String()
 			return false
 		}
 		return true
 	})
 	if skippedVal == "" {
-		t.Fatal("skipped attr missing from log record")
+		t.Fatal("skipped_steps attr missing from log record")
 	}
 	for _, label := range []string{"terraform", "iso removal", "file cleanup", "firewall"} {
 		if !strings.Contains(skippedVal, label) {
-			t.Errorf("skipped attr %q missing label %q", skippedVal, label)
+			t.Errorf("skipped_steps attr %q missing label %q", skippedVal, label)
 		}
 	}
 }
@@ -214,17 +214,17 @@ func TestDestroySteps_PartialFailure(t *testing.T) {
 
 	var stepsVal string
 	rec.Attrs(func(a slog.Attr) bool {
-		if a.Key == "steps" {
+		if a.Key == "failed_steps" {
 			stepsVal = a.Value.String()
 			return false
 		}
 		return true
 	})
 	if !strings.Contains(stepsVal, "terraform destroy") {
-		t.Errorf("steps %q missing 'terraform destroy'", stepsVal)
+		t.Errorf("failed_steps %q missing 'terraform destroy'", stepsVal)
 	}
 	if !strings.Contains(stepsVal, "firewall cleanup") {
-		t.Errorf("steps %q missing 'firewall cleanup'", stepsVal)
+		t.Errorf("failed_steps %q missing 'firewall cleanup'", stepsVal)
 	}
 	if strings.Contains(stepsVal, "iso removal") {
 		t.Errorf("steps %q should not contain 'iso removal'", stepsVal)

@@ -4,7 +4,6 @@ import (
 	"context"
 	"log/slog"
 	"slices"
-	"strings"
 	"sync"
 
 	"github.com/qxtaiba/okdctl/internal/config"
@@ -180,10 +179,10 @@ func (p *Phase) destroySteps(ctx context.Context, cfg *config.Config, opts *Opti
 				switch {
 				case len(failures) > 0:
 					p.Log.Warn("destroy: teardown finished with non-fatal failures",
-						"steps", strings.Join(failures, ", "))
+						"failed_steps", failures)
 				case len(skipped) > 0:
 					p.Log.Info("destroy: cluster teardown completed",
-						"skipped", strings.Join(skipped, ", "))
+						"skipped_steps", skipped)
 				default:
 					p.Log.Info("destroy: cluster teardown completed")
 				}
