@@ -93,7 +93,7 @@ func TestValidateISODir(t *testing.T) {
 		"/mnt/iso",
 	}
 	for _, d := range valid {
-		if err := validateISODir(d); err != nil {
+		if err := ValidateISODir(d); err != nil {
 			t.Errorf("expected valid isoDir %q to pass: %v", d, err)
 		}
 	}
@@ -109,7 +109,7 @@ func TestValidateISODir(t *testing.T) {
 		"/var/lib/vz/iso'quoted",
 	}
 	for _, d := range invalid {
-		if err := validateISODir(d); err == nil {
+		if err := ValidateISODir(d); err == nil {
 			t.Errorf("expected invalid isoDir %q to be rejected", d)
 		}
 	}
