@@ -22,6 +22,10 @@ import (
 // AlreadyDone for StepDeployIgnition requires all three to exist in the webroot.
 var ignitionFilenames = []string{"bootstrap.ign", "master.ign", "worker.ign"}
 
+// zeroBytesFn wipes the pull-secret buffer. Tests may replace it to observe
+// zeroing behaviour; production code must not change it.
+var zeroBytesFn = system.ZeroBytes
+
 // readNoFollow reads path while refusing to follow a symlink at the final
 // component. Mirrors the lstat-then-O_NOFOLLOW pattern in runlock.Acquire.
 func readNoFollow(path string) ([]byte, error) {
@@ -68,7 +72,7 @@ func (p *Phase) GenerateInstallConfig(ctx context.Context, cfg *config.Config, o
 	if err != nil {
 		return &errtypes.AuthError{Msg: "failed to read pull secret", Err: err}
 	}
-	defer system.ZeroBytes(pullSecret)
+	defer zeroBytesFn(pullSecret)
 	if !json.Valid(pullSecret) {
 		return &errtypes.AuthError{Msg: "pull secret is not valid JSON", Err: errtypes.ErrPullSecretInvalid}
 	}
