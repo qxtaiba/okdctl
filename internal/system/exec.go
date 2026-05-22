@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"log/slog"
 	"os/exec"
 	"strings"
@@ -17,6 +18,10 @@ import (
 	"github.com/qxtaiba/okdctl/internal/executor"
 	"github.com/qxtaiba/okdctl/internal/logutil"
 )
+
+// outputCapturedMaxBytes caps stdout returned by OutputCaptured at 4 MiB to
+// prevent a runaway subprocess from buffering unbounded data into the caller.
+const outputCapturedMaxBytes = 4 * 1024 * 1024
 
 // SubprocessError is returned by RunCaptured and OutputCaptured when a
 // subprocess fails. StderrTail carries the raw subprocess stderr; callers
@@ -71,7 +76,8 @@ func RunCaptured(ctx context.Context, bin string, args ...string) error {
 
 // OutputCaptured runs bin with args and returns stdout. On non-zero exit,
 // stderr is captured into the returned error so callers see ip/nmcli
-// diagnostics rather than a bare exit-status.
+// diagnostics rather than a bare exit-status. Stdout is capped at
+// outputCapturedMaxBytes; output that exceeds the cap returns a SubprocessError.
 //
 // env is filtered through executor.DefaultEnvAllowlist.
 func OutputCaptured(ctx context.Context, bin string, args ...string) ([]byte, error) {
@@ -83,11 +89,31 @@ func OutputCaptured(ctx context.Context, bin string, args ...string) ([]byte, er
 	cmd.Env = executor.FilterParentEnv(executor.DefaultEnvAllowlist)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
-	out, err := cmd.Output()
+
+	stdoutPipe, err := cmd.StdoutPipe()
 	if err != nil {
+		return nil, &SubprocessError{Bin: bin, Err: err}
+	}
+	if err := cmd.Start(); err != nil {
+		return nil, &SubprocessError{Bin: bin, Err: err}
+	}
+
+	out, readErr := io.ReadAll(io.LimitReader(stdoutPipe, outputCapturedMaxBytes+1))
+	waitErr := cmd.Wait()
+
+	if len(out) > outputCapturedMaxBytes {
+		return nil, &SubprocessError{
+			Bin: bin,
+			Err: fmt.Errorf("output exceeded %d bytes", outputCapturedMaxBytes),
+		}
+	}
+	if readErr != nil {
+		return nil, &SubprocessError{Bin: bin, Err: readErr}
+	}
+	if waitErr != nil {
 		return nil, &SubprocessError{
 			Bin:        bin,
-			Err:        err,
+			Err:        waitErr,
 			StderrTail: strings.TrimSpace(stderr.String()),
 		}
 	}
