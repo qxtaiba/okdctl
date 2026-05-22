@@ -45,6 +45,18 @@ var (
 	logVerbose bool
 )
 
+// preflightWarns holds warning closures registered before cli.Execute
+// runs. PersistentPreRunE drains the slice after configureLogging so every
+// warning uses the fully-configured formatter (text or JSON).
+var preflightWarns []func()
+
+// DeferWarn enqueues fn to be called by PersistentPreRunE after
+// configureLogging completes. Use this for warnings generated before
+// cli.Execute is invoked (e.g. in main.preflight).
+func DeferWarn(fn func()) {
+	preflightWarns = append(preflightWarns, fn)
+}
+
 var rootCmd = &cobra.Command{
 	Use:   "okdctl",
 	Short: "Deploy production-ready Kubernetes clusters",
@@ -67,6 +79,10 @@ Highlights:
 		if err := configureLogging(cmd); err != nil {
 			return err
 		}
+		for _, fn := range preflightWarns {
+			fn()
+		}
+		preflightWarns = nil
 		return ensureRoot(cmd)
 	},
 }
