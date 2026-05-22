@@ -3,7 +3,6 @@ package dns
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -257,10 +256,7 @@ func validateAndRestartDnsmasq(ctx context.Context, configName string) error {
 
 	if err := validateDnsmasqConfigFn(ctx); err != nil {
 		restore()
-		return errors.Join(
-			fmt.Errorf("dnsmasq config validation failed — previous config restored"),
-			err,
-		)
+		return fmt.Errorf("dnsmasq config validation failed — previous config restored: %w", err)
 	}
 
 	if err := restartDnsmasqFn(ctx); err != nil {
