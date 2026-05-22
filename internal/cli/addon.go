@@ -93,8 +93,14 @@ target. Disable or uninstall the dependent addon first.`,
 }
 
 var addonVerifyCmd = &cobra.Command{
-	Use:     "verify",
-	Short:   "Verify health of all enabled addons",
+	Use:   "verify",
+	Short: "Verify health of all enabled addons",
+	Long: `Run each enabled addon's Verify() probe against the live cluster and
+report pass/fail for every addon. The output lists each addon name alongside
+OK or a FAIL reason. Exit code is non-zero if any probe fails or if the
+configuration cannot be loaded.
+
+See also: addon list`,
 	Example: "  okdctl addon verify",
 	RunE:    runAddonVerify,
 }
