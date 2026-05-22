@@ -182,6 +182,29 @@ failures, 2 = one or more failing checks) regardless of format.
 | `failed` | int | number of checks with severity `fail` |
 | `warned` | int | number of checks with severity `warn` |
 
+## `okdctl version --output=json`
+
+Build identity for the running binary. Suitable for CI version pinning
+and scripted comparisons.
+
+```json
+{
+  "version": "0.8.1",
+  "git_commit": "abc1234",
+  "build_date": "2026-05-23T12:00:00Z",
+  "go_version": "go1.25.0",
+  "platform": "linux/amd64"
+}
+```
+
+| Field | Type | Notes |
+|---|---|---|
+| `version` | string | semver build version injected by goreleaser |
+| `git_commit` | string | short SHA of the commit the binary was built from |
+| `build_date` | string | RFC3339 timestamp of the build, or `"unknown"` for local builds |
+| `go_version` | string | Go toolchain version string (e.g. `go1.25.0`) |
+| `platform` | string | `GOOS/GOARCH` of the build target |
+
 ## Conventions
 
 - All timestamps use RFC 3339 with a trailing `Z` for UTC.

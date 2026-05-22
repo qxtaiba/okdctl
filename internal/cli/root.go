@@ -234,13 +234,46 @@ func exitCodeFor(err error) int {
 	return 1
 }
 
+// versionOutput is the machine-readable shape emitted by
+// `okdctl version --output=json`. Field names match the ldflags variables
+// in internal/version/version.go; see docs/cli/json-schema.md.
+type versionOutput struct {
+	Version   string `json:"version"`
+	GitCommit string `json:"git_commit"`
+	BuildDate string `json:"build_date"`
+	GoVersion string `json:"go_version"`
+	Platform  string `json:"platform"`
+}
+
+var versionOutputFlag string
+
 // versionCmd prints the same template as the --version flag. Exists so
 // `okdctl version` works alongside `okdctl --version` (kubectl/docker/gh
 // all expose both).
 var versionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "Print version, git commit, build date",
+	Long: `Print the okdctl build identity: version number, git commit SHA,
+build date, Go toolchain version, and OS/arch platform.
+
+Pass --output=json for machine-readable output suitable for CI version
+pinning or scripted comparisons (see docs/cli/json-schema.md).`,
+	Example: `  okdctl version
+  okdctl version --output json | jq .version`,
 	RunE: func(cmd *cobra.Command, _ []string) error {
+		if err := validateFormat(versionOutputFlag); err != nil {
+			return err
+		}
+		quietForJSON(versionOutputFlag)
+		if versionOutputFlag == outputJSON {
+			return writeJSON(cmd.OutOrStdout(), versionOutput{
+				Version:   version.Version,
+				GitCommit: version.GitCommit,
+				BuildDate: version.BuildDate,
+				GoVersion: version.GoVersion,
+				Platform:  version.Platform,
+			})
+		}
 		_, err := fmt.Fprintf(cmd.OutOrStdout(), "okdctl %s\nGit Commit: %s\nBuild Date: %s\nGo Version: %s\nPlatform:   %s\n",
 			version.Version, version.GitCommit, version.BuildDate, version.GoVersion, version.Platform)
 		return err
@@ -263,6 +296,8 @@ func init() {
 		tui.Error("flag error", tui.LF("err", err))
 		return &errtypes.UsageError{Msg: err.Error(), Err: err}
 	})
+
+	versionCmd.Flags().StringVarP(&versionOutputFlag, flagOutput, flagOutputShort, outputText, "output format: text|json")
 
 	rootCmd.AddCommand(deployCmd)
 	rootCmd.AddCommand(destroyCmd)

@@ -2,14 +2,30 @@
 
 Print version, git commit, build date
 
+### Synopsis
+
+Print the okdctl build identity: version number, git commit SHA,
+build date, Go toolchain version, and OS/arch platform.
+
+Pass --output=json for machine-readable output suitable for CI version
+pinning or scripted comparisons (see docs/cli/json-schema.md).
+
 ```
 okdctl version [flags]
+```
+
+### Examples
+
+```
+  okdctl version
+  okdctl version --output json | jq .version
 ```
 
 ### Options
 
 ```
-  -h, --help   help for version
+  -h, --help            help for version
+  -o, --output string   output format: text|json (default "text")
 ```
 
 ### Options inherited from parent commands
