@@ -23,29 +23,30 @@ type Manager struct {
 	projectRoot string
 }
 
-// ManagerOption configures a Manager at construction time.
-type ManagerOption func(*Manager)
+// Option configures a Manager at construction time.
+type Option func(*Manager)
+
 
 // WithExecutor sets the subprocess executor used by addon Install/Verify/Uninstall.
-func WithExecutor(exec *executor.Executor) ManagerOption {
+func WithExecutor(exec *executor.Executor) Option {
 	return func(m *Manager) { m.exec = exec }
 }
 
 // WithLogger attaches a logger. Nil resolves to NopLogger.
-func WithLogger(l *slog.Logger) ManagerOption {
+func WithLogger(l *slog.Logger) Option {
 	return func(m *Manager) { m.logger = logutil.OrNop(l) }
 }
 
 // WithProjectRoot sets the path the manager resolves addon-local resources
 // against (manifests, helm charts, flux bootstrap paths).
-func WithProjectRoot(root string) ManagerOption {
+func WithProjectRoot(root string) Option {
 	return func(m *Manager) { m.projectRoot = root }
 }
 
 // NewManager constructs a Manager bound to cfg with options applied in order.
 // A nil logger is tolerated and resolved to NopLogger so the body can log
 // unconditionally — matches the nil-safety contract of phase.NewBasePhase.
-func NewManager(cfg *config.Config, opts ...ManagerOption) *Manager {
+func NewManager(cfg *config.Config, opts ...Option) *Manager {
 	m := &Manager{cfg: cfg}
 	for _, opt := range opts {
 		opt(m)
