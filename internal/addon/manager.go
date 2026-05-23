@@ -26,7 +26,6 @@ type Manager struct {
 // Option configures a Manager at construction time.
 type Option func(*Manager)
 
-
 // WithExecutor sets the subprocess executor used by addon Install/Verify/Uninstall.
 func WithExecutor(exec *executor.Executor) Option {
 	return func(m *Manager) { m.exec = exec }
