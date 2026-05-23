@@ -107,7 +107,10 @@ func TestValidateKubeconfigEnv(t *testing.T) {
 
 	t.Run("perm_0644_rejected_with_auth_error", func(t *testing.T) {
 		f := filepath.Join(kubeDir, "config-0644")
-		if err := os.WriteFile(f, []byte(""), 0o644); err != nil {
+		if err := os.WriteFile(f, []byte(""), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chmod(f, 0o644); err != nil {
 			t.Fatal(err)
 		}
 		err := validateKubeconfigEnv(f)
@@ -125,7 +128,10 @@ func TestValidateKubeconfigEnv(t *testing.T) {
 
 	t.Run("perm_0620_rejected_with_auth_error", func(t *testing.T) {
 		f := filepath.Join(kubeDir, "config-0620")
-		if err := os.WriteFile(f, []byte(""), 0o620); err != nil {
+		if err := os.WriteFile(f, []byte(""), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chmod(f, 0o620); err != nil {
 			t.Fatal(err)
 		}
 		err := validateKubeconfigEnv(f)
