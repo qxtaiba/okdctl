@@ -472,26 +472,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 #### audit-security
 
-##### `sec:fde34e0c:input-kubeconfig-not-resolved` — input kubeconfig not resolved
-
-**Status:** in review — PR #724
-**Severity:** minor
-**Cluster:** input-validation
-**Evidence:** `internal/cluster/k8s.go:78-97`
-**Problem:** validateKubeconfigEnv rejects symlinks and enforces a $HOME or /etc prefix on $KUBECONFIG, but does NOT check the file's permissions. The .env file path is gated at 0o077 (envfile.go:L147) and config files at 0o022 (loader.go:L32) — kubeconfig contains the cluster admin bearer token and should follow the same discipline. A world-readable kubeconfig in the env path is silently accepted.
-**Fix:** After the Lstat and prefix check, validate `fi.Mode().Perm()&0o077 != 0` and reject with errtypes.AuthError. Match the pattern at internal/credentials/envfile.go:L147-L153 which gates the .env file. Kubeconfig holds the same cluster admin material and warrants the same gate.
-**Effort:** hours
-
-##### `sec:eb479d86:cred-in-argv` — cred in argv
-
-**Status:** in review — PR #725
-**Severity:** suggestion
-**Cluster:** shell-injection
-**Evidence:** `internal/distribution/okd/setup/upload.go:23-40`
-**Problem:** remoteISO256 builds the remote path via string concatenation `remotePath + "/" + filename` then passes the result as a single argv to ssh-via-argv. ValidateRemoteFilename is called on filename (good), but remotePath itself is the unvalidated phase.DefaultProxmoxISODir constant today — fine for current callers, but future callers passing an operator-supplied remotePath would route an unvalidated string into the remote sha256sum -- target argument. The shell-protection contract from CLAUDE.md SSH shell policy (validateXxx + shellSingleQuote layering) is implicit, not enforced at the function boundary.
-**Fix:** Either (a) inline-document that callers must pass a validated absolute path with no shell metacharacters, or (b) add validateISODir(remotePath) here so the validation contract is enforced at the helper boundary. Mirror the pattern at internal/distribution/okd/phase/iso_cleanup.go:L235 where validateISODir runs before any ssh call.
-**Effort:** hours
-
 ##### `sec:e076e43c:dl-no-signature` — dl no signature
 
 **Status:** not started
@@ -534,16 +514,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 
 #### audit-subprocess
-
-##### `sub:97cb8adf:unbounded-output` — unbounded output
-
-**Status:** in review — PR #726
-**Severity:** minor
-**Cluster:** io-handling
-**Evidence:** `internal/system/exec.go:72-86`
-**Problem:** OutputCaptured uses cmd.Output() which buffers the full subprocess stdout into a single []byte with no cap. Callers include ssh-keyscan (sshpin.go), gpg --import-options show-only (tools.go), terraform output -json (terraform.go::Output), and dpkg -l (packages.go) — any of which can return multi-MB output that grows unbounded. The canonical executor.Executor.Run uses a 200-line × 64 KiB-partial-cap ring buffer for the same reason.
-**Fix:** Either (a) route all callers through executor.Executor (Run returns ring-buffered Stdout in Result.Stdout and the typed ExitError), retiring system.OutputCaptured entirely — net LOC delta likely negative — or (b) cap stdout in OutputCaptured itself via io.LimitReader on a cmd.StdoutPipe() reader with a per-binary maximum (say 4 MiB). Option (a) is preferred because it converges the two parallel wrappers; CLAUDE.md §12 names internal/executor as canonical.
-**Effort:** hours
 
 ##### `sub:ae5b624c:parallel-exec-wrapper` — parallel exec wrapper
 
@@ -690,38 +660,8 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Tighten to `--certificate-identity-regexp='^https://github\.com/qxtaiba/okdctl/\.github/workflows/release\.yml@refs/tags/v[0-9]+\.[0-9]+\.[0-9]+'` (or whatever the goreleaser release workflow path is). Verify the regex matches the cert identity that goreleaser-action embeds in the SHA256SUMS signature; iterate in a draft release if needed.
 **Effort:** hours
 
-##### `iac:e076e43c:sh-no-version-tag-validation` — sh no version tag validation
-
-**Status:** in review — PR #727
-**Severity:** minor
-**Cluster:** install-sh-fail-closed
-**Evidence:** `scripts/install.sh:113-123`
-**Problem:** VERSION is parsed from the GitHub API response with no shape validation before it lands in `ARCHIVE_NAME` and URL interpolations. A compromised tag_name like `v1.0.0/../../evil` would alter the archive path that curl fetches. The cosign+sha256 layers catch the actual tamper, but a semver guard would fail-closed earlier with a clear diagnostic instead of a confusing 'no checksum found' message downstream.
-**Fix:** After resolving VERSION (line 117), add a regex guard: `[[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.-]+)?$ ]] || die "unexpected version tag: $VERSION"`. Run it both when VERSION is API-resolved and when user-supplied (lines 44, 122) so a user-set VERSION=v0.1.0/../../evil also fails closed.
-**Effort:** hours
-
-##### `iac:18a795d5:hcl-iso-list-no-empty-check` — hcl iso list no empty check
-
-**Status:** in review — PR #731
-**Severity:** suggestion
-**Cluster:** hcl-destroy-ordering
-**Evidence:** `infrastructure/terraform/modules/proxmox-okd/main.tf:254-380`
-**Problem:** Master and worker lifecycle preconditions check `length(var.master_isos) >= var.master_count` (line 255) but not that each element is non-empty. Bootstrap has `var.bootstrap_iso != ""` (line 123). A list with one empty entry passes the length check, then fails at apply with a cryptic provider error rather than at plan with a useful precondition message.
-**Fix:** Strengthen the precondition: `condition = length(var.master_isos) >= var.master_count && alltrue([for iso in slice(var.master_isos, 0, var.master_count) : iso != ""])`. Mirror for the worker block (line 377-380). Or move the check to the `variables.tf` validation block where it lives once.
-**Effort:** hours
-
 
 #### audit-errors
-
-##### `err:d7ce9d16:errors-join-bare-fmt-errorf` — errors join bare fmt errorf
-
-**Status:** in review — PR #728
-**Severity:** minor
-**Cluster:** wrapping
-**Evidence:** `internal/distribution/okd/dns/dns.go:258-264`
-**Problem:** errors.Join joins a fmt.Errorf('config validation failed — previous config restored') without %w to the underlying err. Readers see the human label as a sibling rather than as wrapping context. errors.Is on the underlying err still works through Join, so the chain is intact, but the pattern is inconsistent with the adjacent restart branch on L266-268 which uses fmt.Errorf('failed to restart dnsmasq — previous config restored: %w', err).
-**Fix:** Replace with `return fmt.Errorf("dnsmasq config validation failed — previous config restored: %w", err)` to match the symmetric restart branch's wrapping pattern. Single-error %w is the canonical idiom when there is exactly one cause; errors.Join is for joining multiple peer errors.
-**Effort:** hours
 
 ##### `err:d7ce9d16:dns-bare-fmt-errorf-not-classified` — dns bare fmt errorf not classified
 
@@ -753,16 +693,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Leave as-is OR move to errtypes as ErrProviderNotConnected / ErrProviderUnconfigured for vocabulary uniformity. Package-local sentinels for package-internal preconditions are idiomatic Go (see io.EOF, fs.ErrNotExist) and the caller-facing class is ConfigError (correctly classified by errors.As).
 **Effort:** hours
 
-##### `err:4c092fce:terraform-execerror-stderr-latent-leak` — terraform execerror stderr latent leak
-
-**Status:** in review — PR #721
-**Severity:** major
-**Cluster:** redaction-in-error — seam→`audit-observability`
-**Evidence:** `internal/infrastructure/terraform/terraform.go:36-38`
-**Problem:** ExecError is a type alias to executor.ExitError. ExitError.Error() includes the full subprocess stderr (executor.go:L207). Terraform stderr may carry PROXMOX_VE_API_TOKEN/PROXMOX_VE_PASSWORD echoed during provider plugin errors. executor.ExitError implements Redacted() that omits Stderr — so structured slog routing is safe. But any caller that stringifies via err.Error() / fmt.Sprintf('%v', err) bypasses redaction.
-**Fix:** Either (a) replace Error()'s Stderr inclusion with logutil.RedactableStderr head/tail-truncation to <=400 bytes, or (b) document the contract that this Error() must only be reached via slog (where RedactHandler routes Redacted()), and add a test asserting no production call site uses fmt.Sprintf('%v', err)/err.Error() on a wrapped executor.ExitError. Today there is no proven leak; the finding hardens against a future caller logging err.Error() directly.
-**Effort:** hours
-
 ##### `err:97cb8adf:subprocess-stderr-tail-latent-leak` — subprocess stderr tail latent leak
 
 **Status:** not started
@@ -791,16 +721,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/distribution/okd/postinstall/bootstrap.go:89-92`
 **Problem:** bootstrap-state.auto.tfvars.json write failure surfaces as &errtypes.ClusterError. Symmetric concern with destroy/helpers.go:L41 (state snapshot → ClusterError). Documented here as the canonical example so reviewers do not reclassify state-write failures as ConfigError just because the file is config-shaped — the write happens after a successful bootstrap-vm destroy and is part of the cluster lifecycle, not a config the user edits.
 **Fix:** Leave as-is. ClusterError → exit 4 is correct here. Flagged for completeness because the rule slug suggests reviewers may second-guess; do not change.
-**Effort:** hours
-
-##### `err:632c9087:update-ingress-bare-fmt-errorf` — update ingress bare fmt errorf
-
-**Status:** in review — PR #729
-**Severity:** minor
-**Cluster:** sentinel-vs-typed
-**Evidence:** `internal/distribution/okd/postinstall/update_ingress.go:336-472` + 1 more
-**Problem:** convertHostNetworkIngressControllers and helpers return bare fmt.Errorf for 6 distinct cluster-mutation failure modes (build/delete/create IngressController, replacement marshal/parse, router termination wait). Sibling functions in the same file (L68-L275) return &errtypes.ClusterError uniformly. Classification reaches exit 4 only via orchestrator.classifyStepErr; helpers are also reached from non-step paths (attemptRollback at L586).
-**Fix:** Wrap each bare fmt.Errorf in &errtypes.ClusterError{Msg: ..., Err: err} so exit-code mapping is correct independent of which entry point (orchestrator, attemptRollback, direct test) invokes them. Today exit codes are correct only because classifyStepErr runs; the helpers' contract is silently dependent on the orchestrator.
 **Effort:** hours
 
 ##### `err:b38ec9cc:lock-hint-exit-code-flip` — lock hint exit code flip
@@ -908,16 +828,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 
 #### audit-api-design
-
-##### `api:ddf885f4:opt-name-manager-option` — opt name manager option
-
-**Status:** in review — PR #730
-**Severity:** minor
-**Cluster:** option-consistency
-**Evidence:** `internal/addon/manager.go:26-43`
-**Problem:** addon.Manager uses 'ManagerOption' for its functional-options type while every sibling constructor in the repo (cluster.Option, executor.Option, terraform.Option, proxmox.Option, firewall.Option, download.Option, phase.BasePhaseOption, okd.ProvisionerOption) uses the unqualified 'Option' name. The qualifier 'Manager' duplicates the package name addon at call sites: addon.ManagerOption is verbose where addon.Option suffices.
-**Fix:** Rename addon.ManagerOption to addon.Option in internal/addon/manager.go. Update the two external callers (internal/cli/addon.go:263, internal/distribution/okd/postinstall/phase.go:77) — both use addon.WithExecutor/WithLogger/WithProjectRoot which keep their names. Net: ~1 type declaration + N type references.
-**Effort:** hours
 
 ##### `api:262af6e4:opt-no-newoptions` — opt no newoptions
 
@@ -1212,26 +1122,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 #### audit-cli-ux
 
-##### `ux:fd2125dd:help-long-missing` — help long missing
-
-**Status:** in review — PR #732
-**Severity:** minor
-**Cluster:** help-text
-**Evidence:** `internal/cli/addon.go:95-100`
-**Problem:** addonVerifyCmd has Short and Example but no Long description. Sibling addon subcommands (list, install, uninstall) all carry Long blocks explaining failure modes and dependencies, so verify reads as an afterthought in generated docs (docs/cli/okdctl_addon_verify.md) and via okdctl addon verify --help.
-**Fix:** Add a Long block to addonVerifyCmd describing what 'health' means (e.g. 'Run each registered addon's Verify() probe against the live cluster and report pass/fail; exit code is non-zero if any addon fails verification.'). Match the doc voice of addonListCmd.
-**Effort:** hours
-
-##### `ux:aa84670c:help-long-missing` — help long missing
-
-**Status:** in review — PR #733
-**Severity:** minor
-**Cluster:** help-text
-**Evidence:** `internal/cli/root.go:238-246`
-**Problem:** versionCmd has only Short — no Long, no Example, no --output=json. Sibling read-only commands (status, releases, doctor) expose Long+Example and --output=json. Tools that consume okdctl version programmatically (e.g. CI version pinning) must parse free-form text.
-**Fix:** Add a Long describing the output, an Example (okdctl version, okdctl version --output json | jq .version), and wire --output text|json using the existing flagOutput/flagOutputShort + validateFormat helpers. Emit a small struct {version, git_commit, build_date, go_version, platform} for the JSON form. Document in docs/cli/json-schema.md.
-**Effort:** hours
-
 ##### `ux:8d8faa80:help-no-example` — help no example
 
 **Status:** not started
@@ -1282,16 +1172,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Register a flag-completion function on --channel that returns []string{channelStable, channelAll}, mirroring the destroy --only pattern. Adds two lines, zero behavior change at the CLI surface.
 **Effort:** hours
 
-##### `ux:e45c2239:stderr-stdout-mixed` — stderr stdout mixed
-
-**Status:** in review — PR #734
-**Severity:** minor
-**Cluster:** streams
-**Evidence:** `cmd/okdctl/main.go:32-51`
-**Problem:** preflight() runs before cli.Execute() configures loggers, so its tui.Warn calls fire against tui.SimpleLogger's defaults (which slog.SetDefault wires inside Execute, but only after preflight returns). The Warn message about OKDCTL_BIN_DIR therefore writes through whatever the package-init configured, which may not match the user's --log-format=json choice. JSON consumers piping 2>&1 may see text-format warnings interleaved with JSON log lines downstream.
-**Fix:** Move slog.SetDefault(tui.SimpleLogger()) into a package-init or into main() before preflight(), so preflight's tui.Warn paths use the same logger configuration the rest of the binary uses. Alternative: defer the OKDCTL_BIN_DIR warning until after cli.Execute sets up logging, e.g. by having preflight return a deferred-warning closure that Execute invokes post-configureLogging.
-**Effort:** hours
-
 ##### `ux:0d318f5c:flag-no-default-in-help` — flag no default in help
 
 **Status:** not started
@@ -1335,16 +1215,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 #### audit-observability
 
-##### `obs:15ba17da:key-inconsistent-casing` — key inconsistent casing
-
-**Status:** in review — PR #735
-**Severity:** suggestion
-**Cluster:** field-stability
-**Evidence:** `internal/distribution/okd/destroy/steps.go:180-184`
-**Problem:** Destroy summary log uses key `steps` (plural) for a comma-joined string list, while the canonical orchestrator key catalog uses `step` (singular) — see `o.logger.Info("step: started", "step", step.ID(), ...)` at orchestrator.go:L171. A consumer grepping for the `step` key will not match these summary entries even though they carry the same conceptual data.
-**Fix:** Rename the keys to `failed_steps` / `skipped_steps` for clarity, or pass the slices directly via `slog.Any("failed_steps", failures)`. Either way, do not reuse `step` (singular) for a comma-joined list — that conflicts with the per-step grep contract orchestrator.go establishes.
-**Effort:** hours
-
 ##### `obs:fde34e0c:err-stringified` — err stringified
 
 **Status:** not started
@@ -1353,16 +1223,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/cluster/k8s.go:61-61`
 **Problem:** `c.logger.Debug("ignoring $KUBECONFIG env value", "reason", err.Error())` stringifies err before the slog sink sees it. RedactHandler's redactAny dispatch operates on typed values — once err is collapsed to a string, the handler cannot inspect the chain for a `Redacted() any` implementation or for *url.URL userinfo. The validateKubeconfigEnv error here is unlikely to carry a credential today, but the pattern is the failure mode CLAUDE.md §credentials-and-secrets warns against.
 **Fix:** Replace `"reason", err.Error()` with `"err", err`. The structured attr lets RedactHandler.redactAny() dispatch on the typed value, and an `errors.As` consumer downstream can still walk the chain. Net 0 LOC.
-**Effort:** hours
-
-##### `obs:5013fea6:level-error-not-user-visible` — level error not user visible
-
-**Status:** in review — PR #736
-**Severity:** minor
-**Cluster:** level-discipline
-**Evidence:** `internal/distribution/okd/setup/release_extract.go:126-136`
-**Problem:** `p.Log.Error("tools: oc adm release extract failed", ...)` runs immediately before the function returns a typed *errtypes.AuthError or *errtypes.ClusterError. cli/root.go::execute() then logs the same error a second time at the top of the stack via `tui.Error("command failed", "err", err)`. The Error level here double-logs the failure event and front-loads it before the caller's classification can pick the right exit code.
-**Fix:** Demote to Warn — the caller's Error log is the user-visible event. If the stderr excerpt is the load-bearing diagnostic, attach it to the returned error type rather than logging here (the SubprocessError.Redacted() pattern already exists in internal/system/exec.go for this purpose).
 **Effort:** hours
 
 ##### `obs:97cb8adf:span-no-start-end` — span no start end
@@ -1647,48 +1507,8 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 #### audit-documentation
 
-##### `doc:b3356305:readme-flag-ghost` — readme flag ghost
-
-**Status:** in review — PR #737
-**Severity:** minor
-**Cluster:** readme-drift — seam→`audit-cli-ux`
-**Evidence:** `README.md:240-241`
-**Problem:** README references an `okdctl postinstall` subcommand that does not exist. The repo ships only `okdctl deploy`, which runs the postinstall phase internally as its final step. The user-facing CLI surface has no `postinstall` verb (verified against every `var ...Cmd = &cobra.Command{Use: ...}` site in internal/cli/).
-**Fix:** Rewrite the bullet to reference `okdctl deploy` (which encompasses the postinstall phase): 'After `okdctl deploy` completes, run `okdctl cleanup` which removes the ignition files from the web root.' Verify against the cobra command tree in `internal/cli/` before publishing.
-**Effort:** hours
-
-##### `doc:4ac0d12f:line-citation-drift` — line citation drift
-
-**Status:** in review — PR #738
-**Severity:** minor
-**Cluster:** readme-drift
-**Evidence:** `docs/addons/secretstore.md:34-35`
-**Problem:** Documentation cites `secretstore.go:19-30` as the location of the setting-key constants, but the setting-key constants block actually lives at `internal/addon/catalog/secretstore/secretstore.go:25-39` (lines 18-22 hold an unrelated defaultSecretsDir/defaultNamespace block). Hard-coded line ranges in docs rot every time the file is touched.
-**Fix:** Drop the line range and reference the symbol families by name (the `Setting*` constants and `DefaultSettings`), mirroring the docs/addons/flux.md:31 citation that already uses symbol names without line numbers. Symbol names are stable across file edits; line numbers are not.
-**Effort:** hours
-
 
 #### audit-tests
-
-##### `tst:a6e38cc7:sshpin-verify-shellout-untested` — sshpin verify shellout untested
-
-**Status:** in review — PR #722
-**Severity:** major
-**Cluster:** trust-boundary-untested
-**Evidence:** `internal/sshpin/sshpin.go:35-51`
-**Problem:** sshpin.Verify is the trust-on-first-use boundary for the Proxmox SSH connection: it shells out to ssh-keyscan, then routes to parseAndMatch. parseAndMatch is well-tested but Verify (which composes the ssh-keyscan invocation and surfaces transport errors) is not — and that's the call site that actually faces the network. runKeyscan's '-T 5' timeout, '-H' off (for deterministic output) and the fmt.Errorf wrapping shape are all untested. A regression that loses '-T 5' would silently hang destroy on an unreachable Proxmox host.
-**Fix:** Add internal/sshpin/sshpin_verify_test.go using a fake `ssh-keyscan` via PATH (write t.TempDir POSIX script that emits a fixture line). Cover: (a) happy path with matching fingerprint returns known_hosts temp file; (b) ssh-keyscan exit non-zero is wrapped with 'ssh-keyscan <host>:' prefix; (c) ctx timeout: synctest with ssh-keyscan that hangs (exec sleep 300) — Verify returns ctx error. Template: internal/distribution/okd/phase/ssh_test.go::installFakeSSHEcho.
-**Effort:** hours
-
-##### `tst:ab9b764a:install-config-pull-secret-zeroize-untested` — install config pull secret zeroize untested
-
-**Status:** in review — PR #723
-**Severity:** major
-**Cluster:** cred-path-untested
-**Evidence:** `internal/distribution/okd/setup/ignition.go:39-98`
-**Problem:** GenerateInstallConfig reads cfg.Files.PullSecret into a []byte and defer-zeroes it via system.ZeroBytes — the Zeroize-after-use invariant for pull-secret bytes. The defer-zeroize path is not test-locked. Perms and AuthError-on-missing-pull-secret are tested but the post-defer state of the buffer (zeroed) is not. A regression to defer pullSecret = nil (no clear) would leave the secret reachable until GC.
-**Fix:** Extend internal/distribution/okd/setup/ignition_test.go::TestGenerateInstallConfig with: (a) after GenerateInstallConfig returns, verify the on-disk install-config.yaml contains the pull-secret text (positive control); (b) introduce a test seam (or a `defer system.ZeroBytes` wrapper var that records its calls) — alternatively, refactor ReadFile to a package-var os.ReadFile-like hook so a test can verify the returned slice is zeroed at defer time. The seam should be minimal — a thin wrapper var `var zeroBytesFn = system.ZeroBytes` and a t.Cleanup-restored override is sufficient.
-**Effort:** hours
 
 
 
