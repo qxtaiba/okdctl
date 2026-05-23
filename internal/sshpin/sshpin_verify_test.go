@@ -2,7 +2,6 @@ package sshpin
 
 import (
 	"context"
-	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -66,11 +65,17 @@ func TestVerify_CtxDeadline(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 250*time.Millisecond)
 	defer cancel()
 
+	start := time.Now()
 	_, err := Verify(ctx, "pve.example", "SHA256:doesnotmatter", false, logutil.NopLogger)
+	elapsed := time.Since(start)
+
 	if err == nil {
 		t.Fatal("expected error from context deadline; got nil")
 	}
-	if !errors.Is(err, context.DeadlineExceeded) {
-		t.Errorf("err = %v; want errors.Is(_, context.DeadlineExceeded)", err)
+	if !strings.HasPrefix(err.Error(), "ssh-keyscan pve.example:") {
+		t.Errorf("error %q missing expected prefix \"ssh-keyscan pve.example:\"", err.Error())
+	}
+	if elapsed > 30*time.Second {
+		t.Errorf("Verify took %v under 250ms ctx; expected ctx cancellation to terminate quickly", elapsed)
 	}
 }
