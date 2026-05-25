@@ -300,6 +300,9 @@ func init() {
 	rootCmd.PersistentFlags().StringVarP(&cfgFile, flagConfig, flagConfigShort, "okdctl.yaml", "configuration file")
 	rootCmd.PersistentFlags().StringVar(&logLevel, flagLogLevel, "info", "log verbosity (debug, info, warn, error)")
 	rootCmd.PersistentFlags().StringVar(&logFormat, flagLogFormat, "text", "log output format: text (TTY default) | json (auto-selected when stderr is piped)")
+	// DefValue is blanked so --help does not print '(default "text")', which
+	// would contradict the auto-switch prose above. Do not remove without also
+	// updating the flag's Usage string to describe the TTY-vs-pipe contract.
 	rootCmd.PersistentFlags().Lookup(flagLogFormat).DefValue = ""
 	rootCmd.PersistentFlags().StringVar(&logFile, flagLogFile, "", "write log output to this file in addition to stderr")
 	rootCmd.PersistentFlags().BoolVarP(&logQuiet, flagQuiet, "q", false, "suppress info/warn logs (alias for --log-level=error)")
