@@ -40,6 +40,10 @@ func (p *Phase) postinstallSteps(cfg *config.Config, opts *Options, pctx *distri
 				return nil
 			},
 		},
+		// state:fb54208a (recurring) — if StepVerifyKubeVIP fails after this step
+		// succeeds, StepDeployProductionDNS is skipped and DNS remains pointed at
+		// the (now-gone) bootstrap VM with no rollback. Preferred fix: extend
+		// update-ingress to detect bootstrap-DNS + bootstrap-VM-gone and re-issue.
 		{
 			ID: StepCleanupBootstrap, Name: "cleanup bootstrap vm",
 			ReRunSafe: distribution.ReRunSafeYes,
