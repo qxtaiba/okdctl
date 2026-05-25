@@ -67,6 +67,11 @@ func SafeRemoveWithLogger(ctx context.Context, path, description string, logger 
 // WorkDirectory removes all generated artifacts under workDir. When
 // preserveConfig is true the okdctl.yaml at the root is kept; everything
 // else is removed best-effort and the first failure is returned.
+//
+// state:bdf5a873 audit-positive baseline: all Full-sequence steps that
+// follow this one (webServer, haproxy, dnsmasq, terraform, packages,
+// ignition-certs) reference paths outside workDir, so a partial-strip
+// from a mid-run crash does not break subsequent cleanup steps.
 func WorkDirectory(ctx context.Context, workDir string, preserveConfig bool, logger *slog.Logger) error {
 	if _, err := os.Stat(workDir); os.IsNotExist(err) {
 		return nil
