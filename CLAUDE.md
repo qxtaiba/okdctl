@@ -251,14 +251,14 @@ write the comment — then it carries real information.
   trailer (`uses: owner/action@<40-hex-sha> # vX.Y.Z`). Tool installs
   from Go must be explicit versions — never `@latest`. Terraform versions
   in CI are patch-pinned (`terraform_version: "1.10.3"`, not `"1.10"`).
-- **YAML engine baseline (tripwire).** Four YAML engines are in the dep
-  tree: `sigs.k8s.io/yaml` v1.6.0 (direct, required by k8s.io/api);
-  `go.yaml.in/yaml/v2` and `go.yaml.in/yaml/v3` (transitive, pinned by
-  k8s.io/apimachinery); `gopkg.in/yaml.v3` v3.0.1 (transitive, pulled
-  via stretchr/testify → gopkg.in/check.v1). All four appear in go.sum;
-  `sigs.k8s.io/yaml` is a direct require, `go.yaml.in/yaml/v{2,3}` are
-  `// indirect`, and `gopkg.in/yaml.v3` is purely transitive (go.sum
-  only, absent from go.mod). Do not add a fifth engine without a
-  recorded justification here.
+- **YAML engine baseline (tripwire).** Two engines ship in the
+  `cmd/okdctl` production binary: `sigs.k8s.io/yaml` v1.6.0 (direct,
+  required by k8s.io/api) and `go.yaml.in/yaml/v2` v2.4.3 (indirect,
+  pinned by k8s.io/apimachinery). `go.yaml.in/yaml/v3` v3.0.4 is
+  indirect in go.mod (also pinned by k8s.io/apimachinery) but only
+  reachable under `-tags docs` via `cmd/okdctl-gen-docs`.
+  `gopkg.in/yaml.v3` v3.0.1 is go.sum-only (absent from go.mod),
+  pulled transitively. Do not add a fifth engine without a recorded
+  justification here.
 - **Before adding a dep,** check whether Go 1.25 stdlib covers it
   (`slices`, `maps`, `net/netip`, `log/slog`, `sync.OnceFunc`, etc.).
