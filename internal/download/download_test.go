@@ -32,7 +32,7 @@ func TestDownload_HappyPath(t *testing.T) {
 	out := filepath.Join(dir, "artifact.bin")
 
 	if err := Fetch(context.Background(), srv.URL+"/artifact.bin", out,
-		WithChecksum(sha256Hex(body)),
+		WithFetchChecksum(sha256Hex(body)),
 		WithLogger(logutil.NopLogger),
 	); err != nil {
 		t.Fatalf("Fetch: %v", err)
