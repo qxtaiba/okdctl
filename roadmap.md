@@ -665,7 +665,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `err:d7ce9d16:dns-bare-fmt-errorf-not-classified` — dns bare fmt errorf not classified
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/err-d7ce9d16-dns-classify
+**Status:** not started
 **Severity:** minor
 **Cluster:** sentinel-vs-typed
 **Evidence:** `internal/distribution/okd/dns/dns.go:24-215`
@@ -831,7 +831,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `api:262af6e4:opt-no-newoptions` — opt no newoptions
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/api-262af6e4-newoptions
+**Status:** not started
 **Severity:** minor
 **Cluster:** option-consistency
 **Evidence:** `internal/distribution/okd/cleanup/cleanup.go:68-83`
@@ -1300,7 +1300,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `mod:9d79b841:use-strings-cut` — use strings cut
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/mod-9d79b841-cut
+**Status:** not started
 **Severity:** suggestion
 **Cluster:** slices-maps
 **Evidence:** `internal/distribution/okd/setup/coreos.go:59-68` + 4 more
@@ -1383,7 +1383,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `smell:c19ee328:magic-strings` — magic strings
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/smell-c19ee328-bin-consts
+**Status:** not started
 **Severity:** minor
 **Cluster:** magic-strings
 **Evidence:** `internal/distribution/okd/setup/steps.go:89-94`
