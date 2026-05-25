@@ -27,21 +27,33 @@ const (
 // binary, ctx cancellation) abort immediately; transient failures consume
 // the full backoff budget.
 func RetryDefault(ctx context.Context, fn func() error) error {
-	return wait.ExponentialBackoffWithContext(ctx, wait.Backoff{
+	// lastErr preserves the most recent fn() failure so backoff exhaustion
+	// returns the original error rather than the wait.ErrWaitTimeout sentinel —
+	// mirrors retryDownload in internal/download/retry.go.
+	var lastErr error
+	err := wait.ExponentialBackoffWithContext(ctx, wait.Backoff{
 		Duration: DefaultRetryBackoff,
 		Factor:   2,
 		Jitter:   0.5,
 		Steps:    DefaultRetryCount,
 		Cap:      5 * time.Minute,
 	}, func(_ context.Context) (bool, error) {
-		if err := fn(); err != nil {
-			if !addonIsRetryable(err) {
-				return false, err
+		if fnErr := fn(); fnErr != nil {
+			lastErr = fnErr
+			if !addonIsRetryable(fnErr) {
+				return false, fnErr
 			}
 			return false, nil
 		}
 		return true, nil
 	})
+	if err == nil {
+		return nil
+	}
+	if lastErr != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
+		return lastErr
+	}
+	return err
 }
 
 // addonIsRetryable reports whether err should trigger another retry attempt.
