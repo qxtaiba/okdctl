@@ -11,7 +11,6 @@ import (
 	"testing/synctest"
 	"time"
 
-	"k8s.io/apimachinery/pkg/util/wait"
 	"sigs.k8s.io/yaml"
 
 	"github.com/qxtaiba/okdctl/internal/errtypes"
@@ -83,12 +82,15 @@ func Test_RetryDefault_SucceedsOnAttemptN(t *testing.T) {
 func Test_RetryDefault_AllFailures(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		var calls atomic.Int32
+		sentinel := errors.New("always fails")
 		err := RetryDefault(context.Background(), func() error {
 			calls.Add(1)
-			return errors.New("always fails")
+			return sentinel
 		})
-		if !wait.Interrupted(err) {
-			t.Errorf("err = %v; want wait.Interrupted error", err)
+		// lastErr preservation: exhaustion returns the original fn() error,
+		// not the wait.ErrWaitTimeout sentinel.
+		if !errors.Is(err, sentinel) {
+			t.Errorf("err = %v; want sentinel error %v", err, sentinel)
 		}
 		if calls.Load() != DefaultRetryCount {
 			t.Errorf("calls = %d; want %d", calls.Load(), DefaultRetryCount)
