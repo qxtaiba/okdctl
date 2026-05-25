@@ -7,7 +7,9 @@ package phase
 // without an import cycle (proxmox already imports phase for NodeRole).
 type VMState string
 
-// VM lifecycle state values. String literals match the Proxmox API.
+// Scaffolding (api:3e02f6b8): the full state matrix is kept as a single
+// source of truth for the future status path that surfaces partial-running
+// clusters. Today only StateRunning is consumed (proxmox.Provider mapping).
 const (
 	StateRunning  VMState = "running"
 	StateStopped  VMState = "stopped"
