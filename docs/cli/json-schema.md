@@ -9,6 +9,30 @@ consumers can pin against a known contract.
 > releases. New fields may be added (consumers must tolerate unknown keys);
 > existing fields are not renamed or removed without a major bump.
 
+## `okdctl config show --output=json`
+
+Redacted configuration. All string fields whose JSON tag name matches the
+secret-key denylist are replaced with `"***"`. Fields tagged `json:"-"`
+(Password, APIToken, Username) are omitted entirely.
+
+The exact shape mirrors the `config.Config` Go struct and its nested types.
+A minimal Proxmox-backed example:
+
+```json
+{
+  "provider": {
+    "type": "proxmox",
+    "proxmox": {
+      "host": "pve.example",
+      "node": "pve",
+      "token_id": "***"
+    }
+  }
+}
+```
+
+Without `--output`, the command emits YAML (existing behavior, unchanged).
+
 ## `okdctl status --output=json`
 
 Top-level cluster snapshot.

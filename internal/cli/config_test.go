@@ -1,6 +1,8 @@
 package cli
 
 import (
+	"bytes"
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -8,6 +10,38 @@ import (
 
 	"github.com/qxtaiba/okdctl/internal/config"
 )
+
+func TestRunConfigShow_JSONOutput(t *testing.T) {
+	cfg := &config.Config{
+		Provider: config.ProviderConfig{
+			Type: config.ProviderProxmox,
+			Proxmox: &config.ProxmoxConfig{
+				Host:    "pve.example",
+				TokenID: "secret-token-id",
+			},
+		},
+	}
+
+	redacted := redactConfig(cfg)
+
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetIndent("", "  ")
+	if err := enc.Encode(redacted); err != nil {
+		t.Fatalf("json.Encode: %v", err)
+	}
+
+	out := buf.String()
+
+	var parsed map[string]any
+	if err := json.Unmarshal([]byte(out), &parsed); err != nil {
+		t.Fatalf("output is not valid JSON: %v\n%s", err, out)
+	}
+
+	if strings.Contains(out, "secret-token-id") {
+		t.Errorf("JSON output leaks unredacted TokenID:\n%s", out)
+	}
+}
 
 func TestRedactConfig(t *testing.T) {
 	t.Run("TokenID masked in output", func(t *testing.T) {
