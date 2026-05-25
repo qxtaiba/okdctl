@@ -51,6 +51,9 @@ type ConfigurableAddon interface {
 	Addon
 
 	DefaultSettings() map[string]string
+	// ValidateSettings returns user-display strings for the wizard UI; do
+	// not use the result for exit-code branching. Orchestrator validation
+	// runs separately via cfg.Validate().
 	ValidateSettings(settings map[string]string) []string
 	DecodeSettings(settings map[string]string) (any, error)
 }
