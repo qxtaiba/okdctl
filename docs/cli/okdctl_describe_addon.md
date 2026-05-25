@@ -32,5 +32,5 @@ okdctl describe addon <name> [flags]
 
 ### SEE ALSO
 
-* [okdctl describe](okdctl_describe.md)	 - Drill into a specific node or addon
+* [okdctl describe](okdctl_describe.md)	 - Show details for a cluster node or addon
 

@@ -1,10 +1,10 @@
 ## okdctl describe
 
-Drill into a specific node or addon
+Show details for a cluster node or addon
 
 ### Synopsis
 
-Inspect a cluster node or registered addon in detail; start with 'describe node <name>'.
+Show detailed information for a specific cluster node or registered addon.
 
 ### Options
 
