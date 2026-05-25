@@ -470,6 +470,16 @@ func ValidateDomain(value string) error {
 	return nil
 }
 
+// ValidateProxmoxNodeName rejects names that do not match
+// [a-zA-Z][a-zA-Z0-9_-]*, the same constraint enforced by
+// ValidateProxmoxConfig and the downstream pveshRun guard.
+func ValidateProxmoxNodeName(value string) error {
+	if !proxmoxNamePattern.MatchString(value) {
+		return errors.New("must start with a letter and contain only alphanumeric, hyphens, or underscores")
+	}
+	return nil
+}
+
 // ValidateProxmoxHost accepts a hostname, IP, or host:port.
 func ValidateProxmoxHost(value string) error {
 	host := value
