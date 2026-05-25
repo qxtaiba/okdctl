@@ -1,5 +1,7 @@
 package steps
 
+import "github.com/qxtaiba/okdctl/internal/addon/catalog/flux"
+
 // Cluster identity defaults.
 const (
 	DefaultClusterName = "mycluster"
@@ -68,7 +70,7 @@ const (
 
 // Addon defaults (GitOps).
 const (
-	DefaultGitOpsProvider = "flux"
+	DefaultGitOpsProvider = flux.ProviderID
 	DefaultGitOpsBranch   = "main"
 	DefaultGitOpsPath     = "kubernetes/clusters/production"
 )
