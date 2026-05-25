@@ -156,7 +156,7 @@ if [ -n "$COSIGN_CMD" ] && [ -z "$INSECURE" ]; then
     COSIGN_EXPERIMENTAL=1 cosign verify-blob \
         --certificate="$TMP/SHA256SUMS.pem" \
         --signature="$TMP/SHA256SUMS.sig" \
-        --certificate-identity-regexp='https://github\.com/qxtaiba/okdctl/' \
+        --certificate-identity-regexp='^https://github\.com/qxtaiba/okdctl/\.github/workflows/release\.yml@refs/tags/v[0-9]+\.[0-9]+\.[0-9]+' \
         --certificate-oidc-issuer='https://token.actions.githubusercontent.com' \
         "$TMP/SHA256SUMS" >/dev/null ||
         die "cosign signature verification failed on SHA256SUMS"
