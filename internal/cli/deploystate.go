@@ -21,13 +21,19 @@ const (
 	phaseConfigure deployPhase = "configure"
 )
 
+// deployStateSchemaV1 is the current deploy-state JSON schema marker. Bump
+// this value (and update readDeployState) only when the schema makes a
+// breaking change.
+const deployStateSchemaV1 = "v1"
+
 // deployState records which deploy phase was active when the process last
 // wrote the marker. runDestroy reads it back to emit a phase-specific hint.
 type deployState struct {
-	Phase       deployPhase `json:"phase"`
-	RunID       string      `json:"run_id"`
-	Timestamp   time.Time   `json:"timestamp"`
-	ClusterName string      `json:"cluster_name,omitempty"`
+	SchemaVersion string      `json:"schema_version"`
+	Phase         deployPhase `json:"phase"`
+	RunID         string      `json:"run_id"`
+	Timestamp     time.Time   `json:"timestamp"`
+	ClusterName   string      `json:"cluster_name,omitempty"`
 }
 
 // markDeployPhaseFatal writes the marker for the prepare phase and returns
@@ -58,10 +64,11 @@ func clearDeployMarker(path string) {
 
 func writeDeployState(path string, phase deployPhase, runID, clusterName string) error {
 	data, err := json.Marshal(deployState{
-		Phase:       phase,
-		RunID:       runID,
-		Timestamp:   time.Now().UTC(),
-		ClusterName: clusterName,
+		SchemaVersion: deployStateSchemaV1,
+		Phase:         phase,
+		RunID:         runID,
+		Timestamp:     time.Now().UTC(),
+		ClusterName:   clusterName,
 	})
 	if err != nil {
 		return fmt.Errorf("marshal deploy state: %w", err)
@@ -80,6 +87,11 @@ func readDeployState(path string) (*deployState, error) {
 	var s deployState
 	if err := json.Unmarshal(data, &s); err != nil {
 		return nil, fmt.Errorf("parse deploy state: %w", err)
+	}
+	if s.SchemaVersion != deployStateSchemaV1 {
+		tui.Warn("ignoring deploy-state with unknown schema_version",
+			tui.LF("schema_version", s.SchemaVersion), tui.LF("expected", deployStateSchemaV1))
+		return nil, nil
 	}
 	return &s, nil
 }
