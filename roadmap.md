@@ -569,7 +569,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `state:bdf5a873:work-dir-cleanup-no-resume` — work dir cleanup no resume
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/state-bdf5a873-workdir-cleanup-baseline
 **Severity:** suggestion
 **Cluster:** crash-recoverability
 **Evidence:** `internal/distribution/okd/cleanup/artifacts.go:70-100`
@@ -609,7 +609,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `state:fb54208a:postinstall-no-rollback-recurring` — postinstall no rollback recurring
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/state-fb54208a-rollback-cite
 **Severity:** minor
 **Cluster:** crash-recoverability — related: `state:632c9087:update-ingress-haproxy-rollback-missing`
 **Evidence:** `internal/distribution/okd/postinstall/steps.go:42-96`
@@ -619,7 +619,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `state:eb479d86:iso-upload-already-done-sha256` — iso upload already done sha256
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/state-eb479d86-iso-sha256-baseline
 **Severity:** suggestion
 **Cluster:** phase-idempotency
 **Evidence:** `internal/distribution/okd/setup/upload.go:179-205`
@@ -685,7 +685,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `err:d6b325cb:proxmox-sentinel-ad-hoc` — proxmox sentinel ad hoc
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/err-d6b325cb-proxmox-sentinels
 **Severity:** suggestion
 **Cluster:** sentinel-vs-typed
 **Evidence:** `internal/infrastructure/proxmox/types.go:10-13`
@@ -715,7 +715,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `err:b804b2ec:bootstrap-tfvars-classification` — bootstrap tfvars classification
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/err-b804b2ec-tfvars-classify-cite
 **Severity:** suggestion
 **Cluster:** sentinel-vs-typed
 **Evidence:** `internal/distribution/okd/postinstall/bootstrap.go:89-92`
@@ -735,7 +735,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `err:a4001485:errtypes-no-recoverable-type` — errtypes no recoverable type
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/err-a4001485-recoverable-scaffold
 **Severity:** suggestion
 **Cluster:** domain-vocabulary
 **Evidence:** `internal/errtypes/errtypes.go:1-11` + 3 more
@@ -881,7 +881,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `api:3e02f6b8:export-no-caller-vmstate` — export no caller vmstate
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/api-3e02f6b8-vmstate-export
 **Severity:** suggestion
 **Cluster:** exported-surface
 **Evidence:** `internal/distribution/okd/phase/vmstate.go:11-17`
@@ -891,7 +891,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `api:0139cb3f:export-three-bindir-functions` — export three bindir functions
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/api-0139cb3f-bindir-three
 **Severity:** suggestion
 **Cluster:** exported-surface
 **Evidence:** `internal/distribution/okd/phase/paths.go:53-92`
@@ -931,7 +931,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `api:9ce5434c:export-test-only-pollinterval` — export test only pollinterval
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/api-9ce5434c-pollinterval-export
 **Severity:** suggestion
 **Cluster:** exported-surface
 **Evidence:** `internal/distribution/okd/phase/kubectl.go:48-52`
@@ -961,7 +961,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `api:7f2bf677:pkg-pvesh-in-phase` — pkg pvesh in phase
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/api-7f2bf677-pvesh-doc
 **Severity:** minor
 **Cluster:** package-boundary
 **Evidence:** `internal/distribution/okd/phase/pvesh.go:1-47`
@@ -991,7 +991,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `api:dd75bdeb:export-no-caller-phasecontext` — export no caller phasecontext
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/api-dd75bdeb-phasecontext-export
 **Severity:** suggestion
 **Cluster:** exported-surface
 **Evidence:** `internal/distribution/context.go:1-12`
@@ -1001,7 +1001,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `api:cfcdee2d:export-no-caller-timeout-download` — export no caller timeout download
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/api-cfcdee2d-timeout-dl-export
 **Severity:** suggestion
 **Cluster:** exported-surface — seam→`audit-modernization`
 **Evidence:** `internal/httputil/httputil.go:18-22`
@@ -1011,7 +1011,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `api:bb4fb1a3:zero-value-csr` — zero value csr
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/api-bb4fb1a3-csr-zerovalue
 **Severity:** suggestion
 **Cluster:** zero-value-usability
 **Evidence:** `internal/cluster/types.go:1-9`
@@ -1041,7 +1041,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `api:588ce79e:export-color-theme-enum` — export color theme enum
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/api-588ce79e-theme-export
 **Severity:** suggestion
 **Cluster:** exported-surface
 **Evidence:** `internal/tui/colors.go:9-16`
@@ -1343,7 +1343,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `smell:04f0e35f:abstraction-single-caller` — abstraction single caller
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/smell-04f0e35f-zerobytes
 **Severity:** suggestion
 **Cluster:** helper-package-no-value
 **Evidence:** `internal/system/zeroize.go:1-9`
@@ -1353,7 +1353,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `smell:cf43073b:enum-ad-hoc` — enum ad hoc
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/smell-cf43073b-config-enum-ad-hoc
 **Severity:** suggestion
 **Cluster:** magic-strings
 **Evidence:** `internal/config/types.go:1-32`
