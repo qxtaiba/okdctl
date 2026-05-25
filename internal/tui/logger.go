@@ -27,6 +27,10 @@ func LF(key string, value any) LogField {
 }
 
 var (
+	// stdoutLogger backs charmlog Print* output (json/text payloads, kubeconfig
+	// contents). It is intentionally NOT routed through slog.Default — the
+	// RedactHandler discipline runs only over stderrSlog. Any future slog.Logger
+	// that targets stdout must wrap with logutil.NewRedactHandler.
 	stdoutLogger atomic.Pointer[charmlog.Logger]
 	stderrLogger atomic.Pointer[charmlog.Logger]
 	// stderrSlog routes Debug/Info/Warn/Error through logutil.RedactHandler
