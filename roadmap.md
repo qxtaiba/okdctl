@@ -249,7 +249,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sec:88fd3050:cred-as-string-in-config` — cred as string in config
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-88fd3050-cred-config  
+**Status:** deferred  
 **Severity:** major  
 **Evidence:** `internal/config/cluster.go:107-134`  
 **Problem:** ProxmoxConfig.Password and ProxmoxConfig.APIToken are typed as `string` (with `json:"-"`). The credentials.GetProxmoxCredentials legacy fallback reads them when the env path is empty (proxmox.go:213-228), converting via []byte(px.Password) — the new slice is wipeable but the original string residue persists for the Config's lifetime.  
@@ -267,7 +267,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sec:00000005:bootstrap-oc-no-integrity` — bootstrap oc no integrity
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-00000005-oc-integrity  
+**Status:** deferred  
 **Severity:** major  
 **Evidence:** `internal/distribution/okd/setup/release_extract.go:24-76`  
 **Problem:** bootstrapOC downloads oc.tar.gz from mirror.openshift.com with no checksum or cosign signature verification. The docstring admits 'no upstream checksum is published for this URL; post-extraction binary-exists verification is the integrity gate'.  
