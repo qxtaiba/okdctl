@@ -38,7 +38,8 @@ func (e *SubprocessError) Error() string {
 	if e.StderrTail == "" {
 		return e.Bin + ": " + e.Err.Error()
 	}
-	return e.Bin + ": " + e.Err.Error() + ": " + e.StderrTail
+	tail := fmt.Sprint(logutil.RedactableStderr(e.StderrTail).Redacted())
+	return e.Bin + ": " + e.Err.Error() + ": " + tail
 }
 
 func (e *SubprocessError) Unwrap() error { return e.Err }
