@@ -9,12 +9,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"maps"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/qxtaiba/okdctl/internal/errtypes"
@@ -400,7 +402,16 @@ func (t *Executor) SnapshotState(ctx context.Context) (string, error) {
 	if !system.FileExists(src) {
 		return "", nil
 	}
-	data, err := os.ReadFile(src)
+	// O_NOFOLLOW: pre-sudo symlink redirection guard — mirrors ignition.go:readNoFollow.
+	if info, err := os.Lstat(src); err == nil && info.Mode()&os.ModeSymlink != 0 {
+		return "", fmt.Errorf("terraform snapshot: state file %q is a symlink; refusing to follow", src)
+	}
+	f, err := os.OpenFile(src, os.O_RDONLY|syscall.O_NOFOLLOW, 0)
+	if err != nil {
+		return "", fmt.Errorf("terraform snapshot: read state: %w", err)
+	}
+	data, err := io.ReadAll(f)
+	f.Close()
 	if err != nil {
 		return "", fmt.Errorf("terraform snapshot: read state: %w", err)
 	}
