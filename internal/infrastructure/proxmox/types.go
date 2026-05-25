@@ -6,7 +6,10 @@ import (
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 )
 
-// Provider sentinel errors.
+// Provider sentinel errors. Package-local placement is intentional
+// (err:d6b325cb): package-local sentinels are idiomatic Go (cf. io.EOF,
+// fs.ErrNotExist); every call site wraps them in ConfigError so
+// errors.As classification is unaffected.
 var (
 	ErrNotConnected           = errors.New("not connected to provider")
 	ErrTerraformNotConfigured = errors.New("terraform not configured")
