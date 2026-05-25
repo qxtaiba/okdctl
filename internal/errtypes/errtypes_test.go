@@ -41,18 +41,62 @@ func TestErrorStringOmitsInner(t *testing.T) {
 
 // TestUnwrapChainIntact verifies errors.Is still walks to the wrapped
 // sentinel after the Error()-only change.
+//
+// The ctx-sentinel rows lock the signalExitCode invariant: every errtype
+// must preserve context.Canceled and context.DeadlineExceeded identity
+// through its Unwrap chain so SIGINT→130 / SIGTERM→143 mapping stays
+// correct even when a cancellation is wrapped inside a typed error.
 func TestUnwrapChainIntact(t *testing.T) {
-	wrapped := &errtypes.ConfigError{Msg: "open install-config.yaml", Err: os.ErrNotExist}
-	if !errors.Is(wrapped, os.ErrNotExist) {
-		t.Fatal("errors.Is(wrapped, os.ErrNotExist) = false; Unwrap chain broken")
+	ctxCanceled := context.Canceled
+	ctxDeadline := context.DeadlineExceeded
+
+	type sentinelCase struct {
+		name     string
+		err      error
+		sentinel error
+		wantIs   bool
 	}
 
-	deadline := &errtypes.ClusterError{Msg: "bootstrap timed out", Err: context.DeadlineExceeded}
-	if !errors.Is(deadline, context.DeadlineExceeded) {
-		t.Fatal("errors.Is(deadline, context.DeadlineExceeded) = false; ctx sentinel no longer walks")
+	mkCases := func(errtype string, wrap func(sentinel error) error) []sentinelCase {
+		return []sentinelCase{
+			{errtype + "/canceled", wrap(ctxCanceled), ctxCanceled, true},
+			{errtype + "/deadline", wrap(ctxDeadline), ctxDeadline, true},
+			{errtype + "/unrelated", wrap(ctxCanceled), os.ErrNotExist, false},
+		}
 	}
-	if errors.Is(deadline, os.ErrNotExist) {
-		t.Fatal("errors.Is matched an unrelated sentinel")
+
+	var cases []sentinelCase
+	cases = append(cases, mkCases("ConfigError", func(s error) error {
+		return &errtypes.ConfigError{Msg: "test", Err: s}
+	})...)
+	cases = append(cases, mkCases("NetworkError", func(s error) error {
+		return &errtypes.NetworkError{Msg: "test", Err: s}
+	})...)
+	cases = append(cases, mkCases("ClusterError", func(s error) error {
+		return &errtypes.ClusterError{Msg: "test", Err: s}
+	})...)
+	cases = append(cases, mkCases("AuthError", func(s error) error {
+		return &errtypes.AuthError{Msg: "test", Err: s}
+	})...)
+	cases = append(cases, mkCases("UsageError", func(s error) error {
+		return &errtypes.UsageError{Msg: "test", Err: s}
+	})...)
+	// Preserve the original os.ErrNotExist positive case.
+	cases = append(cases, sentinelCase{
+		name:     "ConfigError/os.ErrNotExist",
+		err:      &errtypes.ConfigError{Msg: "open install-config.yaml", Err: os.ErrNotExist},
+		sentinel: os.ErrNotExist,
+		wantIs:   true,
+	})
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := errors.Is(tc.err, tc.sentinel)
+			if got != tc.wantIs {
+				t.Fatalf("errors.Is(%T, %v) = %v, want %v; Unwrap chain broken or unexpected match",
+					tc.err, tc.sentinel, got, tc.wantIs)
+			}
+		})
 	}
 }
 
