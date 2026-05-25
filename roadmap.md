@@ -484,7 +484,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sec:35abd54e:cred-env-leak-to-child` — cred env leak to child
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-35abd54e-cred-env-doc
+**Status:** in review — PR #752
 **Severity:** suggestion
 **Cluster:** credentials
 **Evidence:** `internal/credentials/proxmox.go:157-178`
@@ -695,7 +695,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `err:97cb8adf:subprocess-stderr-tail-latent-leak` — subprocess stderr tail latent leak
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/err-97cb8adf-stderr-cap
+**Status:** in review — PR #753
 **Severity:** minor
 **Cluster:** redaction-in-error — seam→`audit-observability`
 **Evidence:** `internal/system/exec.go:25-44`
@@ -705,7 +705,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `err:fde34e0c:k8s-subcommand-load-bearing-comment` — k8s subcommand load bearing comment
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/err-fde34e0c-subcommand
+**Status:** in review — PR #757
 **Severity:** suggestion
 **Cluster:** redaction-in-error — seam→`audit-observability`
 **Evidence:** `internal/cluster/k8s.go:126-138`
@@ -745,7 +745,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `err:40d315ad:addon-flux-error-as-string` — addon flux error as string
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/err-40d315ad-flux-validate
+**Status:** in review — PR #758
 **Severity:** suggestion
 **Cluster:** string-sniffing — seam→`audit-api-design`
 **Evidence:** `internal/addon/catalog/flux/flux.go:284-312`
@@ -755,7 +755,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `err:0b188cab:addon-helpers-lasterr-asymmetric` — addon helpers lasterr asymmetric
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/err-0b188cab-lasterr
+**Status:** in review — PR #754
 **Severity:** suggestion
 **Cluster:** wrapping
 **Evidence:** `internal/addon/helpers.go:29-45`
@@ -775,7 +775,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `err:d9f7733e:debug-bundle-stringified-errors` — debug bundle stringified errors
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/err-d9f7733e-bundle-redact
+**Status:** in review — PR #755
 **Severity:** suggestion
 **Cluster:** redaction-in-error — seam→`audit-observability`
 **Evidence:** `internal/cli/debug_bundle.go:211-410`
@@ -795,7 +795,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `err:aa84670c:root-signalexitcode-invariant-test` — root signalexitcode invariant test
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/err-aa84670c-signal-exit
+**Status:** in review — PR #756
 **Severity:** suggestion
 **Cluster:** cancellation-identity — seam→`audit-concurrency`
 **Evidence:** `internal/cli/root.go:181-192`
@@ -1051,7 +1051,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `api:bbc23e42:pkg-progress-reporter-location` — pkg progress reporter location
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/api-bbc23e42-progress-doc
+**Status:** in review — PR #759
 **Severity:** suggestion
 **Cluster:** package-boundary
 **Evidence:** `internal/logutil/logutil.go:23-29`
@@ -1101,7 +1101,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `api:21dc1103:opt-name-clash-extract-option` — opt name clash extract option
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/api-21dc1103-fetchoption
+**Status:** in review — PR #760
 **Severity:** minor
 **Cluster:** option-consistency
 **Evidence:** `internal/download/download.go:37-54`
@@ -1124,7 +1124,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `ux:8d8faa80:help-no-example` — help no example
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/ux-8d8faa80-completion-example
+**Status:** in review — PR #761
 **Severity:** suggestion
 **Cluster:** help-text
 **Evidence:** `internal/cli/completion.go:11-30`
@@ -1154,7 +1154,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `ux:4583b75b:output-flag-inconsistent` — output flag inconsistent
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/ux-4583b75b-config-output
+**Status:** in review — PR #762
 **Severity:** suggestion
 **Cluster:** flag-conventions
 **Evidence:** `internal/cli/config.go:25-42`
@@ -1164,7 +1164,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `ux:e7db1220:flag-completion-inconsistent` — flag completion inconsistent
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/ux-e7db1220-releases-completion
+**Status:** in review — PR #763
 **Severity:** suggestion
 **Cluster:** flag-conventions
 **Evidence:** `internal/cli/releases.go:75-80`
@@ -1174,7 +1174,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `ux:0d318f5c:flag-no-default-in-help` — flag no default in help
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/ux-0d318f5c-log-format-default
+**Status:** in review — PR #764
 **Severity:** suggestion
 **Cluster:** flag-conventions
 **Evidence:** `internal/cli/root.go:251-252`
@@ -1237,7 +1237,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `obs:366b3f2d:level-error-not-user-visible` — level error not user visible
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/obs-366b3f2d-fatal-level
+**Status:** in review — PR #765
 **Severity:** suggestion
 **Cluster:** level-discipline
 **Evidence:** `internal/distribution/orchestrator.go:184-188`
@@ -1333,7 +1333,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `smell:820b96c9:stringly-typed-enum` — stringly typed enum
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/smell-820b96c9-secretstore-typed
+**Status:** in review — PR #766
 **Severity:** suggestion
 **Cluster:** magic-strings
 **Evidence:** `internal/addon/catalog/secretstore/providers.go:27-52`
@@ -1373,7 +1373,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `smell:6424733c:abstraction-single-caller` — abstraction single caller
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/smell-6424733c-tuireporter
+**Status:** in review — PR #767
 **Severity:** suggestion
 **Cluster:** helper-package-no-value
 **Evidence:** `internal/cli/helpers.go:188-194`
@@ -1393,7 +1393,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `smell:efff8856:enum-ad-hoc` — enum ad hoc
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/smell-efff8856-flux-provider-const
+**Status:** in review — PR #768
 **Severity:** suggestion
 **Cluster:** magic-strings
 **Evidence:** `internal/addon/catalog/flux/flux.go:267-278`
