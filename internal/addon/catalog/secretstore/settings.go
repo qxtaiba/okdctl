@@ -4,7 +4,7 @@ package secretstore
 // settings map. Exactly one of OnePassword, Vault, or Bitwarden is non-nil
 // after a successful DecodeSettings call, matching the active Provider.
 type Settings struct {
-	Provider    string
+	Provider    ProviderKind
 	SecretsDir  string
 	OnePassword *OnePasswordSettings
 	Vault       *VaultSettings
@@ -37,16 +37,16 @@ type BitwardenSettings struct {
 // populating only the sub-struct for the active provider. An error is returned
 // only when the onepassword vault CSV is malformed.
 func (s *SecretStore) DecodeSettings(settings map[string]string) (any, error) {
-	provider := settings[SettingProvider]
-	if provider == "" {
-		provider = providerOnepassword
+	prov := ProviderKind(settings[SettingProvider])
+	if prov == "" {
+		prov = ProviderOnepassword
 	}
 	ts := Settings{
-		Provider:   provider,
+		Provider:   prov,
 		SecretsDir: settingOrDefault(settings, SettingSecretsDir, defaultSecretsDir),
 	}
-	switch provider {
-	case providerOnepassword:
+	switch prov {
+	case ProviderOnepassword:
 		vaults, err := parseOnepasswordVaults(settings[SettingOnepasswordVaults])
 		if err != nil {
 			return nil, err
@@ -55,13 +55,13 @@ func (s *SecretStore) DecodeSettings(settings map[string]string) (any, error) {
 			ConnectHost: settingOrDefault(settings, SettingOnepasswordConnectHost, defaultOPConnectHost),
 			Vaults:      vaults,
 		}
-	case providerVault:
+	case ProviderVault:
 		ts.Vault = &VaultSettings{
 			Server:  settings[SettingVaultServer],
 			Path:    settingOrDefault(settings, SettingVaultPath, "secret"),
 			Version: settingOrDefault(settings, SettingVaultVersion, "v2"),
 		}
-	case providerBitwarden:
+	case ProviderBitwarden:
 		ts.Bitwarden = &BitwardenSettings{
 			OrganizationID: settings[SettingBitwardenOrganizationID],
 			ProjectID:      settings[SettingBitwardenProjectID],

@@ -74,7 +74,7 @@ func (s *SecretStore) Install(ctx context.Context, env *addon.Environment) error
 		return fmt.Errorf("secretstore: unknown provider %q", ts.Provider)
 	}
 
-	skip, err := s.installPrereqCheck(env, ts.Provider)
+	skip, err := s.installPrereqCheck(env, string(ts.Provider))
 	if err != nil {
 		return err
 	}
@@ -86,7 +86,7 @@ func (s *SecretStore) Install(ctx context.Context, env *addon.Environment) error
 		return err
 	}
 
-	env.Logger.Info("secretstore: installing provider", "provider", ts.Provider)
+	env.Logger.Info("secretstore: installing provider", "provider", string(ts.Provider))
 
 	manifests, err := p.buildResources(ctx, env, ts)
 	if err != nil {
@@ -104,7 +104,7 @@ func (s *SecretStore) Install(ctx context.Context, env *addon.Environment) error
 		}
 	}
 
-	env.Logger.Info("secretstore: provider installed", "provider", ts.Provider)
+	env.Logger.Info("secretstore: provider installed", "provider", string(ts.Provider))
 	return nil
 }
 
@@ -114,8 +114,8 @@ func (s *SecretStore) Install(ctx context.Context, env *addon.Environment) error
 // caller can rerun after placing the files.
 func (s *SecretStore) installPrereqCheck(env *addon.Environment, providerName string) (skip bool, err error) {
 	dir := resolveSecretsDir(env)
-	switch providerName {
-	case providerOnepassword:
+	switch ProviderKind(providerName) {
+	case ProviderOnepassword:
 		credPath := filepath.Join(dir, opCredentialsFile)
 		tokenPath := filepath.Join(dir, opTokenFile)
 		if !system.FileExists(credPath) && !system.FileExists(tokenPath) {
@@ -127,7 +127,7 @@ func (s *SecretStore) installPrereqCheck(env *addon.Environment, providerName st
 		if (isSopsEncrypted(credPath) || isSopsEncrypted(tokenPath)) && !executor.CommandExists("sops") {
 			return false, fmt.Errorf("sops-encrypted secret files detected but sops is not installed: install with 'brew install sops'")
 		}
-	case providerVault:
+	case ProviderVault:
 		tokenPath := filepath.Join(dir, vaultTokenFile)
 		if !system.FileExists(tokenPath) {
 			env.Logger.Warn("secretstore: vault-token.txt not found, skipping",
@@ -138,7 +138,7 @@ func (s *SecretStore) installPrereqCheck(env *addon.Environment, providerName st
 		if isSopsEncrypted(tokenPath) && !executor.CommandExists("sops") {
 			return false, fmt.Errorf("sops-encrypted vault token detected but sops is not installed: install with 'brew install sops'")
 		}
-	case providerBitwarden:
+	case ProviderBitwarden:
 		tokenPath := filepath.Join(dir, bitwardenTokenFile)
 		if !system.FileExists(tokenPath) {
 			env.Logger.Warn("secretstore: bitwarden-token.txt not found, skipping",
@@ -155,9 +155,9 @@ func (s *SecretStore) installPrereqCheck(env *addon.Environment, providerName st
 
 // Verify checks that each auth Secret created by Install exists in the cluster.
 func (s *SecretStore) Verify(ctx context.Context, env *addon.Environment) error {
-	p, providerName := resolveProvider(env.AddonConfig.Settings)
+	p, kind := resolveProvider(env.AddonConfig.Settings)
 	if p == nil {
-		return fmt.Errorf("secretstore: unknown provider %q", providerName)
+		return fmt.Errorf("secretstore: unknown provider %q", kind)
 	}
 	ns := defaultNamespace
 	for _, name := range p.secretNames() {
@@ -172,9 +172,9 @@ func (s *SecretStore) Verify(ctx context.Context, env *addon.Environment) error 
 // Uninstall deletes the provider's auth Secrets and the ESO SecretStore CRD.
 // Deletion failures are logged but do not abort the sequence.
 func (s *SecretStore) Uninstall(ctx context.Context, env *addon.Environment) error {
-	p, providerName := resolveProvider(env.AddonConfig.Settings)
+	p, kind := resolveProvider(env.AddonConfig.Settings)
 	ns := defaultNamespace
-	env.Logger.Info("secretstore: removing provider resources", "provider", providerName)
+	env.Logger.Info("secretstore: removing provider resources", "provider", string(kind))
 	if p != nil {
 		for _, name := range p.secretNames() {
 			if _, err := env.Exec.Run(ctx, "oc", "delete", "secret", name, "-n", ns); err != nil {
@@ -199,7 +199,7 @@ func (s *SecretStore) RequiredTools() []addon.ToolSpec {
 func (s *SecretStore) DefaultSettings() map[string]string {
 	return map[string]string{
 		SettingSecretsDir:            defaultSecretsDir,
-		SettingProvider:              providerOnepassword,
+		SettingProvider:              string(ProviderOnepassword),
 		SettingOnepasswordVaults:     defaultOPVaults,
 		SettingVaultPath:             "secret",
 		SettingVaultVersion:          "v2",
@@ -217,9 +217,9 @@ func (s *SecretStore) ValidateSettings(settings map[string]string) []string {
 		return []string{err.Error()}
 	}
 	ts := decoded.(Settings)
-	p, name := resolveProvider(settings)
+	p, kind := resolveProvider(settings)
 	if p == nil {
-		return []string{fmt.Sprintf("provider %q is not supported; valid values: onepassword, vault, bitwarden", name)}
+		return []string{fmt.Sprintf("provider %q is not supported; valid values: onepassword, vault, bitwarden", kind)}
 	}
 	return p.validate(ts)
 }
@@ -229,18 +229,18 @@ func (s *SecretStore) ValidateSettings(settings map[string]string) []string {
 // section; common fields have an empty Group.
 func (s *SecretStore) WizardFields() []addon.WizardField {
 	return []addon.WizardField{
-		{Key: SettingProvider, Label: "Provider", Default: providerOnepassword, Help: "ESO backend provider: onepassword, vault, bitwarden"},
+		{Key: SettingProvider, Label: "Provider", Default: string(ProviderOnepassword), Help: "ESO backend provider: onepassword, vault, bitwarden"},
 		{Key: SettingSecretsDir, Label: "Secrets Directory", Default: defaultSecretsDir, Help: "Directory containing provider credential files (plaintext or sops-encrypted)"},
-		{Key: SettingOnepasswordConnectHost, Label: "Connect Host", Default: defaultOPConnectHost, Help: "1Password Connect server URL", Group: providerOnepassword},
-		{Key: SettingOnepasswordVaults, Label: "Vaults", Default: defaultOPVaults, Help: "CSV of name=priority pairs, e.g. \"homelab=1,shared=2\"", Group: providerOnepassword},
-		{Key: SettingVaultServer, Label: "Server URL", Help: "Vault server URL (e.g. https://vault.example.com)", Group: providerVault},
-		{Key: SettingVaultPath, Label: "Secret Path", Default: "secret", Help: "Vault KV mount path", Group: providerVault},
-		{Key: SettingVaultVersion, Label: "KV Version", Default: "v2", Help: "Vault KV engine version: v1 or v2", Group: providerVault},
-		{Key: SettingBitwardenOrganizationID, Label: "Organization ID", Help: "Bitwarden organization UUID", Group: providerBitwarden},
-		{Key: SettingBitwardenProjectID, Label: "Project ID", Help: "Bitwarden project UUID", Group: providerBitwarden},
-		{Key: SettingBitwardenAPIURL, Label: "API URL", Default: defaultBitwardenAPIURL, Help: "Bitwarden Secrets Manager API URL", Group: providerBitwarden},
-		{Key: SettingBitwardenIdentityURL, Label: "Identity URL", Default: defaultBitwardenIdentityURL, Help: "Bitwarden identity service URL", Group: providerBitwarden},
-		{Key: SettingBitwardenSDKServerURL, Label: "SDK Server URL", Default: defaultBitwardenSDKServerURL, Help: "In-cluster bitwarden-sdk-server URL", Group: providerBitwarden},
+		{Key: SettingOnepasswordConnectHost, Label: "Connect Host", Default: defaultOPConnectHost, Help: "1Password Connect server URL", Group: string(ProviderOnepassword)},
+		{Key: SettingOnepasswordVaults, Label: "Vaults", Default: defaultOPVaults, Help: "CSV of name=priority pairs, e.g. \"homelab=1,shared=2\"", Group: string(ProviderOnepassword)},
+		{Key: SettingVaultServer, Label: "Server URL", Help: "Vault server URL (e.g. https://vault.example.com)", Group: string(ProviderVault)},
+		{Key: SettingVaultPath, Label: "Secret Path", Default: "secret", Help: "Vault KV mount path", Group: string(ProviderVault)},
+		{Key: SettingVaultVersion, Label: "KV Version", Default: "v2", Help: "Vault KV engine version: v1 or v2", Group: string(ProviderVault)},
+		{Key: SettingBitwardenOrganizationID, Label: "Organization ID", Help: "Bitwarden organization UUID", Group: string(ProviderBitwarden)},
+		{Key: SettingBitwardenProjectID, Label: "Project ID", Help: "Bitwarden project UUID", Group: string(ProviderBitwarden)},
+		{Key: SettingBitwardenAPIURL, Label: "API URL", Default: defaultBitwardenAPIURL, Help: "Bitwarden Secrets Manager API URL", Group: string(ProviderBitwarden)},
+		{Key: SettingBitwardenIdentityURL, Label: "Identity URL", Default: defaultBitwardenIdentityURL, Help: "Bitwarden identity service URL", Group: string(ProviderBitwarden)},
+		{Key: SettingBitwardenSDKServerURL, Label: "SDK Server URL", Default: defaultBitwardenSDKServerURL, Help: "In-cluster bitwarden-sdk-server URL", Group: string(ProviderBitwarden)},
 	}
 }
 
