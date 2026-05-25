@@ -44,6 +44,24 @@ func TestRunCaptured_ExitOneWithStderr(t *testing.T) {
 	}
 }
 
+// TestSubprocessError_ErrorTruncatesLongStderr guards the 400-byte cap
+// applied by RedactableStderr inside SubprocessError.Error().
+func TestSubprocessError_ErrorTruncatesLongStderr(t *testing.T) {
+	long := strings.Repeat("x", 500)
+	se := &SubprocessError{
+		Bin:        "sh",
+		Err:        errors.New("exit status 1"),
+		StderrTail: long,
+	}
+	got := se.Error()
+	if !strings.Contains(got, "[truncated]") {
+		t.Errorf("Error() = %q; want '[truncated]' marker for 500-byte stderr", got)
+	}
+	if len(got) >= 500 {
+		t.Errorf("Error() length = %d; want < 500 after truncation", len(got))
+	}
+}
+
 func TestRunCaptured_ExitOneEmptyStderr(t *testing.T) {
 	err := RunCaptured(context.Background(), "sh", "-c", "exit 1")
 	if err == nil {
