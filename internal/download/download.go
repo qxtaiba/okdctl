@@ -34,23 +34,27 @@ type dlConfig struct {
 	logger           *slog.Logger
 }
 
-// Option configures a Fetch call.
-type Option func(*dlConfig)
+// FetchOption configures a Fetch call.
+type FetchOption func(*dlConfig)
 
-// WithChecksum sets the expected SHA-256 hex digest; empty disables verification.
-func WithChecksum(sum string) Option { return func(c *dlConfig) { c.expectedChecksum = sum } }
+// WithFetchChecksum sets the expected SHA-256 hex digest; empty disables verification.
+func WithFetchChecksum(sum string) FetchOption {
+	return func(c *dlConfig) { c.expectedChecksum = sum }
+}
 
 // WithDescription sets the human-readable name used in log and error messages.
-func WithDescription(d string) Option { return func(c *dlConfig) { c.description = d } }
+func WithDescription(d string) FetchOption { return func(c *dlConfig) { c.description = d } }
 
 // WithTimeout overrides the per-fetch HTTP timeout (default: DefaultTimeout).
-func WithTimeout(d time.Duration) Option { return func(c *dlConfig) { c.timeout = d } }
+func WithTimeout(d time.Duration) FetchOption { return func(c *dlConfig) { c.timeout = d } }
 
 // WithOverwrite forces a re-download even when a file with a matching checksum exists.
-func WithOverwrite(v bool) Option { return func(c *dlConfig) { c.overwrite = v } }
+func WithOverwrite(v bool) FetchOption { return func(c *dlConfig) { c.overwrite = v } }
 
 // WithLogger injects a structured logger; nil falls back to logutil.NopLogger.
-func WithLogger(l *slog.Logger) Option { return func(c *dlConfig) { c.logger = logutil.OrNop(l) } }
+func WithLogger(l *slog.Logger) FetchOption {
+	return func(c *dlConfig) { c.logger = logutil.OrNop(l) }
+}
 
 func canSkipDownload(cfg *dlConfig) bool {
 	info, err := os.Stat(cfg.outputPath)
@@ -87,7 +91,7 @@ func canSkipDownload(cfg *dlConfig) bool {
 // Fetch downloads the artifact at url to dst with bounded retries and optional
 // SHA-256 verification. A partially-written file is removed on any mid-attempt
 // failure so retries start clean.
-func Fetch(ctx context.Context, url, dst string, opts ...Option) error {
+func Fetch(ctx context.Context, url, dst string, opts ...FetchOption) error {
 	cfg := &dlConfig{
 		url:        url,
 		outputPath: dst,

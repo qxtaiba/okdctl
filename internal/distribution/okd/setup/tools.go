@@ -223,7 +223,7 @@ func (p *Phase) installBinary(ctx context.Context, spec *binaryInstallSpec) erro
 
 	tempFile, err := system.WriteTempFile(spec.name+"-download-*", 0o600, func(f *os.File) error {
 		return download.Fetch(ctx, spec.url, f.Name(),
-			download.WithChecksum(expectedChecksum),
+			download.WithFetchChecksum(expectedChecksum),
 			download.WithDescription(spec.name),
 			download.WithTimeout(2*time.Minute),
 			download.WithLogger(p.Log),

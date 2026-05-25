@@ -62,7 +62,7 @@ func (p *Phase) bootstrapOC(ctx context.Context, downloadDir string) (string, er
 	p.Log.Info("tools: fetching bootstrap oc", "url", tarballURL)
 
 	if err := download.Fetch(ctx, tarballURL, archivePath,
-		download.WithChecksum(bootstrapOCChecksum),
+		download.WithFetchChecksum(bootstrapOCChecksum),
 		download.WithDescription("bootstrap-oc"),
 		download.WithTimeout(3*time.Minute),
 		download.WithLogger(p.Log),

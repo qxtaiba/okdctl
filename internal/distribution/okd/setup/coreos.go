@@ -335,7 +335,7 @@ func (p *Phase) DownloadCoreOSISO(ctx context.Context, info *CoreOSInfo, destPat
 	}
 
 	if err := download.Fetch(ctx, info.ISOUrl, destPath,
-		download.WithChecksum(info.ISOChecksum),
+		download.WithFetchChecksum(info.ISOChecksum),
 		download.WithDescription("CoreOS ISO"),
 		download.WithLogger(p.Log),
 	); err != nil {
