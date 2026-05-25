@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sort"
@@ -108,7 +109,7 @@ func (p *Phase) UpdateIngress(ctx context.Context, cfg *config.Config, opts Upda
 		descriptions = append(descriptions, fmt.Sprintf("%s (%s)", ic.Name, ic.Strategy))
 	}
 	p.Log.Info("update-ingress: discovered controllers",
-		"count", len(controllers), "controllers", strings.Join(descriptions, ", "))
+		slog.Any("controllers", descriptions))
 
 	var hostNetworkICs, lbICs []ingressControllerInfo
 	for _, ic := range controllers {
