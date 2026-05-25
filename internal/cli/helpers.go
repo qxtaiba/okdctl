@@ -188,14 +188,6 @@ func warnIfTfStateOnly(root string) {
 	tui.Info("if this directory belongs to a different cluster, stop and run 'okdctl deploy' in the correct directory")
 }
 
-// tuiReporter wraps tui.StartSpinner so domain code can call a callback that
-// captures the command ctx without taking an internal/tui dependency.
-func tuiReporter(ctx context.Context) func(string) func() {
-	return func(desc string) func() {
-		return tui.StartSpinner(ctx, desc)
-	}
-}
-
 // Pass nil for creds when the operation only needs local tools (oc, dnsmasq, systemctl).
 func createOKDProvisionerWithOpts(cfg *config.Config, creds *credentials.ProxmoxCredentials, projectRoot string, extra ...okd.ProvisionerOption) *okd.Provisioner {
 	opts := []okd.ProvisionerOption{
@@ -336,7 +328,7 @@ func executeFullDeployment(ctx context.Context, cfg *config.Config, opts deploym
 		}
 	}()
 
-	provOpts = append(provOpts, okd.WithProgressReporter(tuiReporter(ctx)))
+	provOpts = append(provOpts, okd.WithProgressReporter(func(desc string) func() { return tui.StartSpinner(ctx, desc) }))
 	p := createOKDProvisionerWithOpts(cfg, opts.Credentials, projectRoot, provOpts...)
 	defer p.ZeroizeEnv()
 
