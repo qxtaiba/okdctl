@@ -891,7 +891,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `api:0139cb3f:export-three-bindir-functions` — export three bindir functions
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/api-0139cb3f-bindir-three
+**Status:** not started
 **Severity:** suggestion
 **Cluster:** exported-surface
 **Evidence:** `internal/distribution/okd/phase/paths.go:53-92`
