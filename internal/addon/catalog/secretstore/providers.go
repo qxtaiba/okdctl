@@ -23,32 +23,36 @@ type provider interface {
 	secretNames() []string
 }
 
+// ProviderKind is the enumeration of ESO backends the secretstore addon
+// supports. Wire values are lowercase strings matching the YAML settings map.
+type ProviderKind string
+
 // Provider values accepted by the secretstore addon.
 const (
-	providerOnepassword = "onepassword"
-	providerVault       = "vault"
-	providerBitwarden   = "bitwarden"
+	ProviderOnepassword ProviderKind = "onepassword"
+	ProviderVault       ProviderKind = "vault"
+	ProviderBitwarden   ProviderKind = "bitwarden"
 )
 
-var providers = map[string]provider{
-	providerOnepassword: &onepasswordProvider{},
-	providerVault:       &vaultProvider{},
-	providerBitwarden:   &bitwardenProvider{},
+var providers = map[ProviderKind]provider{
+	ProviderOnepassword: &onepasswordProvider{},
+	ProviderVault:       &vaultProvider{},
+	ProviderBitwarden:   &bitwardenProvider{},
 }
 
 // resolveProvider returns the provider implementation for the `provider`
 // setting, defaulting to "onepassword" when unset. The second return value
-// is the resolved provider name (useful for error messages on miss).
-func resolveProvider(settings map[string]string) (impl provider, name string) {
-	name = settings[SettingProvider]
-	if name == "" {
-		name = providerOnepassword
+// is the resolved ProviderKind (useful for error messages on miss).
+func resolveProvider(settings map[string]string) (impl provider, kind ProviderKind) {
+	kind = ProviderKind(settings[SettingProvider])
+	if kind == "" {
+		kind = ProviderOnepassword
 	}
-	p, ok := providers[name]
+	p, ok := providers[kind]
 	if !ok {
-		return nil, name
+		return nil, kind
 	}
-	return p, name
+	return p, kind
 }
 
 const (
