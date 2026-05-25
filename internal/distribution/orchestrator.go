@@ -181,11 +181,8 @@ func (o *Orchestrator) executeStep(ctx context.Context, step ProvisioningStep) S
 			StartedAt: startedAt,
 			Duration:  time.Since(startedAt),
 		}
-		if step.IsFatal() {
-			o.logger.Error("step: failed", "step", step.ID(), "duration", r.Duration, "err", err)
-		} else {
-			o.logger.Warn("step: failed", "step", step.ID(), "duration", r.Duration, "err", err)
-		}
+		// Warn here; the cli layer Errors once on command failure (double-log avoidance).
+		o.logger.Warn("step: failed", "step", step.ID(), "duration", r.Duration, "fatal", step.IsFatal(), "err", err)
 		o.rec.StepFinished(&r)
 		return r
 	}
