@@ -6,19 +6,23 @@ Generate shell completion script
 
 Generate a shell completion script for okdctl and write it to stdout.
 
-Bash (add to ~/.bashrc or source in the current shell):
-  okdctl completion bash > /etc/bash_completion.d/okdctl
-  # or: source <(okdctl completion bash)
-
-Zsh (add to ~/.zshrc):
-  okdctl completion zsh > "${fpath[1]}/_okdctl"
-  # or: source <(okdctl completion zsh)
-
-Fish:
-  okdctl completion fish > ~/.config/fish/completions/okdctl.fish
-
 ```
 okdctl completion <bash|zsh|fish>
+```
+
+### Examples
+
+```
+  # Bash — write to the system completions directory or source inline:
+  okdctl completion bash > /etc/bash_completion.d/okdctl
+  source <(okdctl completion bash)
+
+  # Zsh — write to a directory on $fpath or source inline:
+  okdctl completion zsh > "${fpath[1]}/_okdctl"
+  source <(okdctl completion zsh)
+
+  # Fish:
+  okdctl completion fish > ~/.config/fish/completions/okdctl.fish
 ```
 
 ### Options
