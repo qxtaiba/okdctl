@@ -208,6 +208,20 @@ func collectSections(ctx context.Context, addFile func(string, []byte) error, ad
 	return secs
 }
 
+// safeMessage converts err to a string safe for inclusion in the bundle
+// manifest. If err implements Redacted() any the redacted form is used,
+// preventing a future error type from leaking credentials into the
+// operator-shared bundle. Mirrors logutil.redactAny's dispatch shape.
+func safeMessage(err error) string {
+	if err == nil {
+		return ""
+	}
+	if r, ok := err.(interface{ Redacted() any }); ok {
+		return fmt.Sprint(r.Redacted())
+	}
+	return err.Error()
+}
+
 func bundleConfig(addFile func(string, []byte) error, cfg *config.Config, cfgErr error) manifestEntry {
 	if cfgErr != nil {
 		return manifestEntry{Name: categoryConfig, Status: bundleStatusSkipped, Message: fmt.Sprintf("load config: %v", cfgErr)}
@@ -218,7 +232,7 @@ func bundleConfig(addFile func(string, []byte) error, cfg *config.Config, cfgErr
 		return manifestEntry{Name: categoryConfig, Status: bundleStatusFailed, Message: fmt.Sprintf("marshal: %v", err)}
 	}
 	if err := addFile("config.yaml", data); err != nil {
-		return manifestEntry{Name: categoryConfig, Status: bundleStatusFailed, Message: err.Error()}
+		return manifestEntry{Name: categoryConfig, Status: bundleStatusFailed, Message: safeMessage(err)}
 	}
 	return manifestEntry{Name: categoryConfig, Status: bundleStatusOK}
 }
@@ -236,7 +250,7 @@ func bundleLogFile(addFile func(string, []byte) error) manifestEntry {
 		return manifestEntry{Name: categoryLogFile, Status: bundleStatusFailed, Message: fmt.Sprintf("read %s: %v", logFile, err)}
 	}
 	if err := addFile("okdctl.log", data); err != nil {
-		return manifestEntry{Name: categoryLogFile, Status: bundleStatusFailed, Message: err.Error()}
+		return manifestEntry{Name: categoryLogFile, Status: bundleStatusFailed, Message: safeMessage(err)}
 	}
 	return manifestEntry{Name: categoryLogFile, Status: bundleStatusOK, Message: logFile}
 }
@@ -266,7 +280,7 @@ func bundleTerraformState(ctx context.Context, addFile func(string, []byte) erro
 		return manifestEntry{Name: categoryTerraformState, Status: bundleStatusFailed, Message: msg}
 	}
 	if err := addFile("terraform-state-list.txt", []byte(result.Stdout)); err != nil {
-		return manifestEntry{Name: categoryTerraformState, Status: bundleStatusFailed, Message: err.Error()}
+		return manifestEntry{Name: categoryTerraformState, Status: bundleStatusFailed, Message: safeMessage(err)}
 	}
 	return manifestEntry{Name: categoryTerraformState, Status: bundleStatusOK}
 }
@@ -375,13 +389,13 @@ func tarDirInto(addStream func(*tar.Header, io.Reader) error, srcDir, bundlePref
 func bundleDoctor(ctx context.Context, addFile func(string, []byte) error) manifestEntry {
 	data, err := collectDoctorOutput(ctx)
 	if err != nil {
-		return manifestEntry{Name: categoryDoctor, Status: bundleStatusFailed, Message: err.Error()}
+		return manifestEntry{Name: categoryDoctor, Status: bundleStatusFailed, Message: safeMessage(err)}
 	}
 	if data == nil {
 		return manifestEntry{Name: categoryDoctor, Status: bundleStatusSkipped, Message: "doctor is only supported on linux"}
 	}
 	if err := addFile("doctor.json", data); err != nil {
-		return manifestEntry{Name: categoryDoctor, Status: bundleStatusFailed, Message: err.Error()}
+		return manifestEntry{Name: categoryDoctor, Status: bundleStatusFailed, Message: safeMessage(err)}
 	}
 	return manifestEntry{Name: categoryDoctor, Status: bundleStatusOK}
 }
@@ -406,7 +420,7 @@ func bundleSystemMeta(addFile func(string, []byte) error, bundleID string, bundl
 		return manifestEntry{Name: categorySystemMeta, Status: bundleStatusFailed, Message: fmt.Sprintf("marshal: %v", err)}
 	}
 	if err := addFile("system-meta.yaml", data); err != nil {
-		return manifestEntry{Name: categorySystemMeta, Status: bundleStatusFailed, Message: err.Error()}
+		return manifestEntry{Name: categorySystemMeta, Status: bundleStatusFailed, Message: safeMessage(err)}
 	}
 	return manifestEntry{Name: categorySystemMeta, Status: bundleStatusOK}
 }

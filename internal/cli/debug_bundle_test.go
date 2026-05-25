@@ -218,6 +218,28 @@ func TestTarDirIntoTruncatesOversizedFile(t *testing.T) {
 	}
 }
 
+// redactableErr is a test error type that implements Redacted() any.
+type redactableErr struct{ raw string }
+
+func (e redactableErr) Error() string { return e.raw }
+func (e redactableErr) Redacted() any { return "[redacted-in-test]" }
+
+func TestSafeMessageRedacted(t *testing.T) {
+	plain := errors.New("plain error")
+	if got := safeMessage(plain); got != "plain error" {
+		t.Errorf("plain error: got %q, want %q", got, "plain error")
+	}
+
+	re := redactableErr{raw: "secret-token-xyz"}
+	if got := safeMessage(re); got != "[redacted-in-test]" {
+		t.Errorf("redactable error: got %q, want %q", got, "[redacted-in-test]")
+	}
+
+	if got := safeMessage(nil); got != "" {
+		t.Errorf("nil error: got %q, want empty string", got)
+	}
+}
+
 func TestCollectSectionsSkipMustGather(t *testing.T) {
 	add := func(string, []byte) error { return nil }
 	addStream := func(*tar.Header, io.Reader) error { return nil }
