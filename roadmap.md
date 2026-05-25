@@ -494,7 +494,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sec:4c092fce:toctou-chmod` — toctou chmod
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-4c092fce-toctou
+**Status:** in review — PR #747
 **Severity:** minor
 **Cluster:** file-toctou
 **Evidence:** `internal/infrastructure/terraform/terraform.go:395-414`
@@ -504,7 +504,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sec:48688e63:input-cidr-not-parsed` — input cidr not parsed
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-48688e63-cidr
+**Status:** in review — PR #741
 **Severity:** suggestion
 **Cluster:** input-validation
 **Evidence:** `internal/infrastructure/proxmox/proxmox.go:131-145`
@@ -549,7 +549,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `state:b5a79fda:deploy-state-marker-not-version-tagged` — deploy state marker not version tagged
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/state-b5a79fda-schema-version
+**Status:** in review — PR #744
 **Severity:** suggestion
 **Cluster:** state-schema-evolution
 **Evidence:** `internal/cli/deploystate.go:26-32`
@@ -652,7 +652,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `iac:e076e43c:sh-cosign-cert-identity-regex-loose` — sh cosign cert identity regex loose
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/iac-e076e43c-cosign
+**Status:** in review — PR #748
 **Severity:** minor
 **Cluster:** install-sh-integrity
 **Evidence:** `scripts/install.sh:156-157`
@@ -1134,7 +1134,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `ux:d31d1b9d:help-short-tone` — help short tone
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/ux-d31d1b9d-describe-tone
+**Status:** in review — PR #742
 **Severity:** minor
 **Cluster:** help-text
 **Evidence:** `internal/cli/status.go:38-42`
@@ -1204,7 +1204,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `ux:b3356305:help-no-example` — help no example
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/ux-b3356305-readme-usage
+**Status:** in review — PR #746
 **Severity:** minor
 **Cluster:** help-text — seam→`audit-documentation`
 **Evidence:** `README.md:77-83`
@@ -1217,7 +1217,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `obs:fde34e0c:err-stringified` — err stringified
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/obs-fde34e0c-err-attr
+**Status:** in review — PR #750
 **Severity:** minor
 **Cluster:** field-stability
 **Evidence:** `internal/cluster/k8s.go:61-61`
@@ -1247,7 +1247,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `obs:632c9087:any-on-volatile-type` — any on volatile type
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/obs-632c9087-slice-attr
+**Status:** in review — PR #745
 **Severity:** suggestion
 **Cluster:** field-stability
 **Evidence:** `internal/distribution/okd/postinstall/update_ingress.go:103-108`
@@ -1257,7 +1257,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `obs:bbc23e42:handler-no-tty-switch` — handler no tty switch
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/obs-bbc23e42-stdout-doc
+**Status:** in review — PR #749
 **Severity:** suggestion
 **Cluster:** handler-setup
 **Evidence:** `internal/tui/logger.go:41-48`
@@ -1290,7 +1290,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `mod:6fc3d91e:use-strings-fieldsseq` — use strings fieldsseq
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/mod-6fc3d91e-fieldsseq
+**Status:** in review — PR #751
 **Severity:** minor
 **Cluster:** slices-maps
 **Evidence:** `internal/platform/platform.go:122-129` + 1 more
@@ -1456,7 +1456,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `dep:33ef32bf:claude-md-yaml-quad-outdated` — claude md yaml quad outdated
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/dep-33ef32bf-yaml-engines
+**Status:** in review — PR #743
 **Severity:** suggestion
 **Cluster:** duplicate-engine
 **Evidence:** `CLAUDE.md:1-1`
