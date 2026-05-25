@@ -11,17 +11,16 @@ import (
 var completionCmd = &cobra.Command{
 	Use:   "completion <bash|zsh|fish>",
 	Short: "Generate shell completion script",
-	Long: `Generate a shell completion script for okdctl and write it to stdout.
-
-Bash (add to ~/.bashrc or source in the current shell):
+	Long:  `Generate a shell completion script for okdctl and write it to stdout.`,
+	Example: `  # Bash — write to the system completions directory or source inline:
   okdctl completion bash > /etc/bash_completion.d/okdctl
-  # or: source <(okdctl completion bash)
+  source <(okdctl completion bash)
 
-Zsh (add to ~/.zshrc):
+  # Zsh — write to a directory on $fpath or source inline:
   okdctl completion zsh > "${fpath[1]}/_okdctl"
-  # or: source <(okdctl completion zsh)
+  source <(okdctl completion zsh)
 
-Fish:
+  # Fish:
   okdctl completion fish > ~/.config/fish/completions/okdctl.fish`,
 	DisableFlagsInUseLine: true,
 	ValidArgs:             []string{"bash", "zsh", "fish"},
