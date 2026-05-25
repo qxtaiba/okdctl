@@ -32,6 +32,11 @@ const (
 	defaultGitRepoSyncTimeout = 3 * time.Minute
 )
 
+// ProviderID is the canonical addon identity string for FluxCD. Wizard
+// defaults and addon DefaultSettings both reference this constant so the
+// two cannot silently diverge.
+const ProviderID = "flux"
+
 // Settings keys consumed by the Flux addon. Named here so callers (install
 // wizard, validators, gitops bootstrap) reference the same string.
 const (
@@ -270,7 +275,7 @@ func (f *Flux) RequiredTools() []addon.ToolSpec {
 // DefaultSettings returns the built-in defaults for flux's settings map.
 func (f *Flux) DefaultSettings() map[string]string {
 	return map[string]string{
-		SettingProvider:          "flux",
+		SettingProvider:          ProviderID,
 		SettingBranch:            "main",
 		SettingPath:              "kubernetes/clusters/production",
 		SettingControllerTimeout: "300",
