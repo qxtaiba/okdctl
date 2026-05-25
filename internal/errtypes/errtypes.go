@@ -7,7 +7,10 @@
 // classified as ClusterError (exit 4) until a retry-aware consumer exists
 // that needs to distinguish them from permanently-degraded states. Introducing
 // a TransientError type is deferred until that consumer lands (roadmap
-// err:9f8e7d6c).
+// err:9f8e7d6c); see audit err:a4001485. Until then, three sites carry
+// ad-hoc retry classification that TransientError will consolidate:
+// infrastructure/proxmox/proxmox.go::initIsRetryable,
+// addon/helpers.go::addonIsRetryable, download/retry.go::isRetryable.
 package errtypes
 
 import (
