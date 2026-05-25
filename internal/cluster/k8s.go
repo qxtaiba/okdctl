@@ -59,7 +59,7 @@ func WithEnvFallback() Option {
 		if c.Kubeconfig == "" {
 			if kc := os.Getenv("KUBECONFIG"); kc != "" {
 				if err := validateKubeconfigEnv(kc); err != nil {
-					c.logger.Debug("ignoring $KUBECONFIG env value", "reason", err.Error())
+					c.logger.Debug("ignoring $KUBECONFIG env value", "err", err)
 				} else {
 					c.Kubeconfig = kc
 				}
