@@ -93,7 +93,7 @@ func Acquire(projectRoot, verb string) (*Lock, error) {
 // parsed from body differs from localHost, indicating an NFSv3 cross-host
 // stale-lock situation where kernel flock does not propagate.
 func crossHostHint(body, localHost string) string {
-	for _, field := range strings.Fields(body) {
+	for field := range strings.FieldsSeq(body) {
 		val, ok := strings.CutPrefix(field, "HOST=")
 		if !ok {
 			continue

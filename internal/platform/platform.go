@@ -119,7 +119,7 @@ func detectFamily(id, idLike string) Family {
 	if debianIDs[id] {
 		return FamilyDebian
 	}
-	for _, like := range strings.Fields(idLike) {
+	for like := range strings.FieldsSeq(idLike) {
 		if rhelIDs[like] {
 			return FamilyRHEL
 		}
