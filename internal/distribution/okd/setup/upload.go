@@ -178,7 +178,9 @@ func (p *Phase) UploadCustomISOsToProxmox(ctx context.Context, cfg *config.Confi
 
 // isoUploadAlreadyDone returns true when every local ISO has an identical
 // sha256 on the Proxmox host. Any SSH failure or absent Proxmox config
-// conservatively returns (false, nil).
+// conservatively returns (false, nil). Audit state:eb479d86 confirmed this
+// invariant: the conservative-not-done choice lets Exec surface the real
+// failure rather than silently skipping the upload.
 func (p *Phase) isoUploadAlreadyDone(ctx context.Context, cfg *config.Config, opts *Options) (bool, error) {
 	if cfg.Provider.Proxmox == nil {
 		return false, nil
