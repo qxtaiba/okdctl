@@ -133,6 +133,9 @@ func (p *Provider) Connect(ctx context.Context, cfg *config.Config) error {
 		return &errtypes.ConfigError{Msg: "proxmox host is invalid", Err: err}
 	}
 	p.node = cfg.Provider.Proxmox.Node
+	if err := config.ValidateProxmoxNodeName(p.node); err != nil {
+		return &errtypes.ConfigError{Msg: "proxmox node name is invalid", Err: err}
+	}
 	if p.sshExec != nil && (cfg.Provider.Proxmox.SSHHostFingerprint != "" || cfg.Provider.Proxmox.RequirePinnedFingerprint) {
 		path, err := sshpin.Verify(ctx, phase.ProxmoxBareHost(p.host), cfg.Provider.Proxmox.SSHHostFingerprint, cfg.Provider.Proxmox.RequirePinnedFingerprint, p.logger)
 		if err != nil {
