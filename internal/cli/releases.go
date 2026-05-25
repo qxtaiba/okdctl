@@ -74,6 +74,9 @@ var releasesShowCmd = &cobra.Command{
 func init() {
 	releasesListCmd.Flags().StringVar(&releasesListChannel, "channel", channelStable,
 		"filter versions: stable|all")
+	_ = releasesListCmd.RegisterFlagCompletionFunc("channel", func(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
+		return []string{channelStable, channelAll}, cobra.ShellCompDirectiveNoFileComp
+	})
 	releasesListCmd.Flags().StringVarP(&releasesListOutput, flagOutput, flagOutputShort, outputText,
 		"output format: text|json")
 	releasesShowCmd.Flags().StringVarP(&releasesShowOutput, flagOutput, flagOutputShort, outputText,
