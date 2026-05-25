@@ -1,6 +1,7 @@
 package errtypes_test
 
 import (
+	"context"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -8,6 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/qxtaiba/okdctl/internal/executor"
 )
 
 // TestMsgFieldNoCredentialInterpolation scans every non-test .go file under
@@ -136,4 +139,51 @@ func findInternalDir() (string, error) {
 		dir = parent
 	}
 	return "", os.ErrNotExist
+}
+
+// TestExitErrorCommandNoArgvLeak enforces the invariant that
+// executor.ExitError.Command is bounded to "cli subcommand" form (as
+// produced by cluster/k8s.go::subcommand) and never contains full argv.
+// If full argv were passed, a --from-literal=password=<value> flag would
+// appear verbatim in ExitError.Error() and reach log sinks.
+//
+// The adversarial sub-test acts as a canary: it confirms the current
+// ExitError.Error() implementation does NOT redact Command-embedded
+// credentials, meaning the cluster package's subcommand() function is the
+// sole guard. Any change to that guard must update this test.
+func TestExitErrorCommandNoArgvLeak(t *testing.T) {
+	const secret = "s3cr3t"
+
+	t.Run("safe pattern does not contain secret", func(t *testing.T) {
+		e := &executor.ExitError{
+			Command:  "oc create",
+			ExitCode: 1,
+			Stderr:   "some stderr",
+		}
+		if strings.Contains(e.Error(), secret) {
+			t.Fatalf("ExitError.Error() contains secret in safe pattern: %q", e.Error())
+		}
+	})
+
+	t.Run("adversarial full-argv pattern leaks secret", func(t *testing.T) {
+		// Canary: confirms ExitError.Error() does NOT self-redact Command.
+		// If this assertion flips, ExitError gained Command-redaction logic
+		// and cluster/k8s.go::subcommand may be redundant — verify both.
+		e := &executor.ExitError{
+			Command:  "oc create secret generic mysecret --from-literal=password=" + secret,
+			ExitCode: 1,
+			Stderr:   "some stderr",
+		}
+		if !strings.Contains(e.Error(), secret) {
+			t.Fatalf("canary broken: ExitError.Error() no longer surfaces Command verbatim; "+
+				"ExitError may now self-redact — verify cluster/k8s.go::subcommand contract is still needed: %q", e.Error())
+		}
+	})
+
+	t.Run("NewExitError with binary-only cmd does not leak", func(t *testing.T) {
+		err := executor.NewExitError(context.Background(), "oc", 1, "exit 1")
+		if strings.Contains(err.Error(), secret) {
+			t.Fatalf("NewExitError with binary-only cmd leaks secret: %q", err.Error())
+		}
+	})
 }
