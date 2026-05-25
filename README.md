@@ -75,11 +75,20 @@ escalates internally for the commands that need it (`nmcli`, `firewall-cmd`,
 ## Usage
 
 ```
-okdctl deploy           run the wizard, then deploy the cluster
-okdctl destroy          tear down a cluster
-okdctl update-ingress   switch ingress controllers to LoadBalancer IPs
-okdctl doctor           environment preflight check
-okdctl --version        print version, git commit, build date
+okdctl addon            manage cluster addons
+okdctl cleanup          remove OKD cluster artifacts without destroying infrastructure
+okdctl completion       generate shell completion script
+okdctl config           inspect okdctl configuration
+okdctl debug-bundle     collect a support bundle for troubleshooting
+okdctl deploy           deploy a Kubernetes cluster
+okdctl describe         drill into a specific node or addon
+okdctl destroy          destroy a Kubernetes cluster
+okdctl doctor           check that your environment is ready to deploy a cluster
+okdctl kubeconfig       print or export the cluster kubeconfig
+okdctl releases         query available OKD versions
+okdctl status           print a post-deploy cluster summary
+okdctl update-ingress   switch ingress DNS from HAProxy to LoadBalancer IPs
+okdctl version          print version, git commit, build date
 ```
 
 Full command reference: [`docs/cli/okdctl.md`](docs/cli/okdctl.md).
