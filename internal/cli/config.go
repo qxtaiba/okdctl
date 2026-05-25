@@ -1,8 +1,8 @@
 package cli
 
 import (
+	"encoding/json"
 	"fmt"
-	"os"
 	"reflect"
 	"strings"
 
@@ -22,11 +22,14 @@ var configCmd = &cobra.Command{
 	Long:  "Show and validate the resolved okdctl configuration; start with 'config show' to see the active values.",
 }
 
+var configShowOutput string
+
 var configShowCmd = &cobra.Command{
-	Use:     "show",
-	Short:   "Print the resolved configuration with secrets redacted",
-	Example: "  okdctl config show",
-	RunE:    runConfigShow,
+	Use:   "show",
+	Short: "Print the resolved configuration with secrets redacted",
+	Example: `  okdctl config show
+  okdctl config show --output json | jq '.provider'`,
+	RunE: runConfigShow,
 }
 
 var configValidateCmd = &cobra.Command{
@@ -37,6 +40,7 @@ var configValidateCmd = &cobra.Command{
 }
 
 func init() {
+	configShowCmd.Flags().StringVarP(&configShowOutput, flagOutput, flagOutputShort, outputText, "output format: text|json")
 	configCmd.AddCommand(configShowCmd)
 	configCmd.AddCommand(configValidateCmd)
 	rootCmd.AddCommand(configCmd)
@@ -56,18 +60,29 @@ func runConfigValidate(cmd *cobra.Command, _ []string) error {
 	return &errtypes.ConfigError{Msg: result.Error()}
 }
 
-func runConfigShow(_ *cobra.Command, _ []string) error {
+func runConfigShow(cmd *cobra.Command, _ []string) error {
+	if err := validateFormat(configShowOutput); err != nil {
+		return err
+	}
+
 	cfg, err := loadConfig(cfgFile)
 	if err != nil {
 		return err
 	}
 
-	out, err := yaml.Marshal(redactConfig(cfg))
+	redacted := redactConfig(cfg)
+
+	if configShowOutput == outputJSON {
+		enc := json.NewEncoder(cmd.OutOrStdout())
+		enc.SetIndent("", "  ")
+		return enc.Encode(redacted)
+	}
+
+	out, err := yaml.Marshal(redacted)
 	if err != nil {
 		return fmt.Errorf("marshal config: %w", err)
 	}
-
-	_, err = os.Stdout.Write(out)
+	_, err = cmd.OutOrStdout().Write(out)
 	return err
 }
 
