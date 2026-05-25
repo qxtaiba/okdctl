@@ -25,6 +25,12 @@ func pveshRun(ctx context.Context, p *RemoteISOParams, subcommand, path string) 
 // PveshRun is the exported entry point for callers outside package phase.
 // It inherits pveshRun's validateProxmoxName guard, so callers must not
 // validate p.Node themselves. Returns the raw JSON stdout on success.
+//
+// Lives in phase/ rather than infrastructure/proxmox to avoid an import
+// cycle: proxmox imports phase (for VMState, NodeRole), so pvesh helpers
+// cannot live in proxmox without cycling back. infrastructure/proxmox is
+// the sole direct consumer. api:7f2bf677 — if iso_cleanup moves out of
+// phase/, pvesh helpers follow.
 func PveshRun(ctx context.Context, p *RemoteISOParams, subcommand, path string) (string, error) {
 	result, err := pveshRun(ctx, p, subcommand, path)
 	if err != nil {
