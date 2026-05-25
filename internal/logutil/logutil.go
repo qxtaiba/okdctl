@@ -22,6 +22,12 @@ func OrNop(l *slog.Logger) *slog.Logger {
 
 // ProgressReporter starts a progress indicator for desc and returns a stop
 // func. The stop func MUST be idempotent. Implementations may discard desc.
+//
+// The type is defined here rather than in internal/tui (where StartSpinner,
+// the real implementation, lives) to break an import cycle: internal/tui
+// imports internal/logutil for RedactHandler, so placing this type in tui
+// would force every phase and infrastructure package that stores a reporter
+// field to import tui, completing the cycle.
 type ProgressReporter func(desc string) (stop func())
 
 // NopProgressReporter is the no-op ProgressReporter; domain constructors use
