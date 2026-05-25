@@ -10,12 +10,14 @@ okdctl config show [flags]
 
 ```
   okdctl config show
+  okdctl config show --output json | jq '.provider'
 ```
 
 ### Options
 
 ```
-  -h, --help   help for show
+  -h, --help            help for show
+  -o, --output string   output format: text|json (default "text")
 ```
 
 ### Options inherited from parent commands
