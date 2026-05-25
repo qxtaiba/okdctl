@@ -154,6 +154,12 @@ func (c *ProxmoxCredentials) GoString() string {
 // WithEnv option in the same frame as defer Zeroize() and MUST NOT pass
 // the slice to anything that outlives the current call stack (goroutine,
 // cache, persistent config). The source []byte fields remain wipeable.
+//
+// Known call sites (review when adding a new one):
+//
+//	cli/deploy.go       — proxmox.WithEnv(creds.Env()); defer prov.ZeroizeEnv()
+//	cli/destroy.go      — terraform.WithEnv(creds.Env()); defer tf.ZeroizeEnv()
+//	cli/helpers.go      — okd.WithEnv(creds.Env()); callers defer p.ZeroizeEnv()
 func (c *ProxmoxCredentials) Env() []string {
 	if !c.IsValid() {
 		return nil
@@ -164,7 +170,8 @@ func (c *ProxmoxCredentials) Env() []string {
 	if c.UseAPIToken() {
 		env = append(env, envProxmoxAPIToken+"="+string(c.APIToken))
 	} else {
-		env = append(env,
+		env = append(
+			env,
 			envProxmoxUsername+"="+c.Username,
 			envProxmoxPassword+"="+string(c.Password),
 		)

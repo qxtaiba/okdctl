@@ -218,6 +218,11 @@ write the comment — then it carries real information.
   `terraform.WithEnv(creds env)` must also receive `defer tf.ZeroizeEnv()`
   immediately after construction so error paths and early returns do not
   leave credential strings reachable until GC.
+  **Reviewer checklist:** any PR that adds a new `creds.Env()` call site
+  must also add that site to the known-call-sites registry in the
+  `ProxmoxCredentials.Env()` doc comment (`internal/credentials/proxmox.go`)
+  and verify `defer ZeroizeEnv()` is present on the object constructed with
+  that env slice.
 
 ## Dependencies
 
