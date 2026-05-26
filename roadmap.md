@@ -492,26 +492,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Defense-in-depth: add a runtime check that env-slice receivers (terraform.Executor, proxmox.Provider) install ZeroizeEnv defers immediately. Could be enforced by a small linter rule that flags any call site that uses creds.Env() without defer x.ZeroizeEnv() in the same function. The doc at L150-L156 already nails the rule; missing piece is mechanical enforcement.
 **Effort:** hours
 
-##### `sec:4c092fce:toctou-chmod` — toctou chmod
-
-**Status:** in review — PR #747
-**Severity:** minor
-**Cluster:** file-toctou
-**Evidence:** `internal/infrastructure/terraform/terraform.go:395-414`
-**Problem:** SnapshotState reads terraform.tfstate at the working dir then AtomicWrites a backup to <workDir>/terraform.tfstate.<ts>.bak with perm 0o600. terraform.tfstate itself contains the proxmox credentials marshalled by the bpg provider — and the backup also lands at 0o600. However, the os.ReadFile at L403 does not Lstat-then-O_NOFOLLOW: a planted symlink at the state-file path would let the read follow into an attacker-chosen file (which is then copied to the backup path under workDir). Workdir is chown'd back to the invoking user, so the threat is the same pre-sudo symlink redirection as in flux.go and ignition.go.
-**Fix:** Open the state file with syscall.O_NOFOLLOW (read-only). The workdir is created by okdctl phases so legitimate operators won't have symlinks here, but the file is root-owned under sudo and a pre-sudo attacker could plant one. Same pattern as runlock.Acquire.
-**Effort:** hours
-
-##### `sec:48688e63:input-cidr-not-parsed` — input cidr not parsed
-
-**Status:** in review — PR #741
-**Severity:** suggestion
-**Cluster:** input-validation
-**Evidence:** `internal/infrastructure/proxmox/proxmox.go:131-145`
-**Problem:** Provider.Connect reads cfg.Provider.Proxmox.Host and immediately calls config.ValidateProxmoxHost, but uses cfg.Provider.Proxmox.Node verbatim at L135 with no validateProxmoxName check. p.node then flows downstream into phase.RemoteISOParams.Node (proxmox.go:L482) and through pveshRun (pvesh.go:L13) where validateProxmoxName fires — so the gate exists. But the validation happens late; if a future caller bypasses pveshRun and uses p.node directly in an ssh argv, an unvalidated node name reaches the remote shell.
-**Fix:** Add a validateProxmoxName(p.node) check in Connect, mirroring the ValidateProxmoxHost gate above it. The downstream pveshRun fires today, but defense-in-depth at the API boundary catches the misuse case where a new caller bypasses pveshRun.
-**Effort:** hours
-
 
 #### audit-subprocess
 
@@ -545,16 +525,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/distribution/okd/postinstall/steps.go:23-115`
 **Problem:** PhaseContext (pctx) is in-process memory only. The 5-step postinstall sequence — verify-health, cleanup-bootstrap, verify-kubevip, deploy-production-dns, install-addons — has no persistent checkpoint. A crash between StepCleanupBootstrap and StepDeployProductionDNS loses the KubeVipIP that StepVerifyKubeVIP computed; the next run starts at verify-health and recomputes everything from scratch, relying on filesystem sentinels (bootstrap-state.auto.tfvars.json for bootstrap, dnsmasq config for DNS state) for idempotency. Resume is fragile because the recovery path depends on multiple independent sentinels staying in sync.
 **Fix:** Two-stage fix tracked separately on roadmap: (1) lightweight — write a per-phase JSON checkpoint at <workDir>/.<phase>-checkpoint.json after each successful step containing the StepID and any pctx state needed for resume. AlreadyDone reads the checkpoint at orchestrator start. (2) heavier — extend StepDef with a Checkpoint hook and have Orchestrator persist after each success. Today's mitigation is the on-disk sentinels (bootstrap-state.auto.tfvars.json, dnsmasq conf state, kubeconfig presence) which each step's AlreadyDone consults independently. Defer per roadmap state:4f69fc9d; do not act now.
-**Effort:** hours
-
-##### `state:b5a79fda:deploy-state-marker-not-version-tagged` — deploy state marker not version tagged
-
-**Status:** in review — PR #744
-**Severity:** suggestion
-**Cluster:** state-schema-evolution
-**Evidence:** `internal/cli/deploystate.go:26-32`
-**Problem:** deployState JSON schema (phase/run_id/timestamp/cluster_name) has no schemaVersion field. If the format evolves (e.g. add a step_id or a partial-progress field), an old marker file is silently unmarshaled with zero values for new fields — the recovery announce path can degrade to wrong-cluster-warnings or stale-marker false positives.
-**Fix:** Add `SchemaVersion string \`json:"schema_version"\`` to deployState with a package constant `deployStateSchemaV1 = "v1"`. writeDeployState sets it; readDeployState rejects mismatched versions with a Warn+ignore (the file is advisory, not authoritative). Mirrors config.SchemaVersionV1 pattern. Consider deferring until the schema actually evolves.
 **Effort:** hours
 
 ##### `state:b38ec9cc:workers-targeted-apply-skips-other-drift` — workers targeted apply skips other drift
@@ -619,16 +589,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 
 #### audit-iac-and-shell
-
-##### `iac:e076e43c:sh-cosign-cert-identity-regex-loose` — sh cosign cert identity regex loose
-
-**Status:** in review — PR #748
-**Severity:** minor
-**Cluster:** install-sh-integrity
-**Evidence:** `scripts/install.sh:156-157`
-**Problem:** --certificate-identity-regexp is `https://github\.com/qxtaiba/okdctl/` — matches any workflow path under the repo. Defense-in-depth would pin to the specific release workflow (e.g., `\.github/workflows/release\.yml@refs/tags/v.*`) so a future stray signed workflow can't satisfy the check. The OIDC issuer check is still the real gate, but the cert-identity should narrow as tightly as the release process tolerates.
-**Fix:** Tighten to `--certificate-identity-regexp='^https://github\.com/qxtaiba/okdctl/\.github/workflows/release\.yml@refs/tags/v[0-9]+\.[0-9]+\.[0-9]+'` (or whatever the goreleaser release workflow path is). Verify the regex matches the cert identity that goreleaser-action embeds in the SHA256SUMS signature; iterate in a draft release if needed.
-**Effort:** hours
 
 
 #### audit-errors
@@ -1002,16 +962,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Move the bash/zsh/fish snippets from Long into Example and shorten Long to a one-paragraph description. Cobra renders Example in a dedicated section in --help, which puts the snippets where users look for runnable commands.
 **Effort:** hours
 
-##### `ux:d31d1b9d:help-short-tone` — help short tone
-
-**Status:** in review — PR #742
-**Severity:** minor
-**Cluster:** help-text
-**Evidence:** `internal/cli/status.go:38-42`
-**Problem:** describeCmd.Short uses 'Drill into a specific node or addon' — colloquial 'drill into' is out of voice with the rest of the surface where Shorts are clinical imperatives ('Print', 'List', 'Show', 'Manage', 'Verify'). The Long is also a meta-sentence about how to start, not what the verb does.
-**Fix:** Rewrite Short to a clean imperative such as 'Show details for a cluster node or addon' to match the tone of statusCmd.Short ('Print a post-deploy cluster summary'). Tighten Long to a single descriptive sentence (drop the 'start with' meta-prose).
-**Effort:** hours
-
 ##### `ux:fd2125dd:concept-named-twice` — concept named twice
 
 **Status:** not started
@@ -1072,28 +1022,8 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Document a per-command default-value convention for --output-file in CLAUDE.md §flag-naming-convention: '-' for stdout-by-default (kubeconfig), '' for auto-generated (debug-bundle), and a literal default file for deploy. Currently a reader of okdctl deploy --help cannot tell whether '' would create or overwrite. Consider unifying on '-' = stdout for all three and a separate --auto-name flag for debug-bundle.
 **Effort:** hours
 
-##### `ux:b3356305:help-no-example` — help no example
-
-**Status:** in review — PR #746
-**Severity:** minor
-**Cluster:** help-text — seam→`audit-documentation`
-**Evidence:** `README.md:77-83`
-**Problem:** README.md §usage shows a four-line summary block listing only deploy/destroy/update-ingress/doctor/--version. It omits all major user-visible commands the generated docs/cli/okdctl.md does include: addon, cleanup, completion, config, debug-bundle, describe, kubeconfig, releases, status. A reader looking at the README will not discover okdctl status (the cluster-summary command), okdctl debug-bundle (the troubleshooting bundle), or okdctl kubeconfig (the export command).
-**Fix:** Expand README.md §usage to mirror the SEE ALSO section of docs/cli/okdctl.md — list every top-level command with a one-line description, or link explicitly: 'See docs/cli/okdctl.md for the full reference.' Currently the link is at L85-L86 but the truncated list above it suggests those are the only commands.
-**Effort:** hours
-
 
 #### audit-observability
-
-##### `obs:fde34e0c:err-stringified` — err stringified
-
-**Status:** in review — PR #750
-**Severity:** minor
-**Cluster:** field-stability
-**Evidence:** `internal/cluster/k8s.go:61-61`
-**Problem:** `c.logger.Debug("ignoring $KUBECONFIG env value", "reason", err.Error())` stringifies err before the slog sink sees it. RedactHandler's redactAny dispatch operates on typed values — once err is collapsed to a string, the handler cannot inspect the chain for a `Redacted() any` implementation or for *url.URL userinfo. The validateKubeconfigEnv error here is unlikely to carry a credential today, but the pattern is the failure mode CLAUDE.md §credentials-and-secrets warns against.
-**Fix:** Replace `"reason", err.Error()` with `"err", err`. The structured attr lets RedactHandler.redactAny() dispatch on the typed value, and an `errors.As` consumer downstream can still walk the chain. Net 0 LOC.
-**Effort:** hours
 
 ##### `obs:97cb8adf:span-no-start-end` — span no start end
 
@@ -1113,26 +1043,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/distribution/orchestrator.go:184-188`
 **Problem:** Orchestrator logs a fatal step at Error (L185) and then returns the error to the caller, which propagates up to cli/root.go::execute() and is logged a second time via `tui.Error("command failed", ...)`. The double-log is somewhat intentional (orchestrator wants per-step trace; root wants summary) but yields two Error lines for one event in the user-facing log stream.
 **Fix:** Demote the fatal branch to Warn (`o.logger.Warn("step: failed (fatal)", ...)`) so the orchestrator's per-step trace stays one level below the cli-layer's Error. Or accept the double-log as deliberate audit-trail and document the exception in CLAUDE.md so future contributors do not normalise to Warn.
-**Effort:** hours
-
-##### `obs:632c9087:any-on-volatile-type` — any on volatile type
-
-**Status:** in review — PR #745
-**Severity:** suggestion
-**Cluster:** field-stability
-**Evidence:** `internal/distribution/okd/postinstall/update_ingress.go:103-108`
-**Problem:** `p.Log.Info("update-ingress: discovered controllers", "count", len(controllers), "controllers", strings.Join(descriptions, ", "))` constructs a descriptions slice via fmt.Sprintf in a loop at L103-L106 and joins them into a single comma-separated string before logging. The structured attr `controllers` carries a stringified blob rather than a slice — a consumer that wants to filter on one controller name has to substring-match instead of using slog.Group/slice iteration.
-**Fix:** Pass the slice directly: `slog.Any("controllers", descriptions)` (or attach a typed struct slice). The slog JSON handler renders the slice as a JSON array, keeping the per-controller name available to downstream filters. Note: `count` is then redundant — len() reproduces it at log-rendering time, so drop it from the attrs.
-**Effort:** hours
-
-##### `obs:bbc23e42:handler-no-tty-switch` — handler no tty switch
-
-**Status:** in review — PR #749
-**Severity:** suggestion
-**Cluster:** handler-setup
-**Evidence:** `internal/tui/logger.go:41-48`
-**Problem:** tui/logger.go::init() builds stdoutLogger and stderrLogger via `charmlog.New(os.Stdout)` / `charmlog.New(os.Stderr)`, but only stderrLogger is wrapped through RedactHandler via buildStderrSlog(). stdoutLogger is used exclusively for non-slog UI output (json/text marshalled directly to stdout, kubeconfig contents), not for structured log records. The invariant is correct today but undocumented — a future contributor adding `slog.New(stdoutLogger)` for, e.g., a `--log-to-stdout` flag, would silently bypass RedactHandler.
-**Fix:** Add a one-line invariant comment above stdoutLogger's init: `// stdoutLogger backs direct charmlog Print* output (json text, kubeconfig). It is NOT routed through slog.Default — the slog → RedactHandler discipline is enforced exclusively via stderrSlog. Adding a slog.Logger that targets stdout requires wrapping with logutil.NewRedactHandler.` Doc-only change; locks the invariant against accidental bypass.
 **Effort:** hours
 
 
@@ -1156,16 +1066,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/distribution/okd/install/workers.go:91-97`
 **Problem:** Materialises strings.Split(out, newline) into a slice when only iterating to count non-blank lines. Go 1.24's strings.Lines is the iterator form; the repo already uses it in eight other sites.
 **Fix:** Replace `for _, line := range strings.Split(out, "\n")` with `for line := range strings.Lines(out)`. Matches the dominant pattern in internal/platform/platform.go:L85, internal/distribution/okd/install/flux.go:L36, internal/distribution/okd/setup/tools.go:L287. Note strings.Lines retains the trailing newline on each emitted line, so the TrimSpace check still works.
-**Effort:** hours
-
-##### `mod:6fc3d91e:use-strings-fieldsseq` — use strings fieldsseq
-
-**Status:** in review — PR #751
-**Severity:** minor
-**Cluster:** slices-maps
-**Evidence:** `internal/platform/platform.go:122-129` + 1 more
-**Problem:** Two iterate-once sites materialise strings.Fields(s) into a slice. Go 1.24's strings.FieldsSeq is the iterator form — no slice allocation, same loop body.
-**Fix:** Replace `for _, x := range strings.Fields(s)` with `for x := range strings.FieldsSeq(s)` at internal/platform/platform.go:L122 and internal/runlock/runlock.go:L96.
 **Effort:** hours
 
 ##### `mod:9d79b841:use-strings-cut` — use strings cut
@@ -1302,16 +1202,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `go.mod:47-48`
 **Problem:** modern-go/concurrent (last commit Aug 2019, 6.5y stale) and modern-go/reflect2 (last release 2021, last commit Mar 2025) are abandoned-but-shipping. Both transitively required by json-iterator/go → k8s.io/apimachinery. License Apache-2.0 (clean). Pure tripwire: if upstream go-namespace ever lapses, k8s ecosystem breaks for everyone.
 **Fix:** No action; can't dislodge transitively. Removal comes when json-iterator/go is removed (see dep:33ef32bf:json-iterator-stale). Record the tripwire so a future GitHub-namespace-vacate event triggers an immediate k8s.io bump.
-**Effort:** hours
-
-##### `dep:33ef32bf:claude-md-yaml-quad-outdated` — claude md yaml quad outdated
-
-**Status:** in review — PR #743
-**Severity:** suggestion
-**Cluster:** duplicate-engine
-**Evidence:** `CLAUDE.md:1-1`
-**Problem:** CLAUDE.md §dependencies still documents 'Four YAML engines' but `go list -deps -test=false ./cmd/okdctl` shows only two shipping in the binary (sigs.k8s.io/yaml, go.yaml.in/yaml/v2). go.yaml.in/yaml/v3 is build-tool-only (cmd/okdctl-gen-docs via spf13/cobra/doc); gopkg.in/yaml.v3 is test-only. Documentation drifted from current code state.
-**Fix:** Update CLAUDE.md §dependencies to reflect the two-engine production-binary baseline: 'sigs.k8s.io/yaml + go.yaml.in/yaml/v2 ship in cmd/okdctl. go.yaml.in/yaml/v3 is build-tool only (cmd/okdctl-gen-docs). gopkg.in/yaml.v3 is test-only.' Tripwire still applies: do not add a fifth engine.
 **Effort:** hours
 
 ##### `dep:33ef32bf:claude-md-godotenv-stale` — claude md godotenv stale
