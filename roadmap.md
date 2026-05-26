@@ -567,16 +567,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** No code change. The targeted apply is the right choice — un-scoped apply during worker-start would risk applying mid-cluster drift on master VMs. Document this trade-off in the function-level docstring (it's already a comment block, just lift to the function doc) so future readers don't mistake it for a forgotten target restriction.
 **Effort:** hours
 
-##### `state:bdf5a873:work-dir-cleanup-no-resume` — work dir cleanup no resume
-
-**Status:** in review — PR #769
-**Severity:** suggestion
-**Cluster:** crash-recoverability
-**Evidence:** `internal/distribution/okd/cleanup/artifacts.go:70-100`
-**Problem:** WorkDirectory removes per-subdirectory via SafeRemoveWithLogger with errs accumulated, but no transactional or resume semantics. A SIGKILL between `remove(opts.WorkDir, cluster configuration)` and `remove(workDir, work directory)` leaves a partially-stripped okd-install/ — the next cleanup run sees the missing children, treats AlreadyDone as 'not done' (DirExists check), and re-runs against the partial state. This is fine because os.RemoveAll is idempotent on missing children, but the package-level docstring already documents this gap ('Cleanup is best-effort: a mid-run crash leaves workDir in a partially-removed state with no resume capability').
-**Fix:** No code change. The package docstring at cleanup.go:5-6 already names this limitation and documents the mitigation (terraform.tfstate last). Verify the audit-positive baseline holds: cleanup steps after StepCleanupWorkDir do not depend on workDir/* content. Cross-check: webServer/haproxy/dnsmasq/terraform/packages steps reference cfg.HTTPServerRoot, /etc/haproxy/haproxy.cfg, /etc/dnsmasq.d/, infrastructure/terraform/, binDir — all OUTSIDE workDir. Confirmed safe.
-**Effort:** hours
-
 ##### `state:4c092fce:snapshot-pruner-not-locked` — snapshot pruner not locked
 
 **Status:** not started
@@ -605,26 +595,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/runlock/runlock.go:1-10`
 **Problem:** runlock uses syscall.Flock (advisory) for cross-process exclusion in the same project root. The package docstring and CLAUDE.md §architecture-notes both document the NFSv3 cross-host caveat. crossHostHint() at line 95-108 even surfaces the HOST= field mismatch in the error message. Terraform's own state lock (-lock-timeout=120s on every locking subcommand) is the authoritative guard.
 **Fix:** No code change. The dual-lock model is correct: runlock catches the common case (same-host concurrent okdctl), terraform's -lock-timeout=120s catches the cross-host case with a queue-then-fail-with-diagnostic. Verify: every state-locking subcommand in terraform.go (Plan, PlanStreamed, Apply, Destroy direct/with-plan) passes -lock-timeout=120s — confirmed at lines 244, 264, 284, 347.
-**Effort:** hours
-
-##### `state:fb54208a:postinstall-no-rollback-recurring` — postinstall no rollback recurring
-
-**Status:** in review — PR #772
-**Severity:** minor
-**Cluster:** crash-recoverability — related: `state:632c9087:update-ingress-haproxy-rollback-missing`
-**Evidence:** `internal/distribution/okd/postinstall/steps.go:42-96`
-**Problem:** Postinstall steps cleanup-bootstrap (destroys bootstrap VM via targeted apply) and deploy-production-dns (replaces /etc/dnsmasq.d/*.conf) are both NonFatal and mutate external state. If StepCleanupBootstrap succeeds, StepVerifyKubeVIP fails, StepDeployProductionDNS is skipped (SkipWhen reads !pctx.Get().KubeVIPVerified), the cluster is left with: bootstrap VM gone, kube-vip unverified, DNS still pointed at bootstrap. There is no rollback step that restores bootstrap DNS pointing at bastion. Already filed in roadmap (state:fb54208a:postinstall-no-rollback-path) as deferred minor.
-**Fix:** Recurring — see roadmap state:fb54208a:postinstall-no-rollback-path. Preferred fix: extend update-ingress to detect 'bootstrap-DNS + bootstrap-VM-gone' state and re-issue production DNS without depending on the postinstall pctx (update-ingress already owns dns.IsBootstrapDNS + dns.DeployProduction). No code change in this audit run; defer per roadmap.
-**Effort:** hours
-
-##### `state:eb479d86:iso-upload-already-done-sha256` — iso upload already done sha256
-
-**Status:** in review — PR #777
-**Severity:** suggestion
-**Cluster:** phase-idempotency
-**Evidence:** `internal/distribution/okd/setup/upload.go:179-205`
-**Problem:** isoUploadAlreadyDone walks every local ISO and SSHes to the Proxmox host to compute sha256 of the remote file — but a SSH-error or a missing-file is conservatively returned as (false, nil), making the step Exec run. Verified correct: the conservative-not-done choice means the step re-runs and the real failure mode surfaces during Exec rather than being silently skipped.
-**Fix:** No change. The sha256 + skip-if-match pattern is idempotent and resilient. The nolint:nilerr comment correctly justifies the policy.
 **Effort:** hours
 
 ##### `state:0f076161:destroy-skip-flag-orthogonal-with-dryrun` — destroy skip flag orthogonal with dryrun
@@ -683,16 +653,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** The bare wrap is intentional and load-bearing — internal/cli/root.go::signalExitCode walks the chain via errors.Is(err, context.Canceled) before exitCodeFor runs, mapping SIGINT→130. The pattern matches the install/monitor.go canon. Add an inline comment (matching install/monitor.go:L65-68) so reviewers do not wrap it in ClusterError and break the SIGINT→130 mapping.
 **Effort:** hours
 
-##### `err:d6b325cb:proxmox-sentinel-ad-hoc` — proxmox sentinel ad hoc
-
-**Status:** in review — PR #780
-**Severity:** suggestion
-**Cluster:** sentinel-vs-typed
-**Evidence:** `internal/infrastructure/proxmox/types.go:10-13`
-**Problem:** Package proxmox defines two exported sentinels (ErrNotConnected, ErrTerraformNotConfigured) outside errtypes. Both are reachable from external callers via errors.Is. The repo's stated vocabulary lives in errtypes — these sentinels are wrapped in ConfigError at every call site (proxmox.go:L191, L199, L273, L281) so the chain is correct, but the placement diverges from the errtypes-as-home convention.
-**Fix:** Leave as-is OR move to errtypes as ErrProviderNotConnected / ErrProviderUnconfigured for vocabulary uniformity. Package-local sentinels for package-internal preconditions are idiomatic Go (see io.EOF, fs.ErrNotExist) and the caller-facing class is ConfigError (correctly classified by errors.As).
-**Effort:** hours
-
 ##### `err:97cb8adf:subprocess-stderr-tail-latent-leak` — subprocess stderr tail latent leak
 
 **Status:** in review — PR #753
@@ -713,16 +673,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** No code change required. Add an invariant test or document on executor.NewExitError that the Command field never includes argv beyond name+' '+args[0] for cluster.* call sites. Alternative: extend the existing TestMsgFieldNoCredentialInterpolation in errtypes_credleak_test.go to also scan executor.ExitError.Command formats.
 **Effort:** hours
 
-##### `err:b804b2ec:bootstrap-tfvars-classification` — bootstrap tfvars classification
-
-**Status:** in review — PR #776
-**Severity:** suggestion
-**Cluster:** sentinel-vs-typed
-**Evidence:** `internal/distribution/okd/postinstall/bootstrap.go:89-92`
-**Problem:** bootstrap-state.auto.tfvars.json write failure surfaces as &errtypes.ClusterError. Symmetric concern with destroy/helpers.go:L41 (state snapshot → ClusterError). Documented here as the canonical example so reviewers do not reclassify state-write failures as ConfigError just because the file is config-shaped — the write happens after a successful bootstrap-vm destroy and is part of the cluster lifecycle, not a config the user edits.
-**Fix:** Leave as-is. ClusterError → exit 4 is correct here. Flagged for completeness because the rule slug suggests reviewers may second-guess; do not change.
-**Effort:** hours
-
 ##### `err:b38ec9cc:lock-hint-exit-code-flip` — lock hint exit code flip
 
 **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/err-b38ec9cc-lock-hint
@@ -731,16 +681,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/distribution/okd/install/workers.go:39-71` + 3 more
 **Problem:** errors.Join(hint, wrapped) where hint is *errtypes.ConfigError and wrapped is *errtypes.ClusterError works because errors.Join's Unwrap() []error lets errors.As walk to both. But exitCodeFor walks the declaration order: ConfigError → 2, ClusterError → 4. errors.As returns on the first match. The hint matches ConfigError → exit 2; the ClusterError → exit 4 mapping is unreachable. terraform init failure → ClusterError → 4 normally; same failure under a stale lock → ConfigError → 2. Operators scripting against exit codes will see flaky behaviour.
 **Fix:** Either (a) downgrade LockHint to return a *string* that the wrapped ClusterError appends to Msg (exit code stays uniform), or (b) restructure to wrap the hint message inside the ClusterError's Msg with the underlying err: `&errtypes.ClusterError{Msg: msg + '; ' + hintMsg, Err: err}` so only one typed error is in the chain. (c) Or accept the exit-2-for-locked-state mapping and document it in cli/root.go's exit-code table. Today the chain produces inconsistent exit codes silently.
-**Effort:** hours
-
-##### `err:a4001485:errtypes-no-recoverable-type` — errtypes no recoverable type
-
-**Status:** in review — PR #775
-**Severity:** suggestion
-**Cluster:** domain-vocabulary
-**Evidence:** `internal/errtypes/errtypes.go:1-11` + 3 more
-**Problem:** Package doc explicitly defers a Transient/Recoverable error type until a retry-aware consumer exists. Three sites today implement ad-hoc retry-classification by case-on-type (proxmox/proxmox.go::initIsRetryable, addon/helpers.go::addonIsRetryable, download/retry.go::isRetryable). Each duplicates the 'cancel/deadline/cfg/auth → non-retryable' shape. The roadmap consumer (err:9f8e7d6c) is the right time to land a TransientError — but the three duplicate sites already exist and are now divergent.
-**Fix:** Verify intent (grep roadmap.md, ask owner) — do not delete; per MEMORY.md §scaffolding.
 **Effort:** hours
 
 ##### `err:40d315ad:addon-flux-error-as-string` — addon flux error as string
@@ -879,16 +819,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Verify intent (grep roadmap.md, ask owner) — do not delete; per MEMORY.md §scaffolding.
 **Effort:** hours
 
-##### `api:3e02f6b8:export-no-caller-vmstate` — export no caller vmstate
-
-**Status:** in review — PR #770
-**Severity:** suggestion
-**Cluster:** exported-surface
-**Evidence:** `internal/distribution/okd/phase/vmstate.go:11-17`
-**Problem:** VMState constants StateStopped, StateCreating, StateDeleting, StateUnknown have no in-repo caller — only StateRunning is referenced by proxmox.Provider mapping pvesh output. The full state matrix is documented as a single source of truth for a future status path that surfaces partial-running clusters.
-**Fix:** Verify intent (grep roadmap.md, ask owner) — do not delete; per MEMORY.md §scaffolding.
-**Effort:** hours
-
 ##### `api:0139cb3f:export-three-bindir-functions` — export three bindir functions
 
 **Status:** not started
@@ -929,16 +859,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Verify intent (grep roadmap.md, ask owner) — do not delete; per MEMORY.md §scaffolding.
 **Effort:** hours
 
-##### `api:9ce5434c:export-test-only-pollinterval` — export test only pollinterval
-
-**Status:** in review — PR #773
-**Severity:** suggestion
-**Cluster:** exported-surface
-**Evidence:** `internal/distribution/okd/phase/kubectl.go:48-52`
-**Problem:** BasePhase.OcPollOutputInterval is exported solely as a test-injection seam for phase/kubectl_test.go — production code must use OcPollOutput which forwards with interval=0. The inline doc names the constraint. The exported surface lets any caller bypass the production interval-pinning, but it's the documented test pattern.
-**Fix:** Verify intent (grep roadmap.md, ask owner) — do not delete; per MEMORY.md §scaffolding.
-**Effort:** hours
-
 ##### `api:7b2829bb:opt-name-allowlist-redundant` — opt name allowlist redundant
 
 **Status:** not started
@@ -957,16 +877,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/distribution/okd/postinstall/phase.go:74-75`
 **Problem:** All four phase Execute methods accept *Options but the construction shape diverges: NewOptions returns the value (Options, not *Options) for setup, install, postinstall, destroy. Callers must do opts := setup.NewOptions(...); phase.Execute(ctx, &opts). The double indirection (value-return → pointer-arg) is consistent across siblings but odd: either return *Options or take Options by value. The current shape forces every caller through the address-of dance.
 **Fix:** Pick one: return *Options from NewOptions and accept *Options in Execute (current pattern, but document why the value-return is intentional), OR accept Options by value in Execute (simpler, lets the option-set live in the caller frame). Either choice is fine; the asymmetry between 'returns value' and 'takes pointer' is the issue. Mass-edit four phases simultaneously if you change it.
-**Effort:** hours
-
-##### `api:7f2bf677:pkg-pvesh-in-phase` — pkg pvesh in phase
-
-**Status:** in review — PR #783
-**Severity:** minor
-**Cluster:** package-boundary
-**Evidence:** `internal/distribution/okd/phase/pvesh.go:1-47`
-**Problem:** phase/pvesh.go contains Proxmox-specific subprocess primitives (pveshRun, PveshRun, pveshQEMUPath, pveshConfigPath, pveshResult). These are not 'cross-phase helpers' as the phase package doc claims — they are infrastructure provider plumbing that landed in phase to break the proxmox→phase import cycle (the same compromise vmstate.go and noderole.go document). Symptom: phase imports executor (subprocess) for an SSH/pvesh helper that only one consumer (infrastructure/proxmox) actually calls.
-**Fix:** Long-term: extract Proxmox-specific helpers into infrastructure/proxmox/internal/pvesh (or similar) and let phase iso_cleanup call into infrastructure/proxmox for the pvesh subprocess primitives. The break-cycle compromise was justified when phase needed iso_cleanup; if iso_cleanup moves out of phase (it's already in its own file), the rationale weakens.
 **Effort:** hours
 
 ##### `api:97cb8adf:opt-struct-vs-functional-waitfor` — opt struct vs functional waitfor
@@ -989,36 +899,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Optional: change signature to WithInheritedEnv(b bool) Option { return func(e *Executor) { e.inheritEnv = b } } to match the bool-toggle shape used by download.WithOverwrite(v bool). Today's no-arg form is fine for the single use site that always wants 'true' — the asymmetry is only visible to a future caller wanting dynamic dispatch. Document the call-side intent inline if keeping the no-arg form.
 **Effort:** hours
 
-##### `api:dd75bdeb:export-no-caller-phasecontext` — export no caller phasecontext
-
-**Status:** in review — PR #771
-**Severity:** suggestion
-**Cluster:** exported-surface
-**Evidence:** `internal/distribution/context.go:1-12`
-**Problem:** distribution.PhaseContext is exported and generic (typed via [T any]) with one consumer today (postinstall). The package doc names it scaffolded for symmetric use across phases (state:4f69fc9d, state:262af6e4). The exported surface includes a Unit-style API (Get/Update) that justifies the generic and RWMutex.
-**Fix:** Verify intent (grep roadmap.md, ask owner) — do not delete; per MEMORY.md §scaffolding.
-**Effort:** hours
-
-##### `api:cfcdee2d:export-no-caller-timeout-download` — export no caller timeout download
-
-**Status:** in review — PR #774
-**Severity:** suggestion
-**Cluster:** exported-surface — seam→`audit-modernization`
-**Evidence:** `internal/httputil/httputil.go:18-22`
-**Problem:** httputil.TimeoutDownload is exported with no in-repo caller — TimeoutShort and TimeoutMedium are both used, but the 5-minute download timeout is unreferenced. The trio forms a symmetric tier; deleting the unused one breaks the tier shape.
-**Fix:** Verify intent (grep roadmap.md, ask owner) — do not delete; per MEMORY.md §scaffolding.
-**Effort:** hours
-
-##### `api:bb4fb1a3:zero-value-csr` — zero value csr
-
-**Status:** in review — PR #781
-**Severity:** suggestion
-**Cluster:** zero-value-usability
-**Evidence:** `internal/cluster/types.go:1-9`
-**Problem:** cluster.CSR is a single-field struct (Name string) whose only consumer is PendingCSRs returning a []CSR. The single-field wrap adds an indirection where a []string would suffice; the type doc admits 'Pending bool would always be true and add nothing'. The struct exists for future fields but is currently a 1-field box.
-**Fix:** Verify intent (grep roadmap.md, ask owner) — do not delete; per MEMORY.md §scaffolding.
-**Effort:** hours
-
 ##### `api:a55b4592:zero-value-loader` — zero value loader
 
 **Status:** not started
@@ -1037,16 +917,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/infrastructure/terraform/terraform.go:35-38`
 **Problem:** terraform.ExecError is a type alias to executor.ExitError. The alias makes terraform.ExecError and executor.ExitError compatible for errors.As, but the surface is asymmetric: the rest of the terraform API exports its own types (Executor, PlanOptions, etc.) while ExecError forwards. Callers may not realize the two are the same type, leading to either-or errors.As branches.
 **Fix:** Optional: either (a) keep the alias and document that errors.As(&t.ExecError) and errors.As(&executor.ExitError) are equivalent — both at the type-doc and in package docs — or (b) drop the alias and ask callers to errors.As against executor.ExitError directly. Today no caller branches against ExecError specifically; the alias adds clarity at the cost of one extra type name.
-**Effort:** hours
-
-##### `api:588ce79e:export-color-theme-enum` — export color theme enum
-
-**Status:** in review — PR #778
-**Severity:** suggestion
-**Cluster:** exported-surface
-**Evidence:** `internal/tui/colors.go:9-16`
-**Problem:** tui.ColorTheme + ThemeDefault + ThemeHighContrast are exported but the only consumer of ColorTheme is the package-private setTheme(). No external caller; the enum exists for a future 'okdctl theme' CLI verb that would let users pick a palette.
-**Fix:** Verify intent (grep roadmap.md, ask owner) — do not delete; per MEMORY.md §scaffolding.
 **Effort:** hours
 
 ##### `api:bbc23e42:pkg-progress-reporter-location` — pkg progress reporter location
@@ -1339,26 +1209,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/addon/catalog/secretstore/providers.go:27-52`
 **Problem:** Provider selection routes through bare-string constants (providerOnepassword, providerVault, providerBitwarden) keyed in map[string]provider with no typed enum. resolveProvider returns the resolved name as string, and the error path emits the unrecognised name from settings. A typed ProviderKind would make Settings.Provider, the providers map, and resolveProvider's second return value share one identity.
 **Fix:** Define `type ProviderKind string` plus a ProviderKind field on Settings; key the providers map on ProviderKind; have resolveProvider return (provider, ProviderKind). The cleanup.Kind / bundleStatus / bundleCategory / VMState / NodeRole pattern in this repo is the counter-example. Three values today; second addon (after flux) where the same shape recurs.
-**Effort:** hours
-
-##### `smell:04f0e35f:abstraction-single-caller` — abstraction single caller
-
-**Status:** in review — PR #782
-**Severity:** suggestion
-**Cluster:** helper-package-no-value
-**Evidence:** `internal/system/zeroize.go:1-9`
-**Problem:** system.ZeroBytes is a 1-line wrapper around stdlib clear(b) with one production caller (internal/distribution/okd/setup/ignition.go::GenerateInstallConfig). The doc-comment positions it as the canonical complement to ProxmoxCredentials.Zeroize but adds no semantic gain over the stdlib builtin; defer clear(pullSecret) is shorter and self-evident.
-**Fix:** Verify intent (grep roadmap.md, ask owner) — do not delete; per MEMORY.md §scaffolding.
-**Effort:** hours
-
-##### `smell:cf43073b:enum-ad-hoc` — enum ad hoc
-
-**Status:** in review — PR #779
-**Severity:** suggestion
-**Cluster:** magic-strings
-**Evidence:** `internal/config/types.go:1-32`
-**Problem:** DistributionType and ProviderType are typed string enums with exactly one value each (DistributionOKD, ProviderProxmox). SupportedDistributions and SupportedProviders return one-element slices. The single-value enums look like premature abstraction in a strict reading but match the shape needed once a second distribution or provider lands.
-**Fix:** Verify intent (grep roadmap.md, ask owner) — do not delete; per MEMORY.md §scaffolding.
 **Effort:** hours
 
 ##### `smell:262af6e4:abstraction-single-caller` — abstraction single caller
