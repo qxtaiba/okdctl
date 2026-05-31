@@ -9,7 +9,7 @@ require (
 	charm.land/bubbletea/v2 v2.0.6
 	charm.land/lipgloss/v2 v2.0.3
 	charm.land/log/v2 v2.0.0
-	github.com/luthermonson/go-proxmox v0.6.0
+	github.com/luthermonson/go-proxmox v0.7.0
 	github.com/spf13/cobra v1.10.2
 	golang.org/x/crypto v0.52.0
 	golang.org/x/mod v0.36.0
