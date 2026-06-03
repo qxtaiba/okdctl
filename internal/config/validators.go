@@ -567,7 +567,7 @@ var (
 	ValidateCPU       = ValidateIntRange(" (vcpus)", 1, 128)
 	ValidateMemory    = ValidateIntRange(" (in mb)", 1024, 1048576)
 	ValidateOSDisk    = ValidateIntRange(" (in gb)", 20, 1000)
-	ValidateNodeCount = ValidateIntRange(" (nodes)", 1, 100)
+	ValidateNodeCount = ValidateIntRange(" (nodes)", 0, 100)
 	ValidateVMID      = ValidateIntRange("", 100, 999999999)
 	ValidateTimeout   = ValidateIntRange(" (seconds)", 60, 86400)
 )

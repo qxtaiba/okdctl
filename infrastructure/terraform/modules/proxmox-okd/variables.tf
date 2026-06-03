@@ -109,8 +109,8 @@ variable "worker_isos" {
   description = "custom fedora coreos iso paths for worker nodes"
   type        = list(string)
   validation {
-    condition     = length(var.worker_isos) >= 1
-    error_message = "at least one worker iso must be provided."
+    condition     = length(var.worker_isos) >= var.worker_count
+    error_message = "worker_isos must contain at least worker_count entries."
   }
 }
 
