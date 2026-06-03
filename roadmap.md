@@ -482,17 +482,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Defense-in-depth: after VERSION is resolved, validate it matches the regex ^v[0-9]+\.[0-9]+\.[0-9]+ before constructing URLs. This won't stop a creative attacker but bounds the URL grammar. The cosign cert-identity-regexp at L156 is the real trust root.
 **Effort:** hours
 
-##### `sec:35abd54e:cred-env-leak-to-child` — cred env leak to child
-
-**Status:** in review — PR #752
-**Severity:** suggestion
-**Cluster:** credentials
-**Evidence:** `internal/credentials/proxmox.go:157-178`
-**Problem:** ProxmoxCredentials.Env() converts the secret []byte fields to Go strings via string(c.APIToken) and string(c.Password) on KEY=VALUE concatenation. Per the file's own doc at L150-L156, these Go strings can outlive the []byte sources and cannot be wiped. Executor.ZeroizeEnv (executor.go:L440) and Provider.ZeroizeEnv (proxmox.go:L91) blank the slice entries and clear() the slice — but only on the Executor's owned slice. If a copy of the returned []string is retained anywhere (logged, cached, sent to another goroutine), the immutable string headers persist. The architectural comment is good; one runtime mitigation would help.
-**Fix:** Defense-in-depth: add a runtime check that env-slice receivers (terraform.Executor, proxmox.Provider) install ZeroizeEnv defers immediately. Could be enforced by a small linter rule that flags any call site that uses creds.Env() without defer x.ZeroizeEnv() in the same function. The doc at L150-L156 already nails the rule; missing piece is mechanical enforcement.
-**Effort:** hours
-
-
 #### audit-subprocess
 
 ##### `sub:ae5b624c:parallel-exec-wrapper` — parallel exec wrapper
@@ -613,26 +602,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** The bare wrap is intentional and load-bearing — internal/cli/root.go::signalExitCode walks the chain via errors.Is(err, context.Canceled) before exitCodeFor runs, mapping SIGINT→130. The pattern matches the install/monitor.go canon. Add an inline comment (matching install/monitor.go:L65-68) so reviewers do not wrap it in ClusterError and break the SIGINT→130 mapping.
 **Effort:** hours
 
-##### `err:97cb8adf:subprocess-stderr-tail-latent-leak` — subprocess stderr tail latent leak
-
-**Status:** in review — PR #753
-**Severity:** minor
-**Cluster:** redaction-in-error — seam→`audit-observability`
-**Evidence:** `internal/system/exec.go:25-44`
-**Problem:** SubprocessError stores raw StderrTail and Error() concatenates it: `e.Bin + ': ' + e.Err.Error() + ': ' + e.StderrTail`. Redacted() omits StderrTail so slog attrs are safe. But callers may wrap SubprocessError into outer errors with %w and then stringify. Symmetric concern with executor.ExitError; same fix shape.
-**Fix:** Apply logutil.RedactableStderr head/tail truncation inside Error() so the eyeball-rendered error caps at <=400 bytes regardless of sink. Today there is no proven leak — call sites for OutputCaptured (ssh-keyscan, ip-addr) do not handle credentials. The finding lives at the type to make the contract symmetric with the security invariant.
-**Effort:** hours
-
-##### `err:fde34e0c:k8s-subcommand-load-bearing-comment` — k8s subcommand load bearing comment
-
-**Status:** in review — PR #757
-**Severity:** suggestion
-**Cluster:** redaction-in-error — seam→`audit-observability`
-**Evidence:** `internal/cluster/k8s.go:126-138`
-**Problem:** subcommand() returns args[0] when present, used to construct error messages: `fmt.Errorf('%s %s failed: %w', c.CLI, subcommand(args), err)`. The comment claims this prevents 'arbitrary arg values (which could carry --from-literal=... style secrets) in wrapped errors or logs'. The contract holds — but it is enforced by reviewer discipline, not a test. A future change to executor.ExitError that adds full argv to its message would break this redaction story.
-**Fix:** No code change required. Add an invariant test or document on executor.NewExitError that the Command field never includes argv beyond name+' '+args[0] for cluster.* call sites. Alternative: extend the existing TestMsgFieldNoCredentialInterpolation in errtypes_credleak_test.go to also scan executor.ExitError.Command formats.
-**Effort:** hours
-
 ##### `err:b38ec9cc:lock-hint-exit-code-flip` — lock hint exit code flip
 
 **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/err-b38ec9cc-lock-hint
@@ -641,26 +610,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/distribution/okd/install/workers.go:39-71` + 3 more
 **Problem:** errors.Join(hint, wrapped) where hint is *errtypes.ConfigError and wrapped is *errtypes.ClusterError works because errors.Join's Unwrap() []error lets errors.As walk to both. But exitCodeFor walks the declaration order: ConfigError → 2, ClusterError → 4. errors.As returns on the first match. The hint matches ConfigError → exit 2; the ClusterError → exit 4 mapping is unreachable. terraform init failure → ClusterError → 4 normally; same failure under a stale lock → ConfigError → 2. Operators scripting against exit codes will see flaky behaviour.
 **Fix:** Either (a) downgrade LockHint to return a *string* that the wrapped ClusterError appends to Msg (exit code stays uniform), or (b) restructure to wrap the hint message inside the ClusterError's Msg with the underlying err: `&errtypes.ClusterError{Msg: msg + '; ' + hintMsg, Err: err}` so only one typed error is in the chain. (c) Or accept the exit-2-for-locked-state mapping and document it in cli/root.go's exit-code table. Today the chain produces inconsistent exit codes silently.
-**Effort:** hours
-
-##### `err:40d315ad:addon-flux-error-as-string` — addon flux error as string
-
-**Status:** in review — PR #758
-**Severity:** suggestion
-**Cluster:** string-sniffing — seam→`audit-api-design`
-**Evidence:** `internal/addon/catalog/flux/flux.go:284-312`
-**Problem:** ValidateSettings returns []string by calling err.Error() on the DecodeSettings result. The user-facing wizard validation path expects strings, but the decoder may return errtypes.ConfigError — flattening to string drops the typed-error chain. Today decoder errors come from yaml.UnmarshalStrict (bare errors), so the loss is theoretical. Flagged because the Addon.ValidateSettings([]string) signature dictates that all addon validators must drop typed errors.
-**Fix:** Leave the Addon.ValidateSettings signature as []string — it serves the wizard UI, not orchestrator exit-code branching. Add a comment on the Addon interface noting that callers must NOT use this for exit-code branching; the orchestrator validates separately via cfg.Validate(). The smell is api-design-shaped (the interface returns []string instead of []error).
-**Effort:** hours
-
-##### `err:0b188cab:addon-helpers-lasterr-asymmetric` — addon helpers lasterr asymmetric
-
-**Status:** in review — PR #754
-**Severity:** suggestion
-**Cluster:** wrapping
-**Evidence:** `internal/addon/helpers.go:29-45`
-**Problem:** RetryDefault returns the *last* fn() error or wait.ErrWaitTimeout (whichever ExponentialBackoffWithContext yields). Compared with internal/download/retry.go::retryDownload which captures lastErr separately and returns it on cap-out so callers see the original failure rather than the timeout sentinel. The two retry helpers diverge on the lastErr-preservation pattern even though they are otherwise symmetric.
-**Fix:** Capture lastErr like internal/download/retry.go does, then on Backoff exhaustion return lastErr (wrapped) rather than the wait.ErrWaitTimeout. Symmetric helpers should have symmetric error surfaces. Note: not a fix-mandatory finding — the loop in retryDownload is the canonical pattern; this one diverges silently.
 **Effort:** hours
 
 ##### `err:f55b9c27:envfile-loadonce-no-sentinel` — envfile loadonce no sentinel
@@ -673,16 +622,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Add a package-local sentinel `var ErrEnvFileAlreadyLoaded = errors.New("env file already loaded with different path")` and use it as Err on the ConfigError. Callers can errors.Is to detect the double-init case without parsing Msg. Today there's exactly one caller chain (cli/helpers.go::handleCredentials, cli/destroy.go) so practical risk is zero.
 **Effort:** hours
 
-##### `err:d9f7733e:debug-bundle-stringified-errors` — debug bundle stringified errors
-
-**Status:** in review — PR #755
-**Severity:** suggestion
-**Cluster:** redaction-in-error — seam→`audit-observability`
-**Evidence:** `internal/cli/debug_bundle.go:211-410`
-**Problem:** bundleConfig/bundleLogFile/bundleTerraformState/bundleMustGather/bundleDoctor/bundleSystemMeta build manifest entries by calling err.Error() — they stringify potentially-typed errors into a string field of manifestEntry, dropping the chain. The manifest is YAML-serialized and embedded in the bundle. A typed error carrying credential-bearing inner is reduced to its Error() string; errtypes.*.Error() omits inner err so the leak is bounded. Flagged because the pattern is fragile against a future error type that includes credentials in Error() text.
-**Fix:** Route err through a debug_bundle-local 'safeMessage(err)' helper that calls Redacted() if the type implements it before falling back to Error(). Symmetric with internal/logutil/redact.go::redactAny's dispatch. The bundle is operator-facing and may be shared upstream, so redaction discipline matters here more than slog (RedactHandler already covers slog).
-**Effort:** hours
-
 ##### `err:366b3f2d:orchestrator-classifysteperr-canonical` — orchestrator classifysteperr canonical
 
 **Status:** not started
@@ -691,16 +630,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/distribution/orchestrator.go:115-133`
 **Problem:** classifyStepErr is the load-bearing safety net: it correctly preserves cancellation identity and skips wrapping for already-typed errtypes. The smell isn't in this function but in its presence — it catches 14+ bare fmt.Errorf sites in dns/postinstall/setup/install packages. Those packages' contracts are silently orchestrator-dependent. Documented as the canonical example so reviewers know why surrounding findings are minor not major.
 **Fix:** No change. Documented as the canonical fallback so future audits know it exists. If classifyStepErr is ever removed or moved, the 14 bare-fmt.Errorf sites above must each be hardened first.
-**Effort:** hours
-
-##### `err:aa84670c:root-signalexitcode-invariant-test` — root signalexitcode invariant test
-
-**Status:** in review — PR #756
-**Severity:** suggestion
-**Cluster:** cancellation-identity — seam→`audit-concurrency`
-**Evidence:** `internal/cli/root.go:181-192`
-**Problem:** signalExitCode resolves SIGINT→130 / SIGTERM→143 by checking errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded). This is the documented intentional bare-wrap pattern. The implicit smell: this only works because EVERY cancellation site uses %w (or bare-wrap-without-typed-error) to preserve ctx identity. A single future site that wraps ctx.Err inside an errtypes.ClusterError WITHOUT %w would silently break SIGINT mapping.
-**Fix:** Extend the existing TestUnwrapChainIntact (errtypes_test.go:L44-57) to cover all five errtypes × both ctx sentinels (Canceled and DeadlineExceeded). Locks the invariant that all errtypes' Unwrap chains preserve ctx identity for signalExitCode's chain walk.
 **Effort:** hours
 
 ##### `err:ae5b624c:monitor-asymmetric-cancel-handling` — monitor asymmetric cancel handling
@@ -879,16 +808,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Optional: either (a) keep the alias and document that errors.As(&t.ExecError) and errors.As(&executor.ExitError) are equivalent — both at the type-doc and in package docs — or (b) drop the alias and ask callers to errors.As against executor.ExitError directly. Today no caller branches against ExecError specifically; the alias adds clarity at the cost of one extra type name.
 **Effort:** hours
 
-##### `api:bbc23e42:pkg-progress-reporter-location` — pkg progress reporter location
-
-**Status:** in review — PR #759
-**Severity:** suggestion
-**Cluster:** package-boundary
-**Evidence:** `internal/logutil/logutil.go:23-29`
-**Problem:** logutil.ProgressReporter type and logutil.NopProgressReporter live in logutil (a logger-helpers package) while the real implementation StartSpinner lives in internal/tui. The exposed surface is fine; the smell is that the *type* lives in logutil when ProgressReporter has no logging connection and could equally live in tui (where StartSpinner is the real implementation).
-**Fix:** Optional: move ProgressReporter type and NopProgressReporter to internal/tui (where StartSpinner already lives). Today's placement in logutil splits one concept across two packages. If left as-is, document at the logutil package doc why ProgressReporter lives there (likely: 'avoid the phase → tui dependency').
-**Effort:** hours
-
 ##### `api:beabab0c:opt-execute-takes-cfg-twice` — opt execute takes cfg twice
 
 **Status:** not started
@@ -929,16 +848,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Two options: (a) move the env-fallback to a separate factory NewWithEnvFallback(opts ...Option) *Client that applies options then runs env-fallback as a finalizer; (b) keep WithEnvFallback as an option but document at its callsite that it MUST be the last option in the list. Today's two callers put it implicitly via the option order — fragile if a third caller arrives.
 **Effort:** hours
 
-##### `api:21dc1103:opt-name-clash-extract-option` — opt name clash extract option
-
-**Status:** in review — PR #760
-**Severity:** minor
-**Cluster:** option-consistency
-**Evidence:** `internal/download/download.go:37-54`
-**Problem:** internal/download exposes two option types: Option (for Fetch) and ExtractOption (for ExtractTarGz). The two surfaces also have parallel With* names that differ — WithChecksum on Fetch vs WithExtractChecksum on Extract. Within one package, two adjacent functions with diverging option-type-naming conventions.
-**Fix:** Pick one shape: (a) rename Option → FetchOption and keep ExtractOption (both qualified); (b) rename ExtractOption → Option and split into download/extract sub-package. Option (a) is the safer choice — keeps the two surfaces in one package but makes the asymmetry explicit. Today's With* options also have a name disambiguation issue (WithChecksum on Fetch vs WithExtractChecksum on Extract) that the rename would address.
-**Effort:** hours
-
 ##### `api:ae5b624c:iface-csr-approver-positive` — iface csr approver positive
 
 **Status:** not started
@@ -952,16 +861,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 #### audit-cli-ux
 
-##### `ux:8d8faa80:help-no-example` — help no example
-
-**Status:** in review — PR #761
-**Severity:** suggestion
-**Cluster:** help-text
-**Evidence:** `internal/cli/completion.go:11-30`
-**Problem:** completionCmd has Long but no Example field. Every other user-facing subcommand (deploy, destroy, status, releases list, addon list, kubeconfig, debug-bundle) sets Example; completion is the only outlier even though its Long contains shell-by-shell snippets that would render more idiomatically as Example.
-**Fix:** Move the bash/zsh/fish snippets from Long into Example and shorten Long to a one-paragraph description. Cobra renders Example in a dedicated section in --help, which puts the snippets where users look for runnable commands.
-**Effort:** hours
-
 ##### `ux:fd2125dd:concept-named-twice` — concept named twice
 
 **Status:** not started
@@ -970,36 +869,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/cli/addon.go:28-31` + 1 more
 **Problem:** Parent group nouns are inconsistently singular vs plural across the command tree: 'addon list/install/uninstall/verify' (singular) but 'releases list/show' (plural). Internal references compound the drift — addon.go uses 'addon list/verify' in messages while releases.go uses 'releases list'. Pick one: kubectl/oc convention is singular (kubectl get pod, kubectl describe service).
 **Fix:** Rename releases → release for consistency with addon. The fix breaks anyone scripting okdctl releases list, but okdctl is pre-1.0 (per README §status) and the CHANGELOG can document the rename. Alternative: rename addon → addons. Either way, document the convention in CLAUDE.md so new groups follow it.
-**Effort:** hours
-
-##### `ux:4583b75b:output-flag-inconsistent` — output flag inconsistent
-
-**Status:** in review — PR #762
-**Severity:** suggestion
-**Cluster:** flag-conventions
-**Evidence:** `internal/cli/config.go:25-42`
-**Problem:** configShowCmd emits YAML unconditionally and exposes no --output flag, but every other read-only command (status, releases list/show, describe node/addon, addon list/verify, doctor) accepts --output=text|json. A user piping config show through jq cannot.
-**Fix:** Add --output=text|json to configShowCmd. Default stays YAML (text), but --output=json emits the same redacted config as JSON via json.Marshal(redactConfig(cfg)). Document the JSON shape in docs/cli/json-schema.md. This is a pure addition — existing scripts continue to work.
-**Effort:** hours
-
-##### `ux:e7db1220:flag-completion-inconsistent` — flag completion inconsistent
-
-**Status:** in review — PR #763
-**Severity:** suggestion
-**Cluster:** flag-conventions
-**Evidence:** `internal/cli/releases.go:75-80`
-**Problem:** --channel on 'releases list' takes one of two literal strings (stable, all) but does not register a flag-completion function. Sibling commands that take a small enumeration (destroyCmd's --only at internal/cli/destroy.go:L177) DO register RegisterFlagCompletionFunc so shell tab-completion offers the values. Inconsistent within the surface.
-**Fix:** Register a flag-completion function on --channel that returns []string{channelStable, channelAll}, mirroring the destroy --only pattern. Adds two lines, zero behavior change at the CLI surface.
-**Effort:** hours
-
-##### `ux:0d318f5c:flag-no-default-in-help` — flag no default in help
-
-**Status:** in review — PR #764
-**Severity:** suggestion
-**Cluster:** flag-conventions
-**Evidence:** `internal/cli/root.go:251-252`
-**Problem:** --log-format default in --help displays as empty because root.go L252 explicitly overwrites Lookup(flagLogFormat).DefValue = "" to hide the auto-switch behavior. Users running --help cannot see that 'text' is the default for TTY use; the help text describes the auto-switch in prose instead. This is an intentional hide of the field, but the consequence is that the help text is the only signal — a typo on the auto-switch logic could silently change behavior with no help-text trace.
-**Fix:** Either restore the default to 'text' in --help so the auto-switch is documented as an override, or pin the override in a comment explaining that L252 is load-bearing for the TTY-vs-pipe contract. Currently it reads like a stylistic tweak rather than a contract anchor.
 **Effort:** hours
 
 ##### `ux:0f076161:exit-taxonomy-not-published` — exit taxonomy not published
@@ -1034,17 +903,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Problem:** WaitFor's log messages `"waiting"` (L117, L162) and `"ready"` (L133, L156) lack the `<subsystem>:` prefix used everywhere else in the repo — every other log site uses `dns:`, `haproxy:`, `apache:`, `tools:`, etc. The first arg of WaitFor IS `prefix` and IS exposed as a structured attr, but the message itself loses the grep-anchor. Additionally, the attr key `"for"` is a Go-reserved word and an ambiguous identifier compared to canonical `target`/`desc`.
 **Fix:** Move the prefix into the message via concatenation: `logger.Info(prefix+": waiting", "target", description)`. Rename the attr key from `"for"` to `"target"` or `"desc"`. The change is mechanical and keeps the structured attrs intact while restoring the grep contract.
 **Effort:** hours
-
-##### `obs:366b3f2d:level-error-not-user-visible` — level error not user visible
-
-**Status:** in review — PR #765
-**Severity:** suggestion
-**Cluster:** level-discipline
-**Evidence:** `internal/distribution/orchestrator.go:184-188`
-**Problem:** Orchestrator logs a fatal step at Error (L185) and then returns the error to the caller, which propagates up to cli/root.go::execute() and is logged a second time via `tui.Error("command failed", ...)`. The double-log is somewhat intentional (orchestrator wants per-step trace; root wants summary) but yields two Error lines for one event in the user-facing log stream.
-**Fix:** Demote the fatal branch to Warn (`o.logger.Warn("step: failed (fatal)", ...)`) so the orchestrator's per-step trace stays one level below the cli-layer's Error. Or accept the double-log as deliberate audit-trail and document the exception in CLAUDE.md so future contributors do not normalise to Warn.
-**Effort:** hours
-
 
 #### audit-modernization
 
@@ -1101,16 +959,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Fix:** Introduce a vmEnumerationState int-iota with enumYes, enumNo, enumProbeSkipped constants. The single caller in Provision (L254-L263) currently uses `if vmidEnumerable` for log suppression; branching on the typed enum lets that code distinguish probe-confirmed-visible from probe-skipped-default-visible, which a future caller may need for retry decisions.
 **Effort:** hours
 
-##### `smell:820b96c9:stringly-typed-enum` — stringly typed enum
-
-**Status:** in review — PR #766
-**Severity:** suggestion
-**Cluster:** magic-strings
-**Evidence:** `internal/addon/catalog/secretstore/providers.go:27-52`
-**Problem:** Provider selection routes through bare-string constants (providerOnepassword, providerVault, providerBitwarden) keyed in map[string]provider with no typed enum. resolveProvider returns the resolved name as string, and the error path emits the unrecognised name from settings. A typed ProviderKind would make Settings.Provider, the providers map, and resolveProvider's second return value share one identity.
-**Fix:** Define `type ProviderKind string` plus a ProviderKind field on Settings; key the providers map on ProviderKind; have resolveProvider return (provider, ProviderKind). The cleanup.Kind / bundleStatus / bundleCategory / VMState / NodeRole pattern in this repo is the counter-example. Three values today; second addon (after flux) where the same shape recurs.
-**Effort:** hours
-
 ##### `smell:262af6e4:abstraction-single-caller` — abstraction single caller
 
 **Status:** not started
@@ -1119,16 +967,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Evidence:** `internal/distribution/okd/cleanup/cleanup.go:24-56`
 **Problem:** cleanup.Kind defines five values (Full, WorkOnly, WebOnly, HAProxyOnly, TerraformOnly) plus ValidKinds/KindStrings/IsValid/Validate helpers, but only Full and WorkOnly are referenced outside the package. WebOnly, HAProxyOnly, and TerraformOnly carry no callers; the switch in cleanupSteps covers them only to maintain the full enum shape.
 **Fix:** Verify intent (grep roadmap.md, ask owner) — do not delete; per MEMORY.md §scaffolding.
-**Effort:** hours
-
-##### `smell:6424733c:abstraction-single-caller` — abstraction single caller
-
-**Status:** in review — PR #767
-**Severity:** suggestion
-**Cluster:** helper-package-no-value
-**Evidence:** `internal/cli/helpers.go:188-194`
-**Problem:** tuiReporter is a 6-LOC factory whose doc says it exists so domain code can call a callback that captures the command ctx without taking an internal/tui dependency. The file already imports internal/tui at L25, and the only caller (executeFullDeployment, same file) immediately threads the returned closure into okd.WithProgressReporter(tuiReporter(ctx)). The doc rationale is false and the named abstraction adds no semantic gain over inlining.
-**Fix:** Inline at the single call site: `provOpts = append(provOpts, okd.WithProgressReporter(func(desc string) func() { return tui.StartSpinner(ctx, desc) }))` — removes the misleading doc comment and ~5 LOC. Alternative: rewrite the doc to drop the false dependency-isolation claim and explain the real reason (named, testable indirection).
 **Effort:** hours
 
 ##### `smell:c19ee328:magic-strings` — magic strings
@@ -1140,17 +978,6 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 **Problem:** setupBaseSteps lists the OKD tool trio as bare-string literals []string{openshift-install, oc, kubectl} even though openshiftInstallBin is already declared as a package-level constant in phase.go:L35 for the same binary. The other two names (oc, kubectl) are referenced as literal strings dozens of times across setup/install/postinstall/cleanup; a typo here equals a silent skip in the AlreadyDone guard.
 **Fix:** Declare `const ocBin = "oc"` and `const kubectlBin = "kubectl"` alongside the existing openshiftInstallBin in setup/phase.go (or, since all three binaries cross package boundaries, hoist to internal/distribution/okd/phase). Replace the bare literals here and at the related sites. Net ~4 LOC added for the constants; removes pattern-wide silent-typo risk.
 **Effort:** hours
-
-##### `smell:efff8856:enum-ad-hoc` — enum ad hoc
-
-**Status:** in review — PR #768
-**Severity:** suggestion
-**Cluster:** magic-strings
-**Evidence:** `internal/addon/catalog/flux/flux.go:267-278`
-**Problem:** DefaultSettings sets SettingProvider to the literal flux. internal/tui/wizard/steps/defaults.go:L71 already exports DefaultGitOpsProvider = flux as a wizard default; the flux addon (catalog) and the wizard (steps/) each hardcode the same provider literal independently. Two unconnected sites spelling the same enum value is the canonical enum-ad-hoc shape.
-**Fix:** Add `const ProviderID = "flux"` in flux/flux.go (the addon owns its identity), reuse from DefaultSettings, and have wizard/steps/defaults.go reference the same constant. Avoids the silent-drift class where the wizard default and the addon default diverge. Net 0-2 LOC.
-**Effort:** hours
-
 
 #### audit-dependencies
 
