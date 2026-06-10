@@ -118,8 +118,15 @@ func (p *Provisioner) Validate(cfg *config.Config) error {
 // wiping a work directory that contains live cluster state (terraform
 // resources or cluster-config/auth); without it Prepare returns an error
 // so the operator is forced to destroy the cluster first.
+//
+// ResumeInProgress signals that the CLI's deploy-state marker is present,
+// meaning the previous run was interrupted before clean completion. The
+// guard is skipped then so the documented 'okdctl deploy' resume flow is
+// not blocked by mid-setup artifacts such as cluster-config/auth written
+// by StepGenerateIgnition.
 type PrepareOpts struct {
-	FreshDeploy bool
+	FreshDeploy      bool
+	ResumeInProgress bool
 }
 
 // Prepare cleans up previous artifacts and runs the setup phase. It refuses
@@ -129,7 +136,7 @@ func (p *Provisioner) Prepare(ctx context.Context, cfg *config.Config, opts Prep
 	setupOpts := setup.NewOptions(cfg, p.projectRoot)
 
 	if system.DirExists(setupOpts.WorkDir) {
-		if err := p.guardLiveCluster(cfg, setupOpts.WorkDir, opts.FreshDeploy); err != nil {
+		if err := p.guardLiveCluster(cfg, setupOpts.WorkDir, opts); err != nil {
 			return nil, err
 		}
 		p.logger.Info("setup: cleaning up previous artifacts")
@@ -155,14 +162,15 @@ func (p *Provisioner) Prepare(ctx context.Context, cfg *config.Config, opts Prep
 	return setupPhase.Execute(ctx, cfg, &setupOpts)
 }
 
-// guardLiveCluster returns a *errtypes.ClusterError when the work directory
+// guardLiveCluster returns a *errtypes.ConfigError when the work directory
 // contains terraform resources or a cluster-config/auth directory, indicating
-// a live or previously-deployed cluster. freshDeploy bypasses the guard.
+// a live or completed cluster that must be destroyed before re-deploying.
+// FreshDeploy or ResumeInProgress bypasses the guard.
 //
-// Callers that set freshDeploy=true accept credential loss: cluster-config/auth
+// Callers that set FreshDeploy=true accept credential loss: cluster-config/auth
 // (kubeadmin-password, kubeconfig) is wiped with no backup.
-func (p *Provisioner) guardLiveCluster(cfg *config.Config, workDir string, freshDeploy bool) error {
-	if freshDeploy {
+func (p *Provisioner) guardLiveCluster(cfg *config.Config, workDir string, opts PrepareOpts) error {
+	if opts.FreshDeploy || opts.ResumeInProgress {
 		return nil
 	}
 	tfEnv := phase.GetTerraformEnv(cfg)
@@ -171,7 +179,7 @@ func (p *Provisioner) guardLiveCluster(cfg *config.Config, workDir string, fresh
 	hasTFState := tf.HasState()
 	hasAuth := system.DirExists(filepath.Join(phase.ClusterConfigDir(workDir), "auth"))
 	if hasTFState || hasAuth {
-		return &errtypes.ClusterError{
+		return &errtypes.ConfigError{
 			Msg: "work directory contains live cluster state (terraform resources or cluster-config/auth); " +
 				"run 'okdctl destroy' first, or pass --fresh to force-wipe (credentials will be lost)",
 		}
