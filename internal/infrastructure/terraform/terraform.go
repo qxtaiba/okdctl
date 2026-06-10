@@ -143,11 +143,7 @@ func (t *Executor) run(ctx context.Context, args ...string) error {
 		return fmt.Errorf("terraform %s failed: %w", args[0], err)
 	}
 	if result.ExitCode != 0 {
-		return &ExecError{
-			Command:  "terraform " + args[0],
-			ExitCode: result.ExitCode,
-			Stderr:   result.Stderr,
-		}
+		return executor.NewExitError(ctx, "terraform "+args[0], result.ExitCode, result.Stderr)
 	}
 	return nil
 }
@@ -470,11 +466,7 @@ func (t *Executor) Output(ctx context.Context) (map[string]json.RawMessage, erro
 		return nil, fmt.Errorf("terraform output failed: %w", err)
 	}
 	if result.ExitCode != 0 {
-		return nil, &ExecError{
-			Command:  "terraform output",
-			ExitCode: result.ExitCode,
-			Stderr:   result.Stderr,
-		}
+		return nil, executor.NewExitError(ctx, "terraform output", result.ExitCode, result.Stderr)
 	}
 	var out map[string]json.RawMessage
 	if err := json.Unmarshal([]byte(result.Stdout), &out); err != nil {
