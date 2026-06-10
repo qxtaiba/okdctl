@@ -122,8 +122,8 @@ func (f *Flux) Install(ctx context.Context, env *addon.Environment) error {
 	// Wait for GitRepository sync (non-fatal — user may need to fix deploy key or URL)
 	if err := f.waitForGitSync(ctx, env); err != nil {
 		env.Logger.Warn("flux: git sync not ready", "err", err)
-		env.Logger.Warn("flux: debug with: oc get gitrepository -n flux-system -o yaml")
-		env.Logger.Warn("flux: the cluster will auto-reconcile once the git source is reachable")
+		env.Logger.Info("flux: debug with: oc get gitrepository -n flux-system -o yaml")
+		env.Logger.Info("flux: the cluster will auto-reconcile once the git source is reachable")
 	}
 
 	env.Logger.Info("flux: gitops installed and syncing with repository")
