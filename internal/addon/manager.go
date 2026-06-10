@@ -166,7 +166,7 @@ func (m *Manager) InstallOne(ctx context.Context, name string) error {
 
 	ordered, err := Resolve(toInstall)
 	if err != nil {
-		return err
+		return &errtypes.ConfigError{Msg: "addon dependency resolution failed", Err: err}
 	}
 
 	type installedAddon struct {
