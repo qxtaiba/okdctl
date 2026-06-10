@@ -27,6 +27,7 @@ var (
 	deployMinimal             bool
 	deployYes                 bool
 	deployDryRun              bool
+	deployFresh               bool
 	deployMetricsAddr         string
 	deployMetricsAllowNetwork bool
 )
@@ -47,6 +48,7 @@ func init() {
 	deployCmd.Flags().BoolVar(&deployMinimal, "minimal", false, "use minimal defaults (single-node cluster)")
 	deployCmd.Flags().BoolVarP(&deployYes, "yes", "y", false, "skip prompts, use defaults")
 	deployCmd.Flags().BoolVar(&deployDryRun, flagDryRun, false, "preview terraform plan and step listing without deploying")
+	deployCmd.Flags().BoolVar(&deployFresh, "fresh", false, "wipe the work directory even when live cluster state is detected (credentials will be lost)")
 	deployCmd.Flags().StringVar(&deployMetricsAddr, "metrics-addr", "", `address for Prometheus metrics endpoint; bare ":9090" binds 127.0.0.1; disabled when empty`)
 	deployCmd.Flags().BoolVar(&deployMetricsAllowNetwork, "metrics-allow-network", false, "allow metrics endpoint to bind on a wildcard address (0.0.0.0 or [::])")
 }
@@ -272,6 +274,7 @@ func runFullDeployment(ctx context.Context, cfg *config.Config, w io.Writer) err
 		Credentials:         creds,
 		MetricsAddr:         deployMetricsAddr,
 		AllowNetworkMetrics: deployMetricsAllowNetwork,
+		FreshDeploy:         deployFresh,
 	}, w)
 }
 
