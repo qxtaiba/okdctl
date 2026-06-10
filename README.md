@@ -95,7 +95,8 @@ Full command reference: [`docs/cli/okdctl.md`](docs/cli/okdctl.md).
 Exit codes and shell-script idioms: [`docs/cli/exit-codes.md`](docs/cli/exit-codes.md).
 
 First run of `deploy` launches the wizard and writes `okdctl.yaml` plus
-a `.env` for Proxmox credentials. Later runs reuse the existing config.
+an `okdctl.env` file next to the config (named after the config file) for
+Proxmox credentials. Later runs reuse the existing config.
 `--config other.yaml` manages multiple clusters from one machine.
 
 A deploy runs three phases:
@@ -127,9 +128,9 @@ Use the wizard. If you'd rather edit YAML directly, reference configs live in
 - `production.yaml` — 3 control-plane, 5 worker layout
 - `media-server.yaml` — homelab setup with storage-heavy workers
 
-Proxmox credentials live in a `.env` file next to the config, never in the
-YAML. Env vars: `PROXMOX_VE_ENDPOINT`, `PROXMOX_VE_USERNAME`,
-`PROXMOX_VE_PASSWORD` (or `PROXMOX_VE_API_TOKEN`).
+Proxmox credentials live in an `okdctl.env` file next to the config (named
+after the config file), never in the YAML. Env vars: `PROXMOX_VE_ENDPOINT`,
+`PROXMOX_VE_USERNAME`, `PROXMOX_VE_PASSWORD` (or `PROXMOX_VE_API_TOKEN`).
 
 ### OKD pull secret
 
@@ -176,7 +177,7 @@ output goes in bug reports.
 
 ```sh
 okdctl destroy                          # tear down the cluster
-rm -rf ~/okd-install okdctl.yaml .env   # residual state
+rm -rf ~/okd-install okdctl.yaml okdctl.env   # residual state
 sudo rm /usr/local/bin/okdctl           # or: apt remove okdctl / dnf remove okdctl
 ```
 
