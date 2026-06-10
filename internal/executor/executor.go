@@ -369,12 +369,12 @@ func (e *Executor) RunInteractive(ctx context.Context, name string, args ...stri
 	e.logger.Debug("exec: started", "cmd", name, "argc", len(args))
 
 	err := cmd.Run()
+	e.logger.Debug("exec: completed", "cmd", name, "exit", exitCodeOf(err), "duration", time.Since(start))
 	if err != nil {
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			return ctxErr
 		}
 	}
-	e.logger.Debug("exec: completed", "cmd", name, "exit", exitCodeOf(err), "duration", time.Since(start))
 	return err
 }
 
