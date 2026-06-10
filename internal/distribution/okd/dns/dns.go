@@ -12,6 +12,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/templates"
+	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/netutil"
 	"github.com/qxtaiba/okdctl/internal/system"
 )
@@ -22,23 +23,23 @@ import (
 // through per-node calculations.
 func buildConfigData(cfg *config.Config) (templates.DNSConfigData, error) {
 	if cfg == nil {
-		return templates.DNSConfigData{}, fmt.Errorf("config cannot be nil")
+		return templates.DNSConfigData{}, &errtypes.ConfigError{Msg: "config cannot be nil"}
 	}
 
 	clusterDomain := fmt.Sprintf("%s.%s", cfg.Cluster.Name, cfg.Cluster.Domain)
 	staticIPStart := cfg.Networking.StaticIP.Start
 
 	if cfg.Cluster.Name == "" {
-		return templates.DNSConfigData{}, fmt.Errorf("cluster name is required")
+		return templates.DNSConfigData{}, &errtypes.ConfigError{Msg: "cluster name is required"}
 	}
 	if !config.IsValidDNSLabel(cfg.Cluster.Name) {
-		return templates.DNSConfigData{}, fmt.Errorf("cluster name %q is not a valid DNS label", cfg.Cluster.Name)
+		return templates.DNSConfigData{}, &errtypes.ConfigError{Msg: fmt.Sprintf("cluster name %q is not a valid DNS label", cfg.Cluster.Name)}
 	}
 	if cfg.Networking.Bastion.IP == "" {
-		return templates.DNSConfigData{}, fmt.Errorf("bastion IP is required")
+		return templates.DNSConfigData{}, &errtypes.ConfigError{Msg: "bastion IP is required"}
 	}
 	if staticIPStart == "" {
-		return templates.DNSConfigData{}, fmt.Errorf("static IP start is required")
+		return templates.DNSConfigData{}, &errtypes.ConfigError{Msg: "static IP start is required"}
 	}
 
 	// Validate the node IP range up front so we fail with a clear error here
@@ -203,14 +204,14 @@ func DeployProduction(ctx context.Context, cfg *config.Config, appsIP, kubeVipIP
 		return fmt.Errorf("failed to build dns config data: %w", err)
 	}
 	if appsIP != "" && !config.IsValidIP(appsIP) {
-		return fmt.Errorf("invalid apps IP address: %s", appsIP)
+		return &errtypes.ConfigError{Msg: fmt.Sprintf("invalid apps IP address: %s", appsIP)}
 	}
 	if kubeVipIP != "" && !config.IsValidIP(kubeVipIP) {
-		return fmt.Errorf("invalid kube-vip IP address: %s", kubeVipIP)
+		return &errtypes.ConfigError{Msg: fmt.Sprintf("invalid kube-vip IP address: %s", kubeVipIP)}
 	}
 	for _, cd := range customDomains {
 		if !config.IsValidIP(cd.IP) {
-			return fmt.Errorf("invalid custom domain IP address for %s: %s", cd.Domain, cd.IP)
+			return &errtypes.ConfigError{Msg: fmt.Sprintf("invalid custom domain IP address for %s: %s", cd.Domain, cd.IP)}
 		}
 	}
 	data.AppsIP = appsIP
