@@ -128,3 +128,94 @@ func TestValidateTerraformEnv(t *testing.T) {
 		}
 	}
 }
+
+func TestValidateProxmoxConfigFields(t *testing.T) {
+	goodStorage := []string{"local", "local-lvm", "ceph-pool", "storage1", "Tank"}
+	badStorage := []string{`local"inject`, "has space", "has/slash", "has.dot"}
+
+	hasFieldError := func(r *ValidationResult, field string) bool {
+		for _, e := range r.Errors {
+			if e.Field == field {
+				return true
+			}
+		}
+		return false
+	}
+
+	for _, s := range goodStorage {
+		cfg := &ProxmoxConfig{Host: "pve:8006", Node: "pve", Storage: "local-lvm", ISOStorage: s, DataStorage: s}
+		r := &ValidationResult{}
+		validateProxmoxConfig(cfg, r)
+		if hasFieldError(r, FieldProxmoxISOStorage) {
+			t.Errorf("ISOStorage %q rejected", s)
+		}
+		if hasFieldError(r, FieldProxmoxDataStorage) {
+			t.Errorf("DataStorage %q rejected", s)
+		}
+	}
+
+	for _, s := range badStorage {
+		cfg := &ProxmoxConfig{Host: "pve:8006", Node: "pve", Storage: "local-lvm", ISOStorage: s, DataStorage: s}
+		r := &ValidationResult{}
+		validateProxmoxConfig(cfg, r)
+		if !hasFieldError(r, FieldProxmoxISOStorage) {
+			t.Errorf("ISOStorage %q accepted; want rejection", s)
+		}
+		if !hasFieldError(r, FieldProxmoxDataStorage) {
+			t.Errorf("DataStorage %q accepted; want rejection", s)
+		}
+	}
+
+	goodCPU := []string{"host", "kvm64", "x86-64-v2", "x86-64-v2-AES", "Skylake-Server-noTSX-IBRS", "x86-64-v2+pge", "x86-64-v2,flags=+pge"}
+	badCPU := []string{`host"inject`, "has space", "has\nnewline", `"; rm -rf /`}
+
+	for _, s := range goodCPU {
+		cfg := &ProxmoxConfig{Host: "pve:8006", Node: "pve", Storage: "local-lvm", CPUType: s}
+		r := &ValidationResult{}
+		validateProxmoxConfig(cfg, r)
+		if hasFieldError(r, FieldProxmoxCPUType) {
+			t.Errorf("CPUType %q rejected", s)
+		}
+	}
+
+	for _, s := range badCPU {
+		cfg := &ProxmoxConfig{Host: "pve:8006", Node: "pve", Storage: "local-lvm", CPUType: s}
+		r := &ValidationResult{}
+		validateProxmoxConfig(cfg, r)
+		if !hasFieldError(r, FieldProxmoxCPUType) {
+			t.Errorf("CPUType %q accepted; want rejection", s)
+		}
+	}
+
+	goodBridge := []string{"vmbr0", "vmbr1", "vmbr100", "eth0"}
+	badBridge := []string{`vmbr0"inject`, "has space", "0starts-digit"}
+
+	for _, s := range goodBridge {
+		cfg := &ProxmoxConfig{Host: "pve:8006", Node: "pve", Storage: "local-lvm", Bridge: s}
+		r := &ValidationResult{}
+		validateProxmoxConfig(cfg, r)
+		if hasFieldError(r, FieldProxmoxBridge) {
+			t.Errorf("Bridge %q rejected", s)
+		}
+	}
+
+	for _, s := range badBridge {
+		cfg := &ProxmoxConfig{Host: "pve:8006", Node: "pve", Storage: "local-lvm", Bridge: s}
+		r := &ValidationResult{}
+		validateProxmoxConfig(cfg, r)
+		if !hasFieldError(r, FieldProxmoxBridge) {
+			t.Errorf("Bridge %q accepted; want rejection", s)
+		}
+	}
+
+	// empty optional fields must pass without errors on the new fields
+	emptyCfg := &ProxmoxConfig{Host: "pve:8006", Node: "pve", Storage: "local-lvm"}
+	emptyResult := &ValidationResult{}
+	validateProxmoxConfig(emptyCfg, emptyResult)
+	for _, e := range emptyResult.Errors {
+		switch e.Field {
+		case FieldProxmoxISOStorage, FieldProxmoxDataStorage, FieldProxmoxBridge, FieldProxmoxCPUType:
+			t.Errorf("empty optional field %s rejected: %s", e.Field, e.Message)
+		}
+	}
+}

@@ -36,6 +36,10 @@ const (
 	FieldProxmoxHost                     = "provider.proxmox.host"
 	FieldProxmoxNode                     = "provider.proxmox.node"
 	FieldProxmoxStorage                  = "provider.proxmox.storage"
+	FieldProxmoxISOStorage               = "provider.proxmox.iso_storage"
+	FieldProxmoxDataStorage              = "provider.proxmox.data_storage"
+	FieldProxmoxBridge                   = "provider.proxmox.bridge"
+	FieldProxmoxCPUType                  = "provider.proxmox.cpu_type"
 	FieldProxmoxInsecureHTTP             = "provider.proxmox.insecure_http"
 	FieldProxmoxRequirePinnedFingerprint = "provider.proxmox.require_pinned_fingerprint"
 
