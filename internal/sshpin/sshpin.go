@@ -78,7 +78,7 @@ func parseAndMatch(keyscanOut, host, expected string, requirePinned bool, log *s
 			return "", &errtypes.AuthError{Msg: "proxmox.require_pinned_fingerprint is set but ssh_host_fingerprint is empty"}
 		}
 		log.Warn("ssh: proxmox host fingerprint not pinned — set proxmox.ssh_host_fingerprint to one of the observed values",
-			"host", host, "observed", strings.Join(observed, ", "))
+			"host", host, "observed_fingerprints", strings.Join(observed, ", "))
 		return "", nil
 	}
 
