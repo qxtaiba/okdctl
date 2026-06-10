@@ -14,6 +14,10 @@ import (
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
+// invokingUserHomeDirFn resolves the invoking user's home directory.
+// Tests override this to redirect writes to a temp dir.
+var invokingUserHomeDirFn = system.InvokingUserHomeDir
+
 // ValidateClusterAccess runs "oc whoami" to confirm the kubeconfig points at
 // a live cluster and logs the server version when available.
 func (p *Phase) ValidateClusterAccess(ctx context.Context) error {
@@ -55,7 +59,7 @@ func (p *Phase) SetupClusterAccess(ctx context.Context, clusterDir string) error
 	}
 	// Resolve the invoking user's home (not root's) so files land where
 	// the user will look for them after the re-exec'd deploy returns.
-	homeDir, err := system.InvokingUserHomeDir()
+	homeDir, err := invokingUserHomeDirFn()
 	if err != nil {
 		return &errtypes.ConfigError{Msg: "failed to resolve invoking user home", Err: err}
 	}
