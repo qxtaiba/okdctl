@@ -130,7 +130,23 @@ func CopyFileMode(src, dst string, mode os.FileMode) error {
 		return fmt.Errorf("failed to create destination directory: %w", err)
 	}
 
-	destFile, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, mode)
+	// O_NOFOLLOW rejects a symlink at dst; under the sudo re-exec model the
+	// open runs as root, so following a symlink would write to an attacker-chosen path.
+	if info, err := os.Lstat(dst); err == nil {
+		if info.Mode()&os.ModeSymlink != 0 {
+			return &errtypes.AuthError{
+				Msg: fmt.Sprintf("write target %q is a symlink; refusing to write", dst),
+				Err: os.ErrPermission,
+			}
+		}
+	} else if !os.IsNotExist(err) {
+		return &errtypes.AuthError{
+			Msg: fmt.Sprintf("failed to lstat write target %q before write", dst),
+			Err: err,
+		}
+	}
+
+	destFile, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_TRUNC|syscall.O_NOFOLLOW, mode)
 	if err != nil {
 		return fmt.Errorf("failed to create destination file: %w", err)
 	}
@@ -154,16 +170,16 @@ func CopyFileMode(src, dst string, mode os.FileMode) error {
 		return fmt.Errorf("failed to sync destination file: %w", err)
 	}
 
+	// If dst pre-existed with different permissions, O_CREATE won't change
+	// them — tighten via the open fd so the chmod cannot follow a symlink.
+	if err := destFile.Chmod(mode); err != nil {
+		return fmt.Errorf("failed to set file permissions: %w", err)
+	}
+
 	if err := destFile.Close(); err != nil {
 		return fmt.Errorf("failed to close destination file: %w", err)
 	}
 	closed = true
-
-	// If dst pre-existed with different permissions, O_CREATE won't change
-	// them — tighten explicitly so the caller's mode is always honored.
-	if err := os.Chmod(dst, mode); err != nil {
-		return fmt.Errorf("failed to set file permissions: %w", err)
-	}
 
 	success = true
 	return nil
