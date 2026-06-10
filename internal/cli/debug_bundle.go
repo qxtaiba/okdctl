@@ -19,6 +19,7 @@ import (
 	"sigs.k8s.io/yaml"
 
 	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/executor"
 	"github.com/qxtaiba/okdctl/internal/system"
@@ -117,14 +118,14 @@ func runDebugBundle(cmd *cobra.Command, _ []string) (retErr error) {
 
 	if info, err := os.Lstat(outPath); err == nil {
 		if info.Mode()&os.ModeSymlink != 0 {
-			return fmt.Errorf("output path %q is a symlink; refusing to follow", outPath)
+			return &errtypes.ConfigError{Msg: fmt.Sprintf("output path %q is a symlink; refusing to follow", outPath)}
 		}
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("stat bundle file: %w", err)
 	}
 	f, err := os.OpenFile(outPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC|syscall.O_NOFOLLOW, 0o600)
 	if err != nil {
-		return fmt.Errorf("create bundle file: %w", err)
+		return &errtypes.ConfigError{Msg: "create bundle file", Err: err}
 	}
 	defer func() { _ = f.Close() }()
 
