@@ -295,11 +295,16 @@ func startMetricsServer(ctx context.Context, addr string, allowNetwork bool) (fu
 		WriteTimeout:      metricsWriteTimeout,
 		IdleTimeout:       metricsIdleTimeout,
 	}
+	var lc net.ListenConfig
+	ln, err := lc.Listen(ctx, "tcp", addr)
+	if err != nil {
+		return nil, nil, &errtypes.ConfigError{Msg: fmt.Sprintf("metrics bind failed on %q", addr), Err: err}
+	}
+	tui.Info("metrics endpoint listening", tui.LF("addr", addr))
 	// errCh cap=1: the goroutine sends exactly once and never blocks, so it
 	// exits cleanly even if stop is never called (early return on phase error).
 	errCh := make(chan error, 1)
-	go func() { errCh <- srv.ListenAndServe() }()
-	tui.Info("metrics endpoint listening", tui.LF("addr", addr))
+	go func() { errCh <- srv.Serve(ln) }()
 	stop := func() error {
 		// Use Background, not the caller's ctx: by stop() time the parent ctx
 		// is already cancelled by SIGINT, and we need the 5s drain to complete.
