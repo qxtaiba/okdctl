@@ -81,7 +81,7 @@ func runDeploy(cmd *cobra.Command, _ []string) error {
 		if loadErr != nil {
 			tui.Warn("existing config could not be loaded", tui.LF("err", loadErr))
 			if deployYes {
-				return fmt.Errorf("cannot proceed in non-interactive mode with invalid config: %w", loadErr)
+				return &errtypes.ConfigError{Msg: "cannot proceed in non-interactive mode with invalid config", Err: loadErr}
 			}
 			tui.Info("starting fresh with defaults")
 			configExists = false
@@ -108,7 +108,7 @@ func runDeploy(cmd *cobra.Command, _ []string) error {
 
 	result, welcomeMode, err := runWizardWithMode(ctx, cfg, configExists)
 	if err != nil {
-		return fmt.Errorf("wizard failed: %w", err)
+		return &errtypes.ConfigError{Msg: "wizard failed", Err: err}
 	}
 
 	if result.Cancelled {
