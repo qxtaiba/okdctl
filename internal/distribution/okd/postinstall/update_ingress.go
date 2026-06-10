@@ -384,7 +384,7 @@ type ingressControllerInfo struct {
 }
 
 func (p *Phase) discoverIngressControllers(ctx context.Context) ([]ingressControllerInfo, error) {
-	result, err := p.Exec.RunChecked(ctx, "oc", "get", "ingresscontroller",
+	stdout, err := p.OcOutputFull(ctx, "get", "ingresscontroller",
 		"-n", "openshift-ingress-operator",
 		"-o", "json")
 	if err != nil {
@@ -395,7 +395,7 @@ func (p *Phase) discoverIngressControllers(ctx context.Context) ([]ingressContro
 		Items []json.RawMessage `json:"items"`
 	}
 
-	if err := json.Unmarshal([]byte(result.Stdout), &list); err != nil {
+	if err := json.Unmarshal([]byte(stdout), &list); err != nil {
 		return nil, fmt.Errorf("failed to parse IngressController list: %w", err)
 	}
 

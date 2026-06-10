@@ -23,6 +23,21 @@ func (p *BasePhase) OcResourceExists(ctx context.Context, errPrefix string, args
 	return result.ExitCode == 0 && strings.TrimSpace(result.Stdout) != "", nil
 }
 
+// OcOutputFull runs `oc <args...>` once with full stdout buffering (up to
+// 4 MiB) and returns trimmed stdout. Returns an error when output is
+// truncated — callers that machine-parse large JSON payloads must use this
+// instead of OcOutput to guarantee an untruncated stream.
+func (p *BasePhase) OcOutputFull(ctx context.Context, args ...string) (string, error) {
+	result, err := p.Exec.RunOutputChecked(ctx, 0, "oc", args...)
+	if err != nil {
+		return "", err
+	}
+	if result.Truncated {
+		return "", fmt.Errorf("oc output truncated after %d bytes; payload too large for machine parsing", len(result.Stdout))
+	}
+	return strings.TrimSpace(result.Stdout), nil
+}
+
 // OcOutput runs `oc <args...>` once and returns trimmed stdout. A non-zero
 // exit code is returned as an *executor.ExitError (callers can errors.As to
 // inspect ExitCode) unless ctx is cancelled, in which case the ctx error
