@@ -7,6 +7,7 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/logutil"
 )
 
@@ -19,12 +20,13 @@ func TestCleanupTerraformEnv_PreservesState(t *testing.T) {
 	// Seed an env dir with every file cleanupTerraformEnv is expected to
 	// remove PLUS terraform.tfstate, which it must NOT touch.
 	files := map[string]string{
-		"terraform.tfvars":        "vars",
-		"tfplan":                  "plan",
-		"destroy.tfplan":          "dplan",
-		"terraform.tfstate.backup": "backup",
-		".terraform.lock.hcl":     "lock",
-		"terraform.tfstate":       `{"version":4,"resources":[]}`,
+		"terraform.tfvars":               "vars",
+		"tfplan":                         "plan",
+		"destroy.tfplan":                 "dplan",
+		"terraform.tfstate.backup":       "backup",
+		".terraform.lock.hcl":            "lock",
+		phase.BootstrapStateSentinelFile: `{"bootstrap_enabled":false}`,
+		"terraform.tfstate":              `{"version":4,"resources":[]}`,
 	}
 	for name, body := range files {
 		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o600); err != nil {
@@ -44,6 +46,7 @@ func TestCleanupTerraformEnv_PreservesState(t *testing.T) {
 		"tfplan",
 		"destroy.tfplan",
 		".terraform.lock.hcl",
+		phase.BootstrapStateSentinelFile,
 		".terraform",
 	}
 	for _, f := range mustBeGone {

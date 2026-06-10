@@ -10,6 +10,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/templates"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
+	"github.com/qxtaiba/okdctl/internal/system"
 )
 
 // DefaultProxmoxCPUType is the Proxmox qemu cpu type used when the operator
@@ -155,7 +156,11 @@ func (p *Phase) GenerateTerraformVars(ctx context.Context, cfg *config.Config, o
 	}
 
 	data := buildTerraformVarsData(cfg)
-	outputPath := filepath.Join(opts.ProjectRoot, "infrastructure", "terraform", "environments", phase.GetTerraformEnv(cfg), "terraform.tfvars")
+	envDir := filepath.Join(opts.ProjectRoot, "infrastructure", "terraform", "environments", phase.GetTerraformEnv(cfg))
+	// A stale postinstall sentinel would override the regenerated
+	// bootstrap_enabled=true and silently skip the bootstrap VM.
+	_ = system.SafeRemove(filepath.Join(envDir, phase.BootstrapStateSentinelFile))
+	outputPath := filepath.Join(envDir, "terraform.tfvars")
 	return renderAndWrite(
 		func() (string, error) { return templates.RenderTerraformVars(&data) },
 		outputPath, 0o600, "terraform.tfvars",
