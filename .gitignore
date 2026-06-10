@@ -30,7 +30,7 @@ kubeadmin-password
 tfplan
 destroy.tfplan
 .terraform/
-.terraform.lock.hcl
+infrastructure/terraform/modules/**/.terraform.lock.hcl
 
 # SSH keys and secrets
 *.pem
