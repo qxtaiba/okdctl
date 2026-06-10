@@ -26,10 +26,10 @@ const (
 	StepPrintSummary    distribution.StepID = "print-summary"
 )
 
-// destroyTracker buffers step-level failure and skip labels for the final
-// summary step. Without this the prior summary said "cluster teardown
-// completed" even after terraform destroy failed — a misleading-success
-// regression once StepDestroyInfra became NonFatal.
+// destroyTracker buffers step-level failures and skip labels for the final
+// summary step, which must stay NonFatal:false — the orchestrator does not
+// propagate NonFatal errors, and the summary's joined error is what makes a
+// failed teardown exit non-zero instead of reporting misleading success.
 type destroyTracker struct {
 	// Forward-looking: Orchestrator.Run is serial today so onError/skipWhen
 	// have no concurrent callers, but a parallel-step mode would need this
@@ -173,15 +173,10 @@ func (p *Phase) destroySteps(ctx context.Context, cfg *config.Config, opts *Opti
 		},
 		{
 			ID: StepPrintSummary, Name: "print summary", ReRunSafe: distribution.ReRunSafeYes,
-			// NonFatal must stay false: the orchestrator does not propagate
-			// NonFatal errors, and this step's error is what makes a failed
-			// teardown exit non-zero (mirrors cleanupSummaryStep).
 			Desc: "printing destruction summary", NonFatal: false,
 			Exec: func(_ context.Context) error {
 				t.mu.RLock()
-				errs := t.errs
-				failures := t.failures
-				skipped := t.skipped
+				errs, failures, skipped := t.errs, t.failures, t.skipped
 				t.mu.RUnlock()
 				switch {
 				case len(failures) > 0:
