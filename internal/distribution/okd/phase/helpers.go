@@ -9,7 +9,7 @@ import (
 )
 
 // WarnOnError returns an OnError callback that logs a warning with the given
-// message prefix followed by the error. Use with StepBuilder.OnError().
+// message prefix followed by the error. Use as a StepDef.OnError callback.
 func WarnOnError(logger *slog.Logger, msg string) func(error) {
 	return func(err error) {
 		logger.Warn(msg, "err", err)
