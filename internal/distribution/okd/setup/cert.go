@@ -12,6 +12,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"slices"
 	"time"
 
 	"github.com/qxtaiba/okdctl/internal/system"
@@ -74,10 +75,8 @@ func loadExistingCert(certPath, keyPath, ip string) (certPEM, keyPEM []byte, ok 
 		return nil, nil, false
 	}
 
-	for _, san := range cert.IPAddresses {
-		if san.Equal(net.ParseIP(ip)) {
-			return certRaw, keyRaw, true
-		}
+	if want := net.ParseIP(ip); want != nil && slices.ContainsFunc(cert.IPAddresses, want.Equal) {
+		return certRaw, keyRaw, true
 	}
 	if cert.Subject.CommonName == ip {
 		return certRaw, keyRaw, true
