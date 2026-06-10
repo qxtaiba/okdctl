@@ -40,6 +40,100 @@ func TestRedactableStderr_ShortOutputPassesThrough(t *testing.T) {
 	}
 }
 
+func TestRedactableStderr_ContentScrub(t *testing.T) {
+	cases := []struct {
+		name    string
+		input   string
+		wantIn  string
+		wantOut string
+	}{
+		{
+			name:    "key=value shape",
+			input:   "error: password=hunter2 during auth",
+			wantOut: "hunter2",
+		},
+		{
+			name:    "key: value shape",
+			input:   "token: abc123 is invalid",
+			wantOut: "abc123",
+		},
+		{
+			name:    "Authorization Bearer shape",
+			input:   "Authorization: Bearer eyJhbGciOiJSUzI1",
+			wantOut: "eyJhbGciOiJSUzI1",
+		},
+		{
+			name:    "secret= shape",
+			input:   "client_secret=topsecretvalue",
+			wantOut: "topsecretvalue",
+		},
+		{
+			name:   "unrelated text unchanged",
+			input:  "connection refused: dial tcp 10.0.0.1:6443",
+			wantIn: "connection refused",
+		},
+		{
+			name:    "case-insensitive key match",
+			input:   "PASSWORD=MySecretPass",
+			wantOut: "MySecretPass",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := scrubStderrText(tc.input)
+			if tc.wantOut != "" && strings.Contains(got, tc.wantOut) {
+				t.Errorf("scrubStderrText(%q) = %q; credential %q must be absent", tc.input, got, tc.wantOut)
+			}
+			if tc.wantIn != "" && !strings.Contains(got, tc.wantIn) {
+				t.Errorf("scrubStderrText(%q) = %q; expected %q to remain", tc.input, got, tc.wantIn)
+			}
+			if tc.wantOut != "" && !strings.Contains(got, Redacted) {
+				t.Errorf("scrubStderrText(%q) = %q; expected Redacted sentinel", tc.input, got)
+			}
+		})
+	}
+}
+
+func TestRedactableStderr_ShortCredentialIsScrubbedNotPassedThrough(t *testing.T) {
+	raw := "token: supersecrettoken123"
+	var buf bytes.Buffer
+	jsonLogger(&buf).Warn("subprocess failed", slog.Any("stderr", RedactableStderr(raw)))
+	m := parseOne(t, &buf)
+	got, ok := m["stderr"].(string)
+	if !ok {
+		t.Fatalf("stderr is %T; want string", m["stderr"])
+	}
+	if strings.Contains(got, "supersecrettoken123") {
+		t.Errorf("raw token found in log output: %q", got)
+	}
+	if !strings.Contains(got, Redacted) {
+		t.Errorf("expected Redacted sentinel in output: %q", got)
+	}
+}
+
+func TestRedactableStderr_LongTextCredentialInWindowsIsScrubbedWithTruncation(t *testing.T) {
+	head := strings.Repeat("x", 190) + " token: headtoken "
+	tail := " password=tailpass " + strings.Repeat("y", 190)
+	filler := strings.Repeat("z", 100)
+	raw := head + filler + tail
+	var buf bytes.Buffer
+	jsonLogger(&buf).Warn("subprocess failed", slog.Any("stderr", RedactableStderr(raw)))
+	m := parseOne(t, &buf)
+	got, ok := m["stderr"].(string)
+	if !ok {
+		t.Fatalf("stderr is %T; want string", m["stderr"])
+	}
+	if strings.Contains(got, "headtoken") {
+		t.Errorf("head credential token found in output: %q", got)
+	}
+	if strings.Contains(got, "tailpass") {
+		t.Errorf("tail credential password found in output: %q", got)
+	}
+	if !strings.Contains(got, "[truncated]") {
+		t.Errorf("expected truncation marker in output: %q", got)
+	}
+}
+
 // jsonLogger builds a RedactHandler over a JSON sink backed by buf.
 func jsonLogger(buf *bytes.Buffer) *slog.Logger {
 	inner := slog.NewJSONHandler(buf, &slog.HandlerOptions{Level: slog.LevelDebug})

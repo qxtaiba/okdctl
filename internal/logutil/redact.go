@@ -4,8 +4,10 @@ import (
 	"context"
 	"log/slog"
 	"net/url"
+	"regexp"
 	"slices"
 	"strings"
+	"sync"
 )
 
 // Redacted is the placeholder value that replaces any secret-bearing attr
@@ -125,13 +127,38 @@ func redactAny(v any) any {
 // the log sink verbatim.
 type RedactableStderr string
 
-// Redacted returns at most the first 200 and last 200 bytes of the stderr
-// text, joined by a truncation marker when the text exceeds 400 characters.
-// The caller sees enough context to diagnose the error without exposing a
-// full credential dump.
+// stderrScrubOnce guards one-time compilation of stderrScrubRe.
+var stderrScrubOnce sync.Once
+
+// stderrScrubRe matches credential key–value pairs in three shapes:
+//
+//	key=value          (shell env / provider diagnostics)
+//	key: value         (YAML / HTTP-style headers)
+//	Authorization: Bearer <token>
+//
+// Covers secretKeyFragments plus "authorization". Over-redaction is
+// acceptable; under-redaction is not.
+var stderrScrubRe *regexp.Regexp
+
+// scrubStderrText masks credential values in s using stderrScrubRe.
+func scrubStderrText(s string) string {
+	stderrScrubOnce.Do(func() {
+		stderrScrubRe = regexp.MustCompile(
+			`(?i)((?:password|token|secret|api_key|apikey|authorization)` +
+				`(?:\s*[:=]\s*(?:Bearer\s+)?))(\S+)`,
+		)
+	})
+	return stderrScrubRe.ReplaceAllString(s, "${1}"+Redacted)
+}
+
+// Redacted masks credential values matching key=value, key: value, or
+// Authorization: Bearer <token> shapes, then returns at most the first 200
+// and last 200 bytes joined by a truncation marker when the scrubbed text
+// exceeds 400 characters. Scrubbing runs before truncation so a window cut
+// can never split a key and leave its value exposed in the retained tail.
 func (s RedactableStderr) Redacted() any {
 	const half = 200
-	r := string(s)
+	r := scrubStderrText(string(s))
 	if len(r) <= half*2 {
 		return r
 	}
