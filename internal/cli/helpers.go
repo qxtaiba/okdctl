@@ -346,14 +346,19 @@ func executeFullDeployment(ctx context.Context, cfg *config.Config, opts deploym
 
 	// Read the marker before overwriting it: a present marker means the
 	// prior run was interrupted, so Prepare's live-cluster guard must let
-	// the documented re-run-to-resume flow proceed.
+	// the documented re-run-to-resume flow proceed. The guard probe runs
+	// before the marker write so a refusal cannot plant a marker that
+	// would bypass the guard on the next invocation.
 	existingMarker, _ := readDeployState(markerPath)
-	resumeInProgress := existingMarker != nil && !opts.FreshDeploy
+	prepOpts := okd.PrepareOpts{FreshDeploy: opts.FreshDeploy, ResumeInProgress: existingMarker != nil && !opts.FreshDeploy}
+	if err := p.GuardPrepare(cfg, prepOpts); err != nil {
+		return err
+	}
 
 	if err := markDeployPhaseFatal(markerPath, phasePrepare, runID, cfg.Cluster.Name); err != nil {
 		return err
 	}
-	setupSteps, err := p.Prepare(ctx, cfg, okd.PrepareOpts{FreshDeploy: opts.FreshDeploy, ResumeInProgress: resumeInProgress})
+	setupSteps, err := p.Prepare(ctx, cfg, prepOpts)
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
 			fmt.Fprintln(w, InterruptSummary(setupSteps, "okdctl deploy", runID))
