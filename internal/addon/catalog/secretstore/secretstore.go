@@ -6,9 +6,11 @@ package secretstore
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 
 	"github.com/qxtaiba/okdctl/internal/addon"
 	"github.com/qxtaiba/okdctl/internal/executor"
@@ -255,18 +257,27 @@ func isSopsEncrypted(path string) bool {
 
 func readSecret(ctx context.Context, env *addon.Environment, path string) (string, error) {
 	if !isSopsEncrypted(path) {
-		// Refuse plaintext secret files that any other user can read —
-		// mirrors the check in internal/credentials/envfile.go:loadEnvFileOnce.
-		fi, err := os.Stat(path)
+		// lstat (not stat) so the perm gate and the open see the same inode;
+		// O_NOFOLLOW refuses a symlink planted in the secrets dir during a
+		// sudo re-exec from redirecting the read into a root-readable target.
+		fi, err := os.Lstat(path)
 		if err != nil {
 			return "", err
+		}
+		if fi.Mode()&os.ModeSymlink != 0 {
+			return "", fmt.Errorf("secret file %q is a symlink; refusing to follow", path)
 		}
 		if perm := fi.Mode().Perm(); perm&0o077 != 0 {
 			return "", fmt.Errorf("secret file %s has insecure permissions %#o; run 'chmod 600 %s' to fix",
 				filepath.Base(path), perm, path)
 		}
 		env.Logger.Info("secretstore: reading plaintext file", "file", filepath.Base(path))
-		data, err := os.ReadFile(path)
+		f, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NOFOLLOW, 0)
+		if err != nil {
+			return "", err
+		}
+		defer f.Close()
+		data, err := io.ReadAll(f)
 		if err != nil {
 			return "", err
 		}
