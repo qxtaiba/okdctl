@@ -1,12 +1,36 @@
 package cli
 
 import (
+	"context"
+	"errors"
+	"io"
 	"testing"
 
+	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/install"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/postinstall"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/setup"
+	"github.com/qxtaiba/okdctl/internal/errtypes"
 )
+
+func TestRunFullDeployment_RejectsInvalidProviderConfig(t *testing.T) {
+	cfg := &config.Config{
+		Provider: config.ProviderConfig{
+			Type: config.ProviderProxmox,
+			Proxmox: &config.ProxmoxConfig{
+				Host:       "px.local",
+				Node:       "pve",
+				Storage:    "local-lvm",
+				ISOStorage: "${inject}",
+			},
+		},
+	}
+	err := runFullDeployment(context.Background(), cfg, io.Discard)
+	var ce *errtypes.ConfigError
+	if !errors.As(err, &ce) {
+		t.Fatalf("want *errtypes.ConfigError, got %T: %v", err, err)
+	}
+}
 
 func TestDeployDryRunSteps_IDs(t *testing.T) {
 	want := []string{

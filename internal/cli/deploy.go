@@ -243,6 +243,13 @@ func runFullDeployment(ctx context.Context, cfg *config.Config, w io.Writer) err
 		return runDeployDryRun(ctx, cfg, w)
 	}
 
+	// Hard gate before any phase code: provider fields flow verbatim into
+	// terraform.tfvars HCL literals, so a hand-edited config must be
+	// rejected here, not warn-and-proceed like saveConfig does.
+	if result := config.ValidateWithOptions(cfg, config.ValidationOptions{Scope: config.ScopeProvider}); !result.IsValid() {
+		return &errtypes.ConfigError{Msg: "config validation failed", Err: result}
+	}
+
 	envPath := credentials.EnvFilePath(deployOutputFile)
 	if err := credentials.LoadEnvFile(envPath); err != nil {
 		return err
