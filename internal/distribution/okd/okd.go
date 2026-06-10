@@ -172,10 +172,20 @@ func (p *Provisioner) UpdateIngress(ctx context.Context, cfg *config.Config, opt
 		phase.WithExecutor(p.executor),
 		phase.WithLogger(p.logger),
 	)
-	if opts.WorkDir == "" {
-		opts.WorkDir = filepath.Join(p.projectRoot, "okd-install")
-	}
+	opts.WorkDir = resolveIngressWorkDir(p.projectRoot, opts.WorkDir)
 	return postPhase.UpdateIngress(ctx, cfg, opts)
+}
+
+// resolveIngressWorkDir defaults an empty WorkDir to the okd-install
+// directory under projectRoot. UpdateIngressOptions.WorkDir is the parent
+// of cluster-config/, NOT the project root — passing projectRoot here is
+// the regression that pointed RemoveHAProxy's kubeconfig-CA pre-flight at
+// a path that never exists.
+func resolveIngressWorkDir(projectRoot, workDir string) string {
+	if workDir == "" {
+		return filepath.Join(projectRoot, "okd-install")
+	}
+	return workDir
 }
 
 // DestroyOpts configures a Provisioner.Destroy run. Zero-value runs a
