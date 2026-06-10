@@ -337,3 +337,108 @@ func TestRunInteractive_CtxCancelReturnsCtxErr(t *testing.T) {
 		t.Errorf("err = %v; want errors.Is(err, context.Canceled) == true", err)
 	}
 }
+
+func TestRunOutput_FullCapture(t *testing.T) {
+	t.Run("captures more than constMaxLines lines", func(t *testing.T) {
+		t.Parallel()
+		e := New(WithInheritedEnv())
+		result, err := e.RunOutput(context.Background(), 0, "sh", "-c",
+			"for i in $(seq 1 300); do echo \"line$i\"; done")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if result.ExitCode != 0 {
+			t.Errorf("ExitCode = %d; want 0", result.ExitCode)
+		}
+		if result.Truncated {
+			t.Errorf("Truncated = true for 300 lines under 4 MiB cap; want false")
+		}
+		if !strings.Contains(result.Stdout, "line1\n") {
+			t.Errorf("stdout missing line1 (head)")
+		}
+		if !strings.Contains(result.Stdout, "line300") {
+			t.Errorf("stdout missing line300 (tail)")
+		}
+	})
+
+	t.Run("truncates at byte cap and sets Truncated", func(t *testing.T) {
+		t.Parallel()
+		e := New(WithInheritedEnv())
+		result, err := e.RunOutput(context.Background(), 10, "sh", "-c",
+			"printf '%0.s0123456789' $(seq 1 10)")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !result.Truncated {
+			t.Errorf("Truncated = false; want true for output > 10 bytes")
+		}
+		if len(result.Stdout) != 10 {
+			t.Errorf("len(Stdout) = %d; want 10", len(result.Stdout))
+		}
+	})
+
+	t.Run("non-zero exit returns ExitError", func(t *testing.T) {
+		t.Parallel()
+		e := New(WithInheritedEnv())
+		result, err := e.RunOutputChecked(context.Background(), 0, "sh", "-c",
+			"printf 'out\n'; printf 'err\n' >&2; exit 2")
+		if err == nil {
+			t.Fatal("expected error for exit 2; got nil")
+		}
+		var exitErr *ExitError
+		if !errors.As(err, &exitErr) {
+			t.Fatalf("err type = %T; want *ExitError", err)
+		}
+		if exitErr.ExitCode != 2 {
+			t.Errorf("ExitCode = %d; want 2", exitErr.ExitCode)
+		}
+		if result == nil {
+			t.Fatal("result must be non-nil on error")
+		}
+		if !strings.Contains(result.Stdout, "out") {
+			t.Errorf("result.Stdout missing captured output; got %q", result.Stdout)
+		}
+	})
+
+	t.Run("zero exit returns full stdout", func(t *testing.T) {
+		t.Parallel()
+		e := New(WithInheritedEnv())
+		result, err := e.RunOutputChecked(context.Background(), 0, "sh", "-c", "printf 'hello'")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if result.Stdout != "hello" {
+			t.Errorf("Stdout = %q; want %q", result.Stdout, "hello")
+		}
+		if result.Truncated {
+			t.Errorf("Truncated = true; want false")
+		}
+	})
+}
+
+func TestResult_TruncatedOnRingPath(t *testing.T) {
+	t.Run("false when under ring cap", func(t *testing.T) {
+		t.Parallel()
+		e := New(WithInheritedEnv())
+		result, err := e.Run(context.Background(), "sh", "-c", "printf 'hello\n'")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if result.Truncated {
+			t.Errorf("Truncated = true for single-line output; want false")
+		}
+	})
+
+	t.Run("true when over ring cap", func(t *testing.T) {
+		t.Parallel()
+		e := New(WithInheritedEnv())
+		result, err := e.Run(context.Background(), "sh", "-c",
+			"for i in $(seq 1 201); do echo x; done")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !result.Truncated {
+			t.Errorf("Truncated = false for 201 lines; want true")
+		}
+	})
+}

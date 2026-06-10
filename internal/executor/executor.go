@@ -183,11 +183,16 @@ func (e *Executor) buildEnv() []string {
 }
 
 // Result is the captured outcome of a Run-style invocation.
+// Truncated is true when stdout was capped — either by the ring-buffer path
+// (Run/RunChecked hit constMaxLines) or by the byte-cap path (RunOutput hit
+// its limit). Callers that machine-parse stdout must use
+// RunOutput/RunOutputChecked and check Truncated before unmarshalling.
 type Result struct {
-	ExitCode int
-	Stdout   string
-	Stderr   string
-	Duration time.Duration
+	ExitCode  int
+	Stdout    string
+	Stderr    string
+	Duration  time.Duration
+	Truncated bool
 }
 
 // ExitError is the typed error RunChecked / RunWithStdinChecked return when
@@ -267,10 +272,11 @@ func (e *Executor) run(ctx context.Context, stdin io.Reader, name string, args .
 	err := cmd.Run()
 
 	result := &Result{
-		ExitCode: 0,
-		Stdout:   rout.tail(),
-		Stderr:   rerr.tail(),
-		Duration: time.Since(start),
+		ExitCode:  0,
+		Stdout:    rout.tail(),
+		Stderr:    rerr.tail(),
+		Duration:  time.Since(start),
+		Truncated: rout.full,
 	}
 
 	if err != nil {
@@ -405,6 +411,98 @@ func (e *Executor) RunChecked(ctx context.Context, name string, args ...string) 
 		return result, NewExitError(ctx, name, result.ExitCode, result.Stderr)
 	}
 	return result, nil
+}
+
+// runOutputMaxBytes is the default stdout cap for RunOutput when limit=0.
+const runOutputMaxBytes = 4 * 1024 * 1024
+
+// RunOutput executes a command and returns the full stdout up to limit
+// bytes. When limit is 0, runOutputMaxBytes (4 MiB) is used. Unlike Run,
+// stdout is fully buffered rather than ring-truncated, making it safe for
+// machine parsing of large JSON payloads (e.g. oc get clusteroperators -o
+// json). Stderr stays ring-buffered for diagnostics. When stdout exceeds
+// limit, Result.Truncated is true and Stdout holds the capped prefix. The
+// returned *Result is always non-nil.
+func (e *Executor) RunOutput(ctx context.Context, limit int, name string, args ...string) (*Result, error) {
+	return e.runOutput(ctx, nil, limit, name, args...)
+}
+
+// RunOutputChecked is RunOutput with RunChecked semantics: non-zero exit
+// returns an *ExitError carrying the stderr tail.
+func (e *Executor) RunOutputChecked(ctx context.Context, limit int, name string, args ...string) (*Result, error) {
+	result, err := e.RunOutput(ctx, limit, name, args...)
+	if err != nil {
+		return result, err
+	}
+	if result.ExitCode != 0 {
+		return result, NewExitError(ctx, name, result.ExitCode, result.Stderr)
+	}
+	return result, nil
+}
+
+func (e *Executor) runOutput(ctx context.Context, stdin io.Reader, limit int, name string, args ...string) (*Result, error) {
+	if limit <= 0 {
+		limit = runOutputMaxBytes
+	}
+	start := time.Now()
+
+	cmd := exec.CommandContext(ctx, name, args...)
+	if e.workDir != "" {
+		cmd.Dir = e.workDir
+	}
+	cmd.Env = e.buildEnv()
+
+	rerr := newRingWriter(constMaxLines)
+	cmd.Stdin = stdin
+	cmd.Stderr = rerr
+
+	stdoutPipe, pipeErr := cmd.StdoutPipe()
+	if pipeErr != nil {
+		return &Result{Duration: time.Since(start)}, pipeErr
+	}
+
+	// Soft-cancel via SIGINT mirrors run(); see RunInteractive for the rationale.
+	cmd.Cancel = func() error { return cmd.Process.Signal(syscall.SIGINT) }
+	cmd.WaitDelay = 30 * time.Second
+
+	e.logger.Debug("exec: started", "cmd", name, "argc", len(args))
+
+	if err := cmd.Start(); err != nil {
+		return &Result{Duration: time.Since(start)}, err
+	}
+
+	// Read limit+1 bytes so "exactly limit" and "exceeded limit" are distinguishable.
+	out, readErr := io.ReadAll(io.LimitReader(stdoutPipe, int64(limit)+1))
+	waitErr := cmd.Wait()
+
+	truncated := len(out) > limit
+	if truncated {
+		out = out[:limit]
+	}
+
+	result := &Result{
+		ExitCode:  0,
+		Stdout:    string(out),
+		Stderr:    rerr.tail(),
+		Duration:  time.Since(start),
+		Truncated: truncated,
+	}
+
+	var retErr error
+	switch {
+	case readErr != nil:
+		retErr = readErr
+	case waitErr != nil:
+		var exitErr *exec.ExitError
+		if errors.As(waitErr, &exitErr) {
+			result.ExitCode = exitErr.ExitCode()
+		} else {
+			retErr = waitErr
+		}
+	}
+
+	e.logger.Debug("exec: completed", "cmd", name, "exit", result.ExitCode, "duration", result.Duration)
+	return result, retErr
 }
 
 // RunWithStdinChecked is like RunChecked but pipes input to the command's stdin.
