@@ -2,6 +2,7 @@ package destroy
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"slices"
 	"sync"
@@ -35,6 +36,7 @@ type destroyTracker struct {
 	// lock without a retrofit — same rationale as distribution.PhaseContext.
 	mu       sync.RWMutex
 	log      *slog.Logger
+	errs     []error
 	failures []string
 	skipped  []string
 }
@@ -42,6 +44,7 @@ type destroyTracker struct {
 func (t *destroyTracker) onError(label string) func(error) {
 	return func(err error) {
 		t.mu.Lock()
+		t.errs = append(t.errs, err)
 		t.failures = append(t.failures, label)
 		t.mu.Unlock()
 		phase.WarnOnError(t.log, label)(err)
@@ -170,9 +173,13 @@ func (p *Phase) destroySteps(ctx context.Context, cfg *config.Config, opts *Opti
 		},
 		{
 			ID: StepPrintSummary, Name: "print summary", ReRunSafe: distribution.ReRunSafeYes,
-			Desc: "printing destruction summary", NonFatal: true,
+			// NonFatal must stay false: the orchestrator does not propagate
+			// NonFatal errors, and this step's error is what makes a failed
+			// teardown exit non-zero (mirrors cleanupSummaryStep).
+			Desc: "printing destruction summary", NonFatal: false,
 			Exec: func(_ context.Context) error {
 				t.mu.RLock()
+				errs := t.errs
 				failures := t.failures
 				skipped := t.skipped
 				t.mu.RUnlock()
@@ -180,6 +187,7 @@ func (p *Phase) destroySteps(ctx context.Context, cfg *config.Config, opts *Opti
 				case len(failures) > 0:
 					p.Log.Warn("destroy: teardown finished with non-fatal failures",
 						"failed_steps", failures)
+					return &errtypes.ClusterError{Msg: "destroy finished with failed steps", Err: errors.Join(errs...)}
 				case len(skipped) > 0:
 					p.Log.Info("destroy: cluster teardown completed",
 						"skipped_steps", skipped)

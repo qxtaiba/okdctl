@@ -10,6 +10,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/distribution"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
+	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/executor"
 )
 
@@ -117,8 +118,13 @@ func TestDestroySteps_FailurePath(t *testing.T) {
 	if defs[4].ID != StepPrintSummary {
 		t.Fatalf("defs[4].ID = %q; want %q", defs[4].ID, StepPrintSummary)
 	}
-	if err := defs[4].Exec(context.Background()); err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	err := defs[4].Exec(context.Background())
+	if err == nil {
+		t.Fatal("expected non-nil error from summary when steps failed")
+	}
+	var clusterErr *errtypes.ClusterError
+	if !errors.As(err, &clusterErr) {
+		t.Fatalf("err = %v; want *errtypes.ClusterError", err)
 	}
 
 	rec, ok := h.last()
@@ -200,8 +206,19 @@ func TestDestroySteps_PartialFailure(t *testing.T) {
 	defs[0].OnError(errors.New("tf-fail"))
 	defs[3].OnError(errors.New("fw-fail"))
 
-	if err := defs[4].Exec(context.Background()); err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	err := defs[4].Exec(context.Background())
+	if err == nil {
+		t.Fatal("expected non-nil error from summary when steps failed")
+	}
+	var clusterErr *errtypes.ClusterError
+	if !errors.As(err, &clusterErr) {
+		t.Fatalf("err = %v; want *errtypes.ClusterError", err)
+	}
+	if !strings.Contains(clusterErr.Err.Error(), "tf-fail") {
+		t.Errorf("joined error %q missing 'tf-fail'", clusterErr.Err.Error())
+	}
+	if !strings.Contains(clusterErr.Err.Error(), "fw-fail") {
+		t.Errorf("joined error %q missing 'fw-fail'", clusterErr.Err.Error())
 	}
 
 	rec, ok := h.last()
