@@ -203,6 +203,17 @@ func createOKDProvisionerWithOpts(cfg *config.Config, creds *credentials.Proxmox
 	return okd.New(cfg.Distribution.Version, opts...)
 }
 
+// guardedPrepareOpts reads the deploy-state marker BEFORE it is overwritten
+// (a present marker means the prior run was interrupted, so the live-cluster
+// guard must let the documented re-run-to-resume flow proceed) and probes
+// the guard before any marker write — a refusal must not plant a marker
+// that would bypass the guard on the next invocation.
+func guardedPrepareOpts(p *okd.Provisioner, cfg *config.Config, markerPath string, freshDeploy bool) (okd.PrepareOpts, error) {
+	existingMarker, _ := readDeployState(markerPath)
+	prepOpts := okd.PrepareOpts{FreshDeploy: freshDeploy, ResumeInProgress: existingMarker != nil && !freshDeploy}
+	return prepOpts, p.GuardPrepare(cfg, prepOpts)
+}
+
 type deploymentOptions struct {
 	ShowStartMessage    bool
 	Credentials         *credentials.ProxmoxCredentials
@@ -344,14 +355,8 @@ func executeFullDeployment(ctx context.Context, cfg *config.Config, opts deploym
 	startTime := time.Now()
 	markerPath := filepath.Join(workDir, deployStateFile)
 
-	// Read the marker before overwriting it: a present marker means the
-	// prior run was interrupted, so Prepare's live-cluster guard must let
-	// the documented re-run-to-resume flow proceed. The guard probe runs
-	// before the marker write so a refusal cannot plant a marker that
-	// would bypass the guard on the next invocation.
-	existingMarker, _ := readDeployState(markerPath)
-	prepOpts := okd.PrepareOpts{FreshDeploy: opts.FreshDeploy, ResumeInProgress: existingMarker != nil && !opts.FreshDeploy}
-	if err := p.GuardPrepare(cfg, prepOpts); err != nil {
+	prepOpts, err := guardedPrepareOpts(p, cfg, markerPath, opts.FreshDeploy)
+	if err != nil {
 		return err
 	}
 
