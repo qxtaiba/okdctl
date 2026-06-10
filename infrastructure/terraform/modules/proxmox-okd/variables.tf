@@ -153,6 +153,10 @@ variable "master_count" {
     condition     = var.master_count >= 1 && var.master_count <= 5 && var.master_count % 2 == 1
     error_message = "master count must be an odd number between 1 and 5 for ha."
   }
+  validation {
+    condition     = var.master_count <= length(var.master_names)
+    error_message = "master_count exceeds master_names list length; add more entries to master_names."
+  }
 }
 
 variable "worker_count" {
@@ -162,6 +166,10 @@ variable "worker_count" {
   validation {
     condition     = var.worker_count >= 0 && var.worker_count <= 20
     error_message = "worker count must be between 0 and 20."
+  }
+  validation {
+    condition     = var.worker_count <= length(var.worker_names)
+    error_message = "worker_count exceeds worker_names list length; add more entries to worker_names."
   }
 }
 
