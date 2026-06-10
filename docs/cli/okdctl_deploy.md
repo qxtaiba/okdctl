@@ -6,6 +6,9 @@ Deploy a Kubernetes cluster
 
 Deploy an OKD/OpenShift cluster through an interactive wizard.
 
+Use --yes to write the configuration file non-interactively without
+deploying; run the command again without --yes to deploy from it.
+
 ```
 okdctl deploy [flags]
 ```
@@ -15,7 +18,7 @@ okdctl deploy [flags]
 ```
   okdctl deploy
   okdctl deploy --config my-cluster.yaml
-  okdctl deploy --yes --output-file my-cluster.yaml
+  okdctl deploy --yes --output-file my-cluster.yaml  # writes config only; does not deploy
   okdctl deploy --dry-run
 ```
 
@@ -27,8 +30,8 @@ okdctl deploy [flags]
       --metrics-addr string     address for Prometheus metrics endpoint; bare ":9090" binds 127.0.0.1; disabled when empty
       --metrics-allow-network   allow metrics endpoint to bind on a wildcard address (0.0.0.0 or [::])
       --minimal                 use minimal defaults (single-node cluster)
-      --output-file string      output file for configuration (default "okdctl.yaml")
-  -y, --yes                     skip prompts, use defaults
+      --output-file string      config file to write wizard output to; overrides --config when both are set (default "okdctl.yaml")
+  -y, --yes                     write configuration non-interactively; does not deploy
 ```
 
 ### Options inherited from parent commands
