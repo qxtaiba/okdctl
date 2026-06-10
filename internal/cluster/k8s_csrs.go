@@ -13,7 +13,7 @@ import (
 // been approved nor denied. An Approved or Denied CSR carries at least one
 // condition entry and is excluded.
 func (c *Client) PendingCSRs(ctx context.Context) ([]CSR, error) {
-	result, err := c.run(ctx, "get", "csr", "-o", "json")
+	result, err := c.runOutput(ctx, "get", "csr", "-o", "json")
 	if err != nil {
 		return nil, err
 	}
@@ -22,6 +22,11 @@ func (c *Client) PendingCSRs(ctx context.Context) ([]CSR, error) {
 			Msg: "failed to get CSRs",
 			Err: executor.NewExitError(ctx, c.CLI+" get csr", result.ExitCode, result.Stderr),
 		}
+	}
+	// A capped payload means the JSON document is incomplete; parsing would
+	// silently succeed on a partial items list.
+	if result.Truncated {
+		return nil, &errtypes.ClusterError{Msg: "csr list output truncated; cannot parse"}
 	}
 
 	var csrList struct {

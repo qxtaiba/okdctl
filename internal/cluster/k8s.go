@@ -146,6 +146,14 @@ func (c *Client) run(ctx context.Context, args ...string) (*executor.Result, err
 	return result, nil
 }
 
+func (c *Client) runOutput(ctx context.Context, args ...string) (*executor.Result, error) {
+	result, err := c.exec.RunOutput(ctx, 0, c.CLI, args...)
+	if err != nil {
+		return nil, fmt.Errorf("%s %s failed: %w", c.CLI, subcommand(args), err)
+	}
+	return result, nil
+}
+
 func (c *Client) runCheck(ctx context.Context, args ...string) error {
 	result, err := c.run(ctx, args...)
 	if err != nil {
