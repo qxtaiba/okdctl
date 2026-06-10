@@ -114,7 +114,12 @@ func (p *Phase) MonitorInstallation(ctx context.Context, clusterDir string, opts
 		return &errtypes.ClusterError{Msg: "failed to start installation monitor", Err: err}
 	}
 
-	ticker := time.NewTicker(opts.CSRApprovalInterval)
+	// time.NewTicker panics on a non-positive duration; fall back to the default.
+	interval := opts.CSRApprovalInterval
+	if interval <= 0 {
+		interval = DefaultCSRApprovalInterval
+	}
+	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
 	totalApproved := 0
