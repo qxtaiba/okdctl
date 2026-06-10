@@ -22,6 +22,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/executor"
+	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/system"
 	"github.com/qxtaiba/okdctl/internal/tui"
 	"github.com/qxtaiba/okdctl/internal/version"
@@ -274,7 +275,7 @@ func bundleTerraformState(ctx context.Context, addFile func(string, []byte) erro
 		return manifestEntry{Name: categoryTerraformState, Status: bundleStatusFailed, Message: fmt.Sprintf("terraform state list: %v", runErr)}
 	}
 	if result.ExitCode != 0 {
-		msg := strings.TrimSpace(result.Stderr)
+		msg := fmt.Sprint(logutil.RedactableStderr(strings.TrimSpace(result.Stderr)).Redacted())
 		if msg == "" {
 			msg = fmt.Sprintf("terraform state list exited %d", result.ExitCode)
 		}
@@ -316,7 +317,7 @@ func bundleMustGather(ctx context.Context, addStream func(*tar.Header, io.Reader
 		return manifestEntry{Name: categoryMustGather, Status: bundleStatusFailed, Message: fmt.Sprintf("oc adm must-gather: %v", mgErr)}
 	}
 	if mgResult.ExitCode != 0 {
-		msg := strings.TrimSpace(mgResult.Stderr)
+		msg := fmt.Sprint(logutil.RedactableStderr(strings.TrimSpace(mgResult.Stderr)).Redacted())
 		if msg == "" {
 			msg = fmt.Sprintf("oc adm must-gather exited %d", mgResult.ExitCode)
 		}
