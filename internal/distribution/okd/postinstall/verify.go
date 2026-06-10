@@ -117,12 +117,12 @@ type ClusterHealthResult struct {
 func (p *Phase) VerifyClusterHealth(ctx context.Context, _ *Options) (*ClusterHealthResult, error) {
 	result := &ClusterHealthResult{}
 
-	cmdResult, err := p.Exec.RunOutputChecked(ctx, 0, "oc", "get", "clusteroperators", "-o", "json")
+	coJSON, err := p.OcOutputFull(ctx, "get", "clusteroperators", "-o", "json")
 	if err != nil {
 		return nil, &errtypes.ClusterError{Msg: "failed to get cluster operators", Err: err}
 	}
 
-	degraded, err := parseOperatorDegradation([]byte(cmdResult.Stdout))
+	degraded, err := parseOperatorDegradation([]byte(coJSON))
 	if err != nil {
 		return nil, &errtypes.ClusterError{Msg: "failed to parse cluster operator status", Err: err}
 	}
@@ -133,12 +133,12 @@ func (p *Phase) VerifyClusterHealth(ctx context.Context, _ *Options) (*ClusterHe
 		p.Log.Info("cluster: all operators are healthy")
 	}
 
-	cmdResult, err = p.Exec.RunOutputChecked(ctx, 0, "oc", "get", "nodes", "-o", "json")
+	nodesJSON, err := p.OcOutputFull(ctx, "get", "nodes", "-o", "json")
 	if err != nil {
 		return result, &errtypes.ClusterError{Msg: "failed to get nodes", Err: err}
 	}
 
-	ready, total, err := parseNodeReadiness([]byte(cmdResult.Stdout))
+	ready, total, err := parseNodeReadiness([]byte(nodesJSON))
 	if err != nil {
 		return result, &errtypes.ClusterError{Msg: "failed to parse node readiness", Err: err}
 	}

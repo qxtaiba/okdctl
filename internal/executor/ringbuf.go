@@ -20,6 +20,9 @@ type ringWriter struct {
 	max   int
 	pos   int
 	full  bool
+	// dropped is true once a line has actually been overwritten; full alone
+	// only means the buffer reached capacity with nothing lost yet.
+	dropped bool
 	// partial holds an incomplete line (no trailing newline yet).
 	partial string
 }
@@ -50,6 +53,9 @@ func (r *ringWriter) Write(p []byte) (int, error) {
 }
 
 func (r *ringWriter) push(line string) {
+	if r.full {
+		r.dropped = true
+	}
 	r.lines[r.pos] = line
 	r.pos = (r.pos + 1) % r.max
 	if r.pos == 0 {
