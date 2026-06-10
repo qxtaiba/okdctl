@@ -124,7 +124,7 @@ func Fetch(ctx context.Context, url, dst string, opts ...FetchOption) error {
 		return fetchToFile(ctx, client, cfg, filename)
 	})
 	if err != nil {
-		cfg.logger.Error("download: giving up after retries", "desc", cfg.description, "attempts", attempts, "err", err)
+		cfg.logger.Warn("download: giving up after retries", "desc", cfg.description, "attempts", attempts, "err", err)
 		return &errtypes.NetworkError{Msg: fmt.Sprintf("download failed for %s", cfg.description), Err: err}
 	}
 
