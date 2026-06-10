@@ -50,6 +50,11 @@ linters:
     goconst:
       min-occurrences: 3
       min-len: 3
+      # ignore-calls:true (default) is intentional: oc/helm argv literals
+      # ("-n", "get", "json", "haproxy", "flux-system", "infrastructure")
+      # recur 13-26x each as call args that should not become constants;
+      # enabling false needs min-occurrences>=30 plus exclusions to stay green.
+      ignore-calls: true
     gocritic:
       enabled-tags:
         - diagnostic
