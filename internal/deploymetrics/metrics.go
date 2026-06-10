@@ -50,6 +50,13 @@ func (r *Recorder) StepFinished(result *distribution.StepResult) {
 	secs := result.Duration.Seconds()
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	// lazy-init keeps the zero value of Recorder usable without NewRecorder.
+	if r.stepTotal == nil {
+		r.stepTotal = make(map[string][2]int64)
+	}
+	if r.stepDurSec == nil {
+		r.stepDurSec = make(map[string][]float64)
+	}
 	c := r.stepTotal[id]
 	if result.Success {
 		c[0]++
