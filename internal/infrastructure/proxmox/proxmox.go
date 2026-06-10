@@ -476,7 +476,7 @@ func (p *Provider) probeVMEnumeration(ctx context.Context, cfg *config.Config) b
 	}
 	vmidBase := cfg.Topology.VMIDBase
 	if vmidBase == 0 {
-		vmidBase = 6000
+		vmidBase = config.DefaultVMIDBase
 	}
 	params := &phase.RemoteISOParams{
 		Host:           phase.ProxmoxBareHost(p.host),

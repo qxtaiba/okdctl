@@ -51,7 +51,7 @@ func DefaultConfig() *Config {
 				Memory: 8192,
 				Disk:   50,
 			},
-			VMIDBase: 6000,
+			VMIDBase: DefaultVMIDBase,
 		},
 		Networking: NetworkingConfig{
 			MachineCIDR: "192.168.1.0/24",

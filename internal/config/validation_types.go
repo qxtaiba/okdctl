@@ -23,6 +23,12 @@ const (
 	MinDiskGBWorkerOKD   = 50
 )
 
+// DefaultVMIDBase is the VMID assigned to the first cluster VM. Config
+// seeding and the proxmox post-apply enumeration probe both use this value;
+// keeping them in sync here prevents the probe heuristic from silently
+// inverting if the default ever changes.
+const DefaultVMIDBase = 6000
+
 // ValidationError describes a single config validation failure.
 type ValidationError struct {
 	Field   string
