@@ -149,10 +149,12 @@ func runUpdateIngress(cmd *cobra.Command, _ []string) error {
 	tui.Info("detecting ingress strategy and loadbalancer ips...")
 	startTime := time.Now()
 
+	// WorkDir stays empty so the provisioner defaults it to
+	// <projectRoot>/okd-install; passing projectRoot here pointed
+	// RemoveHAProxy at a cluster-config path that never exists.
 	result, err := p.UpdateIngress(ctx, cfg, postinstall.UpdateIngressOptions{
 		RemoveHAProxy:     !updateIngressKeepHAProxy,
 		ConfirmConversion: buildConvertConfirm(ctx, updateIngressYes),
-		WorkDir:           projectRoot,
 	})
 	if err != nil {
 		return err
