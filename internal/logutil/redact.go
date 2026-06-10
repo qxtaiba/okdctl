@@ -132,8 +132,9 @@ var stderrScrubOnce sync.Once
 
 // stderrScrubRe matches credential key–value pairs in three shapes:
 //
-//	key=value          (shell env / provider diagnostics)
-//	key: value         (YAML / HTTP-style headers)
+//	key=value            (shell env / provider diagnostics)
+//	key: value           (YAML / HTTP-style headers)
+//	"key": "value"       (JSON diagnostics; quoted values may contain spaces)
 //	Authorization: Bearer <token>
 //
 // Covers secretKeyFragments plus "authorization". Over-redaction is
@@ -145,7 +146,7 @@ func scrubStderrText(s string) string {
 	stderrScrubOnce.Do(func() {
 		stderrScrubRe = regexp.MustCompile(
 			`(?i)((?:password|token|secret|api_key|apikey|authorization)` +
-				`(?:\s*[:=]\s*(?:Bearer\s+)?))(\S+)`,
+				`(?:["']?\s*[:=]\s*(?:Bearer\s+)?))("[^"]*"|'[^']*'|\S+)`,
 		)
 	})
 	return stderrScrubRe.ReplaceAllString(s, "${1}"+Redacted)

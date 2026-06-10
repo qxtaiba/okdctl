@@ -322,3 +322,43 @@ func TestRedactHandler_WithGroupPropagates(t *testing.T) {
 		t.Errorf("grp.password = %v; want %q", got, Redacted)
 	}
 }
+
+func TestRedactableStderr_QuotedShapes(t *testing.T) {
+	cases := []struct {
+		name    string
+		input   string
+		wantOut string
+	}{
+		{
+			name:    "json quoted key and value",
+			input:   `{"password": "hunter2"}`,
+			wantOut: "hunter2",
+		},
+		{
+			name:    "json compact quoted key",
+			input:   `"token":"abc123"`,
+			wantOut: "abc123",
+		},
+		{
+			name:    "quoted value with spaces",
+			input:   `password="my secret phrase"`,
+			wantOut: "my secret phrase",
+		},
+		{
+			name:    "single-quoted value with spaces",
+			input:   `api_key='spaced out value'`,
+			wantOut: "spaced out value",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := scrubStderrText(tc.input)
+			if strings.Contains(got, tc.wantOut) {
+				t.Errorf("scrubStderrText(%q) = %q; credential %q must be absent", tc.input, got, tc.wantOut)
+			}
+			if !strings.Contains(got, Redacted) {
+				t.Errorf("scrubStderrText(%q) = %q; expected Redacted sentinel", tc.input, got)
+			}
+		})
+	}
+}
