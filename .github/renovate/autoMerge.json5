@@ -7,6 +7,12 @@
       "automerge": true,
       "automergeType": "pr",
       "automergeStrategy": "rebase"
+    },
+    {
+      "description": "require human review for v0.x minor bumps — breaking-capable",
+      "matchCurrentVersion": "<1.0.0",
+      "matchUpdateTypes": ["minor"],
+      "automerge": false
     }
   ]
 }
