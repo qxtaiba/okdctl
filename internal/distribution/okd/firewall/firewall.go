@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"os/exec"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -63,9 +64,7 @@ var haproxyFrontends = []Port{
 // Postinstall uses this to tear down firewall rules when HAProxy is removed,
 // without touching DNS and ignition rules. The result is a defensive copy.
 func HAProxyFrontendPorts() []Port {
-	out := make([]Port, len(haproxyFrontends))
-	copy(out, haproxyFrontends)
-	return out
+	return slices.Clone(haproxyFrontends)
 }
 
 // Port describes a single firewall rule: number + protocol, with a

@@ -2,6 +2,7 @@ package addon
 
 import (
 	"fmt"
+	"slices"
 	"sync"
 
 	"github.com/qxtaiba/okdctl/internal/config"
@@ -78,9 +79,7 @@ func Names() []string {
 	registry.mu.RLock()
 	defer registry.mu.RUnlock()
 
-	out := make([]string, len(registry.order))
-	copy(out, registry.order)
-	return out
+	return slices.Clone(registry.order)
 }
 
 // IsRegistered reports whether name is in the registry. Symmetric with

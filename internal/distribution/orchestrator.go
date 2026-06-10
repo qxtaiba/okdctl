@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"slices"
 	"sync"
 	"time"
 
@@ -107,9 +108,7 @@ func (o *Orchestrator) Run(ctx context.Context) error {
 func (o *Orchestrator) Results() []StepResult {
 	o.mu.RLock()
 	defer o.mu.RUnlock()
-	out := make([]StepResult, len(o.results))
-	copy(out, o.results)
-	return out
+	return slices.Clone(o.results)
 }
 
 // classifyStepErr wraps a bare step error in ClusterError so the cli layer
