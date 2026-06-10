@@ -68,11 +68,11 @@ func (p *Phase) verifyApacheListening(ctx context.Context, bindIP string) {
 	dialer := &net.Dialer{Timeout: 1 * time.Second}
 	conn, err := dialer.DialContext(ctx, "tcp", addr)
 	if err != nil {
-		p.Log.Warn("apache: httpd may not be listening on port 8080 - check configuration")
+		p.Log.Warn("apache: httpd may not be listening on port 443 - check configuration")
 		return
 	}
 	_ = conn.Close()
-	p.Log.Info("apache: httpd service listening on port 8080")
+	p.Log.Info("apache: httpd service listening on port 443")
 }
 
 // configureApacheHTTPS writes the HTTPS vhost drop-in conf and, on Debian,

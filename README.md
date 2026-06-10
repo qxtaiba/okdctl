@@ -160,8 +160,9 @@ Run `okdctl doctor` first. It catches most common failures and its
 output goes in bug reports.
 
 - **Bootstrap VM never comes up.** Networking. The ignition URL must be
-  reachable from the node network (HAProxy IP, port 8080, path
-  `/ignition/<role>.ign`). Doctor probes this.
+  reachable from the node network
+  (`https://<ignition_server_ip>/ignition/<role>.ign`, port 443). Doctor
+  probes this.
 - **`dnsmasq` fails on port 53.** `systemd-resolved` has it. Set
   `DNSStubListener=no` in `/etc/systemd/resolved.conf` and restart
   `systemd-resolved`, then retry `okdctl deploy`.
@@ -237,22 +238,23 @@ The [`CHANGELOG`](CHANGELOG.md) documents every break. Pin a version until 1.0.
 ### Ignition pull-secret exposure window
 
 During bootstrap (approximately 15–30 minutes), Apache on the bastion serves
-`bootstrap.ign`, `master.ign`, and `worker.ign` over HTTP on port 8080. These
+`bootstrap.ign`, `master.ign`, and `worker.ign` over HTTPS on port 443. These
 files embed the OKD pull-secret JSON in plain text.
 
 okdctl binds Apache to `http_server.ignition_server_ip` (the bridge IP that FCOS
 nodes reference in their kargs ignition URL) rather than `0.0.0.0`, which removes
-the risk on interfaces that machine-network nodes cannot reach. The residual window:
-any host that can reach the bastion bridge IP on port 8080 during bootstrap can
-retrieve the ignition files and harvest the pull-secret.
+the risk on interfaces that machine-network nodes cannot reach. The CA that
+authenticates the server is embedded into each node ISO via
+`coreos-installer iso customize --ignition-ca`, so nodes verify the server
+before requesting files. The residual window: TLS authenticates the server,
+not the client — any host that can reach the bastion bridge IP on port 443
+during bootstrap can retrieve the ignition files and harvest the pull-secret.
 
 Mitigations:
 - Ensure the bastion bridge network is isolated from untrusted hosts (VLAN, private
   bridge, or Proxmox SDN zone) before running `okdctl deploy`.
 - After `okdctl deploy` completes, run `okdctl cleanup` which removes the
   ignition files from the web root.
-- A future enhancement (tracked in the roadmap) will add a
-  firewalld/iptables INPUT rule scoping port 8080 to `networking.machine_cidr`.
 
 ### SSH/SCP host-key trust on first run (TOFU window)
 
