@@ -205,8 +205,8 @@ func ConfigureSystemResolver(ctx context.Context, fallbackDNS []string, logger *
 	// Fall back to systemd-resolved.
 	if system.IsServiceActive(ctx, "systemd-resolved") {
 		logger.Info("resolver: configuring systemd-resolved to use dnsmasq")
-		confDir := "/etc/systemd/resolved.conf.d"
-		confPath := confDir + "/dnsmasq.conf"
+		confPath := resolvedConf
+		confDir := filepath.Dir(resolvedConf)
 		confContent := "[Resolve]\nDNS=127.0.0.1\nDomains=~.\n"
 		if err := os.MkdirAll(confDir, 0o755); err != nil {
 			return fmt.Errorf("failed to create resolved.conf.d: %w", err)
