@@ -130,8 +130,8 @@ func TestValidateTerraformEnv(t *testing.T) {
 }
 
 func TestValidateProxmoxConfigFields(t *testing.T) {
-	goodStorage := []string{"local", "local-lvm", "ceph-pool", "storage1", "Tank"}
-	badStorage := []string{`local"inject`, "has space", "has/slash", "has.dot"}
+	goodStorage := []string{"local", "local-lvm", "ceph-pool", "storage1", "Tank", "has.dot"}
+	badStorage := []string{`local"inject`, "has space", "has/slash", ".leading-dot"}
 
 	hasFieldError := func(r *ValidationResult, field string) bool {
 		for _, e := range r.Errors {

@@ -32,6 +32,27 @@ func TestRunFullDeployment_RejectsInvalidProviderConfig(t *testing.T) {
 	}
 }
 
+func TestRunFullDeployment_RejectsBogusProviderType(t *testing.T) {
+	// validateProvider no-ops on a non-proxmox type, so the gate must also
+	// run the required/enum scopes that reject the type itself.
+	cfg := &config.Config{
+		Provider: config.ProviderConfig{
+			Type: "Proxmox",
+			Proxmox: &config.ProxmoxConfig{
+				Host:       "px.local",
+				Node:       "pve",
+				Storage:    "local-lvm",
+				ISOStorage: `x"inject`,
+			},
+		},
+	}
+	err := runFullDeployment(context.Background(), cfg, io.Discard)
+	var ce *errtypes.ConfigError
+	if !errors.As(err, &ce) {
+		t.Fatalf("want *errtypes.ConfigError, got %T: %v", err, err)
+	}
+}
+
 func TestDeployDryRunSteps_IDs(t *testing.T) {
 	want := []string{
 		string(setup.StepInstallPackages),
