@@ -2498,6 +2498,335 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 **Fix:** Add a table test mirroring internal/executor/executor_test.go:L158-L193 (secret keys blanked, slice nil after call, non-secret entries also cleared, idempotent second call). Alternatively refactor Provider to delegate to an executor so the existing test covers it.
 **Effort:** hours
 
+### Tier A — holistic review 2026-06-10
+
+Captured from `holistic-review` run on 2026-06-10 (HEAD `46d11fa`). Items are
+judgment-shaped (not audit atoms); each has a 1-3 sentence rationale inline.
+Run focus: stripping AI-generated code smells. Headline: comment slop is
+already gone (zero hits for narration/dividers/peacock/bare-TODO patterns);
+what remains is structural — dead knobs, fabricated data, unreachable states,
+and ceremony layers.
+
+#### A1 — Collapse the step framework's triple representation
+
+- **Status:** not started
+- **Category:** architecture
+- **State:** design needed
+- **Effort:** days
+- **Impact:** medium
+- **Evidence:** `internal/distribution/step.go:33-79`, `internal/distribution/step.go:238-263`
+- **Rationale:** The same step data exists in three shapes (StepDef struct, fluent StepBuilder, builtStep wrapper) plus a capability-interface tower (Step/Skipper/FatalChecker/StepCallbacks) whose members are all mandatory with a single implementation and single consumer. Two review agents converged on this independently.
+- **Acceptance:**
+  - StepDef + BuildSteps remains the only construction surface; the 13-method fluent StepBuilder is deleted or unexported — grep confirms it has zero callers outside BuildSteps itself
+  - The Step/Skipper/FatalChecker/StepCallbacks interface decomposition collapses: keep one flat interface or have Orchestrator consume a concrete step type; AlreadyDoneChecker stays only if the optional type-assertion at orchestrator.go:151 keeps paying for itself
+  - BuildSteps stops re-translating StepDef field-by-field through builder setters with nil guards; a step is built directly from the def
+  - Stale doc references to the builder (e.g. phase/helpers.go WarnOnError "Use with StepBuilder.OnError()") updated to StepDef vocabulary
+- **Depends on:** none
+
+#### A2 — Unify the two parallel kubectl/oc invocation layers
+
+- **Status:** not started
+- **Category:** architecture
+- **State:** design needed
+- **Effort:** days
+- **Impact:** medium
+- **Evidence:** `internal/cluster/k8s.go:141-160`, `internal/distribution/okd/phase/kubectl.go:16-44`
+- **Rationale:** internal/cluster is a 3-file package wrapping executor to run oc, consumed by exactly one file (install/monitor.go) — which is phase code, where BasePhase.Oc* is canonical. Two independently-derived oc conventions for the same job. Shelling out itself is deliberate (oc is already a required binary; no client-go dep; version-skew safety) — only the duplication goes.
+- **Acceptance:**
+  - One convention for shelling out to oc/kubectl: either internal/cluster becomes the single client that BasePhase.Oc* delegates to, or cluster's CSR methods move into the phase layer and the package is dissolved — decide once and record it in CLAUDE.md architecture notes
+  - cluster.Client's unique value (KUBECONFIG env wiring, WithEnvFallback validation, subcommand-only error formatting to avoid --from-literal secret leakage) is preserved wherever the surviving layer lives
+  - install/monitor.go remains testable via its existing csrApprover seam
+- **Depends on:** none
+
+#### A3 — Fold system.RunCaptured/OutputCaptured into executor
+
+- **Status:** not started
+- **Category:** refactor
+- **State:** well-specified
+- **Effort:** days
+- **Impact:** medium
+- **Evidence:** `internal/system/exec.go:59-122`, `internal/executor/executor.go:243-288`
+- **Rationale:** Two packages independently maintain capped stderr capture, allowlist env filtering, soft-cancel + 30s WaitDelay, and a Redacted() subprocess error — and have already drifted (SubprocessError's uncapped StderrTail vs ExitError's 400-byte truncation). Drift between duplicate redaction paths is how a credential leaks through one stack but not the other. The differences are option-shaped, not architecture-shaped.
+- **Acceptance:**
+  - One subprocess stack: executor gains cancel-signal selection (SIGTERM default, SIGINT for terraform's state-lock release) and a capped/discarded-stdout capture mode; the 9 RunCaptured/OutputCaptured call sites migrate
+  - One typed subprocess-failure error survives, keeping the errors.As contract used at platform/packages.go:101
+  - SIGTERM-vs-SIGINT rationale comments and the env-allowlist guarantee survive the merge verbatim
+  - internal/system's package doc no longer claims command execution
+- **Depends on:** none
+
+#### A4 — Fix double-cumulated histogram buckets in deploymetrics
+
+- **Status:** not started
+- **Category:** correctness
+- **State:** well-specified
+- **Effort:** hours
+- **Impact:** medium
+- **Evidence:** `internal/deploymetrics/metrics.go:107`, `internal/deploymetrics/metrics.go:113`
+- **Rationale:** The histogram serializer cumulates bucket counts twice: counts[i] is already cumulative (incremented for every bucket with s <= bound, no break), then a second `cumulative +=` pass accumulates again — one 0.05s sample renders buckets 1,2,3,...,12 against +Inf=1. Every scrape of okdctl_deploy_step_duration_seconds is currently wrong, and the package has zero tests.
+- **Acceptance:**
+  - counts[i] is emitted directly and the second accumulation is removed — or the inner loop breaks after the first matching bucket
+  - a test feeds known samples and asserts bucket monotonicity and that no le<+Inf bucket exceeds the +Inf bucket
+  - coverage floor added for internal/deploymetrics in .github/coverage-floors.conf
+- **Depends on:** none
+
+#### A5 — Strip audit-hash comment tokens from source
+
+- **Status:** not started
+- **Category:** docs hygiene
+- **State:** well-specified
+- **Effort:** hours
+- **Impact:** small
+- **Evidence:** `internal/cluster/types.go:7`, `internal/infrastructure/proxmox/proxmox.go:32`
+- **Rationale:** ~25 source comments carry opaque audit-pipeline hash tokens (`api:bb4fb1a3`, `state:48688e63`, `roadmap err:9f8e7d6c`) that an outside reader cannot resolve — the most distinctive AI-workflow residue left in the source. The invariants behind them are real and stay; only the tokens go (maintainer directive: remove, don't standardize).
+- **Acceptance:**
+  - all ~25 in-source tokens are removed; the surviving comment states the invariant in plain English (delete the whole comment only when the token was its sole content)
+  - CLAUDE.md comment policy gains one line forbidding audit/roadmap hash tokens in source comments so future audit loops don't reintroduce them
+- **Depends on:** none
+
+#### A6 — Reconcile the 3% comment target with revive `exported`
+
+- **Status:** not started
+- **Category:** architecture / policy
+- **State:** design needed
+- **Effort:** days
+- **Impact:** medium
+- **Evidence:** `.golangci.yml:67`, `internal/distribution/okd/okd.go:43`
+- **Rationale:** Production comment density is 11.9% (3,730/31,402 lines) and cannot fall below ~8% while revive `exported` mandates a doc comment on all 668 exported funcs in internal/ — 56% of functions in internal-only packages are exported. The CLAUDE.md 3% target and the lint config contradict each other, so every grooming pass chases an unreachable number.
+- **Acceptance:**
+  - decide the policy: revise the target to match reality, scope the revive rule, or shrink the export surface
+  - unexport sweep limited to identifiers with zero cross-package consumers AND no scaffolding/API-shape annotation, which deletes their mandated echo-docs as a side effect
+  - the scaffolding carve-out is honored: annotated symmetric APIs and future-command shapes keep their exports
+- **Depends on:** none
+
+#### A7 — Delete the two accidental leftovers in the wizard stack
+
+- **Status:** not started
+- **Category:** refactor
+- **State:** well-specified
+- **Effort:** hours
+- **Impact:** small
+- **Evidence:** `internal/tui/wizard/components/selector.go:388`, `internal/tui/wizard/steps/keymap_help.go:1`
+- **Rationale:** Two genuine accidental-scaffolding artifacts: CompactSelector.ViewHorizontal is a generated alternate-layout method never wired into any view (zero call sites; review.go uses View()), and a help-label const block is copy-pasted across wizard/keymap_help.go and wizard/steps/keymap_help.go — the copies have already drifted by one entry.
+- **Acceptance:**
+  - CompactSelector.ViewHorizontal and its supporting SetWidth/width field are removed — not future-API shape, so the scaffolding carve-out does not apply
+  - the help-label const block lives once in wizard (steps already imports wizard for KeyBinding)
+- **Depends on:** none
+
+#### A8 — Put a test floor under the wizard's data-driven core
+
+- **Status:** not started
+- **Category:** test honesty
+- **State:** design needed
+- **Effort:** days
+- **Impact:** medium
+- **Evidence:** `internal/tui/wizard/datadriven.go:455`, `internal/tui/wizard/steps/node_placement.go:380`
+- **Rationale:** The wizard stack is 6,916 LOC with zero tests and no floor while every adjacent layer is tested — and its Apply/Validate logic writes the config that drives destructive deploys. The framework half is plain data transformation; leaving it untested is the maturity heatmap's one inconsistency with how the repo treats critical surface.
+- **Acceptance:**
+  - pure-logic surfaces get terminal-free tests: DataDrivenStep Value/setValue/Validate/Apply round-trips, steps/validators.go, parseAdditionalNetworks, per-step Apply(cfg) mutations
+  - coverage floors added for internal/tui/wizard and internal/tui/wizard/steps (components/view rendering explicitly out of scope — no teatest requirement)
+  - scope targets only the config-integrity path, not TUI rendering
+- **Depends on:** none
+
+#### A9 — Remove or wire the dead Deployment.Debug and SkipDepsCheck knobs
+
+- **Status:** not started
+- **Category:** refactor
+- **State:** well-specified
+- **Effort:** hours
+- **Impact:** medium
+- **Evidence:** `internal/distribution/okd/phase/paths.go:26`, `internal/tui/wizard/steps/advanced.go:115`
+- **Rationale:** The wizard sets these knobs and the review screen displays them, but nothing downstream reads them — BaseOptions.Debug is never written anywhere, so install's opts.Debug branch is provably dead. Users toggling "debug mode" or "skip deps check" get silent no-ops.
+- **Acceptance:**
+  - cfg.Deployment.Debug and cfg.Deployment.SkipDepsCheck either gain a real consumer in deploy logic or are deleted from the schema, defaults, wizard advanced step, and review screen
+  - phase.BaseOptions.Debug is either populated from cfg at every NewOptions site or removed; the always-false opts.Debug branch in install DeployInfrastructure is resolved either way
+- **Depends on:** none
+
+#### A10 — Stop fabricating ProvisionResult VM state in proxmox.Provision
+
+- **Status:** not started
+- **Category:** domain-model accuracy
+- **State:** design needed
+- **Effort:** hours
+- **Impact:** medium
+- **Evidence:** `internal/infrastructure/proxmox/proxmox.go:304`, `internal/distribution/okd/install/phase.go:151`
+- **Rationale:** retrieveProvisionResult builds a VMStatus list where every VM is unconditionally StateRunning (before any VM was observed running) and APIServerIP is set to the network gateway — a different machine — then the sole caller discards the result with `_, err :=`. Fabricated domain data is worse than scaffolding: a future consumer would trust values that are wrong by construction.
+- **Acceptance:**
+  - Provision either returns error-only, or ProvisionResult carries values that are true (real VM status from pvesh/terraform output, real API endpoint) rather than config arithmetic
+  - no VMStatus is hardcoded to StateRunning before any VM is observed running; APIServerIP is no longer the network gateway
+- **Depends on:** none
+
+#### A11 — Collapse the zero-consumer ValidationScope bitmask
+
+- **Status:** not started
+- **Category:** refactor
+- **State:** well-specified
+- **Effort:** hours
+- **Impact:** medium
+- **Evidence:** `internal/config/validation_types.go:70`, `internal/cli/config.go:55`
+- **Rationale:** A 10-flag bitmask with composite ScopeQuick, an options struct, and two exported entry points — and every production caller invokes plain cfg.Validate() (ScopeAll). ScopeFeatures maps to no validator entry, and the doc comment describes a wizard integration that doesn't exist. Textbook speculative configuration.
+- **Acceptance:**
+  - either cfg.Validate() is the only entry point (bitmask, ScopeQuick, ValidationOptions, ValidateWithOptions, HasScope deleted) or a real caller exercises a non-ScopeAll scope
+  - ScopeFeatures no longer exists as an enum value; doc comments no longer claim ScopeQuick is "used during interactive editing" unless it is
+- **Depends on:** none
+
+#### A12 — Make ClusterPhase lifecycle states reachable or trim them
+
+- **Status:** not started
+- **Category:** domain-model accuracy
+- **State:** design needed
+- **Effort:** days
+- **Impact:** medium
+- **Evidence:** `internal/distribution/okd/types.go:42`, `internal/cli/status.go:189`
+- **Rationale:** Six documented lifecycle states, three forever unreachable: status.go only ever produces Unknown/Running/Degraded, NodeStatusUnknown is never assigned, and the documented exit-code mapping doesn't exist. The JSON contract advertises states consumers will never see.
+- **Acceptance:**
+  - every ClusterPhase constant is producible by `okdctl status` (derive Pending from missing infra, Installing from terraform state present + API down, Failed from an install-failure marker) or the unreachable values and phase.NodeStatusUnknown are removed
+  - the ClusterPhase doc comment's exit-code-mapping claim matches reality — implement the mapping or drop the claim
+- **Depends on:** none
+
+#### A13 — Expose or explicitly shelve the three unreachable cleanup kinds
+
+- **Status:** not started
+- **Category:** cli surface
+- **State:** design needed
+- **Effort:** hours
+- **Impact:** small
+- **Evidence:** `internal/distribution/okd/cleanup/cleanup.go:30`, `internal/cli/cleanup.go:121`
+- **Rationale:** Three of five cleanup kinds (WebOnly, HAProxyOnly, TerraformOnly) are fully implemented through the step-selection switch and summary rendering, yet no flag or caller can select them — finished work that's unshippable. PreserveConfig is a separate constant-false thread-through knob.
+- **Acceptance:**
+  - WebOnly, HAProxyOnly, and TerraformOnly are reachable from the CLI (e.g. a long-form `--kind` flag on `okdctl cleanup`, validated by ValidKinds) or carry a scaffolding tag explaining the intended future command
+  - cleanup.Options.PreserveConfig gains a caller or is removed from Options and the WorkDirectory signature
+- **Depends on:** none
+
+#### A14 — Validate the triple-encoded bastion identity in config
+
+- **Status:** not started
+- **Category:** config coherence
+- **State:** design needed
+- **Effort:** hours
+- **Impact:** medium
+- **Evidence:** `internal/tui/wizard/steps/files.go:79`, `internal/tui/wizard/steps/networking.go:181`
+- **Rationale:** One physical host (the bastion) is encoded in three independent config keys — Networking.Bastion.IP, HTTPServer.IgnitionServerIP, Networking.StaticIP.DNS — kept consistent only by wizard ConfigSet hooks. A user hand-editing okdctl.yaml (the documented non-wizard path) can desync them and get a deploy that fails deep in install with no config-time diagnostic.
+- **Acceptance:**
+  - a validator (or load-time defaulting) covers the relationship between the three fields — desync produces a clear ValidationError or a documented intentional-override path
+  - the wizard-only sync hooks remain, but they are no longer the sole coherence mechanism
+- **Depends on:** none
+
+#### A15 — Fix the TerraformEnv knob's fictional value space and mislabeled help
+
+- **Status:** not started
+- **Category:** config coherence
+- **State:** well-specified
+- **Effort:** hours
+- **Impact:** small
+- **Evidence:** `internal/tui/wizard/steps/advanced.go:142`, `internal/distribution/okd/phase/paths.go:22`
+- **Rationale:** Only environments/production exists on disk, the doc comment advertises "production|staging|...", and the wizard help mislabels the concept as a Terraform workspace — wrong domain vocabulary that sends users to `terraform workspace` commands that do nothing here.
+- **Acceptance:**
+  - wizard help and doc comments stop calling TerraformEnv a "terraform workspace name" (it selects a directory under infrastructure/terraform/environments/) and stop suggesting "staging" exists
+  - a non-default TerraformEnv value is validated against an existing environment directory at config-validation time instead of failing mid-deploy
+- **Depends on:** none
+
+#### A16 — Rewrite root command help: strip marketing slop and false feature claims
+
+- **Status:** not started
+- **Category:** docs / CLI UX
+- **State:** well-specified
+- **Effort:** hours
+- **Impact:** medium
+- **Evidence:** `internal/cli/root.go:61-74`, `README.md:18`
+- **Rationale:** The root help says "production-ready" (the README explicitly disclaims it), "delightful CLI tool", "beautiful TUI", a Highlights bullet list, an addon list naming nonexistent addons, and a hardcoded version range that drifts — the purest LLM fingerprint in the repo, propagated into every generated doc page footer.
+- **Acceptance:**
+  - Short/Long no longer say "production-ready", "delightful CLI tool", "beautiful TUI", or carry a Highlights bullet list — match the README's first-paragraph register
+  - drop the addon list "(Flux, secrets, storage, cert-manager)" (only flux and secretstore exist) and the hardcoded "OKD/OpenShift 4.15-4.21" range
+  - regenerate docs/cli (`make docs`) so the footer disappears from all 25 reference pages
+- **Depends on:** none
+
+#### A17 — Fix inverted sudo/elevation paragraph in exit-codes.md and reconcile README
+
+- **Status:** not started
+- **Category:** docs
+- **State:** well-specified
+- **Effort:** hours
+- **Impact:** medium
+- **Evidence:** `docs/cli/exit-codes.md:25-27`, `internal/cli/elevation.go:78-84`
+- **Rationale:** The paragraph is plausible-sounding, self-contradictory ("rejected as root; use sudo"), and factually inverted against elevation.go's truth table — euid=0 + requiresRoot is allowed, and the binary re-execs itself INTO sudo, never "under the original user". An operator following it on destroy gets advice the binary will not honor.
+- **Acceptance:**
+  - the rewritten paragraph states the real contract: privileged commands self-elevate via sudo re-exec; sudo/root invocation of non-privileged commands is what exits 5
+  - README's "It refuses to start under sudo" is narrowed to match (it only refuses sudo on commands that don't need root)
+- **Depends on:** none
+
+#### A18 — Make deploy honor --config instead of silently ignoring it
+
+- **Status:** not started
+- **Category:** CLI UX / architecture
+- **State:** design needed
+- **Effort:** days
+- **Impact:** large
+- **Evidence:** `internal/cli/deploy.go:39`, `internal/cli/root.go:33-36`
+- **Rationale:** Three independent surfaces (deploy's own Example, README line 99, a load-bearing root.go comment) all assert deploy uses --config, and all three are wrong — runDeploy reads/writes only --output-file. The failure mode is a silent wrong-cluster deploy with mismatched credentials, for the exact multi-cluster audience the README advertises.
+- **Acceptance:**
+  - `okdctl deploy --config staging.yaml` loads/creates staging.yaml and its sibling .env
+  - deploy's Example, README's multi-cluster claim, and the root.go comment all become true statements
+  - design decision recorded: either --output-file becomes an alias/override of --config for deploy, or it is repurposed strictly as "save here when diverging from --config"; its help text discloses that the file is read on re-runs
+- **Depends on:** none
+
+#### A19 — Drop stacked "failed to" prefixes from error-wrap chains
+
+- **Status:** not started
+- **Category:** refactor / failure legibility
+- **State:** well-specified
+- **Effort:** days
+- **Impact:** small
+- **Evidence:** `internal/distribution/okd/dns/dns.go:105-119`, `internal/cli/helpers.go:111`
+- **Rationale:** ~130 wrap sites use the templated "failed to X: %w" prefix that compounds into chains burying the actionable cause. Both the Uber and Google Go style guides explicitly call out "failed to" context as the antipattern; the repo already contains the terse "verb noun: %w" style, so this normalizes toward its own better half and documented convention.
+- **Acceptance:**
+  - error wraps use the terse "verb noun: %w" form (~130 sites, concentrated in system/fs.go, okd/dns/, download/, okd/setup/)
+  - a rendered failure chain reads "configure dns: render bootstrap dns config: open /etc/...: permission denied" rather than four consecutive "failed to" clauses
+  - convention recorded in CLAUDE.md so new wraps don't regress
+- **Depends on:** none
+
+#### A20 — Replace deploy dry-run mirror test with a drift guard against real phase steps
+
+- **Status:** not started
+- **Category:** test honesty
+- **State:** design needed
+- **Effort:** hours
+- **Impact:** medium
+- **Evidence:** `internal/cli/deploy_test.go:11`, `internal/cli/deploy.go:192`
+- **Rationale:** TestDeployDryRunSteps_IDs transcribes deploy.go's 31-entry literal back at itself — the one real regression on this surface (--dry-run output drifting from what deploy actually runs) is exactly what a literal-vs-literal mirror cannot catch.
+- **Acceptance:**
+  - the test (or a derivation in production code) verifies deployDryRunSteps() IDs match the step IDs actually registered by the setup/install/postinstall phases, so adding/reordering a phase step without updating dry-run output fails CI
+  - if deriving from live StepDefs is impractical, each phase exports its canonical ordered StepID slice used by both its xSteps() method and deployDryRunSteps
+- **Depends on:** none
+
+#### A21 — Delete padded/tautological cli validator tests
+
+- **Status:** not started
+- **Category:** test honesty
+- **State:** well-specified
+- **Effort:** hours
+- **Impact:** small
+- **Evidence:** `internal/cli/status_test.go:9`, `internal/cli/status_test.go:18`
+- **Rationale:** TestValidateFormat_DescribeNode and TestValidateFormat_DescribeAddon run an identical table against the same single validateFormat function already covered by releases_test.go — copy-pasted scaffolding named after call sites as if they exercised different code. TestConditionStatusLiterals asserts a constant equals its own literal from the wrong package with no documented contract.
+- **Acceptance:**
+  - the two duplicate validateFormat tests are deleted
+  - TestConditionStatusLiterals either moves next to the phase constants with a why-comment matching the noderole_test.go precedent (k8s wire values), or is deleted
+- **Depends on:** none
+
+#### A22 — Consolidate fake-binary PATH-stub and slog-capture test scaffolding
+
+- **Status:** not started
+- **Category:** refactor (test infrastructure)
+- **State:** well-specified
+- **Effort:** days
+- **Impact:** medium
+- **Evidence:** `internal/distribution/okd/phase/kubectl_test.go:21`, `internal/distribution/okd/destroy/steps_test.go:16`
+- **Rationale:** The fake-binary-on-PATH pattern — the suite's best idea — is hand-rolled 17 times with identical mechanics and a vestigial Windows guard each time, drifting in small ways. Three test packages each carry their own captureHandler slog implementation.
+- **Acceptance:**
+  - a single internal test helper (e.g. internal/testutil) provides InstallFakeBin(t, name, script); the 17 per-package copies call it, keeping only package-specific script bodies local
+  - the three duplicated captureHandler slog implementations are replaced by one shared capture handler
+  - the copy-pasted `runtime.GOOS == "windows"` skips disappear with the consolidation
+- **Depends on:** none
+
 ## Completed
 
 Completed items live in [`docs/roadmap/completed-archive.md`](docs/roadmap/completed-archive.md). Grep there for the canonical "is dep X done?" lookup. The previous in-line pointer index (144 entries, mirroring archive contents) was removed on 2026-05-09 to keep `roadmap.md` focused on active work.
