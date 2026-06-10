@@ -165,3 +165,60 @@ func TestExecutor_HasState(t *testing.T) {
 		})
 	}
 }
+
+func TestExecutor_StateStatus(t *testing.T) {
+	cases := []struct {
+		name    string
+		content string
+		write   bool
+		want    StateStatusValue
+	}{
+		{name: "missing", want: StateStatusMissing},
+		{name: "empty JSON", content: `{}`, write: true, want: StateStatusEmpty},
+		{name: "empty resources", content: `{"version":4,"resources":[]}`, write: true, want: StateStatusEmpty},
+		{name: "corrupt", content: `{not valid json`, write: true, want: StateStatusCorrupt},
+		{name: "populated", content: `{"version":4,"resources":[{"type":"aws_instance"}]}`, write: true, want: StateStatusPopulated},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			e := &Executor{workDir: dir, logger: slog.New(&captureHandler{})}
+			if tc.write {
+				if err := os.WriteFile(filepath.Join(dir, "terraform.tfstate"), []byte(tc.content), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if got := e.StateStatus(); got != tc.want {
+				t.Errorf("StateStatus() = %q; want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestExecutor_NewestBakSnapshot(t *testing.T) {
+	t.Run("none present", func(t *testing.T) {
+		e := &Executor{workDir: t.TempDir()}
+		if got := e.NewestBakSnapshot(); got != "" {
+			t.Errorf("NewestBakSnapshot() = %q; want empty", got)
+		}
+	})
+	t.Run("returns newest by lexicographic name", func(t *testing.T) {
+		dir := t.TempDir()
+		names := []string{
+			"terraform.tfstate.2024-01-01T00-00-00Z.bak",
+			"terraform.tfstate.2024-01-03T00-00-00Z.bak",
+			"terraform.tfstate.2024-01-02T00-00-00Z.bak",
+		}
+		for _, n := range names {
+			if err := os.WriteFile(filepath.Join(dir, n), []byte("x"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+		}
+		e := &Executor{workDir: dir}
+		got := e.NewestBakSnapshot()
+		want := filepath.Join(dir, "terraform.tfstate.2024-01-03T00-00-00Z.bak")
+		if got != want {
+			t.Errorf("NewestBakSnapshot() = %q; want %q", got, want)
+		}
+	})
+}

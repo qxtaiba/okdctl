@@ -24,9 +24,16 @@ func (p *Phase) destroyInfrastructure(ctx context.Context, opts *Options) error 
 	)
 	defer tf.ZeroizeEnv()
 
-	if !tf.HasState() {
+	switch tf.StateStatus() {
+	case terraform.StateStatusMissing, terraform.StateStatusEmpty:
 		p.Log.Warn("terraform: no state file found - infrastructure may already be destroyed")
 		return nil
+	case terraform.StateStatusCorrupt:
+		msg := "terraform state is corrupt; restore the state file and re-run okdctl destroy"
+		if bak := tf.NewestBakSnapshot(); bak != "" {
+			msg = fmt.Sprintf("terraform state is corrupt (newest backup: %s); restore and re-run okdctl destroy", bak)
+		}
+		return &errtypes.ClusterError{Msg: msg}
 	}
 
 	// Snapshot before Init: terraform init may rewrite terraform_version on schema
