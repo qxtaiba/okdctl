@@ -35,10 +35,13 @@ var (
 var deployCmd = &cobra.Command{
 	Use:   "deploy",
 	Short: "Deploy a Kubernetes cluster",
-	Long:  `Deploy an OKD/OpenShift cluster through an interactive wizard.`,
+	Long: `Deploy an OKD/OpenShift cluster through an interactive wizard.
+
+Use --yes to write the configuration file non-interactively without
+deploying; run the command again without --yes to deploy from it.`,
 	Example: `  okdctl deploy
   okdctl deploy --config my-cluster.yaml
-  okdctl deploy --yes --output-file my-cluster.yaml
+  okdctl deploy --yes --output-file my-cluster.yaml  # writes config only; does not deploy
   okdctl deploy --dry-run`,
 	RunE: runDeploy,
 }
@@ -46,7 +49,7 @@ var deployCmd = &cobra.Command{
 func init() {
 	deployCmd.Flags().StringVar(&deployOutputFile, flagOutputFile, "okdctl.yaml", "config file to write wizard output to; overrides --config when both are set")
 	deployCmd.Flags().BoolVar(&deployMinimal, "minimal", false, "use minimal defaults (single-node cluster)")
-	deployCmd.Flags().BoolVarP(&deployYes, "yes", "y", false, "skip prompts, use defaults")
+	deployCmd.Flags().BoolVarP(&deployYes, "yes", "y", false, "write configuration non-interactively; does not deploy")
 	deployCmd.Flags().BoolVar(&deployDryRun, flagDryRun, false, "preview terraform plan and step listing without deploying")
 	deployCmd.Flags().BoolVar(&deployFresh, "fresh", false, "wipe the work directory even when live cluster state is detected (credentials will be lost)")
 	deployCmd.Flags().StringVar(&deployMetricsAddr, "metrics-addr", "", `address for Prometheus metrics endpoint; bare ":9090" binds 127.0.0.1; disabled when empty`)
