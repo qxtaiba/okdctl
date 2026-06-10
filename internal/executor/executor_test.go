@@ -316,3 +316,24 @@ func TestRunStreamedChecked(t *testing.T) {
 		}
 	})
 }
+
+func TestRunInteractive_CtxCancelReturnsCtxErr(t *testing.T) {
+	t.Parallel()
+
+	e := New(WithInheritedEnv(), WithStdout(&strings.Builder{}), WithStderr(&strings.Builder{}))
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	err := e.RunInteractive(ctx, "sh", "-c", "sleep 10")
+	if err == nil {
+		t.Fatal("expected error after ctx cancel; got nil")
+	}
+	var exitErr *ExitError
+	if errors.As(err, &exitErr) {
+		t.Errorf("got *ExitError on ctx cancel; want context error, got: %v", err)
+	}
+	if !errors.Is(err, context.Canceled) {
+		t.Errorf("err = %v; want errors.Is(err, context.Canceled) == true", err)
+	}
+}
