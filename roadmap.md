@@ -90,7 +90,7 @@ items here gate the next release.
 
 ##### `ci-testgo-xcrypto-053-runner-death` — test-go deterministically kills the CI runner since x/crypto v0.53.0
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/ci-testgo-xcrypto
+**Status:** in review — PR #824
 **Severity:** blocker
 **Cluster:** ci-infrastructure
 **Evidence:** runs 27179112763 (`46d11fa`, failed twice — original + 2026-06-10 re-run) and 27166818169 (`c651b3f`); last green `test-go` at `022b1ca`
@@ -594,7 +594,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `err:d7ce9d16:dns-bare-fmt-errorf-not-classified` — dns bare fmt errorf not classified
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/err-d7ce9d16-dns-errtypes
+**Status:** in review — PR #807
 **Severity:** minor
 **Cluster:** sentinel-vs-typed
 **Evidence:** `internal/distribution/okd/dns/dns.go:24-215`
@@ -918,7 +918,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `mod:366b3f2d:use-slices-clone` — use slices clone
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/mod-366b3f2d-slices-clone
+**Status:** in review — PR #803
 **Severity:** minor
 **Cluster:** slices-maps
 **Evidence:** `internal/distribution/orchestrator.go:110-112` + 3 more
@@ -1104,7 +1104,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `sec:aa0f50f5:input-storage-name-unvalidated` — input storage name unvalidated
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-aa0f50f5-validators
+**Status:** in review — PR #813
 **Severity:** major
 **Cluster:** input-validation
 **Evidence:** `internal/config/validators.go:255-281` + 1 more
@@ -1114,7 +1114,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `sec:e3782ee7:symlink-escape` — symlink escape
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-e3782ee7-copyfile-nofollow
+**Status:** in review — PR #810
 **Severity:** major
 **Cluster:** file-toctou
 **Evidence:** `internal/system/fs.go:122-170`
@@ -1136,7 +1136,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `sub:1e8ffb91:ring-truncated-stdout-parse` — ring truncated stdout parse
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sub-1e8ffb91-ring-capture
+**Status:** in review — PR #819
 **Severity:** blocker
 **Cluster:** io-handling — related: sub:d31d1b9d:ring-truncated-stdout-parse, sub:6b533f2d:ring-truncated-stdout-parse, sub:632c9087:ring-truncated-stdout-parse, sub:4c092fce:ring-truncated-stdout-parse
 **Evidence:** `internal/distribution/okd/postinstall/verify.go:118-146`
@@ -1146,7 +1146,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `sub:d31d1b9d:ring-truncated-stdout-parse` — ring truncated stdout parse
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sub-1e8ffb91-ring-capture
+**Status:** in review — PR #819
 **Severity:** major
 **Cluster:** io-handling — related: sub:1e8ffb91:ring-truncated-stdout-parse
 **Evidence:** `internal/cli/status.go:155-187` + 1 more
@@ -1156,7 +1156,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `sub:6b533f2d:ring-truncated-stdout-parse` — ring truncated stdout parse
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sub-1e8ffb91-ring-capture
+**Status:** in review — PR #819
 **Severity:** major
 **Cluster:** io-handling — related: sub:1e8ffb91:ring-truncated-stdout-parse
 **Evidence:** `internal/cluster/k8s_csrs.go:15-49`
@@ -1176,7 +1176,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `sub:632c9087:ring-truncated-stdout-parse` — ring truncated stdout parse
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sub-1e8ffb91-ring-capture
+**Status:** in review — PR #819
 **Severity:** major
 **Cluster:** io-handling — related: sub:1e8ffb91:ring-truncated-stdout-parse
 **Evidence:** `internal/distribution/okd/postinstall/update_ingress.go:387-400`
@@ -1216,7 +1216,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `sub:06f00bcb:exit-code-ignored` — exit code ignored
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sub-06f00bcb-apache
+**Status:** in review — PR #802
 **Severity:** minor
 **Cluster:** io-handling
 **Evidence:** `internal/distribution/okd/setup/apache.go:99-106`
@@ -1258,7 +1258,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `state:62cb8a95:corrupt-state-silent-destroy-noop` — corrupt state silent destroy noop
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/state-62cb8a95-corrupt-state
+**Status:** in review — PR #812
 **Severity:** major
 **Cluster:** tf-state-atomicity — related: state:4c092fce:snapshot-bak-retention-after-destroy
 **Evidence:** `internal/distribution/okd/destroy/helpers.go:27-30` + 1 more
@@ -1268,7 +1268,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `state:c287d5c0:prepare-wipes-live-cluster-artifacts` — prepare wipes live cluster artifacts
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/state-c287d5c0-prepare-wipe
+**Status:** in review — PR #820
 **Severity:** blocker
 **Cluster:** crash-recoverability — related: state:4f69fc9d:no-resume-checkpoint
 **Evidence:** `internal/distribution/okd/okd.go:117-141` + 4 more
@@ -1298,7 +1298,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `state:368b892b:stale-bootstrap-sentinel-poisons-redeploy` — stale bootstrap sentinel poisons redeploy
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/state-368b892b-bootstrap-sentinel
+**Status:** in review — PR #811
 **Severity:** major
 **Cluster:** phase-idempotency — related: state:fb54208a:postinstall-no-rollback-path
 **Evidence:** `internal/distribution/okd/cleanup/infra.go:50-55` + 3 more
@@ -1338,7 +1338,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `state:08c49fc4:update-ingress-workdir-mispass` — update ingress workdir mispass
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/state-08c49fc4-updateingress-workdir
+**Status:** in review — PR #814
 **Severity:** major
 **Cluster:** crash-recoverability
 **Evidence:** `internal/cli/update_ingress.go:152-156` + 2 more
@@ -1380,7 +1380,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `iac:bc37d034:lockfile-gitignored` — lockfile gitignored
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/iac-bc37d034-tf-lockfile
+**Status:** in review — PR #823
 **Severity:** major
 **Cluster:** hcl-provider-hygiene — seam→audit-dependencies
 **Evidence:** `.gitignore:33-33`
@@ -1412,7 +1412,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `err:4c092fce:ctx-err-unwrapped` — ctx err unwrapped
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/err-4c092fce-ctx-exiterror
+**Status:** in review — PR #805
 **Severity:** major
 **Cluster:** cancellation-identity — related: err:7b2829bb:ctx-err-unwrapped
 **Evidence:** `internal/infrastructure/terraform/terraform.go:145-152` + 1 more
@@ -1422,7 +1422,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `err:15ba17da:nonfatal-failures-exit-zero` — nonfatal failures exit zero
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/err-15ba17da-destroy-exit
+**Status:** in review — PR #809
 **Severity:** major
 **Cluster:** typed-error-exit-mapping — seam→audit-state-and-recovery — related: state:6424733c:error-path-hint-always-destroy, state:62cb8a95:corrupt-state-silent-destroy-noop
 **Evidence:** `internal/distribution/okd/destroy/steps.go:171-192` + 1 more
@@ -1452,7 +1452,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `err:7b2829bb:ctx-err-unwrapped` — ctx err unwrapped
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/err-7b2829bb-runinteractive-ctx
+**Status:** in review — PR #806
 **Severity:** major
 **Cluster:** cancellation-identity — related: err:4c092fce:ctx-err-unwrapped
 **Evidence:** `internal/executor/executor.go:349-374` + 3 more
@@ -1492,7 +1492,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `err:ddf885f4:vocab-ad-hoc-synonym` — vocab ad hoc synonym
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/err-ddf885f4-manager
+**Status:** in review — PR #798
 **Severity:** minor
 **Cluster:** domain-vocabulary
 **Evidence:** `internal/addon/manager.go:167-170`
@@ -1586,7 +1586,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `api:ddf885f4:zero-value-unusable` — zero value unusable
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/err-ddf885f4-manager
+**Status:** in review — PR #798
 **Severity:** minor
 **Cluster:** zero-value-usability
 **Evidence:** `internal/addon/manager.go:48-57`
@@ -1758,7 +1758,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `ux:073d24ed:concept-named-twice` — concept named twice
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/ux-073d24ed-deploy-config
+**Status:** in review — PR #821
 **Severity:** major
 **Cluster:** verb-noun — seam→audit-documentation
 **Evidence:** `internal/cli/deploy.go:38-70` + 3 more
@@ -1768,7 +1768,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `ux:073d24ed:yes-flag-divergent-semantics` — yes flag divergent semantics
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/ux-073d24ed-deploy-config
+**Status:** in review — PR #821
 **Severity:** major
 **Cluster:** flag-conventions — related: state:0f076161:destroy-no-cluster-confirm-without-yes
 **Evidence:** `internal/cli/deploy.go:48-97`
@@ -1778,7 +1778,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `ux:073d24ed:exit-code-undefined` — exit code undefined
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/ux-073d24ed-deploy-config
+**Status:** in review — PR #821
 **Severity:** minor
 **Cluster:** exit-codes — seam→audit-errors
 **Evidence:** `internal/cli/deploy.go:73-102` + 1 more
@@ -1788,7 +1788,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `ux:4583b75b:json-quiet-inconsistent` — json quiet inconsistent
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/ux-4583b75b-config-quiet
+**Status:** in review — PR #797
 **Severity:** minor
 **Cluster:** streams
 **Evidence:** `internal/cli/config.go:63-66`
@@ -1870,7 +1870,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `obs:41a9d4eb:log-leaks-cred` — log leaks cred
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/obs-41a9d4eb-redact-scrub
+**Status:** in review — PR #808
 **Severity:** minor
 **Cluster:** redaction-sink — seam→audit-errors — related: err:d9f7733e:err-formats-cred
 **Evidence:** `internal/logutil/redact.go:126-139`
@@ -1900,7 +1900,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `obs:ed55ee90:key-inconsistent-casing` — key inconsistent casing
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/obs-ed55ee90-summary-keys
+**Status:** in review — PR #801
 **Severity:** minor
 **Cluster:** field-stability
 **Evidence:** `internal/distribution/okd/cleanup/summary.go:66-81`
@@ -1982,7 +1982,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `mod:88fd3050:use-omitzero` — use omitzero
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/mod-88fd3050-omitzero
+**Status:** in review — PR #800
 **Severity:** minor
 **Cluster:** encoding-omitzero
 **Evidence:** `internal/config/cluster.go:23-66` + 2 more
@@ -1992,7 +1992,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `mod:696d6b0e:use-strings-splitseq` — use strings splitseq
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/mod-696d6b0e-splitseq
+**Status:** in review — PR #799
 **Severity:** minor
 **Cluster:** range-idioms
 **Evidence:** `internal/distribution/okd/phase/iso_cleanup.go:212-212` + 1 more
@@ -2114,7 +2114,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `smell:91abd90c:magic-number-duplicated` — magic number duplicated
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/smell-91abd90c-vmid-const
+**Status:** in review — PR #804
 **Severity:** suggestion
 **Cluster:** magic-strings
 **Evidence:** `internal/config/defaults.go:54-54` + 1 more
@@ -2176,7 +2176,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `dep:98cc639a:v0x-unregistered-provider` — v0x unregistered provider
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/iac-bc37d034-tf-lockfile
+**Status:** in review — PR #823
 **Severity:** suggestion
 **Cluster:** pin-stability — seam→audit-iac-and-shell — related: iac:bc37d034:lockfile-gitignored, dep:2eef5feb:automerge-v0x-minor
 **Evidence:** `infrastructure/terraform/modules/proxmox-okd/versions.tf:6-11` + 1 more
@@ -2238,7 +2238,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `doc:b3356305:readme-flag-ghost` — readme flag ghost
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/doc-b3356305-readme-drift
+**Status:** in review — PR #822
 **Severity:** major
 **Cluster:** readme-drift — seam→audit-cli-ux — related: ux:073d24ed:concept-named-twice, doc:073d24ed:readme-flag-ghost
 **Evidence:** `README.md:97-99`
@@ -2248,7 +2248,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `doc:073d24ed:readme-flag-ghost` — readme flag ghost
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/ux-073d24ed-deploy-config
+**Status:** in review — PR #821
 **Severity:** major
 **Cluster:** readme-drift — seam→audit-cli-ux — related: ux:073d24ed:concept-named-twice, doc:b3356305:readme-flag-ghost
 **Evidence:** `internal/cli/deploy.go:38-41`
@@ -2258,7 +2258,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `doc:b3356305:readme-default-drift` — readme default drift
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/doc-b3356305-readme-drift
+**Status:** in review — PR #822
 **Severity:** major
 **Cluster:** readme-drift
 **Evidence:** `README.md:176-178` + 2 more
@@ -2268,7 +2268,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `doc:b3356305:readme-behavior-drift` — readme behavior drift
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/doc-b3356305-readme-drift
+**Status:** in review — PR #822
 **Severity:** major
 **Cluster:** readme-drift
 **Evidence:** `README.md:234-252` + 2 more
@@ -2278,7 +2278,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `doc:b3356305:readme-dead-link` — readme dead link
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/doc-b3356305-readme-drift
+**Status:** in review — PR #822
 **Severity:** major
 **Cluster:** readme-drift
 **Evidence:** `README.md:30-32` + 2 more
@@ -2288,7 +2288,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `doc:1013f4e8:docs-behavior-drift` — docs behavior drift
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/doc-b3356305-readme-drift
+**Status:** in review — PR #822
 **Severity:** major
 **Cluster:** readme-drift — seam→audit-cli-ux
 **Evidence:** `docs/cli/exit-codes.md:25-27`
@@ -2350,7 +2350,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `tst:aa0f50f5:trust-boundary-untested` — trust boundary untested
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-aa0f50f5-validators
+**Status:** in review — PR #813
 **Severity:** major
 **Cluster:** trust-boundary-untested — related: tst:c5e5c304:trust-boundary-untested
 **Evidence:** `internal/config/validators.go:27-374`
@@ -2360,7 +2360,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `tst:48688e63:destructive-happy-untested` — destructive happy untested
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/tst-48688e63-proxmox
+**Status:** in review — PR #818
 **Severity:** major
 **Cluster:** destructive-untested — related: tst:48688e63:cred-zeroize-untested
 **Evidence:** `internal/infrastructure/proxmox/proxmox.go:304-366` + 3 more
@@ -2390,7 +2390,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `tst:98723e5d:cred-install-path-untested` — cred install path untested
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/tst-98723e5d-clusteraccess
+**Status:** in review — PR #815
 **Severity:** major
 **Cluster:** cred-path-untested — related: sec:e3782ee7:symlink-escape, tst:e3782ee7:canonical-helper-untested
 **Evidence:** `internal/distribution/okd/install/flux.go:49-105`
@@ -2400,7 +2400,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `tst:2f70d7df:trust-boundary-untested` — trust boundary untested
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/tst-2f70d7df-kargs
+**Status:** in review — PR #816
 **Severity:** major
 **Cluster:** trust-boundary-untested
 **Evidence:** `internal/distribution/okd/setup/kargs.go:74-98`
@@ -2410,7 +2410,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `tst:06f00bcb:cred-perms-policy-untested` — cred perms policy untested
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sub-06f00bcb-apache
+**Status:** in review — PR #802
 **Severity:** major
 **Cluster:** cred-path-untested — related: tst:e3782ee7:canonical-helper-untested
 **Evidence:** `internal/distribution/okd/setup/apache.go:158-183` + 1 more
@@ -2460,7 +2460,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `tst:b5a79fda:trust-boundary-untested` — trust boundary untested
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/tst-b5a79fda-deploystate
+**Status:** in review — PR #817
 **Severity:** minor
 **Cluster:** trust-boundary-untested — seam→audit-state-and-recovery — related: state:c287d5c0:prepare-wipes-live-cluster-artifacts
 **Evidence:** `internal/cli/deploystate.go:79-135`
@@ -2470,7 +2470,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `tst:e3782ee7:canonical-helper-untested` — canonical helper untested
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-e3782ee7-copyfile-nofollow
+**Status:** in review — PR #810
 **Severity:** blocker
 **Cluster:** canonical-helper-untested — seam→audit-security — related: sec:e3782ee7:symlink-escape
 **Evidence:** `internal/system/fs.go:122-170` + 3 more
@@ -2490,7 +2490,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `tst:48688e63:cred-zeroize-untested` — cred zeroize untested
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/tst-48688e63-proxmox
+**Status:** in review — PR #818
 **Severity:** major
 **Cluster:** cred-path-untested
 **Evidence:** `internal/infrastructure/proxmox/proxmox.go:91-100`
