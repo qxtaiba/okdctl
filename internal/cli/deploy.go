@@ -43,7 +43,7 @@ var deployCmd = &cobra.Command{
 }
 
 func init() {
-	deployCmd.Flags().StringVar(&deployOutputFile, flagOutputFile, "okdctl.yaml", "output file for configuration")
+	deployCmd.Flags().StringVar(&deployOutputFile, flagOutputFile, "okdctl.yaml", "config file to write wizard output to; overrides --config when both are set")
 	deployCmd.Flags().BoolVar(&deployMinimal, "minimal", false, "use minimal defaults (single-node cluster)")
 	deployCmd.Flags().BoolVarP(&deployYes, "yes", "y", false, "skip prompts, use defaults")
 	deployCmd.Flags().BoolVar(&deployDryRun, flagDryRun, false, "preview terraform plan and step listing without deploying")
@@ -59,6 +59,13 @@ func runDeploy(cmd *cobra.Command, _ []string) error {
 		return &errtypes.ConfigError{
 			Msg: "--metrics-allow-network requires --metrics-addr (the flag has no effect on its own)",
 		}
+	}
+
+	// Resolve the config file path: --output-file wins when explicitly set;
+	// otherwise honour --config when the caller provided it; fall back to the
+	// --output-file default ("okdctl.yaml") which matches --config's default.
+	if !cmd.Flags().Changed(flagOutputFile) && cmd.Root().PersistentFlags().Changed(flagConfig) {
+		deployOutputFile = cfgFile
 	}
 
 	configExists := false
