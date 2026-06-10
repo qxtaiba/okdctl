@@ -53,8 +53,17 @@ func TestGuardLiveCluster(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name: "auth present no flag",
+			name: "auth alone is mid-setup debris and wipeable",
 			setup: func(t *testing.T, _, workDir string) {
+				seedAuth(t, workDir)
+			},
+			opts:    PrepareOpts{},
+			wantErr: false,
+		},
+		{
+			name: "tfstate and auth no flag",
+			setup: func(t *testing.T, projectRoot, workDir string) {
+				seedTFState(t, projectRoot, "production")
 				seedAuth(t, workDir)
 			},
 			opts:    PrepareOpts{},
@@ -69,9 +78,9 @@ func TestGuardLiveCluster(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "auth present resume bypass",
-			setup: func(t *testing.T, _, workDir string) {
-				seedAuth(t, workDir)
+			name: "tfstate present resume bypass",
+			setup: func(t *testing.T, projectRoot, _ string) {
+				seedTFState(t, projectRoot, "production")
 			},
 			opts:    PrepareOpts{ResumeInProgress: true},
 			wantErr: false,
@@ -97,7 +106,7 @@ func TestGuardLiveCluster(t *testing.T) {
 			tc.setup(t, root, workDir)
 
 			p := New("test", WithProjectRoot(root), WithLogger(logutil.NopLogger))
-			err := p.guardLiveCluster(config.DefaultConfig(), workDir, tc.opts)
+			err := p.guardLiveCluster(config.DefaultConfig(), tc.opts)
 
 			if tc.wantErr {
 				if err == nil {
