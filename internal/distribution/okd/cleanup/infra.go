@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/logutil"
 )
@@ -52,6 +53,7 @@ var terraformFilesToRemove = []string{
 	"tfplan",
 	"destroy.tfplan",
 	".terraform.lock.hcl",
+	phase.BootstrapStateSentinelFile,
 }
 
 func cleanupTerraformEnv(ctx context.Context, envDir, envName string, logger *slog.Logger) error {

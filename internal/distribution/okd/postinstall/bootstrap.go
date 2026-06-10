@@ -7,16 +7,11 @@ import (
 	"path/filepath"
 
 	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/infrastructure/terraform"
 	"github.com/qxtaiba/okdctl/internal/system"
 )
-
-// bootstrapStateFile is the auto-loaded tfvars override that records
-// bootstrap_enabled=false after the VM is destroyed. Terraform loads
-// *.auto.tfvars.json automatically, so subsequent plan/destroy runs see
-// a clean diff without any change to the user-authored terraform.tfvars.
-const bootstrapStateFile = "bootstrap-state.auto.tfvars.json"
 
 // CleanupBootstrap destroys the bootstrap VM by re-applying terraform with bootstrap_enabled=false.
 // Uses -target to scope the operation to the bootstrap resource only, preventing
@@ -74,7 +69,7 @@ func (p *Phase) CleanupBootstrap(ctx context.Context, cfg *config.Config, opts *
 	// bootstrap_enabled=true (which would trigger re-creation on the next plan).
 	// If apply fails, the sentinel is harmless: terraform state still tracks the
 	// VM as present, so the next plan is a correct retry.
-	statePath := filepath.Join(terraformDir, bootstrapStateFile)
+	statePath := filepath.Join(terraformDir, phase.BootstrapStateSentinelFile)
 	if err := system.AtomicWriteString(statePath, `{"bootstrap_enabled": false}`, 0o600); err != nil {
 		// err:b804b2ec — state-write during cluster lifecycle → ClusterError (exit 4),
 		// not ConfigError; bootstrap-state.auto.tfvars.json is managed by okdctl, not the user.

@@ -30,6 +30,12 @@ type BaseOptions struct {
 // KubeAPIPort is the kube-apiserver port served by HAProxy and kube-vip.
 const KubeAPIPort = 6443
 
+// BootstrapStateSentinelFile is the auto-loaded tfvars override postinstall
+// writes after the bootstrap VM is destroyed. Terraform loads *.auto.tfvars.json
+// after terraform.tfvars, so cleanup and setup must remove this file before any
+// subsequent deploy so bootstrap_enabled=true takes effect again.
+const BootstrapStateSentinelFile = "bootstrap-state.auto.tfvars.json"
+
 // Default paths for artifacts the bastion phase code writes or removes.
 // Values follow the stock RHEL-family layout; Debian-family paths are
 // resolved through platform.OS helpers instead.
