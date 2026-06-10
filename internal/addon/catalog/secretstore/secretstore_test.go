@@ -118,6 +118,22 @@ func TestSecretManifestFromFile(t *testing.T) {
 	}
 }
 
+func TestReadSecret_RejectsSymlink(t *testing.T) {
+	tmp := t.TempDir()
+	real := filepath.Join(tmp, "real.txt")
+	if err := os.WriteFile(real, []byte("secret"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(tmp, "link.txt")
+	if err := os.Symlink(real, link); err != nil {
+		t.Fatal(err)
+	}
+	env := makeEnv(tmp, tmp)
+	if _, err := readSecret(context.Background(), env, link); err == nil || !strings.Contains(err.Error(), "symlink") {
+		t.Fatalf("expected symlink-refusal error, got %v", err)
+	}
+}
+
 func TestSecretManifestFromFile_NamespaceAndName(t *testing.T) {
 	tmp := t.TempDir()
 	credFile := filepath.Join(tmp, "creds.json")
