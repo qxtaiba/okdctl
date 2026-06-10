@@ -209,3 +209,90 @@ func TestDestroyInfrastructure_TFDestroyFails(t *testing.T) {
 		t.Errorf("ExitCode = 0; want non-zero from failed plan")
 	}
 }
+
+// TestDestroyInfrastructure_CorruptStateReturnsClusterError locks that a
+// corrupt terraform.tfstate causes destroyInfrastructure to return a
+// *errtypes.ClusterError rather than silently returning nil.
+func TestDestroyInfrastructure_CorruptStateReturnsClusterError(t *testing.T) {
+	projectRoot := t.TempDir()
+	envDir := filepath.Join(projectRoot, "infrastructure", "terraform", "environments", "production")
+	if err := os.MkdirAll(envDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(envDir, "terraform.tfstate"), []byte(`{not valid json`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	p := &Phase{
+		BasePhase: phase.NewBasePhase(
+			"test",
+			phase.WithExecutor(executor.New()),
+			phase.WithLogger(logutil.NopLogger),
+		),
+	}
+	opts := &Options{
+		BaseOptions: phase.BaseOptions{
+			ProjectRoot:  projectRoot,
+			TerraformEnv: "production",
+		},
+		AutoApprove: true,
+	}
+
+	err := p.destroyInfrastructure(context.Background(), opts)
+	if err == nil {
+		t.Fatal("expected ClusterError for corrupt state; got nil")
+	}
+	var clusterErr *errtypes.ClusterError
+	if !errors.As(err, &clusterErr) {
+		t.Fatalf("err = %v; want *errtypes.ClusterError", err)
+	}
+	if !strings.Contains(clusterErr.Msg, "corrupt") {
+		t.Errorf("Msg = %q; want substring 'corrupt'", clusterErr.Msg)
+	}
+}
+
+// TestDestroyInfrastructure_CorruptStateWithBakNamesSnapshot locks that when
+// a .bak snapshot exists alongside a corrupt tfstate, the ClusterError Msg
+// embeds the snapshot path.
+func TestDestroyInfrastructure_CorruptStateWithBakNamesSnapshot(t *testing.T) {
+	projectRoot := t.TempDir()
+	envDir := filepath.Join(projectRoot, "infrastructure", "terraform", "environments", "production")
+	if err := os.MkdirAll(envDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(envDir, "terraform.tfstate"), []byte(`{not valid json`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	bakName := "terraform.tfstate.2024-06-01T00-00-00Z.bak"
+	bakPath := filepath.Join(envDir, bakName)
+	if err := os.WriteFile(bakPath, []byte(`{"version":4,"resources":[{"type":"x"}]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	p := &Phase{
+		BasePhase: phase.NewBasePhase(
+			"test",
+			phase.WithExecutor(executor.New()),
+			phase.WithLogger(logutil.NopLogger),
+		),
+	}
+	opts := &Options{
+		BaseOptions: phase.BaseOptions{
+			ProjectRoot:  projectRoot,
+			TerraformEnv: "production",
+		},
+		AutoApprove: true,
+	}
+
+	err := p.destroyInfrastructure(context.Background(), opts)
+	if err == nil {
+		t.Fatal("expected ClusterError for corrupt state; got nil")
+	}
+	var clusterErr *errtypes.ClusterError
+	if !errors.As(err, &clusterErr) {
+		t.Fatalf("err = %v; want *errtypes.ClusterError", err)
+	}
+	if !strings.Contains(clusterErr.Msg, bakPath) {
+		t.Errorf("Msg = %q; want snapshot path %q embedded", clusterErr.Msg, bakPath)
+	}
+}

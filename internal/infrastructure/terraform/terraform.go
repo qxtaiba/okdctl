@@ -358,20 +358,34 @@ func (t *Executor) destroyDirect(ctx context.Context, opts DestroyOptions) error
 	return t.run(ctx, args...)
 }
 
-// HasState reports whether the working directory contains a terraform.tfstate
-// with at least one managed resource. A missing file, an empty state ({} or
-// {"resources":[]}), or a file that fails JSON parse all return false. On a
-// parse failure the file path is logged at Warn so the operator can inspect
-// or remove the corrupt state before retrying.
-func (t *Executor) HasState() bool {
+// StateStatusValue classifies the terraform.tfstate present in WorkDir.
+type StateStatusValue string
+
+const (
+	// StateStatusMissing means terraform.tfstate does not exist.
+	StateStatusMissing StateStatusValue = "missing"
+	// StateStatusEmpty means the file exists but has no managed resources.
+	StateStatusEmpty StateStatusValue = "empty"
+	// StateStatusPopulated means at least one managed resource is present.
+	StateStatusPopulated StateStatusValue = "populated"
+	// StateStatusCorrupt means the file exists but cannot be read or parsed.
+	// Callers must not treat this as "already destroyed" — surface a
+	// recovery error instead.
+	StateStatusCorrupt StateStatusValue = "corrupt"
+)
+
+// StateStatus classifies the terraform.tfstate in WorkDir. It distinguishes
+// corrupt files from genuinely empty or missing ones so callers can surface
+// actionable diagnostics instead of treating corruption as "already destroyed".
+func (t *Executor) StateStatus() StateStatusValue {
 	stateFile := filepath.Join(t.workDir, "terraform.tfstate")
 	if !system.FileExists(stateFile) {
-		return false
+		return StateStatusMissing
 	}
 	data, err := os.ReadFile(stateFile)
 	if err != nil {
 		t.logger.Warn("terraform: cannot read state file", "path", stateFile, "err", err)
-		return false
+		return StateStatusCorrupt
 	}
 	var s struct {
 		Resources []json.RawMessage `json:"resources"`
@@ -379,9 +393,37 @@ func (t *Executor) HasState() bool {
 	if err := json.Unmarshal(data, &s); err != nil {
 		t.logger.Warn("terraform: state file is corrupt or unreadable; inspect before retrying destroy",
 			"path", stateFile, "err", err)
-		return false
+		return StateStatusCorrupt
 	}
-	return len(s.Resources) > 0
+	if len(s.Resources) == 0 {
+		return StateStatusEmpty
+	}
+	return StateStatusPopulated
+}
+
+// HasState reports whether WorkDir contains a terraform.tfstate with at least
+// one managed resource. Returns false for missing, empty, or corrupt state.
+func (t *Executor) HasState() bool {
+	return t.StateStatus() == StateStatusPopulated
+}
+
+// NewestBakSnapshot returns the absolute path of the most recent
+// terraform.tfstate.*.bak file in WorkDir, or "" when none are present.
+// os.ReadDir entries are name-sorted; timestamp-encoded names are therefore
+// chronologically ordered so the last matching entry is the newest.
+func (t *Executor) NewestBakSnapshot() string {
+	entries, err := os.ReadDir(t.workDir)
+	if err != nil {
+		return ""
+	}
+	latest := ""
+	for _, e := range entries {
+		n := e.Name()
+		if strings.HasPrefix(n, "terraform.tfstate.") && strings.HasSuffix(n, ".bak") {
+			latest = filepath.Join(t.workDir, n)
+		}
+	}
+	return latest
 }
 
 // SnapshotState copies terraform.tfstate to terraform.tfstate.<timestamp>.bak
