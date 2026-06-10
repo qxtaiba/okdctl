@@ -429,6 +429,19 @@ func TestResult_TruncatedOnRingPath(t *testing.T) {
 		}
 	})
 
+	t.Run("false at exactly the ring cap", func(t *testing.T) {
+		t.Parallel()
+		e := New(WithInheritedEnv())
+		result, err := e.Run(context.Background(), "sh", "-c",
+			"for i in $(seq 1 200); do echo x; done")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if result.Truncated {
+			t.Errorf("Truncated = true for exactly 200 lines (nothing dropped); want false")
+		}
+	})
+
 	t.Run("true when over ring cap", func(t *testing.T) {
 		t.Parallel()
 		e := New(WithInheritedEnv())
@@ -441,4 +454,25 @@ func TestResult_TruncatedOnRingPath(t *testing.T) {
 			t.Errorf("Truncated = false for 201 lines; want true")
 		}
 	})
+}
+
+func TestRunOutput_DrainsBeyondPipeBuffer(t *testing.T) {
+	t.Parallel()
+	e := New(WithInheritedEnv())
+	// 2 MiB of output against a 10-byte cap: the excess far exceeds the
+	// kernel pipe buffer, so the call only returns if the pipe is drained.
+	result, err := e.RunOutput(context.Background(), 10, "sh", "-c",
+		"dd if=/dev/zero bs=1024 count=2048 2>/dev/null")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !result.Truncated {
+		t.Errorf("Truncated = false; want true")
+	}
+	if len(result.Stdout) != 10 {
+		t.Errorf("len(Stdout) = %d; want 10", len(result.Stdout))
+	}
+	if result.ExitCode != 0 {
+		t.Errorf("ExitCode = %d; want 0", result.ExitCode)
+	}
 }

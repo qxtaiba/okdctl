@@ -183,10 +183,11 @@ func (e *Executor) buildEnv() []string {
 }
 
 // Result is the captured outcome of a Run-style invocation.
-// Truncated is true when stdout was capped — either by the ring-buffer path
-// (Run/RunChecked hit constMaxLines) or by the byte-cap path (RunOutput hit
-// its limit). Callers that machine-parse stdout must use
-// RunOutput/RunOutputChecked and check Truncated before unmarshalling.
+// Truncated is true when stdout was capped: the ring paths (Run/RunChecked/
+// RunStreamed) set it once a line is actually dropped past constMaxLines;
+// the byte-cap path (RunOutput) sets it when output exceeds the limit.
+// Callers that machine-parse stdout must use RunOutput/RunOutputChecked and
+// check Truncated before unmarshalling.
 type Result struct {
 	ExitCode  int
 	Stdout    string
@@ -276,7 +277,7 @@ func (e *Executor) run(ctx context.Context, stdin io.Reader, name string, args .
 		Stdout:    rout.tail(),
 		Stderr:    rerr.tail(),
 		Duration:  time.Since(start),
-		Truncated: rout.full,
+		Truncated: rout.dropped,
 	}
 
 	if err != nil {
@@ -318,10 +319,11 @@ func (e *Executor) RunStreamed(ctx context.Context, name string, args ...string)
 	err := cmd.Run()
 
 	result := &Result{
-		ExitCode: 0,
-		Stdout:   rout.tail(),
-		Stderr:   rerr.tail(),
-		Duration: time.Since(start),
+		ExitCode:  0,
+		Stdout:    rout.tail(),
+		Stderr:    rerr.tail(),
+		Duration:  time.Since(start),
+		Truncated: rout.dropped,
 	}
 	e.logger.Debug("exec: completed", "cmd", name, "duration", result.Duration)
 
@@ -471,8 +473,12 @@ func (e *Executor) runOutput(ctx context.Context, stdin io.Reader, limit int, na
 		return &Result{Duration: time.Since(start)}, err
 	}
 
-	// Read limit+1 bytes so "exactly limit" and "exceeded limit" are distinguishable.
+	// Read limit+1 bytes so "exactly limit" and "exceeded limit" are
+	// distinguishable, then drain the rest: a child producing more than the
+	// kernel pipe buffer past the cap would otherwise block forever in write
+	// and Wait would never return.
 	out, readErr := io.ReadAll(io.LimitReader(stdoutPipe, int64(limit)+1))
+	_, _ = io.Copy(io.Discard, stdoutPipe)
 	waitErr := cmd.Wait()
 
 	truncated := len(out) > limit
