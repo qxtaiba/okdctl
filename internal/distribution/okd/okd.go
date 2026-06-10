@@ -19,6 +19,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/setup"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/executor"
+	"github.com/qxtaiba/okdctl/internal/infrastructure/terraform"
 	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/system"
 )
@@ -113,22 +114,35 @@ func (p *Provisioner) Validate(cfg *config.Config) error {
 	return nil
 }
 
-// Prepare cleans up previous artifacts and runs the setup phase.
-func (p *Provisioner) Prepare(ctx context.Context, cfg *config.Config) ([]distribution.StepResult, error) {
-	opts := setup.NewOptions(cfg, p.projectRoot)
+// PrepareOpts configures a Provisioner.Prepare run. FreshDeploy permits
+// wiping a work directory that contains live cluster state (terraform
+// resources or cluster-config/auth); without it Prepare returns an error
+// so the operator is forced to destroy the cluster first.
+type PrepareOpts struct {
+	FreshDeploy bool
+}
 
-	if system.DirExists(opts.WorkDir) {
+// Prepare cleans up previous artifacts and runs the setup phase. It refuses
+// to wipe a work directory that appears to belong to a live cluster unless
+// opts.FreshDeploy is true; pass --fresh at the CLI to opt in.
+func (p *Provisioner) Prepare(ctx context.Context, cfg *config.Config, opts PrepareOpts) ([]distribution.StepResult, error) {
+	setupOpts := setup.NewOptions(cfg, p.projectRoot)
+
+	if system.DirExists(setupOpts.WorkDir) {
+		if err := p.guardLiveCluster(cfg, setupOpts.WorkDir, opts.FreshDeploy); err != nil {
+			return nil, err
+		}
 		p.logger.Info("setup: cleaning up previous artifacts")
 		cleanupOpts := &cleanup.Options{
 			BaseOptions: phase.BaseOptions{
-				WorkDir:     opts.WorkDir,
+				WorkDir:     setupOpts.WorkDir,
 				ProjectRoot: p.projectRoot,
 			},
 			Kind:           cleanup.WorkOnly,
 			HTTPServerRoot: cfg.HTTPServer.Root,
 		}
 		if err := cleanup.New(p.version, phase.WithExecutor(p.executor), phase.WithLogger(p.logger)).Execute(ctx, cleanupOpts); err != nil {
-			p.logger.Warn("cleanup: pre-deploy artifact removal incomplete", "phase", "prepare", "err", err)
+			return nil, &errtypes.ClusterError{Msg: "pre-deploy cleanup incomplete; stale sentinels may skip regeneration — remove the work directory manually or run 'okdctl cleanup'", Err: err}
 		}
 	}
 
@@ -138,7 +152,31 @@ func (p *Provisioner) Prepare(ctx context.Context, cfg *config.Config) ([]distri
 		phase.WithRecorder(p.recorder),
 	)
 	setupPhase.BinDir = phase.ResolveBinDir(cfg)
-	return setupPhase.Execute(ctx, cfg, &opts)
+	return setupPhase.Execute(ctx, cfg, &setupOpts)
+}
+
+// guardLiveCluster returns a *errtypes.ClusterError when the work directory
+// contains terraform resources or a cluster-config/auth directory, indicating
+// a live or previously-deployed cluster. freshDeploy bypasses the guard.
+//
+// Callers that set freshDeploy=true accept credential loss: cluster-config/auth
+// (kubeadmin-password, kubeconfig) is wiped with no backup.
+func (p *Provisioner) guardLiveCluster(cfg *config.Config, workDir string, freshDeploy bool) error {
+	if freshDeploy {
+		return nil
+	}
+	tfEnv := phase.GetTerraformEnv(cfg)
+	envDir := filepath.Join(p.projectRoot, "infrastructure", "terraform", "environments", tfEnv)
+	tf := terraform.New(envDir, terraform.WithLogger(p.logger))
+	hasTFState := tf.HasState()
+	hasAuth := system.DirExists(filepath.Join(phase.ClusterConfigDir(workDir), "auth"))
+	if hasTFState || hasAuth {
+		return &errtypes.ClusterError{
+			Msg: "work directory contains live cluster state (terraform resources or cluster-config/auth); " +
+				"run 'okdctl destroy' first, or pass --fresh to force-wipe (credentials will be lost)",
+		}
+	}
+	return nil
 }
 
 // Install runs the install phase: ignition delivery, bootstrap wait, and

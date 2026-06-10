@@ -208,6 +208,7 @@ type deploymentOptions struct {
 	Credentials         *credentials.ProxmoxCredentials
 	MetricsAddr         string
 	AllowNetworkMetrics bool
+	FreshDeploy         bool
 }
 
 // metricsReadHeaderTimeout / metricsReadTimeout / metricsWriteTimeout set
@@ -346,7 +347,7 @@ func executeFullDeployment(ctx context.Context, cfg *config.Config, opts deploym
 	if err := markDeployPhaseFatal(markerPath, phasePrepare, runID, cfg.Cluster.Name); err != nil {
 		return err
 	}
-	setupSteps, err := p.Prepare(ctx, cfg)
+	setupSteps, err := p.Prepare(ctx, cfg, okd.PrepareOpts{FreshDeploy: opts.FreshDeploy})
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
 			fmt.Fprintln(w, InterruptSummary(setupSteps, "okdctl deploy", runID))
