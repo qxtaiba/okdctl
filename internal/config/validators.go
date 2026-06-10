@@ -20,8 +20,9 @@ var (
 	domainPattern     = regexp.MustCompile(`^([a-z0-9]([-a-z0-9]*[a-z0-9])?\.)*[a-z0-9]([-a-z0-9]*[a-z0-9])?$`)
 	okdVersionPattern = regexp.MustCompile(`^\d+\.\d+\.\d+-okd-[a-zA-Z0-9.-]+$`)
 
-	interfaceNamePattern = regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9._-]*$`)
-	proxmoxNamePattern   = regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9_-]*$`)
+	interfaceNamePattern  = regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9._-]*$`)
+	proxmoxNamePattern    = regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9_-]*$`)
+	proxmoxCPUTypePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_+.,=-]*$`)
 )
 
 func validateRequired(cfg *Config, result *ValidationResult) {
@@ -262,6 +263,22 @@ func validateProxmoxConfig(proxmox *ProxmoxConfig, result *ValidationResult) {
 		result.AddError(FieldProxmoxStorage, "proxmox storage is required")
 	} else if !proxmoxNamePattern.MatchString(proxmox.Storage) {
 		result.AddError(FieldProxmoxStorage, "must be a valid Proxmox storage name (alphanumeric, hyphens, underscores)")
+	}
+
+	if proxmox.ISOStorage != "" && !proxmoxNamePattern.MatchString(proxmox.ISOStorage) {
+		result.AddError(FieldProxmoxISOStorage, "must be a valid Proxmox storage name (alphanumeric, hyphens, underscores)")
+	}
+
+	if proxmox.DataStorage != "" && !proxmoxNamePattern.MatchString(proxmox.DataStorage) {
+		result.AddError(FieldProxmoxDataStorage, "must be a valid Proxmox storage name (alphanumeric, hyphens, underscores)")
+	}
+
+	if proxmox.Bridge != "" && !interfaceNamePattern.MatchString(proxmox.Bridge) {
+		result.AddError(FieldProxmoxBridge, "must be a valid network interface name (e.g., vmbr0, vmbr1)")
+	}
+
+	if proxmox.CPUType != "" && !proxmoxCPUTypePattern.MatchString(proxmox.CPUType) {
+		result.AddError(FieldProxmoxCPUType, "must contain only alphanumeric characters, hyphens, underscores, plus, dot, comma, or equals")
 	}
 
 	for i, node := range proxmox.MasterNodes {
