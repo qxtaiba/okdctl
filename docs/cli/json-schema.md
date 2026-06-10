@@ -60,6 +60,7 @@ Top-level cluster snapshot.
 | `nodes[].name` | string | node name from `kubectl get nodes` |
 | `nodes[].role` | string | `master`, `worker`, or `unknown` |
 | `nodes[].ready` | bool | node's `Ready` condition is `True` |
+| `nodes[].status` | string | `Ready` or `NotReady` |
 | `degraded_operators` | int | cluster-operators with `Degraded=True` |
 | `addons[].name` | string | registered addon name |
 | `addons[].healthy` | bool | `true` when verify returned no error |

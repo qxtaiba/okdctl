@@ -8,7 +8,7 @@ import "github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 type ClusterStatus struct {
 	Phase             ClusterPhase  `json:"phase"`
 	APIReachable      bool          `json:"api_reachable"`
-	Nodes             []NodeStatus  `json:"nodes"`
+	Nodes             []NodeStatus  `json:"nodes,omitempty"`
 	DegradedOperators int           `json:"degraded_operators"`
 	Addons            []AddonStatus `json:"addons,omitempty"`
 }
