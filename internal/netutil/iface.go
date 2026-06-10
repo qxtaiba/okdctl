@@ -6,10 +6,29 @@ package netutil
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/qxtaiba/okdctl/internal/system"
 )
+
+// validConnectionNameRegex mirrors the dns package allowlist for nmcli
+// connection names. The explicit leading-dash refusal closes CWE-88: nmcli
+// treats a leading-dash token as a property selector in argv position.
+var validConnectionNameRegex = regexp.MustCompile(`^[A-Za-z0-9 ._/:-]{1,128}$`)
+
+func validateConnectionName(name string) error {
+	if name == "" {
+		return fmt.Errorf("connection name must not be empty")
+	}
+	if name[0] == '-' {
+		return fmt.Errorf("connection name %q must not start with a dash", name)
+	}
+	if !validConnectionNameRegex.MatchString(name) {
+		return fmt.Errorf("connection name %q does not match allowed character set", name)
+	}
+	return nil
+}
 
 // RemoveSecondaryIP strips ip from the active NetworkManager connection bound
 // to iface and reapplies the device. No-ops when ip is not currently assigned.
@@ -74,7 +93,11 @@ func connectionForDevice(ctx context.Context, iface string) (string, error) {
 		unescaped := strings.ReplaceAll(line, `\:`, "\x00")
 		parts := strings.SplitN(unescaped, ":", 2)
 		if len(parts) == 2 && parts[1] == iface {
-			return strings.ReplaceAll(parts[0], "\x00", ":"), nil
+			conn := strings.ReplaceAll(parts[0], "\x00", ":")
+			if err := validateConnectionName(conn); err != nil {
+				return "", fmt.Errorf("networkmanager connection name rejected: %w", err)
+			}
+			return conn, nil
 		}
 	}
 

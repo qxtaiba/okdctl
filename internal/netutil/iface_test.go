@@ -76,6 +76,28 @@ func nmcliCallCount(t *testing.T, logFile string) int {
 	return count
 }
 
+func TestValidateConnectionName(t *testing.T) {
+	cases := []struct {
+		name    string
+		in      string
+		wantErr bool
+	}{
+		{"plain name", "eth0", false},
+		{"name with colon", "br0:1", false},
+		{"empty rejected", "", true},
+		{"leading dash rejected", "-ipv4.method", true},
+		{"semicolon rejected", "conn;rm -rf /", true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := validateConnectionName(tc.in)
+			if (err != nil) != tc.wantErr {
+				t.Errorf("validateConnectionName(%q) err=%v, wantErr=%v", tc.in, err, tc.wantErr)
+			}
+		})
+	}
+}
+
 func TestRemoveSecondaryIP(t *testing.T) {
 	t.Run("ip absent fast-paths nil with no nmcli call", func(t *testing.T) {
 		logFile := filepath.Join(t.TempDir(), "nmcli.log")
