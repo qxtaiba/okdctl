@@ -44,7 +44,7 @@ type StepDef struct {
     Desc        string
     NonFatal    bool
     ReRunSafe   ReRunSafety                              // required — BuildSteps panics on zero value
-    AlreadyDone func(ctx context.Context) (bool, error)  // optional; consulted before Exec on re-runs
+    AlreadyDone func(ctx context.Context) (bool, error)  // required for ReRunSafeNo steps — BuildSteps panics without it; optional for ReRunSafeYes
     SkipWhen    func() bool
     SkipReason  string
     OnStart     func()                                   // optional hook fired before Exec
@@ -90,6 +90,7 @@ type BasePhase struct {
     Log      *slog.Logger                 // structured logger
     Version  string                       // OKD version string, for display
     Recorder distribution.MetricsRecorder // per-step + overall observation sink (nil → nopMetricsRecorder via WithRecorder)
+    Reporter logutil.ProgressReporter     // progress sink for long-running operations (nil → NopProgressReporter via NewBasePhase)
 }
 ```
 
@@ -122,10 +123,11 @@ The ordinary case: you want to add a step to an existing phase.
    - `ReRunSafeYes` — the step is idempotent; re-running it after a partial
      failure is safe. Prefer this default wherever possible.
    - `ReRunSafeNo` — the step has side-effects that must not repeat (e.g.,
-     generating ignition files, deploying terraform infra). For resume
-     safety, wire an `AlreadyDone` func that detects whether the work
-     product already exists; the orchestrator skips `Exec` when it returns
-     true.
+     generating ignition files, deploying terraform infra). `AlreadyDone`
+     is **required** for every `ReRunSafeNo` step — `BuildSteps` panics with
+     `"is ReRunSafeNo but has no AlreadyDone guard"` when it is absent. Wire
+     a func that detects whether the work product already exists; the
+     orchestrator skips `Exec` when it returns true.
 4. If the step body is longer than ~15 lines, extract it to a named
    method on the phase (e.g., `generateKubeVIPManifests`)
 5. Set `NonFatal: true` only if the step is genuinely optional (a warning
