@@ -28,7 +28,7 @@ Windows. Install on the bastion host you intend to deploy from.
 **curl | bash** (verifies SHA256):
 
 ```bash
-curl -sSfL https://raw.githubusercontent.com/qxtaiba/okdctl/main/scripts/install.sh | bash
+curl -sSfL https://raw.githubusercontent.com/qxtaiba/okdctl/develop/scripts/install.sh | bash
 ```
 
 **`.deb` / `.rpm`** from the [releases page](https://github.com/qxtaiba/okdctl/releases)
