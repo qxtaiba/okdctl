@@ -938,7 +938,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `mod:9d79b841:use-strings-cut` — use strings cut
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/mod-9d79b841-strings-cut
 **Severity:** suggestion
 **Cluster:** slices-maps
 **Evidence:** `internal/distribution/okd/setup/coreos.go:59-68` + 4 more
@@ -981,7 +981,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `smell:c19ee328:magic-strings` — magic strings
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/smell-c19ee328-bin-consts
 **Severity:** minor
 **Cluster:** magic-strings
 **Evidence:** `internal/distribution/okd/setup/steps.go:89-94`
@@ -1124,7 +1124,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `sec:19a715fd:symlink-escape` — symlink escape
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sec-19a715fd-nofollow
 **Severity:** minor
 **Cluster:** file-toctou
 **Evidence:** `internal/addon/catalog/secretstore/secretstore.go:256-274`
@@ -1166,7 +1166,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `sub:e552bb7d:argv-unvalidated-token` — argv unvalidated token
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/sub-e552bb7d-conn-validate
 **Severity:** minor
 **Cluster:** argv-construction
 **Evidence:** `internal/netutil/iface.go:66-82` + 1 more
@@ -1360,7 +1360,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `iac:ef8f2924:count-exceeds-names` — count exceeds names
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/iac-ef8f2924-count-validate
 **Severity:** minor
 **Cluster:** hcl-robustness
 **Evidence:** `infrastructure/terraform/modules/proxmox-okd/variables.tf:148-245`
@@ -1472,7 +1472,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `err:d9f7733e:err-formats-cred` — err formats cred
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/err-d9f7733e-bundle-redact
 **Severity:** minor
 **Cluster:** redaction-in-error
 **Evidence:** `internal/cli/debug_bundle.go:276-280` + 1 more
@@ -1504,7 +1504,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `con:6424733c:go-no-wait` — go no wait
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/con-6424733c-metrics-bind
 **Severity:** minor
 **Cluster:** goroutine-lifetime
 **Evidence:** `internal/cli/helpers.go:269-290`
@@ -1514,7 +1514,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `con:ae5b624c:ticker-zero-interval-panic` — ticker zero interval panic
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/con-ae5b624c-ticker-guard
 **Severity:** suggestion
 **Cluster:** time-sleep-retry
 **Evidence:** `internal/distribution/okd/install/monitor.go:117-118`
@@ -1616,7 +1616,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `api:484b40f0:zero-value-unusable` — zero value unusable
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/api-484b40f0-zero-recorder
 **Severity:** suggestion
 **Cluster:** zero-value-usability
 **Evidence:** `internal/deploymetrics/metrics.go:20-34`
@@ -1838,7 +1838,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `ux:daf5bee9:stdout-not-cobra-writer` — stdout not cobra writer
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/ux-daf5bee9-cobra-writer
 **Severity:** suggestion
 **Cluster:** streams
 **Evidence:** `internal/cli/kubeconfig.go:41-70`
@@ -1910,7 +1910,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `obs:a6e38cc7:key-inconsistent-casing` — key inconsistent casing
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/obs-a6e38cc7-fp-key
 **Severity:** minor
 **Cluster:** field-stability
 **Evidence:** `internal/sshpin/sshpin.go:80-82` + 1 more
@@ -1920,7 +1920,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `obs:40d315ad:level-warn-should-info` — level warn should info
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/obs-40d315ad-flux-level
 **Severity:** minor
 **Cluster:** level-discipline
 **Evidence:** `internal/addon/catalog/flux/flux.go:124-126` + 2 more
@@ -1930,7 +1930,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `obs:21dc1103:level-error-not-user-visible` — level error not user visible
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/obs-21dc1103-dl-level
 **Severity:** minor
 **Cluster:** level-discipline — seam→audit-errors
 **Evidence:** `internal/download/download.go:127-128` + 1 more
@@ -1952,7 +1952,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `mod:a3577f6c:use-slices-containsfunc` — use slices containsfunc
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/mod-a3577f6c-containsfunc
 **Severity:** suggestion
 **Cluster:** slices-maps
 **Evidence:** `internal/distribution/okd/setup/cert.go:77-81`
@@ -2002,7 +2002,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `mod:632c9087:use-slices-sort` — use slices sort
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/mod-632c9087-slices-max
 **Severity:** minor
 **Cluster:** slices-maps
 **Evidence:** `internal/distribution/okd/postinstall/update_ingress.go:625-626`
@@ -2074,7 +2074,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `smell:de572c63:magic-path-literal` — magic path literal
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/smell-de572c63-resolved-var
 **Severity:** minor
 **Cluster:** magic-strings
 **Evidence:** `internal/distribution/okd/dns/dnsmasq.go:208-210`
@@ -2134,7 +2134,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `smell:6179837f:linter-config-bug` — linter config bug
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/smell-6179837f-goconst
 **Severity:** suggestion
 **Cluster:** linter-config — related: smell:451be4fa:magic-path-literal, smell:0139cb3f:magic-path-literal
 **Evidence:** `.golangci.yml:50-51`
@@ -2146,7 +2146,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `dep:2eef5feb:automerge-v0x-minor` — automerge v0x minor
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/dep-2eef5feb-automerge
 **Severity:** minor
 **Cluster:** pin-stability — related: dep:33ef32bf:transitive-heavy-narrow, dep:98cc639a:v0x-unregistered-provider
 **Evidence:** `.github/renovate/autoMerge.json5:1-12`
@@ -2228,7 +2228,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `doc:8f46b665:docs-struct-snippet-drift` — docs struct snippet drift
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/doc-8f46b665-phases
 **Severity:** minor
 **Cluster:** readme-drift
 **Evidence:** `docs/architecture/phases.md:86-98` + 2 more
@@ -2298,7 +2298,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `doc:024a2c32:docs-schema-drift` — docs schema drift
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/doc-024a2c32-nodes-omitempty
 **Severity:** minor
 **Cluster:** readme-drift — seam→audit-cli-ux
 **Evidence:** `docs/cli/json-schema.md:236-236` + 2 more
@@ -2328,7 +2328,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `doc:70b3bae2:docs-struct-snippet-drift` — docs struct snippet drift
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/doc-70b3bae2-wizard
 **Severity:** suggestion
 **Cluster:** readme-drift — related: doc:8f46b665:docs-struct-snippet-drift
 **Evidence:** `docs/architecture/wizard.md:43-57`
@@ -2338,7 +2338,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `doc:73ad30ef:doc-comment-stale` — doc comment stale
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/doc-73ad30ef-warnonerror
 **Severity:** suggestion
 **Cluster:** exported-doc
 **Evidence:** `internal/distribution/okd/phase/helpers.go:11-13`
@@ -2430,7 +2430,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `tst:262af6e4:destructive-partial-untested` — destructive partial untested
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/tst-262af6e4-cleanup
 **Severity:** major
 **Cluster:** destructive-untested — seam→audit-state-and-recovery — related: state:0f076161:destroy-scoped-cleanup-unscoped, state:c287d5c0:prepare-wipes-live-cluster-artifacts
 **Evidence:** `internal/distribution/okd/cleanup/cleanup.go:246-259`
@@ -2440,7 +2440,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `tst:0139cb3f:trust-boundary-untested` — trust boundary untested
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/tst-0139cb3f-paths
 **Severity:** major
 **Cluster:** trust-boundary-untested
 **Evidence:** `internal/distribution/okd/phase/paths.go:57-111`
@@ -2450,7 +2450,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `tst:c5e5c304:trust-boundary-untested` — trust boundary untested
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/tst-c5e5c304-tf-test
 **Severity:** minor
 **Cluster:** trust-boundary-untested — related: tst:aa0f50f5:trust-boundary-untested
 **Evidence:** `internal/distribution/okd/setup/terraform.go:20-145`
