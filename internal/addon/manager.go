@@ -53,6 +53,9 @@ func NewManager(cfg *config.Config, opts ...Option) *Manager {
 	if m.logger == nil {
 		m.logger = logutil.NopLogger
 	}
+	if m.exec == nil {
+		m.exec = executor.New(executor.WithLogger(m.logger))
+	}
 	return m
 }
 

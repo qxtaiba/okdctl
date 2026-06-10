@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/executor"
 )
 
 // installFakeOC adds a no-op `oc` script to PATH so the
@@ -150,6 +151,21 @@ func TestInstallOne_AllOrNothingReverseRollback(t *testing.T) {
 	}
 	if c.uninstallN.Load() != 0 {
 		t.Errorf("c.uninstallN = %d; want 0 (failed addon already errored before install completed)", c.uninstallN.Load())
+	}
+}
+
+func TestNewManager_DefaultsExecutor(t *testing.T) {
+	mgr := NewManager(enabledCfg())
+	if mgr.exec == nil {
+		t.Fatal("NewManager without WithExecutor must default m.exec; got nil")
+	}
+}
+
+func TestNewManager_WithExecutorPreserved(t *testing.T) {
+	want := executor.New()
+	mgr := NewManager(enabledCfg(), WithExecutor(want))
+	if mgr.exec != want {
+		t.Fatal("NewManager must preserve an explicitly supplied executor")
 	}
 }
 
