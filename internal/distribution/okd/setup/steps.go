@@ -86,7 +86,7 @@ func (p *Phase) setupBaseSteps(cfg *config.Config, opts *Options) []distribution
 			SkipReason: "downloads disabled",
 			AlreadyDone: func(_ context.Context) (bool, error) {
 				binDir := phase.BinDirOrDefault(p.BinDir)
-				bins := []string{"openshift-install", "oc", "kubectl"}
+				bins := []string{openshiftInstallBin, ocBin, kubectlBin}
 				missing := slices.ContainsFunc(bins, func(b string) bool {
 					return !system.FileExists(filepath.Join(binDir, b))
 				})
