@@ -100,6 +100,35 @@ func TestCopyFileMode(t *testing.T) {
 			t.Errorf("dst created despite src failure: %v", err)
 		}
 	})
+
+	t.Run("refuses symlink at dst", func(t *testing.T) {
+		target := filepath.Join(dir, "symlink-copy-target.txt")
+		if err := os.WriteFile(target, []byte("original"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		link := filepath.Join(dir, "symlink-copy-dst.txt")
+		if err := os.Symlink(target, link); err != nil {
+			t.Fatal(err)
+		}
+		err := CopyFileMode(src, link, 0o600)
+		if err == nil {
+			t.Fatal("CopyFileMode via symlink dst: expected error, got nil")
+		}
+		var authErr *errtypes.AuthError
+		if !errors.As(err, &authErr) {
+			t.Errorf("err type = %T, want *errtypes.AuthError", err)
+		}
+		if !errors.Is(err, os.ErrPermission) {
+			t.Errorf("err does not wrap os.ErrPermission: %v", err)
+		}
+		body, readErr := os.ReadFile(target)
+		if readErr != nil {
+			t.Fatalf("read target: %v", readErr)
+		}
+		if string(body) != "original" {
+			t.Errorf("target body = %q; symlink target was overwritten", body)
+		}
+	})
 }
 
 func TestAtomicWrite(t *testing.T) {
