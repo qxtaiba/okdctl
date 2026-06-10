@@ -97,10 +97,10 @@ func (p *Phase) configureApacheHTTPS(ctx context.Context, certPath, keyPath, web
 	}
 
 	if p.OS.Family == platform.FamilyDebian {
-		if _, err := p.Exec.Run(ctx, "a2enmod", "ssl"); err != nil {
+		if _, err := p.Exec.RunChecked(ctx, "a2enmod", "ssl"); err != nil {
 			p.Log.Warn("apache: a2enmod ssl failed", "err", err)
 		}
-		if _, err := p.Exec.Run(ctx, "a2enconf", "ignition-ssl"); err != nil {
+		if _, err := p.Exec.RunChecked(ctx, "a2enconf", "ignition-ssl"); err != nil {
 			p.Log.Warn("apache: a2enconf ignition-ssl failed", "err", err)
 		}
 	}
