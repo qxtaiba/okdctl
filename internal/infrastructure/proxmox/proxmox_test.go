@@ -1,8 +1,14 @@
 package proxmox
 
 import (
+	"context"
+	"errors"
+	"fmt"
 	"strings"
 	"testing"
+
+	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/errtypes"
 )
 
 func TestProvider_ZeroizeEnv(t *testing.T) {
@@ -64,4 +70,150 @@ func TestProvider_ZeroizeEnv(t *testing.T) {
 			t.Errorf("env not nil after ZeroizeEnv; got %v", p.env)
 		}
 	})
+}
+
+func TestRetrieveProvisionResult(t *testing.T) {
+	cases := []struct {
+		name            string
+		startIP         string
+		masterCount     int
+		workerCount     int
+		cidr            string
+		gateway         string
+		wantBootstrap   string
+		wantMasters     []string
+		wantWorkers     []string
+		wantAPIServerIP string
+		wantErrContains string
+	}{
+		{
+			name:          "1 master 0 workers no cidr",
+			startIP:       "192.168.1.20",
+			masterCount:   1,
+			workerCount:   0,
+			wantBootstrap: "192.168.1.20",
+			wantMasters:   []string{"192.168.1.21"},
+			wantWorkers:   []string{},
+		},
+		{
+			name:          "3 masters 2 workers with cidr",
+			startIP:       "192.168.1.20",
+			masterCount:   3,
+			workerCount:   2,
+			cidr:          "192.168.1.0/24",
+			wantBootstrap: "192.168.1.20",
+			wantMasters:   []string{"192.168.1.21", "192.168.1.22", "192.168.1.23"},
+			wantWorkers:   []string{"192.168.1.24", "192.168.1.25"},
+		},
+		{
+			name:            "gateway sets APIServerIP",
+			startIP:         "192.168.1.20",
+			masterCount:     1,
+			workerCount:     0,
+			gateway:         "192.168.1.1",
+			wantBootstrap:   "192.168.1.20",
+			wantMasters:     []string{"192.168.1.21"},
+			wantWorkers:     []string{},
+			wantAPIServerIP: "192.168.1.1",
+		},
+		{
+			name:            "empty startIP returns config error",
+			startIP:         "",
+			masterCount:     1,
+			wantErrContains: "static IP start address",
+		},
+		{
+			name:            "start ip outside cidr",
+			startIP:         "192.168.2.10",
+			masterCount:     3,
+			workerCount:     2,
+			cidr:            "192.168.1.0/24",
+			wantErrContains: "IP range validation failed",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := &config.Config{
+				Topology: config.TopologyConfig{
+					ControlPlane: config.NodeConfig{Count: tc.masterCount},
+					Workers:      config.NodeConfig{Count: tc.workerCount},
+				},
+				Networking: config.NetworkingConfig{
+					StaticIP:    config.StaticIPConfig{Start: tc.startIP},
+					MachineCIDR: tc.cidr,
+					Gateway:     tc.gateway,
+				},
+			}
+			p := New()
+			result, err := p.retrieveProvisionResult(cfg)
+			if tc.wantErrContains != "" {
+				if err == nil {
+					t.Fatalf("want error containing %q; got nil", tc.wantErrContains)
+				}
+				if !strings.Contains(err.Error(), tc.wantErrContains) {
+					t.Errorf("error = %q; want substring %q", err.Error(), tc.wantErrContains)
+				}
+				var cfgErr *errtypes.ConfigError
+				if !errors.As(err, &cfgErr) {
+					t.Errorf("error type = %T; want *errtypes.ConfigError", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if result.BootstrapIP != tc.wantBootstrap {
+				t.Errorf("BootstrapIP = %q; want %q", result.BootstrapIP, tc.wantBootstrap)
+			}
+			if len(result.ControlPlaneIPs) != len(tc.wantMasters) {
+				t.Fatalf("len(ControlPlaneIPs) = %d; want %d",
+					len(result.ControlPlaneIPs), len(tc.wantMasters))
+			}
+			for i, want := range tc.wantMasters {
+				if result.ControlPlaneIPs[i] != want {
+					t.Errorf("ControlPlaneIPs[%d] = %q; want %q",
+						i, result.ControlPlaneIPs[i], want)
+				}
+			}
+			if len(result.WorkerIPs) != len(tc.wantWorkers) {
+				t.Fatalf("len(WorkerIPs) = %d; want %d",
+					len(result.WorkerIPs), len(tc.wantWorkers))
+			}
+			for i, want := range tc.wantWorkers {
+				if result.WorkerIPs[i] != want {
+					t.Errorf("WorkerIPs[%d] = %q; want %q",
+						i, result.WorkerIPs[i], want)
+				}
+			}
+			if tc.wantAPIServerIP != "" && result.APIServerIP != tc.wantAPIServerIP {
+				t.Errorf("APIServerIP = %q; want %q", result.APIServerIP, tc.wantAPIServerIP)
+			}
+		})
+	}
+}
+
+func TestInitIsRetryable(t *testing.T) {
+	cases := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{"nil", nil, false},
+		{"context canceled", context.Canceled, false},
+		{"context deadline exceeded", context.DeadlineExceeded, false},
+		{"config error", &errtypes.ConfigError{Msg: "bad config"}, false},
+		{"auth error", &errtypes.AuthError{Msg: "bad token"}, false},
+		{"wrapped context canceled", fmt.Errorf("outer: %w", context.Canceled), false},
+		{"wrapped config error", fmt.Errorf("outer: %w", &errtypes.ConfigError{Msg: "x"}), false},
+		{"generic error is retryable", errors.New("connection reset"), true},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := initIsRetryable(tc.err); got != tc.want {
+				t.Errorf("initIsRetryable(%v) = %v; want %v", tc.err, got, tc.want)
+			}
+		})
+	}
 }
