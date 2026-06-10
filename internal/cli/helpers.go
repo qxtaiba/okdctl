@@ -17,6 +17,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/credentials"
 	"github.com/qxtaiba/okdctl/internal/deploymetrics"
+	"github.com/qxtaiba/okdctl/internal/distribution"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/install"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
@@ -203,15 +204,33 @@ func createOKDProvisionerWithOpts(cfg *config.Config, creds *credentials.Proxmox
 	return okd.New(cfg.Distribution.Version, opts...)
 }
 
-// guardedPrepareOpts reads the deploy-state marker BEFORE it is overwritten
-// (a present marker means the prior run was interrupted, so the live-cluster
-// guard must let the documented re-run-to-resume flow proceed) and probes
-// the guard before any marker write — a refusal must not plant a marker
-// that would bypass the guard on the next invocation.
-func guardedPrepareOpts(p *okd.Provisioner, cfg *config.Config, markerPath string, freshDeploy bool) (okd.PrepareOpts, error) {
+// runGuardedPrepare runs the prepare phase behind the live-cluster guard.
+// The deploy-state marker is read BEFORE it is overwritten (a present marker
+// means the prior run was interrupted, so the guard must let the documented
+// re-run-to-resume flow proceed) and the guard probe runs before any marker
+// write — a refusal must not plant a marker that would bypass the guard on
+// the next invocation.
+func runGuardedPrepare(ctx context.Context, p *okd.Provisioner, cfg *config.Config, markerPath, runID string, freshDeploy bool, w io.Writer) ([]distribution.StepResult, error) {
 	existingMarker, _ := readDeployState(markerPath)
 	prepOpts := okd.PrepareOpts{FreshDeploy: freshDeploy, ResumeInProgress: existingMarker != nil && !freshDeploy}
-	return prepOpts, p.GuardPrepare(cfg, prepOpts)
+	if err := p.GuardPrepare(cfg, prepOpts); err != nil {
+		return nil, err
+	}
+
+	if err := markDeployPhaseFatal(markerPath, phasePrepare, runID, cfg.Cluster.Name); err != nil {
+		return nil, err
+	}
+	setupSteps, err := p.Prepare(ctx, cfg, prepOpts)
+	if err != nil {
+		if errors.Is(err, context.Canceled) {
+			fmt.Fprintln(w, InterruptSummary(setupSteps, "okdctl deploy", runID))
+			tui.Info("cancelled during prepare — terraform state is empty; run 'okdctl cleanup' to remove local files")
+			return setupSteps, err
+		}
+		tui.Info("run 'okdctl destroy' to clean up resources")
+		return setupSteps, err
+	}
+	return setupSteps, nil
 }
 
 type deploymentOptions struct {
@@ -355,22 +374,8 @@ func executeFullDeployment(ctx context.Context, cfg *config.Config, opts deploym
 	startTime := time.Now()
 	markerPath := filepath.Join(workDir, deployStateFile)
 
-	prepOpts, err := guardedPrepareOpts(p, cfg, markerPath, opts.FreshDeploy)
+	setupSteps, err := runGuardedPrepare(ctx, p, cfg, markerPath, runID, opts.FreshDeploy, w)
 	if err != nil {
-		return err
-	}
-
-	if err := markDeployPhaseFatal(markerPath, phasePrepare, runID, cfg.Cluster.Name); err != nil {
-		return err
-	}
-	setupSteps, err := p.Prepare(ctx, cfg, prepOpts)
-	if err != nil {
-		if errors.Is(err, context.Canceled) {
-			fmt.Fprintln(w, InterruptSummary(setupSteps, "okdctl deploy", runID))
-			tui.Info("cancelled during prepare — terraform state is empty; run 'okdctl cleanup' to remove local files")
-			return err
-		}
-		tui.Info("run 'okdctl destroy' to clean up resources")
 		return err
 	}
 
