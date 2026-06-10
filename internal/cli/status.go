@@ -153,9 +153,14 @@ func runStatus(cmd *cobra.Command, _ []string) error {
 	}
 
 	var nodes []okd.NodeStatus
-	if raw, ocErr := bp.OcOutput(ctx, "get", "nodes", "-o", "json"); ocErr == nil {
+	if nr, ocErr := bp.Exec.RunOutputChecked(ctx, 0, "oc", "get", "nodes", "-o", "json"); ocErr == nil {
+		if nr.Truncated {
+			bp.Log.Warn("oc get nodes output truncated; node list may be incomplete")
+		}
 		var nl statusNodeList
-		if jsonErr := json.Unmarshal([]byte(raw), &nl); jsonErr == nil {
+		if jsonErr := json.Unmarshal([]byte(nr.Stdout), &nl); jsonErr != nil {
+			bp.Log.Warn("oc get nodes json parse failed", "err", jsonErr)
+		} else {
 			for _, n := range nl.Items {
 				ready := n.isReady()
 				nodePhase := phase.NodeStatusNotReady
@@ -173,9 +178,14 @@ func runStatus(cmd *cobra.Command, _ []string) error {
 	}
 
 	degraded := 0
-	if coRaw, ocErr := bp.OcOutput(ctx, "get", "clusteroperators", "-o", "json"); ocErr == nil {
+	if cor, ocErr := bp.Exec.RunOutputChecked(ctx, 0, "oc", "get", "clusteroperators", "-o", "json"); ocErr == nil {
+		if cor.Truncated {
+			bp.Log.Warn("oc get clusteroperators output truncated; degraded count may be incomplete")
+		}
 		var col statusClusterOperatorList
-		if jsonErr := json.Unmarshal([]byte(coRaw), &col); jsonErr == nil {
+		if jsonErr := json.Unmarshal([]byte(cor.Stdout), &col); jsonErr != nil {
+			bp.Log.Warn("oc get clusteroperators json parse failed", "err", jsonErr)
+		} else {
 			for _, co := range col.Items {
 				if slices.ContainsFunc(co.Status.Conditions, func(c statusCondition) bool {
 					return c.Type == phase.ConditionTypeDegraded && c.Status == phase.ConditionStatusTrue
