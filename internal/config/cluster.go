@@ -20,7 +20,7 @@ type Config struct {
 	Files         FilesConfig            `json:"files"`
 	HTTPServer    HTTPServerConfig       `json:"http_server"`
 	Deployment    DeploymentConfig       `json:"deployment"`
-	Disks         DisksConfig            `json:"disks,omitempty"`
+	Disks         DisksConfig            `json:"disks,omitzero"`
 }
 
 // ClusterConfig configures the cluster's identity (name and base domain).
@@ -40,7 +40,7 @@ type DistributionConfig struct {
 type TopologyConfig struct {
 	ControlPlane NodeConfig `json:"control_plane"`
 	Workers      NodeConfig `json:"workers"`
-	Bootstrap    NodeConfig `json:"bootstrap,omitempty"`
+	Bootstrap    NodeConfig `json:"bootstrap,omitzero"`
 	VMIDBase     int        `json:"vm_id_base,omitempty"`
 }
 
@@ -62,8 +62,8 @@ type NetworkingConfig struct {
 	Gateway     string   `json:"gateway"`
 	DNS         []string `json:"dns"`
 
-	StaticIP StaticIPConfig `json:"static_ip,omitempty"`
-	Bastion  BastionConfig  `json:"bastion,omitempty"`
+	StaticIP StaticIPConfig `json:"static_ip,omitzero"`
+	Bastion  BastionConfig  `json:"bastion,omitzero"`
 }
 
 // StaticIPConfig describes the starting IP, netmask, interface, and DNS
