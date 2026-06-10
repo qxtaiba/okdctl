@@ -103,7 +103,7 @@ func TestExecute_TerraformOnlyPreservesTFState(t *testing.T) {
 			ProjectRoot:  projectRoot,
 			TerraformEnv: "production",
 		},
-		Kind:   TerraformOnly,
+		Kind: TerraformOnly,
 	}
 
 	if err := execute(context.Background(), opts, logutil.NopLogger); err != nil {
@@ -339,5 +339,60 @@ func TestExecute_FullKind_RemovePackagesGating(t *testing.T) {
 			t.Errorf("unexpected error: %v", err)
 		}
 		assertPkgCalled(t, binDir, "coreos-installer")
+	})
+}
+
+func TestExecute_PostDestroy_TFStateGating(t *testing.T) {
+	setup := func(t *testing.T, tfstateBody string) (string, *Options) {
+		t.Helper()
+		projectRoot := t.TempDir()
+		envDir := filepath.Join(projectRoot, "infrastructure", "terraform", "environments", "production")
+		if err := os.MkdirAll(envDir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(envDir, "terraform.tfstate"), []byte(tfstateBody), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		// terraform.tfvars must exist so AlreadyDone returns false and the step runs.
+		if err := os.WriteFile(filepath.Join(envDir, "terraform.tfvars"), []byte("cluster_name = \"test\""), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		opts := &Options{
+			BaseOptions: phase.BaseOptions{
+				WorkDir:      t.TempDir(),
+				ProjectRoot:  projectRoot,
+				TerraformEnv: "production",
+			},
+			Kind:        TerraformOnly,
+			PostDestroy: true,
+		}
+		return filepath.Join(envDir, "terraform.tfstate"), opts
+	}
+
+	t.Run("non-empty state preserved", func(t *testing.T) {
+		const body = `{"version":4,"resources":[{"type":"null_resource"}]}`
+		tfstate, opts := setup(t, body)
+
+		if err := execute(context.Background(), opts, logutil.NopLogger); err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+		got, err := os.ReadFile(tfstate)
+		if err != nil {
+			t.Fatalf("terraform.tfstate removed (DATA LOSS): %v", err)
+		}
+		if string(got) != body {
+			t.Errorf("terraform.tfstate mutated: %q", got)
+		}
+	})
+
+	t.Run("empty state removed", func(t *testing.T) {
+		tfstate, opts := setup(t, `{"version":4,"resources":[]}`)
+
+		if err := execute(context.Background(), opts, logutil.NopLogger); err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+		if _, err := os.Stat(tfstate); !os.IsNotExist(err) {
+			t.Errorf("empty terraform.tfstate not removed after PostDestroy: stat err = %v", err)
+		}
 	})
 }
