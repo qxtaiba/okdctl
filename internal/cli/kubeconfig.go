@@ -38,7 +38,7 @@ func init() {
 	rootCmd.AddCommand(kubeconfigCmd)
 }
 
-func runKubeconfig(_ *cobra.Command, _ []string) error {
+func runKubeconfig(cmd *cobra.Command, _ []string) error {
 	projectRoot, err := resolveProjectRootOrDie()
 	if err != nil {
 		return err
@@ -65,7 +65,7 @@ func runKubeconfig(_ *cobra.Command, _ []string) error {
 	}
 
 	if kubeconfigOutput == "" || kubeconfigOutput == "-" {
-		_, err = os.Stdout.Write(data)
+		_, err = cmd.OutOrStdout().Write(data)
 		return err
 	}
 
