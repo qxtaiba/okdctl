@@ -7,7 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -622,8 +622,7 @@ func (p *Phase) restoreHAProxyBackup() bool {
 		p.Log.Warn("update-ingress: rollback: no haproxy backup found", "pattern", pattern)
 		return false
 	}
-	sort.Strings(matches)
-	latest := matches[len(matches)-1]
+	latest := slices.Max(matches)
 	data, err := os.ReadFile(latest)
 	if err != nil {
 		p.Log.Warn("update-ingress: rollback: could not read haproxy backup", "path", latest, "err", err)
