@@ -64,6 +64,7 @@ func runConfigShow(cmd *cobra.Command, _ []string) error {
 	if err := validateFormat(configShowOutput); err != nil {
 		return err
 	}
+	quietForJSON(configShowOutput)
 
 	cfg, err := loadConfig(cfgFile)
 	if err != nil {
