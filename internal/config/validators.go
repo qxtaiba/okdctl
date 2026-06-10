@@ -20,8 +20,8 @@ var (
 	domainPattern     = regexp.MustCompile(`^([a-z0-9]([-a-z0-9]*[a-z0-9])?\.)*[a-z0-9]([-a-z0-9]*[a-z0-9])?$`)
 	okdVersionPattern = regexp.MustCompile(`^\d+\.\d+\.\d+-okd-[a-zA-Z0-9.-]+$`)
 
-	interfaceNamePattern  = regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9._-]*$`)
-	proxmoxNamePattern    = regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9_-]*$`)
+	interfaceNamePattern = regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9._-]*$`)
+	proxmoxNamePattern   = regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9_-]*$`)
 	// PVE storage IDs allow dots ([A-Za-z][A-Za-z0-9\-_.]*), unlike node names.
 	proxmoxStorageNamePattern = regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9_.-]*$`)
 	proxmoxCPUTypePattern     = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_+.,=-]*$`)
