@@ -22,9 +22,12 @@ Codes 65, 66, and 71 are granular refinements within the broader categories
 2 (config) and 5 (auth). A script that only checks for non-zero exit is
 unaffected; a script that branches on code 2 or 5 should also handle 65/66/71.
 
-Invoking commands like `deploy` or `destroy` directly as root is rejected
-with code 5 (the rejection surfaces as an `AuthError`); use `sudo okdctl …`
-instead so the binary can re-exec under the original user.
+Commands that do not require root (`status`, `config`, `kubeconfig`, and
+others) exit with code 5 when invoked under `sudo` or as root — the binary
+refuses with "do not run as root/sudo; this tool escalates internally".
+Root-requiring commands (`deploy`, `destroy`, `cleanup`, `update-ingress`)
+must be invoked as a regular user; the binary self-elevates via an internal
+`sudo` re-exec so the privileged body runs as euid=0.
 
 ## Examples
 
