@@ -24,5 +24,12 @@
     "managerFilePatterns": [
       "/infrastructure/terraform/.+\\.tf$/"
     ]
-  }
+  },
+  "packageRules": [
+    {
+      "description": "ci-testgo-xcrypto-053-runner-death — x/crypto v0.53.0 OOM-kills the ubuntu CI runner; hold until root-cause is understood",
+      "matchPackageNames": ["golang.org/x/crypto"],
+      "enabled": false
+    }
+  ]
 }

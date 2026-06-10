@@ -11,7 +11,9 @@ require (
 	charm.land/log/v2 v2.0.0
 	github.com/luthermonson/go-proxmox v0.7.1
 	github.com/spf13/cobra v1.10.2
-	golang.org/x/crypto v0.53.0
+	// ci-testgo-xcrypto-053-runner-death — v0.53.0 OOM-kills the ubuntu CI
+	// runner during go test; re-bump once the root cause is understood.
+	golang.org/x/crypto v0.52.0
 	golang.org/x/mod v0.37.0
 	golang.org/x/term v0.44.0
 	k8s.io/api v0.36.1
