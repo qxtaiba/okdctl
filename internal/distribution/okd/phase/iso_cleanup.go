@@ -209,7 +209,7 @@ func vmDevicesReferenceISO(vm map[string]json.RawMessage, isoBase string) bool {
 		}
 		// Segments are comma-separated; device entries may be bare paths or
 		// "file=<storage>:<pool>/<name>" key=value form.
-		for _, seg := range strings.Split(value, ",") {
+		for seg := range strings.SplitSeq(value, ",") {
 			seg = strings.TrimSpace(seg)
 			if v, found := strings.CutPrefix(seg, "file="); found {
 				seg = v
@@ -286,7 +286,7 @@ func RemoveFCOSISOFromProxmox(ctx context.Context, p *RemoteISOParams, isoDir st
 // is unambiguous even when filenames contain newlines or spaces.
 func parseNullDelimitedFileList(output string) []string {
 	var files []string
-	for _, entry := range strings.Split(output, "\x00") {
+	for entry := range strings.SplitSeq(output, "\x00") {
 		entry = strings.TrimSpace(entry)
 		if entry != "" {
 			files = append(files, entry)
