@@ -51,6 +51,10 @@ type FieldDefinition struct {
     Required bool
     Validate func(string) error
 
+    // KVAsDelimitedString controls Value() serialization for FieldTypeKeyValue.
+    // true = "k1=v1,k2=v2" (CSV); false = "k1: v1\nk2: v2" (YAML-map).
+    KVAsDelimitedString bool
+
     ConfigSet ConfigSetter  // how to push this field into *config.Config
     ConfigGet ConfigGetter  // how to read this field from *config.Config
 }
