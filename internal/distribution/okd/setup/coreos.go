@@ -57,9 +57,9 @@ func resolveConfiguredISO(spec string) (string, isoResolution) {
 	}
 	switch {
 	case strings.Contains(spec, ":iso/"):
-		parts := strings.SplitN(spec, ":iso/", 2)
-		if len(parts) == 2 && parts[1] != "" {
-			resolved := filepath.Join(phase.DefaultProxmoxISODir, parts[1])
+		_, filename, ok := strings.Cut(spec, ":iso/")
+		if ok && filename != "" {
+			resolved := filepath.Join(phase.DefaultProxmoxISODir, filename)
 			if system.FileExists(resolved) {
 				return resolved, isoResolved
 			}
