@@ -2827,6 +2827,76 @@ and ceremony layers.
   - the copy-pasted `runtime.GOOS == "windows"` skips disappear with the consolidation
 - **Depends on:** none
 
+#### A23 — Drop redundant "successfully" suffixes from completion logs
+
+- **Status:** not started
+- **Category:** log hygiene
+- **State:** well-specified
+- **Effort:** hours
+- **Impact:** small
+- **Evidence:** `internal/cli/summary.go:133`
+- **Rationale:** ~11 completion logs carry a redundant "successfully" suffix ("terraform: proxmox infrastructure deployed successfully") plus one exclamation ("cluster deployed successfully!") — mild LLM filler; an Info-level completion log already implies success.
+- **Acceptance:**
+  - the ~11 "completed successfully"/"deployed successfully" messages drop the suffix; the exclamation goes
+  - messages stay lowercase and structured per the existing log conventions
+- **Depends on:** none
+
+#### A24 — Re-scope internal/system before it becomes a util gravity well
+
+- **Status:** not started
+- **Category:** architecture
+- **State:** design needed
+- **Effort:** hours
+- **Impact:** small
+- **Evidence:** `internal/system/system.go:1`
+- **Rationale:** The package doc claims "host OS operations" but the package also hosts WaitFor (a generic polling loop that phase/kubectl.go reaches into), NewUUIDv4, and ZeroBytes. With A3 removing exec.go, decide what internal/system IS — and where the misfits live — before the next helper lands there by default.
+- **Acceptance:**
+  - package doc matches actual contents; WaitFor/NewUUIDv4/ZeroBytes either justified under the stated scope or moved to a fitting home
+  - CLAUDE.md architecture notes name the package's boundary so future helpers don't default into it
+- **Depends on:** A3
+
+#### A25 — Put a test floor under infrastructure/proxmox before any go-proxmox change
+
+- **Status:** not started
+- **Category:** test honesty
+- **State:** design needed
+- **Effort:** days
+- **Impact:** medium
+- **Evidence:** `internal/infrastructure/proxmox/proxmox.go:32`, `internal/tui/wizard/steps/proxmox_discovery.go:1`
+- **Rationale:** The package is doubly exposed: zero tests AND sole consumer of the bus-factor-1 v0.x go-proxmox dep that CLAUDE.md flags for a possible ~200 LOC REST rewrite. Any forced rewrite or version bump currently lands on a 557-LOC surface with no safety net.
+- **Acceptance:**
+  - httptest-backed tests cover the discovery path's request/response handling and error mapping (no live Proxmox needed)
+  - coverage floor added for internal/infrastructure/proxmox in .github/coverage-floors.conf
+- **Depends on:** none
+
+#### A26 — Replace log-message-equality assertions with attr-based assertions
+
+- **Status:** not started
+- **Category:** test honesty
+- **State:** well-specified
+- **Effort:** hours
+- **Impact:** small
+- **Evidence:** `internal/distribution/okd/destroy/steps_test.go:16`, `internal/cli/debug_bundle_test.go:1`
+- **Rationale:** Two test files assert exact slog message strings, so rewording a log line breaks tests with no behavior change. The attr assertions (failed_steps/skipped_steps membership) are the honest part — keep those, drop message equality.
+- **Acceptance:**
+  - tests assert on structured attrs and level, not message-string equality (or match a stable substring where the message itself is the contract)
+  - pairs naturally with the shared capture handler from A22
+- **Depends on:** none
+
+#### A27 — Hoist the "okd-install" workdir literal into a phase constant
+
+- **Status:** not started
+- **Category:** refactor
+- **State:** well-specified
+- **Effort:** hours
+- **Impact:** small
+- **Evidence:** `internal/distribution/okd/phase/paths.go:1`, `internal/cli/cleanup.go:1`
+- **Rationale:** The literal "okd-install" workdir name is hardcoded at ~15 call sites (every phase's NewOptions, cli/cleanup.go, cli/status.go) even though phase owns path constants — a one-line constant removes a silent-rename hazard where one missed site orphans state.
+- **Acceptance:**
+  - a single exported constant in internal/distribution/okd/phase replaces all ~15 literals
+  - grep for the raw string finds only the constant definition
+- **Depends on:** none
+
 ## Completed
 
 Completed items live in [`docs/roadmap/completed-archive.md`](docs/roadmap/completed-archive.md). Grep there for the canonical "is dep X done?" lookup. The previous in-line pointer index (144 entries, mirroring archive contents) was removed on 2026-05-09 to keep `roadmap.md` focused on active work.
