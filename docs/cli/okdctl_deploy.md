@@ -23,6 +23,7 @@ okdctl deploy [flags]
 
 ```
       --dry-run                 preview terraform plan and step listing without deploying
+      --fresh                   wipe the work directory even when live cluster state is detected (credentials will be lost)
   -h, --help                    help for deploy
       --metrics-addr string     address for Prometheus metrics endpoint; bare ":9090" binds 127.0.0.1; disabled when empty
       --metrics-allow-network   allow metrics endpoint to bind on a wildcard address (0.0.0.0 or [::])

@@ -109,7 +109,9 @@ A deploy runs three phases:
    LoadBalancer IPs if an LB provider is installed; installs any enabled addons.
 
 Each phase is a sequence of steps with rollback on failure. Re-running
-`deploy` after an interruption picks up where it left off.
+`deploy` after an interruption picks up where it left off. If the work
+directory holds a completed cluster, run `okdctl destroy` first; `--fresh`
+force-wipes it without destroying (credentials will be lost).
 
 Phase internals, addon system, and wizard architecture live in
 [`docs/architecture/`](docs/architecture/). Per-addon reference:

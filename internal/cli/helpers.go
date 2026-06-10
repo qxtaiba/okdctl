@@ -344,10 +344,16 @@ func executeFullDeployment(ctx context.Context, cfg *config.Config, opts deploym
 	startTime := time.Now()
 	markerPath := filepath.Join(workDir, deployStateFile)
 
+	// Read the marker before overwriting it: a present marker means the
+	// prior run was interrupted, so Prepare's live-cluster guard must let
+	// the documented re-run-to-resume flow proceed.
+	existingMarker, _ := readDeployState(markerPath)
+	resumeInProgress := existingMarker != nil && !opts.FreshDeploy
+
 	if err := markDeployPhaseFatal(markerPath, phasePrepare, runID, cfg.Cluster.Name); err != nil {
 		return err
 	}
-	setupSteps, err := p.Prepare(ctx, cfg, okd.PrepareOpts{FreshDeploy: opts.FreshDeploy})
+	setupSteps, err := p.Prepare(ctx, cfg, okd.PrepareOpts{FreshDeploy: opts.FreshDeploy, ResumeInProgress: resumeInProgress})
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
 			fmt.Fprintln(w, InterruptSummary(setupSteps, "okdctl deploy", runID))
