@@ -2,6 +2,12 @@
 
 Show release info for a single OKD version
 
+### Synopsis
+
+Print metadata for a single OKD release identified by its version string
+("4.21.3") or GitHub tag. The version list is resolved from the disk cache;
+use --channel=all with 'releases list' to discover pre-release tags.
+
 ```
 okdctl releases show <version> [flags]
 ```
