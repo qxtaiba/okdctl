@@ -212,7 +212,7 @@ func TestExtractTarGz_StripComponents(t *testing.T) {
 		{Name: "top/inner/file.txt", Mode: 0o644, Data: []byte("data")},
 	})
 	dest := realTempDir(t)
-	if err := ExtractTarGz(context.Background(), archive, dest, WithStripComponents(2)); err != nil {
+	if err := ExtractTarGz(context.Background(), archive, dest, WithExtractStripComponents(2)); err != nil {
 		t.Fatalf("extract: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(dest, "file.txt")); err != nil {
