@@ -150,7 +150,7 @@ func WaitFor(ctx context.Context, prefix, description string, check func(context
 		logger = logutil.NopLogger
 	}
 
-	logger.Info("waiting", "for", description, "prefix", prefix)
+	logger.Info(prefix+": waiting", "target", description)
 
 	ticker := time.NewTicker(opts.Interval)
 	defer ticker.Stop()
@@ -166,7 +166,7 @@ func WaitFor(ctx context.Context, prefix, description string, check func(context
 	polls := 0
 
 	if check(ctx) {
-		logger.Info("ready", "for", description, "prefix", prefix, "polls", polls, "elapsed", time.Since(startTime).Round(time.Second))
+		logger.Info(prefix+": ready", "target", description, "polls", polls, "elapsed", time.Since(startTime).Round(time.Second))
 		return nil
 	}
 
@@ -189,13 +189,13 @@ func WaitFor(ctx context.Context, prefix, description string, check func(context
 			polls++
 			elapsed := time.Since(startTime)
 			if check(ctx) {
-				logger.Info("ready", "for", description, "prefix", prefix, "polls", polls, "elapsed", elapsed.Round(time.Second))
+				logger.Info(prefix+": ready", "target", description, "polls", polls, "elapsed", elapsed.Round(time.Second))
 				return nil
 			}
 			if err := ctx.Err(); err != nil {
 				return fmt.Errorf("waiting for %s %s: %w", prefix, description, err)
 			}
-			logger.Debug("waiting", "for", description, "prefix", prefix, "elapsed", elapsed.Round(time.Second))
+			logger.Debug(prefix+": waiting", "target", description, "elapsed", elapsed.Round(time.Second))
 		}
 	}
 }
