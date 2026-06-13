@@ -13,6 +13,7 @@ import (
 	"syscall"
 
 	"github.com/qxtaiba/okdctl/internal/addon"
+	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/executor"
 	"github.com/qxtaiba/okdctl/internal/system"
 )
@@ -68,12 +69,12 @@ func (s *SecretStore) Info() addon.Metadata {
 func (s *SecretStore) Install(ctx context.Context, env *addon.Environment) error {
 	decoded, err := s.DecodeSettings(env.AddonConfig.Settings)
 	if err != nil {
-		return fmt.Errorf("secretstore: invalid settings: %w", err)
+		return &errtypes.ConfigError{Msg: "secretstore: invalid settings", Err: err}
 	}
 	ts := decoded.(Settings)
 	p, _ := resolveProvider(env.AddonConfig.Settings)
 	if p == nil {
-		return fmt.Errorf("secretstore: unknown provider %q", ts.Provider)
+		return &errtypes.ConfigError{Msg: fmt.Sprintf("secretstore: unknown provider %q", ts.Provider)}
 	}
 
 	skip, err := s.installPrereqCheck(env, string(ts.Provider))
@@ -159,7 +160,7 @@ func (s *SecretStore) installPrereqCheck(env *addon.Environment, providerName st
 func (s *SecretStore) Verify(ctx context.Context, env *addon.Environment) error {
 	p, kind := resolveProvider(env.AddonConfig.Settings)
 	if p == nil {
-		return fmt.Errorf("secretstore: unknown provider %q", kind)
+		return &errtypes.ConfigError{Msg: fmt.Sprintf("secretstore: unknown provider %q", kind)}
 	}
 	ns := defaultNamespace
 	for _, name := range p.secretNames() {
