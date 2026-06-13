@@ -474,7 +474,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sec:e076e43c:dl-no-signature` — dl no signature
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/e076e43c-version-regex
 **Severity:** suggestion
 **Cluster:** tls-network
 **Evidence:** `scripts/install.sh:113-119`
@@ -656,7 +656,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `api:d31d1b9d:pkg-facade-bypass-status` — pkg facade bypass status
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/d31d1b9d-status-facade
 **Severity:** minor
 **Cluster:** package-boundary — seam→`audit-code-smells`
 **Evidence:** `internal/cli/status.go:388-404`
@@ -746,7 +746,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `api:f99eddfa:opt-options-pointer-asymmetry` — opt options pointer asymmetry
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/f99eddfa-options-asymmetry
 **Severity:** suggestion
 **Cluster:** option-consistency
 **Evidence:** `internal/distribution/okd/postinstall/phase.go:74-75`
@@ -776,7 +776,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `api:a55b4592:zero-value-loader` — zero value loader
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/a55b4592-zero-value-loader
 **Severity:** suggestion
 **Cluster:** zero-value-usability
 **Evidence:** `internal/config/loader.go:13-21`
@@ -786,7 +786,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `api:4c092fce:opt-execerror-alias` — opt execerror alias
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/4c092fce-execerror-alias
 **Severity:** suggestion
 **Cluster:** option-consistency
 **Evidence:** `internal/infrastructure/terraform/terraform.go:35-38`
@@ -826,7 +826,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `api:fde34e0c:opt-with-env-fallback-side-effect` — opt with env fallback side effect
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/fde34e0c-k8s-opt-env
 **Severity:** minor
 **Cluster:** option-consistency
 **Evidence:** `internal/cluster/k8s.go:52-71`
@@ -880,7 +880,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `obs:97cb8adf:span-no-start-end` — span no start end
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/97cb8adf-span-start-end
 **Severity:** suggestion
 **Cluster:** span-retry-boundary
 **Evidence:** `internal/system/exec.go:117-163`
@@ -1117,7 +1117,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `state:262af6e4:cleanup-tfvars-proxy-precondition` — cleanup tfvars proxy precondition
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/262af6e4-cleanup-precond
 **Severity:** minor
 **Cluster:** phase-idempotency — related: state:368b892b:stale-bootstrap-sentinel-poisons-redeploy
 **Evidence:** `internal/distribution/okd/cleanup/cleanup.go:235-261`
@@ -1127,7 +1127,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `state:6424733c:error-path-hint-always-destroy` — error path hint always destroy
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/6424733c-error-hint
 **Severity:** minor
 **Cluster:** crash-recoverability
 **Evidence:** `internal/cli/helpers.go:349-385`
@@ -1147,7 +1147,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `state:881d089e:runlock-release-unlink-race` — runlock release unlink race
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/881d089e-runlock-race
 **Severity:** minor
 **Cluster:** tf-state-atomicity
 **Evidence:** `internal/runlock/runlock.go:110-119`
@@ -1169,7 +1169,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `iac:ef8f2924:commented-out-vars` — commented out vars
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/ef8f2924-commented-vars
 **Severity:** suggestion
 **Cluster:** hcl-doc-hygiene
 **Evidence:** `infrastructure/terraform/modules/proxmox-okd/variables.tf:252-265`
@@ -1221,7 +1221,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `err:40d315ad:vocab-ad-hoc-synonym` — vocab ad hoc synonym
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/40d315ad-typed-config-err
 **Severity:** minor
 **Cluster:** domain-vocabulary
 **Evidence:** `internal/addon/catalog/flux/flux.go:93-96` + 1 more
@@ -1315,7 +1315,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `api:297adb3e:opt-inconsistent` — opt inconsistent
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/297adb3e-validation-opt
 **Severity:** suggestion
 **Cluster:** option-consistency
 **Evidence:** `internal/config/validation_types.go:131-142`
@@ -1325,7 +1325,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `api:e45c2239:pkg-facade-bypassed` — pkg facade bypassed
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/e45c2239-bindir-config
 **Severity:** minor
 **Cluster:** package-boundary
 **Evidence:** `cmd/okdctl/main.go:16-44` + 1 more
@@ -1355,7 +1355,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `api:21dc1103:opt-inconsistent` — opt inconsistent
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/21dc1103-download-opt
 **Severity:** suggestion
 **Cluster:** option-consistency
 **Evidence:** `internal/download/download.go:40-57` + 1 more
@@ -1457,7 +1457,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `ux:024a2c32:json-exit-contract-drift` — json exit contract drift
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/024a2c32-json-exit-doc
 **Severity:** minor
 **Cluster:** json-stability
 **Evidence:** `docs/cli/json-schema.md:236-239` + 2 more
@@ -1507,7 +1507,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `ux:e7db1220:help-long-missing` — help long missing
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/e7db1220-help-long
 **Severity:** suggestion
 **Cluster:** help-text
 **Evidence:** `internal/cli/releases.go:40-47` + 2 more
@@ -1519,7 +1519,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `obs:aa84670c:log-leaks-cred` — log leaks cred
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/aa84670c-argv-redact
 **Severity:** suggestion
 **Cluster:** redaction-sink
 **Evidence:** `internal/cli/root.go:105-105`
@@ -1529,7 +1529,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `obs:48688e63:key-inconsistent-casing` — key inconsistent casing
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/48688e63-key-casing
 **Severity:** minor
 **Cluster:** field-stability
 **Evidence:** `internal/infrastructure/proxmox/proxmox.go:220-293` + 1 more
@@ -1541,7 +1541,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `mod:d9f7733e:use-builtins` — use builtins
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/d9f7733e-use-builtins
 **Severity:** suggestion
 **Cluster:** any-interface-builtins
 **Evidence:** `internal/cli/debug_bundle.go:361-365`
@@ -1603,7 +1603,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `smell:073d24ed:stepdef-name-duplication` — stepdef name duplication
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/073d24ed-stepdef-name
 **Severity:** minor
 **Cluster:** magic-strings
 **Evidence:** `internal/cli/deploy.go:192-226`
@@ -1663,7 +1663,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `smell:15ba17da:magic-label-sentinel` — magic label sentinel
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/15ba17da-magic-label
 **Severity:** suggestion
 **Cluster:** magic-strings
 **Evidence:** `internal/distribution/okd/destroy/steps.go:63-67` + 1 more
@@ -1747,7 +1747,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `doc:26a430ee:doc-comment-stale` — doc comment stale
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/26a430ee-elevation-doc
 **Severity:** suggestion
 **Cluster:** exported-doc — related: doc:1013f4e8:docs-behavior-drift
 **Evidence:** `internal/cli/elevation.go:78-84`
@@ -1759,7 +1759,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `tst:632c9087:destructive-partial-untested` — destructive partial untested
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/632c9087-ingress-test
 **Severity:** major
 **Cluster:** destructive-untested — related: sub:1e8ffb91:ring-truncated-stdout-parse
 **Evidence:** `internal/distribution/okd/postinstall/update_ingress.go:461-487` + 1 more
@@ -1779,7 +1779,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `tst:0934cf1b:destructive-happy-untested` — destructive happy untested
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/0934cf1b-packages-test
 **Severity:** minor
 **Cluster:** destructive-untested
 **Evidence:** `internal/platform/packages.go:71-141`
