@@ -107,13 +107,16 @@ func crossHostHint(body, localHost string) string {
 	return ""
 }
 
-// Release closes the fd (which releases the flock) and removes the lock file.
+// Release truncates the diagnostics and closes the fd, which surrenders the
+// flock. The lockfile is left in place so all Acquire calls always flock the
+// same stable inode — removing and recreating it would reintroduce the flock
+// inode race (B flocks the unlinked inode after A's close; C flocks the new
+// inode; both then hold "the lock" on different inodes).
 // Release is a no-op on a nil receiver or a zero-value Lock.
 func (l *Lock) Release() {
 	if l == nil || l.f == nil {
 		return
 	}
-	path := l.f.Name()
+	_ = l.f.Truncate(0)
 	_ = l.f.Close()
-	_ = os.Remove(path)
 }
