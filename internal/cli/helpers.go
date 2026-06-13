@@ -227,7 +227,8 @@ func runGuardedPrepare(ctx context.Context, p *okd.Provisioner, cfg *config.Conf
 			tui.Info("cancelled during prepare — terraform state is empty; run 'okdctl cleanup' to remove local files")
 			return setupSteps, err
 		}
-		tui.Info("run 'okdctl destroy' to clean up resources")
+		// prepare applies nothing to Proxmox; destroy would be a misleading no-op.
+		tui.Info("prepare failed — terraform state is empty; run 'okdctl cleanup' to remove local files")
 		return setupSteps, err
 	}
 	return setupSteps, nil
@@ -394,7 +395,7 @@ func executeFullDeployment(ctx context.Context, cfg *config.Config, opts deploym
 			tui.Info("cancelled during install — terraform state likely populated; run 'okdctl destroy' to clean up")
 			return err
 		}
-		tui.Info("run 'okdctl destroy' to clean up resources")
+		tui.Info("install failed — terraform state likely populated; run 'okdctl destroy' to clean up")
 		return err
 	}
 
@@ -407,7 +408,7 @@ func executeFullDeployment(ctx context.Context, cfg *config.Config, opts deploym
 			tui.Info("cancelled during configure — terraform state likely populated; run 'okdctl destroy' to clean up")
 			return err
 		}
-		tui.Info("run 'okdctl destroy' to clean up resources")
+		tui.Info("configure failed — terraform state likely populated; run 'okdctl destroy' to clean up")
 		return err
 	}
 
