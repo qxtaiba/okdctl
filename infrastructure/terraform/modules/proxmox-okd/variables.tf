@@ -254,26 +254,6 @@ variable "worker_names" {
 
 
 # =============================================================================
-# IGNITION AND NETWORK CONFIGURATION
-# =============================================================================
-
-# variable "bootstrap_kernel_args" {
-#   description = "kernel arguments for bootstrap node including ignition url and network config"
-#   type        = string
-# }
-
-# variable "master_kernel_args" {
-#   description = "list of kernel arguments for master nodes (one per master)"
-#   type        = list(string)
-# }
-
-# variable "worker_kernel_args" {
-#   description = "list of kernel arguments for worker nodes (one per worker)"
-#   type        = list(string)
-# }
-
-
-# =============================================================================
 # OPTIONAL CONFIGURATION
 # =============================================================================
 
