@@ -1,9 +1,18 @@
 package postinstall
 
 import (
+	"context"
 	"encoding/json"
+	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
+	"github.com/qxtaiba/okdctl/internal/executor"
+	"github.com/qxtaiba/okdctl/internal/logutil"
 )
 
 func TestBuildLBIngressController_PreservesFields(t *testing.T) {
@@ -262,5 +271,177 @@ func TestBuildLBIngressController_EmptyNamespaceDefaults(t *testing.T) {
 	}
 	if parsed.Metadata.Namespace != "openshift-ingress-operator" {
 		t.Errorf("namespace = %q; want openshift-ingress-operator", parsed.Metadata.Namespace)
+	}
+}
+
+// installFakeOCForIngress writes a POSIX sh script named "oc" into a temp dir
+// and prepends it to PATH. The script dispatches on $1 with env-var overrides:
+//   - OC_ARGV_LOG           → path; every call appends all args as one line
+//   - OC_DELETE_FAIL=1      → delete exits 1
+//   - OC_CALL_FILE          → path; incremented on each create invocation
+//   - OC_CREATE_FAIL=1      → first create (n=1) exits 1
+//   - OC_ROLLBACK_FAIL=1    → second create (n>=2) exits 1
+//   - OC_ROLLBACK_STDIN_LOG → path; second create writes its stdin there
+func installFakeOCForIngress(t *testing.T) {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("fake-oc script relies on POSIX sh")
+	}
+	dir := t.TempDir()
+	script := "#!/bin/sh\n" +
+		"if [ -n \"${OC_ARGV_LOG:-}\" ]; then echo \"$*\" >> \"$OC_ARGV_LOG\"; fi\n" +
+		"case \"$1\" in\n" +
+		"  delete)\n" +
+		"    if [ \"${OC_DELETE_FAIL:-0}\" = \"1\" ]; then echo \"fake: delete failed\" >&2; exit 1; fi\n" +
+		"    exit 0\n" +
+		"    ;;\n" +
+		"  get)\n" +
+		"    exit 0\n" +
+		"    ;;\n" +
+		"  create)\n" +
+		"    f=\"${OC_CALL_FILE:-/tmp/okd-ingress-counter}\"\n" +
+		"    n=$(cat \"$f\" 2>/dev/null || echo 0)\n" +
+		"    n=$((n + 1))\n" +
+		"    echo \"$n\" > \"$f\"\n" +
+		"    if [ \"$n\" -ge 2 ] && [ -n \"${OC_ROLLBACK_STDIN_LOG:-}\" ]; then cat > \"$OC_ROLLBACK_STDIN_LOG\"; fi\n" +
+		"    if [ \"$n\" -eq 1 ] && [ \"${OC_CREATE_FAIL:-0}\" = \"1\" ]; then echo \"fake: create failed\" >&2; exit 1; fi\n" +
+		"    if [ \"$n\" -ge 2 ] && [ \"${OC_ROLLBACK_FAIL:-0}\" = \"1\" ]; then echo \"fake: rollback failed\" >&2; exit 1; fi\n" +
+		"    exit 0\n" +
+		"    ;;\n" +
+		"  *) exit 0 ;;\n" +
+		"esac\n"
+	path := filepath.Join(dir, "oc")
+	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+}
+
+func newIngressTestPhase(t *testing.T) *Phase {
+	t.Helper()
+	return New("test",
+		phase.WithExecutor(executor.New()),
+		phase.WithLogger(logutil.NopLogger),
+	)
+}
+
+func minimalIC(name string) *ingressControllerInfo {
+	raw := `{"apiVersion":"operator.openshift.io/v1","kind":"IngressController",` +
+		`"metadata":{"name":"` + name + `","namespace":"openshift-ingress-operator"},` +
+		`"spec":{"domain":"apps.test.example.com"}}`
+	return &ingressControllerInfo{
+		Name:    name,
+		Domain:  "apps.test.example.com",
+		RawJSON: json.RawMessage(raw),
+	}
+}
+
+// TestConvertToLoadBalancer_DeleteArgvTargetsICName asserts that the oc delete
+// call names only ic.Name in namespace openshift-ingress-operator.
+func TestConvertToLoadBalancer_DeleteArgvTargetsICName(t *testing.T) {
+	installFakeOCForIngress(t)
+
+	dir := t.TempDir()
+	argvLog := filepath.Join(dir, "argv.log")
+	counter := filepath.Join(dir, "counter")
+	t.Setenv("OC_ARGV_LOG", argvLog)
+	t.Setenv("OC_CALL_FILE", counter)
+
+	p := newIngressTestPhase(t)
+	ic := minimalIC("custom")
+
+	if err := p.convertToLoadBalancer(context.Background(), ic, 5*time.Second); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	data, err := os.ReadFile(argvLog)
+	if err != nil {
+		t.Fatalf("argv log not written: %v", err)
+	}
+	var deleteArgv string
+	for _, l := range strings.Split(strings.TrimSpace(string(data)), "\n") {
+		if strings.HasPrefix(l, "delete ") {
+			deleteArgv = l
+			break
+		}
+	}
+	if deleteArgv == "" {
+		t.Fatalf("no delete argv recorded; log:\n%s", string(data))
+	}
+	if !strings.Contains(deleteArgv, "custom") {
+		t.Errorf("delete argv %q does not name ic %q", deleteArgv, "custom")
+	}
+	if !strings.Contains(deleteArgv, "openshift-ingress-operator") {
+		t.Errorf("delete argv %q does not target namespace openshift-ingress-operator", deleteArgv)
+	}
+}
+
+// TestConvertToLoadBalancer_CreateFailure_RollbackIssued asserts that a failed
+// replacement create triggers attemptRollback, which issues a second oc create
+// whose stdin matches buildRollbackJSON output.
+func TestConvertToLoadBalancer_CreateFailure_RollbackIssued(t *testing.T) {
+	installFakeOCForIngress(t)
+
+	dir := t.TempDir()
+	counter := filepath.Join(dir, "counter")
+	rollbackStdin := filepath.Join(dir, "rollback-stdin.json")
+	t.Setenv("OC_CALL_FILE", counter)
+	t.Setenv("OC_CREATE_FAIL", "1")
+	t.Setenv("OC_ROLLBACK_STDIN_LOG", rollbackStdin)
+
+	p := newIngressTestPhase(t)
+	ic := minimalIC("default")
+
+	if err := p.convertToLoadBalancer(context.Background(), ic, 5*time.Second); err == nil {
+		t.Fatal("expected error on create failure")
+	}
+
+	raw, err := os.ReadFile(counter)
+	if err != nil {
+		t.Fatalf("counter file not written: %v", err)
+	}
+	if strings.TrimSpace(string(raw)) != "2" {
+		t.Errorf("oc create call count = %q; want 2 (replacement + rollback)", strings.TrimSpace(string(raw)))
+	}
+
+	wantJSON, buildErr := buildRollbackJSON(ic)
+	if buildErr != nil {
+		t.Fatalf("buildRollbackJSON: %v", buildErr)
+	}
+	gotStdin, readErr := os.ReadFile(rollbackStdin)
+	if readErr != nil {
+		t.Fatalf("rollback stdin log not written: %v", readErr)
+	}
+	if strings.TrimSpace(string(gotStdin)) != strings.TrimSpace(wantJSON) {
+		t.Errorf("rollback stdin mismatch:\ngot:  %s\nwant: %s",
+			strings.TrimSpace(string(gotStdin)), strings.TrimSpace(wantJSON))
+	}
+}
+
+// TestConvertToLoadBalancer_BothCreateAndRollbackFail_ErrorNamesBoth asserts that
+// when both replacement create and rollback create fail, the returned error
+// message names both failures.
+func TestConvertToLoadBalancer_BothCreateAndRollbackFail_ErrorNamesBoth(t *testing.T) {
+	installFakeOCForIngress(t)
+
+	dir := t.TempDir()
+	counter := filepath.Join(dir, "counter")
+	t.Setenv("OC_CALL_FILE", counter)
+	t.Setenv("OC_CREATE_FAIL", "1")
+	t.Setenv("OC_ROLLBACK_FAIL", "1")
+
+	p := newIngressTestPhase(t)
+	ic := minimalIC("default")
+
+	err := p.convertToLoadBalancer(context.Background(), ic, 5*time.Second)
+	if err == nil {
+		t.Fatal("expected error when both create and rollback fail")
+	}
+	msg := err.Error()
+	if !strings.Contains(msg, "create") {
+		t.Errorf("error %q does not mention create failure", msg)
+	}
+	if !strings.Contains(msg, "rollback") {
+		t.Errorf("error %q does not mention rollback failure", msg)
 	}
 }
