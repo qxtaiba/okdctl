@@ -656,7 +656,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `api:d31d1b9d:pkg-facade-bypass-status` — pkg facade bypass status
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/d31d1b9d-status-facade
+**Status:** in review — PR #856
 **Severity:** minor
 **Cluster:** package-boundary — seam→`audit-code-smells`
 **Evidence:** `internal/cli/status.go:388-404`
@@ -776,7 +776,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `api:a55b4592:zero-value-loader` — zero value loader
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/a55b4592-zero-value-loader
+**Status:** not started
 **Severity:** suggestion
 **Cluster:** zero-value-usability
 **Evidence:** `internal/config/loader.go:13-21`
@@ -1169,7 +1169,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `iac:ef8f2924:commented-out-vars` — commented out vars
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/ef8f2924-commented-vars
+**Status:** in review — PR #855
 **Severity:** suggestion
 **Cluster:** hcl-doc-hygiene
 **Evidence:** `infrastructure/terraform/modules/proxmox-okd/variables.tf:252-265`
@@ -1315,7 +1315,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `api:297adb3e:opt-inconsistent` — opt inconsistent
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/297adb3e-validation-opt
+**Status:** in review — PR #852
 **Severity:** suggestion
 **Cluster:** option-consistency
 **Evidence:** `internal/config/validation_types.go:131-142`
@@ -1541,7 +1541,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `mod:d9f7733e:use-builtins` — use builtins
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/d9f7733e-use-builtins
+**Status:** in review — PR #854
 **Severity:** suggestion
 **Cluster:** any-interface-builtins
 **Evidence:** `internal/cli/debug_bundle.go:361-365`
@@ -1747,7 +1747,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `doc:26a430ee:doc-comment-stale` — doc comment stale
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/26a430ee-elevation-doc
+**Status:** in review — PR #853
 **Severity:** suggestion
 **Cluster:** exported-doc — related: doc:1013f4e8:docs-behavior-drift
 **Evidence:** `internal/cli/elevation.go:78-84`
