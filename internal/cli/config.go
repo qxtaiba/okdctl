@@ -27,6 +27,9 @@ var configShowOutput string
 var configShowCmd = &cobra.Command{
 	Use:   "show",
 	Short: "Print the resolved configuration with secrets redacted",
+	Long: `Print the fully-resolved okdctl configuration with all secret fields
+replaced by "***". Text mode emits YAML; pass --output=json to get a JSON
+object suitable for piping to jq.`,
 	Example: `  okdctl config show
   okdctl config show --output json | jq '.provider'`,
 	RunE: runConfigShow,

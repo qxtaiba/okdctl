@@ -42,16 +42,22 @@ var describeCmd = &cobra.Command{
 }
 
 var describeNodeCmd = &cobra.Command{
-	Use:     "node <name>",
-	Short:   "Show detail for a cluster node",
+	Use:   "node <name>",
+	Short: "Show detail for a cluster node",
+	Long: `Show the name, role (master/worker), and readiness condition for a
+single cluster node retrieved via oc. Use 'okdctl status' to see all nodes
+at once.`,
 	Example: "  okdctl describe node master-0",
 	Args:    cobra.ExactArgs(1),
 	RunE:    runDescribeNode,
 }
 
 var describeAddonCmd = &cobra.Command{
-	Use:     "addon <name>",
-	Short:   "Show detail for a registered addon",
+	Use:   "addon <name>",
+	Short: "Show detail for a registered addon",
+	Long: `Show metadata (display name, description, category) and live health for
+a registered addon by running its Verify() probe against the cluster.
+Use 'okdctl addon list' to see all available addon names.`,
 	Example: "  okdctl describe addon flux",
 	Args:    cobra.ExactArgs(1),
 	RunE:    runDescribeAddon,

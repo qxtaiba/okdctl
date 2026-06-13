@@ -2,6 +2,12 @@
 
 Print the resolved configuration with secrets redacted
 
+### Synopsis
+
+Print the fully-resolved okdctl configuration with all secret fields
+replaced by "***". Text mode emits YAML; pass --output=json to get a JSON
+object suitable for piping to jq.
+
 ```
 okdctl config show [flags]
 ```

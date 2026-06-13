@@ -2,6 +2,12 @@
 
 Show detail for a registered addon
 
+### Synopsis
+
+Show metadata (display name, description, category) and live health for
+a registered addon by running its Verify() probe against the cluster.
+Use 'okdctl addon list' to see all available addon names.
+
 ```
 okdctl describe addon <name> [flags]
 ```

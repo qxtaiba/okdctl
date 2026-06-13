@@ -40,6 +40,11 @@ var releasesCmd = &cobra.Command{
 var releasesListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List available OKD versions",
+	Long: `List OKD versions resolved from the GitHub releases feed.
+
+By default only stable releases are shown; pass --channel=all to include every
+non-draft release. Results are served from a 1-hour on-disk cache
+(~/.okdctl/cache/okd-versions.json) to avoid repeated network round-trips.`,
 	Example: `  okdctl releases list
   okdctl releases list --channel all
   okdctl releases list --output json`,
@@ -51,6 +56,9 @@ var releasesListCmd = &cobra.Command{
 var releasesShowCmd = &cobra.Command{
 	Use:   "show <version>",
 	Short: "Show release info for a single OKD version",
+	Long: `Print metadata for a single OKD release identified by its version string
+("4.21.3") or GitHub tag. The version list is resolved from the disk cache;
+use --channel=all with 'releases list' to discover pre-release tags.`,
 	Example: `  okdctl releases show 4.21.3
   okdctl releases show 4.21.3 --output json`,
 	Args: cobra.ExactArgs(1),

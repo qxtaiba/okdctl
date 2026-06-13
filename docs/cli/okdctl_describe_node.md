@@ -2,6 +2,12 @@
 
 Show detail for a cluster node
 
+### Synopsis
+
+Show the name, role (master/worker), and readiness condition for a
+single cluster node retrieved via oc. Use 'okdctl status' to see all nodes
+at once.
+
 ```
 okdctl describe node <name> [flags]
 ```

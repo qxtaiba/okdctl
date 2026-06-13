@@ -2,6 +2,14 @@
 
 List available OKD versions
 
+### Synopsis
+
+List OKD versions resolved from the GitHub releases feed.
+
+By default only stable releases are shown; pass --channel=all to include every
+non-draft release. Results are served from a 1-hour on-disk cache
+(~/.okdctl/cache/okd-versions.json) to avoid repeated network round-trips.
+
 ```
 okdctl releases list [flags]
 ```
