@@ -11,13 +11,12 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/qxtaiba/okdctl/internal/addon"
+	"github.com/qxtaiba/okdctl/internal/cluster"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
-	"github.com/qxtaiba/okdctl/internal/executor"
 	"github.com/qxtaiba/okdctl/internal/system"
 	"github.com/qxtaiba/okdctl/internal/tui"
-	"github.com/qxtaiba/okdctl/internal/version"
 )
 
 const colName = "name"
@@ -140,7 +139,7 @@ func runStatus(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
-	bp, err := newStatusPhase(projectRoot)
+	cl, err := newStatusClient(projectRoot)
 	if err != nil {
 		return err
 	}
@@ -148,18 +147,18 @@ func runStatus(cmd *cobra.Command, _ []string) error {
 	ctx := cmd.Context()
 
 	apiOK := true
-	if _, ocErr := bp.OcOutput(ctx, "get", "--raw", "/healthz"); ocErr != nil {
+	if _, ocErr := cl.RawGet(ctx, "/healthz"); ocErr != nil {
 		apiOK = false
 	}
 
 	var nodes []okd.NodeStatus
-	if nr, ocErr := bp.Exec.RunOutputChecked(ctx, 0, "oc", "get", "nodes", "-o", "json"); ocErr == nil {
-		if nr.Truncated {
-			bp.Log.Warn("oc get nodes output truncated; node list may be incomplete")
+	if nodesJSON, truncated, ocErr := cl.GetJSON(ctx, "get", "nodes", "-o", "json"); ocErr == nil {
+		if truncated {
+			tui.Warn("oc get nodes output truncated; node list may be incomplete")
 		}
 		var nl statusNodeList
-		if jsonErr := json.Unmarshal([]byte(nr.Stdout), &nl); jsonErr != nil {
-			bp.Log.Warn("oc get nodes json parse failed", "err", jsonErr)
+		if jsonErr := json.Unmarshal([]byte(nodesJSON), &nl); jsonErr != nil {
+			tui.Warn("oc get nodes json parse failed", tui.LF("err", jsonErr))
 		} else {
 			for _, n := range nl.Items {
 				ready := n.isReady()
@@ -178,13 +177,13 @@ func runStatus(cmd *cobra.Command, _ []string) error {
 	}
 
 	degraded := 0
-	if cor, ocErr := bp.Exec.RunOutputChecked(ctx, 0, "oc", "get", "clusteroperators", "-o", "json"); ocErr == nil {
-		if cor.Truncated {
-			bp.Log.Warn("oc get clusteroperators output truncated; degraded count may be incomplete")
+	if coJSON, truncated, ocErr := cl.GetJSON(ctx, "get", "clusteroperators", "-o", "json"); ocErr == nil {
+		if truncated {
+			tui.Warn("oc get clusteroperators output truncated; degraded count may be incomplete")
 		}
 		var col statusClusterOperatorList
-		if jsonErr := json.Unmarshal([]byte(cor.Stdout), &col); jsonErr != nil {
-			bp.Log.Warn("oc get clusteroperators json parse failed", "err", jsonErr)
+		if jsonErr := json.Unmarshal([]byte(coJSON), &col); jsonErr != nil {
+			tui.Warn("oc get clusteroperators json parse failed", tui.LF("err", jsonErr))
 		} else {
 			for _, co := range col.Items {
 				if slices.ContainsFunc(co.Status.Conditions, func(c statusCondition) bool {
@@ -290,7 +289,7 @@ func runDescribeNode(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	bp, err := newStatusPhase(projectRoot)
+	cl, err := newStatusClient(projectRoot)
 	if err != nil {
 		return err
 	}
@@ -298,7 +297,7 @@ func runDescribeNode(cmd *cobra.Command, args []string) error {
 	name := args[0]
 	ctx := cmd.Context()
 
-	raw, ocErr := bp.OcOutput(ctx, "get", "node", name, "-o", "json")
+	raw, _, ocErr := cl.GetJSON(ctx, "get", "node", name, "-o", "json")
 	if ocErr != nil {
 		return &errtypes.ClusterError{Msg: fmt.Sprintf("describe node %s", name), Err: ocErr}
 	}
@@ -395,20 +394,16 @@ func runDescribeAddon(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func newStatusPhase(projectRoot string) (phase.BasePhase, error) {
+func newStatusClient(projectRoot string) (*cluster.Client, error) {
 	workDir := filepath.Join(projectRoot, "okd-install")
 	clusterDir := phase.ClusterConfigDir(workDir)
 	kcPath := filepath.Join(clusterDir, "auth", "kubeconfig")
 
 	if !system.FileExists(kcPath) {
-		return phase.BasePhase{}, &errtypes.ClusterError{
+		return nil, &errtypes.ClusterError{
 			Msg: fmt.Sprintf("kubeconfig not found at %s; run `okdctl deploy` first", kcPath),
 		}
 	}
 
-	exec := executor.New(
-		executor.WithEnv([]string{"KUBECONFIG=" + kcPath}),
-	)
-	bp := phase.NewBasePhase(version.Version, phase.WithExecutor(exec))
-	return bp, nil
+	return cluster.New(cluster.WithCLI("oc"), cluster.WithKubeconfig(kcPath)), nil
 }
