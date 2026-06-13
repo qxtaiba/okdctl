@@ -42,6 +42,30 @@ const (
 	StepConfigureDNS      distribution.StepID = "configure-dns"
 )
 
+// StepNames maps each setup StepID to its display name. StepDef literals in
+// this file reference this map so each name has a single source.
+var StepNames = map[distribution.StepID]string{
+	StepInstallPackages:   "install system packages",
+	StepInstallTools:      "install external tools",
+	StepEnsureWorkDir:     "ensure work directory",
+	StepDownloadTools:     "download okd tools",
+	StepGenerateConfig:    "generate install config",
+	StepGenerateManifests: "generate manifests",
+	StepGenerateKubeVIP:   "generate kube-vip manifests",
+	StepInjectManifests:   "inject custom manifests",
+	StepCompactCluster:    "inject compact cluster manifests",
+	StepGenerateIgnition:  "generate ignition",
+	StepInstallApache:     "install apache",
+	StepDeployIgnition:    "deploy ignition",
+	StepVerifyWebServer:   "verify web server",
+	StepBuildISOs:         "build isos",
+	StepUploadISOs:        "upload isos",
+	StepGenerateTfvars:    "generate terraform variables",
+	StepConfigureHAProxy:  "configure haproxy",
+	StepConfigureFirewall: "configure firewall",
+	StepConfigureDNS:      "configure dns",
+}
+
 // setupSteps returns the ordered steps for the OKD setup phase, grouped
 // into base / manifest / web / infra sub-methods.
 func (p *Phase) setupSteps(cfg *config.Config, opts *Options) []distribution.StepDef {
@@ -59,27 +83,27 @@ func (p *Phase) setupSteps(cfg *config.Config, opts *Options) []distribution.Ste
 func (p *Phase) setupBaseSteps(cfg *config.Config, opts *Options) []distribution.StepDef {
 	return []distribution.StepDef{
 		{
-			ID: StepInstallPackages, Name: "install system packages",
+			ID: StepInstallPackages, Name: StepNames[StepInstallPackages],
 			ReRunSafe: distribution.ReRunSafeYes,
 			Desc:      "installing required system packages", NonFatal: true,
 			Exec:    func(ctx context.Context) error { return p.installSystemPackages(ctx) },
 			OnError: phase.WarnOnError(p.Log, "packages: system installation had warnings"),
 		},
 		{
-			ID: StepInstallTools, Name: "install external tools",
+			ID: StepInstallTools, Name: StepNames[StepInstallTools],
 			ReRunSafe: distribution.ReRunSafeYes,
 			Desc:      "installing core tools and addon-required tools", NonFatal: true,
 			Exec:    func(ctx context.Context) error { return p.InstallExternalTools(ctx, cfg) },
 			OnError: phase.WarnOnError(p.Log, "tools: external installation had warnings"),
 		},
 		{
-			ID: StepEnsureWorkDir, Name: "ensure work directory",
+			ID: StepEnsureWorkDir, Name: StepNames[StepEnsureWorkDir],
 			ReRunSafe: distribution.ReRunSafeYes,
 			Desc:      "creating work directory",
 			Exec:      func(_ context.Context) error { return system.EnsureDir(opts.WorkDir) },
 		},
 		{
-			ID: StepDownloadTools, Name: "download okd tools",
+			ID: StepDownloadTools, Name: StepNames[StepDownloadTools],
 			ReRunSafe:  distribution.ReRunSafeNo,
 			Desc:       fmt.Sprintf("downloading OKD tools version %s", cfg.Distribution.Version),
 			SkipWhen:   func() bool { return opts.SkipDownloads },
@@ -108,7 +132,7 @@ func (p *Phase) setupBaseSteps(cfg *config.Config, opts *Options) []distribution
 func (p *Phase) setupManifestSteps(cfg *config.Config, opts *Options, clusterDir string) []distribution.StepDef {
 	return []distribution.StepDef{
 		{
-			ID: StepGenerateConfig, Name: "generate install config",
+			ID: StepGenerateConfig, Name: StepNames[StepGenerateConfig],
 			ReRunSafe: distribution.ReRunSafeNo,
 			Desc:      "generating install-config.yaml",
 			// install-config.yaml is consumed by openshift-install during manifest
@@ -126,7 +150,7 @@ func (p *Phase) setupManifestSteps(cfg *config.Config, opts *Options, clusterDir
 			},
 		},
 		{
-			ID: StepGenerateManifests, Name: "generate manifests",
+			ID: StepGenerateManifests, Name: StepNames[StepGenerateManifests],
 			ReRunSafe: distribution.ReRunSafeNo,
 			Desc:      "generating kubernetes manifests",
 			// manifests/ directory alone is unsafe: openshift-install can exit
@@ -145,7 +169,7 @@ func (p *Phase) setupManifestSteps(cfg *config.Config, opts *Options, clusterDir
 			},
 		},
 		{
-			ID: StepGenerateKubeVIP, Name: "generate kube-vip manifests",
+			ID: StepGenerateKubeVIP, Name: StepNames[StepGenerateKubeVIP],
 			ReRunSafe: distribution.ReRunSafeYes,
 			Desc:      "generating kube-vip RBAC and DaemonSet manifests for VIP management",
 			Exec: func(_ context.Context) error {
@@ -156,7 +180,7 @@ func (p *Phase) setupManifestSteps(cfg *config.Config, opts *Options, clusterDir
 			},
 		},
 		{
-			ID: StepInjectManifests, Name: "inject custom manifests",
+			ID: StepInjectManifests, Name: StepNames[StepInjectManifests],
 			ReRunSafe: distribution.ReRunSafeYes,
 			Desc:      "injecting custom manifests",
 			Exec: func(ctx context.Context) error {
@@ -171,7 +195,7 @@ func (p *Phase) setupManifestSteps(cfg *config.Config, opts *Options, clusterDir
 			},
 		},
 		{
-			ID: StepCompactCluster, Name: "inject compact cluster manifests",
+			ID: StepCompactCluster, Name: StepNames[StepCompactCluster],
 			ReRunSafe:  distribution.ReRunSafeYes,
 			Desc:       "injecting ingress controller placement for compact cluster",
 			SkipWhen:   func() bool { return cfg.Topology.Workers.Count > 0 },
@@ -185,7 +209,7 @@ func (p *Phase) setupManifestSteps(cfg *config.Config, opts *Options, clusterDir
 			},
 		},
 		{
-			ID: StepGenerateIgnition, Name: "generate ignition",
+			ID: StepGenerateIgnition, Name: StepNames[StepGenerateIgnition],
 			ReRunSafe: distribution.ReRunSafeNo,
 			Desc:      "generating ignition files",
 			AlreadyDone: func(_ context.Context) (bool, error) {
@@ -207,14 +231,14 @@ func (p *Phase) setupManifestSteps(cfg *config.Config, opts *Options, clusterDir
 func (p *Phase) setupWebSteps(cfg *config.Config, opts *Options, clusterDir string) []distribution.StepDef {
 	return []distribution.StepDef{
 		{
-			ID: StepInstallApache, Name: "install apache",
+			ID: StepInstallApache, Name: StepNames[StepInstallApache],
 			ReRunSafe: distribution.ReRunSafeYes,
 			Desc:      "installing and configuring apache web server", NonFatal: true,
 			Exec:    func(ctx context.Context) error { return p.ConfigureApache(ctx, cfg, opts.ProjectRoot) },
 			OnError: phase.WarnOnError(p.Log, "apache: installation skipped"),
 		},
 		{
-			ID: StepDeployIgnition, Name: "deploy ignition",
+			ID: StepDeployIgnition, Name: StepNames[StepDeployIgnition],
 			ReRunSafe: distribution.ReRunSafeNo,
 			Desc:      "deploying ignition files to apache web server",
 			AlreadyDone: func(_ context.Context) (bool, error) {
@@ -240,7 +264,7 @@ func (p *Phase) setupWebSteps(cfg *config.Config, opts *Options, clusterDir stri
 			},
 		},
 		{
-			ID: StepVerifyWebServer, Name: "verify web server",
+			ID: StepVerifyWebServer, Name: StepNames[StepVerifyWebServer],
 			ReRunSafe: distribution.ReRunSafeYes,
 			Desc:      "verifying https web server accessibility",
 			Exec: func(ctx context.Context) error {
@@ -252,7 +276,7 @@ func (p *Phase) setupWebSteps(cfg *config.Config, opts *Options, clusterDir stri
 			},
 		},
 		{
-			ID: StepBuildISOs, Name: "build isos",
+			ID: StepBuildISOs, Name: StepNames[StepBuildISOs],
 			// BuildCustomISOs fingerprint-checks per node (iso.go) and skips
 			// unchanged ISOs, making repeated invocations safe.
 			ReRunSafe:  distribution.ReRunSafeYes,
@@ -262,7 +286,7 @@ func (p *Phase) setupWebSteps(cfg *config.Config, opts *Options, clusterDir stri
 			Exec:       func(ctx context.Context) error { return p.BuildCustomISOs(ctx, cfg, opts) },
 		},
 		{
-			ID: StepUploadISOs, Name: "upload isos",
+			ID: StepUploadISOs, Name: StepNames[StepUploadISOs],
 			ReRunSafe: distribution.ReRunSafeNo,
 			Desc:      "uploading ISOs to Proxmox storage", NonFatal: true,
 			SkipWhen:   func() bool { return opts.SkipISOs },
@@ -290,7 +314,7 @@ func (p *Phase) setupWebSteps(cfg *config.Config, opts *Options, clusterDir stri
 func (p *Phase) setupInfraSteps(cfg *config.Config, opts *Options) []distribution.StepDef {
 	return []distribution.StepDef{
 		{
-			ID: StepGenerateTfvars, Name: "generate terraform variables",
+			ID: StepGenerateTfvars, Name: StepNames[StepGenerateTfvars],
 			ReRunSafe: distribution.ReRunSafeYes,
 			Desc:      "generating terraform variables",
 			Exec: func(ctx context.Context) error {
@@ -303,7 +327,7 @@ func (p *Phase) setupInfraSteps(cfg *config.Config, opts *Options) []distributio
 			},
 		},
 		{
-			ID: StepConfigureHAProxy, Name: "configure haproxy",
+			ID: StepConfigureHAProxy, Name: StepNames[StepConfigureHAProxy],
 			ReRunSafe:  distribution.ReRunSafeYes,
 			Desc:       "configuring haproxy load balancer",
 			SkipWhen:   func() bool { return opts.SkipHAProxy },
@@ -317,7 +341,7 @@ func (p *Phase) setupInfraSteps(cfg *config.Config, opts *Options) []distributio
 			},
 		},
 		{
-			ID: StepConfigureFirewall, Name: "configure firewall",
+			ID: StepConfigureFirewall, Name: StepNames[StepConfigureFirewall],
 			ReRunSafe:  distribution.ReRunSafeYes,
 			Desc:       "configuring firewall rules for OKD",
 			SkipWhen:   func() bool { return opts.SkipFirewall },
@@ -332,7 +356,7 @@ func (p *Phase) setupInfraSteps(cfg *config.Config, opts *Options) []distributio
 			OnError: phase.WarnOnError(p.Log, "firewall: configuration failed"),
 		},
 		{
-			ID: StepConfigureDNS, Name: "configure dns",
+			ID: StepConfigureDNS, Name: StepNames[StepConfigureDNS],
 			ReRunSafe: distribution.ReRunSafeYes,
 			Desc:      "configuring dnsmasq and deploying bootstrap dns configuration", NonFatal: true,
 			Exec: func(ctx context.Context) error {

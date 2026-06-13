@@ -20,10 +20,20 @@ const (
 	StepInstallAddons       distribution.StepID = "install-addons"
 )
 
+// StepNames maps each postinstall StepID to its display name. StepDef literals
+// in this file reference this map so each name has a single source.
+var StepNames = map[distribution.StepID]string{
+	StepVerifyHealth:        "verify cluster health",
+	StepCleanupBootstrap:    "cleanup bootstrap vm",
+	StepVerifyKubeVIP:       "verify kube-vip",
+	StepDeployProductionDNS: "deploy production dns",
+	StepInstallAddons:       "install addons",
+}
+
 func (p *Phase) postinstallSteps(cfg *config.Config, opts *Options, pctx *distribution.PhaseContext[postInstallContext], mgr *addon.Manager) []distribution.StepDef {
 	return []distribution.StepDef{
 		{
-			ID: StepVerifyHealth, Name: "verify cluster health",
+			ID: StepVerifyHealth, Name: StepNames[StepVerifyHealth],
 			ReRunSafe:  distribution.ReRunSafeYes,
 			Desc:       "verifying cluster health",
 			SkipWhen:   func() bool { return opts.SkipClusterHealth },
@@ -45,7 +55,7 @@ func (p *Phase) postinstallSteps(cfg *config.Config, opts *Options, pctx *distri
 		// the (now-gone) bootstrap VM with no rollback. Preferred fix: extend
 		// update-ingress to detect bootstrap-DNS + bootstrap-VM-gone and re-issue.
 		{
-			ID: StepCleanupBootstrap, Name: "cleanup bootstrap vm",
+			ID: StepCleanupBootstrap, Name: StepNames[StepCleanupBootstrap],
 			ReRunSafe: distribution.ReRunSafeYes,
 			Desc:      "destroying bootstrap vm via terraform",
 			Exec: func(ctx context.Context) error {
@@ -59,7 +69,7 @@ func (p *Phase) postinstallSteps(cfg *config.Config, opts *Options, pctx *distri
 			},
 		},
 		{
-			ID: StepVerifyKubeVIP, Name: "verify kube-vip",
+			ID: StepVerifyKubeVIP, Name: StepNames[StepVerifyKubeVIP],
 			ReRunSafe: distribution.ReRunSafeYes,
 			Desc:      "verifying kube-vip api load balancer", NonFatal: true,
 			SkipWhen:   func() bool { return opts.SkipKubeVIP },
@@ -79,7 +89,7 @@ func (p *Phase) postinstallSteps(cfg *config.Config, opts *Options, pctx *distri
 			OnError: phase.WarnOnError(p.Log, "kubevip: verification failed"),
 		},
 		{
-			ID: StepDeployProductionDNS, Name: "deploy production dns",
+			ID: StepDeployProductionDNS, Name: StepNames[StepDeployProductionDNS],
 			ReRunSafe: distribution.ReRunSafeYes,
 			Desc:      "deploying production dns with api vip and apps on bastion", NonFatal: true,
 			SkipWhen:   func() bool { return !pctx.Get().KubeVIPVerified },
@@ -99,7 +109,7 @@ func (p *Phase) postinstallSteps(cfg *config.Config, opts *Options, pctx *distri
 			OnError: phase.WarnOnError(p.Log, "dns: production dns deployment failed"),
 		},
 		{
-			ID: StepInstallAddons, Name: "install addons",
+			ID: StepInstallAddons, Name: StepNames[StepInstallAddons],
 			// Addon installation uses helm upgrade --install / kubectl apply
 			// semantics; re-applying is a safe no-op for already-installed addons.
 			ReRunSafe: distribution.ReRunSafeYes,
