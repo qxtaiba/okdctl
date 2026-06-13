@@ -33,9 +33,10 @@ const PlanFileName = "tfplan"
 // then fails with a clean diagnostic instead of failing immediately.
 const defaultLockTimeout = "120s"
 
-// ExecError reports a non-zero exit from a terraform subprocess. Aliased to
-// the canonical executor.ExitError so callers can errors.As against either
-// shape and so the two types do not drift.
+// ExecError is a type alias for executor.ExitError. Because it is a true
+// alias (not a defined type), errors.As(&terraform.ExecError{}) and
+// errors.As(&executor.ExitError{}) are equivalent — callers may use either
+// target interchangeably without a double unwrap.
 type ExecError = executor.ExitError
 
 // Executor wraps terraform subcommand execution for a single working
