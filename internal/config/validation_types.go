@@ -133,12 +133,10 @@ func runValidators(cfg *Config, opts ValidationOptions) *ValidationResult {
 	return result
 }
 
-// Validate uses ScopeAll when no options are provided.
-func (cfg *Config) Validate(opts ...ValidationOptions) *ValidationResult {
-	if len(opts) == 0 {
-		opts = []ValidationOptions{{Scope: ScopeAll}}
-	}
-	return ValidateWithOptions(cfg, opts[0])
+// Validate runs all validators against cfg. For scoped validation use
+// ValidateWithOptions.
+func (cfg *Config) Validate() *ValidationResult {
+	return ValidateWithOptions(cfg, ValidationOptions{Scope: ScopeAll})
 }
 
 // ValidateWithOptions runs the validator set selected by opts.Scope and
