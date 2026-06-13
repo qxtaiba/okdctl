@@ -826,7 +826,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `api:fde34e0c:opt-with-env-fallback-side-effect` — opt with env fallback side effect
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/fde34e0c-k8s-opt-env
+**Status:** in review — PR #857
 **Severity:** minor
 **Cluster:** option-consistency
 **Evidence:** `internal/cluster/k8s.go:52-71`
@@ -880,7 +880,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `obs:97cb8adf:span-no-start-end` — span no start end
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/97cb8adf-span-start-end
+**Status:** in review — PR #860
 **Severity:** suggestion
 **Cluster:** span-retry-boundary
 **Evidence:** `internal/system/exec.go:117-163`
@@ -1127,7 +1127,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `state:6424733c:error-path-hint-always-destroy` — error path hint always destroy
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/6424733c-error-hint
+**Status:** in review — PR #859
 **Severity:** minor
 **Cluster:** crash-recoverability
 **Evidence:** `internal/cli/helpers.go:349-385`
@@ -1529,7 +1529,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `obs:48688e63:key-inconsistent-casing` — key inconsistent casing
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/48688e63-key-casing
+**Status:** in review — PR #858
 **Severity:** minor
 **Cluster:** field-stability
 **Evidence:** `internal/infrastructure/proxmox/proxmox.go:220-293` + 1 more
@@ -1603,7 +1603,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `smell:073d24ed:stepdef-name-duplication` — stepdef name duplication
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/073d24ed-stepdef-name
+**Status:** in review — PR #863
 **Severity:** minor
 **Cluster:** magic-strings
 **Evidence:** `internal/cli/deploy.go:192-226`
@@ -1759,7 +1759,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `tst:632c9087:destructive-partial-untested` — destructive partial untested
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/632c9087-ingress-test
+**Status:** in review — PR #862
 **Severity:** major
 **Cluster:** destructive-untested — related: sub:1e8ffb91:ring-truncated-stdout-parse
 **Evidence:** `internal/distribution/okd/postinstall/update_ingress.go:461-487` + 1 more
@@ -1779,7 +1779,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `tst:0934cf1b:destructive-happy-untested` — destructive happy untested
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/0934cf1b-packages-test
+**Status:** in review — PR #861
 **Severity:** minor
 **Cluster:** destructive-untested
 **Evidence:** `internal/platform/packages.go:71-141`
