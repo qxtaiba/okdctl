@@ -474,7 +474,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sec:e076e43c:dl-no-signature` — dl no signature
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/e076e43c-version-regex
+**Status:** not started
 **Severity:** suggestion
 **Cluster:** tls-network
 **Evidence:** `scripts/install.sh:113-119`
@@ -746,7 +746,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `api:f99eddfa:opt-options-pointer-asymmetry` — opt options pointer asymmetry
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/f99eddfa-options-asymmetry
+**Status:** in review — PR #873
 **Severity:** suggestion
 **Cluster:** option-consistency
 **Evidence:** `internal/distribution/okd/postinstall/phase.go:74-75`
@@ -786,7 +786,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `api:4c092fce:opt-execerror-alias` — opt execerror alias
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/4c092fce-execerror-alias
+**Status:** in review — PR #872
 **Severity:** suggestion
 **Cluster:** option-consistency
 **Evidence:** `internal/infrastructure/terraform/terraform.go:35-38`
@@ -1147,7 +1147,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `state:881d089e:runlock-release-unlink-race` — runlock release unlink race
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/881d089e-runlock-race
+**Status:** in review — PR #870
 **Severity:** minor
 **Cluster:** tf-state-atomicity
 **Evidence:** `internal/runlock/runlock.go:110-119`
@@ -1221,7 +1221,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `err:40d315ad:vocab-ad-hoc-synonym` — vocab ad hoc synonym
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/40d315ad-typed-config-err
+**Status:** in review — PR #871
 **Severity:** minor
 **Cluster:** domain-vocabulary
 **Evidence:** `internal/addon/catalog/flux/flux.go:93-96` + 1 more
@@ -1519,7 +1519,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `obs:aa84670c:log-leaks-cred` — log leaks cred
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/aa84670c-argv-redact
+**Status:** in review — PR #874
 **Severity:** suggestion
 **Cluster:** redaction-sink
 **Evidence:** `internal/cli/root.go:105-105`
