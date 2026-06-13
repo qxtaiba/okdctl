@@ -33,7 +33,9 @@ type Options struct {
 }
 
 // NewOptions builds post-install Options from cfg and projectRoot, applying
-// the default timeout values.
+// the default timeout values. It returns a value so each caller receives an
+// independent, mutable copy of the defaults; callers pass &opts to Execute
+// once they have finished configuring the option set.
 func NewOptions(cfg *config.Config, projectRoot string) Options {
 	return Options{
 		BaseOptions: phase.BaseOptions{
