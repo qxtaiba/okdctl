@@ -98,7 +98,7 @@ func TestDestroySteps_FailurePath(t *testing.T) {
 		id    distribution.StepID
 		label string
 	}{
-		{0, StepDestroyInfra, "terraform destroy"},
+		{0, StepDestroyInfra, labelTerraformDestroy},
 		{1, StepRemoveRemoteISO, "iso removal"},
 		{2, StepCleanupFiles, "file cleanup"},
 		{3, StepCleanupFirewall, "firewall cleanup"},
@@ -237,8 +237,8 @@ func TestDestroySteps_PartialFailure(t *testing.T) {
 		}
 		return true
 	})
-	if !strings.Contains(stepsVal, "terraform destroy") {
-		t.Errorf("failed_steps %q missing 'terraform destroy'", stepsVal)
+	if !strings.Contains(stepsVal, labelTerraformDestroy) {
+		t.Errorf("failed_steps %q missing %q", stepsVal, labelTerraformDestroy)
 	}
 	if !strings.Contains(stepsVal, "firewall cleanup") {
 		t.Errorf("failed_steps %q missing 'firewall cleanup'", stepsVal)

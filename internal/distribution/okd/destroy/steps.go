@@ -63,10 +63,14 @@ func (t *destroyTracker) skipWhen(label string, fn func() bool) func() bool {
 	}
 }
 
+// labelTerraformDestroy must match the label passed to track() at the
+// StepDestroyInfra OnError site; a mismatch silently breaks terraformFailed().
+const labelTerraformDestroy = "terraform destroy"
+
 func (t *destroyTracker) terraformFailed() bool {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
-	return slices.Contains(t.failures, "terraform destroy")
+	return slices.Contains(t.failures, labelTerraformDestroy)
 }
 
 func (p *Phase) destroySteps(ctx context.Context, cfg *config.Config, opts *Options) []distribution.StepDef {
@@ -90,7 +94,7 @@ func (p *Phase) destroySteps(ctx context.Context, cfg *config.Config, opts *Opti
 				p.Log.Info("terraform: infrastructure destruction completed")
 				return nil
 			},
-			OnError: track("terraform destroy"),
+			OnError: track(labelTerraformDestroy),
 		},
 		{
 			ID: StepRemoveRemoteISO, Name: "remove remote ISO", ReRunSafe: distribution.ReRunSafeYes,
