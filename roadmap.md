@@ -1117,7 +1117,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `state:262af6e4:cleanup-tfvars-proxy-precondition` — cleanup tfvars proxy precondition
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/262af6e4-cleanup-precond
+**Status:** in review — PR #866
 **Severity:** minor
 **Cluster:** phase-idempotency — related: state:368b892b:stale-bootstrap-sentinel-poisons-redeploy
 **Evidence:** `internal/distribution/okd/cleanup/cleanup.go:235-261`
@@ -1325,7 +1325,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `api:e45c2239:pkg-facade-bypassed` — pkg facade bypassed
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/e45c2239-bindir-config
+**Status:** in review — PR #869
 **Severity:** minor
 **Cluster:** package-boundary
 **Evidence:** `cmd/okdctl/main.go:16-44` + 1 more
@@ -1355,7 +1355,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `api:21dc1103:opt-inconsistent` — opt inconsistent
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/21dc1103-download-opt
+**Status:** in review — PR #867
 **Severity:** suggestion
 **Cluster:** option-consistency
 **Evidence:** `internal/download/download.go:40-57` + 1 more
@@ -1457,7 +1457,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `ux:024a2c32:json-exit-contract-drift` — json exit contract drift
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/024a2c32-json-exit-doc
+**Status:** in review — PR #864
 **Severity:** minor
 **Cluster:** json-stability
 **Evidence:** `docs/cli/json-schema.md:236-239` + 2 more
@@ -1507,7 +1507,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `ux:e7db1220:help-long-missing` — help long missing
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/e7db1220-help-long
+**Status:** in review — PR #868
 **Severity:** suggestion
 **Cluster:** help-text
 **Evidence:** `internal/cli/releases.go:40-47` + 2 more
@@ -1663,7 +1663,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `smell:15ba17da:magic-label-sentinel` — magic label sentinel
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/15ba17da-magic-label
+**Status:** in review — PR #865
 **Severity:** suggestion
 **Cluster:** magic-strings
 **Evidence:** `internal/distribution/okd/destroy/steps.go:63-67` + 1 more
