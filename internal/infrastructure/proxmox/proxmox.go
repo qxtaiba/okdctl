@@ -217,7 +217,7 @@ func (p *Provider) Provision(ctx context.Context, cfg *config.Config, opts Provi
 	defer func() { _ = p.terraformExec.CleanupPlans() }()
 
 	totalNodes := 1 + cfg.Topology.ControlPlane.Count + cfg.Topology.Workers.Count
-	p.logger.Info("terraform: plan will create virtual machines", "count", totalNodes)
+	p.logger.Info("terraform: plan will create virtual machines", "vm_count", totalNodes)
 
 	p.logger.Info("terraform: applying infrastructure changes")
 	stopSpinner := p.reporter("applying terraform infrastructure")
