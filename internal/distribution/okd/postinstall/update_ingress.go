@@ -3,6 +3,7 @@ package postinstall
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -479,7 +480,9 @@ func (p *Phase) convertToLoadBalancer(ctx context.Context, ic *ingressController
 	_, err = p.Exec.RunWithStdinChecked(ctx, replacementJSON, "oc", "create", "-f", "-")
 	if err != nil {
 		p.Log.Warn("update-ingress: failed to create replacement, attempting rollback", "err", err)
-		p.attemptRollback(ctx, ic)
+		if rbErr := p.attemptRollback(ctx, ic); rbErr != nil {
+			return &errtypes.ClusterError{Msg: "failed to create replacement IngressController; rollback also failed", Err: errors.Join(err, rbErr)}
+		}
 		return &errtypes.ClusterError{Msg: "failed to create replacement IngressController", Err: err}
 	}
 
@@ -594,21 +597,25 @@ func buildRollbackJSON(ic *ingressControllerInfo) (string, error) {
 
 // attemptRollback recreates the original IngressController from its captured
 // RawJSON. Errors are logged only — the caller already has a primary error.
-func (p *Phase) attemptRollback(ctx context.Context, ic *ingressControllerInfo) {
+func (p *Phase) attemptRollback(ctx context.Context, ic *ingressControllerInfo) error {
 	p.Log.Info("update-ingress: rollback: starting", "name", ic.Name)
 	rollbackJSON, err := buildRollbackJSON(ic)
 	if err != nil {
 		p.Log.Warn("update-ingress: rollback failed — could not build rollback json", "err", err)
-		return
+		return err
 	}
 
 	result, err := p.Exec.RunWithStdin(ctx, rollbackJSON, "oc", "create", "-f", "-")
 	if err != nil || result.ExitCode != 0 {
 		p.Log.Warn("update-ingress: rollback create failed", "err", err, "stderr", logutil.RedactableStderr(result.Stderr))
-		return
+		if err != nil {
+			return err
+		}
+		return fmt.Errorf("rollback oc create exited %d: %s", result.ExitCode, result.Stderr)
 	}
 
 	p.Log.Info("update-ingress: rollback succeeded — restored with original strategy", "name", ic.Name)
+	return nil
 }
 
 // restoreHAProxyBackup finds the most recent haproxy.cfg.backup.* file left
