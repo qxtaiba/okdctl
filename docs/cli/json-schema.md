@@ -235,8 +235,12 @@ and scripted comparisons.
 - All timestamps use RFC 3339 with a trailing `Z` for UTC.
 - All boolean fields are `true` / `false`, not `"true"` / `"false"`.
 - `null` is never emitted — fields that are absent are omitted entirely.
-- `okdctl` sets exit code `0` on JSON success even when the underlying state
-  is degraded; consumers determine state from payload fields, not from the
-  exit code.
+- `okdctl status` sets exit code `0` even when the cluster state is degraded;
+  consumers of its JSON output determine state from payload fields, not from
+  the exit code. This guarantee applies to `status` only — other commands
+  that emit JSON still exit non-zero on failure:
+  `doctor --output=json` exits `2` when any check is `[fail]`;
+  `addon verify --output=json` exits `4` when any probe fails.
+  See [exit-codes.md](exit-codes.md) for the full code taxonomy.
 - Output is pretty-printed (`SetIndent("", "  ")`) for readability when piped
   to a file. Scripts that need compact JSON should pipe through `jq -c`.
