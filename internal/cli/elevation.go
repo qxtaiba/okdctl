@@ -79,7 +79,7 @@ func elevationDecision(cmd *cobra.Command, euid int) elevAction {
 // Policy:
 //
 //	euid=0 ∧  requiresRoot → allow (re-exec'd process running the privileged body)
-//	euid=0 ∧ !requiresRoot → reject (e.g. `sudo okdctl wizard`)
+//	euid=0 ∧ !requiresRoot → reject (e.g. `sudo okdctl status`)
 //	euid≠0 ∧  requiresRoot → re-exec under sudo
 //	euid≠0 ∧ !requiresRoot → allow
 func ensureRoot(cmd *cobra.Command) error {
