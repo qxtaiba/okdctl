@@ -48,12 +48,11 @@ func WithLogger(l *slog.Logger) Option {
 	return func(c *Client) { c.logger = logutil.OrNop(l) }
 }
 
-// WithEnvFallback applies environment-driven defaults when no explicit option
-// has set them: reads KUBECONFIG from the process env when Kubeconfig is
-// still empty, and upgrades the binary from "kubectl" to "oc" when "oc" is
-// on PATH. Pass this option only when env-driven discovery is intentional;
-// production callers (install, postinstall) supply WithCLI/WithKubeconfig
-// explicitly so they get reproducible construction.
+// WithEnvFallback reads the process environment and PATH at application time:
+// it sets Kubeconfig from $KUBECONFIG when still empty, and upgrades the
+// binary from "kubectl" to "oc" when "oc" is on PATH. It MUST be the last
+// option passed to New(); any WithKubeconfig or WithCLI that follows will
+// silently overwrite the env-derived values, negating the fallback.
 func WithEnvFallback() Option {
 	return func(c *Client) {
 		if c.Kubeconfig == "" {
