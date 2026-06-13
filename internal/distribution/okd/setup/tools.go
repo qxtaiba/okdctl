@@ -13,7 +13,6 @@ import (
 
 	"github.com/qxtaiba/okdctl/internal/addon"
 	"github.com/qxtaiba/okdctl/internal/config"
-	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/download"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/executor"
@@ -265,7 +264,7 @@ func (p *Phase) installBinaryToPath(ctx context.Context, srcPath, name string) e
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	binDir := phase.BinDirOrDefault(p.BinDir)
+	binDir := config.BinDirOrDefault(p.BinDir)
 	destPath := filepath.Join(binDir, name)
 
 	if err := system.CopyFile(srcPath, destPath); err != nil {

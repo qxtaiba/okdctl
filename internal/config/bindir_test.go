@@ -1,11 +1,9 @@
-package phase
+package config
 
 import (
 	"os/user"
 	"path/filepath"
 	"testing"
-
-	"github.com/qxtaiba/okdctl/internal/config"
 )
 
 func TestResolveBinDir_Precedence(t *testing.T) {
@@ -15,31 +13,16 @@ func TestResolveBinDir_Precedence(t *testing.T) {
 		cfgDir  string
 		wantDir string
 	}{
-		{
-			name:    "env wins over config and default",
-			envVal:  "/opt/okdctl/bin",
-			cfgDir:  "/config/bin",
-			wantDir: "/opt/okdctl/bin",
-		},
-		{
-			name:    "config wins over default when env unset",
-			envVal:  "",
-			cfgDir:  "/config/bin",
-			wantDir: "/config/bin",
-		},
-		{
-			name:    "default when env and config both absent",
-			envVal:  "",
-			cfgDir:  "",
-			wantDir: DefaultBinDir,
-		},
+		{"env wins over config and default", "/opt/okdctl/bin", "/config/bin", "/opt/okdctl/bin"},
+		{"config wins over default when env unset", "", "/config/bin", "/config/bin"},
+		{"default when env and config both absent", "", "", DefaultBinDir},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Setenv("OKDCTL_BIN_DIR", tc.envVal)
-			var cfg *config.Config
+			var cfg *Config
 			if tc.cfgDir != "" {
-				cfg = &config.Config{}
+				cfg = &Config{}
 				cfg.Deployment.BinDir = tc.cfgDir
 			}
 			got := ResolveBinDir(cfg)
@@ -51,40 +34,22 @@ func TestResolveBinDir_Precedence(t *testing.T) {
 }
 
 func TestResolveBinDir_FallThroughOnInvalid(t *testing.T) {
-	// relative and empty env values must be skipped; control falls to config
-	// then to DefaultBinDir. Locked so a future ValidateBinDir relaxation is a
-	// visible diff here before it reaches production.
 	cases := []struct {
 		name    string
 		envVal  string
 		cfgDir  string
 		wantDir string
 	}{
-		{
-			name:    "relative env falls through to config",
-			envVal:  "relative/bin",
-			cfgDir:  "/config/bin",
-			wantDir: "/config/bin",
-		},
-		{
-			name:    "relative env falls through to default when config absent",
-			envVal:  "relative/bin",
-			cfgDir:  "",
-			wantDir: DefaultBinDir,
-		},
-		{
-			name:    "nil cfg falls back to default",
-			envVal:  "",
-			cfgDir:  "",
-			wantDir: DefaultBinDir,
-		},
+		{"relative env falls through to config", "relative/bin", "/config/bin", "/config/bin"},
+		{"relative env falls through to default when config absent", "relative/bin", "", DefaultBinDir},
+		{"nil cfg falls back to default", "", "", DefaultBinDir},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Setenv("OKDCTL_BIN_DIR", tc.envVal)
-			var cfg *config.Config
+			var cfg *Config
 			if tc.cfgDir != "" {
-				cfg = &config.Config{}
+				cfg = &Config{}
 				cfg.Deployment.BinDir = tc.cfgDir
 			}
 			got := ResolveBinDir(cfg)
@@ -136,8 +101,6 @@ func TestBinDirOrDefault(t *testing.T) {
 }
 
 func TestResolveBinDir_TildeExpansion(t *testing.T) {
-	// Mirrors the SUDO_USER seam in system/fs_test.go TestExpandPath: ~/bin in
-	// config must expand to the invoking user's home even under sudo.
 	cur, err := user.Current()
 	if err != nil {
 		t.Fatal(err)
@@ -145,7 +108,7 @@ func TestResolveBinDir_TildeExpansion(t *testing.T) {
 	t.Setenv("SUDO_USER", cur.Username)
 	t.Setenv("OKDCTL_BIN_DIR", "")
 
-	cfg := &config.Config{}
+	cfg := &Config{}
 	cfg.Deployment.BinDir = "~/bin"
 
 	got := ResolveBinDir(cfg)
@@ -161,7 +124,7 @@ func TestResolveBinDir_TildeExpansion(t *testing.T) {
 func TestResolveBinDir_DotDotTraversal(t *testing.T) {
 	t.Setenv("OKDCTL_BIN_DIR", "")
 
-	cfg := &config.Config{}
+	cfg := &Config{}
 	cfg.Deployment.BinDir = "/usr/local/bin/../../etc"
 
 	got := ResolveBinDir(cfg)
@@ -172,9 +135,6 @@ func TestResolveBinDir_DotDotTraversal(t *testing.T) {
 }
 
 func TestDefaultBinDir_NotACriticalPath(t *testing.T) {
-	// cleanup criticalPaths includes "/usr/local" but not "/usr/local/bin".
-	// Cross-assert without importing cleanup (which imports phase, so the
-	// reverse import would cycle).
 	cleaned := filepath.Clean(DefaultBinDir)
 	if cleaned == "/usr/local" {
 		t.Errorf("DefaultBinDir cleans to /usr/local; cleanup refuseCriticalPath would reject it")

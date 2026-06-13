@@ -22,7 +22,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/qxtaiba/okdctl/internal/config"
-	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/platform"
 	"github.com/qxtaiba/okdctl/internal/system"
@@ -278,9 +277,9 @@ var doctorLoadedCfg = sync.OnceValues(func() (*config.Config, error) {
 func resolveBinDirForDoctor() binDirResolution {
 	loaded, err := doctorLoadedCfg()
 	if err != nil {
-		return binDirResolution{Dir: phase.ResolveBinDir(nil), LoadFailed: true}
+		return binDirResolution{Dir: config.ResolveBinDir(nil), LoadFailed: true}
 	}
-	return binDirResolution{Dir: phase.ResolveBinDir(loaded)}
+	return binDirResolution{Dir: config.ResolveBinDir(loaded)}
 }
 
 var effectiveBinDir = sync.OnceValue(resolveBinDirForDoctor)
@@ -304,7 +303,7 @@ func checkPath(_ context.Context) checkResult {
 	if slices.Contains(filepath.SplitList(os.Getenv("PATH")), r.Dir) {
 		return checkResult{sev: r.demote(sevPass), detail: r.suffix(r.Dir + " found on $PATH")}
 	}
-	if r.Dir == phase.PreflightBinDir() {
+	if r.Dir == config.PreflightBinDir() {
 		return checkResult{sev: sevWarn, detail: r.suffix(r.Dir + " missing from $PATH; okdctl will prepend it at startup")}
 	}
 	return checkResult{sev: sevFail, detail: r.suffix(r.Dir + " missing from $PATH; add it to your shell profile (okdctl cannot auto-prepend a config-only dir)")}
@@ -315,7 +314,7 @@ func checkPath(_ context.Context) checkResult {
 // setup runs under sudo and would install root-owned binaries.
 func checkBinDir(_ context.Context) checkResult {
 	r := effectiveBinDir()
-	defaultDir := r.Dir == phase.DefaultBinDir
+	defaultDir := r.Dir == config.DefaultBinDir
 	if _, err := os.Stat(r.Dir); err != nil {
 		if os.IsNotExist(err) {
 			if defaultDir {
