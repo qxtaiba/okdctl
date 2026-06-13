@@ -92,7 +92,7 @@ func (f *Flux) Install(ctx context.Context, env *addon.Environment) error {
 
 	decoded, err := f.DecodeSettings(env.AddonConfig.Settings)
 	if err != nil {
-		return fmt.Errorf("flux: invalid settings: %w", err)
+		return &errtypes.ConfigError{Msg: "flux: invalid settings", Err: err}
 	}
 	fs := decoded.(Settings)
 
