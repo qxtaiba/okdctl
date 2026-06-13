@@ -71,7 +71,7 @@ func (p *Phase) bootstrapOC(ctx context.Context, downloadDir string) (string, er
 	}
 
 	if err := download.ExtractTarGz(ctx, archivePath, downloadDir,
-		download.WithCleanupArchive(true),
+		download.WithExtractCleanupArchive(true),
 		download.WithExtractLogger(p.Log),
 	); err != nil {
 		return "", &errtypes.NetworkError{Msg: "failed to extract bootstrap oc", Err: err}
@@ -156,7 +156,7 @@ func extractReleaseTarballs(ctx context.Context, destDir string, logger *slog.Lo
 	}
 	for _, archivePath := range matches {
 		if err := download.ExtractTarGz(ctx, archivePath, destDir,
-			download.WithCleanupArchive(true),
+			download.WithExtractCleanupArchive(true),
 		); err != nil {
 			return fmt.Errorf("extract %s: %w", filepath.Base(archivePath), err)
 		}

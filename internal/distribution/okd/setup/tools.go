@@ -242,8 +242,8 @@ func (p *Phase) installBinary(ctx context.Context, spec *binaryInstallSpec) erro
 		}
 		defer func() { _ = os.RemoveAll(extractDir) }()
 		if err := download.ExtractTarGz(ctx, tempFile, extractDir,
-			download.WithStripComponents(spec.stripComponents),
-			download.WithCleanupArchive(true),
+			download.WithExtractStripComponents(spec.stripComponents),
+			download.WithExtractCleanupArchive(true),
 			download.WithExtractLogger(p.Log),
 		); err != nil {
 			return fmt.Errorf("failed to extract %s: %w", spec.name, err)

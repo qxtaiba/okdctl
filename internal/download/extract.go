@@ -35,13 +35,13 @@ func WithExtractChecksum(sum string) ExtractOption {
 	return func(c *extractConfig) { c.expectedChecksum = sum }
 }
 
-// WithStripComponents removes n leading path components from archive entries, like tar --strip-components.
-func WithStripComponents(n int) ExtractOption {
+// WithExtractStripComponents removes n leading path components from archive entries, like tar --strip-components.
+func WithExtractStripComponents(n int) ExtractOption {
 	return func(c *extractConfig) { c.stripComponents = n }
 }
 
-// WithCleanupArchive removes the archive file after successful extraction.
-func WithCleanupArchive(v bool) ExtractOption {
+// WithExtractCleanupArchive removes the archive file after successful extraction.
+func WithExtractCleanupArchive(v bool) ExtractOption {
 	return func(c *extractConfig) { c.cleanupArchive = v }
 }
 
