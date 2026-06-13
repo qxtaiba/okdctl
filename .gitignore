@@ -88,6 +88,7 @@ certs/
 # CLI generated files
 okdctl.yaml
 .okdctl/
+.okdctl.lock
 .deploy-state-*.json
 
 # Test artifacts

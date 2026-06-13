@@ -90,8 +90,12 @@ func TestAcquireAndRelease(t *testing.T) {
 	}
 
 	lock.Release()
-	if _, statErr := os.Stat(lockPath); !os.IsNotExist(statErr) {
-		t.Fatal("lock file not removed after Release")
+	body, statErr := os.ReadFile(lockPath)
+	if statErr != nil {
+		t.Fatalf("lock file must persist after Release, got: %v", statErr)
+	}
+	if len(body) != 0 {
+		t.Fatalf("lock file body must be empty after Release, got: %q", string(body))
 	}
 }
 
