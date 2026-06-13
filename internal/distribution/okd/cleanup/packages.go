@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/logutil"
@@ -43,9 +44,9 @@ func InstalledBinaries() []string {
 // Packages removes dnf packages and tool binaries installed during setup.
 // Individual failures are logged and aggregated; the function returns an
 // error only if at least one removal failed. Empty binDir falls back to
-// phase.DefaultBinDir.
+// config.DefaultBinDir.
 func Packages(ctx context.Context, binDir string, logger *slog.Logger) error {
-	binDir = phase.BinDirOrDefault(binDir)
+	binDir = config.BinDirOrDefault(binDir)
 	logger = logutil.OrNop(logger)
 	if err := refuseCriticalPath(binDir); err != nil {
 		return &errtypes.ClusterError{Msg: "refusing binary removal from critical path"}

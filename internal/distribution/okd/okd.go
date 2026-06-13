@@ -158,7 +158,7 @@ func (p *Provisioner) Prepare(ctx context.Context, cfg *config.Config, opts Prep
 		phase.WithLogger(p.logger),
 		phase.WithRecorder(p.recorder),
 	)
-	setupPhase.BinDir = phase.ResolveBinDir(cfg)
+	setupPhase.BinDir = config.ResolveBinDir(cfg)
 	return setupPhase.Execute(ctx, cfg, &setupOpts)
 }
 

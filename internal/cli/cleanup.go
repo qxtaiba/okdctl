@@ -6,6 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/cleanup"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/executor"
@@ -125,7 +126,7 @@ func runCleanup(cmd *cobra.Command, _ []string) error {
 		ClusterName:    cfg.Cluster.Name,
 		PreserveConfig: false,
 		RemovePackages: false,
-		BinDir:         phase.ResolveBinDir(cfg),
+		BinDir:         config.ResolveBinDir(cfg),
 	}
 
 	tui.Info("cleaning up cluster artifacts...")

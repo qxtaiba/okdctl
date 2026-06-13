@@ -7,14 +7,12 @@ package phase
 
 import (
 	"log/slog"
-	"os"
 	"path/filepath"
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/distribution"
 	"github.com/qxtaiba/okdctl/internal/executor"
 	"github.com/qxtaiba/okdctl/internal/logutil"
-	"github.com/qxtaiba/okdctl/internal/system"
 )
 
 // BaseOptions is the common option set every phase's own Options embeds —
@@ -47,74 +45,12 @@ const (
 	DefaultHAProxyBackupPath = "/etc/haproxy/haproxy.cfg.backup"
 	// DefaultHTTPServerRoot is where the bastion's httpd serves ignition.
 	DefaultHTTPServerRoot = "/var/www/html"
-	// DefaultBinDir is where setup installs okd/terraform/yq/helm/sops.
-	DefaultBinDir = "/usr/local/bin"
 	// DefaultDNSMasqConfigDir is where per-cluster dnsmasq fragments live.
 	DefaultDNSMasqConfigDir = "/etc/dnsmasq.d"
 	// DefaultProxmoxISODir is the default Proxmox-managed path where downloaded
 	// CoreOS ISOs are uploaded via scp and referenced by `qm importdisk`.
 	DefaultProxmoxISODir = "/var/lib/vz/template/iso"
 )
-
-// ResolveBinDir returns the tool-install directory: OKDCTL_BIN_DIR env >
-// cfg.Deployment.BinDir > DefaultBinDir. cfg may be nil; non-absolute values
-// fall through. Paths are cleaned but `..` traversal is not rejected. See
-// BinDirOrDefault for the full three-function surface rationale.
-func ResolveBinDir(cfg *config.Config) string {
-	if v := envBinDir(); v != "" {
-		return v
-	}
-	if cfg != nil && cfg.Deployment.BinDir != "" {
-		if dir, ok := validateAndClean(cfg.Deployment.BinDir); ok {
-			return dir
-		}
-	}
-	return DefaultBinDir
-}
-
-// PreflightBinDir returns the env-only bin dir (OKDCTL_BIN_DIR > DefaultBinDir);
-// the config is not yet parsed when main.preflight runs. See BinDirOrDefault
-// for the full three-function surface rationale.
-func PreflightBinDir() string {
-	if v := envBinDir(); v != "" {
-		return v
-	}
-	return DefaultBinDir
-}
-
-// BinDirOrDefault returns s when non-empty, else DefaultBinDir.
-// Scaffolding (api:0139cb3f): together with PreflightBinDir and ResolveBinDir
-// this forms the three-function bin-dir-resolution surface; each function
-// consults a different input source (struct field, env+config, env-only). Call sites
-// in setup and cleanup use BinDirOrDefault as defense-in-depth — the field
-// is already populated by ResolveBinDir at construction, but the explicit
-// fallback documents that zero-value is safe and makes the resolution path
-// auditable at each call site without tracing back to the constructor.
-func BinDirOrDefault(s string) string {
-	if s == "" {
-		return DefaultBinDir
-	}
-	return s
-}
-
-func envBinDir() string {
-	v := os.Getenv("OKDCTL_BIN_DIR")
-	if v == "" {
-		return ""
-	}
-	if dir, ok := validateAndClean(v); ok {
-		return dir
-	}
-	return ""
-}
-
-func validateAndClean(raw string) (string, bool) {
-	expanded := system.ExpandPath(raw)
-	if err := config.ValidateBinDir(expanded); err != nil {
-		return "", false
-	}
-	return filepath.Clean(expanded), true
-}
 
 // ExternalToolBinaries returns the names of tool binaries setup installs
 // into BinDir. Declared in phase/ (not setup/) so cleanup can reference the

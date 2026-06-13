@@ -13,7 +13,6 @@ import (
 	_ "github.com/qxtaiba/okdctl/internal/addon/catalog" // Register all built-in addons
 	"github.com/qxtaiba/okdctl/internal/cli"
 	"github.com/qxtaiba/okdctl/internal/config"
-	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/system"
 	"github.com/qxtaiba/okdctl/internal/tui"
 )
@@ -41,7 +40,7 @@ func preflight() {
 			cli.DeferWarn(func() { tui.Warn("OKDCTL_BIN_DIR ignored", tui.LF("value", v), tui.LF("err", detail)) })
 		}
 	}
-	binDir := phase.PreflightBinDir()
+	binDir := config.PreflightBinDir()
 	path := os.Getenv("PATH")
 	if !slices.Contains(filepath.SplitList(path), binDir) {
 		if err := os.Setenv("PATH", binDir+":"+path); err != nil {
