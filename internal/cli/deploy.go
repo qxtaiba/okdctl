@@ -10,6 +10,7 @@ import (
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/credentials"
+	"github.com/qxtaiba/okdctl/internal/distribution"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/install"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/postinstall"
@@ -202,39 +203,37 @@ func runDeployDryRun(ctx context.Context, cfg *config.Config, w io.Writer) error
 // deployDryRunSteps returns the ID/Name for every step across setup, install, and
 // postinstall phases in execution order.
 func deployDryRunSteps() []DryRunStep {
-	return []DryRunStep{
-		{ID: string(setup.StepInstallPackages), Name: "install system packages"},
-		{ID: string(setup.StepInstallTools), Name: "install external tools"},
-		{ID: string(setup.StepEnsureWorkDir), Name: "ensure work directory"},
-		{ID: string(setup.StepDownloadTools), Name: "download okd tools"},
-		{ID: string(setup.StepGenerateConfig), Name: "generate install config"},
-		{ID: string(setup.StepGenerateManifests), Name: "generate manifests"},
-		{ID: string(setup.StepGenerateKubeVIP), Name: "generate kube-vip manifests"},
-		{ID: string(setup.StepInjectManifests), Name: "inject custom manifests"},
-		{ID: string(setup.StepCompactCluster), Name: "inject compact cluster manifests"},
-		{ID: string(setup.StepGenerateIgnition), Name: "generate ignition"},
-		{ID: string(setup.StepInstallApache), Name: "install apache"},
-		{ID: string(setup.StepDeployIgnition), Name: "deploy ignition"},
-		{ID: string(setup.StepVerifyWebServer), Name: "verify web server"},
-		{ID: string(setup.StepBuildISOs), Name: "build isos"},
-		{ID: string(setup.StepUploadISOs), Name: "upload isos"},
-		{ID: string(setup.StepGenerateTfvars), Name: "generate terraform variables"},
-		{ID: string(setup.StepConfigureHAProxy), Name: "configure haproxy"},
-		{ID: string(setup.StepConfigureFirewall), Name: "configure firewall"},
-		{ID: string(setup.StepConfigureDNS), Name: "configure dns"},
-		{ID: string(install.StepDeployInfra), Name: "deploy infrastructure"},
-		{ID: string(install.StepWaitBootstrap), Name: "wait for bootstrap"},
-		{ID: string(install.StepStartWorkers), Name: "start worker nodes"},
-		{ID: string(install.StepSetupKubeconfig), Name: "setup kubeconfig"},
-		{ID: string(install.StepValidateAccess), Name: "validate cluster access"},
-		{ID: string(install.StepMonitorInstall), Name: "monitor installation"},
-		{ID: string(install.StepSetupAccess), Name: "setup cluster access"},
-		{ID: string(postinstall.StepVerifyHealth), Name: "verify cluster health"},
-		{ID: string(postinstall.StepCleanupBootstrap), Name: "cleanup bootstrap vm"},
-		{ID: string(postinstall.StepVerifyKubeVIP), Name: "verify kube-vip"},
-		{ID: string(postinstall.StepDeployProductionDNS), Name: "deploy production dns"},
-		{ID: string(postinstall.StepInstallAddons), Name: "install addons"},
+	phases := []struct {
+		order []distribution.StepID
+		names map[distribution.StepID]string
+	}{
+		{[]distribution.StepID{
+			setup.StepInstallPackages, setup.StepInstallTools, setup.StepEnsureWorkDir,
+			setup.StepDownloadTools, setup.StepGenerateConfig, setup.StepGenerateManifests,
+			setup.StepGenerateKubeVIP, setup.StepInjectManifests, setup.StepCompactCluster,
+			setup.StepGenerateIgnition, setup.StepInstallApache, setup.StepDeployIgnition,
+			setup.StepVerifyWebServer, setup.StepBuildISOs, setup.StepUploadISOs,
+			setup.StepGenerateTfvars, setup.StepConfigureHAProxy, setup.StepConfigureFirewall,
+			setup.StepConfigureDNS,
+		}, setup.StepNames},
+		{[]distribution.StepID{
+			install.StepDeployInfra, install.StepWaitBootstrap, install.StepStartWorkers,
+			install.StepSetupKubeconfig, install.StepValidateAccess, install.StepMonitorInstall,
+			install.StepSetupAccess,
+		}, install.StepNames},
+		{[]distribution.StepID{
+			postinstall.StepVerifyHealth, postinstall.StepCleanupBootstrap,
+			postinstall.StepVerifyKubeVIP, postinstall.StepDeployProductionDNS,
+			postinstall.StepInstallAddons,
+		}, postinstall.StepNames},
 	}
+	var out []DryRunStep
+	for _, ph := range phases {
+		for _, id := range ph.order {
+			out = append(out, DryRunStep{ID: string(id), Name: ph.names[id]})
+		}
+	}
+	return out
 }
 
 func saveConfig(cfg *config.Config, path string, w io.Writer) error {
