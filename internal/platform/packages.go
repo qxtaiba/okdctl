@@ -22,6 +22,10 @@ type PackageManager interface {
 	AddRepo(ctx context.Context, name, url string, logger *slog.Logger) error
 }
 
+// aptListDir is the directory where Debian apt repository list files are
+// written. Overridden by tests to avoid requiring root access.
+var aptListDir = "/etc/apt/sources.list.d"
+
 // Manager is the single PackageManager implementation. The family field
 // selects between RHEL (dnf/rpm) and Debian (apt-get/dpkg) binaries and
 // drives the AddRepo branch.
@@ -123,7 +127,7 @@ func (m *Manager) AddRepo(ctx context.Context, name, url string, logger *slog.Lo
 	}
 
 	listContent := fmt.Sprintf("deb [arch=%s] %s any main\n", DownloadArch(), url)
-	listPath := fmt.Sprintf("/etc/apt/sources.list.d/%s.list", name)
+	listPath := fmt.Sprintf("%s/%s.list", aptListDir, name)
 
 	tmpPath, err := system.WriteTempFile("apt-repo", 0o644, func(f *os.File) error {
 		_, err := f.WriteString(listContent)
