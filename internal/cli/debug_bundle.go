@@ -361,10 +361,7 @@ func tarDirInto(addStream func(*tar.Header, io.Reader) error, srcDir, bundlePref
 			return fmt.Errorf("stat %s: %w", path, infoErr)
 		}
 		actualSize := info.Size()
-		cappedSize := actualSize
-		if cappedSize > maxBundleFileBytes {
-			cappedSize = maxBundleFileBytes
-		}
+		cappedSize := min(actualSize, maxBundleFileBytes)
 		f, openFErr := root.Open(rel)
 		if openFErr != nil {
 			return fmt.Errorf("open %s: %w", path, openFErr)
