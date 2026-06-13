@@ -229,6 +229,55 @@ func TestRedactHandler_NilURLPassesThrough(t *testing.T) {
 	}
 }
 
+func TestRedactableArgv_PlainTokensPassThrough(t *testing.T) {
+	argv := RedactableArgv([]string{"install", "--verbose", "--output=json"})
+	got, ok := argv.Redacted().(string)
+	if !ok {
+		t.Fatalf("Redacted() returned %T, want string", argv.Redacted())
+	}
+	if got != "install --verbose --output=json" {
+		t.Errorf("argv = %q; want %q", got, "install --verbose --output=json")
+	}
+}
+
+func TestRedactableArgv_SecretTokenScrubbed(t *testing.T) {
+	cases := []struct {
+		tok  string
+		want string
+	}{
+		{"--token=abc123", "--token=" + Redacted},
+		{"--password=hunter2", "--password=" + Redacted},
+		{"token=abc123", "token=" + Redacted},
+		{"--api_key=xyz", "--api_key=" + Redacted},
+		{"--verbose", "--verbose"},
+		{"install", "install"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.tok, func(t *testing.T) {
+			if got := scrubArgvToken(tc.tok); got != tc.want {
+				t.Errorf("scrubArgvToken(%q) = %q; want %q", tc.tok, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestRedactableArgv_HandlerDispatch(t *testing.T) {
+	argv := RedactableArgv([]string{"install", "--token=secret99", "--verbose"})
+	var buf bytes.Buffer
+	jsonLogger(&buf).Info("okdctl: started", slog.Any("argv", argv))
+	m := parseOne(t, &buf)
+	got, ok := m["argv"].(string)
+	if !ok {
+		t.Fatalf("argv is %T; want string", m["argv"])
+	}
+	if strings.Contains(got, "secret99") {
+		t.Errorf("secret value found in log output: %q", got)
+	}
+	if !strings.Contains(got, Redacted) {
+		t.Errorf("expected Redacted sentinel in argv output: %q", got)
+	}
+}
+
 // redactor satisfies the inline interface{ Redacted() any } that
 // redactAny matches at redact.go:107.
 type redactor struct{ public string }
