@@ -119,6 +119,37 @@ func redactAny(v any) any {
 	}
 }
 
+// RedactableArgv is a named slice type for process argv (os.Args[1:]). Pass
+// it as slog.Any("argv", logutil.RedactableArgv(os.Args[1:])) so RedactHandler
+// dispatches through Redacted() any rather than logging a pre-joined string.
+// Scrubbing runs before joining: any --key=value or key=value token whose key
+// matches KeyIsSecret has its value replaced with the Redacted sentinel,
+// guarding against future flags that accept credentials.
+type RedactableArgv []string
+
+// Redacted scrubs credential-bearing key=value tokens in the argv slice and
+// returns the joined result as a string.
+func (a RedactableArgv) Redacted() any {
+	out := make([]string, len(a))
+	for i, tok := range a {
+		out[i] = scrubArgvToken(tok)
+	}
+	return strings.Join(out, " ")
+}
+
+func scrubArgvToken(tok string) string {
+	bare := strings.TrimPrefix(tok, "--")
+	eq := strings.IndexByte(bare, '=')
+	if eq < 0 {
+		return tok
+	}
+	if !KeyIsSecret(bare[:eq]) {
+		return tok
+	}
+	prefix := tok[:len(tok)-len(bare)+eq+1]
+	return prefix + Redacted
+}
+
 // RedactableStderr is a named string type for subprocess stderr text. Pass
 // it as slog.Any("stderr", rs) — the attr is then KindAny and routes through
 // RedactHandler's Redacted() any dispatch instead of leaving the raw string
