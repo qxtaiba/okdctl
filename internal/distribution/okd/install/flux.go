@@ -21,11 +21,9 @@ var invokingUserHomeDirFn = system.InvokingUserHomeDir
 // ValidateClusterAccess runs "oc whoami" to confirm the kubeconfig points at
 // a live cluster and logs the server version when available.
 func (p *Phase) ValidateClusterAccess(ctx context.Context) error {
-	cmdRunner := p.Exec
-
 	p.Log.Info("cluster: validating access with oc whoami")
 
-	result, err := cmdRunner.RunChecked(ctx, "oc", "whoami")
+	result, err := p.Exec.RunChecked(ctx, "oc", "whoami")
 	if err != nil {
 		return &errtypes.ClusterError{Msg: "failed to run oc whoami", Err: err}
 	}
@@ -37,7 +35,7 @@ func (p *Phase) ValidateClusterAccess(ctx context.Context) error {
 
 	p.Log.Info("cluster: authenticated", "user", user)
 
-	result, err = cmdRunner.Run(ctx, "oc", "version")
+	result, err = p.Exec.Run(ctx, "oc", "version")
 	if err == nil && result.ExitCode == 0 {
 		for line := range strings.Lines(result.Stdout) {
 			if strings.HasPrefix(line, "Server Version:") {
