@@ -228,7 +228,6 @@ func modifyPort(ctx context.Context, backend Backend, port Port, permanent bool,
 		}
 		// Port/protocol validated by validatePort above; args are an argv
 		// slice (no shell interpolation).
-		// Port/protocol validated by validatePort above; argv slice (no shell).
 		return system.RunCaptured(ctx, args[0], args[1:]...)
 
 	case UFW:
