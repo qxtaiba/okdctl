@@ -16,9 +16,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/logutil"
 )
 
-// Client is a thin kubectl/oc wrapper used by the install and
-// postinstall phases for CSR approval, readiness checks, and resource
-// queries.
+// Client is a kubectl/oc wrapper for the install and postinstall phases.
 type Client struct {
 	CLI string
 
