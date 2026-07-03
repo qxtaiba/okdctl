@@ -325,15 +325,7 @@ func (t *Executor) destroyWithPlan(ctx context.Context, opts DestroyOptions) err
 		return fmt.Errorf("terraform destroy plan failed: %w (re-run with an explicit fix or pass UsePlan=false to skip the plan step)", planErr)
 	}
 
-	applyOpts := ApplyOptions{
-		PlanFile: planFile,
-	}
-
-	if err := t.Apply(ctx, applyOpts); err != nil {
-		return err
-	}
-
-	return nil
+	return t.Apply(ctx, ApplyOptions{PlanFile: planFile})
 }
 
 // destroyDirect runs terraform destroy without an intermediate plan file.
