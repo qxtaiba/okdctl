@@ -236,12 +236,9 @@ func parseLockID(lockFile string) string {
 	return info.ID
 }
 
-// Plan runs "terraform plan" with the options in opts. When Destroy is true
-// the plan is a destruction plan.
-func (t *Executor) Plan(ctx context.Context, opts PlanOptions) error {
+func (t *Executor) planArgs(opts PlanOptions) []string {
 	args := []string{"plan", "-lock-timeout=" + defaultLockTimeout}
 	args = append(args, t.buildVarArgs(opts.VarFile, opts.Vars)...)
-
 	if opts.Destroy {
 		args = append(args, "-destroy")
 	}
@@ -251,27 +248,20 @@ func (t *Executor) Plan(ctx context.Context, opts PlanOptions) error {
 	for _, target := range opts.Targets {
 		args = append(args, "-target="+target)
 	}
+	return args
+}
 
-	return t.run(ctx, args...)
+// Plan runs "terraform plan" with the options in opts. When Destroy is true
+// the plan is a destruction plan.
+func (t *Executor) Plan(ctx context.Context, opts PlanOptions) error {
+	return t.run(ctx, t.planArgs(opts)...)
 }
 
 // PlanStreamed runs "terraform plan" streaming stdout and stderr directly to the
 // terminal. Use instead of Plan when the operator must see the plan output —
 // Plan captures into internal buffers and only surfaces stderr on failure.
 func (t *Executor) PlanStreamed(ctx context.Context, opts PlanOptions) error {
-	args := []string{"plan", "-lock-timeout=" + defaultLockTimeout}
-	args = append(args, t.buildVarArgs(opts.VarFile, opts.Vars)...)
-
-	if opts.Destroy {
-		args = append(args, "-destroy")
-	}
-	if opts.OutputPlanFile != "" {
-		args = append(args, "-out="+opts.OutputPlanFile)
-	}
-	for _, target := range opts.Targets {
-		args = append(args, "-target="+target)
-	}
-
+	args := t.planArgs(opts)
 	t.logger.Info("terraform: running plan (streaming to terminal)")
 	return t.exec.RunInteractive(ctx, "terraform", args...)
 }
