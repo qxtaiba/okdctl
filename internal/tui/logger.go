@@ -121,7 +121,7 @@ func (h *stderrHandler) WithGroup(name string) slog.Handler {
 // It does not auto-update if SetRunID is called after SimpleLogger
 // returns. Callers that need run_id must be invoked after SetRunID.
 func SimpleLogger() *slog.Logger {
-	return slog.New(logutil.NewRedactHandler(&stderrHandler{h: stderrLogger.Load()}))
+	return buildStderrSlog()
 }
 
 // ConfigureLoggers applies level, formatter, and writer settings to the
