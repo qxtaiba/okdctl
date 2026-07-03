@@ -50,6 +50,16 @@ func (e *SubprocessError) Redacted() any {
 	return e.Bin + ": " + e.Err.Error()
 }
 
+// configureCapturedCmd applies this package's shared subprocess policy:
+// SIGTERM soft-cancel (SIGINT is reserved for terraform's documented
+// state-lock release path), a 30s WaitDelay, and DefaultEnvAllowlist
+// filtering so caller shell tokens never reach privileged children.
+func configureCapturedCmd(cmd *exec.Cmd) {
+	cmd.Cancel = func() error { return cmd.Process.Signal(syscall.SIGTERM) }
+	cmd.WaitDelay = 30 * time.Second
+	cmd.Env = executor.FilterParentEnv(executor.DefaultEnvAllowlist)
+}
+
 // RunCaptured runs bin with args, capturing stderr into the returned error on
 // non-zero exit. Context cancellation is respected; stdout is discarded
 // (callers that need it should use internal/executor.Executor instead).
@@ -58,11 +68,7 @@ func (e *SubprocessError) Redacted() any {
 // tokens exported by the caller do not reach privileged child processes.
 func RunCaptured(ctx context.Context, bin string, args ...string) error {
 	cmd := exec.CommandContext(ctx, bin, args...)
-	// SIGTERM (not SIGINT) is the correct soft-cancel for non-terraform binaries;
-	// SIGINT is reserved for terraform's documented state-lock release path.
-	cmd.Cancel = func() error { return cmd.Process.Signal(syscall.SIGTERM) }
-	cmd.WaitDelay = 30 * time.Second
-	cmd.Env = executor.FilterParentEnv(executor.DefaultEnvAllowlist)
+	configureCapturedCmd(cmd)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
@@ -83,11 +89,7 @@ func RunCaptured(ctx context.Context, bin string, args ...string) error {
 // env is filtered through executor.DefaultEnvAllowlist.
 func OutputCaptured(ctx context.Context, bin string, args ...string) ([]byte, error) {
 	cmd := exec.CommandContext(ctx, bin, args...)
-	// SIGTERM (not SIGINT) is the correct soft-cancel for non-terraform binaries;
-	// SIGINT is reserved for terraform's documented state-lock release path.
-	cmd.Cancel = func() error { return cmd.Process.Signal(syscall.SIGTERM) }
-	cmd.WaitDelay = 30 * time.Second
-	cmd.Env = executor.FilterParentEnv(executor.DefaultEnvAllowlist)
+	configureCapturedCmd(cmd)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 
