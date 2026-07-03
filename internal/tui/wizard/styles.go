@@ -15,10 +15,6 @@ var (
 
 	WizardBorderStyle = lipgloss.NewStyle().
 				Border(lipgloss.RoundedBorder()).
-				BorderTop(true).
-				BorderRight(true).
-				BorderBottom(true).
-				BorderLeft(true).
 				BorderForeground(tui.ColorSlate600)
 
 	HeaderStyle = lipgloss.NewStyle().
