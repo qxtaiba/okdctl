@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"os"
 	osExec "os/exec"
 	"path/filepath"
@@ -22,7 +21,7 @@ import (
 // SIGTERM-then-SIGKILL escalation natively; the returned kill func remains
 // for API compatibility with injected stubs.
 // con:ae5b624c — canonical cmd.Cancel pattern; sub:7b2829bb mirrors this shape.
-func defaultStartMonitorCmd(ctx context.Context, clusterDir string, _ *slog.Logger) (done <-chan error, kill func(), err error) {
+func defaultStartMonitorCmd(ctx context.Context, clusterDir string) (done <-chan error, kill func(), err error) {
 	cmd := osExec.CommandContext(ctx, "openshift-install", "wait-for", "install-complete", "--dir", clusterDir, "--log-level=debug")
 	// Filter env so openshift-install does not inherit AWS_*/GCP_*/AZURE_* etc. from the user shell.
 	cmd.Env = executor.FilterParentEnv(executor.DefaultEnvAllowlist)
@@ -100,10 +99,7 @@ func (p *Phase) MonitorInstallation(ctx context.Context, clusterDir string, opts
 
 	startCmd := p.startMonitorCmd
 	if startCmd == nil {
-		log := p.Log
-		startCmd = func(ctx context.Context, dir string) (<-chan error, func(), error) {
-			return defaultStartMonitorCmd(ctx, dir, log)
-		}
+		startCmd = defaultStartMonitorCmd
 	}
 
 	stopSpinner := p.Reporter("monitoring cluster operators")
