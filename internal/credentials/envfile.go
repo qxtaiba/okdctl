@@ -128,8 +128,8 @@ func LoadEnvFile(path string) error {
 	return loadErr
 }
 
-// loadEnvFileOnce contains the actual load logic. It is not safe to call
-// concurrently and must only be invoked via the LoadEnvFile sync.Once.
+// loadEnvFileOnce is not safe to call concurrently and must only be
+// invoked via the LoadEnvFile sync.Once.
 func loadEnvFileOnce(path string) error {
 	// Refuse to load a .env that any other user can read. Proxmox tokens
 	// end up in here — a world-readable file defeats the whole point of
