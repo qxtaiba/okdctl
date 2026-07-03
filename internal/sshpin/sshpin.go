@@ -50,9 +50,8 @@ func runKeyscan(ctx context.Context, host string) (string, error) {
 	return string(out), nil
 }
 
-// parseAndMatch is the testable core: inspects keyscanOut line by line,
-// parses each key, and compares its fingerprint against expected. Separated
-// from Verify so tests can pass a fixed string without spawning a subprocess.
+// parseAndMatch inspects keyscanOut line by line, parses each key, and
+// compares its fingerprint against expected.
 func parseAndMatch(keyscanOut, host, expected string, requirePinned bool, log *slog.Logger) (string, error) {
 	var observed []string
 
