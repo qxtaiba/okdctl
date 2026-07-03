@@ -140,7 +140,7 @@ func listProxmoxVMIDs(ctx context.Context, p *RemoteISOParams) ([]int, error) {
 	if err != nil {
 		return nil, fmt.Errorf("ssh pvesh qemu list failed: %w", err)
 	}
-	return parseVMIDsFromSummary([]byte(result.stdout))
+	return parseVMIDsFromSummary([]byte(result))
 }
 
 // vmConfigReferencesISO fetches the per-VM config for vmid and returns true
@@ -151,7 +151,7 @@ func vmConfigReferencesISO(ctx context.Context, p *RemoteISOParams, vmid int, is
 	if err != nil {
 		return true, fmt.Errorf("ssh pvesh qemu config failed for vmid %d: %w", vmid, err)
 	}
-	found, parseErr := configDevicesReferenceISO([]byte(result.stdout), isoBase)
+	found, parseErr := configDevicesReferenceISO([]byte(result), isoBase)
 	if parseErr != nil {
 		return true, fmt.Errorf("vmid %d: %w", vmid, parseErr)
 	}
