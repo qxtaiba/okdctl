@@ -455,11 +455,8 @@ func isValidProvider(p ProviderType) bool {
 }
 
 func getMinMemoryForDistribution(d DistributionType) int {
-	minMemory := map[DistributionType]int{
-		DistributionOKD: MinMemoryMBControlPlaneOKD,
-	}
-	if mem, ok := minMemory[d]; ok {
-		return mem
+	if d == DistributionOKD {
+		return MinMemoryMBControlPlaneOKD
 	}
 	return DefaultMinMemoryMB
 }
