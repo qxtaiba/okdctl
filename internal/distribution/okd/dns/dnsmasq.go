@@ -23,13 +23,13 @@ const dnsmasqService = "dnsmasq"
 // Tests override this var to redirect writes to a t.TempDir().
 var dnsmasqConfigDir = phase.DefaultDNSMasqConfigDir
 
-// validateDnsmasqConfigFn and restartDnsmasqFn are package-level vars so
-// tests can inject fakes without a real dnsmasq binary on PATH.
 // resolvedConf is the systemd-resolved drop-in written by ConfigureSystemResolver.
 // Tests override this var to redirect operations to a t.TempDir().
 var resolvedConf = "/etc/systemd/resolved.conf.d/dnsmasq.conf"
 
 var (
+	// validateDnsmasqConfigFn and restartDnsmasqFn are package-level vars so
+	// tests can inject fakes without a real dnsmasq binary on PATH.
 	validateDnsmasqConfigFn = ValidateDnsmasqConfig
 	restartDnsmasqFn        = RestartDnsmasq
 	// removeAllFn is the os.RemoveAll indirection used by RestoreSystemResolver.
