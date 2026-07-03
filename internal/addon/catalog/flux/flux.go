@@ -32,6 +32,11 @@ const (
 	defaultGitRepoSyncTimeout = 3 * time.Minute
 )
 
+const (
+	defaultBranch = "main"
+	defaultPath   = "kubernetes/clusters/production"
+)
+
 // ProviderID is the canonical addon identity string for FluxCD. Wizard
 // defaults and addon DefaultSettings both reference this constant so the
 // two cannot silently diverge.
@@ -275,8 +280,8 @@ func (f *Flux) RequiredTools() []addon.ToolSpec {
 func (f *Flux) DefaultSettings() map[string]string {
 	return map[string]string{
 		SettingProvider:          ProviderID,
-		SettingBranch:            "main",
-		SettingPath:              "kubernetes/clusters/production",
+		SettingBranch:            defaultBranch,
+		SettingPath:              defaultPath,
 		SettingControllerTimeout: "300",
 		SettingGitSyncTimeout:    "180",
 	}
@@ -321,8 +326,8 @@ func (f *Flux) ValidateSettings(settings map[string]string) []string {
 func (f *Flux) WizardFields() []addon.WizardField {
 	return []addon.WizardField{
 		{Key: SettingRepository, Label: "Repository URL", Help: "ssh://git@github.com/org/repo.git (SSH deploy-key auth only; no https://user:token@ URLs)", Required: true},
-		{Key: SettingBranch, Label: "Branch", Default: "main", Help: "Branch to sync"},
-		{Key: SettingPath, Label: "Path", Default: "kubernetes/clusters/production", Help: "Path within repo"},
+		{Key: SettingBranch, Label: "Branch", Default: defaultBranch, Help: "Branch to sync"},
+		{Key: SettingPath, Label: "Path", Default: defaultPath, Help: "Path within repo"},
 	}
 }
 

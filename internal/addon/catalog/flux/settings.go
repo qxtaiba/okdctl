@@ -15,8 +15,8 @@ type Settings struct {
 func (f *Flux) DecodeSettings(settings map[string]string) (any, error) {
 	return Settings{
 		Repository:         settings[SettingRepository],
-		Branch:             orDefault(settings[SettingBranch], "main"),
-		Path:               orDefault(settings[SettingPath], "kubernetes/clusters/production"),
+		Branch:             orDefault(settings[SettingBranch], defaultBranch),
+		Path:               orDefault(settings[SettingPath], defaultPath),
 		GitHostFingerprint: settings[SettingGitHostFingerprint],
 		AcceptHostKey:      settings[SettingAcceptHostKey] == "true",
 	}, nil
