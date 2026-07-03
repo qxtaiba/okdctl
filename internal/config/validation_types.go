@@ -70,9 +70,7 @@ func (r *ValidationResult) Error() string {
 // set used during interactive editing.
 type ValidationScope uint64
 
-// Validation scope flags. Combine with bitwise-OR; ScopeAll enables
-// every validator, ScopeQuick runs the required/enum/networking set
-// used during interactive editing.
+// Validation scope flags. Combine with bitwise-OR.
 const (
 	ScopeRequired ValidationScope = 1 << iota
 	ScopeNetworking
