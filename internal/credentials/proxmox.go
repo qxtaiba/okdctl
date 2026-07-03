@@ -243,7 +243,6 @@ func GetProxmoxCredentials(cfg *config.Config) *ProxmoxCredentials {
 
 	configHadCreds := configHasCredentials(px)
 
-	// Priority 1: Environment variables (includes values loaded from .env file)
 	if token := os.Getenv(envProxmoxAPIToken); token != "" {
 		creds.APIToken = []byte(token)
 		applyEnvSource(creds, configHadCreds)
