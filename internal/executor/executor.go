@@ -280,18 +280,18 @@ func (e *Executor) run(ctx context.Context, stdin io.Reader, name string, args .
 		Truncated: rout.dropped,
 	}
 
+	var retErr error
 	if err != nil {
 		var exitErr *exec.ExitError
 		if errors.As(err, &exitErr) {
 			result.ExitCode = exitErr.ExitCode()
 		} else {
-			e.logger.Debug("exec: completed", "cmd", name, "exit", result.ExitCode, "duration", result.Duration)
-			return result, err
+			retErr = err
 		}
 	}
 
 	e.logger.Debug("exec: completed", "cmd", name, "exit", result.ExitCode, "duration", result.Duration)
-	return result, nil
+	return result, retErr
 }
 
 // RunStreamed executes a command, piping its stdout and stderr live to
