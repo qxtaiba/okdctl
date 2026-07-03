@@ -181,7 +181,7 @@ func (b *StepBuilder) Build() (ProvisioningStep, error) {
 	if b == nil {
 		return nil, fmt.Errorf("StepBuilder is nil")
 	}
-	return &builtStep{builder: b, reRunSafe: b.reRunSafe}, nil
+	return &builtStep{builder: b}, nil
 }
 
 // MustBuild is Build without error return; it panics if the builder is
@@ -264,14 +264,13 @@ func BuildSteps(defs []StepDef) []ProvisioningStep {
 }
 
 type builtStep struct {
-	builder   *StepBuilder
-	reRunSafe ReRunSafety
+	builder *StepBuilder
 }
 
 // ReRunSafe returns the idempotency declaration for this step, propagated
 // from StepDef.ReRunSafe by BuildSteps. A future Orchestrator change may
 // branch on this to skip ReRunSafeNo steps on recovery reruns.
-func (s *builtStep) ReRunSafe() ReRunSafety { return s.reRunSafe }
+func (s *builtStep) ReRunSafe() ReRunSafety { return s.builder.reRunSafe }
 
 func (s *builtStep) ID() StepID { return s.builder.id }
 
