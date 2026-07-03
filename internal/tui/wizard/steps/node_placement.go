@@ -107,7 +107,6 @@ func (s *NodePlacementStep) buildInnerStep(disc *proxmoxDiscovery, nodeNames []s
 
 	var sections []wizard.SectionDefinition
 
-	// Infrastructure section
 	if disc != nil {
 		var infraFields []wizard.FieldDefinition
 
@@ -155,10 +154,8 @@ func (s *NodePlacementStep) buildInnerStep(disc *proxmoxDiscovery, nodeNames []s
 		}
 	}
 
-	// Node placement sections
 	defaultNode := nodeNames[0]
 
-	// Bootstrap
 	sections = append(sections, wizard.SectionDefinition{
 		Title: "bootstrap",
 		Fields: []wizard.FieldDefinition{{

@@ -91,7 +91,7 @@ func (f *SelectField) SetWidth(width int) {
 
 // Validate always returns nil because selection is constrained to Options.
 func (f *SelectField) Validate() error {
-	return nil // always valid — constrained to options
+	return nil
 }
 
 // Error always returns nil: SelectField has no validator that can fail.
@@ -104,7 +104,6 @@ func (f *SelectField) Error() error {
 func (f *SelectField) SetOptions(options []string) {
 	current := f.Value()
 	f.Options = options
-	// Preserve selection by name
 	f.selected = 0
 	for i, opt := range options {
 		if opt == current {
@@ -146,7 +145,6 @@ func (f *SelectField) View() string {
 	labelStyle := lipgloss.NewStyle().Foreground(tui.ColorSlate300)
 	hintStyle := lipgloss.NewStyle().Foreground(tui.ColorSlate500)
 
-	// Label line
 	labelText := strings.ToLower(f.Label)
 	labelLine := labelStyle.Render(labelText)
 	if f.Help != "" {
@@ -160,7 +158,6 @@ func (f *SelectField) View() string {
 		labelLine += defaultIndicator
 	}
 
-	// Content width
 	contentWidth := f.width - 4
 	if contentWidth < 20 {
 		contentWidth = 40
@@ -176,7 +173,6 @@ func (f *SelectField) View() string {
 		Padding(0, 1).
 		Width(contentWidth)
 
-	// Content inside box
 	val := f.Value()
 	var content string
 	if f.focused && len(f.Options) > 1 {
