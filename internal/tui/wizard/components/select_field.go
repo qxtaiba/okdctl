@@ -18,11 +18,10 @@ type SelectField struct {
 	Help    string
 	Options []string
 
-	selected     int
-	focused      bool
-	width        int
-	isDefault    bool
-	defaultValue string
+	selected  int
+	focused   bool
+	width     int
+	isDefault bool
 }
 
 // NewSelectField builds a SelectField with the given label and option list.
@@ -55,7 +54,6 @@ func (f *SelectField) SetValue(value string) {
 
 // SetDefault sets the starting selection and marks the field as unchanged.
 func (f *SelectField) SetDefault(value string) {
-	f.defaultValue = value
 	f.isDefault = true
 	for i, opt := range f.Options {
 		if opt == value {
