@@ -19,8 +19,7 @@ type Summary struct {
 }
 
 // GenerateSummary returns a post-cleanup inventory for opts. Non-existent
-// paths are treated as zero remaining. Exported for a future
-// `okdctl cleanup status` verb to render without re-running cleanup.
+// paths are treated as zero remaining.
 func GenerateSummary(opts *Options) Summary {
 	summary := Summary{
 		WorkDirSize: "0B",
