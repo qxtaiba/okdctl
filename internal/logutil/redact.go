@@ -7,7 +7,6 @@ import (
 	"regexp"
 	"slices"
 	"strings"
-	"sync"
 )
 
 // Redacted is the placeholder value that replaces any secret-bearing attr
@@ -127,9 +126,6 @@ func redactAny(v any) any {
 // the log sink verbatim.
 type RedactableStderr string
 
-// stderrScrubOnce guards one-time compilation of stderrScrubRe.
-var stderrScrubOnce sync.Once
-
 // stderrScrubRe matches credential key–value pairs in three shapes:
 //
 //	key=value            (shell env / provider diagnostics)
@@ -139,16 +135,13 @@ var stderrScrubOnce sync.Once
 //
 // Covers secretKeyFragments plus "authorization". Over-redaction is
 // acceptable; under-redaction is not.
-var stderrScrubRe *regexp.Regexp
+var stderrScrubRe = regexp.MustCompile(
+	`(?i)((?:password|token|secret|api_key|apikey|authorization)` +
+		`(?:["']?\s*[:=]\s*(?:Bearer\s+)?))("[^"]*"|'[^']*'|\S+)`,
+)
 
 // scrubStderrText masks credential values in s using stderrScrubRe.
 func scrubStderrText(s string) string {
-	stderrScrubOnce.Do(func() {
-		stderrScrubRe = regexp.MustCompile(
-			`(?i)((?:password|token|secret|api_key|apikey|authorization)` +
-				`(?:["']?\s*[:=]\s*(?:Bearer\s+)?))("[^"]*"|'[^']*'|\S+)`,
-		)
-	})
 	return stderrScrubRe.ReplaceAllString(s, "${1}"+Redacted)
 }
 
