@@ -114,7 +114,6 @@ func (f *Flux) Install(ctx context.Context, env *addon.Environment) error {
 		return err
 	}
 
-	// Wait for Flux controllers to become available (fatal if they don't start)
 	if err := f.waitForControllers(ctx, env); err != nil {
 		return err
 	}
