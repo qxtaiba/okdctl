@@ -150,20 +150,24 @@ func resolveProjectRootOrDie() (string, error) {
 // file. It checks the configured config-file name, okdctl.env, and any
 // terraform.tfstate under infrastructure/terraform/environments/. All three
 // are exclusively written by okdctl inside a project root.
-func hasProjectMarker(root string) bool {
-	candidates := []string{
-		filepath.Join(root, filepath.Base(cfgFile)),
-		filepath.Join(root, "okdctl.env"),
-	}
-	for _, c := range candidates {
-		if _, err := os.Stat(c); err == nil {
+func hasPrimaryMarker(root string) bool {
+	for _, name := range []string{filepath.Base(cfgFile), "okdctl.env"} {
+		if _, err := os.Stat(filepath.Join(root, name)); err == nil {
 			return true
 		}
 	}
+	return false
+}
+
+func terraformStateMatches(root string) []string {
 	matches, _ := filepath.Glob(
 		filepath.Join(root, "infrastructure", "terraform", "environments", "*", "terraform.tfstate"),
 	)
-	return len(matches) > 0
+	return matches
+}
+
+func hasProjectMarker(root string) bool {
+	return hasPrimaryMarker(root) || len(terraformStateMatches(root)) > 0
 }
 
 // warnIfTfStateOnly emits a structured warning when the only project marker
@@ -171,14 +175,10 @@ func hasProjectMarker(root string) bool {
 // tfstate after destroy+cleanup may belong to a different cluster if the
 // operator removed the primary config files manually.
 func warnIfTfStateOnly(root string) {
-	for _, name := range []string{filepath.Base(cfgFile), "okdctl.env"} {
-		if _, err := os.Stat(filepath.Join(root, name)); err == nil {
-			return
-		}
+	if hasPrimaryMarker(root) {
+		return
 	}
-	matches, _ := filepath.Glob(
-		filepath.Join(root, "infrastructure", "terraform", "environments", "*", "terraform.tfstate"),
-	)
+	matches := terraformStateMatches(root)
 	if len(matches) == 0 {
 		return
 	}
