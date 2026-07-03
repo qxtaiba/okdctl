@@ -154,23 +154,18 @@ func Dnsmasq(ctx context.Context, clusterName string, logger *slog.Logger) error
 		}
 	}
 
-	configs, _ := filepath.Glob(dnsmasqConfPattern)
-	for _, cfg := range configs {
-		if guardErr := refuseCriticalPath(cfg); guardErr != nil {
-			logger.Warn("cleanup: refusing critical path", "path", cfg, "err", guardErr)
-			continue
+	removeGlobbed := func(pattern string) {
+		matches, _ := filepath.Glob(pattern)
+		for _, m := range matches {
+			if guardErr := refuseCriticalPath(m); guardErr != nil {
+				logger.Warn("cleanup: refusing critical path", "path", m, "err", guardErr)
+				continue
+			}
+			_ = os.RemoveAll(m)
 		}
-		_ = os.RemoveAll(cfg)
 	}
-
-	backups, _ := filepath.Glob(dnsmasqBackupPattern)
-	for _, backup := range backups {
-		if guardErr := refuseCriticalPath(backup); guardErr != nil {
-			logger.Warn("cleanup: refusing critical path", "path", backup, "err", guardErr)
-			continue
-		}
-		_ = os.RemoveAll(backup)
-	}
+	removeGlobbed(dnsmasqConfPattern)
+	removeGlobbed(dnsmasqBackupPattern)
 
 	removePackage(ctx, "dnsmasq", logger)
 
