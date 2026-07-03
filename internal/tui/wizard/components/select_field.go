@@ -166,21 +166,15 @@ func (f *SelectField) View() string {
 		contentWidth = 40
 	}
 
-	// Border style
-	var boxStyle lipgloss.Style
+	borderColor := tui.ColorSlate600
 	if f.focused {
-		boxStyle = lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(tui.ColorPrimary).
-			Padding(0, 1).
-			Width(contentWidth)
-	} else {
-		boxStyle = lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(tui.ColorSlate600).
-			Padding(0, 1).
-			Width(contentWidth)
+		borderColor = tui.ColorPrimary
 	}
+	boxStyle := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(borderColor).
+		Padding(0, 1).
+		Width(contentWidth)
 
 	// Content inside box
 	val := f.Value()
