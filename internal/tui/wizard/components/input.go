@@ -40,12 +40,11 @@ type InputField struct {
 	Password    bool
 	Validator   func(string) error
 
-	input        textinput.Model
-	focused      bool
-	width        int
-	err          error
-	isDefault    bool   // true if value is the original default (not user-modified)
-	defaultValue string // stores the original default value
+	input     textinput.Model
+	focused   bool
+	width     int
+	err       error
+	isDefault bool // true if value is the original default (not user-modified)
 }
 
 // NewInputField builds a plain-text InputField with the given label and
@@ -88,7 +87,6 @@ func (f *InputField) SetValue(value string) {
 // IsDefault reports true until the user edits it.
 func (f *InputField) SetDefault(value string) {
 	f.input.SetValue(value)
-	f.defaultValue = value
 	f.isDefault = true
 }
 

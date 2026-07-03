@@ -20,11 +20,10 @@ type MultiSelectField struct {
 	Help    string
 	Options []string
 
-	selected     []bool
-	cursor       int
-	focused      bool
-	isDefault    bool
-	defaultValue string
+	selected  []bool
+	cursor    int
+	focused   bool
+	isDefault bool
 }
 
 // NewMultiSelectField returns a multi-select field with options unchecked.
@@ -67,7 +66,6 @@ func (f *MultiSelectField) SetValue(value string) {
 // SetDefault initializes the selection from value and marks it as default.
 func (f *MultiSelectField) SetDefault(value string) {
 	f.SetValue(value)
-	f.defaultValue = value
 	f.isDefault = true
 }
 
