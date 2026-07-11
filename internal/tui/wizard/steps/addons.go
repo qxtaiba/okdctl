@@ -249,13 +249,13 @@ var AddonsStepDefinition = wizard.StepDefinition{
 	},
 }
 
-// NewAddonsStep returns the addons wizard step and its state.
-func NewAddonsStep() (step, state *wizard.DataDrivenStep) {
-	step = wizard.NewDataDrivenStep(&AddonsStepDefinition)
+// NewAddonsStep returns the addons wizard step.
+func NewAddonsStep() *wizard.DataDrivenStep {
+	step := wizard.NewDataDrivenStep(&AddonsStepDefinition)
 	step.WithExtraContentFunc(func(s *wizard.DataDrivenStep, _ int) string {
 		return renderAddonWarnings(s)
 	})
-	return step, step
+	return step
 }
 
 func renderAddonWarnings(step *wizard.DataDrivenStep) string {
