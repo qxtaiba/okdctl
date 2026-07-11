@@ -128,7 +128,6 @@ func (p *Phase) findOrDownloadFCOSISO(ctx context.Context, cfg *config.Config, o
 		BaseOptions: phase.BaseOptions{
 			WorkDir: opts.WorkDir,
 		},
-		AutoDownloadISO: true,
 	})
 }
 

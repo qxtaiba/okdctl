@@ -37,17 +37,14 @@ const (
 	kubectlBin          = "kubectl"
 )
 
-// Options configures a setup run: download and upload toggles plus an
-// AutoDownloadISO switch that skips the "is the ISO present?" prompt.
+// Options configures a setup run: download and upload toggles.
 type Options struct {
 	phase.BaseOptions
-	DownloadDir     string
-	SkipDownloads   bool
-	SkipISOs        bool
-	SkipHAProxy     bool
-	SkipFirewall    bool
-	AutoDownloadISO bool
-	Verbose         bool
+	DownloadDir   string
+	SkipDownloads bool
+	SkipISOs      bool
+	SkipHAProxy   bool
+	SkipFirewall  bool
 }
 
 // NewOptions returns setup Options with WorkDir/DownloadDir rooted at

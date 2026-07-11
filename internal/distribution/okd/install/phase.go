@@ -40,7 +40,6 @@ type Options struct {
 	SkipConfirmation    bool
 	BootstrapIP         string
 	SSHKeyPath          string
-	StreamBootstrapLogs bool
 }
 
 // NewOptions builds install Options from cfg, applying deployment-level
@@ -75,7 +74,6 @@ func NewOptions(cfg *config.Config, projectRoot string) Options {
 		CSRApprovalInterval: DefaultCSRApprovalInterval,
 		BootstrapIP:         cfg.Networking.StaticIP.Start,
 		SSHKeyPath:          sshKeyPath,
-		StreamBootstrapLogs: true,
 	}
 }
 
