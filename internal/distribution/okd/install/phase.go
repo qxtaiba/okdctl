@@ -108,6 +108,13 @@ func (p *Phase) Execute(ctx context.Context, cfg *config.Config, opts *Options) 
 	return orchestrator.Results(), nil
 }
 
+// StepDefs returns the ordered step definitions this phase executes for
+// cfg/opts, without running them. Provisioner.DeploySteps calls this for
+// the deploy --dry-run listing, so the listing cannot drift from Execute.
+func (p *Phase) StepDefs(cfg *config.Config, opts *Options) []distribution.StepDef {
+	return p.installSteps(cfg, opts)
+}
+
 // DeployInfrastructure applies the generated Terraform plan against Proxmox
 // to provision the bootstrap and node VMs.
 func (p *Phase) DeployInfrastructure(ctx context.Context, cfg *config.Config, opts *Options) error {

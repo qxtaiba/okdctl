@@ -53,48 +53,33 @@ func TestRunFullDeployment_RejectsBogusProviderType(t *testing.T) {
 	}
 }
 
-func TestDeployDryRunSteps_IDs(t *testing.T) {
-	want := []string{
-		string(setup.StepInstallPackages),
-		string(setup.StepInstallTools),
-		string(setup.StepEnsureWorkDir),
-		string(setup.StepDownloadTools),
-		string(setup.StepGenerateConfig),
-		string(setup.StepGenerateManifests),
-		string(setup.StepGenerateKubeVIP),
-		string(setup.StepInjectManifests),
-		string(setup.StepCompactCluster),
-		string(setup.StepGenerateIgnition),
-		string(setup.StepInstallApache),
-		string(setup.StepDeployIgnition),
-		string(setup.StepVerifyWebServer),
-		string(setup.StepBuildISOs),
-		string(setup.StepUploadISOs),
-		string(setup.StepGenerateTfvars),
-		string(setup.StepConfigureHAProxy),
-		string(setup.StepConfigureFirewall),
-		string(setup.StepConfigureDNS),
-		string(install.StepDeployInfra),
-		string(install.StepWaitBootstrap),
-		string(install.StepStartWorkers),
-		string(install.StepSetupKubeconfig),
-		string(install.StepValidateAccess),
-		string(install.StepMonitorInstall),
-		string(install.StepSetupAccess),
-		string(postinstall.StepVerifyHealth),
-		string(postinstall.StepCleanupBootstrap),
-		string(postinstall.StepVerifyKubeVIP),
-		string(postinstall.StepDeployProductionDNS),
-		string(postinstall.StepInstallAddons),
+func TestDeployDryRunSteps_DerivedFromLivePhaseSteps(t *testing.T) {
+	cfg := config.DefaultConfig()
+	root := t.TempDir()
+
+	got := deployDryRunSteps(cfg, root)
+
+	if len(got) == 0 {
+		t.Fatal("expected at least one step")
+	}
+	if got[0].ID != string(setup.StepInstallPackages) {
+		t.Errorf("first step = %q; want %q (setup phase must lead)", got[0].ID, setup.StepInstallPackages)
+	}
+	last := got[len(got)-1]
+	if last.ID != string(postinstall.StepInstallAddons) {
+		t.Errorf("last step = %q; want %q (postinstall phase must trail)", last.ID, postinstall.StepInstallAddons)
 	}
 
-	got := deployDryRunSteps()
-	if len(got) != len(want) {
-		t.Fatalf("len = %d; want %d", len(got), len(want))
-	}
-	for i, step := range got {
-		if step.ID != want[i] {
-			t.Errorf("step[%d].ID = %q; want %q", i, step.ID, want[i])
+	var sawInstallPhase bool
+	for _, s := range got {
+		if s.ID == string(install.StepDeployInfra) {
+			sawInstallPhase = true
 		}
+		if s.Name == "" {
+			t.Errorf("step %q has empty display name", s.ID)
+		}
+	}
+	if !sawInstallPhase {
+		t.Error("install phase steps missing from dry-run listing")
 	}
 }

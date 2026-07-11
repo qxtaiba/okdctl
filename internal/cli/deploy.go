@@ -12,11 +12,8 @@ import (
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/credentials"
 	"github.com/qxtaiba/okdctl/internal/deploy"
-	"github.com/qxtaiba/okdctl/internal/distribution"
-	"github.com/qxtaiba/okdctl/internal/distribution/okd/install"
+	"github.com/qxtaiba/okdctl/internal/distribution/okd"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
-	"github.com/qxtaiba/okdctl/internal/distribution/okd/postinstall"
-	"github.com/qxtaiba/okdctl/internal/distribution/okd/setup"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/infrastructure/proxmox"
 	"github.com/qxtaiba/okdctl/internal/render"
@@ -216,43 +213,20 @@ func runDeployDryRun(ctx context.Context, cfg *config.Config, w io.Writer) error
 		return &errtypes.ConfigError{Msg: "dry-run: terraform plan failed", Err: planErr}
 	}
 
-	fmt.Fprintln(w, render.DryRunSummary("deploy step listing", deployDryRunSteps()))
+	fmt.Fprintln(w, render.DryRunSummary("deploy step listing", deployDryRunSteps(cfg, projectRoot)))
 	tui.Info("dry-run: re-run without --dry-run to execute deploy")
 	return nil
 }
 
-// deployDryRunSteps returns the ID/Name for every step across setup, install, and
-// postinstall phases in execution order.
-func deployDryRunSteps() []render.DryRunStep {
-	phases := []struct {
-		order []distribution.StepID
-		names map[distribution.StepID]string
-	}{
-		{[]distribution.StepID{
-			setup.StepInstallPackages, setup.StepInstallTools, setup.StepEnsureWorkDir,
-			setup.StepDownloadTools, setup.StepGenerateConfig, setup.StepGenerateManifests,
-			setup.StepGenerateKubeVIP, setup.StepInjectManifests, setup.StepCompactCluster,
-			setup.StepGenerateIgnition, setup.StepInstallApache, setup.StepDeployIgnition,
-			setup.StepVerifyWebServer, setup.StepBuildISOs, setup.StepUploadISOs,
-			setup.StepGenerateTfvars, setup.StepConfigureHAProxy, setup.StepConfigureFirewall,
-			setup.StepConfigureDNS,
-		}, setup.StepNames},
-		{[]distribution.StepID{
-			install.StepDeployInfra, install.StepWaitBootstrap, install.StepStartWorkers,
-			install.StepSetupKubeconfig, install.StepValidateAccess, install.StepMonitorInstall,
-			install.StepSetupAccess,
-		}, install.StepNames},
-		{[]distribution.StepID{
-			postinstall.StepVerifyHealth, postinstall.StepCleanupBootstrap,
-			postinstall.StepVerifyKubeVIP, postinstall.StepDeployProductionDNS,
-			postinstall.StepInstallAddons,
-		}, postinstall.StepNames},
-	}
-	var out []render.DryRunStep
-	for _, ph := range phases {
-		for _, id := range ph.order {
-			out = append(out, render.DryRunStep{ID: string(id), Name: ph.names[id]})
-		}
+// deployDryRunSteps returns the ID/Name for every step across setup, install,
+// and postinstall phases in execution order, derived from the live phase
+// StepDefs via okd.Provisioner.DeploySteps so this listing cannot drift from
+// what deploy actually runs.
+func deployDryRunSteps(cfg *config.Config, projectRoot string) []render.DryRunStep {
+	deploySteps := okd.New(okd.WithProjectRoot(projectRoot), okd.WithLogger(tui.SimpleLogger())).DeploySteps(cfg)
+	out := make([]render.DryRunStep, len(deploySteps))
+	for i, s := range deploySteps {
+		out[i] = render.DryRunStep{ID: string(s.ID), Name: s.Name}
 	}
 	return out
 }

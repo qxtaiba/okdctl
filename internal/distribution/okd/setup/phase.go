@@ -143,6 +143,13 @@ func (p *Phase) Execute(ctx context.Context, cfg *config.Config, opts *Options) 
 	return orchestrator.Results(), nil
 }
 
+// StepDefs returns the ordered step definitions this phase executes for
+// cfg/opts, without running them. Provisioner.DeploySteps calls this for
+// the deploy --dry-run listing, so the listing cannot drift from Execute.
+func (p *Phase) StepDefs(cfg *config.Config, opts *Options) []distribution.StepDef {
+	return p.setupSteps(cfg, opts)
+}
+
 // PrintSetupCompletionSummary logs the cluster-config dir and terraform
 // environment a user needs to reference for the follow-up install step.
 func (p *Phase) PrintSetupCompletionSummary(cfg *config.Config, opts *Options) {
