@@ -386,12 +386,13 @@ func tarDirInto(addStream func(*tar.Header, io.Reader) error, srcDir, bundlePref
 }
 
 func bundleDoctor(ctx context.Context, addFile func(string, []byte) error) manifestEntry {
+	// Skip the re-exec instead of bundling doctor's non-linux refusal message.
+	if runtime.GOOS != "linux" {
+		return manifestEntry{Name: categoryDoctor, Status: bundleStatusSkipped, Message: "doctor is only supported on linux"}
+	}
 	data, err := collectDoctorOutput(ctx)
 	if err != nil {
 		return manifestEntry{Name: categoryDoctor, Status: bundleStatusFailed, Message: safeMessage(err)}
-	}
-	if data == nil {
-		return manifestEntry{Name: categoryDoctor, Status: bundleStatusSkipped, Message: "doctor is only supported on linux"}
 	}
 	if err := addFile("doctor.json", data); err != nil {
 		return manifestEntry{Name: categoryDoctor, Status: bundleStatusFailed, Message: safeMessage(err)}
