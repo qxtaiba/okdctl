@@ -384,7 +384,7 @@ func runDestroyDryRun(ctx context.Context, cfg *config.Config) error {
 	defer lock.Release()
 
 	tfEnv := phase.GetTerraformEnv(cfg)
-	terraformDir := filepath.Join(projectRoot, "infrastructure", "terraform", "environments", tfEnv)
+	terraformDir := phase.TerraformEnvDir(projectRoot, tfEnv)
 
 	tfOpts := []terraform.Option{terraform.WithLogger(tui.SimpleLogger())}
 	if creds.IsValid() {

@@ -347,7 +347,7 @@ func (p *Phase) setupInfraSteps(cfg *config.Config, opts *Options) []distributio
 				if err := p.GenerateTerraformVars(ctx, cfg, opts); err != nil {
 					return &errtypes.ConfigError{Msg: "failed to generate Terraform variables", Err: err}
 				}
-				tfvarsPath := filepath.Join(opts.ProjectRoot, "infrastructure", "terraform", "environments", phase.GetTerraformEnv(cfg), "terraform.tfvars")
+				tfvarsPath := filepath.Join(phase.TerraformEnvDir(opts.ProjectRoot, phase.GetTerraformEnv(cfg)), "terraform.tfvars")
 				p.Log.Info("terraform: configuration written", "path", tfvarsPath)
 				return nil
 			},

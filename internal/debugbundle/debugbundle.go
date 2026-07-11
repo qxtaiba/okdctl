@@ -259,7 +259,7 @@ func bundleTerraformState(ctx context.Context, addFile func(string, []byte) erro
 	if cfg != nil {
 		tfEnv = phase.GetTerraformEnv(cfg)
 	}
-	tfDir := filepath.Join(projectRoot, "infrastructure", "terraform", "environments", tfEnv)
+	tfDir := phase.TerraformEnvDir(projectRoot, tfEnv)
 	if _, err := os.Stat(filepath.Join(tfDir, "terraform.tfstate")); errors.Is(err, os.ErrNotExist) {
 		return manifestEntry{Name: categoryTerraformState, Status: bundleStatusSkipped, Message: "no terraform.tfstate in " + tfDir}
 	}

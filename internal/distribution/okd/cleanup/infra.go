@@ -22,7 +22,7 @@ func Terraform(ctx context.Context, projectRoot, terraformEnv string, logger *sl
 	logger = logutil.OrNop(logger)
 	logger.Info("cleanup: terraform artifacts")
 
-	terraformBase := filepath.Join(projectRoot, "infrastructure", "terraform", "environments")
+	terraformBase := phase.TerraformEnvDir(projectRoot, "")
 
 	if terraformEnv != "" {
 		return cleanupTerraformEnv(ctx, filepath.Join(terraformBase, terraformEnv), terraformEnv, logger)
@@ -65,7 +65,7 @@ func terraformCleanupDone(opts *Options) (bool, error) {
 	if opts.TerraformEnv == "" {
 		return false, nil
 	}
-	envDir := filepath.Join(opts.ProjectRoot, "infrastructure", "terraform", "environments", opts.TerraformEnv)
+	envDir := phase.TerraformEnvDir(opts.ProjectRoot, opts.TerraformEnv)
 	for _, name := range terraformFilesToRemove {
 		if system.FileExists(filepath.Join(envDir, name)) {
 			return false, nil

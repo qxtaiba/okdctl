@@ -3,9 +3,9 @@ package destroy
 import (
 	"context"
 	"fmt"
-	"path/filepath"
 
 	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/infrastructure/terraform"
 	"github.com/qxtaiba/okdctl/internal/nodetypes"
@@ -13,7 +13,7 @@ import (
 )
 
 func (p *Phase) destroyInfrastructure(ctx context.Context, opts *Options) error {
-	terraformDir := filepath.Join(opts.ProjectRoot, "infrastructure", "terraform", "environments", opts.TerraformEnv)
+	terraformDir := phase.TerraformEnvDir(opts.ProjectRoot, opts.TerraformEnv)
 
 	if !system.DirExists(terraformDir) {
 		return &errtypes.ConfigError{Msg: fmt.Sprintf("terraform environment directory not found: %s", terraformDir)}

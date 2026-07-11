@@ -120,7 +120,7 @@ func (p *Phase) StepDefs(cfg *config.Config, opts *Options) []distribution.StepD
 // DeployInfrastructure applies the generated Terraform plan against Proxmox
 // to provision the bootstrap and node VMs.
 func (p *Phase) DeployInfrastructure(ctx context.Context, cfg *config.Config, opts *Options) error {
-	terraformDir := filepath.Join(opts.ProjectRoot, "infrastructure", "terraform", "environments", opts.TerraformEnv)
+	terraformDir := phase.TerraformEnvDir(opts.ProjectRoot, opts.TerraformEnv)
 	tfvarsFile := filepath.Join(terraformDir, "terraform.tfvars")
 
 	p.Log.Debug("terraform: directory", "path", terraformDir)
