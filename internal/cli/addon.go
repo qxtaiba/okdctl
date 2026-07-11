@@ -107,7 +107,9 @@ See also: addon list`,
 
 func init() {
 	addonListCmd.Flags().StringVarP(&addonListOutput, flagOutput, flagOutputShort, outputText, "output format: text|json")
+	registerOutputCompletion(addonListCmd)
 	addonVerifyCmd.Flags().StringVarP(&addonVerifyOutput, flagOutput, flagOutputShort, outputText, "output format: text|json")
+	registerOutputCompletion(addonVerifyCmd)
 	addonInstallCmd.Flags().BoolVar(&addonInstallAll, "all", false, "install all enabled addons (per-addon continuation on failure)")
 	addonUninstallCmd.Flags().BoolVarP(&addonUninstallYes, "yes", "y", false, "skip confirmation prompt")
 	addonUninstallCmd.Flags().StringVar(&addonUninstallConfirmCluster, "confirm-cluster", "",

@@ -310,7 +310,11 @@ pinning or scripted comparisons (see docs/cli/json-schema.md).`,
 func init() {
 	rootCmd.PersistentFlags().StringVarP(&cfgFile, flagConfig, flagConfigShort, "okdctl.yaml", "configuration file")
 	rootCmd.PersistentFlags().StringVar(&logLevel, flagLogLevel, "info", "log verbosity (debug, info, warn, error)")
+	_ = rootCmd.RegisterFlagCompletionFunc(flagLogLevel,
+		cobra.FixedCompletions([]string{"debug", "info", "warn", "error"}, cobra.ShellCompDirectiveNoFileComp))
 	rootCmd.PersistentFlags().StringVar(&logFormat, flagLogFormat, "text", "log output format: text (TTY default) | json (auto-selected when stderr is piped)")
+	_ = rootCmd.RegisterFlagCompletionFunc(flagLogFormat,
+		cobra.FixedCompletions([]string{outputText, outputJSON}, cobra.ShellCompDirectiveNoFileComp))
 	// DefValue is blanked so --help does not print '(default "text")', which
 	// would contradict the auto-switch prose above. Do not remove without also
 	// updating the flag's Usage string to describe the TTY-vs-pipe contract.
@@ -328,6 +332,7 @@ func init() {
 	})
 
 	versionCmd.Flags().StringVarP(&versionOutputFlag, flagOutput, flagOutputShort, outputText, "output format: text|json")
+	registerOutputCompletion(versionCmd)
 
 	rootCmd.AddCommand(deployCmd)
 	rootCmd.AddCommand(destroyCmd)
