@@ -5,7 +5,10 @@ import (
 	"encoding/hex"
 )
 
-// NewUUIDv4 returns a random RFC 4122 version-4 UUID string.
+// NewUUIDv4 returns a random RFC 4122 version-4 UUID string, used for
+// run/bundle IDs (cli/root.go, cli/debug_bundle.go). Lives here rather than
+// a new one-function package because it has no narrower existing home and
+// is dependency-light like the rest of this package.
 // Panics if crypto/rand cannot supply entropy — callers treat this
 // as a fatal runtime condition, matching google/uuid.NewString's
 // contract for security-critical random sources.
