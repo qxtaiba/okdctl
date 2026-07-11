@@ -277,3 +277,15 @@ func TestGitHost(t *testing.T) {
 		})
 	}
 }
+
+func TestValidateSettings_MalformedTimeout(t *testing.T) {
+	f := &Flux{}
+	settings := map[string]string{
+		SettingRepository:        "ssh://git@github.com/org/repo.git",
+		SettingControllerTimeout: "not-a-number",
+	}
+	errs := f.ValidateSettings(settings)
+	if len(errs) == 0 {
+		t.Fatal("ValidateSettings with malformed controller_timeout = no errors, want at least one")
+	}
+}
