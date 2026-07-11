@@ -225,26 +225,6 @@ func (s *SecretStore) ValidateSettings(settings map[string]string) []string {
 	return p.validate(ts)
 }
 
-// WizardFields returns the wizard input fields the secretstore contributes.
-// Fields are annotated with Group to associate them with their provider
-// section; common fields have an empty Group.
-func (s *SecretStore) WizardFields() []addon.WizardField {
-	return []addon.WizardField{
-		{Key: SettingProvider, Label: "Provider", Default: string(ProviderOnepassword), Help: "ESO backend provider: onepassword, vault, bitwarden"},
-		{Key: SettingSecretsDir, Label: "Secrets Directory", Default: defaultSecretsDir, Help: "Directory containing provider credential files (plaintext or sops-encrypted)"},
-		{Key: SettingOnepasswordConnectHost, Label: "Connect Host", Default: defaultOPConnectHost, Help: "1Password Connect server URL", Group: string(ProviderOnepassword)},
-		{Key: SettingOnepasswordVaults, Label: "Vaults", Default: defaultOPVaults, Help: "CSV of name=priority pairs, e.g. \"homelab=1,shared=2\"", Group: string(ProviderOnepassword)},
-		{Key: SettingVaultServer, Label: "Server URL", Help: "Vault server URL (e.g. https://vault.example.com)", Group: string(ProviderVault)},
-		{Key: SettingVaultPath, Label: "Secret Path", Default: "secret", Help: "Vault KV mount path", Group: string(ProviderVault)},
-		{Key: SettingVaultVersion, Label: "KV Version", Default: "v2", Help: "Vault KV engine version: v1 or v2", Group: string(ProviderVault)},
-		{Key: SettingBitwardenOrganizationID, Label: "Organization ID", Help: "Bitwarden organization UUID", Group: string(ProviderBitwarden)},
-		{Key: SettingBitwardenProjectID, Label: "Project ID", Help: "Bitwarden project UUID", Group: string(ProviderBitwarden)},
-		{Key: SettingBitwardenAPIURL, Label: "API URL", Default: defaultBitwardenAPIURL, Help: "Bitwarden Secrets Manager API URL", Group: string(ProviderBitwarden)},
-		{Key: SettingBitwardenIdentityURL, Label: "Identity URL", Default: defaultBitwardenIdentityURL, Help: "Bitwarden identity service URL", Group: string(ProviderBitwarden)},
-		{Key: SettingBitwardenSDKServerURL, Label: "SDK Server URL", Default: defaultBitwardenSDKServerURL, Help: "In-cluster bitwarden-sdk-server URL", Group: string(ProviderBitwarden)},
-	}
-}
-
 func isSopsEncrypted(path string) bool {
 	data, err := os.ReadFile(path)
 	if err != nil {
