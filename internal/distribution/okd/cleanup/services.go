@@ -9,8 +9,8 @@ import (
 
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/dns"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
+	"github.com/qxtaiba/okdctl/internal/hostnet"
 	"github.com/qxtaiba/okdctl/internal/logutil"
-	"github.com/qxtaiba/okdctl/internal/netutil"
 	"github.com/qxtaiba/okdctl/internal/platform"
 	"github.com/qxtaiba/okdctl/internal/system"
 )
@@ -68,9 +68,9 @@ func HAProxy(ctx context.Context, haproxyConfig, vip string, logger *slog.Logger
 	}
 
 	if vip != "" {
-		iface, ifaceErr := netutil.GetDefaultInterface(ctx)
+		iface, ifaceErr := hostnet.GetDefaultInterface(ctx)
 		if ifaceErr == nil {
-			if rmErr := netutil.RemoveSecondaryIP(ctx, vip, iface); rmErr != nil {
+			if rmErr := hostnet.RemoveSecondaryIP(ctx, vip, iface); rmErr != nil {
 				logger.Warn("cleanup: could not remove vip", "vip", vip, "iface", iface, "err", rmErr)
 			} else {
 				logger.Info("cleanup: removed vip", "vip", vip, "iface", iface)
