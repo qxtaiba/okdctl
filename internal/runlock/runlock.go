@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/qxtaiba/okdctl/internal/errtypes"
+	"github.com/qxtaiba/okdctl/internal/system"
 )
 
 const lockFile = ".okdctl.lock"
@@ -86,7 +87,26 @@ func Acquire(projectRoot, verb string) (*Lock, error) {
 	_ = f.Truncate(0)
 	_, _ = fmt.Fprintf(f, "PID=%d VERB=%s TIME=%s HOST=%s\n", os.Getpid(), verb, time.Now().UTC().Format(time.RFC3339), host)
 
+	if err := chownToSudoInvoker(path); err != nil {
+		slog.Warn("runlock: chown lockfile to invoking user failed", "path", path, "err", err)
+	}
+
 	return &Lock{f: f}, nil
+}
+
+// chownToSudoInvoker hands the lockfile back to the invoking user after a
+// root acquisition. deploy/destroy re-exec under sudo, so root creates the
+// 0600 lockfile, but the --dry-run variants skip elevation and must reopen
+// the same never-unlinked file as the non-root user — without the chown
+// that open fails EACCES. Runs on every root acquisition, not only create,
+// so a file left root-owned by an earlier run is handed back too. The euid
+// guard skips the chown when SUDO_UID/SUDO_GID leak into a non-root env,
+// where chowning to another uid would fail EPERM.
+func chownToSudoInvoker(path string) error {
+	if os.Geteuid() != 0 {
+		return nil
+	}
+	return system.ChownToInvokingUser(path)
 }
 
 // crossHostHint returns a non-empty advisory string when the HOST= field
