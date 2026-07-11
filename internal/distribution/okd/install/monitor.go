@@ -4,42 +4,19 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
-	osExec "os/exec"
 	"path/filepath"
-	"syscall"
 	"time"
 
 	"github.com/qxtaiba/okdctl/internal/cluster"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
-	"github.com/qxtaiba/okdctl/internal/executor"
 )
 
-// defaultStartMonitorCmd starts "openshift-install wait-for install-complete",
-// wires stdout/stderr to the current TTY, and returns a buffered done channel
-// and a no-op kill function. cmd.Cancel + cmd.WaitDelay handle the
-// SIGTERM-then-SIGKILL escalation natively; the returned kill func remains
-// for API compatibility with injected stubs.
-// con:ae5b624c — canonical cmd.Cancel pattern; sub:7b2829bb mirrors this shape.
-func defaultStartMonitorCmd(ctx context.Context, clusterDir string) (done <-chan error, kill func(), err error) {
-	cmd := osExec.CommandContext(ctx, "openshift-install", "wait-for", "install-complete", "--dir", clusterDir, "--log-level=debug")
-	// Filter env so openshift-install does not inherit AWS_*/GCP_*/AZURE_* etc. from the user shell.
-	cmd.Env = executor.FilterParentEnv(executor.DefaultEnvAllowlist)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	// Send SIGTERM on ctx cancellation so openshift-install can flush its
-	// in-flight diagnostics. WaitDelay gives it 30 s before SIGKILL fires.
-	cmd.Cancel = func() error { return cmd.Process.Signal(syscall.SIGTERM) }
-	cmd.WaitDelay = 30 * time.Second
-	if startErr := cmd.Start(); startErr != nil {
-		return nil, func() {}, startErr
-	}
-	doneCh := make(chan error, 1)
-	go func() {
-		defer close(doneCh)
-		doneCh <- cmd.Wait()
-	}()
-	return doneCh, func() {}, nil
+// defaultStartMonitorCmd starts "openshift-install wait-for install-complete"
+// via the canonical Executor.StartStreamed, wiring stdout/stderr to the
+// current TTY and sharing buildEnv/cancelSignal/WaitDelay with every other
+// subprocess this phase runs.
+func (p *Phase) defaultStartMonitorCmd(ctx context.Context, clusterDir string) (done <-chan error, kill func(), err error) {
+	return p.Exec.StartStreamed(ctx, "openshift-install", "wait-for", "install-complete", "--dir", clusterDir, "--log-level=debug")
 }
 
 // timeoutNextSteps names the diagnosis surfaces for a wait timeout: the
@@ -108,7 +85,7 @@ func (p *Phase) MonitorInstallation(ctx context.Context, clusterDir string, opts
 
 	startCmd := p.startMonitorCmd
 	if startCmd == nil {
-		startCmd = defaultStartMonitorCmd
+		startCmd = p.defaultStartMonitorCmd
 	}
 
 	stopSpinner := p.Reporter("monitoring cluster operators")
