@@ -133,11 +133,8 @@ func runGuardedSetup(ctx context.Context, p provisioner, cfg *config.Config, mar
 	}
 	setupSteps, err := p.Setup(ctx, cfg, setupOpts)
 	if err != nil {
-		reportDeployFailure(w, err, phaseSetup, setupSteps, runID, started)
-		if errors.Is(err, context.Canceled) {
-			tui.Info("cancelled during setup — terraform state is empty; run 'okdctl cleanup' to remove local files")
-		}
-		return setupSteps, err
+		return setupSteps, reportDeployPhaseError(w, err, phaseSetup, setupSteps, runID, started,
+			"cancelled during setup — terraform state is empty; run 'okdctl cleanup' to remove local files")
 	}
 	return setupSteps, nil
 }
@@ -165,6 +162,18 @@ func reportDeployFailure(w io.Writer, err error, phase deployPhase, steps []dist
 		TeardownCmd:  teardownCmd,
 		TeardownNote: teardownNote,
 	}))
+}
+
+// reportDeployPhaseError prints the end-of-run box via reportDeployFailure
+// and, for a cancelled run, logs cancelHint — the phase-specific guidance on
+// terraform-state disposition. Returns err unchanged so callers can fold it
+// into their own return shape.
+func reportDeployPhaseError(w io.Writer, err error, phase deployPhase, steps []distribution.StepResult, runID string, started time.Time, cancelHint string) error {
+	reportDeployFailure(w, err, phase, steps, runID, started)
+	if errors.Is(err, context.Canceled) {
+		tui.Info(cancelHint)
+	}
+	return err
 }
 
 // Options configures Execute. ProjectRoot must be a resolved project root
@@ -240,11 +249,8 @@ func runDeployPhases(ctx context.Context, p provisioner, cfg *config.Config, pro
 		installOpts := install.NewOptions(cfg, projectRoot)
 		installSteps, err = p.Install(ctx, cfg, &installOpts)
 		if err != nil {
-			reportDeployFailure(w, err, phaseInstall, slices.Concat(setupSteps, installSteps), runID, started)
-			if errors.Is(err, context.Canceled) {
-				tui.Info("cancelled during install — terraform state likely populated; run 'okdctl destroy' to clean up")
-			}
-			return nil, nil, err
+			return nil, nil, reportDeployPhaseError(w, err, phaseInstall, slices.Concat(setupSteps, installSteps), runID, started,
+				"cancelled during install — terraform state likely populated; run 'okdctl destroy' to clean up")
 		}
 	}
 
@@ -259,11 +265,8 @@ func runDeployPhases(ctx context.Context, p provisioner, cfg *config.Config, pro
 		result, postinstallSteps, err = p.PostInstall(ctx, cfg, keepRedHatCatalogs)
 	}
 	if err != nil {
-		reportDeployFailure(w, err, phasePostInstall, slices.Concat(setupSteps, installSteps, postinstallSteps), runID, started)
-		if errors.Is(err, context.Canceled) {
-			tui.Info("cancelled during postinstall — terraform state likely populated; run 'okdctl destroy' to clean up")
-		}
-		return nil, nil, err
+		return nil, nil, reportDeployPhaseError(w, err, phasePostInstall, slices.Concat(setupSteps, installSteps, postinstallSteps), runID, started,
+			"cancelled during postinstall — terraform state likely populated; run 'okdctl destroy' to clean up")
 	}
 
 	return result, slices.Concat(setupSteps, installSteps, postinstallSteps), nil
