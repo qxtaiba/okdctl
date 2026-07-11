@@ -1145,7 +1145,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `api:2c4d8e6b:iface-in-producer` — iface in producer
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/t6-addon
+**Status:** in review — PR #910
 **Severity:** minor
 **Cluster:** interface-location
 **Evidence:** `internal/addon/addon.go:50-92` + 3 more
@@ -1245,7 +1245,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `api:2be6306e:export-no-caller-scaffolding` — export no caller scaffolding
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/t6-addon
+**Status:** deferred (scaffolding verified 2026-07-11 — annotation already present via 8d17082; PR #910 records it)
 **Severity:** suggestion
 **Cluster:** exported-surface
 **Evidence:** `internal/addon/registry.go:86-94`
@@ -1443,7 +1443,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `smell:2c4d8e6b:interfaceany-lazy-exported` — interfaceany lazy exported
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/t6-addon
+**Status:** in review — PR #910
 **Severity:** suggestion
 **Cluster:** interfaceany-lazy — seam→audit-api-design
 **Evidence:** `internal/addon/addon.go:58-58` + 4 more
@@ -1453,7 +1453,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `smell:40d315ad:settings-stringified-numbers` — settings stringified numbers
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/t6-addon
+**Status:** in review — PR #910
 **Severity:** suggestion
 **Cluster:** stringified-numbers
 **Evidence:** `internal/addon/catalog/flux/flux.go:581-588` + 4 more
@@ -1589,7 +1589,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `tst:40d315ad:destructive-happy-untested` — destructive happy untested
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/t6-addon
+**Status:** in review — PR #910
 **Severity:** minor
 **Cluster:** destructive-untested
 **Evidence:** `internal/addon/catalog/flux/flux.go:255-270` + 1 more
