@@ -10,6 +10,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/logutil"
+	"github.com/qxtaiba/okdctl/internal/system"
 )
 
 // Terraform removes generated Terraform artifacts under
@@ -54,6 +55,28 @@ var terraformFilesToRemove = []string{
 	"destroy.tfplan",
 	".terraform.lock.hcl",
 	phase.BootstrapStateSentinelFile,
+}
+
+// terraformCleanupDone reports whether every artifact terraform cleanup
+// removes is already absent. A single present artifact means a prior run
+// was partial and cleanup must resume.
+func terraformCleanupDone(opts *Options) (bool, error) {
+	if opts.TerraformEnv == "" {
+		return false, nil
+	}
+	envDir := filepath.Join(opts.ProjectRoot, "infrastructure", "terraform", "environments", opts.TerraformEnv)
+	for _, name := range terraformFilesToRemove {
+		if system.FileExists(filepath.Join(envDir, name)) {
+			return false, nil
+		}
+	}
+	if system.DirExists(filepath.Join(envDir, ".terraform")) {
+		return false, nil
+	}
+	if opts.PostDestroy && system.FileExists(filepath.Join(envDir, "terraform.tfstate")) {
+		return false, nil
+	}
+	return true, nil
 }
 
 func cleanupTerraformEnv(ctx context.Context, envDir, envName string, logger *slog.Logger) error {
