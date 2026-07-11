@@ -82,7 +82,15 @@ func elevationDecision(cmd *cobra.Command, euid int) elevAction {
 //	euid=0 ∧ !requiresRoot → reject (e.g. `sudo okdctl status`)
 //	euid≠0 ∧  requiresRoot → re-exec under sudo
 //	euid≠0 ∧ !requiresRoot → allow
+//
+// OKDCTL_WIZARD_DEMO=1 skips the re-exec so the README demo recording
+// (scripts/demo/record.sh) can drive the wizard without a sudo prompt;
+// privileged deploy steps still fail without root, so the knob cannot
+// silently degrade a real deploy.
 func ensureRoot(cmd *cobra.Command) error {
+	if os.Getenv(wizardDemoEnv) != "" {
+		return nil
+	}
 	switch elevationDecision(cmd, os.Geteuid()) {
 	case elevAllow:
 		return nil

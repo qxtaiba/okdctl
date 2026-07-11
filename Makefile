@@ -30,7 +30,7 @@ LDFLAGS := -ldflags "-s -w \
 .DEFAULT_GOAL := help
 
 # Phony targets
-.PHONY: all build build-all clean test test-short test-cover lint fmt vet check deps deps-update run dev install docs docs-check help
+.PHONY: all build build-all clean test test-short test-cover lint fmt vet check deps deps-update run dev install docs docs-check demo help
 
 ## Build targets
 
@@ -118,6 +118,9 @@ clean-all: clean ## Clean everything including dependencies
 
 docs: ## Regenerate CLI reference pages under docs/cli/
 	$(GOCMD) run -tags docs ./cmd/okdctl-gen-docs
+
+demo: ## Re-record docs/assets/demo.gif from the committed tape (needs vhs)
+	scripts/demo/record.sh
 
 docs-check: ## Regenerate CLI reference and fail on drift
 	$(GOCMD) run -tags docs ./cmd/okdctl-gen-docs

@@ -18,5 +18,6 @@ Thanks for contributing! See CONTRIBUTING.md for the full workflow.
 - [ ] `CHANGELOG.md` updated under `[Unreleased]` for user-facing changes
       (skip for refactor / CI / docs-only)
 - [ ] `make docs` run and `docs/cli/` committed if CLI flags or commands
+- [ ] wizard-visible change? re-record the demo (`make demo`) and commit the regenerated gif
       changed
 - [ ] Tests added or updated (or explained why not)
