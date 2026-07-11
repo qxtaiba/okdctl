@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/executor"
@@ -289,5 +290,43 @@ func TestDestroyInfrastructure_CorruptStateWithBakNamesSnapshot(t *testing.T) {
 	}
 	if !strings.Contains(clusterErr.Msg, bakPath) {
 		t.Errorf("Msg = %q; want snapshot path %q embedded", clusterErr.Msg, bakPath)
+	}
+}
+
+func TestCustomISONames(t *testing.T) {
+	cfg := &config.Config{}
+	cfg.Topology.ControlPlane.Count = 3
+	cfg.Topology.Workers.Count = 2
+
+	got := customISONames(cfg)
+	want := []string{
+		"bootstrap.iso",
+		"master0.iso", "master1.iso", "master2.iso",
+		"worker0.iso", "worker1.iso",
+	}
+	if len(got) != len(want) {
+		t.Fatalf("customISONames() = %v; want %v", got, want)
+	}
+	for i, name := range want {
+		if got[i] != name {
+			t.Errorf("customISONames()[%d] = %q; want %q", i, got[i], name)
+		}
+	}
+}
+
+func TestCustomISONames_SingleMasterNoWorkers(t *testing.T) {
+	cfg := &config.Config{}
+	cfg.Topology.ControlPlane.Count = 1
+	cfg.Topology.Workers.Count = 0
+
+	got := customISONames(cfg)
+	want := []string{"bootstrap.iso", "master0.iso"}
+	if len(got) != len(want) {
+		t.Fatalf("customISONames() = %v; want %v", got, want)
+	}
+	for i, name := range want {
+		if got[i] != name {
+			t.Errorf("customISONames()[%d] = %q; want %q", i, got[i], name)
+		}
 	}
 }

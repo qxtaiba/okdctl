@@ -118,7 +118,10 @@ func (p *Phase) destroySteps(ctx context.Context, cfg *config.Config, opts *Opti
 					Log:            p.Log,
 					KnownHostsPath: knownHostsPath,
 				}
-				return hostssh.RemoveFCOSISOFromProxmox(ctx, params, hostssh.DefaultProxmoxISODir)
+				if err := hostssh.RemoveFCOSISOFromProxmox(ctx, params, hostssh.DefaultProxmoxISODir); err != nil {
+					return err
+				}
+				return hostssh.RemoveCustomISOsFromProxmox(ctx, params, hostssh.DefaultProxmoxISODir, customISONames(cfg))
 			},
 			OnError: track("iso removal"),
 		},

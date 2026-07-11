@@ -287,6 +287,44 @@ func RemoveFCOSISOFromProxmox(ctx context.Context, p *RemoteISOParams, isoDir st
 	return nil
 }
 
+// RemoveCustomISOsFromProxmox removes the exact per-node custom FCOS ISOs
+// built by the setup phase (see setup.BuildNodeList) from isoDir on the
+// Proxmox host. Unlike RemoveFCOSISOFromProxmox this does not glob — names
+// are exact matches, so it uses SSHRunArgv per the repo's SSH shell policy.
+// A name that fails ValidateRemoteFilename or is still referenced by a
+// running VM is skipped with a warning rather than aborting the batch.
+func RemoveCustomISOsFromProxmox(ctx context.Context, p *RemoteISOParams, isoDir string, names []string) error {
+	if err := ValidateISODir(isoDir); err != nil {
+		return err
+	}
+
+	for _, name := range names {
+		if err := ValidateRemoteFilename(name); err != nil {
+			p.Log.Warn("iso: skipping custom iso with unsafe filename", "file", name, "err", err)
+			continue
+		}
+
+		inUse, err := anyVMReferencesISO(ctx, p, "iso/"+name)
+		if err != nil {
+			p.Log.Warn("iso: could not check vm references — skipping", "iso", name, "err", err)
+			continue
+		}
+		if inUse {
+			p.Log.Warn("iso: still referenced by a running vm — skipping removal", "iso", name)
+			continue
+		}
+
+		target := isoDir + "/" + name
+		if _, rmErr := SSHRunArgv(ctx, p.Exec, p.Host, p.KnownHostsPath, "rm", "-f", "--", target); rmErr != nil {
+			p.Log.Warn("iso: failed to remove", "iso", name, "err", rmErr)
+			continue
+		}
+		p.Log.Info("iso: removed custom node iso from proxmox host", "iso", name)
+	}
+
+	return nil
+}
+
 // parseNullDelimitedFileList splits find -print0 output on null bytes, which
 // is unambiguous even when filenames contain newlines or spaces.
 func parseNullDelimitedFileList(output string) []string {
