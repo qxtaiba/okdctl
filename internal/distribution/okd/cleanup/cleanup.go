@@ -269,7 +269,7 @@ func cleanupSteps(opts *Options, logger *slog.Logger) []distribution.StepDef {
 			if !opts.PostDestroy || opts.TerraformEnv == "" {
 				return nil
 			}
-			envDir := filepath.Join(opts.ProjectRoot, "infrastructure", "terraform", "environments", opts.TerraformEnv)
+			envDir := phase.TerraformEnvDir(opts.ProjectRoot, opts.TerraformEnv)
 			tf := terraform.New(envDir, terraform.WithLogger(logger))
 			if !tf.HasState() {
 				_ = SafeRemoveWithLogger(ctx, filepath.Join(envDir, "terraform.tfstate"), "terraform state file", logger)

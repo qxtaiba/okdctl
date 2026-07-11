@@ -211,9 +211,7 @@ func hasPrimaryMarker(root string) bool {
 }
 
 func terraformStateMatches(root string) []string {
-	matches, _ := filepath.Glob(
-		filepath.Join(root, "infrastructure", "terraform", "environments", "*", "terraform.tfstate"),
-	)
+	matches, _ := filepath.Glob(filepath.Join(phase.TerraformEnvDir(root, "*"), "terraform.tfstate"))
 	return matches
 }
 

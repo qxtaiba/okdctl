@@ -99,6 +99,13 @@ func GetTerraformEnv(cfg *config.Config) string {
 	return "production"
 }
 
+// TerraformEnvDir returns the Terraform environment directory
+// (<projectRoot>/infrastructure/terraform/environments/<env>) for env. An
+// empty env resolves to the environments directory itself.
+func TerraformEnvDir(projectRoot, env string) string {
+	return filepath.Join(projectRoot, "infrastructure", "terraform", "environments", env)
+}
+
 // BasePhase is the shared state every phase (setup, install, postinstall,
 // destroy, cleanup) embeds — command executor, logger, metrics recorder,
 // and progress reporter.

@@ -178,7 +178,7 @@ func (p *Phase) GenerateTerraformVars(ctx context.Context, cfg *config.Config, o
 		return &errtypes.ConfigError{Msg: msgProxmoxProviderRequired}
 	}
 
-	envDir := filepath.Join(opts.ProjectRoot, "infrastructure", "terraform", "environments", phase.GetTerraformEnv(cfg))
+	envDir := phase.TerraformEnvDir(opts.ProjectRoot, phase.GetTerraformEnv(cfg))
 	// A stale postinstall sentinel would override the regenerated
 	// bootstrap_enabled=true and silently skip the bootstrap VM. Deploy is the
 	// only caller that should resurrect bootstrap, so the removal lives here,

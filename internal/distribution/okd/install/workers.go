@@ -3,10 +3,10 @@ package install
 import (
 	"context"
 	"fmt"
-	"path/filepath"
 	"strings"
 
 	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/infrastructure/terraform"
 )
@@ -33,7 +33,7 @@ func (p *Phase) StartWorkerVMs(ctx context.Context, cfg *config.Config, opts *Op
 
 	p.Log.Info("workers: starting", "count", cfg.Topology.Workers.Count)
 
-	terraformDir := filepath.Join(opts.ProjectRoot, "infrastructure", "terraform", "environments", opts.TerraformEnv)
+	terraformDir := phase.TerraformEnvDir(opts.ProjectRoot, opts.TerraformEnv)
 
 	tf := terraform.New(
 		terraformDir,

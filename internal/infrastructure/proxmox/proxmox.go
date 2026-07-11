@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/executor"
 	"github.com/qxtaiba/okdctl/internal/infrastructure/proxmox/hostssh"
@@ -172,7 +173,7 @@ func (p *Provider) setupTerraform(projectRoot, tfEnv string) {
 	p.projectRoot = projectRoot
 	p.tfEnv = tfEnv
 
-	tfDir := filepath.Join(projectRoot, "infrastructure", "terraform", "environments", tfEnv)
+	tfDir := phase.TerraformEnvDir(projectRoot, tfEnv)
 
 	tfOpts := []terraform.Option{
 		terraform.WithLogger(p.logger),

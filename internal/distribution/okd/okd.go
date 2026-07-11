@@ -213,7 +213,7 @@ func (p *Provisioner) guardLiveCluster(cfg *config.Config, opts SetupOpts) error
 		return nil
 	}
 	tfEnv := phase.GetTerraformEnv(cfg)
-	envDir := filepath.Join(p.projectRoot, "infrastructure", "terraform", "environments", tfEnv)
+	envDir := phase.TerraformEnvDir(p.projectRoot, tfEnv)
 	tf := terraform.New(envDir, terraform.WithLogger(p.logger))
 	if !tf.HasState() {
 		return nil
