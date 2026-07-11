@@ -3,6 +3,7 @@ package credentials
 import (
 	"bufio"
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -12,6 +13,11 @@ import (
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/system"
 )
+
+// ErrEnvFileAlreadyLoaded is wrapped inside the ConfigError LoadEnvFile
+// returns when called a second time with a path different from the
+// first call, so callers can errors.Is it instead of string-matching Msg.
+var ErrEnvFileAlreadyLoaded = errors.New("env file already loaded with different path")
 
 // loadOnce guards against concurrent or repeated calls to LoadEnvFile.
 // The global process environment is shared mutable state: without this
@@ -123,7 +129,10 @@ func LoadEnvFile(path string) error {
 		loadErr = loadEnvFileOnce(path)
 	})
 	if loadedPath != path {
-		return &errtypes.ConfigError{Msg: fmt.Sprintf("LoadEnvFile already called with %q; cannot reload from %q", loadedPath, path)}
+		return &errtypes.ConfigError{
+			Msg: fmt.Sprintf("LoadEnvFile already called with %q; cannot reload from %q", loadedPath, path),
+			Err: ErrEnvFileAlreadyLoaded,
+		}
 	}
 	return loadErr
 }
