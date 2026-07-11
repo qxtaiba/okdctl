@@ -222,3 +222,47 @@ func TestExecutor_NewestBakSnapshot(t *testing.T) {
 		}
 	})
 }
+
+func TestExecutor_PruneBakSnapshotsExceptNewest(t *testing.T) {
+	t.Run("none present", func(t *testing.T) {
+		e := &Executor{workDir: t.TempDir()}
+		kept, err := e.PruneBakSnapshotsExceptNewest()
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if kept != "" {
+			t.Errorf("kept = %q; want empty", kept)
+		}
+	})
+
+	t.Run("keeps newest, removes the rest", func(t *testing.T) {
+		dir := t.TempDir()
+		names := []string{
+			"terraform.tfstate.2024-01-01T00-00-00Z.bak",
+			"terraform.tfstate.2024-01-02T00-00-00Z.bak",
+			"terraform.tfstate.2024-01-03T00-00-00Z.bak",
+		}
+		for _, n := range names {
+			if err := os.WriteFile(filepath.Join(dir, n), []byte("x"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+		}
+		e := &Executor{workDir: dir}
+		kept, err := e.PruneBakSnapshotsExceptNewest()
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		want := filepath.Join(dir, "terraform.tfstate.2024-01-03T00-00-00Z.bak")
+		if kept != want {
+			t.Errorf("kept = %q; want %q", kept, want)
+		}
+		for _, n := range names[:2] {
+			if _, statErr := os.Stat(filepath.Join(dir, n)); !os.IsNotExist(statErr) {
+				t.Errorf("%s still present; want removed", n)
+			}
+		}
+		if _, statErr := os.Stat(want); statErr != nil {
+			t.Errorf("newest snapshot removed: %v", statErr)
+		}
+	})
+}
