@@ -19,12 +19,13 @@ import (
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/httputil"
+	"github.com/qxtaiba/okdctl/internal/nodetypes"
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
 type verifyCondition struct {
-	Type   phase.ConditionType   `json:"type"`
-	Status phase.ConditionStatus `json:"status"`
+	Type   nodetypes.ConditionType   `json:"type"`
+	Status nodetypes.ConditionStatus `json:"status"`
 }
 
 // clusterOperatorList is a minimal view of `oc get clusteroperators -o json`
@@ -52,7 +53,7 @@ func parseOperatorDegradation(payload []byte) ([]string, error) {
 	var degraded []string
 	for _, op := range co.Items {
 		if slices.ContainsFunc(op.Status.Conditions, func(c verifyCondition) bool {
-			return c.Type == phase.ConditionTypeDegraded && c.Status == phase.ConditionStatusTrue
+			return c.Type == nodetypes.ConditionTypeDegraded && c.Status == nodetypes.ConditionStatusTrue
 		}) {
 			degraded = append(degraded, op.Metadata.Name)
 		}
@@ -88,7 +89,7 @@ func parseNodeReadiness(payload []byte) (ready, total int, err error) {
 	for _, node := range n.Items {
 		total++
 		if slices.ContainsFunc(node.Status.Conditions, func(c verifyCondition) bool {
-			return c.Type == phase.ConditionTypeReady && c.Status == phase.ConditionStatusTrue
+			return c.Type == nodetypes.ConditionTypeReady && c.Status == nodetypes.ConditionStatusTrue
 		}) {
 			ready++
 		}

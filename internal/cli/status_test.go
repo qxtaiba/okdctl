@@ -3,14 +3,14 @@ package cli
 import (
 	"testing"
 
-	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
+	"github.com/qxtaiba/okdctl/internal/nodetypes"
 )
 
 func TestConditionStatusLiterals(t *testing.T) {
-	if got := string(phase.ConditionStatusTrue); got != "True" {
+	if got := string(nodetypes.ConditionStatusTrue); got != "True" {
 		t.Fatalf("ConditionStatusTrue = %q, want %q", got, "True")
 	}
-	if got := string(phase.ConditionStatusFalse); got != "False" {
+	if got := string(nodetypes.ConditionStatusFalse); got != "False" {
 		t.Fatalf("ConditionStatusFalse = %q, want %q", got, "False")
 	}
 }

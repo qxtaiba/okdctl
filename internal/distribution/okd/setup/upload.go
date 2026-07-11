@@ -10,10 +10,10 @@ import (
 	"strings"
 
 	"github.com/qxtaiba/okdctl/internal/config"
-	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/download"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/executor"
+	"github.com/qxtaiba/okdctl/internal/infrastructure/proxmox/hostssh"
 	"github.com/qxtaiba/okdctl/internal/sshpin"
 	"github.com/qxtaiba/okdctl/internal/system"
 )
@@ -21,14 +21,14 @@ import (
 // remoteISO256 runs sha256sum on remotePath/filename over SSH and returns the
 // hex digest. Any SSH or parse failure returns ("", err).
 func remoteISO256(ctx context.Context, exec *executor.Executor, host, knownHostsPath, remotePath, filename string) (string, error) {
-	if err := phase.ValidateISODir(remotePath); err != nil {
+	if err := hostssh.ValidateISODir(remotePath); err != nil {
 		return "", fmt.Errorf("remoteISO256: %w", err)
 	}
-	if err := phase.ValidateRemoteFilename(filename); err != nil {
+	if err := hostssh.ValidateRemoteFilename(filename); err != nil {
 		return "", fmt.Errorf("remoteISO256: %w", err)
 	}
 	target := remotePath + "/" + filename
-	result, err := phase.SSHRunArgv(ctx, exec, host, knownHostsPath, "sha256sum", "--", target)
+	result, err := hostssh.SSHRunArgv(ctx, exec, host, knownHostsPath, "sha256sum", "--", target)
 	if err != nil {
 		return "", err
 	}
@@ -87,7 +87,7 @@ func calculateTotalSize(files []string) int64 {
 // Per-file invocations mean a SIGINT or network drop mid-batch leaves
 // already-uploaded files intact; the next run resumes only the corrupt tail.
 // When knownHostsPath is non-empty the scp call enforces strict host-key
-// checking against that file, matching sshBaseArgs policy in phase/ssh.go.
+// checking against that file, matching sshBaseArgs policy in hostssh/ssh.go.
 // An empty path falls back to accept-new TOFU, preserving behaviour for
 // operators without a configured fingerprint.
 func uploadISOsViaSCP(ctx context.Context, cmdRunner *executor.Executor, isoFiles []string, user, host, remotePath, knownHostsPath string) error {
@@ -141,9 +141,9 @@ func (p *Phase) UploadCustomISOsToProxmox(ctx context.Context, cfg *config.Confi
 		return nil
 	}
 
-	host := phase.ProxmoxBareHost(cfg.Provider.Proxmox.Host)
+	host := hostssh.ProxmoxBareHost(cfg.Provider.Proxmox.Host)
 	user := "root"
-	remotePath := phase.DefaultProxmoxISODir
+	remotePath := hostssh.DefaultProxmoxISODir
 
 	knownHostsPath, err := sshpin.Verify(ctx, host, cfg.Provider.Proxmox.SSHHostFingerprint, cfg.Provider.Proxmox.RequirePinnedFingerprint, p.Log)
 	if err != nil {
@@ -195,8 +195,8 @@ func (p *Phase) isoUploadAlreadyDone(ctx context.Context, cfg *config.Config, op
 	if err != nil || len(isoFiles) == 0 {
 		return false, nil //nolint:nilerr // intentional: caller treats false as "Exec must run"
 	}
-	host := phase.ProxmoxBareHost(cfg.Provider.Proxmox.Host)
-	remotePath := phase.DefaultProxmoxISODir
+	host := hostssh.ProxmoxBareHost(cfg.Provider.Proxmox.Host)
+	remotePath := hostssh.DefaultProxmoxISODir
 	knownHostsPath, err := sshpin.Verify(ctx, host, cfg.Provider.Proxmox.SSHHostFingerprint, cfg.Provider.Proxmox.RequirePinnedFingerprint, p.Log)
 	if err != nil {
 		return false, err

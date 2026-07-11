@@ -1,6 +1,6 @@
 package okd
 
-import "github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
+import "github.com/qxtaiba/okdctl/internal/nodetypes"
 
 // ClusterStatus is a read-only snapshot of an OKD cluster: lifecycle phase,
 // API reachability, per-node health, operator degradation count, and addon
@@ -57,20 +57,20 @@ const (
 
 // NodeStatus is one cluster node's projected identity and health.
 type NodeStatus struct {
-	Name       string                `json:"name"`
-	Role       phase.NodeRole        `json:"role"`
-	Ready      bool                  `json:"ready"`
-	Status     phase.NodeStatusPhase `json:"status,omitempty"`
-	Version    string                `json:"version,omitempty"`
-	InternalIP string                `json:"internal_ip,omitempty"`
-	Conditions []Condition           `json:"conditions,omitempty"`
+	Name       string                    `json:"name"`
+	Role       nodetypes.NodeRole        `json:"role"`
+	Ready      bool                      `json:"ready"`
+	Status     nodetypes.NodeStatusPhase `json:"status,omitempty"`
+	Version    string                    `json:"version,omitempty"`
+	InternalIP string                    `json:"internal_ip,omitempty"`
+	Conditions []Condition               `json:"conditions,omitempty"`
 }
 
 // Condition mirrors the k8s condition shape but carries project-local
 // ConditionType/Status values from internal/distribution/okd/phase.
 type Condition struct {
-	Type    phase.ConditionType   `json:"type"`
-	Status  phase.ConditionStatus `json:"status"`
-	Reason  string                `json:"reason,omitempty"`
-	Message string                `json:"message,omitempty"`
+	Type    nodetypes.ConditionType   `json:"type"`
+	Status  nodetypes.ConditionStatus `json:"status"`
+	Reason  string                    `json:"reason,omitempty"`
+	Message string                    `json:"message,omitempty"`
 }

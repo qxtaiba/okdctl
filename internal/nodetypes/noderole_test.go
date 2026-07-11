@@ -1,4 +1,4 @@
-package phase
+package nodetypes
 
 import "testing"
 

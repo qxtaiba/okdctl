@@ -1,4 +1,8 @@
-package phase
+// Package hostssh runs commands on the Proxmox host as root over SSH:
+// generic command execution, pvesh queries, and CoreOS ISO cleanup.
+// Policy of record: all SSH operations use SSHRunArgv (argv-mode) except
+// the single sanctioned sh -c call site in RemoveFCOSISOFromProxmox.
+package hostssh
 
 import (
 	"context"

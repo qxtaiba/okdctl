@@ -1,4 +1,4 @@
-package phase
+package hostssh
 
 import (
 	"encoding/json"

@@ -15,6 +15,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/distribution"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
+	"github.com/qxtaiba/okdctl/internal/nodetypes"
 	"github.com/qxtaiba/okdctl/internal/platform"
 )
 
@@ -86,7 +87,7 @@ type CoreOSInfo struct {
 // Terraform tfvars (role, IP, MAC).
 type NodeInfo struct {
 	Name string
-	Role phase.NodeRole
+	Role nodetypes.NodeRole
 	IP   string
 	MAC  string
 }

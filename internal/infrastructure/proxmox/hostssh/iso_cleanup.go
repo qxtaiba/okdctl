@@ -1,4 +1,4 @@
-package phase
+package hostssh
 
 import (
 	"context"
@@ -9,7 +9,12 @@ import (
 	"strings"
 
 	"github.com/qxtaiba/okdctl/internal/executor"
+	"github.com/qxtaiba/okdctl/internal/nodetypes"
 )
+
+// DefaultProxmoxISODir is the default Proxmox-managed path where downloaded
+// CoreOS ISOs are uploaded via scp and referenced by `qm importdisk`.
+const DefaultProxmoxISODir = "/var/lib/vz/template/iso"
 
 // RemoteISOParams carries the connection parameters needed to clean ISOs from
 // a Proxmox host over SSH. Host must be the bare hostname or IP (no port).
@@ -109,15 +114,15 @@ func ValidateRemoteFilename(name string) error {
 // but a stopped VM that still references an ISO can be destroyed cleanly.
 func parseVMIDsFromSummary(data []byte) ([]int, error) {
 	var vms []struct {
-		VMID   int     `json:"vmid"`
-		Status VMState `json:"status"`
+		VMID   int               `json:"vmid"`
+		Status nodetypes.VMState `json:"status"`
 	}
 	if err := json.Unmarshal(data, &vms); err != nil {
 		return nil, fmt.Errorf("pvesh qemu list output not valid json: %w", err)
 	}
 	var ids []int
 	for _, vm := range vms {
-		if vm.Status == StateRunning {
+		if vm.Status == nodetypes.StateRunning {
 			ids = append(ids, vm.VMID)
 		}
 	}

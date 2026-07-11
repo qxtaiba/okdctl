@@ -1,8 +1,8 @@
 // Package phase hosts BasePhase plus the cross-phase helpers (OcResourceExists,
-// OcPollOutput, NodeRole, ConditionStatus, VMState, SSHRunArgv) shared by the
-// setup, install, postinstall, destroy, and cleanup phases. New cross-phase
-// helpers belong here per CLAUDE.md §architecture-notes — not in a specific
-// phase package — to keep the import graph one-directional.
+// OcPollOutput, path layout) shared by the setup, install, postinstall,
+// destroy, and cleanup phases. New cross-phase helpers belong here per
+// CLAUDE.md §architecture-notes — not in a specific phase package — to keep
+// the import graph one-directional.
 package phase
 
 import (
@@ -57,9 +57,6 @@ const (
 	DefaultHTTPServerRoot = "/var/www/html"
 	// DefaultDNSMasqConfigDir is where per-cluster dnsmasq fragments live.
 	DefaultDNSMasqConfigDir = "/etc/dnsmasq.d"
-	// DefaultProxmoxISODir is the default Proxmox-managed path where downloaded
-	// CoreOS ISOs are uploaded via scp and referenced by `qm importdisk`.
-	DefaultProxmoxISODir = "/var/lib/vz/template/iso"
 )
 
 // HAProxyTimestampedBackupPath returns the rolling-backup path for

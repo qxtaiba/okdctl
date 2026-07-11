@@ -15,6 +15,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/distribution/okd"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
+	"github.com/qxtaiba/okdctl/internal/nodetypes"
 	"github.com/qxtaiba/okdctl/internal/system"
 	"github.com/qxtaiba/okdctl/internal/tui"
 )
@@ -87,8 +88,8 @@ type statusNodeList struct {
 }
 
 type statusCondition struct {
-	Type   phase.ConditionType   `json:"type"`
-	Status phase.ConditionStatus `json:"status"`
+	Type   nodetypes.ConditionType   `json:"type"`
+	Status nodetypes.ConditionStatus `json:"status"`
 }
 
 type statusNode struct {
@@ -115,18 +116,18 @@ type statusClusterOperator struct {
 
 func (n *statusNode) isReady() bool {
 	return slices.ContainsFunc(n.Status.Conditions, func(c statusCondition) bool {
-		return c.Type == phase.ConditionTypeReady && c.Status == phase.ConditionStatusTrue
+		return c.Type == nodetypes.ConditionTypeReady && c.Status == nodetypes.ConditionStatusTrue
 	})
 }
 
-func (n *statusNode) role() phase.NodeRole {
+func (n *statusNode) role() nodetypes.NodeRole {
 	if _, ok := n.Metadata.Labels["node-role.kubernetes.io/master"]; ok {
-		return phase.RoleMaster
+		return nodetypes.RoleMaster
 	}
 	if _, ok := n.Metadata.Labels["node-role.kubernetes.io/worker"]; ok {
-		return phase.RoleWorker
+		return nodetypes.RoleWorker
 	}
-	return phase.RoleUnknown
+	return nodetypes.RoleUnknown
 }
 
 func runStatus(cmd *cobra.Command, _ []string) error {
@@ -168,9 +169,9 @@ func runStatus(cmd *cobra.Command, _ []string) error {
 		} else {
 			for _, n := range nl.Items {
 				ready := n.isReady()
-				nodePhase := phase.NodeStatusNotReady
+				nodePhase := nodetypes.NodeStatusNotReady
 				if ready {
-					nodePhase = phase.NodeStatusReady
+					nodePhase = nodetypes.NodeStatusReady
 				}
 				nodes = append(nodes, okd.NodeStatus{
 					Name:   n.Metadata.Name,
@@ -193,7 +194,7 @@ func runStatus(cmd *cobra.Command, _ []string) error {
 		} else {
 			for _, co := range col.Items {
 				if slices.ContainsFunc(co.Status.Conditions, func(c statusCondition) bool {
-					return c.Type == phase.ConditionTypeDegraded && c.Status == phase.ConditionStatusTrue
+					return c.Type == nodetypes.ConditionTypeDegraded && c.Status == nodetypes.ConditionStatusTrue
 				}) {
 					degraded++
 				}
@@ -251,9 +252,9 @@ func printClusterStatus(cmd *cobra.Command, st *okd.ClusterStatus) error {
 	workers := 0
 	for _, n := range st.Nodes {
 		switch n.Role {
-		case phase.RoleMaster:
+		case nodetypes.RoleMaster:
 			masters++
-		case phase.RoleWorker:
+		case nodetypes.RoleWorker:
 			workers++
 		}
 	}
@@ -327,9 +328,9 @@ func runDescribeNode(cmd *cobra.Command, args []string) error {
 	tw := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
 	fmt.Fprintf(tw, "NAME\t%s\n", n.Metadata.Name)
 	fmt.Fprintf(tw, "ROLE\t%s\n", n.role())
-	ready := string(phase.ConditionStatusFalse)
+	ready := string(nodetypes.ConditionStatusFalse)
 	if n.isReady() {
-		ready = string(phase.ConditionStatusTrue)
+		ready = string(nodetypes.ConditionStatusTrue)
 	}
 	fmt.Fprintf(tw, "READY\t%s\n", ready)
 	return tw.Flush()

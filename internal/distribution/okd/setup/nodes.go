@@ -4,9 +4,9 @@ import (
 	"fmt"
 
 	"github.com/qxtaiba/okdctl/internal/config"
-	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/netutil"
+	"github.com/qxtaiba/okdctl/internal/nodetypes"
 )
 
 // BuildNodeList returns the ordered list of nodes (bootstrap, masters,
@@ -26,19 +26,19 @@ func (p *Phase) BuildNodeList(cfg *config.Config) ([]NodeInfo, error) {
 	}
 
 	nodes = append(nodes, NodeInfo{
-		Name: string(phase.RoleBootstrap),
-		Role: phase.RoleBootstrap,
+		Name: string(nodetypes.RoleBootstrap),
+		Role: nodetypes.RoleBootstrap,
 		IP:   startIP,
 	})
 
 	for i := range cfg.Topology.ControlPlane.Count {
 		ip, err := netutil.CalculateVMIP(startIP, 1+i)
 		if err != nil {
-			return nil, &errtypes.ConfigError{Msg: fmt.Sprintf("failed to calculate %s%d IP", phase.RoleMaster, i), Err: err}
+			return nil, &errtypes.ConfigError{Msg: fmt.Sprintf("failed to calculate %s%d IP", nodetypes.RoleMaster, i), Err: err}
 		}
 		nodes = append(nodes, NodeInfo{
-			Name: fmt.Sprintf("%s%d", phase.RoleMaster, i),
-			Role: phase.RoleMaster,
+			Name: fmt.Sprintf("%s%d", nodetypes.RoleMaster, i),
+			Role: nodetypes.RoleMaster,
 			IP:   ip,
 		})
 	}
@@ -47,11 +47,11 @@ func (p *Phase) BuildNodeList(cfg *config.Config) ([]NodeInfo, error) {
 	for i := range cfg.Topology.Workers.Count {
 		ip, err := netutil.CalculateVMIP(startIP, workerOffset+i)
 		if err != nil {
-			return nil, &errtypes.ConfigError{Msg: fmt.Sprintf("failed to calculate %s%d IP", phase.RoleWorker, i), Err: err}
+			return nil, &errtypes.ConfigError{Msg: fmt.Sprintf("failed to calculate %s%d IP", nodetypes.RoleWorker, i), Err: err}
 		}
 		nodes = append(nodes, NodeInfo{
-			Name: fmt.Sprintf("%s%d", phase.RoleWorker, i),
-			Role: phase.RoleWorker,
+			Name: fmt.Sprintf("%s%d", nodetypes.RoleWorker, i),
+			Role: nodetypes.RoleWorker,
 			IP:   ip,
 		})
 	}

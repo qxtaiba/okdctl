@@ -3,7 +3,7 @@ package proxmox
 import (
 	"errors"
 
-	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
+	"github.com/qxtaiba/okdctl/internal/nodetypes"
 )
 
 // Provider sentinel errors. Package-local placement is intentional
@@ -35,17 +35,7 @@ type ProvisionResult struct {
 type VMStatus struct {
 	ID        string
 	Name      string
-	Role      VMRole
-	Status    phase.VMState
+	Role      nodetypes.NodeRole
+	Status    nodetypes.VMState
 	IPAddress string
 }
-
-// VMRole is an alias of phase.NodeRole; both name the same domain concept.
-type VMRole = phase.NodeRole
-
-// Role* re-export the phase.NodeRole values for proxmox-package callers.
-const (
-	RoleBootstrap VMRole = phase.RoleBootstrap
-	RoleMaster    VMRole = phase.RoleMaster
-	RoleWorker    VMRole = phase.RoleWorker
-)

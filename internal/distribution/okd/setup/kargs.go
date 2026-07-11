@@ -5,9 +5,9 @@ import (
 	"net/netip"
 
 	"github.com/qxtaiba/okdctl/internal/config"
-	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/netutil"
+	"github.com/qxtaiba/okdctl/internal/nodetypes"
 )
 
 // LiveKargsParams carries the per-node values embedded as kernel arguments
@@ -75,7 +75,7 @@ func ExtractNetworkConfig(cfg *config.Config) (gateway, netmask, dns, iface stri
 // TLS with a pinned CA cert is the primary defence against credential
 // capture over the machine-network VLAN. IgnitionServerIP must be RFC1918,
 // loopback, or link-local to prevent exposure on public interfaces.
-func BuildIgnitionURLForNode(cfg *config.Config, role phase.NodeRole) (string, error) {
+func BuildIgnitionURLForNode(cfg *config.Config, role nodetypes.NodeRole) (string, error) {
 	ignitionIP := cfg.HTTPServer.IgnitionServerIP
 
 	addr, err := netip.ParseAddr(ignitionIP)

@@ -1,12 +1,15 @@
-package phase
+// Package nodetypes defines the shared domain vocabulary for cluster nodes
+// and Proxmox VMs — NodeRole, VMState, NodeStatusPhase, and the Kubernetes
+// condition enums. It is a leaf package (stdlib-only) so distribution
+// phases, infrastructure providers, and the CLI can all import it without
+// creating upward edges in the import graph.
+package nodetypes
 
 import "fmt"
 
 // NodeRole is the cluster-role assignment for an OKD node. Values are the
 // lowercase strings openshift-install, HAProxy backend templates, and
-// ignition URLs expect verbatim — change carefully. Lives in phase/ rather
-// than okd/ so subpackages (setup, install, destroy, cleanup) can use it
-// without pulling an import cycle through okd → subpackage → okd.
+// ignition URLs expect verbatim — change carefully.
 type NodeRole string
 
 // Node role values. String literals are load-bearing — openshift-install,
