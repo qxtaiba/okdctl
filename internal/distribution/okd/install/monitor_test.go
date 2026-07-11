@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"testing/synctest"
@@ -83,7 +84,8 @@ func TestMonitorInstallation_DeadlineExceeded(t *testing.T) {
 	p := newInstallPhase(t)
 	approver := &fakeApprover{}
 
-	err := p.MonitorInstallation(context.Background(), t.TempDir(), baseOpts(20*time.Millisecond), approver)
+	clusterDir := t.TempDir()
+	err := p.MonitorInstallation(context.Background(), clusterDir, baseOpts(20*time.Millisecond), approver)
 	if err == nil {
 		t.Fatal("expected error on timeout; got nil")
 	}
@@ -94,6 +96,43 @@ func TestMonitorInstallation_DeadlineExceeded(t *testing.T) {
 	if !errors.As(err, &clusterErr) {
 		t.Errorf("err = %v; want errors.As(_, *errtypes.ClusterError)", err)
 	}
+	assertTimeoutDiagnostics(t, err, clusterDir)
+}
+
+// assertTimeoutDiagnostics pins the enriched-timeout contract: the message
+// must name the openshift-install log, an oc probe, and okdctl debug-bundle.
+func assertTimeoutDiagnostics(t *testing.T, err error, clusterDir string) {
+	t.Helper()
+	for _, want := range []string{
+		filepath.Join(clusterDir, ".openshift_install.log"),
+		"oc --kubeconfig " + filepath.Join(clusterDir, "auth", "kubeconfig") + " get clusteroperators",
+		"okdctl debug-bundle",
+	} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("timeout error missing %q: %v", want, err)
+		}
+	}
+}
+
+func TestWaitForBootstrap_TimeoutNamesDiagnostics(t *testing.T) {
+	installFakeOpenShift(t)
+	t.Setenv("OC_FAKE_MODE", "sleep")
+
+	p := newInstallPhase(t)
+	clusterDir := t.TempDir()
+	opts := &Options{BootstrapTimeout: 20 * time.Millisecond}
+
+	err := p.WaitForBootstrap(context.Background(), clusterDir, opts)
+	if err == nil {
+		t.Fatal("expected error on timeout; got nil")
+	}
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Errorf("err = %v; want errors.Is(_, context.DeadlineExceeded)", err)
+	}
+	if !strings.Contains(err.Error(), "bootstrap timed out after") {
+		t.Errorf("err = %v; want message to name the bootstrap timeout", err)
+	}
+	assertTimeoutDiagnostics(t, err, clusterDir)
 }
 
 func TestMonitorInstallation_CtxCanceled(t *testing.T) {
