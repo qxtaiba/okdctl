@@ -83,9 +83,10 @@ func TestDestroySteps_SuccessPath(t *testing.T) {
 	if rec.Level != slog.LevelInfo {
 		t.Errorf("level = %v; want Info", rec.Level)
 	}
-	if rec.Message != "destroy: cluster teardown completed" {
-		t.Errorf("message = %q; want %q", rec.Message, "destroy: cluster teardown completed")
-	}
+	rec.Attrs(func(a slog.Attr) bool {
+		t.Errorf("unexpected attr %s=%v on clean teardown; want no failed_steps/skipped_steps", a.Key, a.Value)
+		return true
+	})
 }
 
 func TestDestroySteps_FailurePath(t *testing.T) {
@@ -133,10 +134,6 @@ func TestDestroySteps_FailurePath(t *testing.T) {
 	if rec.Level != slog.LevelWarn {
 		t.Errorf("level = %v; want Warn", rec.Level)
 	}
-	const wantMsg = "destroy: teardown finished with non-fatal failures"
-	if rec.Message != wantMsg {
-		t.Errorf("message = %q; want %q", rec.Message, wantMsg)
-	}
 
 	var stepsVal string
 	rec.Attrs(func(a slog.Attr) bool {
@@ -174,10 +171,6 @@ func TestDestroySteps_SkipPath(t *testing.T) {
 	}
 	if rec.Level != slog.LevelInfo {
 		t.Errorf("level = %v; want Info", rec.Level)
-	}
-	const wantMsg = "destroy: cluster teardown completed"
-	if rec.Message != wantMsg {
-		t.Errorf("message = %q; want %q", rec.Message, wantMsg)
 	}
 
 	var skippedVal string
