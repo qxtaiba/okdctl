@@ -14,7 +14,8 @@ import (
 // consistent color and badge treatment.
 type OptionStyle int
 
-// OptionStyle values used across the version/release selectors.
+// OptionStyle values, all mapped from releases.ReleaseType by
+// steps/distribution_loader.go::releaseTypeToOptionStyle.
 const (
 	OptionStyleDefault       OptionStyle = iota
 	OptionStyleLatestStable              // Green - latest stable release
@@ -24,18 +25,14 @@ const (
 	OptionStyleLTS                       // Cyan/blue - long-term support
 )
 
-// Option is a single entry in a Selector — a styled, optionally disabled
-// row with a title, description, and requirements note.
+// Option is a single styled entry in a Selector.
 type Option struct {
-	ID           string
-	Title        string
-	Description  string
-	Requirements string
-	Recommended  bool
-	Disabled     bool
-	DisabledMsg  string
-	Style        OptionStyle
-	InDropdown   bool // part of the scrollable dropdown region
+	ID          string
+	Title       string
+	Description string
+	Recommended bool
+	Style       OptionStyle
+	InDropdown  bool // part of the scrollable dropdown region
 }
 
 // Selector is a vertical option list with a scrollable dropdown region.
@@ -43,10 +40,7 @@ type Selector struct {
 	options              []Option
 	selected             int
 	focused              bool
-	width                int
-	height               int
 	dropdownScrollOffset int
-	maxDropdownVisible   int // default 5
 
 	// cachedStyles is a lazily-initialised cache of the lipgloss.Style objects
 	// used when rendering options. Caching is safe because tui.Color* values
@@ -55,15 +49,12 @@ type Selector struct {
 	cachedStyles *optionStyles
 }
 
-// NewSelector builds a Selector starting focused on the first option with
-// the default dropdown window size of 5.
+// NewSelector builds a Selector starting focused on the first option.
 func NewSelector(options []Option) *Selector {
 	return &Selector{
-		options:              options,
-		selected:             0,
-		focused:              true,
-		dropdownScrollOffset: 0,
-		maxDropdownVisible:   5,
+		options:  options,
+		selected: 0,
+		focused:  true,
 	}
 }
 
@@ -77,14 +68,6 @@ func (s *Selector) SetOptions(options []Option) {
 	}
 	if s.selected < 0 {
 		s.selected = 0
-	}
-}
-
-// SetMaxDropdownVisible caps the number of dropdown rows rendered at once.
-// Values <= 0 are ignored so a bad caller can't hide every option.
-func (s *Selector) SetMaxDropdownVisible(n int) {
-	if n > 0 {
-		s.maxDropdownVisible = n
 	}
 }
 
@@ -102,13 +85,6 @@ func (s *Selector) SelectedIndex() int {
 	return s.selected
 }
 
-// SetSelected moves the selection to index, ignoring out-of-range values.
-func (s *Selector) SetSelected(index int) {
-	if index >= 0 && index < len(s.options) {
-		s.selected = index
-	}
-}
-
 // SetSelectedByID moves the selection to the first option whose ID matches.
 // Unknown IDs are silently ignored.
 func (s *Selector) SetSelectedByID(id string) {
@@ -123,12 +99,6 @@ func (s *Selector) SetSelectedByID(id string) {
 // SetFocused toggles keyboard focus on the selector.
 func (s *Selector) SetFocused(focused bool) {
 	s.focused = focused
-}
-
-// SetSize records the selector's layout dimensions for view rendering.
-func (s *Selector) SetSize(width, height int) {
-	s.width = width
-	s.height = height
 }
 
 // Update handles up/down and j/k key presses to move the selection.
@@ -152,11 +122,8 @@ func (s *Selector) Update(msg tea.Msg) (*Selector, tea.Cmd) {
 type optionStyles struct {
 	bulletSelected   lipgloss.Style
 	bulletUnselected lipgloss.Style
-	titleDisabled    lipgloss.Style
 	desc             lipgloss.Style
-	req              lipgloss.Style
 	recommended      lipgloss.Style
-	disabledMsg      lipgloss.Style
 	line             lipgloss.Style
 }
 
@@ -167,11 +134,8 @@ func (s *Selector) getOptionStyles() optionStyles {
 	styles := optionStyles{
 		bulletSelected:   lipgloss.NewStyle().Foreground(tui.ColorPrimary).Bold(true),
 		bulletUnselected: lipgloss.NewStyle().Foreground(tui.ColorSlate600),
-		titleDisabled:    lipgloss.NewStyle().Foreground(tui.ColorSlate600).Strikethrough(true),
 		desc:             lipgloss.NewStyle().Foreground(tui.ColorSlate500),
-		req:              lipgloss.NewStyle().Foreground(tui.ColorSlate600).Italic(true),
 		recommended:      lipgloss.NewStyle().Foreground(tui.ColorSuccess).Italic(true),
-		disabledMsg:      lipgloss.NewStyle().Foreground(tui.ColorWarning).Italic(true),
 		line:             lipgloss.NewStyle().Foreground(tui.ColorSlate700),
 	}
 	s.cachedStyles = &styles
@@ -236,14 +200,10 @@ func (s *Selector) renderOptionWithPrefix(opt *Option, selected, showConnector b
 	titleStyle := s.getTitleStyle(opt.Style)
 
 	var bullet, title string
-	switch {
-	case opt.Disabled:
-		bullet = styles.bulletUnselected.Render("○")
-		title = styles.titleDisabled.Render(opt.Title)
-	case selected:
+	if selected {
 		bullet = styles.bulletSelected.Render("●")
 		title = titleStyle.Bold(true).Render(opt.Title)
-	default:
+	} else {
 		bullet = styles.bulletUnselected.Render("○")
 		title = titleStyle.Render(opt.Title)
 	}
@@ -261,14 +221,6 @@ func (s *Selector) renderOptionWithPrefix(opt *Option, selected, showConnector b
 		}
 	}
 
-	if opt.Requirements != "" {
-		result = append(result, prefix+styles.line.Render("  │ ")+styles.req.Render("Requires: "+opt.Requirements))
-	}
-
-	if opt.Disabled && opt.DisabledMsg != "" {
-		result = append(result, prefix+styles.line.Render("  │ ")+styles.disabledMsg.Render(opt.DisabledMsg))
-	}
-
 	if showConnector {
 		result = append(result, prefix+styles.line.Render("  │"))
 	}
@@ -282,7 +234,6 @@ type CompactSelector struct {
 	options  []string
 	selected int
 	focused  bool
-	width    int
 }
 
 // NewCompactSelector builds a CompactSelector starting focused on index 0.
@@ -299,45 +250,14 @@ func (s *CompactSelector) Len() int {
 	return len(s.options)
 }
 
-// SetOptions replaces the option list, clamping the selection if needed.
-func (s *CompactSelector) SetOptions(options []string) {
-	s.options = options
-	if s.selected >= len(options) {
-		s.selected = len(options) - 1
-	}
-	if s.selected < 0 {
-		s.selected = 0
-	}
-}
-
-// Selected returns the currently highlighted option, or "" when empty.
-func (s *CompactSelector) Selected() string {
-	if s.selected >= 0 && s.selected < len(s.options) {
-		return s.options[s.selected]
-	}
-	return ""
-}
-
 // SelectedIndex returns the current selection's index.
 func (s *CompactSelector) SelectedIndex() int {
 	return s.selected
 }
 
-// SetSelected moves the selection to index, ignoring out-of-range values.
-func (s *CompactSelector) SetSelected(index int) {
-	if index >= 0 && index < len(s.options) {
-		s.selected = index
-	}
-}
-
 // SetFocused toggles keyboard focus on the selector.
 func (s *CompactSelector) SetFocused(focused bool) {
 	s.focused = focused
-}
-
-// SetWidth records the rendering width used by ViewHorizontal.
-func (s *CompactSelector) SetWidth(width int) {
-	s.width = width
 }
 
 // Update handles up/down and j/k key presses to move the selection.
@@ -382,29 +302,4 @@ func (s *CompactSelector) View() string {
 	}
 
 	return strings.Join(lines, "\n")
-}
-
-// ViewHorizontal renders the options side-by-side as styled tab-like cells.
-func (s *CompactSelector) ViewHorizontal() string {
-	var parts []string
-
-	selectedStyle := lipgloss.NewStyle().
-		Foreground(tui.ColorSlate900).
-		Background(tui.ColorPrimary).
-		Padding(0, 1).
-		Bold(true)
-
-	unselectedStyle := lipgloss.NewStyle().
-		Foreground(tui.ColorSlate400).
-		Padding(0, 1)
-
-	for i, opt := range s.options {
-		if i == s.selected {
-			parts = append(parts, selectedStyle.Render(opt))
-		} else {
-			parts = append(parts, unselectedStyle.Render(opt))
-		}
-	}
-
-	return strings.Join(parts, " ")
 }

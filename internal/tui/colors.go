@@ -46,7 +46,6 @@ var (
 	ColorSlate700 = lipgloss.Color("#334155")
 	ColorSlate900 = lipgloss.Color("#0F172A")
 
-	ColorBorder  = ColorSlate700
 	ColorText    = ColorSlate100
 	ColorTextDim = ColorSlate400
 )
@@ -59,7 +58,6 @@ var (
 	hcColorInfo    = lipgloss.Color("#00FFFF")
 	hcColorText    = lipgloss.Color("#FFFFFF")
 	hcColorTextDim = lipgloss.Color("#AAAAAA")
-	hcColorBorder  = lipgloss.Color("#888888")
 )
 
 func setTheme(theme ColorTheme) {
@@ -72,7 +70,6 @@ func setTheme(theme ColorTheme) {
 		ColorInfo = hcColorInfo
 		ColorText = hcColorText
 		ColorTextDim = hcColorTextDim
-		ColorBorder = hcColorBorder
 	default:
 		ColorPrimary = ColorPurple600
 		ColorSuccess = ColorGreen500
@@ -81,7 +78,6 @@ func setTheme(theme ColorTheme) {
 		ColorInfo = ColorBlue500
 		ColorText = ColorSlate100
 		ColorTextDim = ColorSlate400
-		ColorBorder = ColorSlate700
 	}
 }
 

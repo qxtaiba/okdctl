@@ -23,19 +23,17 @@ var errKVEmptyKey = errors.New("key cannot be empty")
 // inter-field navigation and therefore cannot be used as edit-commit keys —
 // same constraint as MultiSelectField and SelectField.
 type KeyValueField struct {
-	Label             string
-	Help              string
-	AsDelimitedString bool
-	Validator         func(string) error
+	Label     string
+	Help      string
+	Validator func(string) error
 
-	rows      []kvRow
-	cursor    int
-	col       int
-	editMode  bool
-	focused   bool
-	err       error
-	isDefault bool
-	width     int
+	rows     []kvRow
+	cursor   int
+	col      int
+	editMode bool
+	focused  bool
+	err      error
+	width    int
 }
 
 type kvRow struct {
@@ -58,19 +56,15 @@ func newKVRow(k, v string) kvRow {
 }
 
 // NewKeyValueField returns a KeyValueField with one empty placeholder row.
-func NewKeyValueField(label string, asDelimitedString bool) *KeyValueField {
+func NewKeyValueField(label string) *KeyValueField {
 	return &KeyValueField{
-		Label:             label,
-		AsDelimitedString: asDelimitedString,
-		rows:              []kvRow{newKVRow("", "")},
+		Label: label,
+		rows:  []kvRow{newKVRow("", "")},
 	}
 }
 
-// Value serializes rows. When AsDelimitedString is true the result is
-// "k1=v1,k2=v2"; otherwise each pair is "k1: v1" joined by newlines.
-// Rows with a blank key are omitted. Values containing the record separator
-// (comma in CSV mode, newline in YAML mode) will not round-trip through
-// SetValue.
+// Value serializes rows as "k1=v1,k2=v2". Rows with a blank key are omitted.
+// Values containing a comma will not round-trip through SetValue.
 func (f *KeyValueField) Value() string {
 	var parts []string
 	for i := range f.rows {
@@ -80,41 +74,21 @@ func (f *KeyValueField) Value() string {
 		if strings.TrimSpace(k) == "" {
 			continue
 		}
-		if f.AsDelimitedString {
-			parts = append(parts, k+"="+v)
-		} else {
-			parts = append(parts, k+": "+v)
-		}
+		parts = append(parts, k+"="+v)
 	}
-	if f.AsDelimitedString {
-		return strings.Join(parts, ",")
-	}
-	return strings.Join(parts, "\n")
+	return strings.Join(parts, ",")
 }
 
-// SetValue parses value into rows, replacing any current content. Values
-// containing the record separator (comma in CSV mode, newline in YAML mode)
-// will not round-trip through Value.
+// SetValue parses a "k1=v1,k2=v2" string into rows, replacing any current
+// content. Values containing a comma will not round-trip through Value.
 func (f *KeyValueField) SetValue(value string) {
-	f.isDefault = false
-	f.rows = parseKVString(value, f.AsDelimitedString)
+	f.rows = parseKVString(value)
 	if len(f.rows) == 0 {
 		f.rows = []kvRow{newKVRow("", "")}
 	}
 	f.cursor = 0
 	f.col = 0
 	f.editMode = false
-}
-
-// SetDefault sets value as current content and marks the field as unchanged.
-func (f *KeyValueField) SetDefault(value string) {
-	f.SetValue(value)
-	f.isDefault = true
-}
-
-// IsDefault reports whether the current rows match the originally set default.
-func (f *KeyValueField) IsDefault() bool {
-	return f.isDefault
 }
 
 // Focus gives the field keyboard focus and returns the textinput blink
@@ -129,11 +103,6 @@ func (f *KeyValueField) Blur() {
 	f.focused = false
 	f.editMode = false
 	f.blurAllInputs()
-}
-
-// IsFocused reports whether the field currently owns focus.
-func (f *KeyValueField) IsFocused() bool {
-	return f.focused
 }
 
 // SetWidth records the available rendering width and resizes each row's
@@ -168,10 +137,6 @@ func (f *KeyValueField) Validate() error {
 	return nil
 }
 
-func (f *KeyValueField) Error() error {
-	return f.err
-}
-
 // Update routes messages: ctrl+e toggles edit mode; in navigate mode
 // j/k/h/l/a/d adjust cursor and rows; in edit mode all other keystrokes
 // forward to the active textinput.
@@ -204,7 +169,6 @@ func (f *KeyValueField) toggleEditMode() tea.Cmd {
 		f.rows = []kvRow{newKVRow("", "")}
 	}
 	f.editMode = true
-	f.isDefault = false
 	return f.syncInputFocus()
 }
 
@@ -219,7 +183,6 @@ func (f *KeyValueField) updateEdit(msg tea.Msg) (FormField, tea.Cmd) {
 	} else {
 		r.valInput, cmd = r.valInput.Update(msg)
 	}
-	f.isDefault = false
 	return f, cmd
 }
 
@@ -251,7 +214,6 @@ func (f *KeyValueField) addRow() tea.Cmd {
 	f.cursor = len(f.rows) - 1
 	f.col = 0
 	f.editMode = true
-	f.isDefault = false
 	cmd := f.syncInputFocus()
 	if f.width > 0 {
 		f.SetWidth(f.width)
@@ -270,7 +232,6 @@ func (f *KeyValueField) deleteRow() {
 	if f.cursor >= len(f.rows) && f.cursor > 0 {
 		f.cursor--
 	}
-	f.isDefault = false
 }
 
 func (f *KeyValueField) syncInputFocus() tea.Cmd {
@@ -368,42 +329,24 @@ func (f *KeyValueField) viewRow(i, colW int) string {
 	return cur + dimStyle.Render(kVal) + "  " + dimStyle.Render(vVal)
 }
 
-func parseKVString(value string, delimited bool) []kvRow {
+func parseKVString(value string) []kvRow {
 	if strings.TrimSpace(value) == "" {
 		return nil
 	}
 	var rows []kvRow
-	if delimited {
-		for _, pair := range strings.Split(value, ",") {
-			pair = strings.TrimSpace(pair)
-			if pair == "" {
-				continue
-			}
-			eq := strings.IndexByte(pair, '=')
-			if eq < 0 {
-				rows = append(rows, newKVRow(pair, ""))
-				continue
-			}
-			rows = append(rows, newKVRow(
-				strings.TrimSpace(pair[:eq]),
-				strings.TrimSpace(pair[eq+1:]),
-			))
-		}
-		return rows
-	}
-	for _, line := range strings.Split(value, "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" {
+	for _, pair := range strings.Split(value, ",") {
+		pair = strings.TrimSpace(pair)
+		if pair == "" {
 			continue
 		}
-		colon := strings.Index(line, ": ")
-		if colon < 0 {
-			rows = append(rows, newKVRow(line, ""))
+		eq := strings.IndexByte(pair, '=')
+		if eq < 0 {
+			rows = append(rows, newKVRow(pair, ""))
 			continue
 		}
 		rows = append(rows, newKVRow(
-			strings.TrimSpace(line[:colon]),
-			strings.TrimSpace(line[colon+2:]),
+			strings.TrimSpace(pair[:eq]),
+			strings.TrimSpace(pair[eq+1:]),
 		))
 	}
 	return rows

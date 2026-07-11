@@ -46,10 +46,6 @@ type FieldDefinition struct {
 	Required bool
 	Validate func(string) error
 
-	// KVAsDelimitedString controls Value() serialization for FieldTypeKeyValue.
-	// true = "k1=v1,k2=v2" (CSV); false = "k1: v1\nk2: v2" (YAML-map).
-	KVAsDelimitedString bool
-
 	ConfigSet ConfigSetter
 	ConfigGet ConfigGetter
 }
@@ -149,7 +145,7 @@ func NewDataDrivenStep(def *StepDefinition) *DataDrivenStep {
 		step.sections = append(step.sections, formSection{
 			title: sectionDef.Title,
 			note:  sectionDef.Note,
-			group: components.NewInputGroup(sectionDef.Title, fields...),
+			group: components.NewInputGroup(fields...),
 		})
 	}
 
@@ -158,13 +154,13 @@ func NewDataDrivenStep(def *StepDefinition) *DataDrivenStep {
 
 func buildFormField(def *FieldDefinition) components.FormField {
 	if def.Type == FieldTypeKeyValue {
-		kv := components.NewKeyValueField(def.Label, def.KVAsDelimitedString)
+		kv := components.NewKeyValueField(def.Label)
 		kv.Help = def.Help
 		if def.Validate != nil {
 			kv.Validator = def.Validate
 		}
 		if def.Default != "" {
-			kv.SetDefault(def.Default)
+			kv.SetValue(def.Default)
 		}
 		return kv
 	}
@@ -173,7 +169,7 @@ func buildFormField(def *FieldDefinition) components.FormField {
 		mf := components.NewMultiSelectField(def.Label, def.Options)
 		mf.Help = def.Help
 		if def.Default != "" {
-			mf.SetDefault(def.Default)
+			mf.SetValue(def.Default)
 		}
 		return mf
 	}
@@ -546,9 +542,9 @@ func (s *DataDrivenStep) View(width, height int) string {
 		sectionTitle := indicator + " " + formViewStyles.sectionHeader.Render(strings.ToLower(section.title))
 		var sectionContent string
 		if section.note != "" {
-			sectionContent = sectionTitle + "\n" + formViewStyles.note.Render(section.note) + "\n\n" + section.group.ViewCompact("")
+			sectionContent = sectionTitle + "\n" + formViewStyles.note.Render(section.note) + "\n\n" + section.group.View()
 		} else {
-			sectionContent = sectionTitle + "\n\n" + section.group.ViewCompact("")
+			sectionContent = sectionTitle + "\n\n" + section.group.View()
 		}
 		content.WriteString(style.Render(sectionContent))
 	}

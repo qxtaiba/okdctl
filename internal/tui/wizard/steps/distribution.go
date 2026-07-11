@@ -46,7 +46,6 @@ func NewDistributionStep() *DistributionStep {
 	s.Style = lipgloss.NewStyle().Foreground(tui.ColorPrimary)
 
 	selector := components.NewSelector(nil)
-	selector.SetMaxDropdownVisible(5)
 
 	return &DistributionStep{
 		BaseStep: wizard.NewBaseStepWithDisplayTitle(
@@ -195,7 +194,6 @@ func (s *DistributionStep) syncSelectedVersion(selected *components.Option) {
 // View renders either the loading indicator or the version selector.
 func (s *DistributionStep) View(width, height int) string {
 	s.SetSize(width, height)
-	s.versionSelector.SetSize(width, height)
 
 	switch s.phase {
 	case phaseVersionLoading:

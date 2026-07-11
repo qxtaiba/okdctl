@@ -63,11 +63,6 @@ func (f *SelectField) SetDefault(value string) {
 	}
 }
 
-// IsDefault reports whether the field still holds its initial default.
-func (f *SelectField) IsDefault() bool {
-	return f.isDefault
-}
-
 // Focus gives the field focus so arrow keys cycle options.
 func (f *SelectField) Focus() tea.Cmd {
 	f.focused = true
@@ -79,11 +74,6 @@ func (f *SelectField) Blur() {
 	f.focused = false
 }
 
-// IsFocused reports whether the field currently owns focus.
-func (f *SelectField) IsFocused() bool {
-	return f.focused
-}
-
 // SetWidth records the rendering width used when drawing the bordered box.
 func (f *SelectField) SetWidth(width int) {
 	f.width = width
@@ -92,25 +82,6 @@ func (f *SelectField) SetWidth(width int) {
 // Validate always returns nil because selection is constrained to Options.
 func (f *SelectField) Validate() error {
 	return nil
-}
-
-// Error always returns nil: SelectField has no validator that can fail.
-func (f *SelectField) Error() error {
-	return nil
-}
-
-// SetOptions replaces the option list, preserving the current selection by
-// name when possible and resetting to index 0 otherwise.
-func (f *SelectField) SetOptions(options []string) {
-	current := f.Value()
-	f.Options = options
-	f.selected = 0
-	for i, opt := range options {
-		if opt == current {
-			f.selected = i
-			return
-		}
-	}
 }
 
 // Update handles left/right and h/l key presses to cycle through Options.
