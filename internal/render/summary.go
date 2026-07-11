@@ -1,4 +1,6 @@
-package cli
+// Package render builds the boxed text summaries okdctl prints after
+// deploys, dry-runs, interruptions, and ingress updates.
+package render
 
 import (
 	"fmt"
@@ -41,36 +43,47 @@ func displayStatus(s *distribution.StepResult) stepDisplayStatus {
 	}
 }
 
-type summaryBuilder struct {
+// Builder accumulates aligned section/key-value lines for a boxed summary.
+type Builder struct {
 	b        strings.Builder
 	keyWidth int
 	kvWidth  int
 }
 
-func newSummaryBuilder() *summaryBuilder {
-	return &summaryBuilder{
+// NewBuilder returns a Builder with the shared summary column widths.
+func NewBuilder() *Builder {
+	return &Builder{
 		keyWidth: defaultKeyColWidth,
 		kvWidth:  defaultContentWidth - 2,
 	}
 }
 
-func (s *summaryBuilder) section(title string) {
+// Section writes a subsection label line.
+func (s *Builder) Section(title string) {
 	s.b.WriteString("  " + tui.SubsectionLabel(title) + "\n")
 }
 
-func (s *summaryBuilder) kv(key, value string) {
+// KV writes a dotted key/value line.
+func (s *Builder) KV(key, value string) {
 	s.b.WriteString("  " + tui.DottedKeyValueFull("  "+key, value, s.keyWidth, s.kvWidth) + "\n")
 }
 
-func (s *summaryBuilder) kvHighlight(key, value string) {
+// KVHighlight writes a dotted key/value line with a highlighted value.
+func (s *Builder) KVHighlight(key, value string) {
 	s.b.WriteString("  " + tui.DottedKeyValueHighlightFull("  "+key, value, s.keyWidth, s.kvWidth) + "\n")
 }
 
-func (s *summaryBuilder) newline() {
+// Newline writes a blank line.
+func (s *Builder) Newline() {
 	s.b.WriteString("\n")
 }
 
-func (s *summaryBuilder) String() string {
+// WriteString appends raw text without key/section formatting.
+func (s *Builder) WriteString(str string) {
+	s.b.WriteString(str)
+}
+
+func (s *Builder) String() string {
 	return s.b.String()
 }
 
@@ -83,17 +96,17 @@ type DryRunStep struct {
 // DryRunSummary renders the step listing for a dry-run inside a boxed section
 // consistent with PostDeploySummary.
 func DryRunSummary(title string, steps []DryRunStep) string {
-	sb := newSummaryBuilder()
-	sb.b.WriteString("\n")
-	sb.b.WriteString("  " + tui.WarningStyle.Render("dry-run — no changes made") + "\n")
-	sb.newline()
+	sb := NewBuilder()
+	sb.WriteString("\n")
+	sb.WriteString("  " + tui.WarningStyle.Render("dry-run — no changes made") + "\n")
+	sb.Newline()
 
 	if len(steps) > 0 {
-		sb.section("would execute")
+		sb.Section("would execute")
 		for _, s := range steps {
-			sb.kv(s.ID, s.Name)
+			sb.KV(s.ID, s.Name)
 		}
-		sb.newline()
+		sb.Newline()
 	}
 
 	return "\n" + tui.BoxedSectionCompact(sb.String(), title, tui.DefaultBoxWidth) + "\n"
@@ -128,78 +141,78 @@ func PostDeploySummary(cfg *config.Config, result *postinstall.Result, steps []d
 	consoleURL := fmt.Sprintf("https://console-openshift-console.apps.%s", clusterFQDN)
 	apiURL := fmt.Sprintf("https://api.%s:6443", clusterFQDN)
 
-	sb := newSummaryBuilder()
-	sb.b.WriteString("\n")
-	sb.b.WriteString("  " + tui.CompletionSuccess("cluster deployed successfully!") + "\n")
-	sb.newline()
-	sb.kv("run_id", runID)
-	sb.newline()
+	sb := NewBuilder()
+	sb.WriteString("\n")
+	sb.WriteString("  " + tui.CompletionSuccess("cluster deployed successfully!") + "\n")
+	sb.Newline()
+	sb.KV("run_id", runID)
+	sb.Newline()
 
-	sb.section("access")
-	sb.kv("cluster", clusterFQDN)
-	sb.kv("console", consoleURL)
-	sb.kv("api", apiURL)
-	sb.newline()
+	sb.Section("access")
+	sb.KV("cluster", clusterFQDN)
+	sb.KV("console", consoleURL)
+	sb.KV("api", apiURL)
+	sb.Newline()
 
-	sb.section("dns records")
+	sb.Section("dns records")
 	apiDomain := fmt.Sprintf("api.%s", clusterFQDN)
 	appsDomain := fmt.Sprintf("*.apps.%s", clusterFQDN)
 	if result != nil && result.DNSDeployed && result.KubeVipIP != "" {
-		sb.kv(apiDomain, result.KubeVipIP+" (kube-vip)")
+		sb.KV(apiDomain, result.KubeVipIP+" (kube-vip)")
 	} else if cfg.Networking.Bastion.IP != "" {
-		sb.kv(apiDomain, cfg.Networking.Bastion.IP+" (haproxy)")
+		sb.KV(apiDomain, cfg.Networking.Bastion.IP+" (haproxy)")
 	}
 	bastionIP := cfg.Networking.Bastion.IP
 	if result != nil && result.BastionIP != "" {
 		bastionIP = result.BastionIP
 	}
-	sb.kv(appsDomain, bastionIP+" (haproxy)")
-	sb.newline()
+	sb.KV(appsDomain, bastionIP+" (haproxy)")
+	sb.Newline()
 
-	sb.section("status")
+	sb.Section("status")
 	if result != nil {
 		if result.BootstrapCleaned {
-			sb.kv("bootstrap", "cleaned up")
+			sb.KV("bootstrap", "cleaned up")
 		} else {
-			sb.kv("bootstrap", "still running")
+			sb.KV("bootstrap", "still running")
 		}
 		if result.DNSDeployed && result.KubeVipIP != "" {
-			sb.kv("api routing", fmt.Sprintf("kube-vip (%s)", result.KubeVipIP))
+			sb.KV("api routing", fmt.Sprintf("kube-vip (%s)", result.KubeVipIP))
 		} else {
-			sb.kv("api routing", "haproxy (bastion)")
+			sb.KV("api routing", "haproxy (bastion)")
 		}
-		sb.kv("ingress routing", "haproxy (bastion)")
+		sb.KV("ingress routing", "haproxy (bastion)")
 	}
-	sb.newline()
+	sb.Newline()
 
 	if len(steps) > 0 {
-		sb.section("steps")
+		sb.Section("steps")
 		var total time.Duration
 		for _, s := range steps {
 			total += s.Duration
 			d := s.Duration.Truncate(time.Millisecond).String()
-			sb.kv(string(s.StepID), fmt.Sprintf("%-*s  %s", stepStatusColWidth, displayStatus(&s), d))
+			sb.KV(string(s.StepID), fmt.Sprintf("%-*s  %s", stepStatusColWidth, displayStatus(&s), d))
 		}
-		sb.kv("total", total.Truncate(time.Millisecond).String())
-		sb.newline()
+		sb.KV("total", total.Truncate(time.Millisecond).String())
+		sb.Newline()
 	}
 
-	sb.section("credentials")
-	sb.kvHighlight("username", "kubeadmin")
-	sb.kv("password", "cat okd-install/cluster-config/auth/kubeadmin-password")
-	sb.newline()
+	sb.Section("credentials")
+	sb.KVHighlight("username", "kubeadmin")
+	sb.KV("password", "cat okd-install/cluster-config/auth/kubeadmin-password")
+	sb.Newline()
 
-	sb.section("quick start")
-	sb.b.WriteString("    " + tui.CodeInlineStyle.Render("export KUBECONFIG=~/.kube/config") + "\n")
-	sb.b.WriteString("    " + tui.CodeInlineStyle.Render("oc get nodes") + "\n")
-	sb.newline()
+	sb.Section("quick start")
+	sb.WriteString("    " + tui.CodeInlineStyle.Render("export KUBECONFIG=~/.kube/config") + "\n")
+	sb.WriteString("    " + tui.CodeInlineStyle.Render("oc get nodes") + "\n")
+	sb.Newline()
 
-	sb.section("next steps")
-	sb.b.WriteString("    cluster deployed with haproxy handling ingress on the bastion.\n")
-	sb.b.WriteString("    if you deploy a loadbalancer provider (e.g., metallb), run:\n")
-	sb.b.WriteString("      " + tui.CodeInlineStyle.Render("okdctl update-ingress") + "\n")
-	sb.b.WriteString("    to auto-detect loadbalancer ips and switch dns over.\n")
-	sb.newline()
+	sb.Section("next steps")
+	sb.WriteString("    cluster deployed with haproxy handling ingress on the bastion.\n")
+	sb.WriteString("    if you deploy a loadbalancer provider (e.g., metallb), run:\n")
+	sb.WriteString("      " + tui.CodeInlineStyle.Render("okdctl update-ingress") + "\n")
+	sb.WriteString("    to auto-detect loadbalancer ips and switch dns over.\n")
+	sb.Newline()
 
 	return "\n" + tui.BoxedSectionCompact(sb.String(), "deployment complete", tui.DefaultBoxWidth) + "\n"
 }
@@ -208,25 +221,25 @@ func PostDeploySummary(cfg *config.Config, result *postinstall.Result, steps []d
 // steps is whatever the orchestrator completed before cancellation;
 // resumeCmd is the exact command the user should re-run (e.g. "okdctl deploy").
 func InterruptSummary(steps []distribution.StepResult, resumeCmd, runID string) string {
-	sb := newSummaryBuilder()
-	sb.b.WriteString("\n")
-	sb.b.WriteString("  " + tui.WarningStyle.Render("interrupted") + "\n")
-	sb.newline()
-	sb.kv("run_id", runID)
-	sb.newline()
+	sb := NewBuilder()
+	sb.WriteString("\n")
+	sb.WriteString("  " + tui.WarningStyle.Render("interrupted") + "\n")
+	sb.Newline()
+	sb.KV("run_id", runID)
+	sb.Newline()
 
 	if len(steps) > 0 {
-		sb.section("partial progress")
+		sb.Section("partial progress")
 		for _, s := range steps {
 			d := s.Duration.Truncate(time.Millisecond).String()
-			sb.kv(string(s.StepID), fmt.Sprintf("%-*s  %s", stepStatusColWidth, displayStatus(&s), d))
+			sb.KV(string(s.StepID), fmt.Sprintf("%-*s  %s", stepStatusColWidth, displayStatus(&s), d))
 		}
-		sb.newline()
+		sb.Newline()
 	}
 
-	sb.section("resume")
-	sb.b.WriteString("    " + tui.CodeInlineStyle.Render(resumeCmd) + "\n")
-	sb.newline()
+	sb.Section("resume")
+	sb.WriteString("    " + tui.CodeInlineStyle.Render(resumeCmd) + "\n")
+	sb.Newline()
 
 	return "\n" + tui.BoxedSectionCompact(sb.String(), "interrupted", tui.DefaultBoxWidth) + "\n"
 }
@@ -234,18 +247,18 @@ func InterruptSummary(steps []distribution.StepResult, resumeCmd, runID string) 
 // UpdateIngressSummary renders the result of the update-ingress subcommand,
 // showing converted controllers and DNS record changes.
 func UpdateIngressSummary(result *postinstall.UpdateIngressResult) string {
-	sb := newSummaryBuilder()
-	sb.newline()
+	sb := NewBuilder()
+	sb.Newline()
 
 	if result.ConvertedCount > 0 {
-		sb.section("conversion")
-		sb.kv("controllers converted", fmt.Sprintf("%d (HostNetwork → LoadBalancerService)", result.ConvertedCount))
-		sb.newline()
+		sb.Section("conversion")
+		sb.KV("controllers converted", fmt.Sprintf("%d (HostNetwork → LoadBalancerService)", result.ConvertedCount))
+		sb.Newline()
 	}
 
-	sb.section("dns records")
+	sb.Section("dns records")
 	if result.KubeVipIP != "" {
-		sb.kvHighlight("api.*", result.KubeVipIP+" (kube-vip)")
+		sb.KVHighlight("api.*", result.KubeVipIP+" (kube-vip)")
 	}
 	for _, e := range result.Entries {
 		label := fmt.Sprintf("*.%s", e.Domain)
@@ -258,20 +271,20 @@ func UpdateIngressSummary(result *postinstall.UpdateIngressResult) string {
 		default:
 			suffix = " (loadbalancer)"
 		}
-		sb.kvHighlight(label, e.LBIP+suffix)
+		sb.KVHighlight(label, e.LBIP+suffix)
 	}
-	sb.newline()
+	sb.Newline()
 
-	sb.section("status")
+	sb.Section("status")
 	if result.DNSReconciled {
-		sb.kv("dns", "reconciled from bootstrap state")
+		sb.KV("dns", "reconciled from bootstrap state")
 	}
 	if result.HAProxyRemoved {
-		sb.kv("haproxy", "stopped and disabled")
+		sb.KV("haproxy", "stopped and disabled")
 	} else {
-		sb.kv("haproxy", "still running")
+		sb.KV("haproxy", "still running")
 	}
-	sb.newline()
+	sb.Newline()
 
 	return "\n" + tui.BoxedSectionCompact(sb.String(), "ingress updated", tui.DefaultBoxWidth) + "\n"
 }

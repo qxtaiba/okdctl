@@ -10,6 +10,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/dns"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/postinstall"
+	"github.com/qxtaiba/okdctl/internal/render"
 	"github.com/qxtaiba/okdctl/internal/runlock"
 	"github.com/qxtaiba/okdctl/internal/system"
 	"github.com/qxtaiba/okdctl/internal/tui"
@@ -162,7 +163,7 @@ func runUpdateIngress(cmd *cobra.Command, _ []string) error {
 
 	duration := time.Since(startTime).Round(time.Second)
 	tui.Info("ingress updated", tui.LF("duration", duration))
-	fmt.Fprintln(cmd.OutOrStdout(), UpdateIngressSummary(result))
+	fmt.Fprintln(cmd.OutOrStdout(), render.UpdateIngressSummary(result))
 
 	return nil
 }
