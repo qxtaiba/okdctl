@@ -17,7 +17,12 @@ Kubernetes cluster without hand-rolling Terraform, Ignition, and bootstrap glue.
 - Not multi-cluster or multi-tenant; one cluster per `okdctl.yaml`.
 - Not a production OKD distribution. Pre-1.0; pin your version.
 
-okdctl phones home to nothing. No telemetry, no analytics, no update pings.
+okdctl collects no telemetry and no analytics. The one request it makes on
+its own behalf is an update check: release builds send a plain HTTPS GET to
+`api.github.com` (`releases/latest`) — nothing beyond what any HTTP request
+carries — at most once per 24 hours, cached in
+`~/.cache/okdctl/update-check.json`. Set `OKDCTL_NO_UPDATE_CHECK=1` to turn
+it off.
 
 ## Install
 

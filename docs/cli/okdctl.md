@@ -17,6 +17,9 @@ Highlights:
   • Automated preflight checks and validation
   • Single binary distribution
 
+Release builds check api.github.com for a newer release (at most once
+per 24h, cached locally); set OKDCTL_NO_UPDATE_CHECK=1 to disable.
+
 ### Options
 
 ```
