@@ -273,10 +273,11 @@ write the comment — then it carries real information.
     `Telmate/proxmox` or replace with direct REST calls via
     `null_resource`. Track upstream releases; bump on each.
 - **Maintained but upstream-locked deps.** `gorilla/websocket` is pulled
-  transitively via `go-proxmox`. **okdctl does not reach it** — the wizard
-  uses REST discovery only, not shell/console websockets. Safe to keep
-  until go-proxmox migrates to `coder/websocket`, at which point take the
-  bump without local code changes.
+  transitively via `go-proxmox`. **It is linked into the release binary but
+  never called** — the wizard uses REST discovery only, not shell/console
+  websockets. Version floor is pinned directly in `go.mod` (v1.5.3+) so it
+  tracks upstream point releases on its own; no need to wait for
+  go-proxmox to migrate to `coder/websocket` before taking a bump.
 - **Removed transitive-weight deps.** `schollz/progressbar/v3` was dropped
   in favour of a ~30 LOC hand-rolled byte-progress writer in
   `internal/download/progress.go`. The writer reuses
