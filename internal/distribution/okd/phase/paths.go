@@ -14,6 +14,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/distribution"
 	"github.com/qxtaiba/okdctl/internal/executor"
 	"github.com/qxtaiba/okdctl/internal/logutil"
+	"github.com/qxtaiba/okdctl/internal/system"
 )
 
 // BaseOptions is the common option set every phase's own Options embeds —
@@ -24,6 +25,10 @@ type BaseOptions struct {
 	WorkDir      string
 	TerraformEnv string
 }
+
+// WorkDirName re-exports system.WorkDirName so every phase package and cli
+// build the per-project workdir path from one source of truth.
+const WorkDirName = system.WorkDirName
 
 // KubeAPIPort is the kube-apiserver port served by HAProxy and kube-vip.
 const KubeAPIPort = 6443

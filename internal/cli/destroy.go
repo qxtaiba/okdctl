@@ -330,7 +330,7 @@ func runDestroy(cmd *cobra.Command, _ []string) error {
 	// tearing down. On partial/cancelled runs the workdir may survive
 	// root-owned; restore invoking-user ownership at exit so the user can
 	// inspect or retry.
-	workDir := filepath.Join(projectRoot, "okd-install")
+	workDir := filepath.Join(projectRoot, phase.WorkDirName)
 	defer func() {
 		if chownErr := system.ChownTreeToInvokingUser(workDir); chownErr != nil {
 			tui.Warn("workdir chown back to user incomplete", tui.LF("err", chownErr))

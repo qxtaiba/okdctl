@@ -224,7 +224,7 @@ func countDegraded(ctx context.Context, cl Client) int {
 // NewClient returns an oc-backed cluster client for the deployed cluster, or
 // a ClusterError when no kubeconfig exists under <projectRoot>/okd-install yet.
 func NewClient(projectRoot string) (*cluster.Client, error) {
-	workDir := filepath.Join(projectRoot, "okd-install")
+	workDir := filepath.Join(projectRoot, phase.WorkDirName)
 	clusterDir := phase.ClusterConfigDir(workDir)
 	kcPath := filepath.Join(clusterDir, "auth", "kubeconfig")
 

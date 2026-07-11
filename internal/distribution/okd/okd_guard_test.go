@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/logutil"
 )
@@ -105,7 +106,7 @@ func TestGuardLiveCluster(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			root := t.TempDir()
-			workDir := filepath.Join(root, "okd-install")
+			workDir := filepath.Join(root, phase.WorkDirName)
 			if err := os.MkdirAll(workDir, 0o755); err != nil {
 				t.Fatal(err)
 			}

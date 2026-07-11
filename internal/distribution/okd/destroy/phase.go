@@ -43,7 +43,7 @@ func NewOptions(cfg *config.Config, projectRoot string) Options {
 	return Options{
 		BaseOptions: phase.BaseOptions{
 			ProjectRoot:  projectRoot,
-			WorkDir:      filepath.Join(projectRoot, "okd-install"),
+			WorkDir:      filepath.Join(projectRoot, phase.WorkDirName),
 			TerraformEnv: phase.GetTerraformEnv(cfg),
 		},
 		AutoApprove: cfg.Deployment.AutoApprove,

@@ -44,7 +44,7 @@ func runKubeconfig(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
-	workDir := filepath.Join(projectRoot, "okd-install")
+	workDir := filepath.Join(projectRoot, phase.WorkDirName)
 	clusterDir := phase.ClusterConfigDir(workDir)
 	src := filepath.Join(clusterDir, "auth", "kubeconfig")
 
