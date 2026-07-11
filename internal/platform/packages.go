@@ -142,12 +142,12 @@ func (m *Manager) AddRepo(ctx context.Context, name, url string) error {
 		return err
 	})
 	if err != nil {
-		return fmt.Errorf("failed to write repo list: %w", err)
+		return fmt.Errorf("write repo list: %w", err)
 	}
 	defer func() { _ = os.Remove(tmpPath) }()
 
 	if err := system.CopyFile(tmpPath, listPath); err != nil {
-		return fmt.Errorf("failed to install repo list: %w", err)
+		return fmt.Errorf("install repo list: %w", err)
 	}
 	return executor.RunCaptured(addRepoCtx, m.pkgCmd, "update")
 }

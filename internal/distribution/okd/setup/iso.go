@@ -60,7 +60,7 @@ func (p *Phase) BuildCustomISOs(ctx context.Context, cfg *config.Config, opts *O
 		keyPath := system.ExpandPath(cfg.Files.SSHPublicKey)
 		b, readErr := os.ReadFile(keyPath)
 		if readErr != nil {
-			return fmt.Errorf("failed to read ssh public key %s: %w", keyPath, readErr)
+			return fmt.Errorf("read ssh public key %s: %w", keyPath, readErr)
 		}
 		sshKey = strings.TrimSpace(string(b))
 	}
@@ -122,7 +122,7 @@ func (p *Phase) BuildCustomISOs(ctx context.Context, cfg *config.Config, opts *O
 func writePreInstallScript(script string) (string, error) {
 	return system.WriteTempFile("pre-install-*.sh", 0o750, func(f *os.File) error {
 		if _, err := f.WriteString(script); err != nil {
-			return fmt.Errorf("failed to write pre-install script: %w", err)
+			return fmt.Errorf("write pre-install script: %w", err)
 		}
 		return nil
 	})
@@ -186,12 +186,12 @@ func writeInstallerTriggerIgnition(sshKey string) (string, error) {
 
 	data, err := json.Marshal(ign)
 	if err != nil {
-		return "", fmt.Errorf("failed to marshal installer trigger ignition: %w", err)
+		return "", fmt.Errorf("marshal installer trigger ignition: %w", err)
 	}
 
 	return system.WriteTempFile("installer-trigger-*.ign", 0o600, func(f *os.File) error {
 		if _, err := f.Write(data); err != nil {
-			return fmt.Errorf("failed to write installer trigger ignition: %w", err)
+			return fmt.Errorf("write installer trigger ignition: %w", err)
 		}
 		return nil
 	})
@@ -203,7 +203,7 @@ func (p *Phase) buildNodeISO(ctx context.Context, cfg *config.Config, node NodeI
 
 	if system.FileExists(outputPath) {
 		if err := os.Remove(outputPath); err != nil {
-			return fmt.Errorf("failed to remove existing ISO %s: %w", outputPath, err)
+			return fmt.Errorf("remove existing ISO %s: %w", outputPath, err)
 		}
 	}
 

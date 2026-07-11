@@ -235,7 +235,7 @@ func (p *Phase) verifyKubeVIPAPIHealthBootstrap(ctx context.Context, vip, cluste
 	doRequest := func(client *http.Client) (string, error) {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, healthURL, http.NoBody)
 		if err != nil {
-			return "", fmt.Errorf("failed to build health request: %w", err)
+			return "", fmt.Errorf("build health request: %w", err)
 		}
 		resp, err := client.Do(req)
 		if err != nil {
@@ -244,7 +244,7 @@ func (p *Phase) verifyKubeVIPAPIHealthBootstrap(ctx context.Context, vip, cluste
 		defer resp.Body.Close()
 		body, err := io.ReadAll(resp.Body)
 		if err != nil {
-			return "", fmt.Errorf("failed to read health response: %w", err)
+			return "", fmt.Errorf("read health response: %w", err)
 		}
 		return strings.TrimSpace(string(body)), nil
 	}

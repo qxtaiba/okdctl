@@ -55,7 +55,7 @@ func WithExtractLogger(l *slog.Logger) ExtractOption {
 func verifyResolvedPath(path, cleanDest string) error {
 	resolved, err := filepath.EvalSymlinks(path)
 	if err != nil {
-		return fmt.Errorf("failed to resolve path %s: %w", path, err)
+		return fmt.Errorf("resolve path %s: %w", path, err)
 	}
 	if !strings.HasPrefix(filepath.Clean(resolved), cleanDest) {
 		return fmt.Errorf("resolves outside destination: %s -> %s", path, resolved)
@@ -87,7 +87,7 @@ func processTarEntry(tarReader *tar.Reader, header *tar.Header, destDir string, 
 	switch header.Typeflag {
 	case tar.TypeDir:
 		if err := os.MkdirAll(targetPath, os.FileMode(header.Mode&0o755)); err != nil {
-			return fmt.Errorf("failed to create directory: %w", err)
+			return fmt.Errorf("create directory: %w", err)
 		}
 		if err := verifyResolvedPath(targetPath, cleanDest); err != nil {
 			return fmt.Errorf("directory %s: %w", name, err)
@@ -95,7 +95,7 @@ func processTarEntry(tarReader *tar.Reader, header *tar.Header, destDir string, 
 
 	case tar.TypeReg:
 		if err := os.MkdirAll(filepath.Dir(targetPath), 0o755); err != nil {
-			return fmt.Errorf("failed to create parent directory: %w", err)
+			return fmt.Errorf("create parent directory: %w", err)
 		}
 		// Resolve the parent through the real filesystem to catch writes
 		// that traverse a previously-extracted symlink (e.g. link -> /etc
@@ -109,15 +109,15 @@ func processTarEntry(tarReader *tar.Reader, header *tar.Header, destDir string, 
 		// the open onto an attacker-chosen path.
 		outFile, err := os.OpenFile(targetPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC|syscall.O_NOFOLLOW, os.FileMode(header.Mode&0o755))
 		if err != nil {
-			return fmt.Errorf("failed to create file: %w", err)
+			return fmt.Errorf("create file: %w", err)
 		}
 
 		if _, err := io.Copy(outFile, tarReader); err != nil {
 			_ = outFile.Close()
-			return fmt.Errorf("failed to write file: %w", err)
+			return fmt.Errorf("write file: %w", err)
 		}
 		if err := outFile.Close(); err != nil {
-			return fmt.Errorf("failed to close extracted file: %w", err)
+			return fmt.Errorf("close extracted file: %w", err)
 		}
 
 	case tar.TypeSymlink:
@@ -133,13 +133,13 @@ func processTarEntry(tarReader *tar.Reader, header *tar.Header, destDir string, 
 
 		if err := os.Symlink(linkTarget, targetPath); err != nil {
 			if !os.IsExist(err) {
-				return fmt.Errorf("failed to create symlink: %w", err)
+				return fmt.Errorf("create symlink: %w", err)
 			}
 			if err := os.Remove(targetPath); err != nil {
-				return fmt.Errorf("failed to remove existing symlink %s: %w", name, err)
+				return fmt.Errorf("remove existing symlink %s: %w", name, err)
 			}
 			if err := os.Symlink(linkTarget, targetPath); err != nil {
-				return fmt.Errorf("failed to replace symlink: %w", err)
+				return fmt.Errorf("replace symlink: %w", err)
 			}
 		}
 		// Defense-in-depth: re-verify through EvalSymlinks after creation so a
@@ -183,20 +183,20 @@ func ExtractTarGz(ctx context.Context, archivePath, destDir string, opts ...Extr
 
 	file, err := os.Open(archivePath)
 	if err != nil {
-		return fmt.Errorf("failed to open archive %s: %w", archivePath, err)
+		return fmt.Errorf("open archive %s: %w", archivePath, err)
 	}
 	defer func() { _ = file.Close() }()
 
 	gzipReader, err := gzip.NewReader(file)
 	if err != nil {
-		return fmt.Errorf("failed to decompress archive %s: %w", archivePath, err)
+		return fmt.Errorf("decompress archive %s: %w", archivePath, err)
 	}
 	defer func() { _ = gzipReader.Close() }()
 
 	tarReader := tar.NewReader(gzipReader)
 
 	if err := os.MkdirAll(destDir, 0o755); err != nil {
-		return fmt.Errorf("failed to create destination directory: %w", err)
+		return fmt.Errorf("create destination directory: %w", err)
 	}
 
 	for {
@@ -211,7 +211,7 @@ func ExtractTarGz(ctx context.Context, archivePath, destDir string, opts ...Extr
 			break
 		}
 		if err != nil {
-			return fmt.Errorf("failed to read tar entry from %s: %w", archivePath, err)
+			return fmt.Errorf("read tar entry from %s: %w", archivePath, err)
 		}
 
 		if err := processTarEntry(tarReader, header, destDir, cfg.stripComponents); err != nil {

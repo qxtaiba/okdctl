@@ -117,7 +117,7 @@ func EnsureNamespace(ctx context.Context, env *Environment, namespace string) er
 
 		env.Logger.Info("creating namespace", "namespace", namespace)
 		if _, err := env.Exec.RunChecked(ctx, "oc", "create", "namespace", namespace); err != nil {
-			return fmt.Errorf("failed to create %s namespace: %w", namespace, err)
+			return fmt.Errorf("create %s namespace: %w", namespace, err)
 		}
 		return nil
 	})

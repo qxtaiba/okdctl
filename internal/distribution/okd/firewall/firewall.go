@@ -143,13 +143,13 @@ func (f *Firewall) Configure(ctx context.Context, ports []Port, permanent bool) 
 
 	for _, port := range ports {
 		if err := openPort(ctx, backend, port, permanent, f.logger); err != nil {
-			return fmt.Errorf("failed to open port %d: %w", port.Number, err)
+			return fmt.Errorf("open port %d: %w", port.Number, err)
 		}
 	}
 
 	if backend == Firewalld && permanent {
 		if err := executor.RunCaptured(ctx, "firewall-cmd", "--reload"); err != nil {
-			return fmt.Errorf("failed to reload firewall: %w", err)
+			return fmt.Errorf("reload firewall: %w", err)
 		}
 	}
 

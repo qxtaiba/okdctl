@@ -174,14 +174,14 @@ func (p *Phase) installTerraform(ctx context.Context) error {
 		// later edit the gpgkey URL and poison subsequent dnf operations.
 		repoPath := "/etc/yum.repos.d/hashicorp.repo"
 		if err := system.AtomicWrite(repoPath, hashicorpRPMRepo, 0o644); err != nil {
-			return fmt.Errorf("failed to write HashiCorp repository file: %w", err)
+			return fmt.Errorf("write HashiCorp repository file: %w", err)
 		}
 	}
 
 	p.Log.Info("tools: hashicorp repository added")
 
 	if err := p.Pkg.Install(ctx, []string{"terraform"}); err != nil {
-		return fmt.Errorf("failed to install terraform: %w", err)
+		return fmt.Errorf("install terraform: %w", err)
 	}
 
 	if !isToolInstalled(toolTerraform) {
@@ -215,7 +215,7 @@ func (p *Phase) installBinary(ctx context.Context, spec *binaryInstallSpec) erro
 		var err error
 		expectedChecksum, err = download.FetchChecksum(ctx, spec.checksumURL, spec.checksumFilename)
 		if err != nil {
-			return fmt.Errorf("failed to fetch checksum for %s: %w", spec.name, err)
+			return fmt.Errorf("fetch checksum for %s: %w", spec.name, err)
 		}
 	case spec.embeddedChecksum != "":
 		expectedChecksum = spec.embeddedChecksum
@@ -231,7 +231,7 @@ func (p *Phase) installBinary(ctx context.Context, spec *binaryInstallSpec) erro
 		)
 	})
 	if err != nil {
-		return fmt.Errorf("failed to download %s: %w", spec.name, err)
+		return fmt.Errorf("download %s: %w", spec.name, err)
 	}
 	defer func() { _ = os.Remove(tempFile) }()
 
@@ -239,7 +239,7 @@ func (p *Phase) installBinary(ctx context.Context, spec *binaryInstallSpec) erro
 	if spec.archiveBinary != "" {
 		extractDir, err := os.MkdirTemp(os.TempDir(), spec.name+"-extract-*")
 		if err != nil {
-			return fmt.Errorf("failed to create extract directory: %w", err)
+			return fmt.Errorf("create extract directory: %w", err)
 		}
 		defer func() { _ = os.RemoveAll(extractDir) }()
 		if err := download.ExtractTarGz(ctx, tempFile, extractDir,
@@ -247,7 +247,7 @@ func (p *Phase) installBinary(ctx context.Context, spec *binaryInstallSpec) erro
 			download.WithExtractCleanupArchive(true),
 			download.WithExtractLogger(p.Log),
 		); err != nil {
-			return fmt.Errorf("failed to extract %s: %w", spec.name, err)
+			return fmt.Errorf("extract %s: %w", spec.name, err)
 		}
 		srcPath = filepath.Join(extractDir, spec.archiveBinary)
 	}
@@ -270,11 +270,11 @@ func (p *Phase) installBinaryToPath(ctx context.Context, srcPath, name string) e
 	destPath := filepath.Join(binDir, name)
 
 	if err := system.CopyFile(srcPath, destPath); err != nil {
-		return fmt.Errorf("failed to copy %s to %s: %w", name, binDir, err)
+		return fmt.Errorf("copy %s to %s: %w", name, binDir, err)
 	}
 
 	if err := system.MakeExecutable(destPath); err != nil {
-		return fmt.Errorf("failed to set executable permissions on %s: %w", name, err)
+		return fmt.Errorf("set executable permissions on %s: %w", name, err)
 	}
 
 	return nil
@@ -321,7 +321,7 @@ func installHashiCorpDebianRepo(ctx context.Context, codename string) error {
 		return nil
 	})
 	if err != nil {
-		return fmt.Errorf("failed to download HashiCorp GPG key: %w", err)
+		return fmt.Errorf("download HashiCorp GPG key: %w", err)
 	}
 	defer func() { _ = os.Remove(gpgTmp) }()
 
@@ -340,7 +340,7 @@ func installHashiCorpDebianRepo(ctx context.Context, codename string) error {
 			}
 		}
 	} else if err := executor.RunCaptured(ctx, "gpg", "--dearmor", "-o", gpgPath, gpgTmp); err != nil {
-		return fmt.Errorf("failed to dearmor HashiCorp GPG key: %w", err)
+		return fmt.Errorf("dearmor HashiCorp GPG key: %w", err)
 	}
 
 	if codename == "" {
@@ -354,12 +354,12 @@ func installHashiCorpDebianRepo(ctx context.Context, codename string) error {
 		return err
 	})
 	if err != nil {
-		return fmt.Errorf("failed to write HashiCorp repo list: %w", err)
+		return fmt.Errorf("write HashiCorp repo list: %w", err)
 	}
 	defer func() { _ = os.Remove(listTmp) }()
 
 	if err := system.CopyFile(listTmp, listPath); err != nil {
-		return fmt.Errorf("failed to install HashiCorp repo list: %w", err)
+		return fmt.Errorf("install HashiCorp repo list: %w", err)
 	}
 	return executor.RunCaptured(ctx, "apt-get", "update")
 }

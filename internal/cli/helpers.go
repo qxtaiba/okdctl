@@ -109,7 +109,7 @@ func resolveProjectRoot() (string, error) {
 func resolveWorkspaceRoot() (string, error) {
 	root, err := resolveProjectRoot()
 	if err != nil {
-		return "", fmt.Errorf("failed to resolve project root: %w", err)
+		return "", fmt.Errorf("resolve project root: %w", err)
 	}
 	if root == "" {
 		return "", fmt.Errorf("project root resolved to empty path")

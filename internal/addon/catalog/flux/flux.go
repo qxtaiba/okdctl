@@ -143,7 +143,7 @@ func (f *Flux) helmUpgradeInstall(ctx context.Context, env *addon.Environment, r
 		args = append(args, extraArgs...)
 		args = append(args, "--wait")
 		if _, err := env.Exec.RunChecked(ctx, "helm", args...); err != nil {
-			return fmt.Errorf("failed to install %s: %w", errLabel, err)
+			return fmt.Errorf("install %s: %w", errLabel, err)
 		}
 		return nil
 	})
@@ -386,7 +386,7 @@ func (f *Flux) createDeployKeySecret(ctx context.Context, env *addon.Environment
 	}
 	host, err := gitHost(repoURL)
 	if err != nil {
-		return fmt.Errorf("failed to resolve git host for ssh-keyscan: %w", err)
+		return fmt.Errorf("resolve git host for ssh-keyscan: %w", err)
 	}
 
 	// Resolve the invoking user's home so `ssh-keygen -f ~/.ssh/...` from
@@ -394,7 +394,7 @@ func (f *Flux) createDeployKeySecret(ctx context.Context, env *addon.Environment
 	// after the deploy re-execs under sudo.
 	homeDir, err := system.InvokingUserHomeDir()
 	if err != nil {
-		return fmt.Errorf("failed to get home directory: %w", err)
+		return fmt.Errorf("get home directory: %w", err)
 	}
 	deployKeyFile := filepath.Join(homeDir, ".ssh", "flux-deploy-key")
 
@@ -402,14 +402,14 @@ func (f *Flux) createDeployKeySecret(ctx context.Context, env *addon.Environment
 	case err != nil && os.IsNotExist(err):
 		return fmt.Errorf("deploy key not found at %s - generate with: ssh-keygen -t ed25519 -f ~/.ssh/flux-deploy-key -N ''", deployKeyFile)
 	case err != nil:
-		return fmt.Errorf("failed to stat deploy key: %w", err)
+		return fmt.Errorf("stat deploy key: %w", err)
 	case info.Mode()&os.ModeSymlink != 0:
 		return fmt.Errorf("deploy key %s is a symlink; refusing to follow", deployKeyFile)
 	}
 
 	privateKey, err := readKeyFile(deployKeyFile)
 	if err != nil {
-		return fmt.Errorf("failed to read deploy key: %w", err)
+		return fmt.Errorf("read deploy key: %w", err)
 	}
 
 	// The public half is optional: flux/source-controller only requires identity
@@ -419,12 +419,12 @@ func (f *Flux) createDeployKeySecret(ctx context.Context, env *addon.Environment
 	if b, err := readKeyFile(publicKeyFile); err == nil {
 		publicKey = b
 	} else if !os.IsNotExist(err) {
-		return fmt.Errorf("failed to read deploy key public half: %w", err)
+		return fmt.Errorf("read deploy key public half: %w", err)
 	}
 
 	knownHostsResult, err := env.Exec.RunChecked(ctx, "ssh-keyscan", host)
 	if err != nil {
-		return fmt.Errorf("failed to get host key for %s: %w", host, err)
+		return fmt.Errorf("get host key for %s: %w", host, err)
 	}
 
 	if err := verifyKeyscanFingerprint(knownHostsResult.Stdout, host, fs.GitHostFingerprint, fs.AcceptHostKey, env.Logger); err != nil {
@@ -439,7 +439,7 @@ func (f *Flux) createDeployKeySecret(ctx context.Context, env *addon.Environment
 	_, applyErr := env.Exec.RunWithStdinChecked(ctx, manifest, "oc", "apply", "-f", "-")
 	clear(privateKey)
 	if applyErr != nil {
-		return fmt.Errorf("failed to apply deploy key secret: %w", applyErr)
+		return fmt.Errorf("apply deploy key secret: %w", applyErr)
 	}
 
 	env.Logger.Info("flux: deploy key secret applied")

@@ -108,6 +108,16 @@ Delete the comment. If the code breaks later, the commit history and the
 type system will catch it. If a reviewer asks "why?", that's the signal to
 write the comment — then it carries real information.
 
+## Error messages
+
+- Wrap errors with the terse `verb noun: %w` form, not `failed to verb
+  noun: %w`. Every call site up the stack re-adds its own prefix, so a
+  four-layer wrap chain reads as four repeated "failed to" clauses
+  instead of the actual failure path: prefer `configure dns: render
+  bootstrap dns config: open /etc/...: permission denied` over `failed
+  to configure dns: failed to render bootstrap dns config: failed to
+  open /etc/...: permission denied`.
+
 ## Architecture notes
 
 - `internal/distribution/okd/phase/` holds shared helpers used by all OKD

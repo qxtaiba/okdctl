@@ -424,17 +424,17 @@ func (p *Phase) generateKubeVIPManifests(cfg *config.Config, clusterDir string) 
 
 	openshiftDir := filepath.Join(clusterDir, openshiftSubdir)
 	if err := system.EnsureDir(openshiftDir); err != nil {
-		return fmt.Errorf("failed to ensure openshift manifests directory: %w", err)
+		return fmt.Errorf("ensure openshift manifests directory: %w", err)
 	}
 
 	rbacManifests, err := templates.RenderKubeVIPRBACManifests()
 	if err != nil {
-		return fmt.Errorf("failed to render kube-vip RBAC manifests: %w", err)
+		return fmt.Errorf("render kube-vip RBAC manifests: %w", err)
 	}
 	for _, m := range rbacManifests {
 		path := filepath.Join(openshiftDir, m.Filename)
 		if err := system.AtomicWriteString(path, m.Content, 0o644); err != nil {
-			return fmt.Errorf("failed to write %s: %w", m.Filename, err)
+			return fmt.Errorf("write %s: %w", m.Filename, err)
 		}
 	}
 
@@ -443,11 +443,11 @@ func (p *Phase) generateKubeVIPManifests(cfg *config.Config, clusterDir string) 
 		Interface:  iface,
 	})
 	if err != nil {
-		return fmt.Errorf("failed to render kube-vip DaemonSet manifest: %w", err)
+		return fmt.Errorf("render kube-vip DaemonSet manifest: %w", err)
 	}
 	dsPath := filepath.Join(openshiftDir, "99-kube-vip-daemonset.yaml")
 	if err := system.AtomicWriteString(dsPath, ds, 0o644); err != nil {
-		return fmt.Errorf("failed to write kube-vip DaemonSet manifest: %w", err)
+		return fmt.Errorf("write kube-vip DaemonSet manifest: %w", err)
 	}
 
 	p.Log.Info("kubevip: manifests generated",
@@ -458,12 +458,12 @@ func (p *Phase) generateKubeVIPManifests(cfg *config.Config, clusterDir string) 
 func (p *Phase) configureDNS(ctx context.Context, cfg *config.Config, opts *Options) error {
 	p.Log.Info("dns: configuring dnsmasq service")
 	if err := dns.Setup(ctx, cfg.Networking.DNS, p.Log); err != nil {
-		return fmt.Errorf("failed to setup dnsmasq: %w", err)
+		return fmt.Errorf("setup dnsmasq: %w", err)
 	}
 
 	p.Log.Info("dns: deploying bootstrap dns configuration")
 	if err := dns.DeployBootstrap(ctx, cfg); err != nil {
-		return fmt.Errorf("failed to deploy bootstrap dns: %w", err)
+		return fmt.Errorf("deploy bootstrap dns: %w", err)
 	}
 
 	// Save a copy to the work directory for reference (non-fatal).
@@ -474,7 +474,7 @@ func (p *Phase) configureDNS(ctx context.Context, cfg *config.Config, opts *Opti
 
 	configPath, err := dns.DnsmasqConfigPath(fmt.Sprintf("okd-%s", cfg.Cluster.Name))
 	if err != nil {
-		return fmt.Errorf("failed to resolve dnsmasq config path: %w", err)
+		return fmt.Errorf("resolve dnsmasq config path: %w", err)
 	}
 	p.Log.Info("dns: dnsmasq configured", "path", configPath)
 	return nil

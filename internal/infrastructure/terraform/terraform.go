@@ -567,7 +567,7 @@ func (t *Executor) CleanupPlans() error {
 	}
 	for _, f := range files {
 		if err := system.SafeRemove(f); err != nil && !os.IsNotExist(err) {
-			errs = append(errs, fmt.Errorf("failed to remove %s: %w", f, err))
+			errs = append(errs, fmt.Errorf("remove %s: %w", f, err))
 		}
 	}
 	return errors.Join(errs...)
