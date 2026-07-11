@@ -2,11 +2,11 @@ package dns
 
 import (
 	"context"
-	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/qxtaiba/okdctl/internal/testutil"
 )
 
 func TestValidateConfigName(t *testing.T) {
@@ -82,15 +82,7 @@ func TestConfigName(t *testing.T) {
 
 func installFakeNmcli(t *testing.T, script string) {
 	t.Helper()
-	if runtime.GOOS == "windows" {
-		t.Skip("fake-nmcli script relies on POSIX sh")
-	}
-	dir := t.TempDir()
-	path := filepath.Join(dir, "nmcli")
-	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	testutil.InstallFakeBin(t, "nmcli", script)
 }
 
 func TestGetActiveConnectionStderr(t *testing.T) {

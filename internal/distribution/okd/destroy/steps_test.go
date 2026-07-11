@@ -12,36 +12,10 @@ import (
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/executor"
+	"github.com/qxtaiba/okdctl/internal/testutil"
 )
 
-type captureHandler struct {
-	records []slog.Record
-	attrs   []slog.Attr
-}
-
-func (h *captureHandler) Enabled(_ context.Context, _ slog.Level) bool { return true }
-
-func (h *captureHandler) Handle(_ context.Context, r slog.Record) error { //nolint:gocritic // hugeParam: slog.Handler interface requires value receiver
-	r.AddAttrs(h.attrs...)
-	h.records = append(h.records, r)
-	return nil
-}
-
-func (h *captureHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
-	merged := append(append([]slog.Attr{}, h.attrs...), attrs...)
-	return &captureHandler{records: h.records, attrs: merged}
-}
-
-func (h *captureHandler) WithGroup(_ string) slog.Handler { return h }
-
-func (h *captureHandler) last() (slog.Record, bool) {
-	if len(h.records) == 0 {
-		return slog.Record{}, false
-	}
-	return h.records[len(h.records)-1], true
-}
-
-func newPhaseWithCapture(h *captureHandler) *Phase {
+func newPhaseWithCapture(h *testutil.CaptureHandler) *Phase {
 	return &Phase{
 		BasePhase: phase.NewBasePhase(
 			phase.WithExecutor(executor.New()),
@@ -66,7 +40,7 @@ func minimalOpts() *Options {
 }
 
 func TestDestroySteps_SuccessPath(t *testing.T) {
-	h := &captureHandler{}
+	h := &testutil.CaptureHandler{}
 	defs := newPhaseWithCapture(h).destroySteps(context.Background(), minimalConfig(), minimalOpts())
 
 	if defs[4].ID != StepPrintSummary {
@@ -76,7 +50,7 @@ func TestDestroySteps_SuccessPath(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	rec, ok := h.last()
+	rec, ok := h.Last()
 	if !ok {
 		t.Fatal("no log records captured")
 	}
@@ -90,7 +64,7 @@ func TestDestroySteps_SuccessPath(t *testing.T) {
 }
 
 func TestDestroySteps_FailurePath(t *testing.T) {
-	h := &captureHandler{}
+	h := &testutil.CaptureHandler{}
 	defs := newPhaseWithCapture(h).destroySteps(context.Background(), minimalConfig(), minimalOpts())
 
 	tracked := []struct {
@@ -127,7 +101,7 @@ func TestDestroySteps_FailurePath(t *testing.T) {
 		t.Fatalf("err = %v; want *errtypes.ClusterError", err)
 	}
 
-	rec, ok := h.last()
+	rec, ok := h.Last()
 	if !ok {
 		t.Fatal("no log records captured")
 	}
@@ -151,7 +125,7 @@ func TestDestroySteps_FailurePath(t *testing.T) {
 }
 
 func TestDestroySteps_SkipPath(t *testing.T) {
-	h := &captureHandler{}
+	h := &testutil.CaptureHandler{}
 	defs := newPhaseWithCapture(h).destroySteps(context.Background(), minimalConfig(), minimalOpts())
 
 	for i := 0; i < 4; i++ {
@@ -165,7 +139,7 @@ func TestDestroySteps_SkipPath(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	rec, ok := h.last()
+	rec, ok := h.Last()
 	if !ok {
 		t.Fatal("no log records captured")
 	}
@@ -192,7 +166,7 @@ func TestDestroySteps_SkipPath(t *testing.T) {
 }
 
 func TestDestroySteps_PartialFailure(t *testing.T) {
-	h := &captureHandler{}
+	h := &testutil.CaptureHandler{}
 	defs := newPhaseWithCapture(h).destroySteps(context.Background(), minimalConfig(), minimalOpts())
 
 	defs[0].OnError(errors.New("tf-fail"))
@@ -213,7 +187,7 @@ func TestDestroySteps_PartialFailure(t *testing.T) {
 		t.Errorf("joined error %q missing 'fw-fail'", clusterErr.Err.Error())
 	}
 
-	rec, ok := h.last()
+	rec, ok := h.Last()
 	if !ok {
 		t.Fatal("no log records captured")
 	}

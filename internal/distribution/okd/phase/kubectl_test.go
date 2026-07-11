@@ -3,9 +3,7 @@ package phase
 import (
 	"context"
 	"errors"
-	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 	"testing/synctest"
@@ -13,6 +11,7 @@ import (
 
 	"github.com/qxtaiba/okdctl/internal/executor"
 	"github.com/qxtaiba/okdctl/internal/logutil"
+	"github.com/qxtaiba/okdctl/internal/testutil"
 )
 
 // installFakeOC writes a POSIX shell script named "oc" in a temp dir,
@@ -20,10 +19,6 @@ import (
 // picks it up. The script switches behaviour on the OC_FAKE_MODE env.
 func installFakeOC(t *testing.T) {
 	t.Helper()
-	if runtime.GOOS == "windows" {
-		t.Skip("fake-oc script relies on POSIX sh")
-	}
-	dir := t.TempDir()
 	script := `#!/bin/sh
 # Fake oc for testing — behaviour keyed off OC_FAKE_MODE.
 case "${OC_FAKE_MODE:-empty}" in
@@ -54,11 +49,7 @@ case "${OC_FAKE_MODE:-empty}" in
 esac
 exit 0
 `
-	path := filepath.Join(dir, "oc")
-	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	testutil.InstallFakeBin(t, "oc", script)
 }
 
 func newTestPhase(t *testing.T) *BasePhase {

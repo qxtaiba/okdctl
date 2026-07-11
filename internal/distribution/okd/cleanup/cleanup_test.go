@@ -5,7 +5,6 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -14,6 +13,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/logutil"
+	"github.com/qxtaiba/okdctl/internal/testutil"
 )
 
 func TestExecute_UnknownKind(t *testing.T) {
@@ -136,11 +136,8 @@ func TestExecute_NilLoggerOk(t *testing.T) {
 // postCheck (`bytes.Contains(stdout, "ii  "+pkg)`) returns true.
 func installFakePkg(t *testing.T) string {
 	t.Helper()
-	if runtime.GOOS == "windows" {
-		t.Skip("fake pkg-tool scripts rely on POSIX sh")
-	}
 	dir := t.TempDir()
-	logScript := "#!/bin/sh\necho \"$@\" >> \"$(dirname \"$0\")/pkg.called\"\nexit 0\n"
+	logScript := "#!/bin/sh\necho \"$@\" >> \"" + filepath.Join(dir, "pkg.called") + "\"\nexit 0\n"
 	rpmScript := "#!/bin/sh\nexit 0\n"
 	// dpkg -l <pkg>  must print a line containing "ii  <pkg>" so platform's
 	// postCheck (bytes.Contains) treats the package as installed.
@@ -152,12 +149,8 @@ func installFakePkg(t *testing.T) string {
 		"dpkg":    dpkgScript,
 	}
 	for name, body := range scripts {
-		p := filepath.Join(dir, name)
-		if err := os.WriteFile(p, []byte(body), 0o755); err != nil {
-			t.Fatal(err)
-		}
+		testutil.InstallFakeBin(t, name, body)
 	}
-	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	return dir
 }
 
