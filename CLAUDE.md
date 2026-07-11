@@ -139,6 +139,12 @@ write the comment — then it carries real information.
   code.
 - `addon.BuildOpaqueSecret` is the canonical k8s Opaque Secret manifest
   builder for addons.
+- Command group nouns (the first word after `okdctl`, e.g. `addon`,
+  `releases`) default to singular even though the underlying concept is a
+  collection — `okdctl addon list`, not `okdctl addons list`. `releases`
+  predates this convention and keeps its plural `Use`; both `addon`/`addons`
+  and `releases`/`release` register the other form via cobra `Aliases` so
+  either spelling works. New noun groups should default to singular.
 - Proxmox host SSH/pvesh access lives in
   `internal/infrastructure/proxmox/hostssh`. SSH shell policy: new SSH
   operations MUST use `SSHRunArgv` (argv-mode). `SSHRun` (sh -c with a
