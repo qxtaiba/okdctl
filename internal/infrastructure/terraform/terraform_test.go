@@ -7,30 +7,9 @@ import (
 	"path/filepath"
 	"strconv"
 	"testing"
+
+	"github.com/qxtaiba/okdctl/internal/testutil"
 )
-
-type captureHandler struct {
-	records []slog.Record
-}
-
-func (h *captureHandler) Enabled(_ context.Context, _ slog.Level) bool { return true }
-
-func (h *captureHandler) Handle(_ context.Context, r slog.Record) error { //nolint:gocritic // hugeParam: slog.Handler interface requires value receiver
-	h.records = append(h.records, r)
-	return nil
-}
-
-func (h *captureHandler) WithAttrs(_ []slog.Attr) slog.Handler { return h }
-func (h *captureHandler) WithGroup(_ string) slog.Handler      { return h }
-
-func (h *captureHandler) hasWarn() bool {
-	for i := range h.records {
-		if h.records[i].Level == slog.LevelWarn {
-			return true
-		}
-	}
-	return false
-}
 
 // TestExecutor_CleanupPlans_PreservesBackupAndState locks that CleanupPlans
 // removes only plan files and never touches terraform.tfstate or
@@ -93,7 +72,7 @@ func TestExecutor_BuildVarArgs_DeterministicOrder(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	e := &Executor{workDir: workDir, varFile: vf, logger: slog.New(&captureHandler{})}
+	e := &Executor{workDir: workDir, varFile: vf, logger: slog.New(&testutil.CaptureHandler{})}
 	got := e.buildVarArgs("", map[string]string{"z": "3", "a": "1", "m": "2"})
 
 	want := []string{"-var-file=" + vf, "-var", "a=1", "-var", "m=2", "-var", "z=3"}
@@ -109,7 +88,7 @@ func TestExecutor_BuildVarArgs_DeterministicOrder(t *testing.T) {
 
 func TestExecutor_BuildVarArgs_VarFileMissing(t *testing.T) {
 	workDir := t.TempDir()
-	h := &captureHandler{}
+	h := &testutil.CaptureHandler{}
 	e := &Executor{
 		workDir: workDir,
 		varFile: filepath.Join(workDir, "does-not-exist.tfvars"),
@@ -123,7 +102,7 @@ func TestExecutor_BuildVarArgs_VarFileMissing(t *testing.T) {
 			t.Errorf("buildVarArgs included -var-file for missing file")
 		}
 	}
-	if !h.hasWarn() {
+	if !h.HasLevel(slog.LevelWarn) {
 		t.Error("expected a Warn log for missing var file; got none")
 	}
 }
@@ -145,7 +124,7 @@ func TestExecutor_HasState(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			dir := t.TempDir()
-			h := &captureHandler{}
+			h := &testutil.CaptureHandler{}
 			e := &Executor{workDir: dir, logger: slog.New(h)}
 
 			if tc.write {
@@ -157,10 +136,10 @@ func TestExecutor_HasState(t *testing.T) {
 			if got := e.HasState(); got != tc.wantTrue {
 				t.Errorf("HasState() = %v; want %v", got, tc.wantTrue)
 			}
-			if tc.wantWarn && !h.hasWarn() {
+			if tc.wantWarn && !h.HasLevel(slog.LevelWarn) {
 				t.Error("expected a Warn log; got none")
 			}
-			if !tc.wantWarn && h.hasWarn() {
+			if !tc.wantWarn && h.HasLevel(slog.LevelWarn) {
 				t.Errorf("unexpected Warn log emitted")
 			}
 		})
@@ -183,7 +162,7 @@ func TestExecutor_StateStatus(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			dir := t.TempDir()
-			e := &Executor{workDir: dir, logger: slog.New(&captureHandler{})}
+			e := &Executor{workDir: dir, logger: slog.New(&testutil.CaptureHandler{})}
 			if tc.write {
 				if err := os.WriteFile(filepath.Join(dir, "terraform.tfstate"), []byte(tc.content), 0o600); err != nil {
 					t.Fatal(err)
@@ -198,12 +177,8 @@ func TestExecutor_StateStatus(t *testing.T) {
 
 func installFakeTerraformOutput(t *testing.T, stdout string, exitCode int) {
 	t.Helper()
-	dir := t.TempDir()
 	script := "#!/bin/sh\ncat <<'EOF'\n" + stdout + "\nEOF\nexit " + strconv.Itoa(exitCode) + "\n"
-	if err := os.WriteFile(filepath.Join(dir, "terraform"), []byte(script), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	testutil.InstallFakeBin(t, "terraform", script)
 }
 
 func TestExecutor_Output_ParsesJSON(t *testing.T) {

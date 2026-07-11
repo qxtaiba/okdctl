@@ -5,26 +5,18 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"runtime"
 	"testing"
 
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/logutil"
+	"github.com/qxtaiba/okdctl/internal/testutil"
 )
 
 func installFakePkgTools(t *testing.T) {
 	t.Helper()
-	if runtime.GOOS == "windows" {
-		t.Skip("fake pkg-tool scripts require POSIX sh")
-	}
-	dir := t.TempDir()
 	for _, name := range []string{"rpm", "dnf", "dpkg", "apt-get"} {
-		p := filepath.Join(dir, name)
-		if err := os.WriteFile(p, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
-			t.Fatal(err)
-		}
+		testutil.InstallFakeBin(t, name, "#!/bin/sh\nexit 0\n")
 	}
-	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 }
 
 func TestPackages_RemovesScopedBinariesOnly(t *testing.T) {

@@ -6,7 +6,6 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -17,6 +16,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/executor"
 	"github.com/qxtaiba/okdctl/internal/logutil"
+	"github.com/qxtaiba/okdctl/internal/testutil"
 )
 
 func TestBuildLBIngressController_PreservesFields(t *testing.T) {
@@ -301,10 +301,6 @@ func TestBuildLBIngressController_EmptyNamespaceDefaults(t *testing.T) {
 //   - OC_SVC_IP_OTHER       → IP printed for any other router service
 func installFakeOCForIngress(t *testing.T) {
 	t.Helper()
-	if runtime.GOOS == "windows" {
-		t.Skip("fake-oc script relies on POSIX sh")
-	}
-	dir := t.TempDir()
 	//nolint:dupword // embedded sh: adjacent fi keywords are not prose
 	script := `#!/bin/sh
 if [ -n "${OC_ARGV_LOG:-}" ]; then echo "$*" >> "$OC_ARGV_LOG"; fi
@@ -373,11 +369,7 @@ case "$1" in
   *) exit 0 ;;
 esac
 `
-	path := filepath.Join(dir, "oc")
-	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	testutil.InstallFakeBin(t, "oc", script)
 }
 
 func newIngressTestPhase(t *testing.T) *Phase {

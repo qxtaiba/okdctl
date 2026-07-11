@@ -3,29 +3,19 @@ package addon
 import (
 	"context"
 	"errors"
-	"os"
-	"path/filepath"
-	"runtime"
 	"sync/atomic"
 	"testing"
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/executor"
+	"github.com/qxtaiba/okdctl/internal/testutil"
 )
 
 // installFakeOC adds a no-op `oc` script to PATH so the
 // executor.CommandExists("oc") guard in InstallAll/InstallOne passes.
 func installFakeOC(t *testing.T) {
 	t.Helper()
-	if runtime.GOOS == "windows" {
-		t.Skip("fake oc relies on POSIX sh")
-	}
-	dir := t.TempDir()
-	path := filepath.Join(dir, "oc")
-	if err := os.WriteFile(path, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	testutil.InstallFakeBin(t, "oc", "#!/bin/sh\nexit 0\n")
 }
 
 type stubAddon struct {

@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/qxtaiba/okdctl/internal/logutil"
+	"github.com/qxtaiba/okdctl/internal/testutil"
 )
 
 // installFakePkgTools writes controllable fake binaries into a TempDir and
@@ -29,11 +30,7 @@ import (
 // POSIX sh (dash on Debian/Ubuntu CI), avoiding the bash-only ${@: -1}.
 func installFakePkgTools(t *testing.T) string {
 	t.Helper()
-	if runtime.GOOS == "windows" {
-		t.Skip("fake pkg-tool scripts require POSIX sh")
-	}
-	dir := t.TempDir()
-	argvLog := filepath.Join(dir, "argv.log")
+	argvLog := filepath.Join(t.TempDir(), "argv.log")
 	logArgv := "#!/bin/sh\necho \"$*\" >> \"" + argvLog + "\"\nexit 0\n"
 	scripts := map[string]string{
 		"rpm":     "#!/bin/sh\neval \"last=\\$$#\"\nif [ \"$last\" = \"notinstalled\" ]; then exit 1; fi\nexit 0\n",
@@ -42,12 +39,8 @@ func installFakePkgTools(t *testing.T) string {
 		"apt-get": logArgv,
 	}
 	for name, body := range scripts {
-		p := filepath.Join(dir, name)
-		if err := os.WriteFile(p, []byte(body), 0o755); err != nil {
-			t.Fatal(err)
-		}
+		testutil.InstallFakeBin(t, name, body)
 	}
-	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	return argvLog
 }
 

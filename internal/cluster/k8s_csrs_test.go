@@ -5,12 +5,12 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/logutil"
+	"github.com/qxtaiba/okdctl/internal/testutil"
 )
 
 // installFakeOCForCSRs writes a PATH-shadow "oc" script and prepends its
@@ -20,10 +20,6 @@ import (
 //	"adm" — appends "$@\n" to $OC_ARGV_FILE when set; exits $OC_APPROVE_EXIT (default 0).
 func installFakeOCForCSRs(t *testing.T) {
 	t.Helper()
-	if runtime.GOOS == "windows" {
-		t.Skip("fake-oc script relies on POSIX sh")
-	}
-	dir := t.TempDir()
 	script := `#!/bin/sh
 default_csr='{"items":[]}'
 case "$1" in
@@ -46,11 +42,7 @@ case "$1" in
     ;;
 esac
 `
-	path := filepath.Join(dir, "oc")
-	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	testutil.InstallFakeBin(t, "oc", script)
 }
 
 func newTestClient(t *testing.T) *Client {

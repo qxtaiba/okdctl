@@ -5,18 +5,14 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/qxtaiba/okdctl/internal/testutil"
 )
 
 func installFakeIPNmcli(t *testing.T, ipOutput string, ipExit int, nmcliLog string) {
 	t.Helper()
-	if runtime.GOOS == "windows" {
-		t.Skip("fake scripts rely on POSIX sh")
-	}
-	dir := t.TempDir()
-
 	ipScript := fmt.Sprintf("#!/bin/sh\nprintf '%%s\\n' '%s'\nexit %d\n", ipOutput, ipExit)
 
 	nmcliScript := fmt.Sprintf(`#!/bin/sh
@@ -42,20 +38,8 @@ esac
 exit 0
 `, nmcliLog)
 
-	for _, e := range []struct {
-		name string
-		body string
-	}{
-		{"ip", ipScript},
-		{"nmcli", nmcliScript},
-	} {
-		p := filepath.Join(dir, e.name)
-		if err := os.WriteFile(p, []byte(e.body), 0o755); err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	testutil.InstallFakeBin(t, "ip", ipScript)
+	testutil.InstallFakeBin(t, "nmcli", nmcliScript)
 }
 
 func nmcliCallCount(t *testing.T, logFile string) int {

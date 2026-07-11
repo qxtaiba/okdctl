@@ -4,11 +4,11 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"runtime"
 	"testing"
 
 	"github.com/qxtaiba/okdctl/internal/executor"
 	"github.com/qxtaiba/okdctl/internal/logutil"
+	"github.com/qxtaiba/okdctl/internal/testutil"
 )
 
 // installFakeSSH writes a POSIX shell script named "ssh" in a temp dir and
@@ -17,10 +17,6 @@ import (
 // DefaultEnvAllowlist, so SSH_FAKE_MODE would otherwise be filtered out.
 func installFakeSSH(t *testing.T) {
 	t.Helper()
-	if runtime.GOOS == "windows" {
-		t.Skip("fake-ssh script relies on POSIX sh")
-	}
-	dir := t.TempDir()
 	script := `#!/bin/sh
 # Fake ssh for testing — behaviour keyed off SSH_FAKE_MODE.
 # SSHRun layout:     $1=-o $2=StrictHostKeyChecking=accept-new $3=-o
@@ -65,11 +61,7 @@ case "$6" in
 esac
 exit 0
 `
-	path := filepath.Join(dir, "ssh")
-	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	testutil.InstallFakeBin(t, "ssh", script)
 }
 
 func newTestISOParams(t *testing.T) *RemoteISOParams {

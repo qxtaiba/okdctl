@@ -3,27 +3,19 @@ package sshpin
 import (
 	"context"
 	"os"
-	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/qxtaiba/okdctl/internal/logutil"
+	"github.com/qxtaiba/okdctl/internal/testutil"
 )
 
 // installFakeKeyscan writes a POSIX sh script named "ssh-keyscan" to a temp
 // dir and prepends it to PATH. script must begin with "#!/bin/sh\n".
 func installFakeKeyscan(t *testing.T, script string) {
 	t.Helper()
-	if runtime.GOOS == "windows" {
-		t.Skip("fake ssh-keyscan script requires POSIX sh")
-	}
-	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "ssh-keyscan"), []byte(script), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	testutil.InstallFakeBin(t, "ssh-keyscan", script)
 }
 
 func TestVerify_HappyPath(t *testing.T) {

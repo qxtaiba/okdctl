@@ -3,33 +3,23 @@ package setup
 import (
 	"bytes"
 	"context"
-	"os"
-	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 
 	"github.com/qxtaiba/okdctl/internal/executor"
 	"github.com/qxtaiba/okdctl/internal/logutil"
+	"github.com/qxtaiba/okdctl/internal/testutil"
 )
 
 func installFakeSCP(t *testing.T) {
 	t.Helper()
-	if runtime.GOOS == "windows" {
-		t.Skip("fake-scp script relies on POSIX sh")
-	}
-	dir := t.TempDir()
 	script := `#!/bin/sh
 for arg in "$@"; do
   printf '%s\n' "$arg"
 done
 exit 0
 `
-	path := filepath.Join(dir, "scp")
-	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	testutil.InstallFakeBin(t, "scp", script)
 }
 
 func newUploadExecutor(extra ...executor.Option) *executor.Executor {

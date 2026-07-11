@@ -5,7 +5,6 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"runtime"
 	"testing"
 
 	"github.com/qxtaiba/okdctl/internal/config"
@@ -13,6 +12,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/executor"
 	"github.com/qxtaiba/okdctl/internal/logutil"
+	"github.com/qxtaiba/okdctl/internal/testutil"
 )
 
 // installFakeTerraformForBootstrap writes a POSIX sh script named "terraform"
@@ -21,10 +21,6 @@ import (
 // "apply-fail" — plan exits 0, apply exits 1.
 func installFakeTerraformForBootstrap(t *testing.T) {
 	t.Helper()
-	if runtime.GOOS == "windows" {
-		t.Skip("fake-terraform script relies on POSIX sh")
-	}
-	dir := t.TempDir()
 	script := `#!/bin/sh
 case "$1" in
   init) exit 0 ;;
@@ -41,11 +37,7 @@ case "$1" in
   *) exit 0 ;;
 esac
 `
-	path := filepath.Join(dir, "terraform")
-	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	testutil.InstallFakeBin(t, "terraform", script)
 }
 
 func seedBootstrapEnvDir(t *testing.T, projectRoot string) string {

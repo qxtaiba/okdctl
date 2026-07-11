@@ -2,13 +2,11 @@ package hostssh
 
 import (
 	"context"
-	"os"
-	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 
 	"github.com/qxtaiba/okdctl/internal/executor"
+	"github.com/qxtaiba/okdctl/internal/testutil"
 )
 
 // installFakeSSHEcho writes a POSIX shell script named "ssh" in a temp dir and
@@ -16,16 +14,7 @@ import (
 // all argv to stdout, one space-separated line.
 func installFakeSSHEcho(t *testing.T) {
 	t.Helper()
-	if runtime.GOOS == "windows" {
-		t.Skip("fake-ssh script relies on POSIX sh")
-	}
-	dir := t.TempDir()
-	script := "#!/bin/sh\necho \"$@\"\n"
-	path := filepath.Join(dir, "ssh")
-	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	testutil.InstallFakeBin(t, "ssh", "#!/bin/sh\necho \"$@\"\n")
 }
 
 func TestSSHRun_acceptNew(t *testing.T) {

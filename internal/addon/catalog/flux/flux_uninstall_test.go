@@ -12,48 +12,18 @@ import (
 	"github.com/qxtaiba/okdctl/internal/addon"
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/executor"
+	"github.com/qxtaiba/okdctl/internal/testutil"
 )
-
-// captureHandler records every slog.Record so tests can assert Warn count.
-type captureHandler struct {
-	records []slog.Record
-}
-
-func (h *captureHandler) Enabled(_ context.Context, _ slog.Level) bool { return true }
-func (h *captureHandler) Handle(_ context.Context, r slog.Record) error { //nolint:gocritic // hugeParam: slog.Handler interface requires value receiver
-	h.records = append(h.records, r)
-	return nil
-}
-func (h *captureHandler) WithAttrs(_ []slog.Attr) slog.Handler { return h }
-func (h *captureHandler) WithGroup(_ string) slog.Handler      { return h }
-
-func (h *captureHandler) warnCount() int {
-	n := 0
-	for i := range h.records {
-		if h.records[i].Level == slog.LevelWarn {
-			n++
-		}
-	}
-	return n
-}
 
 // installFakeTools writes fake helm and oc binaries to a TempDir and prepends
 // the dir to PATH. Each binary appends its argv as a colon-separated line to
 // the file at $ARGV_LOG when set, then exits with $EXIT_CODE (default 0).
 func installFakeTools(t *testing.T) {
 	t.Helper()
-	if runtime.GOOS == "windows" {
-		t.Skip("fake binaries rely on POSIX sh")
-	}
-	dir := t.TempDir()
-	script := []byte("#!/bin/sh\n[ -n \"$ARGV_LOG\" ] && printf '%s\\n' \"$(basename \"$0\"):$*\" >> \"$ARGV_LOG\"\nexit \"${EXIT_CODE:-0}\"\n")
+	script := "#!/bin/sh\n[ -n \"$ARGV_LOG\" ] && printf '%s\\n' \"$(basename \"$0\"):$*\" >> \"$ARGV_LOG\"\nexit \"${EXIT_CODE:-0}\"\n"
 	for _, name := range []string{"helm", "oc"} {
-		p := filepath.Join(dir, name)
-		if err := os.WriteFile(p, script, 0o755); err != nil {
-			t.Fatal(err)
-		}
+		testutil.InstallFakeBin(t, name, script)
 	}
-	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 }
 
 func makeEnv(t *testing.T, argvLog, exitCode string, log *slog.Logger) *addon.Environment {
@@ -87,7 +57,7 @@ func readArgvLog(t *testing.T, path string) []string {
 func TestUninstall_HappyPath(t *testing.T) {
 	installFakeTools(t)
 	argvLog := filepath.Join(t.TempDir(), "argv.log")
-	h := &captureHandler{}
+	h := &testutil.CaptureHandler{}
 	env := makeEnv(t, argvLog, "", slog.New(h))
 
 	f := &Flux{}
@@ -111,7 +81,7 @@ func TestUninstall_HappyPath(t *testing.T) {
 		}
 	}
 
-	if got := h.warnCount(); got != 0 {
+	if got := h.CountLevel(slog.LevelWarn); got != 0 {
 		t.Errorf("warnCount = %d; want 0 on success path", got)
 	}
 }
@@ -126,7 +96,7 @@ func TestUninstall_FailuresDoNotAbort(t *testing.T) {
 	// covered separately below. This exercises the warnOnErr branch 3
 	// times and proves the sequence does not abort early.
 	t.Setenv("PATH", t.TempDir())
-	h := &captureHandler{}
+	h := &testutil.CaptureHandler{}
 	env := &addon.Environment{
 		AddonConfig: config.AddonConfig{},
 		Exec:        executor.New(),
@@ -138,7 +108,7 @@ func TestUninstall_FailuresDoNotAbort(t *testing.T) {
 		t.Fatalf("Uninstall must return nil even when all commands fail; got: %v", err)
 	}
 
-	if got := h.warnCount(); got != 3 {
+	if got := h.CountLevel(slog.LevelWarn); got != 3 {
 		t.Errorf("warnCount = %d; want 3 (one per failing command)", got)
 	}
 }
@@ -152,14 +122,14 @@ func TestUninstall_NonZeroExitWarns(t *testing.T) {
 	}
 	argvLog := filepath.Join(t.TempDir(), "argv.log")
 	installFakeTools(t)
-	h := &captureHandler{}
+	h := &testutil.CaptureHandler{}
 	env := makeEnv(t, argvLog, "1", slog.New(h))
 
 	f := &Flux{}
 	if err := f.Uninstall(context.Background(), env); err != nil {
 		t.Fatalf("Uninstall must return nil on non-zero tool exits; got %v", err)
 	}
-	if got := h.warnCount(); got != 3 {
+	if got := h.CountLevel(slog.LevelWarn); got != 3 {
 		t.Errorf("warnCount = %d; want 3 (every delete exits non-zero)", got)
 	}
 }

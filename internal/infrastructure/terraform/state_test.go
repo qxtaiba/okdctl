@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/qxtaiba/okdctl/internal/errtypes"
+	"github.com/qxtaiba/okdctl/internal/testutil"
 )
 
 func TestSnapshotState_WritesBackup(t *testing.T) {
@@ -20,7 +21,7 @@ func TestSnapshotState_WritesBackup(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	e := &Executor{workDir: dir, logger: slog.New(&captureHandler{})}
+	e := &Executor{workDir: dir, logger: slog.New(&testutil.CaptureHandler{})}
 	dst, err := e.SnapshotState(context.Background())
 	if err != nil {
 		t.Fatalf("SnapshotState: unexpected error: %v", err)
@@ -51,7 +52,7 @@ func TestSnapshotState_WritesBackup(t *testing.T) {
 
 func TestSnapshotState_AbsentSource(t *testing.T) {
 	dir := t.TempDir()
-	e := &Executor{workDir: dir, logger: slog.New(&captureHandler{})}
+	e := &Executor{workDir: dir, logger: slog.New(&testutil.CaptureHandler{})}
 
 	dst, err := e.SnapshotState(context.Background())
 	if err != nil {
@@ -77,7 +78,7 @@ func TestSnapshotState_AtomicWriteError(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = os.Chmod(dir, 0o700) })
 
-	e := &Executor{workDir: dir, logger: slog.New(&captureHandler{})}
+	e := &Executor{workDir: dir, logger: slog.New(&testutil.CaptureHandler{})}
 	dst, err := e.SnapshotState(context.Background())
 	if err == nil {
 		t.Fatalf("expected error from AtomicWrite failure; got nil (dst=%q)", dst)
@@ -105,7 +106,7 @@ func TestPruneSnapshots_KeepsFiveMostRecent(t *testing.T) {
 		}
 	}
 
-	e := &Executor{workDir: dir, logger: slog.New(&captureHandler{})}
+	e := &Executor{workDir: dir, logger: slog.New(&testutil.CaptureHandler{})}
 	e.pruneSnapshots()
 
 	removed := names[:2]
@@ -133,7 +134,7 @@ func TestCheckStateMajorVersion_RejectsMajorTwo(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	log := slog.New(&captureHandler{})
+	log := slog.New(&testutil.CaptureHandler{})
 	err := checkStateMajorVersion(sf, log)
 	if err == nil {
 		t.Fatal("expected ConfigError for major=2; got nil")
@@ -152,7 +153,7 @@ func TestCheckStateMajorVersion_UnparseableVersionIsNonFatal(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	log := slog.New(&captureHandler{})
+	log := slog.New(&testutil.CaptureHandler{})
 	if err := checkStateMajorVersion(sf, log); err != nil {
 		t.Errorf("expected nil for unparseable version; got %v", err)
 	}

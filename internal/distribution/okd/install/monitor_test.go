@@ -3,9 +3,7 @@ package install
 import (
 	"context"
 	"errors"
-	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -15,14 +13,11 @@ import (
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/logutil"
+	"github.com/qxtaiba/okdctl/internal/testutil"
 )
 
 func installFakeOpenShift(t *testing.T) {
 	t.Helper()
-	if runtime.GOOS == "windows" {
-		t.Skip("fake binary relies on POSIX sh")
-	}
-	dir := t.TempDir()
 	// exec sleep so the shell process is replaced — SIGKILL on the script
 	// kills the sleep directly, preventing an orphaned child from holding
 	// stdout/stderr pipes open and stalling `go test` shutdown.
@@ -37,11 +32,7 @@ case "${OC_FAKE_MODE:-ok}" in
 esac
 exit 0
 `
-	path := filepath.Join(dir, "openshift-install")
-	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	testutil.InstallFakeBin(t, "openshift-install", script)
 }
 
 type fakeApprover struct {
