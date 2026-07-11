@@ -320,7 +320,7 @@ func installFakeOCForIngress(t *testing.T) {
 
 func newIngressTestPhase(t *testing.T) *Phase {
 	t.Helper()
-	return New("test",
+	return New(
 		phase.WithExecutor(executor.New()),
 		phase.WithLogger(logutil.NopLogger),
 	)

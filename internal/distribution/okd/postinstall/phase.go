@@ -64,9 +64,9 @@ type Phase struct {
 	phase.BasePhase
 }
 
-// New constructs a post-install Phase with the given version tag and options.
-func New(version string, opts ...phase.BasePhaseOption) *Phase {
-	bp := phase.NewBasePhase(version, opts...)
+// New constructs a post-install Phase with the given options.
+func New(opts ...phase.BasePhaseOption) *Phase {
+	bp := phase.NewBasePhase(opts...)
 	bp.Log = bp.Log.With("phase", "postinstall")
 	return &Phase{BasePhase: bp}
 }

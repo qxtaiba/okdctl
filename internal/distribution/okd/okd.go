@@ -28,7 +28,6 @@ import (
 // install, postinstall, destroy). Construct via New with functional options;
 // the zero value is not usable.
 type Provisioner struct {
-	version     string
 	projectRoot string
 	executor    *executor.Executor
 	pendingEnv  []string
@@ -77,15 +76,13 @@ func WithEnv(env []string) ProvisionerOption {
 	}
 }
 
-// New constructs a Provisioner for the given okdctl version with options
-// applied in order. Normalizes a nil logger to NopLogger and builds the
-// executor once after all options are applied so WithEnv/WithLogger
-// ordering does not matter.
-func New(version string, opts ...ProvisionerOption) *Provisioner {
+// New constructs a Provisioner with options applied in order. Normalizes a
+// nil logger to NopLogger and builds the executor once after all options
+// are applied so WithEnv/WithLogger ordering does not matter.
+func New(opts ...ProvisionerOption) *Provisioner {
 	projectRoot, _ := os.Getwd()
 
 	p := &Provisioner{
-		version:     version,
 		projectRoot: projectRoot,
 		logger:      logutil.NopLogger,
 		reporter:    logutil.NopProgressReporter,
@@ -148,12 +145,12 @@ func (p *Provisioner) Prepare(ctx context.Context, cfg *config.Config, opts Prep
 			Kind:           cleanup.WorkOnly,
 			HTTPServerRoot: cfg.HTTPServer.Root,
 		}
-		if err := cleanup.New(p.version, phase.WithExecutor(p.executor), phase.WithLogger(p.logger)).Execute(ctx, cleanupOpts); err != nil {
+		if err := cleanup.New(phase.WithExecutor(p.executor), phase.WithLogger(p.logger)).Execute(ctx, cleanupOpts); err != nil {
 			return nil, &errtypes.ClusterError{Msg: "pre-deploy cleanup incomplete; stale sentinels may skip regeneration — remove the work directory manually or run 'okdctl cleanup'", Err: err}
 		}
 	}
 
-	setupPhase := setup.New(p.version,
+	setupPhase := setup.New(
 		phase.WithExecutor(p.executor),
 		phase.WithLogger(p.logger),
 		phase.WithRecorder(p.recorder),
@@ -203,7 +200,7 @@ func (p *Provisioner) guardLiveCluster(cfg *config.Config, opts PrepareOpts) err
 // Install runs the install phase: ignition delivery, bootstrap wait, and
 // install-complete monitor. Must be called after Prepare.
 func (p *Provisioner) Install(ctx context.Context, cfg *config.Config, opts *install.Options) ([]distribution.StepResult, error) {
-	installPhase := install.New(p.version,
+	installPhase := install.New(
 		phase.WithExecutor(p.executor),
 		phase.WithLogger(p.logger),
 		phase.WithRecorder(p.recorder),
@@ -215,7 +212,7 @@ func (p *Provisioner) Install(ctx context.Context, cfg *config.Config, opts *ins
 // Configure runs the postinstall phase: kube-vip verification, production
 // DNS cutover, bootstrap cleanup. Returns the result alongside per-step records.
 func (p *Provisioner) Configure(ctx context.Context, cfg *config.Config) (*postinstall.Result, []distribution.StepResult, error) {
-	postPhase := postinstall.New(p.version,
+	postPhase := postinstall.New(
 		phase.WithExecutor(p.executor),
 		phase.WithLogger(p.logger),
 		phase.WithRecorder(p.recorder),
@@ -227,7 +224,7 @@ func (p *Provisioner) Configure(ctx context.Context, cfg *config.Config) (*posti
 // UpdateIngress re-points haproxy at a fresh set of backend nodes without
 // re-running the full postinstall phase. Used by the update-ingress CLI verb.
 func (p *Provisioner) UpdateIngress(ctx context.Context, cfg *config.Config, opts postinstall.UpdateIngressOptions) (*postinstall.UpdateIngressResult, error) {
-	postPhase := postinstall.New(p.version,
+	postPhase := postinstall.New(
 		phase.WithExecutor(p.executor),
 		phase.WithLogger(p.logger),
 	)
@@ -277,7 +274,7 @@ func (p *Provisioner) ZeroizeEnv() {
 
 // Destroy tears down the cluster and its infrastructure.
 func (p *Provisioner) Destroy(ctx context.Context, cfg *config.Config, opts DestroyOpts) ([]distribution.StepResult, error) {
-	destroyPhase := destroy.New(p.version, phase.WithExecutor(p.executor), phase.WithLogger(p.logger))
+	destroyPhase := destroy.New(phase.WithExecutor(p.executor), phase.WithLogger(p.logger))
 	destroyOpts := destroy.NewOptions(cfg, p.projectRoot)
 	destroyOpts.AutoApprove = opts.AutoApprove
 	destroyOpts.RemovePackages = opts.RemovePackages

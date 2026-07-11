@@ -44,7 +44,6 @@ func (h *captureHandler) last() (slog.Record, bool) {
 func newPhaseWithCapture(h *captureHandler) *Phase {
 	return &Phase{
 		BasePhase: phase.NewBasePhase(
-			"test",
 			phase.WithExecutor(executor.New()),
 			phase.WithLogger(slog.New(h)),
 		),

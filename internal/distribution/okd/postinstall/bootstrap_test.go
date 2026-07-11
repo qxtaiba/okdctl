@@ -69,7 +69,6 @@ func newBootstrapPhase(t *testing.T) *Phase {
 	t.Helper()
 	return &Phase{
 		BasePhase: phase.NewBasePhase(
-			"test",
 			phase.WithExecutor(executor.New()),
 			phase.WithLogger(logutil.NopLogger),
 		),

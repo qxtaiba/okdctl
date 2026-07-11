@@ -190,7 +190,7 @@ func warnIfTfStateOnly(root string) {
 }
 
 // Pass nil for creds when the operation only needs local tools (oc, dnsmasq, systemctl).
-func createOKDProvisionerWithOpts(cfg *config.Config, creds *credentials.ProxmoxCredentials, projectRoot string, extra ...okd.ProvisionerOption) *okd.Provisioner {
+func createOKDProvisionerWithOpts(creds *credentials.ProxmoxCredentials, projectRoot string, extra ...okd.ProvisionerOption) *okd.Provisioner {
 	opts := []okd.ProvisionerOption{
 		okd.WithProjectRoot(projectRoot),
 		okd.WithLogger(tui.SimpleLogger()),
@@ -201,7 +201,7 @@ func createOKDProvisionerWithOpts(cfg *config.Config, creds *credentials.Proxmox
 	}
 
 	opts = append(opts, extra...)
-	return okd.New(cfg.Distribution.Version, opts...)
+	return okd.New(opts...)
 }
 
 // runGuardedPrepare runs the prepare phase behind the live-cluster guard.
@@ -366,7 +366,7 @@ func executeFullDeployment(ctx context.Context, cfg *config.Config, opts deploym
 	}()
 
 	provOpts = append(provOpts, okd.WithProgressReporter(func(desc string) func() { return tui.StartSpinner(ctx, desc) }))
-	p := createOKDProvisionerWithOpts(cfg, opts.Credentials, projectRoot, provOpts...)
+	p := createOKDProvisionerWithOpts(opts.Credentials, projectRoot, provOpts...)
 	defer p.ZeroizeEnv()
 
 	if err := p.Validate(cfg); err != nil {

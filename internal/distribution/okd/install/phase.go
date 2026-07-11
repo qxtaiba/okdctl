@@ -87,9 +87,9 @@ type Phase struct {
 	startMonitorCmd func(ctx context.Context, clusterDir string) (<-chan error, func(), error)
 }
 
-// New constructs an install Phase with the given version tag and options.
-func New(version string, opts ...phase.BasePhaseOption) *Phase {
-	bp := phase.NewBasePhase(version, opts...)
+// New constructs an install Phase with the given options.
+func New(opts ...phase.BasePhaseOption) *Phase {
+	bp := phase.NewBasePhase(opts...)
 	bp.Log = bp.Log.With("phase", "install")
 	return &Phase{BasePhase: bp}
 }

@@ -15,7 +15,7 @@ import (
 func newInstallPhase(t *testing.T) *Phase {
 	t.Helper()
 	return &Phase{
-		BasePhase: phase.NewBasePhase("test",
+		BasePhase: phase.NewBasePhase(
 			phase.WithLogger(logutil.NopLogger),
 			phase.WithExecutor(executor.New(executor.WithLogger(logutil.NopLogger))),
 			phase.WithReporter(logutil.NopProgressReporter),
