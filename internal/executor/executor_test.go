@@ -183,7 +183,7 @@ func TestZeroizeEnv(t *testing.T) {
 		}
 	})
 
-	t.Run("nil and empty Env are no-ops", func(t *testing.T) {
+	t.Run("nil and empty Env are no-ops", func(_ *testing.T) {
 		e1 := New()
 		e1.ZeroizeEnv()
 

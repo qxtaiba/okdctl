@@ -157,8 +157,8 @@ func TestWriteEnvFile_SymlinkRefused(t *testing.T) {
 
 func TestLoadEnvFile_PermRefusal(t *testing.T) {
 	tests := []struct {
-		name string
-		perm os.FileMode
+		name        string
+		perm        os.FileMode
 		wantAuthErr bool
 	}{
 		{"0600 accepted", 0o600, false},

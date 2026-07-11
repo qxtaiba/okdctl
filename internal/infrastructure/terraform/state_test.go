@@ -1,6 +1,7 @@
 package terraform
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"log/slog"
@@ -35,7 +36,7 @@ func TestSnapshotState_WritesBackup(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read backup: %v", err)
 	}
-	if string(got) != string(payload) {
+	if !bytes.Equal(got, payload) {
 		t.Errorf("backup content mismatch\n got: %q\nwant: %q", got, payload)
 	}
 

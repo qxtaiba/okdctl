@@ -3,7 +3,6 @@ package install
 import (
 	"context"
 	"errors"
-	"log/slog"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -116,42 +115,18 @@ func TestMonitorInstallation_CtxCanceled(t *testing.T) {
 	}
 }
 
-// monitorCaptureHandler records slog.Records so synctest tests can assert log
-// output produced by MonitorInstallation.
-type monitorCaptureHandler struct {
-	records []slog.Record
-}
-
-func (h *monitorCaptureHandler) Enabled(_ context.Context, _ slog.Level) bool { return true }
-func (h *monitorCaptureHandler) Handle(_ context.Context, r slog.Record) error {
-	h.records = append(h.records, r)
-	return nil
-}
-func (h *monitorCaptureHandler) WithAttrs(_ []slog.Attr) slog.Handler { return h }
-func (h *monitorCaptureHandler) WithGroup(_ string) slog.Handler      { return h }
-
-func (h *monitorCaptureHandler) hasMessage(msg string) bool {
-	for _, r := range h.records {
-		if r.Message == msg {
-			return true
-		}
-	}
-	return false
-}
-
-func newPhaseSynctest(t *testing.T, start func(context.Context, string) (<-chan error, func(), error)) (*Phase, *monitorCaptureHandler) {
+func newPhaseSynctest(t *testing.T, start func(context.Context, string) (<-chan error, func(), error)) *Phase {
 	t.Helper()
-	h := &monitorCaptureHandler{}
 	return &Phase{
-		BasePhase:       phase.NewBasePhase(phase.WithLogger(slog.New(h)), phase.WithReporter(logutil.NopProgressReporter)),
+		BasePhase:       phase.NewBasePhase(phase.WithLogger(logutil.NopLogger), phase.WithReporter(logutil.NopProgressReporter)),
 		startMonitorCmd: start,
-	}, h
+	}
 }
 
 func TestMonitorInstallation_TickerApproveCSRs(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		done := make(chan error, 1)
-		p, _ := newPhaseSynctest(t, func(_ context.Context, _ string) (<-chan error, func(), error) {
+		p := newPhaseSynctest(t, func(_ context.Context, _ string) (<-chan error, func(), error) {
 			return done, func() {}, nil
 		})
 		approver := &fakeApprover{approveN: 1}
@@ -184,7 +159,7 @@ func TestMonitorInstallation_TickerApproveCSRs(t *testing.T) {
 func TestMonitorInstallation_ReapTimeout(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		done := make(chan error, 1)
-		p, _ := newPhaseSynctest(t, func(_ context.Context, _ string) (<-chan error, func(), error) {
+		p := newPhaseSynctest(t, func(_ context.Context, _ string) (<-chan error, func(), error) {
 			return done, func() {}, nil
 		})
 		approver := &fakeApprover{}
@@ -213,7 +188,7 @@ func TestMonitorInstallation_ReapTimeout(t *testing.T) {
 func TestMonitorInstallation_CtxCancelReapsGracefully(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		done := make(chan error, 1)
-		p, _ := newPhaseSynctest(t, func(_ context.Context, _ string) (<-chan error, func(), error) {
+		p := newPhaseSynctest(t, func(_ context.Context, _ string) (<-chan error, func(), error) {
 			return done, func() {}, nil
 		})
 		approver := &fakeApprover{}

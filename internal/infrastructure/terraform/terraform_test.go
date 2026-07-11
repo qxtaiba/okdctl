@@ -14,7 +14,7 @@ type captureHandler struct {
 
 func (h *captureHandler) Enabled(_ context.Context, _ slog.Level) bool { return true }
 
-func (h *captureHandler) Handle(_ context.Context, r slog.Record) error {
+func (h *captureHandler) Handle(_ context.Context, r slog.Record) error { //nolint:gocritic // hugeParam: slog.Handler interface requires value receiver
 	h.records = append(h.records, r)
 	return nil
 }
@@ -23,8 +23,8 @@ func (h *captureHandler) WithAttrs(_ []slog.Attr) slog.Handler { return h }
 func (h *captureHandler) WithGroup(_ string) slog.Handler      { return h }
 
 func (h *captureHandler) hasWarn() bool {
-	for _, r := range h.records {
-		if r.Level == slog.LevelWarn {
+	for i := range h.records {
+		if h.records[i].Level == slog.LevelWarn {
 			return true
 		}
 	}

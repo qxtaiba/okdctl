@@ -15,11 +15,11 @@ func TestZeroBytes(t *testing.T) {
 		}
 	})
 
-	t.Run("nil slice is a no-op", func(t *testing.T) {
+	t.Run("nil slice is a no-op", func(_ *testing.T) {
 		ZeroBytes(nil)
 	})
 
-	t.Run("empty slice is a no-op", func(t *testing.T) {
+	t.Run("empty slice is a no-op", func(_ *testing.T) {
 		ZeroBytes([]byte{})
 	})
 }

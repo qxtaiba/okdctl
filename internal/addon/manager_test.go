@@ -39,15 +39,17 @@ type stubAddon struct {
 }
 
 func (s *stubAddon) Info() Metadata { return s.meta }
-func (s *stubAddon) Install(ctx context.Context, env *Environment) error {
+func (s *stubAddon) Install(_ context.Context, _ *Environment) error {
 	s.installN.Add(1)
 	return s.installErr
 }
-func (s *stubAddon) Verify(ctx context.Context, env *Environment) error {
+
+func (s *stubAddon) Verify(_ context.Context, _ *Environment) error {
 	s.verifyN.Add(1)
 	return s.verifyErr
 }
-func (s *stubAddon) Uninstall(ctx context.Context, env *Environment) error {
+
+func (s *stubAddon) Uninstall(_ context.Context, _ *Environment) error {
 	s.uninstallN.Add(1)
 	return s.uninstallEr
 }

@@ -9,7 +9,7 @@ import (
 )
 
 func TestResolveIngressWorkDir(t *testing.T) {
-	if got, want := resolveIngressWorkDir("/srv/proj", ""), filepath.Join("/srv/proj", "okd-install"); got != want {
+	if got, want := resolveIngressWorkDir("/srv/proj", ""), "/srv/proj/okd-install"; got != want {
 		t.Errorf("empty workdir: got %q, want %q", got, want)
 	}
 	if got, want := resolveIngressWorkDir("/srv/proj", "/explicit/dir"), "/explicit/dir"; got != want {

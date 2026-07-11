@@ -35,7 +35,7 @@ func TestMsgFieldNoCredentialInterpolation(t *testing.T) {
 		}
 		f, parseErr := parser.ParseFile(fset, path, nil, 0)
 		if parseErr != nil {
-			return nil
+			return nil //nolint:nilerr // unparseable files are the compiler's problem; the sweep asserts only on parseable sources
 		}
 		ast.Inspect(f, func(n ast.Node) bool {
 			lit, ok := n.(*ast.CompositeLit)

@@ -18,11 +18,12 @@ import (
 // because system.RunCaptured strips non-allowlisted env vars.
 //
 // Behaviour:
-//   rpm      exits 1 when its last argument is "notinstalled", else 0.
-//   dpkg     exits 0; stdout is "ii  <arg>"; if arg == "rcpkg" stdout is
-//            "rc  rcpkg" (simulating a stale removed entry).
-//   dnf      logs argv, always exits 0.
-//   apt-get  logs argv, always exits 0.
+//
+//	rpm      exits 1 when its last argument is "notinstalled", else 0.
+//	dpkg     exits 0; stdout is "ii  <arg>"; if arg == "rcpkg" stdout is
+//	         "rc  rcpkg" (simulating a stale removed entry).
+//	dnf      logs argv, always exits 0.
+//	apt-get  logs argv, always exits 0.
 //
 // eval "last=\$$#" retrieves the last positional argument portably under
 // POSIX sh (dash on Debian/Ubuntu CI), avoiding the bash-only ${@: -1}.

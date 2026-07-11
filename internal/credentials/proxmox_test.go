@@ -38,12 +38,12 @@ func TestProxmoxCredentials_Zeroize(t *testing.T) {
 		}
 	})
 
-	t.Run("nil receiver is safe", func(t *testing.T) {
+	t.Run("nil receiver is safe", func(_ *testing.T) {
 		var c *ProxmoxCredentials
 		c.Zeroize() // must not panic
 	})
 
-	t.Run("empty slices are safe", func(t *testing.T) {
+	t.Run("empty slices are safe", func(_ *testing.T) {
 		c := &ProxmoxCredentials{}
 		c.Zeroize()
 	})

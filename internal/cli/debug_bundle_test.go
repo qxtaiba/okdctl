@@ -54,7 +54,7 @@ func readTarEntries(t *testing.T, tw *tar.Writer, buf *bytes.Buffer) map[string]
 	out := map[string][]byte{}
 	for {
 		hdr, err := tr.Next()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {
