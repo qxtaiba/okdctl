@@ -85,6 +85,95 @@ func TestReadDeployState_UnknownSchema(t *testing.T) {
 	}
 }
 
+func TestResolveResumePhase(t *testing.T) {
+	tests := []struct {
+		name       string
+		seed       func(t *testing.T, path string)
+		fresh      bool
+		wantPhase  deployPhase
+		wantMarker bool
+	}{
+		{
+			name:      "no marker starts from prepare",
+			seed:      func(*testing.T, string) {},
+			wantPhase: phasePrepare,
+		},
+		{
+			name: "prepare marker resumes through the wipe",
+			seed: func(t *testing.T, path string) {
+				if err := writeDeployState(path, phasePrepare, "run-1", "prod"); err != nil {
+					t.Fatalf("writeDeployState: %v", err)
+				}
+			},
+			wantPhase:  phasePrepare,
+			wantMarker: true,
+		},
+		{
+			name: "install marker routes past the wipe",
+			seed: func(t *testing.T, path string) {
+				if err := writeDeployState(path, phaseInstall, "run-2", "prod"); err != nil {
+					t.Fatalf("writeDeployState: %v", err)
+				}
+			},
+			wantPhase:  phaseInstall,
+			wantMarker: true,
+		},
+		{
+			name: "configure marker routes past wipe and install",
+			seed: func(t *testing.T, path string) {
+				if err := writeDeployState(path, phaseConfigure, "run-3", "prod"); err != nil {
+					t.Fatalf("writeDeployState: %v", err)
+				}
+			},
+			wantPhase:  phaseConfigure,
+			wantMarker: true,
+		},
+		{
+			name: "fresh overrides install marker and restarts from prepare",
+			seed: func(t *testing.T, path string) {
+				if err := writeDeployState(path, phaseInstall, "run-4", "prod"); err != nil {
+					t.Fatalf("writeDeployState: %v", err)
+				}
+			},
+			fresh:      true,
+			wantPhase:  phasePrepare,
+			wantMarker: true,
+		},
+		{
+			name: "marker from different cluster is ignored",
+			seed: func(t *testing.T, path string) {
+				if err := writeDeployState(path, phaseInstall, "run-5", "other"); err != nil {
+					t.Fatalf("writeDeployState: %v", err)
+				}
+			},
+			wantPhase: phasePrepare,
+		},
+		{
+			name: "corrupt marker treated as absent",
+			seed: func(t *testing.T, path string) {
+				if err := os.WriteFile(path, []byte("{broken"), 0o600); err != nil {
+					t.Fatalf("seed file: %v", err)
+				}
+			},
+			wantPhase: phasePrepare,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "deploy.state")
+			tc.seed(t, path)
+			phase, marker := resolveResumePhase(path, "prod", tc.fresh)
+			if phase != tc.wantPhase {
+				t.Errorf("phase = %q; want %q", phase, tc.wantPhase)
+			}
+			if (marker != nil) != tc.wantMarker {
+				t.Errorf("marker = %+v; want present=%v", marker, tc.wantMarker)
+			}
+		})
+	}
+}
+
 func TestAnnounceDeployState_ClusterMismatch(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "deploy.state")

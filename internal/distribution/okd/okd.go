@@ -116,11 +116,15 @@ func (p *Provisioner) Validate(cfg *config.Config) error {
 // resources or cluster-config/auth); without it Prepare returns an error
 // so the operator is forced to destroy the cluster first.
 //
-// ResumeInProgress signals that the CLI's deploy-state marker is present,
-// meaning the previous run was interrupted before clean completion. The
+// ResumeInProgress signals that the CLI's deploy-state marker records a
+// prepare-phase interruption for this cluster, meaning the previous run
+// stopped before any VM booted with the work directory's contents. The
 // guard is skipped then so the documented 'okdctl deploy' resume flow is
 // not blocked by mid-setup artifacts such as cluster-config/auth written
-// by StepGenerateIgnition.
+// by StepGenerateIgnition. Markers recording an install or configure
+// interruption must never reach Prepare: the CLI routes those resumes
+// past the wipe entirely (cli.resolveResumePhase) because the work
+// directory then holds identity material live VMs depend on.
 type PrepareOpts struct {
 	FreshDeploy      bool
 	ResumeInProgress bool
@@ -174,10 +178,11 @@ func (p *Provisioner) GuardPrepare(cfg *config.Config, opts PrepareOpts) error {
 // guardLiveCluster returns a *errtypes.ConfigError when the terraform env
 // state has resources — the authoritative live-cluster signal. A
 // cluster-config/auth directory alone is mid-setup debris (written by
-// StepGenerateIgnition before any VM exists) and stays wipeable, because
-// the deploy-state marker is itself removed by the resume wipe and cannot
-// vouch for a setup-phase interruption. FreshDeploy or ResumeInProgress
-// bypasses the guard.
+// StepGenerateIgnition before any VM exists) and stays wipeable.
+// FreshDeploy or ResumeInProgress bypasses the guard; ResumeInProgress is
+// only set for a prepare-phase marker, which guarantees no VM has booted
+// with the current work directory's contents, so the bypass cannot wipe
+// material a live cluster depends on.
 //
 // Callers that set FreshDeploy=true accept credential loss: cluster-config/auth
 // (kubeadmin-password, kubeconfig) is wiped with no backup.
@@ -219,6 +224,21 @@ func (p *Provisioner) Configure(ctx context.Context, cfg *config.Config) (*posti
 	)
 	opts := postinstall.NewOptions(cfg, p.projectRoot)
 	return postPhase.Execute(ctx, cfg, &opts)
+}
+
+// ResumeConfigure runs the postinstall phase for a deploy interrupted during
+// configure. The cluster is installed and its VMs are live, so Install is
+// not re-run — a terraform re-apply after bootstrap cleanup would recreate
+// the bootstrap VM against a running control plane. Only KUBECONFIG, the
+// process-local executor state Install normally establishes, is re-armed;
+// a missing kubeconfig fails fast before any postinstall step runs.
+func (p *Provisioner) ResumeConfigure(ctx context.Context, cfg *config.Config) (*postinstall.Result, []distribution.StepResult, error) {
+	installPhase := install.New(phase.WithExecutor(p.executor), phase.WithLogger(p.logger))
+	clusterDir := phase.ClusterConfigDir(filepath.Join(p.projectRoot, "okd-install"))
+	if err := installPhase.SetupKubeconfig(ctx, clusterDir); err != nil {
+		return nil, nil, err
+	}
+	return p.Configure(ctx, cfg)
 }
 
 // UpdateIngress re-points haproxy at a fresh set of backend nodes without
