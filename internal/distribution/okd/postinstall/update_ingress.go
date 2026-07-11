@@ -596,7 +596,9 @@ func buildRollbackJSON(ic *ingressControllerInfo) (string, error) {
 }
 
 // attemptRollback recreates the original IngressController from its captured
-// RawJSON. Errors are logged only — the caller already has a primary error.
+// RawJSON. A non-nil return means the rollback itself failed; the caller
+// joins it with the primary error rather than replacing it. Subprocess
+// stderr is redacted before it reaches the error string.
 func (p *Phase) attemptRollback(ctx context.Context, ic *ingressControllerInfo) error {
 	p.Log.Info("update-ingress: rollback: starting", "name", ic.Name)
 	rollbackJSON, err := buildRollbackJSON(ic)
@@ -611,7 +613,8 @@ func (p *Phase) attemptRollback(ctx context.Context, ic *ingressControllerInfo) 
 		if err != nil {
 			return err
 		}
-		return fmt.Errorf("rollback oc create exited %d: %s", result.ExitCode, result.Stderr)
+		return fmt.Errorf("rollback oc create exited %d: %s",
+			result.ExitCode, logutil.RedactableStderr(result.Stderr).Redacted())
 	}
 
 	p.Log.Info("update-ingress: rollback succeeded — restored with original strategy", "name", ic.Name)
