@@ -157,7 +157,7 @@ func (m *Model) syncViewportContent() {
 func (m *Model) renderHeader() string {
 	width := m.contentWidth()
 
-	brand := LogoStyle.Render("O P E N S H I T")
+	brand := LogoStyle.Render("O K D C T L")
 	tagline := TaglineStyle.Render("okd over proxmox, the easy way")
 
 	visibleSteps := m.countVisibleSteps()
