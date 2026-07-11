@@ -275,12 +275,12 @@ func (p *Phase) verifyKubeVIPAPIHealthBootstrap(ctx context.Context, vip, cluste
 // verifyAPIHealthCheck performs a quick API health check via the cluster hostname.
 // Uses oc get --raw /healthz which goes through the kubeconfig's server URL.
 func (p *Phase) verifyAPIHealthCheck(ctx context.Context) error {
-	result, err := p.Exec.RunChecked(ctx, "oc", "get", "--raw", "/healthz")
+	out, err := p.OcOutput(ctx, "get", "--raw", "/healthz")
 	if err != nil {
 		return &errtypes.ClusterError{Msg: "api health check failed", Err: err}
 	}
-	if strings.TrimSpace(result.Stdout) != healthzOKBody {
-		return &errtypes.ClusterError{Msg: fmt.Sprintf("api returned unexpected health status: %s", strings.TrimSpace(result.Stdout))}
+	if out != healthzOKBody {
+		return &errtypes.ClusterError{Msg: fmt.Sprintf("api returned unexpected health status: %s", out)}
 	}
 	return nil
 }

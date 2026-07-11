@@ -155,9 +155,11 @@ func (p *Phase) DeployInfrastructure(ctx context.Context, cfg *config.Config, op
 }
 
 // SetupKubeconfig appends KUBECONFIG=<path> to the phase executor env so
-// subprocesses launched via p.Exec.Run inherit it. Client reads os.Environ at
-// construction and will NOT see this — callers constructing a Client
-// after this runs must pass cluster.WithKubeconfig explicitly.
+// subprocesses launched via p.Exec.Run inherit it. A cluster.Client built
+// with cluster.WithExecutor(p.Exec) (as BasePhase.oc() does) shares this env
+// and sees it automatically; a Client built any other way reads os.Environ
+// only at construction and will NOT see this — pass cluster.WithKubeconfig
+// explicitly in that case.
 func (p *Phase) SetupKubeconfig(ctx context.Context, clusterDir string) error {
 	if err := ctx.Err(); err != nil {
 		return fmt.Errorf("setup kubeconfig: %w", err)

@@ -122,7 +122,21 @@ write the comment — then it carries real information.
   Don't hand-roll `os.CreateTemp` + chmod + defer cleanup.
 - `BasePhase.OcResourceExists` and `BasePhase.OcPollOutput` are the canonical
   kubectl/oc helpers for phase code. Extend `phase/kubectl.go` rather than
-  writing local wrappers.
+  writing local wrappers. Internally every `BasePhase.Oc*` method delegates
+  to `cluster.Client` (via `cluster.WithExecutor`, sharing the phase's own
+  executor) for the actual invocation and transport-error formatting —
+  `internal/cluster` is the low-level oc/kubectl shell-out layer for phase
+  code and non-phase CLI callers (`cli/status.go`,
+  `internal/distribution/okd/install/monitor.go`). Known exceptions:
+  stdin-fed `oc create -f -` in `postinstall/update_ingress.go` (apply +
+  rollback; Client has no stdin primitive), the streamed
+  `oc adm release extract` in `setup/release_extract.go` (Client has no
+  streaming primitive), and `oc adm must-gather` in `cli/debug_bundle.go`
+  (runs the PATH-resolved oc through a purpose-built one-off executor;
+  deliberate non-migration). The addon layer also still shells out via its
+  own `Environment.Exec` — migrating any of these is a separate decision.
+  Add new oc primitives to `cluster.Client`, not a second copy in phase
+  code.
 - `addon.BuildOpaqueSecret` is the canonical k8s Opaque Secret manifest
   builder for addons.
 - SSH shell policy: new SSH operations MUST use `SSHRunArgv` (argv-mode).

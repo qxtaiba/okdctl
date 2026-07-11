@@ -22,13 +22,13 @@ func TestIsValidNetmask(t *testing.T) {
 
 	bad := []string{
 		"",
-		"/33",            // prefix too large
-		"/-1",            // invalid prefix
-		"0.0.0.0",        // canonical but disallowed (would claim whole space)
-		"255.255.255.1",  // non-contiguous
-		"128.0.0.1",      // non-contiguous
-		"255.0.255.0",    // non-contiguous
-		"fe80::/10",      // ipv6
+		"/33",           // prefix too large
+		"/-1",           // invalid prefix
+		"0.0.0.0",       // canonical but disallowed (would claim whole space)
+		"255.255.255.1", // non-contiguous
+		"128.0.0.1",     // non-contiguous
+		"255.0.255.0",   // non-contiguous
+		"fe80::/10",     // ipv6
 		"not-an-address",
 	}
 	for _, s := range bad {
@@ -115,8 +115,8 @@ func TestValidateTerraformEnv(t *testing.T) {
 		"has..dots",
 		"../escape",
 		"/absolute",
-		"env\x00null",  // null byte attempt
-		"unicodé",       // non-ASCII
+		"env\x00null", // null byte attempt
+		"unicodé",     // non-ASCII
 		"env.tf",
 	}
 	for _, s := range bad {

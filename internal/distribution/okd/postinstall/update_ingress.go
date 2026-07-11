@@ -465,7 +465,7 @@ func (p *Phase) convertToLoadBalancer(ctx context.Context, ic *ingressController
 		return &errtypes.ClusterError{Msg: "failed to build replacement IngressController", Err: err}
 	}
 
-	_, err = p.Exec.RunChecked(ctx, "oc", "delete", "ingresscontroller", ic.Name,
+	_, err = p.OcOutput(ctx, "delete", "ingresscontroller", ic.Name,
 		"-n", "openshift-ingress-operator")
 	if err != nil {
 		return &errtypes.ClusterError{Msg: fmt.Sprintf("failed to delete IngressController %q", ic.Name), Err: err}
@@ -650,10 +650,9 @@ func (p *Phase) waitForRouterGone(ctx context.Context, icName string, timeout ti
 	deployName := fmt.Sprintf("router-%s", icName)
 
 	return system.WaitFor(ctx, "ingress", deployName+" termination", func(context.Context) bool {
-		result, _ := p.Exec.Run(ctx, "oc", "get", "deployment", deployName,
-			"-n", "openshift-ingress", "--no-headers", "--ignore-not-found")
-		// --ignore-not-found returns empty stdout when the deployment is gone.
-		return strings.TrimSpace(result.Stdout) == ""
+		exists, err := p.OcResourceExists(ctx, "router termination probe",
+			"deployment", deployName, "-n", "openshift-ingress")
+		return err == nil && !exists
 	}, system.WaitForOptions{
 		Interval: routerGonePollInterval,
 		Timeout:  timeout,

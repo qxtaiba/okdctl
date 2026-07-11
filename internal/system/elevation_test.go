@@ -248,4 +248,3 @@ func TestChownTreeToInvokingUser_AggregatesErrors(t *testing.T) {
 		}
 	})
 }
-
