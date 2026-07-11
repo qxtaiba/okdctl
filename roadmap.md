@@ -1996,6 +1996,446 @@ and ceremony layers.
   - grep for the raw string finds only the constant definition
 - **Depends on:** none
 
+### Tier B — holistic review 2026-07-11
+
+Captured from `holistic-review` run on 2026-07-11 (HEAD `419c83e`). Items are
+judgment-shaped (not audit atoms); each has a 1-3 sentence rationale inline.
+Run focus: open-source launch readiness plus remaining structural AI residue.
+Headline: leaf-level code and docs are production-grade; the gaps are one
+level up — decorative enforcement (coverage gate), dark orchestration layer
+(Execute paths untested), twice-encoded domain facts, and a launch story
+(releases, templates, artifact policy) that fails on first pull. 31 agent
+candidates landed as 28 items (B2 and B3 each merge overlapping findings;
+one candidate dropped as a duplicate of open A5).
+
+#### B1 — Fix the proxmox→phase layering inversion
+
+- **Status:** not started
+- **Category:** architecture
+- **State:** design needed
+- **Effort:** days
+- **Impact:** large
+- **Evidence:** `internal/infrastructure/proxmox/types.go:44`, `cmd/okdctl/main.go:44`
+- **Rationale:** internal/distribution/okd/phase is a grab-bag of four unrelated things (kubectl helpers, path layout, Proxmox SSH access, domain enums), which forces the only inverted edge in the graph — infrastructure importing a distribution phase package — papered over with a type alias and constant re-exports.
+- **Acceptance:**
+  - internal/infrastructure/proxmox no longer imports internal/distribution/okd/phase; the `type VMRole = phase.NodeRole` alias and Role* constant re-exports are deleted
+  - pure domain vocabulary (NodeRole, VMState, Condition*) lives in a leaf package that phase, proxmox, and cli/status all import downward
+  - Proxmox host access over SSH (ssh.go SSHRun/SSHRunArgv, pvesh.go, iso_cleanup.go) lives beside the Proxmox provider; CLAUDE.md's SSH-policy pointer updated with the validateXxx + shellSingleQuote pattern intact
+  - cmd/okdctl/main.go no longer imports distribution/okd/phase for PreflightBinDir
+  - BasePhase.Oc* helpers remain in phase and keep their canonical status
+- **Depends on:** none
+
+#### B2 — Decompose internal/cli: command bodies and deploy engine behind testable seams
+
+- **Status:** not started
+- **Category:** architecture / cognitive-load
+- **State:** design needed
+- **Effort:** days
+- **Impact:** large
+- **Evidence:** `internal/cli/status.go:398`, `internal/cli/helpers.go:328`
+- **Rationale:** internal/cli is the largest package at ~7k LOC across 42 files because whole features live inside it: status aggregation, doctor (536 LOC), debug-bundle (428 LOC), and — most consequentially — the deploy engine (executeFullDeployment, runGuardedPrepare, marker transitions), all untestable behind cobra glue with a zero coverage floor. Merges two independent findings (Structure + Test honesty).
+- **Acceptance:**
+  - cluster status aggregation (statusNode, condition folding, ClusterPhase derivation) lives with the okd domain types it produces; cli keeps flag parsing and rendering only
+  - doctor's checks and debug-bundle collection move to owned packages testable without cobra plumbing
+  - executeFullDeployment / runGuardedPrepare / marker-transition logic lives in a package drivable with a stubbed provisioner; crash-recovery transitions get direct tests (cancel during install leaves the install-phase marker; success clears it)
+  - internal/cli shrinks toward flag-parsing + wiring; no non-root file over ~250 lines of non-cobra logic
+  - elevation re-exec and deploystate marker may stay in cli if judged inherently command-shaped — record the judgment either way
+- **Depends on:** B1
+
+#### B3 — Unify haproxy/service teardown and the backup contract across phases
+
+- **Status:** not started
+- **Category:** correctness / refactor
+- **State:** well-specified
+- **Effort:** hours
+- **Impact:** medium
+- **Evidence:** `internal/distribution/okd/postinstall/haproxy.go:74`, `internal/distribution/okd/cleanup/services.go:64`
+- **Rationale:** Three packages each invented their own naming for the same haproxy backup file and the globs don't intersect: setup's fixed haproxy.cfg.backup is invisible to postinstall's .backup.<ts> restore path and survives cleanup's .backup.* glob — semantic duplication matured into a behavioral bug (root-owned residue after uninstall). The same packages hand-roll identical systemd stop/disable and VIP-release blocks. Merges three overlapping findings (Structure + Authenticity ×2).
+- **Acceptance:**
+  - one documented backup contract for /etc/haproxy/haproxy.cfg: fixed pristine snapshot vs timestamped rolling backups either merged or their split roles stated at the constant and honored by all consumers; the backup suffix is a single exported constant written and globbed via the same symbol
+  - postinstall restore (update_ingress.go) either falls back to the pristine setup snapshot or documents why it must not
+  - cleanup removes (or intentionally preserves, with a comment) the fixed .backup file
+  - the IsServiceActive→Stop / IsServiceEnabled→Disable idempotent guard exists once in phase/ (per CLAUDE.md's cross-phase-helper rule); cleanup and postinstall both call it
+  - the verbatim-duplicated VIP release block (GetDefaultInterface → RemoveSecondaryIP, guarded by vip != "") collapses to one helper
+  - divergent behavior that remains (postinstall backs up, cleanup purges) is intentional and stated in the helper's doc comment
+- **Depends on:** none
+
+#### B4 — Split netutil into pure IP math and host-network mutation
+
+- **Status:** not started
+- **Category:** refactor
+- **State:** well-specified
+- **Effort:** hours
+- **Impact:** small
+- **Evidence:** `internal/netutil/iface.go:35`, `internal/config/validators.go:14`
+- **Rationale:** A package named netutil that both validates CIDRs and reconfigures NetworkManager misleads readers about blast radius: config validation — the most innocent layer in the repo — transitively links code that runs `nmcli connection modify` as root.
+- **Acceptance:**
+  - CIDR/IP arithmetic and privileged host mutation via ip/nmcli shellouts no longer share a package
+  - internal/config imports only the pure half; the mutation half sits beside platform/system in the host-management layer and keeps its validateConnectionName guard
+  - no import cycle is introduced (mutation half may keep importing system)
+- **Depends on:** none
+
+#### B5 — Cut the download→tui edge by injecting progress enablement
+
+- **Status:** not started
+- **Category:** refactor
+- **State:** well-specified
+- **Effort:** hours
+- **Impact:** small
+- **Evidence:** `internal/download/progress.go:28`
+- **Rationale:** The only utility→presentation edge in the graph: a byte-transfer package consults the TUI layer's global at runtime. Inverting it makes download a clean leaf and removes the objection to reusing its retry policy from non-TUI contexts.
+- **Acceptance:**
+  - internal/download no longer imports internal/tui; the progress writer takes an enabled flag or writer at construction and callers pass tui.ProgressBarsEnabled()
+  - TTY-gating behavior is unchanged for deploy; download's import set reduces to errtypes/httputil/logutil
+- **Depends on:** none
+
+#### B6 — Wire or delete the dead phase Options knobs and terraform.WithVarFile
+
+- **Status:** not started
+- **Category:** cleanup
+- **State:** well-specified
+- **Effort:** hours
+- **Impact:** small
+- **Evidence:** `internal/distribution/okd/setup/phase.go:49`, `internal/distribution/okd/install/phase.go:43`
+- **Rationale:** Fresh instances of the exact fabricated-knob shape the 2026-06-10 run caught (A9/A15) but missed here: configuration surface that promises behavior the code never delivers.
+- **Acceptance:**
+  - setup.Options.AutoDownloadISO either gates the documented "skip the ISO-present prompt" behavior or is deleted along with its doc (documented, set once to constant true, never read — a knob whose doc lies is outside the scaffolding carve-out)
+  - setup.Options.Verbose (never assigned, never read) is deleted
+  - install.Options.StreamBootstrapLogs (constant true, gates nothing) is wired or deleted
+  - terraform.WithVarFile (zero call sites) gets an explicit keep-as-API-shape decision recorded or is removed
+- **Depends on:** none
+
+#### B7 — Reconcile the wizard KeyMap with the keys actually handled
+
+- **Status:** not started
+- **Category:** cli-ux / cleanup
+- **State:** well-specified
+- **Effort:** hours
+- **Impact:** small
+- **Evidence:** `internal/tui/wizard/model.go:121`, `internal/tui/wizard/model.go:108`
+- **Rationale:** Half of the registered key bindings are dead config duplicated inline across steps, and one ('?' help) advertises a feature that does not exist — a user-visible authenticity gap in the first screen an adopter touches.
+- **Acceptance:**
+  - the '?' Help binding either gets a real help overlay or is removed from the KeyMap and its advertised help text
+  - the other never-matched bindings (Next, Up, Down, Select) are either routed through model.Update so steps reference KeyMap instead of hand-rolling inline key.NewBinding, or deleted
+  - every binding remaining in defaultKeyMap is matched somewhere; no help text advertises a nonexistent feature
+- **Depends on:** none
+
+#### B8 — Right-size speculative generality in tui/wizard/components
+
+- **Status:** not started
+- **Category:** refactor
+- **State:** design needed
+- **Effort:** days
+- **Impact:** medium
+- **Evidence:** `internal/tui/wizard/components/key_value_field.go:25`, `internal/tui/wizard/components/selector.go:18`
+- **Rationale:** components/ is where the repo's remaining AI-slop concentrates: widgets engineered for a marketplace of steps that never materialized, per-object state that nothing reads, and fallback branches that cannot fire. The declarative wizard core around it is excellent, which makes this pocket stand out more.
+- **Acceptance:**
+  - for each speculative surface — KeyValueField's 410-line editable-table mode set serving one field, Selector's ~600 lines with a 6-variant OptionStyle serving one step, the write-only defaultValue trio, InputGroup's uncalled AddField/IsValid/bordered View, unread ColorBorder, Selector's unreachable all-disabled fallback — record an explicit keep-as-future-API decision (MEMORY.md carve-out) or delete
+  - write-only state (defaultValue trio, ColorBorder) is deleted outright: stored-never-read fields are not API shape
+  - components/ line count drops or every surviving mode has a named prospective consumer in a comment
+- **Depends on:** none
+
+#### B9 — Share single-select navigation between welcome and review steps
+
+- **Status:** not started
+- **Category:** refactor
+- **State:** well-specified
+- **Effort:** hours
+- **Impact:** small
+- **Evidence:** `internal/tui/wizard/steps/review.go:124`, `internal/tui/wizard/steps/welcome.go:70`
+- **Rationale:** The two hand-rolled wizard steps duplicate the exact navigation plumbing the components package exists to own — the same parallel-shape duplication pattern as the addons, at smaller scale.
+- **Acceptance:**
+  - the identical enter/up/down + StepCompleteMsg loop hand-rolled in WelcomeStep and ReviewStep lives in one shared single-select step type or in CompactSelector itself
+  - both steps consume the shared component; no per-step key loop remains
+- **Depends on:** B8
+
+#### B10 — Decouple cluster state and Terraform sources from the okdctl repo checkout
+
+- **Status:** not started
+- **Category:** architecture
+- **State:** design needed
+- **Effort:** weeks
+- **Impact:** large
+- **Evidence:** `internal/cli/helpers.go:119-147`, `internal/distribution/okd/okd.go:190-199`
+- **Rationale:** Every piece of cluster state — tfstate, okd-install/ artifacts, auth material, the deploy marker — lives in cwd, and the Terraform HCL must pre-exist at `<cwd>/infrastructure/terraform/environments/<env>`, meaning the shipped binary is unusable outside a source checkout and cfg.Cluster.Name namespaces nothing on disk. The single largest gap between what the packaging advertises and what the domain model can do.
+- **Acceptance:**
+  - a packaged binary (apt/rpm per README) can deploy a cluster without a git checkout — the Terraform module/environment is go:embed-ed and materialized into the workspace, or an explicit `okdctl init` scaffolds it
+  - the workspace contract is explicit and cluster-keyed: okd-install/, terraform state, and the deploy marker live under a directory derived from (or validated against) cfg.Cluster.Name rather than bare cwd, or the docs state plainly that one working directory == one cluster and the checkout requirement is intentional
+  - resolveProjectRootOrDie's error message ("run okdctl deploy to initialise") stops being circular — deploy in an empty directory either works or names the real prerequisite
+- **Depends on:** none
+
+#### B11 — Adopt one vocabulary for the deploy lifecycle stages
+
+- **Status:** not started
+- **Category:** domain-model accuracy
+- **State:** well-specified
+- **Effort:** days
+- **Impact:** medium
+- **Evidence:** `internal/cli/deploystate.go:18-22`, `internal/distribution/okd/okd.go:135-225`
+- **Rationale:** One lifecycle, two parallel vocabularies: Provisioner.Prepare wraps the setup package and Configure wraps postinstall; the crash marker says prepare/configure while logs say phase=setup and destroy hints mix both. "Cancelled during prepare" leads to a package that doesn't exist.
+- **Acceptance:**
+  - the same three stage names appear in the Provisioner API, the deploy-state marker values, user-facing interrupt/destroy hints, step logs, and docs/architecture/phases.md
+  - marker schema compatibility is handled (v1 values mapped or schema bumped per the existing deployStateSchemaV1 mechanism)
+  - docs/architecture/phases.md and cobra help need no translation table between Provisioner.Prepare/Configure and the setup/postinstall packages they call
+- **Depends on:** none
+
+#### B12 — Unify control-plane naming and colocate per-node-group config facts
+
+- **Status:** not started
+- **Category:** config coherence
+- **State:** design needed
+- **Effort:** days
+- **Impact:** medium
+- **Evidence:** `internal/config/cluster.go:40-53`, `internal/config/cluster.go:126-131`
+- **Rationale:** The control-plane node group is spelled three ways in three schema sections (topology.control_plane vs provider.proxmox.master_nodes vs disks.master_data_size_gb), and its resource facts are scattered with inconsistent unit conventions — the same domain object never appears whole.
+- **Acceptance:**
+  - one name at the YAML surface (control_plane; RoleMaster may stay internal where OKD's own MCP/label vocabulary demands it)
+  - per-group sizing facts live together, or the split is documented as deliberate with consistent unit-naming
+  - VM placement (master_nodes/worker_nodes → Proxmox target nodes) is validated for count coherence against topology counts or documented for its padding/default semantics
+- **Depends on:** none
+
+#### B13 — Single-source the static IP plan and de-overload static_ip.start
+
+- **Status:** not started
+- **Category:** config coherence
+- **State:** design needed
+- **Effort:** days
+- **Impact:** medium
+- **Evidence:** `internal/distribution/okd/setup/nodes.go:19-32`, `internal/config/defaults.go:26-33`
+- **Rationale:** The machine subnet is encoded twice (CIDR and dotted netmask) with different consumers, the sequential-allocation base doubles as three other domain facts (bootstrap IP, VIP seed, install-monitor target), and the shipped defaults collide with themselves — a first-run user who accepts defaults boots a bootstrap VM that ARP-fights the Proxmox host. Complements but does not overlap A14.
+- **Acceptance:**
+  - networking.static_ip.netmask is derived from machine_cidr at load time or a validator rejects disagreement
+  - the invariant that static_ip.start IS the bootstrap node's IP (and the VIP-derivation base) is stated in the schema doc or replaced by an explicit bootstrap_ip field
+  - DefaultConfig's IP plan is self-consistent: provider.proxmox.host no longer shares 192.168.1.100 with static_ip.start
+- **Depends on:** none
+
+#### B14 — Resolve the tool-version vs OKD-release-version confusion
+
+- **Status:** not started
+- **Category:** domain-model accuracy
+- **State:** well-specified
+- **Effort:** hours
+- **Impact:** small
+- **Evidence:** `internal/cli/helpers.go:204`, `internal/cli/cleanup.go:135`
+- **Rationale:** Two distinct domain facts — which okdctl produced an artifact, and which OKD release is being deployed — flow through a single string whose value differs by CLI verb and whose three doc sites each claim a different meaning.
+- **Acceptance:**
+  - one field, one fact: BasePhase.Version carries either the okdctl build version or the OKD release version, never both depending on entry path
+  - the three contradictory docs converge (okd.New, phase.WithVersion, docs/architecture/phases.md)
+  - if nothing consumes the field for provenance, it is removed or given a real consumer rather than kept as a lie
+- **Depends on:** none
+
+#### B15 — Stop the resume path from wiping live-cluster identity material
+
+- **Status:** not started
+- **Category:** state & lifecycle
+- **State:** design needed
+- **Effort:** days
+- **Impact:** large
+- **Evidence:** `internal/distribution/okd/okd.go:127-154`, `internal/cli/helpers.go:213-233`
+- **Rationale:** PrepareOpts.ResumeInProgress bypasses the live-cluster guard and then Prepare unconditionally runs the WorkOnly wipe, so the documented "re-run deploy to resume" flow is only truthful for prepare-stage interruptions; after bootstrap the same flow destroys the only copy of the cluster's auth bundle and regenerates a CA the running VMs never saw. Needs no new persistence — only consulting the phase granularity the marker already records before choosing to wipe.
+- **Acceptance:**
+  - re-running deploy after an interruption during install or configure does not silently wipe cluster-config/auth (kubeconfig, kubeadmin-password) or regenerate ignition/CA material live VMs booted with — the marker's Phase field gates whether the pre-setup wipe is safe
+  - an interruption during configure resumes to a working cluster or fails fast with a precise instruction
+  - the guardLiveCluster doc's admission that the marker "cannot vouch for a setup-phase interruption" is resolved by design rather than bypass
+- **Depends on:** none
+
+#### B16 — Restore community templates the docs claim exist, and add CONTRIBUTING.md
+
+- **Status:** not started
+- **Category:** oss-readiness / docs
+- **State:** design needed
+- **Effort:** hours
+- **Impact:** medium
+- **Evidence:** `README.md:288`, `CHANGELOG.md:22`
+- **Rationale:** An outside contributor can learn the architecture from docs/ but cannot pass the CI gates without reading an AI instruction file, and a bug reporter is directed to issue forms that were deleted (added in ad06796, removed in e57de57 with no rationale). The CHANGELOG "Added: community templates" entry describing removed files is exactly the docs-vs-reality gap an OSS launch cannot afford.
+- **Acceptance:**
+  - issue forms, PR template, CODEOWNERS, FUNDING are restored or the dangling README/CHANGELOG claims are scrubbed
+  - bug-report form asks for the triage inputs the tool already produces: okdctl version, doctor output, debug-bundle attachment, Proxmox VE version
+  - CONTRIBUTING.md distills the human-relevant contributor gates that today live only in CLAUDE.md: lefthook install, coverage floors, lint thresholds, make check/docs targets, conventional-commit format, flag-shorthand policy
+- **Depends on:** none
+
+#### B17 — Define a public-tree policy for AI-workflow artifacts
+
+- **Status:** not started
+- **Category:** oss-readiness / governance
+- **State:** design needed
+- **Effort:** days
+- **Impact:** large
+- **Evidence:** `roadmap.md:286`, `.claude/audits/audit-security.jsonl` (git-tracked)
+- **Rationale:** The tree ships a machine-generated map of known-unfixed weaknesses — including security ones with locations and exploit-shaped descriptions — which contradicts the project's own coordinated-disclosure policy and reads as internal AI-orchestration residue to any outside observer. The single largest open-source publishing decision, currently being made by default.
+- **Acceptance:**
+  - a deliberate decision is recorded per artifact class: roadmap.md, .claude/audits/*.{jsonl,md}, docs/superpowers/{plans,specs}, docs/roadmap/completed-archive.md, .claude/scheduled_tasks.lock — ship, relocate, or rewrite as a public-facing ROADMAP
+  - open security-weakness writeups with fix plans do not ship in the public default branch while unfixed
+  - docs/superpowers/ is removed from the shipped docs set
+  - .claude/scheduled_tasks.lock is untracked and gitignored
+- **Depends on:** none
+
+#### B18 — Reconcile the "phones home to nothing" claim with the default-on update check
+
+- **Status:** not started
+- **Category:** docs-reality / trust
+- **State:** design needed
+- **Effort:** hours
+- **Impact:** medium
+- **Evidence:** `README.md:20`, `internal/version/updatecheck.go:22`
+- **Rationale:** okdctl markets privacy ("phones home to nothing") to a homelab audience that cares about exactly that, while BackgroundCheck hits api.github.com on every eligible invocation by default. The kind of contradiction that becomes a hostile HN comment; either behavior or claim must move.
+- **Acceptance:**
+  - either the update check becomes opt-in, or README is corrected to disclose the api.github.com call, its cache, and the OKDCTL_NO_UPDATE_CHECK=1 opt-out
+  - the opt-out env var is documented in user-facing docs
+  - packaging notes and install.sh output are consistent with whichever posture is chosen
+- **Depends on:** none
+
+#### B19 — Cut v0.1.0 and exercise the entire release story end-to-end
+
+- **Status:** not started
+- **Category:** release engineering
+- **State:** well-specified
+- **Effort:** days
+- **Impact:** large
+- **Evidence:** `CHANGELOG.md:42`, `README.md:189`
+- **Rationale:** The README's strongest open-source signal — signed, attested, reproducible releases — is entirely untested: no tag has ever been pushed, so the verify instructions, the update check's releases/latest query, and the curl|bash installer all point at nothing.
+- **Acceptance:**
+  - a real v0.1.0 tag exists and the release workflow produces the artifact set README promises (tarballs, SHA256SUMS + sigstore sig/pem, CycloneDX SBOMs, intoto provenance)
+  - the cosign verify-blob and gh attestation verify commands in README are executed verbatim against the real artifacts and pass; install.sh is run against the live release
+  - CHANGELOG Unreleased is backfilled with user-facing changes and moved under [0.1.0]; an ongoing changelog rule is adopted
+- **Depends on:** B17
+
+#### B20 — Give non-cancel deploy failures the same summary and next-steps as Ctrl-C
+
+- **Status:** not started
+- **Category:** operator ux / failure legibility
+- **State:** design needed
+- **Effort:** days
+- **Impact:** large
+- **Evidence:** `internal/cli/helpers.go:391`, `internal/distribution/okd/install/monitor.go:60`
+- **Rationale:** The recovery machinery (resume marker, debug-bundle, graceful status) all exists, but a deploy that dies at minute 40 cross-references none of it and actively steers the operator toward destroy. The Ctrl-C path proves the codebase can narrate partial progress well — failures deserve at least parity.
+- **Acceptance:**
+  - a step failure ends with a failure summary equivalent to the existing InterruptSummary box: failed phase+step, elapsed time, run_id — today that box renders only on errors.Is(err, context.Canceled)
+  - the failure epilogue leads with the resume path ("re-run okdctl deploy to resume from <step>") instead of pointing solely at destructive destroy
+  - monitor timeout errors name where to look next: the openshift-install log, a representative oc command, and okdctl debug-bundle
+- **Depends on:** none
+
+#### B21 — Write a persistent per-run deploy log by default
+
+- **Status:** not started
+- **Category:** operator ux / diagnosability
+- **State:** design needed
+- **Effort:** days
+- **Impact:** large
+- **Evidence:** `internal/cli/logging.go:45`, `internal/cli/debug_bundle.go:200`
+- **Rationale:** A 40-minute deploy failure is currently undiagnosable once terminal scrollback is gone unless the operator predicted the failure and passed --log-file up front — which nothing tells them to do. Every comparable installer persists its log unconditionally; the support-bundle story is hollow without it.
+- **Acceptance:**
+  - deploy/destroy/cleanup always tee their stream to a log file in the work directory (per run_id or rotated), analogous to openshift-install's .openshift_install.log
+  - debug-bundle picks up the default log location without configuration, and the failure epilogue prints the log path
+  - redaction guarantees are re-verified for the file sink and the log location respects the sudo-re-exec hardening constraints already tracked for --log-file
+- **Depends on:** B20
+
+#### B22 — Fix the coverage gate: wrong metric, delete-tests bypass, decorative floors
+
+- **Status:** not started
+- **Category:** ci / test-infrastructure
+- **State:** well-specified
+- **Effort:** hours
+- **Impact:** large
+- **Evidence:** `.github/scripts/coverage-check.sh:44-56`, `.github/coverage-floors.conf:8`
+- **Rationale:** The coverage gate is the repo's only anti-regression contract and it currently measures the wrong number (unweighted mean of per-function percentages, not statement coverage), can be bypassed by deleting tests (package vanishes from profile, floor silently unchecked), and has floors 30–45 points below measured coverage. A green gate that is decorative is worse than none.
+- **Acceptance:**
+  - gate compares per-package statement coverage, not unweighted per-function means
+  - gate iterates over the floors file's keys and fails if a floored package is absent from the profile
+  - floors re-baselined to measured-minus-5 (destroy 5→~45, phase 35→~75, download 25→~70, cleanup 35→~70); a non-zero total floor is set
+  - well-covered but unfloored packages (errtypes, sshpin, cluster, logutil, runlock, addon) get floors
+- **Depends on:** none
+
+#### B23 — Test phase orchestration: Execute paths and skip-flag wiring, destructive steps enabled
+
+- **Status:** not started
+- **Category:** tests
+- **State:** well-specified
+- **Effort:** days
+- **Impact:** large
+- **Evidence:** `internal/distribution/okd/destroy/steps_test.go:60-71`, `internal/distribution/okd/destroy/phase.go:68`
+- **Rationale:** Every destructive decision okdctl makes — which steps a destroy runs and in what order — is encoded in xSteps()/Execute functions that have never executed under test; the one "success path" test disables every destructive step first. The single most consequential honesty gap in the suite.
+- **Acceptance:**
+  - destroy's success-path test no longer runs with SkipTerraform+SkipCleanup+SkipFirewall+KeepISOs all true; at least one test drives destroy Execute through the terraform-destroy step against a fake terraform binary and asserts argv/ordering
+  - each phase has a table test over Options permutations asserting the produced step-ID list; Execute/New/NewOptions/xSteps stop being 0.0% in all five packages
+  - cli runDestroy/runCleanup/runDeploy reachable under test via a stubbed provisioner seam, covering the confirm-prompt-to-Execute handoff
+  - complementary to A20 — this covers real Execute paths, not dry-run output
+- **Depends on:** none
+
+#### B24 — Put tests under update_ingress rollback and wait state machine
+
+- **Status:** not started
+- **Category:** tests / risk-reduction
+- **State:** design needed
+- **Effort:** days
+- **Impact:** large
+- **Evidence:** `internal/distribution/okd/postinstall/update_ingress.go:69`, `internal/distribution/okd/postinstall/update_ingress.go:597`
+- **Rationale:** update_ingress mutates a live cluster's ingress with a hand-rolled rollback path, and everything except two pure builders is 0% covered — the code most likely to brick a user's cluster on partial failure is exactly the code with no tests. Simultaneously the repo's biggest file and its riskiest untested surface.
+- **Acceptance:**
+  - attemptRollback, restoreHAProxyBackup, waitForRouterGone, waitForServiceLB, handleHostNetworkConversion exercised via a stubbed BasePhase.Oc* seam (extend phase/kubectl.go per CLAUDE.md rather than a local wrapper)
+  - a failure injected mid-conversion asserts the rollback actually restores the prior ingress strategy and HAProxy backup
+  - file stops being the repo's largest with only its 2 pure JSON builders covered; split acceptable if it falls out naturally
+- **Depends on:** none
+
+#### B25 — Shrink the //go:build linux surface in internal/cli to the syscall layer
+
+- **Status:** not started
+- **Category:** developer-experience / architecture
+- **State:** design needed
+- **Effort:** days
+- **Impact:** medium
+- **Evidence:** `internal/cli/doctor.go:1`, `internal/cli/debug_bundle_doctor_stub.go:1`
+- **Rationale:** The sole maintainer develops on darwin, where the biggest file in the biggest package neither compiles, lints, nor tests locally — a structural blind spot that already causes CI round-trips. Not a Windows-compat item; it makes the Linux-only product's largest subsystem visible to its own dev loop.
+- **Acceptance:**
+  - doctor orchestration, check-result modeling, and rendering compile on darwin; only the genuinely Linux probes (proc/syscall/systemd) stay behind //go:build linux with thin stubs
+  - darwin make lint and go build ./... cover the doctor/debug-bundle logic
+  - the GOOS=linux-lint round-trip pain shrinks to the probe files only
+- **Depends on:** none
+
+#### B26 — Delete the return-step,step two-value ceremony in wizard step constructors
+
+- **Status:** not started
+- **Category:** refactor / ai-slop
+- **State:** well-specified
+- **Effort:** hours
+- **Impact:** small
+- **Evidence:** `internal/tui/wizard/steps/basics.go:69-71`, `internal/tui/wizard/steps/addons.go:253-258`
+- **Rationale:** Six constructors declare `(step, state *wizard.DataDrivenStep)` and `return step, step` — the same pointer twice under two names, implying a step/state separation that does not exist. AI-generated ceremony, not the MEMORY.md future-API scaffolding carve-out.
+- **Acceptance:**
+  - all six New*Step constructors return a single *wizard.DataDrivenStep; callers use the one value
+  - no behavior change; wizard flow unaffected
+- **Depends on:** none
+
+#### B27 — Enable golangci-lint on _test.go files
+
+- **Status:** not started
+- **Category:** ci / test-infrastructure
+- **State:** well-specified
+- **Effort:** hours
+- **Impact:** medium
+- **Evidence:** `.golangci.yml:102`, `.golangci.yml:92-94`
+- **Rationale:** The config contains test-file lint exclusions AND run.tests:false — the exclusions are dead config, a tell that the blanket disable was expedient rather than chosen. With tests now load-bearing, leaving ~13k LOC unlinted invites exactly the rot the gate exists to prevent.
+- **Acceptance:**
+  - run.tests: true; test code gets vet/staticcheck/errcheck coverage
+  - the dead test-path exclusions for dupl/funlen/goconst become live; further test-scoped exclusions added as needed instead of blanket-disabling
+  - CI lint-go stays green after a one-time cleanup pass
+- **Depends on:** none
+
+#### B28 — Build the launch surface: repo metadata, wizard demo capture, launch checklist
+
+- **Status:** not started
+- **Category:** oss-readiness / strategy
+- **State:** sketch
+- **Effort:** days
+- **Impact:** medium
+- **Evidence:** `README.md:9`
+- **Rationale:** The wizard is the product's centerpiece and the README contains zero screenshots or captures; the GitHub repo has no description or topics, so it is undiscoverable even by someone searching for exactly this tool. Everything else in this review makes the code worthy of attention — this item turns attention into users.
+- **Acceptance:**
+  - GitHub repo has a description and topics (proxmox, okd, openshift, kubernetes, homelab, terraform, golang, tui)
+  - README opens with a demo capture of the wizard (VHS tape or asciinema-to-GIF) plus a screenshot of deploy progress and `okdctl status` output; the tape file is committed so the demo regenerates when the wizard changes
+  - a short launch checklist exists sequenced after B16/B17/B19: release shipped and verified, templates restored, demo live, announcement targets (r/homelab, r/Proxmox, OKD community forum)
+- **Depends on:** B16, B19
+
 ## Completed
 
 Completed items live in [`docs/roadmap/completed-archive.md`](docs/roadmap/completed-archive.md). Grep there for the canonical "is dep X done?" lookup. The previous in-line pointer index (144 entries, mirroring archive contents) was removed on 2026-05-09 to keep `roadmap.md` focused on active work.
