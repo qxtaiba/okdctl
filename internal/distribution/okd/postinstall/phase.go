@@ -115,6 +115,20 @@ var (
 	deployBootstrapDNSFn  = dns.DeployBootstrap
 )
 
+// StepDefs returns the ordered step definitions this phase executes for
+// cfg/opts, without running them. Provisioner.DeploySteps calls this for
+// the deploy --dry-run listing; the addon.Manager and PhaseContext it builds
+// are throwaway since nothing here invokes Exec.
+func (p *Phase) StepDefs(cfg *config.Config, opts *Options) []distribution.StepDef {
+	addonMgr := addon.NewManager(cfg,
+		addon.WithExecutor(p.Exec),
+		addon.WithLogger(p.Log),
+		addon.WithProjectRoot(opts.ProjectRoot),
+	)
+	pctx := distribution.NewPhaseContext(postInstallContext{})
+	return p.postinstallSteps(cfg, opts, pctx, addonMgr)
+}
+
 func (p *Phase) deployProductionDNS(ctx context.Context, cfg *config.Config, appsIP, kubeVipIP string, customDomains []templates.DNSCustomDomain) error {
 	if err := deployProductionDNSFn(ctx, cfg, appsIP, kubeVipIP, customDomains); err != nil {
 		return &errtypes.ClusterError{Msg: "failed to deploy production dns config", Err: err}

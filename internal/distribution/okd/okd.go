@@ -245,6 +245,40 @@ func (p *Provisioner) ResumePostInstall(ctx context.Context, cfg *config.Config)
 	return p.PostInstall(ctx, cfg)
 }
 
+// DeployStep is a single step's identity for dry-run listings — ID and
+// display name only, no executable body.
+type DeployStep struct {
+	ID   distribution.StepID
+	Name string
+}
+
+// DeploySteps returns the ordered ID+Name for every step the setup, install,
+// and postinstall phases execute for cfg, derived from the same StepDefs
+// Setup/Install/PostInstall feed into BuildSteps — so a step added to (or
+// reordered in) a phase's xSteps() method cannot drift from this listing.
+func (p *Provisioner) DeploySteps(cfg *config.Config) []DeployStep {
+	setupPhase := setup.New(phase.WithExecutor(p.executor), phase.WithLogger(p.logger))
+	setupPhase.BinDir = config.ResolveBinDir(cfg)
+	setupOpts := setup.NewOptions(cfg, p.projectRoot)
+
+	installPhase := install.New(phase.WithExecutor(p.executor), phase.WithLogger(p.logger))
+	installOpts := install.NewOptions(cfg, p.projectRoot)
+
+	postPhase := postinstall.New(phase.WithExecutor(p.executor), phase.WithLogger(p.logger))
+	postOpts := postinstall.NewOptions(cfg, p.projectRoot)
+
+	var defs []distribution.StepDef
+	defs = append(defs, setupPhase.StepDefs(cfg, &setupOpts)...)
+	defs = append(defs, installPhase.StepDefs(cfg, &installOpts)...)
+	defs = append(defs, postPhase.StepDefs(cfg, &postOpts)...)
+
+	out := make([]DeployStep, len(defs))
+	for i, d := range defs {
+		out[i] = DeployStep{ID: d.ID, Name: d.Name}
+	}
+	return out
+}
+
 // UpdateIngress re-points haproxy at a fresh set of backend nodes without
 // re-running the full postinstall phase. Used by the update-ingress CLI verb.
 func (p *Provisioner) UpdateIngress(ctx context.Context, cfg *config.Config, opts postinstall.UpdateIngressOptions) (*postinstall.UpdateIngressResult, error) {
