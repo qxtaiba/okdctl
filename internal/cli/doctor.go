@@ -1,5 +1,3 @@
-//go:build linux
-
 package cli
 
 import (
@@ -12,11 +10,11 @@ import (
 	"os/exec"
 	"os/user"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -27,10 +25,6 @@ import (
 	"github.com/qxtaiba/okdctl/internal/system"
 	"github.com/qxtaiba/okdctl/internal/tui"
 )
-
-func init() {
-	doctorCmd.RunE = runDoctor
-}
 
 // Severity levels ordered from least to most alarming.
 type severity int
@@ -98,6 +92,11 @@ func (s severity) String() string {
 }
 
 func runDoctor(cmd *cobra.Command, _ []string) error {
+	// Runtime gate rather than a build tag so the check pipeline compiles,
+	// lints, and tests on darwin dev hosts; doctor still refuses to run there.
+	if runtime.GOOS != "linux" {
+		return fmt.Errorf("okdctl doctor is only supported on linux (current: %s)", runtime.GOOS)
+	}
 	if err := validateFormat(doctorOutput); err != nil {
 		return err
 	}
@@ -484,17 +483,10 @@ func checkDiskSpace(_ context.Context) checkResult {
 	if err != nil {
 		return checkResult{sev: sevWarn, detail: "cannot resolve user home"}
 	}
-	var st syscall.Statfs_t
-	if err := syscall.Statfs(u.HomeDir, &st); err != nil {
-		return checkResult{sev: sevWarn, detail: fmt.Sprintf("statfs failed: %v", err)}
+	freeBytes, err := fsFreeBytes(u.HomeDir)
+	if err != nil {
+		return checkResult{sev: sevWarn, detail: err.Error()}
 	}
-	// Bsize is int64 on linux but a filesystem block size is always
-	// positive in practice; the bound check exists to satisfy gosec
-	// G115 without a nolint directive.
-	if st.Bsize <= 0 {
-		return checkResult{sev: sevWarn, detail: "statfs returned a non-positive block size"}
-	}
-	freeBytes := st.Bavail * uint64(st.Bsize)
 	freeGB := freeBytes / (1024 * 1024 * 1024)
 	if freeGB < minGB {
 		return checkResult{sev: sevFail, detail: fmt.Sprintf("%d gb free in %s (need at least %d gb)", freeGB, u.HomeDir, minGB)}

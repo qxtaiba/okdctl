@@ -5,9 +5,7 @@ import "github.com/spf13/cobra"
 // doctorCmd is the user-facing 'okdctl doctor' command. It is separate
 // from main.preflight() (which is a startup guardrail) — doctor runs a
 // comprehensive environment audit and reports status for each check.
-// The command metadata lives here so the cobra tree is platform-consistent
-// for offline tooling (notably cmd/okdctl-gen-docs); the RunE body is
-// wired per-platform in doctor.go (Linux) and doctor_stub.go (non-Linux).
+// runDoctor refuses non-linux hosts at runtime; see doctor.go.
 var doctorOutput string
 
 var doctorCmd = &cobra.Command{
@@ -33,6 +31,7 @@ Pass --output=json for machine-readable output (see docs/cli/json-schema.md).
 See docs/doctor-checks.md for per-check fail messages and fix guidance.`,
 	Example: `  okdctl doctor
   okdctl doctor --output json | jq '.failed'`,
+	RunE: runDoctor,
 }
 
 func init() {
