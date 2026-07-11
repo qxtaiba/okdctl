@@ -93,6 +93,45 @@ func TestLoadFile_UnknownTopLevelKey(t *testing.T) {
 	}
 }
 
+func TestLoadFile_DerivesNetmaskFromMachineCIDR(t *testing.T) {
+	cases := []struct {
+		name string
+		yaml string
+		want string
+	}{
+		{
+			name: "stale netmask overwritten",
+			yaml: "schemaVersion: v1\nnetworking:\n  machine_cidr: 192.168.2.0/25\n  static_ip:\n    netmask: 255.255.255.0\n",
+			want: "255.255.255.128",
+		},
+		{
+			name: "absent netmask derived",
+			yaml: "schemaVersion: v1\nnetworking:\n  machine_cidr: 10.0.0.0/16\n",
+			want: "255.255.0.0",
+		},
+		{
+			name: "invalid cidr leaves netmask for validators",
+			yaml: "schemaVersion: v1\nnetworking:\n  machine_cidr: not-a-cidr\n  static_ip:\n    netmask: 255.255.0.0\n",
+			want: "255.255.0.0",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "okdctl.yaml")
+			if err := os.WriteFile(path, []byte(tc.yaml), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			cfg, err := NewLoader().LoadFile(path)
+			if err != nil {
+				t.Fatalf("LoadFile: %v", err)
+			}
+			if got := cfg.Networking.StaticIP.Netmask; got != tc.want {
+				t.Errorf("Netmask = %q; want %q", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestLoadFile_SaveRoundTrip(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "okdctl.yaml")

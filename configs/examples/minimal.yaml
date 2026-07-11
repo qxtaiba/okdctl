@@ -38,6 +38,13 @@ networking:
   gateway: 192.168.1.1
   dns:
     - 192.168.1.1
+  static_ip:
+    # start IS the bootstrap node's IP; remaining nodes get start+1,
+    # start+2, ... and the API VIP derives from it (x.y.z.10) unless
+    # bastion.vip is set. Keep it clear of live hosts (Proxmox host,
+    # ignition server). Netmask is derived from machine_cidr.
+    start: 192.168.1.140
+    interface: ens18
 addons:
   flux:
     enabled: false

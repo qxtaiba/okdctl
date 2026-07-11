@@ -104,8 +104,8 @@ var NetworkingStepDefinition = wizard.StepDefinition{
 				{
 					Key:       "start_ip",
 					Label:     "start ip",
-					Default:   "192.168.1.100",
-					Help:      "first ip for node allocation",
+					Default:   DefaultStartIP,
+					Help:      "bootstrap node boots here; other nodes follow sequentially and the api vip derives from it",
 					Required:  true,
 					Validate:  config.ValidateIP,
 					ConfigSet: wizard.SetString(func(c *config.Config, v string) { c.Networking.StaticIP.Start = v }),

@@ -7,6 +7,7 @@ import (
 	"sigs.k8s.io/yaml"
 
 	"github.com/qxtaiba/okdctl/internal/errtypes"
+	"github.com/qxtaiba/okdctl/internal/netutil"
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
@@ -51,7 +52,17 @@ func (l *Loader) LoadFile(path string) (*Config, error) {
 	if cfg.SchemaVersion != SchemaVersionV1 {
 		return nil, &errtypes.ConfigError{Msg: fmt.Sprintf("config file %s has unsupported schemaVersion %q (expected %q)", path, cfg.SchemaVersion, SchemaVersionV1)}
 	}
+	deriveStaticNetmask(cfg)
 	return cfg, nil
+}
+
+// deriveStaticNetmask overwrites StaticIP.Netmask with the dotted form of
+// MachineCIDR so the two subnet encodings cannot desync via a hand-edit.
+// Invalid or IPv6 CIDRs are left for the networking validators to report.
+func deriveStaticNetmask(cfg *Config) {
+	if netmask, err := netutil.CIDRToNetmask(cfg.Networking.MachineCIDR); err == nil {
+		cfg.Networking.StaticIP.Netmask = netmask
+	}
 }
 
 // Save writes cfg to path with 0o600 perms via AtomicWrite. SchemaVersion is
