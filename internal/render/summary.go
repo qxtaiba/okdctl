@@ -244,6 +244,63 @@ func InterruptSummary(steps []distribution.StepResult, resumeCmd, runID string) 
 	return "\n" + tui.BoxedSectionCompact(sb.String(), "interrupted", tui.DefaultBoxWidth) + "\n"
 }
 
+// FailureInfo describes a failed deploy for FailureSummary. Phase is the
+// deploy phase recorded in the on-disk marker when the failure happened, so
+// the resume line stays truthful: re-running deploy picks up from exactly
+// that phase. TeardownCmd/TeardownNote carry the phase-appropriate teardown
+// alternative (cleanup when terraform state is empty, destroy otherwise).
+type FailureInfo struct {
+	Steps        []distribution.StepResult
+	Phase        string
+	RunID        string
+	Elapsed      time.Duration
+	TeardownCmd  string
+	TeardownNote string
+}
+
+// FailureSummary renders the partial-progress box for a deploy that failed
+// mid-phase without being cancelled. Next steps lead with the resume path;
+// --fresh and teardown are listed as alternatives, in that order.
+func FailureSummary(f *FailureInfo) string {
+	sb := NewBuilder()
+	sb.WriteString("\n")
+	sb.WriteString("  " + tui.ErrorStyle.Render("deploy failed") + "\n")
+	sb.Newline()
+	sb.KV("run_id", f.RunID)
+	sb.KV("failed phase", f.Phase)
+	if step := failedStepID(f.Steps); step != "" {
+		sb.KV("failed step", step)
+	}
+	sb.KV("elapsed", f.Elapsed.Truncate(time.Second).String())
+	sb.Newline()
+
+	if len(f.Steps) > 0 {
+		sb.Section("partial progress")
+		for _, s := range f.Steps {
+			d := s.Duration.Truncate(time.Millisecond).String()
+			sb.KV(string(s.StepID), fmt.Sprintf("%-*s  %s", stepStatusColWidth, displayStatus(&s), d))
+		}
+		sb.Newline()
+	}
+
+	sb.Section("next steps")
+	sb.WriteString("    re-run " + tui.CodeInlineStyle.Render("okdctl deploy") + " to resume from " + f.Phase + "\n")
+	sb.WriteString("    or " + tui.CodeInlineStyle.Render("okdctl deploy --fresh") + " to restart from scratch (wipes cluster credentials)\n")
+	sb.WriteString("    or " + tui.CodeInlineStyle.Render(f.TeardownCmd) + " to " + f.TeardownNote + "\n")
+	sb.Newline()
+
+	return "\n" + tui.BoxedSectionCompact(sb.String(), "deploy failed", tui.DefaultBoxWidth) + "\n"
+}
+
+func failedStepID(steps []distribution.StepResult) string {
+	for i := len(steps) - 1; i >= 0; i-- {
+		if !steps[i].Success && !steps[i].Skipped {
+			return string(steps[i].StepID)
+		}
+	}
+	return ""
+}
+
 // UpdateIngressSummary renders the result of the update-ingress subcommand,
 // showing converted controllers and DNS record changes.
 func UpdateIngressSummary(result *postinstall.UpdateIngressResult) string {

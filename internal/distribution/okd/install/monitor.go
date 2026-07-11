@@ -42,6 +42,15 @@ func defaultStartMonitorCmd(ctx context.Context, clusterDir string) (done <-chan
 	return doneCh, func() {}, nil
 }
 
+// timeoutNextSteps names the diagnosis surfaces for a wait timeout: the
+// openshift-install debug log, one representative oc probe, and the okdctl
+// bundle collector. Embedded in timeout error messages so the operator sees
+// them wherever the error surfaces — the message is the contract.
+func timeoutNextSteps(clusterDir string) string {
+	return fmt.Sprintf("check %s, inspect the cluster with 'oc --kubeconfig %s get clusteroperators', or collect diagnostics with 'okdctl debug-bundle'",
+		filepath.Join(clusterDir, ".openshift_install.log"), filepath.Join(clusterDir, "auth", "kubeconfig"))
+}
+
 // WaitForBootstrap runs "openshift-install wait-for bootstrap-complete",
 // bounded by opts.BootstrapTimeout, streaming output to the current TTY.
 func (p *Phase) WaitForBootstrap(ctx context.Context, clusterDir string, opts *Options) error {
@@ -57,7 +66,7 @@ func (p *Phase) WaitForBootstrap(ctx context.Context, clusterDir string, opts *O
 			// callers can errors.Is(err, context.DeadlineExceeded) to
 			// distinguish "we ran out of budget" from "command failed".
 			return &errtypes.ClusterError{
-				Msg: fmt.Sprintf("bootstrap timed out after %v", opts.BootstrapTimeout),
+				Msg: fmt.Sprintf("bootstrap timed out after %v — %s", opts.BootstrapTimeout, timeoutNextSteps(clusterDir)),
 				Err: ctx.Err(),
 			}
 		}
@@ -130,7 +139,7 @@ func (p *Phase) MonitorInstallation(ctx context.Context, clusterDir string, opts
 			if err != nil {
 				if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 					return &errtypes.ClusterError{
-						Msg: fmt.Sprintf("installation timed out after %v", opts.InstallTimeout),
+						Msg: fmt.Sprintf("installation timed out after %v — %s", opts.InstallTimeout, timeoutNextSteps(clusterDir)),
 						Err: ctx.Err(),
 					}
 				}
@@ -178,7 +187,7 @@ func (p *Phase) MonitorInstallation(ctx context.Context, clusterDir string, opts
 				return fmt.Errorf("installation cancelled: %w", ctx.Err())
 			}
 			return &errtypes.ClusterError{
-				Msg: fmt.Sprintf("installation timed out after %v", opts.InstallTimeout),
+				Msg: fmt.Sprintf("installation timed out after %v — %s", opts.InstallTimeout, timeoutNextSteps(clusterDir)),
 				Err: ctx.Err(),
 			}
 		}

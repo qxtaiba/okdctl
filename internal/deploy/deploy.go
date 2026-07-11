@@ -60,7 +60,7 @@ type provisioner interface {
 // material live VMs booted with. The guard probe runs before any marker
 // write — a refusal must not plant a marker that would bypass the guard on
 // the next invocation.
-func runGuardedSetup(ctx context.Context, p provisioner, cfg *config.Config, markerPath, runID string, freshDeploy, resumeInProgress bool, w io.Writer) ([]distribution.StepResult, error) {
+func runGuardedSetup(ctx context.Context, p provisioner, cfg *config.Config, markerPath, runID string, freshDeploy, resumeInProgress bool, started time.Time, w io.Writer) ([]distribution.StepResult, error) {
 	setupOpts := okd.SetupOpts{FreshDeploy: freshDeploy, ResumeInProgress: resumeInProgress && !freshDeploy}
 	if err := p.GuardSetup(cfg, setupOpts); err != nil {
 		return nil, err
@@ -71,16 +71,38 @@ func runGuardedSetup(ctx context.Context, p provisioner, cfg *config.Config, mar
 	}
 	setupSteps, err := p.Setup(ctx, cfg, setupOpts)
 	if err != nil {
+		reportDeployFailure(w, err, phaseSetup, setupSteps, runID, started)
 		if errors.Is(err, context.Canceled) {
-			fmt.Fprintln(w, render.InterruptSummary(setupSteps, "okdctl deploy", runID))
 			tui.Info("cancelled during setup — terraform state is empty; run 'okdctl cleanup' to remove local files")
-			return setupSteps, err
 		}
-		// setup applies nothing to Proxmox; destroy would be a misleading no-op.
-		tui.Info("setup failed — terraform state is empty; run 'okdctl cleanup' to remove local files")
 		return setupSteps, err
 	}
 	return setupSteps, nil
+}
+
+// reportDeployFailure prints the end-of-run box for a phase error. Cancelled
+// runs keep the interrupt box; every other failure gets a failure summary
+// whose resume line names the phase the on-disk marker recorded just before
+// the phase ran, so re-running deploy truthfully resumes there. Setup
+// applies nothing to Proxmox, so its teardown alternative is cleanup —
+// destroy would be a misleading no-op.
+func reportDeployFailure(w io.Writer, err error, phase deployPhase, steps []distribution.StepResult, runID string, started time.Time) {
+	if errors.Is(err, context.Canceled) {
+		fmt.Fprintln(w, render.InterruptSummary(steps, "okdctl deploy", runID))
+		return
+	}
+	teardownCmd, teardownNote := "okdctl destroy", "remove provisioned resources"
+	if phase == phaseSetup {
+		teardownCmd, teardownNote = "okdctl cleanup", "remove local files (terraform state is empty)"
+	}
+	fmt.Fprintln(w, render.FailureSummary(&render.FailureInfo{
+		Steps:        steps,
+		Phase:        string(phase),
+		RunID:        runID,
+		Elapsed:      time.Since(started),
+		TeardownCmd:  teardownCmd,
+		TeardownNote: teardownNote,
+	}))
 }
 
 // Options configures Execute. ProjectRoot must be a resolved project root
@@ -97,13 +119,13 @@ type Options struct {
 // runDeployPhases executes setup, install, and postinstall, starting from
 // the phase the deploy-state marker says is safe to resume from. Returns the
 // postinstall result and every executed step across phases.
-func runDeployPhases(ctx context.Context, p provisioner, cfg *config.Config, projectRoot, markerPath, runID string, freshDeploy bool, w io.Writer) (*postinstall.Result, []distribution.StepResult, error) {
+func runDeployPhases(ctx context.Context, p provisioner, cfg *config.Config, projectRoot, markerPath, runID string, freshDeploy bool, started time.Time, w io.Writer) (*postinstall.Result, []distribution.StepResult, error) {
 	resumeFrom, marker := resolveResumePhase(markerPath, cfg.Cluster.Name, freshDeploy)
 
 	var setupSteps []distribution.StepResult
 	var err error
 	if resumeFrom == phaseSetup {
-		setupSteps, err = runGuardedSetup(ctx, p, cfg, markerPath, runID, freshDeploy, marker != nil, w)
+		setupSteps, err = runGuardedSetup(ctx, p, cfg, markerPath, runID, freshDeploy, marker != nil, started, w)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -121,12 +143,10 @@ func runDeployPhases(ctx context.Context, p provisioner, cfg *config.Config, pro
 		installOpts := install.NewOptions(cfg, projectRoot)
 		installSteps, err = p.Install(ctx, cfg, &installOpts)
 		if err != nil {
+			reportDeployFailure(w, err, phaseInstall, slices.Concat(setupSteps, installSteps), runID, started)
 			if errors.Is(err, context.Canceled) {
-				fmt.Fprintln(w, render.InterruptSummary(slices.Concat(setupSteps, installSteps), "okdctl deploy", runID))
 				tui.Info("cancelled during install — terraform state likely populated; run 'okdctl destroy' to clean up")
-				return nil, nil, err
 			}
-			tui.Info("install failed — terraform state likely populated; run 'okdctl destroy' to clean up")
 			return nil, nil, err
 		}
 	}
@@ -142,12 +162,10 @@ func runDeployPhases(ctx context.Context, p provisioner, cfg *config.Config, pro
 		result, postinstallSteps, err = p.PostInstall(ctx, cfg)
 	}
 	if err != nil {
+		reportDeployFailure(w, err, phasePostInstall, slices.Concat(setupSteps, installSteps, postinstallSteps), runID, started)
 		if errors.Is(err, context.Canceled) {
-			fmt.Fprintln(w, render.InterruptSummary(slices.Concat(setupSteps, installSteps, postinstallSteps), "okdctl deploy", runID))
 			tui.Info("cancelled during postinstall — terraform state likely populated; run 'okdctl destroy' to clean up")
-			return nil, nil, err
 		}
-		tui.Info("postinstall failed — terraform state likely populated; run 'okdctl destroy' to clean up")
 		return nil, nil, err
 	}
 
@@ -204,7 +222,7 @@ func Execute(ctx context.Context, cfg *config.Config, opts Options, w io.Writer)
 	startTime := time.Now()
 	markerPath := filepath.Join(workDir, StateFileName)
 
-	result, allSteps, err := runDeployPhases(ctx, p, cfg, projectRoot, markerPath, runID, opts.FreshDeploy, w)
+	result, allSteps, err := runDeployPhases(ctx, p, cfg, projectRoot, markerPath, runID, opts.FreshDeploy, startTime, w)
 	if err != nil {
 		return err
 	}

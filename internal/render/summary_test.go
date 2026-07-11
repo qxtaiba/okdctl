@@ -54,6 +54,37 @@ func TestInterruptSummary(t *testing.T) {
 	}
 }
 
+func TestFailureSummary(t *testing.T) {
+	steps := []distribution.StepResult{
+		{StepID: "download-tools", Success: true, Duration: 3 * time.Second},
+		{StepID: "deploy-infrastructure", Duration: 90 * time.Second},
+	}
+	out := FailureSummary(&FailureInfo{
+		Steps:        steps,
+		Phase:        "install",
+		RunID:        "run-42",
+		Elapsed:      41 * time.Minute,
+		TeardownCmd:  "okdctl destroy",
+		TeardownNote: "remove provisioned resources",
+	})
+	for _, want := range []string{
+		"deploy failed", "run-42", "failed phase", "install",
+		"failed step", "deploy-infrastructure", "elapsed", "41m0s",
+		"download-tools", "ok", "fail",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("failure summary missing %q:\n%s", want, out)
+		}
+	}
+
+	resume := strings.Index(out, "to resume from install")
+	fresh := strings.Index(out, "--fresh")
+	destroy := strings.Index(out, "okdctl destroy")
+	if resume < 0 || fresh < 0 || destroy < 0 || resume > fresh || fresh > destroy {
+		t.Errorf("next steps not ordered resume, --fresh, destroy (%d, %d, %d):\n%s", resume, fresh, destroy, out)
+	}
+}
+
 func TestDryRunSummary(t *testing.T) {
 	out := DryRunSummary("deploy step listing", []DryRunStep{{ID: "step-1", Name: "First step"}})
 	for _, want := range []string{"dry-run — no changes made", "would execute", "step-1", "First step"} {

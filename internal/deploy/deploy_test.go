@@ -3,8 +3,11 @@ package deploy
 import (
 	"bytes"
 	"context"
+	"errors"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/distribution"
@@ -44,6 +47,60 @@ func (f *fakeProvisioner) PostInstall(context.Context, *config.Config) (*postins
 func (f *fakeProvisioner) ResumePostInstall(context.Context, *config.Config) (*postinstall.Result, []distribution.StepResult, error) {
 	f.resumePostCalls++
 	return &postinstall.Result{}, nil, nil
+}
+
+type failingProvisioner struct {
+	fakeProvisioner
+	installSteps []distribution.StepResult
+	installErr   error
+}
+
+func (f *failingProvisioner) Install(context.Context, *config.Config, *install.Options) ([]distribution.StepResult, error) {
+	return f.installSteps, f.installErr
+}
+
+func TestRunDeployPhases_FailureSummaryResumeFirst(t *testing.T) {
+	dir := t.TempDir()
+	markerPath := filepath.Join(dir, StateFileName)
+	cfg := config.DefaultConfig()
+	cfg.Cluster.Name = "prod"
+
+	f := &failingProvisioner{
+		installSteps: []distribution.StepResult{
+			{StepID: "deploy-infrastructure", Duration: 90 * time.Second, Error: errors.New("terraform apply failed")},
+		},
+		installErr: errors.New("terraform apply failed"),
+	}
+	var buf bytes.Buffer
+	_, _, err := runDeployPhases(context.Background(), f, cfg, dir, markerPath, "run-77", false, time.Now(), &buf)
+	if err == nil {
+		t.Fatal("expected install error to propagate; got nil")
+	}
+
+	out := buf.String()
+	for _, want := range []string{
+		"deploy failed",
+		"run-77",
+		"failed phase",
+		"install",
+		"failed step",
+		"deploy-infrastructure",
+		"elapsed",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("failure summary missing %q:\n%s", want, out)
+		}
+	}
+
+	resume := strings.Index(out, "to resume from install")
+	fresh := strings.Index(out, "--fresh")
+	destroy := strings.Index(out, "okdctl destroy")
+	if resume < 0 || fresh < 0 || destroy < 0 {
+		t.Fatalf("epilogue missing resume(%d)/fresh(%d)/destroy(%d) lines:\n%s", resume, fresh, destroy, out)
+	}
+	if resume > fresh || fresh > destroy {
+		t.Errorf("epilogue order resume@%d fresh@%d destroy@%d; want resume first, destroy last:\n%s", resume, fresh, destroy, out)
+	}
 }
 
 func TestRunDeployPhases_ResumeRouting(t *testing.T) {
@@ -102,7 +159,7 @@ func TestRunDeployPhases_ResumeRouting(t *testing.T) {
 
 			f := &fakeProvisioner{}
 			var buf bytes.Buffer
-			if _, _, err := runDeployPhases(context.Background(), f, cfg, dir, markerPath, "new-run", false, &buf); err != nil {
+			if _, _, err := runDeployPhases(context.Background(), f, cfg, dir, markerPath, "new-run", false, time.Now(), &buf); err != nil {
 				t.Fatalf("runDeployPhases: %v", err)
 			}
 
