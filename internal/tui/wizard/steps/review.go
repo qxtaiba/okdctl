@@ -5,7 +5,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
@@ -88,8 +87,8 @@ func (st *sectionStyles) kvPair(label, value string) string {
 // selector.
 type ReviewStep struct {
 	wizard.BaseStep
-	cfg            *config.Config
-	actionSelector *components.CompactSelector
+	cfg    *config.Config
+	action *singleSelect
 }
 
 // NewReviewStep constructs the review wizard step.
@@ -99,6 +98,13 @@ func NewReviewStep() *ReviewStep {
 		"save and exit",
 	}
 
+	action := newSingleSelect(wizard.StepIDReview, components.NewCompactSelector(actions), "enter")
+	action.onNav = func(index, total int) tea.Cmd {
+		return func() tea.Msg {
+			return wizard.FocusChangedMsg{FieldIndex: index, TotalFields: total}
+		}
+	}
+
 	return &ReviewStep{
 		BaseStep: wizard.NewBaseStepWithDisplayTitle(
 			wizard.StepIDReview,
@@ -106,7 +112,7 @@ func NewReviewStep() *ReviewStep {
 			"review your configuration",
 			"review configuration and choose action",
 		),
-		actionSelector: components.NewCompactSelector(actions),
+		action: action,
 	}
 }
 
@@ -122,31 +128,7 @@ func (s *ReviewStep) SetConfig(cfg *config.Config) {
 
 // Update handles action-selector navigation and the enter confirm key.
 func (s *ReviewStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
-	if keyMsg, ok := msg.(tea.KeyPressMsg); ok {
-		switch {
-		case key.Matches(keyMsg, key.NewBinding(key.WithKeys("enter"))):
-			return s, func() tea.Msg {
-				return wizard.StepCompleteMsg{StepID: s.ID()}
-			}
-		case key.Matches(keyMsg, key.NewBinding(key.WithKeys("up", "k", "down", "j"))):
-			var cmd tea.Cmd
-			s.actionSelector, cmd = s.actionSelector.Update(msg)
-			return s, tea.Batch(cmd, s.emitFocusChanged())
-		}
-	}
-	return s, nil
-}
-
-func (s *ReviewStep) emitFocusChanged() tea.Cmd {
-	index := s.actionSelector.SelectedIndex()
-	totalActions := s.actionSelector.Len()
-
-	return func() tea.Msg {
-		return wizard.FocusChangedMsg{
-			FieldIndex:  index,
-			TotalFields: totalActions,
-		}
-	}
+	return s, s.action.Update(msg)
 }
 
 // View renders the full configuration summary and deploy-or-save selector.
@@ -170,7 +152,7 @@ func (s *ReviewStep) View(width, height int) string {
 
 	content.WriteString(st.thickSeparator)
 	content.WriteString("\n\n")
-	content.WriteString(s.actionSelector.View())
+	content.WriteString(s.action.View())
 
 	return content.String()
 }
@@ -475,12 +457,12 @@ func (s *ReviewStep) ShortHelp() []wizard.KeyBinding {
 // SetFocused propagates focus to the action selector.
 func (s *ReviewStep) SetFocused(focused bool) {
 	s.BaseStep.SetFocused(focused)
-	s.actionSelector.SetFocused(focused)
+	s.action.SetFocused(focused)
 }
 
 // GetSelectedAction returns the action the user chose on the review screen.
 func (s *ReviewStep) GetSelectedAction() wizard.Action {
-	switch s.actionSelector.SelectedIndex() {
+	switch s.action.SelectedIndex() {
 	case 0:
 		return wizard.ActionDeploy
 	default:
