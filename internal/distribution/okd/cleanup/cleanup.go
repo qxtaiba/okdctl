@@ -16,6 +16,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/distribution"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/dns"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
@@ -82,6 +83,24 @@ type Options struct {
 	// PostDestroy gates removal of an empty terraform.tfstate after a
 	// successful terraform destroy. Must not be set on setup-flow runs.
 	PostDestroy bool
+}
+
+// NewOptions builds the default cleanup Options for cfg, projectRoot, and
+// kind. VIP, RemovePackages, and PostDestroy are not derivable from cfg
+// alone and stay field-by-field overrides after construction.
+func NewOptions(cfg *config.Config, projectRoot string, kind Kind) Options {
+	return Options{
+		BaseOptions: phase.BaseOptions{
+			WorkDir:      filepath.Join(projectRoot, "okd-install"),
+			ProjectRoot:  projectRoot,
+			TerraformEnv: phase.GetTerraformEnv(cfg),
+		},
+		Kind:           kind,
+		HTTPServerRoot: cfg.HTTPServer.Root,
+		HAProxyConfig:  phase.DefaultHAProxyConfigPath,
+		ClusterName:    cfg.Cluster.Name,
+		BinDir:         config.ResolveBinDir(cfg),
+	}
 }
 
 // Phase drives a cleanup run.

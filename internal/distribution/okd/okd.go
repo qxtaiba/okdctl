@@ -142,15 +142,8 @@ func (p *Provisioner) Setup(ctx context.Context, cfg *config.Config, opts SetupO
 			return nil, err
 		}
 		p.logger.Info("setup: cleaning up previous artifacts")
-		cleanupOpts := &cleanup.Options{
-			BaseOptions: phase.BaseOptions{
-				WorkDir:     setupOpts.WorkDir,
-				ProjectRoot: p.projectRoot,
-			},
-			Kind:           cleanup.WorkOnly,
-			HTTPServerRoot: cfg.HTTPServer.Root,
-		}
-		if err := cleanup.New(phase.WithExecutor(p.executor), phase.WithLogger(p.logger)).Execute(ctx, cleanupOpts); err != nil {
+		cleanupOpts := cleanup.NewOptions(cfg, p.projectRoot, cleanup.WorkOnly)
+		if err := cleanup.New(phase.WithExecutor(p.executor), phase.WithLogger(p.logger)).Execute(ctx, &cleanupOpts); err != nil {
 			return nil, &errtypes.ClusterError{Msg: "pre-deploy cleanup incomplete; stale sentinels may skip regeneration — remove the work directory manually or run 'okdctl cleanup'", Err: err}
 		}
 	}
