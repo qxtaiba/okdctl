@@ -448,9 +448,9 @@ func (s *ReviewStep) Apply(_ *config.Config) error {
 func (s *ReviewStep) ShortHelp() []wizard.KeyBinding {
 	return []wizard.KeyBinding{
 		{Key: "↑↓", Help: "select action"},
-		{Key: helpEnter, Help: helpConfirm},
-		{Key: helpEsc, Help: helpBack},
-		{Key: helpCtrlC, Help: helpQuit},
+		{Key: wizard.HelpEnter, Help: wizard.HelpConfirm},
+		{Key: wizard.HelpEsc, Help: wizard.HelpBack},
+		{Key: wizard.HelpCtrlC, Help: wizard.HelpQuit},
 	}
 }
 

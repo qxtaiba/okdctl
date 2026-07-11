@@ -198,10 +198,10 @@ func (m *Model) renderFooter() string {
 
 func defaultKeyBindings() []KeyBinding {
 	return []KeyBinding{
-		{Key: "↑↓", Help: helpNavigate},
-		{Key: helpEnter, Help: helpConfirm},
-		{Key: helpEsc, Help: helpBack},
-		{Key: helpCtrlC, Help: helpQuit},
+		{Key: "↑↓", Help: HelpNavigate},
+		{Key: HelpEnter, Help: HelpConfirm},
+		{Key: HelpEsc, Help: HelpBack},
+		{Key: HelpCtrlC, Help: HelpQuit},
 	}
 }
 

@@ -166,13 +166,13 @@ func (s *WelcomeStep) ShortHelp() []wizard.KeyBinding {
 	if s.configExists {
 		return []wizard.KeyBinding{
 			{Key: "↑↓", Help: "select"},
-			{Key: helpEnter, Help: helpConfirm},
-			{Key: helpCtrlC, Help: helpQuit},
+			{Key: wizard.HelpEnter, Help: wizard.HelpConfirm},
+			{Key: wizard.HelpCtrlC, Help: wizard.HelpQuit},
 		}
 	}
 	return []wizard.KeyBinding{
-		{Key: helpEnter, Help: "start"},
-		{Key: helpCtrlC, Help: helpQuit},
+		{Key: wizard.HelpEnter, Help: "start"},
+		{Key: wizard.HelpCtrlC, Help: wizard.HelpQuit},
 	}
 }
 
