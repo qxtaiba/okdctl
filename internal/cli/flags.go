@@ -1,5 +1,7 @@
 package cli
 
+import "github.com/spf13/cobra"
+
 // Flag names referenced both at registration (BoolVar/StringVarP) and at
 // read-back (GetBool/GetString). A typo on either side silently returns
 // the zero value at runtime — Go has no compile-time check across the
@@ -43,3 +45,11 @@ const (
 // caller's euid is non-zero and this annotation (or rootRequiredCmds
 // ancestry) is set.
 const annotationKeyRequiresRoot = "requiresRoot"
+
+// registerOutputCompletion wires shell completion for the --output/-o flag
+// on cmd to the text|json enum. Call immediately after StringVarP binds
+// flagOutput on cmd's own FlagSet.
+func registerOutputCompletion(cmd *cobra.Command) {
+	_ = cmd.RegisterFlagCompletionFunc(flagOutput,
+		cobra.FixedCompletions([]string{outputText, outputJSON}, cobra.ShellCompDirectiveNoFileComp))
+}

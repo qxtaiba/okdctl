@@ -87,8 +87,10 @@ func init() {
 	})
 	releasesListCmd.Flags().StringVarP(&releasesListOutput, flagOutput, flagOutputShort, outputText,
 		"output format: text|json")
+	registerOutputCompletion(releasesListCmd)
 	releasesShowCmd.Flags().StringVarP(&releasesShowOutput, flagOutput, flagOutputShort, outputText,
 		"output format: text|json")
+	registerOutputCompletion(releasesShowCmd)
 
 	releasesCmd.AddCommand(releasesListCmd)
 	releasesCmd.AddCommand(releasesShowCmd)

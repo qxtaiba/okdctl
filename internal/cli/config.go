@@ -42,6 +42,7 @@ var configValidateCmd = &cobra.Command{
 
 func init() {
 	configShowCmd.Flags().StringVarP(&configShowOutput, flagOutput, flagOutputShort, outputText, "output format: text|json")
+	registerOutputCompletion(configShowCmd)
 	configCmd.AddCommand(configShowCmd)
 	configCmd.AddCommand(configValidateCmd)
 	rootCmd.AddCommand(configCmd)
