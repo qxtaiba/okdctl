@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 )
 
@@ -192,6 +193,36 @@ func TestExecutor_StateStatus(t *testing.T) {
 				t.Errorf("StateStatus() = %q; want %q", got, tc.want)
 			}
 		})
+	}
+}
+
+func installFakeTerraformOutput(t *testing.T, stdout string, exitCode int) {
+	t.Helper()
+	dir := t.TempDir()
+	script := "#!/bin/sh\ncat <<'EOF'\n" + stdout + "\nEOF\nexit " + strconv.Itoa(exitCode) + "\n"
+	if err := os.WriteFile(filepath.Join(dir, "terraform"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+}
+
+func TestExecutor_Output_ParsesJSON(t *testing.T) {
+	installFakeTerraformOutput(t, `{"foo":{"value":"bar","type":"string"}}`, 0)
+	e := New(t.TempDir())
+	out, err := e.Output(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if _, ok := out["foo"]; !ok {
+		t.Errorf("output missing key %q; got %v", "foo", out)
+	}
+}
+
+func TestExecutor_Output_NonZeroExit(t *testing.T) {
+	installFakeTerraformOutput(t, "", 1)
+	e := New(t.TempDir())
+	if _, err := e.Output(context.Background()); err == nil {
+		t.Fatal("expected error for non-zero exit")
 	}
 }
 
