@@ -1,9 +1,7 @@
-package phase
+package nodetypes
 
 // ConditionType and ConditionStatus mirror the Kubernetes status.conditions
-// shape (Type / Status). Defined in phase/ rather than okd/ so subpackages
-// (postinstall, install) can use the constants without pulling an import
-// cycle through okd → subpackage → okd.
+// shape (Type / Status).
 type ConditionType string
 
 // Scaffolding: the three const groups below form the complete Kubernetes

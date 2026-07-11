@@ -13,6 +13,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/firewall"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
+	"github.com/qxtaiba/okdctl/internal/infrastructure/proxmox/hostssh"
 	"github.com/qxtaiba/okdctl/internal/sshpin"
 	"github.com/qxtaiba/okdctl/internal/system"
 )
@@ -105,19 +106,19 @@ func (p *Phase) destroySteps(ctx context.Context, cfg *config.Config, opts *Opti
 			}),
 			SkipReason: "iso removal disabled via --keep-isos, no proxmox provider, or terraform owns live vms that may still reference these isos",
 			Exec: func(ctx context.Context) error {
-				host := phase.ProxmoxBareHost(cfg.Provider.Proxmox.Host)
+				host := hostssh.ProxmoxBareHost(cfg.Provider.Proxmox.Host)
 				knownHostsPath, verifyErr := sshpin.Verify(ctx, host, cfg.Provider.Proxmox.SSHHostFingerprint, cfg.Provider.Proxmox.RequirePinnedFingerprint, p.Log)
 				if verifyErr != nil {
 					return verifyErr
 				}
-				params := &phase.RemoteISOParams{
+				params := &hostssh.RemoteISOParams{
 					Host:           host,
 					Node:           cfg.Provider.Proxmox.Node,
 					Exec:           p.Exec,
 					Log:            p.Log,
 					KnownHostsPath: knownHostsPath,
 				}
-				return phase.RemoveFCOSISOFromProxmox(ctx, params, phase.DefaultProxmoxISODir)
+				return hostssh.RemoveFCOSISOFromProxmox(ctx, params, hostssh.DefaultProxmoxISODir)
 			},
 			OnError: track("iso removal"),
 		},

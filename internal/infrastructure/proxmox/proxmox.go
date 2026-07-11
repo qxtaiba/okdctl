@@ -17,12 +17,13 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 
 	"github.com/qxtaiba/okdctl/internal/config"
-	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/executor"
+	"github.com/qxtaiba/okdctl/internal/infrastructure/proxmox/hostssh"
 	"github.com/qxtaiba/okdctl/internal/infrastructure/terraform"
 	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/netutil"
+	"github.com/qxtaiba/okdctl/internal/nodetypes"
 	"github.com/qxtaiba/okdctl/internal/sshpin"
 )
 
@@ -137,7 +138,7 @@ func (p *Provider) Connect(ctx context.Context, cfg *config.Config) error {
 		return &errtypes.ConfigError{Msg: "proxmox node name is invalid", Err: err}
 	}
 	if p.sshExec != nil && (cfg.Provider.Proxmox.SSHHostFingerprint != "" || cfg.Provider.Proxmox.RequirePinnedFingerprint) {
-		path, err := sshpin.Verify(ctx, phase.ProxmoxBareHost(p.host), cfg.Provider.Proxmox.SSHHostFingerprint, cfg.Provider.Proxmox.RequirePinnedFingerprint, p.logger)
+		path, err := sshpin.Verify(ctx, hostssh.ProxmoxBareHost(p.host), cfg.Provider.Proxmox.SSHHostFingerprint, cfg.Provider.Proxmox.RequirePinnedFingerprint, p.logger)
 		if err != nil {
 			return &errtypes.NetworkError{Msg: "proxmox host key verification failed", Err: err}
 		}
@@ -323,23 +324,23 @@ func (p *Provider) retrieveProvisionResult(cfg *config.Config) (*ProvisionResult
 	bootstrapIP := startIP
 	result.BootstrapIP = bootstrapIP
 	result.VMs = append(result.VMs, VMStatus{
-		Name:      string(RoleBootstrap),
-		Role:      RoleBootstrap,
+		Name:      string(nodetypes.RoleBootstrap),
+		Role:      nodetypes.RoleBootstrap,
 		IPAddress: bootstrapIP,
-		Status:    phase.StateRunning,
+		Status:    nodetypes.StateRunning,
 	})
 
 	for i := range cfg.Topology.ControlPlane.Count {
 		ip, err := netutil.CalculateVMIP(startIP, 1+i)
 		if err != nil {
-			return nil, &errtypes.ConfigError{Msg: fmt.Sprintf("failed to calculate %s%d IP", RoleMaster, i), Err: err}
+			return nil, &errtypes.ConfigError{Msg: fmt.Sprintf("failed to calculate %s%d IP", nodetypes.RoleMaster, i), Err: err}
 		}
 		result.ControlPlaneIPs = append(result.ControlPlaneIPs, ip)
 		result.VMs = append(result.VMs, VMStatus{
-			Name:      fmt.Sprintf("%s%d", RoleMaster, i),
-			Role:      RoleMaster,
+			Name:      fmt.Sprintf("%s%d", nodetypes.RoleMaster, i),
+			Role:      nodetypes.RoleMaster,
 			IPAddress: ip,
-			Status:    phase.StateRunning,
+			Status:    nodetypes.StateRunning,
 		})
 	}
 
@@ -347,14 +348,14 @@ func (p *Provider) retrieveProvisionResult(cfg *config.Config) (*ProvisionResult
 	for i := range cfg.Topology.Workers.Count {
 		ip, err := netutil.CalculateVMIP(startIP, workerOffset+i)
 		if err != nil {
-			return nil, &errtypes.ConfigError{Msg: fmt.Sprintf("failed to calculate %s%d IP", RoleWorker, i), Err: err}
+			return nil, &errtypes.ConfigError{Msg: fmt.Sprintf("failed to calculate %s%d IP", nodetypes.RoleWorker, i), Err: err}
 		}
 		result.WorkerIPs = append(result.WorkerIPs, ip)
 		result.VMs = append(result.VMs, VMStatus{
-			Name:      fmt.Sprintf("%s%d", RoleWorker, i),
-			Role:      RoleWorker,
+			Name:      fmt.Sprintf("%s%d", nodetypes.RoleWorker, i),
+			Role:      nodetypes.RoleWorker,
 			IPAddress: ip,
-			Status:    phase.StateRunning,
+			Status:    nodetypes.StateRunning,
 		})
 	}
 
@@ -478,13 +479,13 @@ func (p *Provider) probeVMEnumeration(ctx context.Context, cfg *config.Config) b
 	if vmidBase == 0 {
 		vmidBase = config.DefaultVMIDBase
 	}
-	params := &phase.RemoteISOParams{
-		Host:           phase.ProxmoxBareHost(p.host),
+	params := &hostssh.RemoteISOParams{
+		Host:           hostssh.ProxmoxBareHost(p.host),
 		Node:           p.node,
 		Exec:           p.sshExec,
 		KnownHostsPath: p.knownHostsPath,
 	}
-	stdout, err := phase.PveshRun(ctx, params, "get", "/nodes/"+p.node+"/qemu")
+	stdout, err := hostssh.PveshRun(ctx, params, "get", "/nodes/"+p.node+"/qemu")
 	if err != nil {
 		p.logger.Debug("terraform: pvesh probe skipped", "err", err)
 		return true

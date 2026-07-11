@@ -10,6 +10,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/templates"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
+	"github.com/qxtaiba/okdctl/internal/nodetypes"
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
@@ -18,7 +19,7 @@ import (
 // virt and vector extensions (AVX2, AES-NI) required by OKD nodes work.
 const DefaultProxmoxCPUType = "host"
 
-func buildQuotedRoleList(format, prefix string, role phase.NodeRole, count int) []string {
+func buildQuotedRoleList(format, prefix string, role nodetypes.NodeRole, count int) []string {
 	result := make([]string, count)
 	for i := range count {
 		result[i] = fmt.Sprintf(format, prefix, role, i)
@@ -26,11 +27,11 @@ func buildQuotedRoleList(format, prefix string, role phase.NodeRole, count int) 
 	return result
 }
 
-func buildISOStrings(isoStorage string, role phase.NodeRole, count int) []string {
+func buildISOStrings(isoStorage string, role nodetypes.NodeRole, count int) []string {
 	return buildQuotedRoleList(`"%s:iso/%s%d.iso"`, isoStorage, role, count)
 }
 
-func buildNodeNames(clusterName string, role phase.NodeRole, count int) []string {
+func buildNodeNames(clusterName string, role nodetypes.NodeRole, count int) []string {
 	return buildQuotedRoleList(`"%s-%s%d"`, clusterName, role, count)
 }
 
@@ -71,10 +72,10 @@ func buildTerraformVarsData(cfg *config.Config) templates.TerraformVarsData {
 	disks := getDiskSizes(cfg)
 	bootstrapCPU, bootstrapMem := getBootstrapResources(cfg)
 
-	masterISOs := buildISOStrings(proxmox.ISOStorage, phase.RoleMaster, cfg.Topology.ControlPlane.Count)
-	workerISOs := buildISOStrings(proxmox.ISOStorage, phase.RoleWorker, cfg.Topology.Workers.Count)
-	masterNames := buildNodeNames(cfg.Cluster.Name, phase.RoleMaster, cfg.Topology.ControlPlane.Count)
-	workerNames := buildNodeNames(cfg.Cluster.Name, phase.RoleWorker, cfg.Topology.Workers.Count)
+	masterISOs := buildISOStrings(proxmox.ISOStorage, nodetypes.RoleMaster, cfg.Topology.ControlPlane.Count)
+	workerISOs := buildISOStrings(proxmox.ISOStorage, nodetypes.RoleWorker, cfg.Topology.Workers.Count)
+	masterNames := buildNodeNames(cfg.Cluster.Name, nodetypes.RoleMaster, cfg.Topology.ControlPlane.Count)
+	workerNames := buildNodeNames(cfg.Cluster.Name, nodetypes.RoleWorker, cfg.Topology.Workers.Count)
 
 	cpuType := proxmox.CPUType
 	if cpuType == "" {

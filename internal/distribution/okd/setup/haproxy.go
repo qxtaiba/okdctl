@@ -12,6 +12,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/templates"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
+	"github.com/qxtaiba/okdctl/internal/nodetypes"
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
@@ -28,11 +29,11 @@ func (p *Phase) BuildHAProxyConfigData(cfg *config.Config) (templates.HAProxyCon
 
 	for _, node := range nodes {
 		switch node.Role {
-		case phase.RoleBootstrap:
+		case nodetypes.RoleBootstrap:
 			bootstrapIP = node.IP
-		case phase.RoleMaster:
+		case nodetypes.RoleMaster:
 			masterServers = append(masterServers, templates.HAProxyServer{Name: node.Name, IP: node.IP})
-		case phase.RoleWorker:
+		case nodetypes.RoleWorker:
 			workerServers = append(workerServers, templates.HAProxyServer{Name: node.Name, IP: node.IP})
 		default:
 			return templates.HAProxyConfigData{}, &errtypes.ConfigError{Msg: fmt.Sprintf("unexpected node role %q in node %q — HAProxy backend unrenderable", node.Role, node.Name)}

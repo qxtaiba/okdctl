@@ -17,6 +17,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/download"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/httputil"
+	"github.com/qxtaiba/okdctl/internal/infrastructure/proxmox/hostssh"
 	"github.com/qxtaiba/okdctl/internal/platform"
 	"github.com/qxtaiba/okdctl/internal/system"
 	"github.com/qxtaiba/okdctl/internal/tui"
@@ -47,7 +48,7 @@ const (
 )
 
 // resolveConfiguredISO maps cfg.Provider.Proxmox.FCOSIso to one of three
-// states. ":iso/<file>" is resolved relative to phase.DefaultProxmoxISODir;
+// states. ":iso/<file>" is resolved relative to hostssh.DefaultProxmoxISODir;
 // a bare "local:iso" pool reference (no filename) is treated as isoEmpty
 // so glob auto-detection still applies; bare paths are checked via
 // system.FileExists. Returning isoMissing prevents the previous silent
@@ -60,7 +61,7 @@ func resolveConfiguredISO(spec string) (string, isoResolution) {
 	case strings.Contains(spec, ":iso/"):
 		_, filename, ok := strings.Cut(spec, ":iso/")
 		if ok && filename != "" {
-			resolved := filepath.Join(phase.DefaultProxmoxISODir, filename)
+			resolved := filepath.Join(hostssh.DefaultProxmoxISODir, filename)
 			if system.FileExists(resolved) {
 				return resolved, isoResolved
 			}
@@ -78,7 +79,7 @@ func resolveConfiguredISO(spec string) (string, isoResolution) {
 }
 
 func (p *Phase) findOrDownloadFCOSISO(ctx context.Context, cfg *config.Config, opts *Options) (string, error) {
-	isoDir := phase.DefaultProxmoxISODir
+	isoDir := hostssh.DefaultProxmoxISODir
 
 	if cfg.Provider.Proxmox != nil {
 		path, res := resolveConfiguredISO(cfg.Provider.Proxmox.FCOSIso)
