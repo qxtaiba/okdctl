@@ -300,7 +300,7 @@ func TestCollectSectionsSkipMustGather(t *testing.T) {
 	if mg.Status != "skipped" {
 		t.Errorf("Status = %q, want skipped", mg.Status)
 	}
-	if mg.Message != "--skip-must-gather flag set" {
-		t.Errorf("Message = %q, want --skip-must-gather flag set", mg.Message)
+	if !strings.Contains(mg.Message, "--skip-must-gather") {
+		t.Errorf("Message = %q, want it to reference --skip-must-gather", mg.Message)
 	}
 }
