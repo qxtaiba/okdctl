@@ -26,13 +26,13 @@ func (nopMetricsRecorder) StepStarted(StepID)           {}
 func (nopMetricsRecorder) StepFinished(*StepResult)     {}
 func (nopMetricsRecorder) DeployFinished(time.Duration) {}
 
-// Orchestrator runs a sequence of ProvisioningSteps, recording per-step
-// outcomes. Stops on the first fatal failure (per Step.IsFatal); non-fatal
-// failures log a warning and continue. Safe to snapshot Results concurrently
-// with Run.
+// Orchestrator runs a sequence of steps built by BuildSteps, recording
+// per-step outcomes. Stops on the first fatal failure (per StepDef.NonFatal);
+// non-fatal failures log a warning and continue. Safe to snapshot Results
+// concurrently with Run.
 type Orchestrator struct {
 	mu      sync.RWMutex
-	steps   []ProvisioningStep
+	steps   []*builtStep
 	results []StepResult
 	logger  *slog.Logger
 	rec     MetricsRecorder
@@ -40,7 +40,7 @@ type Orchestrator struct {
 
 // NewOrchestrator returns an Orchestrator seeded with the given steps and a
 // NopLogger. Use SetLogger to attach a real logger before Run.
-func NewOrchestrator(steps ...ProvisioningStep) *Orchestrator {
+func NewOrchestrator(steps ...*builtStep) *Orchestrator {
 	return &Orchestrator{
 		steps:   steps,
 		results: make([]StepResult, 0, len(steps)),
@@ -131,7 +131,7 @@ func classifyStepErr(err error) error {
 	return &errtypes.ClusterError{Msg: "step failed", Err: err}
 }
 
-func (o *Orchestrator) executeStep(ctx context.Context, step ProvisioningStep) StepResult {
+func (o *Orchestrator) executeStep(ctx context.Context, step *builtStep) StepResult {
 	startedAt := time.Now()
 
 	if step.ShouldSkip() {
@@ -147,23 +147,21 @@ func (o *Orchestrator) executeStep(ctx context.Context, step ProvisioningStep) S
 		return r
 	}
 
-	if checker, ok := step.(AlreadyDoneChecker); ok {
-		done, err := checker.IsAlreadyDone(ctx)
-		if err != nil {
-			o.logger.Warn("step: already-done check failed, proceeding", "step", step.ID(), "err", err)
-		} else if done {
-			r := StepResult{
-				StepID:     step.ID(),
-				Success:    true,
-				Skipped:    true,
-				SkipReason: "already done",
-				StartedAt:  startedAt,
-				Duration:   time.Since(startedAt),
-			}
-			o.logger.Info("step: skipped (already done)", "step", step.ID(), "name", step.Name(), "reason", "already done")
-			o.rec.StepFinished(&r)
-			return r
+	done, err := step.IsAlreadyDone(ctx)
+	if err != nil {
+		o.logger.Warn("step: already-done check failed, proceeding", "step", step.ID(), "err", err)
+	} else if done {
+		r := StepResult{
+			StepID:     step.ID(),
+			Success:    true,
+			Skipped:    true,
+			SkipReason: "already done",
+			StartedAt:  startedAt,
+			Duration:   time.Since(startedAt),
 		}
+		o.logger.Info("step: skipped (already done)", "step", step.ID(), "name", step.Name(), "reason", "already done")
+		o.rec.StepFinished(&r)
+		return r
 	}
 
 	o.rec.StepStarted(step.ID())
