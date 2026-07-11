@@ -31,7 +31,7 @@ import (
 // Provider drives the Proxmox VE infrastructure lifecycle (connect, provision,
 // disconnect) via a Terraform executor.
 //
-// Mutation invariant (state:48688e63): all Proxmox mutations MUST flow through
+// Mutation invariant: all Proxmox mutations MUST flow through
 // terraform.Executor. Direct Proxmox HTTP calls are forbidden in deploy/destroy
 // paths — the bpg/proxmox terraform provider owns 5xx/408/429 retry/backoff.
 // If status reads are added later, route them through internal/download's
@@ -121,8 +121,7 @@ func New(opts ...Option) *Provider {
 // terraform — the Provider has no Proxmox HTTP client. Connectivity issues
 // surface during terraform plan/apply with clear provider-level errors.
 // ctx is accepted for symmetry with future network-bound providers; this
-// implementation is local-only. See Disconnect for the scaffolding rationale
-// (api:48688e63, con:48688e63).
+// implementation is local-only. See Disconnect for the scaffolding rationale.
 func (p *Provider) Connect(ctx context.Context, cfg *config.Config) error {
 	if cfg == nil {
 		return &errtypes.ConfigError{Msg: "configuration is required"}
@@ -156,7 +155,6 @@ func (p *Provider) Connect(ctx context.Context, cfg *config.Config) error {
 // change. Multi-provider support is explicitly out of scope per roadmap
 // constraint 1 (single provider: Proxmox); this scaffolding is for a
 // future network-bound Proxmox disconnect, not a provider abstraction.
-// Tracked: api:48688e63, con:48688e63.
 func (p *Provider) Disconnect(_ context.Context) error {
 	p.connected = false
 	p.terraformExec = nil

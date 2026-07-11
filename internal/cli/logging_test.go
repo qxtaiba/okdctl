@@ -12,8 +12,8 @@ import (
 	"github.com/qxtaiba/okdctl/internal/tui"
 )
 
-// TestOpenLogFileRefusesSymlink locks the sec:00000002 fix: --log-file
-// must refuse a symlinked path so a pre-sudo attacker cannot redirect
+// TestOpenLogFileRefusesSymlink locks the fix that makes --log-file
+// refuse a symlinked path so a pre-sudo attacker cannot redirect
 // root-authored log lines onto an arbitrary file between the invoking-
 // user run and the sudo re-exec.
 func TestOpenLogFileRefusesSymlink(t *testing.T) {
@@ -30,7 +30,7 @@ func TestOpenLogFileRefusesSymlink(t *testing.T) {
 	f, err := openLogFile(link)
 	if err == nil {
 		_ = f.Close()
-		t.Fatal("openLogFile accepted a symlink; sec:00000002 guard regressed")
+		t.Fatal("openLogFile accepted a symlink; symlink guard regressed")
 	}
 	if !strings.Contains(err.Error(), "symlink") {
 		t.Fatalf("error does not name the rejection reason: %v", err)

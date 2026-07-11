@@ -27,7 +27,7 @@ const (
 
 // OKDVersion is one OKD release entry fetched from the release catalog.
 // JSON field names are part of the `okdctl releases list --output=json`
-// contract — see audit-cli-ux ux:e7db1220 before renaming.
+// contract; do not rename a field without updating downstream consumers.
 type OKDVersion struct {
 	Version     string      `json:"version"`
 	Tag         string      `json:"tag"`

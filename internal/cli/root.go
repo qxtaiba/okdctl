@@ -153,8 +153,8 @@ func execute() (code int) {
 // intentionally bypassed. On the happy path execute()'s defer close(sigCh)
 // fires after signal.Stop, causing the second receive to observe !ok and
 // return cleanly (bounded goroutine leak).
-// con:aa84670c — close(sigCh) ordering after signal.Stop is load-bearing for
-// the bounded-leak contract; do not move or remove without re-deriving it.
+// close(sigCh) ordering after signal.Stop is load-bearing for the
+// bounded-leak contract; do not move or remove without re-deriving it.
 func signalLoop(sigCh <-chan os.Signal, cancel context.CancelFunc, caughtSig *atomic.Value, exit func(int)) {
 	sig, ok := <-sigCh
 	if !ok {

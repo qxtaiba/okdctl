@@ -5,9 +5,9 @@ package nodetypes
 // carefully.
 type VMState string
 
-// Scaffolding (api:3e02f6b8): the full state matrix is kept as a single
-// source of truth for the future status path that surfaces partial-running
-// clusters. Today only StateRunning is consumed (proxmox.Provider mapping).
+// Scaffolding: the full state matrix is kept as a single source of truth
+// for the future status path that surfaces partial-running clusters.
+// Today only StateRunning is consumed (proxmox.Provider mapping).
 const (
 	StateRunning  VMState = "running"
 	StateStopped  VMState = "stopped"

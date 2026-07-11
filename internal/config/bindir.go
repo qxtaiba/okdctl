@@ -37,8 +37,8 @@ func PreflightBinDir() string {
 }
 
 // BinDirOrDefault returns s when non-empty, else DefaultBinDir.
-// Scaffolding (api:0139cb3f): together with PreflightBinDir and ResolveBinDir
-// this forms the three-function bin-dir-resolution surface; each function
+// Scaffolding: together with PreflightBinDir and ResolveBinDir this forms
+// the three-function bin-dir-resolution surface; each function
 // consults a different input source (struct field, env+config, env-only). Call
 // sites in setup and cleanup use BinDirOrDefault as defense-in-depth — the
 // field is already populated by ResolveBinDir at construction, but the explicit
