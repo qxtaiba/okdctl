@@ -71,7 +71,11 @@ func FetchChecksum(ctx context.Context, checksumsURL, filename string) (string, 
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("failed to fetch checksums: HTTP %d", resp.StatusCode)
+		return "", &HTTPStatusError{
+			Status: resp.StatusCode,
+			Method: http.MethodGet,
+			URL:    checksumsURL,
+		}
 	}
 
 	limitedReader := io.LimitReader(resp.Body, maxChecksumFileSize)

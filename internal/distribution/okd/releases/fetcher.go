@@ -10,6 +10,8 @@ import (
 	"strings"
 
 	"golang.org/x/mod/semver"
+
+	"github.com/qxtaiba/okdctl/internal/download"
 )
 
 func (f *OKDVersionFetcher) fetchFromNetwork(ctx context.Context) ([]OKDReleaseSeries, error) {
@@ -45,7 +47,11 @@ func (f *OKDVersionFetcher) fetchFromGitHub(ctx context.Context, repo string, pa
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("github api returned status %d", resp.StatusCode)
+		return nil, fmt.Errorf("github api: %w", &download.HTTPStatusError{
+			Status: resp.StatusCode,
+			Method: http.MethodGet,
+			URL:    url,
+		})
 	}
 
 	var releases []githubRelease
