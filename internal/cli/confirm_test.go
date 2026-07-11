@@ -116,3 +116,31 @@ func TestConfirmClusterMatches(t *testing.T) {
 		})
 	}
 }
+
+func TestPromptForClusterNameConfirmation(t *testing.T) {
+	cases := []struct {
+		name  string
+		input string
+		want  bool
+	}{
+		{"exact match confirms", "prod\n", true},
+		{"case mismatch denies", "PROD\n", false},
+		{"typo denies", "prod1\n", false},
+		{"empty line denies", "\n", false},
+		{"EOF treated as denial", "", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			testStdinReader = strings.NewReader(tc.input)
+			t.Cleanup(func() { testStdinReader = nil })
+
+			ok, err := promptForClusterNameConfirmation(context.Background(), "prod")
+			if err != nil {
+				t.Fatalf("want nil error, got %v", err)
+			}
+			if ok != tc.want {
+				t.Fatalf("want %v, got %v", tc.want, ok)
+			}
+		})
+	}
+}
