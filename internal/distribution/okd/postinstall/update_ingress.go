@@ -275,7 +275,7 @@ func (p *Phase) finalizeIngress(
 		if err := p.RemoveHAProxy(ctx, vip, phase.ClusterConfigDir(opts.WorkDir)); err != nil {
 			p.Log.Warn("update-ingress: haproxy removal failed — rolling back dns to bootstrap", "err", err)
 			dnsRolledBack := false
-			if rbErr := dns.DeployBootstrap(ctx, cfg); rbErr != nil {
+			if rbErr := deployBootstrapDNSFn(ctx, cfg); rbErr != nil {
 				p.Log.Warn("update-ingress: dns rollback to bootstrap failed", "err", rbErr)
 			} else {
 				dnsRolledBack = true
