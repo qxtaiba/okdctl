@@ -205,6 +205,17 @@ func createOKDProvisionerWithOpts(creds *credentials.ProxmoxCredentials, project
 	return okd.New(opts...)
 }
 
+// deployProvisioner is the slice of okd.Provisioner the deploy flow drives.
+// Tests substitute a fake to pin the resume routing — which phases run, and
+// with what guard opts — without executing real phase code.
+type deployProvisioner interface {
+	GuardPrepare(cfg *config.Config, opts okd.PrepareOpts) error
+	Prepare(ctx context.Context, cfg *config.Config, opts okd.PrepareOpts) ([]distribution.StepResult, error)
+	Install(ctx context.Context, cfg *config.Config, opts *install.Options) ([]distribution.StepResult, error)
+	Configure(ctx context.Context, cfg *config.Config) (*postinstall.Result, []distribution.StepResult, error)
+	ResumeConfigure(ctx context.Context, cfg *config.Config) (*postinstall.Result, []distribution.StepResult, error)
+}
+
 // runGuardedPrepare runs the prepare phase behind the live-cluster guard.
 // resumeInProgress carries the caller's marker decision: only a prepare-phase
 // marker for this cluster reaches here (resolveResumePhase routes install and
@@ -212,7 +223,7 @@ func createOKDProvisionerWithOpts(creds *credentials.ProxmoxCredentials, project
 // material live VMs booted with. The guard probe runs before any marker
 // write — a refusal must not plant a marker that would bypass the guard on
 // the next invocation.
-func runGuardedPrepare(ctx context.Context, p *okd.Provisioner, cfg *config.Config, markerPath, runID string, freshDeploy, resumeInProgress bool, w io.Writer) ([]distribution.StepResult, error) {
+func runGuardedPrepare(ctx context.Context, p deployProvisioner, cfg *config.Config, markerPath, runID string, freshDeploy, resumeInProgress bool, w io.Writer) ([]distribution.StepResult, error) {
 	prepOpts := okd.PrepareOpts{FreshDeploy: freshDeploy, ResumeInProgress: resumeInProgress && !freshDeploy}
 	if err := p.GuardPrepare(cfg, prepOpts); err != nil {
 		return nil, err
@@ -330,7 +341,7 @@ func startMetricsServer(ctx context.Context, addr string, allowNetwork bool) (fu
 // runDeployPhases executes prepare, install, and configure, starting from
 // the phase the deploy-state marker says is safe to resume from. Returns the
 // postinstall result and every executed step across phases.
-func runDeployPhases(ctx context.Context, p *okd.Provisioner, cfg *config.Config, projectRoot, markerPath, runID string, freshDeploy bool, w io.Writer) (*postinstall.Result, []distribution.StepResult, error) {
+func runDeployPhases(ctx context.Context, p deployProvisioner, cfg *config.Config, projectRoot, markerPath, runID string, freshDeploy bool, w io.Writer) (*postinstall.Result, []distribution.StepResult, error) {
 	resumeFrom, marker := resolveResumePhase(markerPath, cfg.Cluster.Name, freshDeploy)
 
 	var setupSteps []distribution.StepResult
@@ -343,11 +354,14 @@ func runDeployPhases(ctx context.Context, p *okd.Provisioner, cfg *config.Config
 	} else {
 		tui.Info("resuming interrupted deploy; skipping prepare to preserve cluster identity material",
 			tui.LF("from_phase", string(resumeFrom)), tui.LF("interrupted_run_id", marker.RunID))
+		tui.Info("to restart from scratch instead, re-run with --fresh (wipes cluster credentials)")
 	}
 
 	var installSteps []distribution.StepResult
 	if resumeFrom != phaseConfigure {
-		markDeployPhase(markerPath, phaseInstall, runID, cfg.Cluster.Name)
+		if err := markDeployPhaseFatal(markerPath, phaseInstall, runID, cfg.Cluster.Name); err != nil {
+			return nil, nil, err
+		}
 		installOpts := install.NewOptions(cfg, projectRoot)
 		installSteps, err = p.Install(ctx, cfg, &installOpts)
 		if err != nil {
@@ -361,7 +375,9 @@ func runDeployPhases(ctx context.Context, p *okd.Provisioner, cfg *config.Config
 		}
 	}
 
-	markDeployPhase(markerPath, phaseConfigure, runID, cfg.Cluster.Name)
+	if err := markDeployPhaseFatal(markerPath, phaseConfigure, runID, cfg.Cluster.Name); err != nil {
+		return nil, nil, err
+	}
 	var result *postinstall.Result
 	var configureSteps []distribution.StepResult
 	if resumeFrom == phaseConfigure {

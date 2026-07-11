@@ -78,19 +78,25 @@ func TestGuardLiveCluster(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "tfstate present resume bypass",
+			name: "tfstate contradicts prepare marker, resume refused",
 			setup: func(t *testing.T, projectRoot, _ string) {
 				seedTFState(t, projectRoot, "production")
 			},
 			opts:    PrepareOpts{ResumeInProgress: true},
-			wantErr: false,
+			wantErr: true,
 		},
 		{
-			name: "both present resume bypass",
+			name: "tfstate and auth contradict prepare marker, resume refused",
 			setup: func(t *testing.T, projectRoot, workDir string) {
 				seedTFState(t, projectRoot, "production")
 				seedAuth(t, workDir)
 			},
+			opts:    PrepareOpts{ResumeInProgress: true},
+			wantErr: true,
+		},
+		{
+			name:    "resume with empty tfstate passes",
+			setup:   func(_ *testing.T, _, _ string) {},
 			opts:    PrepareOpts{ResumeInProgress: true},
 			wantErr: false,
 		},
