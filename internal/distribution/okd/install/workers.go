@@ -85,7 +85,7 @@ func (p *Phase) workersAlreadyRunning(ctx context.Context, cfg *config.Config) (
 		return false, nil //nolint:nilerr // cluster-unreachable is non-fatal: report not-done so StartWorkerVMs runs as the safe fallback
 	}
 	count := 0
-	for line := range strings.SplitSeq(out, "\n") {
+	for line := range strings.Lines(out) {
 		if strings.TrimSpace(line) != "" {
 			count++
 		}
