@@ -29,7 +29,7 @@ func (f *fakeClient) RawGet(context.Context, string) (string, error) {
 	return "", f.healthzErr
 }
 
-func (f *fakeClient) GetJSON(_ context.Context, args ...string) (string, bool, error) {
+func (f *fakeClient) GetJSON(_ context.Context, args ...string) (out string, found bool, err error) {
 	if len(args) >= 2 && args[1] == "nodes" {
 		return f.nodesJSON, false, f.nodesErr
 	}
