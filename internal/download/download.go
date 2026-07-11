@@ -20,7 +20,8 @@ import (
 )
 
 // DefaultTimeout bounds a single Fetch call when no WithTimeout option is set.
-const DefaultTimeout = 5 * time.Minute
+// Aliases httputil.TimeoutDownload so the download tier has one owner.
+const DefaultTimeout = httputil.TimeoutDownload
 
 // dlConfig holds the resolved configuration for a Fetch call. logger is
 // normalised via logutil.OrNop once at Fetch construction.

@@ -1,4 +1,7 @@
-// Package dns provides dnsmasq configuration for OKD clusters.
+// Package dns provides dnsmasq configuration for OKD clusters. Exported
+// service ops (EnableDnsmasq, RestartDnsmasq, ValidateDnsmasqConfig,
+// ConfigureSystemResolver, IsNetworkManagerActive) are the package's public
+// API surface even though today's only callers are intra-package.
 package dns
 
 import (
