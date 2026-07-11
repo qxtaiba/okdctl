@@ -1,0 +1,7 @@
+---
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerabilities
+    url: https://github.com/qxtaiba/okdctl/security/advisories/new
+    about: >-
+      Please report security vulnerabilities privately via GitHub Security Advisories, not as a public issue. See SECURITY.md for the full policy.

@@ -1,0 +1,5 @@
+# Requests review from listed owners when matching files change in a PR.
+# The last matching pattern takes precedence. Add path-scoped owners
+# below the default if co-maintainers join.
+
+* @qxtaiba

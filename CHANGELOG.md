@@ -19,7 +19,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `.deb` and `.rpm` packages published on release
 - `curl | sh` installer script with SHA256 verification
 - CodeQL SAST scan on every PR
-- Community templates: issue forms, PR template, CODEOWNERS, FUNDING
+- Community templates: issue forms (bug report, feature request),
+  PR template, CODEOWNERS, and a CONTRIBUTING.md guide
 
 ### Changed
 - `describe addon --format=json` now emits `display_name` (snake_case) instead
