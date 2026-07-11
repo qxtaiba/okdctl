@@ -405,7 +405,7 @@ func (p *Phase) installSystemPackages(ctx context.Context) error {
 	}
 
 	p.Log.Info("packages: installing missing", "count", len(toInstall))
-	if err := p.Pkg.Install(ctx, toInstall, p.Log); err != nil {
+	if err := p.Pkg.Install(ctx, toInstall); err != nil {
 		p.Log.Warn("packages: installation had warnings", "err", err)
 	}
 	return nil

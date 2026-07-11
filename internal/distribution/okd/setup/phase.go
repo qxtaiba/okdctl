@@ -99,7 +99,7 @@ type NodeInfo struct {
 type Phase struct {
 	phase.BasePhase
 	OS         platform.OS
-	Pkg        platform.PackageManager
+	Pkg        *platform.Manager
 	BinDir     string
 	loggedISOs map[string]bool
 }
@@ -113,7 +113,7 @@ func New(opts ...phase.BasePhaseOption) *Phase {
 	return &Phase{
 		BasePhase: bp,
 		OS:        detectedOS,
-		Pkg:       platform.NewPackageManager(detectedOS),
+		Pkg:       platform.NewPackageManager(detectedOS, bp.Log),
 	}
 }
 

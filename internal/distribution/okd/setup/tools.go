@@ -180,7 +180,7 @@ func (p *Phase) installTerraform(ctx context.Context) error {
 
 	p.Log.Info("tools: hashicorp repository added")
 
-	if err := p.Pkg.Install(ctx, []string{"terraform"}, p.Log); err != nil {
+	if err := p.Pkg.Install(ctx, []string{"terraform"}); err != nil {
 		return fmt.Errorf("failed to install terraform: %w", err)
 	}
 

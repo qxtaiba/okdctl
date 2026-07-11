@@ -24,7 +24,7 @@ var (
 func removePackage(ctx context.Context, pkg string, logger *slog.Logger) {
 	logger = logutil.OrNop(logger)
 	pm := detectPackageManager(logger)
-	if err := pm.Remove(ctx, []string{pkg}, logger); err != nil {
+	if err := pm.Remove(ctx, []string{pkg}); err != nil {
 		logger.Warn("cleanup: failed to remove package", "pkg", pkg, "err", err)
 	}
 }

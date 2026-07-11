@@ -11,17 +11,9 @@ import (
 	"time"
 
 	"github.com/qxtaiba/okdctl/internal/executor"
+	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/system"
 )
-
-// PackageManager abstracts the host package manager (dnf or apt-get) used to
-// install OKD host dependencies.
-type PackageManager interface {
-	Install(ctx context.Context, packages []string, logger *slog.Logger) error
-	Remove(ctx context.Context, packages []string, logger *slog.Logger) error
-	IsInstalled(ctx context.Context, pkg string) (bool, error)
-	AddRepo(ctx context.Context, name, url string, logger *slog.Logger) error
-}
 
 // aptListDir is the directory where Debian apt repository list files are
 // written. Overridden by tests to avoid requiring root access.
@@ -33,20 +25,23 @@ var aptListDir = "/etc/apt/sources.list.d"
 // generous-but-bounded posture in setup/release_extract.go.
 const packageManagerTimeout = 15 * time.Minute
 
-// Manager is the single PackageManager implementation. The family field
-// selects between RHEL (dnf/rpm) and Debian (apt-get/dpkg) binaries and
-// drives the AddRepo branch.
+// Manager is the host package manager (dnf or apt-get) used to install OKD
+// host dependencies. The family field selects between RHEL (dnf/rpm) and
+// Debian (apt-get/dpkg) binaries and drives the AddRepo branch.
 type Manager struct {
 	family    Family
 	pkgCmd    string                               // "dnf" | "apt-get"
 	queryCmd  string                               // "rpm" | "dpkg"
 	queryArgs []string                             // ["-q"] | ["-l"]
 	postCheck func(stdout []byte, pkg string) bool // nil → exit code alone is sufficient
+	logger    *slog.Logger
 }
 
 // NewPackageManager returns a Manager wired to the appropriate backend for
-// the detected OS family (dnf/rpm on RHEL, apt-get/dpkg on Debian).
-func NewPackageManager(detected OS) PackageManager {
+// the detected OS family (dnf/rpm on RHEL, apt-get/dpkg on Debian). A nil
+// logger falls back to logutil.NopLogger.
+func NewPackageManager(detected OS, logger *slog.Logger) *Manager {
+	logger = logutil.OrNop(logger)
 	if detected.Family == FamilyDebian {
 		return &Manager{
 			family:    FamilyDebian,
@@ -56,6 +51,7 @@ func NewPackageManager(detected OS) PackageManager {
 			postCheck: func(stdout []byte, pkg string) bool {
 				return bytes.Contains(stdout, []byte("ii  "+pkg))
 			},
+			logger: logger,
 		}
 	}
 	return &Manager{
@@ -63,16 +59,17 @@ func NewPackageManager(detected OS) PackageManager {
 		pkgCmd:    "dnf",
 		queryCmd:  "rpm",
 		queryArgs: []string{"-q"},
+		logger:    logger,
 	}
 }
 
 // Install installs packages via the configured backend. Empty input
 // is a no-op.
-func (m *Manager) Install(ctx context.Context, packages []string, logger *slog.Logger) error {
+func (m *Manager) Install(ctx context.Context, packages []string) error {
 	if len(packages) == 0 {
 		return nil
 	}
-	logger.Info("packages: installing", "packages", packages)
+	m.logger.Info("packages: installing", "packages", packages)
 	installCtx, cancel := context.WithTimeout(ctx, packageManagerTimeout)
 	defer cancel()
 	args := append([]string{"install", "-y"}, packages...)
@@ -81,7 +78,7 @@ func (m *Manager) Install(ctx context.Context, packages []string, logger *slog.L
 
 // Remove uninstalls only the packages in packages that are currently
 // installed, leaving the rest alone.
-func (m *Manager) Remove(ctx context.Context, packages []string, _ *slog.Logger) error {
+func (m *Manager) Remove(ctx context.Context, packages []string) error {
 	if len(packages) == 0 {
 		return nil
 	}
@@ -127,8 +124,8 @@ func (m *Manager) IsInstalled(ctx context.Context, pkg string) (bool, error) {
 
 // AddRepo registers a new package repository with the backend: dnf
 // config-manager on RHEL, an /etc/apt/sources.list.d entry on Debian.
-func (m *Manager) AddRepo(ctx context.Context, name, url string, logger *slog.Logger) error {
-	logger.Info("packages: adding repository", "name", name)
+func (m *Manager) AddRepo(ctx context.Context, name, url string) error {
+	m.logger.Info("packages: adding repository", "name", name)
 
 	addRepoCtx, cancel := context.WithTimeout(ctx, packageManagerTimeout)
 	defer cancel()

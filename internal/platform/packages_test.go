@@ -78,7 +78,7 @@ func redirectAptListDir(t *testing.T) string {
 
 func TestIsInstalled_RHEL(t *testing.T) {
 	installFakePkgTools(t)
-	m := NewPackageManager(OS{Family: FamilyRHEL})
+	m := NewPackageManager(OS{Family: FamilyRHEL}, logutil.NopLogger)
 
 	tests := []struct {
 		pkg    string
@@ -101,7 +101,7 @@ func TestIsInstalled_RHEL(t *testing.T) {
 
 func TestIsInstalled_Debian(t *testing.T) {
 	installFakePkgTools(t)
-	m := NewPackageManager(OS{Family: FamilyDebian})
+	m := NewPackageManager(OS{Family: FamilyDebian}, logutil.NopLogger)
 
 	tests := []struct {
 		pkg    string
@@ -127,7 +127,7 @@ func TestIsInstalled_LookPathError(t *testing.T) {
 		t.Skip("requires POSIX PATH semantics")
 	}
 	t.Setenv("PATH", "")
-	m := NewPackageManager(OS{Family: FamilyRHEL})
+	m := NewPackageManager(OS{Family: FamilyRHEL}, logutil.NopLogger)
 	_, err := m.IsInstalled(context.Background(), "any")
 	if err == nil {
 		t.Error("IsInstalled with empty PATH: want error, got nil")
@@ -136,8 +136,8 @@ func TestIsInstalled_LookPathError(t *testing.T) {
 
 func TestRemove_EmptyInput(t *testing.T) {
 	argvLog := installFakePkgTools(t)
-	m := NewPackageManager(OS{Family: FamilyRHEL})
-	if err := m.Remove(context.Background(), nil, nil); err != nil {
+	m := NewPackageManager(OS{Family: FamilyRHEL}, logutil.NopLogger)
+	if err := m.Remove(context.Background(), nil); err != nil {
 		t.Fatalf("Remove(nil): unexpected error: %v", err)
 	}
 	if got := readArgvLog(t, argvLog); got != "" {
@@ -147,8 +147,8 @@ func TestRemove_EmptyInput(t *testing.T) {
 
 func TestRemove_AllUninstalled(t *testing.T) {
 	argvLog := installFakePkgTools(t)
-	m := NewPackageManager(OS{Family: FamilyRHEL})
-	if err := m.Remove(context.Background(), []string{"notinstalled"}, nil); err != nil {
+	m := NewPackageManager(OS{Family: FamilyRHEL}, logutil.NopLogger)
+	if err := m.Remove(context.Background(), []string{"notinstalled"}); err != nil {
 		t.Fatalf("Remove(all-uninstalled): unexpected error: %v", err)
 	}
 	if got := readArgvLog(t, argvLog); got != "" {
@@ -158,8 +158,8 @@ func TestRemove_AllUninstalled(t *testing.T) {
 
 func TestRemove_InstalledPackage(t *testing.T) {
 	argvLog := installFakePkgTools(t)
-	m := NewPackageManager(OS{Family: FamilyRHEL})
-	if err := m.Remove(context.Background(), []string{"installed-pkg"}, nil); err != nil {
+	m := NewPackageManager(OS{Family: FamilyRHEL}, logutil.NopLogger)
+	if err := m.Remove(context.Background(), []string{"installed-pkg"}); err != nil {
 		t.Fatalf("Remove(installed): unexpected error: %v", err)
 	}
 	want := "remove -y installed-pkg\n"
@@ -170,8 +170,8 @@ func TestRemove_InstalledPackage(t *testing.T) {
 
 func TestRemove_MixedPackages(t *testing.T) {
 	argvLog := installFakePkgTools(t)
-	m := NewPackageManager(OS{Family: FamilyRHEL})
-	if err := m.Remove(context.Background(), []string{"notinstalled", "installed-pkg"}, nil); err != nil {
+	m := NewPackageManager(OS{Family: FamilyRHEL}, logutil.NopLogger)
+	if err := m.Remove(context.Background(), []string{"notinstalled", "installed-pkg"}); err != nil {
 		t.Fatalf("Remove(mixed): unexpected error: %v", err)
 	}
 	want := "remove -y installed-pkg\n"
@@ -182,8 +182,8 @@ func TestRemove_MixedPackages(t *testing.T) {
 
 func TestAddRepo_RHEL(t *testing.T) {
 	installFakePkgTools(t)
-	m := NewPackageManager(OS{Family: FamilyRHEL})
-	if err := m.AddRepo(context.Background(), "myrepo", "https://repo.example.com", logutil.NopLogger); err != nil {
+	m := NewPackageManager(OS{Family: FamilyRHEL}, logutil.NopLogger)
+	if err := m.AddRepo(context.Background(), "myrepo", "https://repo.example.com"); err != nil {
 		t.Fatalf("AddRepo RHEL: unexpected error: %v", err)
 	}
 }
@@ -192,12 +192,12 @@ func TestAddRepo_Debian_Content(t *testing.T) {
 	installFakePkgTools(t)
 	listDir := redirectAptListDir(t)
 
-	m := NewPackageManager(OS{Family: FamilyDebian})
+	m := NewPackageManager(OS{Family: FamilyDebian}, logutil.NopLogger)
 	const (
 		repoName = "myrepo"
 		repoURL  = "https://repo.example.com"
 	)
-	if err := m.AddRepo(context.Background(), repoName, repoURL, logutil.NopLogger); err != nil {
+	if err := m.AddRepo(context.Background(), repoName, repoURL); err != nil {
 		t.Fatalf("AddRepo Debian: unexpected error: %v", err)
 	}
 
