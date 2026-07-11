@@ -304,8 +304,8 @@ func resolveIngressWorkDir(projectRoot, workDir string) string {
 
 // ZeroizeEnv delegates to the underlying executor's ZeroizeEnv, bounding
 // the lifetime of plaintext credential strings. Call via defer after all
-// phases complete. Kept as credential-lifecycle scaffolding (api:c287d5c0);
-// field owner is executor.Executor.ZeroizeEnv.
+// phases complete. Kept as credential-lifecycle scaffolding; field owner
+// is executor.Executor.ZeroizeEnv.
 func (p *Provisioner) ZeroizeEnv() {
 	if p.executor == nil {
 		return

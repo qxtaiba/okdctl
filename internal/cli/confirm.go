@@ -27,7 +27,7 @@ var testStdinReader io.Reader
 // exits. Because inputCh has capacity 1, the goroutine's eventual send never
 // blocks — it simply writes into an abandoned channel and returns. This is
 // a bounded leak scoped to the lifetime of the parent process, not a true
-// resource leak. Recorded as audit-positive baseline (con:39c75e91).
+// resource leak.
 func promptForLine(ctx context.Context, prompt string) (string, error) {
 	r := testStdinReader
 	if r == nil {

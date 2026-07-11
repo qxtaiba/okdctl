@@ -5,9 +5,9 @@ import "sync"
 // PhaseContext provides type-safe, concurrency-safe data sharing between
 // steps within a phase. Today postinstall is the only consumer; the type
 // is scaffolded for symmetric use as resume-checkpoint work lands in other
-// phases (api:dd75bdeb; roadmap state:4f69fc9d, state:262af6e4). The RWMutex is
-// forward-looking: Orchestrator.Run is serial today, but a parallel-step
-// mode would need concurrent Get/Update without a retrofit here.
+// phases. The RWMutex is forward-looking: Orchestrator.Run is serial today,
+// but a parallel-step mode would need concurrent Get/Update without a
+// retrofit here.
 // Must be created via NewPhaseContext; the zero value panics on use.
 type PhaseContext[T any] struct {
 	mu          sync.RWMutex

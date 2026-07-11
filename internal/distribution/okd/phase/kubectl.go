@@ -72,8 +72,8 @@ func (p *BasePhase) OcPollOutput(ctx context.Context, prefix, desc string, timeo
 // OcPollOutputInterval is the test-injection seam used by phase/kubectl_test.go
 // to override the default polling cadence. Production code MUST use OcPollOutput,
 // which fixes interval=0 (immediate first probe). Renaming or deleting this
-// method requires updating phase/kubectl_test.go. Retained as scaffolding
-// (api:9ce5434c); do not delete without a replacement test-injection path.
+// method requires updating phase/kubectl_test.go. Retained as scaffolding;
+// do not delete without a replacement test-injection path.
 func (p *BasePhase) OcPollOutputInterval(ctx context.Context, prefix, desc string, timeout, interval time.Duration, predicate func(stdout string) bool, args ...string) (string, error) {
 	var captured string
 	opts := system.DefaultWaitForOptions()

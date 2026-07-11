@@ -64,8 +64,8 @@ func (p *Phase) CleanupBootstrap(ctx context.Context, cfg *config.Config, opts *
 	// VM as present, so the next plan is a correct retry.
 	statePath := filepath.Join(terraformDir, phase.BootstrapStateSentinelFile)
 	if err := system.AtomicWriteString(statePath, `{"bootstrap_enabled": false}`, 0o600); err != nil {
-		// err:b804b2ec — state-write during cluster lifecycle → ClusterError (exit 4),
-		// not ConfigError; bootstrap-state.auto.tfvars.json is managed by okdctl, not the user.
+		// State-write during cluster lifecycle → ClusterError (exit 4), not
+		// ConfigError; bootstrap-state.auto.tfvars.json is managed by okdctl, not the user.
 		return &errtypes.ClusterError{Msg: "bootstrap: failed to write state override", Err: err}
 	}
 

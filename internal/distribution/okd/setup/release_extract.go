@@ -132,7 +132,7 @@ func (p *Phase) extractReleaseImage(ctx context.Context, ocPath, ref, destDir st
 		// Exit code is the primary signal; stderr-text is a secondary lift.
 		// oc exits 1 for most runtime errors including auth; 125 is the
 		// container-runtime "failed to start" code. Widen this set if upstream
-		// oc changes its exit-code contract (roadmap smell:5013fea6).
+		// oc changes its exit-code contract.
 		execErr := &executor.ExitError{Command: ocPath, ExitCode: result.ExitCode, Stderr: msg}
 		if (result.ExitCode == 1 || result.ExitCode == 125) && isAuthError(msg) {
 			return &errtypes.AuthError{Msg: fmt.Sprintf("release extract: registry auth failed for %s", ref), Err: execErr}

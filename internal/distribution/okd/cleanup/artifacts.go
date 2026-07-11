@@ -68,10 +68,10 @@ func SafeRemoveWithLogger(ctx context.Context, path, description string, logger 
 // workDir itself. Best-effort: failures accumulate into the returned joined
 // error rather than aborting early.
 //
-// state:bdf5a873 audit-positive baseline: all Full-sequence steps that
-// follow this one (webServer, haproxy, dnsmasq, terraform, packages,
-// ignition-certs) reference paths outside workDir, so a partial-strip
-// from a mid-run crash does not break subsequent cleanup steps.
+// All Full-sequence steps that follow this one (webServer, haproxy,
+// dnsmasq, terraform, packages, ignition-certs) reference paths outside
+// workDir, so a partial-strip from a mid-run crash does not break
+// subsequent cleanup steps.
 func WorkDirectory(ctx context.Context, workDir string, logger *slog.Logger) error {
 	if _, err := os.Stat(workDir); os.IsNotExist(err) {
 		return nil

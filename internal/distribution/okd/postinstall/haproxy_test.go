@@ -130,7 +130,7 @@ func TestRemoveHAProxy_ConfigRemoveAllError_DoesNotAbort(t *testing.T) {
 // hostname check, returning *errtypes.ClusterError. With kubeconfig absent,
 // CA-pool retrieval fails and RemoveHAProxy MUST hard-error with
 // *errtypes.ClusterError naming the missing CA — never fall back to
-// InsecureSkipVerify (sec:761e5126).
+// InsecureSkipVerify.
 func TestRemoveHAProxy_KubeVIPHealthcheck(t *testing.T) {
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/healthz" {

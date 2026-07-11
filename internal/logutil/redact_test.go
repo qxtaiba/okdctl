@@ -357,8 +357,8 @@ func (c *credStub) Redacted() any {
 }
 
 // TestRedactHandler_StructFieldsStrippedViaBenignKey covers the failure mode
-// from obs:41a9d4eb: a credential struct passed under a benign key like
-// "creds" must have its secret fields stripped via Redacted().
+// where a credential struct passed under a benign key like "creds" must
+// have its secret fields stripped via Redacted().
 func TestRedactHandler_StructFieldsStrippedViaBenignKey(t *testing.T) {
 	cred := &credStub{Endpoint: "https://host:8006", Password: "hunter2"}
 	var buf bytes.Buffer

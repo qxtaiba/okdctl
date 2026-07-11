@@ -90,6 +90,15 @@ can't say for itself.
    and link an issue: `// TODO(@handle): see owner/repo#123`. Bare `// TODO`
    is rot.
 
+8. **Audit-pipeline or roadmap hash tokens.** Bad:
+   ```go
+   // Scaffolding (api:bb4fb1a3): kept for future fields.
+   // state:48688e63 — all mutations must flow through Executor.
+   ```
+   These IDs resolve to nothing outside the audit tooling that generated
+   them. State the invariant in plain English and drop the token; delete
+   the whole comment only if the token was its sole content.
+
 ### Comment format
 
 - Use `//` line comments, not `/* ... */` blocks, except for build tags or

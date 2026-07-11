@@ -9,9 +9,9 @@ import (
 // ColorTheme selects between the default palette and a high-contrast variant.
 type ColorTheme int
 
-// Scaffolding (api:588ce79e): ThemeDefault and ThemeHighContrast are
-// exported for the future 'okdctl theme' CLI verb that will let users
-// pick a palette at runtime; setTheme is the only current caller.
+// Scaffolding: ThemeDefault and ThemeHighContrast are exported for the
+// future 'okdctl theme' CLI verb that will let users pick a palette at
+// runtime; setTheme is the only current caller.
 const (
 	ThemeDefault ColorTheme = iota
 	ThemeHighContrast
