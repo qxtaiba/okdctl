@@ -121,10 +121,8 @@ func (p *Phase) DeployInfrastructure(ctx context.Context, cfg *config.Config, op
 	terraformDir := filepath.Join(opts.ProjectRoot, "infrastructure", "terraform", "environments", opts.TerraformEnv)
 	tfvarsFile := filepath.Join(terraformDir, "terraform.tfvars")
 
-	if opts.Debug {
-		p.Log.Debug("terraform: directory", "path", terraformDir)
-		p.Log.Debug("terraform: tfvars file", "path", tfvarsFile)
-	}
+	p.Log.Debug("terraform: directory", "path", terraformDir)
+	p.Log.Debug("terraform: tfvars file", "path", tfvarsFile)
 
 	if !system.DirExists(terraformDir) {
 		return &errtypes.ConfigError{Msg: fmt.Sprintf("terraform environment directory not found: %s", terraformDir)}

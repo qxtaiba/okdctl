@@ -240,8 +240,6 @@ type HTTPServerConfig struct {
 type DeploymentConfig struct {
 	TerraformEnv     string `json:"terraform_env,omitempty"`
 	AutoApprove      bool   `json:"auto_approve,omitempty"`
-	Debug            bool   `json:"debug,omitempty"`
-	SkipDepsCheck    bool   `json:"skip_deps_check,omitempty"`
 	BootstrapTimeout int    `json:"bootstrap_timeout,omitempty"`
 	InstallTimeout   int    `json:"install_timeout,omitempty"`
 	BinDir           string `json:"bin_dir,omitempty"`
