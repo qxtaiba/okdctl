@@ -235,27 +235,8 @@ func cleanupSteps(opts *Options, logger *slog.Logger) []distribution.StepDef {
 	terraformStep := distribution.StepDef{
 		ID: StepCleanupTerraform, Name: "cleanup terraform",
 		Desc: "removing generated terraform artifacts", NonFatal: true,
-		ReRunSafe: distribution.ReRunSafeNo,
-		// AlreadyDone returns true only when every artifact is absent. A single
-		// present artifact means a prior run was partial and cleanup must resume.
-		AlreadyDone: func(_ context.Context) (bool, error) {
-			if opts.TerraformEnv == "" {
-				return false, nil
-			}
-			envDir := filepath.Join(opts.ProjectRoot, "infrastructure", "terraform", "environments", opts.TerraformEnv)
-			for _, name := range terraformFilesToRemove {
-				if system.FileExists(filepath.Join(envDir, name)) {
-					return false, nil
-				}
-			}
-			if system.DirExists(filepath.Join(envDir, ".terraform")) {
-				return false, nil
-			}
-			if opts.PostDestroy && system.FileExists(filepath.Join(envDir, "terraform.tfstate")) {
-				return false, nil
-			}
-			return true, nil
-		},
+		ReRunSafe:   distribution.ReRunSafeNo,
+		AlreadyDone: func(_ context.Context) (bool, error) { return terraformCleanupDone(opts) },
 		Exec: func(ctx context.Context) error {
 			if err := Terraform(ctx, opts.ProjectRoot, opts.TerraformEnv, logger); err != nil {
 				return err
