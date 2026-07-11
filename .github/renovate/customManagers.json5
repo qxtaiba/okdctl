@@ -7,7 +7,9 @@
       "managerFilePatterns": [
         "/\\.env$/",
         "/\\.sh$/",
-        "/\\.yaml$/"
+        "/\\.yaml$/",
+        "/\\.yml$/",
+        "/Makefile$/"
       ],
       "matchStrings": [
         "datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\n.+(:\\s|=)(&\\S+\\s)?(?<currentValue>\\S+)"
