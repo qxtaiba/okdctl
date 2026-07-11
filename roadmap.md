@@ -202,7 +202,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `api:4f69fc9d:iface-fragmented-step` — iface fragmented step
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/w2s-steps
+**Status:** in review — PR #923
 **Severity:** suggestion  
 **Evidence:** `internal/distribution/step.go:31-69`  
 **Problem:** Step / Skipper / FatalChecker / StepCallbacks remain four interfaces that ProvisioningStep always composes together. The builtStep impl implements all four.  
@@ -486,7 +486,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sub:ae5b624c:parallel-exec-wrapper` — parallel exec wrapper
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/w2e-executor
+**Status:** in review — PR #926
 **Severity:** suggestion
 **Cluster:** io-handling — seam→`audit-api-design` — related: `sub:97cb8adf:no-cancel-func`
 **Evidence:** `internal/distribution/okd/install/monitor.go:25-44`
@@ -582,7 +582,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `err:48688e63:proxmox-apply-cancel-bare-wrap` — proxmox apply cancel bare wrap
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/w2p-proxmox
+**Status:** in review — PR #921
 **Severity:** suggestion
 **Cluster:** cancellation-identity — seam→`audit-concurrency`
 **Evidence:** `internal/infrastructure/proxmox/proxmox.go:232-242`
@@ -602,7 +602,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `err:f55b9c27:envfile-loadonce-no-sentinel` — envfile loadonce no sentinel
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/w2m-misc
+**Status:** in review — PR #916
 **Severity:** suggestion
 **Cluster:** sentinel-vs-typed
 **Evidence:** `internal/credentials/envfile.go:120-129`
@@ -656,7 +656,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `api:d6b325cb:pkg-types-direction` — pkg types direction
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/w2p-proxmox
+**Status:** in review — PR #921
 **Severity:** minor
 **Cluster:** package-boundary
 **Evidence:** `internal/infrastructure/proxmox/types.go:1-49`
@@ -736,7 +736,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `api:97cb8adf:opt-struct-vs-functional-waitfor` — opt struct vs functional waitfor
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/w3-3-testutil
 **Severity:** suggestion
 **Cluster:** option-consistency
 **Evidence:** `internal/system/exec.go:89-102`
@@ -746,7 +746,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `api:7b2829bb:opt-with-inherited-env-noarg` — opt with inherited env noarg
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/w2e-executor
+**Status:** in review — PR #926
 **Severity:** suggestion
 **Cluster:** option-consistency
 **Evidence:** `internal/executor/executor.go:79-87`
@@ -766,7 +766,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `api:beabab0c:opt-execute-takes-cfg-twice` — opt execute takes cfg twice
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/w3-3-testutil
 **Severity:** suggestion
 **Cluster:** option-consistency
 **Evidence:** `internal/distribution/okd/setup/phase.go:120-135`
@@ -776,7 +776,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `api:4f69fc9d:iface-fragmented-step` — iface fragmented step
 
-**Status:** not started
+**Status:** in review — PR #923
 **Severity:** minor
 **Cluster:** interface-location
 **Evidence:** `internal/distribution/step.go:33-67`
@@ -796,7 +796,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `api:ae5b624c:iface-csr-approver-positive` — iface csr approver positive
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/w2c-cluster
+**Status:** in review — PR #922
 **Severity:** suggestion
 **Cluster:** interface-location
 **Evidence:** `internal/distribution/okd/install/monitor.go:78-83`
@@ -864,7 +864,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `smell:48688e63:bool-should-be-3state` — bool should be 3state
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/w2p-proxmox
+**Status:** in review — PR #921
 **Severity:** suggestion
 **Cluster:** bool-should-be-enum
 **Evidence:** `internal/infrastructure/proxmox/proxmox.go:470-503`
@@ -995,7 +995,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `sub:0934cf1b:no-timeout` — no timeout
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/w2e-executor
+**Status:** in review — PR #926
 **Severity:** suggestion
 **Cluster:** timeout-cancel
 **Evidence:** `internal/platform/packages.go:60-90` + 2 more
@@ -1005,7 +1005,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `sub:4c092fce:ring-truncated-stdout-parse` — ring truncated stdout parse
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/w2e-executor
+**Status:** in review — PR #926
 **Severity:** minor
 **Cluster:** io-handling — related: sub:1e8ffb91:ring-truncated-stdout-parse
 **Evidence:** `internal/infrastructure/terraform/terraform.go:467-484`
@@ -1015,7 +1015,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `sub:19a715fd:ring-truncated-stdout-parse` — ring truncated stdout parse
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/w2e-executor
+**Status:** in review — PR #926
 **Severity:** minor
 **Cluster:** io-handling — seam→audit-security — related: sub:1e8ffb91:ring-truncated-stdout-parse
 **Evidence:** `internal/addon/catalog/secretstore/secretstore.go:276-282`
@@ -1025,7 +1025,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `sub:696d6b0e:ring-truncated-stdout-parse` — ring truncated stdout parse
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/w2e-executor
+**Status:** in review — PR #926
 **Severity:** suggestion
 **Cluster:** io-handling — related: sub:1e8ffb91:ring-truncated-stdout-parse
 **Evidence:** `internal/distribution/okd/phase/iso_cleanup.go:138-159` + 1 more
@@ -1035,7 +1035,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `sub:29293401:ring-truncated-stdout-parse` — ring truncated stdout parse
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/w2e-executor
+**Status:** in review — PR #926
 **Severity:** suggestion
 **Cluster:** io-handling — related: sub:1e8ffb91:ring-truncated-stdout-parse
 **Evidence:** `internal/distribution/okd/setup/haproxy.go:186-200`
@@ -1121,7 +1121,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `err:5e892064:vocab-ad-hoc-synonym` — vocab ad hoc synonym
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/w2m-misc
+**Status:** in review — PR #916
 **Severity:** minor
 **Cluster:** domain-vocabulary
 **Evidence:** `internal/download/checksum.go:74-74` + 1 more
@@ -1155,7 +1155,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `api:7b2829bb:ring-tail-contract` — ring tail contract
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/w2e-executor
+**Status:** deferred (verified 2026-07-11 — already satisfied by commits e293828/48dc087/64196c4; recorded in PR #926)
 **Severity:** minor
 **Cluster:** exported-surface — seam→audit-subprocess — related: sub:1e8ffb91:ring-truncated-stdout-parse
 **Evidence:** `internal/executor/executor.go:25-31` + 2 more
@@ -1165,7 +1165,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `api:d6b325cb:pkg-import-cycle-adj` — pkg import cycle adj
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/w2p-proxmox
+**Status:** in review — PR #921
 **Severity:** minor
 **Cluster:** package-boundary
 **Evidence:** `internal/infrastructure/proxmox/types.go:1-51` + 4 more
@@ -1175,7 +1175,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `api:c287d5c0:pkg-facade-bypassed` — pkg facade bypassed
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/w2s-steps
+**Status:** in review — PR #923
 **Severity:** minor
 **Cluster:** package-boundary
 **Evidence:** `internal/distribution/okd/okd.go:146-154` + 2 more
@@ -1185,7 +1185,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `api:5e892064:ctx-missing-on-io` — ctx missing on io
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/w2m-misc
+**Status:** in review — PR #916
 **Severity:** minor
 **Cluster:** ctx-first
 **Evidence:** `internal/download/checksum.go:21-54` + 2 more
@@ -1195,7 +1195,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `api:d31d1b9d:pkg-facade-bypassed` — pkg facade bypassed
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/w2c-cluster
+**Status:** deferred (verified 2026-07-11 — already resolved by PR #856, no code change needed; recorded in PR #922)
 **Severity:** minor
 **Cluster:** package-boundary — seam→audit-code-smells
 **Evidence:** `internal/cli/status.go:388-404` + 1 more
@@ -1205,7 +1205,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `api:0934cf1b:iface-in-producer` — iface in producer
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/w2e-executor
+**Status:** in review — PR #926
 **Severity:** suggestion
 **Cluster:** interface-location
 **Evidence:** `internal/platform/packages.go:18-56`
@@ -1215,7 +1215,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `api:92553fff:export-no-caller` — export no caller
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/w3-2-helpers
 **Severity:** minor
 **Cluster:** exported-surface
 **Evidence:** `internal/cli/summary.go:77-277`
@@ -1371,7 +1371,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `mod:48688e63:use-slices-containsfunc` — use slices containsfunc
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/w2p-proxmox
+**Status:** in review — PR #921
 **Severity:** suggestion
 **Cluster:** slices-maps
 **Evidence:** `internal/infrastructure/proxmox/proxmox.go:499-503`
@@ -1381,7 +1381,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `mod:e3782ee7:use-errors-is` — use errors is
 
-**Status:** not started
+**Status:** in review — PR #932
 **Severity:** minor
 **Cluster:** errors-and-deprecated-stdlib
 **Evidence:** `internal/system/fs.go:91-210` + 16 more
@@ -1393,7 +1393,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `smell:4ded56d3:retry-scaffold-triplicated` — retry scaffold triplicated
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/w3-2-helpers
 **Severity:** minor
 **Cluster:** dual-impl-same-job
 **Evidence:** `internal/download/retry.go:84-112` + 2 more
@@ -1413,7 +1413,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `smell:0139cb3f:magic-path-literal` — magic path literal
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/w3-2-helpers
 **Severity:** minor
 **Cluster:** magic-strings
 **Evidence:** `internal/distribution/okd/phase/paths.go:130-137` + 16 more
@@ -1423,7 +1423,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `smell:6424733c:pipeline-explicit-errors` — pipeline explicit errors
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/w3-2-helpers
 **Severity:** suggestion
 **Cluster:** arrow-anti
 **Evidence:** `internal/cli/helpers.go:349-385` + 2 more
@@ -1433,7 +1433,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `smell:451be4fa:magic-path-literal` — magic path literal
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/w3-2-helpers
 **Severity:** major
 **Cluster:** magic-strings
 **Evidence:** `internal/system/elevation.go:140-144` + 13 more
@@ -1473,7 +1473,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `smell:90fa855c:coreos-iso-glob-dup` — coreos iso glob dup
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/w3-4-status
 **Severity:** suggestion
 **Cluster:** dual-impl-same-job — re-queued from PR #884's skipped-items section (reverted there by a stale-local-linter false gate)
 **Evidence:** `internal/distribution/okd/setup/coreos.go:100-123`
@@ -1557,7 +1557,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `doc:acb745e5:stepbuilder-doc-self-referential` — stepbuilder doc self referential
 
-**Status:** not started
+**Status:** deferred (superseded 2026-07-11 — PR #923 deletes NewStepBuilder and the inline echo comment entirely)
 **Severity:** suggestion
 **Cluster:** exported-doc — re-queued from PR #884's skipped-items section (reverted there by a stale-local-linter false gate)
 **Evidence:** `internal/distribution/step.go:97-109`
@@ -1567,7 +1567,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `doc:c3dc10bb:flux-gettimeout-doc-orphaned` — flux gettimeout doc orphaned
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/w3-4-status
 **Severity:** suggestion
 **Cluster:** exported-doc — re-queued from PR #884's skipped-items section (reverted there by a stale-local-linter false gate)
 **Evidence:** `internal/addon/catalog/flux/flux.go:565-568`
@@ -1608,7 +1608,7 @@ and ceremony layers.
 
 #### A1 — Collapse the step framework's triple representation
 
-- **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/w2s-steps
+- **Status:** in review — PR #923
 - **Category:** architecture
 - **State:** design needed
 - **Effort:** days
@@ -1624,7 +1624,7 @@ and ceremony layers.
 
 #### A2 — Unify the two parallel kubectl/oc invocation layers
 
-- **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/w2c-cluster
+- **Status:** in review — PR #922
 - **Category:** architecture
 - **State:** design needed
 - **Effort:** days
@@ -1639,7 +1639,7 @@ and ceremony layers.
 
 #### A3 — Fold system.RunCaptured/OutputCaptured into executor
 
-- **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/w2e-executor
+- **Status:** in review — PR #926
 - **Category:** refactor
 - **State:** well-specified
 - **Effort:** days
@@ -1670,7 +1670,7 @@ and ceremony layers.
 
 #### A5 — Strip audit-hash comment tokens from source
 
-- **Status:** not started
+- **Status:** in review — PR #932
 - **Category:** docs hygiene
 - **State:** well-specified
 - **Effort:** hours
@@ -1684,7 +1684,7 @@ and ceremony layers.
 
 #### A6 — Reconcile the 3% comment target with revive `exported`
 
-- **Status:** not started
+- **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/w3-3-testutil
 - **Category:** architecture / policy
 - **State:** design needed
 - **Effort:** days
@@ -1699,7 +1699,7 @@ and ceremony layers.
 
 #### A7 — Delete the two accidental leftovers in the wizard stack
 
-- **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/w2w-wizard
+- **Status:** in review — PR #928
 - **Category:** refactor
 - **State:** well-specified
 - **Effort:** hours
@@ -1713,7 +1713,7 @@ and ceremony layers.
 
 #### A8 — Put a test floor under the wizard's data-driven core
 
-- **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/w2w-wizard
+- **Status:** in review — PR #928
 - **Category:** test honesty
 - **State:** design needed
 - **Effort:** days
@@ -1728,7 +1728,7 @@ and ceremony layers.
 
 #### A9 — Remove or wire the dead Deployment.Debug and SkipDepsCheck knobs
 
-- **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/w2w-wizard
+- **Status:** in review — PR #928
 - **Category:** refactor
 - **State:** well-specified
 - **Effort:** hours
@@ -1742,7 +1742,7 @@ and ceremony layers.
 
 #### A10 — Stop fabricating ProvisionResult VM state in proxmox.Provision
 
-- **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/w2p-proxmox
+- **Status:** in review — PR #921
 - **Category:** domain-model accuracy
 - **State:** design needed
 - **Effort:** hours
@@ -1756,7 +1756,7 @@ and ceremony layers.
 
 #### A11 — Collapse the zero-consumer ValidationScope bitmask
 
-- **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/w2w-wizard
+- **Status:** in review — PR #928
 - **Category:** refactor
 - **State:** well-specified
 - **Effort:** hours
@@ -1770,7 +1770,7 @@ and ceremony layers.
 
 #### A12 — Make ClusterPhase lifecycle states reachable or trim them
 
-- **Status:** not started
+- **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/w3-4-status
 - **Category:** domain-model accuracy
 - **State:** design needed
 - **Effort:** days
@@ -1798,7 +1798,7 @@ and ceremony layers.
 
 #### A14 — Validate the triple-encoded bastion identity in config
 
-- **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/w2w-wizard
+- **Status:** in review — PR #928
 - **Category:** config coherence
 - **State:** design needed
 - **Effort:** hours
@@ -1812,7 +1812,7 @@ and ceremony layers.
 
 #### A15 — Fix the TerraformEnv knob's fictional value space and mislabeled help
 
-- **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/w2w-wizard
+- **Status:** in review — PR #928
 - **Category:** config coherence
 - **State:** well-specified
 - **Effort:** hours
@@ -1855,7 +1855,7 @@ and ceremony layers.
 
 #### A18 — Make deploy honor --config instead of silently ignoring it
 
-- **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/w2w-wizard
+- **Status:** in review — PR #928
 - **Category:** CLI UX / architecture
 - **State:** design needed
 - **Effort:** days
@@ -1870,7 +1870,7 @@ and ceremony layers.
 
 #### A19 — Drop stacked "failed to" prefixes from error-wrap chains
 
-- **Status:** not started
+- **Status:** in review — PR #932
 - **Category:** refactor / failure legibility
 - **State:** well-specified
 - **Effort:** days
@@ -1885,7 +1885,7 @@ and ceremony layers.
 
 #### A20 — Replace deploy dry-run mirror test with a drift guard against real phase steps
 
-- **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/w2s-steps
+- **Status:** in review — PR #923
 - **Category:** test honesty
 - **State:** design needed
 - **Effort:** hours
@@ -1899,7 +1899,7 @@ and ceremony layers.
 
 #### A21 — Delete padded/tautological cli validator tests
 
-- **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/w2m-misc
+- **Status:** in review — PR #916
 - **Category:** test honesty
 - **State:** well-specified
 - **Effort:** hours
@@ -1913,7 +1913,7 @@ and ceremony layers.
 
 #### A22 — Consolidate fake-binary PATH-stub and slog-capture test scaffolding
 
-- **Status:** not started
+- **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/w3-3-testutil
 - **Category:** refactor (test infrastructure)
 - **State:** well-specified
 - **Effort:** days
@@ -1928,7 +1928,7 @@ and ceremony layers.
 
 #### A23 — Drop redundant "successfully" suffixes from completion logs
 
-- **Status:** not started
+- **Status:** in review — PR #932
 - **Category:** log hygiene
 - **State:** well-specified
 - **Effort:** hours
@@ -1942,7 +1942,7 @@ and ceremony layers.
 
 #### A24 — Re-scope internal/system before it becomes a util gravity well
 
-- **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/w2e-executor
+- **Status:** in review — PR #926
 - **Category:** architecture
 - **State:** design needed
 - **Effort:** hours
@@ -1956,7 +1956,7 @@ and ceremony layers.
 
 #### A25 — Put a test floor under infrastructure/proxmox before any go-proxmox change
 
-- **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/w2p-proxmox
+- **Status:** in review — PR #921
 - **Category:** test honesty
 - **State:** design needed
 - **Effort:** days
@@ -1970,7 +1970,7 @@ and ceremony layers.
 
 #### A26 — Replace log-message-equality assertions with attr-based assertions
 
-- **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/w2m-misc
+- **Status:** in review — PR #916
 - **Category:** test honesty
 - **State:** well-specified
 - **Effort:** hours
@@ -1984,7 +1984,7 @@ and ceremony layers.
 
 #### A27 — Hoist the "okd-install" workdir literal into a phase constant
 
-- **Status:** not started
+- **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/w3-2-helpers
 - **Category:** refactor
 - **State:** well-specified
 - **Effort:** hours
