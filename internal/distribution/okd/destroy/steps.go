@@ -140,22 +140,11 @@ func (p *Phase) destroySteps(ctx context.Context, cfg *config.Config, opts *Opti
 					p.Log.Warn("destroy: terraform failed, preserving tfvars / .terraform/ for retry — re-run okdctl destroy to retry")
 					kind = cleanup.WorkOnly
 				}
-				cleanupOpts := &cleanup.Options{
-					BaseOptions: phase.BaseOptions{
-						WorkDir:      opts.WorkDir,
-						ProjectRoot:  opts.ProjectRoot,
-						TerraformEnv: opts.TerraformEnv,
-					},
-					Kind:           kind,
-					HTTPServerRoot: cfg.HTTPServer.Root,
-					HAProxyConfig:  phase.DefaultHAProxyConfigPath,
-					VIP:            vip,
-					ClusterName:    cfg.Cluster.Name,
-					RemovePackages: opts.RemovePackages,
-					BinDir:         config.ResolveBinDir(cfg),
-					PostDestroy:    !t.terraformFailed(),
-				}
-				if err := cleanup.New(phase.WithExecutor(p.Exec), phase.WithLogger(p.Log)).Execute(ctx, cleanupOpts); err != nil {
+				cleanupOpts := cleanup.NewOptions(cfg, opts.ProjectRoot, kind)
+				cleanupOpts.VIP = vip
+				cleanupOpts.RemovePackages = opts.RemovePackages
+				cleanupOpts.PostDestroy = !t.terraformFailed()
+				if err := cleanup.New(phase.WithExecutor(p.Exec), phase.WithLogger(p.Log)).Execute(ctx, &cleanupOpts); err != nil {
 					return &errtypes.ClusterError{Msg: "cleanup failed", Err: err}
 				}
 				return nil

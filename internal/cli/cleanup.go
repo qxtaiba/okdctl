@@ -7,7 +7,6 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/cleanup"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/executor"
@@ -127,26 +126,14 @@ func runCleanup(cmd *cobra.Command, _ []string) error {
 	}
 
 	logger := tui.SimpleLogger()
-	opts := &cleanup.Options{
-		BaseOptions: phase.BaseOptions{
-			WorkDir:      workDir,
-			ProjectRoot:  projectRoot,
-			TerraformEnv: phase.GetTerraformEnv(cfg),
-		},
-		Kind:           kind,
-		HTTPServerRoot: cfg.HTTPServer.Root,
-		HAProxyConfig:  phase.DefaultHAProxyConfigPath,
-		VIP:            vip,
-		ClusterName:    cfg.Cluster.Name,
-		RemovePackages: false,
-		BinDir:         config.ResolveBinDir(cfg),
-	}
+	opts := cleanup.NewOptions(cfg, projectRoot, kind)
+	opts.VIP = vip
 
 	tui.Info("cleaning up cluster artifacts...")
 	startTime := time.Now()
 
 	exec := executor.New(executor.WithWorkDir(projectRoot))
-	if err := cleanup.New(phase.WithExecutor(exec), phase.WithLogger(logger)).Execute(ctx, opts); err != nil {
+	if err := cleanup.New(phase.WithExecutor(exec), phase.WithLogger(logger)).Execute(ctx, &opts); err != nil {
 		tui.Warn("partial cleanup; rerun to retry")
 		return err
 	}
