@@ -1,4 +1,4 @@
-package cli
+package config
 
 import (
 	"bytes"
@@ -7,22 +7,20 @@ import (
 	"testing"
 
 	"sigs.k8s.io/yaml"
-
-	"github.com/qxtaiba/okdctl/internal/config"
 )
 
-func TestRunConfigShow_JSONOutput(t *testing.T) {
-	cfg := &config.Config{
-		Provider: config.ProviderConfig{
-			Type: config.ProviderProxmox,
-			Proxmox: &config.ProxmoxConfig{
+func TestRedactedJSONOutput(t *testing.T) {
+	cfg := &Config{
+		Provider: ProviderConfig{
+			Type: ProviderProxmox,
+			Proxmox: &ProxmoxConfig{
 				Host:    "pve.example",
 				TokenID: "secret-token-id",
 			},
 		},
 	}
 
-	redacted := redactConfig(cfg)
+	redacted := Redacted(cfg)
 
 	var buf bytes.Buffer
 	enc := json.NewEncoder(&buf)
@@ -43,59 +41,59 @@ func TestRunConfigShow_JSONOutput(t *testing.T) {
 	}
 }
 
-func TestRedactConfig(t *testing.T) {
+func TestRedacted(t *testing.T) {
 	t.Run("TokenID masked in output", func(t *testing.T) {
-		cfg := &config.Config{
-			Provider: config.ProviderConfig{
-				Type: config.ProviderProxmox,
-				Proxmox: &config.ProxmoxConfig{
+		cfg := &Config{
+			Provider: ProviderConfig{
+				Type: ProviderProxmox,
+				Proxmox: &ProxmoxConfig{
 					Host:    "pve.example",
 					TokenID: "root@pam!terraform-secret-id",
 				},
 			},
 		}
-		got := redactConfig(cfg)
+		got := Redacted(cfg)
 		if got.Provider.Proxmox.TokenID != "***" {
 			t.Errorf("TokenID = %q; want ***", got.Provider.Proxmox.TokenID)
 		}
 	})
 
 	t.Run("empty TokenID left alone", func(t *testing.T) {
-		cfg := &config.Config{
-			Provider: config.ProviderConfig{
-				Proxmox: &config.ProxmoxConfig{TokenID: ""},
+		cfg := &Config{
+			Provider: ProviderConfig{
+				Proxmox: &ProxmoxConfig{TokenID: ""},
 			},
 		}
-		got := redactConfig(cfg)
+		got := Redacted(cfg)
 		if got.Provider.Proxmox.TokenID != "" {
 			t.Errorf("empty TokenID must not become ***; got %q", got.Provider.Proxmox.TokenID)
 		}
 	})
 
 	t.Run("nil Proxmox provider leaves config unchanged", func(t *testing.T) {
-		cfg := &config.Config{}
-		got := redactConfig(cfg)
+		cfg := &Config{}
+		got := Redacted(cfg)
 		if got.Provider.Proxmox != nil {
 			t.Errorf("nil Proxmox became %+v", got.Provider.Proxmox)
 		}
 	})
 
 	t.Run("original config is not mutated", func(t *testing.T) {
-		cfg := &config.Config{
-			Provider: config.ProviderConfig{
-				Proxmox: &config.ProxmoxConfig{TokenID: "id-live"},
+		cfg := &Config{
+			Provider: ProviderConfig{
+				Proxmox: &ProxmoxConfig{TokenID: "id-live"},
 			},
 		}
-		_ = redactConfig(cfg)
+		_ = Redacted(cfg)
 		if cfg.Provider.Proxmox.TokenID != "id-live" {
-			t.Errorf("redactConfig mutated source; TokenID now %q", cfg.Provider.Proxmox.TokenID)
+			t.Errorf("Redacted mutated source; TokenID now %q", cfg.Provider.Proxmox.TokenID)
 		}
 	})
 
 	t.Run("yaml marshalling omits Username/Password/APIToken", func(t *testing.T) {
-		cfg := &config.Config{
-			Provider: config.ProviderConfig{
-				Proxmox: &config.ProxmoxConfig{
+		cfg := &Config{
+			Provider: ProviderConfig{
+				Proxmox: &ProxmoxConfig{
 					Host:     "pve.example",
 					Username: "root@pam",
 					TokenID:  "tid",
@@ -104,7 +102,7 @@ func TestRedactConfig(t *testing.T) {
 		}
 		cfg.Provider.Proxmox.Password.Set("EXAMPLE-PLAINTEXT-PW")
 		cfg.Provider.Proxmox.APIToken.Set("EXAMPLE-PLAINTEXT-TOKEN")
-		out, err := yaml.Marshal(redactConfig(cfg))
+		out, err := yaml.Marshal(Redacted(cfg))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -120,29 +118,29 @@ func TestRedactConfig(t *testing.T) {
 	})
 
 	t.Run("non-sensitive field passes through unchanged", func(t *testing.T) {
-		cfg := &config.Config{
-			Provider: config.ProviderConfig{
-				Proxmox: &config.ProxmoxConfig{
+		cfg := &Config{
+			Provider: ProviderConfig{
+				Proxmox: &ProxmoxConfig{
 					Host: "pve.example",
 				},
 			},
 		}
-		got := redactConfig(cfg)
+		got := Redacted(cfg)
 		if got.Provider.Proxmox.Host != "pve.example" {
 			t.Errorf("Host = %q; want pve.example", got.Provider.Proxmox.Host)
 		}
 	})
 
 	t.Run("nested struct secret field masked via reflection walker", func(t *testing.T) {
-		cfg := &config.Config{
-			Provider: config.ProviderConfig{
-				Proxmox: &config.ProxmoxConfig{
+		cfg := &Config{
+			Provider: ProviderConfig{
+				Proxmox: &ProxmoxConfig{
 					Host:    "pve.example",
 					TokenID: "nested-token-value",
 				},
 			},
 		}
-		got := redactConfig(cfg)
+		got := Redacted(cfg)
 		if got.Provider.Proxmox.TokenID != "***" {
 			t.Errorf("nested TokenID = %q; want ***", got.Provider.Proxmox.TokenID)
 		}
@@ -154,10 +152,10 @@ func TestRedactConfig(t *testing.T) {
 	t.Run("nil pointer fields do not panic", func(t *testing.T) {
 		defer func() {
 			if r := recover(); r != nil {
-				t.Errorf("redactConfig panicked on nil pointer: %v", r)
+				t.Errorf("Redacted panicked on nil pointer: %v", r)
 			}
 		}()
-		cfg := &config.Config{}
-		_ = redactConfig(cfg)
+		cfg := &Config{}
+		_ = Redacted(cfg)
 	})
 }
