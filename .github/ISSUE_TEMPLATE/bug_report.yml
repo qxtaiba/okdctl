@@ -1,0 +1,86 @@
+---
+name: Bug report
+description: Report a bug in okdctl
+title: "[bug]: "
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug report. The fastest path
+        to a fix is `okdctl debug-bundle` — one command that captures
+        redacted config, recent logs, doctor results, and system metadata
+        into a tarball that is safe to attach here.
+  - type: textarea
+    id: version
+    attributes:
+      label: okdctl version
+      description: Full output of `okdctl version`
+      placeholder: |
+        okdctl v0.1.0
+        Git Commit: abc1234
+        Build Date: 2026-07-01
+        Go Version: go1.26.5
+        Platform:   linux/amd64
+      render: shell
+    validations:
+      required: true
+  - type: input
+    id: proxmox
+    attributes:
+      label: Proxmox VE version
+      placeholder: "8.2.4"
+    validations:
+      required: true
+  - type: input
+    id: topology
+    attributes:
+      label: Deployment topology
+      description: Control-plane and worker counts from your config
+      placeholder: "3 control-plane + 2 workers (or 1 + 0 for single-node)"
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: What happened
+      description: >-
+        What went wrong, and what did you expect instead? Include exact error messages.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: Minimal steps to reproduce. If you can't reproduce, say so.
+      placeholder: |
+        1. Run `okdctl deploy`
+        2. Answer wizard with ...
+        3. Error appears at step X
+    validations:
+      required: true
+  - type: textarea
+    id: doctor
+    attributes:
+      label: okdctl doctor output
+      description: Output of `okdctl doctor` (add `-o json` if you prefer)
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: bundle
+    attributes:
+      label: Debug bundle
+      description: >-
+        Run `okdctl debug-bundle` and drag the generated `okdctl-debug-*.tgz` into this field. Credentials are redacted and the raw terraform state is never included, so the bundle is safe to attach publicly. Add `--skip-must-gather` if the cluster is unreachable or the bundle is too large.
+    validations:
+      required: false
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Pre-flight
+      options:
+        - label: I ran `okdctl doctor` and it did not flag the issue
+          required: true
+        - label: I searched existing issues before filing
+          required: true

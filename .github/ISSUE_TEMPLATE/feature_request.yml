@@ -1,0 +1,64 @@
+---
+name: Feature request
+description: Suggest a new feature or enhancement
+title: "[feature]: "
+labels: ["enhancement", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for proposing an enhancement. Requests with a clear
+        problem statement and a concrete use case land much faster than
+        wish-list items.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem statement
+      description: >-
+        What problem are you trying to solve? Describe the pain point in your own workflow, not the solution you have in mind.
+      placeholder: |
+        When I do X, I have to manually Y and Z. This is error-prone
+        because...
+    validations:
+      required: true
+  - type: textarea
+    id: proposed
+    attributes:
+      label: Proposed solution
+      description: How do you imagine okdctl should address this?
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: >-
+        What workarounds have you tried? What other tools solve this, and why do they fall short for your use case?
+    validations:
+      required: false
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Scope
+      description: Which part of okdctl would this touch?
+      options:
+        - CLI / wizard UX
+        - Phase model (setup/install/postinstall/destroy/cleanup)
+        - Addon system
+        - Configuration schema
+        - Networking / VIPs / DNS
+        - Terraform / infrastructure provisioning
+        - Release / build / distribution
+        - Documentation
+        - Not sure
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Pre-flight
+      options:
+        - label: I searched existing issues before filing
+          required: true
+        - label: This is a new feature, not a bug report
+          required: true

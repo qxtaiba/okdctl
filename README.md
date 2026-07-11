@@ -285,9 +285,11 @@ Additional mitigations:
 
 ## Contributing
 
-PRs welcome. Run `make test && make lint` before submitting. The issue forms
-in `.github/ISSUE_TEMPLATE/` ask for the info I need to reproduce — filling
-them out saves a round trip.
+PRs welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) for dev setup,
+lint/coverage gates, and commit conventions. Run `make test && make lint`
+before submitting. For bugs, use the issue forms: they ask for the
+`okdctl version`, `okdctl doctor`, and `okdctl debug-bundle` output I
+need to reproduce, and filling them out saves a round trip.
 
 ## Release checklist
 

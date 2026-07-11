@@ -21,6 +21,13 @@
   color: "1D76DB"
 - name: area/ci
   color: "bfdadc"
+# Triage (applied by the issue forms in .github/ISSUE_TEMPLATE/)
+- name: bug
+  color: "d73a4a"
+- name: enhancement
+  color: "a2eeef"
+- name: needs-triage
+  color: "e4e669"
 # Process
 - name: do-not-merge
   color: "ee0701"
