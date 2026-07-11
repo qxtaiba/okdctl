@@ -2287,7 +2287,7 @@ one candidate dropped as a duplicate of open A5).
 
 #### B19 — Cut v0.1.0 and exercise the entire release story end-to-end
 
-- **Status:** in progress — prep merged PR #925; tag pending maintainer
+- **Status:** prep done — PR #925; v0.1.0 tag push is the maintainer action
 - **Category:** release engineering
 - **State:** well-specified
 - **Effort:** days
@@ -2423,7 +2423,7 @@ one candidate dropped as a duplicate of open A5).
 
 #### B28 — Build the launch surface: repo metadata, wizard demo capture, launch checklist
 
-- **Status:** in review — demo PR; metadata done
+- **Status:** done — PRs #927 #930 #936; repo metadata set
 - **Category:** oss-readiness / strategy
 - **State:** sketch
 - **Effort:** days
