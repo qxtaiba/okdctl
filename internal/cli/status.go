@@ -3,20 +3,16 @@ package cli
 import (
 	"encoding/json"
 	"fmt"
-	"path/filepath"
-	"slices"
 	"strconv"
 	"text/tabwriter"
 
 	"github.com/spf13/cobra"
 
 	"github.com/qxtaiba/okdctl/internal/addon"
-	"github.com/qxtaiba/okdctl/internal/cluster"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd"
-	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
+	"github.com/qxtaiba/okdctl/internal/distribution/okd/clusterstatus"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/nodetypes"
-	"github.com/qxtaiba/okdctl/internal/system"
 	"github.com/qxtaiba/okdctl/internal/tui"
 )
 
@@ -81,55 +77,6 @@ func init() {
 	rootCmd.AddCommand(describeCmd)
 }
 
-// statusNodeList is a minimal view of `oc get nodes -o json` for role +
-// readiness parsing. Keeps the parse decoupled from corev1 schema evolution.
-type statusNodeList struct {
-	Items []statusNode `json:"items"`
-}
-
-type statusCondition struct {
-	Type   nodetypes.ConditionType   `json:"type"`
-	Status nodetypes.ConditionStatus `json:"status"`
-}
-
-type statusNode struct {
-	Metadata struct {
-		Name   string            `json:"name"`
-		Labels map[string]string `json:"labels"`
-	} `json:"metadata"`
-	Status struct {
-		Conditions []statusCondition `json:"conditions"`
-	} `json:"status"`
-}
-
-// statusClusterOperatorList is a minimal view of `oc get clusteroperators -o json`
-// for degraded-condition parsing. Reuses statusCondition for the conditions slice.
-type statusClusterOperatorList struct {
-	Items []statusClusterOperator `json:"items"`
-}
-
-type statusClusterOperator struct {
-	Status struct {
-		Conditions []statusCondition `json:"conditions"`
-	} `json:"status"`
-}
-
-func (n *statusNode) isReady() bool {
-	return slices.ContainsFunc(n.Status.Conditions, func(c statusCondition) bool {
-		return c.Type == nodetypes.ConditionTypeReady && c.Status == nodetypes.ConditionStatusTrue
-	})
-}
-
-func (n *statusNode) role() nodetypes.NodeRole {
-	if _, ok := n.Metadata.Labels["node-role.kubernetes.io/master"]; ok {
-		return nodetypes.RoleMaster
-	}
-	if _, ok := n.Metadata.Labels["node-role.kubernetes.io/worker"]; ok {
-		return nodetypes.RoleWorker
-	}
-	return nodetypes.RoleUnknown
-}
-
 func runStatus(cmd *cobra.Command, _ []string) error {
 	if err := validateFormat(statusOutput); err != nil {
 		return err
@@ -146,89 +93,12 @@ func runStatus(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
-	cl, err := newStatusClient(projectRoot)
+	cl, err := clusterstatus.NewClient(projectRoot)
 	if err != nil {
 		return err
 	}
 
-	ctx := cmd.Context()
-
-	apiOK := true
-	if _, ocErr := cl.RawGet(ctx, "/healthz"); ocErr != nil {
-		apiOK = false
-	}
-
-	var nodes []okd.NodeStatus
-	if nodesJSON, truncated, ocErr := cl.GetJSON(ctx, "get", "nodes", "-o", "json"); ocErr == nil {
-		if truncated {
-			tui.Warn("oc get nodes output truncated; node list may be incomplete")
-		}
-		var nl statusNodeList
-		if jsonErr := json.Unmarshal([]byte(nodesJSON), &nl); jsonErr != nil {
-			tui.Warn("oc get nodes json parse failed", tui.LF("err", jsonErr))
-		} else {
-			for _, n := range nl.Items {
-				ready := n.isReady()
-				nodePhase := nodetypes.NodeStatusNotReady
-				if ready {
-					nodePhase = nodetypes.NodeStatusReady
-				}
-				nodes = append(nodes, okd.NodeStatus{
-					Name:   n.Metadata.Name,
-					Role:   n.role(),
-					Ready:  ready,
-					Status: nodePhase,
-				})
-			}
-		}
-	}
-
-	degraded := 0
-	if coJSON, truncated, ocErr := cl.GetJSON(ctx, "get", "clusteroperators", "-o", "json"); ocErr == nil {
-		if truncated {
-			tui.Warn("oc get clusteroperators output truncated; degraded count may be incomplete")
-		}
-		var col statusClusterOperatorList
-		if jsonErr := json.Unmarshal([]byte(coJSON), &col); jsonErr != nil {
-			tui.Warn("oc get clusteroperators json parse failed", tui.LF("err", jsonErr))
-		} else {
-			for _, co := range col.Items {
-				if slices.ContainsFunc(co.Status.Conditions, func(c statusCondition) bool {
-					return c.Type == nodetypes.ConditionTypeDegraded && c.Status == nodetypes.ConditionStatusTrue
-				}) {
-					degraded++
-				}
-			}
-		}
-	}
-
-	clusterPhase := okd.PhaseUnknown
-	allReady := len(nodes) > 0 && !slices.ContainsFunc(nodes, func(n okd.NodeStatus) bool { return !n.Ready })
-	switch {
-	case apiOK && allReady && degraded == 0:
-		clusterPhase = okd.PhaseRunning
-	case apiOK && degraded > 0:
-		clusterPhase = okd.PhaseDegraded
-	}
-
-	mgr := newAddonManager(cfg, projectRoot)
-	addonResults, _ := mgr.VerifyAll(ctx)
-	var addonEntries []okd.AddonStatus
-	for _, r := range addonResults {
-		e := okd.AddonStatus{Name: r.Name, Healthy: r.Err == nil}
-		if r.Err != nil {
-			e.Error = r.Err.Error()
-		}
-		addonEntries = append(addonEntries, e)
-	}
-
-	cs := okd.ClusterStatus{
-		Phase:             clusterPhase,
-		APIReachable:      apiOK,
-		Nodes:             nodes,
-		DegradedOperators: degraded,
-		Addons:            addonEntries,
-	}
+	cs := clusterstatus.Collect(cmd.Context(), cl, newAddonManager(cfg, projectRoot))
 
 	if statusOutput == outputJSON {
 		return writeJSON(cmd.OutOrStdout(), cs)
@@ -296,29 +166,28 @@ func runDescribeNode(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	cl, err := newStatusClient(projectRoot)
+	cl, err := clusterstatus.NewClient(projectRoot)
 	if err != nil {
 		return err
 	}
 
 	name := args[0]
-	ctx := cmd.Context()
 
-	raw, _, ocErr := cl.GetJSON(ctx, "get", "node", name, "-o", "json")
+	raw, _, ocErr := cl.GetJSON(cmd.Context(), "get", "node", name, "-o", "json")
 	if ocErr != nil {
 		return &errtypes.ClusterError{Msg: fmt.Sprintf("describe node %s", name), Err: ocErr}
 	}
 
-	var n statusNode
-	if err := json.Unmarshal([]byte(raw), &n); err != nil {
-		return fmt.Errorf("parse node json: %w", err)
+	n, err := clusterstatus.ParseNode([]byte(raw))
+	if err != nil {
+		return err
 	}
 
 	if describeNodeOutput == outputJSON {
 		payload := map[string]any{
-			colName: n.Metadata.Name,
-			"role":  n.role(),
-			"ready": n.isReady(),
+			colName: n.Name,
+			"role":  n.Role,
+			"ready": n.Ready,
 		}
 		enc := json.NewEncoder(cmd.OutOrStdout())
 		enc.SetIndent("", "  ")
@@ -326,10 +195,10 @@ func runDescribeNode(cmd *cobra.Command, args []string) error {
 	}
 
 	tw := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
-	fmt.Fprintf(tw, "NAME\t%s\n", n.Metadata.Name)
-	fmt.Fprintf(tw, "ROLE\t%s\n", n.role())
+	fmt.Fprintf(tw, "NAME\t%s\n", n.Name)
+	fmt.Fprintf(tw, "ROLE\t%s\n", n.Role)
 	ready := string(nodetypes.ConditionStatusFalse)
-	if n.isReady() {
+	if n.Ready {
 		ready = string(nodetypes.ConditionStatusTrue)
 	}
 	fmt.Fprintf(tw, "READY\t%s\n", ready)
@@ -399,18 +268,4 @@ func runDescribeAddon(cmd *cobra.Command, args []string) error {
 		fmt.Fprintln(cmd.OutOrStdout(), tui.DottedKeyValueFull(ln.k, ln.v, tui.DefaultKeyColWidth, 0))
 	}
 	return nil
-}
-
-func newStatusClient(projectRoot string) (*cluster.Client, error) {
-	workDir := filepath.Join(projectRoot, "okd-install")
-	clusterDir := phase.ClusterConfigDir(workDir)
-	kcPath := filepath.Join(clusterDir, "auth", "kubeconfig")
-
-	if !system.FileExists(kcPath) {
-		return nil, &errtypes.ClusterError{
-			Msg: fmt.Sprintf("kubeconfig not found at %s; run `okdctl deploy` first", kcPath),
-		}
-	}
-
-	return cluster.New(cluster.WithCLI("oc"), cluster.WithKubeconfig(kcPath)), nil
 }
