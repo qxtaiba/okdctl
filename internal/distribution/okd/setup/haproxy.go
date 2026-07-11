@@ -184,10 +184,13 @@ func (p *Phase) VerifyHAProxyPorts(ctx context.Context) error {
 		{"443", "HTTPS ingress"},
 	}
 
-	result, err := p.Exec.Run(ctx, "ss", "-tlnp")
+	result, err := p.Exec.RunOutput(ctx, 0, "ss", "-tlnp")
 	if err != nil {
 		p.Log.Warn("haproxy: failed to check listening ports", "err", err)
 		return nil
+	}
+	if result.Truncated {
+		p.Log.Warn("haproxy: ss output truncated; port checks may be unreliable")
 	}
 
 	for _, portInfo := range ports {
