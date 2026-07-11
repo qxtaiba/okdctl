@@ -104,14 +104,15 @@ esac
 # JSON key reordering or whitespace variation in the API response.
 if [ -z "$VERSION" ]; then
     info "resolving latest release..."
-    # Inject a bearer token when available to lift the GitHub API rate limit
-    # from 60 to 5 000 req/hr per IP — relevant on shared CI runners.
-    _gh_auth_header=()
+    # Bearer token travels via curl --config on stdin, not -H argv, so it
+    # never shows up in ps / /proc/PID/cmdline on shared hosts. Lifts the
+    # GitHub API rate limit from 60 to 5 000 req/hr per IP when set.
+    _gh_config_line=""
     if [ -n "${GITHUB_TOKEN:-}" ]; then
-        _gh_auth_header=(-H "Authorization: Bearer $GITHUB_TOKEN")
+        _gh_config_line=$(printf 'header = "Authorization: Bearer %s"' "$GITHUB_TOKEN")
     fi
-    VERSION=$(curl_safe -sSfL --max-time 30 \
-        "${_gh_auth_header[@]}" \
+    VERSION=$(printf '%s\n' "$_gh_config_line" |
+        curl_safe -sSfL --max-time 30 --config - \
         "https://api.github.com/repos/$REPO/releases/latest" |
         sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' |
         head -1)
