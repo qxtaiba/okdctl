@@ -31,10 +31,10 @@ import (
 )
 
 // cfgFile is package-scope state managed by cobra PersistentFlags. It is
-// populated once by the root command's --config flag and read by subcommand
-// RunE handlers (deploy, destroy, update-ingress) via direct package
-// reference. This is the standard cobra pattern; threading it through
-// function parameters would fight the framework.
+// populated once by the root command's --config flag and read directly by
+// config-consuming subcommand RunE handlers. This is the standard cobra
+// pattern; threading it through function parameters would fight the
+// framework.
 var cfgFile string
 
 var (
