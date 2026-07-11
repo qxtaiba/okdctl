@@ -123,4 +123,3 @@ func TestSafeRemoveWithLogger(t *testing.T) {
 		}
 	})
 }
-
