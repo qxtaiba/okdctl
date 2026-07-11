@@ -156,13 +156,9 @@ func (t *cleanupTracker) failedNames() []string {
 	return t.names
 }
 
-func execute(ctx context.Context, opts *Options, logger *slog.Logger) error {
-	return executeWithRecorder(ctx, opts, logger, nil)
-}
-
-// executeWithRecorder is execute plus metrics-recorder wiring, split out so
-// Phase.Execute can forward p.Recorder (matching setup/install/postinstall)
-// without every test constructing a Phase.
+// executeWithRecorder runs the cleanup step sequence with optional metrics
+// wiring; Phase.Execute forwards p.Recorder (matching setup/install/
+// postinstall), tests pass nil.
 func executeWithRecorder(ctx context.Context, opts *Options, logger *slog.Logger, rec distribution.MetricsRecorder) error {
 	if opts.Kind == "" {
 		return &errtypes.ConfigError{Msg: "cleanup kind not set"}
