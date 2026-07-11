@@ -95,11 +95,7 @@ func (f *Flux) Install(ctx context.Context, env *addon.Environment) error {
 		return &errtypes.ConfigError{Msg: "helm is required to install Flux"}
 	}
 
-	decoded, err := f.DecodeSettings(env.AddonConfig.Settings)
-	if err != nil {
-		return &errtypes.ConfigError{Msg: "flux: invalid settings", Err: err}
-	}
-	fs := decoded.(Settings)
+	fs := f.decodeSettings(env.AddonConfig.Settings)
 
 	if err := addon.EnsureNamespace(ctx, env, "flux-system"); err != nil {
 		return err
@@ -293,11 +289,7 @@ func (f *Flux) DefaultSettings() map[string]string {
 // /proc/<pid>/cmdline, so SSH-key auth via a deploy-key Secret is the only
 // supported credential channel.
 func (f *Flux) ValidateSettings(settings map[string]string) []string {
-	decoded, err := f.DecodeSettings(settings)
-	if err != nil {
-		return []string{err.Error()}
-	}
-	fs := decoded.(Settings)
+	fs := f.decodeSettings(settings)
 	var errs []string
 	if fs.Repository == "" {
 		errs = append(errs, "repository is required (set addons.flux.settings.repository)")
