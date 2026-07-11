@@ -2044,7 +2044,7 @@ one candidate dropped as a duplicate of open A5).
 
 #### B3 — Unify haproxy/service teardown and the backup contract across phases
 
-- **Status:** not started
+- **Status:** in progress — worktree: wave1
 - **Category:** correctness / refactor
 - **State:** well-specified
 - **Effort:** hours
@@ -2062,7 +2062,7 @@ one candidate dropped as a duplicate of open A5).
 
 #### B4 — Split netutil into pure IP math and host-network mutation
 
-- **Status:** not started
+- **Status:** in progress — worktree: wave1
 - **Category:** refactor
 - **State:** well-specified
 - **Effort:** hours
@@ -2077,7 +2077,7 @@ one candidate dropped as a duplicate of open A5).
 
 #### B5 — Cut the download→tui edge by injecting progress enablement
 
-- **Status:** not started
+- **Status:** in progress — worktree: wave1
 - **Category:** refactor
 - **State:** well-specified
 - **Effort:** hours
@@ -2091,7 +2091,7 @@ one candidate dropped as a duplicate of open A5).
 
 #### B6 — Wire or delete the dead phase Options knobs and terraform.WithVarFile
 
-- **Status:** not started
+- **Status:** in progress — worktree: wave1
 - **Category:** cleanup
 - **State:** well-specified
 - **Effort:** hours
@@ -2107,7 +2107,7 @@ one candidate dropped as a duplicate of open A5).
 
 #### B7 — Reconcile the wizard KeyMap with the keys actually handled
 
-- **Status:** not started
+- **Status:** in progress — worktree: wave1
 - **Category:** cli-ux / cleanup
 - **State:** well-specified
 - **Effort:** hours
@@ -2211,7 +2211,7 @@ one candidate dropped as a duplicate of open A5).
 
 #### B14 — Resolve the tool-version vs OKD-release-version confusion
 
-- **Status:** not started
+- **Status:** in progress — worktree: wave1
 - **Category:** domain-model accuracy
 - **State:** well-specified
 - **Effort:** hours
@@ -2241,7 +2241,7 @@ one candidate dropped as a duplicate of open A5).
 
 #### B16 — Restore community templates the docs claim exist, and add CONTRIBUTING.md
 
-- **Status:** not started
+- **Status:** in progress — worktree: wave1
 - **Category:** oss-readiness / docs
 - **State:** design needed
 - **Effort:** hours
@@ -2332,7 +2332,7 @@ one candidate dropped as a duplicate of open A5).
 
 #### B22 — Fix the coverage gate: wrong metric, delete-tests bypass, decorative floors
 
-- **Status:** not started
+- **Status:** in progress — worktree: wave1
 - **Category:** ci / test-infrastructure
 - **State:** well-specified
 - **Effort:** hours
@@ -2394,7 +2394,7 @@ one candidate dropped as a duplicate of open A5).
 
 #### B26 — Delete the return-step,step two-value ceremony in wizard step constructors
 
-- **Status:** not started
+- **Status:** in progress — worktree: wave1
 - **Category:** refactor / ai-slop
 - **State:** well-specified
 - **Effort:** hours
