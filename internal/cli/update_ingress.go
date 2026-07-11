@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/deploy"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/dns"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/postinstall"
 	"github.com/qxtaiba/okdctl/internal/render"
@@ -145,7 +146,7 @@ func runUpdateIngress(cmd *cobra.Command, _ []string) error {
 	}
 	defer lock.Release()
 
-	p := createOKDProvisionerWithOpts(nil, projectRoot)
+	p := deploy.NewProvisioner(nil, projectRoot)
 
 	tui.Info("detecting ingress strategy and loadbalancer ips...")
 	startTime := time.Now()

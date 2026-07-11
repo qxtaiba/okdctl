@@ -1,4 +1,4 @@
-package cli
+package deploy
 
 import (
 	"bytes"
@@ -13,7 +13,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/postinstall"
 )
 
-type fakeDeployProvisioner struct {
+type fakeProvisioner struct {
 	guardOpts       []okd.PrepareOpts
 	prepareCalls    int
 	installCalls    int
@@ -21,27 +21,27 @@ type fakeDeployProvisioner struct {
 	resumeConfCalls int
 }
 
-func (f *fakeDeployProvisioner) GuardPrepare(_ *config.Config, opts okd.PrepareOpts) error {
+func (f *fakeProvisioner) GuardPrepare(_ *config.Config, opts okd.PrepareOpts) error {
 	f.guardOpts = append(f.guardOpts, opts)
 	return nil
 }
 
-func (f *fakeDeployProvisioner) Prepare(context.Context, *config.Config, okd.PrepareOpts) ([]distribution.StepResult, error) {
+func (f *fakeProvisioner) Prepare(context.Context, *config.Config, okd.PrepareOpts) ([]distribution.StepResult, error) {
 	f.prepareCalls++
 	return nil, nil
 }
 
-func (f *fakeDeployProvisioner) Install(context.Context, *config.Config, *install.Options) ([]distribution.StepResult, error) {
+func (f *fakeProvisioner) Install(context.Context, *config.Config, *install.Options) ([]distribution.StepResult, error) {
 	f.installCalls++
 	return nil, nil
 }
 
-func (f *fakeDeployProvisioner) Configure(context.Context, *config.Config) (*postinstall.Result, []distribution.StepResult, error) {
+func (f *fakeProvisioner) Configure(context.Context, *config.Config) (*postinstall.Result, []distribution.StepResult, error) {
 	f.configureCalls++
 	return &postinstall.Result{}, nil, nil
 }
 
-func (f *fakeDeployProvisioner) ResumeConfigure(context.Context, *config.Config) (*postinstall.Result, []distribution.StepResult, error) {
+func (f *fakeProvisioner) ResumeConfigure(context.Context, *config.Config) (*postinstall.Result, []distribution.StepResult, error) {
 	f.resumeConfCalls++
 	return &postinstall.Result{}, nil, nil
 }
@@ -91,7 +91,7 @@ func TestRunDeployPhases_ResumeRouting(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			dir := t.TempDir()
-			markerPath := filepath.Join(dir, deployStateFile)
+			markerPath := filepath.Join(dir, StateFileName)
 			if tc.markerPhase != "" {
 				if err := writeDeployState(markerPath, tc.markerPhase, "old-run", "prod"); err != nil {
 					t.Fatalf("writeDeployState: %v", err)
@@ -100,7 +100,7 @@ func TestRunDeployPhases_ResumeRouting(t *testing.T) {
 			cfg := config.DefaultConfig()
 			cfg.Cluster.Name = "prod"
 
-			f := &fakeDeployProvisioner{}
+			f := &fakeProvisioner{}
 			var buf bytes.Buffer
 			if _, _, err := runDeployPhases(context.Background(), f, cfg, dir, markerPath, "new-run", false, &buf); err != nil {
 				t.Fatalf("runDeployPhases: %v", err)

@@ -1,4 +1,4 @@
-package cli
+package deploy
 
 import (
 	"encoding/json"
@@ -199,12 +199,12 @@ func TestAnnounceDeployState_ClusterMismatch(t *testing.T) {
 		t.Fatalf("writeDeployState: %v", err)
 	}
 	// must not panic and must return without printing the install advisory
-	announceDeployState(path, "cluster-b")
+	AnnounceState(path, "cluster-b")
 }
 
 func TestAnnounceDeployState_NoMarker(t *testing.T) {
 	dir := t.TempDir()
-	announceDeployState(filepath.Join(dir, "deploy.state"), "any-cluster")
+	AnnounceState(filepath.Join(dir, "deploy.state"), "any-cluster")
 }
 
 func TestAnnounceDeployState_PreparePhase(t *testing.T) {
@@ -213,7 +213,7 @@ func TestAnnounceDeployState_PreparePhase(t *testing.T) {
 	if err := writeDeployState(path, phasePrepare, "run-prep", "prod"); err != nil {
 		t.Fatalf("writeDeployState: %v", err)
 	}
-	announceDeployState(path, "prod")
+	AnnounceState(path, "prod")
 }
 
 func TestAnnounceDeployState_InstallPhase(t *testing.T) {
@@ -222,5 +222,5 @@ func TestAnnounceDeployState_InstallPhase(t *testing.T) {
 	if err := writeDeployState(path, phaseInstall, "run-inst", "prod"); err != nil {
 		t.Fatalf("writeDeployState: %v", err)
 	}
-	announceDeployState(path, "prod")
+	AnnounceState(path, "prod")
 }

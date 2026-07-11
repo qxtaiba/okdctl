@@ -1,4 +1,7 @@
-package cli
+// Package deploy runs the okdctl deploy engine: phase orchestration with
+// resume routing keyed on the on-disk deploy-state marker, the live-cluster
+// prepare guard, and the optional Prometheus metrics endpoint.
+package deploy
 
 import (
 	"encoding/json"
@@ -164,11 +167,11 @@ func warnIfStaleResume(marker *deployState) {
 	}
 }
 
-// announceDeployState emits a partial-deploy diagnostic on destroy entry.
+// AnnounceState emits a partial-deploy diagnostic on destroy entry.
 // No-op when no marker exists. clusterName is cfg.Cluster.Name from the
 // caller; a non-empty ClusterName mismatch means the marker belongs to a
 // different cluster and is ignored.
-func announceDeployState(path, clusterName string) {
+func AnnounceState(path, clusterName string) {
 	info, statErr := os.Stat(path)
 	ds, err := readDeployState(path)
 	if err != nil {

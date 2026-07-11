@@ -13,6 +13,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/deploy"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
@@ -272,10 +273,10 @@ func runDestroy(cmd *cobra.Command, _ []string) error {
 		}
 	}()
 
-	p := createOKDProvisionerWithOpts(creds, projectRoot)
+	p := deploy.NewProvisioner(creds, projectRoot)
 	defer p.ZeroizeEnv()
 
-	announceDeployState(filepath.Join(workDir, deployStateFile), cfg.Cluster.Name)
+	deploy.AnnounceState(filepath.Join(workDir, deploy.StateFileName), cfg.Cluster.Name)
 
 	tui.Info("destroying cluster...")
 	startTime := time.Now()
