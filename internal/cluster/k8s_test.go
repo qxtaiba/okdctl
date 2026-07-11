@@ -1,6 +1,7 @@
 package cluster
 
 import (
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
@@ -9,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/qxtaiba/okdctl/internal/errtypes"
+	"github.com/qxtaiba/okdctl/internal/executor"
 )
 
 func TestValidateKubeconfigEnv(t *testing.T) {
@@ -143,4 +145,34 @@ func TestValidateKubeconfigEnv(t *testing.T) {
 			t.Errorf("expected *errtypes.AuthError; got %T: %v", err, err)
 		}
 	})
+}
+
+func TestWithExecutor_SharesInjectedExecutorEnv(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fake-oc script relies on POSIX sh")
+	}
+	dir := t.TempDir()
+	script := `#!/bin/sh
+echo "KUBECONFIG=$KUBECONFIG"
+exit 0
+`
+	path := filepath.Join(dir, "oc")
+	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	exec := executor.New()
+	c := New(WithCLI("oc"), WithExecutor(exec))
+	// AppendEnv runs after Client construction — Run must still observe it
+	// because the Client shares the executor pointer, not a private copy.
+	exec.AppendEnv("KUBECONFIG=/tmp/shared-kubeconfig")
+
+	result, err := c.Run(context.Background(), "get", "pods")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(result.Stdout, "KUBECONFIG=/tmp/shared-kubeconfig") {
+		t.Errorf("stdout = %q; want KUBECONFIG env visible via the shared executor", result.Stdout)
+	}
 }

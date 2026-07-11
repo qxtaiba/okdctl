@@ -23,21 +23,19 @@ var invokingUserHomeDirFn = system.InvokingUserHomeDir
 func (p *Phase) ValidateClusterAccess(ctx context.Context) error {
 	p.Log.Info("cluster: validating access with oc whoami")
 
-	result, err := p.Exec.RunChecked(ctx, "oc", "whoami")
+	user, err := p.OcOutput(ctx, "whoami")
 	if err != nil {
 		return &errtypes.ClusterError{Msg: "failed to run oc whoami", Err: err}
 	}
-
-	user := strings.TrimSpace(result.Stdout)
 	if user == "" {
 		return &errtypes.ClusterError{Msg: "cluster authentication returned empty user"}
 	}
 
 	p.Log.Info("cluster: authenticated", "user", user)
 
-	result, err = p.Exec.Run(ctx, "oc", "version")
-	if err == nil && result.ExitCode == 0 {
-		for line := range strings.Lines(result.Stdout) {
+	versionOut, err := p.OcOutput(ctx, "version")
+	if err == nil {
+		for line := range strings.Lines(versionOut) {
 			if strings.HasPrefix(line, "Server Version:") {
 				p.Log.Info("cluster: server version", "version", strings.ToLower(strings.TrimSpace(line)))
 				break

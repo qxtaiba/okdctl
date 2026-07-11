@@ -62,8 +62,8 @@ func (p *Phase) RemoveHAProxy(ctx context.Context, vip, clusterDir string) error
 		// dnsmasq is confirmed to route api.* to the VIP rather than localhost.
 		p.Log.Info("haproxy: pre-flight — verifying api reachable via hostname before teardown")
 		if waitErr := system.WaitForWithTimeout(ctx, "haproxy", "api-via-hostname", func(context.Context) bool {
-			r, _ := p.Exec.Run(ctx, "oc", "get", "--raw", "/healthz")
-			return r.ExitCode == 0 && strings.TrimSpace(r.Stdout) == healthzOKBody
+			out, err := p.OcOutput(ctx, "get", "--raw", "/healthz")
+			return err == nil && out == healthzOKBody
 		}, haproxyVIPTimeout, p.Log); waitErr != nil {
 			return &errtypes.ClusterError{Msg: "api not reachable via hostname; aborting haproxy removal", Err: waitErr}
 		}

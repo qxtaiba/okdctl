@@ -6,9 +6,18 @@ import (
 	"strings"
 	"time"
 
+	"github.com/qxtaiba/okdctl/internal/cluster"
 	"github.com/qxtaiba/okdctl/internal/executor"
 	"github.com/qxtaiba/okdctl/internal/system"
 )
+
+// oc returns a cluster.Client wrapping the phase's own executor so every
+// Oc* method below funnels its actual invocation and transport-error
+// formatting through cluster.Client instead of a second hand-rolled copy.
+// See install.Phase.SetupKubeconfig for how KUBECONFIG reaches p.Exec.
+func (p *BasePhase) oc() *cluster.Client {
+	return cluster.New(cluster.WithExecutor(p.Exec), cluster.WithCLI("oc"), cluster.WithLogger(p.Log))
+}
 
 // OcResourceExists returns true if `oc get <args...>` produces non-empty
 // output, wrapping transport errors with errPrefix. --no-headers and
@@ -16,7 +25,7 @@ import (
 func (p *BasePhase) OcResourceExists(ctx context.Context, errPrefix string, args ...string) (bool, error) {
 	full := append([]string{"get"}, args...)
 	full = append(full, "--no-headers", "--ignore-not-found")
-	result, err := p.Exec.Run(ctx, "oc", full...)
+	result, err := p.oc().Run(ctx, full...)
 	if err != nil {
 		return false, fmt.Errorf("%s: %w", errPrefix, err)
 	}
@@ -28,14 +37,14 @@ func (p *BasePhase) OcResourceExists(ctx context.Context, errPrefix string, args
 // truncated — callers that machine-parse large JSON payloads must use this
 // instead of OcOutput to guarantee an untruncated stream.
 func (p *BasePhase) OcOutputFull(ctx context.Context, args ...string) (string, error) {
-	result, err := p.Exec.RunOutputChecked(ctx, 0, "oc", args...)
+	stdout, truncated, err := p.oc().GetJSON(ctx, args...)
 	if err != nil {
 		return "", err
 	}
-	if result.Truncated {
-		return "", fmt.Errorf("oc output truncated after %d bytes; payload too large for machine parsing", len(result.Stdout))
+	if truncated {
+		return "", fmt.Errorf("oc output truncated after %d bytes; payload too large for machine parsing", len(stdout))
 	}
-	return strings.TrimSpace(result.Stdout), nil
+	return stdout, nil
 }
 
 // OcOutput runs `oc <args...>` once and returns trimmed stdout. A non-zero
@@ -43,7 +52,7 @@ func (p *BasePhase) OcOutputFull(ctx context.Context, args ...string) (string, e
 // inspect ExitCode) unless ctx is cancelled, in which case the ctx error
 // propagates so SIGINT maps to exit 130.
 func (p *BasePhase) OcOutput(ctx context.Context, args ...string) (string, error) {
-	result, err := p.Exec.Run(ctx, "oc", args...)
+	result, err := p.oc().Run(ctx, args...)
 	if err != nil {
 		return "", err
 	}
@@ -74,8 +83,10 @@ func (p *BasePhase) OcPollOutputInterval(ctx context.Context, prefix, desc strin
 	}
 	opts.Logger = p.Log
 	err := system.WaitFor(ctx, prefix, desc, func(context.Context) bool {
-		result, _ := p.Exec.Run(ctx, "oc", args...)
-		if result.ExitCode != 0 {
+		// Client.Run returns a nil Result on transport failure, unlike
+		// executor.Run's always-non-nil contract.
+		result, runErr := p.oc().Run(ctx, args...)
+		if runErr != nil || result.ExitCode != 0 {
 			return false
 		}
 		value := strings.TrimSpace(result.Stdout)

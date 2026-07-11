@@ -1,6 +1,9 @@
 // Package cluster provides a thin Kubernetes client wrapper around kubectl/oc
-// for OKD cluster operations such as CSR approval, node readiness checks,
-// and resource queries during install and postinstall phases.
+// for OKD cluster operations such as CSR approval, node readiness checks, and
+// resource queries, shared by phase code (via BasePhase.Oc*, which delegates
+// internally) and non-phase CLI commands. Consumers define their own narrow
+// interfaces to test against (see install.csrApprover); Client returns
+// concrete types, never interfaces.
 package cluster
 
 import (
@@ -44,6 +47,17 @@ func WithKubeconfig(path string) Option {
 // logutil.NopLogger.
 func WithLogger(l *slog.Logger) Option {
 	return func(c *Client) { c.logger = logutil.OrNop(l) }
+}
+
+// WithExecutor injects an already-configured executor instead of letting
+// New build a private one. The caller owns env wiring on this executor —
+// WithKubeconfig and WithEnvFallback's KUBECONFIG injection only apply to a
+// Client-owned executor and are silently skipped when this option is used.
+// BasePhase.oc() uses this to share the phase's own executor (whose env
+// already carries KUBECONFIG via Exec.AppendEnv) instead of duplicating the
+// oc/kubectl invocation and error-formatting logic in phase code.
+func WithExecutor(exec *executor.Executor) Option {
+	return func(c *Client) { c.exec = exec }
 }
 
 // WithEnvFallback reads the process environment and PATH at application time:
@@ -135,7 +149,13 @@ func subcommand(args []string) string {
 	return args[0]
 }
 
-func (c *Client) run(ctx context.Context, args ...string) (*executor.Result, error) {
+// Run executes `<cli> <args...>` once via the shared executor and returns
+// the raw *executor.Result; callers inspect Result.ExitCode for command
+// failures. A non-nil error means a transport failure (binary missing, ctx
+// cancellation), wrapped with the CLI name and subcommand only — never the
+// full arg list — so a caller passing e.g. --from-literal=token=... never
+// leaks it into a wrapped error or log.
+func (c *Client) Run(ctx context.Context, args ...string) (*executor.Result, error) {
 	result, err := c.exec.Run(ctx, c.CLI, args...)
 	if err != nil {
 		return nil, fmt.Errorf("%s %s failed: %w", c.CLI, subcommand(args), err)
@@ -152,7 +172,7 @@ func (c *Client) runOutput(ctx context.Context, args ...string) (*executor.Resul
 }
 
 func (c *Client) runCheck(ctx context.Context, args ...string) error {
-	result, err := c.run(ctx, args...)
+	result, err := c.Run(ctx, args...)
 	if err != nil {
 		return err
 	}
