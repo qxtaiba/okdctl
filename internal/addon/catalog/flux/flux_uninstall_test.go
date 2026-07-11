@@ -37,11 +37,10 @@ func (h *captureHandler) warnCount() int {
 	return n
 }
 
-// installFakeTools writes fake helm and oc binaries to a TempDir, prepends
-// the dir to PATH, and returns the dir. Each binary appends its argv as a
-// colon-separated line to the file at $ARGV_LOG when set, then exits with
-// $EXIT_CODE (default 0).
-func installFakeTools(t *testing.T) string {
+// installFakeTools writes fake helm and oc binaries to a TempDir and prepends
+// the dir to PATH. Each binary appends its argv as a colon-separated line to
+// the file at $ARGV_LOG when set, then exits with $EXIT_CODE (default 0).
+func installFakeTools(t *testing.T) {
 	t.Helper()
 	if runtime.GOOS == "windows" {
 		t.Skip("fake binaries rely on POSIX sh")
@@ -55,7 +54,6 @@ func installFakeTools(t *testing.T) string {
 		}
 	}
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
-	return dir
 }
 
 func makeEnv(t *testing.T, argvLog, exitCode string, log *slog.Logger) *addon.Environment {
@@ -123,10 +121,10 @@ func TestUninstall_FailuresDoNotAbort(t *testing.T) {
 		t.Skip("PATH override semantics differ on windows")
 	}
 	// Empty PATH so helm/oc cannot be resolved — each Run returns a real
-	// exec lookup error, which is the only failure mode warnOnErr observes
-	// (Uninstall uses Exec.Run, which folds non-zero exit into Result and
-	// returns nil error). This exercises the warnOnErr branch 3 times and
-	// proves the sequence does not abort early.
+	// exec lookup error. warnOnErr also fires on non-zero exit codes (Run
+	// folds those into Result with a nil error); the exit-code branch is
+	// covered separately below. This exercises the warnOnErr branch 3
+	// times and proves the sequence does not abort early.
 	t.Setenv("PATH", t.TempDir())
 	h := &captureHandler{}
 	env := &addon.Environment{
@@ -142,5 +140,26 @@ func TestUninstall_FailuresDoNotAbort(t *testing.T) {
 
 	if got := h.warnCount(); got != 3 {
 		t.Errorf("warnCount = %d; want 3 (one per failing command)", got)
+	}
+}
+
+// TestUninstall_NonZeroExitWarns locks the exit-code half of warnOnErr:
+// Run returns a nil error for a non-zero helm/oc exit, so Uninstall must
+// inspect Result.ExitCode to notice the failure at all.
+func TestUninstall_NonZeroExitWarns(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("PATH override semantics differ on windows")
+	}
+	argvLog := filepath.Join(t.TempDir(), "argv.log")
+	installFakeTools(t)
+	h := &captureHandler{}
+	env := makeEnv(t, argvLog, "1", slog.New(h))
+
+	f := &Flux{}
+	if err := f.Uninstall(context.Background(), env); err != nil {
+		t.Fatalf("Uninstall must return nil on non-zero tool exits; got %v", err)
+	}
+	if got := h.warnCount(); got != 3 {
+		t.Errorf("warnCount = %d; want 3 (every delete exits non-zero)", got)
 	}
 }

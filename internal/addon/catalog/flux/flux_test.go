@@ -16,7 +16,7 @@ func TestBuildInstanceValues(t *testing.T) {
 		Branch:     "feature",
 		Path:       "k8s/prod",
 	}
-	b, err := buildInstanceValues(fs)
+	b, err := buildInstanceValues(&fs)
 	if err != nil {
 		t.Fatalf("buildInstanceValues: %v", err)
 	}
