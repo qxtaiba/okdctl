@@ -321,7 +321,7 @@ func (p *Phase) DownloadCoreOSISO(ctx context.Context, info *CoreOSInfo, destPat
 			if err != nil {
 				p.Log.Warn("coreos: existing iso checksum mismatch, re-downloading")
 			} else {
-				p.Log.Info("coreos: iso checksum verified successfully")
+				p.Log.Info("coreos: iso checksum verified")
 				return nil
 			}
 		} else {

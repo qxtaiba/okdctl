@@ -153,7 +153,7 @@ func (f *Firewall) Configure(ctx context.Context, ports []Port, permanent bool) 
 		}
 	}
 
-	f.logger.Info("firewall: configured successfully")
+	f.logger.Info("firewall: configured")
 
 	return nil
 }

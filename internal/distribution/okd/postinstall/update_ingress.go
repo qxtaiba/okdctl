@@ -349,7 +349,7 @@ func (p *Phase) handleHostNetworkConversion(
 		}
 		names[ic.Name] = true
 		convertedCount++
-		p.Log.Info("update-ingress: converted successfully", "name", ic.Name)
+		p.Log.Info("update-ingress: converted", "name", ic.Name)
 	}
 
 	return convertedCount, names, nil

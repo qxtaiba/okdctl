@@ -87,7 +87,7 @@ func printSummary(opts *Options, t *cleanupTracker, logger *slog.Logger) {
 			"subsystems", strings.Join(names, ", "))
 	} else if totalRemaining == 0 {
 		if opts.Kind == Full {
-			logger.Info("cleanup: completed successfully")
+			logger.Info("cleanup: completed")
 			logger.Info("cleanup: system ready for fresh deployment")
 		} else {
 			logger.Info("cleanup: completed for scope", "scope", opts.Kind)

@@ -47,7 +47,7 @@ func (p *Phase) installSteps(cfg *config.Config, opts *Options) []distribution.S
 				if err := p.DeployInfrastructure(ctx, cfg, opts); err != nil {
 					return err
 				}
-				p.Log.Info("terraform: proxmox infrastructure deployed successfully")
+				p.Log.Info("terraform: proxmox infrastructure deployed")
 				return nil
 			},
 		},

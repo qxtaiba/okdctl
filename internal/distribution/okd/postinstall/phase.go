@@ -102,7 +102,7 @@ func (p *Phase) Execute(ctx context.Context, cfg *config.Config, opts *Options) 
 		result.NodeCount = state.ClusterHealth.ReadyNodes
 	}
 
-	p.Log.Info("postinstall: cluster configuration completed successfully")
+	p.Log.Info("postinstall: cluster configuration completed")
 
 	return result, orchestrator.Results(), nil
 }
