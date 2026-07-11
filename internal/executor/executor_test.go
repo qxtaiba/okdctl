@@ -510,6 +510,43 @@ func TestResult_TruncatedOnRingPath(t *testing.T) {
 	})
 }
 
+func TestStartStreamed(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("needs POSIX sh")
+	}
+
+	t.Run("streams output and reports success via done channel", func(t *testing.T) {
+		t.Parallel()
+		var out strings.Builder
+		e := New(WithInheritedEnv(), WithStdout(&out), WithStderr(&strings.Builder{}))
+
+		done, kill, err := e.StartStreamed(context.Background(), "sh", "-c", "printf 'hello\n'")
+		if err != nil {
+			t.Fatalf("StartStreamed: %v", err)
+		}
+		defer kill()
+
+		if waitErr := <-done; waitErr != nil {
+			t.Fatalf("done channel error: %v", waitErr)
+		}
+		if !strings.Contains(out.String(), "hello") {
+			t.Errorf("streamed stdout missing output; got %q", out.String())
+		}
+	})
+
+	t.Run("start failure returns error and nil done channel", func(t *testing.T) {
+		t.Parallel()
+		e := New(WithInheritedEnv())
+		done, _, err := e.StartStreamed(context.Background(), "okdctl-definitely-not-a-real-binary")
+		if err == nil {
+			t.Fatal("expected error for missing binary")
+		}
+		if done != nil {
+			t.Errorf("done channel = %v; want nil on start failure", done)
+		}
+	})
+}
+
 func TestRunOutput_DrainsBeyondPipeBuffer(t *testing.T) {
 	t.Parallel()
 	e := New(WithInheritedEnv())
