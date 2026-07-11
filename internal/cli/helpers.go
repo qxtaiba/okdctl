@@ -102,13 +102,25 @@ func resolveProjectRoot() (string, error) {
 	return resolved, nil
 }
 
-func resolveProjectRootOrDie() (string, error) {
+// resolveWorkspaceRoot resolves the current directory as the workspace root
+// without requiring project markers. Deploy uses it directly: deploy is the
+// command that creates the markers, so gating it on their presence would be
+// circular.
+func resolveWorkspaceRoot() (string, error) {
 	root, err := resolveProjectRoot()
 	if err != nil {
 		return "", fmt.Errorf("failed to resolve project root: %w", err)
 	}
 	if root == "" {
 		return "", fmt.Errorf("project root resolved to empty path")
+	}
+	return root, nil
+}
+
+func resolveProjectRootOrDie() (string, error) {
+	root, err := resolveWorkspaceRoot()
+	if err != nil {
+		return "", err
 	}
 	// Project marker check: okdctl.yaml and okdctl.env are the primary
 	// markers. terraform.tfstate is a secondary recovery hint — it can
@@ -119,10 +131,10 @@ func resolveProjectRootOrDie() (string, error) {
 	if !hasProjectMarker(root) {
 		return "", &errtypes.ConfigError{
 			Msg: fmt.Sprintf(
-				"no project marker found in %s "+
+				"no cluster in %s "+
 					"(checked okdctl.yaml, okdctl.env, "+
 					"infrastructure/terraform/environments/*/terraform.tfstate); "+
-					"run 'okdctl deploy' to initialise",
+					"run 'okdctl deploy' first",
 				root,
 			),
 			Err: errtypes.ErrConfigMissing,

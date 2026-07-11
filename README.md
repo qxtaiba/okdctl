@@ -101,10 +101,20 @@ okdctl version          print version, git commit, build date
 Full command reference: [`docs/cli/okdctl.md`](docs/cli/okdctl.md).
 Exit codes and shell-script idioms: [`docs/cli/exit-codes.md`](docs/cli/exit-codes.md).
 
-First run of `deploy` launches the wizard and writes `okdctl.yaml` plus
-an `okdctl.env` file next to the config (named after the config file) for
-Proxmox credentials. Later runs reuse the existing config.
-`--config other.yaml` manages multiple clusters from one machine.
+Run `deploy` from any directory — an empty one works. One working
+directory is one cluster: okdctl writes everything it needs next to where
+you run it. First run of `deploy` materializes the Terraform sources
+embedded in the binary into `infrastructure/terraform/` (write-once: files
+already present, e.g. from a source checkout or hand-edited HCL, are never
+overwritten), launches the wizard, and writes `okdctl.yaml` plus an
+`okdctl.env` file next to the config (named after the config file) for
+Proxmox credentials. The deploy itself adds an `okd-install/` work
+directory and Terraform state under
+`infrastructure/terraform/environments/`. Later runs reuse the existing
+config, and commands that operate on an existing cluster (`status`,
+`destroy`, `kubeconfig`, `debug-bundle`) must run from the same directory.
+To manage multiple clusters, use one directory per cluster
+(`--config other.yaml` still selects an alternate config within one).
 
 A deploy runs three phases:
 
@@ -185,7 +195,7 @@ output goes in bug reports.
 
 ```sh
 okdctl destroy                          # tear down the cluster
-rm -rf ~/okd-install okdctl.yaml okdctl.env   # residual state
+rm -rf okd-install infrastructure okdctl.yaml okdctl.env   # residual state in the deploy directory
 sudo rm /usr/local/bin/okdctl           # or: apt remove okdctl / dnf remove okdctl
 ```
 

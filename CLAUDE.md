@@ -140,6 +140,13 @@ write the comment — then it carries real information.
   Per-command boolean tail flags (`--keep-haproxy`, `--keep-isos`,
   `--skip-terraform`, `--skip-must-gather`, `--dry-run`, etc.) are
   intentionally long-form only; do not add a shorthand to new ones.
+- Terraform sources ship inside the binary: `infrastructure/embed.go`
+  go:embed-s the proxmox-okd module + production environment (lock file
+  included) and `internal/deploy.MaterializeTerraform` materializes them
+  write-once into the workspace on `okdctl deploy` — existing files are
+  never overwritten. New files under `infrastructure/terraform/{modules,
+  environments}` must be added to the embed list;
+  `TestEmbeddedTerraformMatchesDisk` fails otherwise.
 - `internal/runlock` serialises concurrent okdctl invocations via flock, which
   is advisory on NFSv3 and bypassed entirely across hosts; never rely on it as
   a cross-host correctness guarantee. Terraform's own state lock is the
