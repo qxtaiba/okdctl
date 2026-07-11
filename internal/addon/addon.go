@@ -47,6 +47,11 @@ type Environment struct {
 // ConfigurableAddon is an Addon that exposes tunable settings with defaults,
 // per-key validation, and typed decoding. DecodeSettings converts the flat
 // settings map into a typed struct; the concrete type is defined per addon.
+// No call site consumes DecodeSettings polymorphically today — it stays on
+// the interface for symmetry with DefaultSettings/ValidateSettings. Each
+// addon also keeps an unexported, typed decodeSettings that Install and
+// ValidateSettings call directly, so the any round-trip and the resulting
+// unchecked type assertion are confined to this exported wrapper.
 type ConfigurableAddon interface {
 	Addon
 

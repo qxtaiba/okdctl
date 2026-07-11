@@ -33,10 +33,12 @@ type BitwardenSettings struct {
 	SDKServerURL   string
 }
 
-// DecodeSettings converts the flat settings map into a Settings value,
-// populating only the sub-struct for the active provider. An error is returned
-// only when the onepassword vault CSV is malformed.
-func (s *SecretStore) DecodeSettings(settings map[string]string) (any, error) {
+// decodeSettings converts the flat settings map into a Settings value,
+// populating only the sub-struct for the active provider. An error is
+// returned only when the onepassword vault CSV is malformed. Install and
+// ValidateSettings call this directly instead of the exported
+// DecodeSettings so neither needs an unchecked type assertion on any.
+func (s *SecretStore) decodeSettings(settings map[string]string) (Settings, error) {
 	prov := ProviderKind(settings[SettingProvider])
 	if prov == "" {
 		prov = ProviderOnepassword
@@ -49,7 +51,7 @@ func (s *SecretStore) DecodeSettings(settings map[string]string) (any, error) {
 	case ProviderOnepassword:
 		vaults, err := parseOnepasswordVaults(settings[SettingOnepasswordVaults])
 		if err != nil {
-			return nil, err
+			return Settings{}, err
 		}
 		ts.OnePassword = &OnePasswordSettings{
 			ConnectHost: settingOrDefault(settings, SettingOnepasswordConnectHost, defaultOPConnectHost),
@@ -71,4 +73,10 @@ func (s *SecretStore) DecodeSettings(settings map[string]string) (any, error) {
 		}
 	}
 	return ts, nil
+}
+
+// DecodeSettings satisfies addon.ConfigurableAddon; see decodeSettings for
+// the typed path used internally by this package.
+func (s *SecretStore) DecodeSettings(settings map[string]string) (any, error) {
+	return s.decodeSettings(settings)
 }

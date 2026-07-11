@@ -67,11 +67,10 @@ func (s *SecretStore) Info() addon.Metadata {
 // configured provider. When provider prerequisites (e.g., credential files)
 // are absent it logs setup instructions and returns nil.
 func (s *SecretStore) Install(ctx context.Context, env *addon.Environment) error {
-	decoded, err := s.DecodeSettings(env.AddonConfig.Settings)
+	ts, err := s.decodeSettings(env.AddonConfig.Settings)
 	if err != nil {
 		return &errtypes.ConfigError{Msg: "secretstore: invalid settings", Err: err}
 	}
-	ts := decoded.(Settings)
 	p, _ := resolveProvider(env.AddonConfig.Settings)
 	if p == nil {
 		return &errtypes.ConfigError{Msg: fmt.Sprintf("secretstore: unknown provider %q", ts.Provider)}
@@ -215,11 +214,10 @@ func (s *SecretStore) DefaultSettings() map[string]string {
 // ValidateSettings dispatches to the selected provider's validator and
 // returns human-readable error strings for any invalid settings.
 func (s *SecretStore) ValidateSettings(settings map[string]string) []string {
-	decoded, err := s.DecodeSettings(settings)
+	ts, err := s.decodeSettings(settings)
 	if err != nil {
 		return []string{err.Error()}
 	}
-	ts := decoded.(Settings)
 	p, kind := resolveProvider(settings)
 	if p == nil {
 		return []string{fmt.Sprintf("provider %q is not supported; valid values: onepassword, vault, bitwarden", kind)}
