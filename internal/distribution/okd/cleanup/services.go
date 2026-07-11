@@ -2,6 +2,7 @@ package cleanup
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -81,7 +82,7 @@ func WebServer(ctx context.Context, httpServerRoot string, logger *slog.Logger) 
 	logger = logutil.OrNop(logger)
 	ignitionDir := filepath.Join(httpServerRoot, "ignition")
 
-	if _, err := os.Stat(ignitionDir); os.IsNotExist(err) {
+	if _, err := os.Stat(ignitionDir); errors.Is(err, os.ErrNotExist) {
 		return nil
 	}
 

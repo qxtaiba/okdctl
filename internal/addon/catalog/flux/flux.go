@@ -6,6 +6,7 @@ package flux
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -399,7 +400,7 @@ func (f *Flux) createDeployKeySecret(ctx context.Context, env *addon.Environment
 	deployKeyFile := filepath.Join(homeDir, ".ssh", "flux-deploy-key")
 
 	switch info, err := os.Lstat(deployKeyFile); {
-	case err != nil && os.IsNotExist(err):
+	case err != nil && errors.Is(err, os.ErrNotExist):
 		return fmt.Errorf("deploy key not found at %s - generate with: ssh-keygen -t ed25519 -f ~/.ssh/flux-deploy-key -N ''", deployKeyFile)
 	case err != nil:
 		return fmt.Errorf("stat deploy key: %w", err)
@@ -418,7 +419,7 @@ func (f *Flux) createDeployKeySecret(ctx context.Context, env *addon.Environment
 	var publicKey []byte
 	if b, err := readKeyFile(publicKeyFile); err == nil {
 		publicKey = b
-	} else if !os.IsNotExist(err) {
+	} else if !errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("read deploy key public half: %w", err)
 	}
 

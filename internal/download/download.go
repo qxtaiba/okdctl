@@ -5,6 +5,7 @@ package download
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -89,7 +90,7 @@ func canSkipDownload(ctx context.Context, cfg *dlConfig) bool {
 	}
 
 	cfg.logger.Warn("download: checksum mismatch, re-downloading", "file", filename)
-	if err := os.Remove(cfg.outputPath); err != nil && !os.IsNotExist(err) {
+	if err := os.Remove(cfg.outputPath); err != nil && !errors.Is(err, os.ErrNotExist) {
 		cfg.logger.Warn("download: failed to remove mismatched file", "file", filename, "err", err)
 	}
 	return false

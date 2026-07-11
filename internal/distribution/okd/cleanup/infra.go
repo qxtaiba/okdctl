@@ -2,6 +2,7 @@ package cleanup
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -29,7 +30,7 @@ func Terraform(ctx context.Context, projectRoot, terraformEnv string, logger *sl
 
 	entries, err := os.ReadDir(terraformBase)
 	if err != nil {
-		if os.IsNotExist(err) {
+		if errors.Is(err, os.ErrNotExist) {
 			logger.Info("cleanup: terraform environments directory does not exist")
 			return nil
 		}
@@ -80,7 +81,7 @@ func terraformCleanupDone(opts *Options) (bool, error) {
 }
 
 func cleanupTerraformEnv(ctx context.Context, envDir, envName string, logger *slog.Logger) error {
-	if _, err := os.Stat(envDir); os.IsNotExist(err) {
+	if _, err := os.Stat(envDir); errors.Is(err, os.ErrNotExist) {
 		return nil
 	}
 

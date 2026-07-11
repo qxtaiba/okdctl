@@ -62,7 +62,7 @@ func WriteEnvFile(path string, creds *ProxmoxCredentials) error {
 				Err: os.ErrPermission,
 			}
 		}
-	} else if !os.IsNotExist(err) {
+	} else if !errors.Is(err, os.ErrNotExist) {
 		return &errtypes.AuthError{
 			Msg: fmt.Sprintf("failed to lstat env file path %q before write", path),
 			Err: err,
@@ -148,7 +148,7 @@ func loadEnvFileOnce(path string) error {
 	// processes may already have been able to read.
 	fi, err := os.Stat(path)
 	if err != nil {
-		if os.IsNotExist(err) {
+		if errors.Is(err, os.ErrNotExist) {
 			return nil // missing .env is not an error
 		}
 		return &errtypes.ConfigError{Msg: fmt.Sprintf("failed to stat env file %s", path), Err: err}

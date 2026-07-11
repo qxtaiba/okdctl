@@ -3,6 +3,7 @@ package system
 import (
 	"crypto/rand"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -88,7 +89,7 @@ func openTempFile(dir, pattern string, mode os.FileMode) (*os.File, error) {
 		}
 		name := filepath.Join(dir, prefix+strconv.FormatUint(uint64(binary.BigEndian.Uint32(seed[:])), 10)+suffix)
 		f, err := os.OpenFile(name, os.O_RDWR|os.O_CREATE|os.O_EXCL, mode)
-		if os.IsExist(err) {
+		if errors.Is(err, os.ErrExist) {
 			continue
 		}
 		return f, err
@@ -139,7 +140,7 @@ func CopyFileMode(src, dst string, mode os.FileMode) error {
 				Err: os.ErrPermission,
 			}
 		}
-	} else if !os.IsNotExist(err) {
+	} else if !errors.Is(err, os.ErrNotExist) {
 		return &errtypes.AuthError{
 			Msg: fmt.Sprintf("failed to lstat write target %q before write", dst),
 			Err: err,
@@ -187,7 +188,7 @@ func CopyFileMode(src, dst string, mode os.FileMode) error {
 
 // SafeRemove removes path recursively; nil if path does not exist.
 func SafeRemove(path string) error {
-	if _, err := os.Stat(path); os.IsNotExist(err) {
+	if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
 		return nil
 	}
 	return os.RemoveAll(path)
@@ -223,7 +224,7 @@ func AtomicWrite(path string, data []byte, perm os.FileMode) error {
 				Err: os.ErrPermission,
 			}
 		}
-	} else if !os.IsNotExist(err) {
+	} else if !errors.Is(err, os.ErrNotExist) {
 		return &errtypes.AuthError{
 			Msg: fmt.Sprintf("failed to lstat write target %q before write", path),
 			Err: err,
