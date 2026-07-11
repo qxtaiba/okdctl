@@ -1471,6 +1471,16 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 **Fix:** switch phase.NodeRole(m[1]) { case phase.RoleBootstrap: ... case phase.RoleMaster: ... case phase.RoleWorker: } — or run the capture through phase.ParseNodeRole, which exists as the canonical deserializer (its doc note "currently no caller" resolves itself).
 **Effort:** hours
 
+##### `smell:90fa855c:coreos-iso-glob-dup` — coreos iso glob dup
+
+**Status:** not started
+**Severity:** suggestion
+**Cluster:** dual-impl-same-job — re-queued from PR #884's skipped-items section (reverted there by a stale-local-linter false gate)
+**Evidence:** `internal/distribution/okd/setup/coreos.go:100-123`
+**Problem:** The pattern-glob → slices.Max → logISOFound scan loop is duplicated byte-for-byte for isoDir (L100-110) and workISODir (L113-123); any change to the pattern list or newest-selection rule must be made twice or the two search paths silently diverge.
+**Fix:** Extract a findNewestISO(dir string, patterns []string) (string, bool) helper and call it for both directories.
+**Effort:** hours
+
 #### audit-dependencies
 
 ##### `dep:b803fcb7:version-floor-unjustified` — version floor unjustified
@@ -1543,6 +1553,26 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 **Evidence:** `internal/cli/root.go:33-38`
 **Problem:** The cfgFile doc comment says it is "read by subcommand RunE handlers (deploy, destroy, update-ingress)". deploy never reads cfgFile (it uses deployOutputFile), while six undocumented commands do read it (addon, cleanup, config, debug-bundle, doctor, status). The stale reader list misleads at exactly the spot where the deploy/--config drift (ux:073d24ed) lives.
 **Fix:** Drop the parenthetical command list (it rots on every new subcommand) or replace with "read by every config-consuming subcommand except deploy, which manages its own file via --output-file".
+**Effort:** hours
+
+##### `doc:acb745e5:stepbuilder-doc-self-referential` — stepbuilder doc self referential
+
+**Status:** not started
+**Severity:** suggestion
+**Cluster:** exported-doc — re-queued from PR #884's skipped-items section (reverted there by a stale-local-linter false gate)
+**Evidence:** `internal/distribution/step.go:97-109`
+**Problem:** NewStepBuilder's doc states the fatal-by-default contract and the constructor body restates it inline (`fatal: true, // default to fatal`) — a narrating echo of the doc one screen up, against the comment policy's echo/self-reference rules.
+**Fix:** Keep the doc sentence; delete the inline `// default to fatal` echo.
+**Effort:** hours
+
+##### `doc:c3dc10bb:flux-gettimeout-doc-orphaned` — flux gettimeout doc orphaned
+
+**Status:** not started
+**Severity:** suggestion
+**Cluster:** exported-doc — re-queued from PR #884's skipped-items section (reverted there by a stale-local-linter false gate)
+**Evidence:** `internal/addon/catalog/flux/flux.go:565-568`
+**Problem:** getTimeout's doc comment ("reads a timeout setting (in seconds)…") is stranded directly above readKeyFile's own doc — the function it describes sits at L581 with no doc, so readKeyFile carries two doc blocks and godoc attributes the wrong one.
+**Fix:** Move the two-line doc onto getTimeout at L581, or delete it if the signature is judged to carry the signal.
 **Effort:** hours
 
 #### audit-tests
