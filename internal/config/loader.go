@@ -42,18 +42,40 @@ func (l *Loader) LoadFile(path string) (*Config, error) {
 		return nil, &errtypes.ConfigError{Msg: fmt.Sprintf("error reading config file %s", path), Err: err}
 	}
 
+	if err := checkSchemaVersion(data, path); err != nil {
+		return nil, err
+	}
+
 	cfg := DefaultConfig()
 	if err := yaml.UnmarshalStrict(data, cfg); err != nil {
 		return nil, &errtypes.ConfigError{Msg: "error parsing config", Err: err}
 	}
-	if cfg.SchemaVersion == "" {
-		return nil, &errtypes.ConfigError{Msg: fmt.Sprintf("config file %s missing required schemaVersion (expected %q)", path, SchemaVersionV1)}
-	}
-	if cfg.SchemaVersion != SchemaVersionV1 {
-		return nil, &errtypes.ConfigError{Msg: fmt.Sprintf("config file %s has unsupported schemaVersion %q (expected %q)", path, cfg.SchemaVersion, SchemaVersionV1)}
-	}
 	deriveStaticNetmask(cfg)
 	return cfg, nil
+}
+
+// checkSchemaVersion gates on schemaVersion before the strict unmarshal so a
+// stale config fails with a migration message naming the renamed keys, not
+// an opaque unknown-field error.
+func checkSchemaVersion(data []byte, path string) error {
+	var probe struct {
+		SchemaVersion string `json:"schemaVersion"`
+	}
+	if err := yaml.Unmarshal(data, &probe); err != nil {
+		return &errtypes.ConfigError{Msg: "error parsing config", Err: err}
+	}
+	switch probe.SchemaVersion {
+	case SchemaVersionCurrent:
+		return nil
+	case "":
+		return &errtypes.ConfigError{Msg: fmt.Sprintf("config file %s missing required schemaVersion (expected %q)", path, SchemaVersionCurrent)}
+	case SchemaVersionV1:
+		return &errtypes.ConfigError{Msg: fmt.Sprintf(
+			"config file %s uses schemaVersion %q; current is %q — rename provider.proxmox.master_nodes to control_plane_nodes, disks.master_data_size_gb to control_plane_data_size_gb, topology.*.memory to memory_mb, topology.*.disk to disk_gb, then set schemaVersion: %q",
+			path, SchemaVersionV1, SchemaVersionCurrent, SchemaVersionCurrent)}
+	default:
+		return &errtypes.ConfigError{Msg: fmt.Sprintf("config file %s has unsupported schemaVersion %q (expected %q)", path, probe.SchemaVersion, SchemaVersionCurrent)}
+	}
 }
 
 // deriveStaticNetmask overwrites StaticIP.Netmask with the dotted form of
@@ -66,10 +88,10 @@ func deriveStaticNetmask(cfg *Config) {
 }
 
 // Save writes cfg to path with 0o600 perms via AtomicWrite. SchemaVersion is
-// set to SchemaVersionV1 when empty.
+// set to SchemaVersionCurrent when empty.
 func (l *Loader) Save(cfg *Config, path string) error {
 	if cfg.SchemaVersion == "" {
-		cfg.SchemaVersion = SchemaVersionV1
+		cfg.SchemaVersion = SchemaVersionCurrent
 	}
 	data, err := yaml.Marshal(cfg)
 	if err != nil {

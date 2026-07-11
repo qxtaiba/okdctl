@@ -14,7 +14,7 @@ const (
 // DefaultConfig returns a Config with defaults for a typical homelab environment.
 func DefaultConfig() *Config {
 	return &Config{
-		SchemaVersion: SchemaVersionV1,
+		SchemaVersion: SchemaVersionCurrent,
 		Cluster: ClusterConfig{
 			Name:   "mycluster",
 			Domain: "k8s.local",
@@ -38,22 +38,22 @@ func DefaultConfig() *Config {
 		},
 		Topology: TopologyConfig{
 			ControlPlane: NodeConfig{
-				Count:  3,
-				CPU:    4,
-				Memory: 12288,
-				Disk:   50,
+				Count:    3,
+				CPU:      4,
+				MemoryMB: 12288,
+				DiskGB:   50,
 			},
 			Workers: NodeConfig{
-				Count:  3,
-				CPU:    8,
-				Memory: 20480,
-				Disk:   50,
+				Count:    3,
+				CPU:      8,
+				MemoryMB: 20480,
+				DiskGB:   50,
 			},
 			Bootstrap: NodeConfig{
-				Count:  1,
-				CPU:    4,
-				Memory: 8192,
-				Disk:   50,
+				Count:    1,
+				CPU:      4,
+				MemoryMB: 8192,
+				DiskGB:   50,
 			},
 			VMIDBase: DefaultVMIDBase,
 		},
@@ -107,8 +107,8 @@ func DefaultConfig() *Config {
 			InstallTimeout:   7200,
 		},
 		Disks: DisksConfig{
-			WorkerDataSizeGB: 500,
-			MasterDataSizeGB: 0,
+			WorkerDataSizeGB:       500,
+			ControlPlaneDataSizeGB: 0,
 		},
 	}
 }
@@ -118,8 +118,8 @@ func MinimalConfig() *Config {
 	cfg := DefaultConfig()
 	cfg.Cluster.Name = "minimal"
 	cfg.Topology = TopologyConfig{
-		ControlPlane: NodeConfig{Count: 1, CPU: 4, Memory: 8192, Disk: 50},
-		Workers:      NodeConfig{Count: 0, CPU: 0, Memory: 0, Disk: 0},
+		ControlPlane: NodeConfig{Count: 1, CPU: 4, MemoryMB: 8192, DiskGB: 50},
+		Workers:      NodeConfig{Count: 0, CPU: 0, MemoryMB: 0, DiskGB: 0},
 	}
 	cfg.Addons = map[string]AddonConfig{
 		defaultFluxAddon: {Enabled: false},

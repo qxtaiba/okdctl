@@ -98,10 +98,10 @@ func checkNodeResources(node NodeConfig, minCPU, minMemory, minDisk int, cpuFiel
 	if node.CPU < minCPU {
 		result.AddError(cpuField, fmt.Sprintf("must have at least %d vCPUs for %s", minCPU, label))
 	}
-	if node.Memory < minMemory {
+	if node.MemoryMB < minMemory {
 		result.AddError(memField, fmt.Sprintf("must have at least %d MB of memory for %s", minMemory, label))
 	}
-	if node.Disk < minDisk {
+	if node.DiskGB < minDisk {
 		result.AddError(diskField, fmt.Sprintf("must have at least %d GB of disk space for %s", minDisk, label))
 	}
 }
@@ -270,6 +270,26 @@ func validateResources(cfg *Config, result *ValidationResult) {
 func validateProvider(cfg *Config, result *ValidationResult) {
 	if cfg.Provider.Type == ProviderProxmox {
 		validateProxmoxConfig(cfg.Provider.Proxmox, result)
+		validatePlacementCounts(cfg, result)
+	}
+}
+
+// validatePlacementCounts rejects placement lists longer than the group's
+// topology count: terraform consumes entries by index and silently ignores
+// the excess, so a longer list is an operator error. Shorter lists are valid
+// — unassigned VMs fall back to provider.proxmox.node.
+func validatePlacementCounts(cfg *Config, result *ValidationResult) {
+	proxmox := cfg.Provider.Proxmox
+	if proxmox == nil {
+		return
+	}
+	if n := len(proxmox.ControlPlaneNodes); n > cfg.Topology.ControlPlane.Count {
+		result.AddError(FieldProxmoxControlPlaneNodes,
+			fmt.Sprintf("has %d entries but %s is %d", n, FieldTopologyControlPlaneCount, cfg.Topology.ControlPlane.Count))
+	}
+	if n := len(proxmox.WorkerNodes); n > cfg.Topology.Workers.Count {
+		result.AddError(FieldProxmoxWorkerNodes,
+			fmt.Sprintf("has %d entries but %s is %d", n, FieldTopologyWorkersCount, cfg.Topology.Workers.Count))
 	}
 }
 
@@ -328,14 +348,14 @@ func validateProxmoxConfig(proxmox *ProxmoxConfig, result *ValidationResult) {
 		result.AddError(FieldProxmoxCPUType, "must contain only alphanumeric characters, hyphens, underscores, plus, dot, comma, or equals")
 	}
 
-	for i, node := range proxmox.MasterNodes {
+	for i, node := range proxmox.ControlPlaneNodes {
 		if node != "" && !proxmoxNamePattern.MatchString(node) {
-			result.AddError(fmt.Sprintf("proxmox.master_nodes[%d]", i), "must be a valid Proxmox node name")
+			result.AddError(fmt.Sprintf("%s[%d]", FieldProxmoxControlPlaneNodes, i), "must be a valid Proxmox node name")
 		}
 	}
 	for i, node := range proxmox.WorkerNodes {
 		if node != "" && !proxmoxNamePattern.MatchString(node) {
-			result.AddError(fmt.Sprintf("proxmox.worker_nodes[%d]", i), "must be a valid Proxmox node name")
+			result.AddError(fmt.Sprintf("%s[%d]", FieldProxmoxWorkerNodes, i), "must be a valid Proxmox node name")
 		}
 	}
 

@@ -36,19 +36,19 @@ func buildNodeNames(clusterName string, role nodetypes.NodeRole, count int) []st
 }
 
 type diskSizes struct {
-	cpOS, workerOS, workerData, masterData int
+	cpOS, workerOS, workerData, cpData int
 }
 
 func getDiskSizes(cfg *config.Config) diskSizes {
 	d := diskSizes{
-		cpOS:       cfg.Topology.ControlPlane.Disk,
+		cpOS:       cfg.Topology.ControlPlane.DiskGB,
 		workerData: cfg.Disks.WorkerDataSizeGB,
-		masterData: cfg.Disks.MasterDataSizeGB,
+		cpData:     cfg.Disks.ControlPlaneDataSizeGB,
 	}
 	if d.cpOS == 0 {
 		d.cpOS = 50
 	}
-	d.workerOS = cfg.Topology.Workers.Disk
+	d.workerOS = cfg.Topology.Workers.DiskGB
 	if d.workerOS == 0 {
 		d.workerOS = d.cpOS
 	}
@@ -57,12 +57,12 @@ func getDiskSizes(cfg *config.Config) diskSizes {
 
 func getBootstrapResources(cfg *config.Config) (cpu, mem int) {
 	cpu = cfg.Topology.Bootstrap.CPU
-	mem = cfg.Topology.Bootstrap.Memory
+	mem = cfg.Topology.Bootstrap.MemoryMB
 	if cpu == 0 {
 		cpu = cfg.Topology.ControlPlane.CPU
 	}
 	if mem == 0 {
-		mem = cfg.Topology.ControlPlane.Memory
+		mem = cfg.Topology.ControlPlane.MemoryMB
 	}
 	return cpu, mem
 }
@@ -98,19 +98,19 @@ func buildTerraformVarsData(cfg *config.Config) templates.TerraformVarsData {
 		MasterOSDiskSizeGB:   disks.cpOS,
 		WorkerOSDiskSizeGB:   disks.workerOS,
 		WorkerDataDiskSizeGB: disks.workerData,
-		MasterDataDiskSizeGB: disks.masterData,
+		MasterDataDiskSizeGB: disks.cpData,
 		BootstrapCPUCores:    bootstrapCPU,
 		BootstrapMemoryMB:    bootstrapMem,
 		MasterCPUCores:       cfg.Topology.ControlPlane.CPU,
-		MasterMemoryMB:       cfg.Topology.ControlPlane.Memory,
+		MasterMemoryMB:       cfg.Topology.ControlPlane.MemoryMB,
 		WorkerCPUCores:       cfg.Topology.Workers.CPU,
-		WorkerMemoryMB:       cfg.Topology.Workers.Memory,
+		WorkerMemoryMB:       cfg.Topology.Workers.MemoryMB,
 		MasterNames:          strings.Join(masterNames, ", "),
 		WorkerNames:          strings.Join(workerNames, ", "),
 		CPUType:              cpuType,
 		NUMAEnabled:          proxmox.NUMAEnabled,
 		AdditionalNetworks:   formatAdditionalNetworks(proxmox.AdditionalNetworks),
-		MasterTargetNodes:    formatStringList(proxmox.MasterNodes),
+		MasterTargetNodes:    formatStringList(proxmox.ControlPlaneNodes),
 		WorkerTargetNodes:    formatStringList(proxmox.WorkerNodes),
 	}
 }

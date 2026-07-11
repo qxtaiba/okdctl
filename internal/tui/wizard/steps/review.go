@@ -183,7 +183,7 @@ func (s *ReviewStep) renderProxmox(st *sectionStyles) string {
 		{label: "host", value: p.Host},
 		{label: "token id", value: p.TokenID, skip: p.TokenID == ""},
 		{label: "bootstrap node", value: p.Node},
-		{label: "master nodes", value: strings.Join(p.MasterNodes, ", "), skip: len(p.MasterNodes) == 0},
+		{label: "control plane nodes", value: strings.Join(p.ControlPlaneNodes, ", "), skip: len(p.ControlPlaneNodes) == 0},
 		{label: "worker nodes", value: strings.Join(p.WorkerNodes, ", "), skip: len(p.WorkerNodes) == 0},
 		{label: "bridge", value: p.Bridge},
 		{label: "storage", value: p.Storage},
@@ -228,8 +228,8 @@ func (s *ReviewStep) renderCompute(st *sectionStyles) string {
 	b.WriteString("\n")
 
 	cpCPU := s.cfg.Topology.ControlPlane.CPU
-	cpMem := s.cfg.Topology.ControlPlane.Memory / 1024
-	cpDisk := s.cfg.Topology.ControlPlane.Disk
+	cpMem := s.cfg.Topology.ControlPlane.MemoryMB / 1024
+	cpDisk := s.cfg.Topology.ControlPlane.DiskGB
 	cpCount := s.cfg.Topology.ControlPlane.Count
 
 	cpSpec := fmt.Sprintf("%d × (%d vcpu, %d GB RAM, %d GB os disk)", cpCount, cpCPU, cpMem, cpDisk)
@@ -238,8 +238,8 @@ func (s *ReviewStep) renderCompute(st *sectionStyles) string {
 
 	if s.cfg.Topology.Workers.Count > 0 {
 		wCPU := s.cfg.Topology.Workers.CPU
-		wMem := s.cfg.Topology.Workers.Memory / 1024
-		wDisk := s.cfg.Topology.Workers.Disk
+		wMem := s.cfg.Topology.Workers.MemoryMB / 1024
+		wDisk := s.cfg.Topology.Workers.DiskGB
 		wCount := s.cfg.Topology.Workers.Count
 
 		wSpec := fmt.Sprintf("%d × (%d vcpu, %d GB RAM, %d GB os disk)", wCount, wCPU, wMem, wDisk)
@@ -253,30 +253,30 @@ func (s *ReviewStep) renderCompute(st *sectionStyles) string {
 		}
 	}
 
-	if s.cfg.Disks.MasterDataSizeGB > 0 {
-		cephSpec := fmt.Sprintf("%d gb per master (%d gb total)", s.cfg.Disks.MasterDataSizeGB, s.cfg.Disks.MasterDataSizeGB*cpCount)
-		b.WriteString(st.kvPair("master data disk", cephSpec))
+	if s.cfg.Disks.ControlPlaneDataSizeGB > 0 {
+		cephSpec := fmt.Sprintf("%d gb per control plane node (%d gb total)", s.cfg.Disks.ControlPlaneDataSizeGB, s.cfg.Disks.ControlPlaneDataSizeGB*cpCount)
+		b.WriteString(st.kvPair("control plane data disk", cephSpec))
 		b.WriteString("\n")
 	}
 
-	totalCPU := cpCPU*cpCount + 4                                            // +4 for bootstrap
-	totalMemGB := (s.cfg.Topology.ControlPlane.Memory*cpCount + 8192) / 1024 // +8192 for bootstrap
-	totalOSDiskGB := cpDisk*cpCount + 50                                     // +50 for bootstrap
+	totalCPU := cpCPU*cpCount + 4                                              // +4 for bootstrap
+	totalMemGB := (s.cfg.Topology.ControlPlane.MemoryMB*cpCount + 8192) / 1024 // +8192 for bootstrap
+	totalOSDiskGB := cpDisk*cpCount + 50                                       // +50 for bootstrap
 	totalDataDiskGB := 0
 
 	wCount := 0
 	if s.cfg.Topology.Workers.Count > 0 {
 		wCount = s.cfg.Topology.Workers.Count
 		totalCPU += s.cfg.Topology.Workers.CPU * wCount
-		totalMemGB += (s.cfg.Topology.Workers.Memory * wCount) / 1024
-		totalOSDiskGB += s.cfg.Topology.Workers.Disk * wCount
+		totalMemGB += (s.cfg.Topology.Workers.MemoryMB * wCount) / 1024
+		totalOSDiskGB += s.cfg.Topology.Workers.DiskGB * wCount
 	}
 
 	if s.cfg.Disks.WorkerDataSizeGB > 0 {
 		totalDataDiskGB += s.cfg.Disks.WorkerDataSizeGB * wCount
 	}
-	if s.cfg.Disks.MasterDataSizeGB > 0 {
-		totalDataDiskGB += s.cfg.Disks.MasterDataSizeGB * cpCount
+	if s.cfg.Disks.ControlPlaneDataSizeGB > 0 {
+		totalDataDiskGB += s.cfg.Disks.ControlPlaneDataSizeGB * cpCount
 	}
 
 	b.WriteString(st.separator)
@@ -418,7 +418,7 @@ func countUniqueNodes(cfg *config.Config) int {
 	if cfg.Provider.Proxmox.Node != "" {
 		seen[cfg.Provider.Proxmox.Node] = true
 	}
-	for _, n := range cfg.Provider.Proxmox.MasterNodes {
+	for _, n := range cfg.Provider.Proxmox.ControlPlaneNodes {
 		if n != "" {
 			seen[n] = true
 		}

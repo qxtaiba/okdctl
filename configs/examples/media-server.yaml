@@ -1,5 +1,5 @@
 ---
-schemaVersion: "v1"
+schemaVersion: "v2"
 
 # Media Server Stack Configuration
 # =================================
@@ -24,13 +24,13 @@ topology:
   control_plane:
     count: 3
     cpu: 4
-    memory: 16384 # 16 GB
-    disk: 100 # 100 GB
+    memory_mb: 16384 # 16 GB
+    disk_gb: 100 # 100 GB
   workers:
     count: 3
     cpu: 8
-    memory: 32768 # 32 GB
-    disk: 200 # 200 GB
+    memory_mb: 32768 # 32 GB
+    disk_gb: 200 # 200 GB
 networking:
   machine_cidr: 192.168.227.0/24
   pod_cidr: 10.128.0.0/14

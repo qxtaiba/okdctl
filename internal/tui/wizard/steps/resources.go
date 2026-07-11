@@ -47,8 +47,8 @@ var ResourcesStepDefinition = wizard.StepDefinition{
 					Help:      "okd minimum: 8192 mb (8 gb)",
 					Required:  true,
 					Validate:  config.ValidateMemory,
-					ConfigSet: wizard.SetInt(func(c *config.Config, v int) { c.Topology.ControlPlane.Memory = v }),
-					ConfigGet: wizard.GetInt(func(c *config.Config) int { return c.Topology.ControlPlane.Memory }),
+					ConfigSet: wizard.SetInt(func(c *config.Config, v int) { c.Topology.ControlPlane.MemoryMB = v }),
+					ConfigGet: wizard.GetInt(func(c *config.Config) int { return c.Topology.ControlPlane.MemoryMB }),
 				},
 				{
 					Key:      "cp_disk",
@@ -58,10 +58,10 @@ var ResourcesStepDefinition = wizard.StepDefinition{
 					Required: true,
 					Validate: config.ValidateOSDisk,
 					ConfigSet: wizard.SetInt(func(c *config.Config, v int) {
-						c.Topology.ControlPlane.Disk = v
-						c.Topology.Bootstrap.Disk = v
+						c.Topology.ControlPlane.DiskGB = v
+						c.Topology.Bootstrap.DiskGB = v
 					}),
-					ConfigGet: wizard.GetInt(func(c *config.Config) int { return c.Topology.ControlPlane.Disk }),
+					ConfigGet: wizard.GetInt(func(c *config.Config) int { return c.Topology.ControlPlane.DiskGB }),
 				},
 			},
 		},
@@ -85,8 +85,8 @@ var ResourcesStepDefinition = wizard.StepDefinition{
 					Help:      "recommended: 8192-65536 mb",
 					Required:  true,
 					Validate:  config.ValidateMemory,
-					ConfigSet: wizard.SetInt(func(c *config.Config, v int) { c.Topology.Workers.Memory = v }),
-					ConfigGet: wizard.GetInt(func(c *config.Config) int { return c.Topology.Workers.Memory }),
+					ConfigSet: wizard.SetInt(func(c *config.Config, v int) { c.Topology.Workers.MemoryMB = v }),
+					ConfigGet: wizard.GetInt(func(c *config.Config) int { return c.Topology.Workers.MemoryMB }),
 				},
 				{
 					Key:       "worker_disk",
@@ -95,8 +95,8 @@ var ResourcesStepDefinition = wizard.StepDefinition{
 					Help:      "boot disk for worker nodes (okd minimum: 50 gb)",
 					Required:  true,
 					Validate:  config.ValidateOSDisk,
-					ConfigSet: wizard.SetInt(func(c *config.Config, v int) { c.Topology.Workers.Disk = v }),
-					ConfigGet: wizard.GetInt(func(c *config.Config) int { return c.Topology.Workers.Disk }),
+					ConfigSet: wizard.SetInt(func(c *config.Config, v int) { c.Topology.Workers.DiskGB = v }),
+					ConfigGet: wizard.GetInt(func(c *config.Config) int { return c.Topology.Workers.DiskGB }),
 				},
 			},
 		},
@@ -114,14 +114,14 @@ var ResourcesStepDefinition = wizard.StepDefinition{
 					ConfigGet: wizard.GetInt(func(c *config.Config) int { return c.Disks.WorkerDataSizeGB }),
 				},
 				{
-					Key:       "master_data_disk",
-					Label:     "master data disk (gb)",
+					Key:       "cp_data_disk",
+					Label:     "control plane data disk (gb)",
 					Default:   "0",
-					Help:      "data disk per master for ceph/storage — set to 0 to disable",
+					Help:      "data disk per control plane node for ceph/storage — set to 0 to disable",
 					Required:  true,
 					Validate:  config.ValidateIntRange(" (in gb)", 0, 5000),
-					ConfigSet: wizard.SetInt(func(c *config.Config, v int) { c.Disks.MasterDataSizeGB = v }),
-					ConfigGet: wizard.GetInt(func(c *config.Config) int { return c.Disks.MasterDataSizeGB }),
+					ConfigSet: wizard.SetInt(func(c *config.Config, v int) { c.Disks.ControlPlaneDataSizeGB = v }),
+					ConfigGet: wizard.GetInt(func(c *config.Config) int { return c.Disks.ControlPlaneDataSizeGB }),
 				},
 			},
 		},
@@ -170,12 +170,12 @@ func renderResourceSummary(step *wizard.DataDrivenStep, state *ResourcesStepStat
 	workerMem := step.ValueInt("worker_memory", 20480)
 	workerDisk := step.ValueInt("worker_disk", 50)
 	workerDataDisk := step.ValueInt("worker_data_disk", 500)
-	masterDataDisk := step.ValueInt("master_data_disk", 0)
+	cpDataDisk := step.ValueInt("cp_data_disk", 0)
 
 	totalCPU := (cpCPU * cpCount) + (workerCPU * workerCount)
 	totalMem := (cpMem * cpCount) + (workerMem * workerCount)
 	totalOSDisk := (cpDisk * cpCount) + (workerDisk * workerCount)
-	totalDataDisk := (workerDataDisk * workerCount) + (masterDataDisk * cpCount)
+	totalDataDisk := (workerDataDisk * workerCount) + (cpDataDisk * cpCount)
 
 	boxContentWidth := width - 8
 	if boxContentWidth < 30 {
