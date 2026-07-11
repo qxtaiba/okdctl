@@ -10,6 +10,8 @@ okdctl provisions OKD clusters on Proxmox VE from an interactive wizard.
 It's for the homelab operator with one or two Proxmox nodes who wants a real
 Kubernetes cluster without hand-rolling Terraform, Ignition, and bootstrap glue.
 
+![okdctl deploy wizard](docs/assets/demo.gif)
+
 ## What it isn't
 
 - Not a managed service, not a wrapper around the Red Hat Assisted Installer.
