@@ -233,6 +233,36 @@ func parseLockID(lockFile string) string {
 	return info.ID
 }
 
+// WithLockHint appends the terraform state-lock diagnostic (see LockHint) to
+// err's message when a stale local-backend lock is present, preserving err's
+// concrete type so a terraform failure exits with the same code whether or
+// not a stale lock is involved — a bare errors.Join would let exitCodeFor
+// match the hint's *errtypes.ConfigError before err's own type (see
+// errtypes.HintAppender). Returns err unchanged when err is nil or no lock
+// file is present, and falls back to errors.Join when err's type does not
+// implement HintAppender.
+func (t *Executor) WithLockHint(err error) error {
+	if err == nil {
+		return nil
+	}
+	hint := t.LockHint()
+	if hint == nil {
+		return err
+	}
+
+	var appender errtypes.HintAppender
+	if !errors.As(err, &appender) {
+		return errors.Join(hint, err)
+	}
+
+	hintMsg := hint.Error()
+	var cfgHint *errtypes.ConfigError
+	if errors.As(hint, &cfgHint) {
+		hintMsg = cfgHint.Msg
+	}
+	return appender.WithHint(hintMsg)
+}
+
 func (t *Executor) planArgs(opts PlanOptions) []string {
 	args := []string{"plan", "-lock-timeout=" + defaultLockTimeout}
 	args = append(args, t.buildVarArgs(opts.VarFile, opts.Vars)...)

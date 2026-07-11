@@ -2,7 +2,6 @@ package postinstall
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"path/filepath"
 
@@ -28,10 +27,7 @@ func (p *Phase) CleanupBootstrap(ctx context.Context, cfg *config.Config, opts *
 	defer tf.ZeroizeEnv()
 
 	if err := tf.Init(ctx); err != nil {
-		if hint := tf.LockHint(); hint != nil {
-			return errors.Join(hint, &errtypes.ClusterError{Msg: "bootstrap: terraform init failed", Err: err})
-		}
-		return &errtypes.ClusterError{Msg: "bootstrap: terraform init failed", Err: err}
+		return tf.WithLockHint(&errtypes.ClusterError{Msg: "bootstrap: terraform init failed", Err: err})
 	}
 
 	vars := map[string]string{"bootstrap_enabled": "false"}
@@ -53,10 +49,7 @@ func (p *Phase) CleanupBootstrap(ctx context.Context, cfg *config.Config, opts *
 		Vars:           vars,
 		Targets:        targets,
 	}); err != nil {
-		if hint := tf.LockHint(); hint != nil {
-			return errors.Join(hint, &errtypes.ClusterError{Msg: "bootstrap: terraform plan failed", Err: err})
-		}
-		return &errtypes.ClusterError{Msg: "bootstrap: terraform plan failed", Err: err}
+		return tf.WithLockHint(&errtypes.ClusterError{Msg: "bootstrap: terraform plan failed", Err: err})
 	}
 
 	snapPath, snapErr := tf.SnapshotState(ctx)
@@ -84,11 +77,7 @@ func (p *Phase) CleanupBootstrap(ctx context.Context, cfg *config.Config, opts *
 		if snapPath != "" {
 			msg = fmt.Sprintf("bootstrap: terraform apply failed (state backup: %s)", snapPath)
 		}
-		wrapped := &errtypes.ClusterError{Msg: msg, Err: err}
-		if hint := tf.LockHint(); hint != nil {
-			return errors.Join(hint, wrapped)
-		}
-		return wrapped
+		return tf.WithLockHint(&errtypes.ClusterError{Msg: msg, Err: err})
 	}
 
 	p.Log.Info("bootstrap: vm destroyed", "cluster", cfg.Cluster.Name)

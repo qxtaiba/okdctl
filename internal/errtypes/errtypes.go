@@ -30,6 +30,14 @@ var ErrPullSecretInvalid = errors.New("pull secret is not valid JSON")
 // on PATH. exitCodeFor maps it to 71 (EX_OSERR).
 var ErrSudoMissing = errors.New("sudo not found")
 
+// HintAppender is implemented by error types whose Msg can be enriched with
+// extra diagnostic text without changing their concrete type — and
+// therefore without changing exitCodeFor's exit-code classification.
+// terraform.Executor.WithLockHint is the only caller today.
+type HintAppender interface {
+	WithHint(hint string) error
+}
+
 // ConfigError wraps a configuration-related failure (missing file, parse
 // error, validation failure). Unwrap chains to the underlying error so
 // errors.Is checks on wrapped sentinels (e.g. os.ErrNotExist) still work.
@@ -57,6 +65,12 @@ func (e *ConfigError) Error() string {
 
 func (e *ConfigError) Unwrap() error { return e.Err }
 
+// WithHint returns a copy of e with hint appended to Msg; e itself is left
+// unmodified. Implements HintAppender.
+func (e *ConfigError) WithHint(hint string) error {
+	return &ConfigError{Msg: e.Msg + "; " + hint, Err: e.Err}
+}
+
 // NetworkError wraps a network-level failure (HTTP, DNS, TLS, download).
 // Msg must never include credentials; see ConfigError for the full contract.
 type NetworkError struct {
@@ -83,6 +97,12 @@ func (e *ClusterError) Error() string {
 }
 
 func (e *ClusterError) Unwrap() error { return e.Err }
+
+// WithHint returns a copy of e with hint appended to Msg; e itself is left
+// unmodified. Implements HintAppender.
+func (e *ClusterError) WithHint(hint string) error {
+	return &ClusterError{Msg: e.Msg + "; " + hint, Err: e.Err}
+}
 
 // AuthError wraps an authentication or privilege-escalation failure
 // (missing sudo, insecure credential file, proxmox token rejected).

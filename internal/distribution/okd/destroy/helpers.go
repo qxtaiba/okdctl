@@ -2,7 +2,6 @@ package destroy
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"path/filepath"
 
@@ -44,10 +43,7 @@ func (p *Phase) destroyInfrastructure(ctx context.Context, opts *Options) error 
 	}
 
 	if err := tf.Init(ctx); err != nil {
-		if hint := tf.LockHint(); hint != nil {
-			return errors.Join(hint, &errtypes.ClusterError{Msg: "terraform init failed", Err: err})
-		}
-		return &errtypes.ClusterError{Msg: "terraform init failed", Err: err}
+		return tf.WithLockHint(&errtypes.ClusterError{Msg: "terraform init failed", Err: err})
 	}
 
 	p.Log.Info("terraform: destroying infrastructure", "env", opts.TerraformEnv)
@@ -63,7 +59,7 @@ func (p *Phase) destroyInfrastructure(ctx context.Context, opts *Options) error 
 		if snapPath != "" {
 			msg = fmt.Sprintf("terraform destroy failed (state backup: %s)", snapPath)
 		}
-		return &errtypes.ClusterError{Msg: msg, Err: err}
+		return tf.WithLockHint(&errtypes.ClusterError{Msg: msg, Err: err})
 	}
 
 	if err := tf.CleanupPlans(); err != nil {

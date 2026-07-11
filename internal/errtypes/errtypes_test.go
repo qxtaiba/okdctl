@@ -111,3 +111,33 @@ func TestUnwrapNilWhenNoInner(t *testing.T) {
 		t.Fatal("errors.Is matched a sentinel despite nil inner")
 	}
 }
+
+// TestWithHintAppendsMsgAndPreservesErr locks WithHint's copy semantics: the
+// receiver is left unmodified, the returned error keeps the same concrete
+// type and Unwrap chain, and hint is appended to Msg.
+func TestWithHintAppendsMsgAndPreservesErr(t *testing.T) {
+	inner := errors.New("boom")
+	cfg := &errtypes.ConfigError{Msg: "config broke", Err: inner}
+	got := cfg.WithHint("try force-unlock")
+
+	var gotCfg *errtypes.ConfigError
+	if !errors.As(got, &gotCfg) {
+		t.Fatalf("WithHint() = %v; want *errtypes.ConfigError", got)
+	}
+	if gotCfg.Msg != "config broke; try force-unlock" {
+		t.Errorf("Msg = %q; want %q", gotCfg.Msg, "config broke; try force-unlock")
+	}
+	if !errors.Is(got, inner) {
+		t.Error("WithHint() broke the Unwrap chain to the inner error")
+	}
+	if cfg.Msg != "config broke" {
+		t.Errorf("receiver mutated: Msg = %q; want unchanged %q", cfg.Msg, "config broke")
+	}
+
+	cluster := &errtypes.ClusterError{Msg: "cluster broke"}
+	gotCluster := cluster.WithHint("try Y")
+	var gotClusterErr *errtypes.ClusterError
+	if !errors.As(gotCluster, &gotClusterErr) || gotClusterErr.Msg != "cluster broke; try Y" {
+		t.Errorf("ClusterError.WithHint() = %v; want Msg %q", gotCluster, "cluster broke; try Y")
+	}
+}
