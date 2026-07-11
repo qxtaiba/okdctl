@@ -64,7 +64,9 @@ func New(opts ...phase.BasePhaseOption) *Phase {
 }
 
 // Execute tears down the cluster. User confirmation is the CLI layer's
-// responsibility before this is called.
+// responsibility before this is called. cfg must be the same cfg passed to
+// NewOptions — opts was derived from it and the two are not re-validated
+// for consistency here.
 func (p *Phase) Execute(ctx context.Context, cfg *config.Config, opts *Options) ([]distribution.StepResult, error) {
 	p.Log.Info("destroy: starting cluster teardown")
 	p.Log.Warn("destroy: this will permanently remove all vms and generated files")

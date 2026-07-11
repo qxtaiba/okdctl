@@ -72,7 +72,9 @@ func New(opts ...phase.BasePhaseOption) *Phase {
 }
 
 // Execute runs the post-install step sequence and returns a summary Result
-// along with each step's outcome.
+// along with each step's outcome. cfg must be the same cfg passed to
+// NewOptions — opts was derived from it and the two are not re-validated
+// for consistency here.
 func (p *Phase) Execute(ctx context.Context, cfg *config.Config, opts *Options) (*Result, []distribution.StepResult, error) {
 	p.Log.Info("postinstall: starting cluster verification and configuration")
 
