@@ -66,10 +66,17 @@ type NetworkingConfig struct {
 	Bastion  BastionConfig  `json:"bastion,omitzero"`
 }
 
-// StaticIPConfig describes the starting IP, netmask, interface, and DNS
-// used when assigning static addresses to cluster nodes.
+// StaticIPConfig describes the static address plan for cluster nodes.
 type StaticIPConfig struct {
-	Start     string `json:"start"`
+	// Start is the bootstrap node's IP, not merely the first free address:
+	// masters and workers allocate sequentially from Start+1, and the API
+	// VIP derives from it (last octet .10) unless bastion.vip overrides.
+	// It must not equal a live host such as the Proxmox host or the
+	// ignition server — the bootstrap VM would ARP-fight it.
+	Start string `json:"start"`
+	// Netmask is derived from machine_cidr at load time; a YAML value is
+	// overwritten. The field persists only to carry the dotted form
+	// consumed by kernel args and HAProxy/dnsmasq templates.
 	Netmask   string `json:"netmask"`
 	Interface string `json:"interface"`
 	DNS       string `json:"dns"`

@@ -168,10 +168,15 @@ func validateAdvancedNetworking(cfg *Config, result *ValidationResult) {
 
 	if staticIPStart != "" {
 		netmask := cfg.Networking.StaticIP.Netmask
-		if netmask == "" {
+		expected, expectedErr := netutil.CIDRToNetmask(machineCIDR)
+		switch {
+		case netmask == "":
 			result.AddError(FieldNetworkingStaticIPNetmask, "netmask is required when using static IPs")
-		} else if !isValidNetmask(netmask) {
+		case !isValidNetmask(netmask):
 			result.AddError(FieldNetworkingStaticIPNetmask, "must be a valid netmask (e.g., 255.255.255.0 or /24)")
+		case expectedErr == nil && !netmaskMatches(netmask, expected):
+			result.AddError(FieldNetworkingStaticIPNetmask,
+				fmt.Sprintf("must match machine CIDR %s (expected %s); netmask is derived from machine_cidr", machineCIDR, expected))
 		}
 
 		iface := cfg.Networking.StaticIP.Interface
@@ -207,6 +212,46 @@ func validateAdvancedNetworking(cfg *Config, result *ValidationResult) {
 			seen[addr] = nip.name
 		}
 	}
+}
+
+// validateStaticIPCollisions rejects a static_ip.start equal to the Proxmox
+// host or ignition server IP. The bootstrap node boots at start (see
+// StaticIPConfig.Start), so an equal address ARP-fights a live host on the
+// machine network.
+func validateStaticIPCollisions(cfg *Config, result *ValidationResult) {
+	start, err := netip.ParseAddr(cfg.Networking.StaticIP.Start)
+	if err != nil {
+		return
+	}
+	if host, err := netip.ParseAddr(proxmoxHostAddr(cfg.Provider.Proxmox)); err == nil && host == start {
+		result.AddError(FieldNetworkingStaticIPStart,
+			fmt.Sprintf("must not equal the proxmox host ip %s (the bootstrap node boots at static_ip.start)", host))
+	}
+	if ign, err := netip.ParseAddr(cfg.HTTPServer.IgnitionServerIP); err == nil && ign == start {
+		result.AddError(FieldNetworkingStaticIPStart,
+			fmt.Sprintf("must not equal the ignition server ip %s (the bootstrap node boots at static_ip.start)", ign))
+	}
+}
+
+func proxmoxHostAddr(proxmox *ProxmoxConfig) string {
+	if proxmox == nil {
+		return ""
+	}
+	host := strings.TrimPrefix(proxmox.Host, "http://")
+	if strings.Contains(host, ":") {
+		if h, _, err := net.SplitHostPort(host); err == nil {
+			host = h
+		}
+	}
+	return host
+}
+
+func netmaskMatches(netmask, dotted string) bool {
+	if strings.HasPrefix(netmask, "/") {
+		converted, err := netutil.CIDRToNetmask("0.0.0.0" + netmask)
+		return err == nil && converted == dotted
+	}
+	return netmask == dotted
 }
 
 func validateResources(cfg *Config, result *ValidationResult) {

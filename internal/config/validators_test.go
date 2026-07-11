@@ -385,6 +385,115 @@ func TestValidateBinDir(t *testing.T) {
 	}
 }
 
+func TestValidateNetmaskMatchesMachineCIDR(t *testing.T) {
+	cases := []struct {
+		name    string
+		netmask string
+		wantErr bool
+	}{
+		{"matching dotted form", "255.255.255.0", false},
+		{"matching slash form", "/24", false},
+		{"mismatched dotted form", "255.255.0.0", true},
+		{"mismatched slash form", "/16", true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := DefaultConfig()
+			cfg.Networking.StaticIP.Netmask = tc.netmask
+			result := &ValidationResult{}
+			validateAdvancedNetworking(cfg, result)
+			gotErr := false
+			for _, e := range result.Errors {
+				if e.Field == FieldNetworkingStaticIPNetmask {
+					gotErr = true
+				}
+			}
+			if gotErr != tc.wantErr {
+				t.Errorf("netmask %q: gotErr = %v, want %v; errors: %v", tc.netmask, gotErr, tc.wantErr, result.Errors)
+			}
+		})
+	}
+}
+
+func TestValidateStaticIPCollisions(t *testing.T) {
+	cases := []struct {
+		name    string
+		mutate  func(*Config)
+		wantErr bool
+	}{
+		{
+			name:    "start equals proxmox host ip",
+			mutate:  func(c *Config) { c.Networking.StaticIP.Start = "192.168.1.100" },
+			wantErr: true,
+		},
+		{
+			name: "start equals http-scheme proxmox host ip",
+			mutate: func(c *Config) {
+				c.Provider.Proxmox.Host = "http://192.168.1.100:8006"
+				c.Networking.StaticIP.Start = "192.168.1.100"
+			},
+			wantErr: true,
+		},
+		{
+			name:    "start equals ignition server ip",
+			mutate:  func(c *Config) { c.Networking.StaticIP.Start = "192.168.1.20" },
+			wantErr: true,
+		},
+		{
+			name: "hostname proxmox host is not comparable",
+			mutate: func(c *Config) {
+				c.Provider.Proxmox.Host = "pve.example.com:8006"
+				c.Networking.StaticIP.Start = "192.168.1.100"
+			},
+			wantErr: false,
+		},
+		{
+			name:    "distinct start accepted",
+			mutate:  func(_ *Config) {},
+			wantErr: false,
+		},
+		{
+			name:    "nil proxmox config tolerated",
+			mutate:  func(c *Config) { c.Provider.Proxmox = nil },
+			wantErr: false,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := DefaultConfig()
+			tc.mutate(cfg)
+			result := &ValidationResult{}
+			validateStaticIPCollisions(cfg, result)
+			gotErr := false
+			for _, e := range result.Errors {
+				if e.Field == FieldNetworkingStaticIPStart {
+					gotErr = true
+				}
+			}
+			if gotErr != tc.wantErr {
+				t.Errorf("gotErr = %v, want %v; errors: %v", gotErr, tc.wantErr, result.Errors)
+			}
+		})
+	}
+}
+
+func TestDefaultConfigSelfConsistent(t *testing.T) {
+	cases := []struct {
+		name string
+		cfg  *Config
+	}{
+		{"default", DefaultConfig()},
+		{"minimal", MinimalConfig()},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if result := tc.cfg.Validate(); !result.IsValid() {
+				t.Errorf("config fails its own validation: %v", result.Errors)
+			}
+		})
+	}
+}
+
 func TestValidateEndToEnd(t *testing.T) {
 	cases := []struct {
 		name       string

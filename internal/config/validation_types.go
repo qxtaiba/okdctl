@@ -107,6 +107,7 @@ var validators = []validatorEntry{
 	{ScopeEnums, validateEnums},
 	{ScopeNetworking, validateNetworking},
 	{ScopeAdvancedNetworking, validateAdvancedNetworking},
+	{ScopeAdvancedNetworking, validateStaticIPCollisions},
 	{ScopeResources, validateResources},
 	{ScopeProvider, validateProvider},
 	{ScopeHTTPServer, validateHTTPServer},

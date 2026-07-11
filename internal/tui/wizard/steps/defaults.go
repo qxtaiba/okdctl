@@ -42,10 +42,12 @@ const (
 	DefaultPodCIDR     = "10.128.0.0/14"
 	DefaultServiceCIDR = "172.30.0.0/16"
 	DefaultHostPrefix  = 23
-	DefaultStartIP     = "192.168.1.100"
-	DefaultNetmask     = "255.255.255.0"
-	DefaultInterface   = "ens18"
-	DefaultBastionIP   = "192.168.1.20"
+	// DefaultStartIP stays clear of the default proxmox host (.100) —
+	// the bootstrap VM boots at start and must not ARP-fight it.
+	DefaultStartIP   = "192.168.1.140"
+	DefaultNetmask   = "255.255.255.0"
+	DefaultInterface = "ens18"
+	DefaultBastionIP = "192.168.1.20"
 )
 
 // Proxmox provider defaults.

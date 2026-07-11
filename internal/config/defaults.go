@@ -4,7 +4,11 @@ import "github.com/qxtaiba/okdctl/internal/netutil"
 
 const (
 	defaultBastionIP = "192.168.1.20"
-	defaultFluxAddon = "flux"
+	// defaultStaticIPStart is deliberately distant from the default
+	// provider.proxmox.host (192.168.1.100): the bootstrap VM boots at
+	// this address and must not ARP-fight the hypervisor.
+	defaultStaticIPStart = "192.168.1.140"
+	defaultFluxAddon     = "flux"
 )
 
 // DefaultConfig returns a Config with defaults for a typical homelab environment.
@@ -61,7 +65,7 @@ func DefaultConfig() *Config {
 			Gateway:     "192.168.1.1",
 			DNS:         []string{"192.168.1.1"},
 			StaticIP: StaticIPConfig{
-				Start:     "192.168.1.100",
+				Start:     defaultStaticIPStart,
 				Netmask:   netutil.DefaultNetmask,
 				Interface: "ens18",
 				DNS:       defaultBastionIP,
