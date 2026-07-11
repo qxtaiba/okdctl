@@ -27,7 +27,10 @@ import (
 // Result.Stderr carry the tail of the output, not the full stream.
 // Callers that need the full stream should use RunStreamed or
 // RunStreamedChecked, which tee live output to e.stdout/e.stderr while
-// still returning a ring-buffered tail in the Result.
+// still returning a ring-buffered tail in the Result. RunOutput/
+// RunOutputChecked instead fully buffer stdout up to a byte cap for
+// machine-parsed payloads; RunDiscard/RunDiscardChecked discard stdout
+// entirely for high-volume/uninteresting output.
 //
 // Environment handling: by default the Executor passes only a curated
 // allowlist of the parent environment down to subprocesses — credentials
@@ -36,13 +39,18 @@ import (
 // vars via WithEnv. The rare caller that needs the full parent env
 // (e.g. a tool that consumes a non-allowlisted variable) opts out via
 // WithInheritedEnv.
+//
+// Cancel signal: ctx cancellation sends cancelSignal to the subprocess
+// (SIGTERM by default; see WithCancelSignal) followed by SIGKILL after a
+// 30s WaitDelay if the process has not exited.
 type Executor struct {
-	workDir    string
-	env        []string
-	stdout     io.Writer
-	stderr     io.Writer
-	inheritEnv bool
-	logger     *slog.Logger
+	workDir      string
+	env          []string
+	stdout       io.Writer
+	stderr       io.Writer
+	inheritEnv   bool
+	cancelSignal syscall.Signal
+	logger       *slog.Logger
 }
 
 // Option configures an Executor at construction time.
@@ -82,17 +90,33 @@ func WithLogger(l *slog.Logger) Option {
 // variable not on the allowlist, or a test that needs a custom env that
 // the allowlist would filter. Symmetric with WithEnv as the canonical
 // inherit-vs-filter option pair.
+//
+// Takes no argument because every current call site wants unconditional
+// inheritance; add a bool parameter (matching download.WithOverwrite's
+// shape) only when a caller needs WithInheritedEnv(false) dynamic dispatch.
 func WithInheritedEnv() Option {
 	return func(e *Executor) { e.inheritEnv = true }
+}
+
+// WithCancelSignal overrides the signal cmd.Cancel sends on ctx
+// cancellation. Defaults to SIGTERM (see New): SIGTERM soft-cancel is the
+// default so DefaultEnvAllowlist-guarded subprocesses (oc, ssh, package
+// managers) get a graceful chance to flush before WaitDelay's 30s SIGKILL
+// escalation. SIGINT is terraform's documented soft-cancel: it triggers a
+// graceful plan/apply abort and releases the state lock before exit — pass
+// WithCancelSignal(syscall.SIGINT) only for a terraform-backed Executor.
+func WithCancelSignal(sig syscall.Signal) Option {
+	return func(e *Executor) { e.cancelSignal = sig }
 }
 
 // New builds an Executor with defaults wired to os.Stdout/os.Stderr and a
 // no-op logger, then applies the provided options.
 func New(opts ...Option) *Executor {
 	e := &Executor{
-		stdout: os.Stdout,
-		stderr: os.Stderr,
-		logger: logutil.NopLogger,
+		stdout:       os.Stdout,
+		stderr:       os.Stderr,
+		cancelSignal: syscall.SIGTERM,
+		logger:       logutil.NopLogger,
 	}
 	for _, opt := range opts {
 		opt(e)
@@ -263,9 +287,10 @@ func (e *Executor) run(ctx context.Context, stdin io.Reader, name string, args .
 	cmd.Stdout = rout
 	cmd.Stderr = rerr
 
-	// Soft-cancel via SIGINT (terraform's documented signal) so apply/destroy
-	// release the state lock before exit; see RunInteractive for the rationale.
-	cmd.Cancel = func() error { return cmd.Process.Signal(syscall.SIGINT) }
+	// Soft-cancel via e.cancelSignal (SIGTERM by default; see
+	// WithCancelSignal) so the subprocess gets a chance to clean up before
+	// WaitDelay's SIGKILL escalation.
+	cmd.Cancel = func() error { return cmd.Process.Signal(e.cancelSignal) }
 	cmd.WaitDelay = 30 * time.Second
 
 	e.logger.Debug("exec: started", "cmd", name, "argc", len(args))
@@ -312,7 +337,7 @@ func (e *Executor) RunStreamed(ctx context.Context, name string, args ...string)
 	cmd.Stdout = io.MultiWriter(e.stdout, rout)
 	cmd.Stderr = io.MultiWriter(e.stderr, rerr)
 
-	cmd.Cancel = func() error { return cmd.Process.Signal(syscall.SIGINT) }
+	cmd.Cancel = func() error { return cmd.Process.Signal(e.cancelSignal) }
 	cmd.WaitDelay = 30 * time.Second
 
 	e.logger.Debug("exec: started", "cmd", name, "argc", len(args))
@@ -352,6 +377,38 @@ func (e *Executor) RunStreamedChecked(ctx context.Context, name string, args ...
 	return result, nil
 }
 
+// StartStreamed starts name with args, piping stdout/stderr live to
+// e.stdout/e.stderr, and returns immediately with a channel that receives
+// cmd.Wait's result once the process exits. Shares buildEnv, cancelSignal,
+// and WaitDelay with the other Run* methods, so callers get the SIGTERM/
+// SIGINT + WaitDelay escalation without reimplementing it. kill is a no-op
+// retained for API symmetry with callers that inject a test stub expecting
+// an explicit kill function; cmd.Cancel already handles ctx cancellation.
+func (e *Executor) StartStreamed(ctx context.Context, name string, args ...string) (done <-chan error, kill func(), err error) {
+	cmd := exec.CommandContext(ctx, name, args...)
+	if e.workDir != "" {
+		cmd.Dir = e.workDir
+	}
+	cmd.Env = e.buildEnv()
+	cmd.Stdout = e.stdout
+	cmd.Stderr = e.stderr
+
+	cmd.Cancel = func() error { return cmd.Process.Signal(e.cancelSignal) }
+	cmd.WaitDelay = 30 * time.Second
+
+	e.logger.Debug("exec: started", "cmd", name, "argc", len(args))
+	if startErr := cmd.Start(); startErr != nil {
+		return nil, func() {}, startErr
+	}
+
+	doneCh := make(chan error, 1)
+	go func() {
+		defer close(doneCh)
+		doneCh <- cmd.Wait()
+	}()
+	return doneCh, func() {}, nil
+}
+
 // RunInteractive executes a command wired to the current process's stdin and
 // the Executor's stdout/stderr for user-facing prompts.
 func (e *Executor) RunInteractive(ctx context.Context, name string, args ...string) error {
@@ -368,10 +425,11 @@ func (e *Executor) RunInteractive(ctx context.Context, name string, args ...stri
 	cmd.Stdout = e.stdout
 	cmd.Stderr = e.stderr
 
-	// SIGINT is terraform's documented soft-cancel: it triggers a graceful
-	// plan/apply abort and releases the state lock before exit. WaitDelay
+	// Soft-cancel via e.cancelSignal (SIGTERM by default; see
+	// WithCancelSignal). SIGINT is terraform's documented soft-cancel —
+	// opted into via WithCancelSignal for terraform's Executor. WaitDelay
 	// gives the process 30 s to clean up before SIGKILL fires.
-	cmd.Cancel = func() error { return cmd.Process.Signal(syscall.SIGINT) }
+	cmd.Cancel = func() error { return cmd.Process.Signal(e.cancelSignal) }
 	cmd.WaitDelay = 30 * time.Second
 
 	e.logger.Debug("exec: started", "cmd", name, "argc", len(args))
@@ -406,6 +464,63 @@ func exitCodeOf(err error) int {
 // Non-zero exits return an *ExitError — callers can errors.As to inspect.
 func (e *Executor) RunChecked(ctx context.Context, name string, args ...string) (*Result, error) {
 	result, err := e.Run(ctx, name, args...)
+	if err != nil {
+		return result, err
+	}
+	if result.ExitCode != 0 {
+		return result, NewExitError(ctx, name, result.ExitCode, result.Stderr)
+	}
+	return result, nil
+}
+
+// RunDiscard executes a command with stdout fully discarded — not even
+// ring-buffered — while stderr stays ring-capped at constMaxLines lines.
+// Use for high-volume/uninteresting stdout (package installs, repo
+// metadata refreshes) where only success/failure and stderr diagnostics
+// matter. The returned *Result is always non-nil; Result.Stdout is always
+// empty.
+func (e *Executor) RunDiscard(ctx context.Context, name string, args ...string) (*Result, error) {
+	start := time.Now()
+	cmd := exec.CommandContext(ctx, name, args...)
+
+	if e.workDir != "" {
+		cmd.Dir = e.workDir
+	}
+	cmd.Env = e.buildEnv()
+
+	rerr := newRingWriter(constMaxLines)
+	cmd.Stdout = io.Discard
+	cmd.Stderr = rerr
+
+	cmd.Cancel = func() error { return cmd.Process.Signal(e.cancelSignal) }
+	cmd.WaitDelay = 30 * time.Second
+
+	e.logger.Debug("exec: started", "cmd", name, "argc", len(args))
+	err := cmd.Run()
+
+	result := &Result{
+		Stderr:   rerr.tail(),
+		Duration: time.Since(start),
+	}
+
+	var retErr error
+	if err != nil {
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			result.ExitCode = exitErr.ExitCode()
+		} else {
+			retErr = err
+		}
+	}
+
+	e.logger.Debug("exec: completed", "cmd", name, "exit", result.ExitCode, "duration", result.Duration)
+	return result, retErr
+}
+
+// RunDiscardChecked is RunDiscard with RunChecked semantics: non-zero exit
+// returns an *ExitError carrying the stderr tail.
+func (e *Executor) RunDiscardChecked(ctx context.Context, name string, args ...string) (*Result, error) {
+	result, err := e.RunDiscard(ctx, name, args...)
 	if err != nil {
 		return result, err
 	}
@@ -463,8 +578,9 @@ func (e *Executor) runOutput(ctx context.Context, stdin io.Reader, limit int, na
 		return &Result{Duration: time.Since(start)}, pipeErr
 	}
 
-	// Soft-cancel via SIGINT mirrors run(); see RunInteractive for the rationale.
-	cmd.Cancel = func() error { return cmd.Process.Signal(syscall.SIGINT) }
+	// Soft-cancel via e.cancelSignal mirrors run(); see WithCancelSignal for
+	// the SIGTERM-default / terraform-SIGINT rationale.
+	cmd.Cancel = func() error { return cmd.Process.Signal(e.cancelSignal) }
 	cmd.WaitDelay = 30 * time.Second
 
 	e.logger.Debug("exec: started", "cmd", name, "argc", len(args))

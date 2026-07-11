@@ -6,8 +6,62 @@ import (
 	"os"
 	"runtime"
 	"strings"
+	"syscall"
 	"testing"
 )
+
+func TestWithCancelSignal(t *testing.T) {
+	t.Run("defaults to SIGTERM", func(t *testing.T) {
+		e := New()
+		if e.cancelSignal != syscall.SIGTERM {
+			t.Errorf("cancelSignal = %v; want SIGTERM", e.cancelSignal)
+		}
+	})
+
+	t.Run("WithCancelSignal overrides", func(t *testing.T) {
+		e := New(WithCancelSignal(syscall.SIGINT))
+		if e.cancelSignal != syscall.SIGINT {
+			t.Errorf("cancelSignal = %v; want SIGINT", e.cancelSignal)
+		}
+	})
+}
+
+func TestRunDiscard(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("needs POSIX sh")
+	}
+
+	t.Run("stdout is always empty", func(t *testing.T) {
+		t.Parallel()
+		e := New(WithInheritedEnv())
+		result, err := e.RunDiscard(context.Background(), "sh", "-c", "printf 'noise\n'; exit 0")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if result.Stdout != "" {
+			t.Errorf("Stdout = %q; want empty (discarded)", result.Stdout)
+		}
+	})
+
+	t.Run("non-zero exit returns ExitError via RunDiscardChecked", func(t *testing.T) {
+		t.Parallel()
+		e := New(WithInheritedEnv())
+		_, err := e.RunDiscardChecked(context.Background(), "sh", "-c", "echo oops >&2; exit 3")
+		if err == nil {
+			t.Fatal("expected error for exit 3")
+		}
+		var exitErr *ExitError
+		if !errors.As(err, &exitErr) {
+			t.Fatalf("err type = %T; want *ExitError", err)
+		}
+		if exitErr.ExitCode != 3 {
+			t.Errorf("ExitCode = %d; want 3", exitErr.ExitCode)
+		}
+		if !strings.Contains(exitErr.Stderr, "oops") {
+			t.Errorf("Stderr = %q; want it to contain 'oops'", exitErr.Stderr)
+		}
+	})
+}
 
 func TestBuildEnv_AllowlistFilters(t *testing.T) {
 	// Seed some env vars — allowed and disallowed.

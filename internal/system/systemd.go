@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"runtime"
+
+	"github.com/qxtaiba/okdctl/internal/executor"
 )
 
 const osLinux = "linux"
@@ -36,10 +38,10 @@ func ManageService(ctx context.Context, action ServiceAction, serviceName string
 
 	switch action {
 	case ServiceStatus:
-		return RunCaptured(ctx, "systemctl", "is-active", serviceName)
+		return executor.RunCaptured(ctx, "systemctl", "is-active", serviceName)
 
 	default:
-		return RunCaptured(ctx, "systemctl", actionStr, serviceName)
+		return executor.RunCaptured(ctx, "systemctl", actionStr, serviceName)
 	}
 }
 
@@ -51,7 +53,7 @@ func IsServiceActive(ctx context.Context, serviceName string) bool {
 		return false
 	}
 
-	return RunCaptured(ctx, "systemctl", "is-active", "--quiet", serviceName) == nil
+	return executor.RunCaptured(ctx, "systemctl", "is-active", "--quiet", serviceName) == nil
 }
 
 // IsServiceEnabled reports whether systemctl considers the service enabled
@@ -61,5 +63,5 @@ func IsServiceEnabled(ctx context.Context, serviceName string) bool {
 		return false
 	}
 
-	return RunCaptured(ctx, "systemctl", "is-enabled", "--quiet", serviceName) == nil
+	return executor.RunCaptured(ctx, "systemctl", "is-enabled", "--quiet", serviceName) == nil
 }

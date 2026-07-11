@@ -13,6 +13,7 @@ import (
 	"golang.org/x/crypto/ssh"
 
 	"github.com/qxtaiba/okdctl/internal/errtypes"
+	"github.com/qxtaiba/okdctl/internal/executor"
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
@@ -43,7 +44,7 @@ func Verify(ctx context.Context, host, expected string, requirePinned bool, log 
 // runKeyscan invokes ssh-keyscan without -H so hostnames appear in plain
 // form, making output deterministic across invocations (no random salt).
 func runKeyscan(ctx context.Context, host string) (string, error) {
-	out, err := system.OutputCaptured(ctx, "ssh-keyscan", "-T", "5", host)
+	out, err := executor.OutputCaptured(ctx, "ssh-keyscan", "-T", "5", host)
 	if err != nil {
 		return "", err
 	}

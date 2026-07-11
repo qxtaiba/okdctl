@@ -281,7 +281,7 @@ func (p *Phase) installBinaryToPath(ctx context.Context, srcPath, name string) e
 }
 
 func getToolVersion(ctx context.Context, tool, flag string) string {
-	output, err := system.OutputCaptured(ctx, tool, flag)
+	output, err := executor.OutputCaptured(ctx, tool, flag)
 	if err != nil {
 		return "unknown"
 	}
@@ -339,7 +339,7 @@ func installHashiCorpDebianRepo(ctx context.Context, codename string) error {
 				Err: err,
 			}
 		}
-	} else if err := system.RunCaptured(ctx, "gpg", "--dearmor", "-o", gpgPath, gpgTmp); err != nil {
+	} else if err := executor.RunCaptured(ctx, "gpg", "--dearmor", "-o", gpgPath, gpgTmp); err != nil {
 		return fmt.Errorf("failed to dearmor HashiCorp GPG key: %w", err)
 	}
 
@@ -361,11 +361,11 @@ func installHashiCorpDebianRepo(ctx context.Context, codename string) error {
 	if err := system.CopyFile(listTmp, listPath); err != nil {
 		return fmt.Errorf("failed to install HashiCorp repo list: %w", err)
 	}
-	return system.RunCaptured(ctx, "apt-get", "update")
+	return executor.RunCaptured(ctx, "apt-get", "update")
 }
 
 func verifyHashiCorpGPGFingerprint(ctx context.Context, armoredKeyPath string) error {
-	out, err := system.OutputCaptured(ctx,
+	out, err := executor.OutputCaptured(ctx,
 		"gpg", "--with-fingerprint", "--with-colons",
 		"--import-options", "show-only", "--import", armoredKeyPath,
 	)
