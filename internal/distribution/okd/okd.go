@@ -268,7 +268,7 @@ func (p *Provisioner) PostInstall(ctx context.Context, cfg *config.Config, keepR
 // a missing kubeconfig fails fast before any postinstall step runs.
 func (p *Provisioner) ResumePostInstall(ctx context.Context, cfg *config.Config, keepRedHatCatalogs bool) (*postinstall.Result, []distribution.StepResult, error) {
 	installPhase := install.New(phase.WithExecutor(p.executor), phase.WithLogger(p.logger))
-	clusterDir := phase.ClusterConfigDir(filepath.Join(p.projectRoot, "okd-install"))
+	clusterDir := phase.ClusterConfigDir(filepath.Join(p.projectRoot, phase.WorkDirName))
 	if err := installPhase.SetupKubeconfig(ctx, clusterDir); err != nil {
 		return nil, nil, &errtypes.ClusterError{
 			Msg: "cannot resume postinstall: cluster kubeconfig unavailable; " +
@@ -342,7 +342,7 @@ func (p *Provisioner) UpdateIngress(ctx context.Context, cfg *config.Config, opt
 // a path that never exists.
 func resolveIngressWorkDir(projectRoot, workDir string) string {
 	if workDir == "" {
-		return filepath.Join(projectRoot, "okd-install")
+		return filepath.Join(projectRoot, phase.WorkDirName)
 	}
 	return workDir
 }

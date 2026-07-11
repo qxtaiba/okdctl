@@ -41,7 +41,7 @@ func TestRemoveHAProxy_WorkDirRegression(t *testing.T) {
 	kubeconfig := "clusters:\n- cluster:\n    certificate-authority-data: " + caData + "\n  name: test\n"
 
 	projectRoot := t.TempDir()
-	okdInstallDir := filepath.Join(projectRoot, "okd-install")
+	okdInstallDir := filepath.Join(projectRoot, phase.WorkDirName)
 	correctClusterDir := phase.ClusterConfigDir(okdInstallDir)
 	authDir := filepath.Join(correctClusterDir, "auth")
 	if err := os.MkdirAll(authDir, 0o700); err != nil {

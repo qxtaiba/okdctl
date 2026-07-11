@@ -288,7 +288,7 @@ func bundleMustGather(ctx context.Context, addStream func(*tar.Header, io.Reader
 	if _, err := osexec.LookPath("oc"); err != nil {
 		return manifestEntry{Name: categoryMustGather, Status: bundleStatusSkipped, Message: "oc not found on PATH; install oc or run okdctl deploy first"}
 	}
-	workDir := filepath.Join(projectRoot, "okd-install")
+	workDir := filepath.Join(projectRoot, phase.WorkDirName)
 	kubeconfig := filepath.Join(phase.ClusterConfigDir(workDir), "auth", "kubeconfig")
 	if _, err := os.Stat(kubeconfig); err != nil {
 		return manifestEntry{Name: categoryMustGather, Status: bundleStatusSkipped, Message: "kubeconfig not found at " + kubeconfig}

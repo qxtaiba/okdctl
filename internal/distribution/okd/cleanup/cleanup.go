@@ -91,7 +91,7 @@ type Options struct {
 func NewOptions(cfg *config.Config, projectRoot string, kind Kind) Options {
 	return Options{
 		BaseOptions: phase.BaseOptions{
-			WorkDir:      filepath.Join(projectRoot, "okd-install"),
+			WorkDir:      filepath.Join(projectRoot, phase.WorkDirName),
 			ProjectRoot:  projectRoot,
 			TerraformEnv: phase.GetTerraformEnv(cfg),
 		},
