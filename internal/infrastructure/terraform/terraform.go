@@ -119,10 +119,13 @@ type DestroyOptions struct {
 // New constructs an Executor rooted at workDir with the default var-file
 // path (<workDir>/terraform.tfvars).
 func New(workDir string, opts ...Option) *Executor {
+	// SIGINT is terraform's documented soft-cancel: it triggers a graceful
+	// plan/apply abort and releases the state lock before exit, unlike the
+	// executor package's SIGTERM default.
 	e := &Executor{
 		workDir: workDir,
 		varFile: filepath.Join(workDir, "terraform.tfvars"),
-		exec:    executor.New(executor.WithWorkDir(workDir)),
+		exec:    executor.New(executor.WithWorkDir(workDir), executor.WithCancelSignal(syscall.SIGINT)),
 		logger:  logutil.NopLogger,
 	}
 	for _, opt := range opts {

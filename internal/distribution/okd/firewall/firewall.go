@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
+	"github.com/qxtaiba/okdctl/internal/executor"
 	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/system"
 )
@@ -112,7 +113,7 @@ func (f *Firewall) DetectBackend(ctx context.Context) Backend {
 	}
 
 	if _, err := exec.LookPath("ufw"); err == nil {
-		if output, err := system.OutputCaptured(ctx, "ufw", "status"); err == nil {
+		if output, err := executor.OutputCaptured(ctx, "ufw", "status"); err == nil {
 			if strings.Contains(string(output), "Status: active") {
 				return UFW
 			}
@@ -147,7 +148,7 @@ func (f *Firewall) Configure(ctx context.Context, ports []Port, permanent bool) 
 	}
 
 	if backend == Firewalld && permanent {
-		if err := system.RunCaptured(ctx, "firewall-cmd", "--reload"); err != nil {
+		if err := executor.RunCaptured(ctx, "firewall-cmd", "--reload"); err != nil {
 			return fmt.Errorf("failed to reload firewall: %w", err)
 		}
 	}
@@ -202,7 +203,7 @@ func (f *Firewall) RemoveRules(ctx context.Context, ports []Port, permanent bool
 	}
 
 	if backend == Firewalld && permanent {
-		_ = system.RunCaptured(ctx, "firewall-cmd", "--reload")
+		_ = executor.RunCaptured(ctx, "firewall-cmd", "--reload")
 	}
 
 	return nil
@@ -228,13 +229,13 @@ func modifyPort(ctx context.Context, backend Backend, port Port, permanent bool,
 		}
 		// Port/protocol validated by validatePort above; args are an argv
 		// slice (no shell interpolation).
-		return system.RunCaptured(ctx, args[0], args[1:]...)
+		return executor.RunCaptured(ctx, args[0], args[1:]...)
 
 	case UFW:
 		if action == actionRemove {
-			return system.RunCaptured(ctx, "ufw", "delete", "allow", portStr)
+			return executor.RunCaptured(ctx, "ufw", "delete", "allow", portStr)
 		}
-		return system.RunCaptured(ctx, "ufw", "allow", portStr)
+		return executor.RunCaptured(ctx, "ufw", "allow", portStr)
 
 	case IPTables:
 		chainAction := "-I"
@@ -246,7 +247,7 @@ func modifyPort(ctx context.Context, backend Backend, port Port, permanent bool,
 			"--dport", strconv.Itoa(port.Number), "-j", "ACCEPT",
 		}
 		// Port/protocol validated by validatePort above; argv slice (no shell).
-		return system.RunCaptured(ctx, args[0], args[1:]...)
+		return executor.RunCaptured(ctx, args[0], args[1:]...)
 	}
 
 	return nil

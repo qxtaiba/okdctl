@@ -3,7 +3,6 @@ package system
 import (
 	"context"
 	"errors"
-	"os/exec"
 	"strings"
 	"testing"
 	"testing/synctest"
@@ -12,81 +11,6 @@ import (
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/logutil"
 )
-
-// Guards the env-allowlist forwarding contract for RunCaptured; the wrapper
-// must not pass arbitrary parent env to privileged subprocesses.
-func TestRunCaptured_EnvFiltered(t *testing.T) {
-	t.Setenv("OKDCTL_SECRET_CANARY", "must-not-leak")
-	err := RunCaptured(context.Background(), "sh", "-c",
-		`[ -z "$OKDCTL_SECRET_CANARY" ] || exit 42`)
-	if err != nil {
-		t.Fatalf("canary env var leaked into child process: %v", err)
-	}
-}
-
-func TestRunCaptured_ExitZero(t *testing.T) {
-	if err := RunCaptured(context.Background(), "sh", "-c", "exit 0"); err != nil {
-		t.Fatalf("exit 0 should return nil; got %v", err)
-	}
-}
-
-func TestRunCaptured_ExitOneWithStderr(t *testing.T) {
-	err := RunCaptured(context.Background(), "sh", "-c", "echo oops >&2; exit 1")
-	if err == nil {
-		t.Fatal("exit 1 should return non-nil error")
-	}
-	if !strings.Contains(err.Error(), "oops") {
-		t.Errorf("err = %q; want stderr text 'oops' in message", err.Error())
-	}
-	var ee *exec.ExitError
-	if !errors.As(err, &ee) {
-		t.Errorf("err = %T; want *exec.ExitError unwrappable via errors.As", err)
-	}
-}
-
-// TestSubprocessError_ErrorTruncatesLongStderr guards the 400-byte cap
-// applied by RedactableStderr inside SubprocessError.Error().
-func TestSubprocessError_ErrorTruncatesLongStderr(t *testing.T) {
-	long := strings.Repeat("x", 500)
-	se := &SubprocessError{
-		Bin:        "sh",
-		Err:        errors.New("exit status 1"),
-		StderrTail: long,
-	}
-	got := se.Error()
-	if !strings.Contains(got, "[truncated]") {
-		t.Errorf("Error() = %q; want '[truncated]' marker for 500-byte stderr", got)
-	}
-	if len(got) >= 500 {
-		t.Errorf("Error() length = %d; want < 500 after truncation", len(got))
-	}
-}
-
-func TestRunCaptured_ExitOneEmptyStderr(t *testing.T) {
-	err := RunCaptured(context.Background(), "sh", "-c", "exit 1")
-	if err == nil {
-		t.Fatal("exit 1 should return non-nil error")
-	}
-	if !strings.Contains(err.Error(), "sh") {
-		t.Errorf("err = %q; want bin name 'sh' in message", err.Error())
-	}
-	var ee *exec.ExitError
-	if !errors.As(err, &ee) {
-		t.Errorf("err = %T; want *exec.ExitError unwrappable via errors.As", err)
-	}
-}
-
-func TestRunCaptured_CtxCancel(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-	err := RunCaptured(ctx, "sh", "-c", "exit 0")
-	if err == nil {
-		t.Fatal("cancelled ctx should return non-nil error")
-	}
-	if !errors.Is(err, context.Canceled) {
-		t.Errorf("err = %v; want errors.Is(_, context.Canceled)", err)
-	}
-}
 
 func TestWaitFor_ReadyOnFirstCheck(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {

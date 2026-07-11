@@ -9,7 +9,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/qxtaiba/okdctl/internal/system"
+	"github.com/qxtaiba/okdctl/internal/executor"
 )
 
 // validConnectionNameRegex mirrors the dns package allowlist for nmcli
@@ -40,7 +40,7 @@ func RemoveSecondaryIP(ctx context.Context, ip, iface string) error {
 		return fmt.Errorf("interface name is required")
 	}
 
-	output, err := system.OutputCaptured(ctx, "ip", "addr", "show", "dev", iface)
+	output, err := executor.OutputCaptured(ctx, "ip", "addr", "show", "dev", iface)
 	if err != nil {
 		return fmt.Errorf("failed to check IP presence on device %s: %w", iface, err)
 	}
@@ -53,11 +53,11 @@ func RemoveSecondaryIP(ctx context.Context, ip, iface string) error {
 		return fmt.Errorf("failed to find networkmanager connection for %s: %w", iface, err)
 	}
 
-	if err := system.RunCaptured(ctx, "nmcli", "connection", "modify", conn, "-ipv4.addresses", ip+"/32"); err != nil {
+	if err := executor.RunCaptured(ctx, "nmcli", "connection", "modify", conn, "-ipv4.addresses", ip+"/32"); err != nil {
 		return fmt.Errorf("failed to remove IP %s from connection %s: %w", ip, conn, err)
 	}
 
-	if err := system.RunCaptured(ctx, "nmcli", "device", "reapply", iface); err != nil {
+	if err := executor.RunCaptured(ctx, "nmcli", "device", "reapply", iface); err != nil {
 		return fmt.Errorf("failed to apply IP change on %s: %w", iface, err)
 	}
 
@@ -67,7 +67,7 @@ func RemoveSecondaryIP(ctx context.Context, ip, iface string) error {
 // GetDefaultInterface returns the interface name that carries the host's
 // default IPv4 route.
 func GetDefaultInterface(ctx context.Context) (string, error) {
-	output, err := system.OutputCaptured(ctx, "ip", "route", "show", "default")
+	output, err := executor.OutputCaptured(ctx, "ip", "route", "show", "default")
 	if err != nil {
 		return "", fmt.Errorf("failed to get default route: %w", err)
 	}
@@ -83,7 +83,7 @@ func GetDefaultInterface(ctx context.Context) (string, error) {
 }
 
 func connectionForDevice(ctx context.Context, iface string) (string, error) {
-	output, err := system.OutputCaptured(ctx, "nmcli", "-t", "-f", "NAME,DEVICE", "connection", "show", "--active")
+	output, err := executor.OutputCaptured(ctx, "nmcli", "-t", "-f", "NAME,DEVICE", "connection", "show", "--active")
 	if err != nil {
 		return "", fmt.Errorf("failed to list networkmanager connections: %w", err)
 	}

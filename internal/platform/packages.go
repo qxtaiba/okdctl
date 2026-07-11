@@ -7,9 +7,9 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"os/exec"
 	"slices"
 
+	"github.com/qxtaiba/okdctl/internal/executor"
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
@@ -67,7 +67,7 @@ func (m *Manager) Install(ctx context.Context, packages []string, logger *slog.L
 	}
 	logger.Info("packages: installing", "packages", packages)
 	args := append([]string{"install", "-y"}, packages...)
-	return system.RunCaptured(ctx, m.pkgCmd, args...)
+	return executor.RunCaptured(ctx, m.pkgCmd, args...)
 }
 
 // Remove uninstalls only the packages in packages that are currently
@@ -90,7 +90,7 @@ func (m *Manager) Remove(ctx context.Context, packages []string, _ *slog.Logger)
 		return nil
 	}
 	args := append([]string{"remove", "-y"}, installed...)
-	return system.RunCaptured(ctx, m.pkgCmd, args...)
+	return executor.RunCaptured(ctx, m.pkgCmd, args...)
 }
 
 // IsInstalled reports whether pkg is present via the backend's query
@@ -100,14 +100,11 @@ func (m *Manager) Remove(ctx context.Context, packages []string, _ *slog.Logger)
 // "not installed".
 func (m *Manager) IsInstalled(ctx context.Context, pkg string) (bool, error) {
 	args := slices.Concat(m.queryArgs, []string{pkg})
-	output, err := system.OutputCaptured(ctx, m.queryCmd, args...)
+	output, err := executor.OutputCaptured(ctx, m.queryCmd, args...)
 	if err != nil {
-		var subErr *system.SubprocessError
-		if errors.As(err, &subErr) {
-			var exitErr *exec.ExitError
-			if errors.As(subErr.Err, &exitErr) {
-				return false, nil
-			}
+		var exitErr *executor.ExitError
+		if errors.As(err, &exitErr) {
+			return false, nil
 		}
 		return false, fmt.Errorf("%s query: %w", m.queryCmd, err)
 	}
@@ -123,7 +120,7 @@ func (m *Manager) AddRepo(ctx context.Context, name, url string, logger *slog.Lo
 	logger.Info("packages: adding repository", "name", name)
 
 	if m.family == FamilyRHEL {
-		return system.RunCaptured(ctx, m.pkgCmd, "config-manager", "--add-repo", url)
+		return executor.RunCaptured(ctx, m.pkgCmd, "config-manager", "--add-repo", url)
 	}
 
 	listContent := fmt.Sprintf("deb [arch=%s] %s any main\n", DownloadArch(), url)
@@ -141,5 +138,5 @@ func (m *Manager) AddRepo(ctx context.Context, name, url string, logger *slog.Lo
 	if err := system.CopyFile(tmpPath, listPath); err != nil {
 		return fmt.Errorf("failed to install repo list: %w", err)
 	}
-	return system.RunCaptured(ctx, m.pkgCmd, "update")
+	return executor.RunCaptured(ctx, m.pkgCmd, "update")
 }

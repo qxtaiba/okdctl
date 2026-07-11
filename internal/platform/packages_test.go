@@ -15,7 +15,7 @@ import (
 // an argv log that dnf and apt-get append each invocation to (one line of
 // space-joined args per call), so tests can assert what the package tool
 // was — or was not — invoked with. The path is embedded in the scripts
-// because system.RunCaptured strips non-allowlisted env vars.
+// because executor.RunCaptured strips non-allowlisted env vars.
 //
 // Behaviour:
 //
