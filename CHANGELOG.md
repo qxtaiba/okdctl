@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+- internal audit and agent-workflow artifacts (.claude/, docs/superpowers/) are no longer tracked in the repository
+
 ### Added
 - `okdctl doctor` — preflight checks for OS, required binaries,
   free ports, sudo access, pull-secret validity, disk space, Proxmox

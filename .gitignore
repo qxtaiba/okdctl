@@ -95,3 +95,7 @@ okdctl.yaml
 test.yaml
 demo.yaml
 
+
+# agent-workflow artifacts — local only, never shipped
+.claude/
+docs/superpowers/

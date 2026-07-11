@@ -2256,7 +2256,7 @@ one candidate dropped as a duplicate of open A5).
 
 #### B17 — Define a public-tree policy for AI-workflow artifacts
 
-- **Status:** not started
+- **Status:** done — decision recorded 2026-07-11: .claude/ and docs/superpowers/ untracked (local-only); roadmap.md + completed-archive stay public as working-in-the-open; no history rewrite
 - **Category:** oss-readiness / governance
 - **State:** design needed
 - **Effort:** days
