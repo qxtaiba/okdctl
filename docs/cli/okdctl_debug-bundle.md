@@ -35,7 +35,7 @@ okdctl debug-bundle [flags]
 
 ```
   -h, --help                 help for debug-bundle
-      --output-file string   write bundle to this path (default: okdctl-debug-<ts>.tgz)
+      --output-file string   write bundle to this path; empty auto-generates okdctl-debug-<ts>.tgz in the cwd; overwrites an existing file at that path
       --skip-must-gather     skip oc adm must-gather (faster, omits cluster diagnostics)
 ```
 
@@ -52,5 +52,5 @@ okdctl debug-bundle [flags]
 
 ### SEE ALSO
 
-* [okdctl](okdctl.md)	 - Deploy production-ready Kubernetes clusters
+* [okdctl](okdctl.md)	 - Provision OKD clusters on Proxmox VE
 

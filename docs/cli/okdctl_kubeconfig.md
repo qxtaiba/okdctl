@@ -24,7 +24,7 @@ okdctl kubeconfig [flags]
 ```
   -h, --help                 help for kubeconfig
       --merge                merge into $KUBECONFIG or ~/.kube/config (non-destructive: existing entries preserved)
-      --output-file string   write kubeconfig to file ('-' for stdout) (default "-")
+      --output-file string   write kubeconfig to file, overwriting it if present ('-' for stdout) (default "-")
 ```
 
 ### Options inherited from parent commands
@@ -40,5 +40,5 @@ okdctl kubeconfig [flags]
 
 ### SEE ALSO
 
-* [okdctl](okdctl.md)	 - Deploy production-ready Kubernetes clusters
+* [okdctl](okdctl.md)	 - Provision OKD clusters on Proxmox VE
 

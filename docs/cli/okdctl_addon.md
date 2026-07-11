@@ -25,7 +25,7 @@ List, install, uninstall, and verify optional cluster addons.
 
 ### SEE ALSO
 
-* [okdctl](okdctl.md)	 - Deploy production-ready Kubernetes clusters
+* [okdctl](okdctl.md)	 - Provision OKD clusters on Proxmox VE
 * [okdctl addon install](okdctl_addon_install.md)	 - Install one addon (or all enabled addons with --all)
 * [okdctl addon list](okdctl_addon_list.md)	 - List registered addons and their config state
 * [okdctl addon uninstall](okdctl_addon_uninstall.md)	 - Uninstall a named addon

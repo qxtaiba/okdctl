@@ -25,7 +25,7 @@ List and inspect OKD releases resolved from the GitHub releases feed.
 
 ### SEE ALSO
 
-* [okdctl](okdctl.md)	 - Deploy production-ready Kubernetes clusters
+* [okdctl](okdctl.md)	 - Provision OKD clusters on Proxmox VE
 * [okdctl releases list](okdctl_releases_list.md)	 - List available OKD versions
 * [okdctl releases show](okdctl_releases_show.md)	 - Show release info for a single OKD version
 

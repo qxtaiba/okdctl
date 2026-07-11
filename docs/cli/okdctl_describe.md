@@ -25,7 +25,7 @@ Show detailed information for a specific cluster node or registered addon.
 
 ### SEE ALSO
 
-* [okdctl](okdctl.md)	 - Deploy production-ready Kubernetes clusters
+* [okdctl](okdctl.md)	 - Provision OKD clusters on Proxmox VE
 * [okdctl describe addon](okdctl_describe_addon.md)	 - Show detail for a registered addon
 * [okdctl describe node](okdctl_describe_node.md)	 - Show detail for a cluster node
 
