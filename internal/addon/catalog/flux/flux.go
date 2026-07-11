@@ -254,17 +254,19 @@ func (f *Flux) Verify(ctx context.Context, env *addon.Environment) error {
 // not abort the sequence.
 func (f *Flux) Uninstall(ctx context.Context, env *addon.Environment) error {
 	env.Logger.Info("flux: removing flux components")
-	warnOnErr := func(err error, desc string) {
-		if err != nil {
-			env.Logger.Warn("flux: "+desc, "err", err)
+	// Run returns a nil error for non-zero exits (only start/ctx failures
+	// error), so the exit code must be checked or failures pass silently.
+	warnOnErr := func(res *executor.Result, err error, desc string) {
+		if err != nil || res.ExitCode != 0 {
+			env.Logger.Warn("flux: "+desc, "exit", res.ExitCode, "err", err)
 		}
 	}
-	_, err := env.Exec.Run(ctx, "helm", "uninstall", "flux-instance", "--namespace", "flux-system")
-	warnOnErr(err, "uninstall flux-instance")
-	_, err = env.Exec.Run(ctx, "helm", "uninstall", "flux-operator", "--namespace", "flux-system")
-	warnOnErr(err, "uninstall flux-operator")
-	_, err = env.Exec.Run(ctx, "oc", "delete", "ns", "flux-system")
-	warnOnErr(err, "delete flux-system namespace")
+	res, err := env.Exec.Run(ctx, "helm", "uninstall", "flux-instance", "--namespace", "flux-system")
+	warnOnErr(res, err, "uninstall flux-instance")
+	res, err = env.Exec.Run(ctx, "helm", "uninstall", "flux-operator", "--namespace", "flux-system")
+	warnOnErr(res, err, "uninstall flux-operator")
+	res, err = env.Exec.Run(ctx, "oc", "delete", "ns", "flux-system")
+	warnOnErr(res, err, "delete flux-system namespace")
 	return nil
 }
 

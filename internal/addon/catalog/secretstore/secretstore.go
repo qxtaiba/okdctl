@@ -179,13 +179,16 @@ func (s *SecretStore) Uninstall(ctx context.Context, env *addon.Environment) err
 	env.Logger.Info("secretstore: removing provider resources", "provider", string(kind))
 	if p != nil {
 		for _, name := range p.secretNames() {
-			if _, err := env.Exec.Run(ctx, "oc", "delete", "secret", name, "-n", ns); err != nil {
-				env.Logger.Warn("secretstore: delete secret failed", "secret", name, "err", err)
+			// Run returns a nil error for non-zero exits (only start/ctx
+			// failures error), so the exit code must be checked or a failed
+			// delete passes silently.
+			if res, err := env.Exec.Run(ctx, "oc", "delete", "secret", name, "-n", ns); err != nil || res.ExitCode != 0 {
+				env.Logger.Warn("secretstore: delete secret failed", "secret", name, "exit", res.ExitCode, "err", err)
 			}
 		}
 	}
-	if _, err := env.Exec.Run(ctx, "oc", "delete", "secretstore", esoSecretStoreName, "-n", ns); err != nil {
-		env.Logger.Warn("secretstore: delete SecretStore CRD failed", "name", esoSecretStoreName, "err", err)
+	if res, err := env.Exec.Run(ctx, "oc", "delete", "secretstore", esoSecretStoreName, "-n", ns); err != nil || res.ExitCode != 0 {
+		env.Logger.Warn("secretstore: delete SecretStore CRD failed", "name", esoSecretStoreName, "exit", res.ExitCode, "err", err)
 	}
 	return nil
 }
