@@ -268,23 +268,6 @@ func resolveIngressWorkDir(projectRoot, workDir string) string {
 	return workDir
 }
 
-// DestroyOpts configures a Provisioner.Destroy run. Zero-value runs a
-// full teardown; Skip* flags carve out individual steps so operators
-// can retry a partial run (e.g. SkipTerraform=true to re-run just the
-// file cleanup after a successful terraform destroy).
-type DestroyOpts struct {
-	AutoApprove    bool
-	RemovePackages bool
-	KeepISOs       bool
-	SkipTerraform  bool
-	SkipCleanup    bool
-	SkipFirewall   bool
-	// TerraformTargets, when non-empty, limits the terraform destroy to
-	// the named resource addresses. Each entry must pass the CLI-layer
-	// allowlist before reaching this struct.
-	TerraformTargets []string
-}
-
 // ZeroizeEnv delegates to the underlying executor's ZeroizeEnv, bounding
 // the lifetime of plaintext credential strings. Call via defer after all
 // phases complete. Kept as credential-lifecycle scaffolding (api:c287d5c0);
@@ -296,17 +279,10 @@ func (p *Provisioner) ZeroizeEnv() {
 	p.executor.ZeroizeEnv()
 }
 
-// Destroy tears down the cluster and its infrastructure.
-func (p *Provisioner) Destroy(ctx context.Context, cfg *config.Config, opts DestroyOpts) ([]distribution.StepResult, error) {
+// Destroy tears down the cluster and its infrastructure. Callers build opts
+// via destroy.NewOptions(cfg, projectRoot) and override the fields they
+// need — there is no separate CLI-facing options type to keep in sync.
+func (p *Provisioner) Destroy(ctx context.Context, cfg *config.Config, opts *destroy.Options) ([]distribution.StepResult, error) {
 	destroyPhase := destroy.New(phase.WithExecutor(p.executor), phase.WithLogger(p.logger))
-	destroyOpts := destroy.NewOptions(cfg, p.projectRoot)
-	destroyOpts.AutoApprove = opts.AutoApprove
-	destroyOpts.RemovePackages = opts.RemovePackages
-	destroyOpts.KeepISOs = opts.KeepISOs
-	destroyOpts.SkipTerraform = opts.SkipTerraform
-	destroyOpts.SkipCleanup = opts.SkipCleanup
-	destroyOpts.SkipFirewall = opts.SkipFirewall
-	destroyOpts.TerraformTargets = opts.TerraformTargets
-
-	return destroyPhase.Execute(ctx, cfg, &destroyOpts)
+	return destroyPhase.Execute(ctx, cfg, opts)
 }
