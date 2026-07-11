@@ -17,12 +17,11 @@ import (
 )
 
 // BaseOptions is the common option set every phase's own Options embeds —
-// the project checkout root, per-run workDir, Debug flag, and the terraform
-// environment name (production|staging|...).
+// the project checkout root, per-run workDir, and the name of the
+// directory under infrastructure/terraform/environments/ to use.
 type BaseOptions struct {
 	ProjectRoot  string
 	WorkDir      string
-	Debug        bool
 	TerraformEnv string
 }
 

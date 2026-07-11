@@ -101,8 +101,6 @@ func DefaultConfig() *Config {
 		Deployment: DeploymentConfig{
 			TerraformEnv:     "production",
 			AutoApprove:      false,
-			Debug:            false,
-			SkipDepsCheck:    false,
 			BootstrapTimeout: 3600,
 			InstallTimeout:   7200,
 		},

@@ -389,9 +389,7 @@ func (s *ReviewStep) renderAdvanced(st *sectionStyles) string {
 	return renderSection(st, "advanced", []kvEntry{
 		{label: "vm id base", value: fmt.Sprintf("%d", vmid), skip: vmid <= 0},
 		{label: "timeouts", value: timeouts, skip: bt <= 0},
-		{label: "debug mode", value: valYes, skip: !dep.Debug},
-		{label: "skip deps check", value: valYes, skip: !dep.SkipDepsCheck},
-		{label: "terraform workspace", value: dep.TerraformEnv, skip: dep.TerraformEnv == ""},
+		{label: "terraform environment", value: dep.TerraformEnv, skip: dep.TerraformEnv == ""},
 		{label: "auto approve", value: valYes, skip: !dep.AutoApprove},
 	})
 }
