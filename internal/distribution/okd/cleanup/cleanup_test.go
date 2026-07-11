@@ -8,7 +8,9 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/qxtaiba/okdctl/internal/distribution"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/logutil"
@@ -43,8 +45,8 @@ func TestExecute_WorkOnlyKindScopesToWorkDirOnly(t *testing.T) {
 	}
 
 	opts := &Options{
-		BaseOptions:    phase.BaseOptions{WorkDir: workDir, ProjectRoot: t.TempDir()},
-		Kind:           WorkOnly,
+		BaseOptions: phase.BaseOptions{WorkDir: workDir, ProjectRoot: t.TempDir()},
+		Kind:        WorkOnly,
 	}
 
 	if err := execute(context.Background(), opts, logutil.NopLogger); err != nil {
@@ -394,4 +396,37 @@ func TestExecute_PostDestroy_TFStateGating(t *testing.T) {
 			t.Errorf("empty terraform.tfstate not removed after PostDestroy: stat err = %v", err)
 		}
 	})
+}
+
+type fakeMetricsRecorder struct {
+	started  []distribution.StepID
+	finished []distribution.StepID
+	deployed bool
+}
+
+func (f *fakeMetricsRecorder) StepStarted(id distribution.StepID) { f.started = append(f.started, id) }
+
+func (f *fakeMetricsRecorder) StepFinished(r *distribution.StepResult) {
+	f.finished = append(f.finished, r.StepID)
+}
+
+func (f *fakeMetricsRecorder) DeployFinished(time.Duration) { f.deployed = true }
+
+func TestPhaseExecute_WiresMetricsRecorder(t *testing.T) {
+	rec := &fakeMetricsRecorder{}
+	p := New(phase.WithLogger(logutil.NopLogger), phase.WithRecorder(rec))
+	opts := &Options{
+		BaseOptions: phase.BaseOptions{WorkDir: t.TempDir()},
+		Kind:        WorkOnly,
+	}
+
+	if err := p.Execute(context.Background(), opts); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if len(rec.started) == 0 {
+		t.Error("StepStarted never called; Phase.Execute did not wire p.Recorder into the orchestrator")
+	}
+	if !rec.deployed {
+		t.Error("DeployFinished never called; Phase.Execute did not wire p.Recorder into the orchestrator")
+	}
 }

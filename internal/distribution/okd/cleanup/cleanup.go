@@ -119,7 +119,7 @@ func New(opts ...phase.BasePhaseOption) *Phase {
 // failures are accumulated and returned as a joined error; a partial run
 // still attempts the remaining steps.
 func (p *Phase) Execute(ctx context.Context, opts *Options) error {
-	return execute(ctx, opts, p.Log)
+	return executeWithRecorder(ctx, opts, p.Log, p.Recorder)
 }
 
 // Step IDs for the cleanup phase, ordered as they execute within Full.
@@ -157,6 +157,13 @@ func (t *cleanupTracker) failedNames() []string {
 }
 
 func execute(ctx context.Context, opts *Options, logger *slog.Logger) error {
+	return executeWithRecorder(ctx, opts, logger, nil)
+}
+
+// executeWithRecorder is execute plus metrics-recorder wiring, split out so
+// Phase.Execute can forward p.Recorder (matching setup/install/postinstall)
+// without every test constructing a Phase.
+func executeWithRecorder(ctx context.Context, opts *Options, logger *slog.Logger, rec distribution.MetricsRecorder) error {
 	if opts.Kind == "" {
 		return &errtypes.ConfigError{Msg: "cleanup kind not set"}
 	}
@@ -166,6 +173,7 @@ func execute(ctx context.Context, opts *Options, logger *slog.Logger) error {
 	defs := cleanupSteps(opts, logger)
 	o := distribution.NewOrchestrator(distribution.BuildSteps(defs)...)
 	o.SetLogger(logger)
+	o.SetMetricsRecorder(rec)
 	return o.Run(ctx)
 }
 
