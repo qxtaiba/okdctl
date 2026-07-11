@@ -10,7 +10,13 @@ import (
 	"github.com/qxtaiba/okdctl/internal/logutil"
 )
 
-// WaitForOptions configures the polling loop driven by WaitFor.
+// WaitForOptions configures the polling loop driven by WaitFor. It is a
+// per-call config struct rather than functional options: WaitFor is a
+// one-shot operation, not a long-lived object built once via a constructor,
+// so there is no natural attachment point for the WithX(...) pattern used
+// by terraform.PlanOptions or proxmox.ProvisionOptions. WaitForWithTimeout
+// wraps the common single-field case so most callers never build this
+// struct by hand.
 type WaitForOptions struct {
 	Interval time.Duration // Default: 30 seconds
 	Timeout  time.Duration // Default: no timeout (0)
