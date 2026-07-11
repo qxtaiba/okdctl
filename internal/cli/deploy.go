@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 
 	"github.com/spf13/cobra"
 
@@ -67,6 +68,24 @@ func runDeploy(cmd *cobra.Command, _ []string) error {
 		return &errtypes.ConfigError{
 			Msg: "--metrics-allow-network requires --metrics-addr (the flag has no effect on its own)",
 		}
+	}
+
+	// Deploy self-initializes the workspace: the embedded Terraform sources
+	// are materialized before the wizard or any phase code so an empty
+	// directory works. Write-once — a source checkout or hand-edited HCL is
+	// never overwritten (see deploy.MaterializeTerraform).
+	projectRoot, err := resolveWorkspaceRoot()
+	if err != nil {
+		return err
+	}
+	created, err := deploy.MaterializeTerraform(projectRoot)
+	if err != nil {
+		return err
+	}
+	if len(created) > 0 {
+		tui.Info("initialized terraform sources",
+			tui.LF("dir", filepath.Join(projectRoot, "infrastructure", "terraform")),
+			tui.LF("files", len(created)))
 	}
 
 	// Resolve the config file path: --output-file wins when explicitly set;
@@ -166,7 +185,7 @@ func runDeployDryRun(ctx context.Context, cfg *config.Config, w io.Writer) error
 	creds := credentials.GetProxmoxCredentials(cfg)
 	defer creds.Zeroize()
 
-	projectRoot, err := resolveProjectRootOrDie()
+	projectRoot, err := resolveWorkspaceRoot()
 	if err != nil {
 		return err
 	}
@@ -280,7 +299,7 @@ func runFullDeployment(ctx context.Context, cfg *config.Config, w io.Writer) err
 		reportCredentialProvenance(creds)
 	}
 
-	projectRoot, err := resolveProjectRootOrDie()
+	projectRoot, err := resolveWorkspaceRoot()
 	if err != nil {
 		return err
 	}
