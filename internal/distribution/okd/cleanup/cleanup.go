@@ -251,6 +251,11 @@ func cleanupSteps(opts *Options, logger *slog.Logger) []distribution.StepDef {
 			tf := terraform.New(envDir, terraform.WithLogger(logger))
 			if !tf.HasState() {
 				_ = SafeRemoveWithLogger(ctx, filepath.Join(envDir, "terraform.tfstate"), "terraform state file", logger)
+				if kept, pruneErr := tf.PruneBakSnapshotsExceptNewest(); pruneErr != nil {
+					logger.Warn("cleanup: terraform state backup prune failed", "err", pruneErr)
+				} else if kept != "" {
+					logger.Info("cleanup: kept newest terraform state backup as rollback artefact", "path", kept)
+				}
 			}
 			return nil
 		},

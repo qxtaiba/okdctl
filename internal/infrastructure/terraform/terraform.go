@@ -499,6 +499,33 @@ func (t *Executor) pruneSnapshots() {
 	}
 }
 
+// PruneBakSnapshotsExceptNewest removes every terraform.tfstate.*.bak file in
+// WorkDir except the most recent, returning its path (or "" if none exist).
+// Mirrors CleanupPlans' policy of keeping one rollback artefact rather than
+// deleting every snapshot outright.
+func (t *Executor) PruneBakSnapshotsExceptNewest() (string, error) {
+	newest := t.NewestBakSnapshot()
+	entries, err := os.ReadDir(t.workDir)
+	if err != nil {
+		return newest, fmt.Errorf("prune bak snapshots: read workdir: %w", err)
+	}
+	var errs []error
+	for _, e := range entries {
+		name := e.Name()
+		if !strings.HasPrefix(name, "terraform.tfstate.") || !strings.HasSuffix(name, ".bak") {
+			continue
+		}
+		path := filepath.Join(t.workDir, name)
+		if path == newest {
+			continue
+		}
+		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+			errs = append(errs, fmt.Errorf("remove %s: %w", path, err))
+		}
+	}
+	return newest, errors.Join(errs...)
+}
+
 // ZeroizeEnv delegates to the inner executor's ZeroizeEnv, bounding the
 // lifetime of plaintext credential strings in process memory. Call via defer
 // after all terraform operations complete.
