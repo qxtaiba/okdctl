@@ -2,6 +2,9 @@
 // Cleanup is best-effort: a mid-run crash leaves workDir in a partially-removed
 // state with no resume capability. Terraform state is removed last so destroy
 // stays re-runnable as long as earlier steps have not corrupted it.
+// Exported subsystem funcs (WorkDirectory, WebServer, Dnsmasq, Packages,
+// IgnitionCerts, GenerateSummary, ValidKinds) are the package's public API
+// surface even though today's only callers are intra-package.
 package cleanup
 
 import (

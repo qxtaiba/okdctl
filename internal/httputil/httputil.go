@@ -15,10 +15,9 @@ import (
 )
 
 // Standard request timeouts tiered by expected response size.
-// Scaffolding (api:cfcdee2d): TimeoutShort/TimeoutMedium/TimeoutDownload
-// form a symmetric latency tier; TimeoutDownload has no in-repo caller yet
-// but removing it would break the tier shape before a file-download caller
-// lands.
+// TimeoutShort/TimeoutMedium/TimeoutDownload form a symmetric latency tier;
+// download.DefaultTimeout aliases TimeoutDownload, so this package owns the
+// download-tier value.
 const (
 	TimeoutShort    = 10 * time.Second // API calls, connectivity checks
 	TimeoutMedium   = 30 * time.Second // Metadata, checksum fetches
