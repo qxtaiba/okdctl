@@ -65,9 +65,11 @@ func (r *ValidationResult) Error() string {
 	return strings.Join(msgs, "; ")
 }
 
-// ValidationScope is a bitmask selecting which validators run. ScopeAll
-// enables every validator; ScopeQuick runs the required/enum/networking
-// set used during interactive editing.
+// ValidationScope is a bitmask selecting which validators
+// ValidateWithOptions runs. ScopeAll enables every validator; deploy's
+// pre-flight gate combines ScopeRequired|ScopeEnums|ScopeProvider|
+// ScopeAdvancedNetworking to reject a hand-edited config before any phase
+// code runs, without paying for the full validator set on every keystroke.
 type ValidationScope uint64
 
 // Validation scope flags. Combine with bitwise-OR.
@@ -77,14 +79,12 @@ const (
 	ScopeResources
 	ScopeDistribution
 	ScopeProvider
-	ScopeFeatures
 	ScopeFiles
 	ScopeAdvancedNetworking
 	ScopeHTTPServer
 	ScopeEnums
 
-	ScopeAll   = 0xFFFFFFFFFFFFFFFF
-	ScopeQuick = ScopeRequired | ScopeEnums | ScopeNetworking
+	ScopeAll = 0xFFFFFFFFFFFFFFFF
 )
 
 // HasScope reports whether s has flag set.
