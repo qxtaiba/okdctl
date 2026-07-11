@@ -170,7 +170,8 @@ write the comment — then it carries real information.
 
 ## Tooling
 
-- `go.mod` targets Go 1.25 / toolchain 1.26.2. Don't downgrade.
+- `go.mod`'s `go` and `toolchain` directives are authoritative for the
+  minimum Go/toolchain version; don't downgrade them.
 - `.golangci.yml` is authoritative for lint config. Key thresholds:
   `funlen.lines: 120`, `gocyclo.min-complexity: 30`, `dupl.threshold: 100`.
 - CI runs `lint-go`, `test-go`, `build-go`, `security` (govulncheck),
@@ -256,10 +257,15 @@ write the comment — then it carries real information.
   LICENSE.
 - **v0.x deps need a justification and an abandonment plan.** v0.x APIs
   may break on any minor bump. Today's entries:
-  - `github.com/luthermonson/go-proxmox` v0.5.x — sole Proxmox discovery
+  - `github.com/luthermonson/go-proxmox` v0.7.x — sole Proxmox discovery
     path (`internal/tui/wizard/steps/proxmox_discovery.go`). Bus-factor 1.
     Fallback: ~200 LOC REST-only rewrite using `net/http` + the documented
-    Proxmox API. Track upstream releases; bump on each.
+    Proxmox API. Track upstream releases; bump on each. Treat 3 consecutive
+    months without an upstream release as the trigger to start the rewrite.
+    Transitive-weight tally: go-proxmox also links `diskfs/go-diskfs` (full
+    ISO9660/MBR stack) plus its compression deps (`klauspost/compress`,
+    `pierrec/lz4/v4`, `ulikunitz/xz`) that okdctl never calls directly —
+    counts toward the rewrite trigger above.
   - `registry.terraform.io/bpg/proxmox` ~> 0.111.0 — sole actively
     maintained Proxmox VE Terraform provider; hash-pinned at 0.111.1 in
     `infrastructure/terraform/environments/production/.terraform.lock.hcl`
@@ -271,9 +277,6 @@ write the comment — then it carries real information.
   uses REST discovery only, not shell/console websockets. Safe to keep
   until go-proxmox migrates to `coder/websocket`, at which point take the
   bump without local code changes.
-- **`github.com/joho/godotenv` ships its license file as `LICENCE`
-  (British spelling) — a valid MIT license; SBOM scanners that grep for
-  `LICENSE` will flag a false positive.**
 - **Removed transitive-weight deps.** `schollz/progressbar/v3` was dropped
   in favour of a ~30 LOC hand-rolled byte-progress writer in
   `internal/download/progress.go`. The writer reuses
@@ -294,5 +297,26 @@ write the comment — then it carries real information.
   `gopkg.in/yaml.v3` v3.0.1 is go.sum-only (absent from go.mod),
   pulled transitively. Do not add a fifth engine without a recorded
   justification here.
+- **Log-engine baseline (tripwire).** Four engines compile into the
+  `cmd/okdctl` binary: `log/slog` (stdlib, canonical sink — every
+  package-level log call funnels through it, see `internal/tui/logger.go`),
+  `charm.land/log/v2` (direct, single call site — the same file — used
+  only as a colored-level formatter behind a slog.Handler facade; kept
+  for charm-ecosystem coherence alongside bubbletea/lipgloss rather than
+  a hand-rolled ~50 LOC replacement), and `go-logr/logr` +
+  `k8s.io/klog/v2` (indirect — `k8s.io/api/core/v1` pulls in klog, which
+  pulls in logr, reached via `internal/addon`). Do not add a fifth engine
+  without recording it here.
+- **k8s-mandated maintenance-frozen deps.** `github.com/json-iterator/go`
+  v1.1.12 (last release Sep 2021) is pulled in transitively via
+  `k8s.io/api` → `k8s.io/apimachinery` →
+  `sigs.k8s.io/structured-merge-diff/v6`, which in turn requires
+  `modern-go/concurrent` (last commit 2019) and `modern-go/reflect2`
+  (last release 2021) — both abandoned-but-shipping. None are reachable
+  for a Go-side replace; removal arrives only when upstream k8s finishes
+  its CBOR migration off json-iterator. Tripwire: if the `json-iterator`
+  or `modern-go` GitHub namespace is ever vacated, bump k8s.io/api +
+  k8s.io/apimachinery immediately, independent of the normal release
+  cadence.
 - **Before adding a dep,** check whether Go 1.25 stdlib covers it
   (`slices`, `maps`, `net/netip`, `log/slog`, `sync.OnceFunc`, etc.).
