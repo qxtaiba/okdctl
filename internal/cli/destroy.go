@@ -195,6 +195,76 @@ func init() {
 	})
 }
 
+// validateDestroyFlagCombos rejects flag combinations that are individually
+// valid but not sensible together; all exit 64 (EX_USAGE).
+func validateDestroyFlagCombos(cfg *config.Config) error {
+	// --target/--only without --confirm-cluster lets a typo silently scope a
+	// destroy; require an explicit cluster-name acknowledgement regardless of --yes.
+	if len(destroyTargets) > 0 && destroyConfirmCluster == "" {
+		return &errtypes.UsageError{
+			Msg: fmt.Sprintf("--target/--only requires --confirm-cluster=%q to guard against targeted destroys on the wrong cluster", cfg.Cluster.Name),
+		}
+	}
+	if !destroyDryRun {
+		return nil
+	}
+	var incompatible []string
+	if destroySkipTerraform {
+		incompatible = append(incompatible, "--skip-terraform")
+	}
+	if destroySkipCleanup {
+		incompatible = append(incompatible, "--skip-cleanup")
+	}
+	if destroySkipFirewall {
+		incompatible = append(incompatible, "--skip-firewall")
+	}
+	if len(incompatible) > 0 {
+		return &errtypes.UsageError{
+			Msg: fmt.Sprintf("%s cannot be used with --dry-run (dry-run only previews terraform; skip flags have no effect)",
+				strings.Join(incompatible, ", ")),
+		}
+	}
+	return nil
+}
+
+// confirmDestroyInteractive runs the two-stage interactive gate: exact
+// cluster-name typing (unscoped runs only — scoped runs already passed
+// --confirm-cluster) followed by the y/N prompt.
+func confirmDestroyInteractive(ctx context.Context, cfg *config.Config) (bool, error) {
+	if len(destroyTargets) == 0 {
+		nameConfirmed, err := promptForClusterNameConfirmation(ctx, cfg.Cluster.Name)
+		if err != nil || !nameConfirmed {
+			return false, err
+		}
+	}
+	return promptForConfirmation(ctx, "proceed with destroy? [y/N]: ")
+}
+
+// buildDestroyOptions assembles destroy.Options from the destroy flag set.
+// A scoped run (--target/--only) forces the cleanup/firewall/iso steps off
+// so bastion-wide teardown never runs against a still-running control plane.
+func buildDestroyOptions(cfg *config.Config, projectRoot string) destroy.Options {
+	skipCleanup := destroySkipCleanup
+	skipFirewall := destroySkipFirewall
+	keepISOs := destroyKeepISOs
+	if len(destroyTargets) > 0 {
+		skipCleanup = true
+		skipFirewall = true
+		keepISOs = true
+		tui.Info("scoped destroy: skipping host cleanup, firewall rules, and iso removal — full bastion teardown is exclusive to an unscoped destroy")
+	}
+
+	opts := destroy.NewOptions(cfg, projectRoot)
+	opts.AutoApprove = true
+	opts.RemovePackages = true
+	opts.KeepISOs = keepISOs
+	opts.SkipTerraform = destroySkipTerraform
+	opts.SkipCleanup = skipCleanup
+	opts.SkipFirewall = skipFirewall
+	opts.TerraformTargets = destroyTargets
+	return opts
+}
+
 func runDestroy(cmd *cobra.Command, _ []string) error {
 	ctx := cmd.Context()
 
@@ -215,31 +285,11 @@ func runDestroy(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
-	// --target/--only without --confirm-cluster lets a typo silently scope a
-	// destroy; require an explicit cluster-name acknowledgement regardless of --yes.
-	if len(destroyTargets) > 0 && destroyConfirmCluster == "" {
-		return &errtypes.UsageError{
-			Msg: fmt.Sprintf("--target/--only requires --confirm-cluster=%q to guard against targeted destroys on the wrong cluster", cfg.Cluster.Name),
-		}
+	if err := validateDestroyFlagCombos(cfg); err != nil {
+		return err
 	}
 
 	if destroyDryRun {
-		var incompatible []string
-		if destroySkipTerraform {
-			incompatible = append(incompatible, "--skip-terraform")
-		}
-		if destroySkipCleanup {
-			incompatible = append(incompatible, "--skip-cleanup")
-		}
-		if destroySkipFirewall {
-			incompatible = append(incompatible, "--skip-firewall")
-		}
-		if len(incompatible) > 0 {
-			return &errtypes.UsageError{
-				Msg: fmt.Sprintf("%s cannot be used with --dry-run (dry-run only previews terraform; skip flags have no effect)",
-					strings.Join(incompatible, ", ")),
-			}
-		}
 		return runDestroyDryRun(ctx, cfg)
 	}
 
@@ -250,21 +300,11 @@ func runDestroy(cmd *cobra.Command, _ []string) error {
 	}
 
 	if !destroyYes {
-		if len(destroyTargets) == 0 {
-			nameConfirmed, err := promptForClusterNameConfirmation(ctx, cfg.Cluster.Name)
-			if err != nil {
-				return err
-			}
-			if !nameConfirmed {
-				tui.Info("cancelled")
-				return nil
-			}
-		}
-		confirmed, err := promptForConfirmation(ctx, "proceed with destroy? [y/N]: ")
+		proceed, err := confirmDestroyInteractive(ctx, cfg)
 		if err != nil {
 			return err
 		}
-		if !confirmed {
+		if !proceed {
 			tui.Info("cancelled")
 			return nil
 		}
@@ -305,24 +345,7 @@ func runDestroy(cmd *cobra.Command, _ []string) error {
 	tui.Info("destroying cluster...")
 	startTime := time.Now()
 
-	skipCleanup := destroySkipCleanup
-	skipFirewall := destroySkipFirewall
-	keepISOs := destroyKeepISOs
-	if len(destroyTargets) > 0 {
-		skipCleanup = true
-		skipFirewall = true
-		keepISOs = true
-		tui.Info("scoped destroy: skipping host cleanup, firewall rules, and iso removal — full bastion teardown is exclusive to an unscoped destroy")
-	}
-
-	destroyOpts := destroy.NewOptions(cfg, projectRoot)
-	destroyOpts.AutoApprove = true
-	destroyOpts.RemovePackages = true
-	destroyOpts.KeepISOs = keepISOs
-	destroyOpts.SkipTerraform = destroySkipTerraform
-	destroyOpts.SkipCleanup = skipCleanup
-	destroyOpts.SkipFirewall = skipFirewall
-	destroyOpts.TerraformTargets = destroyTargets
+	destroyOpts := buildDestroyOptions(cfg, projectRoot)
 
 	steps, err := p.Destroy(ctx, cfg, &destroyOpts)
 	if err != nil {

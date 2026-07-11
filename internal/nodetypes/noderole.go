@@ -22,9 +22,7 @@ const (
 )
 
 // ParseNodeRole is the deserialization counterpart to NodeRole.String().
-// Currently no caller; retained as the canonical symmetric pair for
-// upcoming status JSON / terraform-output deserialization. Case-sensitive
-// to match openshift-install output.
+// Case-sensitive to match openshift-install output.
 func ParseNodeRole(s string) (NodeRole, error) {
 	switch NodeRole(s) {
 	case RoleBootstrap, RoleMaster, RoleWorker:
