@@ -1,21 +1,13 @@
 ## okdctl
 
-Deploy production-ready Kubernetes clusters
+Provision OKD clusters on Proxmox VE
 
 ### Synopsis
 
-Homelab K8s - Deploy production-ready Kubernetes clusters
-
-A delightful CLI tool for deploying OKD/OpenShift clusters
-on Proxmox VE infrastructure.
-
-Highlights:
-  • Interactive setup wizard with beautiful TUI
-  • OKD/OpenShift 4.15-4.21 support
-  • Addon-extensible architecture (Flux, secrets, storage, cert-manager)
-  • YAML configuration with sensible defaults
-  • Automated preflight checks and validation
-  • Single binary distribution
+okdctl provisions OKD clusters on Proxmox VE from an interactive wizard.
+It's for the homelab operator with one or two Proxmox nodes who wants a
+real Kubernetes cluster without hand-rolling Terraform, Ignition, and
+bootstrap glue.
 
 Release builds check api.github.com for a newer release (at most once
 per 24h, cached locally); set OKDCTL_NO_UPDATE_CHECK=1 to disable.

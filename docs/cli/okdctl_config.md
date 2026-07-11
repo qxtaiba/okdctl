@@ -25,7 +25,7 @@ Show and validate the resolved okdctl configuration; start with 'config show' to
 
 ### SEE ALSO
 
-* [okdctl](okdctl.md)	 - Deploy production-ready Kubernetes clusters
+* [okdctl](okdctl.md)	 - Provision OKD clusters on Proxmox VE
 * [okdctl config show](okdctl_config_show.md)	 - Print the resolved configuration with secrets redacted
 * [okdctl config validate](okdctl_config_validate.md)	 - Validate the configuration file and report errors
 

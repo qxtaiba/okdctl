@@ -44,5 +44,5 @@ okdctl completion <bash|zsh|fish>
 
 ### SEE ALSO
 
-* [okdctl](okdctl.md)	 - Deploy production-ready Kubernetes clusters
+* [okdctl](okdctl.md)	 - Provision OKD clusters on Proxmox VE
 
