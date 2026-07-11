@@ -250,11 +250,14 @@ func runFullDeployment(ctx context.Context, cfg *config.Config, w io.Writer) err
 	}
 
 	// Hard gate before any phase code: provider fields flow verbatim into
-	// terraform.tfvars HCL literals, so a hand-edited config must be
-	// rejected here, not warn-and-proceed like saveConfig does. Required
-	// and enum scopes are included because validateProvider no-ops on a
-	// non-proxmox type string — a bogus type must not bypass the gate.
-	gateScope := config.ScopeRequired | config.ScopeEnums | config.ScopeProvider
+	// terraform.tfvars HCL literals, and the bastion identity (Bastion.IP,
+	// StaticIP.DNS, HTTPServer.IgnitionServerIP) flows into apache's bind
+	// address and every node's static-ip kernel args, so a hand-edited
+	// config must be rejected here, not warn-and-proceed like saveConfig
+	// does. Required and enum scopes are included because validateProvider
+	// no-ops on a non-proxmox type string — a bogus type must not bypass
+	// the gate.
+	gateScope := config.ScopeRequired | config.ScopeEnums | config.ScopeProvider | config.ScopeAdvancedNetworking
 	if result := config.ValidateWithOptions(cfg, config.ValidationOptions{Scope: gateScope}); !result.IsValid() {
 		return &errtypes.ConfigError{Msg: "config validation failed", Err: result}
 	}
