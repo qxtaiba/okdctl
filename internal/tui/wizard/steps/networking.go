@@ -188,8 +188,7 @@ var NetworkingStepDefinition = wizard.StepDefinition{
 	},
 }
 
-// NewNetworkingStep returns the networking wizard step and its state.
-func NewNetworkingStep() (step, state *wizard.DataDrivenStep) {
-	step = wizard.NewDataDrivenStep(&NetworkingStepDefinition)
-	return step, step
+// NewNetworkingStep returns the networking wizard step.
+func NewNetworkingStep() *wizard.DataDrivenStep {
+	return wizard.NewDataDrivenStep(&NetworkingStepDefinition)
 }

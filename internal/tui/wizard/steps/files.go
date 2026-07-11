@@ -91,7 +91,6 @@ var FilesStepDefinition = wizard.StepDefinition{
 }
 
 // NewFilesStep returns the files / ignition wizard step.
-func NewFilesStep() (*wizard.DataDrivenStep, wizard.StepState) {
-	step := wizard.NewDataDrivenStep(&FilesStepDefinition)
-	return step, nil
+func NewFilesStep() *wizard.DataDrivenStep {
+	return wizard.NewDataDrivenStep(&FilesStepDefinition)
 }

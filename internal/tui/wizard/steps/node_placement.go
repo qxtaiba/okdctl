@@ -51,16 +51,13 @@ type NodePlacementStep struct {
 	inner *wizard.DataDrivenStep
 }
 
-// IsWizardStepState marks NodePlacementStep as a valid wizard.StepState.
-func (s *NodePlacementStep) IsWizardStepState() {}
-
 // NewNodePlacementStep constructs the node placement wizard step.
-func NewNodePlacementStep() (step, state *NodePlacementStep) {
+func NewNodePlacementStep() *NodePlacementStep {
 	sp := spinner.New()
 	sp.Spinner = spinner.Dot
 	sp.Style = lipgloss.NewStyle().Foreground(tui.ColorPrimary)
 
-	step = &NodePlacementStep{
+	return &NodePlacementStep{
 		BaseStep: wizard.NewBaseStepWithDisplayTitle(
 			wizard.StepIDNodePlacement,
 			"proxmox infrastructure",
@@ -70,7 +67,6 @@ func NewNodePlacementStep() (step, state *NodePlacementStep) {
 		loadingSpinner: sp,
 		phase:          phaseDiscovering,
 	}
-	return step, step
 }
 
 // ShouldShow shows this step only when the Proxmox provider is selected.

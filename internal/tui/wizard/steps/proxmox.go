@@ -104,8 +104,7 @@ var ProxmoxStepDefinition = wizard.StepDefinition{
 	},
 }
 
-// NewProxmoxStep returns the Proxmox wizard step and its state.
-func NewProxmoxStep() (step, state *wizard.DataDrivenStep) {
-	step = wizard.NewDataDrivenStep(&ProxmoxStepDefinition)
-	return step, step
+// NewProxmoxStep returns the Proxmox wizard step.
+func NewProxmoxStep() *wizard.DataDrivenStep {
+	return wizard.NewDataDrivenStep(&ProxmoxStepDefinition)
 }

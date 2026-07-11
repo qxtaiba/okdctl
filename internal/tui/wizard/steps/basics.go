@@ -65,8 +65,7 @@ var BasicsStepDefinition = wizard.StepDefinition{
 	},
 }
 
-// NewBasicsStep returns the basics wizard step and its state.
-func NewBasicsStep() (step, state *wizard.DataDrivenStep) {
-	step = wizard.NewDataDrivenStep(&BasicsStepDefinition)
-	return step, step
+// NewBasicsStep returns the basics wizard step.
+func NewBasicsStep() *wizard.DataDrivenStep {
+	return wizard.NewDataDrivenStep(&BasicsStepDefinition)
 }
