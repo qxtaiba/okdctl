@@ -169,7 +169,7 @@ func TestValidateDestroyTargets_Bounds(t *testing.T) {
 // loadConfig context.
 func requireConfirmClusterWithTarget(targets []string, confirmCluster, clusterName string) error {
 	if len(targets) > 0 && confirmCluster == "" {
-		return &errtypes.ConfigError{
+		return &errtypes.UsageError{
 			Msg: "--target requires --confirm-cluster=" + clusterName,
 		}
 	}

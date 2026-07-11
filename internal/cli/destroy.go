@@ -213,7 +213,7 @@ func runDestroy(cmd *cobra.Command, _ []string) error {
 	// --target/--only without --confirm-cluster lets a typo silently scope a
 	// destroy; require an explicit cluster-name acknowledgement regardless of --yes.
 	if len(destroyTargets) > 0 && destroyConfirmCluster == "" {
-		return &errtypes.ConfigError{
+		return &errtypes.UsageError{
 			Msg: fmt.Sprintf("--target/--only requires --confirm-cluster=%q to guard against targeted destroys on the wrong cluster", cfg.Cluster.Name),
 		}
 	}
@@ -230,7 +230,7 @@ func runDestroy(cmd *cobra.Command, _ []string) error {
 			incompatible = append(incompatible, "--skip-firewall")
 		}
 		if len(incompatible) > 0 {
-			return &errtypes.ConfigError{
+			return &errtypes.UsageError{
 				Msg: fmt.Sprintf("%s cannot be used with --dry-run (dry-run only previews terraform; skip flags have no effect)",
 					strings.Join(incompatible, ", ")),
 			}

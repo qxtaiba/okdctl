@@ -11,7 +11,7 @@ to use in scripts that branch on failure type.
 | 3    | —            | network error (HTTP, DNS, TLS, download failure)             |
 | 4    | —            | cluster error (oc/kubectl failure, install timeout)          |
 | 5    | —            | auth error (proxmox token rejected, insecure file perms)     |
-| 64   | EX_USAGE     | unknown flag (cobra flag-parse failure)                      |
+| 64   | EX_USAGE     | unknown flag, or an invalid flag combination detected at runtime (e.g. `--target` without `--confirm-cluster`) |
 | 65   | EX_DATAERR   | pull secret file exists but is not valid JSON                |
 | 66   | EX_NOINPUT   | configuration file not found on disk                         |
 | 71   | EX_OSERR     | sudo not found on PATH (requires root operation)             |
@@ -28,6 +28,17 @@ refuses with "do not run as root/sudo; this tool escalates internally".
 Root-requiring commands (`deploy`, `destroy`, `cleanup`, `update-ingress`)
 must be invoked as a regular user; the binary self-elevates via an internal
 `sudo` re-exec so the privileged body runs as euid=0.
+
+## ConfigError vs UsageError
+
+Code 2 (ConfigError) covers problems with the content on disk: a config file
+that fails to parse, fails schema validation, or a `doctor` preflight that
+reports `[fail]`. Code 64 (UsageError) covers problems with the flags on the
+command line: an unknown flag, or a combination that is individually valid
+but not sensible together — `--target`/`--only` without `--confirm-cluster`,
+`--dry-run` combined with a `--skip-*` flag, `--metrics-allow-network`
+without `--metrics-addr`. Rule of thumb: if the fix is "edit your YAML", it's
+ConfigError; if the fix is "change your command line", it's UsageError.
 
 ## Examples
 
