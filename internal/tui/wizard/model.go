@@ -87,17 +87,13 @@ const (
 	ActionExit      Action = "exit"
 )
 
-// KeyMap binds wizard-level actions to keystrokes. Per-step help is
-// contributed via the HelpProvider interface; global keys (Quit, Back)
-// always apply.
+// KeyMap binds wizard-level actions to keystrokes: quit, back-navigation,
+// and viewport scrolling. Everything else (field navigation, selection,
+// confirm) is handled inside the active step; per-step help is contributed
+// via the HelpProvider interface.
 type KeyMap struct {
-	Next     key.Binding
 	Back     key.Binding
 	Quit     key.Binding
-	Help     key.Binding
-	Up       key.Binding
-	Down     key.Binding
-	Select   key.Binding
 	PageUp   key.Binding
 	PageDown key.Binding
 	Home     key.Binding
@@ -106,10 +102,6 @@ type KeyMap struct {
 
 func defaultKeyMap() KeyMap {
 	return KeyMap{
-		Next: key.NewBinding(
-			key.WithKeys("enter"),
-			key.WithHelp("enter", "confirm"),
-		),
 		Back: key.NewBinding(
 			key.WithKeys("esc"),
 			key.WithHelp("esc", "back"),
@@ -117,22 +109,6 @@ func defaultKeyMap() KeyMap {
 		Quit: key.NewBinding(
 			key.WithKeys("ctrl+c"),
 			key.WithHelp("ctrl+c", "quit"),
-		),
-		Help: key.NewBinding(
-			key.WithKeys("?"),
-			key.WithHelp("?", "help"),
-		),
-		Up: key.NewBinding(
-			key.WithKeys("up", "k"),
-			key.WithHelp("↑/k", "up"),
-		),
-		Down: key.NewBinding(
-			key.WithKeys("down", "j"),
-			key.WithHelp("↓/j", "down"),
-		),
-		Select: key.NewBinding(
-			key.WithKeys("space"),
-			key.WithHelp("space", "select"),
 		),
 		PageUp: key.NewBinding(
 			key.WithKeys("pgup"),
