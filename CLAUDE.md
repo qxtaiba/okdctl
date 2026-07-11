@@ -20,7 +20,13 @@ See `git log --oneline` for existing examples.
 
 ## Code comments
 
-This repo targets ~3% comment density. Go's naming conventions and the type
+This repo targets ~3% comment density for discretionary WHY-comments (the
+categories below). Package docs and revive's mandatory `exported` doc
+comments (`.golangci.yml`) sit outside that budget — they are structural,
+required by lint, and scale with the size of the exported surface rather
+than with the density target. Measured density including those mandatory
+docs is ~12% today; that reflects a large exported internal/ surface, not
+a violation to chase back down to 3%. Go's naming conventions and the type
 system already carry most of the signal; comments should add what the code
 can't say for itself.
 
