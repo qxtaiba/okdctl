@@ -109,16 +109,17 @@ func (r *Recorder) writeMetrics(b *strings.Builder) {
 		var sum float64
 		for _, s := range samples {
 			sum += s
+			// No break here: every bound >= s increments counts[i], so it
+			// is already cumulative for le=bound — a second pass would
+			// double it.
 			for i, bound := range histogramBuckets {
 				if s <= bound {
 					counts[i]++
 				}
 			}
 		}
-		var cumulative int64
 		for i, bound := range histogramBuckets {
-			cumulative += counts[i]
-			fmt.Fprintf(b, "okdctl_deploy_step_duration_seconds_bucket{step=%q,le=\"%g\"} %d\n", id, bound, cumulative)
+			fmt.Fprintf(b, "okdctl_deploy_step_duration_seconds_bucket{step=%q,le=\"%g\"} %d\n", id, bound, counts[i])
 		}
 		fmt.Fprintf(b, "okdctl_deploy_step_duration_seconds_bucket{step=%q,le=\"+Inf\"} %d\n", id, int64(len(samples)))
 		fmt.Fprintf(b, "okdctl_deploy_step_duration_seconds_sum{step=%q} %g\n", id, sum)
