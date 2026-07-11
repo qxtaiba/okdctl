@@ -2044,7 +2044,7 @@ one candidate dropped as a duplicate of open A5).
 
 #### B3 — Unify haproxy/service teardown and the backup contract across phases
 
-- **Status:** in progress — worktree: wave1
+- **Status:** in review — PR #905
 - **Category:** correctness / refactor
 - **State:** well-specified
 - **Effort:** hours
@@ -2062,7 +2062,7 @@ one candidate dropped as a duplicate of open A5).
 
 #### B4 — Split netutil into pure IP math and host-network mutation
 
-- **Status:** in progress — worktree: wave1
+- **Status:** in review — PR #904
 - **Category:** refactor
 - **State:** well-specified
 - **Effort:** hours
@@ -2077,7 +2077,7 @@ one candidate dropped as a duplicate of open A5).
 
 #### B5 — Cut the download→tui edge by injecting progress enablement
 
-- **Status:** in progress — worktree: wave1
+- **Status:** done — PR #901
 - **Category:** refactor
 - **State:** well-specified
 - **Effort:** hours
@@ -2091,7 +2091,7 @@ one candidate dropped as a duplicate of open A5).
 
 #### B6 — Wire or delete the dead phase Options knobs and terraform.WithVarFile
 
-- **Status:** in progress — worktree: wave1
+- **Status:** done — PR #899
 - **Category:** cleanup
 - **State:** well-specified
 - **Effort:** hours
@@ -2107,7 +2107,7 @@ one candidate dropped as a duplicate of open A5).
 
 #### B7 — Reconcile the wizard KeyMap with the keys actually handled
 
-- **Status:** in progress — worktree: wave1
+- **Status:** done — PR #898
 - **Category:** cli-ux / cleanup
 - **State:** well-specified
 - **Effort:** hours
@@ -2122,7 +2122,7 @@ one candidate dropped as a duplicate of open A5).
 
 #### B8 — Right-size speculative generality in tui/wizard/components
 
-- **Status:** not started
+- **Status:** in progress — worktree: wave2
 - **Category:** refactor
 - **State:** design needed
 - **Effort:** days
@@ -2196,7 +2196,7 @@ one candidate dropped as a duplicate of open A5).
 
 #### B13 — Single-source the static IP plan and de-overload static_ip.start
 
-- **Status:** not started
+- **Status:** in progress — worktree: wave2
 - **Category:** config coherence
 - **State:** design needed
 - **Effort:** days
@@ -2211,7 +2211,7 @@ one candidate dropped as a duplicate of open A5).
 
 #### B14 — Resolve the tool-version vs OKD-release-version confusion
 
-- **Status:** in progress — worktree: wave1
+- **Status:** done — PR #906
 - **Category:** domain-model accuracy
 - **State:** well-specified
 - **Effort:** hours
@@ -2226,7 +2226,7 @@ one candidate dropped as a duplicate of open A5).
 
 #### B15 — Stop the resume path from wiping live-cluster identity material
 
-- **Status:** not started
+- **Status:** in progress — worktree: wave2
 - **Category:** state & lifecycle
 - **State:** design needed
 - **Effort:** days
@@ -2241,7 +2241,7 @@ one candidate dropped as a duplicate of open A5).
 
 #### B16 — Restore community templates the docs claim exist, and add CONTRIBUTING.md
 
-- **Status:** in progress — worktree: wave1
+- **Status:** done — PR #902
 - **Category:** oss-readiness / docs
 - **State:** design needed
 - **Effort:** hours
@@ -2272,7 +2272,7 @@ one candidate dropped as a duplicate of open A5).
 
 #### B18 — Reconcile the "phones home to nothing" claim with the default-on update check
 
-- **Status:** not started
+- **Status:** in progress — worktree: wave2
 - **Category:** docs-reality / trust
 - **State:** design needed
 - **Effort:** hours
@@ -2332,7 +2332,7 @@ one candidate dropped as a duplicate of open A5).
 
 #### B22 — Fix the coverage gate: wrong metric, delete-tests bypass, decorative floors
 
-- **Status:** in progress — worktree: wave1
+- **Status:** done — PR #900
 - **Category:** ci / test-infrastructure
 - **State:** well-specified
 - **Effort:** hours
@@ -2379,7 +2379,7 @@ one candidate dropped as a duplicate of open A5).
 
 #### B25 — Shrink the //go:build linux surface in internal/cli to the syscall layer
 
-- **Status:** not started
+- **Status:** in progress — worktree: wave2
 - **Category:** developer-experience / architecture
 - **State:** design needed
 - **Effort:** days
@@ -2394,7 +2394,7 @@ one candidate dropped as a duplicate of open A5).
 
 #### B26 — Delete the return-step,step two-value ceremony in wizard step constructors
 
-- **Status:** in progress — worktree: wave1
+- **Status:** done — PR #903
 - **Category:** refactor / ai-slop
 - **State:** well-specified
 - **Effort:** hours
@@ -2408,7 +2408,7 @@ one candidate dropped as a duplicate of open A5).
 
 #### B27 — Enable golangci-lint on _test.go files
 
-- **Status:** not started
+- **Status:** in progress — worktree: wave2
 - **Category:** ci / test-infrastructure
 - **State:** well-specified
 - **Effort:** hours
