@@ -2151,7 +2151,7 @@ one candidate dropped as a duplicate of open A5).
 
 #### B10 — Decouple cluster state and Terraform sources from the okdctl repo checkout
 
-- **Status:** in progress — worktree: wave5
+- **Status:** done — PR #933
 - **Category:** architecture
 - **State:** design needed
 - **Effort:** weeks
@@ -2166,7 +2166,7 @@ one candidate dropped as a duplicate of open A5).
 
 #### B11 — Adopt one vocabulary for the deploy lifecycle stages
 
-- **Status:** in progress — worktree: wave5
+- **Status:** done — PR #931
 - **Category:** domain-model accuracy
 - **State:** well-specified
 - **Effort:** days
@@ -2302,7 +2302,7 @@ one candidate dropped as a duplicate of open A5).
 
 #### B20 — Give non-cancel deploy failures the same summary and next-steps as Ctrl-C
 
-- **Status:** in progress — worktree: wave5
+- **Status:** done — PR #934
 - **Category:** operator ux / failure legibility
 - **State:** design needed
 - **Effort:** days
@@ -2317,7 +2317,7 @@ one candidate dropped as a duplicate of open A5).
 
 #### B21 — Write a persistent per-run deploy log by default
 
-- **Status:** in progress — worktree: wave5
+- **Status:** done — PR #935
 - **Category:** operator ux / diagnosability
 - **State:** design needed
 - **Effort:** days
