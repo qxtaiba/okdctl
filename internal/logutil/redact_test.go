@@ -261,6 +261,51 @@ func TestRedactableArgv_SecretTokenScrubbed(t *testing.T) {
 	}
 }
 
+func TestRedactableArgv_SpaceSeparatedSecretScrubbed(t *testing.T) {
+	cases := []struct {
+		name string
+		argv []string
+		want string
+	}{
+		{
+			name: "double-dash flag with following value",
+			argv: []string{"install", "--token", "abc123"},
+			want: "install --token " + Redacted,
+		},
+		{
+			name: "single-dash flag with following value",
+			argv: []string{"install", "-token", "abc123"},
+			want: "install -token " + Redacted,
+		},
+		{
+			name: "secret flag as last arg",
+			argv: []string{"install", "--token"},
+			want: "install --token",
+		},
+		{
+			name: "following arg is another flag",
+			argv: []string{"install", "--token", "--verbose"},
+			want: "install --token --verbose",
+		},
+		{
+			name: "non-secret flag value passes through",
+			argv: []string{"install", "--output", "json"},
+			want: "install --output json",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, ok := RedactableArgv(tc.argv).Redacted().(string)
+			if !ok {
+				t.Fatalf("Redacted() returned non-string")
+			}
+			if got != tc.want {
+				t.Errorf("Redacted() = %q; want %q", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestRedactableArgv_HandlerDispatch(t *testing.T) {
 	argv := RedactableArgv([]string{"install", "--token=secret99", "--verbose"})
 	var buf bytes.Buffer
