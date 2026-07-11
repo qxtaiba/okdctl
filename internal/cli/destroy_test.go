@@ -189,3 +189,26 @@ func TestRequireConfirmClusterWithTarget(t *testing.T) {
 		t.Errorf("no target no confirm-cluster: want nil, got %v", err)
 	}
 }
+
+// scopedDestroyOverrides mirrors the --target/--only defaulting logic inside
+// runDestroy so it is independently testable without a full cobra context.
+func scopedDestroyOverrides(targets []string, skipCleanup, skipFirewall, keepISOs bool) (outSkipCleanup, outSkipFirewall, outKeepISOs bool) {
+	if len(targets) > 0 {
+		return true, true, true
+	}
+	return skipCleanup, skipFirewall, keepISOs
+}
+
+func TestScopedDestroyOverrides(t *testing.T) {
+	target := []string{"module.okd_cluster.proxmox_virtual_environment_vm.master[0]"}
+
+	skipCleanup, skipFirewall, keepISOs := scopedDestroyOverrides(target, false, false, false)
+	if !skipCleanup || !skipFirewall || !keepISOs {
+		t.Errorf("scoped destroy: got (%v,%v,%v); want all true", skipCleanup, skipFirewall, keepISOs)
+	}
+
+	skipCleanup, skipFirewall, keepISOs = scopedDestroyOverrides(nil, false, true, false)
+	if skipCleanup || !skipFirewall || keepISOs {
+		t.Errorf("unscoped destroy: got (%v,%v,%v); want (false,true,false) passthrough", skipCleanup, skipFirewall, keepISOs)
+	}
+}

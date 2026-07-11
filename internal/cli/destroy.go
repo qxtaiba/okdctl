@@ -142,6 +142,12 @@ This operation is idempotent and safe to re-run if a previous destroy was interr
 
 Use --dry-run to preview the terraform destroy plan without modifying infra.
 
+A scoped destroy (--target or --only) only tears down the named Terraform
+resources; host cleanup (haproxy/dnsmasq config, kubeconfig, terraform state
+files), firewall rules, and Proxmox ISO removal are skipped automatically for
+a scoped run — that bastion-wide teardown runs only on an unscoped destroy,
+so it never touches a still-running control plane.
+
 Master nodes ship with prevent_destroy = true in the Terraform module to
 guard against accidental etcd-quorum loss. To run a full or targeted
 destroy, place an override.tf in
@@ -164,17 +170,17 @@ Remove the override.tf after destroy completes. Alternatively, pass
 
 func init() {
 	destroyCmd.Flags().BoolVarP(&destroyYes, "yes", "y", false, "skip confirmation prompt")
-	destroyCmd.Flags().BoolVar(&destroyKeepISOs, "keep-isos", false, "do not remove the FCOS ISO from the Proxmox host")
+	destroyCmd.Flags().BoolVar(&destroyKeepISOs, "keep-isos", false, "do not remove the FCOS ISO from the Proxmox host (always true for a scoped --target/--only destroy)")
 	destroyCmd.Flags().BoolVar(&destroyDryRun, flagDryRun, false, "preview terraform destroy plan without running destroy")
 	destroyCmd.Flags().StringVar(&destroyConfirmCluster, "confirm-cluster", "",
 		"required with --yes; must equal cfg.Cluster.Name (typo guard for scripted destroys)")
 	destroyCmd.Flags().BoolVar(&destroySkipTerraform, "skip-terraform", false, "skip terraform destroy — intended for resuming after a successful terraform-destroy phase (no-op with --dry-run)")
-	destroyCmd.Flags().BoolVar(&destroySkipCleanup, "skip-cleanup", false, "skip host file cleanup — leaves haproxy/dnsmasq config in place (no-op with --dry-run)")
-	destroyCmd.Flags().BoolVar(&destroySkipFirewall, "skip-firewall", false, "skip firewall rule cleanup (no-op with --dry-run)")
+	destroyCmd.Flags().BoolVar(&destroySkipCleanup, "skip-cleanup", false, "skip host file cleanup — leaves haproxy/dnsmasq config in place (no-op with --dry-run; always true for a scoped --target/--only destroy)")
+	destroyCmd.Flags().BoolVar(&destroySkipFirewall, "skip-firewall", false, "skip firewall rule cleanup (no-op with --dry-run; always true for a scoped --target/--only destroy)")
 	destroyCmd.Flags().StringArrayVar(&destroyTargets, flagTarget, nil,
-		"limit terraform destroy to this resource address (repeatable); must match the okd_cluster VM allowlist")
+		"limit terraform destroy to this resource address (repeatable); must match the okd_cluster VM allowlist; scopes cleanup/firewall/iso removal off automatically")
 	destroyCmd.Flags().StringVar(&destroyOnly, flagOnly, "",
-		"scope destroy to a node group: "+strings.Join(validDestroyScopes(), ", ")+" (expands into --target; mutually exclusive with --target)")
+		"scope destroy to a node group: "+strings.Join(validDestroyScopes(), ", ")+" (expands into --target; mutually exclusive with --target; scopes cleanup/firewall/iso removal off automatically)")
 	destroyCmd.MarkFlagsMutuallyExclusive(flagOnly, flagTarget)
 	_ = destroyCmd.RegisterFlagCompletionFunc(flagOnly, func(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
 		return validDestroyScopes(), cobra.ShellCompDirectiveNoFileComp
@@ -281,13 +287,23 @@ func runDestroy(cmd *cobra.Command, _ []string) error {
 	tui.Info("destroying cluster...")
 	startTime := time.Now()
 
+	skipCleanup := destroySkipCleanup
+	skipFirewall := destroySkipFirewall
+	keepISOs := destroyKeepISOs
+	if len(destroyTargets) > 0 {
+		skipCleanup = true
+		skipFirewall = true
+		keepISOs = true
+		tui.Info("scoped destroy: skipping host cleanup, firewall rules, and iso removal — full bastion teardown is exclusive to an unscoped destroy")
+	}
+
 	steps, err := p.Destroy(ctx, cfg, okd.DestroyOpts{
 		AutoApprove:      true,
 		RemovePackages:   true,
-		KeepISOs:         destroyKeepISOs,
+		KeepISOs:         keepISOs,
 		SkipTerraform:    destroySkipTerraform,
-		SkipCleanup:      destroySkipCleanup,
-		SkipFirewall:     destroySkipFirewall,
+		SkipCleanup:      skipCleanup,
+		SkipFirewall:     skipFirewall,
 		TerraformTargets: destroyTargets,
 	})
 	if err != nil {
