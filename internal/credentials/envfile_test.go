@@ -222,3 +222,27 @@ func TestLoadEnvFile_PermRefusal(t *testing.T) {
 		}
 	})
 }
+
+// TestLoadEnvFile_SecondCallDifferentPath is the only test in this
+// package that calls the exported LoadEnvFile — its sync.Once is a
+// process-global singleton, so every other test calls loadEnvFileOnce
+// directly instead (see loadEnvFileOnce callers above).
+func TestLoadEnvFile_SecondCallDifferentPath(t *testing.T) {
+	dir := t.TempDir()
+	first := filepath.Join(dir, "first.env")
+	if err := os.WriteFile(first, []byte("X=1\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := LoadEnvFile(first); err != nil {
+		t.Fatalf("first LoadEnvFile: %v", err)
+	}
+
+	second := filepath.Join(dir, "second.env")
+	err := LoadEnvFile(second)
+	if err == nil {
+		t.Fatal("expected error for second LoadEnvFile call with a different path")
+	}
+	if !errors.Is(err, ErrEnvFileAlreadyLoaded) {
+		t.Errorf("err = %v; want errors.Is(ErrEnvFileAlreadyLoaded)", err)
+	}
+}
