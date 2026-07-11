@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"fmt"
 	"path/filepath"
 	"strings"
 	"time"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/cleanup"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
+	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/executor"
 	"github.com/qxtaiba/okdctl/internal/runlock"
 	"github.com/qxtaiba/okdctl/internal/system"
@@ -72,8 +74,12 @@ func runCleanup(cmd *cobra.Command, _ []string) error {
 	}
 
 	kind := cleanup.Kind(cleanupKind)
-	if err := kind.Validate(); err != nil {
-		return err
+	if kind.Validate() != nil {
+		// Msg-only UsageError: wrapping the ConfigError from Validate would
+		// let exitCodeFor's Config-first precedence map this to exit 2.
+		return &errtypes.UsageError{
+			Msg: fmt.Sprintf("invalid --kind %q; valid values: %s", cleanupKind, strings.Join(cleanup.KindStrings(), ", ")),
+		}
 	}
 
 	if cleanupDryRun {
