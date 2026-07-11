@@ -43,7 +43,7 @@ func TestResolveClusterVIP(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected error, got nil")
 		}
-		const wantPrefix = "failed to resolve VIP:"
+		const wantPrefix = "resolve VIP:"
 		if !strings.HasPrefix(err.Error(), wantPrefix) {
 			t.Errorf("error %q does not start with %q", err.Error(), wantPrefix)
 		}

@@ -17,7 +17,7 @@ import (
 func (f *OKDVersionFetcher) fetchFromNetwork(ctx context.Context) ([]OKDReleaseSeries, error) {
 	releases, err := f.fetchAllPages(ctx, "okd-project/okd")
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch OKD releases: %w", err)
+		return nil, fmt.Errorf("fetch OKD releases: %w", err)
 	}
 
 	releases = f.deduplicateReleases(releases)

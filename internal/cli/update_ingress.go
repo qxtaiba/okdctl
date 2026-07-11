@@ -64,7 +64,7 @@ func runUpdateIngressDryRun(ctx context.Context, cfg *config.Config) error {
 
 	isBootstrap, err := dns.IsBootstrapDNS(cfg)
 	if err != nil {
-		return fmt.Errorf("dry-run: failed to probe dnsmasq state: %w", err)
+		return fmt.Errorf("dry-run: probe dnsmasq state: %w", err)
 	}
 	if isBootstrap {
 		tui.Info("would: deploy production dnsmasq config pointing *.apps at LoadBalancer IPs")

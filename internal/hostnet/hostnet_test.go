@@ -133,8 +133,8 @@ func TestRemoveSecondaryIP(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected error from ip exit 1; got nil")
 		}
-		if !strings.Contains(err.Error(), "failed to check IP presence") {
-			t.Errorf("err = %q; want 'failed to check IP presence' substring", err.Error())
+		if !strings.Contains(err.Error(), "check IP presence") {
+			t.Errorf("err = %q; want 'check IP presence' substring", err.Error())
 		}
 	})
 

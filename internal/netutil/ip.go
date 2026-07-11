@@ -65,7 +65,7 @@ func ValidateIPRangeInCIDR(startIP string, count int, cidr string) error {
 
 	endIP, err := CalculateVMIP(startIP, count-1)
 	if err != nil {
-		return fmt.Errorf("failed to calculate end of range: %w", err)
+		return fmt.Errorf("calculate end of range: %w", err)
 	}
 
 	end, _ := netip.ParseAddr(endIP)

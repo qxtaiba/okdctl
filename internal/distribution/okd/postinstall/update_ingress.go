@@ -389,7 +389,7 @@ func (p *Phase) discoverIngressControllers(ctx context.Context) ([]ingressContro
 		"-n", "openshift-ingress-operator",
 		"-o", "json")
 	if err != nil {
-		return nil, fmt.Errorf("failed to query IngressControllers: %w", err)
+		return nil, fmt.Errorf("query IngressControllers: %w", err)
 	}
 
 	var list struct {
@@ -397,7 +397,7 @@ func (p *Phase) discoverIngressControllers(ctx context.Context) ([]ingressContro
 	}
 
 	if err := json.Unmarshal([]byte(stdout), &list); err != nil {
-		return nil, fmt.Errorf("failed to parse IngressController list: %w", err)
+		return nil, fmt.Errorf("parse IngressController list: %w", err)
 	}
 
 	var controllers []ingressControllerInfo
@@ -417,7 +417,7 @@ func (p *Phase) discoverIngressControllers(ctx context.Context) ([]ingressContro
 		}
 
 		if err := json.Unmarshal(raw, &item); err != nil {
-			return nil, fmt.Errorf("failed to parse IngressController item: %w", err)
+			return nil, fmt.Errorf("parse IngressController item: %w", err)
 		}
 
 		// OKD's bare-metal default has endpointPublishingStrategy unset (null) —
@@ -506,7 +506,7 @@ func buildLBIngressController(ic *ingressControllerInfo) (string, error) {
 	}
 
 	if err := json.Unmarshal(ic.RawJSON, &original); err != nil {
-		return "", fmt.Errorf("failed to parse original IngressController: %w", err)
+		return "", fmt.Errorf("parse original IngressController: %w", err)
 	}
 
 	namespace := original.Metadata.Namespace
@@ -554,7 +554,7 @@ func buildLBIngressController(ic *ingressControllerInfo) (string, error) {
 
 	data, err := json.Marshal(replacement)
 	if err != nil {
-		return "", fmt.Errorf("failed to marshal replacement IngressController: %w", err)
+		return "", fmt.Errorf("marshal replacement IngressController: %w", err)
 	}
 
 	return string(data), nil

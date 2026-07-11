@@ -90,7 +90,7 @@ func writeDnsmasqConfig(ctx context.Context, name, content string) error {
 	if system.FileExists(configPath) {
 		backupPath := configPath + ".backup"
 		if err := system.CopyFile(configPath, backupPath); err != nil {
-			return fmt.Errorf("failed to back up config %s: %w", configPath, err)
+			return fmt.Errorf("back up config %s: %w", configPath, err)
 		}
 	}
 
@@ -101,7 +101,7 @@ func writeDnsmasqConfig(ctx context.Context, name, content string) error {
 	}
 
 	if err := system.AtomicWriteString(configPath, content, 0o644); err != nil {
-		return fmt.Errorf("failed to write config %s: %w", configPath, err)
+		return fmt.Errorf("write config %s: %w", configPath, err)
 	}
 
 	return nil
@@ -145,7 +145,7 @@ func validateConnectionName(name string) error {
 func getActiveConnection(ctx context.Context) (string, error) {
 	out, err := executor.OutputCaptured(ctx, "nmcli", "-t", "-f", "NAME", "connection", "show", "--active")
 	if err != nil {
-		return "", fmt.Errorf("failed to list network connections: %w", err)
+		return "", fmt.Errorf("list network connections: %w", err)
 	}
 
 	for line := range strings.Lines(string(out)) {
@@ -192,11 +192,11 @@ func ConfigureSystemResolver(ctx context.Context, fallbackDNS []string, logger *
 		logger.Info("resolver: configuring connection to use local dnsmasq", "conn", conn)
 
 		if err := executor.RunCaptured(ctx, "nmcli", "connection", "modify", conn, "ipv4.dns", dnsConfig, "ipv4.ignore-auto-dns", "yes"); err != nil {
-			return fmt.Errorf("failed to configure DNS for connection: %w", err)
+			return fmt.Errorf("configure DNS for connection: %w", err)
 		}
 
 		if err := executor.RunCaptured(ctx, "nmcli", "connection", "up", conn); err != nil {
-			return fmt.Errorf("failed to apply DNS configuration: %w", err)
+			return fmt.Errorf("apply DNS configuration: %w", err)
 		}
 
 		logger.Info("resolver: system configured to use local dnsmasq")
@@ -210,7 +210,7 @@ func ConfigureSystemResolver(ctx context.Context, fallbackDNS []string, logger *
 		confDir := filepath.Dir(resolvedConf)
 		confContent := "[Resolve]\nDNS=127.0.0.1\nDomains=~.\n"
 		if err := os.MkdirAll(confDir, 0o755); err != nil {
-			return fmt.Errorf("failed to create resolved.conf.d: %w", err)
+			return fmt.Errorf("create resolved.conf.d: %w", err)
 		}
 		select {
 		case <-ctx.Done():
@@ -222,7 +222,7 @@ func ConfigureSystemResolver(ctx context.Context, fallbackDNS []string, logger *
 			return err
 		})
 		if err != nil {
-			return fmt.Errorf("failed to write dnsmasq.conf: %w", err)
+			return fmt.Errorf("write dnsmasq.conf: %w", err)
 		}
 		select {
 		case <-ctx.Done():
@@ -231,7 +231,7 @@ func ConfigureSystemResolver(ctx context.Context, fallbackDNS []string, logger *
 		}
 		defer func() { _ = os.Remove(tmpPath) }()
 		if err := system.CopyFile(tmpPath, confPath); err != nil {
-			return fmt.Errorf("failed to install dnsmasq.conf: %w", err)
+			return fmt.Errorf("install dnsmasq.conf: %w", err)
 		}
 		return executor.RunCaptured(ctx, "systemctl", "restart", "systemd-resolved")
 	}

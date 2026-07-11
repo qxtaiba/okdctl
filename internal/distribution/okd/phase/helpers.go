@@ -24,7 +24,7 @@ func WarnOnError(logger *slog.Logger, msg string) func(error) {
 func ResolveClusterVIP(cfg *config.Config) (string, error) {
 	vip, err := netutil.ResolveVIP(cfg.Networking.Bastion.VIP, cfg.Networking.StaticIP.Start)
 	if err != nil {
-		return "", fmt.Errorf("failed to resolve VIP: %w", err)
+		return "", fmt.Errorf("resolve VIP: %w", err)
 	}
 	return vip, nil
 }

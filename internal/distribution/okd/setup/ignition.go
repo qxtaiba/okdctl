@@ -49,10 +49,10 @@ func readNoFollow(path string) ([]byte, error) {
 func renderAndWrite(render func() (string, error), path string, mode os.FileMode, errLabel string) error {
 	content, err := render()
 	if err != nil {
-		return fmt.Errorf("failed to render %s: %w", errLabel, err)
+		return fmt.Errorf("render %s: %w", errLabel, err)
 	}
 	if err := system.AtomicWriteString(path, content, mode); err != nil {
-		return fmt.Errorf("failed to write %s: %w", errLabel, err)
+		return fmt.Errorf("write %s: %w", errLabel, err)
 	}
 	return nil
 }

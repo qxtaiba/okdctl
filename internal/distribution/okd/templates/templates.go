@@ -242,17 +242,17 @@ func reversePTR(ip string) string {
 func renderTemplate(name string, data any) (string, error) {
 	content, err := templateFS.ReadFile(name)
 	if err != nil {
-		return "", fmt.Errorf("failed to read template %s: %w", name, err)
+		return "", fmt.Errorf("read template %s: %w", name, err)
 	}
 
 	tmpl, err := template.New(name).Funcs(templateFuncs).Parse(string(content))
 	if err != nil {
-		return "", fmt.Errorf("failed to parse template %s: %w", name, err)
+		return "", fmt.Errorf("parse template %s: %w", name, err)
 	}
 
 	var buf bytes.Buffer
 	if err := tmpl.Execute(&buf, data); err != nil {
-		return "", fmt.Errorf("failed to execute template %s: %w", name, err)
+		return "", fmt.Errorf("execute template %s: %w", name, err)
 	}
 
 	return buf.String(), nil

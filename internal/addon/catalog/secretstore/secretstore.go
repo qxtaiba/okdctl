@@ -291,7 +291,7 @@ func resolveSecretsDir(env *addon.Environment) string {
 func secretManifestFromFile(ctx context.Context, env *addon.Environment, filePath, secretName, dataKey string) (string, error) {
 	plaintext, err := readSecret(ctx, env, filePath)
 	if err != nil {
-		return "", fmt.Errorf("failed to read %s: %w", filepath.Base(filePath), err)
+		return "", fmt.Errorf("read %s: %w", filepath.Base(filePath), err)
 	}
 	manifest, err := addon.BuildOpaqueSecret(defaultNamespace, secretName, map[string][]byte{
 		dataKey: []byte(strings.TrimSpace(plaintext)),

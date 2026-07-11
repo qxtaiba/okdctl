@@ -49,10 +49,10 @@ func (p *Phase) ensureIgnitionDir(ctx context.Context, webRoot string) (string, 
 
 func enableAndStartApache(ctx context.Context, serviceName string) error {
 	if err := system.ManageService(ctx, system.ServiceEnable, serviceName); err != nil {
-		return fmt.Errorf("failed to enable %s: %w", serviceName, err)
+		return fmt.Errorf("enable %s: %w", serviceName, err)
 	}
 	if err := system.ManageService(ctx, system.ServiceStart, serviceName); err != nil {
-		return fmt.Errorf("failed to start %s: %w", serviceName, err)
+		return fmt.Errorf("start %s: %w", serviceName, err)
 	}
 	if !system.IsServiceActive(ctx, serviceName) {
 		return fmt.Errorf("apache service %s failed to start - check systemctl status %s", serviceName, serviceName)
@@ -80,7 +80,7 @@ func (p *Phase) verifyApacheListening(ctx context.Context, bindIP string) {
 func (p *Phase) configureApacheHTTPS(ctx context.Context, certPath, keyPath, webRoot, bindIP string) error {
 	vhostDir := p.OS.ApacheVhostConfDir()
 	if err := system.EnsureDir(vhostDir); err != nil {
-		return fmt.Errorf("apache: failed to ensure vhost conf dir: %w", err)
+		return fmt.Errorf("apache: ensure vhost conf dir: %w", err)
 	}
 
 	listen := "443"
@@ -93,7 +93,7 @@ func (p *Phase) configureApacheHTTPS(ctx context.Context, certPath, keyPath, web
 
 	confPath := filepath.Join(vhostDir, "ignition-ssl.conf")
 	if err := system.AtomicWriteString(confPath, vhostConf, 0o644); err != nil {
-		return fmt.Errorf("apache: failed to write HTTPS vhost conf: %w", err)
+		return fmt.Errorf("apache: write HTTPS vhost conf: %w", err)
 	}
 
 	if p.OS.Family == platform.FamilyDebian {

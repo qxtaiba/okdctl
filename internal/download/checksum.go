@@ -41,14 +41,14 @@ func (cr *ctxReader) Read(p []byte) (int, error) {
 func CalculateChecksum(ctx context.Context, path string) (string, error) {
 	file, err := os.Open(path)
 	if err != nil {
-		return "", fmt.Errorf("failed to open %s for checksum: %w", path, err)
+		return "", fmt.Errorf("open %s for checksum: %w", path, err)
 	}
 	defer func() { _ = file.Close() }()
 
 	hasher := sha256.New()
 	buf := make([]byte, checksumChunkSize)
 	if _, err := io.CopyBuffer(hasher, &ctxReader{ctx: ctx, r: file}, buf); err != nil {
-		return "", fmt.Errorf("failed to read file for checksum: %w", err)
+		return "", fmt.Errorf("read file for checksum: %w", err)
 	}
 
 	return hex.EncodeToString(hasher.Sum(nil)), nil
@@ -82,12 +82,12 @@ func FetchChecksum(ctx context.Context, checksumsURL, filename string) (string, 
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, checksumsURL, http.NoBody)
 	if err != nil {
-		return "", fmt.Errorf("failed to build checksum request for %s: %w", checksumsURL, err)
+		return "", fmt.Errorf("build checksum request for %s: %w", checksumsURL, err)
 	}
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("failed to fetch checksums from %s: %w", checksumsURL, err)
+		return "", fmt.Errorf("fetch checksums from %s: %w", checksumsURL, err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
@@ -102,7 +102,7 @@ func FetchChecksum(ctx context.Context, checksumsURL, filename string) (string, 
 	limitedReader := io.LimitReader(resp.Body, maxChecksumFileSize)
 	body, err := io.ReadAll(limitedReader)
 	if err != nil {
-		return "", fmt.Errorf("failed to read checksums response: %w", err)
+		return "", fmt.Errorf("read checksums response: %w", err)
 	}
 
 	for line := range strings.Lines(string(body)) {

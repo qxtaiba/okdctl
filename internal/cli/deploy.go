@@ -147,7 +147,7 @@ func runDeploy(cmd *cobra.Command, _ []string) error {
 	defer clearConfigCredentials(cfg)
 
 	if err := writeCredentialsEnv(cfg, deployOutputFile); err != nil {
-		return fmt.Errorf("failed to save credentials: %w", err)
+		return fmt.Errorf("save credentials: %w", err)
 	}
 
 	// Clear secrets before saving so they never appear in YAML.
@@ -155,7 +155,7 @@ func runDeploy(cmd *cobra.Command, _ []string) error {
 	clearConfigCredentials(cfg)
 
 	if err := saveConfig(cfg, deployOutputFile, out); err != nil {
-		return fmt.Errorf("failed to save configuration: %w", err)
+		return fmt.Errorf("save configuration: %w", err)
 	}
 
 	switch result.Action {
@@ -238,7 +238,7 @@ func saveConfig(cfg *config.Config, path string, w io.Writer) error {
 
 	loader := config.NewLoader()
 	if err := loader.Save(cfg, path); err != nil {
-		return fmt.Errorf("failed to save configuration: %w", err)
+		return fmt.Errorf("save configuration: %w", err)
 	}
 
 	return nil

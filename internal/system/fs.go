@@ -56,7 +56,7 @@ func EnsureDirForFile(filePath string) error {
 func WriteTempFile(pattern string, mode os.FileMode, writeFn func(*os.File) error) (string, error) {
 	f, err := openTempFile("", pattern, mode)
 	if err != nil {
-		return "", fmt.Errorf("failed to create %s: %w", pattern, err)
+		return "", fmt.Errorf("create %s: %w", pattern, err)
 	}
 	cleanup := func() {
 		_ = f.Close()
@@ -68,7 +68,7 @@ func WriteTempFile(pattern string, mode os.FileMode, writeFn func(*os.File) erro
 	}
 	if err := f.Close(); err != nil {
 		_ = os.Remove(f.Name())
-		return "", fmt.Errorf("failed to close %s: %w", f.Name(), err)
+		return "", fmt.Errorf("close %s: %w", f.Name(), err)
 	}
 	return f.Name(), nil
 }
@@ -105,7 +105,7 @@ func openTempFile(dir, pattern string, mode os.FileMode) (*os.File, error) {
 func CopyFile(src, dst string) error {
 	info, err := os.Stat(src)
 	if err != nil {
-		return fmt.Errorf("failed to stat source file: %w", err)
+		return fmt.Errorf("stat source file: %w", err)
 	}
 	return CopyFileMode(src, dst, info.Mode().Perm())
 }
@@ -122,12 +122,12 @@ func CopyFile(src, dst string) error {
 func CopyFileMode(src, dst string, mode os.FileMode) error {
 	sourceFile, err := os.Open(src)
 	if err != nil {
-		return fmt.Errorf("failed to open source file: %w", err)
+		return fmt.Errorf("open source file: %w", err)
 	}
 	defer func() { _ = sourceFile.Close() }()
 
 	if err := EnsureDirForFile(dst); err != nil {
-		return fmt.Errorf("failed to create destination directory: %w", err)
+		return fmt.Errorf("create destination directory: %w", err)
 	}
 
 	// O_NOFOLLOW rejects a symlink at dst; under the sudo re-exec model the
@@ -148,7 +148,7 @@ func CopyFileMode(src, dst string, mode os.FileMode) error {
 
 	destFile, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_TRUNC|syscall.O_NOFOLLOW, mode)
 	if err != nil {
-		return fmt.Errorf("failed to create destination file: %w", err)
+		return fmt.Errorf("create destination file: %w", err)
 	}
 
 	closed := false
@@ -163,21 +163,21 @@ func CopyFileMode(src, dst string, mode os.FileMode) error {
 	}()
 
 	if _, err := io.Copy(destFile, sourceFile); err != nil {
-		return fmt.Errorf("failed to copy file contents: %w", err)
+		return fmt.Errorf("copy file contents: %w", err)
 	}
 
 	if err := destFile.Sync(); err != nil {
-		return fmt.Errorf("failed to sync destination file: %w", err)
+		return fmt.Errorf("sync destination file: %w", err)
 	}
 
 	// If dst pre-existed with different permissions, O_CREATE won't change
 	// them — tighten via the open fd so the chmod cannot follow a symlink.
 	if err := destFile.Chmod(mode); err != nil {
-		return fmt.Errorf("failed to set file permissions: %w", err)
+		return fmt.Errorf("set file permissions: %w", err)
 	}
 
 	if err := destFile.Close(); err != nil {
-		return fmt.Errorf("failed to close destination file: %w", err)
+		return fmt.Errorf("close destination file: %w", err)
 	}
 	closed = true
 
@@ -213,7 +213,7 @@ func ExpandPath(path string) string {
 // temp file is created next to path to guarantee that.
 func AtomicWrite(path string, data []byte, perm os.FileMode) error {
 	if err := EnsureDirForFile(path); err != nil {
-		return fmt.Errorf("failed to create directory: %w", err)
+		return fmt.Errorf("create directory: %w", err)
 	}
 
 	if info, err := os.Lstat(path); err == nil {
@@ -233,7 +233,7 @@ func AtomicWrite(path string, data []byte, perm os.FileMode) error {
 	dir := filepath.Dir(path)
 	tmpFile, err := openTempFile(dir, ".tmp-*", perm)
 	if err != nil {
-		return fmt.Errorf("failed to create temp file: %w", err)
+		return fmt.Errorf("create temp file: %w", err)
 	}
 	tmpPath := tmpFile.Name()
 
@@ -246,20 +246,20 @@ func AtomicWrite(path string, data []byte, perm os.FileMode) error {
 
 	if _, err := tmpFile.Write(data); err != nil {
 		_ = tmpFile.Close()
-		return fmt.Errorf("failed to write data: %w", err)
+		return fmt.Errorf("write data: %w", err)
 	}
 
 	if err := tmpFile.Sync(); err != nil {
 		_ = tmpFile.Close()
-		return fmt.Errorf("failed to sync file: %w", err)
+		return fmt.Errorf("sync file: %w", err)
 	}
 
 	if err := tmpFile.Close(); err != nil {
-		return fmt.Errorf("failed to close temp file: %w", err)
+		return fmt.Errorf("close temp file: %w", err)
 	}
 
 	if err := os.Rename(tmpPath, path); err != nil {
-		return fmt.Errorf("failed to rename temp file: %w", err)
+		return fmt.Errorf("rename temp file: %w", err)
 	}
 
 	// fsync the parent so the rename's directory-entry update is crash-
@@ -267,7 +267,7 @@ func AtomicWrite(path string, data []byte, perm os.FileMode) error {
 	// the old name — matters for kubeconfig / .env / install-config.yaml
 	// which are consumed immediately after AtomicWrite returns.
 	if err := fsyncDir(dir); err != nil {
-		return fmt.Errorf("failed to fsync directory: %w", err)
+		return fmt.Errorf("fsync directory: %w", err)
 	}
 
 	success = true

@@ -42,7 +42,7 @@ func RemoveSecondaryIP(ctx context.Context, ip, iface string) error {
 
 	output, err := executor.OutputCaptured(ctx, "ip", "addr", "show", "dev", iface)
 	if err != nil {
-		return fmt.Errorf("failed to check IP presence on device %s: %w", iface, err)
+		return fmt.Errorf("check IP presence on device %s: %w", iface, err)
 	}
 	if !strings.Contains(string(output), ip+"/") {
 		return nil
@@ -50,15 +50,15 @@ func RemoveSecondaryIP(ctx context.Context, ip, iface string) error {
 
 	conn, err := connectionForDevice(ctx, iface)
 	if err != nil {
-		return fmt.Errorf("failed to find networkmanager connection for %s: %w", iface, err)
+		return fmt.Errorf("find networkmanager connection for %s: %w", iface, err)
 	}
 
 	if err := executor.RunCaptured(ctx, "nmcli", "connection", "modify", conn, "-ipv4.addresses", ip+"/32"); err != nil {
-		return fmt.Errorf("failed to remove IP %s from connection %s: %w", ip, conn, err)
+		return fmt.Errorf("remove IP %s from connection %s: %w", ip, conn, err)
 	}
 
 	if err := executor.RunCaptured(ctx, "nmcli", "device", "reapply", iface); err != nil {
-		return fmt.Errorf("failed to apply IP change on %s: %w", iface, err)
+		return fmt.Errorf("apply IP change on %s: %w", iface, err)
 	}
 
 	return nil
@@ -69,7 +69,7 @@ func RemoveSecondaryIP(ctx context.Context, ip, iface string) error {
 func GetDefaultInterface(ctx context.Context) (string, error) {
 	output, err := executor.OutputCaptured(ctx, "ip", "route", "show", "default")
 	if err != nil {
-		return "", fmt.Errorf("failed to get default route: %w", err)
+		return "", fmt.Errorf("get default route: %w", err)
 	}
 
 	fields := strings.Fields(string(output))
@@ -85,7 +85,7 @@ func GetDefaultInterface(ctx context.Context) (string, error) {
 func connectionForDevice(ctx context.Context, iface string) (string, error) {
 	output, err := executor.OutputCaptured(ctx, "nmcli", "-t", "-f", "NAME,DEVICE", "connection", "show", "--active")
 	if err != nil {
-		return "", fmt.Errorf("failed to list networkmanager connections: %w", err)
+		return "", fmt.Errorf("list networkmanager connections: %w", err)
 	}
 
 	for line := range strings.Lines(string(output)) {

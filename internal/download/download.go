@@ -119,7 +119,7 @@ func Fetch(ctx context.Context, url, dst string, opts ...FetchOption) error {
 	}
 
 	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
-		return fmt.Errorf("failed to create output directory: %w", err)
+		return fmt.Errorf("create output directory: %w", err)
 	}
 
 	filename := filepath.Base(dst)
