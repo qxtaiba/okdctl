@@ -18,6 +18,13 @@ import (
 // snapshot; this call overrides it at apply time via -var. Operators running
 // `terraform plan` from the workdir will see a diff on that variable — that is
 // expected. The authoritative cluster state lives in tfstate, not in tfvars.
+//
+// The apply is scoped via -target to the worker VM resource only, matching
+// CleanupBootstrap's precaution — an unscoped apply here would also
+// reconcile any drift accumulated elsewhere (e.g. a hand-edited
+// terraform.tfvars master CPU or network change) instead of leaving it for
+// the next full apply. That drift is deferred, not lost — it surfaces on
+// the next un-scoped `okdctl deploy` run.
 func (p *Phase) StartWorkerVMs(ctx context.Context, cfg *config.Config, opts *Options) error {
 	if cfg.Topology.Workers.Count == 0 {
 		p.Log.Info("workers: no workers configured, skipping")
@@ -44,9 +51,6 @@ func (p *Phase) StartWorkerVMs(ctx context.Context, cfg *config.Config, opts *Op
 		Vars: map[string]string{
 			"start_workers_immediately": "true",
 		},
-		// Without scoping, this apply reconciles the full state — a stray
-		// tfvars edit elsewhere would be silently applied alongside the
-		// worker start. Bootstrap takes the same precaution.
 		Targets: []string{"module.okd_cluster.proxmox_virtual_environment_vm.worker"},
 	}
 
