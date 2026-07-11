@@ -25,7 +25,7 @@ func ValidateFilePath(value string) error {
 	}
 	expanded := system.ExpandPath(value)
 
-	if _, err := os.Stat(expanded); os.IsNotExist(err) {
+	if _, err := os.Stat(expanded); errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("file does not exist: %s", expanded)
 	} else if err != nil {
 		return fmt.Errorf("cannot access file: %w", err)

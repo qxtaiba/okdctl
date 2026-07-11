@@ -132,7 +132,7 @@ func processTarEntry(tarReader *tar.Reader, header *tar.Header, destDir string, 
 		}
 
 		if err := os.Symlink(linkTarget, targetPath); err != nil {
-			if !os.IsExist(err) {
+			if !errors.Is(err, os.ErrExist) {
 				return fmt.Errorf("create symlink: %w", err)
 			}
 			if err := os.Remove(targetPath); err != nil {

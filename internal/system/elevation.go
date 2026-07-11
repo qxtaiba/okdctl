@@ -103,7 +103,7 @@ var statFn = os.Stat
 func WriteAsInvokingUser(path string, data []byte, mode os.FileMode) error {
 	parentDir := filepath.Dir(path)
 	parentExisted := true
-	if _, err := statFn(parentDir); os.IsNotExist(err) {
+	if _, err := statFn(parentDir); errors.Is(err, os.ErrNotExist) {
 		parentExisted = false
 	}
 	if err := AtomicWrite(path, data, mode); err != nil {

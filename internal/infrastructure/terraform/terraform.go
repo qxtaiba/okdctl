@@ -496,7 +496,7 @@ func (t *Executor) pruneSnapshots() {
 		return
 	}
 	for _, old := range snaps[:len(snaps)-retain] {
-		if err := os.Remove(old); err != nil && !os.IsNotExist(err) {
+		if err := os.Remove(old); err != nil && !errors.Is(err, os.ErrNotExist) {
 			t.logger.Warn("terraform: snapshot prune: remove failed", "path", old, "err", err)
 		}
 	}
@@ -522,7 +522,7 @@ func (t *Executor) PruneBakSnapshotsExceptNewest() (string, error) {
 		if path == newest {
 			continue
 		}
-		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+		if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
 			errs = append(errs, fmt.Errorf("remove %s: %w", path, err))
 		}
 	}
@@ -566,7 +566,7 @@ func (t *Executor) CleanupPlans() error {
 		filepath.Join(t.workDir, "destroy.tfplan"),
 	}
 	for _, f := range files {
-		if err := system.SafeRemove(f); err != nil && !os.IsNotExist(err) {
+		if err := system.SafeRemove(f); err != nil && !errors.Is(err, os.ErrNotExist) {
 			errs = append(errs, fmt.Errorf("remove %s: %w", f, err))
 		}
 	}

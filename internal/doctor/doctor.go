@@ -7,6 +7,7 @@ package doctor
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -167,7 +168,7 @@ func checkPath(r binDirResolution) Result {
 func checkBinDir(r binDirResolution) Result {
 	defaultDir := r.Dir == config.DefaultBinDir
 	if _, err := os.Stat(r.Dir); err != nil {
-		if os.IsNotExist(err) {
+		if errors.Is(err, os.ErrNotExist) {
 			if defaultDir {
 				return Result{Sev: Warn, Detail: r.suffix(r.Dir + " does not exist; setup will create it as root via sudo")}
 			}
@@ -281,7 +282,7 @@ func checkPullSecret(cfgFile string) Result {
 	}
 
 	if _, err := os.Stat(configPath); err != nil {
-		if os.IsNotExist(err) {
+		if errors.Is(err, os.ErrNotExist) {
 			return Result{
 				Sev:    Warn,
 				Detail: "no config yet at " + configPath + "; run 'okdctl deploy' to set the pull secret path in the wizard",
@@ -304,7 +305,7 @@ func checkPullSecret(cfgFile string) Result {
 
 	data, err := os.ReadFile(path)
 	if err != nil {
-		if os.IsNotExist(err) {
+		if errors.Is(err, os.ErrNotExist) {
 			return Result{Sev: Fail, Detail: "not found at " + path + " (download from https://console.redhat.com/openshift/install/pull-secret)"}
 		}
 		return Result{Sev: Fail, Detail: err.Error()}

@@ -41,7 +41,7 @@ func SafeRemoveWithLogger(ctx context.Context, path, description string, logger 
 			logger.Warn("cleanup: refusing symlink target; remove the link manually", "path", path)
 			return &errtypes.ConfigError{Msg: fmt.Sprintf("refusing to remove symlink %s", path)}
 		}
-	} else if os.IsNotExist(err) {
+	} else if errors.Is(err, os.ErrNotExist) {
 		return nil
 	}
 
@@ -56,7 +56,7 @@ func SafeRemoveWithLogger(ctx context.Context, path, description string, logger 
 	if _, err := os.Stat(path); err == nil {
 		logger.Warn("cleanup: still exists after removal", "target", description)
 		return &errtypes.ConfigError{Msg: fmt.Sprintf("%s still exists after removal", description)}
-	} else if !os.IsNotExist(err) {
+	} else if !errors.Is(err, os.ErrNotExist) {
 		// Cannot verify removal (e.g. permission denied on parent); assume success.
 		logger.Warn("cleanup: could not verify removal", "target", description, "err", err)
 	}
@@ -73,7 +73,7 @@ func SafeRemoveWithLogger(ctx context.Context, path, description string, logger 
 // workDir, so a partial-strip from a mid-run crash does not break
 // subsequent cleanup steps.
 func WorkDirectory(ctx context.Context, workDir string, logger *slog.Logger) error {
-	if _, err := os.Stat(workDir); os.IsNotExist(err) {
+	if _, err := os.Stat(workDir); errors.Is(err, os.ErrNotExist) {
 		return nil
 	}
 

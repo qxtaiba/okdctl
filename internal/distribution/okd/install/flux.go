@@ -2,6 +2,7 @@ package install
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -115,7 +116,7 @@ func (p *Phase) addKubeconfigToBashrc(homeDir, kubeconfigPath string) error {
 	created := false
 	if fi, err := os.Stat(bashrcPath); err == nil {
 		mode = fi.Mode().Perm()
-	} else if os.IsNotExist(err) {
+	} else if errors.Is(err, os.ErrNotExist) {
 		created = true
 	}
 
@@ -130,7 +131,7 @@ func (p *Phase) addKubeconfigToBashrc(homeDir, kubeconfigPath string) error {
 
 	f, err := os.OpenFile(bashrcPath, os.O_RDONLY|syscall.O_NOFOLLOW, 0)
 	if err != nil {
-		if os.IsNotExist(err) {
+		if errors.Is(err, os.ErrNotExist) {
 			if writeErr := system.AtomicWriteString(bashrcPath, exportLine+"\n", mode); writeErr != nil {
 				return writeErr
 			}

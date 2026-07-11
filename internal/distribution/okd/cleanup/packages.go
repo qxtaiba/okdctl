@@ -2,6 +2,7 @@ package cleanup
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -64,7 +65,7 @@ func Packages(ctx context.Context, binDir string, logger *slog.Logger) error {
 	binaries := InstalledBinaries()
 	for _, binary := range binaries {
 		binPath := filepath.Join(binDir, binary)
-		if _, err := os.Stat(binPath); os.IsNotExist(err) {
+		if _, err := os.Stat(binPath); errors.Is(err, os.ErrNotExist) {
 			continue
 		}
 		if guardErr := refuseCriticalPath(binPath); guardErr != nil {

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -261,7 +262,7 @@ func (p *Phase) ValidateIgnitionFiles(ctx context.Context, clusterDir string) er
 
 		info, err := os.Stat(path)
 		if err != nil {
-			if os.IsNotExist(err) {
+			if errors.Is(err, os.ErrNotExist) {
 				return &errtypes.ConfigError{Msg: fmt.Sprintf("%s was not generated", file)}
 			}
 			return &errtypes.ConfigError{Msg: fmt.Sprintf("failed to stat %s", file), Err: err}
