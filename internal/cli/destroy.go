@@ -242,6 +242,16 @@ func runDestroy(cmd *cobra.Command, _ []string) error {
 	}
 
 	if !destroyYes {
+		if len(destroyTargets) == 0 {
+			nameConfirmed, err := promptForClusterNameConfirmation(ctx, cfg.Cluster.Name)
+			if err != nil {
+				return err
+			}
+			if !nameConfirmed {
+				tui.Info("cancelled")
+				return nil
+			}
+		}
 		confirmed, err := promptForConfirmation(ctx, "proceed with destroy? [y/N]: ")
 		if err != nil {
 			return err
