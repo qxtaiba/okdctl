@@ -2010,7 +2010,7 @@ one candidate dropped as a duplicate of open A5).
 
 #### B1 — Fix the proxmox→phase layering inversion
 
-- **Status:** not started
+- **Status:** in progress — worktree: wave3
 - **Category:** architecture
 - **State:** design needed
 - **Effort:** days
@@ -2044,7 +2044,7 @@ one candidate dropped as a duplicate of open A5).
 
 #### B3 — Unify haproxy/service teardown and the backup contract across phases
 
-- **Status:** in review — PR #905
+- **Status:** done — PR #905
 - **Category:** correctness / refactor
 - **State:** well-specified
 - **Effort:** hours
@@ -2122,7 +2122,7 @@ one candidate dropped as a duplicate of open A5).
 
 #### B8 — Right-size speculative generality in tui/wizard/components
 
-- **Status:** in progress — worktree: wave2
+- **Status:** done — PR #913
 - **Category:** refactor
 - **State:** design needed
 - **Effort:** days
@@ -2137,7 +2137,7 @@ one candidate dropped as a duplicate of open A5).
 
 #### B9 — Share single-select navigation between welcome and review steps
 
-- **Status:** not started
+- **Status:** in progress — worktree: wave3
 - **Category:** refactor
 - **State:** well-specified
 - **Effort:** hours
@@ -2181,7 +2181,7 @@ one candidate dropped as a duplicate of open A5).
 
 #### B12 — Unify control-plane naming and colocate per-node-group config facts
 
-- **Status:** not started
+- **Status:** in progress — worktree: wave3
 - **Category:** config coherence
 - **State:** design needed
 - **Effort:** days
@@ -2196,7 +2196,7 @@ one candidate dropped as a duplicate of open A5).
 
 #### B13 — Single-source the static IP plan and de-overload static_ip.start
 
-- **Status:** in progress — worktree: wave2
+- **Status:** done — PR #912
 - **Category:** config coherence
 - **State:** design needed
 - **Effort:** days
@@ -2226,7 +2226,7 @@ one candidate dropped as a duplicate of open A5).
 
 #### B15 — Stop the resume path from wiping live-cluster identity material
 
-- **Status:** in progress — worktree: wave2
+- **Status:** in review — PR #914
 - **Category:** state & lifecycle
 - **State:** design needed
 - **Effort:** days
@@ -2272,7 +2272,7 @@ one candidate dropped as a duplicate of open A5).
 
 #### B18 — Reconcile the "phones home to nothing" claim with the default-on update check
 
-- **Status:** in progress — worktree: wave2
+- **Status:** done — PR #909
 - **Category:** docs-reality / trust
 - **State:** design needed
 - **Effort:** hours
@@ -2364,7 +2364,7 @@ one candidate dropped as a duplicate of open A5).
 
 #### B24 — Put tests under update_ingress rollback and wait state machine
 
-- **Status:** not started
+- **Status:** in progress — worktree: wave3
 - **Category:** tests / risk-reduction
 - **State:** design needed
 - **Effort:** days
@@ -2379,7 +2379,7 @@ one candidate dropped as a duplicate of open A5).
 
 #### B25 — Shrink the //go:build linux surface in internal/cli to the syscall layer
 
-- **Status:** in progress — worktree: wave2
+- **Status:** done — PR #911
 - **Category:** developer-experience / architecture
 - **State:** design needed
 - **Effort:** days
@@ -2408,7 +2408,7 @@ one candidate dropped as a duplicate of open A5).
 
 #### B27 — Enable golangci-lint on _test.go files
 
-- **Status:** in progress — worktree: wave2
+- **Status:** in review — PR #915
 - **Category:** ci / test-infrastructure
 - **State:** well-specified
 - **Effort:** hours
