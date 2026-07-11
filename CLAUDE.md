@@ -237,8 +237,8 @@ write the comment — then it carries real information.
     path (`internal/tui/wizard/steps/proxmox_discovery.go`). Bus-factor 1.
     Fallback: ~200 LOC REST-only rewrite using `net/http` + the documented
     Proxmox API. Track upstream releases; bump on each.
-  - `registry.terraform.io/bpg/proxmox` ~> 0.109.0 — sole actively
-    maintained Proxmox VE Terraform provider; hash-pinned at 0.109.0 in
+  - `registry.terraform.io/bpg/proxmox` ~> 0.111.0 — sole actively
+    maintained Proxmox VE Terraform provider; hash-pinned at 0.111.1 in
     `infrastructure/terraform/environments/production/.terraform.lock.hcl`
     (linux_amd64 + linux_arm64 hashes committed). Fallback: migrate to
     `Telmate/proxmox` or replace with direct REST calls via
