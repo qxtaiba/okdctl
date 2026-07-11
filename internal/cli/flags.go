@@ -28,6 +28,15 @@ const (
 	outputJSON = "json"
 )
 
+// Subcommand names referenced both at cobra registration (Use:) and in
+// policy tables (rootRequiredCmds, defaultLogSinkCmds); a typo between the
+// two sites would silently drop a command from the policy.
+const (
+	cmdNameDeploy  = "deploy"
+	cmdNameDestroy = "destroy"
+	cmdNameCleanup = "cleanup"
+)
+
 // annotationKeyRequiresRoot tags cobra commands whose body must run as
 // root (writes to /etc, /usr/local/bin, /var/www/html, systemd, firewalls).
 // The PersistentPreRunE in elevation.go re-execs under sudo when the

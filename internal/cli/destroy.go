@@ -135,7 +135,7 @@ func validateDestroyTargets(targets []string, cfg *config.Config) error {
 }
 
 var destroyCmd = &cobra.Command{
-	Use:   "destroy",
+	Use:   cmdNameDestroy,
 	Short: "Destroy a Kubernetes cluster",
 	Long: `Destroy a Kubernetes cluster and all associated infrastructure.
 This operation is idempotent and safe to re-run if a previous destroy was interrupted.

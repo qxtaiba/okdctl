@@ -22,7 +22,7 @@ import (
 // Matching walks the cobra parent chain, so a future nested layout like
 // `okdctl cluster deploy` still triggers the gate as long as `deploy`
 // stays in this slice.
-var rootRequiredCmds = []string{"deploy", "destroy", "cleanup", "update-ingress"}
+var rootRequiredCmds = []string{cmdNameDeploy, cmdNameDestroy, cmdNameCleanup, "update-ingress"}
 
 // annotationValueTrue is the canonical truthy value for cobra annotations
 // (e.g. requiresRoot). Cobra annotations are map[string]string, so callers

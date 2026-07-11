@@ -109,7 +109,7 @@ func TestBundleLogFile(t *testing.T) {
 
 	var buf bytes.Buffer
 	tw := tar.NewWriter(&buf)
-	entry := bundleLogFile(stubAddFile(tw), logPath)
+	entry := bundleLogFile(stubAddFile(tw), logPath, "", errors.New("unused"))
 	if entry.Status != "ok" {
 		t.Fatalf("bundleLogFile status = %q; message: %s", entry.Status, entry.Message)
 	}
@@ -120,6 +120,39 @@ func TestBundleLogFile(t *testing.T) {
 	}
 	if string(data) != "line1\nline2\n" {
 		t.Errorf("unexpected log content: %q", string(data))
+	}
+}
+
+// TestBundleLogFileDefaultDiscovery locks the zero-configuration pickup of
+// the default workspace log: with no --log-file, the bundle must find
+// <projectRoot>/okdctl.log on its own.
+func TestBundleLogFileDefaultDiscovery(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "okdctl.log"), []byte("deploy failed here\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	var buf bytes.Buffer
+	tw := tar.NewWriter(&buf)
+	entry := bundleLogFile(stubAddFile(tw), "", dir, nil)
+	if entry.Status != "ok" {
+		t.Fatalf("bundleLogFile status = %q; message: %s", entry.Status, entry.Message)
+	}
+	entries := readTarEntries(t, tw, &buf)
+	if string(entries["okdctl.log"]) != "deploy failed here\n" {
+		t.Errorf("default log content not bundled: %q", string(entries["okdctl.log"]))
+	}
+}
+
+func TestBundleLogFileSkipsWhenNoLogExists(t *testing.T) {
+	var buf bytes.Buffer
+	tw := tar.NewWriter(&buf)
+	entry := bundleLogFile(stubAddFile(tw), "", t.TempDir(), nil)
+	if entry.Status != "skipped" {
+		t.Fatalf("bundleLogFile status = %q, want skipped; message: %s", entry.Status, entry.Message)
+	}
+	if !strings.Contains(entry.Message, "okdctl.log") {
+		t.Errorf("skip message does not name the default log location: %s", entry.Message)
 	}
 }
 

@@ -5,32 +5,59 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
+	"slices"
 	"syscall"
 
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 
+	"github.com/qxtaiba/okdctl/internal/logutil"
+	"github.com/qxtaiba/okdctl/internal/system"
 	"github.com/qxtaiba/okdctl/internal/tui"
 )
 
 // logFileCloser holds the open log-file handle so Execute can close it.
-// nil when --log-file is not set.
+// nil when no file sink is active (--log-file unset and the command has
+// no default sink).
 var logFileCloser io.Closer
+
+// runLogPath is the path of the active file sink (--log-file or the
+// default workspace okdctl.log); "" when no file sink is active. execute()
+// prints it on failure so the operator knows a persistent log exists.
+var runLogPath string
+
+// defaultLogSinkCmds lists the commands that tee their log stream to
+// <workspace>/okdctl.log by default. Scoped to the commands that mutate a
+// workspace; read-only commands (status, version, releases) must not start
+// writing files. Matching walks the cobra parent chain, mirroring
+// rootRequiredCmds.
+var defaultLogSinkCmds = []string{cmdNameDeploy, cmdNameDestroy, cmdNameCleanup}
+
+func wantsDefaultLogSink(cmd *cobra.Command) bool {
+	for c := cmd; c != nil; c = c.Parent() {
+		if slices.Contains(defaultLogSinkCmds, c.Name()) {
+			return true
+		}
+	}
+	return false
+}
 
 // openLogFile refuses a symlink path via lstat, then opens with
 // O_NOFOLLOW so a symlink planted between lstat and open still loses
 // the race. Needed because configureLogging runs twice on root-required
 // commands (invoking user + sudo re-exec) and a pre-sudo attacker could
 // otherwise redirect root-authored log lines via a planted symlink.
-// Privilege contract: --log-file is operator-supplied and the file is
-// opened as root post-sudo-re-exec. The operator is trusted; no
-// path-location restriction is enforced. O_APPEND + 0o600 bound the
-// risk: existing file content cannot be overwritten, and the resulting
-// file is readable only by root.
+// Privilege contract: the path is either operator-supplied (--log-file)
+// or derived from the operator's working directory (the default
+// okdctl.log sink), and the file is opened as root post-sudo-re-exec.
+// The operator is trusted; no path-location restriction is enforced.
+// O_APPEND + 0o600 bound the risk: existing file content cannot be
+// overwritten, and callers restore invoking-user ownership where needed.
 func openLogFile(path string) (*os.File, error) {
 	if info, err := os.Lstat(path); err == nil {
 		if info.Mode()&os.ModeSymlink != 0 {
-			return nil, fmt.Errorf("--log-file path %q is a symlink; refusing to follow", path)
+			return nil, fmt.Errorf("log file path %q is a symlink; refusing to follow", path)
 		}
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return nil, fmt.Errorf("stat log file: %w", err)
@@ -38,18 +65,53 @@ func openLogFile(path string) (*os.File, error) {
 	return os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND|syscall.O_NOFOLLOW, 0o600)
 }
 
+// openDefaultLogSink opens <workspace>/okdctl.log for append and chowns it
+// to the invoking user. Under the sudo re-exec model the pre-sudo pass
+// creates the file as the invoking user and the root pass only appends;
+// the chown covers direct `sudo okdctl deploy` invocations where root
+// creates it. A chown failure closes the sink — a root-owned 0600 log the
+// operator cannot read afterwards is worse than no file sink.
+func openDefaultLogSink() (string, *os.File, error) {
+	root, err := resolveWorkspaceRoot()
+	if err != nil {
+		return "", nil, err
+	}
+	path := filepath.Join(root, logutil.DefaultLogFileName)
+	f, err := openLogFile(path)
+	if err != nil {
+		return "", nil, err
+	}
+	if err := system.ChownToInvokingUser(path); err != nil {
+		_ = f.Close()
+		return "", nil, fmt.Errorf("chown log file to invoking user: %w", err)
+	}
+	return path, f, nil
+}
+
 func configureLogging(cmd *cobra.Command) error {
 	stdoutW := io.Writer(os.Stdout)
 	stderrW := io.Writer(os.Stderr)
 
-	if logFile != "" {
-		f, err := openLogFile(logFile)
-		if err != nil {
-			return fmt.Errorf("open log file: %w", err)
+	var sink *os.File
+	var sinkErr error
+	switch {
+	case logFile != "":
+		sink, sinkErr = openLogFile(logFile)
+		if sinkErr != nil {
+			return fmt.Errorf("open log file: %w", sinkErr)
 		}
-		logFileCloser = f
-		stdoutW = io.MultiWriter(os.Stdout, f)
-		stderrW = io.MultiWriter(os.Stderr, f)
+		runLogPath = logFile
+	case wantsDefaultLogSink(cmd):
+		// Best-effort: a read-only or otherwise unwritable cwd must not
+		// block the run, unlike an explicit --log-file which hard-fails
+		// above. The warning is emitted after ConfigureLoggers below so
+		// it uses the fully-configured formatter.
+		runLogPath, sink, sinkErr = openDefaultLogSink()
+	}
+	if sink != nil {
+		logFileCloser = sink
+		stdoutW = io.MultiWriter(os.Stdout, sink)
+		stderrW = io.MultiWriter(os.Stderr, sink)
 	}
 
 	// --quiet and --verbose are sugar over --log-level; mutual exclusion is
@@ -78,6 +140,9 @@ func configureLogging(cmd *cobra.Command) error {
 
 	if err := tui.ConfigureLoggers(effectiveLevel, logFormat, stdoutW, stderrW, progressBars); err != nil {
 		return err
+	}
+	if sinkErr != nil {
+		tui.Warn("default log file unavailable; continuing without persistent log", tui.LF("err", sinkErr))
 	}
 	if logFormat == outputJSON && !logVerbose {
 		tui.SuppressInfo()

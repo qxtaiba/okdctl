@@ -37,7 +37,7 @@ var (
 )
 
 var deployCmd = &cobra.Command{
-	Use:   "deploy",
+	Use:   cmdNameDeploy,
 	Short: "Deploy a Kubernetes cluster",
 	Long: `Deploy an OKD/OpenShift cluster through an interactive wizard.
 

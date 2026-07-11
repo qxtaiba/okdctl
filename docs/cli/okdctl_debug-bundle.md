@@ -11,8 +11,10 @@ okdctl doctor results, and system metadata.
 The output is safe to attach to a support ticket — credentials are
 redacted and the raw terraform state file is never included.
 
-Run this after a failed deploy, passing the same --log-file you used
-during the deploy so the bundle captures the relevant logs.
+Run this after a failed deploy. deploy, destroy, and cleanup append
+their full log to okdctl.log in the working directory by default and
+the bundle picks it up automatically; pass the same --log-file the
+failing run used only if it overrode that default.
 
 Pass --quiet to suppress progress logs to stderr when only the bundle
 file is needed (e.g. in scripts or CI).
@@ -41,7 +43,7 @@ okdctl debug-bundle [flags]
 
 ```
   -c, --config string       configuration file (default "okdctl.yaml")
-      --log-file string     write log output to this file in addition to stderr
+      --log-file string     write log output to this file in addition to stderr (replaces the default okdctl.log sink of deploy/destroy/cleanup)
       --log-format string   log output format: text (TTY default) | json (auto-selected when stderr is piped)
       --log-level string    log verbosity (debug, info, warn, error) (default "info")
   -q, --quiet               suppress info/warn logs (alias for --log-level=error)

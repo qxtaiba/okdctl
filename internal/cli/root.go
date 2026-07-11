@@ -142,6 +142,10 @@ func execute() (code int) {
 		// chance to scrub credentials in the chain. tui.Error(err.Error())
 		// would stringify before the handler sees it.
 		tui.Error("command failed", tui.LF("err", err))
+		if runLogPath != "" {
+			tui.Info("full run log persisted; attach it to bug reports or run 'okdctl debug-bundle'",
+				tui.LF("path", runLogPath))
+		}
 		return exitCodeFor(err)
 	}
 
@@ -307,7 +311,7 @@ func init() {
 	// would contradict the auto-switch prose above. Do not remove without also
 	// updating the flag's Usage string to describe the TTY-vs-pipe contract.
 	rootCmd.PersistentFlags().Lookup(flagLogFormat).DefValue = ""
-	rootCmd.PersistentFlags().StringVar(&logFile, flagLogFile, "", "write log output to this file in addition to stderr")
+	rootCmd.PersistentFlags().StringVar(&logFile, flagLogFile, "", "write log output to this file in addition to stderr (replaces the default okdctl.log sink of deploy/destroy/cleanup)")
 	rootCmd.PersistentFlags().BoolVarP(&logQuiet, flagQuiet, "q", false, "suppress info/warn logs (alias for --log-level=error)")
 	rootCmd.PersistentFlags().BoolVarP(&logVerbose, flagVerbose, "v", false, "enable debug logging (alias for --log-level=debug)")
 	rootCmd.MarkFlagsMutuallyExclusive(flagQuiet, flagVerbose)

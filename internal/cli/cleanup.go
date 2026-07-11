@@ -22,7 +22,7 @@ var (
 )
 
 var cleanupCmd = &cobra.Command{
-	Use:   "cleanup",
+	Use:   cmdNameCleanup,
 	Short: "Remove OKD cluster artifacts without destroying infrastructure",
 	Long: `Remove cluster artifacts (work directory, ignition files, HAProxy,
 dnsmasq, Apache httpd, Terraform state files) without tearing down
