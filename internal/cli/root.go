@@ -71,7 +71,10 @@ Highlights:
   • Addon-extensible architecture (Flux, secrets, storage, cert-manager)
   • YAML configuration with sensible defaults
   • Automated preflight checks and validation
-  • Single binary distribution`,
+  • Single binary distribution
+
+Release builds check api.github.com for a newer release (at most once
+per 24h, cached locally); set OKDCTL_NO_UPDATE_CHECK=1 to disable.`,
 	Version:       version.Version,
 	SilenceUsage:  true,
 	SilenceErrors: true,
