@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -227,4 +228,24 @@ func TestVerifyDownloadedFile(t *testing.T) {
 			t.Errorf("file must be removed after mismatch; stat err = %v", err)
 		}
 	})
+}
+
+func TestFetchChecksum_NonOKStatusReturnsHTTPStatusError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "not found", http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	_, err := FetchChecksum(context.Background(), srv.URL, "okdctl.tar.gz")
+	if err == nil {
+		t.Fatal("expected error for HTTP 404; got nil")
+	}
+
+	var httpErr *HTTPStatusError
+	if !errors.As(err, &httpErr) {
+		t.Fatalf("err = %v; want errors.As(*HTTPStatusError) to succeed", err)
+	}
+	if httpErr.Status != http.StatusNotFound {
+		t.Errorf("HTTPStatusError.Status = %d; want %d", httpErr.Status, http.StatusNotFound)
+	}
 }
