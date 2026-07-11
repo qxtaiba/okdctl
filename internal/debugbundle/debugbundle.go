@@ -182,7 +182,7 @@ func Write(ctx context.Context, opts Options) (retErr error) {
 func collectSections(ctx context.Context, addFile func(string, []byte) error, addStream func(*tar.Header, io.Reader) error, cfg *config.Config, cfgErr error, projectRoot string, prErr error, bundleAt time.Time, bundleID, logFile string, skipMustGather bool) []manifestEntry {
 	secs := []manifestEntry{
 		bundleConfig(addFile, cfg, cfgErr),
-		bundleLogFile(addFile, logFile),
+		bundleLogFile(addFile, logFile, projectRoot, prErr),
 		bundleTerraformState(ctx, addFile, projectRoot, prErr, cfg),
 		bundleDoctor(ctx, addFile),
 		bundleSystemMeta(addFile, bundleID, bundleAt),
@@ -224,12 +224,21 @@ func bundleConfig(addFile func(string, []byte) error, cfg *config.Config, cfgErr
 	return manifestEntry{Name: categoryConfig, Status: bundleStatusOK}
 }
 
-func bundleLogFile(addFile func(string, []byte) error, logFile string) manifestEntry {
+// bundleLogFile archives the run log. An explicit --log-file path wins;
+// otherwise it falls back to the default <workspace>/okdctl.log that
+// deploy, destroy, and cleanup append to.
+func bundleLogFile(addFile func(string, []byte) error, logFile, projectRoot string, prErr error) manifestEntry {
 	if logFile == "" {
-		return manifestEntry{
-			Name:    categoryLogFile,
-			Status:  bundleStatusSkipped,
-			Message: "no --log-file set on this invocation; re-run the failing command with --log-file to persist logs",
+		if prErr != nil {
+			return manifestEntry{Name: categoryLogFile, Status: bundleStatusSkipped, Message: fmt.Sprintf("project root: %v", prErr)}
+		}
+		logFile = filepath.Join(projectRoot, logutil.DefaultLogFileName)
+		if _, err := os.Stat(logFile); err != nil {
+			return manifestEntry{
+				Name:    categoryLogFile,
+				Status:  bundleStatusSkipped,
+				Message: fmt.Sprintf("no %s in %s and no --log-file set; deploy/destroy/cleanup write it by default", logutil.DefaultLogFileName, projectRoot),
+			}
 		}
 	}
 	data, err := os.ReadFile(logFile)

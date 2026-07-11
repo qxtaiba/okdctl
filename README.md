@@ -110,7 +110,12 @@ overwritten), launches the wizard, and writes `okdctl.yaml` plus an
 `okdctl.env` file next to the config (named after the config file) for
 Proxmox credentials. The deploy itself adds an `okd-install/` work
 directory and Terraform state under
-`infrastructure/terraform/environments/`. Later runs reuse the existing
+`infrastructure/terraform/environments/`. `deploy`, `destroy`, and
+`cleanup` also append their full log to `okdctl.log` next to the config
+(credentials redacted, one `run_id` per invocation), so a failed deploy
+stays diagnosable after the terminal scrollback is gone —
+`okdctl debug-bundle` picks it up automatically, and `--log-file`
+redirects it. Later runs reuse the existing
 config, and commands that operate on an existing cluster (`status`,
 `destroy`, `kubeconfig`, `debug-bundle`) must run from the same directory.
 To manage multiple clusters, use one directory per cluster
@@ -195,7 +200,7 @@ output goes in bug reports.
 
 ```sh
 okdctl destroy                          # tear down the cluster
-rm -rf okd-install infrastructure okdctl.yaml okdctl.env   # residual state in the deploy directory
+rm -rf okd-install infrastructure okdctl.yaml okdctl.env okdctl.log   # residual state in the deploy directory
 sudo rm /usr/local/bin/okdctl           # or: apt remove okdctl / dnf remove okdctl
 ```
 
