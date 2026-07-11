@@ -48,9 +48,9 @@ esac
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 }
 
-func seedBootstrapEnvDir(t *testing.T, projectRoot, env string) string {
+func seedBootstrapEnvDir(t *testing.T, projectRoot string) string {
 	t.Helper()
-	envDir := filepath.Join(projectRoot, "infrastructure", "terraform", "environments", env)
+	envDir := filepath.Join(projectRoot, "infrastructure", "terraform", "environments", "production")
 	for _, sub := range []string{
 		envDir,
 		filepath.Join(envDir, ".terraform", "providers"),
@@ -80,7 +80,7 @@ func TestCleanupBootstrap_Success(t *testing.T) {
 	t.Setenv("TF_FAKE_MODE", "success")
 
 	projectRoot := t.TempDir()
-	envDir := seedBootstrapEnvDir(t, projectRoot, "production")
+	envDir := seedBootstrapEnvDir(t, projectRoot)
 	planPath := filepath.Join(envDir, "bootstrap-destroy.tfplan")
 	if err := os.WriteFile(planPath, []byte("stub"), 0o600); err != nil {
 		t.Fatal(err)
@@ -108,7 +108,7 @@ func TestCleanupBootstrap_PlanFails(t *testing.T) {
 	t.Setenv("TF_FAKE_MODE", "plan-fail")
 
 	projectRoot := t.TempDir()
-	envDir := seedBootstrapEnvDir(t, projectRoot, "production")
+	envDir := seedBootstrapEnvDir(t, projectRoot)
 	planPath := filepath.Join(envDir, "bootstrap-destroy.tfplan")
 	if err := os.WriteFile(planPath, []byte("stub"), 0o600); err != nil {
 		t.Fatal(err)
@@ -141,7 +141,7 @@ func TestCleanupBootstrap_ApplyFails(t *testing.T) {
 	t.Setenv("TF_FAKE_MODE", "apply-fail")
 
 	projectRoot := t.TempDir()
-	envDir := seedBootstrapEnvDir(t, projectRoot, "production")
+	envDir := seedBootstrapEnvDir(t, projectRoot)
 	planPath := filepath.Join(envDir, "bootstrap-destroy.tfplan")
 	if err := os.WriteFile(planPath, []byte("stub"), 0o600); err != nil {
 		t.Fatal(err)
