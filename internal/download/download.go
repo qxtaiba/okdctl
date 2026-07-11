@@ -63,7 +63,7 @@ func WithLogger(l *slog.Logger) FetchOption {
 	return func(c *dlConfig) { c.logger = logutil.OrNop(l) }
 }
 
-func canSkipDownload(cfg *dlConfig) bool {
+func canSkipDownload(ctx context.Context, cfg *dlConfig) bool {
 	info, err := os.Stat(cfg.outputPath)
 	if err != nil || info.Size() == 0 {
 		return false
@@ -78,7 +78,7 @@ func canSkipDownload(cfg *dlConfig) bool {
 
 	cfg.logger.Info("download: validating existing file", "file", filename)
 
-	actualChecksum, err := CalculateChecksum(cfg.outputPath)
+	actualChecksum, err := CalculateChecksum(ctx, cfg.outputPath)
 	if err != nil {
 		return false // can't read file; re-download instead of failing
 	}
@@ -114,7 +114,7 @@ func Fetch(ctx context.Context, url, dst string, opts ...FetchOption) error {
 		cfg.description = filepath.Base(dst)
 	}
 
-	if !cfg.overwrite && canSkipDownload(cfg) {
+	if !cfg.overwrite && canSkipDownload(ctx, cfg) {
 		return nil
 	}
 
@@ -135,7 +135,7 @@ func Fetch(ctx context.Context, url, dst string, opts ...FetchOption) error {
 		return &errtypes.NetworkError{Msg: fmt.Sprintf("download failed for %s", cfg.description), Err: err}
 	}
 
-	if err := verifyDownloadedFile(dst, cfg.expectedChecksum, cfg.logger); err != nil {
+	if err := verifyDownloadedFile(ctx, dst, cfg.expectedChecksum, cfg.logger); err != nil {
 		_ = os.Remove(dst)
 		return err
 	}

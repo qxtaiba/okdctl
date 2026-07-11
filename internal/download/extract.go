@@ -174,7 +174,7 @@ func ExtractTarGz(ctx context.Context, archivePath, destDir string, opts ...Extr
 	if cfg.expectedChecksum != "" {
 		cfg.logger.Info("download: validating sha256 checksum", "file", filename)
 
-		if err := ValidateChecksum(archivePath, cfg.expectedChecksum); err != nil {
+		if err := ValidateChecksum(ctx, archivePath, cfg.expectedChecksum); err != nil {
 			return fmt.Errorf("checksum validation failed for %s: %w", filename, err)
 		}
 

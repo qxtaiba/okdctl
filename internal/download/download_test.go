@@ -203,7 +203,7 @@ func TestCanSkipDownload(t *testing.T) {
 			expectedChecksum: goodSum,
 			logger:           logutil.NopLogger,
 		}
-		if canSkipDownload(cfg) {
+		if canSkipDownload(context.Background(), cfg) {
 			t.Error("expected false for absent file")
 		}
 	})
@@ -219,7 +219,7 @@ func TestCanSkipDownload(t *testing.T) {
 			expectedChecksum: goodSum,
 			logger:           logutil.NopLogger,
 		}
-		if canSkipDownload(cfg) {
+		if canSkipDownload(context.Background(), cfg) {
 			t.Error("expected false for zero-size file")
 		}
 	})
@@ -235,7 +235,7 @@ func TestCanSkipDownload(t *testing.T) {
 			expectedChecksum: goodSum,
 			logger:           logutil.NopLogger,
 		}
-		if !canSkipDownload(cfg) {
+		if !canSkipDownload(context.Background(), cfg) {
 			t.Error("expected true for matching checksum")
 		}
 	})
@@ -251,7 +251,7 @@ func TestCanSkipDownload(t *testing.T) {
 			expectedChecksum: badSum,
 			logger:           logutil.NopLogger,
 		}
-		if canSkipDownload(cfg) {
+		if canSkipDownload(context.Background(), cfg) {
 			t.Error("expected false for checksum mismatch")
 		}
 		if _, err := os.Stat(path); !os.IsNotExist(err) {

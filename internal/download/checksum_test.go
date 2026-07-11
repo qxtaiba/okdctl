@@ -22,7 +22,7 @@ func TestCalculateChecksum(t *testing.T) {
 	if err := os.WriteFile(path, data, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	sum, err := CalculateChecksum(path)
+	sum, err := CalculateChecksum(context.Background(), path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -43,25 +43,25 @@ func TestValidateChecksum(t *testing.T) {
 	good := hex.EncodeToString(want[:])
 
 	t.Run("empty expected bypasses check", func(t *testing.T) {
-		if err := ValidateChecksum(path, ""); err != nil {
+		if err := ValidateChecksum(context.Background(), path, ""); err != nil {
 			t.Errorf("empty checksum must disable validation; got %v", err)
 		}
 	})
 
 	t.Run("matching checksum succeeds", func(t *testing.T) {
-		if err := ValidateChecksum(path, good); err != nil {
+		if err := ValidateChecksum(context.Background(), path, good); err != nil {
 			t.Errorf("good checksum failed: %v", err)
 		}
 	})
 
 	t.Run("mismatching checksum fails", func(t *testing.T) {
-		if err := ValidateChecksum(path, strings.Repeat("0", 64)); err == nil {
+		if err := ValidateChecksum(context.Background(), path, strings.Repeat("0", 64)); err == nil {
 			t.Error("expected mismatch error")
 		}
 	})
 
 	t.Run("missing file surfaces error", func(t *testing.T) {
-		if err := ValidateChecksum(filepath.Join(dir, "nope"), good); err == nil {
+		if err := ValidateChecksum(context.Background(), filepath.Join(dir, "nope"), good); err == nil {
 			t.Error("expected open error")
 		}
 	})
@@ -193,7 +193,7 @@ func TestVerifyDownloadedFile(t *testing.T) {
 		if err := os.WriteFile(path, data, 0o600); err != nil {
 			t.Fatal(err)
 		}
-		if err := verifyDownloadedFile(path, "", nop); err != nil {
+		if err := verifyDownloadedFile(context.Background(), path, "", nop); err != nil {
 			t.Errorf("empty checksum must be a no-op; got %v", err)
 		}
 		if _, err := os.Stat(path); err != nil {
@@ -207,7 +207,7 @@ func TestVerifyDownloadedFile(t *testing.T) {
 		if err := os.WriteFile(path, data, 0o600); err != nil {
 			t.Fatal(err)
 		}
-		if err := verifyDownloadedFile(path, goodHex, nop); err != nil {
+		if err := verifyDownloadedFile(context.Background(), path, goodHex, nop); err != nil {
 			t.Errorf("good checksum failed: %v", err)
 		}
 		if _, err := os.Stat(path); err != nil {
@@ -221,7 +221,7 @@ func TestVerifyDownloadedFile(t *testing.T) {
 		if err := os.WriteFile(path, data, 0o600); err != nil {
 			t.Fatal(err)
 		}
-		if err := verifyDownloadedFile(path, badHex, nop); err == nil {
+		if err := verifyDownloadedFile(context.Background(), path, badHex, nop); err == nil {
 			t.Error("expected mismatch error")
 		}
 		if _, err := os.Stat(path); !os.IsNotExist(err) {
@@ -247,5 +247,20 @@ func TestFetchChecksum_NonOKStatusReturnsHTTPStatusError(t *testing.T) {
 	}
 	if httpErr.Status != http.StatusNotFound {
 		t.Errorf("HTTPStatusError.Status = %d; want %d", httpErr.Status, http.StatusNotFound)
+	}
+}
+
+func TestCalculateChecksum_CtxCancelled(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "big.bin")
+	if err := os.WriteFile(path, make([]byte, 4<<20), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	if _, err := CalculateChecksum(ctx, path); !errors.Is(err, context.Canceled) {
+		t.Errorf("err = %v; want context.Canceled", err)
 	}
 }

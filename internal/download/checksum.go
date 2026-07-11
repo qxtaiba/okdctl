@@ -17,8 +17,28 @@ import (
 
 const maxChecksumFileSize = 1024 * 1024
 
+// checksumChunkSize bounds how much of the file CalculateChecksum reads
+// between context checks, so hashing a multi-GB CoreOS ISO can be
+// interrupted by ctx cancellation within a couple of seconds instead of
+// running the read to completion.
+const checksumChunkSize = 2 << 20 // 2 MiB
+
+// ctxReader wraps r and fails with ctx.Err() once ctx is done, checked
+// before every Read call.
+type ctxReader struct {
+	ctx context.Context
+	r   io.Reader
+}
+
+func (cr *ctxReader) Read(p []byte) (int, error) {
+	if err := cr.ctx.Err(); err != nil {
+		return 0, err
+	}
+	return cr.r.Read(p)
+}
+
 // CalculateChecksum returns the hex-encoded SHA-256 of the file at path.
-func CalculateChecksum(path string) (string, error) {
+func CalculateChecksum(ctx context.Context, path string) (string, error) {
 	file, err := os.Open(path)
 	if err != nil {
 		return "", fmt.Errorf("failed to open %s for checksum: %w", path, err)
@@ -26,7 +46,8 @@ func CalculateChecksum(path string) (string, error) {
 	defer func() { _ = file.Close() }()
 
 	hasher := sha256.New()
-	if _, err := io.Copy(hasher, file); err != nil {
+	buf := make([]byte, checksumChunkSize)
+	if _, err := io.CopyBuffer(hasher, &ctxReader{ctx: ctx, r: file}, buf); err != nil {
 		return "", fmt.Errorf("failed to read file for checksum: %w", err)
 	}
 
@@ -35,12 +56,12 @@ func CalculateChecksum(path string) (string, error) {
 
 // ValidateChecksum compares the SHA-256 of path against expectedChecksum.
 // An empty expectedChecksum disables the check and returns nil.
-func ValidateChecksum(path, expectedChecksum string) error {
+func ValidateChecksum(ctx context.Context, path, expectedChecksum string) error {
 	if expectedChecksum == "" {
 		return nil
 	}
 
-	actualChecksum, err := CalculateChecksum(path)
+	actualChecksum, err := CalculateChecksum(ctx, path)
 	if err != nil {
 		return err
 	}
@@ -113,7 +134,7 @@ func FetchChecksum(ctx context.Context, checksumsURL, filename string) (string, 
 	return "", fmt.Errorf("checksum not found for file: %s", filename)
 }
 
-func verifyDownloadedFile(path, expectedChecksum string, logger *slog.Logger) error {
+func verifyDownloadedFile(ctx context.Context, path, expectedChecksum string, logger *slog.Logger) error {
 	if expectedChecksum == "" {
 		return nil
 	}
@@ -122,7 +143,7 @@ func verifyDownloadedFile(path, expectedChecksum string, logger *slog.Logger) er
 
 	logger.Info("download: verifying checksum", "file", filename)
 
-	actualChecksum, err := CalculateChecksum(path)
+	actualChecksum, err := CalculateChecksum(ctx, path)
 	if err != nil {
 		_ = os.Remove(path)
 		return err

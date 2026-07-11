@@ -46,7 +46,7 @@ func remoteISO256(ctx context.Context, exec *executor.Executor, host, knownHosts
 // local file. Any error (SSH transport, parse, local hash failure) returns
 // true so the caller falls back to uploading.
 func isoUploadNeeded(ctx context.Context, exec *executor.Executor, host, knownHostsPath, remotePath, localPath string) bool {
-	localHash, err := download.CalculateChecksum(localPath)
+	localHash, err := download.CalculateChecksum(ctx, localPath)
 	if err != nil {
 		return true
 	}
