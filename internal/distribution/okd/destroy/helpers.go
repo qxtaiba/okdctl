@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"path/filepath"
 
+	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/infrastructure/terraform"
+	"github.com/qxtaiba/okdctl/internal/nodetypes"
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
@@ -67,4 +69,20 @@ func (p *Phase) destroyInfrastructure(ctx context.Context, opts *Options) error 
 	}
 
 	return nil
+}
+
+// customISONames returns the exact per-node custom ISO filenames the setup
+// phase uploads to the Proxmox host (bootstrap.iso, master<N>.iso,
+// worker<N>.iso) for cfg's topology — see setup.BuildNodeList for the
+// naming this mirrors. Names carry no cluster prefix; removal-side safety
+// comes from hostssh.RemoveCustomISOsFromProxmox's in-use check, not the name.
+func customISONames(cfg *config.Config) []string {
+	names := []string{string(nodetypes.RoleBootstrap) + ".iso"}
+	for i := range cfg.Topology.ControlPlane.Count {
+		names = append(names, fmt.Sprintf("%s%d.iso", nodetypes.RoleMaster, i))
+	}
+	for i := range cfg.Topology.Workers.Count {
+		names = append(names, fmt.Sprintf("%s%d.iso", nodetypes.RoleWorker, i))
+	}
+	return names
 }
