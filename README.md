@@ -75,9 +75,12 @@ source <(okdctl completion zsh)
 okdctl completion fish > ~/.config/fish/completions/okdctl.fish
 ```
 
-Don't run `okdctl` as root. It refuses to start under `sudo` and
-escalates internally for the commands that need it (`nmcli`, `firewall-cmd`,
-`systemctl`).
+Don't run `okdctl` as root yourself. Non-privileged commands (`status`,
+`config`, `kubeconfig`, and others) refuse to start under `sudo` or as root
+and exit 5. Privileged commands (`deploy`, `destroy`, `cleanup`,
+`update-ingress`) self-elevate via an internal `sudo` re-exec — invoke them
+as your normal user and let okdctl escalate for the parts that touch
+`nmcli`, `firewall-cmd`, and `systemctl`.
 
 ## Usage
 
