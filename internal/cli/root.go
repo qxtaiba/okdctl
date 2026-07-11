@@ -146,11 +146,13 @@ func execute() (code int) {
 }
 
 // signalLoop runs the two-strike shutdown handler in execute()'s goroutine.
-// First signal: store, cancel, and print the escape-hatch hint. Second signal:
-// call exit(130) immediately — the user has explicitly asked for a hard kill,
-// so deferred cleanup (logFileCloser.Close) is intentionally bypassed. On the
-// happy path execute()'s defer close(sigCh) fires after signal.Stop, causing
-// the second receive to observe !ok and return cleanly (bounded goroutine leak).
+// First signal: store, cancel, and print the escape-hatch hint. Second
+// signal: exit(143) if it was SIGTERM, exit(130) otherwise — matching the
+// documented taxonomy (130=SIGINT, 143=SIGTERM). The user has explicitly
+// asked for a hard kill, so deferred cleanup (logFileCloser.Close) is
+// intentionally bypassed. On the happy path execute()'s defer close(sigCh)
+// fires after signal.Stop, causing the second receive to observe !ok and
+// return cleanly (bounded goroutine leak).
 // con:aa84670c — close(sigCh) ordering after signal.Stop is load-bearing for
 // the bounded-leak contract; do not move or remove without re-deriving it.
 func signalLoop(sigCh <-chan os.Signal, cancel context.CancelFunc, caughtSig *atomic.Value, exit func(int)) {
@@ -161,8 +163,12 @@ func signalLoop(sigCh <-chan os.Signal, cancel context.CancelFunc, caughtSig *at
 	caughtSig.Store(sig)
 	cancel()
 	tui.Warn("shutdown in progress; press ctrl-c again to force quit")
-	_, ok = <-sigCh
+	sig2, ok := <-sigCh
 	if !ok {
+		return
+	}
+	if sig2 == syscall.SIGTERM {
+		exit(143)
 		return
 	}
 	exit(130)

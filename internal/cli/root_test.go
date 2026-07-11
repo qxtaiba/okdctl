@@ -54,6 +54,24 @@ func TestSignalLoopSecondSignalForcesExit(t *testing.T) {
 	}
 }
 
+// TestSignalLoopSecondSignalSIGTERMForces143 verifies that a second SIGTERM
+// exits 143 (not the SIGINT-shaped 130), matching the documented taxonomy.
+func TestSignalLoopSecondSignalSIGTERMForces143(t *testing.T) {
+	sigCh := make(chan os.Signal, 2)
+	_, cancel := context.WithCancel(context.Background())
+	var caughtSig atomic.Value
+	exitCode := -1
+	fakeExit := func(code int) { exitCode = code }
+
+	sigCh <- syscall.SIGTERM
+	sigCh <- syscall.SIGTERM
+	signalLoop(sigCh, cancel, &caughtSig, fakeExit)
+
+	if exitCode != 143 {
+		t.Fatalf("expected exit(143) on second SIGTERM, got exit(%d)", exitCode)
+	}
+}
+
 // TestExitCodeForTaxonomy locks the published exit-code contract from
 // root.go's package doc: ConfigError=2, NetworkError=3, ClusterError=4,
 // AuthError=5, everything else=1. Scripts consuming okdctl's exit codes
