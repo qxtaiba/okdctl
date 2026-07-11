@@ -234,6 +234,7 @@ type CompactSelector struct {
 	options  []string
 	selected int
 	focused  bool
+	noWrap   bool
 }
 
 // NewCompactSelector builds a CompactSelector starting focused on index 0.
@@ -260,6 +261,12 @@ func (s *CompactSelector) SetFocused(focused bool) {
 	s.focused = focused
 }
 
+// SetWrap controls whether up/down navigation wraps past the list ends.
+// Selectors wrap by default.
+func (s *CompactSelector) SetWrap(wrap bool) {
+	s.noWrap = !wrap
+}
+
 // Update handles up/down and j/k key presses to move the selection.
 func (s *CompactSelector) Update(msg tea.Msg) (*CompactSelector, tea.Cmd) {
 	if !s.focused {
@@ -269,13 +276,17 @@ func (s *CompactSelector) Update(msg tea.Msg) (*CompactSelector, tea.Cmd) {
 	if keyMsg, ok := msg.(tea.KeyPressMsg); ok {
 		switch {
 		case key.Matches(keyMsg, key.NewBinding(key.WithKeys("up", "k"))):
-			s.selected--
-			if s.selected < 0 {
+			switch {
+			case s.selected > 0:
+				s.selected--
+			case !s.noWrap:
 				s.selected = len(s.options) - 1
 			}
 		case key.Matches(keyMsg, key.NewBinding(key.WithKeys("down", "j"))):
-			s.selected++
-			if s.selected >= len(s.options) {
+			switch {
+			case s.selected < len(s.options)-1:
+				s.selected++
+			case !s.noWrap:
 				s.selected = 0
 			}
 		}
