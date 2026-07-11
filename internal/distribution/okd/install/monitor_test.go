@@ -143,7 +143,7 @@ func newPhaseSynctest(t *testing.T, start func(context.Context, string) (<-chan 
 	t.Helper()
 	h := &monitorCaptureHandler{}
 	return &Phase{
-		BasePhase:       phase.NewBasePhase("test", phase.WithLogger(slog.New(h)), phase.WithReporter(logutil.NopProgressReporter)),
+		BasePhase:       phase.NewBasePhase(phase.WithLogger(slog.New(h)), phase.WithReporter(logutil.NopProgressReporter)),
 		startMonitorCmd: start,
 	}, h
 }

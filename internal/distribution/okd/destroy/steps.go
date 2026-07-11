@@ -152,7 +152,7 @@ func (p *Phase) destroySteps(ctx context.Context, cfg *config.Config, opts *Opti
 					BinDir:         config.ResolveBinDir(cfg),
 					PostDestroy:    !t.terraformFailed(),
 				}
-				if err := cleanup.New(p.Version, phase.WithExecutor(p.Exec), phase.WithLogger(p.Log)).Execute(ctx, cleanupOpts); err != nil {
+				if err := cleanup.New(phase.WithExecutor(p.Exec), phase.WithLogger(p.Log)).Execute(ctx, cleanupOpts); err != nil {
 					return &errtypes.ClusterError{Msg: "cleanup failed", Err: err}
 				}
 				return nil

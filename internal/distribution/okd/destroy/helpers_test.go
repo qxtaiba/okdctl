@@ -115,7 +115,6 @@ func TestDestroyInfrastructure_MissingEnvDir(t *testing.T) {
 
 	p := &Phase{
 		BasePhase: phase.NewBasePhase(
-			"test",
 			phase.WithExecutor(executor.New()),
 			phase.WithLogger(logutil.NopLogger),
 		),
@@ -150,7 +149,6 @@ func TestDestroyInfrastructure_EmptyStateReturnsNil(t *testing.T) {
 
 	p := &Phase{
 		BasePhase: phase.NewBasePhase(
-			"test",
 			phase.WithExecutor(executor.New()),
 			phase.WithLogger(logutil.NopLogger),
 		),
@@ -178,7 +176,6 @@ func TestDestroyInfrastructure_TFDestroyFails(t *testing.T) {
 
 	p := &Phase{
 		BasePhase: phase.NewBasePhase(
-			"test",
 			phase.WithExecutor(executor.New()),
 			phase.WithLogger(logutil.NopLogger),
 		),
@@ -225,7 +222,6 @@ func TestDestroyInfrastructure_CorruptStateReturnsClusterError(t *testing.T) {
 
 	p := &Phase{
 		BasePhase: phase.NewBasePhase(
-			"test",
 			phase.WithExecutor(executor.New()),
 			phase.WithLogger(logutil.NopLogger),
 		),
@@ -271,7 +267,6 @@ func TestDestroyInfrastructure_CorruptStateWithBakNamesSnapshot(t *testing.T) {
 
 	p := &Phase{
 		BasePhase: phase.NewBasePhase(
-			"test",
 			phase.WithExecutor(executor.New()),
 			phase.WithLogger(logutil.NopLogger),
 		),

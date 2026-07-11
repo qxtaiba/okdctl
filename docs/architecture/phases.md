@@ -88,7 +88,6 @@ every phase needs:
 type BasePhase struct {
     Exec     *executor.Executor           // subprocess runner (oc, terraform, etc.)
     Log      *slog.Logger                 // structured logger
-    Version  string                       // OKD version string, for display
     Recorder distribution.MetricsRecorder // per-step + overall observation sink (nil → nopMetricsRecorder via WithRecorder)
     Reporter logutil.ProgressReporter     // progress sink for long-running operations (nil → NopProgressReporter via NewBasePhase)
 }

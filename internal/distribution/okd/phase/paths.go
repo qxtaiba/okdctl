@@ -79,12 +79,11 @@ func GetTerraformEnv(cfg *config.Config) string {
 }
 
 // BasePhase is the shared state every phase (setup, install, postinstall,
-// destroy, cleanup) embeds — command executor, logger, okdctl version
-// string used for provenance in generated artifacts, and progress reporter.
+// destroy, cleanup) embeds — command executor, logger, metrics recorder,
+// and progress reporter.
 type BasePhase struct {
 	Exec     *executor.Executor
 	Log      *slog.Logger
-	Version  string
 	Recorder distribution.MetricsRecorder
 	Reporter logutil.ProgressReporter
 }
@@ -103,11 +102,6 @@ func WithLogger(l *slog.Logger) BasePhaseOption {
 	return func(p *BasePhase) { p.Log = logutil.OrNop(l) }
 }
 
-// WithVersion sets the okdctl version tag embedded in generated artifacts.
-func WithVersion(v string) BasePhaseOption {
-	return func(p *BasePhase) { p.Version = v }
-}
-
 // WithRecorder attaches a MetricsRecorder. Nil is tolerated; phases pass
 // p.Recorder to orchestrator.SetMetricsRecorder which normalises nil to nop.
 func WithRecorder(rec distribution.MetricsRecorder) BasePhaseOption {
@@ -120,11 +114,11 @@ func WithReporter(r logutil.ProgressReporter) BasePhaseOption {
 	return func(p *BasePhase) { p.Reporter = r }
 }
 
-// NewBasePhase constructs a BasePhase tagged with the okdctl version and the
-// supplied options. Nil-safe for logger (→ NopLogger), exec (→ fresh executor
-// wired to the same logger), and reporter (→ NopProgressReporter).
-func NewBasePhase(version string, opts ...BasePhaseOption) BasePhase {
-	p := BasePhase{Version: version}
+// NewBasePhase constructs a BasePhase from the supplied options. Nil-safe
+// for logger (→ NopLogger), exec (→ fresh executor wired to the same
+// logger), and reporter (→ NopProgressReporter).
+func NewBasePhase(opts ...BasePhaseOption) BasePhase {
+	p := BasePhase{}
 	for _, opt := range opts {
 		opt(&p)
 	}

@@ -42,7 +42,6 @@ func (h *isoCapture) WithGroup(_ string) slog.Handler { return h }
 func newPhaseWithISOCapture(h *isoCapture) *Phase {
 	return &Phase{
 		BasePhase: phase.NewBasePhase(
-			"test",
 			phase.WithExecutor(executor.New(executor.WithLogger(logutil.NopLogger))),
 			phase.WithLogger(slog.New(h)),
 		),
@@ -113,7 +112,7 @@ func makeStreamJSON(arch, release, isoURL string) []byte {
 
 func newTestPhase(t *testing.T) *Phase {
 	t.Helper()
-	return &Phase{BasePhase: phase.NewBasePhase("test",
+	return &Phase{BasePhase: phase.NewBasePhase(
 		phase.WithLogger(logutil.NopLogger),
 		phase.WithExecutor(executor.New(executor.WithLogger(logutil.NopLogger))),
 	)}

@@ -63,7 +63,7 @@ exit 0
 
 func newTestPhase(t *testing.T) *BasePhase {
 	t.Helper()
-	p := NewBasePhase("test",
+	p := NewBasePhase(
 		WithExecutor(executor.New()),
 		WithLogger(logutil.NopLogger),
 	)

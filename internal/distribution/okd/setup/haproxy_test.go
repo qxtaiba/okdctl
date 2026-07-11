@@ -61,7 +61,7 @@ func newPhase(t *testing.T, binDir string) *Phase {
 	t.Helper()
 	t.Setenv("PATH", binDir+":"+os.Getenv("PATH"))
 	exec := executor.New(executor.WithInheritedEnv())
-	return New("test", phase.WithExecutor(exec), phase.WithLogger(logutil.NopLogger))
+	return New(phase.WithExecutor(exec), phase.WithLogger(logutil.NopLogger))
 }
 
 func TestConfigureHAProxy_HappyPath(t *testing.T) {

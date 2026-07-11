@@ -63,7 +63,7 @@ func TestRemoveHAProxy_WorkDirRegression(t *testing.T) {
 	haproxyHealthPort = port
 	haproxyVIPTimeout = 1 * time.Second
 
-	p := New("test", phase.WithExecutor(executor.New()), phase.WithLogger(logutil.NopLogger))
+	p := New(phase.WithExecutor(executor.New()), phase.WithLogger(logutil.NopLogger))
 
 	t.Run("correct_workdir_passes_ca_check", func(t *testing.T) {
 		err := p.RemoveHAProxy(context.Background(), "127.0.0.1", correctClusterDir)

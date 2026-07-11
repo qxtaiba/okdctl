@@ -13,7 +13,6 @@ import (
 	"github.com/qxtaiba/okdctl/internal/runlock"
 	"github.com/qxtaiba/okdctl/internal/system"
 	"github.com/qxtaiba/okdctl/internal/tui"
-	"github.com/qxtaiba/okdctl/internal/version"
 )
 
 var (
@@ -133,7 +132,7 @@ func runCleanup(cmd *cobra.Command, _ []string) error {
 	startTime := time.Now()
 
 	exec := executor.New(executor.WithWorkDir(projectRoot))
-	if err := cleanup.New(version.Version, phase.WithExecutor(exec), phase.WithLogger(logger)).Execute(ctx, opts); err != nil {
+	if err := cleanup.New(phase.WithExecutor(exec), phase.WithLogger(logger)).Execute(ctx, opts); err != nil {
 		tui.Warn("partial cleanup; rerun to retry")
 		return err
 	}

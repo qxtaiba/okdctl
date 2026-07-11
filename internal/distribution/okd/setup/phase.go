@@ -104,10 +104,10 @@ type Phase struct {
 	loggedISOs map[string]bool
 }
 
-// New constructs a setup Phase with the given version tag and options.
-// Host OS detection populates OS and Pkg; detection errors fall back to RHEL/dnf.
-func New(version string, opts ...phase.BasePhaseOption) *Phase {
-	bp := phase.NewBasePhase(version, opts...)
+// New constructs a setup Phase with the given options. Host OS detection
+// populates OS and Pkg; detection errors fall back to RHEL/dnf.
+func New(opts ...phase.BasePhaseOption) *Phase {
+	bp := phase.NewBasePhase(opts...)
 	bp.Log = bp.Log.With("phase", "setup")
 	detectedOS := platform.DetectOrDefault(bp.Log)
 	return &Phase{

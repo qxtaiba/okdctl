@@ -105,7 +105,7 @@ func TestGuardLiveCluster(t *testing.T) {
 			}
 			tc.setup(t, root, workDir)
 
-			p := New("test", WithProjectRoot(root), WithLogger(logutil.NopLogger))
+			p := New(WithProjectRoot(root), WithLogger(logutil.NopLogger))
 			err := p.guardLiveCluster(config.DefaultConfig(), tc.opts)
 
 			if tc.wantErr {
