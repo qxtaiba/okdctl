@@ -30,9 +30,10 @@ var (
 // releasesCmd groups the read-only subcommands that query the OKD releases
 // feed, backed by the fetcher's disk cache.
 var releasesCmd = &cobra.Command{
-	Use:   "releases",
-	Short: "Query available OKD versions",
-	Long:  "List and inspect OKD releases resolved from the GitHub releases feed.",
+	Use:     "releases",
+	Aliases: []string{"release"},
+	Short:   "Query available OKD versions",
+	Long:    "List and inspect OKD releases resolved from the GitHub releases feed.",
 }
 
 // releasesListCmd prints available versions, filtered to Stable=true by

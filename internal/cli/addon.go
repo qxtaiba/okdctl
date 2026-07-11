@@ -25,9 +25,10 @@ var (
 )
 
 var addonCmd = &cobra.Command{
-	Use:   "addon",
-	Short: "Manage cluster addons",
-	Long:  "List, install, uninstall, and verify optional cluster addons.",
+	Use:     "addon",
+	Aliases: []string{"addons"},
+	Short:   "Manage cluster addons",
+	Long:    "List, install, uninstall, and verify optional cluster addons.",
 }
 
 var addonListCmd = &cobra.Command{
