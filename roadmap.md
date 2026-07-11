@@ -202,7 +202,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `api:4f69fc9d:iface-fragmented-step` — iface fragmented step
 
-**Status:** deferred  
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/w2s-steps
 **Severity:** suggestion  
 **Evidence:** `internal/distribution/step.go:31-69`  
 **Problem:** Step / Skipper / FatalChecker / StepCallbacks remain four interfaces that ProvisioningStep always composes together. The builtStep impl implements all four.  
@@ -486,7 +486,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sub:ae5b624c:parallel-exec-wrapper` — parallel exec wrapper
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/w2e-executor
 **Severity:** suggestion
 **Cluster:** io-handling — seam→`audit-api-design` — related: `sub:97cb8adf:no-cancel-func`
 **Evidence:** `internal/distribution/okd/install/monitor.go:25-44`
@@ -498,7 +498,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `state:0f076161:destroy-no-cluster-confirm-without-yes` — destroy no cluster confirm without yes
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/t3-destroy-cleanup
+**Status:** in review — PR #908
 **Severity:** minor
 **Cluster:** destroy-safety
 **Evidence:** `internal/cli/destroy.go:230-245`
@@ -518,7 +518,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `state:b38ec9cc:workers-targeted-apply-skips-other-drift` — workers targeted apply skips other drift
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/t4-lockhint-workers
+**Status:** in review — PR #907
 **Severity:** suggestion
 **Cluster:** phase-idempotency
 **Evidence:** `internal/distribution/okd/install/workers.go:46-76`
@@ -558,7 +558,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `state:0f076161:destroy-skip-flag-orthogonal-with-dryrun` — destroy skip flag orthogonal with dryrun
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/t3-destroy-cleanup
+**Status:** in review — PR #908
 **Severity:** suggestion
 **Cluster:** destroy-safety
 **Evidence:** `internal/cli/destroy.go:210-227`
@@ -582,7 +582,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `err:48688e63:proxmox-apply-cancel-bare-wrap` — proxmox apply cancel bare wrap
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/w2p-proxmox
 **Severity:** suggestion
 **Cluster:** cancellation-identity — seam→`audit-concurrency`
 **Evidence:** `internal/infrastructure/proxmox/proxmox.go:232-242`
@@ -592,7 +592,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `err:b38ec9cc:lock-hint-exit-code-flip` — lock hint exit code flip
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/t4-lockhint-workers
+**Status:** in review — PR #907
 **Severity:** major
 **Cluster:** sentinel-vs-typed — seam→`audit-cli-ux`
 **Evidence:** `internal/distribution/okd/install/workers.go:39-71` + 3 more
@@ -602,7 +602,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `err:f55b9c27:envfile-loadonce-no-sentinel` — envfile loadonce no sentinel
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/w2m-misc
 **Severity:** suggestion
 **Cluster:** sentinel-vs-typed
 **Evidence:** `internal/credentials/envfile.go:120-129`
@@ -646,7 +646,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `api:262af6e4:opt-no-newoptions` — opt no newoptions
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/t3-destroy-cleanup
+**Status:** in review — PR #908
 **Severity:** minor
 **Cluster:** option-consistency
 **Evidence:** `internal/distribution/okd/cleanup/cleanup.go:68-83`
@@ -656,7 +656,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `api:d6b325cb:pkg-types-direction` — pkg types direction
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/w2p-proxmox
 **Severity:** minor
 **Cluster:** package-boundary
 **Evidence:** `internal/infrastructure/proxmox/types.go:1-49`
@@ -666,7 +666,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `api:262af6e4:opt-execute-receiver-unused` — opt execute receiver unused
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/t3-destroy-cleanup
+**Status:** in review — PR #908
 **Severity:** minor
 **Cluster:** option-consistency
 **Evidence:** `internal/distribution/okd/cleanup/cleanup.go:97-102`
@@ -746,7 +746,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `api:7b2829bb:opt-with-inherited-env-noarg` — opt with inherited env noarg
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/w2e-executor
 **Severity:** suggestion
 **Cluster:** option-consistency
 **Evidence:** `internal/executor/executor.go:79-87`
@@ -786,7 +786,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `api:c287d5c0:opt-destroyopts-duplication` — opt destroyopts duplication
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/t3-destroy-cleanup
+**Status:** in review — PR #908
 **Severity:** minor
 **Cluster:** option-consistency
 **Evidence:** `internal/distribution/okd/okd.go:181-222`
@@ -796,7 +796,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `api:ae5b624c:iface-csr-approver-positive` — iface csr approver positive
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/w2c-cluster
 **Severity:** suggestion
 **Cluster:** interface-location
 **Evidence:** `internal/distribution/okd/install/monitor.go:78-83`
@@ -808,7 +808,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `ux:fd2125dd:concept-named-twice` — concept named twice
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/t5-cli-root
+**Status:** in review — PR #896
 **Severity:** minor
 **Cluster:** verb-noun
 **Evidence:** `internal/cli/addon.go:28-31` + 1 more
@@ -818,7 +818,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `ux:0f076161:exit-taxonomy-not-published` — exit taxonomy not published
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/t3-destroy-cleanup
+**Status:** in review — PR #908
 **Severity:** minor
 **Cluster:** exit-codes — seam→`audit-errors`
 **Evidence:** `internal/cli/destroy.go:204-227`
@@ -828,7 +828,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `ux:073d24ed:flag-shortcut-collision` — flag shortcut collision
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/t5-cli-root
+**Status:** in review — PR #896
 **Severity:** minor
 **Cluster:** flag-conventions
 **Evidence:** `internal/cli/deploy.go:46-51` + 2 more
@@ -842,7 +842,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `mod:b38ec9cc:use-strings-lines` — use strings lines
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/t4-lockhint-workers
+**Status:** in review — PR #907
 **Severity:** minor
 **Cluster:** slices-maps
 **Evidence:** `internal/distribution/okd/install/workers.go:91-97`
@@ -854,7 +854,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `smell:0f076161:stringly-typed-enum` — stringly typed enum
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/t3-destroy-cleanup
+**Status:** in review — PR #908
 **Severity:** minor
 **Cluster:** magic-strings
 **Evidence:** `internal/cli/destroy.go:109-130`
@@ -864,7 +864,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `smell:48688e63:bool-should-be-3state` — bool should be 3state
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/w2p-proxmox
 **Severity:** suggestion
 **Cluster:** bool-should-be-enum
 **Evidence:** `internal/infrastructure/proxmox/proxmox.go:470-503`
@@ -874,7 +874,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `smell:262af6e4:abstraction-single-caller` — abstraction single caller
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/t3-destroy-cleanup
+**Status:** in review — PR #908
 **Severity:** suggestion
 **Cluster:** helper-package-no-value
 **Evidence:** `internal/distribution/okd/cleanup/cleanup.go:24-56`
@@ -995,7 +995,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `sub:0934cf1b:no-timeout` — no timeout
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/w2e-executor
 **Severity:** suggestion
 **Cluster:** timeout-cancel
 **Evidence:** `internal/platform/packages.go:60-90` + 2 more
@@ -1005,7 +1005,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `sub:4c092fce:ring-truncated-stdout-parse` — ring truncated stdout parse
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/w2e-executor
 **Severity:** minor
 **Cluster:** io-handling — related: sub:1e8ffb91:ring-truncated-stdout-parse
 **Evidence:** `internal/infrastructure/terraform/terraform.go:467-484`
@@ -1015,7 +1015,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `sub:19a715fd:ring-truncated-stdout-parse` — ring truncated stdout parse
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/w2e-executor
 **Severity:** minor
 **Cluster:** io-handling — seam→audit-security — related: sub:1e8ffb91:ring-truncated-stdout-parse
 **Evidence:** `internal/addon/catalog/secretstore/secretstore.go:276-282`
@@ -1025,7 +1025,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `sub:696d6b0e:ring-truncated-stdout-parse` — ring truncated stdout parse
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/w2e-executor
 **Severity:** suggestion
 **Cluster:** io-handling — related: sub:1e8ffb91:ring-truncated-stdout-parse
 **Evidence:** `internal/distribution/okd/phase/iso_cleanup.go:138-159` + 1 more
@@ -1035,7 +1035,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `sub:29293401:ring-truncated-stdout-parse` — ring truncated stdout parse
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/w2e-executor
 **Severity:** suggestion
 **Cluster:** io-handling — related: sub:1e8ffb91:ring-truncated-stdout-parse
 **Evidence:** `internal/distribution/okd/setup/haproxy.go:186-200`
@@ -1047,7 +1047,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `state:0f076161:destroy-scoped-cleanup-unscoped` — destroy scoped cleanup unscoped
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/t3-destroy-cleanup
+**Status:** in review — PR #908
 **Severity:** blocker
 **Cluster:** destroy-safety — related: state:0f076161:destroy-no-cluster-confirm-without-yes
 **Evidence:** `internal/cli/destroy.go:282-290` + 2 more
@@ -1057,7 +1057,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `state:15ba17da:destroy-orphans-custom-isos` — destroy orphans custom isos
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/t3-destroy-cleanup
+**Status:** in review — PR #908
 **Severity:** minor
 **Cluster:** destroy-safety — related: state:0f076161:destroy-scoped-cleanup-unscoped
 **Evidence:** `internal/distribution/okd/destroy/steps.go:93-115` + 2 more
@@ -1067,7 +1067,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `state:4c092fce:snapshot-bak-retention-after-destroy` — snapshot bak retention after destroy
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/t3-destroy-cleanup
+**Status:** in review — PR #908
 **Severity:** suggestion
 **Cluster:** tf-state-atomicity — seam→audit-security — related: state:62cb8a95:corrupt-state-silent-destroy-noop
 **Evidence:** `internal/infrastructure/terraform/terraform.go:391-453` + 1 more
@@ -1121,7 +1121,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `err:5e892064:vocab-ad-hoc-synonym` — vocab ad hoc synonym
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/w2m-misc
 **Severity:** minor
 **Cluster:** domain-vocabulary
 **Evidence:** `internal/download/checksum.go:74-74` + 1 more
@@ -1131,7 +1131,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `err:aa84670c:exit-mapping-nesting-precedence` — exit mapping nesting precedence
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/t5-cli-root
+**Status:** in review — PR #896
 **Severity:** suggestion
 **Cluster:** typed-error-exit-mapping — seam→audit-cli-ux
 **Evidence:** `internal/cli/root.go:212-251`
@@ -1155,7 +1155,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `api:7b2829bb:ring-tail-contract` — ring tail contract
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/w2e-executor
 **Severity:** minor
 **Cluster:** exported-surface — seam→audit-subprocess — related: sub:1e8ffb91:ring-truncated-stdout-parse
 **Evidence:** `internal/executor/executor.go:25-31` + 2 more
@@ -1165,7 +1165,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `api:d6b325cb:pkg-import-cycle-adj` — pkg import cycle adj
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/w2p-proxmox
 **Severity:** minor
 **Cluster:** package-boundary
 **Evidence:** `internal/infrastructure/proxmox/types.go:1-51` + 4 more
@@ -1175,7 +1175,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `api:c287d5c0:pkg-facade-bypassed` — pkg facade bypassed
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/w2s-steps
 **Severity:** minor
 **Cluster:** package-boundary
 **Evidence:** `internal/distribution/okd/okd.go:146-154` + 2 more
@@ -1185,7 +1185,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `api:5e892064:ctx-missing-on-io` — ctx missing on io
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/w2m-misc
 **Severity:** minor
 **Cluster:** ctx-first
 **Evidence:** `internal/download/checksum.go:21-54` + 2 more
@@ -1195,7 +1195,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `api:d31d1b9d:pkg-facade-bypassed` — pkg facade bypassed
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/w2c-cluster
 **Severity:** minor
 **Cluster:** package-boundary — seam→audit-code-smells
 **Evidence:** `internal/cli/status.go:388-404` + 1 more
@@ -1205,7 +1205,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `api:0934cf1b:iface-in-producer` — iface in producer
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/w2e-executor
 **Severity:** suggestion
 **Cluster:** interface-location
 **Evidence:** `internal/platform/packages.go:18-56`
@@ -1225,7 +1225,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `api:cfcdee2d:export-no-caller-scaffolding` — export no caller scaffolding
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/t8c-scaffolding
+**Status:** in review — PR #897
 **Severity:** suggestion
 **Cluster:** exported-surface
 **Evidence:** `internal/httputil/httputil.go:18-26`
@@ -1305,7 +1305,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `api:de572c63:export-no-caller-scaffolding` — export no caller scaffolding
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/t8c-scaffolding
+**Status:** in review — PR #897
 **Severity:** suggestion
 **Cluster:** exported-surface
 **Evidence:** `internal/distribution/okd/dns/dnsmasq.go:49-64` + 17 more
@@ -1327,7 +1327,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `ux:024a2c32:json-schema-undoc` — json schema undoc
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/t5-cli-root
+**Status:** in review — PR #896
 **Severity:** suggestion
 **Cluster:** json-stability — related: sub:d31d1b9d:ring-truncated-stdout-parse
 **Evidence:** `docs/cli/json-schema.md:56-67` + 2 more
@@ -1337,7 +1337,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `ux:aa84670c:exit-code-undefined` — exit code undefined
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/t5-cli-root
+**Status:** in review — PR #896
 **Severity:** suggestion
 **Cluster:** exit-codes
 **Evidence:** `internal/cli/root.go:157-170`
@@ -1347,7 +1347,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `ux:e7db1220:flag-completion-inconsistent` — flag completion inconsistent
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/t5-cli-root
+**Status:** in review — PR #896
 **Severity:** suggestion
 **Cluster:** flag-conventions
 **Evidence:** `internal/cli/releases.go:77-83` + 2 more
@@ -1357,7 +1357,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `ux:fd2125dd:verb-noun-inconsistent` — verb noun inconsistent
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/t5-cli-root
+**Status:** in review — PR #896
 **Severity:** suggestion
 **Cluster:** verb-noun
 **Evidence:** `internal/cli/addon.go:27-31` + 1 more
@@ -1371,7 +1371,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `mod:48688e63:use-slices-containsfunc` — use slices containsfunc
 
-**Status:** not started
+**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/w2p-proxmox
 **Severity:** suggestion
 **Cluster:** slices-maps
 **Evidence:** `internal/infrastructure/proxmox/proxmox.go:499-503`
@@ -1403,7 +1403,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `smell:4c092fce:pipeline-explicit-errors` — pipeline explicit errors
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/t4-lockhint-workers
+**Status:** in review — PR #907
 **Severity:** minor
 **Cluster:** arrow-anti
 **Evidence:** `internal/infrastructure/terraform/terraform.go:212-227` + 8 more
@@ -1463,7 +1463,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `smell:0f076161:enum-ad-hoc` — enum ad hoc
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/t3-destroy-cleanup
+**Status:** in review — PR #908
 **Severity:** suggestion
 **Cluster:** magic-strings
 **Evidence:** `internal/cli/destroy.go:109-130`
@@ -1547,7 +1547,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `doc:aa84670c:doc-comment-stale` — doc comment stale
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/t5-cli-root
+**Status:** in review — PR #896
 **Severity:** minor
 **Cluster:** exported-doc — related: doc:b3356305:readme-flag-ghost, ux:073d24ed:concept-named-twice
 **Evidence:** `internal/cli/root.go:33-38`
@@ -1579,7 +1579,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `tst:b38ec9cc:destructive-happy-untested` — destructive happy untested
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/t4-lockhint-workers
+**Status:** in review — PR #907
 **Severity:** major
 **Cluster:** destructive-untested — seam→audit-state-and-recovery — related: state:0f076161:destroy-scoped-cleanup-unscoped
 **Evidence:** `internal/distribution/okd/install/workers.go:22-76`
@@ -1608,7 +1608,7 @@ and ceremony layers.
 
 #### A1 — Collapse the step framework's triple representation
 
-- **Status:** not started
+- **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/w2s-steps
 - **Category:** architecture
 - **State:** design needed
 - **Effort:** days
@@ -1624,7 +1624,7 @@ and ceremony layers.
 
 #### A2 — Unify the two parallel kubectl/oc invocation layers
 
-- **Status:** not started
+- **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/w2c-cluster
 - **Category:** architecture
 - **State:** design needed
 - **Effort:** days
@@ -1639,7 +1639,7 @@ and ceremony layers.
 
 #### A3 — Fold system.RunCaptured/OutputCaptured into executor
 
-- **Status:** not started
+- **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/w2e-executor
 - **Category:** refactor
 - **State:** well-specified
 - **Effort:** days
@@ -1699,7 +1699,7 @@ and ceremony layers.
 
 #### A7 — Delete the two accidental leftovers in the wizard stack
 
-- **Status:** not started
+- **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/w2w-wizard
 - **Category:** refactor
 - **State:** well-specified
 - **Effort:** hours
@@ -1713,7 +1713,7 @@ and ceremony layers.
 
 #### A8 — Put a test floor under the wizard's data-driven core
 
-- **Status:** not started
+- **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/w2w-wizard
 - **Category:** test honesty
 - **State:** design needed
 - **Effort:** days
@@ -1728,7 +1728,7 @@ and ceremony layers.
 
 #### A9 — Remove or wire the dead Deployment.Debug and SkipDepsCheck knobs
 
-- **Status:** not started
+- **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/w2w-wizard
 - **Category:** refactor
 - **State:** well-specified
 - **Effort:** hours
@@ -1742,7 +1742,7 @@ and ceremony layers.
 
 #### A10 — Stop fabricating ProvisionResult VM state in proxmox.Provision
 
-- **Status:** not started
+- **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/w2p-proxmox
 - **Category:** domain-model accuracy
 - **State:** design needed
 - **Effort:** hours
@@ -1756,7 +1756,7 @@ and ceremony layers.
 
 #### A11 — Collapse the zero-consumer ValidationScope bitmask
 
-- **Status:** not started
+- **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/w2w-wizard
 - **Category:** refactor
 - **State:** well-specified
 - **Effort:** hours
@@ -1784,7 +1784,7 @@ and ceremony layers.
 
 #### A13 — Expose or explicitly shelve the three unreachable cleanup kinds
 
-- **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/t3-destroy-cleanup
+- **Status:** in review — PR #908
 - **Category:** cli surface
 - **State:** design needed
 - **Effort:** hours
@@ -1798,7 +1798,7 @@ and ceremony layers.
 
 #### A14 — Validate the triple-encoded bastion identity in config
 
-- **Status:** not started
+- **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/w2w-wizard
 - **Category:** config coherence
 - **State:** design needed
 - **Effort:** hours
@@ -1812,7 +1812,7 @@ and ceremony layers.
 
 #### A15 — Fix the TerraformEnv knob's fictional value space and mislabeled help
 
-- **Status:** not started
+- **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/w2w-wizard
 - **Category:** config coherence
 - **State:** well-specified
 - **Effort:** hours
@@ -1826,7 +1826,7 @@ and ceremony layers.
 
 #### A16 — Rewrite root command help: strip marketing slop and false feature claims
 
-- **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/t5-cli-root
+- **Status:** in review — PR #896
 - **Category:** docs / CLI UX
 - **State:** well-specified
 - **Effort:** hours
@@ -1841,7 +1841,7 @@ and ceremony layers.
 
 #### A17 — Fix inverted sudo/elevation paragraph in exit-codes.md and reconcile README
 
-- **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/t5-cli-root
+- **Status:** in review — PR #896
 - **Category:** docs
 - **State:** well-specified
 - **Effort:** hours
@@ -1855,7 +1855,7 @@ and ceremony layers.
 
 #### A18 — Make deploy honor --config instead of silently ignoring it
 
-- **Status:** not started
+- **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/w2w-wizard
 - **Category:** CLI UX / architecture
 - **State:** design needed
 - **Effort:** days
@@ -1885,7 +1885,7 @@ and ceremony layers.
 
 #### A20 — Replace deploy dry-run mirror test with a drift guard against real phase steps
 
-- **Status:** not started
+- **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/w2s-steps
 - **Category:** test honesty
 - **State:** design needed
 - **Effort:** hours
@@ -1899,7 +1899,7 @@ and ceremony layers.
 
 #### A21 — Delete padded/tautological cli validator tests
 
-- **Status:** not started
+- **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/w2m-misc
 - **Category:** test honesty
 - **State:** well-specified
 - **Effort:** hours
@@ -1942,7 +1942,7 @@ and ceremony layers.
 
 #### A24 — Re-scope internal/system before it becomes a util gravity well
 
-- **Status:** not started
+- **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/w2e-executor
 - **Category:** architecture
 - **State:** design needed
 - **Effort:** hours
@@ -1956,7 +1956,7 @@ and ceremony layers.
 
 #### A25 — Put a test floor under infrastructure/proxmox before any go-proxmox change
 
-- **Status:** not started
+- **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/w2p-proxmox
 - **Category:** test honesty
 - **State:** design needed
 - **Effort:** days
@@ -1970,7 +1970,7 @@ and ceremony layers.
 
 #### A26 — Replace log-message-equality assertions with attr-based assertions
 
-- **Status:** not started
+- **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/w2m-misc
 - **Category:** test honesty
 - **State:** well-specified
 - **Effort:** hours
