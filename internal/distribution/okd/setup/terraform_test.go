@@ -23,8 +23,8 @@ func TestGetDiskSizes(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := &config.Config{
 				Topology: config.TopologyConfig{
-					ControlPlane: config.NodeConfig{Disk: tt.cpDisk},
-					Workers:      config.NodeConfig{Disk: tt.workerDisk},
+					ControlPlane: config.NodeConfig{DiskGB: tt.cpDisk},
+					Workers:      config.NodeConfig{DiskGB: tt.workerDisk},
 				},
 			}
 			d := getDiskSizes(cfg)
@@ -56,8 +56,8 @@ func TestGetBootstrapResources(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := &config.Config{
 				Topology: config.TopologyConfig{
-					Bootstrap:    config.NodeConfig{CPU: tt.bsCPU, Memory: tt.bsMem},
-					ControlPlane: config.NodeConfig{CPU: tt.cpCPU, Memory: tt.cpMem},
+					Bootstrap:    config.NodeConfig{CPU: tt.bsCPU, MemoryMB: tt.bsMem},
+					ControlPlane: config.NodeConfig{CPU: tt.cpCPU, MemoryMB: tt.cpMem},
 				},
 			}
 			cpu, mem := getBootstrapResources(cfg)
@@ -119,9 +119,9 @@ func TestBuildTerraformVarsData_threeMastersTwoWorkers(t *testing.T) {
 			Proxmox: &config.ProxmoxConfig{ISOStorage: "iso-store"},
 		},
 		Topology: config.TopologyConfig{
-			ControlPlane: config.NodeConfig{Count: 3, CPU: 4, Memory: 16384, Disk: 120},
-			Workers:      config.NodeConfig{Count: 2, CPU: 8, Memory: 32768, Disk: 200},
-			Bootstrap:    config.NodeConfig{CPU: 0, Memory: 0},
+			ControlPlane: config.NodeConfig{Count: 3, CPU: 4, MemoryMB: 16384, DiskGB: 120},
+			Workers:      config.NodeConfig{Count: 2, CPU: 8, MemoryMB: 32768, DiskGB: 200},
+			Bootstrap:    config.NodeConfig{CPU: 0, MemoryMB: 0},
 		},
 	}
 
@@ -167,8 +167,8 @@ func TestBuildTerraformVarsData_workerDiskFallsBackToCPDisk(t *testing.T) {
 		Cluster:  config.ClusterConfig{Name: "fallback"},
 		Provider: config.ProviderConfig{Proxmox: &config.ProxmoxConfig{ISOStorage: "iso"}},
 		Topology: config.TopologyConfig{
-			ControlPlane: config.NodeConfig{Count: 3, CPU: 4, Memory: 8192, Disk: 100},
-			Workers:      config.NodeConfig{Count: 2, CPU: 4, Memory: 8192, Disk: 0},
+			ControlPlane: config.NodeConfig{Count: 3, CPU: 4, MemoryMB: 8192, DiskGB: 100},
+			Workers:      config.NodeConfig{Count: 2, CPU: 4, MemoryMB: 8192, DiskGB: 0},
 		},
 	}
 

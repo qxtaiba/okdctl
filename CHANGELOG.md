@@ -23,6 +23,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   PR template, CODEOWNERS, and a CONTRIBUTING.md guide
 
 ### Changed
+- **Breaking:** okdctl.yaml schema version bumped to `v2`. The control-plane
+  node group is now named `control_plane` everywhere at the YAML surface, and
+  every size key names its unit. Key renames (old → new):
+  - `provider.proxmox.master_nodes` → `provider.proxmox.control_plane_nodes`
+  - `disks.master_data_size_gb` → `disks.control_plane_data_size_gb`
+  - `topology.<group>.memory` → `topology.<group>.memory_mb`
+  - `topology.<group>.disk` → `topology.<group>.disk_gb`
+
+  There is no automatic migration: a config with `schemaVersion: v1` fails to
+  load with a message listing these renames; apply them and set
+  `schemaVersion: "v2"`. Terraform variable names (`master_target_nodes`,
+  `master_count`, ...) are unchanged — OKD's own master/worker vocabulary
+  stays internal. Two validation tightenings ride along: placement lists
+  longer than the group's topology count are rejected instead of silently
+  truncated (shorter lists still pad with `provider.proxmox.node`), and a
+  config that omits `schemaVersion` entirely is rejected (it previously
+  inherited the default version silently).
 - `describe addon --format=json` now emits `display_name` (snake_case) instead
   of `display-name`; aligns with all other JSON fields
 - Release builds now use `-trimpath` for reproducibility

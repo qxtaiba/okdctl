@@ -22,13 +22,13 @@ func TestIsValidNetmask(t *testing.T) {
 
 	bad := []string{
 		"",
-		"/33",            // prefix too large
-		"/-1",            // invalid prefix
-		"0.0.0.0",        // canonical but disallowed (would claim whole space)
-		"255.255.255.1",  // non-contiguous
-		"128.0.0.1",      // non-contiguous
-		"255.0.255.0",    // non-contiguous
-		"fe80::/10",      // ipv6
+		"/33",           // prefix too large
+		"/-1",           // invalid prefix
+		"0.0.0.0",       // canonical but disallowed (would claim whole space)
+		"255.255.255.1", // non-contiguous
+		"128.0.0.1",     // non-contiguous
+		"255.0.255.0",   // non-contiguous
+		"fe80::/10",     // ipv6
 		"not-an-address",
 	}
 	for _, s := range bad {
@@ -115,8 +115,8 @@ func TestValidateTerraformEnv(t *testing.T) {
 		"has..dots",
 		"../escape",
 		"/absolute",
-		"env\x00null",  // null byte attempt
-		"unicodé",       // non-ASCII
+		"env\x00null", // null byte attempt
+		"unicodé",     // non-ASCII
 		"env.tf",
 	}
 	for _, s := range bad {
@@ -217,6 +217,58 @@ func TestValidateProxmoxConfigFields(t *testing.T) {
 		case FieldProxmoxISOStorage, FieldProxmoxDataStorage, FieldProxmoxBridge, FieldProxmoxCPUType:
 			t.Errorf("empty optional field %s rejected: %s", e.Field, e.Message)
 		}
+	}
+}
+
+func TestValidatePlacementCounts(t *testing.T) {
+	cases := []struct {
+		name    string
+		cpNodes []string
+		wNodes  []string
+		cpCount int
+		wCount  int
+		wantErr []string
+	}{
+		{name: "empty lists valid", cpCount: 3, wCount: 2},
+		{name: "shorter lists pad", cpNodes: []string{"pve1"}, wNodes: []string{"pve2"}, cpCount: 3, wCount: 2},
+		{name: "exact lengths valid", cpNodes: []string{"pve1", "pve2", "pve3"}, wNodes: []string{"pve1", "pve2"}, cpCount: 3, wCount: 2},
+		{
+			name:    "longer lists rejected",
+			cpNodes: []string{"pve1", "pve2", "pve3", "pve4"},
+			wNodes:  []string{"pve1", "pve2", "pve3"},
+			cpCount: 3, wCount: 2,
+			wantErr: []string{FieldProxmoxControlPlaneNodes, FieldProxmoxWorkerNodes},
+		},
+		{
+			name:    "zero workers with placement rejected",
+			wNodes:  []string{"pve1"},
+			cpCount: 1, wCount: 0,
+			wantErr: []string{FieldProxmoxWorkerNodes},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := &Config{
+				Provider: ProviderConfig{
+					Type:    ProviderProxmox,
+					Proxmox: &ProxmoxConfig{ControlPlaneNodes: tc.cpNodes, WorkerNodes: tc.wNodes},
+				},
+				Topology: TopologyConfig{
+					ControlPlane: NodeConfig{Count: tc.cpCount},
+					Workers:      NodeConfig{Count: tc.wCount},
+				},
+			}
+			r := &ValidationResult{}
+			validatePlacementCounts(cfg, r)
+			if len(r.Errors) != len(tc.wantErr) {
+				t.Fatalf("got %d errors (%v); want %d", len(r.Errors), r.Errors, len(tc.wantErr))
+			}
+			for i, field := range tc.wantErr {
+				if r.Errors[i].Field != field {
+					t.Errorf("Errors[%d].Field = %q; want %q", i, r.Errors[i].Field, field)
+				}
+			}
+		})
 	}
 }
 

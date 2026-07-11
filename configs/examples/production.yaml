@@ -1,5 +1,5 @@
 ---
-schemaVersion: "v1"
+schemaVersion: "v2"
 
 # Production-Ready Cluster Configuration
 # ======================================
@@ -24,13 +24,13 @@ topology:
   control_plane:
     count: 3 # HA control plane
     cpu: 8
-    memory: 32768 # 32 GB
-    disk: 200 # 200 GB
+    memory_mb: 32768 # 32 GB
+    disk_gb: 200 # 200 GB
   workers:
     count: 5
     cpu: 16
-    memory: 65536 # 64 GB
-    disk: 500 # 500 GB
+    memory_mb: 65536 # 64 GB
+    disk_gb: 500 # 500 GB
 networking:
   machine_cidr: 192.168.1.0/24
   pod_cidr: 10.128.0.0/14

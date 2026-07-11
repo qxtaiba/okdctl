@@ -164,7 +164,7 @@ func (s *NodePlacementStep) buildInnerStep(disc *proxmoxDiscovery, nodeNames []s
 
 	cpCount := s.cfg.Topology.ControlPlane.Count
 	if cpCount > 0 {
-		sections = append(sections, nodePlacementSection("control plane", fieldPrefixMaster, clusterName, cpCount, px.MasterNodes, defaultNode, nodeNames))
+		sections = append(sections, nodePlacementSection("control plane", fieldPrefixMaster, clusterName, cpCount, px.ControlPlaneNodes, defaultNode, nodeNames))
 	}
 
 	wCount := s.cfg.Topology.Workers.Count
@@ -179,14 +179,14 @@ func (s *NodePlacementStep) buildInnerStep(disc *proxmoxDiscovery, nodeNames []s
 		Description:  "auto-discovered from your proxmox cluster",
 		Sections:     sections,
 		Apply: func(step *wizard.DataDrivenStep, cfg *config.Config) error {
-			var masterNodes, workerNodes []string
+			var controlPlaneNodes, workerNodes []string
 			for i := range cpCount {
-				masterNodes = append(masterNodes, step.Value(fmt.Sprintf("%s_%d", fieldPrefixMaster, i)))
+				controlPlaneNodes = append(controlPlaneNodes, step.Value(fmt.Sprintf("%s_%d", fieldPrefixMaster, i)))
 			}
 			for i := range wCount {
 				workerNodes = append(workerNodes, step.Value(fmt.Sprintf("%s_%d", fieldPrefixWorker, i)))
 			}
-			cfg.Provider.Proxmox.MasterNodes = masterNodes
+			cfg.Provider.Proxmox.ControlPlaneNodes = controlPlaneNodes
 			cfg.Provider.Proxmox.WorkerNodes = workerNodes
 			return nil
 		},

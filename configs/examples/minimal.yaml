@@ -1,5 +1,5 @@
 ---
-schemaVersion: "v1"
+schemaVersion: "v2"
 
 # Minimal Single-Node Cluster Configuration
 # ==========================================
@@ -24,13 +24,13 @@ topology:
   control_plane:
     count: 1
     cpu: 4
-    memory: 8192 # 8 GB
-    disk: 50 # 50 GB
+    memory_mb: 8192 # 8 GB
+    disk_gb: 50 # 50 GB
   workers:
     count: 0 # No workers - control plane runs workloads
     cpu: 0
-    memory: 0
-    disk: 0
+    memory_mb: 0
+    disk_gb: 0
 networking:
   machine_cidr: 192.168.1.0/24
   pod_cidr: 10.128.0.0/14

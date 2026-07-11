@@ -15,12 +15,12 @@ const (
 
 	FieldTopologyControlPlaneCount  = "topology.control_plane.count"
 	FieldTopologyControlPlaneCPU    = "topology.control_plane.cpu"
-	FieldTopologyControlPlaneMemory = "topology.control_plane.memory"
-	FieldTopologyControlPlaneDisk   = "topology.control_plane.disk"
+	FieldTopologyControlPlaneMemory = "topology.control_plane.memory_mb"
+	FieldTopologyControlPlaneDisk   = "topology.control_plane.disk_gb"
 	FieldTopologyWorkersCount       = "topology.workers.count"
 	FieldTopologyWorkersCPU         = "topology.workers.cpu"
-	FieldTopologyWorkersMemory      = "topology.workers.memory"
-	FieldTopologyWorkersDisk        = "topology.workers.disk"
+	FieldTopologyWorkersMemory      = "topology.workers.memory_mb"
+	FieldTopologyWorkersDisk        = "topology.workers.disk_gb"
 
 	FieldNetworkingMachineCIDR     = "networking.machine_cidr"
 	FieldNetworkingPodCIDR         = "networking.pod_cidr"
@@ -42,6 +42,8 @@ const (
 	FieldProxmoxCPUType                  = "provider.proxmox.cpu_type"
 	FieldProxmoxInsecureHTTP             = "provider.proxmox.insecure_http"
 	FieldProxmoxRequirePinnedFingerprint = "provider.proxmox.require_pinned_fingerprint"
+	FieldProxmoxControlPlaneNodes        = "provider.proxmox.control_plane_nodes"
+	FieldProxmoxWorkerNodes              = "provider.proxmox.worker_nodes"
 
 	FieldFilesSSHPublicKey = "files.ssh_public_key"
 	FieldFilesPullSecret   = "files.pull_secret" //nolint:gosec // field name constant, not a credential
