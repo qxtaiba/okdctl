@@ -314,15 +314,6 @@ func (f *Flux) ValidateSettings(settings map[string]string) []string {
 	return errs
 }
 
-// WizardFields returns the wizard input fields the flux addon contributes.
-func (f *Flux) WizardFields() []addon.WizardField {
-	return []addon.WizardField{
-		{Key: SettingRepository, Label: "Repository URL", Help: "ssh://git@github.com/org/repo.git (SSH deploy-key auth only; no https://user:token@ URLs)", Required: true},
-		{Key: SettingBranch, Label: "Branch", Default: defaultBranch, Help: "Branch to sync"},
-		{Key: SettingPath, Label: "Path", Default: defaultPath, Help: "Path within repo"},
-	}
-}
-
 func (f *Flux) waitForControllers(ctx context.Context, env *addon.Environment) error {
 	env.Logger.Info("flux: waiting for controllers to become ready")
 

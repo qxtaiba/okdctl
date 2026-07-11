@@ -42,10 +42,13 @@ type ConfigurableAddon interface {
 ```
 
 `Info` is static metadata (name, display name, dependencies, priority);
-`DefaultSettings` / `ValidateSettings` / `DecodeSettings` run at wizard
-time and again before install; `Install`, `Verify`, and `Uninstall` do the
-actual work against a live cluster via the `Environment` (which carries
-`AddonConfig`, an executor, a logger, and the project root).
+`Install`, `Verify`, and `Uninstall` do the actual work against a live
+cluster via the `Environment` (which carries `AddonConfig`, an executor, a
+logger, and the project root). `DefaultSettings`, `ValidateSettings`, and
+`DecodeSettings` describe an addon's settings map, but no orchestrator or
+wizard code calls them polymorphically today — each addon exercises its own
+methods directly (`ValidateSettings` from its tests, an unexported typed
+`decodeSettings` from its own `Install`).
 
 ## Registration via init()
 
@@ -116,21 +119,20 @@ flowchart TD
     G --> D
 ```
 
-## WizardProvider: addons that contribute config fields
+## Wizard field layout lives in the wizard package
 
-Addons that need user input (e.g., Flux wants a Git repository URL) can
-implement `WizardProvider`:
-
-```go
-type WizardProvider interface {
-    WizardFields() []WizardField
-}
-```
-
-The wizard renders these fields in a dedicated "Addon settings" step
-after the user selects which addons to enable. Field values are persisted
-into the addon's settings map (`config.Addons["flux"].Settings`) and
-surfaced via `AddonConfig` to `ValidateSettings` and `Install`.
+Addons that need user input (e.g., Flux wants a Git repository URL) do not
+declare their own field list. The wizard's addons step
+(`internal/tui/wizard/steps/addons.go`) hand-builds a `DataDrivenStep` with
+its own field definitions, importing each addon package only for its
+`SettingXxx` constants. This is deliberate: the wizard needs per-field
+input type (select vs free text vs key-value), option lists, grouped
+sections with notes, and cross-field warnings computed from filesystem and
+tool checks — richness a flat addon-owned field list can't express without
+duplicating the wizard's own step-definition model inside every addon
+package. Field values are persisted into the addon's settings map
+(`config.Addons["flux"].Settings`) and surfaced via `AddonConfig` to
+`ValidateSettings` and `Install`.
 
 ## EnsureNamespace and other shared helpers
 
