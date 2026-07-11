@@ -27,6 +27,8 @@ import (
 // Severity levels ordered from least to most alarming.
 type Severity int
 
+// Pass, Warn, and Fail order check outcomes from least to most alarming;
+// multi-item rollups keep the worst item severity.
 const (
 	Pass Severity = iota
 	Warn
