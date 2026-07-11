@@ -13,7 +13,6 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -95,7 +94,10 @@ func (f *Flux) Install(ctx context.Context, env *addon.Environment) error {
 		return &errtypes.ConfigError{Msg: "helm is required to install Flux"}
 	}
 
-	fs := f.decodeSettings(env.AddonConfig.Settings)
+	fs, err := f.decodeSettings(env.AddonConfig.Settings)
+	if err != nil {
+		return &errtypes.ConfigError{Msg: "flux: invalid settings", Err: err}
+	}
 
 	if err := addon.EnsureNamespace(ctx, env, "flux-system"); err != nil {
 		return err
@@ -115,12 +117,13 @@ func (f *Flux) Install(ctx context.Context, env *addon.Environment) error {
 		return err
 	}
 
-	if err := f.waitForControllers(ctx, env); err != nil {
+	// Wait for Flux controllers to become available (fatal if they don't start)
+	if err := f.waitForControllers(ctx, env, fs); err != nil {
 		return err
 	}
 
 	// Wait for GitRepository sync (non-fatal — user may need to fix deploy key or URL)
-	if err := f.waitForGitSync(ctx, env); err != nil {
+	if err := f.waitForGitSync(ctx, env, fs); err != nil {
 		env.Logger.Warn("flux: git sync not ready", "err", err)
 		env.Logger.Info("flux: debug with: oc get gitrepository -n flux-system -o yaml")
 		env.Logger.Info("flux: the cluster will auto-reconcile once the git source is reachable")
@@ -289,7 +292,10 @@ func (f *Flux) DefaultSettings() map[string]string {
 // /proc/<pid>/cmdline, so SSH-key auth via a deploy-key Secret is the only
 // supported credential channel.
 func (f *Flux) ValidateSettings(settings map[string]string) []string {
-	fs := f.decodeSettings(settings)
+	fs, err := f.decodeSettings(settings)
+	if err != nil {
+		return []string{err.Error()}
+	}
 	var errs []string
 	if fs.Repository == "" {
 		errs = append(errs, "repository is required (set addons.flux.settings.repository)")
@@ -314,10 +320,10 @@ func (f *Flux) ValidateSettings(settings map[string]string) []string {
 	return errs
 }
 
-func (f *Flux) waitForControllers(ctx context.Context, env *addon.Environment) error {
+func (f *Flux) waitForControllers(ctx context.Context, env *addon.Environment, fs Settings) error {
 	env.Logger.Info("flux: waiting for controllers to become ready")
 
-	timeout := getTimeout(env.AddonConfig.Settings, SettingControllerTimeout, defaultControllerTimeout)
+	timeout := fs.ControllerTimeout
 
 	if err := system.WaitForWithTimeout(ctx, "flux", "controllers", func(context.Context) bool {
 		result, _ := env.Exec.Run(ctx, "oc", "get", "deployments",
@@ -350,10 +356,10 @@ func (f *Flux) waitForControllers(ctx context.Context, env *addon.Environment) e
 	return nil
 }
 
-func (f *Flux) waitForGitSync(ctx context.Context, env *addon.Environment) error {
+func (f *Flux) waitForGitSync(ctx context.Context, env *addon.Environment, fs Settings) error {
 	env.Logger.Info("flux: waiting for git repository sync")
 
-	timeout := getTimeout(env.AddonConfig.Settings, SettingGitSyncTimeout, defaultGitRepoSyncTimeout)
+	timeout := fs.GitSyncTimeout
 
 	if err := system.WaitForWithTimeout(ctx, "flux", "git sync", func(context.Context) bool {
 		result, _ := env.Exec.Run(ctx, "oc", "get", "gitrepository",
@@ -549,8 +555,6 @@ func buildFluxDeployKeySecret(namespace, name string, privateKey, publicKey, kno
 	return addon.BuildOpaqueSecret(namespace, name, data)
 }
 
-// getTimeout reads a timeout setting (in seconds) from the settings map,
-// falling back to the given default.
 // readKeyFile reads path while refusing to follow a symlink at the final
 // component. Mirrors the lstat-then-O_NOFOLLOW pattern in runlock.Acquire.
 func readKeyFile(path string) ([]byte, error) {
@@ -563,13 +567,4 @@ func readKeyFile(path string) ([]byte, error) {
 	}
 	defer f.Close()
 	return io.ReadAll(f)
-}
-
-func getTimeout(settings map[string]string, key string, defaultTimeout time.Duration) time.Duration {
-	if v, ok := settings[key]; ok && v != "" {
-		if secs, err := strconv.Atoi(v); err == nil && secs > 0 {
-			return time.Duration(secs) * time.Second
-		}
-	}
-	return defaultTimeout
 }
