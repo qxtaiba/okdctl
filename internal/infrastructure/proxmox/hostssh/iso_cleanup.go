@@ -245,9 +245,12 @@ func RemoveFCOSISOFromProxmox(ctx context.Context, p *RemoteISOParams, isoDir st
 		"find %s -maxdepth 1 -name 'fedora-coreos-*.iso' -type f -print0 2>/dev/null || true",
 		shellSingleQuote(isoDir),
 	)
-	result, err := SSHRun(ctx, p.Exec, p.Host, p.KnownHostsPath, findCmd)
+	result, err := SSHRunOutput(ctx, p.Exec, p.Host, p.KnownHostsPath, findCmd)
 	if err != nil {
 		return fmt.Errorf("ssh find failed: %w", err)
+	}
+	if result.Truncated {
+		return fmt.Errorf("ssh find output truncated after %d bytes; refusing to process a partial file list", len(result.Stdout))
 	}
 
 	files := parseNullDelimitedFileList(result.Stdout)

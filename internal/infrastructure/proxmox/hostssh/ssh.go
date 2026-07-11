@@ -62,6 +62,33 @@ func SSHRunArgv(ctx context.Context, exec *executor.Executor, host, knownHostsPa
 	return result, nil
 }
 
+// SSHRunOutput is SSHRun with full stdout capture (Executor.RunOutput)
+// instead of the ring-truncated tail, for callers that parse stdout as
+// JSON or another format sensitive to truncation. Same non-zero-exit and
+// shell-injection semantics as SSHRun.
+func SSHRunOutput(ctx context.Context, exec *executor.Executor, host, knownHostsPath, cmd string) (*executor.Result, error) {
+	args := sshBaseArgs(host, knownHostsPath)
+	args = append(args, cmd)
+	result, err := exec.RunOutput(ctx, 0, "ssh", args...)
+	if err != nil {
+		return result, fmt.Errorf("ssh %s: %w", host, err)
+	}
+	return result, nil
+}
+
+// SSHRunArgvOutput is SSHRunArgv with full stdout capture (Executor.RunOutput)
+// instead of the ring-truncated tail, for callers that parse stdout as JSON.
+// Same non-zero-exit and argv-mode shell-injection semantics as SSHRunArgv.
+func SSHRunArgvOutput(ctx context.Context, exec *executor.Executor, host, knownHostsPath string, argv ...string) (*executor.Result, error) {
+	args := sshBaseArgs(host, knownHostsPath)
+	args = append(args, argv...)
+	result, err := exec.RunOutput(ctx, 0, "ssh", args...)
+	if err != nil {
+		return result, fmt.Errorf("ssh %s: %w", host, err)
+	}
+	return result, nil
+}
+
 // sshBaseArgs builds the ssh option flags and remote user@host token.
 // Strict mode is used when knownHostsPath is set; accept-new otherwise.
 func sshBaseArgs(host, knownHostsPath string) []string {
