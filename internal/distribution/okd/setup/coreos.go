@@ -317,7 +317,7 @@ func (p *Phase) DownloadCoreOSISO(ctx context.Context, info *CoreOSInfo, destPat
 	if system.FileExists(destPath) {
 		p.logISOFound(destPath)
 		if info.ISOChecksum != "" {
-			err := download.ValidateChecksum(destPath, info.ISOChecksum)
+			err := download.ValidateChecksum(ctx, destPath, info.ISOChecksum)
 			if err != nil {
 				p.Log.Warn("coreos: existing iso checksum mismatch, re-downloading")
 			} else {
