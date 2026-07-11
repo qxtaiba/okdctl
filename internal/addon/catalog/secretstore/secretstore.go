@@ -267,9 +267,12 @@ func readSecret(ctx context.Context, env *addon.Environment, path string) (strin
 	}
 
 	env.Logger.Info("secretstore: decrypting with sops", "file", filepath.Base(path))
-	result, err := env.Exec.RunChecked(ctx, "sops", "-d", path)
+	result, err := env.Exec.RunOutputChecked(ctx, 0, "sops", "-d", path)
 	if err != nil {
 		return "", fmt.Errorf("sops decryption failed (is the age key at ~/.config/sops/age/keys.txt?): %w", err)
+	}
+	if result.Truncated {
+		return "", fmt.Errorf("sops decryption output truncated after %d bytes; secret may be corrupted", len(result.Stdout))
 	}
 	return result.Stdout, nil
 }
