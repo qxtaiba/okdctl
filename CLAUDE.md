@@ -160,6 +160,13 @@ write the comment — then it carries real information.
   Per-command boolean tail flags (`--keep-haproxy`, `--keep-isos`,
   `--skip-terraform`, `--skip-must-gather`, `--dry-run`, etc.) are
   intentionally long-form only; do not add a shorthand to new ones.
+  `--output-file`'s default value is command-specific; each command's own
+  `--help` documents what its default means — `deploy` defaults to
+  `"okdctl.yaml"` (reuses an existing file there, otherwise creates one),
+  `debug-bundle` defaults to `""` (auto-generates a timestamped
+  `okdctl-debug-<ts>.tgz` in the cwd), `kubeconfig` defaults to `"-"`
+  (stdout). Do not assume a single meaning for `--output-file`'s default
+  across commands.
 - Terraform sources ship inside the binary: `infrastructure/embed.go`
   go:embed-s the proxmox-okd module + production environment (lock file
   included) and `internal/deploy.MaterializeTerraform` materializes them
