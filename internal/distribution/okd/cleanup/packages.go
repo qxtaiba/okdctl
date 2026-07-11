@@ -13,10 +13,10 @@ import (
 	"github.com/qxtaiba/okdctl/internal/platform"
 )
 
-// detectPackageManager returns a PackageManager for the current host OS,
-// falling back to RHEL/dnf if detection fails (cleanup runs on the bastion).
-func detectPackageManager(logger *slog.Logger) platform.PackageManager {
-	return platform.NewPackageManager(platform.DetectOrDefault(logger))
+// detectPackageManager returns a Manager for the current host OS, falling
+// back to RHEL/dnf if detection fails (cleanup runs on the bastion).
+func detectPackageManager(logger *slog.Logger) *platform.Manager {
+	return platform.NewPackageManager(platform.DetectOrDefault(logger), logger)
 }
 
 // InstalledPackages returns the scoped list of dnf packages cleanup will
@@ -56,7 +56,7 @@ func Packages(ctx context.Context, binDir string, logger *slog.Logger) error {
 	pm := detectPackageManager(logger)
 
 	pkgList := InstalledPackages()
-	if err := pm.Remove(ctx, pkgList, logger); err != nil {
+	if err := pm.Remove(ctx, pkgList); err != nil {
 		logger.Warn("cleanup: some packages could not be removed (may require manual cleanup)")
 		hasErrors = true
 	}
