@@ -18,9 +18,9 @@ func TestValidateAndRestartDnsmasq(t *testing.T) {
 		backupContent = "address=/api.test.example.com/10.0.0.1\n"
 	)
 
-	setup := func(t *testing.T, seedBackup bool) (dir, confPath, backupPath string) {
+	setup := func(t *testing.T, seedBackup bool) (confPath, backupPath string) {
 		t.Helper()
-		dir = t.TempDir()
+		dir := t.TempDir()
 
 		origDir := dnsmasqConfigDir
 		dnsmasqConfigDir = dir
@@ -37,7 +37,7 @@ func TestValidateAndRestartDnsmasq(t *testing.T) {
 				t.Fatalf("seed backup: %v", err)
 			}
 		}
-		return dir, confPath, backupPath
+		return confPath, backupPath
 	}
 
 	injectFns := func(t *testing.T, validateErr, restartErr error) {
@@ -53,7 +53,7 @@ func TestValidateAndRestartDnsmasq(t *testing.T) {
 	}
 
 	t.Run("happy_path_removes_backup", func(t *testing.T) {
-		_, confPath, backupPath := setup(t, true)
+		confPath, backupPath := setup(t, true)
 		injectFns(t, nil, nil)
 
 		err := validateAndRestartDnsmasq(context.Background(), clusterName)
@@ -75,7 +75,7 @@ func TestValidateAndRestartDnsmasq(t *testing.T) {
 	})
 
 	t.Run("validate_failure_restores_backup", func(t *testing.T) {
-		_, confPath, backupPath := setup(t, true)
+		confPath, backupPath := setup(t, true)
 		injectFns(t, errValidate, nil)
 
 		err := validateAndRestartDnsmasq(context.Background(), clusterName)
@@ -100,7 +100,7 @@ func TestValidateAndRestartDnsmasq(t *testing.T) {
 	})
 
 	t.Run("restart_failure_restores_backup", func(t *testing.T) {
-		_, confPath, backupPath := setup(t, true)
+		confPath, backupPath := setup(t, true)
 		injectFns(t, nil, errRestart)
 
 		err := validateAndRestartDnsmasq(context.Background(), clusterName)
@@ -125,7 +125,7 @@ func TestValidateAndRestartDnsmasq(t *testing.T) {
 	})
 
 	t.Run("missing_backup_not_precondition", func(t *testing.T) {
-		_, _, backupPath := setup(t, false)
+		_, backupPath := setup(t, false)
 		injectFns(t, errValidate, nil)
 
 		err := validateAndRestartDnsmasq(context.Background(), clusterName)

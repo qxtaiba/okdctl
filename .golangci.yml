@@ -55,6 +55,9 @@ linters:
       # recur 13-26x each as call args that should not become constants;
       # enabling false needs min-occurrences>=30 plus exclusions to stay green.
       ignore-calls: true
+      # test fixtures repeat prod strings; without this they push prod
+      # occurrence counts over the threshold and demand prod constants
+      ignore-tests: true
     gocritic:
       enabled-tags:
         - diagnostic
@@ -89,9 +92,14 @@ linters:
       - std-error-handling
       - legacy
     rules:
-      # allow dupl/funlen/goconst in tests
-      - linters: [dupl, funlen, goconst]
+      # table-driven tests legitimately repeat shape and run long
+      - linters: [dupl, funlen]
         path: _test\.go
+      # G306: test helpers write fake executables (0755) and conf fixtures
+      # G101: fixtures embed obviously-fake tokens to exercise redaction
+      - linters: [gosec]
+        path: _test\.go
+        text: "^G(101|306):"
       # noctx: allow http calls without context in wizard discovery (short-lived)
       - linters: [noctx]
         path: proxmox_discovery\.go
@@ -99,4 +107,4 @@ linters:
       - docs
       - third_party
 run:
-  tests: false
+  tests: true

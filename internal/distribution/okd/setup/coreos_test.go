@@ -26,7 +26,7 @@ type isoCapture struct {
 
 func (h *isoCapture) Enabled(_ context.Context, _ slog.Level) bool { return true }
 
-func (h *isoCapture) Handle(_ context.Context, r slog.Record) error {
+func (h *isoCapture) Handle(_ context.Context, r slog.Record) error { //nolint:gocritic // hugeParam: slog.Handler interface requires value receiver
 	r.AddAttrs(h.attrs...)
 	h.records = append(h.records, r)
 	return nil

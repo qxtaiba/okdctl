@@ -58,10 +58,6 @@ func TestNewInsecure(t *testing.T) {
 		}
 	}
 
-	// Minor: ensure the tls config type is what we expect (guards against a
-	// future refactor that swaps to a different package).
-	var _ *tls.Config = tr.TLSClientConfig
-
 	if c.CheckRedirect == nil {
 		t.Error("CheckRedirect not installed on NewInsecure client")
 	}

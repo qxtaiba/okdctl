@@ -20,7 +20,7 @@ type captureHandler struct {
 }
 
 func (h *captureHandler) Enabled(_ context.Context, _ slog.Level) bool { return true }
-func (h *captureHandler) Handle(_ context.Context, r slog.Record) error {
+func (h *captureHandler) Handle(_ context.Context, r slog.Record) error { //nolint:gocritic // hugeParam: slog.Handler interface requires value receiver
 	h.records = append(h.records, r)
 	return nil
 }
@@ -29,8 +29,8 @@ func (h *captureHandler) WithGroup(_ string) slog.Handler      { return h }
 
 func (h *captureHandler) warnCount() int {
 	n := 0
-	for _, r := range h.records {
-		if r.Level == slog.LevelWarn {
+	for i := range h.records {
+		if h.records[i].Level == slog.LevelWarn {
 			n++
 		}
 	}
@@ -58,7 +58,7 @@ func installFakeTools(t *testing.T) string {
 	return dir
 }
 
-func makeEnv(t *testing.T, argvLog string, exitCode string, log *slog.Logger) *addon.Environment {
+func makeEnv(t *testing.T, argvLog, exitCode string, log *slog.Logger) *addon.Environment {
 	t.Helper()
 	extraEnv := []string{"ARGV_LOG=" + argvLog}
 	if exitCode != "" {

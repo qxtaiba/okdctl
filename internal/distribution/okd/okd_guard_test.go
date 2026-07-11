@@ -11,9 +11,9 @@ import (
 	"github.com/qxtaiba/okdctl/internal/logutil"
 )
 
-func seedTFState(t *testing.T, projectRoot, env string) {
+func seedTFState(t *testing.T, projectRoot string) {
 	t.Helper()
-	envDir := filepath.Join(projectRoot, "infrastructure", "terraform", "environments", env)
+	envDir := filepath.Join(projectRoot, "infrastructure", "terraform", "environments", "production")
 	if err := os.MkdirAll(envDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -47,7 +47,7 @@ func TestGuardLiveCluster(t *testing.T) {
 		{
 			name: "tfstate present no flag",
 			setup: func(t *testing.T, projectRoot, _ string) {
-				seedTFState(t, projectRoot, "production")
+				seedTFState(t, projectRoot)
 			},
 			opts:    PrepareOpts{},
 			wantErr: true,
@@ -63,7 +63,7 @@ func TestGuardLiveCluster(t *testing.T) {
 		{
 			name: "tfstate and auth no flag",
 			setup: func(t *testing.T, projectRoot, workDir string) {
-				seedTFState(t, projectRoot, "production")
+				seedTFState(t, projectRoot)
 				seedAuth(t, workDir)
 			},
 			opts:    PrepareOpts{},
@@ -72,7 +72,7 @@ func TestGuardLiveCluster(t *testing.T) {
 		{
 			name: "tfstate present fresh bypass",
 			setup: func(t *testing.T, projectRoot, _ string) {
-				seedTFState(t, projectRoot, "production")
+				seedTFState(t, projectRoot)
 			},
 			opts:    PrepareOpts{FreshDeploy: true},
 			wantErr: false,
@@ -80,7 +80,7 @@ func TestGuardLiveCluster(t *testing.T) {
 		{
 			name: "tfstate contradicts prepare marker, resume refused",
 			setup: func(t *testing.T, projectRoot, _ string) {
-				seedTFState(t, projectRoot, "production")
+				seedTFState(t, projectRoot)
 			},
 			opts:    PrepareOpts{ResumeInProgress: true},
 			wantErr: true,
@@ -88,7 +88,7 @@ func TestGuardLiveCluster(t *testing.T) {
 		{
 			name: "tfstate and auth contradict prepare marker, resume refused",
 			setup: func(t *testing.T, projectRoot, workDir string) {
-				seedTFState(t, projectRoot, "production")
+				seedTFState(t, projectRoot)
 				seedAuth(t, workDir)
 			},
 			opts:    PrepareOpts{ResumeInProgress: true},

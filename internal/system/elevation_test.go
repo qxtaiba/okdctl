@@ -34,7 +34,7 @@ func TestChownTreeToInvokingUser_SymlinkEscape(t *testing.T) {
 	var visited []string
 	_ = fs.WalkDir(r.FS(), ".", func(path string, _ fs.DirEntry, ferr error) error {
 		if ferr != nil {
-			return nil
+			return nil //nolint:nilerr // unreadable entries are irrelevant; the test asserts only on visited paths
 		}
 		visited = append(visited, path)
 		return nil
@@ -248,4 +248,3 @@ func TestChownTreeToInvokingUser_AggregatesErrors(t *testing.T) {
 		}
 	})
 }
-

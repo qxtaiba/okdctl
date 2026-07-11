@@ -138,11 +138,11 @@ func TestExtractTarGz_ZipSlipRejected(t *testing.T) {
 func realTempDir(t *testing.T) string {
 	t.Helper()
 	d := t.TempDir()
-	real, err := filepath.EvalSymlinks(d)
+	resolved, err := filepath.EvalSymlinks(d)
 	if err != nil {
 		return d
 	}
-	return real
+	return resolved
 }
 
 func TestExtractTarGz_HappyPath(t *testing.T) {

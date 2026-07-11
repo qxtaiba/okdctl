@@ -83,6 +83,10 @@ func calculateTotalSize(files []string) int64 {
 	return totalSize
 }
 
+// proxmoxSCPUser is fixed: ISO uploads target /var/lib/vz, writable only
+// by root on a stock Proxmox VE install.
+const proxmoxSCPUser = "root"
+
 // uploadISOsViaSCP scps ISOs to the Proxmox host one file at a time.
 // Per-file invocations mean a SIGINT or network drop mid-batch leaves
 // already-uploaded files intact; the next run resumes only the corrupt tail.
@@ -90,7 +94,7 @@ func calculateTotalSize(files []string) int64 {
 // checking against that file, matching sshBaseArgs policy in hostssh/ssh.go.
 // An empty path falls back to accept-new TOFU, preserving behaviour for
 // operators without a configured fingerprint.
-func uploadISOsViaSCP(ctx context.Context, cmdRunner *executor.Executor, isoFiles []string, user, host, remotePath, knownHostsPath string) error {
+func uploadISOsViaSCP(ctx context.Context, cmdRunner *executor.Executor, isoFiles []string, host, remotePath, knownHostsPath string) error {
 	var baseArgs []string
 	if knownHostsPath != "" {
 		baseArgs = []string{
@@ -104,7 +108,7 @@ func uploadISOsViaSCP(ctx context.Context, cmdRunner *executor.Executor, isoFile
 			"-o", "BatchMode=yes",
 		}
 	}
-	dest := fmt.Sprintf("%s@%s:%s/", user, host, remotePath)
+	dest := fmt.Sprintf("%s@%s:%s/", proxmoxSCPUser, host, remotePath)
 	for _, f := range isoFiles {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -142,7 +146,6 @@ func (p *Phase) UploadCustomISOsToProxmox(ctx context.Context, cfg *config.Confi
 	}
 
 	host := hostssh.ProxmoxBareHost(cfg.Provider.Proxmox.Host)
-	user := "root"
 	remotePath := hostssh.DefaultProxmoxISODir
 
 	knownHostsPath, err := sshpin.Verify(ctx, host, cfg.Provider.Proxmox.SSHHostFingerprint, cfg.Provider.Proxmox.RequirePinnedFingerprint, p.Log)
@@ -166,9 +169,9 @@ func (p *Phase) UploadCustomISOsToProxmox(ctx context.Context, cfg *config.Confi
 
 	totalSizeMB := float64(calculateTotalSize(toUpload)) / 1024 / 1024
 	roundedMB := math.Round(totalSizeMB*10) / 10
-	p.Log.Info("iso: uploading", "count", len(toUpload), "size_mb", roundedMB, "user", user, "host", host, "path", remotePath)
+	p.Log.Info("iso: uploading", "count", len(toUpload), "size_mb", roundedMB, "user", proxmoxSCPUser, "host", host, "path", remotePath)
 
-	if err := uploadISOsViaSCP(ctx, p.Exec, toUpload, user, host, remotePath, knownHostsPath); err != nil {
+	if err := uploadISOsViaSCP(ctx, p.Exec, toUpload, host, remotePath, knownHostsPath); err != nil {
 		return &errtypes.NetworkError{Msg: "scp upload to proxmox failed", Err: err}
 	}
 

@@ -1,6 +1,7 @@
 package system
 
 import (
+	"bytes"
 	"errors"
 	"os"
 	"os/user"
@@ -37,7 +38,7 @@ func TestWriteTempFile(t *testing.T) {
 
 	t.Run("writeFn error triggers cleanup", func(t *testing.T) {
 		sentinel := errors.New("boom")
-		path, err := WriteTempFile("okdctl-test-*.txt", 0o600, func(f *os.File) error {
+		path, err := WriteTempFile("okdctl-test-*.txt", 0o600, func(_ *os.File) error {
 			return sentinel
 		})
 		if err == nil || !errors.Is(err, sentinel) {
@@ -47,7 +48,6 @@ func TestWriteTempFile(t *testing.T) {
 			t.Errorf("path = %q, want empty on error", path)
 		}
 	})
-
 }
 
 func TestCopyFileMode(t *testing.T) {
@@ -418,7 +418,7 @@ func TestMakeExecutable(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if string(got) != string(body) {
+		if !bytes.Equal(got, body) {
 			t.Errorf("body changed after MakeExecutable: got %q", got)
 		}
 	})

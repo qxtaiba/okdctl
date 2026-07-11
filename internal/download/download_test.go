@@ -1,6 +1,7 @@
 package download
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -42,7 +43,7 @@ func TestDownload_HappyPath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadFile: %v", err)
 	}
-	if string(got) != string(body) {
+	if !bytes.Equal(got, body) {
 		t.Errorf("content = %q; want %q", got, body)
 	}
 

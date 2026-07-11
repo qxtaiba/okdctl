@@ -41,7 +41,7 @@ func TestIsAuthError(t *testing.T) {
 	}
 }
 
-func makeOCTarGz(t *testing.T, ocContent []byte) ([]byte, string) {
+func makeOCTarGz(t *testing.T, ocContent []byte) (archive []byte, sha256Hex string) {
 	t.Helper()
 	var buf bytes.Buffer
 	gw := gzip.NewWriter(&buf)

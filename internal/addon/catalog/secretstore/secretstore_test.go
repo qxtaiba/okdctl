@@ -40,7 +40,7 @@ func TestResolveSecretsDir_Relative(t *testing.T) {
 	root := "/project/root"
 	env := makeEnv(root, "secrets/provider")
 	got := resolveSecretsDir(env)
-	want := filepath.Join(root, "secrets/provider")
+	want := filepath.Join(root, "secrets", "provider")
 	if got != want {
 		t.Errorf("resolveSecretsDir relative = %q; want %q", got, want)
 	}
@@ -63,7 +63,7 @@ func TestResolveSecretsDir_TraversalAnchor(t *testing.T) {
 	root := "/project/root"
 	env := makeEnv(root, "../etc")
 	got := resolveSecretsDir(env)
-	want := filepath.Join(root, "../etc")
+	want := filepath.Join(root, "..", "etc")
 	if got != want {
 		t.Errorf("resolveSecretsDir traversal = %q; want %q", got, want)
 	}
@@ -120,12 +120,12 @@ func TestSecretManifestFromFile(t *testing.T) {
 
 func TestReadSecret_RejectsSymlink(t *testing.T) {
 	tmp := t.TempDir()
-	real := filepath.Join(tmp, "real.txt")
-	if err := os.WriteFile(real, []byte("secret"), 0o600); err != nil {
+	target := filepath.Join(tmp, "real.txt")
+	if err := os.WriteFile(target, []byte("secret"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	link := filepath.Join(tmp, "link.txt")
-	if err := os.Symlink(real, link); err != nil {
+	if err := os.Symlink(target, link); err != nil {
 		t.Fatal(err)
 	}
 	env := makeEnv(tmp, tmp)

@@ -44,9 +44,8 @@ func TestUploadISOsViaSCP_argvShape(t *testing.T) {
 	installFakeSCP(t)
 
 	const (
-		user       = "root"
 		host       = "pve.example"
-		remotePath = "/var/lib/vz/template/iso"
+		remotePath = "/srv/custom/iso"
 	)
 	isoFiles := []string{
 		"/tmp/isos/coreos.iso",
@@ -56,7 +55,7 @@ func TestUploadISOsViaSCP_argvShape(t *testing.T) {
 	var buf bytes.Buffer
 	exec := newUploadExecutor(executor.WithStdout(&buf))
 
-	if err := uploadISOsViaSCP(context.Background(), exec, isoFiles, user, host, remotePath, ""); err != nil {
+	if err := uploadISOsViaSCP(context.Background(), exec, isoFiles, host, remotePath, ""); err != nil {
 		t.Fatalf("uploadISOsViaSCP: %v", err)
 	}
 
@@ -86,7 +85,7 @@ func TestUploadISOsViaSCP_argvShape(t *testing.T) {
 		}
 	}
 
-	want := user + "@" + host + ":" + remotePath + "/"
+	want := proxmoxSCPUser + "@" + host + ":" + remotePath + "/"
 	dest := false
 	for _, l := range lines {
 		if l == want {
@@ -102,7 +101,6 @@ func TestUploadISOsViaSCP_argvShape(t *testing.T) {
 func TestUploadISOsViaSCP_pinnedUsesStrictChecking(t *testing.T) {
 	installFakeSCP(t)
 	const (
-		user           = "root"
 		host           = "pve.example"
 		remotePath     = "/var/lib/vz/template/iso"
 		knownHostsPath = "/tmp/okdctl-known-hosts-pinned"
@@ -112,7 +110,7 @@ func TestUploadISOsViaSCP_pinnedUsesStrictChecking(t *testing.T) {
 	var buf bytes.Buffer
 	exec := newUploadExecutor(executor.WithStdout(&buf))
 
-	if err := uploadISOsViaSCP(context.Background(), exec, isoFiles, user, host, remotePath, knownHostsPath); err != nil {
+	if err := uploadISOsViaSCP(context.Background(), exec, isoFiles, host, remotePath, knownHostsPath); err != nil {
 		t.Fatalf("uploadISOsViaSCP: %v", err)
 	}
 
@@ -141,7 +139,6 @@ func TestUploadISOsViaSCP_spaceInFilename(t *testing.T) {
 	installFakeSCP(t)
 
 	const (
-		user       = "root"
 		host       = "pve.example"
 		remotePath = "/var/lib/vz/template/iso"
 	)
@@ -151,7 +148,7 @@ func TestUploadISOsViaSCP_spaceInFilename(t *testing.T) {
 	var buf bytes.Buffer
 	exec := newUploadExecutor(executor.WithStdout(&buf))
 
-	if err := uploadISOsViaSCP(context.Background(), exec, isoFiles, user, host, remotePath, ""); err != nil {
+	if err := uploadISOsViaSCP(context.Background(), exec, isoFiles, host, remotePath, ""); err != nil {
 		t.Fatalf("uploadISOsViaSCP: %v", err)
 	}
 

@@ -39,7 +39,7 @@ func TestProvider_ZeroizeEnv(t *testing.T) {
 		}
 	})
 
-	t.Run("nil and empty env are no-ops", func(t *testing.T) {
+	t.Run("nil and empty env are no-ops", func(_ *testing.T) {
 		p1 := New()
 		p1.ZeroizeEnv()
 
