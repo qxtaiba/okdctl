@@ -2,11 +2,17 @@ package cli
 
 import (
 	"context"
+	"os"
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard/steps"
 )
+
+// wizardDemoEnv puts the wizard in recording mode for the README demo:
+// fields start blank (defaults render as placeholders, not values) and
+// deploy skips the sudo re-exec. See scripts/demo/record.sh.
+const wizardDemoEnv = "OKDCTL_WIZARD_DEMO"
 
 func runWizardWithMode(ctx context.Context, cfg *config.Config, configExists bool) (wizard.Result, steps.WelcomeMode, error) {
 	wizardCfg := wizard.DefaultConfig()
@@ -66,7 +72,9 @@ func buildWizardStepsWithState(wizardCfg wizard.Config) wizard.BuiltSteps {
 	configureWelcomeStep(built, wizardCfg.ConfigExists)
 
 	if wizardCfg.InitialConfig != nil {
-		initializeStepsFromConfig(built, wizardCfg.InitialConfig)
+		if os.Getenv(wizardDemoEnv) == "" {
+			initializeStepsFromConfig(built, wizardCfg.InitialConfig)
+		}
 		configureReviewStep(built, wizardCfg.InitialConfig)
 	}
 
