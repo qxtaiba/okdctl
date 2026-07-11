@@ -35,13 +35,13 @@ func TestGuardLiveCluster(t *testing.T) {
 	tests := []struct {
 		name    string
 		setup   func(t *testing.T, projectRoot, workDir string)
-		opts    PrepareOpts
+		opts    SetupOpts
 		wantErr bool
 	}{
 		{
 			name:    "no state no auth no flag",
 			setup:   func(_ *testing.T, _, _ string) {},
-			opts:    PrepareOpts{},
+			opts:    SetupOpts{},
 			wantErr: false,
 		},
 		{
@@ -49,7 +49,7 @@ func TestGuardLiveCluster(t *testing.T) {
 			setup: func(t *testing.T, projectRoot, _ string) {
 				seedTFState(t, projectRoot)
 			},
-			opts:    PrepareOpts{},
+			opts:    SetupOpts{},
 			wantErr: true,
 		},
 		{
@@ -57,7 +57,7 @@ func TestGuardLiveCluster(t *testing.T) {
 			setup: func(t *testing.T, _, workDir string) {
 				seedAuth(t, workDir)
 			},
-			opts:    PrepareOpts{},
+			opts:    SetupOpts{},
 			wantErr: false,
 		},
 		{
@@ -66,7 +66,7 @@ func TestGuardLiveCluster(t *testing.T) {
 				seedTFState(t, projectRoot)
 				seedAuth(t, workDir)
 			},
-			opts:    PrepareOpts{},
+			opts:    SetupOpts{},
 			wantErr: true,
 		},
 		{
@@ -74,30 +74,30 @@ func TestGuardLiveCluster(t *testing.T) {
 			setup: func(t *testing.T, projectRoot, _ string) {
 				seedTFState(t, projectRoot)
 			},
-			opts:    PrepareOpts{FreshDeploy: true},
+			opts:    SetupOpts{FreshDeploy: true},
 			wantErr: false,
 		},
 		{
-			name: "tfstate contradicts prepare marker, resume refused",
+			name: "tfstate contradicts setup marker, resume refused",
 			setup: func(t *testing.T, projectRoot, _ string) {
 				seedTFState(t, projectRoot)
 			},
-			opts:    PrepareOpts{ResumeInProgress: true},
+			opts:    SetupOpts{ResumeInProgress: true},
 			wantErr: true,
 		},
 		{
-			name: "tfstate and auth contradict prepare marker, resume refused",
+			name: "tfstate and auth contradict setup marker, resume refused",
 			setup: func(t *testing.T, projectRoot, workDir string) {
 				seedTFState(t, projectRoot)
 				seedAuth(t, workDir)
 			},
-			opts:    PrepareOpts{ResumeInProgress: true},
+			opts:    SetupOpts{ResumeInProgress: true},
 			wantErr: true,
 		},
 		{
 			name:    "resume with empty tfstate passes",
 			setup:   func(_ *testing.T, _, _ string) {},
-			opts:    PrepareOpts{ResumeInProgress: true},
+			opts:    SetupOpts{ResumeInProgress: true},
 			wantErr: false,
 		},
 	}

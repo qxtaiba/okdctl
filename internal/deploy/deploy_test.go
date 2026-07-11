@@ -14,20 +14,20 @@ import (
 )
 
 type fakeProvisioner struct {
-	guardOpts       []okd.PrepareOpts
-	prepareCalls    int
+	guardOpts       []okd.SetupOpts
+	setupCalls      int
 	installCalls    int
-	configureCalls  int
-	resumeConfCalls int
+	postCalls       int
+	resumePostCalls int
 }
 
-func (f *fakeProvisioner) GuardPrepare(_ *config.Config, opts okd.PrepareOpts) error {
+func (f *fakeProvisioner) GuardSetup(_ *config.Config, opts okd.SetupOpts) error {
 	f.guardOpts = append(f.guardOpts, opts)
 	return nil
 }
 
-func (f *fakeProvisioner) Prepare(context.Context, *config.Config, okd.PrepareOpts) ([]distribution.StepResult, error) {
-	f.prepareCalls++
+func (f *fakeProvisioner) Setup(context.Context, *config.Config, okd.SetupOpts) ([]distribution.StepResult, error) {
+	f.setupCalls++
 	return nil, nil
 }
 
@@ -36,13 +36,13 @@ func (f *fakeProvisioner) Install(context.Context, *config.Config, *install.Opti
 	return nil, nil
 }
 
-func (f *fakeProvisioner) Configure(context.Context, *config.Config) (*postinstall.Result, []distribution.StepResult, error) {
-	f.configureCalls++
+func (f *fakeProvisioner) PostInstall(context.Context, *config.Config) (*postinstall.Result, []distribution.StepResult, error) {
+	f.postCalls++
 	return &postinstall.Result{}, nil, nil
 }
 
-func (f *fakeProvisioner) ResumeConfigure(context.Context, *config.Config) (*postinstall.Result, []distribution.StepResult, error) {
-	f.resumeConfCalls++
+func (f *fakeProvisioner) ResumePostInstall(context.Context, *config.Config) (*postinstall.Result, []distribution.StepResult, error) {
+	f.resumePostCalls++
 	return &postinstall.Result{}, nil, nil
 }
 
@@ -51,40 +51,40 @@ func TestRunDeployPhases_ResumeRouting(t *testing.T) {
 	tests := []struct {
 		name        string
 		markerPhase deployPhase // "" = no marker on disk
-		// wantGuardResume nil means the guard (and prepare) must never be
+		// wantGuardResume nil means the guard (and setup) must never be
 		// consulted; otherwise it pins the ResumeInProgress value passed.
 		wantGuardResume *bool
-		wantPrepare     int
+		wantSetup       int
 		wantInstall     int
-		wantConfigure   int
-		wantResumeConf  int
+		wantPost        int
+		wantResumePost  int
 	}{
 		{
 			name:            "no marker runs all phases through the guard",
 			wantGuardResume: guardResume(false),
-			wantPrepare:     1, wantInstall: 1, wantConfigure: 1,
+			wantSetup:       1, wantInstall: 1, wantPost: 1,
 		},
 		{
-			name:            "prepare marker resumes through guard and wipe",
-			markerPhase:     phasePrepare,
+			name:            "setup marker resumes through guard and wipe",
+			markerPhase:     phaseSetup,
 			wantGuardResume: guardResume(true),
-			wantPrepare:     1, wantInstall: 1, wantConfigure: 1,
+			wantSetup:       1, wantInstall: 1, wantPost: 1,
 		},
 		{
-			name:        "install marker never touches guard or prepare",
+			name:        "install marker never touches guard or setup",
 			markerPhase: phaseInstall,
-			wantInstall: 1, wantConfigure: 1,
+			wantInstall: 1, wantPost: 1,
 		},
 		{
-			name:           "configure marker runs resume-configure only",
-			markerPhase:    phaseConfigure,
-			wantResumeConf: 1,
+			name:           "postinstall marker runs resume-postinstall only",
+			markerPhase:    phasePostInstall,
+			wantResumePost: 1,
 		},
 		{
 			name:            "unknown marker phase does not bypass the guard",
 			markerPhase:     deployPhase("someday"),
 			wantGuardResume: guardResume(false),
-			wantPrepare:     1, wantInstall: 1, wantConfigure: 1,
+			wantSetup:       1, wantInstall: 1, wantPost: 1,
 		},
 	}
 
@@ -118,17 +118,17 @@ func TestRunDeployPhases_ResumeRouting(t *testing.T) {
 					t.Errorf("guard ResumeInProgress = %v; want %v", got, *tc.wantGuardResume)
 				}
 			}
-			if f.prepareCalls != tc.wantPrepare {
-				t.Errorf("prepare calls = %d; want %d", f.prepareCalls, tc.wantPrepare)
+			if f.setupCalls != tc.wantSetup {
+				t.Errorf("setup calls = %d; want %d", f.setupCalls, tc.wantSetup)
 			}
 			if f.installCalls != tc.wantInstall {
 				t.Errorf("install calls = %d; want %d", f.installCalls, tc.wantInstall)
 			}
-			if f.configureCalls != tc.wantConfigure {
-				t.Errorf("configure calls = %d; want %d", f.configureCalls, tc.wantConfigure)
+			if f.postCalls != tc.wantPost {
+				t.Errorf("postinstall calls = %d; want %d", f.postCalls, tc.wantPost)
 			}
-			if f.resumeConfCalls != tc.wantResumeConf {
-				t.Errorf("resume-configure calls = %d; want %d", f.resumeConfCalls, tc.wantResumeConf)
+			if f.resumePostCalls != tc.wantResumePost {
+				t.Errorf("resume-postinstall calls = %d; want %d", f.resumePostCalls, tc.wantResumePost)
 			}
 		})
 	}

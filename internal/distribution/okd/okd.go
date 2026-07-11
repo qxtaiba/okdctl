@@ -111,30 +111,30 @@ func (p *Provisioner) Validate(cfg *config.Config) error {
 	return nil
 }
 
-// PrepareOpts configures a Provisioner.Prepare run. FreshDeploy permits
+// SetupOpts configures a Provisioner.Setup run. FreshDeploy permits
 // wiping a work directory that contains live cluster state (terraform
-// resources or cluster-config/auth); without it Prepare returns an error
+// resources or cluster-config/auth); without it Setup returns an error
 // so the operator is forced to destroy the cluster first.
 //
 // ResumeInProgress signals that the CLI's deploy-state marker records a
-// prepare-phase interruption for this cluster. A prepare run applies
+// setup-phase interruption for this cluster. A setup run applies
 // nothing to Proxmox, so populated terraform state alongside such a
 // marker is a contradiction (a failed install-marker write, or a --fresh
 // run interrupted over an older cluster); the guard then refuses with a
 // contradiction diagnostic instead of unlocking the wipe. Markers
-// recording an install or configure interruption must never reach
-// Prepare: the CLI routes those resumes past the wipe entirely
-// (cli.resolveResumePhase) because the work directory then holds
+// recording an install or postinstall interruption must never reach
+// Setup: the CLI routes those resumes past the wipe entirely
+// (deploy.resolveResumePhase) because the work directory then holds
 // identity material live VMs depend on.
-type PrepareOpts struct {
+type SetupOpts struct {
 	FreshDeploy      bool
 	ResumeInProgress bool
 }
 
-// Prepare cleans up previous artifacts and runs the setup phase. It refuses
+// Setup cleans up previous artifacts and runs the setup phase. It refuses
 // to wipe a work directory that appears to belong to a live cluster unless
 // opts.FreshDeploy is true; pass --fresh at the CLI to opt in.
-func (p *Provisioner) Prepare(ctx context.Context, cfg *config.Config, opts PrepareOpts) ([]distribution.StepResult, error) {
+func (p *Provisioner) Setup(ctx context.Context, cfg *config.Config, opts SetupOpts) ([]distribution.StepResult, error) {
 	setupOpts := setup.NewOptions(cfg, p.projectRoot)
 
 	if system.DirExists(setupOpts.WorkDir) {
@@ -164,11 +164,11 @@ func (p *Provisioner) Prepare(ctx context.Context, cfg *config.Config, opts Prep
 	return setupPhase.Execute(ctx, cfg, &setupOpts)
 }
 
-// GuardPrepare reports whether Prepare would refuse to wipe the work
+// GuardSetup reports whether Setup would refuse to wipe the work
 // directory, without side effects. The CLI calls it before writing the
 // deploy-state marker so a refusal cannot plant a marker that would
 // bypass the guard on the next invocation.
-func (p *Provisioner) GuardPrepare(cfg *config.Config, opts PrepareOpts) error {
+func (p *Provisioner) GuardSetup(cfg *config.Config, opts SetupOpts) error {
 	setupOpts := setup.NewOptions(cfg, p.projectRoot)
 	if !system.DirExists(setupOpts.WorkDir) {
 		return nil
@@ -181,12 +181,12 @@ func (p *Provisioner) GuardPrepare(cfg *config.Config, opts PrepareOpts) error {
 // cluster-config/auth directory alone is mid-setup debris (written by
 // StepGenerateIgnition before any VM exists) and stays wipeable. Only
 // FreshDeploy bypasses the guard: ResumeInProgress never unlocks the wipe,
-// because populated state contradicts the prepare-phase marker it vouches
+// because populated state contradicts the setup-phase marker it vouches
 // for — trusting the marker there would wipe material live VMs depend on.
 //
 // Callers that set FreshDeploy=true accept credential loss: cluster-config/auth
 // (kubeadmin-password, kubeconfig) is wiped with no backup.
-func (p *Provisioner) guardLiveCluster(cfg *config.Config, opts PrepareOpts) error {
+func (p *Provisioner) guardLiveCluster(cfg *config.Config, opts SetupOpts) error {
 	if opts.FreshDeploy {
 		return nil
 	}
@@ -198,8 +198,8 @@ func (p *Provisioner) guardLiveCluster(cfg *config.Config, opts PrepareOpts) err
 	}
 	if opts.ResumeInProgress {
 		return &errtypes.ConfigError{
-			Msg: "deploy-state marker records a prepare-phase interruption but terraform state has resources — " +
-				"a prepare run applies nothing, so the marker cannot be trusted; " +
+			Msg: "deploy-state marker records a setup-phase interruption but terraform state has resources — " +
+				"a setup run applies nothing, so the marker cannot be trusted; " +
 				"run 'okdctl destroy' first, or pass --fresh to force-wipe (credentials will be lost)",
 		}
 	}
@@ -210,7 +210,7 @@ func (p *Provisioner) guardLiveCluster(cfg *config.Config, opts PrepareOpts) err
 }
 
 // Install runs the install phase: ignition delivery, bootstrap wait, and
-// install-complete monitor. Must be called after Prepare.
+// install-complete monitor. Must be called after Setup.
 func (p *Provisioner) Install(ctx context.Context, cfg *config.Config, opts *install.Options) ([]distribution.StepResult, error) {
 	installPhase := install.New(
 		phase.WithExecutor(p.executor),
@@ -221,9 +221,9 @@ func (p *Provisioner) Install(ctx context.Context, cfg *config.Config, opts *ins
 	return installPhase.Execute(ctx, cfg, opts)
 }
 
-// Configure runs the postinstall phase: kube-vip verification, production
+// PostInstall runs the postinstall phase: kube-vip verification, production
 // DNS cutover, bootstrap cleanup. Returns the result alongside per-step records.
-func (p *Provisioner) Configure(ctx context.Context, cfg *config.Config) (*postinstall.Result, []distribution.StepResult, error) {
+func (p *Provisioner) PostInstall(ctx context.Context, cfg *config.Config) (*postinstall.Result, []distribution.StepResult, error) {
 	postPhase := postinstall.New(
 		phase.WithExecutor(p.executor),
 		phase.WithLogger(p.logger),
@@ -233,23 +233,23 @@ func (p *Provisioner) Configure(ctx context.Context, cfg *config.Config) (*posti
 	return postPhase.Execute(ctx, cfg, &opts)
 }
 
-// ResumeConfigure runs the postinstall phase for a deploy interrupted during
-// configure. The cluster is installed and its VMs are live, so Install is
-// not re-run — a terraform re-apply after bootstrap cleanup would recreate
-// the bootstrap VM against a running control plane. Only KUBECONFIG, the
-// process-local executor state Install normally establishes, is re-armed;
+// ResumePostInstall runs the postinstall phase for a deploy interrupted
+// during postinstall. The cluster is installed and its VMs are live, so
+// Install is not re-run — a terraform re-apply after bootstrap cleanup would
+// recreate the bootstrap VM against a running control plane. Only KUBECONFIG,
+// the process-local executor state Install normally establishes, is re-armed;
 // a missing kubeconfig fails fast before any postinstall step runs.
-func (p *Provisioner) ResumeConfigure(ctx context.Context, cfg *config.Config) (*postinstall.Result, []distribution.StepResult, error) {
+func (p *Provisioner) ResumePostInstall(ctx context.Context, cfg *config.Config) (*postinstall.Result, []distribution.StepResult, error) {
 	installPhase := install.New(phase.WithExecutor(p.executor), phase.WithLogger(p.logger))
 	clusterDir := phase.ClusterConfigDir(filepath.Join(p.projectRoot, "okd-install"))
 	if err := installPhase.SetupKubeconfig(ctx, clusterDir); err != nil {
 		return nil, nil, &errtypes.ClusterError{
-			Msg: "cannot resume configure: cluster kubeconfig unavailable; " +
+			Msg: "cannot resume postinstall: cluster kubeconfig unavailable; " +
 				"run 'okdctl destroy' then re-deploy, or re-run with --fresh to restart from scratch (credentials will be lost)",
 			Err: err,
 		}
 	}
-	return p.Configure(ctx, cfg)
+	return p.PostInstall(ctx, cfg)
 }
 
 // UpdateIngress re-points haproxy at a fresh set of backend nodes without
