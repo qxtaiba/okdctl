@@ -146,8 +146,7 @@ func (p *Phase) DeployInfrastructure(ctx context.Context, cfg *config.Config, op
 		TerraformEnv: opts.TerraformEnv,
 	}
 
-	_, err := prov.Provision(ctx, cfg, provOpts)
-	if err != nil {
+	if err := prov.Provision(ctx, cfg, provOpts); err != nil {
 		return err
 	}
 

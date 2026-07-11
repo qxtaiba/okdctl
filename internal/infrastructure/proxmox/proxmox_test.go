@@ -4,11 +4,16 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
+	"github.com/qxtaiba/okdctl/internal/executor"
+	"github.com/qxtaiba/okdctl/internal/infrastructure/terraform"
 )
 
 func TestProvider_ZeroizeEnv(t *testing.T) {
@@ -72,49 +77,33 @@ func TestProvider_ZeroizeEnv(t *testing.T) {
 	})
 }
 
-func TestRetrieveProvisionResult(t *testing.T) {
+func TestPlanProvisionedNodes(t *testing.T) {
 	cases := []struct {
 		name            string
 		startIP         string
 		masterCount     int
 		workerCount     int
 		cidr            string
-		gateway         string
-		wantBootstrap   string
-		wantMasters     []string
-		wantWorkers     []string
-		wantAPIServerIP string
+		wantNames       []string
+		wantIPs         []string
 		wantErrContains string
 	}{
 		{
-			name:          "1 master 0 workers no cidr",
-			startIP:       "192.168.1.20",
-			masterCount:   1,
-			workerCount:   0,
-			wantBootstrap: "192.168.1.20",
-			wantMasters:   []string{"192.168.1.21"},
-			wantWorkers:   []string{},
+			name:        "1 master 0 workers no cidr",
+			startIP:     "192.168.1.20",
+			masterCount: 1,
+			workerCount: 0,
+			wantNames:   []string{"bootstrap", "master0"},
+			wantIPs:     []string{"192.168.1.20", "192.168.1.21"},
 		},
 		{
-			name:          "3 masters 2 workers with cidr",
-			startIP:       "192.168.1.20",
-			masterCount:   3,
-			workerCount:   2,
-			cidr:          "192.168.1.0/24",
-			wantBootstrap: "192.168.1.20",
-			wantMasters:   []string{"192.168.1.21", "192.168.1.22", "192.168.1.23"},
-			wantWorkers:   []string{"192.168.1.24", "192.168.1.25"},
-		},
-		{
-			name:            "gateway sets APIServerIP",
-			startIP:         "192.168.1.20",
-			masterCount:     1,
-			workerCount:     0,
-			gateway:         "192.168.1.1",
-			wantBootstrap:   "192.168.1.20",
-			wantMasters:     []string{"192.168.1.21"},
-			wantWorkers:     []string{},
-			wantAPIServerIP: "192.168.1.1",
+			name:        "3 masters 2 workers with cidr",
+			startIP:     "192.168.1.20",
+			masterCount: 3,
+			workerCount: 2,
+			cidr:        "192.168.1.0/24",
+			wantNames:   []string{"bootstrap", "master0", "master1", "master2", "worker0", "worker1"},
+			wantIPs:     []string{"192.168.1.20", "192.168.1.21", "192.168.1.22", "192.168.1.23", "192.168.1.24", "192.168.1.25"},
 		},
 		{
 			name:            "empty startIP returns config error",
@@ -142,11 +131,10 @@ func TestRetrieveProvisionResult(t *testing.T) {
 				Networking: config.NetworkingConfig{
 					StaticIP:    config.StaticIPConfig{Start: tc.startIP},
 					MachineCIDR: tc.cidr,
-					Gateway:     tc.gateway,
 				},
 			}
 			p := New()
-			result, err := p.retrieveProvisionResult(cfg)
+			nodes, err := p.planProvisionedNodes(cfg)
 			if tc.wantErrContains != "" {
 				if err == nil {
 					t.Fatalf("want error containing %q; got nil", tc.wantErrContains)
@@ -163,34 +151,166 @@ func TestRetrieveProvisionResult(t *testing.T) {
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
-			if result.BootstrapIP != tc.wantBootstrap {
-				t.Errorf("BootstrapIP = %q; want %q", result.BootstrapIP, tc.wantBootstrap)
+			if len(nodes) != len(tc.wantNames) {
+				t.Fatalf("len(nodes) = %d; want %d", len(nodes), len(tc.wantNames))
 			}
-			if len(result.ControlPlaneIPs) != len(tc.wantMasters) {
-				t.Fatalf("len(ControlPlaneIPs) = %d; want %d",
-					len(result.ControlPlaneIPs), len(tc.wantMasters))
-			}
-			for i, want := range tc.wantMasters {
-				if result.ControlPlaneIPs[i] != want {
-					t.Errorf("ControlPlaneIPs[%d] = %q; want %q",
-						i, result.ControlPlaneIPs[i], want)
+			for i, n := range nodes {
+				if n.name != tc.wantNames[i] || n.ip != tc.wantIPs[i] {
+					t.Errorf("nodes[%d] = {%q %q}; want {%q %q}", i, n.name, n.ip, tc.wantNames[i], tc.wantIPs[i])
 				}
-			}
-			if len(result.WorkerIPs) != len(tc.wantWorkers) {
-				t.Fatalf("len(WorkerIPs) = %d; want %d",
-					len(result.WorkerIPs), len(tc.wantWorkers))
-			}
-			for i, want := range tc.wantWorkers {
-				if result.WorkerIPs[i] != want {
-					t.Errorf("WorkerIPs[%d] = %q; want %q",
-						i, result.WorkerIPs[i], want)
-				}
-			}
-			if tc.wantAPIServerIP != "" && result.APIServerIP != tc.wantAPIServerIP {
-				t.Errorf("APIServerIP = %q; want %q", result.APIServerIP, tc.wantAPIServerIP)
 			}
 		})
 	}
+}
+
+func TestProvider_Disconnect(t *testing.T) {
+	p := New()
+	p.connected = true
+	p.terraformExec = terraform.New(t.TempDir())
+	if err := p.Disconnect(context.Background()); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if p.connected {
+		t.Error("expected p.connected = false")
+	}
+	if p.terraformExec != nil {
+		t.Error("expected p.terraformExec = nil")
+	}
+}
+
+func TestProvider_setupTerraform_idempotent(t *testing.T) {
+	p := New()
+	root := t.TempDir()
+	p.setupTerraform(root, "production")
+	first := p.terraformExec
+	p.setupTerraform(root, "production")
+	if p.terraformExec != first {
+		t.Error("setupTerraform reinitialized executor for identical projectRoot/tfEnv")
+	}
+	p.setupTerraform(root, "staging")
+	if p.terraformExec == first {
+		t.Error("setupTerraform did not reinitialize executor when tfEnv changed")
+	}
+}
+
+func TestProvider_Provision_Guards(t *testing.T) {
+	t.Run("not connected", func(t *testing.T) {
+		p := New()
+		err := p.Provision(context.Background(), &config.Config{}, ProvisionOptions{})
+		if !errors.Is(err, ErrNotConnected) {
+			t.Fatalf("err = %v; want ErrNotConnected", err)
+		}
+	})
+
+	t.Run("terraform not configured", func(t *testing.T) {
+		p := New()
+		p.connected = true
+		err := p.Provision(context.Background(), &config.Config{}, ProvisionOptions{})
+		if !errors.Is(err, ErrTerraformNotConfigured) {
+			t.Fatalf("err = %v; want ErrTerraformNotConfigured", err)
+		}
+	})
+}
+
+func TestProvider_PlanOnly_Guards(t *testing.T) {
+	t.Run("not connected", func(t *testing.T) {
+		p := New()
+		err := p.PlanOnly(context.Background(), &config.Config{}, ProvisionOptions{})
+		if !errors.Is(err, ErrNotConnected) {
+			t.Fatalf("err = %v; want ErrNotConnected", err)
+		}
+	})
+
+	t.Run("terraform not configured", func(t *testing.T) {
+		p := New()
+		p.connected = true
+		err := p.PlanOnly(context.Background(), &config.Config{}, ProvisionOptions{})
+		if !errors.Is(err, ErrTerraformNotConfigured) {
+			t.Fatalf("err = %v; want ErrTerraformNotConfigured", err)
+		}
+	})
+}
+
+// installFakePvesh writes a POSIX "ssh" fake on PATH that always answers
+// with the contents of response, regardless of the pvesh subcommand/path
+// it was invoked with.
+func installFakePvesh(t *testing.T, response string) {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("fake-ssh script relies on POSIX sh")
+	}
+	dir := t.TempDir()
+	respFile := filepath.Join(dir, "response.json")
+	if err := os.WriteFile(respFile, []byte(response), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	script := fmt.Sprintf("#!/bin/sh\ncat %q\n", respFile)
+	sshPath := filepath.Join(dir, "ssh")
+	if err := os.WriteFile(sshPath, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+}
+
+func TestProvider_ProbeVMEnumeration(t *testing.T) {
+	cfg := &config.Config{Topology: config.TopologyConfig{VMIDBase: 100}}
+
+	t.Run("no ssh exec skips probe", func(t *testing.T) {
+		p := New()
+		p.node = "pve-01"
+		if got := p.probeVMEnumeration(context.Background(), cfg); got != enumProbeSkipped {
+			t.Errorf("got %v; want enumProbeSkipped", got)
+		}
+	})
+
+	t.Run("pvesh run error (invalid node) skips probe", func(t *testing.T) {
+		p := New()
+		p.node = "bad;node"
+		p.sshExec = executor.New()
+		if got := p.probeVMEnumeration(context.Background(), cfg); got != enumProbeSkipped {
+			t.Errorf("got %v; want enumProbeSkipped", got)
+		}
+	})
+
+	t.Run("malformed json payload skips probe", func(t *testing.T) {
+		installFakePvesh(t, "not json")
+		p := New()
+		p.host, p.node = "10.0.0.1", "pve-01"
+		p.sshExec = executor.New()
+		if got := p.probeVMEnumeration(context.Background(), cfg); got != enumProbeSkipped {
+			t.Errorf("got %v; want enumProbeSkipped", got)
+		}
+	})
+
+	t.Run("vmid found", func(t *testing.T) {
+		installFakePvesh(t, `[{"vmid":100},{"vmid":101}]`)
+		p := New()
+		p.host, p.node = "10.0.0.1", "pve-01"
+		p.sshExec = executor.New()
+		if got := p.probeVMEnumeration(context.Background(), cfg); got != enumYes {
+			t.Errorf("got %v; want enumYes", got)
+		}
+	})
+
+	t.Run("vmid not found", func(t *testing.T) {
+		installFakePvesh(t, `[{"vmid":200}]`)
+		p := New()
+		p.host, p.node = "10.0.0.1", "pve-01"
+		p.sshExec = executor.New()
+		if got := p.probeVMEnumeration(context.Background(), cfg); got != enumNo {
+			t.Errorf("got %v; want enumNo", got)
+		}
+	})
+
+	t.Run("default vmid base used when topology.VMIDBase is zero", func(t *testing.T) {
+		installFakePvesh(t, fmt.Sprintf(`[{"vmid":%d}]`, config.DefaultVMIDBase))
+		p := New()
+		p.host, p.node = "10.0.0.1", "pve-01"
+		p.sshExec = executor.New()
+		if got := p.probeVMEnumeration(context.Background(), &config.Config{}); got != enumYes {
+			t.Errorf("got %v; want enumYes", got)
+		}
+	})
 }
 
 func TestInitIsRetryable(t *testing.T) {

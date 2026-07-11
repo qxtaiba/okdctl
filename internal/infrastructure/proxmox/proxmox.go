@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"log/slog"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -187,12 +188,15 @@ func (p *Provider) setupTerraform(projectRoot, tfEnv string) {
 	p.terraformExec = terraform.New(tfDir, tfOpts...)
 }
 
-// Provision runs terraform init/plan/apply for the configured environment
-// and returns the VM IPs. Connect must have run first; otherwise this
-// returns ErrNotConnected.
-func (p *Provider) Provision(ctx context.Context, cfg *config.Config, opts ProvisionOptions) (*ProvisionResult, error) {
+// Provision runs terraform init/plan/apply for the configured environment.
+// Connect must have run first; otherwise this returns ErrNotConnected. It is
+// error-only (roadmap A10): the prior *ProvisionResult return fabricated
+// VMStatus.Status as StateRunning before any VM was observed running and set
+// APIServerIP to the network gateway (a different machine); the sole caller
+// discarded the value anyway.
+func (p *Provider) Provision(ctx context.Context, cfg *config.Config, opts ProvisionOptions) error {
 	if !p.connected {
-		return nil, &errtypes.ConfigError{Msg: "proxmox provider not connected — call Connect() first", Err: ErrNotConnected}
+		return &errtypes.ConfigError{Msg: "proxmox provider not connected — call Connect() first", Err: ErrNotConnected}
 	}
 
 	if opts.ProjectRoot != "" && opts.TerraformEnv != "" {
@@ -200,12 +204,12 @@ func (p *Provider) Provision(ctx context.Context, cfg *config.Config, opts Provi
 	}
 
 	if p.terraformExec == nil {
-		return nil, &errtypes.ConfigError{Msg: "terraform executor not configured — set ProjectRoot and TerraformEnv", Err: ErrTerraformNotConfigured}
+		return &errtypes.ConfigError{Msg: "terraform executor not configured — set ProjectRoot and TerraformEnv", Err: ErrTerraformNotConfigured}
 	}
 
 	p.logger.Info("terraform: initializing backend and providers")
 	if err := p.initWithRetry(ctx); err != nil {
-		return nil, &errtypes.ClusterError{Msg: "terraform init failed", Err: err}
+		return &errtypes.ClusterError{Msg: "terraform init failed", Err: err}
 	}
 
 	p.logger.Info("terraform: creating execution plan")
@@ -213,7 +217,7 @@ func (p *Provider) Provision(ctx context.Context, cfg *config.Config, opts Provi
 		OutputPlanFile: terraform.PlanFileName,
 	}
 	if err := p.terraformExec.Plan(ctx, planOpts); err != nil {
-		return nil, &errtypes.ClusterError{Msg: "terraform plan failed", Err: err}
+		return &errtypes.ClusterError{Msg: "terraform plan failed", Err: err}
 	}
 	defer func() { _ = p.terraformExec.CleanupPlans() }()
 
@@ -228,45 +232,43 @@ func (p *Provider) Provision(ctx context.Context, cfg *config.Config, opts Provi
 	}
 	snapPath, snapErr := p.terraformExec.SnapshotState(ctx)
 	if snapErr != nil {
-		return nil, &errtypes.ClusterError{Msg: "provision: state snapshot failed", Err: snapErr}
+		return &errtypes.ClusterError{Msg: "provision: state snapshot failed", Err: snapErr}
 	}
 
 	applyErr := p.terraformExec.Apply(ctx, applyOpts)
 	stopSpinner()
 	if applyErr != nil {
 		if errors.Is(ctx.Err(), context.Canceled) {
-			return nil, fmt.Errorf("terraform apply interrupted: %w", errors.Join(ctx.Err(), applyErr))
+			// Bare wrap intentional: cli/root.go::signalExitCode walks the chain
+			// via errors.Is(err, context.Canceled) before exitCodeFor runs,
+			// mapping SIGINT→130 / SIGTERM→143 without a typed error. Do not
+			// wrap this in errtypes.ClusterError.
+			return fmt.Errorf("terraform apply interrupted: %w", errors.Join(ctx.Err(), applyErr))
 		}
 		p.logger.Warn("terraform: apply failed; partial infrastructure may exist. run 'okdctl destroy' to clean up", "err", applyErr)
 		msg := "terraform apply failed"
 		if snapPath != "" {
 			msg = fmt.Sprintf("terraform apply failed (state backup: %s)", snapPath)
 		}
-		return nil, &errtypes.ClusterError{Msg: msg, Err: applyErr}
+		return &errtypes.ClusterError{Msg: msg, Err: applyErr}
 	}
 
-	result, err := p.retrieveProvisionResult(cfg)
+	nodes, err := p.planProvisionedNodes(cfg)
 	if err != nil {
-		return nil, &errtypes.ClusterError{Msg: "terraform apply succeeded but IP retrieval failed; run 'okdctl destroy' to clean up", Err: err}
-	}
-
-	if len(result.VMs) == 0 {
-		return nil, &errtypes.ClusterError{Msg: "terraform apply succeeded but no VMs were provisioned; check config"}
+		return &errtypes.ClusterError{Msg: "terraform apply succeeded but IP validation failed; run 'okdctl destroy' to clean up", Err: err}
 	}
 
 	p.checkTerraformOutputs(ctx, cfg)
-	vmidEnumerable := p.probeVMEnumeration(ctx, cfg)
+	enumState := p.probeVMEnumeration(ctx, cfg)
 
-	p.logger.Info("terraform: vms provisioned", "count", len(result.VMs))
-	if vmidEnumerable {
-		for _, vm := range result.VMs {
-			if vm.IPAddress != "" {
-				p.logger.Info("terraform: vm provisioned", "vm", vm.Name, "ip", vm.IPAddress)
-			}
+	p.logger.Info("terraform: vms provisioned", "count", len(nodes))
+	if enumState != enumNo {
+		for _, n := range nodes {
+			p.logger.Info("terraform: vm provisioned", "vm", n.name, "ip", n.ip)
 		}
 	}
 
-	return result, nil
+	return nil
 }
 
 // PlanOnly runs terraform init and plan for the configured environment without
@@ -300,15 +302,23 @@ func (p *Provider) PlanOnly(ctx context.Context, cfg *config.Config, opts Provis
 	return nil
 }
 
-// retrieveProvisionResult derives VM IPs from static config.
-// IP scheme: bootstrap = start IP, masters = start+1..N, workers = start+N+1 onwards.
-func (p *Provider) retrieveProvisionResult(cfg *config.Config) (*ProvisionResult, error) {
-	result := &ProvisionResult{
-		VMs:             []VMStatus{},
-		ControlPlaneIPs: []string{},
-		WorkerIPs:       []string{},
-	}
+// vmNodeSpec pairs a node name with its config-derived static IP for the
+// post-apply summary log. It makes no claim about observed VM state — see
+// planProvisionedNodes.
+type vmNodeSpec struct {
+	name string
+	ip   string
+}
 
+// planProvisionedNodes validates that the configured static IP range fits
+// the topology and CIDR, then returns the name/IP pairs Provision logs
+// after a successful apply. Renamed from retrieveProvisionResult (roadmap
+// A10): the prior ProvisionResult.VMs carried a Status hardcoded to
+// StateRunning and an APIServerIP set to the network gateway, neither of
+// which was observed — this helper reports config-derived addresses only,
+// with no state claim.
+// IP scheme: bootstrap = start IP, masters = start+1..N, workers = start+N+1 onwards.
+func (p *Provider) planProvisionedNodes(cfg *config.Config) ([]vmNodeSpec, error) {
 	startIP := cfg.Networking.StaticIP.Start
 	if startIP == "" {
 		return nil, &errtypes.ConfigError{Msg: "static IP start address is required for OKD deployments"}
@@ -321,27 +331,14 @@ func (p *Provider) retrieveProvisionResult(cfg *config.Config) (*ProvisionResult
 		}
 	}
 
-	bootstrapIP := startIP
-	result.BootstrapIP = bootstrapIP
-	result.VMs = append(result.VMs, VMStatus{
-		Name:      string(nodetypes.RoleBootstrap),
-		Role:      nodetypes.RoleBootstrap,
-		IPAddress: bootstrapIP,
-		Status:    nodetypes.StateRunning,
-	})
+	nodes := []vmNodeSpec{{name: string(nodetypes.RoleBootstrap), ip: startIP}}
 
 	for i := range cfg.Topology.ControlPlane.Count {
 		ip, err := netutil.CalculateVMIP(startIP, 1+i)
 		if err != nil {
 			return nil, &errtypes.ConfigError{Msg: fmt.Sprintf("failed to calculate %s%d IP", nodetypes.RoleMaster, i), Err: err}
 		}
-		result.ControlPlaneIPs = append(result.ControlPlaneIPs, ip)
-		result.VMs = append(result.VMs, VMStatus{
-			Name:      fmt.Sprintf("%s%d", nodetypes.RoleMaster, i),
-			Role:      nodetypes.RoleMaster,
-			IPAddress: ip,
-			Status:    nodetypes.StateRunning,
-		})
+		nodes = append(nodes, vmNodeSpec{name: fmt.Sprintf("%s%d", nodetypes.RoleMaster, i), ip: ip})
 	}
 
 	workerOffset := 1 + cfg.Topology.ControlPlane.Count
@@ -350,20 +347,10 @@ func (p *Provider) retrieveProvisionResult(cfg *config.Config) (*ProvisionResult
 		if err != nil {
 			return nil, &errtypes.ConfigError{Msg: fmt.Sprintf("failed to calculate %s%d IP", nodetypes.RoleWorker, i), Err: err}
 		}
-		result.WorkerIPs = append(result.WorkerIPs, ip)
-		result.VMs = append(result.VMs, VMStatus{
-			Name:      fmt.Sprintf("%s%d", nodetypes.RoleWorker, i),
-			Role:      nodetypes.RoleWorker,
-			IPAddress: ip,
-			Status:    nodetypes.StateRunning,
-		})
+		nodes = append(nodes, vmNodeSpec{name: fmt.Sprintf("%s%d", nodetypes.RoleWorker, i), ip: ip})
 	}
 
-	if cfg.Networking.Gateway != "" {
-		result.APIServerIP = cfg.Networking.Gateway
-	}
-
-	return result, nil
+	return nodes, nil
 }
 
 // checkTerraformOutputs cross-checks the vm_ids counts from terraform output
@@ -465,15 +452,30 @@ func initIsRetryable(err error) bool {
 	return !errors.As(err, &authErr)
 }
 
+// vmEnumerationState classifies the pvesh VM-enumeration probe outcome.
+type vmEnumerationState int
+
+const (
+	// enumYes: vmidBase was found in the pvesh QEMU list.
+	enumYes vmEnumerationState = iota
+	// enumNo: the probe ran and parsed successfully but vmidBase was absent
+	// — the VM is not yet enumerable.
+	enumNo
+	// enumProbeSkipped: no sshExec, an SSH error, or a parse error — the
+	// probe could not run, so callers treat the VM as present by default.
+	enumProbeSkipped
+)
+
+// vmIDProbe is the pvesh QEMU-list element shape probeVMEnumeration parses.
+type vmIDProbe struct {
+	VMID int `json:"vmid"`
+}
+
 // probeVMEnumeration queries pvesh over SSH to check whether vmidBase is
-// visible in the Proxmox QEMU list. Returns true when the vmid is found or
-// when the probe cannot run (no sshExec, SSH error, parse error) — callers
-// treat those cases as "do not suppress per-VM logs". Returns false only when
-// the probe ran and parsed successfully but vmidBase was not present, meaning
-// the VMs are not yet enumerable.
-func (p *Provider) probeVMEnumeration(ctx context.Context, cfg *config.Config) bool {
+// visible in the Proxmox QEMU list.
+func (p *Provider) probeVMEnumeration(ctx context.Context, cfg *config.Config) vmEnumerationState {
 	if p.sshExec == nil {
-		return true
+		return enumProbeSkipped
 	}
 	vmidBase := cfg.Topology.VMIDBase
 	if vmidBase == 0 {
@@ -488,20 +490,16 @@ func (p *Provider) probeVMEnumeration(ctx context.Context, cfg *config.Config) b
 	stdout, err := hostssh.PveshRun(ctx, params, "get", "/nodes/"+p.node+"/qemu")
 	if err != nil {
 		p.logger.Debug("terraform: pvesh probe skipped", "err", err)
-		return true
+		return enumProbeSkipped
 	}
-	var vms []struct {
-		VMID int `json:"vmid"`
-	}
+	var vms []vmIDProbe
 	if err := json.Unmarshal([]byte(stdout), &vms); err != nil {
 		p.logger.Debug("terraform: pvesh probe payload unparseable", "err", err)
-		return true
+		return enumProbeSkipped
 	}
-	for _, vm := range vms {
-		if vm.VMID == vmidBase {
-			return true
-		}
+	if slices.ContainsFunc(vms, func(v vmIDProbe) bool { return v.VMID == vmidBase }) {
+		return enumYes
 	}
 	p.logger.Info("terraform: vm not yet enumerable, install phase will retry", "vmid", vmidBase)
-	return false
+	return enumNo
 }
