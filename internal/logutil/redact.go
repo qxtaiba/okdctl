@@ -123,16 +123,22 @@ func redactAny(v any) any {
 // it as slog.Any("argv", logutil.RedactableArgv(os.Args[1:])) so RedactHandler
 // dispatches through Redacted() any rather than logging a pre-joined string.
 // Scrubbing runs before joining: any --key=value or key=value token whose key
-// matches KeyIsSecret has its value replaced with the Redacted sentinel,
-// guarding against future flags that accept credentials.
+// matches KeyIsSecret has its value replaced with the Redacted sentinel, and
+// the value following a bare --key / -key secret flag (pflag's space-separated
+// form) is replaced too, guarding against future flags that accept
+// credentials.
 type RedactableArgv []string
 
-// Redacted scrubs credential-bearing key=value tokens in the argv slice and
-// returns the joined result as a string.
+// Redacted scrubs credential-bearing tokens in the argv slice and returns
+// the joined result as a string.
 func (a RedactableArgv) Redacted() any {
 	out := make([]string, len(a))
-	for i, tok := range a {
-		out[i] = scrubArgvToken(tok)
+	for i := 0; i < len(a); i++ {
+		out[i] = scrubArgvToken(a[i])
+		if bareSecretFlag(a[i]) && i+1 < len(a) && !strings.HasPrefix(a[i+1], "-") {
+			i++
+			out[i] = Redacted
+		}
 	}
 	return strings.Join(out, " ")
 }
@@ -148,6 +154,17 @@ func scrubArgvToken(tok string) string {
 	}
 	prefix := tok[:len(tok)-len(bare)+eq+1]
 	return prefix + Redacted
+}
+
+// bareSecretFlag reports whether tok is a dash-prefixed flag with no =value
+// whose name matches KeyIsSecret, meaning the next argv entry carries the
+// secret.
+func bareSecretFlag(tok string) bool {
+	if !strings.HasPrefix(tok, "-") {
+		return false
+	}
+	name := strings.TrimLeft(tok, "-")
+	return !strings.Contains(name, "=") && KeyIsSecret(name)
 }
 
 // RedactableStderr is a named string type for subprocess stderr text. Pass
