@@ -22,6 +22,13 @@ Codes 65, 66, and 71 are granular refinements within the broader categories
 2 (config) and 5 (auth). A script that only checks for non-zero exit is
 unaffected; a script that branches on code 2 or 5 should also handle 65/66/71.
 
+When an error wraps more than one typed category (e.g. a `ClusterError`
+wrapping a `ConfigError` produced during a failed reload), resolution is not
+"outermost wins": sentinels (65/66/71) outrank every category, and within
+categories the precedence is `Config` (2) > `Network` (3) > `Cluster` (4) >
+`Auth` (5) > `Usage` (64) — whichever type is present anywhere in the chain,
+in that order, determines the exit code.
+
 Commands that do not require root (`status`, `config`, `kubeconfig`, and
 others) exit with code 5 when invoked under `sudo` or as root — the binary
 refuses with "do not run as root/sudo; this tool escalates internally".
