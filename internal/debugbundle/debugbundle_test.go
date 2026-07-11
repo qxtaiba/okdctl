@@ -1,4 +1,4 @@
-package cli
+package debugbundle
 
 import (
 	"archive/tar"
@@ -107,13 +107,9 @@ func TestBundleLogFile(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	orig := logFile
-	logFile = logPath
-	t.Cleanup(func() { logFile = orig })
-
 	var buf bytes.Buffer
 	tw := tar.NewWriter(&buf)
-	entry := bundleLogFile(stubAddFile(tw))
+	entry := bundleLogFile(stubAddFile(tw), logPath)
 	if entry.Status != "ok" {
 		t.Fatalf("bundleLogFile status = %q; message: %s", entry.Status, entry.Message)
 	}
@@ -255,6 +251,7 @@ func TestCollectSectionsSkipMustGather(t *testing.T) {
 		errors.New("no project root"),
 		time.Now(),
 		"test-bundle-id",
+		"",
 		true,
 	)
 	var mg *manifestEntry
