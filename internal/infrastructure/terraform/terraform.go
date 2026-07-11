@@ -542,12 +542,12 @@ func (t *Executor) ZeroizeEnv() {
 // Output runs "terraform output -json" and returns the decoded top-level
 // map. Each value remains JSON-encoded; callers unmarshal individual entries.
 func (t *Executor) Output(ctx context.Context) (map[string]json.RawMessage, error) {
-	result, err := t.exec.Run(ctx, "terraform", "output", "-json")
+	result, err := t.exec.RunOutputChecked(ctx, 0, "terraform", "output", "-json")
 	if err != nil {
 		return nil, fmt.Errorf("terraform output failed: %w", err)
 	}
-	if result.ExitCode != 0 {
-		return nil, executor.NewExitError(ctx, "terraform output", result.ExitCode, result.Stderr)
+	if result.Truncated {
+		return nil, fmt.Errorf("terraform output: output truncated after %d bytes", len(result.Stdout))
 	}
 	var out map[string]json.RawMessage
 	if err := json.Unmarshal([]byte(result.Stdout), &out); err != nil {
