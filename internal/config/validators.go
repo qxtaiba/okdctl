@@ -68,6 +68,18 @@ func validateEnums(cfg *Config, result *ValidationResult) {
 	if cfg.Provider.Type != "" && !isValidProvider(cfg.Provider.Type) {
 		result.AddError(FieldProviderType, fmt.Sprintf("unsupported provider: %s", cfg.Provider.Type))
 	}
+
+	// "production" ships in the repo and is trusted without a disk check so
+	// DefaultConfig()-based callers (including tests run from a package-local
+	// CWD) never trip this; a genuinely custom environment must have a
+	// matching directory or terraform fails deep in the install phase
+	// instead of here.
+	if env := cfg.Deployment.TerraformEnv; env != "" && env != "production" {
+		dir := filepath.Join("infrastructure", "terraform", "environments", env)
+		if !system.DirExists(dir) {
+			result.AddError(FieldDeploymentTerraformEnv, fmt.Sprintf("no environment directory at %s", dir))
+		}
+	}
 }
 
 func checkCIDROverlap(cidr1, cidr2, field, otherName string, result *ValidationResult) {
@@ -656,7 +668,8 @@ var (
 var terraformEnvPattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_-]*$`)
 
 // ValidateTerraformEnv allows an empty string (runtime default applies) and
-// otherwise requires a terraform-workspace-shaped identifier.
+// otherwise requires an identifier valid as a directory name under
+// infrastructure/terraform/environments/.
 func ValidateTerraformEnv(value string) error {
 	if value == "" {
 		return nil
