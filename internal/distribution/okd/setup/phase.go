@@ -137,7 +137,7 @@ func (p *Phase) Execute(ctx context.Context, cfg *config.Config, opts *Options) 
 		return orchestrator.Results(), err
 	}
 
-	p.Log.Info("setup: cluster configuration completed successfully")
+	p.Log.Info("setup: cluster configuration completed")
 	p.PrintSetupCompletionSummary(cfg, opts)
 
 	return orchestrator.Results(), nil

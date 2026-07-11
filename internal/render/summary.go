@@ -143,7 +143,7 @@ func PostDeploySummary(cfg *config.Config, result *postinstall.Result, steps []d
 
 	sb := NewBuilder()
 	sb.WriteString("\n")
-	sb.WriteString("  " + tui.CompletionSuccess("cluster deployed successfully!") + "\n")
+	sb.WriteString("  " + tui.CompletionSuccess("cluster deployed") + "\n")
 	sb.Newline()
 	sb.KV("run_id", runID)
 	sb.Newline()

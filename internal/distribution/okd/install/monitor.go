@@ -135,7 +135,7 @@ func (p *Phase) MonitorInstallation(ctx context.Context, clusterDir string, opts
 			}
 			totalApproved += approved
 
-			p.Log.Info("install: completed successfully", "csrs_approved", totalApproved)
+			p.Log.Info("install: completed", "csrs_approved", totalApproved)
 			return nil
 
 		case <-ticker.C:

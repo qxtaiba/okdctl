@@ -120,7 +120,7 @@ func (p *Phase) setupBaseSteps(cfg *config.Config, opts *Options) []distribution
 				if err := p.DownloadOKDTools(ctx, cfg.Distribution.Version, opts); err != nil {
 					return err
 				}
-				p.Log.Info("tools: sha256 checksums validated successfully")
+				p.Log.Info("tools: sha256 checksums validated")
 				return nil
 			},
 		},

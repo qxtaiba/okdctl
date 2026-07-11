@@ -375,7 +375,7 @@ func (f *Flux) waitForGitSync(ctx context.Context, env *addon.Environment, fs *S
 		return fmt.Errorf("git repository sync not ready within %v: %w", timeout, err)
 	}
 
-	env.Logger.Info("flux: git repository synced successfully")
+	env.Logger.Info("flux: git repository synced")
 	return nil
 }
 

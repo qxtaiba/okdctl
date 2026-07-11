@@ -67,7 +67,7 @@ func (p *Phase) StartWorkerVMs(ctx context.Context, cfg *config.Config, opts *Op
 		return tf.WithLockHint(&errtypes.ClusterError{Msg: msg, Err: err})
 	}
 
-	p.Log.Info("workers: all worker nodes started successfully")
+	p.Log.Info("workers: all worker nodes started")
 	return nil
 }
 
