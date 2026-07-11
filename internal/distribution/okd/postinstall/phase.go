@@ -107,8 +107,16 @@ func (p *Phase) Execute(ctx context.Context, cfg *config.Config, opts *Options) 
 	return result, orchestrator.Results(), nil
 }
 
+// deployProductionDNSFn and deployBootstrapDNSFn are package-level vars so
+// tests can exercise update-ingress flows without mutating /etc/dnsmasq.d,
+// mirroring the fn-var seams in internal/distribution/okd/dns.
+var (
+	deployProductionDNSFn = dns.DeployProduction
+	deployBootstrapDNSFn  = dns.DeployBootstrap
+)
+
 func (p *Phase) deployProductionDNS(ctx context.Context, cfg *config.Config, appsIP, kubeVipIP string, customDomains []templates.DNSCustomDomain) error {
-	if err := dns.DeployProduction(ctx, cfg, appsIP, kubeVipIP, customDomains); err != nil {
+	if err := deployProductionDNSFn(ctx, cfg, appsIP, kubeVipIP, customDomains); err != nil {
 		return &errtypes.ClusterError{Msg: "failed to deploy production dns config", Err: err}
 	}
 	return nil
