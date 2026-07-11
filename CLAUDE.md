@@ -262,10 +262,10 @@ write the comment — then it carries real information.
     Fallback: ~200 LOC REST-only rewrite using `net/http` + the documented
     Proxmox API. Track upstream releases; bump on each. Treat 3 consecutive
     months without an upstream release as the trigger to start the rewrite.
-    Transitive-weight tally: go-proxmox also links `diskfs/go-diskfs` (full
-    ISO9660/MBR stack) plus its compression deps (`klauspost/compress`,
-    `pierrec/lz4/v4`, `ulikunitz/xz`) that okdctl never calls directly —
-    counts toward the rewrite trigger above.
+    Transitive-weight tally: go-proxmox also links `diskfs/go-diskfs` (a
+    full ISO9660/MBR filesystem stack okdctl never calls directly; its
+    compression deps stay go.sum-only under module pruning) — counts
+    toward the rewrite trigger above.
   - `registry.terraform.io/bpg/proxmox` ~> 0.111.0 — sole actively
     maintained Proxmox VE Terraform provider; hash-pinned at 0.111.1 in
     `infrastructure/terraform/environments/production/.terraform.lock.hcl`
@@ -275,8 +275,8 @@ write the comment — then it carries real information.
 - **Maintained but upstream-locked deps.** `gorilla/websocket` is pulled
   transitively via `go-proxmox`. **It is linked into the release binary but
   never called** — the wizard uses REST discovery only, not shell/console
-  websockets. Version floor is pinned directly in `go.mod` (v1.5.3+) so it
-  tracks upstream point releases on its own; no need to wait for
+  websockets. The floor is pinned in `go.mod` (v1.5.3, indirect); bump it
+  with an explicit `go get` on upstream releases — no need to wait for
   go-proxmox to migrate to `coder/websocket` before taking a bump.
 - **Removed transitive-weight deps.** `schollz/progressbar/v3` was dropped
   in favour of a ~30 LOC hand-rolled byte-progress writer in
@@ -312,12 +312,12 @@ write the comment — then it carries real information.
   v1.1.12 (last release Sep 2021) is pulled in transitively via
   `k8s.io/api` → `k8s.io/apimachinery` →
   `sigs.k8s.io/structured-merge-diff/v6`, which in turn requires
-  `modern-go/concurrent` (last commit 2019) and `modern-go/reflect2`
+  `modern-go/concurrent` (last commit 2018) and `modern-go/reflect2`
   (last release 2021) — both abandoned-but-shipping. None are reachable
   for a Go-side replace; removal arrives only when upstream k8s finishes
   its CBOR migration off json-iterator. Tripwire: if the `json-iterator`
   or `modern-go` GitHub namespace is ever vacated, bump k8s.io/api +
   k8s.io/apimachinery immediately, independent of the normal release
   cadence.
-- **Before adding a dep,** check whether Go 1.25 stdlib covers it
+- **Before adding a dep,** check whether the current Go stdlib covers it
   (`slices`, `maps`, `net/netip`, `log/slog`, `sync.OnceFunc`, etc.).
