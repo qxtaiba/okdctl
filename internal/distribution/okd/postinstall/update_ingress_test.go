@@ -3,6 +3,7 @@ package postinstall
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -443,5 +444,12 @@ func TestConvertToLoadBalancer_BothCreateAndRollbackFail_ErrorNamesBoth(t *testi
 	}
 	if !strings.Contains(msg, "rollback") {
 		t.Errorf("error %q does not mention rollback failure", msg)
+	}
+	wrapped := errors.Unwrap(err)
+	if wrapped == nil {
+		t.Fatal("expected wrapped error carrying both failures")
+	}
+	if !strings.Contains(wrapped.Error(), "fake: rollback failed") {
+		t.Errorf("wrapped error %q does not carry redacted rollback stderr", wrapped.Error())
 	}
 }
