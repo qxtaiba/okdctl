@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"os"
 	"slices"
+	"time"
 
 	"github.com/qxtaiba/okdctl/internal/executor"
 	"github.com/qxtaiba/okdctl/internal/system"
@@ -25,6 +26,12 @@ type PackageManager interface {
 // aptListDir is the directory where Debian apt repository list files are
 // written. Overridden by tests to avoid requiring root access.
 var aptListDir = "/etc/apt/sources.list.d"
+
+// packageManagerTimeout bounds a single package-manager invocation. dnf/apt
+// against a wedged mirror or stale repo metadata can otherwise hang the
+// underlying exec indefinitely; 15 minutes mirrors ocExtractTimeout's
+// generous-but-bounded posture in setup/release_extract.go.
+const packageManagerTimeout = 15 * time.Minute
 
 // Manager is the single PackageManager implementation. The family field
 // selects between RHEL (dnf/rpm) and Debian (apt-get/dpkg) binaries and
@@ -66,8 +73,10 @@ func (m *Manager) Install(ctx context.Context, packages []string, logger *slog.L
 		return nil
 	}
 	logger.Info("packages: installing", "packages", packages)
+	installCtx, cancel := context.WithTimeout(ctx, packageManagerTimeout)
+	defer cancel()
 	args := append([]string{"install", "-y"}, packages...)
-	return executor.RunCaptured(ctx, m.pkgCmd, args...)
+	return executor.RunCaptured(installCtx, m.pkgCmd, args...)
 }
 
 // Remove uninstalls only the packages in packages that are currently
@@ -89,8 +98,10 @@ func (m *Manager) Remove(ctx context.Context, packages []string, _ *slog.Logger)
 	if len(installed) == 0 {
 		return nil
 	}
+	removeCtx, cancel := context.WithTimeout(ctx, packageManagerTimeout)
+	defer cancel()
 	args := append([]string{"remove", "-y"}, installed...)
-	return executor.RunCaptured(ctx, m.pkgCmd, args...)
+	return executor.RunCaptured(removeCtx, m.pkgCmd, args...)
 }
 
 // IsInstalled reports whether pkg is present via the backend's query
@@ -119,8 +130,11 @@ func (m *Manager) IsInstalled(ctx context.Context, pkg string) (bool, error) {
 func (m *Manager) AddRepo(ctx context.Context, name, url string, logger *slog.Logger) error {
 	logger.Info("packages: adding repository", "name", name)
 
+	addRepoCtx, cancel := context.WithTimeout(ctx, packageManagerTimeout)
+	defer cancel()
+
 	if m.family == FamilyRHEL {
-		return executor.RunCaptured(ctx, m.pkgCmd, "config-manager", "--add-repo", url)
+		return executor.RunCaptured(addRepoCtx, m.pkgCmd, "config-manager", "--add-repo", url)
 	}
 
 	listContent := fmt.Sprintf("deb [arch=%s] %s any main\n", DownloadArch(), url)
@@ -138,5 +152,5 @@ func (m *Manager) AddRepo(ctx context.Context, name, url string, logger *slog.Lo
 	if err := system.CopyFile(tmpPath, listPath); err != nil {
 		return fmt.Errorf("failed to install repo list: %w", err)
 	}
-	return executor.RunCaptured(ctx, m.pkgCmd, "update")
+	return executor.RunCaptured(addRepoCtx, m.pkgCmd, "update")
 }
