@@ -10,6 +10,7 @@ import (
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/credentials"
+	"github.com/qxtaiba/okdctl/internal/deploy"
 	"github.com/qxtaiba/okdctl/internal/distribution"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/install"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
@@ -279,12 +280,18 @@ func runFullDeployment(ctx context.Context, cfg *config.Config, w io.Writer) err
 		reportCredentialProvenance(creds)
 	}
 
-	return executeFullDeployment(ctx, cfg, deploymentOptions{
+	projectRoot, err := resolveProjectRootOrDie()
+	if err != nil {
+		return err
+	}
+
+	return deploy.Execute(ctx, cfg, deploy.Options{
 		ShowStartMessage:    true,
 		Credentials:         creds,
 		MetricsAddr:         deployMetricsAddr,
 		AllowNetworkMetrics: deployMetricsAllowNetwork,
 		FreshDeploy:         deployFresh,
+		ProjectRoot:         projectRoot,
 	}, w)
 }
 
