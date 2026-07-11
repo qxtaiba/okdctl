@@ -14,7 +14,7 @@ require (
 	// ci-testgo-xcrypto-053-runner-death — v0.53.0 OOM-kills the ubuntu CI
 	// runner during go test; re-bump once the root cause is understood.
 	golang.org/x/crypto v0.52.0
-	golang.org/x/mod v0.37.0
+	golang.org/x/mod v0.38.0
 	golang.org/x/term v0.44.0
 	k8s.io/api v0.36.2
 	k8s.io/apimachinery v0.36.2
