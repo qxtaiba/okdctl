@@ -453,3 +453,75 @@ func TestConvertToLoadBalancer_BothCreateAndRollbackFail_ErrorNamesBoth(t *testi
 		t.Errorf("wrapped error %q does not carry redacted rollback stderr", wrapped.Error())
 	}
 }
+
+// TestRestoreHAProxyBackup_PrefersTimestampedFallsBackToPristine covers the
+// restore side of the shared backup contract: the newest timestamped backup
+// wins when present, and setup's fixed pristine snapshot is the fallback
+// when RemoveHAProxy left no timestamped backup.
+func TestRestoreHAProxyBackup_PrefersTimestampedFallsBackToPristine(t *testing.T) {
+	newPhase := func() *Phase {
+		return New(phase.WithExecutor(executor.New()), phase.WithLogger(logutil.NopLogger))
+	}
+	setConfigPath := func(t *testing.T, cfg string) {
+		t.Helper()
+		orig := haproxyConfigPath
+		t.Cleanup(func() { haproxyConfigPath = orig })
+		haproxyConfigPath = cfg
+	}
+
+	t.Run("prefers newest timestamped backup", func(t *testing.T) {
+		cfg := filepath.Join(t.TempDir(), "haproxy.cfg")
+		setConfigPath(t, cfg)
+
+		writes := map[string]string{
+			cfg + phase.HAProxyBackupSuffix: "pristine",
+			phase.HAProxyTimestampedBackupPath(cfg, time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)): "old",
+			phase.HAProxyTimestampedBackupPath(cfg, time.Date(2026, 2, 1, 0, 0, 0, 0, time.UTC)): "new",
+		}
+		for path, content := range writes {
+			if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		if !newPhase().restoreHAProxyBackup() {
+			t.Fatal("restoreHAProxyBackup returned false with backups present")
+		}
+		got, err := os.ReadFile(cfg)
+		if err != nil {
+			t.Fatalf("read restored config: %v", err)
+		}
+		if string(got) != "new" {
+			t.Errorf("restored %q, want newest timestamped backup content \"new\"", got)
+		}
+	})
+
+	t.Run("falls back to pristine snapshot", func(t *testing.T) {
+		cfg := filepath.Join(t.TempDir(), "haproxy.cfg")
+		setConfigPath(t, cfg)
+
+		if err := os.WriteFile(cfg+phase.HAProxyBackupSuffix, []byte("pristine"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+
+		if !newPhase().restoreHAProxyBackup() {
+			t.Fatal("restoreHAProxyBackup returned false with pristine snapshot present")
+		}
+		got, err := os.ReadFile(cfg)
+		if err != nil {
+			t.Fatalf("read restored config: %v", err)
+		}
+		if string(got) != "pristine" {
+			t.Errorf("restored %q, want pristine snapshot content", got)
+		}
+	})
+
+	t.Run("returns false with no backups", func(t *testing.T) {
+		cfg := filepath.Join(t.TempDir(), "haproxy.cfg")
+		setConfigPath(t, cfg)
+
+		if newPhase().restoreHAProxyBackup() {
+			t.Fatal("restoreHAProxyBackup returned true with no backup files")
+		}
+	})
+}

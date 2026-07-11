@@ -8,6 +8,7 @@ package phase
 import (
 	"log/slog"
 	"path/filepath"
+	"time"
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/distribution"
@@ -40,9 +41,18 @@ const BootstrapStateSentinelFile = "bootstrap-state.auto.tfvars.json"
 const (
 	// DefaultHAProxyConfigPath is where HAProxy reads its live config.
 	DefaultHAProxyConfigPath = "/etc/haproxy/haproxy.cfg"
-	// DefaultHAProxyBackupPath is the reboot-safe snapshot setup writes
+	// HAProxyBackupSuffix is the single suffix shared by every haproxy
+	// config backup artifact. Two schemes hang off it, on purpose: setup
+	// keeps one fixed pristine snapshot at <cfg>+suffix
+	// (DefaultHAProxyBackupPath) as ConfigureHAProxy's rollback source,
+	// and postinstall writes rolling timestamped backups at
+	// <cfg>+suffix+".<ts>" before removing the config. Restore prefers
+	// the newest timestamped backup and falls back to the pristine
+	// snapshot; cleanup purges both via HAProxyBackupGlob.
+	HAProxyBackupSuffix = ".backup"
+	// DefaultHAProxyBackupPath is the fixed pristine snapshot setup writes
 	// before rewriting DefaultHAProxyConfigPath.
-	DefaultHAProxyBackupPath = "/etc/haproxy/haproxy.cfg.backup"
+	DefaultHAProxyBackupPath = DefaultHAProxyConfigPath + HAProxyBackupSuffix
 	// DefaultHTTPServerRoot is where the bastion's httpd serves ignition.
 	DefaultHTTPServerRoot = "/var/www/html"
 	// DefaultDNSMasqConfigDir is where per-cluster dnsmasq fragments live.
@@ -51,6 +61,21 @@ const (
 	// CoreOS ISOs are uploaded via scp and referenced by `qm importdisk`.
 	DefaultProxmoxISODir = "/var/lib/vz/template/iso"
 )
+
+// HAProxyTimestampedBackupPath returns the rolling-backup path for
+// configPath at time now. The 20060102-150405 stamp sorts lexicographically,
+// so slices.Max over HAProxyBackupGlob matches selects the newest.
+func HAProxyTimestampedBackupPath(configPath string, now time.Time) string {
+	return configPath + HAProxyBackupSuffix + "." + now.Format("20060102-150405")
+}
+
+// HAProxyBackupGlob returns the glob matching every backup artifact for
+// configPath: the fixed pristine snapshot and all timestamped backups.
+// "<cfg>.backup.<ts>" sorts above "<cfg>.backup", so slices.Max over the
+// matches prefers a timestamped backup over the pristine snapshot.
+func HAProxyBackupGlob(configPath string) string {
+	return configPath + HAProxyBackupSuffix + "*"
+}
 
 // ExternalToolBinaries returns the names of tool binaries setup installs
 // into BinDir. Declared in phase/ (not setup/) so cleanup can reference the

@@ -76,12 +76,12 @@ func TestRemoveHAProxy_BackupCreated(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	matches, err := filepath.Glob(cfgFile + ".backup.*")
+	matches, err := filepath.Glob(phase.HAProxyBackupGlob(cfgFile))
 	if err != nil {
 		t.Fatalf("glob: %v", err)
 	}
 	if len(matches) != 1 {
-		t.Fatalf("expected exactly one backup file matching %q; got %v", cfgFile+".backup.*", matches)
+		t.Fatalf("expected exactly one backup file matching %q; got %v", phase.HAProxyBackupGlob(cfgFile), matches)
 	}
 
 	got, err := os.ReadFile(matches[0])
