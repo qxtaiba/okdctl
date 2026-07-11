@@ -208,6 +208,12 @@ func signalExitCode(caughtSig *atomic.Value, err error) (int, bool) {
 	return 130, true
 }
 
+// exitCodeFor maps err to the documented BSD-sysexits exit code. Sentinel
+// errors (66/65/71) outrank every category below, and within categories the
+// check order below is the precedence order: a category type found anywhere
+// in the error chain wins over a different category type wrapping it,
+// regardless of which is the outermost wrap. Precedence is Config(2) >
+// Network(3) > Cluster(4) > Auth(5) > Usage(64). See docs/cli/exit-codes.md.
 func exitCodeFor(err error) int {
 	if err == nil {
 		return 0
