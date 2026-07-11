@@ -117,14 +117,15 @@ func (p *Provisioner) Validate(cfg *config.Config) error {
 // so the operator is forced to destroy the cluster first.
 //
 // ResumeInProgress signals that the CLI's deploy-state marker records a
-// prepare-phase interruption for this cluster, meaning the previous run
-// stopped before any VM booted with the work directory's contents. The
-// guard is skipped then so the documented 'okdctl deploy' resume flow is
-// not blocked by mid-setup artifacts such as cluster-config/auth written
-// by StepGenerateIgnition. Markers recording an install or configure
-// interruption must never reach Prepare: the CLI routes those resumes
-// past the wipe entirely (cli.resolveResumePhase) because the work
-// directory then holds identity material live VMs depend on.
+// prepare-phase interruption for this cluster. A prepare run applies
+// nothing to Proxmox, so populated terraform state alongside such a
+// marker is a contradiction (a failed install-marker write, or a --fresh
+// run interrupted over an older cluster); the guard then refuses with a
+// contradiction diagnostic instead of unlocking the wipe. Markers
+// recording an install or configure interruption must never reach
+// Prepare: the CLI routes those resumes past the wipe entirely
+// (cli.resolveResumePhase) because the work directory then holds
+// identity material live VMs depend on.
 type PrepareOpts struct {
 	FreshDeploy      bool
 	ResumeInProgress bool
@@ -178,28 +179,34 @@ func (p *Provisioner) GuardPrepare(cfg *config.Config, opts PrepareOpts) error {
 // guardLiveCluster returns a *errtypes.ConfigError when the terraform env
 // state has resources — the authoritative live-cluster signal. A
 // cluster-config/auth directory alone is mid-setup debris (written by
-// StepGenerateIgnition before any VM exists) and stays wipeable.
-// FreshDeploy or ResumeInProgress bypasses the guard; ResumeInProgress is
-// only set for a prepare-phase marker, which guarantees no VM has booted
-// with the current work directory's contents, so the bypass cannot wipe
-// material a live cluster depends on.
+// StepGenerateIgnition before any VM exists) and stays wipeable. Only
+// FreshDeploy bypasses the guard: ResumeInProgress never unlocks the wipe,
+// because populated state contradicts the prepare-phase marker it vouches
+// for — trusting the marker there would wipe material live VMs depend on.
 //
 // Callers that set FreshDeploy=true accept credential loss: cluster-config/auth
 // (kubeadmin-password, kubeconfig) is wiped with no backup.
 func (p *Provisioner) guardLiveCluster(cfg *config.Config, opts PrepareOpts) error {
-	if opts.FreshDeploy || opts.ResumeInProgress {
+	if opts.FreshDeploy {
 		return nil
 	}
 	tfEnv := phase.GetTerraformEnv(cfg)
 	envDir := filepath.Join(p.projectRoot, "infrastructure", "terraform", "environments", tfEnv)
 	tf := terraform.New(envDir, terraform.WithLogger(p.logger))
-	if tf.HasState() {
+	if !tf.HasState() {
+		return nil
+	}
+	if opts.ResumeInProgress {
 		return &errtypes.ConfigError{
-			Msg: "terraform state has resources — the work directory belongs to a live cluster; " +
+			Msg: "deploy-state marker records a prepare-phase interruption but terraform state has resources — " +
+				"a prepare run applies nothing, so the marker cannot be trusted; " +
 				"run 'okdctl destroy' first, or pass --fresh to force-wipe (credentials will be lost)",
 		}
 	}
-	return nil
+	return &errtypes.ConfigError{
+		Msg: "terraform state has resources — the work directory belongs to a live cluster; " +
+			"run 'okdctl destroy' first, or pass --fresh to force-wipe (credentials will be lost)",
+	}
 }
 
 // Install runs the install phase: ignition delivery, bootstrap wait, and
@@ -236,7 +243,11 @@ func (p *Provisioner) ResumeConfigure(ctx context.Context, cfg *config.Config) (
 	installPhase := install.New(phase.WithExecutor(p.executor), phase.WithLogger(p.logger))
 	clusterDir := phase.ClusterConfigDir(filepath.Join(p.projectRoot, "okd-install"))
 	if err := installPhase.SetupKubeconfig(ctx, clusterDir); err != nil {
-		return nil, nil, err
+		return nil, nil, &errtypes.ClusterError{
+			Msg: "cannot resume configure: cluster kubeconfig unavailable; " +
+				"run 'okdctl destroy' then re-deploy, or re-run with --fresh to restart from scratch (credentials will be lost)",
+			Err: err,
+		}
 	}
 	return p.Configure(ctx, cfg)
 }

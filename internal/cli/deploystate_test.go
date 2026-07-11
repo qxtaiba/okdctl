@@ -157,6 +157,24 @@ func TestResolveResumePhase(t *testing.T) {
 			},
 			wantPhase: phasePrepare,
 		},
+		{
+			name: "marker without cluster name treated as absent",
+			seed: func(t *testing.T, path string) {
+				if err := writeDeployState(path, phaseInstall, "run-6", ""); err != nil {
+					t.Fatalf("writeDeployState: %v", err)
+				}
+			},
+			wantPhase: phasePrepare,
+		},
+		{
+			name: "unknown marker phase treated as absent, no guard bypass",
+			seed: func(t *testing.T, path string) {
+				if err := writeDeployState(path, deployPhase("someday"), "run-7", "prod"); err != nil {
+					t.Fatalf("writeDeployState: %v", err)
+				}
+			},
+			wantPhase: phasePrepare,
+		},
 	}
 
 	for _, tc := range tests {

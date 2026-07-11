@@ -27,7 +27,8 @@ const (
 const deployStateSchemaV1 = "v1"
 
 // deployState records which deploy phase was active when the process last
-// wrote the marker. runDestroy reads it back to emit a phase-specific hint.
+// wrote the marker. Resume routing (resolveResumePhase) and destroy
+// diagnostics (announceDeployState) read it back.
 type deployState struct {
 	SchemaVersion string      `json:"schema_version"`
 	Phase         deployPhase `json:"phase"`
@@ -36,22 +37,16 @@ type deployState struct {
 	ClusterName   string      `json:"cluster_name,omitempty"`
 }
 
-// markDeployPhaseFatal writes the marker for the prepare phase and returns
-// any write error. The first marker write is fatal so a write failure cannot
-// produce a silently-accumulated stale marker.
+// markDeployPhaseFatal writes the marker for the given phase and returns any
+// write error. The marker is load-bearing routing state — resolveResumePhase
+// keys the pre-setup wipe on its Phase — so a failed write must abort the
+// deploy: proceeding would leave a stale prepare-phase marker that routes a
+// post-install resume through the wipe.
 func markDeployPhaseFatal(path string, phase deployPhase, runID, clusterName string) error {
 	if err := writeDeployState(path, phase, runID, clusterName); err != nil {
 		return fmt.Errorf("write deploy state marker: %w", err)
 	}
 	return nil
-}
-
-// markDeployPhase writes the marker for the given phase, warn-logging on
-// failure (non-fatal — the marker is advisory for subsequent phases).
-func markDeployPhase(path string, phase deployPhase, runID, clusterName string) {
-	if err := writeDeployState(path, phase, runID, clusterName); err != nil {
-		tui.Warn("could not write deploy state marker", tui.LF("err", err))
-	}
 }
 
 // clearDeployMarker removes the marker on clean completion. ErrNotExist is
@@ -97,9 +92,10 @@ func readDeployState(path string) (*deployState, error) {
 }
 
 // loadResumeMarker reads the deploy-state marker for the resume decision.
-// Unreadable markers and markers naming a different cluster are treated as
-// absent so they can neither bypass the live-cluster guard nor skip prepare
-// on behalf of the wrong cluster.
+// Unreadable markers, markers naming a different cluster, and markers with
+// no cluster name at all (older binaries omitted it) are treated as absent:
+// resume grants skip-wipe/skip-install power, so a marker must positively
+// identify this cluster before it is trusted.
 func loadResumeMarker(path, clusterName string) *deployState {
 	marker, err := readDeployState(path)
 	if err != nil {
@@ -109,7 +105,12 @@ func loadResumeMarker(path, clusterName string) *deployState {
 	if marker == nil {
 		return nil
 	}
-	if marker.ClusterName != "" && marker.ClusterName != clusterName {
+	if marker.ClusterName == "" {
+		tui.Warn("deploy state marker has no cluster name; treating as absent",
+			tui.LF("current_cluster", clusterName))
+		return nil
+	}
+	if marker.ClusterName != clusterName {
 		tui.Warn("deploy state marker is from a different cluster, ignoring",
 			tui.LF("marker_cluster", marker.ClusterName), tui.LF("current_cluster", clusterName))
 		return nil
@@ -125,7 +126,8 @@ func loadResumeMarker(path, clusterName string) *deployState {
 // pre-setup wipe) entirely. A prepare marker guarantees no VM has booted
 // with the current work directory's contents, so resuming through the wipe
 // is safe. FreshDeploy restarts from prepare: the operator accepted
-// credential loss by passing --fresh.
+// credential loss by passing --fresh. A marker with an unrecognized phase is
+// treated as absent — it must not vouch for a guard bypass.
 func resolveResumePhase(markerPath, clusterName string, freshDeploy bool) (deployPhase, *deployState) {
 	marker := loadResumeMarker(markerPath, clusterName)
 	if freshDeploy || marker == nil {
@@ -133,9 +135,33 @@ func resolveResumePhase(markerPath, clusterName string, freshDeploy bool) (deplo
 	}
 	switch marker.Phase {
 	case phaseInstall, phaseConfigure:
+		warnIfStaleResume(marker)
 		return marker.Phase, marker
+	case phasePrepare:
+		return phasePrepare, marker
 	}
-	return phasePrepare, marker
+	tui.Warn("deploy state marker has unknown phase; treating as absent",
+		tui.LF("phase", string(marker.Phase)))
+	return phasePrepare, nil
+}
+
+// warnIfStaleResume flags resume markers old enough that resuming is likely
+// to fail. The ignition certs openshift-install embeds for bootstrap are
+// valid for 24 h, so an install-phase resume past that window will hang at
+// the bootstrap wait unless bootstrap already completed; anything a week
+// old is probably abandoned debris.
+func warnIfStaleResume(marker *deployState) {
+	age := time.Since(marker.Timestamp)
+	switch {
+	case marker.Phase == phaseInstall && age >= 24*time.Hour:
+		tui.Warn("deploy state marker is older than the 24h bootstrap ignition cert validity; resume may fail at bootstrap wait",
+			tui.LF("marker_age", age.Round(time.Hour).String()))
+		tui.Info("if bootstrap never completed, run 'okdctl destroy' then re-deploy with --fresh")
+	case age >= 7*24*time.Hour:
+		tui.Warn("deploy state marker is likely stale",
+			tui.LF("marker_age", fmt.Sprintf("%d days", int(age.Hours()/24))))
+		tui.Info("re-run with --fresh to restart from scratch instead (credentials will be lost)")
+	}
 }
 
 // announceDeployState emits a partial-deploy diagnostic on destroy entry.
