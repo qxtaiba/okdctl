@@ -2027,7 +2027,7 @@ one candidate dropped as a duplicate of open A5).
 
 #### B2 — Decompose internal/cli: command bodies and deploy engine behind testable seams
 
-- **Status:** in progress — worktree: wave4
+- **Status:** done — PR #929
 - **Category:** architecture / cognitive-load
 - **State:** design needed
 - **Effort:** days
@@ -2151,7 +2151,7 @@ one candidate dropped as a duplicate of open A5).
 
 #### B10 — Decouple cluster state and Terraform sources from the okdctl repo checkout
 
-- **Status:** not started
+- **Status:** in progress — worktree: wave5
 - **Category:** architecture
 - **State:** design needed
 - **Effort:** weeks
@@ -2166,7 +2166,7 @@ one candidate dropped as a duplicate of open A5).
 
 #### B11 — Adopt one vocabulary for the deploy lifecycle stages
 
-- **Status:** not started
+- **Status:** in progress — worktree: wave5
 - **Category:** domain-model accuracy
 - **State:** well-specified
 - **Effort:** days
@@ -2287,7 +2287,7 @@ one candidate dropped as a duplicate of open A5).
 
 #### B19 — Cut v0.1.0 and exercise the entire release story end-to-end
 
-- **Status:** not started
+- **Status:** in progress — prep merged PR #925; tag pending maintainer
 - **Category:** release engineering
 - **State:** well-specified
 - **Effort:** days
@@ -2302,7 +2302,7 @@ one candidate dropped as a duplicate of open A5).
 
 #### B20 — Give non-cancel deploy failures the same summary and next-steps as Ctrl-C
 
-- **Status:** not started
+- **Status:** in progress — worktree: wave5
 - **Category:** operator ux / failure legibility
 - **State:** design needed
 - **Effort:** days
@@ -2317,7 +2317,7 @@ one candidate dropped as a duplicate of open A5).
 
 #### B21 — Write a persistent per-run deploy log by default
 
-- **Status:** not started
+- **Status:** in progress — worktree: wave5
 - **Category:** operator ux / diagnosability
 - **State:** design needed
 - **Effort:** days
@@ -2348,7 +2348,7 @@ one candidate dropped as a duplicate of open A5).
 
 #### B23 — Test phase orchestration: Execute paths and skip-flag wiring, destructive steps enabled
 
-- **Status:** in progress — worktree: wave4
+- **Status:** done — PR #924
 - **Category:** tests
 - **State:** well-specified
 - **Effort:** days
@@ -2364,7 +2364,7 @@ one candidate dropped as a duplicate of open A5).
 
 #### B24 — Put tests under update_ingress rollback and wait state machine
 
-- **Status:** in progress — worktree: wave3
+- **Status:** done — PR #920
 - **Category:** tests / risk-reduction
 - **State:** design needed
 - **Effort:** days
@@ -2423,7 +2423,7 @@ one candidate dropped as a duplicate of open A5).
 
 #### B28 — Build the launch surface: repo metadata, wizard demo capture, launch checklist
 
-- **Status:** not started
+- **Status:** in review — demo PR; metadata done
 - **Category:** oss-readiness / strategy
 - **State:** sketch
 - **Effort:** days
