@@ -53,7 +53,11 @@ jobs:
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           go-version-file: go.mod
-      - run: go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
+      - name: install govulncheck
+        env:
+          # renovate: datasource=go depName=golang.org/x/vuln
+          GOVULNCHECK_VERSION: v1.6.0
+        run: go install golang.org/x/vuln/cmd/govulncheck@${GOVULNCHECK_VERSION}
       - run: govulncheck ./...
   docs-go:
     runs-on: ubuntu-latest
@@ -79,7 +83,11 @@ jobs:
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           go-version-file: go.mod
-      - run: go install github.com/google/yamlfmt/cmd/yamlfmt@v0.14.0
+      - name: install yamlfmt
+        env:
+          # renovate: datasource=go depName=github.com/google/yamlfmt
+          YAMLFMT_VERSION: v0.21.0
+        run: go install github.com/google/yamlfmt/cmd/yamlfmt@${YAMLFMT_VERSION}
       - run: yamlfmt -lint .
   # Infrastructure
   validate-terraform:
