@@ -14,7 +14,7 @@ import (
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/deploy"
-	"github.com/qxtaiba/okdctl/internal/distribution/okd"
+	"github.com/qxtaiba/okdctl/internal/distribution/okd/destroy"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/infrastructure/terraform"
@@ -315,15 +315,16 @@ func runDestroy(cmd *cobra.Command, _ []string) error {
 		tui.Info("scoped destroy: skipping host cleanup, firewall rules, and iso removal — full bastion teardown is exclusive to an unscoped destroy")
 	}
 
-	steps, err := p.Destroy(ctx, cfg, okd.DestroyOpts{
-		AutoApprove:      true,
-		RemovePackages:   true,
-		KeepISOs:         keepISOs,
-		SkipTerraform:    destroySkipTerraform,
-		SkipCleanup:      skipCleanup,
-		SkipFirewall:     skipFirewall,
-		TerraformTargets: destroyTargets,
-	})
+	destroyOpts := destroy.NewOptions(cfg, projectRoot)
+	destroyOpts.AutoApprove = true
+	destroyOpts.RemovePackages = true
+	destroyOpts.KeepISOs = keepISOs
+	destroyOpts.SkipTerraform = destroySkipTerraform
+	destroyOpts.SkipCleanup = skipCleanup
+	destroyOpts.SkipFirewall = skipFirewall
+	destroyOpts.TerraformTargets = destroyTargets
+
+	steps, err := p.Destroy(ctx, cfg, &destroyOpts)
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
 			fmt.Fprintln(cmd.OutOrStdout(), render.InterruptSummary(steps, "okdctl destroy", tui.RunID()))
