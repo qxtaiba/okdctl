@@ -7,16 +7,18 @@ import (
 	"charm.land/lipgloss/v2"
 )
 
-const dropdownBorderWidth = 20
+const (
+	dropdownBorderWidth = 20
+	maxDropdownVisible  = 5
+)
 
-// moveUp moves selection up, skipping disabled options.
-// Navigation is trapped within dropdown boundaries and won't wrap around.
+// moveUp moves selection up. Navigation is trapped within dropdown
+// boundaries and won't wrap around.
 func (s *Selector) moveUp() {
 	if len(s.options) == 0 {
 		return
 	}
 
-	original := s.selected
 	wasInDropdown := s.options[s.selected].InDropdown
 
 	if wasInDropdown {
@@ -38,18 +40,6 @@ func (s *Selector) moveUp() {
 		s.selected = len(s.options) - 1
 	}
 
-	attempts := 0
-	for s.options[s.selected].Disabled && attempts < len(s.options) {
-		s.selected--
-		if s.selected < 0 {
-			s.selected = len(s.options) - 1
-		}
-		attempts++
-	}
-	if attempts >= len(s.options) {
-		s.selected = original
-	}
-
 	nowInDropdown := s.options[s.selected].InDropdown
 	if nowInDropdown {
 		s.adjustDropdownScroll()
@@ -63,7 +53,6 @@ func (s *Selector) moveDown() {
 		return
 	}
 
-	original := s.selected
 	wasInDropdown := s.options[s.selected].InDropdown
 
 	if wasInDropdown {
@@ -83,18 +72,6 @@ func (s *Selector) moveDown() {
 
 	if s.selected >= len(s.options) {
 		s.selected = 0
-	}
-
-	attempts := 0
-	for s.options[s.selected].Disabled && attempts < len(s.options) {
-		s.selected++
-		if s.selected >= len(s.options) {
-			s.selected = 0
-		}
-		attempts++
-	}
-	if attempts >= len(s.options) {
-		s.selected = original
 	}
 
 	nowInDropdown := s.options[s.selected].InDropdown
@@ -120,11 +97,11 @@ func (s *Selector) adjustDropdownScroll() {
 
 	if posInDropdown < s.dropdownScrollOffset {
 		s.dropdownScrollOffset = posInDropdown
-	} else if posInDropdown >= s.dropdownScrollOffset+s.maxDropdownVisible {
-		s.dropdownScrollOffset = posInDropdown - s.maxDropdownVisible + 1
+	} else if posInDropdown >= s.dropdownScrollOffset+maxDropdownVisible {
+		s.dropdownScrollOffset = posInDropdown - maxDropdownVisible + 1
 	}
 
-	maxOffset := dropdownCount - s.maxDropdownVisible
+	maxOffset := dropdownCount - maxDropdownVisible
 	if maxOffset < 0 {
 		maxOffset = 0
 	}
@@ -154,7 +131,7 @@ func (s *Selector) renderDropdownRegion(start, end int, scrollStyle, borderStyle
 	var lines []string
 
 	visibleStart := start + s.dropdownScrollOffset
-	visibleEnd := visibleStart + s.maxDropdownVisible - 1
+	visibleEnd := visibleStart + maxDropdownVisible - 1
 	if visibleEnd > end {
 		visibleEnd = end
 	}

@@ -18,14 +18,10 @@ import (
 type FormField interface {
 	Value() string
 	SetValue(value string)
-	SetDefault(value string)
-	IsDefault() bool
 	Focus() tea.Cmd
 	Blur()
-	IsFocused() bool
 	SetWidth(width int)
 	Validate() error
-	Error() error
 	Update(msg tea.Msg) (FormField, tea.Cmd)
 	View() string
 }
@@ -40,11 +36,10 @@ type InputField struct {
 	Password    bool
 	Validator   func(string) error
 
-	input     textinput.Model
-	focused   bool
-	width     int
-	err       error
-	isDefault bool // true if value is the original default (not user-modified)
+	input   textinput.Model
+	focused bool
+	width   int
+	err     error
 }
 
 // NewInputField builds a plain-text InputField with the given label and
@@ -77,22 +72,9 @@ func (f *InputField) Value() string {
 	return f.input.Value()
 }
 
-// SetValue replaces the field value and marks it as user-modified.
+// SetValue replaces the field value.
 func (f *InputField) SetValue(value string) {
 	f.input.SetValue(value)
-	f.isDefault = false
-}
-
-// SetDefault sets value as both the current text and the tracked default so
-// IsDefault reports true until the user edits it.
-func (f *InputField) SetDefault(value string) {
-	f.input.SetValue(value)
-	f.isDefault = true
-}
-
-// IsDefault reports whether the current value is the originally set default.
-func (f *InputField) IsDefault() bool {
-	return f.isDefault
 }
 
 // Focus gives the field focus and returns the textinput blink command.
@@ -107,11 +89,6 @@ func (f *InputField) Blur() {
 	f.focused = false
 	f.input.Blur()
 	_ = f.Validate()
-}
-
-// IsFocused reports whether the field currently owns focus.
-func (f *InputField) IsFocused() bool {
-	return f.focused
 }
 
 // SetWidth resizes the input field, reserving border and padding space.
@@ -157,12 +134,8 @@ func (f *InputField) Validate() error {
 	return nil
 }
 
-func (f *InputField) Error() error {
-	return f.err
-}
-
-// Update forwards msg to the underlying textinput and clears the default
-// flag once the value diverges from the field's default.
+// Update forwards msg to the underlying textinput, clearing any stale
+// validation error on keypress.
 func (f *InputField) Update(msg tea.Msg) (FormField, tea.Cmd) {
 	if !f.focused {
 		return f, nil
@@ -172,14 +145,8 @@ func (f *InputField) Update(msg tea.Msg) (FormField, tea.Cmd) {
 		f.err = nil
 	}
 
-	oldValue := f.input.Value()
-
 	var cmd tea.Cmd
 	f.input, cmd = f.input.Update(msg)
-
-	if f.input.Value() != oldValue {
-		f.isDefault = false
-	}
 
 	return f, cmd
 }
@@ -201,14 +168,6 @@ func (f *InputField) View() string {
 	labelLine := labelStyle.Render(labelText)
 	if f.Help != "" {
 		labelLine += " " + hintStyle.Render("("+strings.ToLower(f.Help)+")")
-	}
-
-	if f.isDefault && f.input.Value() != "" {
-		defaultIndicator := lipgloss.NewStyle().
-			Foreground(tui.ColorSlate500).
-			Italic(true).
-			Render(" (default)")
-		labelLine += defaultIndicator
 	}
 
 	contentWidth := f.input.Width()
@@ -268,7 +227,6 @@ func (e *scrubbedError) Unwrap() error { return e.inner }
 // InputGroup is an ordered collection of FormFields with a single focus
 // cursor. It handles tab/shift-tab traversal and aggregate validation.
 type InputGroup struct {
-	Title  string
 	fields []FormField
 
 	focusIndex int
@@ -277,17 +235,11 @@ type InputGroup struct {
 }
 
 // NewInputGroup returns a group containing the given fields.
-func NewInputGroup(title string, fields ...FormField) *InputGroup {
+func NewInputGroup(fields ...FormField) *InputGroup {
 	return &InputGroup{
-		Title:      title,
 		fields:     fields,
 		focusIndex: 0,
 	}
-}
-
-// AddField appends a field to the group.
-func (g *InputGroup) AddField(field FormField) {
-	g.fields = append(g.fields, field)
 }
 
 // Fields returns the group's fields in insertion order.
@@ -330,16 +282,11 @@ func (g *InputGroup) Blur() {
 	}
 }
 
-// IsFocused reports whether the group currently holds focus.
-func (g *InputGroup) IsFocused() bool {
-	return g.focused
-}
-
 // SetWidth resizes the group and propagates the width to each field.
 func (g *InputGroup) SetWidth(width int) {
 	g.width = width
 	for _, f := range g.fields {
-		f.SetWidth(width) // ViewCompact has no padding
+		f.SetWidth(width)
 	}
 }
 
@@ -384,16 +331,6 @@ func (g *InputGroup) Validate() []error {
 	return errors
 }
 
-// IsValid reports whether every field in the group currently validates.
-func (g *InputGroup) IsValid() bool {
-	for _, f := range g.fields {
-		if err := f.Validate(); err != nil {
-			return false
-		}
-	}
-	return true
-}
-
 // Update handles group-level navigation keys (tab, shift-tab) and forwards
 // everything else to the focused field.
 func (g *InputGroup) Update(msg tea.Msg) (*InputGroup, tea.Cmd) {
@@ -417,45 +354,9 @@ func (g *InputGroup) Update(msg tea.Msg) (*InputGroup, tea.Cmd) {
 	return g, cmd
 }
 
-// View renders the group with its optional bordered title.
+// View renders the group's fields separated by blank lines.
 func (g *InputGroup) View() string {
 	var lines []string
-
-	if g.Title != "" {
-		titleStyle := lipgloss.NewStyle().
-			Foreground(tui.ColorSlate300).
-			Bold(true).
-			MarginBottom(1)
-		lines = append(lines, titleStyle.Render(g.Title))
-	}
-
-	for _, f := range g.fields {
-		lines = append(lines, f.View(), "")
-	}
-
-	content := strings.Join(lines, "\n")
-
-	if g.Title != "" {
-		groupStyle := lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(tui.ColorSlate700).
-			Padding(1, 2)
-		return groupStyle.Render(content)
-	}
-
-	return content
-}
-
-// ViewCompact renders the group without the surrounding border.
-func (g *InputGroup) ViewCompact(title string) string {
-	var lines []string
-
-	if title != "" {
-		titleStyle := lipgloss.NewStyle().
-			Foreground(tui.ColorCyan500).
-			Bold(true)
-		lines = append(lines, titleStyle.Render(title))
-	}
 
 	for i, f := range g.fields {
 		lines = append(lines, f.View())

@@ -20,10 +20,9 @@ type MultiSelectField struct {
 	Help    string
 	Options []string
 
-	selected  []bool
-	cursor    int
-	focused   bool
-	isDefault bool
+	selected []bool
+	cursor   int
+	focused  bool
 }
 
 // NewMultiSelectField returns a multi-select field with options unchecked.
@@ -50,7 +49,6 @@ func (f *MultiSelectField) Value() string {
 // selected.
 func (f *MultiSelectField) SetValue(value string) {
 	f.selected = make([]bool, len(f.Options))
-	f.isDefault = false
 	if value == "" {
 		return
 	}
@@ -61,17 +59,6 @@ func (f *MultiSelectField) SetValue(value string) {
 	for i, opt := range f.Options {
 		f.selected[i] = chosen[opt]
 	}
-}
-
-// SetDefault initializes the selection from value and marks it as default.
-func (f *MultiSelectField) SetDefault(value string) {
-	f.SetValue(value)
-	f.isDefault = true
-}
-
-// IsDefault reports whether the current selection is the field's default.
-func (f *MultiSelectField) IsDefault() bool {
-	return f.isDefault
 }
 
 // Focus gives the field keyboard focus.
@@ -85,20 +72,11 @@ func (f *MultiSelectField) Blur() {
 	f.focused = false
 }
 
-// IsFocused reports whether the field currently has focus.
-func (f *MultiSelectField) IsFocused() bool {
-	return f.focused
-}
-
 // SetWidth is a no-op: the field width is governed by option labels.
 func (f *MultiSelectField) SetWidth(_ int) {}
 
 // Validate always returns nil — any non-empty selection is valid.
 func (f *MultiSelectField) Validate() error {
-	return nil
-}
-
-func (f *MultiSelectField) Error() error {
 	return nil
 }
 
@@ -123,7 +101,6 @@ func (f *MultiSelectField) Update(msg tea.Msg) (FormField, tea.Cmd) {
 		case key.Matches(keyMsg, key.NewBinding(key.WithKeys("space"))):
 			if f.cursor >= 0 && f.cursor < len(f.selected) {
 				f.selected[f.cursor] = !f.selected[f.cursor]
-				f.isDefault = false
 			}
 		}
 	}
