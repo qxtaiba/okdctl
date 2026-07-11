@@ -73,7 +73,6 @@ type Options struct {
 	phase.BaseOptions
 
 	Kind           Kind
-	PreserveConfig bool
 	HTTPServerRoot string
 	HAProxyConfig  string
 	VIP            string
@@ -186,7 +185,7 @@ func cleanupSteps(opts *Options, logger *slog.Logger) []distribution.StepDef {
 		AlreadyDone: func(_ context.Context) (bool, error) {
 			return !system.DirExists(opts.WorkDir), nil
 		},
-		Exec:    func(ctx context.Context) error { return WorkDirectory(ctx, opts.WorkDir, opts.PreserveConfig, logger) },
+		Exec:    func(ctx context.Context) error { return WorkDirectory(ctx, opts.WorkDir, logger) },
 		OnError: t.onError("work directory"),
 	}
 

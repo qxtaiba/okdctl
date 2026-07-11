@@ -151,7 +151,6 @@ func (p *Phase) destroySteps(ctx context.Context, cfg *config.Config, opts *Opti
 					HAProxyConfig:  phase.DefaultHAProxyConfigPath,
 					VIP:            vip,
 					ClusterName:    cfg.Cluster.Name,
-					PreserveConfig: false,
 					RemovePackages: opts.RemovePackages,
 					BinDir:         config.ResolveBinDir(cfg),
 					PostDestroy:    !t.terraformFailed(),

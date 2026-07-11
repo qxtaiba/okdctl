@@ -45,7 +45,6 @@ func TestExecute_WorkOnlyKindScopesToWorkDirOnly(t *testing.T) {
 	opts := &Options{
 		BaseOptions:    phase.BaseOptions{WorkDir: workDir, ProjectRoot: t.TempDir()},
 		Kind:           WorkOnly,
-		PreserveConfig: false,
 	}
 
 	if err := execute(context.Background(), opts, logutil.NopLogger); err != nil {
