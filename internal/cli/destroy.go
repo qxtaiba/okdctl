@@ -18,6 +18,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/infrastructure/terraform"
+	"github.com/qxtaiba/okdctl/internal/nodetypes"
 	"github.com/qxtaiba/okdctl/internal/render"
 	"github.com/qxtaiba/okdctl/internal/runlock"
 	"github.com/qxtaiba/okdctl/internal/system"
@@ -102,27 +103,31 @@ func validateDestroyTargets(targets []string, cfg *config.Config) error {
 					"must match module.okd_cluster.proxmox_virtual_environment_vm.{bootstrap|master|worker}[<n>]", t),
 			}
 		}
-		nodeType := m[1]
+		role, roleErr := nodetypes.ParseNodeRole(m[1])
+		if roleErr != nil {
+			// destroyTargetRE already restricts m[1] to bootstrap|master|worker.
+			continue
+		}
 		bracket := m[2]
 		if bracket == "" {
 			continue
 		}
 		idx, _ := strconv.Atoi(bracket[1 : len(bracket)-1])
-		switch nodeType {
-		case "bootstrap":
+		switch role {
+		case nodetypes.RoleBootstrap:
 			if idx != 0 {
 				return &errtypes.UsageError{
 					Msg: fmt.Sprintf("--target bootstrap index %d is out of range; bootstrap has exactly one node (index 0)", idx),
 				}
 			}
-		case "master":
+		case nodetypes.RoleMaster:
 			if idx >= cfg.Topology.ControlPlane.Count {
 				return &errtypes.UsageError{
 					Msg: fmt.Sprintf("--target master[%d] is out of range; cluster has %d master(s) (valid: 0-%d)",
 						idx, cfg.Topology.ControlPlane.Count, cfg.Topology.ControlPlane.Count-1),
 				}
 			}
-		case "worker":
+		case nodetypes.RoleWorker:
 			if idx >= cfg.Topology.Workers.Count {
 				return &errtypes.UsageError{
 					Msg: fmt.Sprintf("--target worker[%d] is out of range; cluster has %d worker(s) (valid: 0-%d)",
