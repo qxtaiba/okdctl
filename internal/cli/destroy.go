@@ -141,6 +141,9 @@ var destroyCmd = &cobra.Command{
 This operation is idempotent and safe to re-run if a previous destroy was interrupted.
 
 Use --dry-run to preview the terraform destroy plan without modifying infra.
+dry-run previews the terraform-destroy plan; the --skip-* flags resume a
+partial terraform-destroy — the two address different failure points and
+cannot be combined (see the --dry-run incompatibility check).
 
 A scoped destroy (--target or --only) only tears down the named Terraform
 resources; host cleanup (haproxy/dnsmasq config, kubeconfig, terraform state
