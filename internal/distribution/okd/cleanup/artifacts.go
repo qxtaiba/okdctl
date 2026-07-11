@@ -64,15 +64,15 @@ func SafeRemoveWithLogger(ctx context.Context, path, description string, logger 
 	return nil
 }
 
-// WorkDirectory removes all generated artifacts under workDir. When
-// preserveConfig is true the okdctl.yaml at the root is kept; everything
-// else is removed best-effort and the first failure is returned.
+// WorkDirectory removes all generated artifacts under workDir, including
+// workDir itself. Best-effort: failures accumulate into the returned joined
+// error rather than aborting early.
 //
 // state:bdf5a873 audit-positive baseline: all Full-sequence steps that
 // follow this one (webServer, haproxy, dnsmasq, terraform, packages,
 // ignition-certs) reference paths outside workDir, so a partial-strip
 // from a mid-run crash does not break subsequent cleanup steps.
-func WorkDirectory(ctx context.Context, workDir string, preserveConfig bool, logger *slog.Logger) error {
+func WorkDirectory(ctx context.Context, workDir string, logger *slog.Logger) error {
 	if _, err := os.Stat(workDir); os.IsNotExist(err) {
 		return nil
 	}
@@ -87,19 +87,12 @@ func WorkDirectory(ctx context.Context, workDir string, preserveConfig bool, log
 		}
 	}
 
-	if preserveConfig {
-		remove(filepath.Join(workDir, "tmp"), "temporary files")
-		remove(filepath.Join(workDir, "downloads"), "download cache")
-		remove(filepath.Join(workDir, "installer"), "installer files")
-		remove(filepath.Join(workDir, "custom-isos"), "custom ISO files")
-	} else {
-		remove(phase.ClusterConfigDir(workDir), "cluster configuration")
-		remove(filepath.Join(workDir, "custom-isos"), "custom ISOs")
-		remove(filepath.Join(workDir, "installer"), "installer")
-		remove(filepath.Join(workDir, "tmp"), "temp files")
-		remove(filepath.Join(workDir, "downloads"), "downloads")
-		remove(workDir, "work directory")
-	}
+	remove(phase.ClusterConfigDir(workDir), "cluster configuration")
+	remove(filepath.Join(workDir, "custom-isos"), "custom ISOs")
+	remove(filepath.Join(workDir, "installer"), "installer")
+	remove(filepath.Join(workDir, "tmp"), "temp files")
+	remove(filepath.Join(workDir, "downloads"), "downloads")
+	remove(workDir, "work directory")
 
 	return errors.Join(errs...)
 }

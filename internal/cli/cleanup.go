@@ -2,6 +2,7 @@ package cli
 
 import (
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -19,6 +20,7 @@ var (
 	cleanupYes            bool
 	cleanupDryRun         bool
 	cleanupConfirmCluster string
+	cleanupKind           string
 )
 
 var cleanupCmd = &cobra.Command{
@@ -29,9 +31,12 @@ dnsmasq, Apache httpd, Terraform state files) without tearing down
 Proxmox infrastructure.
 
 Use this after a manual Terraform destroy, or to reset a failed deployment
-to a clean state.`,
+to a clean state.
+
+--kind scopes cleanup to a single subsystem instead of the "full" default.`,
 	Example: `  okdctl cleanup
   okdctl cleanup --yes
+  okdctl cleanup --kind work-only
   okdctl cleanup --dry-run`,
 	RunE: runCleanup,
 }
@@ -41,6 +46,11 @@ func init() {
 	cleanupCmd.Flags().BoolVar(&cleanupDryRun, flagDryRun, false, "preview what would be removed without making changes")
 	cleanupCmd.Flags().StringVar(&cleanupConfirmCluster, "confirm-cluster", "",
 		"required with --yes; must equal cfg.Cluster.Name (typo guard for scripted cleanups)")
+	cleanupCmd.Flags().StringVar(&cleanupKind, "kind", string(cleanup.Full),
+		"cleanup scope: "+strings.Join(cleanup.KindStrings(), ", "))
+	_ = cleanupCmd.RegisterFlagCompletionFunc("kind", func(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
+		return cleanup.KindStrings(), cobra.ShellCompDirectiveNoFileComp
+	})
 	rootCmd.AddCommand(cleanupCmd)
 }
 
@@ -59,6 +69,11 @@ func runCleanup(cmd *cobra.Command, _ []string) error {
 
 	cfg, err := loadConfig(cfgFile)
 	if err != nil {
+		return err
+	}
+
+	kind := cleanup.Kind(cleanupKind)
+	if err := kind.Validate(); err != nil {
 		return err
 	}
 
@@ -118,12 +133,11 @@ func runCleanup(cmd *cobra.Command, _ []string) error {
 			ProjectRoot:  projectRoot,
 			TerraformEnv: phase.GetTerraformEnv(cfg),
 		},
-		Kind:           cleanup.Full,
+		Kind:           kind,
 		HTTPServerRoot: cfg.HTTPServer.Root,
 		HAProxyConfig:  phase.DefaultHAProxyConfigPath,
 		VIP:            vip,
 		ClusterName:    cfg.Cluster.Name,
-		PreserveConfig: false,
 		RemovePackages: false,
 		BinDir:         config.ResolveBinDir(cfg),
 	}
