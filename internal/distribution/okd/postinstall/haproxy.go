@@ -13,8 +13,8 @@ import (
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/firewall"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
+	"github.com/qxtaiba/okdctl/internal/hostnet"
 	"github.com/qxtaiba/okdctl/internal/httputil"
-	"github.com/qxtaiba/okdctl/internal/netutil"
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
@@ -101,12 +101,12 @@ func (p *Phase) RemoveHAProxy(ctx context.Context, vip, clusterDir string) error
 	}
 
 	if vip != "" {
-		iface, ifaceErr := netutil.GetDefaultInterface(ctx)
+		iface, ifaceErr := hostnet.GetDefaultInterface(ctx)
 		if ifaceErr != nil {
 			p.Log.Warn("haproxy: could not detect default interface for VIP removal", "err", ifaceErr)
 		} else {
 			p.Log.Info("haproxy: removing vip", "vip", vip, "iface", iface)
-			if rmErr := netutil.RemoveSecondaryIP(ctx, vip, iface); rmErr != nil {
+			if rmErr := hostnet.RemoveSecondaryIP(ctx, vip, iface); rmErr != nil {
 				p.Log.Warn("haproxy: could not remove vip", "vip", vip, "iface", iface, "err", rmErr)
 			} else {
 				p.Log.Info("haproxy: vip removed", "vip", vip, "iface", iface)

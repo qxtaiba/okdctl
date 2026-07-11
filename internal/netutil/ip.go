@@ -1,3 +1,6 @@
+// Package netutil provides pure IP math — CIDR arithmetic, address-range
+// enumeration, and VIP derivation. It never touches host network state;
+// privileged ip/nmcli mutation lives in internal/hostnet.
 package netutil
 
 import (
