@@ -78,7 +78,7 @@ type Options struct {
 	RemovePackages bool
 	BinDir         string
 	// PostDestroy gates removal of an empty terraform.tfstate after a
-	// successful terraform destroy. Must not be set on prepare-flow runs.
+	// successful terraform destroy. Must not be set on setup-flow runs.
 	PostDestroy bool
 }
 

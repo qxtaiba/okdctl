@@ -11,10 +11,10 @@ import (
 	"github.com/qxtaiba/okdctl/internal/logutil"
 )
 
-func TestResumeConfigure_MissingKubeconfigFailsFast(t *testing.T) {
+func TestResumePostInstall_MissingKubeconfigFailsFast(t *testing.T) {
 	p := New(WithProjectRoot(t.TempDir()), WithLogger(logutil.NopLogger))
 
-	_, _, err := p.ResumeConfigure(context.Background(), config.DefaultConfig())
+	_, _, err := p.ResumePostInstall(context.Background(), config.DefaultConfig())
 	if err == nil {
 		t.Fatal("expected error when kubeconfig is missing; got nil")
 	}

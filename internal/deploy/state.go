@@ -1,6 +1,6 @@
 // Package deploy runs the okdctl deploy engine: phase orchestration with
 // resume routing keyed on the on-disk deploy-state marker, the live-cluster
-// prepare guard, and the optional Prometheus metrics endpoint.
+// setup guard, and the optional Prometheus metrics endpoint.
 package deploy
 
 import (
@@ -19,15 +19,20 @@ import (
 type deployPhase string
 
 const (
-	phasePrepare   deployPhase = "prepare"
-	phaseInstall   deployPhase = "install"
-	phaseConfigure deployPhase = "configure"
+	phaseSetup       deployPhase = "setup"
+	phaseInstall     deployPhase = "install"
+	phasePostInstall deployPhase = "postinstall"
 )
 
-// deployStateSchemaV1 is the current deploy-state JSON schema marker. Bump
+// deployStateSchemaV2 is the current deploy-state JSON schema marker. Bump
 // this value (and update readDeployState) only when the schema makes a
-// breaking change.
-const deployStateSchemaV1 = "v1"
+// breaking change. v1 markers used prepare/configure phase names;
+// readDeployState maps them onto the v2 vocabulary so an interrupted deploy
+// from an older binary still resumes correctly.
+const (
+	deployStateSchemaV1 = "v1"
+	deployStateSchemaV2 = "v2"
+)
 
 // deployState records which deploy phase was active when the process last
 // wrote the marker. Resume routing (resolveResumePhase) and destroy
@@ -43,7 +48,7 @@ type deployState struct {
 // markDeployPhaseFatal writes the marker for the given phase and returns any
 // write error. The marker is load-bearing routing state — resolveResumePhase
 // keys the pre-setup wipe on its Phase — so a failed write must abort the
-// deploy: proceeding would leave a stale prepare-phase marker that routes a
+// deploy: proceeding would leave a stale setup-phase marker that routes a
 // post-install resume through the wipe.
 func markDeployPhaseFatal(path string, phase deployPhase, runID, clusterName string) error {
 	if err := writeDeployState(path, phase, runID, clusterName); err != nil {
@@ -62,7 +67,7 @@ func clearDeployMarker(path string) {
 
 func writeDeployState(path string, phase deployPhase, runID, clusterName string) error {
 	data, err := json.Marshal(deployState{
-		SchemaVersion: deployStateSchemaV1,
+		SchemaVersion: deployStateSchemaV2,
 		Phase:         phase,
 		RunID:         runID,
 		Timestamp:     time.Now().UTC(),
@@ -86,12 +91,29 @@ func readDeployState(path string) (*deployState, error) {
 	if err := json.Unmarshal(data, &s); err != nil {
 		return nil, fmt.Errorf("parse deploy state: %w", err)
 	}
-	if s.SchemaVersion != deployStateSchemaV1 {
+	switch s.SchemaVersion {
+	case deployStateSchemaV2:
+	case deployStateSchemaV1:
+		s.Phase = migrateV1Phase(s.Phase)
+	default:
 		tui.Warn("ignoring deploy-state with unknown schema_version",
-			tui.LF("schema_version", s.SchemaVersion), tui.LF("expected", deployStateSchemaV1))
+			tui.LF("schema_version", s.SchemaVersion), tui.LF("expected", deployStateSchemaV2))
 		return nil, nil
 	}
 	return &s, nil
+}
+
+// migrateV1Phase maps the retired v1 phase vocabulary onto the package names
+// v2 records. Values it does not recognize pass through unchanged so
+// resolveResumePhase's unknown-phase-treated-as-absent handling still applies.
+func migrateV1Phase(p deployPhase) deployPhase {
+	switch p {
+	case "prepare":
+		return phaseSetup
+	case "configure":
+		return phasePostInstall
+	}
+	return p
 }
 
 // loadResumeMarker reads the deploy-state marker for the resume decision.
@@ -122,30 +144,30 @@ func loadResumeMarker(path, clusterName string) *deployState {
 }
 
 // resolveResumePhase decides where an interrupted deploy resumes. An install
-// or configure marker means live VMs booted with the ignition/CA in the work
-// directory and cluster-config/auth holds the only copy of the cluster's
+// or postinstall marker means live VMs booted with the ignition/CA in the
+// work directory and cluster-config/auth holds the only copy of the cluster's
 // auth bundle — never wipe or regenerate identity material the marker says a
-// live cluster depends on, so those resumes route past prepare (and its
-// pre-setup wipe) entirely. A prepare marker guarantees no VM has booted
+// live cluster depends on, so those resumes route past setup (and its
+// pre-setup wipe) entirely. A setup marker guarantees no VM has booted
 // with the current work directory's contents, so resuming through the wipe
-// is safe. FreshDeploy restarts from prepare: the operator accepted
+// is safe. FreshDeploy restarts from setup: the operator accepted
 // credential loss by passing --fresh. A marker with an unrecognized phase is
 // treated as absent — it must not vouch for a guard bypass.
 func resolveResumePhase(markerPath, clusterName string, freshDeploy bool) (deployPhase, *deployState) {
 	marker := loadResumeMarker(markerPath, clusterName)
 	if freshDeploy || marker == nil {
-		return phasePrepare, marker
+		return phaseSetup, marker
 	}
 	switch marker.Phase {
-	case phaseInstall, phaseConfigure:
+	case phaseInstall, phasePostInstall:
 		warnIfStaleResume(marker)
 		return marker.Phase, marker
-	case phasePrepare:
-		return phasePrepare, marker
+	case phaseSetup:
+		return phaseSetup, marker
 	}
 	tui.Warn("deploy state marker has unknown phase; treating as absent",
 		tui.LF("phase", string(marker.Phase)))
-	return phasePrepare, nil
+	return phaseSetup, nil
 }
 
 // warnIfStaleResume flags resume markers old enough that resuming is likely
@@ -194,11 +216,11 @@ func AnnounceState(path, clusterName string) {
 		}
 	}
 	switch ds.Phase {
-	case phasePrepare:
-		tui.Warn("partial deploy detected — cancelled during prepare; terraform state is empty",
+	case phaseSetup:
+		tui.Warn("partial deploy detected — cancelled during setup; terraform state is empty",
 			append([]tui.LogField{tui.LF("run_id", ds.RunID)}, extra...)...)
 		tui.Info("if VMs were not created, prefer 'okdctl cleanup' over destroy")
-	case phaseInstall, phaseConfigure:
+	case phaseInstall, phasePostInstall:
 		tui.Warn("partial deploy detected — terraform state likely populated",
 			append([]tui.LogField{tui.LF("phase", ds.Phase), tui.LF("run_id", ds.RunID)}, extra...)...)
 		tui.Info("running destroy to remove provisioned resources")

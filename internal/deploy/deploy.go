@@ -46,38 +46,38 @@ func NewProvisioner(creds *credentials.ProxmoxCredentials, projectRoot string, e
 // Tests substitute a fake to pin the resume routing — which phases run, and
 // with what guard opts — without executing real phase code.
 type provisioner interface {
-	GuardPrepare(cfg *config.Config, opts okd.PrepareOpts) error
-	Prepare(ctx context.Context, cfg *config.Config, opts okd.PrepareOpts) ([]distribution.StepResult, error)
+	GuardSetup(cfg *config.Config, opts okd.SetupOpts) error
+	Setup(ctx context.Context, cfg *config.Config, opts okd.SetupOpts) ([]distribution.StepResult, error)
 	Install(ctx context.Context, cfg *config.Config, opts *install.Options) ([]distribution.StepResult, error)
-	Configure(ctx context.Context, cfg *config.Config) (*postinstall.Result, []distribution.StepResult, error)
-	ResumeConfigure(ctx context.Context, cfg *config.Config) (*postinstall.Result, []distribution.StepResult, error)
+	PostInstall(ctx context.Context, cfg *config.Config) (*postinstall.Result, []distribution.StepResult, error)
+	ResumePostInstall(ctx context.Context, cfg *config.Config) (*postinstall.Result, []distribution.StepResult, error)
 }
 
-// runGuardedPrepare runs the prepare phase behind the live-cluster guard.
-// resumeInProgress carries the caller's marker decision: only a prepare-phase
+// runGuardedSetup runs the setup phase behind the live-cluster guard.
+// resumeInProgress carries the caller's marker decision: only a setup-phase
 // marker for this cluster reaches here (resolveResumePhase routes install and
-// configure markers past Prepare entirely), so the guard bypass cannot wipe
+// postinstall markers past Setup entirely), so the guard bypass cannot wipe
 // material live VMs booted with. The guard probe runs before any marker
 // write — a refusal must not plant a marker that would bypass the guard on
 // the next invocation.
-func runGuardedPrepare(ctx context.Context, p provisioner, cfg *config.Config, markerPath, runID string, freshDeploy, resumeInProgress bool, w io.Writer) ([]distribution.StepResult, error) {
-	prepOpts := okd.PrepareOpts{FreshDeploy: freshDeploy, ResumeInProgress: resumeInProgress && !freshDeploy}
-	if err := p.GuardPrepare(cfg, prepOpts); err != nil {
+func runGuardedSetup(ctx context.Context, p provisioner, cfg *config.Config, markerPath, runID string, freshDeploy, resumeInProgress bool, w io.Writer) ([]distribution.StepResult, error) {
+	setupOpts := okd.SetupOpts{FreshDeploy: freshDeploy, ResumeInProgress: resumeInProgress && !freshDeploy}
+	if err := p.GuardSetup(cfg, setupOpts); err != nil {
 		return nil, err
 	}
 
-	if err := markDeployPhaseFatal(markerPath, phasePrepare, runID, cfg.Cluster.Name); err != nil {
+	if err := markDeployPhaseFatal(markerPath, phaseSetup, runID, cfg.Cluster.Name); err != nil {
 		return nil, err
 	}
-	setupSteps, err := p.Prepare(ctx, cfg, prepOpts)
+	setupSteps, err := p.Setup(ctx, cfg, setupOpts)
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
 			fmt.Fprintln(w, render.InterruptSummary(setupSteps, "okdctl deploy", runID))
-			tui.Info("cancelled during prepare — terraform state is empty; run 'okdctl cleanup' to remove local files")
+			tui.Info("cancelled during setup — terraform state is empty; run 'okdctl cleanup' to remove local files")
 			return setupSteps, err
 		}
-		// prepare applies nothing to Proxmox; destroy would be a misleading no-op.
-		tui.Info("prepare failed — terraform state is empty; run 'okdctl cleanup' to remove local files")
+		// setup applies nothing to Proxmox; destroy would be a misleading no-op.
+		tui.Info("setup failed — terraform state is empty; run 'okdctl cleanup' to remove local files")
 		return setupSteps, err
 	}
 	return setupSteps, nil
@@ -94,7 +94,7 @@ type Options struct {
 	ProjectRoot         string
 }
 
-// runDeployPhases executes prepare, install, and configure, starting from
+// runDeployPhases executes setup, install, and postinstall, starting from
 // the phase the deploy-state marker says is safe to resume from. Returns the
 // postinstall result and every executed step across phases.
 func runDeployPhases(ctx context.Context, p provisioner, cfg *config.Config, projectRoot, markerPath, runID string, freshDeploy bool, w io.Writer) (*postinstall.Result, []distribution.StepResult, error) {
@@ -102,19 +102,19 @@ func runDeployPhases(ctx context.Context, p provisioner, cfg *config.Config, pro
 
 	var setupSteps []distribution.StepResult
 	var err error
-	if resumeFrom == phasePrepare {
-		setupSteps, err = runGuardedPrepare(ctx, p, cfg, markerPath, runID, freshDeploy, marker != nil, w)
+	if resumeFrom == phaseSetup {
+		setupSteps, err = runGuardedSetup(ctx, p, cfg, markerPath, runID, freshDeploy, marker != nil, w)
 		if err != nil {
 			return nil, nil, err
 		}
 	} else {
-		tui.Info("resuming interrupted deploy; skipping prepare to preserve cluster identity material",
+		tui.Info("resuming interrupted deploy; skipping setup to preserve cluster identity material",
 			tui.LF("from_phase", string(resumeFrom)), tui.LF("interrupted_run_id", marker.RunID))
 		tui.Info("to restart from scratch instead, re-run with --fresh (wipes cluster credentials)")
 	}
 
 	var installSteps []distribution.StepResult
-	if resumeFrom != phaseConfigure {
+	if resumeFrom != phasePostInstall {
 		if err := markDeployPhaseFatal(markerPath, phaseInstall, runID, cfg.Cluster.Name); err != nil {
 			return nil, nil, err
 		}
@@ -131,30 +131,30 @@ func runDeployPhases(ctx context.Context, p provisioner, cfg *config.Config, pro
 		}
 	}
 
-	if err := markDeployPhaseFatal(markerPath, phaseConfigure, runID, cfg.Cluster.Name); err != nil {
+	if err := markDeployPhaseFatal(markerPath, phasePostInstall, runID, cfg.Cluster.Name); err != nil {
 		return nil, nil, err
 	}
 	var result *postinstall.Result
-	var configureSteps []distribution.StepResult
-	if resumeFrom == phaseConfigure {
-		result, configureSteps, err = p.ResumeConfigure(ctx, cfg)
+	var postinstallSteps []distribution.StepResult
+	if resumeFrom == phasePostInstall {
+		result, postinstallSteps, err = p.ResumePostInstall(ctx, cfg)
 	} else {
-		result, configureSteps, err = p.Configure(ctx, cfg)
+		result, postinstallSteps, err = p.PostInstall(ctx, cfg)
 	}
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
-			fmt.Fprintln(w, render.InterruptSummary(slices.Concat(setupSteps, installSteps, configureSteps), "okdctl deploy", runID))
-			tui.Info("cancelled during configure — terraform state likely populated; run 'okdctl destroy' to clean up")
+			fmt.Fprintln(w, render.InterruptSummary(slices.Concat(setupSteps, installSteps, postinstallSteps), "okdctl deploy", runID))
+			tui.Info("cancelled during postinstall — terraform state likely populated; run 'okdctl destroy' to clean up")
 			return nil, nil, err
 		}
-		tui.Info("configure failed — terraform state likely populated; run 'okdctl destroy' to clean up")
+		tui.Info("postinstall failed — terraform state likely populated; run 'okdctl destroy' to clean up")
 		return nil, nil, err
 	}
 
-	return result, slices.Concat(setupSteps, installSteps, configureSteps), nil
+	return result, slices.Concat(setupSteps, installSteps, postinstallSteps), nil
 }
 
-// Execute runs the full deployment — prepare, install, configure — under the
+// Execute runs the full deployment — setup, install, postinstall — under the
 // project run lock, with resume routing, metrics, and the post-deploy summary.
 func Execute(ctx context.Context, cfg *config.Config, opts Options, w io.Writer) error {
 	projectRoot := opts.ProjectRoot
