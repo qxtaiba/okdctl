@@ -11,6 +11,8 @@ Proxmox infrastructure.
 Use this after a manual Terraform destroy, or to reset a failed deployment
 to a clean state.
 
+--kind scopes cleanup to a single subsystem instead of the "full" default.
+
 ```
 okdctl cleanup [flags]
 ```
@@ -20,6 +22,7 @@ okdctl cleanup [flags]
 ```
   okdctl cleanup
   okdctl cleanup --yes
+  okdctl cleanup --kind work-only
   okdctl cleanup --dry-run
 ```
 
@@ -29,6 +32,7 @@ okdctl cleanup [flags]
       --confirm-cluster string   required with --yes; must equal cfg.Cluster.Name (typo guard for scripted cleanups)
       --dry-run                  preview what would be removed without making changes
   -h, --help                     help for cleanup
+      --kind string              cleanup scope: full, work-only, web-only, haproxy-only, terraform-only (default "full")
   -y, --yes                      skip confirmation prompt
 ```
 
