@@ -2010,7 +2010,7 @@ one candidate dropped as a duplicate of open A5).
 
 #### B1 — Fix the proxmox→phase layering inversion
 
-- **Status:** in progress — worktree: wave3
+- **Status:** done — PR #918
 - **Category:** architecture
 - **State:** design needed
 - **Effort:** days
@@ -2027,7 +2027,7 @@ one candidate dropped as a duplicate of open A5).
 
 #### B2 — Decompose internal/cli: command bodies and deploy engine behind testable seams
 
-- **Status:** not started
+- **Status:** in progress — worktree: wave4
 - **Category:** architecture / cognitive-load
 - **State:** design needed
 - **Effort:** days
@@ -2137,7 +2137,7 @@ one candidate dropped as a duplicate of open A5).
 
 #### B9 — Share single-select navigation between welcome and review steps
 
-- **Status:** in progress — worktree: wave3
+- **Status:** done — PR #917
 - **Category:** refactor
 - **State:** well-specified
 - **Effort:** hours
@@ -2181,7 +2181,7 @@ one candidate dropped as a duplicate of open A5).
 
 #### B12 — Unify control-plane naming and colocate per-node-group config facts
 
-- **Status:** in progress — worktree: wave3
+- **Status:** done — PR #919
 - **Category:** config coherence
 - **State:** design needed
 - **Effort:** days
@@ -2226,7 +2226,7 @@ one candidate dropped as a duplicate of open A5).
 
 #### B15 — Stop the resume path from wiping live-cluster identity material
 
-- **Status:** in review — PR #914
+- **Status:** done — PR #914
 - **Category:** state & lifecycle
 - **State:** design needed
 - **Effort:** days
@@ -2348,7 +2348,7 @@ one candidate dropped as a duplicate of open A5).
 
 #### B23 — Test phase orchestration: Execute paths and skip-flag wiring, destructive steps enabled
 
-- **Status:** not started
+- **Status:** in progress — worktree: wave4
 - **Category:** tests
 - **State:** well-specified
 - **Effort:** days
