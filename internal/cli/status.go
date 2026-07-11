@@ -13,6 +13,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/clusterstatus"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/nodetypes"
+	"github.com/qxtaiba/okdctl/internal/render"
 	"github.com/qxtaiba/okdctl/internal/tui"
 )
 
@@ -107,16 +108,16 @@ func runStatus(cmd *cobra.Command, _ []string) error {
 }
 
 func printClusterStatus(cmd *cobra.Command, st *okd.ClusterStatus) error {
-	sb := newSummaryBuilder()
-	sb.b.WriteString("\n")
+	sb := render.NewBuilder()
+	sb.WriteString("\n")
 
-	sb.section("api")
+	sb.Section("api")
 	if st.APIReachable {
-		sb.kv("reachable", "yes")
+		sb.KV("reachable", "yes")
 	} else {
-		sb.kv("reachable", "no (oc get --raw /healthz failed)")
+		sb.KV("reachable", "no (oc get --raw /healthz failed)")
 	}
-	sb.newline()
+	sb.Newline()
 
 	masters := 0
 	workers := 0
@@ -128,26 +129,26 @@ func printClusterStatus(cmd *cobra.Command, st *okd.ClusterStatus) error {
 			workers++
 		}
 	}
-	sb.section("nodes")
-	sb.kv("masters", strconv.Itoa(masters))
-	sb.kv("workers", strconv.Itoa(workers))
-	sb.kv("total", strconv.Itoa(len(st.Nodes)))
-	sb.newline()
+	sb.Section("nodes")
+	sb.KV("masters", strconv.Itoa(masters))
+	sb.KV("workers", strconv.Itoa(workers))
+	sb.KV("total", strconv.Itoa(len(st.Nodes)))
+	sb.Newline()
 
-	sb.section("cluster operators")
+	sb.Section("cluster operators")
 	if st.DegradedOperators == 0 {
-		sb.kv("degraded", "0 (all healthy)")
+		sb.KV("degraded", "0 (all healthy)")
 	} else {
-		sb.kv("degraded", strconv.Itoa(st.DegradedOperators))
+		sb.KV("degraded", strconv.Itoa(st.DegradedOperators))
 	}
-	sb.newline()
+	sb.Newline()
 
 	if len(st.Addons) > 0 {
-		sb.section("addons")
+		sb.Section("addons")
 		for _, a := range st.Addons {
-			sb.kv(a.Name, a.Label())
+			sb.KV(a.Name, a.Label())
 		}
-		sb.newline()
+		sb.Newline()
 	}
 
 	_, err := fmt.Fprint(cmd.OutOrStdout(),

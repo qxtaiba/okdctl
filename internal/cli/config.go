@@ -9,6 +9,7 @@ import (
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
+	"github.com/qxtaiba/okdctl/internal/render"
 )
 
 const cfgVerb = "config"
@@ -53,7 +54,7 @@ func runConfigValidate(cmd *cobra.Command, _ []string) error {
 	}
 
 	result := cfg.Validate()
-	fmt.Fprintln(cmd.OutOrStdout(), ValidationSummary(result))
+	fmt.Fprintln(cmd.OutOrStdout(), render.ValidationSummary(result))
 	if result == nil || result.IsValid() {
 		return nil
 	}

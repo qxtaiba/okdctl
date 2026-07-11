@@ -17,6 +17,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/infrastructure/terraform"
+	"github.com/qxtaiba/okdctl/internal/render"
 	"github.com/qxtaiba/okdctl/internal/runlock"
 	"github.com/qxtaiba/okdctl/internal/system"
 	"github.com/qxtaiba/okdctl/internal/tui"
@@ -290,7 +291,7 @@ func runDestroy(cmd *cobra.Command, _ []string) error {
 	})
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
-			fmt.Fprintln(cmd.OutOrStdout(), InterruptSummary(steps, "okdctl destroy", tui.RunID()))
+			fmt.Fprintln(cmd.OutOrStdout(), render.InterruptSummary(steps, "okdctl destroy", tui.RunID()))
 			return err
 		}
 		return err

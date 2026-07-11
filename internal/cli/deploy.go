@@ -17,6 +17,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/setup"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/infrastructure/proxmox"
+	"github.com/qxtaiba/okdctl/internal/render"
 	"github.com/qxtaiba/okdctl/internal/runlock"
 	"github.com/qxtaiba/okdctl/internal/tui"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
@@ -195,14 +196,14 @@ func runDeployDryRun(ctx context.Context, cfg *config.Config, w io.Writer) error
 		return &errtypes.ConfigError{Msg: "dry-run: terraform plan failed", Err: planErr}
 	}
 
-	fmt.Fprintln(w, DryRunSummary("deploy step listing", deployDryRunSteps()))
+	fmt.Fprintln(w, render.DryRunSummary("deploy step listing", deployDryRunSteps()))
 	tui.Info("dry-run: re-run without --dry-run to execute deploy")
 	return nil
 }
 
 // deployDryRunSteps returns the ID/Name for every step across setup, install, and
 // postinstall phases in execution order.
-func deployDryRunSteps() []DryRunStep {
+func deployDryRunSteps() []render.DryRunStep {
 	phases := []struct {
 		order []distribution.StepID
 		names map[distribution.StepID]string
@@ -227,10 +228,10 @@ func deployDryRunSteps() []DryRunStep {
 			postinstall.StepInstallAddons,
 		}, postinstall.StepNames},
 	}
-	var out []DryRunStep
+	var out []render.DryRunStep
 	for _, ph := range phases {
 		for _, id := range ph.order {
-			out = append(out, DryRunStep{ID: string(id), Name: ph.names[id]})
+			out = append(out, render.DryRunStep{ID: string(id), Name: ph.names[id]})
 		}
 	}
 	return out
