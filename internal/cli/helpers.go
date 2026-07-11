@@ -20,6 +20,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/distribution"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/install"
+	"github.com/qxtaiba/okdctl/internal/distribution/okd/postinstall"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/runlock"
 	"github.com/qxtaiba/okdctl/internal/system"
@@ -205,14 +206,14 @@ func createOKDProvisionerWithOpts(creds *credentials.ProxmoxCredentials, project
 }
 
 // runGuardedPrepare runs the prepare phase behind the live-cluster guard.
-// The deploy-state marker is read BEFORE it is overwritten (a present marker
-// means the prior run was interrupted, so the guard must let the documented
-// re-run-to-resume flow proceed) and the guard probe runs before any marker
+// resumeInProgress carries the caller's marker decision: only a prepare-phase
+// marker for this cluster reaches here (resolveResumePhase routes install and
+// configure markers past Prepare entirely), so the guard bypass cannot wipe
+// material live VMs booted with. The guard probe runs before any marker
 // write — a refusal must not plant a marker that would bypass the guard on
 // the next invocation.
-func runGuardedPrepare(ctx context.Context, p *okd.Provisioner, cfg *config.Config, markerPath, runID string, freshDeploy bool, w io.Writer) ([]distribution.StepResult, error) {
-	existingMarker, _ := readDeployState(markerPath)
-	prepOpts := okd.PrepareOpts{FreshDeploy: freshDeploy, ResumeInProgress: existingMarker != nil && !freshDeploy}
+func runGuardedPrepare(ctx context.Context, p *okd.Provisioner, cfg *config.Config, markerPath, runID string, freshDeploy, resumeInProgress bool, w io.Writer) ([]distribution.StepResult, error) {
+	prepOpts := okd.PrepareOpts{FreshDeploy: freshDeploy, ResumeInProgress: resumeInProgress && !freshDeploy}
 	if err := p.GuardPrepare(cfg, prepOpts); err != nil {
 		return nil, err
 	}
@@ -326,6 +327,61 @@ func startMetricsServer(ctx context.Context, addr string, allowNetwork bool) (fu
 	return stop, []okd.ProvisionerOption{okd.WithMetricsRecorder(rec)}, nil
 }
 
+// runDeployPhases executes prepare, install, and configure, starting from
+// the phase the deploy-state marker says is safe to resume from. Returns the
+// postinstall result and every executed step across phases.
+func runDeployPhases(ctx context.Context, p *okd.Provisioner, cfg *config.Config, projectRoot, markerPath, runID string, freshDeploy bool, w io.Writer) (*postinstall.Result, []distribution.StepResult, error) {
+	resumeFrom, marker := resolveResumePhase(markerPath, cfg.Cluster.Name, freshDeploy)
+
+	var setupSteps []distribution.StepResult
+	var err error
+	if resumeFrom == phasePrepare {
+		setupSteps, err = runGuardedPrepare(ctx, p, cfg, markerPath, runID, freshDeploy, marker != nil, w)
+		if err != nil {
+			return nil, nil, err
+		}
+	} else {
+		tui.Info("resuming interrupted deploy; skipping prepare to preserve cluster identity material",
+			tui.LF("from_phase", string(resumeFrom)), tui.LF("interrupted_run_id", marker.RunID))
+	}
+
+	var installSteps []distribution.StepResult
+	if resumeFrom != phaseConfigure {
+		markDeployPhase(markerPath, phaseInstall, runID, cfg.Cluster.Name)
+		installOpts := install.NewOptions(cfg, projectRoot)
+		installSteps, err = p.Install(ctx, cfg, &installOpts)
+		if err != nil {
+			if errors.Is(err, context.Canceled) {
+				fmt.Fprintln(w, InterruptSummary(slices.Concat(setupSteps, installSteps), "okdctl deploy", runID))
+				tui.Info("cancelled during install — terraform state likely populated; run 'okdctl destroy' to clean up")
+				return nil, nil, err
+			}
+			tui.Info("install failed — terraform state likely populated; run 'okdctl destroy' to clean up")
+			return nil, nil, err
+		}
+	}
+
+	markDeployPhase(markerPath, phaseConfigure, runID, cfg.Cluster.Name)
+	var result *postinstall.Result
+	var configureSteps []distribution.StepResult
+	if resumeFrom == phaseConfigure {
+		result, configureSteps, err = p.ResumeConfigure(ctx, cfg)
+	} else {
+		result, configureSteps, err = p.Configure(ctx, cfg)
+	}
+	if err != nil {
+		if errors.Is(err, context.Canceled) {
+			fmt.Fprintln(w, InterruptSummary(slices.Concat(setupSteps, installSteps, configureSteps), "okdctl deploy", runID))
+			tui.Info("cancelled during configure — terraform state likely populated; run 'okdctl destroy' to clean up")
+			return nil, nil, err
+		}
+		tui.Info("configure failed — terraform state likely populated; run 'okdctl destroy' to clean up")
+		return nil, nil, err
+	}
+
+	return result, slices.Concat(setupSteps, installSteps, configureSteps), nil
+}
+
 func executeFullDeployment(ctx context.Context, cfg *config.Config, opts deploymentOptions, w io.Writer) error {
 	projectRoot, err := resolveProjectRootOrDie()
 	if err != nil {
@@ -380,39 +436,11 @@ func executeFullDeployment(ctx context.Context, cfg *config.Config, opts deploym
 	startTime := time.Now()
 	markerPath := filepath.Join(workDir, deployStateFile)
 
-	setupSteps, err := runGuardedPrepare(ctx, p, cfg, markerPath, runID, opts.FreshDeploy, w)
+	result, allSteps, err := runDeployPhases(ctx, p, cfg, projectRoot, markerPath, runID, opts.FreshDeploy, w)
 	if err != nil {
 		return err
 	}
 
-	markDeployPhase(markerPath, phaseInstall, runID, cfg.Cluster.Name)
-	installOpts := install.NewOptions(cfg, projectRoot)
-	installSteps, err := p.Install(ctx, cfg, &installOpts)
-	if err != nil {
-		if errors.Is(err, context.Canceled) {
-			combined := slices.Concat(setupSteps, installSteps)
-			fmt.Fprintln(w, InterruptSummary(combined, "okdctl deploy", runID))
-			tui.Info("cancelled during install — terraform state likely populated; run 'okdctl destroy' to clean up")
-			return err
-		}
-		tui.Info("install failed — terraform state likely populated; run 'okdctl destroy' to clean up")
-		return err
-	}
-
-	markDeployPhase(markerPath, phaseConfigure, runID, cfg.Cluster.Name)
-	result, configureSteps, err := p.Configure(ctx, cfg)
-	if err != nil {
-		if errors.Is(err, context.Canceled) {
-			combined := slices.Concat(setupSteps, installSteps, configureSteps)
-			fmt.Fprintln(w, InterruptSummary(combined, "okdctl deploy", runID))
-			tui.Info("cancelled during configure — terraform state likely populated; run 'okdctl destroy' to clean up")
-			return err
-		}
-		tui.Info("configure failed — terraform state likely populated; run 'okdctl destroy' to clean up")
-		return err
-	}
-
-	allSteps := slices.Concat(setupSteps, installSteps, configureSteps)
 	clearDeployMarker(markerPath)
 
 	duration := time.Since(startTime).Round(time.Second)

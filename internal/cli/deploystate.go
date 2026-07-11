@@ -96,6 +96,48 @@ func readDeployState(path string) (*deployState, error) {
 	return &s, nil
 }
 
+// loadResumeMarker reads the deploy-state marker for the resume decision.
+// Unreadable markers and markers naming a different cluster are treated as
+// absent so they can neither bypass the live-cluster guard nor skip prepare
+// on behalf of the wrong cluster.
+func loadResumeMarker(path, clusterName string) *deployState {
+	marker, err := readDeployState(path)
+	if err != nil {
+		tui.Warn("could not read deploy state marker; treating as absent", tui.LF("err", err))
+		return nil
+	}
+	if marker == nil {
+		return nil
+	}
+	if marker.ClusterName != "" && marker.ClusterName != clusterName {
+		tui.Warn("deploy state marker is from a different cluster, ignoring",
+			tui.LF("marker_cluster", marker.ClusterName), tui.LF("current_cluster", clusterName))
+		return nil
+	}
+	return marker
+}
+
+// resolveResumePhase decides where an interrupted deploy resumes. An install
+// or configure marker means live VMs booted with the ignition/CA in the work
+// directory and cluster-config/auth holds the only copy of the cluster's
+// auth bundle — never wipe or regenerate identity material the marker says a
+// live cluster depends on, so those resumes route past prepare (and its
+// pre-setup wipe) entirely. A prepare marker guarantees no VM has booted
+// with the current work directory's contents, so resuming through the wipe
+// is safe. FreshDeploy restarts from prepare: the operator accepted
+// credential loss by passing --fresh.
+func resolveResumePhase(markerPath, clusterName string, freshDeploy bool) (deployPhase, *deployState) {
+	marker := loadResumeMarker(markerPath, clusterName)
+	if freshDeploy || marker == nil {
+		return phasePrepare, marker
+	}
+	switch marker.Phase {
+	case phaseInstall, phaseConfigure:
+		return marker.Phase, marker
+	}
+	return phasePrepare, marker
+}
+
 // announceDeployState emits a partial-deploy diagnostic on destroy entry.
 // No-op when no marker exists. clusterName is cfg.Cluster.Name from the
 // caller; a non-empty ClusterName mismatch means the marker belongs to a
