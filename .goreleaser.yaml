@@ -48,7 +48,10 @@ sboms:
   - id: package
     artifacts: package
     documents:
-      - "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}.pkg.sbom.json"
+      # .ArtifactName keeps deb and rpm SBOMs distinct — a shared
+      # os/arch name made the two overwrite each other and duplicated
+      # their SHA256SUMS lines.
+      - "{{ .ArtifactName }}.sbom.json"
     cmd: syft
     args: ["$artifact", "--output", "cyclonedx-json=$document"]
 # Sigstore keyless signing of checksum file + artifacts.

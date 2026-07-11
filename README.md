@@ -198,7 +198,7 @@ Every tagged release ships:
 - `okdctl_<version>_linux_<arch>.tar.gz` — binary archive (amd64 + arm64)
 - `SHA256SUMS`, `SHA256SUMS.sig`, `SHA256SUMS.pem` — sigstore keyless signature
 - `okdctl_<version>_linux_<arch>.sbom.json` — CycloneDX SBOM (binary archive)
-- `okdctl_<version>_linux_<arch>.pkg.sbom.json` — CycloneDX SBOM (apt/rpm package)
+- `okdctl_<version>_linux_<arch>.{deb,rpm}.sbom.json` — CycloneDX SBOMs (apt/rpm packages)
 - `okdctl.intoto.jsonl` — SLSA build provenance
 
 Verify the signature without managing any keys:
