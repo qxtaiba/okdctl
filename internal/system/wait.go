@@ -28,7 +28,10 @@ func DefaultWaitForOptions() WaitForOptions {
 
 // WaitFor polls check at opts.Interval until it returns true, ctx is
 // cancelled, or opts.Timeout elapses. A timeout that races with ctx
-// cancellation reports ctx.Err as the primary cause.
+// cancellation reports ctx.Err as the primary cause. Lives here as a
+// generic, dependency-light polling primitive shared by phase/kubectl.go
+// and postinstall's ingress-termination wait — narrower than a
+// subprocess-exec concern, so it stays out of internal/executor.
 func WaitFor(ctx context.Context, prefix, description string, check func(context.Context) bool, opts WaitForOptions) error {
 	if opts.Interval == 0 {
 		opts.Interval = 30 * time.Second
