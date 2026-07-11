@@ -104,7 +104,7 @@ func (f *Flux) Install(ctx context.Context, env *addon.Environment) error {
 	}
 
 	if err := addon.RetryDefault(ctx, func() error {
-		return f.createDeployKeySecret(ctx, env, fs)
+		return f.createDeployKeySecret(ctx, env, &fs)
 	}); err != nil {
 		return fmt.Errorf("deploy key secret required: %w", err)
 	}
@@ -113,17 +113,17 @@ func (f *Flux) Install(ctx context.Context, env *addon.Environment) error {
 		return err
 	}
 
-	if err := f.installInstance(ctx, env, fs); err != nil {
+	if err := f.installInstance(ctx, env, &fs); err != nil {
 		return err
 	}
 
 	// Wait for Flux controllers to become available (fatal if they don't start)
-	if err := f.waitForControllers(ctx, env, fs); err != nil {
+	if err := f.waitForControllers(ctx, env, &fs); err != nil {
 		return err
 	}
 
 	// Wait for GitRepository sync (non-fatal — user may need to fix deploy key or URL)
-	if err := f.waitForGitSync(ctx, env, fs); err != nil {
+	if err := f.waitForGitSync(ctx, env, &fs); err != nil {
 		env.Logger.Warn("flux: git sync not ready", "err", err)
 		env.Logger.Info("flux: debug with: oc get gitrepository -n flux-system -o yaml")
 		env.Logger.Info("flux: the cluster will auto-reconcile once the git source is reachable")
@@ -163,7 +163,7 @@ func (f *Flux) installOperator(ctx context.Context, env *addon.Environment) erro
 	return nil
 }
 
-func (f *Flux) installInstance(ctx context.Context, env *addon.Environment, fs Settings) error {
+func (f *Flux) installInstance(ctx context.Context, env *addon.Environment, fs *Settings) error {
 	env.Logger.Info("flux: installing instance for gitops sync")
 	if fs.Repository == "" {
 		return &errtypes.ConfigError{Msg: "flux repository not configured - set addons.flux.settings.repository in config"}
@@ -191,7 +191,7 @@ func (f *Flux) installInstance(ctx context.Context, env *addon.Environment, fs S
 // Settings into YAML bytes. Keeping values in a file rather than --set argv
 // prevents repository URLs from appearing in /proc/<pid>/cmdline and in helm
 // release Secrets.
-func buildInstanceValues(fs Settings) ([]byte, error) {
+func buildInstanceValues(fs *Settings) ([]byte, error) {
 	v := map[string]any{
 		"instance": map[string]any{
 			"cluster": map[string]any{
@@ -322,7 +322,7 @@ func (f *Flux) ValidateSettings(settings map[string]string) []string {
 	return errs
 }
 
-func (f *Flux) waitForControllers(ctx context.Context, env *addon.Environment, fs Settings) error {
+func (f *Flux) waitForControllers(ctx context.Context, env *addon.Environment, fs *Settings) error {
 	env.Logger.Info("flux: waiting for controllers to become ready")
 
 	timeout := fs.ControllerTimeout
@@ -358,7 +358,7 @@ func (f *Flux) waitForControllers(ctx context.Context, env *addon.Environment, f
 	return nil
 }
 
-func (f *Flux) waitForGitSync(ctx context.Context, env *addon.Environment, fs Settings) error {
+func (f *Flux) waitForGitSync(ctx context.Context, env *addon.Environment, fs *Settings) error {
 	env.Logger.Info("flux: waiting for git repository sync")
 
 	timeout := fs.GitSyncTimeout
@@ -379,7 +379,7 @@ func (f *Flux) waitForGitSync(ctx context.Context, env *addon.Environment, fs Se
 	return nil
 }
 
-func (f *Flux) createDeployKeySecret(ctx context.Context, env *addon.Environment, fs Settings) error {
+func (f *Flux) createDeployKeySecret(ctx context.Context, env *addon.Environment, fs *Settings) error {
 	repoURL := fs.Repository
 	if repoURL == "" {
 		return &errtypes.ConfigError{Msg: "flux repository not configured - set addons.flux.settings.repository in config"}
