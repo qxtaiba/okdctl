@@ -621,12 +621,13 @@ func (p *Phase) attemptRollback(ctx context.Context, ic *ingressControllerInfo) 
 	return nil
 }
 
-// restoreHAProxyBackup finds the most recent haproxy.cfg.backup.* file left
-// by RemoveHAProxy and copies it back to haproxyConfigPath so DNS rollback
-// has a coherent recovery target. Returns true only when the restore
-// succeeds; errors are logged as warnings.
+// restoreHAProxyBackup restores haproxyConfigPath from the newest timestamped
+// backup left by RemoveHAProxy — falling back to setup's fixed pristine
+// snapshot when no timestamped backup exists — so DNS rollback has a coherent
+// recovery target. Returns true only when the restore succeeds; errors are
+// logged as warnings.
 func (p *Phase) restoreHAProxyBackup() bool {
-	pattern := haproxyConfigPath + ".backup.*"
+	pattern := phase.HAProxyBackupGlob(haproxyConfigPath)
 	matches, err := filepath.Glob(pattern)
 	if err != nil || len(matches) == 0 {
 		p.Log.Warn("update-ingress: rollback: no haproxy backup found", "pattern", pattern)

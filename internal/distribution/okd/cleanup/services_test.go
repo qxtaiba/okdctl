@@ -5,10 +5,38 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/dns"
+	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/logutil"
 )
+
+// TestHAProxy_RemovesFixedAndTimestampedBackups guards the backup-residue
+// fix: cleanup must sweep both setup's fixed pristine snapshot and
+// postinstall's timestamped backups, not just the timestamped ones.
+func TestHAProxy_RemovesFixedAndTimestampedBackups(t *testing.T) {
+	dir := t.TempDir()
+	cfg := filepath.Join(dir, "haproxy.cfg")
+	pristine := cfg + phase.HAProxyBackupSuffix
+	timestamped := phase.HAProxyTimestampedBackupPath(cfg, time.Now())
+
+	for _, p := range []string{cfg, pristine, timestamped} {
+		if err := os.WriteFile(p, []byte("x"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if err := HAProxy(context.Background(), cfg, "", logutil.NopLogger); err != nil {
+		t.Fatalf("HAProxy: %v", err)
+	}
+
+	for _, p := range []string{cfg, pristine, timestamped} {
+		if _, err := os.Stat(p); !os.IsNotExist(err) {
+			t.Errorf("%s not removed by cleanup: %v", filepath.Base(p), err)
+		}
+	}
+}
 
 func TestDnsmasq_GlobLoopRemovesAllMatches(t *testing.T) {
 	dir := t.TempDir()

@@ -8,11 +8,10 @@ import (
 	"path/filepath"
 
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/dns"
+	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
-	"github.com/qxtaiba/okdctl/internal/hostnet"
 	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/platform"
-	"github.com/qxtaiba/okdctl/internal/system"
 )
 
 // dnsmasqConfPattern and dnsmasqBackupPattern are package-level vars so
@@ -21,25 +20,6 @@ var (
 	dnsmasqConfPattern   = "/etc/dnsmasq.d/okd-*.conf"
 	dnsmasqBackupPattern = "/etc/dnsmasq.d/*.backup"
 )
-
-func stopAndDisableService(ctx context.Context, serviceName string, logger *slog.Logger) {
-	logger = logutil.OrNop(logger)
-	if system.IsServiceActive(ctx, serviceName) {
-		if err := system.ManageService(ctx, system.ServiceStop, serviceName); err != nil {
-			logger.Warn("cleanup: failed to stop service", "svc", serviceName, "err", err)
-		}
-	} else {
-		logger.Info("cleanup: service not running", "svc", serviceName)
-	}
-
-	if system.IsServiceEnabled(ctx, serviceName) {
-		if err := system.ManageService(ctx, system.ServiceDisable, serviceName); err != nil {
-			logger.Warn("cleanup: failed to disable service", "svc", serviceName, "err", err)
-		}
-	} else {
-		logger.Info("cleanup: service not enabled", "svc", serviceName)
-	}
-}
 
 func removePackage(ctx context.Context, pkg string, logger *slog.Logger) {
 	logger = logutil.OrNop(logger)
@@ -57,26 +37,19 @@ func HAProxy(ctx context.Context, haproxyConfig, vip string, logger *slog.Logger
 	logger = logutil.OrNop(logger)
 	logger.Info("cleanup: haproxy service and configuration")
 
-	stopAndDisableService(ctx, "haproxy", logger)
+	phase.StopAndDisableService(ctx, "haproxy", logger)
 
 	_ = SafeRemoveWithLogger(ctx, haproxyConfig, "haproxy configuration file", logger)
 
-	backupPattern := haproxyConfig + ".backup.*"
-	backups, _ := filepath.Glob(backupPattern)
+	// The glob covers postinstall's timestamped backups and setup's fixed
+	// pristine snapshot; the latter used to be missed, leaving root-owned
+	// residue in /etc/haproxy after uninstall.
+	backups, _ := filepath.Glob(phase.HAProxyBackupGlob(haproxyConfig))
 	for _, backup := range backups {
 		_ = SafeRemoveWithLogger(ctx, backup, "haproxy backup configuration", logger)
 	}
 
-	if vip != "" {
-		iface, ifaceErr := hostnet.GetDefaultInterface(ctx)
-		if ifaceErr == nil {
-			if rmErr := hostnet.RemoveSecondaryIP(ctx, vip, iface); rmErr != nil {
-				logger.Warn("cleanup: could not remove vip", "vip", vip, "iface", iface, "err", rmErr)
-			} else {
-				logger.Info("cleanup: removed vip", "vip", vip, "iface", iface)
-			}
-		}
-	}
+	phase.ReleaseVIP(ctx, vip, logger)
 
 	removePackage(ctx, "haproxy", logger)
 
@@ -95,7 +68,7 @@ func Apache(ctx context.Context, logger *slog.Logger) error {
 	svcName := detectedOS.ApacheServiceName()
 	pkgName := detectedOS.ApachePackageName()
 
-	stopAndDisableService(ctx, svcName, logger)
+	phase.StopAndDisableService(ctx, svcName, logger)
 	removePackage(ctx, pkgName, logger)
 
 	logger.Info("cleanup: apache httpd completed")
@@ -140,7 +113,7 @@ func Dnsmasq(ctx context.Context, clusterName string, logger *slog.Logger) error
 		logger.Warn("cleanup: failed to restore system resolver", "err", err)
 	}
 
-	stopAndDisableService(ctx, "dnsmasq", logger)
+	phase.StopAndDisableService(ctx, "dnsmasq", logger)
 
 	if clusterName != "" {
 		if configPath, err := dns.DnsmasqConfigPath(fmt.Sprintf("okd-%s", clusterName)); err == nil {

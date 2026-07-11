@@ -13,7 +13,6 @@ import (
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/firewall"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
-	"github.com/qxtaiba/okdctl/internal/hostnet"
 	"github.com/qxtaiba/okdctl/internal/httputil"
 	"github.com/qxtaiba/okdctl/internal/system"
 )
@@ -71,20 +70,9 @@ func (p *Phase) RemoveHAProxy(ctx context.Context, vip, clusterDir string) error
 		p.Log.Info("haproxy: pre-flight — api confirmed reachable via hostname")
 	}
 
-	if system.IsServiceActive(ctx, "haproxy") {
-		p.Log.Info("haproxy: stopping service")
-		if err := system.ManageService(ctx, system.ServiceStop, "haproxy"); err != nil {
-			p.Log.Warn("haproxy: stop failed", "err", err)
-		}
-	}
-	if system.IsServiceEnabled(ctx, "haproxy") {
-		p.Log.Info("haproxy: disabling service")
-		if err := system.ManageService(ctx, system.ServiceDisable, "haproxy"); err != nil {
-			p.Log.Warn("haproxy: disable failed", "err", err)
-		}
-	}
+	phase.StopAndDisableService(ctx, "haproxy", p.Log)
 
-	backupPath := haproxyConfigPath + ".backup." + time.Now().Format("20060102-150405")
+	backupPath := phase.HAProxyTimestampedBackupPath(haproxyConfigPath, time.Now())
 	if err := system.CopyFile(haproxyConfigPath, backupPath); err != nil {
 		p.Log.Warn("haproxy: could not back up config; removal will proceed without a recovery artifact", "err", err)
 	} else {
@@ -100,19 +88,7 @@ func (p *Phase) RemoveHAProxy(ctx context.Context, vip, clusterDir string) error
 		p.Log.Warn("haproxy: firewall cleanup incomplete", "err", err)
 	}
 
-	if vip != "" {
-		iface, ifaceErr := hostnet.GetDefaultInterface(ctx)
-		if ifaceErr != nil {
-			p.Log.Warn("haproxy: could not detect default interface for VIP removal", "err", ifaceErr)
-		} else {
-			p.Log.Info("haproxy: removing vip", "vip", vip, "iface", iface)
-			if rmErr := hostnet.RemoveSecondaryIP(ctx, vip, iface); rmErr != nil {
-				p.Log.Warn("haproxy: could not remove vip", "vip", vip, "iface", iface, "err", rmErr)
-			} else {
-				p.Log.Info("haproxy: vip removed", "vip", vip, "iface", iface)
-			}
-		}
-	}
+	phase.ReleaseVIP(ctx, vip, p.Log)
 
 	return nil
 }
