@@ -31,6 +31,7 @@ type dlConfig struct {
 	description      string
 	timeout          time.Duration
 	overwrite        bool
+	progress         bool
 	logger           *slog.Logger
 }
 
@@ -50,6 +51,11 @@ func WithTimeout(d time.Duration) FetchOption { return func(c *dlConfig) { c.tim
 
 // WithOverwrite forces a re-download even when a file with a matching checksum exists.
 func WithOverwrite(v bool) FetchOption { return func(c *dlConfig) { c.overwrite = v } }
+
+// WithProgress enables the stderr progress bar. Default is off; TTY gating
+// is the caller's job — pass tui.ProgressBarsEnabled() (or equivalent) so
+// this package stays free of presentation-layer imports.
+func WithProgress(v bool) FetchOption { return func(c *dlConfig) { c.progress = v } }
 
 // WithLogger injects a structured logger; nil falls back to logutil.NopLogger.
 func WithLogger(l *slog.Logger) FetchOption {
@@ -171,7 +177,7 @@ func fetchToFile(ctx context.Context, client *http.Client, cfg *dlConfig, filena
 		return fmt.Errorf("create output file: %w", err)
 	}
 
-	pw := newProgressWriter(outFile, resp.ContentLength, filename)
+	pw := newProgressWriter(outFile, resp.ContentLength, filename, cfg.progress)
 	if _, err := io.Copy(pw, resp.Body); err != nil {
 		_ = pw.Close()
 		_ = outFile.Close()

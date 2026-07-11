@@ -7,15 +7,12 @@ import (
 	"strings"
 
 	"golang.org/x/term"
-
-	"github.com/qxtaiba/okdctl/internal/tui"
 )
 
 // progressWriter wraps dst, counting bytes written and rendering a simple
 // carriage-return progress bar to stderr on each Write. Caller must call
-// Close to emit the final newline. When tui.ProgressBarsEnabled() is false
-// or total is unknown (<=0), renders nothing and acts as a transparent
-// pass-through.
+// Close to emit the final newline. When enabled is false or total is
+// unknown (<=0), renders nothing and acts as a transparent pass-through.
 type progressWriter struct {
 	dst     io.Writer
 	total   int64
@@ -24,8 +21,8 @@ type progressWriter struct {
 	width   int
 }
 
-func newProgressWriter(dst io.Writer, total int64, desc string) io.WriteCloser {
-	if !tui.ProgressBarsEnabled() || total <= 0 {
+func newProgressWriter(dst io.Writer, total int64, desc string, enabled bool) io.WriteCloser {
+	if !enabled || total <= 0 {
 		return nopCloser{dst}
 	}
 	w, _, err := term.GetSize(int(os.Stderr.Fd()))

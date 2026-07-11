@@ -19,6 +19,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/httputil"
 	"github.com/qxtaiba/okdctl/internal/platform"
 	"github.com/qxtaiba/okdctl/internal/system"
+	"github.com/qxtaiba/okdctl/internal/tui"
 )
 
 // Tool binary fetch URLs and version pins. The {arch} placeholder is
@@ -226,6 +227,7 @@ func (p *Phase) installBinary(ctx context.Context, spec *binaryInstallSpec) erro
 			download.WithDescription(spec.name),
 			download.WithTimeout(2*time.Minute),
 			download.WithLogger(p.Log),
+			download.WithProgress(tui.ProgressBarsEnabled()),
 		)
 	})
 	if err != nil {
