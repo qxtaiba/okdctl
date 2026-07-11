@@ -95,7 +95,9 @@ func New(opts ...phase.BasePhaseOption) *Phase {
 }
 
 // Execute runs the install phase step sequence and returns each step's
-// result. A non-nil error means orchestration stopped early.
+// result. A non-nil error means orchestration stopped early. cfg must be
+// the same cfg passed to NewOptions — opts was derived from it and the two
+// are not re-validated for consistency here.
 func (p *Phase) Execute(ctx context.Context, cfg *config.Config, opts *Options) ([]distribution.StepResult, error) {
 	orchestrator := distribution.NewOrchestrator(distribution.BuildSteps(p.installSteps(cfg, opts))...)
 	orchestrator.SetLogger(p.Log)
