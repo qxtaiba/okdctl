@@ -40,7 +40,8 @@ const defaultLockTimeout = "120s"
 type ExecError = executor.ExitError
 
 // Executor wraps terraform subcommand execution for a single working
-// directory with an optional var-file override.
+// directory. varFile is the default var-file path; per-invocation
+// overrides come via the VarFile field on Plan/Apply/DestroyOptions.
 type Executor struct {
 	workDir string
 	varFile string
@@ -55,11 +56,6 @@ type Option func(*Executor)
 // WithLogger sets the slog logger used to narrate terraform invocations.
 func WithLogger(l *slog.Logger) Option {
 	return func(e *Executor) { e.logger = logutil.OrNop(l) }
-}
-
-// WithVarFile overrides the default var-file path (<workDir>/terraform.tfvars).
-func WithVarFile(path string) Option {
-	return func(e *Executor) { e.varFile = path }
 }
 
 // WorkDir returns the working directory this Executor is rooted at.
