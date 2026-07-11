@@ -65,7 +65,7 @@ func runDeploy(cmd *cobra.Command, _ []string) error {
 	out := cmd.OutOrStdout()
 
 	if deployMetricsAllowNetwork && deployMetricsAddr == "" {
-		return &errtypes.ConfigError{
+		return &errtypes.UsageError{
 			Msg: "--metrics-allow-network requires --metrics-addr (the flag has no effect on its own)",
 		}
 	}
