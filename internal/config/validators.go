@@ -199,6 +199,21 @@ func validateAdvancedNetworking(cfg *Config, result *ValidationResult) {
 		}
 	}
 
+	// One physical bastion host runs dnsmasq (the DNS server baked into
+	// every node's static-ip kernel args, see setup/kargs.go) and the
+	// ignition HTTPS server (apache binds HTTPServer.IgnitionServerIP
+	// directly, see setup/apache.go). A hand-edited config that points
+	// either at a different host than networking.bastion.ip fails deep in
+	// setup with no config-time diagnostic otherwise.
+	if bastionIP != "" {
+		if dns := cfg.Networking.StaticIP.DNS; dns != "" && dns != bastionIP {
+			result.AddError(FieldNetworkingStaticIPDNS, "must match networking.bastion.ip — dnsmasq (the VMs' DNS server) runs on the bastion")
+		}
+		if ignitionIP := cfg.HTTPServer.IgnitionServerIP; ignitionIP != "" && ignitionIP != bastionIP {
+			result.AddError(FieldHTTPServerIP, "must match networking.bastion.ip — the ignition http server binds to the bastion")
+		}
+	}
+
 	type namedIP struct {
 		name string
 		ip   string
