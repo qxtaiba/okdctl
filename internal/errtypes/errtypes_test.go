@@ -81,7 +81,6 @@ func TestUnwrapChainIntact(t *testing.T) {
 	cases = append(cases, mkCases("UsageError", func(s error) error {
 		return &errtypes.UsageError{Msg: "test", Err: s}
 	})...)
-	// Preserve the original os.ErrNotExist positive case.
 	cases = append(cases, sentinelCase{
 		name:     "ConfigError/os.ErrNotExist",
 		err:      &errtypes.ConfigError{Msg: "open install-config.yaml", Err: os.ErrNotExist},

@@ -229,9 +229,9 @@ func sortAndClassifySeries(seriesMap map[string]*OKDReleaseSeries) []OKDReleaseS
 	return result
 }
 
-// OKD uses different prerelease patterns across versions:
-//   - Modern (4.12+): ".ec." (engineering candidate) or ".rc." (release candidate)
-//   - Legacy (4.4 and earlier): "-beta" suffix
+// isPrerelease reports whether tag matches an OKD prerelease pattern: modern
+// releases (4.12+) use ".ec." (engineering candidate) or ".rc.", while legacy
+// releases (4.4 and earlier) use a "-beta" suffix.
 func isPrerelease(tag string) bool {
 	tagLower := strings.ToLower(tag)
 	return strings.Contains(tagLower, ".ec.") ||

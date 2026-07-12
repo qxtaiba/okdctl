@@ -179,7 +179,6 @@ func ConfigureSystemResolver(ctx context.Context, fallbackDNS []string, logger *
 		return fmt.Errorf("invalid fallback DNS configuration: %w", err)
 	}
 
-	// Prefer NetworkManager when available.
 	if IsNetworkManagerActive(ctx) {
 		conn, err := getActiveConnection(ctx)
 		if err != nil {
@@ -203,7 +202,6 @@ func ConfigureSystemResolver(ctx context.Context, fallbackDNS []string, logger *
 		return nil
 	}
 
-	// Fall back to systemd-resolved.
 	if system.IsServiceActive(ctx, "systemd-resolved") {
 		logger.Info("resolver: configuring systemd-resolved to use dnsmasq")
 		confPath := resolvedConf
@@ -265,7 +263,6 @@ func RestoreSystemResolver(ctx context.Context, logger *slog.Logger) error {
 		return nil
 	}
 
-	// Clean up systemd-resolved drop-in if it exists.
 	if system.FileExists(resolvedConf) {
 		logger.Info("resolver: removing systemd-resolved dnsmasq configuration")
 		if err := removeAllFn(resolvedConf); err != nil {

@@ -37,9 +37,9 @@ const (
 	defaultPath   = "kubernetes/clusters/production"
 )
 
-// ProviderID is the canonical addon identity string for FluxCD. Wizard
-// defaults and addon DefaultSettings both reference this constant so the
-// two cannot silently diverge.
+// ProviderID is the addon identity string for FluxCD. Wizard defaults and
+// addon DefaultSettings both reference this constant so the two cannot
+// silently diverge.
 const ProviderID = "flux"
 
 // Settings keys consumed by the Flux addon. Named here so callers (install

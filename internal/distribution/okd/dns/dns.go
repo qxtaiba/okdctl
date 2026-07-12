@@ -46,9 +46,7 @@ func buildConfigData(cfg *config.Config) (templates.DNSConfigData, error) {
 		return templates.DNSConfigData{}, &errtypes.ConfigError{Msg: "static IP start is required"}
 	}
 
-	// Validate the node IP range up front so we fail with a clear error here
-	// rather than midway through per-node CalculateVMIP calls. This mirrors
-	// the check in setup/nodes.go so the two paths stay in lockstep.
+	// Mirrors the check in setup/nodes.go so the two paths stay in lockstep.
 	totalNodes := 1 + cfg.Topology.ControlPlane.Count + cfg.Topology.Workers.Count
 	if err := netutil.ValidateIPRangeInCIDR(staticIPStart, totalNodes, cfg.Networking.MachineCIDR); err != nil {
 		return templates.DNSConfigData{}, err

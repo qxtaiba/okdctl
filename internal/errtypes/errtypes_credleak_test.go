@@ -166,9 +166,6 @@ func TestExitErrorCommandNoArgvLeak(t *testing.T) {
 	})
 
 	t.Run("adversarial full-argv pattern leaks secret", func(t *testing.T) {
-		// Canary: confirms ExitError.Error() does NOT self-redact Command.
-		// If this assertion flips, ExitError gained Command-redaction logic
-		// and cluster/k8s.go::subcommand may be redundant — verify both.
 		e := &executor.ExitError{
 			Command:  "oc create secret generic mysecret --from-literal=password=" + secret,
 			ExitCode: 1,
