@@ -1215,7 +1215,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `api:92553fff:export-no-caller` — export no caller
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/w3-2-helpers
+**Status:** in review — PR #940
 **Severity:** minor
 **Cluster:** exported-surface
 **Evidence:** `internal/cli/summary.go:77-277`
@@ -1393,7 +1393,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `smell:4ded56d3:retry-scaffold-triplicated` — retry scaffold triplicated
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/w3-2-helpers
+**Status:** in review — PR #940
 **Severity:** minor
 **Cluster:** dual-impl-same-job
 **Evidence:** `internal/download/retry.go:84-112` + 2 more
@@ -1413,7 +1413,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `smell:0139cb3f:magic-path-literal` — magic path literal
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/w3-2-helpers
+**Status:** in review — PR #940
 **Severity:** minor
 **Cluster:** magic-strings
 **Evidence:** `internal/distribution/okd/phase/paths.go:130-137` + 16 more
@@ -1423,7 +1423,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `smell:6424733c:pipeline-explicit-errors` — pipeline explicit errors
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/w3-2-helpers
+**Status:** in review — PR #940
 **Severity:** suggestion
 **Cluster:** arrow-anti
 **Evidence:** `internal/cli/helpers.go:349-385` + 2 more
@@ -1433,7 +1433,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `smell:451be4fa:magic-path-literal` — magic path literal
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/w3-2-helpers
+**Status:** in review — PR #940
 **Severity:** major
 **Cluster:** magic-strings
 **Evidence:** `internal/system/elevation.go:140-144` + 13 more
@@ -1984,7 +1984,7 @@ and ceremony layers.
 
 #### A27 — Hoist the "okd-install" workdir literal into a phase constant
 
-- **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/w3-2-helpers
+- **Status:** in review — PR #940
 - **Category:** refactor
 - **State:** well-specified
 - **Effort:** hours
