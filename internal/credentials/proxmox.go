@@ -159,6 +159,7 @@ func (c *ProxmoxCredentials) GoString() string {
 //
 //	cli/deploy.go       — proxmox.WithEnv(creds.Env()); defer prov.ZeroizeEnv()
 //	cli/destroy.go      — terraform.WithEnv(creds.Env()); defer tf.ZeroizeEnv()
+//	cli/node.go         — terraform.WithEnv(creds.Env()); defer tf.ZeroizeEnv()
 //	deploy/deploy.go    — okd.WithEnv(creds.Env()); callers defer p.ZeroizeEnv()
 func (c *ProxmoxCredentials) Env() []string {
 	if !c.IsValid() {

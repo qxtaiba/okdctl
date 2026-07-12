@@ -156,11 +156,25 @@ func (p *Phase) GenerateTerraformVars(ctx context.Context, cfg *config.Config, o
 		return &errtypes.ConfigError{Msg: "proxmox provider configuration required"}
 	}
 
-	data := buildTerraformVarsData(cfg)
 	envDir := filepath.Join(opts.ProjectRoot, "infrastructure", "terraform", "environments", phase.GetTerraformEnv(cfg))
 	// A stale postinstall sentinel would override the regenerated
-	// bootstrap_enabled=true and silently skip the bootstrap VM.
+	// bootstrap_enabled=true and silently skip the bootstrap VM. Deploy is the
+	// only caller that should resurrect bootstrap, so the removal lives here,
+	// not in WriteTerraformVars — node-lifecycle re-renders must preserve it.
 	_ = system.SafeRemove(filepath.Join(envDir, phase.BootstrapStateSentinelFile))
+	return WriteTerraformVars(cfg, envDir)
+}
+
+// WriteTerraformVars renders terraform.tfvars from cfg into envDir. Unlike
+// GenerateTerraformVars it does NOT touch the bootstrap sentinel, so a
+// post-install re-render (node add/remove/resize) cannot resurrect the
+// bootstrap VM by flipping bootstrap_enabled back to true. envDir is the
+// concrete environment directory (…/environments/<env>).
+func WriteTerraformVars(cfg *config.Config, envDir string) error {
+	if cfg.Provider.Proxmox == nil {
+		return &errtypes.ConfigError{Msg: "proxmox provider configuration required"}
+	}
+	data := buildTerraformVarsData(cfg)
 	outputPath := filepath.Join(envDir, "terraform.tfvars")
 	return renderAndWrite(
 		func() (string, error) { return templates.RenderTerraformVars(&data) },
