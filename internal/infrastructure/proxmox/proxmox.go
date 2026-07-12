@@ -152,9 +152,9 @@ func (p *Provider) Connect(ctx context.Context, cfg *config.Config) error {
 // network-bound providers; this implementation is local-only. The _ receiver
 // is intentional — if Proxmox ever adds a graceful session-teardown handshake
 // (e.g., via the Proxmox VE API), ctx threads through without a signature
-// change. Multi-provider support is explicitly out of scope per roadmap
-// constraint 1 (single provider: Proxmox); this scaffolding is for a
-// future network-bound Proxmox disconnect, not a provider abstraction.
+// change. Multi-provider support is explicitly out of scope (Proxmox is
+// the sole provider); this scaffolding is for a future network-bound
+// Proxmox disconnect, not a provider abstraction.
 func (p *Provider) Disconnect(_ context.Context) error {
 	p.connected = false
 	p.terraformExec = nil
@@ -188,10 +188,10 @@ func (p *Provider) setupTerraform(projectRoot, tfEnv string) {
 
 // Provision runs terraform init/plan/apply for the configured environment.
 // Connect must have run first; otherwise this returns ErrNotConnected. It is
-// error-only (roadmap A10): the prior *ProvisionResult return fabricated
-// VMStatus.Status as StateRunning before any VM was observed running and set
-// APIServerIP to the network gateway (a different machine); the sole caller
-// discarded the value anyway.
+// error-only: the prior *ProvisionResult return fabricated VMStatus.Status
+// as StateRunning before any VM was observed running and set APIServerIP to
+// the network gateway (a different machine); the sole caller discarded the
+// value anyway.
 func (p *Provider) Provision(ctx context.Context, cfg *config.Config, opts ProvisionOptions) error {
 	if !p.connected {
 		return &errtypes.ConfigError{Msg: "proxmox provider not connected — call Connect() first", Err: ErrNotConnected}
@@ -310,11 +310,9 @@ type vmNodeSpec struct {
 
 // planProvisionedNodes validates that the configured static IP range fits
 // the topology and CIDR, then returns the name/IP pairs Provision logs
-// after a successful apply. Renamed from retrieveProvisionResult (roadmap
-// A10): the prior ProvisionResult.VMs carried a Status hardcoded to
-// StateRunning and an APIServerIP set to the network gateway, neither of
-// which was observed — this helper reports config-derived addresses only,
-// with no state claim.
+// after a successful apply. It reports config-derived addresses only, with
+// no state claim — no VM's running status or API server reachability is
+// observed here.
 // IP scheme: bootstrap = start IP, masters = start+1..N, workers = start+N+1 onwards.
 func (p *Provider) planProvisionedNodes(cfg *config.Config) ([]vmNodeSpec, error) {
 	startIP := cfg.Networking.StaticIP.Start

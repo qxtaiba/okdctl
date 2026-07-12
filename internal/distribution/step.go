@@ -11,8 +11,7 @@ import (
 )
 
 // StepID is a stable identifier for a provisioning step. IDs appear in logs,
-// persisted StepResult records, and roadmap cross-references, so they must not
-// change once a step ships.
+// so they must not change once a step ships.
 type StepID string
 
 // StepResult is the outcome of a single provisioning step, populated by the

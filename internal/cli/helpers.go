@@ -144,10 +144,9 @@ func resolveProjectRootOrDie() (string, error) {
 	return root, nil
 }
 
-// hasProjectMarker reports whether root contains at least one okdctl project
-// file. It checks the configured config-file name, okdctl.env, and any
-// terraform.tfstate under infrastructure/terraform/environments/. All three
-// are exclusively written by okdctl inside a project root.
+// hasPrimaryMarker reports whether root contains okdctl's primary config
+// markers: the configured config-file name or okdctl.env. Both are
+// exclusively written by okdctl inside a project root.
 func hasPrimaryMarker(root string) bool {
 	for _, name := range []string{filepath.Base(cfgFile), "okdctl.env"} {
 		if _, err := os.Stat(filepath.Join(root, name)); err == nil {
@@ -164,6 +163,9 @@ func terraformStateMatches(root string) []string {
 	return matches
 }
 
+// hasProjectMarker reports whether root contains at least one okdctl project
+// marker: a primary marker (see hasPrimaryMarker) or a terraform.tfstate
+// under infrastructure/terraform/environments/.
 func hasProjectMarker(root string) bool {
 	return hasPrimaryMarker(root) || len(terraformStateMatches(root)) > 0
 }

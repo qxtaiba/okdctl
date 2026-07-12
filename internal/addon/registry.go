@@ -82,9 +82,8 @@ func Names() []string {
 	return slices.Clone(registry.order)
 }
 
-// IsRegistered reports whether name is in the registry. Symmetric with
-// Get/Names/All; currently no caller, retained as the canonical predicate
-// for the future "okdctl addon validate" verb and wizard pre-checks.
+// IsRegistered reports whether name is in the registry. Unused today — kept
+// for a future "okdctl addon validate" verb and wizard pre-checks.
 func IsRegistered(name string) bool {
 	registry.mu.RLock()
 	defer registry.mu.RUnlock()

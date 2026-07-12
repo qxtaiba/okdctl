@@ -3,8 +3,8 @@ package cli
 import "github.com/spf13/cobra"
 
 // doctorCmd is the user-facing 'okdctl doctor' command. It is separate
-// from main.preflight() (which is a startup guardrail) — doctor runs a
-// comprehensive environment audit and reports status for each check.
+// from main.preflight() (which is a startup guardrail) — doctor runs the
+// host preflight checks and reports each result.
 // runDoctor refuses non-linux hosts at runtime; see doctor.go.
 var doctorOutput string
 

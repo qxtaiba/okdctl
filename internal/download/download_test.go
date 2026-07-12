@@ -57,11 +57,11 @@ func TestDownload_HappyPath(t *testing.T) {
 }
 
 // TestRetryDownload_RetriableHTTPErrorSecondAttemptWins drives retryDownload
-// with a 503 (retriable transport error). The roadmap framed this as
-// "checksum-mismatch retry" but verifyDownloadedFile does not retry on
-// mismatch — it removes the file and returns. Retry is a transport-tier
-// concern only; this test exercises that path. First-failure backoff is
-// ~2.5-7.5 s with jitter; the sleep is intentional, not gated, so CI sees it.
+// with a 503 (retriable transport error). verifyDownloadedFile does not retry
+// on checksum mismatch — it removes the file and returns. Retry is a
+// transport-tier concern only; this test exercises that path. First-failure
+// backoff is ~2.5-7.5 s with jitter; the sleep is intentional, not gated, so
+// CI sees it.
 func TestRetryDownload_RetriableHTTPErrorSecondAttemptWins(t *testing.T) {
 	calls := 0
 	retryable := &HTTPStatusError{Status: http.StatusServiceUnavailable, Method: http.MethodGet, URL: "http://example.invalid/f"}

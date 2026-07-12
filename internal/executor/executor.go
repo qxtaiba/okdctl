@@ -88,8 +88,7 @@ func WithLogger(l *slog.Logger) Option {
 // parent's full environment to subprocesses. Use sparingly — prefer
 // WithEnv for well-known variables. Use cases: a tool that consumes a
 // variable not on the allowlist, or a test that needs a custom env that
-// the allowlist would filter. Symmetric with WithEnv as the canonical
-// inherit-vs-filter option pair.
+// the allowlist would filter.
 //
 // Takes no argument because every current call site wants unconditional
 // inheritance; add a bool parameter (matching download.WithOverwrite's
@@ -124,10 +123,10 @@ func New(opts ...Option) *Executor {
 	return e
 }
 
-// DefaultEnvAllowlist is the canonical env filter used by both Executor
-// subprocesses and the sudo re-exec in internal/cli/elevation.go. It
-// passes tooling plumbing and provider namespaces; everything else is
-// dropped to prevent unrelated tokens reaching privileged processes.
+// DefaultEnvAllowlist is the env filter shared by Executor subprocesses and
+// the sudo re-exec in internal/cli/elevation.go. It passes tooling plumbing
+// and provider namespaces; everything else is dropped to prevent unrelated
+// tokens reaching privileged processes.
 var DefaultEnvAllowlist = EnvAllowlist{
 	Exact: map[string]bool{
 		"PATH": true, "HOME": true, "USER": true, "LOGNAME": true, "SHELL": true,
@@ -160,7 +159,7 @@ var DefaultEnvAllowlist = EnvAllowlist{
 
 // EnvAllowlist is a dual exact-match + prefix-match filter for environment
 // variables. Exported so callers outside this package (e.g. cli/elevation.go)
-// can reuse the same canonical list rather than duplicating it.
+// can reuse the same list rather than duplicating it.
 type EnvAllowlist struct {
 	Exact    map[string]bool
 	Prefixes []string

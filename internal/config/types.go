@@ -1,9 +1,9 @@
 package config
 
 // DistributionType identifies the Kubernetes distribution to deploy.
-// Scaffolding: single-variant by design — roadmap §1 explicitly skips
-// multi-distribution; the typed enum preserves the API surface so call
-// sites need no change if a second variant ever lands.
+// Scaffolding: single-variant by design — multi-distribution support is
+// deliberately out of scope; the typed enum preserves the API surface so
+// call sites need no change if a second variant ever lands.
 type DistributionType string
 
 // Distributions okdctl can deploy.
@@ -12,9 +12,9 @@ const (
 )
 
 // ProviderType identifies the infrastructure provider.
-// Scaffolding: single-variant by design — roadmap §1 skips multi-provider;
-// ProviderConfig stays Proxmox-shaped. The typed enum is kept for
-// call-site stability, not future expansion.
+// Scaffolding: single-variant by design — multi-provider support is
+// deliberately out of scope; ProviderConfig stays Proxmox-shaped. The
+// typed enum is kept for call-site stability, not future expansion.
 type ProviderType string
 
 // Providers okdctl can deploy onto.
