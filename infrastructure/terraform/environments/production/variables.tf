@@ -55,6 +55,16 @@ variable "vmid_base" {
   type        = number
 }
 
+# worker_count is exposed at the root so `okdctl node remove` / `add` can
+# drive the worker VM set by count. Master count stays module-internal: master
+# add/remove renumbers worker IPs and is guarded by prevent_destroy + the
+# odd-quorum validator, so it is deliberately not a root knob.
+variable "worker_count" {
+  description = "number of worker nodes to create"
+  type        = number
+  default     = 3
+}
+
 
 # =============================================================================
 # VM RESOURCE CONFIGURATION
@@ -77,6 +87,21 @@ variable "bootstrap_memory_mb" {
 
 variable "worker_cpu_cores" {
   description = "cpu cores for worker nodes (defaults to cpu_cores if not set)"
+  type        = number
+  default     = null
+}
+
+# master_memory_mb / master_cpu_cores give `okdctl node resize masters` a clean
+# per-role knob. Null falls back to memory_mb / cpu_cores in the module's
+# coalesce, so a root that never sets them keeps the pre-widening behavior.
+variable "master_memory_mb" {
+  description = "memory for master nodes (defaults to memory_mb if not set)"
+  type        = number
+  default     = null
+}
+
+variable "master_cpu_cores" {
+  description = "cpu cores for master nodes (defaults to cpu_cores if not set)"
   type        = number
   default     = null
 }
