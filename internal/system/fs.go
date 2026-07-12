@@ -16,6 +16,15 @@ import (
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 )
 
+// TerraformEnvDir returns the Terraform environment directory
+// (<projectRoot>/infrastructure/terraform/environments/<env>) for env. An
+// empty env resolves to the environments directory itself. It lives here
+// rather than in phase because internal/infrastructure/proxmox must build
+// this path without importing phase (see roadmap B1 layering fix).
+func TerraformEnvDir(projectRoot, env string) string {
+	return filepath.Join(projectRoot, "infrastructure", "terraform", "environments", env)
+}
+
 // FileExists reports whether path refers to an existing regular file
 // (returns false for directories).
 func FileExists(path string) bool {
