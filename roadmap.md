@@ -1473,7 +1473,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `smell:90fa855c:coreos-iso-glob-dup` — coreos iso glob dup
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/w3-4-status
+**Status:** in review — PR #942
 **Severity:** suggestion
 **Cluster:** dual-impl-same-job — re-queued from PR #884's skipped-items section (reverted there by a stale-local-linter false gate)
 **Evidence:** `internal/distribution/okd/setup/coreos.go:100-123`
@@ -1567,7 +1567,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `doc:c3dc10bb:flux-gettimeout-doc-orphaned` — flux gettimeout doc orphaned
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/w3-4-status
+**Status:** in review — PR #942
 **Severity:** suggestion
 **Cluster:** exported-doc — re-queued from PR #884's skipped-items section (reverted there by a stale-local-linter false gate)
 **Evidence:** `internal/addon/catalog/flux/flux.go:565-568`
@@ -1770,7 +1770,7 @@ and ceremony layers.
 
 #### A12 — Make ClusterPhase lifecycle states reachable or trim them
 
-- **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/w3-4-status
+- **Status:** in review — PR #942
 - **Category:** domain-model accuracy
 - **State:** design needed
 - **Effort:** days
