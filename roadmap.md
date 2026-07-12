@@ -202,7 +202,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `api:4f69fc9d:iface-fragmented-step` — iface fragmented step
 
-**Status:** in review — PR #923
+**Status:** done — PR #923
 **Severity:** suggestion  
 **Evidence:** `internal/distribution/step.go:31-69`  
 **Problem:** Step / Skipper / FatalChecker / StepCallbacks remain four interfaces that ProvisioningStep always composes together. The builtStep impl implements all four.  
@@ -486,7 +486,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `sub:ae5b624c:parallel-exec-wrapper` — parallel exec wrapper
 
-**Status:** in review — PR #926
+**Status:** done — PR #926
 **Severity:** suggestion
 **Cluster:** io-handling — seam→`audit-api-design` — related: `sub:97cb8adf:no-cancel-func`
 **Evidence:** `internal/distribution/okd/install/monitor.go:25-44`
@@ -498,7 +498,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `state:0f076161:destroy-no-cluster-confirm-without-yes` — destroy no cluster confirm without yes
 
-**Status:** in review — PR #908
+**Status:** done — PR #908
 **Severity:** minor
 **Cluster:** destroy-safety
 **Evidence:** `internal/cli/destroy.go:230-245`
@@ -518,7 +518,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `state:b38ec9cc:workers-targeted-apply-skips-other-drift` — workers targeted apply skips other drift
 
-**Status:** in review — PR #907
+**Status:** done — PR #907
 **Severity:** suggestion
 **Cluster:** phase-idempotency
 **Evidence:** `internal/distribution/okd/install/workers.go:46-76`
@@ -558,7 +558,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `state:0f076161:destroy-skip-flag-orthogonal-with-dryrun` — destroy skip flag orthogonal with dryrun
 
-**Status:** in review — PR #908
+**Status:** done — PR #908
 **Severity:** suggestion
 **Cluster:** destroy-safety
 **Evidence:** `internal/cli/destroy.go:210-227`
@@ -582,7 +582,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `err:48688e63:proxmox-apply-cancel-bare-wrap` — proxmox apply cancel bare wrap
 
-**Status:** in review — PR #921
+**Status:** done — PR #921
 **Severity:** suggestion
 **Cluster:** cancellation-identity — seam→`audit-concurrency`
 **Evidence:** `internal/infrastructure/proxmox/proxmox.go:232-242`
@@ -592,7 +592,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `err:b38ec9cc:lock-hint-exit-code-flip` — lock hint exit code flip
 
-**Status:** in review — PR #907
+**Status:** done — PR #907
 **Severity:** major
 **Cluster:** sentinel-vs-typed — seam→`audit-cli-ux`
 **Evidence:** `internal/distribution/okd/install/workers.go:39-71` + 3 more
@@ -602,7 +602,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `err:f55b9c27:envfile-loadonce-no-sentinel` — envfile loadonce no sentinel
 
-**Status:** in review — PR #916
+**Status:** done — PR #916
 **Severity:** suggestion
 **Cluster:** sentinel-vs-typed
 **Evidence:** `internal/credentials/envfile.go:120-129`
@@ -646,7 +646,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `api:262af6e4:opt-no-newoptions` — opt no newoptions
 
-**Status:** in review — PR #908
+**Status:** done — PR #908
 **Severity:** minor
 **Cluster:** option-consistency
 **Evidence:** `internal/distribution/okd/cleanup/cleanup.go:68-83`
@@ -656,7 +656,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `api:d6b325cb:pkg-types-direction` — pkg types direction
 
-**Status:** in review — PR #921
+**Status:** done — PR #921
 **Severity:** minor
 **Cluster:** package-boundary
 **Evidence:** `internal/infrastructure/proxmox/types.go:1-49`
@@ -666,7 +666,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `api:262af6e4:opt-execute-receiver-unused` — opt execute receiver unused
 
-**Status:** in review — PR #908
+**Status:** done — PR #908
 **Severity:** minor
 **Cluster:** option-consistency
 **Evidence:** `internal/distribution/okd/cleanup/cleanup.go:97-102`
@@ -746,7 +746,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `api:7b2829bb:opt-with-inherited-env-noarg` — opt with inherited env noarg
 
-**Status:** in review — PR #926
+**Status:** done — PR #926
 **Severity:** suggestion
 **Cluster:** option-consistency
 **Evidence:** `internal/executor/executor.go:79-87`
@@ -776,7 +776,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `api:4f69fc9d:iface-fragmented-step` — iface fragmented step
 
-**Status:** in review — PR #923
+**Status:** done — PR #923
 **Severity:** minor
 **Cluster:** interface-location
 **Evidence:** `internal/distribution/step.go:33-67`
@@ -786,7 +786,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `api:c287d5c0:opt-destroyopts-duplication` — opt destroyopts duplication
 
-**Status:** in review — PR #908
+**Status:** done — PR #908
 **Severity:** minor
 **Cluster:** option-consistency
 **Evidence:** `internal/distribution/okd/okd.go:181-222`
@@ -796,7 +796,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `api:ae5b624c:iface-csr-approver-positive` — iface csr approver positive
 
-**Status:** in review — PR #922
+**Status:** done — PR #922
 **Severity:** suggestion
 **Cluster:** interface-location
 **Evidence:** `internal/distribution/okd/install/monitor.go:78-83`
@@ -808,7 +808,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `ux:fd2125dd:concept-named-twice` — concept named twice
 
-**Status:** in review — PR #896
+**Status:** done — PR #896
 **Severity:** minor
 **Cluster:** verb-noun
 **Evidence:** `internal/cli/addon.go:28-31` + 1 more
@@ -818,7 +818,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `ux:0f076161:exit-taxonomy-not-published` — exit taxonomy not published
 
-**Status:** in review — PR #908
+**Status:** done — PR #908
 **Severity:** minor
 **Cluster:** exit-codes — seam→`audit-errors`
 **Evidence:** `internal/cli/destroy.go:204-227`
@@ -828,7 +828,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `ux:073d24ed:flag-shortcut-collision` — flag shortcut collision
 
-**Status:** in review — PR #896
+**Status:** done — PR #896
 **Severity:** minor
 **Cluster:** flag-conventions
 **Evidence:** `internal/cli/deploy.go:46-51` + 2 more
@@ -842,7 +842,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `mod:b38ec9cc:use-strings-lines` — use strings lines
 
-**Status:** in review — PR #907
+**Status:** done — PR #907
 **Severity:** minor
 **Cluster:** slices-maps
 **Evidence:** `internal/distribution/okd/install/workers.go:91-97`
@@ -854,7 +854,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `smell:0f076161:stringly-typed-enum` — stringly typed enum
 
-**Status:** in review — PR #908
+**Status:** done — PR #908
 **Severity:** minor
 **Cluster:** magic-strings
 **Evidence:** `internal/cli/destroy.go:109-130`
@@ -864,7 +864,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `smell:48688e63:bool-should-be-3state` — bool should be 3state
 
-**Status:** in review — PR #921
+**Status:** done — PR #921
 **Severity:** suggestion
 **Cluster:** bool-should-be-enum
 **Evidence:** `internal/infrastructure/proxmox/proxmox.go:470-503`
@@ -874,7 +874,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `smell:262af6e4:abstraction-single-caller` — abstraction single caller
 
-**Status:** in review — PR #908
+**Status:** done — PR #908
 **Severity:** suggestion
 **Cluster:** helper-package-no-value
 **Evidence:** `internal/distribution/okd/cleanup/cleanup.go:24-56`
@@ -886,7 +886,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `dep:e8f33f61:maint-single-bus-go-proxmox` — maint single bus go proxmox
 
-**Status:** in review — PR #895
+**Status:** done — PR #895
 **Severity:** major
 **Cluster:** maintenance-signal
 **Evidence:** `go.mod:12-12`
@@ -896,7 +896,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `dep:33ef32bf:yaml-prod-binary-engines` — yaml prod binary engines
 
-**Status:** in review — PR #895
+**Status:** done — PR #895
 **Severity:** minor
 **Cluster:** duplicate-engine
 **Evidence:** `go.mod:19-55`
@@ -906,7 +906,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `dep:33ef32bf:gorilla-ws-version-floor` — gorilla ws version floor
 
-**Status:** in review — PR #895
+**Status:** done — PR #895
 **Severity:** minor
 **Cluster:** justified-version-floor
 **Evidence:** `go.mod:39-39`
@@ -916,7 +916,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `dep:33ef32bf:json-iterator-stale` — json iterator stale
 
-**Status:** in review — PR #895
+**Status:** done — PR #895
 **Severity:** suggestion
 **Cluster:** maintenance-signal
 **Evidence:** `go.mod:42-42`
@@ -926,7 +926,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `dep:33ef32bf:modern-go-concurrent-abandoned` — modern go concurrent abandoned
 
-**Status:** in review — PR #895
+**Status:** done — PR #895
 **Severity:** suggestion
 **Cluster:** maintenance-signal
 **Evidence:** `go.mod:47-48`
@@ -936,7 +936,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `dep:33ef32bf:claude-md-godotenv-stale` — claude md godotenv stale
 
-**Status:** in review — PR #895
+**Status:** done — PR #895
 **Severity:** suggestion
 **Cluster:** maintenance-signal
 **Evidence:** `CLAUDE.md:1-1`
@@ -956,7 +956,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `dep:660d83a5:charm-log-vs-slog-policy` — charm log vs slog policy
 
-**Status:** in review — PR #895
+**Status:** done — PR #895
 **Severity:** suggestion
 **Cluster:** duplicate-engine — seam→`audit-modernization`
 **Evidence:** `internal/tui/logger.go:12-196`
@@ -966,7 +966,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `dep:33ef32bf:diskfs-transitive-weight` — diskfs transitive weight
 
-**Status:** in review — PR #895
+**Status:** done — PR #895
 **Severity:** minor
 **Cluster:** transitive-weight
 **Evidence:** `go.mod:34-34`
@@ -995,7 +995,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `sub:0934cf1b:no-timeout` — no timeout
 
-**Status:** in review — PR #926
+**Status:** done — PR #926
 **Severity:** suggestion
 **Cluster:** timeout-cancel
 **Evidence:** `internal/platform/packages.go:60-90` + 2 more
@@ -1005,7 +1005,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `sub:4c092fce:ring-truncated-stdout-parse` — ring truncated stdout parse
 
-**Status:** in review — PR #926
+**Status:** done — PR #926
 **Severity:** minor
 **Cluster:** io-handling — related: sub:1e8ffb91:ring-truncated-stdout-parse
 **Evidence:** `internal/infrastructure/terraform/terraform.go:467-484`
@@ -1015,7 +1015,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `sub:19a715fd:ring-truncated-stdout-parse` — ring truncated stdout parse
 
-**Status:** in review — PR #926
+**Status:** done — PR #926
 **Severity:** minor
 **Cluster:** io-handling — seam→audit-security — related: sub:1e8ffb91:ring-truncated-stdout-parse
 **Evidence:** `internal/addon/catalog/secretstore/secretstore.go:276-282`
@@ -1025,7 +1025,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `sub:696d6b0e:ring-truncated-stdout-parse` — ring truncated stdout parse
 
-**Status:** in review — PR #926
+**Status:** done — PR #926
 **Severity:** suggestion
 **Cluster:** io-handling — related: sub:1e8ffb91:ring-truncated-stdout-parse
 **Evidence:** `internal/distribution/okd/phase/iso_cleanup.go:138-159` + 1 more
@@ -1035,7 +1035,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `sub:29293401:ring-truncated-stdout-parse` — ring truncated stdout parse
 
-**Status:** in review — PR #926
+**Status:** done — PR #926
 **Severity:** suggestion
 **Cluster:** io-handling — related: sub:1e8ffb91:ring-truncated-stdout-parse
 **Evidence:** `internal/distribution/okd/setup/haproxy.go:186-200`
@@ -1047,7 +1047,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `state:0f076161:destroy-scoped-cleanup-unscoped` — destroy scoped cleanup unscoped
 
-**Status:** in review — PR #908
+**Status:** done — PR #908
 **Severity:** blocker
 **Cluster:** destroy-safety — related: state:0f076161:destroy-no-cluster-confirm-without-yes
 **Evidence:** `internal/cli/destroy.go:282-290` + 2 more
@@ -1057,7 +1057,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `state:15ba17da:destroy-orphans-custom-isos` — destroy orphans custom isos
 
-**Status:** in review — PR #908
+**Status:** done — PR #908
 **Severity:** minor
 **Cluster:** destroy-safety — related: state:0f076161:destroy-scoped-cleanup-unscoped
 **Evidence:** `internal/distribution/okd/destroy/steps.go:93-115` + 2 more
@@ -1067,7 +1067,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `state:4c092fce:snapshot-bak-retention-after-destroy` — snapshot bak retention after destroy
 
-**Status:** in review — PR #908
+**Status:** done — PR #908
 **Severity:** suggestion
 **Cluster:** tf-state-atomicity — seam→audit-security — related: state:62cb8a95:corrupt-state-silent-destroy-noop
 **Evidence:** `internal/infrastructure/terraform/terraform.go:391-453` + 1 more
@@ -1089,7 +1089,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `iac:18a795d5:dup-insecure-comment` — dup insecure comment
 
-**Status:** in review — PR #894
+**Status:** done — PR #894
 **Severity:** suggestion
 **Cluster:** hcl-doc-hygiene
 **Evidence:** `infrastructure/terraform/modules/proxmox-okd/main.tf:9-10` + 3 more
@@ -1099,7 +1099,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `iac:e076e43c:token-in-argv` — token in argv
 
-**Status:** in review — PR #894
+**Status:** done — PR #894
 **Severity:** suggestion
 **Cluster:** install-sh-integrity
 **Evidence:** `scripts/install.sh:109-117`
@@ -1121,7 +1121,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `err:5e892064:vocab-ad-hoc-synonym` — vocab ad hoc synonym
 
-**Status:** in review — PR #916
+**Status:** done — PR #916
 **Severity:** minor
 **Cluster:** domain-vocabulary
 **Evidence:** `internal/download/checksum.go:74-74` + 1 more
@@ -1131,7 +1131,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `err:aa84670c:exit-mapping-nesting-precedence` — exit mapping nesting precedence
 
-**Status:** in review — PR #896
+**Status:** done — PR #896
 **Severity:** suggestion
 **Cluster:** typed-error-exit-mapping — seam→audit-cli-ux
 **Evidence:** `internal/cli/root.go:212-251`
@@ -1145,7 +1145,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `api:2c4d8e6b:iface-in-producer` — iface in producer
 
-**Status:** in review — PR #910
+**Status:** done — PR #910
 **Severity:** minor
 **Cluster:** interface-location
 **Evidence:** `internal/addon/addon.go:50-92` + 3 more
@@ -1165,7 +1165,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `api:d6b325cb:pkg-import-cycle-adj` — pkg import cycle adj
 
-**Status:** in review — PR #921
+**Status:** done — PR #921
 **Severity:** minor
 **Cluster:** package-boundary
 **Evidence:** `internal/infrastructure/proxmox/types.go:1-51` + 4 more
@@ -1175,7 +1175,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `api:c287d5c0:pkg-facade-bypassed` — pkg facade bypassed
 
-**Status:** in review — PR #923
+**Status:** done — PR #923
 **Severity:** minor
 **Cluster:** package-boundary
 **Evidence:** `internal/distribution/okd/okd.go:146-154` + 2 more
@@ -1185,7 +1185,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `api:5e892064:ctx-missing-on-io` — ctx missing on io
 
-**Status:** in review — PR #916
+**Status:** done — PR #916
 **Severity:** minor
 **Cluster:** ctx-first
 **Evidence:** `internal/download/checksum.go:21-54` + 2 more
@@ -1205,7 +1205,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `api:0934cf1b:iface-in-producer` — iface in producer
 
-**Status:** in review — PR #926
+**Status:** done — PR #926
 **Severity:** suggestion
 **Cluster:** interface-location
 **Evidence:** `internal/platform/packages.go:18-56`
@@ -1225,7 +1225,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `api:cfcdee2d:export-no-caller-scaffolding` — export no caller scaffolding
 
-**Status:** in review — PR #897
+**Status:** done — PR #897
 **Severity:** suggestion
 **Cluster:** exported-surface
 **Evidence:** `internal/httputil/httputil.go:18-26`
@@ -1305,7 +1305,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `api:de572c63:export-no-caller-scaffolding` — export no caller scaffolding
 
-**Status:** in review — PR #897
+**Status:** done — PR #897
 **Severity:** suggestion
 **Cluster:** exported-surface
 **Evidence:** `internal/distribution/okd/dns/dnsmasq.go:49-64` + 17 more
@@ -1327,7 +1327,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `ux:024a2c32:json-schema-undoc` — json schema undoc
 
-**Status:** in review — PR #896
+**Status:** done — PR #896
 **Severity:** suggestion
 **Cluster:** json-stability — related: sub:d31d1b9d:ring-truncated-stdout-parse
 **Evidence:** `docs/cli/json-schema.md:56-67` + 2 more
@@ -1337,7 +1337,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `ux:aa84670c:exit-code-undefined` — exit code undefined
 
-**Status:** in review — PR #896
+**Status:** done — PR #896
 **Severity:** suggestion
 **Cluster:** exit-codes
 **Evidence:** `internal/cli/root.go:157-170`
@@ -1347,7 +1347,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `ux:e7db1220:flag-completion-inconsistent` — flag completion inconsistent
 
-**Status:** in review — PR #896
+**Status:** done — PR #896
 **Severity:** suggestion
 **Cluster:** flag-conventions
 **Evidence:** `internal/cli/releases.go:77-83` + 2 more
@@ -1357,7 +1357,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `ux:fd2125dd:verb-noun-inconsistent` — verb noun inconsistent
 
-**Status:** in review — PR #896
+**Status:** done — PR #896
 **Severity:** suggestion
 **Cluster:** verb-noun
 **Evidence:** `internal/cli/addon.go:27-31` + 1 more
@@ -1371,7 +1371,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `mod:48688e63:use-slices-containsfunc` — use slices containsfunc
 
-**Status:** in review — PR #921
+**Status:** done — PR #921
 **Severity:** suggestion
 **Cluster:** slices-maps
 **Evidence:** `internal/infrastructure/proxmox/proxmox.go:499-503`
@@ -1381,7 +1381,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `mod:e3782ee7:use-errors-is` — use errors is
 
-**Status:** in review — PR #932
+**Status:** done — PR #932
 **Severity:** minor
 **Cluster:** errors-and-deprecated-stdlib
 **Evidence:** `internal/system/fs.go:91-210` + 16 more
@@ -1403,7 +1403,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `smell:4c092fce:pipeline-explicit-errors` — pipeline explicit errors
 
-**Status:** in review — PR #907
+**Status:** done — PR #907
 **Severity:** minor
 **Cluster:** arrow-anti
 **Evidence:** `internal/infrastructure/terraform/terraform.go:212-227` + 8 more
@@ -1443,7 +1443,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `smell:2c4d8e6b:interfaceany-lazy-exported` — interfaceany lazy exported
 
-**Status:** in review — PR #910
+**Status:** done — PR #910
 **Severity:** suggestion
 **Cluster:** interfaceany-lazy — seam→audit-api-design
 **Evidence:** `internal/addon/addon.go:58-58` + 4 more
@@ -1453,7 +1453,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `smell:40d315ad:settings-stringified-numbers` — settings stringified numbers
 
-**Status:** in review — PR #910
+**Status:** done — PR #910
 **Severity:** suggestion
 **Cluster:** stringified-numbers
 **Evidence:** `internal/addon/catalog/flux/flux.go:581-588` + 4 more
@@ -1463,7 +1463,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `smell:0f076161:enum-ad-hoc` — enum ad hoc
 
-**Status:** in review — PR #908
+**Status:** done — PR #908
 **Severity:** suggestion
 **Cluster:** magic-strings
 **Evidence:** `internal/cli/destroy.go:109-130`
@@ -1485,7 +1485,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `dep:b803fcb7:version-floor-unjustified` — version floor unjustified
 
-**Status:** in review — PR #894
+**Status:** done — PR #894
 **Severity:** minor
 **Cluster:** pin-stability
 **Evidence:** `.github/workflows/ci.yml:56-56` + 2 more
@@ -1495,7 +1495,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `dep:33ef32bf:dup-log-engines` — dup log engines
 
-**Status:** in review — PR #895
+**Status:** done — PR #895
 **Severity:** suggestion
 **Cluster:** duplicate-engine
 **Evidence:** `go.mod:11-11` + 3 more
@@ -1505,7 +1505,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `dep:6ebdb617:dep-registry-drift` — dep registry drift
 
-**Status:** in review — PR #895
+**Status:** done — PR #895
 **Severity:** minor
 **Cluster:** maintenance-signal
 **Evidence:** `CLAUDE.md:234-247` + 1 more
@@ -1515,7 +1515,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `dep:33ef32bf:version-floor-unjustified` — version floor unjustified
 
-**Status:** in review — PR #895
+**Status:** done — PR #895
 **Severity:** minor
 **Cluster:** justified-version-floor — related: dep:6ebdb617:dep-registry-drift
 **Evidence:** `go.mod:39-39` + 1 more
@@ -1525,7 +1525,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `dep:b803fcb7:pin-action-trailer-imprecise` — pin action trailer imprecise
 
-**Status:** in review — PR #894
+**Status:** done — PR #894
 **Severity:** minor
 **Cluster:** pin-stability — related: dep:6ebdb617:dep-registry-drift
 **Evidence:** `.github/workflows/ci.yml:15-19` + 6 more
@@ -1535,7 +1535,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `dep:33ef32bf:transitive-heavy-narrow` — transitive heavy narrow
 
-**Status:** in review — PR #895
+**Status:** done — PR #895
 **Severity:** suggestion
 **Cluster:** transitive-weight — related: dep:33ef32bf:version-floor-unjustified
 **Evidence:** `go.mod:12-12` + 1 more
@@ -1547,7 +1547,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `doc:aa84670c:doc-comment-stale` — doc comment stale
 
-**Status:** in review — PR #896
+**Status:** done — PR #896
 **Severity:** minor
 **Cluster:** exported-doc — related: doc:b3356305:readme-flag-ghost, ux:073d24ed:concept-named-twice
 **Evidence:** `internal/cli/root.go:33-38`
@@ -1579,7 +1579,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `tst:b38ec9cc:destructive-happy-untested` — destructive happy untested
 
-**Status:** in review — PR #907
+**Status:** done — PR #907
 **Severity:** major
 **Cluster:** destructive-untested — seam→audit-state-and-recovery — related: state:0f076161:destroy-scoped-cleanup-unscoped
 **Evidence:** `internal/distribution/okd/install/workers.go:22-76`
@@ -1589,7 +1589,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `tst:40d315ad:destructive-happy-untested` — destructive happy untested
 
-**Status:** in review — PR #910
+**Status:** done — PR #910
 **Severity:** minor
 **Cluster:** destructive-untested
 **Evidence:** `internal/addon/catalog/flux/flux.go:255-270` + 1 more
@@ -1608,7 +1608,7 @@ and ceremony layers.
 
 #### A1 — Collapse the step framework's triple representation
 
-- **Status:** in review — PR #923
+- **Status:** done — PR #923
 - **Category:** architecture
 - **State:** design needed
 - **Effort:** days
@@ -1624,7 +1624,7 @@ and ceremony layers.
 
 #### A2 — Unify the two parallel kubectl/oc invocation layers
 
-- **Status:** in review — PR #922
+- **Status:** done — PR #922
 - **Category:** architecture
 - **State:** design needed
 - **Effort:** days
@@ -1639,7 +1639,7 @@ and ceremony layers.
 
 #### A3 — Fold system.RunCaptured/OutputCaptured into executor
 
-- **Status:** in review — PR #926
+- **Status:** done — PR #926
 - **Category:** refactor
 - **State:** well-specified
 - **Effort:** days
@@ -1655,7 +1655,7 @@ and ceremony layers.
 
 #### A4 — Fix double-cumulated histogram buckets in deploymetrics
 
-- **Status:** in review — PR #893
+- **Status:** done — PR #893
 - **Category:** correctness
 - **State:** well-specified
 - **Effort:** hours
@@ -1670,7 +1670,7 @@ and ceremony layers.
 
 #### A5 — Strip audit-hash comment tokens from source
 
-- **Status:** in review — PR #932
+- **Status:** done — PR #932
 - **Category:** docs hygiene
 - **State:** well-specified
 - **Effort:** hours
@@ -1699,7 +1699,7 @@ and ceremony layers.
 
 #### A7 — Delete the two accidental leftovers in the wizard stack
 
-- **Status:** in review — PR #928
+- **Status:** done — PR #928
 - **Category:** refactor
 - **State:** well-specified
 - **Effort:** hours
@@ -1713,7 +1713,7 @@ and ceremony layers.
 
 #### A8 — Put a test floor under the wizard's data-driven core
 
-- **Status:** in review — PR #928
+- **Status:** done — PR #928
 - **Category:** test honesty
 - **State:** design needed
 - **Effort:** days
@@ -1728,7 +1728,7 @@ and ceremony layers.
 
 #### A9 — Remove or wire the dead Deployment.Debug and SkipDepsCheck knobs
 
-- **Status:** in review — PR #928
+- **Status:** done — PR #928
 - **Category:** refactor
 - **State:** well-specified
 - **Effort:** hours
@@ -1742,7 +1742,7 @@ and ceremony layers.
 
 #### A10 — Stop fabricating ProvisionResult VM state in proxmox.Provision
 
-- **Status:** in review — PR #921
+- **Status:** done — PR #921
 - **Category:** domain-model accuracy
 - **State:** design needed
 - **Effort:** hours
@@ -1756,7 +1756,7 @@ and ceremony layers.
 
 #### A11 — Collapse the zero-consumer ValidationScope bitmask
 
-- **Status:** in review — PR #928
+- **Status:** done — PR #928
 - **Category:** refactor
 - **State:** well-specified
 - **Effort:** hours
@@ -1784,7 +1784,7 @@ and ceremony layers.
 
 #### A13 — Expose or explicitly shelve the three unreachable cleanup kinds
 
-- **Status:** in review — PR #908
+- **Status:** done — PR #908
 - **Category:** cli surface
 - **State:** design needed
 - **Effort:** hours
@@ -1798,7 +1798,7 @@ and ceremony layers.
 
 #### A14 — Validate the triple-encoded bastion identity in config
 
-- **Status:** in review — PR #928
+- **Status:** done — PR #928
 - **Category:** config coherence
 - **State:** design needed
 - **Effort:** hours
@@ -1812,7 +1812,7 @@ and ceremony layers.
 
 #### A15 — Fix the TerraformEnv knob's fictional value space and mislabeled help
 
-- **Status:** in review — PR #928
+- **Status:** done — PR #928
 - **Category:** config coherence
 - **State:** well-specified
 - **Effort:** hours
@@ -1826,7 +1826,7 @@ and ceremony layers.
 
 #### A16 — Rewrite root command help: strip marketing slop and false feature claims
 
-- **Status:** in review — PR #896
+- **Status:** done — PR #896
 - **Category:** docs / CLI UX
 - **State:** well-specified
 - **Effort:** hours
@@ -1841,7 +1841,7 @@ and ceremony layers.
 
 #### A17 — Fix inverted sudo/elevation paragraph in exit-codes.md and reconcile README
 
-- **Status:** in review — PR #896
+- **Status:** done — PR #896
 - **Category:** docs
 - **State:** well-specified
 - **Effort:** hours
@@ -1855,7 +1855,7 @@ and ceremony layers.
 
 #### A18 — Make deploy honor --config instead of silently ignoring it
 
-- **Status:** in review — PR #928
+- **Status:** done — PR #928
 - **Category:** CLI UX / architecture
 - **State:** design needed
 - **Effort:** days
@@ -1870,7 +1870,7 @@ and ceremony layers.
 
 #### A19 — Drop stacked "failed to" prefixes from error-wrap chains
 
-- **Status:** in review — PR #932
+- **Status:** done — PR #932
 - **Category:** refactor / failure legibility
 - **State:** well-specified
 - **Effort:** days
@@ -1885,7 +1885,7 @@ and ceremony layers.
 
 #### A20 — Replace deploy dry-run mirror test with a drift guard against real phase steps
 
-- **Status:** in review — PR #923
+- **Status:** done — PR #923
 - **Category:** test honesty
 - **State:** design needed
 - **Effort:** hours
@@ -1899,7 +1899,7 @@ and ceremony layers.
 
 #### A21 — Delete padded/tautological cli validator tests
 
-- **Status:** in review — PR #916
+- **Status:** done — PR #916
 - **Category:** test honesty
 - **State:** well-specified
 - **Effort:** hours
@@ -1928,7 +1928,7 @@ and ceremony layers.
 
 #### A23 — Drop redundant "successfully" suffixes from completion logs
 
-- **Status:** in review — PR #932
+- **Status:** done — PR #932
 - **Category:** log hygiene
 - **State:** well-specified
 - **Effort:** hours
@@ -1942,7 +1942,7 @@ and ceremony layers.
 
 #### A24 — Re-scope internal/system before it becomes a util gravity well
 
-- **Status:** in review — PR #926
+- **Status:** done — PR #926
 - **Category:** architecture
 - **State:** design needed
 - **Effort:** hours
@@ -1956,7 +1956,7 @@ and ceremony layers.
 
 #### A25 — Put a test floor under infrastructure/proxmox before any go-proxmox change
 
-- **Status:** in review — PR #921
+- **Status:** done — PR #921
 - **Category:** test honesty
 - **State:** design needed
 - **Effort:** days
@@ -1970,7 +1970,7 @@ and ceremony layers.
 
 #### A26 — Replace log-message-equality assertions with attr-based assertions
 
-- **Status:** in review — PR #916
+- **Status:** done — PR #916
 - **Category:** test honesty
 - **State:** well-specified
 - **Effort:** hours
