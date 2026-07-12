@@ -99,29 +99,13 @@ func (p *Phase) findOrDownloadFCOSISO(ctx context.Context, cfg *config.Config, o
 		"fedora-coreos.iso",
 	}
 
-	for _, pattern := range patterns {
-		matches, err := filepath.Glob(filepath.Join(isoDir, pattern))
-		if err != nil {
-			continue
-		}
-		if len(matches) > 0 {
-			isoPath := slices.Max(matches) // newest by lexicographic version
-			p.logISOFound(isoPath)
-			return isoPath, nil
-		}
+	if isoPath, ok := p.findNewestISO(isoDir, patterns); ok {
+		return isoPath, nil
 	}
 
 	workISODir := filepath.Join(opts.WorkDir, "downloads")
-	for _, pattern := range patterns {
-		matches, err := filepath.Glob(filepath.Join(workISODir, pattern))
-		if err != nil {
-			continue
-		}
-		if len(matches) > 0 {
-			isoPath := slices.Max(matches) // newest by lexicographic version
-			p.logISOFound(isoPath)
-			return isoPath, nil
-		}
+	if isoPath, ok := p.findNewestISO(workISODir, patterns); ok {
+		return isoPath, nil
 	}
 
 	p.Log.Info("coreos: no iso found, attempting auto-download")
@@ -131,6 +115,23 @@ func (p *Phase) findOrDownloadFCOSISO(ctx context.Context, cfg *config.Config, o
 			WorkDir: opts.WorkDir,
 		},
 	})
+}
+
+// findNewestISO globs dir against each pattern in order and returns the
+// lexicographically newest match from the first pattern with a hit.
+func (p *Phase) findNewestISO(dir string, patterns []string) (string, bool) {
+	for _, pattern := range patterns {
+		matches, err := filepath.Glob(filepath.Join(dir, pattern))
+		if err != nil {
+			continue
+		}
+		if len(matches) > 0 {
+			isoPath := slices.Max(matches) // newest by lexicographic version
+			p.logISOFound(isoPath)
+			return isoPath, true
+		}
+	}
+	return "", false
 }
 
 // minSCOSStreamMinor is the first OKD minor that publishes scos.json
