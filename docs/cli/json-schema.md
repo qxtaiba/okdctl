@@ -55,12 +55,12 @@ Top-level cluster snapshot.
 
 | Field | Type | Notes |
 |---|---|---|
-| `phase` | string | lifecycle state: `Pending`, `Installing`, `Running`, `Degraded`, `Failed`, or `Unknown`; always present |
+| `phase` | string | lifecycle state: `Pending`, `Installing`, `Running`, `Degraded`, or `Unknown`; always present |
 | `api_reachable` | bool | `true` when `kube-apiserver /healthz` returns 200 |
 | `nodes[].name` | string | node name from `kubectl get nodes` |
 | `nodes[].role` | string | `master`, `worker`, or `unknown` |
 | `nodes[].ready` | bool | node's `Ready` condition is `True` |
-| `nodes[].status` | string | `Ready`, `NotReady`, or `Unknown`; the CLI only ever emits `Ready`/`NotReady` today |
+| `nodes[].status` | string | `Ready`, `NotReady`, or `Unknown` |
 | `nodes[].version` | string | reserved for a future kubelet-version projection; not populated by any command today, so never emitted |
 | `nodes[].internal_ip` | string | reserved for a future internal-IP projection; not populated by any command today, so never emitted |
 | `nodes[].conditions` | array | reserved for a future per-node condition list; not populated by any command today, so never emitted |
