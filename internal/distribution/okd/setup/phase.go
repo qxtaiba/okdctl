@@ -94,12 +94,19 @@ type NodeInfo struct {
 	MAC  string
 }
 
+// packageInstaller is the subset of platform.Manager the setup phase calls.
+// A consumer-side interface so tests can substitute a no-op fake without
+// shelling out to the real host package manager.
+type packageInstaller interface {
+	Install(ctx context.Context, packages []string) error
+}
+
 // Phase drives the setup flow: artifact download, config generation,
 // ignition upload, and bastion service configuration.
 type Phase struct {
 	phase.BasePhase
 	OS         platform.OS
-	Pkg        *platform.Manager
+	Pkg        packageInstaller
 	BinDir     string
 	loggedISOs map[string]bool
 }
