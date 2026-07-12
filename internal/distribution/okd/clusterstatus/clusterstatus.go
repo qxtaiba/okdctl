@@ -64,10 +64,28 @@ type statusClusterOperator struct {
 	} `json:"status"`
 }
 
+func (n *statusNode) readyCondition() nodetypes.ConditionStatus {
+	for _, c := range n.Status.Conditions {
+		if c.Type == nodetypes.ConditionTypeReady {
+			return c.Status
+		}
+	}
+	return nodetypes.ConditionStatusUnknown
+}
+
 func (n *statusNode) isReady() bool {
-	return slices.ContainsFunc(n.Status.Conditions, func(c statusCondition) bool {
-		return c.Type == nodetypes.ConditionTypeReady && c.Status == nodetypes.ConditionStatusTrue
-	})
+	return n.readyCondition() == nodetypes.ConditionStatusTrue
+}
+
+func (n *statusNode) statusPhase() nodetypes.NodeStatusPhase {
+	switch n.readyCondition() {
+	case nodetypes.ConditionStatusTrue:
+		return nodetypes.NodeStatusReady
+	case nodetypes.ConditionStatusFalse:
+		return nodetypes.NodeStatusNotReady
+	default:
+		return nodetypes.NodeStatusUnknown
+	}
 }
 
 func (n *statusNode) role() nodetypes.NodeRole {
@@ -93,23 +111,19 @@ func ParseNode(data []byte) (okd.NodeStatus, error) {
 // Collect queries the cluster for API reachability, node readiness, operator
 // degradation, and addon health, then derives the overall phase. Failed oc
 // queries degrade to empty sections rather than aborting so status renders
-// whatever it can reach.
-func Collect(ctx context.Context, cl Client, verifier AddonVerifier) okd.ClusterStatus {
-	apiOK := true
-	if _, ocErr := cl.RawGet(ctx, "/healthz"); ocErr != nil {
-		apiOK = false
-	}
-
-	nodes := collectNodes(ctx, cl)
-	degraded := countDegraded(ctx, cl)
-
-	clusterPhase := okd.PhaseUnknown
-	allReady := len(nodes) > 0 && !slices.ContainsFunc(nodes, func(n okd.NodeStatus) bool { return !n.Ready })
-	switch {
-	case apiOK && allReady && degraded == 0:
-		clusterPhase = okd.PhaseRunning
-	case apiOK && degraded > 0:
-		clusterPhase = okd.PhaseDegraded
+// whatever it can reach. cl may be nil when no kubeconfig exists yet (e.g.
+// before the first deploy); Collect then skips the live queries and derives
+// Pending/Installing from terraform-state presence under projectRoot instead.
+func Collect(ctx context.Context, cl Client, verifier AddonVerifier, projectRoot string) okd.ClusterStatus {
+	apiOK := false
+	var nodes []okd.NodeStatus
+	degraded := 0
+	if cl != nil {
+		if _, ocErr := cl.RawGet(ctx, "/healthz"); ocErr == nil {
+			apiOK = true
+		}
+		nodes = collectNodes(ctx, cl)
+		degraded = countDegraded(ctx, cl)
 	}
 
 	addonResults, _ := verifier.VerifyAll(ctx)
@@ -123,12 +137,39 @@ func Collect(ctx context.Context, cl Client, verifier AddonVerifier) okd.Cluster
 	}
 
 	return okd.ClusterStatus{
-		Phase:             clusterPhase,
+		Phase:             derivePhase(apiOK, nodes, degraded, projectRoot),
 		APIReachable:      apiOK,
 		Nodes:             nodes,
 		DegradedOperators: degraded,
 		Addons:            addonEntries,
 	}
+}
+
+// derivePhase maps API reachability, node readiness, operator health, and
+// terraform-state presence onto ClusterPhase. Pending and Installing are
+// inferred from infrastructure state because neither has a reachable
+// kube-apiserver to query directly.
+func derivePhase(apiOK bool, nodes []okd.NodeStatus, degraded int, projectRoot string) okd.ClusterPhase {
+	allReady := len(nodes) > 0 && !slices.ContainsFunc(nodes, func(n okd.NodeStatus) bool { return !n.Ready })
+	switch {
+	case apiOK && allReady && degraded == 0:
+		return okd.PhaseRunning
+	case apiOK && degraded > 0:
+		return okd.PhaseDegraded
+	case !apiOK && !hasTerraformState(projectRoot):
+		return okd.PhasePending
+	case !apiOK:
+		return okd.PhaseInstalling
+	default:
+		return okd.PhaseUnknown
+	}
+}
+
+func hasTerraformState(projectRoot string) bool {
+	matches, _ := filepath.Glob(
+		filepath.Join(projectRoot, "infrastructure", "terraform", "environments", "*", "terraform.tfstate"),
+	)
+	return len(matches) > 0
 }
 
 func collectNodes(ctx context.Context, cl Client) []okd.NodeStatus {
@@ -146,16 +187,11 @@ func collectNodes(ctx context.Context, cl Client) []okd.NodeStatus {
 	}
 	var nodes []okd.NodeStatus
 	for _, n := range nl.Items {
-		ready := n.isReady()
-		nodePhase := nodetypes.NodeStatusNotReady
-		if ready {
-			nodePhase = nodetypes.NodeStatusReady
-		}
 		nodes = append(nodes, okd.NodeStatus{
 			Name:   n.Metadata.Name,
 			Role:   n.role(),
-			Ready:  ready,
-			Status: nodePhase,
+			Ready:  n.isReady(),
+			Status: n.statusPhase(),
 		})
 	}
 	return nodes
