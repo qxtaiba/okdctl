@@ -35,8 +35,8 @@ func (a AddonStatus) Label() string {
 }
 
 // ClusterPhase is the high-level lifecycle state the CLI renders in status
-// output and uses for exit-code mapping. Values are title-cased to match the
-// conventions used by kube-style tooling.
+// output. Values are title-cased to match the conventions used by kube-style
+// tooling.
 type ClusterPhase string
 
 const (
@@ -49,8 +49,6 @@ const (
 	// PhaseDegraded means the cluster serves API traffic but one or more
 	// operators report a non-healthy condition.
 	PhaseDegraded ClusterPhase = "Degraded"
-	// PhaseFailed is a terminal install failure requiring destroy+retry.
-	PhaseFailed ClusterPhase = "Failed"
 	// PhaseUnknown is the default when status cannot be determined.
 	PhaseUnknown ClusterPhase = "Unknown"
 )

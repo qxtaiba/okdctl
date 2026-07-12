@@ -3,6 +3,8 @@ package clusterstatus
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/qxtaiba/okdctl/internal/addon"
@@ -74,7 +76,7 @@ func TestCollect_RunningCluster(t *testing.T) {
 		{Name: "metallb", Err: errors.New("pods not ready")},
 	}}
 
-	cs := Collect(context.Background(), cl, v)
+	cs := Collect(context.Background(), cl, v, t.TempDir())
 
 	if cs.Phase != okd.PhaseRunning {
 		t.Errorf("Phase = %q; want %q", cs.Phase, okd.PhaseRunning)
@@ -104,7 +106,7 @@ func TestCollect_DegradedCluster(t *testing.T) {
 			{"status":{"conditions":[{"type":"Degraded","status":"False"}]}}]}`,
 	}
 
-	cs := Collect(context.Background(), cl, &fakeVerifier{})
+	cs := Collect(context.Background(), cl, &fakeVerifier{}, t.TempDir())
 
 	if cs.Phase != okd.PhaseDegraded {
 		t.Errorf("Phase = %q; want %q", cs.Phase, okd.PhaseDegraded)
@@ -127,10 +129,12 @@ func TestCollect_APIUnreachable(t *testing.T) {
 		operatorsErr: errors.New("connection refused"),
 	}
 
-	cs := Collect(context.Background(), cl, &fakeVerifier{})
+	// No terraform state under this root, so an unreachable API reads as
+	// Pending (pre-install) rather than Installing (infra up, no cluster yet).
+	cs := Collect(context.Background(), cl, &fakeVerifier{}, t.TempDir())
 
-	if cs.Phase != okd.PhaseUnknown {
-		t.Errorf("Phase = %q; want %q", cs.Phase, okd.PhaseUnknown)
+	if cs.Phase != okd.PhasePending {
+		t.Errorf("Phase = %q; want %q", cs.Phase, okd.PhasePending)
 	}
 	if cs.APIReachable {
 		t.Error("APIReachable = true; want false")
@@ -143,7 +147,7 @@ func TestCollect_APIUnreachable(t *testing.T) {
 func TestCollect_CorruptPayloadsDegradeToEmpty(t *testing.T) {
 	cl := &fakeClient{nodesJSON: "{broken", operatorsJSON: "{broken"}
 
-	cs := Collect(context.Background(), cl, &fakeVerifier{})
+	cs := Collect(context.Background(), cl, &fakeVerifier{}, t.TempDir())
 
 	if cs.Phase != okd.PhaseUnknown {
 		t.Errorf("Phase = %q; want %q", cs.Phase, okd.PhaseUnknown)
@@ -153,8 +157,106 @@ func TestCollect_CorruptPayloadsDegradeToEmpty(t *testing.T) {
 	}
 }
 
+func TestCollect_NilClientDerivesFromInfra(t *testing.T) {
+	withState := t.TempDir()
+	stateDir := filepath.Join(withState, "infrastructure", "terraform", "environments", "production")
+	if err := os.MkdirAll(stateDir, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(stateDir, "terraform.tfstate"), []byte("{}"), 0o600); err != nil {
+		t.Fatalf("write tfstate: %v", err)
+	}
+
+	cases := []struct {
+		name        string
+		projectRoot string
+		want        okd.ClusterPhase
+	}{
+		{"no-kubeconfig-no-infra", t.TempDir(), okd.PhasePending},
+		{"no-kubeconfig-infra-present", withState, okd.PhaseInstalling},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cs := Collect(context.Background(), nil, &fakeVerifier{}, tc.projectRoot)
+			if cs.Phase != tc.want {
+				t.Errorf("Phase = %q; want %q", cs.Phase, tc.want)
+			}
+			if cs.APIReachable {
+				t.Error("APIReachable = true; want false")
+			}
+			if cs.Nodes != nil {
+				t.Errorf("Nodes = %v; want nil", cs.Nodes)
+			}
+		})
+	}
+}
+
 func TestNewClient_MissingKubeconfig(t *testing.T) {
 	if _, err := NewClient(t.TempDir()); err == nil {
 		t.Error("want error for missing kubeconfig, got nil")
+	}
+}
+
+func TestDerivePhase(t *testing.T) {
+	withState := t.TempDir()
+	stateDir := filepath.Join(withState, "infrastructure", "terraform", "environments", "production")
+	if err := os.MkdirAll(stateDir, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(stateDir, "terraform.tfstate"), []byte("{}"), 0o600); err != nil {
+		t.Fatalf("write tfstate: %v", err)
+	}
+	withoutState := t.TempDir()
+
+	ready := okd.NodeStatus{Ready: true}
+	notReady := okd.NodeStatus{Ready: false}
+
+	cases := []struct {
+		name        string
+		apiOK       bool
+		nodes       []okd.NodeStatus
+		degraded    int
+		projectRoot string
+		want        okd.ClusterPhase
+	}{
+		{"running", true, []okd.NodeStatus{ready}, 0, withoutState, okd.PhaseRunning},
+		{"degraded", true, []okd.NodeStatus{ready}, 1, withoutState, okd.PhaseDegraded},
+		{"pending-no-infra", false, nil, 0, withoutState, okd.PhasePending},
+		{"installing-infra-present", false, nil, 0, withState, okd.PhaseInstalling},
+		{"unknown-partial-ready", true, []okd.NodeStatus{ready, notReady}, 0, withoutState, okd.PhaseUnknown},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := derivePhase(tc.apiOK, tc.nodes, tc.degraded, tc.projectRoot)
+			if got != tc.want {
+				t.Fatalf("derivePhase() = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestStatusNodeStatusPhase(t *testing.T) {
+	cases := []struct {
+		name       string
+		conditions []statusCondition
+		wantPhase  nodetypes.NodeStatusPhase
+		wantReady  bool
+	}{
+		{"ready", []statusCondition{{Type: nodetypes.ConditionTypeReady, Status: nodetypes.ConditionStatusTrue}}, nodetypes.NodeStatusReady, true},
+		{"not-ready", []statusCondition{{Type: nodetypes.ConditionTypeReady, Status: nodetypes.ConditionStatusFalse}}, nodetypes.NodeStatusNotReady, false},
+		{"unknown-condition", []statusCondition{{Type: nodetypes.ConditionTypeReady, Status: nodetypes.ConditionStatusUnknown}}, nodetypes.NodeStatusUnknown, false},
+		{"missing-condition", nil, nodetypes.NodeStatusUnknown, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			n := &statusNode{}
+			n.Status.Conditions = tc.conditions
+			if got := n.statusPhase(); got != tc.wantPhase {
+				t.Fatalf("statusPhase() = %q, want %q", got, tc.wantPhase)
+			}
+			if got := n.isReady(); got != tc.wantReady {
+				t.Fatalf("isReady() = %v, want %v", got, tc.wantReady)
+			}
+		})
 	}
 }

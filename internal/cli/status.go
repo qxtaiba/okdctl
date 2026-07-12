@@ -97,12 +97,12 @@ func runStatus(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
-	cl, err := clusterstatus.NewClient(projectRoot)
-	if err != nil {
-		return err
+	var cl clusterstatus.Client
+	if c, clErr := clusterstatus.NewClient(projectRoot); clErr == nil {
+		cl = c
 	}
 
-	cs := clusterstatus.Collect(cmd.Context(), cl, newAddonManager(cfg, projectRoot))
+	cs := clusterstatus.Collect(cmd.Context(), cl, newAddonManager(cfg, projectRoot), projectRoot)
 
 	if statusOutput == outputJSON {
 		return writeJSON(cmd.OutOrStdout(), cs)
@@ -113,6 +113,10 @@ func runStatus(cmd *cobra.Command, _ []string) error {
 func printClusterStatus(cmd *cobra.Command, st *okd.ClusterStatus) error {
 	sb := render.NewBuilder()
 	sb.WriteString("\n")
+
+	sb.Section("cluster")
+	sb.KV("phase", string(st.Phase))
+	sb.Newline()
 
 	sb.Section("api")
 	if st.APIReachable {
