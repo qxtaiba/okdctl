@@ -1215,7 +1215,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `api:92553fff:export-no-caller` — export no caller
 
-**Status:** in review — PR #940
+**Status:** deferred (superseded 2026-07-12 — the six summary helpers moved to internal/render as its public API via the cli→render refactor; unexport no longer applies; commit dropped from PR #940)
 **Severity:** minor
 **Cluster:** exported-surface
 **Evidence:** `internal/cli/summary.go:77-277`
@@ -1567,7 +1567,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `doc:c3dc10bb:flux-gettimeout-doc-orphaned` — flux gettimeout doc orphaned
 
-**Status:** in review — PR #942
+**Status:** deferred (superseded 2026-07-12 — develop refactored getTimeout into settings.go::parseTimeoutSetting; the orphaned doc no longer exists; commit dropped from PR #942)
 **Severity:** suggestion
 **Cluster:** exported-doc — re-queued from PR #884's skipped-items section (reverted there by a stale-local-linter false gate)
 **Evidence:** `internal/addon/catalog/flux/flux.go:565-568`
