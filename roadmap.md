@@ -736,7 +736,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `api:97cb8adf:opt-struct-vs-functional-waitfor` — opt struct vs functional waitfor
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/w3-3-testutil
+**Status:** in review — PR #941
 **Severity:** suggestion
 **Cluster:** option-consistency
 **Evidence:** `internal/system/exec.go:89-102`
@@ -766,7 +766,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `api:beabab0c:opt-execute-takes-cfg-twice` — opt execute takes cfg twice
 
-**Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/w3-3-testutil
+**Status:** in review — PR #941
 **Severity:** suggestion
 **Cluster:** option-consistency
 **Evidence:** `internal/distribution/okd/setup/phase.go:120-135`
@@ -1684,7 +1684,7 @@ and ceremony layers.
 
 #### A6 — Reconcile the 3% comment target with revive `exported`
 
-- **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/w3-3-testutil
+- **Status:** in review — PR #941
 - **Category:** architecture / policy
 - **State:** design needed
 - **Effort:** days
@@ -1913,7 +1913,7 @@ and ceremony layers.
 
 #### A22 — Consolidate fake-binary PATH-stub and slog-capture test scaffolding
 
-- **Status:** in progress — worktree: /Users/qalnuaimy/Desktop/okdctl/.worktrees/w3-3-testutil
+- **Status:** in review — PR #941
 - **Category:** refactor (test infrastructure)
 - **State:** well-specified
 - **Effort:** days
