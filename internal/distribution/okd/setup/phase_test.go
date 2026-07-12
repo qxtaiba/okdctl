@@ -3,7 +3,6 @@ package setup
 import (
 	"context"
 	"errors"
-	"log/slog"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -133,20 +132,8 @@ type recordingPkgManager struct {
 	installs [][]string
 }
 
-func (m *recordingPkgManager) Install(_ context.Context, pkgs []string, _ *slog.Logger) error {
+func (m *recordingPkgManager) Install(_ context.Context, pkgs []string) error {
 	m.installs = append(m.installs, pkgs)
-	return nil
-}
-
-func (m *recordingPkgManager) Remove(_ context.Context, _ []string, _ *slog.Logger) error {
-	return nil
-}
-
-func (m *recordingPkgManager) IsInstalled(_ context.Context, _ string) (bool, error) {
-	return true, nil
-}
-
-func (m *recordingPkgManager) AddRepo(_ context.Context, _, _ string, _ *slog.Logger) error {
 	return nil
 }
 
