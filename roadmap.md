@@ -2062,7 +2062,7 @@ one candidate dropped as a duplicate of open A5).
 
 #### B4 — Split netutil into pure IP math and host-network mutation
 
-- **Status:** in review — PR #904
+- **Status:** done — PR #904
 - **Category:** refactor
 - **State:** well-specified
 - **Effort:** hours
@@ -2408,7 +2408,7 @@ one candidate dropped as a duplicate of open A5).
 
 #### B27 — Enable golangci-lint on _test.go files
 
-- **Status:** in review — PR #915
+- **Status:** done — PR #915
 - **Category:** ci / test-infrastructure
 - **State:** well-specified
 - **Effort:** hours
