@@ -1,0 +1,148 @@
+package node
+
+import (
+	"context"
+	"fmt"
+
+	"github.com/qxtaiba/okdctl/internal/cluster"
+	"github.com/qxtaiba/okdctl/internal/errtypes"
+	"github.com/qxtaiba/okdctl/internal/infrastructure/terraform"
+)
+
+// RemoveOptions tunes a worker removal.
+type RemoveOptions struct {
+	// ForceStorage permits removal even when the worker holds rook-ceph OSDs
+	// (whose CEPH-DATA disk is destroyed with the VM).
+	ForceStorage bool
+	SkipDrain    bool
+	DrainTimeout string
+}
+
+// RemoveWorker removes the named worker: guards, cordon, drain, targeted
+// terraform delete (plan-gated to exactly worker[N-1]), Kubernetes node delete,
+// then a best-effort HAProxy backend refresh. On any failure the node is left
+// cordoned. Only the highest-numbered worker is removable (count-index rule).
+func (r *Runner) RemoveWorker(ctx context.Context, target string, opts RemoveOptions) error {
+	nodes, err := r.Cluster.ListNodes(ctx)
+	if err != nil {
+		return &errtypes.ClusterError{Msg: "list nodes", Err: err}
+	}
+	workerCount := r.Cfg.Topology.Workers.Count
+	if err := validateWorkerRemovable(nodes, target, workerCount); err != nil {
+		return &errtypes.ConfigError{Msg: err.Error()}
+	}
+	idx, _ := cluster.NodeIndex(target)
+
+	if err := r.checkStorageGuard(ctx, target, opts.ForceStorage); err != nil {
+		return err
+	}
+	if err := r.checkIngressGuard(ctx, nodes, target); err != nil {
+		return err
+	}
+
+	if r.DryRun {
+		r.Log.Info("node: dry-run — guards passed", "node", target, "tf_address", workerAddress(idx))
+		return r.dryRunPlan(ctx, workerAddress(idx))
+	}
+
+	if !opts.SkipDrain {
+		if err := r.cordonAndDrain(ctx, target, opts.DrainTimeout, false); err != nil {
+			return err
+		}
+	}
+
+	// Persist the reduced topology before the apply so a crash between here and
+	// apply leaves tfvars/config consistent with the intended delete; the apply
+	// is idempotent on re-run (an already-deleted instance re-plans to no-op,
+	// which the gate then reports as empty — see resume note in RemoveWorker docs).
+	r.Cfg.Topology.Workers.Count = workerCount - 1
+	if err := r.persistTopology(); err != nil {
+		return &errtypes.ClusterError{Msg: "persist topology", Err: err}
+	}
+
+	if err := markStep(r.marker(), OpRemove, target, StepTFApply, r.RunID, r.Cfg.Cluster.Name); err != nil {
+		return err
+	}
+	if err := r.targetedApply(ctx, workerAddress(idx), terraform.PlanActionDelete); err != nil {
+		return err
+	}
+
+	if err := markStep(r.marker(), OpRemove, target, StepDeleteK8s, r.RunID, r.Cfg.Cluster.Name); err != nil {
+		return err
+	}
+	if err := r.Cluster.DeleteNode(ctx, target); err != nil {
+		return err
+	}
+
+	if err := clearOpMarker(r.marker()); err != nil {
+		r.Log.Warn("node: op marker cleanup failed", "err", err)
+	}
+	r.Log.Info("node: worker removed", "node", target)
+	r.Log.Info("node: if haproxy still fronts this cluster, its config lists the removed worker as a stale backend; re-render it via a root-capable path or reload manually")
+	return nil
+}
+
+func (r *Runner) cordonAndDrain(ctx context.Context, node, timeout string, force bool) error {
+	if err := markStep(r.marker(), OpRemove, node, StepCordon, r.RunID, r.Cfg.Cluster.Name); err != nil {
+		return err
+	}
+	if err := r.Cluster.Cordon(ctx, node); err != nil {
+		return err
+	}
+	if err := markStep(r.marker(), OpRemove, node, StepDrain, r.RunID, r.Cfg.Cluster.Name); err != nil {
+		return err
+	}
+	if err := r.Cluster.Drain(ctx, node, cluster.DrainOptions{
+		IgnoreDaemonsets: true,
+		DeleteEmptyDir:   true,
+		Force:            force,
+		Timeout:          timeout,
+	}); err != nil {
+		return &errtypes.ClusterError{Msg: fmt.Sprintf("drain %s (node left cordoned; re-run to retry)", node), Err: err}
+	}
+	return nil
+}
+
+func (r *Runner) checkStorageGuard(ctx context.Context, target string, force bool) error {
+	pods, err := r.Cluster.PodsForSelector(ctx, "", "app=rook-ceph-osd")
+	if err != nil {
+		return &errtypes.ClusterError{Msg: "storage guard: list rook-ceph osd pods", Err: err}
+	}
+	osds := osdPodsOnNode(pods, target)
+	if len(osds) == 0 {
+		return nil
+	}
+	if force {
+		r.Log.Warn("node: --force-storage set; removing a node with live OSDs destroys their CEPH-DATA disk", "node", target, "osds", len(osds))
+		return nil
+	}
+	return &errtypes.ConfigError{Msg: fmt.Sprintf(
+		"%s holds %d rook-ceph OSD(s) (%v); removing it destroys its CEPH-DATA disk and loses that data. Migrate OSDs off it first, or re-run with --force-storage.",
+		target, len(osds), osds)}
+}
+
+func (r *Runner) checkIngressGuard(ctx context.Context, nodes []cluster.NodeDetail, target string) error {
+	routerPods, err := r.Cluster.PodsForSelector(ctx, "openshift-ingress", "")
+	if err != nil {
+		return &errtypes.ClusterError{Msg: "ingress guard: list router pods", Err: err}
+	}
+	workers := workerNameSet(nodes)
+	onWorkers := ingressPodsOnWorkers(routerPods, workers)
+	if len(onWorkers) == 0 {
+		return nil
+	}
+	schedulable, err := r.Cluster.MastersSchedulable(ctx)
+	if err != nil {
+		return &errtypes.ClusterError{Msg: "ingress guard: read mastersSchedulable", Err: err}
+	}
+	if schedulable {
+		return nil
+	}
+	return &errtypes.ConfigError{Msg: fmt.Sprintf(
+		"router pods run on worker nodes (%s) and the control plane is not schedulable; draining %s would leave ingress nowhere to reschedule. Set mastersSchedulable=true and apply the compact IngressController first (see 'okdctl cluster compact'), or move ingress off workers.",
+		joinPodNames(onWorkers), target)}
+}
+
+func (r *Runner) dryRunPlan(ctx context.Context, address string) error {
+	return r.targetedApply(ctx, address, terraform.PlanActionDelete)
+}
