@@ -73,9 +73,10 @@ func TestReporterInvokedDuringMasterResize(t *testing.T) {
 		t.Fatalf("resize: %v", err)
 	}
 
-	// Per master: etcd gate (pre), cordon+drain, targeted apply, node-ready
-	// wait, etcd gate (post) — five long steps must each show visible life.
-	const perMaster = 5
+	// Per master: etcd gate (pre), cordon+drain, targeted apply, power-cycle,
+	// node-ready wait, etcd gate (post), ceph gate (post) — seven long steps
+	// must each show visible life.
+	const perMaster = 7
 	if got := rr.starCount(); got != perMaster*3 {
 		t.Errorf("want %d reporter starts across 3 masters, got %d: %v", perMaster*3, got, rr.starts)
 	}
@@ -111,9 +112,9 @@ func TestReporterInvokedDuringRemoveWorker(t *testing.T) {
 		t.Fatalf("remove worker: %v", err)
 	}
 
-	// Cordon+drain, then targeted plan+apply.
-	if got := rr.starCount(); got != 2 {
-		t.Errorf("want 2 reporter starts (cordon/drain, targeted apply), got %d: %v", got, rr.starts)
+	// Cordon+drain, targeted plan+apply, then the post-remove ceph gate.
+	if got := rr.starCount(); got != 3 {
+		t.Errorf("want 3 reporter starts (cordon/drain, targeted apply, ceph gate), got %d: %v", got, rr.starts)
 	}
 	if rr.stops != rr.starCount() {
 		t.Errorf("every started span must stop: starts=%d stops=%d", rr.starCount(), rr.stops)
@@ -144,8 +145,9 @@ func TestReporterInvokedDuringCompact(t *testing.T) {
 	}
 
 	// compact-preflight etcd gate, the N-worker plan-gate preflight span, two
-	// workers each with cordon/drain + targeted apply, and compact-final.
-	const want = 1 + 1 + 2*2 + 1
+	// workers each with cordon/drain + targeted apply + post-remove ceph gate,
+	// and the compact-final etcd + ceph gates.
+	const want = 1 + 1 + 2*3 + 2
 	if got := rr.starCount(); got != want {
 		t.Errorf("want %d reporter starts, got %d: %v", want, got, rr.starts)
 	}

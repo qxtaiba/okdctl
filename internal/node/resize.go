@@ -111,10 +111,6 @@ func (r *Runner) Resize(ctx context.Context, scope ResizeScope, opts ResizeOptio
 		r.Log.Warn("node: op marker cleanup failed", "err", err)
 	}
 	r.Log.Info("node: resize complete", "role", string(role), "memory_mb", opts.MemoryMB, "nodes", len(targets))
-	if delta != 0 {
-		r.Log.Info("node: if the provider did not restart a vm on the memory change, the guest still runs at its old size until it reboots; verify with 'oc debug node/<name> -- free -m' or the memory panel in the proxmox ui",
-			"role", string(role), "memory_mb", opts.MemoryMB)
-	}
 	return nil
 }
 

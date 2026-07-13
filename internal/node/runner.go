@@ -285,6 +285,8 @@ func (r *Runner) waitEtcdHealthy(ctx context.Context, phase string) error {
 // closed: without a wired power-cycler the resize cannot be realized, so the
 // caller must leave the node cordoned and surface the error.
 func (r *Runner) powerCycleVM(ctx context.Context, role nodetypes.NodeRole, index int) error {
+	stop := r.startProgress("power-cycling vm to realize the new sizing")
+	defer stop()
 	if r.Power == nil {
 		return &errtypes.ClusterError{Msg: "resize needs Proxmox API access to power-cycle the VM (the config-only memory change does not take effect until a stop→start), but no Proxmox credentials are available"}
 	}
@@ -312,6 +314,8 @@ func (r *Runner) powerCycleVM(ctx context.Context, role nodetypes.NodeRole, inde
 // a rook-ceph toolbox are treated as not-applicable and pass immediately, so
 // the gate is a no-op on non-Ceph clusters.
 func (r *Runner) waitCephHealthy(ctx context.Context, phase string) error {
+	stop := r.startProgress("waiting for ceph health (" + phase + ")")
+	defer stop()
 	var lastReason string
 	notApplicable := false
 	ok := func(ctx context.Context) bool {
