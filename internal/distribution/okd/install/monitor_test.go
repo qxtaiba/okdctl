@@ -10,6 +10,7 @@ import (
 	"testing/synctest"
 	"time"
 
+	"github.com/qxtaiba/okdctl/internal/cluster"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/logutil"
@@ -50,8 +51,8 @@ type fakeOperatorCounter struct {
 	err              error
 }
 
-func (f fakeOperatorCounter) ClusterOperatorsAvailable(context.Context) (available, total int, err error) {
-	return f.available, f.total, f.err
+func (f fakeOperatorCounter) ClusterOperatorHealth(context.Context) (cluster.OperatorHealth, error) {
+	return cluster.OperatorHealth{Available: f.available, Total: f.total}, f.err
 }
 
 // TestOperatorStatusDetail locks the status-line detail format across the

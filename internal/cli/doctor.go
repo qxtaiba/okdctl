@@ -164,7 +164,7 @@ func severityMarkers(sev doctor.Severity) (icon, label, rawLabel string) {
 		icon = tui.SuccessStyle.Render("✓")
 		label = tui.SuccessStyle.Render(rawLabel)
 	case doctor.Warn:
-		icon = tui.WarningStyle.Render("⚠")
+		icon = tui.WarningStyle.Render(tui.IconWarning)
 		label = tui.WarningStyle.Render(rawLabel)
 	case doctor.Fail:
 		icon = tui.ErrorStyle.Render("✗")

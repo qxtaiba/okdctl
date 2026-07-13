@@ -62,7 +62,8 @@ func (p *Phase) disableSubscriptionGatedCatalogSources(ctx context.Context) erro
 // so it cannot be applied idempotently via oc and does not survive a
 // cluster rebuild. The insights-config ConfigMap's alerting.disabled field
 // is insights-operator's own purpose-built, declarative switch for exactly
-// this alert, so it is the least invasive of the three.
+// this alert, so it is the least invasive of the three (mechanism documented
+// at github.com/openshift/insights-operator/blob/master/docs/arch.md).
 const insightsConfigManifest = `apiVersion: v1
 kind: ConfigMap
 metadata:

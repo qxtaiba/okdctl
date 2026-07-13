@@ -3,6 +3,7 @@ package node
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"sort"
 	"strconv"
 
@@ -67,8 +68,8 @@ func (r *Runner) Compact(ctx context.Context, opts CompactOptions) error {
 	if err != nil {
 		return &errtypes.ClusterError{Msg: "list nodes", Err: err}
 	}
-	workers := workersByIndexDesc(nodes)
-	masters := mastersByIndexAsc(nodes)
+	workers := workersByIndexDesc(nodes, r.Log)
+	masters := mastersByIndexAsc(nodes, r.Log)
 
 	pf, err := r.runPreflightCompact(ctx, workers, masters, opts)
 	if err != nil {
@@ -337,15 +338,19 @@ func (r *Runner) enableSchedulableAndIngress(ctx context.Context, replicas int) 
 	return nil
 }
 
-func workersByIndexDesc(nodes []cluster.NodeDetail) []string {
-	return namesByIndex(nodes, nodetypes.RoleWorker, false)
+func workersByIndexDesc(nodes []cluster.NodeDetail, log *slog.Logger) []string {
+	return namesByIndex(nodes, nodetypes.RoleWorker, false, log)
 }
 
-func mastersByIndexAsc(nodes []cluster.NodeDetail) []string {
-	return namesByIndex(nodes, nodetypes.RoleMaster, true)
+func mastersByIndexAsc(nodes []cluster.NodeDetail, log *slog.Logger) []string {
+	return namesByIndex(nodes, nodetypes.RoleMaster, true, log)
 }
 
-func namesByIndex(nodes []cluster.NodeDetail, role nodetypes.NodeRole, ascending bool) []string {
+// namesByIndex silently drops any node whose name has no numeric suffix from
+// the returned plan (cluster.NodeIndex can't place it); log warns per node so
+// a hand-added or oddly named worker doesn't vanish from a compact plan
+// without a trace.
+func namesByIndex(nodes []cluster.NodeDetail, role nodetypes.NodeRole, ascending bool, log *slog.Logger) []string {
 	type ni struct {
 		name string
 		idx  int
@@ -357,6 +362,7 @@ func namesByIndex(nodes []cluster.NodeDetail, role nodetypes.NodeRole, ascending
 		}
 		idx, ok := cluster.NodeIndex(n.Name)
 		if !ok {
+			log.Warn("node: skipping node with no numeric suffix from compact plan", "node", n.Name, "role", role)
 			continue
 		}
 		items = append(items, ni{name: n.Name, idx: idx})

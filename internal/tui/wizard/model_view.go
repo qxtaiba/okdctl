@@ -36,7 +36,7 @@ func (m *Model) View() tea.View {
 			Foreground(tui.ColorError).
 			Bold(true).
 			Padding(0, 1)
-		content.WriteString(errorStyle.Render("✖ " + m.err.Error()))
+		content.WriteString(errorStyle.Render(tui.IconError + " " + m.err.Error()))
 		content.WriteString("\n")
 	}
 
