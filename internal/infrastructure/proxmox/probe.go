@@ -121,38 +121,47 @@ func ProbeHost(ctx context.Context, opts *ProbeOptions) (*HostProbe, error) {
 }
 
 func newProbeClient(opts *ProbeOptions, timeout time.Duration) (*proxmox.Client, error) {
-	if opts.Endpoint == "" || opts.Node == "" {
-		return nil, fmt.Errorf("proxmox probe: endpoint and node are required")
+	if opts.Node == "" {
+		return nil, fmt.Errorf("proxmox probe: node is required")
+	}
+	return newProxmoxClient(opts.Endpoint, opts.Username, opts.Password, opts.APIToken, opts.Insecure, timeout)
+}
+
+// newProxmoxClient builds a read/operational go-proxmox client shared by the
+// host probe and the power-cycler. Password auth mirrors the wizard discovery
+// path; token auth is the headless bastion default. go-proxmox needs the token
+// split into id=secret; the credential []byte becomes an immutable Go string
+// inside the client that Zeroize cannot reach — bounded to the single call, the
+// caller still wipes its own copy.
+func newProxmoxClient(endpoint, username string, password, apiToken []byte, insecure bool, timeout time.Duration) (*proxmox.Client, error) {
+	if endpoint == "" {
+		return nil, fmt.Errorf("proxmox client: endpoint is required")
 	}
 	httpClient := &http.Client{
 		Timeout: timeout,
 		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: opts.Insecure}, //nolint:gosec // operator opts in via Insecure
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: insecure}, //nolint:gosec // operator opts in via Insecure
 		},
 	}
-	base := normalizeEndpoint(opts.Endpoint) + "/api2/json"
+	base := normalizeEndpoint(endpoint) + "/api2/json"
 
-	// Password auth mirrors the wizard discovery path; token auth is the
-	// headless bastion default. go-proxmox needs the token split into id=secret;
-	// the []byte becomes an immutable Go string inside the client that Zeroize
-	// cannot reach — bounded to this probe, the caller still wipes its copy.
 	switch {
-	case len(opts.Password) > 0:
+	case len(password) > 0:
 		return proxmox.NewClient(base,
 			proxmox.WithHTTPClient(httpClient),
-			proxmox.WithCredentials(&proxmox.Credentials{Username: opts.Username, Password: string(opts.Password)}),
+			proxmox.WithCredentials(&proxmox.Credentials{Username: username, Password: string(password)}),
 		), nil
-	case len(opts.APIToken) > 0:
-		id, secret, ok := strings.Cut(string(opts.APIToken), "=")
+	case len(apiToken) > 0:
+		id, secret, ok := strings.Cut(string(apiToken), "=")
 		if !ok {
-			return nil, fmt.Errorf("proxmox probe: PROXMOX_VE_API_TOKEN must be in id=secret form")
+			return nil, fmt.Errorf("proxmox client: PROXMOX_VE_API_TOKEN must be in id=secret form")
 		}
 		return proxmox.NewClient(base,
 			proxmox.WithHTTPClient(httpClient),
 			proxmox.WithAPIToken(id, secret),
 		), nil
 	default:
-		return nil, fmt.Errorf("proxmox probe: no credentials (need password or api token)")
+		return nil, fmt.Errorf("proxmox client: no credentials (need password or api token)")
 	}
 }
 

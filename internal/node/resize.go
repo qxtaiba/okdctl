@@ -41,6 +41,13 @@ func (r *Runner) Resize(ctx context.Context, scope ResizeScope, opts ResizeOptio
 		return &errtypes.ConfigError{Msg: "resize: --memory-mb must be greater than 0"}
 	}
 
+	// Fail before any disruption: a resize is realized only by a hypervisor
+	// power-cycle, so refuse up front when no power-cycler is wired rather than
+	// draining a node and then discovering the change can't take effect.
+	if !r.DryRun && r.Power == nil {
+		return &errtypes.ConfigError{Msg: "resize needs Proxmox API access to power-cycle the VM after the memory change, but no Proxmox credentials are available; set PROXMOX_VE_* credentials and retry"}
+	}
+
 	nodes, err := r.Cluster.ListNodes(ctx)
 	if err != nil {
 		return &errtypes.ClusterError{Msg: "list nodes", Err: err}
@@ -209,6 +216,17 @@ func (r *Runner) resizeOneNode(ctx context.Context, t resizeTarget, role nodetyp
 		return err
 	}
 
+	// The apply only rewrites the VM's *config*; bpg/proxmox does not restart it,
+	// so the guest keeps its old memory until a hypervisor stop→start. Power-cycle
+	// now, then wait for the node to rejoin. A failure here leaves the node
+	// cordoned and returns an error — never report success on an unrealized resize.
+	if err := markStep(r.marker(), OpResize, t.name, StepPowerCycle, r.RunID, r.Cfg.Cluster.Name); err != nil {
+		return err
+	}
+	if err := r.powerCycleVM(ctx, role, t.index); err != nil {
+		return err
+	}
+
 	if err := r.waitNodeReady(ctx, t.name); err != nil {
 		return err
 	}
@@ -224,6 +242,14 @@ func (r *Runner) resizeOneNode(ctx context.Context, t resizeTarget, role nodetyp
 	if err := r.Cluster.Uncordon(ctx, t.name); err != nil {
 		return err
 	}
+
+	// A worker (or a compacted master) may host OSDs; the power-cycle took them
+	// down and triggered a rebalance. Wait for structural Ceph health before the
+	// op returns so a compact loop never drains the next node mid-recovery.
+	if err := r.waitCephHealthy(ctx, "post-"+t.name); err != nil {
+		return err
+	}
+
 	r.Log.Info("node: resized", "node", t.name, "role", string(role))
 	return nil
 }
