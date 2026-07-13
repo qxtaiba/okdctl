@@ -60,7 +60,7 @@ func runClusterCompact(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
-	consent := nodeConsent{yes: compactYes, confirmCluster: compactConfirmCluster, dryRun: compactDryRun, twoStage: true}
+	consent := nodeConsent{yes: compactYes, dryRun: compactDryRun, twoStage: true}
 	rc, err := buildNodeRunner(cmd.Context(), cfg, "compact", consent, true)
 	if err != nil {
 		return err

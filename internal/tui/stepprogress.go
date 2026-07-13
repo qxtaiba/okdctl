@@ -42,8 +42,7 @@ type StepProgress struct {
 	total   int
 	index   map[distribution.StepID]stepPos
 
-	mu      sync.Mutex
-	painted bool
+	mu sync.Mutex
 }
 
 type stepPos struct {
@@ -80,14 +79,13 @@ func (s *StepProgress) StepStarted(id distribution.StepID) {
 	if !ok {
 		return
 	}
-	s.writeSink("step: started " + s.plainLabel(pos))
+	s.writeSink("step: started " + s.label(pos))
 	lineReg.register(s)
 	line := MutedStyle.Render(s.label(pos))
 	lineReg.paint(s, func() {
 		s.mu.Lock()
 		defer s.mu.Unlock()
 		_, _ = fmt.Fprint(s.w, "\r\x1b[2K"+line)
-		s.painted = true
 	})
 }
 
@@ -108,7 +106,6 @@ func (s *StepProgress) StepFinished(r *distribution.StepResult) {
 		s.mu.Lock()
 		defer s.mu.Unlock()
 		_, _ = fmt.Fprint(s.w, "\r\x1b[2K"+final+"\n")
-		s.painted = false
 	})
 	lineReg.deregister(s)
 }
@@ -122,7 +119,6 @@ func (s *StepProgress) clearLine() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	_, _ = fmt.Fprint(s.w, "\r\x1b[2K")
-	s.painted = false
 }
 
 func (s *StepProgress) counter(n int) string {
@@ -148,18 +144,14 @@ func (s *StepProgress) finalLine(r *distribution.StepResult, pos stepPos) string
 	}
 }
 
-func (s *StepProgress) plainLabel(pos stepPos) string {
-	return fmt.Sprintf("%s %s · %s", s.counter(pos.n), pos.meta.Name, pos.meta.Phase)
-}
-
 func (s *StepProgress) plainStatus(r *distribution.StepResult, pos stepPos) string {
 	switch {
 	case r.Skipped:
-		return "step: skip " + s.plainLabel(pos)
+		return "step: skip " + s.label(pos)
 	case r.Success:
-		return fmt.Sprintf("step: ok %s (%s)", s.plainLabel(pos), r.Duration.Truncate(time.Millisecond))
+		return fmt.Sprintf("step: ok %s (%s)", s.label(pos), r.Duration.Truncate(time.Millisecond))
 	default:
-		return fmt.Sprintf("step: fail %s (%s)", s.plainLabel(pos), r.Duration.Truncate(time.Millisecond))
+		return fmt.Sprintf("step: fail %s (%s)", s.label(pos), r.Duration.Truncate(time.Millisecond))
 	}
 }
 

@@ -59,9 +59,16 @@ type compactPreflight struct {
 // plane is made schedulable — a refusal on the third worker must not leave the
 // cluster half-mutated. --dry-run runs the same preflight and prints the ordered
 // action list with per-node verdicts, mutating nothing.
+//
+// The pre-flight etcd gate blocks (up to EtcdGateTimeout) only on the real
+// path. Under --dry-run it degrades to a single non-blocking probe reported as
+// a verdict line, so a preview against a degraded quorum still prints instead
+// of hanging on a gate whose whole purpose is to wait.
 func (r *Runner) Compact(ctx context.Context, opts CompactOptions) error {
-	if err := r.waitEtcdHealthy(ctx, "compact-preflight"); err != nil {
-		return err
+	if !r.DryRun {
+		if err := r.waitEtcdHealthy(ctx, "compact-preflight"); err != nil {
+			return err
+		}
 	}
 
 	nodes, err := r.Cluster.ListNodes(ctx)
@@ -80,7 +87,7 @@ func (r *Runner) Compact(ctx context.Context, opts CompactOptions) error {
 
 	if r.DryRun {
 		r.preview(&plan)
-		r.reportCompactPlan(workers, masters, pf, opts)
+		r.reportCompactPlan(ctx, workers, masters, pf, opts)
 		return pf.blockErr
 	}
 	if pf.blockErr != nil {
@@ -286,13 +293,14 @@ func compactPlan(pf compactPreflight, clusterName string, opts CompactOptions) O
 // reportCompactPlan prints the ordered dry-run action list with per-node
 // verdicts: the control-plane step, each worker removal (with its OSD/ingress
 // placement and gate verdict), and the interleaved master grows.
-func (r *Runner) reportCompactPlan(workers, masters []string, pf compactPreflight, opts CompactOptions) {
+func (r *Runner) reportCompactPlan(ctx context.Context, workers, masters []string, pf compactPreflight, opts CompactOptions) {
 	replicas := opts.IngressReplicas
 	if replicas <= 0 {
 		replicas = 2
 	}
 	r.Log.Info("node: dry-run — compact plan (no changes made)",
 		"workers_to_remove", len(workers), "masters", len(masters), "grow_master_mb", opts.GrowMasterMemoryMB)
+	r.reportEtcdDryRunVerdict(ctx)
 	r.Log.Info("node: dry-run — step: make control plane schedulable and apply compact ingress",
 		"ingress_replicas", replicas)
 
@@ -317,6 +325,26 @@ func (r *Runner) reportCompactPlan(workers, masters []string, pf compactPrefligh
 	}
 	if pf.memErr != nil {
 		r.Log.Warn("node: dry-run — master grow WOULD EXCEED host memory budget", "err", pf.memErr)
+	}
+}
+
+// reportEtcdDryRunVerdict runs a single non-blocking etcd probe and prints it
+// as a dry-run verdict line. Unlike the real path's waitEtcdHealthy gate it
+// never blocks and never fails the preview: a degraded quorum is surfaced so
+// the operator knows the real compact would wait for it up to EtcdGateTimeout.
+func (r *Runner) reportEtcdDryRunVerdict(ctx context.Context) {
+	h, err := r.Cluster.EtcdHealthy(ctx)
+	switch {
+	case err != nil:
+		r.Log.Warn("node: dry-run — etcd: UNHEALTHY — real compact will wait up to 10m", "reason", err.Error())
+	case !h.Healthy:
+		reason := h.Reason
+		if reason == "" {
+			reason = "not healthy"
+		}
+		r.Log.Warn("node: dry-run — etcd: UNHEALTHY — real compact will wait up to 10m", "reason", reason)
+	default:
+		r.Log.Info("node: dry-run — etcd: healthy")
 	}
 }
 

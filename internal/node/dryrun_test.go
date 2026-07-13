@@ -554,6 +554,60 @@ func TestCompactDryRunPreviewsEveryWorkerAndMakesNoMutation(t *testing.T) {
 	}
 }
 
+// TestCompactDryRunAgainstDegradedEtcdStillPreviews locks the fix that makes
+// the pre-flight etcd gate non-blocking under --dry-run: a degraded quorum must
+// not hang the preview, and the verdict is surfaced as a line rather than a
+// failure.
+func TestCompactDryRunAgainstDegradedEtcdStillPreviews(t *testing.T) {
+	fc := &fakeCluster{
+		nodes: []cluster.NodeDetail{
+			{Name: "worker0", Role: nodetypes.RoleWorker},
+			{Name: "worker1", Role: nodetypes.RoleWorker},
+			{Name: "master0", Role: nodetypes.RoleMaster},
+		},
+		schedulable: true,
+		etcdHealthy: false, // degraded: the real gate would block up to 10m
+	}
+	ftf := &fakeTF{action: terraform.PlanActionDelete}
+	cfg := config.DefaultConfig()
+	cfg.Topology.Workers.Count = 2
+
+	dir := t.TempDir()
+	var buf bytes.Buffer
+	r := &Runner{
+		Cluster:    fc,
+		TF:         ftf,
+		Cfg:        cfg,
+		ConfigPath: filepath.Join(dir, "okdctl.yaml"),
+		WorkDir:    dir,
+		EnvDir:     dir,
+		RunID:      "test-run",
+		DryRun:     true,
+		Log:        slog.New(slog.NewTextHandler(&buf, nil)),
+	}
+
+	if err := r.Compact(context.Background(), CompactOptions{IngressReplicas: 2}); err != nil {
+		t.Fatalf("dry-run compact against degraded etcd must not fail: %v", err)
+	}
+
+	out := buf.String()
+	if !strings.Contains(out, "compact plan") {
+		t.Errorf("preview did not print against degraded etcd:\n%s", out)
+	}
+	if !strings.Contains(out, "etcd: UNHEALTHY") || !strings.Contains(out, "wait up to 10m") {
+		t.Errorf("preview missing the etcd verdict line:\n%s", out)
+	}
+
+	// Zero mutation despite the degraded quorum.
+	if fc.setSched != 0 || fc.applied != 0 || fc.cordon != 0 || fc.drain != 0 || fc.deleteNode != 0 {
+		t.Errorf("dry-run compact mutated the cluster: setSched=%d applied=%d cordon=%d drain=%d delete=%d",
+			fc.setSched, fc.applied, fc.cordon, fc.drain, fc.deleteNode)
+	}
+	if ftf.applyCalls != 0 || ftf.snapshots != 0 {
+		t.Errorf("dry-run compact applied terraform: apply=%d snapshot=%d", ftf.applyCalls, ftf.snapshots)
+	}
+}
+
 func TestCompactPreflightsStorageGuardBeforeControlPlaneMutation(t *testing.T) {
 	fc := &fakeCluster{
 		nodes:       compactNodes(),
