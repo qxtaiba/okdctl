@@ -2471,7 +2471,7 @@ ISO globs while the stream-pin lookup discards the major version with OKD
 
 #### C2 — Preflight compact guards and make its dry-run real
 
-- **Status:** not started
+- **Status:** in review — branch feat/tier-c-batch
 - **Category:** trust / destructive-op safety
 - **State:** well-specified
 - **Effort:** days
@@ -2519,7 +2519,7 @@ ISO globs while the stream-pin lookup discards the major version with OKD
 
 #### C5 — Coordinate the spinner with the stderr logger
 
-- **Status:** not started
+- **Status:** in review — branch feat/tier-c-batch
 - **Category:** tui / deploy-output
 - **State:** well-specified
 - **Effort:** hours
@@ -2535,7 +2535,7 @@ ISO globs while the stream-pin lookup discards the major version with OKD
 
 #### C6 — Route the openshift-install firehose to the log file, curate the TTY
 
-- **Status:** not started
+- **Status:** in review — branch feat/tier-c-batch
 - **Category:** tui / deploy-output
 - **State:** design needed
 - **Effort:** days
@@ -2551,7 +2551,7 @@ ISO globs while the stream-pin lookup discards the major version with OKD
 
 #### C7 — Render a live deploy step checklist via MetricsRecorder
 
-- **Status:** not started
+- **Status:** in review — branch feat/tier-c-batch
 - **Category:** tui / deploy-output
 - **State:** well-specified
 - **Effort:** days
@@ -2567,7 +2567,7 @@ ISO globs while the stream-pin lookup discards the major version with OKD
 
 #### C8 — Show progress during long node-op waits
 
-- **Status:** not started
+- **Status:** in review — branch feat/tier-c-batch
 - **Category:** operator-ux / node-ops
 - **State:** well-specified
 - **Effort:** days
@@ -2582,7 +2582,7 @@ ISO globs while the stream-pin lookup discards the major version with OKD
 
 #### C9 — Make destructive node/cluster confirmations informed and destroy-grade
 
-- **Status:** not started
+- **Status:** in review — branch feat/tier-c-batch
 - **Category:** trust / operator-ux
 - **State:** well-specified
 - **Effort:** days
@@ -2598,7 +2598,7 @@ ISO globs while the stream-pin lookup discards the major version with OKD
 
 #### C10 — Keep --dry-run from rewriting the terraform root
 
-- **Status:** not started
+- **Status:** in review — branch feat/tier-c-batch
 - **Category:** trust / dry-run honesty
 - **State:** well-specified
 - **Effort:** hours
@@ -2613,7 +2613,7 @@ ISO globs while the stream-pin lookup discards the major version with OKD
 
 #### C11 — Version-stamp the materialized terraform root and fix half-migration detection
 
-- **Status:** not started
+- **Status:** in review — branch feat/tier-c-batch
 - **Category:** trust / state-recovery
 - **State:** design needed
 - **Effort:** days
@@ -2628,7 +2628,7 @@ ISO globs while the stream-pin lookup discards the major version with OKD
 
 #### C12 — Add node list and per-node status visibility
 
-- **Status:** not started
+- **Status:** in review — branch feat/tier-c-batch
 - **Category:** feature-gap / observability
 - **State:** design needed
 - **Effort:** days
@@ -2644,7 +2644,7 @@ ISO globs while the stream-pin lookup discards the major version with OKD
 
 #### C13 — Add a day-2 cluster section to doctor
 
-- **Status:** not started
+- **Status:** in review — branch feat/tier-c-batch
 - **Category:** feature-gap / observability
 - **State:** well-specified
 - **Effort:** days
@@ -2675,7 +2675,7 @@ ISO globs while the stream-pin lookup discards the major version with OKD
 
 #### C15 — Let the wizard review step jump to sections
 
-- **Status:** not started
+- **Status:** in review — branch feat/tier-c-batch
 - **Category:** tui / wizard
 - **State:** design needed
 - **Effort:** days
@@ -2690,7 +2690,7 @@ ISO globs while the stream-pin lookup discards the major version with OKD
 
 #### C16 — Replace internals-facing node-op messages with operator actions
 
-- **Status:** not started
+- **Status:** in review — branch feat/tier-c-batch
 - **Category:** operator-ux / messages
 - **State:** well-specified
 - **Effort:** hours
@@ -2706,7 +2706,7 @@ ISO globs while the stream-pin lookup discards the major version with OKD
 
 #### C17 — Allow CPU-only resize without restating memory
 
-- **Status:** not started
+- **Status:** in review — branch feat/tier-c-batch
 - **Category:** operator-ux / flags
 - **State:** well-specified
 - **Effort:** hours
@@ -2721,7 +2721,7 @@ ISO globs while the stream-pin lookup discards the major version with OKD
 
 #### C18 — Route cluster package output checks through getJSONChecked
 
-- **Status:** not started
+- **Status:** in review — branch feat/tier-c-batch
 - **Category:** refactor / dedup
 - **State:** well-specified
 - **Effort:** hours
@@ -2736,7 +2736,7 @@ ISO globs while the stream-pin lookup discards the major version with OKD
 
 #### C19 — Make CoreOS stream pin lookup major-version aware before OKD 5.0 goes stable
 
-- **Status:** not started
+- **Status:** in review — branch feat/tier-c-batch
 - **Category:** correctness / okd-landscape
 - **State:** well-specified
 - **Effort:** hours
@@ -2752,7 +2752,7 @@ ISO globs while the stream-pin lookup discards the major version with OKD
 
 #### C20 — Extend ISO auto-detect and destroy cleanup to SCOS filenames
 
-- **Status:** not started
+- **Status:** in review — branch feat/tier-c-batch
 - **Category:** correctness / okd-landscape
 - **State:** well-specified
 - **Effort:** hours
@@ -2767,7 +2767,7 @@ ISO globs while the stream-pin lookup discards the major version with OKD
 
 #### C21 — Bump the default OKD version pin to current stable
 
-- **Status:** not started
+- **Status:** in review — branch feat/tier-c-batch
 - **Category:** freshness / okd-landscape
 - **State:** well-specified
 - **Effort:** hours
@@ -2828,7 +2828,7 @@ ISO globs while the stream-pin lookup discards the major version with OKD
 
 #### C25 — Disable Red-Hat-subscription-gated defaults post-install
 
-- **Status:** not started
+- **Status:** in review — branch feat/tier-c-batch
 - **Category:** feature-gap / okd-polish
 - **State:** well-specified
 - **Effort:** days
@@ -2843,7 +2843,7 @@ ISO globs while the stream-pin lookup discards the major version with OKD
 
 #### C26 — Ship a chrony MachineConfig tuned for VM clock drift
 
-- **Status:** not started
+- **Status:** in review — branch feat/tier-c-batch
 - **Category:** feature-gap / okd-polish
 - **State:** well-specified
 - **Effort:** hours
@@ -2858,7 +2858,7 @@ ISO globs while the stream-pin lookup discards the major version with OKD
 
 #### C27 — Rebuild ExtractTarGz containment on os.Root
 
-- **Status:** not started
+- **Status:** in review — branch feat/tier-c-batch
 - **Category:** build-vs-buy / security
 - **State:** well-specified
 - **Effort:** hours
@@ -2873,7 +2873,7 @@ ISO globs while the stream-pin lookup discards the major version with OKD
 
 #### C28 — Reimplement system.WaitFor internals on apimachinery wait
 
-- **Status:** not started
+- **Status:** in review — branch feat/tier-c-batch
 - **Category:** build-vs-buy
 - **State:** well-specified
 - **Effort:** hours
@@ -2887,7 +2887,7 @@ ISO globs while the stream-pin lookup discards the major version with OKD
 
 #### C29 — Replace system.NewUUIDv4 with crypto/rand.Text
 
-- **Status:** not started
+- **Status:** in review — branch feat/tier-c-batch
 - **Category:** build-vs-buy
 - **State:** well-specified
 - **Effort:** hours
@@ -2901,7 +2901,7 @@ ISO globs while the stream-pin lookup discards the major version with OKD
 
 #### C30 — Decide keep/kill on the --metrics-addr Prometheus endpoint
 
-- **Status:** not started
+- **Status:** in review — branch feat/tier-c-batch
 - **Category:** simplification / product-decision
 - **State:** design needed
 - **Effort:** hours
@@ -2916,7 +2916,7 @@ ISO globs while the stream-pin lookup discards the major version with OKD
 
 #### C31 — Collapse the triplicated exponential-backoff retry wrapper
 
-- **Status:** not started
+- **Status:** in review — branch feat/tier-c-batch
 - **Category:** simplification
 - **State:** well-specified
 - **Effort:** hours
@@ -2944,7 +2944,7 @@ ISO globs while the stream-pin lookup discards the major version with OKD
 
 #### C33 — Delete redundant test restatements in postinstall and destroy suites
 
-- **Status:** not started
+- **Status:** in review — branch feat/tier-c-batch
 - **Category:** simplification / tests
 - **State:** well-specified
 - **Effort:** hours
@@ -2958,7 +2958,7 @@ ISO globs while the stream-pin lookup discards the major version with OKD
 
 #### C34 — Extract one shared slog capture-handler test fixture
 
-- **Status:** not started
+- **Status:** done — superseded by PR #941 (slog-capture consolidation landed there first)
 - **Category:** simplification / tests
 - **State:** well-specified
 - **Effort:** hours
