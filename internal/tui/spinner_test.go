@@ -171,6 +171,43 @@ func TestStartSpinner_NonTTYNoOp(t *testing.T) {
 	stop() // must not panic or block
 }
 
+// TestStatusLine_SetUpdatesDesc drives the updatable status line and asserts
+// the painted line reflects a desc replaced mid-run, on one owned line.
+func TestStatusLine_SetUpdatesDesc(t *testing.T) {
+	var buf bytes.Buffer
+	set, stop := startStatusLine(context.Background(), "waiting for cluster operators", &buf)
+	if !lineReg.active.Load() {
+		t.Fatal("status line did not register as line owner")
+	}
+	set("cluster operators 12/33 available · 4 CSRs approved")
+	// Give the ticker a couple of frames to repaint with the new desc.
+	time.Sleep(300 * time.Millisecond)
+	stop()
+
+	out := buf.String()
+	if !strings.Contains(out, "12/33 available") {
+		t.Fatalf("painted line missing updated detail:\n%q", out)
+	}
+	if lineReg.active.Load() {
+		t.Fatal("owner still active after stop")
+	}
+}
+
+// TestStartStatusLine_NonTTYNoOp locks the non-TTY contract: no owner is
+// registered and both returned funcs are callable no-ops.
+func TestStartStatusLine_NonTTYNoOp(t *testing.T) {
+	prev := progressBarsActive.Load()
+	progressBarsActive.Store(false)
+	t.Cleanup(func() { progressBarsActive.Store(prev) })
+
+	set, stop := StartStatusLine(context.Background(), "quiet")
+	if lineReg.active.Load() {
+		t.Fatal("non-TTY StartStatusLine registered a line owner")
+	}
+	set("detail") // must not panic
+	stop()        // must not panic or block
+}
+
 func tail(s string) string {
 	if len(s) > 24 {
 		return s[len(s)-24:]

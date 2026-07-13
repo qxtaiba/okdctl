@@ -5,6 +5,7 @@ package okd
 import (
 	"context"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -34,6 +35,9 @@ type Provisioner struct {
 	logger      *slog.Logger
 	recorder    distribution.MetricsRecorder
 	reporter    logutil.ProgressReporter
+	statusLine  logutil.StatusLineReporter
+	streamOut   io.Writer
+	streamErr   io.Writer
 }
 
 // ProvisionerOption configures a Provisioner. Options compose — pass multiple
@@ -68,6 +72,24 @@ func WithProgressReporter(r logutil.ProgressReporter) ProvisionerOption {
 	return func(p *Provisioner) { p.reporter = r }
 }
 
+// WithStatusLineReporter sets the updatable status-line reporter the install
+// monitor drives during the cluster-operator wait. Defaults to
+// logutil.NopStatusLineReporter when omitted.
+func WithStatusLineReporter(r logutil.StatusLineReporter) ProvisionerOption {
+	return func(p *Provisioner) { p.statusLine = r }
+}
+
+// WithStreamWriters redirects streamed subprocess stdout/stderr away from the
+// executor's os.Stdout/os.Stderr defaults — deploy routes the openshift-install
+// firehose to the persistent log file so the TTY carries only the curated
+// status line. A nil writer leaves that stream on its default.
+func WithStreamWriters(stdout, stderr io.Writer) ProvisionerOption {
+	return func(p *Provisioner) {
+		p.streamOut = stdout
+		p.streamErr = stderr
+	}
+}
+
 // WithEnv passes environment variables to the executor for all subprocess calls,
 // avoiding modification of the global process environment.
 func WithEnv(env []string) ProvisionerOption {
@@ -86,6 +108,7 @@ func New(opts ...ProvisionerOption) *Provisioner {
 		projectRoot: projectRoot,
 		logger:      logutil.NopLogger,
 		reporter:    logutil.NopProgressReporter,
+		statusLine:  logutil.NopStatusLineReporter,
 	}
 
 	for _, opt := range opts {
@@ -95,6 +118,12 @@ func New(opts ...ProvisionerOption) *Provisioner {
 	execOpts := []executor.Option{executor.WithLogger(p.logger)}
 	if len(p.pendingEnv) > 0 {
 		execOpts = append(execOpts, executor.WithEnv(p.pendingEnv))
+	}
+	if p.streamOut != nil {
+		execOpts = append(execOpts, executor.WithStdout(p.streamOut))
+	}
+	if p.streamErr != nil {
+		execOpts = append(execOpts, executor.WithStderr(p.streamErr))
 	}
 	p.executor = executor.New(execOpts...)
 
@@ -210,6 +239,7 @@ func (p *Provisioner) Install(ctx context.Context, cfg *config.Config, opts *ins
 		phase.WithLogger(p.logger),
 		phase.WithRecorder(p.recorder),
 		phase.WithReporter(p.reporter),
+		phase.WithStatusLine(p.statusLine),
 	)
 	return installPhase.Execute(ctx, cfg, opts)
 }

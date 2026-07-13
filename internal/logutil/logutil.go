@@ -38,3 +38,17 @@ type ProgressReporter func(desc string) (stop func())
 // NopProgressReporter is the no-op ProgressReporter; domain constructors use
 // it as the default so callers can invoke the reporter unconditionally.
 var NopProgressReporter ProgressReporter = func(string) func() { return func() {} }
+
+// StatusLineReporter starts an updatable status line for desc and returns a
+// set func (replaces the live detail shown alongside desc) plus an idempotent
+// stop func. Both are safe to call unconditionally; a nop implementation
+// discards updates. Defined here for the same import-cycle reason as
+// ProgressReporter — the real implementation (tui.StartStatusLine) lives in
+// internal/tui.
+type StatusLineReporter func(desc string) (set func(detail string), stop func())
+
+// NopStatusLineReporter is the no-op StatusLineReporter used as the default so
+// phases can drive the status line unconditionally.
+var NopStatusLineReporter StatusLineReporter = func(string) (func(string), func()) {
+	return func(string) {}, func() {}
+}

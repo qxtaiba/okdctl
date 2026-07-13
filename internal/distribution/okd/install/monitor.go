@@ -12,9 +12,10 @@ import (
 )
 
 // defaultStartMonitorCmd starts "openshift-install wait-for install-complete"
-// via the canonical Executor.StartStreamed, wiring stdout/stderr to the
-// current TTY and sharing buildEnv/cancelSignal/WaitDelay with every other
-// subprocess this phase runs.
+// via the canonical Executor.StartStreamed, sharing buildEnv/cancelSignal/
+// WaitDelay with every other subprocess this phase runs. The executor's
+// stdout/stderr are wired by deploy to the persistent log file (the TTY shows
+// the curated status line instead); --verbose tees them back to the terminal.
 func (p *Phase) defaultStartMonitorCmd(ctx context.Context, clusterDir string) (done <-chan error, kill func(), err error) {
 	return p.Exec.StartStreamed(ctx, "openshift-install", "wait-for", "install-complete", "--dir", clusterDir, "--log-level=debug")
 }
@@ -67,6 +68,27 @@ type csrApprover interface {
 	ApprovePendingCSRs(ctx context.Context) (int, error)
 }
 
+// operatorCounter is the optional cluster-operator-count surface a real
+// cluster.Client satisfies. MonitorInstallation type-asserts the approver for
+// it; a stub approver that omits it simply drops the operator count from the
+// status line (the CSR count still shows).
+type operatorCounter interface {
+	ClusterOperatorsAvailable(ctx context.Context) (available, total int, err error)
+}
+
+// operatorStatusDetail builds the status-line detail from the live
+// cluster-operator count and the running CSR-approval total. A missing counter
+// or a transient count failure (API not yet reachable) degrades to the CSR
+// count alone rather than blanking the line.
+func operatorStatusDetail(ctx context.Context, counter operatorCounter, csrs int) string {
+	if counter != nil {
+		if available, total, err := counter.ClusterOperatorsAvailable(ctx); err == nil && total > 0 {
+			return fmt.Sprintf("cluster operators %d/%d available · %d CSRs approved", available, total, csrs)
+		}
+	}
+	return fmt.Sprintf("%d CSRs approved", csrs)
+}
+
 // MonitorInstallation watches the post-bootstrap install until all cluster
 // operators are Available, bounded by opts.InstallTimeout. If approver is
 // nil a real cluster.Client is constructed from clusterDir/auth/kubeconfig.
@@ -88,8 +110,9 @@ func (p *Phase) MonitorInstallation(ctx context.Context, clusterDir string, opts
 		startCmd = p.defaultStartMonitorCmd
 	}
 
-	stopSpinner := p.Reporter("monitoring cluster operators")
-	defer stopSpinner()
+	counter, _ := approver.(operatorCounter)
+	setStatus, stopStatus := p.StatusLine("waiting for cluster operators")
+	defer stopStatus()
 
 	installDone, _, err := startCmd(ctx, clusterDir)
 	if err != nil {
@@ -105,6 +128,7 @@ func (p *Phase) MonitorInstallation(ctx context.Context, clusterDir string, opts
 	defer ticker.Stop()
 
 	totalApproved := 0
+	setStatus(operatorStatusDetail(ctx, counter, totalApproved))
 	// Dedup identical consecutive tick errors: Warn once, then Debug the
 	// repeats so a 60-minute install doesn't spam the log with the same
 	// transient approve-check failure.
@@ -155,6 +179,7 @@ func (p *Phase) MonitorInstallation(ctx context.Context, clusterDir string, opts
 				totalApproved += approved
 				p.Log.Info("csr: approved pending requests", "approved", approved, "total", totalApproved)
 			}
+			setStatus(operatorStatusDetail(ctx, counter, totalApproved))
 
 		case <-ctx.Done():
 			if errors.Is(ctx.Err(), context.Canceled) {

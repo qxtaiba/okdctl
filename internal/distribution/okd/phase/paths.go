@@ -103,10 +103,11 @@ func GetTerraformEnv(cfg *config.Config) string {
 // destroy, cleanup) embeds — command executor, logger, metrics recorder,
 // and progress reporter.
 type BasePhase struct {
-	Exec     *executor.Executor
-	Log      *slog.Logger
-	Recorder distribution.MetricsRecorder
-	Reporter logutil.ProgressReporter
+	Exec       *executor.Executor
+	Log        *slog.Logger
+	Recorder   distribution.MetricsRecorder
+	Reporter   logutil.ProgressReporter
+	StatusLine logutil.StatusLineReporter
 }
 
 // BasePhaseOption configures a BasePhase at construction time.
@@ -135,6 +136,12 @@ func WithReporter(r logutil.ProgressReporter) BasePhaseOption {
 	return func(p *BasePhase) { p.Reporter = r }
 }
 
+// WithStatusLine sets the updatable status-line reporter used by the install
+// monitor. Nil resolves to logutil.NopStatusLineReporter.
+func WithStatusLine(r logutil.StatusLineReporter) BasePhaseOption {
+	return func(p *BasePhase) { p.StatusLine = r }
+}
+
 // NewBasePhase constructs a BasePhase from the supplied options. Nil-safe
 // for logger (→ NopLogger), exec (→ fresh executor wired to the same
 // logger), and reporter (→ NopProgressReporter).
@@ -151,6 +158,9 @@ func NewBasePhase(opts ...BasePhaseOption) BasePhase {
 	}
 	if p.Reporter == nil {
 		p.Reporter = logutil.NopProgressReporter
+	}
+	if p.StatusLine == nil {
+		p.StatusLine = logutil.NopStatusLineReporter
 	}
 	return p
 }

@@ -5,8 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
 	"slices"
+	"sync"
 	"time"
 
 	"github.com/qxtaiba/okdctl/internal/config"
@@ -24,6 +26,66 @@ import (
 // StateFileName is the deploy-state marker file written under the work
 // directory (<projectRoot>/okd-install).
 const StateFileName = ".okdctl-deploy-state.json"
+
+// streamWriters builds the stdout/stderr writers for the phase executor from
+// the persistent log sink. Default (not verbose): the openshift-install
+// firehose routes to the log file only, leaving the TTY for the curated
+// status line and milestone lines. Verbose: the stream is tee'd to both the
+// TTY (raw) and the log file. In every mode the stream is scanned for
+// milestones (bootstrap/install complete, degraded operators) promoted to the
+// TTY. Returns (nil, nil) when no sink is active, so the caller leaves the
+// executor on its os.Stdout/os.Stderr defaults.
+func streamWriters(sink io.Writer, verbose bool) (stdout, stderr io.Writer) {
+	if sink == nil {
+		return nil, nil
+	}
+	baseOut, baseErr := sink, sink
+	if verbose {
+		baseOut = io.MultiWriter(os.Stdout, sink)
+		baseErr = io.MultiWriter(os.Stderr, sink)
+	}
+	notify := milestoneNotifier()
+	return install.NewMilestoneWriter(baseOut, notify), install.NewMilestoneWriter(baseErr, notify)
+}
+
+// milestoneNotifier returns a notify func that promotes each openshift-install
+// milestone to the TTY log at most once per distinct event — openshift-install
+// re-prints a degraded operator on every poll, so a seen-set keeps the status
+// feed from spamming. The func is called from both the stdout and stderr copy
+// goroutines, so its map is mutex-guarded.
+func milestoneNotifier() func(install.Milestone) {
+	var mu sync.Mutex
+	seen := map[string]bool{}
+	return func(m install.Milestone) {
+		var key string
+		switch m.Kind {
+		case install.MilestoneBootstrapComplete:
+			key = "bootstrap"
+		case install.MilestoneInstallComplete:
+			key = "install"
+		case install.MilestoneOperatorDegraded:
+			key = "degraded:" + m.Operator
+		default:
+			return
+		}
+		mu.Lock()
+		if seen[key] {
+			mu.Unlock()
+			return
+		}
+		seen[key] = true
+		mu.Unlock()
+
+		switch m.Kind {
+		case install.MilestoneBootstrapComplete:
+			tui.Info("bootstrap complete — control plane has taken over")
+		case install.MilestoneInstallComplete:
+			tui.Info("install complete — cluster is initialized")
+		case install.MilestoneOperatorDegraded:
+			tui.Warn("cluster operator degraded during install", tui.LF("operator", m.Operator))
+		}
+	}
+}
 
 // NewProvisioner builds an okd.Provisioner wired for CLI use (tui logger,
 // credential env). Pass nil for creds when the operation only needs local
@@ -113,6 +175,13 @@ type Options struct {
 	FreshDeploy        bool
 	KeepRedHatCatalogs bool
 	ProjectRoot        string
+	// LogSink is the persistent okdctl.log writer. When set, the
+	// openshift-install firehose routes there instead of the TTY; nil leaves
+	// streamed output on the default os.Stdout/os.Stderr.
+	LogSink io.Writer
+	// Verbose mirrors --verbose: it keeps the streamed subprocess output on
+	// the TTY (tee'd to LogSink) instead of routing it to the log file only.
+	Verbose bool
 }
 
 // runDeployPhases executes setup, install, and postinstall, starting from
@@ -198,6 +267,10 @@ func Execute(ctx context.Context, cfg *config.Config, opts Options, w io.Writer)
 
 	provOpts := []okd.ProvisionerOption{
 		okd.WithProgressReporter(func(desc string) func() { return tui.StartSpinner(ctx, desc) }),
+		okd.WithStatusLineReporter(func(desc string) (func(string), func()) { return tui.StartStatusLine(ctx, desc) }),
+	}
+	if so, se := streamWriters(opts.LogSink, opts.Verbose); so != nil {
+		provOpts = append(provOpts, okd.WithStreamWriters(so, se))
 	}
 	p := NewProvisioner(opts.Credentials, projectRoot, provOpts...)
 	defer p.ZeroizeEnv()

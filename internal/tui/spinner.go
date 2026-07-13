@@ -31,12 +31,34 @@ func StartSpinner(ctx context.Context, desc string) func() {
 	return startSpinner(ctx, desc, os.Stderr)
 }
 
+// StartStatusLine renders a spinner whose description can be replaced in place
+// while it runs — the install monitor uses it to surface live cluster-operator
+// and CSR counts on one owned line. Returns a set func to update the detail
+// and a stop func with StartSpinner's teardown semantics. Both are no-ops when
+// ProgressBarsEnabled is false (non-TTY or JSON), so callers invoke them
+// unconditionally.
+func StartStatusLine(ctx context.Context, desc string) (set func(string), stop func()) {
+	if !ProgressBarsEnabled() {
+		return func(string) {}, func() {}
+	}
+	return startStatusLine(ctx, desc, os.Stderr)
+}
+
+func startStatusLine(ctx context.Context, desc string, w io.Writer) (set func(string), stop func()) {
+	sp := &spinner{w: w, desc: desc, start: time.Now()}
+	return sp.setDesc, runSpinner(ctx, sp)
+}
+
 func startSpinner(ctx context.Context, desc string, w io.Writer) func() {
+	sp := &spinner{w: w, desc: desc, start: time.Now()}
+	return runSpinner(ctx, sp)
+}
+
+func runSpinner(ctx context.Context, sp *spinner) func() {
 	done := make(chan struct{})
 	stopCh := make(chan struct{})
 	stop := sync.OnceFunc(func() { close(stopCh) })
 
-	sp := &spinner{w: w, desc: desc, start: time.Now()}
 	lineReg.register(sp)
 
 	go func() {
@@ -74,6 +96,12 @@ type spinner struct {
 // clearLine implements lineOwner. The caller holds the line lock.
 func (s *spinner) clearLine() {
 	_, _ = fmt.Fprint(s.w, "\r\x1b[2K")
+}
+
+// setDesc replaces the spinner's description under the line lock so a repaint
+// never reads a half-written desc; the change shows on the next tick.
+func (s *spinner) setDesc(d string) {
+	lineReg.paint(func() { s.desc = d })
 }
 
 func (s *spinner) paint() {

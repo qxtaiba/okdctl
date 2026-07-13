@@ -27,6 +27,12 @@ var logFileCloser io.Closer
 // prints it on failure so the operator knows a persistent log exists.
 var runLogPath string
 
+// runLogSink is the active file sink as a plain writer; nil when no file sink
+// is active. deploy routes the openshift-install firehose here so the TTY
+// carries only the curated status line. It aliases the same handle as
+// logFileCloser — do not close it separately.
+var runLogSink io.Writer
+
 // defaultLogSinkCmds lists the commands that tee their log stream to
 // <workspace>/okdctl.log by default. Scoped to the commands that mutate a
 // workspace; read-only commands (status, version, releases) must not start
@@ -110,6 +116,7 @@ func configureLogging(cmd *cobra.Command) error {
 	}
 	if sink != nil {
 		logFileCloser = sink
+		runLogSink = sink
 		stdoutW = io.MultiWriter(os.Stdout, sink)
 		stderrW = io.MultiWriter(os.Stderr, sink)
 	}

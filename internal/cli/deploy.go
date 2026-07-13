@@ -280,6 +280,8 @@ func runFullDeployment(ctx context.Context, cfg *config.Config, w io.Writer) err
 		FreshDeploy:        deployFresh,
 		KeepRedHatCatalogs: deployKeepRedHatCatalogs,
 		ProjectRoot:        projectRoot,
+		LogSink:            runLogSink,
+		Verbose:            logVerbose,
 	}, w)
 }
 
