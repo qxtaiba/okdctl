@@ -87,14 +87,11 @@ func (c *Client) SetMastersSchedulable(ctx context.Context, schedulable bool) er
 
 // MastersSchedulable reports the cluster Scheduler's spec.mastersSchedulable.
 func (c *Client) MastersSchedulable(ctx context.Context) (bool, error) {
-	result, err := c.runOutput(ctx, "get", "schedulers.config.openshift.io", "cluster", "-o", "json")
+	data, err := c.getJSONChecked(ctx, "get scheduler", "get", "schedulers.config.openshift.io", "cluster", "-o", "json")
 	if err != nil {
 		return false, err
 	}
-	if result.ExitCode != 0 {
-		return false, &errtypes.ClusterError{Msg: "get scheduler", Err: executor.NewExitError(ctx, c.CLI+" get scheduler", result.ExitCode, result.Stderr)}
-	}
-	return parseMastersSchedulable([]byte(result.Stdout))
+	return parseMastersSchedulable(data)
 }
 
 func parseMastersSchedulable(data []byte) (bool, error) {
@@ -120,17 +117,11 @@ type NodeDetail struct {
 
 // ListNodes returns every node's projected identity from `oc get nodes -o json`.
 func (c *Client) ListNodes(ctx context.Context) ([]NodeDetail, error) {
-	result, err := c.runOutput(ctx, "get", "nodes", "-o", "json")
+	data, err := c.getJSONChecked(ctx, "list nodes", "get", "nodes", "-o", "json")
 	if err != nil {
 		return nil, err
 	}
-	if result.ExitCode != 0 {
-		return nil, &errtypes.ClusterError{Msg: "list nodes", Err: executor.NewExitError(ctx, c.CLI+" get nodes", result.ExitCode, result.Stderr)}
-	}
-	if result.Truncated {
-		return nil, &errtypes.ClusterError{Msg: "list nodes: output truncated; cannot parse"}
-	}
-	return parseNodeList([]byte(result.Stdout))
+	return parseNodeList(data)
 }
 
 func parseNodeList(data []byte) ([]NodeDetail, error) {
@@ -193,17 +184,11 @@ func (c *Client) PodsForSelector(ctx context.Context, namespace, selector string
 	}
 	args = append(args, "-o", "json")
 
-	result, err := c.runOutput(ctx, args...)
+	data, err := c.getJSONChecked(ctx, "list pods", args...)
 	if err != nil {
 		return nil, err
 	}
-	if result.ExitCode != 0 {
-		return nil, &errtypes.ClusterError{Msg: "list pods", Err: executor.NewExitError(ctx, c.CLI+" get pods", result.ExitCode, result.Stderr)}
-	}
-	if result.Truncated {
-		return nil, &errtypes.ClusterError{Msg: "list pods: output truncated; cannot parse"}
-	}
-	return parsePodPlacements([]byte(result.Stdout))
+	return parsePodPlacements(data)
 }
 
 func parsePodPlacements(data []byte) ([]PodPlacement, error) {

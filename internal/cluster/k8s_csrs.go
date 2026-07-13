@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 
 	"github.com/qxtaiba/okdctl/internal/errtypes"
-	"github.com/qxtaiba/okdctl/internal/executor"
 )
 
 // PendingCSRs returns CSRs whose status.conditions slice is empty, which
@@ -13,20 +12,9 @@ import (
 // been approved nor denied. An Approved or Denied CSR carries at least one
 // condition entry and is excluded.
 func (c *Client) PendingCSRs(ctx context.Context) ([]CSR, error) {
-	result, err := c.runOutput(ctx, "get", "csr", "-o", "json")
+	data, err := c.getJSONChecked(ctx, "get csrs", "get", "csr", "-o", "json")
 	if err != nil {
 		return nil, err
-	}
-	if result.ExitCode != 0 {
-		return nil, &errtypes.ClusterError{
-			Msg: "failed to get CSRs",
-			Err: executor.NewExitError(ctx, c.CLI+" get csr", result.ExitCode, result.Stderr),
-		}
-	}
-	// A capped payload means the JSON document is incomplete; parsing would
-	// silently succeed on a partial items list.
-	if result.Truncated {
-		return nil, &errtypes.ClusterError{Msg: "csr list output truncated; cannot parse"}
 	}
 
 	var csrList struct {
@@ -40,7 +28,7 @@ func (c *Client) PendingCSRs(ctx context.Context) ([]CSR, error) {
 		} `json:"items"`
 	}
 
-	if err := json.Unmarshal([]byte(result.Stdout), &csrList); err != nil {
+	if err := json.Unmarshal(data, &csrList); err != nil {
 		return nil, &errtypes.ClusterError{Msg: "failed to parse CSRs", Err: err}
 	}
 
