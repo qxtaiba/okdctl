@@ -45,6 +45,41 @@ func (f *fakeApprover) ApprovePendingCSRs(_ context.Context) (int, error) {
 	return f.approveN, nil
 }
 
+type fakeOperatorCounter struct {
+	available, total int
+	err              error
+}
+
+func (f fakeOperatorCounter) ClusterOperatorsAvailable(context.Context) (available, total int, err error) {
+	return f.available, f.total, f.err
+}
+
+// TestOperatorStatusDetail locks the status-line detail format across the
+// counter states: a live count renders "cluster operators A/B available · N
+// CSRs approved", while a nil counter, a count error, or a zero total degrade
+// to the CSR count alone rather than blanking the line.
+func TestOperatorStatusDetail(t *testing.T) {
+	tests := []struct {
+		name    string
+		counter operatorCounter
+		csrs    int
+		want    string
+	}{
+		{"present total>0", fakeOperatorCounter{available: 30, total: 33}, 4, "cluster operators 30/33 available · 4 CSRs approved"},
+		{"present all available", fakeOperatorCounter{available: 33, total: 33}, 0, "cluster operators 33/33 available · 0 CSRs approved"},
+		{"present count error", fakeOperatorCounter{err: errors.New("api not reachable")}, 5, "5 CSRs approved"},
+		{"present zero total", fakeOperatorCounter{available: 0, total: 0}, 2, "2 CSRs approved"},
+		{"nil counter", nil, 7, "7 CSRs approved"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := operatorStatusDetail(context.Background(), tc.counter, tc.csrs); got != tc.want {
+				t.Errorf("operatorStatusDetail = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
 func baseOpts(installTimeout time.Duration) *Options {
 	return &Options{
 		InstallTimeout:      installTimeout,

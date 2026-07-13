@@ -101,11 +101,11 @@ func (s *spinner) clearLine() {
 // setDesc replaces the spinner's description under the line lock so a repaint
 // never reads a half-written desc; the change shows on the next tick.
 func (s *spinner) setDesc(d string) {
-	lineReg.paint(func() { s.desc = d })
+	lineReg.paint(s, func() { s.desc = d })
 }
 
 func (s *spinner) paint() {
-	lineReg.paint(func() {
+	lineReg.paint(s, func() {
 		elapsed := time.Since(s.start).Round(time.Second)
 		frame := SpinnerStyle.Render(spinnerFrames[s.frame%len(spinnerFrames)])
 		_, _ = fmt.Fprintf(s.w, "\r%s %s (%s)", frame, s.desc, elapsed)

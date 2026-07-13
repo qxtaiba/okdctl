@@ -279,12 +279,23 @@ func (p *Provisioner) ResumePostInstall(ctx context.Context, cfg *config.Config,
 	return p.PostInstall(ctx, cfg, keepRedHatCatalogs)
 }
 
-// DeployStep is a single step's identity for dry-run listings — ID and
-// display name only, no executable body.
+// DeployStep is a single step's identity for dry-run listings and the live
+// checklist — ID, display name, and the phase (setup/install/postinstall)
+// that owns it, no executable body.
 type DeployStep struct {
-	ID   distribution.StepID
-	Name string
+	ID    distribution.StepID
+	Name  string
+	Phase string
 }
+
+// Deploy phase labels carried on DeployStep.Phase. They match the deploy
+// package's on-disk marker phase names so a resume can filter the plan to the
+// phases it will actually run.
+const (
+	PhaseSetup       = "setup"
+	PhaseInstall     = "install"
+	PhasePostInstall = "postinstall"
+)
 
 // DeploySteps returns the ordered ID+Name for every step the setup, install,
 // and postinstall phases execute for cfg, derived from the same StepDefs
@@ -301,15 +312,15 @@ func (p *Provisioner) DeploySteps(cfg *config.Config) []DeployStep {
 	postPhase := postinstall.New(phase.WithExecutor(p.executor), phase.WithLogger(p.logger))
 	postOpts := postinstall.NewOptions(cfg, p.projectRoot)
 
-	var defs []distribution.StepDef
-	defs = append(defs, setupPhase.StepDefs(cfg, &setupOpts)...)
-	defs = append(defs, installPhase.StepDefs(cfg, &installOpts)...)
-	defs = append(defs, postPhase.StepDefs(cfg, &postOpts)...)
-
-	out := make([]DeployStep, len(defs))
-	for i, d := range defs {
-		out[i] = DeployStep{ID: d.ID, Name: d.Name}
+	var out []DeployStep
+	appendPhase := func(phaseName string, defs []distribution.StepDef) {
+		for _, d := range defs {
+			out = append(out, DeployStep{ID: d.ID, Name: d.Name, Phase: phaseName})
+		}
 	}
+	appendPhase(PhaseSetup, setupPhase.StepDefs(cfg, &setupOpts))
+	appendPhase(PhaseInstall, installPhase.StepDefs(cfg, &installOpts))
+	appendPhase(PhasePostInstall, postPhase.StepDefs(cfg, &postOpts))
 	return out
 }
 

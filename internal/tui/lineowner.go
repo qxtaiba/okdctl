@@ -46,21 +46,40 @@ func (r *lineRegistry) release(o lineOwner) {
 	}
 }
 
-// paint runs the owner's repaint under the line lock.
-func (r *lineRegistry) paint(fn func()) {
+// deregister removes o as owner without clearing its line. The checklist uses
+// it after committing a step's final line with a trailing newline: the line is
+// already permanent, so a clearLine here would erase the fresh empty line
+// below it. No-op if o is not the current owner.
+func (r *lineRegistry) deregister(o lineOwner) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	fn()
+	if r.owner == o {
+		r.owner = nil
+		r.active.Store(false)
+	}
 }
 
-// withLine erases the active owner's line, then runs fn, under the line lock.
-// The lock-free fast path keeps the no-spinner logging hot path (including
-// every non-TTY run) free of mutex traffic: no owner ever registers there.
-func (r *lineRegistry) withLine(fn func()) {
-	if !r.active.Load() {
+// paint runs o's repaint under the line lock, but only while o is still the
+// active owner. The guard mirrors release's owner check: with two concurrent
+// owners handing the line back and forth (the step checklist and the
+// spinner/status line it spawns per step), a stale owner whose line was already
+// replaced must not paint over the current owner's line.
+func (r *lineRegistry) paint(o lineOwner, fn func()) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.owner == o {
 		fn()
-		return
 	}
+}
+
+// withLine erases the active owner's line, then runs fn, under the line
+// lock. Always locks, even when active is false: a lock-free fast path here
+// let a Handle() call that sampled active just before a concurrent register
+// skip the lock while another, already in-flight Handle() call (still on the
+// pre-transition value) wrote straight through — same io.Writer, racing
+// under two different locks. r.mu is uncontended on the common no-owner
+// path, so the cost is one extra lock/unlock per log record.
+func (r *lineRegistry) withLine(fn func()) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.owner != nil {

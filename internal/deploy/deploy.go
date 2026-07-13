@@ -184,12 +184,41 @@ type Options struct {
 	Verbose bool
 }
 
+// checklistRecorder builds the live step-checklist recorder for a TTY deploy,
+// seeded with only the steps the resumed run will actually execute so the
+// counter (N/total) reflects this run rather than a full deploy. Returns nil
+// when progress rendering is off (non-TTY or JSON), leaving the orchestrator's
+// plain step log lines in place. logSink receives the per-step trail so
+// okdctl.log keeps a record the checklist otherwise replaces on the TTY.
+func checklistRecorder(cfg *config.Config, projectRoot string, resumeFrom deployPhase, logSink io.Writer) distribution.MetricsRecorder {
+	if !tui.ProgressBarsEnabled() {
+		return nil
+	}
+	all := okd.New(okd.WithProjectRoot(projectRoot), okd.WithLogger(tui.SimpleLogger())).DeploySteps(cfg)
+	var plan []tui.StepMeta
+	for _, s := range all {
+		if !phaseRuns(resumeFrom, s.Phase) {
+			continue
+		}
+		plan = append(plan, tui.StepMeta{ID: s.ID, Name: s.Name, Phase: s.Phase})
+	}
+	if len(plan) == 0 {
+		return nil
+	}
+	return tui.NewStepProgress(plan, logSink)
+}
+
+// phaseRuns reports whether a step in stepPhase executes given resumeFrom as
+// the entry point: a resume runs its entry phase and every later phase.
+func phaseRuns(resumeFrom deployPhase, stepPhase string) bool {
+	order := map[string]int{okd.PhaseSetup: 0, okd.PhaseInstall: 1, okd.PhasePostInstall: 2}
+	return order[stepPhase] >= order[string(resumeFrom)]
+}
+
 // runDeployPhases executes setup, install, and postinstall, starting from
 // the phase the deploy-state marker says is safe to resume from. Returns the
 // postinstall result and every executed step across phases.
-func runDeployPhases(ctx context.Context, p provisioner, cfg *config.Config, projectRoot, markerPath, runID string, freshDeploy, keepRedHatCatalogs bool, started time.Time, w io.Writer) (*postinstall.Result, []distribution.StepResult, error) {
-	resumeFrom, marker := resolveResumePhase(markerPath, cfg.Cluster.Name, freshDeploy)
-
+func runDeployPhases(ctx context.Context, p provisioner, cfg *config.Config, projectRoot, markerPath, runID string, resumeFrom deployPhase, marker *deployState, freshDeploy, keepRedHatCatalogs bool, started time.Time, w io.Writer) (*postinstall.Result, []distribution.StepResult, error) {
 	var setupSteps []distribution.StepResult
 	var err error
 	if resumeFrom == phaseSetup {
@@ -265,9 +294,15 @@ func Execute(ctx context.Context, cfg *config.Config, opts Options, w io.Writer)
 
 	runID := tui.RunID()
 
+	markerPath := filepath.Join(workDir, StateFileName)
+	resumeFrom, marker := resolveResumePhase(markerPath, cfg.Cluster.Name, opts.FreshDeploy)
+
 	provOpts := []okd.ProvisionerOption{
 		okd.WithProgressReporter(func(desc string) func() { return tui.StartSpinner(ctx, desc) }),
 		okd.WithStatusLineReporter(func(desc string) (func(string), func()) { return tui.StartStatusLine(ctx, desc) }),
+	}
+	if rec := checklistRecorder(cfg, projectRoot, resumeFrom, opts.LogSink); rec != nil {
+		provOpts = append(provOpts, okd.WithMetricsRecorder(rec))
 	}
 	if so, se := streamWriters(opts.LogSink, opts.Verbose); so != nil {
 		provOpts = append(provOpts, okd.WithStreamWriters(so, se))
@@ -284,9 +319,8 @@ func Execute(ctx context.Context, cfg *config.Config, opts Options, w io.Writer)
 	}
 
 	startTime := time.Now()
-	markerPath := filepath.Join(workDir, StateFileName)
 
-	result, allSteps, err := runDeployPhases(ctx, p, cfg, projectRoot, markerPath, runID, opts.FreshDeploy, opts.KeepRedHatCatalogs, startTime, w)
+	result, allSteps, err := runDeployPhases(ctx, p, cfg, projectRoot, markerPath, runID, resumeFrom, marker, opts.FreshDeploy, opts.KeepRedHatCatalogs, startTime, w)
 	if err != nil {
 		return err
 	}

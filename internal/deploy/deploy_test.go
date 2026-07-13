@@ -72,7 +72,8 @@ func TestRunDeployPhases_FailureSummaryResumeFirst(t *testing.T) {
 		installErr: errors.New("terraform apply failed"),
 	}
 	var buf bytes.Buffer
-	_, _, err := runDeployPhases(context.Background(), f, cfg, dir, markerPath, "run-77", false, false, time.Now(), &buf)
+	resumeFrom, marker := resolveResumePhase(markerPath, cfg.Cluster.Name, false)
+	_, _, err := runDeployPhases(context.Background(), f, cfg, dir, markerPath, "run-77", resumeFrom, marker, false, false, time.Now(), &buf)
 	if err == nil {
 		t.Fatal("expected install error to propagate; got nil")
 	}
@@ -159,7 +160,8 @@ func TestRunDeployPhases_ResumeRouting(t *testing.T) {
 
 			f := &fakeProvisioner{}
 			var buf bytes.Buffer
-			if _, _, err := runDeployPhases(context.Background(), f, cfg, dir, markerPath, "new-run", false, false, time.Now(), &buf); err != nil {
+			resumeFrom, marker := resolveResumePhase(markerPath, cfg.Cluster.Name, false)
+			if _, _, err := runDeployPhases(context.Background(), f, cfg, dir, markerPath, "new-run", resumeFrom, marker, false, false, time.Now(), &buf); err != nil {
 				t.Fatalf("runDeployPhases: %v", err)
 			}
 
