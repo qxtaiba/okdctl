@@ -26,16 +26,25 @@ func (nopMetricsRecorder) StepStarted(StepID)           {}
 func (nopMetricsRecorder) StepFinished(*StepResult)     {}
 func (nopMetricsRecorder) DeployFinished(time.Duration) {}
 
+// stepLogSuppressor is an optional MetricsRecorder capability: a recorder that
+// renders its own per-step narration (e.g. a live TTY checklist) returns true
+// so the Orchestrator demotes its step Info lines to Debug — the two must not
+// both narrate the same step on the terminal.
+type stepLogSuppressor interface {
+	SuppressStepLog() bool
+}
+
 // Orchestrator runs a sequence of steps built by BuildSteps, recording
 // per-step outcomes. Stops on the first fatal failure (per StepDef.NonFatal);
 // non-fatal failures log a warning and continue. Safe to snapshot Results
 // concurrently with Run.
 type Orchestrator struct {
-	mu      sync.RWMutex
-	steps   []*builtStep
-	results []StepResult
-	logger  *slog.Logger
-	rec     MetricsRecorder
+	mu           sync.RWMutex
+	steps        []*builtStep
+	results      []StepResult
+	logger       *slog.Logger
+	rec          MetricsRecorder
+	suppressStep bool
 }
 
 // NewOrchestrator returns an Orchestrator seeded with the given steps and a
@@ -60,9 +69,26 @@ func (o *Orchestrator) SetLogger(logger *slog.Logger) {
 func (o *Orchestrator) SetMetricsRecorder(rec MetricsRecorder) {
 	if rec == nil {
 		o.rec = nopMetricsRecorder{}
+		o.suppressStep = false
 		return
 	}
 	o.rec = rec
+	if s, ok := rec.(stepLogSuppressor); ok {
+		o.suppressStep = s.SuppressStepLog()
+	} else {
+		o.suppressStep = false
+	}
+}
+
+// stepInfo logs a per-step milestone at Info, or at Debug when the attached
+// recorder renders its own checklist — the demoted lines still reach
+// okdctl.log through the recorder's sink mirror, not this logger.
+func (o *Orchestrator) stepInfo(msg string, args ...any) {
+	if o.suppressStep {
+		o.logger.Debug(msg, args...)
+		return
+	}
+	o.logger.Info(msg, args...)
 }
 
 // Run executes each step in order, honoring ctx cancellation between steps.
@@ -90,7 +116,7 @@ func (o *Orchestrator) Run(ctx context.Context) error {
 		o.mu.Unlock()
 
 		if result.Skipped {
-			o.logger.Info("step: skipped", "step", step.ID(), "name", step.Name(), "reason", result.SkipReason)
+			o.stepInfo("step: skipped", "step", step.ID(), "name", step.Name(), "reason", result.SkipReason)
 			continue
 		}
 
@@ -159,13 +185,13 @@ func (o *Orchestrator) executeStep(ctx context.Context, step *builtStep) StepRes
 			StartedAt:  startedAt,
 			Duration:   time.Since(startedAt),
 		}
-		o.logger.Info("step: skipped (already done)", "step", step.ID(), "name", step.Name(), "reason", "already done")
+		o.stepInfo("step: skipped (already done)", "step", step.ID(), "name", step.Name(), "reason", "already done")
 		o.rec.StepFinished(&r)
 		return r
 	}
 
 	o.rec.StepStarted(step.ID())
-	o.logger.Info("step: started", "step", step.ID(), "name", step.Name())
+	o.stepInfo("step: started", "step", step.ID(), "name", step.Name())
 	step.OnStart()
 
 	if err := step.Execute(ctx); err != nil {
@@ -191,7 +217,7 @@ func (o *Orchestrator) executeStep(ctx context.Context, step *builtStep) StepRes
 		StartedAt: startedAt,
 		Duration:  time.Since(startedAt),
 	}
-	o.logger.Info("step: succeeded", "step", step.ID(), "duration", r.Duration)
+	o.stepInfo("step: succeeded", "step", step.ID(), "duration", r.Duration)
 	o.rec.StepFinished(&r)
 	return r
 }

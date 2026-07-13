@@ -29,13 +29,13 @@ func TestDeploySteps_MatchesPerPhaseStepDefs(t *testing.T) {
 
 	var want []DeployStep
 	for _, d := range setup.New(phase.WithLogger(logutil.NopLogger)).StepDefs(cfg, &setupOpts) {
-		want = append(want, DeployStep{ID: d.ID, Name: d.Name})
+		want = append(want, DeployStep{ID: d.ID, Name: d.Name, Phase: PhaseSetup})
 	}
 	for _, d := range install.New(phase.WithLogger(logutil.NopLogger)).StepDefs(cfg, &installOpts) {
-		want = append(want, DeployStep{ID: d.ID, Name: d.Name})
+		want = append(want, DeployStep{ID: d.ID, Name: d.Name, Phase: PhaseInstall})
 	}
 	for _, d := range postinstall.New(phase.WithLogger(logutil.NopLogger)).StepDefs(cfg, &postOpts) {
-		want = append(want, DeployStep{ID: d.ID, Name: d.Name})
+		want = append(want, DeployStep{ID: d.ID, Name: d.Name, Phase: PhasePostInstall})
 	}
 
 	if len(got) != len(want) {
