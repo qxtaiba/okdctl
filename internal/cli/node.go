@@ -134,7 +134,7 @@ func buildNodeRunner(ctx context.Context, cfg *config.Config, verb string, dryRu
 	if err != nil {
 		return nil, err
 	}
-	if err := ensureNodeOpsWorkspace(ctx, projectRoot, nodeYes); err != nil {
+	if err := ensureNodeOpsWorkspace(ctx, projectRoot, nodeYes, dryRun); err != nil {
 		return nil, err
 	}
 
@@ -238,13 +238,19 @@ func runHostBudgetProbe(ctx context.Context, cfg *config.Config, creds *credenti
 // ensureNodeOpsWorkspace migrates a write-once terraform root that lacks the
 // node-lifecycle variables. Migration overwrites operator-editable HCL, so it
 // requires consent (--yes or an interactive y/N) and backs up the originals.
-func ensureNodeOpsWorkspace(ctx context.Context, projectRoot string, yes bool) error {
+// dryRun refuses instead: --dry-run promises no mutation, so a root needing
+// migration must be reported and left untouched rather than rewritten or
+// prompted for mid-preview.
+func ensureNodeOpsWorkspace(ctx context.Context, projectRoot string, yes, dryRun bool) error {
 	ok, err := deploy.TerraformRootSupportsNodeOps(projectRoot)
 	if err != nil {
 		return err
 	}
 	if ok {
 		return nil
+	}
+	if dryRun {
+		return &errtypes.UsageError{Msg: "terraform root needs node-ops migration; re-run without --dry-run to migrate (no changes made)"}
 	}
 	tui.Warn("terraform root predates node-lifecycle support; it must be migrated (worker_count / master sizing variables)")
 	tui.Info("migration backs up the originals to *.pre-nodeops.bak before overwriting")
