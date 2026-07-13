@@ -49,8 +49,8 @@ type provisioner interface {
 	GuardSetup(cfg *config.Config, opts okd.SetupOpts) error
 	Setup(ctx context.Context, cfg *config.Config, opts okd.SetupOpts) ([]distribution.StepResult, error)
 	Install(ctx context.Context, cfg *config.Config, opts *install.Options) ([]distribution.StepResult, error)
-	PostInstall(ctx context.Context, cfg *config.Config) (*postinstall.Result, []distribution.StepResult, error)
-	ResumePostInstall(ctx context.Context, cfg *config.Config) (*postinstall.Result, []distribution.StepResult, error)
+	PostInstall(ctx context.Context, cfg *config.Config, keepRedHatCatalogs bool) (*postinstall.Result, []distribution.StepResult, error)
+	ResumePostInstall(ctx context.Context, cfg *config.Config, keepRedHatCatalogs bool) (*postinstall.Result, []distribution.StepResult, error)
 }
 
 // runGuardedSetup runs the setup phase behind the live-cluster guard.
@@ -108,16 +108,17 @@ func reportDeployFailure(w io.Writer, err error, phase deployPhase, steps []dist
 // Options configures Execute. ProjectRoot must be a resolved project root
 // (see the cli package's project-marker validation).
 type Options struct {
-	ShowStartMessage bool
-	Credentials      *credentials.ProxmoxCredentials
-	FreshDeploy      bool
-	ProjectRoot      string
+	ShowStartMessage   bool
+	Credentials        *credentials.ProxmoxCredentials
+	FreshDeploy        bool
+	KeepRedHatCatalogs bool
+	ProjectRoot        string
 }
 
 // runDeployPhases executes setup, install, and postinstall, starting from
 // the phase the deploy-state marker says is safe to resume from. Returns the
 // postinstall result and every executed step across phases.
-func runDeployPhases(ctx context.Context, p provisioner, cfg *config.Config, projectRoot, markerPath, runID string, freshDeploy bool, started time.Time, w io.Writer) (*postinstall.Result, []distribution.StepResult, error) {
+func runDeployPhases(ctx context.Context, p provisioner, cfg *config.Config, projectRoot, markerPath, runID string, freshDeploy, keepRedHatCatalogs bool, started time.Time, w io.Writer) (*postinstall.Result, []distribution.StepResult, error) {
 	resumeFrom, marker := resolveResumePhase(markerPath, cfg.Cluster.Name, freshDeploy)
 
 	var setupSteps []distribution.StepResult
@@ -155,9 +156,9 @@ func runDeployPhases(ctx context.Context, p provisioner, cfg *config.Config, pro
 	var result *postinstall.Result
 	var postinstallSteps []distribution.StepResult
 	if resumeFrom == phasePostInstall {
-		result, postinstallSteps, err = p.ResumePostInstall(ctx, cfg)
+		result, postinstallSteps, err = p.ResumePostInstall(ctx, cfg, keepRedHatCatalogs)
 	} else {
-		result, postinstallSteps, err = p.PostInstall(ctx, cfg)
+		result, postinstallSteps, err = p.PostInstall(ctx, cfg, keepRedHatCatalogs)
 	}
 	if err != nil {
 		reportDeployFailure(w, err, phasePostInstall, slices.Concat(setupSteps, installSteps, postinstallSteps), runID, started)
@@ -212,7 +213,7 @@ func Execute(ctx context.Context, cfg *config.Config, opts Options, w io.Writer)
 	startTime := time.Now()
 	markerPath := filepath.Join(workDir, StateFileName)
 
-	result, allSteps, err := runDeployPhases(ctx, p, cfg, projectRoot, markerPath, runID, opts.FreshDeploy, startTime, w)
+	result, allSteps, err := runDeployPhases(ctx, p, cfg, projectRoot, markerPath, runID, opts.FreshDeploy, opts.KeepRedHatCatalogs, startTime, w)
 	if err != nil {
 		return err
 	}

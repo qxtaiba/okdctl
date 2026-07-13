@@ -39,12 +39,12 @@ func (f *fakeProvisioner) Install(context.Context, *config.Config, *install.Opti
 	return nil, nil
 }
 
-func (f *fakeProvisioner) PostInstall(context.Context, *config.Config) (*postinstall.Result, []distribution.StepResult, error) {
+func (f *fakeProvisioner) PostInstall(context.Context, *config.Config, bool) (*postinstall.Result, []distribution.StepResult, error) {
 	f.postCalls++
 	return &postinstall.Result{}, nil, nil
 }
 
-func (f *fakeProvisioner) ResumePostInstall(context.Context, *config.Config) (*postinstall.Result, []distribution.StepResult, error) {
+func (f *fakeProvisioner) ResumePostInstall(context.Context, *config.Config, bool) (*postinstall.Result, []distribution.StepResult, error) {
 	f.resumePostCalls++
 	return &postinstall.Result{}, nil, nil
 }
@@ -72,7 +72,7 @@ func TestRunDeployPhases_FailureSummaryResumeFirst(t *testing.T) {
 		installErr: errors.New("terraform apply failed"),
 	}
 	var buf bytes.Buffer
-	_, _, err := runDeployPhases(context.Background(), f, cfg, dir, markerPath, "run-77", false, time.Now(), &buf)
+	_, _, err := runDeployPhases(context.Background(), f, cfg, dir, markerPath, "run-77", false, false, time.Now(), &buf)
 	if err == nil {
 		t.Fatal("expected install error to propagate; got nil")
 	}
@@ -159,7 +159,7 @@ func TestRunDeployPhases_ResumeRouting(t *testing.T) {
 
 			f := &fakeProvisioner{}
 			var buf bytes.Buffer
-			if _, _, err := runDeployPhases(context.Background(), f, cfg, dir, markerPath, "new-run", false, time.Now(), &buf); err != nil {
+			if _, _, err := runDeployPhases(context.Background(), f, cfg, dir, markerPath, "new-run", false, false, time.Now(), &buf); err != nil {
 				t.Fatalf("runDeployPhases: %v", err)
 			}
 

@@ -18,6 +18,7 @@ const (
 	StepVerifyKubeVIP       distribution.StepID = "verify-kubevip"
 	StepDeployProductionDNS distribution.StepID = "deploy-production-dns"
 	StepInstallAddons       distribution.StepID = "install-addons"
+	StepDisableRHDefaults   distribution.StepID = "disable-rh-defaults"
 )
 
 // StepNames maps each postinstall StepID to its display name. StepDef literals
@@ -28,6 +29,7 @@ var StepNames = map[distribution.StepID]string{
 	StepVerifyKubeVIP:       "verify kube-vip",
 	StepDeployProductionDNS: "deploy production dns",
 	StepInstallAddons:       "install addons",
+	StepDisableRHDefaults:   "disable rh-subscription-gated defaults",
 }
 
 func (p *Phase) postinstallSteps(cfg *config.Config, opts *Options, pctx *distribution.PhaseContext[postInstallContext], mgr *addon.Manager) []distribution.StepDef {
@@ -124,6 +126,24 @@ func (p *Phase) postinstallSteps(cfg *config.Config, opts *Options, pctx *distri
 				return nil
 			},
 			OnError: phase.WarnOnError(p.Log, "addons: installation failed"),
+		},
+		{
+			ID: StepDisableRHDefaults, Name: StepNames[StepDisableRHDefaults],
+			ReRunSafe: distribution.ReRunSafeYes,
+			Desc:      "disabling operatorhub catalogsources and the insights alert that require a red hat subscription", NonFatal: true,
+			SkipWhen:   func() bool { return opts.KeepRedHatCatalogs },
+			SkipReason: "kept by --keep-redhat-catalogs",
+			Exec: func(ctx context.Context) error {
+				if err := p.disableSubscriptionGatedCatalogSources(ctx); err != nil {
+					return &errtypes.ClusterError{Msg: "disable subscription-gated catalogsources", Err: err}
+				}
+				if err := p.silenceInsightsDisabledAlert(ctx); err != nil {
+					return &errtypes.ClusterError{Msg: "silence insights disabled alert", Err: err}
+				}
+				p.Log.Info("postinstall: disabled rh-subscription-gated catalogsources and insights alert")
+				return nil
+			},
+			OnError: phase.WarnOnError(p.Log, "rh-defaults: disable failed"),
 		},
 	}
 }

@@ -66,8 +66,8 @@ func TestDeployDryRunSteps_DerivedFromLivePhaseSteps(t *testing.T) {
 		t.Errorf("first step = %q; want %q (setup phase must lead)", got[0].ID, setup.StepInstallPackages)
 	}
 	last := got[len(got)-1]
-	if last.ID != string(postinstall.StepInstallAddons) {
-		t.Errorf("last step = %q; want %q (postinstall phase must trail)", last.ID, postinstall.StepInstallAddons)
+	if last.ID != string(postinstall.StepDisableRHDefaults) {
+		t.Errorf("last step = %q; want %q (postinstall phase must trail)", last.ID, postinstall.StepDisableRHDefaults)
 	}
 
 	var sawInstallPhase bool

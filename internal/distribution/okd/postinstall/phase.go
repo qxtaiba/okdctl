@@ -27,6 +27,7 @@ type Options struct {
 	phase.BaseOptions
 	SkipClusterHealth       bool
 	SkipKubeVIP             bool
+	KeepRedHatCatalogs      bool
 	Timeout                 time.Duration
 	KubeVIPDaemonSetTimeout time.Duration
 	KubeVIPVIPTimeout       time.Duration
