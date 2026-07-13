@@ -2,10 +2,12 @@ package node
 
 import (
 	"fmt"
+	"log/slog"
 	"sort"
 	"strings"
 
 	"github.com/qxtaiba/okdctl/internal/cluster"
+	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/nodetypes"
 )
 
@@ -62,11 +64,11 @@ func validateWorkerRemovable(nodes []cluster.NodeDetail, target string, workerCo
 	return nil
 }
 
-// osdPodsOnNode returns the names of rook-ceph OSD pods scheduled on node.
-// A non-empty result means removing the node destroys its CEPH-DATA disk and
-// the OSD data on it. Detection is generic: any pod matching the OSD label,
-// in any namespace, placed on the target node.
-func osdPodsOnNode(pods []cluster.PodPlacement, node string) []string {
+// podNamesOnNode returns the namespace/name of every pod in pods placed on
+// node, sorted. Callers pre-filter pods by label (OSD, router) so the placement
+// filter here stays generic; a non-empty OSD result means removing the node
+// destroys its CEPH-DATA disk and the data on it.
+func podNamesOnNode(pods []cluster.PodPlacement, node string) []string {
 	var names []string
 	for _, p := range pods {
 		if p.NodeName == node {
@@ -75,6 +77,54 @@ func osdPodsOnNode(pods []cluster.PodPlacement, node string) []string {
 	}
 	sort.Strings(names)
 	return names
+}
+
+// storageGuardVerdict decides whether removing node is permitted given the
+// rook-ceph OSD pods scheduled on it. Shared by RemoveWorker's in-loop guard and
+// compact's preflight so both refuse (or force-allow) identically. A non-empty
+// osds with force=false returns a ConfigError; force=true warns and permits.
+func storageGuardVerdict(node string, osds []string, force bool, log *slog.Logger) error {
+	if len(osds) == 0 {
+		return nil
+	}
+	if force {
+		log.Warn("node: --force-storage set; removing a node with live OSDs destroys their CEPH-DATA disk", "node", node, "osds", len(osds))
+		return nil
+	}
+	return &errtypes.ConfigError{Msg: fmt.Sprintf(
+		"%s holds %d rook-ceph OSD(s) (%v); removing it destroys its CEPH-DATA disk and loses that data. Migrate OSDs off it first, or re-run with --force-storage.",
+		node, len(osds), osds)}
+}
+
+// projectCompactPeakMiB simulates compact's interleaved sequence (remove a
+// worker, then grow the next master) and returns the peak host memory
+// allocation reached. A freed worker always precedes a grown master, so the peak
+// bounds the memory-budget guard's projection. growTargetMiB==0 models "no
+// master grow" — the sequence only frees memory.
+func projectCompactPeakMiB(allocatedMiB, workerMiB, masterCurMiB, growTargetMiB, numWorkers, numMasters int) int {
+	masterDelta := 0
+	if growTargetMiB > 0 {
+		masterDelta = growTargetMiB - masterCurMiB
+	}
+	peak := allocatedMiB
+	grows := 0
+	for i := 0; i < numWorkers; i++ {
+		allocatedMiB -= workerMiB
+		if growTargetMiB > 0 && grows < numMasters {
+			allocatedMiB += masterDelta
+			grows++
+		}
+		if allocatedMiB > peak {
+			peak = allocatedMiB
+		}
+	}
+	for ; growTargetMiB > 0 && grows < numMasters; grows++ {
+		allocatedMiB += masterDelta
+		if allocatedMiB > peak {
+			peak = allocatedMiB
+		}
+	}
+	return peak
 }
 
 // ingressPodsOnWorkers returns router pods scheduled on any worker node. When
