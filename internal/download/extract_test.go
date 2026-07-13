@@ -163,6 +163,62 @@ func TestExtractTarGz_HappyPath(t *testing.T) {
 	}
 }
 
+// TestExtractTarGz_ComposedSymlinkChainRejected is the reviewer's exact
+// reproduction: two in-tree links that each pass the textual pre-check compose
+// into an escaping link. `a/b/toroot -> ../..` resolves back to destDir, then
+// `a/b/toroot/esc -> ../etc` is created *through* toroot and lands at
+// destDir/esc pointing outside destDir. Extraction must fail with
+// ErrSymlinkEscape and leave no escaping link on disk.
+func TestExtractTarGz_ComposedSymlinkChainRejected(t *testing.T) {
+	archive := buildTarGz(t, []tarEntry{
+		{Name: "a/", Mode: 0o755, Typeflag: tar.TypeDir},
+		{Name: "a/b/", Mode: 0o755, Typeflag: tar.TypeDir},
+		{Name: "a/b/toroot", Mode: 0o777, Typeflag: tar.TypeSymlink, Linkname: "../.."},
+		{Name: "a/b/toroot/esc", Mode: 0o777, Typeflag: tar.TypeSymlink, Linkname: "../etc"},
+	})
+	dest := realTempDir(t)
+	err := ExtractTarGz(context.Background(), archive, dest)
+	if err == nil {
+		t.Fatalf("expected rejection of composed symlink chain")
+	}
+	if !errors.Is(err, ErrSymlinkEscape) {
+		t.Errorf("err = %v; want errors.Is ErrSymlinkEscape", err)
+	}
+
+	// The escaping link materializes at destDir/esc (reached through toroot);
+	// it must have been removed. Check both the resolved and literal locations.
+	for _, rel := range []string{"esc", filepath.Join("a", "b", "toroot", "esc")} {
+		p := filepath.Join(dest, rel)
+		if _, statErr := os.Lstat(p); !os.IsNotExist(statErr) {
+			tgt, _ := os.Readlink(p)
+			t.Errorf("escaping link left on disk at %s -> %s (lstat err %v)", p, tgt, statErr)
+		}
+	}
+}
+
+// TestExtractTarGz_InTreeSymlinkChain confirms a legitimate composed chain
+// whose final target stays inside destDir still extracts. real/ exists before
+// the link is created, so the resolution post-check resolves it cleanly.
+func TestExtractTarGz_InTreeSymlinkChain(t *testing.T) {
+	archive := buildTarGz(t, []tarEntry{
+		{Name: "real/", Mode: 0o755, Typeflag: tar.TypeDir},
+		{Name: "real/data.txt", Mode: 0o644, Data: []byte("payload")},
+		{Name: "dir/", Mode: 0o755, Typeflag: tar.TypeDir},
+		{Name: "dir/link1", Mode: 0o777, Typeflag: tar.TypeSymlink, Linkname: "../real"},
+	})
+	dest := realTempDir(t)
+	if err := ExtractTarGz(context.Background(), archive, dest); err != nil {
+		t.Fatalf("extract in-tree chain: %v", err)
+	}
+	body, err := os.ReadFile(filepath.Join(dest, "dir", "link1", "data.txt"))
+	if err != nil {
+		t.Fatalf("read through in-tree link: %v", err)
+	}
+	if string(body) != "payload" {
+		t.Errorf("body = %q; want payload", body)
+	}
+}
+
 func TestExtractTarGz_ContextCancellation(t *testing.T) {
 	archive := buildTarGz(t, []tarEntry{
 		{Name: "a.txt", Mode: 0o644, Data: []byte("x")},
