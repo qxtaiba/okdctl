@@ -1,12 +1,13 @@
 // Package setup runs the OKD setup phase: install host packages and the
 // tool trio (oc, openshift-install, terraform), render install-config and
-// Kubernetes manifests (including kube-vip), generate ignition files, build
-// custom CoreOS ISOs with embedded kargs, and configure HAProxy, dnsmasq,
-// and the bastion firewall. Steps are declared in setupBaseSteps,
-// setupManifestSteps, setupWebSteps, and setupInfraSteps, concatenated by
-// setupSteps. Exported builders (BuildLiveKargs, BuildDestKargs,
-// ExtractNetworkConfig, EnsureIgnitionCert) are the package's public API
-// surface even though today's only callers are intra-package.
+// Kubernetes manifests (including kube-vip and chrony), generate ignition
+// files, build custom CoreOS ISOs with embedded kargs, and configure
+// HAProxy, dnsmasq, and the bastion firewall. Steps are declared in
+// setupBaseSteps, setupManifestSteps, setupWebSteps, and setupInfraSteps,
+// concatenated by setupSteps. Exported builders (BuildLiveKargs,
+// BuildDestKargs, ExtractNetworkConfig, EnsureIgnitionCert) are the
+// package's public API surface even though today's only callers are
+// intra-package.
 package setup
 
 import (

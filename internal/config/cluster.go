@@ -78,6 +78,12 @@ type NetworkingConfig struct {
 
 	StaticIP StaticIPConfig `json:"static_ip,omitzero"`
 	Bastion  BastionConfig  `json:"bastion,omitzero"`
+
+	// NTPServer is the chrony source shipped to every master/worker node via
+	// MachineConfig. Empty means "use the bastion" (HTTPServer.IgnitionServerIP) —
+	// the bastion is already reachable from every node and needs no extra
+	// firewall opening.
+	NTPServer string `json:"ntp_server,omitempty"`
 }
 
 // StaticIPConfig describes the static address plan for cluster nodes.

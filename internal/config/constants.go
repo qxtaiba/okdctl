@@ -33,6 +33,7 @@ const (
 	FieldNetworkingStaticIPNetmask = "networking.static_ip.netmask"
 	FieldNetworkingStaticIPIface   = "networking.static_ip.interface"
 	FieldNetworkingStaticIPDNS     = "networking.static_ip.dns"
+	FieldNetworkingNTPServer       = "networking.ntp_server"
 
 	FieldProxmoxHost                     = "provider.proxmox.host"
 	FieldProxmoxNode                     = "provider.proxmox.node"

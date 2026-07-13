@@ -78,6 +78,20 @@ var AdvancedStepDefinition = wizard.StepDefinition{
 			},
 		},
 		{
+			Title: "clock synchronization",
+			Fields: []wizard.FieldDefinition{
+				{
+					Key:       "ntp_server",
+					Label:     "ntp server",
+					Default:   "",
+					Help:      "chrony source for master/worker nodes — blank uses the bastion's ignition server ip",
+					Validate:  config.ValidateNTPServer,
+					ConfigSet: wizard.SetString(func(c *config.Config, v string) { c.Networking.NTPServer = v }),
+					ConfigGet: wizard.GetString(func(c *config.Config) string { return c.Networking.NTPServer }),
+				},
+			},
+		},
+		{
 			Title: "installation timeouts",
 			Fields: []wizard.FieldDefinition{
 				{
