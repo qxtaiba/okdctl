@@ -6,6 +6,8 @@ import (
 	"log/slog"
 	"time"
 
+	"k8s.io/apimachinery/pkg/util/wait"
+
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/logutil"
 )
@@ -50,51 +52,62 @@ func WaitFor(ctx context.Context, prefix, description string, check func(context
 
 	logger.Info(prefix+": waiting", "target", description)
 
-	ticker := time.NewTicker(opts.Interval)
-	defer ticker.Stop()
-
-	var timeoutCh <-chan time.Time
-	if opts.Timeout > 0 {
-		timer := time.NewTimer(opts.Timeout)
-		defer timer.Stop()
-		timeoutCh = timer.C
-	}
-
 	startTime := time.Now()
 	polls := 0
+	first := true
 
-	if check(ctx) {
-		logger.Info(prefix+": ready", "target", description, "polls", polls, "elapsed", time.Since(startTime).Round(time.Second))
+	// PollUntilContextTimeout/Cancel invoke this once immediately (the
+	// "first" branch, mirroring the old pre-loop check) and then once per
+	// tick thereafter. Only the tick branch counts toward polls, matching
+	// the original ticker-driven accounting.
+	//
+	// The library passes its own deadline-bound context here; we ignore it
+	// and call check with the caller's original ctx instead, so a final
+	// in-flight probe isn't cancelled mid-call when the poll deadline lands
+	// (the old WaitFor contract, preserved).
+	condition := func(context.Context) (bool, error) {
+		if first {
+			first = false
+			ready := check(ctx)
+			if ready {
+				logger.Info(prefix+": ready", "target", description, "polls", polls, "elapsed", time.Since(startTime).Round(time.Second))
+			}
+			return ready, nil
+		}
+
+		polls++
+		elapsed := time.Since(startTime)
+		if check(ctx) {
+			logger.Info(prefix+": ready", "target", description, "polls", polls, "elapsed", elapsed.Round(time.Second))
+			return true, nil
+		}
+		logger.Debug(prefix+": waiting", "target", description, "elapsed", elapsed.Round(time.Second))
+		return false, nil
+	}
+
+	var pollErr error
+	if opts.Timeout > 0 {
+		pollErr = wait.PollUntilContextTimeout(ctx, opts.Interval, opts.Timeout, true, condition)
+	} else {
+		pollErr = wait.PollUntilContextCancel(ctx, opts.Interval, true, condition)
+	}
+	if pollErr == nil {
 		return nil
 	}
 
-	for {
-		select {
-		case <-ctx.Done():
-			return fmt.Errorf("waiting for %s %s: %w", prefix, description, ctx.Err())
-		case <-timeoutCh:
-			if err := ctx.Err(); err != nil {
-				return fmt.Errorf("waiting for %s %s: %w", prefix, description, err)
-			}
-			// Return a ClusterError so exitCodeFor maps this to exit 4 rather
-			// than 130. Unwrap chains to context.DeadlineExceeded so
-			// errors.Is checks still work.
-			return &errtypes.ClusterError{
-				Msg: fmt.Sprintf("timeout waiting for %s %s after %v (%d polls)", prefix, description, opts.Timeout, polls),
-				Err: context.DeadlineExceeded,
-			}
-		case <-ticker.C:
-			polls++
-			elapsed := time.Since(startTime)
-			if check(ctx) {
-				logger.Info(prefix+": ready", "target", description, "polls", polls, "elapsed", elapsed.Round(time.Second))
-				return nil
-			}
-			if err := ctx.Err(); err != nil {
-				return fmt.Errorf("waiting for %s %s: %w", prefix, description, err)
-			}
-			logger.Debug(prefix+": waiting", "target", description, "elapsed", elapsed.Round(time.Second))
-		}
+	// A race between ctx and our own timeout reports ctx.Err as the primary
+	// cause; PollUntilContextTimeout derives its deadline from ctx, so ctx's
+	// own error (if any) always takes precedence over the synthetic one.
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("waiting for %s %s: %w", prefix, description, err)
+	}
+
+	// Return a ClusterError so exitCodeFor maps this to exit 4 rather
+	// than 130. Unwrap chains to context.DeadlineExceeded so
+	// errors.Is checks still work.
+	return &errtypes.ClusterError{
+		Msg: fmt.Sprintf("timeout waiting for %s %s after %v (%d polls)", prefix, description, opts.Timeout, polls),
+		Err: context.DeadlineExceeded,
 	}
 }
 
