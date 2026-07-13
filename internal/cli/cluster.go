@@ -73,7 +73,7 @@ func runClusterCompact(cmd *cobra.Command, _ []string) error {
 	// buildNodeRunner reads the shared node* flag vars; align them with the
 	// compact flag set so migration consent and dry-run route correctly.
 	nodeYes = compactYes
-	rc, err := buildNodeRunner(cmd.Context(), cfg, "compact", compactDryRun)
+	rc, err := buildNodeRunner(cmd.Context(), cfg, "compact", compactDryRun, true)
 	if err != nil {
 		return err
 	}
@@ -83,5 +83,7 @@ func runClusterCompact(cmd *cobra.Command, _ []string) error {
 		IngressReplicas:    compactIngressReplica,
 		GrowMasterMemoryMB: compactGrowMasterMB,
 		ForceStorage:       compactForceStorage,
+		HostTotalMiB:       rc.HostTotalMiB,
+		HostAllocatedMiB:   rc.HostAllocatedMiB,
 	})
 }
