@@ -3,8 +3,10 @@ package steps
 import (
 	"fmt"
 	"path/filepath"
+	"strconv"
 	"strings"
 
+	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
@@ -83,12 +85,27 @@ func (st *sectionStyles) kvPair(label, value string) string {
 	return st.label.Render(label) + st.value.Render(value)
 }
 
+// reviewJumpOrder lists the steps this screen's section headers may jump
+// to, in on-screen order. welcome and distribution have no dedicated
+// section here and are not reachable by digit jump.
+var reviewJumpOrder = []wizard.StepID{
+	wizard.StepIDBasics,
+	wizard.StepIDProxmox,
+	wizard.StepIDNodePlacement,
+	wizard.StepIDNetworking,
+	wizard.StepIDResources,
+	wizard.StepIDFiles,
+	wizard.StepIDAddons,
+	wizard.StepIDAdvanced,
+}
+
 // ReviewStep renders the final configuration review and deploy/save action
 // selector.
 type ReviewStep struct {
 	wizard.BaseStep
-	cfg    *config.Config
-	action *singleSelect
+	cfg         *config.Config
+	action      *singleSelect
+	jumpTargets []wizard.JumpTarget
 }
 
 // NewReviewStep constructs the review wizard step.
@@ -126,9 +143,41 @@ func (s *ReviewStep) SetConfig(cfg *config.Config) {
 	s.cfg = cfg
 }
 
-// Update handles action-selector navigation and the enter confirm key.
+// Update handles digit-jump keys, action-selector navigation, and the enter
+// confirm key.
 func (s *ReviewStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
+	if keyMsg, ok := msg.(tea.KeyPressMsg); ok {
+		for _, t := range s.jumpTargets {
+			if key.Matches(keyMsg, key.NewBinding(key.WithKeys(strconv.Itoa(t.Digit)))) {
+				id := t.StepID
+				return s, func() tea.Msg { return wizard.JumpToStepMsg{StepID: id} }
+			}
+		}
+	}
 	return s, s.action.Update(msg)
+}
+
+// JumpOrder returns the steps this screen's section headers may route a
+// digit keypress to; see reviewJumpOrder.
+func (s *ReviewStep) JumpOrder() []wizard.StepID {
+	return reviewJumpOrder
+}
+
+// SetJumpTargets records the compacted digit assignments the wizard model
+// computed for reviewJumpOrder; called every time this step regains focus.
+func (s *ReviewStep) SetJumpTargets(targets []wizard.JumpTarget) {
+	s.jumpTargets = targets
+}
+
+// sectionTitle prefixes title with "[N] " when stepID has an active jump
+// digit, so the review screen's own headers double as its jump legend.
+func (s *ReviewStep) sectionTitle(title string, stepID wizard.StepID) string {
+	for _, t := range s.jumpTargets {
+		if t.StepID == stepID {
+			return fmt.Sprintf("[%d] %s", t.Digit, title)
+		}
+	}
+	return title
 }
 
 // View renders the full configuration summary and deploy-or-save selector.
@@ -144,6 +193,7 @@ func (s *ReviewStep) View(width, height int) string {
 
 	content.WriteString(s.renderClusterIdentity(&st))
 	content.WriteString(s.renderProxmox(&st))
+	content.WriteString(s.renderNodePlacement(&st))
 	content.WriteString(s.renderNetworking(&st))
 	content.WriteString(s.renderCompute(&st))
 	content.WriteString(s.renderFilesIgnition(&st))
@@ -162,7 +212,7 @@ func (s *ReviewStep) renderClusterIdentity(st *sectionStyles) string {
 	if s.cfg.Distribution.Version != "" {
 		distVersion = "OKD " + s.cfg.Distribution.Version
 	}
-	return renderSection(st, "cluster identity", []kvEntry{
+	return renderSection(st, s.sectionTitle("cluster identity", wizard.StepIDBasics), []kvEntry{
 		{label: "name", value: s.cfg.Cluster.Name},
 		{label: "domain", value: s.cfg.Cluster.Domain},
 		{label: "distribution", value: distVersion},
@@ -179,18 +229,30 @@ func (s *ReviewStep) renderProxmox(st *sectionStyles) string {
 		bridges[i] = n.Bridge
 	}
 	addlNetworks := strings.Join(bridges, ", ")
-	return renderSection(st, "proxmox", []kvEntry{
+	return renderSection(st, s.sectionTitle("proxmox", wizard.StepIDProxmox), []kvEntry{
 		{label: "host", value: p.Host},
 		{label: "token id", value: p.TokenID, skip: p.TokenID == ""},
 		{label: "bootstrap node", value: p.Node},
-		{label: "control plane nodes", value: strings.Join(p.ControlPlaneNodes, ", "), skip: len(p.ControlPlaneNodes) == 0},
-		{label: "worker nodes", value: strings.Join(p.WorkerNodes, ", "), skip: len(p.WorkerNodes) == 0},
 		{label: "bridge", value: p.Bridge},
 		{label: "storage", value: p.Storage},
 		{label: "data storage", value: p.DataStorage, skip: p.DataStorage == "" || p.DataStorage == p.Storage},
 		{label: "iso storage", value: p.ISOStorage, skip: p.ISOStorage == ""},
 		{label: "fcos iso", value: p.FCOSIso, skip: p.FCOSIso == ""},
 		{label: "extra networks", value: addlNetworks, skip: len(p.AdditionalNetworks) == 0},
+	})
+}
+
+// renderNodePlacement shares renderProxmox's ShouldShow gate (the
+// NodePlacementStep only exists when the Proxmox provider is selected), so
+// it disappears from the jump legend under the same conditions.
+func (s *ReviewStep) renderNodePlacement(st *sectionStyles) string {
+	p := s.cfg.Provider.Proxmox
+	if p == nil {
+		return ""
+	}
+	return renderSection(st, s.sectionTitle("node placement", wizard.StepIDNodePlacement), []kvEntry{
+		{label: "control plane nodes", value: strings.Join(p.ControlPlaneNodes, ", "), skip: len(p.ControlPlaneNodes) == 0},
+		{label: "worker nodes", value: strings.Join(p.WorkerNodes, ", "), skip: len(p.WorkerNodes) == 0},
 	})
 }
 
@@ -203,7 +265,7 @@ func (s *ReviewStep) renderNetworking(st *sectionStyles) string {
 			vipValue = derived + " (auto)"
 		}
 	}
-	return renderSection(st, "networking", []kvEntry{
+	return renderSection(st, s.sectionTitle("networking", wizard.StepIDNetworking), []kvEntry{
 		{label: "machine cidr", value: net.MachineCIDR},
 		{label: "gateway", value: net.Gateway},
 		{label: "upstream dns", value: strings.Join(net.DNS, ", ")},
@@ -222,7 +284,7 @@ func (s *ReviewStep) renderNetworking(st *sectionStyles) string {
 func (s *ReviewStep) renderCompute(st *sectionStyles) string {
 	var b strings.Builder
 
-	b.WriteString(st.header.Render("compute"))
+	b.WriteString(st.header.Render(s.sectionTitle("compute", wizard.StepIDResources)))
 	b.WriteString("\n")
 	b.WriteString(st.separator)
 	b.WriteString("\n")
@@ -307,7 +369,7 @@ func (s *ReviewStep) renderCompute(st *sectionStyles) string {
 func (s *ReviewStep) renderFilesIgnition(st *sectionStyles) string {
 	var b strings.Builder
 
-	b.WriteString(st.header.Render("files & ignition"))
+	b.WriteString(st.header.Render(s.sectionTitle("files & ignition", wizard.StepIDFiles)))
 	b.WriteString("\n")
 	b.WriteString(st.separator)
 	b.WriteString("\n")
@@ -355,7 +417,7 @@ func (s *ReviewStep) renderFeatures(st *sectionStyles) string {
 
 	var b strings.Builder
 
-	b.WriteString(st.header.Render("addons"))
+	b.WriteString(st.header.Render(s.sectionTitle("addons", wizard.StepIDAddons)))
 	b.WriteString("\n")
 	b.WriteString(st.separator)
 	b.WriteString("\n")
@@ -386,7 +448,7 @@ func (s *ReviewStep) renderAdvanced(st *sectionStyles) string {
 		timeouts = fmt.Sprintf("bootstrap %dm, install %dm", bt/60, s.cfg.Deployment.InstallTimeout/60)
 	}
 	dep := s.cfg.Deployment
-	return renderSection(st, "advanced", []kvEntry{
+	return renderSection(st, s.sectionTitle("advanced", wizard.StepIDAdvanced), []kvEntry{
 		{label: "vm id base", value: fmt.Sprintf("%d", vmid), skip: vmid <= 0},
 		{label: "timeouts", value: timeouts, skip: bt <= 0},
 		{label: "terraform environment", value: dep.TerraformEnv, skip: dep.TerraformEnv == ""},
@@ -444,12 +506,16 @@ func (s *ReviewStep) Apply(_ *config.Config) error {
 
 // ShortHelp returns the review step's help bar.
 func (s *ReviewStep) ShortHelp() []wizard.KeyBinding {
-	return []wizard.KeyBinding{
+	bindings := []wizard.KeyBinding{
 		{Key: "↑↓", Help: "select action"},
 		{Key: wizard.HelpEnter, Help: wizard.HelpConfirm},
 		{Key: wizard.HelpEsc, Help: wizard.HelpBack},
 		{Key: wizard.HelpCtrlC, Help: wizard.HelpQuit},
 	}
+	if len(s.jumpTargets) > 0 {
+		bindings = append(bindings, wizard.KeyBinding{Key: "1-9", Help: wizard.HelpJump})
+	}
+	return bindings
 }
 
 // SetFocused propagates focus to the action selector.

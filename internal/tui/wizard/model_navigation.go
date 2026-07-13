@@ -108,6 +108,10 @@ func (m *Model) goToNextStep() (tea.Model, tea.Cmd) {
 		if f, ok := m.steps[m.currentStep].(FocusableStep); ok {
 			f.SetFocused(false)
 		}
+
+		if m.returnToReview {
+			return m.jumpToReview()
+		}
 	}
 
 	nextStep := m.currentStep + 1
@@ -134,22 +138,7 @@ func (m *Model) goToNextStep() (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 	}
 
-	m.currentStep = nextStep
-
-	contentWidth, contentHeight := m.contentDimensions()
-	if r, ok := m.steps[m.currentStep].(ResizableStep); ok {
-		r.SetSize(contentWidth, contentHeight)
-	}
-	if f, ok := m.steps[m.currentStep].(FocusableStep); ok {
-		f.SetFocused(true)
-	}
-
-	if m.ready {
-		m.viewport.GotoTop()
-		m.syncViewportContent()
-	}
-
-	return m, m.steps[m.currentStep].Init()
+	return m.focusStep(nextStep)
 }
 
 func (m *Model) goToPreviousStep() (tea.Model, tea.Cmd) {
@@ -161,6 +150,10 @@ func (m *Model) goToPreviousStep() (tea.Model, tea.Cmd) {
 		if f, ok := m.steps[m.currentStep].(FocusableStep); ok {
 			f.SetFocused(false)
 		}
+	}
+
+	if m.returnToReview {
+		return m.jumpToReview()
 	}
 
 	prevStep := m.currentStep - 1
@@ -176,20 +169,103 @@ func (m *Model) goToPreviousStep() (tea.Model, tea.Cmd) {
 		prevStep = 0
 	}
 
-	m.currentStep = prevStep
+	return m.focusStep(prevStep)
+}
+
+// jumpToReview clears returnToReview and focuses the review step directly,
+// skipping whatever steps sit between the current step and review.
+func (m *Model) jumpToReview() (tea.Model, tea.Cmd) {
+	m.returnToReview = false
+
+	idx := m.indexOfStepByID(StepIDReview)
+	if idx < 0 {
+		idx = m.currentStep
+	}
+
+	return m.focusStep(idx)
+}
+
+// jumpToStep applies and blurs the current step, then focuses id directly
+// and arms returnToReview so the eventual confirm/back lands back here.
+func (m *Model) jumpToStep(id StepID) (tea.Model, tea.Cmd) {
+	idx := m.indexOfStepByID(id)
+	if idx < 0 || !stepShouldShow(m.steps[idx], m.config) {
+		return m, nil
+	}
+
+	if len(m.steps) > 0 && m.currentStep < len(m.steps) {
+		if a, ok := m.steps[m.currentStep].(ConfigApplier); ok {
+			if err := a.Apply(m.config); err != nil {
+				m.err = err
+				return m, func() tea.Msg { return ErrorSetMsg{Error: err} }
+			}
+		}
+		if f, ok := m.steps[m.currentStep].(FocusableStep); ok {
+			f.SetFocused(false)
+		}
+	}
+
+	m.returnToReview = true
+
+	return m.focusStep(idx)
+}
+
+func (m *Model) indexOfStepByID(id StepID) int {
+	for i, s := range m.steps {
+		if s.ID() == id {
+			return i
+		}
+	}
+	return -1
+}
+
+// focusStep is the shared tail of every step transition: resize, focus,
+// refresh review jump targets, and reset/re-sync the viewport.
+func (m *Model) focusStep(idx int) (tea.Model, tea.Cmd) {
+	m.currentStep = idx
 
 	contentWidth, contentHeight := m.contentDimensions()
-	if r, ok := m.steps[m.currentStep].(ResizableStep); ok {
+	if r, ok := m.steps[idx].(ResizableStep); ok {
 		r.SetSize(contentWidth, contentHeight)
 	}
-	if f, ok := m.steps[m.currentStep].(FocusableStep); ok {
+	if f, ok := m.steps[idx].(FocusableStep); ok {
 		f.SetFocused(true)
 	}
+
+	m.syncJumpTargets()
 
 	if m.ready {
 		m.viewport.GotoTop()
 		m.syncViewportContent()
 	}
 
-	return m, m.steps[m.currentStep].Init()
+	return m, m.steps[idx].Init()
+}
+
+// syncJumpTargets refreshes the review step's digit-jump table whenever the
+// current step implements ReviewJumper. Hidden targets (ShouldShow false)
+// are skipped entirely so digits stay compact instead of leaving gaps.
+func (m *Model) syncJumpTargets() {
+	rj, ok := m.steps[m.currentStep].(ReviewJumper)
+	if !ok {
+		return
+	}
+
+	order := rj.JumpOrder()
+	targets := make([]JumpTarget, 0, len(order))
+	digit := 1
+	for _, id := range order {
+		// Digits are single keystrokes; nine is the practical ceiling.
+		if digit > 9 {
+			break
+		}
+		idx := m.indexOfStepByID(id)
+		if idx < 0 || !stepShouldShow(m.steps[idx], m.config) {
+			continue
+		}
+		targets = append(targets, JumpTarget{StepID: id, Digit: digit})
+		digit++
+	}
+
+	rj.SetJumpTargets(targets)
 }

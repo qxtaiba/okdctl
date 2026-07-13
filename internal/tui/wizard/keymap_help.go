@@ -12,4 +12,5 @@ const (
 	HelpQuit     = "quit"
 	HelpCtrlC    = "ctrl+c"
 	HelpContinue = "continue"
+	HelpJump     = "jump to section"
 )
