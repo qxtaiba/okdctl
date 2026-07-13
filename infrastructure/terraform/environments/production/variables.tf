@@ -148,3 +148,25 @@ variable "vm_tags" {
   type        = list(string)
   default     = []
 }
+
+
+# =============================================================================
+# DEPLOY LIFECYCLE
+# =============================================================================
+# bootstrap_enabled and start_workers_immediately are the deploy-lifecycle knobs
+# that node ops assert as post-deploy invariants: a running cluster has no
+# bootstrap VM and its workers are started. Exposed at the root so `okdctl node`
+# ops can pass them as -var overrides (defeating any stale terraform.tfvars
+# value); defaults mirror the module, which the deploy flow flips via -var
+# during install and cleanup.
+variable "bootstrap_enabled" {
+  description = "whether to create the bootstrap node"
+  type        = bool
+  default     = true
+}
+
+variable "start_workers_immediately" {
+  description = "start worker vms on create instead of delaying until the control plane is ready"
+  type        = bool
+  default     = false
+}

@@ -37,4 +37,11 @@ module "okd_cluster" {
   master_data_disk_size_gb = var.master_data_disk_size_gb
 
   vm_tags = var.vm_tags
+
+  # =============================================================================
+  # DEPLOY LIFECYCLE (node ops override these via -var as post-deploy invariants)
+  # =============================================================================
+
+  bootstrap_enabled         = var.bootstrap_enabled
+  start_workers_immediately = var.start_workers_immediately
 }

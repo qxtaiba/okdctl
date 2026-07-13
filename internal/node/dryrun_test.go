@@ -144,6 +144,9 @@ func TestResizeDryRunMakesNoMutation(t *testing.T) {
 	if ftf.lastVars["master_memory_mb"] != "24576" {
 		t.Errorf("dry-run plan did not carry the sizing override: vars=%v", ftf.lastVars)
 	}
+	if ftf.lastVars["bootstrap_enabled"] != "false" || ftf.lastVars["start_workers_immediately"] != "true" {
+		t.Errorf("plan missing post-deploy invariants (bootstrap_enabled=false, start_workers_immediately=true): vars=%v", ftf.lastVars)
+	}
 	assertUnchanged(t, tfvars, "SENTINEL_TFVARS\n")
 	assertUnchanged(t, cfgPath, "SENTINEL_CONFIG\n")
 	if _, err := os.Stat(filepath.Join(r.WorkDir, OpMarkerFileName)); !os.IsNotExist(err) {
@@ -229,6 +232,9 @@ func TestRemoveDryRunPreviewIsTruthfulAndInert(t *testing.T) {
 	// real rather than a spuriously-empty no-op.
 	if ftf.lastVars["worker_count"] != "2" {
 		t.Errorf("dry-run remove plan did not carry worker_count override: vars=%v", ftf.lastVars)
+	}
+	if ftf.lastVars["bootstrap_enabled"] != "false" || ftf.lastVars["start_workers_immediately"] != "true" {
+		t.Errorf("remove plan missing post-deploy invariants: vars=%v", ftf.lastVars)
 	}
 	assertUnchanged(t, tfvars, "SENTINEL_TFVARS\n")
 	assertUnchanged(t, cfgPath, "SENTINEL_CONFIG\n")
