@@ -49,7 +49,25 @@ func MaterializeTerraform(root string) ([]string, error) {
 	if err != nil {
 		return created, fmt.Errorf("materialize terraform sources: %w", err)
 	}
+	// Only touch the manifest and re-chown when this run actually created files:
+	// a repeat deploy — or `deploy --dry-run` — against a settled root writes
+	// nothing. A root that already carries a valid manifest is left alone
+	// (write-once; MigrateTerraformRoot re-stamps on migration), and a legacy
+	// capable root without a manifest keeps working via content-sniff rather
+	// than being stamped as a dry-run side effect. When files were created, stamp
+	// only if the resulting root content-sniffs as node-ops capable: a source
+	// checkout whose surviving files predate node ops carries no markers and is
+	// left unstamped.
 	if len(created) > 0 {
+		capable, err := rootIsNodeOpsCapable(root)
+		if err != nil {
+			return created, fmt.Errorf("inspect terraform root: %w", err)
+		}
+		if capable {
+			if err := stampRootManifest(root, nodeOpsRootFormat); err != nil {
+				return created, fmt.Errorf("stamp terraform root: %w", err)
+			}
+		}
 		if err := system.ChownTreeToInvokingUser(filepath.Join(root, "infrastructure")); err != nil {
 			return created, fmt.Errorf("chown terraform sources: %w", err)
 		}
