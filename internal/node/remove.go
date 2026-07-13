@@ -3,6 +3,7 @@ package node
 import (
 	"context"
 	"fmt"
+	"strconv"
 
 	"github.com/qxtaiba/okdctl/internal/cluster"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
@@ -40,9 +41,16 @@ func (r *Runner) RemoveWorker(ctx context.Context, target string, opts RemoveOpt
 		return err
 	}
 
+	// The dry-run delete preview must show the resource going away, but the
+	// resource only leaves the config once worker_count drops. Persisting is
+	// forbidden in dry-run, so feed the reduced count as a plan-time -var
+	// override; without it the plan is a no-op and the gate reports an empty
+	// plan (the fidelity bug this override fixes).
+	countVars := map[string]string{"worker_count": strconv.Itoa(workerCount - 1)}
+
 	if r.DryRun {
 		r.Log.Info("node: dry-run — guards passed", "node", target, "tf_address", workerAddress(idx))
-		return r.dryRunPlan(ctx, workerAddress(idx))
+		return r.targetedApply(ctx, workerAddress(idx), terraform.PlanActionDelete, countVars)
 	}
 
 	if !opts.SkipDrain {
@@ -63,7 +71,7 @@ func (r *Runner) RemoveWorker(ctx context.Context, target string, opts RemoveOpt
 	if err := markStep(r.marker(), OpRemove, target, StepTFApply, r.RunID, r.Cfg.Cluster.Name); err != nil {
 		return err
 	}
-	if err := r.targetedApply(ctx, workerAddress(idx), terraform.PlanActionDelete); err != nil {
+	if err := r.targetedApply(ctx, workerAddress(idx), terraform.PlanActionDelete, countVars); err != nil {
 		return err
 	}
 
@@ -141,8 +149,4 @@ func (r *Runner) checkIngressGuard(ctx context.Context, nodes []cluster.NodeDeta
 	return &errtypes.ConfigError{Msg: fmt.Sprintf(
 		"router pods run on worker nodes (%s) and the control plane is not schedulable; draining %s would leave ingress nowhere to reschedule. Set mastersSchedulable=true and apply the compact IngressController first (see 'okdctl cluster compact'), or move ingress off workers.",
 		joinPodNames(onWorkers), target)}
-}
-
-func (r *Runner) dryRunPlan(ctx context.Context, address string) error {
-	return r.targetedApply(ctx, address, terraform.PlanActionDelete)
 }

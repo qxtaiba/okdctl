@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strconv"
 
 	"github.com/qxtaiba/okdctl/internal/cluster"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
@@ -60,22 +61,49 @@ func (r *Runner) Resize(ctx context.Context, scope ResizeScope, opts ResizeOptio
 			"delta_mib_per_node", delta, "nodes", len(targets))
 	}
 
-	r.applyRoleSizing(role, opts)
-	if err := r.persistTopology(); err != nil {
-		return &errtypes.ClusterError{Msg: "persist topology", Err: err}
+	// Persist only outside dry-run: a dry-run must write nothing to disk. The
+	// truthful plan preview instead comes from sizingVars passed as -var
+	// overrides, so terraform sees the new sizing without a tfvars/config write.
+	sizingVars := roleSizingVars(role, opts)
+	if !r.DryRun {
+		r.applyRoleSizing(role, opts)
+		if err := r.persistTopology(); err != nil {
+			return &errtypes.ClusterError{Msg: "persist topology", Err: err}
+		}
 	}
 
 	for _, t := range targets {
-		if err := r.resizeOneNode(ctx, t, role); err != nil {
+		if err := r.resizeOneNode(ctx, t, role, sizingVars); err != nil {
 			return err
 		}
 	}
+
+	if r.DryRun {
+		r.Log.Info("node: dry-run — resize plan gate passed for all targets; no cluster or workspace changes made",
+			"role", string(role), "memory_mb", opts.MemoryMB, "nodes", len(targets))
+		return nil
+	}
+
 	if err := clearOpMarker(r.marker()); err != nil {
 		r.Log.Warn("node: op marker cleanup failed", "err", err)
 	}
 	r.Log.Info("node: resize complete", "role", string(role), "memory_mb", opts.MemoryMB, "nodes", len(targets))
 	r.Log.Info("node: if the Proxmox provider did not restart a VM on the memory change, the guest runs at its old size until its next reboot — verify with the documented probe (TODO: bpg/proxmox reboot-on-memory-change behavior, spec §11)")
 	return nil
+}
+
+// roleSizingVars builds the plan-time -var overrides for a per-role resize so a
+// targeted plan reflects the new sizing without persisting terraform.tfvars.
+func roleSizingVars(role nodetypes.NodeRole, opts ResizeOptions) map[string]string {
+	memKey, cpuKey := "worker_memory_mb", "worker_cpu_cores"
+	if role == nodetypes.RoleMaster {
+		memKey, cpuKey = "master_memory_mb", "master_cpu_cores"
+	}
+	vars := map[string]string{memKey: strconv.Itoa(opts.MemoryMB)}
+	if opts.CPU > 0 {
+		vars[cpuKey] = strconv.Itoa(opts.CPU)
+	}
+	return vars
 }
 
 type resizeTarget struct {
@@ -133,11 +161,18 @@ func (r *Runner) applyRoleSizing(role nodetypes.NodeRole, opts ResizeOptions) {
 	}
 }
 
-func (r *Runner) resizeOneNode(ctx context.Context, t resizeTarget, role nodetypes.NodeRole) error {
+func (r *Runner) resizeOneNode(ctx context.Context, t resizeTarget, role nodetypes.NodeRole, sizingVars map[string]string) error {
 	isMaster := role == nodetypes.RoleMaster
 	address := masterAddress(t.index)
 	if !isMaster {
 		address = workerAddress(t.index)
+	}
+
+	// Dry-run performs ZERO cluster mutation (no cordon/drain/uncordon) and
+	// ZERO persistence: it only previews the plan gate for the in-place update.
+	// Kept ahead of every mutating step so the --dry-run contract holds.
+	if r.DryRun {
+		return r.targetedApply(ctx, address, terraform.PlanActionUpdate, sizingVars)
 	}
 
 	if isMaster {
@@ -170,12 +205,8 @@ func (r *Runner) resizeOneNode(ctx context.Context, t resizeTarget, role nodetyp
 	// would destroy the VM and, for a master, break quorum. prevent_destroy on
 	// the master resource backstops this, but the gate refuses it up front with
 	// a clear message instead of a terraform apply error.
-	if err := r.targetedApply(ctx, address, terraform.PlanActionUpdate); err != nil {
+	if err := r.targetedApply(ctx, address, terraform.PlanActionUpdate, sizingVars); err != nil {
 		return err
-	}
-
-	if r.DryRun {
-		return nil
 	}
 
 	if err := r.waitNodeReady(ctx, t.name); err != nil {
