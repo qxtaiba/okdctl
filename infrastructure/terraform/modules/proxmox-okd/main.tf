@@ -187,6 +187,11 @@ resource "proxmox_virtual_environment_vm" "master" {
     serial       = "OS-DISK"
   }
 
+  # Ceph OSD data disk, terraform-managed (disk is intentionally NOT in
+  # ignore_changes) so it can be attached to a running master post-creation and
+  # rook auto-creates the OSD on the scsi1 device. INVARIANT: only ever add or
+  # grow master_data_disk_size_gb — decreasing it makes terraform destroy the
+  # disk and lose its OSD data.
   dynamic "disk" {
     for_each = var.master_data_disk_size_gb >= var.minimum_data_disk_size_gb && var.master_data_disk_size_gb > 0 ? [1] : []
     content {
@@ -264,9 +269,6 @@ resource "proxmox_virtual_environment_vm" "master" {
       # efi_disk holds nvram/boot-order state across reboots; replacing the
       # disk on a force-new attribute change would reset bootloader picks.
       efi_disk,
-      # disk topology is fixed at first apply; lowering master_data_disk_size_gb
-      # would silently destroy the Ceph data disk without this guard.
-      disk,
     ]
   }
 }
@@ -324,6 +326,8 @@ resource "proxmox_virtual_environment_vm" "worker" {
     serial       = "OS-DISK"
   }
 
+  # Ceph OSD data disk, terraform-managed (see the master block's note). Only
+  # ever add or grow worker_data_disk_size_gb — a decrease destroys the OSD data.
   dynamic "disk" {
     for_each = var.worker_data_disk_size_gb >= var.minimum_data_disk_size_gb && var.worker_data_disk_size_gb > 0 ? [1] : []
     content {
@@ -390,9 +394,6 @@ resource "proxmox_virtual_environment_vm" "worker" {
       # efi_disk holds nvram/boot-order state across reboots; replacing the
       # disk on a force-new attribute change would reset bootloader picks.
       efi_disk,
-      # disk topology is fixed at first apply; lowering worker_data_disk_size_gb
-      # would silently destroy the Ceph data disk without this guard.
-      disk,
     ]
   }
 }
