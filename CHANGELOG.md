@@ -32,8 +32,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `--output`/`-o` (`text`|`json`) on `version`, `doctor`, `status`,
   `config show`, `describe`, `addon list`, `addon verify`, and
   `releases`
-- `deploy --metrics-addr` Prometheus endpoint, loopback-only unless
-  `--metrics-allow-network` is also given
 - `update-ingress --confirm-cluster` typo guard before mutating a live
   cluster
 - deploy phase marker: a failed deploy now hints `cleanup` vs `destroy`
