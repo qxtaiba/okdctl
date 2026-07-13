@@ -18,6 +18,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/httputil"
 	"github.com/qxtaiba/okdctl/internal/infrastructure/proxmox/hostssh"
+	"github.com/qxtaiba/okdctl/internal/nodetypes"
 	"github.com/qxtaiba/okdctl/internal/platform"
 	"github.com/qxtaiba/okdctl/internal/system"
 	"github.com/qxtaiba/okdctl/internal/tui"
@@ -93,11 +94,15 @@ func (p *Phase) findOrDownloadFCOSISO(ctx context.Context, cfg *config.Config, o
 		}
 	}
 
-	patterns := []string{
-		"fedora-coreos-*.iso",
+	// nodetypes.CoreOSISONamePatterns covers the two official OKD artifact
+	// shapes (fedora-coreos-*.iso, scos-*.iso); fcos-*.iso and
+	// fedora-coreos.iso are additional local naming conventions for
+	// manually-placed ISOs and stay setup-local since hostssh's remote
+	// guard never needs to recognize them.
+	patterns := slices.Concat(nodetypes.CoreOSISONamePatterns, []string{
 		"fcos-*.iso",
 		"fedora-coreos.iso",
-	}
+	})
 
 	if isoPath, ok := p.findNewestISO(isoDir, patterns); ok {
 		return isoPath, nil

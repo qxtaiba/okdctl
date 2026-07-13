@@ -32,8 +32,9 @@ type Options struct {
 	// When true, packages like haproxy, httpd, dnsmasq, etc. will be uninstalled.
 	RemovePackages bool
 
-	// KeepISOs skips removal of fedora-coreos-*.iso from the Proxmox host.
-	// Useful when chaining a destroy with an immediate re-deploy.
+	// KeepISOs skips removal of the base coreos iso and per-node custom
+	// isos from the Proxmox host. Useful when chaining a destroy with an
+	// immediate re-deploy.
 	KeepISOs bool
 }
 

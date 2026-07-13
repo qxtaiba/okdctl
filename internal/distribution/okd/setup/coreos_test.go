@@ -9,12 +9,16 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/executor"
+	"github.com/qxtaiba/okdctl/internal/infrastructure/proxmox/hostssh"
 	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/platform"
 )
@@ -116,6 +120,49 @@ func newTestPhase(t *testing.T) *Phase {
 		phase.WithLogger(logutil.NopLogger),
 		phase.WithExecutor(executor.New(executor.WithLogger(logutil.NopLogger))),
 	)}
+}
+
+// TestFindOrDownloadFCOSISO_globDetectsCoreOSNames asserts local ISO
+// auto-detect finds both the pre-4.19 fedora-coreos-*.iso shape and the
+// 4.19+ scos-*.iso shape without hitting the network. The real
+// hostssh.DefaultProxmoxISODir is checked first; the fixture lives under
+// opts.WorkDir/downloads so the test only exercises that second glob loop.
+func TestFindOrDownloadFCOSISO_globDetectsCoreOSNames(t *testing.T) {
+	if _, err := os.Stat(hostssh.DefaultProxmoxISODir); err == nil {
+		t.Skipf("%s exists on this machine; test assumes no local proxmox iso dir", hostssh.DefaultProxmoxISODir)
+	}
+
+	cases := []struct {
+		name    string
+		isoName string
+	}{
+		{"fedora-coreos shape", "fedora-coreos-40.20240101.3.0-x86_64.iso"},
+		{"scos shape", "scos-10.0.20251103-0-live-iso.x86_64.iso"},
+	}
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			workDir := t.TempDir()
+			downloadsDir := filepath.Join(workDir, "downloads")
+			if err := os.MkdirAll(downloadsDir, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			isoPath := filepath.Join(downloadsDir, tt.isoName)
+			if err := os.WriteFile(isoPath, []byte("fake"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+
+			p := newTestPhase(t)
+			opts := &Options{BaseOptions: phase.BaseOptions{WorkDir: workDir}}
+
+			got, err := p.findOrDownloadFCOSISO(context.Background(), &config.Config{}, opts)
+			if err != nil {
+				t.Fatalf("findOrDownloadFCOSISO: %v", err)
+			}
+			if got != isoPath {
+				t.Errorf("findOrDownloadFCOSISO = %q, want %q", got, isoPath)
+			}
+		})
+	}
 }
 
 func TestParseOKDVersion(t *testing.T) {
