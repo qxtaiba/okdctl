@@ -14,6 +14,7 @@ import (
 	"sigs.k8s.io/yaml"
 
 	"github.com/qxtaiba/okdctl/internal/errtypes"
+	"github.com/qxtaiba/okdctl/internal/system"
 )
 
 func Test_addonIsRetryable(t *testing.T) {
@@ -92,8 +93,8 @@ func Test_RetryDefault_AllFailures(t *testing.T) {
 		if !errors.Is(err, sentinel) {
 			t.Errorf("err = %v; want sentinel error %v", err, sentinel)
 		}
-		if calls.Load() != DefaultRetryCount {
-			t.Errorf("calls = %d; want %d", calls.Load(), DefaultRetryCount)
+		if want := system.DefaultBackoff().Steps; int(calls.Load()) != want {
+			t.Errorf("calls = %d; want %d", calls.Load(), want)
 		}
 	})
 }
@@ -103,7 +104,7 @@ func Test_RetryDefault_CtxCancel(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 		go func() {
-			time.Sleep(DefaultRetryBackoff / 2)
+			time.Sleep(system.DefaultBackoff().Duration / 2)
 			cancel()
 		}()
 		err := RetryDefault(ctx, func() error {

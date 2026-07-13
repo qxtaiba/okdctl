@@ -13,9 +13,6 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
-	"time"
-
-	"k8s.io/apimachinery/pkg/util/wait"
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
@@ -26,6 +23,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/netutil"
 	"github.com/qxtaiba/okdctl/internal/nodetypes"
 	"github.com/qxtaiba/okdctl/internal/sshpin"
+	"github.com/qxtaiba/okdctl/internal/system"
 )
 
 // Provider drives the Proxmox VE infrastructure lifecycle (connect, provision,
@@ -388,45 +386,28 @@ func (p *Provider) checkTerraformOutputs(ctx context.Context, cfg *config.Config
 
 // initWithRetry wraps terraform init in a bounded retry for transient
 // failures (network blips during provider-plugin download, brief Proxmox
-// API unavailability). 3 attempts, exponential backoff starting at 5 s,
-// factor 2, jitter 0.5, 5-minute cap. Permanent failures (config/auth
-// errors, context cancellation) abort on the first attempt.
+// API unavailability) via system.DefaultBackoff(). Permanent failures
+// (config/auth errors, context cancellation) abort on the first attempt.
+// Repeated identical failures demote to Debug after the first Warn so a
+// long retry run doesn't spam the log.
 func (p *Provider) initWithRetry(ctx context.Context) error {
-	backoff := wait.Backoff{
-		Duration: 5 * time.Second,
-		Factor:   2,
-		Jitter:   0.5,
-		Steps:    3,
-		Cap:      5 * time.Minute,
-	}
 	var lastWarnMsg string
-	var lastErr error
 	var attempt int
-	err := wait.ExponentialBackoffWithContext(ctx, backoff, func(_ context.Context) (bool, error) {
+	return system.Retry(ctx, system.DefaultBackoff(), initIsRetryable, func(ctx context.Context) error {
 		attempt++
-		if initErr := p.terraformExec.Init(ctx); initErr != nil {
-			if !initIsRetryable(initErr) {
-				return false, initErr
-			}
-			lastErr = initErr
-			msg := initErr.Error()
-			if msg != lastWarnMsg {
-				p.logger.Warn("terraform: init failed, retrying", "attempt", attempt, "err", initErr)
-				lastWarnMsg = msg
-			} else {
-				p.logger.Debug("terraform: init failed (repeated), retrying", "attempt", attempt, "err", initErr)
-			}
-			return false, nil
+		initErr := p.terraformExec.Init(ctx)
+		if initErr == nil || !initIsRetryable(initErr) {
+			return initErr
 		}
-		return true, nil
+		msg := initErr.Error()
+		if msg != lastWarnMsg {
+			p.logger.Warn("terraform: init failed, retrying", "attempt", attempt, "err", initErr)
+			lastWarnMsg = msg
+		} else {
+			p.logger.Debug("terraform: init failed (repeated), retrying", "attempt", attempt, "err", initErr)
+		}
+		return initErr
 	})
-	if err == nil {
-		return nil
-	}
-	if lastErr != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
-		return lastErr
-	}
-	return err
 }
 
 // initIsRetryable reports whether an error from terraform init should
