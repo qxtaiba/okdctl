@@ -70,6 +70,32 @@ Top-level cluster snapshot.
 | `addons[].error` | string | present only when `healthy=false` |
 | `addons` | array | addon health snapshots; present when non-empty |
 
+## `okdctl node list --output=json`
+
+Flat array of cluster nodes, each with its terraform count index and a
+config-vs-tfvars sizing-drift indicator.
+
+```json
+[
+  {"name": "master-0", "role": "master", "ready": true, "tf_index": 0, "drift": "none"},
+  {
+    "name": "worker-2", "role": "worker", "ready": false, "tf_index": 2,
+    "drift": "pending", "drift_detail": "config 16384MiB/4cpu vs tfvars 8192MiB/4cpu",
+    "in_flight_op": "resize (tf-apply)"
+  }
+]
+```
+
+| Field | Type | Notes |
+|---|---|---|
+| `name` | string | node name from `kubectl get nodes` |
+| `role` | string | `master`, `worker`, or `unknown` |
+| `ready` | bool | node's `Ready` condition is `True` |
+| `tf_index` | int | trailing numeric suffix of the node name (`worker2` → `2`), mapping the node to its terraform count index; omitted when the name has no numeric suffix |
+| `drift` | string | `none`, `pending`, or `unknown` — compares the config file's per-role cpu/memory to what was last rendered into terraform.tfvars. This is **not** a live VM query (okdctl fetches no per-guest Proxmox sizing anywhere today): `pending` means a sizing change is staged in the workspace, not that the node's guest has actually been resized. `unknown` means terraform.tfvars has not been rendered yet |
+| `drift_detail` | string | present only when `drift=pending`; the compared config/tfvars values |
+| `in_flight_op` | string | present only on the node targeted by an in-flight `remove`/`resize`/`compact` op's on-disk marker, formatted `"<op> (<step>)"` |
+
 ## `okdctl releases list --output=json`
 
 Flat array of OKD releases (newest first). The CLI's human-readable mode

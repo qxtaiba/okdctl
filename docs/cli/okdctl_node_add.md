@@ -1,29 +1,22 @@
-## okdctl describe node
+## okdctl node add
 
-Show detail for a cluster node
+Add a node to the cluster (not yet implemented)
 
 ### Synopsis
 
-Show the name, role (master/worker), and readiness condition for a
-single cluster node retrieved via oc. Use 'okdctl node list' to see every
-node at once (with terraform index and sizing-drift), or 'okdctl status' for
-a cluster-wide summary.
+Adding a node requires building and uploading a per-node CoreOS ISO and
+reviving the ignition HTTPS server post-install; it is deferred (see the node
+lifecycle spec, phase 4). Use 'okdctl deploy' to grow a fresh cluster.
 
 ```
-okdctl describe node <name> [flags]
-```
-
-### Examples
-
-```
-  okdctl describe node master-0
+okdctl node add --role worker [flags]
 ```
 
 ### Options
 
 ```
-  -h, --help            help for node
-  -o, --output string   output format: text|json (default "text")
+  -h, --help          help for add
+      --role string   node role to add (default "worker")
 ```
 
 ### Options inherited from parent commands
@@ -39,5 +32,5 @@ okdctl describe node <name> [flags]
 
 ### SEE ALSO
 
-* [okdctl describe](okdctl_describe.md)	 - Show details for a cluster node or addon
+* [okdctl node](okdctl_node.md)	 - Manage cluster node lifecycle
 

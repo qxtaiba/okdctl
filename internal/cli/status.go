@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
-	"text/tabwriter"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -42,8 +42,9 @@ var describeNodeCmd = &cobra.Command{
 	Use:   "node <name>",
 	Short: "Show detail for a cluster node",
 	Long: `Show the name, role (master/worker), and readiness condition for a
-single cluster node retrieved via oc. Use 'okdctl status' to see all nodes
-at once.`,
+single cluster node retrieved via oc. Use 'okdctl node list' to see every
+node at once (with terraform index and sizing-drift), or 'okdctl status' for
+a cluster-wide summary.`,
 	Example: "  okdctl describe node master-0",
 	Args:    cobra.ExactArgs(1),
 	RunE:    runDescribeNode,
@@ -137,6 +138,14 @@ func printClusterStatus(cmd *cobra.Command, st *okd.ClusterStatus) error {
 		}
 	}
 	sb.Section("nodes")
+	if len(st.Nodes) == 0 {
+		sb.WriteString("    no nodes reported\n")
+	} else {
+		for _, line := range nodeStatusTableLines(st.Nodes) {
+			sb.WriteString("    " + line + "\n")
+		}
+		sb.Newline()
+	}
 	sb.KV("masters", strconv.Itoa(masters))
 	sb.KV("workers", strconv.Itoa(workers))
 	sb.KV("total", strconv.Itoa(len(st.Nodes)))
@@ -161,6 +170,44 @@ func printClusterStatus(cmd *cobra.Command, st *okd.ClusterStatus) error {
 	_, err := fmt.Fprint(cmd.OutOrStdout(),
 		"\n"+tui.BoxedSectionCompact(sb.String(), "cluster status", tui.DefaultBoxWidth)+"\n")
 	return err
+}
+
+// nodeStatusTableLines renders an aligned NAME/ROLE/READY table for the
+// status box, one line per node plus a header. Column widths are computed
+// from the widest cell (including the header) so long node names never
+// misalign later columns; padding is always computed on the plain text
+// before tui.ErrorStyle wraps a NotReady row, so the style's zero-width ANSI
+// codes cannot shift a later row out of alignment. The header stays unstyled
+// so it lines up byte-for-byte with every Ready (equally unstyled) row.
+func nodeStatusTableLines(nodes []okd.NodeStatus) []string {
+	nameW, roleW := len("NAME"), len("ROLE")
+	for _, n := range nodes {
+		nameW = max(nameW, len(n.Name))
+		roleW = max(roleW, len(string(n.Role)))
+	}
+	const readyW = len("READY")
+
+	lines := make([]string, 0, len(nodes)+1)
+	lines = append(lines, padRight("NAME", nameW)+"  "+padRight("ROLE", roleW)+"  "+padRight("READY", readyW))
+	for _, n := range nodes {
+		readyText := "no"
+		if n.Ready {
+			readyText = "yes"
+		}
+		row := padRight(n.Name, nameW) + "  " + padRight(string(n.Role), roleW) + "  " + padRight(readyText, readyW)
+		if !n.Ready {
+			row = tui.ErrorStyle.Render(row)
+		}
+		lines = append(lines, row)
+	}
+	return lines
+}
+
+func padRight(s string, w int) string {
+	if len(s) >= w {
+		return s
+	}
+	return s + strings.Repeat(" ", w-len(s))
 }
 
 func runDescribeNode(cmd *cobra.Command, args []string) error {
@@ -202,15 +249,15 @@ func runDescribeNode(cmd *cobra.Command, args []string) error {
 		return enc.Encode(payload)
 	}
 
-	tw := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
-	fmt.Fprintf(tw, "NAME\t%s\n", n.Name)
-	fmt.Fprintf(tw, "ROLE\t%s\n", n.Role)
-	ready := string(nodetypes.ConditionStatusFalse)
-	if n.Ready {
-		ready = string(nodetypes.ConditionStatusTrue)
+	lines := []struct{ k, v string }{
+		{colName, n.Name},
+		{"role", string(n.Role)},
+		{"ready", yesNo(n.Ready)},
 	}
-	fmt.Fprintf(tw, "READY\t%s\n", ready)
-	return tw.Flush()
+	for _, ln := range lines {
+		fmt.Fprintln(cmd.OutOrStdout(), tui.DottedKeyValueFull(ln.k, ln.v, tui.DefaultKeyColWidth, 0))
+	}
+	return nil
 }
 
 func runDescribeAddon(cmd *cobra.Command, args []string) error {

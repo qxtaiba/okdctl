@@ -1,6 +1,8 @@
 package setup
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/qxtaiba/okdctl/internal/config"
@@ -175,5 +177,52 @@ func TestBuildTerraformVarsData_workerDiskFallsBackToCPDisk(t *testing.T) {
 	got := buildTerraformVarsData(cfg)
 	if got.WorkerOSDiskSizeGB != 100 {
 		t.Errorf("WorkerOSDiskSizeGB = %d, want 100 (inherited from cp disk)", got.WorkerOSDiskSizeGB)
+	}
+}
+
+func TestReadTerraformVarsSizing_RoundTripsWrittenVars(t *testing.T) {
+	cfg := &config.Config{
+		Cluster:  config.ClusterConfig{Name: "sizingcluster"},
+		Provider: config.ProviderConfig{Proxmox: &config.ProxmoxConfig{ISOStorage: "iso-store"}},
+		Topology: config.TopologyConfig{
+			ControlPlane: config.NodeConfig{Count: 3, CPU: 4, MemoryMB: 8192},
+			Workers:      config.NodeConfig{Count: 2, CPU: 8, MemoryMB: 16384},
+		},
+	}
+	envDir := t.TempDir()
+	if err := WriteTerraformVars(cfg, envDir); err != nil {
+		t.Fatalf("WriteTerraformVars: %v", err)
+	}
+
+	got, found, err := ReadTerraformVarsSizing(envDir)
+	if err != nil {
+		t.Fatalf("ReadTerraformVarsSizing: %v", err)
+	}
+	if !found {
+		t.Fatal("found = false, want true")
+	}
+	want := TerraformVarsSizing{MasterCPU: 4, MasterMemoryMB: 8192, WorkerCPU: 8, WorkerMemoryMB: 16384}
+	if got != want {
+		t.Errorf("ReadTerraformVarsSizing() = %+v, want %+v", got, want)
+	}
+}
+
+func TestReadTerraformVarsSizing_MissingFileIsNotAnError(t *testing.T) {
+	_, found, err := ReadTerraformVarsSizing(t.TempDir())
+	if err != nil {
+		t.Fatalf("want nil error for a missing tfvars file, got %v", err)
+	}
+	if found {
+		t.Error("found = true, want false")
+	}
+}
+
+func TestReadTerraformVarsSizing_MissingKeyErrors(t *testing.T) {
+	envDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(envDir, "terraform.tfvars"), []byte("master_cpu_cores = 4\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, found, err := ReadTerraformVarsSizing(envDir); err == nil || found {
+		t.Fatalf("want (false, error) for a tfvars missing sizing keys, got (found=%v, err=%v)", found, err)
 	}
 }
