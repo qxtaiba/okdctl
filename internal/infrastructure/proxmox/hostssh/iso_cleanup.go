@@ -28,9 +28,10 @@ type RemoteISOParams struct {
 	KnownHostsPath string
 }
 
-// refuseUnsafeISOPath rejects any path that is not exactly
-// <isoDir>/fedora-coreos-*.iso. The guard prevents a config typo from
-// pointing an SSH rm at an arbitrary path on the Proxmox host.
+// refuseUnsafeISOPath rejects any path that is not exactly <isoDir>/<name>
+// where name matches one of nodetypes.CoreOSISONamePatterns. The guard
+// prevents a config typo from pointing an SSH rm at an arbitrary path on
+// the Proxmox host.
 func refuseUnsafeISOPath(isoDir, path string) error {
 	cleaned := filepath.Clean(path)
 	dir := filepath.Dir(cleaned)
@@ -39,8 +40,8 @@ func refuseUnsafeISOPath(isoDir, path string) error {
 	if dir != filepath.Clean(isoDir) {
 		return fmt.Errorf("refusing unsafe remote path %q: not inside %s", path, isoDir)
 	}
-	if !strings.HasPrefix(base, "fedora-coreos-") || !strings.HasSuffix(base, ".iso") {
-		return fmt.Errorf("refusing unsafe remote path %q: not a fedora-coreos-*.iso filename", path)
+	if !nodetypes.IsCoreOSISOName(base) {
+		return fmt.Errorf("refusing unsafe remote path %q: not a recognized base coreos iso filename", path)
 	}
 	return nil
 }
@@ -227,9 +228,21 @@ func vmDevicesReferenceISO(vm map[string]json.RawMessage, isoBase string) bool {
 	return false
 }
 
-// RemoveFCOSISOFromProxmox removes fedora-coreos-*.iso files from isoDir on
-// the Proxmox host over SSH. Files still referenced by a running VM are
-// skipped with a warning. The path safety check runs before every rm.
+// findCoreOSISONameClause builds a POSIX find(1) -name test that matches any
+// pattern in nodetypes.CoreOSISONamePatterns, keeping the remote find filter
+// in sync with refuseUnsafeISOPath's allowlist so the two cannot drift.
+func findCoreOSISONameClause() string {
+	terms := make([]string, len(nodetypes.CoreOSISONamePatterns))
+	for i, pat := range nodetypes.CoreOSISONamePatterns {
+		terms[i] = "-name " + shellSingleQuote(pat)
+	}
+	return `\( ` + strings.Join(terms, " -o ") + ` \)`
+}
+
+// RemoveFCOSISOFromProxmox removes base CoreOS installer ISOs matching
+// nodetypes.CoreOSISONamePatterns (fedora-coreos-*.iso, scos-*.iso) from
+// isoDir on the Proxmox host over SSH. Files still referenced by a running
+// VM are skipped with a warning. The path safety check runs before every rm.
 //
 // Shell-injection policy of record: this function is the only place in the
 // repo that passes a constructed string to a remote shell via SSHRun (sh -c).
@@ -242,8 +255,8 @@ func RemoveFCOSISOFromProxmox(ctx context.Context, p *RemoteISOParams, isoDir st
 	}
 
 	findCmd := fmt.Sprintf(
-		"find %s -maxdepth 1 -name 'fedora-coreos-*.iso' -type f -print0 2>/dev/null || true",
-		shellSingleQuote(isoDir),
+		"find %s -maxdepth 1 %s -type f -print0 2>/dev/null || true",
+		shellSingleQuote(isoDir), findCoreOSISONameClause(),
 	)
 	result, err := SSHRunOutput(ctx, p.Exec, p.Host, p.KnownHostsPath, findCmd)
 	if err != nil {
@@ -255,7 +268,7 @@ func RemoveFCOSISOFromProxmox(ctx context.Context, p *RemoteISOParams, isoDir st
 
 	files := parseNullDelimitedFileList(result.Stdout)
 	if len(files) == 0 {
-		p.Log.Info("iso: no fedora-coreos-*.iso found on proxmox host, nothing to remove")
+		p.Log.Info("iso: no base coreos iso found on proxmox host, nothing to remove")
 		return nil
 	}
 
@@ -290,7 +303,7 @@ func RemoveFCOSISOFromProxmox(ctx context.Context, p *RemoteISOParams, isoDir st
 	return nil
 }
 
-// RemoveCustomISOsFromProxmox removes the exact per-node custom FCOS ISOs
+// RemoveCustomISOsFromProxmox removes the exact per-node custom CoreOS ISOs
 // built by the setup phase (see setup.BuildNodeList) from isoDir on the
 // Proxmox host. Unlike RemoveFCOSISOFromProxmox this does not glob — names
 // are exact matches, so it uses SSHRunArgv per the repo's SSH shell policy.

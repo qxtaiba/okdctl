@@ -45,6 +45,9 @@ case "$6" in
       unsafe-path)
         printf '/etc/passwd\0'
         ;;
+      scos)
+        printf '/var/lib/vz/template/iso/scos-10.0.20251103-0-live-iso.x86_64.iso\0'
+        ;;
       *)
         printf '/var/lib/vz/template/iso/fedora-coreos-40.20240101.iso\0'
         ;;
@@ -110,6 +113,27 @@ func TestRemoveFCOSISOFromProxmox_skipsISOReferencedByRunningVM(t *testing.T) {
 	if _, statErr := os.Stat(counter); statErr == nil {
 		raw, _ := os.ReadFile(counter)
 		t.Errorf("rm called (counter=%q) but ISO is in use — removal must be skipped", string(raw))
+	}
+}
+
+func TestRemoveFCOSISOFromProxmox_removesSCOSFixture(t *testing.T) {
+	installFakeSSH(t)
+	dir := t.TempDir()
+	counter := filepath.Join(dir, "rm-counter")
+	t.Setenv("SSH_FAKE_MODE", "scos")
+	t.Setenv("SSH_RM_COUNTER", counter)
+
+	p := newTestISOParams(t)
+	if err := RemoveFCOSISOFromProxmox(context.Background(), p, "/var/lib/vz/template/iso"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	raw, readErr := os.ReadFile(counter)
+	if readErr != nil {
+		t.Fatalf("rm counter file not written — scos-named iso was not removed: %v", readErr)
+	}
+	if string(raw) != "1" {
+		t.Errorf("rm counter = %q; want 1", string(raw))
 	}
 }
 

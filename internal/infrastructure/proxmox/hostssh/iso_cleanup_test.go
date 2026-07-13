@@ -1,7 +1,12 @@
 package hostssh
 
 import (
+	"context"
 	"encoding/json"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -41,6 +46,8 @@ func TestRefuseUnsafeISOPath(t *testing.T) {
 	safe := []string{
 		"/var/lib/vz/template/iso/fedora-coreos-40.20240101.iso",
 		"/var/lib/vz/template/iso/fedora-coreos-41.3.1-x86_64.iso",
+		"/var/lib/vz/template/iso/scos-10.0.20251103-0-live-iso.x86_64.iso",
+		"/var/lib/vz/template/iso/scos-9.0.20250510-0.iso",
 	}
 	for _, p := range safe {
 		if err := refuseUnsafeISOPath(isoDir, p); err != nil {
@@ -56,7 +63,11 @@ func TestRefuseUnsafeISOPath(t *testing.T) {
 		"/var/lib/vz/template/iso/fedora-coreos-40.iso/../../../etc/passwd",
 		"/var/lib/vz/template/iso/other-distro.iso",
 		"/var/lib/vz/template/iso/fedora-coreos-40.img",
+		"/var/lib/vz/template/iso/scos-40.iso/../../../etc/passwd",
+		"/var/lib/vz/template/iso/scos.iso",
+		"/var/lib/vz/template/iso/scos-40.img",
 		"/tmp/fedora-coreos-40.iso",
+		"/tmp/scos-40.iso",
 		"",
 	}
 	for _, p := range unsafe {
@@ -272,5 +283,54 @@ func TestConfigDevicesReferenceISO_summaryShapeNoDevices(t *testing.T) {
 	}
 	if found {
 		t.Error("summary-list element shape must not match any device field")
+	}
+}
+
+func TestFindCoreOSISONameClause(t *testing.T) {
+	got := findCoreOSISONameClause()
+	want := `\( -name 'fedora-coreos-*.iso' -o -name 'scos-*.iso' \)`
+	if got != want {
+		t.Errorf("findCoreOSISONameClause() = %q, want %q", got, want)
+	}
+}
+
+// TestRemoveFCOSISOFromProxmox_findCmdMatchesBothShapesLocally runs the
+// exact find command RemoveFCOSISOFromProxmox sends over SSH through a real
+// local shell (no ssh/fake-ssh involved) to prove the \( -o \) grouping is
+// valid POSIX find(1) syntax and matches fedora-coreos-*.iso and
+// scos-*.iso while rejecting lookalikes.
+func TestRemoveFCOSISOFromProxmox_findCmdMatchesBothShapesLocally(t *testing.T) {
+	if runtime.GOOS == goosWindows {
+		t.Skip("uses POSIX sh/find")
+	}
+	dir := t.TempDir()
+	want := map[string]bool{
+		"fedora-coreos-40.20240101.3.0-x86_64.iso": true,
+		"scos-10.0.20251103-0-live-iso.x86_64.iso": true,
+		"other-distro.iso":                         false,
+		"fedora-coreos-40.img":                     false,
+		"scos.iso":                                 false,
+	}
+	for name := range want {
+		if err := os.WriteFile(filepath.Join(dir, name), nil, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	findCmd := "find " + shellSingleQuote(dir) + " -maxdepth 1 " + findCoreOSISONameClause() + " -type f -print0 2>/dev/null || true"
+	out, err := exec.CommandContext(context.Background(), "sh", "-c", findCmd).Output()
+	if err != nil {
+		t.Fatalf("sh -c %q: %v", findCmd, err)
+	}
+
+	got := parseNullDelimitedFileList(string(out))
+	gotSet := make(map[string]bool, len(got))
+	for _, f := range got {
+		gotSet[filepath.Base(f)] = true
+	}
+	for name, wantMatch := range want {
+		if gotSet[name] != wantMatch {
+			t.Errorf("find matched %q = %v, want %v", name, gotSet[name], wantMatch)
+		}
 	}
 }

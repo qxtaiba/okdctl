@@ -18,7 +18,7 @@ import (
 )
 
 // nodeISOFingerprint hashes the coreos-installer inputs for one node ISO. The
-// base ISO path (filename encodes the FCOS version) is used instead of its
+// base ISO path (filename encodes the CoreOS version) is used instead of its
 // content to avoid hashing a multi-GB file on every invocation.
 func nodeISOFingerprint(liveKargs, destKargs []string, sshKey, basePath string) string {
 	h := sha256.New()
@@ -31,7 +31,7 @@ func nodeISOFingerprint(liveKargs, destKargs []string, sshKey, basePath string) 
 	return hex.EncodeToString(h.Sum(nil))
 }
 
-// BuildCustomISOs produces a per-node FCOS ISO with coreos-installer that
+// BuildCustomISOs produces a per-node CoreOS ISO with coreos-installer that
 // embeds the node's ignition URL, role, and static-IP kernel arguments. A
 // node whose output ISO and .fp-<name> fingerprint both match the current
 // inputs is skipped; the fingerprint is written after a successful build.
@@ -47,7 +47,7 @@ func (p *Phase) BuildCustomISOs(ctx context.Context, cfg *config.Config, opts *O
 
 	fcosISO, err := p.findOrDownloadFCOSISO(ctx, cfg, opts)
 	if err != nil {
-		return &errtypes.NetworkError{Msg: "failed to find or download FCOS ISO", Err: err}
+		return &errtypes.NetworkError{Msg: "failed to find or download CoreOS ISO", Err: err}
 	}
 
 	nodes, err := p.BuildNodeList(cfg)

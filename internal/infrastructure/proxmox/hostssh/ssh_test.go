@@ -9,6 +9,12 @@ import (
 	"github.com/qxtaiba/okdctl/internal/testutil"
 )
 
+// goosWindows names the one GOOS every POSIX-shell fake-ssh/find test in
+// this package skips on; a shared constant keeps goconst from flagging the
+// repeated literal across ssh_test.go, remove_fcos_iso_test.go, and
+// iso_cleanup_test.go.
+const goosWindows = "windows"
+
 // installFakeSSHEcho writes a POSIX shell script named "ssh" in a temp dir and
 // prepends that dir to PATH so the Executor picks it up. The script prints
 // all argv to stdout, one space-separated line.

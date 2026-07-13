@@ -1,8 +1,9 @@
 // Package nodetypes defines the shared domain vocabulary for cluster nodes
-// and Proxmox VMs — NodeRole, VMState, NodeStatusPhase, and the Kubernetes
-// condition enums. It is a leaf package (stdlib-only) so distribution
-// phases, infrastructure providers, and the CLI can all import it without
-// creating upward edges in the import graph.
+// and Proxmox VMs — NodeRole, VMState, NodeStatusPhase, the Kubernetes
+// condition enums, and the base CoreOS installer ISO name-shape allowlist.
+// It is a leaf package (stdlib-only) so distribution phases, infrastructure
+// providers, and the CLI can all import it without creating upward edges in
+// the import graph.
 package nodetypes
 
 import "fmt"
