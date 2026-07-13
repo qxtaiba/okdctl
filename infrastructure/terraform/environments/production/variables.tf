@@ -112,6 +112,37 @@ variable "worker_memory_mb" {
   default     = null
 }
 
+# master_data_disk_size_gb is exposed so the compaction runbook can give the
+# masters Ceph OSD disks. Default 0 keeps masters diskless (matching how okdctl
+# deploys today); the module omits the data disk entirely when this is 0.
+variable "master_data_disk_size_gb" {
+  description = "size of data disk for master nodes in gb (0 = no data disk)"
+  type        = number
+  default     = 0
+}
+
+
+# =============================================================================
+# NODE NAMES
+# =============================================================================
+# Exposed at the root so the rendered tfvars' cluster-prefixed names
+# (${cluster}-masterN / ${cluster}-workerN) take effect instead of the module's
+# bare masterN/workerN defaults. Without this, adopting the slim root would
+# rename every existing VM in place. Root defaults mirror the module's so a
+# standalone plan still validates; real deployments always supply names via
+# tfvars.
+variable "master_names" {
+  description = "list of master node names"
+  type        = list(string)
+  default     = ["master0", "master1", "master2"]
+}
+
+variable "worker_names" {
+  description = "list of worker node names"
+  type        = list(string)
+  default     = ["worker0", "worker1", "worker2"]
+}
+
 variable "vm_tags" {
   description = "tags to apply to all vms"
   type        = list(string)
