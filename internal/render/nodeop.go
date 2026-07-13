@@ -50,7 +50,7 @@ func NodeOpDryRun(plan *node.OpPlan) string {
 
 // NodeOpComplete renders the completion box shown after a node op succeeds,
 // listing the nodes acted on, the elapsed time, and the operation-specific
-// follow-up the operator still owns (HAProxy backend refresh, guest reboot).
+// follow-up the operator still owns (HAProxy backend refresh, verification).
 func NodeOpComplete(plan *node.OpPlan, elapsed time.Duration) string {
 	sb := NewBuilder()
 	sb.WriteString("\n")
@@ -93,6 +93,7 @@ func nodeOpDetails(sb *Builder, plan *node.OpPlan) {
 		if plan.CPU > 0 {
 			sb.KV("target cpu", fmt.Sprintf("%d vCPU", plan.CPU))
 		}
+		sb.KV("disruption", "each node is drained, then hard power-cycled (stop→start) to realize the change")
 	}
 	if plan.GrowMasterMemoryMB > 0 {
 		sb.KV("grow masters to", fmt.Sprintf("%d MiB", plan.GrowMasterMemoryMB))
@@ -126,8 +127,8 @@ func nodeOpNextSteps(plan *node.OpPlan) []string {
 		}
 	case node.OpResize:
 		return []string{
-			"a memory change takes effect only after the guest reboots; verify with",
-			"  'oc debug node/<name> -- free -m' or the proxmox memory panel",
+			"each resized node was power-cycled to realize the change; verify with",
+			"  'okdctl node list' or 'oc debug node/<name> -- free -m'",
 		}
 	default:
 		return nil
