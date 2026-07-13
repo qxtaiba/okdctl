@@ -21,7 +21,7 @@ func DefaultConfig() *Config {
 		},
 		Distribution: DistributionConfig{
 			Type:    DistributionOKD,
-			Version: "4.18.0-okd-scos.10",
+			Version: "4.22.0-okd-scos.7",
 		},
 		Provider: ProviderConfig{
 			Type: ProviderProxmox,
