@@ -29,7 +29,7 @@ type EtcdHealth struct {
 // etcd resource's rollout condition. A master resize/removal MUST gate on this
 // before and after each node so quorum is never mutated mid-rollout.
 func (c *Client) EtcdHealthy(ctx context.Context) (EtcdHealth, error) {
-	coRaw, err := c.getJSONChecked(ctx, "get", "clusteroperator", "etcd", "-o", "json")
+	coRaw, err := c.getJSONChecked(ctx, "get etcd operator", "get", "clusteroperator", "etcd", "-o", "json")
 	if err != nil {
 		return EtcdHealth{}, err
 	}
@@ -38,7 +38,7 @@ func (c *Client) EtcdHealthy(ctx context.Context) (EtcdHealth, error) {
 		return EtcdHealth{}, &errtypes.ClusterError{Msg: "parse etcd operator", Err: err}
 	}
 
-	podsRaw, err := c.getJSONChecked(ctx, "get", "pods", "-n", "openshift-etcd",
+	podsRaw, err := c.getJSONChecked(ctx, "get etcd pods", "get", "pods", "-n", "openshift-etcd",
 		"-l", "app=etcd", "-o", "json")
 	if err != nil {
 		return EtcdHealth{}, err
@@ -48,7 +48,7 @@ func (c *Client) EtcdHealthy(ctx context.Context) (EtcdHealth, error) {
 		return EtcdHealth{}, &errtypes.ClusterError{Msg: "parse etcd pods", Err: err}
 	}
 
-	etcdRaw, err := c.getJSONChecked(ctx, "get", "etcd", "cluster", "-o", "json")
+	etcdRaw, err := c.getJSONChecked(ctx, "get etcd cluster", "get", "etcd", "cluster", "-o", "json")
 	if err != nil {
 		return EtcdHealth{}, err
 	}
@@ -78,19 +78,25 @@ func (c *Client) EtcdHealthy(ctx context.Context) (EtcdHealth, error) {
 	return h, nil
 }
 
-func (c *Client) getJSONChecked(ctx context.Context, args ...string) ([]byte, error) {
+// getJSONChecked runs an `oc get ... -o json` style query and returns its
+// stdout only after checking both failure modes a JSON caller must guard
+// against: a non-zero exit and a truncated (size-capped) capture, which would
+// otherwise parse as valid-but-incomplete JSON. msgPrefix becomes the
+// ClusterError's Msg, in the caller's own "verb noun" convention (e.g. "list
+// nodes", "get csrs").
+func (c *Client) getJSONChecked(ctx context.Context, msgPrefix string, args ...string) ([]byte, error) {
 	result, err := c.runOutput(ctx, args...)
 	if err != nil {
 		return nil, err
 	}
 	if result.ExitCode != 0 {
 		return nil, &errtypes.ClusterError{
-			Msg: fmt.Sprintf("%s %s", c.CLI, subcommand(args)),
+			Msg: msgPrefix,
 			Err: executor.NewExitError(ctx, c.CLI+" "+subcommand(args), result.ExitCode, strings.TrimSpace(result.Stderr)),
 		}
 	}
 	if result.Truncated {
-		return nil, &errtypes.ClusterError{Msg: fmt.Sprintf("%s %s: output truncated; cannot parse", c.CLI, subcommand(args))}
+		return nil, &errtypes.ClusterError{Msg: fmt.Sprintf("%s: output truncated; cannot parse", msgPrefix)}
 	}
 	return []byte(result.Stdout), nil
 }
