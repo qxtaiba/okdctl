@@ -134,31 +134,45 @@ func (p *Phase) findNewestISO(dir string, patterns []string) (string, bool) {
 	return "", false
 }
 
-// minSCOSStreamMinor is the first OKD minor that publishes scos.json
-// (Stream CoreOS); earlier minors (4.15-4.18) ship Fedora CoreOS via
-// fcos.json. The schema is identical at the path the parser walks.
+// minSCOSStreamMajor and minSCOSStreamMinor mark the first OKD release that
+// publishes scos.json (Stream CoreOS); earlier 4.x minors (4.15-4.18) ship
+// Fedora CoreOS via fcos.json. Every 5.x+ major ships scos.json exclusively.
+// The schema is identical at the path the parser walks.
 // Verified 2026-04-20 across release-4.14 through release-4.24.
-const minSCOSStreamMinor = 19
+const (
+	minSCOSStreamMajor = 4
+	minSCOSStreamMinor = 19
+)
 
 // streamRawBaseURL is the GitHub raw-content root for openshift/installer.
 // Tests override this to an httptest.Server URL for hermetic mocking.
 var streamRawBaseURL = "https://raw.githubusercontent.com"
 
-// coreOSStreamPin is the compile-time anchor for one OKD minor's stream JSON.
-// CommitSHA pins the openshift/installer tree (immutable); JSONSHA256 is the
-// SHA-256 of the JSON file at that commit, verified before the body is parsed.
-// Both must update together on OKD minor bumps — see README "Bumping the
-// CoreOS stream pin".
+// coreOSStreamPin is the compile-time anchor for one OKD release's stream
+// JSON. CommitSHA pins the openshift/installer tree (immutable); JSONSHA256
+// is the SHA-256 of the JSON file at that commit, verified before the body
+// is parsed. Both must update together on OKD version bumps — see README
+// "Bumping the CoreOS stream pin".
 type coreOSStreamPin struct {
 	CommitSHA  string
 	JSONSHA256 string
 }
 
-// streamPins maps each supported OKD minor to a pinned openshift/installer
-// commit SHA and the expected SHA-256 of its stream JSON file. Fetching from
-// release-4.X branch (mutable) is intentionally absent: an attacker who can
-// rewrite the JSON on that branch can also rewrite the sha256 field, making
-// DownloadCoreOSISO's integrity check meaningless.
+// okdVersionKey identifies one supported OKD release train by (major,
+// minor). Keying streamPins on minor alone would let a future 5.x version
+// collide with a pinned 4.x entry of the same minor number and silently
+// resolve to the wrong installer commit and SHA-256.
+type okdVersionKey struct {
+	Major int
+	Minor int
+}
+
+// streamPins maps each supported OKD (major, minor) release train to a
+// pinned openshift/installer commit SHA and the expected SHA-256 of its
+// stream JSON file. Fetching from release-X.Y branch (mutable) is
+// intentionally absent: an attacker who can rewrite the JSON on that branch
+// can also rewrite the sha256 field, making DownloadCoreOSISO's integrity
+// check meaningless.
 //
 // 4.15-4.18 share an identical fcos.json sha256 (the file content is
 // byte-equal on those four release branches at their pinned tips); goconst
@@ -167,28 +181,28 @@ type coreOSStreamPin struct {
 // a real diff in the next bump PR.
 //
 // To add or update a pin:
-//  1. git ls-remote https://github.com/openshift/installer release-4.X
+//  1. git ls-remote https://github.com/openshift/installer release-X.Y
 //  2. curl -sSfL https://raw.githubusercontent.com/openshift/installer/<SHA>/data/data/coreos/<fcos|scos>.json | sha256sum
 //  3. update CommitSHA and JSONSHA256 below; run make test.
 //
 // Tests may override this var to inject hermetic pin entries.
 //
 //nolint:goconst,nolintlint // see comment above re: 4.15-4.18 sha-equal-by-design
-var streamPins = map[int]coreOSStreamPin{
-	10: {CommitSHA: "62137b29c72f4303faeb325dce01bc358d68d2ad", JSONSHA256: "ba2d4f18b19d5de01261e52228d189c221f50302c4bc3b8e585a32668c4f01e5"},
-	11: {CommitSHA: "64675f82cb5be511953ef6eff2a9d76efa9cfe73", JSONSHA256: "7ed054b02d04baab3eacda3c13e060a30d6d221202be42bf38e5de1c0e155264"},
-	12: {CommitSHA: "b86064a94ccd47a4547bd16771de98dc36a4abb0", JSONSHA256: "31c97633aed443b33f9e3282b416750c9f4a43ce9fd2c8b3f716052045e0c869"},
-	13: {CommitSHA: "b3d2f7b8834666c220b88f7aee46ec9160274bcc", JSONSHA256: "7d84d832e0e8c28f52fda566318bb5afdb60829f7e6317cae9e163536e2706e4"},
-	14: {CommitSHA: "4dd5abdf12a97ef0f32f6774ab79fa8dc6482f34", JSONSHA256: "bbb0651c7363d416c7e38e1f4129345f0804913f736f842cfa2156733e3c7f41"},
-	15: {CommitSHA: "83c823bf5cb70c42dcbbc93306a570759ac6aaf8", JSONSHA256: "57f52e71f3f351bfdac77b1708e725a287e8df0239df7f6ff0b2883d73b10302"},
-	16: {CommitSHA: "441e0e5469d5698ce147c092c7c802d7c44b1557", JSONSHA256: "57f52e71f3f351bfdac77b1708e725a287e8df0239df7f6ff0b2883d73b10302"},
-	17: {CommitSHA: "b102c3acc6afdc1aed628f8d5604a467fba9b8c4", JSONSHA256: "57f52e71f3f351bfdac77b1708e725a287e8df0239df7f6ff0b2883d73b10302"},
-	18: {CommitSHA: "488926dc2c95d96460ee9939929a76ed23e1c596", JSONSHA256: "57f52e71f3f351bfdac77b1708e725a287e8df0239df7f6ff0b2883d73b10302"},
-	19: {CommitSHA: "9cdc31344d455cbc638d490cdc32c978e0b822c1", JSONSHA256: "734ab37d8ac19e8b4c5535c11b1432ffefad9403032d37eda873b1168595ab2c"},
-	20: {CommitSHA: "13a5f6b91e1636b63bb0956c6fa49fab236e71c1", JSONSHA256: "cc5912af5ae98f6fed3e09e545bc8409ce83843a9fc3b11d06ef315c903d925d"},
-	21: {CommitSHA: "9a415c497e70d5234c473325cf17aeef78c03544", JSONSHA256: "3bfc32f58e48880e3fb6ef56b19f8ba41411ba35416fef2d881d5adaf474600c"},
-	22: {CommitSHA: "b8a967b9336275a333e96a658dcccebbc0fb8fea", JSONSHA256: "3bfc32f58e48880e3fb6ef56b19f8ba41411ba35416fef2d881d5adaf474600c"},
-	23: {CommitSHA: "51977d88a06e9e2c95d31f5e33543e72cbd38dfa", JSONSHA256: "3bfc32f58e48880e3fb6ef56b19f8ba41411ba35416fef2d881d5adaf474600c"},
+var streamPins = map[okdVersionKey]coreOSStreamPin{
+	{4, 10}: {CommitSHA: "62137b29c72f4303faeb325dce01bc358d68d2ad", JSONSHA256: "ba2d4f18b19d5de01261e52228d189c221f50302c4bc3b8e585a32668c4f01e5"},
+	{4, 11}: {CommitSHA: "64675f82cb5be511953ef6eff2a9d76efa9cfe73", JSONSHA256: "7ed054b02d04baab3eacda3c13e060a30d6d221202be42bf38e5de1c0e155264"},
+	{4, 12}: {CommitSHA: "b86064a94ccd47a4547bd16771de98dc36a4abb0", JSONSHA256: "31c97633aed443b33f9e3282b416750c9f4a43ce9fd2c8b3f716052045e0c869"},
+	{4, 13}: {CommitSHA: "b3d2f7b8834666c220b88f7aee46ec9160274bcc", JSONSHA256: "7d84d832e0e8c28f52fda566318bb5afdb60829f7e6317cae9e163536e2706e4"},
+	{4, 14}: {CommitSHA: "4dd5abdf12a97ef0f32f6774ab79fa8dc6482f34", JSONSHA256: "bbb0651c7363d416c7e38e1f4129345f0804913f736f842cfa2156733e3c7f41"},
+	{4, 15}: {CommitSHA: "83c823bf5cb70c42dcbbc93306a570759ac6aaf8", JSONSHA256: "57f52e71f3f351bfdac77b1708e725a287e8df0239df7f6ff0b2883d73b10302"},
+	{4, 16}: {CommitSHA: "441e0e5469d5698ce147c092c7c802d7c44b1557", JSONSHA256: "57f52e71f3f351bfdac77b1708e725a287e8df0239df7f6ff0b2883d73b10302"},
+	{4, 17}: {CommitSHA: "b102c3acc6afdc1aed628f8d5604a467fba9b8c4", JSONSHA256: "57f52e71f3f351bfdac77b1708e725a287e8df0239df7f6ff0b2883d73b10302"},
+	{4, 18}: {CommitSHA: "488926dc2c95d96460ee9939929a76ed23e1c596", JSONSHA256: "57f52e71f3f351bfdac77b1708e725a287e8df0239df7f6ff0b2883d73b10302"},
+	{4, 19}: {CommitSHA: "9cdc31344d455cbc638d490cdc32c978e0b822c1", JSONSHA256: "734ab37d8ac19e8b4c5535c11b1432ffefad9403032d37eda873b1168595ab2c"},
+	{4, 20}: {CommitSHA: "13a5f6b91e1636b63bb0956c6fa49fab236e71c1", JSONSHA256: "cc5912af5ae98f6fed3e09e545bc8409ce83843a9fc3b11d06ef315c903d925d"},
+	{4, 21}: {CommitSHA: "9a415c497e70d5234c473325cf17aeef78c03544", JSONSHA256: "3bfc32f58e48880e3fb6ef56b19f8ba41411ba35416fef2d881d5adaf474600c"},
+	{4, 22}: {CommitSHA: "b8a967b9336275a333e96a658dcccebbc0fb8fea", JSONSHA256: "3bfc32f58e48880e3fb6ef56b19f8ba41411ba35416fef2d881d5adaf474600c"},
+	{4, 23}: {CommitSHA: "51977d88a06e9e2c95d31f5e33543e72cbd38dfa", JSONSHA256: "3bfc32f58e48880e3fb6ef56b19f8ba41411ba35416fef2d881d5adaf474600c"},
 }
 
 // coreOSStreamData is the subset of fcos.json / scos.json DetectCoreOSVersion
@@ -212,19 +226,18 @@ type coreOSStreamData struct {
 	} `json:"architectures"`
 }
 
-// parseOKDMinor extracts the minor from an OKD version like
-// "4.19.0-0.okd-2025-…". The bool is true only when both major and minor
-// scanned successfully; callers must refuse the request when it is false.
-func parseOKDMinor(version string) (int, bool) {
-	var major, minor int
+// parseOKDVersion extracts major and minor from an OKD version like
+// "4.19.0-0.okd-2025-…". The bool is true only when both scanned
+// successfully; callers must refuse the request when it is false.
+func parseOKDVersion(version string) (major, minor int, ok bool) {
 	n, _ := fmt.Sscanf(version, "%d.%d", &major, &minor)
-	return minor, n == 2
+	return major, minor, n == 2
 }
 
-// streamFileForMinor returns the data file an OKD minor publishes:
-// fcos.json for 4.15-4.18, scos.json for 4.19+.
-func streamFileForMinor(minor int) string {
-	if minor >= minSCOSStreamMinor {
+// streamFileForVersion returns the data file an OKD (major, minor) release
+// publishes: fcos.json for 4.15-4.18, scos.json for 4.19+ and every 5.x+.
+func streamFileForVersion(major, minor int) string {
+	if major > minSCOSStreamMajor || (major == minSCOSStreamMajor && minor >= minSCOSStreamMinor) {
 		return "scos.json"
 	}
 	return "fcos.json"
@@ -289,20 +302,21 @@ func coreOSInfoFromStream(sd *coreOSStreamData) (*CoreOSInfo, error) {
 
 // DetectCoreOSVersion returns the CoreOS ISO location, checksum, and release
 // for the host architecture. okdVersion picks the right upstream data file:
-// 4.15-4.18 → fcos.json (Fedora CoreOS), 4.19+ → scos.json (Stream CoreOS).
-// A malformed okdVersion or an unpinned minor fails fast as a ConfigError.
+// 4.15-4.18 → fcos.json (Fedora CoreOS), 4.19+ and every 5.x → scos.json
+// (Stream CoreOS). A malformed okdVersion or an unpinned (major, minor)
+// fails fast as a ConfigError.
 func (p *Phase) DetectCoreOSVersion(ctx context.Context, okdVersion string) (*CoreOSInfo, error) {
-	minor, ok := parseOKDMinor(okdVersion)
+	major, minor, ok := parseOKDVersion(okdVersion)
 	if !ok {
 		return nil, &errtypes.ConfigError{Msg: fmt.Sprintf("invalid OKD version %q: cannot parse major.minor", okdVersion)}
 	}
-	pin, ok := streamPins[minor]
+	pin, ok := streamPins[okdVersionKey{Major: major, Minor: minor}]
 	if !ok {
-		return nil, &errtypes.ConfigError{Msg: fmt.Sprintf("OKD minor 4.%d is not pinned; update streamPins in coreos.go", minor)}
+		return nil, &errtypes.ConfigError{Msg: fmt.Sprintf("OKD %d.%d is not pinned; update streamPins in coreos.go", major, minor)}
 	}
 	streamURL := fmt.Sprintf(
 		"%s/openshift/installer/%s/data/data/coreos/%s",
-		streamRawBaseURL, pin.CommitSHA, streamFileForMinor(minor),
+		streamRawBaseURL, pin.CommitSHA, streamFileForVersion(major, minor),
 	)
 	sd, err := fetchCoreOSStream(ctx, streamURL, pin.JSONSHA256)
 	if err != nil {

@@ -118,23 +118,26 @@ func newTestPhase(t *testing.T) *Phase {
 	)}
 }
 
-func TestParseOKDMinor(t *testing.T) {
+func TestParseOKDVersion(t *testing.T) {
 	cases := []struct {
-		in     string
-		want   int
-		wantOK bool
+		in        string
+		wantMajor int
+		wantMinor int
+		wantOK    bool
 	}{
-		{"4.19.0-0.okd-2025-05-01-123456", 19, true},
-		{"4.21.0-okd-scos.10", 21, true},
-		{"4.20.0-0.okd-2025-07-01-000000", 20, true},
-		{"4.15.0-0.okd-2024-01-27-040212", 15, true},
-		{"not-a-version", 0, false},
-		{"", 0, false},
+		{"4.19.0-0.okd-2025-05-01-123456", 4, 19, true},
+		{"4.21.0-okd-scos.10", 4, 21, true},
+		{"4.20.0-0.okd-2025-07-01-000000", 4, 20, true},
+		{"4.15.0-0.okd-2024-01-27-040212", 4, 15, true},
+		{"5.0.0-okd-scos.ec.4", 5, 0, true},
+		{"not-a-version", 0, 0, false},
+		{"", 0, 0, false},
 	}
 	for _, tt := range cases {
-		got, ok := parseOKDMinor(tt.in)
-		if ok != tt.wantOK || got != tt.want {
-			t.Errorf("parseOKDMinor(%q) = (%d, %v), want (%d, %v)", tt.in, got, ok, tt.want, tt.wantOK)
+		gotMajor, gotMinor, ok := parseOKDVersion(tt.in)
+		if ok != tt.wantOK || gotMajor != tt.wantMajor || gotMinor != tt.wantMinor {
+			t.Errorf("parseOKDVersion(%q) = (%d, %d, %v), want (%d, %d, %v)",
+				tt.in, gotMajor, gotMinor, ok, tt.wantMajor, tt.wantMinor, tt.wantOK)
 		}
 	}
 }
@@ -154,21 +157,24 @@ func TestDetectCoreOSVersion_malformedVersion(t *testing.T) {
 	}
 }
 
-func TestStreamFileForMinor(t *testing.T) {
+func TestStreamFileForVersion(t *testing.T) {
 	cases := []struct {
-		minor int
-		want  string
+		major, minor int
+		want         string
 	}{
-		{0, "fcos.json"},
-		{15, "fcos.json"},
-		{18, "fcos.json"},
-		{19, "scos.json"},
-		{20, "scos.json"},
-		{99, "scos.json"},
+		{4, 0, "fcos.json"},
+		{4, 15, "fcos.json"},
+		{4, 18, "fcos.json"},
+		{4, 19, "scos.json"},
+		{4, 20, "scos.json"},
+		{4, 99, "scos.json"},
+		{5, 0, "scos.json"},
+		{5, 19, "scos.json"},
+		{6, 0, "scos.json"},
 	}
 	for _, tt := range cases {
-		if got := streamFileForMinor(tt.minor); got != tt.want {
-			t.Errorf("streamFileForMinor(%d) = %q, want %q", tt.minor, got, tt.want)
+		if got := streamFileForVersion(tt.major, tt.minor); got != tt.want {
+			t.Errorf("streamFileForVersion(%d, %d) = %q, want %q", tt.major, tt.minor, got, tt.want)
 		}
 	}
 }
@@ -229,8 +235,8 @@ func TestDetectCoreOSVersion_scosFor419(t *testing.T) {
 	t.Cleanup(func() { streamRawBaseURL = old })
 
 	oldPins := streamPins
-	streamPins = map[int]coreOSStreamPin{
-		19: {CommitSHA: testSHA, JSONSHA256: hex.EncodeToString(sum[:])},
+	streamPins = map[okdVersionKey]coreOSStreamPin{
+		{4, 19}: {CommitSHA: testSHA, JSONSHA256: hex.EncodeToString(sum[:])},
 	}
 	t.Cleanup(func() { streamPins = oldPins })
 
@@ -265,8 +271,8 @@ func TestDetectCoreOSVersion_fcosFor418(t *testing.T) {
 	t.Cleanup(func() { streamRawBaseURL = old })
 
 	oldPins := streamPins
-	streamPins = map[int]coreOSStreamPin{
-		18: {CommitSHA: testSHA, JSONSHA256: hex.EncodeToString(sum[:])},
+	streamPins = map[okdVersionKey]coreOSStreamPin{
+		{4, 18}: {CommitSHA: testSHA, JSONSHA256: hex.EncodeToString(sum[:])},
 	}
 	t.Cleanup(func() { streamPins = oldPins })
 
@@ -294,13 +300,92 @@ func TestDetectCoreOSVersion_fetchFailErrors(t *testing.T) {
 	t.Cleanup(func() { streamRawBaseURL = old })
 
 	oldPins := streamPins
-	streamPins = map[int]coreOSStreamPin{
-		19: {CommitSHA: "testpin0000000000000000000000000000000419", JSONSHA256: "aaaa"},
+	streamPins = map[okdVersionKey]coreOSStreamPin{
+		{4, 19}: {CommitSHA: "testpin0000000000000000000000000000000419", JSONSHA256: "aaaa"},
 	}
 	t.Cleanup(func() { streamPins = oldPins })
 
 	p := newTestPhase(t)
 	if _, err := p.DetectCoreOSVersion(context.Background(), "4.19.0-0.okd-2025-05-01-000000"); err == nil {
 		t.Fatal("expected error when upstream fetch fails, got nil")
+	}
+}
+
+// TestDetectCoreOSVersion_majorMinorDistinctness pins both "5.0" and a
+// synthetic "4.0" to different commits/checksums with the same minor number
+// (0) and asserts each resolves to its own pin — the (major, minor) key
+// prevents a 5.x version from colliding with an unrelated 4.x entry.
+func TestDetectCoreOSVersion_majorMinorDistinctness(t *testing.T) {
+	arch := platform.CoreOSArch()
+	body4 := makeStreamJSON(arch, "39.20240101.3.0", "https://example.com/fcos4.iso")
+	sum4 := sha256.Sum256(body4)
+	body5 := makeStreamJSON(arch, "9.0.20260601-0", "https://example.com/scos5.iso")
+	sum5 := sha256.Sum256(body5)
+
+	const (
+		testSHA4 = "testpin0000000000000000000000000000000400"
+		testSHA5 = "testpin0000000000000000000000000000000500"
+	)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.Contains(r.URL.Path, testSHA4):
+			_, _ = w.Write(body4)
+		case strings.Contains(r.URL.Path, testSHA5):
+			_, _ = w.Write(body5)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	old := streamRawBaseURL
+	streamRawBaseURL = srv.URL
+	t.Cleanup(func() { streamRawBaseURL = old })
+
+	oldPins := streamPins
+	streamPins = map[okdVersionKey]coreOSStreamPin{
+		{4, 0}: {CommitSHA: testSHA4, JSONSHA256: hex.EncodeToString(sum4[:])},
+		{5, 0}: {CommitSHA: testSHA5, JSONSHA256: hex.EncodeToString(sum5[:])},
+	}
+	t.Cleanup(func() { streamPins = oldPins })
+
+	p := newTestPhase(t)
+
+	info4, err := p.DetectCoreOSVersion(context.Background(), "4.0.0-0.okd-2024-01-01-000000")
+	if err != nil {
+		t.Fatalf("DetectCoreOSVersion 4.0: %v", err)
+	}
+	if info4.ISOUrl != "https://example.com/fcos4.iso" {
+		t.Errorf("4.0 ISOUrl = %q, want fcos4.iso pin", info4.ISOUrl)
+	}
+
+	info5, err := p.DetectCoreOSVersion(context.Background(), "5.0.0-okd-scos.ec.4")
+	if err != nil {
+		t.Fatalf("DetectCoreOSVersion 5.0: %v", err)
+	}
+	if info5.ISOUrl != "https://example.com/scos5.iso" {
+		t.Errorf("5.0 ISOUrl = %q, want scos5.iso pin", info5.ISOUrl)
+	}
+
+	if info4.ISOUrl == info5.ISOUrl {
+		t.Fatal("4.0 and 5.0 pins resolved to the same ISO; major.minor key is not distinguishing them")
+	}
+}
+
+// TestDetectCoreOSVersion_unpinned5x asserts an unpinned 5.x version fails
+// with the requested major.minor in the error, not a stale "4.%d" message.
+func TestDetectCoreOSVersion_unpinned5x(t *testing.T) {
+	p := newTestPhase(t)
+	_, err := p.DetectCoreOSVersion(context.Background(), "5.0.0-okd-scos.ec.4")
+	if err == nil {
+		t.Fatal("expected error for unpinned 5.0, got nil")
+	}
+	var ce *errtypes.ConfigError
+	if !errors.As(err, &ce) {
+		t.Fatalf("expected *errtypes.ConfigError, got %T: %v", err, err)
+	}
+	if !strings.Contains(err.Error(), "5.0") {
+		t.Errorf("error %q does not mention requested version 5.0", err.Error())
 	}
 }
