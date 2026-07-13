@@ -200,7 +200,11 @@ func (r *Runner) resizeOneNode(ctx context.Context, t resizeTarget, role nodetyp
 	if err := r.Cluster.Drain(ctx, t.name, cluster.DrainOptions{
 		IgnoreDaemonsets: true,
 		DeleteEmptyDir:   true,
-		Timeout:          "10m",
+		// Control-plane nodes host standalone guard pods (etcd-guard,
+		// kube-apiserver-guard, …) that declare no controller; oc adm drain
+		// refuses those without --force, so a master resize needs Force.
+		Force:   isMaster,
+		Timeout: "10m",
 	}); err != nil {
 		return &errtypes.ClusterError{Msg: fmt.Sprintf("drain %s (node left cordoned)", t.name), Err: err}
 	}
