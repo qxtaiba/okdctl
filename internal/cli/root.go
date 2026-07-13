@@ -12,6 +12,7 @@ package cli
 
 import (
 	"context"
+	"crypto/rand"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -25,7 +26,6 @@ import (
 
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/logutil"
-	"github.com/qxtaiba/okdctl/internal/system"
 	"github.com/qxtaiba/okdctl/internal/tui"
 	"github.com/qxtaiba/okdctl/internal/version"
 )
@@ -95,7 +95,7 @@ func Execute() {
 }
 
 func execute() (code int) {
-	tui.SetRunID(system.NewUUIDv4())
+	tui.SetRunID(rand.Text())
 	start := time.Now()
 	tui.Info("okdctl: started", tui.LF("argv", logutil.RedactableArgv(os.Args[1:])))
 	defer func() {

@@ -207,8 +207,8 @@ write the comment — then it carries real information.
   waits and fails with a clean diagnostic rather than failing immediately.
 - `internal/system` holds small, dependency-light host primitives with no
   narrower existing home: filesystem helpers, sudo elevation, systemd
-  control, a generic `WaitFor` poll loop, and byte/UUID primitives
-  (`ZeroBytes`, `NewUUIDv4`). It does not execute arbitrary subprocesses —
+  control, a generic `WaitFor` poll loop, and byte primitives (`ZeroBytes`).
+  It does not execute arbitrary subprocesses —
   that's `internal/executor`. Give a new helper a narrower home first
   (executor for subprocess exec, logutil for logging, credentials for
   secrets) before defaulting it into `internal/system`.

@@ -8,6 +8,7 @@ import (
 	"archive/tar"
 	"compress/gzip"
 	"context"
+	"crypto/rand"
 	"errors"
 	"fmt"
 	"io"
@@ -26,7 +27,6 @@ import (
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/executor"
 	"github.com/qxtaiba/okdctl/internal/logutil"
-	"github.com/qxtaiba/okdctl/internal/system"
 	"github.com/qxtaiba/okdctl/internal/tui"
 	"github.com/qxtaiba/okdctl/internal/version"
 )
@@ -90,7 +90,7 @@ type manifestEntry struct {
 // opts.OutPath. Section failures are recorded in the manifest rather than
 // aborting; only tarball-level failures return an error.
 func Write(ctx context.Context, opts Options) (retErr error) {
-	bundleID := system.NewUUIDv4()
+	bundleID := rand.Text()
 	bundleAt := time.Now().UTC()
 
 	outPath := opts.OutPath
