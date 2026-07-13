@@ -15,7 +15,11 @@ func TestNodeIndex(t *testing.T) {
 		{"worker2", 2, true},
 		{"master0", 0, true},
 		{"grappleberry-worker11", 11, true},
+		// Kubernetes reports FQDNs; the index is in the first label, not the domain.
+		{"grappleberry-worker0.grappleberry.k8s.local", 0, true},
+		{"grappleberry-master2.grappleberry.k8s.local", 2, true},
 		{"bootstrap", 0, false},
+		{"bootstrap.grappleberry.k8s.local", 0, false},
 		{"", 0, false},
 		{"node-", 0, false},
 	}
