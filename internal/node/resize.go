@@ -72,11 +72,23 @@ func (r *Runner) Resize(ctx context.Context, scope ResizeScope, opts ResizeOptio
 			"delta_mib_per_node", delta, "nodes", len(targets))
 	}
 
+	plan := resizePlan(role, targets, r.Cfg.Cluster.Name, opts)
+
 	// Persist only outside dry-run: a dry-run must write nothing to disk. The
 	// truthful plan preview instead comes from sizingVars passed as -var
 	// overrides, so terraform sees the new sizing without a tfvars/config write.
 	sizingVars := roleSizingVars(role, opts)
-	if !r.DryRun {
+	if r.DryRun {
+		r.preview(&plan)
+	} else {
+		proceed, err := r.confirm(ctx, &plan)
+		if err != nil {
+			return err
+		}
+		if !proceed {
+			r.Log.Info("node: resize cancelled", "role", string(role))
+			return ErrDeclined
+		}
 		r.applyRoleSizing(role, opts)
 		if err := r.persistTopology(); err != nil {
 			return &errtypes.ClusterError{Msg: "persist topology", Err: err}
@@ -104,6 +116,31 @@ func (r *Runner) Resize(ctx context.Context, scope ResizeScope, opts ResizeOptio
 			"role", string(role), "memory_mb", opts.MemoryMB)
 	}
 	return nil
+}
+
+// resizePlan builds the informed-confirmation summary for a resize: one
+// in-place update per target node, carrying the resolved memory/cpu targets.
+func resizePlan(role nodetypes.NodeRole, targets []resizeTarget, clusterName string, opts ResizeOptions) OpPlan {
+	nodes := make([]PlanNode, len(targets))
+	for i, t := range targets {
+		addr := workerAddress(t.index)
+		if role == nodetypes.RoleMaster {
+			addr = masterAddress(t.index)
+		}
+		nodes[i] = PlanNode{
+			Name:      t.name,
+			Role:      role,
+			TFAddress: addr,
+			Action:    terraform.PlanActionUpdate,
+		}
+	}
+	return OpPlan{
+		Op:       OpResize,
+		Cluster:  clusterName,
+		Nodes:    nodes,
+		MemoryMB: opts.MemoryMB,
+		CPU:      opts.CPU,
+	}
 }
 
 // roleSizingVars builds the plan-time -var overrides for a per-role resize so a

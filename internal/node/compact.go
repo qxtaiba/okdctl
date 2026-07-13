@@ -75,7 +75,10 @@ func (r *Runner) Compact(ctx context.Context, opts CompactOptions) error {
 		return err
 	}
 
+	plan := compactPlan(pf, r.Cfg.Cluster.Name, opts)
+
 	if r.DryRun {
+		r.preview(&plan)
 		r.reportCompactPlan(workers, masters, pf, opts)
 		return pf.blockErr
 	}
@@ -83,7 +86,22 @@ func (r *Runner) Compact(ctx context.Context, opts CompactOptions) error {
 		return pf.blockErr
 	}
 
-	// Preflight passed: only now mutate the control plane.
+	proceed, err := r.confirm(ctx, &plan)
+	if err != nil {
+		return err
+	}
+	if !proceed {
+		r.Log.Info("node: compact cancelled", "cluster", r.Cfg.Cluster.Name)
+		return ErrDeclined
+	}
+
+	// The inner RemoveWorker/Resize calls run under the consent granted above;
+	// suppress their gates so no mid-teardown prompt can abort a half-executed
+	// sequence and no inner decline can be conflated with success.
+	r.preConsented = true
+	defer func() { r.preConsented = false }()
+
+	// Preflight passed and confirmed: only now mutate the control plane.
 	if err := r.enableSchedulableAndIngress(ctx, opts.IngressReplicas); err != nil {
 		return err
 	}
@@ -235,6 +253,33 @@ func (r *Runner) compactHybridError(removed, total int, failedNode string, cause
 	return fmt.Errorf(
 		"compact: remove worker %s (%d of %d workers already removed; the control plane is already schedulable with the compact IngressController applied — resolve the cause and re-run 'okdctl cluster compact' to remove the remaining %d worker(s), already-removed workers stay gone): %w",
 		failedNode, removed, total, total-removed, cause)
+}
+
+// compactPlan builds the informed-confirmation summary from the preflight
+// verdicts: one worker delete per verdict (in removal order) carrying its OSD /
+// ingress placement and any guard/plan refusal, plus the master-grow target.
+func compactPlan(pf compactPreflight, clusterName string, opts CompactOptions) OpPlan {
+	nodes := make([]PlanNode, 0, len(pf.verdicts))
+	for i := range pf.verdicts {
+		v := &pf.verdicts[i]
+		nodes = append(nodes, PlanNode{
+			Name:      v.node,
+			Role:      nodetypes.RoleWorker,
+			TFAddress: workerAddress(v.index),
+			Action:    terraform.PlanActionDelete,
+			OSDs:      v.osds,
+			Ingress:   v.ingress,
+			Blocked:   v.blocked,
+		})
+	}
+	return OpPlan{
+		Op:                 OpCompact,
+		Cluster:            clusterName,
+		Nodes:              nodes,
+		DrainTimeout:       "10m",
+		GrowMasterMemoryMB: opts.GrowMasterMemoryMB,
+		IngressReplicas:    opts.IngressReplicas,
+	}
 }
 
 // reportCompactPlan prints the ordered dry-run action list with per-node

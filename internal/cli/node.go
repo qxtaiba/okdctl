@@ -2,8 +2,12 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io"
+	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -18,6 +22,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/infrastructure/terraform"
 	"github.com/qxtaiba/okdctl/internal/node"
 	"github.com/qxtaiba/okdctl/internal/nodetypes"
+	"github.com/qxtaiba/okdctl/internal/render"
 	"github.com/qxtaiba/okdctl/internal/runlock"
 	"github.com/qxtaiba/okdctl/internal/tui"
 )
@@ -112,29 +117,56 @@ func init() {
 	rootCmd.AddCommand(nodeCmd)
 }
 
+// nodeConsent carries the per-command consent state buildNodeRunner needs to
+// wire the informed-confirmation flow, passed explicitly rather than read from
+// shared package globals so the node and cluster commands never alias flags.
+// twoStage requests the destroy-grade gate (typed cluster name + y/N) used by
+// the VM-destroying verbs; resize passes false for a single y/N.
+type nodeConsent struct {
+	yes            bool
+	confirmCluster string
+	dryRun         bool
+	twoStage       bool
+}
+
 // nodeRunnerCtx bundles the disposable resources a node op holds so RunE
 // bodies can defer a single cleanup. HostTotalMiB/HostAllocatedMiB are the
 // read-only Proxmox memory-budget probe results (zero when the probe was
-// skipped or failed — the guard then warns instead of enforcing).
+// skipped or failed — the guard then warns instead of enforcing). captured is
+// the plan the confirm/preview hook observed, reused for the completion box.
 type nodeRunnerCtx struct {
 	runner           *node.Runner
 	release          func()
 	HostTotalMiB     int
 	HostAllocatedMiB int
+	captured         *node.OpPlan
+	dryRun           bool
 }
 
 func (n *nodeRunnerCtx) cleanup() { n.release() }
 
+// complete prints the deploy-family completion box for a finished mutating op,
+// skipping dry-runs (which already printed their own box). A declined op never
+// reaches here: its RunE maps node.ErrDeclined to a clean exit before calling
+// complete. The captured==nil guard is a nil-safety backstop.
+func (n *nodeRunnerCtx) complete(w io.Writer, elapsed time.Duration) {
+	if n.dryRun || n.captured == nil {
+		return
+	}
+	fmt.Fprint(w, render.NodeOpComplete(n.captured, elapsed))
+}
+
 // buildNodeRunner resolves the workspace, migrates the terraform root if it
 // predates node-lifecycle support, loads credentials, and wires a node.Runner
-// under the project run lock. The returned cleanup zeroizes credentials and
+// under the project run lock. It installs the informed-confirmation hook (or the
+// dry-run preview) from consent. The returned cleanup zeroizes credentials and
 // releases the lock.
-func buildNodeRunner(ctx context.Context, cfg *config.Config, verb string, dryRun, probeHost bool) (*nodeRunnerCtx, error) {
+func buildNodeRunner(ctx context.Context, cfg *config.Config, verb string, consent nodeConsent, probeHost bool) (*nodeRunnerCtx, error) {
 	projectRoot, err := resolveProjectRootOrDie()
 	if err != nil {
 		return nil, err
 	}
-	if err := ensureNodeOpsWorkspace(ctx, projectRoot, nodeYes, dryRun); err != nil {
+	if err := ensureNodeOpsWorkspace(ctx, projectRoot, consent.yes, consent.dryRun); err != nil {
 		return nil, err
 	}
 
@@ -171,7 +203,7 @@ func buildNodeRunner(ctx context.Context, cfg *config.Config, verb string, dryRu
 	}
 
 	runner := node.NewRunner(cl, tf, cfg, projectRoot, cfgFile, tfEnv, tui.RunID(), tui.SimpleLogger())
-	runner.DryRun = dryRun
+	runner.DryRun = consent.dryRun
 	runner.Reporter = func(desc string) func() { return tui.StartSpinner(ctx, desc) }
 
 	// A resize takes effect only after a Proxmox power-cycle (bpg/proxmox changes
@@ -187,16 +219,56 @@ func buildNodeRunner(ctx context.Context, cfg *config.Config, verb string, dryRu
 		})
 	}
 
-	return &nodeRunnerCtx{
+	rc := &nodeRunnerCtx{
 		runner:           runner,
 		HostTotalMiB:     hostTotalMiB,
 		HostAllocatedMiB: hostAllocatedMiB,
+		dryRun:           consent.dryRun,
 		release: func() {
 			lock.Release()
 			tf.ZeroizeEnv()
 			creds.Zeroize()
 		},
-	}, nil
+	}
+	if consent.dryRun {
+		runner.Preview = func(plan *node.OpPlan) {
+			rc.captured = plan
+			fmt.Fprint(os.Stdout, render.NodeOpDryRun(plan))
+		}
+	} else {
+		runner.Confirm = nodeConfirmHook(rc, consent, cfg.Cluster.Name)
+	}
+	return rc, nil
+}
+
+// nodeConfirmHook builds the guards-before-prompt callback: it always prints the
+// informed box (so --yes still surfaces the blast radius), then runs the gate
+// unless --yes was passed. It records the plan for the completion box. The box
+// and prompt share stderr so they never interleave with piped stdout data, and
+// the hook is invoked with no spinner span open.
+func nodeConfirmHook(rc *nodeRunnerCtx, consent nodeConsent, clusterName string) node.ConfirmFunc {
+	return func(ctx context.Context, plan *node.OpPlan) (bool, error) {
+		rc.captured = plan
+		fmt.Fprint(os.Stderr, render.NodeOpConfirm(plan))
+		if consent.yes {
+			return true, nil
+		}
+		return runNodeGate(ctx, consent.twoStage, clusterName)
+	}
+}
+
+// runNodeGate runs the interactive consent gate: destroy-grade verbs
+// (twoStage) require the operator to type the exact cluster name before the
+// final y/N; resize needs only the y/N.
+func runNodeGate(ctx context.Context, twoStage bool, clusterName string) (bool, error) {
+	if twoStage {
+		nameOK, err := promptForClusterNameConfirmation(ctx, clusterName,
+			fmt.Sprintf("type cluster name %q to confirm: ", clusterName))
+		if err != nil || !nameOK {
+			return false, err
+		}
+	}
+	return promptForConfirmation(ctx, "proceed? [y/N]: ")
 }
 
 // runHostBudgetProbe reads host memory and datastore headroom from the Proxmox
@@ -300,28 +372,27 @@ func runNodeRemove(cmd *cobra.Command, args []string) error {
 	if err := confirmClusterMatches(nodeYes, nodeConfirmCluster, cfg.Cluster.Name, "node remove"); err != nil {
 		return err
 	}
-	if !nodeYes && !nodeDryRun {
-		proceed, err := promptForConfirmation(cmd.Context(), fmt.Sprintf("remove node %q from cluster %q? [y/N]: ", target, cfg.Cluster.Name))
-		if err != nil {
-			return err
-		}
-		if !proceed {
-			tui.Info("cancelled")
-			return nil
-		}
-	}
 
-	rc, err := buildNodeRunner(cmd.Context(), cfg, "remove", nodeDryRun, false)
+	consent := nodeConsent{yes: nodeYes, confirmCluster: nodeConfirmCluster, dryRun: nodeDryRun, twoStage: true}
+	rc, err := buildNodeRunner(cmd.Context(), cfg, "remove", consent, false)
 	if err != nil {
 		return err
 	}
 	defer rc.cleanup()
 
-	return rc.runner.RemoveWorker(cmd.Context(), target, node.RemoveOptions{
+	start := time.Now()
+	if err := rc.runner.RemoveWorker(cmd.Context(), target, node.RemoveOptions{
 		ForceStorage: nodeForceStorage,
 		SkipDrain:    nodeSkipDrain,
 		DrainTimeout: nodeDrainTimeout,
-	})
+	}); err != nil {
+		if errors.Is(err, node.ErrDeclined) {
+			return nil
+		}
+		return err
+	}
+	rc.complete(cmd.OutOrStdout(), time.Since(start))
+	return nil
 }
 
 func runNodeResize(cmd *cobra.Command, args []string) error {
@@ -340,30 +411,28 @@ func runNodeResize(cmd *cobra.Command, args []string) error {
 	if err := confirmClusterMatches(nodeYes, nodeConfirmCluster, cfg.Cluster.Name, "node resize"); err != nil {
 		return err
 	}
-	if !nodeYes && !nodeDryRun {
-		prompt := fmt.Sprintf("resize %s to %s in cluster %q? [y/N]: ", args[0], describeResizeChange(nodeResizeMemoryMB, nodeResizeCPU), cfg.Cluster.Name)
-		proceed, err := promptForConfirmation(cmd.Context(), prompt)
-		if err != nil {
-			return err
-		}
-		if !proceed {
-			tui.Info("cancelled")
-			return nil
-		}
-	}
 
-	rc, err := buildNodeRunner(cmd.Context(), cfg, "resize", nodeDryRun, true)
+	consent := nodeConsent{yes: nodeYes, confirmCluster: nodeConfirmCluster, dryRun: nodeDryRun, twoStage: false}
+	rc, err := buildNodeRunner(cmd.Context(), cfg, "resize", consent, true)
 	if err != nil {
 		return err
 	}
 	defer rc.cleanup()
 
-	return rc.runner.Resize(cmd.Context(), scope, node.ResizeOptions{
+	start := time.Now()
+	if err := rc.runner.Resize(cmd.Context(), scope, node.ResizeOptions{
 		MemoryMB:         nodeResizeMemoryMB,
 		CPU:              nodeResizeCPU,
 		HostTotalMiB:     rc.HostTotalMiB,
 		HostAllocatedMiB: rc.HostAllocatedMiB,
-	})
+	}); err != nil {
+		if errors.Is(err, node.ErrDeclined) {
+			return nil
+		}
+		return err
+	}
+	rc.complete(cmd.OutOrStdout(), time.Since(start))
+	return nil
 }
 
 // validateResizeFlags requires at least one resize dimension: an omitted
@@ -373,19 +442,6 @@ func validateResizeFlags(memoryMB, cpu int) error {
 		return &errtypes.UsageError{Msg: "resize requires at least one of --memory-mb or --cpu"}
 	}
 	return nil
-}
-
-// describeResizeChange renders the confirmation-prompt summary of a resize,
-// naming only the dimensions the caller is actually changing.
-func describeResizeChange(memoryMB, cpu int) string {
-	switch {
-	case memoryMB > 0 && cpu > 0:
-		return fmt.Sprintf("%d MiB, %d vCPU", memoryMB, cpu)
-	case memoryMB > 0:
-		return fmt.Sprintf("%d MiB", memoryMB)
-	default:
-		return fmt.Sprintf("%d vCPU", cpu)
-	}
 }
 
 func parseResizeScope(arg string) (node.ResizeScope, error) {

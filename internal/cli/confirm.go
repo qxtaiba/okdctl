@@ -75,8 +75,8 @@ func isConfirmResponse(response string) bool {
 // cluster name (case-sensitive) before a destructive op proceeds — a typo or
 // a plain "y" both deny, unlike promptForConfirmation's y/N gate. See
 // promptForLine for the ctx-cancellation and TTY-guard contract.
-func promptForClusterNameConfirmation(ctx context.Context, name string) (bool, error) {
-	response, err := promptForLine(ctx, "type cluster name to confirm destroy: ")
+func promptForClusterNameConfirmation(ctx context.Context, name, prompt string) (bool, error) {
+	response, err := promptForLine(ctx, prompt)
 	if err != nil {
 		return false, err
 	}

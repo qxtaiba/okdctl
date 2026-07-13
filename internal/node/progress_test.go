@@ -65,6 +65,7 @@ func TestReporterInvokedDuringMasterResize(t *testing.T) {
 
 	r, _, _ := seedRunner(t, fc, ftf, cfg)
 	r.DryRun = false
+	r.Power = &fakePower{}
 	rr := &recordingReporter{}
 	r.Reporter = rr.reporter()
 
@@ -102,6 +103,7 @@ func TestReporterInvokedDuringRemoveWorker(t *testing.T) {
 
 	r, _, _ := seedRunner(t, fc, ftf, cfg)
 	r.DryRun = false
+	r.Power = &fakePower{}
 	rr := &recordingReporter{}
 	r.Reporter = rr.reporter()
 
@@ -133,6 +135,7 @@ func TestReporterInvokedDuringCompact(t *testing.T) {
 
 	r, _, _ := seedRunner(t, fc, ftf, cfg)
 	r.DryRun = false
+	r.Power = &fakePower{}
 	rr := &recordingReporter{}
 	r.Reporter = rr.reporter()
 

@@ -5,13 +5,16 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"testing"
 
 	"github.com/qxtaiba/okdctl/internal/errtypes"
+	"github.com/qxtaiba/okdctl/internal/node"
 )
 
 func TestValidateResizeFlags(t *testing.T) {
@@ -152,21 +155,86 @@ func TestDryRunDoesNotPromptForMigration(t *testing.T) {
 	}
 }
 
-func TestDescribeResizeChange(t *testing.T) {
-	cases := []struct {
-		name          string
-		memoryMB, cpu int
-		want          string
-	}{
-		{"memory only", 16384, 0, "16384 MiB"},
-		{"cpu only", 0, 8, "8 vCPU"},
-		{"both", 16384, 8, "16384 MiB, 8 vCPU"},
+// captureStderr redirects os.Stderr around fn and returns what was written, so
+// a test can assert the informed box printed without polluting test output.
+func captureStderr(t *testing.T, fn func()) string {
+	t.Helper()
+	old := os.Stderr
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
 	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			if got := describeResizeChange(tc.memoryMB, tc.cpu); got != tc.want {
-				t.Errorf("describeResizeChange(%d, %d) = %q, want %q", tc.memoryMB, tc.cpu, got, tc.want)
-			}
-		})
+	os.Stderr = w
+	done := make(chan string, 1)
+	go func() {
+		b, _ := io.ReadAll(r)
+		done <- string(b)
+	}()
+	fn()
+	_ = w.Close()
+	os.Stderr = old
+	return <-done
+}
+
+func TestNodeConfirmHookYesPrintsBoxSkipsGate(t *testing.T) {
+	rc := &nodeRunnerCtx{}
+	hook := nodeConfirmHook(rc, nodeConsent{yes: true, twoStage: true}, "prod")
+
+	var ok bool
+	var hookErr error
+	out := captureStderr(t, func() {
+		ok, hookErr = hook(context.Background(), &node.OpPlan{Op: node.OpRemove, Cluster: "prod"})
+	})
+
+	if hookErr != nil || !ok {
+		t.Fatalf("--yes must proceed without prompting: ok=%v err=%v", ok, hookErr)
+	}
+	if rc.captured == nil {
+		t.Error("confirm hook must capture the plan for the completion box")
+	}
+	if !strings.Contains(out, "confirm worker removal") || !strings.Contains(out, "prod") {
+		t.Errorf("--yes still prints the informed box; got:\n%s", out)
+	}
+}
+
+func TestRunNodeGateSingleYN(t *testing.T) {
+	testStdinReader = strings.NewReader("y\n")
+	t.Cleanup(func() { testStdinReader = nil })
+
+	ok, err := runNodeGate(context.Background(), false, "prod")
+	if err != nil || !ok {
+		t.Fatalf("single y/N gate: ok=%v err=%v", ok, err)
+	}
+}
+
+func TestRunNodeGateTwoStageWrongNameDenies(t *testing.T) {
+	testStdinReader = strings.NewReader("staging\n")
+	t.Cleanup(func() { testStdinReader = nil })
+
+	ok, err := runNodeGate(context.Background(), true, "prod")
+	if err != nil {
+		t.Fatalf("wrong name should deny without error, got %v", err)
+	}
+	if ok {
+		t.Fatal("mistyped cluster name must deny the destroy-grade gate")
+	}
+}
+
+func TestRunNodeGateTwoStageHappyPath(t *testing.T) {
+	pr, pw := io.Pipe()
+	testStdinReader = pr
+	t.Cleanup(func() {
+		_ = pr.Close()
+		testStdinReader = nil
+	})
+	go func() {
+		_, _ = pw.Write([]byte("prod\n"))
+		_, _ = pw.Write([]byte("y\n"))
+		_ = pw.Close()
+	}()
+
+	ok, err := runNodeGate(context.Background(), true, "prod")
+	if err != nil || !ok {
+		t.Fatalf("typed name + y should proceed: ok=%v err=%v", ok, err)
 	}
 }

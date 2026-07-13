@@ -232,7 +232,7 @@ func validateDestroyFlagCombos(cfg *config.Config) error {
 // --confirm-cluster) followed by the y/N prompt.
 func confirmDestroyInteractive(ctx context.Context, cfg *config.Config) (bool, error) {
 	if len(destroyTargets) == 0 {
-		nameConfirmed, err := promptForClusterNameConfirmation(ctx, cfg.Cluster.Name)
+		nameConfirmed, err := promptForClusterNameConfirmation(ctx, cfg.Cluster.Name, "type cluster name to confirm destroy: ")
 		if err != nil || !nameConfirmed {
 			return false, err
 		}
