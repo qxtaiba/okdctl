@@ -187,18 +187,24 @@ Identical shape to the `addons[]` entries in `okdctl status --output=json`.
 
 ## `okdctl doctor --output=json`
 
-Preflight check envelope. Exit code follows the documented contract (0 = no
-failures, 2 = one or more failing checks) regardless of format.
+Preflight check envelope. Exit code follows the documented contract (0 =
+every check passes, 6 = one or more checks warn but none fail, 2 = one or
+more failing checks) regardless of format.
 
 ```json
 {
   "checks": [
     {"name": "host os", "severity": "ok", "detail": "fedora 41 (rhel family)"},
     {"name": "tools and packages/oc", "severity": "warn", "detail": "will be downloaded during setup"},
-    {"name": "host ports", "severity": "fail", "detail": "in use: 80, 443 (stop the conflicting service before deploy)"}
+    {"name": "host ports", "severity": "fail", "detail": "in use: 80, 443 (stop the conflicting service before deploy)"},
+    {"name": "cluster/nodes", "severity": "ok", "detail": "6 ready"},
+    {"name": "cluster/cluster operators", "severity": "fail", "detail": "degraded: ingress"},
+    {"name": "cluster/pending csrs", "severity": "warn", "detail": "2 awaiting approval"},
+    {"name": "cluster/etcd", "severity": "ok", "detail": "healthy (3/3 pods ready)"},
+    {"name": "cluster/signer expiry", "severity": "warn", "detail": "kube-apiserver-to-kubelet-signer expires in 21 days (2026-08-04) — rotate before kubelets fail"}
   ],
-  "failed": 1,
-  "warned": 1
+  "failed": 2,
+  "warned": 3
 }
 ```
 
@@ -209,6 +215,18 @@ failures, 2 = one or more failing checks) regardless of format.
 | `checks[].detail` | string | human-readable result text; omitted when empty |
 | `failed` | int | number of checks with severity `fail` |
 | `warned` | int | number of checks with severity `warn` |
+
+The `cluster/*` entries are a day-2 section that appears **only when a deployed
+cluster's kubeconfig is present** (located the same way `okdctl status` finds
+it); pre-deploy runs omit them entirely, so their presence is not guaranteed.
+The section reports `cluster/nodes` (NotReady = `fail`), `cluster/cluster
+operators` (Degraded = `fail`, Progressing = `warn`), `cluster/pending csrs`
+(any pending = `warn`), `cluster/etcd` (unhealthy = `fail`), and
+`cluster/signer expiry` (expired = `fail`, under 30 days = `warn`). A
+`cluster/csr recovery` entry is added only when pending CSRs coincide with
+NotReady nodes. When the cluster API is unreachable a single `cluster/api`
+`warn` entry replaces the section rather than five cascading errors. These
+entries feed `failed`/`warned` and the exit code exactly like the host checks.
 
 ## `okdctl version --output=json`
 
@@ -242,7 +260,8 @@ and scripted comparisons.
   consumers of its JSON output determine state from payload fields, not from
   the exit code. This guarantee applies to `status` only — other commands
   that emit JSON still exit non-zero on failure:
-  `doctor --output=json` exits `2` when any check is `[fail]`;
+  `doctor --output=json` exits `6` when checks warn but none fail, and
+  `2` when any check is `[fail]`;
   `addon verify --output=json` exits `4` when any probe fails.
   See [exit-codes.md](exit-codes.md) for the full code taxonomy.
 - Output is pretty-printed (`SetIndent("", "  ")`) for readability when piped

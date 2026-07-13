@@ -3,8 +3,15 @@
 `okdctl doctor` runs 10 preflight checks against the local environment
 before a deploy. The command is Linux-only (it reads `/etc/os-release`
 and uses Linux syscalls). Checks run in the order listed below; results
-are reported per-check. Exit code is 0 when there are no `[fail]`
-results (`[warn]` is tolerated), 2 (configuration error) otherwise.
+are reported per-check. Exit code is 0 when every check passes, 6 when
+one or more checks report `[warn]` and none report `[fail]`, and 2
+(configuration error) when any check reports `[fail]`. See
+[exit-codes.md](cli/exit-codes.md) for the full taxonomy.
+
+When a deployed cluster's kubeconfig is present (located the same way
+`okdctl status` finds it), doctor appends an 11th [day-2 cluster
+section](#cluster) that reports live cluster health. Pre-deploy runs omit
+it, so doctor stays useful before a cluster exists.
 
 ## Table of contents
 
@@ -18,6 +25,7 @@ results (`[warn]` is tolerated), 2 (configuration error) otherwise.
 8. [pull secret](#pull-secret)
 9. [disk space](#disk-space)
 10. [host ports](#host-ports)
+11. [cluster (day-2)](#cluster)
 
 ---
 
@@ -268,10 +276,11 @@ path configured in `okdctl.yaml` under `files.pull_secret`.
 
 **Warn vs fail split (by design):** `okdctl doctor` is an orientation tool,
 not a strict preflight gate. When no config file exists yet, the pull-secret
-check emits `[warn]` and exits 0 so a first-time user can read the full
-doctor output without a blocking failure. Once a config exists with
-`files.pull_secret` unset or pointing at an invalid file, the check escalates
-to `[fail]` (exit 2). The same validation runs again during `okdctl deploy`,
+check emits `[warn]` (exit 6 if no other check fails) so a first-time user
+can read the full doctor output without a blocking failure. Once a config
+exists with `files.pull_secret` unset or pointing at an invalid file, the
+check escalates to `[fail]` (exit 2). The same validation runs again during
+`okdctl deploy`,
 which exits 65 (EX_DATAERR) on the same condition — the split is intentional:
 doctor surfaces orientation, deploy enforces correctness.
 
@@ -336,3 +345,41 @@ If the service on the port is intentional, stop or reconfigure it before
 running `okdctl deploy` — okdctl always binds to the ports listed above.
 
 ---
+
+## cluster
+
+**When it runs:** Only when a deployed cluster's kubeconfig is found under
+`<project>/okd-install/…/auth/kubeconfig` (the same path `okdctl status`
+uses). Absent a kubeconfig the whole section is skipped and doctor behaves
+exactly as it did pre-deploy.
+
+**What it checks:** Live day-2 health via `oc`, reported as a sub-list under
+one `cluster` title:
+
+| Item | `[ok]` | `[warn]` | `[fail]` |
+|------|--------|----------|----------|
+| `nodes` | all Ready | — | any NotReady (names listed) |
+| `cluster operators` | none Degraded/Progressing | one or more Progressing | one or more Degraded |
+| `pending csrs` | none | one or more awaiting approval | — |
+| `etcd` | quorum healthy | probe query failed | unhealthy (reason shown) |
+| `signer expiry` | over 30 days left | under 30 days to expiry | already expired |
+
+The signer is `kube-apiserver-to-kubelet-signer` in
+`openshift-kube-apiserver-operator`; its `tls.crt` NotAfter is parsed and the
+days remaining reported. When it expires, kubelets can no longer complete
+their CSRs and nodes drift to NotReady — the `[warn]` at under 30 days is your
+runway to rotate it.
+
+**CSR recovery hint:** When pending CSRs coincide with NotReady nodes (the
+classic post-signer-expiry state), an extra `csr recovery` item suggests:
+```bash
+oc get csr -o name | xargs oc adm certificate approve
+```
+
+**Unreachable cluster:** If the API cannot be reached, the section collapses
+to a single `api` `[warn]` finding ("cluster unreachable: …") rather than
+emitting a separate error for every probe.
+
+**Exit code:** These items feed the same contract as the host checks — any
+`[fail]` (Degraded operator, NotReady node, unhealthy etcd, expired signer)
+exits 2; warn-only (no `[fail]` anywhere) exits 6.

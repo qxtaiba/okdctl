@@ -17,7 +17,7 @@ import (
 // OC_ARGV_LOG and exits with OC_EXIT_CODE (default 0).
 func installFakePatchOC(t *testing.T) string {
 	t.Helper()
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS == goosWindows {
 		t.Skip("fake-oc script relies on POSIX sh")
 	}
 	dir := t.TempDir()

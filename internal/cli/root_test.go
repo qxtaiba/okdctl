@@ -101,11 +101,38 @@ func TestExitCodeForTaxonomy(t *testing.T) {
 		{"ErrConfigMissing_wrapped", fmt.Errorf("load: %w", &errtypes.ConfigError{Msg: "not found", Err: errtypes.ErrConfigMissing}), 66},
 		{"ErrPullSecretInvalid_direct", &errtypes.AuthError{Msg: "bad json", Err: errtypes.ErrPullSecretInvalid}, 65},
 		{"ErrSudoMissing_direct", &errtypes.AuthError{Msg: "no sudo", Err: errtypes.ErrSudoMissing}, 71},
+		// doctor's warn-only sentinel is cli-local (not an errtypes category)
+		// and carries its own dedicated code; see errDoctorWarn.
+		{"errDoctorWarn_direct", errDoctorWarn, 6},
+		{"errDoctorWarn_wrapped", fmt.Errorf("doctor: %w", errDoctorWarn), 6},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			if got := exitCodeFor(tc.err); got != tc.want {
 				t.Fatalf("exitCodeFor(%v) = %d, want %d", tc.err, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestShouldAnnounceFailure locks the one exception to execute()'s generic
+// "command failed" line: a warn-only doctor run (errDoctorWarn) is not an
+// actual failure, so it must not trigger the announcement.
+func TestShouldAnnounceFailure(t *testing.T) {
+	cases := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{"errDoctorWarn suppressed", errDoctorWarn, false},
+		{"wrapped errDoctorWarn suppressed", fmt.Errorf("doctor: %w", errDoctorWarn), false},
+		{"ConfigError announced", &errtypes.ConfigError{Msg: "bad yaml"}, true},
+		{"generic error announced", errors.New("boom"), true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := shouldAnnounceFailure(tc.err); got != tc.want {
+				t.Errorf("shouldAnnounceFailure(%v) = %v, want %v", tc.err, got, tc.want)
 			}
 		})
 	}

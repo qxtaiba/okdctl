@@ -84,6 +84,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - exit codes follow BSD sysexits (usage 64, data 65, missing config 66,
   ...); `doctor` exits 2 when any check reports `[fail]`; full table in
   `docs/cli/exit-codes.md`
+- **Breaking (pre-1.0):** `doctor` no longer exits 0 on warn-only runs.
+  It now exits 0 only when every check passes, 6 when one or more checks
+  report `[warn]` and none report `[fail]`, and 2 when any check reports
+  `[fail]` — a dedicated code for "needs attention but not blocking" so
+  the command can be cron'd; see `docs/cli/exit-codes.md`
 - `install.sh` fails closed: SHA256 verification is mandatory, the
   cosign signature check is required unless `INSECURE=1`, and malformed
   version tags abort
