@@ -252,7 +252,24 @@ func ensureNodeOpsWorkspace(ctx context.Context, projectRoot string, yes, dryRun
 	if dryRun {
 		return &errtypes.UsageError{Msg: "terraform root needs node-ops migration; re-run without --dry-run to migrate (no changes made)"}
 	}
-	tui.Warn("terraform root predates node-lifecycle support; it must be migrated (worker_count / master sizing variables)")
+	format, stamped, err := deploy.TerraformRootFormat(projectRoot)
+	if err != nil {
+		return err
+	}
+	if stamped {
+		tui.Warn("terraform root predates node-lifecycle support",
+			tui.LF("workspace_format", format),
+			tui.LF("binary_expects", deploy.ExpectedTerraformRootFormat()))
+	} else {
+		tui.Warn("terraform root predates node-lifecycle support; it must be migrated (worker_count / master sizing variables)")
+	}
+	preview, err := deploy.PreviewTerraformRootMigration(projectRoot)
+	if err != nil {
+		return err
+	}
+	for _, f := range preview.OperatorModified {
+		tui.Warn("you edited this terraform file; your version will be backed up before overwrite", tui.LF("path", f))
+	}
 	tui.Info("migration backs up the originals to *.pre-nodeops.bak before overwriting")
 	if !yes {
 		proceed, err := promptForConfirmation(ctx, "migrate the terraform root now? [y/N]: ")

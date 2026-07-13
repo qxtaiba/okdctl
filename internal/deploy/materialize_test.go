@@ -2,9 +2,13 @@ package deploy
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
+	"errors"
 	"io/fs"
 	"os"
 	"path/filepath"
+	"sort"
 	"syscall"
 	"testing"
 
@@ -85,6 +89,70 @@ func TestMaterializeTerraformIdempotent(t *testing.T) {
 	}
 }
 
+// hashInfraTree digests every regular file's relative path and content under
+// <root>/infrastructure so a caller can assert the tree — the stamped manifest
+// included — is byte-identical before and after an operation. The walk only
+// collects relative paths; files are read after WalkDir returns so no
+// filesystem operation runs inside the callback (gosec G122).
+func hashInfraTree(t *testing.T, root string) string {
+	t.Helper()
+	base := filepath.Join(root, "infrastructure")
+	var paths []string
+	err := filepath.WalkDir(base, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			return nil
+		}
+		rel, err := filepath.Rel(base, path)
+		if err != nil {
+			return err
+		}
+		paths = append(paths, rel)
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("walk %s: %v", base, err)
+	}
+	sort.Strings(paths)
+	h := sha256.New()
+	for _, rel := range paths {
+		data, readErr := os.ReadFile(filepath.Join(base, rel))
+		if readErr != nil {
+			t.Fatalf("read %s: %v", rel, readErr)
+		}
+		h.Write([]byte(rel))
+		h.Write(data)
+	}
+	return hex.EncodeToString(h.Sum(nil))
+}
+
+// TestMaterializeSettledRootWritesNothing pins the deploy --dry-run contract at
+// the materialize layer: a root that was already materialized and stamped is
+// left byte-identical on a repeat call — no file created, no manifest re-stamped.
+func TestMaterializeSettledRootWritesNothing(t *testing.T) {
+	root := t.TempDir()
+	if _, err := MaterializeTerraform(root); err != nil {
+		t.Fatalf("first run: %v", err)
+	}
+	if _, err := os.Stat(rootManifestPath(root)); err != nil {
+		t.Fatalf("first run must stamp the manifest for a freshly created capable root: %v", err)
+	}
+
+	before := hashInfraTree(t, root)
+	created, err := MaterializeTerraform(root)
+	if err != nil {
+		t.Fatalf("second run: %v", err)
+	}
+	if len(created) != 0 {
+		t.Fatalf("second run created %v, want nothing", created)
+	}
+	if after := hashInfraTree(t, root); before != after {
+		t.Fatalf("re-materialize mutated the settled root: before=%s after=%s", before, after)
+	}
+}
+
 func TestMaterializeTerraformPreservesModifiedFiles(t *testing.T) {
 	root := t.TempDir()
 	if _, err := MaterializeTerraform(root); err != nil {
@@ -147,6 +215,44 @@ func TestMaterializeTerraformSourceCheckoutPassthrough(t *testing.T) {
 	}
 	if string(got) != sentinel {
 		t.Errorf("checkout file was overwritten: %q", got)
+	}
+}
+
+// TestMaterializeTerraformLegacyCapableRootWithoutManifest composes
+// materialization with manifest detection: a pre-existing checkout that
+// already carries the real embedded content (so it content-sniffs as
+// node-ops capable) never gets stamped by a no-op MaterializeTerraform run,
+// and TerraformRootSupportsNodeOps still resolves via content-sniff.
+func TestMaterializeTerraformLegacyCapableRootWithoutManifest(t *testing.T) {
+	root := t.TempDir()
+	for _, path := range embeddedTerraformPaths(t) {
+		target := filepath.Join(root, "infrastructure", filepath.FromSlash(path))
+		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		data, err := infrastructure.TerraformFS.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(target, data, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	created, err := MaterializeTerraform(root)
+	if err != nil {
+		t.Fatalf("MaterializeTerraform: %v", err)
+	}
+	if len(created) != 0 {
+		t.Fatalf("created = %v, want none for a fully pre-existing checkout", created)
+	}
+	if _, statErr := os.Stat(rootManifestPath(root)); !errors.Is(statErr, fs.ErrNotExist) {
+		t.Fatalf("no-op materialize must not stamp a manifest, stat err = %v", statErr)
+	}
+
+	ok, err := TerraformRootSupportsNodeOps(root)
+	if err != nil || !ok {
+		t.Fatalf("legacy capable root must be detected via content-sniff, got (%v,%v)", ok, err)
 	}
 }
 
