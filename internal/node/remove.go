@@ -20,9 +20,11 @@ type RemoveOptions struct {
 }
 
 // RemoveWorker removes the named worker: guards, cordon, drain, targeted
-// terraform delete (plan-gated to exactly worker[N-1]), Kubernetes node delete,
-// then a best-effort HAProxy backend refresh. On any failure the node is left
-// cordoned. Only the highest-numbered worker is removable (count-index rule).
+// terraform delete (plan-gated to exactly worker[N-1]), then Kubernetes node
+// delete. It does not touch HAProxy — the completion log points the operator
+// at the manual backend-refresh steps instead. On any failure the node is
+// left cordoned. Only the highest-numbered worker is removable (count-index
+// rule).
 func (r *Runner) RemoveWorker(ctx context.Context, target string, opts RemoveOptions) error {
 	nodes, err := r.Cluster.ListNodes(ctx)
 	if err != nil {
@@ -94,7 +96,8 @@ func (r *Runner) RemoveWorker(ctx context.Context, target string, opts RemoveOpt
 		r.Log.Warn("node: op marker cleanup failed", "err", err)
 	}
 	r.Log.Info("node: worker removed", "node", target)
-	r.Log.Info("node: if haproxy still fronts this cluster, its config lists the removed worker as a stale backend; re-render it via a root-capable path or reload manually")
+	r.Log.Info("node: if haproxy fronts this cluster, its config still lists this worker; 1) edit /etc/haproxy/haproxy.cfg as root and drop its 'server' line from the http-backend and https-backend sections 2) validate with 'haproxy -c -f /etc/haproxy/haproxy.cfg' 3) apply with 'systemctl restart haproxy'",
+		"node", target)
 	return nil
 }
 

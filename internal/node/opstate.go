@@ -45,7 +45,6 @@ const (
 	StepTFApply    Step = "tf-apply"
 	StepPowerCycle Step = "power-cycle"
 	StepDeleteK8s  Step = "delete-node"
-	StepHAProxy    Step = "haproxy"
 	StepUncordon   Step = "uncordon"
 )
 
