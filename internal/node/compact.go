@@ -70,7 +70,7 @@ func (r *Runner) Compact(ctx context.Context, opts CompactOptions) error {
 	workers := workersByIndexDesc(nodes)
 	masters := mastersByIndexAsc(nodes)
 
-	pf, err := r.preflightCompact(ctx, workers, masters, opts)
+	pf, err := r.runPreflightCompact(ctx, workers, masters, opts)
 	if err != nil {
 		return err
 	}
@@ -124,6 +124,15 @@ func (r *Runner) Compact(ctx context.Context, opts CompactOptions) error {
 	}
 	r.Log.Info("node: compaction complete", "masters", len(masters))
 	return nil
+}
+
+// runPreflightCompact wraps preflightCompact in one reporter span covering
+// the whole N-worker plan-gate sequence, rather than a spinner flickering
+// per worker.
+func (r *Runner) runPreflightCompact(ctx context.Context, workers, masters []string, opts CompactOptions) (compactPreflight, error) {
+	stop := r.startProgress(fmt.Sprintf("gating removal plan for %d worker node(s)", len(workers)))
+	defer stop()
+	return r.preflightCompact(ctx, workers, masters, opts)
 }
 
 // preflightCompact runs the read-only guards for every worker (storage +

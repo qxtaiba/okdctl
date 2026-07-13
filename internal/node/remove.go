@@ -102,6 +102,9 @@ func (r *Runner) RemoveWorker(ctx context.Context, target string, opts RemoveOpt
 }
 
 func (r *Runner) cordonAndDrain(ctx context.Context, node, timeout string, force bool) error {
+	stop := r.startProgress(fmt.Sprintf("cordoning and draining %s", node))
+	defer stop()
+
 	if err := markStep(r.marker(), OpRemove, node, StepCordon, r.RunID, r.Cfg.Cluster.Name); err != nil {
 		return err
 	}
