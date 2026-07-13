@@ -100,7 +100,9 @@ func (h *stderrHandler) Enabled(ctx context.Context, lvl slog.Level) bool {
 }
 
 func (h *stderrHandler) Handle(ctx context.Context, r slog.Record) error { //nolint:gocritic // hugeParam: slog.Handler interface requires value receiver
-	return h.h.Handle(ctx, r)
+	var err error
+	lineReg.withLine(func() { err = h.h.Handle(ctx, r) })
+	return err
 }
 
 func (h *stderrHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
