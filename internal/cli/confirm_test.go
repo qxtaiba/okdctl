@@ -134,7 +134,7 @@ func TestPromptForClusterNameConfirmation(t *testing.T) {
 			testStdinReader = strings.NewReader(tc.input)
 			t.Cleanup(func() { testStdinReader = nil })
 
-			ok, err := promptForClusterNameConfirmation(context.Background(), "prod")
+			ok, err := promptForClusterNameConfirmation(context.Background(), "prod", "type cluster name to confirm: ")
 			if err != nil {
 				t.Fatalf("want nil error, got %v", err)
 			}

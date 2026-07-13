@@ -92,6 +92,18 @@ type Runner struct {
 	// Proxmox credentials are available; a resize then fails safe.
 	Power vmPowerCycler
 
+	// Confirm gates each mutating op between guards/preflight and the first
+	// mutation; nil auto-approves (tests, non-interactive callers that gate
+	// elsewhere). Preview renders the dry-run plan; nil falls back to slog.
+	Confirm ConfirmFunc
+	Preview PreviewFunc
+
+	// preConsented suppresses the confirm gate for ops composed under a consent
+	// already granted at a higher level (compact's RemoveWorker/Resize inner
+	// calls). Set for the duration of the composed sequence and restored after;
+	// see Compact.
+	preConsented bool
+
 	NodeReadyTimeout time.Duration
 	EtcdGateTimeout  time.Duration
 	CephGateTimeout  time.Duration

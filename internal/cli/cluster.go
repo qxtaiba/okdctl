@@ -1,12 +1,12 @@
 package cli
 
 import (
-	"fmt"
+	"errors"
+	"time"
 
 	"github.com/spf13/cobra"
 
 	"github.com/qxtaiba/okdctl/internal/node"
-	"github.com/qxtaiba/okdctl/internal/tui"
 )
 
 var (
@@ -59,31 +59,27 @@ func runClusterCompact(cmd *cobra.Command, _ []string) error {
 	if err := confirmClusterMatches(compactYes, compactConfirmCluster, cfg.Cluster.Name, "cluster compact"); err != nil {
 		return err
 	}
-	if !compactYes && !compactDryRun {
-		proceed, err := promptForConfirmation(cmd.Context(), fmt.Sprintf("compact cluster %q onto its control plane? [y/N]: ", cfg.Cluster.Name))
-		if err != nil {
-			return err
-		}
-		if !proceed {
-			tui.Info("cancelled")
-			return nil
-		}
-	}
 
-	// buildNodeRunner reads the shared node* flag vars; align them with the
-	// compact flag set so migration consent and dry-run route correctly.
-	nodeYes = compactYes
-	rc, err := buildNodeRunner(cmd.Context(), cfg, "compact", compactDryRun, true)
+	consent := nodeConsent{yes: compactYes, confirmCluster: compactConfirmCluster, dryRun: compactDryRun, twoStage: true}
+	rc, err := buildNodeRunner(cmd.Context(), cfg, "compact", consent, true)
 	if err != nil {
 		return err
 	}
 	defer rc.cleanup()
 
-	return rc.runner.Compact(cmd.Context(), node.CompactOptions{
+	start := time.Now()
+	if err := rc.runner.Compact(cmd.Context(), node.CompactOptions{
 		IngressReplicas:    compactIngressReplica,
 		GrowMasterMemoryMB: compactGrowMasterMB,
 		ForceStorage:       compactForceStorage,
 		HostTotalMiB:       rc.HostTotalMiB,
 		HostAllocatedMiB:   rc.HostAllocatedMiB,
-	})
+	}); err != nil {
+		if errors.Is(err, node.ErrDeclined) {
+			return nil
+		}
+		return err
+	}
+	rc.complete(cmd.OutOrStdout(), time.Since(start))
+	return nil
 }

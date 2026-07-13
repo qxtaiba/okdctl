@@ -8,6 +8,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/cluster"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/infrastructure/terraform"
+	"github.com/qxtaiba/okdctl/internal/nodetypes"
 )
 
 // RemoveOptions tunes a worker removal.
@@ -36,11 +37,23 @@ func (r *Runner) RemoveWorker(ctx context.Context, target string, opts RemoveOpt
 	}
 	idx, _ := cluster.NodeIndex(target)
 
-	if err := r.checkStorageGuard(ctx, target, opts.ForceStorage); err != nil {
+	osdHere, ingressHere, err := r.removeGuards(ctx, nodes, target, opts.ForceStorage)
+	if err != nil {
 		return err
 	}
-	if err := r.checkIngressGuard(ctx, nodes, target); err != nil {
-		return err
+
+	plan := OpPlan{
+		Op:           OpRemove,
+		Cluster:      r.Cfg.Cluster.Name,
+		DrainTimeout: opts.DrainTimeout,
+		Nodes: []PlanNode{{
+			Name:      target,
+			Role:      nodetypes.RoleWorker,
+			TFAddress: workerAddress(idx),
+			Action:    terraform.PlanActionDelete,
+			OSDs:      osdHere,
+			Ingress:   ingressHere,
+		}},
 	}
 
 	// The dry-run delete preview must show the resource going away, but the
@@ -51,8 +64,17 @@ func (r *Runner) RemoveWorker(ctx context.Context, target string, opts RemoveOpt
 	countVars := map[string]string{"worker_count": strconv.Itoa(workerCount - 1)}
 
 	if r.DryRun {
-		r.Log.Info("node: dry-run — guards passed", "node", target, "tf_address", workerAddress(idx))
+		r.preview(&plan)
 		return r.targetedApply(ctx, workerAddress(idx), terraform.PlanActionDelete, countVars)
+	}
+
+	proceed, err := r.confirm(ctx, &plan)
+	if err != nil {
+		return err
+	}
+	if !proceed {
+		r.Log.Info("node: remove cancelled", "node", target)
+		return ErrDeclined
 	}
 
 	if !opts.SkipDrain {
@@ -125,19 +147,32 @@ func (r *Runner) cordonAndDrain(ctx context.Context, node, timeout string, force
 	return nil
 }
 
-func (r *Runner) checkStorageGuard(ctx context.Context, target string, force bool) error {
-	pods, err := r.Cluster.PodsForSelector(ctx, "", "app=rook-ceph-osd")
+// removeGuards runs the read-only storage and ingress guards for a worker
+// removal with a single pod fetch per selector, returning the OSD and router
+// pods on target so the confirmation box can report them without re-querying.
+// A blocked guard returns its refusal; the pod slices are then unused.
+func (r *Runner) removeGuards(ctx context.Context, nodes []cluster.NodeDetail, target string, force bool) (osdHere, ingressHere []string, err error) {
+	osdPods, err := r.Cluster.PodsForSelector(ctx, "", "app=rook-ceph-osd")
 	if err != nil {
-		return &errtypes.ClusterError{Msg: "storage guard: list rook-ceph osd pods", Err: err}
+		return nil, nil, &errtypes.ClusterError{Msg: "storage guard: list rook-ceph osd pods", Err: err}
 	}
-	return storageGuardVerdict(target, podNamesOnNode(pods, target), force, r.Log)
-}
-
-func (r *Runner) checkIngressGuard(ctx context.Context, nodes []cluster.NodeDetail, target string) error {
 	routerPods, err := r.Cluster.PodsForSelector(ctx, "openshift-ingress", "")
 	if err != nil {
-		return &errtypes.ClusterError{Msg: "ingress guard: list router pods", Err: err}
+		return nil, nil, &errtypes.ClusterError{Msg: "ingress guard: list router pods", Err: err}
 	}
+	osdHere = podNamesOnNode(osdPods, target)
+	ingressHere = podNamesOnNode(routerPods, target)
+
+	if err := storageGuardVerdict(target, osdHere, force, r.Log); err != nil {
+		return nil, nil, err
+	}
+	if err := r.checkIngressGuard(ctx, nodes, routerPods, target); err != nil {
+		return nil, nil, err
+	}
+	return osdHere, ingressHere, nil
+}
+
+func (r *Runner) checkIngressGuard(ctx context.Context, nodes []cluster.NodeDetail, routerPods []cluster.PodPlacement, target string) error {
 	workers := workerNameSet(nodes)
 	onWorkers := ingressPodsOnWorkers(routerPods, workers)
 	if len(onWorkers) == 0 {
