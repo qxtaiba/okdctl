@@ -16,4 +16,5 @@ var (
 	ErrorStyle      = lipgloss.NewStyle().Foreground(ColorError).Bold(true)
 	WarningStyle    = lipgloss.NewStyle().Foreground(ColorWarning).Bold(true)
 	HighlightStyle  = lipgloss.NewStyle().Foreground(ColorPrimary).Bold(true)
+	SpinnerStyle    = lipgloss.NewStyle().Foreground(ColorCyan500).Bold(true)
 )
