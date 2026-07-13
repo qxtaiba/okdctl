@@ -127,17 +127,7 @@ func (r *Runner) checkStorageGuard(ctx context.Context, target string, force boo
 	if err != nil {
 		return &errtypes.ClusterError{Msg: "storage guard: list rook-ceph osd pods", Err: err}
 	}
-	osds := osdPodsOnNode(pods, target)
-	if len(osds) == 0 {
-		return nil
-	}
-	if force {
-		r.Log.Warn("node: --force-storage set; removing a node with live OSDs destroys their CEPH-DATA disk", "node", target, "osds", len(osds))
-		return nil
-	}
-	return &errtypes.ConfigError{Msg: fmt.Sprintf(
-		"%s holds %d rook-ceph OSD(s) (%v); removing it destroys its CEPH-DATA disk and loses that data. Migrate OSDs off it first, or re-run with --force-storage.",
-		target, len(osds), osds)}
+	return storageGuardVerdict(target, podNamesOnNode(pods, target), force, r.Log)
 }
 
 func (r *Runner) checkIngressGuard(ctx context.Context, nodes []cluster.NodeDetail, target string) error {

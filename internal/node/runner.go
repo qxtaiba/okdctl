@@ -134,31 +134,15 @@ func (r *Runner) persistTopology() error {
 	return nil
 }
 
-// targetedApply plans a single-resource change, gates the plan to exactly
-// (address, want), snapshots state, and applies the saved plan. A gate failure
-// aborts before any mutation. planVars are plan-time -var overrides so the
-// preview is truthful without persisting terraform.tfvars — the dry-run path
-// relies on this to show the intended change while writing nothing to disk.
-func (r *Runner) targetedApply(ctx context.Context, address string, want terraform.PlanAction, planVars map[string]string) error {
-	if err := r.TF.Init(ctx); err != nil {
-		return r.TF.WithLockHint(&errtypes.ClusterError{Msg: "terraform init", Err: err})
-	}
-
-	planFile := "node-op.tfplan"
-	planPath := filepath.Join(r.EnvDir, planFile)
-	defer func() {
-		if err := system.SafeRemove(planPath); err != nil {
-			r.Log.Warn("node: plan file cleanup failed", "err", err)
-		}
-	}()
-
-	// Post-deploy invariants every node op asserts: the bootstrap VM is gone and
-	// workers run. Passed as -var (highest precedence, above terraform.tfvars and
-	// auto-tfvars) so a stale terraform.tfvars bootstrap_enabled=true can't inject
-	// a bootstrap-create into the targeted plan, and the module's
-	// start_workers_immediately=false default can't plan a running worker to
-	// stopped. Either would trip the single-change gate or, on apply, stop a
-	// healthy VM. planVars (the caller's sizing) override these if they collide.
+// nodeOpPlanVars merges the caller's plan-time overrides onto the post-deploy
+// invariants every node op asserts: the bootstrap VM is gone and workers run.
+// Passed as -var (highest precedence, above terraform.tfvars and auto-tfvars) so
+// a stale terraform.tfvars bootstrap_enabled=true can't inject a bootstrap-create
+// into the targeted plan, and the module's start_workers_immediately=false
+// default can't plan a running worker to stopped. Either would trip the
+// single-change gate or, on apply, stop a healthy VM. planVars override these on
+// a key collision.
+func nodeOpPlanVars(planVars map[string]string) map[string]string {
 	vars := map[string]string{
 		"bootstrap_enabled":         "false",
 		"start_workers_immediately": "true",
@@ -166,22 +150,60 @@ func (r *Runner) targetedApply(ctx context.Context, address string, want terrafo
 	for k, v := range planVars {
 		vars[k] = v
 	}
+	return vars
+}
 
-	if err := r.TF.Plan(ctx, terraform.PlanOptions{
+// planTargeted runs a single-resource targeted plan with the node-op invariant
+// vars plus planVars and gates it to exactly (address, want). On success it
+// returns the saved plan's path and a cleanup func the caller MUST invoke once
+// done — after any apply, since Apply consumes the saved plan. On any error the
+// plan file is already removed and the returned cleanup is a no-op.
+func (r *Runner) planTargeted(ctx context.Context, address string, want terraform.PlanAction, planVars map[string]string) (planPath string, cleanup func(), err error) {
+	noop := func() {}
+	if err := r.TF.Init(ctx); err != nil {
+		return "", noop, r.TF.WithLockHint(&errtypes.ClusterError{Msg: "terraform init", Err: err})
+	}
+
+	planFile := "node-op.tfplan"
+	planPath = filepath.Join(r.EnvDir, planFile)
+	cleanup = func() {
+		if rmErr := system.SafeRemove(planPath); rmErr != nil {
+			r.Log.Warn("node: plan file cleanup failed", "err", rmErr)
+		}
+	}
+
+	if planErr := r.TF.Plan(ctx, terraform.PlanOptions{
 		OutputPlanFile: planFile,
 		Targets:        []string{address},
-		Vars:           vars,
-	}); err != nil {
-		return r.TF.WithLockHint(&errtypes.ClusterError{Msg: "terraform plan", Err: err})
+		Vars:           nodeOpPlanVars(planVars),
+	}); planErr != nil {
+		cleanup()
+		return "", noop, r.TF.WithLockHint(&errtypes.ClusterError{Msg: "terraform plan", Err: planErr})
 	}
 
-	changes, err := r.TF.ShowPlanChanges(ctx, planPath)
+	changes, showErr := r.TF.ShowPlanChanges(ctx, planPath)
+	if showErr != nil {
+		cleanup()
+		return "", noop, &errtypes.ClusterError{Msg: "read terraform plan", Err: showErr}
+	}
+	if gateErr := terraform.AssertOnlyChange(changes, address, want); gateErr != nil {
+		cleanup()
+		return "", noop, &errtypes.ClusterError{Msg: "plan safety gate refused the change", Err: gateErr}
+	}
+	return planPath, cleanup, nil
+}
+
+// targetedApply plans a single-resource change, gates the plan to exactly
+// (address, want), snapshots state, and applies the saved plan. A gate failure
+// aborts before any mutation. planVars are plan-time -var overrides so the
+// preview is truthful without persisting terraform.tfvars — the dry-run path
+// relies on this to show the intended change while writing nothing to disk.
+func (r *Runner) targetedApply(ctx context.Context, address string, want terraform.PlanAction, planVars map[string]string) error {
+	planPath, cleanup, err := r.planTargeted(ctx, address, want, planVars)
 	if err != nil {
-		return &errtypes.ClusterError{Msg: "read terraform plan", Err: err}
+		return err
 	}
-	if err := terraform.AssertOnlyChange(changes, address, want); err != nil {
-		return &errtypes.ClusterError{Msg: "plan safety gate refused the change", Err: err}
-	}
+	defer cleanup()
 
 	if r.DryRun {
 		r.Log.Info("node: dry-run — plan gate passed, skipping apply", "address", address, "action", string(want))

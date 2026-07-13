@@ -60,11 +60,11 @@ func TestOsdPodsOnNode(t *testing.T) {
 		{Name: "osd-1", Namespace: "rook-ceph", NodeName: "worker0"},
 		{Name: "osd-2", Namespace: "rook-ceph", NodeName: "worker2"},
 	}
-	got := osdPodsOnNode(pods, "worker2")
+	got := podNamesOnNode(pods, "worker2")
 	if len(got) != 2 {
 		t.Fatalf("want 2 osds on worker2, got %v", got)
 	}
-	if len(osdPodsOnNode(pods, "worker1")) != 0 {
+	if len(podNamesOnNode(pods, "worker1")) != 0 {
 		t.Fatal("want 0 osds on worker1")
 	}
 }
