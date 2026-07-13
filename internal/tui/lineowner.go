@@ -1,9 +1,6 @@
 package tui
 
-import (
-	"sync"
-	"sync/atomic"
-)
+import "sync"
 
 // lineOwner is a writer that owns the current terminal line — a spinner or,
 // later, a step-checklist renderer. The stderr log handler asks the active
@@ -21,17 +18,20 @@ type lineOwner interface {
 var lineReg lineRegistry
 
 type lineRegistry struct {
-	mu     sync.Mutex
-	owner  lineOwner
-	active atomic.Bool
+	mu    sync.Mutex
+	owner lineOwner
 }
 
-// register installs o as the active line owner.
+// register installs o as the active line owner, clearing the outgoing owner's
+// line first so a takeover by a shorter line leaves no stale tail from the
+// previous owner's longer one.
 func (r *lineRegistry) register(o lineOwner) {
 	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.owner != nil && r.owner != o {
+		r.owner.clearLine()
+	}
 	r.owner = o
-	r.active.Store(true)
-	r.mu.Unlock()
 }
 
 // release clears o's line and removes it as owner. No-op if o is not the
@@ -42,7 +42,6 @@ func (r *lineRegistry) release(o lineOwner) {
 	if r.owner == o {
 		o.clearLine()
 		r.owner = nil
-		r.active.Store(false)
 	}
 }
 
@@ -55,7 +54,6 @@ func (r *lineRegistry) deregister(o lineOwner) {
 	defer r.mu.Unlock()
 	if r.owner == o {
 		r.owner = nil
-		r.active.Store(false)
 	}
 }
 
@@ -73,12 +71,12 @@ func (r *lineRegistry) paint(o lineOwner, fn func()) {
 }
 
 // withLine erases the active owner's line, then runs fn, under the line
-// lock. Always locks, even when active is false: a lock-free fast path here
-// let a Handle() call that sampled active just before a concurrent register
-// skip the lock while another, already in-flight Handle() call (still on the
-// pre-transition value) wrote straight through — same io.Writer, racing
-// under two different locks. r.mu is uncontended on the common no-owner
-// path, so the cost is one extra lock/unlock per log record.
+// lock. Always locks, even with no owner: a lock-free fast path here let a
+// Handle() call that sampled "no owner" just before a concurrent register
+// skip the lock while another, already in-flight Handle() call wrote straight
+// through — same io.Writer, racing under two different locks. r.mu is
+// uncontended on the common no-owner path, so the cost is one extra
+// lock/unlock per log record.
 func (r *lineRegistry) withLine(fn func()) {
 	r.mu.Lock()
 	defer r.mu.Unlock()

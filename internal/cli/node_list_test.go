@@ -178,11 +178,11 @@ func TestPrintNodeListAlignsColumnsWithLongNames(t *testing.T) {
 	}
 
 	const roleCol, driftCol, opCol = 1, 4, 5
-	if got := col(row0, roleCol); got != "master" {
-		t.Errorf("row0 ROLE column = %q, want %q (header offset %d):\n%s", got, "master", colStarts[roleCol], buf.String())
+	if got := col(row0, roleCol); got != nodetypes.RoleMaster.String() {
+		t.Errorf("row0 ROLE column = %q, want %q (header offset %d):\n%s", got, nodetypes.RoleMaster.String(), colStarts[roleCol], buf.String())
 	}
-	if got := col(row1, roleCol); got != "worker" {
-		t.Errorf("row1 ROLE column = %q, want %q (header offset %d):\n%s", got, "worker", colStarts[roleCol], buf.String())
+	if got := col(row1, roleCol); got != nodetypes.RoleWorker.String() {
+		t.Errorf("row1 ROLE column = %q, want %q (header offset %d):\n%s", got, nodetypes.RoleWorker.String(), colStarts[roleCol], buf.String())
 	}
 	if got := col(row0, driftCol); got != driftNone {
 		t.Errorf("row0 DRIFT column = %q, want %q", got, driftNone)

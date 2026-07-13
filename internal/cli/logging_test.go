@@ -116,8 +116,8 @@ func TestConfigureLogging_DefaultSinkRedacts(t *testing.T) {
 		t.Fatal("logFileCloser not set for default sink")
 	}
 
-	// Error level: stderr is piped under `go test`, so configureLogging
-	// auto-selects json and SuppressInfo raises the level past info/warn.
+	// Error always emits regardless of level, so it exercises the redaction
+	// pipeline on the file sink independent of the deploy-family Info/Warn policy.
 	tui.Error("connect failed", tui.LF("password", "hunter2"), tui.LF("cluster", "prod"))
 
 	data, err := os.ReadFile(runLogPath)
@@ -133,6 +133,35 @@ func TestConfigureLogging_DefaultSinkRedacts(t *testing.T) {
 	}
 	if !strings.Contains(out, "prod") {
 		t.Errorf("non-secret attr dropped from default log file:\n%s", out)
+	}
+}
+
+// TestConfigureLogging_DeployMilestonesSurviveNonTTY locks T24's non-TTY
+// contract: stderr is piped under `go test`, so configureLogging auto-selects
+// json — but deploy-family flows must NOT SuppressInfo, so a milestone still
+// emits at Info and a degraded-operator notice still emits at Warn.
+func TestConfigureLogging_DeployMilestonesSurviveNonTTY(t *testing.T) {
+	resetLoggingState(t)
+	dir := t.TempDir()
+	t.Chdir(dir)
+
+	if err := configureLogging(deployCmd); err != nil {
+		t.Fatalf("configureLogging: %v", err)
+	}
+
+	tui.Info("bootstrap complete")
+	tui.Warn("cluster operator degraded", tui.LF("operator", "ingress"))
+
+	data, err := os.ReadFile(runLogPath)
+	if err != nil {
+		t.Fatalf("read default log: %v", err)
+	}
+	out := string(data)
+	if !strings.Contains(out, "bootstrap complete") {
+		t.Errorf("milestone Info silenced on non-TTY deploy:\n%s", out)
+	}
+	if !strings.Contains(out, "cluster operator degraded") {
+		t.Errorf("degraded-operator Warn silenced on non-TTY deploy:\n%s", out)
 	}
 }
 

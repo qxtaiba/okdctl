@@ -151,7 +151,12 @@ func configureLogging(cmd *cobra.Command) error {
 	if sinkErr != nil {
 		tui.Warn("default log file unavailable; continuing without persistent log", tui.LF("err", sinkErr))
 	}
-	if logFormat == outputJSON && !logVerbose {
+	// Suppress Info/Warn chatter under json so status-style `2>&1 | jq`
+	// pipelines see a clean stream — but never for the deploy-family flows,
+	// whose non-TTY contract keeps milestones at Info and degraded-operator
+	// notices at Warn (json-formatted). Their firehose already goes to the log
+	// file, so what reaches stderr is the curated milestone/Warn set, not chatter.
+	if logFormat == outputJSON && !logVerbose && !wantsDefaultLogSink(cmd) {
 		tui.SuppressInfo()
 	}
 	return nil

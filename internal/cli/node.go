@@ -123,10 +123,9 @@ func init() {
 // twoStage requests the destroy-grade gate (typed cluster name + y/N) used by
 // the VM-destroying verbs; resize passes false for a single y/N.
 type nodeConsent struct {
-	yes            bool
-	confirmCluster string
-	dryRun         bool
-	twoStage       bool
+	yes      bool
+	dryRun   bool
+	twoStage bool
 }
 
 // nodeRunnerCtx bundles the disposable resources a node op holds so RunE
@@ -373,7 +372,7 @@ func runNodeRemove(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	consent := nodeConsent{yes: nodeYes, confirmCluster: nodeConfirmCluster, dryRun: nodeDryRun, twoStage: true}
+	consent := nodeConsent{yes: nodeYes, dryRun: nodeDryRun, twoStage: true}
 	rc, err := buildNodeRunner(cmd.Context(), cfg, "remove", consent, false)
 	if err != nil {
 		return err
@@ -412,7 +411,7 @@ func runNodeResize(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	consent := nodeConsent{yes: nodeYes, confirmCluster: nodeConfirmCluster, dryRun: nodeDryRun, twoStage: false}
+	consent := nodeConsent{yes: nodeYes, dryRun: nodeDryRun, twoStage: false}
 	rc, err := buildNodeRunner(cmd.Context(), cfg, "resize", consent, true)
 	if err != nil {
 		return err
@@ -446,9 +445,9 @@ func validateResizeFlags(memoryMB, cpu int) error {
 
 func parseResizeScope(arg string) (node.ResizeScope, error) {
 	switch arg {
-	case "masters", "master":
+	case "masters", nodetypes.RoleMaster.String():
 		return node.ResizeScope{Role: nodetypes.RoleMaster}, nil
-	case "workers", "worker":
+	case "workers", nodetypes.RoleWorker.String():
 		return node.ResizeScope{Role: nodetypes.RoleWorker}, nil
 	default:
 		if _, ok := cluster.NodeIndex(arg); !ok {

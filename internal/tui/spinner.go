@@ -108,7 +108,7 @@ func (s *spinner) paint() {
 	lineReg.paint(s, func() {
 		elapsed := time.Since(s.start).Round(time.Second)
 		frame := SpinnerStyle.Render(spinnerFrames[s.frame%len(spinnerFrames)])
-		_, _ = fmt.Fprintf(s.w, "\r%s %s (%s)", frame, s.desc, elapsed)
+		_, _ = fmt.Fprintf(s.w, "\r\x1b[2K%s %s (%s)", frame, s.desc, elapsed)
 		s.frame++
 	})
 }

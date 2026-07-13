@@ -2,6 +2,15 @@ package tui
 
 import "testing"
 
+// hasOwner reports whether a line owner is currently registered. Test-only
+// helper: production code never queries ownership, so this lives beside the
+// tests rather than in lineowner.go.
+func (r *lineRegistry) hasOwner() bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.owner != nil
+}
+
 // noopOwner carries a name so distinct instances are distinct pointers — a
 // pointer to a zero-size struct may compare equal to another, which would
 // defeat the owner-identity guard under test.

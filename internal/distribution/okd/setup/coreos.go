@@ -179,11 +179,12 @@ type okdVersionKey struct {
 // can also rewrite the sha256 field, making DownloadCoreOSISO's integrity
 // check meaningless.
 //
-// 4.15-4.18 share an identical fcos.json sha256 (the file content is
-// byte-equal on those four release branches at their pinned tips); goconst
-// is suppressed because the duplication is mechanical, machine-rewritten by
-// scripts/update-coreos-pins.sh, and any per-minor drift would surface as
-// a real diff in the next bump PR.
+// 4.15-4.18 share an identical fcos.json sha256, and 4.21-4.23 likewise
+// share an identical scos.json sha256 (the file content is byte-equal across
+// each of those release branches at their pinned tips — verified genuine
+// upstream, not a copy-paste slip); goconst is suppressed because the
+// duplication is mechanical, machine-rewritten by scripts/update-coreos-pins.sh,
+// and any per-minor drift would surface as a real diff in the next bump PR.
 //
 // To add or update a pin:
 //  1. git ls-remote https://github.com/openshift/installer release-X.Y
@@ -192,7 +193,7 @@ type okdVersionKey struct {
 //
 // Tests may override this var to inject hermetic pin entries.
 //
-//nolint:goconst,nolintlint // see comment above re: 4.15-4.18 sha-equal-by-design
+//nolint:goconst,nolintlint // see comment above re: 4.15-4.18 / 4.21-4.23 sha-equal-by-design
 var streamPins = map[okdVersionKey]coreOSStreamPin{
 	{4, 10}: {CommitSHA: "62137b29c72f4303faeb325dce01bc358d68d2ad", JSONSHA256: "ba2d4f18b19d5de01261e52228d189c221f50302c4bc3b8e585a32668c4f01e5"},
 	{4, 11}: {CommitSHA: "64675f82cb5be511953ef6eff2a9d76efa9cfe73", JSONSHA256: "7ed054b02d04baab3eacda3c13e060a30d6d221202be42bf38e5de1c0e155264"},

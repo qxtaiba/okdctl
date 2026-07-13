@@ -28,7 +28,7 @@ func TestStepProgress_StartThenFinishRewritesLine(t *testing.T) {
 	t.Cleanup(func() { lineReg.release(sp) })
 
 	sp.StepStarted("create-vms")
-	if !lineReg.active.Load() {
+	if !lineReg.hasOwner() {
 		t.Fatal("StepStarted did not register the checklist as line owner")
 	}
 	sp.StepFinished(&distribution.StepResult{StepID: "create-vms", Success: true, Duration: 12 * time.Second})
@@ -42,7 +42,7 @@ func TestStepProgress_StartThenFinishRewritesLine(t *testing.T) {
 	if !strings.HasSuffix(out, "\n") {
 		t.Errorf("finished line not committed to scrollback (no trailing newline):\n%q", out)
 	}
-	if lineReg.active.Load() {
+	if lineReg.hasOwner() {
 		t.Error("checklist still owns the line after StepFinished")
 	}
 	if !strings.Contains(sink.String(), "step: ok [2/3] create vms · install") {
@@ -194,7 +194,7 @@ func TestStepProgress_ConcurrentInterleave(t *testing.T) {
 		stop()
 	}
 
-	if lineReg.active.Load() {
+	if lineReg.hasOwner() {
 		t.Fatal("a line owner is still registered after teardown")
 	}
 

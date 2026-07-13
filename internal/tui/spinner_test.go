@@ -136,11 +136,11 @@ func TestSpinner_NoDeadlockUnderConcurrentLogs(t *testing.T) {
 func TestSpinner_TeardownClearsAndDeregisters(t *testing.T) {
 	var buf bytes.Buffer
 	stop := startSpinner(context.Background(), "waiting", &buf)
-	if !lineReg.active.Load() {
+	if !lineReg.hasOwner() {
 		t.Fatal("spinner did not register as line owner")
 	}
 	stop()
-	if lineReg.active.Load() {
+	if lineReg.hasOwner() {
 		t.Fatal("owner still active after stop")
 	}
 	if !strings.HasSuffix(buf.String(), clearSeq) {
@@ -152,7 +152,7 @@ func TestSpinner_TeardownClearsAndDeregisters(t *testing.T) {
 	stop2 := startSpinner(ctx, "cancelme", &buf2)
 	cancel()
 	stop2() // OnceFunc + <-done must return even though ctx already fired
-	if lineReg.active.Load() {
+	if lineReg.hasOwner() {
 		t.Fatal("owner still active after ctx-cancel teardown")
 	}
 }
@@ -165,7 +165,7 @@ func TestStartSpinner_NonTTYNoOp(t *testing.T) {
 	t.Cleanup(func() { progressBarsActive.Store(prev) })
 
 	stop := StartSpinner(context.Background(), "quiet")
-	if lineReg.active.Load() {
+	if lineReg.hasOwner() {
 		t.Fatal("non-TTY StartSpinner registered a line owner")
 	}
 	stop() // must not panic or block
@@ -176,7 +176,7 @@ func TestStartSpinner_NonTTYNoOp(t *testing.T) {
 func TestStatusLine_SetUpdatesDesc(t *testing.T) {
 	var buf bytes.Buffer
 	set, stop := startStatusLine(context.Background(), "waiting for cluster operators", &buf)
-	if !lineReg.active.Load() {
+	if !lineReg.hasOwner() {
 		t.Fatal("status line did not register as line owner")
 	}
 	set("cluster operators 12/33 available · 4 CSRs approved")
@@ -188,7 +188,7 @@ func TestStatusLine_SetUpdatesDesc(t *testing.T) {
 	if !strings.Contains(out, "12/33 available") {
 		t.Fatalf("painted line missing updated detail:\n%q", out)
 	}
-	if lineReg.active.Load() {
+	if lineReg.hasOwner() {
 		t.Fatal("owner still active after stop")
 	}
 }
@@ -201,11 +201,60 @@ func TestStartStatusLine_NonTTYNoOp(t *testing.T) {
 	t.Cleanup(func() { progressBarsActive.Store(prev) })
 
 	set, stop := StartStatusLine(context.Background(), "quiet")
-	if lineReg.active.Load() {
+	if lineReg.hasOwner() {
 		t.Fatal("non-TTY StartStatusLine registered a line owner")
 	}
 	set("detail") // must not panic
 	stop()        // must not panic or block
+}
+
+// TestLineRegistry_RegisterClearsOutgoingOwner proves a takeover erases the
+// displaced owner's line, so a shorter incoming line can't leave the tail of a
+// longer outgoing one on screen.
+func TestLineRegistry_RegisterClearsOutgoingOwner(t *testing.T) {
+	var reg lineRegistry
+	var buf bytes.Buffer
+	a := &fakeOwner{w: &buf}
+	b := &fakeOwner{w: &buf}
+
+	reg.register(a)
+	if a.clears != 0 {
+		t.Fatalf("register cleared before any takeover: clears=%d", a.clears)
+	}
+	reg.register(b) // b takes over from a
+	if a.clears != 1 {
+		t.Fatalf("takeover did not clear the outgoing owner: a.clears=%d", a.clears)
+	}
+	if b.clears != 0 {
+		t.Fatalf("takeover cleared the incoming owner: b.clears=%d", b.clears)
+	}
+	// Re-registering the same owner must not self-clear.
+	reg.register(b)
+	if b.clears != 0 {
+		t.Fatalf("re-register of the same owner cleared it: b.clears=%d", b.clears)
+	}
+}
+
+// TestSpinner_PaintErasesToEndOfLine proves each spinner frame opens with the
+// clear sequence, so a shorter frame painted after a longer one leaves no
+// residual tail from the previous frame.
+func TestSpinner_PaintErasesToEndOfLine(t *testing.T) {
+	var buf bytes.Buffer
+	sp := &spinner{w: &buf, desc: "a considerably longer description", start: time.Now()}
+	lineReg.register(sp)
+	t.Cleanup(func() { lineReg.release(sp) })
+
+	sp.paint()
+	if !strings.HasPrefix(buf.String(), clearSeq) {
+		t.Fatalf("paint did not erase to end of line; got %q", buf.String())
+	}
+
+	buf.Reset()
+	sp.setDesc("short")
+	sp.paint()
+	if !strings.HasPrefix(buf.String(), clearSeq) {
+		t.Fatalf("shorter repaint did not erase the longer prior line; got %q", buf.String())
+	}
 }
 
 func tail(s string) string {
