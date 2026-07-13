@@ -11,6 +11,7 @@ to use in scripts that branch on failure type.
 | 3    | —            | network error (HTTP, DNS, TLS, download failure)             |
 | 4    | —            | cluster error (oc/kubectl failure, install timeout)          |
 | 5    | —            | auth error (proxmox token rejected, insecure file perms)     |
+| 6    | —            | `doctor` preflight warn-only: one or more checks reported `[warn]` and none reported `[fail]` |
 | 64   | EX_USAGE     | unknown flag, or an invalid flag combination detected at runtime (e.g. `--target` without `--confirm-cluster`) |
 | 65   | EX_DATAERR   | pull secret file exists but is not valid JSON                |
 | 66   | EX_NOINPUT   | configuration file not found on disk                         |
@@ -21,6 +22,12 @@ to use in scripts that branch on failure type.
 Codes 65, 66, and 71 are granular refinements within the broader categories
 2 (config) and 5 (auth). A script that only checks for non-zero exit is
 unaffected; a script that branches on code 2 or 5 should also handle 65/66/71.
+
+Code 6 is `doctor`-specific and sits outside the ConfigError/NetworkError/
+ClusterError/AuthError/UsageError hierarchy below: no other command emits
+it, and it is not a refinement of any broader category the way 65/66/71 are.
+It exists purely so a cron job can tell "clean" (0), "needs attention but
+not blocking" (6), and "blocking" (2) apart without parsing output.
 
 When an error wraps more than one typed category (e.g. a `ClusterError`
 wrapping a `ConfigError` produced during a failed reload), resolution is not
@@ -39,8 +46,14 @@ must be invoked as a regular user; the binary self-elevates via an internal
 ## ConfigError vs UsageError
 
 Code 2 (ConfigError) covers problems with the content on disk: a config file
-that fails to parse, fails schema validation, or a `doctor` preflight that
-reports `[fail]`. Code 64 (UsageError) covers problems with the flags on the
+that fails to parse, fails schema validation, or a `doctor` check that reports
+`[fail]`. `doctor` exits 0 only when every check passes, 6 when one or more
+checks report `[warn]` and none report `[fail]`, and 2 on any `[fail]`,
+whether from the host-preflight checks or the day-2 `cluster` section (a
+Degraded ClusterOperator, a NotReady node, unhealthy etcd, or an expired
+kube-apiserver-to-kubelet-signer). The day-2 section is present only when a
+deployed cluster's kubeconfig is found; pre-deploy runs are unaffected.
+Code 64 (UsageError) covers problems with the flags on the
 command line: an unknown flag, or a combination that is individually valid
 but not sensible together — `--target`/`--only` without `--confirm-cluster`,
 `--dry-run` combined with a `--skip-*` flag. Rule of thumb: if the fix is

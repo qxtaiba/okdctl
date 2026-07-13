@@ -13,8 +13,12 @@ import (
 	"github.com/qxtaiba/okdctl/internal/executor"
 )
 
+// goosWindows is pulled into a constant because every fake-oc/POSIX-only
+// test helper across this package's test files guards on it (goconst).
+const goosWindows = "windows"
+
 func TestValidateKubeconfigEnv(t *testing.T) {
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS == goosWindows {
 		t.Skip("symlink and path tests rely on POSIX semantics")
 	}
 
@@ -148,7 +152,7 @@ func TestValidateKubeconfigEnv(t *testing.T) {
 }
 
 func TestWithExecutor_SharesInjectedExecutorEnv(t *testing.T) {
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS == goosWindows {
 		t.Skip("fake-oc script relies on POSIX sh")
 	}
 	dir := t.TempDir()

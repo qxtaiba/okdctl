@@ -16,8 +16,9 @@ with a bracketed label:
   ✗ [fail] : this must be fixed before 'okdctl deploy' will
              succeed
 
-Exit code is 0 if there are no [fail] results ([warn] is tolerated),
-2 (configuration error) otherwise. Designed to be rerun until clean.
+Exit code is 0 when every check passes, 6 when one or more checks warn
+but none fail, and 2 (configuration error) when any check fails.
+Designed to be rerun until clean.
 
 Pass --output=json for machine-readable output (see docs/cli/json-schema.md).
 

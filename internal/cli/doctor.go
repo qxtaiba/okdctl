@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"runtime"
@@ -8,10 +9,33 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/qxtaiba/okdctl/internal/distribution/okd/clusterstatus"
 	"github.com/qxtaiba/okdctl/internal/doctor"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/tui"
 )
+
+// errDoctorWarn signals a doctor run with warnings but no failures. It is a
+// bare sentinel local to cli (not an errtypes category) because warn-only is
+// not a real failure — exitCodeFor maps it to the dedicated code 6 so cron
+// consumers can distinguish "clean", "warn", and "fail" (see
+// docs/cli/exit-codes.md); execute() also skips its usual "command failed"
+// announcement for this sentinel.
+var errDoctorWarn = errors.New("doctor: warnings present, no failures")
+
+// doctorExitErr maps a doctor run's fail/warn tallies to the value runDoctor
+// returns, shared by both the JSON and text rendering paths so the two
+// outputs can never drift on exit-code behavior.
+func doctorExitErr(fails, warns int) error {
+	switch {
+	case fails > 0:
+		return &errtypes.ConfigError{Msg: "preflight checks failed"}
+	case warns > 0:
+		return errDoctorWarn
+	default:
+		return nil
+	}
+}
 
 // doctorJSONCheck is one entry in the JSON output's checks array. For
 // multi-item checks, every sub-item becomes its own entry; detail is omitted
@@ -43,6 +67,9 @@ func runDoctor(cmd *cobra.Command, _ []string) error {
 	ctx := cmd.Context()
 
 	checks := doctor.Checks(cfgFile)
+	if cc, ok := discoverClusterCheck(); ok {
+		checks = append(checks, cc)
+	}
 
 	type collectedResult struct {
 		c doctor.Check
@@ -87,10 +114,7 @@ func runDoctor(cmd *cobra.Command, _ []string) error {
 		if encErr := writeJSON(cmd.OutOrStdout(), out); encErr != nil {
 			return encErr
 		}
-		if fails > 0 {
-			return &errtypes.ConfigError{Msg: "preflight checks failed"}
-		}
-		return nil
+		return doctorExitErr(fails, warns)
 	}
 
 	w := cmd.OutOrStdout()
@@ -106,13 +130,28 @@ func runDoctor(cmd *cobra.Command, _ []string) error {
 	switch {
 	case fails > 0:
 		tui.Warn("doctor: failing checks block deploy", tui.LF("failing", fails), tui.LF("warnings", warns))
-		return &errtypes.ConfigError{Msg: "preflight checks failed"}
 	case warns > 0:
 		tui.Warn("doctor: deploy may proceed but review warnings above", tui.LF("warnings", warns))
 	default:
 		tui.Info("doctor: environment looks ready")
 	}
-	return nil
+	return doctorExitErr(fails, warns)
+}
+
+// discoverClusterCheck returns the day-2 cluster check when a deployed
+// cluster's kubeconfig is present, located the same way status does. Absent a
+// kubeconfig (or outside a project dir) it returns ok=false so doctor stays a
+// pure pre-deploy tool.
+func discoverClusterCheck() (doctor.Check, bool) {
+	root, err := resolveProjectRoot()
+	if err != nil {
+		return doctor.Check{}, false
+	}
+	cl, err := clusterstatus.NewClient(root)
+	if err != nil {
+		return doctor.Check{}, false
+	}
+	return doctor.ClusterCheck(cl), true
 }
 
 // severityMarkers returns the styled icon, the styled bracketed label,

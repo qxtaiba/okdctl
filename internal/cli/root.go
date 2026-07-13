@@ -1,13 +1,13 @@
 // Package cli wires together the cobra command tree and drives the
 // top-level event loop. Process exit codes follow a documented contract:
 // config error=2, network error=3, cluster error=4, auth error=5
-// (includes invoked-as-root rejection via AuthError), config file not
-// found=66 (EX_NOINPUT), invalid pull secret JSON=65 (EX_DATAERR),
-// sudo not found=71 (EX_OSERR), unknown-flag error=64 (EX_USAGE, via
-// SetFlagErrorFunc), other error=1 (includes unknown subcommands,
-// arg-count violations, and mutually-exclusive-flag conflicts which cobra
-// surfaces outside the flag-parser), SIGINT=130, SIGTERM=143, success=0.
-// See docs/cli/exit-codes.md for the full taxonomy table.
+// (includes invoked-as-root rejection via AuthError), doctor warn-only=6
+// (see errDoctorWarn), config file not found=66 (EX_NOINPUT), invalid pull
+// secret JSON=65 (EX_DATAERR), sudo not found=71 (EX_OSERR), unknown-flag
+// error=64 (EX_USAGE, via SetFlagErrorFunc), other error=1 (includes unknown
+// subcommands, arg-count violations, and mutually-exclusive-flag conflicts
+// which cobra surfaces outside the flag-parser), SIGINT=130, SIGTERM=143,
+// success=0. See docs/cli/exit-codes.md for the full taxonomy table.
 package cli
 
 import (
@@ -130,13 +130,15 @@ func execute() (code int) {
 		if sigCode, handled := signalExitCode(&caughtSig, err); handled {
 			return sigCode
 		}
-		// Pass err as a structured attr so logutil.RedactHandler gets the
-		// chance to scrub credentials in the chain. tui.Error(err.Error())
-		// would stringify before the handler sees it.
-		tui.Error("command failed", tui.LF("err", err))
-		if runLogPath != "" {
-			tui.Info("full run log persisted; attach it to bug reports or run 'okdctl debug-bundle'",
-				tui.LF("path", runLogPath))
+		if shouldAnnounceFailure(err) {
+			// Pass err as a structured attr so logutil.RedactHandler gets the
+			// chance to scrub credentials in the chain. tui.Error(err.Error())
+			// would stringify before the handler sees it.
+			tui.Error("command failed", tui.LF("err", err))
+			if runLogPath != "" {
+				tui.Info("full run log persisted; attach it to bug reports or run 'okdctl debug-bundle'",
+					tui.LF("path", runLogPath))
+			}
 		}
 		return exitCodeFor(err)
 	}
@@ -197,6 +199,15 @@ func printUpdateNotice(ch <-chan version.CheckResult) {
 	fmt.Fprintln(os.Stderr, tui.MutedStyle.Render("  curl -sSfL https://raw.githubusercontent.com/qxtaiba/okdctl/develop/scripts/install.sh | bash"))
 }
 
+// shouldAnnounceFailure reports whether execute() should print its generic
+// "command failed" line for err. errDoctorWarn represents a benign warn-only
+// doctor run (exit 6), not an actual failure, so it is excluded — doctor
+// already prints its own warning summary and a second, contradictory
+// "command failed" line would mislead an operator reading the log.
+func shouldAnnounceFailure(err error) bool {
+	return !errors.Is(err, errDoctorWarn)
+}
+
 // signalExitCode reports whether err was caused by a caught OS signal and,
 // if so, returns the corresponding exit code (130 for SIGINT, 143 for SIGTERM).
 // When no signal was received, handled is false and the caller resolves the
@@ -235,6 +246,12 @@ func exitCodeFor(err error) int {
 	}
 	if errors.Is(err, errtypes.ErrSudoMissing) {
 		return 71
+	}
+	// errDoctorWarn is a cli-local sentinel, not an errtypes category — it
+	// carries its own dedicated code rather than folding into ConfigError(2)
+	// so a warn-only doctor run stays distinguishable from a failing one.
+	if errors.Is(err, errDoctorWarn) {
+		return 6
 	}
 	var cfgErr *errtypes.ConfigError
 	if errors.As(err, &cfgErr) {
