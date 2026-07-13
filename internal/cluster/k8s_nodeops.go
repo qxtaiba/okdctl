@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/executor"
@@ -247,8 +248,13 @@ func (c *Client) Apply(ctx context.Context, manifest []byte) error {
 
 // NodeIndex extracts the trailing integer of a node name (worker2 → 2, true).
 // okdctl VMs are numbered per role, so the suffix is the terraform count index;
-// a name with no trailing digits returns (0, false).
+// a name with no trailing digits returns (0, false). Kubernetes reports nodes
+// by FQDN (grappleberry-worker0.grappleberry.k8s.local), so the domain is
+// stripped first — the index lives in the trailing digits of the first label.
 func NodeIndex(name string) (int, bool) {
+	if dot := strings.IndexByte(name, '.'); dot != -1 {
+		name = name[:dot]
+	}
 	i := len(name)
 	for i > 0 && name[i-1] >= '0' && name[i-1] <= '9' {
 		i--
