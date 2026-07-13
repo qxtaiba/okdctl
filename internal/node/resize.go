@@ -19,8 +19,9 @@ type ResizeScope struct {
 	Node string
 }
 
-// ResizeOptions carries the new per-node resources. MemoryMB is required (> 0);
-// CPU is optional (0 leaves cores unchanged).
+// ResizeOptions carries the new per-node resources. MemoryMB and CPU are each
+// independently optional — 0 keeps the role's current value — but at least
+// one must be set.
 type ResizeOptions struct {
 	MemoryMB int
 	CPU      int
@@ -37,8 +38,8 @@ type ResizeOptions struct {
 // in config/tfvars, but each targeted apply mutates only the current node —
 // other same-role nodes pick up the pending change on the next full deploy.
 func (r *Runner) Resize(ctx context.Context, scope ResizeScope, opts ResizeOptions) error {
-	if opts.MemoryMB <= 0 {
-		return &errtypes.ConfigError{Msg: "resize: --memory-mb must be greater than 0"}
+	if opts.MemoryMB <= 0 && opts.CPU <= 0 {
+		return &errtypes.ConfigError{Msg: "resize: at least one of --memory-mb or --cpu must be set"}
 	}
 
 	// Fail before any disruption: a resize is realized only by a hypervisor
@@ -58,6 +59,9 @@ func (r *Runner) Resize(ctx context.Context, scope ResizeScope, opts ResizeOptio
 	}
 
 	current := r.roleMemoryMB(role)
+	if opts.MemoryMB <= 0 {
+		opts.MemoryMB = current // omitted --memory-mb keeps memory unchanged
+	}
 	delta := opts.MemoryMB - current
 	if opts.HostTotalMiB > 0 {
 		if err := validateMemoryBudget(opts.HostTotalMiB, opts.HostAllocatedMiB, delta*len(targets)); err != nil {

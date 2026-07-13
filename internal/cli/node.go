@@ -59,7 +59,7 @@ run on workers with a non-schedulable control plane (ingress outage).`,
 }
 
 var nodeResizeCmd = &cobra.Command{
-	Use:   "resize (masters|workers|<name>) --memory-mb N [--cpu N]",
+	Use:   "resize (masters|workers|<name>) [--memory-mb N] [--cpu N]",
 	Short: "Resize node CPU/memory per role, rolled out one node at a time",
 	Long: `Change per-role node resources and roll the change out one node at a
 time. Masters are etcd-health-gated before and after every node and applied
@@ -68,9 +68,13 @@ without the etcd gate.
 
 Sizing is per-role: the role's memory/cpu knob is updated in config and tfvars,
 but each targeted apply mutates only the current node; other same-role nodes
-pick up the pending change on the next full deploy.`,
+pick up the pending change on the next full deploy.
+
+At least one of --memory-mb or --cpu is required; an omitted dimension keeps
+the role's current value.`,
 	Example: `  okdctl node resize masters --memory-mb 24576 --yes --confirm-cluster grappleberry
-  okdctl node resize workers --memory-mb 16384 --dry-run`,
+  okdctl node resize workers --memory-mb 16384 --dry-run
+  okdctl node resize workers --cpu 8 --yes --confirm-cluster grappleberry`,
 	Args: cobra.ExactArgs(1),
 	RunE: runNodeResize,
 }
@@ -97,8 +101,8 @@ func init() {
 	nodeResizeCmd.Flags().BoolVarP(&nodeYes, "yes", "y", false, "skip confirmation prompt")
 	nodeResizeCmd.Flags().StringVar(&nodeConfirmCluster, "confirm-cluster", "", "required with --yes; must equal the config cluster name")
 	nodeResizeCmd.Flags().BoolVar(&nodeDryRun, flagDryRun, false, "run gates and the plan gate without mutating anything")
-	nodeResizeCmd.Flags().IntVar(&nodeResizeMemoryMB, "memory-mb", 0, "new per-node memory in MiB (required)")
-	nodeResizeCmd.Flags().IntVar(&nodeResizeCPU, "cpu", 0, "new per-node cpu cores (0 leaves unchanged)")
+	nodeResizeCmd.Flags().IntVar(&nodeResizeMemoryMB, "memory-mb", 0, "new per-node memory in MiB (0 keeps current)")
+	nodeResizeCmd.Flags().IntVar(&nodeResizeCPU, "cpu", 0, "new per-node cpu cores (0 keeps current)")
 
 	nodeAddCmd.Flags().String("role", "worker", "node role to add")
 
@@ -306,15 +310,16 @@ func runNodeResize(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	if nodeResizeMemoryMB <= 0 {
-		return &errtypes.UsageError{Msg: "resize requires --memory-mb greater than 0"}
+	if err := validateResizeFlags(nodeResizeMemoryMB, nodeResizeCPU); err != nil {
+		return err
 	}
 
 	if err := confirmClusterMatches(nodeYes, nodeConfirmCluster, cfg.Cluster.Name, "node resize"); err != nil {
 		return err
 	}
 	if !nodeYes && !nodeDryRun {
-		proceed, err := promptForConfirmation(cmd.Context(), fmt.Sprintf("resize %s to %d MiB in cluster %q? [y/N]: ", args[0], nodeResizeMemoryMB, cfg.Cluster.Name))
+		prompt := fmt.Sprintf("resize %s to %s in cluster %q? [y/N]: ", args[0], describeResizeChange(nodeResizeMemoryMB, nodeResizeCPU), cfg.Cluster.Name)
+		proceed, err := promptForConfirmation(cmd.Context(), prompt)
 		if err != nil {
 			return err
 		}
@@ -336,6 +341,28 @@ func runNodeResize(cmd *cobra.Command, args []string) error {
 		HostTotalMiB:     rc.HostTotalMiB,
 		HostAllocatedMiB: rc.HostAllocatedMiB,
 	})
+}
+
+// validateResizeFlags requires at least one resize dimension: an omitted
+// --memory-mb or --cpu keeps the role's current value rather than erroring.
+func validateResizeFlags(memoryMB, cpu int) error {
+	if memoryMB <= 0 && cpu <= 0 {
+		return &errtypes.UsageError{Msg: "resize requires at least one of --memory-mb or --cpu"}
+	}
+	return nil
+}
+
+// describeResizeChange renders the confirmation-prompt summary of a resize,
+// naming only the dimensions the caller is actually changing.
+func describeResizeChange(memoryMB, cpu int) string {
+	switch {
+	case memoryMB > 0 && cpu > 0:
+		return fmt.Sprintf("%d MiB, %d vCPU", memoryMB, cpu)
+	case memoryMB > 0:
+		return fmt.Sprintf("%d MiB", memoryMB)
+	default:
+		return fmt.Sprintf("%d vCPU", cpu)
+	}
 }
 
 func parseResizeScope(arg string) (node.ResizeScope, error) {
