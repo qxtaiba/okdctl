@@ -170,6 +170,19 @@ func buildNodeRunner(ctx context.Context, cfg *config.Config, verb string, dryRu
 	runner.DryRun = dryRun
 	runner.Reporter = func(desc string) func() { return tui.StartSpinner(ctx, desc) }
 
+	// A resize takes effect only after a Proxmox power-cycle (bpg/proxmox changes
+	// the VM config without restarting). Wire the API power-cycler whenever creds
+	// are present; resize fails safe when it is nil.
+	if probeHost && creds.IsValid() {
+		runner.Power = proxmox.NewPowerCycler(&proxmox.PowerCycleOptions{
+			Endpoint: creds.Endpoint,
+			Username: creds.Username,
+			Password: creds.Password,
+			APIToken: creds.APIToken,
+			Insecure: creds.Insecure,
+		})
+	}
+
 	return &nodeRunnerCtx{
 		runner:           runner,
 		HostTotalMiB:     hostTotalMiB,

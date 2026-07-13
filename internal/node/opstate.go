@@ -40,12 +40,13 @@ type Step string
 
 // Mutating steps a marker can be written before; used for resume diagnostics.
 const (
-	StepCordon    Step = "cordon"
-	StepDrain     Step = "drain"
-	StepTFApply   Step = "tf-apply"
-	StepDeleteK8s Step = "delete-node"
-	StepHAProxy   Step = "haproxy"
-	StepUncordon  Step = "uncordon"
+	StepCordon     Step = "cordon"
+	StepDrain      Step = "drain"
+	StepTFApply    Step = "tf-apply"
+	StepPowerCycle Step = "power-cycle"
+	StepDeleteK8s  Step = "delete-node"
+	StepHAProxy    Step = "haproxy"
+	StepUncordon   Step = "uncordon"
 )
 
 // opState is the marker payload. ClusterName guards against a marker left in a

@@ -2,9 +2,11 @@ package node
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/qxtaiba/okdctl/internal/cluster"
 	"github.com/qxtaiba/okdctl/internal/config"
@@ -13,18 +15,22 @@ import (
 	"github.com/qxtaiba/okdctl/internal/nodetypes"
 )
 
+const testProxmoxNode = "pve"
+
 // fakeCluster records the mutating calls a node op makes so a dry-run can be
 // asserted to make none.
 type fakeCluster struct {
-	nodes       []cluster.NodeDetail
-	cordon      int
-	drain       int
-	uncordon    int
-	deleteNode  int
-	setSched    int
-	applied     int
-	schedulable bool
-	etcdHealthy bool
+	nodes          []cluster.NodeDetail
+	cordon         int
+	drain          int
+	uncordon       int
+	deleteNode     int
+	setSched       int
+	applied        int
+	schedulable    bool
+	etcdHealthy    bool
+	cephApplicable bool
+	cephHealthy    bool
 }
 
 func (f *fakeCluster) ListNodes(context.Context) ([]cluster.NodeDetail, error) { return f.nodes, nil }
@@ -37,6 +43,10 @@ func (f *fakeCluster) Drain(context.Context, string, cluster.DrainOptions) error
 func (f *fakeCluster) DeleteNode(context.Context, string) error { f.deleteNode++; return nil }
 func (f *fakeCluster) EtcdHealthy(context.Context) (cluster.EtcdHealth, error) {
 	return cluster.EtcdHealth{Healthy: f.etcdHealthy}, nil
+}
+
+func (f *fakeCluster) CephHealthy(context.Context) (cluster.CephHealth, error) {
+	return cluster.CephHealth{Applicable: f.cephApplicable, Healthy: f.cephHealthy}, nil
 }
 func (f *fakeCluster) MastersSchedulable(context.Context) (bool, error) { return f.schedulable, nil }
 func (f *fakeCluster) SetMastersSchedulable(context.Context, bool) error {
@@ -81,6 +91,22 @@ func (f *fakeTF) Apply(context.Context, terraform.ApplyOptions) error {
 }
 func (f *fakeTF) WithLockHint(err error) error { return err }
 
+// fakePower records power-cycle calls so a resize can be asserted to realize
+// the change via the hypervisor. err simulates an API failure.
+type fakePower struct {
+	calls    int
+	lastNode string
+	lastVMID int
+	err      error
+}
+
+func (f *fakePower) PowerCycleVM(_ context.Context, node string, vmid int) error {
+	f.calls++
+	f.lastNode = node
+	f.lastVMID = vmid
+	return f.err
+}
+
 func seedRunner(t *testing.T, fc *fakeCluster, ftf *fakeTF, cfg *config.Config) (r *Runner, tfvarsPath, cfgPath string) {
 	t.Helper()
 	dir := t.TempDir()
@@ -93,15 +119,18 @@ func seedRunner(t *testing.T, fc *fakeCluster, ftf *fakeTF, cfg *config.Config) 
 		t.Fatal(err)
 	}
 	r = &Runner{
-		Cluster:    fc,
-		TF:         ftf,
-		Cfg:        cfg,
-		ConfigPath: cfgPath,
-		WorkDir:    dir,
-		EnvDir:     dir,
-		RunID:      "test-run",
-		DryRun:     true,
-		Log:        logutil.NopLogger,
+		Cluster:          fc,
+		TF:               ftf,
+		Cfg:              cfg,
+		ConfigPath:       cfgPath,
+		WorkDir:          dir,
+		EnvDir:           dir,
+		RunID:            "test-run",
+		DryRun:           true,
+		Log:              logutil.NopLogger,
+		NodeReadyTimeout: 5 * time.Second,
+		EtcdGateTimeout:  5 * time.Second,
+		CephGateTimeout:  5 * time.Second,
 	}
 	return r, tfvarsPath, cfgPath
 }
@@ -199,6 +228,83 @@ func TestResizeMemoryBudgetDegradesWhenProbeAbsent(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatalf("absent probe must degrade to a warning, not fail: %v", err)
+	}
+}
+
+func TestResizeOneNodePowerCyclesAndRealizes(t *testing.T) {
+	fc := &fakeCluster{
+		nodes:          []cluster.NodeDetail{{Name: "worker0", Role: nodetypes.RoleWorker, Ready: true}},
+		cephApplicable: true,
+		cephHealthy:    true,
+	}
+	ftf := &fakeTF{action: terraform.PlanActionUpdate}
+	fp := &fakePower{}
+	cfg := config.DefaultConfig()
+	cfg.Topology.VMIDBase = 6000
+	cfg.Provider.Proxmox.Node = testProxmoxNode
+
+	r, _, _ := seedRunner(t, fc, ftf, cfg)
+	r.DryRun = false
+	r.Power = fp
+
+	if err := r.resizeOneNode(context.Background(), resizeTarget{name: "worker0", index: 0}, nodetypes.RoleWorker, map[string]string{"worker_memory_mb": "16384"}); err != nil {
+		t.Fatalf("resizeOneNode: %v", err)
+	}
+	if fp.calls != 1 {
+		t.Fatalf("expected exactly one power-cycle, got %d", fp.calls)
+	}
+	if fp.lastVMID != 6100 || fp.lastNode != testProxmoxNode {
+		t.Fatalf("power-cycle addressed wrong vm: node=%q vmid=%d (want pve/6100)", fp.lastNode, fp.lastVMID)
+	}
+	if fc.cordon != 1 || fc.drain != 1 || fc.uncordon != 1 {
+		t.Errorf("expected cordon/drain/uncordon once each: cordon=%d drain=%d uncordon=%d", fc.cordon, fc.drain, fc.uncordon)
+	}
+}
+
+func TestResizeOneNodePowerCycleFailureLeavesCordoned(t *testing.T) {
+	fc := &fakeCluster{
+		nodes:          []cluster.NodeDetail{{Name: "worker0", Role: nodetypes.RoleWorker, Ready: true}},
+		cephApplicable: true,
+		cephHealthy:    true,
+	}
+	ftf := &fakeTF{action: terraform.PlanActionUpdate}
+	fp := &fakePower{err: errors.New("proxmox api unreachable")}
+	cfg := config.DefaultConfig()
+	cfg.Topology.VMIDBase = 6000
+	cfg.Provider.Proxmox.Node = testProxmoxNode
+
+	r, _, _ := seedRunner(t, fc, ftf, cfg)
+	r.DryRun = false
+	r.Power = fp
+
+	err := r.resizeOneNode(context.Background(), resizeTarget{name: "worker0", index: 0}, nodetypes.RoleWorker, map[string]string{"worker_memory_mb": "16384"})
+	if err == nil {
+		t.Fatal("expected error when power-cycle fails")
+	}
+	if fc.uncordon != 0 {
+		t.Errorf("node must be left cordoned on power-cycle failure; uncordon=%d", fc.uncordon)
+	}
+	if fp.calls != 1 {
+		t.Errorf("expected one power-cycle attempt, got %d", fp.calls)
+	}
+}
+
+func TestResizeRefusesWithoutPowerCycler(t *testing.T) {
+	fc := &fakeCluster{nodes: []cluster.NodeDetail{{Name: "worker0", Role: nodetypes.RoleWorker, Ready: true}}}
+	ftf := &fakeTF{action: terraform.PlanActionUpdate}
+	cfg := config.DefaultConfig()
+	cfg.Topology.Workers.MemoryMB = 12288
+
+	r, _, _ := seedRunner(t, fc, ftf, cfg)
+	r.DryRun = false
+	r.Power = nil
+
+	err := r.Resize(context.Background(), ResizeScope{Role: nodetypes.RoleWorker}, ResizeOptions{MemoryMB: 16384})
+	if err == nil {
+		t.Fatal("expected refusal when no power-cycler is wired")
+	}
+	if fc.cordon != 0 || fc.drain != 0 {
+		t.Errorf("refusal must precede any disruption: cordon=%d drain=%d", fc.cordon, fc.drain)
 	}
 }
 

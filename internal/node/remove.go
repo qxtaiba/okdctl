@@ -82,6 +82,14 @@ func (r *Runner) RemoveWorker(ctx context.Context, target string, opts RemoveOpt
 		return err
 	}
 
+	// If the removed worker held OSDs (--force-storage / compaction), destroying
+	// its CEPH-DATA disk triggers a rebalance. Wait for structural Ceph health
+	// before returning so a compact loop never starts draining the next worker
+	// while a replica is still missing. No-op on non-Ceph clusters.
+	if err := r.waitCephHealthy(ctx, "post-remove-"+target); err != nil {
+		return err
+	}
+
 	if err := clearOpMarker(r.marker()); err != nil {
 		r.Log.Warn("node: op marker cleanup failed", "err", err)
 	}

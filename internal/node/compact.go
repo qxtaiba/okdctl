@@ -88,6 +88,9 @@ func (r *Runner) Compact(ctx context.Context, opts CompactOptions) error {
 	if err := r.waitEtcdHealthy(ctx, "compact-final"); err != nil {
 		return err
 	}
+	if err := r.waitCephHealthy(ctx, "compact-final"); err != nil {
+		return err
+	}
 	r.Log.Info("node: compaction complete", "masters", len(masters))
 	return nil
 }

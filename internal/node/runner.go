@@ -13,6 +13,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/infrastructure/terraform"
 	"github.com/qxtaiba/okdctl/internal/logutil"
+	"github.com/qxtaiba/okdctl/internal/nodetypes"
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
@@ -22,9 +23,17 @@ import (
 const (
 	DefaultNodeReadyTimeout = 15 * time.Minute
 	DefaultEtcdGateTimeout  = 10 * time.Minute
+	// DefaultCephGateTimeout is generous: a rebalance after an OSD host is
+	// power-cycled or removed can take a while to return all PGs to active+clean.
+	DefaultCephGateTimeout = 30 * time.Minute
 	// hostMemoryReserveMiB is the hypervisor headroom the memory-budget guard
 	// keeps free when projecting a resize (ZFS ARC, host services).
 	hostMemoryReserveMiB = 2048
+	// vmidMasterOffset / vmidWorkerOffset mirror the module's numbering
+	// (bootstrap=base, masters=base+10+n, workers=base+100+n) so a resize can
+	// address the right QEMU id for the Proxmox power-cycle.
+	vmidMasterOffset = 10
+	vmidWorkerOffset = 100
 )
 
 // clusterClient is the slice of cluster.Client the node ops drive. Defined as
@@ -37,10 +46,19 @@ type clusterClient interface {
 	Drain(ctx context.Context, node string, opts cluster.DrainOptions) error
 	DeleteNode(ctx context.Context, node string) error
 	EtcdHealthy(ctx context.Context) (cluster.EtcdHealth, error)
+	CephHealthy(ctx context.Context) (cluster.CephHealth, error)
 	MastersSchedulable(ctx context.Context) (bool, error)
 	SetMastersSchedulable(ctx context.Context, schedulable bool) error
 	PodsForSelector(ctx context.Context, namespace, selector string) ([]cluster.PodPlacement, error)
 	Apply(ctx context.Context, manifest []byte) error
+}
+
+// vmPowerCycler stops→starts a VM through the Proxmox API. An interface so a
+// resize test can record the call without a live hypervisor. nil means no
+// Proxmox credentials were wired — resize then refuses rather than silently
+// leaving the memory change unrealized.
+type vmPowerCycler interface {
+	PowerCycleVM(ctx context.Context, node string, vmid int) error
 }
 
 // terraformExec is the slice of terraform.Executor node ops drive; an interface
@@ -70,8 +88,13 @@ type Runner struct {
 	Log         *slog.Logger
 	Reporter    logutil.ProgressReporter
 
+	// Power performs the post-resize hypervisor power-cycle. nil when no
+	// Proxmox credentials are available; a resize then fails safe.
+	Power vmPowerCycler
+
 	NodeReadyTimeout time.Duration
 	EtcdGateTimeout  time.Duration
+	CephGateTimeout  time.Duration
 }
 
 // NewRunner wires a Runner with derived work/env directories and default
@@ -91,6 +114,7 @@ func NewRunner(cl *cluster.Client, tf *terraform.Executor, cfg *config.Config, p
 		Reporter:         logutil.NopProgressReporter,
 		NodeReadyTimeout: DefaultNodeReadyTimeout,
 		EtcdGateTimeout:  DefaultEtcdGateTimeout,
+		CephGateTimeout:  DefaultCephGateTimeout,
 	}
 }
 
@@ -197,6 +221,65 @@ func (r *Runner) waitEtcdHealthy(ctx context.Context, phase string) error {
 	}
 	if err := system.WaitForWithTimeout(ctx, "etcd", phase, ok, r.EtcdGateTimeout, r.Log); err != nil {
 		return &errtypes.ClusterError{Msg: fmt.Sprintf("etcd health gate (%s) failed: %s", phase, lastReason), Err: err}
+	}
+	return nil
+}
+
+// powerCycleVM stops→starts the VM backing a resized node so bpg/proxmox's
+// config-only memory change actually takes effect (see PowerCycler). It fails
+// closed: without a wired power-cycler the resize cannot be realized, so the
+// caller must leave the node cordoned and surface the error.
+func (r *Runner) powerCycleVM(ctx context.Context, role nodetypes.NodeRole, index int) error {
+	if r.Power == nil {
+		return &errtypes.ClusterError{Msg: "resize needs Proxmox API access to power-cycle the VM (the config-only memory change does not take effect until a stop→start), but no Proxmox credentials are available"}
+	}
+	base := r.Cfg.Topology.VMIDBase
+	if base == 0 {
+		base = config.DefaultVMIDBase
+	}
+	offset := vmidWorkerOffset
+	if role == nodetypes.RoleMaster {
+		offset = vmidMasterOffset
+	}
+	vmid := base + offset + index
+	node := ""
+	if r.Cfg.Provider.Proxmox != nil {
+		node = r.Cfg.Provider.Proxmox.Node
+	}
+	if err := r.Power.PowerCycleVM(ctx, node, vmid); err != nil {
+		return &errtypes.ClusterError{Msg: fmt.Sprintf("power-cycle vm %d (node left cordoned; resize not realized)", vmid), Err: err}
+	}
+	return nil
+}
+
+// waitCephHealthy blocks until rook-ceph is structurally healthy (mons in
+// quorum, OSDs up/in, PGs active+clean) or the gate times out. Clusters without
+// a rook-ceph toolbox are treated as not-applicable and pass immediately, so
+// the gate is a no-op on non-Ceph clusters.
+func (r *Runner) waitCephHealthy(ctx context.Context, phase string) error {
+	var lastReason string
+	notApplicable := false
+	ok := func(ctx context.Context) bool {
+		h, err := r.Cluster.CephHealthy(ctx)
+		if err != nil {
+			lastReason = err.Error()
+			return false
+		}
+		if !h.Applicable {
+			notApplicable = true
+			return true
+		}
+		if !h.Healthy {
+			lastReason = h.Reason
+			return false
+		}
+		return true
+	}
+	if err := system.WaitForWithTimeout(ctx, "ceph", phase, ok, r.CephGateTimeout, r.Log); err != nil {
+		return &errtypes.ClusterError{Msg: fmt.Sprintf("ceph health gate (%s) failed: %s", phase, lastReason), Err: err}
+	}
+	if notApplicable {
+		r.Log.Debug("node: rook-ceph not present; ceph gate skipped", "phase", phase)
 	}
 	return nil
 }
