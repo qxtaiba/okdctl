@@ -151,6 +151,54 @@ func TestResizeDryRunMakesNoMutation(t *testing.T) {
 	}
 }
 
+func TestResizeMemoryBudgetEnforcedWhenProbeFeedsValues(t *testing.T) {
+	fc := &fakeCluster{
+		nodes:       []cluster.NodeDetail{{Name: "master0", Role: nodetypes.RoleMaster}},
+		etcdHealthy: true,
+	}
+	ftf := &fakeTF{action: terraform.PlanActionUpdate}
+	cfg := config.DefaultConfig()
+	cfg.Topology.ControlPlane.MemoryMB = 12288
+
+	r, _, _ := seedRunner(t, fc, ftf, cfg)
+
+	// Host nearly full: growing a master by ~28 GiB must be refused by the guard.
+	err := r.Resize(context.Background(), ResizeScope{Role: nodetypes.RoleMaster}, ResizeOptions{
+		MemoryMB:         40960,
+		HostTotalMiB:     96000,
+		HostAllocatedMiB: 93000,
+	})
+	if err == nil {
+		t.Fatal("want memory-budget refusal when the probe reports the host is full")
+	}
+	if ftf.planCalls != 0 {
+		t.Errorf("budget refusal must precede any plan; planCalls=%d", ftf.planCalls)
+	}
+}
+
+func TestResizeMemoryBudgetDegradesWhenProbeAbsent(t *testing.T) {
+	fc := &fakeCluster{
+		nodes:       []cluster.NodeDetail{{Name: "master0", Role: nodetypes.RoleMaster}},
+		etcdHealthy: true,
+	}
+	ftf := &fakeTF{action: terraform.PlanActionUpdate}
+	cfg := config.DefaultConfig()
+	cfg.Topology.ControlPlane.MemoryMB = 12288
+
+	r, _, _ := seedRunner(t, fc, ftf, cfg)
+
+	// Zero host budget models a failed/absent probe: the guard must warn and
+	// continue, not hard-fail the resize.
+	err := r.Resize(context.Background(), ResizeScope{Role: nodetypes.RoleMaster}, ResizeOptions{
+		MemoryMB:         40960,
+		HostTotalMiB:     0,
+		HostAllocatedMiB: 0,
+	})
+	if err != nil {
+		t.Fatalf("absent probe must degrade to a warning, not fail: %v", err)
+	}
+}
+
 func TestRemoveDryRunPreviewIsTruthfulAndInert(t *testing.T) {
 	fc := &fakeCluster{
 		nodes: []cluster.NodeDetail{

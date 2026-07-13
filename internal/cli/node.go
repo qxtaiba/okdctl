@@ -9,10 +9,12 @@ import (
 
 	"github.com/qxtaiba/okdctl/internal/cluster"
 	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/credentials"
 	"github.com/qxtaiba/okdctl/internal/deploy"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/clusterstatus"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
+	"github.com/qxtaiba/okdctl/internal/infrastructure/proxmox"
 	"github.com/qxtaiba/okdctl/internal/infrastructure/terraform"
 	"github.com/qxtaiba/okdctl/internal/node"
 	"github.com/qxtaiba/okdctl/internal/nodetypes"
@@ -107,10 +109,14 @@ func init() {
 }
 
 // nodeRunnerCtx bundles the disposable resources a node op holds so RunE
-// bodies can defer a single cleanup.
+// bodies can defer a single cleanup. HostTotalMiB/HostAllocatedMiB are the
+// read-only Proxmox memory-budget probe results (zero when the probe was
+// skipped or failed — the guard then warns instead of enforcing).
 type nodeRunnerCtx struct {
-	runner  *node.Runner
-	release func()
+	runner           *node.Runner
+	release          func()
+	HostTotalMiB     int
+	HostAllocatedMiB int
 }
 
 func (n *nodeRunnerCtx) cleanup() { n.release() }
@@ -119,7 +125,7 @@ func (n *nodeRunnerCtx) cleanup() { n.release() }
 // predates node-lifecycle support, loads credentials, and wires a node.Runner
 // under the project run lock. The returned cleanup zeroizes credentials and
 // releases the lock.
-func buildNodeRunner(ctx context.Context, cfg *config.Config, verb string, dryRun bool) (*nodeRunnerCtx, error) {
+func buildNodeRunner(ctx context.Context, cfg *config.Config, verb string, dryRun, probeHost bool) (*nodeRunnerCtx, error) {
 	projectRoot, err := resolveProjectRootOrDie()
 	if err != nil {
 		return nil, err
@@ -131,6 +137,11 @@ func buildNodeRunner(ctx context.Context, cfg *config.Config, verb string, dryRu
 	creds, err := handleCredentials(cfg)
 	if err != nil {
 		return nil, err
+	}
+
+	var hostTotalMiB, hostAllocatedMiB int
+	if probeHost && creds.IsValid() {
+		hostTotalMiB, hostAllocatedMiB = runHostBudgetProbe(ctx, cfg, creds)
 	}
 
 	tfEnv := phase.GetTerraformEnv(cfg)
@@ -160,13 +171,51 @@ func buildNodeRunner(ctx context.Context, cfg *config.Config, verb string, dryRu
 	runner.Reporter = func(desc string) func() { return tui.StartSpinner(ctx, desc) }
 
 	return &nodeRunnerCtx{
-		runner: runner,
+		runner:           runner,
+		HostTotalMiB:     hostTotalMiB,
+		HostAllocatedMiB: hostAllocatedMiB,
 		release: func() {
 			lock.Release()
 			tf.ZeroizeEnv()
 			creds.Zeroize()
 		},
 	}, nil
+}
+
+// runHostBudgetProbe reads host memory and datastore headroom from the Proxmox
+// API (read-only) so the memory-budget guard can enforce numerically. It
+// degrades gracefully: a probe failure or missing provider config logs a
+// warning and returns zeros, leaving the guard in warn-only mode rather than
+// blocking a resize on an unreachable probe.
+func runHostBudgetProbe(ctx context.Context, cfg *config.Config, creds *credentials.ProxmoxCredentials) (totalMiB, allocatedMiB int) {
+	px := cfg.Provider.Proxmox
+	if px == nil {
+		return 0, 0
+	}
+	probe, err := proxmox.ProbeHost(ctx, &proxmox.ProbeOptions{
+		Endpoint:   creds.Endpoint,
+		Username:   creds.Username,
+		Password:   creds.Password,
+		APIToken:   creds.APIToken,
+		Insecure:   creds.Insecure,
+		Node:       px.Node,
+		Datastores: []string{px.Storage, px.DataStorage},
+	})
+	if err != nil {
+		tui.Warn("host memory-budget probe failed; memory guard will warn instead of enforce", tui.LF("err", err))
+		return 0, 0
+	}
+	tui.Info("host memory budget",
+		tui.LF("node", probe.Node),
+		tui.LF("total_mib", probe.HostMemTotalMiB()),
+		tui.LF("allocated_mib", probe.GuestAllocatedMiB()))
+	for _, d := range probe.Datastores {
+		tui.Info("datastore headroom",
+			tui.LF("name", d.Name),
+			tui.LF("free_gib", d.AvailBytes/(1024*1024*1024)),
+			tui.LF("total_gib", d.TotalBytes/(1024*1024*1024)))
+	}
+	return probe.HostMemTotalMiB(), probe.GuestAllocatedMiB()
 }
 
 // ensureNodeOpsWorkspace migrates a write-once terraform root that lacks the
@@ -222,7 +271,7 @@ func runNodeRemove(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	rc, err := buildNodeRunner(cmd.Context(), cfg, "remove", nodeDryRun)
+	rc, err := buildNodeRunner(cmd.Context(), cfg, "remove", nodeDryRun, false)
 	if err != nil {
 		return err
 	}
@@ -262,15 +311,17 @@ func runNodeResize(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	rc, err := buildNodeRunner(cmd.Context(), cfg, "resize", nodeDryRun)
+	rc, err := buildNodeRunner(cmd.Context(), cfg, "resize", nodeDryRun, true)
 	if err != nil {
 		return err
 	}
 	defer rc.cleanup()
 
 	return rc.runner.Resize(cmd.Context(), scope, node.ResizeOptions{
-		MemoryMB: nodeResizeMemoryMB,
-		CPU:      nodeResizeCPU,
+		MemoryMB:         nodeResizeMemoryMB,
+		CPU:              nodeResizeCPU,
+		HostTotalMiB:     rc.HostTotalMiB,
+		HostAllocatedMiB: rc.HostAllocatedMiB,
 	})
 }
 
