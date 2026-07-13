@@ -120,6 +120,21 @@ func NewRunner(cl *cluster.Client, tf *terraform.Executor, cfg *config.Config, p
 
 func (r *Runner) marker() string { return markerPath(r.WorkDir) }
 
+// startProgress starts r.Reporter for desc, unless dry-run — a dry-run must
+// stay visually silent even for gates that run ahead of the dry-run branch
+// (e.g. compact's pre-flight etcd check), so the check lives here once
+// rather than at every call site. Reporter is nil-safe: Runner values built
+// directly (tests) skip NewRunner's NopProgressReporter default.
+func (r *Runner) startProgress(desc string) (stop func()) {
+	if r.DryRun {
+		return func() {}
+	}
+	if r.Reporter == nil {
+		return logutil.NopProgressReporter(desc)
+	}
+	return r.Reporter(desc)
+}
+
 // persistTopology re-renders terraform.tfvars from the mutated config and saves
 // okdctl.yaml, so the reduced/resized topology survives into the next full
 // deploy. WriteTerraformVars preserves the bootstrap sentinel (unlike deploy's
@@ -199,6 +214,9 @@ func (r *Runner) planTargeted(ctx context.Context, address string, want terrafor
 // preview is truthful without persisting terraform.tfvars — the dry-run path
 // relies on this to show the intended change while writing nothing to disk.
 func (r *Runner) targetedApply(ctx context.Context, address string, want terraform.PlanAction, planVars map[string]string) error {
+	stop := r.startProgress(fmt.Sprintf("applying terraform change to %s", address))
+	defer stop()
+
 	planPath, cleanup, err := r.planTargeted(ctx, address, want, planVars)
 	if err != nil {
 		return err
@@ -228,6 +246,9 @@ func (r *Runner) targetedApply(ctx context.Context, address string, want terrafo
 // waitEtcdHealthy blocks until the etcd quorum is healthy or the gate times
 // out. It is the mandatory pre/post gate around any control-plane mutation.
 func (r *Runner) waitEtcdHealthy(ctx context.Context, phase string) error {
+	stop := r.startProgress(fmt.Sprintf("waiting for etcd health (%s)", phase))
+	defer stop()
+
 	var lastReason string
 	ok := func(ctx context.Context) bool {
 		h, err := r.Cluster.EtcdHealthy(ctx)
@@ -309,6 +330,9 @@ func (r *Runner) waitCephHealthy(ctx context.Context, phase string) error {
 // waitNodeReady blocks until node reports Ready. Used after a resize apply so
 // the next control-plane step never proceeds against a rebooting node.
 func (r *Runner) waitNodeReady(ctx context.Context, node string) error {
+	stop := r.startProgress(fmt.Sprintf("waiting for node %s to become ready", node))
+	defer stop()
+
 	ok := func(ctx context.Context) bool {
 		nodes, err := r.Cluster.ListNodes(ctx)
 		if err != nil {

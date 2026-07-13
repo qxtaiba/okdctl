@@ -195,25 +195,8 @@ func (r *Runner) resizeOneNode(ctx context.Context, t resizeTarget, role nodetyp
 		}
 	}
 
-	if err := markStep(r.marker(), OpResize, t.name, StepCordon, r.RunID, r.Cfg.Cluster.Name); err != nil {
+	if err := r.resizeCordonAndDrain(ctx, t.name, isMaster); err != nil {
 		return err
-	}
-	if err := r.Cluster.Cordon(ctx, t.name); err != nil {
-		return err
-	}
-	if err := markStep(r.marker(), OpResize, t.name, StepDrain, r.RunID, r.Cfg.Cluster.Name); err != nil {
-		return err
-	}
-	if err := r.Cluster.Drain(ctx, t.name, cluster.DrainOptions{
-		IgnoreDaemonsets: true,
-		DeleteEmptyDir:   true,
-		// Control-plane nodes host standalone guard pods (etcd-guard,
-		// kube-apiserver-guard, …) that declare no controller; oc adm drain
-		// refuses those without --force, so a master resize needs Force.
-		Force:   isMaster,
-		Timeout: "10m",
-	}); err != nil {
-		return &errtypes.ClusterError{Msg: fmt.Sprintf("drain %s (node left cordoned)", t.name), Err: err}
 	}
 
 	if err := markStep(r.marker(), OpResize, t.name, StepTFApply, r.RunID, r.Cfg.Cluster.Name); err != nil {
@@ -262,5 +245,32 @@ func (r *Runner) resizeOneNode(ctx context.Context, t resizeTarget, role nodetyp
 	}
 
 	r.Log.Info("node: resized", "node", t.name, "role", string(role))
+	return nil
+}
+
+func (r *Runner) resizeCordonAndDrain(ctx context.Context, node string, isMaster bool) error {
+	stop := r.startProgress(fmt.Sprintf("cordoning and draining %s", node))
+	defer stop()
+
+	if err := markStep(r.marker(), OpResize, node, StepCordon, r.RunID, r.Cfg.Cluster.Name); err != nil {
+		return err
+	}
+	if err := r.Cluster.Cordon(ctx, node); err != nil {
+		return err
+	}
+	if err := markStep(r.marker(), OpResize, node, StepDrain, r.RunID, r.Cfg.Cluster.Name); err != nil {
+		return err
+	}
+	if err := r.Cluster.Drain(ctx, node, cluster.DrainOptions{
+		IgnoreDaemonsets: true,
+		DeleteEmptyDir:   true,
+		// Control-plane nodes host standalone guard pods (etcd-guard,
+		// kube-apiserver-guard, …) that declare no controller; oc adm drain
+		// refuses those without --force, so a master resize needs Force.
+		Force:   isMaster,
+		Timeout: "10m",
+	}); err != nil {
+		return &errtypes.ClusterError{Msg: fmt.Sprintf("drain %s (node left cordoned)", node), Err: err}
+	}
 	return nil
 }
