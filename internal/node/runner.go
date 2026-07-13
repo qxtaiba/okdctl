@@ -27,12 +27,39 @@ const (
 	hostMemoryReserveMiB = 2048
 )
 
+// clusterClient is the slice of cluster.Client the node ops drive. Defined as
+// an interface so tests can substitute a call-recording fake (proving, e.g.,
+// that a dry-run performs no cordon/drain) without a live cluster.
+type clusterClient interface {
+	ListNodes(ctx context.Context) ([]cluster.NodeDetail, error)
+	Cordon(ctx context.Context, node string) error
+	Uncordon(ctx context.Context, node string) error
+	Drain(ctx context.Context, node string, opts cluster.DrainOptions) error
+	DeleteNode(ctx context.Context, node string) error
+	EtcdHealthy(ctx context.Context) (cluster.EtcdHealth, error)
+	MastersSchedulable(ctx context.Context) (bool, error)
+	SetMastersSchedulable(ctx context.Context, schedulable bool) error
+	PodsForSelector(ctx context.Context, namespace, selector string) ([]cluster.PodPlacement, error)
+	Apply(ctx context.Context, manifest []byte) error
+}
+
+// terraformExec is the slice of terraform.Executor node ops drive; an interface
+// so a fake can record plan/apply calls without running terraform.
+type terraformExec interface {
+	Init(ctx context.Context) error
+	Plan(ctx context.Context, opts terraform.PlanOptions) error
+	ShowPlanChanges(ctx context.Context, planFile string) ([]terraform.ResourceChange, error)
+	SnapshotState(ctx context.Context) (string, error)
+	Apply(ctx context.Context, opts terraform.ApplyOptions) error
+	WithLockHint(err error) error
+}
+
 // Runner drives node-lifecycle ops against one cluster. TF mutates VMs;
 // Cluster runs the Kubernetes lifecycle. ConfigPath and EnvDir are persisted
 // on each op so a later full deploy reconciles to the same topology.
 type Runner struct {
-	Cluster     *cluster.Client
-	TF          *terraform.Executor
+	Cluster     clusterClient
+	TF          terraformExec
 	Cfg         *config.Config
 	ConfigPath  string
 	ProjectRoot string
@@ -85,8 +112,10 @@ func (r *Runner) persistTopology() error {
 
 // targetedApply plans a single-resource change, gates the plan to exactly
 // (address, want), snapshots state, and applies the saved plan. A gate failure
-// aborts before any mutation. Returns the state-snapshot path for diagnostics.
-func (r *Runner) targetedApply(ctx context.Context, address string, want terraform.PlanAction) error {
+// aborts before any mutation. planVars are plan-time -var overrides so the
+// preview is truthful without persisting terraform.tfvars — the dry-run path
+// relies on this to show the intended change while writing nothing to disk.
+func (r *Runner) targetedApply(ctx context.Context, address string, want terraform.PlanAction, planVars map[string]string) error {
 	if err := r.TF.Init(ctx); err != nil {
 		return r.TF.WithLockHint(&errtypes.ClusterError{Msg: "terraform init", Err: err})
 	}
@@ -102,6 +131,7 @@ func (r *Runner) targetedApply(ctx context.Context, address string, want terrafo
 	if err := r.TF.Plan(ctx, terraform.PlanOptions{
 		OutputPlanFile: planFile,
 		Targets:        []string{address},
+		Vars:           planVars,
 	}); err != nil {
 		return r.TF.WithLockHint(&errtypes.ClusterError{Msg: "terraform plan", Err: err})
 	}
