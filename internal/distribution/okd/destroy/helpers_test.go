@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -286,39 +287,40 @@ func TestDestroyInfrastructure_CorruptStateWithBakNamesSnapshot(t *testing.T) {
 }
 
 func TestCustomISONames(t *testing.T) {
-	cfg := &config.Config{}
-	cfg.Topology.ControlPlane.Count = 3
-	cfg.Topology.Workers.Count = 2
+	cases := []struct {
+		name    string
+		masters int
+		workers int
+		want    []string
+	}{
+		{
+			name:    "multi master multi worker",
+			masters: 3,
+			workers: 2,
+			want: []string{
+				"bootstrap.iso",
+				"master0.iso", "master1.iso", "master2.iso",
+				"worker0.iso", "worker1.iso",
+			},
+		},
+		{
+			name:    "single master no workers",
+			masters: 1,
+			workers: 0,
+			want:    []string{"bootstrap.iso", "master0.iso"},
+		},
+	}
 
-	got := customISONames(cfg)
-	want := []string{
-		"bootstrap.iso",
-		"master0.iso", "master1.iso", "master2.iso",
-		"worker0.iso", "worker1.iso",
-	}
-	if len(got) != len(want) {
-		t.Fatalf("customISONames() = %v; want %v", got, want)
-	}
-	for i, name := range want {
-		if got[i] != name {
-			t.Errorf("customISONames()[%d] = %q; want %q", i, got[i], name)
-		}
-	}
-}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := &config.Config{}
+			cfg.Topology.ControlPlane.Count = tc.masters
+			cfg.Topology.Workers.Count = tc.workers
 
-func TestCustomISONames_SingleMasterNoWorkers(t *testing.T) {
-	cfg := &config.Config{}
-	cfg.Topology.ControlPlane.Count = 1
-	cfg.Topology.Workers.Count = 0
-
-	got := customISONames(cfg)
-	want := []string{"bootstrap.iso", "master0.iso"}
-	if len(got) != len(want) {
-		t.Fatalf("customISONames() = %v; want %v", got, want)
-	}
-	for i, name := range want {
-		if got[i] != name {
-			t.Errorf("customISONames()[%d] = %q; want %q", i, got[i], name)
-		}
+			got := customISONames(cfg)
+			if !slices.Equal(got, tc.want) {
+				t.Errorf("customISONames() = %v; want %v", got, tc.want)
+			}
+		})
 	}
 }

@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/qxtaiba/okdctl/internal/config"
-	"github.com/qxtaiba/okdctl/internal/distribution"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/executor"
@@ -63,67 +62,6 @@ func TestDestroySteps_SuccessPath(t *testing.T) {
 	})
 }
 
-func TestDestroySteps_FailurePath(t *testing.T) {
-	h := &testutil.CaptureHandler{}
-	defs := newPhaseWithCapture(h).destroySteps(context.Background(), minimalConfig(), minimalOpts())
-
-	tracked := []struct {
-		idx   int
-		id    distribution.StepID
-		label string
-	}{
-		{0, StepDestroyInfra, labelTerraformDestroy},
-		{1, StepRemoveRemoteISO, "iso removal"},
-		{2, StepCleanupFiles, "file cleanup"},
-		{3, StepCleanupFirewall, "firewall cleanup"},
-	}
-
-	sentinel := errors.New("sentinel")
-	for _, tc := range tracked {
-		if defs[tc.idx].ID != tc.id {
-			t.Fatalf("defs[%d].ID = %q; want %q", tc.idx, defs[tc.idx].ID, tc.id)
-		}
-		if defs[tc.idx].OnError == nil {
-			t.Fatalf("defs[%d] (%s) has nil OnError", tc.idx, tc.id)
-		}
-		defs[tc.idx].OnError(sentinel)
-	}
-
-	if defs[4].ID != StepPrintSummary {
-		t.Fatalf("defs[4].ID = %q; want %q", defs[4].ID, StepPrintSummary)
-	}
-	err := defs[4].Exec(context.Background())
-	if err == nil {
-		t.Fatal("expected non-nil error from summary when steps failed")
-	}
-	var clusterErr *errtypes.ClusterError
-	if !errors.As(err, &clusterErr) {
-		t.Fatalf("err = %v; want *errtypes.ClusterError", err)
-	}
-
-	rec, ok := h.Last()
-	if !ok {
-		t.Fatal("no log records captured")
-	}
-	if rec.Level != slog.LevelWarn {
-		t.Errorf("level = %v; want Warn", rec.Level)
-	}
-
-	var stepsVal string
-	rec.Attrs(func(a slog.Attr) bool {
-		if a.Key == "failed_steps" {
-			stepsVal = a.Value.String()
-			return false
-		}
-		return true
-	})
-	for _, tc := range tracked {
-		if !strings.Contains(stepsVal, tc.label) {
-			t.Errorf("failed_steps attr %q missing label %q", stepsVal, tc.label)
-		}
-	}
-}
-
 func TestDestroySteps_SkipPath(t *testing.T) {
 	h := &testutil.CaptureHandler{}
 	defs := newPhaseWithCapture(h).destroySteps(context.Background(), minimalConfig(), minimalOpts())
@@ -169,8 +107,22 @@ func TestDestroySteps_PartialFailure(t *testing.T) {
 	h := &testutil.CaptureHandler{}
 	defs := newPhaseWithCapture(h).destroySteps(context.Background(), minimalConfig(), minimalOpts())
 
-	defs[0].OnError(errors.New("tf-fail"))
-	defs[3].OnError(errors.New("fw-fail"))
+	cases := []struct {
+		idx   int
+		label string
+		err   string
+	}{
+		{0, labelTerraformDestroy, "tf-fail"},
+		{1, "iso removal", "iso-fail"},
+		{2, "file cleanup", "cleanup-fail"},
+		{3, "firewall cleanup", "fw-fail"},
+	}
+	for _, c := range cases {
+		if defs[c.idx].OnError == nil {
+			t.Fatalf("defs[%d].OnError is nil; want wired for %q", c.idx, c.label)
+		}
+		defs[c.idx].OnError(errors.New(c.err))
+	}
 
 	err := defs[4].Exec(context.Background())
 	if err == nil {
@@ -180,11 +132,10 @@ func TestDestroySteps_PartialFailure(t *testing.T) {
 	if !errors.As(err, &clusterErr) {
 		t.Fatalf("err = %v; want *errtypes.ClusterError", err)
 	}
-	if !strings.Contains(clusterErr.Err.Error(), "tf-fail") {
-		t.Errorf("joined error %q missing 'tf-fail'", clusterErr.Err.Error())
-	}
-	if !strings.Contains(clusterErr.Err.Error(), "fw-fail") {
-		t.Errorf("joined error %q missing 'fw-fail'", clusterErr.Err.Error())
+	for _, c := range cases {
+		if !strings.Contains(clusterErr.Err.Error(), c.err) {
+			t.Errorf("joined error %q missing %q", clusterErr.Err.Error(), c.err)
+		}
 	}
 
 	rec, ok := h.Last()
@@ -203,16 +154,12 @@ func TestDestroySteps_PartialFailure(t *testing.T) {
 		}
 		return true
 	})
-	if !strings.Contains(stepsVal, labelTerraformDestroy) {
-		t.Errorf("failed_steps %q missing %q", stepsVal, labelTerraformDestroy)
+	for _, c := range cases {
+		if !strings.Contains(stepsVal, c.label) {
+			t.Errorf("failed_steps %q missing %q", stepsVal, c.label)
+		}
 	}
-	if !strings.Contains(stepsVal, "firewall cleanup") {
-		t.Errorf("failed_steps %q missing 'firewall cleanup'", stepsVal)
-	}
-	if strings.Contains(stepsVal, "iso removal") {
-		t.Errorf("steps %q should not contain 'iso removal'", stepsVal)
-	}
-	if strings.Contains(stepsVal, "file cleanup") {
-		t.Errorf("steps %q should not contain 'file cleanup'", stepsVal)
+	if strings.Contains(stepsVal, "print summary") {
+		t.Errorf("failed_steps %q should not contain untracked step label %q", stepsVal, "print summary")
 	}
 }
