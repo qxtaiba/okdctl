@@ -21,13 +21,16 @@ import (
 
 func TestBuildLBIngressController_PreservesFields(t *testing.T) {
 	cases := []struct {
-		name        string
-		icJSON      json.RawMessage
-		hasReplicas bool
-		hasCert     bool
-		hasRoute    bool
-		hasAdmit    bool
-		hasNode     bool
+		name          string
+		icJSON        json.RawMessage
+		hasReplicas   bool
+		hasCert       bool
+		hasRoute      bool
+		hasAdmit      bool
+		hasNode       bool
+		wantDomain    string
+		wantReplicas  int32
+		wantNamespace string
 	}{
 		{
 			name: "all optional fields present",
@@ -42,11 +45,14 @@ func TestBuildLBIngressController_PreservesFields(t *testing.T) {
 					"nodePlacement":{"nodeSelector":{"matchLabels":{"node-role.kubernetes.io/worker":""}}}
 				}
 			}`),
-			hasReplicas: true,
-			hasCert:     true,
-			hasRoute:    true,
-			hasAdmit:    true,
-			hasNode:     true,
+			hasReplicas:   true,
+			hasCert:       true,
+			hasRoute:      true,
+			hasAdmit:      true,
+			hasNode:       true,
+			wantDomain:    "apps.example.com",
+			wantReplicas:  3,
+			wantNamespace: "openshift-ingress-operator",
 		},
 		{
 			name: "absent optional fields stay omitted",
@@ -54,6 +60,29 @@ func TestBuildLBIngressController_PreservesFields(t *testing.T) {
 				"metadata":{"name":"minimal","namespace":"openshift-ingress-operator"},
 				"spec":{"domain":"apps.minimal.test"}
 			}`),
+			wantDomain:    "apps.minimal.test",
+			wantNamespace: "openshift-ingress-operator",
+		},
+		{
+			name: "empty namespace defaults to openshift-ingress-operator",
+			icJSON: json.RawMessage(`{
+				"metadata":{"name":"default","namespace":""},
+				"spec":{"domain":"apps.cluster.local"}
+			}`),
+			wantDomain:    "apps.cluster.local",
+			wantNamespace: "openshift-ingress-operator",
+		},
+		{
+			name: "existing strategy type is overridden to LoadBalancerService",
+			icJSON: json.RawMessage(`{
+				"metadata":{"name":"default","namespace":"openshift-ingress-operator"},
+				"spec":{
+					"domain":"apps.cluster.local",
+					"endpointPublishingStrategy":{"type":"HostNetwork"}
+				}
+			}`),
+			wantDomain:    "apps.cluster.local",
+			wantNamespace: "openshift-ingress-operator",
 		},
 	}
 
@@ -88,8 +117,11 @@ func TestBuildLBIngressController_PreservesFields(t *testing.T) {
 			if parsed.Spec.EndpointPublishingStrategy.Type != "LoadBalancerService" {
 				t.Errorf("Type = %q; want LoadBalancerService", parsed.Spec.EndpointPublishingStrategy.Type)
 			}
-			if parsed.Metadata.Namespace == "" {
-				t.Error("Namespace must not be empty")
+			if parsed.Metadata.Namespace != tc.wantNamespace {
+				t.Errorf("Namespace = %q; want %q", parsed.Metadata.Namespace, tc.wantNamespace)
+			}
+			if parsed.Spec.Domain != tc.wantDomain {
+				t.Errorf("Domain = %q; want %q", parsed.Spec.Domain, tc.wantDomain)
 			}
 
 			checkOpt := func(name string, want bool, got bool) {
@@ -101,6 +133,9 @@ func TestBuildLBIngressController_PreservesFields(t *testing.T) {
 				}
 			}
 			checkOpt("Replicas", tc.hasReplicas, parsed.Spec.Replicas != nil)
+			if tc.hasReplicas && (parsed.Spec.Replicas == nil || *parsed.Spec.Replicas != tc.wantReplicas) {
+				t.Errorf("Replicas = %v; want %d", parsed.Spec.Replicas, tc.wantReplicas)
+			}
 			checkOpt("DefaultCertificate", tc.hasCert, parsed.Spec.DefaultCertificate != nil)
 			checkOpt("RouteSelector", tc.hasRoute, parsed.Spec.RouteSelector != nil)
 			checkOpt("RouteAdmission", tc.hasAdmit, parsed.Spec.RouteAdmission != nil)
@@ -157,124 +192,6 @@ func TestBuildRollbackJSON_StripsServerFields(t *testing.T) {
 		if _, ok := meta[keep]; !ok {
 			t.Errorf("metadata.%s must survive the strip but is absent", keep)
 		}
-	}
-}
-
-func TestBuildLBIngressController_TypeIsLoadBalancerService(t *testing.T) {
-	ic := &ingressControllerInfo{
-		RawJSON: json.RawMessage(`{
-			"metadata":{"name":"default","namespace":"openshift-ingress-operator"},
-			"spec":{
-				"domain":"apps.cluster.local",
-				"endpointPublishingStrategy":{"type":"HostNetwork"}
-			}
-		}`),
-	}
-	out, err := buildLBIngressController(ic)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	var parsed struct {
-		Spec struct {
-			EndpointPublishingStrategy struct {
-				Type string `json:"type"`
-			} `json:"endpointPublishingStrategy"`
-		} `json:"spec"`
-	}
-	if err := json.Unmarshal([]byte(out), &parsed); err != nil {
-		t.Fatalf("output is not valid JSON: %v", err)
-	}
-	if parsed.Spec.EndpointPublishingStrategy.Type != "LoadBalancerService" {
-		t.Errorf("Type = %q; want LoadBalancerService", parsed.Spec.EndpointPublishingStrategy.Type)
-	}
-}
-
-func TestBuildLBIngressController_PreservesSpecFields(t *testing.T) {
-	wantDomain := "apps.example.com"
-	wantReplicas := int32(3)
-	ic := &ingressControllerInfo{
-		RawJSON: json.RawMessage(`{
-			"metadata":{"name":"custom","namespace":"openshift-ingress-operator"},
-			"spec":{
-				"domain":"apps.example.com",
-				"replicas":3,
-				"defaultCertificate":{"name":"my-cert"},
-				"routeSelector":{"matchLabels":{"env":"prod"}},
-				"routeAdmission":{"wildcardPolicy":"WildcardsDisallowed"},
-				"nodePlacement":{"nodeSelector":{"matchLabels":{"node-role.kubernetes.io/worker":""}}}
-			}
-		}`),
-	}
-
-	out, err := buildLBIngressController(ic)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	var parsed struct {
-		Spec struct {
-			EndpointPublishingStrategy struct {
-				Type string `json:"type"`
-			} `json:"endpointPublishingStrategy"`
-			Domain             string           `json:"domain"`
-			Replicas           *int32           `json:"replicas"`
-			DefaultCertificate *json.RawMessage `json:"defaultCertificate"`
-			RouteSelector      *json.RawMessage `json:"routeSelector"`
-			RouteAdmission     *json.RawMessage `json:"routeAdmission"`
-			NodePlacement      *json.RawMessage `json:"nodePlacement"`
-		} `json:"spec"`
-	}
-	if err := json.Unmarshal([]byte(out), &parsed); err != nil {
-		t.Fatalf("output is not valid JSON: %v", err)
-	}
-
-	if parsed.Spec.EndpointPublishingStrategy.Type != "LoadBalancerService" {
-		t.Errorf("strategy type = %q; want LoadBalancerService", parsed.Spec.EndpointPublishingStrategy.Type)
-	}
-	if parsed.Spec.Domain != wantDomain {
-		t.Errorf("domain = %q; want %q", parsed.Spec.Domain, wantDomain)
-	}
-	if parsed.Spec.Replicas == nil || *parsed.Spec.Replicas != wantReplicas {
-		t.Errorf("replicas = %v; want %d", parsed.Spec.Replicas, wantReplicas)
-	}
-	if parsed.Spec.DefaultCertificate == nil {
-		t.Error("defaultCertificate must be present but is nil")
-	}
-	if parsed.Spec.RouteSelector == nil {
-		t.Error("routeSelector must be present but is nil")
-	}
-	if parsed.Spec.RouteAdmission == nil {
-		t.Error("routeAdmission must be present but is nil")
-	}
-	if parsed.Spec.NodePlacement == nil {
-		t.Error("nodePlacement must be present but is nil")
-	}
-}
-
-func TestBuildLBIngressController_EmptyNamespaceDefaults(t *testing.T) {
-	ic := &ingressControllerInfo{
-		RawJSON: json.RawMessage(`{
-			"metadata":{"name":"default","namespace":""},
-			"spec":{"domain":"apps.cluster.local"}
-		}`),
-	}
-
-	out, err := buildLBIngressController(ic)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	var parsed struct {
-		Metadata struct {
-			Namespace string `json:"namespace"`
-		} `json:"metadata"`
-	}
-	if err := json.Unmarshal([]byte(out), &parsed); err != nil {
-		t.Fatalf("output is not valid JSON: %v", err)
-	}
-	if parsed.Metadata.Namespace != "openshift-ingress-operator" {
-		t.Errorf("namespace = %q; want openshift-ingress-operator", parsed.Metadata.Namespace)
 	}
 }
 
