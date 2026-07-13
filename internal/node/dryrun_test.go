@@ -308,6 +308,66 @@ func TestResizeRefusesWithoutPowerCycler(t *testing.T) {
 	}
 }
 
+func TestResizeCPUOnlyKeepsMemoryUnchanged(t *testing.T) {
+	fc := &fakeCluster{
+		nodes:       []cluster.NodeDetail{{Name: "master0", Role: nodetypes.RoleMaster}},
+		etcdHealthy: true,
+	}
+	ftf := &fakeTF{action: terraform.PlanActionUpdate}
+	cfg := config.DefaultConfig()
+	cfg.Topology.ControlPlane.MemoryMB = 12288
+	cfg.Topology.ControlPlane.CPU = 4
+
+	r, tfvars, cfgPath := seedRunner(t, fc, ftf, cfg)
+
+	// Host nearly full: a CPU-only resize must resolve memory to its current
+	// value (zero delta) so the budget guard skips cleanly instead of tripping
+	// on a spuriously huge delta computed against an unset MemoryMB.
+	err := r.Resize(context.Background(), ResizeScope{Role: nodetypes.RoleMaster}, ResizeOptions{
+		CPU:              8,
+		HostTotalMiB:     96000,
+		HostAllocatedMiB: 93000,
+	})
+	if err != nil {
+		t.Fatalf("cpu-only resize: %v", err)
+	}
+
+	if ftf.lastVars["master_memory_mb"] != "12288" {
+		t.Errorf("cpu-only resize must plan memory at its current value: vars=%v", ftf.lastVars)
+	}
+	if ftf.lastVars["master_cpu_cores"] != "8" {
+		t.Errorf("cpu-only resize did not carry the cpu override: vars=%v", ftf.lastVars)
+	}
+	if fc.cordon != 0 || fc.drain != 0 || fc.uncordon != 0 {
+		t.Errorf("dry-run resize mutated the cluster: cordon=%d drain=%d uncordon=%d", fc.cordon, fc.drain, fc.uncordon)
+	}
+	if ftf.applyCalls != 0 || ftf.snapshots != 0 {
+		t.Errorf("dry-run resize applied terraform: apply=%d snapshot=%d", ftf.applyCalls, ftf.snapshots)
+	}
+	assertUnchanged(t, tfvars, "SENTINEL_TFVARS\n")
+	assertUnchanged(t, cfgPath, "SENTINEL_CONFIG\n")
+}
+
+func TestResizeRequiresMemoryOrCPU(t *testing.T) {
+	fc := &fakeCluster{
+		nodes:       []cluster.NodeDetail{{Name: "master0", Role: nodetypes.RoleMaster}},
+		etcdHealthy: true,
+	}
+	ftf := &fakeTF{action: terraform.PlanActionUpdate}
+	cfg := config.DefaultConfig()
+	cfg.Topology.ControlPlane.MemoryMB = 12288
+
+	r, _, _ := seedRunner(t, fc, ftf, cfg)
+
+	err := r.Resize(context.Background(), ResizeScope{Role: nodetypes.RoleMaster}, ResizeOptions{})
+	if err == nil {
+		t.Fatal("want error when neither MemoryMB nor CPU is set")
+	}
+	if ftf.planCalls != 0 || fc.cordon != 0 {
+		t.Errorf("usage error must precede any plan or mutation: planCalls=%d cordon=%d", ftf.planCalls, fc.cordon)
+	}
+}
+
 func TestRemoveDryRunPreviewIsTruthfulAndInert(t *testing.T) {
 	fc := &fakeCluster{
 		nodes: []cluster.NodeDetail{
