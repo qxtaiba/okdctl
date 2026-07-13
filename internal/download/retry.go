@@ -6,10 +6,9 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
-	"time"
 	"unicode"
 
-	"k8s.io/apimachinery/pkg/util/wait"
+	"github.com/qxtaiba/okdctl/internal/system"
 )
 
 // HTTPStatusError carries the HTTP status returned from a failed request so
@@ -77,36 +76,14 @@ func isRetryable(err error) bool {
 	return true
 }
 
-// retryDownload runs fn with exponential backoff (5s base, factor 2, jitter
-// 0.5, 3 attempts, 5-minute cap) and returns how many attempts were made
-// and the final error. Non-retryable failures abort immediately; context
-// cancellation returns ctx.Err().
+// retryDownload runs fn with system.DefaultBackoff() and returns how many
+// attempts were made and the final error. Non-retryable failures abort
+// immediately; context cancellation returns ctx.Err().
 func retryDownload(ctx context.Context, fn func() error) (int, error) {
 	var attempts int
-	var lastErr error
-	backoff := wait.Backoff{
-		Duration: 5 * time.Second,
-		Factor:   2,
-		Jitter:   0.5,
-		Steps:    3,
-		Cap:      5 * time.Minute,
-	}
-	err := wait.ExponentialBackoffWithContext(ctx, backoff, func(_ context.Context) (bool, error) {
+	err := system.Retry(ctx, system.DefaultBackoff(), isRetryable, func(context.Context) error {
 		attempts++
-		if fnErr := fn(); fnErr != nil {
-			lastErr = fnErr
-			if !isRetryable(fnErr) {
-				return false, fnErr
-			}
-			return false, nil
-		}
-		return true, nil
+		return fn()
 	})
-	if err == nil {
-		return attempts, nil
-	}
-	if lastErr != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
-		return attempts, lastErr
-	}
 	return attempts, err
 }
