@@ -128,10 +128,25 @@ func (r *Runner) targetedApply(ctx context.Context, address string, want terrafo
 		}
 	}()
 
+	// Post-deploy invariants every node op asserts: the bootstrap VM is gone and
+	// workers run. Passed as -var (highest precedence, above terraform.tfvars and
+	// auto-tfvars) so a stale terraform.tfvars bootstrap_enabled=true can't inject
+	// a bootstrap-create into the targeted plan, and the module's
+	// start_workers_immediately=false default can't plan a running worker to
+	// stopped. Either would trip the single-change gate or, on apply, stop a
+	// healthy VM. planVars (the caller's sizing) override these if they collide.
+	vars := map[string]string{
+		"bootstrap_enabled":         "false",
+		"start_workers_immediately": "true",
+	}
+	for k, v := range planVars {
+		vars[k] = v
+	}
+
 	if err := r.TF.Plan(ctx, terraform.PlanOptions{
 		OutputPlanFile: planFile,
 		Targets:        []string{address},
-		Vars:           planVars,
+		Vars:           vars,
 	}); err != nil {
 		return r.TF.WithLockHint(&errtypes.ClusterError{Msg: "terraform plan", Err: err})
 	}
