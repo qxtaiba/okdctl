@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/qxtaiba/okdctl/internal/cluster"
+	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/nodetypes"
 )
 
@@ -58,11 +59,11 @@ func TestCompactOrdering(t *testing.T) {
 		{Name: "master0", Role: nodetypes.RoleMaster},
 		{Name: "master1", Role: nodetypes.RoleMaster},
 	}
-	desc := workersByIndexDesc(nodes)
+	desc := workersByIndexDesc(nodes, logutil.NopLogger)
 	if len(desc) != 3 || desc[0] != "worker2" || desc[2] != "worker0" {
 		t.Fatalf("workers must be removed top-down: %v", desc)
 	}
-	asc := mastersByIndexAsc(nodes)
+	asc := mastersByIndexAsc(nodes, logutil.NopLogger)
 	if len(asc) != 2 || asc[0] != "master0" || asc[1] != "master1" {
 		t.Fatalf("masters must grow low-to-high: %v", asc)
 	}

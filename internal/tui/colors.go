@@ -81,8 +81,19 @@ func setTheme(theme ColorTheme) {
 	}
 }
 
+// highContrastRequested checks OKDCTL_HIGH_CONTRAST and the legacy
+// HOMELAB_HIGH_CONTRAST (kept working for existing scripts/dotfiles).
+func highContrastRequested() bool {
+	for _, name := range []string{"OKDCTL_HIGH_CONTRAST", "HOMELAB_HIGH_CONTRAST"} {
+		if v := os.Getenv(name); v == "1" || v == "true" {
+			return true
+		}
+	}
+	return false
+}
+
 func init() {
-	if os.Getenv("HOMELAB_HIGH_CONTRAST") == "1" || os.Getenv("HOMELAB_HIGH_CONTRAST") == "true" {
+	if highContrastRequested() {
 		setTheme(ThemeHighContrast)
 	}
 }

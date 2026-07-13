@@ -275,7 +275,7 @@ func (f *KeyValueField) View() string {
 	}
 	if f.err != nil {
 		errStyle := lipgloss.NewStyle().Foreground(tui.ColorError)
-		lines = append(lines, errStyle.Render("✖ "+strings.ToLower(f.err.Error())))
+		lines = append(lines, errStyle.Render(tui.IconError+" "+strings.ToLower(f.err.Error())))
 	}
 	return strings.Join(lines, "\n")
 }

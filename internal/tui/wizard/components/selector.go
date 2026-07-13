@@ -44,8 +44,8 @@ type Selector struct {
 
 	// cachedStyles is a lazily-initialised cache of the lipgloss.Style objects
 	// used when rendering options. Caching is safe because tui.Color* values
-	// are only mutated during tui package init (via the HOMELAB_HIGH_CONTRAST
-	// env var) and never change thereafter.
+	// are only mutated during tui package init (via the high-contrast env
+	// vars) and never change thereafter.
 	cachedStyles *optionStyles
 }
 

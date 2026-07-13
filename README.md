@@ -88,6 +88,7 @@ The wizard asks for Proxmox credentials and cluster shape, writes
 ```
 okdctl addon            manage cluster addons
 okdctl cleanup          remove OKD cluster artifacts without destroying infrastructure
+okdctl cluster          cluster-wide lifecycle operations
 okdctl completion       generate shell completion script
 okdctl config           inspect okdctl configuration
 okdctl debug-bundle     collect a support bundle for troubleshooting
@@ -96,6 +97,7 @@ okdctl describe         drill into a specific node or addon
 okdctl destroy          destroy a Kubernetes cluster
 okdctl doctor           check that your environment is ready to deploy a cluster
 okdctl kubeconfig       print or export the cluster kubeconfig
+okdctl node             manage cluster node lifecycle
 okdctl releases         query available OKD versions
 okdctl status           print a post-deploy cluster summary
 okdctl update-ingress   switch ingress DNS from HAProxy to LoadBalancer IPs

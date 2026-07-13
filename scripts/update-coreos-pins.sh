@@ -33,6 +33,8 @@ require python3
 env_args=()
 for minor in "${SUPPORTED_MINORS[@]}"; do
     flavor=fcos
+    # The fcos/scos split at minor 19 is specific to MAJOR=4; a second
+    # major/minor loop (see header) must define its own boundary, not reuse 19.
     [ "$minor" -ge 19 ] && flavor=scos
     sha=$(git ls-remote https://github.com/openshift/installer "release-$MAJOR.$minor" | awk '{print $1}')
     if [ -z "$sha" ]; then

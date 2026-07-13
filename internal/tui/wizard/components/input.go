@@ -202,7 +202,7 @@ func (f *InputField) View() string {
 				errText = strings.ReplaceAll(errText, strings.ToLower(v), "<redacted>")
 			}
 		}
-		result += "\n" + errStyle.Render("✖ "+errText)
+		result += "\n" + errStyle.Render(tui.IconError+" "+errText)
 	}
 
 	return result

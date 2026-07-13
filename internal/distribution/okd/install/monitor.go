@@ -68,12 +68,12 @@ type csrApprover interface {
 	ApprovePendingCSRs(ctx context.Context) (int, error)
 }
 
-// operatorCounter is the optional cluster-operator-count surface a real
+// operatorCounter is the optional cluster-operator-health surface a real
 // cluster.Client satisfies. MonitorInstallation type-asserts the approver for
 // it; a stub approver that omits it simply drops the operator count from the
 // status line (the CSR count still shows).
 type operatorCounter interface {
-	ClusterOperatorsAvailable(ctx context.Context) (available, total int, err error)
+	ClusterOperatorHealth(ctx context.Context) (cluster.OperatorHealth, error)
 }
 
 // operatorStatusDetail builds the status-line detail from the live
@@ -82,8 +82,8 @@ type operatorCounter interface {
 // count alone rather than blanking the line.
 func operatorStatusDetail(ctx context.Context, counter operatorCounter, csrs int) string {
 	if counter != nil {
-		if available, total, err := counter.ClusterOperatorsAvailable(ctx); err == nil && total > 0 {
-			return fmt.Sprintf("cluster operators %d/%d available · %d CSRs approved", available, total, csrs)
+		if h, err := counter.ClusterOperatorHealth(ctx); err == nil && h.Total > 0 {
+			return fmt.Sprintf("cluster operators %d/%d available · %d CSRs approved", h.Available, h.Total, csrs)
 		}
 	}
 	return fmt.Sprintf("%d CSRs approved", csrs)

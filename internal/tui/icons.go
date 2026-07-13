@@ -4,5 +4,6 @@ package tui
 const (
 	IconSuccess = "✔"
 	IconError   = "✖"
+	IconWarning = "⚠"
 	IconSkip    = "↷"
 )
