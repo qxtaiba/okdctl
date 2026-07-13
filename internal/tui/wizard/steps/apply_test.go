@@ -83,6 +83,20 @@ func TestAdvancedStepDefinition_Fields(t *testing.T) {
 	if !cfg.Deployment.AutoApprove {
 		t.Error("AutoApprove = false, want true")
 	}
+
+	ntp := findField(t, &AdvancedStepDefinition, "ntp_server")
+	if err := ntp.ConfigSet(cfg, "192.168.1.20"); err != nil {
+		t.Fatalf("ConfigSet(ntp_server): %v", err)
+	}
+	if cfg.Networking.NTPServer != "192.168.1.20" {
+		t.Errorf("NTPServer = %q, want 192.168.1.20", cfg.Networking.NTPServer)
+	}
+	if got := ntp.ConfigGet(cfg); got != "192.168.1.20" {
+		t.Errorf("ConfigGet(ntp_server) = %q", got)
+	}
+	if err := ntp.Validate("!not valid!"); err == nil {
+		t.Error("Validate(ntp_server) accepted invalid host")
+	}
 }
 
 func TestAdvancedStepDefinition_NoDeadDebugFields(t *testing.T) {

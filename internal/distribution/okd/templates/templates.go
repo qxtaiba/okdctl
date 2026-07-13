@@ -210,6 +210,36 @@ func RenderKubeVIPDaemonSet(data KubeVIPData) (string, error) {
 	return renderTemplate("kube-vip-daemonset.yaml.tmpl", data)
 }
 
+// ChronyConfData is the template binding for the chrony.conf shipped to
+// every master/worker node via MachineConfig.
+type ChronyConfData struct {
+	Server string
+}
+
+// RenderChronyConf renders /etc/chrony.conf pointed at data.Server. It
+// always steps the clock unconditionally (makestep 1.0 -1) rather than
+// slewing: Proxmox pause/resume can jump the guest clock by minutes in one
+// shot, and chrony's slew-only convergence takes hours — long enough for
+// etcd leader elections to fail and node certs to read "not yet valid" in
+// the meantime.
+func RenderChronyConf(data ChronyConfData) (string, error) {
+	return renderTemplate("chrony.conf.tmpl", data)
+}
+
+// ChronyMachineConfigData is the template binding for the chrony
+// MachineConfig manifest, rendered once per node pool (master, worker).
+type ChronyMachineConfigData struct {
+	Role   string // machineconfiguration.openshift.io/role label value
+	Name   string // metadata.name
+	Source string // ignition storage.files contents.source data URL
+}
+
+// RenderChronyMachineConfig renders the chrony MachineConfig manifest for
+// data.Role from data.Source.
+func RenderChronyMachineConfig(data ChronyMachineConfigData) (string, error) {
+	return renderTemplate("chrony-machineconfig.yaml.tmpl", data)
+}
+
 var templateFuncs = template.FuncMap{
 	"split":      strings.Split,
 	"trimPrefix": strings.TrimPrefix,

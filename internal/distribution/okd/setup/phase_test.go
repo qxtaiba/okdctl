@@ -25,6 +25,7 @@ var setupStepOrder = []distribution.StepID{
 	StepGenerateConfig,
 	StepGenerateManifests,
 	StepGenerateKubeVIP,
+	StepGenerateChrony,
 	StepInjectManifests,
 	StepCompactCluster,
 	StepGenerateIgnition,
@@ -209,6 +210,7 @@ func TestSetupExecute_ManifestPipeline(t *testing.T) {
 		{StepGenerateConfig, true, false},
 		{StepGenerateManifests, true, false},
 		{StepGenerateKubeVIP, true, false},
+		{StepGenerateChrony, true, false},
 		{StepInjectManifests, true, false},
 		{StepCompactCluster, true, false},
 		{StepGenerateIgnition, false, false},
@@ -230,6 +232,8 @@ func TestSetupExecute_ManifestPipeline(t *testing.T) {
 		ManifestsSentinel(clusterDir),
 		filepath.Join(clusterDir, openshiftSubdir, "99-kube-vip-daemonset.yaml"),
 		filepath.Join(clusterDir, openshiftSubdir, "99-ingress-controller-master-placement.yaml"),
+		filepath.Join(clusterDir, openshiftSubdir, "99-master-chrony-configuration.yaml"),
+		filepath.Join(clusterDir, openshiftSubdir, "99-worker-chrony-configuration.yaml"),
 	} {
 		if _, statErr := os.Stat(f); statErr != nil {
 			t.Errorf("expected artifact missing: %v", statErr)

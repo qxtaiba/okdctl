@@ -1,0 +1,11 @@
+# Managed by okdctl. Edits here are overwritten on the next MachineConfig
+# rollout — set networking.ntp_server in okdctl.yaml instead.
+server {{ .Server }} iburst
+driftfile /var/lib/chrony/drift
+rtcsync
+
+# Proxmox pause/resume can jump the guest clock by minutes in one shot;
+# chrony's default slew-only correction takes hours to converge, during
+# which etcd leader elections fail and node certs read "not yet valid".
+# Step unconditionally instead of slewing.
+makestep 1.0 -1

@@ -141,6 +141,10 @@ func validateNetworking(cfg *Config, result *ValidationResult) {
 		}
 	}
 
+	if cfg.Networking.NTPServer != "" && !isValidHostOrIP(cfg.Networking.NTPServer) {
+		result.AddError(FieldNetworkingNTPServer, "must be a valid hostname or IP address")
+	}
+
 	podCIDR := cfg.Networking.PodCIDR
 	serviceCIDR := cfg.Networking.ServiceCIDR
 	machineCIDR := cfg.Networking.MachineCIDR
@@ -599,6 +603,19 @@ func ValidateProxmoxHost(value string) error {
 		host = h
 	}
 	if host == "" || !isValidHostOrIP(host) {
+		return errors.New("must be a valid hostname or IP address")
+	}
+	return nil
+}
+
+// ValidateNTPServer accepts an empty string (the bastion default applies)
+// or a hostname/IP for the chrony source shipped in the master/worker
+// MachineConfigs.
+func ValidateNTPServer(value string) error {
+	if value == "" {
+		return nil
+	}
+	if !isValidHostOrIP(value) {
 		return errors.New("must be a valid hostname or IP address")
 	}
 	return nil

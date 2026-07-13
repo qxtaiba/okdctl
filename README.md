@@ -182,8 +182,13 @@ output belongs in bug reports.
   which isn't on `$PATH` in the current shell until you re-source your rc.
 - **Terraform destroy hangs.** The Proxmox API drops long-running destroy
   requests under load. Re-run `okdctl destroy` — state is preserved.
-- **CSR approval fails on clock skew.** Nodes whose clock differs from the
-  bastion's get their certs refused. Run `ntpdate` on both and retry.
+- **CSR approval fails on clock skew.** A Proxmox pause/resume can jump a
+  guest's clock by minutes, which fails etcd elections and gets certs
+  refused as "not yet valid". okdctl ships a chrony MachineConfig to every
+  master/worker pointed at the bastion (`networking.ntp_server` overrides
+  the source) that steps the clock unconditionally instead of slewing, so
+  this should self-heal within a few minutes of the node coming up; if it
+  doesn't, check that the node can reach the configured NTP source.
 
 ## Uninstall
 

@@ -437,6 +437,61 @@ func TestValidateBinDir(t *testing.T) {
 	}
 }
 
+func TestValidateNTPServer(t *testing.T) {
+	good := []string{
+		"",
+		"192.168.1.20",
+		"pool.ntp.org",
+		"2001:db8::1",
+	}
+	for _, s := range good {
+		if err := ValidateNTPServer(s); err != nil {
+			t.Errorf("ValidateNTPServer(%q) error: %v", s, err)
+		}
+	}
+
+	bad := []string{
+		"!bad!.example",
+		"space in host",
+		"192.168.1.20:123",
+	}
+	for _, s := range bad {
+		if err := ValidateNTPServer(s); err == nil {
+			t.Errorf("ValidateNTPServer(%q) accepted; want error", s)
+		}
+	}
+}
+
+func TestValidateNetworkingNTPServer(t *testing.T) {
+	cases := []struct {
+		name    string
+		server  string
+		wantErr bool
+	}{
+		{"empty accepted (bastion default applies)", "", false},
+		{"valid ip accepted", "192.168.1.20", false},
+		{"valid hostname accepted", "ntp.example.com", false},
+		{"invalid host rejected", "!not valid!", true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := DefaultConfig()
+			cfg.Networking.NTPServer = tc.server
+			result := &ValidationResult{}
+			validateNetworking(cfg, result)
+			gotErr := false
+			for _, e := range result.Errors {
+				if e.Field == FieldNetworkingNTPServer {
+					gotErr = true
+				}
+			}
+			if gotErr != tc.wantErr {
+				t.Errorf("server %q: gotErr = %v, want %v; errors: %v", tc.server, gotErr, tc.wantErr, result.Errors)
+			}
+		})
+	}
+}
+
 func TestValidateNetmaskMatchesMachineCIDR(t *testing.T) {
 	cases := []struct {
 		name    string
@@ -572,6 +627,13 @@ func TestValidateEndToEnd(t *testing.T) {
 				c.Distribution.Type = "k3s"
 			},
 			wantFields: []string{FieldDistributionType},
+		},
+		{
+			name: "invalid ntp server rejected",
+			mutateCfg: func(c *Config) {
+				c.Networking.NTPServer = "!not valid!"
+			},
+			wantFields: []string{FieldNetworkingNTPServer},
 		},
 		{
 			name:       "empty config fails required checks",

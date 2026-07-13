@@ -28,6 +28,7 @@ const (
 	StepGenerateConfig    distribution.StepID = "generate-config"
 	StepGenerateManifests distribution.StepID = "generate-manifests"
 	StepGenerateKubeVIP   distribution.StepID = "generate-kubevip-manifests"
+	StepGenerateChrony    distribution.StepID = "generate-chrony-manifests"
 	StepInjectManifests   distribution.StepID = "inject-manifests"
 	StepCompactCluster    distribution.StepID = "compact-cluster-manifests"
 	StepGenerateIgnition  distribution.StepID = "generate-ignition"
@@ -52,6 +53,7 @@ var StepNames = map[distribution.StepID]string{
 	StepGenerateConfig:    "generate install config",
 	StepGenerateManifests: "generate manifests",
 	StepGenerateKubeVIP:   "generate kube-vip manifests",
+	StepGenerateChrony:    "generate chrony machineconfigs",
 	StepInjectManifests:   "inject custom manifests",
 	StepCompactCluster:    "inject compact cluster manifests",
 	StepGenerateIgnition:  "generate ignition",
@@ -175,6 +177,17 @@ func (p *Phase) setupManifestSteps(cfg *config.Config, opts *Options, clusterDir
 			Exec: func(_ context.Context) error {
 				if err := p.generateKubeVIPManifests(cfg, clusterDir); err != nil {
 					return &errtypes.ConfigError{Msg: "failed to generate kube-vip manifests", Err: err}
+				}
+				return nil
+			},
+		},
+		{
+			ID: StepGenerateChrony, Name: StepNames[StepGenerateChrony],
+			ReRunSafe: distribution.ReRunSafeYes,
+			Desc:      "generating chrony machineconfigs for vm clock drift",
+			Exec: func(_ context.Context) error {
+				if err := p.generateChronyManifests(cfg, clusterDir); err != nil {
+					return &errtypes.ConfigError{Msg: "failed to generate chrony machineconfigs", Err: err}
 				}
 				return nil
 			},
