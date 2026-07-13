@@ -1,10 +1,13 @@
 package node
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -346,6 +349,67 @@ func TestResizeCPUOnlyKeepsMemoryUnchanged(t *testing.T) {
 	}
 	assertUnchanged(t, tfvars, "SENTINEL_TFVARS\n")
 	assertUnchanged(t, cfgPath, "SENTINEL_CONFIG\n")
+}
+
+// TestResizeCompletionHintGatedByMemoryDelta locks the carry-over fix: the
+// "restart a vm" completion hint is memory-motivated, so it must fire
+// only when the resize actually changed memory, not on a CPU-only resize.
+func TestResizeCompletionHintGatedByMemoryDelta(t *testing.T) {
+	newLoggedRunner := func(t *testing.T, buf *bytes.Buffer, fc *fakeCluster, ftf *fakeTF, cfg *config.Config) *Runner {
+		t.Helper()
+		dir := t.TempDir()
+		return &Runner{
+			Cluster:    fc,
+			TF:         ftf,
+			Cfg:        cfg,
+			ConfigPath: filepath.Join(dir, "okdctl.yaml"),
+			WorkDir:    dir,
+			EnvDir:     dir,
+			RunID:      "test-run",
+			Log:        slog.New(slog.NewTextHandler(buf, nil)),
+		}
+	}
+
+	t.Run("cpu-only resize omits the restart hint", func(t *testing.T) {
+		fc := &fakeCluster{
+			nodes:       []cluster.NodeDetail{{Name: "master0", Role: nodetypes.RoleMaster, Ready: true}},
+			etcdHealthy: true,
+		}
+		ftf := &fakeTF{action: terraform.PlanActionUpdate}
+		cfg := config.DefaultConfig()
+		cfg.Topology.ControlPlane.MemoryMB = 12288
+		cfg.Topology.ControlPlane.CPU = 4
+
+		var buf bytes.Buffer
+		r := newLoggedRunner(t, &buf, fc, ftf, cfg)
+
+		if err := r.Resize(context.Background(), ResizeScope{Role: nodetypes.RoleMaster}, ResizeOptions{CPU: 8}); err != nil {
+			t.Fatalf("cpu-only resize: %v", err)
+		}
+		if strings.Contains(buf.String(), "restart a vm") {
+			t.Errorf("cpu-only resize (memory unchanged) logged the memory restart hint: %s", buf.String())
+		}
+	})
+
+	t.Run("memory resize logs the restart hint", func(t *testing.T) {
+		fc := &fakeCluster{
+			nodes:       []cluster.NodeDetail{{Name: "master0", Role: nodetypes.RoleMaster, Ready: true}},
+			etcdHealthy: true,
+		}
+		ftf := &fakeTF{action: terraform.PlanActionUpdate}
+		cfg := config.DefaultConfig()
+		cfg.Topology.ControlPlane.MemoryMB = 12288
+
+		var buf bytes.Buffer
+		r := newLoggedRunner(t, &buf, fc, ftf, cfg)
+
+		if err := r.Resize(context.Background(), ResizeScope{Role: nodetypes.RoleMaster}, ResizeOptions{MemoryMB: 24576}); err != nil {
+			t.Fatalf("memory resize: %v", err)
+		}
+		if !strings.Contains(buf.String(), "restart a vm") {
+			t.Errorf("memory resize did not log the restart hint: %s", buf.String())
+		}
+	})
 }
 
 func TestResizeRequiresMemoryOrCPU(t *testing.T) {
