@@ -89,7 +89,7 @@ func (p *Phase) findOrDownloadFCOSISO(ctx context.Context, cfg *config.Config, o
 			return path, nil
 		case isoMissing:
 			return "", &errtypes.ConfigError{
-				Msg: fmt.Sprintf("configured FCOS ISO not found: %s", cfg.Provider.Proxmox.FCOSIso),
+				Msg: fmt.Sprintf("configured coreos iso not found: %s", cfg.Provider.Proxmox.FCOSIso),
 			}
 		}
 	}

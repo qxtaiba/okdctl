@@ -428,7 +428,7 @@ func validateOKDVersion(version string) error {
 	}
 
 	if !okdVersionPattern.MatchString(version) {
-		return fmt.Errorf("okd version must be in format X.Y.Z-okd-<suffix> (e.g., 4.18.0-okd-scos.10)")
+		return fmt.Errorf("okd version must be in format X.Y.Z-okd-<suffix> (e.g., 4.22.0-okd-scos.7)")
 	}
 
 	return nil
