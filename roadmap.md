@@ -2436,6 +2436,540 @@ one candidate dropped as a duplicate of open A5).
   - a short launch checklist exists sequenced after B16/B17/B19: release shipped and verified, templates restored, demo live, announcement targets (r/homelab, r/Proxmox, OKD community forum)
 - **Depends on:** B16, B19
 
+### Tier C — holistic review 2026-07-13
+
+Captured from a holistic-review run on 2026-07-13 (HEAD `509ff51`, branch
+`feat/node-lifecycle`). Items are judgment-shaped (not audit atoms); each has
+a 1-3 sentence rationale inline. Two waves: C1-C18 from a five-theme review
+fleet (node-lifecycle surface, day-2 gaps, deploy-output UX, trust), each
+item surviving an adversarial verification pass that checked evidence at the
+cited lines, searched for prior solutions, and grepped this file for
+duplicates; C19-C34 from a follow-up wave (web research on the OKD/Proxmox
+landscape, a build-vs-buy review, a deletion-biased simplification sweep).
+Headlines: the node-op layer's architecture is sound (plan gate, etcd gates,
+inert dry-runs all verified) but its crash-resume story is write-only — the
+op marker is recorded before every mutating step and read by nothing; and
+OKD's SCOS-only reality since 4.19 has drifted out from under the FCOS-named
+ISO globs while the stream-pin lookup discards the major version with OKD
+5.0 already in engineering candidates.
+
+#### C1 — Make interrupted node ops resumable
+
+- **Status:** not started
+- **Category:** trust / state-recovery
+- **State:** design needed
+- **Effort:** days
+- **Impact:** large
+- **Evidence:** `internal/node/opstate.go:87`, `internal/node/guards.go:59-61`
+- **Rationale:** The opstate package doc promises interrupted ops resume with context, but `readOpState` has zero production callers: config is persisted before apply, and the empty-plan gate hard-errors on any already-applied re-run — so every crash window mid-remove/resize strands the operator with a cordoned node, a live VM, and a config that says it's gone. The tool recorded exactly what it needs and then ignores it.
+- **Acceptance:**
+  - Every node op reads the op marker at start and either resumes from the recorded step or prints an actionable "interrupted op X at step Y on node Z; node left cordoned" diagnostic stating what re-running will do
+  - SIGKILL injected between persistTopology and tf apply, between tf apply and DeleteNode, and mid master-roll resize: re-running the same command completes the op instead of failing validateWorkerRemovable or the plan gate — one test per crash window
+  - AssertOnlyChange distinguishes "plan empty because already at target" (skip apply, uncordon, continue; dry-run reports no changes needed) from "variable never reached the module" (still fatal for remove's delete gate)
+  - A node command run while another op's marker is present requires explicit acknowledgment; if the journal is instead judged not worth reading, the marker writes and the docs' resume claims are removed together
+- **Depends on:** none
+
+#### C2 — Preflight compact guards and make its dry-run real
+
+- **Status:** not started
+- **Category:** trust / destructive-op safety
+- **State:** well-specified
+- **Effort:** days
+- **Impact:** large
+- **Evidence:** `internal/node/compact.go:45-50`, `internal/node/compact.go:52-59`
+- **Rationale:** Compact is the most destructive verb on the branch — it serially destroys every worker — yet its dry-run holds a strictly weaker contract than the sub-ops it composes: a green three-count summary, then the real run mutates the control plane and ingress before discovering worker1's OSD guard blocks, leaving a half-compacted cluster the preview never predicted.
+- **Acceptance:**
+  - `cluster compact --dry-run` runs the read-only storage/ingress guards and memory-budget projection for every worker plus the per-worker delete plan gates (progressively decremented worker_count -var overrides, the mechanism remove's dry-run already uses), and prints the ordered action list with per-node verdicts
+  - A real compact evaluates all worker guards (notably rook-ceph OSD presence) before SetMastersSchedulable or the ingress apply mutate anything
+  - A guard refusal after N workers were removed tells the operator exactly what hybrid state they are in and how to proceed
+  - Dry-run stays zero-mutation and zero-disk-write, covered in dryrun_test.go alongside the remove/resize inertness tests
+- **Depends on:** none
+
+#### C3 — Complete okdctl node add
+
+- **Status:** not started
+- **Category:** feature-gap / day-2
+- **State:** well-specified
+- **Effort:** weeks
+- **Impact:** large
+- **Evidence:** `internal/cli/node.go:84-86`, `internal/distribution/okd/setup/iso.go:38`
+- **Rationale:** This branch ships remove/resize/compact while add remains a UsageError stub, so the lifecycle story is asymmetric: operators can shrink but must redeploy to grow. Scale-out is the most-asked day-2 operation in every peer tool, and every ingredient — the BuildCustomISOs/buildNodeISO per-node ISO pipeline, the ignition HTTPS server, the CSR approval loop, the plan gate, the memory-budget probe — is already in the tree.
+- **Acceptance:**
+  - `okdctl node add --role worker` builds the per-node CoreOS ISO via the existing BuildCustomISOs path, uploads it via the existing hostssh path, and revives the ignition HTTPS server only for the join window (then tears it down, matching the pull-secret exposure mitigation)
+  - Bumps worker_count with the plan gate asserting exactly one create; waits for join via the CSR approval loop; updates okdctl.yaml + tfvars
+  - `--dry-run` previews; the Proxmox memory-budget probe guards oversubscription like resize does
+  - A cluster deployed with N workers reaches N+1 Ready workers with one command
+- **Depends on:** none
+
+#### C4 — Add cluster stop/start with CSR recovery
+
+- **Status:** not started
+- **Category:** feature-gap / day-2
+- **State:** design needed
+- **Effort:** days
+- **Impact:** large
+- **Evidence:** `internal/cluster/k8s_csrs.go:59`, `internal/cli/node.go:190`
+- **Rationale:** Powering the cluster down is the single most common homelab day-2 operation, and the restart is where OKD's cert-rotation cliff bites with the notorious pending-CSR dance. okdctl uniquely owns both sides — Proxmox VM power and oc/CSR access — which today the operator interleaves by hand between the Proxmox UI and the graceful-shutdown runbook.
+- **Acceptance:**
+  - `okdctl cluster stop` cordons nodes, gracefully shuts down guests (workers before masters), confirms VMs stopped via the Proxmox API, and prints the kube-apiserver-to-kubelet-signer expiry with a warning if planned downtime crosses it
+  - `okdctl cluster start` powers VMs masters-first, waits for the API, then runs the CSR approval loop until all nodes are Ready and uncordoned
+  - Both verbs support --yes/--confirm-cluster and --dry-run consistent with node remove/resize
+  - A cluster restarted after >30 days offline comes back Ready without hand-approving CSRs
+- **Depends on:** none
+
+#### C5 — Coordinate the spinner with the stderr logger
+
+- **Status:** not started
+- **Category:** tui / deploy-output
+- **State:** well-specified
+- **Effort:** hours
+- **Impact:** medium
+- **Evidence:** `internal/tui/spinner.go:46-48`, `internal/distribution/okd/install/monitor.go:91`
+- **Rationale:** Every long phase today produces garbled lines like `| monitoring cluster operators (2m30s)[INFO] csr: approved 3` because two writers share stderr with zero coordination. It is the most visible rough edge in real runs and the foundation every other deploy-output improvement builds on.
+- **Acceptance:**
+  - tui keeps an atomic registry of the active spinner; the stderr handler erases the spinner line (`\r\x1b[2K`) under a shared mutex before writing a record, and the spinner repaints on its next tick — log lines always start at column 0 on their own row
+  - Spinner clearing switches from len(desc)-based space math to `\r\x1b[2K` (correct for any width and non-ASCII desc)
+  - Frames upgrade from ASCII `| / - \` to braille dots styled with existing theme styles; elapsed-time suffix kept
+  - Non-TTY path unchanged (StartSpinner still no-ops when ProgressBarsEnabled is false)
+- **Depends on:** none
+
+#### C6 — Route the openshift-install firehose to the log file, curate the TTY
+
+- **Status:** not started
+- **Category:** tui / deploy-output
+- **State:** design needed
+- **Effort:** days
+- **Impact:** large
+- **Evidence:** `internal/distribution/okd/install/monitor.go:19`, `internal/cli/logging.go:113-114`
+- **Rationale:** The longest phase of the deploy is currently unreadable: a `--log-level=debug` subprocess firehose buries every okdctl-styled line while the spinner stomps on partial lines. The okdctl.log sink already exists but its MultiWriter tees only tui-logger output — subprocess streams bypass it because the executor defaults to bare os.Stdout/os.Stderr and no production call site uses WithStdout/WithStderr; routing the firehose there is the missing plumbing.
+- **Acceptance:**
+  - By default the openshift-install stdout/stderr stream routes only to the persistent log file (plumb the sink writer into the phase executor via the existing WithStdout/WithStderr options); --verbose restores live streaming to the TTY
+  - The TTY shows one owned status line — spinner, elapsed, clusteroperator available count, CSRs approved — refreshed via the existing cluster.Client polling the CSR ticker loop already runs
+  - Milestone lines parsed from the stream (bootstrap complete, install complete, degraded-operator warnings) are promoted to normal tui.Info lines
+  - On failure/timeout the error still points at .openshift_install.log (timeoutNextSteps already does) and okdctl.log so nothing diagnostic is lost
+- **Depends on:** C5
+
+#### C7 — Render a live deploy step checklist via MetricsRecorder
+
+- **Status:** not started
+- **Category:** tui / deploy-output
+- **State:** well-specified
+- **Effort:** days
+- **Impact:** large
+- **Evidence:** `internal/distribution/orchestrator.go:168`, `internal/distribution/okd/okd.go:259`
+- **Rationale:** During the 40-minute deploy the operator stares at unnumbered slog lines with no idea how far along they are. Both seams (MetricsRecorder, DeploySteps) already exist, so this is pure rendering work with the single biggest demo payoff.
+- **Acceptance:**
+  - A tui.StepProgress type implements distribution.MetricsRecorder, wired in internal/deploy.Execute alongside the existing deploymetrics recorder (deploy.go:200) behind a fan-out MultiRecorder, since Orchestrator/Provisioner hold a single recorder slot
+  - DeployStep/DeploySteps gain a Phase field so the checklist can render "[ 4/17] create vms · install"; StepStarted shows the dim line, StepFinished rewrites it in place with duration and success/failure/skip styling
+  - Resume runs subset phases and skipped/already-done steps emit StepFinished without StepStarted — totals are seeded from the actually-run phases and the renderer tolerates finish-without-start
+  - When the checklist is active, the orchestrator's own step Info lines demote to Debug so they land in okdctl.log but not the TTY; non-TTY / json behavior unchanged; Ctrl-C and failure paths still render InterruptSummary/FailureSummary with completed lines left in scrollback
+- **Depends on:** C5, C6
+
+#### C8 — Show progress during long node-op waits
+
+- **Status:** not started
+- **Category:** operator-ux / node-ops
+- **State:** well-specified
+- **Effort:** days
+- **Impact:** medium
+- **Evidence:** `internal/cli/node.go:171`, `internal/node/resize.go:193-198`
+- **Rationale:** Prior tiers cured the 40-minute-deploy blindness; the new surface reintroduces it — a master resize is a multi-hour near-silent wall exactly when the operator is most anxious, with their control plane cordoned. Reporter is wired to tui.StartSpinner at the CLI and never invoked in internal/node; drain and the targeted apply run fully captured, and the 15m/10m wait gates print one Info line then demote every poll tick to Debug.
+- **Acceptance:**
+  - Each long-running step (cordon/drain, targeted plan+apply, node-ready wait, etcd gate) shows a spinner or step line while in flight, matching deploy's presentation
+  - A 3-master resize (potentially 60+ minutes) never goes more than the poll interval without visible evidence of life at default verbosity
+  - Reporter invocation is covered by a test using the recording fake; dry-run inertness tests still pass
+- **Depends on:** none
+
+#### C9 — Make destructive node/cluster confirmations informed and destroy-grade
+
+- **Status:** not started
+- **Category:** trust / operator-ux
+- **State:** well-specified
+- **Effort:** days
+- **Impact:** medium
+- **Evidence:** `internal/cli/node.go:264`, `internal/cli/destroy.go:230-240`
+- **Rationale:** Compact irreversibly destroys N worker VMs and their data disks yet gates on a single y/N issued before okdctl has computed anything, while destroy requires exact-name typing after a preview. The rendering primitives all exist; rebuilding the consent flow is also the natural moment to stop routing it through shared package-level flag globals.
+- **Acceptance:**
+  - Before the prompt, node remove/resize and cluster compact print a render.Builder box with node, role, tf address, drain timeout, guard verdicts, and an amber irreversible line naming the VM + data disk — shown after guards and the plan gate so consent is informed
+  - Interactive cluster compact and node remove require typing the cluster name (reusing destroy's two-stage gate), not just y/N
+  - --dry-run and completion render deploy-family boxes (DryRunSummary-style ordered operations; completion box with per-stage durations and next-steps advisories) instead of bare slog lines
+  - buildNodeRunner takes consent state as explicit parameters; the `nodeYes = compactYes` cross-command flag aliasing is deleted
+- **Depends on:** none
+
+#### C10 — Keep --dry-run from rewriting the terraform root
+
+- **Status:** not started
+- **Category:** trust / dry-run honesty
+- **State:** well-specified
+- **Effort:** hours
+- **Impact:** medium
+- **Evidence:** `internal/cli/node.go:133`, `internal/cli/node.go:92`
+- **Rationale:** The "make resize --dry-run inert" commit fixed persistence and cluster mutation but missed the workspace migration, which rewrites operator-editable HCL on a path the flag explicitly promises is inert. Scripted `--dry-run --yes` probes are exactly how operators will test these commands before trusting them.
+- **Acceptance:**
+  - `node remove --dry-run --yes` against a pre-nodeops root leaves infrastructure/terraform/ byte-identical: either report "migration required, re-run without --dry-run" and exit cleanly, or preview against the embedded root in a scratch dir
+  - Interactive dry-run no longer prompts the operator to consent to a real HCL rewrite mid-preview
+  - Regression test alongside TestRemoveDryRunPreviewIsTruthfulAndInert covering the pre-migration root
+- **Depends on:** none
+
+#### C11 — Version-stamp the materialized terraform root and fix half-migration detection
+
+- **Status:** not started
+- **Category:** trust / state-recovery
+- **State:** design needed
+- **Effort:** days
+- **Impact:** medium
+- **Evidence:** `internal/deploy/migrate.go:27-33`, `internal/deploy/migrate.go:54-75`
+- **Rationale:** A crash between the two AtomicWrites bricks node ops permanently: the sniff test passes forever while main.tf never passes worker_count to the module, and the gate error even anticipates the state the migration code created. Config and deploy-state both have version stories; the terraform root's era is inferred by grepping files operators are explicitly told they may edit.
+- **Acceptance:**
+  - Immediate fix: a workspace with migrated variables.tf but pre-migration main.tf is detected as needing migration and re-offered the idempotent migrate; a crash injected between the two AtomicWrites self-heals on re-run instead of permanently dying at the plan gate
+  - Materialization writes a manifest (format version + per-file content hash) alongside the root; a newer binary reports "workspace format N, binary expects M" with the migration it will perform, instead of grepping HCL
+  - Operator-modified files are distinguished from stale-embedded files, so migration prompts say "you edited this; your version will be backed up" only when true
+- **Depends on:** none
+
+#### C12 — Add node list and per-node status visibility
+
+- **Status:** not started
+- **Category:** feature-gap / observability
+- **State:** design needed
+- **Effort:** days
+- **Impact:** medium
+- **Evidence:** `internal/cli/status.go:126-138`, `internal/node/resize.go:125`
+- **Rationale:** The branch makes node topology mutable but not inspectable: the two states the new commands create — role-config drift and an in-flight op — have no surface at all, and status hides exactly the thing operators check it for (which node is not ready) behind a jq incantation. All data is already in memory; resize's own error text says "run 'okdctl status' to list nodes" but status text output never prints node names.
+- **Acceptance:**
+  - `okdctl node list` exists with text and --output json: name, role, ready, terraform index, a pending-resize/drift indicator derived from config-vs-applied sizing, and any in-flight op marker
+  - status's nodes section becomes an aligned per-node table inside the existing box (NotReady rows in error style), keeping the count summary as footer
+  - describe node drops tabwriter for the dotted-KV form describe addon uses, so the describe group has one voice; --output json unchanged
+  - Error messages that tell the operator to list nodes point at a command whose default output actually lists them
+- **Depends on:** none
+
+#### C13 — Add a day-2 cluster section to doctor
+
+- **Status:** not started
+- **Category:** feature-gap / observability
+- **State:** well-specified
+- **Effort:** days
+- **Impact:** medium
+- **Evidence:** `internal/cli/doctor_cmd.go:13`, `internal/cluster/k8s_etcd.go:31`
+- **Rationale:** OKD's cert-expiry cliff is invisible until it hits, and okdctl already computes etcd health for node ops — surfacing it in doctor turns existing primitives into the monitoring story for an operator with no Prometheus stack yet.
+- **Acceptance:**
+  - When a deployed cluster's kubeconfig is present, doctor adds checks: Degraded/Progressing ClusterOperators, NotReady nodes, pending CSR count, etcd health, and the kube-apiserver-to-kubelet-signer NotAfter date with days remaining
+  - Warns prominently when cert expiry is within 30 days; suggests CSR recovery when pending CSRs plus NotReady nodes appear together
+  - Exit codes distinguish healthy/warn/fail so operators can cron it; --output json stays stable per the existing json-schema doc
+- **Depends on:** none
+
+#### C14 — Add okdctl plan (read-only drift preview)
+
+- **Status:** not started
+- **Category:** feature-gap / day-2
+- **State:** design needed
+- **Effort:** days
+- **Impact:** medium
+- **Evidence:** `internal/cli/node.go:69-71`, `internal/infrastructure/terraform/plangate.go:74-129`
+- **Rationale:** The branch's per-role resize semantics manufacture drift as a feature, but there is no scriptable, parsed, dedicated drift audit: `deploy --dry-run` streams raw unscoped terraform output, exits 0 regardless, and buries drift in deploy-preview framing, while ParsePlanChanges/ShowPlanChanges already parse and classify plan output but are used only by the node-op plan gate.
+- **Acceptance:**
+  - `okdctl plan` runs terraform plan (with -lock-timeout, never apply) and prints per-resource create/update/replace/delete via the ParsePlanChanges rendering
+  - Flags nodes whose live sizing differs from the role knob in okdctl.yaml — the exact pending set node resize leaves behind
+  - Exits with a distinct nonzero code when drift exists (plan gains -detailed-exitcode plumbing), zero when clean; mutates nothing; help text explains how deploy reconciles what plan shows
+  - The design reconciles with deploy --dry-run — extend it or absorb its plan step — instead of duplicating runDeployDryRun's creds/runlock/connect plumbing as a parallel path
+- **Depends on:** none
+
+#### C15 — Let the wizard review step jump to sections
+
+- **Status:** not started
+- **Category:** tui / wizard
+- **State:** design needed
+- **Effort:** days
+- **Impact:** medium
+- **Evidence:** `internal/tui/wizard/steps/review.go:95-116`, `internal/tui/wizard/model_navigation.go`
+- **Rationale:** The review screen is the wizard's last impression and its edit path is its worst ergonomic: a typo in step 3 of 11 costs ~16 keypresses to fix. Jump-and-return is the standard installer-wizard pattern and is contained entirely in the navigation model plus the review view.
+- **Acceptance:**
+  - Each rendered review section gains a bracketed index in its header; pressing that digit on the review screen jumps straight to the corresponding step
+  - A returnToReview flag makes confirming (or Esc-ing) the edited step jump straight back to review instead of replaying intermediate steps
+  - The review footer advertises it via the existing HelpProvider/ShortHelp seam; hidden steps (stepShouldShow false) are never assigned an index
+- **Depends on:** none
+
+#### C16 — Replace internals-facing node-op messages with operator actions
+
+- **Status:** not started
+- **Category:** operator-ux / messages
+- **State:** well-specified
+- **Effort:** hours
+- **Impact:** small
+- **Evidence:** `internal/node/resize.go:91`, `internal/node/remove.go:89`
+- **Rationale:** Both messages fire at the moment of success, when the tool knows exactly what residual work remains, and hand the operator internals ("TODO: spec §11", "a root-capable path") instead of an action. The haproxy step constant and doc claim describe work the code demoted to a log hint — wire it or make the docs honest.
+- **Acceptance:**
+  - The resize message tells the operator how to verify the guest saw the new memory (`oc debug node/<name> -- free -m`, or the Proxmox UI) with no TODO/spec tokens
+  - The remove message carries the concrete fix for the stale HAProxy backend (exact file/section and reload command, or the okdctl command that re-renders it); decide deliberately whether non-root node ops offer a sudo-gated haproxy refresh step
+  - StepHAProxy (opstate.go:47) is either backed by a real refresh step or removed together with RemoveWorker's doc-comment claim of "a best-effort HAProxy backend refresh" that the code does not perform
+  - CLAUDE.md's bare-TODO comment rule is applied to log strings too
+- **Depends on:** none
+
+#### C17 — Allow CPU-only resize without restating memory
+
+- **Status:** not started
+- **Category:** operator-ux / flags
+- **State:** well-specified
+- **Effort:** hours
+- **Impact:** small
+- **Evidence:** `internal/cli/node.go:296-298`, `internal/node/resize.go:53-62`
+- **Rationale:** The flag surface advertises CPU as optional but memory as mandatory, so changing one knob means asserting the other — and a mis-typed memory value during a routine CPU bump rolls the whole role through cordon/drain for a change nobody asked for.
+- **Acceptance:**
+  - `okdctl node resize workers --cpu 8` succeeds, leaving memory unchanged in config, tfvars, and the plan-time -var overrides
+  - Usage error only when neither --memory-mb nor --cpu is given; help text says at least one is required
+  - Memory-budget guard skips cleanly on a CPU-only change
+- **Depends on:** none
+
+#### C18 — Route cluster package output checks through getJSONChecked
+
+- **Status:** not started
+- **Category:** refactor / dedup
+- **State:** well-specified
+- **Effort:** hours
+- **Impact:** small
+- **Evidence:** `internal/cluster/k8s_etcd.go:81`, `internal/cluster/k8s_nodeops.go:121-133`
+- **Rationale:** The branch added the right helper and then didn't use it in the sibling files written in the same commit series — four inline copies of the same three-clause check in one package, one of which (MastersSchedulable) omits the Truncated guard entirely, a latent partial-JSON parse bug the fold fixes.
+- **Acceptance:**
+  - ListNodes, PodsForSelector, MastersSchedulable, and PendingCSRs (k8s_csrs.go:16-30) call getJSONChecked (or a promoted equivalent taking a msg-prefix parameter) instead of inlining exit-code/truncation checks
+  - MastersSchedulable gains the Truncated guard it currently lacks; PendingCSRs loses its convention-violating "failed to" prefix
+  - Error text for each caller keeps its verb-noun prefix; existing k8s_nodeops_test cases still pass
+- **Depends on:** none
+
+#### C19 — Make CoreOS stream pin lookup major-version aware before OKD 5.0 goes stable
+
+- **Status:** not started
+- **Category:** correctness / okd-landscape
+- **State:** well-specified
+- **Effort:** hours
+- **Impact:** large
+- **Evidence:** `internal/distribution/okd/setup/coreos.go:217-221`, `internal/distribution/okd/setup/coreos.go:176-191`
+- **Rationale:** parseOKDMinor parses "major.minor" and discards major; streamPins is keyed by minor alone. OKD 5.0 is already five engineering candidates deep (5.0.0-okd-scos.ec.0 through ec.4, openshift/installer has release-5.0/5.1 branches cut), so a 5.x version today fails with an error that hardcodes "4.%d" — and a future 5.x minor that collides with a pinned 4.x key would silently resolve to the wrong installer commit and SHA256, defeating the exact tamper-detection streamPins exists to provide.
+- **Acceptance:**
+  - streamPins (or its replacement) is keyed by an unambiguous (major, minor) pair, not minor alone; parseOKDMinor returns and uses both
+  - The "not pinned" error reports the actual requested major.minor, never a hardcoded "4."
+  - A test asserts "5.0.0-okd-scos.ec.4" and a "4.19.0-okd-scos.6"-style fixture resolve to distinct pins even though they collide under a minor-only key
+  - scripts/update-coreos-pins.sh and the doc comment in coreos.go record major alongside minor for new pins
+- **Depends on:** none
+
+#### C20 — Extend ISO auto-detect and destroy cleanup to SCOS filenames
+
+- **Status:** not started
+- **Category:** correctness / okd-landscape
+- **State:** well-specified
+- **Effort:** hours
+- **Impact:** medium
+- **Evidence:** `internal/distribution/okd/setup/coreos.go:96-100`, `internal/infrastructure/proxmox/hostssh/iso_cleanup.go:42`
+- **Rationale:** OKD has shipped only SCOS-named boot ISOs since 4.19 (the current 4.22 artifact is literally scos-10.0.…-live-iso.x86_64.iso), but the local auto-detect globs match only fedora-coreos-*/fcos-* names, and the destroy-time removal path both searches for and — via its path-safety guard — actively refuses anything not named fedora-coreos-*.iso. On every SCOS cluster, a cached ISO is invisible to the fast path and `okdctl destroy` silently leaks the base ISO on the Proxmox host on every teardown.
+- **Acceptance:**
+  - Both call sites recognize scos-*.iso names, ideally by deriving the expected filename from the same stream metadata coreos.go already fetches instead of hardcoding a second drifting pattern list
+  - The iso_cleanup.go safety guard accepts the SCOS name shape while still refusing arbitrary paths; a destroy-phase test proves an SCOS-named fixture ISO is found and removed
+  - User-facing log/desc strings ("removing fedora-coreos iso", "no fedora-coreos-*.iso found") are accurate for SCOS-only deployments
+- **Depends on:** none
+
+#### C21 — Bump the default OKD version pin to current stable
+
+- **Status:** not started
+- **Category:** freshness / okd-landscape
+- **State:** well-specified
+- **Effort:** hours
+- **Impact:** small
+- **Evidence:** `internal/config/defaults.go`
+- **Rationale:** New clusters default to 4.18.0-okd-scos.10 — the last pre-SCOS-boot-image release — while stable is at 4.22 with weekly patch drops. A fresh homelab deploy in mid-2026 should not start four minors behind on the default path.
+- **Acceptance:**
+  - Default version moves to the current stable (4.22.x) and the pin-bump procedure in scripts/update-coreos-pins.sh is exercised as part of the change
+  - The wizard's version step and configs/examples/*.yaml agree with the new default
+- **Depends on:** none
+
+#### C22 — Proxmox HA anti-affinity rules for control-plane VM placement
+
+- **Status:** not started
+- **Category:** feature-gap / proxmox-native
+- **State:** design needed
+- **Effort:** days
+- **Impact:** medium
+- **Evidence:** `infrastructure/terraform/modules/proxmox-okd/main.tf:65-69`
+- **Rationale:** bpg/proxmox ships first-class HA resources (proxmox_virtual_environment_haresource, _harule with negative resource-affinity, PVE 9+), but the module registers none even though master_target_nodes already lets operators spread masters across physical hosts — and the startup{order} blocks it does use are documented host-local-only, so cross-host ordering silently degrades. Without enforced anti-affinity, a Proxmox HA failover can relocate two masters onto one surviving host, breaking the etcd failure domain the operator believed they had.
+- **Acceptance:**
+  - Opt-in variable (ha_enabled, default false — single-node PVE has no HA) creates one haresource per master plus one negative resource-affinity harule grouping all master VM IDs
+  - PVE 9+ requirement stated explicitly; enabling on an older cluster fails the plan with a clear message
+  - startup{} blocks documented as host-local-only and superseded when ha_enabled=true
+  - terraform plan/apply idempotent with ha_enabled toggled both ways — no unrelated VM churn
+- **Depends on:** none
+
+#### C23 — Fix the silent FCOS fstrim failure so thin-storage discard reclaims space
+
+- **Status:** not started
+- **Category:** correctness / proxmox-native
+- **State:** well-specified
+- **Effort:** days
+- **Impact:** medium
+- **Evidence:** `infrastructure/terraform/modules/proxmox-okd/main.tf:77`
+- **Rationale:** Every disk sets discard="on", but Fedora CoreOS's stock fstrim.timer runs `fstrim --fstab`, which unconditionally fails because FCOS ships no /etc/fstab (open upstream bug coreos/fedora-coreos-tracker#468) — so guest-side space reclaim on ZFS/Ceph/LVM-thin Proxmox storage silently never happens. A MachineConfig systemd override that trims real mountpoints closes it with manifest-injection plumbing okdctl already has.
+- **Acceptance:**
+  - A MachineConfig for both pools ships a systemd unit+timer trimming actual FCOS mountpoints instead of relying on --fstab
+  - Comment links the upstream issue per CLAUDE.md's workaround convention
+  - Verified against a thin-provisioned backend: deleting a large file followed by the timer firing measurably shrinks host-side usage versus the stock no-op baseline
+- **Depends on:** none
+
+#### C24 — Proxmox-native node snapshot/rollback safety net
+
+- **Status:** not started
+- **Category:** feature-gap / proxmox-native
+- **State:** design needed
+- **Effort:** days
+- **Impact:** medium
+- **Evidence:** `internal/infrastructure/proxmox/hostssh/pvesh.go`, `infrastructure/terraform/modules/proxmox-okd/main.tf:56`
+- **Rationale:** "Snapshot before I do something risky, roll back if it breaks" is a hypervisor-native undo button no generic installer can offer, and the hostssh/pvesh layer is its natural home. Distinct from the rejected etcd-backup scope: manual, single-node, short-lived, no scheduling or retention. Note qemu-guest-agent is currently disabled fleet-wide ("disabled for faster terraform operations"), so snapshots are crash-consistent unless agent enablement is revisited.
+- **Acceptance:**
+  - okdctl node snapshot create/list/rollback/delete <node> wraps pvesh snapshot endpoints, extending hostssh per the argv-mode SSH policy
+  - Creation reuses cluster.Client Cordon/Drain when targeting a live node; warns crash-consistent-only when the VM has no guest agent
+  - Rollback re-verifies node health (kubelet Ready, rejoined) and fails loudly rather than leaving a half-rolled-back node
+  - Documented as a bounded manual safety net — no scheduling, no retention
+- **Depends on:** none
+
+#### C25 — Disable Red-Hat-subscription-gated defaults post-install
+
+- **Status:** not started
+- **Category:** feature-gap / okd-polish
+- **State:** well-specified
+- **Effort:** days
+- **Impact:** small
+- **Evidence:** `internal/distribution/okd/postinstall/`
+- **Rationale:** Every fresh OKD cluster throws a permanent, unresolvable InsightsDisabled alert (okd-project/okd#2058 has the maintainer on record that pull-secret-gated operators are non-functional on OKD) and runs three catalog-index pods (redhat-operators, certified-operators, redhat-marketplace) pulling indexes no OKD user can install from. okdctl can ship the cluster in the state OKD users end up hand-patching it into.
+- **Acceptance:**
+  - A postinstall step patches operatorhub.config.openshift.io/cluster to disable the three subscription-gated CatalogSources, leaving community-operators untouched
+  - The InsightsDisabled alert is silenced so it stops presenting as actionable
+  - Gated behind a default-on flag (e.g. --keep-redhat-catalogs to opt out) and documented as a deliberate deviation from stock installer defaults
+- **Depends on:** none
+
+#### C26 — Ship a chrony MachineConfig tuned for VM clock drift
+
+- **Status:** not started
+- **Category:** feature-gap / okd-polish
+- **State:** well-specified
+- **Effort:** hours
+- **Impact:** small
+- **Evidence:** `internal/distribution/okd/setup/ignition.go`, `README.md:185-186`
+- **Rationale:** Clock skew after Proxmox snapshot/pause/resume cycles causes etcd election failures and "certificate is not yet valid" errors (RH KB 7033287) — a VM-specific failure class bare metal doesn't hit, and the README's current answer is "run ntpdate by hand and retry." A chrony MachineConfig with makestep tuned for fast step-correction fixes it structurally.
+- **Acceptance:**
+  - Control-plane + worker MachineConfig sets an explicit chrony server (default: the bastion, overridable in config) with makestep tuned to step-correct quickly after pause/resume
+  - Wizard/config exposes the NTP source as an optional field with a sane default
+  - README troubleshooting entry updated to reflect the structural fix
+- **Depends on:** none
+
+#### C27 — Rebuild ExtractTarGz containment on os.Root
+
+- **Status:** not started
+- **Category:** build-vs-buy / security
+- **State:** well-specified
+- **Effort:** hours
+- **Impact:** medium
+- **Evidence:** `internal/download/extract.go:54-64`, `internal/download/extract.go:83-150`
+- **Rationale:** ~40 LOC of hand-rolled path containment (HasPrefix checks, post-write EvalSymlinks re-verification, gosec suppressions) can be replaced by stdlib os.Root's kernel-enforced openat2-style containment — which also closes the EvalSymlinks-then-mkdir TOCTOU window the comments acknowledge. Zero new deps, net −30 LOC, strictly stronger invariant.
+- **Acceptance:**
+  - processTarEntry writes via an os.Root opened on destDir (Root.MkdirAll/OpenFile/Symlink); verifyResolvedPath is deleted
+  - Explicit rejection of absolute/escaping symlink Linkname targets is retained (extracted trees are consumed later by non-Root code)
+  - All existing zip-slip/symlink-traversal tests in extract_test.go pass unchanged
+- **Depends on:** none
+
+#### C28 — Reimplement system.WaitFor internals on apimachinery wait
+
+- **Status:** not started
+- **Category:** build-vs-buy
+- **State:** well-specified
+- **Effort:** hours
+- **Impact:** small
+- **Evidence:** `internal/system/wait.go:47-92`, `internal/download/retry.go:12`
+- **Rationale:** WaitFor hand-rolls ticker+timer race handling — the subtlest concurrency code in internal/system — while the repo already standardized on k8s.io/apimachinery/pkg/util/wait at three production sites. Folding the internals deletes ~35 LOC and leaves one polling vocabulary instead of two.
+- **Acceptance:**
+  - WaitFor keeps its exact signature, polls/elapsed logging, ClusterError-on-timeout, and ctx-error-primary semantics; only the internal machinery moves to wait.PollUntilContextTimeout(immediate=true)
+  - wait_test.go passes without behavioral edits; no new dependency
+- **Depends on:** none
+
+#### C29 — Replace system.NewUUIDv4 with crypto/rand.Text
+
+- **Status:** not started
+- **Category:** build-vs-buy
+- **State:** well-specified
+- **Effort:** hours
+- **Impact:** small
+- **Evidence:** `internal/system/runid.go:15-37`, `internal/cli/root.go:98`
+- **Rationale:** The hand-rolled UUIDv4 encoder plus its test (~60 LOC) reduces to stdlib rand.Text() with identical entropy and panic-on-entropy-failure semantics. Only cost is cosmetic: run_id changes from 36-char UUID to 26-char base32.
+- **Acceptance:**
+  - run_id and debug-bundle ID call rand.Text(); runid.go and runid_test.go are deleted
+  - Confirmed no consumer parses or validates the UUID shape before the format changes
+- **Depends on:** none
+
+#### C30 — Decide keep/kill on the --metrics-addr Prometheus endpoint
+
+- **Status:** not started
+- **Category:** simplification / product-decision
+- **State:** design needed
+- **Effort:** hours
+- **Impact:** large
+- **Evidence:** `internal/deploymetrics/metrics.go:1`, `internal/cli/deploy.go:56`
+- **Rationale:** A Prometheus scrape endpoint on a one-shot deploy CLI is the largest cohesive feature with the thinnest real-world justification — deliberate (PR #87), but no doc or test shows an actual scraping workflow. Killing it deletes ~550 LOC, two flags, and the MetricsRecorder plumbing's second consumer; keeping it deserves a written rationale so it stops resurfacing in reviews. Note the C7 checklist item adds a new MetricsRecorder consumer, so decide this first.
+- **Acceptance:**
+  - An explicit keep or kill verdict is recorded
+  - If killed: internal/deploymetrics, internal/deploy/metrics.go, the --metrics-addr/--metrics-allow-network flags, and their tests are deleted; pending metrics-related roadmap items are closed as obsolete; MetricsRecorder itself stays (C7 consumes it)
+  - If kept: the package doc states who scrapes a run-once CLI and why
+- **Depends on:** none
+
+#### C31 — Collapse the triplicated exponential-backoff retry wrapper
+
+- **Status:** not started
+- **Category:** simplification
+- **State:** well-specified
+- **Effort:** hours
+- **Impact:** small
+- **Evidence:** `internal/addon/helpers.go:32`, `internal/infrastructure/proxmox/proxmox.go:405`
+- **Rationale:** Three near-identical wrappers around wait.ExponentialBackoffWithContext share the same backoff literals and ctx-cancellation epilogue — one comments that it "mirrors retryDownload" — and the errtypes package doc already names all three as consolidation targets. One shared helper deletes ~60-70 LOC and one copy-paste concept.
+- **Acceptance:**
+  - One Retry(ctx, backoff, classifier, fn) helper exists (natural home: internal/system next to WaitFor); download/retry.go, addon RetryDefault, and proxmox's inline loop all call it
+  - The duplicated wait.Backoff literals and the "mirrors retryDownload" comment are gone; the three per-package isRetryable classifiers remain
+- **Depends on:** none
+
+#### C32 — Eliminate the hybrid third path in wizard step authoring
+
+- **Status:** not started
+- **Category:** simplification / wizard
+- **State:** sketch
+- **Effort:** days
+- **Impact:** medium
+- **Evidence:** `internal/tui/wizard/steps/node_placement.go:51`, `internal/tui/wizard/datadriven.go:39`
+- **Rationale:** Seven steps use the declarative StepDefinition framework, four hand-roll Update/View, and node_placement straddles both — embedding a DataDrivenStep and wrapping it in forwarding shims, proof the paths don't compose. Deleting the hybrid collapses step authoring from three paths to two documented ones.
+- **Acceptance:**
+  - node_placement is either fully declarative (framework gains the hook it needed) or fully hand-rolled; the forwarding shims are deleted
+  - The declarative/hand-rolled boundary is stated in datadriven.go's package doc; ~100-150 LOC removed if the new hook lets 1-2 hand-rolled steps migrate
+- **Depends on:** none
+
+#### C33 — Delete redundant test restatements in postinstall and destroy suites
+
+- **Status:** not started
+- **Category:** simplification / tests
+- **State:** well-specified
+- **Effort:** hours
+- **Impact:** small
+- **Evidence:** `internal/distribution/okd/postinstall/update_ingress_test.go:163`, `internal/distribution/okd/destroy/steps_test.go:92`
+- **Rationale:** Four tests hit the same buildLBIngressController builder re-asserting overlapping invariants, and destroy's FailurePath asserts a strict subset of its PartialFailure sibling. ~250 LOC of restatement deleted with zero loss of pinned behavior; verified against the coverage floors (same production lines stay covered by surviving tests).
+- **Acceptance:**
+  - The three redundant buildLBIngressController tests fold into the existing PreservesFields checkOpt table; TestDestroySteps_FailurePath is deleted; TestCustomISONames pair collapses to one two-row table
+  - go test ./... passes and no .github/coverage-floors.conf floor regresses
+- **Depends on:** none
+
+#### C34 — Extract one shared slog capture-handler test fixture
+
+- **Status:** not started
+- **Category:** simplification / tests
+- **State:** well-specified
+- **Effort:** hours
+- **Impact:** small
+- **Evidence:** `internal/distribution/okd/destroy/steps_test.go:17`, `internal/distribution/okd/setup/coreos_test.go:23`
+- **Rationale:** The same ~35-40-line hand-rolled slog.Handler is copied verbatim in five test packages — the one genuine fixture duplication the earlier test-scaffolding consolidation missed. One shared helper deletes ~140 LOC and stops the sixth paste.
+- **Acceptance:**
+  - A single CaptureHandler lives in a logutil-adjacent test helper package (e.g. internal/logutil/logtest) with records/WithAttrs-merge/last() semantics
+  - The five verbatim copies (destroy, terraform, flux, secretstore, setup/isoCapture) are deleted; no production package imports the helper
+- **Depends on:** none
+
 ## Completed
 
 Completed items live in [`docs/roadmap/completed-archive.md`](docs/roadmap/completed-archive.md). Grep there for the canonical "is dep X done?" lookup. The previous in-line pointer index (144 entries, mirroring archive contents) was removed on 2026-05-09 to keep `roadmap.md` focused on active work.
