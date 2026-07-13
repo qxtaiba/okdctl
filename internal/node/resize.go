@@ -173,7 +173,7 @@ func resolveResizeTargets(nodes []cluster.NodeDetail, scope ResizeScope) ([]resi
 				return []resizeTarget{{name: n.Name, index: idx}}, n.Role, nil
 			}
 		}
-		return nil, "", fmt.Errorf("node %q not found in cluster; run 'okdctl status' to list nodes", scope.Node)
+		return nil, "", fmt.Errorf("node %q not found in cluster; run 'okdctl node list' to list nodes", scope.Node)
 	}
 
 	var targets []resizeTarget

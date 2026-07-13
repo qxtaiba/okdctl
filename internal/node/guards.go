@@ -40,7 +40,7 @@ func validateWorkerRemovable(nodes []cluster.NodeDetail, target string, workerCo
 		}
 	}
 	if targetNode == nil {
-		return fmt.Errorf("node %q not found in cluster; run 'okdctl status' to list nodes", target)
+		return fmt.Errorf("node %q not found in cluster; run 'okdctl node list' to list nodes", target)
 	}
 	if targetNode.Role != nodetypes.RoleWorker {
 		return fmt.Errorf("node %q is a %s; only worker nodes can be removed (master add/remove is not supported)", target, targetNode.Role)

@@ -1,29 +1,15 @@
-## okdctl describe node
+## okdctl cluster
 
-Show detail for a cluster node
+Cluster-wide lifecycle operations
 
 ### Synopsis
 
-Show the name, role (master/worker), and readiness condition for a
-single cluster node retrieved via oc. Use 'okdctl node list' to see every
-node at once (with terraform index and sizing-drift), or 'okdctl status' for
-a cluster-wide summary.
-
-```
-okdctl describe node <name> [flags]
-```
-
-### Examples
-
-```
-  okdctl describe node master-0
-```
+Orchestrate multi-node lifecycle sequences such as compaction onto the control plane.
 
 ### Options
 
 ```
-  -h, --help            help for node
-  -o, --output string   output format: text|json (default "text")
+  -h, --help   help for cluster
 ```
 
 ### Options inherited from parent commands
@@ -39,5 +25,6 @@ okdctl describe node <name> [flags]
 
 ### SEE ALSO
 
-* [okdctl describe](okdctl_describe.md)	 - Show details for a cluster node or addon
+* [okdctl](okdctl.md)	 - Provision OKD clusters on Proxmox VE
+* [okdctl cluster compact](okdctl_cluster_compact.md)	 - Consolidate the cluster onto its control plane
 

@@ -2,8 +2,13 @@ package setup
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
+	"regexp"
+	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/qxtaiba/okdctl/internal/config"
@@ -180,4 +185,64 @@ func WriteTerraformVars(cfg *config.Config, envDir string) error {
 		func() (string, error) { return templates.RenderTerraformVars(&data) },
 		outputPath, 0o600, "terraform.tfvars",
 	)
+}
+
+// TerraformVarsSizing is the per-role cpu/memory pair last rendered into
+// terraform.tfvars.
+type TerraformVarsSizing struct {
+	MasterCPU      int
+	MasterMemoryMB int
+	WorkerCPU      int
+	WorkerMemoryMB int
+}
+
+// tfvarsIntAssignment matches okdctl's own generated "key = 1234" lines. It is
+// not a general HCL parser — WriteTerraformVars is the only writer of this
+// file's scalar fields, so a purpose-built reader for that exact shape is
+// enough; hand-edited tfvars using interpolation or expressions for these
+// keys will not match and ReadTerraformVarsSizing reports it as missing.
+var tfvarsIntAssignment = regexp.MustCompile(`(?m)^(\w+)\s*=\s*(-?\d+)\s*$`)
+
+// ReadTerraformVarsSizing parses the four scalar sizing fields WriteTerraformVars
+// renders out of envDir's terraform.tfvars, so `okdctl node list` can detect
+// drift between the live config and the sizing last materialized to disk.
+// found=false (with a nil error) means terraform.tfvars has not been rendered
+// yet — a fresh workspace has nothing to drift from.
+func ReadTerraformVarsSizing(envDir string) (sizing TerraformVarsSizing, found bool, err error) {
+	path := filepath.Join(envDir, "terraform.tfvars")
+	data, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return TerraformVarsSizing{}, false, nil
+	}
+	if err != nil {
+		return TerraformVarsSizing{}, false, fmt.Errorf("read terraform.tfvars: %w", err)
+	}
+
+	values := map[string]int{}
+	for _, m := range tfvarsIntAssignment.FindAllStringSubmatch(string(data), -1) {
+		if v, convErr := strconv.Atoi(m[2]); convErr == nil {
+			values[m[1]] = v
+		}
+	}
+
+	fields := map[string]*int{
+		"master_cpu_cores": &sizing.MasterCPU,
+		"master_memory_mb": &sizing.MasterMemoryMB,
+		"worker_cpu_cores": &sizing.WorkerCPU,
+		"worker_memory_mb": &sizing.WorkerMemoryMB,
+	}
+	var missing []string
+	for key, dst := range fields {
+		v, ok := values[key]
+		if !ok {
+			missing = append(missing, key)
+			continue
+		}
+		*dst = v
+	}
+	if len(missing) > 0 {
+		sort.Strings(missing)
+		return TerraformVarsSizing{}, false, fmt.Errorf("parse terraform.tfvars: missing sizing key(s) %s", strings.Join(missing, ", "))
+	}
+	return sizing, true, nil
 }

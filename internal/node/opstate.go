@@ -113,3 +113,37 @@ func clearOpMarker(path string) error {
 func markerPath(workDir string) string {
 	return filepath.Join(workDir, OpMarkerFileName)
 }
+
+// OpMarker is the read-only view of an in-flight node op exposed to
+// non-mutating callers (`okdctl node list`). It mirrors opState's fields
+// without exposing the marker's on-disk JSON shape as public API.
+type OpMarker struct {
+	Op          Op
+	Target      string
+	Step        Step
+	RunID       string
+	ClusterName string
+	Timestamp   time.Time
+}
+
+// ReadOpMarker reads the op marker under workDir, returning nil when no op is
+// in flight (no marker file, or a marker left by a different cluster). Safe to
+// call without holding the run lock: the marker is written via AtomicWrite, so
+// a concurrent writer never leaves a partial read.
+func ReadOpMarker(workDir, clusterName string) (*OpMarker, error) {
+	s, err := readOpState(markerPath(workDir), clusterName)
+	if err != nil {
+		return nil, err
+	}
+	if s == nil {
+		return nil, nil
+	}
+	return &OpMarker{
+		Op:          s.Op,
+		Target:      s.Target,
+		Step:        s.Step,
+		RunID:       s.RunID,
+		ClusterName: s.ClusterName,
+		Timestamp:   s.Timestamp,
+	}, nil
+}

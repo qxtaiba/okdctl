@@ -28,6 +28,7 @@ per 24h, cached locally); set OKDCTL_NO_UPDATE_CHECK=1 to disable.
 
 * [okdctl addon](okdctl_addon.md)	 - Manage cluster addons
 * [okdctl cleanup](okdctl_cleanup.md)	 - Remove OKD cluster artifacts without destroying infrastructure
+* [okdctl cluster](okdctl_cluster.md)	 - Cluster-wide lifecycle operations
 * [okdctl completion](okdctl_completion.md)	 - Generate shell completion script
 * [okdctl config](okdctl_config.md)	 - Inspect okdctl configuration
 * [okdctl debug-bundle](okdctl_debug-bundle.md)	 - Collect a support bundle for troubleshooting
@@ -36,6 +37,7 @@ per 24h, cached locally); set OKDCTL_NO_UPDATE_CHECK=1 to disable.
 * [okdctl destroy](okdctl_destroy.md)	 - Destroy a Kubernetes cluster
 * [okdctl doctor](okdctl_doctor.md)	 - Check that your environment is ready to deploy a cluster
 * [okdctl kubeconfig](okdctl_kubeconfig.md)	 - Print or export the cluster kubeconfig
+* [okdctl node](okdctl_node.md)	 - Manage cluster node lifecycle
 * [okdctl releases](okdctl_releases.md)	 - Query available OKD versions
 * [okdctl status](okdctl_status.md)	 - Print a post-deploy cluster summary
 * [okdctl update-ingress](okdctl_update-ingress.md)	 - Switch ingress DNS from HAProxy to LoadBalancer IPs
