@@ -108,12 +108,10 @@ func reportDeployFailure(w io.Writer, err error, phase deployPhase, steps []dist
 // Options configures Execute. ProjectRoot must be a resolved project root
 // (see the cli package's project-marker validation).
 type Options struct {
-	ShowStartMessage    bool
-	Credentials         *credentials.ProxmoxCredentials
-	MetricsAddr         string
-	AllowNetworkMetrics bool
-	FreshDeploy         bool
-	ProjectRoot         string
+	ShowStartMessage bool
+	Credentials      *credentials.ProxmoxCredentials
+	FreshDeploy      bool
+	ProjectRoot      string
 }
 
 // runDeployPhases executes setup, install, and postinstall, starting from
@@ -173,7 +171,7 @@ func runDeployPhases(ctx context.Context, p provisioner, cfg *config.Config, pro
 }
 
 // Execute runs the full deployment — setup, install, postinstall — under the
-// project run lock, with resume routing, metrics, and the post-deploy summary.
+// project run lock, with resume routing and the post-deploy summary.
 func Execute(ctx context.Context, cfg *config.Config, opts Options, w io.Writer) error {
 	projectRoot := opts.ProjectRoot
 
@@ -197,17 +195,9 @@ func Execute(ctx context.Context, cfg *config.Config, opts Options, w io.Writer)
 
 	runID := tui.RunID()
 
-	stopMetrics, provOpts, err := startMetricsServer(ctx, opts.MetricsAddr, opts.AllowNetworkMetrics)
-	if err != nil {
-		return err
+	provOpts := []okd.ProvisionerOption{
+		okd.WithProgressReporter(func(desc string) func() { return tui.StartSpinner(ctx, desc) }),
 	}
-	defer func() {
-		if stopErr := stopMetrics(); stopErr != nil {
-			tui.Warn("metrics server stopped with error", tui.LF("err", stopErr))
-		}
-	}()
-
-	provOpts = append(provOpts, okd.WithProgressReporter(func(desc string) func() { return tui.StartSpinner(ctx, desc) }))
 	p := NewProvisioner(opts.Credentials, projectRoot, provOpts...)
 	defer p.ZeroizeEnv()
 

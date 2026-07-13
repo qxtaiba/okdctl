@@ -43,9 +43,9 @@ that fails to parse, fails schema validation, or a `doctor` preflight that
 reports `[fail]`. Code 64 (UsageError) covers problems with the flags on the
 command line: an unknown flag, or a combination that is individually valid
 but not sensible together — `--target`/`--only` without `--confirm-cluster`,
-`--dry-run` combined with a `--skip-*` flag, `--metrics-allow-network`
-without `--metrics-addr`. Rule of thumb: if the fix is "edit your YAML", it's
-ConfigError; if the fix is "change your command line", it's UsageError.
+`--dry-run` combined with a `--skip-*` flag. Rule of thumb: if the fix is
+"edit your YAML", it's ConfigError; if the fix is "change your command
+line", it's UsageError.
 
 ## Examples
 

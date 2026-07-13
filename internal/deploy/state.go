@@ -1,6 +1,6 @@
 // Package deploy runs the okdctl deploy engine: phase orchestration with
-// resume routing keyed on the on-disk deploy-state marker, the live-cluster
-// setup guard, and the optional Prometheus metrics endpoint.
+// resume routing keyed on the on-disk deploy-state marker and the
+// live-cluster setup guard.
 package deploy
 
 import (

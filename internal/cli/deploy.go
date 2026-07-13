@@ -24,13 +24,11 @@ import (
 )
 
 var (
-	deployOutputFile          string
-	deployMinimal             bool
-	deployYes                 bool
-	deployDryRun              bool
-	deployFresh               bool
-	deployMetricsAddr         string
-	deployMetricsAllowNetwork bool
+	deployOutputFile string
+	deployMinimal    bool
+	deployYes        bool
+	deployDryRun     bool
+	deployFresh      bool
 )
 
 var deployCmd = &cobra.Command{
@@ -53,19 +51,11 @@ func init() {
 	deployCmd.Flags().BoolVarP(&deployYes, "yes", "y", false, "write configuration non-interactively; does not deploy")
 	deployCmd.Flags().BoolVar(&deployDryRun, flagDryRun, false, "preview terraform plan and step listing without deploying")
 	deployCmd.Flags().BoolVar(&deployFresh, "fresh", false, "wipe the work directory even when live cluster state is detected (credentials will be lost)")
-	deployCmd.Flags().StringVar(&deployMetricsAddr, "metrics-addr", "", `address for Prometheus metrics endpoint; bare ":9090" binds 127.0.0.1; disabled when empty`)
-	deployCmd.Flags().BoolVar(&deployMetricsAllowNetwork, "metrics-allow-network", false, "allow metrics endpoint to bind on a wildcard address (0.0.0.0 or [::])")
 }
 
 func runDeploy(cmd *cobra.Command, _ []string) error {
 	ctx := cmd.Context()
 	out := cmd.OutOrStdout()
-
-	if deployMetricsAllowNetwork && deployMetricsAddr == "" {
-		return &errtypes.UsageError{
-			Msg: "--metrics-allow-network requires --metrics-addr (the flag has no effect on its own)",
-		}
-	}
 
 	// Deploy self-initializes the workspace: the embedded Terraform sources
 	// are materialized before the wizard or any phase code so an empty
@@ -282,12 +272,10 @@ func runFullDeployment(ctx context.Context, cfg *config.Config, w io.Writer) err
 	}
 
 	return deploy.Execute(ctx, cfg, deploy.Options{
-		ShowStartMessage:    true,
-		Credentials:         creds,
-		MetricsAddr:         deployMetricsAddr,
-		AllowNetworkMetrics: deployMetricsAllowNetwork,
-		FreshDeploy:         deployFresh,
-		ProjectRoot:         projectRoot,
+		ShowStartMessage: true,
+		Credentials:      creds,
+		FreshDeploy:      deployFresh,
+		ProjectRoot:      projectRoot,
 	}, w)
 }
 
