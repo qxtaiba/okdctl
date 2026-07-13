@@ -60,6 +60,12 @@ type Model struct {
 	steps       []WizardStep
 	currentStep int
 
+	// returnToReview is set when the review screen jumps to an edit step
+	// (JumpToStepMsg) and cleared once that step is confirmed or escaped;
+	// while set, goToNextStep/goToPreviousStep route back to the review
+	// step instead of the normal forward/backward step.
+	returnToReview bool
+
 	config *config.Config
 
 	quitting bool
@@ -211,6 +217,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case StepBackMsg:
 		return m.goToPreviousStep()
+
+	case JumpToStepMsg:
+		return m.jumpToStep(msg.StepID)
 
 	case ErrorSetMsg:
 		m.err = msg.Error

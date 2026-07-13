@@ -207,3 +207,29 @@ type FocusChangedMsg struct {
 type ConfigSyncMsg struct {
 	StepID StepID
 }
+
+// JumpTarget pairs a StepID with the 1-based digit used to jump to it from
+// the review screen. Digits are compacted: a step hidden by ShouldShow
+// consumes no digit, so later entries shift down rather than leaving a gap.
+type JumpTarget struct {
+	StepID StepID
+	Digit  int
+}
+
+// ReviewJumper is implemented by the review step. JumpOrder declares, in
+// on-screen order, which steps its section headers may route a digit
+// keypress to; the wizard model compacts that list against each target's
+// current ShouldShow result and delivers the result via SetJumpTargets
+// every time the step regains focus.
+type ReviewJumper interface {
+	JumpOrder() []StepID
+	SetJumpTargets(targets []JumpTarget)
+}
+
+// JumpToStepMsg requests the wizard navigate directly to the named step,
+// bypassing the normal forward/backward sequence. The wizard remembers the
+// jump: confirming or escaping the target step returns straight back to the
+// review screen instead of replaying the steps in between.
+type JumpToStepMsg struct {
+	StepID StepID
+}
