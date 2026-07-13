@@ -62,6 +62,17 @@ func (p *BasePhase) OcOutput(ctx context.Context, args ...string) (string, error
 	return strings.TrimSpace(result.Stdout), nil
 }
 
+// OcPatch patches a cluster-scoped resource via `oc patch <resource> <name>
+// --type=<patchType> -p <patch>`.
+func (p *BasePhase) OcPatch(ctx context.Context, resource, name, patchType, patch string) error {
+	return p.oc().Patch(ctx, resource, name, patchType, patch)
+}
+
+// OcApply applies a manifest via `oc apply -f -`, feeding it on stdin.
+func (p *BasePhase) OcApply(ctx context.Context, manifest []byte) error {
+	return p.oc().Apply(ctx, manifest)
+}
+
 // OcPollOutput polls `oc <args...>` at the WaitFor default interval (30s)
 // until predicate matches the trimmed stdout, and returns the first
 // matching value. timeout bounds the wait.

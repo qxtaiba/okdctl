@@ -24,11 +24,12 @@ import (
 )
 
 var (
-	deployOutputFile string
-	deployMinimal    bool
-	deployYes        bool
-	deployDryRun     bool
-	deployFresh      bool
+	deployOutputFile         string
+	deployMinimal            bool
+	deployYes                bool
+	deployDryRun             bool
+	deployFresh              bool
+	deployKeepRedHatCatalogs bool
 )
 
 var deployCmd = &cobra.Command{
@@ -41,7 +42,8 @@ deploying; run the command again without --yes to deploy from it.`,
 	Example: `  okdctl deploy
   okdctl deploy --config my-cluster.yaml
   okdctl deploy --yes --output-file my-cluster.yaml  # writes config only; does not deploy
-  okdctl deploy --dry-run`,
+  okdctl deploy --dry-run
+  okdctl deploy --keep-redhat-catalogs`,
 	RunE: runDeploy,
 }
 
@@ -51,6 +53,7 @@ func init() {
 	deployCmd.Flags().BoolVarP(&deployYes, "yes", "y", false, "write configuration non-interactively; does not deploy")
 	deployCmd.Flags().BoolVar(&deployDryRun, flagDryRun, false, "preview terraform plan and step listing without deploying")
 	deployCmd.Flags().BoolVar(&deployFresh, "fresh", false, "wipe the work directory even when live cluster state is detected (credentials will be lost)")
+	deployCmd.Flags().BoolVar(&deployKeepRedHatCatalogs, "keep-redhat-catalogs", false, "keep the redhat-operators, certified-operators, and redhat-marketplace OperatorHub catalogsources and the InsightsDisabled alert enabled (both require a Red Hat subscription OKD clusters don't have)")
 }
 
 func runDeploy(cmd *cobra.Command, _ []string) error {
@@ -272,10 +275,11 @@ func runFullDeployment(ctx context.Context, cfg *config.Config, w io.Writer) err
 	}
 
 	return deploy.Execute(ctx, cfg, deploy.Options{
-		ShowStartMessage: true,
-		Credentials:      creds,
-		FreshDeploy:      deployFresh,
-		ProjectRoot:      projectRoot,
+		ShowStartMessage:   true,
+		Credentials:        creds,
+		FreshDeploy:        deployFresh,
+		KeepRedHatCatalogs: deployKeepRedHatCatalogs,
+		ProjectRoot:        projectRoot,
 	}, w)
 }
 

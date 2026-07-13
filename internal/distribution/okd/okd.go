@@ -215,14 +215,18 @@ func (p *Provisioner) Install(ctx context.Context, cfg *config.Config, opts *ins
 }
 
 // PostInstall runs the postinstall phase: kube-vip verification, production
-// DNS cutover, bootstrap cleanup. Returns the result alongside per-step records.
-func (p *Provisioner) PostInstall(ctx context.Context, cfg *config.Config) (*postinstall.Result, []distribution.StepResult, error) {
+// DNS cutover, bootstrap cleanup. Returns the result alongside per-step
+// records. keepRedHatCatalogs mirrors the deploy --keep-redhat-catalogs flag,
+// skipping the step that disables subscription-gated OperatorHub catalog
+// sources and the InsightsDisabled alert.
+func (p *Provisioner) PostInstall(ctx context.Context, cfg *config.Config, keepRedHatCatalogs bool) (*postinstall.Result, []distribution.StepResult, error) {
 	postPhase := postinstall.New(
 		phase.WithExecutor(p.executor),
 		phase.WithLogger(p.logger),
 		phase.WithRecorder(p.recorder),
 	)
 	opts := postinstall.NewOptions(cfg, p.projectRoot)
+	opts.KeepRedHatCatalogs = keepRedHatCatalogs
 	return postPhase.Execute(ctx, cfg, &opts)
 }
 
@@ -232,7 +236,7 @@ func (p *Provisioner) PostInstall(ctx context.Context, cfg *config.Config) (*pos
 // recreate the bootstrap VM against a running control plane. Only KUBECONFIG,
 // the process-local executor state Install normally establishes, is re-armed;
 // a missing kubeconfig fails fast before any postinstall step runs.
-func (p *Provisioner) ResumePostInstall(ctx context.Context, cfg *config.Config) (*postinstall.Result, []distribution.StepResult, error) {
+func (p *Provisioner) ResumePostInstall(ctx context.Context, cfg *config.Config, keepRedHatCatalogs bool) (*postinstall.Result, []distribution.StepResult, error) {
 	installPhase := install.New(phase.WithExecutor(p.executor), phase.WithLogger(p.logger))
 	clusterDir := phase.ClusterConfigDir(filepath.Join(p.projectRoot, "okd-install"))
 	if err := installPhase.SetupKubeconfig(ctx, clusterDir); err != nil {
@@ -242,7 +246,7 @@ func (p *Provisioner) ResumePostInstall(ctx context.Context, cfg *config.Config)
 			Err: err,
 		}
 	}
-	return p.PostInstall(ctx, cfg)
+	return p.PostInstall(ctx, cfg, keepRedHatCatalogs)
 }
 
 // DeployStep is a single step's identity for dry-run listings — ID and

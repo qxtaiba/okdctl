@@ -166,6 +166,16 @@ a private registry; using a real `console.redhat.com` secret with OKD may
 violate Red Hat's subscription terms — see
 [okd-project/okd#1930](https://github.com/okd-project/okd/discussions/1930).
 
+Because of that, every OKD cluster also ships two subscription-gated
+defaults that are provably non-functional: the `redhat-operators`,
+`certified-operators`, and `redhat-marketplace` OperatorHub
+CatalogSources (their index pods can never be pulled without a
+subscription) and a permanent, unresolvable `InsightsDisabled` alert (the
+Insights operator needs a `console.redhat.com` token no OKD install has —
+see [okd-project/okd#2058](https://github.com/okd-project/okd/discussions/2058)).
+`okdctl deploy` disables both by default during postinstall; pass
+`--keep-redhat-catalogs` to leave them as OKD ships them.
+
 ## Troubleshooting
 
 Run `okdctl doctor` first — it catches most common failures, and its

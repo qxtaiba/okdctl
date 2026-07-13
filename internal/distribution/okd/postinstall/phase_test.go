@@ -21,6 +21,7 @@ var postinstallStepOrder = []distribution.StepID{
 	StepVerifyKubeVIP,
 	StepDeployProductionDNS,
 	StepInstallAddons,
+	StepDisableRHDefaults,
 }
 
 func TestPostinstallSteps_StepListAndSkipWiring(t *testing.T) {
@@ -58,6 +59,19 @@ func TestPostinstallSteps_StepListAndSkipWiring(t *testing.T) {
 			kubeVIPVerified: true,
 			wantSkip: map[distribution.StepID]bool{
 				StepDeployProductionDNS: false,
+			},
+		},
+		{
+			name: "defaults: disable-rh-defaults runs",
+			wantSkip: map[distribution.StepID]bool{
+				StepDisableRHDefaults: false,
+			},
+		},
+		{
+			name: "keep-redhat-catalogs",
+			opts: Options{KeepRedHatCatalogs: true},
+			wantSkip: map[distribution.StepID]bool{
+				StepDisableRHDefaults: true,
 			},
 		},
 	}
@@ -103,10 +117,12 @@ func TestPostinstallExecute_BootstrapTeardownViaFakeTerraform(t *testing.T) {
 		Networking: config.NetworkingConfig{Bastion: config.BastionConfig{IP: "192.168.1.5"}},
 	}
 	opts := NewOptions(cfg, projectRoot)
-	// Health and kube-vip verification need a live cluster; their wiring is
-	// covered by TestPostinstallSteps_StepListAndSkipWiring.
+	// Health, kube-vip verification, and disabling rh-subscription-gated
+	// defaults all need a live cluster; their wiring is covered by
+	// TestPostinstallSteps_StepListAndSkipWiring.
 	opts.SkipClusterHealth = true
 	opts.SkipKubeVIP = true
+	opts.KeepRedHatCatalogs = true
 
 	p := New(phase.WithExecutor(executor.New()), phase.WithLogger(logutil.NopLogger))
 	result, results, err := p.Execute(context.Background(), cfg, &opts)
@@ -123,6 +139,7 @@ func TestPostinstallExecute_BootstrapTeardownViaFakeTerraform(t *testing.T) {
 		StepVerifyKubeVIP:       true,
 		StepDeployProductionDNS: true,
 		StepInstallAddons:       false,
+		StepDisableRHDefaults:   true,
 	}
 	for i, r := range results {
 		if r.StepID != postinstallStepOrder[i] {
