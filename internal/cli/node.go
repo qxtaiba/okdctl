@@ -115,7 +115,10 @@ whole batch and torn down when the batch finishes, fails, or times out.
 An interrupted add records an op marker and resumes automatically on the
 next 'okdctl node add', skipping already-joined nodes and completed steps.
 --acknowledge-interrupted-op overrides a marker left by a different op or
-node instead of refusing.`,
+node instead of refusing. If a batch is interrupted, finish it with another
+'okdctl node add' before running 'okdctl deploy' — deploy does not consult
+the op marker and a partial batch's config/tfvars undercount the workers
+terraform already created, so it would destroy the in-flight node(s).`,
 	Example: `  okdctl node add --role worker --yes --confirm-cluster grappleberry
   okdctl node add --role worker --count 2 --dry-run`,
 	Args: cobra.NoArgs,
