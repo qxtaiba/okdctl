@@ -380,7 +380,7 @@ func TestResizeOneNodePowerCyclesAndRealizes(t *testing.T) {
 	r.DryRun = false
 	r.Power = fp
 
-	if err := r.resizeOneNode(context.Background(), resizeTarget{name: "worker0", index: 0}, nodetypes.RoleWorker, map[string]string{"worker_memory_mb": "16384"}); err != nil {
+	if err := r.resizeOneNode(context.Background(), resizeTarget{name: "worker0", index: 0}, nodetypes.RoleWorker, map[string]string{"worker_memory_mb": "16384"}, nil); err != nil {
 		t.Fatalf("resizeOneNode: %v", err)
 	}
 	if fp.calls != 1 {
@@ -410,7 +410,7 @@ func TestResizeOneNodePowerCycleFailureLeavesCordoned(t *testing.T) {
 	r.DryRun = false
 	r.Power = fp
 
-	err := r.resizeOneNode(context.Background(), resizeTarget{name: "worker0", index: 0}, nodetypes.RoleWorker, map[string]string{"worker_memory_mb": "16384"})
+	err := r.resizeOneNode(context.Background(), resizeTarget{name: "worker0", index: 0}, nodetypes.RoleWorker, map[string]string{"worker_memory_mb": "16384"}, nil)
 	if err == nil {
 		t.Fatal("expected error when power-cycle fails")
 	}
