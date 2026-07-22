@@ -63,7 +63,11 @@ func NodeOpComplete(plan *node.OpPlan, elapsed time.Duration) string {
 	sb.Section("nodes")
 	for i := range plan.Nodes {
 		n := &plan.Nodes[i]
-		sb.KV(n.Name, fmt.Sprintf("%s  %s", n.Role, nodeActionVerb(n.Action)))
+		verb := nodeActionVerb(n.Action)
+		if plan.Op == node.OpStop || plan.Op == node.OpStart {
+			verb = nodePowerCompleteVerb(plan.Op)
+		}
+		sb.KV(n.Name, fmt.Sprintf("%s  %s", n.Role, verb))
 	}
 	sb.Newline()
 
@@ -103,7 +107,11 @@ func nodeOpDetails(sb *Builder, plan *node.OpPlan) {
 	sb.Section("nodes")
 	for i := range plan.Nodes {
 		n := &plan.Nodes[i]
-		sb.KV(n.Name, fmt.Sprintf("%s  %s  [%s]", n.Role, n.TFAddress, n.Action))
+		if plan.Op == node.OpStop || plan.Op == node.OpStart {
+			sb.KV(n.Name, fmt.Sprintf("%s  %s", n.Role, nodePowerPlanVerb(plan.Op)))
+		} else {
+			sb.KV(n.Name, fmt.Sprintf("%s  %s  [%s]", n.Role, n.TFAddress, n.Action))
+		}
 		if len(n.OSDs) > 0 {
 			sb.KV("  storage", fmt.Sprintf("%d rook-ceph OSD(s) — data disk destroyed", len(n.OSDs)))
 		}
@@ -130,9 +138,37 @@ func nodeOpNextSteps(plan *node.OpPlan) []string {
 			"each resized node was power-cycled to realize the change; verify with",
 			"  'okdctl node list' or 'oc debug node/<name> -- free -m'",
 		}
+	case node.OpStop:
+		return []string{
+			"the cluster is powered off and nothing will respond until it restarts",
+			"restart it with 'okdctl cluster start'",
+		}
+	case node.OpStart:
+		return []string{
+			"verify the cluster with 'okdctl status'",
+		}
 	default:
 		return nil
 	}
+}
+
+// nodePowerPlanVerb names the planned power action for a stop/start node line
+// in the confirm and dry-run boxes; these ops carry no terraform address, so
+// this replaces the [action] bracket used by tf-mutating ops.
+func nodePowerPlanVerb(op node.Op) string {
+	if op == node.OpStart {
+		return "powered on"
+	}
+	return "shut down"
+}
+
+// nodePowerCompleteVerb names the completed power action for a stop/start node
+// line in the completion box.
+func nodePowerCompleteVerb(op node.Op) string {
+	if op == node.OpStart {
+		return "started"
+	}
+	return "stopped"
 }
 
 func nodeActionVerb(a terraform.PlanAction) string {
@@ -154,6 +190,10 @@ func opHeadline(op node.Op) string {
 		return "confirm cluster compaction"
 	case node.OpResize:
 		return "confirm node resize"
+	case node.OpStop:
+		return "confirm cluster stop"
+	case node.OpStart:
+		return "confirm cluster start"
 	default:
 		return "confirm node operation"
 	}
@@ -167,6 +207,10 @@ func opTitle(op node.Op) string {
 		return "cluster compact"
 	case node.OpResize:
 		return "node resize"
+	case node.OpStop:
+		return "cluster stop"
+	case node.OpStart:
+		return "cluster start"
 	default:
 		return "node op"
 	}
@@ -180,6 +224,10 @@ func opComplete(op node.Op) string {
 		return "cluster compacted"
 	case node.OpResize:
 		return "resize complete"
+	case node.OpStop:
+		return "cluster stopped"
+	case node.OpStart:
+		return "cluster started"
 	default:
 		return "node operation complete"
 	}

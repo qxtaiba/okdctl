@@ -89,3 +89,77 @@ func TestNodeOpDryRunMarksNoChanges(t *testing.T) {
 		t.Errorf("dry-run box should list the planned operation:\n%s", got)
 	}
 }
+
+func stopPlan() node.OpPlan {
+	return node.OpPlan{
+		Op:      node.OpStop,
+		Cluster: "grappleberry",
+		Nodes: []node.PlanNode{
+			{Name: "worker0", Role: nodetypes.RoleWorker, Action: terraform.PlanActionNoop},
+			{Name: "master0", Role: nodetypes.RoleMaster, Action: terraform.PlanActionNoop},
+		},
+	}
+}
+
+func startPlan() node.OpPlan {
+	return node.OpPlan{
+		Op:      node.OpStart,
+		Cluster: "grappleberry",
+		Nodes: []node.PlanNode{
+			{Name: "master0", Role: nodetypes.RoleMaster, Action: terraform.PlanActionNoop},
+			{Name: "worker0", Role: nodetypes.RoleWorker, Action: terraform.PlanActionNoop},
+		},
+	}
+}
+
+func TestNodeOpConfirmStopHasNoTFAddressOrIrreversible(t *testing.T) {
+	plan := stopPlan()
+	got := NodeOpConfirm(&plan)
+	for _, want := range []string{"confirm cluster stop", "grappleberry", "worker0", "shut down"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("stop confirm box missing %q:\n%s", want, got)
+		}
+	}
+	if strings.Contains(got, "irreversible") {
+		t.Errorf("cluster stop must not carry the irreversible warning:\n%s", got)
+	}
+	if strings.Contains(got, "no-op") {
+		t.Errorf("cluster stop must not print a terraform action/address:\n%s", got)
+	}
+}
+
+func TestNodeOpConfirmStartHasNoTFAddressOrIrreversible(t *testing.T) {
+	plan := startPlan()
+	got := NodeOpConfirm(&plan)
+	for _, want := range []string{"confirm cluster start", "grappleberry", "master0", "powered on"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("start confirm box missing %q:\n%s", want, got)
+		}
+	}
+	if strings.Contains(got, "irreversible") {
+		t.Errorf("cluster start must not carry the irreversible warning:\n%s", got)
+	}
+	if strings.Contains(got, "no-op") {
+		t.Errorf("cluster start must not print a terraform action/address:\n%s", got)
+	}
+}
+
+func TestNodeOpCompleteStopUsesStoppedVerb(t *testing.T) {
+	plan := stopPlan()
+	got := NodeOpComplete(&plan, 45*time.Second)
+	for _, want := range []string{"cluster stopped", "worker0", "stopped", "okdctl cluster start"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("stop completion box missing %q:\n%s", want, got)
+		}
+	}
+}
+
+func TestNodeOpCompleteStartUsesStartedVerb(t *testing.T) {
+	plan := startPlan()
+	got := NodeOpComplete(&plan, 45*time.Second)
+	for _, want := range []string{"cluster started", "master0", "started", "okdctl status"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("start completion box missing %q:\n%s", want, got)
+		}
+	}
+}
