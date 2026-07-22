@@ -65,6 +65,19 @@ type nodeListEntry struct {
 	InFlightOp  string             `json:"in_flight_op,omitempty"`
 }
 
+// nodeListResult is the top-level shape of `okdctl node list --output json`;
+// see docs/cli/json-schema.md for the documented, stable shape.
+type nodeListResult struct {
+	Nodes []nodeListEntry `json:"nodes"`
+	// UnattachedOp surfaces an on-disk op marker whose Target matches no
+	// listed node — a cluster-stop/start marker (Target is the cluster name,
+	// not a node) or a marker whose node was since removed. Per-node
+	// in_flight_op only fires on a Target match, so without this field either
+	// marker shape is invisible to `node list`, including the exact case a
+	// same-workdir op with a different target would clobber.
+	UnattachedOp string `json:"unattached_op,omitempty"`
+}
+
 func runNodeList(cmd *cobra.Command, _ []string) error {
 	if err := validateFormat(nodeListOutput); err != nil {
 		return err
@@ -91,12 +104,14 @@ func runNodeList(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
-	entries := buildNodeListEntries(nodes, cfg, loadNodeListSideData(cfg, projectRoot))
+	side := loadNodeListSideData(cfg, projectRoot)
+	entries := buildNodeListEntries(nodes, cfg, side)
+	unattached := unattachedOpNote(side.marker, nodes)
 
 	if nodeListOutput == outputJSON {
-		return writeJSON(cmd.OutOrStdout(), entries)
+		return writeJSON(cmd.OutOrStdout(), nodeListResult{Nodes: entries, UnattachedOp: unattached})
 	}
-	return printNodeList(cmd.OutOrStdout(), entries)
+	return printNodeList(cmd.OutOrStdout(), entries, unattached)
 }
 
 // nodeListSideData is the non-cluster context `okdctl node list` folds onto
@@ -144,6 +159,21 @@ func buildNodeListEntries(nodes []cluster.NodeDetail, cfg *config.Config, side n
 	return entries
 }
 
+// unattachedOpNote reports a marker whose Target matches no listed node —
+// see nodeListResult.UnattachedOp. Empty when there is no marker or it is
+// already attached to a listed node via in_flight_op.
+func unattachedOpNote(marker *node.OpMarker, nodes []cluster.NodeDetail) string {
+	if marker == nil {
+		return ""
+	}
+	for _, n := range nodes {
+		if n.Name == marker.Target {
+			return ""
+		}
+	}
+	return fmt.Sprintf("%s (%s) on %s", marker.Op, marker.Step, marker.Target)
+}
+
 // roleSizingDrift compares cfg's role sizing to sizing (parsed from
 // terraform.tfvars). found=false means terraform.tfvars has not been
 // rendered, so drift cannot be assessed.
@@ -168,30 +198,40 @@ func roleSizingDrift(cfg *config.Config, role nodetypes.NodeRole, sizing setup.T
 	return driftPending, fmt.Sprintf("config %dMiB/%dcpu vs tfvars %dMiB/%dcpu", cfgMem, cfgCPU, tfMem, tfCPU)
 }
 
-// printNodeList renders the text table. Plain tabwriter, no color: tabwriter
-// measures column width in bytes, so ANSI styling here would misalign columns
-// the way it would not inside a lipgloss-padded box.
-func printNodeList(w io.Writer, entries []nodeListEntry) error {
+// printNodeList renders the text table, plus a trailing note when
+// unattachedOp is non-empty (see nodeListResult.UnattachedOp). Plain
+// tabwriter, no color: tabwriter measures column width in bytes, so ANSI
+// styling here would misalign columns the way it would not inside a
+// lipgloss-padded box.
+func printNodeList(w io.Writer, entries []nodeListEntry, unattachedOp string) error {
 	if len(entries) == 0 {
-		_, err := fmt.Fprintln(w, "no nodes found")
-		return err
-	}
-	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(tw, "NAME\tROLE\tREADY\tTF-INDEX\tDRIFT\tOP")
-	for _, e := range entries {
-		idx := "-"
-		if e.TFIndex != nil {
-			idx = strconv.Itoa(*e.TFIndex)
+		if _, err := fmt.Fprintln(w, "no nodes found"); err != nil {
+			return err
 		}
-		op := e.InFlightOp
-		if op == "" {
-			op = "-"
+	} else {
+		tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+		fmt.Fprintln(tw, "NAME\tROLE\tREADY\tTF-INDEX\tDRIFT\tOP")
+		for _, e := range entries {
+			idx := "-"
+			if e.TFIndex != nil {
+				idx = strconv.Itoa(*e.TFIndex)
+			}
+			op := e.InFlightOp
+			if op == "" {
+				op = "-"
+			}
+			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\n", e.Name, e.Role, yesNo(e.Ready), idx, e.Drift, op)
 		}
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\n", e.Name, e.Role, yesNo(e.Ready), idx, e.Drift, op)
+		if err := tw.Flush(); err != nil {
+			return err
+		}
+		if _, err := fmt.Fprintln(w, "\nDRIFT compares config sizing to terraform.tfvars on disk, not live VM state."); err != nil {
+			return err
+		}
 	}
-	if err := tw.Flush(); err != nil {
-		return err
+	if unattachedOp == "" {
+		return nil
 	}
-	_, err := fmt.Fprintln(w, "\nDRIFT compares config sizing to terraform.tfvars on disk, not live VM state.")
+	_, err := fmt.Fprintf(w, "\nin-flight op: %s — not attached to a listed node\n", unattachedOp)
 	return err
 }
