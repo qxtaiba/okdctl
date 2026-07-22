@@ -18,6 +18,9 @@ type RemoveOptions struct {
 	ForceStorage bool
 	SkipDrain    bool
 	DrainTimeout string
+	// Acknowledge overrides a stranded marker left by a different op/target so
+	// RemoveWorker proceeds fresh instead of refusing; see beginOp.
+	Acknowledge bool
 }
 
 // RemoveWorker removes the named worker: guards, cordon, drain, targeted
@@ -25,21 +28,36 @@ type RemoveOptions struct {
 // delete. It does not touch HAProxy — the completion log points the operator
 // at the manual backend-refresh steps instead. On any failure the node is
 // left cordoned. Only the highest-numbered worker is removable (count-index
-// rule).
+// rule). An interrupted run resumes at its recorded step (see beginOp),
+// skipping the guards/confirm gate — they assume a clean baseline that no
+// longer holds once a prior attempt has partially mutated the cluster.
 func (r *Runner) RemoveWorker(ctx context.Context, target string, opts RemoveOptions) error {
-	nodes, err := r.Cluster.ListNodes(ctx)
-	if err != nil {
-		return &errtypes.ClusterError{Msg: "list nodes", Err: err}
-	}
-	workerCount := r.Cfg.Topology.Workers.Count
-	if err := validateWorkerRemovable(nodes, target, workerCount); err != nil {
-		return &errtypes.ConfigError{Msg: err.Error()}
-	}
-	idx, _ := cluster.NodeIndex(target)
-
-	osdHere, ingressHere, err := r.removeGuards(ctx, nodes, target, opts.ForceStorage)
+	marker, err := r.beginOp(OpRemove, func(m *OpMarker) bool { return m.Target == target }, opts.Acknowledge)
 	if err != nil {
 		return err
+	}
+	resuming := marker != nil
+	resumeStep := Step("")
+	if resuming {
+		resumeStep = marker.Step
+	}
+
+	workerCount := r.Cfg.Topology.Workers.Count
+	idx, _ := cluster.NodeIndex(target)
+
+	var osdHere, ingressHere []string
+	if !resuming {
+		nodes, err := r.Cluster.ListNodes(ctx)
+		if err != nil {
+			return &errtypes.ClusterError{Msg: "list nodes", Err: err}
+		}
+		if err := validateWorkerRemovable(nodes, target, workerCount); err != nil {
+			return &errtypes.ConfigError{Msg: err.Error()}
+		}
+		osdHere, ingressHere, err = r.removeGuards(ctx, nodes, target, opts.ForceStorage)
+		if err != nil {
+			return err
+		}
 	}
 
 	plan := OpPlan{
@@ -68,42 +86,48 @@ func (r *Runner) RemoveWorker(ctx context.Context, target string, opts RemoveOpt
 		return r.targetedApply(ctx, workerAddress(idx), terraform.PlanActionDelete, countVars)
 	}
 
-	proceed, err := r.confirm(ctx, &plan)
-	if err != nil {
-		return err
-	}
-	if !proceed {
-		r.Log.Info("node: remove cancelled", "node", target)
-		return ErrDeclined
+	if !resuming {
+		proceed, err := r.confirm(ctx, &plan)
+		if err != nil {
+			return err
+		}
+		if !proceed {
+			r.Log.Info("node: remove cancelled", "node", target)
+			return ErrDeclined
+		}
 	}
 
 	if !opts.SkipDrain {
-		if err := r.cordonAndDrain(ctx, target, opts.DrainTimeout, false); err != nil {
+		if err := r.cordonAndDrain(ctx, target, opts.DrainTimeout, false, resumeStep); err != nil {
 			return err
 		}
 	}
 
-	// Persist the reduced topology before the apply so a crash between here and
-	// apply leaves tfvars/config consistent with the intended delete; the apply
-	// is idempotent on re-run (an already-deleted instance re-plans to no-op,
-	// which the gate then reports as empty — see resume note in RemoveWorker docs).
-	r.Cfg.Topology.Workers.Count = workerCount - 1
-	if err := r.persistTopology(); err != nil {
-		return &errtypes.ClusterError{Msg: "persist topology", Err: err}
+	if shouldRunStep(StepTFApply, resumeStep) {
+		if err := markStep(r.marker(), OpRemove, target, StepTFApply, r.RunID, r.Cfg.Cluster.Name); err != nil {
+			return err
+		}
+		if err := r.targetedApply(ctx, workerAddress(idx), terraform.PlanActionDelete, countVars); err != nil {
+			return err
+		}
+
+		// Persist only after the apply has verifiably landed (real apply or an
+		// already-at-target resume), so a crash before this point leaves
+		// tfvars/config consistent with the cluster and a resumed re-run
+		// recomputes the same decremented count from the still-unmutated config.
+		r.Cfg.Topology.Workers.Count = workerCount - 1
+		if err := r.persistTopology(); err != nil {
+			return &errtypes.ClusterError{Msg: "persist topology", Err: err}
+		}
 	}
 
-	if err := markStep(r.marker(), OpRemove, target, StepTFApply, r.RunID, r.Cfg.Cluster.Name); err != nil {
-		return err
-	}
-	if err := r.targetedApply(ctx, workerAddress(idx), terraform.PlanActionDelete, countVars); err != nil {
-		return err
-	}
-
-	if err := markStep(r.marker(), OpRemove, target, StepDeleteK8s, r.RunID, r.Cfg.Cluster.Name); err != nil {
-		return err
-	}
-	if err := r.Cluster.DeleteNode(ctx, target); err != nil {
-		return err
+	if shouldRunStep(StepDeleteK8s, resumeStep) {
+		if err := markStep(r.marker(), OpRemove, target, StepDeleteK8s, r.RunID, r.Cfg.Cluster.Name); err != nil {
+			return err
+		}
+		if err := r.Cluster.DeleteNode(ctx, target); err != nil {
+			return err
+		}
 	}
 
 	// If the removed worker held OSDs (--force-storage / compaction), destroying
@@ -123,26 +147,33 @@ func (r *Runner) RemoveWorker(ctx context.Context, target string, opts RemoveOpt
 	return nil
 }
 
-func (r *Runner) cordonAndDrain(ctx context.Context, node, timeout string, force bool) error {
+// cordonAndDrain gates cordon and drain independently via resumeStep so a run
+// resuming exactly at StepDrain (cordon already landed before the crash)
+// re-runs only the drain.
+func (r *Runner) cordonAndDrain(ctx context.Context, node, timeout string, force bool, resumeStep Step) error {
 	stop := r.startProgress(fmt.Sprintf("cordoning and draining %s", node))
 	defer stop()
 
-	if err := markStep(r.marker(), OpRemove, node, StepCordon, r.RunID, r.Cfg.Cluster.Name); err != nil {
-		return err
+	if shouldRunStep(StepCordon, resumeStep) {
+		if err := markStep(r.marker(), OpRemove, node, StepCordon, r.RunID, r.Cfg.Cluster.Name); err != nil {
+			return err
+		}
+		if err := r.Cluster.Cordon(ctx, node); err != nil {
+			return err
+		}
 	}
-	if err := r.Cluster.Cordon(ctx, node); err != nil {
-		return err
-	}
-	if err := markStep(r.marker(), OpRemove, node, StepDrain, r.RunID, r.Cfg.Cluster.Name); err != nil {
-		return err
-	}
-	if err := r.Cluster.Drain(ctx, node, cluster.DrainOptions{
-		IgnoreDaemonsets: true,
-		DeleteEmptyDir:   true,
-		Force:            force,
-		Timeout:          timeout,
-	}); err != nil {
-		return &errtypes.ClusterError{Msg: fmt.Sprintf("drain %s (node left cordoned; re-run to retry)", node), Err: err}
+	if shouldRunStep(StepDrain, resumeStep) {
+		if err := markStep(r.marker(), OpRemove, node, StepDrain, r.RunID, r.Cfg.Cluster.Name); err != nil {
+			return err
+		}
+		if err := r.Cluster.Drain(ctx, node, cluster.DrainOptions{
+			IgnoreDaemonsets: true,
+			DeleteEmptyDir:   true,
+			Force:            force,
+			Timeout:          timeout,
+		}); err != nil {
+			return &errtypes.ClusterError{Msg: fmt.Sprintf("drain %s (node left cordoned; re-run to retry)", node), Err: err}
+		}
 	}
 	return nil
 }
