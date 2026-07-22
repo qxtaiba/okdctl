@@ -201,6 +201,35 @@ func TestExecutor_Output_NonZeroExit(t *testing.T) {
 	}
 }
 
+func TestExecutor_PlanDetailed(t *testing.T) {
+	cases := []struct {
+		name        string
+		exitCode    int
+		wantChanges bool
+		wantErr     bool
+	}{
+		{name: "exit 0 no changes", exitCode: 0, wantChanges: false, wantErr: false},
+		{name: "exit 2 changes present", exitCode: 2, wantChanges: true, wantErr: false},
+		{name: "exit 1 real failure", exitCode: 1, wantChanges: false, wantErr: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			installFakeTerraformOutput(t, "", tc.exitCode)
+			e := New(t.TempDir())
+			gotChanges, err := e.PlanDetailed(context.Background(), PlanOptions{})
+			if tc.wantErr && err == nil {
+				t.Fatal("expected error, got nil")
+			}
+			if !tc.wantErr && err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if gotChanges != tc.wantChanges {
+				t.Errorf("PlanDetailed() changes = %v; want %v", gotChanges, tc.wantChanges)
+			}
+		})
+	}
+}
+
 func TestExecutor_NewestBakSnapshot(t *testing.T) {
 	t.Run("none present", func(t *testing.T) {
 		e := &Executor{workDir: t.TempDir()}

@@ -287,6 +287,30 @@ func (t *Executor) Plan(ctx context.Context, opts PlanOptions) error {
 	return t.run(ctx, t.planArgs(opts)...)
 }
 
+// PlanDetailed runs "terraform plan -detailed-exitcode" and reports whether
+// the plan contains pending changes. Unlike Plan, a non-zero exit is not
+// automatically a failure: terraform's -detailed-exitcode convention uses
+// exit 2 to mean "changes present," which this method reports as (true,
+// nil) rather than an error. Exit 0 means no changes (false, nil); any
+// other exit code is a genuine plan failure.
+func (t *Executor) PlanDetailed(ctx context.Context, opts PlanOptions) (bool, error) {
+	args := append(t.planArgs(opts), "-detailed-exitcode")
+	t.logger.Info("terraform: running", "cmd", args[0])
+
+	result, err := t.exec.Run(ctx, "terraform", args...)
+	if err != nil {
+		return false, fmt.Errorf("terraform %s failed: %w", args[0], err)
+	}
+	switch result.ExitCode {
+	case 0:
+		return false, nil
+	case 2:
+		return true, nil
+	default:
+		return false, executor.NewExitError(ctx, "terraform "+args[0], result.ExitCode, result.Stderr)
+	}
+}
+
 // PlanStreamed runs "terraform plan" streaming stdout and stderr directly to the
 // terminal. Use instead of Plan when the operator must see the plan output —
 // Plan captures into internal buffers and only surfaces stderr on failure.
