@@ -27,4 +27,6 @@ Orchestrate multi-node lifecycle sequences such as compaction onto the control p
 
 * [okdctl](okdctl.md)	 - Provision OKD clusters on Proxmox VE
 * [okdctl cluster compact](okdctl_cluster_compact.md)	 - Consolidate the cluster onto its control plane
+* [okdctl cluster start](okdctl_cluster_start.md)	 - Power on the cluster
+* [okdctl cluster stop](okdctl_cluster_stop.md)	 - Power off the cluster
 
