@@ -75,16 +75,24 @@ func (r *Runner) Stop(ctx context.Context) error {
 	return nil
 }
 
-// clusterPowerPlan builds the read-only plan summary shared by stop and
-// start: workers before masters, each carrying PlanActionNoop since these
-// ops power a VM rather than change its terraform resource.
+// clusterPowerPlan builds the read-only plan summary shared by stop and start,
+// each node carrying PlanActionNoop since these ops power a VM rather than
+// change its terraform resource. Ordering follows the op's power sequence so
+// the preview reads in execution order: stop takes workers before masters,
+// start takes masters before workers (etcd quorum first).
 func clusterPowerPlan(op Op, clusterName string, workers, masters []string) OpPlan {
 	nodes := make([]PlanNode, 0, len(workers)+len(masters))
-	for _, w := range workers {
-		nodes = append(nodes, PlanNode{Name: w, Role: nodetypes.RoleWorker, Action: terraform.PlanActionNoop})
+	appendRole := func(names []string, role nodetypes.NodeRole) {
+		for _, n := range names {
+			nodes = append(nodes, PlanNode{Name: n, Role: role, Action: terraform.PlanActionNoop})
+		}
 	}
-	for _, m := range masters {
-		nodes = append(nodes, PlanNode{Name: m, Role: nodetypes.RoleMaster, Action: terraform.PlanActionNoop})
+	if op == OpStart {
+		appendRole(masters, nodetypes.RoleMaster)
+		appendRole(workers, nodetypes.RoleWorker)
+	} else {
+		appendRole(workers, nodetypes.RoleWorker)
+		appendRole(masters, nodetypes.RoleMaster)
 	}
 	return OpPlan{Op: op, Cluster: clusterName, Nodes: nodes}
 }

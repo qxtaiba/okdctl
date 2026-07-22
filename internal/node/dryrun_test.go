@@ -44,11 +44,35 @@ type fakeCluster struct {
 	approveErr     error
 	signerNotAfter time.Time
 	signerErr      error
+
+	listCalls int
+	// readyAtCall, when >0, forces ListNodes to report every node not-Ready
+	// until the Nth call (1-based), mirroring drainFailsAtCall: it lets a start
+	// test drive the readiness poll from not-ready to Ready without a live API.
+	readyAtCall int
+	// listErr, when set, makes ListNodes fail — simulating the API being
+	// unreachable while a just-started control plane is still coming up.
+	listErr error
 }
 
-func (f *fakeCluster) ListNodes(context.Context) ([]cluster.NodeDetail, error) { return f.nodes, nil }
-func (f *fakeCluster) Cordon(context.Context, string) error                    { f.cordon++; return nil }
-func (f *fakeCluster) Uncordon(context.Context, string) error                  { f.uncordon++; return nil }
+func (f *fakeCluster) ListNodes(context.Context) ([]cluster.NodeDetail, error) {
+	f.listCalls++
+	if f.listErr != nil {
+		return nil, f.listErr
+	}
+	if f.readyAtCall > 0 {
+		ready := f.listCalls >= f.readyAtCall
+		out := make([]cluster.NodeDetail, len(f.nodes))
+		copy(out, f.nodes)
+		for i := range out {
+			out[i].Ready = ready
+		}
+		return out, nil
+	}
+	return f.nodes, nil
+}
+func (f *fakeCluster) Cordon(context.Context, string) error   { f.cordon++; return nil }
+func (f *fakeCluster) Uncordon(context.Context, string) error { f.uncordon++; return nil }
 func (f *fakeCluster) Drain(_ context.Context, _ string, _ cluster.DrainOptions) error {
 	f.drain++
 	if f.drainFailsAtCall != 0 && f.drain == f.drainFailsAtCall {
@@ -161,6 +185,9 @@ type fakePower struct {
 
 	startCalls int
 	startErr   error
+	// startOrder records each StartVM call's vmid in call order, so a test can
+	// assert masters-before-workers sequencing.
+	startOrder []int
 
 	running bool
 }
@@ -187,6 +214,7 @@ func (f *fakePower) StartVM(_ context.Context, node string, vmid int) error {
 	f.startCalls++
 	f.lastNode = node
 	f.lastVMID = vmid
+	f.startOrder = append(f.startOrder, vmid)
 	return f.startErr
 }
 
