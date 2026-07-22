@@ -26,6 +26,10 @@ const (
 	// DefaultCephGateTimeout is generous: a rebalance after an OSD host is
 	// power-cycled or removed can take a while to return all PGs to active+clean.
 	DefaultCephGateTimeout = 30 * time.Minute
+	// DefaultClusterReadyTimeout bounds cluster start's wait for every node to
+	// report Ready, ticking ApprovePendingCSRs each poll so kubelet certificate
+	// rotation never stalls the wait unattended.
+	DefaultClusterReadyTimeout = 30 * time.Minute
 	// hostMemoryReserveMiB is the hypervisor headroom the memory-budget guard
 	// keeps free when projecting a resize (ZFS ARC, host services).
 	hostMemoryReserveMiB = 2048
@@ -51,6 +55,8 @@ type clusterClient interface {
 	SetMastersSchedulable(ctx context.Context, schedulable bool) error
 	PodsForSelector(ctx context.Context, namespace, selector string) ([]cluster.PodPlacement, error)
 	Apply(ctx context.Context, manifest []byte) error
+	ApprovePendingCSRs(ctx context.Context) (int, error)
+	SignerNotAfter(ctx context.Context) (time.Time, error)
 }
 
 // vmPowerCycler stops→starts a VM through the Proxmox API. An interface so a
@@ -59,6 +65,9 @@ type clusterClient interface {
 // leaving the memory change unrealized.
 type vmPowerCycler interface {
 	PowerCycleVM(ctx context.Context, node string, vmid int) error
+	ShutdownVM(ctx context.Context, node string, vmid int) error
+	StartVM(ctx context.Context, node string, vmid int) error
+	VMRunning(ctx context.Context, node string, vmid int) (bool, error)
 }
 
 // terraformExec is the slice of terraform.Executor node ops drive; an interface
@@ -104,9 +113,10 @@ type Runner struct {
 	// see Compact.
 	preConsented bool
 
-	NodeReadyTimeout time.Duration
-	EtcdGateTimeout  time.Duration
-	CephGateTimeout  time.Duration
+	NodeReadyTimeout    time.Duration
+	EtcdGateTimeout     time.Duration
+	CephGateTimeout     time.Duration
+	ClusterReadyTimeout time.Duration
 }
 
 // NewRunner wires a Runner with derived work/env directories and default
@@ -114,19 +124,20 @@ type Runner struct {
 func NewRunner(cl *cluster.Client, tf *terraform.Executor, cfg *config.Config, projectRoot, configPath, tfEnv, runID string, log *slog.Logger) *Runner {
 	workDir := filepath.Join(projectRoot, "okd-install")
 	return &Runner{
-		Cluster:          cl,
-		TF:               tf,
-		Cfg:              cfg,
-		ConfigPath:       configPath,
-		ProjectRoot:      projectRoot,
-		WorkDir:          workDir,
-		EnvDir:           filepath.Join(projectRoot, "infrastructure", "terraform", "environments", tfEnv),
-		RunID:            runID,
-		Log:              logutil.OrNop(log),
-		Reporter:         logutil.NopProgressReporter,
-		NodeReadyTimeout: DefaultNodeReadyTimeout,
-		EtcdGateTimeout:  DefaultEtcdGateTimeout,
-		CephGateTimeout:  DefaultCephGateTimeout,
+		Cluster:             cl,
+		TF:                  tf,
+		Cfg:                 cfg,
+		ConfigPath:          configPath,
+		ProjectRoot:         projectRoot,
+		WorkDir:             workDir,
+		EnvDir:              filepath.Join(projectRoot, "infrastructure", "terraform", "environments", tfEnv),
+		RunID:               runID,
+		Log:                 logutil.OrNop(log),
+		Reporter:            logutil.NopProgressReporter,
+		NodeReadyTimeout:    DefaultNodeReadyTimeout,
+		EtcdGateTimeout:     DefaultEtcdGateTimeout,
+		CephGateTimeout:     DefaultCephGateTimeout,
+		ClusterReadyTimeout: DefaultClusterReadyTimeout,
 	}
 }
 
@@ -280,6 +291,25 @@ func (r *Runner) waitEtcdHealthy(ctx context.Context, phase string) error {
 	return nil
 }
 
+// vmTarget resolves the Proxmox node name and QEMU vmid for a role/index pair,
+// mirroring the module's numbering (bootstrap=base, masters=base+10+n,
+// workers=base+100+n) so power-cycle/shutdown/start calls address the right VM.
+func (r *Runner) vmTarget(role nodetypes.NodeRole, index int) (node string, vmid int) {
+	base := r.Cfg.Topology.VMIDBase
+	if base == 0 {
+		base = config.DefaultVMIDBase
+	}
+	offset := vmidWorkerOffset
+	if role == nodetypes.RoleMaster {
+		offset = vmidMasterOffset
+	}
+	vmid = base + offset + index
+	if r.Cfg.Provider.Proxmox != nil {
+		node = r.Cfg.Provider.Proxmox.Node
+	}
+	return node, vmid
+}
+
 // powerCycleVM stops→starts the VM backing a resized node so bpg/proxmox's
 // config-only memory change actually takes effect (see PowerCycler). It fails
 // closed: without a wired power-cycler the resize cannot be realized, so the
@@ -290,19 +320,7 @@ func (r *Runner) powerCycleVM(ctx context.Context, role nodetypes.NodeRole, inde
 	if r.Power == nil {
 		return &errtypes.ClusterError{Msg: "resize needs Proxmox API access to power-cycle the VM (the config-only memory change does not take effect until a stop→start), but no Proxmox credentials are available"}
 	}
-	base := r.Cfg.Topology.VMIDBase
-	if base == 0 {
-		base = config.DefaultVMIDBase
-	}
-	offset := vmidWorkerOffset
-	if role == nodetypes.RoleMaster {
-		offset = vmidMasterOffset
-	}
-	vmid := base + offset + index
-	node := ""
-	if r.Cfg.Provider.Proxmox != nil {
-		node = r.Cfg.Provider.Proxmox.Node
-	}
+	node, vmid := r.vmTarget(role, index)
 	if err := r.Power.PowerCycleVM(ctx, node, vmid); err != nil {
 		return &errtypes.ClusterError{Msg: fmt.Sprintf("power-cycle vm %d (node left cordoned; resize not realized)", vmid), Err: err}
 	}

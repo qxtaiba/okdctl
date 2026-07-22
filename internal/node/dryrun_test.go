@@ -38,6 +38,12 @@ type fakeCluster struct {
 	cephHealthy    bool
 	// drainFailsAtCall makes the Nth Drain call (1-based) fail; 0 never fails.
 	drainFailsAtCall int
+
+	approveCalls   int
+	approveCount   int
+	approveErr     error
+	signerNotAfter time.Time
+	signerErr      error
 }
 
 func (f *fakeCluster) ListNodes(context.Context) ([]cluster.NodeDetail, error) { return f.nodes, nil }
@@ -89,6 +95,21 @@ func (f *fakeCluster) PodsForSelector(_ context.Context, namespace, selector str
 }
 func (f *fakeCluster) Apply(context.Context, []byte) error { f.applied++; return nil }
 
+func (f *fakeCluster) ApprovePendingCSRs(context.Context) (int, error) {
+	f.approveCalls++
+	if f.approveErr != nil {
+		return 0, f.approveErr
+	}
+	return f.approveCount, nil
+}
+
+func (f *fakeCluster) SignerNotAfter(context.Context) (time.Time, error) {
+	if f.signerErr != nil {
+		return time.Time{}, f.signerErr
+	}
+	return f.signerNotAfter, nil
+}
+
 // fakeTF records plan/apply calls and echoes a single in-place-or-delete change
 // for whatever the plan targeted, so the plan gate is exercised without running
 // terraform.
@@ -122,12 +143,26 @@ func (f *fakeTF) Apply(context.Context, terraform.ApplyOptions) error {
 func (f *fakeTF) WithLockHint(err error) error { return err }
 
 // fakePower records power-cycle calls so a resize can be asserted to realize
-// the change via the hypervisor. err simulates an API failure.
+// the change via the hypervisor. err simulates a PowerCycleVM API failure;
+// shutdownErr/startErr do the same for ShutdownVM/StartVM.
 type fakePower struct {
 	calls    int
 	lastNode string
 	lastVMID int
 	err      error
+
+	shutdownCalls int
+	shutdownErr   error
+	// shutdownFailsAtCall makes the Nth ShutdownVM call (1-based) fail; 0 never fails.
+	shutdownFailsAtCall int
+	// shutdownOrder records each ShutdownVM call's vmid in call order, so a
+	// test can assert workers-before-masters sequencing.
+	shutdownOrder []int
+
+	startCalls int
+	startErr   error
+
+	running bool
 }
 
 func (f *fakePower) PowerCycleVM(_ context.Context, node string, vmid int) error {
@@ -135,6 +170,28 @@ func (f *fakePower) PowerCycleVM(_ context.Context, node string, vmid int) error
 	f.lastNode = node
 	f.lastVMID = vmid
 	return f.err
+}
+
+func (f *fakePower) ShutdownVM(_ context.Context, node string, vmid int) error {
+	f.shutdownCalls++
+	f.lastNode = node
+	f.lastVMID = vmid
+	f.shutdownOrder = append(f.shutdownOrder, vmid)
+	if f.shutdownFailsAtCall != 0 && f.shutdownCalls == f.shutdownFailsAtCall {
+		return errors.New("shutdown failed")
+	}
+	return f.shutdownErr
+}
+
+func (f *fakePower) StartVM(_ context.Context, node string, vmid int) error {
+	f.startCalls++
+	f.lastNode = node
+	f.lastVMID = vmid
+	return f.startErr
+}
+
+func (f *fakePower) VMRunning(context.Context, string, int) (bool, error) {
+	return f.running, nil
 }
 
 func seedRunner(t *testing.T, fc *fakeCluster, ftf *fakeTF, cfg *config.Config) (r *Runner, tfvarsPath, cfgPath string) {
