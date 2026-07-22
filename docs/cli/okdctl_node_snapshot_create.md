@@ -26,7 +26,7 @@ okdctl node snapshot create <node> [flags]
 
 ```
       --confirm-cluster string   required with --yes; must equal the config cluster name
-      --description string       optional snapshot description
+      --description string       optional snapshot description (single token: no spaces; use dashes or underscores)
       --drain-timeout string     drain timeout when the node is cordoned first (default "10m")
       --dry-run                  report what would happen without creating a snapshot
   -h, --help                     help for create

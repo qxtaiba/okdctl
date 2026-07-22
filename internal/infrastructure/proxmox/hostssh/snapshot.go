@@ -80,17 +80,20 @@ func validateSnapshotName(name string) error {
 
 // validateSnapshotDescription allowlist-checks an optional free-text
 // description before it reaches the remote shell as an SSHRunArgv atom.
-// An empty description is valid — CreateSnapshot omits -description
-// entirely when desc is "".
+// Whitespace is rejected, not just control characters: SSHRunArgv joins argv
+// with spaces before handing it to the remote login shell, so a multi-word
+// value would word-split there instead of surviving as the single token
+// pvesh expects. An empty description is valid — CreateSnapshot omits
+// -description entirely when desc is "".
 func validateSnapshotDescription(desc string) error {
 	if len(desc) > 200 {
 		return fmt.Errorf("must be 200 characters or fewer, got %d", len(desc))
 	}
 	for i, r := range desc {
 		ok := (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') ||
-			(r >= '0' && r <= '9') || r == ' ' || r == '.' || r == ',' || r == ':' || r == '_' || r == '-'
+			(r >= '0' && r <= '9') || r == '.' || r == ',' || r == ':' || r == '_' || r == '-'
 		if !ok {
-			return fmt.Errorf("character %q at position %d not in [A-Za-z0-9 .,:_-]", string(r), i)
+			return fmt.Errorf("character %q at position %d not in [A-Za-z0-9.,:_-] (no whitespace — must be a single token; use dashes or underscores)", string(r), i)
 		}
 	}
 	return nil

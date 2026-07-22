@@ -95,7 +95,7 @@ func TestValidateSnapshotDescription_RejectsInjectionPayloads(t *testing.T) {
 }
 
 func TestValidateSnapshotDescription(t *testing.T) {
-	accept := []string{"", "pre-upgrade snapshot", "before ceph rebuild, 2026-07-13"}
+	accept := []string{"", "pre-upgrade_snapshot", "before-ceph-rebuild,2026-07-13"}
 	for _, desc := range accept {
 		if err := validateSnapshotDescription(desc); err != nil {
 			t.Errorf("validateSnapshotDescription(%q) rejected; want nil: %v", desc, err)
@@ -107,6 +107,20 @@ func TestValidateSnapshotDescription(t *testing.T) {
 	for _, desc := range reject {
 		if err := validateSnapshotDescription(desc); err == nil {
 			t.Errorf("validateSnapshotDescription(%q) accepted; want error", desc)
+		}
+	}
+}
+
+// TestValidateSnapshotDescription_RejectsWhitespace is FIX 1: SSHRunArgv
+// space-joins argv before handing it to the remote login shell, so a
+// multi-word description would word-split there instead of surviving as the
+// single token pvesh's -description flag expects. The validator must fail
+// closed rather than let a spaced value reach the remote shell corrupted.
+func TestValidateSnapshotDescription_RejectsWhitespace(t *testing.T) {
+	reject := []string{"before upgrade", "before\tupgrade", "before\nupgrade", " leading", "trailing "}
+	for _, desc := range reject {
+		if err := validateSnapshotDescription(desc); err == nil {
+			t.Errorf("validateSnapshotDescription(%q) accepted; want error (whitespace must be rejected)", desc)
 		}
 	}
 }
@@ -353,7 +367,7 @@ func TestCreateSnapshot_success(t *testing.T) {
 	installFakeSnapshotSSH(t)
 	p := newTestSnapshotParams(t)
 
-	if err := CreateSnapshot(context.Background(), p, 100, "pre-upgrade", "before upgrade", 5*time.Second); err != nil {
+	if err := CreateSnapshot(context.Background(), p, 100, "pre-upgrade", "before-upgrade", 5*time.Second); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
@@ -367,7 +381,7 @@ func TestCreateSnapshot_neverPassesVMState(t *testing.T) {
 	log := filepath.Join(t.TempDir(), "argv.log")
 	t.Setenv("SNAP_ARGV_LOG", log)
 
-	if err := CreateSnapshot(context.Background(), p, 100, "pre-upgrade", "before upgrade", 5*time.Second); err != nil {
+	if err := CreateSnapshot(context.Background(), p, 100, "pre-upgrade", "before-upgrade", 5*time.Second); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
@@ -382,7 +396,7 @@ func TestCreateSnapshot_neverPassesVMState(t *testing.T) {
 	if !strings.Contains(argv, "-snapname pre-upgrade") {
 		t.Errorf("argv %q missing -snapname pre-upgrade", argv)
 	}
-	if !strings.Contains(argv, "-description before upgrade") {
+	if !strings.Contains(argv, "-description before-upgrade") {
 		t.Errorf("argv %q missing -description", argv)
 	}
 }
