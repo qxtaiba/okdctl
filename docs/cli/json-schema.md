@@ -96,6 +96,32 @@ config-vs-tfvars sizing-drift indicator.
 | `drift_detail` | string | present only when `drift=pending`; the compared config/tfvars values |
 | `in_flight_op` | string | present only on the node targeted by an in-flight `remove`/`resize`/`compact` op's on-disk marker, formatted `"<op> (<step>)"` |
 
+## `okdctl plan --output=json`
+
+Read-only terraform-plan drift preview. Exit code is `0` when `drift` is
+`false`, `7` when `drift` is `true` — see [exit-codes.md](exit-codes.md).
+
+```json
+{
+  "drift": true,
+  "changes": [
+    {"address": "module.okd_cluster.proxmox_virtual_environment_vm.worker[2]", "action": "update"}
+  ]
+}
+```
+
+| Field | Type | Notes |
+|---|---|---|
+| `drift` | bool | `true` when `changes` is non-empty |
+| `changes[].address` | string | terraform resource address |
+| `changes[].action` | string | `create`, `update`, `delete`, `replace`, or `unknown` — see `terraform.PlanAction` |
+| `changes` | array | empty array (`[]`), never omitted, when the plan is clean |
+
+`deploy --dry-run` renders the same change list (via the shared
+`render.PlanPreview`) but has no `--output=json` mode of its own and keeps
+exiting `0` regardless of drift — only `okdctl plan` carries the drift exit
+code.
+
 ## `okdctl releases list --output=json`
 
 Flat array of OKD releases (newest first). The CLI's human-readable mode
@@ -288,7 +314,8 @@ and scripted comparisons.
   that emit JSON still exit non-zero on failure:
   `doctor --output=json` exits `6` when checks warn but none fail, and
   `2` when any check is `[fail]`;
-  `addon verify --output=json` exits `4` when any probe fails.
+  `addon verify --output=json` exits `4` when any probe fails;
+  `plan --output=json` exits `7` when `drift` is `true`.
   See [exit-codes.md](exit-codes.md) for the full code taxonomy.
 - Output is pretty-printed (`SetIndent("", "  ")`) for readability when piped
   to a file. Scripts that need compact JSON should pipe through `jq -c`.

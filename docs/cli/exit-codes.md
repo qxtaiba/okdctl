@@ -12,6 +12,7 @@ to use in scripts that branch on failure type.
 | 4    | —            | cluster error (oc/kubectl failure, install timeout)          |
 | 5    | —            | auth error (proxmox token rejected, insecure file perms)     |
 | 6    | —            | `doctor` preflight warn-only: one or more checks reported `[warn]` and none reported `[fail]` |
+| 7    | —            | `plan` found drift: a create/update/replace/delete is pending against the current configuration |
 | 64   | EX_USAGE     | unknown flag, or an invalid flag combination detected at runtime (e.g. `--target` without `--confirm-cluster`) |
 | 65   | EX_DATAERR   | pull secret file exists but is not valid JSON                |
 | 66   | EX_NOINPUT   | configuration file not found on disk                         |
@@ -28,6 +29,15 @@ ClusterError/AuthError/UsageError hierarchy below: no other command emits
 it, and it is not a refinement of any broader category the way 65/66/71 are.
 It exists purely so a cron job can tell "clean" (0), "needs attention but
 not blocking" (6), and "blocking" (2) apart without parsing output.
+
+Code 7 is `plan`-specific and follows the same pattern as code 6: drift is
+not a failure (`okdctl plan` ran successfully and reported an accurate
+result), so it gets its own dedicated code rather than folding into
+ConfigError(2). A script can tell "clean" (0) apart from "drifted, run
+`okdctl deploy` to reconcile" (7) apart from "plan itself failed" (2/3/4/5)
+without parsing output. `deploy --dry-run` shares the same plan-preview
+machinery but keeps its pre-existing exit-0-on-drift contract — only `plan`
+gained the code.
 
 When an error wraps more than one typed category (e.g. a `ClusterError`
 wrapping a `ConfigError` produced during a failed reload), resolution is not
@@ -89,6 +99,18 @@ Detect and skip on interruption in CI:
 
 ```sh
 okdctl deploy || { [ $? -eq 130 ] && exit 0 || exit 1; }
+```
+
+Alert on drift without failing a cron job:
+
+```sh
+okdctl plan
+rc=$?
+case $rc in
+  0) echo "no drift" ;;
+  7) echo "drift found — run 'okdctl deploy' to reconcile" | mail -s "okdctl drift" ops@example.com ;;
+  *) echo "plan itself failed (exit $rc)"; exit 1 ;;
+esac
 ```
 
 ## Source anchor
