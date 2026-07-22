@@ -108,7 +108,7 @@ var nodeSnapshotDeleteCmd = &cobra.Command{
 
 func init() {
 	nodeSnapshotCreateCmd.Flags().StringVar(&nodeSnapshotCreateName, "name", "", "snapshot name (default okdctl-<UTC timestamp>)")
-	nodeSnapshotCreateCmd.Flags().StringVar(&nodeSnapshotCreateDescription, "description", "", "optional snapshot description")
+	nodeSnapshotCreateCmd.Flags().StringVar(&nodeSnapshotCreateDescription, "description", "", "optional snapshot description (single token: no spaces; use dashes or underscores)")
 	nodeSnapshotCreateCmd.Flags().BoolVar(&nodeSnapshotCreateSkipDrain, "skip-drain", false, "skip cordon/drain before snapshotting a Ready node")
 	nodeSnapshotCreateCmd.Flags().StringVar(&nodeSnapshotCreateDrainTimeout, "drain-timeout", "10m", "drain timeout when the node is cordoned first")
 	nodeSnapshotCreateCmd.Flags().BoolVarP(&nodeSnapshotCreateYes, "yes", "y", false, "skip confirmation prompt")
