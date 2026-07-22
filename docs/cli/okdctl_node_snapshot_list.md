@@ -1,17 +1,27 @@
-## okdctl node
+## okdctl node snapshot list
 
-Manage cluster node lifecycle
+List a node's Proxmox snapshots
 
 ### Synopsis
 
-Add, remove, and resize cluster nodes as first-class operations that span
-Proxmox VMs (via Terraform), Terraform state, and the Kubernetes lifecycle
-(cordon, drain, CSR, etcd-quorum safety).
+List target's Proxmox snapshots. Read-only; no confirmation gate.
+
+```
+okdctl node snapshot list <node> [flags]
+```
+
+### Examples
+
+```
+  okdctl node snapshot list worker0
+  okdctl node snapshot list worker0 --output json
+```
 
 ### Options
 
 ```
-  -h, --help   help for node
+  -h, --help            help for list
+  -o, --output string   output format: text|json (default "text")
 ```
 
 ### Options inherited from parent commands
@@ -27,10 +37,5 @@ Proxmox VMs (via Terraform), Terraform state, and the Kubernetes lifecycle
 
 ### SEE ALSO
 
-* [okdctl](okdctl.md)	 - Provision OKD clusters on Proxmox VE
-* [okdctl node add](okdctl_node_add.md)	 - Add a node to the cluster (not yet implemented)
-* [okdctl node list](okdctl_node_list.md)	 - List cluster nodes with role, readiness, and sizing drift
-* [okdctl node remove](okdctl_node_remove.md)	 - Remove a worker node from the cluster
-* [okdctl node resize](okdctl_node_resize.md)	 - Resize node CPU/memory per role, rolled out one node at a time
 * [okdctl node snapshot](okdctl_node_snapshot.md)	 - Manual, single-node Proxmox VM snapshots
 
