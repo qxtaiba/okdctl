@@ -150,6 +150,14 @@ func (p *Phase) ConfigureApache(ctx context.Context, cfg *config.Config, project
 	return nil
 }
 
+// TeardownIgnitionServer stops and disables httpd once a node add's join
+// window closes. Unlike cleanup.Apache it does not uninstall the httpd
+// package or remove the vhost conf and TLS cert, so a later ConfigureApache
+// call revives the ignition server cheaply instead of regenerating them.
+func (p *Phase) TeardownIgnitionServer(ctx context.Context) {
+	phase.StopAndDisableService(ctx, p.OS.ApacheServiceName(), p.Log)
+}
+
 // DeployToWebServer copies the generated ignition files from clusterDir
 // into the httpd web root. Auth credentials (kubeconfig, kubeadmin-password)
 // are intentionally not copied here — they are consumed directly from

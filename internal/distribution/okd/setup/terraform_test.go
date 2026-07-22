@@ -3,9 +3,11 @@ package setup
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/nodetypes"
 )
 
 func TestGetDiskSizes(t *testing.T) {
@@ -217,6 +219,46 @@ func TestReadTerraformVarsSizing_MissingFileIsNotAnError(t *testing.T) {
 	}
 	if found {
 		t.Error("found = true, want false")
+	}
+}
+
+func TestWorkerISOsPlanVar(t *testing.T) {
+	cases := []struct {
+		name        string
+		isoStorage  string
+		workerCount int
+		want        string
+	}{
+		{name: "single worker", isoStorage: "local", workerCount: 1, want: `["local:iso/worker0.iso"]`},
+		{name: "three workers", isoStorage: "iso-store", workerCount: 3, want: `["iso-store:iso/worker0.iso", "iso-store:iso/worker1.iso", "iso-store:iso/worker2.iso"]`},
+		{name: "zero workers", isoStorage: "local", workerCount: 0, want: `[]`},
+	}
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := WorkerISOsPlanVar(tt.isoStorage, tt.workerCount); got != tt.want {
+				t.Errorf("WorkerISOsPlanVar(%q, %d) = %q, want %q", tt.isoStorage, tt.workerCount, got, tt.want)
+			}
+		})
+	}
+}
+
+// TestWorkerISOsPlanVar_WidensPastPersistedCount locks the dry-run
+// correctness invariant: previewing a node add for workerCount N+k must
+// widen the ISO list to N+k entries, not the N persisted in
+// terraform.tfvars, or the module's length(worker_isos) >= worker_count
+// assertion fails the plan.
+func TestWorkerISOsPlanVar_WidensPastPersistedCount(t *testing.T) {
+	persistedCount := 2
+	previewCount := 3
+
+	persisted := buildISOStrings("iso-store", nodetypes.RoleWorker, persistedCount)
+	widened := WorkerISOsPlanVar("iso-store", previewCount)
+
+	if strings.Count(widened, ".iso") <= len(persisted) {
+		t.Fatalf("WorkerISOsPlanVar(_, %d) did not widen past the persisted count %d: %q", previewCount, persistedCount, widened)
+	}
+	if !strings.Contains(widened, `"iso-store:iso/worker2.iso"`) {
+		t.Errorf("WorkerISOsPlanVar(_, %d) missing the newly-added worker2 entry: %q", previewCount, widened)
 	}
 }
 
