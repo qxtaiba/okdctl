@@ -60,6 +60,25 @@ type fakeCluster struct {
 	// listErr, when set, makes ListNodes fail — the API unreachable while a
 	// just-started control plane is still coming up.
 	listErr error
+
+	// log, when non-nil, receives an event name from every mutating and
+	// health-gate call this fake makes, so a snapshot test can assert
+	// cross-object ordering (e.g. cordon before drain before rollback).
+	log *[]string
+
+	etcdCalls int
+	// etcdUnhealthyFromCall makes EtcdHealthy report unhealthy from the Nth
+	// call (1-based) onward; 0 never overrides etcdHealthy.
+	etcdUnhealthyFromCall int
+	cephCalls             int
+	// cephUnhealthyFromCall mirrors etcdUnhealthyFromCall for CephHealthy.
+	cephUnhealthyFromCall int
+}
+
+func (f *fakeCluster) record(event string) {
+	if f.log != nil {
+		*f.log = append(*f.log, event)
+	}
 }
 
 func (f *fakeCluster) ListNodes(context.Context) ([]cluster.NodeDetail, error) {
@@ -82,18 +101,21 @@ func (f *fakeCluster) ListNodes(context.Context) ([]cluster.NodeDetail, error) {
 func (f *fakeCluster) Cordon(_ context.Context, node string) error {
 	f.cordon++
 	f.cordonedNodes = append(f.cordonedNodes, node)
+	f.record("cordon")
 	return nil
 }
 
 func (f *fakeCluster) Uncordon(_ context.Context, node string) error {
 	f.uncordon++
 	f.uncordonedNodes = append(f.uncordonedNodes, node)
+	f.record("uncordon")
 	return nil
 }
 
 func (f *fakeCluster) Drain(_ context.Context, node string, _ cluster.DrainOptions) error {
 	f.drain++
 	f.drainedNodes = append(f.drainedNodes, node)
+	f.record("drain")
 	if f.drainFailsAtCall != 0 && f.drain == f.drainFailsAtCall {
 		return errors.New("drain timed out")
 	}
@@ -115,11 +137,23 @@ func (f *fakeCluster) DeleteNode(_ context.Context, name string) error {
 }
 
 func (f *fakeCluster) EtcdHealthy(context.Context) (cluster.EtcdHealth, error) {
-	return cluster.EtcdHealth{Healthy: f.etcdHealthy}, nil
+	f.etcdCalls++
+	f.record("etcd")
+	healthy := f.etcdHealthy
+	if f.etcdUnhealthyFromCall != 0 && f.etcdCalls >= f.etcdUnhealthyFromCall {
+		healthy = false
+	}
+	return cluster.EtcdHealth{Healthy: healthy}, nil
 }
 
 func (f *fakeCluster) CephHealthy(context.Context) (cluster.CephHealth, error) {
-	return cluster.CephHealth{Applicable: f.cephApplicable, Healthy: f.cephHealthy}, nil
+	f.cephCalls++
+	f.record("ceph")
+	healthy := f.cephHealthy
+	if f.cephUnhealthyFromCall != 0 && f.cephCalls >= f.cephUnhealthyFromCall {
+		healthy = false
+	}
+	return cluster.CephHealth{Applicable: f.cephApplicable, Healthy: healthy}, nil
 }
 
 func (f *fakeCluster) MastersSchedulable(context.Context) (bool, error) { return f.schedulable, nil }
