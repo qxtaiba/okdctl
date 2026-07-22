@@ -31,6 +31,8 @@ const (
 	OpRemove  Op = "remove"
 	OpResize  Op = "resize"
 	OpCompact Op = "compact"
+	OpStop    Op = "stop"
+	OpStart   Op = "start"
 )
 
 // Step names the mutating step the marker was written before. Steps are
@@ -46,6 +48,8 @@ const (
 	StepPowerCycle Step = "power-cycle"
 	StepDeleteK8s  Step = "delete-node"
 	StepUncordon   Step = "uncordon"
+	StepShutdown   Step = "shutdown"
+	StepPowerOn    Step = "power-on"
 )
 
 // opState is the marker payload. ClusterName guards against a marker left in a
