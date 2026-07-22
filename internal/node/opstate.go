@@ -58,12 +58,13 @@ const (
 	StepPowerOn    Step = "power-on"
 
 	// node add's own step sequence; StepTFApply above is reused for the
-	// worker_count apply.
-	StepBuildISO     Step = "build-iso"
-	StepUploadISO    Step = "upload-iso"
-	StepIgnitionUp   Step = "ignition-up"
-	StepWaitJoin     Step = "wait-join"
-	StepIgnitionDown Step = "ignition-down"
+	// worker_count apply. Ignition teardown is a plain defer that never calls
+	// markStep (it must run on every exit path, not just a resumed one), so
+	// there is no corresponding StepIgnitionDown.
+	StepBuildISO   Step = "build-iso"
+	StepUploadISO  Step = "upload-iso"
+	StepIgnitionUp Step = "ignition-up"
+	StepWaitJoin   Step = "wait-join"
 )
 
 // opState is the marker payload. ClusterName guards against a marker left in a

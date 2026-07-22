@@ -37,11 +37,10 @@ var stepOrder = map[Step]int{
 	StepDeleteK8s:  4,
 	StepUncordon:   5,
 
-	StepIgnitionUp:   -4,
-	StepBuildISO:     -3,
-	StepUploadISO:    -2,
-	StepWaitJoin:     6,
-	StepIgnitionDown: 7,
+	StepIgnitionUp: -4,
+	StepBuildISO:   -3,
+	StepUploadISO:  -2,
+	StepWaitJoin:   6,
 }
 
 // shouldRunStep reports whether step runs given the resume point from. from ""
