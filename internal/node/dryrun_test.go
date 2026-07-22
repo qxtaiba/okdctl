@@ -74,6 +74,17 @@ type fakeCluster struct {
 	cephCalls             int
 	// cephUnhealthyFromCall mirrors etcdUnhealthyFromCall for CephHealthy.
 	cephUnhealthyFromCall int
+
+	// workersAppearAtCall, when >0, makes ListNodes append appearingWorkers
+	// starting at the Nth call (1-based) — models new workers joining after
+	// their VM boots, while the pre-add validate call still sees the old count.
+	workersAppearAtCall int
+	appearingWorkers    []cluster.NodeDetail
+	// events, when set, records a coarse op-ordering trace shared with the
+	// fake ISO/ignition/terraform collaborators so a node-add test can assert
+	// the batch-scoped revive/teardown and per-node build->upload->apply->join
+	// sequence.
+	events *[]string
 }
 
 func (f *fakeCluster) record(event string) {
@@ -95,6 +106,10 @@ func (f *fakeCluster) ListNodes(context.Context) ([]cluster.NodeDetail, error) {
 			out[i].Ready = ready
 		}
 		return out, nil
+	}
+	if f.workersAppearAtCall > 0 && f.listNodesCalls >= f.workersAppearAtCall {
+		out := append([]cluster.NodeDetail{}, f.nodes...)
+		return append(out, f.appearingWorkers...), nil
 	}
 	return f.nodes, nil
 }
@@ -178,6 +193,9 @@ func (f *fakeCluster) Apply(context.Context, []byte) error { f.applied++; return
 
 func (f *fakeCluster) ApprovePendingCSRs(context.Context) (int, error) {
 	f.approveCalls++
+	if f.events != nil {
+		*f.events = append(*f.events, "join")
+	}
 	if f.approveErr != nil {
 		return 0, f.approveErr
 	}
@@ -215,6 +233,9 @@ type fakeTF struct {
 	// no behavior change.
 	stateAbsent bool
 	stateCalls  int
+	// events, when set, records "apply" on each Apply so a node-add ordering
+	// test can place the terraform create between upload and join.
+	events *[]string
 }
 
 func (f *fakeTF) Init(context.Context) error { return nil }
@@ -242,6 +263,9 @@ func (f *fakeTF) StateHasResource(context.Context, string) (bool, error) {
 
 func (f *fakeTF) Apply(context.Context, terraform.ApplyOptions) error {
 	f.applyCalls++
+	if f.events != nil {
+		*f.events = append(*f.events, "apply")
+	}
 	return nil
 }
 func (f *fakeTF) WithLockHint(err error) error { return err }
