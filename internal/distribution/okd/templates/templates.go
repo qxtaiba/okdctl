@@ -57,6 +57,7 @@ type TerraformVarsData struct {
 	WorkerNames          string
 	CPUType              string
 	NUMAEnabled          bool
+	HAEnabled            bool
 	AdditionalNetworks   string
 	MasterTargetNodes    string
 	WorkerTargetNodes    string

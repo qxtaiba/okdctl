@@ -118,7 +118,7 @@ func TestBuildTerraformVarsData_threeMastersTwoWorkers(t *testing.T) {
 	cfg := &config.Config{
 		Cluster: config.ClusterConfig{Name: "mycluster"},
 		Provider: config.ProviderConfig{
-			Proxmox: &config.ProxmoxConfig{ISOStorage: "iso-store"},
+			Proxmox: &config.ProxmoxConfig{ISOStorage: "iso-store", HAEnabled: true},
 		},
 		Topology: config.TopologyConfig{
 			ControlPlane: config.NodeConfig{Count: 3, CPU: 4, MemoryMB: 16384, DiskGB: 120},
@@ -153,6 +153,9 @@ func TestBuildTerraformVarsData_threeMastersTwoWorkers(t *testing.T) {
 	}
 	if got.CPUType != DefaultProxmoxCPUType {
 		t.Errorf("CPUType = %q, want %q (default)", got.CPUType, DefaultProxmoxCPUType)
+	}
+	if !got.HAEnabled {
+		t.Error("HAEnabled = false, want true (propagated from provider config)")
 	}
 	wantMasterNames := `"mycluster-master0", "mycluster-master1", "mycluster-master2"`
 	if got.MasterNames != wantMasterNames {

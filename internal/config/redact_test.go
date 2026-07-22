@@ -159,3 +159,26 @@ func TestRedacted(t *testing.T) {
 		_ = Redacted(cfg)
 	})
 }
+
+func TestProxmoxConfig_Redacted(t *testing.T) {
+	p := &ProxmoxConfig{
+		Host:      "pve.example",
+		Username:  "root@pam",
+		TokenID:   "tid",
+		HAEnabled: true,
+	}
+	got, ok := p.Redacted().(redactedProxmoxConfig)
+	if !ok {
+		t.Fatalf("Redacted() type = %T, want redactedProxmoxConfig", p.Redacted())
+	}
+	if !got.HAEnabled {
+		t.Error("redactedProxmoxConfig.HAEnabled = false, want true")
+	}
+	if got.Host != p.Host {
+		t.Errorf("redactedProxmoxConfig.Host = %q, want %q", got.Host, p.Host)
+	}
+
+	if (*ProxmoxConfig)(nil).Redacted() != nil {
+		t.Error("Redacted() on nil *ProxmoxConfig must return nil")
+	}
+}

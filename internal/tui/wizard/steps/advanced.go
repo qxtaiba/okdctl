@@ -75,6 +75,25 @@ var AdvancedStepDefinition = wizard.StepDefinition{
 						return valNo
 					},
 				},
+				{
+					Key:     "ha_enabled",
+					Label:   "enable ha anti-affinity",
+					Default: valNo,
+					Help:    "spread master vms across proxmox nodes via ha-manager anti-affinity — requires pve 9+; once enabled, ha supersedes the per-vm startup{} ordering on any ha-triggered relocation",
+					Type:    wizard.FieldTypeSelect,
+					Options: []string{valNo, valYes},
+					ConfigSet: wizard.SetBool(func(c *config.Config, v bool) {
+						if c.Provider.Proxmox != nil {
+							c.Provider.Proxmox.HAEnabled = v
+						}
+					}),
+					ConfigGet: func(cfg *config.Config) string {
+						if cfg.Provider.Proxmox != nil && cfg.Provider.Proxmox.HAEnabled {
+							return valYes
+						}
+						return valNo
+					},
+				},
 			},
 		},
 		{
