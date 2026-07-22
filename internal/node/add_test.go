@@ -47,10 +47,17 @@ func (f *fakeISO) UploadCustomISOsToProxmox(context.Context, *config.Config, *se
 // fakeIgnition records ConfigureApache/TeardownIgnitionServer calls so a
 // dry-run can be proven to revive/teardown neither, and a real batch can be
 // proven to revive/teardown exactly once. events records "revive"/"teardown".
+// teardownErrAtCall/teardownHadDeadline snapshot the passed context's state
+// synchronously inside the call (not after), since the caller's own deferred
+// cancel() may fire immediately after TeardownIgnitionServer returns — reading
+// ctx.Err() later would observe that cancel(), not the state teardown actually
+// ran under.
 type fakeIgnition struct {
-	configureCalls int
-	teardownCalls  int
-	events         *[]string
+	configureCalls      int
+	teardownCalls       int
+	teardownErrAtCall   error
+	teardownHadDeadline bool
+	events              *[]string
 }
 
 func (f *fakeIgnition) ConfigureApache(context.Context, *config.Config, string) error {
@@ -61,8 +68,10 @@ func (f *fakeIgnition) ConfigureApache(context.Context, *config.Config, string) 
 	return nil
 }
 
-func (f *fakeIgnition) TeardownIgnitionServer(context.Context) {
+func (f *fakeIgnition) TeardownIgnitionServer(ctx context.Context) {
 	f.teardownCalls++
+	f.teardownErrAtCall = ctx.Err()
+	_, f.teardownHadDeadline = ctx.Deadline()
 	if f.events != nil {
 		*f.events = append(*f.events, "teardown")
 	}
@@ -416,6 +425,50 @@ func TestAddWorkersTeardownOnJoinTimeout(t *testing.T) {
 	if fiso.buildCalls != 1 || ftf.applyCalls != 1 {
 		t.Errorf("the node must have been built and applied before the join wait: build=%d apply=%d",
 			fiso.buildCalls, ftf.applyCalls)
+	}
+}
+
+// TestAddWorkersTeardownRunsUnderDetachedCtxWhenCancelled proves the security
+// fix for the Ctrl-C-during-join-wait window: even when the caller's ctx is
+// already cancelled (mirroring SIGINT landing during waitWorkerJoined), the
+// deferred teardown must still run to completion under a context that is NOT
+// cancelled — otherwise system.IsServiceActive's exec.CommandContext would
+// fail to start, StopAndDisableService would wrongly conclude httpd isn't
+// running, and the pull-secret-serving ignition server would never be
+// stopped or disabled.
+func TestAddWorkersTeardownRunsUnderDetachedCtxWhenCancelled(t *testing.T) {
+	fc := &fakeCluster{
+		nodes: addExistingWorkers(2), // the new worker never appears; the join wait observes cancellation
+	}
+	ftf := &fakeTF{action: terraform.PlanActionCreate}
+	fiso := &fakeISO{}
+	fign := &fakeIgnition{}
+	cfg := addTestConfig(2, 16384)
+
+	r, _, _ := seedAddRunner(t, fc, ftf, fiso, fign, cfg)
+	writeIgnitionArtifacts(t, r)
+	r.DryRun = false
+	r.NodeReadyTimeout = time.Minute // ctx cancellation must pre-empt this, not the timeout
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // simulate Ctrl-C landing before/during the join wait
+
+	err := r.AddWorkers(ctx, AddOptions{Count: 1})
+	if err == nil {
+		t.Fatal("want an error when the parent ctx is cancelled during the join wait")
+	}
+
+	if fign.configureCalls != 1 {
+		t.Errorf("revive must still run before the cancellation is observed: configure=%d", fign.configureCalls)
+	}
+	if fign.teardownCalls != 1 {
+		t.Fatalf("teardown must still fire when ctx is cancelled: teardown=%d", fign.teardownCalls)
+	}
+	if fign.teardownErrAtCall != nil {
+		t.Errorf("teardown must run under a live (non-cancelled) context, got Err()=%v at call time — teardown is not detached from the cancelled parent ctx", fign.teardownErrAtCall)
+	}
+	if !fign.teardownHadDeadline {
+		t.Error("teardown context should carry a bound (timeout) independent of the cancelled parent")
 	}
 }
 
