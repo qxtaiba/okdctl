@@ -92,3 +92,24 @@ func TestAssertOnlyChange(t *testing.T) {
 		}
 	})
 }
+
+func TestEmptyPlanMeansAlreadyAtTarget(t *testing.T) {
+	cases := []struct {
+		name        string
+		addrInState bool
+		want        PlanAction
+		result      bool
+	}{
+		{"delete wanted, addr absent from state", false, PlanActionDelete, true},
+		{"delete wanted, addr still in state", true, PlanActionDelete, false},
+		{"update wanted, addr present in state", true, PlanActionUpdate, true},
+		{"update wanted, addr absent from state", false, PlanActionUpdate, false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := EmptyPlanMeansAlreadyAtTarget(c.addrInState, c.want); got != c.result {
+				t.Errorf("EmptyPlanMeansAlreadyAtTarget(%v, %s) = %v; want %v", c.addrInState, c.want, got, c.result)
+			}
+		})
+	}
+}

@@ -158,3 +158,56 @@ func TestCheckStateMajorVersion_UnparseableVersionIsNonFatal(t *testing.T) {
 		t.Errorf("expected nil for unparseable version; got %v", err)
 	}
 }
+
+func TestExecutor_StateHasResource(t *testing.T) {
+	addr := "module.okd_cluster.proxmox_virtual_environment_vm.worker[2]"
+
+	cases := []struct {
+		name    string
+		script  string
+		want    bool
+		wantErr bool
+	}{
+		{
+			name:   "exit 1 with empty stdout and stderr means absent",
+			script: "#!/bin/sh\nexit 1\n",
+			want:   false,
+		},
+		{
+			name:    "exit 1 with stderr output is a hard error",
+			script:  "#!/bin/sh\necho 'Error: Failed to load state' >&2\nexit 1\n",
+			wantErr: true,
+		},
+		{
+			name:   "exit 0 means present",
+			script: "#!/bin/sh\necho \"$3\"\nexit 0\n",
+			want:   true,
+		},
+		{
+			name:    "other non-zero exit is a hard error, never silent absence",
+			script:  "#!/bin/sh\nexit 2\n",
+			wantErr: true,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			testutil.InstallFakeBin(t, "terraform", tc.script)
+			e := New(t.TempDir())
+
+			got, err := e.StateHasResource(context.Background(), addr)
+			if tc.wantErr {
+				if err == nil {
+					t.Fatal("StateHasResource: expected error; got nil")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("StateHasResource: unexpected error: %v", err)
+			}
+			if got != tc.want {
+				t.Errorf("StateHasResource() = %v; want %v", got, tc.want)
+			}
+		})
+	}
+}
