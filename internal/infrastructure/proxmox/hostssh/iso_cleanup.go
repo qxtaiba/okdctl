@@ -16,10 +16,11 @@ import (
 // CoreOS ISOs are uploaded via scp and referenced by `qm importdisk`.
 const DefaultProxmoxISODir = "/var/lib/vz/template/iso"
 
-// RemoteISOParams carries the connection parameters needed to clean ISOs from
-// a Proxmox host over SSH. Host must be the bare hostname or IP (no port).
-// KnownHostsPath, when non-empty, enables strict host-key checking; empty
-// preserves accept-new TOFU.
+// RemoteISOParams carries the connection parameters shared by pvesh/ssh
+// operations (ISO cleanup, VM snapshots, host probes) against a Proxmox
+// host. Host must be the bare hostname or IP (no port). KnownHostsPath,
+// when non-empty, enables strict host-key checking; empty preserves
+// accept-new TOFU.
 type RemoteISOParams struct {
 	Host           string
 	Node           string
