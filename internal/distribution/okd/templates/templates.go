@@ -240,6 +240,22 @@ func RenderChronyMachineConfig(data ChronyMachineConfigData) (string, error) {
 	return renderTemplate("chrony-machineconfig.yaml.tmpl", data)
 }
 
+// FstrimMachineConfigData is the template binding for the fstrim
+// MachineConfig manifest, rendered once per node pool (master, worker).
+type FstrimMachineConfigData struct {
+	Role string // machineconfiguration.openshift.io/role label value
+	Name string // metadata.name
+}
+
+// RenderFstrimMachineConfig renders the fstrim MachineConfig manifest for
+// data.Role. It masks FCOS's stock fstrim.timer (which fails because FCOS
+// ships no /etc/fstab for `fstrim --fstab` to read, see
+// coreos/fedora-coreos-tracker#468) and ships a replacement unit trimming
+// explicit mountpoints.
+func RenderFstrimMachineConfig(data FstrimMachineConfigData) (string, error) {
+	return renderTemplate("fstrim-machineconfig.yaml.tmpl", data)
+}
+
 var templateFuncs = template.FuncMap{
 	"split":      strings.Split,
 	"trimPrefix": strings.TrimPrefix,
