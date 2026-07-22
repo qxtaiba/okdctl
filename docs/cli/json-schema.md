@@ -72,34 +72,35 @@ Top-level cluster snapshot.
 
 ## `okdctl node list --output=json`
 
-Top-level object carrying the node array plus any op marker that could not be
-attached to a specific listed node.
+Flat array, one entry per cluster node.
 
 ```json
-{
-  "nodes": [
-    {"name": "master-0", "role": "master", "ready": true, "tf_index": 0, "drift": "none"},
-    {
-      "name": "worker-2", "role": "worker", "ready": false, "tf_index": 2,
-      "drift": "pending", "drift_detail": "config 16384MiB/4cpu vs tfvars 8192MiB/4cpu",
-      "in_flight_op": "resize (tf-apply)"
-    }
-  ],
-  "unattached_op": "stop (shutdown) on grappleberry"
-}
+[
+  {"name": "master-0", "role": "master", "ready": true, "tf_index": 0, "drift": "none"},
+  {
+    "name": "worker-2", "role": "worker", "ready": false, "tf_index": 2,
+    "drift": "pending", "drift_detail": "config 16384MiB/4cpu vs tfvars 8192MiB/4cpu",
+    "in_flight_op": "resize (tf-apply)"
+  }
+]
 ```
 
 | Field | Type | Notes |
 |---|---|---|
-| `nodes` | array | one entry per cluster node, each with its terraform count index and a config-vs-tfvars sizing-drift indicator |
-| `nodes[].name` | string | node name from `kubectl get nodes` |
-| `nodes[].role` | string | `master`, `worker`, or `unknown` |
-| `nodes[].ready` | bool | node's `Ready` condition is `True` |
-| `nodes[].tf_index` | int | trailing numeric suffix of the node name (`worker2` → `2`), mapping the node to its terraform count index; omitted when the name has no numeric suffix |
-| `nodes[].drift` | string | `none`, `pending`, or `unknown` — compares the config file's per-role cpu/memory to what was last rendered into terraform.tfvars. This is **not** a live VM query (okdctl fetches no per-guest Proxmox sizing anywhere today): `pending` means a sizing change is staged in the workspace, not that the node's guest has actually been resized. `unknown` means either terraform.tfvars has not been rendered yet, or the node's `role` is `unknown` (no config sizing exists to compare against) |
-| `nodes[].drift_detail` | string | present only when `drift=pending`; the compared config/tfvars values |
-| `nodes[].in_flight_op` | string | present only on the node targeted by an in-flight `remove`/`resize`/`compact` op's on-disk marker, formatted `"<op> (<step>)"` |
-| `unattached_op` | string | present only when an on-disk op marker exists whose target matches no listed node — a `cluster stop`/`cluster start` marker (its target is the cluster name, not a node) or a marker naming a node since removed. Formatted `"<op> (<step>) on <target>"`. This is also the marker a non-resumable op (snapshot, stop, start) would refuse to overwrite without `--acknowledge-interrupted-op` |
+| `[].name` | string | node name from `kubectl get nodes` |
+| `[].role` | string | `master`, `worker`, or `unknown` |
+| `[].ready` | bool | node's `Ready` condition is `True` |
+| `[].tf_index` | int | trailing numeric suffix of the node name (`worker2` → `2`), mapping the node to its terraform count index; omitted when the name has no numeric suffix |
+| `[].drift` | string | `none`, `pending`, or `unknown` — compares the config file's per-role cpu/memory to what was last rendered into terraform.tfvars. This is **not** a live VM query (okdctl fetches no per-guest Proxmox sizing anywhere today): `pending` means a sizing change is staged in the workspace, not that the node's guest has actually been resized. `unknown` means either terraform.tfvars has not been rendered yet, or the node's `role` is `unknown` (no config sizing exists to compare against) |
+| `[].drift_detail` | string | present only when `drift=pending`; the compared config/tfvars values |
+| `[].in_flight_op` | string | present only on the node targeted by an in-flight `remove`/`resize`/`compact` op's on-disk marker, formatted `"<op> (<step>)"` |
+
+An op marker whose target matches no listed node — a `cluster stop`/`cluster
+start` marker (its target is the cluster name, not a node) or a marker naming
+a since-removed node — is **not** part of the JSON array. It surfaces only in
+the text output as a trailing `in-flight op: …` note; scripted callers that
+need it read the marker via `okdctl node list` text or the on-disk marker
+directly.
 
 ## `okdctl node snapshot list <node> --output=json`
 
