@@ -90,6 +90,55 @@ func TestNodeOpDryRunMarksNoChanges(t *testing.T) {
 	}
 }
 
+func addPlan() node.OpPlan {
+	return node.OpPlan{
+		Op:      node.OpAdd,
+		Cluster: "grappleberry",
+		Nodes: []node.PlanNode{{
+			Name:      "grappleberry-worker2",
+			Role:      nodetypes.RoleWorker,
+			TFAddress: "module.okd_cluster.proxmox_virtual_environment_vm.worker[2]",
+			Action:    terraform.PlanActionCreate,
+		}},
+	}
+}
+
+func TestNodeOpConfirmAddHasNoIrreversibleLine(t *testing.T) {
+	plan := addPlan()
+	got := NodeOpConfirm(&plan)
+	for _, want := range []string{
+		"confirm node add", "grappleberry", "worker[2]", "ignition server", "revived",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("add confirm box missing %q:\n%s", want, got)
+		}
+	}
+	if strings.Contains(got, "irreversible") {
+		t.Errorf("node add must not carry the irreversible warning:\n%s", got)
+	}
+}
+
+func TestNodeOpDryRunAddMarksNoChanges(t *testing.T) {
+	plan := addPlan()
+	got := NodeOpDryRun(&plan)
+	if !strings.Contains(got, "dry-run — no changes made") {
+		t.Errorf("dry-run box missing the no-changes banner:\n%s", got)
+	}
+	if !strings.Contains(got, "worker[2]") {
+		t.Errorf("dry-run box should list the planned operation:\n%s", got)
+	}
+}
+
+func TestNodeOpCompleteAddListsNodesAndNextSteps(t *testing.T) {
+	plan := addPlan()
+	got := NodeOpComplete(&plan, 5*time.Minute)
+	for _, want := range []string{"worker(s) added", "grappleberry-worker2", "added", "haproxy", "joined"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("add completion box missing %q:\n%s", want, got)
+		}
+	}
+}
+
 func stopPlan() node.OpPlan {
 	return node.OpPlan{
 		Op:      node.OpStop,

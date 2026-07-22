@@ -102,6 +102,9 @@ func nodeOpDetails(sb *Builder, plan *node.OpPlan) {
 	if plan.GrowMasterMemoryMB > 0 {
 		sb.KV("grow masters to", fmt.Sprintf("%d MiB", plan.GrowMasterMemoryMB))
 	}
+	if plan.Op == node.OpAdd {
+		sb.KV("ignition server", "revived for the join window, then torn down")
+	}
 	sb.Newline()
 
 	sb.Section("nodes")
@@ -127,6 +130,12 @@ func nodeOpDetails(sb *Builder, plan *node.OpPlan) {
 
 func nodeOpNextSteps(plan *node.OpPlan) []string {
 	switch plan.Op {
+	case node.OpAdd:
+		return []string{
+			"if haproxy fronts this cluster, add 'server' lines for the new worker(s) to",
+			"  /etc/haproxy/haproxy.cfg, validate with 'haproxy -c -f ...', then restart it",
+			"verify the new node(s) joined with 'okdctl node list' or 'okdctl status'",
+		}
 	case node.OpRemove, node.OpCompact:
 		return []string{
 			"if haproxy fronts this cluster, drop the removed worker 'server' lines from",
@@ -173,6 +182,8 @@ func nodePowerCompleteVerb(op node.Op) string {
 
 func nodeActionVerb(a terraform.PlanAction) string {
 	switch a {
+	case terraform.PlanActionCreate:
+		return "added"
 	case terraform.PlanActionDelete:
 		return "removed"
 	case terraform.PlanActionUpdate:
@@ -184,6 +195,8 @@ func nodeActionVerb(a terraform.PlanAction) string {
 
 func opHeadline(op node.Op) string {
 	switch op {
+	case node.OpAdd:
+		return "confirm node add"
 	case node.OpRemove:
 		return "confirm worker removal"
 	case node.OpCompact:
@@ -201,6 +214,8 @@ func opHeadline(op node.Op) string {
 
 func opTitle(op node.Op) string {
 	switch op {
+	case node.OpAdd:
+		return "node add"
 	case node.OpRemove:
 		return "node remove"
 	case node.OpCompact:
@@ -218,6 +233,8 @@ func opTitle(op node.Op) string {
 
 func opComplete(op node.Op) string {
 	switch op {
+	case node.OpAdd:
+		return "worker(s) added"
 	case node.OpRemove:
 		return "worker removed"
 	case node.OpCompact:
