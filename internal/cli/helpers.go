@@ -117,8 +117,6 @@ func runTerraformPlanPreview(ctx context.Context, cfg *config.Config, opts planP
 		return nil, err
 	}
 
-	tui.Info("plan: running terraform plan (no changes will be made)")
-
 	return prov.PlanPreview(ctx, cfg, proxmox.ProvisionOptions{
 		ProjectRoot:  opts.ProjectRoot,
 		TerraformEnv: phase.GetTerraformEnv(cfg),

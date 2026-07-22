@@ -171,6 +171,8 @@ func runDeployDryRun(ctx context.Context, cfg *config.Config, w io.Writer) error
 		return err
 	}
 
+	tui.Info("dry-run: running terraform plan (no changes will be made)")
+
 	changes, err := runTerraformPlanPreview(ctx, cfg, planPreviewOptions{
 		ConfigPath:  deployOutputFile,
 		ProjectRoot: projectRoot,

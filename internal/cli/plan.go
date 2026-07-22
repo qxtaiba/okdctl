@@ -73,6 +73,8 @@ func runPlan(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
+	tui.Info("plan: running terraform plan (no changes will be made)")
+
 	changes, err := runTerraformPlanPreview(cmd.Context(), cfg, planPreviewOptions{
 		ConfigPath:  cfgFile,
 		ProjectRoot: projectRoot,
