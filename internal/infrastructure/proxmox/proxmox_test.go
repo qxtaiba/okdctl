@@ -305,7 +305,7 @@ esac
 exit 0
 `, planExit, showStdout)
 	path := filepath.Join(dir, "terraform")
-	if err := os.WriteFile(path, []byte(script), 0o755); err != nil { //nolint:gosec // G306: fake test binary needs +x
+	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))

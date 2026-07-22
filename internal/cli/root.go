@@ -2,12 +2,13 @@
 // top-level event loop. Process exit codes follow a documented contract:
 // config error=2, network error=3, cluster error=4, auth error=5
 // (includes invoked-as-root rejection via AuthError), doctor warn-only=6
-// (see errDoctorWarn), config file not found=66 (EX_NOINPUT), invalid pull
-// secret JSON=65 (EX_DATAERR), sudo not found=71 (EX_OSERR), unknown-flag
-// error=64 (EX_USAGE, via SetFlagErrorFunc), other error=1 (includes unknown
-// subcommands, arg-count violations, and mutually-exclusive-flag conflicts
-// which cobra surfaces outside the flag-parser), SIGINT=130, SIGTERM=143,
-// success=0. See docs/cli/exit-codes.md for the full taxonomy table.
+// (see errDoctorWarn), plan drift detected=7 (see errPlanDrift), config file
+// not found=66 (EX_NOINPUT), invalid pull secret JSON=65 (EX_DATAERR), sudo
+// not found=71 (EX_OSERR), unknown-flag error=64 (EX_USAGE, via
+// SetFlagErrorFunc), other error=1 (includes unknown subcommands,
+// arg-count violations, and mutually-exclusive-flag conflicts which cobra
+// surfaces outside the flag-parser), SIGINT=130, SIGTERM=143, success=0.
+// See docs/cli/exit-codes.md for the full taxonomy table.
 package cli
 
 import (
@@ -200,12 +201,13 @@ func printUpdateNotice(ch <-chan version.CheckResult) {
 }
 
 // shouldAnnounceFailure reports whether execute() should print its generic
-// "command failed" line for err. errDoctorWarn represents a benign warn-only
-// doctor run (exit 6), not an actual failure, so it is excluded — doctor
-// already prints its own warning summary and a second, contradictory
-// "command failed" line would mislead an operator reading the log.
+// "command failed" line for err. errDoctorWarn and errPlanDrift represent
+// benign non-zero outcomes (doctor warn-only, plan drift found), not actual
+// failures, so both are excluded — each command already prints its own
+// result summary and a second, contradictory "command failed" line would
+// mislead an operator reading the log.
 func shouldAnnounceFailure(err error) bool {
-	return !errors.Is(err, errDoctorWarn)
+	return !errors.Is(err, errDoctorWarn) && !errors.Is(err, errPlanDrift)
 }
 
 // signalExitCode reports whether err was caused by a caught OS signal and,
@@ -247,11 +249,15 @@ func exitCodeFor(err error) int {
 	if errors.Is(err, errtypes.ErrSudoMissing) {
 		return 71
 	}
-	// errDoctorWarn is a cli-local sentinel, not an errtypes category — it
-	// carries its own dedicated code rather than folding into ConfigError(2)
-	// so a warn-only doctor run stays distinguishable from a failing one.
+	// errDoctorWarn and errPlanDrift are cli-local sentinels, not errtypes
+	// categories — each carries its own dedicated code rather than folding
+	// into ConfigError(2) so a warn-only doctor run or a drift-only plan
+	// stays distinguishable from a real failure.
 	if errors.Is(err, errDoctorWarn) {
 		return 6
+	}
+	if errors.Is(err, errPlanDrift) {
+		return 7
 	}
 	var cfgErr *errtypes.ConfigError
 	if errors.As(err, &cfgErr) {
