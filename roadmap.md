@@ -2455,7 +2455,7 @@ ISO globs while the stream-pin lookup discards the major version with OKD
 
 #### C1 — Make interrupted node ops resumable
 
-- **Status:** not started
+- **Status:** in review — PR #950
 - **Category:** trust / state-recovery
 - **State:** design needed
 - **Effort:** days
@@ -2487,7 +2487,7 @@ ISO globs while the stream-pin lookup discards the major version with OKD
 
 #### C3 — Complete okdctl node add
 
-- **Status:** not started
+- **Status:** in review — PR #950
 - **Category:** feature-gap / day-2
 - **State:** well-specified
 - **Effort:** weeks
@@ -2503,7 +2503,7 @@ ISO globs while the stream-pin lookup discards the major version with OKD
 
 #### C4 — Add cluster stop/start with CSR recovery
 
-- **Status:** not started
+- **Status:** in review — PR #950
 - **Category:** feature-gap / day-2
 - **State:** design needed
 - **Effort:** days
@@ -2659,7 +2659,7 @@ ISO globs while the stream-pin lookup discards the major version with OKD
 
 #### C14 — Add okdctl plan (read-only drift preview)
 
-- **Status:** not started
+- **Status:** in review — PR #950
 - **Category:** feature-gap / day-2
 - **State:** design needed
 - **Effort:** days
@@ -2781,7 +2781,7 @@ ISO globs while the stream-pin lookup discards the major version with OKD
 
 #### C22 — Proxmox HA anti-affinity rules for control-plane VM placement
 
-- **Status:** not started
+- **Status:** in review — PR #950
 - **Category:** feature-gap / proxmox-native
 - **State:** design needed
 - **Effort:** days
@@ -2797,7 +2797,7 @@ ISO globs while the stream-pin lookup discards the major version with OKD
 
 #### C23 — Fix the silent FCOS fstrim failure so thin-storage discard reclaims space
 
-- **Status:** not started
+- **Status:** in review — PR #950
 - **Category:** correctness / proxmox-native
 - **State:** well-specified
 - **Effort:** days
@@ -2812,7 +2812,7 @@ ISO globs while the stream-pin lookup discards the major version with OKD
 
 #### C24 — Proxmox-native node snapshot/rollback safety net
 
-- **Status:** not started
+- **Status:** in review — PR #950
 - **Category:** feature-gap / proxmox-native
 - **State:** design needed
 - **Effort:** days
@@ -2930,7 +2930,7 @@ ISO globs while the stream-pin lookup discards the major version with OKD
 
 #### C32 — Eliminate the hybrid third path in wizard step authoring
 
-- **Status:** not started
+- **Status:** in review — PR #950
 - **Category:** simplification / wizard
 - **State:** sketch
 - **Effort:** days
