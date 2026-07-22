@@ -146,7 +146,7 @@ func TestPrintNodeListAlignsColumnsWithLongNames(t *testing.T) {
 		},
 	}
 	var buf bytes.Buffer
-	if err := printNodeList(&buf, entries); err != nil {
+	if err := printNodeList(&buf, entries, ""); err != nil {
 		t.Fatalf("printNodeList: %v", err)
 	}
 
@@ -197,11 +197,64 @@ func TestPrintNodeListAlignsColumnsWithLongNames(t *testing.T) {
 
 func TestPrintNodeListEmpty(t *testing.T) {
 	var buf bytes.Buffer
-	if err := printNodeList(&buf, nil); err != nil {
+	if err := printNodeList(&buf, nil, ""); err != nil {
 		t.Fatalf("printNodeList: %v", err)
 	}
 	if got := buf.String(); got != "no nodes found\n" {
-		t.Errorf("printNodeList(nil) = %q, want %q", got, "no nodes found\n")
+		t.Errorf("printNodeList(nil, \"\") = %q, want %q", got, "no nodes found\n")
+	}
+}
+
+// TestPrintNodeListShowsUnattachedOpNote is FIX 2: a marker that matches no
+// listed node (a cluster-stop/start marker, or a node since removed) must
+// surface as a top-level note rather than vanish — even when the node table
+// itself is empty.
+func TestPrintNodeListShowsUnattachedOpNote(t *testing.T) {
+	var buf bytes.Buffer
+	entries := []nodeListEntry{{Name: "master-0", Role: nodetypes.RoleMaster, Ready: true, Drift: driftNone}}
+	if err := printNodeList(&buf, entries, "stop (shutdown) on grappleberry"); err != nil {
+		t.Fatalf("printNodeList: %v", err)
+	}
+	if !strings.Contains(buf.String(), "in-flight op: stop (shutdown) on grappleberry — not attached to a listed node") {
+		t.Errorf("missing unattached-op note: %q", buf.String())
+	}
+
+	buf.Reset()
+	if err := printNodeList(&buf, nil, "stop (shutdown) on grappleberry"); err != nil {
+		t.Fatalf("printNodeList: %v", err)
+	}
+	if !strings.Contains(buf.String(), "no nodes found") || !strings.Contains(buf.String(), "in-flight op:") {
+		t.Errorf("unattached-op note must surface even with an empty node table: %q", buf.String())
+	}
+}
+
+// TestUnattachedOpNote covers FIX 2's core predicate: a marker whose Target
+// matches a listed node is not unattached (it is already surfaced per-node
+// via in_flight_op); a marker naming the cluster (cluster stop/start) or a
+// removed node is.
+func TestUnattachedOpNote(t *testing.T) {
+	nodes := []cluster.NodeDetail{
+		{Name: "master-0", Role: nodetypes.RoleMaster},
+		{Name: "worker-2", Role: nodetypes.RoleWorker},
+	}
+
+	if got := unattachedOpNote(nil, nodes); got != "" {
+		t.Errorf("no marker: got %q, want empty", got)
+	}
+
+	attached := &node.OpMarker{Op: node.OpResize, Target: "worker-2", Step: node.StepTFApply}
+	if got := unattachedOpNote(attached, nodes); got != "" {
+		t.Errorf("marker attached to a listed node: got %q, want empty (already surfaced via in_flight_op)", got)
+	}
+
+	clusterStop := &node.OpMarker{Op: node.OpStop, Target: "grappleberry", Step: node.StepShutdown}
+	if got := unattachedOpNote(clusterStop, nodes); got != "stop (shutdown) on grappleberry" {
+		t.Errorf("cluster-stop marker: got %q, want %q", got, "stop (shutdown) on grappleberry")
+	}
+
+	removedNode := &node.OpMarker{Op: node.OpRemove, Target: "worker-9", Step: node.StepDrain}
+	if got := unattachedOpNote(removedNode, nodes); got != "remove (drain) on worker-9" {
+		t.Errorf("marker for a removed node: got %q, want %q", got, "remove (drain) on worker-9")
 	}
 }
 
