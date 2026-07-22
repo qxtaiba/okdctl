@@ -11,7 +11,8 @@ without the etcd gate.
 
 Sizing is per-role: the role's memory/cpu knob is updated in config and tfvars,
 but each targeted apply mutates only the current node; other same-role nodes
-pick up the pending change on the next full deploy.
+pick up the pending change on the next full deploy. Run 'okdctl plan' after a
+resize to see exactly which same-role siblings still have the change pending.
 
 At least one of --memory-mb or --cpu is required; an omitted dimension keeps
 the role's current value.
