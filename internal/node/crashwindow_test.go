@@ -94,6 +94,60 @@ func TestRemoveWorkerResumesBetweenApplyAndPersist(t *testing.T) {
 	}
 }
 
+// TestRemoveWorkerResumesBetweenPersistAndDeleteMarker covers the exact window
+// the other crash-window tests miss: the crash lands AFTER persistTopology (the
+// on-disk config already reads count=N-1) but BEFORE the delete-node marker
+// advances, so the marker is still StepTFApply. A relative decrement would
+// re-apply count-1 against the already-decremented config and land at N-2 —
+// understating the topology so the next deploy destroys a healthy worker. The
+// absolute (Count = idx) assignment must leave the config at N-1 on resume.
+func TestRemoveWorkerResumesBetweenPersistAndDeleteMarker(t *testing.T) {
+	const target = "worker2"
+
+	fc := &fakeCluster{
+		nodes: []cluster.NodeDetail{
+			{Name: "worker0", Role: nodetypes.RoleWorker},
+			{Name: "worker1", Role: nodetypes.RoleWorker},
+			{Name: target, Role: nodetypes.RoleWorker}, // still listed: DeleteNode never ran
+			{Name: "master0", Role: nodetypes.RoleMaster},
+		},
+		schedulable: true,
+	}
+	// The apply already landed (state no longer holds worker[2], plan is empty),
+	// and persist already ran — so the config reads the decremented count while
+	// the marker is still StepTFApply.
+	ftf := &fakeTF{action: terraform.PlanActionDelete, emptyPlan: true, stateAbsent: true}
+	cfg := config.DefaultConfig()
+	cfg.Topology.Workers.Count = 2 // persist LANDED before the crash
+
+	r, _, _ := seedRunner(t, fc, ftf, cfg)
+	r.DryRun = false
+	seedMarker(t, r, OpRemove, target, StepTFApply)
+
+	if err := r.RemoveWorker(context.Background(), target, RemoveOptions{}); err != nil {
+		t.Fatalf("resumed remove: %v", err)
+	}
+
+	if cfg.Topology.Workers.Count != 2 {
+		t.Errorf("resumed remove must leave count at N-1 (2), not decrement again to N-2: got %d", cfg.Topology.Workers.Count)
+	}
+	if ftf.applyCalls != 0 {
+		t.Errorf("already-applied delete must not be re-applied: applyCalls=%d", ftf.applyCalls)
+	}
+	if fc.deleteNode != 1 {
+		t.Errorf("resumed remove must delete the k8s Node object: deleteNode=%d", fc.deleteNode)
+	}
+	var remaining []string
+	for _, n := range fc.nodes {
+		if n.Role == nodetypes.RoleWorker {
+			remaining = append(remaining, n.Name)
+		}
+	}
+	if !slices.Equal(remaining, []string{"worker0", "worker1"}) {
+		t.Errorf("the correct workers must remain after resume: got %v, want [worker0 worker1]", remaining)
+	}
+}
+
 func TestRemoveWorkerResumesBetweenApplyAndDeleteNode(t *testing.T) {
 	const target = "worker2"
 
