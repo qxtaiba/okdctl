@@ -13,11 +13,8 @@ import (
 	"github.com/qxtaiba/okdctl/internal/credentials"
 	"github.com/qxtaiba/okdctl/internal/deploy"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd"
-	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
-	"github.com/qxtaiba/okdctl/internal/infrastructure/proxmox"
 	"github.com/qxtaiba/okdctl/internal/render"
-	"github.com/qxtaiba/okdctl/internal/runlock"
 	"github.com/qxtaiba/okdctl/internal/tui"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard/steps"
@@ -163,49 +160,27 @@ func runDeploy(cmd *cobra.Command, _ []string) error {
 	return nil
 }
 
-// runDeployDryRun previews a deploy: runs terraform plan and lists every phase
-// step. Requires terraform.tfvars from a prior setup run; absent tfvars causes
-// plan failure and exits 2.
+// runDeployDryRun previews a deploy: runs a terraform plan preview and lists
+// every phase step. Requires terraform.tfvars from a prior setup run; absent
+// tfvars causes plan failure and exits 2. Always exits 0 when the preview
+// itself succeeds, even when the plan reports drift — unlike 'okdctl plan',
+// dry-run's exit contract predates drift-awareness and stays unchanged here.
 func runDeployDryRun(ctx context.Context, cfg *config.Config, w io.Writer) error {
-	envPath := credentials.EnvFilePath(deployOutputFile)
-	if err := credentials.LoadEnvFile(envPath); err != nil {
-		return err
-	}
-
-	creds := credentials.GetProxmoxCredentials(cfg)
-	defer creds.Zeroize()
-
 	projectRoot, err := resolveWorkspaceRoot()
 	if err != nil {
 		return err
 	}
 
-	lock, err := runlock.Acquire(projectRoot, "deploy --dry-run")
+	changes, err := runTerraformPlanPreview(ctx, cfg, planPreviewOptions{
+		ConfigPath:  deployOutputFile,
+		ProjectRoot: projectRoot,
+		Caller:      "deploy --dry-run",
+	})
 	if err != nil {
-		return err
-	}
-	defer lock.Release()
-
-	prov := proxmox.New(
-		proxmox.WithProjectRoot(projectRoot),
-		proxmox.WithLogger(tui.SimpleLogger()),
-		proxmox.WithEnv(creds.Env()),
-	)
-	defer prov.ZeroizeEnv()
-	if connErr := prov.Connect(ctx, cfg); connErr != nil {
-		return &errtypes.ConfigError{Msg: "dry-run: provider connect failed", Err: connErr}
+		return &errtypes.ConfigError{Msg: "dry-run: plan preview failed", Err: err}
 	}
 
-	tui.Info("dry-run: running terraform plan (no changes will be made)")
-
-	tfEnv := phase.GetTerraformEnv(cfg)
-	if planErr := prov.PlanOnly(ctx, cfg, proxmox.ProvisionOptions{
-		ProjectRoot:  projectRoot,
-		TerraformEnv: tfEnv,
-	}); planErr != nil {
-		return &errtypes.ConfigError{Msg: "dry-run: terraform plan failed", Err: planErr}
-	}
-
+	fmt.Fprint(w, render.PlanPreview(changes))
 	fmt.Fprintln(w, render.DryRunSummary("deploy step listing", deployDryRunSteps(cfg, projectRoot)))
 	tui.Info("dry-run: re-run without --dry-run to execute deploy")
 	return nil
