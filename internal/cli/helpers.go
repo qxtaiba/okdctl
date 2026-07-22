@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -9,8 +10,12 @@ import (
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/credentials"
+	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
+	"github.com/qxtaiba/okdctl/internal/infrastructure/proxmox"
+	"github.com/qxtaiba/okdctl/internal/infrastructure/terraform"
 	"github.com/qxtaiba/okdctl/internal/render"
+	"github.com/qxtaiba/okdctl/internal/runlock"
 	"github.com/qxtaiba/okdctl/internal/tui"
 )
 
@@ -67,6 +72,57 @@ func reportCredentialProvenance(creds *credentials.ProxmoxCredentials) {
 	if creds.Insecure {
 		tui.Warn("proxmox: TLS verification disabled (insecure=true in config)")
 	}
+}
+
+// planPreviewOptions configures runTerraformPlanPreview.
+type planPreviewOptions struct {
+	// ConfigPath derives the credentials .env file path via credentials.EnvFilePath.
+	ConfigPath string
+	// ProjectRoot is the workspace root containing the terraform environments dir.
+	ProjectRoot string
+	// Caller is the runlock verb recorded for concurrent-run diagnostics
+	// (e.g. "deploy --dry-run", "plan").
+	Caller string
+}
+
+// runTerraformPlanPreview loads credentials, acquires the project run lock,
+// connects the proxmox provider, and runs a read-only terraform plan
+// preview, returning the parsed non-no-op resource changes. It is the sole
+// path to a preview plan — deploy --dry-run and okdctl plan both call it so
+// the two commands cannot drift on how a preview is produced. Errors are
+// returned as-is (already typed via errtypes); callers decide whether to
+// wrap or let them surface.
+func runTerraformPlanPreview(ctx context.Context, cfg *config.Config, opts planPreviewOptions) ([]terraform.ResourceChange, error) {
+	envPath := credentials.EnvFilePath(opts.ConfigPath)
+	if err := credentials.LoadEnvFile(envPath); err != nil {
+		return nil, err
+	}
+
+	creds := credentials.GetProxmoxCredentials(cfg)
+	defer creds.Zeroize()
+
+	lock, err := runlock.Acquire(opts.ProjectRoot, opts.Caller)
+	if err != nil {
+		return nil, err
+	}
+	defer lock.Release()
+
+	prov := proxmox.New(
+		proxmox.WithProjectRoot(opts.ProjectRoot),
+		proxmox.WithLogger(tui.SimpleLogger()),
+		proxmox.WithEnv(creds.Env()),
+	)
+	defer prov.ZeroizeEnv()
+	if err := prov.Connect(ctx, cfg); err != nil {
+		return nil, err
+	}
+
+	tui.Info("plan: running terraform plan (no changes will be made)")
+
+	return prov.PlanPreview(ctx, cfg, proxmox.ProvisionOptions{
+		ProjectRoot:  opts.ProjectRoot,
+		TerraformEnv: phase.GetTerraformEnv(cfg),
+	})
 }
 
 func validateConfig(cfg *config.Config, w io.Writer) *config.ValidationResult {
