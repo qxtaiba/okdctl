@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"time"
+
+	"github.com/luthermonson/go-proxmox"
 )
 
 // DefaultPowerCycleTimeout bounds each stop/start task within a power-cycle.
@@ -29,6 +31,8 @@ type PowerCycleOptions struct {
 // narrow, operational power-cycle — not an infra-state mutation — and is the
 // sanctioned API-path analogue of the SSH exemption in hostssh/iso_cleanup.go:
 // the bastion cannot SSH to the Proxmox host, so this goes over the API instead.
+// The same rationale extends to ShutdownVM/StartVM/VMRunning: cluster stop/start
+// needs graceful, per-VM power control that terraform apply/destroy cannot express.
 type PowerCycler struct {
 	opts *PowerCycleOptions
 }
@@ -38,27 +42,43 @@ func NewPowerCycler(opts *PowerCycleOptions) *PowerCycler {
 	return &PowerCycler{opts: opts}
 }
 
-// PowerCycleVM stops (if running) then starts the VM, waiting for each task to
-// complete. It is fail-closed: any error leaves the caller to treat the resize
-// as unrealized. node is the Proxmox node name; vmid the QEMU id.
-func (pc *PowerCycler) PowerCycleVM(ctx context.Context, node string, vmid int) error {
-	timeout := pc.opts.Timeout
-	if timeout <= 0 {
-		timeout = DefaultPowerCycleTimeout
+// timeout returns the configured per-task timeout, or DefaultPowerCycleTimeout.
+func (pc *PowerCycler) timeout() time.Duration {
+	if pc.opts.Timeout > 0 {
+		return pc.opts.Timeout
 	}
+	return DefaultPowerCycleTimeout
+}
 
+// vm builds a client scoped to timeout and returns the target VM with its
+// current status already populated (go-proxmox fetches status/current +
+// config as part of the lookup).
+func (pc *PowerCycler) vm(ctx context.Context, node string, vmid int, timeout time.Duration) (*proxmox.VirtualMachine, error) {
 	client, err := newProxmoxClient(pc.opts.Endpoint, pc.opts.Username, pc.opts.Password, pc.opts.APIToken, pc.opts.Insecure, timeout)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	n, err := client.Node(ctx, node)
 	if err != nil {
-		return fmt.Errorf("get proxmox node %s: %w", node, err)
+		return nil, fmt.Errorf("get proxmox node %s: %w", node, err)
 	}
 	vm, err := n.VirtualMachine(ctx, vmid)
 	if err != nil {
-		return fmt.Errorf("get vm %d: %w", vmid, err)
+		return nil, fmt.Errorf("get vm %d: %w", vmid, err)
+	}
+	return vm, nil
+}
+
+// PowerCycleVM stops (if running) then starts the VM, waiting for each task to
+// complete. It is fail-closed: any error leaves the caller to treat the resize
+// as unrealized. node is the Proxmox node name; vmid the QEMU id.
+func (pc *PowerCycler) PowerCycleVM(ctx context.Context, node string, vmid int) error {
+	timeout := pc.timeout()
+
+	vm, err := pc.vm(ctx, node, vmid, timeout)
+	if err != nil {
+		return err
 	}
 
 	if vm.IsRunning() {
@@ -79,4 +99,70 @@ func (pc *PowerCycler) PowerCycleVM(ctx context.Context, node string, vmid int) 
 		return fmt.Errorf("wait for vm %d start: %w", vmid, err)
 	}
 	return nil
+}
+
+// ShutdownVM sends an ACPI graceful shutdown and waits for it to power off.
+// It is a no-op if the VM already reports stopped. A completed shutdown task
+// does not by itself prove the guest powered off — the guest can ignore the
+// ACPI signal — so ShutdownVM re-pings the VM afterward and errors unless
+// Proxmox now reports it stopped.
+func (pc *PowerCycler) ShutdownVM(ctx context.Context, node string, vmid int) error {
+	timeout := pc.timeout()
+
+	vm, err := pc.vm(ctx, node, vmid, timeout)
+	if err != nil {
+		return err
+	}
+	if vm.IsStopped() {
+		return nil
+	}
+
+	task, err := vm.Shutdown(ctx)
+	if err != nil {
+		return fmt.Errorf("shutdown vm %d: %w", vmid, err)
+	}
+	if err := task.Wait(ctx, powerTaskPollInterval, timeout); err != nil {
+		return fmt.Errorf("wait for vm %d shutdown: %w", vmid, err)
+	}
+
+	if err := vm.Ping(ctx); err != nil {
+		return fmt.Errorf("confirm vm %d shutdown: %w", vmid, err)
+	}
+	if !vm.IsStopped() {
+		return fmt.Errorf("confirm vm %d shutdown: vm still running after shutdown task completed", vmid)
+	}
+	return nil
+}
+
+// StartVM starts the VM if it is not already running and waits for the task
+// to complete. It is a no-op if the VM already reports running.
+func (pc *PowerCycler) StartVM(ctx context.Context, node string, vmid int) error {
+	timeout := pc.timeout()
+
+	vm, err := pc.vm(ctx, node, vmid, timeout)
+	if err != nil {
+		return err
+	}
+	if vm.IsRunning() {
+		return nil
+	}
+
+	task, err := vm.Start(ctx)
+	if err != nil {
+		return fmt.Errorf("start vm %d: %w", vmid, err)
+	}
+	if err := task.Wait(ctx, powerTaskPollInterval, timeout); err != nil {
+		return fmt.Errorf("wait for vm %d start: %w", vmid, err)
+	}
+	return nil
+}
+
+// VMRunning reports the VM's live running state, read fresh from the Proxmox
+// API on every call (no caching).
+func (pc *PowerCycler) VMRunning(ctx context.Context, node string, vmid int) (bool, error) {
+	vm, err := pc.vm(ctx, node, vmid, pc.timeout())
+	if err != nil {
+		return false, err
+	}
+	return vm.IsRunning(), nil
 }
