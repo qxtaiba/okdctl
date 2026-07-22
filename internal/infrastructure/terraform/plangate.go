@@ -114,6 +114,20 @@ func describeChanges(changes []ResourceChange) string {
 	return "[" + strings.Join(parts, ", ") + "]"
 }
 
+// EmptyPlanMeansAlreadyAtTarget interprets an empty targeted plan given
+// whether addr is currently present in state and the change the caller
+// wanted (want). A delete going empty means "already gone" only when addr is
+// absent from state; any other want (create/update) going empty means
+// "already there" only when addr is present. Callers use this to distinguish
+// a resumed re-run — the apply already landed — from a plan that never
+// reached the module at all.
+func EmptyPlanMeansAlreadyAtTarget(addrInState bool, want PlanAction) bool {
+	if want == PlanActionDelete {
+		return !addrInState
+	}
+	return addrInState
+}
+
 // ShowPlanChanges runs `terraform show -json <planFile>` and returns the folded
 // non-no-op resource changes. planFile is a saved plan produced by Plan with
 // OutputPlanFile set.
