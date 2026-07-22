@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/qxtaiba/okdctl/internal/cluster"
 	"github.com/qxtaiba/okdctl/internal/config"
@@ -17,36 +19,53 @@ import (
 )
 
 // fakeISO records BuildCustomISOs/UploadCustomISOsToProxmox calls so a
-// dry-run can be proven to trigger neither.
+// dry-run can be proven to trigger neither. events, when set, records the
+// per-node "build"/"upload" ordering shared with the other fakes.
 type fakeISO struct {
 	buildCalls  int
 	uploadCalls int
+	buildErr    error
+	events      *[]string
 }
 
 func (f *fakeISO) BuildCustomISOs(context.Context, *config.Config, *setup.Options) error {
 	f.buildCalls++
-	return nil
+	if f.events != nil {
+		*f.events = append(*f.events, "build")
+	}
+	return f.buildErr
 }
 
 func (f *fakeISO) UploadCustomISOsToProxmox(context.Context, *config.Config, *setup.Options) error {
 	f.uploadCalls++
+	if f.events != nil {
+		*f.events = append(*f.events, "upload")
+	}
 	return nil
 }
 
 // fakeIgnition records ConfigureApache/TeardownIgnitionServer calls so a
-// dry-run can be proven to revive/teardown neither.
+// dry-run can be proven to revive/teardown neither, and a real batch can be
+// proven to revive/teardown exactly once. events records "revive"/"teardown".
 type fakeIgnition struct {
 	configureCalls int
 	teardownCalls  int
+	events         *[]string
 }
 
 func (f *fakeIgnition) ConfigureApache(context.Context, *config.Config, string) error {
 	f.configureCalls++
+	if f.events != nil {
+		*f.events = append(*f.events, "revive")
+	}
 	return nil
 }
 
 func (f *fakeIgnition) TeardownIgnitionServer(context.Context) {
 	f.teardownCalls++
+	if f.events != nil {
+		*f.events = append(*f.events, "teardown")
+	}
 }
 
 const addTestClusterName = "mycluster"
@@ -56,7 +75,10 @@ func addTestConfig(workerCount, workerMemMB int) *config.Config {
 	cfg.Cluster.Name = addTestClusterName
 	cfg.Topology.Workers.Count = workerCount
 	cfg.Topology.Workers.MemoryMB = workerMemMB
-	cfg.Provider.Proxmox = &config.ProxmoxConfig{ISOStorage: "iso-store"}
+	// Keep DefaultConfig's full Proxmox block (Node, etc.) so a non-dry-run
+	// batch's after-loop persistTopology can render terraform.tfvars; only the
+	// ISO storage is overridden to the value the worker_isos assertions expect.
+	cfg.Provider.Proxmox.ISOStorage = "iso-store"
 	return cfg
 }
 
@@ -268,5 +290,174 @@ func TestAddWorkersPlanShape(t *testing.T) {
 				t.Error("an add plan must never report DestroysData")
 			}
 		})
+	}
+}
+
+// addExistingWorkers builds the pre-add worker roster the count-match guard
+// checks against (names match r.workerName so the join wait can find them).
+func addExistingWorkers(n int) []cluster.NodeDetail {
+	nodes := make([]cluster.NodeDetail, n)
+	for i := range nodes {
+		nodes[i] = cluster.NodeDetail{
+			Name:  fmt.Sprintf("%s-worker%d", addTestClusterName, i),
+			Role:  nodetypes.RoleWorker,
+			Ready: true,
+		}
+	}
+	return nodes
+}
+
+func addAppearingWorkers(from, count int) []cluster.NodeDetail {
+	nodes := make([]cluster.NodeDetail, count)
+	for i := range nodes {
+		nodes[i] = cluster.NodeDetail{
+			Name:  fmt.Sprintf("%s-worker%d", addTestClusterName, from+i),
+			Role:  nodetypes.RoleWorker,
+			Ready: true,
+		}
+	}
+	return nodes
+}
+
+// TestAddWorkersMutatingSequenceOrder locks the per-node ordering
+// (build→upload→apply→join) and the batch-scoped ignition window (revive
+// first, teardown last, each exactly once) for a fresh --count 2 batch.
+func TestAddWorkersMutatingSequenceOrder(t *testing.T) {
+	var events []string
+	fc := &fakeCluster{
+		nodes:               addExistingWorkers(2),
+		workersAppearAtCall: 2, // call 1 is the pre-add count-match guard
+		appearingWorkers:    addAppearingWorkers(2, 2),
+		events:              &events,
+	}
+	ftf := &fakeTF{action: terraform.PlanActionCreate, events: &events}
+	fiso := &fakeISO{events: &events}
+	fign := &fakeIgnition{events: &events}
+	cfg := addTestConfig(2, 16384)
+
+	r, _, _ := seedAddRunner(t, fc, ftf, fiso, fign, cfg)
+	writeIgnitionArtifacts(t, r)
+	r.DryRun = false
+
+	if err := r.AddWorkers(context.Background(), AddOptions{Count: 2}); err != nil {
+		t.Fatalf("add: %v", err)
+	}
+
+	want := []string{"revive", "build", "upload", "apply", "join", "build", "upload", "apply", "join", "teardown"}
+	if strings.Join(events, ",") != strings.Join(want, ",") {
+		t.Errorf("mutating sequence out of order:\n got %v\nwant %v", events, want)
+	}
+	if fign.configureCalls != 1 || fign.teardownCalls != 1 {
+		t.Errorf("ignition window must revive/teardown exactly once: configure=%d teardown=%d", fign.configureCalls, fign.teardownCalls)
+	}
+	if cfg.Topology.Workers.Count != 4 {
+		t.Errorf("batch add must persist the widened worker count: got %d want 4", cfg.Topology.Workers.Count)
+	}
+}
+
+// TestAddWorkersReviveTeardownOncePerBatch proves the join window is opened and
+// closed exactly once across a multi-node --count 3 batch (not once per node).
+func TestAddWorkersReviveTeardownOncePerBatch(t *testing.T) {
+	fc := &fakeCluster{
+		nodes:               addExistingWorkers(2),
+		workersAppearAtCall: 2,
+		appearingWorkers:    addAppearingWorkers(2, 3),
+	}
+	ftf := &fakeTF{action: terraform.PlanActionCreate}
+	fiso := &fakeISO{}
+	fign := &fakeIgnition{}
+	cfg := addTestConfig(2, 16384)
+
+	r, _, _ := seedAddRunner(t, fc, ftf, fiso, fign, cfg)
+	writeIgnitionArtifacts(t, r)
+	r.DryRun = false
+
+	if err := r.AddWorkers(context.Background(), AddOptions{Count: 3}); err != nil {
+		t.Fatalf("add count 3: %v", err)
+	}
+	if fign.configureCalls != 1 {
+		t.Errorf("revive must run exactly once for the whole batch: configure=%d", fign.configureCalls)
+	}
+	if fign.teardownCalls != 1 {
+		t.Errorf("teardown must run exactly once for the whole batch: teardown=%d", fign.teardownCalls)
+	}
+	if fiso.buildCalls != 3 || fiso.uploadCalls != 3 || ftf.applyCalls != 3 {
+		t.Errorf("each new node must build/upload/apply once: build=%d upload=%d apply=%d",
+			fiso.buildCalls, fiso.uploadCalls, ftf.applyCalls)
+	}
+}
+
+// TestAddWorkersTeardownOnJoinTimeout proves the deferred teardown fires even
+// when a node never joins — the join window must not be left open on failure.
+func TestAddWorkersTeardownOnJoinTimeout(t *testing.T) {
+	fc := &fakeCluster{
+		nodes: addExistingWorkers(2), // the new worker never appears → join times out
+	}
+	ftf := &fakeTF{action: terraform.PlanActionCreate}
+	fiso := &fakeISO{}
+	fign := &fakeIgnition{}
+	cfg := addTestConfig(2, 16384)
+
+	r, _, _ := seedAddRunner(t, fc, ftf, fiso, fign, cfg)
+	writeIgnitionArtifacts(t, r)
+	r.DryRun = false
+	r.NodeReadyTimeout = 50 * time.Millisecond
+
+	err := r.AddWorkers(context.Background(), AddOptions{Count: 1})
+	if err == nil {
+		t.Fatal("want a join-timeout error when the new worker never becomes Ready")
+	}
+	if fign.teardownCalls != 1 {
+		t.Errorf("teardown must fire on a join timeout (deferred): teardown=%d", fign.teardownCalls)
+	}
+	if fign.configureCalls != 1 {
+		t.Errorf("revive must have run before the timeout: configure=%d", fign.configureCalls)
+	}
+	if fiso.buildCalls != 1 || ftf.applyCalls != 1 {
+		t.Errorf("the node must have been built and applied before the join wait: build=%d apply=%d",
+			fiso.buildCalls, ftf.applyCalls)
+	}
+}
+
+// TestAddWorkersResumeSkipsJoinedWorker models a batch interrupted while
+// waiting for worker1 to join: worker0 already joined and must be skipped
+// whole, worker1 re-runs only its join, and the guards/confirm are skipped.
+func TestAddWorkersResumeSkipsJoinedWorker(t *testing.T) {
+	fc := &fakeCluster{
+		nodes: []cluster.NodeDetail{
+			{Name: "mycluster-worker0", Role: nodetypes.RoleWorker, Ready: true},
+			{Name: "mycluster-worker1", Role: nodetypes.RoleWorker, Ready: true},
+		},
+	}
+	ftf := &fakeTF{action: terraform.PlanActionCreate}
+	fiso := &fakeISO{}
+	fign := &fakeIgnition{}
+	// Count never advanced (persist is after the whole batch), so the resumed
+	// range is still [0,1].
+	cfg := addTestConfig(0, 16384)
+
+	r, _, _ := seedAddRunner(t, fc, ftf, fiso, fign, cfg)
+	r.DryRun = false
+	seedMarker(t, r, OpAdd, "mycluster-worker1", StepWaitJoin)
+
+	if err := r.AddWorkers(context.Background(), AddOptions{Count: 2}); err != nil {
+		t.Fatalf("resumed add: %v", err)
+	}
+
+	if fiso.buildCalls != 0 || fiso.uploadCalls != 0 || ftf.applyCalls != 0 {
+		t.Errorf("resume at worker1/wait-join must skip worker0 whole and skip worker1's build/upload/apply: build=%d upload=%d apply=%d",
+			fiso.buildCalls, fiso.uploadCalls, ftf.applyCalls)
+	}
+	if fc.approveCalls < 1 {
+		t.Errorf("worker1's join must re-run (CSR approval ticks): approve=%d", fc.approveCalls)
+	}
+	if fc.listNodesCalls != 1 {
+		t.Errorf("resume must query ListNodes only for worker1's join (worker0 skipped, guards skipped): listNodes=%d want 1", fc.listNodesCalls)
+	}
+	if fign.configureCalls != 1 || fign.teardownCalls != 1 {
+		t.Errorf("resume must still open/close the join window once: configure=%d teardown=%d", fign.configureCalls, fign.teardownCalls)
+	}
+	if cfg.Topology.Workers.Count != 2 {
+		t.Errorf("completed resume must persist the final worker count: got %d want 2", cfg.Topology.Workers.Count)
 	}
 }

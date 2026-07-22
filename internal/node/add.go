@@ -88,12 +88,17 @@ func addPlan(clusterName string, startIdx, count int) OpPlan {
 	}
 }
 
-// AddWorkers guards, plans, and — outside dry-run — confirms a batch add of
-// opts.Count new workers. This covers add's read-only sequence only: the
-// mutating sequence (per-node ISO build/upload, ignition-server revive with
-// a deferred teardown, targeted create, CSR approval, and wait-join) lands in
-// a follow-up change on top of this skeleton; see the comment at the bottom
-// of this function for the exact stopping point.
+// AddWorkers guards, plans, confirms, and executes a batch add of opts.Count
+// new workers. Outside dry-run it reopens the ignition server for one
+// batch-scoped join window (revive once, deferred teardown once on any exit),
+// then per new index builds/uploads the node's ISO, applies a plan-gated
+// exactly-one-create, and waits for the node to join and report Ready while
+// approving its kubelet CSRs. It does not touch HAProxy — the completion log
+// points the operator at the manual backend-add steps. An interrupted batch
+// resumes at its recorded node/step (see beginOp): already-joined nodes are
+// skipped, the marked node re-enters at its step, and not-yet-reached nodes
+// run fresh. Resume skips the guards/confirm gate — they assume a clean
+// baseline that no longer holds once a prior attempt partially mutated things.
 func (r *Runner) AddWorkers(ctx context.Context, opts AddOptions) error {
 	if opts.Count < 1 {
 		return &errtypes.ConfigError{Msg: "add: --count must be >= 1"}
@@ -103,7 +108,8 @@ func (r *Runner) AddWorkers(ctx context.Context, opts AddOptions) error {
 	}
 
 	startIdx := r.Cfg.Topology.Workers.Count
-	newNodeName := fmt.Sprintf("%s-worker%d", r.Cfg.Cluster.Name, startIdx)
+	endIdx := startIdx + opts.Count - 1
+	batchLabel := r.workerName(startIdx)
 
 	// A dry-run previews a fresh plan and mutates nothing, so resume is
 	// irrelevant: skip beginOp entirely so a stranded foreign marker previews
@@ -111,36 +117,39 @@ func (r *Runner) AddWorkers(ctx context.Context, opts AddOptions) error {
 	var marker *OpMarker
 	if !r.DryRun {
 		var err error
-		marker, err = r.beginOp(OpAdd, func(m *OpMarker) bool { return m.Target == newNodeName }, opts.Acknowledge)
+		marker, err = r.beginOp(OpAdd, addBatchMatch(startIdx, endIdx), opts.Acknowledge)
 		if err != nil {
 			return err
 		}
 	}
 	resuming := marker != nil
 
-	if err := r.preflightIgnitionArtifacts(); err != nil {
-		return err
-	}
+	plan := addPlan(r.Cfg.Cluster.Name, startIdx, opts.Count)
 
-	nodes, err := r.Cluster.ListNodes(ctx)
-	if err != nil {
-		return &errtypes.ClusterError{Msg: "list nodes", Err: err}
-	}
-	if err := validateWorkerCountMatchesCluster(nodes, startIdx); err != nil {
-		return &errtypes.ConfigError{Msg: err.Error()}
-	}
-
-	delta := r.Cfg.Topology.Workers.MemoryMB * opts.Count
-	if opts.HostTotalMiB > 0 {
-		if err := validateMemoryBudget(opts.HostTotalMiB, opts.HostAllocatedMiB, delta); err != nil {
+	// Guards assume a clean baseline; a resume has already moved past it, so
+	// run them only on a fresh op (mirrors RemoveWorker/Resize).
+	if !resuming {
+		if err := r.preflightIgnitionArtifacts(); err != nil {
+			return err
+		}
+		nodes, err := r.Cluster.ListNodes(ctx)
+		if err != nil {
+			return &errtypes.ClusterError{Msg: "list nodes", Err: err}
+		}
+		if err := validateWorkerCountMatchesCluster(nodes, startIdx); err != nil {
 			return &errtypes.ConfigError{Msg: err.Error()}
 		}
-	} else if delta > 0 {
-		r.Log.Warn("node: could not verify host memory budget (no proxmox probe); ensure the host has headroom before adding nodes",
-			"delta_mib_total", delta, "nodes", opts.Count)
-	}
 
-	plan := addPlan(r.Cfg.Cluster.Name, startIdx, opts.Count)
+		delta := r.Cfg.Topology.Workers.MemoryMB * opts.Count
+		if opts.HostTotalMiB > 0 {
+			if err := validateMemoryBudget(opts.HostTotalMiB, opts.HostAllocatedMiB, delta); err != nil {
+				return &errtypes.ConfigError{Msg: err.Error()}
+			}
+		} else if delta > 0 {
+			r.Log.Warn("node: could not verify host memory budget (no proxmox probe); ensure the host has headroom before adding nodes",
+				"delta_mib_total", delta, "nodes", opts.Count)
+		}
+	}
 
 	// A dry-run never persists, so every per-node plan gate previews against
 	// the same plan-time overrides widened to the batch's final worker count —
@@ -173,8 +182,174 @@ func (r *Runner) AddWorkers(ctx context.Context, opts AddOptions) error {
 		}
 	}
 
-	// Guards, plan, and confirm end here. The mutating sequence — per-node ISO
-	// build/upload, ignition-server revive with a deferred teardown, targeted
-	// create, CSR approval, and wait-join — is not implemented yet.
+	// One batch-scoped join window: revive the ignition server once, and defer
+	// its teardown NOW — before any VM exists — so it fires on success,
+	// failure, timeout, or panic and the window is never left open. Teardown is
+	// idempotent (stop+disable httpd, not uninstall) and does NOT rewrite the
+	// op marker, so a failed batch keeps its per-node resume position. The
+	// window spans the whole --count N batch: Apache stays up across every
+	// node's build/apply, which for N>1 is a deliberately widened window.
+	if err := markStep(r.marker(), OpAdd, batchLabel, StepIgnitionUp, r.RunID, r.Cfg.Cluster.Name); err != nil {
+		return err
+	}
+	defer r.Ignition.TeardownIgnitionServer(ctx)
+	if err := r.Ignition.ConfigureApache(ctx, r.Cfg, r.ProjectRoot); err != nil {
+		return &errtypes.ClusterError{Msg: "revive ignition server", Err: err}
+	}
+
+	for idx := startIdx; idx <= endIdx; idx++ {
+		if err := r.addOneWorker(ctx, idx, marker); err != nil {
+			return err
+		}
+	}
+
+	// Persist the widened topology only once the whole batch has joined — a
+	// crash mid-batch must leave config/tfvars at the pre-add count so a
+	// resumed run recomputes the same batch range (startIdx, endIdx) rather
+	// than shifting it forward. Mirrors Resize's after-the-loop persist. A
+	// re-created VM on resume is covered by targetedApply's alreadyAtTarget
+	// classification, so re-entering the apply after this persist is a no-op.
+	r.Cfg.Topology.Workers.Count = endIdx + 1
+	if err := r.persistTopology(); err != nil {
+		return &errtypes.ClusterError{Msg: "persist topology", Err: err}
+	}
+
+	if err := clearOpMarker(r.marker()); err != nil {
+		r.Log.Warn("node: op marker cleanup failed", "err", err)
+	}
+	r.Log.Info("node: workers added", "count", opts.Count, "from_index", startIdx)
+	r.Log.Info("node: if haproxy fronts this cluster, add a 'server' line for each new worker to the http-backend and https-backend sections of /etc/haproxy/haproxy.cfg, validate with 'haproxy -c -f /etc/haproxy/haproxy.cfg', then apply with 'systemctl restart haproxy'",
+		"count", opts.Count)
+	return nil
+}
+
+// addBatchMatch matches an add marker whose recorded worker index falls in the
+// batch's [startIdx, endIdx] range, so a resumed --count N batch reattaches to
+// a marker recorded against ANY node in the batch, not only its first — the
+// marker roams across the batch as each node is worked.
+func addBatchMatch(startIdx, endIdx int) OpMatch {
+	return func(m *OpMarker) bool {
+		i, ok := cluster.NodeIndex(m.Target)
+		return ok && i >= startIdx && i <= endIdx
+	}
+}
+
+func (r *Runner) workerName(idx int) string {
+	return fmt.Sprintf("%s-worker%d", r.Cfg.Cluster.Name, idx)
+}
+
+// addOneWorker builds and uploads the new worker's ISO, applies the plan-gated
+// exactly-one-create, and waits for the node to join. marker is the batch's
+// resume marker (nil on a fresh run): a node whose index precedes the marked
+// node already joined before the interruption and is skipped whole; the marked
+// node re-enters at its recorded step; a node past the marked one runs fresh.
+func (r *Runner) addOneWorker(ctx context.Context, idx int, marker *OpMarker) error {
+	name := r.workerName(idx)
+
+	resumeStep := Step("")
+	if marker != nil {
+		if marker.Target == name {
+			resumeStep = marker.Step
+		} else if mi, ok := cluster.NodeIndex(marker.Target); ok && mi > idx {
+			r.Log.Info("node: worker already joined before interruption — skipping", "node", name)
+			return nil
+		}
+		// mi < idx (or unparseable): not yet reached before the crash — run fresh.
+	}
+
+	// Absolute in-memory bump so BuildCustomISOs renders this node's ISO and
+	// the after-loop persist writes the batch's final count regardless of the
+	// resume point. In-memory only; the single disk write is the after-loop
+	// persistTopology, so a crash here strands nothing.
+	total := idx + 1
+	r.Cfg.Topology.Workers.Count = total
+	planVars := map[string]string{
+		"worker_count": strconv.Itoa(total),
+		"worker_isos":  setup.WorkerISOsPlanVar(r.Cfg.Provider.Proxmox.ISOStorage, total),
+	}
+	resuming := marker != nil
+
+	if shouldRunStep(StepBuildISO, resumeStep) {
+		if err := markStep(r.marker(), OpAdd, name, StepBuildISO, r.RunID, r.Cfg.Cluster.Name); err != nil {
+			return err
+		}
+		if err := r.ISO.BuildCustomISOs(ctx, r.Cfg, r.SetupOpts); err != nil {
+			return &errtypes.ClusterError{Msg: fmt.Sprintf("build iso for %s", name), Err: err}
+		}
+	}
+	if shouldRunStep(StepUploadISO, resumeStep) {
+		if err := markStep(r.marker(), OpAdd, name, StepUploadISO, r.RunID, r.Cfg.Cluster.Name); err != nil {
+			return err
+		}
+		if err := r.ISO.UploadCustomISOsToProxmox(ctx, r.Cfg, r.SetupOpts); err != nil {
+			return &errtypes.ClusterError{Msg: fmt.Sprintf("upload iso for %s", name), Err: err}
+		}
+	}
+	if shouldRunStep(StepTFApply, resumeStep) {
+		if err := markStep(r.marker(), OpAdd, name, StepTFApply, r.RunID, r.Cfg.Cluster.Name); err != nil {
+			return err
+		}
+		if err := r.targetedApply(ctx, workerAddress(idx), terraform.PlanActionCreate, planVars, resuming); err != nil {
+			return err
+		}
+	}
+	if shouldRunStep(StepWaitJoin, resumeStep) {
+		if err := markStep(r.marker(), OpAdd, name, StepWaitJoin, r.RunID, r.Cfg.Cluster.Name); err != nil {
+			return err
+		}
+		if err := r.waitWorkerJoined(ctx, name); err != nil {
+			return err
+		}
+	}
+	r.Log.Info("node: worker added", "node", name)
+	return nil
+}
+
+// waitWorkerJoined blocks until node registers and reports Ready or the gate
+// times out (NodeReadyTimeout). Each poll first approves any pending kubelet
+// CSRs — a joining node cannot register until its bootstrap CSR is approved —
+// then checks the node's readiness. The CSR-approval failure log is gated
+// log-once-then-debug so a transient hiccup does not flood the wait window
+// (mirrors install/monitor.go's poll loop).
+func (r *Runner) waitWorkerJoined(ctx context.Context, node string) error {
+	stop := r.startProgress(fmt.Sprintf("waiting for %s to join and become ready", node))
+	defer stop()
+
+	var lastApproveWarn, lastReason string
+	ok := func(ctx context.Context) bool {
+		if approved, aerr := r.Cluster.ApprovePendingCSRs(ctx); aerr != nil {
+			if msg := aerr.Error(); msg != lastApproveWarn {
+				r.Log.Warn("node: csr approval check failed", "err", aerr)
+				lastApproveWarn = msg
+			} else {
+				r.Log.Debug("node: csr approval check failed (repeated)", "err", aerr)
+			}
+		} else {
+			lastApproveWarn = ""
+			if approved > 0 {
+				r.Log.Info("node: approved pending csrs", "approved", approved)
+			}
+		}
+
+		nodes, err := r.Cluster.ListNodes(ctx)
+		if err != nil {
+			lastReason = "cluster api not reachable"
+			return false
+		}
+		for _, n := range nodes {
+			if n.Name == node {
+				if n.Ready {
+					return true
+				}
+				lastReason = "node registered but not yet ready"
+				return false
+			}
+		}
+		lastReason = "node not yet registered"
+		return false
+	}
+	if err := system.WaitForWithTimeout(ctx, "node", node+"-join", ok, r.NodeReadyTimeout, r.Log); err != nil {
+		return &errtypes.ClusterError{Msg: fmt.Sprintf("worker %s did not join and become Ready: %s", node, lastReason), Err: err}
+	}
 	return nil
 }

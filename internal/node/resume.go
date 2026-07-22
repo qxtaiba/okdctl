@@ -24,6 +24,11 @@ type OpMatch func(m *OpMarker) bool
 // subset; it is not a single shared timeline across ops. Node add's sequence
 // reuses StepTFApply's slot (2) for its worker_count apply, so its own steps
 // are numbered around that fixed point rather than renumbering it.
+//
+// StepIgnitionUp sorts BEFORE StepBuildISO: the ignition revive is a
+// batch-scoped step recorded against the batch's first node, so a resume that
+// reattaches to it (crash right after revive, before any per-node work) must
+// still re-run that node's build/upload/apply, not skip them.
 var stepOrder = map[Step]int{
 	StepCordon:     0,
 	StepDrain:      1,
@@ -32,9 +37,9 @@ var stepOrder = map[Step]int{
 	StepDeleteK8s:  4,
 	StepUncordon:   5,
 
+	StepIgnitionUp:   -4,
 	StepBuildISO:     -3,
 	StepUploadISO:    -2,
-	StepIgnitionUp:   -1,
 	StepWaitJoin:     6,
 	StepIgnitionDown: 7,
 }
