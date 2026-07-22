@@ -132,9 +132,9 @@ func (r *Runner) ListSnapshots(ctx context.Context, target string) ([]hostssh.Sn
 // quorum (pre-gate, real runs only: a dry-run must never block on a gate whose
 // purpose is to wait) and re-verifies health before returning the node to
 // service (post-gate). Any failure from cordonAndDrain onward leaves the node
-// cordoned; the returned error names the failing stage, and only a clean
-// post-gate reaches the final (best-effort) uncordon, which is also what
-// clears the OpSnapshot marker cordonAndDrain wrote.
+// cordoned and returns that failure as the op's result — including the final
+// uncordon, so the command never exits clean while the node is actually left
+// cordoned; only a fully clean run clears the OpSnapshot marker.
 func (r *Runner) RollbackSnapshot(ctx context.Context, target, snapname string) error {
 	if r.Proxmox == nil {
 		return &errtypes.ClusterError{Msg: "snapshot rollback needs Proxmox SSH access, but no Proxmox host is configured"}
@@ -186,8 +186,11 @@ func (r *Runner) RollbackSnapshot(ctx context.Context, target, snapname string) 
 		}
 	}
 
-	if err := r.Cluster.Uncordon(ctx, target); err != nil {
-		r.Log.Warn("node: uncordon after rollback failed", "node", target, "err", err)
+	if uerr := r.Cluster.Uncordon(ctx, target); uerr != nil {
+		return &errtypes.ClusterError{
+			Msg: fmt.Sprintf("uncordon %s after rollback to snapshot %s succeeded (node left cordoned; uncordon manually with 'oc adm uncordon %s')", target, snapname, target),
+			Err: uerr,
+		}
 	}
 
 	if err := clearOpMarker(r.marker()); err != nil {

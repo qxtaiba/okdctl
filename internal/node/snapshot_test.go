@@ -583,6 +583,44 @@ func TestRollbackSnapshot_successClearsOpMarker(t *testing.T) {
 	}
 }
 
+// TestRollbackSnapshot_finalUncordonFailureSurfacesAsError is FIX 3: a failed
+// final uncordon must surface as the op's result (matching CreateSnapshot's
+// promote-to-error behavior) rather than demote to a warning behind a nil
+// return — the command must never exit clean while the node is actually left
+// cordoned. The OpSnapshot marker must also survive, since the op did not
+// fully succeed.
+func TestRollbackSnapshot_finalUncordonFailureSurfacesAsError(t *testing.T) {
+	fc := &fakeCluster{
+		nodes:       []cluster.NodeDetail{{Name: "worker0", Role: nodetypes.RoleWorker, Ready: true}},
+		uncordonErr: errors.New("connection refused"),
+	}
+	fsc := &fakeSnapshotClient{}
+	cfg := config.DefaultConfig()
+	cfg.Provider.Proxmox.Node = testProxmoxNode
+
+	r := seedSnapshotRunner(t, fc, fsc, cfg)
+	r.DryRun = false
+
+	err := r.RollbackSnapshot(context.Background(), "worker0", testSnapshotName)
+	if err == nil {
+		t.Fatal("expected error when the final uncordon fails")
+	}
+	if !strings.Contains(err.Error(), "left cordoned") {
+		t.Errorf("err = %q; want it to name the cordoned state", err.Error())
+	}
+	if fc.uncordon != 1 {
+		t.Errorf("uncordon calls = %d; want 1 (attempted, even though it failed)", fc.uncordon)
+	}
+
+	marker, merr := ReadOpMarker(r.WorkDir, cfg.Cluster.Name)
+	if merr != nil {
+		t.Fatalf("ReadOpMarker: %v", merr)
+	}
+	if marker == nil || marker.Op != OpSnapshot {
+		t.Errorf("marker = %+v; want a persisted OpSnapshot marker (not cleared on final uncordon failure)", marker)
+	}
+}
+
 func TestRollbackSnapshot_requiresProxmox(t *testing.T) {
 	fc := &fakeCluster{nodes: []cluster.NodeDetail{{Name: "worker0", Role: nodetypes.RoleWorker, Ready: true}}}
 	r, _, _ := seedRunner(t, fc, &fakeTF{}, config.DefaultConfig())
