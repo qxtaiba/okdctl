@@ -12,6 +12,11 @@ destroys the last instance, so workers must be removed top-down. Guards refuse
 removal when the worker holds rook-ceph OSDs (data loss) or when router pods
 run on workers with a non-schedulable control plane (ingress outage).
 
+An interrupted removal records an op marker and resumes automatically on the
+next 'okdctl node remove' of the same worker, skipping already-completed
+steps. --acknowledge-interrupted-op overrides a marker left by a different op
+or node instead of refusing.
+
 ```
 okdctl node remove <name> [flags]
 ```
@@ -26,13 +31,14 @@ okdctl node remove <name> [flags]
 ### Options
 
 ```
-      --confirm-cluster string   required with --yes; must equal the config cluster name
-      --drain-timeout string     per-node drain timeout (default "10m")
-      --dry-run                  run guards and the plan gate without mutating anything
-      --force-storage            allow removal even when the worker holds rook-ceph OSDs (destroys their data disk)
-  -h, --help                     help for remove
-      --skip-drain               skip cordon/drain (assumes the node is already evacuated)
-  -y, --yes                      skip confirmation prompt
+      --acknowledge-interrupted-op   override a stranded marker left by a different op or node and proceed fresh
+      --confirm-cluster string       required with --yes; must equal the config cluster name
+      --drain-timeout string         per-node drain timeout (default "10m")
+      --dry-run                      run guards and the plan gate without mutating anything
+      --force-storage                allow removal even when the worker holds rook-ceph OSDs (destroys their data disk)
+  -h, --help                         help for remove
+      --skip-drain                   skip cordon/drain (assumes the node is already evacuated)
+  -y, --yes                          skip confirmation prompt
 ```
 
 ### Options inherited from parent commands

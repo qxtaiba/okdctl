@@ -10,12 +10,13 @@ import (
 )
 
 var (
-	compactYes            bool
-	compactConfirmCluster string
-	compactDryRun         bool
-	compactForceStorage   bool
-	compactIngressReplica int
-	compactGrowMasterMB   int
+	compactYes                    bool
+	compactConfirmCluster         string
+	compactDryRun                 bool
+	compactForceStorage           bool
+	compactIngressReplica         int
+	compactGrowMasterMB           int
+	compactAcknowledgeInterrupted bool
 
 	stopYes            bool
 	stopConfirmCluster string
@@ -40,7 +41,13 @@ then remove workers top-down — optionally growing masters interleaved so a
 freed worker always precedes a grown master (memory-budget ordering).
 
 This is a thin orchestrator over 'node remove' and 'node resize'; it adds no
-new mutation mechanics and inherits their guards (storage, ingress, etcd).`,
+new mutation mechanics and inherits their guards (storage, ingress, etcd).
+
+An interrupted compaction resumes automatically: each inner worker removal or
+master resize carries its own op marker, so re-running 'okdctl cluster compact'
+picks up at the node/step that was in flight.
+--acknowledge-interrupted-op overrides a marker left by an unrelated op
+instead of refusing.`,
 	Example: `  okdctl cluster compact --yes --confirm-cluster grappleberry
   okdctl cluster compact --grow-master-memory-mb 24576 --dry-run`,
 	RunE: runClusterCompact,
@@ -84,6 +91,7 @@ func init() {
 	clusterCompactCmd.Flags().BoolVar(&compactForceStorage, "force-storage", false, "allow worker removal even when workers hold rook-ceph OSDs")
 	clusterCompactCmd.Flags().IntVar(&compactIngressReplica, "ingress-replicas", 2, "compact IngressController replica count")
 	clusterCompactCmd.Flags().IntVar(&compactGrowMasterMB, "grow-master-memory-mb", 0, "resize each master to this memory (MiB) as workers are removed (0 leaves masters unchanged)")
+	clusterCompactCmd.Flags().BoolVar(&compactAcknowledgeInterrupted, "acknowledge-interrupted-op", false, "override a stranded marker left by an unrelated op and proceed fresh")
 
 	clusterStopCmd.Flags().BoolVarP(&stopYes, "yes", "y", false, "skip confirmation prompt")
 	clusterStopCmd.Flags().StringVar(&stopConfirmCluster, "confirm-cluster", "", "required with --yes; must equal the config cluster name")
@@ -123,6 +131,7 @@ func runClusterCompact(cmd *cobra.Command, _ []string) error {
 		ForceStorage:       compactForceStorage,
 		HostTotalMiB:       rc.HostTotalMiB,
 		HostAllocatedMiB:   rc.HostAllocatedMiB,
+		Acknowledge:        compactAcknowledgeInterrupted,
 	}); err != nil {
 		if errors.Is(err, node.ErrDeclined) {
 			return nil

@@ -28,14 +28,15 @@ import (
 )
 
 var (
-	nodeYes            bool
-	nodeConfirmCluster string
-	nodeDryRun         bool
-	nodeForceStorage   bool
-	nodeSkipDrain      bool
-	nodeDrainTimeout   string
-	nodeResizeMemoryMB int
-	nodeResizeCPU      int
+	nodeYes                    bool
+	nodeConfirmCluster         string
+	nodeDryRun                 bool
+	nodeForceStorage           bool
+	nodeSkipDrain              bool
+	nodeDrainTimeout           string
+	nodeResizeMemoryMB         int
+	nodeResizeCPU              int
+	nodeAcknowledgeInterrupted bool
 )
 
 var nodeCmd = &cobra.Command{
@@ -56,7 +57,12 @@ terraform apply, then delete its Kubernetes Node object.
 Only the highest-numbered worker is removable: terraform count reduction
 destroys the last instance, so workers must be removed top-down. Guards refuse
 removal when the worker holds rook-ceph OSDs (data loss) or when router pods
-run on workers with a non-schedulable control plane (ingress outage).`,
+run on workers with a non-schedulable control plane (ingress outage).
+
+An interrupted removal records an op marker and resumes automatically on the
+next 'okdctl node remove' of the same worker, skipping already-completed
+steps. --acknowledge-interrupted-op overrides a marker left by a different op
+or node instead of refusing.`,
 	Example: `  okdctl node remove worker2 --yes --confirm-cluster grappleberry
   okdctl node remove worker2 --dry-run`,
 	Args: cobra.ExactArgs(1),
@@ -77,7 +83,12 @@ pick up the pending change on the next full deploy. Run 'okdctl plan' after a
 resize to see exactly which same-role siblings still have the change pending.
 
 At least one of --memory-mb or --cpu is required; an omitted dimension keeps
-the role's current value.`,
+the role's current value.
+
+An interrupted role roll records an op marker and resumes automatically on the
+next 'okdctl node resize' of the same role or node, skipping already-completed
+nodes and steps. --acknowledge-interrupted-op overrides a marker left by a
+different op or node instead of refusing.`,
 	Example: `  okdctl node resize masters --memory-mb 24576 --yes --confirm-cluster grappleberry
   okdctl node resize workers --memory-mb 16384 --dry-run
   okdctl node resize workers --cpu 8 --yes --confirm-cluster grappleberry`,
@@ -103,12 +114,14 @@ func init() {
 	nodeRemoveCmd.Flags().BoolVar(&nodeForceStorage, "force-storage", false, "allow removal even when the worker holds rook-ceph OSDs (destroys their data disk)")
 	nodeRemoveCmd.Flags().BoolVar(&nodeSkipDrain, "skip-drain", false, "skip cordon/drain (assumes the node is already evacuated)")
 	nodeRemoveCmd.Flags().StringVar(&nodeDrainTimeout, "drain-timeout", "10m", "per-node drain timeout")
+	nodeRemoveCmd.Flags().BoolVar(&nodeAcknowledgeInterrupted, "acknowledge-interrupted-op", false, "override a stranded marker left by a different op or node and proceed fresh")
 
 	nodeResizeCmd.Flags().BoolVarP(&nodeYes, "yes", "y", false, "skip confirmation prompt")
 	nodeResizeCmd.Flags().StringVar(&nodeConfirmCluster, "confirm-cluster", "", "required with --yes; must equal the config cluster name")
 	nodeResizeCmd.Flags().BoolVar(&nodeDryRun, flagDryRun, false, "run gates and the plan gate without mutating anything")
 	nodeResizeCmd.Flags().IntVar(&nodeResizeMemoryMB, "memory-mb", 0, "new per-node memory in MiB (0 keeps current)")
 	nodeResizeCmd.Flags().IntVar(&nodeResizeCPU, "cpu", 0, "new per-node cpu cores (0 keeps current)")
+	nodeResizeCmd.Flags().BoolVar(&nodeAcknowledgeInterrupted, "acknowledge-interrupted-op", false, "override a stranded marker left by a different op or node and proceed fresh")
 
 	nodeAddCmd.Flags().String("role", "worker", "node role to add")
 
@@ -385,6 +398,7 @@ func runNodeRemove(cmd *cobra.Command, args []string) error {
 		ForceStorage: nodeForceStorage,
 		SkipDrain:    nodeSkipDrain,
 		DrainTimeout: nodeDrainTimeout,
+		Acknowledge:  nodeAcknowledgeInterrupted,
 	}); err != nil {
 		if errors.Is(err, node.ErrDeclined) {
 			return nil
@@ -425,6 +439,7 @@ func runNodeResize(cmd *cobra.Command, args []string) error {
 		CPU:              nodeResizeCPU,
 		HostTotalMiB:     rc.HostTotalMiB,
 		HostAllocatedMiB: rc.HostAllocatedMiB,
+		Acknowledge:      nodeAcknowledgeInterrupted,
 	}); err != nil {
 		if errors.Is(err, node.ErrDeclined) {
 			return nil
