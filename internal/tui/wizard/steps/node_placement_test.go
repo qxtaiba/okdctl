@@ -1,10 +1,57 @@
 package steps
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/qxtaiba/okdctl/internal/config"
 )
+
+func TestNodePlacementApplyWritesFieldsInIndexOrder(t *testing.T) {
+	nodeNames := []string{"pve1", "pve2", "pve3"}
+	cfg := &config.Config{
+		Provider: config.ProviderConfig{
+			Type:    config.ProviderProxmox,
+			Proxmox: &config.ProxmoxConfig{},
+		},
+	}
+	cfg.Topology.ControlPlane.Count = 3
+	cfg.Topology.Workers.Count = 2
+
+	s := NewNodePlacementStep()
+	s.cfg = cfg
+	s.buildInnerStep(nil, nodeNames)
+
+	if len(s.controlPlaneFields) != 3 || len(s.workerFields) != 2 {
+		t.Fatalf("built %d control-plane / %d worker fields, want 3/2",
+			len(s.controlPlaneFields), len(s.workerFields))
+	}
+
+	// Deliberately non-identity assignment: a reorder bug in Apply would not
+	// survive these permuted picks.
+	wantControlPlane := []string{"pve3", "pve1", "pve2"}
+	wantWorkers := []string{"pve2", "pve3"}
+	for i, v := range wantControlPlane {
+		s.controlPlaneFields[i].SetValue(v)
+	}
+	for i, v := range wantWorkers {
+		s.workerFields[i].SetValue(v)
+	}
+
+	if err := s.Apply(cfg); err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+
+	if got := cfg.Provider.Proxmox.ControlPlaneNodes; !slices.Equal(got, wantControlPlane) {
+		t.Errorf("ControlPlaneNodes = %v, want %v", got, wantControlPlane)
+	}
+	if got := cfg.Provider.Proxmox.WorkerNodes; !slices.Equal(got, wantWorkers) {
+		t.Errorf("WorkerNodes = %v, want %v", got, wantWorkers)
+	}
+	if got := cfg.Provider.Proxmox.Node; got != "pve1" {
+		t.Errorf("bootstrap Node = %q, want pve1 (default)", got)
+	}
+}
 
 func TestParseAdditionalNetworks(t *testing.T) {
 	if got := parseAdditionalNetworks("", nil); got != nil {
