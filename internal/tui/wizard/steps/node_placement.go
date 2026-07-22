@@ -11,6 +11,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/tui"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
+	"github.com/qxtaiba/okdctl/internal/tui/wizard/components"
 )
 
 type placementPhase int
@@ -20,9 +21,7 @@ const (
 	phasePlacing
 )
 
-// Field-key prefixes for per-node form fields. The constructor and the
-// Apply function must agree on these — drift here silently breaks
-// per-node placement read-back from the wizard step.
+// Label suffixes for per-node form fields (e.g. "cluster-master0").
 const (
 	fieldPrefixMaster = "master"
 	fieldPrefixWorker = "worker"
@@ -36,7 +35,7 @@ type discoveryCompleteMsg struct {
 // NodePlacementStep discovers Proxmox infrastructure and presents
 // selectable dropdowns for bridge, storage, and per-VM node assignment.
 // It uses a two-phase approach: spinner during discovery, then a
-// dynamically-built DataDrivenStep for the selection UI.
+// dynamically-built MultiSectionForm for the selection UI.
 type NodePlacementStep struct {
 	wizard.BaseStep
 
@@ -47,8 +46,21 @@ type NodePlacementStep struct {
 	discovery      *proxmoxDiscovery
 	discoveryErr   error
 
-	// The inner form step, built dynamically after discovery
-	inner *wizard.DataDrivenStep
+	// inner is the multi-section form built after discovery. The typed field
+	// pointers below alias fields inside it so Apply reads them back directly,
+	// in index order, without key-string round-trips. A pointer is nil when
+	// discovery did not surface that field.
+	inner *wizard.MultiSectionForm
+
+	bridgeField        *components.SelectField
+	additionalNetworks *components.MultiSelectField
+	osStorageField     *components.SelectField
+	dataStorageField   *components.SelectField
+	isoStorageField    *components.SelectField
+	fcosField          *components.SelectField
+	bootstrapField     *components.SelectField
+	controlPlaneFields []*components.SelectField
+	workerFields       []*components.SelectField
 }
 
 // NewNodePlacementStep constructs the node placement wizard step.
@@ -92,8 +104,9 @@ func (s *NodePlacementStep) fetchDiscovery() tea.Msg {
 	return discoveryCompleteMsg{discovery: disc, err: err}
 }
 
-// buildInnerStep creates a DataDrivenStep with SelectField dropdowns
-// populated from discovery results.
+// buildInnerStep builds the MultiSectionForm of SelectField/MultiSelectField
+// dropdowns from discovery results, retaining typed field pointers so Apply
+// can read them back directly.
 func (s *NodePlacementStep) buildInnerStep(disc *proxmoxDiscovery, nodeNames []string) {
 	px := s.cfg.Provider.Proxmox
 	clusterName := s.cfg.Cluster.Name
@@ -101,99 +114,112 @@ func (s *NodePlacementStep) buildInnerStep(disc *proxmoxDiscovery, nodeNames []s
 		clusterName = "cluster"
 	}
 
-	var sections []wizard.SectionDefinition
+	var sections []wizard.FormSection
 
 	if disc != nil {
-		var infraFields []wizard.FieldDefinition
+		var infraFields []components.FormField
 
 		if bridges := bridgeNames(disc.Bridges); len(bridges) > 0 {
-			infraFields = append(infraFields,
-				wizard.FieldDefinition{
-					Key: fieldBridge, Label: fieldBridge, Default: firstMatch(bridges, px.Bridge, "vmbr0"),
-					Help: "network bridge for vms", Type: wizard.FieldTypeSelect, Options: bridges,
-					ConfigSet: func(cfg *config.Config, v string) error { cfg.Provider.Proxmox.Bridge = v; return nil },
-					ConfigGet: func(cfg *config.Config) string { return cfg.Provider.Proxmox.Bridge },
-				},
-				additionalNetworksField(bridges, px.AdditionalNetworks),
-			)
+			s.bridgeField = newSelectField(fieldBridge, "network bridge for vms",
+				bridges, firstMatch(bridges, px.Bridge, "vmbr0"), px.Bridge)
+			s.additionalNetworks = components.NewMultiSelectField("additional networks", bridges)
+			s.additionalNetworks.Help = "extra bridges to attach to all vms — leave empty for none"
+			s.additionalNetworks.SetValue(additionalNetworksBridges(px.AdditionalNetworks))
+			infraFields = append(infraFields, s.bridgeField, s.additionalNetworks)
 		}
 		if pools := filterStorageByContent(disc.Storage, "images"); len(pools) > 0 {
-			infraFields = append(infraFields,
-				wizard.FieldDefinition{
-					Key: "os_storage", Label: "os storage", Default: firstMatch(pools, px.Storage, "local-lvm"),
-					Help: "storage pool for vm boot disks", Type: wizard.FieldTypeSelect, Options: pools,
-					ConfigSet: func(cfg *config.Config, v string) error { cfg.Provider.Proxmox.Storage = v; return nil },
-					ConfigGet: func(cfg *config.Config) string { return cfg.Provider.Proxmox.Storage },
-				},
-				wizard.FieldDefinition{
-					Key: "data_storage", Label: fieldDataStorage, Default: firstMatch(pools, px.DataStorage, "local-lvm"),
-					Help: "storage pool for data/ceph disks", Type: wizard.FieldTypeSelect, Options: pools,
-					ConfigSet: func(cfg *config.Config, v string) error { cfg.Provider.Proxmox.DataStorage = v; return nil },
-					ConfigGet: func(cfg *config.Config) string { return cfg.Provider.Proxmox.DataStorage },
-				},
-			)
+			s.osStorageField = newSelectField("os storage", "storage pool for vm boot disks",
+				pools, firstMatch(pools, px.Storage, "local-lvm"), px.Storage)
+			s.dataStorageField = newSelectField(fieldDataStorage, "storage pool for data/ceph disks",
+				pools, firstMatch(pools, px.DataStorage, "local-lvm"), px.DataStorage)
+			infraFields = append(infraFields, s.osStorageField, s.dataStorageField)
 		}
 		if pools := filterStorageByContent(disc.Storage, "iso"); len(pools) > 0 {
-			infraFields = append(infraFields, wizard.FieldDefinition{
-				Key: "iso_storage", Label: "iso storage", Default: firstMatch(pools, px.ISOStorage, "local"),
-				Help: "storage for iso files", Type: wizard.FieldTypeSelect, Options: pools,
-				ConfigSet: func(cfg *config.Config, v string) error { cfg.Provider.Proxmox.ISOStorage = v; return nil },
-				ConfigGet: func(cfg *config.Config) string { return cfg.Provider.Proxmox.ISOStorage },
-			})
+			s.isoStorageField = newSelectField("iso storage", "storage for iso files",
+				pools, firstMatch(pools, px.ISOStorage, "local"), px.ISOStorage)
+			infraFields = append(infraFields, s.isoStorageField)
 		}
 		if len(disc.ISOs) > 0 {
-			infraFields = append(infraFields, fcosISOField(disc.ISOs, px.FCOSIso))
+			isoOptions := append([]string{""}, disc.ISOs...)
+			s.fcosField = newSelectField("fcos iso",
+				"pre-uploaded coreos iso — blank to let okdctl download and upload it",
+				isoOptions, firstMatch(disc.ISOs, px.FCOSIso, ""), px.FCOSIso)
+			infraFields = append(infraFields, s.fcosField)
 		}
 
 		if len(infraFields) > 0 {
-			sections = append(sections, wizard.SectionDefinition{Title: "infrastructure", Fields: infraFields})
+			sections = append(sections, wizard.FormSection{
+				Title: "infrastructure",
+				Group: components.NewInputGroup(infraFields...),
+			})
 		}
 	}
 
 	defaultNode := nodeNames[0]
 
-	sections = append(sections, wizard.SectionDefinition{
+	s.bootstrapField = newSelectField(clusterName+"-bootstrap", "proxmox node for bootstrap vm",
+		nodeNames, defaultNode, px.Node)
+	sections = append(sections, wizard.FormSection{
 		Title: "bootstrap",
-		Fields: []wizard.FieldDefinition{{
-			Key: "bootstrap_node", Label: clusterName + "-bootstrap", Default: defaultNode,
-			Help: "proxmox node for bootstrap vm", Type: wizard.FieldTypeSelect, Options: nodeNames,
-			ConfigSet: func(cfg *config.Config, v string) error { cfg.Provider.Proxmox.Node = v; return nil },
-			ConfigGet: func(cfg *config.Config) string { return cfg.Provider.Proxmox.Node },
-		}},
+		Group: components.NewInputGroup(s.bootstrapField),
 	})
 
-	cpCount := s.cfg.Topology.ControlPlane.Count
-	if cpCount > 0 {
-		sections = append(sections, nodePlacementSection("control plane", fieldPrefixMaster, clusterName, cpCount, px.ControlPlaneNodes, defaultNode, nodeNames))
+	if cpCount := s.cfg.Topology.ControlPlane.Count; cpCount > 0 {
+		s.controlPlaneFields = nodeSelectFields(fieldPrefixMaster, clusterName, cpCount, px.ControlPlaneNodes, defaultNode, nodeNames)
+		sections = append(sections, wizard.FormSection{
+			Title: "control plane",
+			Group: selectFieldGroup(s.controlPlaneFields),
+		})
 	}
 
-	wCount := s.cfg.Topology.Workers.Count
-	if wCount > 0 {
-		sections = append(sections, nodePlacementSection("workers", fieldPrefixWorker, clusterName, wCount, px.WorkerNodes, defaultNode, nodeNames))
+	if wCount := s.cfg.Topology.Workers.Count; wCount > 0 {
+		s.workerFields = nodeSelectFields(fieldPrefixWorker, clusterName, wCount, px.WorkerNodes, defaultNode, nodeNames)
+		sections = append(sections, wizard.FormSection{
+			Title: "workers",
+			Group: selectFieldGroup(s.workerFields),
+		})
 	}
 
-	def := wizard.StepDefinition{
-		ID:           wizard.StepIDNodePlacement,
-		Title:        "proxmox infrastructure",
-		DisplayTitle: "configure proxmox infrastructure",
-		Description:  "auto-discovered from your proxmox cluster",
-		Sections:     sections,
-		Apply: func(step *wizard.DataDrivenStep, cfg *config.Config) error {
-			var controlPlaneNodes, workerNodes []string
-			for i := range cpCount {
-				controlPlaneNodes = append(controlPlaneNodes, step.Value(fmt.Sprintf("%s_%d", fieldPrefixMaster, i)))
-			}
-			for i := range wCount {
-				workerNodes = append(workerNodes, step.Value(fmt.Sprintf("%s_%d", fieldPrefixWorker, i)))
-			}
-			cfg.Provider.Proxmox.ControlPlaneNodes = controlPlaneNodes
-			cfg.Provider.Proxmox.WorkerNodes = workerNodes
-			return nil
-		},
-	}
+	s.inner = wizard.NewMultiSectionForm(sections)
+}
 
-	s.inner = wizard.NewDataDrivenStep(&def)
-	s.inner.LoadFromConfig(s.cfg)
+// newSelectField builds a select dropdown, applying def as the starting
+// default and then overlaying current — matching the DataDrivenStep
+// buildFormField+LoadFromConfig sequence: SetValue("") is a no-op unless ""
+// is itself an option (the fcos "blank" case), so an empty current preserves
+// the default for ordinary fields.
+func newSelectField(label, help string, options []string, def, current string) *components.SelectField {
+	sf := components.NewSelectField(label, options)
+	sf.Help = help
+	sf.SetDefault(def)
+	sf.SetValue(current)
+	return sf
+}
+
+// nodeSelectFields builds per-node proxmox-node dropdowns for a role, seeding
+// each with the matching existing assignment when present. These fields carry
+// no config-load overlay, so the default alone determines the initial value.
+func nodeSelectFields(fieldPrefix, clusterName string, count int, existing []string, defaultNode string, allNodes []string) []*components.SelectField {
+	fields := make([]*components.SelectField, 0, count)
+	for i := range count {
+		target := defaultNode
+		if i < len(existing) && existing[i] != "" {
+			target = existing[i]
+		}
+		sf := components.NewSelectField(fmt.Sprintf("%s-%s%d", clusterName, fieldPrefix, i), allNodes)
+		sf.Help = "proxmox node"
+		sf.SetDefault(target)
+		fields = append(fields, sf)
+	}
+	return fields
+}
+
+func selectFieldGroup(fields []*components.SelectField) *components.InputGroup {
+	ff := make([]components.FormField, len(fields))
+	for i, f := range fields {
+		ff[i] = f
+	}
+	return components.NewInputGroup(ff...)
 }
 
 // Update handles discovery results, spinner ticks, and forwards other
@@ -230,10 +256,17 @@ func (s *NodePlacementStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 		}
 	}
 
-	// Delegate to inner step once built
 	if s.phase == phasePlacing && s.inner != nil {
-		_, cmd := s.inner.Update(msg)
-		return s, cmd
+		cmd, enterPressed := s.inner.Update(msg)
+		if !enterPressed {
+			return s, cmd
+		}
+		if err := s.inner.Validate(); err != nil {
+			return s, nil
+		}
+		return s, func() tea.Msg {
+			return wizard.StepCompleteMsg{StepID: s.ID()}
+		}
 	}
 
 	return s, nil
@@ -259,15 +292,56 @@ func (s *NodePlacementStep) View(width, height int) string {
 	}
 
 	if s.inner != nil {
-		return header + s.inner.View(width, height)
+		return header + s.inner.View(width)
 	}
 	return header
 }
 
-// Apply delegates to the inner form's Apply when one has been built.
+// Apply writes each retained field's value into cfg. Per-node dropdowns are
+// read in index order, so controlPlaneFields[i]/workerFields[i] map to
+// ControlPlaneNodes[i]/WorkerNodes[i] — the ordering is the correctness
+// contract for VM-to-node assignment.
 func (s *NodePlacementStep) Apply(cfg *config.Config) error {
-	if s.inner != nil {
-		return s.inner.Apply(cfg)
+	if s.inner == nil || cfg.Provider.Proxmox == nil {
+		return nil
+	}
+	px := cfg.Provider.Proxmox
+
+	if s.bridgeField != nil {
+		px.Bridge = s.bridgeField.Value()
+	}
+	if s.additionalNetworks != nil {
+		px.AdditionalNetworks = parseAdditionalNetworks(s.additionalNetworks.Value(), px.AdditionalNetworks)
+	}
+	if s.osStorageField != nil {
+		px.Storage = s.osStorageField.Value()
+	}
+	if s.dataStorageField != nil {
+		px.DataStorage = s.dataStorageField.Value()
+	}
+	if s.isoStorageField != nil {
+		px.ISOStorage = s.isoStorageField.Value()
+	}
+	if s.fcosField != nil {
+		px.FCOSIso = s.fcosField.Value()
+	}
+	if s.bootstrapField != nil {
+		px.Node = s.bootstrapField.Value()
+	}
+
+	if len(s.controlPlaneFields) > 0 {
+		nodes := make([]string, len(s.controlPlaneFields))
+		for i, f := range s.controlPlaneFields {
+			nodes[i] = f.Value()
+		}
+		px.ControlPlaneNodes = nodes
+	}
+	if len(s.workerFields) > 0 {
+		nodes := make([]string, len(s.workerFields))
+		for i, f := range s.workerFields {
+			nodes[i] = f.Value()
+		}
+		px.WorkerNodes = nodes
 	}
 	return nil
 }
@@ -275,9 +349,14 @@ func (s *NodePlacementStep) Apply(cfg *config.Config) error {
 // SetFocused propagates focus to the inner form.
 func (s *NodePlacementStep) SetFocused(focused bool) {
 	s.BaseStep.SetFocused(focused)
-	if s.inner != nil {
-		s.inner.SetFocused(focused)
+	if s.inner == nil {
+		return
 	}
+	if focused {
+		_ = s.inner.Focus() // Command executed during Init()
+		return
+	}
+	s.inner.Blur()
 }
 
 // ShortHelp returns the step's help bar or nil while discovering.
@@ -293,66 +372,12 @@ func (s *NodePlacementStep) ShortHelp() []wizard.KeyBinding {
 	}
 }
 
-// nodePlacementSection builds a SectionDefinition of proxmox-node select
-// fields for a role (bootstrap, master, worker). fieldPrefix is used for
-// both the field key (e.g. "master_0") and the label suffix.
-func nodePlacementSection(title, fieldPrefix, clusterName string, count int, existing []string, defaultNode string, allNodes []string) wizard.SectionDefinition {
-	fields := make([]wizard.FieldDefinition, 0, count)
-	for i := range count {
-		target := defaultNode
-		if i < len(existing) && existing[i] != "" {
-			target = existing[i]
-		}
-		fields = append(fields, wizard.FieldDefinition{
-			Key:     fmt.Sprintf("%s_%d", fieldPrefix, i),
-			Label:   fmt.Sprintf("%s-%s%d", clusterName, fieldPrefix, i),
-			Default: target, Help: "proxmox node",
-			Type: wizard.FieldTypeSelect, Options: allNodes,
-		})
-	}
-	return wizard.SectionDefinition{Title: title, Fields: fields}
-}
-
 func bridgeNames(bridges []proxmoxBridge) []string {
 	names := make([]string, len(bridges))
 	for i, b := range bridges {
 		names[i] = b.Name
 	}
 	return names
-}
-
-func additionalNetworksField(bridges []string, current []config.AdditionalNetwork) wizard.FieldDefinition {
-	return wizard.FieldDefinition{
-		Key:     "additional_networks",
-		Label:   "additional networks",
-		Default: additionalNetworksBridges(current),
-		Help:    "extra bridges to attach to all vms — leave empty for none",
-		Type:    wizard.FieldTypeMultiSelect,
-		Options: bridges,
-		ConfigSet: func(cfg *config.Config, v string) error {
-			cfg.Provider.Proxmox.AdditionalNetworks = parseAdditionalNetworks(v, cfg.Provider.Proxmox.AdditionalNetworks)
-			return nil
-		},
-		ConfigGet: func(cfg *config.Config) string {
-			return additionalNetworksBridges(cfg.Provider.Proxmox.AdditionalNetworks)
-		},
-	}
-}
-
-func fcosISOField(isos []string, current string) wizard.FieldDefinition {
-	return wizard.FieldDefinition{
-		Key:     "fcos_iso",
-		Label:   "fcos iso",
-		Default: firstMatch(isos, current, ""),
-		Help:    "pre-uploaded coreos iso — blank to let okdctl download and upload it",
-		Type:    wizard.FieldTypeSelect,
-		Options: append([]string{""}, isos...),
-		ConfigSet: func(cfg *config.Config, v string) error {
-			cfg.Provider.Proxmox.FCOSIso = v
-			return nil
-		},
-		ConfigGet: func(cfg *config.Config) string { return cfg.Provider.Proxmox.FCOSIso },
-	}
 }
 
 // additionalNetworksBridges serialises []AdditionalNetwork to a comma-
