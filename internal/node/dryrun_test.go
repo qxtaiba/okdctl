@@ -32,6 +32,7 @@ type fakeCluster struct {
 	cordon         int
 	drain          int
 	uncordon       int
+	uncordonErr    error
 	deleteNode     int
 	setSched       int
 	applied        int
@@ -109,7 +110,7 @@ func (f *fakeCluster) Uncordon(_ context.Context, node string) error {
 	f.uncordon++
 	f.uncordonedNodes = append(f.uncordonedNodes, node)
 	f.record("uncordon")
-	return nil
+	return f.uncordonErr
 }
 
 func (f *fakeCluster) Drain(_ context.Context, node string, _ cluster.DrainOptions) error {
