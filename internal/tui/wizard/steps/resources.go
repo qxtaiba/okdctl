@@ -28,7 +28,7 @@ var ResourcesStepDefinition = wizard.StepDefinition{
 	Description:  "configure cpu, memory, and storage for nodes",
 	Sections: []wizard.SectionDefinition{
 		{
-			Title: "control plane",
+			Title: roleLabelControlPlane,
 			Fields: []wizard.FieldDefinition{
 				{
 					Key:       "cp_vcpus",
@@ -66,7 +66,7 @@ var ResourcesStepDefinition = wizard.StepDefinition{
 			},
 		},
 		{
-			Title: "workers",
+			Title: roleLabelWorkers,
 			Fields: []wizard.FieldDefinition{
 				{
 					Key:       "worker_vcpus",

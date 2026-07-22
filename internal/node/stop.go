@@ -43,7 +43,7 @@ func (r *Runner) Stop(ctx context.Context, opts StopOptions) error {
 
 	nodes, err := r.Cluster.ListNodes(ctx)
 	if err != nil {
-		return &errtypes.ClusterError{Msg: "list nodes", Err: err}
+		return &errtypes.ClusterError{Msg: msgListNodes, Err: err}
 	}
 	workers := namesByIndex(nodes, nodetypes.RoleWorker, true, r.Log)
 	masters := mastersByIndexAsc(nodes, r.Log)

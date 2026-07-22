@@ -295,7 +295,7 @@ func (s *ReviewStep) renderCompute(st *sectionStyles) string {
 	cpCount := s.cfg.Topology.ControlPlane.Count
 
 	cpSpec := fmt.Sprintf("%d × (%d vcpu, %d GB RAM, %d GB os disk)", cpCount, cpCPU, cpMem, cpDisk)
-	b.WriteString(st.kvPair("control plane", cpSpec))
+	b.WriteString(st.kvPair(roleLabelControlPlane, cpSpec))
 	b.WriteString("\n")
 
 	if s.cfg.Topology.Workers.Count > 0 {
@@ -305,7 +305,7 @@ func (s *ReviewStep) renderCompute(st *sectionStyles) string {
 		wCount := s.cfg.Topology.Workers.Count
 
 		wSpec := fmt.Sprintf("%d × (%d vcpu, %d GB RAM, %d GB os disk)", wCount, wCPU, wMem, wDisk)
-		b.WriteString(st.kvPair("workers", wSpec))
+		b.WriteString(st.kvPair(roleLabelWorkers, wSpec))
 		b.WriteString("\n")
 
 		if s.cfg.Disks.WorkerDataSizeGB > 0 {

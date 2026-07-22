@@ -32,7 +32,7 @@ var addonCmd = &cobra.Command{
 }
 
 var addonListCmd = &cobra.Command{
-	Use:   "list",
+	Use:   cmdNameList,
 	Short: "List registered addons and their config state",
 	Long: `List all registered addons with their display name, dependencies, and
 whether they are enabled in the configuration file.

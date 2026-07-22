@@ -433,7 +433,7 @@ func (r *Runner) vmTarget(role nodetypes.NodeRole, index int) (node string, vmid
 func (r *Runner) resolveVMID(ctx context.Context, target string) (vmid int, role nodetypes.NodeRole, ready bool, err error) {
 	nodes, err := r.Cluster.ListNodes(ctx)
 	if err != nil {
-		return 0, "", false, &errtypes.ClusterError{Msg: "list nodes", Err: err}
+		return 0, "", false, &errtypes.ClusterError{Msg: msgListNodes, Err: err}
 	}
 	for _, n := range nodes {
 		if n.Name != target {

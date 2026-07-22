@@ -37,6 +37,7 @@ const (
 	cmdNameDeploy  = "deploy"
 	cmdNameDestroy = "destroy"
 	cmdNameCleanup = "cleanup"
+	cmdNameList    = "list"
 )
 
 // annotationKeyRequiresRoot tags cobra commands whose body must run as

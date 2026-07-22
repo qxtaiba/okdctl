@@ -24,6 +24,10 @@ import (
 // virt and vector extensions (AVX2, AES-NI) required by OKD nodes work.
 const DefaultProxmoxCPUType = "host"
 
+// msgProxmoxProviderRequired is the ConfigError context raised when a
+// Proxmox-targeted step runs without provider credentials configured.
+const msgProxmoxProviderRequired = "proxmox provider configuration required"
+
 func buildQuotedRoleList(format, prefix string, role nodetypes.NodeRole, count int) []string {
 	result := make([]string, count)
 	for i := range count {
@@ -171,7 +175,7 @@ func (p *Phase) GenerateTerraformVars(ctx context.Context, cfg *config.Config, o
 		return err
 	}
 	if cfg.Provider.Proxmox == nil {
-		return &errtypes.ConfigError{Msg: "proxmox provider configuration required"}
+		return &errtypes.ConfigError{Msg: msgProxmoxProviderRequired}
 	}
 
 	envDir := filepath.Join(opts.ProjectRoot, "infrastructure", "terraform", "environments", phase.GetTerraformEnv(cfg))
@@ -190,7 +194,7 @@ func (p *Phase) GenerateTerraformVars(ctx context.Context, cfg *config.Config, o
 // concrete environment directory (…/environments/<env>).
 func WriteTerraformVars(cfg *config.Config, envDir string) error {
 	if cfg.Provider.Proxmox == nil {
-		return &errtypes.ConfigError{Msg: "proxmox provider configuration required"}
+		return &errtypes.ConfigError{Msg: msgProxmoxProviderRequired}
 	}
 	data := buildTerraformVarsData(cfg)
 	outputPath := filepath.Join(envDir, "terraform.tfvars")

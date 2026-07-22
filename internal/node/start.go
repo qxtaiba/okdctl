@@ -182,7 +182,7 @@ func (r *Runner) uncordonAll(ctx context.Context) error {
 
 	nodes, err := r.Cluster.ListNodes(ctx)
 	if err != nil {
-		return &errtypes.ClusterError{Msg: "list nodes", Err: err}
+		return &errtypes.ClusterError{Msg: msgListNodes, Err: err}
 	}
 	for _, n := range nodes {
 		if err := r.Cluster.Uncordon(ctx, n.Name); err != nil {

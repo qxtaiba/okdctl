@@ -39,7 +39,7 @@ var releasesCmd = &cobra.Command{
 // releasesListCmd prints available versions, filtered to Stable=true by
 // default or every non-draft release when --channel=all.
 var releasesListCmd = &cobra.Command{
-	Use:   "list",
+	Use:   cmdNameList,
 	Short: "List available OKD versions",
 	Long: `List OKD versions resolved from the GitHub releases feed.
 

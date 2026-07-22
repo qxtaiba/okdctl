@@ -56,7 +56,7 @@ func (r *Runner) RemoveWorker(ctx context.Context, target string, opts RemoveOpt
 	if !resuming {
 		nodes, err := r.Cluster.ListNodes(ctx)
 		if err != nil {
-			return &errtypes.ClusterError{Msg: "list nodes", Err: err}
+			return &errtypes.ClusterError{Msg: msgListNodes, Err: err}
 		}
 		if err := validateWorkerRemovable(nodes, target, workerCount); err != nil {
 			return &errtypes.ConfigError{Msg: err.Error()}
@@ -88,7 +88,7 @@ func (r *Runner) RemoveWorker(ctx context.Context, target string, opts RemoveOpt
 	// removable-worker guard enforces it), so the delete preview is unchanged;
 	// persisting is forbidden in dry-run, so this override also drives a
 	// truthful preview without a config write.
-	countVars := map[string]string{"worker_count": strconv.Itoa(idx)}
+	countVars := map[string]string{tfVarWorkerCount: strconv.Itoa(idx)}
 
 	if r.DryRun {
 		r.preview(&plan)
@@ -129,7 +129,7 @@ func (r *Runner) RemoveWorker(ctx context.Context, target string, opts RemoveOpt
 		// the next deploy).
 		r.Cfg.Topology.Workers.Count = idx
 		if err := r.persistTopology(); err != nil {
-			return &errtypes.ClusterError{Msg: "persist topology", Err: err}
+			return &errtypes.ClusterError{Msg: msgPersistTopology, Err: err}
 		}
 	}
 

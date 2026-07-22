@@ -32,7 +32,7 @@ const (
 var nodeListOutput string
 
 var nodeListCmd = &cobra.Command{
-	Use:   "list",
+	Use:   cmdNameList,
 	Short: "List cluster nodes with role, readiness, and sizing drift",
 	Long: `List every cluster node with its role, readiness, terraform count
 index, sizing-drift indicator, and any in-flight node op.

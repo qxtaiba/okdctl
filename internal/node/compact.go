@@ -94,7 +94,7 @@ func (r *Runner) Compact(ctx context.Context, opts CompactOptions) error {
 
 	nodes, err := r.Cluster.ListNodes(ctx)
 	if err != nil {
-		return &errtypes.ClusterError{Msg: "list nodes", Err: err}
+		return &errtypes.ClusterError{Msg: msgListNodes, Err: err}
 	}
 	workers := workersByIndexDesc(nodes, r.Log)
 	masters := mastersByIndexAsc(nodes, r.Log)
@@ -139,7 +139,7 @@ func (r *Runner) Compact(ctx context.Context, opts CompactOptions) error {
 	workerMem := r.Cfg.Topology.Workers.MemoryMB
 	masterGrows := 0
 	for i, w := range workers {
-		if err := r.RemoveWorker(ctx, w, RemoveOptions{ForceStorage: opts.ForceStorage, DrainTimeout: "10m", Acknowledge: opts.Acknowledge}); err != nil {
+		if err := r.RemoveWorker(ctx, w, RemoveOptions{ForceStorage: opts.ForceStorage, DrainTimeout: defaultDrainTimeout, Acknowledge: opts.Acknowledge}); err != nil {
 			return r.compactHybridError(i, len(workers), w, err)
 		}
 		if opts.HostAllocatedMiB > 0 {
@@ -240,7 +240,7 @@ func (r *Runner) refuseForeignMarkerBeforeCompact(ack bool) error {
 // -var override drives the count down exactly as the real removal loop will,
 // one step per prior removal. The saved plan is dropped immediately (gate-only).
 func (r *Runner) assertWorkerDeletable(ctx context.Context, idx int) error {
-	countVars := map[string]string{"worker_count": strconv.Itoa(idx)}
+	countVars := map[string]string{tfVarWorkerCount: strconv.Itoa(idx)}
 	_, _, cleanup, err := r.planTargeted(ctx, workerAddress(idx), terraform.PlanActionDelete, countVars, false)
 	cleanup()
 	return err
@@ -318,7 +318,7 @@ func compactPlan(pf compactPreflight, clusterName string, opts CompactOptions) O
 		Op:                 OpCompact,
 		Cluster:            clusterName,
 		Nodes:              nodes,
-		DrainTimeout:       "10m",
+		DrainTimeout:       defaultDrainTimeout,
 		GrowMasterMemoryMB: opts.GrowMasterMemoryMB,
 		IngressReplicas:    opts.IngressReplicas,
 	}
