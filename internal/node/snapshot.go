@@ -16,6 +16,17 @@ type SnapshotCreateOptions struct {
 	Description  string
 	DrainTimeout string
 	SkipDrain    bool
+	// Acknowledge overrides a stranded marker left by any other in-flight op —
+	// snapshot is non-resumable, so unlike compact it has no inner op to
+	// exempt; see Runner.refuseForeignMarker.
+	Acknowledge bool
+}
+
+// SnapshotRollbackOptions tunes a node snapshot rollback.
+type SnapshotRollbackOptions struct {
+	// Acknowledge overrides a stranded marker left by any other in-flight op;
+	// see SnapshotCreateOptions.Acknowledge.
+	Acknowledge bool
 }
 
 // defaultSnapshotName generates a letter-led, pve-configid-valid name for a
@@ -43,6 +54,11 @@ func (r *Runner) snapshotTimeout() time.Duration {
 func (r *Runner) CreateSnapshot(ctx context.Context, target string, opts SnapshotCreateOptions) (_ string, err error) {
 	if r.Proxmox == nil {
 		return "", &errtypes.ClusterError{Msg: "snapshot needs Proxmox SSH access, but no Proxmox host is configured"}
+	}
+	if !r.DryRun {
+		if err := r.refuseForeignMarker(opts.Acknowledge); err != nil {
+			return "", err
+		}
 	}
 	vmid, role, ready, verr := r.resolveVMID(ctx, target)
 	if verr != nil {
@@ -135,9 +151,14 @@ func (r *Runner) ListSnapshots(ctx context.Context, target string) ([]hostssh.Sn
 // cordoned and returns that failure as the op's result — including the final
 // uncordon, so the command never exits clean while the node is actually left
 // cordoned; only a fully clean run clears the OpSnapshot marker.
-func (r *Runner) RollbackSnapshot(ctx context.Context, target, snapname string) error {
+func (r *Runner) RollbackSnapshot(ctx context.Context, target, snapname string, opts SnapshotRollbackOptions) error {
 	if r.Proxmox == nil {
 		return &errtypes.ClusterError{Msg: "snapshot rollback needs Proxmox SSH access, but no Proxmox host is configured"}
+	}
+	if !r.DryRun {
+		if err := r.refuseForeignMarker(opts.Acknowledge); err != nil {
+			return err
+		}
 	}
 	vmid, role, _, err := r.resolveVMID(ctx, target)
 	if err != nil {

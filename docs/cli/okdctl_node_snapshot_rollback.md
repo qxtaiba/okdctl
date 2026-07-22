@@ -14,6 +14,11 @@ running, so the op refuses to start against an already-unhealthy quorum and
 re-verifies health before the node is uncordoned. Any failure from the
 cordon onward leaves the node cordoned; the error names the failing stage.
 
+Rollback refuses to run while a marker from any other in-flight node op is
+recorded, since snapshot is not resumable and would otherwise overwrite that
+op's resume trail. --acknowledge-interrupted-op overrides the marker and
+proceeds.
+
 ```
 okdctl node snapshot rollback <node> <name> [flags]
 ```
@@ -28,10 +33,11 @@ okdctl node snapshot rollback <node> <name> [flags]
 ### Options
 
 ```
-      --confirm-cluster string   required with --yes; must equal the config cluster name
-      --dry-run                  report what would happen without rolling back
-  -h, --help                     help for rollback
-  -y, --yes                      skip confirmation prompt
+      --acknowledge-interrupted-op   override a stranded marker left by an unrelated op and proceed fresh
+      --confirm-cluster string       required with --yes; must equal the config cluster name
+      --dry-run                      report what would happen without rolling back
+  -h, --help                         help for rollback
+  -y, --yes                          skip confirmation prompt
 ```
 
 ### Options inherited from parent commands

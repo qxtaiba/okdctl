@@ -3,11 +3,13 @@ package node
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/qxtaiba/okdctl/internal/cluster"
 	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/nodetypes"
 )
 
@@ -38,7 +40,7 @@ func TestStartDryRunMakesNoMutation(t *testing.T) {
 	r, tfvars, cfgPath := seedRunner(t, fc, ftf, cfg)
 	r.Power = fp
 
-	if err := r.Start(context.Background()); err != nil {
+	if err := r.Start(context.Background(), StartOptions{}); err != nil {
 		t.Fatalf("dry-run start: %v", err)
 	}
 
@@ -57,7 +59,7 @@ func TestStartDryRunDoesNotRequirePower(t *testing.T) {
 	r, _, _ := seedRunner(t, fc, &fakeTF{}, startTestConfig())
 	r.Power = nil
 
-	if err := r.Start(context.Background()); err != nil {
+	if err := r.Start(context.Background(), StartOptions{}); err != nil {
 		t.Fatalf("dry-run start without a power-cycler must not fail: %v", err)
 	}
 }
@@ -68,7 +70,7 @@ func TestStartRefusesWithoutPowerCycler(t *testing.T) {
 	r.DryRun = false
 	r.Power = nil
 
-	err := r.Start(context.Background())
+	err := r.Start(context.Background(), StartOptions{})
 	if err == nil {
 		t.Fatal("expected refusal when no power-cycler is wired")
 	}
@@ -85,7 +87,7 @@ func TestStartPowersMastersBeforeWorkers(t *testing.T) {
 	r.Power = fp
 	r.ClusterReadyTimeout = 5 * time.Second
 
-	if err := r.Start(context.Background()); err != nil {
+	if err := r.Start(context.Background(), StartOptions{}); err != nil {
 		t.Fatalf("start: %v", err)
 	}
 
@@ -119,7 +121,7 @@ func TestStartWaitConvergesAndApprovesCSRs(t *testing.T) {
 	r.Power = fp
 	r.ClusterReadyTimeout = 5 * time.Second
 
-	if err := r.Start(context.Background()); err != nil {
+	if err := r.Start(context.Background(), StartOptions{}); err != nil {
 		t.Fatalf("start: %v", err)
 	}
 	if fc.approveCalls < 1 {
@@ -144,7 +146,7 @@ func TestStartWaitKeepsApprovingBeforeReady(t *testing.T) {
 	r.Power = fp
 	r.ClusterReadyTimeout = 50 * time.Millisecond
 
-	err := r.Start(context.Background())
+	err := r.Start(context.Background(), StartOptions{})
 	if err == nil {
 		t.Fatal("expected a timeout error when nodes never become Ready")
 	}
@@ -164,11 +166,46 @@ func TestStartWaitSkipsApproveWhenAPIDown(t *testing.T) {
 	r.Power = fp
 	r.ClusterReadyTimeout = 50 * time.Millisecond
 
-	err := r.Start(context.Background())
+	err := r.Start(context.Background(), StartOptions{})
 	if err == nil {
 		t.Fatal("expected a timeout error when the API is unreachable")
 	}
 	if fc.approveCalls != 0 {
 		t.Errorf("CSR approval must be skipped while ListNodes fails (API not up): approve=%d", fc.approveCalls)
+	}
+}
+
+// TestStartRefusesForeignMarkerWithoutAck locks Fix 1: start is
+// non-resumable, so a marker left by an unrelated op — here a stranded
+// remove — must refuse before any cluster call or power-on, unless
+// acknowledged.
+func TestStartRefusesForeignMarkerWithoutAck(t *testing.T) {
+	fc := &fakeCluster{nodes: startTestNodes()}
+	fp := &fakePower{}
+	r, _, _ := seedRunner(t, fc, &fakeTF{}, startTestConfig())
+	r.DryRun = false
+	r.Power = fp
+	r.ClusterReadyTimeout = 5 * time.Second
+	seedMarker(t, r, OpRemove, "worker5", StepDrain)
+
+	err := r.Start(context.Background(), StartOptions{})
+	var cfgErr *errtypes.ConfigError
+	if !errors.As(err, &cfgErr) {
+		t.Fatalf("want *errtypes.ConfigError refusing the foreign marker, got %v", err)
+	}
+	for _, want := range []string{"worker5", "drain", "remove"} {
+		if !strings.Contains(cfgErr.Error(), want) {
+			t.Errorf("refusal must name the stranded op: %q does not contain %q", cfgErr.Error(), want)
+		}
+	}
+	if fc.listNodesCalls != 0 || fp.startCalls != 0 {
+		t.Errorf("refused start must make zero mutation: listNodes=%d start=%d", fc.listNodesCalls, fp.startCalls)
+	}
+
+	if err := r.Start(context.Background(), StartOptions{Acknowledge: true}); err != nil {
+		t.Fatalf("acknowledged start must proceed fresh: %v", err)
+	}
+	if fp.startCalls != 4 {
+		t.Errorf("acknowledged start should power on every vm: start=%d", fp.startCalls)
 	}
 }

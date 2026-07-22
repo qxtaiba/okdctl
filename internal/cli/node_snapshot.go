@@ -30,12 +30,14 @@ var (
 	nodeSnapshotCreateYes          bool
 	nodeSnapshotCreateConfirm      string
 	nodeSnapshotCreateDryRun       bool
+	nodeSnapshotCreateAcknowledge  bool
 
 	nodeSnapshotListOutput string
 
-	nodeSnapshotRollbackYes     bool
-	nodeSnapshotRollbackConfirm string
-	nodeSnapshotRollbackDryRun  bool
+	nodeSnapshotRollbackYes         bool
+	nodeSnapshotRollbackConfirm     string
+	nodeSnapshotRollbackDryRun      bool
+	nodeSnapshotRollbackAcknowledge bool
 
 	nodeSnapshotDeleteYes     bool
 	nodeSnapshotDeleteConfirm string
@@ -63,7 +65,12 @@ first unless --skip-drain is set; a NotReady node is snapshotted directly,
 since a drain would only spin with nowhere to reschedule its pods.
 
 Crash-consistent only: qemu-guest-agent is disabled fleet-wide, so this is
-equivalent to the VM losing power, not a clean shutdown.`,
+equivalent to the VM losing power, not a clean shutdown.
+
+Create refuses to run while a marker from any other in-flight node op is
+recorded, since snapshot is not resumable and would otherwise overwrite that
+op's resume trail. --acknowledge-interrupted-op overrides the marker and
+proceeds.`,
 	Example: `  okdctl node snapshot create worker0 --yes --confirm-cluster grappleberry
   okdctl node snapshot create worker0 --name pre-upgrade --dry-run`,
 	Args: cobra.ExactArgs(1),
@@ -90,7 +97,12 @@ A master rollback is quorum-sensitive: a crash-consistent snapshot can leave
 etcd's Raft term or rook-ceph's OSD state stale relative to peers that kept
 running, so the op refuses to start against an already-unhealthy quorum and
 re-verifies health before the node is uncordoned. Any failure from the
-cordon onward leaves the node cordoned; the error names the failing stage.`,
+cordon onward leaves the node cordoned; the error names the failing stage.
+
+Rollback refuses to run while a marker from any other in-flight node op is
+recorded, since snapshot is not resumable and would otherwise overwrite that
+op's resume trail. --acknowledge-interrupted-op overrides the marker and
+proceeds.`,
 	Example: `  okdctl node snapshot rollback worker0 pre-upgrade --yes --confirm-cluster grappleberry
   okdctl node snapshot rollback worker0 pre-upgrade --dry-run`,
 	Args: cobra.ExactArgs(2),
@@ -114,6 +126,7 @@ func init() {
 	nodeSnapshotCreateCmd.Flags().BoolVarP(&nodeSnapshotCreateYes, "yes", "y", false, "skip confirmation prompt")
 	nodeSnapshotCreateCmd.Flags().StringVar(&nodeSnapshotCreateConfirm, "confirm-cluster", "", "required with --yes; must equal the config cluster name")
 	nodeSnapshotCreateCmd.Flags().BoolVar(&nodeSnapshotCreateDryRun, flagDryRun, false, "report what would happen without creating a snapshot")
+	nodeSnapshotCreateCmd.Flags().BoolVar(&nodeSnapshotCreateAcknowledge, "acknowledge-interrupted-op", false, "override a stranded marker left by an unrelated op and proceed fresh")
 
 	nodeSnapshotListCmd.Flags().StringVarP(&nodeSnapshotListOutput, flagOutput, flagOutputShort, outputText, "output format: text|json")
 	registerOutputCompletion(nodeSnapshotListCmd)
@@ -121,6 +134,7 @@ func init() {
 	nodeSnapshotRollbackCmd.Flags().BoolVarP(&nodeSnapshotRollbackYes, "yes", "y", false, "skip confirmation prompt")
 	nodeSnapshotRollbackCmd.Flags().StringVar(&nodeSnapshotRollbackConfirm, "confirm-cluster", "", "required with --yes; must equal the config cluster name")
 	nodeSnapshotRollbackCmd.Flags().BoolVar(&nodeSnapshotRollbackDryRun, flagDryRun, false, "report what would happen without rolling back")
+	nodeSnapshotRollbackCmd.Flags().BoolVar(&nodeSnapshotRollbackAcknowledge, "acknowledge-interrupted-op", false, "override a stranded marker left by an unrelated op and proceed fresh")
 
 	nodeSnapshotDeleteCmd.Flags().BoolVarP(&nodeSnapshotDeleteYes, "yes", "y", false, "skip confirmation prompt")
 	nodeSnapshotDeleteCmd.Flags().StringVar(&nodeSnapshotDeleteConfirm, "confirm-cluster", "", "required with --yes; must equal the config cluster name")
@@ -253,6 +267,7 @@ func runNodeSnapshotCreate(cmd *cobra.Command, args []string) error {
 		Description:  nodeSnapshotCreateDescription,
 		SkipDrain:    nodeSnapshotCreateSkipDrain,
 		DrainTimeout: nodeSnapshotCreateDrainTimeout,
+		Acknowledge:  nodeSnapshotCreateAcknowledge,
 	})
 	if err != nil {
 		return err
@@ -299,7 +314,9 @@ func runNodeSnapshotRollback(cmd *cobra.Command, args []string) error {
 		nodeSnapshotRollbackYes, nodeSnapshotRollbackDryRun, nodeSnapshotRollbackConfirm,
 		"rollback restores disk state from a crash-consistent snapshot and powers the vm back on regardless of its current state; a master rollback is quorum-sensitive",
 		target, snapname,
-		func(rc *nodeRunnerCtx) error { return rc.runner.RollbackSnapshot(cmd.Context(), target, snapname) })
+		func(rc *nodeRunnerCtx) error {
+			return rc.runner.RollbackSnapshot(cmd.Context(), target, snapname, node.SnapshotRollbackOptions{Acknowledge: nodeSnapshotRollbackAcknowledge})
+		})
 }
 
 func runNodeSnapshotDelete(cmd *cobra.Command, args []string) error {

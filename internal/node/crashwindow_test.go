@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/qxtaiba/okdctl/internal/cluster"
 	"github.com/qxtaiba/okdctl/internal/config"
@@ -422,6 +423,49 @@ func TestDryRunPreviewsPastForeignMarker(t *testing.T) {
 		if fc.cordon != 0 || fc.drain != 0 || fc.uncordon != 0 || ftf.applyCalls != 0 {
 			t.Errorf("dry-run must make zero mutation: cordon=%d drain=%d uncordon=%d apply=%d",
 				fc.cordon, fc.drain, fc.uncordon, ftf.applyCalls)
+		}
+	})
+
+	t.Run("snapshot create", func(t *testing.T) {
+		fc := &fakeCluster{nodes: []cluster.NodeDetail{{Name: "worker0", Role: nodetypes.RoleWorker, Ready: true}}}
+		fsc := &fakeSnapshotClient{}
+		cfg := config.DefaultConfig()
+		cfg.Provider.Proxmox.Node = testProxmoxNode
+		r := seedSnapshotRunner(t, fc, fsc, cfg) // DryRun defaults true
+		seedMarker(t, r, OpRemove, "worker5", StepDrain)
+
+		if _, err := r.CreateSnapshot(context.Background(), "worker0", SnapshotCreateOptions{Name: testSnapshotName}); err != nil {
+			t.Fatalf("dry-run snapshot create past foreign marker must preview, not refuse: %v", err)
+		}
+		if fc.cordon != 0 || fc.drain != 0 || fsc.createCalls != 0 {
+			t.Errorf("dry-run must make zero mutation: cordon=%d drain=%d create=%d", fc.cordon, fc.drain, fsc.createCalls)
+		}
+	})
+
+	t.Run("cluster stop", func(t *testing.T) {
+		fc := &fakeCluster{nodes: stopTestNodes(), signerNotAfter: time.Now().Add(60 * 24 * time.Hour)}
+		ftf := &fakeTF{}
+		r, _, _ := seedRunner(t, fc, ftf, config.DefaultConfig()) // DryRun defaults true
+		seedMarker(t, r, OpRemove, "worker5", StepDrain)
+
+		if err := r.Stop(context.Background(), StopOptions{}); err != nil {
+			t.Fatalf("dry-run stop past foreign marker must preview, not refuse: %v", err)
+		}
+		if fc.cordon != 0 {
+			t.Errorf("dry-run must make zero mutation: cordon=%d", fc.cordon)
+		}
+	})
+
+	t.Run("cluster start", func(t *testing.T) {
+		fc := &fakeCluster{nodes: startTestNodes()}
+		r, _, _ := seedRunner(t, fc, &fakeTF{}, startTestConfig()) // DryRun defaults true
+		seedMarker(t, r, OpRemove, "worker5", StepDrain)
+
+		if err := r.Start(context.Background(), StartOptions{}); err != nil {
+			t.Fatalf("dry-run start past foreign marker must preview, not refuse: %v", err)
+		}
+		if fc.listNodesCalls != 0 {
+			t.Errorf("dry-run must make zero mutation: listNodes=%d", fc.listNodesCalls)
 		}
 	})
 }

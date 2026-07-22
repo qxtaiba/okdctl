@@ -18,13 +18,15 @@ var (
 	compactGrowMasterMB           int
 	compactAcknowledgeInterrupted bool
 
-	stopYes            bool
-	stopConfirmCluster string
-	stopDryRun         bool
+	stopYes                    bool
+	stopConfirmCluster         string
+	stopDryRun                 bool
+	stopAcknowledgeInterrupted bool
 
-	startYes            bool
-	startConfirmCluster string
-	startDryRun         bool
+	startYes                    bool
+	startConfirmCluster         string
+	startDryRun                 bool
+	startAcknowledgeInterrupted bool
 )
 
 var clusterCmd = &cobra.Command{
@@ -62,7 +64,11 @@ followed by each master (ascending) through the Proxmox API.
 Stop runs no drain: with the whole cluster stopping there is nowhere left to
 reschedule a pod. The kubelet client-cert signer's remaining validity is
 reported before the confirmation prompt, since it keeps expiring while the
-cluster is stopped. Restart with 'okdctl cluster start'.`,
+cluster is stopped. Restart with 'okdctl cluster start'.
+
+Stop refuses to run while a marker from any other in-flight node op is
+recorded, since stop is not resumable and would otherwise overwrite that op's
+resume trail. --acknowledge-interrupted-op overrides the marker and proceeds.`,
 	Example: `  okdctl cluster stop --yes --confirm-cluster grappleberry
   okdctl cluster stop --dry-run`,
 	RunE: runClusterStop,
@@ -78,7 +84,12 @@ uncordon every node.
 
 Node enumeration is config-driven (cfg.Topology counts) rather than the
 Kubernetes API: the API is hosted by the very VMs start has not powered on
-yet.`,
+yet.
+
+Start refuses to run while a marker from any other in-flight node op is
+recorded, since start is not resumable and would otherwise overwrite that
+op's resume trail. --acknowledge-interrupted-op overrides the marker and
+proceeds.`,
 	Example: `  okdctl cluster start --yes --confirm-cluster grappleberry
   okdctl cluster start --dry-run`,
 	RunE: runClusterStart,
@@ -96,10 +107,12 @@ func init() {
 	clusterStopCmd.Flags().BoolVarP(&stopYes, "yes", "y", false, "skip confirmation prompt")
 	clusterStopCmd.Flags().StringVar(&stopConfirmCluster, "confirm-cluster", "", "required with --yes; must equal the config cluster name")
 	clusterStopCmd.Flags().BoolVar(&stopDryRun, flagDryRun, false, "print the shutdown plan without powering anything off")
+	clusterStopCmd.Flags().BoolVar(&stopAcknowledgeInterrupted, "acknowledge-interrupted-op", false, "override a stranded marker left by an unrelated op and proceed fresh")
 
 	clusterStartCmd.Flags().BoolVarP(&startYes, "yes", "y", false, "skip confirmation prompt")
 	clusterStartCmd.Flags().StringVar(&startConfirmCluster, "confirm-cluster", "", "required with --yes; must equal the config cluster name")
 	clusterStartCmd.Flags().BoolVar(&startDryRun, flagDryRun, false, "print the power-on plan without powering anything on")
+	clusterStartCmd.Flags().BoolVar(&startAcknowledgeInterrupted, "acknowledge-interrupted-op", false, "override a stranded marker left by an unrelated op and proceed fresh")
 
 	clusterCmd.AddCommand(clusterCompactCmd)
 	clusterCmd.AddCommand(clusterStopCmd)
@@ -144,12 +157,16 @@ func runClusterCompact(cmd *cobra.Command, _ []string) error {
 
 func runClusterStop(cmd *cobra.Command, _ []string) error {
 	return runClusterPower(cmd, "stop", stopYes, stopConfirmCluster, stopDryRun,
-		func(rc *nodeRunnerCtx) error { return rc.runner.Stop(cmd.Context()) })
+		func(rc *nodeRunnerCtx) error {
+			return rc.runner.Stop(cmd.Context(), node.StopOptions{Acknowledge: stopAcknowledgeInterrupted})
+		})
 }
 
 func runClusterStart(cmd *cobra.Command, _ []string) error {
 	return runClusterPower(cmd, "start", startYes, startConfirmCluster, startDryRun,
-		func(rc *nodeRunnerCtx) error { return rc.runner.Start(cmd.Context()) })
+		func(rc *nodeRunnerCtx) error {
+			return rc.runner.Start(cmd.Context(), node.StartOptions{Acknowledge: startAcknowledgeInterrupted})
+		})
 }
 
 // runClusterPower is the shared shape behind cluster stop and cluster start:

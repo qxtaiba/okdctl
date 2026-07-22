@@ -2,6 +2,7 @@ package node
 
 import (
 	"fmt"
+	"slices"
 
 	"github.com/qxtaiba/okdctl/internal/cluster"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
@@ -88,6 +89,32 @@ func (r *Runner) beginOp(op Op, match OpMatch, ack bool) (*OpMarker, error) {
 	r.Log.Warn("node: overwriting stranded op marker",
 		"op", string(marker.Op), "node", marker.Target, "step", string(marker.Step))
 	return nil, nil
+}
+
+// refuseForeignMarker refuses (unless ack) when an on-disk marker records an
+// op the caller does not compose. It is the shared guard behind every
+// non-resumable op (snapshot create/rollback, cluster stop/start) and behind
+// compact's own pre-mutation check: called with no allowResumable, ANY
+// existing marker is foreign and refused; compact calls it with
+// allowResumable=OpRemove,OpResize since a marker for either of its own inner
+// ops is indistinguishable from compact's own in-flight call (one cluster per
+// workdir) and refusing it would break compact's resume — see
+// refuseForeignMarkerBeforeCompact. Unlike beginOp this never returns a
+// marker to resume from: every caller of this guard is non-resumable itself.
+func (r *Runner) refuseForeignMarker(ack bool, allowResumable ...Op) error {
+	if ack {
+		return nil
+	}
+	marker, err := ReadOpMarker(r.WorkDir, r.Cfg.Cluster.Name)
+	if err != nil {
+		return err
+	}
+	if marker == nil || slices.Contains(allowResumable, marker.Op) {
+		return nil
+	}
+	return &errtypes.ConfigError{Msg: fmt.Sprintf(
+		"an interrupted %s op on node %q is recorded (stopped before step %q); re-run with --acknowledge-interrupted-op to override it, or finish it first",
+		marker.Op, marker.Target, marker.Step)}
 }
 
 // resizeScopeMatch builds the OpMatch for a resize resume. A single-node scope
