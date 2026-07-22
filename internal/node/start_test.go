@@ -45,8 +45,8 @@ func TestStartDryRunMakesNoMutation(t *testing.T) {
 	if fp.startCalls != 0 || fp.calls != 0 || fp.shutdownCalls != 0 {
 		t.Errorf("dry-run start touched the hypervisor: start=%d powerCycle=%d shutdown=%d", fp.startCalls, fp.calls, fp.shutdownCalls)
 	}
-	if fc.listCalls != 0 || fc.cordon != 0 || fc.uncordon != 0 || fc.approveCalls != 0 {
-		t.Errorf("dry-run start called the cluster: list=%d cordon=%d uncordon=%d approve=%d", fc.listCalls, fc.cordon, fc.uncordon, fc.approveCalls)
+	if fc.listNodesCalls != 0 || fc.cordon != 0 || fc.uncordon != 0 || fc.approveCalls != 0 {
+		t.Errorf("dry-run start called the cluster: list=%d cordon=%d uncordon=%d approve=%d", fc.listNodesCalls, fc.cordon, fc.uncordon, fc.approveCalls)
 	}
 	assertUnchanged(t, tfvars, "SENTINEL_TFVARS\n")
 	assertUnchanged(t, cfgPath, "SENTINEL_CONFIG\n")
@@ -72,8 +72,8 @@ func TestStartRefusesWithoutPowerCycler(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected refusal when no power-cycler is wired")
 	}
-	if fc.listCalls != 0 {
-		t.Errorf("refusal must precede any cluster call: list=%d", fc.listCalls)
+	if fc.listNodesCalls != 0 {
+		t.Errorf("refusal must precede any cluster call: list=%d", fc.listNodesCalls)
 	}
 }
 
