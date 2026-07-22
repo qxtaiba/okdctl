@@ -755,7 +755,7 @@ func TestTargetedApplyAlreadyAtTargetSkipsApply(t *testing.T) {
 	r, _, _ := seedRunner(t, fc, ftf, cfg)
 	r.DryRun = false
 
-	if err := r.targetedApply(context.Background(), testWorkerAddress, terraform.PlanActionDelete, nil); err != nil {
+	if err := r.targetedApply(context.Background(), testWorkerAddress, terraform.PlanActionDelete, nil, false); err != nil {
 		t.Fatalf("targetedApply: %v", err)
 	}
 	if ftf.stateCalls != 1 {
@@ -774,12 +774,53 @@ func TestTargetedApplyEmptyPlanStillAwayFromTargetIsGateFailure(t *testing.T) {
 	r, _, _ := seedRunner(t, fc, ftf, cfg)
 	r.DryRun = false
 
-	err := r.targetedApply(context.Background(), testWorkerAddress, terraform.PlanActionDelete, nil)
+	err := r.targetedApply(context.Background(), testWorkerAddress, terraform.PlanActionDelete, nil, false)
 	if err == nil {
 		t.Fatal("want a gate-refusal error when the empty plan does not mean already-at-target")
 	}
 	if ftf.applyCalls != 0 {
 		t.Errorf("gate failure must not apply: apply=%d", ftf.applyCalls)
+	}
+}
+
+// TestTargetedApplyFreshEmptyUpdatePlanIsGateFailure locks Fix 3: on a FRESH
+// run (resuming=false) an empty UPDATE plan means the -var never reached the
+// module (a plumbing regression) and must stay fatal — never silently reported
+// as "already resized". The address is present in state, so without the
+// resume-gate the old code would have short-circuited to alreadyAtTarget.
+func TestTargetedApplyFreshEmptyUpdatePlanIsGateFailure(t *testing.T) {
+	fc := &fakeCluster{}
+	ftf := &fakeTF{action: terraform.PlanActionUpdate, emptyPlan: true, stateAbsent: false}
+	cfg := config.DefaultConfig()
+
+	r, _, _ := seedRunner(t, fc, ftf, cfg)
+	r.DryRun = false
+
+	err := r.targetedApply(context.Background(), testWorkerAddress, terraform.PlanActionUpdate, nil, false)
+	if err == nil {
+		t.Fatal("want a gate-refusal error for a fresh empty update plan (var never reached module)")
+	}
+	if ftf.applyCalls != 0 {
+		t.Errorf("gate failure must not apply: apply=%d", ftf.applyCalls)
+	}
+}
+
+// TestTargetedApplyResumedEmptyUpdatePlanSkips is the resume counterpart: with
+// resuming=true the same empty update plan (address present in state) is
+// classified already-at-target and the apply is skipped.
+func TestTargetedApplyResumedEmptyUpdatePlanSkips(t *testing.T) {
+	fc := &fakeCluster{}
+	ftf := &fakeTF{action: terraform.PlanActionUpdate, emptyPlan: true, stateAbsent: false}
+	cfg := config.DefaultConfig()
+
+	r, _, _ := seedRunner(t, fc, ftf, cfg)
+	r.DryRun = false
+
+	if err := r.targetedApply(context.Background(), testWorkerAddress, terraform.PlanActionUpdate, nil, true); err != nil {
+		t.Fatalf("resumed empty update plan must skip, not error: %v", err)
+	}
+	if ftf.applyCalls != 0 || ftf.snapshots != 0 {
+		t.Errorf("already-at-target resume must skip apply: apply=%d snapshot=%d", ftf.applyCalls, ftf.snapshots)
 	}
 }
 
@@ -791,7 +832,7 @@ func TestTargetedApplyHappyPathNeverProbesState(t *testing.T) {
 	r, _, _ := seedRunner(t, fc, ftf, cfg)
 	r.DryRun = false
 
-	if err := r.targetedApply(context.Background(), testWorkerAddress, terraform.PlanActionDelete, nil); err != nil {
+	if err := r.targetedApply(context.Background(), testWorkerAddress, terraform.PlanActionDelete, nil, false); err != nil {
 		t.Fatalf("targetedApply: %v", err)
 	}
 	if ftf.stateCalls != 0 {

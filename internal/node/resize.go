@@ -242,12 +242,13 @@ func (r *Runner) resizeOneNode(ctx context.Context, t resizeTarget, role nodetyp
 	if !isMaster {
 		address = workerAddress(t.index)
 	}
+	resuming := marker != nil
 
 	// Dry-run performs ZERO cluster mutation (no cordon/drain/uncordon) and
 	// ZERO persistence: it only previews the plan gate for the in-place update.
 	// Kept ahead of every mutating step so the --dry-run contract holds.
 	if r.DryRun {
-		return r.targetedApply(ctx, address, terraform.PlanActionUpdate, sizingVars)
+		return r.targetedApply(ctx, address, terraform.PlanActionUpdate, sizingVars, resuming)
 	}
 
 	resumeStep := Step("")
@@ -255,7 +256,7 @@ func (r *Runner) resizeOneNode(ctx context.Context, t resizeTarget, role nodetyp
 		if marker.Target == t.name {
 			resumeStep = marker.Step
 		} else {
-			_, alreadyAtTarget, cleanup, err := r.planTargeted(ctx, address, terraform.PlanActionUpdate, sizingVars)
+			_, alreadyAtTarget, cleanup, err := r.planTargeted(ctx, address, terraform.PlanActionUpdate, sizingVars, resuming)
 			cleanup()
 			if err != nil {
 				return err
@@ -286,7 +287,7 @@ func (r *Runner) resizeOneNode(ctx context.Context, t resizeTarget, role nodetyp
 		// prevent_destroy on the master resource backstops this, but the gate
 		// refuses it up front with a clear message instead of a terraform
 		// apply error.
-		if err := r.targetedApply(ctx, address, terraform.PlanActionUpdate, sizingVars); err != nil {
+		if err := r.targetedApply(ctx, address, terraform.PlanActionUpdate, sizingVars, resuming); err != nil {
 			return err
 		}
 	}

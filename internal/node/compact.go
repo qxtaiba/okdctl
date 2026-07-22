@@ -221,7 +221,7 @@ func (r *Runner) preflightCompact(ctx context.Context, workers, masters []string
 // one step per prior removal. The saved plan is dropped immediately (gate-only).
 func (r *Runner) assertWorkerDeletable(ctx context.Context, idx int) error {
 	countVars := map[string]string{"worker_count": strconv.Itoa(idx)}
-	_, _, cleanup, err := r.planTargeted(ctx, workerAddress(idx), terraform.PlanActionDelete, countVars)
+	_, _, cleanup, err := r.planTargeted(ctx, workerAddress(idx), terraform.PlanActionDelete, countVars, false)
 	cleanup()
 	return err
 }
