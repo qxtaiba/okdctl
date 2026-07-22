@@ -312,3 +312,52 @@ func TestNodeCommandRefusesForeignMarkerWithoutAcknowledgment(t *testing.T) {
 		t.Errorf("acknowledged resize must persist the new sizing: got %d", cfg.Topology.ControlPlane.MemoryMB)
 	}
 }
+
+// TestDryRunPreviewsPastForeignMarker locks Fix 4: a --dry-run against a
+// stranded foreign marker must preview the fresh plan, not refuse — the run
+// mutates nothing, so resume is irrelevant. Covers remove and resize.
+func TestDryRunPreviewsPastForeignMarker(t *testing.T) {
+	t.Run("remove", func(t *testing.T) {
+		fc := &fakeCluster{
+			nodes: []cluster.NodeDetail{
+				{Name: "worker0", Role: nodetypes.RoleWorker},
+				{Name: "worker1", Role: nodetypes.RoleWorker},
+				{Name: "worker2", Role: nodetypes.RoleWorker},
+				{Name: "master0", Role: nodetypes.RoleMaster},
+			},
+			schedulable: true,
+		}
+		ftf := &fakeTF{action: terraform.PlanActionDelete}
+		cfg := config.DefaultConfig()
+		cfg.Topology.Workers.Count = 3
+		r, _, _ := seedRunner(t, fc, ftf, cfg) // DryRun defaults true
+		seedMarker(t, r, OpResize, "master0", StepPowerCycle)
+
+		if err := r.RemoveWorker(context.Background(), "worker2", RemoveOptions{}); err != nil {
+			t.Fatalf("dry-run remove past foreign marker must preview, not refuse: %v", err)
+		}
+		if fc.cordon != 0 || fc.drain != 0 || fc.deleteNode != 0 || ftf.applyCalls != 0 {
+			t.Errorf("dry-run must make zero mutation: cordon=%d drain=%d delete=%d apply=%d",
+				fc.cordon, fc.drain, fc.deleteNode, ftf.applyCalls)
+		}
+	})
+
+	t.Run("resize", func(t *testing.T) {
+		fc := &fakeCluster{
+			nodes:       []cluster.NodeDetail{{Name: "master0", Role: nodetypes.RoleMaster, Ready: true}},
+			etcdHealthy: true,
+		}
+		ftf := &fakeTF{action: terraform.PlanActionUpdate}
+		cfg := config.DefaultConfig()
+		cfg.Topology.ControlPlane.MemoryMB = 12288
+		r, _, _ := seedRunner(t, fc, ftf, cfg)
+		seedMarker(t, r, OpRemove, "worker2", StepDrain)
+		if err := r.Resize(context.Background(), ResizeScope{Role: nodetypes.RoleMaster}, ResizeOptions{MemoryMB: 24576}); err != nil {
+			t.Fatalf("dry-run resize past foreign marker must preview, not refuse: %v", err)
+		}
+		if fc.cordon != 0 || fc.drain != 0 || fc.uncordon != 0 || ftf.applyCalls != 0 {
+			t.Errorf("dry-run must make zero mutation: cordon=%d drain=%d uncordon=%d apply=%d",
+				fc.cordon, fc.drain, fc.uncordon, ftf.applyCalls)
+		}
+	})
+}

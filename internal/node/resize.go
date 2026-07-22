@@ -61,9 +61,15 @@ func (r *Runner) Resize(ctx context.Context, scope ResizeScope, opts ResizeOptio
 		return &errtypes.ClusterError{Msg: "list nodes", Err: err}
 	}
 
-	marker, err := r.beginOp(OpResize, resizeScopeMatch(scope, nodes), opts.Acknowledge)
-	if err != nil {
-		return err
+	// A dry-run previews a fresh plan and mutates nothing, so resume is
+	// irrelevant: skip beginOp entirely so a stranded foreign marker previews
+	// rather than refusing.
+	var marker *OpMarker
+	if !r.DryRun {
+		marker, err = r.beginOp(OpResize, resizeScopeMatch(scope, nodes), opts.Acknowledge)
+		if err != nil {
+			return err
+		}
 	}
 	resuming := marker != nil
 
