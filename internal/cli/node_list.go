@@ -65,19 +65,6 @@ type nodeListEntry struct {
 	InFlightOp  string             `json:"in_flight_op,omitempty"`
 }
 
-// nodeListResult is the top-level shape of `okdctl node list --output json`;
-// see docs/cli/json-schema.md for the documented, stable shape.
-type nodeListResult struct {
-	Nodes []nodeListEntry `json:"nodes"`
-	// UnattachedOp surfaces an on-disk op marker whose Target matches no
-	// listed node — a cluster-stop/start marker (Target is the cluster name,
-	// not a node) or a marker whose node was since removed. Per-node
-	// in_flight_op only fires on a Target match, so without this field either
-	// marker shape is invisible to `node list`, including the exact case a
-	// same-workdir op with a different target would clobber.
-	UnattachedOp string `json:"unattached_op,omitempty"`
-}
-
 func runNodeList(cmd *cobra.Command, _ []string) error {
 	if err := validateFormat(nodeListOutput); err != nil {
 		return err
@@ -109,7 +96,7 @@ func runNodeList(cmd *cobra.Command, _ []string) error {
 	unattached := unattachedOpNote(side.marker, nodes)
 
 	if nodeListOutput == outputJSON {
-		return writeJSON(cmd.OutOrStdout(), nodeListResult{Nodes: entries, UnattachedOp: unattached})
+		return writeJSON(cmd.OutOrStdout(), entries)
 	}
 	return printNodeList(cmd.OutOrStdout(), entries, unattached)
 }
@@ -160,7 +147,7 @@ func buildNodeListEntries(nodes []cluster.NodeDetail, cfg *config.Config, side n
 }
 
 // unattachedOpNote reports a marker whose Target matches no listed node —
-// see nodeListResult.UnattachedOp. Empty when there is no marker or it is
+// see the unattached-op text note. Empty when there is no marker or it is
 // already attached to a listed node via in_flight_op.
 func unattachedOpNote(marker *node.OpMarker, nodes []cluster.NodeDetail) string {
 	if marker == nil {
@@ -199,7 +186,7 @@ func roleSizingDrift(cfg *config.Config, role nodetypes.NodeRole, sizing setup.T
 }
 
 // printNodeList renders the text table, plus a trailing note when
-// unattachedOp is non-empty (see nodeListResult.UnattachedOp). Plain
+// unattachedOp is non-empty (the unattached-op text note). Plain
 // tabwriter, no color: tabwriter measures column width in bytes, so ANSI
 // styling here would misalign columns the way it would not inside a
 // lipgloss-padded box.
