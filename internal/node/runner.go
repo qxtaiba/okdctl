@@ -126,6 +126,24 @@ type terraformExec interface {
 	StateHasResource(ctx context.Context, addr string) (bool, error)
 }
 
+// isoProvisioner is the slice of setup.Phase node add drives to build and
+// upload the new node's custom CoreOS ISO. Both calls are already
+// count-generic and fingerprint/checksum-skip unchanged nodes, so node add
+// reuses them as-is rather than a dedicated single-node build path. An
+// interface so a test can substitute a call-recording fake without shelling
+// out to coreos-installer/scp.
+type isoProvisioner interface {
+	BuildCustomISOs(ctx context.Context, cfg *config.Config, opts *setup.Options) error
+	UploadCustomISOsToProxmox(ctx context.Context, cfg *config.Config, opts *setup.Options) error
+}
+
+// ignitionServer is the slice of setup.Phase node add drives to expose
+// worker.ign over HTTPS for the join window. An interface so a test can
+// substitute a call-recording fake without touching httpd.
+type ignitionServer interface {
+	ConfigureApache(ctx context.Context, cfg *config.Config, projectRoot string) error
+}
+
 // Runner drives node-lifecycle ops against one cluster. TF mutates VMs;
 // Cluster runs the Kubernetes lifecycle. ConfigPath and EnvDir are persisted
 // on each op so a later full deploy reconciles to the same topology.
@@ -158,6 +176,13 @@ type Runner struct {
 	// SnapshotTaskTimeout bounds how long a snapshot create/rollback/delete
 	// waits for its async pvesh task to complete.
 	SnapshotTaskTimeout time.Duration
+
+	// ISO and Ignition drive node add's ISO build/upload and ignition-server
+	// revive (node add only; nil for every other op). SetupOpts carries the
+	// setup phase's WorkDir/ProjectRoot/TerraformEnv those calls need.
+	ISO       isoProvisioner
+	Ignition  ignitionServer
+	SetupOpts *setup.Options
 
 	// Confirm gates each mutating op between guards/preflight and the first
 	// mutation; nil auto-approves (tests, non-interactive callers that gate

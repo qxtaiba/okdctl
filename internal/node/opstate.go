@@ -38,6 +38,7 @@ const (
 	OpStop     Op = "stop"
 	OpStart    Op = "start"
 	OpSnapshot Op = "snapshot"
+	OpAdd      Op = "add"
 )
 
 // Step names the mutating step the marker was written before. Steps are
@@ -55,6 +56,14 @@ const (
 	StepUncordon   Step = "uncordon"
 	StepShutdown   Step = "shutdown"
 	StepPowerOn    Step = "power-on"
+
+	// node add's own step sequence; StepTFApply above is reused for the
+	// worker_count apply.
+	StepBuildISO     Step = "build-iso"
+	StepUploadISO    Step = "upload-iso"
+	StepIgnitionUp   Step = "ignition-up"
+	StepWaitJoin     Step = "wait-join"
+	StepIgnitionDown Step = "ignition-down"
 )
 
 // opState is the marker payload. ClusterName guards against a marker left in a
