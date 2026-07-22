@@ -26,6 +26,11 @@ type CompactOptions struct {
 	// Host memory budget, from a read-only Proxmox probe; zero skips the check.
 	HostTotalMiB     int
 	HostAllocatedMiB int
+	// Acknowledge overrides a stranded marker left by a different op/target,
+	// threaded into every inner RemoveWorker/Resize call; see beginOp. Compact
+	// itself never mutates against an unacknowledged foreign marker — the first
+	// gated inner call refuses it before any per-node work runs.
+	Acknowledge bool
 }
 
 // compactVerdict is one worker's read-only preflight result. osds/ingress are
@@ -64,6 +69,14 @@ type compactPreflight struct {
 // path. Under --dry-run it degrades to a single non-blocking probe reported as
 // a verdict line, so a preview against a degraded quorum still prints instead
 // of hanging on a gate whose whole purpose is to wait.
+//
+// Compact records no op marker of its own: RemoveWorker and Resize each
+// record OpRemove/OpResize against the node they are mutating, so a crash
+// mid-loop leaves a marker naming that node, not compact. A re-run repeats
+// the read-only preflight and the idempotent schedulable/ingress step, then
+// reaches the same worker (or master) whose own beginOp resumes it at its
+// recorded step — including refusing an unrelated foreign marker before that
+// node's destructive work runs.
 func (r *Runner) Compact(ctx context.Context, opts CompactOptions) error {
 	if !r.DryRun {
 		if err := r.waitEtcdHealthy(ctx, "compact-preflight"); err != nil {
@@ -118,7 +131,7 @@ func (r *Runner) Compact(ctx context.Context, opts CompactOptions) error {
 	workerMem := r.Cfg.Topology.Workers.MemoryMB
 	masterGrows := 0
 	for i, w := range workers {
-		if err := r.RemoveWorker(ctx, w, RemoveOptions{ForceStorage: opts.ForceStorage, DrainTimeout: "10m"}); err != nil {
+		if err := r.RemoveWorker(ctx, w, RemoveOptions{ForceStorage: opts.ForceStorage, DrainTimeout: "10m", Acknowledge: opts.Acknowledge}); err != nil {
 			return r.compactHybridError(i, len(workers), w, err)
 		}
 		if opts.HostAllocatedMiB > 0 {
@@ -247,6 +260,7 @@ func (r *Runner) growMaster(ctx context.Context, master string, allocatedMiB int
 		MemoryMB:         opts.GrowMasterMemoryMB,
 		HostTotalMiB:     opts.HostTotalMiB,
 		HostAllocatedMiB: allocatedMiB,
+		Acknowledge:      opts.Acknowledge,
 	}); err != nil {
 		return fmt.Errorf("compact: grow master %s: %w", master, err)
 	}
