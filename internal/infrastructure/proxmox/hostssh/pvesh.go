@@ -8,14 +8,18 @@ import (
 
 // pveshRun executes a pvesh subcommand on the Proxmox host in argv mode so
 // no shell string is assembled from user-controlled atoms. p.Node is
-// validated once here; callers must not re-validate.
-func pveshRun(ctx context.Context, p *RemoteISOParams, subcommand, path string) (string, error) {
+// validated once here; callers must not re-validate. extra is inserted
+// between path and --output-format json (e.g. "-snapname", "foo" for a
+// snapshot create call); callers must validate every extra atom themselves
+// before passing it in, the same way p.Node is validated here — pveshRun
+// performs no allowlist checks on extra.
+func pveshRun(ctx context.Context, p *RemoteISOParams, subcommand, path string, extra ...string) (string, error) {
 	if err := validateProxmoxName(p.Node); err != nil {
 		return "", fmt.Errorf("proxmox node %q invalid: %w", p.Node, err)
 	}
-	result, err := SSHRunArgvOutput(ctx, p.Exec, p.Host, p.KnownHostsPath,
-		"pvesh", subcommand, path, "--output-format", "json",
-	)
+	argv := append([]string{"pvesh", subcommand, path}, extra...)
+	argv = append(argv, "--output-format", "json")
+	result, err := SSHRunArgvOutput(ctx, p.Exec, p.Host, p.KnownHostsPath, argv...)
 	if err != nil {
 		return "", err
 	}
@@ -28,8 +32,8 @@ func pveshRun(ctx context.Context, p *RemoteISOParams, subcommand, path string) 
 // PveshRun is the exported entry point for callers outside package hostssh.
 // It inherits pveshRun's validateProxmoxName guard, so callers must not
 // validate p.Node themselves. Returns the raw JSON stdout on success.
-func PveshRun(ctx context.Context, p *RemoteISOParams, subcommand, path string) (string, error) {
-	return pveshRun(ctx, p, subcommand, path)
+func PveshRun(ctx context.Context, p *RemoteISOParams, subcommand, path string, extra ...string) (string, error) {
+	return pveshRun(ctx, p, subcommand, path, extra...)
 }
 
 func pveshQEMUPath(node string) string {
