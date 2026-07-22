@@ -4,6 +4,8 @@ import (
 	"errors"
 	"testing"
 
+	tea "charm.land/bubbletea/v2"
+
 	"github.com/qxtaiba/okdctl/internal/config"
 )
 
@@ -180,6 +182,38 @@ func TestDataDrivenStep_Apply_PropagatesConfigSetError(t *testing.T) {
 	cfg := &config.Config{}
 	if err := step.Apply(cfg); err == nil {
 		t.Fatal("Apply() with unparsable int field: want error, got nil")
+	}
+}
+
+func TestDataDrivenStep_UpdateEnterValidatesThenCompletes(t *testing.T) {
+	step := NewDataDrivenStep(testStepDefinition())
+	step.SetFocused(true)
+
+	enter := tea.KeyPressMsg{Code: tea.KeyEnter}
+
+	// Required "name" is empty: enter must fail validation and not advance.
+	if _, cmd := step.Update(enter); cmd != nil {
+		t.Fatal("Update(enter) with empty required field: want nil cmd, got non-nil")
+	}
+
+	step.setValue("name", "cluster-a")
+	_, cmd := step.Update(enter)
+	if cmd == nil {
+		t.Fatal("Update(enter) with valid values: want completion cmd, got nil")
+	}
+	msg := cmd()
+	complete, ok := msg.(StepCompleteMsg)
+	if !ok {
+		t.Fatalf("Update(enter) emitted %T, want StepCompleteMsg", msg)
+	}
+	if complete.StepID != StepIDBasics {
+		t.Errorf("StepCompleteMsg.StepID = %q, want %q", complete.StepID, StepIDBasics)
+	}
+
+	// Definition-level Validate rejects "forbidden": enter must not advance.
+	step.setValue("name", "forbidden")
+	if _, cmd := step.Update(enter); cmd != nil {
+		t.Fatal("Update(enter) with definition-forbidden value: want nil cmd, got non-nil")
 	}
 }
 
