@@ -105,6 +105,10 @@ func TestExitCodeForTaxonomy(t *testing.T) {
 		// and carries its own dedicated code; see errDoctorWarn.
 		{"errDoctorWarn_direct", errDoctorWarn, 6},
 		{"errDoctorWarn_wrapped", fmt.Errorf("doctor: %w", errDoctorWarn), 6},
+		// plan's drift-found sentinel mirrors errDoctorWarn: cli-local, its
+		// own dedicated code; see errPlanDrift.
+		{"errPlanDrift_direct", errPlanDrift, 7},
+		{"errPlanDrift_wrapped", fmt.Errorf("plan: %w", errPlanDrift), 7},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -126,6 +130,8 @@ func TestShouldAnnounceFailure(t *testing.T) {
 	}{
 		{"errDoctorWarn suppressed", errDoctorWarn, false},
 		{"wrapped errDoctorWarn suppressed", fmt.Errorf("doctor: %w", errDoctorWarn), false},
+		{"errPlanDrift suppressed", errPlanDrift, false},
+		{"wrapped errPlanDrift suppressed", fmt.Errorf("plan: %w", errPlanDrift), false},
 		{"ConfigError announced", &errtypes.ConfigError{Msg: "bad yaml"}, true},
 		{"generic error announced", errors.New("boom"), true},
 	}
