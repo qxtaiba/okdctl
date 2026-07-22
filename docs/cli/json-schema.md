@@ -96,6 +96,29 @@ config-vs-tfvars sizing-drift indicator.
 | `drift_detail` | string | present only when `drift=pending`; the compared config/tfvars values |
 | `in_flight_op` | string | present only on the node targeted by an in-flight `remove`/`resize`/`compact` op's on-disk marker, formatted `"<op> (<step>)"` |
 
+## `okdctl node snapshot list <node> --output=json`
+
+Flat array of one node's Proxmox VM snapshots, in the order pvesh reports
+them (not guaranteed chronological). The synthetic `current` entry Proxmox
+uses to anchor its snapshot tree is filtered out.
+
+```json
+[
+  {
+    "name": "pre-upgrade", "description": "before upgrading to 4.21",
+    "snap_time": "2026-04-12T15:00:00Z"
+  },
+  {"name": "baseline", "parent": "pre-upgrade"}
+]
+```
+
+| Field | Type | Notes |
+|---|---|---|
+| `name` | string | snapshot name (pve-configid grammar: letter-led, `[A-Za-z0-9_-]`, ≤40 chars) |
+| `description` | string | optional free-text note set at `snapshot create --description`; omitted when empty |
+| `snap_time` | RFC3339 string | when the snapshot was taken; omitted when Proxmox reports no timestamp |
+| `parent` | string | the snapshot this one was taken on top of, if any; omitted for a root snapshot |
+
 ## `okdctl plan --output=json`
 
 Read-only terraform-plan drift preview. Exit code is `0` when `drift` is
