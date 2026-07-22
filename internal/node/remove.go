@@ -74,12 +74,14 @@ func (r *Runner) RemoveWorker(ctx context.Context, target string, opts RemoveOpt
 		}},
 	}
 
-	// The dry-run delete preview must show the resource going away, but the
-	// resource only leaves the config once worker_count drops. Persisting is
-	// forbidden in dry-run, so feed the reduced count as a plan-time -var
-	// override; without it the plan is a no-op and the gate reports an empty
-	// plan (the fidelity bug this override fixes).
-	countVars := map[string]string{"worker_count": strconv.Itoa(workerCount - 1)}
+	// worker[idx] leaves the config exactly when worker_count drops to idx (the
+	// workers 0..idx-1 remain). Using idx directly is absolute, so a resumed
+	// re-run over an already-decremented config computes the same target rather
+	// than decrementing again. On a fresh run idx == workerCount-1 (the
+	// removable-worker guard enforces it), so the delete preview is unchanged;
+	// persisting is forbidden in dry-run, so this override also drives a
+	// truthful preview without a config write.
+	countVars := map[string]string{"worker_count": strconv.Itoa(idx)}
 
 	if r.DryRun {
 		r.preview(&plan)
@@ -112,10 +114,13 @@ func (r *Runner) RemoveWorker(ctx context.Context, target string, opts RemoveOpt
 		}
 
 		// Persist only after the apply has verifiably landed (real apply or an
-		// already-at-target resume), so a crash before this point leaves
-		// tfvars/config consistent with the cluster and a resumed re-run
-		// recomputes the same decremented count from the still-unmutated config.
-		r.Cfg.Topology.Workers.Count = workerCount - 1
+		// already-at-target resume). The assignment is absolute (Count = idx,
+		// the removed worker's stable index), not a relative decrement, so a
+		// crash after this persist but before the delete-node marker advances
+		// re-runs it as a no-op on resume rather than decrementing a second time
+		// and understating the topology (which would destroy a healthy worker on
+		// the next deploy).
+		r.Cfg.Topology.Workers.Count = idx
 		if err := r.persistTopology(); err != nil {
 			return &errtypes.ClusterError{Msg: "persist topology", Err: err}
 		}
