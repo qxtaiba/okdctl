@@ -267,12 +267,20 @@ func (p *Provider) Provision(ctx context.Context, cfg *config.Config, opts Provi
 	return nil
 }
 
-// PlanOnly runs terraform init and plan for the configured environment without
-// applying changes. opts.ProjectRoot and opts.TerraformEnv must both be set.
-// Plan output streams to the terminal via PlanStreamed. Used by --dry-run deploy.
-func (p *Provider) PlanOnly(ctx context.Context, cfg *config.Config, opts ProvisionOptions) error {
+// planPreviewFileName is the plan file PlanPreview writes, distinct from
+// terraform.PlanFileName so a preview run never collides with a plan file
+// an apply left behind (concurrent runs are still serialized by runlock).
+const planPreviewFileName = "plan-preview.tfplan"
+
+// PlanPreview runs terraform init and a saved plan for the configured
+// environment, returning the parsed non-no-op resource changes without
+// applying anything. opts.ProjectRoot and opts.TerraformEnv must both be
+// set. The plan file is removed before returning, success or failure, so
+// PlanPreview never leaves an apply-able artefact on disk. Used by both
+// `okdctl plan` and `deploy --dry-run`.
+func (p *Provider) PlanPreview(ctx context.Context, cfg *config.Config, opts ProvisionOptions) ([]terraform.ResourceChange, error) {
 	if !p.connected {
-		return &errtypes.ConfigError{Msg: "proxmox provider not connected — call Connect() first", Err: ErrNotConnected}
+		return nil, &errtypes.ConfigError{Msg: "proxmox provider not connected — call Connect() first", Err: ErrNotConnected}
 	}
 
 	if opts.ProjectRoot != "" && opts.TerraformEnv != "" {
@@ -280,22 +288,33 @@ func (p *Provider) PlanOnly(ctx context.Context, cfg *config.Config, opts Provis
 	}
 
 	if p.terraformExec == nil {
-		return &errtypes.ConfigError{Msg: "terraform executor not configured — set ProjectRoot and TerraformEnv", Err: ErrTerraformNotConfigured}
+		return nil, &errtypes.ConfigError{Msg: "terraform executor not configured — set ProjectRoot and TerraformEnv", Err: ErrTerraformNotConfigured}
 	}
 
 	p.logger.Info("terraform: initializing backend and providers")
 	if err := p.initWithRetry(ctx); err != nil {
-		return &errtypes.ClusterError{Msg: "terraform init failed", Err: err}
+		return nil, &errtypes.ClusterError{Msg: "terraform init failed", Err: err}
 	}
+
+	absPlanFile := filepath.Join(p.terraformExec.WorkDir(), planPreviewFileName)
+	defer func() { _ = system.SafeRemove(absPlanFile) }()
 
 	totalNodes := 1 + cfg.Topology.ControlPlane.Count + cfg.Topology.Workers.Count
 	p.logger.Info("terraform: plan preview", "vm_count", totalNodes)
 
-	if err := p.terraformExec.PlanStreamed(ctx, terraform.PlanOptions{}); err != nil {
-		return &errtypes.ClusterError{Msg: "terraform plan failed", Err: err}
+	hasChanges, err := p.terraformExec.PlanDetailed(ctx, terraform.PlanOptions{OutputPlanFile: planPreviewFileName})
+	if err != nil {
+		return nil, &errtypes.ClusterError{Msg: "terraform plan failed", Err: err}
+	}
+	if !hasChanges {
+		return nil, nil
 	}
 
-	return nil
+	changes, err := p.terraformExec.ShowPlanChanges(ctx, absPlanFile)
+	if err != nil {
+		return nil, &errtypes.ClusterError{Msg: "terraform show plan failed", Err: err}
+	}
+	return changes, nil
 }
 
 // vmNodeSpec pairs a node name with its config-derived static IP for the

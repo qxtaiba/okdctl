@@ -212,10 +212,10 @@ func TestProvider_Provision_Guards(t *testing.T) {
 	})
 }
 
-func TestProvider_PlanOnly_Guards(t *testing.T) {
+func TestProvider_PlanPreview_Guards(t *testing.T) {
 	t.Run("not connected", func(t *testing.T) {
 		p := New()
-		err := p.PlanOnly(context.Background(), &config.Config{}, ProvisionOptions{})
+		_, err := p.PlanPreview(context.Background(), &config.Config{}, ProvisionOptions{})
 		if !errors.Is(err, ErrNotConnected) {
 			t.Fatalf("err = %v; want ErrNotConnected", err)
 		}
@@ -224,11 +224,91 @@ func TestProvider_PlanOnly_Guards(t *testing.T) {
 	t.Run("terraform not configured", func(t *testing.T) {
 		p := New()
 		p.connected = true
-		err := p.PlanOnly(context.Background(), &config.Config{}, ProvisionOptions{})
+		_, err := p.PlanPreview(context.Background(), &config.Config{}, ProvisionOptions{})
 		if !errors.Is(err, ErrTerraformNotConfigured) {
 			t.Fatalf("err = %v; want ErrTerraformNotConfigured", err)
 		}
 	})
+}
+
+func TestProvider_PlanPreview(t *testing.T) {
+	setupWorkDir := func(t *testing.T) string {
+		t.Helper()
+		root := t.TempDir()
+		tfDir := filepath.Join(root, "infrastructure", "terraform", "environments", "production")
+		if err := os.MkdirAll(tfDir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		return root
+	}
+
+	t.Run("no changes returns nil without parsing show", func(t *testing.T) {
+		root := setupWorkDir(t)
+		installFakeTerraformDispatch(t, 0, "")
+		p := New()
+		p.connected = true
+		changes, err := p.PlanPreview(context.Background(), &config.Config{}, ProvisionOptions{ProjectRoot: root, TerraformEnv: "production"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if changes != nil {
+			t.Errorf("changes = %+v; want nil", changes)
+		}
+	})
+
+	t.Run("changes present are parsed and plan file removed", func(t *testing.T) {
+		root := setupWorkDir(t)
+		showJSON := `{"resource_changes":[{"address":"module.okd_cluster.proxmox_virtual_environment_vm.worker[0]","change":{"actions":["update"]}}]}`
+		installFakeTerraformDispatch(t, 2, showJSON)
+		p := New()
+		p.connected = true
+		changes, err := p.PlanPreview(context.Background(), &config.Config{}, ProvisionOptions{ProjectRoot: root, TerraformEnv: "production"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(changes) != 1 || changes[0].Action != terraform.PlanActionUpdate {
+			t.Fatalf("changes = %+v; want 1 update", changes)
+		}
+		tfDir := filepath.Join(root, "infrastructure", "terraform", "environments", "production")
+		if _, statErr := os.Stat(filepath.Join(tfDir, planPreviewFileName)); !os.IsNotExist(statErr) {
+			t.Errorf("plan file not cleaned up: %v", statErr)
+		}
+	})
+}
+
+// installFakeTerraformDispatch writes a POSIX "terraform" fake on PATH that
+// answers "init" with exit 0, "plan" with planExit (mirroring
+// -detailed-exitcode: 0=no changes, 2=changes), and "show" with showStdout.
+func installFakeTerraformDispatch(t *testing.T, planExit int, showStdout string) {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("fake terraform script relies on POSIX sh")
+	}
+	dir := t.TempDir()
+	script := fmt.Sprintf(`#!/bin/sh
+cmd="$1"
+case "$cmd" in
+  init) exit 0 ;;
+  plan)
+    for arg in "$@"; do
+      case "$arg" in
+        -out=*) planfile="${arg#-out=}" ;;
+      esac
+    done
+    if [ -n "$planfile" ]; then : > "$planfile"; fi
+    exit %d ;;
+  show) cat <<'EOF'
+%s
+EOF
+    exit 0 ;;
+esac
+exit 0
+`, planExit, showStdout)
+	path := filepath.Join(dir, "terraform")
+	if err := os.WriteFile(path, []byte(script), 0o755); err != nil { //nolint:gosec // G306: fake test binary needs +x
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 }
 
 // installFakePvesh writes a POSIX "ssh" fake on PATH that always answers
