@@ -83,7 +83,7 @@ func (r *Runner) RemoveWorker(ctx context.Context, target string, opts RemoveOpt
 
 	if r.DryRun {
 		r.preview(&plan)
-		return r.targetedApply(ctx, workerAddress(idx), terraform.PlanActionDelete, countVars)
+		return r.targetedApply(ctx, workerAddress(idx), terraform.PlanActionDelete, countVars, resuming)
 	}
 
 	if !resuming {
@@ -107,7 +107,7 @@ func (r *Runner) RemoveWorker(ctx context.Context, target string, opts RemoveOpt
 		if err := markStep(r.marker(), OpRemove, target, StepTFApply, r.RunID, r.Cfg.Cluster.Name); err != nil {
 			return err
 		}
-		if err := r.targetedApply(ctx, workerAddress(idx), terraform.PlanActionDelete, countVars); err != nil {
+		if err := r.targetedApply(ctx, workerAddress(idx), terraform.PlanActionDelete, countVars, resuming); err != nil {
 			return err
 		}
 

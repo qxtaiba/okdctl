@@ -202,11 +202,16 @@ func nodeOpPlanVars(planVars map[string]string) map[string]string {
 // never reached the module). But an empty plan is also what a resumed re-run
 // produces once the apply already landed, so an empty plan additionally
 // checks state via StateHasResource and classifies it with
-// terraform.EmptyPlanMeansAlreadyAtTarget; a true classification returns
-// alreadyAtTarget=true and a nil error instead of the gate-refusal error.
-// That extra state read only happens on the empty-plan path, never on the
-// happy path of a single matching change.
-func (r *Runner) planTargeted(ctx context.Context, address string, want terraform.PlanAction, planVars map[string]string) (planPath string, alreadyAtTarget bool, cleanup func(), err error) {
+// terraform.EmptyPlanMeansAlreadyAtTarget. That extra state read only happens
+// on the empty-plan path, never on the happy path of a single matching change.
+//
+// A delete is classified unconditionally: an empty delete plan with the
+// address absent from state is unambiguously "already gone". An update is
+// classified as already-at-target ONLY when resuming: on a fresh run an empty
+// update plan means the variable never reached the module (a -var plumbing
+// regression), which must stay fatal rather than be silently reported as
+// "already resized".
+func (r *Runner) planTargeted(ctx context.Context, address string, want terraform.PlanAction, planVars map[string]string, resuming bool) (planPath string, alreadyAtTarget bool, cleanup func(), err error) {
 	noop := func() {}
 	if err := r.TF.Init(ctx); err != nil {
 		return "", false, noop, r.TF.WithLockHint(&errtypes.ClusterError{Msg: "terraform init", Err: err})
@@ -241,7 +246,8 @@ func (r *Runner) planTargeted(ctx context.Context, address string, want terrafor
 				cleanup()
 				return "", false, noop, &errtypes.ClusterError{Msg: "check terraform state", Err: stateErr}
 			}
-			if terraform.EmptyPlanMeansAlreadyAtTarget(inState, want) {
+			if terraform.EmptyPlanMeansAlreadyAtTarget(inState, want) &&
+				(want == terraform.PlanActionDelete || resuming) {
 				cleanup()
 				return "", true, noop, nil
 			}
@@ -257,11 +263,11 @@ func (r *Runner) planTargeted(ctx context.Context, address string, want terrafor
 // aborts before any mutation. planVars are plan-time -var overrides so the
 // preview is truthful without persisting terraform.tfvars — the dry-run path
 // relies on this to show the intended change while writing nothing to disk.
-func (r *Runner) targetedApply(ctx context.Context, address string, want terraform.PlanAction, planVars map[string]string) error {
+func (r *Runner) targetedApply(ctx context.Context, address string, want terraform.PlanAction, planVars map[string]string, resuming bool) error {
 	stop := r.startProgress(fmt.Sprintf("applying terraform change to %s", address))
 	defer stop()
 
-	planPath, alreadyAtTarget, cleanup, err := r.planTargeted(ctx, address, want, planVars)
+	planPath, alreadyAtTarget, cleanup, err := r.planTargeted(ctx, address, want, planVars, resuming)
 	if err != nil {
 		return err
 	}
