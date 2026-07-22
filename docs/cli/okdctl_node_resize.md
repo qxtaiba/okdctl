@@ -17,6 +17,11 @@ resize to see exactly which same-role siblings still have the change pending.
 At least one of --memory-mb or --cpu is required; an omitted dimension keeps
 the role's current value.
 
+An interrupted role roll records an op marker and resumes automatically on the
+next 'okdctl node resize' of the same role or node, skipping already-completed
+nodes and steps. --acknowledge-interrupted-op overrides a marker left by a
+different op or node instead of refusing.
+
 ```
 okdctl node resize (masters|workers|<name>) [--memory-mb N] [--cpu N] [flags]
 ```
@@ -32,12 +37,13 @@ okdctl node resize (masters|workers|<name>) [--memory-mb N] [--cpu N] [flags]
 ### Options
 
 ```
-      --confirm-cluster string   required with --yes; must equal the config cluster name
-      --cpu int                  new per-node cpu cores (0 keeps current)
-      --dry-run                  run gates and the plan gate without mutating anything
-  -h, --help                     help for resize
-      --memory-mb int            new per-node memory in MiB (0 keeps current)
-  -y, --yes                      skip confirmation prompt
+      --acknowledge-interrupted-op   override a stranded marker left by a different op or node and proceed fresh
+      --confirm-cluster string       required with --yes; must equal the config cluster name
+      --cpu int                      new per-node cpu cores (0 keeps current)
+      --dry-run                      run gates and the plan gate without mutating anything
+  -h, --help                         help for resize
+      --memory-mb int                new per-node memory in MiB (0 keeps current)
+  -y, --yes                          skip confirmation prompt
 ```
 
 ### Options inherited from parent commands

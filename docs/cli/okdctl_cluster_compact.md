@@ -11,6 +11,12 @@ freed worker always precedes a grown master (memory-budget ordering).
 This is a thin orchestrator over 'node remove' and 'node resize'; it adds no
 new mutation mechanics and inherits their guards (storage, ingress, etcd).
 
+An interrupted compaction resumes automatically: each inner worker removal or
+master resize carries its own op marker, so re-running 'okdctl cluster compact'
+picks up at the node/step that was in flight.
+--acknowledge-interrupted-op overrides a marker left by an unrelated op
+instead of refusing.
+
 ```
 okdctl cluster compact [flags]
 ```
@@ -25,13 +31,14 @@ okdctl cluster compact [flags]
 ### Options
 
 ```
-      --confirm-cluster string      required with --yes; must equal the config cluster name
-      --dry-run                     print the compaction plan without mutating anything
-      --force-storage               allow worker removal even when workers hold rook-ceph OSDs
-      --grow-master-memory-mb int   resize each master to this memory (MiB) as workers are removed (0 leaves masters unchanged)
-  -h, --help                        help for compact
-      --ingress-replicas int        compact IngressController replica count (default 2)
-  -y, --yes                         skip confirmation prompt
+      --acknowledge-interrupted-op   override a stranded marker left by an unrelated op and proceed fresh
+      --confirm-cluster string       required with --yes; must equal the config cluster name
+      --dry-run                      print the compaction plan without mutating anything
+      --force-storage                allow worker removal even when workers hold rook-ceph OSDs
+      --grow-master-memory-mb int    resize each master to this memory (MiB) as workers are removed (0 leaves masters unchanged)
+  -h, --help                         help for compact
+      --ingress-replicas int         compact IngressController replica count (default 2)
+  -y, --yes                          skip confirmation prompt
 ```
 
 ### Options inherited from parent commands
