@@ -28,7 +28,7 @@ Proxmox VMs (via Terraform), Terraform state, and the Kubernetes lifecycle
 ### SEE ALSO
 
 * [okdctl](okdctl.md)	 - Provision OKD clusters on Proxmox VE
-* [okdctl node add](okdctl_node_add.md)	 - Add a node to the cluster (not yet implemented)
+* [okdctl node add](okdctl_node_add.md)	 - Add worker node(s) to the cluster
 * [okdctl node list](okdctl_node_list.md)	 - List cluster nodes with role, readiness, and sizing drift
 * [okdctl node remove](okdctl_node_remove.md)	 - Remove a worker node from the cluster
 * [okdctl node resize](okdctl_node_resize.md)	 - Resize node CPU/memory per role, rolled out one node at a time
