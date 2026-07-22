@@ -2,11 +2,14 @@ package node
 
 import (
 	"context"
+	"errors"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/qxtaiba/okdctl/internal/cluster"
 	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/nodetypes"
 )
 
@@ -30,7 +33,7 @@ func TestStopDryRunMakesNoMutation(t *testing.T) {
 
 	r, tfvars, cfgPath := seedRunner(t, fc, ftf, cfg)
 
-	if err := r.Stop(context.Background()); err != nil {
+	if err := r.Stop(context.Background(), StopOptions{}); err != nil {
 		t.Fatalf("dry-run stop: %v", err)
 	}
 
@@ -55,7 +58,7 @@ func TestStopDryRunDoesNotRequirePower(t *testing.T) {
 	r, _, _ := seedRunner(t, fc, ftf, cfg)
 	r.Power = nil
 
-	if err := r.Stop(context.Background()); err != nil {
+	if err := r.Stop(context.Background(), StopOptions{}); err != nil {
 		t.Fatalf("dry-run stop without a power-cycler must not fail: %v", err)
 	}
 }
@@ -72,7 +75,7 @@ func TestStopRefusesWithoutPowerCycler(t *testing.T) {
 	r.DryRun = false
 	r.Power = nil
 
-	err := r.Stop(context.Background())
+	err := r.Stop(context.Background(), StopOptions{})
 	if err == nil {
 		t.Fatal("expected refusal when no power-cycler is wired")
 	}
@@ -96,7 +99,7 @@ func TestStopShutsWorkersBeforeMasters(t *testing.T) {
 	r.DryRun = false
 	r.Power = fp
 
-	if err := r.Stop(context.Background()); err != nil {
+	if err := r.Stop(context.Background(), StopOptions{}); err != nil {
 		t.Fatalf("stop: %v", err)
 	}
 
@@ -133,7 +136,7 @@ func TestStopLeavesCordonedOnShutdownFailure(t *testing.T) {
 	r.DryRun = false
 	r.Power = fp
 
-	err := r.Stop(context.Background())
+	err := r.Stop(context.Background(), StopOptions{})
 	if err == nil {
 		t.Fatal("expected error when the first shutdown fails")
 	}
@@ -145,5 +148,46 @@ func TestStopLeavesCordonedOnShutdownFailure(t *testing.T) {
 	}
 	if fp.shutdownCalls != 1 {
 		t.Errorf("expected exactly one shutdown attempt before the failure short-circuits, got %d", fp.shutdownCalls)
+	}
+}
+
+// TestStopRefusesForeignMarkerWithoutAck locks Fix 1: stop is non-resumable,
+// so a marker left by an unrelated op — here a stranded remove — must refuse
+// before any cordon or power-off call, unless acknowledged.
+func TestStopRefusesForeignMarkerWithoutAck(t *testing.T) {
+	fc := &fakeCluster{
+		nodes:          stopTestNodes(),
+		signerNotAfter: time.Now().Add(60 * 24 * time.Hour),
+	}
+	ftf := &fakeTF{}
+	fp := &fakePower{}
+	cfg := config.DefaultConfig()
+	cfg.Topology.VMIDBase = 6000
+	cfg.Provider.Proxmox.Node = testProxmoxNode
+
+	r, _, _ := seedRunner(t, fc, ftf, cfg)
+	r.DryRun = false
+	r.Power = fp
+	seedMarker(t, r, OpRemove, "worker5", StepDrain)
+
+	err := r.Stop(context.Background(), StopOptions{})
+	var cfgErr *errtypes.ConfigError
+	if !errors.As(err, &cfgErr) {
+		t.Fatalf("want *errtypes.ConfigError refusing the foreign marker, got %v", err)
+	}
+	for _, want := range []string{"worker5", "drain", "remove"} {
+		if !strings.Contains(cfgErr.Error(), want) {
+			t.Errorf("refusal must name the stranded op: %q does not contain %q", cfgErr.Error(), want)
+		}
+	}
+	if fc.cordon != 0 || fp.shutdownCalls != 0 {
+		t.Errorf("refused stop must make zero mutation: cordon=%d shutdown=%d", fc.cordon, fp.shutdownCalls)
+	}
+
+	if err := r.Stop(context.Background(), StopOptions{Acknowledge: true}); err != nil {
+		t.Fatalf("acknowledged stop must proceed fresh: %v", err)
+	}
+	if fc.cordon != 4 || fp.shutdownCalls != 4 {
+		t.Errorf("acknowledged stop should run the full sequence: cordon=%d shutdown=%d", fc.cordon, fp.shutdownCalls)
 	}
 }

@@ -12,6 +12,10 @@ reschedule a pod. The kubelet client-cert signer's remaining validity is
 reported before the confirmation prompt, since it keeps expiring while the
 cluster is stopped. Restart with 'okdctl cluster start'.
 
+Stop refuses to run while a marker from any other in-flight node op is
+recorded, since stop is not resumable and would otherwise overwrite that op's
+resume trail. --acknowledge-interrupted-op overrides the marker and proceeds.
+
 ```
 okdctl cluster stop [flags]
 ```
@@ -26,10 +30,11 @@ okdctl cluster stop [flags]
 ### Options
 
 ```
-      --confirm-cluster string   required with --yes; must equal the config cluster name
-      --dry-run                  print the shutdown plan without powering anything off
-  -h, --help                     help for stop
-  -y, --yes                      skip confirmation prompt
+      --acknowledge-interrupted-op   override a stranded marker left by an unrelated op and proceed fresh
+      --confirm-cluster string       required with --yes; must equal the config cluster name
+      --dry-run                      print the shutdown plan without powering anything off
+  -h, --help                         help for stop
+  -y, --yes                          skip confirmation prompt
 ```
 
 ### Options inherited from parent commands

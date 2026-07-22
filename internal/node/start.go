@@ -9,6 +9,14 @@ import (
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
+// StartOptions tunes a cluster start.
+type StartOptions struct {
+	// Acknowledge overrides a stranded marker left by any other in-flight
+	// op — start is non-resumable and composes nothing, so unlike compact it
+	// has no inner op to exempt; see Runner.refuseForeignMarker.
+	Acknowledge bool
+}
+
 // Start powers the cluster back on: every master first (as one batch, no
 // inter-master ready-wait), then every worker, then waits for all nodes to
 // report Ready while approving kubelet CSRs each poll, and finally uncordons.
@@ -20,9 +28,14 @@ import (
 // any single member is healthy — waiting on master0 alone would hang forever.
 // Only once the API is reachable (after the readiness wait) does Start switch
 // to real ListNodes names for the uncordon.
-func (r *Runner) Start(ctx context.Context) error {
-	if !r.DryRun && r.Power == nil {
-		return &errtypes.ClusterError{Msg: "cluster start needs Proxmox API access to power on VMs, but no Proxmox credentials are available"}
+func (r *Runner) Start(ctx context.Context, opts StartOptions) error {
+	if !r.DryRun {
+		if r.Power == nil {
+			return &errtypes.ClusterError{Msg: "cluster start needs Proxmox API access to power on VMs, but no Proxmox credentials are available"}
+		}
+		if err := r.refuseForeignMarker(opts.Acknowledge); err != nil {
+			return err
+		}
 	}
 
 	cpCount := r.Cfg.Topology.ControlPlane.Count

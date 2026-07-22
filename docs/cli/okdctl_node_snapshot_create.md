@@ -11,6 +11,11 @@ since a drain would only spin with nowhere to reschedule its pods.
 Crash-consistent only: qemu-guest-agent is disabled fleet-wide, so this is
 equivalent to the VM losing power, not a clean shutdown.
 
+Create refuses to run while a marker from any other in-flight node op is
+recorded, since snapshot is not resumable and would otherwise overwrite that
+op's resume trail. --acknowledge-interrupted-op overrides the marker and
+proceeds.
+
 ```
 okdctl node snapshot create <node> [flags]
 ```
@@ -25,14 +30,15 @@ okdctl node snapshot create <node> [flags]
 ### Options
 
 ```
-      --confirm-cluster string   required with --yes; must equal the config cluster name
-      --description string       optional snapshot description (single token: no spaces; use dashes or underscores)
-      --drain-timeout string     drain timeout when the node is cordoned first (default "10m")
-      --dry-run                  report what would happen without creating a snapshot
-  -h, --help                     help for create
-      --name string              snapshot name (default okdctl-<UTC timestamp>)
-      --skip-drain               skip cordon/drain before snapshotting a Ready node
-  -y, --yes                      skip confirmation prompt
+      --acknowledge-interrupted-op   override a stranded marker left by an unrelated op and proceed fresh
+      --confirm-cluster string       required with --yes; must equal the config cluster name
+      --description string           optional snapshot description (single token: no spaces; use dashes or underscores)
+      --drain-timeout string         drain timeout when the node is cordoned first (default "10m")
+      --dry-run                      report what would happen without creating a snapshot
+  -h, --help                         help for create
+      --name string                  snapshot name (default okdctl-<UTC timestamp>)
+      --skip-drain                   skip cordon/drain before snapshotting a Ready node
+  -y, --yes                          skip confirmation prompt
 ```
 
 ### Options inherited from parent commands

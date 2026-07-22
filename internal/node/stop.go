@@ -18,14 +18,27 @@ import (
 // each other.
 const signerWarnWindow = 30 * 24 * time.Hour
 
+// StopOptions tunes a cluster stop.
+type StopOptions struct {
+	// Acknowledge overrides a stranded marker left by any other in-flight
+	// op — stop is non-resumable and composes nothing, so unlike compact it
+	// has no inner op to exempt; see Runner.refuseForeignMarker.
+	Acknowledge bool
+}
+
 // Stop shuts the cluster down: cordon every node, then gracefully power off
 // every worker (ascending) followed by every master (ascending) through the
 // Proxmox API. It never drains — with the whole cluster stopping there is
 // nowhere left to reschedule a pod, so a drain would only spin until its
 // own timeout. Restart with 'okdctl cluster start'.
-func (r *Runner) Stop(ctx context.Context) error {
-	if !r.DryRun && r.Power == nil {
-		return &errtypes.ClusterError{Msg: "cluster stop needs Proxmox API access to power off VMs, but no Proxmox credentials are available"}
+func (r *Runner) Stop(ctx context.Context, opts StopOptions) error {
+	if !r.DryRun {
+		if r.Power == nil {
+			return &errtypes.ClusterError{Msg: "cluster stop needs Proxmox API access to power off VMs, but no Proxmox credentials are available"}
+		}
+		if err := r.refuseForeignMarker(opts.Acknowledge); err != nil {
+			return err
+		}
 	}
 
 	nodes, err := r.Cluster.ListNodes(ctx)

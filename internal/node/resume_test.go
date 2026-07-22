@@ -128,6 +128,45 @@ func TestBeginOpForeignMarkerAcknowledgedProceedsFresh(t *testing.T) {
 	}
 }
 
+func TestRefuseForeignMarkerNoMarkerRunsFresh(t *testing.T) {
+	r, _, _ := seedRunner(t, &fakeCluster{}, &fakeTF{}, config.DefaultConfig())
+	if err := r.refuseForeignMarker(false); err != nil {
+		t.Fatalf("refuseForeignMarker: %v", err)
+	}
+}
+
+func TestRefuseForeignMarkerAnyMarkerRefusedWithoutAllowlist(t *testing.T) {
+	r, _, _ := seedRunner(t, &fakeCluster{}, &fakeTF{}, config.DefaultConfig())
+	seedMarker(t, r, OpRemove, testWorkerNode, StepDrain)
+
+	err := r.refuseForeignMarker(false)
+	var cfgErr *errtypes.ConfigError
+	if !errors.As(err, &cfgErr) {
+		t.Fatalf("want *errtypes.ConfigError, got %v", err)
+	}
+}
+
+// TestRefuseForeignMarkerAllowsListedOps proves allowResumable is the same
+// composition seam compact uses (OpRemove/OpResize) rather than a special
+// case — any op the caller lists is treated as its own, not foreign.
+func TestRefuseForeignMarkerAllowsListedOps(t *testing.T) {
+	r, _, _ := seedRunner(t, &fakeCluster{}, &fakeTF{}, config.DefaultConfig())
+	seedMarker(t, r, OpResize, testMasterNode, StepPowerCycle)
+
+	if err := r.refuseForeignMarker(false, OpRemove, OpResize); err != nil {
+		t.Errorf("marker's op is in allowResumable, must not refuse: %v", err)
+	}
+}
+
+func TestRefuseForeignMarkerAcknowledgedProceeds(t *testing.T) {
+	r, _, _ := seedRunner(t, &fakeCluster{}, &fakeTF{}, config.DefaultConfig())
+	seedMarker(t, r, OpStop, "cluster1", StepShutdown)
+
+	if err := r.refuseForeignMarker(true); err != nil {
+		t.Errorf("ack=true must proceed regardless of marker: %v", err)
+	}
+}
+
 func TestResizeScopeMatch(t *testing.T) {
 	nodes := []cluster.NodeDetail{
 		{Name: testMasterNode, Role: nodetypes.RoleMaster},

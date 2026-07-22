@@ -22,7 +22,7 @@ func TestClusterStopStartRegisteredWithExpectedFlags(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			cmd := findSubcommand(t, clusterCmd, name)
 
-			for _, flag := range []string{"yes", "confirm-cluster", flagDryRun} {
+			for _, flag := range []string{"yes", "confirm-cluster", flagDryRun, "acknowledge-interrupted-op"} {
 				if cmd.Flags().Lookup(flag) == nil {
 					t.Errorf("missing --%s flag", flag)
 				}

@@ -232,19 +232,7 @@ func (r *Runner) preflightCompact(ctx context.Context, workers, masters []string
 // ahead of the idempotent control-plane prep, so a genuinely-unrelated op is
 // never overwritten without an explicit acknowledgement.
 func (r *Runner) refuseForeignMarkerBeforeCompact(ack bool) error {
-	if ack {
-		return nil
-	}
-	marker, err := ReadOpMarker(r.WorkDir, r.Cfg.Cluster.Name)
-	if err != nil {
-		return err
-	}
-	if marker == nil || marker.Op == OpRemove || marker.Op == OpResize {
-		return nil
-	}
-	return &errtypes.ConfigError{Msg: fmt.Sprintf(
-		"an interrupted %s op on node %q is recorded (stopped before step %q); compact does not compose it — finish it first, or re-run with --acknowledge-interrupted-op to override it",
-		marker.Op, marker.Target, marker.Step)}
+	return r.refuseForeignMarker(ack, OpRemove, OpResize)
 }
 
 // assertWorkerDeletable plan-gates the delete of worker[idx] without applying:

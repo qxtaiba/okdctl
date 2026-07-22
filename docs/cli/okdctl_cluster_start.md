@@ -13,6 +13,11 @@ Node enumeration is config-driven (cfg.Topology counts) rather than the
 Kubernetes API: the API is hosted by the very VMs start has not powered on
 yet.
 
+Start refuses to run while a marker from any other in-flight node op is
+recorded, since start is not resumable and would otherwise overwrite that
+op's resume trail. --acknowledge-interrupted-op overrides the marker and
+proceeds.
+
 ```
 okdctl cluster start [flags]
 ```
@@ -27,10 +32,11 @@ okdctl cluster start [flags]
 ### Options
 
 ```
-      --confirm-cluster string   required with --yes; must equal the config cluster name
-      --dry-run                  print the power-on plan without powering anything on
-  -h, --help                     help for start
-  -y, --yes                      skip confirmation prompt
+      --acknowledge-interrupted-op   override a stranded marker left by an unrelated op and proceed fresh
+      --confirm-cluster string       required with --yes; must equal the config cluster name
+      --dry-run                      print the power-on plan without powering anything on
+  -h, --help                         help for start
+  -y, --yes                          skip confirmation prompt
 ```
 
 ### Options inherited from parent commands

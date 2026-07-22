@@ -11,6 +11,7 @@ import (
 
 	"github.com/qxtaiba/okdctl/internal/cluster"
 	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/infrastructure/proxmox/hostssh"
 	"github.com/qxtaiba/okdctl/internal/nodetypes"
 )
@@ -340,6 +341,44 @@ func TestCreateSnapshot_failureLeavesOpSnapshotMarkerNotOpRemove(t *testing.T) {
 	}
 }
 
+// TestCreateSnapshot_refusesForeignMarkerWithoutAck locks Fix 1: snapshot
+// create is non-resumable, so a marker left by an unrelated op — here a
+// stranded remove on a different node — must refuse before any cordon/drain
+// or pvesh call, unless acknowledged.
+func TestCreateSnapshot_refusesForeignMarkerWithoutAck(t *testing.T) {
+	fc := &fakeCluster{nodes: []cluster.NodeDetail{{Name: "worker0", Role: nodetypes.RoleWorker, Ready: true}}}
+	fsc := &fakeSnapshotClient{}
+	cfg := config.DefaultConfig()
+	cfg.Provider.Proxmox.Node = testProxmoxNode
+
+	r := seedSnapshotRunner(t, fc, fsc, cfg)
+	r.DryRun = false
+	seedMarker(t, r, OpRemove, "worker5", StepDrain)
+
+	_, err := r.CreateSnapshot(context.Background(), "worker0", SnapshotCreateOptions{Name: testSnapshotName})
+	var cfgErr *errtypes.ConfigError
+	if !errors.As(err, &cfgErr) {
+		t.Fatalf("want *errtypes.ConfigError refusing the foreign marker, got %v", err)
+	}
+	for _, want := range []string{"worker5", "drain", "remove"} {
+		if !strings.Contains(cfgErr.Error(), want) {
+			t.Errorf("refusal must name the stranded op: %q does not contain %q", cfgErr.Error(), want)
+		}
+	}
+	if fc.cordon != 0 || fc.drain != 0 || fc.uncordon != 0 || fsc.createCalls != 0 {
+		t.Errorf("refused create must make zero mutation: cordon=%d drain=%d uncordon=%d create=%d",
+			fc.cordon, fc.drain, fc.uncordon, fsc.createCalls)
+	}
+
+	name, err := r.CreateSnapshot(context.Background(), "worker0", SnapshotCreateOptions{Name: testSnapshotName, Acknowledge: true})
+	if err != nil {
+		t.Fatalf("acknowledged create must proceed fresh: %v", err)
+	}
+	if name != testSnapshotName || fsc.createCalls != 1 {
+		t.Errorf("acknowledged create did not run: name=%q createCalls=%d", name, fsc.createCalls)
+	}
+}
+
 func TestCreateSnapshot_requiresProxmox(t *testing.T) {
 	fc := &fakeCluster{nodes: []cluster.NodeDetail{{Name: "worker0", Role: nodetypes.RoleWorker, Ready: true}}}
 	r, _, _ := seedRunner(t, fc, &fakeTF{}, config.DefaultConfig())
@@ -414,7 +453,7 @@ func TestRollbackSnapshot_workerHappyPath(t *testing.T) {
 	r := seedSnapshotRunner(t, fc, fsc, cfg)
 	r.DryRun = false
 
-	if err := r.RollbackSnapshot(context.Background(), "worker0", testSnapshotName); err != nil {
+	if err := r.RollbackSnapshot(context.Background(), "worker0", testSnapshotName, SnapshotRollbackOptions{}); err != nil {
 		t.Fatalf("RollbackSnapshot: %v", err)
 	}
 	if fc.cordon != 1 || fc.uncordon != 1 || fsc.rollbackCalls != 1 {
@@ -444,7 +483,7 @@ func TestRollbackSnapshot_masterGatesHealthPrePostBeforeUncordon(t *testing.T) {
 	r := seedSnapshotRunner(t, fc, fsc, cfg)
 	r.DryRun = false
 
-	if err := r.RollbackSnapshot(context.Background(), "master0", testSnapshotName); err != nil {
+	if err := r.RollbackSnapshot(context.Background(), "master0", testSnapshotName, SnapshotRollbackOptions{}); err != nil {
 		t.Fatalf("RollbackSnapshot: %v", err)
 	}
 	if fc.etcdCalls != 2 || fc.cephCalls != 2 {
@@ -490,7 +529,7 @@ func TestRollbackSnapshot_postGateFailureLeavesNodeCordoned(t *testing.T) {
 	r.EtcdGateTimeout = 30 * time.Millisecond
 	r.CephGateTimeout = 30 * time.Millisecond
 
-	err := r.RollbackSnapshot(context.Background(), "master0", testSnapshotName)
+	err := r.RollbackSnapshot(context.Background(), "master0", testSnapshotName, SnapshotRollbackOptions{})
 	if err == nil {
 		t.Fatal("expected error when the post-rollback ceph gate fails")
 	}
@@ -519,7 +558,7 @@ func TestRollbackSnapshot_taskFailureLeavesNodeCordoned(t *testing.T) {
 	r := seedSnapshotRunner(t, fc, fsc, cfg)
 	r.DryRun = false
 
-	err := r.RollbackSnapshot(context.Background(), "worker0", testSnapshotName)
+	err := r.RollbackSnapshot(context.Background(), "worker0", testSnapshotName, SnapshotRollbackOptions{})
 	if err == nil {
 		t.Fatal("expected error when the rollback task fails")
 	}
@@ -546,7 +585,7 @@ func TestRollbackSnapshot_dryRunMakesZeroMutatingCalls(t *testing.T) {
 	r := seedSnapshotRunner(t, fc, fsc, cfg)
 	// seedRunner defaults DryRun to true.
 
-	if err := r.RollbackSnapshot(context.Background(), "master0", testSnapshotName); err != nil {
+	if err := r.RollbackSnapshot(context.Background(), "master0", testSnapshotName, SnapshotRollbackOptions{}); err != nil {
 		t.Fatalf("dry-run RollbackSnapshot: %v", err)
 	}
 	if fc.cordon != 0 || fc.drain != 0 || fc.uncordon != 0 || fc.etcdCalls != 0 || fc.cephCalls != 0 {
@@ -570,7 +609,7 @@ func TestRollbackSnapshot_successClearsOpMarker(t *testing.T) {
 	r := seedSnapshotRunner(t, fc, fsc, cfg)
 	r.DryRun = false
 
-	if err := r.RollbackSnapshot(context.Background(), "worker0", testSnapshotName); err != nil {
+	if err := r.RollbackSnapshot(context.Background(), "worker0", testSnapshotName, SnapshotRollbackOptions{}); err != nil {
 		t.Fatalf("RollbackSnapshot: %v", err)
 	}
 
@@ -601,7 +640,7 @@ func TestRollbackSnapshot_finalUncordonFailureSurfacesAsError(t *testing.T) {
 	r := seedSnapshotRunner(t, fc, fsc, cfg)
 	r.DryRun = false
 
-	err := r.RollbackSnapshot(context.Background(), "worker0", testSnapshotName)
+	err := r.RollbackSnapshot(context.Background(), "worker0", testSnapshotName, SnapshotRollbackOptions{})
 	if err == nil {
 		t.Fatal("expected error when the final uncordon fails")
 	}
@@ -621,11 +660,46 @@ func TestRollbackSnapshot_finalUncordonFailureSurfacesAsError(t *testing.T) {
 	}
 }
 
+// TestRollbackSnapshot_refusesForeignMarkerWithoutAck mirrors
+// TestCreateSnapshot_refusesForeignMarkerWithoutAck for rollback.
+func TestRollbackSnapshot_refusesForeignMarkerWithoutAck(t *testing.T) {
+	fc := &fakeCluster{nodes: []cluster.NodeDetail{{Name: "worker0", Role: nodetypes.RoleWorker, Ready: true}}}
+	fsc := &fakeSnapshotClient{}
+	cfg := config.DefaultConfig()
+	cfg.Provider.Proxmox.Node = testProxmoxNode
+
+	r := seedSnapshotRunner(t, fc, fsc, cfg)
+	r.DryRun = false
+	seedMarker(t, r, OpRemove, "worker5", StepDrain)
+
+	err := r.RollbackSnapshot(context.Background(), "worker0", testSnapshotName, SnapshotRollbackOptions{})
+	var cfgErr *errtypes.ConfigError
+	if !errors.As(err, &cfgErr) {
+		t.Fatalf("want *errtypes.ConfigError refusing the foreign marker, got %v", err)
+	}
+	for _, want := range []string{"worker5", "drain", "remove"} {
+		if !strings.Contains(cfgErr.Error(), want) {
+			t.Errorf("refusal must name the stranded op: %q does not contain %q", cfgErr.Error(), want)
+		}
+	}
+	if fc.cordon != 0 || fc.drain != 0 || fc.uncordon != 0 || fsc.rollbackCalls != 0 {
+		t.Errorf("refused rollback must make zero mutation: cordon=%d drain=%d uncordon=%d rollback=%d",
+			fc.cordon, fc.drain, fc.uncordon, fsc.rollbackCalls)
+	}
+
+	if err := r.RollbackSnapshot(context.Background(), "worker0", testSnapshotName, SnapshotRollbackOptions{Acknowledge: true}); err != nil {
+		t.Fatalf("acknowledged rollback must proceed fresh: %v", err)
+	}
+	if fsc.rollbackCalls != 1 {
+		t.Errorf("acknowledged rollback did not run: rollbackCalls=%d", fsc.rollbackCalls)
+	}
+}
+
 func TestRollbackSnapshot_requiresProxmox(t *testing.T) {
 	fc := &fakeCluster{nodes: []cluster.NodeDetail{{Name: "worker0", Role: nodetypes.RoleWorker, Ready: true}}}
 	r, _, _ := seedRunner(t, fc, &fakeTF{}, config.DefaultConfig())
 
-	if err := r.RollbackSnapshot(context.Background(), "worker0", testSnapshotName); err == nil {
+	if err := r.RollbackSnapshot(context.Background(), "worker0", testSnapshotName, SnapshotRollbackOptions{}); err == nil {
 		t.Fatal("expected error when Proxmox is not configured")
 	}
 }
