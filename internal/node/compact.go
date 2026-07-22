@@ -27,9 +27,12 @@ type CompactOptions struct {
 	HostTotalMiB     int
 	HostAllocatedMiB int
 	// Acknowledge overrides a stranded marker left by a different op/target,
-	// threaded into every inner RemoveWorker/Resize call; see beginOp. Compact
-	// itself never mutates against an unacknowledged foreign marker — the first
-	// gated inner call refuses it before any per-node work runs.
+	// threaded into every inner RemoveWorker/Resize call; see beginOp. A marker
+	// from an op compact does NOT compose (anything but OpRemove/OpResize) is
+	// refused up front, before any control-plane mutation. An OpRemove/OpResize
+	// marker is left to the inner op's own beginOp resume path — it is
+	// indistinguishable from compact's own in-flight inner op (one cluster per
+	// workdir), so refusing it would break compact's own resume.
 	Acknowledge bool
 }
 
@@ -75,10 +78,15 @@ type compactPreflight struct {
 // mid-loop leaves a marker naming that node, not compact. A re-run repeats
 // the read-only preflight and the idempotent schedulable/ingress step, then
 // reaches the same worker (or master) whose own beginOp resumes it at its
-// recorded step — including refusing an unrelated foreign marker before that
-// node's destructive work runs.
+// recorded step. The control-plane prep (SetMastersSchedulable + compact
+// ingress) is idempotent and reversible, so running it ahead of the inner
+// resume is safe; a marker from an op compact does not compose is refused
+// before that prep (see refuseForeignMarkerBeforeCompact).
 func (r *Runner) Compact(ctx context.Context, opts CompactOptions) error {
 	if !r.DryRun {
+		if err := r.refuseForeignMarkerBeforeCompact(opts.Acknowledge); err != nil {
+			return err
+		}
 		if err := r.waitEtcdHealthy(ctx, "compact-preflight"); err != nil {
 			return err
 		}
@@ -213,6 +221,30 @@ func (r *Runner) preflightCompact(ctx context.Context, workers, masters []string
 		pf.blockErr = pf.memErr
 	}
 	return pf, nil
+}
+
+// refuseForeignMarkerBeforeCompact refuses (unless ack) when an on-disk marker
+// records an op compact does not compose. Compact drives OpRemove and OpResize
+// through its inner calls, and a stranded marker for either is indistinguishable
+// from compact's own in-flight inner op (one cluster per workdir) — refusing it
+// would break compact's own resume, so those are left to the inner beginOp. A
+// marker from any other op family is unambiguously foreign and refused here,
+// ahead of the idempotent control-plane prep, so a genuinely-unrelated op is
+// never overwritten without an explicit acknowledgement.
+func (r *Runner) refuseForeignMarkerBeforeCompact(ack bool) error {
+	if ack {
+		return nil
+	}
+	marker, err := ReadOpMarker(r.WorkDir, r.Cfg.Cluster.Name)
+	if err != nil {
+		return err
+	}
+	if marker == nil || marker.Op == OpRemove || marker.Op == OpResize {
+		return nil
+	}
+	return &errtypes.ConfigError{Msg: fmt.Sprintf(
+		"an interrupted %s op on node %q is recorded (stopped before step %q); compact does not compose it — finish it first, or re-run with --acknowledge-interrupted-op to override it",
+		marker.Op, marker.Target, marker.Step)}
 }
 
 // assertWorkerDeletable plan-gates the delete of worker[idx] without applying:
