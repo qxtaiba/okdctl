@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"strconv"
+	"time"
 
 	"github.com/qxtaiba/okdctl/internal/cluster"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
@@ -14,6 +15,10 @@ import (
 	"github.com/qxtaiba/okdctl/internal/nodetypes"
 	"github.com/qxtaiba/okdctl/internal/system"
 )
+
+// ignitionTeardownTimeout bounds the detached teardown context (see AddWorkers)
+// so a wedged systemctl call cannot hang process exit indefinitely.
+const ignitionTeardownTimeout = 30 * time.Second
 
 // AddOptions tunes a worker batch add.
 type AddOptions struct {
@@ -192,7 +197,18 @@ func (r *Runner) AddWorkers(ctx context.Context, opts AddOptions) error {
 	if err := markStep(r.marker(), OpAdd, batchLabel, StepIgnitionUp, r.RunID, r.Cfg.Cluster.Name); err != nil {
 		return err
 	}
-	defer r.Ignition.TeardownIgnitionServer(ctx)
+	// Detached from ctx's cancellation: on SIGINT during the join wait, ctx is
+	// already cancelled by the time this runs, and system.IsServiceActive's
+	// exec.CommandContext would fail to even start under a cancelled ctx —
+	// reporting "not active" and making StopAndDisableService skip the
+	// stop+disable entirely, leaving httpd serving worker.ign (which embeds the
+	// pull secret) indefinitely. context.WithoutCancel keeps the deadline chain
+	// but drops the cancellation signal; the timeout bounds a wedged systemctl.
+	defer func() {
+		tctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), ignitionTeardownTimeout)
+		defer cancel()
+		r.Ignition.TeardownIgnitionServer(tctx)
+	}()
 	if err := r.Ignition.ConfigureApache(ctx, r.Cfg, r.ProjectRoot); err != nil {
 		return &errtypes.ClusterError{Msg: "revive ignition server", Err: err}
 	}
