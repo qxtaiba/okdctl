@@ -17,6 +17,13 @@ type OpMatch func(m *OpMarker) bool
 // decide which steps a resume replays. A resumed op re-enters the sequence at
 // its recorded step; every step at or after it re-runs (steps are idempotent),
 // every strictly-earlier step is skipped.
+//
+// shouldRunStep only ever compares two steps recorded by the same op's own
+// beginOp resume (a foreign marker never reaches it — see beginOp), so the
+// map only needs to stay internally monotonic within each op's own step
+// subset; it is not a single shared timeline across ops. Node add's sequence
+// reuses StepTFApply's slot (2) for its worker_count apply, so its own steps
+// are numbered around that fixed point rather than renumbering it.
 var stepOrder = map[Step]int{
 	StepCordon:     0,
 	StepDrain:      1,
@@ -24,6 +31,12 @@ var stepOrder = map[Step]int{
 	StepPowerCycle: 3,
 	StepDeleteK8s:  4,
 	StepUncordon:   5,
+
+	StepBuildISO:     -3,
+	StepUploadISO:    -2,
+	StepIgnitionUp:   -1,
+	StepWaitJoin:     6,
+	StepIgnitionDown: 7,
 }
 
 // shouldRunStep reports whether step runs given the resume point from. from ""
