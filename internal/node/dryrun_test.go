@@ -144,6 +144,15 @@ type fakeTF struct {
 	lastVars   map[string]string
 	lastTarget string
 	action     terraform.PlanAction
+	// emptyPlan makes ShowPlanChanges report no changes, simulating a
+	// resumed re-run where the apply already landed.
+	emptyPlan bool
+	// stateAbsent flips StateHasResource to report the target address as
+	// absent from state; zero value (false) keeps the common "still
+	// present" default so tests that never reach the empty-plan branch see
+	// no behavior change.
+	stateAbsent bool
+	stateCalls  int
 }
 
 func (f *fakeTF) Init(context.Context) error { return nil }
@@ -157,9 +166,18 @@ func (f *fakeTF) Plan(_ context.Context, opts terraform.PlanOptions) error {
 }
 
 func (f *fakeTF) ShowPlanChanges(context.Context, string) ([]terraform.ResourceChange, error) {
+	if f.emptyPlan {
+		return nil, nil
+	}
 	return []terraform.ResourceChange{{Address: f.lastTarget, Action: f.action}}, nil
 }
 func (f *fakeTF) SnapshotState(context.Context) (string, error) { f.snapshots++; return "", nil }
+
+func (f *fakeTF) StateHasResource(context.Context, string) (bool, error) {
+	f.stateCalls++
+	return !f.stateAbsent, nil
+}
+
 func (f *fakeTF) Apply(context.Context, terraform.ApplyOptions) error {
 	f.applyCalls++
 	return nil
@@ -693,5 +711,62 @@ func TestCompactHybridStateReportedOnMidLoopFailure(t *testing.T) {
 	}
 	if fc.deleteNode != 1 {
 		t.Errorf("exactly one worker should have been removed before the failure: deleteNode=%d", fc.deleteNode)
+	}
+}
+
+const testWorkerAddress = "module.okd_cluster.proxmox_virtual_environment_vm.worker[2]"
+
+func TestTargetedApplyAlreadyAtTargetSkipsApply(t *testing.T) {
+	fc := &fakeCluster{}
+	ftf := &fakeTF{action: terraform.PlanActionDelete, emptyPlan: true, stateAbsent: true}
+	cfg := config.DefaultConfig()
+
+	r, _, _ := seedRunner(t, fc, ftf, cfg)
+	r.DryRun = false
+
+	if err := r.targetedApply(context.Background(), testWorkerAddress, terraform.PlanActionDelete, nil); err != nil {
+		t.Fatalf("targetedApply: %v", err)
+	}
+	if ftf.stateCalls != 1 {
+		t.Errorf("expected exactly one StateHasResource probe on the empty-plan path, got %d", ftf.stateCalls)
+	}
+	if ftf.applyCalls != 0 || ftf.snapshots != 0 {
+		t.Errorf("already-at-target must skip apply: apply=%d snapshot=%d", ftf.applyCalls, ftf.snapshots)
+	}
+}
+
+func TestTargetedApplyEmptyPlanStillAwayFromTargetIsGateFailure(t *testing.T) {
+	fc := &fakeCluster{}
+	ftf := &fakeTF{action: terraform.PlanActionDelete, emptyPlan: true, stateAbsent: false}
+	cfg := config.DefaultConfig()
+
+	r, _, _ := seedRunner(t, fc, ftf, cfg)
+	r.DryRun = false
+
+	err := r.targetedApply(context.Background(), testWorkerAddress, terraform.PlanActionDelete, nil)
+	if err == nil {
+		t.Fatal("want a gate-refusal error when the empty plan does not mean already-at-target")
+	}
+	if ftf.applyCalls != 0 {
+		t.Errorf("gate failure must not apply: apply=%d", ftf.applyCalls)
+	}
+}
+
+func TestTargetedApplyHappyPathNeverProbesState(t *testing.T) {
+	fc := &fakeCluster{}
+	ftf := &fakeTF{action: terraform.PlanActionDelete}
+	cfg := config.DefaultConfig()
+
+	r, _, _ := seedRunner(t, fc, ftf, cfg)
+	r.DryRun = false
+
+	if err := r.targetedApply(context.Background(), testWorkerAddress, terraform.PlanActionDelete, nil); err != nil {
+		t.Fatalf("targetedApply: %v", err)
+	}
+	if ftf.stateCalls != 0 {
+		t.Errorf("happy path must not pay the state-list probe: stateCalls=%d", ftf.stateCalls)
+	}
+	if ftf.applyCalls != 1 {
+		t.Errorf("expected exactly one apply, got %d", ftf.applyCalls)
 	}
 }

@@ -79,6 +79,7 @@ type terraformExec interface {
 	SnapshotState(ctx context.Context) (string, error)
 	Apply(ctx context.Context, opts terraform.ApplyOptions) error
 	WithLockHint(err error) error
+	StateHasResource(ctx context.Context, addr string) (bool, error)
 }
 
 // Runner drives node-lifecycle ops against one cluster. TF mutates VMs;
@@ -196,10 +197,19 @@ func nodeOpPlanVars(planVars map[string]string) map[string]string {
 // returns the saved plan's path and a cleanup func the caller MUST invoke once
 // done — after any apply, since Apply consumes the saved plan. On any error the
 // plan file is already removed and the returned cleanup is a no-op.
-func (r *Runner) planTargeted(ctx context.Context, address string, want terraform.PlanAction, planVars map[string]string) (planPath string, cleanup func(), err error) {
+//
+// An empty plan normally means the gate refused the change (the variable
+// never reached the module). But an empty plan is also what a resumed re-run
+// produces once the apply already landed, so an empty plan additionally
+// checks state via StateHasResource and classifies it with
+// terraform.EmptyPlanMeansAlreadyAtTarget; a true classification returns
+// alreadyAtTarget=true and a nil error instead of the gate-refusal error.
+// That extra state read only happens on the empty-plan path, never on the
+// happy path of a single matching change.
+func (r *Runner) planTargeted(ctx context.Context, address string, want terraform.PlanAction, planVars map[string]string) (planPath string, alreadyAtTarget bool, cleanup func(), err error) {
 	noop := func() {}
 	if err := r.TF.Init(ctx); err != nil {
-		return "", noop, r.TF.WithLockHint(&errtypes.ClusterError{Msg: "terraform init", Err: err})
+		return "", false, noop, r.TF.WithLockHint(&errtypes.ClusterError{Msg: "terraform init", Err: err})
 	}
 
 	planFile := "node-op.tfplan"
@@ -216,19 +226,30 @@ func (r *Runner) planTargeted(ctx context.Context, address string, want terrafor
 		Vars:           nodeOpPlanVars(planVars),
 	}); planErr != nil {
 		cleanup()
-		return "", noop, r.TF.WithLockHint(&errtypes.ClusterError{Msg: "terraform plan", Err: planErr})
+		return "", false, noop, r.TF.WithLockHint(&errtypes.ClusterError{Msg: "terraform plan", Err: planErr})
 	}
 
 	changes, showErr := r.TF.ShowPlanChanges(ctx, planPath)
 	if showErr != nil {
 		cleanup()
-		return "", noop, &errtypes.ClusterError{Msg: "read terraform plan", Err: showErr}
+		return "", false, noop, &errtypes.ClusterError{Msg: "read terraform plan", Err: showErr}
 	}
 	if gateErr := terraform.AssertOnlyChange(changes, address, want); gateErr != nil {
+		if len(changes) == 0 {
+			inState, stateErr := r.TF.StateHasResource(ctx, address)
+			if stateErr != nil {
+				cleanup()
+				return "", false, noop, &errtypes.ClusterError{Msg: "check terraform state", Err: stateErr}
+			}
+			if terraform.EmptyPlanMeansAlreadyAtTarget(inState, want) {
+				cleanup()
+				return "", true, noop, nil
+			}
+		}
 		cleanup()
-		return "", noop, &errtypes.ClusterError{Msg: "plan safety gate refused the change", Err: gateErr}
+		return "", false, noop, r.TF.WithLockHint(&errtypes.ClusterError{Msg: "plan safety gate refused the change", Err: gateErr})
 	}
-	return planPath, cleanup, nil
+	return planPath, false, cleanup, nil
 }
 
 // targetedApply plans a single-resource change, gates the plan to exactly
@@ -240,11 +261,16 @@ func (r *Runner) targetedApply(ctx context.Context, address string, want terrafo
 	stop := r.startProgress(fmt.Sprintf("applying terraform change to %s", address))
 	defer stop()
 
-	planPath, cleanup, err := r.planTargeted(ctx, address, want, planVars)
+	planPath, alreadyAtTarget, cleanup, err := r.planTargeted(ctx, address, want, planVars)
 	if err != nil {
 		return err
 	}
 	defer cleanup()
+
+	if alreadyAtTarget {
+		r.Log.Info("node: already at target — skipping apply", "address", address, "action", string(want))
+		return nil
+	}
 
 	if r.DryRun {
 		r.Log.Info("node: dry-run — plan gate passed, skipping apply", "address", address, "action", string(want))
