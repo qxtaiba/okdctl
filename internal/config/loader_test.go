@@ -190,3 +190,23 @@ func TestLoadFile_SaveRoundTrip(t *testing.T) {
 		t.Errorf("Cluster.Name = %q; want %q", loaded.Cluster.Name, cfg.Cluster.Name)
 	}
 }
+
+func TestLoadFile_SaveRoundTrip_HAEnabled(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "okdctl.yaml")
+
+	loader := NewLoader()
+	cfg := DefaultConfig()
+	cfg.Provider.Proxmox.HAEnabled = true
+	if err := loader.Save(cfg, path); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	loaded, err := loader.LoadFile(path)
+	if err != nil {
+		t.Fatalf("LoadFile after Save: %v", err)
+	}
+	if loaded.Provider.Proxmox == nil || !loaded.Provider.Proxmox.HAEnabled {
+		t.Errorf("Provider.Proxmox.HAEnabled = %+v; want true", loaded.Provider.Proxmox)
+	}
+}

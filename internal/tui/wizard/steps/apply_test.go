@@ -97,6 +97,32 @@ func TestAdvancedStepDefinition_Fields(t *testing.T) {
 	if err := ntp.Validate("!not valid!"); err == nil {
 		t.Error("Validate(ntp_server) accepted invalid host")
 	}
+
+	cfg.Provider.Proxmox = &config.ProxmoxConfig{}
+	ha := findField(t, &AdvancedStepDefinition, "ha_enabled")
+	if err := ha.ConfigSet(cfg, "yes"); err != nil {
+		t.Fatalf("ConfigSet(ha_enabled): %v", err)
+	}
+	if !cfg.Provider.Proxmox.HAEnabled {
+		t.Error("Provider.Proxmox.HAEnabled = false, want true")
+	}
+	if got := ha.ConfigGet(cfg); got != valYes {
+		t.Errorf("ConfigGet(ha_enabled) = %q, want yes", got)
+	}
+}
+
+func TestAdvancedStepDefinition_HAEnabledOnNilProxmoxConfig(t *testing.T) {
+	cfg := &config.Config{}
+	ha := findField(t, &AdvancedStepDefinition, "ha_enabled")
+	if got := ha.ConfigGet(cfg); got != valNo {
+		t.Errorf("ConfigGet(ha_enabled) on nil Proxmox = %q, want no", got)
+	}
+	if err := ha.ConfigSet(cfg, "yes"); err != nil {
+		t.Fatalf("ConfigSet(ha_enabled): %v", err)
+	}
+	if cfg.Provider.Proxmox != nil {
+		t.Error("ConfigSet(ha_enabled) on nil Proxmox must not allocate a ProxmoxConfig")
+	}
 }
 
 func TestAdvancedStepDefinition_NoDeadDebugFields(t *testing.T) {

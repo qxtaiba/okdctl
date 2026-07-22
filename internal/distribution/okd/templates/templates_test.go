@@ -2,6 +2,7 @@ package templates
 
 import (
 	"encoding/base64"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -82,6 +83,19 @@ spec:
 		}
 		if string(decoded) != conf {
 			t.Errorf("embedded chrony.conf source = %q; want %q", decoded, conf)
+		}
+	}
+}
+
+func TestRenderTerraformVars_HAEnabled(t *testing.T) {
+	for _, enabled := range []bool{false, true} {
+		got, err := RenderTerraformVars(&TerraformVarsData{HAEnabled: enabled})
+		if err != nil {
+			t.Fatalf("RenderTerraformVars(HAEnabled=%v): %v", enabled, err)
+		}
+		want := "ha_enabled = " + strconv.FormatBool(enabled)
+		if !strings.Contains(got, want) {
+			t.Errorf("RenderTerraformVars(HAEnabled=%v) missing %q:\n%s", enabled, want, got)
 		}
 	}
 }

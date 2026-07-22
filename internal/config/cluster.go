@@ -154,6 +154,9 @@ type ProxmoxConfig struct {
 	CPUType            string              `json:"cpu_type,omitempty"`
 	AdditionalNetworks []AdditionalNetwork `json:"additional_networks,omitempty"`
 	NUMAEnabled        bool                `json:"numa_enabled,omitempty"`
+	// HAEnabled provisions Proxmox HA-manager anti-affinity for master VMs
+	// (requires PVE 9+; see infrastructure/terraform/modules/proxmox-okd/ha.tf).
+	HAEnabled bool `json:"ha_enabled,omitempty"`
 	// ControlPlaneNodes and WorkerNodes assign each VM by index to a
 	// Proxmox node. A list shorter than the group's topology count pads
 	// with Node for the remaining VMs; a longer list fails validation.
@@ -192,6 +195,7 @@ type redactedProxmoxConfig struct {
 	CPUType                  string
 	AdditionalNetworks       []AdditionalNetwork
 	NUMAEnabled              bool
+	HAEnabled                bool
 	ControlPlaneNodes        []string
 	WorkerNodes              []string
 	SSHHostFingerprint       string
@@ -218,6 +222,7 @@ func (p *ProxmoxConfig) Redacted() any {
 		CPUType:                  p.CPUType,
 		AdditionalNetworks:       p.AdditionalNetworks,
 		NUMAEnabled:              p.NUMAEnabled,
+		HAEnabled:                p.HAEnabled,
 		ControlPlaneNodes:        p.ControlPlaneNodes,
 		WorkerNodes:              p.WorkerNodes,
 		SSHHostFingerprint:       p.SSHHostFingerprint,

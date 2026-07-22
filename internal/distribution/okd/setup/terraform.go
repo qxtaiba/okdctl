@@ -114,6 +114,7 @@ func buildTerraformVarsData(cfg *config.Config) templates.TerraformVarsData {
 		WorkerNames:          strings.Join(workerNames, ", "),
 		CPUType:              cpuType,
 		NUMAEnabled:          proxmox.NUMAEnabled,
+		HAEnabled:            proxmox.HAEnabled,
 		AdditionalNetworks:   formatAdditionalNetworks(proxmox.AdditionalNetworks),
 		MasterTargetNodes:    formatStringList(proxmox.ControlPlaneNodes),
 		WorkerTargetNodes:    formatStringList(proxmox.WorkerNodes),
