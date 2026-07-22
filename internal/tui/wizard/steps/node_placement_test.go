@@ -4,8 +4,19 @@ import (
 	"slices"
 	"testing"
 
+	tea "charm.land/bubbletea/v2"
+
 	"github.com/qxtaiba/okdctl/internal/config"
 )
+
+func newProxmoxTestConfig() *config.Config {
+	return &config.Config{
+		Provider: config.ProviderConfig{
+			Type:    config.ProviderProxmox,
+			Proxmox: &config.ProxmoxConfig{},
+		},
+	}
+}
 
 func TestNodePlacementApplyWritesFieldsInIndexOrder(t *testing.T) {
 	nodeNames := []string{"pve1", "pve2", "pve3"}
@@ -50,6 +61,129 @@ func TestNodePlacementApplyWritesFieldsInIndexOrder(t *testing.T) {
 	}
 	if got := cfg.Provider.Proxmox.Node; got != "pve1" {
 		t.Errorf("bootstrap Node = %q, want pve1 (default)", got)
+	}
+}
+
+func TestNodePlacementStep_DiscoveryTransitionsToPlacingPhase(t *testing.T) {
+	cfg := newProxmoxTestConfig()
+	cfg.Topology.ControlPlane.Count = 1
+	cfg.Topology.Workers.Count = 1
+
+	s := NewNodePlacementStep()
+	s.cfg = cfg
+
+	if s.phase != phaseDiscovering {
+		t.Fatalf("initial phase = %v, want phaseDiscovering", s.phase)
+	}
+	if s.inner != nil {
+		t.Fatal("inner form built before discovery completes")
+	}
+
+	disc := &proxmoxDiscovery{Nodes: []proxmoxNode{{Name: "pve1"}, {Name: "pve2"}}}
+	_, _ = s.Update(discoveryCompleteMsg{discovery: disc})
+
+	if s.phase != phasePlacing {
+		t.Fatalf("phase after discoveryCompleteMsg = %v, want phasePlacing", s.phase)
+	}
+	if s.discovery != disc {
+		t.Error("s.discovery was not set from the discoveryCompleteMsg payload")
+	}
+	if s.inner == nil {
+		t.Fatal("inner form is nil after discovery completes")
+	}
+}
+
+func TestNodePlacementStep_TabAdvancesAcrossSections(t *testing.T) {
+	cfg := newProxmoxTestConfig()
+	cfg.Topology.ControlPlane.Count = 2
+	cfg.Topology.Workers.Count = 1
+
+	s := NewNodePlacementStep()
+	s.cfg = cfg
+	s.buildInnerStep(nil, []string{"pve1", "pve2"})
+	s.phase = phasePlacing
+	s.SetFocused(true)
+
+	// Sections in build order: bootstrap (1 field), control plane (2 fields),
+	// workers (1 field) — disc is nil so there is no infrastructure section.
+	if got := s.inner.CurrentSection(); got != 0 {
+		t.Fatalf("initial CurrentSection() = %d, want 0 (bootstrap)", got)
+	}
+
+	tab := tea.KeyPressMsg{Code: tea.KeyTab}
+
+	// bootstrap's only field is also its last field: tab must cross into
+	// control plane rather than wrapping within the section.
+	_, _ = s.Update(tab)
+	if got := s.inner.CurrentSection(); got != 1 {
+		t.Fatalf("CurrentSection() after 1st tab = %d, want 1 (control plane)", got)
+	}
+
+	// control plane has two fields: the first tab stays within the section.
+	_, _ = s.Update(tab)
+	if got := s.inner.CurrentSection(); got != 1 {
+		t.Fatalf("CurrentSection() mid-section tab = %d, want 1 (still control plane)", got)
+	}
+
+	// second tab lands on the section's last field: crosses into workers.
+	_, _ = s.Update(tab)
+	if got := s.inner.CurrentSection(); got != 2 {
+		t.Fatalf("CurrentSection() after crossing control plane = %d, want 2 (workers)", got)
+	}
+
+	// workers is the last section: tab at its last field is a bounded no-op.
+	_, _ = s.Update(tab)
+	if got := s.inner.CurrentSection(); got != 2 {
+		t.Fatalf("CurrentSection() at final boundary = %d, want 2 (unchanged)", got)
+	}
+}
+
+func TestNodePlacementStep_ShouldShow(t *testing.T) {
+	s := NewNodePlacementStep()
+	if !s.ShouldShow(newProxmoxTestConfig()) {
+		t.Error("ShouldShow(proxmox provider) = false, want true")
+	}
+
+	other := NewNodePlacementStep()
+	otherCfg := &config.Config{Provider: config.ProviderConfig{Type: config.ProviderType("aws")}}
+	if other.ShouldShow(otherCfg) {
+		t.Error("ShouldShow(non-proxmox provider) = true, want false")
+	}
+}
+
+func TestNodePlacementStep_DefaultsRoundTripExistingAssignments(t *testing.T) {
+	nodeNames := []string{"pve1", "pve2", "pve3"}
+	cfg := newProxmoxTestConfig()
+	cfg.Provider.Proxmox.ControlPlaneNodes = []string{"pve2", "pve3", "pve1"}
+	cfg.Provider.Proxmox.WorkerNodes = []string{"pve3", "pve2"}
+	cfg.Topology.ControlPlane.Count = 3
+	cfg.Topology.Workers.Count = 2
+
+	s := NewNodePlacementStep()
+	s.cfg = cfg
+	s.buildInnerStep(nil, nodeNames)
+
+	wantControlPlane := []string{"pve2", "pve3", "pve1"}
+	wantWorkers := []string{"pve3", "pve2"}
+	for i, want := range wantControlPlane {
+		if got := s.controlPlaneFields[i].Value(); got != want {
+			t.Errorf("controlPlaneFields[%d].Value() = %q, want %q (pre-set default)", i, got, want)
+		}
+	}
+	for i, want := range wantWorkers {
+		if got := s.workerFields[i].Value(); got != want {
+			t.Errorf("workerFields[%d].Value() = %q, want %q (pre-set default)", i, got, want)
+		}
+	}
+
+	if err := s.Apply(cfg); err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	if got := cfg.Provider.Proxmox.ControlPlaneNodes; !slices.Equal(got, wantControlPlane) {
+		t.Errorf("ControlPlaneNodes after Apply = %v, want unchanged %v", got, wantControlPlane)
+	}
+	if got := cfg.Provider.Proxmox.WorkerNodes; !slices.Equal(got, wantWorkers) {
+		t.Errorf("WorkerNodes after Apply = %v, want unchanged %v", got, wantWorkers)
 	}
 }
 
