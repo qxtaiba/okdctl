@@ -11,6 +11,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/setup"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
+	"github.com/qxtaiba/okdctl/internal/infrastructure/proxmox/hostssh"
 	"github.com/qxtaiba/okdctl/internal/infrastructure/terraform"
 	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/nodetypes"
@@ -30,6 +31,9 @@ const (
 	// report Ready, ticking ApprovePendingCSRs each poll so kubelet certificate
 	// rotation never stalls the wait unattended.
 	DefaultClusterReadyTimeout = 30 * time.Minute
+	// DefaultSnapshotTaskTimeout bounds how long a snapshot create/rollback/
+	// delete waits for its async pvesh task to reach status=stopped.
+	DefaultSnapshotTaskTimeout = 5 * time.Minute
 	// hostMemoryReserveMiB is the hypervisor headroom the memory-budget guard
 	// keeps free when projecting a resize (ZFS ARC, host services).
 	hostMemoryReserveMiB = 2048
@@ -70,6 +74,46 @@ type vmPowerCycler interface {
 	VMRunning(ctx context.Context, node string, vmid int) (bool, error)
 }
 
+// snapshotClient mirrors package hostssh's pvesh-backed snapshot primitives
+// as an interface so a test can substitute a call-recording fake without a
+// live Proxmox host, the same role vmPowerCycler plays for the REST API.
+type snapshotClient interface {
+	CreateSnapshot(ctx context.Context, p *hostssh.RemoteISOParams, vmid int, name, description string, timeout time.Duration) error
+	ListSnapshots(ctx context.Context, p *hostssh.RemoteISOParams, vmid int) ([]hostssh.SnapshotInfo, error)
+	RollbackSnapshot(ctx context.Context, p *hostssh.RemoteISOParams, vmid int, name string, timeout time.Duration) error
+	DeleteSnapshot(ctx context.Context, p *hostssh.RemoteISOParams, vmid int, name string, timeout time.Duration) error
+	VMAgentEnabled(ctx context.Context, p *hostssh.RemoteISOParams, vmid int) (bool, error)
+}
+
+// HostsshSnapshotClient is the production snapshotClient, delegating each
+// call straight through to package hostssh's pvesh primitives.
+type HostsshSnapshotClient struct{}
+
+// CreateSnapshot forwards to hostssh.CreateSnapshot.
+func (HostsshSnapshotClient) CreateSnapshot(ctx context.Context, p *hostssh.RemoteISOParams, vmid int, name, description string, timeout time.Duration) error {
+	return hostssh.CreateSnapshot(ctx, p, vmid, name, description, timeout)
+}
+
+// ListSnapshots forwards to hostssh.ListSnapshots.
+func (HostsshSnapshotClient) ListSnapshots(ctx context.Context, p *hostssh.RemoteISOParams, vmid int) ([]hostssh.SnapshotInfo, error) {
+	return hostssh.ListSnapshots(ctx, p, vmid)
+}
+
+// RollbackSnapshot forwards to hostssh.RollbackSnapshot.
+func (HostsshSnapshotClient) RollbackSnapshot(ctx context.Context, p *hostssh.RemoteISOParams, vmid int, name string, timeout time.Duration) error {
+	return hostssh.RollbackSnapshot(ctx, p, vmid, name, timeout)
+}
+
+// DeleteSnapshot forwards to hostssh.DeleteSnapshot.
+func (HostsshSnapshotClient) DeleteSnapshot(ctx context.Context, p *hostssh.RemoteISOParams, vmid int, name string, timeout time.Duration) error {
+	return hostssh.DeleteSnapshot(ctx, p, vmid, name, timeout)
+}
+
+// VMAgentEnabled forwards to hostssh.VMAgentEnabled.
+func (HostsshSnapshotClient) VMAgentEnabled(ctx context.Context, p *hostssh.RemoteISOParams, vmid int) (bool, error) {
+	return hostssh.VMAgentEnabled(ctx, p, vmid)
+}
+
 // terraformExec is the slice of terraform.Executor node ops drive; an interface
 // so a fake can record plan/apply calls without running terraform.
 type terraformExec interface {
@@ -101,6 +145,19 @@ type Runner struct {
 	// Power performs the post-resize hypervisor power-cycle. nil when no
 	// Proxmox credentials are available; a resize then fails safe.
 	Power vmPowerCycler
+
+	// Proxmox carries the pvesh-over-SSH connection params snapshot ops use.
+	// nil when no Proxmox SSH access is wired — snapshot ops then fail closed
+	// the same way Power does for resize.
+	Proxmox *hostssh.RemoteISOParams
+
+	// Snapshot is the pvesh-backed client snapshot ops drive; an interface so
+	// tests can record calls without a live hypervisor.
+	Snapshot snapshotClient
+
+	// SnapshotTaskTimeout bounds how long a snapshot create/rollback/delete
+	// waits for its async pvesh task to complete.
+	SnapshotTaskTimeout time.Duration
 
 	// Confirm gates each mutating op between guards/preflight and the first
 	// mutation; nil auto-approves (tests, non-interactive callers that gate
@@ -135,10 +192,12 @@ func NewRunner(cl *cluster.Client, tf *terraform.Executor, cfg *config.Config, p
 		RunID:               runID,
 		Log:                 logutil.OrNop(log),
 		Reporter:            logutil.NopProgressReporter,
+		Snapshot:            HostsshSnapshotClient{},
 		NodeReadyTimeout:    DefaultNodeReadyTimeout,
 		EtcdGateTimeout:     DefaultEtcdGateTimeout,
 		CephGateTimeout:     DefaultCephGateTimeout,
 		ClusterReadyTimeout: DefaultClusterReadyTimeout,
+		SnapshotTaskTimeout: DefaultSnapshotTaskTimeout,
 	}
 }
 
@@ -340,6 +399,28 @@ func (r *Runner) vmTarget(role nodetypes.NodeRole, index int) (node string, vmid
 		node = r.Cfg.Provider.Proxmox.Node
 	}
 	return node, vmid
+}
+
+// resolveVMID resolves target's cluster node name to its Proxmox vmid, role,
+// and current Ready status via ListNodes, so snapshot ops can address the
+// right VM without callers re-deriving the terraform index themselves.
+func (r *Runner) resolveVMID(ctx context.Context, target string) (vmid int, role nodetypes.NodeRole, ready bool, err error) {
+	nodes, err := r.Cluster.ListNodes(ctx)
+	if err != nil {
+		return 0, "", false, &errtypes.ClusterError{Msg: "list nodes", Err: err}
+	}
+	for _, n := range nodes {
+		if n.Name != target {
+			continue
+		}
+		idx, ok := cluster.NodeIndex(n.Name)
+		if !ok {
+			return 0, "", false, &errtypes.ConfigError{Msg: fmt.Sprintf("cannot derive a terraform index from node name %q", n.Name)}
+		}
+		_, vmid := r.vmTarget(n.Role, idx)
+		return vmid, n.Role, n.Ready, nil
+	}
+	return 0, "", false, &errtypes.ConfigError{Msg: fmt.Sprintf("node %q not found in cluster; run 'okdctl node list' to list nodes", target)}
 }
 
 // powerCycleVM stops→starts the VM backing a resized node so bpg/proxmox's
