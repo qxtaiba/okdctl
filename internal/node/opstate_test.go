@@ -9,14 +9,14 @@ func TestOpStateRoundTrip(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, OpMarkerFileName)
 
-	if err := markStep(path, OpRemove, "worker2", StepDrain, "run-1", "grappleberry"); err != nil {
+	if err := markStep(path, OpRemove, testWorkerNode, StepDrain, "run-1", "grappleberry"); err != nil {
 		t.Fatalf("markStep: %v", err)
 	}
 	got, err := readOpState(path, "grappleberry")
 	if err != nil {
 		t.Fatalf("readOpState: %v", err)
 	}
-	if got == nil || got.Op != OpRemove || got.Target != "worker2" || got.Step != StepDrain {
+	if got == nil || got.Op != OpRemove || got.Target != testWorkerNode || got.Step != StepDrain {
 		t.Fatalf("round-trip mismatch: %+v", got)
 	}
 }
