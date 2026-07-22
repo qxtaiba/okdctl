@@ -27,6 +27,12 @@ const (
 	fieldPrefixWorker = "worker"
 )
 
+// Role display labels shown in wizard section titles and review output.
+const (
+	roleLabelControlPlane = "control plane"
+	roleLabelWorkers      = "workers"
+)
+
 type discoveryCompleteMsg struct {
 	discovery *proxmoxDiscovery
 	err       error
@@ -167,7 +173,7 @@ func (s *NodePlacementStep) buildInnerStep(disc *proxmoxDiscovery, nodeNames []s
 	if cpCount := s.cfg.Topology.ControlPlane.Count; cpCount > 0 {
 		s.controlPlaneFields = nodeSelectFields(fieldPrefixMaster, clusterName, cpCount, px.ControlPlaneNodes, defaultNode, nodeNames)
 		sections = append(sections, wizard.FormSection{
-			Title: "control plane",
+			Title: roleLabelControlPlane,
 			Group: selectFieldGroup(s.controlPlaneFields),
 		})
 	}
@@ -175,7 +181,7 @@ func (s *NodePlacementStep) buildInnerStep(disc *proxmoxDiscovery, nodeNames []s
 	if wCount := s.cfg.Topology.Workers.Count; wCount > 0 {
 		s.workerFields = nodeSelectFields(fieldPrefixWorker, clusterName, wCount, px.WorkerNodes, defaultNode, nodeNames)
 		sections = append(sections, wizard.FormSection{
-			Title: "workers",
+			Title: roleLabelWorkers,
 			Group: selectFieldGroup(s.workerFields),
 		})
 	}

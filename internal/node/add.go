@@ -139,7 +139,7 @@ func (r *Runner) AddWorkers(ctx context.Context, opts AddOptions) error {
 		}
 		nodes, err := r.Cluster.ListNodes(ctx)
 		if err != nil {
-			return &errtypes.ClusterError{Msg: "list nodes", Err: err}
+			return &errtypes.ClusterError{Msg: msgListNodes, Err: err}
 		}
 		if err := validateWorkerCountMatchesCluster(nodes, startIdx); err != nil {
 			return &errtypes.ConfigError{Msg: err.Error()}
@@ -165,8 +165,8 @@ func (r *Runner) AddWorkers(ctx context.Context, opts AddOptions) error {
 		r.preview(&plan)
 		total := startIdx + opts.Count
 		planVars := map[string]string{
-			"worker_count": strconv.Itoa(total),
-			"worker_isos":  setup.WorkerISOsPlanVar(r.Cfg.Provider.Proxmox.ISOStorage, total),
+			tfVarWorkerCount: strconv.Itoa(total),
+			"worker_isos":    setup.WorkerISOsPlanVar(r.Cfg.Provider.Proxmox.ISOStorage, total),
 		}
 		for i := range plan.Nodes {
 			if err := r.targetedApply(ctx, plan.Nodes[i].TFAddress, terraform.PlanActionCreate, planVars, resuming); err != nil {
@@ -227,7 +227,7 @@ func (r *Runner) AddWorkers(ctx context.Context, opts AddOptions) error {
 	// classification, so re-entering the apply after this persist is a no-op.
 	r.Cfg.Topology.Workers.Count = endIdx + 1
 	if err := r.persistTopology(); err != nil {
-		return &errtypes.ClusterError{Msg: "persist topology", Err: err}
+		return &errtypes.ClusterError{Msg: msgPersistTopology, Err: err}
 	}
 
 	if err := clearOpMarker(r.marker()); err != nil {
@@ -280,8 +280,8 @@ func (r *Runner) addOneWorker(ctx context.Context, idx int, marker *OpMarker) er
 	total := idx + 1
 	r.Cfg.Topology.Workers.Count = total
 	planVars := map[string]string{
-		"worker_count": strconv.Itoa(total),
-		"worker_isos":  setup.WorkerISOsPlanVar(r.Cfg.Provider.Proxmox.ISOStorage, total),
+		tfVarWorkerCount: strconv.Itoa(total),
+		"worker_isos":    setup.WorkerISOsPlanVar(r.Cfg.Provider.Proxmox.ISOStorage, total),
 	}
 	resuming := marker != nil
 

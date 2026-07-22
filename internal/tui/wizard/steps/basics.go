@@ -42,7 +42,7 @@ var BasicsStepDefinition = wizard.StepDefinition{
 			Fields: []wizard.FieldDefinition{
 				{
 					Key:       "control_plane_count",
-					Label:     "control plane",
+					Label:     roleLabelControlPlane,
 					Default:   "3",
 					Help:      "number of control plane nodes (odd for etcd quorum)",
 					Type:      wizard.FieldTypeSelect,
@@ -52,7 +52,7 @@ var BasicsStepDefinition = wizard.StepDefinition{
 				},
 				{
 					Key:       "worker_count",
-					Label:     "workers",
+					Label:     roleLabelWorkers,
 					Default:   "3",
 					Help:      "number of worker nodes",
 					Required:  true,

@@ -58,7 +58,7 @@ func (r *Runner) Resize(ctx context.Context, scope ResizeScope, opts ResizeOptio
 
 	nodes, err := r.Cluster.ListNodes(ctx)
 	if err != nil {
-		return &errtypes.ClusterError{Msg: "list nodes", Err: err}
+		return &errtypes.ClusterError{Msg: msgListNodes, Err: err}
 	}
 
 	// A dry-run previews a fresh plan and mutates nothing, so resume is
@@ -129,7 +129,7 @@ func (r *Runner) Resize(ctx context.Context, scope ResizeScope, opts ResizeOptio
 	// delta on top of an already-persisted one.
 	r.applyRoleSizing(role, opts)
 	if err := r.persistTopology(); err != nil {
-		return &errtypes.ClusterError{Msg: "persist topology", Err: err}
+		return &errtypes.ClusterError{Msg: msgPersistTopology, Err: err}
 	}
 
 	if err := clearOpMarker(r.marker()); err != nil {
@@ -280,7 +280,10 @@ func (r *Runner) resizeOneNode(ctx context.Context, t resizeTarget, role nodetyp
 		}
 	}
 
-	if err := r.resizeCordonAndDrain(ctx, t.name, isMaster, resumeStep); err != nil {
+	// Control-plane nodes host standalone guard pods (etcd-guard,
+	// kube-apiserver-guard, …) that declare no controller; oc adm drain refuses
+	// those without --force, so a master resize passes force=isMaster.
+	if err := r.cordonAndDrain(ctx, OpResize, t.name, defaultDrainTimeout, isMaster, resumeStep); err != nil {
 		return err
 	}
 
@@ -338,39 +341,5 @@ func (r *Runner) resizeOneNode(ctx context.Context, t resizeTarget, role nodetyp
 	}
 
 	r.Log.Info("node: resized", "node", t.name, "role", string(role))
-	return nil
-}
-
-// resizeCordonAndDrain gates cordon and drain independently via resumeStep so
-// a run resuming exactly at StepDrain (cordon already landed before the
-// crash) re-runs only the drain.
-func (r *Runner) resizeCordonAndDrain(ctx context.Context, node string, isMaster bool, resumeStep Step) error {
-	stop := r.startProgress(fmt.Sprintf("cordoning and draining %s", node))
-	defer stop()
-
-	if shouldRunStep(StepCordon, resumeStep) {
-		if err := markStep(r.marker(), OpResize, node, StepCordon, r.RunID, r.Cfg.Cluster.Name); err != nil {
-			return err
-		}
-		if err := r.Cluster.Cordon(ctx, node); err != nil {
-			return err
-		}
-	}
-	if shouldRunStep(StepDrain, resumeStep) {
-		if err := markStep(r.marker(), OpResize, node, StepDrain, r.RunID, r.Cfg.Cluster.Name); err != nil {
-			return err
-		}
-		if err := r.Cluster.Drain(ctx, node, cluster.DrainOptions{
-			IgnoreDaemonsets: true,
-			DeleteEmptyDir:   true,
-			// Control-plane nodes host standalone guard pods (etcd-guard,
-			// kube-apiserver-guard, …) that declare no controller; oc adm drain
-			// refuses those without --force, so a master resize needs Force.
-			Force:   isMaster,
-			Timeout: "10m",
-		}); err != nil {
-			return &errtypes.ClusterError{Msg: fmt.Sprintf("drain %s (node left cordoned)", node), Err: err}
-		}
-	}
 	return nil
 }

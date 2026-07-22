@@ -23,6 +23,16 @@ const OpMarkerFileName = ".okdctl-node-op.json"
 
 const opStateSchemaV1 = "v1"
 
+// Shared literals used across the node-lifecycle verbs: the terraform count
+// variable, the default drain/operation timeout, and the ClusterError wrap
+// labels reused by every verb's ListNodes and persist-topology steps.
+const (
+	tfVarWorkerCount    = "worker_count"
+	defaultDrainTimeout = "10m"
+	msgListNodes        = "list nodes"
+	msgPersistTopology  = "persist topology"
+)
+
 // Op identifies which node-lifecycle verb is in flight.
 type Op string
 

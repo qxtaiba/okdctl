@@ -128,7 +128,7 @@ func uploadISOsViaSCP(ctx context.Context, cmdRunner *executor.Executor, isoFile
 // single scp command (avoids multiple password prompts).
 func (p *Phase) UploadCustomISOsToProxmox(ctx context.Context, cfg *config.Config, opts *Options) error {
 	if cfg.Provider.Proxmox == nil {
-		return &errtypes.ConfigError{Msg: "proxmox provider configuration required"}
+		return &errtypes.ConfigError{Msg: msgProxmoxProviderRequired}
 	}
 
 	isoDir := filepath.Join(opts.WorkDir, "custom-isos")
