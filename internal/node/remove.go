@@ -32,9 +32,16 @@ type RemoveOptions struct {
 // skipping the guards/confirm gate — they assume a clean baseline that no
 // longer holds once a prior attempt has partially mutated the cluster.
 func (r *Runner) RemoveWorker(ctx context.Context, target string, opts RemoveOptions) error {
-	marker, err := r.beginOp(OpRemove, func(m *OpMarker) bool { return m.Target == target }, opts.Acknowledge)
-	if err != nil {
-		return err
+	// A dry-run previews a fresh plan and mutates nothing, so resume is
+	// irrelevant: skip beginOp entirely so a stranded foreign marker previews
+	// rather than refusing.
+	var marker *OpMarker
+	if !r.DryRun {
+		var err error
+		marker, err = r.beginOp(OpRemove, func(m *OpMarker) bool { return m.Target == target }, opts.Acknowledge)
+		if err != nil {
+			return err
+		}
 	}
 	resuming := marker != nil
 	resumeStep := Step("")
