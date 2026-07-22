@@ -1,3 +1,15 @@
+// Package wizard implements the bubbletea model and step orchestration for
+// okdctl's interactive configuration wizard, producing a validated
+// config.Config for downstream deployment.
+//
+// A step reaches the UI by one of two paths, and only two:
+//   - Declarative: a StepDefinition describes sections and fields, and
+//     NewDataDrivenStep renders and binds them automatically. Prefer this.
+//   - Hand-rolled: a type implements WizardStep directly, for steps whose
+//     sections depend on runtime input a static StepDefinition can't express
+//     (e.g. node placement, sized only after Proxmox discovery). Such steps
+//     may still reuse MultiSectionForm or components.InputGroup for navigation
+//     and rendering rather than duplicating it.
 package wizard
 
 import (
@@ -71,19 +83,20 @@ type StepDefinition struct {
 	ExtraContent func(values map[string]string, width int) string
 }
 
-// formSection is the runtime counterpart to SectionDefinition, pairing a title
-// with its built InputGroup.
-type formSection struct {
-	title string
-	note  string
-	group *components.InputGroup
+// FormSection pairs a titled/annotated section with its built InputGroup. It
+// is the runtime counterpart to SectionDefinition and the unit MultiSectionForm
+// navigates across.
+type FormSection struct {
+	Title string
+	Note  string // e.g. prerequisites, shown below the title
+	Group *components.InputGroup
 }
 
-func (s *formSection) isComplete() bool {
-	if s.group == nil {
+func (s *FormSection) isComplete() bool {
+	if s.Group == nil {
 		return false
 	}
-	for _, field := range s.group.Fields() {
+	for _, field := range s.Group.Fields() {
 		if field.Value() == "" {
 			return false
 		}
@@ -92,6 +105,237 @@ func (s *formSection) isComplete() bool {
 		}
 	}
 	return true
+}
+
+// MultiSectionForm is a reusable multi-section input form with tab/shift-tab
+// navigation across section boundaries and per-section ✓/●/○ indicators. It
+// backs DataDrivenStep and is available to hand-rolled WizardSteps whose
+// sections are computed at runtime. It is a widget, not a step: Update returns
+// enterPressed rather than a StepCompleteMsg so the caller can layer its own
+// validation and completion.
+type MultiSectionForm struct {
+	sections       []FormSection
+	currentSection int
+
+	// totalFieldsCache is the summed field count across all sections, used by
+	// emitFocusChanged. -1 means "not yet computed".
+	totalFieldsCache int
+}
+
+// NewMultiSectionForm wraps sections in a form focused on the first section.
+func NewMultiSectionForm(sections []FormSection) *MultiSectionForm {
+	return &MultiSectionForm{
+		sections:         sections,
+		totalFieldsCache: -1,
+	}
+}
+
+// CurrentSection returns the index of the section that currently owns focus.
+func (f *MultiSectionForm) CurrentSection() int { return f.currentSection }
+
+// FieldAt returns the field at the given section/field indices, or nil when
+// either index is out of range or the section has no group.
+func (f *MultiSectionForm) FieldAt(section, field int) components.FormField {
+	if section < 0 || section >= len(f.sections) {
+		return nil
+	}
+	group := f.sections[section].Group
+	if group == nil {
+		return nil
+	}
+	return group.Field(field)
+}
+
+// currentGroup returns the Group of the currently-active section, or nil if
+// the index is out of range or the section has no Group.
+func (f *MultiSectionForm) currentGroup() *components.InputGroup {
+	if f.currentSection < 0 || f.currentSection >= len(f.sections) {
+		return nil
+	}
+	return f.sections[f.currentSection].Group
+}
+
+// Init focuses the first input group so the user can type immediately.
+func (f *MultiSectionForm) Init() tea.Cmd {
+	if len(f.sections) > 0 && f.sections[0].Group != nil {
+		return f.sections[0].Group.Focus()
+	}
+	return nil
+}
+
+// Focus resets navigation to the first section and focuses it.
+func (f *MultiSectionForm) Focus() tea.Cmd {
+	f.currentSection = 0
+	if len(f.sections) > 0 && f.sections[0].Group != nil {
+		return f.sections[0].Group.Focus()
+	}
+	return nil
+}
+
+// Blur removes focus from every section's group.
+func (f *MultiSectionForm) Blur() {
+	for _, section := range f.sections {
+		if section.Group != nil {
+			section.Group.Blur()
+		}
+	}
+}
+
+// Update handles navigation (tab/shift-tab across section boundaries) and
+// forwards other input to the focused group. On enter it reports
+// enterPressed=true without validating or completing — the caller layers that.
+func (f *MultiSectionForm) Update(msg tea.Msg) (cmd tea.Cmd, enterPressed bool) {
+	group := f.currentGroup()
+	if group == nil {
+		return nil, false
+	}
+
+	if keyMsg, ok := msg.(tea.KeyPressMsg); ok {
+		switch {
+		case key.Matches(keyMsg, key.NewBinding(key.WithKeys("enter"))):
+			return nil, true
+
+		case key.Matches(keyMsg, key.NewBinding(key.WithKeys("tab", "down"))):
+			isLastField := group.FocusIndex() >= len(group.Fields())-1
+			isLastSection := f.currentSection >= len(f.sections)-1
+
+			if isLastField && isLastSection {
+				return nil, false
+			}
+
+			if isLastField {
+				group.Blur()
+				f.currentSection++
+				nextGroup := f.currentGroup()
+				focusCmd := f.emitFocusChanged()
+				if nextGroup == nil {
+					return focusCmd, false
+				}
+				nextGroup.SetFocusIndex(0)
+				return tea.Batch(nextGroup.Focus(), focusCmd), false
+			}
+
+			var groupCmd tea.Cmd
+			f.sections[f.currentSection].Group, groupCmd = group.Update(msg)
+			return tea.Batch(groupCmd, f.emitFocusChanged()), false
+
+		case key.Matches(keyMsg, key.NewBinding(key.WithKeys("shift+tab", "up"))):
+			isFirstField := group.FocusIndex() == 0
+			isFirstSection := f.currentSection == 0
+
+			if isFirstField && isFirstSection {
+				return nil, false
+			}
+
+			if isFirstField {
+				group.Blur()
+				f.currentSection--
+				prevGroup := f.currentGroup()
+				focusCmd := f.emitFocusChanged()
+				if prevGroup == nil {
+					return focusCmd, false
+				}
+				prevGroup.SetFocusIndex(len(prevGroup.Fields()) - 1)
+				return tea.Batch(prevGroup.Focus(), focusCmd), false
+			}
+
+			var groupCmd tea.Cmd
+			f.sections[f.currentSection].Group, groupCmd = group.Update(msg)
+			return tea.Batch(groupCmd, f.emitFocusChanged()), false
+		}
+	}
+
+	var groupCmd tea.Cmd
+	f.sections[f.currentSection].Group, groupCmd = group.Update(msg)
+	return groupCmd, false
+}
+
+func (f *MultiSectionForm) emitFocusChanged() tea.Cmd {
+	globalIndex := 0
+	for i := range f.currentSection {
+		if f.sections[i].Group == nil {
+			continue
+		}
+		globalIndex += len(f.sections[i].Group.Fields())
+	}
+	if current := f.currentGroup(); current != nil {
+		globalIndex += current.FocusIndex()
+	}
+
+	if f.totalFieldsCache < 0 {
+		total := 0
+		for _, section := range f.sections {
+			if section.Group != nil {
+				total += len(section.Group.Fields())
+			}
+		}
+		f.totalFieldsCache = total
+	}
+	totalFields := f.totalFieldsCache
+
+	return func() tea.Msg {
+		return FocusChangedMsg{
+			FieldIndex:  globalIndex,
+			TotalFields: totalFields,
+		}
+	}
+}
+
+// Validate returns the first error from any section's group validation, or nil
+// when every field is valid.
+func (f *MultiSectionForm) Validate() error {
+	for _, section := range f.sections {
+		if section.Group == nil {
+			continue
+		}
+		if errs := section.Group.Validate(); len(errs) > 0 {
+			return errs[0]
+		}
+	}
+	return nil
+}
+
+// View renders each section with its active/completed/pending indicator.
+func (f *MultiSectionForm) View(width int) string {
+	innerWidth := width - 4
+	if innerWidth < 40 {
+		innerWidth = 40
+	}
+
+	var content strings.Builder
+
+	for i, section := range f.sections {
+		if section.Group == nil {
+			continue
+		}
+		section.Group.SetWidth(innerWidth)
+
+		var style lipgloss.Style
+		var indicator string
+
+		switch {
+		case i == f.currentSection:
+			style = formViewStyles.activeSection
+			indicator = formViewStyles.activeRender
+		case section.isComplete():
+			style = formViewStyles.inactiveSection
+			indicator = formViewStyles.completedRender
+		default:
+			style = formViewStyles.inactiveSection
+			indicator = formViewStyles.pendingRender
+		}
+
+		sectionTitle := indicator + " " + formViewStyles.sectionHeader.Render(strings.ToLower(section.Title))
+		var sectionContent string
+		if section.Note != "" {
+			sectionContent = sectionTitle + "\n" + formViewStyles.note.Render(section.Note) + "\n\n" + section.Group.View()
+		} else {
+			sectionContent = sectionTitle + "\n\n" + section.Group.View()
+		}
+		content.WriteString(style.Render(sectionContent))
+	}
+
+	return content.String()
 }
 
 type fieldLocation struct {
@@ -107,28 +351,22 @@ type DataDrivenStep struct {
 	definition *StepDefinition
 	fieldKeys  map[string]fieldLocation // maps Key -> section/field indices
 
-	sections       []formSection
-	currentSection int
+	form *MultiSectionForm
 
 	// customExtraContent, when non-nil, overrides definition.ExtraContent.
 	// Set via WithExtraContentFunc.
 	customExtraContent func(width int) string
-
-	// totalFieldsCache is the summed field count across all sections, used by
-	// emitFocusChanged. -1 means "not yet computed".
-	totalFieldsCache int
 }
 
 // NewDataDrivenStep builds a DataDrivenStep from a StepDefinition.
 func NewDataDrivenStep(def *StepDefinition) *DataDrivenStep {
 	step := &DataDrivenStep{
-		BaseStep:         NewBaseStepWithDisplayTitle(def.ID, def.Title, def.DisplayTitle, def.Description),
-		definition:       def,
-		fieldKeys:        make(map[string]fieldLocation),
-		sections:         make([]formSection, 0, len(def.Sections)),
-		totalFieldsCache: -1,
+		BaseStep:   NewBaseStepWithDisplayTitle(def.ID, def.Title, def.DisplayTitle, def.Description),
+		definition: def,
+		fieldKeys:  make(map[string]fieldLocation),
 	}
 
+	sections := make([]FormSection, 0, len(def.Sections))
 	for sectionIdx := range def.Sections {
 		sectionDef := &def.Sections[sectionIdx]
 		fields := make([]components.FormField, 0, len(sectionDef.Fields))
@@ -142,13 +380,14 @@ func NewDataDrivenStep(def *StepDefinition) *DataDrivenStep {
 			}
 		}
 
-		step.sections = append(step.sections, formSection{
-			title: sectionDef.Title,
-			note:  sectionDef.Note,
-			group: components.NewInputGroup(fields...),
+		sections = append(sections, FormSection{
+			Title: sectionDef.Title,
+			Note:  sectionDef.Note,
+			Group: components.NewInputGroup(fields...),
 		})
 	}
 
+	step.form = NewMultiSectionForm(sections)
 	return step
 }
 
@@ -195,20 +434,16 @@ func buildFormField(def *FieldDefinition) components.FormField {
 	return field
 }
 
-// getField resolves a field key to its FormField by walking the
-// fieldKeys → section → group → field chain, returning nil if any level
-// is missing. Callers must handle the nil case. The parameter is named
-// fieldKey rather than key to avoid shadowing the bubbles/v2/key import.
+// getField resolves a field key to its FormField via the form's section/field
+// coordinates, returning nil if the key is unknown or the location is missing.
+// Callers must handle the nil case. The parameter is named fieldKey rather than
+// key to avoid shadowing the bubbles/v2/key import.
 func (s *DataDrivenStep) getField(fieldKey string) components.FormField {
 	loc, ok := s.fieldKeys[fieldKey]
-	if !ok || loc.section < 0 || loc.section >= len(s.sections) {
+	if !ok {
 		return nil
 	}
-	group := s.sections[loc.section].group
-	if group == nil {
-		return nil
-	}
-	return group.Field(loc.field)
+	return s.form.FieldAt(loc.section, loc.field)
 }
 
 // Value returns the current string value of the field named fieldKey.
@@ -234,15 +469,7 @@ func (s *DataDrivenStep) ValueInt(fieldKey string, fallback int) int {
 }
 
 func (s *DataDrivenStep) setValue(fieldKey, value string) {
-	loc, ok := s.fieldKeys[fieldKey]
-	if !ok || loc.section < 0 || loc.section >= len(s.sections) {
-		return
-	}
-	group := s.sections[loc.section].group
-	if group == nil {
-		return
-	}
-	if field := group.Field(loc.field); field != nil {
+	if field := s.getField(fieldKey); field != nil {
 		field.SetValue(value)
 	}
 }
@@ -277,21 +504,9 @@ func (s *DataDrivenStep) WithExtraContentFunc(fn func(step *DataDrivenStep, widt
 	return s
 }
 
-// currentGroup returns the Group of the currently-active section, or nil if
-// the index is out of range or the section has no Group.
-func (s *DataDrivenStep) currentGroup() *components.InputGroup {
-	if s.currentSection < 0 || s.currentSection >= len(s.sections) {
-		return nil
-	}
-	return s.sections[s.currentSection].group
-}
-
 // Init focuses the first input group so the user can type immediately.
 func (s *DataDrivenStep) Init() tea.Cmd {
-	if len(s.sections) > 0 && s.sections[0].group != nil {
-		return s.sections[0].group.Focus()
-	}
-	return nil
+	return s.form.Init()
 }
 
 // SetFocused toggles step focus; when re-focused, focus returns to the
@@ -299,17 +514,10 @@ func (s *DataDrivenStep) Init() tea.Cmd {
 func (s *DataDrivenStep) SetFocused(focused bool) {
 	s.BaseStep.SetFocused(focused)
 	if focused {
-		s.currentSection = 0
-		if len(s.sections) > 0 && s.sections[0].group != nil {
-			_ = s.sections[0].group.Focus() // Command executed during Init()
-		}
+		_ = s.form.Focus() // Command executed during Init()
 		return
 	}
-	for _, section := range s.sections {
-		if section.group != nil {
-			section.group.Blur()
-		}
-	}
+	s.form.Blur()
 }
 
 // ShortHelp returns the key bindings shown in the step's help footer.
@@ -321,120 +529,26 @@ func (s *DataDrivenStep) ShortHelp() []KeyBinding {
 	}
 }
 
-// Update handles navigation (enter/tab/shift-tab) and forwards other input
-// to the currently-focused form group.
+// Update forwards input to the embedded form and, on enter, runs
+// definition-aware validation before emitting StepCompleteMsg.
 func (s *DataDrivenStep) Update(msg tea.Msg) (WizardStep, tea.Cmd) {
-	group := s.currentGroup()
-	if group == nil {
+	cmd, enterPressed := s.form.Update(msg)
+	if !enterPressed {
+		return s, cmd
+	}
+	if err := s.Validate(); err != nil {
 		return s, nil
 	}
-
-	if keyMsg, ok := msg.(tea.KeyPressMsg); ok {
-		switch {
-		case key.Matches(keyMsg, key.NewBinding(key.WithKeys("enter"))):
-			if err := s.Validate(); err != nil {
-				return s, nil
-			}
-			return s, func() tea.Msg {
-				return StepCompleteMsg{StepID: s.ID()}
-			}
-
-		case key.Matches(keyMsg, key.NewBinding(key.WithKeys("tab", "down"))):
-			isLastField := group.FocusIndex() >= len(group.Fields())-1
-			isLastSection := s.currentSection >= len(s.sections)-1
-
-			if isLastField && isLastSection {
-				return s, nil
-			}
-
-			if isLastField {
-				group.Blur()
-				s.currentSection++
-				nextGroup := s.currentGroup()
-				focusCmd := s.emitFocusChanged()
-				if nextGroup == nil {
-					return s, focusCmd
-				}
-				nextGroup.SetFocusIndex(0)
-				return s, tea.Batch(nextGroup.Focus(), focusCmd)
-			}
-
-			var cmd tea.Cmd
-			s.sections[s.currentSection].group, cmd = group.Update(msg)
-			return s, tea.Batch(cmd, s.emitFocusChanged())
-
-		case key.Matches(keyMsg, key.NewBinding(key.WithKeys("shift+tab", "up"))):
-			isFirstField := group.FocusIndex() == 0
-			isFirstSection := s.currentSection == 0
-
-			if isFirstField && isFirstSection {
-				return s, nil
-			}
-
-			if isFirstField {
-				group.Blur()
-				s.currentSection--
-				prevGroup := s.currentGroup()
-				focusCmd := s.emitFocusChanged()
-				if prevGroup == nil {
-					return s, focusCmd
-				}
-				prevGroup.SetFocusIndex(len(prevGroup.Fields()) - 1)
-				return s, tea.Batch(prevGroup.Focus(), focusCmd)
-			}
-
-			var cmd tea.Cmd
-			s.sections[s.currentSection].group, cmd = group.Update(msg)
-			return s, tea.Batch(cmd, s.emitFocusChanged())
-		}
-	}
-
-	var cmd tea.Cmd
-	s.sections[s.currentSection].group, cmd = group.Update(msg)
-	return s, cmd
-}
-
-func (s *DataDrivenStep) emitFocusChanged() tea.Cmd {
-	globalIndex := 0
-	for i := range s.currentSection {
-		if s.sections[i].group == nil {
-			continue
-		}
-		globalIndex += len(s.sections[i].group.Fields())
-	}
-	if current := s.currentGroup(); current != nil {
-		globalIndex += current.FocusIndex()
-	}
-
-	if s.totalFieldsCache < 0 {
-		total := 0
-		for _, section := range s.sections {
-			if section.group != nil {
-				total += len(section.group.Fields())
-			}
-		}
-		s.totalFieldsCache = total
-	}
-	totalFields := s.totalFieldsCache
-
-	return func() tea.Msg {
-		return FocusChangedMsg{
-			FieldIndex:  globalIndex,
-			TotalFields: totalFields,
-		}
+	return s, func() tea.Msg {
+		return StepCompleteMsg{StepID: s.ID()}
 	}
 }
 
-// Validate runs each section's group validation, then the step-level
-// Validate function if the definition provides one.
+// Validate runs the form's field validation, then the step-level Validate
+// function if the definition provides one.
 func (s *DataDrivenStep) Validate() error {
-	for _, section := range s.sections {
-		if section.group == nil {
-			continue
-		}
-		if errs := section.group.Validate(); len(errs) > 0 {
-			return errs[0]
-		}
+	if err := s.form.Validate(); err != nil {
+		return err
 	}
 	if s.definition.Validate != nil {
 		return s.definition.Validate(s.values())
@@ -506,48 +620,13 @@ var formViewStyles = struct {
 		PaddingLeft(2),
 }
 
-// View renders the step's sections with per-section active/completed
-// indicators and appends any configured extra content.
+// View renders the step's sections via the embedded form and appends any
+// configured extra content.
 func (s *DataDrivenStep) View(width, height int) string {
 	s.SetSize(width, height)
 
-	innerWidth := width - 4
-	if innerWidth < 40 {
-		innerWidth = 40
-	}
-
 	var content strings.Builder
-
-	for i, section := range s.sections {
-		if section.group == nil {
-			continue
-		}
-		section.group.SetWidth(innerWidth)
-
-		var style lipgloss.Style
-		var indicator string
-
-		switch {
-		case i == s.currentSection:
-			style = formViewStyles.activeSection
-			indicator = formViewStyles.activeRender
-		case section.isComplete():
-			style = formViewStyles.inactiveSection
-			indicator = formViewStyles.completedRender
-		default:
-			style = formViewStyles.inactiveSection
-			indicator = formViewStyles.pendingRender
-		}
-
-		sectionTitle := indicator + " " + formViewStyles.sectionHeader.Render(strings.ToLower(section.title))
-		var sectionContent string
-		if section.note != "" {
-			sectionContent = sectionTitle + "\n" + formViewStyles.note.Render(section.note) + "\n\n" + section.group.View()
-		} else {
-			sectionContent = sectionTitle + "\n\n" + section.group.View()
-		}
-		content.WriteString(style.Render(sectionContent))
-	}
+	content.WriteString(s.form.View(width))
 
 	// customExtraContent (set via WithExtraContentFunc) takes precedence over
 	// the definition's ExtraContent.

@@ -1,6 +1,3 @@
-// Package wizard implements the bubbletea model and step orchestration for
-// okdctl's interactive configuration wizard, producing a validated
-// config.Config for downstream deployment.
 package wizard
 
 import (
