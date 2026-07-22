@@ -14,6 +14,7 @@ import "embed"
 // terraform/modules or terraform/environments is missing from this list.
 //
 //go:embed terraform/modules/proxmox-okd/main.tf
+//go:embed terraform/modules/proxmox-okd/ha.tf
 //go:embed terraform/modules/proxmox-okd/variables.tf
 //go:embed terraform/modules/proxmox-okd/output.tf
 //go:embed terraform/modules/proxmox-okd/versions.tf
