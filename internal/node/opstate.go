@@ -26,13 +26,18 @@ const opStateSchemaV1 = "v1"
 // Op identifies which node-lifecycle verb is in flight.
 type Op string
 
-// Node-lifecycle op identifiers recorded in the marker.
+// Node-lifecycle op identifiers recorded in the marker. OpSnapshot is its own
+// identifier, distinct from OpRemove, precisely so a snapshot's cordon/drain
+// can never be mistaken for an in-flight remove by anything that later keys
+// off Op equality — snapshots are bounded, non-resumable ops and must not
+// borrow another op's resume identity.
 const (
-	OpRemove  Op = "remove"
-	OpResize  Op = "resize"
-	OpCompact Op = "compact"
-	OpStop    Op = "stop"
-	OpStart   Op = "start"
+	OpRemove   Op = "remove"
+	OpResize   Op = "resize"
+	OpCompact  Op = "compact"
+	OpStop     Op = "stop"
+	OpStart    Op = "start"
+	OpSnapshot Op = "snapshot"
 )
 
 // Step names the mutating step the marker was written before. Steps are

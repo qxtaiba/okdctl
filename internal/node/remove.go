@@ -107,7 +107,7 @@ func (r *Runner) RemoveWorker(ctx context.Context, target string, opts RemoveOpt
 	}
 
 	if !opts.SkipDrain {
-		if err := r.cordonAndDrain(ctx, target, opts.DrainTimeout, false, resumeStep); err != nil {
+		if err := r.cordonAndDrain(ctx, OpRemove, target, opts.DrainTimeout, false, resumeStep); err != nil {
 			return err
 		}
 	}
@@ -159,15 +159,17 @@ func (r *Runner) RemoveWorker(ctx context.Context, target string, opts RemoveOpt
 	return nil
 }
 
-// cordonAndDrain gates cordon and drain independently via resumeStep so a run
-// resuming exactly at StepDrain (cordon already landed before the crash)
-// re-runs only the drain.
-func (r *Runner) cordonAndDrain(ctx context.Context, node, timeout string, force bool, resumeStep Step) error {
+// cordonAndDrain cordons then drains node, writing an op marker (under op — the
+// caller's identity, not a hardcoded one, so a snapshot and a remove sharing
+// this helper never leave a marker the other could be mistaken for) before each
+// step, and gating each step via resumeStep so a run resuming exactly at
+// StepDrain (cordon already landed before the crash) re-runs only the drain.
+func (r *Runner) cordonAndDrain(ctx context.Context, op Op, node, timeout string, force bool, resumeStep Step) error {
 	stop := r.startProgress(fmt.Sprintf("cordoning and draining %s", node))
 	defer stop()
 
 	if shouldRunStep(StepCordon, resumeStep) {
-		if err := markStep(r.marker(), OpRemove, node, StepCordon, r.RunID, r.Cfg.Cluster.Name); err != nil {
+		if err := markStep(r.marker(), op, node, StepCordon, r.RunID, r.Cfg.Cluster.Name); err != nil {
 			return err
 		}
 		if err := r.Cluster.Cordon(ctx, node); err != nil {
@@ -175,7 +177,7 @@ func (r *Runner) cordonAndDrain(ctx context.Context, node, timeout string, force
 		}
 	}
 	if shouldRunStep(StepDrain, resumeStep) {
-		if err := markStep(r.marker(), OpRemove, node, StepDrain, r.RunID, r.Cfg.Cluster.Name); err != nil {
+		if err := markStep(r.marker(), op, node, StepDrain, r.RunID, r.Cfg.Cluster.Name); err != nil {
 			return err
 		}
 		if err := r.Cluster.Drain(ctx, node, cluster.DrainOptions{

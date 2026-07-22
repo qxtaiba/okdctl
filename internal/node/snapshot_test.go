@@ -278,6 +278,68 @@ func TestCreateSnapshot_agentProbeFailureAssumesDisabled(t *testing.T) {
 	}
 }
 
+// TestCreateSnapshot_successClearsOpMarker is part of FIX 2: a clean snapshot
+// leaves no op marker behind — cordonAndDrain's OpSnapshot marker must not
+// outlive a successful op, so `okdctl node list` never shows a phantom
+// in-flight op for a snapshot that already finished.
+func TestCreateSnapshot_successClearsOpMarker(t *testing.T) {
+	fc := &fakeCluster{nodes: []cluster.NodeDetail{{Name: "worker0", Role: nodetypes.RoleWorker, Ready: true}}}
+	fsc := &fakeSnapshotClient{}
+	cfg := config.DefaultConfig()
+	cfg.Provider.Proxmox.Node = testProxmoxNode
+
+	r := seedSnapshotRunner(t, fc, fsc, cfg)
+	r.DryRun = false
+
+	if _, err := r.CreateSnapshot(context.Background(), "worker0", SnapshotCreateOptions{Name: testSnapshotName}); err != nil {
+		t.Fatalf("CreateSnapshot: %v", err)
+	}
+
+	marker, err := ReadOpMarker(r.WorkDir, cfg.Cluster.Name)
+	if err != nil {
+		t.Fatalf("ReadOpMarker: %v", err)
+	}
+	if marker != nil {
+		t.Errorf("expected no marker after a clean snapshot; got %+v", marker)
+	}
+}
+
+// TestCreateSnapshot_failureLeavesOpSnapshotMarkerNotOpRemove is FIX 2: it
+// proves the shared-marker hazard is closed. cordonAndDrain is shared between
+// RemoveWorker and snapshot; before this fix it always wrote OpRemove, so a
+// snapshot that cordoned/drained and then died left a marker `okdctl node
+// remove` would resume-match. Here the pvesh create call itself fails after a
+// successful cordon/drain, leaving a marker behind — it must be tagged
+// OpSnapshot, never OpRemove, since any future resume logic keys off Op
+// equality (see opstate.go's Op type).
+func TestCreateSnapshot_failureLeavesOpSnapshotMarkerNotOpRemove(t *testing.T) {
+	fc := &fakeCluster{nodes: []cluster.NodeDetail{{Name: "worker0", Role: nodetypes.RoleWorker, Ready: true}}}
+	fsc := &fakeSnapshotClient{createErr: errors.New("no space left on device")}
+	cfg := config.DefaultConfig()
+	cfg.Provider.Proxmox.Node = testProxmoxNode
+
+	r := seedSnapshotRunner(t, fc, fsc, cfg)
+	r.DryRun = false
+
+	if _, err := r.CreateSnapshot(context.Background(), "worker0", SnapshotCreateOptions{Name: testSnapshotName}); err == nil {
+		t.Fatal("expected error when the pvesh create call fails")
+	}
+
+	marker, err := ReadOpMarker(r.WorkDir, cfg.Cluster.Name)
+	if err != nil {
+		t.Fatalf("ReadOpMarker: %v", err)
+	}
+	if marker == nil {
+		t.Fatal("expected a marker to remain after a cordoned failure")
+	}
+	if marker.Op != OpSnapshot {
+		t.Errorf("marker.Op = %q; want %q", marker.Op, OpSnapshot)
+	}
+	if marker.Op == OpRemove {
+		t.Fatal("marker.Op must never equal OpRemove: a later 'okdctl node remove' keys resume on Op equality")
+	}
+}
+
 func TestCreateSnapshot_requiresProxmox(t *testing.T) {
 	fc := &fakeCluster{nodes: []cluster.NodeDetail{{Name: "worker0", Role: nodetypes.RoleWorker, Ready: true}}}
 	r, _, _ := seedRunner(t, fc, &fakeTF{}, config.DefaultConfig())
@@ -493,6 +555,31 @@ func TestRollbackSnapshot_dryRunMakesZeroMutatingCalls(t *testing.T) {
 	}
 	if fsc.rollbackCalls != 0 {
 		t.Errorf("dry-run called RollbackSnapshot: rollbackCalls=%d", fsc.rollbackCalls)
+	}
+}
+
+// TestRollbackSnapshot_successClearsOpMarker mirrors
+// TestCreateSnapshot_successClearsOpMarker for rollback: FIX 2 requires the
+// OpSnapshot marker cordonAndDrain wrote to be cleared on a fully clean run.
+func TestRollbackSnapshot_successClearsOpMarker(t *testing.T) {
+	fc := &fakeCluster{nodes: []cluster.NodeDetail{{Name: "worker0", Role: nodetypes.RoleWorker, Ready: true}}}
+	fsc := &fakeSnapshotClient{}
+	cfg := config.DefaultConfig()
+	cfg.Provider.Proxmox.Node = testProxmoxNode
+
+	r := seedSnapshotRunner(t, fc, fsc, cfg)
+	r.DryRun = false
+
+	if err := r.RollbackSnapshot(context.Background(), "worker0", testSnapshotName); err != nil {
+		t.Fatalf("RollbackSnapshot: %v", err)
+	}
+
+	marker, err := ReadOpMarker(r.WorkDir, cfg.Cluster.Name)
+	if err != nil {
+		t.Fatalf("ReadOpMarker: %v", err)
+	}
+	if marker != nil {
+		t.Errorf("expected no marker after a clean rollback; got %+v", marker)
 	}
 }
 

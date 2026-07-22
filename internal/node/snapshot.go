@@ -68,20 +68,29 @@ func (r *Runner) CreateSnapshot(ctx context.Context, target string, opts Snapsho
 	}
 
 	if ready && !opts.SkipDrain {
-		if derr := r.cordonAndDrain(ctx, target, opts.DrainTimeout, role == nodetypes.RoleMaster, Step("")); derr != nil {
+		if derr := r.cordonAndDrain(ctx, OpSnapshot, target, opts.DrainTimeout, role == nodetypes.RoleMaster, Step("")); derr != nil {
 			return "", derr
 		}
 		// Uncordon runs whether the snapshot below succeeds or fails, so a
 		// snapshot failure never leaves the node needlessly unschedulable on
 		// top of the original problem. If the snapshot itself succeeded and
 		// this uncordon then fails, that failure becomes the op's result —
-		// the caller must know the node is unexpectedly still cordoned.
+		// the caller must know the node is unexpectedly still cordoned. Only
+		// a clean uncordon clears the OpSnapshot marker cordonAndDrain wrote:
+		// a failure leaves it in place (matching remove/resize precedent) as
+		// an operator-visible "left cordoned" trail, correctly attributed to
+		// snapshot rather than misread as a stuck remove.
 		defer func() {
 			if uerr := r.Cluster.Uncordon(ctx, target); uerr != nil {
 				if err == nil {
 					err = uerr
 				} else {
 					r.Log.Warn("node: uncordon after snapshot failed", "node", target, "err", uerr)
+				}
+			}
+			if err == nil {
+				if cerr := clearOpMarker(r.marker()); cerr != nil {
+					r.Log.Warn("node: op marker cleanup failed", "err", cerr)
 				}
 			}
 		}()
@@ -124,7 +133,8 @@ func (r *Runner) ListSnapshots(ctx context.Context, target string) ([]hostssh.Sn
 // purpose is to wait) and re-verifies health before returning the node to
 // service (post-gate). Any failure from cordonAndDrain onward leaves the node
 // cordoned; the returned error names the failing stage, and only a clean
-// post-gate reaches the final (best-effort) uncordon.
+// post-gate reaches the final (best-effort) uncordon, which is also what
+// clears the OpSnapshot marker cordonAndDrain wrote.
 func (r *Runner) RollbackSnapshot(ctx context.Context, target, snapname string) error {
 	if r.Proxmox == nil {
 		return &errtypes.ClusterError{Msg: "snapshot rollback needs Proxmox SSH access, but no Proxmox host is configured"}
@@ -149,7 +159,7 @@ func (r *Runner) RollbackSnapshot(ctx context.Context, target, snapname string) 
 		return nil
 	}
 
-	if err := r.cordonAndDrain(ctx, target, "", isMaster, Step("")); err != nil {
+	if err := r.cordonAndDrain(ctx, OpSnapshot, target, "", isMaster, Step("")); err != nil {
 		return err
 	}
 
@@ -178,6 +188,10 @@ func (r *Runner) RollbackSnapshot(ctx context.Context, target, snapname string) 
 
 	if err := r.Cluster.Uncordon(ctx, target); err != nil {
 		r.Log.Warn("node: uncordon after rollback failed", "node", target, "err", err)
+	}
+
+	if err := clearOpMarker(r.marker()); err != nil {
+		r.Log.Warn("node: op marker cleanup failed", "err", err)
 	}
 
 	r.Log.Info("node: rolled back", "node", target, "name", snapname)
