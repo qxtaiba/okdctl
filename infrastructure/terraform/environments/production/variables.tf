@@ -170,3 +170,13 @@ variable "start_workers_immediately" {
   type        = bool
   default     = false
 }
+
+
+# =============================================================================
+# HIGH AVAILABILITY
+# =============================================================================
+variable "ha_enabled" {
+  description = "enable proxmox ha anti-affinity for master vms (pve9+)"
+  type        = bool
+  default     = false
+}

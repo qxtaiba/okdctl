@@ -44,4 +44,10 @@ module "okd_cluster" {
 
   bootstrap_enabled         = var.bootstrap_enabled
   start_workers_immediately = var.start_workers_immediately
+
+  # =============================================================================
+  # HIGH AVAILABILITY
+  # =============================================================================
+
+  ha_enabled = var.ha_enabled
 }

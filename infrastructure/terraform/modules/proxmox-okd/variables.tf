@@ -317,3 +317,9 @@ variable "protect_masters" {
   type        = bool
   default     = false
 }
+
+variable "ha_enabled" {
+  description = "enable proxmox ha anti-affinity for master vms (pve9+; supersedes startup{} ordering on ha-triggered relocation, see ha.tf)"
+  type        = bool
+  default     = false
+}
