@@ -1,0 +1,174 @@
+package node
+
+import (
+	"context"
+	"errors"
+	"testing"
+	"time"
+
+	"github.com/qxtaiba/okdctl/internal/cluster"
+	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/nodetypes"
+)
+
+func startTestNodes() []cluster.NodeDetail {
+	return []cluster.NodeDetail{
+		{Name: "master0", Role: nodetypes.RoleMaster, Ready: true},
+		{Name: "master1", Role: nodetypes.RoleMaster, Ready: true},
+		{Name: "worker0", Role: nodetypes.RoleWorker, Ready: true},
+		{Name: "worker1", Role: nodetypes.RoleWorker, Ready: true},
+	}
+}
+
+func startTestConfig() *config.Config {
+	cfg := config.DefaultConfig()
+	cfg.Topology.ControlPlane.Count = 2
+	cfg.Topology.Workers.Count = 2
+	cfg.Topology.VMIDBase = 6000
+	cfg.Provider.Proxmox.Node = testProxmoxNode
+	return cfg
+}
+
+func TestStartDryRunMakesNoMutation(t *testing.T) {
+	fc := &fakeCluster{nodes: startTestNodes()}
+	ftf := &fakeTF{}
+	fp := &fakePower{}
+	cfg := startTestConfig()
+
+	r, tfvars, cfgPath := seedRunner(t, fc, ftf, cfg)
+	r.Power = fp
+
+	if err := r.Start(context.Background()); err != nil {
+		t.Fatalf("dry-run start: %v", err)
+	}
+
+	if fp.startCalls != 0 || fp.calls != 0 || fp.shutdownCalls != 0 {
+		t.Errorf("dry-run start touched the hypervisor: start=%d powerCycle=%d shutdown=%d", fp.startCalls, fp.calls, fp.shutdownCalls)
+	}
+	if fc.listCalls != 0 || fc.cordon != 0 || fc.uncordon != 0 || fc.approveCalls != 0 {
+		t.Errorf("dry-run start called the cluster: list=%d cordon=%d uncordon=%d approve=%d", fc.listCalls, fc.cordon, fc.uncordon, fc.approveCalls)
+	}
+	assertUnchanged(t, tfvars, "SENTINEL_TFVARS\n")
+	assertUnchanged(t, cfgPath, "SENTINEL_CONFIG\n")
+}
+
+func TestStartDryRunDoesNotRequirePower(t *testing.T) {
+	fc := &fakeCluster{nodes: startTestNodes()}
+	r, _, _ := seedRunner(t, fc, &fakeTF{}, startTestConfig())
+	r.Power = nil
+
+	if err := r.Start(context.Background()); err != nil {
+		t.Fatalf("dry-run start without a power-cycler must not fail: %v", err)
+	}
+}
+
+func TestStartRefusesWithoutPowerCycler(t *testing.T) {
+	fc := &fakeCluster{nodes: startTestNodes()}
+	r, _, _ := seedRunner(t, fc, &fakeTF{}, startTestConfig())
+	r.DryRun = false
+	r.Power = nil
+
+	err := r.Start(context.Background())
+	if err == nil {
+		t.Fatal("expected refusal when no power-cycler is wired")
+	}
+	if fc.listCalls != 0 {
+		t.Errorf("refusal must precede any cluster call: list=%d", fc.listCalls)
+	}
+}
+
+func TestStartPowersMastersBeforeWorkers(t *testing.T) {
+	fc := &fakeCluster{nodes: startTestNodes()}
+	fp := &fakePower{}
+	r, _, _ := seedRunner(t, fc, &fakeTF{}, startTestConfig())
+	r.DryRun = false
+	r.Power = fp
+	r.ClusterReadyTimeout = 5 * time.Second
+
+	if err := r.Start(context.Background()); err != nil {
+		t.Fatalf("start: %v", err)
+	}
+
+	want := []int{6010, 6011, 6100, 6101}
+	if len(fp.startOrder) != len(want) {
+		t.Fatalf("startOrder = %v, want %v", fp.startOrder, want)
+	}
+	for i, vmid := range want {
+		if fp.startOrder[i] != vmid {
+			t.Errorf("startOrder[%d] = %d, want %d (masters ascending then workers ascending): full order %v",
+				i, fp.startOrder[i], vmid, fp.startOrder)
+		}
+	}
+	if fc.uncordon != 4 {
+		t.Errorf("start must uncordon every node from real ListNodes names: uncordon=%d", fc.uncordon)
+	}
+	if fc.cordon != 0 {
+		t.Errorf("start must never cordon: cordon=%d", fc.cordon)
+	}
+}
+
+func TestStartWaitConvergesAndApprovesCSRs(t *testing.T) {
+	// readyAtCall=1: the readiness poll converges on its first (immediate) tick,
+	// which must have approved pending CSRs before returning ready. A later
+	// convergence would stall on the 30s poll interval, so ready-first keeps the
+	// test fast while still exercising the call-counted toggle.
+	fc := &fakeCluster{nodes: startTestNodes(), readyAtCall: 1, approveCount: 1}
+	fp := &fakePower{}
+	r, _, _ := seedRunner(t, fc, &fakeTF{}, startTestConfig())
+	r.DryRun = false
+	r.Power = fp
+	r.ClusterReadyTimeout = 5 * time.Second
+
+	if err := r.Start(context.Background()); err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	if fc.approveCalls < 1 {
+		t.Errorf("expected ApprovePendingCSRs to run during the readiness wait, got %d calls", fc.approveCalls)
+	}
+	if fp.startCalls != 4 {
+		t.Errorf("expected all 4 VMs powered on before the wait, got %d", fp.startCalls)
+	}
+}
+
+func TestStartWaitKeepsApprovingBeforeReady(t *testing.T) {
+	// Nodes never report Ready; a tight timeout means exactly the immediate
+	// poll runs, which must still have attempted a CSR approval.
+	nodes := startTestNodes()
+	for i := range nodes {
+		nodes[i].Ready = false
+	}
+	fc := &fakeCluster{nodes: nodes, approveCount: 0}
+	fp := &fakePower{}
+	r, _, _ := seedRunner(t, fc, &fakeTF{}, startTestConfig())
+	r.DryRun = false
+	r.Power = fp
+	r.ClusterReadyTimeout = 50 * time.Millisecond
+
+	err := r.Start(context.Background())
+	if err == nil {
+		t.Fatal("expected a timeout error when nodes never become Ready")
+	}
+	if fc.approveCalls < 1 {
+		t.Errorf("CSR approval must run while waiting even before nodes are Ready, got %d", fc.approveCalls)
+	}
+	if fc.uncordon != 0 {
+		t.Errorf("start must not uncordon when the readiness wait never converges: uncordon=%d", fc.uncordon)
+	}
+}
+
+func TestStartWaitSkipsApproveWhenAPIDown(t *testing.T) {
+	fc := &fakeCluster{nodes: startTestNodes(), listErr: errors.New("connection refused")}
+	fp := &fakePower{}
+	r, _, _ := seedRunner(t, fc, &fakeTF{}, startTestConfig())
+	r.DryRun = false
+	r.Power = fp
+	r.ClusterReadyTimeout = 50 * time.Millisecond
+
+	err := r.Start(context.Background())
+	if err == nil {
+		t.Fatal("expected a timeout error when the API is unreachable")
+	}
+	if fc.approveCalls != 0 {
+		t.Errorf("CSR approval must be skipped while ListNodes fails (API not up): approve=%d", fc.approveCalls)
+	}
+}
