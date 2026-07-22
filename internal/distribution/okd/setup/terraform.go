@@ -36,6 +36,18 @@ func buildISOStrings(isoStorage string, role nodetypes.NodeRole, count int) []st
 	return buildQuotedRoleList(`"%s:iso/%s%d.iso"`, isoStorage, role, count)
 }
 
+// WorkerISOsPlanVar renders the plan-time -var override for worker_isos
+// widened to workerCount entries, reusing buildISOStrings so the ISO path
+// format has one source of truth with buildTerraformVarsData. A node-add
+// dry-run widens worker_count to preview the create; the module asserts
+// length(worker_isos) >= worker_count, so the preview must widen worker_isos
+// in lockstep or the plan fails against the smaller list still on disk in
+// terraform.tfvars.
+func WorkerISOsPlanVar(isoStorage string, workerCount int) string {
+	isos := buildISOStrings(isoStorage, nodetypes.RoleWorker, workerCount)
+	return "[" + strings.Join(isos, ", ") + "]"
+}
+
 func buildNodeNames(clusterName string, role nodetypes.NodeRole, count int) []string {
 	return buildQuotedRoleList(`"%s-%s%d"`, clusterName, role, count)
 }

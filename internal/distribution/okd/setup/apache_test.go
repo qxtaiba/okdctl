@@ -1,17 +1,79 @@
 package setup
 
 import (
+	"context"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/qxtaiba/okdctl/internal/config"
 )
 
+// goosLinux dedupes the "linux" literal across the systemctl-gated tests
+// below (goconst flags 3+ occurrences).
+const goosLinux = "linux"
+
 func apacheCfg(webRoot string) *config.Config {
 	cfg := config.DefaultConfig()
 	cfg.HTTPServer.Root = webRoot
 	return cfg
+}
+
+// fakeSystemctl writes an executable systemctl stub that appends its argv to
+// calls.log and prepends its dir to PATH, mirroring
+// phase/teardown_test.go's fakeTeardownBin pattern.
+func fakeSystemctl(t *testing.T, script string) (callLog string) {
+	t.Helper()
+	dir := t.TempDir()
+	callLog = filepath.Join(dir, "calls.log")
+	body := "#!/bin/sh\necho \"$@\" >> " + callLog + "\n" + script + "\n"
+	if err := os.WriteFile(filepath.Join(dir, "systemctl"), []byte(body), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	return callLog
+}
+
+func TestTeardownIgnitionServer_StopsAndDisablesHTTPD(t *testing.T) {
+	if runtime.GOOS != goosLinux {
+		t.Skip("systemctl branches are linux-only; darwin takes the GOOS gate")
+	}
+	callLog := fakeSystemctl(t, "exit 0")
+
+	p := newTestPhase(t)
+	p.TeardownIgnitionServer(context.Background())
+
+	calls, err := os.ReadFile(callLog)
+	if err != nil {
+		t.Fatalf("read call log: %v", err)
+	}
+	for _, want := range []string{"is-active --quiet httpd", "stop httpd", "is-enabled --quiet httpd", "disable httpd"} {
+		if !strings.Contains(string(calls), want) {
+			t.Errorf("systemctl calls missing %q; got:\n%s", want, calls)
+		}
+	}
+}
+
+func TestTeardownIgnitionServer_InactiveIsNoop(t *testing.T) {
+	var callLog string
+	if runtime.GOOS == goosLinux {
+		callLog = fakeSystemctl(t, "case \"$1\" in is-*) exit 1;; *) exit 0;; esac")
+	}
+
+	p := newTestPhase(t)
+	p.TeardownIgnitionServer(context.Background())
+
+	if runtime.GOOS == goosLinux {
+		calls, err := os.ReadFile(callLog)
+		if err != nil {
+			t.Fatalf("read call log: %v", err)
+		}
+		if strings.Contains(string(calls), "stop httpd") || strings.Contains(string(calls), "disable httpd") {
+			t.Errorf("inactive httpd must not be stopped or disabled; got:\n%s", calls)
+		}
+	}
 }
 
 func TestDeployToWebServer_IgnitionFilesLandAt0640(t *testing.T) {

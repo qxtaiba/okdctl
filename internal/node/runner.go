@@ -142,6 +142,7 @@ type isoProvisioner interface {
 // substitute a call-recording fake without touching httpd.
 type ignitionServer interface {
 	ConfigureApache(ctx context.Context, cfg *config.Config, projectRoot string) error
+	TeardownIgnitionServer(ctx context.Context)
 }
 
 // Runner drives node-lifecycle ops against one cluster. TF mutates VMs;
