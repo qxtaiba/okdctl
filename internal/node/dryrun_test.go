@@ -21,7 +21,10 @@ import (
 const testProxmoxNode = "pve"
 
 // fakeCluster records the mutating calls a node op makes so a dry-run can be
-// asserted to make none.
+// asserted to make none. The …Nodes slices additionally record which node
+// each call targeted, and listNodesCalls/podsForSelectorCalls count the
+// read-only guard queries, so a resumed op can be proven to have skipped
+// guards/validation rather than merely having them no-op.
 type fakeCluster struct {
 	nodes          []cluster.NodeDetail
 	osdPods        []cluster.PodPlacement
@@ -45,23 +48,27 @@ type fakeCluster struct {
 	signerNotAfter time.Time
 	signerErr      error
 
-	listCalls int
+	listNodesCalls       int
+	podsForSelectorCalls int
+	cordonedNodes        []string
+	drainedNodes         []string
+	uncordonedNodes      []string
 	// readyAtCall, when >0, forces ListNodes to report every node not-Ready
-	// until the Nth call (1-based), mirroring drainFailsAtCall: it lets a start
-	// test drive the readiness poll from not-ready to Ready without a live API.
+	// until the Nth call (1-based): drives a start test's readiness poll from
+	// not-ready to Ready without a live API.
 	readyAtCall int
-	// listErr, when set, makes ListNodes fail — simulating the API being
-	// unreachable while a just-started control plane is still coming up.
+	// listErr, when set, makes ListNodes fail — the API unreachable while a
+	// just-started control plane is still coming up.
 	listErr error
 }
 
 func (f *fakeCluster) ListNodes(context.Context) ([]cluster.NodeDetail, error) {
-	f.listCalls++
+	f.listNodesCalls++
 	if f.listErr != nil {
 		return nil, f.listErr
 	}
 	if f.readyAtCall > 0 {
-		ready := f.listCalls >= f.readyAtCall
+		ready := f.listNodesCalls >= f.readyAtCall
 		out := make([]cluster.NodeDetail, len(f.nodes))
 		copy(out, f.nodes)
 		for i := range out {
@@ -71,10 +78,22 @@ func (f *fakeCluster) ListNodes(context.Context) ([]cluster.NodeDetail, error) {
 	}
 	return f.nodes, nil
 }
-func (f *fakeCluster) Cordon(context.Context, string) error   { f.cordon++; return nil }
-func (f *fakeCluster) Uncordon(context.Context, string) error { f.uncordon++; return nil }
-func (f *fakeCluster) Drain(_ context.Context, _ string, _ cluster.DrainOptions) error {
+
+func (f *fakeCluster) Cordon(_ context.Context, node string) error {
+	f.cordon++
+	f.cordonedNodes = append(f.cordonedNodes, node)
+	return nil
+}
+
+func (f *fakeCluster) Uncordon(_ context.Context, node string) error {
+	f.uncordon++
+	f.uncordonedNodes = append(f.uncordonedNodes, node)
+	return nil
+}
+
+func (f *fakeCluster) Drain(_ context.Context, node string, _ cluster.DrainOptions) error {
 	f.drain++
+	f.drainedNodes = append(f.drainedNodes, node)
 	if f.drainFailsAtCall != 0 && f.drain == f.drainFailsAtCall {
 		return errors.New("drain timed out")
 	}
@@ -102,13 +121,16 @@ func (f *fakeCluster) EtcdHealthy(context.Context) (cluster.EtcdHealth, error) {
 func (f *fakeCluster) CephHealthy(context.Context) (cluster.CephHealth, error) {
 	return cluster.CephHealth{Applicable: f.cephApplicable, Healthy: f.cephHealthy}, nil
 }
+
 func (f *fakeCluster) MastersSchedulable(context.Context) (bool, error) { return f.schedulable, nil }
+
 func (f *fakeCluster) SetMastersSchedulable(context.Context, bool) error {
 	f.setSched++
 	return nil
 }
 
 func (f *fakeCluster) PodsForSelector(_ context.Context, namespace, selector string) ([]cluster.PodPlacement, error) {
+	f.podsForSelectorCalls++
 	if selector == "app=rook-ceph-osd" {
 		return f.osdPods, nil
 	}
@@ -147,6 +169,11 @@ type fakeTF struct {
 	// emptyPlan makes ShowPlanChanges report no changes, simulating a
 	// resumed re-run where the apply already landed.
 	emptyPlan bool
+	// emptyForAddress makes ShowPlanChanges report an empty plan only for the
+	// listed targeted addresses, on top of the emptyPlan bool — used to model
+	// a role roll where some nodes in the same fakeTF have already landed and
+	// others have not.
+	emptyForAddress map[string]bool
 	// stateAbsent flips StateHasResource to report the target address as
 	// absent from state; zero value (false) keeps the common "still
 	// present" default so tests that never reach the empty-plan branch see
@@ -166,7 +193,7 @@ func (f *fakeTF) Plan(_ context.Context, opts terraform.PlanOptions) error {
 }
 
 func (f *fakeTF) ShowPlanChanges(context.Context, string) ([]terraform.ResourceChange, error) {
-	if f.emptyPlan {
+	if f.emptyPlan || f.emptyForAddress[f.lastTarget] {
 		return nil, nil
 	}
 	return []terraform.ResourceChange{{Address: f.lastTarget, Action: f.action}}, nil
@@ -186,12 +213,15 @@ func (f *fakeTF) WithLockHint(err error) error { return err }
 
 // fakePower records power-cycle calls so a resize can be asserted to realize
 // the change via the hypervisor. err simulates a PowerCycleVM API failure;
-// shutdownErr/startErr do the same for ShutdownVM/StartVM.
+// shutdownErr/startErr do the same for ShutdownVM/StartVM. cycledVMIDs records
+// every PowerCycleVM call (not just the last) so a multi-node role roll can
+// assert exactly which VMs were power-cycled.
 type fakePower struct {
-	calls    int
-	lastNode string
-	lastVMID int
-	err      error
+	calls       int
+	lastNode    string
+	lastVMID    int
+	cycledVMIDs []int
+	err         error
 
 	shutdownCalls int
 	shutdownErr   error
@@ -214,6 +244,7 @@ func (f *fakePower) PowerCycleVM(_ context.Context, node string, vmid int) error
 	f.calls++
 	f.lastNode = node
 	f.lastVMID = vmid
+	f.cycledVMIDs = append(f.cycledVMIDs, vmid)
 	return f.err
 }
 
