@@ -17,6 +17,37 @@ import (
 	"github.com/qxtaiba/okdctl/internal/node"
 )
 
+func TestValidateAddFlags(t *testing.T) {
+	cases := []struct {
+		name    string
+		role    string
+		count   int
+		wantErr bool
+	}{
+		{"worker role, default count", "worker", 1, false},
+		{"worker role, batch count", "worker", 3, false},
+		{"master role rejected", "master", 1, true},
+		{"unknown role rejected", "bootstrap", 1, true},
+		{"zero count rejected", "worker", 0, true},
+		{"negative count rejected", "worker", -1, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := validateAddFlags(tc.role, tc.count)
+			if tc.wantErr {
+				var usageErr *errtypes.UsageError
+				if !errors.As(err, &usageErr) {
+					t.Fatalf("want *errtypes.UsageError, got %v", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("want nil error, got %v", err)
+			}
+		})
+	}
+}
+
 func TestValidateResizeFlags(t *testing.T) {
 	cases := []struct {
 		name          string

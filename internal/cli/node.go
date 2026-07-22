@@ -17,7 +17,9 @@ import (
 	"github.com/qxtaiba/okdctl/internal/deploy"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/clusterstatus"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
+	"github.com/qxtaiba/okdctl/internal/distribution/okd/setup"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
+	"github.com/qxtaiba/okdctl/internal/executor"
 	"github.com/qxtaiba/okdctl/internal/infrastructure/proxmox"
 	"github.com/qxtaiba/okdctl/internal/infrastructure/terraform"
 	"github.com/qxtaiba/okdctl/internal/node"
@@ -37,6 +39,8 @@ var (
 	nodeResizeMemoryMB         int
 	nodeResizeCPU              int
 	nodeAcknowledgeInterrupted bool
+	nodeAddRole                string
+	nodeAddCount               int
 )
 
 var nodeCmd = &cobra.Command{
@@ -97,14 +101,25 @@ different op or node instead of refusing.`,
 }
 
 var nodeAddCmd = &cobra.Command{
-	Use:   "add --role worker",
-	Short: "Add a node to the cluster (not yet implemented)",
-	Long: `Adding a node requires building and uploading a per-node CoreOS ISO and
-reviving the ignition HTTPS server post-install; it is deferred (see the node
-lifecycle spec, phase 4). Use 'okdctl deploy' to grow a fresh cluster.`,
-	RunE: func(_ *cobra.Command, _ []string) error {
-		return &errtypes.UsageError{Msg: "node add is not yet implemented (deferred to phase 4); see 'okdctl node --help'"}
-	},
+	Use:   "add --role worker [--count N]",
+	Short: "Add worker node(s) to the cluster",
+	Long: `Build and upload a per-node CoreOS ISO, revive the ignition HTTPS server for
+the join window, apply a plan-gated targeted terraform create, and wait for
+each new node to join and report Ready.
+
+Only worker nodes can be added (master add/remove is not supported). --count
+adds N workers in one batch, occupying the next N terraform count indices
+after the persisted worker count. The ignition server is revived once for the
+whole batch and torn down when the batch finishes, fails, or times out.
+
+An interrupted add records an op marker and resumes automatically on the
+next 'okdctl node add', skipping already-joined nodes and completed steps.
+--acknowledge-interrupted-op overrides a marker left by a different op or
+node instead of refusing.`,
+	Example: `  okdctl node add --role worker --yes --confirm-cluster grappleberry
+  okdctl node add --role worker --count 2 --dry-run`,
+	Args: cobra.NoArgs,
+	RunE: runNodeAdd,
 }
 
 func init() {
@@ -123,7 +138,12 @@ func init() {
 	nodeResizeCmd.Flags().IntVar(&nodeResizeCPU, "cpu", 0, "new per-node cpu cores (0 keeps current)")
 	nodeResizeCmd.Flags().BoolVar(&nodeAcknowledgeInterrupted, "acknowledge-interrupted-op", false, "override a stranded marker left by a different op or node and proceed fresh")
 
-	nodeAddCmd.Flags().String("role", "worker", "node role to add")
+	nodeAddCmd.Flags().BoolVarP(&nodeYes, "yes", "y", false, "skip confirmation prompt")
+	nodeAddCmd.Flags().StringVar(&nodeConfirmCluster, "confirm-cluster", "", "required with --yes; must equal the config cluster name")
+	nodeAddCmd.Flags().BoolVar(&nodeDryRun, flagDryRun, false, "run guards and the plan gate without mutating anything")
+	nodeAddCmd.Flags().StringVar(&nodeAddRole, "role", "worker", "node role to add (only worker is supported)")
+	nodeAddCmd.Flags().IntVar(&nodeAddCount, "count", 1, "number of nodes to add in this batch")
+	nodeAddCmd.Flags().BoolVar(&nodeAcknowledgeInterrupted, "acknowledge-interrupted-op", false, "override a stranded marker left by a different op or node and proceed fresh")
 
 	nodeCmd.AddCommand(nodeRemoveCmd)
 	nodeCmd.AddCommand(nodeResizeCmd)
@@ -218,6 +238,15 @@ func buildNodeRunner(ctx context.Context, cfg *config.Config, verb string, conse
 	runner := node.NewRunner(cl, tf, cfg, projectRoot, cfgFile, tfEnv, tui.RunID(), tui.SimpleLogger())
 	runner.DryRun = consent.dryRun
 	runner.Reporter = func(desc string) func() { return tui.StartSpinner(ctx, desc) }
+
+	// Wired unconditionally: construction is cheap (no I/O) and only node add
+	// dereferences ISO/Ignition/SetupOpts, so every other verb simply ignores them.
+	setupExec := executor.New(executor.WithWorkDir(projectRoot))
+	setupPhase := setup.New(phase.WithExecutor(setupExec), phase.WithLogger(tui.SimpleLogger()))
+	setupOpts := setup.NewOptions(cfg, projectRoot)
+	runner.ISO = setupPhase
+	runner.Ignition = setupPhase
+	runner.SetupOpts = &setupOpts
 
 	// A resize takes effect only after a Proxmox power-cycle (bpg/proxmox changes
 	// the VM config without restarting). Wire the API power-cycler whenever creds
@@ -447,6 +476,54 @@ func runNodeResize(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	rc.complete(cmd.OutOrStdout(), time.Since(start))
+	return nil
+}
+
+func runNodeAdd(cmd *cobra.Command, _ []string) error {
+	cfg, err := loadConfig(cfgFile)
+	if err != nil {
+		return err
+	}
+	if err := validateAddFlags(nodeAddRole, nodeAddCount); err != nil {
+		return err
+	}
+
+	if err := confirmClusterMatches(nodeYes, nodeConfirmCluster, cfg.Cluster.Name, "node add"); err != nil {
+		return err
+	}
+
+	consent := nodeConsent{yes: nodeYes, dryRun: nodeDryRun, twoStage: false}
+	rc, err := buildNodeRunner(cmd.Context(), cfg, "add", consent, true)
+	if err != nil {
+		return err
+	}
+	defer rc.cleanup()
+
+	start := time.Now()
+	if err := rc.runner.AddWorkers(cmd.Context(), node.AddOptions{
+		Count:            nodeAddCount,
+		HostTotalMiB:     rc.HostTotalMiB,
+		HostAllocatedMiB: rc.HostAllocatedMiB,
+		Acknowledge:      nodeAcknowledgeInterrupted,
+	}); err != nil {
+		if errors.Is(err, node.ErrDeclined) {
+			return nil
+		}
+		return err
+	}
+	rc.complete(cmd.OutOrStdout(), time.Since(start))
+	return nil
+}
+
+// validateAddFlags requires --role worker (master add/remove is not
+// supported, mirroring remove's guard) and a positive --count.
+func validateAddFlags(role string, count int) error {
+	if role != nodetypes.RoleWorker.String() {
+		return &errtypes.UsageError{Msg: fmt.Sprintf("--role %q is not supported; only worker nodes can be added (master add/remove is not supported)", role)}
+	}
+	if count < 1 {
+		return &errtypes.UsageError{Msg: "--count must be >= 1"}
+	}
 	return nil
 }
 
