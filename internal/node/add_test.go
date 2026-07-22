@@ -304,7 +304,8 @@ func TestAddWorkersPlanShape(t *testing.T) {
 
 // addExistingWorkers builds the pre-add worker roster the count-match guard
 // checks against (names match r.workerName so the join wait can find them).
-func addExistingWorkers(n int) []cluster.NodeDetail {
+func addExistingWorkers() []cluster.NodeDetail {
+	const n = 2
 	nodes := make([]cluster.NodeDetail, n)
 	for i := range nodes {
 		nodes[i] = cluster.NodeDetail{
@@ -334,7 +335,7 @@ func addAppearingWorkers(from, count int) []cluster.NodeDetail {
 func TestAddWorkersMutatingSequenceOrder(t *testing.T) {
 	var events []string
 	fc := &fakeCluster{
-		nodes:               addExistingWorkers(2),
+		nodes:               addExistingWorkers(),
 		workersAppearAtCall: 2, // call 1 is the pre-add count-match guard
 		appearingWorkers:    addAppearingWorkers(2, 2),
 		events:              &events,
@@ -368,7 +369,7 @@ func TestAddWorkersMutatingSequenceOrder(t *testing.T) {
 // closed exactly once across a multi-node --count 3 batch (not once per node).
 func TestAddWorkersReviveTeardownOncePerBatch(t *testing.T) {
 	fc := &fakeCluster{
-		nodes:               addExistingWorkers(2),
+		nodes:               addExistingWorkers(),
 		workersAppearAtCall: 2,
 		appearingWorkers:    addAppearingWorkers(2, 3),
 	}
@@ -400,7 +401,7 @@ func TestAddWorkersReviveTeardownOncePerBatch(t *testing.T) {
 // when a node never joins — the join window must not be left open on failure.
 func TestAddWorkersTeardownOnJoinTimeout(t *testing.T) {
 	fc := &fakeCluster{
-		nodes: addExistingWorkers(2), // the new worker never appears → join times out
+		nodes: addExistingWorkers(), // the new worker never appears → join times out
 	}
 	ftf := &fakeTF{action: terraform.PlanActionCreate}
 	fiso := &fakeISO{}
@@ -438,7 +439,7 @@ func TestAddWorkersTeardownOnJoinTimeout(t *testing.T) {
 // stopped or disabled.
 func TestAddWorkersTeardownRunsUnderDetachedCtxWhenCancelled(t *testing.T) {
 	fc := &fakeCluster{
-		nodes: addExistingWorkers(2), // the new worker never appears; the join wait observes cancellation
+		nodes: addExistingWorkers(), // the new worker never appears; the join wait observes cancellation
 	}
 	ftf := &fakeTF{action: terraform.PlanActionCreate}
 	fiso := &fakeISO{}
