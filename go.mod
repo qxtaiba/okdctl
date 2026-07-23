@@ -9,7 +9,7 @@ require (
 	charm.land/bubbletea/v2 v2.0.8
 	charm.land/lipgloss/v2 v2.0.5
 	charm.land/log/v2 v2.0.0
-	github.com/luthermonson/go-proxmox v0.8.0
+	github.com/luthermonson/go-proxmox v0.8.1
 	github.com/spf13/cobra v1.10.2
 	// ci-testgo-xcrypto-053-runner-death — v0.53.0 OOM-kills the ubuntu CI
 	// runner during go test; re-bump once the root cause is understood.
