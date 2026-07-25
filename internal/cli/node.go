@@ -89,13 +89,20 @@ resize to see exactly which same-role siblings still have the change pending.
 At least one of --memory-mb or --cpu is required; an omitted dimension keeps
 the role's current value.
 
+--skip-drain power-cycles the node without cordoning/draining it. The resize is
+realized by a hypervisor stop→start that kills the node's pods regardless;
+skipping the drain lets them restart in place on the now-roomier node instead of
+evicting them cluster-wide. Prefer it when the cluster is memory-saturated, where
+a drain's evicted pods cannot reschedule and the drain times out. The etcd and
+Ceph health gates around the power-cycle still run.
+
 An interrupted role roll records an op marker and resumes automatically on the
 next 'okdctl node resize' of the same role or node, skipping already-completed
 nodes and steps. --acknowledge-interrupted-op overrides a marker left by a
 different op or node instead of refusing.`,
 	Example: `  okdctl node resize masters --memory-mb 24576 --yes --confirm-cluster grappleberry
   okdctl node resize workers --memory-mb 16384 --dry-run
-  okdctl node resize workers --cpu 8 --yes --confirm-cluster grappleberry`,
+  okdctl node resize grappleberry-master0 --memory-mb 30720 --skip-drain --yes --confirm-cluster grappleberry`,
 	Args: cobra.ExactArgs(1),
 	RunE: runNodeResize,
 }
@@ -139,6 +146,7 @@ func init() {
 	nodeResizeCmd.Flags().BoolVar(&nodeDryRun, flagDryRun, false, "run gates and the plan gate without mutating anything")
 	nodeResizeCmd.Flags().IntVar(&nodeResizeMemoryMB, "memory-mb", 0, "new per-node memory in MiB (0 keeps current)")
 	nodeResizeCmd.Flags().IntVar(&nodeResizeCPU, "cpu", 0, "new per-node cpu cores (0 keeps current)")
+	nodeResizeCmd.Flags().BoolVar(&nodeSkipDrain, "skip-drain", false, "power-cycle without cordon/drain so pods restart in place (use when a drain can't reschedule under memory pressure); etcd/Ceph gates still run")
 	nodeResizeCmd.Flags().BoolVar(&nodeAcknowledgeInterrupted, "acknowledge-interrupted-op", false, "override a stranded marker left by a different op or node and proceed fresh")
 
 	nodeAddCmd.Flags().BoolVarP(&nodeYes, "yes", "y", false, "skip confirmation prompt")
@@ -472,6 +480,7 @@ func runNodeResize(cmd *cobra.Command, args []string) error {
 		HostTotalMiB:     rc.HostTotalMiB,
 		HostAllocatedMiB: rc.HostAllocatedMiB,
 		Acknowledge:      nodeAcknowledgeInterrupted,
+		SkipDrain:        nodeSkipDrain,
 	}); err != nil {
 		if errors.Is(err, node.ErrDeclined) {
 			return nil

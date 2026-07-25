@@ -470,7 +470,7 @@ func TestResizeOneNodePowerCyclesAndRealizes(t *testing.T) {
 	r.DryRun = false
 	r.Power = fp
 
-	if err := r.resizeOneNode(context.Background(), resizeTarget{name: "worker0", index: 0}, nodetypes.RoleWorker, map[string]string{"worker_memory_mb": "16384"}, nil); err != nil {
+	if err := r.resizeOneNode(context.Background(), resizeTarget{name: "worker0", index: 0}, nodetypes.RoleWorker, map[string]string{"worker_memory_mb": "16384"}, nil, false); err != nil {
 		t.Fatalf("resizeOneNode: %v", err)
 	}
 	if fp.calls != 1 {
@@ -481,6 +481,41 @@ func TestResizeOneNodePowerCyclesAndRealizes(t *testing.T) {
 	}
 	if fc.cordon != 1 || fc.drain != 1 || fc.uncordon != 1 {
 		t.Errorf("expected cordon/drain/uncordon once each: cordon=%d drain=%d uncordon=%d", fc.cordon, fc.drain, fc.uncordon)
+	}
+}
+
+// TestResizeOneNodeSkipDrainAvoidsCordon verifies --skip-drain power-cycles the
+// node and realizes the resize without cordoning or draining it, while the
+// post-power-cycle Ceph gate still runs. The eviction storm a drain would cause
+// is exactly what deadlocks on a memory-saturated cluster, so skip-drain must
+// touch neither cordon nor drain yet still realize the change.
+func TestResizeOneNodeSkipDrainAvoidsCordon(t *testing.T) {
+	fc := &fakeCluster{
+		nodes:          []cluster.NodeDetail{{Name: "worker0", Role: nodetypes.RoleWorker, Ready: true}},
+		cephApplicable: true,
+		cephHealthy:    true,
+	}
+	ftf := &fakeTF{action: terraform.PlanActionUpdate}
+	fp := &fakePower{}
+	cfg := config.DefaultConfig()
+	cfg.Topology.VMIDBase = 6000
+	cfg.Provider.Proxmox.Node = testProxmoxNode
+
+	r, _, _ := seedRunner(t, fc, ftf, cfg)
+	r.DryRun = false
+	r.Power = fp
+
+	if err := r.resizeOneNode(context.Background(), resizeTarget{name: "worker0", index: 0}, nodetypes.RoleWorker, map[string]string{"worker_memory_mb": "16384"}, nil, true); err != nil {
+		t.Fatalf("resizeOneNode(skipDrain): %v", err)
+	}
+	if fp.calls != 1 {
+		t.Fatalf("expected exactly one power-cycle, got %d", fp.calls)
+	}
+	if fc.cordon != 0 || fc.drain != 0 {
+		t.Errorf("skip-drain must not cordon or drain: cordon=%d drain=%d", fc.cordon, fc.drain)
+	}
+	if fc.cephCalls == 0 {
+		t.Errorf("skip-drain must still run the post-power-cycle Ceph gate; cephCalls=%d", fc.cephCalls)
 	}
 }
 
@@ -500,7 +535,7 @@ func TestResizeOneNodePowerCycleFailureLeavesCordoned(t *testing.T) {
 	r.DryRun = false
 	r.Power = fp
 
-	err := r.resizeOneNode(context.Background(), resizeTarget{name: "worker0", index: 0}, nodetypes.RoleWorker, map[string]string{"worker_memory_mb": "16384"}, nil)
+	err := r.resizeOneNode(context.Background(), resizeTarget{name: "worker0", index: 0}, nodetypes.RoleWorker, map[string]string{"worker_memory_mb": "16384"}, nil, false)
 	if err == nil {
 		t.Fatal("expected error when power-cycle fails")
 	}
