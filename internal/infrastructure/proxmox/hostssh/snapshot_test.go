@@ -32,7 +32,7 @@ func TestValidateVMID(t *testing.T) {
 
 // TestValidateSnapshotName_RejectsInjectionPayloads exercises the exact
 // shell-metacharacter payloads TestValidateProxmoxName_RejectsBadNode uses
-// in pvesh_test.go: validateSnapshotName is the injection guard for the
+// in pvesh_test.go: ValidateSnapshotName is the injection guard for the
 // snapshot-create/rollback/delete argv path the same way validateProxmoxName
 // guards the node atom.
 func TestValidateSnapshotName_RejectsInjectionPayloads(t *testing.T) {
@@ -46,8 +46,8 @@ func TestValidateSnapshotName_RejectsInjectionPayloads(t *testing.T) {
 		"snap\tname",
 	}
 	for _, name := range payloads {
-		if err := validateSnapshotName(name); err == nil {
-			t.Errorf("validateSnapshotName(%q) accepted; want error", name)
+		if err := ValidateSnapshotName(name); err == nil {
+			t.Errorf("ValidateSnapshotName(%q) accepted; want error", name)
 		}
 	}
 }
@@ -55,8 +55,8 @@ func TestValidateSnapshotName_RejectsInjectionPayloads(t *testing.T) {
 func TestValidateSnapshotName(t *testing.T) {
 	accept := []string{"a", "A", "snap-1", "snap_1", "okdctl-20260713-101500"}
 	for _, name := range accept {
-		if err := validateSnapshotName(name); err != nil {
-			t.Errorf("validateSnapshotName(%q) rejected; want nil: %v", name, err)
+		if err := ValidateSnapshotName(name); err != nil {
+			t.Errorf("ValidateSnapshotName(%q) rejected; want nil: %v", name, err)
 		}
 	}
 
@@ -70,8 +70,8 @@ func TestValidateSnapshotName(t *testing.T) {
 		"A" + strings.Repeat("a", 40), // 41 chars, over the 40-char cap
 	}
 	for _, name := range reject {
-		if err := validateSnapshotName(name); err == nil {
-			t.Errorf("validateSnapshotName(%q) accepted; want error", name)
+		if err := ValidateSnapshotName(name); err == nil {
+			t.Errorf("ValidateSnapshotName(%q) accepted; want error", name)
 		}
 	}
 }
@@ -88,8 +88,8 @@ func TestValidateSnapshotDescription_RejectsInjectionPayloads(t *testing.T) {
 		"desc&bg",
 	}
 	for _, desc := range payloads {
-		if err := validateSnapshotDescription(desc); err == nil {
-			t.Errorf("validateSnapshotDescription(%q) accepted; want error", desc)
+		if err := ValidateSnapshotDescription(desc); err == nil {
+			t.Errorf("ValidateSnapshotDescription(%q) accepted; want error", desc)
 		}
 	}
 }
@@ -97,16 +97,18 @@ func TestValidateSnapshotDescription_RejectsInjectionPayloads(t *testing.T) {
 func TestValidateSnapshotDescription(t *testing.T) {
 	accept := []string{"", "pre-upgrade_snapshot", "before-ceph-rebuild,2026-07-13"}
 	for _, desc := range accept {
-		if err := validateSnapshotDescription(desc); err != nil {
-			t.Errorf("validateSnapshotDescription(%q) rejected; want nil: %v", desc, err)
+		if err := ValidateSnapshotDescription(desc); err != nil {
+			t.Errorf("ValidateSnapshotDescription(%q) rejected; want nil: %v", desc, err)
 		}
 	}
 
 	longDesc := strings.Repeat("a", 201)
-	reject := []string{"desc\nname", "desc\x00", longDesc}
+	// "-vmstate"/"--description": a dash-led description could otherwise read
+	// as a pvesh option token on the remote command line.
+	reject := []string{"desc\nname", "desc\x00", longDesc, "-vmstate", "--description", "_leading", ".leading"}
 	for _, desc := range reject {
-		if err := validateSnapshotDescription(desc); err == nil {
-			t.Errorf("validateSnapshotDescription(%q) accepted; want error", desc)
+		if err := ValidateSnapshotDescription(desc); err == nil {
+			t.Errorf("ValidateSnapshotDescription(%q) accepted; want error", desc)
 		}
 	}
 }
@@ -119,8 +121,8 @@ func TestValidateSnapshotDescription(t *testing.T) {
 func TestValidateSnapshotDescription_RejectsWhitespace(t *testing.T) {
 	reject := []string{"before upgrade", "before\tupgrade", "before\nupgrade", " leading", "trailing "}
 	for _, desc := range reject {
-		if err := validateSnapshotDescription(desc); err == nil {
-			t.Errorf("validateSnapshotDescription(%q) accepted; want error (whitespace must be rejected)", desc)
+		if err := ValidateSnapshotDescription(desc); err == nil {
+			t.Errorf("ValidateSnapshotDescription(%q) accepted; want error (whitespace must be rejected)", desc)
 		}
 	}
 }
