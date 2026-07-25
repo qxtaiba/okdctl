@@ -28,6 +28,7 @@ import (
 
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/logutil"
+	"github.com/qxtaiba/okdctl/internal/render"
 	"github.com/qxtaiba/okdctl/internal/tui"
 	"github.com/qxtaiba/okdctl/internal/version"
 )
@@ -133,14 +134,7 @@ func execute() (code int) {
 			return sigCode
 		}
 		if shouldAnnounceFailure(err) {
-			// Pass err as a structured attr so logutil.RedactHandler gets the
-			// chance to scrub credentials in the chain. tui.Error(err.Error())
-			// would stringify before the handler sees it.
-			tui.Error("command failed", tui.LF("err", err))
-			if runLogPath != "" {
-				tui.Info("full run log persisted; attach it to bug reports or run 'okdctl debug-bundle'",
-					tui.LF("path", runLogPath))
-			}
+			announceFailure(err)
 		}
 		return exitCodeFor(err)
 	}
@@ -199,6 +193,25 @@ func printUpdateNotice(ch <-chan version.CheckResult) {
 		tui.HighlightStyle.Render(result.LatestTag))
 	fmt.Fprintln(os.Stderr, tui.MutedStyle.Render("  to upgrade (sha256 + cosign verified):"))
 	fmt.Fprintln(os.Stderr, tui.MutedStyle.Render("  curl -sSfL https://raw.githubusercontent.com/qxtaiba/okdctl/develop/scripts/install.sh | bash"))
+}
+
+// announceFailure surfaces a command failure. On a human TTY (text format) it
+// renders the boxed ErrorSummary — the same designed chrome the deploy
+// summaries use — unless the command already rendered its own failure box
+// (render.IsPresented). On the machine surface (piped/JSON) it keeps the
+// structured "command failed" log line so 2>&1 consumers and the file sink
+// see err through logutil.RedactHandler, which scrubs credentials in the
+// chain — tui.Error(err.Error()) would stringify before the handler sees it.
+func announceFailure(err error) {
+	if tui.ProgressBarsEnabled() && !render.IsPresented(err) {
+		fmt.Fprint(os.Stderr, render.ErrorSummary(err, exitCodeFor(err), tui.RunID()))
+		return
+	}
+	tui.Error("command failed", tui.LF("err", err))
+	if runLogPath != "" {
+		tui.Info("full run log persisted; attach it to bug reports or run 'okdctl debug-bundle'",
+			tui.LF("path", runLogPath))
+	}
 }
 
 // shouldAnnounceFailure reports whether execute() should print its generic

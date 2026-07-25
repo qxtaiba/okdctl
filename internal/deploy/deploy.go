@@ -173,7 +173,9 @@ func reportDeployPhaseError(w io.Writer, err error, phase deployPhase, steps []d
 	if errors.Is(err, context.Canceled) {
 		tui.Info(cancelHint)
 	}
-	return err
+	// The FailureSummary/InterruptSummary box above already presents this
+	// failure; mark it so the top-level handler does not stack a second box.
+	return render.Presented(err)
 }
 
 // Options configures Execute. ProjectRoot must be a resolved project root
