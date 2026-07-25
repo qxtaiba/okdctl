@@ -376,13 +376,13 @@ func (s *ReviewStep) renderFilesIgnition(st *sectionStyles) string {
 
 	if s.cfg.Files.PullSecret != "" {
 		b.WriteString(st.label.Render("pull secret"))
-		b.WriteString(st.check.Render("✓ "))
+		b.WriteString(st.check.Render(tui.IconSuccess + " "))
 		b.WriteString(st.value.Render(truncatePath(s.cfg.Files.PullSecret, 40)))
 		b.WriteString("\n")
 	}
 	if s.cfg.Files.SSHPublicKey != "" {
 		b.WriteString(st.label.Render("ssh key"))
-		b.WriteString(st.check.Render("✓ "))
+		b.WriteString(st.check.Render(tui.IconSuccess + " "))
 		b.WriteString(st.value.Render(truncatePath(s.cfg.Files.SSHPublicKey, 40)))
 		b.WriteString("\n")
 	}

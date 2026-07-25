@@ -21,7 +21,12 @@ const (
 // swaps the semantic aliases below.
 var (
 	ColorPurple600 = lipgloss.Color("#9333EA")
+	ColorPurple800 = lipgloss.Color("#6B21A8")
 	ColorPrimary   = ColorPurple600
+	// ColorPrimaryDim tints box borders with the brand instead of slate grey,
+	// so every box reads as okdctl at a glance while the brighter ColorPrimary
+	// carries the title.
+	ColorPrimaryDim = ColorPurple800
 
 	ColorGreen500 = lipgloss.Color("#22C55E")
 	ColorSuccess  = ColorGreen500
@@ -64,6 +69,7 @@ func setTheme(theme ColorTheme) {
 	switch theme {
 	case ThemeHighContrast:
 		ColorPrimary = hcColorPrimary
+		ColorPrimaryDim = hcColorPrimary
 		ColorSuccess = hcColorSuccess
 		ColorWarning = hcColorWarning
 		ColorError = hcColorError
@@ -72,6 +78,7 @@ func setTheme(theme ColorTheme) {
 		ColorTextDim = hcColorTextDim
 	default:
 		ColorPrimary = ColorPurple600
+		ColorPrimaryDim = ColorPurple800
 		ColorSuccess = ColorGreen500
 		ColorWarning = ColorAmber500
 		ColorError = ColorRed500

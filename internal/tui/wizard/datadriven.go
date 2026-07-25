@@ -606,14 +606,14 @@ var formViewStyles = struct {
 	completedRender: lipgloss.NewStyle().
 		Foreground(tui.ColorSuccess).
 		Bold(true).
-		Render("✓"),
+		Render(tui.IconSuccess),
 	activeRender: lipgloss.NewStyle().
 		Foreground(tui.ColorPrimary).
 		Bold(true).
-		Render("●"),
+		Render(tui.IconActive),
 	pendingRender: lipgloss.NewStyle().
 		Foreground(tui.ColorSlate600).
-		Render("○"),
+		Render(tui.IconPending),
 	note: lipgloss.NewStyle().
 		Foreground(tui.ColorSlate500).
 		Italic(true).

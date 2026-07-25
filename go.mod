@@ -21,10 +21,11 @@ require (
 	sigs.k8s.io/yaml v1.6.0
 )
 
+require github.com/charmbracelet/colorprofile v0.4.3
+
 require (
 	github.com/atotto/clipboard v0.1.4 // indirect
 	github.com/buger/goterm v1.0.4 // indirect
-	github.com/charmbracelet/colorprofile v0.4.3 // indirect
 	github.com/charmbracelet/ultraviolet v0.0.0-20260703014108-f5a850f9c2b7 // indirect
 	github.com/charmbracelet/x/ansi v0.11.7 // indirect
 	github.com/charmbracelet/x/term v0.2.2 // indirect

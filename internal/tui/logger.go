@@ -59,7 +59,7 @@ func buildLogger(w io.Writer) *charmlog.Logger {
 	l.SetLevel(charmlog.InfoLevel)
 	styles := charmlog.DefaultStyles()
 	styles.Levels[charmlog.DebugLevel] = lipgloss.NewStyle().Foreground(ColorSlate500).SetString("[DEBUG]")
-	styles.Levels[charmlog.InfoLevel] = lipgloss.NewStyle().Foreground(ColorCyan500).Bold(true).SetString("[INFO]")
+	styles.Levels[charmlog.InfoLevel] = lipgloss.NewStyle().Foreground(ColorInfo).Bold(true).SetString("[INFO]")
 	styles.Levels[charmlog.WarnLevel] = lipgloss.NewStyle().Foreground(ColorWarning).Bold(true).SetString("[WARN]")
 	styles.Levels[charmlog.ErrorLevel] = lipgloss.NewStyle().Foreground(ColorError).Bold(true).SetString("[ERROR]")
 	l.SetStyles(styles)

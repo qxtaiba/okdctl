@@ -145,6 +145,11 @@ func configureLogging(cmd *cobra.Command) error {
 
 	progressBars := stderrIsTTY && stdoutIsTTY && logFormat != outputJSON && !noColor
 
+	// Pin the box/leader render profile to stdout's real capabilities so a
+	// piped or NO_COLOR run strips escapes from boxes the same way charm/log
+	// already strips them from level badges.
+	tui.SetColorProfileFor(os.Stdout)
+
 	if err := tui.ConfigureLoggers(effectiveLevel, logFormat, stdoutW, stderrW, progressBars); err != nil {
 		return err
 	}
