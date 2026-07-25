@@ -299,10 +299,13 @@ write the comment — then it carries real information.
   permissive license (MIT / Apache-2.0 / BSD-{2,3}). No GPL / AGPL / LGPL
   / custom / missing licenses — the shipped static binary plus apt/rpm/brew
   packaging would be blocked. New deps touch `go.mod` ⇒ check the upstream
-  LICENSE.
+  LICENSE. Scope: everything linked into or shipped with a release
+  artifact. Developer-only tooling that is never linked or distributed
+  (e.g. `air`, GPL-3.0, installed at `make dev` time, absent from go.mod)
+  is exempt; record any such exception here.
 - **v0.x deps need a justification and an abandonment plan.** v0.x APIs
   may break on any minor bump. Today's entries:
-  - `github.com/luthermonson/go-proxmox` v0.7.x — sole Proxmox discovery
+  - `github.com/luthermonson/go-proxmox` v0.8.x — sole Proxmox discovery
     path (`internal/tui/wizard/steps/proxmox_discovery.go`). Bus-factor 1.
     Fallback: ~200 LOC REST-only rewrite using `net/http` + the documented
     Proxmox API. Track upstream releases; bump on each. Treat 3 consecutive

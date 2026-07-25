@@ -113,14 +113,14 @@ type nodeListSideData struct {
 }
 
 func loadNodeListSideData(cfg *config.Config, projectRoot string) nodeListSideData {
-	envDir := filepath.Join(projectRoot, "infrastructure", "terraform", "environments", phase.GetTerraformEnv(cfg))
+	envDir := phase.TerraformEnvDir(projectRoot, phase.GetTerraformEnv(cfg))
 	sizing, found, err := setup.ReadTerraformVarsSizing(envDir)
 	if err != nil {
 		tui.Warn("node list: read terraform.tfvars sizing failed; drift will show as unknown", tui.LF("err", err))
 		found = false
 	}
 
-	workDir := filepath.Join(projectRoot, "okd-install")
+	workDir := filepath.Join(projectRoot, phase.WorkDirName)
 	marker, err := node.ReadOpMarker(workDir, cfg.Cluster.Name)
 	if err != nil {
 		tui.Warn("node list: read in-flight op marker failed", tui.LF("err", err))

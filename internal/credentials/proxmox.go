@@ -157,9 +157,14 @@ func (c *ProxmoxCredentials) GoString() string {
 //
 // Known call sites (review when adding a new one):
 //
-//	cli/deploy.go       — proxmox.WithEnv(creds.Env()); defer prov.ZeroizeEnv()
+//	cli/helpers.go      — proxmox.WithEnv(creds.Env()); defer prov.ZeroizeEnv()
+//	                      (runTerraformPlanPreview, shared by deploy --dry-run
+//	                      and okdctl plan)
 //	cli/destroy.go      — terraform.WithEnv(creds.Env()); defer tf.ZeroizeEnv()
-//	cli/node.go         — terraform.WithEnv(creds.Env()); defer tf.ZeroizeEnv()
+//	cli/node.go         — terraform.WithEnv(creds.Env()); manual ZeroizeEnv on
+//	                      the early-error returns + all buildNodeRunner callers
+//	                      defer rc.cleanup() (tf escapes into the runner, so a
+//	                      literal defer is impossible there)
 //	deploy/deploy.go    — okd.WithEnv(creds.Env()); callers defer p.ZeroizeEnv()
 func (c *ProxmoxCredentials) Env() []string {
 	if !c.IsValid() {
