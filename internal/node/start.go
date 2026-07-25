@@ -37,6 +37,7 @@ func (r *Runner) Start(ctx context.Context, opts StartOptions) error {
 			return err
 		}
 	}
+	r.warnIfHAManaged("start")
 
 	cpCount := r.Cfg.Topology.ControlPlane.Count
 	workerCount := r.Cfg.Topology.Workers.Count
