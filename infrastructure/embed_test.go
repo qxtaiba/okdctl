@@ -107,3 +107,28 @@ func TestEmbeddedTerraformMatchesDisk(t *testing.T) {
 		}
 	}
 }
+
+// TestEmbeddedMasterKeepsPreventDestroy is a tripwire on the module's last
+// line of defense against etcd-quorum loss: the master VM resource must keep
+// lifecycle { prevent_destroy = true }. Deleting or flipping it (e.g. while
+// debugging a destroy) would let a targeted destroy or a replace-folding plan
+// silently wipe a control-plane VM.
+func TestEmbeddedMasterKeepsPreventDestroy(t *testing.T) {
+	data, err := TerraformFS.ReadFile("terraform/modules/proxmox-okd/main.tf")
+	if err != nil {
+		t.Fatalf("read embedded main.tf: %v", err)
+	}
+	src := string(data)
+
+	start := strings.Index(src, `resource "proxmox_virtual_environment_vm" "master"`)
+	if start == -1 {
+		t.Fatal("master VM resource not found in embedded main.tf")
+	}
+	block := src[start:]
+	if next := strings.Index(block[1:], "\nresource "); next != -1 {
+		block = block[:next+1]
+	}
+	if !strings.Contains(block, "prevent_destroy = true") {
+		t.Fatal("master VM resource lost prevent_destroy = true; restore the lifecycle guard before shipping")
+	}
+}
