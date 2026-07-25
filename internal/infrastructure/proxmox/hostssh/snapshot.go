@@ -52,11 +52,11 @@ func validateVMID(vmid int) error {
 	return nil
 }
 
-// validateSnapshotName enforces the pve-configid grammar Proxmox itself
+// ValidateSnapshotName enforces the pve-configid grammar Proxmox itself
 // requires for a snapshot name. This doubles as the shell-injection guard
 // for every path built with the name (SSHRunArgv does not sanitize argv
 // atoms against the remote login shell — see ssh.go).
-func validateSnapshotName(name string) error {
+func ValidateSnapshotName(name string) error {
 	if name == "" {
 		return fmt.Errorf("must not be empty")
 	}
@@ -78,16 +78,25 @@ func validateSnapshotName(name string) error {
 	return nil
 }
 
-// validateSnapshotDescription allowlist-checks an optional free-text
+// ValidateSnapshotDescription allowlist-checks an optional free-text
 // description before it reaches the remote shell as an SSHRunArgv atom.
 // Whitespace is rejected, not just control characters: SSHRunArgv joins argv
 // with spaces before handing it to the remote login shell, so a multi-word
 // value would word-split there instead of surviving as the single token
 // pvesh expects. An empty description is valid — CreateSnapshot omits
 // -description entirely when desc is "".
-func validateSnapshotDescription(desc string) error {
+func ValidateSnapshotDescription(desc string) error {
 	if len(desc) > 200 {
 		return fmt.Errorf("must be 200 characters or fewer, got %d", len(desc))
+	}
+	// Letter/digit-first keeps a description from ever reading as a pvesh
+	// option token (`-vmstate`) on the remote command line.
+	if desc != "" {
+		first := rune(desc[0])
+		ok := (first >= 'a' && first <= 'z') || (first >= 'A' && first <= 'Z') || (first >= '0' && first <= '9')
+		if !ok {
+			return fmt.Errorf("must start with a letter or digit, got %q", string(first))
+		}
 	}
 	for i, r := range desc {
 		ok := (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') ||
@@ -101,7 +110,7 @@ func validateSnapshotDescription(desc string) error {
 
 // validateUPID rejects UPID values outside the Proxmox task-id charset,
 // guarding pveshWaitTask's status-path interpolation the same way
-// validateSnapshotName guards create/rollback/delete.
+// ValidateSnapshotName guards create/rollback/delete.
 func validateUPID(upid string) error {
 	if upid == "" {
 		return fmt.Errorf("must not be empty")
@@ -219,10 +228,10 @@ func CreateSnapshot(ctx context.Context, p *RemoteISOParams, vmid int, name, des
 	if err := validateVMID(vmid); err != nil {
 		return fmt.Errorf("vmid %d invalid: %w", vmid, err)
 	}
-	if err := validateSnapshotName(name); err != nil {
+	if err := ValidateSnapshotName(name); err != nil {
 		return fmt.Errorf("snapshot name %q invalid: %w", name, err)
 	}
-	if err := validateSnapshotDescription(description); err != nil {
+	if err := ValidateSnapshotDescription(description); err != nil {
 		return fmt.Errorf("snapshot description invalid: %w", err)
 	}
 
@@ -286,7 +295,7 @@ func RollbackSnapshot(ctx context.Context, p *RemoteISOParams, vmid int, name st
 	if err := validateVMID(vmid); err != nil {
 		return fmt.Errorf("vmid %d invalid: %w", vmid, err)
 	}
-	if err := validateSnapshotName(name); err != nil {
+	if err := ValidateSnapshotName(name); err != nil {
 		return fmt.Errorf("snapshot name %q invalid: %w", name, err)
 	}
 
@@ -307,7 +316,7 @@ func DeleteSnapshot(ctx context.Context, p *RemoteISOParams, vmid int, name stri
 	if err := validateVMID(vmid); err != nil {
 		return fmt.Errorf("vmid %d invalid: %w", vmid, err)
 	}
-	if err := validateSnapshotName(name); err != nil {
+	if err := ValidateSnapshotName(name); err != nil {
 		return fmt.Errorf("snapshot name %q invalid: %w", name, err)
 	}
 
