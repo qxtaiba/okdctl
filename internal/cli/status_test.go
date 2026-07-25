@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"regexp"
 	"strconv"
 	"strings"
 	"testing"
@@ -12,6 +13,12 @@ import (
 	"github.com/qxtaiba/okdctl/internal/distribution/okd"
 	"github.com/qxtaiba/okdctl/internal/nodetypes"
 )
+
+var ansiSeq = regexp.MustCompile(`\x1b\[[0-9;]*m`)
+
+// stripANSI removes SGR escape sequences so byte-offset column math is valid
+// on the dim-styled table header.
+func stripANSI(s string) string { return ansiSeq.ReplaceAllString(s, "") }
 
 // TestNodeStatusTableLinesAlignsColumnsWithLongNames covers only Ready nodes
 // (unstyled rows) so raw byte offsets are a valid alignment proxy — a
@@ -26,7 +33,7 @@ func TestNodeStatusTableLinesAlignsColumnsWithLongNames(t *testing.T) {
 	if len(lines) != 3 {
 		t.Fatalf("len(lines) = %d, want 3 (header + 2 rows)", len(lines))
 	}
-	header, row0, row1 := lines[0], lines[1], lines[2]
+	header, row0, row1 := stripANSI(lines[0]), lines[1], lines[2]
 
 	headers := []string{"NAME", "ROLE", "READY"}
 	colStarts := make([]int, len(headers))

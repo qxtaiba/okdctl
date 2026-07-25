@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
-	"strings"
 
+	"charm.land/lipgloss/v2"
 	"github.com/spf13/cobra"
 
 	"github.com/qxtaiba/okdctl/internal/addon"
@@ -172,42 +172,23 @@ func printClusterStatus(cmd *cobra.Command, st *okd.ClusterStatus) error {
 	return err
 }
 
-// nodeStatusTableLines renders an aligned NAME/ROLE/READY table for the
-// status box, one line per node plus a header. Column widths are computed
-// from the widest cell (including the header) so long node names never
-// misalign later columns; padding is always computed on the plain text
-// before tui.ErrorStyle wraps a NotReady row, so the style's zero-width ANSI
-// codes cannot shift a later row out of alignment. The header stays unstyled
-// so it lines up byte-for-byte with every Ready (equally unstyled) row.
+// nodeStatusTableLines renders the NAME/ROLE/READY node table for the status
+// box through the shared tui.Table primitive: dim header, per-row red skin for
+// a not-ready node. Padding is computed on plain text so a styled row's
+// zero-width escapes never shift a later column.
 func nodeStatusTableLines(nodes []okd.NodeStatus) []string {
-	nameW, roleW := len("NAME"), len("ROLE")
+	rows := make([][]string, 0, len(nodes))
 	for _, n := range nodes {
-		nameW = max(nameW, len(n.Name))
-		roleW = max(roleW, len(string(n.Role)))
+		rows = append(rows, []string{n.Name, string(n.Role), yesNo(n.Ready)})
 	}
-	const readyW = len("READY")
-
-	lines := make([]string, 0, len(nodes)+1)
-	lines = append(lines, padRight("NAME", nameW)+"  "+padRight("ROLE", roleW)+"  "+padRight("READY", readyW))
-	for _, n := range nodes {
-		readyText := "no"
-		if n.Ready {
-			readyText = "yes"
-		}
-		row := padRight(n.Name, nameW) + "  " + padRight(string(n.Role), roleW) + "  " + padRight(readyText, readyW)
-		if !n.Ready {
-			row = tui.ErrorStyle.Render(row)
-		}
-		lines = append(lines, row)
-	}
-	return lines
-}
-
-func padRight(s string, w int) string {
-	if len(s) >= w {
-		return s
-	}
-	return s + strings.Repeat(" ", w-len(s))
+	return tui.Table([]string{"NAME", "ROLE", "READY"}, rows, tui.TableOptions{
+		RowStyle: func(i int) (lipgloss.Style, bool) {
+			if !nodes[i].Ready {
+				return tui.ErrorStyle, true
+			}
+			return lipgloss.Style{}, false
+		},
+	})
 }
 
 func runDescribeNode(cmd *cobra.Command, args []string) error {
