@@ -1,0 +1,215 @@
+package cli
+
+import (
+	"context"
+	"errors"
+	"io"
+	"strings"
+	"testing"
+
+	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/errtypes"
+)
+
+// resetDestroyFlags zeroes the destroy command's package-level flag variables
+// and restores the caller-time values on cleanup, so tests can exercise the
+// real validateDestroyFlagCombos/buildDestroyOptions/confirmDestroyInteractive
+// (not mirrors of them) without leaking state across tests.
+func resetDestroyFlags(t *testing.T) {
+	t.Helper()
+	savedYes, savedKeepISOs, savedDryRun := destroyYes, destroyKeepISOs, destroyDryRun
+	savedConfirm, savedOnly := destroyConfirmCluster, destroyOnly
+	savedSkipTF, savedSkipCleanup, savedSkipFW := destroySkipTerraform, destroySkipCleanup, destroySkipFirewall
+	savedTargets := destroyTargets
+	t.Cleanup(func() {
+		destroyYes, destroyKeepISOs, destroyDryRun = savedYes, savedKeepISOs, savedDryRun
+		destroyConfirmCluster, destroyOnly = savedConfirm, savedOnly
+		destroySkipTerraform, destroySkipCleanup, destroySkipFirewall = savedSkipTF, savedSkipCleanup, savedSkipFW
+		destroyTargets = savedTargets
+	})
+	destroyYes, destroyKeepISOs, destroyDryRun = false, false, false
+	destroyConfirmCluster, destroyOnly = "", ""
+	destroySkipTerraform, destroySkipCleanup, destroySkipFirewall = false, false, false
+	destroyTargets = nil
+}
+
+const (
+	guardTestCluster = "prod"
+	guardTestTarget  = "module.okd_cluster.proxmox_virtual_environment_vm.worker[1]"
+)
+
+func destroyGuardConfig() *config.Config {
+	cfg := config.DefaultConfig()
+	cfg.Cluster.Name = guardTestCluster
+	return cfg
+}
+
+func TestValidateDestroyFlagCombos_TargetedRequiresConfirmCluster(t *testing.T) {
+	resetDestroyFlags(t)
+	cfg := destroyGuardConfig()
+	destroyTargets = []string{guardTestTarget}
+
+	err := validateDestroyFlagCombos(cfg)
+	if err == nil {
+		t.Fatal("targeted destroy without --confirm-cluster must be refused")
+	}
+	var usageErr *errtypes.UsageError
+	if !errors.As(err, &usageErr) {
+		t.Errorf("want *errtypes.UsageError (exit 64), got %T: %v", err, err)
+	}
+	if !strings.Contains(err.Error(), `"prod"`) {
+		t.Errorf("refusal should name the cluster the operator must confirm: %v", err)
+	}
+
+	destroyConfirmCluster = guardTestCluster
+	if err := validateDestroyFlagCombos(cfg); err != nil {
+		t.Errorf("targeted destroy with --confirm-cluster must pass: %v", err)
+	}
+}
+
+func TestValidateDestroyFlagCombos_DryRunRejectsSkipFlags(t *testing.T) {
+	cases := []struct {
+		name  string
+		set   func()
+		wants []string
+	}{
+		{"skip-terraform", func() { destroySkipTerraform = true }, []string{"--skip-terraform"}},
+		{"skip-cleanup", func() { destroySkipCleanup = true }, []string{"--skip-cleanup"}},
+		{"skip-firewall", func() { destroySkipFirewall = true }, []string{"--skip-firewall"}},
+		{"all three", func() {
+			destroySkipTerraform, destroySkipCleanup, destroySkipFirewall = true, true, true
+		}, []string{"--skip-terraform", "--skip-cleanup", "--skip-firewall"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			resetDestroyFlags(t)
+			destroyDryRun = true
+			tc.set()
+
+			err := validateDestroyFlagCombos(destroyGuardConfig())
+			if err == nil {
+				t.Fatal("--dry-run with skip flags must be refused")
+			}
+			var usageErr *errtypes.UsageError
+			if !errors.As(err, &usageErr) {
+				t.Errorf("want *errtypes.UsageError, got %T: %v", err, err)
+			}
+			for _, want := range tc.wants {
+				if !strings.Contains(err.Error(), want) {
+					t.Errorf("refusal must name %s: %v", want, err)
+				}
+			}
+		})
+	}
+}
+
+func TestValidateDestroyFlagCombos_DryRunAloneAndPlainDestroyPass(t *testing.T) {
+	resetDestroyFlags(t)
+	cfg := destroyGuardConfig()
+
+	if err := validateDestroyFlagCombos(cfg); err != nil {
+		t.Errorf("unscoped destroy with no flags must pass: %v", err)
+	}
+	destroyDryRun = true
+	if err := validateDestroyFlagCombos(cfg); err != nil {
+		t.Errorf("--dry-run alone must pass: %v", err)
+	}
+}
+
+// TestBuildDestroyOptions_ScopedForcesBastionTeardownOff locks the scoped-
+// destroy invariant on the real buildDestroyOptions: with --target set, host
+// cleanup, firewall teardown, and ISO removal are forced off regardless of the
+// operator's flags, so a partial destroy never tears down the bastion services
+// a still-running control plane depends on.
+func TestBuildDestroyOptions_ScopedForcesBastionTeardownOff(t *testing.T) {
+	resetDestroyFlags(t)
+	cfg := destroyGuardConfig()
+	destroyTargets = []string{guardTestTarget}
+
+	opts := buildDestroyOptions(cfg, t.TempDir())
+	if !opts.SkipCleanup || !opts.SkipFirewall || !opts.KeepISOs {
+		t.Errorf("scoped destroy must force cleanup/firewall/iso off: SkipCleanup=%v SkipFirewall=%v KeepISOs=%v",
+			opts.SkipCleanup, opts.SkipFirewall, opts.KeepISOs)
+	}
+	if len(opts.TerraformTargets) != 1 || opts.TerraformTargets[0] != guardTestTarget {
+		t.Errorf("targets must pass through to the destroy phase: %v", opts.TerraformTargets)
+	}
+	if !opts.AutoApprove {
+		t.Error("CLI-confirmed destroy must auto-approve terraform (confirmation already happened)")
+	}
+}
+
+func TestBuildDestroyOptions_UnscopedPassesFlagsThrough(t *testing.T) {
+	resetDestroyFlags(t)
+	cfg := destroyGuardConfig()
+	destroySkipFirewall = true
+	destroyKeepISOs = true
+
+	opts := buildDestroyOptions(cfg, t.TempDir())
+	if opts.SkipCleanup {
+		t.Error("unscoped destroy must not force SkipCleanup")
+	}
+	if !opts.SkipFirewall || !opts.KeepISOs {
+		t.Errorf("operator flags must pass through: SkipFirewall=%v KeepISOs=%v", opts.SkipFirewall, opts.KeepISOs)
+	}
+	if len(opts.TerraformTargets) != 0 {
+		t.Errorf("unscoped destroy must carry no targets: %v", opts.TerraformTargets)
+	}
+}
+
+// lineReader delivers exactly one line per Read call, mirroring a TTY in
+// canonical mode. promptForLine wraps the shared reader in a fresh
+// bufio.Reader on every prompt, so a plain strings.Reader carrying both
+// answers would have its second line swallowed by the first prompt's
+// buffered lookahead — exactly what happens to pasted-ahead input on a real
+// terminal, where the gate then fails closed (declines).
+type lineReader struct{ lines []string }
+
+func (r *lineReader) Read(p []byte) (int, error) {
+	if len(r.lines) == 0 {
+		return 0, io.EOF
+	}
+	line := r.lines[0]
+	r.lines = r.lines[1:]
+	return copy(p, line), nil
+}
+
+// TestConfirmDestroyInteractive drives the real two-stage interactive gate:
+// an unscoped destroy demands the exact cluster name and then a y/N; a typo,
+// a bare "y" at the name stage, or a decline all abort. A scoped destroy
+// (--target already passed --confirm-cluster) skips the typed-name stage.
+func TestConfirmDestroyInteractive(t *testing.T) {
+	cases := []struct {
+		name    string
+		scoped  bool
+		input   []string
+		proceed bool
+	}{
+		{"wrong cluster name refuses", false, []string{"prod-oops\n"}, false},
+		{"bare y at name stage refuses", false, []string{"y\n"}, false},
+		{"exact name then yes proceeds", false, []string{"prod\n", "y\n"}, true},
+		{"exact name then no aborts", false, []string{"prod\n", "n\n"}, false},
+		{"exact name then default-empty aborts", false, []string{"prod\n", "\n"}, false},
+		{"case-mismatched name refuses", false, []string{"PROD\n", "y\n"}, false},
+		{"scoped skips name stage", true, []string{"y\n"}, true},
+		{"scoped still requires the y", true, []string{"n\n"}, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			resetDestroyFlags(t)
+			if tc.scoped {
+				destroyTargets = []string{guardTestTarget}
+			}
+			testStdinReader = &lineReader{lines: tc.input}
+			t.Cleanup(func() { testStdinReader = nil })
+
+			proceed, err := confirmDestroyInteractive(context.Background(), destroyGuardConfig())
+			if err != nil {
+				t.Fatalf("confirmDestroyInteractive: %v", err)
+			}
+			if proceed != tc.proceed {
+				t.Errorf("proceed = %v; want %v", proceed, tc.proceed)
+			}
+		})
+	}
+}
