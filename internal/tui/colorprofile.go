@@ -15,10 +15,11 @@ import (
 // piped or NO_COLOR run leaked 24-bit escapes into files and dumb terminals.
 // Detecting once here and downsampling every rendered string through the same
 // colorprofile machinery charm/log uses gives both subsystems one rulebook.
-var outputProfile atomic.Int32
+var outputProfile atomic.Pointer[colorprofile.Profile]
 
 func init() {
-	outputProfile.Store(int32(colorprofile.Detect(os.Stdout, os.Environ())))
+	p := colorprofile.Detect(os.Stdout, os.Environ())
+	outputProfile.Store(&p)
 }
 
 // SetColorProfileFor re-detects the render color profile from w (the command's
@@ -27,12 +28,13 @@ func init() {
 // tests and redirected output observe the correct profile rather than the
 // os.Stdout snapshot taken at init.
 func SetColorProfileFor(w io.Writer) {
-	outputProfile.Store(int32(colorprofile.Detect(w, os.Environ())))
+	p := colorprofile.Detect(w, os.Environ())
+	outputProfile.Store(&p)
 }
 
 // ColorProfile returns the active render color profile.
 func ColorProfile() colorprofile.Profile {
-	return colorprofile.Profile(outputProfile.Load())
+	return *outputProfile.Load()
 }
 
 // ColorEnabled reports whether the active profile emits any color.

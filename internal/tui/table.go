@@ -38,9 +38,7 @@ func Table(headers []string, rows [][]string, opts TableOptions) []string {
 
 	cells := make([][]string, 0, len(rows)+1)
 	cells = append(cells, headers)
-	for _, r := range rows {
-		cells = append(cells, r)
-	}
+	cells = append(cells, rows...)
 
 	widths := make([]int, cols)
 	for _, row := range cells {
