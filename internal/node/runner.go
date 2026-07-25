@@ -139,10 +139,12 @@ type isoProvisioner interface {
 
 // ignitionServer is the slice of setup.Phase node add drives to expose
 // worker.ign over HTTPS for the join window. An interface so a test can
-// substitute a call-recording fake without touching httpd.
+// substitute a call-recording fake without touching httpd. A teardown error
+// means httpd may still be serving the pull secret; the caller must surface
+// it loudly rather than swallow it.
 type ignitionServer interface {
-	ConfigureApache(ctx context.Context, cfg *config.Config, projectRoot string) error
-	TeardownIgnitionServer(ctx context.Context)
+	ReviveIgnitionServer(ctx context.Context, cfg *config.Config, projectRoot, clusterDir string) error
+	TeardownIgnitionServer(ctx context.Context) error
 }
 
 // Runner drives node-lifecycle ops against one cluster. TF mutates VMs;
@@ -206,7 +208,7 @@ type Runner struct {
 // NewRunner wires a Runner with derived work/env directories and default
 // timeouts. cfg's terraform environment resolves the env directory.
 func NewRunner(cl *cluster.Client, tf *terraform.Executor, cfg *config.Config, projectRoot, configPath, tfEnv, runID string, log *slog.Logger) *Runner {
-	workDir := filepath.Join(projectRoot, "okd-install")
+	workDir := filepath.Join(projectRoot, system.WorkDirName)
 	return &Runner{
 		Cluster:             cl,
 		TF:                  tf,
@@ -214,7 +216,7 @@ func NewRunner(cl *cluster.Client, tf *terraform.Executor, cfg *config.Config, p
 		ConfigPath:          configPath,
 		ProjectRoot:         projectRoot,
 		WorkDir:             workDir,
-		EnvDir:              filepath.Join(projectRoot, "infrastructure", "terraform", "environments", tfEnv),
+		EnvDir:              system.TerraformEnvDir(projectRoot, tfEnv),
 		RunID:               runID,
 		Log:                 logutil.OrNop(log),
 		Reporter:            logutil.NopProgressReporter,
@@ -359,7 +361,17 @@ func (r *Runner) targetedApply(ctx context.Context, address string, want terrafo
 	defer cleanup()
 
 	if alreadyAtTarget {
-		r.Log.Info("node: already at target — skipping apply", "address", address, "action", string(want))
+		if want == terraform.PlanActionDelete && !resuming {
+			// A fresh delete landing here means terraform state has no record
+			// of the resource. That is the expected shape after an
+			// acknowledged partial remove, but it is also exactly what a
+			// lost/mismatched state file produces — in which case the VM still
+			// exists and reporting a quiet success would strand it unmanaged.
+			r.Log.Warn("node: terraform state has no record of this resource — treating it as already destroyed; if the vm still exists in proxmox, the workspace state is wrong and this result must not be trusted",
+				"address", address)
+		} else {
+			r.Log.Info("node: already at target — skipping apply", "address", address, "action", string(want))
+		}
 		return nil
 	}
 

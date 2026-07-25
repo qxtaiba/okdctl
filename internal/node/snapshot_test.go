@@ -703,3 +703,37 @@ func TestRollbackSnapshot_requiresProxmox(t *testing.T) {
 		t.Fatal("expected error when Proxmox is not configured")
 	}
 }
+
+// TestCreateSnapshot_acknowledgeConsumesForeignMarker pins the ack contract:
+// a --skip-drain create never writes a marker of its own, so the acknowledged
+// foreign marker must be deleted by the guard itself — otherwise the marker
+// the operator already acknowledged resurfaces and re-blocks the next op.
+func TestCreateSnapshot_acknowledgeConsumesForeignMarker(t *testing.T) {
+	fc := &fakeCluster{nodes: []cluster.NodeDetail{{Name: "worker0", Role: nodetypes.RoleWorker, Ready: true}}}
+	fsc := &fakeSnapshotClient{}
+	cfg := config.DefaultConfig()
+	cfg.Provider.Proxmox.Node = testProxmoxNode
+
+	r := seedSnapshotRunner(t, fc, fsc, cfg)
+	r.DryRun = false
+	seedMarker(t, r, OpRemove, "worker5", StepDrain)
+
+	if _, err := r.CreateSnapshot(context.Background(), "worker0",
+		SnapshotCreateOptions{Name: testSnapshotName, SkipDrain: true, Acknowledge: true}); err != nil {
+		t.Fatalf("acknowledged --skip-drain create must proceed: %v", err)
+	}
+
+	marker, err := ReadOpMarker(r.WorkDir, cfg.Cluster.Name)
+	if err != nil {
+		t.Fatalf("re-read marker: %v", err)
+	}
+	if marker != nil {
+		t.Fatalf("acknowledged marker must be consumed, still present: %+v", marker)
+	}
+
+	// The next op must run clean with no acknowledgement needed.
+	if _, err := r.CreateSnapshot(context.Background(), "worker0",
+		SnapshotCreateOptions{Name: testSnapshotName, SkipDrain: true}); err != nil {
+		t.Fatalf("follow-up op must not re-refuse a consumed marker: %v", err)
+	}
+}

@@ -35,11 +35,12 @@ type AddOptions struct {
 }
 
 // preflightIgnitionArtifacts verifies the setup phase's ignition assets —
-// worker.ign and the ignition TLS cert — are still on disk. Node add reuses
-// both as-is rather than regenerating them, so `okdctl cleanup --kind
-// web-only` removing them must be caught here before any mutation runs; a
-// `cleanup full` run is already caught by node ops' upstream missing-
-// kubeconfig guard.
+// worker.ign and the ignition TLS cert — are still on disk. These are the
+// SOURCE copies the revive re-deploys into the web root, so this guards
+// against their loss (e.g. a manual wipe of cluster-config); the served
+// web-root copies that `okdctl cleanup --kind web-only` removes are healed
+// by ReviveIgnitionServer's re-deploy, not checked here. A `cleanup full`
+// run is already caught by node ops' upstream missing-kubeconfig guard.
 func (r *Runner) preflightIgnitionArtifacts() error {
 	ignPath := filepath.Join(phase.ClusterConfigDir(r.WorkDir), "worker.ign")
 	if !system.FileExists(ignPath) {
@@ -198,18 +199,21 @@ func (r *Runner) AddWorkers(ctx context.Context, opts AddOptions) error {
 		return err
 	}
 	// Detached from ctx's cancellation: on SIGINT during the join wait, ctx is
-	// already cancelled by the time this runs, and system.IsServiceActive's
-	// exec.CommandContext would fail to even start under a cancelled ctx —
-	// reporting "not active" and making StopAndDisableService skip the
-	// stop+disable entirely, leaving httpd serving worker.ign (which embeds the
-	// pull secret) indefinitely. context.WithoutCancel keeps the deadline chain
-	// but drops the cancellation signal; the timeout bounds a wedged systemctl.
+	// already cancelled by the time this runs, and every systemctl call under
+	// a cancelled ctx fails before it even starts — leaving httpd serving
+	// worker.ign (which embeds the pull secret) indefinitely.
+	// context.WithoutCancel drops BOTH the cancellation signal and any
+	// deadline; the explicit WithTimeout is the only bound on a wedged
+	// systemctl — do not remove it as redundant.
 	defer func() {
 		tctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), ignitionTeardownTimeout)
 		defer cancel()
-		r.Ignition.TeardownIgnitionServer(tctx)
+		if terr := r.Ignition.TeardownIgnitionServer(tctx); terr != nil {
+			r.Log.Warn("node: ignition server teardown failed — the cluster pull secret may still be served on port 443; stop it manually ('systemctl stop httpd') and verify with 'systemctl status httpd'",
+				"err", terr)
+		}
 	}()
-	if err := r.Ignition.ConfigureApache(ctx, r.Cfg, r.ProjectRoot); err != nil {
+	if err := r.Ignition.ReviveIgnitionServer(ctx, r.Cfg, r.ProjectRoot, phase.ClusterConfigDir(r.WorkDir)); err != nil {
 		return &errtypes.ClusterError{Msg: "revive ignition server", Err: err}
 	}
 
