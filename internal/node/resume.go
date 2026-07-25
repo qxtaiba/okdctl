@@ -56,9 +56,10 @@ func shouldRunStep(step, from Step) bool {
 }
 
 // beginOp is the first call in every mutating op, ahead of guards, validation,
-// and the confirm gate. It classifies the on-disk marker into one of four
-// outcomes and is strictly READ-ONLY (only ReadOpMarker's file read) so it
-// cannot break the dry-run zero-mutation contract:
+// and the confirm gate. Every caller gates it on !DryRun, so its only
+// mutation — sweeping a completed add batch's leftover marker — never runs
+// under the dry-run zero-mutation contract. It classifies the on-disk marker
+// into one of four outcomes:
 //
 //   - no marker: (nil, nil) — run normally.
 //   - marker's Op matches and match() is true: (marker, nil) — resume; the
@@ -76,6 +77,9 @@ func (r *Runner) beginOp(op Op, match OpMatch, ack bool) (*OpMarker, error) {
 	if marker == nil {
 		return nil, nil
 	}
+	if r.sweepCompletedAddMarker(marker) {
+		return nil, nil
+	}
 	if marker.Op == op && match(marker) {
 		r.Log.Info("node: resuming interrupted op",
 			"op", string(marker.Op), "node", marker.Target, "step", string(marker.Step))
@@ -87,6 +91,31 @@ func (r *Runner) beginOp(op Op, match OpMatch, ack bool) (*OpMarker, error) {
 	r.Log.Warn("node: overwriting stranded op marker",
 		"op", string(marker.Op), "node", marker.Target, "step", string(marker.Step))
 	return nil, nil
+}
+
+// sweepCompletedAddMarker clears (and reports true for) a marker that is the
+// residue of a fully-completed add batch: AddWorkers persists the widened
+// worker count only after every node in the batch has joined, so a marker
+// whose worker index precedes the persisted count can only mean the batch
+// finished and the process died between persistTopology and clearOpMarker.
+// Without this sweep every subsequent op refuses on a batch that actually
+// completed, with a misleading "stopped before step wait-join" message. A
+// genuinely in-flight add always carries an index at or above the persisted
+// count (its batch starts there), so it is never swept.
+func (r *Runner) sweepCompletedAddMarker(m *OpMarker) bool {
+	if m.Op != OpAdd {
+		return false
+	}
+	idx, ok := cluster.NodeIndex(m.Target)
+	if !ok || idx >= r.Cfg.Topology.Workers.Count {
+		return false
+	}
+	r.Log.Info("node: clearing marker left by a completed add batch",
+		"node", m.Target, "step", string(m.Step))
+	if err := clearOpMarker(r.marker()); err != nil {
+		r.Log.Warn("node: op marker cleanup failed", "err", err)
+	}
+	return true
 }
 
 // strandedMarkerMsg renders the refusal for a stranded op marker. An add's
@@ -135,6 +164,9 @@ func (r *Runner) refuseForeignMarker(ack bool, allowResumable ...Op) error {
 		return nil
 	}
 	if marker == nil || slices.Contains(allowResumable, marker.Op) {
+		return nil
+	}
+	if r.sweepCompletedAddMarker(marker) {
 		return nil
 	}
 	if !ack {
