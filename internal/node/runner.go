@@ -452,7 +452,9 @@ func (r *Runner) resolveVMID(ctx context.Context, target string) (vmid int, role
 // powerCycleVM stops→starts the VM backing a resized node so bpg/proxmox's
 // config-only memory change actually takes effect (see PowerCycler). It fails
 // closed: without a wired power-cycler the resize cannot be realized, so the
-// caller must leave the node cordoned and surface the error.
+// caller surfaces the error and re-runs to retry. The node is left as the
+// current step found it — cordoned on the drain path, untouched under
+// --skip-drain — so the message must not assume a cordon.
 func (r *Runner) powerCycleVM(ctx context.Context, role nodetypes.NodeRole, index int) error {
 	stop := r.startProgress("power-cycling vm to realize the new sizing")
 	defer stop()
@@ -461,7 +463,7 @@ func (r *Runner) powerCycleVM(ctx context.Context, role nodetypes.NodeRole, inde
 	}
 	node, vmid := r.vmTarget(role, index)
 	if err := r.Power.PowerCycleVM(ctx, node, vmid); err != nil {
-		return &errtypes.ClusterError{Msg: fmt.Sprintf("power-cycle vm %d (node left cordoned; resize not realized)", vmid), Err: err}
+		return &errtypes.ClusterError{Msg: fmt.Sprintf("power-cycle vm %d (resize not realized; re-run to retry)", vmid), Err: err}
 	}
 	return nil
 }
