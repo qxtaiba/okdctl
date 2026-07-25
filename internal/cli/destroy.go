@@ -351,7 +351,7 @@ func runDestroy(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
 			fmt.Fprintln(cmd.OutOrStdout(), render.InterruptSummary(steps, "okdctl destroy", tui.RunID()))
-			return err
+			return render.Presented(err)
 		}
 		return err
 	}
