@@ -6,8 +6,11 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
+	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/infrastructure/terraform"
 	"github.com/qxtaiba/okdctl/internal/render"
+	"github.com/qxtaiba/okdctl/internal/system"
 	"github.com/qxtaiba/okdctl/internal/tui"
 )
 
@@ -71,6 +74,16 @@ func runPlan(cmd *cobra.Command, _ []string) error {
 	projectRoot, err := resolveProjectRootOrDie()
 	if err != nil {
 		return err
+	}
+
+	// plan is read-only by design and never materializes the embedded
+	// terraform sources, so a workspace that deploy has not created yet must
+	// fail here with a pointer at deploy instead of surfacing a raw
+	// `terraform init … no such file or directory` from the provider layer.
+	envDir := phase.TerraformEnvDir(projectRoot, phase.GetTerraformEnv(cfg))
+	if !system.DirExists(envDir) {
+		return &errtypes.ConfigError{Msg: fmt.Sprintf(
+			"terraform workspace not found at %s; run 'okdctl deploy' to create it before previewing drift", envDir)}
 	}
 
 	tui.Info("plan: running terraform plan (no changes will be made)")
