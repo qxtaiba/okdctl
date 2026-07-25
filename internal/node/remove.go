@@ -50,7 +50,13 @@ func (r *Runner) RemoveWorker(ctx context.Context, target string, opts RemoveOpt
 	}
 
 	workerCount := r.Cfg.Topology.Workers.Count
-	idx, _ := cluster.NodeIndex(target)
+	// A digit-less target must fail here rather than silently parse to idx 0:
+	// the resume path skips validateWorkerRemovable, and idx drives both the
+	// terraform address and the worker_count persist below.
+	idx, ok := cluster.NodeIndex(target)
+	if !ok {
+		return &errtypes.ConfigError{Msg: fmt.Sprintf("cannot derive a terraform index from node name %q", target)}
+	}
 
 	var osdHere, ingressHere []string
 	if !resuming {
@@ -186,7 +192,15 @@ func (r *Runner) cordonAndDrain(ctx context.Context, op Op, node, timeout string
 			Force:            force,
 			Timeout:          timeout,
 		}); err != nil {
-			return &errtypes.ClusterError{Msg: fmt.Sprintf("drain %s (node left cordoned; re-run to retry)", node), Err: err}
+			// remove/resize resume their own marker on a plain re-run; a
+			// snapshot op refuses its own marker as foreign, so its retry
+			// advice must name the acknowledge flag or it sends the operator
+			// into a refusal loop.
+			retry := "re-run to retry"
+			if op == OpSnapshot {
+				retry = "re-run with --acknowledge-interrupted-op to retry"
+			}
+			return &errtypes.ClusterError{Msg: fmt.Sprintf("drain %s (node left cordoned; %s)", node, retry), Err: err}
 		}
 	}
 	return nil

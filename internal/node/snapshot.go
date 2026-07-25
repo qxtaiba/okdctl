@@ -189,7 +189,7 @@ func (r *Runner) RollbackSnapshot(ctx context.Context, target, snapname string, 
 	stop()
 	if rerr != nil {
 		return &errtypes.ClusterError{
-			Msg: fmt.Sprintf("roll back %s to snapshot %s (node left cordoned; re-run after resolving the cause)", target, snapname),
+			Msg: fmt.Sprintf("roll back %s to snapshot %s (node left cordoned; re-run with --acknowledge-interrupted-op after resolving the cause)", target, snapname),
 			Err: rerr,
 		}
 	}

@@ -169,7 +169,9 @@ func (r *Runner) stopOneNode(ctx context.Context, node string, role nodetypes.No
 		return err
 	}
 	if err := r.Power.ShutdownVM(ctx, vmNode, vmid); err != nil {
-		return &errtypes.ClusterError{Msg: fmt.Sprintf("shut down vm %d for node %s (node left cordoned; re-run 'okdctl cluster stop' to retry)", vmid, node), Err: err}
+		// stop refuses its own stranded marker on a plain re-run, so the
+		// retry advice must name the acknowledge flag.
+		return &errtypes.ClusterError{Msg: fmt.Sprintf("shut down vm %d for node %s (node left cordoned; re-run 'okdctl cluster stop' with --acknowledge-interrupted-op to retry)", vmid, node), Err: err}
 	}
 	return nil
 }

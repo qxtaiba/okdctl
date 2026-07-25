@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/x509"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -51,6 +52,10 @@ func enableAndStartApache(ctx context.Context, serviceName string) error {
 	if err := system.ManageService(ctx, system.ServiceEnable, serviceName); err != nil {
 		return fmt.Errorf("enable %s: %w", serviceName, err)
 	}
+	return startApache(ctx, serviceName)
+}
+
+func startApache(ctx context.Context, serviceName string) error {
 	if err := system.ManageService(ctx, system.ServiceStart, serviceName); err != nil {
 		return fmt.Errorf("start %s: %w", serviceName, err)
 	}
@@ -150,12 +155,54 @@ func (p *Phase) ConfigureApache(ctx context.Context, cfg *config.Config, project
 	return nil
 }
 
+// ReviveIgnitionServer reopens the ignition join window for node add: the
+// same vhost/dir configuration as ConfigureApache plus a re-deploy of the
+// ignition payloads from clusterDir into the web root (healing a prior
+// 'okdctl cleanup --kind web-only', which removes only the served copies),
+// but the service is started WITHOUT being enabled — a hard crash mid-add
+// must not leave the pull-secret server resurrecting across host reboots.
+func (p *Phase) ReviveIgnitionServer(ctx context.Context, cfg *config.Config, projectRoot, clusterDir string) error {
+	p.Log.Info("apache: reviving httpd for the node-add join window")
+
+	bindIP := cfg.HTTPServer.IgnitionServerIP
+	webRoot := cfg.HTTPServer.Root
+	if webRoot == "" {
+		webRoot = phase.DefaultHTTPServerRoot
+	}
+
+	certPath, keyPath := IgnitionCertPaths(projectRoot)
+	if err := p.configureApacheHTTPS(ctx, certPath, keyPath, webRoot, bindIP); err != nil {
+		return &errtypes.ClusterError{Msg: "configure apache https vhost", Err: err}
+	}
+	if err := startApache(ctx, p.OS.ApacheServiceName()); err != nil {
+		return &errtypes.ClusterError{Msg: "start apache", Err: err}
+	}
+	p.verifyApacheListening(ctx, bindIP)
+
+	return p.DeployToWebServer(ctx, cfg, clusterDir)
+}
+
 // TeardownIgnitionServer stops and disables httpd once a node add's join
-// window closes. Unlike cleanup.Apache it does not uninstall the httpd
-// package or remove the vhost conf and TLS cert, so a later ConfigureApache
-// call revives the ignition server cheaply instead of regenerating them.
-func (p *Phase) TeardownIgnitionServer(ctx context.Context) {
-	phase.StopAndDisableService(ctx, p.OS.ApacheServiceName(), p.Log)
+// window closes, then verifies the stop took. The stop is attempted
+// unconditionally rather than gated on an is-active probe: teardown runs
+// under a detached post-cancel context where a failing probe would silently
+// skip the stop and leave the pull-secret window open. Unlike cleanup.Apache
+// it does not uninstall the httpd package or remove the vhost conf and TLS
+// cert, so a later revive is cheap. A non-nil return means httpd may still
+// be serving ignition payloads — the caller must surface that loudly.
+func (p *Phase) TeardownIgnitionServer(ctx context.Context) error {
+	svc := p.OS.ApacheServiceName()
+	var errs []error
+	if err := system.ManageService(ctx, system.ServiceStop, svc); err != nil {
+		errs = append(errs, fmt.Errorf("stop %s: %w", svc, err))
+	}
+	if err := system.ManageService(ctx, system.ServiceDisable, svc); err != nil {
+		p.Log.Warn("apache: disable after ignition teardown failed", "svc", svc, "err", err)
+	}
+	if system.IsServiceActive(ctx, svc) {
+		errs = append(errs, fmt.Errorf("%s still active after stop", svc))
+	}
+	return errors.Join(errs...)
 }
 
 // DeployToWebServer copies the generated ignition files from clusterDir

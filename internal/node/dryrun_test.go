@@ -297,6 +297,11 @@ type fakePower struct {
 	startOrder []int
 
 	running bool
+
+	// onCycle fires inside every PowerCycleVM call, so a test can model
+	// cluster state that only converges once the power-on lands (e.g. etcd
+	// health returning after a mid-cycle crash left the member powered off).
+	onCycle func()
 }
 
 func (f *fakePower) PowerCycleVM(_ context.Context, node string, vmid int) error {
@@ -304,6 +309,9 @@ func (f *fakePower) PowerCycleVM(_ context.Context, node string, vmid int) error
 	f.lastNode = node
 	f.lastVMID = vmid
 	f.cycledVMIDs = append(f.cycledVMIDs, vmid)
+	if f.onCycle != nil {
+		f.onCycle()
+	}
 	return f.err
 }
 

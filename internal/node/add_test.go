@@ -44,7 +44,7 @@ func (f *fakeISO) UploadCustomISOsToProxmox(context.Context, *config.Config, *se
 	return nil
 }
 
-// fakeIgnition records ConfigureApache/TeardownIgnitionServer calls so a
+// fakeIgnition records ReviveIgnitionServer/TeardownIgnitionServer calls so a
 // dry-run can be proven to revive/teardown neither, and a real batch can be
 // proven to revive/teardown exactly once. events records "revive"/"teardown".
 // teardownErrAtCall/teardownHadDeadline snapshot the passed context's state
@@ -60,7 +60,7 @@ type fakeIgnition struct {
 	events              *[]string
 }
 
-func (f *fakeIgnition) ConfigureApache(context.Context, *config.Config, string) error {
+func (f *fakeIgnition) ReviveIgnitionServer(context.Context, *config.Config, string, string) error {
 	f.configureCalls++
 	if f.events != nil {
 		*f.events = append(*f.events, "revive")
@@ -68,13 +68,14 @@ func (f *fakeIgnition) ConfigureApache(context.Context, *config.Config, string) 
 	return nil
 }
 
-func (f *fakeIgnition) TeardownIgnitionServer(ctx context.Context) {
+func (f *fakeIgnition) TeardownIgnitionServer(ctx context.Context) error {
 	f.teardownCalls++
 	f.teardownErrAtCall = ctx.Err()
 	_, f.teardownHadDeadline = ctx.Deadline()
 	if f.events != nil {
 		*f.events = append(*f.events, "teardown")
 	}
+	return nil
 }
 
 const addTestClusterName = "mycluster"

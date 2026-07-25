@@ -36,43 +36,48 @@ func fakeSystemctl(t *testing.T, script string) (callLog string) {
 	return callLog
 }
 
-func TestTeardownIgnitionServer_StopsAndDisablesHTTPD(t *testing.T) {
+func TestTeardownIgnitionServer_StopsUnconditionallyAndVerifies(t *testing.T) {
 	if runtime.GOOS != goosLinux {
 		t.Skip("systemctl branches are linux-only; darwin takes the GOOS gate")
 	}
-	callLog := fakeSystemctl(t, "exit 0")
+	// stop/disable succeed; the post-stop is-active verify reports inactive.
+	callLog := fakeSystemctl(t, "case \"$1\" in is-active) exit 1;; *) exit 0;; esac")
 
 	p := newTestPhase(t)
-	p.TeardownIgnitionServer(context.Background())
+	if err := p.TeardownIgnitionServer(context.Background()); err != nil {
+		t.Fatalf("clean teardown must return nil: %v", err)
+	}
 
 	calls, err := os.ReadFile(callLog)
 	if err != nil {
 		t.Fatalf("read call log: %v", err)
 	}
-	for _, want := range []string{"is-active --quiet httpd", "stop httpd", "is-enabled --quiet httpd", "disable httpd"} {
+	// The stop is NOT gated on an is-active probe: teardown runs under a
+	// detached post-cancel ctx where a failing probe would silently skip the
+	// stop and leave the pull-secret window open.
+	for _, want := range []string{"stop httpd", "disable httpd", "is-active --quiet httpd"} {
 		if !strings.Contains(string(calls), want) {
 			t.Errorf("systemctl calls missing %q; got:\n%s", want, calls)
 		}
 	}
 }
 
-func TestTeardownIgnitionServer_InactiveIsNoop(t *testing.T) {
-	var callLog string
-	if runtime.GOOS == goosLinux {
-		callLog = fakeSystemctl(t, "case \"$1\" in is-*) exit 1;; *) exit 0;; esac")
+func TestTeardownIgnitionServer_ReportsStillActive(t *testing.T) {
+	if runtime.GOOS != goosLinux {
+		t.Skip("systemctl branches are linux-only; darwin takes the GOOS gate")
 	}
+	// Every call "succeeds", including the post-stop is-active verify — the
+	// service survived the stop, so teardown must fail loudly rather than let
+	// node add report success while the pull secret is still served.
+	fakeSystemctl(t, "exit 0")
 
 	p := newTestPhase(t)
-	p.TeardownIgnitionServer(context.Background())
-
-	if runtime.GOOS == goosLinux {
-		calls, err := os.ReadFile(callLog)
-		if err != nil {
-			t.Fatalf("read call log: %v", err)
-		}
-		if strings.Contains(string(calls), "stop httpd") || strings.Contains(string(calls), "disable httpd") {
-			t.Errorf("inactive httpd must not be stopped or disabled; got:\n%s", calls)
-		}
+	err := p.TeardownIgnitionServer(context.Background())
+	if err == nil {
+		t.Fatal("teardown must return an error when httpd is still active after the stop")
+	}
+	if !strings.Contains(err.Error(), "still active") {
+		t.Errorf("error must name the still-active service: %v", err)
 	}
 }
 

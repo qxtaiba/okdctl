@@ -89,14 +89,20 @@ func (r *Runner) Resize(ctx context.Context, scope ResizeScope, opts ResizeOptio
 	if opts.MemoryMB <= 0 {
 		opts.MemoryMB = current // omitted --memory-mb keeps memory unchanged
 	}
+	// The budget guard runs only on a fresh roll: on a resume the live
+	// HostAllocatedMiB probe already counts every target that grew before the
+	// crash, so projecting delta*len(targets) on top of it double-counts the
+	// finished nodes and can refuse a legitimate resume on a tight host.
 	delta := opts.MemoryMB - current
-	if opts.HostTotalMiB > 0 {
-		if err := validateMemoryBudget(opts.HostTotalMiB, opts.HostAllocatedMiB, delta*len(targets)); err != nil {
-			return &errtypes.ConfigError{Msg: err.Error()}
+	if !resuming {
+		if opts.HostTotalMiB > 0 {
+			if err := validateMemoryBudget(opts.HostTotalMiB, opts.HostAllocatedMiB, delta*len(targets)); err != nil {
+				return &errtypes.ConfigError{Msg: err.Error()}
+			}
+		} else if delta > 0 {
+			r.Log.Warn("node: could not verify host memory budget (no Proxmox probe); ensure the host has headroom before growing nodes",
+				"delta_mib_per_node", delta, "nodes", len(targets))
 		}
-	} else if delta > 0 {
-		r.Log.Warn("node: could not verify host memory budget (no Proxmox probe); ensure the host has headroom before growing nodes",
-			"delta_mib_per_node", delta, "nodes", len(targets))
 	}
 
 	plan := resizePlan(role, targets, r.Cfg.Cluster.Name, opts)
@@ -281,7 +287,14 @@ func (r *Runner) resizeOneNode(ctx context.Context, t resizeTarget, role nodetyp
 		}
 	}
 
-	if isMaster {
+	// The pre-gate is skipped when the resume point is at or past the
+	// power-cycle: PowerCycleVM is stop-then-start, so a crash (or a transient
+	// start failure) between the two leaves this master powered OFF — etcd
+	// cannot report healthy until the very power-on this gate would forever
+	// wait ahead of. The post-cycle gate below still verifies quorum before
+	// the node returns to service.
+	preGate := resumeStep == "" || stepOrder[resumeStep] < stepOrder[StepPowerCycle]
+	if isMaster && preGate {
 		if err := r.waitEtcdHealthy(ctx, "pre-"+t.name); err != nil {
 			return err
 		}
@@ -331,7 +344,7 @@ func (r *Runner) resizeOneNode(ctx context.Context, t resizeTarget, role nodetyp
 	if err := r.waitNodeReady(ctx, t.name); err != nil {
 		return err
 	}
-	if isMaster {
+	if isMaster && preGate {
 		if err := r.waitEtcdHealthy(ctx, "post-"+t.name); err != nil {
 			return err
 		}
