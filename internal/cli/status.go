@@ -139,7 +139,7 @@ func printClusterStatus(cmd *cobra.Command, st *okd.ClusterStatus) error {
 	}
 	sb.Section("nodes")
 	if len(st.Nodes) == 0 {
-		sb.WriteString("    no nodes reported\n")
+		sb.WriteString("    " + tui.EmptyState("no nodes reported", "deploy a cluster with 'okdctl deploy'") + "\n")
 	} else {
 		for _, line := range nodeStatusTableLines(st.Nodes) {
 			sb.WriteString("    " + line + "\n")
