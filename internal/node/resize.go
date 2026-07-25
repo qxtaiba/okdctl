@@ -32,6 +32,13 @@ type ResizeOptions struct {
 	// Acknowledge overrides a stranded marker left by a different op/target so
 	// Resize proceeds fresh instead of refusing; see beginOp.
 	Acknowledge bool
+	// SkipDrain power-cycles the node without cordoning/draining it first. An
+	// in-place grow is realized by a hypervisor stop→start that kills the node's
+	// pods anyway; skipping the drain lets them restart in place on the roomier
+	// node instead of evicting them cluster-wide — which cannot succeed when the
+	// cluster is memory-saturated (every other node full → evicted pods wedge
+	// Pending → drain times out). The etcd and Ceph health gates still run.
+	SkipDrain bool
 }
 
 // Resize changes per-role node resources and rolls the change out one node at a
@@ -112,7 +119,7 @@ func (r *Runner) Resize(ctx context.Context, scope ResizeScope, opts ResizeOptio
 	}
 
 	for _, t := range targets {
-		if err := r.resizeOneNode(ctx, t, role, sizingVars, marker); err != nil {
+		if err := r.resizeOneNode(ctx, t, role, sizingVars, marker, opts.SkipDrain); err != nil {
 			return err
 		}
 	}
@@ -242,7 +249,7 @@ func (r *Runner) applyRoleSizing(role nodetypes.NodeRole, opts ResizeOptions) {
 // earlier target's completion leaves no per-node record of its own — and the
 // node is skipped entirely on a positive probe. The probe only runs when a
 // marker is present: a fresh roll pays zero extra terraform calls.
-func (r *Runner) resizeOneNode(ctx context.Context, t resizeTarget, role nodetypes.NodeRole, sizingVars map[string]string, marker *OpMarker) error {
+func (r *Runner) resizeOneNode(ctx context.Context, t resizeTarget, role nodetypes.NodeRole, sizingVars map[string]string, marker *OpMarker, skipDrain bool) error {
 	isMaster := role == nodetypes.RoleMaster
 	address := masterAddress(t.index)
 	if !isMaster {
@@ -283,8 +290,15 @@ func (r *Runner) resizeOneNode(ctx context.Context, t resizeTarget, role nodetyp
 	// Control-plane nodes host standalone guard pods (etcd-guard,
 	// kube-apiserver-guard, …) that declare no controller; oc adm drain refuses
 	// those without --force, so a master resize passes force=isMaster.
-	if err := r.cordonAndDrain(ctx, OpResize, t.name, defaultDrainTimeout, isMaster, resumeStep); err != nil {
-		return err
+	//
+	// --skip-drain power-cycles without cordon/drain: the stop→start kills the
+	// pods anyway and they restart in place on the roomier node, avoiding the
+	// eviction storm that deadlocks a drain on a memory-saturated cluster. The
+	// etcd/Ceph gates below still bound the reboot's blast radius.
+	if !skipDrain {
+		if err := r.cordonAndDrain(ctx, OpResize, t.name, defaultDrainTimeout, isMaster, resumeStep); err != nil {
+			return err
+		}
 	}
 
 	if shouldRunStep(StepTFApply, resumeStep) {
