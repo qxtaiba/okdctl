@@ -40,6 +40,7 @@ func (r *Runner) Stop(ctx context.Context, opts StopOptions) error {
 			return err
 		}
 	}
+	r.warnIfHAManaged("stop")
 
 	nodes, err := r.Cluster.ListNodes(ctx)
 	if err != nil {
@@ -132,6 +133,20 @@ func (r *Runner) reportSignerExpiry(ctx context.Context) {
 	default:
 		r.Log.Info("node: kube-apiserver-to-kubelet-signer expiry checked", "days_remaining", days, "expires", date)
 	}
+}
+
+// warnIfHAManaged flags an okdctl power op running against masters the PVE
+// HA manager also controls. The CRM enforces its own request-state: it may
+// restart masters that cluster stop just shut down (and okdctl cannot
+// detect that from here). Warn-and-proceed rather than refuse — the
+// interaction is unverified on a live PVE9 cluster and refusing would
+// strand legitimate single-node or CRM-tolerant setups.
+func (r *Runner) warnIfHAManaged(verb string) {
+	if r.Cfg.Provider.Proxmox == nil || !r.Cfg.Provider.Proxmox.HAEnabled {
+		return
+	}
+	r.Log.Warn("node: masters are proxmox-ha managed (ha_enabled); the ha manager may counteract this power operation — verify the cluster's power state afterwards, or set the ha request-state via pvesh first",
+		"op", verb)
 }
 
 // cordonAll cordons every node before any shutdown begins, so a mid-stop

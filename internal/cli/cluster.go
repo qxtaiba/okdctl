@@ -68,7 +68,12 @@ cluster is stopped. Restart with 'okdctl cluster start'.
 
 Stop refuses to run while a marker from any other in-flight node op is
 recorded, since stop is not resumable and would otherwise overwrite that op's
-resume trail. --acknowledge-interrupted-op overrides the marker and proceeds.`,
+resume trail. --acknowledge-interrupted-op overrides the marker and proceeds.
+
+With ha_enabled set, masters are also managed by the Proxmox HA manager,
+which may counteract an out-of-band shutdown (its request-state still says
+started). Stop warns and proceeds; verify the power state afterwards, or set
+the HA request-state to stopped via pvesh first.`,
 	Example: `  okdctl cluster stop --yes --confirm-cluster grappleberry
   okdctl cluster stop --dry-run`,
 	RunE: runClusterStop,
