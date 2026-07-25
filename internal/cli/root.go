@@ -19,6 +19,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"strings"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -324,10 +325,28 @@ pinning or scripted comparisons (see docs/cli/json-schema.md).`,
 				Platform:  version.Platform,
 			})
 		}
-		_, err := fmt.Fprintf(cmd.OutOrStdout(), "okdctl %s\nGit Commit: %s\nBuild Date: %s\nGo Version: %s\nPlatform:   %s\n",
-			version.Version, version.GitCommit, version.BuildDate, version.GoVersion, version.Platform)
+		_, err := fmt.Fprint(cmd.OutOrStdout(), versionText())
 		return err
 	},
+}
+
+// versionText renders the build identity with the dotted-leader convention
+// used by every other okdctl surface, instead of the stray "Key:" colons the
+// stock cobra version template emits.
+func versionText() string {
+	const keyCol = 16
+	rows := [][2]string{
+		{"git commit", version.GitCommit},
+		{"build date", version.BuildDate},
+		{"go version", version.GoVersion},
+		{"platform", version.Platform},
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "okdctl %s\n", version.Version)
+	for _, r := range rows {
+		b.WriteString("  " + tui.DottedKeyValueFull(r[0], r[1], keyCol, 0) + "\n")
+	}
+	return b.String()
 }
 
 func init() {
@@ -362,10 +381,5 @@ func init() {
 	rootCmd.AddCommand(updateIngressCmd)
 	rootCmd.AddCommand(versionCmd)
 
-	rootCmd.SetVersionTemplate(fmt.Sprintf(`{{with .Name}}{{printf "%%s " .}}{{end}}{{printf "%%s" .Version}}
-Git Commit: %s
-Build Date: %s
-Go Version: %s
-Platform:   %s
-`, version.GitCommit, version.BuildDate, version.GoVersion, version.Platform))
+	rootCmd.SetVersionTemplate(versionText())
 }

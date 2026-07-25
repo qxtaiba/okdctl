@@ -33,10 +33,26 @@ func maxLineWidth(content string) int {
 	return m
 }
 
+// normalizeVerticalPadding trims blank lines from both ends of content and
+// re-adds exactly one, so every box carries symmetric one-row top/bottom
+// padding regardless of how many trailing Newline() calls a Builder made.
+func normalizeVerticalPadding(content string) string {
+	lines := strings.Split(content, "\n")
+	for len(lines) > 0 && strings.TrimSpace(lines[0]) == "" {
+		lines = lines[1:]
+	}
+	for len(lines) > 0 && strings.TrimSpace(lines[len(lines)-1]) == "" {
+		lines = lines[:len(lines)-1]
+	}
+	return "\n" + strings.Join(lines, "\n") + "\n"
+}
+
 func boxedSectionCore(content, title string, width int, cfg boxConfig) string {
 	if width < MinBoxWidth {
 		width = DefaultBoxWidthFallback
 	}
+
+	content = normalizeVerticalPadding(content)
 
 	borderStyle := lipgloss.NewStyle().Foreground(cfg.borderColor)
 	titleStyle := lipgloss.NewStyle().Foreground(cfg.titleColor).Bold(true)
@@ -109,15 +125,28 @@ func boxedSectionCore(content, title string, width int, cfg boxConfig) string {
 	result = append(result, contentRows...)
 	result = append(result, bottomBorder)
 
-	return strings.Join(result, "\n")
+	return Downsample(strings.Join(result, "\n"))
 }
 
-// BoxedSectionCompact renders content inside a single-line-titled box using
-// the muted slate palette.
+// BoxedSectionCompact renders content inside a single-line-titled box. The
+// title carries the brand purple and the border a dimmed brand tint so every
+// box reads as okdctl; color is stripped when the active profile is not a
+// truecolor TTY.
 func BoxedSectionCompact(content, title string, width int) string {
 	return boxedSectionCore(content, title, width, boxConfig{
-		borderColor: ColorSlate600,
-		titleColor:  ColorSlate300,
+		borderColor: ColorPrimaryDim,
+		titleColor:  ColorPrimary,
+		compact:     true,
+	})
+}
+
+// BoxedSectionAccent renders a compact box whose title and border take a
+// caller-chosen accent color, used by the error box to skin the same chrome in
+// red without duplicating the layout core.
+func BoxedSectionAccent(content, title string, width int, accent color.Color) string {
+	return boxedSectionCore(content, title, width, boxConfig{
+		borderColor: accent,
+		titleColor:  accent,
 		compact:     true,
 	})
 }
