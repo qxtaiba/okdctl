@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -225,7 +224,7 @@ func buildNodeRunner(ctx context.Context, cfg *config.Config, verb string, conse
 	}
 
 	tfEnv := phase.GetTerraformEnv(cfg)
-	terraformDir := filepath.Join(projectRoot, "infrastructure", "terraform", "environments", tfEnv)
+	terraformDir := phase.TerraformEnvDir(projectRoot, tfEnv)
 	tfOpts := []terraform.Option{terraform.WithLogger(tui.SimpleLogger())}
 	if creds.IsValid() {
 		tfOpts = append(tfOpts, terraform.WithEnv(creds.Env()))

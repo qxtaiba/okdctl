@@ -200,7 +200,7 @@ func (p *Phase) setupManifestSteps(cfg *config.Config, opts *Options, clusterDir
 			Desc:      "generating fstrim machineconfigs for thin-storage reclaim",
 			Exec: func(_ context.Context) error {
 				if err := p.generateFstrimManifests(clusterDir); err != nil {
-					return &errtypes.ConfigError{Msg: "failed to generate fstrim machineconfigs", Err: err}
+					return &errtypes.ConfigError{Msg: "generate fstrim machineconfigs", Err: err}
 				}
 				return nil
 			},
