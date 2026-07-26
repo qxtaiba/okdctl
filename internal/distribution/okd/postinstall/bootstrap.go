@@ -6,10 +6,10 @@ import (
 	"path/filepath"
 
 	"github.com/qxtaiba/okdctl/internal/config"
-	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/infrastructure/terraform"
 	"github.com/qxtaiba/okdctl/internal/system"
+	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
 // CleanupBootstrap destroys the bootstrap VM by re-applying terraform with bootstrap_enabled=false.
@@ -18,7 +18,7 @@ import (
 // Re-running after the VM is already gone is a no-op: terraform reports zero
 // changes and apply succeeds cleanly.
 func (p *Phase) CleanupBootstrap(ctx context.Context, cfg *config.Config, opts *Options) error {
-	terraformDir := phase.TerraformEnvDir(opts.ProjectRoot, opts.TerraformEnv)
+	terraformDir := workspace.TerraformEnvDir(opts.ProjectRoot, opts.TerraformEnv)
 
 	tf := terraform.New(terraformDir,
 		terraform.WithLogger(p.Log),
@@ -62,7 +62,7 @@ func (p *Phase) CleanupBootstrap(ctx context.Context, cfg *config.Config, opts *
 	// bootstrap_enabled=true (which would trigger re-creation on the next plan).
 	// If apply fails, the sentinel is harmless: terraform state still tracks the
 	// VM as present, so the next plan is a correct retry.
-	statePath := filepath.Join(terraformDir, phase.BootstrapStateSentinelFile)
+	statePath := filepath.Join(terraformDir, workspace.BootstrapStateSentinelFile)
 	if err := system.AtomicWriteString(statePath, `{"bootstrap_enabled": false}`, 0o600); err != nil {
 		// State-write during cluster lifecycle → ClusterError (exit 4), not
 		// ConfigError; bootstrap-state.auto.tfvars.json is managed by okdctl, not the user.

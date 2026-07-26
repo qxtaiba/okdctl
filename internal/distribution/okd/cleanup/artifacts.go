@@ -9,9 +9,9 @@ import (
 	"path/filepath"
 	"slices"
 
-	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/logutil"
+	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
 var criticalPaths = []string{"/", "/etc", "/var", "/usr", "/usr/local", "/bin", "/sbin", "/lib", "/home", "/root", "/boot", "/dev", "/proc", "/sys"}
@@ -93,7 +93,7 @@ func WorkDirectory(ctx context.Context, workDir string, retainClusterConfig bool
 	}
 
 	if !retainClusterConfig {
-		remove(phase.ClusterConfigDir(workDir), "cluster configuration")
+		remove(workspace.ClusterConfigDir(workDir), "cluster configuration")
 	}
 	remove(filepath.Join(workDir, "custom-isos"), "custom ISOs")
 	remove(filepath.Join(workDir, "installer"), "installer")

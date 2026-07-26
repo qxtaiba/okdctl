@@ -11,11 +11,11 @@ import (
 
 	"github.com/qxtaiba/okdctl/internal/cluster"
 	"github.com/qxtaiba/okdctl/internal/config"
-	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/setup"
 	"github.com/qxtaiba/okdctl/internal/infrastructure/terraform"
 	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/nodetypes"
+	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
 // fakeISO records BuildCustomISOs/UploadCustomISOsToProxmox calls so a
@@ -128,7 +128,7 @@ func seedAddRunner(t *testing.T, fc *fakeCluster, ftf *fakeTF, fiso *fakeISO, fi
 // r's WorkDir/ProjectRoot so preflightIgnitionArtifacts passes.
 func writeIgnitionArtifacts(t *testing.T, r *Runner) {
 	t.Helper()
-	clusterDir := phase.ClusterConfigDir(r.WorkDir)
+	clusterDir := workspace.ClusterConfigDir(r.WorkDir)
 	if err := os.MkdirAll(clusterDir, 0o755); err != nil {
 		t.Fatal(err)
 	}

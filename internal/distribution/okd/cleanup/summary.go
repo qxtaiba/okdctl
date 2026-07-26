@@ -6,7 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
+	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
 // Summary is the post-cleanup inventory the CLI renders for the operator.
@@ -38,7 +38,7 @@ func GenerateSummary(opts *Options) Summary {
 	}
 
 	if opts.Kind == Full || opts.Kind == TerraformOnly {
-		terraformBase := phase.TerraformEnvDir(opts.ProjectRoot, "")
+		terraformBase := workspace.TerraformEnvDir(opts.ProjectRoot, "")
 		if entries, err := os.ReadDir(terraformBase); err == nil {
 			for _, entry := range entries {
 				if !entry.IsDir() {

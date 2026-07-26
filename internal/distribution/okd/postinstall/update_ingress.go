@@ -19,6 +19,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/system"
+	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
 // DefaultIngressLBTimeout caps how long update-ingress waits for the
@@ -287,7 +288,7 @@ func (p *Phase) finalizeIngress(
 	// VIP — not the bastion — before HAProxy stops listening.
 	if opts.RemoveHAProxy && hostNetworkCount == 0 {
 		p.Log.Info("update-ingress: removing haproxy from bastion")
-		if err := p.RemoveHAProxy(ctx, vip, phase.ClusterConfigDir(opts.WorkDir)); err != nil {
+		if err := p.RemoveHAProxy(ctx, vip, workspace.ClusterConfigDir(opts.WorkDir)); err != nil {
 			p.Log.Warn("update-ingress: haproxy removal failed — rolling back dns to bootstrap", "err", err)
 			// Detached from ctx: a Ctrl-C during haproxy removal would
 			// otherwise doom the dns rollback before it starts.
@@ -538,7 +539,7 @@ func ingressBackupPath(workDir, name string) string {
 	if workDir == "" {
 		return ""
 	}
-	return filepath.Join(phase.ClusterConfigDir(workDir), ingressBackupPrefix+name+ingressBackupSuffix)
+	return filepath.Join(workspace.ClusterConfigDir(workDir), ingressBackupPrefix+name+ingressBackupSuffix)
 }
 
 // ingressBackupControllerName extracts the controller name from a backup
@@ -584,7 +585,7 @@ func (p *Phase) restoreOrphanedIngressBackups(ctx context.Context, workDir strin
 	if workDir == "" {
 		return 0
 	}
-	matches, err := filepath.Glob(filepath.Join(phase.ClusterConfigDir(workDir), ingressBackupPrefix+"*"+ingressBackupSuffix))
+	matches, err := filepath.Glob(filepath.Join(workspace.ClusterConfigDir(workDir), ingressBackupPrefix+"*"+ingressBackupSuffix))
 	if err != nil || len(matches) == 0 {
 		return 0
 	}

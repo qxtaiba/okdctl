@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"path/filepath"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -20,8 +19,8 @@ import (
 	"github.com/qxtaiba/okdctl/internal/node"
 	"github.com/qxtaiba/okdctl/internal/runlock"
 	"github.com/qxtaiba/okdctl/internal/sshpin"
-	"github.com/qxtaiba/okdctl/internal/system"
 	"github.com/qxtaiba/okdctl/internal/tui"
+	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
 var (
@@ -190,8 +189,8 @@ func buildSnapshotRunner(ctx context.Context, cfg *config.Config, dryRun bool) (
 		Cfg:         cfg,
 		ConfigPath:  cfgFile,
 		ProjectRoot: projectRoot,
-		WorkDir:     filepath.Join(projectRoot, system.WorkDirName),
-		EnvDir:      system.TerraformEnvDir(projectRoot, tfEnv),
+		WorkDir:     workspace.WorkDir(projectRoot),
+		EnvDir:      workspace.TerraformEnvDir(projectRoot, tfEnv),
 		RunID:       tui.RunID(),
 		DryRun:      dryRun,
 		Log:         log,

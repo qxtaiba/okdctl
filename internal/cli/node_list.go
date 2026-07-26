@@ -3,7 +3,6 @@ package cli
 import (
 	"fmt"
 	"io"
-	"path/filepath"
 	"strconv"
 	"text/tabwriter"
 
@@ -15,8 +14,8 @@ import (
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/setup"
 	"github.com/qxtaiba/okdctl/internal/node"
 	"github.com/qxtaiba/okdctl/internal/nodetypes"
-	"github.com/qxtaiba/okdctl/internal/system"
 	"github.com/qxtaiba/okdctl/internal/tui"
+	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
 // Sizing-drift values for nodeListEntry.Drift. "pending" means config and
@@ -113,14 +112,14 @@ type nodeListSideData struct {
 }
 
 func loadNodeListSideData(cfg *config.Config, projectRoot string) nodeListSideData {
-	envDir := system.TerraformEnvDir(projectRoot, cfg.TerraformEnvName())
+	envDir := workspace.TerraformEnvDir(projectRoot, cfg.TerraformEnvName())
 	sizing, found, err := setup.ReadTerraformVarsSizing(envDir)
 	if err != nil {
 		tui.Warn("node list: read terraform.tfvars sizing failed; drift will show as unknown", tui.LF("err", err))
 		found = false
 	}
 
-	workDir := filepath.Join(projectRoot, system.WorkDirName)
+	workDir := workspace.WorkDir(projectRoot)
 	marker, err := node.ReadOpMarker(workDir, cfg.Cluster.Name)
 	if err != nil {
 		tui.Warn("node list: read in-flight op marker failed", tui.LF("err", err))

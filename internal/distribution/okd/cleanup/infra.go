@@ -8,10 +8,10 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/system"
+	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
 // Terraform removes generated Terraform artifacts under
@@ -22,7 +22,7 @@ func Terraform(ctx context.Context, projectRoot, terraformEnv string, logger *sl
 	logger = logutil.OrNop(logger)
 	logger.Info("cleanup: terraform artifacts")
 
-	terraformBase := phase.TerraformEnvDir(projectRoot, "")
+	terraformBase := workspace.TerraformEnvDir(projectRoot, "")
 
 	if terraformEnv != "" {
 		return cleanupTerraformEnv(ctx, filepath.Join(terraformBase, terraformEnv), terraformEnv, logger)
@@ -55,7 +55,7 @@ var terraformFilesToRemove = []string{
 	"tfplan",
 	"destroy.tfplan",
 	".terraform.lock.hcl",
-	phase.BootstrapStateSentinelFile,
+	workspace.BootstrapStateSentinelFile,
 }
 
 // terraformCleanupDone reports whether every artifact terraform cleanup
@@ -65,7 +65,7 @@ func terraformCleanupDone(opts *Options) (bool, error) {
 	if opts.TerraformEnv == "" {
 		return false, nil
 	}
-	envDir := phase.TerraformEnvDir(opts.ProjectRoot, opts.TerraformEnv)
+	envDir := workspace.TerraformEnvDir(opts.ProjectRoot, opts.TerraformEnv)
 	for _, name := range terraformFilesToRemove {
 		if system.FileExists(filepath.Join(envDir, name)) {
 			return false, nil

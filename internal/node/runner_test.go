@@ -9,7 +9,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/cluster"
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/nodetypes"
-	"github.com/qxtaiba/okdctl/internal/system"
+	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
 func TestResolveVMID(t *testing.T) {
@@ -82,10 +82,10 @@ func TestNewRunner_OptionsDeriveDirsAndDefaults(t *testing.T) {
 		WithRunID("run-42"),
 	)
 
-	if r.WorkDir != filepath.Join(projRoot, system.WorkDirName) {
+	if r.WorkDir != workspace.WorkDir(projRoot) {
 		t.Errorf("WorkDir = %q; want derived from project root", r.WorkDir)
 	}
-	if r.EnvDir != system.TerraformEnvDir(projRoot, "production") {
+	if r.EnvDir != workspace.TerraformEnvDir(projRoot, "production") {
 		t.Errorf("EnvDir = %q; want derived from project root + tf env", r.EnvDir)
 	}
 	if r.ConfigPath != configPath || r.RunID != "run-42" {

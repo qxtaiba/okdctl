@@ -26,8 +26,8 @@ import (
 	"github.com/qxtaiba/okdctl/internal/nodetypes"
 	"github.com/qxtaiba/okdctl/internal/render"
 	"github.com/qxtaiba/okdctl/internal/runlock"
-	"github.com/qxtaiba/okdctl/internal/system"
 	"github.com/qxtaiba/okdctl/internal/tui"
+	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
 var (
@@ -224,7 +224,7 @@ func prepareNodeOpsEnv(ctx context.Context, cfg *config.Config, probeHost bool) 
 		return nil, err
 	}
 	tfEnv := cfg.TerraformEnvName()
-	terraformDir := system.TerraformEnvDir(projectRoot, tfEnv)
+	terraformDir := workspace.TerraformEnvDir(projectRoot, tfEnv)
 	if err := ensureTerraformWorkspace(terraformDir); err != nil {
 		return nil, err
 	}
@@ -279,7 +279,7 @@ func (e *nodeOpsEnv) newRunner(cmd *cobra.Command, cfg *config.Config, verb stri
 	ctx := cmd.Context()
 	creds := e.creds
 
-	terraformDir := system.TerraformEnvDir(e.projectRoot, e.tfEnv)
+	terraformDir := workspace.TerraformEnvDir(e.projectRoot, e.tfEnv)
 	tfOpts := []terraform.Option{terraform.WithLogger(log)}
 	if creds.IsValid() {
 		tfOpts = append(tfOpts, terraform.WithEnv(creds.Env()))

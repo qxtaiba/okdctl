@@ -20,6 +20,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/nodetypes"
 	"github.com/qxtaiba/okdctl/internal/platform"
+	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
 // openshift-install integration points. openshiftSubdir is the manifests
@@ -46,12 +47,8 @@ type Options struct {
 // projectRoot and TerraformEnv resolved from cfg.
 func NewOptions(cfg *config.Config, projectRoot string) Options {
 	return Options{
-		BaseOptions: phase.BaseOptions{
-			WorkDir:      filepath.Join(projectRoot, phase.WorkDirName),
-			ProjectRoot:  projectRoot,
-			TerraformEnv: phase.GetTerraformEnv(cfg),
-		},
-		DownloadDir: filepath.Join(projectRoot, phase.WorkDirName, "downloads"),
+		BaseOptions: phase.NewBaseOptions(cfg, projectRoot),
+		DownloadDir: filepath.Join(workspace.WorkDir(projectRoot), "downloads"),
 	}
 }
 
@@ -141,8 +138,8 @@ func (p *Phase) StepDefs(cfg *config.Config, opts *Options) []distribution.StepD
 // PrintSetupCompletionSummary logs the cluster-config dir and terraform
 // environment a user needs to reference for the follow-up install step.
 func (p *Phase) PrintSetupCompletionSummary(cfg *config.Config, opts *Options) {
-	clusterDir := phase.ClusterConfigDir(opts.WorkDir)
-	tfEnv := phase.GetTerraformEnv(cfg)
+	clusterDir := workspace.ClusterConfigDir(opts.WorkDir)
+	tfEnv := cfg.TerraformEnvName()
 
 	p.Log.Info("setup: cluster config saved", "path", clusterDir)
 	p.Log.Info("setup: terraform environment set", "env", tfEnv)

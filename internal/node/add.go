@@ -8,13 +8,13 @@ import (
 	"time"
 
 	"github.com/qxtaiba/okdctl/internal/cluster"
-	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/setup"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/infrastructure/terraform"
 	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/nodetypes"
 	"github.com/qxtaiba/okdctl/internal/system"
+	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
 // ignitionTeardownTimeout bounds the detached teardown context (see AddWorkers)
@@ -43,7 +43,7 @@ type AddOptions struct {
 // by ReviveIgnitionServer's re-deploy, not checked here. A `cleanup full`
 // run is already caught by node ops' upstream missing-kubeconfig guard.
 func (r *Runner) preflightIgnitionArtifacts() error {
-	ignPath := filepath.Join(phase.ClusterConfigDir(r.WorkDir), "worker.ign")
+	ignPath := filepath.Join(workspace.ClusterConfigDir(r.WorkDir), "worker.ign")
 	if !system.FileExists(ignPath) {
 		return &errtypes.ConfigError{Msg: fmt.Sprintf(
 			"worker.ign not found at %s; re-run setup (e.g. 'okdctl deploy') to regenerate it before adding a node", ignPath,
@@ -218,7 +218,7 @@ func (r *Runner) AddWorkers(ctx context.Context, opts AddOptions) error {
 				"err", terr)
 		}
 	}()
-	if err := r.Ignition.ReviveIgnitionServer(ctx, r.Cfg, r.ProjectRoot, phase.ClusterConfigDir(r.WorkDir)); err != nil {
+	if err := r.Ignition.ReviveIgnitionServer(ctx, r.Cfg, r.ProjectRoot, workspace.ClusterConfigDir(r.WorkDir)); err != nil {
 		return &errtypes.ClusterError{Msg: "revive ignition server", Err: err}
 	}
 

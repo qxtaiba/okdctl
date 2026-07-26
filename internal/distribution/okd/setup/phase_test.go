@@ -15,6 +15,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/executor"
 	"github.com/qxtaiba/okdctl/internal/logutil"
+	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
 var setupStepOrder = []distribution.StepID{
@@ -228,7 +229,7 @@ func TestSetupExecute_ManifestPipeline(t *testing.T) {
 		}
 	}
 
-	clusterDir := phase.ClusterConfigDir(workDir)
+	clusterDir := workspace.ClusterConfigDir(workDir)
 	for _, f := range []string{
 		filepath.Join(clusterDir, "install-config.yaml.backup"),
 		ManifestsSentinel(clusterDir),

@@ -21,6 +21,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/runlock"
 	"github.com/qxtaiba/okdctl/internal/system"
 	"github.com/qxtaiba/okdctl/internal/tui"
+	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
 // StateFileName is the deploy-state marker file written under the work
@@ -314,7 +315,7 @@ func Execute(ctx context.Context, cfg *config.Config, opts Options, w io.Writer)
 	// Under the sudo re-exec model these are root-owned by default; restore
 	// ownership to the invoking user at exit so they can inspect and rm -rf
 	// the workdir without sudo. No-op when not running under sudo.
-	workDir := filepath.Join(projectRoot, system.WorkDirName)
+	workDir := workspace.WorkDir(projectRoot)
 	defer func() {
 		if chownErr := system.ChownTreeToInvokingUser(workDir); chownErr != nil {
 			tui.Warn("workdir chown back to user incomplete", tui.LF("err", chownErr))

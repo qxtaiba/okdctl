@@ -6,6 +6,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/distribution"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
+	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
 // Step IDs for the install phase, ordered as they execute.
@@ -32,7 +33,7 @@ var StepNames = map[distribution.StepID]string{
 }
 
 func (p *Phase) installSteps(cfg *config.Config, opts *Options) []distribution.StepDef {
-	clusterDir := phase.ClusterConfigDir(opts.WorkDir)
+	clusterDir := workspace.ClusterConfigDir(opts.WorkDir)
 
 	return []distribution.StepDef{
 		{

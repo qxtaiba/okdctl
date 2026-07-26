@@ -6,9 +6,9 @@ import (
 	"strings"
 
 	"github.com/qxtaiba/okdctl/internal/config"
-	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/infrastructure/terraform"
+	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
 // StartWorkerVMs starts worker VMs after bootstrap completes so they can reach the MCS.
@@ -33,7 +33,7 @@ func (p *Phase) StartWorkerVMs(ctx context.Context, cfg *config.Config, opts *Op
 
 	p.Log.Info("workers: starting", "count", cfg.Topology.Workers.Count)
 
-	terraformDir := phase.TerraformEnvDir(opts.ProjectRoot, opts.TerraformEnv)
+	terraformDir := workspace.TerraformEnvDir(opts.ProjectRoot, opts.TerraformEnv)
 
 	tf := terraform.New(
 		terraformDir,

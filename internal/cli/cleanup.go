@@ -3,7 +3,6 @@ package cli
 import (
 	"context"
 	"fmt"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -17,6 +16,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/runlock"
 	"github.com/qxtaiba/okdctl/internal/system"
 	"github.com/qxtaiba/okdctl/internal/tui"
+	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
 var (
@@ -58,7 +58,7 @@ func init() {
 }
 
 func runCleanupDryRun(projectRoot string) {
-	workDir := filepath.Join(projectRoot, system.WorkDirName)
+	workDir := workspace.WorkDir(projectRoot)
 	tui.Info("dry-run: would remove work directory", tui.LF("path", workDir))
 	tui.Info("dry-run: would remove haproxy config block", tui.LF("path", phase.DefaultHAProxyConfigPath))
 	tui.Info("dry-run: would remove dnsmasq drop-in", tui.LF("dir", phase.DefaultDNSMasqConfigDir))
@@ -143,7 +143,7 @@ func runCleanup(cmd *cobra.Command, _ []string) error {
 	}
 	defer lock.Release()
 
-	workDir := filepath.Join(projectRoot, system.WorkDirName)
+	workDir := workspace.WorkDir(projectRoot)
 	defer func() {
 		if chownErr := system.ChownTreeToInvokingUser(workDir); chownErr != nil {
 			tui.Warn("workdir chown back to user incomplete", tui.LF("err", chownErr))

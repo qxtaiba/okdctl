@@ -6,7 +6,6 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -15,6 +14,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/httputil"
 	"github.com/qxtaiba/okdctl/internal/system"
+	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
 var (
@@ -32,7 +32,7 @@ var (
 // caller today is finalizeIngress in update_ingress.go.
 func (p *Phase) RemoveHAProxy(ctx context.Context, vip, clusterDir string) error {
 	if vip != "" {
-		kubeconfigPath := filepath.Join(clusterDir, "auth", "kubeconfig")
+		kubeconfigPath := workspace.KubeconfigPath(clusterDir)
 		pool, caErr := httputil.KubeconfigCAPool(kubeconfigPath)
 		if caErr != nil {
 			return &errtypes.ClusterError{Msg: "kubeconfig CA unavailable; cannot verify api via vip", Err: caErr}

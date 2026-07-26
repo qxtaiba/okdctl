@@ -3,7 +3,6 @@ package postinstall
 
 import (
 	"context"
-	"path/filepath"
 	"time"
 
 	"github.com/qxtaiba/okdctl/internal/addon"
@@ -39,11 +38,7 @@ type Options struct {
 // once they have finished configuring the option set.
 func NewOptions(cfg *config.Config, projectRoot string) Options {
 	return Options{
-		BaseOptions: phase.BaseOptions{
-			ProjectRoot:  projectRoot,
-			WorkDir:      filepath.Join(projectRoot, phase.WorkDirName),
-			TerraformEnv: phase.GetTerraformEnv(cfg),
-		},
+		BaseOptions:             phase.NewBaseOptions(cfg, projectRoot),
 		Timeout:                 DefaultTimeout,
 		KubeVIPDaemonSetTimeout: DefaultKubeVIPDaemonSetTimeout,
 		KubeVIPVIPTimeout:       DefaultKubeVIPVIPTimeout,

@@ -10,6 +10,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/cluster"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/logutil"
+	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
 // defaultStartMonitorCmd starts "openshift-install wait-for install-complete"
@@ -27,7 +28,7 @@ func (p *Phase) defaultStartMonitorCmd(ctx context.Context, clusterDir string) (
 // them wherever the error surfaces — the message is the contract.
 func timeoutNextSteps(clusterDir string) string {
 	return fmt.Sprintf("check %s, inspect the cluster with 'oc --kubeconfig %s get clusteroperators', or collect diagnostics with 'okdctl debug-bundle'",
-		filepath.Join(clusterDir, ".openshift_install.log"), filepath.Join(clusterDir, "auth", "kubeconfig"))
+		filepath.Join(clusterDir, ".openshift_install.log"), workspace.KubeconfigPath(clusterDir))
 }
 
 // WaitForBootstrap runs "openshift-install wait-for bootstrap-complete",
@@ -98,7 +99,7 @@ func (p *Phase) MonitorInstallation(ctx context.Context, clusterDir string, opts
 	defer cancel()
 
 	if approver == nil {
-		kubeconfigPath := filepath.Join(clusterDir, "auth", "kubeconfig")
+		kubeconfigPath := workspace.KubeconfigPath(clusterDir)
 		approver = cluster.New(
 			cluster.WithCLI("oc"),
 			cluster.WithKubeconfig(kubeconfigPath),

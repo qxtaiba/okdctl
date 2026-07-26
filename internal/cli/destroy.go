@@ -22,6 +22,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/runlock"
 	"github.com/qxtaiba/okdctl/internal/system"
 	"github.com/qxtaiba/okdctl/internal/tui"
+	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
 type destroyScope string
@@ -329,7 +330,7 @@ func runDestroy(cmd *cobra.Command, _ []string) error {
 	// tearing down. On partial/cancelled runs the workdir may survive
 	// root-owned; restore invoking-user ownership at exit so the user can
 	// inspect or retry.
-	workDir := filepath.Join(projectRoot, system.WorkDirName)
+	workDir := workspace.WorkDir(projectRoot)
 	defer func() {
 		if chownErr := system.ChownTreeToInvokingUser(workDir); chownErr != nil {
 			tui.Warn("workdir chown back to user incomplete", tui.LF("err", chownErr))
@@ -383,7 +384,7 @@ func runDestroyDryRun(ctx context.Context, cfg *config.Config) error {
 	defer lock.Release()
 
 	tfEnv := cfg.TerraformEnvName()
-	terraformDir := system.TerraformEnvDir(projectRoot, tfEnv)
+	terraformDir := workspace.TerraformEnvDir(projectRoot, tfEnv)
 
 	tfOpts := []terraform.Option{terraform.WithLogger(tui.SimpleLogger())}
 	if creds.IsValid() {

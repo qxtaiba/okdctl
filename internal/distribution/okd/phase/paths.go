@@ -1,8 +1,8 @@
 // Package phase hosts BasePhase plus the cross-phase helpers (OcResourceExists,
-// OcPollOutput, path layout) shared by the setup, install, postinstall,
-// destroy, and cleanup phases. New cross-phase helpers belong here per
-// CLAUDE.md §architecture-notes — not in a specific phase package — to keep
-// the import graph one-directional.
+// OcPollOutput) shared by the setup, install, postinstall, destroy, and
+// cleanup phases. New cross-phase helpers belong here per CLAUDE.md
+// §architecture-notes — not in a specific phase package — to keep the import
+// graph one-directional; on-disk layout paths live in internal/workspace.
 package phase
 
 import (
@@ -13,7 +13,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/distribution"
 	"github.com/qxtaiba/okdctl/internal/executor"
 	"github.com/qxtaiba/okdctl/internal/logutil"
-	"github.com/qxtaiba/okdctl/internal/system"
+	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
 // BaseOptions is the common option set every phase's own Options embeds —
@@ -25,18 +25,18 @@ type BaseOptions struct {
 	TerraformEnv string
 }
 
-// WorkDirName re-exports system.WorkDirName so every phase package and cli
-// build the per-project workdir path from one source of truth.
-const WorkDirName = system.WorkDirName
+// NewBaseOptions resolves the standard phase roots for projectRoot: the
+// workspace work dir and the Terraform environment configured in cfg.
+func NewBaseOptions(cfg *config.Config, projectRoot string) BaseOptions {
+	return BaseOptions{
+		ProjectRoot:  projectRoot,
+		WorkDir:      workspace.WorkDir(projectRoot),
+		TerraformEnv: cfg.TerraformEnvName(),
+	}
+}
 
 // KubeAPIPort is the kube-apiserver port served by HAProxy and kube-vip.
 const KubeAPIPort = 6443
-
-// BootstrapStateSentinelFile is the auto-loaded tfvars override postinstall
-// writes after the bootstrap VM is destroyed. Terraform loads *.auto.tfvars.json
-// after terraform.tfvars, so cleanup and setup must remove this file before any
-// subsequent deploy so bootstrap_enabled=true takes effect again.
-const BootstrapStateSentinelFile = "bootstrap-state.auto.tfvars.json"
 
 // Default paths for artifacts the bastion phase code writes or removes.
 // Values follow the stock RHEL-family layout; Debian-family paths are
@@ -97,25 +97,6 @@ func OKDToolBinaries() []string {
 		"oc",
 		"kubectl",
 	}
-}
-
-// ClusterConfigDir re-exports system.ClusterConfigDir so phase code keeps a
-// single import for cluster layout paths; non-phase callers use the system
-// home directly.
-func ClusterConfigDir(workDir string) string {
-	return system.ClusterConfigDir(workDir)
-}
-
-// GetTerraformEnv re-exports Config.TerraformEnvName for phase callers.
-func GetTerraformEnv(cfg *config.Config) string {
-	return cfg.TerraformEnvName()
-}
-
-// TerraformEnvDir re-exports system.TerraformEnvDir so phase callers build the
-// Terraform environment path from the same source of truth as
-// internal/infrastructure/proxmox (which cannot import phase; see roadmap B1).
-func TerraformEnvDir(projectRoot, env string) string {
-	return system.TerraformEnvDir(projectRoot, env)
 }
 
 // BasePhase is the shared state every phase (setup, install, postinstall,

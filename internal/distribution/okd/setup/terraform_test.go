@@ -11,6 +11,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/nodetypes"
+	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
 func TestGetDiskSizes(t *testing.T) {
@@ -282,11 +283,11 @@ func TestReadTerraformVarsSizing_MissingKeyErrors(t *testing.T) {
 func TestGenerateTerraformVars_RemovesBootstrapSentinel(t *testing.T) {
 	root := t.TempDir()
 	cfg := config.DefaultConfig()
-	envDir := phase.TerraformEnvDir(root, phase.GetTerraformEnv(cfg))
+	envDir := workspace.TerraformEnvDir(root, cfg.TerraformEnvName())
 	if err := os.MkdirAll(envDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	sentinel := filepath.Join(envDir, phase.BootstrapStateSentinelFile)
+	sentinel := filepath.Join(envDir, workspace.BootstrapStateSentinelFile)
 	if err := os.WriteFile(sentinel, []byte(`{"bootstrap_enabled": false}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -314,7 +315,7 @@ func TestGenerateTerraformVars_RemovesBootstrapSentinel(t *testing.T) {
 func TestWriteTerraformVars_PreservesBootstrapSentinel(t *testing.T) {
 	cfg := config.DefaultConfig()
 	envDir := t.TempDir()
-	sentinel := filepath.Join(envDir, phase.BootstrapStateSentinelFile)
+	sentinel := filepath.Join(envDir, workspace.BootstrapStateSentinelFile)
 	sentinelBytes := []byte(`{"bootstrap_enabled": false}`)
 	if err := os.WriteFile(sentinel, sentinelBytes, 0o644); err != nil {
 		t.Fatal(err)

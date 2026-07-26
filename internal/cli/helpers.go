@@ -16,8 +16,8 @@ import (
 	"github.com/qxtaiba/okdctl/internal/infrastructure/terraform"
 	"github.com/qxtaiba/okdctl/internal/render"
 	"github.com/qxtaiba/okdctl/internal/runlock"
-	"github.com/qxtaiba/okdctl/internal/system"
 	"github.com/qxtaiba/okdctl/internal/tui"
+	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
 func loadConfig(configFile string) (*config.Config, error) {
@@ -209,7 +209,7 @@ func hasPrimaryMarker(root string) bool {
 }
 
 func terraformStateMatches(root string) []string {
-	matches, _ := filepath.Glob(filepath.Join(system.TerraformEnvDir(root, "*"), "terraform.tfstate"))
+	matches, _ := filepath.Glob(filepath.Join(workspace.TerraformEnvDir(root, "*"), "terraform.tfstate"))
 	return matches
 }
 

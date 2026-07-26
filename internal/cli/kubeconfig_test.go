@@ -11,7 +11,7 @@ import (
 	"testing"
 
 	"github.com/qxtaiba/okdctl/internal/errtypes"
-	"github.com/qxtaiba/okdctl/internal/system"
+	"github.com/qxtaiba/okdctl/internal/workspace"
 	"github.com/spf13/cobra"
 	"sigs.k8s.io/yaml"
 )
@@ -352,7 +352,7 @@ func seedKubeconfigWorkspace(t *testing.T) []byte {
 	if err := os.WriteFile(filepath.Join(root, "okdctl.yaml"), []byte(""), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	authDir := filepath.Join(root, system.WorkDirName, "cluster-config", "auth")
+	authDir := filepath.Join(root, workspace.WorkDirName, "cluster-config", "auth")
 	if err := os.MkdirAll(authDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
