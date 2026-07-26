@@ -9,14 +9,16 @@ import (
 )
 
 // registry is the global addon registry, populated via init() in each addon package.
-var registry = &Registry{
+var registry = &addonRegistry{
 	addons: make(map[string]Addon),
 }
 
-// Registry holds the set of addons an okdctl build knows about. Lookups are
-// safe for concurrent use; iteration order is insertion order (the order the
-// addon packages' init() functions called Register), not alphabetical.
-type Registry struct {
+// addonRegistry holds the set of addons an okdctl build knows about. Lookups
+// are safe for concurrent use; iteration order is insertion order (the order
+// the addon packages' init() functions called Register), not alphabetical.
+// All access goes through the package-level Register/Get/All/Enabled/Names
+// functions on the singleton above.
+type addonRegistry struct {
 	mu     sync.RWMutex
 	addons map[string]Addon
 	order  []string // insertion order for deterministic iteration
