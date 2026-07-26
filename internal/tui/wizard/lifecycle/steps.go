@@ -12,5 +12,7 @@ func NewSteps(st *State, hooks Hooks) []wizard.WizardStep {
 		NewParamsStep(st),
 		NewPreviewStep(st, hooks),
 		NewConfirmStep(st),
+		NewExecStep(st, hooks),
+		NewDoneStep(st),
 	}
 }
