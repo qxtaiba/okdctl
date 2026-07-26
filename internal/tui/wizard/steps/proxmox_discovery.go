@@ -2,15 +2,15 @@ package steps
 
 import (
 	"context"
-	"crypto/tls"
 	"fmt"
-	"net/http"
 	"strings"
 	"time"
 
 	"github.com/luthermonson/go-proxmox"
 
 	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/httputil"
+	infraproxmox "github.com/qxtaiba/okdctl/internal/infrastructure/proxmox"
 )
 
 // proxmoxNode is a discovered Proxmox cluster node.
@@ -64,15 +64,10 @@ func discoverProxmox(cfg *config.Config) (*proxmoxDiscovery, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	httpClient := &http.Client{
-		Timeout: 10 * time.Second,
-		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: px.Insecure}, //nolint:gosec // user opted in via Insecure flag
-		},
-	}
+	httpClient := httputil.NewOptionalInsecure(px.Insecure, 10*time.Second)
 
 	client := proxmox.NewClient(
-		buildBaseURL(px.Host)+"/api2/json",
+		infraproxmox.APIBaseURL(px.Host),
 		proxmox.WithHTTPClient(httpClient),
 		proxmox.WithCredentials(&proxmox.Credentials{Username: px.Username, Password: string(px.Password.Bytes())}),
 	)
@@ -193,11 +188,4 @@ func classifyError(err error) error {
 	default:
 		return fmt.Errorf("connection failed: %w", err)
 	}
-}
-
-func buildBaseURL(host string) string {
-	if strings.Contains(host, "://") {
-		return strings.TrimRight(host, "/")
-	}
-	return "https://" + strings.TrimRight(host, "/")
 }

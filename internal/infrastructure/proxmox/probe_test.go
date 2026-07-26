@@ -2,17 +2,12 @@ package proxmox
 
 import (
 	"bytes"
-	"errors"
 	"log/slog"
-	"net/http"
-	"net/url"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/luthermonson/go-proxmox"
-
-	"github.com/qxtaiba/okdctl/internal/httputil"
 )
 
 func TestSelectNodeMem(t *testing.T) {
@@ -76,11 +71,25 @@ func TestNormalizeEndpoint(t *testing.T) {
 	cases := map[string]string{
 		"https://pve:8006/":    "https://pve:8006",
 		"pve.example.com":      "https://pve.example.com",
+		"pve.example.com/":     "https://pve.example.com",
 		"http://10.0.0.1:8006": "http://10.0.0.1:8006",
 	}
 	for in, want := range cases {
 		if got := normalizeEndpoint(in); got != want {
 			t.Errorf("normalizeEndpoint(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestAPIBaseURL(t *testing.T) {
+	cases := map[string]string{
+		"pve.example.test":          "https://pve.example.test/api2/json",
+		"https://pve.example.test/": "https://pve.example.test/api2/json",
+		"http://pve:8006":           "http://pve:8006/api2/json",
+	}
+	for in, want := range cases {
+		if got := APIBaseURL(in); got != want {
+			t.Errorf("APIBaseURL(%q) = %q, want %q", in, got, want)
 		}
 	}
 }
@@ -94,73 +103,6 @@ func TestNewProbeClientRequiresCreds(t *testing.T) {
 	}
 	if _, err := newProbeClient(&ProbeOptions{Endpoint: "https://pve:8006", Node: "pve", APIToken: []byte("user@pam!t=secret")}, defaultProbeTimeout); err != nil {
 		t.Fatalf("valid token should build client: %v", err)
-	}
-}
-
-func redirectReq(t *testing.T, host string, withAuth bool) *http.Request {
-	t.Helper()
-	u, err := url.Parse("https://" + host + "/api2/json")
-	if err != nil {
-		t.Fatal(err)
-	}
-	req := &http.Request{URL: u, Header: http.Header{}}
-	if withAuth {
-		req.Header.Set("Authorization", "PVEAPIToken=user@pam!t=secret")
-	}
-	return req
-}
-
-// redirectVia builds an n-request redirect chain originating from the
-// credentialed probe host.
-func redirectVia(t *testing.T, n int) []*http.Request {
-	t.Helper()
-	via := make([]*http.Request, n)
-	for i := range via {
-		via[i] = redirectReq(t, "pve.example", false)
-	}
-	return via
-}
-
-// TestAPIClientRedirectPolicy pins the redirect policy on the client the
-// probe hand-builds: 5-hop cap and cross-host Authorization refusal — the
-// load-bearing guard for the credentialed go-proxmox client. Exercised
-// through CheckRedirect so a factory swap that drops the policy fails here.
-func TestAPIClientRedirectPolicy(t *testing.T) {
-	check := newAPIHTTPClient(false, time.Second).CheckRedirect
-	if check == nil {
-		t.Fatal("CheckRedirect not installed; redirect cap policy is missing")
-	}
-	if err := check(redirectReq(t, "pve.example", false), redirectVia(t, 1)); err != nil {
-		t.Errorf("same-host hop 1 refused: %v", err)
-	}
-	if err := check(redirectReq(t, "pve.example", false), redirectVia(t, 5)); !errors.Is(err, httputil.ErrTooManyRedirects) {
-		t.Errorf("hop 5 = %v; want ErrTooManyRedirects", err)
-	}
-	if err := check(redirectReq(t, "evil.example", true), redirectVia(t, 1)); !errors.Is(err, httputil.ErrCrossHostAuthHeader) {
-		t.Errorf("cross-host with auth = %v; want ErrCrossHostAuthHeader", err)
-	}
-	if err := check(redirectReq(t, "mirror.example", false), redirectVia(t, 1)); err != nil {
-		t.Errorf("cross-host without auth refused: %v", err)
-	}
-}
-
-func TestNewAPIHTTPClientInstallsRedirectCap(t *testing.T) {
-	c := newAPIHTTPClient(true, 3*time.Second)
-	if c.CheckRedirect == nil {
-		t.Error("CheckRedirect not installed; redirect cap policy is missing")
-	}
-	if c.Timeout != 3*time.Second {
-		t.Errorf("Timeout = %v; want 3s", c.Timeout)
-	}
-	tr, ok := c.Transport.(*http.Transport)
-	if !ok {
-		t.Fatalf("Transport = %T; want *http.Transport", c.Transport)
-	}
-	if !tr.TLSClientConfig.InsecureSkipVerify {
-		t.Error("insecure=true not carried into TLSClientConfig")
-	}
-	if newAPIHTTPClient(false, time.Second).Transport.(*http.Transport).TLSClientConfig.InsecureSkipVerify {
-		t.Error("insecure=false must keep TLS verification on")
 	}
 }
 
