@@ -296,8 +296,6 @@ type fakePower struct {
 	// assert masters-before-workers sequencing.
 	startOrder []int
 
-	running bool
-
 	// onCycle fires inside every PowerCycleVM call, so a test can model
 	// cluster state that only converges once the power-on lands (e.g. etcd
 	// health returning after a mid-cycle crash left the member powered off).
@@ -332,10 +330,6 @@ func (f *fakePower) StartVM(_ context.Context, node string, vmid int) error {
 	f.lastVMID = vmid
 	f.startOrder = append(f.startOrder, vmid)
 	return f.startErr
-}
-
-func (f *fakePower) VMRunning(context.Context, string, int) (bool, error) {
-	return f.running, nil
 }
 
 func seedRunner(t *testing.T, fc *fakeCluster, ftf *fakeTF, cfg *config.Config) (r *Runner, tfvarsPath, cfgPath string) {

@@ -31,8 +31,8 @@ type PowerCycleOptions struct {
 // narrow, operational power-cycle — not an infra-state mutation — and is the
 // sanctioned API-path analogue of the SSH exemption in hostssh/iso_cleanup.go:
 // the bastion cannot SSH to the Proxmox host, so this goes over the API instead.
-// The same rationale extends to ShutdownVM/StartVM/VMRunning: cluster stop/start
-// needs graceful, per-VM power control that terraform apply/destroy cannot express.
+// The same rationale extends to ShutdownVM/StartVM: cluster stop/start needs
+// graceful, per-VM power control that terraform apply/destroy cannot express.
 type PowerCycler struct {
 	opts *PowerCycleOptions
 }
@@ -155,14 +155,4 @@ func (pc *PowerCycler) StartVM(ctx context.Context, node string, vmid int) error
 		return fmt.Errorf("wait for vm %d start: %w", vmid, err)
 	}
 	return nil
-}
-
-// VMRunning reports the VM's live running state, read fresh from the Proxmox
-// API on every call (no caching).
-func (pc *PowerCycler) VMRunning(ctx context.Context, node string, vmid int) (bool, error) {
-	vm, err := pc.vm(ctx, node, vmid, pc.timeout())
-	if err != nil {
-		return false, err
-	}
-	return vm.IsRunning(), nil
 }
