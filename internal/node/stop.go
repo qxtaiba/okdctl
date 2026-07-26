@@ -182,7 +182,7 @@ func (r *Runner) stopOneNode(ctx context.Context, node string, role nodetypes.No
 	idx, _ := cluster.NodeIndex(node)
 	vmNode, vmid := r.vmTarget(role, idx)
 
-	if err := markStep(r.marker(), OpStop, node, StepShutdown, r.RunID, r.Cfg.Cluster.Name); err != nil {
+	if err := r.mark(OpStop, node, StepShutdown); err != nil {
 		return err
 	}
 	if err := r.Power.ShutdownVM(ctx, vmNode, vmid); err != nil {

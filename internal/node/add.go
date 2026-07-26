@@ -199,7 +199,7 @@ func (r *Runner) AddWorkers(ctx context.Context, opts AddOptions) error {
 	// op marker, so a failed batch keeps its per-node resume position. The
 	// window spans the whole --count N batch: Apache stays up across every
 	// node's build/apply, which for N>1 is a deliberately widened window.
-	if err := markStep(r.marker(), OpAdd, batchLabel, StepIgnitionUp, r.RunID, r.Cfg.Cluster.Name); err != nil {
+	if err := r.mark(OpAdd, batchLabel, StepIgnitionUp); err != nil {
 		return err
 	}
 	// Detached from ctx's cancellation: on SIGINT during the join wait, ctx is
@@ -294,7 +294,7 @@ func (r *Runner) addOneWorker(ctx context.Context, idx int, marker *OpMarker) er
 	resuming := marker != nil
 
 	if shouldRunStep(StepBuildISO, resumeStep) {
-		if err := markStep(r.marker(), OpAdd, name, StepBuildISO, r.RunID, r.Cfg.Cluster.Name); err != nil {
+		if err := r.mark(OpAdd, name, StepBuildISO); err != nil {
 			return err
 		}
 		if err := r.ISO.BuildCustomISOs(ctx, r.Cfg, r.SetupOpts); err != nil {
@@ -302,7 +302,7 @@ func (r *Runner) addOneWorker(ctx context.Context, idx int, marker *OpMarker) er
 		}
 	}
 	if shouldRunStep(StepUploadISO, resumeStep) {
-		if err := markStep(r.marker(), OpAdd, name, StepUploadISO, r.RunID, r.Cfg.Cluster.Name); err != nil {
+		if err := r.mark(OpAdd, name, StepUploadISO); err != nil {
 			return err
 		}
 		if err := r.ISO.UploadCustomISOsToProxmox(ctx, r.Cfg, r.SetupOpts); err != nil {
@@ -310,7 +310,7 @@ func (r *Runner) addOneWorker(ctx context.Context, idx int, marker *OpMarker) er
 		}
 	}
 	if shouldRunStep(StepTFApply, resumeStep) {
-		if err := markStep(r.marker(), OpAdd, name, StepTFApply, r.RunID, r.Cfg.Cluster.Name); err != nil {
+		if err := r.mark(OpAdd, name, StepTFApply); err != nil {
 			return err
 		}
 		if err := r.targetedApply(ctx, workerAddress(idx), terraform.PlanActionCreate, planVars, resuming); err != nil {
@@ -318,7 +318,7 @@ func (r *Runner) addOneWorker(ctx context.Context, idx int, marker *OpMarker) er
 		}
 	}
 	if shouldRunStep(StepWaitJoin, resumeStep) {
-		if err := markStep(r.marker(), OpAdd, name, StepWaitJoin, r.RunID, r.Cfg.Cluster.Name); err != nil {
+		if err := r.mark(OpAdd, name, StepWaitJoin); err != nil {
 			return err
 		}
 		if err := r.waitWorkerJoined(ctx, name); err != nil {

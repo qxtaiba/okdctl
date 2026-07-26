@@ -320,7 +320,7 @@ func (r *Runner) resizeOneNode(ctx context.Context, t resizeTarget, role nodetyp
 	}
 
 	if shouldRunStep(StepTFApply, resumeStep) {
-		if err := markStep(r.marker(), OpResize, t.name, StepTFApply, r.RunID, r.Cfg.Cluster.Name); err != nil {
+		if err := r.mark(OpResize, t.name, StepTFApply); err != nil {
 			return err
 		}
 		// A memory change must be an in-place update, never a replace — a
@@ -338,7 +338,7 @@ func (r *Runner) resizeOneNode(ctx context.Context, t resizeTarget, role nodetyp
 	// now, then wait for the node to rejoin. A failure here leaves the node
 	// cordoned and returns an error — never report success on an unrealized resize.
 	if shouldRunStep(StepPowerCycle, resumeStep) {
-		if err := markStep(r.marker(), OpResize, t.name, StepPowerCycle, r.RunID, r.Cfg.Cluster.Name); err != nil {
+		if err := r.mark(OpResize, t.name, StepPowerCycle); err != nil {
 			return err
 		}
 		if err := r.powerCycleVM(ctx, role, t.index); err != nil {
@@ -356,7 +356,7 @@ func (r *Runner) resizeOneNode(ctx context.Context, t resizeTarget, role nodetyp
 	}
 
 	if shouldRunStep(StepUncordon, resumeStep) {
-		if err := markStep(r.marker(), OpResize, t.name, StepUncordon, r.RunID, r.Cfg.Cluster.Name); err != nil {
+		if err := r.mark(OpResize, t.name, StepUncordon); err != nil {
 			return err
 		}
 		if err := r.Cluster.Uncordon(ctx, t.name); err != nil {

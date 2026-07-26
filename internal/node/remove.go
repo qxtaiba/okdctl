@@ -121,7 +121,7 @@ func (r *Runner) RemoveWorker(ctx context.Context, target string, opts RemoveOpt
 	}
 
 	if shouldRunStep(StepTFApply, resumeStep) {
-		if err := markStep(r.marker(), OpRemove, target, StepTFApply, r.RunID, r.Cfg.Cluster.Name); err != nil {
+		if err := r.mark(OpRemove, target, StepTFApply); err != nil {
 			return err
 		}
 		if err := r.targetedApply(ctx, workerAddress(idx), terraform.PlanActionDelete, countVars, resuming); err != nil {
@@ -142,7 +142,7 @@ func (r *Runner) RemoveWorker(ctx context.Context, target string, opts RemoveOpt
 	}
 
 	if shouldRunStep(StepDeleteK8s, resumeStep) {
-		if err := markStep(r.marker(), OpRemove, target, StepDeleteK8s, r.RunID, r.Cfg.Cluster.Name); err != nil {
+		if err := r.mark(OpRemove, target, StepDeleteK8s); err != nil {
 			return err
 		}
 		if err := r.Cluster.DeleteNode(ctx, target); err != nil {
@@ -177,7 +177,7 @@ func (r *Runner) cordonAndDrain(ctx context.Context, op Op, node, timeout string
 	defer stop()
 
 	if shouldRunStep(StepCordon, resumeStep) {
-		if err := markStep(r.marker(), op, node, StepCordon, r.RunID, r.Cfg.Cluster.Name); err != nil {
+		if err := r.mark(op, node, StepCordon); err != nil {
 			return err
 		}
 		if err := r.Cluster.Cordon(ctx, node); err != nil {
@@ -185,7 +185,7 @@ func (r *Runner) cordonAndDrain(ctx context.Context, op Op, node, timeout string
 		}
 	}
 	if shouldRunStep(StepDrain, resumeStep) {
-		if err := markStep(r.marker(), op, node, StepDrain, r.RunID, r.Cfg.Cluster.Name); err != nil {
+		if err := r.mark(op, node, StepDrain); err != nil {
 			return err
 		}
 		if err := r.Cluster.Drain(ctx, node, cluster.DrainOptions{
