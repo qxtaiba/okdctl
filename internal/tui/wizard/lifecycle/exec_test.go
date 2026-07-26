@@ -49,8 +49,10 @@ func pump(t *testing.T, s *ExecStep, first tea.Cmd) tea.Msg {
 }
 
 func execState() *State {
-	return &State{Cfg: config.DefaultConfig(), Op: node.OpResize, Plan: masterResizePlan(),
-		Proceed: true, Scope: node.ResizeScope{Role: nodetypes.RoleMaster}}
+	return &State{
+		Cfg: config.DefaultConfig(), Op: node.OpResize, Plan: masterResizePlan(),
+		Proceed: true, Scope: node.ResizeScope{Role: nodetypes.RoleMaster},
+	}
 }
 
 func TestExecStepRunsToCompletion(t *testing.T) {
@@ -93,8 +95,10 @@ func TestExecStepFailurePropagatesToState(t *testing.T) {
 
 func TestExecStepQuitGuardCancelsThenForces(t *testing.T) {
 	cancelled := false
-	s := NewExecStep(execState(), Hooks{CancelOp: func() { cancelled = true },
-		Execute: func(*State, chan<- ExecEvent) error { return nil }})
+	s := NewExecStep(execState(), Hooks{
+		CancelOp: func() { cancelled = true },
+		Execute:  func(*State, chan<- ExecEvent) error { return nil },
+	})
 	if !s.InterceptQuit() {
 		t.Fatal("first ctrl+c must be intercepted")
 	}

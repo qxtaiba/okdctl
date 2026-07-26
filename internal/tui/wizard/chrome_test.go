@@ -13,7 +13,7 @@ type nopStep struct{ BaseStep }
 
 func (s *nopStep) Init() tea.Cmd                        { return nil }
 func (s *nopStep) Update(tea.Msg) (WizardStep, tea.Cmd) { return s, nil }
-func (s *nopStep) View(width, height int) string        { return "body" }
+func (s *nopStep) View(_, _ int) string                 { return "body" }
 
 func newNopStep() *nopStep { return &nopStep{BaseStep: NewBaseStep("nop", "nop", "")} }
 

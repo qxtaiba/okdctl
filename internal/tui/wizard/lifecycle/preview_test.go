@@ -25,14 +25,20 @@ func previewWith(t *testing.T, st *State, plan *node.OpPlan, err error) *Preview
 func pressActionDown(s *PreviewStep) { _, _ = s.Update(tea.KeyPressMsg{Code: 'j', Text: "j"}) }
 
 func masterResizePlan() *node.OpPlan {
-	return &node.OpPlan{Op: node.OpResize, Cluster: "homelab", MemoryMB: 24576,
-		Nodes: []node.PlanNode{{Name: "homelab-master0", Role: nodetypes.RoleMaster,
-			TFAddress: "m.master[0]", Action: terraform.PlanActionUpdate}}}
+	return &node.OpPlan{
+		Op: node.OpResize, Cluster: "homelab", MemoryMB: 24576,
+		Nodes: []node.PlanNode{{
+			Name: "homelab-master0", Role: nodetypes.RoleMaster,
+			TFAddress: "m.master[0]", Action: terraform.PlanActionUpdate,
+		}},
+	}
 }
 
 func TestPreviewExecuteSetsProceedAndCompletes(t *testing.T) {
-	st := &State{Cfg: config.DefaultConfig(), Op: node.OpResize,
-		Scope: node.ResizeScope{Role: nodetypes.RoleMaster}}
+	st := &State{
+		Cfg: config.DefaultConfig(), Op: node.OpResize,
+		Scope: node.ResizeScope{Role: nodetypes.RoleMaster},
+	}
 	s := previewWith(t, st, masterResizePlan(), nil)
 	if st.Plan == nil {
 		t.Fatal("dry-run plan must be captured into state")
@@ -53,8 +59,10 @@ func TestPreviewExecuteSetsProceedAndCompletes(t *testing.T) {
 }
 
 func TestPreviewExitWithoutChanges(t *testing.T) {
-	st := &State{Cfg: config.DefaultConfig(), Op: node.OpResize,
-		Scope: node.ResizeScope{Role: nodetypes.RoleMaster}}
+	st := &State{
+		Cfg: config.DefaultConfig(), Op: node.OpResize,
+		Scope: node.ResizeScope{Role: nodetypes.RoleMaster},
+	}
 	s := previewWith(t, st, masterResizePlan(), nil)
 	pressActionDown(s) // execute -> back
 	pressActionDown(s) // back -> exit
@@ -68,8 +76,10 @@ func TestPreviewExitWithoutChanges(t *testing.T) {
 }
 
 func TestPreviewBackReturnsToParameters(t *testing.T) {
-	st := &State{Cfg: config.DefaultConfig(), Op: node.OpResize,
-		Scope: node.ResizeScope{Role: nodetypes.RoleMaster}}
+	st := &State{
+		Cfg: config.DefaultConfig(), Op: node.OpResize,
+		Scope: node.ResizeScope{Role: nodetypes.RoleMaster},
+	}
 	s := previewWith(t, st, masterResizePlan(), nil)
 	pressActionDown(s) // execute -> back
 	_, cmd := s.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
@@ -83,10 +93,14 @@ func TestPreviewBackReturnsToParameters(t *testing.T) {
 
 func TestPreviewRendersPlanGatesAndWarnings(t *testing.T) {
 	st := &State{Cfg: config.DefaultConfig(), Op: node.OpRemove, Target: "homelab-worker2"}
-	plan := &node.OpPlan{Op: node.OpRemove, Cluster: "homelab",
-		Nodes: []node.PlanNode{{Name: "homelab-worker2", Role: nodetypes.RoleWorker,
+	plan := &node.OpPlan{
+		Op: node.OpRemove, Cluster: "homelab",
+		Nodes: []node.PlanNode{{
+			Name: "homelab-worker2", Role: nodetypes.RoleWorker,
 			TFAddress: "m.worker[2]", Action: terraform.PlanActionDelete,
-			OSDs: []string{"osd.1"}, Ingress: []string{"router-a"}}}}
+			OSDs: []string{"osd.1"}, Ingress: []string{"router-a"},
+		}},
+	}
 	s := previewWith(t, st, plan, nil)
 	out := s.View(90, 60)
 	for _, want := range []string{

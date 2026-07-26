@@ -146,8 +146,9 @@ func (s *ExecStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 			s.finishRows(msg.ev.Err)
 			return s, func() tea.Msg { return wizard.StepCompleteMsg{StepID: StepIDExec} }
 		}
-		s.applyEvent(msg.ev)
-		return s, s.listen()
+		s.applyEvent(&msg.ev)
+		listen := s.listen()
+		return s, listen
 
 	case spinner.TickMsg:
 		if !s.finished {
@@ -160,7 +161,7 @@ func (s *ExecStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 }
 
 // applyEvent attributes an event to a node and flips the matched row.
-func (s *ExecStep) applyEvent(ev ExecEvent) {
+func (s *ExecStep) applyEvent(ev *ExecEvent) {
 	if len(s.nodes) == 0 {
 		return
 	}
@@ -201,7 +202,7 @@ func (s *ExecStep) markEarlierRowsDone(np *nodeProgress, active int) {
 	}
 }
 
-func (s *ExecStep) nodeIndexFor(ev ExecEvent) int {
+func (s *ExecStep) nodeIndexFor(ev *ExecEvent) int {
 	for i := range s.nodes {
 		if ev.Node == s.nodes[i].name {
 			return i
@@ -279,7 +280,7 @@ func (s *ExecStep) View(width, height int) string {
 		b.WriteString(bullet + " " + titleStyle.Render(np.name) + suffix + "\n")
 		if i == s.currentNode || nodeTouched(np) {
 			for j := range np.rows {
-				b.WriteString("    " + s.renderRow(&np.rows[j], doneStyle, failStyle, pendStyle) + "\n")
+				b.WriteString("    " + s.renderRow(&np.rows[j], &doneStyle, &failStyle, &pendStyle) + "\n")
 			}
 			for _, extra := range np.extra {
 				b.WriteString("    " + dimStyle.Render("… "+extra) + "\n")
@@ -298,7 +299,7 @@ func (s *ExecStep) View(width, height int) string {
 	return b.String()
 }
 
-func (s *ExecStep) renderRow(r *execRow, doneStyle, failStyle, pendStyle lipgloss.Style) string {
+func (s *ExecStep) renderRow(r *execRow, doneStyle, failStyle, pendStyle *lipgloss.Style) string {
 	took := ""
 	if r.took > 0 {
 		took = "  " + r.took.Truncate(time.Second).String()
