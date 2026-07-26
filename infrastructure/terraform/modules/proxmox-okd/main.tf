@@ -193,7 +193,7 @@ resource "proxmox_virtual_environment_vm" "master" {
   # grow master_data_disk_size_gb — decreasing it makes terraform destroy the
   # disk and lose its OSD data.
   dynamic "disk" {
-    for_each = var.master_data_disk_size_gb >= var.minimum_data_disk_size_gb && var.master_data_disk_size_gb > 0 ? [1] : []
+    for_each = var.master_data_disk_size_gb > 0 ? [1] : []
     content {
       datastore_id = var.data_storage
       size         = var.master_data_disk_size_gb
@@ -211,7 +211,7 @@ resource "proxmox_virtual_environment_vm" "master" {
   # INVARIANT: only ever add or grow master_mon_disk_size_gb — decreasing it
   # makes terraform destroy the disk and lose the mon store on it.
   dynamic "disk" {
-    for_each = var.master_mon_disk_size_gb >= var.minimum_data_disk_size_gb && var.master_mon_disk_size_gb > 0 ? [1] : []
+    for_each = var.master_mon_disk_size_gb > 0 ? [1] : []
     content {
       datastore_id = var.data_storage
       size         = var.master_mon_disk_size_gb
@@ -276,6 +276,14 @@ resource "proxmox_virtual_environment_vm" "master" {
     precondition {
       condition     = length(var.master_isos) >= var.master_count && alltrue([for iso in slice(var.master_isos, 0, var.master_count) : iso != ""])
       error_message = "master_isos must have at least master_count (${var.master_count}) non-empty entries; got ${length(var.master_isos)} entries (check for empty strings in the first ${var.master_count})."
+    }
+    precondition {
+      condition     = var.master_data_disk_size_gb == 0 || var.master_data_disk_size_gb >= var.minimum_data_disk_size_gb
+      error_message = "master_data_disk_size_gb (${var.master_data_disk_size_gb}) is below minimum_data_disk_size_gb (${var.minimum_data_disk_size_gb}); shrinking a data disk destroys its ceph osd data — raise the size or lower the floor deliberately."
+    }
+    precondition {
+      condition     = var.master_mon_disk_size_gb == 0 || var.master_mon_disk_size_gb >= var.minimum_data_disk_size_gb
+      error_message = "master_mon_disk_size_gb (${var.master_mon_disk_size_gb}) is below minimum_data_disk_size_gb (${var.minimum_data_disk_size_gb}); a below-floor value must fail the plan, not silently omit (destroy) the mon disk — raise the size or lower the floor deliberately."
     }
     ignore_changes = [
       # bpg/terraform-provider-proxmox dynamic + static network_device coexist;
@@ -347,7 +355,7 @@ resource "proxmox_virtual_environment_vm" "worker" {
   # Ceph OSD data disk, terraform-managed (see the master block's note). Only
   # ever add or grow worker_data_disk_size_gb — a decrease destroys the OSD data.
   dynamic "disk" {
-    for_each = var.worker_data_disk_size_gb >= var.minimum_data_disk_size_gb && var.worker_data_disk_size_gb > 0 ? [1] : []
+    for_each = var.worker_data_disk_size_gb > 0 ? [1] : []
     content {
       datastore_id = var.data_storage
       size         = var.worker_data_disk_size_gb
@@ -401,6 +409,10 @@ resource "proxmox_virtual_environment_vm" "worker" {
     precondition {
       condition     = length(var.worker_isos) >= var.worker_count && alltrue([for iso in slice(var.worker_isos, 0, var.worker_count) : iso != ""])
       error_message = "worker_isos must have at least worker_count (${var.worker_count}) non-empty entries; got ${length(var.worker_isos)} entries (check for empty strings in the first ${var.worker_count})."
+    }
+    precondition {
+      condition     = var.worker_data_disk_size_gb == 0 || var.worker_data_disk_size_gb >= var.minimum_data_disk_size_gb
+      error_message = "worker_data_disk_size_gb (${var.worker_data_disk_size_gb}) is below minimum_data_disk_size_gb (${var.minimum_data_disk_size_gb}); shrinking a data disk destroys its ceph osd data — raise the size or lower the floor deliberately."
     }
     ignore_changes = [
       # bpg/terraform-provider-proxmox dynamic + static network_device coexist;

@@ -37,6 +37,8 @@ module "okd_cluster" {
   master_data_disk_size_gb = var.master_data_disk_size_gb
   master_mon_disk_size_gb  = var.master_mon_disk_size_gb
 
+  minimum_data_disk_size_gb = var.minimum_data_disk_size_gb
+
   vm_tags = var.vm_tags
 
   # =============================================================================

@@ -130,6 +130,17 @@ variable "master_mon_disk_size_gb" {
   default     = 0
 }
 
+# Set this to the smallest data-disk size in use (e.g. 500) after initial
+# apply so a regenerated tfvars or a typo cannot shrink a ceph disk: the
+# module fails the plan when a nonzero size drops below this floor. Zeroing
+# a size still removes the disk — terraform cannot tell "never had a disk"
+# from "disk being deleted".
+variable "minimum_data_disk_size_gb" {
+  description = "plan-time floor for nonzero data-disk sizes (0 disables the guard)"
+  type        = number
+  default     = 0
+}
+
 
 # =============================================================================
 # NODE NAMES

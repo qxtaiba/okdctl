@@ -69,7 +69,7 @@ variable "data_storage" {
 }
 
 variable "minimum_data_disk_size_gb" {
-  description = "floor for data-disk activation; setting to 1 prevents a re-apply that zeros master_data_disk_size_gb, master_mon_disk_size_gb, or worker_data_disk_size_gb from silently destroying existing disks"
+  description = "plan-time floor for nonzero data/mon-disk sizes: a plan that sets master_data_disk_size_gb, master_mon_disk_size_gb, or worker_data_disk_size_gb to a nonzero value below this fails instead of shrinking (destroying) the disk; zeroing a size still removes the disk — no variable can prevent that"
   type        = number
   default     = 0
   validation {
@@ -79,13 +79,13 @@ variable "minimum_data_disk_size_gb" {
 }
 
 variable "worker_data_disk_size_gb" {
-  description = "size of data disk for worker nodes in gb; 0 (or any value below minimum_data_disk_size_gb) omits the disk — lowering this after initial apply destroys the ceph data disk"
+  description = "size of data disk for worker nodes in gb; 0 omits the disk — zeroing this after initial apply destroys the ceph data disk, and nonzero values below minimum_data_disk_size_gb fail at plan time"
   type        = number
   default     = 500
 }
 
 variable "master_data_disk_size_gb" {
-  description = "size of data disk for master nodes in gb; 0 (or any value below minimum_data_disk_size_gb) omits the disk — lowering this after initial apply destroys the ceph data disk"
+  description = "size of data disk for master nodes in gb; 0 omits the disk — zeroing this after initial apply destroys the ceph data disk, and nonzero values below minimum_data_disk_size_gb fail at plan time"
   type        = number
   default     = 0
 }
