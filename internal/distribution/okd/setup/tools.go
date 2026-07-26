@@ -185,7 +185,7 @@ func (p *Phase) installTerraform(ctx context.Context) error {
 	}
 
 	if !isToolInstalled(toolTerraform) {
-		return fmt.Errorf("terraform installation verification failed")
+		return &errtypes.ConfigError{Msg: "terraform installation verification failed"}
 	}
 
 	version := getToolVersion(ctx, "terraform", "--version")
@@ -258,7 +258,7 @@ func (p *Phase) installBinary(ctx context.Context, spec *binaryInstallSpec) erro
 		return err
 	}
 	if !isToolInstalled(externalTool(spec.name)) {
-		return fmt.Errorf("%s installation verification failed", spec.name)
+		return &errtypes.ConfigError{Msg: fmt.Sprintf("%s installation verification failed", spec.name)}
 	}
 	p.Log.Info("tools: installed", "tool", spec.name, "version", getToolVersion(ctx, spec.name, spec.versionFlag))
 	return nil
@@ -342,7 +342,7 @@ func installHashiCorpDebianRepo(ctx context.Context, codename string) error {
 	}
 
 	if codename == "" {
-		return fmt.Errorf("failed to detect debian codename: VERSION_CODENAME not set in /etc/os-release")
+		return &errtypes.ConfigError{Msg: "debian codename not detected: VERSION_CODENAME not set in /etc/os-release"}
 	}
 
 	listContent := fmt.Sprintf("deb [signed-by=%s] https://apt.releases.hashicorp.com %s main\n", gpgPath, codename)
