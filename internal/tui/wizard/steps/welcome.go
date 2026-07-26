@@ -34,7 +34,7 @@ var welcomeOptions = []struct {
 type WelcomeStep struct {
 	wizard.BaseStep
 	configExists bool
-	nav          *singleSelect
+	nav          *wizard.SingleSelect
 }
 
 // NewWelcomeStep constructs the welcome wizard step.
@@ -52,7 +52,7 @@ func NewWelcomeStep() *WelcomeStep {
 // newWelcomeSelect builds the step's navigation: a clamped (non-wrapping)
 // list over the deploy/edit/fresh options, or a single "get started" entry
 // on the blank onboarding branch. Space confirms alongside enter.
-func newWelcomeSelect(configExists bool) *singleSelect {
+func newWelcomeSelect(configExists bool) *wizard.SingleSelect {
 	options := []string{"get started"}
 	if configExists {
 		options = make([]string, len(welcomeOptions))
@@ -62,7 +62,7 @@ func newWelcomeSelect(configExists bool) *singleSelect {
 	}
 	selector := components.NewCompactSelector(options)
 	selector.SetWrap(false)
-	return newSingleSelect(wizard.StepIDWelcome, selector, "enter", " ")
+	return wizard.NewSingleSelect(wizard.StepIDWelcome, selector, "enter", " ")
 }
 
 // SetConfigExists tells the step whether an okdctl.yaml exists so it can
