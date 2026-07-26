@@ -12,9 +12,12 @@ import (
 	"github.com/qxtaiba/okdctl/internal/executor"
 )
 
-// validConnectionNameRegex mirrors the dns package allowlist for nmcli
-// connection names. The explicit leading-dash refusal closes CWE-88: nmcli
-// treats a leading-dash token as a property selector in argv position.
+// validConnectionNameRegex is the allowlist for nmcli connection names:
+// the realistic NetworkManager name space (alphanumerics, space, dot,
+// underscore, slash, colon for aliases like br0:1, hyphen, up to 128
+// chars), rejecting everything else including all shell metacharacters.
+// The explicit leading-dash refusal closes CWE-88: nmcli treats a
+// leading-dash token as a property selector in argv position.
 var validConnectionNameRegex = regexp.MustCompile(`^[A-Za-z0-9 ._/:-]{1,128}$`)
 
 func validateConnectionName(name string) error {
@@ -70,6 +73,59 @@ func RemoveSecondaryIP(ctx context.Context, ip, iface string) error {
 	}
 
 	return nil
+}
+
+// ActiveConnection returns the name of the first active non-loopback
+// NetworkManager connection. The name is scraped from nmcli output, so it
+// is validated against the connection-name allowlist before it can reach
+// any nmcli argv position.
+func ActiveConnection(ctx context.Context) (string, error) {
+	out, err := executor.OutputCaptured(ctx, "nmcli", "-t", "-f", "NAME", "connection", "show", "--active")
+	if err != nil {
+		return "", fmt.Errorf("list network connections: %w", err)
+	}
+
+	for line := range strings.Lines(string(out)) {
+		line = strings.TrimSpace(line)
+		if line == "" || line == "lo" {
+			continue
+		}
+		if err := validateConnectionName(line); err != nil {
+			return "", fmt.Errorf("active connection name rejected: %w", err)
+		}
+		return line, nil
+	}
+	return "", fmt.Errorf("no active network connection found")
+}
+
+// OverrideConnectionDNS points conn's IPv4 DNS at servers and disables
+// automatic (DHCP) DNS on the profile. The change is persisted only; call
+// ActivateConnection to apply it to the running device.
+func OverrideConnectionDNS(ctx context.Context, conn string, servers []string) error {
+	if err := validateConnectionName(conn); err != nil {
+		return fmt.Errorf("connection name rejected: %w", err)
+	}
+	return executor.RunCaptured(ctx, "nmcli", "connection", "modify", conn,
+		"ipv4.dns", strings.Join(servers, ","), "ipv4.ignore-auto-dns", "yes")
+}
+
+// ClearConnectionDNSOverride reverts OverrideConnectionDNS: it empties the
+// profile's IPv4 DNS list and re-enables automatic DNS.
+func ClearConnectionDNSOverride(ctx context.Context, conn string) error {
+	if err := validateConnectionName(conn); err != nil {
+		return fmt.Errorf("connection name rejected: %w", err)
+	}
+	return executor.RunCaptured(ctx, "nmcli", "connection", "modify", conn,
+		"ipv4.dns", "", "ipv4.ignore-auto-dns", "no")
+}
+
+// ActivateConnection brings conn up so profile changes take effect on the
+// running device.
+func ActivateConnection(ctx context.Context, conn string) error {
+	if err := validateConnectionName(conn); err != nil {
+		return fmt.Errorf("connection name rejected: %w", err)
+	}
+	return executor.RunCaptured(ctx, "nmcli", "connection", "up", conn)
 }
 
 // GetDefaultInterface returns the interface name that carries the host's
