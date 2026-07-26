@@ -3,9 +3,9 @@
 `okdctl` organizes all its work into **phases** and **steps**. A phase
 is a cohesive unit of work (setup, install, post-install, destroy, cleanup);
 a step is one operation inside a phase (install a package, render a
-template, provision VMs). Phases are orchestrated by shared infrastructure
-so each phase implementation only has to declare *what* happens, not *how*
-it's sequenced, logged, skipped, or rolled back.
+template, provision VMs). The phases are orchestrated by shared
+infrastructure, so each phase implementation only has to declare *what*
+happens, not *how* it's sequenced, logged, skipped, or rolled back.
 
 Phase flow:
 
@@ -73,7 +73,7 @@ iterates, emitting progress events and invoking each step's `Exec`. If `ctx`
 is cancelled mid-run (SIGINT / SIGTERM), the current step finishes but later
 steps are skipped — no forced kills.
 
-The orchestrator is intentionally simple. It does **not** do parallelism,
+The orchestrator is intentionally simple. It does not do parallelism,
 DAG scheduling, or resumable checkpoints. Each phase's step list is
 designed to be short enough (tens of steps, not hundreds) that linear
 execution is fast enough, and idempotent enough that re-running from
@@ -86,18 +86,19 @@ every phase needs:
 
 ```go
 type BasePhase struct {
-    Exec     *executor.Executor           // subprocess runner (oc, terraform, etc.)
-    Log      *slog.Logger                 // structured logger
-    Recorder distribution.MetricsRecorder // per-step + overall observation sink (nil → nopMetricsRecorder via WithRecorder)
-    Reporter logutil.ProgressReporter     // progress sink for long-running operations (nil → NopProgressReporter via NewBasePhase)
+    Exec       *executor.Executor            // subprocess runner (oc, terraform, etc.)
+    Log        *slog.Logger                  // structured logger
+    Recorder   distribution.MetricsRecorder  // per-step + overall observation sink (nil → nopMetricsRecorder via WithRecorder)
+    Reporter   logutil.ProgressReporter      // progress sink for long-running operations (nil → NopProgressReporter via NewBasePhase)
+    StatusLine logutil.StatusLineReporter    // updatable status line for the install monitor (nil → NopStatusLineReporter)
 }
 ```
 
-Phases that need OS-family awareness (setup, cleanup) embed `BasePhase` and
-add their own `platform.OS` / `platform.PackageManager` fields — `BasePhase`
-itself stays distribution-agnostic.
+The phases that need OS-family awareness (setup, cleanup) embed
+`BasePhase` and add their own `platform.OS` / `platform.PackageManager`
+fields; `BasePhase` itself stays distribution-agnostic.
 
-Phases get shared helper methods on `BasePhase` for common operations:
+The phases get shared helper methods on `BasePhase` for common operations:
 
 - `p.OcResourceExists(ctx, errPrefix, args...)` — "does this k8s resource
   exist?" via `oc get`, wrapping errors with a consistent prefix
@@ -150,20 +151,21 @@ This is rare. If you think you need a new phase:
 New phases must have a corresponding destroy/cleanup path. Do not ship
 a phase that creates state without a documented way to remove it.
 
-## Why this design
+## Design notes
 
-**Why data-driven steps instead of chained function calls?** Steps are
-data, which means they're inspectable and tooled. The wizard and CLI can
-list the steps that *would* run without executing them, skip modes are
+The steps are data instead of chained function calls so they can be
+inspected and tooled. In particular, the wizard and CLI can list the
+steps that would run without executing them, the skip modes are
 trivial, and a phase's structure is visible at a glance.
 
-**Why a shared orchestrator instead of per-phase logic?** Every phase
-needs progress output, error handling, skip logic, and logging. Writing
-that once in the orchestrator means phase authors focus on the domain
-logic, and the UX is consistent across phases.
+The orchestrator is shared instead of per-phase because every phase
+needs the same progress output, error handling, skip logic, and logging.
+That machinery is written once, so the phase authors focus on the domain
+logic and the UX stays consistent across phases.
 
-**Why no DAG or parallelism?** On a single Proxmox host, most work is
-either CPU-bound on one tool (terraform, openshift-install) or waiting
-on external state (cluster operators becoming ready). Parallelism adds
-complexity without meaningful speedup, and makes rollback-on-failure
-genuinely hard. Linear execution is the correct choice for this domain.
+There is no DAG scheduling or parallelism on purpose. On a single
+Proxmox host, most of the work is either CPU-bound on one tool
+(terraform, openshift-install) or waiting on external state such as
+cluster operators becoming ready. In that setting, parallelism adds
+complexity without meaningful speedup and makes rollback-on-failure
+much harder.

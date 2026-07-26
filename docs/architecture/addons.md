@@ -1,21 +1,22 @@
 # The addon system
 
-Addons are optional components the user can opt into per-cluster — things
-like Flux for GitOps, cert-manager for TLS, an external secret store, or
-a storage class. They're decoupled from the core phase model: the phases
-deploy OKD itself and stop; addons install on top of a live cluster.
+The addons are optional components the user can opt into per-cluster:
+things like Flux for GitOps, cert-manager for TLS, an external secret
+store, or a storage class. They're decoupled from the core phase model
+in that the phases deploy OKD itself and stop, while the addons install
+on top of a live cluster.
 
 ## Goals
 
-1. **Zero-cost for users who don't want them.** If you don't enable any
-   addons, you pay no install time and no cluster resources.
-2. **Discoverable in the wizard.** The wizard lists all registered addons
-   and lets the user pick which to install during the post-install phase.
-3. **Pluggable without modifying core code.** Adding a new addon means
-   dropping a file in the catalog — no edits to the wizard, phase, or
-   manager.
-4. **Dependency-aware.** An addon can declare it depends on another addon
-   (e.g., cert-manager depends on trust-manager). The manager resolves
+1. Zero cost for users who don't want them: with no addons enabled, you
+   pay no install time and no cluster resources.
+2. Discoverable in the wizard, which lists all registered addons and
+   lets the user pick which to install during the post-install phase.
+3. Pluggable without modifying core code: adding a new addon means
+   dropping a file in the catalog, with no edits to the wizard, phase,
+   or manager.
+4. Dependency-aware: an addon can declare that it depends on another
+   addon (say, cert-manager on trust-manager) and the manager resolves
    the order.
 
 ## The Addon interface
@@ -29,8 +30,8 @@ type Addon interface {
 }
 ```
 
-Addons that take user-tunable settings opt into the `ConfigurableAddon`
-sub-interface:
+The addons that take user-tunable settings opt into the
+`ConfigurableAddon` sub-interface:
 
 ```go
 type ConfigurableAddon interface {
@@ -70,12 +71,12 @@ import _ "github.com/qxtaiba/okdctl/internal/addon/catalog"
 
 which in turn imports each addon package for its side effects. This is
 why every addon automatically becomes visible to the wizard without any
-explicit wiring — the import graph is the registration.
+explicit wiring: the import graph is the registration.
 
 **Caveat:** because registration happens via `init()`, the order is
-non-deterministic. Addons must not depend on other addons being
-*registered* (they can depend on other addons being *installed*, via
-`Info().Dependencies`).
+non-deterministic. In particular, addons must not depend on other addons
+being *registered* (they can depend on other addons being *installed*,
+via `Info().Dependencies`).
 
 ## The catalog
 
@@ -121,8 +122,8 @@ flowchart TD
 
 ## Wizard field layout lives in the wizard package
 
-Addons that need user input (e.g., Flux wants a Git repository URL) do not
-declare their own field list. The wizard's addons step
+The addons that need user input (e.g., Flux wants a Git repository URL)
+do not declare their own field list. The wizard's addons step
 (`internal/tui/wizard/steps/addons.go`) hand-builds a `DataDrivenStep` with
 its own field definitions, importing each addon package only for its
 `SettingXxx` constants. This is deliberate: the wizard needs per-field
@@ -130,7 +131,7 @@ input type (select vs free text vs key-value), option lists, grouped
 sections with notes, and cross-field warnings computed from filesystem and
 tool checks — richness a flat addon-owned field list can't express without
 duplicating the wizard's own step-definition model inside every addon
-package. Field values are persisted into the addon's settings map
+package. The field values are persisted into the addon's settings map
 (`config.Addons["flux"].Settings`) and surfaced via `AddonConfig` to
 `ValidateSettings` and `Install`.
 
@@ -146,12 +147,12 @@ creates the namespace idempotently. Similar helpers live in
 - `addon.EnsureNamespace(ctx, env, name)` — idempotent namespace
   creation with retries
 
-New cross-addon helpers belong in `helpers.go`. Do **not** write per-addon
+New cross-addon helpers belong in `helpers.go`. Do not write per-addon
 copies of namespace creation or secret construction logic.
 
-## Why not Helm?
+## Why not Helm
 
-A reasonable question. Helm would let users install any chart. But:
+Helm would let users install any chart, but:
 
 - Most homelab users don't want to think about Helm values files
 - Helm state lives in the cluster (as secrets), which makes "what's

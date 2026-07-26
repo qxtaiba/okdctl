@@ -31,7 +31,6 @@ archives:
       - README.md
       - LICENSE
       - NOTICE
-      - CHANGELOG.md
 checksum:
   name_template: "SHA256SUMS"
   algorithm: sha256
@@ -73,9 +72,9 @@ signs:
 nfpms:
   - id: default
     package_name: okdctl
-    vendor: Q Al Nuaimi
+    vendor: Qutaiba Al-Nuaimy
     homepage: "https://github.com/qxtaiba/okdctl"
-    maintainer: "Q Al Nuaimi"
+    maintainer: "Qutaiba Al-Nuaimy"
     description: |-
       Deploy production-ready OKD Kubernetes clusters on Proxmox VE.
       Interactive TUI wizard, single binary, opinionated defaults for homelab
@@ -102,6 +101,15 @@ changelog:
       - "^ci:"
       - Merge pull request
       - Merge branch
+  groups:
+    - title: Features
+      regexp: '^feat(\(.*\))?!?:'
+      order: 0
+    - title: Bug fixes
+      regexp: '^fix(\(.*\))?!?:'
+      order: 1
+    - title: Other changes
+      order: 999
 release:
   github:
     owner: qxtaiba
@@ -110,9 +118,6 @@ release:
   draft: false
   header: |
     ## okdctl {{ .Tag }}
-
-    See [CHANGELOG.md](https://github.com/qxtaiba/okdctl/blob/main/CHANGELOG.md)
-    for human-curated release notes.
 
     All release artifacts are signed with sigstore keyless signing. Verify
     with `cosign verify-blob` (see README for instructions).

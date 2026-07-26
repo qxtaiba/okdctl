@@ -99,3 +99,8 @@ demo.yaml
 # agent-workflow artifacts — local only, never shipped
 .claude/
 docs/superpowers/
+
+# local-only maintainer docs — kept on disk, not published
+CLAUDE.md
+roadmap.md
+docs/roadmap/

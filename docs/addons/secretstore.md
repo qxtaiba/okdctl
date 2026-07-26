@@ -1,9 +1,9 @@
 # secret store addon
 
-Bootstraps ESO (External Secrets Operator) provider credentials into the
-cluster as Kubernetes Secrets, and applies an ESO `SecretStore` CRD that
-configures the operator to use those credentials. Supports multiple
-backends via the `provider` setting.
+This addon bootstraps ESO (External Secrets Operator) provider
+credentials into the cluster as Kubernetes Secrets, and applies an ESO
+`SecretStore` CRD that configures the operator to use those credentials.
+It supports multiple backends via the `provider` setting.
 
 Not enabled by default. Enable in the wizard or set
 `addons.secretstore.enabled: true` in `okdctl.yaml`.
@@ -47,7 +47,7 @@ Additional settings:
 | key | default | notes |
 |---|---|---|
 | `onepassword_connect_host` | `http://onepassword-connect:8080` | URL of the 1Password Connect server |
-| `onepassword_vaults` | `homelab=1` | CSV of `name=priority` pairs written into `spec.provider.onepassword.vaults`. Most homelab users have one vault and can leave this at the default or set `"myvault=1"`. Multi-vault: `"homelab=1,shared=2"`. A structured editor is tracked for a follow-up roadmap item. |
+| `onepassword_vaults` | `homelab=1` | CSV of `name=priority` pairs written into `spec.provider.onepassword.vaults`. Most homelab users have one vault and can leave this at the default or set `"myvault=1"`. Multi-vault: `"homelab=1,shared=2"`. |
 
 ```yaml
 addons:

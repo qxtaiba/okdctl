@@ -1,8 +1,8 @@
 # flux gitops addon
 
-Bootstraps [FluxCD](https://fluxcd.io) into an OKD cluster using the
-controlplane.io Flux Operator. Flux watches a Git repository and
-reconciles cluster state continuously.
+This addon bootstraps [FluxCD](https://fluxcd.io) into an OKD cluster
+using the controlplane.io Flux Operator. Flux watches a Git repository
+and reconciles cluster state continuously.
 
 Not enabled by default. Enable in the wizard or set
 `addons.flux.enabled: true` in `okdctl.yaml`.
@@ -27,6 +27,8 @@ apply`) or if you have no Git repository to point it at.
 | `path` | `kubernetes/clusters/production` | path within repo |
 | `controller_timeout` | `300` (seconds) | how long to wait for controllers |
 | `git_sync_timeout` | `180` (seconds) | how long to wait for first git sync |
+| `git_host_fingerprint` | _(unset)_ | `SHA256:<base64>` pin for the git host's SSH key |
+| `accept_host_key` | `false` | `true` opts into trust-on-first-use when no fingerprint is pinned |
 
 Sources: `Flux.DefaultSettings` (defaults map) and `defaultControllerTimeout`/`defaultGitRepoSyncTimeout` (duration constants) in `internal/addon/catalog/flux/flux.go`.
 
@@ -58,10 +60,20 @@ ssh-keygen -t ed25519 -f ~/.ssh/flux-deploy-key -N ''
 ```
 
 Then add the public key (`~/.ssh/flux-deploy-key.pub`) as a read-only
-deploy key on your Git host. The public half is optional — Flux only
+deploy key on your Git host. The public half is optional; Flux only
 requires the private key and `known_hosts`. Install reads the key,
 runs `ssh-keyscan` against the resolved git host, and stores the result
 as a `flux-system` Secret in the `flux-system` namespace.
+
+## git host key verification
+
+The keyscan result is verified before it is stored. With
+`git_host_fingerprint` set, install requires the scanned host key to
+match the pinned `SHA256:<base64>` fingerprint and fails on mismatch.
+With no pin, install fails closed and lists the observed fingerprints so
+you can pin one. Setting `accept_host_key: "true"` instead accepts the
+scanned key trust-on-first-use and logs the observed fingerprints at
+WARN; review them before relying on the sync.
 
 If the deploy key file is missing, install fails immediately with the
 path and the `ssh-keygen` command to fix it.

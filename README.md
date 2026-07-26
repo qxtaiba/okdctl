@@ -6,31 +6,39 @@
 
 okdctl provisions OKD clusters on Proxmox VE from an interactive wizard.
 It's for the homelab operator with one or two Proxmox nodes who wants a real
-Kubernetes cluster without hand-rolling Terraform, Ignition, and bootstrap glue.
+Kubernetes cluster without hand-rolling Terraform, Ignition, and bootstrap
+glue.
 
 ![okdctl deploy wizard](docs/assets/demo.gif)
 
 ## What it isn't
 
-- Not a managed service, not a wrapper around the Red Hat Assisted Installer.
-- Not k3s or microk8s — this is upstream OKD with the full operator surface.
+- Not a managed service, and not a wrapper around the Red Hat Assisted
+  Installer.
+- Not k3s or microk8s. This is upstream OKD with the full operator surface.
 - Not multi-cluster or multi-tenant; one cluster per `okdctl.yaml`.
-- Not a production OKD distribution. Pre-1.0 — the config schema breaks
-  between minors (every break is in the [CHANGELOG](CHANGELOG.md)); pin
-  your version.
+- Not a production OKD distribution. Pre-1.0, the config schema breaks
+  between minors, so pin your version. Every break is listed in the
+  [release notes](https://github.com/qxtaiba/okdctl/releases).
 
 okdctl collects no telemetry and no analytics. The one request it makes on
-its own behalf is an update check: release builds send a plain HTTPS GET to
-`api.github.com` (`releases/latest`) — nothing beyond what any HTTP request
-carries — at most once per 24 hours, cached in
-`~/.cache/okdctl/update-check.json`. Set `OKDCTL_NO_UPDATE_CHECK=1` to turn
-it off.
+its own behalf is an update check: a plain HTTPS GET to `api.github.com`
+(`releases/latest`), at most once per 24 hours, cached in
+`~/.cache/okdctl/update-check.json`. Builds without a release version skip
+it. Set `OKDCTL_NO_UPDATE_CHECK=1` to turn it off.
+
+## Requirements
+
+- A Linux host to deploy from (the bastion), rhel- or debian-family. The
+  deploy phase shells out to `dnf`/`apt`, `firewall-cmd`, `nmcli`, and
+  `systemctl`, so macOS and Windows can build okdctl but not deploy with it.
+- A Proxmox VE node reachable from the bastion over SSH and the API.
+- `curl`, `ssh`, and `git` on the bastion, sudo access, and 20 GB of free
+  disk in your home directory.
+
+`okdctl doctor` checks all of this before you commit to a deploy.
 
 ## Install
-
-Linux only — the deploy phase shells out to `dnf`/`apt`, `firewall-cmd`,
-`nmcli`, and `systemctl`. Install on the bastion host you intend to deploy
-from.
 
 **curl | bash** (verifies SHA256):
 
@@ -50,9 +58,92 @@ make build
 sudo install -m 0755 bin/okdctl /usr/local/bin/
 ```
 
-Releases are sigstore-signed (keyless) and ship with a CycloneDX SBOM and
-SLSA build provenance. Verify with `cosign verify-blob` — see
-[Verifying a release](#verifying-a-release) below.
+The releases are sigstore-signed (keyless) and ship with a CycloneDX
+SBOM and SLSA build provenance. See
+[Verifying a release](#verifying-a-release).
+
+## Quick start
+
+```sh
+mkdir my-cluster && cd my-cluster
+okdctl deploy
+```
+
+The wizard asks for Proxmox credentials and cluster shape, writes
+`okdctl.yaml` and `okdctl.env`, then deploys. A deploy runs three phases:
+
+1. **setup** installs the tool trio (`oc`, `openshift-install`,
+   `terraform`) and host packages, renders manifests and custom CoreOS
+   ISOs, and configures HAProxy, DNS, and the firewall on the bastion.
+2. **install** brings the VMs up via Terraform, then waits for bootstrap
+   to complete and CSRs to be approved.
+3. **post-install** removes the bootstrap node, migrates ingress to
+   LoadBalancer IPs when available, and installs any addons you picked.
+
+Each phase is a sequence of steps with rollback on failure. Re-running
+`deploy` after an interruption picks up where it left off.
+
+## Commands
+
+```
+okdctl addon            manage cluster addons
+okdctl cleanup          remove OKD cluster artifacts without destroying infrastructure
+okdctl cluster          cluster-wide lifecycle operations
+okdctl completion       generate shell completion script
+okdctl config           inspect okdctl configuration
+okdctl debug-bundle     collect a support bundle for troubleshooting
+okdctl deploy           deploy a Kubernetes cluster
+okdctl describe         show details for a cluster node or addon
+okdctl destroy          destroy a Kubernetes cluster
+okdctl doctor           check that your environment is ready to deploy a cluster
+okdctl kubeconfig       print or export the cluster kubeconfig
+okdctl node             manage cluster node lifecycle
+okdctl plan             preview infrastructure drift without applying changes
+okdctl releases         query available OKD versions
+okdctl status           print a post-deploy cluster summary
+okdctl update-ingress   switch ingress DNS from HAProxy to LoadBalancer IPs
+okdctl version          print version, git commit, build date
+```
+
+Full command reference: [`docs/cli/okdctl.md`](docs/cli/okdctl.md).
+Exit codes and shell-script idioms: [`docs/cli/exit-codes.md`](docs/cli/exit-codes.md).
+JSON output shapes: [`docs/cli/json-schema.md`](docs/cli/json-schema.md).
+
+### The working directory
+
+One working directory is one cluster. okdctl writes everything next to
+where you run it, and `deploy` works from any directory, including an
+empty one. The first run:
+
+- materializes the Terraform sources embedded in the binary into
+  `infrastructure/terraform/` (write-once: existing files, such as a
+  source checkout or hand-edited HCL, are never overwritten)
+- launches the wizard
+- writes `okdctl.yaml`, plus an `okdctl.env` file next to it for Proxmox
+  credentials
+
+The deploy itself adds an `okd-install/` work directory and Terraform
+state under `infrastructure/terraform/environments/`.
+
+`deploy`, `destroy`, and `cleanup` append their full log to `okdctl.log`
+next to the config, with credentials redacted and one `run_id` per
+invocation. A failed deploy stays diagnosable after the scrollback is
+gone: `okdctl debug-bundle` picks the log up automatically, and
+`--log-file` redirects it.
+
+Later runs reuse the existing config. The commands that operate on an
+existing cluster (`status`, `destroy`, `kubeconfig`, `debug-bundle`) must
+run from the same directory. For multiple clusters, use one directory per
+cluster; `--config other.yaml` selects an alternate config within one.
+
+If the work directory holds a completed cluster, run `okdctl destroy`
+before deploying again. `--fresh` force-wipes the directory without
+destroying anything, and the credentials in it are lost.
+
+The phase internals, the addon system, and the wizard architecture live
+in [`docs/architecture/`](docs/architecture/). Per-addon reference:
+[Flux](docs/addons/flux.md),
+[external secret store](docs/addons/secretstore.md).
 
 ### Shell completion
 
@@ -73,89 +164,23 @@ source <(okdctl completion zsh)
 okdctl completion fish > ~/.config/fish/completions/okdctl.fish
 ```
 
-## Quick start
-
-```sh
-mkdir my-cluster && cd my-cluster
-okdctl deploy
-```
-
-The wizard asks for Proxmox credentials and cluster shape, writes
-`okdctl.yaml` and `okdctl.env`, then deploys.
-
-## Usage
-
-```
-okdctl addon            manage cluster addons
-okdctl cleanup          remove OKD cluster artifacts without destroying infrastructure
-okdctl cluster          cluster-wide lifecycle operations
-okdctl completion       generate shell completion script
-okdctl config           inspect okdctl configuration
-okdctl debug-bundle     collect a support bundle for troubleshooting
-okdctl deploy           deploy a Kubernetes cluster
-okdctl describe         drill into a specific node or addon
-okdctl destroy          destroy a Kubernetes cluster
-okdctl doctor           check that your environment is ready to deploy a cluster
-okdctl kubeconfig       print or export the cluster kubeconfig
-okdctl node             manage cluster node lifecycle
-okdctl releases         query available OKD versions
-okdctl status           print a post-deploy cluster summary
-okdctl update-ingress   switch ingress DNS from HAProxy to LoadBalancer IPs
-okdctl version          print version, git commit, build date
-```
-
-Full command reference: [`docs/cli/okdctl.md`](docs/cli/okdctl.md).
-Exit codes and shell-script idioms: [`docs/cli/exit-codes.md`](docs/cli/exit-codes.md).
-
-Run `deploy` from any directory — an empty one works. One working directory
-is one cluster: okdctl writes everything next to where you run it. First
-run materializes the Terraform sources embedded in the binary into
-`infrastructure/terraform/` (write-once — existing files, e.g. from a
-source checkout or hand-edited HCL, are never overwritten), launches the
-wizard, and writes `okdctl.yaml` plus an `okdctl.env` file next to the
-config (named after the config file) for Proxmox credentials. The deploy
-itself adds an `okd-install/` work directory and Terraform state under
-`infrastructure/terraform/environments/`. `deploy`, `destroy`, and
-`cleanup` append their full log to `okdctl.log` next to the config
-(credentials redacted, one `run_id` per invocation), so a failed deploy
-stays diagnosable after the scrollback is gone — `okdctl debug-bundle`
-picks it up automatically, `--log-file` redirects it. Later runs reuse the
-existing config; commands that operate on an existing cluster (`status`,
-`destroy`, `kubeconfig`, `debug-bundle`) must run from the same directory.
-For multiple clusters, use one directory per cluster (`--config other.yaml`
-selects an alternate config within one).
-
-A deploy runs three phases: **setup** installs the tool trio (`oc`,
-`openshift-install`, `terraform`) and host packages, renders manifests and
-custom CoreOS ISOs, and configures HAProxy/DNS/firewall on the bastion;
-**install** brings the VMs up via Terraform and waits for bootstrap and
-CSR approval; **post-install** removes the bootstrap node, migrates
-ingress to LoadBalancer IPs if available, and installs any addons you
-picked. Each phase is a sequence of steps with rollback on failure;
-re-running `deploy` after an interruption picks up where it left off. If
-the work directory holds a completed cluster, run `okdctl destroy` first;
-`--fresh` force-wipes it without destroying (credentials will be lost).
-
-Phase internals, addon system, and wizard architecture live in
-[`docs/architecture/`](docs/architecture/). Per-addon reference:
-[Flux](docs/addons/flux.md),
-[1Password Secret Store](docs/addons/secretstore.md).
-
 ## Configuration
 
 Use the wizard. If you'd rather edit YAML directly, reference configs live
-in [`configs/examples/`](configs/examples/): `minimal.yaml` (1
-control-plane node, 0 workers — single-node cluster), `production.yaml`
-(3 control-plane, 5 worker layout), `media-server.yaml` (homelab setup
-with storage-heavy workers).
+in [`configs/examples/`](configs/examples/):
 
-Proxmox credentials live in the `okdctl.env` file next to the config,
-never in the YAML. Env vars: `PROXMOX_VE_ENDPOINT`, `PROXMOX_VE_USERNAME`,
-`PROXMOX_VE_PASSWORD` (or `PROXMOX_VE_API_TOKEN`).
+- `minimal.yaml` — 1 control-plane node, 0 workers (single-node cluster)
+- `production.yaml` — 3 control-plane nodes, 5 workers
+- `media-server.yaml` — homelab setup with storage-heavy workers
+
+The Proxmox credentials live in the `okdctl.env` file next to the
+config, never in the YAML. Env vars: `PROXMOX_VE_ENDPOINT`,
+`PROXMOX_VE_USERNAME`, `PROXMOX_VE_PASSWORD` (or
+`PROXMOX_VE_API_TOKEN`).
 
 ### OKD pull secret
 
-No Red Hat account needed — the dummy pull secret from
+No Red Hat account needed. The dummy pull secret from
 [openshift/okd](https://github.com/openshift/okd) works, since
 `openshift-install` only schema-validates it at prompt time:
 
@@ -164,23 +189,24 @@ No Red Hat account needed — the dummy pull secret from
 ```
 
 Save it as `~/pull-secret.json` (the wizard's default). Bring your own for
-a private registry; using a real `console.redhat.com` secret with OKD may
-violate Red Hat's subscription terms — see
+a private registry. Note that using a real `console.redhat.com` secret
+with OKD may violate Red Hat's subscription terms; see
 [okd-project/okd#1930](https://github.com/okd-project/okd/discussions/1930).
 
-Because of that, every OKD cluster also ships two subscription-gated
-defaults that are provably non-functional: the `redhat-operators`,
-`certified-operators`, and `redhat-marketplace` OperatorHub
-CatalogSources (their index pods can never be pulled without a
-subscription) and a permanent, unresolvable `InsightsDisabled` alert (the
-Insights operator needs a `console.redhat.com` token no OKD install has —
-see [okd-project/okd#2058](https://github.com/okd-project/okd/discussions/2058)).
-`okdctl deploy` disables both by default during postinstall; pass
+### Subscription-gated defaults
+
+Stock OKD ships two things that cannot work without a Red Hat
+subscription: the `redhat-operators`, `certified-operators`, and
+`redhat-marketplace` OperatorHub catalogs, whose index images can never be
+pulled, and a permanent `InsightsDisabled` alert, since the Insights
+operator needs a `console.redhat.com` token no OKD install has (see
+[okd-project/okd#2058](https://github.com/okd-project/okd/discussions/2058)).
+`okdctl deploy` disables both during post-install. Pass
 `--keep-redhat-catalogs` to leave them as OKD ships them.
 
 ## Troubleshooting
 
-Run `okdctl doctor` first — it catches most common failures, and its
+Run `okdctl doctor` first. It catches most common failures, and its
 output belongs in bug reports.
 
 - **Bootstrap VM never comes up.** Networking. The ignition URL must be
@@ -193,26 +219,28 @@ output belongs in bug reports.
 - **`oc` not found mid-setup.** okdctl installs it into `/usr/local/bin`,
   which isn't on `$PATH` in the current shell until you re-source your rc.
 - **Terraform destroy hangs.** The Proxmox API drops long-running destroy
-  requests under load. Re-run `okdctl destroy` — state is preserved.
+  requests under load. Re-run `okdctl destroy`; state is preserved.
 - **CSR approval fails on clock skew.** A Proxmox pause/resume can jump a
   guest's clock by minutes, which fails etcd elections and gets certs
-  refused as "not yet valid". okdctl ships a chrony MachineConfig to every
-  master/worker pointed at the bastion (`networking.ntp_server` overrides
-  the source) that steps the clock unconditionally instead of slewing, so
-  this should self-heal within a few minutes of the node coming up; if it
-  doesn't, check that the node can reach the configured NTP source.
+  refused as "not yet valid". okdctl ships a chrony MachineConfig on every
+  master and worker, pointed at the bastion, that steps the clock instead
+  of slewing (`networking.ntp_server` overrides the source). Skew should
+  self-heal within a few minutes of the node coming up. If it doesn't,
+  check that the node can reach the configured NTP source.
 
 ## Uninstall
 
 ```sh
-okdctl destroy                                                      # tear down the cluster
+okdctl destroy                                                       # tear down the cluster
 rm -rf okd-install infrastructure okdctl.yaml okdctl.env okdctl.log  # residual state
 sudo rm /usr/local/bin/okdctl                                        # or: apt/dnf remove okdctl
 ```
 
-`destroy` removes the dnsmasq drop-in, HAProxy config block, firewall rules
-okdctl added, the Terraform-provisioned VMs, and the `haproxy`, `dnsmasq`,
-and `httpd` packages it installed.
+`destroy` tears down the Terraform-provisioned VMs, removes the dnsmasq
+drop-in, the HAProxy config and its backups, and the firewall rules okdctl
+added, then uninstalls what setup installed: the `haproxy`, `dnsmasq`,
+`httpd`, `coreos-installer`, and `terraform` packages, and the `oc`,
+`openshift-install`, and `kubectl` binaries in the bin dir.
 
 ## Verifying a release
 
@@ -236,7 +264,7 @@ cosign verify-blob \
 ```
 
 This proves the checksums file came from a GitHub Actions workflow in this
-repository — no maintainer private keys, no trust in the release page
+repository. No maintainer private keys, no trust in the release page
 markup, no trust in any CDN between you and GitHub.
 
 Each release also carries a GitHub artifact attestation (SLSA build
@@ -250,11 +278,13 @@ This checks the attestation against GitHub's Sigstore instance and confirms
 the artifact was produced by a workflow in this repository. Requires the
 [GitHub CLI](https://cli.github.com/) (`gh`).
 
-Binaries are built with `-trimpath` and deterministic ldflags, so `make
-build` from the tagged commit produces a byte-identical binary.
+The binaries are built with `-trimpath` and deterministic ldflags, so
+`make build` from the tagged commit produces a byte-identical binary.
 `sha256sum bin/okdctl` should match `SHA256SUMS`.
 
 ## Security considerations
+
+Two known exposure windows are worth understanding before you deploy:
 
 ### Ignition pull-secret exposure window
 
@@ -262,12 +292,12 @@ During bootstrap (roughly 15–30 minutes), Apache on the bastion serves
 `bootstrap.ign`, `master.ign`, and `worker.ign` over HTTPS on port 443.
 These files embed the OKD pull-secret JSON in plain text.
 
-okdctl binds Apache to `http_server.ignition_server_ip` (the bridge IP FCOS
-nodes reference in their kargs ignition URL), not `0.0.0.0`, so hosts off
-the machine network can't reach it. Each node ISO gets the server's CA
-embedded via `coreos-installer iso customize --ignition-ca`, so nodes
-verify the server before requesting files. The residual risk: TLS
-authenticates the server, not the client — any host that can reach the
+okdctl binds Apache to `http_server.ignition_server_ip` (the bridge IP
+FCOS nodes reference in their kargs ignition URL), not `0.0.0.0`, so
+hosts off the machine network can't reach it. Each node ISO gets the
+server's CA embedded via `coreos-installer iso customize --ignition-ca`,
+so nodes verify the server before requesting files. The residual risk:
+TLS authenticates the server, not the client. Any host that can reach the
 bastion bridge IP on port 443 during bootstrap can retrieve the ignition
 files and harvest the pull secret.
 
@@ -275,21 +305,21 @@ Mitigations:
 
 - Isolate the bastion bridge network from untrusted hosts (VLAN, private
   bridge, or Proxmox SDN zone) before running `okdctl deploy`.
-- Run `okdctl cleanup` after deploy completes — it removes the ignition
+- Run `okdctl cleanup` after deploy completes. It removes the ignition
   files from the web root.
 
-### SSH/SCP host-key trust on first run (TOFU window)
+### SSH host-key trust on first run (TOFU window)
 
 The first `okdctl deploy` scps CoreOS ISOs to the Proxmox host with
 `-o StrictHostKeyChecking=accept-new`, trusting and pinning the Proxmox
-host key without prior verification. Every later SSH/SCP call (Proxmox
-shell commands, ISO removal) reuses that cached key. A machine-in-the-middle
-on the bastion-to-Proxmox path during that first SCP call can substitute an
-attacker key, which then stays trusted for the life of the cluster.
+host key without prior verification. Every later SSH/SCP call reuses that
+cached key. A machine-in-the-middle on the bastion-to-Proxmox path during
+that first SCP call can substitute an attacker key, which then stays
+trusted for the life of the cluster.
 
 Set `provider.proxmox.ssh_host_fingerprint` in `okdctl.yaml`
 (`SHA256:<base64>`, from `ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub`
-or the Proxmox UI) for deterministic verification — every later SSH/SCP
+or the Proxmox UI) for deterministic verification; every later SSH/SCP
 call then refuses on mismatch. Set
 `provider.proxmox.require_pinned_fingerprint: true` to fail closed when
 the pin is absent.
@@ -305,13 +335,26 @@ Other mitigations:
 
 ## Contributing
 
-PRs welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) for dev setup,
-lint/coverage gates, and commit conventions. Run `make test && make lint`
-before submitting. For bugs, use the issue forms — they ask for the
-`okdctl version`, `okdctl doctor`, and `okdctl debug-bundle` output I
-need to reproduce.
+PRs welcome. You need Go 1.26 or newer; `go.mod` pins the toolchain, so
+`go build` fetches the right one automatically.
+
+```sh
+make build        # builds ./bin/okdctl
+make test         # unit tests with -race and coverage
+make lint         # golangci-lint (installed on first run)
+```
+
+Install [lefthook](https://github.com/evilmartians/lefthook) and run
+`lefthook install` to get the same checks as git hooks. The commit
+messages follow conventional commits (`type(scope): description`,
+lowercase, imperative). If you add or change CLI commands or flags, run
+`make docs` and commit the regenerated pages under `docs/cli/`; CI fails
+on drift.
+
+For bugs, use the issue forms. They ask for the `okdctl version`,
+`okdctl doctor`, and `okdctl debug-bundle` output I need to reproduce.
 
 ## License
 
-Apache-2.0. Copyright 2026 Q Al Nuaimi. See [LICENSE](LICENSE) and
+Apache-2.0. Copyright 2026 Qutaiba Al-Nuaimy. See [LICENSE](LICENSE) and
 [NOTICE](NOTICE).

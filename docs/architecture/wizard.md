@@ -30,13 +30,15 @@ type StepDefinition struct {
 The wizard package lives under `internal/tui/wizard/`:
 
 - `datadriven.go` — the runtime that renders any `StepDefinition`
-- `steps/` — the step definitions themselves (basics, topology, networking,
-  proxmox, addons, review)
+- `steps/` — the step definitions themselves, one file per step (welcome,
+  distribution, proxmox, basics, node_placement, networking, resources,
+  addons, files, advanced, review)
 
 Each step's file declares a single `StepDefinition` literal plus its
-helper validators. Adding a new step is mostly additive: create the
-file, register the step in the wizard assembly in
-`internal/tui/wizard/builder.go`, and you're done.
+helper validators. Adding a new step takes three additive edits: create
+the file under `steps/`, add a `StepType` constant and a `DefaultConfig()`
+entry in `internal/tui/wizard/config.go`, and register a factory in
+`defaultStepRegistrations` in `internal/cli/wizard_setup.go`.
 
 ## FieldDefinition: the smallest unit
 
@@ -50,10 +52,6 @@ type FieldDefinition struct {
     Options  []string    // populated only when Type == FieldTypeSelect
     Required bool
     Validate func(string) error
-
-    // KVAsDelimitedString controls Value() serialization for FieldTypeKeyValue.
-    // true = "k1=v1,k2=v2" (CSV); false = "k1: v1\nk2: v2" (YAML-map).
-    KVAsDelimitedString bool
 
     ConfigSet ConfigSetter  // how to push this field into *config.Config
     ConfigGet ConfigGetter  // how to read this field from *config.Config
@@ -81,25 +79,19 @@ definitions stay terse:
 },
 ```
 
-## Why data-driven?
+## Why data-driven
 
-Two reasons.
-
-**Consistency.** Every step looks the same: the same header, the same
-navigation, the same validation behavior, the same help text placement,
-the same keyboard shortcuts. If we hand-wrote each step as a bespoke
-bubbletea model, wizard UX would drift between steps and bugs would
-proliferate.
-
-**Testability.** Step definitions are pure data. Their validators are
-pure functions. You can unit-test a field's validator without spinning
-up a TUI. You can snapshot-test the wizard's rendered output for a given
-set of field values. Neither is practical if the steps are imperative
-bubbletea code.
+The payoff is consistency and testability. Every step gets the same
+header, navigation, validation behavior, help text placement, and
+keyboard shortcuts, because one runtime renders them all; hand-written
+bubbletea models would drift apart step by step. The step definitions
+are also pure data with pure validator functions, so you can unit-test
+a validator or snapshot-test a step's rendered output without spinning
+up a TUI.
 
 ## The escape hatch: ExtraContent and WithExtraContentFunc
 
-Some steps need to render content that isn't a form field — a preview of
+Some steps need to render content that isn't a form field: a preview of
 what will be created, a live Proxmox discovery result, a warning banner.
 These steps use `ExtraContent` in the step definition or
 `WithExtraContentFunc` on the step instance to render arbitrary
@@ -124,12 +116,12 @@ answer is usually "your step is too complex — split it" rather than
    end of the wizard, before `deploy` actually starts; it's the same
    validator run by `loadConfig` in `internal/cli/helpers.go`
 
-If the user hits escape, state is **not** discarded — it's preserved
-in the step's field values so they can come back and tweak.
+If the user hits escape, the state is not discarded. It stays in the
+step's field values so they can come back and tweak.
 
-Wizard step flow. Steps with `ShouldShow` predicates are shown twice
-— once as the active step, once as a `(skipped)` bypass — to make the
-condition explicit:
+The step flow is shown below. The steps with `ShouldShow` predicates
+appear twice, once as the active step and once as a `(skipped)` bypass,
+to make the condition explicit:
 
 ```mermaid
 flowchart TD
@@ -148,13 +140,13 @@ flowchart TD
     review --> E([complete])
 ```
 
-## Why not huh / survey / promptui?
+## Why not huh, survey, or promptui
 
 We looked at the Charmbracelet `huh` library and decided to skip it.
 `huh` is great for one-shot forms but fights the multi-section, back-
 and-forth, live-preview wizard structure we needed. The data-driven
 model gives us what `huh` would have given us (consistent rendering,
-reusable validators) plus the ability to render custom extra content
-per step — which `huh` doesn't support.
+reusable validators) plus per-step custom extra content, which `huh`
+doesn't support.
 
 The wizard is built directly on `bubbletea`, `bubbles`, and `lipgloss`.

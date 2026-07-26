@@ -20,9 +20,12 @@ to use in scripts that branch on failure type.
 | 130  | —            | interrupted by SIGINT (Ctrl-C)                               |
 | 143  | —            | terminated by SIGTERM                                        |
 
-Codes 65, 66, and 71 are granular refinements within the broader categories
-2 (config) and 5 (auth). A script that only checks for non-zero exit is
-unaffected; a script that branches on code 2 or 5 should also handle 65/66/71.
+The codes 65, 66, and 71 are granular refinements within the broader
+categories 2 (config) and 5 (auth). A script that only checks for
+non-zero exit is unaffected; a script that branches on code 2 or 5
+should also handle 65/66/71.
+
+## Code 6: doctor's warn-only signal
 
 Code 6 is `doctor`-specific and sits outside the ConfigError/NetworkError/
 ClusterError/AuthError/UsageError hierarchy below: no other command emits
@@ -30,28 +33,35 @@ it, and it is not a refinement of any broader category the way 65/66/71 are.
 It exists purely so a cron job can tell "clean" (0), "needs attention but
 not blocking" (6), and "blocking" (2) apart without parsing output.
 
+## Code 7: plan's drift signal
+
 Code 7 is `plan`-specific and follows the same pattern as code 6: drift is
 not a failure (`okdctl plan` ran successfully and reported an accurate
 result), so it gets its own dedicated code rather than folding into
 ConfigError(2). A script can tell "clean" (0) apart from "drifted, run
 `okdctl deploy` to reconcile" (7) apart from "plan itself failed" (2/3/4/5)
 without parsing output. `deploy --dry-run` shares the same plan-preview
-machinery but keeps its pre-existing exit-0-on-drift contract — only `plan`
+machinery but keeps its pre-existing exit-0-on-drift contract; only `plan`
 gained the code.
 
-When an error wraps more than one typed category (e.g. a `ClusterError`
-wrapping a `ConfigError` produced during a failed reload), resolution is not
-"outermost wins": sentinels (65/66/71) outrank every category, and within
-categories the precedence is `Config` (2) > `Network` (3) > `Cluster` (4) >
-`Auth` (5) > `Usage` (64) — whichever type is present anywhere in the chain,
-in that order, determines the exit code.
+## Precedence when errors wrap
 
-Commands that do not require root (`status`, `config`, `kubeconfig`, and
-others) exit with code 5 when invoked under `sudo` or as root — the binary
-refuses with "do not run as root/sudo; this tool escalates internally".
-Root-requiring commands (`deploy`, `destroy`, `cleanup`, `update-ingress`)
-must be invoked as a regular user; the binary self-elevates via an internal
-`sudo` re-exec so the privileged body runs as euid=0.
+When an error wraps more than one typed category (e.g. a `ClusterError`
+wrapping a `ConfigError` produced during a failed reload), the resolution
+is not "outermost wins": the sentinels (65/66/71) outrank every category,
+and within categories the precedence is `Config` (2) > `Network` (3) >
+`Cluster` (4) > `Auth` (5) > `Usage` (64). Whichever type is present
+anywhere in the chain, in that order, determines the exit code.
+
+## Root and sudo
+
+The commands that do not require root (`status`, `config`, `kubeconfig`,
+and others) exit with code 5 when invoked under `sudo` or as root; the
+binary refuses with "do not run as root/sudo; this tool escalates
+internally". The root-requiring commands (`deploy`, `destroy`, `cleanup`,
+`update-ingress`, `addon install`, `addon uninstall`) must be invoked as
+a regular user; the binary self-elevates via an internal `sudo` re-exec
+so the privileged body runs as euid=0.
 
 ## ConfigError vs UsageError
 
