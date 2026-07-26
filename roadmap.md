@@ -4054,7 +4054,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `obs:8ea706f6:level-info-should-debug` — level info should debug
 
-**Status:** not started
+**Status:** done (fix/audit-w12 5138b02e)
 **Severity:** minor
 **Cluster:** level-discipline
 **Evidence:** `internal/distribution/okd/setup/tools.go:119-122`
@@ -4064,7 +4064,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `obs:29293401:level-info-should-debug` — level info should debug
 
-**Status:** not started
+**Status:** done (fix/audit-w12 5138b02e)
 **Severity:** minor
 **Cluster:** level-discipline
 **Evidence:** `internal/distribution/okd/setup/haproxy.go:196-203`
@@ -4074,7 +4074,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `obs:06f00bcb:key-inconsistent-casing` — key inconsistent casing
 
-**Status:** not started
+**Status:** done (fix/audit-w12 60abd59a)
 **Severity:** minor
 **Cluster:** field-stability
 **Evidence:** `internal/distribution/okd/setup/apache.go:108-108`
@@ -4084,7 +4084,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `obs:9d79b841:key-inconsistent-casing` — key inconsistent casing
 
-**Status:** not started
+**Status:** done (fix/audit-w12 60abd59a)
 **Severity:** minor
 **Cluster:** field-stability
 **Evidence:** `internal/distribution/okd/setup/coreos.go:30-40` + 1 more
@@ -4094,7 +4094,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `obs:f5d703ab:key-inconsistent-casing` — key inconsistent casing
 
-**Status:** not started
+**Status:** done (fix/audit-w12 60abd59a)
 **Severity:** suggestion
 **Cluster:** field-stability
 **Evidence:** `internal/distribution/okd/setup/artifacts.go:69-69` + 1 more
@@ -4104,7 +4104,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `obs:ae5b624c:key-inconsistent-casing` — key inconsistent casing
 
-**Status:** not started
+**Status:** done (fix/audit-w12 60abd59a)
 **Severity:** minor
 **Cluster:** field-stability
 **Evidence:** `internal/distribution/okd/install/monitor.go:162-162` + 1 more
@@ -4114,7 +4114,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `obs:98723e5d:value-embeds-label` — value embeds label
 
-**Status:** not started
+**Status:** done (fix/audit-w12 60abd59a)
 **Severity:** suggestion
 **Cluster:** field-stability
 **Evidence:** `internal/distribution/okd/install/flux.go:39-44`
@@ -4124,7 +4124,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `obs:06f00bcb:warn-drops-err` — warn drops err
 
-**Status:** not started
+**Status:** done (fix/audit-w12 60abd59a)
 **Severity:** suggestion
 **Cluster:** field-stability
 **Evidence:** `internal/distribution/okd/setup/apache.go:69-73` + 1 more
@@ -4134,7 +4134,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `obs:9d79b841:msg-stale-content` — msg stale content
 
-**Status:** not started
+**Status:** done (fix/audit-w12 60abd59a)
 **Severity:** suggestion
 **Cluster:** msg-hygiene
 **Evidence:** `internal/distribution/okd/setup/coreos.go:376-376`
@@ -4144,7 +4144,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `obs:5013fea6:span-no-start-end` — span no start end
 
-**Status:** not started
+**Status:** done (fix/audit-w12 5138b02e)
 **Severity:** suggestion
 **Cluster:** span-retry-boundary
 **Evidence:** `internal/distribution/okd/setup/release_extract.go:114-143`
@@ -4154,7 +4154,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `obs:830d4653:warn-drops-err` — warn drops err
 
-**Status:** not started
+**Status:** done (fix/audit-w12 60abd59a)
 **Severity:** minor
 **Cluster:** field-stability
 **Evidence:** `internal/distribution/okd/cleanup/packages.go:60-63`
@@ -4164,7 +4164,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `obs:ed55ee90:key-inconsistent-casing` — key inconsistent casing
 
-**Status:** not started
+**Status:** done (fix/audit-w12 60abd59a)
 **Severity:** suggestion
 **Cluster:** field-stability
 **Evidence:** `internal/distribution/okd/cleanup/summary.go:88-89` + 1 more
@@ -4174,7 +4174,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `obs:15ba17da:msg-stale-content` — msg stale content
 
-**Status:** not started
+**Status:** done (fix/audit-w12 5138b02e)
 **Severity:** minor
 **Cluster:** msg-hygiene
 **Evidence:** `internal/distribution/okd/destroy/steps.go:165-165`
@@ -4184,7 +4184,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `obs:de572c63:completion-log-unconditional` — completion log unconditional
 
-**Status:** not started
+**Status:** done (fix/audit-w12 1ffb3961)
 **Severity:** minor
 **Cluster:** span-retry-boundary
 **Evidence:** `internal/distribution/okd/dns/dnsmasq.go:254-262` + 1 more
@@ -4194,7 +4194,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `obs:632c9087:key-inconsistent-casing` — key inconsistent casing
 
-**Status:** not started
+**Status:** done (fix/audit-w12 60abd59a)
 **Severity:** suggestion
 **Cluster:** field-stability
 **Evidence:** `internal/distribution/okd/postinstall/update_ingress.go:112-113` + 4 more
@@ -4204,7 +4204,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `obs:1e8ffb91:msg-prefix-drift` — msg prefix drift
 
-**Status:** not started
+**Status:** done (fix/audit-w12 5138b02e)
 **Severity:** suggestion
 **Cluster:** msg-hygiene
 **Evidence:** `internal/distribution/okd/postinstall/verify.go:233-272`
@@ -4214,7 +4214,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `obs:fdccb07e:err-stringified` — err stringified
 
-**Status:** not started
+**Status:** done (fix/audit-w12 95ee1857)
 **Severity:** minor
 **Cluster:** field-stability — seam→errors
 **Evidence:** `internal/node/compact.go:369-383`
@@ -4224,7 +4224,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `obs:02fe484f:key-inconsistent-casing` — key inconsistent casing
 
-**Status:** not started
+**Status:** done (fix/audit-w12 95ee1857)
 **Severity:** suggestion
 **Cluster:** field-stability
 **Evidence:** `internal/node/stop.go:127-134`
@@ -4234,7 +4234,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `obs:fdccb07e:key-inconsistent-casing` — key inconsistent casing
 
-**Status:** not started
+**Status:** done (fix/audit-w12 95ee1857)
 **Severity:** suggestion
 **Cluster:** field-stability
 **Evidence:** `internal/node/compact.go:427-427`
@@ -4244,7 +4244,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `obs:65a14362:msg-text-drift` — msg text drift
 
-**Status:** not started
+**Status:** done (fix/audit-w12 95ee1857)
 **Severity:** suggestion
 **Cluster:** msg-hygiene
 **Evidence:** `internal/node/resize.go:98-99` + 2 more
@@ -4254,7 +4254,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `obs:fdccb07e:span-no-start-end` — span no start end
 
-**Status:** not started
+**Status:** done (fix/audit-w12 95ee1857)
 **Severity:** suggestion
 **Cluster:** span-retry-boundary
 **Evidence:** `internal/node/compact.go:85-174` + 7 more
@@ -4264,7 +4264,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `obs:881d089e:default-logger-undocumented` — default logger undocumented
 
-**Status:** not started
+**Status:** done (fix/audit-w12 5138b02e)
 **Severity:** suggestion
 **Cluster:** handler-setup
 **Evidence:** `internal/runlock/runlock.go:83-91`
@@ -4274,7 +4274,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `obs:91935445:key-inconsistent-casing` — key inconsistent casing
 
-**Status:** not started
+**Status:** done (fix/audit-w12 60abd59a)
 **Severity:** minor
 **Cluster:** field-stability
 **Evidence:** `internal/debugbundle/debugbundle.go:101-101` + 3 more
@@ -4284,7 +4284,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `obs:eff8657e:value-format-drift` — value format drift
 
-**Status:** not started
+**Status:** done (fix/audit-w12 60abd59a)
 **Severity:** minor
 **Cluster:** field-stability
 **Evidence:** `internal/deploy/state.go:183-187` + 1 more
@@ -4294,7 +4294,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `obs:08c49fc4:key-inconsistent-casing` — key inconsistent casing
 
-**Status:** not started
+**Status:** done (fix/audit-w12 60abd59a)
 **Severity:** minor
 **Cluster:** field-stability
 **Evidence:** `internal/cli/update_ingress.go:60-61` + 4 more
@@ -4304,7 +4304,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `obs:e45c2239:err-stringified` — err stringified
 
-**Status:** not started
+**Status:** done (fix/audit-w12 60abd59a)
 **Severity:** minor
 **Cluster:** field-stability — seam→errors
 **Evidence:** `cmd/okdctl/main.go:36-40`
@@ -4314,7 +4314,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `obs:91935445:redaction-helper-bypassed` — redaction helper bypassed
 
-**Status:** not started
+**Status:** done (fix/audit-w12 becfa5a5)
 **Severity:** minor
 **Cluster:** redaction-sink — seam→security
 **Evidence:** `internal/debugbundle/debugbundle.go:212-222` + 9 more
@@ -4324,7 +4324,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `obs:6424733c:level-error-duplicates-return` — level error duplicates return
 
-**Status:** not started
+**Status:** done (fix/audit-w12 60abd59a)
 **Severity:** minor
 **Cluster:** level-discipline — related: ux:aa84670c:log-before-configure
 **Evidence:** `internal/cli/helpers.go:26-33`
@@ -4334,7 +4334,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `obs:6424733c:msg-multiline-split` — msg multiline split
 
-**Status:** not started
+**Status:** done (fix/audit-w12 60abd59a)
 **Severity:** suggestion
 **Cluster:** msg-hygiene
 **Evidence:** `internal/cli/helpers.go:52-54`
@@ -4344,7 +4344,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `obs:08c49fc4:msg-trailing-period` — msg trailing period
 
-**Status:** not started
+**Status:** done (fix/audit-w12 60abd59a)
 **Severity:** suggestion
 **Cluster:** msg-hygiene
 **Evidence:** `internal/cli/update_ingress.go:88-89`
@@ -4354,7 +4354,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `obs:f327eaf4:default-logger-undocumented` — default logger undocumented
 
-**Status:** not started
+**Status:** done (fix/audit-w12 60abd59a)
 **Severity:** suggestion
 **Cluster:** handler-setup — related: obs:881d089e:default-logger-undocumented
 **Evidence:** `internal/deploy/migrate.go:90-94`
@@ -4364,7 +4364,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `obs:fd2125dd:span-no-start-end` — span no start end
 
-**Status:** not started
+**Status:** rejected — addon.Manager already logs the span (count at start, per-addon on completion); a CLI-layer duplicate would double-log
 **Severity:** suggestion
 **Cluster:** span-retry-boundary
 **Evidence:** `internal/cli/addon.go:164-210`
@@ -4374,7 +4374,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `obs:7b2829bb:key-inconsistent-casing` — key inconsistent casing
 
-**Status:** not started
+**Status:** done (fix/audit-w12 60abd59a)
 **Severity:** suggestion
 **Cluster:** field-stability
 **Evidence:** `internal/executor/executor.go:352-352`
@@ -4384,7 +4384,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `obs:7f696ed8:key-inconsistent-casing` — key inconsistent casing
 
-**Status:** not started
+**Status:** done (fix/audit-w12 60abd59a)
 **Severity:** minor
 **Cluster:** field-stability
 **Evidence:** `internal/infrastructure/terraform/state.go:29-38` + 2 more
@@ -4394,7 +4394,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `obs:21dc1103:key-inconsistent-casing` — key inconsistent casing
 
-**Status:** not started
+**Status:** done (fix/audit-w12 60abd59a)
 **Severity:** suggestion
 **Cluster:** field-stability — related: err:4ded56d3:err-formats-cred
 **Evidence:** `internal/download/download.go:127-135`
@@ -4404,7 +4404,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `obs:40d315ad:msg-dynamic` — msg dynamic
 
-**Status:** not started
+**Status:** done (fix/audit-w12 5138b02e)
 **Severity:** suggestion
 **Cluster:** msg-hygiene
 **Evidence:** `internal/addon/catalog/flux/flux.go:262-262`
@@ -4416,7 +4416,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `mod:65a14362:use-slices-sort` — use slices sort
 
-**Status:** not started
+**Status:** done (fix/audit-w12 bcaad47f)
 **Severity:** minor
 **Cluster:** slices-maps
 **Evidence:** `internal/node/resize.go:221-221`
@@ -4426,7 +4426,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `mod:c5e5c304:use-slices-sort` — use slices sort
 
-**Status:** not started
+**Status:** done (fix/audit-w12 bcaad47f)
 **Severity:** suggestion
 **Cluster:** slices-maps
 **Evidence:** `internal/distribution/okd/setup/terraform.go:261-261`
@@ -4436,7 +4436,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `mod:46a2d36e:use-slices-sort` — use slices sort
 
-**Status:** not started
+**Status:** done (fix/audit-w12 bcaad47f)
 **Severity:** suggestion
 **Cluster:** slices-maps
 **Evidence:** `internal/node/guards.go:78-78`
@@ -4446,7 +4446,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `mod:fdccb07e:use-slices-sort` — use slices sort
 
-**Status:** not started
+**Status:** done (fix/audit-w12 bcaad47f)
 **Severity:** suggestion
 **Cluster:** slices-maps
 **Evidence:** `internal/node/compact.go:432-437`
@@ -4456,7 +4456,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `mod:4fe429e4:use-maps-copy` — use maps copy
 
-**Status:** not started
+**Status:** done (fix/audit-w12 bcaad47f)
 **Severity:** minor
 **Cluster:** slices-maps
 **Evidence:** `internal/node/runner.go:274-276`
@@ -4466,7 +4466,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `mod:2465a34a:use-slices-contains` — use slices contains
 
-**Status:** not started
+**Status:** done (fix/audit-w12 bcaad47f)
 **Severity:** minor
 **Cluster:** slices-maps
 **Evidence:** `internal/cluster/k8s_etcd.go:170-175`
@@ -4476,7 +4476,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `mod:7f03549f:use-slices-contains` — use slices contains
 
-**Status:** not started
+**Status:** done (fix/audit-w12 bcaad47f)
 **Severity:** minor
 **Cluster:** slices-maps
 **Evidence:** `internal/doctor/doctor.go:222-228`
@@ -4486,7 +4486,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `mod:588ce79e:use-slices-contains` — use slices contains
 
-**Status:** not started
+**Status:** done (fix/audit-w12 bcaad47f)
 **Severity:** suggestion
 **Cluster:** slices-maps
 **Evidence:** `internal/tui/colors.go:94-99`
@@ -4496,7 +4496,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `mod:6424733c:use-slices-contains` — use slices contains
 
-**Status:** not started
+**Status:** done (fix/audit-w12 bcaad47f)
 **Severity:** suggestion
 **Cluster:** slices-maps
 **Evidence:** `internal/cli/helpers.go:205-211`
@@ -4506,7 +4506,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `mod:f4ab7641:use-fmt-errorf` — use fmt errorf
 
-**Status:** not started
+**Status:** done (fix/audit-w12 c91764f5)
 **Severity:** suggestion
 **Cluster:** errors-and-deprecated-stdlib
 **Evidence:** `internal/doctor/statfs_stub.go:12-14`
@@ -4516,7 +4516,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `mod:ca06979c:use-errorf-w` — use errorf w
 
-**Status:** not started
+**Status:** done (fix/audit-w12 aa3f966f)
 **Severity:** minor
 **Cluster:** errors-and-deprecated-stdlib — seam→errors — related: err:366b3f2d:wrap-cause-dropped-at-sink
 **Evidence:** `internal/node/add.go:145-145` + 5 more
@@ -4526,7 +4526,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `mod:af5b4ad0:use-range-int` — use range int
 
-**Status:** not started
+**Status:** done (fix/audit-w12 c91764f5)
 **Severity:** minor
 **Cluster:** range-idioms
 **Evidence:** `internal/tui/table.go:55-55`
@@ -4536,7 +4536,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `mod:46a2d36e:use-range-int` — use range int
 
-**Status:** not started
+**Status:** done (fix/audit-w12 c91764f5)
 **Severity:** minor
 **Cluster:** range-idioms
 **Evidence:** `internal/node/guards.go:111-111`
@@ -4546,7 +4546,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `mod:46a2d36e:use-builtins` — use builtins
 
-**Status:** not started
+**Status:** done (fix/audit-w12 c91764f5)
 **Severity:** minor
 **Cluster:** any-interface-builtins
 **Evidence:** `internal/node/guards.go:117-119` + 1 more
@@ -4556,7 +4556,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `mod:7352ede7:use-builtins` — use builtins
 
-**Status:** not started
+**Status:** done (fix/audit-w12 c91764f5)
 **Severity:** suggestion
 **Cluster:** any-interface-builtins
 **Evidence:** `internal/render/errorbox.go:118-120`
@@ -4566,7 +4566,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `mod:2845ab58:use-synctest` — use synctest
 
-**Status:** not started
+**Status:** done — already fixed in round 1 (93f753b0)
 **Severity:** minor
 **Cluster:** any-interface-builtins — seam→concurrency — related: con:2845ab58:synctest-opportunity
 **Evidence:** `internal/tui/spinner_test.go:176-185` + 1 more
@@ -4578,7 +4578,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `smell:c287d5c0:stringly-typed-enum` — stringly typed enum
 
-**Status:** not started
+**Status:** done (fix/audit-w12 d523bb15)
 **Severity:** minor
 **Cluster:** magic-strings — seam→api-design — related: api:c287d5c0:opt-inconsistent
 **Evidence:** `internal/distribution/okd/okd.go:291-298` + 3 more
@@ -4588,7 +4588,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `smell:166385d6:enum-ad-hoc` — enum ad hoc
 
-**Status:** not started
+**Status:** done (fix/audit-w12 a312bba0)
 **Severity:** minor
 **Cluster:** magic-strings
 **Evidence:** `internal/distribution/okd/setup/fstrim.go:15-15` + 1 more
@@ -4598,7 +4598,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `smell:f5d703ab:enum-ad-hoc` — enum ad hoc
 
-**Status:** not started
+**Status:** done (fix/audit-w12 99ca2f40)
 **Severity:** minor
 **Cluster:** magic-strings — seam→api-design
 **Evidence:** `internal/distribution/okd/setup/artifacts.go:42-42` + 2 more
@@ -4608,7 +4608,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `smell:ed55ee90:arrow-pyramid` — arrow pyramid
 
-**Status:** not started
+**Status:** done (fix/audit-w12 9965020d)
 **Severity:** suggestion
 **Cluster:** arrow-anti
 **Evidence:** `internal/distribution/okd/cleanup/summary.go:41-56`
@@ -4630,7 +4630,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `dep:33ef32bf:version-major-stuck` — version major stuck
 
-**Status:** not started
+**Status:** done (fix/audit-w12 65a5f3f8) — renovate narrowed to !v0.53.0; first v0.54.0+ PR is the CI canary
 **Severity:** major
 **Cluster:** justified-version-floor
 **Evidence:** `go.mod:14-16` + 1 more
@@ -4640,7 +4640,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `dep:b803fcb7:maint-stale` — maint stale
 
-**Status:** not started
+**Status:** done (fix/audit-w12 1e62dbe0) — trivy-action SHA-pinned, exit-code 1
 **Severity:** major
 **Cluster:** maintenance-signal — seam→iac-and-shell
 **Evidence:** `.github/workflows/ci.yml:120-126`
@@ -4650,7 +4650,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `dep:33ef32bf:v0-dep-unjustified` — v0 dep unjustified
 
-**Status:** not started
+**Status:** done (fix/audit-w12 d5b668ba)
 **Severity:** minor
 **Cluster:** justified-version-floor
 **Evidence:** `go.mod:24-24`
@@ -4660,7 +4660,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `dep:6ebdb617:baseline-record-stale` — baseline record stale
 
-**Status:** not started
+**Status:** done (fix/audit-w12 d5b668ba)
 **Severity:** minor
 **Cluster:** maintenance-signal — related: api:f5eb0ca4:export-no-caller-scaffolding, sec:1cb08008:tls-insecure-skip
 **Evidence:** `CLAUDE.md:305-313`
@@ -4670,7 +4670,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `dep:33ef32bf:transitive-heavy-narrow` — transitive heavy narrow
 
-**Status:** not started
+**Status:** done (fix/audit-w12 d5b668ba)
 **Severity:** minor
 **Cluster:** transitive-weight — related: dep:6ebdb617:baseline-record-stale, api:1cb08008:export-no-caller
 **Evidence:** `go.mod:12-12`
@@ -4680,7 +4680,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `dep:b803fcb7:pin-tool-unannotated` — pin tool unannotated
 
-**Status:** not started
+**Status:** done (fix/audit-w12 6cd88f92)
 **Severity:** minor
 **Cluster:** pin-stability
 **Evidence:** `.github/workflows/ci.yml:19-21` + 5 more
@@ -4690,7 +4690,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `dep:ad6a01e5:pin-go-tool-latest` — pin go tool latest
 
-**Status:** not started
+**Status:** done (fix/audit-w12 b82cbdd9)
 **Severity:** suggestion
 **Cluster:** pin-stability
 **Evidence:** `lefthook.yml:4-7`
@@ -4702,7 +4702,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `doc:b8750296:readme-flag-missing` — readme flag missing
 
-**Status:** not started
+**Status:** done — page already regenerated upstream (36a8b990); lefthook docs-check gate added (2b85eafe)
 **Severity:** minor
 **Cluster:** readme-drift
 **Evidence:** `docs/cli/okdctl_node_resize.md:19-45`
@@ -4712,7 +4712,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `doc:b3356305:readme-flag-missing` — readme flag missing
 
-**Status:** not started
+**Status:** done (fix/audit-w12 80da1b80)
 **Severity:** minor
 **Cluster:** readme-drift — seam→cli-ux
 **Evidence:** `README.md:88-105`
@@ -4722,7 +4722,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `doc:5f5527e7:exported-doc-echo-sig` — exported doc echo sig
 
-**Status:** not started
+**Status:** done (fix/audit-w12 3a8f9200)
 **Severity:** suggestion
 **Cluster:** exported-doc — related: api:5f5527e7:export-no-caller-scaffolding
 **Evidence:** `internal/render/summary.go:76-77` + 2 more
@@ -4732,7 +4732,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `doc:de572c63:exported-doc-echo-sig` — exported doc echo sig
 
-**Status:** not started
+**Status:** done (fix/audit-w12 3a8f9200) — bonus: ServiceEnable doc was factually wrong (claimed it starts the service); corrected
 **Severity:** suggestion
 **Cluster:** exported-doc
 **Evidence:** `internal/distribution/okd/dns/dnsmasq.go:50-53` + 1 more
@@ -4742,7 +4742,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `doc:b3356305:readme-summary-drift` — readme summary drift
 
-**Status:** not started
+**Status:** done (fix/audit-w12 80da1b80)
 **Severity:** suggestion
 **Cluster:** readme-drift — seam→cli-ux
 **Evidence:** `README.md:96-96`
@@ -4754,7 +4754,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `tst:c287d5c0:cred-zeroize-untested` — cred zeroize untested
 
-**Status:** not started
+**Status:** done (fix/audit-w12 5484a84a) — production bug fixed: pendingEnv now blanked via KeyIsSecret before delegate
 **Severity:** major
 **Cluster:** cred-path-untested
 **Evidence:** `internal/distribution/okd/okd.go:350-359` + 2 more
@@ -4764,7 +4764,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `tst:fde34e0c:cred-scrub-untested` — cred scrub untested
 
-**Status:** not started
+**Status:** done (fix/audit-w12 7150797a)
 **Severity:** major
 **Cluster:** cred-path-untested
 **Evidence:** `internal/cluster/k8s.go:142-188` + 1 more
@@ -4774,7 +4774,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `tst:35abd54e:cred-zeroize-untested` — cred zeroize untested
 
-**Status:** not started
+**Status:** done (fix/audit-w12 14c54cd7) — AST-sweep registry+ZeroizeEnv pairing test
 **Severity:** major
 **Cluster:** cred-path-untested
 **Evidence:** `internal/credentials/proxmox.go:146-186` + 4 more
@@ -4784,7 +4784,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `tst:4c092fce:cred-zeroize-untested` — cred zeroize untested
 
-**Status:** not started
+**Status:** done (fix/audit-w12 231de80f)
 **Severity:** minor
 **Cluster:** cred-path-untested
 **Evidence:** `internal/infrastructure/terraform/terraform.go:556-564`
@@ -4794,7 +4794,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `tst:daf5bee9:cred-scrub-untested` — cred scrub untested
 
-**Status:** not started
+**Status:** done (fix/audit-w12 0f9a9b85)
 **Severity:** minor
 **Cluster:** cred-path-untested
 **Evidence:** `internal/cli/kubeconfig.go:67-79`
@@ -4804,7 +4804,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `tst:7b2829bb:cred-scrub-untested` — cred scrub untested
 
-**Status:** not started
+**Status:** done (fix/audit-w12 1ffa78da)
 **Severity:** major
 **Cluster:** cred-path-untested — seam→observability — related: sec:fe5a42c5:cred-in-log, err:fe5a42c5:err-wraps-cred-downstream
 **Evidence:** `internal/executor/executor.go:242-248`
@@ -4814,7 +4814,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `tst:7b2829bb:canonical-helper-untested` — canonical helper untested
 
-**Status:** not started
+**Status:** done (fix/audit-w12 1ffa78da)
 **Severity:** blocker
 **Cluster:** canonical-helper-untested — related: con:632c9087:cancelled-ctx-cleanup, tst:c287d5c0:cred-zeroize-untested
 **Evidence:** `internal/executor/executor.go:267-270` + 3 more
@@ -4824,7 +4824,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `tst:e2343d2c:canonical-helper-untested` — canonical helper untested
 
-**Status:** not started
+**Status:** done (fix/audit-w12 92bbdc77)
 **Severity:** blocker
 **Cluster:** canonical-helper-untested — related: state:d7ce9d16:restore-without-restart, tst:de572c63:destructive-partial-untested
 **Evidence:** `internal/system/systemd.go:32-69`
@@ -4834,7 +4834,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `tst:25fa1be8:destructive-happy-untested` — destructive happy untested
 
-**Status:** not started
+**Status:** done (fix/audit-w12 ae3a4491)
 **Severity:** major
 **Cluster:** destructive-untested
 **Evidence:** `internal/distribution/okd/firewall/firewall.go:134-252`
@@ -4844,7 +4844,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `tst:de572c63:destructive-partial-untested` — destructive partial untested
 
-**Status:** not started
+**Status:** done (fix/audit-w12 0babee45)
 **Severity:** major
 **Cluster:** destructive-untested — seam→state-and-recovery — related: state:d7ce9d16:restore-without-restart
 **Evidence:** `internal/distribution/okd/dns/dnsmasq.go:80-108` + 1 more
@@ -4854,7 +4854,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `tst:ddf885f4:destructive-confirm-untested` — destructive confirm untested
 
-**Status:** not started
+**Status:** done (fix/audit-w12 169818b4)
 **Severity:** major
 **Cluster:** destructive-untested — related: state:fd2125dd:concurrent-run-addon-unlocked, con:ddf885f4:cancelled-ctx-cleanup
 **Evidence:** `internal/addon/manager.go:238-283` + 1 more
@@ -4864,7 +4864,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `tst:0f076161:destructive-confirm-untested` — destructive confirm untested
 
-**Status:** not started
+**Status:** done (fix/audit-w12 8cb8bec1)
 **Severity:** major
 **Cluster:** destructive-untested — seam→state-and-recovery — related: state:0f076161:destroy-topology-drift-blind, ux:0f076161:flag-help-wording-drift
 **Evidence:** `internal/cli/destroy.go:268-366`
@@ -4874,7 +4874,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `tst:93957c53:destructive-confirm-untested` — destructive confirm untested
 
-**Status:** not started
+**Status:** done (fix/audit-w12 33a59d01)
 **Severity:** major
 **Cluster:** destructive-untested — seam→state-and-recovery — related: state:93957c53:cleanup-weak-confirm-gate, state:bdf5a873:cleanup-deletes-live-artifacts
 **Evidence:** `internal/cli/cleanup.go:68-151`
@@ -4884,7 +4884,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `tst:c5e5c304:destructive-happy-untested` — destructive happy untested
 
-**Status:** not started
+**Status:** done (fix/audit-w12 0507fa74)
 **Severity:** major
 **Cluster:** destructive-untested — related: state:c19ee328:resume-breaks-after-ignition
 **Evidence:** `internal/distribution/okd/setup/terraform.go:173-189` + 1 more
@@ -4894,7 +4894,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `tst:61f4d731:destructive-confirm-untested` — destructive confirm untested
 
-**Status:** not started
+**Status:** done (fix/audit-w12 1c602911)
 **Severity:** minor
 **Cluster:** destructive-untested
 **Evidence:** `internal/cluster/k8s_ceph.go:34-70` + 1 more
@@ -4904,7 +4904,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `tst:40d315ad:cred-scrub-untested` — cred scrub untested
 
-**Status:** not started
+**Status:** done (fix/audit-w12 29c5b197)
 **Severity:** minor
 **Cluster:** cred-path-untested
 **Evidence:** `internal/addon/catalog/flux/flux.go:383-428` + 1 more
@@ -4914,7 +4914,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `tst:aa0f50f5:trust-boundary-untested` — trust boundary untested
 
-**Status:** not started
+**Status:** done (fix/audit-w12 afa0106e)
 **Severity:** suggestion
 **Cluster:** trust-boundary-untested
 **Evidence:** `internal/config/validators.go:573-698`
