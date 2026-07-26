@@ -260,15 +260,19 @@ func RestoreSystemResolver(ctx context.Context, logger *slog.Logger) error {
 
 		logger.Info("resolver: restoring DHCP DNS", "conn", conn)
 
-		if err := executor.RunCaptured(ctx, "nmcli", "connection", "modify", conn, "ipv4.dns", "", "ipv4.ignore-auto-dns", "no"); err != nil {
-			logger.Warn("resolver: failed to clear DNS settings", "err", err)
+		modifyErr := executor.RunCaptured(ctx, "nmcli", "connection", "modify", conn, "ipv4.dns", "", "ipv4.ignore-auto-dns", "no")
+		if modifyErr != nil {
+			logger.Warn("resolver: failed to clear DNS settings", "err", modifyErr)
 		}
 
-		if err := executor.RunCaptured(ctx, "nmcli", "connection", "up", conn); err != nil {
-			logger.Warn("resolver: failed to apply DNS configuration", "err", err)
+		upErr := executor.RunCaptured(ctx, "nmcli", "connection", "up", conn)
+		if upErr != nil {
+			logger.Warn("resolver: failed to apply DNS configuration", "err", upErr)
 		}
 
-		logger.Info("resolver: system DNS restored to DHCP")
+		if modifyErr == nil && upErr == nil {
+			logger.Info("resolver: system DNS restored to DHCP")
+		}
 		return nil
 	}
 
@@ -276,6 +280,7 @@ func RestoreSystemResolver(ctx context.Context, logger *slog.Logger) error {
 		logger.Info("resolver: removing systemd-resolved dnsmasq configuration")
 		if err := removeAllFn(resolvedConf); err != nil {
 			logger.Warn("resolver: failed to remove", "path", resolvedConf, "err", err)
+			return nil
 		}
 		if isServiceActiveFn(ctx, "systemd-resolved") {
 			_ = system.ManageService(ctx, system.ServiceRestart, "systemd-resolved")
