@@ -5,7 +5,8 @@
 // (see errDoctorWarn), plan drift detected=7 (see errPlanDrift), config file
 // not found=66 (EX_NOINPUT), invalid pull secret JSON=65 (EX_DATAERR), sudo
 // not found=71 (EX_OSERR), unknown-flag error=64 (EX_USAGE, via
-// SetFlagErrorFunc), other error=1 (includes unknown subcommands,
+// SetFlagErrorFunc), internal panic=70 (EX_SOFTWARE, via execute's
+// recover), other error=1 (includes unknown subcommands,
 // arg-count violations, and mutually-exclusive-flag conflicts which cobra
 // surfaces outside the flag-parser), SIGINT=130, SIGTERM=143, success=0.
 // See docs/cli/exit-codes.md for the full taxonomy table.
@@ -19,6 +20,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"runtime/debug"
 	"strings"
 	"sync/atomic"
 	"syscall"
@@ -102,10 +104,30 @@ func execute() (code int) {
 	start := time.Now()
 	tui.Info("okdctl: started", tui.LF("argv", logutil.RedactableArgv(os.Args[1:])))
 	defer func() {
-		tui.Info("okdctl: finished",
+		tui.Info(
+			"okdctl: finished",
 			tui.LF("duration", time.Since(start).Round(time.Millisecond).String()),
 			tui.LF("exit_code", code),
 		)
+	}()
+
+	// Recover panics into exit 70 (EX_SOFTWARE): the Go runtime's own panic
+	// exit code is 2, which the published taxonomy reserves for ConfigError,
+	// and an unrecovered panic would also skip Execute's logFileCloser flush.
+	// Registered after the bookend defer so it runs first on unwind and the
+	// bookend logs the real exit code.
+	defer func() {
+		r := recover()
+		if r == nil {
+			return
+		}
+		code = 70
+		tui.Error("internal error: panic recovered", tui.LF("panic", fmt.Sprint(r)))
+		stack := debug.Stack()
+		fmt.Fprintf(os.Stderr, "panic: %v\n\n%s", r, stack)
+		if runLogSink != nil {
+			fmt.Fprintf(runLogSink, "panic: %v\n\n%s", r, stack)
+		}
 	}()
 
 	// Roll our own signal handling so we can tell SIGINT (→130) apart from

@@ -16,6 +16,7 @@ to use in scripts that branch on failure type.
 | 64   | EX_USAGE     | unknown flag, or an invalid flag combination detected at runtime (e.g. `--target` without `--confirm-cluster`) |
 | 65   | EX_DATAERR   | pull secret file exists but is not valid JSON                |
 | 66   | EX_NOINPUT   | configuration file not found on disk                         |
+| 70   | EX_SOFTWARE  | internal error: a panic was caught at top level (a bug in okdctl — the stack trace goes to stderr and the run log) |
 | 71   | EX_OSERR     | sudo not found on PATH (requires root operation)             |
 | 130  | —            | interrupted by SIGINT (Ctrl-C)                               |
 | 143  | —            | terminated by SIGTERM                                        |

@@ -9,6 +9,8 @@ import (
 	"syscall"
 	"testing"
 
+	"github.com/spf13/cobra"
+
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 )
 
@@ -198,5 +200,29 @@ func TestSignalExitCode(t *testing.T) {
 				t.Fatalf("code=%d, want %d", code, tc.wantCode)
 			}
 		})
+	}
+}
+
+// TestExecutePanicExitsSoftware locks the crash contract: a panic anywhere
+// under the cobra tree must exit 70 (EX_SOFTWARE), not the Go runtime's own
+// exit 2, which the published taxonomy reserves for ConfigError.
+func TestExecutePanicExitsSoftware(t *testing.T) {
+	t.Setenv("OKDCTL_NO_UPDATE_CHECK", "1")
+	t.Setenv(wizardDemoEnv, "1")
+
+	panicCmd := &cobra.Command{
+		Use:    "panic-test",
+		Hidden: true,
+		RunE:   func(*cobra.Command, []string) error { panic("boom") },
+	}
+	rootCmd.AddCommand(panicCmd)
+	rootCmd.SetArgs([]string{"panic-test"})
+	t.Cleanup(func() {
+		rootCmd.RemoveCommand(panicCmd)
+		rootCmd.SetArgs(nil)
+	})
+
+	if got := execute(); got != 70 {
+		t.Fatalf("execute() after panic = %d, want 70 (EX_SOFTWARE)", got)
 	}
 }
