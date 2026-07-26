@@ -303,7 +303,8 @@ func bundleMustGather(ctx context.Context, addStream func(*tar.Header, io.Reader
 	defer cancel()
 
 	mgExec := executor.New()
-	mgResult, mgErr := mgExec.Run(gctx, "oc", "adm", "must-gather",
+	mgResult, mgErr := mgExec.Run(
+		gctx, "oc", "adm", "must-gather",
 		"--kubeconfig="+kubeconfig,
 		"--dest-dir="+mgDir,
 	)
@@ -384,12 +385,17 @@ func bundleDoctor(ctx context.Context, addFile func(string, []byte) error) manif
 	if runtime.GOOS != "linux" {
 		return manifestEntry{Name: categoryDoctor, Status: bundleStatusSkipped, Message: "doctor is only supported on linux"}
 	}
-	data, err := collectDoctorOutput(ctx)
+	stdout, stderr, err := collectDoctorOutput(ctx)
 	if err != nil {
 		return manifestEntry{Name: categoryDoctor, Status: bundleStatusFailed, Message: safeMessage(err)}
 	}
-	if err := addFile("doctor.json", data); err != nil {
+	if err := addFile("doctor.json", stdout); err != nil {
 		return manifestEntry{Name: categoryDoctor, Status: bundleStatusFailed, Message: safeMessage(err)}
+	}
+	if len(stderr) > 0 {
+		if err := addFile("doctor-stderr.txt", stderr); err != nil {
+			return manifestEntry{Name: categoryDoctor, Status: bundleStatusFailed, Message: safeMessage(err)}
+		}
 	}
 	return manifestEntry{Name: categoryDoctor, Status: bundleStatusOK}
 }
