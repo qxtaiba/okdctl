@@ -10,11 +10,11 @@ import (
 	"regexp"
 	"runtime"
 	"slices"
-	"strings"
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/executor"
+	"github.com/qxtaiba/okdctl/internal/hostnet"
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
@@ -44,13 +44,6 @@ var (
 )
 
 var validConfigNameRegex = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$`)
-
-// validConnectionNameRegex is an allowlist for nmcli connection names. It
-// accepts the realistic NetworkManager name space (alphanumerics, space,
-// dot, underscore, slash, colon for interface aliases like br0:1, hyphen,
-// up to 128 chars) and rejects everything else, including all shell
-// metacharacters not enumerated.
-var validConnectionNameRegex = regexp.MustCompile(`^[A-Za-z0-9 ._/:-]{1,128}$`)
 
 // EnableDnsmasq marks dnsmasq to start at boot (systemctl enable, no
 // --now): it does not start the service — the restart after the first
@@ -137,39 +130,6 @@ func IsNetworkManagerActive(ctx context.Context) bool {
 	return system.IsServiceActive(ctx, "NetworkManager")
 }
 
-// validateConnectionName accepts only names matching validConnectionNameRegex.
-// The allowlist fails-closed: any nmcli output containing characters outside
-// the realistic NetworkManager name space is rejected, including every shell
-// metacharacter (the previous denylist could grow stale).
-func validateConnectionName(name string) error {
-	if name == "" {
-		return fmt.Errorf("connection name must not be empty")
-	}
-	if !validConnectionNameRegex.MatchString(name) {
-		return fmt.Errorf("connection name %q does not match allowed character set", name)
-	}
-	return nil
-}
-
-func getActiveConnection(ctx context.Context) (string, error) {
-	out, err := executor.OutputCaptured(ctx, "nmcli", "-t", "-f", "NAME", "connection", "show", "--active")
-	if err != nil {
-		return "", fmt.Errorf("list network connections: %w", err)
-	}
-
-	for line := range strings.Lines(string(out)) {
-		line = strings.TrimSpace(line)
-		if line == "" || line == "lo" {
-			continue
-		}
-		if err := validateConnectionName(line); err != nil {
-			return "", fmt.Errorf("active connection name rejected: %w", err)
-		}
-		return line, nil
-	}
-	return "", fmt.Errorf("no active network connection found")
-}
-
 func validateDNSAddresses(addresses []string) error {
 	for _, addr := range addresses {
 		if err := config.ValidateIP(addr); err != nil {
@@ -189,21 +149,20 @@ func ConfigureSystemResolver(ctx context.Context, fallbackDNS []string, logger *
 	}
 
 	if isNetworkManagerActiveFn(ctx) {
-		conn, err := getActiveConnection(ctx)
+		conn, err := hostnet.ActiveConnection(ctx)
 		if err != nil {
 			return err
 		}
 
 		dnsList := slices.Concat([]string{"127.0.0.1"}, fallbackDNS)
-		dnsConfig := strings.Join(dnsList, ",")
 
 		logger.Info("resolver: configuring connection to use local dnsmasq", "conn", conn)
 
-		if err := executor.RunCaptured(ctx, "nmcli", "connection", "modify", conn, "ipv4.dns", dnsConfig, "ipv4.ignore-auto-dns", "yes"); err != nil {
+		if err := hostnet.OverrideConnectionDNS(ctx, conn, dnsList); err != nil {
 			return fmt.Errorf("configure DNS for connection: %w", err)
 		}
 
-		if err := executor.RunCaptured(ctx, "nmcli", "connection", "up", conn); err != nil {
+		if err := hostnet.ActivateConnection(ctx, conn); err != nil {
 			return fmt.Errorf("apply DNS configuration: %w", err)
 		}
 
@@ -252,7 +211,7 @@ func ConfigureSystemResolver(ctx context.Context, fallbackDNS []string, logger *
 // logged but do not abort cleanup.
 func RestoreSystemResolver(ctx context.Context, logger *slog.Logger) error {
 	if isNetworkManagerActiveFn(ctx) {
-		conn, err := getActiveConnection(ctx)
+		conn, err := hostnet.ActiveConnection(ctx)
 		if err != nil {
 			logger.Warn("resolver: could not detect active connection for restore", "err", err)
 			return nil // best-effort restore; no active connection is non-fatal
@@ -260,12 +219,12 @@ func RestoreSystemResolver(ctx context.Context, logger *slog.Logger) error {
 
 		logger.Info("resolver: restoring DHCP DNS", "conn", conn)
 
-		modifyErr := executor.RunCaptured(ctx, "nmcli", "connection", "modify", conn, "ipv4.dns", "", "ipv4.ignore-auto-dns", "no")
+		modifyErr := hostnet.ClearConnectionDNSOverride(ctx, conn)
 		if modifyErr != nil {
 			logger.Warn("resolver: failed to clear DNS settings", "err", modifyErr)
 		}
 
-		upErr := executor.RunCaptured(ctx, "nmcli", "connection", "up", conn)
+		upErr := hostnet.ActivateConnection(ctx, conn)
 		if upErr != nil {
 			logger.Warn("resolver: failed to apply DNS configuration", "err", upErr)
 		}

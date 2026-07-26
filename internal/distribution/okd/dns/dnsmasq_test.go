@@ -7,8 +7,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"github.com/qxtaiba/okdctl/internal/testutil"
 )
 
 func TestValidateConfigName(t *testing.T) {
@@ -79,73 +77,6 @@ func TestConfigName(t *testing.T) {
 	got := configName("prod")
 	if got != "okd-prod" {
 		t.Errorf("configName(%q) = %q; want %q", "prod", got, "okd-prod")
-	}
-}
-
-func installFakeNmcli(t *testing.T, script string) {
-	t.Helper()
-	testutil.InstallFakeBin(t, "nmcli", script)
-}
-
-func TestGetActiveConnectionStderr(t *testing.T) {
-	installFakeNmcli(t, "#!/bin/sh\necho 'Error: NetworkManager is not running' >&2\nexit 10\n")
-	_, err := getActiveConnection(context.Background())
-	if err == nil {
-		t.Fatal("expected error, got nil")
-	}
-	if !strings.Contains(err.Error(), "NetworkManager is not running") {
-		t.Errorf("error does not contain nmcli stderr: %q", err.Error())
-	}
-}
-
-func TestValidateConnectionName(t *testing.T) {
-	cases := []struct {
-		name    string
-		input   string
-		wantErr bool
-	}{
-		{name: "simple", input: "eth0"},
-		{name: "with space", input: "Wired connection 1"},
-		{name: "hyphen underscore", input: "my-conn_1"},
-		{name: "dot and colon", input: "br0:1"},
-		{name: "slash in name", input: "br0/dnsmasq"},
-		{name: "dot hyphen underscore", input: "a.b-c_d"},
-		{name: "max length 128", input: strings.Repeat("a", 128)},
-		{name: "empty", input: "", wantErr: true},
-		{name: "too long 129", input: strings.Repeat("a", 129), wantErr: true},
-		{name: "semicolon", input: "eth0;id", wantErr: true},
-		{name: "newline", input: "eth0\nid", wantErr: true},
-		{name: "carriage return", input: "eth0\rid", wantErr: true},
-		{name: "null byte", input: "eth0\x00id", wantErr: true},
-		{name: "backtick", input: "eth`0", wantErr: true},
-		{name: "dollar sign", input: "eth$0", wantErr: true},
-		{name: "less than", input: "eth<0", wantErr: true},
-		{name: "greater than", input: "eth>0", wantErr: true},
-		{name: "pipe", input: "eth0|id", wantErr: true},
-		{name: "ampersand", input: "eth0&id", wantErr: true},
-		{name: "shell injection", input: "; rm -rf /", wantErr: true},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			err := validateConnectionName(tc.input)
-			if tc.wantErr && err == nil {
-				t.Errorf("validateConnectionName(%q): expected error, got nil", tc.input)
-			}
-			if !tc.wantErr && err != nil {
-				t.Errorf("validateConnectionName(%q): unexpected error: %v", tc.input, err)
-			}
-		})
-	}
-}
-
-func TestGetActiveConnectionRejectsUnsafeName(t *testing.T) {
-	installFakeNmcli(t, "#!/bin/sh\nprintf 'eth0;evil\\n'\n")
-	_, err := getActiveConnection(context.Background())
-	if err == nil {
-		t.Fatal("expected error for unsafe connection name, got nil")
-	}
-	if !strings.Contains(err.Error(), "does not match allowed character set") {
-		t.Errorf("error does not mention allowlist rejection: %q", err.Error())
 	}
 }
 
