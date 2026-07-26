@@ -6,6 +6,9 @@ module "okd_cluster" {
   # proxmox infrastructure
 
   target_node   = var.target_node
+  bridge        = var.bridge
+  os_storage    = var.os_storage
+  data_storage  = var.data_storage
   bootstrap_iso = var.bootstrap_iso
   master_isos   = var.master_isos
   worker_isos   = var.worker_isos
@@ -14,18 +17,25 @@ module "okd_cluster" {
 
   cluster_name = var.cluster_name
   vmid_base    = var.vmid_base
+  master_count = var.master_count
   worker_count = var.worker_count
   master_names = var.master_names
   worker_names = var.worker_names
 
-  # vm resources (env-specific overrides only; module owns defaults+validation)
+  # vm resources (module owns defaults+validation)
 
+  cpu_cores                = var.cpu_cores
   memory_mb                = var.memory_mb
+  bootstrap_cpu_cores      = var.bootstrap_cpu_cores
   bootstrap_memory_mb      = var.bootstrap_memory_mb
   worker_cpu_cores         = var.worker_cpu_cores
   worker_memory_mb         = var.worker_memory_mb
   master_cpu_cores         = var.master_cpu_cores
   master_memory_mb         = var.master_memory_mb
+  os_disk_size_gb          = var.os_disk_size_gb
+  master_os_disk_size_gb   = var.master_os_disk_size_gb
+  worker_os_disk_size_gb   = var.worker_os_disk_size_gb
+  worker_data_disk_size_gb = var.worker_data_disk_size_gb
   master_data_disk_size_gb = var.master_data_disk_size_gb
   master_mon_disk_size_gb  = var.master_mon_disk_size_gb
 
@@ -41,4 +51,12 @@ module "okd_cluster" {
   # high availability
 
   ha_enabled = var.ha_enabled
+
+  # hardware and placement
+
+  cpu_type            = var.cpu_type
+  numa_enabled        = var.numa_enabled
+  additional_networks = var.additional_networks
+  master_target_nodes = var.master_target_nodes
+  worker_target_nodes = var.worker_target_nodes
 }
