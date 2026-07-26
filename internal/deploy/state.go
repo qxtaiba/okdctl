@@ -10,8 +10,8 @@ import (
 	"os"
 	"time"
 
+	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/system"
-	"github.com/qxtaiba/okdctl/internal/tui"
 )
 
 // deployPhase identifies which phase of the deploy sequence was active when
@@ -70,8 +70,8 @@ func clearDeployMarker(path, runID, clusterName string) {
 		return
 	}
 	if writeErr := writeDeployState(path, phaseCompleted, runID, clusterName); writeErr != nil {
-		tui.Warn("could not remove deploy state marker",
-			tui.LF("remove_err", err), tui.LF("mark_completed_err", writeErr))
+		logutil.Warn("could not remove deploy state marker",
+			logutil.LF("remove_err", err), logutil.LF("mark_completed_err", writeErr))
 	}
 }
 
@@ -102,8 +102,8 @@ func readDeployState(path string) (*deployState, error) {
 		return nil, fmt.Errorf("parse deploy state: %w", err)
 	}
 	if s.SchemaVersion != deployStateSchemaV2 {
-		tui.Warn("ignoring deploy-state with unknown schema_version",
-			tui.LF("schema_version", s.SchemaVersion), tui.LF("expected", deployStateSchemaV2))
+		logutil.Warn("ignoring deploy-state with unknown schema_version",
+			logutil.LF("schema_version", s.SchemaVersion), logutil.LF("expected", deployStateSchemaV2))
 		return nil, nil
 	}
 	return &s, nil
@@ -117,20 +117,20 @@ func readDeployState(path string) (*deployState, error) {
 func loadResumeMarker(path, clusterName string) *deployState {
 	marker, err := readDeployState(path)
 	if err != nil {
-		tui.Warn("could not read deploy state marker; treating as absent", tui.LF("err", err))
+		logutil.Warn("could not read deploy state marker; treating as absent", logutil.LF("err", err))
 		return nil
 	}
 	if marker == nil {
 		return nil
 	}
 	if marker.ClusterName == "" {
-		tui.Warn("deploy state marker has no cluster name; treating as absent",
-			tui.LF("current_cluster", clusterName))
+		logutil.Warn("deploy state marker has no cluster name; treating as absent",
+			logutil.LF("current_cluster", clusterName))
 		return nil
 	}
 	if marker.ClusterName != clusterName {
-		tui.Warn("deploy state marker is from a different cluster, ignoring",
-			tui.LF("marker_cluster", marker.ClusterName), tui.LF("current_cluster", clusterName))
+		logutil.Warn("deploy state marker is from a different cluster, ignoring",
+			logutil.LF("marker_cluster", marker.ClusterName), logutil.LF("current_cluster", clusterName))
 		return nil
 	}
 	return marker
@@ -160,8 +160,8 @@ func resolveResumePhase(markerPath, clusterName string, freshDeploy bool) (deplo
 	case phaseCompleted:
 		return phaseSetup, nil
 	}
-	tui.Warn("deploy state marker has unknown phase; treating as absent",
-		tui.LF("phase", string(marker.Phase)))
+	logutil.Warn("deploy state marker has unknown phase; treating as absent",
+		logutil.LF("phase", string(marker.Phase)))
 	return phaseSetup, nil
 }
 
@@ -174,13 +174,13 @@ func warnIfStaleResume(marker *deployState) {
 	age := time.Since(marker.Timestamp)
 	switch {
 	case marker.Phase == phaseInstall && age >= 24*time.Hour:
-		tui.Warn("deploy state marker is older than the 24h bootstrap ignition cert validity; resume may fail at bootstrap wait",
-			tui.LF("marker_age", age.Round(time.Hour).String()))
-		tui.Info("if bootstrap never completed, run 'okdctl destroy' then re-deploy with --fresh")
+		logutil.Warn("deploy state marker is older than the 24h bootstrap ignition cert validity; resume may fail at bootstrap wait",
+			logutil.LF("marker_age", age.Round(time.Hour).String()))
+		logutil.Info("if bootstrap never completed, run 'okdctl destroy' then re-deploy with --fresh")
 	case age >= 7*24*time.Hour:
-		tui.Warn("deploy state marker is likely stale",
-			tui.LF("marker_age", age.Round(time.Hour).String()))
-		tui.Info("re-run with --fresh to restart from scratch instead (credentials will be lost)")
+		logutil.Warn("deploy state marker is likely stale",
+			logutil.LF("marker_age", age.Round(time.Hour).String()))
+		logutil.Info("re-run with --fresh to restart from scratch instead (credentials will be lost)")
 	}
 }
 
@@ -192,35 +192,35 @@ func AnnounceState(path, clusterName string) {
 	info, statErr := os.Stat(path)
 	ds, err := readDeployState(path)
 	if err != nil {
-		tui.Warn("could not read deploy state marker", tui.LF("err", err))
+		logutil.Warn("could not read deploy state marker", logutil.LF("err", err))
 		return
 	}
 	if ds == nil {
 		return
 	}
 	if ds.ClusterName != "" && ds.ClusterName != clusterName {
-		tui.Warn("deploy state marker is from a different cluster, ignoring",
-			tui.LF("marker_cluster", ds.ClusterName), tui.LF("current_cluster", clusterName))
+		logutil.Warn("deploy state marker is from a different cluster, ignoring",
+			logutil.LF("marker_cluster", ds.ClusterName), logutil.LF("current_cluster", clusterName))
 		return
 	}
-	var extra []tui.LogField
+	var extra []logutil.LogField
 	if statErr == nil {
 		if modAge := time.Since(info.ModTime()); modAge >= 7*24*time.Hour {
 			extra = append(extra,
-				tui.LF("marker_age", modAge.Round(time.Hour).String()),
-				tui.LF("stale", true))
+				logutil.LF("marker_age", modAge.Round(time.Hour).String()),
+				logutil.LF("stale", true))
 		}
 	}
 	switch ds.Phase {
 	case phaseCompleted:
 		return
 	case phaseSetup:
-		tui.Warn("partial deploy detected — cancelled during setup; terraform state is empty",
-			append([]tui.LogField{tui.LF("run_id", ds.RunID)}, extra...)...)
-		tui.Info("if VMs were not created, prefer 'okdctl cleanup' over destroy")
+		logutil.Warn("partial deploy detected — cancelled during setup; terraform state is empty",
+			append([]logutil.LogField{logutil.LF("run_id", ds.RunID)}, extra...)...)
+		logutil.Info("if VMs were not created, prefer 'okdctl cleanup' over destroy")
 	case phaseInstall, phasePostInstall:
-		tui.Warn("partial deploy detected — terraform state likely populated",
-			append([]tui.LogField{tui.LF("phase", ds.Phase), tui.LF("run_id", ds.RunID)}, extra...)...)
-		tui.Info("running destroy to remove provisioned resources")
+		logutil.Warn("partial deploy detected — terraform state likely populated",
+			append([]logutil.LogField{logutil.LF("phase", ds.Phase), logutil.LF("run_id", ds.RunID)}, extra...)...)
+		logutil.Info("running destroy to remove provisioned resources")
 	}
 }

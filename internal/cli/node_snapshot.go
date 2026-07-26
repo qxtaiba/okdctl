@@ -16,6 +16,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/executor"
 	"github.com/qxtaiba/okdctl/internal/infrastructure/proxmox/hostssh"
+	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/node"
 	"github.com/qxtaiba/okdctl/internal/runlock"
 	"github.com/qxtaiba/okdctl/internal/sshpin"
@@ -165,7 +166,7 @@ func buildSnapshotRunner(ctx context.Context, cfg *config.Config, dryRun bool) (
 		return nil, err
 	}
 
-	log := tui.SimpleLogger()
+	log := logutil.SimpleLogger()
 	host := hostssh.ProxmoxBareHost(px.Host)
 	knownHostsPath, err := sshpin.Verify(ctx, host, px.SSHHostFingerprint, px.RequirePinnedFingerprint, log)
 	if err != nil {
@@ -189,7 +190,7 @@ func buildSnapshotRunner(ctx context.Context, cfg *config.Config, dryRun bool) (
 		node.WithProjectRoot(projectRoot),
 		node.WithConfigPath(cfgFile),
 		node.WithTerraformEnv(cfg.TerraformEnvName()),
-		node.WithRunID(tui.RunID()),
+		node.WithRunID(logutil.RunID()),
 		node.WithLogger(log))
 	runner.DryRun = dryRun
 	runner.Reporter = func(desc string) func() { return tui.StartSpinner(ctx, desc) }
@@ -217,7 +218,7 @@ func buildSnapshotRunner(ctx context.Context, cfg *config.Config, dryRun bool) (
 // buildNodeRunner's Preview/Confirm split. warnMsg fires immediately before
 // the interactive prompt only: a --yes run sees the crash-consistency
 // notice solely from the runner's own log line, not a duplicate here.
-func nodeSnapshotGate(ctx context.Context, verb string, twoStage, yes, dryRun bool, confirmCluster, clusterName, warnMsg string, warnFields ...tui.LogField) (bool, error) {
+func nodeSnapshotGate(ctx context.Context, verb string, twoStage, yes, dryRun bool, confirmCluster, clusterName, warnMsg string, warnFields ...logutil.LogField) (bool, error) {
 	if err := confirmClusterMatches(yes, confirmCluster, clusterName, verb); err != nil {
 		return false, err
 	}
@@ -225,7 +226,7 @@ func nodeSnapshotGate(ctx context.Context, verb string, twoStage, yes, dryRun bo
 		return true, nil
 	}
 	if warnMsg != "" {
-		tui.Warn(warnMsg, warnFields...)
+		logutil.Warn(warnMsg, warnFields...)
 	}
 	return runNodeGate(ctx, twoStage, clusterName)
 }
@@ -252,12 +253,12 @@ func runNodeSnapshotCreate(cmd *cobra.Command, args []string) error {
 	proceed, err := nodeSnapshotGate(cmd.Context(), "node snapshot create", false,
 		nodeSnapshotCreateYes, nodeSnapshotCreateDryRun, nodeSnapshotCreateConfirm, cfg.Cluster.Name,
 		"snapshot is crash-consistent only (qemu-guest-agent is disabled fleet-wide); not a substitute for backup/DR",
-		tui.LF("node", target))
+		logutil.LF("node", target))
 	if err != nil {
 		return err
 	}
 	if !proceed {
-		tui.Info("cancelled")
+		logutil.Info("cancelled")
 		return nil
 	}
 
@@ -301,12 +302,12 @@ func runNodeSnapshotMutate(cmd *cobra.Command, verb string, twoStage, yes, dryRu
 	}
 
 	proceed, err := nodeSnapshotGate(cmd.Context(), verb, twoStage, yes, dryRun, confirmCluster, cfg.Cluster.Name,
-		warnMsg, tui.LF("node", target), tui.LF("snapshot", snapname))
+		warnMsg, logutil.LF("node", target), logutil.LF("snapshot", snapname))
 	if err != nil {
 		return err
 	}
 	if !proceed {
-		tui.Info("cancelled")
+		logutil.Info("cancelled")
 		return nil
 	}
 

@@ -17,11 +17,11 @@ import (
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/destroy"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/infrastructure/terraform"
+	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/nodetypes"
 	"github.com/qxtaiba/okdctl/internal/render"
 	"github.com/qxtaiba/okdctl/internal/runlock"
 	"github.com/qxtaiba/okdctl/internal/system"
-	"github.com/qxtaiba/okdctl/internal/tui"
 	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
@@ -251,7 +251,7 @@ func buildDestroyOptions(cfg *config.Config, projectRoot string) destroy.Options
 		skipCleanup = true
 		skipFirewall = true
 		keepISOs = true
-		tui.Info("scoped destroy: skipping host cleanup, firewall rules, and iso removal — full bastion teardown is exclusive to an unscoped destroy")
+		logutil.Info("scoped destroy: skipping host cleanup, firewall rules, and iso removal — full bastion teardown is exclusive to an unscoped destroy")
 	}
 
 	opts := destroy.NewOptions(cfg, projectRoot)
@@ -293,7 +293,7 @@ func runDestroy(cmd *cobra.Command, _ []string) error {
 		return runDestroyDryRun(ctx, cfg)
 	}
 
-	tui.Warn("this will destroy cluster and all associated resources", tui.LF("cluster", cfg.Cluster.Name))
+	logutil.Warn("this will destroy cluster and all associated resources", logutil.LF("cluster", cfg.Cluster.Name))
 
 	if err := confirmClusterMatches(destroyYes, destroyConfirmCluster, cfg.Cluster.Name, "destroy"); err != nil {
 		return err
@@ -305,7 +305,7 @@ func runDestroy(cmd *cobra.Command, _ []string) error {
 			return err
 		}
 		if !proceed {
-			tui.Info("cancelled")
+			logutil.Info("cancelled")
 			return nil
 		}
 	}
@@ -333,7 +333,7 @@ func runDestroy(cmd *cobra.Command, _ []string) error {
 	workDir := workspace.WorkDir(projectRoot)
 	defer func() {
 		if chownErr := system.ChownTreeToInvokingUser(workDir); chownErr != nil {
-			tui.Warn("workdir chown back to user incomplete", tui.LF("err", chownErr))
+			logutil.Warn("workdir chown back to user incomplete", logutil.LF("err", chownErr))
 		}
 	}()
 
@@ -342,7 +342,7 @@ func runDestroy(cmd *cobra.Command, _ []string) error {
 
 	deploy.AnnounceState(filepath.Join(workDir, deploy.StateFileName), cfg.Cluster.Name)
 
-	tui.Info("destroying cluster...")
+	logutil.Info("destroying cluster...")
 	startTime := time.Now()
 
 	destroyOpts := buildDestroyOptions(cfg, projectRoot)
@@ -350,14 +350,14 @@ func runDestroy(cmd *cobra.Command, _ []string) error {
 	steps, err := p.Destroy(ctx, cfg, &destroyOpts)
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
-			fmt.Fprintln(cmd.OutOrStdout(), render.InterruptSummary(steps, "okdctl destroy", tui.RunID()))
+			fmt.Fprintln(cmd.OutOrStdout(), render.InterruptSummary(steps, "okdctl destroy", logutil.RunID()))
 			return render.Presented(err)
 		}
 		return err
 	}
 
 	duration := time.Since(startTime).Round(time.Second)
-	tui.Info("cluster destroyed", tui.LF("duration", duration))
+	logutil.Info("cluster destroyed", logutil.LF("duration", duration))
 
 	return nil
 }
@@ -386,14 +386,14 @@ func runDestroyDryRun(ctx context.Context, cfg *config.Config) error {
 	tfEnv := cfg.TerraformEnvName()
 	terraformDir := workspace.TerraformEnvDir(projectRoot, tfEnv)
 
-	tfOpts := []terraform.Option{terraform.WithLogger(tui.SimpleLogger())}
+	tfOpts := []terraform.Option{terraform.WithLogger(logutil.SimpleLogger())}
 	if creds.IsValid() {
 		tfOpts = append(tfOpts, terraform.WithEnv(creds.Env()))
 	}
 	tf := terraform.New(terraformDir, tfOpts...)
 	defer tf.ZeroizeEnv()
 
-	tui.Info("dry-run: terraform destroy plan", tui.LF("cluster", cfg.Cluster.Name))
+	logutil.Info("dry-run: terraform destroy plan", logutil.LF("cluster", cfg.Cluster.Name))
 
 	if err := tf.Init(ctx); err != nil {
 		return tf.WithLockHint(&errtypes.ConfigError{Msg: "terraform init failed in dry-run", Err: err})
@@ -403,6 +403,6 @@ func runDestroyDryRun(ctx context.Context, cfg *config.Config) error {
 		return tf.WithLockHint(&errtypes.ConfigError{Msg: "terraform destroy plan failed", Err: err})
 	}
 
-	tui.Info("dry-run: re-run without --dry-run to execute destroy")
+	logutil.Info("dry-run: re-run without --dry-run to execute destroy")
 	return nil
 }

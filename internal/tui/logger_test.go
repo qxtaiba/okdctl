@@ -4,20 +4,22 @@ import (
 	"bytes"
 	"strings"
 	"testing"
+
+	"github.com/qxtaiba/okdctl/internal/logutil"
 )
 
 // TestStderrSlog_RedactsSecrets locks the RedactHandler wiring: an attr
 // whose key names a credential (password/token/secret/api_key/apikey) must
-// never appear verbatim in tui.X output, regardless of the value type.
+// never appear verbatim in logutil.X output, regardless of the value type.
 func TestStderrSlog_RedactsSecrets(t *testing.T) {
 	var buf bytes.Buffer
 	if err := ConfigureLoggers("debug", "text", &buf, &buf, false); err != nil {
 		t.Fatal(err)
 	}
 	// ConfigureLoggers only touches stdoutLogger/stderrLogger's output;
-	// stderrSlog is already built from stderrLogger pointer so its output
-	// follows SetOutput. Rebuild defensively to be explicit.
-	stderrSlog.Store(buildStderrSlog())
+	// the installed handler already wraps the stderrLogger pointer so its
+	// output follows SetOutput. Reinstall defensively to be explicit.
+	logutil.InstallHandler(newStderrHandler())
 
 	cases := []struct {
 		key   string
@@ -34,7 +36,7 @@ func TestStderrSlog_RedactsSecrets(t *testing.T) {
 
 	for _, tc := range cases {
 		buf.Reset()
-		Info("test message", LF(tc.key, tc.value))
+		logutil.Info("test message", logutil.LF(tc.key, tc.value))
 		out := buf.String()
 		if strings.Contains(out, tc.value) {
 			t.Errorf("key=%s leaked value %q in tui.Info output:\n%s", tc.key, tc.value, out)
@@ -50,10 +52,10 @@ func TestStderrSlog_NonSecretsPassThrough(t *testing.T) {
 	if err := ConfigureLoggers("debug", "text", &buf, &buf, false); err != nil {
 		t.Fatal(err)
 	}
-	stderrSlog.Store(buildStderrSlog())
+	logutil.InstallHandler(newStderrHandler())
 
 	buf.Reset()
-	Info("test message", LF("cluster", "prod"), LF("ip", "10.0.0.1"))
+	logutil.Info("test message", logutil.LF("cluster", "prod"), logutil.LF("ip", "10.0.0.1"))
 	out := buf.String()
 	if !strings.Contains(out, "prod") {
 		t.Errorf("non-secret 'cluster' value dropped: %s", out)
@@ -68,11 +70,11 @@ func TestSetRunID_RefreshesRedactionWrapper(t *testing.T) {
 	if err := ConfigureLoggers("debug", "text", &buf, &buf, false); err != nil {
 		t.Fatal(err)
 	}
-	stderrSlog.Store(buildStderrSlog())
+	logutil.InstallHandler(newStderrHandler())
 
 	SetRunID("run-42")
 	buf.Reset()
-	Info("after set run id", LF("password", "secret-pw"))
+	logutil.Info("after set run id", logutil.LF("password", "secret-pw"))
 	out := buf.String()
 	if !strings.Contains(out, "run_id") {
 		t.Errorf("run_id not present after SetRunID: %s", out)

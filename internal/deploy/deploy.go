@@ -17,6 +17,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/distribution/okd"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/install"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/postinstall"
+	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/render"
 	"github.com/qxtaiba/okdctl/internal/runlock"
 	"github.com/qxtaiba/okdctl/internal/system"
@@ -79,11 +80,11 @@ func milestoneNotifier() func(install.Milestone) {
 
 		switch m.Kind {
 		case install.MilestoneBootstrapComplete:
-			tui.Info("bootstrap complete — control plane has taken over")
+			logutil.Info("bootstrap complete — control plane has taken over")
 		case install.MilestoneInstallComplete:
-			tui.Info("install complete — cluster is initialized")
+			logutil.Info("install complete — cluster is initialized")
 		case install.MilestoneOperatorDegraded:
-			tui.Warn("cluster operator degraded during install", tui.LF("operator", m.Operator))
+			logutil.Warn("cluster operator degraded during install", logutil.LF("operator", m.Operator))
 		}
 	}
 }
@@ -94,7 +95,7 @@ func milestoneNotifier() func(install.Milestone) {
 func NewProvisioner(creds *credentials.ProxmoxCredentials, projectRoot string, extra ...okd.ProvisionerOption) *okd.Provisioner {
 	opts := []okd.ProvisionerOption{
 		okd.WithProjectRoot(projectRoot),
-		okd.WithLogger(tui.SimpleLogger()),
+		okd.WithLogger(logutil.SimpleLogger()),
 	}
 
 	if creds != nil && creds.IsValid() {
@@ -172,7 +173,7 @@ func reportDeployFailure(w io.Writer, err error, phase deployPhase, steps []dist
 func reportDeployPhaseError(w io.Writer, err error, phase deployPhase, steps []distribution.StepResult, runID string, started time.Time, cancelHint string) error {
 	reportDeployFailure(w, err, phase, steps, runID, started)
 	if errors.Is(err, context.Canceled) {
-		tui.Info(cancelHint)
+		logutil.Info(cancelHint)
 	}
 	// The FailureSummary/InterruptSummary box above already presents this
 	// failure; mark it so the top-level handler does not stack a second box.
@@ -203,10 +204,10 @@ type Options struct {
 // plain step log lines in place. logSink receives the per-step trail so
 // okdctl.log keeps a record the checklist otherwise replaces on the TTY.
 func checklistRecorder(cfg *config.Config, projectRoot string, resumeFrom deployPhase, logSink io.Writer) distribution.MetricsRecorder {
-	if !tui.ProgressBarsEnabled() {
+	if !logutil.ProgressBarsEnabled() {
 		return nil
 	}
-	all := okd.New(okd.WithProjectRoot(projectRoot), okd.WithLogger(tui.SimpleLogger())).DeploySteps(cfg)
+	all := okd.New(okd.WithProjectRoot(projectRoot), okd.WithLogger(logutil.SimpleLogger())).DeploySteps(cfg)
 	var plan []tui.StepMeta
 	for _, s := range all {
 		if !phaseRuns(resumeFrom, s.Phase) {
@@ -239,9 +240,9 @@ func runDeployPhases(ctx context.Context, p provisioner, cfg *config.Config, pro
 			return nil, nil, err
 		}
 	} else {
-		tui.Info("resuming interrupted deploy; skipping setup to preserve cluster identity material",
-			tui.LF("from_phase", string(resumeFrom)), tui.LF("interrupted_run_id", marker.RunID))
-		tui.Info("to restart from scratch instead, re-run with --fresh (wipes cluster credentials)")
+		logutil.Info("resuming interrupted deploy; skipping setup to preserve cluster identity material",
+			logutil.LF("from_phase", string(resumeFrom)), logutil.LF("interrupted_run_id", marker.RunID))
+		logutil.Info("to restart from scratch instead, re-run with --fresh (wipes cluster credentials)")
 	}
 
 	var installSteps []distribution.StepResult
@@ -285,16 +286,16 @@ func runDeployPhases(ctx context.Context, p provisioner, cfg *config.Config, pro
 func announceEmbeddedDrift(root string) {
 	drift, err := DetectEmbeddedDrift(root)
 	if err != nil {
-		tui.Warn("could not compare terraform workspace against embedded sources", tui.LF("err", err))
+		logutil.Warn("could not compare terraform workspace against embedded sources", logutil.LF("err", err))
 		return
 	}
 	for _, f := range drift.Stale {
-		tui.Warn("terraform file was written by an older okdctl and differs from this binary's embedded copy; the workspace copy is kept (write-once) — back it up and delete it, then re-run deploy to refresh it",
-			tui.LF("path", f))
+		logutil.Warn("terraform file was written by an older okdctl and differs from this binary's embedded copy; the workspace copy is kept (write-once) — back it up and delete it, then re-run deploy to refresh it",
+			logutil.LF("path", f))
 	}
 	for _, f := range drift.Unverified {
-		tui.Warn("terraform file differs from this binary's embedded copy; if you did not edit it, back it up and delete it, then re-run deploy to refresh it",
-			tui.LF("path", f))
+		logutil.Warn("terraform file differs from this binary's embedded copy; if you did not edit it, back it up and delete it, then re-run deploy to refresh it",
+			logutil.LF("path", f))
 	}
 }
 
@@ -318,11 +319,11 @@ func Execute(ctx context.Context, cfg *config.Config, opts Options, w io.Writer)
 	workDir := workspace.WorkDir(projectRoot)
 	defer func() {
 		if chownErr := system.ChownTreeToInvokingUser(workDir); chownErr != nil {
-			tui.Warn("workdir chown back to user incomplete", tui.LF("err", chownErr))
+			logutil.Warn("workdir chown back to user incomplete", logutil.LF("err", chownErr))
 		}
 	}()
 
-	runID := tui.RunID()
+	runID := logutil.RunID()
 
 	announceEmbeddedDrift(projectRoot)
 
@@ -347,8 +348,8 @@ func Execute(ctx context.Context, cfg *config.Config, opts Options, w io.Writer)
 	}
 
 	if opts.ShowStartMessage {
-		tui.Info("starting deployment...",
-			tui.LF("cluster", cfg.Cluster.Name), tui.LF("domain", cfg.Cluster.Domain))
+		logutil.Info("starting deployment...",
+			logutil.LF("cluster", cfg.Cluster.Name), logutil.LF("domain", cfg.Cluster.Domain))
 	}
 
 	startTime := time.Now()
@@ -363,7 +364,7 @@ func Execute(ctx context.Context, cfg *config.Config, opts Options, w io.Writer)
 	duration := time.Since(startTime).Round(time.Second)
 
 	fmt.Fprintln(w)
-	tui.Info("deployment complete", tui.LF("duration", duration))
+	logutil.Info("deployment complete", logutil.LF("duration", duration))
 	fmt.Fprintln(w, render.PostDeploySummary(cfg, result, allSteps, runID))
 
 	return nil

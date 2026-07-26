@@ -14,9 +14,9 @@ import (
 	"github.com/qxtaiba/okdctl/internal/cluster"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
+	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/nodetypes"
 	"github.com/qxtaiba/okdctl/internal/system"
-	"github.com/qxtaiba/okdctl/internal/tui"
 	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
@@ -178,11 +178,11 @@ func collectNodes(ctx context.Context, cl Client) []okd.NodeStatus {
 		return nil
 	}
 	if truncated {
-		tui.Warn("oc get nodes output truncated; node list may be incomplete")
+		logutil.Warn("oc get nodes output truncated; node list may be incomplete")
 	}
 	var nl statusNodeList
 	if jsonErr := json.Unmarshal([]byte(nodesJSON), &nl); jsonErr != nil {
-		tui.Warn("oc get nodes json parse failed", tui.LF("err", jsonErr))
+		logutil.Warn("oc get nodes json parse failed", logutil.LF("err", jsonErr))
 		return nil
 	}
 	var nodes []okd.NodeStatus
@@ -203,11 +203,11 @@ func countDegraded(ctx context.Context, cl Client) int {
 		return 0
 	}
 	if truncated {
-		tui.Warn("oc get clusteroperators output truncated; degraded count may be incomplete")
+		logutil.Warn("oc get clusteroperators output truncated; degraded count may be incomplete")
 	}
 	var col statusClusterOperatorList
 	if jsonErr := json.Unmarshal([]byte(coJSON), &col); jsonErr != nil {
-		tui.Warn("oc get clusteroperators json parse failed", tui.LF("err", jsonErr))
+		logutil.Warn("oc get clusteroperators json parse failed", logutil.LF("err", jsonErr))
 		return 0
 	}
 	degraded := 0

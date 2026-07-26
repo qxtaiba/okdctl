@@ -13,7 +13,7 @@ import (
 
 	"github.com/qxtaiba/okdctl/infrastructure"
 	"github.com/qxtaiba/okdctl/internal/system"
-	"github.com/qxtaiba/okdctl/internal/tui"
+	"github.com/qxtaiba/okdctl/internal/logutil"
 )
 
 const (
@@ -65,10 +65,10 @@ func readRootManifest(root string) (*terraformRootManifest, error) {
 		return nil, fmt.Errorf("parse terraform root manifest: %w", err)
 	}
 	if m.SchemaVersion != rootManifestSchema {
-		tui.Warn("terraform root manifest has unknown schema; ignoring it",
-			tui.LF("path", rootManifestPath(root)),
-			tui.LF("schema_version", m.SchemaVersion),
-			tui.LF("expected", rootManifestSchema))
+		logutil.Warn("terraform root manifest has unknown schema; ignoring it",
+			logutil.LF("path", rootManifestPath(root)),
+			logutil.LF("schema_version", m.SchemaVersion),
+			logutil.LF("expected", rootManifestSchema))
 		return nil, nil
 	}
 	return &m, nil

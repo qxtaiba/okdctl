@@ -7,6 +7,8 @@ import (
 	"os"
 	"sync"
 	"time"
+
+	"github.com/qxtaiba/okdctl/internal/logutil"
 )
 
 var spinnerFrames = []string{"⣾", "⣽", "⣻", "⢿", "⡿", "⣟", "⣯", "⣷"}
@@ -25,7 +27,7 @@ var spinnerFrames = []string{"⣾", "⣽", "⣻", "⢿", "⡿", "⣟", "⣯", "�
 // Dual-stop-signal pattern: stopCh (sync.OnceFunc) plus ctx.Done() with a
 // done channel for ordered teardown; preserve as-is.
 func StartSpinner(ctx context.Context, desc string) func() {
-	if !ProgressBarsEnabled() {
+	if !logutil.ProgressBarsEnabled() {
 		return func() {}
 	}
 	return startSpinner(ctx, desc, os.Stderr)
@@ -38,7 +40,7 @@ func StartSpinner(ctx context.Context, desc string) func() {
 // ProgressBarsEnabled is false (non-TTY or JSON), so callers invoke them
 // unconditionally.
 func StartStatusLine(ctx context.Context, desc string) (set func(string), stop func()) {
-	if !ProgressBarsEnabled() {
+	if !logutil.ProgressBarsEnabled() {
 		return func(string) {}, func() {}
 	}
 	return startStatusLine(ctx, desc, os.Stderr)

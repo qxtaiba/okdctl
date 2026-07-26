@@ -17,10 +17,10 @@ import (
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/httputil"
 	"github.com/qxtaiba/okdctl/internal/infrastructure/proxmox/hostssh"
+	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/nodetypes"
 	"github.com/qxtaiba/okdctl/internal/platform"
 	"github.com/qxtaiba/okdctl/internal/system"
-	"github.com/qxtaiba/okdctl/internal/tui"
 )
 
 // logISOFound emits "coreos: iso found" at Info for isoPath, de-duping by
@@ -356,7 +356,7 @@ func (p *Provisioner) DownloadCoreOSISO(ctx context.Context, info *CoreOSInfo, d
 		download.WithFetchChecksum(info.ISOChecksum),
 		download.WithDescription("CoreOS ISO"),
 		download.WithLogger(p.Log),
-		download.WithProgress(tui.ProgressBarsEnabled()),
+		download.WithProgress(logutil.ProgressBarsEnabled()),
 	); err != nil {
 		return &errtypes.NetworkError{Msg: "download CoreOS ISO", Err: err}
 	}

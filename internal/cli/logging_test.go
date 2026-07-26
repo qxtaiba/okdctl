@@ -118,7 +118,7 @@ func TestConfigureLogging_DefaultSinkRedacts(t *testing.T) {
 
 	// Error always emits regardless of level, so it exercises the redaction
 	// pipeline on the file sink independent of the deploy-family Info/Warn policy.
-	tui.Error("connect failed", tui.LF("password", "hunter2"), tui.LF("cluster", "prod"))
+	logutil.Error("connect failed", logutil.LF("password", "hunter2"), logutil.LF("cluster", "prod"))
 
 	data, err := os.ReadFile(runLogPath)
 	if err != nil {
@@ -149,8 +149,8 @@ func TestConfigureLogging_DeployMilestonesSurviveNonTTY(t *testing.T) {
 		t.Fatalf("configureLogging: %v", err)
 	}
 
-	tui.Info("bootstrap complete")
-	tui.Warn("cluster operator degraded", tui.LF("operator", "ingress"))
+	logutil.Info("bootstrap complete")
+	logutil.Warn("cluster operator degraded", logutil.LF("operator", "ingress"))
 
 	data, err := os.ReadFile(runLogPath)
 	if err != nil {

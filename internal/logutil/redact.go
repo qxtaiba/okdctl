@@ -32,8 +32,9 @@ var secretKeyFragments = []string{
 // RedactHandler wraps an inner slog.Handler and rewrites attr values that
 // look like credentials — *url.URL values carrying userinfo, or any type
 // implementing Redacted() any — and rewrites attrs whose keys match
-// secretKeyFragments to the Redacted sentinel. Install via tui.SimpleLogger
-// so every slog caller inherits the sweep without touching call sites.
+// secretKeyFragments to the Redacted sentinel. InstallHandler wraps every
+// facade sink in it, so every slog caller inherits the sweep without
+// touching call sites.
 //
 // Credential types (e.g. ProxmoxCredentials) MUST implement Redacted() any
 // and return a struct that omits all secret fields. This is the only

@@ -12,6 +12,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/clusterstatus"
 	"github.com/qxtaiba/okdctl/internal/doctor"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
+	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/tui"
 )
 
@@ -131,11 +132,11 @@ func runDoctor(cmd *cobra.Command, _ []string) error {
 
 	switch {
 	case fails > 0:
-		tui.Warn("doctor: failing checks block deploy", tui.LF("failing", fails), tui.LF("warnings", warns))
+		logutil.Warn("doctor: failing checks block deploy", logutil.LF("failing", fails), logutil.LF("warnings", warns))
 	case warns > 0:
-		tui.Warn("doctor: deploy may proceed but review warnings above", tui.LF("warnings", warns))
+		logutil.Warn("doctor: deploy may proceed but review warnings above", logutil.LF("warnings", warns))
 	default:
-		tui.Info("doctor: environment looks ready")
+		logutil.Info("doctor: environment looks ready")
 	}
 	return doctorExitErr(fails, warns)
 }

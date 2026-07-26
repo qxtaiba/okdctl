@@ -11,10 +11,10 @@ import (
 	"github.com/qxtaiba/okdctl/internal/deploy"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/dns"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/postinstall"
+	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/render"
 	"github.com/qxtaiba/okdctl/internal/runlock"
 	"github.com/qxtaiba/okdctl/internal/system"
-	"github.com/qxtaiba/okdctl/internal/tui"
 )
 
 var (
@@ -57,36 +57,36 @@ func init() {
 // It probes on-disk dnsmasq state and the haproxy service to label any
 // steps that would already be no-ops on the live system.
 func runUpdateIngressDryRun(ctx context.Context, cfg *config.Config) error {
-	tui.Info("dry-run: update-ingress for cluster",
-		tui.LF("cluster", cfg.Cluster.Name), tui.LF("domain", cfg.Cluster.Domain))
-	tui.Info("would: query IngressControllers (oc get ingresscontroller -n openshift-ingress-operator)")
-	tui.Info("would: wait for LoadBalancer IPs on router-* services in openshift-ingress")
+	logutil.Info("dry-run: update-ingress for cluster",
+		logutil.LF("cluster", cfg.Cluster.Name), logutil.LF("domain", cfg.Cluster.Domain))
+	logutil.Info("would: query IngressControllers (oc get ingresscontroller -n openshift-ingress-operator)")
+	logutil.Info("would: wait for LoadBalancer IPs on router-* services in openshift-ingress")
 
 	isBootstrap, err := dns.IsBootstrapDNS(cfg)
 	if err != nil {
 		return fmt.Errorf("dry-run: probe dnsmasq state: %w", err)
 	}
 	if isBootstrap {
-		tui.Info("would: deploy production dnsmasq config pointing *.apps at LoadBalancer IPs")
+		logutil.Info("would: deploy production dnsmasq config pointing *.apps at LoadBalancer IPs")
 	} else {
-		tui.Info("would: deploy production dnsmasq config pointing *.apps at LoadBalancer IPs (no-op: dns already cut over)")
+		logutil.Info("would: deploy production dnsmasq config pointing *.apps at LoadBalancer IPs (no-op: dns already cut over)")
 	}
 
 	if !updateIngressKeepHAProxy {
 		if system.IsServiceActive(ctx, "haproxy") {
-			tui.Info("would: stop and disable haproxy on the bastion (if all controllers are LB-type)")
+			logutil.Info("would: stop and disable haproxy on the bastion (if all controllers are LB-type)")
 		} else {
-			tui.Info("would: stop and disable haproxy on the bastion (no-op: haproxy already stopped)")
+			logutil.Info("would: stop and disable haproxy on the bastion (no-op: haproxy already stopped)")
 		}
 	}
-	tui.Info("dry-run: re-run without --dry-run to execute update-ingress")
+	logutil.Info("dry-run: re-run without --dry-run to execute update-ingress")
 	return nil
 }
 
 func buildConvertConfirm(ctx context.Context, yes bool) func([]string) bool {
 	return func(hostNetworkICs []string) bool {
-		tui.Warn("converting HostNetwork controller(s) to LoadBalancerService requires deleting and recreating them; routes on affected controllers see a brief (~30s) outage",
-			tui.LF("count", len(hostNetworkICs)))
+		logutil.Warn("converting HostNetwork controller(s) to LoadBalancerService requires deleting and recreating them; routes on affected controllers see a brief (~30s) outage",
+			logutil.LF("count", len(hostNetworkICs)))
 
 		if yes {
 			return true
@@ -95,7 +95,7 @@ func buildConvertConfirm(ctx context.Context, yes bool) func([]string) bool {
 		prompt := fmt.Sprintf("convert %d HostNetwork controller(s) to LoadBalancerService? [y/N]: ", len(hostNetworkICs))
 		confirmed, err := promptForConfirmation(ctx, prompt)
 		if err != nil {
-			tui.Warn("skipping HostNetwork conversion", tui.LF("err", err))
+			logutil.Warn("skipping HostNetwork conversion", logutil.LF("err", err))
 			return false
 		}
 		return confirmed
@@ -118,10 +118,10 @@ func runUpdateIngress(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
-	tui.Warn("this will update dns to use loadbalancer ips",
-		tui.LF("cluster", cfg.Cluster.Name), tui.LF("domain", cfg.Cluster.Domain))
+	logutil.Warn("this will update dns to use loadbalancer ips",
+		logutil.LF("cluster", cfg.Cluster.Name), logutil.LF("domain", cfg.Cluster.Domain))
 	if !updateIngressKeepHAProxy {
-		tui.Warn("haproxy will be stopped and disabled on the bastion (pass --keep-haproxy to skip)")
+		logutil.Warn("haproxy will be stopped and disabled on the bastion (pass --keep-haproxy to skip)")
 	}
 
 	if !updateIngressYes {
@@ -130,7 +130,7 @@ func runUpdateIngress(cmd *cobra.Command, _ []string) error {
 			return err
 		}
 		if !confirmed {
-			tui.Info("cancelled")
+			logutil.Info("cancelled")
 			return nil
 		}
 	}
@@ -148,7 +148,7 @@ func runUpdateIngress(cmd *cobra.Command, _ []string) error {
 
 	p := deploy.NewProvisioner(nil, projectRoot)
 
-	tui.Info("detecting ingress strategy and loadbalancer ips...")
+	logutil.Info("detecting ingress strategy and loadbalancer ips...")
 	startTime := time.Now()
 
 	// WorkDir stays empty so the provisioner defaults it to
@@ -163,7 +163,7 @@ func runUpdateIngress(cmd *cobra.Command, _ []string) error {
 	}
 
 	duration := time.Since(startTime).Round(time.Second)
-	tui.Info("ingress updated", tui.LF("duration", duration))
+	logutil.Info("ingress updated", logutil.LF("duration", duration))
 	fmt.Fprintln(cmd.OutOrStdout(), render.UpdateIngressSummary(result))
 
 	return nil

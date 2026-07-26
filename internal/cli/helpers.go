@@ -14,9 +14,9 @@ import (
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/infrastructure/proxmox"
 	"github.com/qxtaiba/okdctl/internal/infrastructure/terraform"
+	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/render"
 	"github.com/qxtaiba/okdctl/internal/runlock"
-	"github.com/qxtaiba/okdctl/internal/tui"
 	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
@@ -26,9 +26,9 @@ func loadConfig(configFile string) (*config.Config, error) {
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			if configFile == "okdctl.yaml" {
-				tui.Info("run 'okdctl deploy' to create a configuration file")
+				logutil.Info("run 'okdctl deploy' to create a configuration file")
 			} else {
-				tui.Info("run 'okdctl deploy --output-file <file>' to create it", tui.LF("file", configFile))
+				logutil.Info("run 'okdctl deploy --output-file <file>' to create it", logutil.LF("file", configFile))
 			}
 			return nil, &errtypes.ConfigError{Msg: fmt.Sprintf("configuration file not found: %s", configFile), Err: errtypes.ErrConfigMissing}
 		}
@@ -48,10 +48,10 @@ func handleCredentials(cfg *config.Config) (*credentials.ProxmoxCredentials, err
 
 	creds := credentials.GetProxmoxCredentials(cfg)
 	if !creds.IsValid() {
-		tui.Warn("no proxmox credentials found")
-		tui.Info("set credentials via environment variables or env file",
-			tui.LF("path", envPath),
-			tui.LF("vars", "PROXMOX_VE_USERNAME+PROXMOX_VE_PASSWORD or PROXMOX_VE_API_TOKEN"))
+		logutil.Warn("no proxmox credentials found")
+		logutil.Info("set credentials via environment variables or env file",
+			logutil.LF("path", envPath),
+			logutil.LF("vars", "PROXMOX_VE_USERNAME+PROXMOX_VE_PASSWORD or PROXMOX_VE_API_TOKEN"))
 	} else {
 		reportCredentialProvenance(creds)
 	}
@@ -62,15 +62,15 @@ func handleCredentials(cfg *config.Config) (*credentials.ProxmoxCredentials, err
 // mixed-provenance warnings the operator should see (env-overrides-config,
 // endpoint falling back to config). Callers must check creds.IsValid first.
 func reportCredentialProvenance(creds *credentials.ProxmoxCredentials) {
-	tui.Info("using credentials", tui.LF("source", creds.Source))
+	logutil.Info("using credentials", logutil.LF("source", creds.Source))
 	if creds.ConfigCredentialsOverridden {
-		tui.Warn("environment credentials override proxmox credentials in config file")
+		logutil.Warn("environment credentials override proxmox credentials in config file")
 	}
 	if creds.EndpointFromConfig {
-		tui.Warn("PROXMOX_VE_ENDPOINT not set; endpoint falling back to config file (mixed source)")
+		logutil.Warn("PROXMOX_VE_ENDPOINT not set; endpoint falling back to config file (mixed source)")
 	}
 	if creds.Insecure {
-		tui.Warn("proxmox: TLS verification disabled (insecure=true in config)")
+		logutil.Warn("proxmox: TLS verification disabled (insecure=true in config)")
 	}
 }
 
@@ -109,7 +109,7 @@ func runTerraformPlanPreview(ctx context.Context, cfg *config.Config, opts planP
 
 	prov := proxmox.New(
 		proxmox.WithProjectRoot(opts.ProjectRoot),
-		proxmox.WithLogger(tui.SimpleLogger()),
+		proxmox.WithLogger(logutil.SimpleLogger()),
 		proxmox.WithEnv(creds.Env()),
 	)
 	defer prov.ZeroizeEnv()
@@ -232,10 +232,10 @@ func warnIfTfStateOnly(root string) {
 	if len(matches) == 0 {
 		return
 	}
-	tui.Warn(
+	logutil.Warn(
 		"okdctl.yaml and okdctl.env not found; accepting terraform.tfstate as a recovery hint",
-		tui.LF("tfstate", matches[0]),
-		tui.LF("root", root),
+		logutil.LF("tfstate", matches[0]),
+		logutil.LF("root", root),
 	)
-	tui.Info("if this directory belongs to a different cluster, stop and run 'okdctl deploy' in the correct directory")
+	logutil.Info("if this directory belongs to a different cluster, stop and run 'okdctl deploy' in the correct directory")
 }

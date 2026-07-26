@@ -86,7 +86,7 @@ per 24h, cached locally); set OKDCTL_NO_UPDATE_CHECK=1 to disable.`,
 		// Logged here rather than in execute() so the line honors --quiet,
 		// --log-format, and the piped-stderr auto-switch, symmetric with the
 		// post-configuration "okdctl: finished" bookend.
-		tui.Info("okdctl: started", tui.LF("argv", logutil.RedactableArgv(os.Args[1:])))
+		logutil.Info("okdctl: started", logutil.LF("argv", logutil.RedactableArgv(os.Args[1:])))
 		startLogged = true
 		for _, fn := range preflightWarns {
 			fn()
@@ -100,7 +100,7 @@ per 24h, cached locally); set OKDCTL_NO_UPDATE_CHECK=1 to disable.`,
 // runs the cobra tree, flushes any log file, and exits with the exit code
 // computed by execute().
 func Execute() {
-	slog.SetDefault(tui.SimpleLogger())
+	slog.SetDefault(logutil.SimpleLogger())
 	wrapArgValidators(rootCmd)
 	code := execute()
 	if logFileCloser != nil {
@@ -143,10 +143,10 @@ func execute() (code int) {
 		if !startLogged {
 			return
 		}
-		tui.Info(
+		logutil.Info(
 			"okdctl: finished",
-			tui.LF("duration", time.Since(start).Round(time.Millisecond).String()),
-			tui.LF("exit_code", code),
+			logutil.LF("duration", time.Since(start).Round(time.Millisecond).String()),
+			logutil.LF("exit_code", code),
 		)
 	}()
 
@@ -161,7 +161,7 @@ func execute() (code int) {
 			return
 		}
 		code = 70
-		tui.Error("internal error: panic recovered", tui.LF("panic", fmt.Sprint(r)))
+		logutil.Error("internal error: panic recovered", logutil.LF("panic", fmt.Sprint(r)))
 		stack := debug.Stack()
 		fmt.Fprintf(os.Stderr, "panic: %v\n\n%s", r, stack)
 		if runLogSink != nil {
@@ -221,7 +221,7 @@ func signalLoop(sigCh <-chan os.Signal, cancel context.CancelFunc, caughtSig *at
 	}
 	caughtSig.Store(sig)
 	cancel()
-	tui.Warn("shutdown in progress; press ctrl-c again to force quit")
+	logutil.Warn("shutdown in progress; press ctrl-c again to force quit")
 	sig2, ok := <-sigCh
 	if !ok {
 		return
@@ -262,16 +262,16 @@ func printUpdateNotice(ch <-chan version.CheckResult) {
 // (render.IsPresented). On the machine surface (piped/JSON) it keeps the
 // structured "command failed" log line so 2>&1 consumers and the file sink
 // see err through logutil.RedactHandler, which scrubs credentials in the
-// chain — tui.Error(err.Error()) would stringify before the handler sees it.
+// chain — logutil.Error(err.Error()) would stringify before the handler sees it.
 func announceFailure(err error) {
-	if tui.ProgressBarsEnabled() && !render.IsPresented(err) {
-		fmt.Fprint(os.Stderr, render.ErrorSummary(err, exitCodeFor(err), tui.RunID()))
+	if logutil.ProgressBarsEnabled() && !render.IsPresented(err) {
+		fmt.Fprint(os.Stderr, render.ErrorSummary(err, exitCodeFor(err), logutil.RunID()))
 		return
 	}
-	tui.Error("command failed", tui.LF("err", err))
+	logutil.Error("command failed", logutil.LF("err", err))
 	if runLogPath != "" {
-		tui.Info("full run log persisted; attach it to bug reports or run 'okdctl debug-bundle'",
-			tui.LF("path", runLogPath))
+		logutil.Info("full run log persisted; attach it to bug reports or run 'okdctl debug-bundle'",
+			logutil.LF("path", runLogPath))
 	}
 }
 
@@ -443,7 +443,7 @@ func init() {
 	// Return UsageError instead of os.Exit so Execute's deferred
 	// logFileCloser.Close() runs before the process exits.
 	rootCmd.SetFlagErrorFunc(func(_ *cobra.Command, err error) error {
-		tui.Error("flag error", tui.LF("err", err))
+		logutil.Error("flag error", logutil.LF("err", err))
 		return &errtypes.UsageError{Msg: err.Error(), Err: err}
 	})
 

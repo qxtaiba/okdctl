@@ -13,8 +13,8 @@ import (
 	_ "github.com/qxtaiba/okdctl/internal/addon/catalog" // Register all built-in addons
 	"github.com/qxtaiba/okdctl/internal/cli"
 	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/system"
-	"github.com/qxtaiba/okdctl/internal/tui"
 )
 
 func main() {
@@ -33,18 +33,20 @@ func preflight() {
 	if v := os.Getenv("OKDCTL_BIN_DIR"); v != "" {
 		expanded := system.ExpandPath(v)
 		if err := config.ValidateBinDir(expanded); err != nil {
-			fields := []tui.LogField{tui.LF("value", v), tui.LF("err", err)}
+			fields := []logutil.LogField{logutil.LF("value", v), logutil.LF("err", err)}
 			if strings.HasPrefix(v, "~") && expanded == v {
-				fields = append(fields, tui.LF("note", "tilde expansion failed (home dir unresolved)"))
+				fields = append(fields, logutil.LF("note", "tilde expansion failed (home dir unresolved)"))
 			}
-			cli.DeferWarn(func() { tui.Warn("OKDCTL_BIN_DIR ignored", fields...) })
+			cli.DeferWarn(func() { logutil.Warn("OKDCTL_BIN_DIR ignored", fields...) })
 		}
 	}
 	binDir := config.PreflightBinDir()
 	path := os.Getenv("PATH")
 	if !slices.Contains(filepath.SplitList(path), binDir) {
 		if err := os.Setenv("PATH", binDir+":"+path); err != nil {
-			cli.DeferWarn(func() { tui.Warn("failed to prepend bin dir to PATH", tui.LF("bin_dir", binDir), tui.LF("err", err)) })
+			cli.DeferWarn(func() {
+				logutil.Warn("failed to prepend bin dir to PATH", logutil.LF("bin_dir", binDir), logutil.LF("err", err))
+			})
 		}
 	}
 }

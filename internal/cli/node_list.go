@@ -12,9 +12,9 @@ import (
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/clusterstatus"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/provision"
+	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/node"
 	"github.com/qxtaiba/okdctl/internal/nodetypes"
-	"github.com/qxtaiba/okdctl/internal/tui"
 	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
@@ -115,14 +115,14 @@ func loadNodeListSideData(cfg *config.Config, projectRoot string) nodeListSideDa
 	envDir := workspace.TerraformEnvDir(projectRoot, cfg.TerraformEnvName())
 	sizing, found, err := provision.ReadTerraformVarsSizing(envDir)
 	if err != nil {
-		tui.Warn("node list: read terraform.tfvars sizing failed; drift will show as unknown", tui.LF("err", err))
+		logutil.Warn("node list: read terraform.tfvars sizing failed; drift will show as unknown", logutil.LF("err", err))
 		found = false
 	}
 
 	workDir := workspace.WorkDir(projectRoot)
 	marker, err := node.ReadOpMarker(workDir, cfg.Cluster.Name)
 	if err != nil {
-		tui.Warn("node list: read in-flight op marker failed", tui.LF("err", err))
+		logutil.Warn("node list: read in-flight op marker failed", logutil.LF("err", err))
 		marker = nil
 	}
 
