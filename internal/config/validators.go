@@ -13,6 +13,7 @@ import (
 
 	"github.com/qxtaiba/okdctl/internal/netutil"
 	"github.com/qxtaiba/okdctl/internal/system"
+	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
 var (
@@ -75,7 +76,7 @@ func validateEnums(cfg *Config, result *ValidationResult) {
 	// matching directory or terraform fails deep in the install phase
 	// instead of here.
 	if env := cfg.Deployment.TerraformEnv; env != "" && env != defaultTerraformEnv {
-		dir := filepath.Join("infrastructure", "terraform", "environments", env)
+		dir := workspace.TerraformEnvDir("", env)
 		if !system.DirExists(dir) {
 			result.AddError(FieldDeploymentTerraformEnv, fmt.Sprintf("no environment directory at %s", dir))
 		}

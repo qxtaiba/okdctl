@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"encoding/json"
 	"fmt"
 	"strconv"
 
@@ -225,9 +224,7 @@ func runDescribeNode(cmd *cobra.Command, args []string) error {
 			"role":  n.Role,
 			"ready": n.Ready,
 		}
-		enc := json.NewEncoder(cmd.OutOrStdout())
-		enc.SetIndent("", "  ")
-		return enc.Encode(payload)
+		return writeJSON(cmd.OutOrStdout(), payload)
 	}
 
 	lines := []struct{ k, v string }{
@@ -295,9 +292,7 @@ func runDescribeAddon(cmd *cobra.Command, args []string) error {
 		for _, ln := range lines {
 			payload[ln.jsonKey] = ln.v
 		}
-		enc := json.NewEncoder(cmd.OutOrStdout())
-		enc.SetIndent("", "  ")
-		return enc.Encode(payload)
+		return writeJSON(cmd.OutOrStdout(), payload)
 	}
 
 	for _, ln := range lines {
