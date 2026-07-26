@@ -1,12 +1,14 @@
 package setup
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/nodetypes"
 )
 
@@ -269,5 +271,84 @@ func TestReadTerraformVarsSizing_MissingKeyErrors(t *testing.T) {
 	}
 	if _, found, err := ReadTerraformVarsSizing(envDir); err == nil || found {
 		t.Fatalf("want (false, error) for a tfvars missing sizing keys, got (found=%v, err=%v)", found, err)
+	}
+}
+
+// TestGenerateTerraformVars_RemovesBootstrapSentinel locks the deploy-only
+// bootstrap resurrection contract: GenerateTerraformVars must delete the
+// postinstall sentinel before rendering, or a stale bootstrap_enabled=false
+// override silently skips the bootstrap VM on redeploy.
+func TestGenerateTerraformVars_RemovesBootstrapSentinel(t *testing.T) {
+	root := t.TempDir()
+	cfg := config.DefaultConfig()
+	envDir := phase.TerraformEnvDir(root, phase.GetTerraformEnv(cfg))
+	if err := os.MkdirAll(envDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	sentinel := filepath.Join(envDir, phase.BootstrapStateSentinelFile)
+	if err := os.WriteFile(sentinel, []byte(`{"bootstrap_enabled": false}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	opts := &Options{BaseOptions: phase.BaseOptions{ProjectRoot: root}}
+	if err := (&Phase{}).GenerateTerraformVars(context.Background(), cfg, opts); err != nil {
+		t.Fatalf("GenerateTerraformVars: %v", err)
+	}
+
+	if _, err := os.Stat(sentinel); !os.IsNotExist(err) {
+		t.Errorf("bootstrap sentinel must be removed by GenerateTerraformVars, stat err: %v", err)
+	}
+	fi, err := os.Stat(filepath.Join(envDir, "terraform.tfvars"))
+	if err != nil {
+		t.Fatalf("terraform.tfvars not rendered: %v", err)
+	}
+	if perm := fi.Mode().Perm(); perm != 0o600 {
+		t.Errorf("terraform.tfvars perm = %#o, want 0600", perm)
+	}
+}
+
+// TestWriteTerraformVars_PreservesBootstrapSentinel locks the other half of
+// the split: node-lifecycle re-renders go through WriteTerraformVars and must
+// leave the sentinel untouched so they cannot resurrect the bootstrap VM.
+func TestWriteTerraformVars_PreservesBootstrapSentinel(t *testing.T) {
+	cfg := config.DefaultConfig()
+	envDir := t.TempDir()
+	sentinel := filepath.Join(envDir, phase.BootstrapStateSentinelFile)
+	sentinelBytes := []byte(`{"bootstrap_enabled": false}`)
+	if err := os.WriteFile(sentinel, sentinelBytes, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := WriteTerraformVars(cfg, envDir); err != nil {
+		t.Fatalf("WriteTerraformVars: %v", err)
+	}
+
+	got, err := os.ReadFile(sentinel)
+	if err != nil {
+		t.Fatalf("sentinel must survive WriteTerraformVars: %v", err)
+	}
+	if string(got) != string(sentinelBytes) {
+		t.Errorf("sentinel bytes changed: %q", got)
+	}
+	fi, err := os.Stat(filepath.Join(envDir, "terraform.tfvars"))
+	if err != nil {
+		t.Fatalf("terraform.tfvars not rendered: %v", err)
+	}
+	if perm := fi.Mode().Perm(); perm != 0o600 {
+		t.Errorf("terraform.tfvars perm = %#o, want 0600", perm)
+	}
+}
+
+func TestTerraformVarsWriters_RequireProxmoxProvider(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Provider.Proxmox = nil
+	envDir := t.TempDir()
+
+	if err := WriteTerraformVars(cfg, envDir); err == nil {
+		t.Error("WriteTerraformVars without proxmox provider: want error, got nil")
+	}
+	opts := &Options{BaseOptions: phase.BaseOptions{ProjectRoot: envDir}}
+	if err := (&Phase{}).GenerateTerraformVars(context.Background(), cfg, opts); err == nil {
+		t.Error("GenerateTerraformVars without proxmox provider: want error, got nil")
 	}
 }
