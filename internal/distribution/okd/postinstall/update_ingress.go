@@ -499,7 +499,9 @@ func (p *Phase) convertToLoadBalancer(ctx context.Context, ic *ingressController
 	_, err = p.OcOutput(ctx, "delete", "ingresscontroller", ic.Name,
 		"-n", "openshift-ingress-operator")
 	if err != nil {
-		p.removeIngressBackup(backupPath)
+		// Keep the backup: a cancelled/failed delete may still have completed
+		// server-side, and restoreOrphanedIngressBackups drops stale backups
+		// whose controller survived on the next run.
 		return &errtypes.ClusterError{Msg: fmt.Sprintf("delete IngressController %q", ic.Name), Err: err}
 	}
 
