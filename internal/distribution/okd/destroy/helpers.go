@@ -111,7 +111,7 @@ func (p *Phase) warnTopologyDrift(ctx context.Context, tf *terraform.Executor, c
 
 // customISONames returns the exact per-node custom ISO filenames the setup
 // phase uploads to the Proxmox host (bootstrap.iso, master<N>.iso,
-// worker<N>.iso) for cfg's topology — see setup.BuildNodeList for the
+// worker<N>.iso) for cfg's topology — see provision.BuildNodeList for the
 // naming this mirrors. Names carry no cluster prefix; removal-side safety
 // comes from hostssh.RemoveCustomISOsFromProxmox's in-use check, not the name.
 func customISONames(cfg *config.Config) []string {

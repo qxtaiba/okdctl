@@ -4,7 +4,20 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
+	"github.com/qxtaiba/okdctl/internal/distribution/okd/provision"
+	"github.com/qxtaiba/okdctl/internal/executor"
+	"github.com/qxtaiba/okdctl/internal/logutil"
 )
+
+func newTestPhase(t *testing.T) *Phase {
+	t.Helper()
+	return &Phase{Provisioner: provision.Provisioner{BasePhase: phase.NewBasePhase(
+		phase.WithLogger(logutil.NopLogger),
+		phase.WithExecutor(executor.New(executor.WithLogger(logutil.NopLogger))),
+	)}}
+}
 
 func TestAtomicInstallFile(t *testing.T) {
 	t.Run("installs with mode and content", func(t *testing.T) {

@@ -1,4 +1,4 @@
-package setup
+package provision
 
 import (
 	"context"
@@ -13,7 +13,6 @@ import (
 	"strings"
 
 	"github.com/qxtaiba/okdctl/internal/config"
-	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/download"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/httputil"
@@ -25,9 +24,9 @@ import (
 )
 
 // logISOFound emits "coreos: iso found" at Info for isoPath, de-duping by
-// base filename across this Phase's lifetime so a single setup run never
+// base filename across this Provisioner's lifetime so a single run never
 // logs the same ISO more than once.
-func (p *Phase) logISOFound(isoPath string) {
+func (p *Provisioner) logISOFound(isoPath string) {
 	base := filepath.Base(isoPath)
 	if p.loggedISOs == nil {
 		p.loggedISOs = make(map[string]bool)
@@ -79,7 +78,7 @@ func resolveConfiguredISO(spec string) (string, isoResolution) {
 	}
 }
 
-func (p *Phase) findOrDownloadFCOSISO(ctx context.Context, cfg *config.Config, opts *Options) (string, error) {
+func (p *Provisioner) findOrDownloadFCOSISO(ctx context.Context, cfg *config.Config, opts Options) (string, error) {
 	isoDir := hostssh.DefaultProxmoxISODir
 
 	if cfg.Provider.Proxmox != nil {
@@ -115,16 +114,12 @@ func (p *Phase) findOrDownloadFCOSISO(ctx context.Context, cfg *config.Config, o
 
 	p.Log.Info("coreos: no iso found, attempting auto-download")
 
-	return p.EnsureCoreOSISO(ctx, cfg, &Options{
-		BaseOptions: phase.BaseOptions{
-			WorkDir: opts.WorkDir,
-		},
-	})
+	return p.EnsureCoreOSISO(ctx, cfg, Options{WorkDir: opts.WorkDir})
 }
 
 // findNewestISO globs dir against each pattern in order and returns the
 // lexicographically newest match from the first pattern with a hit.
-func (p *Phase) findNewestISO(dir string, patterns []string) (string, bool) {
+func (p *Provisioner) findNewestISO(dir string, patterns []string) (string, bool) {
 	for _, pattern := range patterns {
 		matches, err := filepath.Glob(filepath.Join(dir, pattern))
 		if err != nil {
@@ -311,7 +306,7 @@ func coreOSInfoFromStream(sd *coreOSStreamData) (*CoreOSInfo, error) {
 // 4.15-4.18 → fcos.json (Fedora CoreOS), 4.19+ and every 5.x → scos.json
 // (Stream CoreOS). A malformed okdVersion or an unpinned (major, minor)
 // fails fast as a ConfigError.
-func (p *Phase) DetectCoreOSVersion(ctx context.Context, okdVersion string) (*CoreOSInfo, error) {
+func (p *Provisioner) DetectCoreOSVersion(ctx context.Context, okdVersion string) (*CoreOSInfo, error) {
 	major, minor, ok := parseOKDVersion(okdVersion)
 	if !ok {
 		return nil, &errtypes.ConfigError{Msg: fmt.Sprintf("invalid OKD version %q: cannot parse major.minor", okdVersion)}
@@ -334,7 +329,7 @@ func (p *Phase) DetectCoreOSVersion(ctx context.Context, okdVersion string) (*Co
 // DownloadCoreOSISO downloads the CoreOS ISO described by info to destPath.
 // An existing file with a matching checksum is reused; mismatch triggers a
 // re-download.
-func (p *Phase) DownloadCoreOSISO(ctx context.Context, info *CoreOSInfo, destPath string) error {
+func (p *Provisioner) DownloadCoreOSISO(ctx context.Context, info *CoreOSInfo, destPath string) error {
 	if system.FileExists(destPath) {
 		p.logISOFound(destPath)
 		if info.ISOChecksum != "" {
@@ -373,7 +368,7 @@ func (p *Phase) DownloadCoreOSISO(ctx context.Context, info *CoreOSInfo, destPat
 
 // EnsureCoreOSISO ensures the CoreOS ISO is available, downloading to the work
 // directory (avoids permission issues with /var/lib/vz).
-func (p *Phase) EnsureCoreOSISO(ctx context.Context, cfg *config.Config, opts *Options) (string, error) {
+func (p *Provisioner) EnsureCoreOSISO(ctx context.Context, cfg *config.Config, opts Options) (string, error) {
 	p.Log.Info("coreos: resolving iso from pinned installer stream metadata")
 
 	var okdVersion string

@@ -1,4 +1,4 @@
-package setup
+package provision
 
 import (
 	"context"
@@ -89,7 +89,7 @@ func TestDeployToWebServer_IgnitionFilesLandAt0640(t *testing.T) {
 	clusterDir := t.TempDir()
 	webRoot := t.TempDir()
 
-	for _, name := range ignitionFilenames {
+	for _, name := range IgnitionFilenames {
 		path := filepath.Join(clusterDir, name)
 		if err := os.WriteFile(path, []byte(`{"ignition":{"version":"3.4.0"}}`), 0o600); err != nil {
 			t.Fatalf("write %s: %v", name, err)
@@ -110,7 +110,7 @@ func TestDeployToWebServer_IgnitionFilesLandAt0640(t *testing.T) {
 		t.Errorf("ignition dir perm = %04o, want 0750", got)
 	}
 
-	for _, name := range ignitionFilenames {
+	for _, name := range IgnitionFilenames {
 		fi, err := os.Stat(filepath.Join(ignitionDir, name))
 		if err != nil {
 			t.Fatalf("stat %s: %v", name, err)
@@ -125,7 +125,7 @@ func TestDeployToWebServer_AbsentFilesSkipped(t *testing.T) {
 	clusterDir := t.TempDir()
 	webRoot := t.TempDir()
 
-	present := ignitionFilenames[0]
+	present := IgnitionFilenames[0]
 	if err := os.WriteFile(
 		filepath.Join(clusterDir, present),
 		[]byte(`{"ignition":{"version":"3.4.0"}}`),
@@ -144,7 +144,7 @@ func TestDeployToWebServer_AbsentFilesSkipped(t *testing.T) {
 		t.Errorf("%s missing in web root: %v", present, err)
 	}
 
-	for _, name := range ignitionFilenames[1:] {
+	for _, name := range IgnitionFilenames[1:] {
 		if _, err := os.Stat(filepath.Join(ignitionDir, name)); err == nil {
 			t.Errorf("%s must not exist in web root when absent from clusterDir", name)
 		}
@@ -155,7 +155,7 @@ func TestDeployToWebServer_AuthFilesNotCopied(t *testing.T) {
 	clusterDir := t.TempDir()
 	webRoot := t.TempDir()
 
-	for _, name := range ignitionFilenames {
+	for _, name := range IgnitionFilenames {
 		if err := os.WriteFile(
 			filepath.Join(clusterDir, name),
 			[]byte(`{"ignition":{"version":"3.4.0"}}`),

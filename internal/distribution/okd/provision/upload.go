@@ -1,4 +1,4 @@
-package setup
+package provision
 
 import (
 	"context"
@@ -126,7 +126,7 @@ func uploadISOsViaSCP(ctx context.Context, cmdRunner *executor.Executor, isoFile
 
 // UploadCustomISOsToProxmox uploads all custom ISOs to Proxmox storage via a
 // single scp command (avoids multiple password prompts).
-func (p *Phase) UploadCustomISOsToProxmox(ctx context.Context, cfg *config.Config, opts *Options) error {
+func (p *Provisioner) UploadCustomISOsToProxmox(ctx context.Context, cfg *config.Config, opts Options) error {
 	if cfg.Provider.Proxmox == nil {
 		return &errtypes.ConfigError{Msg: msgProxmoxProviderRequired}
 	}
@@ -179,12 +179,12 @@ func (p *Phase) UploadCustomISOsToProxmox(ctx context.Context, cfg *config.Confi
 	return nil
 }
 
-// isoUploadAlreadyDone returns true when every local ISO has an identical
+// ISOUploadAlreadyDone returns true when every local ISO has an identical
 // sha256 on the Proxmox host. Any SSH failure or absent Proxmox config
 // conservatively returns (false, nil) — the conservative-not-done choice
 // lets Exec surface the real failure rather than silently skipping the
 // upload.
-func (p *Phase) isoUploadAlreadyDone(ctx context.Context, cfg *config.Config, opts *Options) (bool, error) {
+func (p *Provisioner) ISOUploadAlreadyDone(ctx context.Context, cfg *config.Config, opts Options) (bool, error) {
 	if cfg.Provider.Proxmox == nil {
 		return false, nil
 	}

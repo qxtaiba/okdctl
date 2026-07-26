@@ -1,24 +1,21 @@
 // Package setup runs the OKD setup phase: install host packages and the
 // tool trio (oc, openshift-install, terraform), render install-config and
-// Kubernetes manifests (including kube-vip, chrony, and fstrim), generate ignition
-// files, build custom CoreOS ISOs with embedded kargs, and configure
-// HAProxy, dnsmasq, and the bastion firewall. Steps are declared in
-// setupBaseSteps, setupManifestSteps, setupWebSteps, and setupInfraSteps,
-// concatenated by setupSteps. Exported builders (BuildLiveKargs,
-// BuildDestKargs, ExtractNetworkConfig, EnsureIgnitionCert) are the
-// package's public API surface even though today's only callers are
-// intra-package.
+// Kubernetes manifests (including kube-vip, chrony, and fstrim), generate
+// ignition files, and configure HAProxy, dnsmasq, and the bastion firewall.
+// The ISO build/upload and ignition-server machinery shared with day-2 node
+// operations lives in the embedded provision.Provisioner. Steps are declared
+// in setupBaseSteps, setupManifestSteps, setupWebSteps, and setupInfraSteps,
+// concatenated by setupSteps.
 package setup
 
 import (
 	"context"
-	"fmt"
 	"path/filepath"
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/distribution"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
-	"github.com/qxtaiba/okdctl/internal/nodetypes"
+	"github.com/qxtaiba/okdctl/internal/distribution/okd/provision"
 	"github.com/qxtaiba/okdctl/internal/platform"
 	"github.com/qxtaiba/okdctl/internal/workspace"
 )
@@ -52,29 +49,10 @@ func NewOptions(cfg *config.Config, projectRoot string) Options {
 	}
 }
 
-// BuildIgnitionURL builds the base https:// URL where ignition payloads are
-// served. Apache always binds port 443 (see configureApache), so the port is
-// never spelled in the URL.
-func BuildIgnitionURL(ip string) string {
-	return fmt.Sprintf("https://%s/ignition", ip)
-}
-
-// CoreOSInfo describes a Fedora CoreOS download candidate resolved from
-// the CoreOS stream metadata.
-type CoreOSInfo struct {
-	Version      string
-	ISOUrl       string
-	ISOChecksum  string
-	Architecture string
-}
-
-// NodeInfo identifies a single VM the setup phase emits into the generated
-// Terraform tfvars (role, IP, MAC).
-type NodeInfo struct {
-	Name string
-	Role nodetypes.NodeRole
-	IP   string
-	MAC  string
+// provisionOpts projects the setup options onto the narrow option set the
+// shared provisioning machinery consumes.
+func (o *Options) provisionOpts() provision.Options {
+	return provision.Options{ProjectRoot: o.ProjectRoot, WorkDir: o.WorkDir}
 }
 
 // packageInstaller is the subset of platform.Manager the setup phase calls.
@@ -87,11 +65,9 @@ type packageInstaller interface {
 // Phase drives the setup flow: artifact download, config generation,
 // ignition upload, and bastion service configuration.
 type Phase struct {
-	phase.BasePhase
-	OS         platform.OS
-	Pkg        packageInstaller
-	BinDir     string
-	loggedISOs map[string]bool
+	provision.Provisioner
+	Pkg    packageInstaller
+	BinDir string
 }
 
 // New constructs a setup Phase with the given options. Host OS detection
@@ -101,9 +77,8 @@ func New(opts ...phase.BasePhaseOption) *Phase {
 	bp.Log = bp.Log.With("phase", "setup")
 	detectedOS := platform.DetectOrDefault(bp.Log)
 	return &Phase{
-		BasePhase: bp,
-		OS:        detectedOS,
-		Pkg:       platform.NewPackageManager(detectedOS, bp.Log),
+		Provisioner: provision.Provisioner{BasePhase: bp, OS: detectedOS},
+		Pkg:         platform.NewPackageManager(detectedOS, bp.Log),
 	}
 }
 

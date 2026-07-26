@@ -305,7 +305,7 @@ func RemoveFCOSISOFromProxmox(ctx context.Context, p *RemoteISOParams, isoDir st
 }
 
 // RemoveCustomISOsFromProxmox removes the exact per-node custom CoreOS ISOs
-// built by the setup phase (see setup.BuildNodeList) from isoDir on the
+// built by the setup phase (see provision.BuildNodeList) from isoDir on the
 // Proxmox host. Unlike RemoveFCOSISOFromProxmox this does not glob — names
 // are exact matches, so it uses SSHRunArgv per the repo's SSH shell policy.
 // A name that fails ValidateRemoteFilename or is still referenced by a

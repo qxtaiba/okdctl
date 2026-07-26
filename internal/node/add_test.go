@@ -11,7 +11,7 @@ import (
 
 	"github.com/qxtaiba/okdctl/internal/cluster"
 	"github.com/qxtaiba/okdctl/internal/config"
-	"github.com/qxtaiba/okdctl/internal/distribution/okd/setup"
+	"github.com/qxtaiba/okdctl/internal/distribution/okd/provision"
 	"github.com/qxtaiba/okdctl/internal/infrastructure/terraform"
 	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/nodetypes"
@@ -28,7 +28,7 @@ type fakeISO struct {
 	events      *[]string
 }
 
-func (f *fakeISO) BuildCustomISOs(context.Context, *config.Config, *setup.Options) error {
+func (f *fakeISO) BuildCustomISOs(context.Context, *config.Config, provision.Options) error {
 	f.buildCalls++
 	if f.events != nil {
 		*f.events = append(*f.events, "build")
@@ -36,7 +36,7 @@ func (f *fakeISO) BuildCustomISOs(context.Context, *config.Config, *setup.Option
 	return f.buildErr
 }
 
-func (f *fakeISO) UploadCustomISOsToProxmox(context.Context, *config.Config, *setup.Options) error {
+func (f *fakeISO) UploadCustomISOsToProxmox(context.Context, *config.Config, provision.Options) error {
 	f.uploadCalls++
 	if f.events != nil {
 		*f.events = append(*f.events, "upload")
@@ -135,7 +135,7 @@ func writeIgnitionArtifacts(t *testing.T, r *Runner) {
 	if err := os.WriteFile(filepath.Join(clusterDir, "worker.ign"), []byte("{}"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	certPath, _ := setup.IgnitionCertPaths(r.ProjectRoot)
+	certPath, _ := provision.IgnitionCertPaths(r.ProjectRoot)
 	if err := os.MkdirAll(filepath.Dir(certPath), 0o755); err != nil {
 		t.Fatal(err)
 	}

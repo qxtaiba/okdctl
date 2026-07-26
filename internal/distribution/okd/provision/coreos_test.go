@@ -1,4 +1,4 @@
-package setup
+package provision
 
 import (
 	"context"
@@ -43,8 +43,8 @@ func (h *isoCapture) WithAttrs(attrs []slog.Attr) slog.Handler {
 
 func (h *isoCapture) WithGroup(_ string) slog.Handler { return h }
 
-func newPhaseWithISOCapture(h *isoCapture) *Phase {
-	return &Phase{
+func newPhaseWithISOCapture(h *isoCapture) *Provisioner {
+	return &Provisioner{
 		BasePhase: phase.NewBasePhase(
 			phase.WithExecutor(executor.New(executor.WithLogger(logutil.NopLogger))),
 			phase.WithLogger(slog.New(h)),
@@ -114,9 +114,9 @@ func makeStreamJSON(arch, release, isoURL string) []byte {
 	return b
 }
 
-func newTestPhase(t *testing.T) *Phase {
+func newTestPhase(t *testing.T) *Provisioner {
 	t.Helper()
-	return &Phase{BasePhase: phase.NewBasePhase(
+	return &Provisioner{BasePhase: phase.NewBasePhase(
 		phase.WithLogger(logutil.NopLogger),
 		phase.WithExecutor(executor.New(executor.WithLogger(logutil.NopLogger))),
 	)}
@@ -152,7 +152,7 @@ func TestFindOrDownloadFCOSISO_globDetectsCoreOSNames(t *testing.T) {
 			}
 
 			p := newTestPhase(t)
-			opts := &Options{BaseOptions: phase.BaseOptions{WorkDir: workDir}}
+			opts := Options{WorkDir: workDir}
 
 			got, err := p.findOrDownloadFCOSISO(context.Background(), &config.Config{}, opts)
 			if err != nil {

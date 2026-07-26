@@ -17,7 +17,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/credentials"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/clusterstatus"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
-	"github.com/qxtaiba/okdctl/internal/distribution/okd/setup"
+	"github.com/qxtaiba/okdctl/internal/distribution/okd/provision"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/executor"
 	"github.com/qxtaiba/okdctl/internal/infrastructure/proxmox"
@@ -308,17 +308,16 @@ func (e *nodeOpsEnv) newRunner(cmd *cobra.Command, cfg *config.Config, verb stri
 	runner.Reporter = func(desc string) func() { return tui.StartSpinner(ctx, desc) }
 
 	// Wired unconditionally: construction is cheap (no I/O) and only node add
-	// dereferences ISO/Ignition/SetupOpts, so every other verb simply ignores them.
-	setupExecOpts := []executor.Option{executor.WithWorkDir(e.projectRoot)}
+	// dereferences ISO/Ignition/Provision, so every other verb simply ignores them.
+	provExecOpts := []executor.Option{executor.WithWorkDir(e.projectRoot)}
 	if subprocOut != nil {
-		setupExecOpts = append(setupExecOpts, executor.WithStdout(subprocOut), executor.WithStderr(subprocOut))
+		provExecOpts = append(provExecOpts, executor.WithStdout(subprocOut), executor.WithStderr(subprocOut))
 	}
-	setupExec := executor.New(setupExecOpts...)
-	setupPhase := setup.New(phase.WithExecutor(setupExec), phase.WithLogger(log))
-	setupOpts := setup.NewOptions(cfg, e.projectRoot)
-	runner.ISO = setupPhase
-	runner.Ignition = setupPhase
-	runner.SetupOpts = &setupOpts
+	provExec := executor.New(provExecOpts...)
+	prov := provision.New(phase.WithExecutor(provExec), phase.WithLogger(log))
+	runner.ISO = prov
+	runner.Ignition = prov
+	runner.Provision = provision.NewOptions(e.projectRoot)
 
 	// A resize takes effect only after a Proxmox power-cycle (bpg/proxmox changes
 	// the VM config without restarting). Wire the API power-cycler whenever creds

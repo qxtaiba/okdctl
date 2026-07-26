@@ -1,4 +1,4 @@
-package setup
+package provision
 
 import (
 	"context"
@@ -36,7 +36,7 @@ func nodeISOFingerprint(liveKargs, destKargs []string, sshKey, basePath string) 
 // embeds the node's ignition URL, role, and static-IP kernel arguments. A
 // node whose output ISO and .fp-<name> fingerprint both match the current
 // inputs is skipped; the fingerprint is written after a successful build.
-func (p *Phase) BuildCustomISOs(ctx context.Context, cfg *config.Config, opts *Options) error {
+func (p *Provisioner) BuildCustomISOs(ctx context.Context, cfg *config.Config, opts Options) error {
 	isoDir := filepath.Join(opts.WorkDir, "custom-isos")
 	if err := system.EnsureDir(isoDir); err != nil {
 		return err
@@ -51,7 +51,7 @@ func (p *Phase) BuildCustomISOs(ctx context.Context, cfg *config.Config, opts *O
 		return &errtypes.NetworkError{Msg: "find or download CoreOS ISO", Err: err}
 	}
 
-	nodes, err := p.BuildNodeList(cfg)
+	nodes, err := BuildNodeList(cfg)
 	if err != nil {
 		return &errtypes.ConfigError{Msg: "build node list", Err: err}
 	}
@@ -198,7 +198,7 @@ func writeInstallerTriggerIgnition(sshKey string) (string, error) {
 	})
 }
 
-func (p *Phase) buildNodeISO(ctx context.Context, cfg *config.Config, node NodeInfo, fcosISO, outputDir, sshKey, fp, fpFile, caCertPath string) error {
+func (p *Provisioner) buildNodeISO(ctx context.Context, cfg *config.Config, node NodeInfo, fcosISO, outputDir, sshKey, fp, fpFile, caCertPath string) error {
 	isoName := fmt.Sprintf("%s.iso", node.Name)
 	outputPath := filepath.Join(outputDir, isoName)
 
