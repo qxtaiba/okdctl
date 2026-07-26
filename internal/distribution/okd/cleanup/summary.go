@@ -42,20 +42,28 @@ func GenerateSummary(opts *Options) Summary {
 		terraformBase := phase.TerraformEnvDir(opts.ProjectRoot, "")
 		if entries, err := os.ReadDir(terraformBase); err == nil {
 			for _, entry := range entries {
-				if entry.IsDir() {
-					envDir := filepath.Join(terraformBase, entry.Name())
-					// Don't count terraform.tfstate - it's intentionally preserved for destroy
-					for _, f := range []string{"terraform.tfvars", "tfplan", "destroy.tfplan", "terraform.tfstate.backup"} {
-						if _, err := os.Stat(filepath.Join(envDir, f)); err == nil {
-							summary.RemainingTerraformFiles++
-						}
-					}
+				if !entry.IsDir() {
+					continue
 				}
+				summary.RemainingTerraformFiles += countTerraformArtifacts(filepath.Join(terraformBase, entry.Name()))
 			}
 		}
 	}
 
 	return summary
+}
+
+// countTerraformArtifacts counts leftover terraform working files in envDir.
+// terraform.tfstate is deliberately excluded — cleanup preserves it for
+// destroy.
+func countTerraformArtifacts(envDir string) int {
+	count := 0
+	for _, f := range []string{"terraform.tfvars", "tfplan", "destroy.tfplan", "terraform.tfstate.backup"} {
+		if _, err := os.Stat(filepath.Join(envDir, f)); err == nil {
+			count++
+		}
+	}
+	return count
 }
 
 func printSummary(opts *Options, t *cleanupTracker, logger *slog.Logger) {
