@@ -226,3 +226,38 @@ func TestExecutePanicExitsSoftware(t *testing.T) {
 		t.Fatalf("execute() after panic = %d, want 70 (EX_SOFTWARE)", got)
 	}
 }
+
+// TestWrapArgValidators locks the arg-count exit-code policy: cobra's bare
+// validator errors become UsageError (exit 64), hand-rolled UsageError
+// validators pass through unwrapped, and valid invocations are untouched.
+func TestWrapArgValidators(t *testing.T) {
+	root := &cobra.Command{Use: "root"}
+	exact := &cobra.Command{Use: "exact", Args: cobra.ExactArgs(1), RunE: func(*cobra.Command, []string) error { return nil }}
+	handRolled := &cobra.Command{Use: "hand", Args: func(_ *cobra.Command, args []string) error {
+		if len(args) != 1 {
+			return &errtypes.UsageError{Msg: "expected exactly one name"}
+		}
+		return nil
+	}}
+	root.AddCommand(exact)
+	root.AddCommand(handRolled)
+	wrapArgValidators(root)
+
+	if err := exact.Args(exact, []string{"one"}); err != nil {
+		t.Fatalf("valid arg count must pass: %v", err)
+	}
+
+	err := exact.Args(exact, nil)
+	var usageErr *errtypes.UsageError
+	if !errors.As(err, &usageErr) {
+		t.Fatalf("cobra arg-count violation must map to UsageError (exit 64), got %T: %v", err, err)
+	}
+	if exitCodeFor(err) != 64 {
+		t.Fatalf("exitCodeFor(wrapped arg-count error) = %d, want 64", exitCodeFor(err))
+	}
+
+	err = handRolled.Args(handRolled, nil)
+	if !errors.As(err, &usageErr) || usageErr.Msg != "expected exactly one name" {
+		t.Fatalf("hand-rolled UsageError must pass through unwrapped, got %v", err)
+	}
+}

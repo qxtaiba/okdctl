@@ -6,14 +6,14 @@ to use in scripts that branch on failure type.
 | Code | BSD name     | Trigger                                                      |
 |------|--------------|--------------------------------------------------------------|
 | 0    | EX_OK        | success                                                      |
-| 1    | —            | unclassified error (unknown subcommand, arg-count violation) |
+| 1    | —            | unclassified error (unknown subcommand)                      |
 | 2    | —            | configuration error (parse failure, schema mismatch, doctor preflight [fail]) |
 | 3    | —            | network error (HTTP, DNS, TLS, download failure)             |
 | 4    | —            | cluster error (oc/kubectl failure, install timeout)          |
 | 5    | —            | auth error (proxmox token rejected, insecure file perms)     |
 | 6    | —            | `doctor` preflight warn-only: one or more checks reported `[warn]` and none reported `[fail]` |
 | 7    | —            | `plan` found drift: a create/update/replace/delete is pending against the current configuration |
-| 64   | EX_USAGE     | unknown flag, or an invalid flag combination detected at runtime (e.g. `--target` without `--confirm-cluster`) |
+| 64   | EX_USAGE     | unknown flag, wrong argument count, or an invalid flag combination detected at runtime (e.g. `--target` without `--confirm-cluster`) |
 | 65   | EX_DATAERR   | pull secret file exists but is not valid JSON                |
 | 66   | EX_NOINPUT   | configuration file not found on disk                         |
 | 70   | EX_SOFTWARE  | internal error: a panic was caught at top level (a bug in okdctl — the stack trace goes to stderr and the run log) |
@@ -64,8 +64,9 @@ whether from the host-preflight checks or the day-2 `cluster` section (a
 Degraded ClusterOperator, a NotReady node, unhealthy etcd, or an expired
 kube-apiserver-to-kubelet-signer). The day-2 section is present only when a
 deployed cluster's kubeconfig is found; pre-deploy runs are unaffected.
-Code 64 (UsageError) covers problems with the flags on the
-command line: an unknown flag, or a combination that is individually valid
+Code 64 (UsageError) covers problems with the command line itself: an
+unknown flag, a wrong number of positional arguments (e.g. `okdctl node
+remove` without a node name), or a flag combination that is individually valid
 but not sensible together — `--target`/`--only` without `--confirm-cluster`,
 `--dry-run` combined with a `--skip-*` flag. Rule of thumb: if the fix is
 "edit your YAML", it's ConfigError; if the fix is "change your command

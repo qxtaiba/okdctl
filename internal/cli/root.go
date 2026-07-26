@@ -5,9 +5,9 @@
 // (see errDoctorWarn), plan drift detected=7 (see errPlanDrift), config file
 // not found=66 (EX_NOINPUT), invalid pull secret JSON=65 (EX_DATAERR), sudo
 // not found=71 (EX_OSERR), unknown-flag error=64 (EX_USAGE, via
-// SetFlagErrorFunc), internal panic=70 (EX_SOFTWARE, via execute's
-// recover), other error=1 (includes unknown subcommands,
-// arg-count violations, and mutually-exclusive-flag conflicts which cobra
+// SetFlagErrorFunc; arg-count violations via wrapArgValidators), internal
+// panic=70 (EX_SOFTWARE, via execute's recover), other error=1 (includes
+// unknown subcommands and mutually-exclusive-flag conflicts which cobra
 // surfaces outside the flag-parser), SIGINT=130, SIGTERM=143, success=0.
 // See docs/cli/exit-codes.md for the full taxonomy table.
 package cli
@@ -101,11 +101,37 @@ per 24h, cached locally); set OKDCTL_NO_UPDATE_CHECK=1 to disable.`,
 // computed by execute().
 func Execute() {
 	slog.SetDefault(tui.SimpleLogger())
+	wrapArgValidators(rootCmd)
 	code := execute()
 	if logFileCloser != nil {
 		_ = logFileCloser.Close()
 	}
 	os.Exit(code)
+}
+
+// wrapArgValidators wraps every command's positional-arg validator so a
+// violation surfaces as UsageError (exit 64, EX_USAGE) instead of cobra's
+// bare error (exit 1), keeping arg-count failures consistent with the
+// unknown-flag path installed by SetFlagErrorFunc. Hand-rolled validators
+// that already return UsageError pass through unchanged. Runs once from
+// Execute, after every init() has registered its commands.
+func wrapArgValidators(cmd *cobra.Command) {
+	if fn := cmd.Args; fn != nil {
+		cmd.Args = func(c *cobra.Command, args []string) error {
+			err := fn(c, args)
+			if err == nil {
+				return nil
+			}
+			var usageErr *errtypes.UsageError
+			if errors.As(err, &usageErr) {
+				return err
+			}
+			return &errtypes.UsageError{Msg: err.Error(), Err: err}
+		}
+	}
+	for _, c := range cmd.Commands() {
+		wrapArgValidators(c)
+	}
 }
 
 func execute() (code int) {
