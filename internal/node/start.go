@@ -60,6 +60,8 @@ func (r *Runner) Start(ctx context.Context, opts StartOptions) error {
 		return ErrDeclined
 	}
 
+	r.Log.Info("node: starting cluster", "masters", cpCount, "workers", workerCount)
+
 	if err := markStep(r.marker(), OpStart, r.Cfg.Cluster.Name, StepPowerOn, r.RunID, r.Cfg.Cluster.Name); err != nil {
 		return err
 	}

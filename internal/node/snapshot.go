@@ -112,6 +112,7 @@ func (r *Runner) CreateSnapshot(ctx context.Context, target string, opts Snapsho
 		}()
 	}
 
+	r.Log.Info("node: creating snapshot", "node", target, "name", name)
 	stop := r.startProgress(fmt.Sprintf("snapshotting %s", target))
 	cerr := r.Snapshot.CreateSnapshot(ctx, r.Proxmox, vmid, name, opts.Description, r.snapshotTimeout())
 	stop()
@@ -179,6 +180,8 @@ func (r *Runner) RollbackSnapshot(ctx context.Context, target, snapname string, 
 		r.Log.Info("node: dry-run — would roll back vm to snapshot (auto-starts the vm)", "node", target, "vmid", vmid, "name", snapname)
 		return nil
 	}
+
+	r.Log.Info("node: rolling back to snapshot", "node", target, "name", snapname)
 
 	if err := r.cordonAndDrain(ctx, OpSnapshot, target, "", isMaster, Step("")); err != nil {
 		return err

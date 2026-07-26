@@ -67,6 +67,8 @@ func (r *Runner) Stop(ctx context.Context, opts StopOptions) error {
 		return ErrDeclined
 	}
 
+	r.Log.Info("node: stopping cluster", "workers", len(workers), "masters", len(masters))
+
 	if err := r.cordonAll(ctx, workers, masters); err != nil {
 		return err
 	}
@@ -127,7 +129,7 @@ func (r *Runner) reportSignerExpiry(ctx context.Context) {
 	date := notAfter.Format("2006-01-02")
 	switch {
 	case remaining <= 0:
-		r.Log.Warn("node: kube-apiserver-to-kubelet-signer already expired", "expired", date)
+		r.Log.Warn("node: kube-apiserver-to-kubelet-signer already expired", "days_remaining", days, "expires", date)
 	case remaining < signerWarnWindow:
 		r.Log.Warn("node: kube-apiserver-to-kubelet-signer expires soon", "days_remaining", days, "expires", date)
 	default:

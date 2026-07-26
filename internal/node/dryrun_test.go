@@ -749,15 +749,16 @@ func TestCompactDryRunAgainstDegradedEtcdStillPreviews(t *testing.T) {
 	dir := t.TempDir()
 	var buf bytes.Buffer
 	r := &Runner{
-		Cluster:    fc,
-		TF:         ftf,
-		Cfg:        cfg,
-		ConfigPath: filepath.Join(dir, "okdctl.yaml"),
-		WorkDir:    dir,
-		EnvDir:     dir,
-		RunID:      "test-run",
-		DryRun:     true,
-		Log:        slog.New(slog.NewTextHandler(&buf, nil)),
+		Cluster:         fc,
+		TF:              ftf,
+		Cfg:             cfg,
+		ConfigPath:      filepath.Join(dir, "okdctl.yaml"),
+		WorkDir:         dir,
+		EnvDir:          dir,
+		RunID:           "test-run",
+		DryRun:          true,
+		EtcdGateTimeout: DefaultEtcdGateTimeout,
+		Log:             slog.New(slog.NewTextHandler(&buf, nil)),
 	}
 
 	if err := r.Compact(context.Background(), CompactOptions{IngressReplicas: 2}); err != nil {
@@ -768,7 +769,7 @@ func TestCompactDryRunAgainstDegradedEtcdStillPreviews(t *testing.T) {
 	if !strings.Contains(out, "compact plan") {
 		t.Errorf("preview did not print against degraded etcd:\n%s", out)
 	}
-	if !strings.Contains(out, "etcd: UNHEALTHY") || !strings.Contains(out, "wait up to 10m") {
+	if !strings.Contains(out, "etcd: UNHEALTHY") || !strings.Contains(out, "wait_up_to=10m0s") {
 		t.Errorf("preview missing the etcd verdict line:\n%s", out)
 	}
 

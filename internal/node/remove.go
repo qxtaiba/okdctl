@@ -112,6 +112,8 @@ func (r *Runner) RemoveWorker(ctx context.Context, target string, opts RemoveOpt
 		}
 	}
 
+	r.Log.Info("node: removing worker", "node", target)
+
 	if !opts.SkipDrain {
 		if err := r.cordonAndDrain(ctx, OpRemove, target, opts.DrainTimeout, false, resumeStep); err != nil {
 			return err

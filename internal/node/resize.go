@@ -101,7 +101,7 @@ func (r *Runner) Resize(ctx context.Context, scope ResizeScope, opts ResizeOptio
 				return &errtypes.ConfigError{Msg: err.Error(), Err: err}
 			}
 		} else if delta > 0 {
-			r.Log.Warn("node: could not verify host memory budget (no Proxmox probe); ensure the host has headroom before growing nodes",
+			r.Log.Warn("node: could not verify host memory budget (no proxmox probe); ensure the host has headroom before growing nodes",
 				"delta_mib_per_node", delta, "nodes", len(targets))
 		}
 	}
@@ -123,6 +123,10 @@ func (r *Runner) Resize(ctx context.Context, scope ResizeScope, opts ResizeOptio
 			r.Log.Info("node: resize cancelled", "role", string(role))
 			return ErrDeclined
 		}
+	}
+
+	if !r.DryRun {
+		r.Log.Info("node: resizing nodes", "role", string(role), "nodes", len(targets), "memory_mb", opts.MemoryMB)
 	}
 
 	for _, t := range targets {

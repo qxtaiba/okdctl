@@ -190,6 +190,8 @@ func (r *Runner) AddWorkers(ctx context.Context, opts AddOptions) error {
 		}
 	}
 
+	r.Log.Info("node: adding workers", "count", opts.Count)
+
 	// One batch-scoped join window: revive the ignition server once, and defer
 	// its teardown NOW — before any VM exists — so it fires on success,
 	// failure, timeout, or panic and the window is never left open. Teardown is
