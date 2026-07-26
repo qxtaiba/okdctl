@@ -20,7 +20,7 @@ const releaseImageRef = "quay.io/okd/scos-release:"
 // OKD release container image, and installs them to BinDir.
 func (p *Phase) DownloadOKDTools(ctx context.Context, version string, opts *Options) error {
 	if err := system.EnsureDir(opts.DownloadDir); err != nil {
-		return &errtypes.ConfigError{Msg: "failed to create download directory", Err: err}
+		return &errtypes.ConfigError{Msg: "create download directory", Err: err}
 	}
 
 	ocPath, err := p.bootstrapOC(ctx, opts.DownloadDir)
@@ -57,7 +57,7 @@ func (p *Phase) InstallToolsToSystem(ctx context.Context, srcDir string) error {
 		destPath := filepath.Join(destDir, binary)
 
 		if err := atomicInstallFile(srcPath, destPath, 0o755); err != nil {
-			return &errtypes.ConfigError{Msg: fmt.Sprintf("failed to install %s", binary), Err: err}
+			return &errtypes.ConfigError{Msg: fmt.Sprintf("install %s", binary), Err: err}
 		}
 
 		p.Log.Info("tools: installed binary", "binary", binary, "path", destPath)

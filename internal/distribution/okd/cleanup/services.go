@@ -88,7 +88,7 @@ func WebServer(ctx context.Context, httpServerRoot string, logger *slog.Logger) 
 
 	ignitionFiles, err := filepath.Glob(filepath.Join(ignitionDir, "*.ign"))
 	if err != nil {
-		return &errtypes.ConfigError{Msg: "failed to glob ignition files", Err: err}
+		return &errtypes.ConfigError{Msg: "glob ignition files", Err: err}
 	}
 
 	if len(ignitionFiles) == 0 {

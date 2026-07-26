@@ -138,7 +138,7 @@ func (p *Phase) UploadCustomISOsToProxmox(ctx context.Context, cfg *config.Confi
 
 	isoFiles, err := collectISOFiles(isoDir)
 	if err != nil {
-		return &errtypes.ConfigError{Msg: "failed to collect ISO files", Err: err}
+		return &errtypes.ConfigError{Msg: "collect ISO files", Err: err}
 	}
 	if len(isoFiles) == 0 {
 		p.Log.Warn("iso: no iso files found to upload")

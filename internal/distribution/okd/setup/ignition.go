@@ -66,12 +66,12 @@ func (p *Phase) generateInstallConfig(ctx context.Context, cfg *config.Config, o
 		return err
 	}
 	if err := system.EnsureDir(outputDir); err != nil {
-		return &errtypes.ConfigError{Msg: "failed to create output directory", Err: err}
+		return &errtypes.ConfigError{Msg: "create output directory", Err: err}
 	}
 
 	pullSecret, err := readNoFollow(cfg.Files.PullSecret)
 	if err != nil {
-		return &errtypes.AuthError{Msg: "failed to read pull secret", Err: err}
+		return &errtypes.AuthError{Msg: "read pull secret", Err: err}
 	}
 	defer zeroBytesFn(pullSecret)
 	if !json.Valid(pullSecret) {
@@ -80,7 +80,7 @@ func (p *Phase) generateInstallConfig(ctx context.Context, cfg *config.Config, o
 
 	sshKey, err := readNoFollow(cfg.Files.SSHPublicKey)
 	if err != nil {
-		return &errtypes.ConfigError{Msg: "failed to read SSH key", Err: err}
+		return &errtypes.ConfigError{Msg: "read SSH key", Err: err}
 	}
 
 	hostPrefix := cfg.Networking.HostPrefix
@@ -107,7 +107,7 @@ func (p *Phase) generateInstallConfig(ctx context.Context, cfg *config.Config, o
 		func() (string, error) { return templates.RenderInstallConfig(&data) },
 		outputPath, 0o600, "install-config.yaml",
 	); err != nil {
-		return &errtypes.ConfigError{Msg: "failed to render install-config.yaml", Err: err}
+		return &errtypes.ConfigError{Msg: "render install-config.yaml", Err: err}
 	}
 
 	// openshift-install consumes install-config.yaml during manifest generation;
@@ -124,7 +124,7 @@ func (p *Phase) generateInstallConfig(ctx context.Context, cfg *config.Config, o
 	defer zeroBytesFn(rendered)
 	backupPath := outputPath + ".backup"
 	if err := system.AtomicWrite(backupPath, rendered, 0o600); err != nil {
-		return &errtypes.ConfigError{Msg: "failed to backup install-config.yaml", Err: err}
+		return &errtypes.ConfigError{Msg: "backup install-config.yaml", Err: err}
 	}
 
 	return nil
@@ -186,7 +186,7 @@ func (p *Phase) GenerateManifests(ctx context.Context, clusterDir string) error 
 	}
 
 	if err := system.AtomicWrite(ManifestsSentinel(clusterDir), nil, 0o644); err != nil {
-		return &errtypes.ClusterError{Msg: "failed to write manifests sentinel", Err: err}
+		return &errtypes.ClusterError{Msg: "write manifests sentinel", Err: err}
 	}
 	return nil
 }
@@ -203,12 +203,12 @@ func (p *Phase) InjectCustomManifests(ctx context.Context, projectRoot, clusterD
 
 	entries, err := os.ReadDir(customDir)
 	if err != nil {
-		return 0, &errtypes.ConfigError{Msg: "failed to read custom manifests directory", Err: err}
+		return 0, &errtypes.ConfigError{Msg: "read custom manifests directory", Err: err}
 	}
 
 	openshiftDir := filepath.Join(clusterDir, openshiftSubdir)
 	if err := system.EnsureDir(openshiftDir); err != nil {
-		return 0, &errtypes.ConfigError{Msg: "failed to ensure openshift manifests directory", Err: err}
+		return 0, &errtypes.ConfigError{Msg: "ensure openshift manifests directory", Err: err}
 	}
 
 	count := 0
@@ -229,7 +229,7 @@ func (p *Phase) InjectCustomManifests(ctx context.Context, projectRoot, clusterD
 		destPath := filepath.Join(openshiftDir, name)
 
 		if err := system.CopyFile(srcPath, destPath); err != nil {
-			return count, &errtypes.ConfigError{Msg: fmt.Sprintf("failed to inject %s", name), Err: err}
+			return count, &errtypes.ConfigError{Msg: fmt.Sprintf("inject %s", name), Err: err}
 		}
 		count++
 	}
@@ -250,7 +250,7 @@ func (p *Phase) InjectCompactClusterManifests(ctx context.Context, clusterDir st
 
 	openshiftDir := filepath.Join(clusterDir, openshiftSubdir)
 	if err := system.EnsureDir(openshiftDir); err != nil {
-		return &errtypes.ConfigError{Msg: "failed to ensure openshift manifests directory", Err: err}
+		return &errtypes.ConfigError{Msg: "ensure openshift manifests directory", Err: err}
 	}
 
 	destPath := filepath.Join(openshiftDir, "99-ingress-controller-master-placement.yaml")
@@ -260,7 +260,7 @@ func (p *Phase) InjectCompactClusterManifests(ctx context.Context, clusterDir st
 		},
 		destPath, 0o644, "compact cluster ingress manifest",
 	); err != nil {
-		return &errtypes.ConfigError{Msg: "failed to render compact cluster ingress manifest", Err: err}
+		return &errtypes.ConfigError{Msg: "render compact cluster ingress manifest", Err: err}
 	}
 	return nil
 }
@@ -279,7 +279,7 @@ func (p *Phase) GenerateIgnitionConfigs(ctx context.Context, clusterDir string) 
 	}
 
 	if err := system.AtomicWrite(IgnitionSentinel(clusterDir), nil, 0o644); err != nil {
-		return &errtypes.ClusterError{Msg: "failed to write ignition sentinel", Err: err}
+		return &errtypes.ClusterError{Msg: "write ignition sentinel", Err: err}
 	}
 	return nil
 }
@@ -303,7 +303,7 @@ func (p *Phase) ValidateIgnitionFiles(ctx context.Context, clusterDir string) er
 			if errors.Is(err, os.ErrNotExist) {
 				return &errtypes.ConfigError{Msg: fmt.Sprintf("%s was not generated", file)}
 			}
-			return &errtypes.ConfigError{Msg: fmt.Sprintf("failed to stat %s", file), Err: err}
+			return &errtypes.ConfigError{Msg: fmt.Sprintf("stat %s", file), Err: err}
 		}
 
 		if info.Size() < minSize {
@@ -312,7 +312,7 @@ func (p *Phase) ValidateIgnitionFiles(ctx context.Context, clusterDir string) er
 
 		content, err := os.ReadFile(path)
 		if err != nil {
-			return &errtypes.ConfigError{Msg: fmt.Sprintf("failed to read %s", file), Err: err}
+			return &errtypes.ConfigError{Msg: fmt.Sprintf("read %s", file), Err: err}
 		}
 
 		var js json.RawMessage

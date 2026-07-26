@@ -326,7 +326,7 @@ func (p *Phase) DetectCoreOSVersion(ctx context.Context, okdVersion string) (*Co
 	)
 	sd, err := fetchCoreOSStream(ctx, streamURL, pin.JSONSHA256)
 	if err != nil {
-		return nil, &errtypes.ClusterError{Msg: "failed to fetch CoreOS stream info", Err: err}
+		return nil, &errtypes.ClusterError{Msg: "fetch CoreOS stream info", Err: err}
 	}
 	return coreOSInfoFromStream(sd)
 }
@@ -353,7 +353,7 @@ func (p *Phase) DownloadCoreOSISO(ctx context.Context, info *CoreOSInfo, destPat
 	p.Log.Info("coreos: downloading iso", "version", info.Version, "url", info.ISOUrl)
 
 	if err := system.EnsureDir(filepath.Dir(destPath)); err != nil {
-		return &errtypes.ConfigError{Msg: "failed to ensure CoreOS ISO destination directory", Err: err}
+		return &errtypes.ConfigError{Msg: "ensure CoreOS ISO destination directory", Err: err}
 	}
 
 	if err := download.Fetch(
@@ -363,7 +363,7 @@ func (p *Phase) DownloadCoreOSISO(ctx context.Context, info *CoreOSInfo, destPat
 		download.WithLogger(p.Log),
 		download.WithProgress(tui.ProgressBarsEnabled()),
 	); err != nil {
-		return &errtypes.NetworkError{Msg: "failed to download CoreOS ISO", Err: err}
+		return &errtypes.NetworkError{Msg: "download CoreOS ISO", Err: err}
 	}
 
 	p.Log.Info("coreos: iso downloaded", "path", destPath)
@@ -390,7 +390,7 @@ func (p *Phase) EnsureCoreOSISO(ctx context.Context, cfg *config.Config, opts *O
 	// Separate from custom-isos directory which gets uploaded to Proxmox
 	downloadsDir := filepath.Join(opts.WorkDir, "downloads")
 	if err := system.EnsureDir(downloadsDir); err != nil {
-		return "", &errtypes.ConfigError{Msg: "failed to create downloads directory", Err: err}
+		return "", &errtypes.ConfigError{Msg: "create downloads directory", Err: err}
 	}
 
 	isoFilename := filepath.Base(info.ISOUrl)

@@ -34,7 +34,7 @@ func Terraform(ctx context.Context, projectRoot, terraformEnv string, logger *sl
 			logger.Info("cleanup: terraform environments directory does not exist")
 			return nil
 		}
-		return &errtypes.ConfigError{Msg: "failed to read terraform environments directory", Err: err}
+		return &errtypes.ConfigError{Msg: "read terraform environments directory", Err: err}
 	}
 
 	for _, entry := range entries {

@@ -109,7 +109,7 @@ func (p *Phase) InstallExternalTools(ctx context.Context, cfg *config.Config) er
 	tools := append([]externalTool{toolTerraform, toolYQ}, addonRequiredTools(cfg)...)
 	for _, tool := range tools {
 		if err := p.installTool(ctx, tool); err != nil {
-			return &errtypes.ConfigError{Msg: fmt.Sprintf("failed to install %s", tool), Err: err}
+			return &errtypes.ConfigError{Msg: fmt.Sprintf("install %s", tool), Err: err}
 		}
 	}
 	return nil

@@ -160,7 +160,7 @@ func CopyFileMode(src, dst string, mode os.FileMode) error {
 		}
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return &errtypes.AuthError{
-			Msg: fmt.Sprintf("failed to lstat write target %q before write", dst),
+			Msg: fmt.Sprintf("lstat write target %q before write", dst),
 			Err: err,
 		}
 	}
@@ -244,7 +244,7 @@ func AtomicWrite(path string, data []byte, perm os.FileMode) error {
 		}
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return &errtypes.AuthError{
-			Msg: fmt.Sprintf("failed to lstat write target %q before write", path),
+			Msg: fmt.Sprintf("lstat write target %q before write", path),
 			Err: err,
 		}
 	}

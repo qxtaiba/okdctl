@@ -60,9 +60,9 @@ func (p *Phase) StartWorkerVMs(ctx context.Context, cfg *config.Config, opts *Op
 	}
 
 	if err := tf.Apply(ctx, applyOpts); err != nil {
-		msg := "failed to start worker VMs"
+		msg := "start worker VMs"
 		if snapPath != "" {
-			msg = fmt.Sprintf("failed to start worker VMs (state backup: %s)", snapPath)
+			msg = fmt.Sprintf("start worker VMs (state backup: %s)", snapPath)
 		}
 		return tf.WithLockHint(&errtypes.ClusterError{Msg: msg, Err: err})
 	}

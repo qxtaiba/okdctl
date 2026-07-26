@@ -48,12 +48,12 @@ func (p *Phase) BuildCustomISOs(ctx context.Context, cfg *config.Config, opts *O
 
 	fcosISO, err := p.findOrDownloadFCOSISO(ctx, cfg, opts)
 	if err != nil {
-		return &errtypes.NetworkError{Msg: "failed to find or download CoreOS ISO", Err: err}
+		return &errtypes.NetworkError{Msg: "find or download CoreOS ISO", Err: err}
 	}
 
 	nodes, err := p.BuildNodeList(cfg)
 	if err != nil {
-		return &errtypes.ConfigError{Msg: "failed to build node list", Err: err}
+		return &errtypes.ConfigError{Msg: "build node list", Err: err}
 	}
 
 	var sshKey string
@@ -113,7 +113,7 @@ func (p *Phase) BuildCustomISOs(ctx context.Context, cfg *config.Config, opts *O
 		p.Log.Info("iso: building custom coreos iso", "node", node.Name)
 
 		if err := p.buildNodeISO(ctx, cfg, node, fcosISO, isoDir, sshKey, fp, fpFile, caCertPath); err != nil {
-			return &errtypes.ClusterError{Msg: fmt.Sprintf("failed to build ISO for %s", node.Name), Err: err}
+			return &errtypes.ClusterError{Msg: fmt.Sprintf("build ISO for %s", node.Name), Err: err}
 		}
 	}
 

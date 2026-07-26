@@ -70,7 +70,7 @@ func (p *Phase) bootstrapOC(ctx context.Context, downloadDir string) (string, er
 		download.WithLogger(p.Log),
 		download.WithProgress(tui.ProgressBarsEnabled()),
 	); err != nil {
-		return "", &errtypes.NetworkError{Msg: "failed to download bootstrap oc", Err: err}
+		return "", &errtypes.NetworkError{Msg: "download bootstrap oc", Err: err}
 	}
 
 	if err := download.ExtractTarGz(
@@ -78,7 +78,7 @@ func (p *Phase) bootstrapOC(ctx context.Context, downloadDir string) (string, er
 		download.WithExtractCleanupArchive(true),
 		download.WithExtractLogger(p.Log),
 	); err != nil {
-		return "", &errtypes.NetworkError{Msg: "failed to extract bootstrap oc", Err: err}
+		return "", &errtypes.NetworkError{Msg: "extract bootstrap oc", Err: err}
 	}
 
 	fi, statErr := os.Stat(ocPath)

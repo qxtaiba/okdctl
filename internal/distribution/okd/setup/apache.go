@@ -34,7 +34,7 @@ func (p *Phase) ensureIgnitionDir(ctx context.Context, webRoot string) (string, 
 	// 0o750: apache user owns and reads; local non-apache users cannot read
 	// ignition files which embed the cluster pull-secret.
 	if err := os.MkdirAll(ignitionDir, 0o750); err != nil {
-		return "", &errtypes.ConfigError{Msg: "failed to create ignition directory", Err: err}
+		return "", &errtypes.ConfigError{Msg: "create ignition directory", Err: err}
 	}
 
 	apacheUser := p.OS.ApacheUser()
@@ -137,11 +137,11 @@ func (p *Phase) ConfigureApache(ctx context.Context, cfg *config.Config, project
 
 	certPath, keyPath := IgnitionCertPaths(projectRoot)
 	if err := p.configureApacheHTTPS(ctx, certPath, keyPath, webRoot, bindIP); err != nil {
-		return &errtypes.ClusterError{Msg: "failed to configure apache HTTPS vhost", Err: err}
+		return &errtypes.ClusterError{Msg: "configure apache HTTPS vhost", Err: err}
 	}
 
 	if err := enableAndStartApache(ctx, p.OS.ApacheServiceName()); err != nil {
-		return &errtypes.ClusterError{Msg: "failed to enable and start apache", Err: err}
+		return &errtypes.ClusterError{Msg: "enable and start apache", Err: err}
 	}
 
 	p.verifyApacheListening(ctx, bindIP)
@@ -238,7 +238,7 @@ func (p *Phase) DeployToWebServer(ctx context.Context, cfg *config.Config, clust
 		// is existence-only — a torn copy would be skipped on resume and served
 		// to booting nodes.
 		if err := system.AtomicWrite(destPath, data, 0o640); err != nil {
-			return &errtypes.ConfigError{Msg: fmt.Sprintf("failed to copy %s", file), Err: err}
+			return &errtypes.ConfigError{Msg: fmt.Sprintf("copy %s", file), Err: err}
 		}
 	}
 
@@ -258,7 +258,7 @@ func (p *Phase) VerifyWebServer(ctx context.Context, baseURL string, caCertPEM [
 	}
 	cert, parseErr := x509.ParseCertificate(block.Bytes)
 	if parseErr != nil {
-		return &errtypes.ConfigError{Msg: "failed to parse ignition ca cert", Err: parseErr}
+		return &errtypes.ConfigError{Msg: "parse ignition ca cert", Err: parseErr}
 	}
 	pool := x509.NewCertPool()
 	pool.AddCert(cert)
@@ -268,12 +268,12 @@ func (p *Phase) VerifyWebServer(ctx context.Context, baseURL string, caCertPEM [
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, testURL, http.NoBody)
 	if err != nil {
-		return &errtypes.NetworkError{Msg: "failed to create request", Err: err}
+		return &errtypes.NetworkError{Msg: "create request", Err: err}
 	}
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return &errtypes.NetworkError{Msg: "failed to connect to web server", Err: err}
+		return &errtypes.NetworkError{Msg: "connect to web server", Err: err}
 	}
 	defer func() { _ = resp.Body.Close() }()
 

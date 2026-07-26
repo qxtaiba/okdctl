@@ -349,7 +349,7 @@ func (p *Provider) planProvisionedNodes(cfg *config.Config) ([]vmNodeSpec, error
 	for i := range cfg.Topology.ControlPlane.Count {
 		ip, err := netutil.CalculateVMIP(startIP, 1+i)
 		if err != nil {
-			return nil, &errtypes.ConfigError{Msg: fmt.Sprintf("failed to calculate %s%d IP", nodetypes.RoleMaster, i), Err: err}
+			return nil, &errtypes.ConfigError{Msg: fmt.Sprintf("calculate %s%d IP", nodetypes.RoleMaster, i), Err: err}
 		}
 		nodes = append(nodes, vmNodeSpec{name: fmt.Sprintf("%s%d", nodetypes.RoleMaster, i), ip: ip})
 	}
@@ -358,7 +358,7 @@ func (p *Provider) planProvisionedNodes(cfg *config.Config) ([]vmNodeSpec, error
 	for i := range cfg.Topology.Workers.Count {
 		ip, err := netutil.CalculateVMIP(startIP, workerOffset+i)
 		if err != nil {
-			return nil, &errtypes.ConfigError{Msg: fmt.Sprintf("failed to calculate %s%d IP", nodetypes.RoleWorker, i), Err: err}
+			return nil, &errtypes.ConfigError{Msg: fmt.Sprintf("calculate %s%d IP", nodetypes.RoleWorker, i), Err: err}
 		}
 		nodes = append(nodes, vmNodeSpec{name: fmt.Sprintf("%s%d", nodetypes.RoleWorker, i), ip: ip})
 	}
