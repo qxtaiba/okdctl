@@ -12,6 +12,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/setup"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/infrastructure/terraform"
+	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/nodetypes"
 	"github.com/qxtaiba/okdctl/internal/system"
 )
@@ -332,24 +333,19 @@ func (r *Runner) addOneWorker(ctx context.Context, idx int, marker *OpMarker) er
 // waitWorkerJoined blocks until node registers and reports Ready or the gate
 // times out (NodeReadyTimeout). Each poll first approves any pending kubelet
 // CSRs — a joining node cannot register until its bootstrap CSR is approved —
-// then checks the node's readiness. The CSR-approval failure log is gated
-// log-once-then-debug so a transient hiccup does not flood the wait window
-// (mirrors install/monitor.go's poll loop).
+// then checks the node's readiness. The CSR-approval failure log is deduped
+// so a transient hiccup does not flood the wait window.
 func (r *Runner) waitWorkerJoined(ctx context.Context, node string) error {
 	stop := r.startProgress(fmt.Sprintf("waiting for %s to join and become ready", node))
 	defer stop()
 
-	var lastApproveWarn, lastReason string
+	approveWarn := logutil.NewDedupWarner(r.Log)
+	var lastReason string
 	ok := func(ctx context.Context) bool {
 		if approved, aerr := r.Cluster.ApprovePendingCSRs(ctx); aerr != nil {
-			if msg := aerr.Error(); msg != lastApproveWarn {
-				r.Log.Warn("node: csr approval check failed", "err", aerr)
-				lastApproveWarn = msg
-			} else {
-				r.Log.Debug("node: csr approval check failed (repeated)", "err", aerr)
-			}
+			approveWarn.Warn(aerr.Error(), "node: csr approval check failed", "err", aerr)
 		} else {
-			lastApproveWarn = ""
+			approveWarn.Reset()
 			if approved > 0 {
 				r.Log.Info("node: approved pending csrs", "approved", approved)
 			}
