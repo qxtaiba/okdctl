@@ -237,6 +237,13 @@ func GetProxmoxCredentials(cfg *config.Config) *ProxmoxCredentials {
 		return creds
 	}
 
+	// Validators reject http:// without the insecure_http opt-in at config
+	// load; enforce it here too so an http endpoint never receives plaintext
+	// credentials via a caller that skipped validation.
+	if strings.HasPrefix(host, "http://") && !px.InsecureHTTP {
+		return creds
+	}
+
 	if !strings.HasPrefix(host, "https://") && !strings.HasPrefix(host, "http://") {
 		host = "https://" + host
 	}
