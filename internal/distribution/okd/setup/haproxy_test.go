@@ -138,3 +138,31 @@ func TestConfigureHAProxy_NoBackup_SkipsRollback(t *testing.T) {
 		t.Error("backup must not be created when no prior config exists")
 	}
 }
+
+func TestConfigureHAProxy_RerunPreservesPristineBackup(t *testing.T) {
+	tmpDir := t.TempDir()
+	binDir := t.TempDir()
+	writeFakeHAProxy(t, binDir, 0)
+
+	setupSeams(t, tmpDir, func(_ context.Context) error { return nil })
+
+	const pristine = "# operator config"
+	if err := os.WriteFile(haproxyConfigPath, []byte(pristine), 0o644); err != nil {
+		t.Fatalf("pre-seed config: %v", err)
+	}
+
+	p := newPhase(t, binDir)
+	for run := 1; run <= 2; run++ {
+		if err := p.ConfigureHAProxy(context.Background(), minimalCfg(), &Options{}); err != nil {
+			t.Fatalf("run %d: unexpected error: %v", run, err)
+		}
+	}
+
+	data, err := os.ReadFile(haproxyBackupPath)
+	if err != nil {
+		t.Fatalf("read backup: %v", err)
+	}
+	if string(data) != pristine {
+		t.Errorf("pristine backup clobbered on re-run: got %q, want %q", data, pristine)
+	}
+}

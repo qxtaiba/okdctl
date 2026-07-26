@@ -116,9 +116,12 @@ func (p *Phase) ConfigureHAProxy(ctx context.Context, cfg *config.Config, _ *Opt
 	defer func() { _ = os.Remove(tmpPath) }()
 
 	// Back up the live config so we can roll back if validation or restart
-	// fails after the new config is already in place.
-	hasBackup := false
-	if system.FileExists(haproxyConfigPath) {
+	// fails after the new config is already in place. The fixed backup path
+	// is the single pristine pre-okdctl snapshot: from the second run onward
+	// the live file is okdctl's own render, so an existing backup is never
+	// overwritten — postinstall's timestamped backups cover later snapshots.
+	hasBackup := system.FileExists(haproxyBackupPath)
+	if !hasBackup && system.FileExists(haproxyConfigPath) {
 		if err := system.CopyFile(haproxyConfigPath, haproxyBackupPath); err != nil {
 			return &errtypes.ConfigError{Msg: "failed to back up existing haproxy.cfg", Err: err}
 		}
