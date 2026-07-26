@@ -3456,7 +3456,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `err:6b533f2d:wrap-double-context` — wrap double context
 
-**Status:** in progress — scope files done (c965d653); repo-wide 'failed to' sweep in post-merge pass
+**Status:** done (fix/audit-w12 8b7c138f)
 **Severity:** minor
 **Cluster:** wrapping
 **Evidence:** `internal/cluster/k8s_csrs.go:32-32` + 85 more
@@ -3548,7 +3548,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `con:2845ab58:synctest-opportunity` — synctest opportunity
 
-**Status:** in progress — spinner done (93f753b0); stepprogress_test 2ms sleep in post-merge sweep
+**Status:** done (fix/audit-w12 6cf53e17)
 **Severity:** suggestion
 **Cluster:** time-sleep-retry
 **Evidence:** `internal/tui/spinner_test.go:176-194` + 2 more
@@ -3790,7 +3790,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `api:a59bcd89:export-no-caller` — export no caller
 
-**Status:** in progress — ColorProfile done (7e18f059); ColorEnabled/Downsample tui-wide unexport in post-merge sweep
+**Status:** done (fix/audit-w12 fa3c7ec6)
 **Severity:** suggestion
 **Cluster:** exported-surface
 **Evidence:** `internal/tui/colorprofile.go:36-49`
@@ -3830,7 +3830,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `api:7b2829bb:zero-value-unusable` — zero value unusable
 
-**Status:** in progress — executor done (645944ad); construct-via-New docs on cluster.Client/terraform.Executor/platform in post-merge sweep
+**Status:** done (fix/audit-w12 beddef9f)
 **Severity:** minor
 **Cluster:** zero-value-usability
 **Evidence:** `internal/executor/executor.go:288-295` + 3 more
@@ -3922,7 +3922,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `ux:0f076161:flag-help-wording-drift` — flag help wording drift
 
-**Status:** in progress — destroy+cleanup done (b7fa4ae9); addon.go/update_ingress.go sites in post-merge sweep
+**Status:** done (fix/audit-w12 a3ff1f2f)
 **Severity:** minor
 **Cluster:** help-text
 **Evidence:** `internal/cli/destroy.go:183-184` + 3 more
