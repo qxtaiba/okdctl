@@ -87,7 +87,7 @@ variable "master_data_disk_size_gb" {
 }
 
 variable "master_mon_disk_size_gb" {
-  description = "size of dedicated ceph mon-store disk for master nodes in gb; 0 (or any value below minimum_data_disk_size_gb) omits the disk — lowering this after initial apply destroys the mon disk"
+  description = "size of dedicated ceph mon-store disk for master nodes in gb; 0 omits the disk — zeroing this after initial apply destroys the mon disk, and nonzero values below minimum_data_disk_size_gb fail at plan time"
   type        = number
   default     = 0
 }
