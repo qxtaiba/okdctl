@@ -36,6 +36,11 @@ var (
 	// removeAllFn is the os.RemoveAll indirection used by RestoreSystemResolver.
 	// Tests inject a failing func to cover the logged-but-not-propagated error path.
 	removeAllFn = os.RemoveAll
+	// isNetworkManagerActiveFn and isServiceActiveFn let tests drive the
+	// resolver forward/restore paths from non-Linux hosts, where the real
+	// probes are hard-gated off by runtime.GOOS.
+	isNetworkManagerActiveFn = IsNetworkManagerActive
+	isServiceActiveFn        = system.IsServiceActive
 )
 
 var validConfigNameRegex = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$`)
@@ -179,7 +184,7 @@ func ConfigureSystemResolver(ctx context.Context, fallbackDNS []string, logger *
 		return fmt.Errorf("invalid fallback DNS configuration: %w", err)
 	}
 
-	if IsNetworkManagerActive(ctx) {
+	if isNetworkManagerActiveFn(ctx) {
 		conn, err := getActiveConnection(ctx)
 		if err != nil {
 			return err
@@ -202,7 +207,7 @@ func ConfigureSystemResolver(ctx context.Context, fallbackDNS []string, logger *
 		return nil
 	}
 
-	if system.IsServiceActive(ctx, "systemd-resolved") {
+	if isServiceActiveFn(ctx, "systemd-resolved") {
 		logger.Info("resolver: configuring systemd-resolved to use dnsmasq")
 		confPath := resolvedConf
 		confDir := filepath.Dir(resolvedConf)
@@ -242,7 +247,7 @@ func ConfigureSystemResolver(ctx context.Context, fallbackDNS []string, logger *
 // nmcli DNS override or removes the systemd-resolved drop-in. Failures are
 // logged but do not abort cleanup.
 func RestoreSystemResolver(ctx context.Context, logger *slog.Logger) error {
-	if IsNetworkManagerActive(ctx) {
+	if isNetworkManagerActiveFn(ctx) {
 		conn, err := getActiveConnection(ctx)
 		if err != nil {
 			logger.Warn("resolver: could not detect active connection for restore", "err", err)
@@ -268,7 +273,7 @@ func RestoreSystemResolver(ctx context.Context, logger *slog.Logger) error {
 		if err := removeAllFn(resolvedConf); err != nil {
 			logger.Warn("resolver: failed to remove", "path", resolvedConf, "err", err)
 		}
-		if system.IsServiceActive(ctx, "systemd-resolved") {
+		if isServiceActiveFn(ctx, "systemd-resolved") {
 			_ = system.ManageService(ctx, system.ServiceRestart, "systemd-resolved")
 		}
 		logger.Info("resolver: systemd-resolved configuration restored")
