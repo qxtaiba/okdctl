@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/qxtaiba/okdctl/internal/distribution"
@@ -187,6 +188,11 @@ func TestOrchestratorRun_ClassifiesBareErrorAsClusterError(t *testing.T) {
 	var ce *errtypes.ClusterError
 	if !errors.As(err, &ce) {
 		t.Fatalf("Run() err = %T, want *errtypes.ClusterError", err)
+	}
+	// errtypes Error() surfaces only Msg, so the root cause must be carried
+	// in Msg or every sink prints a bare "step failed".
+	if !strings.Contains(ce.Error(), "boom") {
+		t.Fatalf("classified error %q does not surface the root cause", ce.Error())
 	}
 }
 

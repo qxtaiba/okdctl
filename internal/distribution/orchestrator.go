@@ -154,7 +154,12 @@ func classifyStepErr(err error) error {
 	if errors.As(err, &ce) || errors.As(err, &ne) || errors.As(err, &cfge) || errors.As(err, &ae) || errors.As(err, &ue) {
 		return err
 	}
-	return &errtypes.ClusterError{Msg: "step failed", Err: err}
+	// errtypes Error() surfaces only Msg, so a generic Msg would drop the
+	// root cause from every sink (failure box, structured log, run log).
+	// Embedding err.Error() is as safe as the pre-classification exit-1 path
+	// was: stderr-bearing layers (executor.ExitError) already scrub and
+	// truncate their own output.
+	return &errtypes.ClusterError{Msg: "step failed: " + err.Error(), Err: err}
 }
 
 func (o *Orchestrator) executeStep(ctx context.Context, step *builtStep) StepResult {
