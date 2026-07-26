@@ -53,7 +53,7 @@ func seedMarker(t *testing.T, r *Runner, op Op, target string, step Step) {
 	}
 }
 
-func matchTarget(name string) OpMatch {
+func matchTarget(name string) opMatch {
 	return func(m *OpMarker) bool { return m.Target == name }
 }
 

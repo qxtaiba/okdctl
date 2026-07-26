@@ -84,7 +84,7 @@ func (m *Manager) Remove(ctx context.Context, packages []string) error {
 	}
 	var installed []string
 	for _, pkg := range packages {
-		ok, err := m.IsInstalled(ctx, pkg)
+		ok, err := m.isInstalled(ctx, pkg)
 		if err != nil {
 			return fmt.Errorf("query %s: %w", pkg, err)
 		}
@@ -101,12 +101,12 @@ func (m *Manager) Remove(ctx context.Context, packages []string) error {
 	return executor.RunCaptured(removeCtx, m.pkgCmd, args...)
 }
 
-// IsInstalled reports whether pkg is present via the backend's query
+// isInstalled reports whether pkg is present via the backend's query
 // command (for dpkg, stale "rc" entries are filtered). A non-zero exit
 // maps to (false, nil); other failures (ctx cancellation, LookPath,
 // I/O) propagate so callers don't treat a broken query backend as
 // "not installed".
-func (m *Manager) IsInstalled(ctx context.Context, pkg string) (bool, error) {
+func (m *Manager) isInstalled(ctx context.Context, pkg string) (bool, error) {
 	args := slices.Concat(m.queryArgs, []string{pkg})
 	output, err := executor.OutputCaptured(ctx, m.queryCmd, args...)
 	if err != nil {

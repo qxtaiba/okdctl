@@ -68,10 +68,10 @@ func foldActions(actions []string) PlanAction {
 	return PlanActionUnknown
 }
 
-// ParsePlanChanges decodes `terraform show -json` output into the non-no-op
+// parsePlanChanges decodes `terraform show -json` output into the non-no-op
 // resource changes. no-op entries are dropped so callers reason only about
 // what the plan actually mutates.
-func ParsePlanChanges(raw []byte) ([]ResourceChange, error) {
+func parsePlanChanges(raw []byte) ([]ResourceChange, error) {
 	var ps planShow
 	if err := json.Unmarshal(raw, &ps); err != nil {
 		return nil, fmt.Errorf("parse plan json: %w", err)
@@ -139,5 +139,5 @@ func (t *Executor) ShowPlanChanges(ctx context.Context, planFile string) ([]Reso
 	if result.Truncated {
 		return nil, fmt.Errorf("terraform show plan: output truncated after %d bytes", len(result.Stdout))
 	}
-	return ParsePlanChanges([]byte(result.Stdout))
+	return parsePlanChanges([]byte(result.Stdout))
 }

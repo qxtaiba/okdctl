@@ -249,7 +249,7 @@ func (r *Runner) AddWorkers(ctx context.Context, opts AddOptions) error {
 // batch's [startIdx, endIdx] range, so a resumed --count N batch reattaches to
 // a marker recorded against ANY node in the batch, not only its first — the
 // marker roams across the batch as each node is worked.
-func addBatchMatch(startIdx, endIdx int) OpMatch {
+func addBatchMatch(startIdx, endIdx int) opMatch {
 	return func(m *OpMarker) bool {
 		i, ok := cluster.NodeIndex(m.Target)
 		return ok && i >= startIdx && i <= endIdx

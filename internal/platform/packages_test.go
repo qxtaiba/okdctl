@@ -81,13 +81,13 @@ func TestIsInstalled_RHEL(t *testing.T) {
 		{"notinstalled", false},
 	}
 	for _, tc := range tests {
-		ok, err := m.IsInstalled(context.Background(), tc.pkg)
+		ok, err := m.isInstalled(context.Background(), tc.pkg)
 		if err != nil {
-			t.Errorf("IsInstalled(%q): unexpected error: %v", tc.pkg, err)
+			t.Errorf("isInstalled(%q): unexpected error: %v", tc.pkg, err)
 			continue
 		}
 		if ok != tc.wantOK {
-			t.Errorf("IsInstalled(%q) = %v; want %v", tc.pkg, ok, tc.wantOK)
+			t.Errorf("isInstalled(%q) = %v; want %v", tc.pkg, ok, tc.wantOK)
 		}
 	}
 }
@@ -104,13 +104,13 @@ func TestIsInstalled_Debian(t *testing.T) {
 		{"rcpkg", false},
 	}
 	for _, tc := range tests {
-		ok, err := m.IsInstalled(context.Background(), tc.pkg)
+		ok, err := m.isInstalled(context.Background(), tc.pkg)
 		if err != nil {
-			t.Errorf("IsInstalled(%q): unexpected error: %v", tc.pkg, err)
+			t.Errorf("isInstalled(%q): unexpected error: %v", tc.pkg, err)
 			continue
 		}
 		if ok != tc.wantOK {
-			t.Errorf("IsInstalled(%q) = %v; want %v", tc.pkg, ok, tc.wantOK)
+			t.Errorf("isInstalled(%q) = %v; want %v", tc.pkg, ok, tc.wantOK)
 		}
 	}
 }
@@ -121,9 +121,9 @@ func TestIsInstalled_LookPathError(t *testing.T) {
 	}
 	t.Setenv("PATH", "")
 	m := NewPackageManager(OS{Family: FamilyRHEL}, logutil.NopLogger)
-	_, err := m.IsInstalled(context.Background(), "any")
+	_, err := m.isInstalled(context.Background(), "any")
 	if err == nil {
-		t.Error("IsInstalled with empty PATH: want error, got nil")
+		t.Error("isInstalled with empty PATH: want error, got nil")
 	}
 }
 

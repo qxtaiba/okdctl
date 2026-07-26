@@ -8,11 +8,11 @@ import (
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 )
 
-// OpMatch reports whether an on-disk marker belongs to the op the caller is
-// about to run. beginOp resumes only when the marker's Op matches and OpMatch
+// opMatch reports whether an on-disk marker belongs to the op the caller is
+// about to run. beginOp resumes only when the marker's Op matches and opMatch
 // returns true, so each op supplies a predicate keyed on its own target
 // (node name, role, …). Pure: it must not touch the cluster or terraform.
-type OpMatch func(m *OpMarker) bool
+type opMatch func(m *OpMarker) bool
 
 // stepOrder totally orders the mutating-step vocabulary so shouldRunStep can
 // decide which steps a resume replays. A resumed op re-enters the sequence at
@@ -69,7 +69,7 @@ func shouldRunStep(step, from Step) bool {
 //     pointing at --acknowledge-interrupted-op.
 //   - a foreign marker with ack true: warn and (nil, nil) — the op proceeds
 //     fresh and its first markStep overwrites the stale marker.
-func (r *Runner) beginOp(op Op, match OpMatch, ack bool) (*OpMarker, error) {
+func (r *Runner) beginOp(op Op, match opMatch, ack bool) (*OpMarker, error) {
 	marker, err := ReadOpMarker(r.WorkDir, r.Cfg.Cluster.Name)
 	if err != nil {
 		return nil, err
@@ -185,11 +185,11 @@ func (r *Runner) refuseForeignMarker(ack bool, allowResumable ...Op) error {
 	return nil
 }
 
-// resizeScopeMatch builds the OpMatch for a resize resume. A single-node scope
+// resizeScopeMatch builds the opMatch for a resize resume. A single-node scope
 // matches the marker naming that node; a role scope matches when the marker's
 // recorded node resolves to the scoped role in the current node list, so an
 // interrupted role roll resumes on the same role it started.
-func resizeScopeMatch(scope ResizeScope, nodes []cluster.NodeDetail) OpMatch {
+func resizeScopeMatch(scope ResizeScope, nodes []cluster.NodeDetail) opMatch {
 	return func(m *OpMarker) bool {
 		if scope.Node != "" {
 			return m.Target == scope.Node
