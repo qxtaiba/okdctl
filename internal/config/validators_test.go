@@ -777,3 +777,91 @@ func TestValidateVMIDBase(t *testing.T) {
 		})
 	}
 }
+
+// TestWizardWrapperValidators sweeps the exported wizard-facing wrappers
+// with accept/reject vectors. The primitives underneath carry their own
+// tests; this locks the wrappers' delegation so an inverted condition or a
+// wrong pattern var cannot wave hostile wizard input through unnoticed.
+func TestWizardWrapperValidators(t *testing.T) {
+	cases := []struct {
+		name   string
+		fn     func(string) error
+		accept []string
+		reject []string
+	}{
+		{
+			name:   "ValidateDomain",
+			fn:     ValidateDomain,
+			accept: []string{"example.com", "okd.local", "a-b.c-d.io"},
+			reject: []string{"", "ab", "exa mple.com", "EXAMPLE.COM", "foo..bar", "-bad.com", "a.b;rm -rf /", strings.Repeat("a", 254)},
+		},
+		{
+			name:   "ValidateProxmoxNodeName",
+			fn:     ValidateProxmoxNodeName,
+			accept: []string{"pve1", "node-a", "n_1"},
+			reject: []string{"", "1pve", "-pve", "pve;reboot", "pve node", "pve$(id)"},
+		},
+		{
+			name:   "ValidateIP",
+			fn:     ValidateIP,
+			accept: []string{"192.168.1.1", "10.0.0.254", "::1", "fe80::1"},
+			reject: []string{"", "999.1.1.1", "1.2.3", "1.2.3.4/24", "host.example.com", "1.2.3.4;ls"},
+		},
+		{
+			name:   "ValidatePortNumber",
+			fn:     ValidatePortNumber,
+			accept: []string{"1", "443", "65535"},
+			reject: []string{"", "0", "-1", "65536", "8080/tcp", "abc"},
+		},
+		{
+			name:   "ValidateCPU",
+			fn:     ValidateCPU,
+			accept: []string{"1", "128"},
+			reject: []string{"0", "129", "four", ""},
+		},
+		{
+			name:   "ValidateMemory",
+			fn:     ValidateMemory,
+			accept: []string{"1024", "1048576"},
+			reject: []string{"1023", "1048577", "8G", ""},
+		},
+		{
+			name:   "ValidateOSDisk",
+			fn:     ValidateOSDisk,
+			accept: []string{"20", "1000"},
+			reject: []string{"19", "1001", "big", ""},
+		},
+		{
+			name:   "ValidateNodeCount",
+			fn:     ValidateNodeCount,
+			accept: []string{"0", "100"},
+			reject: []string{"-1", "101", "many", ""},
+		},
+		{
+			name:   "ValidateVMID",
+			fn:     ValidateVMID,
+			accept: []string{"100", "999999999"},
+			reject: []string{"99", "1000000000", "id", ""},
+		},
+		{
+			name:   "ValidateTimeout",
+			fn:     ValidateTimeout,
+			accept: []string{"60", "86400"},
+			reject: []string{"59", "86401", "1h", ""},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			for _, in := range tc.accept {
+				if err := tc.fn(in); err != nil {
+					t.Errorf("%s(%q) rejected valid input: %v", tc.name, in, err)
+				}
+			}
+			for _, in := range tc.reject {
+				if err := tc.fn(in); err == nil {
+					t.Errorf("%s(%q) accepted; want error", tc.name, in)
+				}
+			}
+		})
+	}
+}
