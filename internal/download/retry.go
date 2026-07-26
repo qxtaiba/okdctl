@@ -13,8 +13,9 @@ import (
 
 // HTTPStatusError carries the HTTP status returned from a failed request so
 // isRetryable can tell 4xx (fail fast) from 5xx (retry). Body is a ≤256-byte
-// excerpt of the response body with non-printable bytes stripped; no credential
-// scrubbing — callers who persist these errors are responsible for redaction.
+// excerpt of the response body with non-printable bytes stripped; Error()
+// applies no credential scrubbing — callers who persist its output are
+// responsible for redaction. Structured log sinks are covered by Redacted.
 type HTTPStatusError struct {
 	Status int
 	Method string
@@ -27,6 +28,16 @@ func (e *HTTPStatusError) Error() string {
 		return fmt.Sprintf("HTTP %d %s %s: %s", e.Status, e.Method, e.URL, e.Body)
 	}
 	return fmt.Sprintf("HTTP %d %s %s", e.Status, e.Method, e.URL)
+}
+
+// Redacted omits URL and Body so a tokenized/pre-signed URL or a
+// credential-echoing response body never reaches a structured log sink via
+// slog attrs; mirrors executor.ExitError.Redacted.
+func (e *HTTPStatusError) Redacted() any {
+	return struct {
+		Status int
+		Method string
+	}{e.Status, e.Method}
 }
 
 // bodySnippet trims a response-body read down to a printable string. Control
