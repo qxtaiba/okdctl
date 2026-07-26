@@ -19,7 +19,8 @@ func (p *Phase) destroyInfrastructure(ctx context.Context, cfg *config.Config, o
 		return &errtypes.ConfigError{Msg: fmt.Sprintf("terraform environment directory not found: %s", terraformDir)}
 	}
 
-	tf := terraform.New(terraformDir,
+	tf := terraform.New(
+		terraformDir,
 		terraform.WithLogger(p.Log),
 		terraform.WithEnv(p.Exec.SnapshotEnv()),
 	)
