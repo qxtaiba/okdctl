@@ -37,16 +37,16 @@ func colorProfile() colorprofile.Profile {
 	return *outputProfile.Load()
 }
 
-// ColorEnabled reports whether the active profile emits any color.
-func ColorEnabled() bool {
+// colorEnabled reports whether the active profile emits any color.
+func colorEnabled() bool {
 	return colorProfile() > colorprofile.Ascii
 }
 
-// Downsample rewrites s so its ANSI color escapes match the active output
+// downsample rewrites s so its ANSI color escapes match the active output
 // profile: returned unchanged under TrueColor, downgraded for ANSI/ANSI256,
 // and stripped entirely when stdout is not a TTY or NO_COLOR is set. This is
 // the single gate that makes lipgloss box output honor NO_COLOR and pipes.
-func Downsample(s string) string {
+func downsample(s string) string {
 	p := colorProfile()
 	if p == colorprofile.TrueColor {
 		return s
