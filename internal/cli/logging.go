@@ -154,7 +154,7 @@ func configureLogging(cmd *cobra.Command) error {
 		return err
 	}
 	if sinkErr != nil {
-		tui.Warn("default log file unavailable; continuing without persistent log", tui.LF("err", sinkErr))
+		logutil.Warn("default log file unavailable; continuing without persistent log", logutil.LF("err", sinkErr))
 	}
 	// Suppress Info/Warn chatter under json so status-style `2>&1 | jq`
 	// pipelines see a clean stream — but never for the deploy-family flows,

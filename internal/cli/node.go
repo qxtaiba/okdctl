@@ -22,6 +22,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/executor"
 	"github.com/qxtaiba/okdctl/internal/infrastructure/proxmox"
 	"github.com/qxtaiba/okdctl/internal/infrastructure/terraform"
+	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/node"
 	"github.com/qxtaiba/okdctl/internal/nodetypes"
 	"github.com/qxtaiba/okdctl/internal/render"
@@ -256,7 +257,7 @@ func buildNodeRunner(cmd *cobra.Command, cfg *config.Config, verb string, consen
 	if err != nil {
 		return nil, err
 	}
-	rc, err := env.newRunner(cmd, cfg, verb, consent, tui.SimpleLogger(), nil)
+	rc, err := env.newRunner(cmd, cfg, verb, consent, logutil.SimpleLogger(), nil)
 	if err != nil {
 		env.close()
 		return nil, err
@@ -302,7 +303,7 @@ func (e *nodeOpsEnv) newRunner(cmd *cobra.Command, cfg *config.Config, verb stri
 		node.WithProjectRoot(e.projectRoot),
 		node.WithConfigPath(cfgFile),
 		node.WithTerraformEnv(e.tfEnv),
-		node.WithRunID(tui.RunID()),
+		node.WithRunID(logutil.RunID()),
 		node.WithLogger(log))
 	runner.DryRun = consent.dryRun
 	runner.Reporter = func(desc string) func() { return tui.StartSpinner(ctx, desc) }
@@ -404,18 +405,18 @@ func runHostBudgetProbe(ctx context.Context, cfg *config.Config, creds *credenti
 		Datastores: []string{px.Storage, px.DataStorage},
 	})
 	if err != nil {
-		tui.Warn("host memory-budget probe failed; memory guard will warn instead of enforce", tui.LF("err", err))
+		logutil.Warn("host memory-budget probe failed; memory guard will warn instead of enforce", logutil.LF("err", err))
 		return 0, 0
 	}
-	tui.Info("host memory budget",
-		tui.LF("host_node", probe.Node),
-		tui.LF("total_mib", probe.HostMemTotalMiB()),
-		tui.LF("allocated_mib", probe.GuestAllocatedMiB()))
+	logutil.Info("host memory budget",
+		logutil.LF("host_node", probe.Node),
+		logutil.LF("total_mib", probe.HostMemTotalMiB()),
+		logutil.LF("allocated_mib", probe.GuestAllocatedMiB()))
 	for _, d := range probe.Datastores {
-		tui.Info("datastore headroom",
-			tui.LF("name", d.Name),
-			tui.LF("free_gib", d.AvailBytes/(1024*1024*1024)),
-			tui.LF("total_gib", d.TotalBytes/(1024*1024*1024)))
+		logutil.Info("datastore headroom",
+			logutil.LF("name", d.Name),
+			logutil.LF("free_gib", d.AvailBytes/(1024*1024*1024)),
+			logutil.LF("total_gib", d.TotalBytes/(1024*1024*1024)))
 	}
 	return probe.HostMemTotalMiB(), probe.GuestAllocatedMiB()
 }

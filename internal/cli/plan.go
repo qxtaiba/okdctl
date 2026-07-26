@@ -8,9 +8,9 @@ import (
 
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/infrastructure/terraform"
+	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/render"
 	"github.com/qxtaiba/okdctl/internal/system"
-	"github.com/qxtaiba/okdctl/internal/tui"
 	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
@@ -86,7 +86,7 @@ func runPlan(cmd *cobra.Command, _ []string) error {
 			"terraform workspace not found at %s; run 'okdctl deploy' to create it before previewing drift", envDir)}
 	}
 
-	tui.Info("plan: running terraform plan (no changes will be made)")
+	logutil.Info("plan: running terraform plan (no changes will be made)")
 
 	changes, err := runTerraformPlanPreview(cmd.Context(), cfg, planPreviewOptions{
 		ConfigPath:  cfgFile,
@@ -106,10 +106,10 @@ func runPlan(cmd *cobra.Command, _ []string) error {
 	}
 
 	if len(changes) > 0 {
-		tui.Warn("plan: drift detected", tui.LF("changes", len(changes)))
+		logutil.Warn("plan: drift detected", logutil.LF("changes", len(changes)))
 		return errPlanDrift
 	}
-	tui.Info("plan: no drift detected")
+	logutil.Info("plan: no drift detected")
 	return nil
 }
 

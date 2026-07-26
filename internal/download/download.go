@@ -55,7 +55,7 @@ func WithTimeout(d time.Duration) FetchOption { return func(c *dlConfig) { c.tim
 func WithOverwrite(v bool) FetchOption { return func(c *dlConfig) { c.overwrite = v } }
 
 // WithProgress enables the stderr progress bar. Default is off; TTY gating
-// is the caller's job — pass tui.ProgressBarsEnabled() (or equivalent) so
+// is the caller's job — pass logutil.ProgressBarsEnabled() (or equivalent) so
 // this package stays free of presentation-layer imports.
 func WithProgress(v bool) FetchOption { return func(c *dlConfig) { c.progress = v } }
 

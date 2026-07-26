@@ -170,7 +170,7 @@ var insecureTLSWarnOnce sync.Once
 
 // warnInsecureTLS surfaces a long-forgotten insecure:true once per process —
 // PowerCycler builds a client per operation, so per-call warnings would be
-// noise. It logs via slog.Default, which tui.SimpleLogger rebinds to the
+// noise. It logs via slog.Default, which the cli rebinds to the
 // RedactHandler-backed logger; no logger threads through the credential
 // options structs, and widening them for one warning is not worth it.
 func warnInsecureTLS(endpoint string) {

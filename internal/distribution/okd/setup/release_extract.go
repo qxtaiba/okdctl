@@ -15,7 +15,6 @@ import (
 	"github.com/qxtaiba/okdctl/internal/executor"
 	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/system"
-	"github.com/qxtaiba/okdctl/internal/tui"
 )
 
 // ocExtractTimeout bounds the `oc adm release extract --tools` call. The
@@ -68,7 +67,7 @@ func (p *Phase) bootstrapOC(ctx context.Context, downloadDir string) (string, er
 		download.WithDescription("bootstrap-oc"),
 		download.WithTimeout(3*time.Minute),
 		download.WithLogger(p.Log),
-		download.WithProgress(tui.ProgressBarsEnabled()),
+		download.WithProgress(logutil.ProgressBarsEnabled()),
 	); err != nil {
 		return "", &errtypes.NetworkError{Msg: "download bootstrap oc", Err: err}
 	}

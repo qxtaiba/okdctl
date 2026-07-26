@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/qxtaiba/okdctl/internal/logutil"
+
 	"github.com/qxtaiba/okdctl/internal/distribution"
 )
 
@@ -161,7 +163,7 @@ func TestStepProgress_ConcurrentInterleave(t *testing.T) {
 		go func(id int) {
 			defer wg.Done()
 			for range perG {
-				Info("checklist interleave", LF("g", id))
+				logutil.Info("checklist interleave", logutil.LF("g", id))
 			}
 		}(g)
 	}
@@ -171,7 +173,7 @@ func TestStepProgress_ConcurrentInterleave(t *testing.T) {
 	// registered owner (the "leftover spinner" clear path in withLine).
 	// Every spinner is stopped only after all log producers have joined
 	// below, so lineReg's active flag never flips false while a concurrent
-	// Info() call could still be mid-flight against it.
+	// logutil.Info() call could still be mid-flight against it.
 	ids := []distribution.StepID{"gen-config", "create-vms", "wait-bootstrap", "verify", "cleanup"}
 	results := make([]*distribution.StepResult, len(ids))
 	stopSpinners := make([]func(), 0, len(ids))
@@ -180,7 +182,7 @@ func TestStepProgress_ConcurrentInterleave(t *testing.T) {
 		stopSpinners = append(stopSpinners, startSpinner(context.Background(), "step working", &buf))
 		// Real sleep on purpose — not a synctest candidate. In a bubble the
 		// fake clock advances only when every goroutine is durably blocked,
-		// so the busy Info() producers would defer this sleep until they
+		// so the busy logutil.Info() producers would defer this sleep until they
 		// finish, collapsing the mid-step interleave window -race needs.
 		time.Sleep(2 * time.Millisecond)
 		results[i] = &distribution.StepResult{

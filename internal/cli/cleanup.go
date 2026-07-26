@@ -13,9 +13,9 @@ import (
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/cleanup"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
+	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/runlock"
 	"github.com/qxtaiba/okdctl/internal/system"
-	"github.com/qxtaiba/okdctl/internal/tui"
 	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
@@ -59,12 +59,12 @@ func init() {
 
 func runCleanupDryRun(projectRoot string) {
 	workDir := workspace.WorkDir(projectRoot)
-	tui.Info("dry-run: would remove work directory", tui.LF("path", workDir))
-	tui.Info("dry-run: would remove haproxy config block", tui.LF("path", phase.DefaultHAProxyConfigPath))
-	tui.Info("dry-run: would remove dnsmasq drop-in", tui.LF("dir", phase.DefaultDNSMasqConfigDir))
-	tui.Info("dry-run: would remove packages", tui.LF("packages", cleanup.InstalledPackages()))
-	tui.Info("dry-run: would remove binaries", tui.LF("binaries", cleanup.InstalledBinaries()))
-	tui.Info("dry-run: re-run without --dry-run to execute cleanup")
+	logutil.Info("dry-run: would remove work directory", logutil.LF("path", workDir))
+	logutil.Info("dry-run: would remove haproxy config block", logutil.LF("path", phase.DefaultHAProxyConfigPath))
+	logutil.Info("dry-run: would remove dnsmasq drop-in", logutil.LF("dir", phase.DefaultDNSMasqConfigDir))
+	logutil.Info("dry-run: would remove packages", logutil.LF("packages", cleanup.InstalledPackages()))
+	logutil.Info("dry-run: would remove binaries", logutil.LF("binaries", cleanup.InstalledBinaries()))
+	logutil.Info("dry-run: re-run without --dry-run to execute cleanup")
 }
 
 // cleanupKindRemovesCredentials reports whether kind wipes cluster-config
@@ -112,9 +112,9 @@ func runCleanup(cmd *cobra.Command, _ []string) error {
 		return nil
 	}
 
-	tui.Warn("this will remove all local artifacts for cluster", tui.LF("cluster", cfg.Cluster.Name))
+	logutil.Warn("this will remove all local artifacts for cluster", logutil.LF("cluster", cfg.Cluster.Name))
 	if cleanupKindRemovesCredentials(kind) {
-		tui.Warn("once the infrastructure is destroyed this includes the admin credentials (kubeconfig, kubeadmin-password)")
+		logutil.Warn("once the infrastructure is destroyed this includes the admin credentials (kubeconfig, kubeadmin-password)")
 	}
 
 	if err := confirmClusterMatches(cleanupYes, cleanupConfirmCluster, cfg.Cluster.Name, "cleanup"); err != nil {
@@ -127,7 +127,7 @@ func runCleanup(cmd *cobra.Command, _ []string) error {
 			return err
 		}
 		if !confirmed {
-			tui.Info("cancelled")
+			logutil.Info("cancelled")
 			return nil
 		}
 	}
@@ -146,7 +146,7 @@ func runCleanup(cmd *cobra.Command, _ []string) error {
 	workDir := workspace.WorkDir(projectRoot)
 	defer func() {
 		if chownErr := system.ChownTreeToInvokingUser(workDir); chownErr != nil {
-			tui.Warn("workdir chown back to user incomplete", tui.LF("err", chownErr))
+			logutil.Warn("workdir chown back to user incomplete", logutil.LF("err", chownErr))
 		}
 	}()
 
@@ -158,18 +158,18 @@ func runCleanup(cmd *cobra.Command, _ []string) error {
 	opts := cleanup.NewOptions(cfg, projectRoot, kind)
 	opts.VIP = vip
 
-	tui.Info("cleaning up cluster artifacts...")
+	logutil.Info("cleaning up cluster artifacts...")
 	startTime := time.Now()
 
 	p := deploy.NewProvisioner(nil, projectRoot)
 	defer p.ZeroizeEnv()
 	if err := p.Cleanup(ctx, &opts); err != nil {
-		tui.Warn("partial cleanup; rerun to retry")
+		logutil.Warn("partial cleanup; rerun to retry")
 		return err
 	}
 
 	duration := time.Since(startTime).Round(time.Second)
-	tui.Info("cleanup complete", tui.LF("duration", duration))
+	logutil.Info("cleanup complete", logutil.LF("duration", duration))
 
 	return nil
 }

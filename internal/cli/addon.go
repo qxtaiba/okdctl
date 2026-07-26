@@ -13,8 +13,8 @@ import (
 	"github.com/qxtaiba/okdctl/internal/distribution/okd"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/executor"
+	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/runlock"
-	"github.com/qxtaiba/okdctl/internal/tui"
 )
 
 var (
@@ -192,7 +192,7 @@ func runAddonUninstall(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	tui.Warn("this will uninstall addon from cluster", tui.LF("addon", args[0]), tui.LF("cluster", cfg.Cluster.Name))
+	logutil.Warn("this will uninstall addon from cluster", logutil.LF("addon", args[0]), logutil.LF("cluster", cfg.Cluster.Name))
 
 	if err := confirmClusterMatches(addonUninstallYes, addonUninstallConfirmCluster, cfg.Cluster.Name, "uninstall"); err != nil {
 		return err
@@ -203,7 +203,7 @@ func runAddonUninstall(cmd *cobra.Command, args []string) error {
 			return err
 		}
 		if !ok {
-			tui.Info("cancelled")
+			logutil.Info("cancelled")
 			return nil
 		}
 	}
@@ -223,7 +223,7 @@ func runAddonUninstall(cmd *cobra.Command, args []string) error {
 	if err := mgr.Uninstall(cmd.Context(), args[0]); err != nil {
 		return err
 	}
-	tui.Info("addon uninstalled", tui.LF("addon", args[0]))
+	logutil.Info("addon uninstalled", logutil.LF("addon", args[0]))
 	return nil
 }
 
@@ -288,7 +288,7 @@ func newAddonManager(cfg *config.Config, projectRoot string) *addon.Manager {
 	return addon.NewManager(
 		cfg,
 		addon.WithExecutor(exec),
-		addon.WithLogger(tui.SimpleLogger()),
+		addon.WithLogger(logutil.SimpleLogger()),
 		addon.WithProjectRoot(projectRoot),
 	)
 }

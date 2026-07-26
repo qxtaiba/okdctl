@@ -9,6 +9,8 @@ import (
 	"testing"
 	"testing/synctest"
 	"time"
+
+	"github.com/qxtaiba/okdctl/internal/logutil"
 )
 
 const clearSeq = "\r\x1b[2K"
@@ -30,7 +32,7 @@ func configureBuf(t *testing.T, buf *bytes.Buffer) {
 	if err := ConfigureLoggers("debug", "text", buf, buf, false); err != nil {
 		t.Fatal(err)
 	}
-	stderrSlog.Store(buildStderrSlog())
+	logutil.InstallHandler(newStderrHandler())
 }
 
 // TestHandler_ClearsOwnerLineOncePerRecord proves the stderr handler erases
@@ -46,7 +48,7 @@ func TestHandler_ClearsOwnerLineOncePerRecord(t *testing.T) {
 
 	const n = 5
 	for range n {
-		Info("phase tick")
+		logutil.Info("phase tick")
 	}
 
 	if fake.clears != n {
@@ -82,7 +84,7 @@ func TestSpinner_LogDuringSpinnerStartsAtColumnZero(t *testing.T) {
 
 		stop := startSpinner(context.Background(), "installing", &buf)
 		for range 3 {
-			Info("csr pending")
+			logutil.Info("csr pending")
 			time.Sleep(150 * time.Millisecond)
 		}
 		stop()
@@ -116,7 +118,7 @@ func TestSpinner_NoDeadlockUnderConcurrentLogs(t *testing.T) {
 		go func(id int) {
 			defer wg.Done()
 			for range perG {
-				Info("worker log", LF("g", id))
+				logutil.Info("worker log", logutil.LF("g", id))
 			}
 		}(g)
 	}
@@ -165,9 +167,9 @@ func TestSpinner_TeardownClearsAndDeregisters(t *testing.T) {
 // TestStartSpinner_NonTTYNoOp locks the non-TTY contract: StartSpinner
 // registers no owner and returns a callable no-op stop.
 func TestStartSpinner_NonTTYNoOp(t *testing.T) {
-	prev := progressBarsActive.Load()
-	progressBarsActive.Store(false)
-	t.Cleanup(func() { progressBarsActive.Store(prev) })
+	prev := logutil.ProgressBarsEnabled()
+	logutil.SetProgressBarsEnabled(false)
+	t.Cleanup(func() { logutil.SetProgressBarsEnabled(prev) })
 
 	stop := StartSpinner(context.Background(), "quiet")
 	if lineReg.hasOwner() {
@@ -205,9 +207,9 @@ func TestStatusLine_SetUpdatesDesc(t *testing.T) {
 // TestStartStatusLine_NonTTYNoOp locks the non-TTY contract: no owner is
 // registered and both returned funcs are callable no-ops.
 func TestStartStatusLine_NonTTYNoOp(t *testing.T) {
-	prev := progressBarsActive.Load()
-	progressBarsActive.Store(false)
-	t.Cleanup(func() { progressBarsActive.Store(prev) })
+	prev := logutil.ProgressBarsEnabled()
+	logutil.SetProgressBarsEnabled(false)
+	t.Cleanup(func() { logutil.SetProgressBarsEnabled(prev) })
 
 	set, stop := StartStatusLine(context.Background(), "quiet")
 	if lineReg.hasOwner() {

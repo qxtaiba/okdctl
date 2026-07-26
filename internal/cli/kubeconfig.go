@@ -11,8 +11,8 @@ import (
 	"sigs.k8s.io/yaml"
 
 	"github.com/qxtaiba/okdctl/internal/errtypes"
+	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/system"
-	"github.com/qxtaiba/okdctl/internal/tui"
 	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
@@ -75,7 +75,7 @@ func runKubeconfig(cmd *cobra.Command, _ []string) error {
 	if err := system.AtomicWrite(kubeconfigOutput, data, 0o600); err != nil {
 		return fmt.Errorf("write kubeconfig: %w", err)
 	}
-	tui.Info("kubeconfig written", tui.LF("path", kubeconfigOutput))
+	logutil.Info("kubeconfig written", logutil.LF("path", kubeconfigOutput))
 	return nil
 }
 
@@ -127,7 +127,7 @@ func mergeKubeconfig(srcData []byte) error {
 	if err := system.AtomicWrite(dest, out, 0o600); err != nil {
 		return fmt.Errorf("write merged kubeconfig: %w", err)
 	}
-	tui.Info("kubeconfig merged", tui.LF("path", dest))
+	logutil.Info("kubeconfig merged", logutil.LF("path", dest))
 	return nil
 }
 

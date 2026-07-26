@@ -26,7 +26,6 @@ import (
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/executor"
 	"github.com/qxtaiba/okdctl/internal/logutil"
-	"github.com/qxtaiba/okdctl/internal/tui"
 	"github.com/qxtaiba/okdctl/internal/version"
 	"github.com/qxtaiba/okdctl/internal/workspace"
 )
@@ -98,7 +97,7 @@ func Write(ctx context.Context, opts Options) (retErr error) {
 		outPath = fmt.Sprintf("okdctl-debug-%s.tgz", bundleAt.Format("20060102-150405"))
 	}
 
-	tui.Info("collecting debug bundle", tui.LF("bundle_id", bundleID), tui.LF("path", outPath))
+	logutil.Info("collecting debug bundle", logutil.LF("bundle_id", bundleID), logutil.LF("path", outPath))
 
 	cfg, cfgErr := opts.LoadConfig()
 
@@ -175,7 +174,7 @@ func Write(ctx context.Context, opts Options) (retErr error) {
 		return fmt.Errorf("write manifest: %w", err)
 	}
 
-	tui.Info("debug bundle written", tui.LF("path", outPath), tui.LF("bundle_id", bundleID))
+	logutil.Info("debug bundle written", logutil.LF("path", outPath), logutil.LF("bundle_id", bundleID))
 	return nil
 }
 
@@ -323,7 +322,7 @@ func bundleMustGather(ctx context.Context, addStream func(*tar.Header, io.Reader
 		return manifestEntry{Name: categoryMustGather, Status: bundleStatusFailed, Message: "archive must-gather: " + safeMessage(archErr)}
 	}
 	if len(truncated) > 0 {
-		tui.Warn("must-gather files truncated to 50 MB", tui.LF("files", truncated))
+		logutil.Warn("must-gather files truncated to 50 MB", logutil.LF("files", truncated))
 		return manifestEntry{Name: categoryMustGather, Status: bundleStatusOK, Message: "truncated (>50 MB): " + strings.Join(truncated, ", ")}
 	}
 	return manifestEntry{Name: categoryMustGather, Status: bundleStatusOK}

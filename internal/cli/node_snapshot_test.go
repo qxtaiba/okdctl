@@ -17,7 +17,7 @@ import (
 )
 
 // captureTuiStderr redirects tui's package-level stderr logger to a buffer
-// around fn and restores it after — tui.Warn/Info write through a charmlog
+// around fn and restores it after — logutil.Warn/Info write through a charmlog
 // writer captured once at package init, not the live os.Stderr variable, so
 // a plain os.Pipe swap (captureStderr) never sees these records.
 func captureTuiStderr(t *testing.T, fn func()) string {

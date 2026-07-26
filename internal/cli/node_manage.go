@@ -20,7 +20,6 @@ import (
 	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/node"
 	"github.com/qxtaiba/okdctl/internal/render"
-	"github.com/qxtaiba/okdctl/internal/tui"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard/lifecycle"
 )
@@ -53,7 +52,7 @@ func runNodeManage(cmd *cobra.Command, _ []string) error {
 
 	// The wizard owns the terminal from here on; no line-owner spinner or
 	// download progress bar may render beneath the AltScreen.
-	tui.DisableProgressBars()
+	logutil.SetProgressBarsEnabled(false)
 
 	env, err := prepareNodeOpsEnv(ctx, cfg, true)
 	if err != nil {
@@ -124,7 +123,7 @@ func reportLifecycleOutcome(cmd *cobra.Command, result wizard.Result, st *lifecy
 		fmt.Fprint(cmd.OutOrStdout(), render.NodeOpComplete(st.Plan, st.Elapsed))
 		return nil
 	case result.Cancelled || !st.Proceed:
-		tui.Info("no changes made")
+		logutil.Info("no changes made")
 		return nil
 	default:
 		return nil

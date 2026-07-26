@@ -14,9 +14,9 @@ import (
 	"github.com/qxtaiba/okdctl/internal/deploy"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
+	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/render"
 	"github.com/qxtaiba/okdctl/internal/runlock"
-	"github.com/qxtaiba/okdctl/internal/tui"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard/steps"
 )
@@ -79,9 +79,9 @@ func runDeploy(cmd *cobra.Command, _ []string) error {
 			return err
 		}
 		if len(created) > 0 {
-			tui.Info("initialized terraform sources",
-				tui.LF("dir", filepath.Join(projectRoot, "infrastructure", "terraform")),
-				tui.LF("count", len(created)))
+			logutil.Info("initialized terraform sources",
+				logutil.LF("dir", filepath.Join(projectRoot, "infrastructure", "terraform")),
+				logutil.LF("count", len(created)))
 		}
 		return nil
 	}); err != nil {
@@ -103,11 +103,11 @@ func runDeploy(cmd *cobra.Command, _ []string) error {
 		loader := config.NewLoader()
 		loadedCfg, loadErr := loader.LoadFile(deployOutputFile)
 		if loadErr != nil {
-			tui.Warn("existing config could not be loaded", tui.LF("err", loadErr))
+			logutil.Warn("existing config could not be loaded", logutil.LF("err", loadErr))
 			if deployYes || deployWriteConfig {
 				return &errtypes.ConfigError{Msg: "cannot proceed in non-interactive mode with invalid config", Err: loadErr}
 			}
-			tui.Info("starting fresh with defaults")
+			logutil.Info("starting fresh with defaults")
 			configExists = false
 		} else {
 			cfg = loadedCfg
@@ -152,7 +152,7 @@ func runDeploy(cmd *cobra.Command, _ []string) error {
 	}
 
 	if result.Cancelled {
-		tui.Info("wizard cancelled, no changes made")
+		logutil.Info("wizard cancelled, no changes made")
 		return nil
 	}
 
@@ -202,7 +202,7 @@ func runDeployDryRun(ctx context.Context, cfg *config.Config, w io.Writer) error
 		return err
 	}
 
-	tui.Info("dry-run: running terraform plan (no changes will be made)")
+	logutil.Info("dry-run: running terraform plan (no changes will be made)")
 
 	changes, err := runTerraformPlanPreview(ctx, cfg, planPreviewOptions{
 		ConfigPath:  deployOutputFile,
@@ -215,7 +215,7 @@ func runDeployDryRun(ctx context.Context, cfg *config.Config, w io.Writer) error
 
 	fmt.Fprint(w, render.PlanPreview(changes))
 	fmt.Fprintln(w, render.DryRunSummary("deploy step listing", deployDryRunSteps(cfg, projectRoot)))
-	tui.Info("dry-run: re-run without --dry-run to execute deploy")
+	logutil.Info("dry-run: re-run without --dry-run to execute deploy")
 	return nil
 }
 
@@ -224,7 +224,7 @@ func runDeployDryRun(ctx context.Context, cfg *config.Config, w io.Writer) error
 // StepDefs via okd.Provisioner.DeploySteps so this listing cannot drift from
 // what deploy actually runs.
 func deployDryRunSteps(cfg *config.Config, projectRoot string) []render.DryRunStep {
-	deploySteps := okd.New(okd.WithProjectRoot(projectRoot), okd.WithLogger(tui.SimpleLogger())).DeploySteps(cfg)
+	deploySteps := okd.New(okd.WithProjectRoot(projectRoot), okd.WithLogger(logutil.SimpleLogger())).DeploySteps(cfg)
 	out := make([]render.DryRunStep, len(deploySteps))
 	for i, s := range deploySteps {
 		out[i] = render.DryRunStep{ID: string(s.ID), Name: s.Name}
@@ -248,7 +248,7 @@ func withProjectLock(projectRoot, verb string, fn func() error) error {
 
 func saveConfig(cfg *config.Config, path string, w io.Writer) error {
 	if result := validateConfig(cfg, w); !result.IsValid() {
-		tui.Warn("configuration has validation warnings but will still be saved")
+		logutil.Warn("configuration has validation warnings but will still be saved")
 	}
 
 	loader := config.NewLoader()
@@ -286,7 +286,7 @@ func runFullDeployment(ctx context.Context, cfg *config.Config, w io.Writer) err
 	defer creds.Zeroize()
 
 	if !creds.IsValid() {
-		tui.Warn("no proxmox credentials found")
+		logutil.Warn("no proxmox credentials found")
 	} else {
 		reportCredentialProvenance(creds)
 	}
@@ -309,7 +309,7 @@ func runFullDeployment(ctx context.Context, cfg *config.Config, w io.Writer) err
 
 func showExitSummary(path string, w io.Writer) {
 	fmt.Fprintln(w)
-	tui.Info("configuration saved", tui.LF("path", path))
+	logutil.Info("configuration saved", logutil.LF("path", path))
 }
 
 func writeCredentialsEnv(cfg *config.Config, configPath string) error {
@@ -340,7 +340,7 @@ func writeCredentialsEnv(cfg *config.Config, configPath string) error {
 		return err
 	}
 
-	tui.Info("credentials saved", tui.LF("path", envPath))
+	logutil.Info("credentials saved", logutil.LF("path", envPath))
 	return nil
 }
 
