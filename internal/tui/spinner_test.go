@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 )
 
@@ -72,27 +73,31 @@ func TestHandler_ClearsOwnerLineOncePerRecord(t *testing.T) {
 
 // TestSpinner_LogDuringSpinnerStartsAtColumnZero runs the real spinner and
 // interleaves log records, asserting the handler clears the spinner line.
+// Runs under synctest so the between-record waits ride the fake clock: each
+// sleep spans at least one 120ms ticker frame without real-time delay.
 func TestSpinner_LogDuringSpinnerStartsAtColumnZero(t *testing.T) {
-	var buf bytes.Buffer
-	configureBuf(t, &buf)
+	synctest.Test(t, func(t *testing.T) {
+		var buf bytes.Buffer
+		configureBuf(t, &buf)
 
-	stop := startSpinner(context.Background(), "installing", &buf)
-	for range 3 {
-		Info("csr pending")
-		time.Sleep(5 * time.Millisecond)
-	}
-	stop()
+		stop := startSpinner(context.Background(), "installing", &buf)
+		for range 3 {
+			Info("csr pending")
+			time.Sleep(150 * time.Millisecond)
+		}
+		stop()
 
-	out := buf.String()
-	if !strings.Contains(out, clearSeq) {
-		t.Fatalf("no clear sequence emitted during spinner:\n%q", out)
-	}
-	if !strings.Contains(out, "csr pending") {
-		t.Fatalf("log record lost:\n%q", out)
-	}
-	if !strings.HasSuffix(out, clearSeq) {
-		t.Fatalf("teardown did not leave a cleared line; suffix = %q", tail(out))
-	}
+		out := buf.String()
+		if !strings.Contains(out, clearSeq) {
+			t.Fatalf("no clear sequence emitted during spinner:\n%q", out)
+		}
+		if !strings.Contains(out, "csr pending") {
+			t.Fatalf("log record lost:\n%q", out)
+		}
+		if !strings.HasSuffix(out, clearSeq) {
+			t.Fatalf("teardown did not leave a cleared line; suffix = %q", tail(out))
+		}
+	})
 }
 
 // TestSpinner_NoDeadlockUnderConcurrentLogs logs from many goroutines while a
@@ -173,24 +178,28 @@ func TestStartSpinner_NonTTYNoOp(t *testing.T) {
 
 // TestStatusLine_SetUpdatesDesc drives the updatable status line and asserts
 // the painted line reflects a desc replaced mid-run, on one owned line.
+// Runs under synctest so the two ticker frames the repaint needs pass on the
+// fake clock instead of a real 300ms load-sensitive sleep.
 func TestStatusLine_SetUpdatesDesc(t *testing.T) {
-	var buf bytes.Buffer
-	set, stop := startStatusLine(context.Background(), "waiting for cluster operators", &buf)
-	if !lineReg.hasOwner() {
-		t.Fatal("status line did not register as line owner")
-	}
-	set("cluster operators 12/33 available · 4 CSRs approved")
-	// Give the ticker a couple of frames to repaint with the new desc.
-	time.Sleep(300 * time.Millisecond)
-	stop()
+	synctest.Test(t, func(t *testing.T) {
+		var buf bytes.Buffer
+		set, stop := startStatusLine(context.Background(), "waiting for cluster operators", &buf)
+		if !lineReg.hasOwner() {
+			t.Fatal("status line did not register as line owner")
+		}
+		set("cluster operators 12/33 available · 4 CSRs approved")
+		// Give the ticker a couple of frames to repaint with the new desc.
+		time.Sleep(300 * time.Millisecond)
+		stop()
 
-	out := buf.String()
-	if !strings.Contains(out, "12/33 available") {
-		t.Fatalf("painted line missing updated detail:\n%q", out)
-	}
-	if lineReg.hasOwner() {
-		t.Fatal("owner still active after stop")
-	}
+		out := buf.String()
+		if !strings.Contains(out, "12/33 available") {
+			t.Fatalf("painted line missing updated detail:\n%q", out)
+		}
+		if lineReg.hasOwner() {
+			t.Fatal("owner still active after stop")
+		}
+	})
 }
 
 // TestStartStatusLine_NonTTYNoOp locks the non-TTY contract: no owner is
