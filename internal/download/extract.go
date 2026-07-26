@@ -18,12 +18,11 @@ import (
 // extractConfig holds the resolved configuration for an ExtractTarGz call.
 // logger is normalised via logutil.OrNop once at ExtractTarGz construction.
 type extractConfig struct {
-	archivePath      string
-	destDir          string
-	expectedChecksum string
-	stripComponents  int
-	cleanupArchive   bool
-	logger           *slog.Logger
+	archivePath     string
+	destDir         string
+	stripComponents int
+	cleanupArchive  bool
+	logger          *slog.Logger
 }
 
 // ExtractOption configures an ExtractTarGz call.
@@ -32,11 +31,6 @@ type ExtractOption func(*extractConfig)
 // ErrSymlinkEscape reports a symlink whose resolved location or target lands
 // outside destDir. Callers can match it with errors.Is.
 var ErrSymlinkEscape = errors.New("symlink resolves outside destination")
-
-// WithExtractChecksum sets the expected SHA-256 hex digest for the archive; empty disables verification.
-func WithExtractChecksum(sum string) ExtractOption {
-	return func(c *extractConfig) { c.expectedChecksum = sum }
-}
 
 // WithExtractStripComponents removes n leading path components from archive entries, like tar --strip-components.
 func WithExtractStripComponents(n int) ExtractOption {
@@ -191,16 +185,6 @@ func ExtractTarGz(ctx context.Context, archivePath, destDir string, opts ...Extr
 	}
 
 	filename := filepath.Base(archivePath)
-
-	if cfg.expectedChecksum != "" {
-		cfg.logger.Info("download: validating sha256 checksum", "file", filename)
-
-		if err := ValidateChecksum(ctx, archivePath, cfg.expectedChecksum); err != nil {
-			return fmt.Errorf("checksum validation failed for %s: %w", filename, err)
-		}
-
-		cfg.logger.Info("download: checksum validated", "file", filename)
-	}
 
 	file, err := os.Open(archivePath)
 	if err != nil {
