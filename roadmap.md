@@ -1245,7 +1245,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `api:2be6306e:export-no-caller-scaffolding` — export no caller scaffolding
 
-**Status:** deferred (scaffolding verified 2026-07-11 — annotation already present via 8d17082; PR #910 records it)
+**Status:** verified-intent (kept) — addon verb family actively growing under R1; annotation recorded via PR #910
 **Severity:** suggestion
 **Cluster:** exported-surface
 **Evidence:** `internal/addon/registry.go:86-94`
@@ -1443,7 +1443,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `smell:2c4d8e6b:interfaceany-lazy-exported` — interfaceany lazy exported
 
-**Status:** done — PR #910
+**Status:** verified-intent, conditional on R1 — same evidence as api:2c4d8e6b; interface doc should cite R1 by ID
 **Severity:** suggestion
 **Cluster:** interfaceany-lazy — seam→audit-api-design
 **Evidence:** `internal/addon/addon.go:58-58` + 4 more
@@ -3558,7 +3558,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `con:c4182b1c:speculative-lock` — speculative lock
 
-**Status:** not started
+**Status:** stale — owner review: no parallel-step item in roadmap; prior keep cited resume items that are themselves deferred; trigger failed two audit cycles
 **Severity:** suggestion
 **Cluster:** waitgroup-vs-errgroup — related: con:15ba17da:speculative-lock
 **Evidence:** `internal/distribution/context.go:12-16`
@@ -3568,7 +3568,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `con:15ba17da:speculative-lock` — speculative lock
 
-**Status:** not started
+**Status:** stale — owner review: deliberate keep (PR #460) but rationale is the same nonexistent parallel-step mode as con:c4182b1c
 **Severity:** suggestion
 **Cluster:** waitgroup-vs-errgroup — related: con:c4182b1c:speculative-lock
 **Evidence:** `internal/distribution/okd/destroy/steps.go:34-43`
@@ -3580,7 +3580,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `api:66f217c9:export-no-caller-scaffolding` — export no caller scaffolding
 
-**Status:** not started
+**Status:** stale — owner review: consumers arrived and bypassed (cli releases.go uses slices.DeleteFunc; wizard uses Series.Latest)
 **Severity:** suggestion
 **Cluster:** exported-surface
 **Evidence:** `internal/distribution/okd/releases/okd.go:47-71` + 1 more
@@ -3620,7 +3620,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `api:2c4d8e6b:export-no-caller-scaffolding` — export no caller scaffolding
 
-**Status:** not started
+**Status:** verified-intent, conditional on R1 — the in-review addon-category workstream is the planned polymorphic consumer; flips stale if R1 dies
 **Severity:** suggestion
 **Cluster:** exported-surface
 **Evidence:** `internal/addon/addon.go:47-64` + 4 more
@@ -3640,7 +3640,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `api:fde34e0c:export-no-caller` — export no caller
 
-**Status:** deferred — owner decision needed: wire WithEnvFallback (runtime behavior change) or drop documented+tested option; 2026-06-10 audit classified same symbol as kept scaffolding
+**Status:** done as recorded decision (fix/audit-w12 509c8ced) — WithEnvFallback kept, documented as deliberately unwired; trigger: a command operating without a workspace (inspect/adopt a cluster okdctl did not deploy)
 **Severity:** minor
 **Cluster:** exported-surface
 **Evidence:** `internal/cluster/k8s.go:63-83`
@@ -3650,7 +3650,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `api:cf43073b:export-no-caller-scaffolding` — export no caller scaffolding
 
-**Status:** not started
+**Status:** stale — owner review: roadmap ground rule forecloses multi-provider/distribution enumeration; unexport candidate (in-package callers exist)
 **Severity:** suggestion
 **Cluster:** exported-surface
 **Evidence:** `internal/config/types.go:25-40`
@@ -3660,7 +3660,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `api:aa0f50f5:export-no-caller-scaffolding` — export no caller scaffolding
 
-**Status:** not started
+**Status:** verified-intent (kept) — live symmetric family; IsValidIP/IsValidDNSLabel externally consumed by okd/dns
 **Severity:** suggestion
 **Cluster:** exported-surface
 **Evidence:** `internal/config/validators.go:515-519`
@@ -3670,7 +3670,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `api:c8b28673:export-no-caller-scaffolding` — export no caller scaffolding
 
-**Status:** not started
+**Status:** stale — owner review: fetch-side embedded-pin verification landed at every extract site; owner question is drop vs keep-inert
 **Severity:** suggestion
 **Cluster:** exported-surface — seam→security — related: sec:8ea706f6:dl-no-signature
 **Evidence:** `internal/download/extract.go:36-40`
@@ -3680,7 +3680,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `api:f5eb0ca4:export-no-caller-scaffolding` — export no caller scaffolding
 
-**Status:** not started
+**Status:** stale — owner review: the named future (C4 cluster stop/start, PR #950) shipped without calling VMRunning
 **Severity:** suggestion
 **Cluster:** exported-surface
 **Evidence:** `internal/infrastructure/proxmox/power.go:160-168`
@@ -3700,7 +3700,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `api:9c7cfdc5:export-no-caller-scaffolding` — export no caller scaffolding
 
-**Status:** not started
+**Status:** verified-intent (kept) — real in-package callers; CLAUDE.md routes all new SSH ops into hostssh
 **Severity:** suggestion
 **Cluster:** exported-surface
 **Evidence:** `internal/infrastructure/proxmox/hostssh/ssh.go:65-90`
@@ -3710,7 +3710,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `api:0934cf1b:export-no-caller-scaffolding` — export no caller scaffolding
 
-**Status:** not started
+**Status:** stale — owner review: the one repo-registration need deliberately rejected AddRepo (embedded .repo trust-root fix, PR #476); motivating spec deleted
 **Severity:** suggestion
 **Cluster:** exported-surface
 **Evidence:** `internal/platform/packages.go:127-155`
@@ -3730,7 +3730,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `api:6fc3d91e:export-no-caller-scaffolding` — export no caller scaffolding
 
-**Status:** not started
+**Status:** stale — owner review: sole SELinux decision point references a function that no longer exists; motivating OS-abstraction spec deleted
 **Severity:** suggestion
 **Cluster:** exported-surface
 **Evidence:** `internal/platform/platform.go:141-147` + 1 more
@@ -3740,7 +3740,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `api:5f5527e7:export-no-caller-scaffolding` — export no caller scaffolding
 
-**Status:** not started
+**Status:** verified-intent (kept) — in-package callers + active cli-visual-overhaul spec invests in Builder surface
 **Severity:** suggestion
 **Cluster:** exported-surface
 **Evidence:** `internal/render/summary.go:71-74`
@@ -3750,7 +3750,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `api:74f7ee95:export-no-caller-scaffolding` — export no caller scaffolding
 
-**Status:** not started
+**Status:** now-used — cli/node.go:293 assigns runner.Preview (field-typed usage the identifier grep missed); no longer scaffolding
 **Severity:** suggestion
 **Cluster:** exported-surface
 **Evidence:** `internal/node/confirm.go:63-65`
@@ -3770,7 +3770,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `api:451be4fa:export-no-caller-scaffolding` — export no caller scaffolding
 
-**Status:** not started
+**Status:** verified-intent (kept) — base primitive of the externally-consumed InvokingUser family
 **Severity:** suggestion
 **Cluster:** exported-surface
 **Evidence:** `internal/system/elevation.go:29-36`
@@ -4002,7 +4002,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `ux:8edf3817:concept-named-twice` — concept named twice
 
-**Status:** not started
+**Status:** stale — owner review: C3 shipped 'masters not supported' in help text; bless --role as settled vocabulary or drop it
 **Severity:** suggestion
 **Cluster:** verb-noun
 **Evidence:** `internal/cli/node.go:104-147`
@@ -4926,7 +4926,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `iac:b611e9fe:root-vars-silently-ignored` — production root omits template-rendered variables
 
-**Status:** not started
+**Status:** done (fix/audit-w12 7b802de5) — 15 variables wired through production root; tripwire TestTfvarsTemplateVarsWired
 **Severity:** major
 **Cluster:** hcl-wiring (discovered by fix agent G7, not an audit row)
 **Evidence:** `infrastructure/terraform/environments/production/`
@@ -4936,7 +4936,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `sec:1cb08008:redirect-cap-dedup` — probe redirect-cap mirrors unexported httputil helpers
 
-**Status:** not started
+**Status:** done (fix/audit-w12 66f41a26) — httputil.NewWithTransport factory; probe keeps its own policy table test
 **Severity:** suggestion
 **Cluster:** dedup (discovered by fix agent G1)
 **Evidence:** `internal/infrastructure/proxmox/probe.go`
