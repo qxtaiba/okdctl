@@ -80,8 +80,15 @@ The wizard asks for Proxmox credentials and cluster shape, writes
 3. **post-install** removes the bootstrap node, migrates ingress to
    LoadBalancer IPs when available, and installs any addons you picked.
 
-Each phase is a sequence of steps with rollback on failure. Re-running
-`deploy` after an interruption picks up where it left off.
+Each phase is a sequence of steps. A step failure stops the run
+(completed steps are not rolled back), prints a failure summary, and
+leaves a deploy-state marker naming the active phase. Re-running `deploy`
+resumes from that phase — once install has begun, setup is skipped so
+cluster credentials are never regenerated under live VMs — and steps
+whose work already exists are skipped. To tear down instead: after a
+setup failure `okdctl cleanup` removes local files (no VMs exist yet);
+once install has started, `okdctl destroy` removes the provisioned
+resources.
 
 ## Commands
 

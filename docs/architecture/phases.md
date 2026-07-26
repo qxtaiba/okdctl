@@ -5,7 +5,7 @@ is a cohesive unit of work (setup, install, post-install, destroy, cleanup);
 a step is one operation inside a phase (install a package, render a
 template, provision VMs). The phases are orchestrated by shared
 infrastructure, so each phase implementation only has to declare *what*
-happens, not *how* it's sequenced, logged, skipped, or rolled back.
+happens, not *how* it's sequenced, logged, skipped, or resumed.
 
 Phase flow:
 
@@ -74,10 +74,20 @@ is cancelled mid-run (SIGINT / SIGTERM), the current step finishes but later
 steps are skipped — no forced kills.
 
 The orchestrator is intentionally simple. It does not do parallelism,
-DAG scheduling, or resumable checkpoints. Each phase's step list is
-designed to be short enough (tens of steps, not hundreds) that linear
-execution is fast enough, and idempotent enough that re-running from
-scratch after a failure is the recovery strategy.
+DAG scheduling, or rollback — a failed step stops the run and leaves
+completed work in place. Recovery is re-running `okdctl deploy`: the
+deploy engine (`internal/deploy`) writes an on-disk deploy-state marker
+naming the phase that was active, and the next run resumes from that
+phase. An install or postinstall marker routes past setup entirely, so
+cluster identity material (ignition, CA, auth bundle) is never wiped or
+regenerated under live VMs; only `--fresh` restarts from setup, at the
+cost of those credentials. Within a resumed phase, `ReRunSafeYes` steps
+simply run again and `ReRunSafeNo` steps are skipped via their
+`AlreadyDone` guard when the work product already exists. When teardown
+is the right move instead, `okdctl cleanup` removes local files after a
+setup-phase failure (terraform state is still empty) and `okdctl
+destroy` removes provisioned resources once install has begun — the
+failure summary names the applicable command.
 
 ## BasePhase: the shared substrate
 
@@ -167,5 +177,5 @@ There is no DAG scheduling or parallelism on purpose. On a single
 Proxmox host, most of the work is either CPU-bound on one tool
 (terraform, openshift-install) or waiting on external state such as
 cluster operators becoming ready. In that setting, parallelism adds
-complexity without meaningful speedup and makes rollback-on-failure
-much harder.
+complexity without meaningful speedup and makes the linear
+resume-on-re-run model much harder to reason about.
