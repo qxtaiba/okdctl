@@ -2,10 +2,16 @@ package cli
 
 import (
 	"context"
+	"errors"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/cleanup"
+	"github.com/qxtaiba/okdctl/internal/errtypes"
+	"github.com/qxtaiba/okdctl/internal/system"
 )
 
 func cleanupGuardConfig() *config.Config {
@@ -63,4 +69,125 @@ func TestConfirmCleanupInteractive(t *testing.T) {
 			}
 		})
 	}
+}
+
+func resetCleanupFlags(t *testing.T) {
+	t.Helper()
+	savedYes, savedDryRun := cleanupYes, cleanupDryRun
+	savedConfirm, savedKind := cleanupConfirmCluster, cleanupKind
+	t.Cleanup(func() {
+		cleanupYes, cleanupDryRun = savedYes, savedDryRun
+		cleanupConfirmCluster, cleanupKind = savedConfirm, savedKind
+	})
+	cleanupYes, cleanupDryRun = false, false
+	cleanupConfirmCluster, cleanupKind = "", string(cleanup.Full)
+}
+
+// seedCleanupWorkspace writes a loadable okdctl.yaml (cluster "prod") plus a
+// sentinel file inside the okd-install workdir, then chdirs into the root.
+// The sentinel lets refusal-path tests prove nothing was removed.
+func seedCleanupWorkspace(t *testing.T) (sentinelPath string) {
+	t.Helper()
+	root := t.TempDir()
+	t.Chdir(root)
+	if err := config.NewLoader().Save(cleanupGuardConfig(), filepath.Join(root, "okdctl.yaml")); err != nil {
+		t.Fatalf("seed config: %v", err)
+	}
+	authDir := filepath.Join(root, system.WorkDirName, "cluster-config", "auth")
+	if err := os.MkdirAll(authDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	sentinelPath = filepath.Join(authDir, "kubeconfig")
+	if err := os.WriteFile(sentinelPath, []byte("credential"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return sentinelPath
+}
+
+func mustSurviveCleanup(t *testing.T, sentinelPath string) {
+	t.Helper()
+	if _, err := os.Stat(sentinelPath); err != nil {
+		t.Fatalf("auth artifact was removed on a path that must not delete anything: %v", err)
+	}
+}
+
+// TestRunCleanup_Wiring locks runCleanup's guard and dry-run routing: the
+// dry-run branch must return before the confirm gate and any deletion, and
+// the confirm gate must run before runlock/phase construction.
+func TestRunCleanup_Wiring(t *testing.T) {
+	t.Run("--dry-run previews and removes nothing", func(t *testing.T) {
+		resetCleanupFlags(t)
+		sentinel := seedCleanupWorkspace(t)
+		cleanupDryRun = true
+		cleanupCmd.SetContext(context.Background())
+
+		if err := runCleanup(cleanupCmd, nil); err != nil {
+			t.Fatalf("runCleanup --dry-run: %v", err)
+		}
+		mustSurviveCleanup(t, sentinel)
+	})
+
+	t.Run("invalid --kind is a UsageError", func(t *testing.T) {
+		resetCleanupFlags(t)
+		sentinel := seedCleanupWorkspace(t)
+		cleanupKind = "everything"
+		cleanupCmd.SetContext(context.Background())
+
+		err := runCleanup(cleanupCmd, nil)
+		if err == nil {
+			t.Fatal("invalid --kind must be refused")
+		}
+		var usageErr *errtypes.UsageError
+		if !errors.As(err, &usageErr) {
+			t.Errorf("want *errtypes.UsageError (exit 64), got %T: %v", err, err)
+		}
+		mustSurviveCleanup(t, sentinel)
+	})
+
+	t.Run("--yes without --confirm-cluster refuses", func(t *testing.T) {
+		resetCleanupFlags(t)
+		sentinel := seedCleanupWorkspace(t)
+		cleanupYes = true
+		cleanupCmd.SetContext(context.Background())
+
+		err := runCleanup(cleanupCmd, nil)
+		if err == nil {
+			t.Fatal("scripted cleanup without --confirm-cluster must be refused")
+		}
+		var cfgErr *errtypes.ConfigError
+		if !errors.As(err, &cfgErr) {
+			t.Errorf("want *errtypes.ConfigError, got %T: %v", err, err)
+		}
+		if !strings.Contains(err.Error(), "--confirm-cluster") {
+			t.Errorf("refusal must point at --confirm-cluster: %v", err)
+		}
+		mustSurviveCleanup(t, sentinel)
+	})
+
+	t.Run("--yes with wrong --confirm-cluster refuses", func(t *testing.T) {
+		resetCleanupFlags(t)
+		sentinel := seedCleanupWorkspace(t)
+		cleanupYes = true
+		cleanupConfirmCluster = "staging"
+		cleanupCmd.SetContext(context.Background())
+
+		err := runCleanup(cleanupCmd, nil)
+		if err == nil || !strings.Contains(err.Error(), "does not match") {
+			t.Fatalf("mismatched --confirm-cluster must refuse, got: %v", err)
+		}
+		mustSurviveCleanup(t, sentinel)
+	})
+
+	t.Run("interactive decline cancels cleanly", func(t *testing.T) {
+		resetCleanupFlags(t)
+		sentinel := seedCleanupWorkspace(t)
+		testStdinReader = &lineReader{lines: []string{guardTestCluster + "\n", "n\n"}}
+		t.Cleanup(func() { testStdinReader = nil })
+		cleanupCmd.SetContext(context.Background())
+
+		if err := runCleanup(cleanupCmd, nil); err != nil {
+			t.Fatalf("declined cleanup must exit 0, got: %v", err)
+		}
+		mustSurviveCleanup(t, sentinel)
+	})
 }
