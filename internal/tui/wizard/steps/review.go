@@ -104,7 +104,7 @@ var reviewJumpOrder = []wizard.StepID{
 type ReviewStep struct {
 	wizard.BaseStep
 	cfg         *config.Config
-	action      *singleSelect
+	action      *wizard.SingleSelect
 	jumpTargets []wizard.JumpTarget
 }
 
@@ -115,8 +115,8 @@ func NewReviewStep() *ReviewStep {
 		"save and exit",
 	}
 
-	action := newSingleSelect(wizard.StepIDReview, components.NewCompactSelector(actions), "enter")
-	action.onNav = func(index, total int) tea.Cmd {
+	action := wizard.NewSingleSelect(wizard.StepIDReview, components.NewCompactSelector(actions), "enter")
+	action.OnNav = func(index, total int) tea.Cmd {
 		return func() tea.Msg {
 			return wizard.FocusChangedMsg{FieldIndex: index, TotalFields: total}
 		}
