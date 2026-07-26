@@ -1,6 +1,10 @@
 package flux
 
 import (
+	"bytes"
+	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -288,4 +292,50 @@ func TestValidateSettings_MalformedTimeout(t *testing.T) {
 	if len(errs) == 0 {
 		t.Fatal("ValidateSettings with malformed controller_timeout = no errors, want at least one")
 	}
+}
+
+// TestReadKeyFile locks the symlink guard on the deploy-key read: a
+// symlinked ~/.ssh/flux-deploy-key must fail closed, or a hostile link
+// could exfiltrate an arbitrary root-readable file into a cluster Secret.
+// Mirrors setup's readNoFollow symlink-rejection test.
+func TestReadKeyFile(t *testing.T) {
+	dir := t.TempDir()
+
+	t.Run("regular file returns bytes", func(t *testing.T) {
+		path := filepath.Join(dir, "key")
+		want := []byte("-----BEGIN OPENSSH PRIVATE KEY-----\nabc\n")
+		if err := os.WriteFile(path, want, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		got, err := readKeyFile(path)
+		if err != nil {
+			t.Fatalf("readKeyFile: %v", err)
+		}
+		if !bytes.Equal(got, want) {
+			t.Errorf("readKeyFile = %q, want %q", got, want)
+		}
+	})
+
+	t.Run("symlink at final component refused", func(t *testing.T) {
+		target := filepath.Join(dir, "target")
+		if err := os.WriteFile(target, []byte("secret"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		link := filepath.Join(dir, "link")
+		if err := os.Symlink(target, link); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := readKeyFile(link); err == nil || !strings.Contains(err.Error(), "refusing to follow") {
+			t.Errorf("symlink read must fail closed with a refusal, got: %v", err)
+		}
+	})
+
+	t.Run("missing file maps to ErrNotExist", func(t *testing.T) {
+		// createDeployKeySecret treats a missing .pub as optional via
+		// errors.Is(err, os.ErrNotExist); the identity error type is load-bearing.
+		_, err := readKeyFile(filepath.Join(dir, "absent"))
+		if !errors.Is(err, os.ErrNotExist) {
+			t.Errorf("want os.ErrNotExist for a missing key, got: %v", err)
+		}
+	})
 }
