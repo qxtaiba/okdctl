@@ -5,13 +5,13 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/executor"
 	"github.com/qxtaiba/okdctl/internal/logutil"
+	"github.com/qxtaiba/okdctl/internal/testutil"
 )
 
 func TestBuildOperatorHubPatch_DisablesOnlyNamedSources(t *testing.T) {
@@ -49,25 +49,17 @@ func TestBuildOperatorHubPatch_DisablesOnlyNamedSources(t *testing.T) {
 	}
 }
 
-// installFakeOCForRHDefaults writes a POSIX sh "oc" script logging argv to
+// installFakeOCForRHDefaults installs a POSIX sh "oc" script logging argv to
 // OC_ARGV_LOG and stdin (for `apply -f -`) to OC_STDIN_LOG, exiting
 // OC_EXIT_CODE (default 0).
 func installFakeOCForRHDefaults(t *testing.T) (argvLog, stdinLog string) {
 	t.Helper()
-	if runtime.GOOS == "windows" {
-		t.Skip("fake-oc script relies on POSIX sh")
-	}
-	dir := t.TempDir()
-	script := `#!/bin/sh
+	testutil.InstallFakeBin(t, "oc", `#!/bin/sh
 echo "$@" >> "$OC_ARGV_LOG"
 if [ "$1" = "apply" ]; then cat > "$OC_STDIN_LOG"; fi
 exit "${OC_EXIT_CODE:-0}"
-`
-	path := filepath.Join(dir, "oc")
-	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+`)
+	dir := t.TempDir()
 	argvLog = filepath.Join(dir, "argv.log")
 	stdinLog = filepath.Join(dir, "stdin.log")
 	t.Setenv("OC_ARGV_LOG", argvLog)

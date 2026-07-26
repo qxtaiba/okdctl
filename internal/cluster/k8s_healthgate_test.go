@@ -5,12 +5,12 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/executor"
+	"github.com/qxtaiba/okdctl/internal/testutil"
 )
 
 const healthyCephJSON = `{
@@ -20,16 +20,12 @@ const healthyCephJSON = `{
   "pgmap": {"num_pgs":100,"pgs_by_state":[{"state_name":"active+clean","count":100}]}
 }`
 
-// installFakeOCCeph writes a PATH-shadow "oc" that serves CephHealthy's two
+// installFakeOCCeph installs a PATH-shadow "oc" that serves CephHealthy's two
 // invocations: `get pods` emits $OC_PODS_JSON, `exec` logs argv, exits 1
 // with stderr when $OC_EXEC_FAIL is set, and emits $OC_CEPH_JSON otherwise.
 func installFakeOCCeph(t *testing.T) (argvLog string) {
 	t.Helper()
-	if runtime.GOOS == goosWindows {
-		t.Skip("fake-oc script relies on POSIX sh")
-	}
-	dir := t.TempDir()
-	script := `#!/bin/sh
+	testutil.InstallFakeBin(t, "oc", `#!/bin/sh
 echo "$@" >> "$OC_ARGV_LOG"
 case "$1" in
 get) printf '%s' "$OC_PODS_JSON" ;;
@@ -42,13 +38,8 @@ exec)
   ;;
 esac
 exit 0
-`
-	path := filepath.Join(dir, "oc")
-	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
-	argvLog = filepath.Join(dir, "argv.log")
+`)
+	argvLog = filepath.Join(t.TempDir(), "argv.log")
 	t.Setenv("OC_ARGV_LOG", argvLog)
 	t.Setenv("OC_CEPH_JSON", healthyCephJSON)
 	return argvLog
@@ -153,16 +144,12 @@ func TestFirstScheduledPod(t *testing.T) {
 	}
 }
 
-// installFakeOCEtcd writes a PATH-shadow "oc" serving EtcdHealthy's three
+// installFakeOCEtcd installs a PATH-shadow "oc" serving EtcdHealthy's three
 // sequenced queries, branching on the resource argument: clusteroperator →
 // $OC_CO_JSON, pods → $OC_PODS_JSON, etcd → $OC_ETCD_JSON.
 func installFakeOCEtcd(t *testing.T) {
 	t.Helper()
-	if runtime.GOOS == goosWindows {
-		t.Skip("fake-oc script relies on POSIX sh")
-	}
-	dir := t.TempDir()
-	script := `#!/bin/sh
+	testutil.InstallFakeBin(t, "oc", `#!/bin/sh
 case "$2" in
 clusteroperator) printf '%s' "$OC_CO_JSON" ;;
 pods) printf '%s' "$OC_PODS_JSON" ;;
@@ -170,12 +157,7 @@ etcd) printf '%s' "$OC_ETCD_JSON" ;;
 *) echo "unexpected resource: $2" >&2; exit 2 ;;
 esac
 exit 0
-`
-	path := filepath.Join(dir, "oc")
-	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+`)
 	t.Setenv("OC_CO_JSON", `{"status":{"conditions":[
 	  {"type":"Available","status":"True"},
 	  {"type":"Degraded","status":"False"},

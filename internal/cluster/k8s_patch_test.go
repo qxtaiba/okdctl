@@ -5,32 +5,23 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/executor"
+	"github.com/qxtaiba/okdctl/internal/testutil"
 )
 
-// installFakePatchOC writes a POSIX sh "oc" script that logs its full argv to
-// OC_ARGV_LOG and exits with OC_EXIT_CODE (default 0).
+// installFakePatchOC installs a POSIX sh "oc" script that logs its full argv
+// to OC_ARGV_LOG and exits with OC_EXIT_CODE (default 0).
 func installFakePatchOC(t *testing.T) string {
 	t.Helper()
-	if runtime.GOOS == goosWindows {
-		t.Skip("fake-oc script relies on POSIX sh")
-	}
-	dir := t.TempDir()
-	script := `#!/bin/sh
+	testutil.InstallFakeBin(t, "oc", `#!/bin/sh
 echo "$@" >> "$OC_ARGV_LOG"
 exit "${OC_EXIT_CODE:-0}"
-`
-	path := filepath.Join(dir, "oc")
-	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
-	argvLog := filepath.Join(dir, "argv.log")
+`)
+	argvLog := filepath.Join(t.TempDir(), "argv.log")
 	t.Setenv("OC_ARGV_LOG", argvLog)
 	return argvLog
 }

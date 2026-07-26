@@ -177,8 +177,12 @@ func TestExecutor_StateStatus(t *testing.T) {
 
 func installFakeTerraformOutput(t *testing.T, stdout string, exitCode int) {
 	t.Helper()
-	script := "#!/bin/sh\ncat <<'EOF'\n" + stdout + "\nEOF\nexit " + strconv.Itoa(exitCode) + "\n"
-	testutil.InstallFakeBin(t, "terraform", script)
+	testutil.InstallFakeBin(t, "terraform", `#!/bin/sh
+printf '%s\n' "${TF_FAKE_STDOUT:-}"
+exit "${TF_FAKE_EXIT:-0}"
+`)
+	t.Setenv("TF_FAKE_STDOUT", stdout)
+	t.Setenv("TF_FAKE_EXIT", strconv.Itoa(exitCode))
 }
 
 func TestExecutor_Output_ParsesJSON(t *testing.T) {
