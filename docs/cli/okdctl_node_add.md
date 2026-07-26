@@ -22,14 +22,14 @@ the op marker and a partial batch's config/tfvars undercount the workers
 terraform already created, so it would destroy the in-flight node(s).
 
 ```
-okdctl node add --role worker [--count N] [flags]
+okdctl node add [--count N] [flags]
 ```
 
 ### Examples
 
 ```
-  okdctl node add --role worker --yes --confirm-cluster grappleberry
-  okdctl node add --role worker --count 2 --dry-run
+  okdctl node add --yes --confirm-cluster grappleberry
+  okdctl node add --count 2 --dry-run
 ```
 
 ### Options
@@ -40,7 +40,6 @@ okdctl node add --role worker [--count N] [flags]
       --count int                    number of nodes to add in this batch (default 1)
       --dry-run                      run guards and the plan gate without mutating anything
   -h, --help                         help for add
-      --role string                  node role to add (only worker is supported) (default "worker")
   -y, --yes                          skip confirmation prompt
 ```
 
