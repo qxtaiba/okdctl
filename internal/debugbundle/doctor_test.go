@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 )
 
@@ -33,8 +34,13 @@ func TestCollectDoctorOutputSeparatesStreamsAndToleratesFailure(t *testing.T) {
 	if string(stdout) != "fake-doctor-stdout" {
 		t.Errorf("stdout = %q, want %q with no stderr interleaved", stdout, "fake-doctor-stdout")
 	}
-	if string(stderr) != "fake-doctor-stderr" {
-		t.Errorf("stderr = %q, want %q", stderr, "fake-doctor-stderr")
+	// Prefix, not equality: under `go test -cover` the re-exec'd test binary
+	// appends a GOCOVERDIR warning to stderr after the marker.
+	if !strings.HasPrefix(string(stderr), "fake-doctor-stderr") {
+		t.Errorf("stderr = %q, want %q prefix", stderr, "fake-doctor-stderr")
+	}
+	if strings.Contains(string(stderr), "fake-doctor-stdout") {
+		t.Errorf("stdout marker leaked into stderr: %q", stderr)
 	}
 }
 

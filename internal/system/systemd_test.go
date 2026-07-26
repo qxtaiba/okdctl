@@ -2,6 +2,7 @@ package system
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -12,17 +13,16 @@ import (
 )
 
 // installFakeSystemctl writes a PATH-shadow systemctl that appends its argv
-// to a log file and exits $SYSTEMCTL_EXIT (default 0). Returns the log path.
-func installFakeSystemctl(t *testing.T) string {
+// to a log file and exits exitCode, returning the log path. Log path and
+// exit code are baked into the script text (see the firewall fakes for the
+// same pattern) because executor.RunCaptured filters the child env through
+// DefaultEnvAllowlist, so control env vars would never reach the fake.
+func installFakeSystemctl(t *testing.T, exitCode int) string {
 	t.Helper()
-	script := `#!/bin/sh
-echo "$@" >> "$SYSTEMCTL_ARGV_LOG"
-exit "${SYSTEMCTL_EXIT:-0}"
-`
-	dir := testutil.InstallFakeBin(t, "systemctl", script)
-	argvLog := filepath.Join(dir, "argv.log")
-	t.Setenv("SYSTEMCTL_ARGV_LOG", argvLog)
-	return argvLog
+	logPath := filepath.Join(t.TempDir(), "argv.log")
+	testutil.InstallFakeBin(t, "systemctl",
+		fmt.Sprintf("#!/bin/sh\necho \"$@\" >> %q\nexit %d\n", logPath, exitCode))
+	return logPath
 }
 
 func readSystemctlArgv(t *testing.T, path string) string {
@@ -53,7 +53,7 @@ func TestManageService_ArgvShape(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(string(tc.action), func(t *testing.T) {
-			argvLog := installFakeSystemctl(t)
+			argvLog := installFakeSystemctl(t, 0)
 			if err := ManageService(context.Background(), tc.action, "haproxy"); err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
@@ -68,8 +68,7 @@ func TestManageService_NonZeroExitReturnsError(t *testing.T) {
 	if runtime.GOOS != osLinux {
 		t.Skip("needs the Linux exec path")
 	}
-	installFakeSystemctl(t)
-	t.Setenv("SYSTEMCTL_EXIT", "1")
+	installFakeSystemctl(t, 1)
 	if err := ManageService(context.Background(), ServiceRestart, "haproxy"); err == nil {
 		t.Fatal("expected error for systemctl exit 1")
 	}
@@ -81,7 +80,7 @@ func TestServiceProbes_ExitCodeMapsToBool(t *testing.T) {
 	}
 
 	t.Run("exit 0 reports true with quiet argv", func(t *testing.T) {
-		argvLog := installFakeSystemctl(t)
+		argvLog := installFakeSystemctl(t, 0)
 		if !IsServiceActive(context.Background(), "dnsmasq") {
 			t.Error("IsServiceActive = false for exit 0; want true")
 		}
@@ -91,7 +90,7 @@ func TestServiceProbes_ExitCodeMapsToBool(t *testing.T) {
 	})
 
 	t.Run("enabled probe uses is-enabled", func(t *testing.T) {
-		argvLog := installFakeSystemctl(t)
+		argvLog := installFakeSystemctl(t, 0)
 		if !IsServiceEnabled(context.Background(), "dnsmasq") {
 			t.Error("IsServiceEnabled = false for exit 0; want true")
 		}
@@ -101,8 +100,7 @@ func TestServiceProbes_ExitCodeMapsToBool(t *testing.T) {
 	})
 
 	t.Run("exit 1 reports false", func(t *testing.T) {
-		installFakeSystemctl(t)
-		t.Setenv("SYSTEMCTL_EXIT", "1")
+		installFakeSystemctl(t, 1)
 		if IsServiceActive(context.Background(), "dnsmasq") {
 			t.Error("IsServiceActive = true for exit 1; want false")
 		}
@@ -119,7 +117,7 @@ func TestSystemd_NonLinuxFailsClosed(t *testing.T) {
 	if runtime.GOOS == osLinux {
 		t.Skip("locks the non-Linux branch; runs on darwin dev machines")
 	}
-	argvLog := installFakeSystemctl(t)
+	argvLog := installFakeSystemctl(t, 0)
 
 	if err := ManageService(context.Background(), ServiceRestart, "haproxy"); err == nil {
 		t.Error("ManageService must error on non-Linux hosts")
