@@ -21,9 +21,12 @@ to use in scripts that branch on failure type.
 | 130  | —            | interrupted by SIGINT (Ctrl-C)                               |
 | 143  | —            | terminated by SIGTERM                                        |
 
-Codes 65, 66, and 71 are granular refinements within the broader categories
-2 (config) and 5 (auth). A script that only checks for non-zero exit is
-unaffected; a script that branches on code 2 or 5 should also handle 65/66/71.
+Codes 65, 66, and 71 are granular refinements within the broader categories:
+66 refines 2 (config — the file is missing rather than malformed), while 65
+and 71 refine 5 (auth — the pull secret is the registry credential, and a
+missing sudo blocks the privilege escalation). A script that only checks for
+non-zero exit is unaffected; a script that branches on code 2 should also
+handle 66, and one that branches on 5 should also handle 65/71.
 
 Code 6 is `doctor`-specific and sits outside the ConfigError/NetworkError/
 ClusterError/AuthError/UsageError hierarchy below: no other command emits
@@ -42,17 +45,27 @@ gained the code.
 
 When an error wraps more than one typed category (e.g. a `ClusterError`
 wrapping a `ConfigError` produced during a failed reload), resolution is not
-"outermost wins": sentinels (65/66/71) outrank every category, and within
+"outermost wins": sentinels (65/66/71) outrank everything, followed by the
+command-local sentinels doctor-warn (6) and plan-drift (7), and within
 categories the precedence is `Config` (2) > `Network` (3) > `Cluster` (4) >
 `Auth` (5) > `Usage` (64) — whichever type is present anywhere in the chain,
 in that order, determines the exit code.
+
+One consequence of `Config` outranking `Network`: `deploy --dry-run` and
+`destroy --dry-run` wrap every plan-preview failure in a configuration
+error, so a Proxmox-unreachable failure during a dry-run exits 2, not 3.
+The network branch below is reachable from the real (non-dry-run)
+deploy/destroy paths.
 
 Commands that do not require root (`status`, `config`, `kubeconfig`, and
 others) exit with code 5 when invoked under `sudo` or as root — the binary
 refuses with "do not run as root/sudo; this tool escalates internally".
 Root-requiring commands (`deploy`, `destroy`, `cleanup`, `update-ingress`)
 must be invoked as a regular user; the binary self-elevates via an internal
-`sudo` re-exec so the privileged body runs as euid=0.
+`sudo` re-exec so the privileged body runs as euid=0. Once that re-exec
+begins, okdctl's process image is replaced by sudo: if sudo itself fails —
+for example on a wrong password — the shell observes sudo's own exit code
+(typically 1), not an okdctl code such as 5 or 71.
 
 ## ConfigError vs UsageError
 
@@ -87,10 +100,11 @@ okdctl deploy
 rc=$?
 case $rc in
   0)   echo "deploy succeeded" ;;
-  2|65|66) echo "fix your config or pull secret, then retry" ;;
+  2|66) echo "fix your config, then retry" ;;
   3)   echo "network unreachable — check DNS and firewall" ;;
   4)   echo "cluster error — inspect oc logs" ;;
-  5|71) echo "auth or privilege problem" ;;
+  5|65|71) echo "auth, pull-secret, or privilege problem" ;;
+  70)  echo "okdctl bug — report it with the stack trace from stderr" ;;
   130) echo "interrupted" ;;
   143) echo "terminated by signal" ;;
   *)   echo "unexpected error (exit $rc)" ;;
