@@ -95,9 +95,9 @@ func (s *OpStep) View(width, height int) string {
 
 	if s.st.Marker != nil {
 		warnStyle := lipgloss.NewStyle().Foreground(tui.ColorWarning)
-		age := time.Since(s.st.Marker.Timestamp).Truncate(time.Minute)
 		content += warnStyle.Render(fmt.Sprintf("⚠ interrupted %s of %s — step: %s, recorded %s ago",
-			s.st.Marker.Op, s.st.Marker.Target, s.st.Marker.Step, age)) + "\n\n"
+			s.st.Marker.Op, s.st.Marker.Target, s.st.Marker.Step,
+			humanAge(time.Since(s.st.Marker.Timestamp)))) + "\n\n"
 	}
 
 	for i, o := range s.ops {
@@ -146,6 +146,24 @@ func (s *OpStep) Apply(_ *config.Config) error {
 		}
 	}
 	return nil
+}
+
+// humanAge renders a duration at minute precision without the trailing
+// zero units time.Duration.String produces ("2h", not "2h0m0s").
+func humanAge(d time.Duration) string {
+	if d < time.Minute {
+		return "under a minute"
+	}
+	h := d / time.Hour
+	m := (d % time.Hour) / time.Minute
+	switch {
+	case h == 0:
+		return fmt.Sprintf("%dm", m)
+	case m == 0:
+		return fmt.Sprintf("%dh", h)
+	default:
+		return fmt.Sprintf("%dh%dm", h, m)
+	}
 }
 
 // SetFocused propagates focus to the selector.
