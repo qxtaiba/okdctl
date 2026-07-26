@@ -22,6 +22,12 @@ const (
 	phaseSetup       deployPhase = "setup"
 	phaseInstall     deployPhase = "install"
 	phasePostInstall deployPhase = "postinstall"
+
+	// phaseCompleted is the terminal marker state clearDeployMarker falls
+	// back to when it cannot remove the file: resume routing and destroy
+	// diagnostics treat it as no marker at all, so a stale-but-unremovable
+	// marker can never route the next deploy through a postinstall resume.
+	phaseCompleted deployPhase = "completed"
 )
 
 // deployStateSchemaV2 is the current deploy-state JSON schema marker. Bump
@@ -58,10 +64,19 @@ func markDeployPhaseFatal(path string, phase deployPhase, runID, clusterName str
 }
 
 // clearDeployMarker removes the marker on clean completion. ErrNotExist is
-// expected (write may have failed silently) and is not warned.
-func clearDeployMarker(path string) {
-	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
-		tui.Warn("could not remove deploy state marker", tui.LF("err", err))
+// expected (write may have failed silently) and is not warned. When the
+// remove itself fails, the marker is overwritten with a terminal completed
+// state instead: leaving the stale phase in place would route the next
+// deploy through a postinstall-only resume of a deploy that already
+// finished.
+func clearDeployMarker(path, runID, clusterName string) {
+	err := os.Remove(path)
+	if err == nil || errors.Is(err, os.ErrNotExist) {
+		return
+	}
+	if writeErr := writeDeployState(path, phaseCompleted, runID, clusterName); writeErr != nil {
+		tui.Warn("could not remove deploy state marker",
+			tui.LF("remove_err", err), tui.LF("mark_completed_err", writeErr))
 	}
 }
 
@@ -164,6 +179,8 @@ func resolveResumePhase(markerPath, clusterName string, freshDeploy bool) (deplo
 		return marker.Phase, marker
 	case phaseSetup:
 		return phaseSetup, marker
+	case phaseCompleted:
+		return phaseSetup, nil
 	}
 	tui.Warn("deploy state marker has unknown phase; treating as absent",
 		tui.LF("phase", string(marker.Phase)))
@@ -216,6 +233,8 @@ func AnnounceState(path, clusterName string) {
 		}
 	}
 	switch ds.Phase {
+	case phaseCompleted:
+		return
 	case phaseSetup:
 		tui.Warn("partial deploy detected — cancelled during setup; terraform state is empty",
 			append([]tui.LogField{tui.LF("run_id", ds.RunID)}, extra...)...)

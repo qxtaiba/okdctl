@@ -220,6 +220,15 @@ func TestResolveResumePhase(t *testing.T) {
 			},
 			wantPhase: phaseSetup,
 		},
+		{
+			name: "completed marker treated as absent, never grants resume",
+			seed: func(t *testing.T, path string) {
+				if err := writeDeployState(path, phaseCompleted, "run-8", "prod"); err != nil {
+					t.Fatalf("writeDeployState: %v", err)
+				}
+			},
+			wantPhase: phaseSetup,
+		},
 	}
 
 	for _, tc := range tests {
@@ -267,5 +276,38 @@ func TestAnnounceDeployState_InstallPhase(t *testing.T) {
 	if err := writeDeployState(path, phaseInstall, "run-inst", "prod"); err != nil {
 		t.Fatalf("writeDeployState: %v", err)
 	}
+	AnnounceState(path, "prod")
+}
+
+func TestClearDeployMarker_RemovesMarker(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "deploy.state")
+	if err := writeDeployState(path, phasePostInstall, "run-x", "prod"); err != nil {
+		t.Fatalf("writeDeployState: %v", err)
+	}
+	clearDeployMarker(path, "run-x", "prod")
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("marker still present after clear: %v", err)
+	}
+	// Absent marker: must be a silent no-op.
+	clearDeployMarker(path, "run-x", "prod")
+}
+
+// TestCompletedMarker_IsInertEverywhere locks the terminal marker contract:
+// a completed-phase marker written by clearDeployMarker's remove-failure
+// fallback must behave exactly like no marker for both resume routing and
+// destroy diagnostics.
+func TestCompletedMarker_IsInertEverywhere(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "deploy.state")
+	if err := writeDeployState(path, phaseCompleted, "run-done", "prod"); err != nil {
+		t.Fatalf("writeDeployState: %v", err)
+	}
+
+	phase, marker := resolveResumePhase(path, "prod", false)
+	if phase != phaseSetup || marker != nil {
+		t.Errorf("resolveResumePhase = (%q, %+v); want (setup, nil)", phase, marker)
+	}
+	// must not print the partial-deploy advisory or panic
 	AnnounceState(path, "prod")
 }

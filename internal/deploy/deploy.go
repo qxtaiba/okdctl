@@ -330,7 +330,7 @@ func Execute(ctx context.Context, cfg *config.Config, opts Options, w io.Writer)
 		return err
 	}
 
-	clearDeployMarker(markerPath)
+	clearDeployMarker(markerPath, runID, cfg.Cluster.Name)
 
 	duration := time.Since(startTime).Round(time.Second)
 
