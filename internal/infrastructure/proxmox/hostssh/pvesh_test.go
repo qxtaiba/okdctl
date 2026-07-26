@@ -1,8 +1,11 @@
 package hostssh
 
 import (
+	"context"
 	"strings"
 	"testing"
+
+	"github.com/qxtaiba/okdctl/internal/executor"
 )
 
 func TestPveshQEMUPath(t *testing.T) {
@@ -33,6 +36,31 @@ func TestPveshRun_RejectsInvalidNode(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "invalid") {
 		t.Errorf("err = %q; want substring 'invalid'", err.Error())
+	}
+}
+
+// TestPveshRun_ComposesNodeScopedPath pins the chokepoint contract: callers
+// hand PveshRun a node-relative resource and the /nodes/<node>/ prefix is
+// composed here, from the same p.Node that validateProxmoxName checks.
+func TestPveshRun_ComposesNodeScopedPath(t *testing.T) {
+	installFakeSSHEcho(t)
+	p := &RemoteISOParams{Node: "pve-01", Host: "pve-test", Exec: executor.New()}
+
+	stdout, err := PveshRun(context.Background(), p, "get", "qemu")
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if !strings.Contains(stdout, "pvesh get /nodes/pve-01/qemu") {
+		t.Errorf("argv = %q; want composed path /nodes/pve-01/qemu", stdout)
+	}
+}
+
+// TestPveshRun_ExportedRejectsInvalidNode proves the exported entry point
+// cannot be used to smuggle a bad node atom into the composed path.
+func TestPveshRun_ExportedRejectsInvalidNode(t *testing.T) {
+	p := &RemoteISOParams{Node: "bad;rm -rf /", Host: "ignored"}
+	if _, err := PveshRun(t.Context(), p, "get", "qemu"); err == nil {
+		t.Fatal("expected error for malformed node name; got nil")
 	}
 }
 

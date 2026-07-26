@@ -483,7 +483,7 @@ func (p *Provider) probeVMEnumeration(ctx context.Context, cfg *config.Config) v
 		Exec:           p.sshExec,
 		KnownHostsPath: p.knownHostsPath,
 	}
-	stdout, err := hostssh.PveshRun(ctx, params, "get", "/nodes/"+p.node+"/qemu")
+	stdout, err := hostssh.PveshRun(ctx, params, "get", "qemu")
 	if err != nil {
 		p.logger.Debug("terraform: pvesh probe skipped", "err", err)
 		return enumProbeSkipped
