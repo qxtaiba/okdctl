@@ -14,6 +14,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/executor"
 	"github.com/qxtaiba/okdctl/internal/logutil"
+	"github.com/qxtaiba/okdctl/internal/testutil"
 )
 
 var postinstallStepOrder = []distribution.StepID{
@@ -200,16 +201,11 @@ func TestPostinstallExecute_BootstrapTeardownViaFakeTerraform(t *testing.T) {
 // command lines instead of exit-code behaviour.
 func installFakeTerraformArgv(t *testing.T) {
 	t.Helper()
-	dir := t.TempDir()
-	script := `#!/bin/sh
+	testutil.InstallFakeBin(t, "terraform", `#!/bin/sh
 echo "$@" >> "$TF_ARGV_LOG"
 exit 0
-`
-	if err := os.WriteFile(filepath.Join(dir, "terraform"), []byte(script), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("PATH", dir)
-	t.Setenv("TF_ARGV_LOG", filepath.Join(dir, "argv.log"))
+`)
+	t.Setenv("TF_ARGV_LOG", filepath.Join(t.TempDir(), "argv.log"))
 }
 
 func readBootstrapArgvLines(t *testing.T) []string {

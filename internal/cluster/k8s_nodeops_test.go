@@ -6,7 +6,6 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 
@@ -14,6 +13,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/executor"
 	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/nodetypes"
+	"github.com/qxtaiba/okdctl/internal/testutil"
 )
 
 func TestNodeIndex(t *testing.T) {
@@ -74,24 +74,15 @@ func TestParseMastersSchedulable(t *testing.T) {
 	}
 }
 
-// installFakeOCHugeOutput writes a PATH-shadow "oc" script emitting more
+// installFakeOCHugeOutput installs a PATH-shadow "oc" script emitting more
 // than the executor's 4 MiB output-capture cap, so RunOutput sets
 // Result.Truncated without needing a real oversized cluster response.
 func installFakeOCHugeOutput(t *testing.T) {
 	t.Helper()
-	if runtime.GOOS == goosWindows {
-		t.Skip("fake-oc script relies on POSIX sh")
-	}
-	dir := t.TempDir()
-	script := `#!/bin/sh
+	testutil.InstallFakeBin(t, "oc", `#!/bin/sh
 head -c 5000000 /dev/zero | tr '\0' '{'
 exit 0
-`
-	path := filepath.Join(dir, "oc")
-	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+`)
 }
 
 // TestMastersSchedulable_TruncatedOutputErrors is a regression test: before
@@ -125,7 +116,7 @@ func TestParsePodPlacements(t *testing.T) {
 	}
 }
 
-// installFakeOCGeneric writes a POSIX sh "oc" script that appends its full
+// installFakeOCGeneric installs a POSIX sh "oc" script that appends its full
 // argv to an argv log, copies stdin to a stdin log, prints $OC_STDOUT
 // verbatim, and exits $OC_EXIT_CODE (default 0). Returns the argv and stdin
 // log paths. Combines installFakePatchOC's argv logging with
@@ -134,21 +125,13 @@ func TestParsePodPlacements(t *testing.T) {
 // node-lifecycle and raw-query primitives.
 func installFakeOCGeneric(t *testing.T) (argvLog, stdinLog string) {
 	t.Helper()
-	if runtime.GOOS == goosWindows {
-		t.Skip("fake-oc script relies on POSIX sh")
-	}
-	dir := t.TempDir()
-	script := `#!/bin/sh
+	testutil.InstallFakeBin(t, "oc", `#!/bin/sh
 echo "$@" >> "$OC_ARGV_LOG"
 cat > "$OC_STDIN_LOG"
 printf '%s' "${OC_STDOUT:-}"
 exit "${OC_EXIT_CODE:-0}"
-`
-	path := filepath.Join(dir, "oc")
-	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+`)
+	dir := t.TempDir()
 	argvLog = filepath.Join(dir, "argv.log")
 	stdinLog = filepath.Join(dir, "stdin.log")
 	t.Setenv("OC_ARGV_LOG", argvLog)

@@ -3,33 +3,22 @@ package cluster
 import (
 	"context"
 	"errors"
-	"os"
-	"path/filepath"
-	"runtime"
 	"slices"
 	"testing"
 
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/logutil"
+	"github.com/qxtaiba/okdctl/internal/testutil"
 )
 
-// installFakeOCEmitting writes a PATH-shadow "oc" that prints $OC_JSON on any
-// invocation and exits $OC_EXIT (default 0).
+// installFakeOCEmitting installs a PATH-shadow "oc" that prints $OC_JSON on
+// any invocation and exits $OC_EXIT (default 0).
 func installFakeOCEmitting(t *testing.T) {
 	t.Helper()
-	if runtime.GOOS == goosWindows {
-		t.Skip("fake-oc script relies on POSIX sh")
-	}
-	dir := t.TempDir()
-	script := `#!/bin/sh
+	testutil.InstallFakeBin(t, "oc", `#!/bin/sh
 printf '%s' "${OC_JSON:-}"
 exit "${OC_EXIT:-0}"
-`
-	path := filepath.Join(dir, "oc")
-	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+`)
 }
 
 func TestParseOperatorHealth(t *testing.T) {

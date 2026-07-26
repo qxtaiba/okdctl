@@ -16,12 +16,15 @@ import (
 // non-empty, makes that subcommand exit 1 with stderr output.
 func installRecordingTerraform(t *testing.T, failSubcommand string) {
 	t.Helper()
-	script := "#!/bin/sh\nprintf '%s\\n' \"$*\" >> argv.log\n"
-	if failSubcommand != "" {
-		script += "if [ \"$1\" = \"" + failSubcommand + "\" ]; then echo 'Error: simulated failure' >&2; exit 1; fi\n"
-	}
-	script += "exit 0\n"
-	testutil.InstallFakeBin(t, "terraform", script)
+	testutil.InstallFakeBin(t, "terraform", `#!/bin/sh
+printf '%s\n' "$*" >> argv.log
+if [ -n "${TF_FAKE_FAIL:-}" ] && [ "$1" = "$TF_FAKE_FAIL" ]; then
+  echo 'Error: simulated failure' >&2
+  exit 1
+fi
+exit 0
+`)
+	t.Setenv("TF_FAKE_FAIL", failSubcommand)
 }
 
 func recordedArgv(t *testing.T, workDir string) []string {

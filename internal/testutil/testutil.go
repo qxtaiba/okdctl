@@ -9,24 +9,55 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sync"
 	"testing"
 )
 
-// InstallFakeBin writes script to a temp directory as an executable file
-// named name and prepends that directory to PATH for the test's duration.
+var (
+	fakeBinMu   sync.Mutex
+	fakeBinDirs = map[string]string{}
+)
+
+// InstallFakeBin installs an executable file named name containing script
+// and prepends its directory to PATH for the test's duration. Each distinct
+// (name, script) pair is written exactly once per test-binary run and the
+// directory is reused across tests: macOS Gatekeeper charges ~0.4s for the
+// first exec of every freshly written script, so per-test temp dirs made
+// suites pay that scan hundreds of times. Per-test behavior differences
+// must therefore flow through env vars (OC_EXIT_CODE, OC_ARGV_LOG, ...),
+// never through per-test script edits. The shared directories are not
+// removed on test completion — the leak is bounded by the number of
+// distinct scripts per run and lands in the OS temp dir.
 // It skips the test on Windows since fake binaries rely on POSIX sh.
 func InstallFakeBin(t *testing.T, name, script string) string {
 	t.Helper()
 	if runtime.GOOS == "windows" {
 		t.Skip("fake binaries rely on POSIX sh")
 	}
-	dir := t.TempDir()
-	path := filepath.Join(dir, name)
-	if err := os.WriteFile(path, []byte(script), 0o755); err != nil { //nolint:gosec // G306: fake test binary needs +x
+	dir, err := fakeBinDir(name, script)
+	if err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	return dir
+}
+
+func fakeBinDir(name, script string) (string, error) {
+	fakeBinMu.Lock()
+	defer fakeBinMu.Unlock()
+	key := name + "\x00" + script
+	if dir, ok := fakeBinDirs[key]; ok {
+		return dir, nil
+	}
+	dir, err := os.MkdirTemp("", "okdctl-fakebin-")
+	if err != nil {
+		return "", err
+	}
+	if err := os.WriteFile(filepath.Join(dir, name), []byte(script), 0o755); err != nil { //nolint:gosec // G306: fake test binary needs +x
+		return "", err
+	}
+	fakeBinDirs[key] = dir
+	return dir, nil
 }
 
 // CaptureHandler is an slog.Handler that records every emitted Record so
