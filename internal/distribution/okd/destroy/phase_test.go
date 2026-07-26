@@ -196,6 +196,10 @@ func installFakeTerraformArgv(t *testing.T) string {
 	logPath := filepath.Join(dir, "argv.log")
 	script := `#!/bin/sh
 echo "$@" >> "$TF_ARGV_LOG"
+if [ "$1" = "state" ]; then
+  # state list <addr> with no match: exit 1, empty stdout/stderr.
+  exit 1
+fi
 if [ "$1" = "plan" ]; then
   if [ "${TF_FAKE_MODE:-ok}" = "plan-fail" ]; then
     echo "fake: plan error" >&2
@@ -206,6 +210,10 @@ if [ "$1" = "plan" ]; then
       -out=*) : > "${a#-out=}" ;;
     esac
   done
+fi
+if [ "$1" = "apply" ]; then
+  # destroy-apply leaves an empty state, as real terraform destroy does.
+  printf '{"version":4,"resources":[]}' > terraform.tfstate
 fi
 exit 0
 `

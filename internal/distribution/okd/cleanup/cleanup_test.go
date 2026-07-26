@@ -220,8 +220,11 @@ func TestExecute_FullKind_AllStepsRun(t *testing.T) {
 	if err := os.MkdirAll(envDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
+	// Empty (destroyed) state: a populated or corrupt tfstate makes the
+	// work-directory step preserve cluster credentials instead.
+	const stateBody = `{"version":4,"resources":[]}`
 	tfstate := filepath.Join(envDir, "terraform.tfstate")
-	if err := os.WriteFile(tfstate, []byte("STATE"), 0o600); err != nil {
+	if err := os.WriteFile(tfstate, []byte(stateBody), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -250,7 +253,7 @@ func TestExecute_FullKind_AllStepsRun(t *testing.T) {
 	if err != nil {
 		t.Fatalf("terraform.tfstate removed (DATA LOSS): %v", err)
 	}
-	if string(body) != "STATE" {
+	if string(body) != stateBody {
 		t.Errorf("terraform.tfstate mutated: %q", body)
 	}
 }

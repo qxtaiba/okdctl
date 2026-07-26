@@ -83,6 +83,12 @@ type Options struct {
 	// PostDestroy gates removal of an empty terraform.tfstate after a
 	// successful terraform destroy. Must not be set on setup-flow runs.
 	PostDestroy bool
+	// ForceCredentialWipe permits removing cluster-config (auth/kubeconfig
+	// and auth/kubeadmin-password) even while terraform state still has
+	// resources. Set it only after explicit operator consent naming
+	// credential loss (deploy --fresh); default false preserves the
+	// credentials of a live cluster.
+	ForceCredentialWipe bool
 }
 
 // NewOptions builds the default cleanup Options for cfg, projectRoot, and
@@ -173,6 +179,33 @@ func executeWithRecorder(ctx context.Context, opts *Options, logger *slog.Logger
 	return o.Run(ctx)
 }
 
+// retainClusterCredentials decides whether the work-directory step must
+// preserve cluster-config: populated terraform state means the VMs are
+// still live, so deleting the only admin credentials (kubeconfig,
+// kubeadmin-password) would orphan a running cluster. Corrupt state fails
+// closed with an error — it cannot vouch that the cluster is gone. Only
+// ForceCredentialWipe (explicit operator consent, e.g. deploy --fresh)
+// bypasses both outcomes.
+func retainClusterCredentials(opts *Options, logger *slog.Logger) (bool, error) {
+	if opts.ForceCredentialWipe {
+		return false, nil
+	}
+	envDir := phase.TerraformEnvDir(opts.ProjectRoot, opts.TerraformEnv)
+	tf := terraform.New(envDir, terraform.WithLogger(logger))
+	switch tf.StateStatus() {
+	case terraform.StateStatusPopulated:
+		logger.Warn("cleanup: terraform state still has resources; preserving cluster credentials (cluster-config with kubeconfig and kubeadmin-password) — run 'okdctl destroy' to tear the cluster down first")
+		return true, nil
+	case terraform.StateStatusCorrupt:
+		return false, &errtypes.ClusterError{
+			Msg: fmt.Sprintf("terraform state is corrupt; refusing to remove cluster credentials — restore %s and re-run",
+				filepath.Join(envDir, "terraform.tfstate")),
+		}
+	default:
+		return false, nil
+	}
+}
+
 func cleanupSummaryStep(opts *Options, t *cleanupTracker, logger *slog.Logger) distribution.StepDef {
 	return distribution.StepDef{
 		ID: StepCleanupSummary, Name: "cleanup summary",
@@ -208,7 +241,13 @@ func cleanupSteps(opts *Options, logger *slog.Logger) []distribution.StepDef {
 		AlreadyDone: func(_ context.Context) (bool, error) {
 			return !system.DirExists(opts.WorkDir), nil
 		},
-		Exec:    func(ctx context.Context) error { return WorkDirectory(ctx, opts.WorkDir, logger) },
+		Exec: func(ctx context.Context) error {
+			retain, err := retainClusterCredentials(opts, logger)
+			if err != nil {
+				return err
+			}
+			return WorkDirectory(ctx, opts.WorkDir, retain, logger)
+		},
 		OnError: t.onError("work directory"),
 	}
 

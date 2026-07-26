@@ -68,11 +68,16 @@ func SafeRemoveWithLogger(ctx context.Context, path, description string, logger 
 // workDir itself. Best-effort: failures accumulate into the returned joined
 // error rather than aborting early.
 //
+// retainClusterConfig preserves cluster-config (auth/kubeconfig and
+// auth/kubeadmin-password — the only admin credentials) and the workDir
+// root that contains it; everything else is still removed. Callers set it
+// when terraform state says the cluster is still live.
+//
 // All Full-sequence steps that follow this one (webServer, haproxy,
 // dnsmasq, terraform, packages, ignition-certs) reference paths outside
 // workDir, so a partial-strip from a mid-run crash does not break
 // subsequent cleanup steps.
-func WorkDirectory(ctx context.Context, workDir string, logger *slog.Logger) error {
+func WorkDirectory(ctx context.Context, workDir string, retainClusterConfig bool, logger *slog.Logger) error {
 	if _, err := os.Stat(workDir); errors.Is(err, os.ErrNotExist) {
 		return nil
 	}
@@ -87,12 +92,16 @@ func WorkDirectory(ctx context.Context, workDir string, logger *slog.Logger) err
 		}
 	}
 
-	remove(phase.ClusterConfigDir(workDir), "cluster configuration")
+	if !retainClusterConfig {
+		remove(phase.ClusterConfigDir(workDir), "cluster configuration")
+	}
 	remove(filepath.Join(workDir, "custom-isos"), "custom ISOs")
 	remove(filepath.Join(workDir, "installer"), "installer")
 	remove(filepath.Join(workDir, "tmp"), "temp files")
 	remove(filepath.Join(workDir, "downloads"), "downloads")
-	remove(workDir, "work directory")
+	if !retainClusterConfig {
+		remove(workDir, "work directory")
+	}
 
 	return errors.Join(errs...)
 }
