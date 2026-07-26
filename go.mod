@@ -12,7 +12,10 @@ require (
 	github.com/luthermonson/go-proxmox v0.8.1
 	github.com/spf13/cobra v1.10.2
 	// ci-testgo-xcrypto-053-runner-death — v0.53.0 OOM-kills the ubuntu CI
-	// runner during go test; re-bump once the root cause is understood.
+	// runner during go test; renovate blocks only v0.53.0, so the first
+	// v0.54.0+ bump PR is the CI canary — if its test-go job survives,
+	// merge and drop this comment; if it OOMs, re-widen the renovate block
+	// and record the outcome in CLAUDE.md §dependencies.
 	golang.org/x/crypto v0.52.0
 	golang.org/x/mod v0.38.0
 	golang.org/x/term v0.45.0

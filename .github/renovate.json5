@@ -27,9 +27,9 @@
   },
   "packageRules": [
     {
-      "description": "ci-testgo-xcrypto-053-runner-death — x/crypto v0.53.0 OOM-kills the ubuntu CI runner; hold until root-cause is understood",
+      "description": "ci-testgo-xcrypto-053-runner-death — x/crypto v0.53.0 OOM-kills the ubuntu CI runner; block only that version so the first v0.54.0+ PR doubles as the CI canary",
       "matchPackageNames": ["golang.org/x/crypto"],
-      "enabled": false
+      "allowedVersions": "!/^v0\\.53\\.0$/"
     }
   ]
 }
