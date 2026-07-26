@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
+	"os"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -206,6 +208,12 @@ func buildNodeRunner(cmd *cobra.Command, cfg *config.Config, verb string, consen
 	if err != nil {
 		return nil, err
 	}
+	tfEnv := cfg.TerraformEnvName()
+	terraformDir := system.TerraformEnvDir(projectRoot, tfEnv)
+	if err := ensureTerraformWorkspace(terraformDir); err != nil {
+		return nil, err
+	}
+
 	creds, err := handleCredentials(cfg)
 	if err != nil {
 		return nil, err
@@ -216,8 +224,6 @@ func buildNodeRunner(cmd *cobra.Command, cfg *config.Config, verb string, consen
 		hostTotalMiB, hostAllocatedMiB = runHostBudgetProbe(ctx, cfg, creds)
 	}
 
-	tfEnv := cfg.TerraformEnvName()
-	terraformDir := system.TerraformEnvDir(projectRoot, tfEnv)
 	tfOpts := []terraform.Option{terraform.WithLogger(tui.SimpleLogger())}
 	if creds.IsValid() {
 		tfOpts = append(tfOpts, terraform.WithEnv(creds.Env()))
@@ -356,6 +362,20 @@ func runHostBudgetProbe(ctx context.Context, cfg *config.Config, creds *credenti
 			tui.LF("total_gib", d.TotalBytes/(1024*1024*1024)))
 	}
 	return probe.HostMemTotalMiB(), probe.GuestAllocatedMiB()
+}
+
+// ensureTerraformWorkspace fails fast with a targeted error when the
+// terraform environment dir is absent — before credentials are prompted for
+// or the run lock is taken — so a node op in a never-deployed directory
+// doesn't surface as a raw terraform chdir failure.
+func ensureTerraformWorkspace(terraformDir string) error {
+	if _, err := os.Stat(terraformDir); err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return &errtypes.ConfigError{Msg: fmt.Sprintf("no terraform workspace at %s; run 'okdctl deploy' from this directory first", terraformDir)}
+		}
+		return &errtypes.ConfigError{Msg: "stat terraform workspace", Err: err}
+	}
+	return nil
 }
 
 func runNodeRemove(cmd *cobra.Command, args []string) error {

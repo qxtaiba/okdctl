@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -67,6 +68,26 @@ func TestValidateResizeFlags(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestEnsureTerraformWorkspace(t *testing.T) {
+	t.Run("missing dir returns targeted config error", func(t *testing.T) {
+		dir := filepath.Join(t.TempDir(), "never-deployed")
+		err := ensureTerraformWorkspace(dir)
+		var cfgErr *errtypes.ConfigError
+		if !errors.As(err, &cfgErr) {
+			t.Fatalf("want *errtypes.ConfigError, got %v (%T)", err, err)
+		}
+		if !strings.Contains(cfgErr.Msg, "okdctl deploy") {
+			t.Errorf("error must point at 'okdctl deploy', got %q", cfgErr.Msg)
+		}
+	})
+
+	t.Run("existing dir passes", func(t *testing.T) {
+		if err := ensureTerraformWorkspace(t.TempDir()); err != nil {
+			t.Fatalf("want nil, got %v", err)
+		}
+	})
 }
 
 func TestNodeConfirmHookYesPrintsBoxSkipsGate(t *testing.T) {
