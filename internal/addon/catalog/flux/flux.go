@@ -329,11 +329,13 @@ func (f *Flux) waitForControllers(ctx context.Context, env *addon.Environment, f
 	timeout := fs.ControllerTimeout
 
 	if err := system.WaitForWithTimeout(ctx, "flux", "controllers", func(context.Context) bool {
-		result, _ := env.Exec.Run(ctx, "oc", "get", "deployments",
+		// RunOutput + Truncated guard, not the ring-truncated Run: this
+		// output is machine-parsed line by line.
+		result, err := env.Exec.RunOutput(ctx, 0, "oc", "get", "deployments",
 			"-n", "flux-system",
 			"-l", "app.kubernetes.io/part-of=flux",
 			"-o", "jsonpath={range .items[*]}{.metadata.name}={.status.availableReplicas}{\"\\n\"}{end}")
-		if result.ExitCode != 0 {
+		if err != nil || result.ExitCode != 0 || result.Truncated {
 			return false
 		}
 		lines := strings.Split(strings.TrimSpace(result.Stdout), "\n")
@@ -423,9 +425,15 @@ func (f *Flux) createDeployKeySecret(ctx context.Context, env *addon.Environment
 		return fmt.Errorf("read deploy key public half: %w", err)
 	}
 
-	knownHostsResult, err := env.Exec.RunChecked(ctx, "ssh-keyscan", host)
+	// RunOutputChecked, not the ring-truncated RunChecked: this output feeds
+	// fingerprint verification and the known_hosts Secret, so a silently
+	// truncated tail must fail closed instead of being parsed.
+	knownHostsResult, err := env.Exec.RunOutputChecked(ctx, 0, "ssh-keyscan", host)
 	if err != nil {
 		return fmt.Errorf("get host key for %s: %w", host, err)
+	}
+	if knownHostsResult.Truncated {
+		return fmt.Errorf("ssh-keyscan output for %s exceeded the capture limit; refusing to verify a partial host-key list", host)
 	}
 
 	if err := verifyKeyscanFingerprint(knownHostsResult.Stdout, host, fs.GitHostFingerprint, fs.AcceptHostKey, env.Logger); err != nil {
