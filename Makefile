@@ -57,7 +57,7 @@ run: ## Run the CLI directly
 	$(GOCMD) run ./cmd/okdctl $(ARGS)
 
 # renovate: datasource=go depName=github.com/air-verse/air
-AIR_VERSION=v1.67.2
+AIR_VERSION=v1.67.3
 
 dev: ## Run with hot reload (requires air)
 	# air is dev-only (not in the release binary); pin to a known-good version rather than @latest.
