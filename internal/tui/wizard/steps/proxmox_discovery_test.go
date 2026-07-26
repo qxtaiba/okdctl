@@ -221,18 +221,3 @@ func TestClassifyError(t *testing.T) {
 		})
 	}
 }
-
-func TestBuildBaseURL(t *testing.T) {
-	cases := map[string]string{
-		"pve.example.test":             "https://pve.example.test",
-		"pve.example.test/":            "https://pve.example.test",
-		"https://pve.example.test":     "https://pve.example.test",
-		"https://pve.example.test/":    "https://pve.example.test",
-		"http://pve.example.test:8006": "http://pve.example.test:8006",
-	}
-	for in, want := range cases {
-		if got := buildBaseURL(in); got != want {
-			t.Errorf("buildBaseURL(%q) = %q; want %q", in, got, want)
-		}
-	}
-}

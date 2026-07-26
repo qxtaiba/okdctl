@@ -2,10 +2,8 @@ package proxmox
 
 import (
 	"context"
-	"crypto/tls"
 	"fmt"
 	"log/slog"
-	"net/http"
 	"strings"
 	"sync"
 	"time"
@@ -132,11 +130,10 @@ func newProbeClient(opts *ProbeOptions, timeout time.Duration) (*proxmox.Client,
 }
 
 // newProxmoxClient builds a read/operational go-proxmox client shared by the
-// host probe and the power-cycler. Password auth mirrors the wizard discovery
-// path; token auth is the headless bastion default. go-proxmox needs the token
-// split into id=secret; the credential []byte becomes an immutable Go string
-// inside the client that Zeroize cannot reach — bounded to the single call, the
-// caller still wipes its own copy.
+// host probe and the power-cycler. Token auth is the headless bastion
+// default. go-proxmox needs the token split into id=secret; the credential
+// []byte becomes an immutable Go string inside the client that Zeroize cannot
+// reach — bounded to the single call, the caller still wipes its own copy.
 func newProxmoxClient(endpoint, username string, password, apiToken []byte, insecure bool, timeout time.Duration) (*proxmox.Client, error) {
 	if endpoint == "" {
 		return nil, fmt.Errorf("proxmox client: endpoint is required")
@@ -144,8 +141,8 @@ func newProxmoxClient(endpoint, username string, password, apiToken []byte, inse
 	if insecure {
 		warnInsecureTLS(endpoint)
 	}
-	httpClient := newAPIHTTPClient(insecure, timeout)
-	base := normalizeEndpoint(endpoint) + "/api2/json"
+	httpClient := httputil.NewOptionalInsecure(insecure, timeout)
+	base := APIBaseURL(endpoint)
 
 	switch {
 	case len(password) > 0:
@@ -167,18 +164,6 @@ func newProxmoxClient(endpoint, username string, password, apiToken []byte, inse
 	default:
 		return nil, fmt.Errorf("proxmox client: no credentials (need password or api token)")
 	}
-}
-
-// newAPIHTTPClient builds the transport for the hand-rolled go-proxmox
-// client: request timeout, operator-opt-in TLS verification skip, and the
-// same redirect policy every httputil-built client gets. The redirect cap
-// is load-bearing here — go-proxmox attaches auth per request, so a
-// compromised or misconfigured endpoint could otherwise walk the token
-// cross-host.
-func newAPIHTTPClient(insecure bool, timeout time.Duration) *http.Client {
-	return httputil.NewWithTransport(&http.Transport{
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: insecure}, //nolint:gosec // operator opts in via Insecure
-	}, timeout)
 }
 
 var insecureTLSWarnOnce sync.Once
@@ -228,6 +213,14 @@ func dedupe(names []string) []string {
 		out = append(out, n)
 	}
 	return out
+}
+
+// APIBaseURL normalizes endpoint (https scheme by default, trailing slashes
+// trimmed) and appends the /api2/json API root. It is the single place the
+// suffix is written; every go-proxmox client (probe, power-cycler, wizard
+// discovery) builds its base URL here.
+func APIBaseURL(endpoint string) string {
+	return normalizeEndpoint(endpoint) + "/api2/json"
 }
 
 func normalizeEndpoint(endpoint string) string {

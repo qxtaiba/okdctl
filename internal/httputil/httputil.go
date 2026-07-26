@@ -57,16 +57,22 @@ func NewInsecure(timeout time.Duration) *http.Client {
 	}
 }
 
-// NewWithTransport returns a client using the caller-supplied transport,
-// with the standard redirect policy installed. It exists for callers that
-// must carry a transport the other factories cannot express (e.g. the
-// Proxmox probe's operator-opt-in TLS skip) without losing the 5-hop cap
-// and cross-host Authorization refusal every httputil client gets.
-func NewWithTransport(transport http.RoundTripper, timeout time.Duration) *http.Client {
+// NewOptionalInsecure returns a client that skips TLS verification only when
+// insecure is true — the operator-opt-in path for the go-proxmox API clients
+// (host probe, power-cycler, wizard discovery). The standard redirect policy
+// is always installed and is load-bearing here: go-proxmox attaches auth per
+// request, so an uncapped redirect chain could walk the credential cross-host.
+//
+// Adding a new caller requires adding its package path to the
+// NewOptionalInsecure allowlist in TestNewInsecureCallerPolicy
+// (httputil_newinsecure_policy_test.go).
+func NewOptionalInsecure(insecure bool, timeout time.Duration) *http.Client {
 	return &http.Client{
 		Timeout:       timeout,
 		CheckRedirect: capRedirects,
-		Transport:     transport,
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: insecure}, //nolint:gosec // caller opts in; callers gated by TestNewInsecureCallerPolicy
+		},
 	}
 }
 

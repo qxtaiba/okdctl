@@ -63,6 +63,31 @@ func TestNewInsecure(t *testing.T) {
 	}
 }
 
+func TestNewOptionalInsecure(t *testing.T) {
+	c := NewOptionalInsecure(true, 3*time.Second)
+	if c.Timeout != 3*time.Second {
+		t.Errorf("Timeout = %v, want 3s", c.Timeout)
+	}
+	if c.CheckRedirect == nil {
+		t.Error("CheckRedirect not installed on NewOptionalInsecure client")
+	}
+	tr, ok := c.Transport.(*http.Transport)
+	if !ok {
+		t.Fatalf("Transport not *http.Transport: %T", c.Transport)
+	}
+	if !tr.TLSClientConfig.InsecureSkipVerify {
+		t.Error("insecure=true not carried into TLSClientConfig")
+	}
+
+	secure := NewOptionalInsecure(false, time.Second)
+	if secure.Transport.(*http.Transport).TLSClientConfig.InsecureSkipVerify {
+		t.Error("insecure=false must keep TLS verification on")
+	}
+	if secure.CheckRedirect == nil {
+		t.Error("CheckRedirect not installed on secure NewOptionalInsecure client")
+	}
+}
+
 func TestNewWithCA(t *testing.T) {
 	pool := x509.NewCertPool()
 	c := NewWithCA(pool, 7*time.Second)

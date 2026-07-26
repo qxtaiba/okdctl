@@ -1,23 +1,33 @@
 package httputil_test
 
 import (
+	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
 
-// TestNewInsecureCallerPolicy fails if any file outside
-// internal/distribution/okd/postinstall/ both imports httputil and calls
-// httputil.NewInsecure. TLS-skip clients are only legitimate during the
-// bootstrap window where no cluster CA is yet available; new callers must
-// add themselves to allowedPrefixes after a security review.
+// TestNewInsecureCallerPolicy fails if any file both imports httputil and
+// calls a TLS-skip-capable factory (NewInsecure, NewOptionalInsecure) from
+// outside that factory's allowlisted paths. TLS-skip clients are legitimate
+// only during the bootstrap window where no cluster CA is yet available
+// (NewInsecure) or on the operator-opt-in Proxmox API paths
+// (NewOptionalInsecure); new callers must add themselves to
+// allowedPrefixes after a security review.
 func TestNewInsecureCallerPolicy(t *testing.T) {
 	const importPath = "github.com/qxtaiba/okdctl/internal/httputil"
-	allowedPrefixes := []string{"internal/distribution/okd/postinstall/"}
+	allowedPrefixes := map[string][]string{
+		"NewInsecure": {"internal/distribution/okd/postinstall/"},
+		"NewOptionalInsecure": {
+			"internal/infrastructure/proxmox/",
+			"internal/tui/wizard/steps/",
+		},
+	}
 
 	root, err := findInternalDir()
 	if err != nil {
@@ -45,19 +55,18 @@ func TestNewInsecureCallerPolicy(t *testing.T) {
 		if err != nil {
 			return nil //nolint:nilerr // unparseable files are the compiler's problem; the sweep asserts only on parseable sources
 		}
-		if !callsNewInsecure(full) {
-			return nil
-		}
 		rel := filepath.ToSlash(path)
-		ok := false
-		for _, prefix := range allowedPrefixes {
-			if strings.Contains(rel, prefix) {
-				ok = true
-				break
+		for _, fn := range calledInsecureFactories(full, allowedPrefixes) {
+			ok := false
+			for _, prefix := range allowedPrefixes[fn] {
+				if strings.Contains(rel, prefix) {
+					ok = true
+					break
+				}
 			}
-		}
-		if !ok {
-			violations = append(violations, path)
+			if !ok {
+				violations = append(violations, fmt.Sprintf("httputil.%s called outside its allowlisted paths: %s", fn, path))
+			}
 		}
 		return nil
 	})
@@ -65,7 +74,7 @@ func TestNewInsecureCallerPolicy(t *testing.T) {
 		t.Fatalf("walk: %v", walkErr)
 	}
 	for _, v := range violations {
-		t.Errorf("httputil.NewInsecure called outside allowed postinstall/ path: %s", v)
+		t.Error(v)
 	}
 }
 
@@ -78,12 +87,11 @@ func importsPath(f *ast.File, path string) bool {
 	return false
 }
 
-func callsNewInsecure(f *ast.File) bool {
-	found := false
+// calledInsecureFactories returns the gated httputil factory names (keys of
+// gated) the file calls, deduplicated.
+func calledInsecureFactories(f *ast.File, gated map[string][]string) []string {
+	seen := map[string]bool{}
 	ast.Inspect(f, func(n ast.Node) bool {
-		if found {
-			return false
-		}
 		call, ok := n.(*ast.CallExpr)
 		if !ok {
 			return true
@@ -96,13 +104,19 @@ func callsNewInsecure(f *ast.File) bool {
 		if !ok {
 			return true
 		}
-		if ident.Name == "httputil" && sel.Sel.Name == "NewInsecure" {
-			found = true
-			return false
+		if ident.Name == "httputil" {
+			if _, gatedFn := gated[sel.Sel.Name]; gatedFn {
+				seen[sel.Sel.Name] = true
+			}
 		}
 		return true
 	})
-	return found
+	names := make([]string, 0, len(seen))
+	for name := range seen {
+		names = append(names, name)
+	}
+	slices.Sort(names)
+	return names
 }
 
 func findInternalDir() (string, error) {
