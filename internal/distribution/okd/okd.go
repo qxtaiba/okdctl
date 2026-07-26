@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/distribution"
@@ -358,11 +359,19 @@ func resolveIngressWorkDir(projectRoot, workDir string) string {
 	return workDir
 }
 
-// ZeroizeEnv delegates to the underlying executor's ZeroizeEnv, bounding
-// the lifetime of plaintext credential strings. Call via defer after all
-// phases complete. Kept as credential-lifecycle scaffolding; field owner
-// is executor.Executor.ZeroizeEnv.
+// ZeroizeEnv blanks secret-keyed entries in pendingEnv, clears and nils the
+// slice, then delegates to the underlying executor's ZeroizeEnv, bounding
+// the lifetime of plaintext credential strings on both copies. Call via
+// defer after all phases complete.
 func (p *Provisioner) ZeroizeEnv() {
+	for i, kv := range p.pendingEnv {
+		key, _, _ := strings.Cut(kv, "=")
+		if logutil.KeyIsSecret(key) {
+			p.pendingEnv[i] = ""
+		}
+	}
+	clear(p.pendingEnv)
+	p.pendingEnv = nil
 	if p.executor == nil {
 		return
 	}
