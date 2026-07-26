@@ -94,7 +94,7 @@ This is **design-doc-first**. No code lands until the plan is reviewed.
 
 ### R1 — Addon category model + design doc
 
-- **Status:** in review — PR #337
+- **Status:** stalled — design PR #337 closed unmerged; no design doc in docs/superpowers/plans. Needs owner decision: restart the design or defer R1 explicitly.
 - **Category:** feature-gap / half-done
 - **State:** design needed
 - **Effort:** weeks
@@ -736,7 +736,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `api:97cb8adf:opt-struct-vs-functional-waitfor` — opt struct vs functional waitfor
 
-**Status:** in review — PR #941
+**Status:** done — PR #941 (merged 2026-07-12)
 **Severity:** suggestion
 **Cluster:** option-consistency
 **Evidence:** `internal/system/exec.go:89-102`
@@ -766,7 +766,7 @@ Filed by the orchestrator aggregation so `/roadmap-pickup` can fan them out when
 
 ##### `api:beabab0c:opt-execute-takes-cfg-twice` — opt execute takes cfg twice
 
-**Status:** in review — PR #941
+**Status:** done — PR #941 (merged 2026-07-12)
 **Severity:** suggestion
 **Cluster:** option-consistency
 **Evidence:** `internal/distribution/okd/setup/phase.go:120-135`
@@ -1393,7 +1393,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `smell:4ded56d3:retry-scaffold-triplicated` — retry scaffold triplicated
 
-**Status:** in review — PR #940
+**Status:** done — PR #940 (merged 2026-07-25)
 **Severity:** minor
 **Cluster:** dual-impl-same-job
 **Evidence:** `internal/download/retry.go:84-112` + 2 more
@@ -1413,7 +1413,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `smell:0139cb3f:magic-path-literal` — magic path literal
 
-**Status:** in review — PR #940
+**Status:** done — PR #940 (merged 2026-07-25)
 **Severity:** minor
 **Cluster:** magic-strings
 **Evidence:** `internal/distribution/okd/phase/paths.go:130-137` + 16 more
@@ -1423,7 +1423,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `smell:6424733c:pipeline-explicit-errors` — pipeline explicit errors
 
-**Status:** in review — PR #940
+**Status:** done — PR #940 (merged 2026-07-25)
 **Severity:** suggestion
 **Cluster:** arrow-anti
 **Evidence:** `internal/cli/helpers.go:349-385` + 2 more
@@ -1433,7 +1433,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `smell:451be4fa:magic-path-literal` — magic path literal
 
-**Status:** in review — PR #940
+**Status:** done — PR #940 (merged 2026-07-25)
 **Severity:** major
 **Cluster:** magic-strings
 **Evidence:** `internal/system/elevation.go:140-144` + 13 more
@@ -1473,7 +1473,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `smell:90fa855c:coreos-iso-glob-dup` — coreos iso glob dup
 
-**Status:** in review — PR #942
+**Status:** done — PR #942 (merged 2026-07-12)
 **Severity:** suggestion
 **Cluster:** dual-impl-same-job — re-queued from PR #884's skipped-items section (reverted there by a stale-local-linter false gate)
 **Evidence:** `internal/distribution/okd/setup/coreos.go:100-123`
@@ -3620,7 +3620,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `api:2c4d8e6b:export-no-caller-scaffolding` — export no caller scaffolding
 
-**Status:** verified-intent, conditional on R1 — the in-review addon-category workstream is the planned polymorphic consumer; flips stale if R1 dies
+**Status:** verified-intent, conditional on R1 — the in-review addon-category workstream is the planned polymorphic consumer; flips stale if R1 dies CAVEAT (2026-07-26): R1's design PR #337 is closed unmerged — if R1 is not restarted, these flip stale.
 **Severity:** suggestion
 **Cluster:** exported-surface
 **Evidence:** `internal/addon/addon.go:47-64` + 4 more
@@ -4618,7 +4618,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `smell:2c4d8e6b:interfaceany-lazy-exported` — interfaceany lazy exported
 
-**Status:** verified-intent, conditional on R1 — same evidence as api:2c4d8e6b; interface doc should cite R1 by ID
+**Status:** verified-intent, conditional on R1 — same evidence as api:2c4d8e6b; interface doc should cite R1 by ID CAVEAT (2026-07-26): R1's design PR #337 is closed unmerged — if R1 is not restarted, these flip stale.
 **Severity:** suggestion
 **Cluster:** interfaceany-lazy — seam→api-design — related: api:2c4d8e6b:export-no-caller-scaffolding
 **Evidence:** `internal/addon/addon.go:55-64` + 2 more
