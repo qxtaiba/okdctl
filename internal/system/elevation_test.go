@@ -1,12 +1,17 @@
 package system
 
 import (
+	"context"
+	"errors"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/qxtaiba/okdctl/internal/testutil"
 )
 
 // TestChownTreeToInvokingUser_SymlinkEscape verifies that the os.Root-based
@@ -247,4 +252,36 @@ func TestChownTreeToInvokingUser_AggregatesErrors(t *testing.T) {
 			t.Errorf("expected >=3 joined errors (walk continued); got %d in: %v", lineCount, err)
 		}
 	})
+}
+
+// TestHasPasswordlessSudo_CtxCancelSurfacesCtxErr locks the executor.run
+// convention: a ctx-killed sudo probe reports the cancellation, not the
+// opaque *exec.ExitError from the delivered signal.
+func TestHasPasswordlessSudo_CtxCancelSurfacesCtxErr(t *testing.T) {
+	testutil.InstallFakeBin(t, "sudo", "#!/bin/sh\nexec /bin/sleep 5\n")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	err := HasPasswordlessSudo(ctx)
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("err = %v; want context.DeadlineExceeded", err)
+	}
+}
+
+// TestHasPasswordlessSudo_PassAndFail covers the two uncancelled outcomes:
+// exit 0 maps to nil, non-zero exit propagates as a non-ctx error.
+func TestHasPasswordlessSudo_PassAndFail(t *testing.T) {
+	testutil.InstallFakeBin(t, "sudo", "#!/bin/sh\nexit 0\n")
+	if err := HasPasswordlessSudo(context.Background()); err != nil {
+		t.Fatalf("passwordless probe: err = %v; want nil", err)
+	}
+
+	testutil.InstallFakeBin(t, "sudo", "#!/bin/sh\nexit 1\n")
+	err := HasPasswordlessSudo(context.Background())
+	if err == nil {
+		t.Fatal("expected error for non-zero sudo exit")
+	}
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("err = %v; must not be a ctx error", err)
+	}
 }
