@@ -288,10 +288,18 @@ variable "numa_enabled" {
   default     = false
 }
 
+# Any qemu cpu model is legal, not just the common four — okdctl's config
+# validator admits models like Skylake-Server-noTSX-IBRS or x86-64-v2,flags=+pge
+# and passes them through verbatim, so this must not narrow the set. The regex
+# mirrors internal/config/validators.go's proxmoxCPUTypePattern.
 variable "cpu_type" {
-  description = "cpu type for vms (host, x86-64-v2, x86-64-v3, kvm64)"
+  description = "qemu cpu model for vms (commonly host, x86-64-v2, x86-64-v3, or kvm64; any model plus flags accepted)"
   type        = string
   default     = "host"
+  validation {
+    condition     = can(regex("^[A-Za-z0-9][A-Za-z0-9_+.,=-]*$", var.cpu_type))
+    error_message = "cpu_type must be a qemu cpu model name (alphanumerics plus _ + . , = -)."
+  }
 }
 
 variable "master_target_nodes" {
