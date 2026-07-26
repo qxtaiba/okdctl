@@ -38,7 +38,6 @@ var (
 	nodeResizeMemoryMB         int
 	nodeResizeCPU              int
 	nodeAcknowledgeInterrupted bool
-	nodeAddRole                string
 	nodeAddCount               int
 )
 
@@ -107,7 +106,7 @@ different op or node instead of refusing.`,
 }
 
 var nodeAddCmd = &cobra.Command{
-	Use:   "add --role worker [--count N]",
+	Use:   "add [--count N]",
 	Short: "Add worker node(s) to the cluster",
 	Long: `Build and upload a per-node CoreOS ISO, revive the ignition HTTPS server for
 the join window, apply a plan-gated targeted terraform create, and wait for
@@ -125,8 +124,8 @@ node instead of refusing. If a batch is interrupted, finish it with another
 'okdctl node add' before running 'okdctl deploy' — deploy does not consult
 the op marker and a partial batch's config/tfvars undercount the workers
 terraform already created, so it would destroy the in-flight node(s).`,
-	Example: `  okdctl node add --role worker --yes --confirm-cluster grappleberry
-  okdctl node add --role worker --count 2 --dry-run`,
+	Example: `  okdctl node add --yes --confirm-cluster grappleberry
+  okdctl node add --count 2 --dry-run`,
 	Args: cobra.NoArgs,
 	RunE: runNodeAdd,
 }
@@ -151,7 +150,6 @@ func init() {
 	nodeAddCmd.Flags().BoolVarP(&nodeYes, "yes", "y", false, "skip confirmation prompt")
 	nodeAddCmd.Flags().StringVar(&nodeConfirmCluster, "confirm-cluster", "", "required with --yes; must equal the config cluster name")
 	nodeAddCmd.Flags().BoolVar(&nodeDryRun, flagDryRun, false, "run guards and the plan gate without mutating anything")
-	nodeAddCmd.Flags().StringVar(&nodeAddRole, "role", "worker", "node role to add (only worker is supported)")
 	nodeAddCmd.Flags().IntVar(&nodeAddCount, "count", 1, "number of nodes to add in this batch")
 	nodeAddCmd.Flags().BoolVar(&nodeAcknowledgeInterrupted, "acknowledge-interrupted-op", false, "override a stranded marker left by a different op or node and proceed fresh")
 
@@ -502,7 +500,7 @@ func runNodeAdd(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
-	if err := validateAddFlags(nodeAddRole, nodeAddCount); err != nil {
+	if err := validateAddFlags(nodeAddCount); err != nil {
 		return err
 	}
 
@@ -533,12 +531,8 @@ func runNodeAdd(cmd *cobra.Command, _ []string) error {
 	return nil
 }
 
-// validateAddFlags requires --role worker (master add/remove is not
-// supported, mirroring remove's guard) and a positive --count.
-func validateAddFlags(role string, count int) error {
-	if role != nodetypes.RoleWorker.String() {
-		return &errtypes.UsageError{Msg: fmt.Sprintf("--role %q is not supported; only worker nodes can be added (master add/remove is not supported)", role)}
-	}
+// validateAddFlags requires a positive --count.
+func validateAddFlags(count int) error {
 	if count < 1 {
 		return &errtypes.UsageError{Msg: "--count must be >= 1"}
 	}
