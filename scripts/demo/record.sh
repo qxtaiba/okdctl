@@ -30,6 +30,8 @@ for _ in $(seq 1 20); do
   curl -sk https://127.0.0.1:8006/api2/json/version >/dev/null 2>&1 && break
   sleep 0.5
 done
+curl -sk https://127.0.0.1:8006/api2/json/version >/dev/null 2>&1 ||
+  { echo "fakepve did not become ready after 10s" >&2; exit 1; }
 
 echo "recording (this replays the full tape in real time — ~4 minutes)..."
 mkdir -p "$WORK/cwd"
