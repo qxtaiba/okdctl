@@ -85,16 +85,18 @@ elif [ -n "$INSECURE" ]; then
     red "         SHA256 verification still runs; unset INSECURE to re-enable cosign."
 fi
 
-# okdctl is Linux-only. Refuse to install on anything else.
+# okdctl is Linux-only. Refuse to install on anything else. OS/ARCH must
+# match .goreleaser.yaml's name_template ({{ .Os }}_{{ .Arch }} — GOOS/GOARCH
+# spellings), which produces okdctl_<v>_linux_{amd64,arm64}.tar.gz.
 OS=$(uname -s | tr '[:upper:]' '[:lower:]')
 case "$OS" in
-    linux) OS="Linux" ;;
+    linux) ;;
     *) die "unsupported OS: $OS — okdctl runs on Linux only (the deploy phase needs dnf/apt, systemd, firewall-cmd, nmcli)" ;;
 esac
 
 ARCH=$(uname -m)
 case "$ARCH" in
-    x86_64 | amd64) ARCH="x86_64" ;;
+    x86_64 | amd64) ARCH="amd64" ;;
     aarch64 | arm64) ARCH="arm64" ;;
     *) die "unsupported arch: $ARCH (supported: x86_64, arm64)" ;;
 esac
