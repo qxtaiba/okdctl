@@ -194,6 +194,9 @@ main() {
     [ -f "$BINARY" ] || die "$BINARY not found in archive"
 
     # Install. If the install dir is not writable by the current user, try sudo.
+    # A nonexistent dir fails -w too and would silently route into the sudo
+    # branch, dying with a raw coreutils error instead of this diagnostic.
+    [ -d "$INSTALL_DIR" ] || die "INSTALL_DIR does not exist: $INSTALL_DIR"
     info "installing to $INSTALL_DIR/$BINARY"
     if [ -w "$INSTALL_DIR" ]; then
         install -m 0755 "$BINARY" "$INSTALL_DIR/$BINARY"
