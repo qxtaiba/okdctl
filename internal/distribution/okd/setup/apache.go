@@ -227,9 +227,17 @@ func (p *Phase) DeployToWebServer(ctx context.Context, cfg *config.Config, clust
 			continue
 		}
 
+		data, err := os.ReadFile(srcPath)
+		if err != nil {
+			return &errtypes.ConfigError{Msg: fmt.Sprintf("read %s", file), Err: err}
+		}
+
 		destPath := filepath.Join(ignitionDir, file)
 		// 0o640: apache group readable only; ignition files carry pullSecret.
-		if err := system.CopyFileMode(srcPath, destPath, 0o640); err != nil {
+		// AtomicWrite (temp+fsync+rename) because deploy-ignition's AlreadyDone
+		// is existence-only — a torn copy would be skipped on resume and served
+		// to booting nodes.
+		if err := system.AtomicWrite(destPath, data, 0o640); err != nil {
 			return &errtypes.ConfigError{Msg: fmt.Sprintf("failed to copy %s", file), Err: err}
 		}
 	}

@@ -111,11 +111,19 @@ func (p *Phase) GenerateInstallConfig(ctx context.Context, cfg *config.Config, o
 	}
 
 	// openshift-install consumes install-config.yaml during manifest generation;
-	// .backup is the rollback artifact and inherits the 0o600 on-disk gate. The
-	// in-memory pull-secret buffer is wiped via the defer above on every return
-	// path; deleting .backup once manifests succeed is tracked separately.
+	// .backup is the rollback artifact and inherits the 0o600 on-disk gate. It
+	// also doubles as generate-config's AlreadyDone sentinel, so it is written
+	// atomically — a torn copy would pass the existence guard and poison both
+	// resume and rollback. The in-memory pull-secret buffers are wiped via the
+	// defers on every return path; deleting .backup once manifests succeed is
+	// tracked separately.
+	rendered, err := os.ReadFile(outputPath)
+	if err != nil {
+		return &errtypes.ConfigError{Msg: "read install-config.yaml for backup", Err: err}
+	}
+	defer zeroBytesFn(rendered)
 	backupPath := outputPath + ".backup"
-	if err := system.CopyFileMode(outputPath, backupPath, 0o600); err != nil {
+	if err := system.AtomicWrite(backupPath, rendered, 0o600); err != nil {
 		return &errtypes.ConfigError{Msg: "failed to backup install-config.yaml", Err: err}
 	}
 
