@@ -11,7 +11,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/cluster"
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/clusterstatus"
-	"github.com/qxtaiba/okdctl/internal/distribution/okd/setup"
+	"github.com/qxtaiba/okdctl/internal/distribution/okd/provision"
 	"github.com/qxtaiba/okdctl/internal/node"
 	"github.com/qxtaiba/okdctl/internal/nodetypes"
 	"github.com/qxtaiba/okdctl/internal/tui"
@@ -106,14 +106,14 @@ func runNodeList(cmd *cobra.Command, _ []string) error {
 // degrades the affected column to "unknown"/absent rather than failing the
 // whole listing, matching clusterstatus.Collect's degrade-gracefully policy.
 type nodeListSideData struct {
-	tfSizing      setup.TerraformVarsSizing
+	tfSizing      provision.TerraformVarsSizing
 	tfSizingFound bool
 	marker        *node.OpMarker
 }
 
 func loadNodeListSideData(cfg *config.Config, projectRoot string) nodeListSideData {
 	envDir := workspace.TerraformEnvDir(projectRoot, cfg.TerraformEnvName())
-	sizing, found, err := setup.ReadTerraformVarsSizing(envDir)
+	sizing, found, err := provision.ReadTerraformVarsSizing(envDir)
 	if err != nil {
 		tui.Warn("node list: read terraform.tfvars sizing failed; drift will show as unknown", tui.LF("err", err))
 		found = false
@@ -163,7 +163,7 @@ func unattachedOpNote(marker *node.OpMarker, nodes []cluster.NodeDetail) string 
 // roleSizingDrift compares cfg's role sizing to sizing (parsed from
 // terraform.tfvars). found=false means terraform.tfvars has not been
 // rendered, so drift cannot be assessed.
-func roleSizingDrift(cfg *config.Config, role nodetypes.NodeRole, sizing setup.TerraformVarsSizing, found bool) (status, detail string) {
+func roleSizingDrift(cfg *config.Config, role nodetypes.NodeRole, sizing provision.TerraformVarsSizing, found bool) (status, detail string) {
 	if !found {
 		return driftUnknown, ""
 	}

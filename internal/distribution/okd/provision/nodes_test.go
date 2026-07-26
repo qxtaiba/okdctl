@@ -1,4 +1,4 @@
-package setup
+package provision
 
 import (
 	"errors"
@@ -66,8 +66,7 @@ func TestBuildNodeList(t *testing.T) {
 					MachineCIDR: tc.cidr,
 				},
 			}
-			p := &Phase{}
-			nodes, err := p.BuildNodeList(cfg)
+			nodes, err := BuildNodeList(cfg)
 			if tc.wantErrContains != "" {
 				if err == nil {
 					t.Fatalf("want error containing %q; got nil", tc.wantErrContains)

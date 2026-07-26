@@ -1,4 +1,4 @@
-package setup
+package provision
 
 import (
 	"crypto/ecdsa"

@@ -1,4 +1,4 @@
-package setup
+package provision
 
 import (
 	"fmt"
@@ -13,7 +13,7 @@ import (
 // workers) with IPs allocated from the static-IP start. The IP range is
 // validated against machineCIDR up front so we fail before per-node
 // calculation.
-func (p *Phase) BuildNodeList(cfg *config.Config) ([]NodeInfo, error) {
+func BuildNodeList(cfg *config.Config) ([]NodeInfo, error) {
 	var nodes []NodeInfo
 
 	startIP := cfg.Networking.StaticIP.Start

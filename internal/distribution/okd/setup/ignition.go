@@ -14,14 +14,13 @@ import (
 	"syscall"
 
 	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/distribution/okd/provision"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/templates"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
-// ignitionFilenames is the canonical list openshift-install emits into clusterDir.
 // AlreadyDone for StepDeployIgnition requires all three to exist in the webroot.
-var ignitionFilenames = []string{"bootstrap.ign", "master.ign", "worker.ign"}
 
 // zeroBytesFn wipes the pull-secret buffer. Tests may replace it to observe
 // zeroing behaviour; production code must not change it.
@@ -292,7 +291,7 @@ func (p *Phase) ValidateIgnitionFiles(ctx context.Context, clusterDir string) er
 	}
 	minSize := int64(1024) // ignition files are typically much larger
 
-	for _, file := range ignitionFilenames {
+	for _, file := range provision.IgnitionFilenames {
 		if err := ctx.Err(); err != nil {
 			return err
 		}

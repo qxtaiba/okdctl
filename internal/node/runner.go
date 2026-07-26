@@ -10,7 +10,7 @@ import (
 
 	"github.com/qxtaiba/okdctl/internal/cluster"
 	"github.com/qxtaiba/okdctl/internal/config"
-	"github.com/qxtaiba/okdctl/internal/distribution/okd/setup"
+	"github.com/qxtaiba/okdctl/internal/distribution/okd/provision"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/infrastructure/proxmox/hostssh"
 	"github.com/qxtaiba/okdctl/internal/infrastructure/terraform"
@@ -127,18 +127,18 @@ type terraformExec interface {
 	StateHasResource(ctx context.Context, addr string) (bool, error)
 }
 
-// isoProvisioner is the slice of setup.Phase node add drives to build and
-// upload the new node's custom CoreOS ISO. Both calls are already
+// isoProvisioner is the slice of provision.Provisioner node add drives to
+// build and upload the new node's custom CoreOS ISO. Both calls are already
 // count-generic and fingerprint/checksum-skip unchanged nodes, so node add
 // reuses them as-is rather than a dedicated single-node build path. An
 // interface so a test can substitute a call-recording fake without shelling
 // out to coreos-installer/scp.
 type isoProvisioner interface {
-	BuildCustomISOs(ctx context.Context, cfg *config.Config, opts *setup.Options) error
-	UploadCustomISOsToProxmox(ctx context.Context, cfg *config.Config, opts *setup.Options) error
+	BuildCustomISOs(ctx context.Context, cfg *config.Config, opts provision.Options) error
+	UploadCustomISOsToProxmox(ctx context.Context, cfg *config.Config, opts provision.Options) error
 }
 
-// ignitionServer is the slice of setup.Phase node add drives to expose
+// ignitionServer is the slice of provision.Provisioner node add drives to expose
 // worker.ign over HTTPS for the join window. An interface so a test can
 // substitute a call-recording fake without touching httpd. A teardown error
 // means httpd may still be serving the pull secret; the caller must surface
@@ -182,11 +182,11 @@ type Runner struct {
 	SnapshotTaskTimeout time.Duration
 
 	// ISO and Ignition drive node add's ISO build/upload and ignition-server
-	// revive (node add only; nil for every other op). SetupOpts carries the
-	// setup phase's WorkDir/ProjectRoot/TerraformEnv those calls need.
+	// revive (node add only; zero/nil for every other op). Provision carries
+	// the WorkDir/ProjectRoot roots those calls resolve artifacts from.
 	ISO       isoProvisioner
 	Ignition  ignitionServer
-	SetupOpts *setup.Options
+	Provision provision.Options
 
 	// Confirm gates each mutating op between guards/preflight and the first
 	// mutation; nil auto-approves (tests, non-interactive callers that gate
@@ -302,7 +302,7 @@ func (r *Runner) startProgress(desc string) (stop func()) {
 // deploy. WriteTerraformVars preserves the bootstrap sentinel (unlike deploy's
 // GenerateTerraformVars) so a re-render cannot resurrect the bootstrap VM.
 func (r *Runner) persistTopology() error {
-	if err := setup.WriteTerraformVars(r.Cfg, r.EnvDir); err != nil {
+	if err := provision.WriteTerraformVars(r.Cfg, r.EnvDir); err != nil {
 		return fmt.Errorf("render terraform vars: %w", err)
 	}
 	if err := config.NewLoader().Save(r.Cfg, r.ConfigPath); err != nil {

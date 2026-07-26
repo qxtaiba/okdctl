@@ -11,6 +11,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/dns"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/firewall"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
+	"github.com/qxtaiba/okdctl/internal/distribution/okd/provision"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/templates"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/executor"
@@ -274,7 +275,7 @@ func (p *Phase) setupWebSteps(cfg *config.Config, opts *Options, clusterDir stri
 					webRoot = phase.DefaultHTTPServerRoot
 				}
 				// All files must exist: a partial-write resumes the full deploy.
-				for _, name := range ignitionFilenames {
+				for _, name := range provision.IgnitionFilenames {
 					if !system.FileExists(filepath.Join(webRoot, "ignition", name)) {
 						return false, nil
 					}
@@ -285,7 +286,7 @@ func (p *Phase) setupWebSteps(cfg *config.Config, opts *Options, clusterDir stri
 				if err := p.DeployToWebServer(ctx, cfg, clusterDir); err != nil {
 					return &errtypes.ConfigError{Msg: "deploy to web server", Err: err}
 				}
-				webURL := BuildIgnitionURL(cfg.HTTPServer.IgnitionServerIP)
+				webURL := provision.BuildIgnitionURL(cfg.HTTPServer.IgnitionServerIP)
 				p.Log.Info("ignition: deployed to web server", "url", webURL)
 				return nil
 			},
@@ -295,11 +296,11 @@ func (p *Phase) setupWebSteps(cfg *config.Config, opts *Options, clusterDir stri
 			ReRunSafe: distribution.ReRunSafeYes,
 			Desc:      "verifying https web server accessibility",
 			Exec: func(ctx context.Context) error {
-				certPEM, _, err := EnsureIgnitionCert(opts.ProjectRoot, cfg.HTTPServer.IgnitionServerIP)
+				certPEM, _, err := provision.EnsureIgnitionCert(opts.ProjectRoot, cfg.HTTPServer.IgnitionServerIP)
 				if err != nil {
 					return &errtypes.ConfigError{Msg: "load ignition cert for verification", Err: err}
 				}
-				return p.VerifyWebServer(ctx, BuildIgnitionURL(cfg.HTTPServer.IgnitionServerIP), certPEM)
+				return p.VerifyWebServer(ctx, provision.BuildIgnitionURL(cfg.HTTPServer.IgnitionServerIP), certPEM)
 			},
 		},
 		{
@@ -310,7 +311,7 @@ func (p *Phase) setupWebSteps(cfg *config.Config, opts *Options, clusterDir stri
 			Desc:       "building custom CoreOS ISOs",
 			SkipWhen:   func() bool { return opts.SkipISOs },
 			SkipReason: "iso building disabled",
-			Exec:       func(ctx context.Context) error { return p.BuildCustomISOs(ctx, cfg, opts) },
+			Exec:       func(ctx context.Context) error { return p.BuildCustomISOs(ctx, cfg, opts.provisionOpts()) },
 		},
 		{
 			ID: StepUploadISOs, Name: StepNames[StepUploadISOs],
@@ -319,10 +320,10 @@ func (p *Phase) setupWebSteps(cfg *config.Config, opts *Options, clusterDir stri
 			SkipWhen:   func() bool { return opts.SkipISOs },
 			SkipReason: "iso building disabled",
 			AlreadyDone: func(ctx context.Context) (bool, error) {
-				return p.isoUploadAlreadyDone(ctx, cfg, opts)
+				return p.ISOUploadAlreadyDone(ctx, cfg, opts.provisionOpts())
 			},
 			Exec: func(ctx context.Context) error {
-				if err := p.UploadCustomISOsToProxmox(ctx, cfg, opts); err != nil {
+				if err := p.UploadCustomISOsToProxmox(ctx, cfg, opts.provisionOpts()); err != nil {
 					return err
 				}
 				p.Log.Info("iso: all custom isos uploaded to proxmox storage")

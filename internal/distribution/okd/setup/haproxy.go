@@ -10,6 +10,7 @@ import (
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
+	"github.com/qxtaiba/okdctl/internal/distribution/okd/provision"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/templates"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/nodetypes"
@@ -19,7 +20,7 @@ import (
 // BuildHAProxyConfigData assembles the HAProxy template data from cfg's
 // node list. When no workers are configured, masters serve ingress directly.
 func (p *Phase) BuildHAProxyConfigData(cfg *config.Config) (templates.HAProxyConfigData, error) {
-	nodes, err := p.BuildNodeList(cfg)
+	nodes, err := provision.BuildNodeList(cfg)
 	if err != nil {
 		return templates.HAProxyConfigData{}, &errtypes.ConfigError{Msg: "build node list", Err: err}
 	}

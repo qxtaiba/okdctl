@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/qxtaiba/okdctl/internal/cluster"
-	"github.com/qxtaiba/okdctl/internal/distribution/okd/setup"
+	"github.com/qxtaiba/okdctl/internal/distribution/okd/provision"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/infrastructure/terraform"
 	"github.com/qxtaiba/okdctl/internal/logutil"
@@ -50,7 +50,7 @@ func (r *Runner) preflightIgnitionArtifacts() error {
 		)}
 	}
 
-	certPath, _ := setup.IgnitionCertPaths(r.ProjectRoot)
+	certPath, _ := provision.IgnitionCertPaths(r.ProjectRoot)
 	if !system.FileExists(certPath) {
 		return &errtypes.ConfigError{Msg: fmt.Sprintf(
 			"ignition tls cert not found at %s; re-run setup (e.g. 'okdctl deploy') to regenerate it before adding a node", certPath,
@@ -170,7 +170,7 @@ func (r *Runner) AddWorkers(ctx context.Context, opts AddOptions) error {
 		total := startIdx + opts.Count
 		planVars := map[string]string{
 			tfVarWorkerCount: strconv.Itoa(total),
-			"worker_isos":    setup.WorkerISOsPlanVar(r.Cfg.Provider.Proxmox.ISOStorage, total),
+			"worker_isos":    provision.WorkerISOsPlanVar(r.Cfg.Provider.Proxmox.ISOStorage, total),
 		}
 		for i := range plan.Nodes {
 			if err := r.targetedApply(ctx, plan.Nodes[i].TFAddress, terraform.PlanActionCreate, planVars, resuming); err != nil {
@@ -290,7 +290,7 @@ func (r *Runner) addOneWorker(ctx context.Context, idx int, marker *OpMarker) er
 	r.Cfg.Topology.Workers.Count = total
 	planVars := map[string]string{
 		tfVarWorkerCount: strconv.Itoa(total),
-		"worker_isos":    setup.WorkerISOsPlanVar(r.Cfg.Provider.Proxmox.ISOStorage, total),
+		"worker_isos":    provision.WorkerISOsPlanVar(r.Cfg.Provider.Proxmox.ISOStorage, total),
 	}
 	resuming := marker != nil
 
@@ -298,7 +298,7 @@ func (r *Runner) addOneWorker(ctx context.Context, idx int, marker *OpMarker) er
 		if err := r.mark(OpAdd, name, StepBuildISO); err != nil {
 			return err
 		}
-		if err := r.ISO.BuildCustomISOs(ctx, r.Cfg, r.SetupOpts); err != nil {
+		if err := r.ISO.BuildCustomISOs(ctx, r.Cfg, r.Provision); err != nil {
 			return &errtypes.ClusterError{Msg: fmt.Sprintf("build iso for %s", name), Err: err}
 		}
 	}
@@ -306,7 +306,7 @@ func (r *Runner) addOneWorker(ctx context.Context, idx int, marker *OpMarker) er
 		if err := r.mark(OpAdd, name, StepUploadISO); err != nil {
 			return err
 		}
-		if err := r.ISO.UploadCustomISOsToProxmox(ctx, r.Cfg, r.SetupOpts); err != nil {
+		if err := r.ISO.UploadCustomISOsToProxmox(ctx, r.Cfg, r.Provision); err != nil {
 			return &errtypes.ClusterError{Msg: fmt.Sprintf("upload iso for %s", name), Err: err}
 		}
 	}

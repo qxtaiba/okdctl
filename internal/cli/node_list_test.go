@@ -10,7 +10,7 @@ import (
 
 	"github.com/qxtaiba/okdctl/internal/cluster"
 	"github.com/qxtaiba/okdctl/internal/config"
-	"github.com/qxtaiba/okdctl/internal/distribution/okd/setup"
+	"github.com/qxtaiba/okdctl/internal/distribution/okd/provision"
 	"github.com/qxtaiba/okdctl/internal/node"
 	"github.com/qxtaiba/okdctl/internal/nodetypes"
 )
@@ -24,18 +24,18 @@ func TestRoleSizingDrift(t *testing.T) {
 			Workers:      config.NodeConfig{CPU: 8, MemoryMB: 16384},
 		},
 	}
-	inSync := setup.TerraformVarsSizing{MasterCPU: 4, MasterMemoryMB: 8192, WorkerCPU: 8, WorkerMemoryMB: 16384}
-	stale := setup.TerraformVarsSizing{MasterCPU: 4, MasterMemoryMB: 8192, WorkerCPU: 8, WorkerMemoryMB: 8192}
+	inSync := provision.TerraformVarsSizing{MasterCPU: 4, MasterMemoryMB: 8192, WorkerCPU: 8, WorkerMemoryMB: 16384}
+	stale := provision.TerraformVarsSizing{MasterCPU: 4, MasterMemoryMB: 8192, WorkerCPU: 8, WorkerMemoryMB: 8192}
 
 	cases := []struct {
 		name       string
 		role       nodetypes.NodeRole
-		sizing     setup.TerraformVarsSizing
+		sizing     provision.TerraformVarsSizing
 		found      bool
 		wantStatus string
 		wantDetail bool
 	}{
-		{"not rendered yet", nodetypes.RoleMaster, setup.TerraformVarsSizing{}, false, driftUnknown, false},
+		{"not rendered yet", nodetypes.RoleMaster, provision.TerraformVarsSizing{}, false, driftUnknown, false},
 		{"master in sync", nodetypes.RoleMaster, inSync, true, driftNone, false},
 		{"worker in sync", nodetypes.RoleWorker, inSync, true, driftNone, false},
 		{"worker drifted", nodetypes.RoleWorker, stale, true, driftPending, true},
@@ -70,7 +70,7 @@ func TestBuildNodeListEntries(t *testing.T) {
 		{Name: "foreign-node", Role: nodetypes.RoleUnknown, Ready: true},
 	}
 	side := nodeListSideData{
-		tfSizing:      setup.TerraformVarsSizing{MasterCPU: 4, MasterMemoryMB: 8192, WorkerCPU: 4, WorkerMemoryMB: 8192},
+		tfSizing:      provision.TerraformVarsSizing{MasterCPU: 4, MasterMemoryMB: 8192, WorkerCPU: 4, WorkerMemoryMB: 8192},
 		tfSizingFound: true,
 		marker:        &node.OpMarker{Op: node.OpResize, Target: "worker-2", Step: node.StepTFApply},
 	}
@@ -275,7 +275,7 @@ func TestLoadNodeListSideDataReadsTfvarsAndMarker(t *testing.T) {
 	if err := os.MkdirAll(envDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := setup.WriteTerraformVars(cfg, envDir); err != nil {
+	if err := provision.WriteTerraformVars(cfg, envDir); err != nil {
 		t.Fatalf("WriteTerraformVars: %v", err)
 	}
 

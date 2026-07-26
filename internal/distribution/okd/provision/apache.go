@@ -1,4 +1,4 @@
-package setup
+package provision
 
 import (
 	"context"
@@ -25,7 +25,7 @@ const (
 	minIgnitionFileSize = 1000 // bytes
 )
 
-func (p *Phase) ensureIgnitionDir(ctx context.Context, webRoot string) (string, error) {
+func (p *Provisioner) ensureIgnitionDir(ctx context.Context, webRoot string) (string, error) {
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}
@@ -65,7 +65,7 @@ func startApache(ctx context.Context, serviceName string) error {
 	return nil
 }
 
-func (p *Phase) verifyApacheListening(ctx context.Context, bindIP string) {
+func (p *Provisioner) verifyApacheListening(ctx context.Context, bindIP string) {
 	addr := "127.0.0.1:443"
 	if bindIP != "" {
 		addr = net.JoinHostPort(bindIP, "443")
@@ -82,7 +82,7 @@ func (p *Phase) verifyApacheListening(ctx context.Context, bindIP string) {
 
 // configureApacheHTTPS writes the HTTPS vhost drop-in conf and, on Debian,
 // enables mod_ssl and the conf. On RHEL conf.d is auto-included by httpd.conf.
-func (p *Phase) configureApacheHTTPS(ctx context.Context, certPath, keyPath, webRoot, bindIP string) error {
+func (p *Provisioner) configureApacheHTTPS(ctx context.Context, certPath, keyPath, webRoot, bindIP string) error {
 	vhostDir := p.OS.ApacheVhostConfDir()
 	if err := system.EnsureDir(vhostDir); err != nil {
 		return fmt.Errorf("apache: ensure vhost conf dir: %w", err)
@@ -121,7 +121,7 @@ func (p *Phase) configureApacheHTTPS(ctx context.Context, certPath, keyPath, web
 // pinned CA cert is the primary defence against credential capture over the
 // machine-network VLAN — BuildIgnitionURLForNode enforces the RFC1918
 // invariant at config time.
-func (p *Phase) ConfigureApache(ctx context.Context, cfg *config.Config, projectRoot string) error {
+func (p *Provisioner) ConfigureApache(ctx context.Context, cfg *config.Config, projectRoot string) error {
 	p.Log.Info("apache: configuring httpd for serving ignition files over https")
 
 	bindIP := cfg.HTTPServer.IgnitionServerIP
@@ -161,7 +161,7 @@ func (p *Phase) ConfigureApache(ctx context.Context, cfg *config.Config, project
 // 'okdctl cleanup --kind web-only', which removes only the served copies),
 // but the service is started WITHOUT being enabled — a hard crash mid-add
 // must not leave the pull-secret server resurrecting across host reboots.
-func (p *Phase) ReviveIgnitionServer(ctx context.Context, cfg *config.Config, projectRoot, clusterDir string) error {
+func (p *Provisioner) ReviveIgnitionServer(ctx context.Context, cfg *config.Config, projectRoot, clusterDir string) error {
 	p.Log.Info("apache: reviving httpd for the node-add join window")
 
 	bindIP := cfg.HTTPServer.IgnitionServerIP
@@ -190,7 +190,7 @@ func (p *Phase) ReviveIgnitionServer(ctx context.Context, cfg *config.Config, pr
 // it does not uninstall the httpd package or remove the vhost conf and TLS
 // cert, so a later revive is cheap. A non-nil return means httpd may still
 // be serving ignition payloads — the caller must surface that loudly.
-func (p *Phase) TeardownIgnitionServer(ctx context.Context) error {
+func (p *Provisioner) TeardownIgnitionServer(ctx context.Context) error {
 	svc := p.OS.ApacheServiceName()
 	var errs []error
 	if err := system.ManageService(ctx, system.ServiceStop, svc); err != nil {
@@ -210,7 +210,7 @@ func (p *Phase) TeardownIgnitionServer(ctx context.Context) error {
 // are intentionally not copied here — they are consumed directly from
 // clusterDir by the install and postinstall phases and must not be placed
 // under the apache DocumentRoot.
-func (p *Phase) DeployToWebServer(ctx context.Context, cfg *config.Config, clusterDir string) error {
+func (p *Provisioner) DeployToWebServer(ctx context.Context, cfg *config.Config, clusterDir string) error {
 	webRoot := cfg.HTTPServer.Root
 	if webRoot == "" {
 		webRoot = phase.DefaultHTTPServerRoot
@@ -221,7 +221,7 @@ func (p *Phase) DeployToWebServer(ctx context.Context, cfg *config.Config, clust
 		return err
 	}
 
-	for _, file := range ignitionFilenames {
+	for _, file := range IgnitionFilenames {
 		srcPath := filepath.Join(clusterDir, file)
 		if !system.FileExists(srcPath) {
 			continue
@@ -249,7 +249,7 @@ func (p *Phase) DeployToWebServer(ctx context.Context, cfg *config.Config, clust
 // the server certificate against caCertPEM. A mismatch causes the TLS handshake
 // to fail — confirming Apache is serving the cert that was embedded into the
 // node ISOs via --ignition-ca.
-func (p *Phase) VerifyWebServer(ctx context.Context, baseURL string, caCertPEM []byte) error {
+func (p *Provisioner) VerifyWebServer(ctx context.Context, baseURL string, caCertPEM []byte) error {
 	testURL := fmt.Sprintf("%s/bootstrap.ign", baseURL)
 
 	block, _ := pem.Decode(caCertPEM)
