@@ -1,6 +1,4 @@
-# =============================================================================
-# HIGH AVAILABILITY (opt-in, ha_enabled)
-# =============================================================================
+# high availability (opt-in, ha_enabled)
 # Provisions Proxmox HA-manager resources for the master VMs declared in
 # main.tf so a PVE-node failure relocates masters onto surviving nodes
 # instead of leaving them down until manual intervention, with anti-affinity

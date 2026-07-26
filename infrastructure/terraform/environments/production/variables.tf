@@ -1,15 +1,11 @@
-# =============================================================================
-# PROXMOX CONNECTION (set via environment variables)
+# proxmox connection (set via environment variables)
 # - PROXMOX_VE_ENDPOINT    (api url, e.g., https://pve.example.com:8006/)
 # - PROXMOX_VE_USERNAME    (username, e.g., root@pam)
 # - PROXMOX_VE_PASSWORD    (password)
 # - PROXMOX_VE_INSECURE  (DEV ONLY: disables TLS verification — never set in prod; use a CA-signed cert or add the proxmox CA to your trust store)
-# =============================================================================
 
 
-# =============================================================================
-# PROXMOX INFRASTRUCTURE VARIABLES
-# =============================================================================
+# proxmox infrastructure variables
 variable "target_node" {
   description = "proxmox node name where vms will be created"
   type        = string
@@ -42,9 +38,7 @@ variable "worker_isos" {
 }
 
 
-# =============================================================================
-# CLUSTER CONFIGURATION VARIABLES
-# =============================================================================
+# cluster configuration variables
 variable "cluster_name" {
   description = "name of the okd cluster"
   type        = string
@@ -66,9 +60,7 @@ variable "worker_count" {
 }
 
 
-# =============================================================================
-# VM RESOURCE CONFIGURATION
-# =============================================================================
+# vm resource configuration
 # Variables identical to module defaults are intentionally omitted so the
 # module's own validation blocks (cpu_cores 2-32, memory_mb >= 8192,
 # master_count odd 1-5, vmid_base 100-9000, etc.) are the single source of
@@ -142,9 +134,7 @@ variable "minimum_data_disk_size_gb" {
 }
 
 
-# =============================================================================
-# NODE NAMES
-# =============================================================================
+# node names
 # Exposed at the root so the rendered tfvars' cluster-prefixed names
 # (${cluster}-masterN / ${cluster}-workerN) take effect instead of the module's
 # bare masterN/workerN defaults. Without this, adopting the slim root would
@@ -170,9 +160,7 @@ variable "vm_tags" {
 }
 
 
-# =============================================================================
-# DEPLOY LIFECYCLE
-# =============================================================================
+# deploy lifecycle
 # bootstrap_enabled and start_workers_immediately are the deploy-lifecycle knobs
 # that node ops assert as post-deploy invariants: a running cluster has no
 # bootstrap VM and its workers are started. Exposed at the root so `okdctl node`
@@ -192,9 +180,7 @@ variable "start_workers_immediately" {
 }
 
 
-# =============================================================================
-# HIGH AVAILABILITY
-# =============================================================================
+# high availability
 variable "ha_enabled" {
   description = "enable proxmox ha anti-affinity for master vms (pve9+)"
   type        = bool

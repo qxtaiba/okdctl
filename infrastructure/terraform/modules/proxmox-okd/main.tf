@@ -1,6 +1,4 @@
-# =============================================================================
-# PROVIDER CONFIGURATION
-# =============================================================================
+# provider configuration
 
 # uses environment variables:
 # - PROXMOX_VE_ENDPOINT    (api url, e.g., https://pve.example.com:8006/)
@@ -8,10 +6,6 @@
 # - PROXMOX_VE_PASSWORD    (password)
 # - PROXMOX_VE_INSECURE  (DEV ONLY: disables TLS verification — never set in prod; use a CA-signed cert or add the proxmox CA to your trust store)
 # Provider configuration is handled by the parent module
-
-# =============================================================================
-# LOCALS
-# =============================================================================
 
 locals {
   masters = slice(var.master_names, 0, var.master_count)
@@ -27,9 +21,7 @@ locals {
   worker_os_disk   = coalesce(var.worker_os_disk_size_gb, var.os_disk_size_gb)
 }
 
-# =============================================================================
-# BOOTSTRAP NODE
-# =============================================================================
+# bootstrap node
 
 resource "proxmox_virtual_environment_vm" "bootstrap" {
   count = var.bootstrap_enabled ? 1 : 0
@@ -136,9 +128,7 @@ resource "proxmox_virtual_environment_vm" "bootstrap" {
   }
 }
 
-# =============================================================================
-# MASTER NODES
-# =============================================================================
+# master nodes
 
 resource "proxmox_virtual_environment_vm" "master" {
   count = length(local.masters)
@@ -299,9 +289,7 @@ resource "proxmox_virtual_environment_vm" "master" {
   }
 }
 
-# =============================================================================
-# WORKER NODES
-# =============================================================================
+# worker nodes
 
 resource "proxmox_virtual_environment_vm" "worker" {
   count = length(local.workers)

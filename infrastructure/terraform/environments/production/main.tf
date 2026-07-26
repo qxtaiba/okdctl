@@ -1,22 +1,16 @@
-# =============================================================================
-# OKD CLUSTER DEPLOYMENT ON PROXMOX - PRODUCTION ENVIRONMENT
-# =============================================================================
+# okd cluster deployment on proxmox - production environment
 
 module "okd_cluster" {
   source = "../../modules/proxmox-okd"
 
-  # =============================================================================
-  # PROXMOX INFRASTRUCTURE
-  # =============================================================================
+  # proxmox infrastructure
 
   target_node   = var.target_node
   bootstrap_iso = var.bootstrap_iso
   master_isos   = var.master_isos
   worker_isos   = var.worker_isos
 
-  # =============================================================================
-  # CLUSTER CONFIGURATION
-  # =============================================================================
+  # cluster configuration
 
   cluster_name = var.cluster_name
   vmid_base    = var.vmid_base
@@ -24,9 +18,7 @@ module "okd_cluster" {
   master_names = var.master_names
   worker_names = var.worker_names
 
-  # =============================================================================
-  # VM RESOURCES (env-specific overrides only; module owns defaults+validation)
-  # =============================================================================
+  # vm resources (env-specific overrides only; module owns defaults+validation)
 
   memory_mb                = var.memory_mb
   bootstrap_memory_mb      = var.bootstrap_memory_mb
@@ -41,16 +33,12 @@ module "okd_cluster" {
 
   vm_tags = var.vm_tags
 
-  # =============================================================================
-  # DEPLOY LIFECYCLE (node ops override these via -var as post-deploy invariants)
-  # =============================================================================
+  # deploy lifecycle (node ops override these via -var as post-deploy invariants)
 
   bootstrap_enabled         = var.bootstrap_enabled
   start_workers_immediately = var.start_workers_immediately
 
-  # =============================================================================
-  # HIGH AVAILABILITY
-  # =============================================================================
+  # high availability
 
   ha_enabled = var.ha_enabled
 }

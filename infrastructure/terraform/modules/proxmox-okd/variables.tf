@@ -1,15 +1,11 @@
-# =============================================================================
-# PROXMOX CONNECTION (set via environment variables)
+# proxmox connection (set via environment variables)
 # - PROXMOX_VE_ENDPOINT    (api url, e.g., https://pve.example.com:8006/)
 # - PROXMOX_VE_USERNAME    (username, e.g., root@pam)
 # - PROXMOX_VE_PASSWORD    (password)
 # - PROXMOX_VE_INSECURE  (DEV ONLY: disables TLS verification — never set in prod; use a CA-signed cert or add the proxmox CA to your trust store)
-# =============================================================================
 
 
-# =============================================================================
-# PROXMOX INFRASTRUCTURE VARIABLES
-# =============================================================================
+# proxmox infrastructure variables
 
 variable "target_node" {
   description = "proxmox node name where vms will be created"
@@ -120,9 +116,7 @@ variable "worker_isos" {
 }
 
 
-# =============================================================================
-# CLUSTER CONFIGURATION VARIABLES
-# =============================================================================
+# cluster configuration variables
 
 variable "cluster_name" {
   description = "name of the okd cluster"
@@ -179,9 +173,7 @@ variable "worker_count" {
 }
 
 
-# =============================================================================
-# VM RESOURCE CONFIGURATION
-# =============================================================================
+# vm resource configuration
 
 variable "cpu_cores" {
   description = "number of cpu cores per vm"
@@ -241,9 +233,7 @@ variable "worker_memory_mb" {
 }
 
 
-# =============================================================================
-# NODE NAMES
-# =============================================================================
+# node names
 
 variable "master_names" {
   description = "list of master node names"
@@ -258,9 +248,7 @@ variable "worker_names" {
 }
 
 
-# =============================================================================
-# OPTIONAL CONFIGURATION
-# =============================================================================
+# optional configuration
 
 variable "vm_tags" {
   description = "tags to apply to all vms"
