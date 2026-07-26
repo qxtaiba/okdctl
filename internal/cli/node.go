@@ -155,6 +155,7 @@ func init() {
 	nodeCmd.AddCommand(nodeRemoveCmd)
 	nodeCmd.AddCommand(nodeResizeCmd)
 	nodeCmd.AddCommand(nodeAddCmd)
+	nodeCmd.AddCommand(nodeManageCmd)
 	rootCmd.AddCommand(nodeCmd)
 }
 
