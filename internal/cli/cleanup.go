@@ -10,10 +10,10 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/deploy"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/cleanup"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
-	"github.com/qxtaiba/okdctl/internal/executor"
 	"github.com/qxtaiba/okdctl/internal/runlock"
 	"github.com/qxtaiba/okdctl/internal/system"
 	"github.com/qxtaiba/okdctl/internal/tui"
@@ -155,15 +155,15 @@ func runCleanup(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
-	logger := tui.SimpleLogger()
 	opts := cleanup.NewOptions(cfg, projectRoot, kind)
 	opts.VIP = vip
 
 	tui.Info("cleaning up cluster artifacts...")
 	startTime := time.Now()
 
-	exec := executor.New(executor.WithWorkDir(projectRoot))
-	if err := cleanup.New(phase.WithExecutor(exec), phase.WithLogger(logger)).Execute(ctx, &opts); err != nil {
+	p := deploy.NewProvisioner(nil, projectRoot)
+	defer p.ZeroizeEnv()
+	if err := p.Cleanup(ctx, &opts); err != nil {
 		tui.Warn("partial cleanup; rerun to retry")
 		return err
 	}

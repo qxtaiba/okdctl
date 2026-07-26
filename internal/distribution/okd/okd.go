@@ -368,3 +368,13 @@ func (p *Provisioner) Destroy(ctx context.Context, cfg *config.Config, opts *des
 	destroyPhase := destroy.New(phase.WithExecutor(p.executor), phase.WithLogger(p.logger))
 	return destroyPhase.Execute(ctx, cfg, opts)
 }
+
+// Cleanup removes local cluster artifacts without touching infrastructure.
+// Callers build opts via cleanup.NewOptions(cfg, projectRoot, kind) and
+// override the fields they need — the same pass-through contract as
+// Destroy. Setup's internal pre-deploy cleanup does not route through here;
+// it wires its own WorkOnly run with the FreshDeploy consent applied.
+func (p *Provisioner) Cleanup(ctx context.Context, opts *cleanup.Options) error {
+	cleanupPhase := cleanup.New(phase.WithExecutor(p.executor), phase.WithLogger(p.logger))
+	return cleanupPhase.Execute(ctx, opts)
+}
