@@ -14,13 +14,13 @@ import (
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/clusterstatus"
-	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/executor"
 	"github.com/qxtaiba/okdctl/internal/infrastructure/proxmox/hostssh"
 	"github.com/qxtaiba/okdctl/internal/node"
 	"github.com/qxtaiba/okdctl/internal/runlock"
 	"github.com/qxtaiba/okdctl/internal/sshpin"
+	"github.com/qxtaiba/okdctl/internal/system"
 	"github.com/qxtaiba/okdctl/internal/tui"
 )
 
@@ -184,14 +184,14 @@ func buildSnapshotRunner(ctx context.Context, cfg *config.Config, dryRun bool) (
 		return nil, err
 	}
 
-	tfEnv := phase.GetTerraformEnv(cfg)
+	tfEnv := cfg.TerraformEnvName()
 	runner := &node.Runner{
 		Cluster:     cl,
 		Cfg:         cfg,
 		ConfigPath:  cfgFile,
 		ProjectRoot: projectRoot,
-		WorkDir:     filepath.Join(projectRoot, phase.WorkDirName),
-		EnvDir:      phase.TerraformEnvDir(projectRoot, tfEnv),
+		WorkDir:     filepath.Join(projectRoot, system.WorkDirName),
+		EnvDir:      system.TerraformEnvDir(projectRoot, tfEnv),
 		RunID:       tui.RunID(),
 		DryRun:      dryRun,
 		Log:         log,

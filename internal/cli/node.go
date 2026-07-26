@@ -24,6 +24,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/nodetypes"
 	"github.com/qxtaiba/okdctl/internal/render"
 	"github.com/qxtaiba/okdctl/internal/runlock"
+	"github.com/qxtaiba/okdctl/internal/system"
 	"github.com/qxtaiba/okdctl/internal/tui"
 )
 
@@ -223,8 +224,8 @@ func buildNodeRunner(cmd *cobra.Command, cfg *config.Config, verb string, consen
 		hostTotalMiB, hostAllocatedMiB = runHostBudgetProbe(ctx, cfg, creds)
 	}
 
-	tfEnv := phase.GetTerraformEnv(cfg)
-	terraformDir := phase.TerraformEnvDir(projectRoot, tfEnv)
+	tfEnv := cfg.TerraformEnvName()
+	terraformDir := system.TerraformEnvDir(projectRoot, tfEnv)
 	tfOpts := []terraform.Option{terraform.WithLogger(tui.SimpleLogger())}
 	if creds.IsValid() {
 		tfOpts = append(tfOpts, terraform.WithEnv(creds.Env()))

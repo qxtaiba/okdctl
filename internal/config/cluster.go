@@ -256,6 +256,15 @@ type DeploymentConfig struct {
 	BinDir           string `json:"bin_dir,omitempty"`
 }
 
+// TerraformEnvName returns the active Terraform environment name from
+// deployment.terraform_env, defaulting to "production" when unset.
+func (c *Config) TerraformEnvName() string {
+	if c.Deployment.TerraformEnv != "" {
+		return c.Deployment.TerraformEnv
+	}
+	return "production"
+}
+
 // DisksConfig sizes the optional extra data disk (Ceph/storage) attached to
 // each node in a group. The root/OS disk is sized by topology.<group>.disk_gb
 // (NodeConfig.DiskGB); per-VM placement lives in provider.proxmox.

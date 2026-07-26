@@ -10,12 +10,12 @@ import (
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/credentials"
-	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/infrastructure/proxmox"
 	"github.com/qxtaiba/okdctl/internal/infrastructure/terraform"
 	"github.com/qxtaiba/okdctl/internal/render"
 	"github.com/qxtaiba/okdctl/internal/runlock"
+	"github.com/qxtaiba/okdctl/internal/system"
 	"github.com/qxtaiba/okdctl/internal/tui"
 )
 
@@ -119,7 +119,7 @@ func runTerraformPlanPreview(ctx context.Context, cfg *config.Config, opts planP
 
 	return prov.PlanPreview(ctx, cfg, proxmox.ProvisionOptions{
 		ProjectRoot:  opts.ProjectRoot,
-		TerraformEnv: phase.GetTerraformEnv(cfg),
+		TerraformEnv: cfg.TerraformEnvName(),
 	})
 }
 
@@ -211,7 +211,7 @@ func hasPrimaryMarker(root string) bool {
 }
 
 func terraformStateMatches(root string) []string {
-	matches, _ := filepath.Glob(filepath.Join(phase.TerraformEnvDir(root, "*"), "terraform.tfstate"))
+	matches, _ := filepath.Glob(filepath.Join(system.TerraformEnvDir(root, "*"), "terraform.tfstate"))
 	return matches
 }
 

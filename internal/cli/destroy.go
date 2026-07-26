@@ -15,7 +15,6 @@ import (
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/deploy"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/destroy"
-	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/infrastructure/terraform"
 	"github.com/qxtaiba/okdctl/internal/nodetypes"
@@ -330,7 +329,7 @@ func runDestroy(cmd *cobra.Command, _ []string) error {
 	// tearing down. On partial/cancelled runs the workdir may survive
 	// root-owned; restore invoking-user ownership at exit so the user can
 	// inspect or retry.
-	workDir := filepath.Join(projectRoot, phase.WorkDirName)
+	workDir := filepath.Join(projectRoot, system.WorkDirName)
 	defer func() {
 		if chownErr := system.ChownTreeToInvokingUser(workDir); chownErr != nil {
 			tui.Warn("workdir chown back to user incomplete", tui.LF("err", chownErr))
@@ -383,8 +382,8 @@ func runDestroyDryRun(ctx context.Context, cfg *config.Config) error {
 	}
 	defer lock.Release()
 
-	tfEnv := phase.GetTerraformEnv(cfg)
-	terraformDir := phase.TerraformEnvDir(projectRoot, tfEnv)
+	tfEnv := cfg.TerraformEnvName()
+	terraformDir := system.TerraformEnvDir(projectRoot, tfEnv)
 
 	tfOpts := []terraform.Option{terraform.WithLogger(tui.SimpleLogger())}
 	if creds.IsValid() {

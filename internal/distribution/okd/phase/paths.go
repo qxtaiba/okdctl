@@ -7,7 +7,6 @@ package phase
 
 import (
 	"log/slog"
-	"path/filepath"
 	"time"
 
 	"github.com/qxtaiba/okdctl/internal/config"
@@ -89,19 +88,16 @@ func ExternalToolBinaries() []string {
 	}
 }
 
-// ClusterConfigDir returns the path where openshift-install writes its
-// install-config.yaml and the generated kubeconfig/auth bundle.
+// ClusterConfigDir re-exports system.ClusterConfigDir so phase code keeps a
+// single import for cluster layout paths; non-phase callers use the system
+// home directly.
 func ClusterConfigDir(workDir string) string {
-	return filepath.Join(workDir, "cluster-config")
+	return system.ClusterConfigDir(workDir)
 }
 
-// GetTerraformEnv returns the active terraform environment name from the
-// config, defaulting to "production" when unset.
+// GetTerraformEnv re-exports Config.TerraformEnvName for phase callers.
 func GetTerraformEnv(cfg *config.Config) string {
-	if cfg.Deployment.TerraformEnv != "" {
-		return cfg.Deployment.TerraformEnv
-	}
-	return "production"
+	return cfg.TerraformEnvName()
 }
 
 // TerraformEnvDir re-exports system.TerraformEnvDir so phase callers build the
