@@ -221,6 +221,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		if key.Matches(msg, m.keyMap.Back) && m.currentStep > 0 {
+			if g, ok := m.steps[m.currentStep].(BackGuard); ok && g.InterceptBack() {
+				return m, nil
+			}
 			return m.goToPreviousStep()
 		}
 

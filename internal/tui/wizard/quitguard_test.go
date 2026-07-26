@@ -43,3 +43,28 @@ func TestUnguardedStepQuitsOnCtrlC(t *testing.T) {
 		t.Fatal("steps without QuitGuard must keep the immediate-quit behavior")
 	}
 }
+
+type backGuardedStep struct {
+	nopStep
+	intercepts bool
+}
+
+func (s *backGuardedStep) InterceptBack() bool { return s.intercepts }
+
+func TestBackGuardInterceptsEsc(t *testing.T) {
+	g := &backGuardedStep{nopStep: *newNopStep(), intercepts: true}
+	m := NewModel([]WizardStep{newNopStep(), g}, config.DefaultConfig())
+	_, _ = m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+	m.currentStep = 1
+
+	updated, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+	if updated.(*Model).currentStep != 1 {
+		t.Fatal("guarded step must prevent esc navigation")
+	}
+
+	g.intercepts = false
+	updated, _ = updated.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+	if updated.(*Model).currentStep != 0 {
+		t.Fatal("once the guard declines, esc must navigate back")
+	}
+}

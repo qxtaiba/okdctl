@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -247,7 +248,7 @@ func buildNodeRunner(cmd *cobra.Command, cfg *config.Config, verb string, consen
 	if err != nil {
 		return nil, err
 	}
-	rc, err := env.newRunner(cmd, cfg, verb, consent)
+	rc, err := env.newRunner(cmd, cfg, verb, consent, tui.SimpleLogger())
 	if err != nil {
 		env.close()
 		return nil, err
@@ -258,15 +259,17 @@ func buildNodeRunner(cmd *cobra.Command, cfg *config.Config, verb string, consen
 }
 
 // newRunner wires a node.Runner under the project run lock, installing the
-// informed-confirmation hook (or the dry-run preview) from consent. The
-// returned cleanup releases the lock and zeroizes the terraform env; the
-// credentials stay owned by the nodeOpsEnv.
-func (e *nodeOpsEnv) newRunner(cmd *cobra.Command, cfg *config.Config, verb string, consent nodeConsent) (*nodeRunnerCtx, error) {
+// informed-confirmation hook (or the dry-run preview) from consent. log is
+// the sink for the runner AND its terraform/setup collaborators — the
+// manage flow passes a file-only logger because stderr belongs to the
+// AltScreen TUI while it runs. The returned cleanup releases the lock and
+// zeroizes the terraform env; the credentials stay owned by the nodeOpsEnv.
+func (e *nodeOpsEnv) newRunner(cmd *cobra.Command, cfg *config.Config, verb string, consent nodeConsent, log *slog.Logger) (*nodeRunnerCtx, error) {
 	ctx := cmd.Context()
 	creds := e.creds
 
 	terraformDir := system.TerraformEnvDir(e.projectRoot, e.tfEnv)
-	tfOpts := []terraform.Option{terraform.WithLogger(tui.SimpleLogger())}
+	tfOpts := []terraform.Option{terraform.WithLogger(log)}
 	if creds.IsValid() {
 		tfOpts = append(tfOpts, terraform.WithEnv(creds.Env()))
 	}
@@ -289,14 +292,14 @@ func (e *nodeOpsEnv) newRunner(cmd *cobra.Command, cfg *config.Config, verb stri
 		node.WithConfigPath(cfgFile),
 		node.WithTerraformEnv(e.tfEnv),
 		node.WithRunID(tui.RunID()),
-		node.WithLogger(tui.SimpleLogger()))
+		node.WithLogger(log))
 	runner.DryRun = consent.dryRun
 	runner.Reporter = func(desc string) func() { return tui.StartSpinner(ctx, desc) }
 
 	// Wired unconditionally: construction is cheap (no I/O) and only node add
 	// dereferences ISO/Ignition/SetupOpts, so every other verb simply ignores them.
 	setupExec := executor.New(executor.WithWorkDir(e.projectRoot))
-	setupPhase := setup.New(phase.WithExecutor(setupExec), phase.WithLogger(tui.SimpleLogger()))
+	setupPhase := setup.New(phase.WithExecutor(setupExec), phase.WithLogger(log))
 	setupOpts := setup.NewOptions(cfg, e.projectRoot)
 	runner.ISO = setupPhase
 	runner.Ignition = setupPhase

@@ -90,6 +90,7 @@ func (s *ExecStep) Init() tea.Cmd {
 		return s.listen()
 	}
 	s.startedGoroutine = true
+	s.st.Started = true
 	s.started = time.Now()
 	s.buildRows()
 
@@ -141,6 +142,7 @@ func (s *ExecStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 	case execEventMsg:
 		if msg.ev.Final {
 			s.finished = true
+			s.st.Executed = true
 			s.st.Result = msg.ev.Err
 			s.st.Elapsed = time.Since(s.started)
 			s.finishRows(msg.ev.Err)
@@ -239,6 +241,13 @@ func rowLabels(rows []execRow) []string {
 		out[i] = rows[i].label
 	}
 	return out
+}
+
+// InterceptBack makes the execution screen forward-only: esc must never
+// orphan the event pump mid-mutation (the runner goroutine would block on
+// a full channel) or re-arm a listener on a finished run.
+func (s *ExecStep) InterceptBack() bool {
+	return true
 }
 
 // InterceptQuit turns the first ctrl+c into a graceful cancel (the marker
