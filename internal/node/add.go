@@ -145,13 +145,13 @@ func (r *Runner) AddWorkers(ctx context.Context, opts AddOptions) error {
 			return &errtypes.ClusterError{Msg: msgListNodes, Err: err}
 		}
 		if err := validateWorkerCountMatchesCluster(nodes, startIdx); err != nil {
-			return &errtypes.ConfigError{Msg: err.Error()}
+			return &errtypes.ConfigError{Msg: err.Error(), Err: err}
 		}
 
 		delta := r.Cfg.Topology.Workers.MemoryMB * opts.Count
 		if opts.HostTotalMiB > 0 {
 			if err := validateMemoryBudget(opts.HostTotalMiB, opts.HostAllocatedMiB, delta); err != nil {
-				return &errtypes.ConfigError{Msg: err.Error()}
+				return &errtypes.ConfigError{Msg: err.Error(), Err: err}
 			}
 		} else if delta > 0 {
 			r.Log.Warn("node: could not verify host memory budget (no proxmox probe); ensure the host has headroom before adding nodes",

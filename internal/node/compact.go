@@ -268,7 +268,7 @@ func (r *Runner) projectCompactMemory(numWorkers, numMasters int, opts CompactOp
 		numWorkers, numMasters,
 	)
 	if err := validateMemoryBudget(opts.HostTotalMiB, opts.HostAllocatedMiB, peak-opts.HostAllocatedMiB); err != nil {
-		return &errtypes.ConfigError{Msg: err.Error()}
+		return &errtypes.ConfigError{Msg: err.Error(), Err: err}
 	}
 	return nil
 }

@@ -83,7 +83,7 @@ func (r *Runner) Resize(ctx context.Context, scope ResizeScope, opts ResizeOptio
 
 	targets, role, err := resolveResizeTargets(nodes, scope)
 	if err != nil {
-		return &errtypes.ConfigError{Msg: err.Error()}
+		return &errtypes.ConfigError{Msg: err.Error(), Err: err}
 	}
 
 	current := r.roleMemoryMB(role)
@@ -98,7 +98,7 @@ func (r *Runner) Resize(ctx context.Context, scope ResizeScope, opts ResizeOptio
 	if !resuming {
 		if opts.HostTotalMiB > 0 {
 			if err := validateMemoryBudget(opts.HostTotalMiB, opts.HostAllocatedMiB, delta*len(targets)); err != nil {
-				return &errtypes.ConfigError{Msg: err.Error()}
+				return &errtypes.ConfigError{Msg: err.Error(), Err: err}
 			}
 		} else if delta > 0 {
 			r.Log.Warn("node: could not verify host memory budget (no Proxmox probe); ensure the host has headroom before growing nodes",

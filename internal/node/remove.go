@@ -65,7 +65,7 @@ func (r *Runner) RemoveWorker(ctx context.Context, target string, opts RemoveOpt
 			return &errtypes.ClusterError{Msg: msgListNodes, Err: err}
 		}
 		if err := validateWorkerRemovable(nodes, target, workerCount); err != nil {
-			return &errtypes.ConfigError{Msg: err.Error()}
+			return &errtypes.ConfigError{Msg: err.Error(), Err: err}
 		}
 		osdHere, ingressHere, err = r.removeGuards(ctx, nodes, target, opts.ForceStorage)
 		if err != nil {
