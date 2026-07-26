@@ -69,17 +69,24 @@ func validateEnums(cfg *Config, result *ValidationResult) {
 	if cfg.Provider.Type != "" && !isValidProvider(cfg.Provider.Type) {
 		result.AddError(FieldProviderType, fmt.Sprintf("unsupported provider: %s", cfg.Provider.Type))
 	}
+}
 
-	// "production" ships in the repo and is trusted without a disk check so
-	// DefaultConfig()-based callers (including tests run from a package-local
-	// CWD) never trip this; a genuinely custom environment must have a
-	// matching directory or terraform fails deep in the install phase
-	// instead of here.
-	if env := cfg.Deployment.TerraformEnv; env != "" && env != defaultTerraformEnv {
-		dir := workspace.TerraformEnvDir("", env)
-		if !system.DirExists(dir) {
-			result.AddError(FieldDeploymentTerraformEnv, fmt.Sprintf("no environment directory at %s", dir))
-		}
+// validateTerraformEnvDir requires a matching environment directory under
+// projectRoot. "production" ships in the repo and is trusted without a disk
+// check so DefaultConfig()-based callers (including tests run from a
+// package-local CWD) never trip this; a genuinely custom environment must
+// have a matching directory or terraform fails deep in the install phase
+// instead of here. An empty projectRoot resolves against the process cwd,
+// which only matches materialization when the caller runs at the workspace
+// root — deploy's gate passes its resolved root explicitly.
+func validateTerraformEnvDir(cfg *Config, projectRoot string, result *ValidationResult) {
+	env := cfg.Deployment.TerraformEnv
+	if env == "" || env == defaultTerraformEnv {
+		return
+	}
+	dir := workspace.TerraformEnvDir(projectRoot, env)
+	if !system.DirExists(dir) {
+		result.AddError(FieldDeploymentTerraformEnv, fmt.Sprintf("no environment directory at %s", dir))
 	}
 }
 

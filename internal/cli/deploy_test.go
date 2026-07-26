@@ -54,6 +54,30 @@ func TestRunFullDeployment_RejectsBogusProviderType(t *testing.T) {
 	}
 }
 
+func TestDeployGateScope_CoversRenderSurfaces(t *testing.T) {
+	for name, scope := range map[string]config.ValidationScope{
+		"required":            config.ScopeRequired,
+		"enums":               config.ScopeEnums,
+		"provider":            config.ScopeProvider,
+		"advanced networking": config.ScopeAdvancedNetworking,
+		"networking":          config.ScopeNetworking,
+		"http server":         config.ScopeHTTPServer,
+	} {
+		if !deployGateScope.HasScope(scope) {
+			t.Errorf("deploy gate is missing the %s scope", name)
+		}
+	}
+}
+
+func TestDeployGateScope_RejectsUnsafeHTTPRoot(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.HTTPServer.Root = "/var/www/$(reboot)"
+	result := config.ValidateWithOptions(cfg, config.ValidationOptions{Scope: deployGateScope})
+	if result.IsValid() {
+		t.Fatal("gate accepted an http_server.root with shell metacharacters")
+	}
+}
+
 func TestDeployDryRunSteps_DerivedFromLivePhaseSteps(t *testing.T) {
 	cfg := config.DefaultConfig()
 	root := t.TempDir()

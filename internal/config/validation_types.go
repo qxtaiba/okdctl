@@ -67,9 +67,9 @@ func (r *ValidationResult) Error() string {
 
 // ValidationScope is a bitmask selecting which validators
 // ValidateWithOptions runs. ScopeAll enables every validator; deploy's
-// pre-flight gate combines ScopeRequired|ScopeEnums|ScopeProvider|
-// ScopeAdvancedNetworking to reject a hand-edited config before any phase
-// code runs, without paying for the full validator set on every keystroke.
+// pre-flight gate (see cli.deployGateScope) combines the scopes covering
+// its render surfaces to reject a hand-edited config before any phase code
+// runs, without paying for the full validator set on every keystroke.
 type ValidationScope uint64
 
 // Validation scope flags. Combine with bitwise-OR.
@@ -95,6 +95,11 @@ func (s ValidationScope) HasScope(flag ValidationScope) bool {
 // ValidationOptions controls which validators run.
 type ValidationOptions struct {
 	Scope ValidationScope
+	// ProjectRoot anchors filesystem checks (the terraform environments
+	// dir). Empty resolves against the process cwd; deploy passes its
+	// resolved workspace root so validation and materialization agree
+	// when okdctl is invoked from a subdirectory.
+	ProjectRoot string
 }
 
 type validatorEntry struct {
@@ -127,6 +132,10 @@ func runValidators(cfg *Config, opts ValidationOptions) *ValidationResult {
 		if opts.Scope.HasScope(v.scope) {
 			v.validate(cfg, result)
 		}
+	}
+
+	if opts.Scope.HasScope(ScopeEnums) {
+		validateTerraformEnvDir(cfg, opts.ProjectRoot, result)
 	}
 
 	return result
