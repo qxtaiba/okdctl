@@ -39,6 +39,13 @@ const (
 	protoUDP = "udp"
 )
 
+// goos and isServiceActiveFn are test seams: DetectBackend's platform gate
+// and firewalld-active probe are otherwise unreachable from non-Linux hosts.
+var (
+	goos              = runtime.GOOS
+	isServiceActiveFn = system.IsServiceActive
+)
+
 // OKDRequiredPorts is the authoritative port list opened by setup;
 // HAProxyFrontendPorts() derives its subset from this slice.
 var OKDRequiredPorts = []Port{
@@ -102,12 +109,12 @@ func New(opts ...Option) *Firewall {
 // then ufw, then iptables. Returns None on non-Linux hosts or when no
 // backend is present.
 func (f *Firewall) DetectBackend(ctx context.Context) Backend {
-	if runtime.GOOS != "linux" {
+	if goos != "linux" {
 		return None
 	}
 
 	if _, err := exec.LookPath("firewall-cmd"); err == nil {
-		if system.IsServiceActive(ctx, "firewalld") {
+		if isServiceActiveFn(ctx, "firewalld") {
 			return Firewalld
 		}
 	}
