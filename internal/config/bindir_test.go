@@ -118,20 +118,24 @@ func TestResolveBinDir_TildeExpansion(t *testing.T) {
 	}
 }
 
-// TestResolveBinDir_DotDotTraversal locks current behavior: dot-dot sequences
-// are collapsed by filepath.Clean but not rejected. A future change adding
-// traversal rejection must update both the impl and this assertion.
 func TestResolveBinDir_DotDotTraversal(t *testing.T) {
-	t.Setenv("OKDCTL_BIN_DIR", "")
+	t.Run("config value with dot-dot falls back to default", func(t *testing.T) {
+		t.Setenv("OKDCTL_BIN_DIR", "")
+		cfg := &Config{}
+		cfg.Deployment.BinDir = "/usr/local/bin/../../etc"
+		if got := ResolveBinDir(cfg); got != DefaultBinDir {
+			t.Errorf("ResolveBinDir dot-dot = %q; want %q (traversal rejected)", got, DefaultBinDir)
+		}
+	})
 
-	cfg := &Config{}
-	cfg.Deployment.BinDir = "/usr/local/bin/../../etc"
-
-	got := ResolveBinDir(cfg)
-	want := filepath.Clean("/usr/local/bin/../../etc")
-	if got != want {
-		t.Errorf("ResolveBinDir dot-dot = %q; want %q (traversal not rejected, only cleaned)", got, want)
-	}
+	t.Run("env value with dot-dot falls through to config", func(t *testing.T) {
+		t.Setenv("OKDCTL_BIN_DIR", "/opt/../etc/bin")
+		cfg := &Config{}
+		cfg.Deployment.BinDir = "/config/bin"
+		if got := ResolveBinDir(cfg); got != "/config/bin" {
+			t.Errorf("ResolveBinDir = %q; want /config/bin", got)
+		}
+	})
 }
 
 func TestDefaultBinDir_NotACriticalPath(t *testing.T) {
