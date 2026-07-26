@@ -471,6 +471,46 @@ func TestCreateSnapshot_rejectedByPveshScrubsStderr(t *testing.T) {
 	}
 }
 
+// TestCreateSnapshot_duplicateName covers the ListSnapshots pre-check: a
+// name the VM already has must surface as ErrSnapshotExists instead of a
+// raw pvesh task exitstatus string.
+func TestCreateSnapshot_duplicateName(t *testing.T) {
+	installFakeSnapshotSSH(t)
+	p := newTestSnapshotParams(t)
+
+	listFile := filepath.Join(t.TempDir(), "list.json")
+	if err := os.WriteFile(listFile, []byte(`[{"name":"pre-upgrade","snaptime":1690000000}]`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("SNAP_LIST_FILE", listFile)
+
+	err := CreateSnapshot(context.Background(), p, 100, "pre-upgrade", "", 5*time.Second)
+	if !errors.Is(err, ErrSnapshotExists) {
+		t.Fatalf("err = %v; want errors.Is(err, ErrSnapshotExists)", err)
+	}
+	if !strings.Contains(err.Error(), "pre-upgrade") {
+		t.Errorf("err = %q; want it to name the colliding snapshot", err.Error())
+	}
+}
+
+// TestCreateSnapshot_otherSnapshotsDoNotCollide proves the pre-check only
+// refuses an exact name match; unrelated existing snapshots must not block
+// the create.
+func TestCreateSnapshot_otherSnapshotsDoNotCollide(t *testing.T) {
+	installFakeSnapshotSSH(t)
+	p := newTestSnapshotParams(t)
+
+	listFile := filepath.Join(t.TempDir(), "list.json")
+	if err := os.WriteFile(listFile, []byte(`[{"name":"post-upgrade","snaptime":1690000000}]`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("SNAP_LIST_FILE", listFile)
+
+	if err := CreateSnapshot(context.Background(), p, 100, "pre-upgrade", "", 5*time.Second); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 // TestCreateSnapshot_timesOutWhenTaskNeverStops proves pveshWaitTask does
 // not treat "pvesh returned a UPID" as success: if the background task never
 // reaches status=stopped, CreateSnapshot must fail rather than declare
