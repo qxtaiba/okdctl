@@ -64,9 +64,46 @@ func TestWaitFor_Timeout(t *testing.T) {
 		if !errors.Is(err, context.DeadlineExceeded) {
 			t.Errorf("err = %v; want errors.Is(_, context.DeadlineExceeded)", err)
 		}
+		if !errors.Is(err, errtypes.ErrWaitTimeout) {
+			t.Errorf("err = %v; want errors.Is(_, errtypes.ErrWaitTimeout)", err)
+		}
 		var clusterErr *errtypes.ClusterError
 		if !errors.As(err, &clusterErr) {
 			t.Errorf("err = %v; want errors.As(_, *errtypes.ClusterError)", err)
+		}
+	})
+}
+
+// TestWaitFor_HungProbeDiesAtGrace locks the probe-context bound: a probe
+// that ignores readiness and blocks on its ctx must be cancelled at
+// opts.Timeout+probeGrace, so WaitFor returns instead of stalling forever
+// past its configured timeout.
+func TestWaitFor_HungProbeDiesAtGrace(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		var probeCtxErr error
+		check := func(ctx context.Context) bool {
+			<-ctx.Done()
+			probeCtxErr = ctx.Err()
+			return false
+		}
+
+		start := time.Now()
+		err := WaitFor(context.Background(), "test", "hung-probe", check, WaitForOptions{
+			Interval: 1 * time.Second,
+			Timeout:  5 * time.Second,
+			Logger:   logutil.NopLogger,
+		})
+		if err == nil {
+			t.Fatal("expected timeout error")
+		}
+		if !errors.Is(err, errtypes.ErrWaitTimeout) {
+			t.Errorf("err = %v; want errors.Is(_, errtypes.ErrWaitTimeout)", err)
+		}
+		if elapsed := time.Since(start); elapsed != 5*time.Second+probeGrace {
+			t.Errorf("elapsed = %v; want exactly timeout+grace %v", elapsed, 5*time.Second+probeGrace)
+		}
+		if !errors.Is(probeCtxErr, context.DeadlineExceeded) {
+			t.Errorf("probe ctx err = %v; want context.DeadlineExceeded", probeCtxErr)
 		}
 	})
 }

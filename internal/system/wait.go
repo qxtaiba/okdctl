@@ -34,6 +34,12 @@ func DefaultWaitForOptions() WaitForOptions {
 	}
 }
 
+// probeGrace bounds how far a final in-flight probe may outlive opts.Timeout.
+// A probe launched just before the poll deadline is allowed to finish rather
+// than being cancelled mid-call, but one that hangs (oc against a blackholed
+// API) must not stall WaitFor forever past its configured timeout.
+const probeGrace = 30 * time.Second
+
 // WaitFor polls check at opts.Interval until it returns true, ctx is
 // cancelled, or opts.Timeout elapses. A timeout that races with ctx
 // cancellation reports ctx.Err as the primary cause. Lives here as a
@@ -56,19 +62,26 @@ func WaitFor(ctx context.Context, prefix, description string, check func(context
 	polls := 0
 	first := true
 
+	// The library passes its own deadline-bound context to the condition; we
+	// ignore it so a final in-flight probe isn't cancelled mid-call the
+	// instant the poll deadline lands. probeCtx keeps that intent bounded:
+	// probes run against the caller's ctx extended only by probeGrace past
+	// opts.Timeout, so a hung probe dies at deadline+grace instead of never.
+	probeCtx := ctx
+	if opts.Timeout > 0 {
+		var cancel context.CancelFunc
+		probeCtx, cancel = context.WithDeadline(ctx, startTime.Add(opts.Timeout+probeGrace))
+		defer cancel()
+	}
+
 	// PollUntilContextTimeout/Cancel invoke this once immediately (the
 	// "first" branch, mirroring the old pre-loop check) and then once per
 	// tick thereafter. Only the tick branch counts toward polls, matching
 	// the original ticker-driven accounting.
-	//
-	// The library passes its own deadline-bound context here; we ignore it
-	// and call check with the caller's original ctx instead, so a final
-	// in-flight probe isn't cancelled mid-call when the poll deadline lands
-	// (the old WaitFor contract, preserved).
 	condition := func(context.Context) (bool, error) {
 		if first {
 			first = false
-			ready := check(ctx)
+			ready := check(probeCtx)
 			if ready {
 				logger.Info(prefix+": ready", "target", description, "polls", polls, "elapsed", time.Since(startTime).Round(time.Second))
 			}
@@ -77,7 +90,7 @@ func WaitFor(ctx context.Context, prefix, description string, check func(context
 
 		polls++
 		elapsed := time.Since(startTime)
-		if check(ctx) {
+		if check(probeCtx) {
 			logger.Info(prefix+": ready", "target", description, "polls", polls, "elapsed", elapsed.Round(time.Second))
 			return true, nil
 		}
@@ -102,12 +115,13 @@ func WaitFor(ctx context.Context, prefix, description string, check func(context
 		return fmt.Errorf("waiting for %s %s: %w", prefix, description, err)
 	}
 
-	// Return a ClusterError so exitCodeFor maps this to exit 4 rather
-	// than 130. Unwrap chains to context.DeadlineExceeded so
-	// errors.Is checks still work.
+	// Return a ClusterError so exitCodeFor maps this to exit 4 rather than
+	// 130. ErrWaitTimeout chains to context.DeadlineExceeded so existing
+	// errors.Is checks still work, while letting callers tell a WaitFor
+	// poll timeout from a genuine context deadline.
 	return &errtypes.ClusterError{
 		Msg: fmt.Sprintf("timeout waiting for %s %s after %v (%d polls)", prefix, description, opts.Timeout, polls),
-		Err: context.DeadlineExceeded,
+		Err: errtypes.ErrWaitTimeout,
 	}
 }
 

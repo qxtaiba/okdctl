@@ -13,6 +13,7 @@
 package errtypes
 
 import (
+	"context"
 	"errors"
 	"fmt"
 )
@@ -28,6 +29,12 @@ var ErrPullSecretInvalid = errors.New("pull secret is not valid JSON")
 // ErrSudoMissing is wrapped inside an AuthError when sudo cannot be located
 // on PATH. exitCodeFor maps it to 71 (EX_OSERR).
 var ErrSudoMissing = errors.New("sudo not found")
+
+// ErrWaitTimeout marks a poll-loop timeout raised by system.WaitFor's own
+// opts.Timeout, as opposed to a deadline set on the caller's context. It
+// wraps context.DeadlineExceeded so existing errors.Is matchers keep
+// working; match ErrWaitTimeout to single out poll timeouts specifically.
+var ErrWaitTimeout = fmt.Errorf("wait timeout: %w", context.DeadlineExceeded)
 
 // HintAppender is implemented by error types whose Msg can be enriched with
 // extra diagnostic text without changing their concrete type — and
