@@ -145,7 +145,7 @@ func (p *Phase) setupManifestSteps(cfg *config.Config, opts *Options, clusterDir
 				return system.FileExists(filepath.Join(clusterDir, "install-config.yaml.backup")), nil
 			},
 			Exec: func(ctx context.Context) error {
-				if err := p.GenerateInstallConfig(ctx, cfg, clusterDir); err != nil {
+				if err := p.generateInstallConfig(ctx, cfg, clusterDir); err != nil {
 					return &errtypes.ConfigError{Msg: "failed to generate install-config", Err: err}
 				}
 				p.Log.Info("config: install-config.yaml generated",

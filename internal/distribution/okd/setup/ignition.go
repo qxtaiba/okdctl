@@ -58,10 +58,10 @@ func renderAndWrite(render func() (string, error), path string, mode os.FileMode
 	return nil
 }
 
-// GenerateInstallConfig renders install-config.yaml into outputDir using
+// generateInstallConfig renders install-config.yaml into outputDir using
 // pull-secret and SSH key paths from cfg, then keeps a .backup copy before
 // openshift-install consumes the original during manifest generation.
-func (p *Phase) GenerateInstallConfig(ctx context.Context, cfg *config.Config, outputDir string) error {
+func (p *Phase) generateInstallConfig(ctx context.Context, cfg *config.Config, outputDir string) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}

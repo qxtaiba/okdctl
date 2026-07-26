@@ -48,8 +48,8 @@ func TestGenerateInstallConfig_PullSecretInFileAndZeroed(t *testing.T) {
 	outputDir := t.TempDir()
 	p := newTestPhase(t)
 
-	if err := p.GenerateInstallConfig(t.Context(), cfg, outputDir); err != nil {
-		t.Fatalf("GenerateInstallConfig: %v", err)
+	if err := p.generateInstallConfig(t.Context(), cfg, outputDir); err != nil {
+		t.Fatalf("generateInstallConfig: %v", err)
 	}
 
 	rendered, err := os.ReadFile(filepath.Join(outputDir, "install-config.yaml"))
@@ -75,8 +75,8 @@ func TestGenerateInstallConfig_Perms(t *testing.T) {
 	outputDir := t.TempDir()
 	p := newTestPhase(t)
 
-	if err := p.GenerateInstallConfig(t.Context(), cfg, outputDir); err != nil {
-		t.Fatalf("GenerateInstallConfig: %v", err)
+	if err := p.generateInstallConfig(t.Context(), cfg, outputDir); err != nil {
+		t.Fatalf("generateInstallConfig: %v", err)
 	}
 
 	for _, name := range []string{"install-config.yaml", "install-config.yaml.backup"} {
@@ -97,7 +97,7 @@ func TestGenerateInstallConfig_PullSecretReadFail(t *testing.T) {
 	cfg.Files.SSHPublicKey = filepath.Join(t.TempDir(), "id_rsa.pub")
 
 	p := newTestPhase(t)
-	err := p.GenerateInstallConfig(t.Context(), cfg, t.TempDir())
+	err := p.generateInstallConfig(t.Context(), cfg, t.TempDir())
 	if err == nil {
 		t.Fatal("want error for missing pull-secret, got nil")
 	}
@@ -128,7 +128,7 @@ func TestGenerateInstallConfig_SymlinkRejected(t *testing.T) {
 	cfg.Files.SSHPublicKey = sshKeyPath
 	p := newTestPhase(t)
 
-	err := p.GenerateInstallConfig(t.Context(), cfg, t.TempDir())
+	err := p.generateInstallConfig(t.Context(), cfg, t.TempDir())
 	if err == nil {
 		t.Fatal("want error for symlinked pull-secret, got nil")
 	}
@@ -150,7 +150,7 @@ func TestGenerateInstallConfig_SymlinkRejected(t *testing.T) {
 	cfg2.Files.PullSecret = realPS
 	cfg2.Files.SSHPublicKey = sshSymlink
 
-	err = p.GenerateInstallConfig(t.Context(), cfg2, t.TempDir())
+	err = p.generateInstallConfig(t.Context(), cfg2, t.TempDir())
 	if err == nil {
 		t.Fatal("want error for symlinked SSH key, got nil")
 	}
