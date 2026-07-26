@@ -136,7 +136,7 @@ func runClusterCompact(cmd *cobra.Command, _ []string) error {
 	}
 
 	consent := nodeConsent{yes: compactYes, dryRun: compactDryRun, twoStage: true}
-	rc, err := buildNodeRunner(cmd.Context(), cfg, "compact", consent, true)
+	rc, err := buildNodeRunner(cmd, cfg, "compact", consent, true)
 	if err != nil {
 		return err
 	}
@@ -188,7 +188,7 @@ func runClusterPower(cmd *cobra.Command, verb string, yes bool, confirmCluster s
 	}
 
 	consent := nodeConsent{yes: yes, dryRun: dryRun, twoStage: false}
-	rc, err := buildNodeRunner(cmd.Context(), cfg, verb, consent, true)
+	rc, err := buildNodeRunner(cmd, cfg, verb, consent, true)
 	if err != nil {
 		return err
 	}

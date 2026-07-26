@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -204,7 +203,8 @@ func (n *nodeRunnerCtx) complete(w io.Writer, elapsed time.Duration) {
 // under the project run lock. It installs the informed-confirmation hook (or the
 // dry-run preview) from consent. The returned cleanup zeroizes credentials and
 // releases the lock.
-func buildNodeRunner(ctx context.Context, cfg *config.Config, verb string, consent nodeConsent, probeHost bool) (*nodeRunnerCtx, error) {
+func buildNodeRunner(cmd *cobra.Command, cfg *config.Config, verb string, consent nodeConsent, probeHost bool) (*nodeRunnerCtx, error) {
+	ctx := cmd.Context()
 	projectRoot, err := resolveProjectRootOrDie()
 	if err != nil {
 		return nil, err
@@ -283,12 +283,13 @@ func buildNodeRunner(ctx context.Context, cfg *config.Config, verb string, conse
 		},
 	}
 	if consent.dryRun {
+		out := cmd.OutOrStdout()
 		runner.Preview = func(plan *node.OpPlan) {
 			rc.captured = plan
-			fmt.Fprint(os.Stdout, render.NodeOpDryRun(plan))
+			fmt.Fprint(out, render.NodeOpDryRun(plan))
 		}
 	} else {
-		runner.Confirm = nodeConfirmHook(rc, consent, cfg.Cluster.Name)
+		runner.Confirm = nodeConfirmHook(rc, consent, cfg.Cluster.Name, cmd.ErrOrStderr())
 	}
 	return rc, nil
 }
@@ -296,12 +297,12 @@ func buildNodeRunner(ctx context.Context, cfg *config.Config, verb string, conse
 // nodeConfirmHook builds the guards-before-prompt callback: it always prints the
 // informed box (so --yes still surfaces the blast radius), then runs the gate
 // unless --yes was passed. It records the plan for the completion box. The box
-// and prompt share stderr so they never interleave with piped stdout data, and
-// the hook is invoked with no spinner span open.
-func nodeConfirmHook(rc *nodeRunnerCtx, consent nodeConsent, clusterName string) node.ConfirmFunc {
+// and prompt share the stderr stream (errW) so they never interleave with piped
+// stdout data, and the hook is invoked with no spinner span open.
+func nodeConfirmHook(rc *nodeRunnerCtx, consent nodeConsent, clusterName string, errW io.Writer) node.ConfirmFunc {
 	return func(ctx context.Context, plan *node.OpPlan) (bool, error) {
 		rc.captured = plan
-		fmt.Fprint(os.Stderr, render.NodeOpConfirm(plan))
+		fmt.Fprint(errW, render.NodeOpConfirm(plan))
 		if consent.yes {
 			return true, nil
 		}
@@ -426,7 +427,7 @@ func runNodeRemove(cmd *cobra.Command, args []string) error {
 	}
 
 	consent := nodeConsent{yes: nodeYes, dryRun: nodeDryRun, twoStage: true}
-	rc, err := buildNodeRunner(cmd.Context(), cfg, "remove", consent, false)
+	rc, err := buildNodeRunner(cmd, cfg, "remove", consent, false)
 	if err != nil {
 		return err
 	}
@@ -466,7 +467,7 @@ func runNodeResize(cmd *cobra.Command, args []string) error {
 	}
 
 	consent := nodeConsent{yes: nodeYes, dryRun: nodeDryRun, twoStage: false}
-	rc, err := buildNodeRunner(cmd.Context(), cfg, "resize", consent, true)
+	rc, err := buildNodeRunner(cmd, cfg, "resize", consent, true)
 	if err != nil {
 		return err
 	}
@@ -504,7 +505,7 @@ func runNodeAdd(cmd *cobra.Command, _ []string) error {
 	}
 
 	consent := nodeConsent{yes: nodeYes, dryRun: nodeDryRun, twoStage: false}
-	rc, err := buildNodeRunner(cmd.Context(), cfg, "add", consent, true)
+	rc, err := buildNodeRunner(cmd, cfg, "add", consent, true)
 	if err != nil {
 		return err
 	}
