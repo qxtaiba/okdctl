@@ -664,3 +664,116 @@ func TestValidateEndToEnd(t *testing.T) {
 		})
 	}
 }
+
+func TestValidateAdditionalNetworks(t *testing.T) {
+	cases := []struct {
+		name       string
+		networks   []AdditionalNetwork
+		wantFields []string
+	}{
+		{"empty list", nil, nil},
+		{"valid full entry", []AdditionalNetwork{{Bridge: "vmbr1", Model: "virtio", VLANTag: 100}}, nil},
+		{"empty model uses virtio default", []AdditionalNetwork{{Bridge: "vmbr1"}}, nil},
+		{"vlan bounds", []AdditionalNetwork{{Bridge: "vmbr1", VLANTag: 4094}}, nil},
+		{
+			"missing bridge",
+			[]AdditionalNetwork{{Model: "virtio"}},
+			[]string{"provider.proxmox.additional_networks[0].bridge"},
+		},
+		{
+			"hcl interpolation in bridge",
+			[]AdditionalNetwork{{Bridge: `${file("/etc/passwd")}`}},
+			[]string{"provider.proxmox.additional_networks[0].bridge"},
+		},
+		{
+			"quote breakout in bridge",
+			[]AdditionalNetwork{{Bridge: `vmbr0", extra = "x`}},
+			[]string{"provider.proxmox.additional_networks[0].bridge"},
+		},
+		{
+			"model outside allowlist",
+			[]AdditionalNetwork{{Bridge: "vmbr1", Model: "virtio${run}"}},
+			[]string{"provider.proxmox.additional_networks[0].model"},
+		},
+		{
+			"vlan too high",
+			[]AdditionalNetwork{{Bridge: "vmbr1", VLANTag: 4095}},
+			[]string{"provider.proxmox.additional_networks[0].vlan_tag"},
+		},
+		{
+			"vlan negative",
+			[]AdditionalNetwork{{Bridge: "vmbr1", VLANTag: -1}},
+			[]string{"provider.proxmox.additional_networks[0].vlan_tag"},
+		},
+		{
+			"second entry indexed independently",
+			[]AdditionalNetwork{{Bridge: "vmbr1"}, {Bridge: "bad bridge"}},
+			[]string{"provider.proxmox.additional_networks[1].bridge"},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			r := &ValidationResult{}
+			validateAdditionalNetworks(tc.networks, r)
+			if len(tc.wantFields) == 0 {
+				if !r.IsValid() {
+					t.Fatalf("want valid, got errors: %v", r.Errors)
+				}
+				return
+			}
+			for _, field := range tc.wantFields {
+				found := false
+				for _, e := range r.Errors {
+					if e.Field == field {
+						found = true
+						break
+					}
+				}
+				if !found {
+					t.Errorf("missing error for field %s; got %v", field, r.Errors)
+				}
+			}
+		})
+	}
+}
+
+func TestValidateVMIDBase(t *testing.T) {
+	newCfg := func(base, masters, workers int) *Config {
+		cfg := DefaultConfig()
+		cfg.Topology.VMIDBase = base
+		cfg.Topology.ControlPlane.Count = masters
+		cfg.Topology.Workers.Count = workers
+		return cfg
+	}
+
+	cases := []struct {
+		name    string
+		cfg     *Config
+		wantErr bool
+	}{
+		{"default base valid", newCfg(DefaultVMIDBase, 3, 2), false},
+		{"minimum valid", newCfg(100, 1, 0), false},
+		{"zero rejected", newCfg(0, 1, 0), true},
+		{"negative rejected", newCfg(-5, 1, 0), true},
+		{"below proxmox floor rejected", newCfg(99, 1, 0), true},
+		{"above ceiling rejected", newCfg(1000000000, 1, 0), true},
+		{"overflow past ceiling rejected", newCfg(999999997, 3, 2), true},
+		{"just under ceiling valid", newCfg(999999990, 3, 2), false},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			r := &ValidationResult{}
+			validateVMIDBase(tc.cfg, r)
+			if gotErr := !r.IsValid(); gotErr != tc.wantErr {
+				t.Errorf("validateVMIDBase err = %v, want %v (errors: %v)", gotErr, tc.wantErr, r.Errors)
+			}
+			for _, e := range r.Errors {
+				if e.Field != "topology.vm_id_base" {
+					t.Errorf("unexpected error field %s", e.Field)
+				}
+			}
+		})
+	}
+}

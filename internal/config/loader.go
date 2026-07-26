@@ -72,7 +72,8 @@ func checkSchemaVersion(data []byte, path string) error {
 	case SchemaVersionV1:
 		return &errtypes.ConfigError{Msg: fmt.Sprintf(
 			"config file %s uses schemaVersion %q; current is %q — rename provider.proxmox.master_nodes to control_plane_nodes, disks.master_data_size_gb to control_plane_data_size_gb, topology.*.memory to memory_mb, topology.*.disk to disk_gb, then set schemaVersion: %q",
-			path, SchemaVersionV1, SchemaVersionCurrent, SchemaVersionCurrent)}
+			path, SchemaVersionV1, SchemaVersionCurrent, SchemaVersionCurrent,
+		)}
 	default:
 		return &errtypes.ConfigError{Msg: fmt.Sprintf("config file %s has unsupported schemaVersion %q (expected %q)", path, probe.SchemaVersion, SchemaVersionCurrent)}
 	}

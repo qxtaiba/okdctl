@@ -118,6 +118,7 @@ func MinimalConfig() *Config {
 	cfg.Topology = TopologyConfig{
 		ControlPlane: NodeConfig{Count: 1, CPU: 4, MemoryMB: 8192, DiskGB: 50},
 		Workers:      NodeConfig{Count: 0, CPU: 0, MemoryMB: 0, DiskGB: 0},
+		VMIDBase:     DefaultVMIDBase,
 	}
 	cfg.Addons = map[string]AddonConfig{
 		defaultFluxAddon: {Enabled: false},
