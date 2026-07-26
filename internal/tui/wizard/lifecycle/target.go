@@ -115,7 +115,7 @@ func (s *TargetStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 		}
 
 	case tea.KeyPressMsg:
-		if s.phase != targetPicking || s.loadErr != nil || s.selector == nil {
+		if s.phase != targetPicking || s.loadErr != nil || s.selector == nil || len(s.choices) == 0 {
 			return s, nil
 		}
 		if msg.Code == tea.KeyEnter {

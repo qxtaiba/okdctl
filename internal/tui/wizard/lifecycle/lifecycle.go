@@ -51,6 +51,11 @@ type State struct {
 	// Proceed is true only after the operator chose execute on the preview
 	// screen (and, for destructive plans, passed the typed confirmation).
 	Proceed bool
+	// Started marks that execution began (mutations may have happened);
+	// Executed marks that the backend returned. The gap between them is an
+	// interrupted run the CLI must report truthfully.
+	Started  bool
+	Executed bool
 
 	Result  error
 	Elapsed time.Duration

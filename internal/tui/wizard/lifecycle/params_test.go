@@ -93,10 +93,21 @@ func TestParamsStepRemoveForceStorage(t *testing.T) {
 	}
 }
 
-func TestParamsStepShouldShowHiddenOnResume(t *testing.T) {
+func TestParamsStepShownOnResume(t *testing.T) {
+	// The backend does not persist an interrupted op's parameters, so a
+	// resume must re-collect them: hiding this step would hand Resize
+	// zero sizing (refused) and Remove an unbounded drain timeout.
 	cfg := config.DefaultConfig()
-	st := &State{Cfg: cfg, Op: node.OpResize, Resume: true}
-	if NewParamsStep(st).ShouldShow(cfg) {
-		t.Error("params must be hidden on resume")
+	st := &State{
+		Cfg: cfg, Op: node.OpResize, Resume: true,
+		Scope: node.ResizeScope{Node: "homelab-master0"},
+	}
+	s := NewParamsStep(st)
+	if !s.ShouldShow(cfg) {
+		t.Fatal("params must be shown on resume")
+	}
+	_ = s.Init()
+	if s.resizeRole() != nodetypes.RoleMaster {
+		t.Error("resume must infer the role from the marker target name")
 	}
 }

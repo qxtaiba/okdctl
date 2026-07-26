@@ -54,10 +54,11 @@ func NewParamsStep(st *State) *ParamsStep {
 	}
 }
 
-// ShouldShow hides the step on resume — parameters are recomputed by the
-// backend from the recorded roll.
+// ShouldShow always shows the step: the backend does not persist an
+// interrupted op's parameters, so a resume must re-collect them (the
+// resize refuses zero sizing and remove would drain unbounded otherwise).
 func (s *ParamsStep) ShouldShow(_ *config.Config) bool {
-	return !s.st.Resume
+	return true
 }
 
 // Init builds the per-op form on first focus and focuses it.
@@ -134,6 +135,11 @@ func (s *ParamsStep) resizeRole() nodetypes.NodeRole {
 		if n.Name == s.st.Scope.Node {
 			return n.Role
 		}
+	}
+	// Resume skips the target step, so the live list is empty; the node
+	// name itself carries the role (cluster naming: <cluster>-masterN).
+	if strings.Contains(s.st.Scope.Node, "master") {
+		return nodetypes.RoleMaster
 	}
 	return nodetypes.RoleWorker
 }

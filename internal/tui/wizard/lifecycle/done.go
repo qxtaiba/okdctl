@@ -30,6 +30,13 @@ func NewDoneStep(st *State) *DoneStep {
 	}
 }
 
+// InterceptBack keeps the flow forward-only: esc from the done screen
+// would re-enter the finished execution step and softlock on its drained
+// event channel.
+func (s *DoneStep) InterceptBack() bool {
+	return true
+}
+
 // ShouldShow gates the step to consented (executed) runs.
 func (s *DoneStep) ShouldShow(_ *config.Config) bool {
 	return s.st.Proceed

@@ -75,7 +75,7 @@ func runNodeManage(cmd *cobra.Command, _ []string) error {
 	hooks := lifecycle.Hooks{
 		ListNodes: func() ([]cluster.NodeDetail, error) { return cl.ListNodes(ctx) },
 		DryRun: func(s *lifecycle.State) (*node.OpPlan, error) {
-			rc, err := env.newRunner(cmd, cfg, "manage", nodeConsent{dryRun: true})
+			rc, err := env.newRunner(cmd, cfg, "manage", nodeConsent{dryRun: true}, fileOnlySlog())
 			if err != nil {
 				return nil, err
 			}
@@ -97,17 +97,28 @@ func runNodeManage(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return &errtypes.ConfigError{Msg: "lifecycle wizard", Err: err}
 	}
-	if result.Cancelled || !st.Proceed {
+	return reportLifecycleOutcome(cmd, result, st)
+}
+
+// reportLifecycleOutcome maps the wizard's terminal state to a truthful
+// exit: "no changes made" is only ever printed when execution never
+// started; a run interrupted mid-execution surfaces the resume marker and
+// exits non-zero instead of claiming a clean state.
+func reportLifecycleOutcome(cmd *cobra.Command, result wizard.Result, st *lifecycle.State) error {
+	switch {
+	case st.Started && !st.Executed:
+		return &errtypes.ClusterError{Msg: "execution was interrupted mid-operation; the op marker records the in-flight step — re-run 'okdctl node manage' (or the matching node verb) to resume"}
+	case st.Executed && st.Result != nil:
+		return st.Result
+	case st.Executed:
+		fmt.Fprint(cmd.OutOrStdout(), render.NodeOpComplete(st.Plan, st.Elapsed))
+		return nil
+	case result.Cancelled || !st.Proceed:
 		tui.Info("no changes made")
 		return nil
+	default:
+		return nil
 	}
-	if st.Result != nil {
-		return st.Result
-	}
-	if st.Plan != nil {
-		fmt.Fprint(cmd.OutOrStdout(), render.NodeOpComplete(st.Plan, st.Elapsed))
-	}
-	return nil
 }
 
 // executeLifecycleOp runs the wizard-approved operation inside the TUI's
@@ -116,7 +127,7 @@ func runNodeManage(cmd *cobra.Command, _ []string) error {
 // was granted on the preview/confirm screens, so the runner's ConfirmFunc
 // only cross-checks that the world still matches the approved plan.
 func executeLifecycleOp(opCtx context.Context, cmd *cobra.Command, cfg *config.Config, env *nodeOpsEnv, st *lifecycle.State, events chan<- lifecycle.ExecEvent) error {
-	rc, err := env.newRunner(cmd, cfg, "manage", nodeConsent{})
+	rc, err := env.newRunner(cmd, cfg, "manage", nodeConsent{}, fileOnlySlog())
 	if err != nil {
 		return err
 	}
@@ -134,8 +145,6 @@ func executeLifecycleOp(opCtx context.Context, cmd *cobra.Command, cfg *config.C
 	rc.runner.OnStep = func(target string, step node.Step) {
 		events <- lifecycle.ExecEvent{Node: target, Step: step}
 	}
-	rc.runner.Log = fileOnlySlog()
-
 	if err := runLifecycleOp(opCtx, rc, st); err != nil {
 		if errors.Is(err, node.ErrDeclined) {
 			return &errtypes.ClusterError{Msg: "the cluster changed since the preview — re-run 'okdctl node manage' to re-plan"}

@@ -135,7 +135,10 @@ func (s *OpStep) renderOption(o *opChoice, selected bool) string {
 // Apply records the chosen operation. Choosing a non-resume op while a
 // marker exists arms Ack so the backend's foreign-marker refusal becomes an
 // explicit operator choice instead of a mid-flow error. Resume seeds the
-// marker's target so the hidden target step is not missed.
+// marker's target so the hidden target step is not missed. Note that
+// choosing a fresh op whose kind and target happen to match the marker
+// still resumes inside the backend (beginOp's match branch) — CLI parity;
+// the resumed roll skips already-completed nodes rather than restarting.
 func (s *OpStep) Apply(_ *config.Config) error {
 	c := s.ops[s.nav.SelectedIndex()]
 	s.st.Op = c.op
