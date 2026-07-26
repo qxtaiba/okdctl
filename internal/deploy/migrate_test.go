@@ -412,3 +412,105 @@ func TestMigrateTerraformRootBacksUpAndWidens(t *testing.T) {
 		t.Fatalf("post-migration root must support node ops, got (%v,%v)", ok, err)
 	}
 }
+
+func TestStampRootManifestCoversModuleFiles(t *testing.T) {
+	root := t.TempDir()
+	writeNodeOpsRoot(t, root)
+	if err := stampRootManifest(root, nodeOpsRootFormat); err != nil {
+		t.Fatalf("stampRootManifest: %v", err)
+	}
+	m, err := readRootManifest(root)
+	if err != nil || m == nil {
+		t.Fatalf("readRootManifest: (%+v, %v)", m, err)
+	}
+	const moduleMain = "terraform/modules/proxmox-okd/main.tf"
+	if m.Files[moduleMain] == "" {
+		t.Errorf("manifest has no hash for %s; module files must be covered", moduleMain)
+	}
+}
+
+func TestDetectEmbeddedDrift(t *testing.T) {
+	const moduleMain = "terraform/modules/proxmox-okd/main.tf"
+	embedded, err := infrastructure.TerraformFS.ReadFile(moduleMain)
+	if err != nil {
+		t.Fatal(err)
+	}
+	oldContent := []byte("# module written by an older okdctl\n")
+	writeModule := func(t *testing.T, root string, content []byte) string {
+		t.Helper()
+		target := filepath.Join(root, "infrastructure", filepath.FromSlash(moduleMain))
+		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(target, content, 0o644); err != nil {
+			t.Fatal(err)
+		}
+		return target
+	}
+
+	t.Run("empty root reports nothing", func(t *testing.T) {
+		drift, err := DetectEmbeddedDrift(t.TempDir())
+		if err != nil {
+			t.Fatalf("DetectEmbeddedDrift: %v", err)
+		}
+		if len(drift.Stale) != 0 || len(drift.Unverified) != 0 {
+			t.Errorf("drift = %+v; want empty for a not-yet-materialized root", drift)
+		}
+	})
+
+	t.Run("copy matching embedded reports nothing", func(t *testing.T) {
+		root := t.TempDir()
+		writeModule(t, root, embedded)
+		drift, err := DetectEmbeddedDrift(root)
+		if err != nil {
+			t.Fatalf("DetectEmbeddedDrift: %v", err)
+		}
+		if len(drift.Stale) != 0 || len(drift.Unverified) != 0 {
+			t.Errorf("drift = %+v; want empty for an up-to-date file", drift)
+		}
+	})
+
+	t.Run("pristine stale file reported as stale", func(t *testing.T) {
+		root := t.TempDir()
+		target := writeModule(t, root, oldContent)
+		writeTestManifest(t, root, map[string][]byte{moduleMain: oldContent})
+		drift, err := DetectEmbeddedDrift(root)
+		if err != nil {
+			t.Fatalf("DetectEmbeddedDrift: %v", err)
+		}
+		if len(drift.Stale) != 1 || drift.Stale[0] != target {
+			t.Errorf("Stale = %v; want [%s]", drift.Stale, target)
+		}
+		if len(drift.Unverified) != 0 {
+			t.Errorf("Unverified = %v; want empty", drift.Unverified)
+		}
+	})
+
+	t.Run("operator edit stays silent", func(t *testing.T) {
+		root := t.TempDir()
+		writeModule(t, root, []byte("# operator hand-edit\n"))
+		writeTestManifest(t, root, map[string][]byte{moduleMain: embedded})
+		drift, err := DetectEmbeddedDrift(root)
+		if err != nil {
+			t.Fatalf("DetectEmbeddedDrift: %v", err)
+		}
+		if len(drift.Stale) != 0 || len(drift.Unverified) != 0 {
+			t.Errorf("drift = %+v; want empty for a proven operator edit", drift)
+		}
+	})
+
+	t.Run("divergence without manifest reports unverified", func(t *testing.T) {
+		root := t.TempDir()
+		target := writeModule(t, root, oldContent)
+		drift, err := DetectEmbeddedDrift(root)
+		if err != nil {
+			t.Fatalf("DetectEmbeddedDrift: %v", err)
+		}
+		if len(drift.Unverified) != 1 || drift.Unverified[0] != target {
+			t.Errorf("Unverified = %v; want [%s]", drift.Unverified, target)
+		}
+		if len(drift.Stale) != 0 {
+			t.Errorf("Stale = %v; want empty", drift.Stale)
+		}
+	})
+}

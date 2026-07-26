@@ -276,6 +276,27 @@ func runDeployPhases(ctx context.Context, p provisioner, cfg *config.Config, pro
 
 // Execute runs the full deployment — setup, install, postinstall — under the
 // project run lock, with resume routing and the post-deploy summary.
+// announceEmbeddedDrift warns when the write-once terraform workspace has
+// fallen behind this binary's embedded sources (an okdctl upgrade whose
+// module changed), so an operator learns their deploy runs old HCL instead
+// of discovering it via a mid-apply variable mismatch. Warn-only: refreshing
+// operator-editable HCL without consent would break the write-once contract.
+func announceEmbeddedDrift(root string) {
+	drift, err := DetectEmbeddedDrift(root)
+	if err != nil {
+		tui.Warn("could not compare terraform workspace against embedded sources", tui.LF("err", err))
+		return
+	}
+	for _, f := range drift.Stale {
+		tui.Warn("terraform file was written by an older okdctl and differs from this binary's embedded copy; the workspace copy is kept (write-once) — back it up and delete it, then re-run deploy to refresh it",
+			tui.LF("path", f))
+	}
+	for _, f := range drift.Unverified {
+		tui.Warn("terraform file differs from this binary's embedded copy; if you did not edit it, back it up and delete it, then re-run deploy to refresh it",
+			tui.LF("path", f))
+	}
+}
+
 func Execute(ctx context.Context, cfg *config.Config, opts Options, w io.Writer) error {
 	projectRoot := opts.ProjectRoot
 
@@ -298,6 +319,8 @@ func Execute(ctx context.Context, cfg *config.Config, opts Options, w io.Writer)
 	}()
 
 	runID := tui.RunID()
+
+	announceEmbeddedDrift(projectRoot)
 
 	markerPath := filepath.Join(workDir, StateFileName)
 	resumeFrom, marker := resolveResumePhase(markerPath, cfg.Cluster.Name, opts.FreshDeploy)

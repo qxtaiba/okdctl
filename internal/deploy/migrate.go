@@ -96,23 +96,39 @@ func readRootManifest(root string) (*terraformRootManifest, error) {
 	return &m, nil
 }
 
-// stampRootManifest records the sha256 of the EMBEDDED bytes okdctl writes for
-// each managed root file — the source of truth — never the on-disk content.
-// Hashing what was written (not what is currently on disk) is what lets a later
-// format bump tell a pristine file from an operator edit: an edit made before a
-// re-stamp can never be absorbed as the recorded baseline. Callers MUST invoke
-// it only after every managed file has landed: the manifest is the completion
-// marker detection trusts, so stamping before the last file lands would itself
-// open a crash window.
+func contentHash(data []byte) string {
+	sum := sha256.Sum256(data)
+	return hex.EncodeToString(sum[:])
+}
+
+// stampRootManifest records the sha256 of the EMBEDDED bytes okdctl writes —
+// the source of truth — never the on-disk content. Hashing what was written
+// (not what is currently on disk) is what lets a later refresh tell a
+// pristine file from an operator edit: an edit made before a re-stamp can
+// never be absorbed as the recorded baseline. Every embedded file is hashed
+// (module included), so drift detection covers the whole managed tree, not
+// just the node-ops env files. Callers MUST invoke it only after every
+// managed file has landed: the manifest is the completion marker detection
+// trusts, so stamping before the last file lands would itself open a crash
+// window.
 func stampRootManifest(root string, format int) error {
-	files := make(map[string]string, len(nodeOpsRootFiles))
-	for _, rel := range nodeOpsRootFiles {
-		data, err := infrastructure.TerraformFS.ReadFile(rel)
-		if err != nil {
-			return fmt.Errorf("hash embedded %s: %w", rel, err)
+	files := make(map[string]string)
+	err := fs.WalkDir(infrastructure.TerraformFS, ".", func(path string, d fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
 		}
-		sum := sha256.Sum256(data)
-		files[rel] = hex.EncodeToString(sum[:])
+		if d.IsDir() {
+			return nil
+		}
+		data, readErr := infrastructure.TerraformFS.ReadFile(path)
+		if readErr != nil {
+			return readErr
+		}
+		files[path] = contentHash(data)
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("hash embedded terraform sources: %w", err)
 	}
 	m := terraformRootManifest{SchemaVersion: rootManifestSchema, Format: format, Files: files}
 	data, err := json.MarshalIndent(&m, "", "  ")
@@ -240,8 +256,72 @@ func manifestFlagsEdit(m *terraformRootManifest, rel string, existing []byte) bo
 	if !ok {
 		return false
 	}
-	sum := sha256.Sum256(existing)
-	return recorded != hex.EncodeToString(sum[:])
+	return recorded != contentHash(existing)
+}
+
+// EmbeddedDrift classifies managed *.tf files whose on-disk content differs
+// from this binary's embedded copy. MaterializeTerraform is write-once, so
+// after an okdctl upgrade an existing workspace keeps deploying the old HCL;
+// drift detection is what keeps that divergence from staying silent.
+type EmbeddedDrift struct {
+	// Stale files match the hash the manifest recorded when okdctl wrote
+	// them — the operator never touched them; only the embedded copy moved on.
+	Stale []string
+	// Unverified files differ from the embedded copy but have no recorded
+	// hash (legacy root or untracked file), so okdctl cannot tell an operator
+	// edit from staleness.
+	Unverified []string
+}
+
+// DetectEmbeddedDrift compares every embedded *.tf source against its on-disk
+// copy under root. Files matching the embedded copy, files missing on disk
+// (materialize will create them), and proven operator edits (recorded hash
+// disagrees with disk) are all excluded — write-once means an operator's
+// divergence is deliberate and must not be nagged about. Read-only.
+func DetectEmbeddedDrift(root string) (EmbeddedDrift, error) {
+	m, err := readRootManifest(root)
+	if err != nil {
+		return EmbeddedDrift{}, err
+	}
+	var drift EmbeddedDrift
+	err = fs.WalkDir(infrastructure.TerraformFS, ".", func(path string, d fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if d.IsDir() || filepath.Ext(path) != ".tf" {
+			return nil
+		}
+		target := filepath.Join(root, "infrastructure", filepath.FromSlash(path))
+		existing, readErr := os.ReadFile(target)
+		if readErr != nil {
+			if errors.Is(readErr, fs.ErrNotExist) {
+				return nil
+			}
+			return readErr
+		}
+		embedded, readErr := infrastructure.TerraformFS.ReadFile(path)
+		if readErr != nil {
+			return readErr
+		}
+		if bytes.Equal(existing, embedded) {
+			return nil
+		}
+		var recorded string
+		if m != nil {
+			recorded = m.Files[path]
+		}
+		switch {
+		case recorded == "":
+			drift.Unverified = append(drift.Unverified, target)
+		case recorded == contentHash(existing):
+			drift.Stale = append(drift.Stale, target)
+		}
+		return nil
+	})
+	if err != nil {
+		return EmbeddedDrift{}, fmt.Errorf("detect terraform drift: %w", err)
+	}
+	return drift, nil
 }
 
 // MigrateTerraformRoot overwrites the production-root files that
