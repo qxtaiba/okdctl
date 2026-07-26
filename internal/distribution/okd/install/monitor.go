@@ -9,6 +9,7 @@ import (
 
 	"github.com/qxtaiba/okdctl/internal/cluster"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
+	"github.com/qxtaiba/okdctl/internal/logutil"
 )
 
 // defaultStartMonitorCmd starts "openshift-install wait-for install-complete"
@@ -129,10 +130,7 @@ func (p *Phase) MonitorInstallation(ctx context.Context, clusterDir string, opts
 
 	totalApproved := 0
 	setStatus(operatorStatusDetail(ctx, counter, totalApproved))
-	// Dedup identical consecutive tick errors: Warn once, then Debug the
-	// repeats so a 60-minute install doesn't spam the log with the same
-	// transient approve-check failure.
-	var lastCSRWarnMsg string
+	csrWarn := logutil.NewDedupWarner(p.Log)
 
 	for {
 		select {
@@ -165,15 +163,9 @@ func (p *Phase) MonitorInstallation(ctx context.Context, clusterDir string, opts
 		case <-ticker.C:
 			approved, err := approver.ApprovePendingCSRs(ctx)
 			if err != nil {
-				msg := err.Error()
-				if msg != lastCSRWarnMsg {
-					p.Log.Warn("csr: approval check failed", "err", err)
-					lastCSRWarnMsg = msg
-				} else {
-					p.Log.Debug("csr: approval check failed (repeated)", "err", err)
-				}
+				csrWarn.Warn(err.Error(), "csr: approval check failed", "err", err)
 			} else {
-				lastCSRWarnMsg = ""
+				csrWarn.Reset()
 			}
 			if approved > 0 {
 				totalApproved += approved

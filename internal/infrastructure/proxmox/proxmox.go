@@ -410,7 +410,7 @@ func (p *Provider) checkTerraformOutputs(ctx context.Context, cfg *config.Config
 // Repeated identical failures demote to Debug after the first Warn so a
 // long retry run doesn't spam the log.
 func (p *Provider) initWithRetry(ctx context.Context) error {
-	var lastWarnMsg string
+	initWarn := logutil.NewDedupWarner(p.logger)
 	var attempt int
 	return system.Retry(ctx, system.DefaultBackoff(), initIsRetryable, func(ctx context.Context) error {
 		attempt++
@@ -418,13 +418,7 @@ func (p *Provider) initWithRetry(ctx context.Context) error {
 		if initErr == nil || !initIsRetryable(initErr) {
 			return initErr
 		}
-		msg := initErr.Error()
-		if msg != lastWarnMsg {
-			p.logger.Warn("terraform: init failed, retrying", "attempt", attempt, "err", initErr)
-			lastWarnMsg = msg
-		} else {
-			p.logger.Debug("terraform: init failed (repeated), retrying", "attempt", attempt, "err", initErr)
-		}
+		initWarn.Warn(initErr.Error(), "terraform: init failed, retrying", "attempt", attempt, "err", initErr)
 		return initErr
 	})
 }

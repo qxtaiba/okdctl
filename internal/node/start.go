@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/qxtaiba/okdctl/internal/errtypes"
+	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/nodetypes"
 	"github.com/qxtaiba/okdctl/internal/system"
 )
@@ -129,30 +130,22 @@ func (r *Runner) waitClusterReadyWithCSRApproval(ctx context.Context) error {
 	stop := r.startProgress("waiting for cluster to become ready")
 	defer stop()
 
-	var lastListWarn, lastApproveWarn, lastReason string
+	listWarn := logutil.NewDedupWarner(r.Log)
+	approveWarn := logutil.NewDedupWarner(r.Log)
+	var lastReason string
 	ok := func(ctx context.Context) bool {
 		nodes, err := r.Cluster.ListNodes(ctx)
 		if err != nil {
-			if msg := err.Error(); msg != lastListWarn {
-				r.Log.Warn("node: cluster api not reachable yet", "err", err)
-				lastListWarn = msg
-			} else {
-				r.Log.Debug("node: cluster api not reachable yet (repeated)", "err", err)
-			}
+			listWarn.Warn(err.Error(), "node: cluster api not reachable yet", "err", err)
 			lastReason = "cluster api not reachable"
 			return false
 		}
-		lastListWarn = ""
+		listWarn.Reset()
 
 		if approved, aerr := r.Cluster.ApprovePendingCSRs(ctx); aerr != nil {
-			if msg := aerr.Error(); msg != lastApproveWarn {
-				r.Log.Warn("node: csr approval check failed", "err", aerr)
-				lastApproveWarn = msg
-			} else {
-				r.Log.Debug("node: csr approval check failed (repeated)", "err", aerr)
-			}
+			approveWarn.Warn(aerr.Error(), "node: csr approval check failed", "err", aerr)
 		} else {
-			lastApproveWarn = ""
+			approveWarn.Reset()
 			if approved > 0 {
 				r.Log.Info("node: approved pending csrs", "approved", approved)
 			}
