@@ -51,16 +51,6 @@ var FilesStepDefinition = wizard.StepDefinition{
 			Title: "ignition server",
 			Fields: []wizard.FieldDefinition{
 				{
-					Key:       "http_port",
-					Label:     "http port",
-					Default:   "8080",
-					Help:      "port for http server serving ignition files",
-					Required:  true,
-					Validate:  config.ValidatePortNumber,
-					ConfigSet: wizard.SetInt(func(c *config.Config, v int) { c.HTTPServer.Port = v }),
-					ConfigGet: wizard.GetInt(func(c *config.Config) int { return c.HTTPServer.Port }),
-				},
-				{
 					Key:       "web_root",
 					Label:     "web root",
 					Default:   "/var/www/html",

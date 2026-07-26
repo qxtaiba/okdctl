@@ -51,7 +51,6 @@ const (
 	FieldFilesPullSecret   = "files.pull_secret" //nolint:gosec // field name constant, not a credential
 
 	FieldHTTPServerIP   = "http_server.ip"
-	FieldHTTPServerPort = "http_server.port"
 	FieldHTTPServerRoot = "http_server.root"
 
 	FieldDeploymentAutoApprove  = "deployment.auto_approve"

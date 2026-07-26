@@ -86,13 +86,5 @@ func BuildIgnitionURLForNode(cfg *config.Config, role nodetypes.NodeRole) (strin
 		return "", &errtypes.ConfigError{Msg: fmt.Sprintf("ignition server IP %q must be RFC1918, loopback, or link-local — HTTPS ignition on a public address exposes cluster credentials", ignitionIP)}
 	}
 
-	ignitionPort := cfg.HTTPServer.Port
-	if ignitionPort == 0 {
-		ignitionPort = DefaultIgnitionHTTPSPort
-	}
-	ignitionFile := role.String() + ".ign"
-	if ignitionPort == DefaultIgnitionHTTPSPort {
-		return fmt.Sprintf("https://%s/ignition/%s", ignitionIP, ignitionFile), nil
-	}
-	return fmt.Sprintf("https://%s:%d/ignition/%s", ignitionIP, ignitionPort, ignitionFile), nil
+	return fmt.Sprintf("%s/%s", BuildIgnitionURL(ignitionIP), role.String()+".ign"), nil
 }

@@ -388,7 +388,7 @@ func (s *ReviewStep) renderFilesIgnition(st *sectionStyles) string {
 	}
 
 	if s.cfg.HTTPServer.IgnitionServerIP != "" {
-		ignitionURL := fmt.Sprintf("https://%s:%d", s.cfg.HTTPServer.IgnitionServerIP, s.cfg.HTTPServer.Port)
+		ignitionURL := "https://" + s.cfg.HTTPServer.IgnitionServerIP
 		b.WriteString(st.kvPair("ignition server", ignitionURL))
 		b.WriteString("\n")
 		b.WriteString(st.kvPair("web root", s.cfg.HTTPServer.Root))

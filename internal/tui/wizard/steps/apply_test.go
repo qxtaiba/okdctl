@@ -152,12 +152,6 @@ func TestFilesStepDefinition_Fields(t *testing.T) {
 		t.Errorf("ConfigGet(ssh_public_key) = %q", got)
 	}
 
-	port := findField(t, &FilesStepDefinition, "http_port")
-	_ = port.ConfigSet(cfg, "9443")
-	if cfg.HTTPServer.Port != 9443 {
-		t.Errorf("HTTPServer.Port = %d, want 9443", cfg.HTTPServer.Port)
-	}
-
 	root := findField(t, &FilesStepDefinition, "web_root")
 	_ = root.ConfigSet(cfg, "/srv/ignition")
 	if cfg.HTTPServer.Root != "/srv/ignition" {

@@ -9,10 +9,9 @@ import (
 	"github.com/qxtaiba/okdctl/internal/nodetypes"
 )
 
-func cfgWithIgnitionIP(ip string, port int) *config.Config {
+func cfgWithIgnitionIP(ip string) *config.Config {
 	cfg := config.DefaultConfig()
 	cfg.HTTPServer.IgnitionServerIP = ip
-	cfg.HTTPServer.Port = port
 	return cfg
 }
 
@@ -20,84 +19,55 @@ func TestBuildIgnitionURLForNode_accept(t *testing.T) {
 	cases := []struct {
 		name    string
 		ip      string
-		port    int
 		role    nodetypes.NodeRole
 		wantURL string
 	}{
 		{
-			name:    "rfc1918 10.x default port",
+			name:    "rfc1918 10.x",
 			ip:      "10.0.0.1",
-			port:    0,
 			role:    nodetypes.RoleMaster,
 			wantURL: "https://10.0.0.1/ignition/master.ign",
 		},
 		{
-			name:    "rfc1918 192.168.x default port",
+			name:    "rfc1918 192.168.x",
 			ip:      "192.168.1.20",
-			port:    0,
 			role:    nodetypes.RoleWorker,
 			wantURL: "https://192.168.1.20/ignition/worker.ign",
 		},
 		{
-			name:    "rfc1918 172.16.x default port",
+			name:    "rfc1918 172.16.x",
 			ip:      "172.16.0.5",
-			port:    0,
 			role:    nodetypes.RoleBootstrap,
 			wantURL: "https://172.16.0.5/ignition/bootstrap.ign",
 		},
 		{
-			name:    "loopback 127.0.0.1 default port",
+			name:    "loopback 127.0.0.1",
 			ip:      "127.0.0.1",
-			port:    0,
 			role:    nodetypes.RoleMaster,
 			wantURL: "https://127.0.0.1/ignition/master.ign",
 		},
 		{
-			name:    "link-local 169.254.0.1 default port",
+			name:    "link-local 169.254.0.1",
 			ip:      "169.254.0.1",
-			port:    0,
 			role:    nodetypes.RoleMaster,
 			wantURL: "https://169.254.0.1/ignition/master.ign",
 		},
 		{
-			name:    "ipv6 ula fd00::1 default port",
+			name:    "ipv6 ula fd00::1",
 			ip:      "fd00::1",
-			port:    0,
 			role:    nodetypes.RoleMaster,
 			wantURL: "https://fd00::1/ignition/master.ign",
 		},
 		{
-			name:    "ipv6 link-local fe80::1 default port",
+			name:    "ipv6 link-local fe80::1",
 			ip:      "fe80::1",
-			port:    0,
 			role:    nodetypes.RoleMaster,
 			wantURL: "https://fe80::1/ignition/master.ign",
-		},
-		{
-			name:    "explicit port 443 elided",
-			ip:      "10.0.0.1",
-			port:    443,
-			role:    nodetypes.RoleMaster,
-			wantURL: "https://10.0.0.1/ignition/master.ign",
-		},
-		{
-			name:    "custom port 8080 included",
-			ip:      "192.168.1.20",
-			port:    8080,
-			role:    nodetypes.RoleWorker,
-			wantURL: "https://192.168.1.20:8080/ignition/worker.ign",
-		},
-		{
-			name:    "custom port 9443 included",
-			ip:      "10.0.0.1",
-			port:    9443,
-			role:    nodetypes.RoleBootstrap,
-			wantURL: "https://10.0.0.1:9443/ignition/bootstrap.ign",
 		},
 	}
 	for _, tt := range cases {
 		t.Run(tt.name, func(t *testing.T) {
-			cfg := cfgWithIgnitionIP(tt.ip, tt.port)
+			cfg := cfgWithIgnitionIP(tt.ip)
 			got, err := BuildIgnitionURLForNode(cfg, tt.role)
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
@@ -122,7 +92,7 @@ func TestBuildIgnitionURLForNode_reject(t *testing.T) {
 	}
 	for _, tt := range cases {
 		t.Run(tt.name, func(t *testing.T) {
-			cfg := cfgWithIgnitionIP(tt.ip, 0)
+			cfg := cfgWithIgnitionIP(tt.ip)
 			_, err := BuildIgnitionURLForNode(cfg, nodetypes.RoleMaster)
 			if err == nil {
 				t.Fatal("expected error, got nil")
@@ -158,17 +128,17 @@ func TestBuildLiveKargs_golden(t *testing.T) {
 			},
 		},
 		{
-			name: "custom port in ignition url",
+			name: "worker on a /16 network",
 			params: LiveKargsParams{
 				NodeIP:      "10.0.0.5",
 				Gateway:     "10.0.0.1",
 				Netmask:     "255.255.0.0",
 				DNS:         "10.0.0.2",
 				Interface:   "eth0",
-				IgnitionURL: "https://10.0.0.2:8080/ignition/worker.ign",
+				IgnitionURL: "https://10.0.0.2/ignition/worker.ign",
 			},
 			want: []string{
-				"coreos.inst.ignition_url=https://10.0.0.2:8080/ignition/worker.ign",
+				"coreos.inst.ignition_url=https://10.0.0.2/ignition/worker.ign",
 				"ip=10.0.0.5::10.0.0.1:255.255.0.0::eth0:none",
 				"nameserver=10.0.0.2",
 			},

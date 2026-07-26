@@ -315,7 +315,7 @@ previous `~/okd-install` runs from failed deployments.
 ## host ports
 
 **What it checks:** Attempts a TCP connect to `127.0.0.1` on each of the
-following ports: `53`, `80`, `443`, `6443`, `22623`, `8080`. A successful
+following ports: `53`, `80`, `443`, `6443`, `22623`. A successful
 connect means another service is already bound there; deploy services
 (`haproxy`, `dnsmasq`, `apache`) will conflict.
 
@@ -328,7 +328,7 @@ in use: <ports> (stop the conflicting service before deploy)
 
 Identify and stop the conflicting service for each busy port:
 ```bash
-sudo ss -tlnp | grep -E ':(53|80|443|6443|22623|8080) '
+sudo ss -tlnp | grep -E ':(53|80|443|6443|22623) '
 ```
 
 Common culprits and fixes:
@@ -337,7 +337,6 @@ Common culprits and fixes:
 |------|---------------|-----|
 | 53 | `systemd-resolved` | `sudo systemctl stop systemd-resolved` and set `DNSStubListener=no` in `/etc/systemd/resolved.conf` |
 | 80 / 443 | Existing web server | `sudo systemctl stop httpd apache2 nginx` |
-| 8080 | Any HTTP proxy or app | Stop or reconfigure the service |
 | 6443 | Existing k8s API server | Stop the conflicting cluster |
 | 22623 | Another OKD install | Stop or destroy the existing cluster first |
 

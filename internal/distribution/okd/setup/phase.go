@@ -22,15 +22,6 @@ import (
 	"github.com/qxtaiba/okdctl/internal/platform"
 )
 
-// Defaults for the ignition HTTPS server. Port 0 in BuildIgnitionURL falls
-// back to DefaultIgnitionHTTPSPort. DefaultIgnitionPort is kept for back-
-// compat with callers that still reference it.
-const (
-	DefaultIgnitionPort      = 8080
-	DefaultIgnitionHTTPSPort = 443
-	HTTPDefaultPort          = 80
-)
-
 // openshift-install integration points. openshiftSubdir is the manifests
 // subdirectory openshift-install creates beneath clusterDir; openshiftInstallBin
 // is the binary name invoked for manifest and ignition generation.
@@ -65,16 +56,10 @@ func NewOptions(cfg *config.Config, projectRoot string) Options {
 }
 
 // BuildIgnitionURL builds the base https:// URL where ignition payloads are
-// served. Port 0 falls back to DefaultIgnitionHTTPSPort; port 443 is elided
-// per RFC 7230.
-func BuildIgnitionURL(ip string, port int) string {
-	if port == 0 {
-		port = DefaultIgnitionHTTPSPort
-	}
-	if port == DefaultIgnitionHTTPSPort {
-		return fmt.Sprintf("https://%s/ignition", ip)
-	}
-	return fmt.Sprintf("https://%s:%d/ignition", ip, port)
+// served. Apache always binds port 443 (see configureApache), so the port is
+// never spelled in the URL.
+func BuildIgnitionURL(ip string) string {
+	return fmt.Sprintf("https://%s/ignition", ip)
 }
 
 // CoreOSInfo describes a Fedora CoreOS download candidate resolved from

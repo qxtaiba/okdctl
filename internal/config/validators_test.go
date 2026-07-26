@@ -808,12 +808,6 @@ func TestWizardWrapperValidators(t *testing.T) {
 			reject: []string{"", "999.1.1.1", "1.2.3", "1.2.3.4/24", "host.example.com", "1.2.3.4;ls"},
 		},
 		{
-			name:   "ValidatePortNumber",
-			fn:     ValidatePortNumber,
-			accept: []string{"1", "443", "65535"},
-			reject: []string{"", "0", "-1", "65536", "8080/tcp", "abc"},
-		},
-		{
 			name:   "ValidateCPU",
 			fn:     ValidateCPU,
 			accept: []string{"1", "128"},

@@ -107,7 +107,7 @@ func Checks(cfgFile string) []Check {
 			return checkPullSecret(cfgFile)
 		}},
 		{"disk space", "at least 20 gb free in $home for install artifacts", checkDiskSpace},
-		{"host ports", "53, 80, 443, 6443, 22623, 8080 available for bind", checkPorts},
+		{"host ports", "53, 80, 443, 6443, 22623 available for bind", checkPorts},
 	}
 }
 
@@ -352,7 +352,7 @@ func checkDiskSpace(_ context.Context) Result {
 // the common case of services bound on 0.0.0.0 or 127.0.0.1; misses
 // services bound only on a specific non-loopback address.
 func checkPorts(ctx context.Context) Result {
-	ports := []int{53, 80, 443, 6443, 22623, 8080}
+	ports := []int{53, 80, 443, 6443, 22623}
 
 	var busy []string
 	for _, p := range ports {
@@ -363,7 +363,7 @@ func checkPorts(ctx context.Context) Result {
 	if len(busy) > 0 {
 		return Result{Sev: Warn, Detail: "in use: " + strings.Join(busy, ", ") + " (stop the conflicting service before deploy)"}
 	}
-	return Result{Sev: Pass, Detail: "53, 80, 443, 6443, 22623, 8080 all free"}
+	return Result{Sev: Pass, Detail: "53, 80, 443, 6443, 22623 all free"}
 }
 
 func isPortInUse(ctx context.Context, port int) bool {

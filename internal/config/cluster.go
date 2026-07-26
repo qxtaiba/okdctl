@@ -233,7 +233,6 @@ type FilesConfig struct {
 // HTTPServerConfig configures the local HTTP server that hosts ignition
 // payloads during install.
 type HTTPServerConfig struct {
-	Port             int    `json:"port"`
 	Root             string `json:"root"`
 	IgnitionServerIP string `json:"ignition_server_ip"`
 }

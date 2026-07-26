@@ -284,7 +284,7 @@ func (p *Phase) setupWebSteps(cfg *config.Config, opts *Options, clusterDir stri
 				if err := p.DeployToWebServer(ctx, cfg, clusterDir); err != nil {
 					return &errtypes.ConfigError{Msg: "deploy to web server", Err: err}
 				}
-				webURL := BuildIgnitionURL(cfg.HTTPServer.IgnitionServerIP, cfg.HTTPServer.Port)
+				webURL := BuildIgnitionURL(cfg.HTTPServer.IgnitionServerIP)
 				p.Log.Info("ignition: deployed to web server", "url", webURL)
 				return nil
 			},
@@ -298,7 +298,7 @@ func (p *Phase) setupWebSteps(cfg *config.Config, opts *Options, clusterDir stri
 				if err != nil {
 					return &errtypes.ConfigError{Msg: "load ignition cert for verification", Err: err}
 				}
-				return p.VerifyWebServer(ctx, BuildIgnitionURL(cfg.HTTPServer.IgnitionServerIP, cfg.HTTPServer.Port), certPEM)
+				return p.VerifyWebServer(ctx, BuildIgnitionURL(cfg.HTTPServer.IgnitionServerIP), certPEM)
 			},
 		},
 		{

@@ -449,12 +449,6 @@ func validateAdditionalNetworks(networks []AdditionalNetwork, result *Validation
 const httpRootUnsafe = "\n\r\t \"'`$;<>\\"
 
 func validateHTTPServer(cfg *Config, result *ValidationResult) {
-	if cfg.HTTPServer.Port != 0 {
-		if cfg.HTTPServer.Port < 1 || cfg.HTTPServer.Port > 65535 {
-			result.AddError(FieldHTTPServerPort, "must be a valid port number (1-65535)")
-		}
-	}
-
 	if cfg.HTTPServer.IgnitionServerIP != "" && !IsValidIP(cfg.HTTPServer.IgnitionServerIP) {
 		result.AddError(FieldHTTPServerIP, "must be a valid IPv4 or IPv6 literal")
 	}
@@ -720,18 +714,6 @@ func ValidateIntRange(unit string, lo, hi int) func(string) error {
 		}
 		return nil
 	}
-}
-
-// ValidatePortNumber requires value to parse as a port in [1, 65535].
-func ValidatePortNumber(value string) error {
-	port, err := strconv.Atoi(value)
-	if err != nil {
-		return errors.New("must be a valid number")
-	}
-	if port < 1 || port > 65535 {
-		return errors.New("must be between 1 and 65535")
-	}
-	return nil
 }
 
 // Preset field validators used by wizard input fields. Each wraps

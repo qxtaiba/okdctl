@@ -54,8 +54,7 @@ var OKDRequiredPorts = []Port{
 	{Number: phase.KubeAPIPort, Protocol: protoTCP, Description: "kubernetes api"},
 	{Number: 22623, Protocol: protoTCP, Description: "machine config server"},
 	{Number: 80, Protocol: protoTCP, Description: "http ingress"},
-	{Number: 443, Protocol: protoTCP, Description: "https ingress"},
-	{Number: 8080, Protocol: protoTCP, Description: "ignition server"},
+	{Number: 443, Protocol: protoTCP, Description: "https ingress + ignition server"},
 }
 
 // haproxyFrontends is the authoritative list of {number, protocol} pairs
