@@ -8,8 +8,8 @@ import (
 	"github.com/luthermonson/go-proxmox"
 )
 
-// DefaultPowerCycleTimeout bounds each stop/start task within a power-cycle.
-const DefaultPowerCycleTimeout = 5 * time.Minute
+// defaultPowerCycleTimeout bounds each stop/start task within a power-cycle.
+const defaultPowerCycleTimeout = 5 * time.Minute
 
 const powerTaskPollInterval = 2 * time.Second
 
@@ -42,12 +42,12 @@ func NewPowerCycler(opts *PowerCycleOptions) *PowerCycler {
 	return &PowerCycler{opts: opts}
 }
 
-// timeout returns the configured per-task timeout, or DefaultPowerCycleTimeout.
+// timeout returns the configured per-task timeout, or defaultPowerCycleTimeout.
 func (pc *PowerCycler) timeout() time.Duration {
 	if pc.opts.Timeout > 0 {
 		return pc.opts.Timeout
 	}
-	return DefaultPowerCycleTimeout
+	return defaultPowerCycleTimeout
 }
 
 // vm builds a client scoped to timeout and returns the target VM with its

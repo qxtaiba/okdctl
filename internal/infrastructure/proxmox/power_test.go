@@ -12,15 +12,15 @@ import (
 func TestPowerCycler_timeout(t *testing.T) {
 	t.Run("default when unset", func(t *testing.T) {
 		pc := NewPowerCycler(&PowerCycleOptions{})
-		if got := pc.timeout(); got != DefaultPowerCycleTimeout {
-			t.Errorf("timeout() = %v; want %v", got, DefaultPowerCycleTimeout)
+		if got := pc.timeout(); got != defaultPowerCycleTimeout {
+			t.Errorf("timeout() = %v; want %v", got, defaultPowerCycleTimeout)
 		}
 	})
 
 	t.Run("default when negative", func(t *testing.T) {
 		pc := NewPowerCycler(&PowerCycleOptions{Timeout: -time.Second})
-		if got := pc.timeout(); got != DefaultPowerCycleTimeout {
-			t.Errorf("timeout() = %v; want %v", got, DefaultPowerCycleTimeout)
+		if got := pc.timeout(); got != defaultPowerCycleTimeout {
+			t.Errorf("timeout() = %v; want %v", got, defaultPowerCycleTimeout)
 		}
 	})
 

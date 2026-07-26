@@ -11,8 +11,8 @@ import (
 	"github.com/luthermonson/go-proxmox"
 )
 
-// DefaultProbeTimeout bounds every read in a single ProbeHost call.
-const DefaultProbeTimeout = 15 * time.Second
+// defaultProbeTimeout bounds every read in a single ProbeHost call.
+const defaultProbeTimeout = 15 * time.Second
 
 // ProbeOptions carries the read-only Proxmox API probe inputs. Password /
 // APIToken are the caller's credential bytes; the caller owns Zeroize. Node is
@@ -65,7 +65,7 @@ func bytesToMiB(b uint64) int { return int(b / (1024 * 1024)) } //nolint:gosec /
 func ProbeHost(ctx context.Context, opts *ProbeOptions) (*HostProbe, error) {
 	timeout := opts.Timeout
 	if timeout <= 0 {
-		timeout = DefaultProbeTimeout
+		timeout = defaultProbeTimeout
 	}
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()

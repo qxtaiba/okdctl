@@ -77,13 +77,13 @@ func TestNormalizeEndpoint(t *testing.T) {
 }
 
 func TestNewProbeClientRequiresCreds(t *testing.T) {
-	if _, err := newProbeClient(&ProbeOptions{Endpoint: "https://pve:8006", Node: "pve"}, DefaultProbeTimeout); err == nil {
+	if _, err := newProbeClient(&ProbeOptions{Endpoint: "https://pve:8006", Node: "pve"}, defaultProbeTimeout); err == nil {
 		t.Fatal("want error when neither password nor token is set")
 	}
-	if _, err := newProbeClient(&ProbeOptions{Endpoint: "https://pve:8006", Node: "pve", APIToken: []byte("no-equals")}, DefaultProbeTimeout); err == nil {
+	if _, err := newProbeClient(&ProbeOptions{Endpoint: "https://pve:8006", Node: "pve", APIToken: []byte("no-equals")}, defaultProbeTimeout); err == nil {
 		t.Fatal("want error for malformed api token")
 	}
-	if _, err := newProbeClient(&ProbeOptions{Endpoint: "https://pve:8006", Node: "pve", APIToken: []byte("user@pam!t=secret")}, DefaultProbeTimeout); err != nil {
+	if _, err := newProbeClient(&ProbeOptions{Endpoint: "https://pve:8006", Node: "pve", APIToken: []byte("user@pam!t=secret")}, defaultProbeTimeout); err != nil {
 		t.Fatalf("valid token should build client: %v", err)
 	}
 }
