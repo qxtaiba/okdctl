@@ -26,11 +26,19 @@ type stubAddon struct {
 	installN    atomic.Int32
 	verifyN     atomic.Int32
 	uninstallEr error
+	// installHook, when non-nil, runs during Install (used to cancel the
+	// caller ctx mid-install).
+	installHook func()
+	// uninstallCtxLive records whether the last Uninstall saw an uncancelled ctx.
+	uninstallCtxLive atomic.Bool
 }
 
 func (s *stubAddon) Info() Metadata { return s.meta }
 func (s *stubAddon) Install(_ context.Context, _ *Environment) error {
 	s.installN.Add(1)
+	if s.installHook != nil {
+		s.installHook()
+	}
 	return s.installErr
 }
 
@@ -39,8 +47,9 @@ func (s *stubAddon) Verify(_ context.Context, _ *Environment) error {
 	return s.verifyErr
 }
 
-func (s *stubAddon) Uninstall(_ context.Context, _ *Environment) error {
+func (s *stubAddon) Uninstall(ctx context.Context, _ *Environment) error {
 	s.uninstallN.Add(1)
+	s.uninstallCtxLive.Store(ctx.Err() == nil)
 	return s.uninstallEr
 }
 
@@ -175,5 +184,58 @@ func TestInstallAll_CtxCancelStopsInstall(t *testing.T) {
 	}
 	if a.installN.Load() != 0 {
 		t.Errorf("a.installN = %d; want 0 (ctx cancelled before install)", a.installN.Load())
+	}
+}
+
+// TestInstallAll_RollbackRunsAfterCtxCancel asserts the rollback Uninstall of
+// a failed addon runs under a detached bounded ctx: an install that failed
+// because the caller ctx was cancelled must still be unwound.
+func TestInstallAll_RollbackRunsAfterCtxCancel(t *testing.T) {
+	installFakeOC(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	a := &stubAddon{
+		meta:        Metadata{Name: "a", Priority: 1, DisplayName: "a"},
+		installErr:  errors.New("a install fails"),
+		installHook: cancel,
+	}
+	registerStubs(t, a)
+
+	mgr := NewManager(enabledCfg("a"))
+	if err := mgr.InstallAll(ctx); err == nil {
+		t.Fatal("expected aggregated error, got nil")
+	}
+	if a.uninstallN.Load() != 1 {
+		t.Fatalf("a.uninstallN = %d; want 1 (rollback must run after ctx cancel)", a.uninstallN.Load())
+	}
+	if !a.uninstallCtxLive.Load() {
+		t.Error("rollback Uninstall received a cancelled ctx; want a detached live ctx")
+	}
+}
+
+// TestInstallOne_ReverseRollbackRunsAfterCtxCancel is the InstallOne sibling:
+// the reverse-order unwind of previously-installed addons must survive a
+// mid-install ctx cancellation.
+func TestInstallOne_ReverseRollbackRunsAfterCtxCancel(t *testing.T) {
+	installFakeOC(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	a := &stubAddon{meta: Metadata{Name: "a", Priority: 1, DisplayName: "a"}}
+	b := &stubAddon{
+		meta:        Metadata{Name: "b", Priority: 2, DisplayName: "b", Dependencies: []string{"a"}},
+		installErr:  errors.New("b install fails"),
+		installHook: cancel,
+	}
+	registerStubs(t, a, b)
+
+	mgr := NewManager(enabledCfg("a", "b"))
+	if err := mgr.InstallOne(ctx, "b"); err == nil {
+		t.Fatal("expected error from InstallOne; got nil")
+	}
+	if a.uninstallN.Load() != 1 {
+		t.Fatalf("a.uninstallN = %d; want 1 (reverse rollback must run after ctx cancel)", a.uninstallN.Load())
+	}
+	if !a.uninstallCtxLive.Load() {
+		t.Error("rollback Uninstall received a cancelled ctx; want a detached live ctx")
 	}
 }
