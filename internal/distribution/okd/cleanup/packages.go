@@ -34,12 +34,7 @@ func InstalledPackages() []string {
 // remove from BinDir. Exported so a future cleanup preview/plan CLI verb
 // can render this list without executing the removal.
 func InstalledBinaries() []string {
-	okdBinaries := []string{
-		"openshift-install",
-		"oc",
-		"kubectl",
-	}
-	return append(okdBinaries, phase.ExternalToolBinaries()...)
+	return append(phase.OKDToolBinaries(), phase.ExternalToolBinaries()...)
 }
 
 // Packages removes dnf packages and tool binaries installed during setup.

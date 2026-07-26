@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 
 	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/system"
 )
@@ -41,7 +42,7 @@ func (p *Phase) DownloadOKDTools(ctx context.Context, version string, opts *Opti
 // InstallToolsToSystem copies the downloaded OKD binaries from srcDir into
 // p.BinDir (empty falls back to config.DefaultBinDir) with executable mode.
 func (p *Phase) InstallToolsToSystem(ctx context.Context, srcDir string) error {
-	binaries := []string{"openshift-install", "oc", "kubectl"}
+	binaries := phase.OKDToolBinaries()
 	destDir := config.BinDirOrDefault(p.BinDir)
 
 	for _, binary := range binaries {

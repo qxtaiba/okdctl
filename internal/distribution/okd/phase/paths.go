@@ -88,6 +88,17 @@ func ExternalToolBinaries() []string {
 	}
 }
 
+// OKDToolBinaries returns the OKD release binaries setup extracts into
+// BinDir. Declared in phase/ (not setup/) for the same reason as
+// ExternalToolBinaries: cleanup must remove exactly the set setup installs.
+func OKDToolBinaries() []string {
+	return []string{
+		"openshift-install",
+		"oc",
+		"kubectl",
+	}
+}
+
 // ClusterConfigDir re-exports system.ClusterConfigDir so phase code keeps a
 // single import for cluster layout paths; non-phase callers use the system
 // home directly.
