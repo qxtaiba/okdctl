@@ -405,6 +405,10 @@ resource "proxmox_virtual_environment_vm" "worker" {
     type         = "4m"
   }
 
+  # Workers deliberately have no prevent_destroy: okdctl node remove drives
+  # this set by count, and prevent_destroy cannot be variable-gated
+  # (hashicorp/terraform#3116). Removing a worker therefore destroys its
+  # data disk and the ceph osd data on it — drain and purge the osd first.
   lifecycle {
     precondition {
       condition     = length(var.worker_isos) >= var.worker_count && alltrue([for iso in slice(var.worker_isos, 0, var.worker_count) : iso != ""])
