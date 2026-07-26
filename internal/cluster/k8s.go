@@ -68,6 +68,13 @@ func WithExecutor(exec *executor.Executor) Option {
 // binary from "kubectl" to "oc" when "oc" is on PATH. It MUST be the last
 // option passed to New(); any WithKubeconfig or WithCLI that follows will
 // silently overwrite the env-derived values, negating the fallback.
+//
+// Deliberately unwired today: every okdctl command targets the
+// workspace-managed kubeconfig (<projectRoot>/okd-install/auth/kubeconfig),
+// and honoring $KUBECONFIG would silently retarget a command at whatever
+// unrelated cluster the user's env points to. Wire it only for a command
+// that must operate without a workspace — e.g. inspecting or adopting a
+// cluster okdctl did not deploy.
 func WithEnvFallback() Option {
 	return func(c *Client) {
 		if c.Kubeconfig == "" {
