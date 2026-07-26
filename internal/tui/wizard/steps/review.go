@@ -18,73 +18,6 @@ import (
 	"github.com/qxtaiba/okdctl/internal/tui/wizard/components"
 )
 
-// kvEntry describes one label/value line within a review section. When skip
-// is true, the entry is omitted entirely (not rendered as blank).
-type kvEntry struct {
-	label string
-	value string
-	skip  bool
-}
-
-// renderSection emits a titled block of kvEntry lines. Returns "" if every
-// entry is skipped — lets callers short-circuit whole sections by filtering.
-func renderSection(st *sectionStyles, title string, entries []kvEntry) string {
-	visible := entries[:0:0]
-	for _, e := range entries {
-		if !e.skip {
-			visible = append(visible, e)
-		}
-	}
-	if len(visible) == 0 {
-		return ""
-	}
-	var b strings.Builder
-	b.WriteString(st.header.Render(title))
-	b.WriteString("\n")
-	b.WriteString(st.separator)
-	b.WriteString("\n")
-	for _, e := range visible {
-		b.WriteString(st.kvPair(e.label, e.value))
-		b.WriteString("\n")
-	}
-	b.WriteString("\n")
-	return b.String()
-}
-
-type sectionStyles struct {
-	header         lipgloss.Style
-	separator      string
-	thickSeparator string
-	label          lipgloss.Style
-	value          lipgloss.Style
-	check          lipgloss.Style
-}
-
-func newSectionStyles(width int) sectionStyles {
-	return sectionStyles{
-		header: lipgloss.NewStyle().
-			Foreground(tui.ColorCyan500).
-			Bold(true),
-		separator: lipgloss.NewStyle().
-			Foreground(tui.ColorSlate700).
-			Render(strings.Repeat("┄", width-4)),
-		thickSeparator: lipgloss.NewStyle().
-			Foreground(tui.ColorSlate600).
-			Render(strings.Repeat("═", width-4)),
-		label: lipgloss.NewStyle().
-			Foreground(tui.ColorSlate400).
-			Width(18),
-		value: lipgloss.NewStyle().
-			Foreground(tui.ColorText),
-		check: lipgloss.NewStyle().
-			Foreground(tui.ColorSuccess),
-	}
-}
-
-func (st *sectionStyles) kvPair(label, value string) string {
-	return st.label.Render(label) + st.value.Render(value)
-}
-
 // reviewJumpOrder lists the steps this screen's section headers may jump
 // to, in on-screen order. welcome and distribution have no dedicated
 // section here and are not reachable by digit jump.
@@ -104,7 +37,7 @@ var reviewJumpOrder = []wizard.StepID{
 type ReviewStep struct {
 	wizard.BaseStep
 	cfg         *config.Config
-	action      *singleSelect
+	action      *wizard.SingleSelect
 	jumpTargets []wizard.JumpTarget
 }
 
@@ -115,8 +48,8 @@ func NewReviewStep() *ReviewStep {
 		"save and exit",
 	}
 
-	action := newSingleSelect(wizard.StepIDReview, components.NewCompactSelector(actions), "enter")
-	action.onNav = func(index, total int) tea.Cmd {
+	action := wizard.NewSingleSelect(wizard.StepIDReview, components.NewCompactSelector(actions), "enter")
+	action.OnNav = func(index, total int) tea.Cmd {
 		return func() tea.Msg {
 			return wizard.FocusChangedMsg{FieldIndex: index, TotalFields: total}
 		}
@@ -188,7 +121,7 @@ func (s *ReviewStep) View(width, height int) string {
 		return "no configuration to review"
 	}
 
-	st := newSectionStyles(width)
+	st := wizard.NewSectionStyles(width)
 	var content strings.Builder
 
 	content.WriteString(s.renderClusterIdentity(&st))
@@ -200,26 +133,26 @@ func (s *ReviewStep) View(width, height int) string {
 	content.WriteString(s.renderFeatures(&st))
 	content.WriteString(s.renderAdvanced(&st))
 
-	content.WriteString(st.thickSeparator)
+	content.WriteString(st.ThickSeparator)
 	content.WriteString("\n\n")
 	content.WriteString(s.action.View())
 
 	return content.String()
 }
 
-func (s *ReviewStep) renderClusterIdentity(st *sectionStyles) string {
+func (s *ReviewStep) renderClusterIdentity(st *wizard.SectionStyles) string {
 	distVersion := string(s.cfg.Distribution.Type)
 	if s.cfg.Distribution.Version != "" {
 		distVersion = "OKD " + s.cfg.Distribution.Version
 	}
-	return renderSection(st, s.sectionTitle("cluster identity", wizard.StepIDBasics), []kvEntry{
-		{label: "name", value: s.cfg.Cluster.Name},
-		{label: "domain", value: s.cfg.Cluster.Domain},
-		{label: "distribution", value: distVersion},
+	return wizard.RenderSection(st, s.sectionTitle("cluster identity", wizard.StepIDBasics), []wizard.KVEntry{
+		{Label: "name", Value: s.cfg.Cluster.Name},
+		{Label: "domain", Value: s.cfg.Cluster.Domain},
+		{Label: "distribution", Value: distVersion},
 	})
 }
 
-func (s *ReviewStep) renderProxmox(st *sectionStyles) string {
+func (s *ReviewStep) renderProxmox(st *wizard.SectionStyles) string {
 	p := s.cfg.Provider.Proxmox
 	if p == nil {
 		return ""
@@ -229,34 +162,34 @@ func (s *ReviewStep) renderProxmox(st *sectionStyles) string {
 		bridges[i] = n.Bridge
 	}
 	addlNetworks := strings.Join(bridges, ", ")
-	return renderSection(st, s.sectionTitle("proxmox", wizard.StepIDProxmox), []kvEntry{
-		{label: "host", value: p.Host},
-		{label: "token id", value: p.TokenID, skip: p.TokenID == ""},
-		{label: "bootstrap node", value: p.Node},
-		{label: "bridge", value: p.Bridge},
-		{label: "storage", value: p.Storage},
-		{label: "data storage", value: p.DataStorage, skip: p.DataStorage == "" || p.DataStorage == p.Storage},
-		{label: "iso storage", value: p.ISOStorage, skip: p.ISOStorage == ""},
-		{label: "fcos iso", value: p.FCOSIso, skip: p.FCOSIso == ""},
-		{label: "extra networks", value: addlNetworks, skip: len(p.AdditionalNetworks) == 0},
+	return wizard.RenderSection(st, s.sectionTitle("proxmox", wizard.StepIDProxmox), []wizard.KVEntry{
+		{Label: "host", Value: p.Host},
+		{Label: "token id", Value: p.TokenID, Skip: p.TokenID == ""},
+		{Label: "bootstrap node", Value: p.Node},
+		{Label: "bridge", Value: p.Bridge},
+		{Label: "storage", Value: p.Storage},
+		{Label: "data storage", Value: p.DataStorage, Skip: p.DataStorage == "" || p.DataStorage == p.Storage},
+		{Label: "iso storage", Value: p.ISOStorage, Skip: p.ISOStorage == ""},
+		{Label: "fcos iso", Value: p.FCOSIso, Skip: p.FCOSIso == ""},
+		{Label: "extra networks", Value: addlNetworks, Skip: len(p.AdditionalNetworks) == 0},
 	})
 }
 
 // renderNodePlacement shares renderProxmox's ShouldShow gate (the
 // NodePlacementStep only exists when the Proxmox provider is selected), so
 // it disappears from the jump legend under the same conditions.
-func (s *ReviewStep) renderNodePlacement(st *sectionStyles) string {
+func (s *ReviewStep) renderNodePlacement(st *wizard.SectionStyles) string {
 	p := s.cfg.Provider.Proxmox
 	if p == nil {
 		return ""
 	}
-	return renderSection(st, s.sectionTitle("node placement", wizard.StepIDNodePlacement), []kvEntry{
-		{label: "control plane nodes", value: strings.Join(p.ControlPlaneNodes, ", "), skip: len(p.ControlPlaneNodes) == 0},
-		{label: "worker nodes", value: strings.Join(p.WorkerNodes, ", "), skip: len(p.WorkerNodes) == 0},
+	return wizard.RenderSection(st, s.sectionTitle("node placement", wizard.StepIDNodePlacement), []wizard.KVEntry{
+		{Label: "control plane nodes", Value: strings.Join(p.ControlPlaneNodes, ", "), Skip: len(p.ControlPlaneNodes) == 0},
+		{Label: "worker nodes", Value: strings.Join(p.WorkerNodes, ", "), Skip: len(p.WorkerNodes) == 0},
 	})
 }
 
-func (s *ReviewStep) renderNetworking(st *sectionStyles) string {
+func (s *ReviewStep) renderNetworking(st *wizard.SectionStyles) string {
 	net := s.cfg.Networking
 	noStatic := net.StaticIP.Start == ""
 	vipValue := net.Bastion.VIP
@@ -265,28 +198,28 @@ func (s *ReviewStep) renderNetworking(st *sectionStyles) string {
 			vipValue = derived + " (auto)"
 		}
 	}
-	return renderSection(st, s.sectionTitle("networking", wizard.StepIDNetworking), []kvEntry{
-		{label: "machine cidr", value: net.MachineCIDR},
-		{label: "gateway", value: net.Gateway},
-		{label: "upstream dns", value: strings.Join(net.DNS, ", ")},
-		{label: "bastion", value: net.Bastion.IP},
-		{label: "api vip", value: vipValue, skip: vipValue == ""},
-		{label: "host prefix", value: fmt.Sprintf("%d", net.HostPrefix), skip: net.HostPrefix == 0},
-		{label: "pod cidr", value: net.PodCIDR, skip: net.PodCIDR == ""},
-		{label: "service cidr", value: net.ServiceCIDR, skip: net.PodCIDR == ""},
-		{label: "static ip start", value: net.StaticIP.Start, skip: noStatic},
-		{label: "interface", value: net.StaticIP.Interface, skip: noStatic},
-		{label: "netmask", value: net.StaticIP.Netmask + " (from cidr)", skip: noStatic},
-		{label: "vm dns", value: net.StaticIP.DNS + " (bastion/dnsmasq)", skip: noStatic},
+	return wizard.RenderSection(st, s.sectionTitle("networking", wizard.StepIDNetworking), []wizard.KVEntry{
+		{Label: "machine cidr", Value: net.MachineCIDR},
+		{Label: "gateway", Value: net.Gateway},
+		{Label: "upstream dns", Value: strings.Join(net.DNS, ", ")},
+		{Label: "bastion", Value: net.Bastion.IP},
+		{Label: "api vip", Value: vipValue, Skip: vipValue == ""},
+		{Label: "host prefix", Value: fmt.Sprintf("%d", net.HostPrefix), Skip: net.HostPrefix == 0},
+		{Label: "pod cidr", Value: net.PodCIDR, Skip: net.PodCIDR == ""},
+		{Label: "service cidr", Value: net.ServiceCIDR, Skip: net.PodCIDR == ""},
+		{Label: "static ip start", Value: net.StaticIP.Start, Skip: noStatic},
+		{Label: "interface", Value: net.StaticIP.Interface, Skip: noStatic},
+		{Label: "netmask", Value: net.StaticIP.Netmask + " (from cidr)", Skip: noStatic},
+		{Label: "vm dns", Value: net.StaticIP.DNS + " (bastion/dnsmasq)", Skip: noStatic},
 	})
 }
 
-func (s *ReviewStep) renderCompute(st *sectionStyles) string {
+func (s *ReviewStep) renderCompute(st *wizard.SectionStyles) string {
 	var b strings.Builder
 
-	b.WriteString(st.header.Render(s.sectionTitle("compute", wizard.StepIDResources)))
+	b.WriteString(st.Header.Render(s.sectionTitle("compute", wizard.StepIDResources)))
 	b.WriteString("\n")
-	b.WriteString(st.separator)
+	b.WriteString(st.Separator)
 	b.WriteString("\n")
 
 	cpCPU := s.cfg.Topology.ControlPlane.CPU
@@ -295,7 +228,7 @@ func (s *ReviewStep) renderCompute(st *sectionStyles) string {
 	cpCount := s.cfg.Topology.ControlPlane.Count
 
 	cpSpec := fmt.Sprintf("%d × (%d vcpu, %d GB RAM, %d GB os disk)", cpCount, cpCPU, cpMem, cpDisk)
-	b.WriteString(st.kvPair(roleLabelControlPlane, cpSpec))
+	b.WriteString(st.KVPair(roleLabelControlPlane, cpSpec))
 	b.WriteString("\n")
 
 	if s.cfg.Topology.Workers.Count > 0 {
@@ -305,19 +238,19 @@ func (s *ReviewStep) renderCompute(st *sectionStyles) string {
 		wCount := s.cfg.Topology.Workers.Count
 
 		wSpec := fmt.Sprintf("%d × (%d vcpu, %d GB RAM, %d GB os disk)", wCount, wCPU, wMem, wDisk)
-		b.WriteString(st.kvPair(roleLabelWorkers, wSpec))
+		b.WriteString(st.KVPair(roleLabelWorkers, wSpec))
 		b.WriteString("\n")
 
 		if s.cfg.Disks.WorkerDataSizeGB > 0 {
 			cephSpec := fmt.Sprintf("%d gb per worker (%d gb total)", s.cfg.Disks.WorkerDataSizeGB, s.cfg.Disks.WorkerDataSizeGB*wCount)
-			b.WriteString(st.kvPair("worker data disk", cephSpec))
+			b.WriteString(st.KVPair("worker data disk", cephSpec))
 			b.WriteString("\n")
 		}
 	}
 
 	if s.cfg.Disks.ControlPlaneDataSizeGB > 0 {
 		cephSpec := fmt.Sprintf("%d gb per control plane node (%d gb total)", s.cfg.Disks.ControlPlaneDataSizeGB, s.cfg.Disks.ControlPlaneDataSizeGB*cpCount)
-		b.WriteString(st.kvPair("control plane data disk", cephSpec))
+		b.WriteString(st.KVPair("control plane data disk", cephSpec))
 		b.WriteString("\n")
 	}
 
@@ -341,10 +274,10 @@ func (s *ReviewStep) renderCompute(st *sectionStyles) string {
 		totalDataDiskGB += s.cfg.Disks.ControlPlaneDataSizeGB * cpCount
 	}
 
-	b.WriteString(st.separator)
+	b.WriteString(st.Separator)
 	b.WriteString("\n")
 	totalSpec := fmt.Sprintf("%d vcpu, %d gb ram, %d gb disk", totalCPU, totalMemGB, totalOSDiskGB+totalDataDiskGB)
-	b.WriteString(st.kvPair("total", totalSpec))
+	b.WriteString(st.KVPair("total", totalSpec))
 	b.WriteString("\n")
 
 	warnStyle := lipgloss.NewStyle().Foreground(tui.ColorWarning)
@@ -366,32 +299,32 @@ func (s *ReviewStep) renderCompute(st *sectionStyles) string {
 	return b.String()
 }
 
-func (s *ReviewStep) renderFilesIgnition(st *sectionStyles) string {
+func (s *ReviewStep) renderFilesIgnition(st *wizard.SectionStyles) string {
 	var b strings.Builder
 
-	b.WriteString(st.header.Render(s.sectionTitle("files & ignition", wizard.StepIDFiles)))
+	b.WriteString(st.Header.Render(s.sectionTitle("files & ignition", wizard.StepIDFiles)))
 	b.WriteString("\n")
-	b.WriteString(st.separator)
+	b.WriteString(st.Separator)
 	b.WriteString("\n")
 
 	if s.cfg.Files.PullSecret != "" {
-		b.WriteString(st.label.Render("pull secret"))
-		b.WriteString(st.check.Render(tui.IconSuccess + " "))
-		b.WriteString(st.value.Render(truncatePath(s.cfg.Files.PullSecret, 40)))
+		b.WriteString(st.Label.Render("pull secret"))
+		b.WriteString(st.Check.Render(tui.IconSuccess + " "))
+		b.WriteString(st.Value.Render(truncatePath(s.cfg.Files.PullSecret, 40)))
 		b.WriteString("\n")
 	}
 	if s.cfg.Files.SSHPublicKey != "" {
-		b.WriteString(st.label.Render("ssh key"))
-		b.WriteString(st.check.Render(tui.IconSuccess + " "))
-		b.WriteString(st.value.Render(truncatePath(s.cfg.Files.SSHPublicKey, 40)))
+		b.WriteString(st.Label.Render("ssh key"))
+		b.WriteString(st.Check.Render(tui.IconSuccess + " "))
+		b.WriteString(st.Value.Render(truncatePath(s.cfg.Files.SSHPublicKey, 40)))
 		b.WriteString("\n")
 	}
 
 	if s.cfg.HTTPServer.IgnitionServerIP != "" {
 		ignitionURL := "https://" + s.cfg.HTTPServer.IgnitionServerIP
-		b.WriteString(st.kvPair("ignition server", ignitionURL))
+		b.WriteString(st.KVPair("ignition server", ignitionURL))
 		b.WriteString("\n")
-		b.WriteString(st.kvPair("web root", s.cfg.HTTPServer.Root))
+		b.WriteString(st.KVPair("web root", s.cfg.HTTPServer.Root))
 		b.WriteString("\n")
 	}
 	b.WriteString("\n")
@@ -399,7 +332,7 @@ func (s *ReviewStep) renderFilesIgnition(st *sectionStyles) string {
 	return b.String()
 }
 
-func (s *ReviewStep) renderFeatures(st *sectionStyles) string {
+func (s *ReviewStep) renderFeatures(st *wizard.SectionStyles) string {
 	if s.cfg.Addons == nil {
 		return ""
 	}
@@ -417,9 +350,9 @@ func (s *ReviewStep) renderFeatures(st *sectionStyles) string {
 
 	var b strings.Builder
 
-	b.WriteString(st.header.Render(s.sectionTitle("addons", wizard.StepIDAddons)))
+	b.WriteString(st.Header.Render(s.sectionTitle("addons", wizard.StepIDAddons)))
 	b.WriteString("\n")
-	b.WriteString(st.separator)
+	b.WriteString(st.Separator)
 	b.WriteString("\n")
 
 	for name, ac := range s.cfg.Addons {
@@ -432,7 +365,7 @@ func (s *ReviewStep) renderFeatures(st *sectionStyles) string {
 		} else if repo, ok := ac.Settings[flux.SettingRepository]; ok && repo != "" {
 			label = fmt.Sprintf("%s (%s)", name, repo)
 		}
-		b.WriteString(st.kvPair(name, label))
+		b.WriteString(st.KVPair(name, label))
 		b.WriteString("\n")
 	}
 	b.WriteString("\n")
@@ -440,7 +373,7 @@ func (s *ReviewStep) renderFeatures(st *sectionStyles) string {
 	return b.String()
 }
 
-func (s *ReviewStep) renderAdvanced(st *sectionStyles) string {
+func (s *ReviewStep) renderAdvanced(st *wizard.SectionStyles) string {
 	bt := s.cfg.Deployment.BootstrapTimeout
 	vmid := s.cfg.Topology.VMIDBase
 	timeouts := ""
@@ -448,11 +381,11 @@ func (s *ReviewStep) renderAdvanced(st *sectionStyles) string {
 		timeouts = fmt.Sprintf("bootstrap %dm, install %dm", bt/60, s.cfg.Deployment.InstallTimeout/60)
 	}
 	dep := s.cfg.Deployment
-	return renderSection(st, s.sectionTitle("advanced", wizard.StepIDAdvanced), []kvEntry{
-		{label: "vm id base", value: fmt.Sprintf("%d", vmid), skip: vmid <= 0},
-		{label: "timeouts", value: timeouts, skip: bt <= 0},
-		{label: "terraform environment", value: dep.TerraformEnv, skip: dep.TerraformEnv == ""},
-		{label: "auto approve", value: valYes, skip: !dep.AutoApprove},
+	return wizard.RenderSection(st, s.sectionTitle("advanced", wizard.StepIDAdvanced), []wizard.KVEntry{
+		{Label: "vm id base", Value: fmt.Sprintf("%d", vmid), Skip: vmid <= 0},
+		{Label: "timeouts", Value: timeouts, Skip: bt <= 0},
+		{Label: "terraform environment", Value: dep.TerraformEnv, Skip: dep.TerraformEnv == ""},
+		{Label: "auto approve", Value: valYes, Skip: !dep.AutoApprove},
 	})
 }
 

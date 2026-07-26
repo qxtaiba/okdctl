@@ -161,10 +161,14 @@ func (c *ProxmoxCredentials) GoString() string {
 //	                      (runTerraformPlanPreview, shared by deploy --dry-run
 //	                      and okdctl plan)
 //	cli/destroy.go      — terraform.WithEnv(creds.Env()); defer tf.ZeroizeEnv()
-//	cli/node.go         — terraform.WithEnv(creds.Env()); manual ZeroizeEnv on
-//	                      the early-error returns + all buildNodeRunner callers
-//	                      defer rc.cleanup() (tf escapes into the runner, so a
-//	                      literal defer is impossible there)
+//	cli/node.go         — terraform.WithEnv(creds.Env()) inside
+//	                      (*nodeOpsEnv).newRunner; manual ZeroizeEnv on the
+//	                      early-error returns, rc.release zeroizes the tf env
+//	                      per invocation, and the creds themselves are owned
+//	                      by nodeOpsEnv (env.close() → creds.Zeroize()) — the
+//	                      flag verbs defer rc.cleanup() via buildNodeRunner,
+//	                      node manage defers env.close() and builds runners
+//	                      per dry-run/execute invocation
 //	deploy/deploy.go    — okd.WithEnv(creds.Env()); callers defer p.ZeroizeEnv()
 func (c *ProxmoxCredentials) Env() []string {
 	if !c.IsValid() {

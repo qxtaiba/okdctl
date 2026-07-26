@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"log/slog"
 	"os"
 	"time"
 
@@ -157,6 +158,7 @@ func init() {
 	nodeCmd.AddCommand(nodeRemoveCmd)
 	nodeCmd.AddCommand(nodeResizeCmd)
 	nodeCmd.AddCommand(nodeAddCmd)
+	nodeCmd.AddCommand(nodeManageCmd)
 	rootCmd.AddCommand(nodeCmd)
 }
 
@@ -198,12 +200,25 @@ func (n *nodeRunnerCtx) complete(w io.Writer, elapsed time.Duration) {
 	fmt.Fprint(w, render.NodeOpComplete(n.captured, elapsed))
 }
 
-// buildNodeRunner resolves the workspace, loads credentials, and wires a
-// node.Runner under the project run lock. It installs the
-// informed-confirmation hook (or the dry-run preview) from consent. The
-// returned cleanup zeroizes credentials and releases the lock.
-func buildNodeRunner(cmd *cobra.Command, cfg *config.Config, verb string, consent nodeConsent, probeHost bool) (*nodeRunnerCtx, error) {
-	ctx := cmd.Context()
+// nodeOpsEnv is the pre-TUI environment for node ops: project root,
+// credentials, and the read-only host probe results. It owns the
+// credentials; close zeroizes them. Split from runner construction so the
+// lifecycle wizard can hold one env across screens while building a fresh
+// runner (and taking the run lock) per dry-run/execute invocation.
+type nodeOpsEnv struct {
+	projectRoot      string
+	creds            *credentials.ProxmoxCredentials
+	tfEnv            string
+	hostTotalMiB     int
+	hostAllocatedMiB int
+}
+
+func (e *nodeOpsEnv) close() { e.creds.Zeroize() }
+
+// prepareNodeOpsEnv resolves the workspace, loads credentials, and runs
+// the read-only host memory probe — everything that must happen ahead of
+// any TUI taking over the terminal.
+func prepareNodeOpsEnv(ctx context.Context, cfg *config.Config, probeHost bool) (*nodeOpsEnv, error) {
 	projectRoot, err := resolveProjectRootOrDie()
 	if err != nil {
 		return nil, err
@@ -224,40 +239,76 @@ func buildNodeRunner(cmd *cobra.Command, cfg *config.Config, verb string, consen
 		hostTotalMiB, hostAllocatedMiB = runHostBudgetProbe(ctx, cfg, creds)
 	}
 
-	tfOpts := []terraform.Option{terraform.WithLogger(tui.SimpleLogger())}
+	return &nodeOpsEnv{
+		projectRoot:      projectRoot,
+		creds:            creds,
+		tfEnv:            cfg.TerraformEnvName(),
+		hostTotalMiB:     hostTotalMiB,
+		hostAllocatedMiB: hostAllocatedMiB,
+	}, nil
+}
+
+// buildNodeRunner composes prepareNodeOpsEnv and newRunner for the
+// flag-driven verbs, folding the env's lifetime into the returned cleanup
+// so callers keep the single-defer contract.
+func buildNodeRunner(cmd *cobra.Command, cfg *config.Config, verb string, consent nodeConsent, probeHost bool) (*nodeRunnerCtx, error) {
+	env, err := prepareNodeOpsEnv(cmd.Context(), cfg, probeHost)
+	if err != nil {
+		return nil, err
+	}
+	rc, err := env.newRunner(cmd, cfg, verb, consent, tui.SimpleLogger())
+	if err != nil {
+		env.close()
+		return nil, err
+	}
+	inner := rc.release
+	rc.release = func() { inner(); env.close() }
+	return rc, nil
+}
+
+// newRunner wires a node.Runner under the project run lock, installing the
+// informed-confirmation hook (or the dry-run preview) from consent. log is
+// the sink for the runner AND its terraform/setup collaborators — the
+// manage flow passes a file-only logger because stderr belongs to the
+// AltScreen TUI while it runs. The returned cleanup releases the lock and
+// zeroizes the terraform env; the credentials stay owned by the nodeOpsEnv.
+func (e *nodeOpsEnv) newRunner(cmd *cobra.Command, cfg *config.Config, verb string, consent nodeConsent, log *slog.Logger) (*nodeRunnerCtx, error) {
+	ctx := cmd.Context()
+	creds := e.creds
+
+	terraformDir := system.TerraformEnvDir(e.projectRoot, e.tfEnv)
+	tfOpts := []terraform.Option{terraform.WithLogger(log)}
 	if creds.IsValid() {
 		tfOpts = append(tfOpts, terraform.WithEnv(creds.Env()))
 	}
 	tf := terraform.New(terraformDir, tfOpts...)
 
-	cl, err := clusterstatus.NewClient(projectRoot)
+	cl, err := clusterstatus.NewClient(e.projectRoot)
 	if err != nil {
-		creds.Zeroize()
 		tf.ZeroizeEnv()
 		return nil, err
 	}
 
-	lock, err := runlock.Acquire(projectRoot, "node "+verb)
+	lock, err := runlock.Acquire(e.projectRoot, "node "+verb)
 	if err != nil {
-		creds.Zeroize()
 		tf.ZeroizeEnv()
 		return nil, err
 	}
 
 	runner := node.NewRunner(cl, tf, cfg,
-		node.WithProjectRoot(projectRoot),
+		node.WithProjectRoot(e.projectRoot),
 		node.WithConfigPath(cfgFile),
-		node.WithTerraformEnv(tfEnv),
+		node.WithTerraformEnv(e.tfEnv),
 		node.WithRunID(tui.RunID()),
-		node.WithLogger(tui.SimpleLogger()))
+		node.WithLogger(log))
 	runner.DryRun = consent.dryRun
 	runner.Reporter = func(desc string) func() { return tui.StartSpinner(ctx, desc) }
 
 	// Wired unconditionally: construction is cheap (no I/O) and only node add
 	// dereferences ISO/Ignition/SetupOpts, so every other verb simply ignores them.
-	setupExec := executor.New(executor.WithWorkDir(projectRoot))
-	setupPhase := setup.New(phase.WithExecutor(setupExec), phase.WithLogger(tui.SimpleLogger()))
-	setupOpts := setup.NewOptions(cfg, projectRoot)
+	setupExec := executor.New(executor.WithWorkDir(e.projectRoot))
+	setupPhase := setup.New(phase.WithExecutor(setupExec), phase.WithLogger(log))
+	setupOpts := setup.NewOptions(cfg, e.projectRoot)
 	runner.ISO = setupPhase
 	runner.Ignition = setupPhase
 	runner.SetupOpts = &setupOpts
@@ -265,7 +316,7 @@ func buildNodeRunner(cmd *cobra.Command, cfg *config.Config, verb string, consen
 	// A resize takes effect only after a Proxmox power-cycle (bpg/proxmox changes
 	// the VM config without restarting). Wire the API power-cycler whenever creds
 	// are present; resize fails safe when it is nil.
-	if probeHost && creds.IsValid() {
+	if creds.IsValid() {
 		runner.Power = proxmox.NewPowerCycler(&proxmox.PowerCycleOptions{
 			Endpoint: creds.Endpoint,
 			Username: creds.Username,
@@ -277,13 +328,12 @@ func buildNodeRunner(cmd *cobra.Command, cfg *config.Config, verb string, consen
 
 	rc := &nodeRunnerCtx{
 		runner:           runner,
-		HostTotalMiB:     hostTotalMiB,
-		HostAllocatedMiB: hostAllocatedMiB,
+		HostTotalMiB:     e.hostTotalMiB,
+		HostAllocatedMiB: e.hostAllocatedMiB,
 		dryRun:           consent.dryRun,
 		release: func() {
 			lock.Release()
 			tf.ZeroizeEnv()
-			creds.Zeroize()
 		},
 	}
 	if consent.dryRun {

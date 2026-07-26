@@ -158,7 +158,7 @@ func (m *Model) renderHeader() string {
 	width := m.contentWidth()
 
 	brand := LogoStyle.Render("O K D C T L")
-	tagline := TaglineStyle.Render("okd over proxmox, the easy way")
+	tagline := TaglineStyle.Render(m.chrome.Tagline)
 
 	visibleSteps := m.countVisibleSteps()
 	currentVisible := m.currentVisibleStepIndex() + 1
@@ -282,20 +282,10 @@ func (m *Model) renderScrollIndicator() string {
 }
 
 func (m *Model) renderContextBadge() string {
-	var parts []string
-
-	if m.config.Distribution.Type != "" {
-		parts = append(parts, string(m.config.Distribution.Type))
-		if m.config.Distribution.Version != "" {
-			parts[0] += " " + m.config.Distribution.Version
-		}
-	}
-
-	if len(parts) == 0 {
+	if m.chrome.Badge == nil {
 		return ""
 	}
-
-	return strings.Join(parts, " → ")
+	return m.chrome.Badge(m.config)
 }
 
 func (m *Model) countVisibleSteps() int {
