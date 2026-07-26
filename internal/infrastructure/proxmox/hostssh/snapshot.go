@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/qxtaiba/okdctl/internal/executor"
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
@@ -130,7 +131,11 @@ func validateUPID(upid string) error {
 // tolerates a non-zero exit because its callers are read paths; a task
 // launch must fail loudly on rejection instead of returning whatever ended
 // up on stdout, so this checks result.ExitCode itself rather than going
-// through pveshRun.
+// through pveshRun. The failure routes through executor.NewExitError so
+// remote stderr is scrubbed and truncated before it can reach a log sink,
+// and a cancelled ctx keeps its context.Canceled identity. The path stays
+// out of the ExitError Command label (see TestExitErrorCommandNoArgvLeak)
+// and is carried by the wrapping message instead.
 func pveshTaskCall(ctx context.Context, p *RemoteISOParams, subcommand, path string, extra ...string) (string, error) {
 	if err := validateProxmoxName(p.Node); err != nil {
 		return "", fmt.Errorf("proxmox node %q invalid: %w", p.Node, err)
@@ -142,7 +147,8 @@ func pveshTaskCall(ctx context.Context, p *RemoteISOParams, subcommand, path str
 		return "", err
 	}
 	if result.ExitCode != 0 {
-		return "", fmt.Errorf("pvesh %s %s: exit %d: %s", subcommand, path, result.ExitCode, strings.TrimSpace(result.Stderr))
+		return "", fmt.Errorf("pvesh %s %s: %w", subcommand, path,
+			executor.NewExitError(ctx, "pvesh "+subcommand, result.ExitCode, result.Stderr))
 	}
 	if result.Truncated {
 		return "", fmt.Errorf("pvesh %s %s output truncated after %d bytes", subcommand, path, len(result.Stdout))

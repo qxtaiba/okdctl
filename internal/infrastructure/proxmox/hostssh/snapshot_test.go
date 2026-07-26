@@ -3,6 +3,7 @@ package hostssh
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -438,6 +439,35 @@ func TestCreateSnapshot_rejectedByPvesh(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "no such storage") {
 		t.Errorf("err = %q; want it to surface pvesh stderr", err.Error())
+	}
+}
+
+// TestCreateSnapshot_rejectedByPveshScrubsStderr pins the executor.ExitError
+// routing in pveshTaskCall: remote stderr must be scrubbed before it can
+// reach a log sink, the path must stay out of the Command label, and the
+// path context must survive in the wrapping message.
+func TestCreateSnapshot_rejectedByPveshScrubsStderr(t *testing.T) {
+	installFakeSnapshotSSH(t)
+	p := newTestSnapshotParams(t)
+	t.Setenv("SNAP_TASK_EXIT_CODE", "1")
+	t.Setenv("SNAP_TASK_STDERR", "401 authentication failure PROXMOX_VE_PASSWORD=hunter2")
+
+	err := CreateSnapshot(context.Background(), p, 100, "pre-upgrade", "", 5*time.Second)
+	if err == nil {
+		t.Fatal("expected error for rejected create call; got nil")
+	}
+	var exitErr *executor.ExitError
+	if !errors.As(err, &exitErr) {
+		t.Fatalf("err = %v (%T); want executor.ExitError in the chain", err, err)
+	}
+	if exitErr.Command != "pvesh create" {
+		t.Errorf("ExitError.Command = %q; the path must stay out of the Command label", exitErr.Command)
+	}
+	if strings.Contains(err.Error(), "hunter2") {
+		t.Errorf("err = %q; remote stderr credential leaked unscrubbed", err.Error())
+	}
+	if !strings.Contains(err.Error(), "/nodes/pve-01/qemu/100/snapshot") {
+		t.Errorf("err = %q; want the pvesh path context in the message", err.Error())
 	}
 }
 
