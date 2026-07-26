@@ -109,21 +109,17 @@ func projectCompactPeakMiB(allocatedMiB, workerMiB, masterCurMiB, growTargetMiB,
 	}
 	peak := allocatedMiB
 	grows := 0
-	for i := 0; i < numWorkers; i++ {
+	for range numWorkers {
 		allocatedMiB -= workerMiB
 		if growTargetMiB > 0 && grows < numMasters {
 			allocatedMiB += masterDelta
 			grows++
 		}
-		if allocatedMiB > peak {
-			peak = allocatedMiB
-		}
+		peak = max(peak, allocatedMiB)
 	}
 	for ; growTargetMiB > 0 && grows < numMasters; grows++ {
 		allocatedMiB += masterDelta
-		if allocatedMiB > peak {
-			peak = allocatedMiB
-		}
+		peak = max(peak, allocatedMiB)
 	}
 	return peak
 }

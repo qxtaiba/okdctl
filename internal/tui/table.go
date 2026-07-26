@@ -52,7 +52,7 @@ func Table(headers []string, rows [][]string, opts TableOptions) []string {
 	lines := make([]string, 0, len(cells))
 	for ri, row := range cells {
 		parts := make([]string, cols)
-		for c := 0; c < cols; c++ {
+		for c := range cols {
 			var cell string
 			if c < len(row) {
 				cell = truncateMiddle(row[c], opts.MaxColWidth)
