@@ -77,6 +77,22 @@ func TestRedactableStderr_ContentScrub(t *testing.T) {
 			input:   "PASSWORD=MySecretPass",
 			wantOut: "MySecretPass",
 		},
+		{
+			name:    "credential= shape",
+			input:   "aws_credential=AKIAEXAMPLEVALUE rejected",
+			wantOut: "AKIAEXAMPLEVALUE",
+		},
+		{
+			name:    "passphrase: shape",
+			input:   "passphrase: opensesame did not unlock key",
+			wantOut: "opensesame",
+		},
+		{
+			name:    "bare JWT with no key shape",
+			input:   "auth failed for eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJvcGVyYXRvciJ9.c2lnbmF0dXJlLWJ5dGVz in request",
+			wantIn:  "auth failed for",
+			wantOut: "eyJzdWIiOiJvcGVyYXRvciJ9",
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -91,6 +107,33 @@ func TestRedactableStderr_ContentScrub(t *testing.T) {
 				t.Errorf("scrubStderrText(%q) = %q; expected Redacted sentinel", tc.input, got)
 			}
 		})
+	}
+}
+
+func TestKeyIsSecret(t *testing.T) {
+	cases := []struct {
+		key  string
+		want bool
+	}{
+		{"password", true},
+		{"proxmox_ve_api_token", true},
+		{"client_secret", true},
+		{"api_key", true},
+		{"apikey", true},
+		{"aws_credentials", true},
+		{"ssh_passphrase", true},
+		{"authorization", true},
+		{"Authorization", true},
+		{"public_key", false},
+		{"oauth_flow", false},
+		{"endpoint", false},
+		{"username", false},
+		{"", false},
+	}
+	for _, tc := range cases {
+		if got := KeyIsSecret(tc.key); got != tc.want {
+			t.Errorf("KeyIsSecret(%q) = %v; want %v", tc.key, got, tc.want)
+		}
 	}
 }
 
