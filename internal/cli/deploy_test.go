@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"os"
 	"testing"
 
 	"github.com/qxtaiba/okdctl/internal/config"
@@ -81,5 +82,55 @@ func TestDeployDryRunSteps_DerivedFromLivePhaseSteps(t *testing.T) {
 	}
 	if !sawInstallPhase {
 		t.Error("install phase steps missing from dry-run listing")
+	}
+}
+
+// TestDeployYesWriteConfigFlagContract locks the assume-yes alignment:
+// --yes deploys (like every sibling command's --yes), --write-config carries
+// the old write-only meaning, and the two are mutually exclusive.
+func TestDeployYesWriteConfigFlagContract(t *testing.T) {
+	yes := deployCmd.Flags().Lookup("yes")
+	if yes == nil || yes.Shorthand != "y" {
+		t.Fatal("deploy must keep --yes with the -y shorthand")
+	}
+	wc := deployCmd.Flags().Lookup("write-config")
+	if wc == nil {
+		t.Fatal("deploy must register --write-config")
+	}
+	if wc.Shorthand != "" {
+		t.Error("--write-config must stay long-form only (boolean tail flags carry no shorthand)")
+	}
+}
+
+// TestRunDeployYesWithoutConfigExitsNoInput verifies that a non-interactive
+// deploy refuses to run against compiled-in defaults: --yes with no config
+// file on disk must exit 66 (ErrConfigMissing), not silently write config
+// and exit 0 like the pre-v0.2.0 --yes did.
+func TestRunDeployYesWithoutConfigExitsNoInput(t *testing.T) {
+	t.Chdir(t.TempDir())
+	deployYes = true
+	t.Cleanup(func() { deployYes = false })
+
+	err := runDeploy(deployCmd, nil)
+	if !errors.Is(err, errtypes.ErrConfigMissing) {
+		t.Fatalf("want ErrConfigMissing (exit 66), got %v", err)
+	}
+	if exitCodeFor(err) != 66 {
+		t.Fatalf("exitCodeFor = %d, want 66", exitCodeFor(err))
+	}
+}
+
+// TestRunDeployWriteConfigWritesWithoutDeploying verifies --write-config
+// saves the configuration file and returns without deploying.
+func TestRunDeployWriteConfigWritesWithoutDeploying(t *testing.T) {
+	t.Chdir(t.TempDir())
+	deployWriteConfig = true
+	t.Cleanup(func() { deployWriteConfig = false })
+
+	if err := runDeploy(deployCmd, nil); err != nil {
+		t.Fatalf("runDeploy --write-config: %v", err)
+	}
+	if _, err := os.Stat("okdctl.yaml"); err != nil {
+		t.Fatalf("--write-config must write okdctl.yaml: %v", err)
 	}
 }
