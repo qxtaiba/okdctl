@@ -15,6 +15,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/testutil"
+	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
 func installFakeOpenShift(t *testing.T) {
@@ -132,7 +133,7 @@ func assertTimeoutDiagnostics(t *testing.T, err error, clusterDir string) {
 	t.Helper()
 	for _, want := range []string{
 		filepath.Join(clusterDir, ".openshift_install.log"),
-		"oc --kubeconfig " + filepath.Join(clusterDir, "auth", "kubeconfig") + " get clusteroperators",
+		"oc --kubeconfig " + workspace.KubeconfigPath(clusterDir) + " get clusteroperators",
 		"okdctl debug-bundle",
 	} {
 		if !strings.Contains(err.Error(), want) {

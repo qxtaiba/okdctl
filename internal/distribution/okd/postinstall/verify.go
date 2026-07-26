@@ -9,7 +9,6 @@ import (
 	"io"
 	"net"
 	"net/http"
-	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -21,6 +20,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/httputil"
 	"github.com/qxtaiba/okdctl/internal/nodetypes"
 	"github.com/qxtaiba/okdctl/internal/system"
+	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
 type verifyCondition struct {
@@ -169,7 +169,7 @@ func (p *Phase) VerifyKubeVIP(ctx context.Context, cfg *config.Config, opts *Opt
 		return "", &errtypes.ClusterError{Msg: "kube-vip vip not reachable", Err: err}
 	}
 
-	if err := p.verifyKubeVIPAPIHealthBootstrap(ctx, vip, phase.ClusterConfigDir(opts.WorkDir)); err != nil {
+	if err := p.verifyKubeVIPAPIHealthBootstrap(ctx, vip, workspace.ClusterConfigDir(opts.WorkDir)); err != nil {
 		return "", &errtypes.ClusterError{Msg: "kube-vip api health check failed", Err: err}
 	}
 
@@ -224,7 +224,7 @@ func (p *Phase) waitForKubeVIPPing(ctx context.Context, vip string, opts *Option
 func (p *Phase) verifyKubeVIPAPIHealthBootstrap(ctx context.Context, vip, clusterDir string) error {
 	healthURL := fmt.Sprintf("https://%s:%d/healthz", vip, phase.KubeAPIPort)
 
-	kubeconfigPath := filepath.Join(clusterDir, "auth", "kubeconfig")
+	kubeconfigPath := workspace.KubeconfigPath(clusterDir)
 	pool, caErr := httputil.KubeconfigCAPool(kubeconfigPath)
 	if caErr != nil {
 		return &errtypes.ClusterError{Msg: "kubeconfig CA unavailable for kube-vip api health check", Err: caErr}

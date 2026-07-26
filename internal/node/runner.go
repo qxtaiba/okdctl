@@ -17,6 +17,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/nodetypes"
 	"github.com/qxtaiba/okdctl/internal/system"
+	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
 // Default gates for node-lifecycle waits. NodeReadyTimeout bounds the wait for
@@ -266,8 +267,8 @@ func NewRunner(cl *cluster.Client, tf *terraform.Executor, cfg *config.Config, o
 		opt(r)
 	}
 	r.Log = logutil.OrNop(r.Log)
-	r.WorkDir = filepath.Join(r.ProjectRoot, system.WorkDirName)
-	r.EnvDir = system.TerraformEnvDir(r.ProjectRoot, r.tfEnv)
+	r.WorkDir = workspace.WorkDir(r.ProjectRoot)
+	r.EnvDir = workspace.TerraformEnvDir(r.ProjectRoot, r.tfEnv)
 	return r
 }
 

@@ -11,7 +11,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/cleanup"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
-	"github.com/qxtaiba/okdctl/internal/system"
+	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
 func cleanupGuardConfig() *config.Config {
@@ -93,7 +93,7 @@ func seedCleanupWorkspace(t *testing.T) (sentinelPath string) {
 	if err := config.NewLoader().Save(cleanupGuardConfig(), filepath.Join(root, "okdctl.yaml")); err != nil {
 		t.Fatalf("seed config: %v", err)
 	}
-	authDir := filepath.Join(root, system.WorkDirName, "cluster-config", "auth")
+	authDir := filepath.Join(root, workspace.WorkDirName, "cluster-config", "auth")
 	if err := os.MkdirAll(authDir, 0o755); err != nil {
 		t.Fatal(err)
 	}

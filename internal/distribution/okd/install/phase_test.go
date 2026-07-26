@@ -14,6 +14,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/executor"
 	"github.com/qxtaiba/okdctl/internal/logutil"
+	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
 var installStepOrder = []distribution.StepID{
@@ -152,11 +153,11 @@ func TestInstallExecute_FullRunWithFakeBinaries(t *testing.T) {
 	t.Cleanup(func() { invokingUserHomeDirFn = origHome })
 
 	workDir := t.TempDir()
-	clusterDir := phase.ClusterConfigDir(workDir)
+	clusterDir := workspace.ClusterConfigDir(workDir)
 	if err := os.MkdirAll(filepath.Join(clusterDir, "auth"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(clusterDir, "auth", "kubeconfig"), []byte("apiVersion: v1\nkind: Config\n"), 0o600); err != nil {
+	if err := os.WriteFile(workspace.KubeconfigPath(clusterDir), []byte("apiVersion: v1\nkind: Config\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 

@@ -16,24 +16,6 @@ import (
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 )
 
-// TerraformEnvDir returns the Terraform environment directory
-// (<projectRoot>/infrastructure/terraform/environments/<env>) for env. An
-// empty env resolves to the environments directory itself. It lives here
-// rather than in phase because internal/infrastructure/proxmox must build
-// this path without importing phase (see roadmap B1 layering fix).
-func TerraformEnvDir(projectRoot, env string) string {
-	return filepath.Join(projectRoot, "infrastructure", "terraform", "environments", env)
-}
-
-// ClusterConfigDir returns the openshift-install output directory
-// (<workDir>/cluster-config) holding install-config.yaml and the generated
-// kubeconfig/auth bundle. It lives here with the other layout helpers so
-// non-phase packages (cli, debugbundle) resolve cluster paths without
-// importing phase.
-func ClusterConfigDir(workDir string) string {
-	return filepath.Join(workDir, "cluster-config")
-}
-
 // FileExists reports whether path refers to an existing regular file
 // (returns false for directories).
 func FileExists(path string) bool {

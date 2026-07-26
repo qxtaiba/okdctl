@@ -26,9 +26,9 @@ import (
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/executor"
 	"github.com/qxtaiba/okdctl/internal/logutil"
-	"github.com/qxtaiba/okdctl/internal/system"
 	"github.com/qxtaiba/okdctl/internal/tui"
 	"github.com/qxtaiba/okdctl/internal/version"
+	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
 type bundleCategory string
@@ -259,7 +259,7 @@ func bundleTerraformState(ctx context.Context, addFile func(string, []byte) erro
 	if cfg != nil {
 		tfEnv = cfg.TerraformEnvName()
 	}
-	tfDir := system.TerraformEnvDir(projectRoot, tfEnv)
+	tfDir := workspace.TerraformEnvDir(projectRoot, tfEnv)
 	if _, err := os.Stat(filepath.Join(tfDir, "terraform.tfstate")); errors.Is(err, os.ErrNotExist) {
 		return manifestEntry{Name: categoryTerraformState, Status: bundleStatusSkipped, Message: "no terraform.tfstate in " + tfDir}
 	}
@@ -288,8 +288,8 @@ func bundleMustGather(ctx context.Context, addStream func(*tar.Header, io.Reader
 	if _, err := osexec.LookPath("oc"); err != nil {
 		return manifestEntry{Name: categoryMustGather, Status: bundleStatusSkipped, Message: "oc not found on PATH; install oc or run okdctl deploy first"}
 	}
-	workDir := filepath.Join(projectRoot, system.WorkDirName)
-	kubeconfig := filepath.Join(system.ClusterConfigDir(workDir), "auth", "kubeconfig")
+	workDir := workspace.WorkDir(projectRoot)
+	kubeconfig := workspace.KubeconfigPath(workspace.ClusterConfigDir(workDir))
 	if _, err := os.Stat(kubeconfig); err != nil {
 		return manifestEntry{Name: categoryMustGather, Status: bundleStatusSkipped, Message: "kubeconfig not found at " + kubeconfig}
 	}

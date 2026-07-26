@@ -13,6 +13,7 @@ import (
 
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/system"
+	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
 // invokingUserHomeDirFn resolves the invoking user's home directory.
@@ -73,7 +74,7 @@ func (p *Phase) SetupClusterAccess(ctx context.Context, clusterDir string) error
 	if err := ctx.Err(); err != nil {
 		return fmt.Errorf("setup cluster access: %w", err)
 	}
-	srcKubeconfig := filepath.Join(clusterDir, "auth", "kubeconfig")
+	srcKubeconfig := workspace.KubeconfigPath(clusterDir)
 	destKubeconfig := filepath.Join(kubeDir, "config")
 
 	if system.FileExists(destKubeconfig) {

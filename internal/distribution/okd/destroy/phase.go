@@ -4,7 +4,6 @@ package destroy
 
 import (
 	"context"
-	"path/filepath"
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/distribution"
@@ -41,11 +40,7 @@ type Options struct {
 // NewOptions builds the default destroy Options from cfg and projectRoot.
 func NewOptions(cfg *config.Config, projectRoot string) Options {
 	return Options{
-		BaseOptions: phase.BaseOptions{
-			ProjectRoot:  projectRoot,
-			WorkDir:      filepath.Join(projectRoot, phase.WorkDirName),
-			TerraformEnv: phase.GetTerraformEnv(cfg),
-		},
+		BaseOptions: phase.NewBaseOptions(cfg, projectRoot),
 		AutoApprove: cfg.Deployment.AutoApprove,
 		CleanupKind: cleanup.Full,
 	}

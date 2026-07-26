@@ -18,6 +18,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/executor"
 	"github.com/qxtaiba/okdctl/internal/logutil"
+	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
 // TestRemoveHAProxy_WorkDirRegression guards the workdir mispass: RemoveHAProxy
@@ -41,8 +42,8 @@ func TestRemoveHAProxy_WorkDirRegression(t *testing.T) {
 	kubeconfig := "clusters:\n- cluster:\n    certificate-authority-data: " + caData + "\n  name: test\n"
 
 	projectRoot := t.TempDir()
-	okdInstallDir := filepath.Join(projectRoot, phase.WorkDirName)
-	correctClusterDir := phase.ClusterConfigDir(okdInstallDir)
+	okdInstallDir := workspace.WorkDir(projectRoot)
+	correctClusterDir := workspace.ClusterConfigDir(okdInstallDir)
 	authDir := filepath.Join(correctClusterDir, "auth")
 	if err := os.MkdirAll(authDir, 0o700); err != nil {
 		t.Fatalf("mkdir auth: %v", err)
@@ -78,7 +79,7 @@ func TestRemoveHAProxy_WorkDirRegression(t *testing.T) {
 	})
 
 	t.Run("wrong_workdir_fails_ca_check", func(t *testing.T) {
-		wrongClusterDir := phase.ClusterConfigDir(projectRoot)
+		wrongClusterDir := workspace.ClusterConfigDir(projectRoot)
 		err := p.RemoveHAProxy(context.Background(), "127.0.0.1", wrongClusterDir)
 		var clusterErr *errtypes.ClusterError
 		if !errors.As(err, &clusterErr) {

@@ -13,11 +13,11 @@ import (
 	"github.com/qxtaiba/okdctl/internal/addon"
 	"github.com/qxtaiba/okdctl/internal/cluster"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd"
-	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/nodetypes"
 	"github.com/qxtaiba/okdctl/internal/system"
 	"github.com/qxtaiba/okdctl/internal/tui"
+	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
 // Client is the slice of cluster.Client that status collection drives.
@@ -167,7 +167,7 @@ func derivePhase(apiOK bool, nodes []okd.NodeStatus, degraded int, projectRoot s
 
 func hasTerraformState(projectRoot string) bool {
 	matches, _ := filepath.Glob(
-		filepath.Join(system.TerraformEnvDir(projectRoot, "*"), "terraform.tfstate"),
+		filepath.Join(workspace.TerraformEnvDir(projectRoot, "*"), "terraform.tfstate"),
 	)
 	return len(matches) > 0
 }
@@ -224,9 +224,9 @@ func countDegraded(ctx context.Context, cl Client) int {
 // NewClient returns an oc-backed cluster client for the deployed cluster, or
 // a ClusterError when no kubeconfig exists under <projectRoot>/okd-install yet.
 func NewClient(projectRoot string) (*cluster.Client, error) {
-	workDir := filepath.Join(projectRoot, phase.WorkDirName)
-	clusterDir := phase.ClusterConfigDir(workDir)
-	kcPath := filepath.Join(clusterDir, "auth", "kubeconfig")
+	workDir := workspace.WorkDir(projectRoot)
+	clusterDir := workspace.ClusterConfigDir(workDir)
+	kcPath := workspace.KubeconfigPath(clusterDir)
 
 	if !system.FileExists(kcPath) {
 		return nil, &errtypes.ClusterError{

@@ -11,6 +11,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/render"
 	"github.com/qxtaiba/okdctl/internal/system"
 	"github.com/qxtaiba/okdctl/internal/tui"
+	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
 // errPlanDrift signals a plan run that found pending infrastructure changes.
@@ -79,7 +80,7 @@ func runPlan(cmd *cobra.Command, _ []string) error {
 	// terraform sources, so a workspace that deploy has not created yet must
 	// fail here with a pointer at deploy instead of surfacing a raw
 	// `terraform init … no such file or directory` from the provider layer.
-	envDir := system.TerraformEnvDir(projectRoot, cfg.TerraformEnvName())
+	envDir := workspace.TerraformEnvDir(projectRoot, cfg.TerraformEnvName())
 	if !system.DirExists(envDir) {
 		return &errtypes.ConfigError{Msg: fmt.Sprintf(
 			"terraform workspace not found at %s; run 'okdctl deploy' to create it before previewing drift", envDir)}

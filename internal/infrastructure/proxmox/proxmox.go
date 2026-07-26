@@ -24,6 +24,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/nodetypes"
 	"github.com/qxtaiba/okdctl/internal/sshpin"
 	"github.com/qxtaiba/okdctl/internal/system"
+	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
 // Provider drives the Proxmox VE infrastructure lifecycle (connect, provision,
@@ -172,7 +173,7 @@ func (p *Provider) setupTerraform(projectRoot, tfEnv string) {
 	p.projectRoot = projectRoot
 	p.tfEnv = tfEnv
 
-	tfDir := system.TerraformEnvDir(projectRoot, tfEnv)
+	tfDir := workspace.TerraformEnvDir(projectRoot, tfEnv)
 
 	tfOpts := []terraform.Option{
 		terraform.WithLogger(p.logger),

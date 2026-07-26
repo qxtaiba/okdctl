@@ -15,6 +15,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/executor"
 	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/testutil"
+	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
 var postinstallStepOrder = []distribution.StepID{
@@ -168,7 +169,7 @@ func TestPostinstallExecute_BootstrapTeardownViaFakeTerraform(t *testing.T) {
 		t.Errorf("Result.BastionIP = %q; want 192.168.1.5", result.BastionIP)
 	}
 
-	sentinel := filepath.Join(envDir, phase.BootstrapStateSentinelFile)
+	sentinel := filepath.Join(envDir, workspace.BootstrapStateSentinelFile)
 	data, readErr := os.ReadFile(sentinel)
 	if readErr != nil {
 		t.Fatalf("bootstrap state sentinel not written: %v", readErr)

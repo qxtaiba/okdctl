@@ -23,6 +23,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/infrastructure/terraform"
 	"github.com/qxtaiba/okdctl/internal/system"
+	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
 // Kind selects which cleanup steps run.
@@ -96,11 +97,7 @@ type Options struct {
 // alone and stay field-by-field overrides after construction.
 func NewOptions(cfg *config.Config, projectRoot string, kind Kind) Options {
 	return Options{
-		BaseOptions: phase.BaseOptions{
-			WorkDir:      filepath.Join(projectRoot, phase.WorkDirName),
-			ProjectRoot:  projectRoot,
-			TerraformEnv: phase.GetTerraformEnv(cfg),
-		},
+		BaseOptions:    phase.NewBaseOptions(cfg, projectRoot),
 		Kind:           kind,
 		HTTPServerRoot: cfg.HTTPServer.Root,
 		HAProxyConfig:  phase.DefaultHAProxyConfigPath,
@@ -194,7 +191,7 @@ func retainClusterCredentials(opts *Options, logger *slog.Logger) (bool, error) 
 	if opts.ForceCredentialWipe {
 		return false, nil
 	}
-	envDir := phase.TerraformEnvDir(opts.ProjectRoot, opts.TerraformEnv)
+	envDir := workspace.TerraformEnvDir(opts.ProjectRoot, opts.TerraformEnv)
 	tf := terraform.New(envDir, terraform.WithLogger(logger))
 	switch tf.StateStatus() {
 	case terraform.StateStatusPopulated:
@@ -312,7 +309,7 @@ func cleanupSteps(opts *Options, logger *slog.Logger) []distribution.StepDef {
 			if !opts.PostDestroy || opts.TerraformEnv == "" {
 				return nil
 			}
-			envDir := phase.TerraformEnvDir(opts.ProjectRoot, opts.TerraformEnv)
+			envDir := workspace.TerraformEnvDir(opts.ProjectRoot, opts.TerraformEnv)
 			tf := terraform.New(envDir, terraform.WithLogger(logger))
 			if !tf.HasState() {
 				_ = SafeRemoveWithLogger(ctx, filepath.Join(envDir, "terraform.tfstate"), "terraform state file", logger)

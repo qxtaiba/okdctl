@@ -13,6 +13,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/system"
 	"github.com/qxtaiba/okdctl/internal/tui"
+	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
 var (
@@ -43,9 +44,9 @@ func runKubeconfig(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
-	workDir := filepath.Join(projectRoot, system.WorkDirName)
-	clusterDir := system.ClusterConfigDir(workDir)
-	src := filepath.Join(clusterDir, "auth", "kubeconfig")
+	workDir := workspace.WorkDir(projectRoot)
+	clusterDir := workspace.ClusterConfigDir(workDir)
+	src := workspace.KubeconfigPath(clusterDir)
 
 	if !system.FileExists(src) {
 		return &errtypes.ConfigError{

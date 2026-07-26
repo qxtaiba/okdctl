@@ -12,11 +12,11 @@ import (
 	"strings"
 
 	"github.com/qxtaiba/okdctl/internal/config"
-	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/templates"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/nodetypes"
 	"github.com/qxtaiba/okdctl/internal/system"
+	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
 // DefaultProxmoxCPUType is the Proxmox qemu cpu type used when the operator
@@ -178,12 +178,12 @@ func (p *Phase) GenerateTerraformVars(ctx context.Context, cfg *config.Config, o
 		return &errtypes.ConfigError{Msg: msgProxmoxProviderRequired}
 	}
 
-	envDir := phase.TerraformEnvDir(opts.ProjectRoot, phase.GetTerraformEnv(cfg))
+	envDir := workspace.TerraformEnvDir(opts.ProjectRoot, cfg.TerraformEnvName())
 	// A stale postinstall sentinel would override the regenerated
 	// bootstrap_enabled=true and silently skip the bootstrap VM. Deploy is the
 	// only caller that should resurrect bootstrap, so the removal lives here,
 	// not in WriteTerraformVars — node-lifecycle re-renders must preserve it.
-	_ = system.SafeRemove(filepath.Join(envDir, phase.BootstrapStateSentinelFile))
+	_ = system.SafeRemove(filepath.Join(envDir, workspace.BootstrapStateSentinelFile))
 	return WriteTerraformVars(cfg, envDir)
 }
 

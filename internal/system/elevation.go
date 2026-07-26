@@ -14,6 +14,7 @@ import (
 
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/executor"
+	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
 // InvokingUser returns the user who invoked the command. When the process
@@ -131,22 +132,15 @@ func canonicalizePath(p string) string {
 	return p
 }
 
-// WorkDirName is the per-project workdir okdctl creates under the project
-// root for run artifacts (install-config, manifests, ignition, downloaded
-// tools). isAllowedChownRoot's Base match must stay in lockstep with every
-// filepath.Join(root, WorkDirName) call site, or a rename silently disables
-// the chown-back allowlist below.
-const WorkDirName = "okd-install"
-
 // isAllowedChownRoot reports whether absPath is a permitted target for a
 // recursive chown. Guard against caller passing /etc or similar — chowntree
 // running as root would corrupt system ownership. Allowed: paths whose Base
-// is WorkDirName or "infrastructure" (the only trees okdctl creates as
-// root), any subpath of homeDir (kubeconfig install + .okdctl cache), and
-// any subpath of tmpDir (test/ephemeral flows).
+// is workspace.WorkDirName or "infrastructure" (the only trees okdctl
+// creates as root), any subpath of homeDir (kubeconfig install + .okdctl
+// cache), and any subpath of tmpDir (test/ephemeral flows).
 func isAllowedChownRoot(absPath, homeDir, tmpDir string) bool {
 	base := filepath.Base(absPath)
-	if base == WorkDirName || base == "infrastructure" {
+	if base == workspace.WorkDirName || base == "infrastructure" {
 		return true
 	}
 	hasPrefix := func(prefix string) bool {

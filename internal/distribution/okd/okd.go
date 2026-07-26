@@ -8,7 +8,6 @@ import (
 	"io"
 	"log/slog"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/qxtaiba/okdctl/internal/config"
@@ -24,6 +23,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/infrastructure/terraform"
 	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/system"
+	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
 // Provisioner orchestrates the OKD distribution's phase packages (setup,
@@ -224,8 +224,8 @@ func (p *Provisioner) guardLiveCluster(cfg *config.Config, opts SetupOpts) error
 	if opts.FreshDeploy {
 		return nil
 	}
-	tfEnv := phase.GetTerraformEnv(cfg)
-	envDir := phase.TerraformEnvDir(p.projectRoot, tfEnv)
+	tfEnv := cfg.TerraformEnvName()
+	envDir := workspace.TerraformEnvDir(p.projectRoot, tfEnv)
 	tf := terraform.New(envDir, terraform.WithLogger(p.logger))
 	if !tf.HasState() {
 		return nil
@@ -280,7 +280,7 @@ func (p *Provisioner) PostInstall(ctx context.Context, cfg *config.Config, keepR
 // a missing kubeconfig fails fast before any postinstall step runs.
 func (p *Provisioner) ResumePostInstall(ctx context.Context, cfg *config.Config, keepRedHatCatalogs bool) (*postinstall.Result, []distribution.StepResult, error) {
 	installPhase := install.New(phase.WithExecutor(p.executor), phase.WithLogger(p.logger))
-	clusterDir := phase.ClusterConfigDir(filepath.Join(p.projectRoot, phase.WorkDirName))
+	clusterDir := workspace.ClusterConfigDir(workspace.WorkDir(p.projectRoot))
 	if err := installPhase.SetupKubeconfig(ctx, clusterDir); err != nil {
 		return nil, nil, &errtypes.ClusterError{
 			Msg: "cannot resume postinstall: cluster kubeconfig unavailable; " +
@@ -357,7 +357,7 @@ func (p *Provisioner) UpdateIngress(ctx context.Context, cfg *config.Config, opt
 // a path that never exists.
 func resolveIngressWorkDir(projectRoot, workDir string) string {
 	if workDir == "" {
-		return filepath.Join(projectRoot, phase.WorkDirName)
+		return workspace.WorkDir(projectRoot)
 	}
 	return workDir
 }

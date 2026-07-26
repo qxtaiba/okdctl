@@ -17,6 +17,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/netutil"
 	"github.com/qxtaiba/okdctl/internal/platform"
 	"github.com/qxtaiba/okdctl/internal/system"
+	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
 // Step IDs for the setup phase, ordered as they execute.
@@ -73,7 +74,7 @@ var StepNames = map[distribution.StepID]string{
 // setupSteps returns the ordered steps for the OKD setup phase, grouped
 // into base / manifest / web / infra sub-methods.
 func (p *Phase) setupSteps(cfg *config.Config, opts *Options) []distribution.StepDef {
-	clusterDir := phase.ClusterConfigDir(opts.WorkDir)
+	clusterDir := workspace.ClusterConfigDir(opts.WorkDir)
 	var steps []distribution.StepDef
 	steps = append(steps, p.setupBaseSteps(cfg, opts)...)
 	steps = append(steps, p.setupManifestSteps(cfg, opts, clusterDir)...)
@@ -347,7 +348,7 @@ func (p *Phase) setupInfraSteps(cfg *config.Config, opts *Options) []distributio
 				if err := p.GenerateTerraformVars(ctx, cfg, opts); err != nil {
 					return &errtypes.ConfigError{Msg: "generate Terraform variables", Err: err}
 				}
-				tfvarsPath := filepath.Join(phase.TerraformEnvDir(opts.ProjectRoot, phase.GetTerraformEnv(cfg)), "terraform.tfvars")
+				tfvarsPath := filepath.Join(workspace.TerraformEnvDir(opts.ProjectRoot, cfg.TerraformEnvName()), "terraform.tfvars")
 				p.Log.Info("terraform: configuration written", "path", tfvarsPath)
 				return nil
 			},

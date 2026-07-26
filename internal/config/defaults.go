@@ -1,6 +1,9 @@
 package config
 
-import "github.com/qxtaiba/okdctl/internal/netutil"
+import (
+	"github.com/qxtaiba/okdctl/internal/netutil"
+	"github.com/qxtaiba/okdctl/internal/workspace"
+)
 
 const (
 	defaultBastionIP = "192.168.1.20"
@@ -9,9 +12,9 @@ const (
 	// this address and must not ARP-fight the hypervisor.
 	defaultStaticIPStart = "192.168.1.140"
 	defaultFluxAddon     = "flux"
-	// defaultTerraformEnv names the embedded environment that ships in the
+	// defaultTerraformEnv is the embedded environment that ships in the
 	// repo; validators trust it without a disk check.
-	defaultTerraformEnv = "production"
+	defaultTerraformEnv = workspace.DefaultTerraformEnv
 )
 
 // DefaultConfig returns a Config with defaults for a typical homelab environment.

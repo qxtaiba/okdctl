@@ -18,6 +18,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/infrastructure/proxmox"
 	"github.com/qxtaiba/okdctl/internal/system"
+	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
 // Default timeouts and intervals for the install phase. Overridable via
@@ -63,11 +64,7 @@ func NewOptions(cfg *config.Config, projectRoot string) Options {
 	}
 
 	return Options{
-		BaseOptions: phase.BaseOptions{
-			WorkDir:      filepath.Join(projectRoot, phase.WorkDirName),
-			ProjectRoot:  projectRoot,
-			TerraformEnv: phase.GetTerraformEnv(cfg),
-		},
+		BaseOptions:         phase.NewBaseOptions(cfg, projectRoot),
 		AutoApprove:         cfg.Deployment.AutoApprove,
 		BootstrapTimeout:    bootstrapTimeout,
 		InstallTimeout:      installTimeout,
@@ -120,7 +117,7 @@ func (p *Phase) StepDefs(cfg *config.Config, opts *Options) []distribution.StepD
 // DeployInfrastructure applies the generated Terraform plan against Proxmox
 // to provision the bootstrap and node VMs.
 func (p *Phase) DeployInfrastructure(ctx context.Context, cfg *config.Config, opts *Options) error {
-	terraformDir := phase.TerraformEnvDir(opts.ProjectRoot, opts.TerraformEnv)
+	terraformDir := workspace.TerraformEnvDir(opts.ProjectRoot, opts.TerraformEnv)
 	tfvarsFile := filepath.Join(terraformDir, "terraform.tfvars")
 
 	p.Log.Debug("terraform: directory", "path", terraformDir)
@@ -170,7 +167,7 @@ func (p *Phase) SetupKubeconfig(ctx context.Context, clusterDir string) error {
 	if err := ctx.Err(); err != nil {
 		return fmt.Errorf("setup kubeconfig: %w", err)
 	}
-	kubeconfigPath := filepath.Join(clusterDir, "auth", "kubeconfig")
+	kubeconfigPath := workspace.KubeconfigPath(clusterDir)
 	if !system.FileExists(kubeconfigPath) {
 		return &errtypes.ClusterError{Msg: fmt.Sprintf("kubeconfig not found at %s", kubeconfigPath)}
 	}
