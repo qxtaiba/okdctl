@@ -32,13 +32,8 @@ const (
 
 // deployStateSchemaV2 is the current deploy-state JSON schema marker. Bump
 // this value (and update readDeployState) only when the schema makes a
-// breaking change. v1 markers used prepare/configure phase names;
-// readDeployState maps them onto the v2 vocabulary so an interrupted deploy
-// from an older binary still resumes correctly.
-const (
-	deployStateSchemaV1 = "v1"
-	deployStateSchemaV2 = "v2"
-)
+// breaking change.
+const deployStateSchemaV2 = "v2"
 
 // deployState records which deploy phase was active when the process last
 // wrote the marker. Resume routing (resolveResumePhase) and destroy
@@ -106,29 +101,12 @@ func readDeployState(path string) (*deployState, error) {
 	if err := json.Unmarshal(data, &s); err != nil {
 		return nil, fmt.Errorf("parse deploy state: %w", err)
 	}
-	switch s.SchemaVersion {
-	case deployStateSchemaV2:
-	case deployStateSchemaV1:
-		s.Phase = migrateV1Phase(s.Phase)
-	default:
+	if s.SchemaVersion != deployStateSchemaV2 {
 		tui.Warn("ignoring deploy-state with unknown schema_version",
 			tui.LF("schema_version", s.SchemaVersion), tui.LF("expected", deployStateSchemaV2))
 		return nil, nil
 	}
 	return &s, nil
-}
-
-// migrateV1Phase maps the retired v1 phase vocabulary onto the package names
-// v2 records. Values it does not recognize pass through unchanged so
-// resolveResumePhase's unknown-phase-treated-as-absent handling still applies.
-func migrateV1Phase(p deployPhase) deployPhase {
-	switch p {
-	case "prepare":
-		return phaseSetup
-	case "configure":
-		return phasePostInstall
-	}
-	return p
 }
 
 // loadResumeMarker reads the deploy-state marker for the resume decision.

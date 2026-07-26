@@ -218,12 +218,11 @@ func TestMaterializeTerraformSourceCheckoutPassthrough(t *testing.T) {
 	}
 }
 
-// TestMaterializeTerraformLegacyCapableRootWithoutManifest composes
-// materialization with manifest detection: a pre-existing checkout that
-// already carries the real embedded content (so it content-sniffs as
-// node-ops capable) never gets stamped by a no-op MaterializeTerraform run,
-// and TerraformRootSupportsNodeOps still resolves via content-sniff.
-func TestMaterializeTerraformLegacyCapableRootWithoutManifest(t *testing.T) {
+// TestMaterializeTerraformNoOpRunNeverStamps pins that a pre-existing
+// checkout that already carries the real embedded content never gets a
+// manifest stamped by a no-op MaterializeTerraform run — stamping is a
+// side effect of creating files, and a dry run must stay side-effect free.
+func TestMaterializeTerraformNoOpRunNeverStamps(t *testing.T) {
 	root := t.TempDir()
 	for _, path := range embeddedTerraformPaths(t) {
 		target := filepath.Join(root, "infrastructure", filepath.FromSlash(path))
@@ -248,11 +247,6 @@ func TestMaterializeTerraformLegacyCapableRootWithoutManifest(t *testing.T) {
 	}
 	if _, statErr := os.Stat(rootManifestPath(root)); !errors.Is(statErr, fs.ErrNotExist) {
 		t.Fatalf("no-op materialize must not stamp a manifest, stat err = %v", statErr)
-	}
-
-	ok, err := TerraformRootSupportsNodeOps(root)
-	if err != nil || !ok {
-		t.Fatalf("legacy capable root must be detected via content-sniff, got (%v,%v)", ok, err)
 	}
 }
 

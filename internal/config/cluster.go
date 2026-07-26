@@ -4,16 +4,9 @@
 package config
 
 // Schema version markers for okdctl.yaml. The loader accepts only
-// SchemaVersionCurrent; bump it (and teach LoadFile a targeted migration
-// message) only when the schema makes a breaking change.
+// SchemaVersionCurrent; bump it only when the schema makes a breaking
+// change.
 const (
-	// SchemaVersionV1 predates the v2 key renames (listed on
-	// SchemaVersionV2); kept so the loader can emit a migration diagnostic.
-	SchemaVersionV1 = "v1"
-	// SchemaVersionV2 renamed provider.proxmox.master_nodes →
-	// control_plane_nodes, disks.master_data_size_gb →
-	// control_plane_data_size_gb, and topology memory/disk →
-	// memory_mb/disk_gb.
 	SchemaVersionV2 = "v2"
 
 	SchemaVersionCurrent = SchemaVersionV2

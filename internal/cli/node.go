@@ -12,7 +12,6 @@ import (
 	"github.com/qxtaiba/okdctl/internal/cluster"
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/credentials"
-	"github.com/qxtaiba/okdctl/internal/deploy"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/clusterstatus"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/setup"
@@ -197,21 +196,16 @@ func (n *nodeRunnerCtx) complete(w io.Writer, elapsed time.Duration) {
 	fmt.Fprint(w, render.NodeOpComplete(n.captured, elapsed))
 }
 
-// buildNodeRunner resolves the workspace, migrates the terraform root if it
-// predates node-lifecycle support, loads credentials, and wires a node.Runner
-// under the project run lock. It installs the informed-confirmation hook (or the
-// dry-run preview) from consent. The returned cleanup zeroizes credentials and
-// releases the lock.
+// buildNodeRunner resolves the workspace, loads credentials, and wires a
+// node.Runner under the project run lock. It installs the
+// informed-confirmation hook (or the dry-run preview) from consent. The
+// returned cleanup zeroizes credentials and releases the lock.
 func buildNodeRunner(cmd *cobra.Command, cfg *config.Config, verb string, consent nodeConsent, probeHost bool) (*nodeRunnerCtx, error) {
 	ctx := cmd.Context()
 	projectRoot, err := resolveProjectRootOrDie()
 	if err != nil {
 		return nil, err
 	}
-	if err := ensureNodeOpsWorkspace(ctx, projectRoot, consent.yes, consent.dryRun); err != nil {
-		return nil, err
-	}
-
 	creds, err := handleCredentials(cfg)
 	if err != nil {
 		return nil, err
@@ -362,61 +356,6 @@ func runHostBudgetProbe(ctx context.Context, cfg *config.Config, creds *credenti
 			tui.LF("total_gib", d.TotalBytes/(1024*1024*1024)))
 	}
 	return probe.HostMemTotalMiB(), probe.GuestAllocatedMiB()
-}
-
-// ensureNodeOpsWorkspace migrates a write-once terraform root that lacks the
-// node-lifecycle variables. Migration overwrites operator-editable HCL, so it
-// requires consent (--yes or an interactive y/N) and backs up the originals.
-// dryRun refuses instead: --dry-run promises no mutation, so a root needing
-// migration must be reported and left untouched rather than rewritten or
-// prompted for mid-preview.
-func ensureNodeOpsWorkspace(ctx context.Context, projectRoot string, yes, dryRun bool) error {
-	ok, err := deploy.TerraformRootSupportsNodeOps(projectRoot)
-	if err != nil {
-		return err
-	}
-	if ok {
-		return nil
-	}
-	if dryRun {
-		return &errtypes.UsageError{Msg: "terraform root needs node-ops migration; re-run without --dry-run to migrate (no changes made)"}
-	}
-	format, stamped, err := deploy.TerraformRootFormat(projectRoot)
-	if err != nil {
-		return err
-	}
-	if stamped {
-		tui.Warn("terraform root predates node-lifecycle support",
-			tui.LF("workspace_format", format),
-			tui.LF("binary_expects", deploy.ExpectedTerraformRootFormat()))
-	} else {
-		tui.Warn("terraform root predates node-lifecycle support; it must be migrated (worker_count / master sizing variables)")
-	}
-	preview, err := deploy.PreviewTerraformRootMigration(projectRoot)
-	if err != nil {
-		return err
-	}
-	for _, f := range preview.OperatorModified {
-		tui.Warn("you edited this terraform file; your version will be backed up before overwrite", tui.LF("path", f))
-	}
-	tui.Info("migration backs up the originals to *.pre-nodeops.bak before overwriting")
-	if !yes {
-		proceed, err := promptForConfirmation(ctx, "migrate the terraform root now? [y/N]: ")
-		if err != nil {
-			return err
-		}
-		if !proceed {
-			return &errtypes.ConfigError{Msg: "terraform root migration declined; node ops cannot run against the older root"}
-		}
-	}
-	migrated, err := deploy.MigrateTerraformRoot(projectRoot)
-	if err != nil {
-		return &errtypes.ConfigError{Msg: "migrate terraform root", Err: err}
-	}
-	for _, f := range migrated {
-		tui.Info("migrated terraform file", tui.LF("path", f))
-	}
-	return nil
 }
 
 func runNodeRemove(cmd *cobra.Command, args []string) error {

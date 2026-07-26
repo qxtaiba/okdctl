@@ -73,27 +73,6 @@ func TestLoadFile_MissingSchemaVersion(t *testing.T) {
 	}
 }
 
-func TestLoadFile_V1SchemaMigrationMessage(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "okdctl.yaml")
-	// A v1 config with since-renamed keys must fail on the version gate
-	// (naming the old→new keys), not on the strict unmarshal.
-	v1 := "schemaVersion: v1\nprovider:\n  type: proxmox\n  proxmox:\n    master_nodes: [pve1]\n"
-	if err := os.WriteFile(path, []byte(v1), 0o600); err != nil {
-		t.Fatal(err)
-	}
-
-	_, err := NewLoader().LoadFile(path)
-	var cfgErr *errtypes.ConfigError
-	if !errors.As(err, &cfgErr) {
-		t.Fatalf("err = %v; want *errtypes.ConfigError", err)
-	}
-	for _, want := range []string{"control_plane_nodes", "control_plane_data_size_gb", "memory_mb", "disk_gb"} {
-		if !strings.Contains(cfgErr.Msg, want) {
-			t.Errorf("ConfigError.Msg = %q; want it to mention %q", cfgErr.Msg, want)
-		}
-	}
-}
-
 func TestLoadFile_UnsupportedSchemaVersion(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "okdctl.yaml")

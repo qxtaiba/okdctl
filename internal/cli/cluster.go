@@ -15,7 +15,7 @@ var (
 	compactDryRun                 bool
 	compactForceStorage           bool
 	compactIngressReplica         int
-	compactGrowMasterMB           int
+	compactMasterMemoryMB         int
 	compactAcknowledgeInterrupted bool
 
 	stopYes                    bool
@@ -106,11 +106,7 @@ func init() {
 	clusterCompactCmd.Flags().BoolVar(&compactDryRun, flagDryRun, false, "print the compaction plan without mutating anything")
 	clusterCompactCmd.Flags().BoolVar(&compactForceStorage, "force-storage", false, "allow worker removal even when workers hold rook-ceph OSDs")
 	clusterCompactCmd.Flags().IntVar(&compactIngressReplica, "ingress-replicas", 2, "compact IngressController replica count")
-	clusterCompactCmd.Flags().IntVar(&compactGrowMasterMB, "master-memory-mb", 0, "grow each master to this memory (MiB) as workers are removed (0 leaves masters unchanged)")
-	// Deprecated spelling; both flags share compactGrowMasterMB so either
-	// works during the transition.
-	clusterCompactCmd.Flags().IntVar(&compactGrowMasterMB, "grow-master-memory-mb", 0, "grow each master to this memory (MiB) as workers are removed (0 leaves masters unchanged)")
-	_ = clusterCompactCmd.Flags().MarkDeprecated("grow-master-memory-mb", "use --master-memory-mb")
+	clusterCompactCmd.Flags().IntVar(&compactMasterMemoryMB, "master-memory-mb", 0, "grow each master to this memory (MiB) as workers are removed (0 leaves masters unchanged)")
 	clusterCompactCmd.Flags().BoolVar(&compactAcknowledgeInterrupted, "acknowledge-interrupted-op", false, "override a stranded marker left by an unrelated op and proceed fresh")
 
 	clusterStopCmd.Flags().BoolVarP(&stopYes, "yes", "y", false, "skip confirmation prompt")
@@ -149,7 +145,7 @@ func runClusterCompact(cmd *cobra.Command, _ []string) error {
 	start := time.Now()
 	if err := rc.runner.Compact(cmd.Context(), node.CompactOptions{
 		IngressReplicas:    compactIngressReplica,
-		GrowMasterMemoryMB: compactGrowMasterMB,
+		GrowMasterMemoryMB: compactMasterMemoryMB,
 		ForceStorage:       compactForceStorage,
 		HostTotalMiB:       rc.HostTotalMiB,
 		HostAllocatedMiB:   rc.HostAllocatedMiB,

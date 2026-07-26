@@ -151,9 +151,9 @@ func init() {
 // buildSnapshotRunner wires a node.Runner for the pvesh-over-SSH snapshot
 // surface: it verifies the Proxmox host's SSH fingerprint, builds the
 // RemoteISOParams the runner's HostsshSnapshotClient needs, and acquires the
-// project run lock. Unlike buildNodeRunner it never touches Terraform (no
-// ensureNodeOpsWorkspace migration — snapshots don't need the node-ops root)
-// and never wires Power (proxmox.NewPowerCycler is REST/API-credential
+// project run lock. Unlike buildNodeRunner it never touches Terraform
+// (snapshots don't need the terraform root) and never wires Power
+// (proxmox.NewPowerCycler is REST/API-credential
 // based; snapshots are SSH-key based), keeping the pvesh surface separate
 // from cluster stop/start's REST surface.
 func buildSnapshotRunner(ctx context.Context, cfg *config.Config, dryRun bool) (*nodeRunnerCtx, error) {

@@ -55,8 +55,8 @@ func (l *Loader) LoadFile(path string) (*Config, error) {
 }
 
 // checkSchemaVersion gates on schemaVersion before the strict unmarshal so a
-// stale config fails with a migration message naming the renamed keys, not
-// an opaque unknown-field error.
+// config written for another schema fails with a clear version error, not an
+// opaque unknown-field error.
 func checkSchemaVersion(data []byte, path string) error {
 	var probe struct {
 		SchemaVersion string `json:"schemaVersion"`
@@ -69,11 +69,6 @@ func checkSchemaVersion(data []byte, path string) error {
 		return nil
 	case "":
 		return &errtypes.ConfigError{Msg: fmt.Sprintf("config file %s missing required schemaVersion (expected %q)", path, SchemaVersionCurrent)}
-	case SchemaVersionV1:
-		return &errtypes.ConfigError{Msg: fmt.Sprintf(
-			"config file %s uses schemaVersion %q; current is %q — rename provider.proxmox.master_nodes to control_plane_nodes, disks.master_data_size_gb to control_plane_data_size_gb, topology.*.memory to memory_mb, topology.*.disk to disk_gb, then set schemaVersion: %q",
-			path, SchemaVersionV1, SchemaVersionCurrent, SchemaVersionCurrent,
-		)}
 	default:
 		return &errtypes.ConfigError{Msg: fmt.Sprintf("config file %s has unsupported schemaVersion %q (expected %q)", path, probe.SchemaVersion, SchemaVersionCurrent)}
 	}

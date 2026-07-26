@@ -76,47 +76,6 @@ func seedRawState(t *testing.T, path, schema string, phase deployPhase) {
 	}
 }
 
-func TestReadDeployState_V1PhaseMigration(t *testing.T) {
-	tests := []struct {
-		name      string
-		v1Phase   deployPhase
-		wantPhase deployPhase
-	}{
-		{name: "v1 prepare maps to setup", v1Phase: "prepare", wantPhase: phaseSetup},
-		{name: "v1 configure maps to postinstall", v1Phase: "configure", wantPhase: phasePostInstall},
-		{name: "v1 install unchanged", v1Phase: phaseInstall, wantPhase: phaseInstall},
-		{name: "v1 unknown phase passes through", v1Phase: "someday", wantPhase: "someday"},
-	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			path := filepath.Join(t.TempDir(), "deploy.state")
-			seedRawState(t, path, deployStateSchemaV1, tc.v1Phase)
-			ds, err := readDeployState(path)
-			if err != nil {
-				t.Fatalf("readDeployState: %v", err)
-			}
-			if ds == nil {
-				t.Fatal("want non-nil deployState, got nil")
-			}
-			if ds.Phase != tc.wantPhase {
-				t.Errorf("Phase = %q; want %q", ds.Phase, tc.wantPhase)
-			}
-		})
-	}
-}
-
-func TestResolveResumePhase_V1ConfigureMarkerResumesPostInstall(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "deploy.state")
-	seedRawState(t, path, deployStateSchemaV1, "configure")
-	phase, marker := resolveResumePhase(path, "prod", false)
-	if phase != phasePostInstall {
-		t.Errorf("phase = %q; want %q", phase, phasePostInstall)
-	}
-	if marker == nil {
-		t.Error("want non-nil marker")
-	}
-}
-
 func TestReadDeployState_UnknownSchema(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "deploy.state")
