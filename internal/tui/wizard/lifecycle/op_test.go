@@ -31,8 +31,10 @@ func TestOpStepSelectsOperations(t *testing.T) {
 }
 
 func TestOpStepMarkerAddsResumeOptionAndArmsAck(t *testing.T) {
-	st := &State{Cfg: config.DefaultConfig(),
-		Marker: &node.OpMarker{Op: node.OpResize, Target: "homelab-master0", Step: node.StepPowerCycle}}
+	st := &State{
+		Cfg:    config.DefaultConfig(),
+		Marker: &node.OpMarker{Op: node.OpResize, Target: "homelab-master0", Step: node.StepPowerCycle},
+	}
 	s := NewOpStep(st)
 	if err := s.Apply(nil); err != nil { // first option = resume
 		t.Fatal(err)
@@ -58,8 +60,10 @@ func TestOpStepMarkerAddsResumeOptionAndArmsAck(t *testing.T) {
 }
 
 func TestOpStepResumeRemoveSeedsTarget(t *testing.T) {
-	st := &State{Cfg: config.DefaultConfig(),
-		Marker: &node.OpMarker{Op: node.OpRemove, Target: "homelab-worker2", Step: node.StepDrain}}
+	st := &State{
+		Cfg:    config.DefaultConfig(),
+		Marker: &node.OpMarker{Op: node.OpRemove, Target: "homelab-worker2", Step: node.StepDrain},
+	}
 	s := NewOpStep(st)
 	if err := s.Apply(nil); err != nil {
 		t.Fatal(err)

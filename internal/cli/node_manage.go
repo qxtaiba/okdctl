@@ -89,7 +89,7 @@ func runNodeManage(cmd *cobra.Command, _ []string) error {
 		},
 		CancelOp: cancelOp,
 		Execute: func(s *lifecycle.State, events chan<- lifecycle.ExecEvent) error {
-			return executeLifecycleOp(cmd, opCtx, cfg, env, s, events)
+			return executeLifecycleOp(opCtx, cmd, cfg, env, s, events)
 		},
 	}
 
@@ -115,7 +115,7 @@ func runNodeManage(cmd *cobra.Command, _ []string) error {
 // OnStep transitions) and slog goes to the okdctl.log sink only. Consent
 // was granted on the preview/confirm screens, so the runner's ConfirmFunc
 // only cross-checks that the world still matches the approved plan.
-func executeLifecycleOp(cmd *cobra.Command, opCtx context.Context, cfg *config.Config, env *nodeOpsEnv, st *lifecycle.State, events chan<- lifecycle.ExecEvent) error {
+func executeLifecycleOp(opCtx context.Context, cmd *cobra.Command, cfg *config.Config, env *nodeOpsEnv, st *lifecycle.State, events chan<- lifecycle.ExecEvent) error {
 	rc, err := env.newRunner(cmd, cfg, "manage", nodeConsent{})
 	if err != nil {
 		return err

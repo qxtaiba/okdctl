@@ -166,7 +166,7 @@ func (s *PreviewStep) View(width, height int) string {
 	var b strings.Builder
 
 	b.WriteString(wizard.RenderSection(&st, "[1] operation", s.operationEntries()))
-	b.WriteString(s.renderNodes(&st, warnStyle))
+	b.WriteString(s.renderNodes(&st, &warnStyle))
 	b.WriteString(s.renderGates(&st))
 
 	if s.st.Plan.DestroysData() {
@@ -189,8 +189,10 @@ func (s *PreviewStep) operationEntries() []wizard.KVEntry {
 	if s.st.Op == node.OpResize {
 		current := s.currentRoleMemoryMB()
 		if plan.MemoryMB > 0 && plan.MemoryMB != current {
-			entries = append(entries, wizard.KVEntry{Label: "target memory",
-				Value: fmt.Sprintf("%d → %d MiB per node", current, plan.MemoryMB)})
+			entries = append(entries, wizard.KVEntry{
+				Label: "target memory",
+				Value: fmt.Sprintf("%d → %d MiB per node", current, plan.MemoryMB),
+			})
 		}
 		cpuLine := fmt.Sprintf("%d vCPU per node", plan.CPU)
 		if plan.CPU <= 0 {
@@ -207,13 +209,15 @@ func (s *PreviewStep) operationEntries() []wizard.KVEntry {
 		entries = append(entries, wizard.KVEntry{Label: "drain timeout", Value: s.st.DrainTimeout})
 	}
 	if s.st.Op == node.OpAdd {
-		entries = append(entries, wizard.KVEntry{Label: "ignition server",
-			Value: "revived for the join window, then torn down"})
+		entries = append(entries, wizard.KVEntry{
+			Label: "ignition server",
+			Value: "revived for the join window, then torn down",
+		})
 	}
 	return entries
 }
 
-func (s *PreviewStep) renderNodes(st *wizard.SectionStyles, warnStyle lipgloss.Style) string {
+func (s *PreviewStep) renderNodes(st *wizard.SectionStyles, warnStyle *lipgloss.Style) string {
 	var b strings.Builder
 	b.WriteString(st.Header.Render("[2] nodes — execution order"))
 	b.WriteString("\n")

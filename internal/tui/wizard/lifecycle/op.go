@@ -44,12 +44,18 @@ func NewOpStep(st *State) *OpStep {
 		})
 	}
 	ops = append(ops,
-		opChoice{op: node.OpResize, title: "resize nodes",
-			desc: "change per-role cpu/memory, rolled out one node\nat a time behind etcd/ceph health gates"},
-		opChoice{op: node.OpAdd, title: "add workers",
-			desc: "build + upload a per-node iso, revive the ignition\nserver, join and wait ready"},
-		opChoice{op: node.OpRemove, title: "remove worker",
-			desc: "cordon, drain, destroy the vm, delete the node\n(highest-numbered worker only)"},
+		opChoice{
+			op: node.OpResize, title: "resize nodes",
+			desc: "change per-role cpu/memory, rolled out one node\nat a time behind etcd/ceph health gates",
+		},
+		opChoice{
+			op: node.OpAdd, title: "add workers",
+			desc: "build + upload a per-node iso, revive the ignition\nserver, join and wait ready",
+		},
+		opChoice{
+			op: node.OpRemove, title: "remove worker",
+			desc: "cordon, drain, destroy the vm, delete the node\n(highest-numbered worker only)",
+		},
 	)
 
 	titles := make([]string, len(ops))

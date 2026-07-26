@@ -15,8 +15,10 @@ import (
 func TestConfirmStepGatesOnExactClusterName(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.Cluster.Name = "homelab"
-	plan := &node.OpPlan{Op: node.OpRemove, Cluster: "homelab",
-		Nodes: []node.PlanNode{{Name: "homelab-worker2", Action: terraform.PlanActionDelete}}}
+	plan := &node.OpPlan{
+		Op: node.OpRemove, Cluster: "homelab",
+		Nodes: []node.PlanNode{{Name: "homelab-worker2", Action: terraform.PlanActionDelete}},
+	}
 	st := &State{Cfg: cfg, Op: node.OpRemove, Plan: plan, Proceed: true}
 	s := NewConfirmStep(st)
 	_ = s.Init()

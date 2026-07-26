@@ -39,7 +39,7 @@ var descRowHints = []struct{ prefix, row string }{
 // matchRow resolves an execution event to its gate-row index in rows, or
 // -1 when nothing matches. Ceph descriptions fall back to the combined
 // "uncordon + ceph" row when the standalone ceph row is absent (resize).
-func matchRow(rows []string, ev ExecEvent) int {
+func matchRow(rows []string, ev *ExecEvent) int {
 	if hint, ok := stepRowHints[ev.Step]; ok && ev.Step != "" {
 		return rowIndex(rows, hint)
 	}

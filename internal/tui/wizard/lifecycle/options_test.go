@@ -3,8 +3,10 @@ package lifecycle
 import "testing"
 
 func TestOptionsFromState(t *testing.T) {
-	st := &State{MemoryMB: 24576, CPU: 6, SkipDrain: true, Ack: true,
-		ForceStorage: true, DrainTimeout: "5m", Count: 2}
+	st := &State{
+		MemoryMB: 24576, CPU: 6, SkipDrain: true, Ack: true,
+		ForceStorage: true, DrainTimeout: "5m", Count: 2,
+	}
 
 	ro := ResizeOptionsFrom(st)
 	if ro.MemoryMB != 24576 || ro.CPU != 6 || !ro.SkipDrain || !ro.Acknowledge {
