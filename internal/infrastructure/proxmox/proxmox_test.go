@@ -117,7 +117,7 @@ func TestPlanProvisionedNodes(t *testing.T) {
 			masterCount:     3,
 			workerCount:     2,
 			cidr:            "192.168.1.0/24",
-			wantErrContains: "IP range validation failed",
+			wantErrContains: "static IP range does not fit in machine CIDR",
 		},
 	}
 

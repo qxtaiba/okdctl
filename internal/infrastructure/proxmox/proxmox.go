@@ -20,7 +20,6 @@ import (
 	"github.com/qxtaiba/okdctl/internal/infrastructure/proxmox/hostssh"
 	"github.com/qxtaiba/okdctl/internal/infrastructure/terraform"
 	"github.com/qxtaiba/okdctl/internal/logutil"
-	"github.com/qxtaiba/okdctl/internal/netutil"
 	"github.com/qxtaiba/okdctl/internal/nodetypes"
 	"github.com/qxtaiba/okdctl/internal/sshpin"
 	"github.com/qxtaiba/okdctl/internal/system"
@@ -330,40 +329,20 @@ type vmNodeSpec struct {
 // the topology and CIDR, then returns the name/IP pairs Provision logs
 // after a successful apply. It reports config-derived addresses only, with
 // no state claim — no VM's running status or API server reachability is
-// observed here.
-// IP scheme: bootstrap = start IP, masters = start+1..N, workers = start+N+1 onwards.
+// observed here. The IP scheme is owned by nodetypes.ClusterNodes.
 func (p *Provider) planProvisionedNodes(cfg *config.Config) ([]vmNodeSpec, error) {
-	startIP := cfg.Networking.StaticIP.Start
-	if startIP == "" {
+	if cfg.Networking.StaticIP.Start == "" {
 		return nil, &errtypes.ConfigError{Msg: "static IP start address is required for OKD deployments"}
 	}
 
-	totalNodes := 1 + cfg.Topology.ControlPlane.Count + cfg.Topology.Workers.Count
-	if cfg.Networking.MachineCIDR != "" {
-		if err := netutil.ValidateIPRangeInCIDR(startIP, totalNodes, cfg.Networking.MachineCIDR); err != nil {
-			return nil, &errtypes.ConfigError{Msg: "IP range validation failed", Err: err}
-		}
+	enum, err := nodetypes.ClusterNodes(cfg)
+	if err != nil {
+		return nil, err
 	}
-
-	nodes := []vmNodeSpec{{name: string(nodetypes.RoleBootstrap), ip: startIP}}
-
-	for i := range cfg.Topology.ControlPlane.Count {
-		ip, err := netutil.CalculateVMIP(startIP, 1+i)
-		if err != nil {
-			return nil, &errtypes.ConfigError{Msg: fmt.Sprintf("calculate %s%d IP", nodetypes.RoleMaster, i), Err: err}
-		}
-		nodes = append(nodes, vmNodeSpec{name: fmt.Sprintf("%s%d", nodetypes.RoleMaster, i), ip: ip})
+	nodes := make([]vmNodeSpec, len(enum))
+	for i, n := range enum {
+		nodes[i] = vmNodeSpec{name: n.Name(), ip: n.IP}
 	}
-
-	workerOffset := 1 + cfg.Topology.ControlPlane.Count
-	for i := range cfg.Topology.Workers.Count {
-		ip, err := netutil.CalculateVMIP(startIP, workerOffset+i)
-		if err != nil {
-			return nil, &errtypes.ConfigError{Msg: fmt.Sprintf("calculate %s%d IP", nodetypes.RoleWorker, i), Err: err}
-		}
-		nodes = append(nodes, vmNodeSpec{name: fmt.Sprintf("%s%d", nodetypes.RoleWorker, i), ip: ip})
-	}
-
 	return nodes, nil
 }
 

@@ -18,7 +18,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/templates"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
-	"github.com/qxtaiba/okdctl/internal/netutil"
+	"github.com/qxtaiba/okdctl/internal/nodetypes"
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
@@ -47,9 +47,8 @@ func buildConfigData(cfg *config.Config) (templates.DNSConfigData, error) {
 		return templates.DNSConfigData{}, &errtypes.ConfigError{Msg: "static IP start is required"}
 	}
 
-	// Mirrors the check in setup/nodes.go so the two paths stay in lockstep.
-	totalNodes := 1 + cfg.Topology.ControlPlane.Count + cfg.Topology.Workers.Count
-	if err := netutil.ValidateIPRangeInCIDR(staticIPStart, totalNodes, cfg.Networking.MachineCIDR); err != nil {
+	enum, err := nodetypes.ClusterNodes(cfg)
+	if err != nil {
 		return templates.DNSConfigData{}, err
 	}
 
@@ -66,36 +65,19 @@ func buildConfigData(cfg *config.Config) (templates.DNSConfigData, error) {
 		UpstreamDNS:   cfg.Networking.DNS,
 	}
 
-	bootstrapIP, err := netutil.CalculateVMIP(staticIPStart, 0)
-	if err != nil {
-		return templates.DNSConfigData{}, fmt.Errorf("calculate bootstrap IP: %w", err)
-	}
-	data.BootstrapNode = templates.DNSNode{
-		Name: fmt.Sprintf("%s-bootstrap", cfg.Cluster.Name),
-		IP:   bootstrapIP,
-	}
-
-	for i := range cfg.Topology.ControlPlane.Count {
-		ip, err := netutil.CalculateVMIP(staticIPStart, i+1)
-		if err != nil {
-			return templates.DNSConfigData{}, fmt.Errorf("calculate master%d IP: %w", i, err)
+	for _, n := range enum {
+		node := templates.DNSNode{
+			Name: fmt.Sprintf("%s-%s", cfg.Cluster.Name, n.Name()),
+			IP:   n.IP,
 		}
-		data.MasterNodes = append(data.MasterNodes, templates.DNSNode{
-			Name: fmt.Sprintf("%s-master%d", cfg.Cluster.Name, i),
-			IP:   ip,
-		})
-	}
-
-	workerStartIndex := cfg.Topology.ControlPlane.Count + 1
-	for i := range cfg.Topology.Workers.Count {
-		ip, err := netutil.CalculateVMIP(staticIPStart, workerStartIndex+i)
-		if err != nil {
-			return templates.DNSConfigData{}, fmt.Errorf("calculate worker%d IP: %w", i, err)
+		switch n.Role {
+		case nodetypes.RoleBootstrap:
+			data.BootstrapNode = node
+		case nodetypes.RoleMaster:
+			data.MasterNodes = append(data.MasterNodes, node)
+		case nodetypes.RoleWorker:
+			data.WorkerNodes = append(data.WorkerNodes, node)
 		}
-		data.WorkerNodes = append(data.WorkerNodes, templates.DNSNode{
-			Name: fmt.Sprintf("%s-worker%d", cfg.Cluster.Name, i),
-			IP:   ip,
-		})
 	}
 
 	return data, nil
