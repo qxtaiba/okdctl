@@ -1245,7 +1245,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `api:2be6306e:export-no-caller-scaffolding` — export no caller scaffolding
 
-**Status:** verified-intent (kept) — addon verb family actively growing under R1; annotation recorded via PR #910
+**Status:** deferred (scaffolding verified 2026-07-11 — annotation already present via 8d17082; PR #910 records it)
 **Severity:** suggestion
 **Cluster:** exported-surface
 **Evidence:** `internal/addon/registry.go:86-94`
@@ -1443,7 +1443,7 @@ Recurring findings already tracked in earlier tiers (entries NOT duplicated here
 
 ##### `smell:2c4d8e6b:interfaceany-lazy-exported` — interfaceany lazy exported
 
-**Status:** verified-intent, conditional on R1 — same evidence as api:2c4d8e6b; interface doc should cite R1 by ID
+**Status:** done — PR #910
 **Severity:** suggestion
 **Cluster:** interfaceany-lazy — seam→audit-api-design
 **Evidence:** `internal/addon/addon.go:58-58` + 4 more
@@ -3610,7 +3610,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `api:2be6306e:export-no-caller-scaffolding` — export no caller scaffolding
 
-**Status:** not started
+**Status:** verified-intent (kept) — addon verb family actively growing under R1; annotation recorded via PR #910
 **Severity:** suggestion
 **Cluster:** exported-surface
 **Evidence:** `internal/addon/registry.go:85-92`
@@ -4618,7 +4618,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `smell:2c4d8e6b:interfaceany-lazy-exported` — interfaceany lazy exported
 
-**Status:** not started
+**Status:** verified-intent, conditional on R1 — same evidence as api:2c4d8e6b; interface doc should cite R1 by ID
 **Severity:** suggestion
 **Cluster:** interfaceany-lazy — seam→api-design — related: api:2c4d8e6b:export-no-caller-scaffolding
 **Evidence:** `internal/addon/addon.go:55-64` + 2 more
