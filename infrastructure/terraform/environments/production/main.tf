@@ -35,6 +35,7 @@ module "okd_cluster" {
   master_cpu_cores         = var.master_cpu_cores
   master_memory_mb         = var.master_memory_mb
   master_data_disk_size_gb = var.master_data_disk_size_gb
+  master_mon_disk_size_gb  = var.master_mon_disk_size_gb
 
   vm_tags = var.vm_tags
 
