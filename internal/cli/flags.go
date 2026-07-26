@@ -37,6 +37,7 @@ const (
 	cmdNameDeploy  = "deploy"
 	cmdNameDestroy = "destroy"
 	cmdNameCleanup = "cleanup"
+	cmdNameManage  = "manage"
 	cmdNameList    = "list"
 )
 

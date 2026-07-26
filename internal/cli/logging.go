@@ -38,7 +38,7 @@ var runLogSink io.Writer
 // workspace; read-only commands (status, version, releases) must not start
 // writing files. Matching walks the cobra parent chain, mirroring
 // rootRequiredCmds.
-var defaultLogSinkCmds = []string{cmdNameDeploy, cmdNameDestroy, cmdNameCleanup}
+var defaultLogSinkCmds = []string{cmdNameDeploy, cmdNameDestroy, cmdNameCleanup, cmdNameManage}
 
 func wantsDefaultLogSink(cmd *cobra.Command) bool {
 	for c := cmd; c != nil; c = c.Parent() {

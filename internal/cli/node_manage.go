@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"time"
@@ -15,6 +16,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/clusterstatus"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
+	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/node"
 	"github.com/qxtaiba/okdctl/internal/render"
 	"github.com/qxtaiba/okdctl/internal/tui"
@@ -64,6 +66,11 @@ func runNodeManage(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
+	// opCtx is cancelled by the execution screen's graceful-cancel path
+	// (first ctrl+c); the backend unwinds and leaves its resume marker.
+	opCtx, cancelOp := context.WithCancel(ctx)
+	defer cancelOp()
+
 	st := &lifecycle.State{Cfg: cfg, Marker: marker}
 	hooks := lifecycle.Hooks{
 		ListNodes: func() ([]cluster.NodeDetail, error) { return cl.ListNodes(ctx) },
@@ -80,6 +87,10 @@ func runNodeManage(cmd *cobra.Command, _ []string) error {
 			}
 			return captured, nil
 		},
+		CancelOp: cancelOp,
+		Execute: func(s *lifecycle.State, events chan<- lifecycle.ExecEvent) error {
+			return executeLifecycleOp(cmd, opCtx, cfg, env, s, events)
+		},
 	}
 
 	result, err := wizard.RunFlow(ctx, lifecycle.NewSteps(st, hooks), cfg, lifecycleChrome())
@@ -90,15 +101,21 @@ func runNodeManage(cmd *cobra.Command, _ []string) error {
 		tui.Info("no changes made")
 		return nil
 	}
-
-	return executeLifecycleOp(cmd, cfg, env, st)
+	if st.Result != nil {
+		return st.Result
+	}
+	if st.Plan != nil {
+		fmt.Fprint(cmd.OutOrStdout(), render.NodeOpComplete(st.Plan, st.Elapsed))
+	}
+	return nil
 }
 
-// executeLifecycleOp runs the wizard-approved operation on the plain
-// terminal (spinners + informed box), with consent collapsed into the
-// wizard screens: the runner's ConfirmFunc only cross-checks that the
-// world still matches the plan the operator approved.
-func executeLifecycleOp(cmd *cobra.Command, cfg *config.Config, env *nodeOpsEnv, st *lifecycle.State) error {
+// executeLifecycleOp runs the wizard-approved operation inside the TUI's
+// AltScreen: progress flows over the event channel (Reporter spans +
+// OnStep transitions) and slog goes to the okdctl.log sink only. Consent
+// was granted on the preview/confirm screens, so the runner's ConfirmFunc
+// only cross-checks that the world still matches the approved plan.
+func executeLifecycleOp(cmd *cobra.Command, opCtx context.Context, cfg *config.Config, env *nodeOpsEnv, st *lifecycle.State, events chan<- lifecycle.ExecEvent) error {
 	rc, err := env.newRunner(cmd, cfg, "manage", nodeConsent{})
 	if err != nil {
 		return err
@@ -106,25 +123,35 @@ func executeLifecycleOp(cmd *cobra.Command, cfg *config.Config, env *nodeOpsEnv,
 	defer rc.cleanup()
 
 	approved := st.Plan
-	errW := cmd.ErrOrStderr()
 	rc.runner.Confirm = func(_ context.Context, p *node.OpPlan) (bool, error) {
-		rc.captured = p
-		fmt.Fprint(errW, render.NodeOpConfirm(p))
-		if !lifecycle.PlansEquivalent(approved, p) {
-			return false, &errtypes.ClusterError{Msg: "the cluster changed since the preview — re-run 'okdctl node manage' to re-plan"}
-		}
-		return true, nil
+		return lifecycle.PlansEquivalent(approved, p), nil
 	}
+	rc.runner.Reporter = func(desc string) func() {
+		start := time.Now()
+		events <- lifecycle.ExecEvent{Desc: desc}
+		return func() { events <- lifecycle.ExecEvent{Desc: desc, Done: true, Took: time.Since(start)} }
+	}
+	rc.runner.OnStep = func(target string, step node.Step) {
+		events <- lifecycle.ExecEvent{Node: target, Step: step}
+	}
+	rc.runner.Log = fileOnlySlog()
 
-	start := time.Now()
-	if err := runLifecycleOp(cmd.Context(), rc, st); err != nil {
+	if err := runLifecycleOp(opCtx, rc, st); err != nil {
 		if errors.Is(err, node.ErrDeclined) {
-			return nil
+			return &errtypes.ClusterError{Msg: "the cluster changed since the preview — re-run 'okdctl node manage' to re-plan"}
 		}
 		return err
 	}
-	rc.complete(cmd.OutOrStdout(), time.Since(start))
 	return nil
+}
+
+// fileOnlySlog returns a redact-wrapped slog writing only to the okdctl.log
+// sink — never stderr, which the AltScreen wizard owns during execution.
+func fileOnlySlog() *slog.Logger {
+	if runLogSink == nil {
+		return logutil.NopLogger
+	}
+	return slog.New(logutil.NewRedactHandler(slog.NewTextHandler(runLogSink, nil)))
 }
 
 // runLifecycleOp dispatches the wizard-collected operation onto the
