@@ -52,7 +52,11 @@ func NewOptions(cfg *config.Config, projectRoot string) Options {
 }
 
 // Phase drives the destroy flow: terraform destroy, host-file cleanup,
-// firewall teardown, and ISO removal.
+// firewall teardown, and ISO removal. Unlike setup/install/postinstall it
+// deliberately exposes no StepDefs listing: Provisioner.DeploySteps covers
+// only the phases deploy runs, and the authoritative destroy preview is
+// the terraform destroy plan (okdctl destroy --dry-run), not a static
+// step list.
 type Phase struct {
 	phase.BasePhase
 }

@@ -26,8 +26,16 @@ import (
 )
 
 // Provisioner orchestrates the OKD distribution's phase packages (setup,
-// install, postinstall, destroy). Construct via New with functional options;
-// the zero value is not usable.
+// install, postinstall, destroy, cleanup). Construct via New with
+// functional options; the zero value is not usable.
+//
+// Options convention: Setup takes the facade-owned SetupOpts because it
+// encodes wipe-guard consent rather than phase tuning; Install, Destroy,
+// UpdateIngress, and Cleanup pass their phase package's Options through
+// unchanged so there is no CLI-facing mirror type to keep in sync.
+// PostInstall's bare keepRedHatCatalogs bool is grandfathered — fold it
+// into an options struct when a second knob lands rather than adding a
+// second positional flag.
 type Provisioner struct {
 	projectRoot string
 	executor    *executor.Executor

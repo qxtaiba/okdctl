@@ -109,7 +109,11 @@ func NewOptions(cfg *config.Config, projectRoot string, kind Kind) Options {
 	}
 }
 
-// Phase drives a cleanup run.
+// Phase drives a cleanup run. Like destroy it deliberately exposes no
+// StepDefs listing (okdctl cleanup --dry-run previews targets at the CLI
+// layer), and Execute takes no cfg and returns no StepResults: every input
+// the steps need is carried on Options, and per-step outcomes surface as
+// the summary step's joined error.
 type Phase struct {
 	phase.BasePhase
 }
