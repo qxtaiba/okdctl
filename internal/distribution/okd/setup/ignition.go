@@ -138,10 +138,40 @@ func IgnitionSentinel(clusterDir string) string {
 	return filepath.Join(clusterDir, ".ignition.complete")
 }
 
+// manifestsGenerated reports whether create manifests completed for
+// clusterDir. The ignition sentinel alone is proof: create ignition-configs
+// consumes manifests/ (taking ManifestsSentinel with it), so a resume after
+// a completed generate-ignition must not re-run create manifests.
+func manifestsGenerated(clusterDir string) bool {
+	if system.FileExists(IgnitionSentinel(clusterDir)) {
+		return true
+	}
+	return system.DirExists(filepath.Join(clusterDir, "manifests")) &&
+		system.FileExists(ManifestsSentinel(clusterDir))
+}
+
+// restoreInstallConfigFromBackup re-materializes install-config.yaml from
+// its .backup when a prior run consumed it: openshift-install deletes the
+// file during create manifests, so a resume that re-runs the step would
+// otherwise hard-fail with no install-config. No-op when the original is
+// present or no backup exists.
+func restoreInstallConfigFromBackup(clusterDir string) error {
+	outputPath := filepath.Join(clusterDir, "install-config.yaml")
+	backupPath := outputPath + ".backup"
+	if system.FileExists(outputPath) || !system.FileExists(backupPath) {
+		return nil
+	}
+	return system.CopyFileMode(backupPath, outputPath, 0o600)
+}
+
 // GenerateManifests invokes "openshift-install create manifests" to expand
 // install-config.yaml into the full manifest set under clusterDir, then
 // writes ManifestsSentinel to mark a clean completion.
 func (p *Phase) GenerateManifests(ctx context.Context, clusterDir string) error {
+	if err := restoreInstallConfigFromBackup(clusterDir); err != nil {
+		return &errtypes.ConfigError{Msg: "restore install-config.yaml from backup", Err: err}
+	}
+
 	_, err := p.Exec.RunChecked(ctx, openshiftInstallBin, "create", "manifests", "--dir", clusterDir)
 	if err != nil {
 		return &errtypes.ClusterError{Msg: "openshift-install create manifests failed", Err: err}

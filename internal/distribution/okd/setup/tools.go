@@ -222,7 +222,8 @@ func (p *Phase) installBinary(ctx context.Context, spec *binaryInstallSpec) erro
 	}
 
 	tempFile, err := system.WriteTempFile(spec.name+"-download-*", 0o600, func(f *os.File) error {
-		return download.Fetch(ctx, spec.url, f.Name(),
+		return download.Fetch(
+			ctx, spec.url, f.Name(),
 			download.WithFetchChecksum(expectedChecksum),
 			download.WithDescription(spec.name),
 			download.WithTimeout(2*time.Minute),
@@ -242,7 +243,8 @@ func (p *Phase) installBinary(ctx context.Context, spec *binaryInstallSpec) erro
 			return fmt.Errorf("create extract directory: %w", err)
 		}
 		defer func() { _ = os.RemoveAll(extractDir) }()
-		if err := download.ExtractTarGz(ctx, tempFile, extractDir,
+		if err := download.ExtractTarGz(
+			ctx, tempFile, extractDir,
 			download.WithExtractStripComponents(spec.stripComponents),
 			download.WithExtractCleanupArchive(true),
 			download.WithExtractLogger(p.Log),
@@ -365,7 +367,8 @@ func installHashiCorpDebianRepo(ctx context.Context, codename string) error {
 }
 
 func verifyHashiCorpGPGFingerprint(ctx context.Context, armoredKeyPath string) error {
-	out, err := executor.OutputCaptured(ctx,
+	out, err := executor.OutputCaptured(
+		ctx,
 		"gpg", "--with-fingerprint", "--with-colons",
 		"--import-options", "show-only", "--import", armoredKeyPath,
 	)

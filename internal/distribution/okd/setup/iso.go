@@ -22,7 +22,8 @@ import (
 // content to avoid hashing a multi-GB file on every invocation.
 func nodeISOFingerprint(liveKargs, destKargs []string, sshKey, basePath string) string {
 	h := sha256.New()
-	_, _ = fmt.Fprintf(h, "%s\x00%s\x00%s\x00%s",
+	_, _ = fmt.Fprintf(
+		h, "%s\x00%s\x00%s\x00%s",
 		strings.Join(liveKargs, "\x1f"),
 		strings.Join(destKargs, "\x1f"),
 		sshKey,
@@ -260,7 +261,8 @@ func (p *Phase) buildNodeISO(ctx context.Context, cfg *config.Config, node NodeI
 		return err
 	}
 	defer func() { _ = os.Remove(triggerPath) }()
-	args = append(args,
+	args = append(
+		args,
 		"--live-ignition", triggerPath,
 		"--pre-install", scriptPath,
 		"-o", outputPath, fcosISO,

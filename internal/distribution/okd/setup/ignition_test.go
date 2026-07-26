@@ -159,3 +159,94 @@ func TestGenerateInstallConfig_SymlinkRejected(t *testing.T) {
 		t.Errorf("ssh-key symlink: error type = %T, want *errtypes.ConfigError", err)
 	}
 }
+
+func TestManifestsGenerated(t *testing.T) {
+	t.Run("nothing present", func(t *testing.T) {
+		if manifestsGenerated(t.TempDir()) {
+			t.Error("empty cluster dir must not count as generated")
+		}
+	})
+	t.Run("manifests dir without sentinel", func(t *testing.T) {
+		dir := t.TempDir()
+		if err := os.MkdirAll(filepath.Join(dir, "manifests"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if manifestsGenerated(dir) {
+			t.Error("partial manifests dir must not count as generated")
+		}
+	})
+	t.Run("manifests dir with sentinel", func(t *testing.T) {
+		dir := t.TempDir()
+		if err := os.MkdirAll(filepath.Join(dir, "manifests"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(ManifestsSentinel(dir), nil, 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if !manifestsGenerated(dir) {
+			t.Error("manifests dir + sentinel must count as generated")
+		}
+	})
+	t.Run("ignition sentinel after manifests consumed", func(t *testing.T) {
+		dir := t.TempDir()
+		if err := os.WriteFile(IgnitionSentinel(dir), nil, 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if !manifestsGenerated(dir) {
+			t.Error("resume after create ignition-configs must treat manifests as generated")
+		}
+	})
+}
+
+func TestRestoreInstallConfigFromBackup(t *testing.T) {
+	t.Run("restores from backup when original consumed", func(t *testing.T) {
+		dir := t.TempDir()
+		backupPath := filepath.Join(dir, "install-config.yaml.backup")
+		if err := os.WriteFile(backupPath, []byte("kind: InstallConfig"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := restoreInstallConfigFromBackup(dir); err != nil {
+			t.Fatalf("restore: %v", err)
+		}
+		restored := filepath.Join(dir, "install-config.yaml")
+		data, err := os.ReadFile(restored)
+		if err != nil {
+			t.Fatalf("read restored file: %v", err)
+		}
+		if string(data) != "kind: InstallConfig" {
+			t.Errorf("restored content = %q, want backup content", data)
+		}
+		info, err := os.Stat(restored)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if perm := info.Mode().Perm(); perm != 0o600 {
+			t.Errorf("restored perm = %04o, want 0600", perm)
+		}
+	})
+	t.Run("original present is untouched", func(t *testing.T) {
+		dir := t.TempDir()
+		original := filepath.Join(dir, "install-config.yaml")
+		if err := os.WriteFile(original, []byte("original"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(original+".backup", []byte("backup"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := restoreInstallConfigFromBackup(dir); err != nil {
+			t.Fatalf("restore: %v", err)
+		}
+		data, err := os.ReadFile(original)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(data) != "original" {
+			t.Errorf("original content = %q, want %q", data, "original")
+		}
+	})
+	t.Run("no backup is a no-op", func(t *testing.T) {
+		if err := restoreInstallConfigFromBackup(t.TempDir()); err != nil {
+			t.Fatalf("restore: %v", err)
+		}
+	})
+}

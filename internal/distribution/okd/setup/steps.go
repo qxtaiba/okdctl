@@ -159,10 +159,10 @@ func (p *Phase) setupManifestSteps(cfg *config.Config, opts *Options, clusterDir
 			Desc:      "generating kubernetes manifests",
 			// manifests/ directory alone is unsafe: openshift-install can exit
 			// non-zero mid-write, leaving a partial directory the next run sees
-			// as "already done". Require both directory + .complete sentinel.
+			// as "already done". Require directory + .complete sentinel, or the
+			// ignition sentinel once create ignition-configs consumed manifests/.
 			AlreadyDone: func(_ context.Context) (bool, error) {
-				return system.DirExists(filepath.Join(clusterDir, "manifests")) &&
-					system.FileExists(ManifestsSentinel(clusterDir)), nil
+				return manifestsGenerated(clusterDir), nil
 			},
 			Exec: func(ctx context.Context) error {
 				if err := p.GenerateManifests(ctx, clusterDir); err != nil {
