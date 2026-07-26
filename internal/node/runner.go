@@ -193,6 +193,11 @@ type Runner struct {
 	Confirm ConfirmFunc
 	Preview PreviewFunc
 
+	// OnStep, when non-nil, observes each mutating step just before its
+	// marker is written — the structured progress feed the TUI execution
+	// screen consumes. Purely observational; errors never flow back.
+	OnStep func(target string, step Step)
+
 	// preConsented suppresses the confirm gate for ops composed under a consent
 	// already granted at a higher level (compact's RemoveWorker/Resize inner
 	// calls). Set for the duration of the composed sequence and restored after;
@@ -267,6 +272,14 @@ func NewRunner(cl *cluster.Client, tf *terraform.Executor, cfg *config.Config, o
 }
 
 func (r *Runner) marker() string { return markerPath(r.WorkDir) }
+
+// mark notifies OnStep and writes the op marker for a mutating step.
+func (r *Runner) mark(op Op, target string, step Step) error {
+	if r.OnStep != nil {
+		r.OnStep(target, step)
+	}
+	return markStep(r.marker(), op, target, step, r.RunID, r.Cfg.Cluster.Name)
+}
 
 // startProgress starts r.Reporter for desc, unless dry-run — a dry-run must
 // stay visually silent even for gates that run ahead of the dry-run branch
