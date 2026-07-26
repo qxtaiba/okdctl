@@ -212,3 +212,14 @@ func TestNodeOpCompleteStartUsesStartedVerb(t *testing.T) {
 		}
 	}
 }
+
+func TestNodeOpNextStepsPerOp(t *testing.T) {
+	for _, op := range []node.Op{node.OpAdd, node.OpRemove, node.OpResize} {
+		if len(NodeOpNextSteps(&node.OpPlan{Op: op})) == 0 {
+			t.Errorf("op %s must have next steps", op)
+		}
+	}
+	if NodeOpNextSteps(&node.OpPlan{Op: node.Op("bogus")}) != nil {
+		t.Error("unknown op must return nil")
+	}
+}
