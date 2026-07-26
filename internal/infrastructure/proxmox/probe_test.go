@@ -1,9 +1,18 @@
 package proxmox
 
 import (
+	"bytes"
+	"errors"
+	"log/slog"
+	"net/http"
+	"net/url"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/luthermonson/go-proxmox"
+
+	"github.com/qxtaiba/okdctl/internal/httputil"
 )
 
 func TestSelectNodeMem(t *testing.T) {
@@ -85,5 +94,92 @@ func TestNewProbeClientRequiresCreds(t *testing.T) {
 	}
 	if _, err := newProbeClient(&ProbeOptions{Endpoint: "https://pve:8006", Node: "pve", APIToken: []byte("user@pam!t=secret")}, defaultProbeTimeout); err != nil {
 		t.Fatalf("valid token should build client: %v", err)
+	}
+}
+
+func redirectReq(t *testing.T, host string, withAuth bool) *http.Request {
+	t.Helper()
+	u, err := url.Parse("https://" + host + "/api2/json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := &http.Request{URL: u, Header: http.Header{}}
+	if withAuth {
+		req.Header.Set("Authorization", "PVEAPIToken=user@pam!t=secret")
+	}
+	return req
+}
+
+func redirectVia(t *testing.T, n int, host string) []*http.Request {
+	t.Helper()
+	via := make([]*http.Request, n)
+	for i := range via {
+		via[i] = redirectReq(t, host, false)
+	}
+	return via
+}
+
+// TestCapAPIRedirects pins the policy mirrored from httputil: 5-hop cap and
+// cross-host Authorization refusal — the load-bearing guard for the
+// credentialed go-proxmox client.
+func TestCapAPIRedirects(t *testing.T) {
+	if err := capAPIRedirects(redirectReq(t, "pve.example", false), redirectVia(t, 1, "pve.example")); err != nil {
+		t.Errorf("same-host hop 1 refused: %v", err)
+	}
+	if err := capAPIRedirects(redirectReq(t, "pve.example", false), redirectVia(t, 5, "pve.example")); !errors.Is(err, httputil.ErrTooManyRedirects) {
+		t.Errorf("hop 5 = %v; want ErrTooManyRedirects", err)
+	}
+	if err := capAPIRedirects(redirectReq(t, "evil.example", true), redirectVia(t, 1, "pve.example")); !errors.Is(err, httputil.ErrCrossHostAuthHeader) {
+		t.Errorf("cross-host with auth = %v; want ErrCrossHostAuthHeader", err)
+	}
+	if err := capAPIRedirects(redirectReq(t, "mirror.example", false), redirectVia(t, 1, "pve.example")); err != nil {
+		t.Errorf("cross-host without auth refused: %v", err)
+	}
+}
+
+func TestNewAPIHTTPClientInstallsRedirectCap(t *testing.T) {
+	c := newAPIHTTPClient(true, 3*time.Second)
+	if c.CheckRedirect == nil {
+		t.Error("CheckRedirect not installed; redirect cap policy is missing")
+	}
+	if c.Timeout != 3*time.Second {
+		t.Errorf("Timeout = %v; want 3s", c.Timeout)
+	}
+	tr, ok := c.Transport.(*http.Transport)
+	if !ok {
+		t.Fatalf("Transport = %T; want *http.Transport", c.Transport)
+	}
+	if !tr.TLSClientConfig.InsecureSkipVerify {
+		t.Error("insecure=true not carried into TLSClientConfig")
+	}
+	if newAPIHTTPClient(false, time.Second).Transport.(*http.Transport).TLSClientConfig.InsecureSkipVerify {
+		t.Error("insecure=false must keep TLS verification on")
+	}
+}
+
+// TestNewProxmoxClientWarnsOnInsecureOnce asserts the connection-time
+// warning for insecure: true fires, and only once per process — repeats
+// from per-operation client builds would be noise.
+func TestNewProxmoxClientWarnsOnInsecureOnce(t *testing.T) {
+	var buf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+
+	build := func() {
+		t.Helper()
+		if _, err := newProxmoxClient("https://pve:8006", "", nil, []byte("user@pam!t=secret"), true, time.Second); err != nil {
+			t.Fatalf("newProxmoxClient: %v", err)
+		}
+	}
+
+	build()
+	if !strings.Contains(buf.String(), "tls verification disabled") {
+		t.Fatalf("expected insecure tls warning, log = %q", buf.String())
+	}
+	buf.Reset()
+	build()
+	if strings.Contains(buf.String(), "tls verification disabled") {
+		t.Errorf("warning must fire once per process, log = %q", buf.String())
 	}
 }
