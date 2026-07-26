@@ -160,18 +160,35 @@ func TestClientCordon_ArgvShape(t *testing.T) {
 	}
 }
 
-func TestClientCordon_NonZeroExitWrapsClusterError(t *testing.T) {
-	installFakeOCGeneric(t)
-	t.Setenv("OC_EXIT_CODE", "1")
-	c := New(WithCLI("oc"), WithExecutor(executor.New()))
-
-	err := c.Cordon(context.Background(), "worker0")
-	if err == nil {
-		t.Fatal("expected error on non-zero exit")
+func TestClientNonZeroExitWrapsClusterError(t *testing.T) {
+	cases := []struct {
+		name string
+		call func(ctx context.Context, c *Client) error
+	}{
+		{"Cordon", func(ctx context.Context, c *Client) error { return c.Cordon(ctx, "worker0") }},
+		{"Uncordon", func(ctx context.Context, c *Client) error { return c.Uncordon(ctx, "worker0") }},
+		{"Drain", func(ctx context.Context, c *Client) error { return c.Drain(ctx, "worker0", DrainOptions{}) }},
+		{"DeleteNode", func(ctx context.Context, c *Client) error { return c.DeleteNode(ctx, "worker0") }},
+		{"SetMastersSchedulable", func(ctx context.Context, c *Client) error { return c.SetMastersSchedulable(ctx, false) }},
+		{"ListNodes", func(ctx context.Context, c *Client) error { _, err := c.ListNodes(ctx); return err }},
+		{"PodsForSelector", func(ctx context.Context, c *Client) error { _, err := c.PodsForSelector(ctx, "", ""); return err }},
+		{"Apply", func(ctx context.Context, c *Client) error { return c.Apply(ctx, []byte(`{}`)) }},
 	}
-	var ce *errtypes.ClusterError
-	if !errors.As(err, &ce) {
-		t.Fatalf("err is %T; want *errtypes.ClusterError", err)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			installFakeOCGeneric(t)
+			t.Setenv("OC_EXIT_CODE", "1")
+			c := New(WithCLI("oc"), WithExecutor(executor.New()))
+
+			err := tc.call(context.Background(), c)
+			if err == nil {
+				t.Fatal("expected error on non-zero exit")
+			}
+			var ce *errtypes.ClusterError
+			if !errors.As(err, &ce) {
+				t.Fatalf("err is %T; want *errtypes.ClusterError", err)
+			}
+		})
 	}
 }
 
@@ -184,21 +201,6 @@ func TestClientUncordon_ArgvShape(t *testing.T) {
 	}
 	if got, want := readArgvLog(t, argvLog), "adm uncordon worker0"; got != want {
 		t.Errorf("argv = %q; want %q", got, want)
-	}
-}
-
-func TestClientUncordon_NonZeroExitWrapsClusterError(t *testing.T) {
-	installFakeOCGeneric(t)
-	t.Setenv("OC_EXIT_CODE", "1")
-	c := New(WithCLI("oc"), WithExecutor(executor.New()))
-
-	err := c.Uncordon(context.Background(), "worker0")
-	if err == nil {
-		t.Fatal("expected error on non-zero exit")
-	}
-	var ce *errtypes.ClusterError
-	if !errors.As(err, &ce) {
-		t.Fatalf("err is %T; want *errtypes.ClusterError", err)
 	}
 }
 
@@ -233,21 +235,6 @@ func TestClientDrain_ArgvShape_NoOptions(t *testing.T) {
 	}
 }
 
-func TestClientDrain_NonZeroExitWrapsClusterError(t *testing.T) {
-	installFakeOCGeneric(t)
-	t.Setenv("OC_EXIT_CODE", "1")
-	c := New(WithCLI("oc"), WithExecutor(executor.New()))
-
-	err := c.Drain(context.Background(), "worker0", DrainOptions{})
-	if err == nil {
-		t.Fatal("expected error on non-zero exit")
-	}
-	var ce *errtypes.ClusterError
-	if !errors.As(err, &ce) {
-		t.Fatalf("err is %T; want *errtypes.ClusterError", err)
-	}
-}
-
 func TestClientDeleteNode_ArgvShape(t *testing.T) {
 	argvLog, _ := installFakeOCGeneric(t)
 	c := New(WithCLI("oc"), WithExecutor(executor.New()))
@@ -257,21 +244,6 @@ func TestClientDeleteNode_ArgvShape(t *testing.T) {
 	}
 	if got, want := readArgvLog(t, argvLog), "delete node worker0 --ignore-not-found"; got != want {
 		t.Errorf("argv = %q; want %q", got, want)
-	}
-}
-
-func TestClientDeleteNode_NonZeroExitWrapsClusterError(t *testing.T) {
-	installFakeOCGeneric(t)
-	t.Setenv("OC_EXIT_CODE", "1")
-	c := New(WithCLI("oc"), WithExecutor(executor.New()))
-
-	err := c.DeleteNode(context.Background(), "worker0")
-	if err == nil {
-		t.Fatal("expected error on non-zero exit")
-	}
-	var ce *errtypes.ClusterError
-	if !errors.As(err, &ce) {
-		t.Fatalf("err is %T; want *errtypes.ClusterError", err)
 	}
 }
 
@@ -285,21 +257,6 @@ func TestClientSetMastersSchedulable_ArgvShape(t *testing.T) {
 	want := `patch schedulers.config.openshift.io cluster --type=merge -p {"spec":{"mastersSchedulable":true}}`
 	if got := readArgvLog(t, argvLog); got != want {
 		t.Errorf("argv = %q; want %q", got, want)
-	}
-}
-
-func TestClientSetMastersSchedulable_NonZeroExitWrapsClusterError(t *testing.T) {
-	installFakeOCGeneric(t)
-	t.Setenv("OC_EXIT_CODE", "1")
-	c := New(WithCLI("oc"), WithExecutor(executor.New()))
-
-	err := c.SetMastersSchedulable(context.Background(), false)
-	if err == nil {
-		t.Fatal("expected error on non-zero exit")
-	}
-	var ce *errtypes.ClusterError
-	if !errors.As(err, &ce) {
-		t.Fatalf("err is %T; want *errtypes.ClusterError", err)
 	}
 }
 
@@ -317,21 +274,6 @@ func TestClientListNodes_FakeOC(t *testing.T) {
 	}
 	if len(nodes) != 1 || nodes[0].Name != "master0" || !nodes[0].Ready {
 		t.Errorf("unexpected nodes: %+v", nodes)
-	}
-}
-
-func TestClientListNodes_NonZeroExitWrapsClusterError(t *testing.T) {
-	installFakeOCGeneric(t)
-	t.Setenv("OC_EXIT_CODE", "1")
-	c := New(WithCLI("oc"), WithExecutor(executor.New()))
-
-	_, err := c.ListNodes(context.Background())
-	if err == nil {
-		t.Fatal("expected error on non-zero exit")
-	}
-	var ce *errtypes.ClusterError
-	if !errors.As(err, &ce) {
-		t.Fatalf("err is %T; want *errtypes.ClusterError", err)
 	}
 }
 
@@ -367,21 +309,6 @@ func TestClientPodsForSelector_ArgvShape_Namespaced(t *testing.T) {
 	}
 }
 
-func TestClientPodsForSelector_NonZeroExitWrapsClusterError(t *testing.T) {
-	installFakeOCGeneric(t)
-	t.Setenv("OC_EXIT_CODE", "1")
-	c := New(WithCLI("oc"), WithExecutor(executor.New()))
-
-	_, err := c.PodsForSelector(context.Background(), "", "")
-	if err == nil {
-		t.Fatal("expected error on non-zero exit")
-	}
-	var ce *errtypes.ClusterError
-	if !errors.As(err, &ce) {
-		t.Fatalf("err is %T; want *errtypes.ClusterError", err)
-	}
-}
-
 func TestClientApply_ArgvShapeAndStdin(t *testing.T) {
 	argvLog, stdinLog := installFakeOCGeneric(t)
 	c := New(WithCLI("oc"), WithExecutor(executor.New()))
@@ -399,20 +326,5 @@ func TestClientApply_ArgvShapeAndStdin(t *testing.T) {
 	}
 	if !bytes.Equal(data, manifest) {
 		t.Errorf("stdin = %q; want %q", data, manifest)
-	}
-}
-
-func TestClientApply_NonZeroExitWrapsClusterError(t *testing.T) {
-	installFakeOCGeneric(t)
-	t.Setenv("OC_EXIT_CODE", "1")
-	c := New(WithCLI("oc"), WithExecutor(executor.New()))
-
-	err := c.Apply(context.Background(), []byte(`{}`))
-	if err == nil {
-		t.Fatal("expected error on non-zero exit")
-	}
-	var ce *errtypes.ClusterError
-	if !errors.As(err, &ce) {
-		t.Fatalf("err is %T; want *errtypes.ClusterError", err)
 	}
 }
