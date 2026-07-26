@@ -45,13 +45,15 @@ func (r *Runner) preflightIgnitionArtifacts() error {
 	ignPath := filepath.Join(phase.ClusterConfigDir(r.WorkDir), "worker.ign")
 	if !system.FileExists(ignPath) {
 		return &errtypes.ConfigError{Msg: fmt.Sprintf(
-			"worker.ign not found at %s; re-run setup (e.g. 'okdctl deploy') to regenerate it before adding a node", ignPath)}
+			"worker.ign not found at %s; re-run setup (e.g. 'okdctl deploy') to regenerate it before adding a node", ignPath,
+		)}
 	}
 
 	certPath, _ := setup.IgnitionCertPaths(r.ProjectRoot)
 	if !system.FileExists(certPath) {
 		return &errtypes.ConfigError{Msg: fmt.Sprintf(
-			"ignition tls cert not found at %s; re-run setup (e.g. 'okdctl deploy') to regenerate it before adding a node", certPath)}
+			"ignition tls cert not found at %s; re-run setup (e.g. 'okdctl deploy') to regenerate it before adding a node", certPath,
+		)}
 	}
 	return nil
 }

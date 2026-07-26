@@ -294,7 +294,8 @@ func (r *Runner) growMaster(ctx context.Context, master string, allocatedMiB int
 func (r *Runner) compactHybridError(removed, total int, failedNode string, cause error) error {
 	return fmt.Errorf(
 		"compact: remove worker %s (%d of %d workers already removed; the control plane is already schedulable with the compact IngressController applied — resolve the cause and re-run 'okdctl cluster compact' to remove the remaining %d worker(s), already-removed workers stay gone): %w",
-		failedNode, removed, total, total-removed, cause)
+		failedNode, removed, total, total-removed, cause,
+	)
 }
 
 // compactPlan builds the informed-confirmation summary from the preflight

@@ -246,5 +246,6 @@ func (r *Runner) checkIngressGuard(ctx context.Context, nodes []cluster.NodeDeta
 	}
 	return &errtypes.ConfigError{Msg: fmt.Sprintf(
 		"router pods run on worker nodes (%s) and the control plane is not schedulable; draining %s would leave ingress nowhere to reschedule. Set mastersSchedulable=true and apply the compact IngressController first (see 'okdctl cluster compact'), or move ingress off workers.",
-		joinPodNames(onWorkers), target)}
+		joinPodNames(onWorkers), target,
+	)}
 }

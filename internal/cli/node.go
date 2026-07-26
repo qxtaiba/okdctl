@@ -246,7 +246,12 @@ func buildNodeRunner(cmd *cobra.Command, cfg *config.Config, verb string, consen
 		return nil, err
 	}
 
-	runner := node.NewRunner(cl, tf, cfg, projectRoot, cfgFile, tfEnv, tui.RunID(), tui.SimpleLogger())
+	runner := node.NewRunner(cl, tf, cfg,
+		node.WithProjectRoot(projectRoot),
+		node.WithConfigPath(cfgFile),
+		node.WithTerraformEnv(tfEnv),
+		node.WithRunID(tui.RunID()),
+		node.WithLogger(tui.SimpleLogger()))
 	runner.DryRun = consent.dryRun
 	runner.Reporter = func(desc string) func() { return tui.StartSpinner(ctx, desc) }
 

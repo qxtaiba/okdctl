@@ -93,7 +93,8 @@ func storageGuardVerdict(node string, osds []string, force bool, log *slog.Logge
 	}
 	return &errtypes.ConfigError{Msg: fmt.Sprintf(
 		"%s holds %d rook-ceph OSD(s) (%v); removing it destroys its CEPH-DATA disk and loses that data. Migrate OSDs off it first, or re-run with --force-storage.",
-		node, len(osds), osds)}
+		node, len(osds), osds,
+	)}
 }
 
 // projectCompactPeakMiB simulates compact's interleaved sequence (remove a

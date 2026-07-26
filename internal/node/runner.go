@@ -203,22 +203,52 @@ type Runner struct {
 	EtcdGateTimeout     time.Duration
 	CephGateTimeout     time.Duration
 	ClusterReadyTimeout time.Duration
+
+	// tfEnv is the terraform environment name captured by WithTerraformEnv;
+	// NewRunner resolves it against ProjectRoot into EnvDir after all
+	// options have applied, so option ordering does not matter.
+	tfEnv string
+}
+
+// RunnerOption configures optional Runner wiring in NewRunner, mirroring the
+// okd.New / addon.NewManager option style.
+type RunnerOption func(*Runner)
+
+// WithProjectRoot sets the project root the work and terraform env
+// directories derive from.
+func WithProjectRoot(root string) RunnerOption {
+	return func(r *Runner) { r.ProjectRoot = root }
+}
+
+// WithConfigPath sets the okdctl.yaml path each op persists topology to.
+func WithConfigPath(path string) RunnerOption {
+	return func(r *Runner) { r.ConfigPath = path }
+}
+
+// WithTerraformEnv selects the terraform environment whose directory node
+// ops plan and apply in.
+func WithTerraformEnv(env string) RunnerOption {
+	return func(r *Runner) { r.tfEnv = env }
+}
+
+// WithRunID tags the runner's op markers and logs with the CLI run id.
+func WithRunID(id string) RunnerOption {
+	return func(r *Runner) { r.RunID = id }
+}
+
+// WithLogger sets the runner's logger; nil is normalized to a no-op logger.
+func WithLogger(log *slog.Logger) RunnerOption {
+	return func(r *Runner) { r.Log = log }
 }
 
 // NewRunner wires a Runner with derived work/env directories and default
-// timeouts. cfg's terraform environment resolves the env directory.
-func NewRunner(cl *cluster.Client, tf *terraform.Executor, cfg *config.Config, projectRoot, configPath, tfEnv, runID string, log *slog.Logger) *Runner {
-	workDir := filepath.Join(projectRoot, system.WorkDirName)
-	return &Runner{
+// timeouts. Required collaborators (cluster client, terraform executor,
+// config) are positional; everything else arrives via options.
+func NewRunner(cl *cluster.Client, tf *terraform.Executor, cfg *config.Config, opts ...RunnerOption) *Runner {
+	r := &Runner{
 		Cluster:             cl,
 		TF:                  tf,
 		Cfg:                 cfg,
-		ConfigPath:          configPath,
-		ProjectRoot:         projectRoot,
-		WorkDir:             workDir,
-		EnvDir:              system.TerraformEnvDir(projectRoot, tfEnv),
-		RunID:               runID,
-		Log:                 logutil.OrNop(log),
 		Reporter:            logutil.NopProgressReporter,
 		Snapshot:            HostsshSnapshotClient{},
 		NodeReadyTimeout:    DefaultNodeReadyTimeout,
@@ -227,6 +257,13 @@ func NewRunner(cl *cluster.Client, tf *terraform.Executor, cfg *config.Config, p
 		ClusterReadyTimeout: DefaultClusterReadyTimeout,
 		SnapshotTaskTimeout: DefaultSnapshotTaskTimeout,
 	}
+	for _, opt := range opts {
+		opt(r)
+	}
+	r.Log = logutil.OrNop(r.Log)
+	r.WorkDir = filepath.Join(r.ProjectRoot, system.WorkDirName)
+	r.EnvDir = system.TerraformEnvDir(r.ProjectRoot, r.tfEnv)
+	return r
 }
 
 func (r *Runner) marker() string { return markerPath(r.WorkDir) }
