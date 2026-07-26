@@ -111,9 +111,9 @@ func readDeployState(path string) (*deployState, error) {
 
 // loadResumeMarker reads the deploy-state marker for the resume decision.
 // Unreadable markers, markers naming a different cluster, and markers with
-// no cluster name at all (older binaries omitted it) are treated as absent:
-// resume grants skip-wipe/skip-install power, so a marker must positively
-// identify this cluster before it is trusted.
+// no cluster name at all are treated as absent: resume grants
+// skip-wipe/skip-install power, so a marker must positively identify this
+// cluster before it is trusted.
 func loadResumeMarker(path, clusterName string) *deployState {
 	marker, err := readDeployState(path)
 	if err != nil {

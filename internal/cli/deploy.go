@@ -194,8 +194,8 @@ func runDeploy(cmd *cobra.Command, _ []string) error {
 // runDeployDryRun previews a deploy: runs a terraform plan preview and lists
 // every phase step. Requires terraform.tfvars from a prior setup run; absent
 // tfvars causes plan failure and exits 2. Always exits 0 when the preview
-// itself succeeds, even when the plan reports drift — unlike 'okdctl plan',
-// dry-run's exit contract predates drift-awareness and stays unchanged here.
+// itself succeeds, even when the plan reports drift — 'okdctl plan' is the
+// drift-gating surface for scripts; dry-run is a human-facing preview.
 func runDeployDryRun(ctx context.Context, cfg *config.Config, w io.Writer) error {
 	projectRoot, err := resolveWorkspaceRoot()
 	if err != nil {
