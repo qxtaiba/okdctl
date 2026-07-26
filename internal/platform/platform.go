@@ -138,14 +138,6 @@ func (o OS) ApachePackageName() string {
 	return "httpd"
 }
 
-// ApacheConfigPath returns the path to the main Apache config file.
-func (o OS) ApacheConfigPath() string {
-	if o.Family == FamilyDebian {
-		return "/etc/apache2/apache2.conf"
-	}
-	return "/etc/httpd/conf/httpd.conf"
-}
-
 // ApacheServiceName returns the systemd service name for Apache.
 func (o OS) ApacheServiceName() string {
 	if o.Family == FamilyDebian {
@@ -170,9 +162,4 @@ func (o OS) ApacheVhostConfDir() string {
 		return "/etc/apache2/conf-available"
 	}
 	return "/etc/httpd/conf.d"
-}
-
-// HasSELinux reports whether the detected family ships SELinux by default.
-func (o OS) HasSELinux() bool {
-	return o.Family == FamilyRHEL
 }
