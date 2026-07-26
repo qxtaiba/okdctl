@@ -121,9 +121,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: aquasecurity/tfsec-action@b466648d6e39e7c75324f25d83891162a721f2d6 # v1.0.3
+      # Trivy replaced tfsec here: upstream deprecated tfsec in Trivy's
+      # favor, so tfsec's rule set no longer receives updates.
+      - uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
-          working_directory: infrastructure/terraform
+          scan-type: config
+          scan-ref: infrastructure/terraform
+          # trivy-action defaults to exit-code 0; keep tfsec's fail-on-findings gate
+          exit-code: "1"
   # Shell
   lint-shell:
     runs-on: ubuntu-latest
