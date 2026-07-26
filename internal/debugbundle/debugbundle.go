@@ -98,7 +98,7 @@ func Write(ctx context.Context, opts Options) (retErr error) {
 		outPath = fmt.Sprintf("okdctl-debug-%s.tgz", bundleAt.Format("20060102-150405"))
 	}
 
-	tui.Info("collecting debug bundle", tui.LF("bundle_id", bundleID), tui.LF("output", outPath))
+	tui.Info("collecting debug bundle", tui.LF("bundle_id", bundleID), tui.LF("path", outPath))
 
 	cfg, cfgErr := opts.LoadConfig()
 
@@ -211,12 +211,12 @@ func safeMessage(err error) string {
 
 func bundleConfig(addFile func(string, []byte) error, cfg *config.Config, cfgErr error) manifestEntry {
 	if cfgErr != nil {
-		return manifestEntry{Name: categoryConfig, Status: bundleStatusSkipped, Message: fmt.Sprintf("load config: %v", cfgErr)}
+		return manifestEntry{Name: categoryConfig, Status: bundleStatusSkipped, Message: "load config: " + safeMessage(cfgErr)}
 	}
 	redacted := config.Redacted(cfg)
 	data, err := yaml.Marshal(redacted)
 	if err != nil {
-		return manifestEntry{Name: categoryConfig, Status: bundleStatusFailed, Message: fmt.Sprintf("marshal: %v", err)}
+		return manifestEntry{Name: categoryConfig, Status: bundleStatusFailed, Message: "marshal: " + safeMessage(err)}
 	}
 	if err := addFile("config.yaml", data); err != nil {
 		return manifestEntry{Name: categoryConfig, Status: bundleStatusFailed, Message: safeMessage(err)}
@@ -230,7 +230,7 @@ func bundleConfig(addFile func(string, []byte) error, cfg *config.Config, cfgErr
 func bundleLogFile(addFile func(string, []byte) error, logFile, projectRoot string, prErr error) manifestEntry {
 	if logFile == "" {
 		if prErr != nil {
-			return manifestEntry{Name: categoryLogFile, Status: bundleStatusSkipped, Message: fmt.Sprintf("project root: %v", prErr)}
+			return manifestEntry{Name: categoryLogFile, Status: bundleStatusSkipped, Message: "project root: " + safeMessage(prErr)}
 		}
 		logFile = filepath.Join(projectRoot, logutil.DefaultLogFileName)
 		if _, err := os.Stat(logFile); err != nil {
@@ -243,7 +243,7 @@ func bundleLogFile(addFile func(string, []byte) error, logFile, projectRoot stri
 	}
 	data, err := os.ReadFile(logFile)
 	if err != nil {
-		return manifestEntry{Name: categoryLogFile, Status: bundleStatusFailed, Message: fmt.Sprintf("read %s: %v", logFile, err)}
+		return manifestEntry{Name: categoryLogFile, Status: bundleStatusFailed, Message: fmt.Sprintf("read %s: ", logFile) + safeMessage(err)}
 	}
 	if err := addFile("okdctl.log", data); err != nil {
 		return manifestEntry{Name: categoryLogFile, Status: bundleStatusFailed, Message: safeMessage(err)}
@@ -253,7 +253,7 @@ func bundleLogFile(addFile func(string, []byte) error, logFile, projectRoot stri
 
 func bundleTerraformState(ctx context.Context, addFile func(string, []byte) error, projectRoot string, prErr error, cfg *config.Config) manifestEntry {
 	if prErr != nil {
-		return manifestEntry{Name: categoryTerraformState, Status: bundleStatusSkipped, Message: fmt.Sprintf("project root: %v", prErr)}
+		return manifestEntry{Name: categoryTerraformState, Status: bundleStatusSkipped, Message: "project root: " + safeMessage(prErr)}
 	}
 	tfEnv := "production"
 	if cfg != nil {
@@ -266,7 +266,7 @@ func bundleTerraformState(ctx context.Context, addFile func(string, []byte) erro
 	tfExec := executor.New(executor.WithWorkDir(tfDir))
 	result, runErr := tfExec.Run(ctx, "terraform", "state", "list")
 	if runErr != nil {
-		return manifestEntry{Name: categoryTerraformState, Status: bundleStatusFailed, Message: fmt.Sprintf("terraform state list: %v", runErr)}
+		return manifestEntry{Name: categoryTerraformState, Status: bundleStatusFailed, Message: "terraform state list: " + safeMessage(runErr)}
 	}
 	if result.ExitCode != 0 {
 		msg := fmt.Sprint(logutil.RedactableStderr(strings.TrimSpace(result.Stderr)).Redacted())
@@ -283,7 +283,7 @@ func bundleTerraformState(ctx context.Context, addFile func(string, []byte) erro
 
 func bundleMustGather(ctx context.Context, addStream func(*tar.Header, io.Reader) error, projectRoot string, prErr error) manifestEntry {
 	if prErr != nil {
-		return manifestEntry{Name: categoryMustGather, Status: bundleStatusSkipped, Message: fmt.Sprintf("project root: %v", prErr)}
+		return manifestEntry{Name: categoryMustGather, Status: bundleStatusSkipped, Message: "project root: " + safeMessage(prErr)}
 	}
 	if _, err := osexec.LookPath("oc"); err != nil {
 		return manifestEntry{Name: categoryMustGather, Status: bundleStatusSkipped, Message: "oc not found on PATH; install oc or run okdctl deploy first"}
@@ -295,7 +295,7 @@ func bundleMustGather(ctx context.Context, addStream func(*tar.Header, io.Reader
 	}
 	mgDir, err := os.MkdirTemp("", "okdctl-must-gather-*")
 	if err != nil {
-		return manifestEntry{Name: categoryMustGather, Status: bundleStatusFailed, Message: fmt.Sprintf("create temp dir: %v", err)}
+		return manifestEntry{Name: categoryMustGather, Status: bundleStatusFailed, Message: "create temp dir: " + safeMessage(err)}
 	}
 	defer func() { _ = os.RemoveAll(mgDir) }()
 
@@ -309,7 +309,7 @@ func bundleMustGather(ctx context.Context, addStream func(*tar.Header, io.Reader
 		"--dest-dir="+mgDir,
 	)
 	if mgErr != nil {
-		return manifestEntry{Name: categoryMustGather, Status: bundleStatusFailed, Message: fmt.Sprintf("oc adm must-gather: %v", mgErr)}
+		return manifestEntry{Name: categoryMustGather, Status: bundleStatusFailed, Message: "oc adm must-gather: " + safeMessage(mgErr)}
 	}
 	if mgResult.ExitCode != 0 {
 		msg := fmt.Sprint(logutil.RedactableStderr(strings.TrimSpace(mgResult.Stderr)).Redacted())
@@ -320,10 +320,10 @@ func bundleMustGather(ctx context.Context, addStream func(*tar.Header, io.Reader
 	}
 	truncated, archErr := tarDirInto(addStream, mgDir, "must-gather/")
 	if archErr != nil {
-		return manifestEntry{Name: categoryMustGather, Status: bundleStatusFailed, Message: fmt.Sprintf("archive must-gather: %v", archErr)}
+		return manifestEntry{Name: categoryMustGather, Status: bundleStatusFailed, Message: "archive must-gather: " + safeMessage(archErr)}
 	}
 	if len(truncated) > 0 {
-		tui.Warn("must-gather files truncated to 50 MB", tui.LF("files", strings.Join(truncated, ", ")))
+		tui.Warn("must-gather files truncated to 50 MB", tui.LF("files", truncated))
 		return manifestEntry{Name: categoryMustGather, Status: bundleStatusOK, Message: "truncated (>50 MB): " + strings.Join(truncated, ", ")}
 	}
 	return manifestEntry{Name: categoryMustGather, Status: bundleStatusOK}
@@ -417,7 +417,7 @@ func bundleSystemMeta(addFile func(string, []byte) error, bundleID string, bundl
 	}
 	data, err := yaml.Marshal(meta)
 	if err != nil {
-		return manifestEntry{Name: categorySystemMeta, Status: bundleStatusFailed, Message: fmt.Sprintf("marshal: %v", err)}
+		return manifestEntry{Name: categorySystemMeta, Status: bundleStatusFailed, Message: "marshal: " + safeMessage(err)}
 	}
 	if err := addFile("system-meta.yaml", data); err != nil {
 		return manifestEntry{Name: categorySystemMeta, Status: bundleStatusFailed, Message: safeMessage(err)}
