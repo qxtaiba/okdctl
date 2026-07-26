@@ -31,7 +31,7 @@ var (
 
 var clusterCmd = &cobra.Command{
 	Use:   "cluster",
-	Short: "Cluster-wide lifecycle operations",
+	Short: "Manage cluster-wide lifecycle operations",
 	Long:  "Orchestrate multi-node lifecycle sequences such as compaction onto the control plane.",
 }
 
@@ -51,7 +51,7 @@ picks up at the node/step that was in flight.
 --acknowledge-interrupted-op overrides a marker left by an unrelated op
 instead of refusing.`,
 	Example: `  okdctl cluster compact --yes --confirm-cluster grappleberry
-  okdctl cluster compact --grow-master-memory-mb 24576 --dry-run`,
+  okdctl cluster compact --master-memory-mb 24576 --dry-run`,
 	RunE: runClusterCompact,
 }
 
@@ -106,7 +106,11 @@ func init() {
 	clusterCompactCmd.Flags().BoolVar(&compactDryRun, flagDryRun, false, "print the compaction plan without mutating anything")
 	clusterCompactCmd.Flags().BoolVar(&compactForceStorage, "force-storage", false, "allow worker removal even when workers hold rook-ceph OSDs")
 	clusterCompactCmd.Flags().IntVar(&compactIngressReplica, "ingress-replicas", 2, "compact IngressController replica count")
-	clusterCompactCmd.Flags().IntVar(&compactGrowMasterMB, "grow-master-memory-mb", 0, "resize each master to this memory (MiB) as workers are removed (0 leaves masters unchanged)")
+	clusterCompactCmd.Flags().IntVar(&compactGrowMasterMB, "master-memory-mb", 0, "grow each master to this memory (MiB) as workers are removed (0 leaves masters unchanged)")
+	// Deprecated spelling; both flags share compactGrowMasterMB so either
+	// works during the transition.
+	clusterCompactCmd.Flags().IntVar(&compactGrowMasterMB, "grow-master-memory-mb", 0, "grow each master to this memory (MiB) as workers are removed (0 leaves masters unchanged)")
+	_ = clusterCompactCmd.Flags().MarkDeprecated("grow-master-memory-mb", "use --master-memory-mb")
 	clusterCompactCmd.Flags().BoolVar(&compactAcknowledgeInterrupted, "acknowledge-interrupted-op", false, "override a stranded marker left by an unrelated op and proceed fresh")
 
 	clusterStopCmd.Flags().BoolVarP(&stopYes, "yes", "y", false, "skip confirmation prompt")
