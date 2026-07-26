@@ -50,6 +50,10 @@ var (
 	logVerbose bool
 )
 
+// startLogged records that PersistentPreRunE emitted the "okdctl: started"
+// bookend, keeping the deferred "okdctl: finished" line symmetric.
+var startLogged bool
+
 // preflightWarns holds warning closures registered before cli.Execute
 // runs. PersistentPreRunE drains the slice after configureLogging so every
 // warning uses the fully-configured formatter (text or JSON).
@@ -79,6 +83,11 @@ per 24h, cached locally); set OKDCTL_NO_UPDATE_CHECK=1 to disable.`,
 		if err := configureLogging(cmd); err != nil {
 			return err
 		}
+		// Logged here rather than in execute() so the line honors --quiet,
+		// --log-format, and the piped-stderr auto-switch, symmetric with the
+		// post-configuration "okdctl: finished" bookend.
+		tui.Info("okdctl: started", tui.LF("argv", logutil.RedactableArgv(os.Args[1:])))
+		startLogged = true
 		for _, fn := range preflightWarns {
 			fn()
 		}
@@ -102,8 +111,12 @@ func Execute() {
 func execute() (code int) {
 	tui.SetRunID(rand.Text())
 	start := time.Now()
-	tui.Info("okdctl: started", tui.LF("argv", logutil.RedactableArgv(os.Args[1:])))
 	defer func() {
+		// Gated on startLogged so help/version paths that never reach
+		// PersistentPreRunE do not log a "finished" without a "started".
+		if !startLogged {
+			return
+		}
 		tui.Info(
 			"okdctl: finished",
 			tui.LF("duration", time.Since(start).Round(time.Millisecond).String()),
