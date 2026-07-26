@@ -128,7 +128,7 @@ func (p *Phase) ConfigureApache(ctx context.Context, cfg *config.Config, project
 	// Listen :443 is provided by the platform's mod_ssl default conf
 	// (RHEL: /etc/httpd/conf.d/ssl.conf, Debian: ports.conf after a2enmod ssl).
 	// 443 is already labeled https_port_t in the default RHEL SELinux policy,
-	// so configureSELinuxForApache is intentionally not called here.
+	// so no SELinux port relabeling is needed here.
 
 	webRoot := cfg.HTTPServer.Root
 	if webRoot == "" {

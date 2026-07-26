@@ -58,17 +58,6 @@ func readArgvLog(t *testing.T, path string) string {
 	return string(data)
 }
 
-// redirectAptListDir points aptListDir at a TempDir for the duration of
-// the test and restores the original value via t.Cleanup.
-func redirectAptListDir(t *testing.T) string {
-	t.Helper()
-	dir := t.TempDir()
-	orig := aptListDir
-	aptListDir = dir
-	t.Cleanup(func() { aptListDir = orig })
-	return dir
-}
-
 func TestIsInstalled_RHEL(t *testing.T) {
 	installFakePkgTools(t)
 	m := NewPackageManager(OS{Family: FamilyRHEL}, logutil.NopLogger)
@@ -170,37 +159,5 @@ func TestRemove_MixedPackages(t *testing.T) {
 	want := "remove -y installed-pkg\n"
 	if got := readArgvLog(t, argvLog); got != want {
 		t.Errorf("dnf argv log = %q; want %q", got, want)
-	}
-}
-
-func TestAddRepo_RHEL(t *testing.T) {
-	installFakePkgTools(t)
-	m := NewPackageManager(OS{Family: FamilyRHEL}, logutil.NopLogger)
-	if err := m.AddRepo(context.Background(), "myrepo", "https://repo.example.com"); err != nil {
-		t.Fatalf("AddRepo RHEL: unexpected error: %v", err)
-	}
-}
-
-func TestAddRepo_Debian_Content(t *testing.T) {
-	installFakePkgTools(t)
-	listDir := redirectAptListDir(t)
-
-	m := NewPackageManager(OS{Family: FamilyDebian}, logutil.NopLogger)
-	const (
-		repoName = "myrepo"
-		repoURL  = "https://repo.example.com"
-	)
-	if err := m.AddRepo(context.Background(), repoName, repoURL); err != nil {
-		t.Fatalf("AddRepo Debian: unexpected error: %v", err)
-	}
-
-	listFile := filepath.Join(listDir, repoName+".list")
-	got, err := os.ReadFile(listFile)
-	if err != nil {
-		t.Fatalf("list file not written: %v", err)
-	}
-	want := "deb [arch=" + DownloadArch() + "] " + repoURL + " any main\n"
-	if string(got) != want {
-		t.Errorf("list file content:\ngot  %q\nwant %q", string(got), want)
 	}
 }

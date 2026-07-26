@@ -6,18 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"os"
 	"slices"
 	"time"
 
 	"github.com/qxtaiba/okdctl/internal/executor"
 	"github.com/qxtaiba/okdctl/internal/logutil"
-	"github.com/qxtaiba/okdctl/internal/system"
 )
-
-// aptListDir is the directory where Debian apt repository list files are
-// written. Overridden by tests to avoid requiring root access.
-var aptListDir = "/etc/apt/sources.list.d"
 
 // packageManagerTimeout bounds a single package-manager invocation. dnf/apt
 // against a wedged mirror or stale repo metadata can otherwise hang the
@@ -27,7 +21,7 @@ const packageManagerTimeout = 15 * time.Minute
 
 // Manager is the host package manager (dnf or apt-get) used to install OKD
 // host dependencies. The family field selects between RHEL (dnf/rpm) and
-// Debian (apt-get/dpkg) binaries and drives the AddRepo branch.
+// Debian (apt-get/dpkg) binaries.
 //
 // Must be constructed via NewPackageManager — the zero value panics on
 // first use (the backend commands and logger are set only there).
@@ -123,34 +117,4 @@ func (m *Manager) isInstalled(ctx context.Context, pkg string) (bool, error) {
 		return true, nil
 	}
 	return m.postCheck(output, pkg), nil
-}
-
-// AddRepo registers a new package repository with the backend: dnf
-// config-manager on RHEL, an /etc/apt/sources.list.d entry on Debian.
-func (m *Manager) AddRepo(ctx context.Context, name, url string) error {
-	m.logger.Info("packages: adding repository", "name", name)
-
-	addRepoCtx, cancel := context.WithTimeout(ctx, packageManagerTimeout)
-	defer cancel()
-
-	if m.family == FamilyRHEL {
-		return executor.RunCaptured(addRepoCtx, m.pkgCmd, "config-manager", "--add-repo", url)
-	}
-
-	listContent := fmt.Sprintf("deb [arch=%s] %s any main\n", DownloadArch(), url)
-	listPath := fmt.Sprintf("%s/%s.list", aptListDir, name)
-
-	tmpPath, err := system.WriteTempFile("apt-repo", 0o644, func(f *os.File) error {
-		_, err := f.WriteString(listContent)
-		return err
-	})
-	if err != nil {
-		return fmt.Errorf("write repo list: %w", err)
-	}
-	defer func() { _ = os.Remove(tmpPath) }()
-
-	if err := system.CopyFile(tmpPath, listPath); err != nil {
-		return fmt.Errorf("install repo list: %w", err)
-	}
-	return executor.RunCaptured(addRepoCtx, m.pkgCmd, "update")
 }
