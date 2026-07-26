@@ -171,31 +171,14 @@ func newProxmoxClient(endpoint, username string, password, apiToken []byte, inse
 
 // newAPIHTTPClient builds the transport for the hand-rolled go-proxmox
 // client: request timeout, operator-opt-in TLS verification skip, and the
-// same redirect policy every httputil-built client gets.
-func newAPIHTTPClient(insecure bool, timeout time.Duration) *http.Client {
-	return &http.Client{
-		Timeout:       timeout,
-		CheckRedirect: capAPIRedirects,
-		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: insecure}, //nolint:gosec // operator opts in via Insecure
-		},
-	}
-}
-
-// capAPIRedirects restates httputil's unexported capRedirects policy for the
-// one client this package hand-builds (httputil's factories cannot carry the
-// insecure transport): cap at 5 hops and refuse any cross-host redirect
-// carrying an Authorization header — go-proxmox attaches auth per request,
-// so a compromised or misconfigured endpoint could otherwise walk the token
+// same redirect policy every httputil-built client gets. The redirect cap
+// is load-bearing here — go-proxmox attaches auth per request, so a
+// compromised or misconfigured endpoint could otherwise walk the token
 // cross-host.
-func capAPIRedirects(req *http.Request, via []*http.Request) error {
-	if len(via) >= 5 {
-		return httputil.ErrTooManyRedirects
-	}
-	if req.URL.Host != via[0].URL.Host && req.Header.Get("Authorization") != "" {
-		return httputil.ErrCrossHostAuthHeader
-	}
-	return nil
+func newAPIHTTPClient(insecure bool, timeout time.Duration) *http.Client {
+	return httputil.NewWithTransport(&http.Transport{
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: insecure}, //nolint:gosec // operator opts in via Insecure
+	}, timeout)
 }
 
 var insecureTLSWarnOnce sync.Once

@@ -119,20 +119,25 @@ func redirectVia(t *testing.T, n int, host string) []*http.Request {
 	return via
 }
 
-// TestCapAPIRedirects pins the policy mirrored from httputil: 5-hop cap and
-// cross-host Authorization refusal — the load-bearing guard for the
-// credentialed go-proxmox client.
-func TestCapAPIRedirects(t *testing.T) {
-	if err := capAPIRedirects(redirectReq(t, "pve.example", false), redirectVia(t, 1, "pve.example")); err != nil {
+// TestAPIClientRedirectPolicy pins the redirect policy on the client the
+// probe hand-builds: 5-hop cap and cross-host Authorization refusal — the
+// load-bearing guard for the credentialed go-proxmox client. Exercised
+// through CheckRedirect so a factory swap that drops the policy fails here.
+func TestAPIClientRedirectPolicy(t *testing.T) {
+	check := newAPIHTTPClient(false, time.Second).CheckRedirect
+	if check == nil {
+		t.Fatal("CheckRedirect not installed; redirect cap policy is missing")
+	}
+	if err := check(redirectReq(t, "pve.example", false), redirectVia(t, 1, "pve.example")); err != nil {
 		t.Errorf("same-host hop 1 refused: %v", err)
 	}
-	if err := capAPIRedirects(redirectReq(t, "pve.example", false), redirectVia(t, 5, "pve.example")); !errors.Is(err, httputil.ErrTooManyRedirects) {
+	if err := check(redirectReq(t, "pve.example", false), redirectVia(t, 5, "pve.example")); !errors.Is(err, httputil.ErrTooManyRedirects) {
 		t.Errorf("hop 5 = %v; want ErrTooManyRedirects", err)
 	}
-	if err := capAPIRedirects(redirectReq(t, "evil.example", true), redirectVia(t, 1, "pve.example")); !errors.Is(err, httputil.ErrCrossHostAuthHeader) {
+	if err := check(redirectReq(t, "evil.example", true), redirectVia(t, 1, "pve.example")); !errors.Is(err, httputil.ErrCrossHostAuthHeader) {
 		t.Errorf("cross-host with auth = %v; want ErrCrossHostAuthHeader", err)
 	}
-	if err := capAPIRedirects(redirectReq(t, "mirror.example", false), redirectVia(t, 1, "pve.example")); err != nil {
+	if err := check(redirectReq(t, "mirror.example", false), redirectVia(t, 1, "pve.example")); err != nil {
 		t.Errorf("cross-host without auth refused: %v", err)
 	}
 }
