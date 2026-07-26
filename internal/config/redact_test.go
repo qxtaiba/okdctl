@@ -149,6 +149,76 @@ func TestRedacted(t *testing.T) {
 		}
 	})
 
+	t.Run("secret-keyed addon setting masked in map", func(t *testing.T) {
+		cfg := &Config{
+			Addons: map[string]AddonConfig{
+				"secretstore": {
+					Enabled: true,
+					Settings: map[string]string{
+						"registry_password": "hunter2",
+						"provider":          "onepassword",
+					},
+				},
+			},
+		}
+		got := Redacted(cfg)
+		s := got.Addons["secretstore"].Settings
+		if s["registry_password"] != "***" {
+			t.Errorf("Settings[registry_password] = %q; want ***", s["registry_password"])
+		}
+		if s["provider"] != "onepassword" {
+			t.Errorf("Settings[provider] = %q; want onepassword", s["provider"])
+		}
+	})
+
+	t.Run("map masking does not mutate source config", func(t *testing.T) {
+		cfg := &Config{
+			Addons: map[string]AddonConfig{
+				"a": {Settings: map[string]string{"api_token": "live-tok"}},
+			},
+		}
+		_ = Redacted(cfg)
+		if cfg.Addons["a"].Settings["api_token"] != "live-tok" {
+			t.Errorf("Redacted mutated source map; Settings[api_token] = %q",
+				cfg.Addons["a"].Settings["api_token"])
+		}
+	})
+
+	t.Run("empty secret-keyed map value left alone", func(t *testing.T) {
+		cfg := &Config{
+			Addons: map[string]AddonConfig{
+				"a": {Settings: map[string]string{"api_token": ""}},
+			},
+		}
+		got := Redacted(cfg)
+		if got.Addons["a"].Settings["api_token"] != "" {
+			t.Errorf("empty map value must not become ***; got %q",
+				got.Addons["a"].Settings["api_token"])
+		}
+	})
+
+	t.Run("struct in slice masked without mutating source", func(t *testing.T) {
+		cfg := &Config{
+			Provider: ProviderConfig{
+				Proxmox: &ProxmoxConfig{
+					Host: "pve.example",
+					AdditionalNetworks: []AdditionalNetwork{
+						{Bridge: "vmbr1", Model: "virtio"},
+					},
+				},
+			},
+		}
+		got := Redacted(cfg)
+		if got.Provider.Proxmox.AdditionalNetworks[0].Bridge != "vmbr1" {
+			t.Errorf("non-secret slice element altered: %+v",
+				got.Provider.Proxmox.AdditionalNetworks[0])
+		}
+		got.Provider.Proxmox.AdditionalNetworks[0].Bridge = "changed"
+		if cfg.Provider.Proxmox.AdditionalNetworks[0].Bridge != "vmbr1" {
+			t.Error("slice backing shared between Redacted copy and source")
+		}
+	})
+
 	t.Run("nil pointer fields do not panic", func(t *testing.T) {
 		defer func() {
 			if r := recover(); r != nil {
