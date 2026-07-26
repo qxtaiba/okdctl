@@ -259,21 +259,34 @@ func saveConfig(cfg *config.Config, path string, w io.Writer) error {
 	return nil
 }
 
+// deployGateScope is the hard pre-flight gate for runFullDeployment, scoped
+// to the surfaces deploy renders: provider fields flow verbatim into
+// terraform.tfvars HCL literals; the bastion identity (Bastion.IP,
+// StaticIP.DNS, HTTPServer.IgnitionServerIP) flows into apache's bind
+// address and every node's static-ip kernel args; HTTPServer.Root is
+// interpolated into the apache vhost (httpRootUnsafe); the CIDRs flow
+// verbatim into install-config rendering. Required and enum scopes are
+// included because validateProvider no-ops on a non-proxmox type string —
+// a bogus type must not bypass the gate.
+const deployGateScope = config.ScopeRequired | config.ScopeEnums | config.ScopeProvider |
+	config.ScopeAdvancedNetworking | config.ScopeNetworking | config.ScopeHTTPServer
+
 func runFullDeployment(ctx context.Context, cfg *config.Config, w io.Writer) error {
 	if deployDryRun {
 		return runDeployDryRun(ctx, cfg, w)
 	}
 
-	// Hard gate before any phase code: provider fields flow verbatim into
-	// terraform.tfvars HCL literals, and the bastion identity (Bastion.IP,
-	// StaticIP.DNS, HTTPServer.IgnitionServerIP) flows into apache's bind
-	// address and every node's static-ip kernel args, so a hand-edited
-	// config must be rejected here, not warn-and-proceed like saveConfig
-	// does. Required and enum scopes are included because validateProvider
-	// no-ops on a non-proxmox type string — a bogus type must not bypass
-	// the gate.
-	gateScope := config.ScopeRequired | config.ScopeEnums | config.ScopeProvider | config.ScopeAdvancedNetworking
-	if result := config.ValidateWithOptions(cfg, config.ValidationOptions{Scope: gateScope}); !result.IsValid() {
+	// Resolve the workspace root before the gate so validation's
+	// terraform-env directory check sees the same path materialization uses.
+	projectRoot, err := resolveWorkspaceRoot()
+	if err != nil {
+		return err
+	}
+
+	// Hard gate before any phase code: a hand-edited config must be
+	// rejected here, not warn-and-proceed like saveConfig does.
+	gate := config.ValidationOptions{Scope: deployGateScope, ProjectRoot: projectRoot}
+	if result := config.ValidateWithOptions(cfg, gate); !result.IsValid() {
 		return &errtypes.ConfigError{Msg: "config validation failed", Err: result}
 	}
 
@@ -289,11 +302,6 @@ func runFullDeployment(ctx context.Context, cfg *config.Config, w io.Writer) err
 		logutil.Warn("no proxmox credentials found")
 	} else {
 		reportCredentialProvenance(creds)
-	}
-
-	projectRoot, err := resolveWorkspaceRoot()
-	if err != nil {
-		return err
 	}
 
 	return deploy.Execute(ctx, cfg, deploy.Options{
