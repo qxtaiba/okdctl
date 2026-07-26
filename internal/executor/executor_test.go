@@ -68,12 +68,13 @@ func TestBuildEnv_AllowlistFilters(t *testing.T) {
 	t.Setenv("PATH", "/usr/bin:/bin")
 	t.Setenv("HOME", "/tmp/home")
 	t.Setenv("KUBECONFIG", "/tmp/kube")
-	t.Setenv("KUBE_PS1", "on")                // prefix match
-	t.Setenv("TF_VAR_region", "us-east-1")    // prefix match
-	t.Setenv("PROXMOX_VE_PASSWORD", "hunter") // prefix match
-	t.Setenv("AWS_SECRET_ACCESS_KEY", "nope") // not in allowlist
-	t.Setenv("SECRET_API_KEY", "nope")        // not in allowlist
-	t.Setenv("OKDCTL_INTERNAL_TOKEN", "nope") // not in allowlist
+	t.Setenv("KUBE_PS1", "on")                  // prefix match
+	t.Setenv("TF_VAR_region", "us-east-1")      // prefix match
+	t.Setenv("PROXMOX_VE_ENDPOINT", "pve:8006") // prefix match, non-secret
+	t.Setenv("PROXMOX_VE_PASSWORD", "hunter")   // prefix match, secret-keyed
+	t.Setenv("AWS_SECRET_ACCESS_KEY", "nope")   // not in allowlist
+	t.Setenv("SECRET_API_KEY", "nope")          // not in allowlist
+	t.Setenv("OKDCTL_INTERNAL_TOKEN", "nope")   // not in allowlist
 
 	e := New()
 	env := e.buildEnv()
@@ -85,7 +86,7 @@ func TestBuildEnv_AllowlistFilters(t *testing.T) {
 		"KUBECONFIG=/tmp/kube",
 		"KUBE_PS1=on",
 		"TF_VAR_region=us-east-1",
-		"PROXMOX_VE_PASSWORD=hunter",
+		"PROXMOX_VE_ENDPOINT=pve:8006",
 	}
 	for _, want := range mustContain {
 		if !strings.Contains(joined, "\x00"+want+"\x00") {
@@ -97,11 +98,34 @@ func TestBuildEnv_AllowlistFilters(t *testing.T) {
 		"AWS_SECRET_ACCESS_KEY=",
 		"SECRET_API_KEY=",
 		"OKDCTL_INTERNAL_TOKEN=",
+		"PROXMOX_VE_PASSWORD=",
 	}
 	for _, forbid := range mustNotContain {
 		if strings.Contains(joined, "\x00"+forbid) {
 			t.Errorf("%q leaked through allowlist; env:\n%v", forbid, env)
 		}
+	}
+}
+
+func TestBuildEnv_SecretKeyedDroppedFromParentButNotWithEnv(t *testing.T) {
+	t.Setenv("PROXMOX_VE_PASSWORD", "from-parent")
+	t.Setenv("PROXMOX_VE_API_TOKEN", "from-parent")
+	t.Setenv("TF_VAR_db_password", "from-parent")
+
+	e := New(WithEnv([]string{"PROXMOX_VE_PASSWORD=from-caller"}))
+	joined := "\n" + strings.Join(e.buildEnv(), "\n") + "\n"
+
+	for _, forbid := range []string{
+		"\nPROXMOX_VE_PASSWORD=from-parent\n",
+		"\nPROXMOX_VE_API_TOKEN=from-parent\n",
+		"\nTF_VAR_db_password=from-parent\n",
+	} {
+		if strings.Contains(joined, forbid) {
+			t.Errorf("parent secret %q leaked into subprocess env:\n%s", strings.TrimSpace(forbid), joined)
+		}
+	}
+	if !strings.Contains(joined, "\nPROXMOX_VE_PASSWORD=from-caller\n") {
+		t.Errorf("WithEnv-supplied credential missing from env:\n%s", joined)
 	}
 }
 

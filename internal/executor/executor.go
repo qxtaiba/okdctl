@@ -35,10 +35,15 @@ import (
 // Environment handling: by default the Executor passes only a curated
 // allowlist of the parent environment down to subprocesses — credentials
 // that happen to be exported (unrelated AWS/GCP tokens, shell history
-// plumbing, etc.) do not reach every shellout. Callers append extra
-// vars via WithEnv. The rare caller that needs the full parent env
-// (e.g. a tool that consumes a non-allowlisted variable) opts out via
-// WithInheritedEnv.
+// plumbing, etc.) do not reach every shellout. Parent entries whose key
+// matches logutil.KeyIsSecret (PROXMOX_VE_PASSWORD, TF_VAR_*token, …) are
+// dropped even when their namespace is allowlisted; a credential reaches a
+// subprocess only when the caller passes it explicitly via WithEnv or
+// AppendEnv. The rare caller that needs the full parent env (e.g. a tool
+// that consumes a non-allowlisted variable) opts out via WithInheritedEnv.
+//
+// Must be constructed via New — the zero value panics on first use
+// (logger and output streams are set only in New).
 //
 // Cancel signal: ctx cancellation sends cancelSignal to the subprocess
 // (SIGTERM by default; see WithCancelSignal) followed by SIGKILL after a
@@ -127,6 +132,11 @@ func New(opts ...Option) *Executor {
 // the sudo re-exec in internal/cli/elevation.go. It passes tooling plumbing
 // and provider namespaces; everything else is dropped to prevent unrelated
 // tokens reaching privileged processes.
+//
+// Executor subprocesses additionally drop secret-keyed entries from the
+// filtered base (see buildEnv); only re-exec sites that call
+// FilterParentEnv directly — okdctl handing the environment to itself —
+// receive allowlisted credentials such as PROXMOX_VE_PASSWORD.
 var DefaultEnvAllowlist = EnvAllowlist{
 	Exact: map[string]bool{
 		"PATH": true, "HOME": true, "USER": true, "LOGNAME": true, "SHELL": true,
@@ -189,8 +199,8 @@ func FilterParentEnv(a EnvAllowlist) []string {
 
 // buildEnv composes the subprocess env for a single Run. Inherit mode passes
 // os.Environ() through unchanged. Default mode filters through
-// DefaultEnvAllowlist, then appends caller-supplied e.env (later wins in
-// the duplicate-key tie).
+// DefaultEnvAllowlist, drops secret-keyed entries, then appends
+// caller-supplied e.env (later wins in the duplicate-key tie).
 func (e *Executor) buildEnv() []string {
 	if e.inheritEnv {
 		if len(e.env) == 0 {
@@ -198,11 +208,28 @@ func (e *Executor) buildEnv() []string {
 		}
 		return append(os.Environ(), e.env...)
 	}
-	base := FilterParentEnv(DefaultEnvAllowlist)
+	base := dropSecretKeyed(FilterParentEnv(DefaultEnvAllowlist))
 	if len(e.env) == 0 {
 		return base
 	}
 	return append(base, e.env...)
+}
+
+// dropSecretKeyed removes entries whose key matches logutil.KeyIsSecret.
+// The PROXMOX_/TF_ namespaces are allowlisted for provider plumbing, not
+// for broadcasting PROXMOX_VE_PASSWORD / PROXMOX_VE_API_TOKEN (which
+// credentials.LoadEnvFile setenvs into the process) to every oc/ssh/
+// package-manager shellout; executors that need credentials receive them
+// explicitly via WithEnv(creds.Env()).
+func dropSecretKeyed(env []string) []string {
+	out := env[:0]
+	for _, kv := range env {
+		key, _, _ := strings.Cut(kv, "=")
+		if !logutil.KeyIsSecret(key) {
+			out = append(out, kv)
+		}
+	}
+	return out
 }
 
 // Result is the captured outcome of a Run-style invocation.
