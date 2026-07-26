@@ -20,7 +20,6 @@ import (
 	"github.com/qxtaiba/okdctl/internal/runlock"
 	"github.com/qxtaiba/okdctl/internal/sshpin"
 	"github.com/qxtaiba/okdctl/internal/tui"
-	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
 var (
@@ -183,30 +182,23 @@ func buildSnapshotRunner(ctx context.Context, cfg *config.Config, dryRun bool) (
 		return nil, err
 	}
 
-	tfEnv := cfg.TerraformEnvName()
-	runner := &node.Runner{
-		Cluster:     cl,
-		Cfg:         cfg,
-		ConfigPath:  cfgFile,
-		ProjectRoot: projectRoot,
-		WorkDir:     workspace.WorkDir(projectRoot),
-		EnvDir:      workspace.TerraformEnvDir(projectRoot, tfEnv),
-		RunID:       tui.RunID(),
-		DryRun:      dryRun,
-		Log:         log,
-		Reporter:    func(desc string) func() { return tui.StartSpinner(ctx, desc) },
-		Proxmox: &hostssh.RemoteISOParams{
-			Host:           host,
-			Node:           px.Node,
-			Exec:           executor.New(executor.WithWorkDir(projectRoot)),
-			Log:            log,
-			KnownHostsPath: knownHostsPath,
-		},
-		Snapshot:            node.HostsshSnapshotClient{},
-		NodeReadyTimeout:    node.DefaultNodeReadyTimeout,
-		EtcdGateTimeout:     node.DefaultEtcdGateTimeout,
-		CephGateTimeout:     node.DefaultCephGateTimeout,
-		SnapshotTaskTimeout: node.DefaultSnapshotTaskTimeout,
+	// nil terraform executor on purpose: snapshot ops never plan or apply,
+	// and NewRunner supplies the timeout defaults the old hand-built literal
+	// silently dropped.
+	runner := node.NewRunner(cl, nil, cfg,
+		node.WithProjectRoot(projectRoot),
+		node.WithConfigPath(cfgFile),
+		node.WithTerraformEnv(cfg.TerraformEnvName()),
+		node.WithRunID(tui.RunID()),
+		node.WithLogger(log))
+	runner.DryRun = dryRun
+	runner.Reporter = func(desc string) func() { return tui.StartSpinner(ctx, desc) }
+	runner.Proxmox = &hostssh.RemoteISOParams{
+		Host:           host,
+		Node:           px.Node,
+		Exec:           executor.New(executor.WithWorkDir(projectRoot)),
+		Log:            log,
+		KnownHostsPath: knownHostsPath,
 	}
 
 	return &nodeRunnerCtx{

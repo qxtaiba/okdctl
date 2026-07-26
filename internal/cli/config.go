@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"encoding/json"
 	"fmt"
 
 	"github.com/spf13/cobra"
@@ -83,9 +82,7 @@ func runConfigShow(cmd *cobra.Command, _ []string) error {
 	redacted := config.Redacted(cfg)
 
 	if configShowOutput == outputJSON {
-		enc := json.NewEncoder(cmd.OutOrStdout())
-		enc.SetIndent("", "  ")
-		return enc.Encode(redacted)
+		return writeJSON(cmd.OutOrStdout(), redacted)
 	}
 
 	out, err := yaml.Marshal(redacted)
