@@ -211,7 +211,7 @@ func checklistRecorder(cfg *config.Config, projectRoot string, resumeFrom deploy
 		if !phaseRuns(resumeFrom, s.Phase) {
 			continue
 		}
-		plan = append(plan, tui.StepMeta{ID: s.ID, Name: s.Name, Phase: s.Phase})
+		plan = append(plan, tui.StepMeta{ID: s.ID, Name: s.Name, Phase: string(s.Phase)})
 	}
 	if len(plan) == 0 {
 		return nil
@@ -221,9 +221,9 @@ func checklistRecorder(cfg *config.Config, projectRoot string, resumeFrom deploy
 
 // phaseRuns reports whether a step in stepPhase executes given resumeFrom as
 // the entry point: a resume runs its entry phase and every later phase.
-func phaseRuns(resumeFrom deployPhase, stepPhase string) bool {
-	order := map[string]int{okd.PhaseSetup: 0, okd.PhaseInstall: 1, okd.PhasePostInstall: 2}
-	return order[stepPhase] >= order[string(resumeFrom)]
+func phaseRuns(resumeFrom deployPhase, stepPhase okd.DeployPhase) bool {
+	order := map[okd.DeployPhase]int{okd.PhaseSetup: 0, okd.PhaseInstall: 1, okd.PhasePostInstall: 2}
+	return order[stepPhase] >= order[okd.DeployPhase(resumeFrom)]
 }
 
 // runDeployPhases executes setup, install, and postinstall, starting from

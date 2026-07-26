@@ -297,16 +297,19 @@ func (p *Provisioner) ResumePostInstall(ctx context.Context, cfg *config.Config,
 type DeployStep struct {
 	ID    distribution.StepID
 	Name  string
-	Phase string
+	Phase DeployPhase
 }
 
-// Deploy phase labels carried on DeployStep.Phase. They match the deploy
+// DeployPhase labels the deploy phase that owns a DeployStep.
+type DeployPhase string
+
+// Deploy phase labels carried on DeployStep.Phase. The values match the deploy
 // package's on-disk marker phase names so a resume can filter the plan to the
 // phases it will actually run.
 const (
-	PhaseSetup       = "setup"
-	PhaseInstall     = "install"
-	PhasePostInstall = "postinstall"
+	PhaseSetup       DeployPhase = "setup"
+	PhaseInstall     DeployPhase = "install"
+	PhasePostInstall DeployPhase = "postinstall"
 )
 
 // DeploySteps returns the ordered ID+Name for every step the setup, install,
@@ -325,7 +328,7 @@ func (p *Provisioner) DeploySteps(cfg *config.Config) []DeployStep {
 	postOpts := postinstall.NewOptions(cfg, p.projectRoot)
 
 	var out []DeployStep
-	appendPhase := func(phaseName string, defs []distribution.StepDef) {
+	appendPhase := func(phaseName DeployPhase, defs []distribution.StepDef) {
 		for _, d := range defs {
 			out = append(out, DeployStep{ID: d.ID, Name: d.Name, Phase: phaseName})
 		}
