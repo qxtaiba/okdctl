@@ -64,7 +64,7 @@ func RemoveSecondaryIP(ctx context.Context, ip, iface string) error {
 		// divergence so the operator knows the profile no longer matches the
 		// runtime state.
 		if restoreErr := executor.RunCaptured(ctx, "nmcli", "connection", "modify", conn, "+ipv4.addresses", ip+"/32"); restoreErr != nil {
-			return fmt.Errorf("apply IP change on %s: %w (profile %s no longer lists %s but the device was not reapplied; restoring the profile also failed: %v)", iface, err, conn, ip, restoreErr)
+			return fmt.Errorf("apply IP change on %s: %w (profile %s no longer lists %s but the device was not reapplied; restoring the profile also failed: %w)", iface, err, conn, ip, restoreErr)
 		}
 		return fmt.Errorf("apply IP change on %s: %w (profile change on %s was rolled back)", iface, err, conn)
 	}

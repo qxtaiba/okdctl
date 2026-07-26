@@ -297,6 +297,9 @@ func announceEmbeddedDrift(root string) {
 	}
 }
 
+// Execute runs the full deploy pipeline under the project run lock: it
+// resolves the resume phase from the on-disk marker, drives the OKD
+// provisioner through every phase, and writes the post-deploy summary to w.
 func Execute(ctx context.Context, cfg *config.Config, opts Options, w io.Writer) error {
 	projectRoot := opts.ProjectRoot
 

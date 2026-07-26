@@ -55,25 +55,29 @@ func (p *Phase) InstallToolsToSystem(ctx context.Context, srcDir string) error {
 			continue
 		}
 
-		destPath := filepath.Join(destDir, binary)
-
-		if err := atomicInstallFile(srcPath, destPath, 0o755); err != nil {
+		if err := atomicInstallFile(srcPath, destDir, binary); err != nil {
 			return &errtypes.ConfigError{Msg: fmt.Sprintf("install %s", binary), Err: err}
 		}
 
-		p.Log.Info("tools: installed binary", "tool", binary, "path", destPath)
+		p.Log.Info("tools: installed binary", "tool", binary, "path", filepath.Join(destDir, binary))
 	}
 
 	return nil
 }
 
-// atomicInstallFile streams src into a temp file created beside dst, applies
-// mode, fsyncs, and renames it into place. Installed binaries back
-// existence-only resume guards (download-tools' AlreadyDone), so a crash
-// mid-install must never leave a truncated file at dst. Streaming avoids
-// buffering multi-hundred-MB release binaries the way system.AtomicWrite
-// would.
-func atomicInstallFile(src, dst string, mode os.FileMode) error {
+// atomicInstallFile streams src into a temp file created inside destDir,
+// applies executable mode, fsyncs, and renames it to destDir/name. Installed
+// binaries back existence-only resume guards (download-tools' AlreadyDone),
+// so a crash mid-install must never leave a truncated file at the
+// destination. Streaming avoids buffering multi-hundred-MB release binaries
+// the way system.AtomicWrite would. name must be a bare file name — anything
+// carrying a separator or ".." cannot escape destDir.
+func atomicInstallFile(src, destDir, name string) error {
+	if name != filepath.Base(name) || !filepath.IsLocal(name) {
+		return fmt.Errorf("install name %q is not a bare file name", name)
+	}
+	dst := filepath.Join(destDir, name)
+
 	in, err := os.Open(src)
 	if err != nil {
 		return fmt.Errorf("open %s: %w", src, err)
@@ -95,7 +99,7 @@ func atomicInstallFile(src, dst string, mode os.FileMode) error {
 		_ = tmp.Close()
 		return fmt.Errorf("copy %s: %w", src, err)
 	}
-	if err := tmp.Chmod(mode); err != nil {
+	if err := tmp.Chmod(0o755); err != nil {
 		_ = tmp.Close()
 		return fmt.Errorf("chmod temp file: %w", err)
 	}

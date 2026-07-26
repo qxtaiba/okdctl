@@ -1,6 +1,7 @@
 package setup
 
 import (
+	"bytes"
 	"context"
 	"os"
 	"path/filepath"
@@ -327,7 +328,7 @@ func TestWriteTerraformVars_PreservesBootstrapSentinel(t *testing.T) {
 	if err != nil {
 		t.Fatalf("sentinel must survive WriteTerraformVars: %v", err)
 	}
-	if string(got) != string(sentinelBytes) {
+	if !bytes.Equal(got, sentinelBytes) {
 		t.Errorf("sentinel bytes changed: %q", got)
 	}
 	fi, err := os.Stat(filepath.Join(envDir, "terraform.tfvars"))

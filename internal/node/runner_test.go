@@ -71,22 +71,24 @@ func TestResolveVMID_ListNodesError(t *testing.T) {
 // no-op, and the default timeouts and snapshot client are wired.
 func TestNewRunner_OptionsDeriveDirsAndDefaults(t *testing.T) {
 	cfg := config.DefaultConfig()
+	projRoot := t.TempDir()
+	configPath := filepath.Join(projRoot, "okdctl.yaml")
 	r := NewRunner(
 		nil, nil, cfg,
 		WithLogger(nil),
 		WithTerraformEnv("production"),
-		WithProjectRoot("/proj"),
-		WithConfigPath("/proj/okdctl.yaml"),
+		WithProjectRoot(projRoot),
+		WithConfigPath(configPath),
 		WithRunID("run-42"),
 	)
 
-	if r.WorkDir != filepath.Join("/proj", system.WorkDirName) {
+	if r.WorkDir != filepath.Join(projRoot, system.WorkDirName) {
 		t.Errorf("WorkDir = %q; want derived from project root", r.WorkDir)
 	}
-	if r.EnvDir != system.TerraformEnvDir("/proj", "production") {
+	if r.EnvDir != system.TerraformEnvDir(projRoot, "production") {
 		t.Errorf("EnvDir = %q; want derived from project root + tf env", r.EnvDir)
 	}
-	if r.ConfigPath != "/proj/okdctl.yaml" || r.RunID != "run-42" {
+	if r.ConfigPath != configPath || r.RunID != "run-42" {
 		t.Errorf("ConfigPath/RunID = %q/%q; want option values", r.ConfigPath, r.RunID)
 	}
 	if r.Log == nil {

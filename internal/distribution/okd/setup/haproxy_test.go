@@ -28,16 +28,10 @@ func minimalCfg() *config.Config {
 	}
 }
 
-func writeFakeHAProxy(t *testing.T, dir string, exitCode int) {
+func writeFakeHAProxy(t *testing.T, dir string) {
 	t.Helper()
 	script := filepath.Join(dir, "haproxy")
-	body := "#!/bin/sh\nexit "
-	if exitCode == 0 {
-		body += "0\n"
-	} else {
-		body += "1\n"
-	}
-	if err := os.WriteFile(script, []byte(body), 0o755); err != nil {
+	if err := os.WriteFile(script, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
 		t.Fatalf("write fake haproxy: %v", err)
 	}
 }
@@ -67,7 +61,7 @@ func newPhase(t *testing.T, binDir string) *Phase {
 func TestConfigureHAProxy_HappyPath(t *testing.T) {
 	tmpDir := t.TempDir()
 	binDir := t.TempDir()
-	writeFakeHAProxy(t, binDir, 0)
+	writeFakeHAProxy(t, binDir)
 
 	setupSeams(t, tmpDir, func(_ context.Context) error { return nil })
 
@@ -92,7 +86,7 @@ func TestConfigureHAProxy_HappyPath(t *testing.T) {
 func TestConfigureHAProxy_HappyPath_BackupCreated(t *testing.T) {
 	tmpDir := t.TempDir()
 	binDir := t.TempDir()
-	writeFakeHAProxy(t, binDir, 0)
+	writeFakeHAProxy(t, binDir)
 
 	setupSeams(t, tmpDir, func(_ context.Context) error { return nil })
 
@@ -120,7 +114,7 @@ func TestConfigureHAProxy_HappyPath_BackupCreated(t *testing.T) {
 func TestConfigureHAProxy_NoBackup_SkipsRollback(t *testing.T) {
 	tmpDir := t.TempDir()
 	binDir := t.TempDir()
-	writeFakeHAProxy(t, binDir, 0)
+	writeFakeHAProxy(t, binDir)
 
 	errRestart := errors.New("restart failed")
 	setupSeams(t, tmpDir, func(_ context.Context) error { return errRestart })
@@ -142,7 +136,7 @@ func TestConfigureHAProxy_NoBackup_SkipsRollback(t *testing.T) {
 func TestConfigureHAProxy_RerunPreservesPristineBackup(t *testing.T) {
 	tmpDir := t.TempDir()
 	binDir := t.TempDir()
-	writeFakeHAProxy(t, binDir, 0)
+	writeFakeHAProxy(t, binDir)
 
 	setupSeams(t, tmpDir, func(_ context.Context) error { return nil })
 

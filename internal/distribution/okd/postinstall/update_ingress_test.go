@@ -1195,16 +1195,15 @@ func TestConvertToLoadBalancer_RollbackRunsAfterCtxCancel(t *testing.T) {
 // success and on successful in-process rollback, retained when the rollback
 // also fails.
 func TestConvertToLoadBalancer_BackupLifecycle(t *testing.T) {
-	newBackupEnv := func(t *testing.T) (workDir, backupPath, seen string) {
+	newBackupEnv := func(t *testing.T) (backupPath, seen string) {
 		t.Helper()
 		installFakeOCForIngress(t)
-		workDir = t.TempDir()
-		backupPath = ingressBackupPath(workDir, "default")
+		backupPath = ingressBackupPath(t.TempDir(), "default")
 		seen = filepath.Join(t.TempDir(), "backup-seen")
 		t.Setenv("OC_CALL_FILE", filepath.Join(t.TempDir(), "counter"))
 		t.Setenv("OC_BACKUP_EXPECT", backupPath)
 		t.Setenv("OC_BACKUP_SEEN", seen)
-		return workDir, backupPath, seen
+		return backupPath, seen
 	}
 
 	assertSeenAtDelete := func(t *testing.T, seen string) {
@@ -1219,7 +1218,7 @@ func TestConvertToLoadBalancer_BackupLifecycle(t *testing.T) {
 	}
 
 	t.Run("success removes backup", func(t *testing.T) {
-		_, backupPath, seen := newBackupEnv(t)
+		backupPath, seen := newBackupEnv(t)
 		p := newIngressTestPhase(t)
 		if err := p.convertToLoadBalancer(context.Background(), minimalIC("default"), 5*time.Second, backupPath); err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -1231,7 +1230,7 @@ func TestConvertToLoadBalancer_BackupLifecycle(t *testing.T) {
 	})
 
 	t.Run("successful rollback removes backup", func(t *testing.T) {
-		_, backupPath, seen := newBackupEnv(t)
+		backupPath, seen := newBackupEnv(t)
 		t.Setenv("OC_CREATE_FAIL", "1")
 		p := newIngressTestPhase(t)
 		if err := p.convertToLoadBalancer(context.Background(), minimalIC("default"), 5*time.Second, backupPath); err == nil {
@@ -1244,7 +1243,7 @@ func TestConvertToLoadBalancer_BackupLifecycle(t *testing.T) {
 	})
 
 	t.Run("failed rollback retains backup", func(t *testing.T) {
-		_, backupPath, _ := newBackupEnv(t)
+		backupPath, _ := newBackupEnv(t)
 		t.Setenv("OC_CREATE_FAIL", "1")
 		t.Setenv("OC_ROLLBACK_FAIL", "1")
 		p := newIngressTestPhase(t)

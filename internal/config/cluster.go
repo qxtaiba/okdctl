@@ -262,7 +262,7 @@ func (c *Config) TerraformEnvName() string {
 	if c.Deployment.TerraformEnv != "" {
 		return c.Deployment.TerraformEnv
 	}
-	return "production"
+	return defaultTerraformEnv
 }
 
 // DisksConfig sizes the optional extra data disk (Ceph/storage) attached to

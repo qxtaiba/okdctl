@@ -15,7 +15,7 @@ func TestAtomicInstallFile(t *testing.T) {
 		}
 
 		dst := filepath.Join(destDir, "oc")
-		if err := atomicInstallFile(src, dst, 0o755); err != nil {
+		if err := atomicInstallFile(src, destDir, "oc"); err != nil {
 			t.Fatalf("atomicInstallFile: %v", err)
 		}
 
@@ -46,7 +46,7 @@ func TestAtomicInstallFile(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if err := atomicInstallFile(src, dst, 0o755); err != nil {
+		if err := atomicInstallFile(src, destDir, "kubectl"); err != nil {
 			t.Fatalf("atomicInstallFile: %v", err)
 		}
 		data, err := os.ReadFile(dst)
@@ -65,7 +65,7 @@ func TestAtomicInstallFile(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if err := atomicInstallFile(src, filepath.Join(destDir, "openshift-install"), 0o755); err != nil {
+		if err := atomicInstallFile(src, destDir, "openshift-install"); err != nil {
 			t.Fatalf("atomicInstallFile: %v", err)
 		}
 		entries, err := os.ReadDir(destDir)
@@ -80,11 +80,24 @@ func TestAtomicInstallFile(t *testing.T) {
 	t.Run("missing source errors without touching dst", func(t *testing.T) {
 		destDir := t.TempDir()
 		dst := filepath.Join(destDir, "oc")
-		if err := atomicInstallFile(filepath.Join(t.TempDir(), "absent"), dst, 0o755); err == nil {
+		if err := atomicInstallFile(filepath.Join(t.TempDir(), "absent"), destDir, "oc"); err == nil {
 			t.Fatal("want error for missing source, got nil")
 		}
 		if _, err := os.Stat(dst); err == nil {
 			t.Error("dst must not exist after failed install")
+		}
+	})
+
+	t.Run("rejects names that escape destDir", func(t *testing.T) {
+		srcDir, destDir := t.TempDir(), t.TempDir()
+		src := filepath.Join(srcDir, "oc")
+		if err := os.WriteFile(src, []byte("bin"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		for _, name := range []string{"../oc", "sub/oc", "..", "/abs/oc"} {
+			if err := atomicInstallFile(src, destDir, name); err == nil {
+				t.Errorf("name %q must be rejected", name)
+			}
 		}
 	})
 }

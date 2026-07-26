@@ -35,6 +35,6 @@ package logutil
 //	marker_age     deploy-state marker age as a rounded time.Duration string
 //	stale          boolean judgment that a marker/resource is likely abandoned
 //	phase, run_id  deployment phase and run correlation ID
-//	addon          addon name
+//	addon          name of the addon
 //	backend        firewall backend name
 //	stderr         subprocess stderr, always wrapped in RedactableStderr

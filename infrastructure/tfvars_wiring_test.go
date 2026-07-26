@@ -9,8 +9,8 @@ import (
 )
 
 var (
-	tmplAssignment  = regexp.MustCompile(`(?m)^(\w+)\s*=`)
-	varDeclaration  = regexp.MustCompile(`(?m)^variable\s+"(\w+)"`)
+	tmplAssignment    = regexp.MustCompile(`(?m)^(\w+)\s*=`)
+	varDeclaration    = regexp.MustCompile(`(?m)^variable\s+"(\w+)"`)
 	modulePassthrough = regexp.MustCompile(`(?m)^\s*(\w+)\s*=\s*var\.(\w+)\b`)
 )
 

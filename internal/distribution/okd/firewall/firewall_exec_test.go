@@ -12,10 +12,10 @@ import (
 
 // setBackendSeams overrides the DetectBackend platform gate and firewalld
 // probe, which are otherwise hard-gated off on non-Linux dev hosts.
-func setBackendSeams(t *testing.T, os string, firewalldActive bool) {
+func setBackendSeams(t *testing.T, osName string, firewalldActive bool) {
 	t.Helper()
 	origGoos, origSvc := goos, isServiceActiveFn
-	goos = os
+	goos = osName
 	isServiceActiveFn = func(_ context.Context, svc string) bool {
 		return firewalldActive && svc == "firewalld"
 	}

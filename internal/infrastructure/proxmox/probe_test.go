@@ -110,11 +110,13 @@ func redirectReq(t *testing.T, host string, withAuth bool) *http.Request {
 	return req
 }
 
-func redirectVia(t *testing.T, n int, host string) []*http.Request {
+// redirectVia builds an n-request redirect chain originating from the
+// credentialed probe host.
+func redirectVia(t *testing.T, n int) []*http.Request {
 	t.Helper()
 	via := make([]*http.Request, n)
 	for i := range via {
-		via[i] = redirectReq(t, host, false)
+		via[i] = redirectReq(t, "pve.example", false)
 	}
 	return via
 }
@@ -128,16 +130,16 @@ func TestAPIClientRedirectPolicy(t *testing.T) {
 	if check == nil {
 		t.Fatal("CheckRedirect not installed; redirect cap policy is missing")
 	}
-	if err := check(redirectReq(t, "pve.example", false), redirectVia(t, 1, "pve.example")); err != nil {
+	if err := check(redirectReq(t, "pve.example", false), redirectVia(t, 1)); err != nil {
 		t.Errorf("same-host hop 1 refused: %v", err)
 	}
-	if err := check(redirectReq(t, "pve.example", false), redirectVia(t, 5, "pve.example")); !errors.Is(err, httputil.ErrTooManyRedirects) {
+	if err := check(redirectReq(t, "pve.example", false), redirectVia(t, 5)); !errors.Is(err, httputil.ErrTooManyRedirects) {
 		t.Errorf("hop 5 = %v; want ErrTooManyRedirects", err)
 	}
-	if err := check(redirectReq(t, "evil.example", true), redirectVia(t, 1, "pve.example")); !errors.Is(err, httputil.ErrCrossHostAuthHeader) {
+	if err := check(redirectReq(t, "evil.example", true), redirectVia(t, 1)); !errors.Is(err, httputil.ErrCrossHostAuthHeader) {
 		t.Errorf("cross-host with auth = %v; want ErrCrossHostAuthHeader", err)
 	}
-	if err := check(redirectReq(t, "mirror.example", false), redirectVia(t, 1, "pve.example")); err != nil {
+	if err := check(redirectReq(t, "mirror.example", false), redirectVia(t, 1)); err != nil {
 		t.Errorf("cross-host without auth refused: %v", err)
 	}
 }
