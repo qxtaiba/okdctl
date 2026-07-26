@@ -36,7 +36,7 @@ func (p *Phase) logISOFound(isoPath string) {
 		return
 	}
 	p.loggedISOs[base] = true
-	p.Log.Info("coreos: iso found", "iso", base)
+	p.Log.Info("coreos: iso found", "file", base)
 }
 
 // isoResolution describes how a configured FCOSIso spec was resolved.
@@ -340,7 +340,7 @@ func (p *Phase) DownloadCoreOSISO(ctx context.Context, info *CoreOSInfo, destPat
 		if info.ISOChecksum != "" {
 			err := download.ValidateChecksum(ctx, destPath, info.ISOChecksum)
 			if err != nil {
-				p.Log.Warn("coreos: existing iso checksum mismatch, re-downloading")
+				p.Log.Warn("coreos: existing iso checksum mismatch, re-downloading", "path", destPath, "err", err)
 			} else {
 				p.Log.Info("coreos: iso checksum verified")
 				return nil
@@ -374,7 +374,7 @@ func (p *Phase) DownloadCoreOSISO(ctx context.Context, info *CoreOSInfo, destPat
 // EnsureCoreOSISO ensures the CoreOS ISO is available, downloading to the work
 // directory (avoids permission issues with /var/lib/vz).
 func (p *Phase) EnsureCoreOSISO(ctx context.Context, cfg *config.Config, opts *Options) (string, error) {
-	p.Log.Info("coreos: detecting version from openshift-install")
+	p.Log.Info("coreos: resolving iso from pinned installer stream metadata")
 
 	var okdVersion string
 	if cfg != nil {

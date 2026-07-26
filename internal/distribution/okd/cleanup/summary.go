@@ -5,7 +5,6 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 )
@@ -94,7 +93,7 @@ func printSummary(opts *Options, t *cleanupTracker, logger *slog.Logger) {
 	totalRemaining := summary.RemainingWorkFiles + summary.RemainingIgnitionFiles + summary.RemainingTerraformFiles
 	if names := t.failedNames(); len(names) > 0 {
 		logger.Warn("cleanup: partial cleanup; rerun to retry; subsystems still active",
-			"subsystems", strings.Join(names, ", "))
+			"failed_steps", names)
 	} else if totalRemaining == 0 {
 		if opts.Kind == Full {
 			logger.Info("cleanup: completed")

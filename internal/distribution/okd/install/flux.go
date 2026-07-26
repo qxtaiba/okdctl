@@ -38,7 +38,8 @@ func (p *Phase) ValidateClusterAccess(ctx context.Context) error {
 	if err == nil {
 		for line := range strings.Lines(versionOut) {
 			if strings.HasPrefix(line, "Server Version:") {
-				p.Log.Info("cluster: server version", "version", strings.ToLower(strings.TrimSpace(line)))
+				version := strings.TrimSpace(strings.TrimPrefix(line, "Server Version:"))
+				p.Log.Info("cluster: server version", "version", version)
 				break
 			}
 		}

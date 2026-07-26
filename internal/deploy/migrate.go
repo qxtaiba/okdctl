@@ -8,13 +8,13 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
-	"log/slog"
 	"os"
 	"path/filepath"
 	"time"
 
 	"github.com/qxtaiba/okdctl/infrastructure"
 	"github.com/qxtaiba/okdctl/internal/system"
+	"github.com/qxtaiba/okdctl/internal/tui"
 )
 
 // nodeOpsRootFiles are the production-root files whose embedded copies gained
@@ -87,10 +87,10 @@ func readRootManifest(root string) (*terraformRootManifest, error) {
 		return nil, fmt.Errorf("parse terraform root manifest: %w", err)
 	}
 	if m.SchemaVersion != rootManifestSchema {
-		slog.Warn("terraform root manifest has unknown schema; using content detection",
-			"path", rootManifestPath(root),
-			"schema_version", m.SchemaVersion,
-			"supported", rootManifestSchema)
+		tui.Warn("terraform root manifest has unknown schema; using content detection",
+			tui.LF("path", rootManifestPath(root)),
+			tui.LF("schema_version", m.SchemaVersion),
+			tui.LF("expected", rootManifestSchema))
 		return nil, nil
 	}
 	return &m, nil

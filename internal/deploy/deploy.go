@@ -343,7 +343,8 @@ func Execute(ctx context.Context, cfg *config.Config, opts Options, w io.Writer)
 	}
 
 	if opts.ShowStartMessage {
-		tui.Info("starting deployment...", tui.LF("cluster", cfg.Cluster.Name+"."+cfg.Cluster.Domain))
+		tui.Info("starting deployment...",
+			tui.LF("cluster", cfg.Cluster.Name), tui.LF("domain", cfg.Cluster.Domain))
 	}
 
 	startTime := time.Now()

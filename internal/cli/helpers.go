@@ -25,7 +25,6 @@ func loadConfig(configFile string) (*config.Config, error) {
 	cfg, err := loader.LoadFile(configFile)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			tui.Error("configuration file not found", tui.LF("file", configFile))
 			if configFile == "okdctl.yaml" {
 				tui.Info("run 'okdctl deploy' to create a configuration file")
 			} else {
@@ -50,9 +49,9 @@ func handleCredentials(cfg *config.Config) (*credentials.ProxmoxCredentials, err
 	creds := credentials.GetProxmoxCredentials(cfg)
 	if !creds.IsValid() {
 		tui.Warn("no proxmox credentials found")
-		tui.Info("set credentials via environment variables or env file", tui.LF("path", envPath))
-		tui.Info("  PROXMOX_VE_USERNAME + PROXMOX_VE_PASSWORD")
-		tui.Info("  or PROXMOX_VE_API_TOKEN")
+		tui.Info("set credentials via environment variables or env file",
+			tui.LF("path", envPath),
+			tui.LF("vars", "PROXMOX_VE_USERNAME+PROXMOX_VE_PASSWORD or PROXMOX_VE_API_TOKEN"))
 	} else {
 		reportCredentialProvenance(creds)
 	}
@@ -233,7 +232,8 @@ func warnIfTfStateOnly(root string) {
 	if len(matches) == 0 {
 		return
 	}
-	tui.Warn("okdctl.yaml and okdctl.env not found; accepting terraform.tfstate as a recovery hint",
+	tui.Warn(
+		"okdctl.yaml and okdctl.env not found; accepting terraform.tfstate as a recovery hint",
 		tui.LF("tfstate", matches[0]),
 		tui.LF("root", root),
 	)

@@ -53,7 +53,7 @@ func Packages(ctx context.Context, binDir string, logger *slog.Logger) error {
 
 	pkgList := InstalledPackages()
 	if err := pm.Remove(ctx, pkgList); err != nil {
-		logger.Warn("cleanup: some packages could not be removed (may require manual cleanup)")
+		logger.Warn("cleanup: some packages could not be removed (may require manual cleanup)", "err", err)
 		hasErrors = true
 	}
 

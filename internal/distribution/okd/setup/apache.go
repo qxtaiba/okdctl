@@ -73,7 +73,7 @@ func (p *Phase) verifyApacheListening(ctx context.Context, bindIP string) {
 	dialer := &net.Dialer{Timeout: 1 * time.Second}
 	conn, err := dialer.DialContext(ctx, "tcp", addr)
 	if err != nil {
-		p.Log.Warn("apache: httpd may not be listening on port 443 - check configuration")
+		p.Log.Warn("apache: httpd may not be listening on port 443 - check configuration", "addr", addr, "err", err)
 		return
 	}
 	_ = conn.Close()
@@ -110,7 +110,7 @@ func (p *Phase) configureApacheHTTPS(ctx context.Context, certPath, keyPath, web
 		}
 	}
 
-	p.Log.Info("apache: HTTPS vhost configured", "conf", confPath)
+	p.Log.Info("apache: HTTPS vhost configured", "path", confPath)
 	return nil
 }
 

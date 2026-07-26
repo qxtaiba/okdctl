@@ -81,7 +81,7 @@ func runDeploy(cmd *cobra.Command, _ []string) error {
 		if len(created) > 0 {
 			tui.Info("initialized terraform sources",
 				tui.LF("dir", filepath.Join(projectRoot, "infrastructure", "terraform")),
-				tui.LF("files", len(created)))
+				tui.LF("count", len(created)))
 		}
 		return nil
 	}); err != nil {

@@ -5,13 +5,14 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"log/slog"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/qxtaiba/okdctl/infrastructure"
+	"github.com/qxtaiba/okdctl/internal/tui"
 )
 
 func prodDir(root string) string {
@@ -147,9 +148,10 @@ func TestReadRootManifestUnknownSchemaFallsBackToContentSniff(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	oldDefault := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
-	defer slog.SetDefault(oldDefault)
+	if err := tui.ConfigureLoggers("warn", "text", io.Discard, &buf, false); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = tui.ConfigureLoggers("info", "text", os.Stdout, os.Stderr, false) }()
 
 	got, err := readRootManifest(root)
 	if err != nil {

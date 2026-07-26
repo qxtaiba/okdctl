@@ -354,7 +354,7 @@ func runHostBudgetProbe(ctx context.Context, cfg *config.Config, creds *credenti
 		return 0, 0
 	}
 	tui.Info("host memory budget",
-		tui.LF("node", probe.Node),
+		tui.LF("host_node", probe.Node),
 		tui.LF("total_mib", probe.HostMemTotalMiB()),
 		tui.LF("allocated_mib", probe.GuestAllocatedMiB()))
 	for _, d := range probe.Datastores {

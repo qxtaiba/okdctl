@@ -376,18 +376,19 @@ func (e *Executor) RunStreamed(ctx context.Context, name string, args ...string)
 		Duration:  time.Since(start),
 		Truncated: rout.dropped,
 	}
-	e.logger.Debug("exec: completed", "cmd", name, "duration", result.Duration)
 
+	var retErr error
 	if err != nil {
 		var exitErr *exec.ExitError
 		if errors.As(err, &exitErr) {
 			result.ExitCode = exitErr.ExitCode()
 		} else {
-			return result, err
+			retErr = err
 		}
 	}
 
-	return result, nil
+	e.logger.Debug("exec: completed", "cmd", name, "exit", result.ExitCode, "duration", result.Duration)
+	return result, retErr
 }
 
 // RunStreamedChecked is RunStreamed with RunChecked semantics: non-zero

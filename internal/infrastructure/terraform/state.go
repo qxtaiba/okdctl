@@ -27,7 +27,7 @@ func checkStateMajorVersion(stateFile string, log *slog.Logger) error {
 	raw, err := os.ReadFile(stateFile)
 	if err != nil {
 		log.Warn("terraform: state file read failed; skipping major-version preflight",
-			"file", stateFile, "err", err)
+			"path", stateFile, "err", err)
 		return nil
 	}
 	var state struct {
@@ -35,7 +35,7 @@ func checkStateMajorVersion(stateFile string, log *slog.Logger) error {
 	}
 	if err := json.Unmarshal(raw, &state); err != nil || state.TerraformVersion == "" {
 		log.Warn("terraform: state version unreadable; skipping major-version preflight",
-			"file", stateFile)
+			"path", stateFile)
 		return nil //nolint:nilerr // parse failure is non-fatal: terraform's own init/plan path surfaces it
 	}
 	parts := strings.SplitN(state.TerraformVersion, ".", 2)

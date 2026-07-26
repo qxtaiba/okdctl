@@ -190,7 +190,7 @@ func (p *Phase) reconcileBootstrapDNSOnly(ctx context.Context, cfg *config.Confi
 	if err := p.deployProductionDNS(ctx, cfg, appsIP, vip, nil); err != nil {
 		return nil, err
 	}
-	p.Log.Info("update-ingress: dns updated (kube-vip only)", "apps", appsIP, "api", vip)
+	p.Log.Info("update-ingress: dns updated (kube-vip only)", "apps", appsIP, "vip", vip)
 	return &UpdateIngressResult{
 		KubeVipIP:     vip,
 		DNSReconciled: true,
@@ -274,7 +274,7 @@ func (p *Phase) finalizeIngress(
 	if err := p.deployProductionDNS(ctx, cfg, appsIP, vip, customDomains); err != nil {
 		return nil, &errtypes.ClusterError{Msg: "deploy production DNS", Err: err}
 	}
-	p.Log.Info("update-ingress: dns updated", "apps", appsIP, "api", vip)
+	p.Log.Info("update-ingress: dns updated", "apps", appsIP, "vip", vip)
 
 	result := &UpdateIngressResult{
 		Entries:        entries,
@@ -331,7 +331,7 @@ func (p *Phase) handleHostNetworkConversion(
 	}
 
 	p.Log.Warn("update-ingress: controllers using HostNetwork",
-		"count", len(hostNetworkICs), "controllers", strings.Join(icNames, ", "))
+		"count", len(hostNetworkICs), slog.Any("controllers", icNames))
 
 	metalLBAvailable, err := p.checkMetalLBAvailable(ctx)
 	if err != nil {
@@ -773,7 +773,7 @@ func (p *Phase) restoreHAProxyBackup() bool {
 		p.Log.Warn("update-ingress: rollback: could not restore haproxy config", "path", haproxyConfigPath, "err", err)
 		return false
 	}
-	p.Log.Info("update-ingress: rollback: haproxy config restored from backup", "backup", latest)
+	p.Log.Info("update-ingress: rollback: haproxy config restored from backup", "path", latest)
 	return true
 }
 

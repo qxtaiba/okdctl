@@ -201,7 +201,7 @@ func warnIfStaleResume(marker *deployState) {
 		tui.Info("if bootstrap never completed, run 'okdctl destroy' then re-deploy with --fresh")
 	case age >= 7*24*time.Hour:
 		tui.Warn("deploy state marker is likely stale",
-			tui.LF("marker_age", fmt.Sprintf("%d days", int(age.Hours()/24))))
+			tui.LF("marker_age", age.Round(time.Hour).String()))
 		tui.Info("re-run with --fresh to restart from scratch instead (credentials will be lost)")
 	}
 }
@@ -227,9 +227,10 @@ func AnnounceState(path, clusterName string) {
 	}
 	var extra []tui.LogField
 	if statErr == nil {
-		days := int(time.Since(info.ModTime()).Hours() / 24)
-		if days >= 7 {
-			extra = append(extra, tui.LF("marker_age", fmt.Sprintf("%d days — likely stale", days)))
+		if modAge := time.Since(info.ModTime()); modAge >= 7*24*time.Hour {
+			extra = append(extra,
+				tui.LF("marker_age", modAge.Round(time.Hour).String()),
+				tui.LF("stale", true))
 		}
 	}
 	switch ds.Phase {

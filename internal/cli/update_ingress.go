@@ -57,8 +57,8 @@ func init() {
 // It probes on-disk dnsmasq state and the haproxy service to label any
 // steps that would already be no-ops on the live system.
 func runUpdateIngressDryRun(ctx context.Context, cfg *config.Config) error {
-	clusterFQDN := cfg.Cluster.Name + "." + cfg.Cluster.Domain
-	tui.Info("dry-run: update-ingress for cluster", tui.LF("cluster", clusterFQDN))
+	tui.Info("dry-run: update-ingress for cluster",
+		tui.LF("cluster", cfg.Cluster.Name), tui.LF("domain", cfg.Cluster.Domain))
 	tui.Info("would: query IngressControllers (oc get ingresscontroller -n openshift-ingress-operator)")
 	tui.Info("would: wait for LoadBalancer IPs on router-* services in openshift-ingress")
 
@@ -85,8 +85,8 @@ func runUpdateIngressDryRun(ctx context.Context, cfg *config.Config) error {
 
 func buildConvertConfirm(ctx context.Context, yes bool) func([]string) bool {
 	return func(hostNetworkICs []string) bool {
-		tui.Warn("converting HostNetwork controller(s) to LoadBalancerService requires deleting and recreating them", tui.LF("count", len(hostNetworkICs)))
-		tui.Warn("this will cause a brief outage (~30s) for routes on affected controllers.")
+		tui.Warn("converting HostNetwork controller(s) to LoadBalancerService requires deleting and recreating them; routes on affected controllers see a brief (~30s) outage",
+			tui.LF("count", len(hostNetworkICs)))
 
 		if yes {
 			return true
@@ -118,8 +118,8 @@ func runUpdateIngress(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
-	clusterFQDN := cfg.Cluster.Name + "." + cfg.Cluster.Domain
-	tui.Warn("this will update dns to use loadbalancer ips", tui.LF("cluster", clusterFQDN))
+	tui.Warn("this will update dns to use loadbalancer ips",
+		tui.LF("cluster", cfg.Cluster.Name), tui.LF("domain", cfg.Cluster.Domain))
 	if !updateIngressKeepHAProxy {
 		tui.Warn("haproxy will be stopped and disabled on the bastion (pass --keep-haproxy to skip)")
 	}

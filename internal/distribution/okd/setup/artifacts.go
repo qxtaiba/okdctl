@@ -61,7 +61,7 @@ func (p *Phase) InstallToolsToSystem(ctx context.Context, srcDir string) error {
 			return &errtypes.ConfigError{Msg: fmt.Sprintf("install %s", binary), Err: err}
 		}
 
-		p.Log.Info("tools: installed binary", "binary", binary, "path", destPath)
+		p.Log.Info("tools: installed binary", "tool", binary, "path", destPath)
 	}
 
 	return nil
