@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -8,6 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/cleanup"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
@@ -65,6 +67,25 @@ func runCleanupDryRun(projectRoot string) {
 	tui.Info("dry-run: re-run without --dry-run to execute cleanup")
 }
 
+// cleanupKindRemovesCredentials reports whether kind wipes cluster-config
+// and with it the admin credentials (kubeconfig, kubeadmin-password).
+func cleanupKindRemovesCredentials(kind cleanup.Kind) bool {
+	return kind == cleanup.Full || kind == cleanup.WorkOnly
+}
+
+// confirmCleanupInteractive gates a cleanup run: kinds that remove the
+// admin credentials get the same two-stage typed-cluster-name gate as
+// destroy; scoped kinds keep the single y/N prompt.
+func confirmCleanupInteractive(ctx context.Context, cfg *config.Config, kind cleanup.Kind) (bool, error) {
+	if cleanupKindRemovesCredentials(kind) {
+		nameConfirmed, err := promptForClusterNameConfirmation(ctx, cfg.Cluster.Name, "type cluster name to confirm cleanup: ")
+		if err != nil || !nameConfirmed {
+			return false, err
+		}
+	}
+	return promptForConfirmation(ctx, "proceed with cleanup? [y/N]: ")
+}
+
 func runCleanup(cmd *cobra.Command, _ []string) error {
 	ctx := cmd.Context()
 
@@ -92,13 +113,16 @@ func runCleanup(cmd *cobra.Command, _ []string) error {
 	}
 
 	tui.Warn("this will remove all local artifacts for cluster", tui.LF("cluster", cfg.Cluster.Name))
+	if cleanupKindRemovesCredentials(kind) {
+		tui.Warn("once the infrastructure is destroyed this includes the admin credentials (kubeconfig, kubeadmin-password)")
+	}
 
 	if err := confirmClusterMatches(cleanupYes, cleanupConfirmCluster, cfg.Cluster.Name, "cleanup"); err != nil {
 		return err
 	}
 
 	if !cleanupYes {
-		confirmed, err := promptForConfirmation(ctx, "proceed with cleanup? [y/N]: ")
+		confirmed, err := confirmCleanupInteractive(ctx, cfg, kind)
 		if err != nil {
 			return err
 		}
