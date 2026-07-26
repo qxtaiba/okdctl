@@ -66,7 +66,7 @@ func (p *Phase) CleanupBootstrap(ctx context.Context, cfg *config.Config, opts *
 	if err := system.AtomicWriteString(statePath, `{"bootstrap_enabled": false}`, 0o600); err != nil {
 		// State-write during cluster lifecycle → ClusterError (exit 4), not
 		// ConfigError; bootstrap-state.auto.tfvars.json is managed by okdctl, not the user.
-		return &errtypes.ClusterError{Msg: "bootstrap: failed to write state override", Err: err}
+		return &errtypes.ClusterError{Msg: "bootstrap: write state override", Err: err}
 	}
 
 	p.Log.Info("bootstrap: applying — destroying bootstrap vm")

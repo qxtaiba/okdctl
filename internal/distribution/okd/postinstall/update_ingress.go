@@ -78,7 +78,7 @@ type UpdateIngressResult struct {
 func (p *Phase) UpdateIngress(ctx context.Context, cfg *config.Config, opts UpdateIngressOptions) (*UpdateIngressResult, error) {
 	vip, err := phase.ResolveClusterVIP(cfg)
 	if err != nil {
-		return nil, &errtypes.ConfigError{Msg: "failed to resolve cluster VIP", Err: err}
+		return nil, &errtypes.ConfigError{Msg: "resolve cluster VIP", Err: err}
 	}
 
 	bootstrapDNS, err := dns.IsBootstrapDNS(cfg)
@@ -98,7 +98,7 @@ func (p *Phase) UpdateIngress(ctx context.Context, cfg *config.Config, opts Upda
 	controllers, err := p.discoverIngressControllers(ctx)
 	if err != nil {
 		if !bootstrapDNS {
-			return nil, &errtypes.ClusterError{Msg: "failed to discover IngressControllers", Err: err}
+			return nil, &errtypes.ClusterError{Msg: "discover IngressControllers", Err: err}
 		}
 		p.Log.Warn("update-ingress: cluster unreachable — reconciling bootstrap dns to kube-vip only",
 			"err", err)
@@ -149,7 +149,7 @@ func (p *Phase) UpdateIngress(ctx context.Context, cfg *config.Config, opts Upda
 		if converted > 0 {
 			controllers, err = p.discoverIngressControllers(ctx)
 			if err != nil {
-				return nil, &errtypes.ClusterError{Msg: "failed to re-discover IngressControllers after conversion", Err: err}
+				return nil, &errtypes.ClusterError{Msg: "re-discover IngressControllers after conversion", Err: err}
 			}
 
 			hostNetworkICs = nil
@@ -272,7 +272,7 @@ func (p *Phase) finalizeIngress(
 
 	p.Log.Info("update-ingress: deploying production dns with loadbalancer ips")
 	if err := p.deployProductionDNS(ctx, cfg, appsIP, vip, customDomains); err != nil {
-		return nil, &errtypes.ClusterError{Msg: "failed to deploy production DNS", Err: err}
+		return nil, &errtypes.ClusterError{Msg: "deploy production DNS", Err: err}
 	}
 	p.Log.Info("update-ingress: dns updated", "apps", appsIP, "api", vip)
 
@@ -364,7 +364,7 @@ func (p *Phase) handleHostNetworkConversion(
 		ic := &hostNetworkICs[i]
 		p.Log.Info("update-ingress: converting from hostnetwork to loadbalancerservice", "name", ic.Name)
 		if err := p.convertToLoadBalancer(ctx, ic, timeout, ingressBackupPath(opts.WorkDir, ic.Name)); err != nil {
-			return convertedCount, names, &errtypes.ClusterError{Msg: fmt.Sprintf("failed to convert IngressController %q", ic.Name), Err: err}
+			return convertedCount, names, &errtypes.ClusterError{Msg: fmt.Sprintf("convert IngressController %q", ic.Name), Err: err}
 		}
 		names[ic.Name] = true
 		convertedCount++
@@ -469,10 +469,10 @@ func (p *Phase) discoverIngressControllers(ctx context.Context) ([]ingressContro
 }
 
 func (p *Phase) checkMetalLBAvailable(ctx context.Context) (bool, error) {
-	if ok, err := p.OcResourceExists(ctx, "failed to check metallb-system namespace", "namespace", "metallb-system"); err != nil || !ok {
+	if ok, err := p.OcResourceExists(ctx, "check metallb-system namespace", "namespace", "metallb-system"); err != nil || !ok {
 		return false, err
 	}
-	if ok, err := p.OcResourceExists(ctx, "failed to check IPAddressPools", "ipaddresspool", "-n", "metallb-system"); err != nil || !ok {
+	if ok, err := p.OcResourceExists(ctx, "check IPAddressPools", "ipaddresspool", "-n", "metallb-system"); err != nil || !ok {
 		return false, err
 	}
 	return true, nil
@@ -481,7 +481,7 @@ func (p *Phase) checkMetalLBAvailable(ctx context.Context) (bool, error) {
 func (p *Phase) convertToLoadBalancer(ctx context.Context, ic *ingressControllerInfo, timeout time.Duration, backupPath string) error {
 	replacementJSON, err := buildLBIngressController(ic)
 	if err != nil {
-		return &errtypes.ClusterError{Msg: "failed to build replacement IngressController", Err: err}
+		return &errtypes.ClusterError{Msg: "build replacement IngressController", Err: err}
 	}
 
 	// The delete below removes the only live copy of the controller spec, so
@@ -500,7 +500,7 @@ func (p *Phase) convertToLoadBalancer(ctx context.Context, ic *ingressController
 		"-n", "openshift-ingress-operator")
 	if err != nil {
 		p.removeIngressBackup(backupPath)
-		return &errtypes.ClusterError{Msg: fmt.Sprintf("failed to delete IngressController %q", ic.Name), Err: err}
+		return &errtypes.ClusterError{Msg: fmt.Sprintf("delete IngressController %q", ic.Name), Err: err}
 	}
 
 	p.Log.Info("update-ingress: waiting for router deployment to terminate", "name", ic.Name)
@@ -519,10 +519,10 @@ func (p *Phase) convertToLoadBalancer(ctx context.Context, ic *ingressController
 		rbCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), ingressRollbackTimeout)
 		defer cancel()
 		if rbErr := p.attemptRollback(rbCtx, ic); rbErr != nil {
-			return &errtypes.ClusterError{Msg: "failed to create replacement IngressController; rollback also failed", Err: errors.Join(err, rbErr)}
+			return &errtypes.ClusterError{Msg: "create replacement IngressController; rollback also failed", Err: errors.Join(err, rbErr)}
 		}
 		p.removeIngressBackup(backupPath)
-		return &errtypes.ClusterError{Msg: "failed to create replacement IngressController", Err: err}
+		return &errtypes.ClusterError{Msg: "create replacement IngressController", Err: err}
 	}
 
 	p.removeIngressBackup(backupPath)

@@ -120,12 +120,12 @@ func (p *Phase) VerifyClusterHealth(ctx context.Context, _ *Options) (*ClusterHe
 
 	coJSON, err := p.OcOutputFull(ctx, "get", "clusteroperators", "-o", "json")
 	if err != nil {
-		return nil, &errtypes.ClusterError{Msg: "failed to get cluster operators", Err: err}
+		return nil, &errtypes.ClusterError{Msg: "get cluster operators", Err: err}
 	}
 
 	degraded, err := parseOperatorDegradation([]byte(coJSON))
 	if err != nil {
-		return nil, &errtypes.ClusterError{Msg: "failed to parse cluster operator status", Err: err}
+		return nil, &errtypes.ClusterError{Msg: "parse cluster operator status", Err: err}
 	}
 	result.DegradedOperators = len(degraded)
 	if result.DegradedOperators > 0 {
@@ -136,12 +136,12 @@ func (p *Phase) VerifyClusterHealth(ctx context.Context, _ *Options) (*ClusterHe
 
 	nodesJSON, err := p.OcOutputFull(ctx, "get", "nodes", "-o", "json")
 	if err != nil {
-		return result, &errtypes.ClusterError{Msg: "failed to get nodes", Err: err}
+		return result, &errtypes.ClusterError{Msg: "get nodes", Err: err}
 	}
 
 	ready, total, err := parseNodeReadiness([]byte(nodesJSON))
 	if err != nil {
-		return result, &errtypes.ClusterError{Msg: "failed to parse node readiness", Err: err}
+		return result, &errtypes.ClusterError{Msg: "parse node readiness", Err: err}
 	}
 	result.ReadyNodes = ready
 	result.TotalNodes = total
@@ -156,7 +156,7 @@ func (p *Phase) VerifyClusterHealth(ctx context.Context, _ *Options) (*ClusterHe
 func (p *Phase) VerifyKubeVIP(ctx context.Context, cfg *config.Config, opts *Options) (string, error) {
 	vip, err := phase.ResolveClusterVIP(cfg)
 	if err != nil {
-		return "", &errtypes.ConfigError{Msg: "failed to resolve cluster VIP", Err: err}
+		return "", &errtypes.ConfigError{Msg: "resolve cluster VIP", Err: err}
 	}
 
 	p.Log.Info("kubevip: checking vip", "vip", vip)

@@ -141,7 +141,7 @@ func TestApprovePendingCSRs_ApproveFailureWrapped(t *testing.T) {
 	if !errors.As(err, &ce) {
 		t.Fatalf("err is %T; want *errtypes.ClusterError", err)
 	}
-	if !strings.HasPrefix(ce.Msg, "failed to approve CSRs") {
-		t.Errorf("ClusterError.Msg = %q; want prefix %q", ce.Msg, "failed to approve CSRs")
+	if !strings.HasPrefix(ce.Msg, "approve CSRs") {
+		t.Errorf("ClusterError.Msg = %q; want prefix %q", ce.Msg, "approve CSRs")
 	}
 }

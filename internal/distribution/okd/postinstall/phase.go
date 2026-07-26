@@ -147,7 +147,7 @@ func (p *Phase) StepDefs(cfg *config.Config, opts *Options) []distribution.StepD
 
 func (p *Phase) deployProductionDNS(ctx context.Context, cfg *config.Config, appsIP, kubeVipIP string, customDomains []templates.DNSCustomDomain) error {
 	if err := deployProductionDNSFn(ctx, cfg, appsIP, kubeVipIP, customDomains); err != nil {
-		return &errtypes.ClusterError{Msg: "failed to deploy production dns config", Err: err}
+		return &errtypes.ClusterError{Msg: "deploy production dns config", Err: err}
 	}
 	return nil
 }

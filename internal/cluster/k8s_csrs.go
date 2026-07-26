@@ -29,7 +29,7 @@ func (c *Client) PendingCSRs(ctx context.Context) ([]CSR, error) {
 	}
 
 	if err := json.Unmarshal(data, &csrList); err != nil {
-		return nil, &errtypes.ClusterError{Msg: "failed to parse CSRs", Err: err}
+		return nil, &errtypes.ClusterError{Msg: "parse CSRs", Err: err}
 	}
 
 	var pendingCSRs []CSR
@@ -61,7 +61,7 @@ func (c *Client) ApprovePendingCSRs(ctx context.Context) (int, error) {
 
 	args := append([]string{"adm", "certificate", "approve"}, names...)
 	if err := c.runCheck(ctx, args...); err != nil {
-		return 0, &errtypes.ClusterError{Msg: "failed to approve CSRs", Err: err}
+		return 0, &errtypes.ClusterError{Msg: "approve CSRs", Err: err}
 	}
 
 	return len(names), nil
