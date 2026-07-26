@@ -11,6 +11,20 @@ pre-commit:
       stage_fixed: true
     govet:
       run: go vet ./...
+    sops-guard:
+      glob: "automation/config/secrets/*"
+      # docs/addons/secretstore.md routes real plaintext tokens into this
+      # dir; only sops-encrypted payloads may ever be committed from it.
+      run: |
+        status=0
+        for f in {staged_files}; do
+          case "$f" in */.gitkeep) continue ;; esac
+          if ! grep -q 'ENC\[AES256_GCM' "$f"; then
+            echo "refusing to commit $f: not sops-encrypted (see docs/addons/secretstore.md)" >&2
+            status=1
+          fi
+        done
+        exit $status
     shellcheck:
       glob: "*.sh"
       run: |

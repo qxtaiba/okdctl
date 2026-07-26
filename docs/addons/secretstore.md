@@ -80,6 +80,13 @@ skipped. If neither file exists, install warns and exits without error.
 3. Copy the credentials file into the secrets directory.
 4. Optionally encrypt with sops: `sops -e -i <file>`
 
+Untracked files under `automation/config/secrets/` are gitignored, so
+your token and credentials files will not be committed. The two files the
+repo itself ships there are sops-encrypted by design — never commit
+plaintext credentials, and rotate the underlying credentials only if the
+sops key is suspected compromised. A lefthook pre-commit guard rejects
+any file staged from that directory that is not sops-encrypted.
+
 ### vault
 
 Reads `vault-token.txt` from `secrets_dir`. Creates a `vault-token` Opaque
