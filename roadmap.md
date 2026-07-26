@@ -3558,7 +3558,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `con:c4182b1c:speculative-lock` — speculative lock
 
-**Status:** stale — owner review: no parallel-step item in roadmap; prior keep cited resume items that are themselves deferred; trigger failed two audit cycles
+**Status:** done (chore/scaffold-cleanup 2a41ca34) — removed per owner approval 2026-07-26
 **Severity:** suggestion
 **Cluster:** waitgroup-vs-errgroup — related: con:15ba17da:speculative-lock
 **Evidence:** `internal/distribution/context.go:12-16`
@@ -3568,7 +3568,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `con:15ba17da:speculative-lock` — speculative lock
 
-**Status:** stale — owner review: deliberate keep (PR #460) but rationale is the same nonexistent parallel-step mode as con:c4182b1c
+**Status:** done (chore/scaffold-cleanup 77e03d4c) — removed per owner approval 2026-07-26
 **Severity:** suggestion
 **Cluster:** waitgroup-vs-errgroup — related: con:c4182b1c:speculative-lock
 **Evidence:** `internal/distribution/okd/destroy/steps.go:34-43`
@@ -3580,7 +3580,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `api:66f217c9:export-no-caller-scaffolding` — export no caller scaffolding
 
-**Status:** stale — owner review: consumers arrived and bypassed (cli releases.go uses slices.DeleteFunc; wizard uses Series.Latest)
+**Status:** done (chore/scaffold-cleanup 507afb2f) — removed per owner approval 2026-07-26
 **Severity:** suggestion
 **Cluster:** exported-surface
 **Evidence:** `internal/distribution/okd/releases/okd.go:47-71` + 1 more
@@ -3650,7 +3650,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `api:cf43073b:export-no-caller-scaffolding` — export no caller scaffolding
 
-**Status:** stale — owner review: roadmap ground rule forecloses multi-provider/distribution enumeration; unexport candidate (in-package callers exist)
+**Status:** done (chore/scaffold-cleanup 27c033a1) — unexported per owner approval 2026-07-26
 **Severity:** suggestion
 **Cluster:** exported-surface
 **Evidence:** `internal/config/types.go:25-40`
@@ -3670,7 +3670,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `api:c8b28673:export-no-caller-scaffolding` — export no caller scaffolding
 
-**Status:** stale — owner review: fetch-side embedded-pin verification landed at every extract site; owner question is drop vs keep-inert
+**Status:** done (chore/scaffold-cleanup 59e41782) — removed per owner approval 2026-07-26
 **Severity:** suggestion
 **Cluster:** exported-surface — seam→security — related: sec:8ea706f6:dl-no-signature
 **Evidence:** `internal/download/extract.go:36-40`
@@ -3680,7 +3680,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `api:f5eb0ca4:export-no-caller-scaffolding` — export no caller scaffolding
 
-**Status:** stale — owner review: the named future (C4 cluster stop/start, PR #950) shipped without calling VMRunning
+**Status:** done (chore/scaffold-cleanup 4584d8b3) — removed per owner approval 2026-07-26
 **Severity:** suggestion
 **Cluster:** exported-surface
 **Evidence:** `internal/infrastructure/proxmox/power.go:160-168`
@@ -3710,7 +3710,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `api:0934cf1b:export-no-caller-scaffolding` — export no caller scaffolding
 
-**Status:** stale — owner review: the one repo-registration need deliberately rejected AddRepo (embedded .repo trust-root fix, PR #476); motivating spec deleted
+**Status:** done (chore/scaffold-cleanup 5bccf931) — removed per owner approval 2026-07-26
 **Severity:** suggestion
 **Cluster:** exported-surface
 **Evidence:** `internal/platform/packages.go:127-155`
@@ -3730,7 +3730,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `api:6fc3d91e:export-no-caller-scaffolding` — export no caller scaffolding
 
-**Status:** stale — owner review: sole SELinux decision point references a function that no longer exists; motivating OS-abstraction spec deleted
+**Status:** done (chore/scaffold-cleanup 5bccf931) — removed per owner approval 2026-07-26
 **Severity:** suggestion
 **Cluster:** exported-surface
 **Evidence:** `internal/platform/platform.go:141-147` + 1 more
@@ -4002,7 +4002,7 @@ Full 14-audit sweep (waves 1-2 audited a4d193d4 / rebased into develop; wave 3 a
 
 ##### `ux:8edf3817:concept-named-twice` — concept named twice
 
-**Status:** stale — owner review: C3 shipped 'masters not supported' in help text; bless --role as settled vocabulary or drop it
+**Status:** done (chore/scaffold-cleanup 0a5ae645) — removed per owner approval 2026-07-26
 **Severity:** suggestion
 **Cluster:** verb-noun
 **Evidence:** `internal/cli/node.go:104-147`
