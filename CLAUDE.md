@@ -305,21 +305,39 @@ write the comment — then it carries real information.
   is exempt; record any such exception here.
 - **v0.x deps need a justification and an abandonment plan.** v0.x APIs
   may break on any minor bump. Today's entries:
-  - `github.com/luthermonson/go-proxmox` v0.8.x — sole Proxmox discovery
-    path (`internal/tui/wizard/steps/proxmox_discovery.go`). Bus-factor 1.
-    Fallback: ~200 LOC REST-only rewrite using `net/http` + the documented
-    Proxmox API. Track upstream releases; bump on each. Treat 3 consecutive
-    months without an upstream release as the trigger to start the rewrite.
+  - `github.com/luthermonson/go-proxmox` v0.8.x — sole Proxmox API client:
+    wizard discovery (`internal/tui/wizard/steps/proxmox_discovery.go`)
+    plus host probing and VM power operations
+    (`internal/infrastructure/proxmox/{probe,power}.go`). Bus-factor 1.
+    Fallback: ~300–400 LOC REST-only rewrite using `net/http` + the
+    documented Proxmox API, covering discovery + probe + power. Track
+    upstream releases; bump on each. Treat 3 consecutive months without an
+    upstream release as the trigger to start the rewrite.
     Transitive-weight tally: go-proxmox also links `diskfs/go-diskfs` (a
     full ISO9660/MBR filesystem stack okdctl never calls directly; its
-    compression deps stay go.sum-only under module pruning) — counts
-    toward the rewrite trigger above.
+    compression deps stay go.sum-only under module pruning),
+    `buger/goterm`, and `jinzhu/copier` — all linked into the binary but
+    never called; `magefile/mage` stays go.mod-indirect only, not linked.
+    All of it counts toward the rewrite trigger above.
   - `registry.terraform.io/bpg/proxmox` ~> 0.111.0 — sole actively
     maintained Proxmox VE Terraform provider; hash-pinned at 0.111.1 in
     `infrastructure/terraform/environments/production/.terraform.lock.hcl`
     (linux_amd64 + linux_arm64 hashes committed). Fallback: migrate to
     `Telmate/proxmox` or replace with direct REST calls via
     `null_resource`. Track upstream releases; bump on each.
+  - `github.com/charmbracelet/colorprofile` v0.4.x — charm-ecosystem
+    terminal color-profile detection, single call site
+    (`internal/tui/colorprofile.go`). Fallback: inline ~30 LOC of env/TTY
+    profile detection, or a lipgloss-native profile API if charm.land
+    absorbs it. Track upstream releases; bump on each.
+  - `golang.org/x/*` modules are permanently v0 by convention with Go-team
+    maintenance guarantees; they are exempt from this registry. One carries
+    a hold: `golang.org/x/crypto` is floored at v0.52.0 because v0.53.0
+    OOM-killed the ubuntu CI runner during `go test`
+    (`ci-testgo-xcrypto-053-runner-death`). Renovate blocks exactly
+    v0.53.0, so the first v0.54.0+ renovate PR is the CI canary — if
+    test-go survives, merge and delete this entry plus the go.mod comment;
+    if it OOMs again, re-widen the block and record the outcome here.
 - **Maintained but upstream-locked deps.** `gorilla/websocket` is pulled
   transitively via `go-proxmox`. **It is linked into the release binary but
   never called** — the wizard uses REST discovery only, not shell/console
