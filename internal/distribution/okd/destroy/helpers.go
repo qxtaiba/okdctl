@@ -12,7 +12,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
-func (p *Phase) destroyInfrastructure(ctx context.Context, opts *Options) error {
+func (p *Phase) destroyInfrastructure(ctx context.Context, cfg *config.Config, opts *Options) error {
 	terraformDir := phase.TerraformEnvDir(opts.ProjectRoot, opts.TerraformEnv)
 
 	if !system.DirExists(terraformDir) {
@@ -48,6 +48,8 @@ func (p *Phase) destroyInfrastructure(ctx context.Context, opts *Options) error 
 		return tf.WithLockHint(&errtypes.ClusterError{Msg: "terraform init failed", Err: err})
 	}
 
+	p.warnTopologyDrift(ctx, tf, cfg, len(opts.TerraformTargets) > 0)
+
 	p.Log.Info("terraform: destroying infrastructure", "env", opts.TerraformEnv)
 	p.Log.Warn("terraform: this operation cannot be undone")
 
@@ -69,6 +71,41 @@ func (p *Phase) destroyInfrastructure(ctx context.Context, opts *Options) error 
 	}
 
 	return nil
+}
+
+// warnTopologyDrift probes the state for a master/worker instance one past
+// the config's topology count. A hit means the config was edited since
+// deploy: scoped --only destroys expand targets from config counts and
+// would leave the higher-index VMs running, and customISONames would miss
+// their per-node ISOs. Best-effort — a failed probe warns and never blocks
+// the destroy, which tears down whatever the state actually holds.
+func (p *Phase) warnTopologyDrift(ctx context.Context, tf *terraform.Executor, cfg *config.Config, scoped bool) {
+	probes := []struct {
+		role  nodetypes.NodeRole
+		count int
+	}{
+		{nodetypes.RoleMaster, cfg.Topology.ControlPlane.Count},
+		{nodetypes.RoleWorker, cfg.Topology.Workers.Count},
+	}
+	for _, probe := range probes {
+		addr := fmt.Sprintf("module.okd_cluster.proxmox_virtual_environment_vm.%s[%d]", probe.role, probe.count)
+		present, err := tf.StateHasResource(ctx, addr)
+		if err != nil {
+			p.Log.Warn("destroy: topology drift probe failed; cannot verify config counts against deployed state",
+				"addr", addr, "err", err)
+			continue
+		}
+		if !present {
+			continue
+		}
+		if scoped {
+			p.Log.Warn("destroy: config topology drifted from deployed state; a scoped destroy expanded from config counts leaves higher-index vms running — run an unscoped destroy to remove them",
+				"role", string(probe.role), "config_count", probe.count)
+		} else {
+			p.Log.Warn("destroy: config topology drifted from deployed state; custom iso removal may miss per-node isos beyond the config count",
+				"role", string(probe.role), "config_count", probe.count)
+		}
+	}
 }
 
 // customISONames returns the exact per-node custom ISO filenames the setup

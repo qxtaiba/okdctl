@@ -3,6 +3,7 @@ package destroy
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"slices"
@@ -121,7 +122,7 @@ func TestDestroyInfrastructure_MissingEnvDir(t *testing.T) {
 		AutoApprove: true,
 	}
 
-	err := p.destroyInfrastructure(context.Background(), opts)
+	err := p.destroyInfrastructure(context.Background(), config.DefaultConfig(), opts)
 	if err == nil {
 		t.Fatal("expected error for missing env dir")
 	}
@@ -155,7 +156,7 @@ func TestDestroyInfrastructure_EmptyStateReturnsNil(t *testing.T) {
 		AutoApprove: true,
 	}
 
-	if err := p.destroyInfrastructure(context.Background(), opts); err != nil {
+	if err := p.destroyInfrastructure(context.Background(), config.DefaultConfig(), opts); err != nil {
 		t.Errorf("expected nil (no state = already destroyed); got %v", err)
 	}
 }
@@ -182,7 +183,7 @@ func TestDestroyInfrastructure_TFDestroyFails(t *testing.T) {
 		AutoApprove: true,
 	}
 
-	err := p.destroyInfrastructure(context.Background(), opts)
+	err := p.destroyInfrastructure(context.Background(), config.DefaultConfig(), opts)
 	if err == nil {
 		t.Fatal("expected error when terraform destroy fails")
 	}
@@ -228,7 +229,7 @@ func TestDestroyInfrastructure_CorruptStateReturnsClusterError(t *testing.T) {
 		AutoApprove: true,
 	}
 
-	err := p.destroyInfrastructure(context.Background(), opts)
+	err := p.destroyInfrastructure(context.Background(), config.DefaultConfig(), opts)
 	if err == nil {
 		t.Fatal("expected ClusterError for corrupt state; got nil")
 	}
@@ -273,7 +274,7 @@ func TestDestroyInfrastructure_CorruptStateWithBakNamesSnapshot(t *testing.T) {
 		AutoApprove: true,
 	}
 
-	err := p.destroyInfrastructure(context.Background(), opts)
+	err := p.destroyInfrastructure(context.Background(), config.DefaultConfig(), opts)
 	if err == nil {
 		t.Fatal("expected ClusterError for corrupt state; got nil")
 	}
@@ -322,5 +323,108 @@ func TestCustomISONames(t *testing.T) {
 				t.Errorf("customISONames() = %v; want %v", got, tc.want)
 			}
 		})
+	}
+}
+
+// installFakeStateList installs a terraform stub whose `state list <addr>`
+// exits 0 (present) only for addresses listed in present; every other
+// address exits 1 with empty output (absent). Non-state subcommands exit 0.
+func installFakeStateList(t *testing.T, present ...string) {
+	t.Helper()
+	var b strings.Builder
+	b.WriteString("#!/bin/sh\nif [ \"$1\" != \"state\" ]; then exit 0; fi\ncase \"$3\" in\n")
+	for _, addr := range present {
+		b.WriteString("  '" + addr + "') echo \"$3\"; exit 0 ;;\n")
+	}
+	b.WriteString("  *) exit 1 ;;\nesac\n")
+	testutil.InstallFakeBin(t, "terraform", b.String())
+}
+
+func driftConfig(masters, workers int) *config.Config {
+	cfg := &config.Config{}
+	cfg.Topology.ControlPlane.Count = masters
+	cfg.Topology.Workers.Count = workers
+	return cfg
+}
+
+func driftPhase(h *testutil.CaptureHandler) *Phase {
+	return &Phase{
+		BasePhase: phase.NewBasePhase(
+			phase.WithExecutor(executor.New()),
+			phase.WithLogger(slog.New(h)),
+		),
+	}
+}
+
+func TestWarnTopologyDrift(t *testing.T) {
+	const workerPastEnd = "module.okd_cluster.proxmox_virtual_environment_vm.worker[2]"
+
+	cases := []struct {
+		name     string
+		present  []string
+		scoped   bool
+		wantWarn bool
+		wantMsg  string
+	}{
+		{
+			name:     "no drift stays silent",
+			present:  nil,
+			scoped:   true,
+			wantWarn: false,
+		},
+		{
+			name:     "scoped drift warns about surviving vms",
+			present:  []string{workerPastEnd},
+			scoped:   true,
+			wantWarn: true,
+			wantMsg:  "unscoped destroy",
+		},
+		{
+			name:     "unscoped drift warns about orphan isos",
+			present:  []string{workerPastEnd},
+			scoped:   false,
+			wantWarn: true,
+			wantMsg:  "iso removal",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			installFakeStateList(t, tc.present...)
+			h := &testutil.CaptureHandler{}
+			p := driftPhase(h)
+			tf := terraform.New(t.TempDir(), terraform.WithLogger(logutil.NopLogger))
+
+			p.warnTopologyDrift(context.Background(), tf, driftConfig(3, 2), tc.scoped)
+
+			if got := h.HasLevel(slog.LevelWarn); got != tc.wantWarn {
+				t.Fatalf("warn logged = %v; want %v", got, tc.wantWarn)
+			}
+			if tc.wantMsg != "" {
+				rec, ok := h.Last()
+				if !ok || !strings.Contains(rec.Message, tc.wantMsg) {
+					t.Errorf("warn message = %q; want substring %q", rec.Message, tc.wantMsg)
+				}
+			}
+		})
+	}
+}
+
+// TestWarnTopologyDrift_ProbeFailureNeverBlocks locks the best-effort
+// contract: a broken probe (non-1 exit with stderr) logs and returns; the
+// destroy itself is never gated on the diagnostic.
+func TestWarnTopologyDrift_ProbeFailureNeverBlocks(t *testing.T) {
+	testutil.InstallFakeBin(t, "terraform", "#!/bin/sh\necho \"probe broken\" >&2\nexit 2\n")
+	h := &testutil.CaptureHandler{}
+	p := driftPhase(h)
+	tf := terraform.New(t.TempDir(), terraform.WithLogger(logutil.NopLogger))
+
+	p.warnTopologyDrift(context.Background(), tf, driftConfig(1, 1), true)
+
+	rec, ok := h.Last()
+	if !ok {
+		t.Fatal("probe failure must be logged")
+	}
+	if !strings.Contains(rec.Message, "drift probe failed") {
+		t.Errorf("message = %q; want probe-failure diagnostic", rec.Message)
 	}
 }

@@ -89,7 +89,7 @@ func (p *Phase) destroySteps(ctx context.Context, cfg *config.Config, opts *Opti
 			SkipWhen:   trackSkip("terraform", func() bool { return opts.SkipTerraform }),
 			SkipReason: "terraform destroy disabled",
 			Exec: func(ctx context.Context) error {
-				if err := p.destroyInfrastructure(ctx, opts); err != nil {
+				if err := p.destroyInfrastructure(ctx, cfg, opts); err != nil {
 					return err
 				}
 				p.Log.Info("terraform: infrastructure destruction completed")
