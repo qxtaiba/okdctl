@@ -3,10 +3,12 @@ package addon
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync/atomic"
 	"testing"
 
 	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/executor"
 	"github.com/qxtaiba/okdctl/internal/testutil"
 )
@@ -237,5 +239,141 @@ func TestInstallOne_ReverseRollbackRunsAfterCtxCancel(t *testing.T) {
 	}
 	if !a.uninstallCtxLive.Load() {
 		t.Error("rollback Uninstall received a cancelled ctx; want a detached live ctx")
+	}
+}
+
+func TestUninstall_UnknownAddonIsConfigError(t *testing.T) {
+	mgr := NewManager(enabledCfg())
+	err := mgr.Uninstall(context.Background(), "no-such-addon")
+	if err == nil {
+		t.Fatal("unknown addon: want error, got nil")
+	}
+	var cfgErr *errtypes.ConfigError
+	if !errors.As(err, &cfgErr) {
+		t.Errorf("want *errtypes.ConfigError (exit 2), got %T: %v", err, err)
+	}
+}
+
+func TestUninstall_RefusedWhileDirectDependentEnabled(t *testing.T) {
+	a := &stubAddon{meta: Metadata{Name: "a", Priority: 1, DisplayName: "a"}}
+	b := &stubAddon{meta: Metadata{Name: "b", Priority: 2, DisplayName: "b", Dependencies: []string{"a"}}}
+	registerStubs(t, a, b)
+
+	mgr := NewManager(enabledCfg("a", "b"))
+	err := mgr.Uninstall(context.Background(), "a")
+	if err == nil {
+		t.Fatal("uninstall of a load-bearing addon must be refused")
+	}
+	var cfgErr *errtypes.ConfigError
+	if !errors.As(err, &cfgErr) {
+		t.Errorf("want *errtypes.ConfigError, got %T: %v", err, err)
+	}
+	if !strings.Contains(err.Error(), "b depends on it") {
+		t.Errorf("refusal must name the dependent addon: %v", err)
+	}
+	if a.uninstallN.Load() != 0 {
+		t.Errorf("a.uninstallN = %d; guard must run before Uninstall", a.uninstallN.Load())
+	}
+}
+
+func TestUninstall_RefusedForTransitiveDependent(t *testing.T) {
+	a := &stubAddon{meta: Metadata{Name: "a", Priority: 1, DisplayName: "a"}}
+	b := &stubAddon{meta: Metadata{Name: "b", Priority: 2, DisplayName: "b", Dependencies: []string{"a"}}}
+	c := &stubAddon{meta: Metadata{Name: "c", Priority: 3, DisplayName: "c", Dependencies: []string{"b"}}}
+	registerStubs(t, a, b, c)
+
+	// Only a and c are enabled: the walk must cross the disabled middle hop.
+	mgr := NewManager(enabledCfg("a", "c"))
+	err := mgr.Uninstall(context.Background(), "a")
+	if err == nil {
+		t.Fatal("transitive dependent must block uninstall")
+	}
+	if !strings.Contains(err.Error(), "c depends on it") {
+		t.Errorf("refusal must name the transitive dependent: %v", err)
+	}
+	if a.uninstallN.Load() != 0 {
+		t.Errorf("a.uninstallN = %d; want 0", a.uninstallN.Load())
+	}
+}
+
+func TestUninstall_DependencyCycleTerminatesAndProceeds(t *testing.T) {
+	x := &stubAddon{meta: Metadata{Name: "x", Priority: 1, DisplayName: "x", Dependencies: []string{"y"}}}
+	y := &stubAddon{meta: Metadata{Name: "y", Priority: 2, DisplayName: "y", Dependencies: []string{"x"}}}
+	solo := &stubAddon{meta: Metadata{Name: "solo", Priority: 3, DisplayName: "solo"}}
+	registerStubs(t, x, y, solo)
+
+	// dependsOn must terminate on the x<->y cycle via the visited map
+	// instead of recursing forever, then let the unrelated uninstall run.
+	mgr := NewManager(enabledCfg("x", "y", "solo"))
+	if err := mgr.Uninstall(context.Background(), "solo"); err != nil {
+		t.Fatalf("Uninstall(solo): %v", err)
+	}
+	if solo.uninstallN.Load() != 1 {
+		t.Errorf("solo.uninstallN = %d; want exactly 1", solo.uninstallN.Load())
+	}
+}
+
+func TestUninstall_NoDependentCallsUninstallOnce(t *testing.T) {
+	a := &stubAddon{meta: Metadata{Name: "a", Priority: 1, DisplayName: "a"}}
+	b := &stubAddon{meta: Metadata{Name: "b", Priority: 2, DisplayName: "b", Dependencies: []string{"a"}}}
+	registerStubs(t, a, b)
+
+	// b depends on a, not the reverse — removing the leaf must be allowed.
+	mgr := NewManager(enabledCfg("a", "b"))
+	if err := mgr.Uninstall(context.Background(), "b"); err != nil {
+		t.Fatalf("Uninstall(b): %v", err)
+	}
+	if b.uninstallN.Load() != 1 {
+		t.Errorf("b.uninstallN = %d; want exactly 1", b.uninstallN.Load())
+	}
+	if a.uninstallN.Load() != 0 {
+		t.Errorf("a.uninstallN = %d; dependency must stay installed", a.uninstallN.Load())
+	}
+}
+
+func TestVerifyAll_ContinuesPastFailureAndAggregates(t *testing.T) {
+	a := &stubAddon{meta: Metadata{Name: "a", Priority: 1, DisplayName: "a"}, verifyErr: errors.New("a broken")}
+	b := &stubAddon{meta: Metadata{Name: "b", Priority: 2, DisplayName: "b"}}
+	registerStubs(t, a, b)
+
+	mgr := NewManager(enabledCfg("a", "b"))
+	results, err := mgr.VerifyAll(context.Background())
+	if err == nil {
+		t.Fatal("want aggregated error when a verify fails")
+	}
+	if len(results) != 2 {
+		t.Fatalf("len(results) = %d; want 2 (iteration must not stop on failure)", len(results))
+	}
+	var clusterErr *errtypes.ClusterError
+	if !errors.As(err, &clusterErr) {
+		t.Errorf("aggregate must carry *errtypes.ClusterError, got %T: %v", err, err)
+	}
+	byName := map[string]error{}
+	for _, r := range results {
+		byName[r.Name] = r.Err
+	}
+	if byName["a"] == nil {
+		t.Error("result for a must carry the verify error")
+	}
+	if byName["b"] != nil {
+		t.Errorf("result for b must be clean, got: %v", byName["b"])
+	}
+	if b.verifyN.Load() != 1 {
+		t.Errorf("b.verifyN = %d; want 1", b.verifyN.Load())
+	}
+}
+
+func TestVerifyAll_CancelledCtxStopsIteration(t *testing.T) {
+	a := &stubAddon{meta: Metadata{Name: "a", Priority: 1, DisplayName: "a"}}
+	registerStubs(t, a)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, err := NewManager(enabledCfg("a")).VerifyAll(ctx)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("want context.Canceled, got: %v", err)
+	}
+	if a.verifyN.Load() != 0 {
+		t.Errorf("a.verifyN = %d; cancelled ctx must stop before Verify", a.verifyN.Load())
 	}
 }
