@@ -10,7 +10,7 @@ import (
 func TestNewStepsOrder(t *testing.T) {
 	st := &State{Cfg: config.DefaultConfig()}
 	steps := NewSteps(st, Hooks{})
-	want := []wizard.StepID{StepIDOp, StepIDTarget, StepIDParams, StepIDPreview, StepIDConfirm}
+	want := []wizard.StepID{StepIDOp, StepIDTarget, StepIDParams, StepIDPreview, StepIDConfirm, StepIDExec, StepIDDone}
 	if len(steps) != len(want) {
 		t.Fatalf("len(steps) = %d, want %d", len(steps), len(want))
 	}
