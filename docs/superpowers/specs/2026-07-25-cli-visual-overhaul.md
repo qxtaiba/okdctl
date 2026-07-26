@@ -446,7 +446,7 @@ Give empty states a consistent glyph + reassurance, not a bare string:
 
 ```
 │  nodes                                                                     │
-│    ○ no worker nodes yet — add one with  okdctl node add --role worker     │
+│    ○ no worker nodes yet — add one with  okdctl node add                   │
 ```
 
 ### 3.5 Spinner / progress — keep, unify color
