@@ -15,6 +15,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/distribution/okd"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/render"
+	"github.com/qxtaiba/okdctl/internal/runlock"
 	"github.com/qxtaiba/okdctl/internal/tui"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard/steps"
@@ -72,14 +73,19 @@ func runDeploy(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
-	created, err := deploy.MaterializeTerraform(projectRoot)
-	if err != nil {
+	if err := withProjectLock(projectRoot, "deploy", func() error {
+		created, err := deploy.MaterializeTerraform(projectRoot)
+		if err != nil {
+			return err
+		}
+		if len(created) > 0 {
+			tui.Info("initialized terraform sources",
+				tui.LF("dir", filepath.Join(projectRoot, "infrastructure", "terraform")),
+				tui.LF("files", len(created)))
+		}
+		return nil
+	}); err != nil {
 		return err
-	}
-	if len(created) > 0 {
-		tui.Info("initialized terraform sources",
-			tui.LF("dir", filepath.Join(projectRoot, "infrastructure", "terraform")),
-			tui.LF("files", len(created)))
 	}
 
 	// Resolve the config file path: --output-file wins when explicitly set;
@@ -121,7 +127,9 @@ func runDeploy(cmd *cobra.Command, _ []string) error {
 	}
 
 	if deployWriteConfig {
-		return saveConfig(cfg, deployOutputFile, out)
+		return withProjectLock(projectRoot, "deploy --write-config", func() error {
+			return saveConfig(cfg, deployOutputFile, out)
+		})
 	}
 
 	// --yes carries the same assume-yes meaning as every sibling command:
@@ -157,16 +165,18 @@ func runDeploy(cmd *cobra.Command, _ []string) error {
 	// Guarantee secrets are cleared from the config struct, even on panic.
 	defer clearConfigCredentials(cfg)
 
-	if err := writeCredentialsEnv(cfg, deployOutputFile); err != nil {
-		return fmt.Errorf("save credentials: %w", err)
-	}
+	if err := withProjectLock(projectRoot, "deploy", func() error {
+		if err := writeCredentialsEnv(cfg, deployOutputFile); err != nil {
+			return fmt.Errorf("save credentials: %w", err)
+		}
 
-	// Clear secrets before saving so they never appear in YAML.
-	// The defer above is a safety net; this is the primary clear.
-	clearConfigCredentials(cfg)
+		// Clear secrets before saving so they never appear in YAML.
+		// The defer above is a safety net; this is the primary clear.
+		clearConfigCredentials(cfg)
 
-	if err := saveConfig(cfg, deployOutputFile, out); err != nil {
-		return fmt.Errorf("save configuration: %w", err)
+		return saveConfig(cfg, deployOutputFile, out)
+	}); err != nil {
+		return err
 	}
 
 	switch result.Action {
@@ -220,6 +230,20 @@ func deployDryRunSteps(cfg *config.Config, projectRoot string) []render.DryRunSt
 		out[i] = render.DryRunStep{ID: string(s.ID), Name: s.Name}
 	}
 	return out
+}
+
+// withProjectLock runs fn while holding the project runlock. runDeploy uses
+// it to serialize its shared-file write windows (terraform materialization,
+// okdctl.yaml, okdctl.env) against concurrent okdctl invocations while
+// keeping the interactive wizard outside the lock; deploy.Execute takes the
+// lock again for the deployment itself.
+func withProjectLock(projectRoot, verb string, fn func() error) error {
+	lock, err := runlock.Acquire(projectRoot, verb)
+	if err != nil {
+		return err
+	}
+	defer lock.Release()
+	return fn()
 }
 
 func saveConfig(cfg *config.Config, path string, w io.Writer) error {
