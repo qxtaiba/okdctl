@@ -71,7 +71,7 @@ func NodeOpComplete(plan *node.OpPlan, elapsed time.Duration) string {
 	}
 	sb.Newline()
 
-	if steps := nodeOpNextSteps(plan); len(steps) > 0 {
+	if steps := NodeOpNextSteps(plan); len(steps) > 0 {
 		sb.Section("next steps")
 		for _, s := range steps {
 			sb.WriteString("    " + s + "\n")
@@ -128,7 +128,10 @@ func nodeOpDetails(sb *Builder, plan *node.OpPlan) {
 	sb.Newline()
 }
 
-func nodeOpNextSteps(plan *node.OpPlan) []string {
+// NodeOpNextSteps returns the operator-owned follow-ups for a completed op;
+// shared by the CLI completion box and the wizard's done screen so the
+// wording never drifts.
+func NodeOpNextSteps(plan *node.OpPlan) []string {
 	switch plan.Op {
 	case node.OpAdd:
 		return []string{
