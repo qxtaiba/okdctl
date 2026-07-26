@@ -48,7 +48,7 @@ func init() {
 	cleanupCmd.Flags().BoolVarP(&cleanupYes, "yes", "y", false, "skip confirmation prompt")
 	cleanupCmd.Flags().BoolVar(&cleanupDryRun, flagDryRun, false, "preview what would be removed without making changes")
 	cleanupCmd.Flags().StringVar(&cleanupConfirmCluster, "confirm-cluster", "",
-		"required with --yes; must equal cfg.Cluster.Name (typo guard for scripted cleanups)")
+		"required with --yes; must equal the config cluster name")
 	cleanupCmd.Flags().StringVar(&cleanupKind, "kind", string(cleanup.Full),
 		"cleanup scope: "+strings.Join(cleanup.KindStrings(), ", "))
 	_ = cleanupCmd.RegisterFlagCompletionFunc("kind", func(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {

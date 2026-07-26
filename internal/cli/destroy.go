@@ -181,7 +181,7 @@ func init() {
 	destroyCmd.Flags().BoolVar(&destroyKeepISOs, "keep-isos", false, "do not remove the FCOS ISO from the Proxmox host (always true for a scoped --target/--only destroy)")
 	destroyCmd.Flags().BoolVar(&destroyDryRun, flagDryRun, false, "preview terraform destroy plan without running destroy")
 	destroyCmd.Flags().StringVar(&destroyConfirmCluster, "confirm-cluster", "",
-		"required with --yes; must equal cfg.Cluster.Name (typo guard for scripted destroys)")
+		"required with --yes; must equal the config cluster name")
 	destroyCmd.Flags().BoolVar(&destroySkipTerraform, "skip-terraform", false, "skip terraform destroy — intended for resuming after a successful terraform-destroy phase (no-op with --dry-run)")
 	destroyCmd.Flags().BoolVar(&destroySkipCleanup, "skip-cleanup", false, "skip host file cleanup — leaves haproxy/dnsmasq config in place (no-op with --dry-run; always true for a scoped --target/--only destroy)")
 	destroyCmd.Flags().BoolVar(&destroySkipFirewall, "skip-firewall", false, "skip firewall rule cleanup (no-op with --dry-run; always true for a scoped --target/--only destroy)")
