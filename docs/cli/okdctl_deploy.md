@@ -6,8 +6,11 @@ Deploy a Kubernetes cluster
 
 Deploy an OKD/OpenShift cluster through an interactive wizard.
 
-Use --yes to write the configuration file non-interactively without
-deploying; run the command again without --yes to deploy from it.
+Use --yes to skip the wizard and deploy non-interactively from an existing
+configuration file. Use --write-config to write the configuration file
+non-interactively without deploying.
+
+Note: before v0.2.0, --yes meant what --write-config means now.
 
 ```
 okdctl deploy [flags]
@@ -18,7 +21,8 @@ okdctl deploy [flags]
 ```
   okdctl deploy
   okdctl deploy --config my-cluster.yaml
-  okdctl deploy --yes --output-file my-cluster.yaml  # writes config only; does not deploy
+  okdctl deploy --yes                                # deploys from okdctl.yaml, no wizard
+  okdctl deploy --write-config --output-file my-cluster.yaml  # writes config only; does not deploy
   okdctl deploy --dry-run
   okdctl deploy --keep-redhat-catalogs
 ```
@@ -32,7 +36,8 @@ okdctl deploy [flags]
       --keep-redhat-catalogs   keep the redhat-operators, certified-operators, and redhat-marketplace OperatorHub catalogsources and the InsightsDisabled alert enabled (both require a Red Hat subscription OKD clusters don't have)
       --minimal                use minimal defaults (single-node cluster)
       --output-file string     config file to write wizard output to; reuses and reads back an existing file at this path, otherwise creates one; overrides --config when both are set (default "okdctl.yaml")
-  -y, --yes                    write configuration non-interactively; does not deploy
+      --write-config           write configuration non-interactively; does not deploy
+  -y, --yes                    skip the wizard and deploy from the existing configuration file
 ```
 
 ### Options inherited from parent commands

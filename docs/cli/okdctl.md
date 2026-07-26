@@ -28,7 +28,7 @@ per 24h, cached locally); set OKDCTL_NO_UPDATE_CHECK=1 to disable.
 
 * [okdctl addon](okdctl_addon.md)	 - Manage cluster addons
 * [okdctl cleanup](okdctl_cleanup.md)	 - Remove OKD cluster artifacts without destroying infrastructure
-* [okdctl cluster](okdctl_cluster.md)	 - Cluster-wide lifecycle operations
+* [okdctl cluster](okdctl_cluster.md)	 - Manage cluster-wide lifecycle operations
 * [okdctl completion](okdctl_completion.md)	 - Generate shell completion script
 * [okdctl config](okdctl_config.md)	 - Inspect okdctl configuration
 * [okdctl debug-bundle](okdctl_debug-bundle.md)	 - Collect a support bundle for troubleshooting

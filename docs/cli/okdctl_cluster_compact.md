@@ -25,7 +25,7 @@ okdctl cluster compact [flags]
 
 ```
   okdctl cluster compact --yes --confirm-cluster grappleberry
-  okdctl cluster compact --grow-master-memory-mb 24576 --dry-run
+  okdctl cluster compact --master-memory-mb 24576 --dry-run
 ```
 
 ### Options
@@ -35,9 +35,9 @@ okdctl cluster compact [flags]
       --confirm-cluster string       required with --yes; must equal the config cluster name
       --dry-run                      print the compaction plan without mutating anything
       --force-storage                allow worker removal even when workers hold rook-ceph OSDs
-      --grow-master-memory-mb int    resize each master to this memory (MiB) as workers are removed (0 leaves masters unchanged)
   -h, --help                         help for compact
       --ingress-replicas int         compact IngressController replica count (default 2)
+      --master-memory-mb int         grow each master to this memory (MiB) as workers are removed (0 leaves masters unchanged)
   -y, --yes                          skip confirmation prompt
 ```
 
@@ -54,5 +54,5 @@ okdctl cluster compact [flags]
 
 ### SEE ALSO
 
-* [okdctl cluster](okdctl_cluster.md)	 - Cluster-wide lifecycle operations
+* [okdctl cluster](okdctl_cluster.md)	 - Manage cluster-wide lifecycle operations
 

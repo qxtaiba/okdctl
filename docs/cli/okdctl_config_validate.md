@@ -2,6 +2,16 @@
 
 Validate the configuration file and report errors
 
+### Synopsis
+
+Validate the configuration file against the schema (required fields,
+enum values, provider settings, topology constraints) and print every
+error and warning found.
+
+Read-only: nothing is written or deployed. Exits 0 when the config is
+valid (warnings alone do not fail), 2 when validation reports errors,
+and 66 when the file does not exist.
+
 ```
 okdctl config validate [flags]
 ```

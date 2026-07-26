@@ -55,5 +55,5 @@ okdctl cluster stop [flags]
 
 ### SEE ALSO
 
-* [okdctl cluster](okdctl_cluster.md)	 - Cluster-wide lifecycle operations
+* [okdctl cluster](okdctl_cluster.md)	 - Manage cluster-wide lifecycle operations
 
