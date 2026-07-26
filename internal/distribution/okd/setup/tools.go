@@ -271,12 +271,8 @@ func (p *Phase) installBinaryToPath(ctx context.Context, srcPath, name string) e
 	binDir := config.BinDirOrDefault(p.BinDir)
 	destPath := filepath.Join(binDir, name)
 
-	if err := system.CopyFile(srcPath, destPath); err != nil {
-		return fmt.Errorf("copy %s to %s: %w", name, binDir, err)
-	}
-
-	if err := system.MakeExecutable(destPath); err != nil {
-		return fmt.Errorf("set executable permissions on %s: %w", name, err)
+	if err := atomicInstallFile(srcPath, destPath, 0o755); err != nil {
+		return fmt.Errorf("install %s to %s: %w", name, binDir, err)
 	}
 
 	return nil

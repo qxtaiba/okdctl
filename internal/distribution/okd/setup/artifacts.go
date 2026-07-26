@@ -3,6 +3,8 @@ package setup
 import (
 	"context"
 	"fmt"
+	"io"
+	"os"
 	"path/filepath"
 
 	"github.com/qxtaiba/okdctl/internal/config"
@@ -54,20 +56,57 @@ func (p *Phase) InstallToolsToSystem(ctx context.Context, srcDir string) error {
 
 		destPath := filepath.Join(destDir, binary)
 
-		if err := system.CopyFile(srcPath, destPath); err != nil {
+		if err := atomicInstallFile(srcPath, destPath, 0o755); err != nil {
 			return &errtypes.ConfigError{Msg: fmt.Sprintf("failed to install %s", binary), Err: err}
-		}
-
-		if err := system.MakeExecutable(destPath); err != nil {
-			p.Log.Warn("tools: failed to set executable permission", "binary", binary, "err", err)
-		}
-
-		if !system.FileExists(destPath) {
-			return &errtypes.ConfigError{Msg: fmt.Sprintf("tools: %s not found at %s after install", binary, destPath)}
 		}
 
 		p.Log.Info("tools: installed binary", "binary", binary, "path", destPath)
 	}
 
+	return nil
+}
+
+// atomicInstallFile streams src into a temp file created beside dst, applies
+// mode, fsyncs, and renames it into place. Installed binaries back
+// existence-only resume guards (download-tools' AlreadyDone), so a crash
+// mid-install must never leave a truncated file at dst. Streaming avoids
+// buffering multi-hundred-MB release binaries the way system.AtomicWrite
+// would.
+func atomicInstallFile(src, dst string, mode os.FileMode) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return fmt.Errorf("open %s: %w", src, err)
+	}
+	defer func() { _ = in.Close() }()
+
+	if err := system.EnsureDirForFile(dst); err != nil {
+		return fmt.Errorf("create destination directory: %w", err)
+	}
+
+	tmp, err := os.CreateTemp(filepath.Dir(dst), "."+filepath.Base(dst)+".tmp-*")
+	if err != nil {
+		return fmt.Errorf("create temp file: %w", err)
+	}
+	tmpPath := tmp.Name()
+	defer func() { _ = os.Remove(tmpPath) }()
+
+	if _, err := io.Copy(tmp, in); err != nil {
+		_ = tmp.Close()
+		return fmt.Errorf("copy %s: %w", src, err)
+	}
+	if err := tmp.Chmod(mode); err != nil {
+		_ = tmp.Close()
+		return fmt.Errorf("chmod temp file: %w", err)
+	}
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		return fmt.Errorf("sync temp file: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		return fmt.Errorf("close temp file: %w", err)
+	}
+	if err := os.Rename(tmpPath, dst); err != nil {
+		return fmt.Errorf("rename into place: %w", err)
+	}
 	return nil
 }
