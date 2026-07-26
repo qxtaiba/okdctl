@@ -44,6 +44,9 @@ func displayStatus(s *distribution.StepResult) stepDisplayStatus {
 }
 
 // Builder accumulates aligned section/key-value lines for a boxed summary.
+// Every writer shares one layout contract: lines are indented two spaces
+// inside the box, and KV/KVHighlight dot-pad their keys against the shared
+// keyWidth/kvWidth columns so values align down the whole summary.
 type Builder struct {
 	b        strings.Builder
 	keyWidth int
@@ -73,7 +76,7 @@ func (s *Builder) KVHighlight(key, value string) {
 	s.b.WriteString("  " + tui.DottedKeyValueHighlightFull("  "+key, value, s.keyWidth, s.kvWidth) + "\n")
 }
 
-// Newline writes a blank line.
+// Newline writes a blank spacer line between sections.
 func (s *Builder) Newline() {
 	s.b.WriteString("\n")
 }

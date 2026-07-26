@@ -52,12 +52,16 @@ var validConfigNameRegex = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$`
 // metacharacters not enumerated.
 var validConnectionNameRegex = regexp.MustCompile(`^[A-Za-z0-9 ._/:-]{1,128}$`)
 
-// EnableDnsmasq enables and starts the dnsmasq service.
+// EnableDnsmasq marks dnsmasq to start at boot (systemctl enable, no
+// --now): it does not start the service — the restart after the first
+// config deploy brings it up.
 func EnableDnsmasq(ctx context.Context) error {
 	return system.ManageService(ctx, system.ServiceEnable, dnsmasqService)
 }
 
-// RestartDnsmasq restarts the dnsmasq service.
+// RestartDnsmasq restarts dnsmasq so a newly written config takes effect.
+// Run ValidateDnsmasqConfig first — restarting into a broken config takes
+// cluster DNS down.
 func RestartDnsmasq(ctx context.Context) error {
 	return system.ManageService(ctx, system.ServiceRestart, dnsmasqService)
 }
