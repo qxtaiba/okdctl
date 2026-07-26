@@ -41,6 +41,11 @@ pull-secret.txt
 pull-secret.json
 .sops.yaml
 
+automation/config/secrets/*
+!automation/config/secrets/.gitkeep
+!automation/config/secrets/1password-credentials.json
+!automation/config/secrets/1password-token.txt
+
 # Ignition files
 *.ign
 
