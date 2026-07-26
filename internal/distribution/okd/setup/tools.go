@@ -117,7 +117,7 @@ func (p *Phase) InstallExternalTools(ctx context.Context, cfg *config.Config) er
 
 func (p *Phase) installTool(ctx context.Context, tool externalTool) error {
 	if isToolInstalled(tool) {
-		p.Log.Info("tools: already installed", "tool", string(tool))
+		p.Log.Debug("tools: already installed", "tool", string(tool))
 		return nil
 	}
 

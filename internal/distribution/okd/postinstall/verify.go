@@ -230,7 +230,7 @@ func (p *Phase) verifyKubeVIPAPIHealthBootstrap(ctx context.Context, vip, cluste
 		return &errtypes.ClusterError{Msg: "kubeconfig CA unavailable for kube-vip api health check", Err: caErr}
 	}
 
-	p.Log.Info("verify: checking vip health", "url", healthURL)
+	p.Log.Info("kubevip: checking vip health", "url", healthURL)
 
 	doRequest := func(client *http.Client) (string, error) {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, healthURL, http.NoBody)
@@ -256,7 +256,7 @@ func (p *Phase) verifyKubeVIPAPIHealthBootstrap(ctx context.Context, vip, cluste
 			return &errtypes.ClusterError{Msg: fmt.Sprintf("api health check at %s", healthURL), Err: err}
 		}
 		// VIP not yet in apiserver SANs — transient during kube-vip cert re-issue; retry insecure.
-		p.Log.Warn("verify: vip not in apiserver sans yet, retrying without tls verification", "vip", vip)
+		p.Log.Warn("kubevip: vip not in apiserver sans yet, retrying without tls verification", "vip", vip)
 		response, err = doRequest(httputil.NewInsecure(5 * time.Second))
 		if err != nil {
 			return &errtypes.ClusterError{Msg: fmt.Sprintf("api health check at %s", healthURL), Err: err}

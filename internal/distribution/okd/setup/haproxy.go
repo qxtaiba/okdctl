@@ -199,7 +199,7 @@ func (p *Phase) VerifyHAProxyPorts(ctx context.Context) error {
 	for _, portInfo := range ports {
 		pattern := fmt.Sprintf(":%s ", portInfo.port)
 		if strings.Contains(result.Stdout, pattern) {
-			p.Log.Info("haproxy: listening", "port", portInfo.port, "desc", portInfo.description)
+			p.Log.Debug("haproxy: listening", "port", portInfo.port, "desc", portInfo.description)
 		} else {
 			p.Log.Warn("haproxy: may not be listening", "port", portInfo.port, "desc", portInfo.description)
 		}

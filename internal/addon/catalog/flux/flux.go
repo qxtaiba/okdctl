@@ -181,7 +181,8 @@ func (f *Flux) installInstance(ctx context.Context, env *addon.Environment, fs *
 		return fmt.Errorf("flux: write instance values file: %w", err)
 	}
 	defer func() { _ = os.Remove(valuesPath) }()
-	return f.helmUpgradeInstall(ctx, env, "flux-instance",
+	return f.helmUpgradeInstall(
+		ctx, env, "flux-instance",
 		"oci://ghcr.io/controlplaneio-fluxcd/charts/flux-instance",
 		"flux instance",
 		"-f", valuesPath,
@@ -259,7 +260,7 @@ func (f *Flux) Uninstall(ctx context.Context, env *addon.Environment) error {
 	// error), so the exit code must be checked or failures pass silently.
 	warnOnErr := func(res *executor.Result, err error, desc string) {
 		if err != nil || res.ExitCode != 0 {
-			env.Logger.Warn("flux: "+desc, "exit", res.ExitCode, "err", err)
+			env.Logger.Warn("flux: uninstall step failed", "step", desc, "exit", res.ExitCode, "err", err)
 		}
 	}
 	res, err := env.Exec.Run(ctx, "helm", "uninstall", "flux-instance", "--namespace", "flux-system")

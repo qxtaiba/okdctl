@@ -143,6 +143,8 @@ func (p *Phase) extractReleaseImage(ctx context.Context, ocPath, ref, destDir st
 		return &errtypes.ClusterError{Msg: fmt.Sprintf("release extract failed for %s", ref), Err: execErr}
 	}
 
+	p.Log.Info("tools: release extract completed", "ref", ref, "duration", result.Duration)
+
 	return extractReleaseTarballs(ctx, destDir, p.Log)
 }
 

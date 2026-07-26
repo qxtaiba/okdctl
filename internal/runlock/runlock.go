@@ -31,6 +31,9 @@ type Lock struct {
 // non-blocking flock. On success it writes human-readable diagnostics
 // into the file and returns a *Lock. On conflict it reads the file body
 // and returns a *errtypes.ConfigError naming the holder.
+// Warn records emitted here route through slog.Default(); callers that
+// bypass cli.Execute must install logutil.RedactHandler first (see
+// internal/version/updatecheck.go for the same contract).
 func Acquire(projectRoot, verb string) (*Lock, error) {
 	path := filepath.Join(projectRoot, lockFile)
 

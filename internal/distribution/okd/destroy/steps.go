@@ -162,7 +162,7 @@ func (p *Phase) destroySteps(ctx context.Context, cfg *config.Config, opts *Opti
 				if err := fw.RemoveOKDRules(ctx, true); err != nil {
 					return &errtypes.ClusterError{Msg: "firewall cleanup failed", Err: err}
 				}
-				p.Log.Info("firewall: okd rules removed from firewalld")
+				p.Log.Info("firewall: okd rules removed")
 				return nil
 			},
 			OnError: track("firewall cleanup"),
