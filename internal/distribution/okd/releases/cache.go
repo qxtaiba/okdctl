@@ -45,6 +45,10 @@ func (f *OKDVersionFetcher) loadFromDiskCache() []OKDReleaseSeries {
 		return nil // Invalid cache format - will refresh
 	}
 
+	if cache.Schema != diskCacheSchema {
+		return nil // Cache written by a different shape - treat as corrupt
+	}
+
 	if time.Since(cache.CachedAt) >= f.diskCacheTTL {
 		return nil // Cache is stale
 	}
@@ -59,6 +63,7 @@ func (f *OKDVersionFetcher) saveToDiskCache(series []OKDReleaseSeries) {
 	}
 
 	cache := diskCache{
+		Schema:   diskCacheSchema,
 		CachedAt: time.Now(),
 		Series:   series,
 	}

@@ -54,7 +54,14 @@ type githubRelease struct {
 	PublishedAt time.Time `json:"published_at"`
 }
 
+// diskCacheSchema versions the on-disk cache JSON. json.Unmarshal tolerates
+// shape drift silently, so loadFromDiskCache discards any cache whose schema
+// does not match exactly (a missing field decodes as 0) and refetches; bump
+// it whenever diskCache or its nested types change shape.
+const diskCacheSchema = 1
+
 type diskCache struct {
+	Schema   int                `json:"schema"`
 	CachedAt time.Time          `json:"cached_at"`
 	Series   []OKDReleaseSeries `json:"series"`
 }
