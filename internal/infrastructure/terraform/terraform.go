@@ -42,6 +42,9 @@ type ExecError = executor.ExitError
 // Executor wraps terraform subcommand execution for a single working
 // directory. varFile is the default var-file path; per-invocation
 // overrides come via the VarFile field on Plan/Apply/DestroyOptions.
+//
+// Must be constructed via New — the zero value panics on first use (the
+// backing executor and logger are set only in New).
 type Executor struct {
 	workDir string
 	varFile string

@@ -20,6 +20,9 @@ import (
 )
 
 // Client is a kubectl/oc wrapper for the install and postinstall phases.
+//
+// Must be constructed via New — the zero value panics on first use (the
+// backing executor and logger are set only in New).
 type Client struct {
 	CLI string
 

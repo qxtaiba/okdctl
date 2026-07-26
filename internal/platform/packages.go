@@ -28,6 +28,9 @@ const packageManagerTimeout = 15 * time.Minute
 // Manager is the host package manager (dnf or apt-get) used to install OKD
 // host dependencies. The family field selects between RHEL (dnf/rpm) and
 // Debian (apt-get/dpkg) binaries and drives the AddRepo branch.
+//
+// Must be constructed via NewPackageManager — the zero value panics on
+// first use (the backend commands and logger are set only there).
 type Manager struct {
 	family    Family
 	pkgCmd    string                               // "dnf" | "apt-get"
