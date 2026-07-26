@@ -49,7 +49,7 @@ func init() {
 	updateIngressCmd.Flags().BoolVar(&updateIngressKeepHAProxy, "keep-haproxy", false, "keep haproxy running on the bastion after dns switch")
 	updateIngressCmd.Flags().BoolVar(&updateIngressDryRun, flagDryRun, false, "preview update-ingress mutations without touching the cluster")
 	updateIngressCmd.Flags().StringVar(&updateIngressConfirmCluster, "confirm-cluster", "",
-		"required with --yes; must equal cfg.Cluster.Name (typo guard for scripted update-ingress runs)")
+		"required with --yes; must equal the config cluster name")
 }
 
 // runUpdateIngressDryRun prints the mutations update-ingress would perform

@@ -23,7 +23,7 @@ okdctl addon uninstall <name> [flags]
 ### Options
 
 ```
-      --confirm-cluster string   required with --yes; must equal cfg.Cluster.Name (typo guard for scripted uninstalls)
+      --confirm-cluster string   required with --yes; must equal the config cluster name
   -h, --help                     help for uninstall
   -y, --yes                      skip confirmation prompt
 ```
