@@ -591,11 +591,11 @@ func isValidNetmask(s string) bool {
 }
 
 func isValidDistribution(d DistributionType) bool {
-	return slices.Contains(SupportedDistributions(), d)
+	return slices.Contains(supportedDistributions(), d)
 }
 
 func isValidProvider(p ProviderType) bool {
-	return slices.Contains(SupportedProviders(), p)
+	return slices.Contains(supportedProviders(), p)
 }
 
 func getMinMemoryForDistribution(d DistributionType) int {

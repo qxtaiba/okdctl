@@ -22,16 +22,16 @@ const (
 	ProviderProxmox ProviderType = "proxmox"
 )
 
-// SupportedDistributions returns the distributions okdctl knows how to
+// supportedDistributions returns the distributions okdctl knows how to
 // deploy.
-func SupportedDistributions() []DistributionType {
+func supportedDistributions() []DistributionType {
 	return []DistributionType{
 		DistributionOKD,
 	}
 }
 
-// SupportedProviders returns the infrastructure providers okdctl targets.
-func SupportedProviders() []ProviderType {
+// supportedProviders returns the infrastructure providers okdctl targets.
+func supportedProviders() []ProviderType {
 	return []ProviderType{
 		ProviderProxmox,
 	}
