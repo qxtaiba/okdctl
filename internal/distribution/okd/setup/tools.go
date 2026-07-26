@@ -109,7 +109,7 @@ func (p *Phase) InstallExternalTools(ctx context.Context, cfg *config.Config) er
 	tools := append([]externalTool{toolTerraform, toolYQ}, addonRequiredTools(cfg)...)
 	for _, tool := range tools {
 		if err := p.installTool(ctx, tool); err != nil {
-			return &errtypes.ConfigError{Msg: fmt.Sprintf("failed to install %s", tool), Err: err}
+			return &errtypes.ConfigError{Msg: fmt.Sprintf("install %s", tool), Err: err}
 		}
 	}
 	return nil
@@ -117,7 +117,7 @@ func (p *Phase) InstallExternalTools(ctx context.Context, cfg *config.Config) er
 
 func (p *Phase) installTool(ctx context.Context, tool externalTool) error {
 	if isToolInstalled(tool) {
-		p.Log.Info("tools: already installed", "tool", string(tool))
+		p.Log.Debug("tools: already installed", "tool", string(tool))
 		return nil
 	}
 
@@ -185,7 +185,7 @@ func (p *Phase) installTerraform(ctx context.Context) error {
 	}
 
 	if !isToolInstalled(toolTerraform) {
-		return fmt.Errorf("terraform installation verification failed")
+		return &errtypes.ConfigError{Msg: "terraform installation verification failed"}
 	}
 
 	version := getToolVersion(ctx, "terraform", "--version")
@@ -222,7 +222,8 @@ func (p *Phase) installBinary(ctx context.Context, spec *binaryInstallSpec) erro
 	}
 
 	tempFile, err := system.WriteTempFile(spec.name+"-download-*", 0o600, func(f *os.File) error {
-		return download.Fetch(ctx, spec.url, f.Name(),
+		return download.Fetch(
+			ctx, spec.url, f.Name(),
 			download.WithFetchChecksum(expectedChecksum),
 			download.WithDescription(spec.name),
 			download.WithTimeout(2*time.Minute),
@@ -242,7 +243,8 @@ func (p *Phase) installBinary(ctx context.Context, spec *binaryInstallSpec) erro
 			return fmt.Errorf("create extract directory: %w", err)
 		}
 		defer func() { _ = os.RemoveAll(extractDir) }()
-		if err := download.ExtractTarGz(ctx, tempFile, extractDir,
+		if err := download.ExtractTarGz(
+			ctx, tempFile, extractDir,
 			download.WithExtractStripComponents(spec.stripComponents),
 			download.WithExtractCleanupArchive(true),
 			download.WithExtractLogger(p.Log),
@@ -256,7 +258,7 @@ func (p *Phase) installBinary(ctx context.Context, spec *binaryInstallSpec) erro
 		return err
 	}
 	if !isToolInstalled(externalTool(spec.name)) {
-		return fmt.Errorf("%s installation verification failed", spec.name)
+		return &errtypes.ConfigError{Msg: fmt.Sprintf("%s installation verification failed", spec.name)}
 	}
 	p.Log.Info("tools: installed", "tool", spec.name, "version", getToolVersion(ctx, spec.name, spec.versionFlag))
 	return nil
@@ -267,14 +269,9 @@ func (p *Phase) installBinaryToPath(ctx context.Context, srcPath, name string) e
 		return err
 	}
 	binDir := config.BinDirOrDefault(p.BinDir)
-	destPath := filepath.Join(binDir, name)
 
-	if err := system.CopyFile(srcPath, destPath); err != nil {
-		return fmt.Errorf("copy %s to %s: %w", name, binDir, err)
-	}
-
-	if err := system.MakeExecutable(destPath); err != nil {
-		return fmt.Errorf("set executable permissions on %s: %w", name, err)
+	if err := atomicInstallFile(srcPath, binDir, name); err != nil {
+		return fmt.Errorf("install %s to %s: %w", name, binDir, err)
 	}
 
 	return nil
@@ -344,7 +341,7 @@ func installHashiCorpDebianRepo(ctx context.Context, codename string) error {
 	}
 
 	if codename == "" {
-		return fmt.Errorf("failed to detect debian codename: VERSION_CODENAME not set in /etc/os-release")
+		return &errtypes.ConfigError{Msg: "debian codename not detected: VERSION_CODENAME not set in /etc/os-release"}
 	}
 
 	listContent := fmt.Sprintf("deb [signed-by=%s] https://apt.releases.hashicorp.com %s main\n", gpgPath, codename)
@@ -365,7 +362,8 @@ func installHashiCorpDebianRepo(ctx context.Context, codename string) error {
 }
 
 func verifyHashiCorpGPGFingerprint(ctx context.Context, armoredKeyPath string) error {
-	out, err := executor.OutputCaptured(ctx,
+	out, err := executor.OutputCaptured(
+		ctx,
 		"gpg", "--with-fingerprint", "--with-colons",
 		"--import-options", "show-only", "--import", armoredKeyPath,
 	)

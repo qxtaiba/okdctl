@@ -7,13 +7,14 @@ import (
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/templates"
+	"github.com/qxtaiba/okdctl/internal/nodetypes"
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
 // chronyMachineConfigRoles are the MachineConfig pools chrony must target —
 // the MCO applies pool-scoped configs only to matching nodes, so shipping
 // only "master" would leave workers on their unmanaged default chrony.conf.
-var chronyMachineConfigRoles = []string{"master", "worker"}
+var chronyMachineConfigRoles = []string{string(nodetypes.RoleMaster), string(nodetypes.RoleWorker)}
 
 // generateChronyManifests writes a chrony MachineConfig for each node pool,
 // pointed at cfg.Networking.NTPServer (defaulting to the bastion's ignition

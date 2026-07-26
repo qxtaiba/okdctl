@@ -36,6 +36,11 @@ var (
 	// removeAllFn is the os.RemoveAll indirection used by RestoreSystemResolver.
 	// Tests inject a failing func to cover the logged-but-not-propagated error path.
 	removeAllFn = os.RemoveAll
+	// isNetworkManagerActiveFn and isServiceActiveFn let tests drive the
+	// resolver forward/restore paths from non-Linux hosts, where the real
+	// probes are hard-gated off by runtime.GOOS.
+	isNetworkManagerActiveFn = IsNetworkManagerActive
+	isServiceActiveFn        = system.IsServiceActive
 )
 
 var validConfigNameRegex = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$`)
@@ -47,12 +52,16 @@ var validConfigNameRegex = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$`
 // metacharacters not enumerated.
 var validConnectionNameRegex = regexp.MustCompile(`^[A-Za-z0-9 ._/:-]{1,128}$`)
 
-// EnableDnsmasq enables and starts the dnsmasq service.
+// EnableDnsmasq marks dnsmasq to start at boot (systemctl enable, no
+// --now): it does not start the service — the restart after the first
+// config deploy brings it up.
 func EnableDnsmasq(ctx context.Context) error {
 	return system.ManageService(ctx, system.ServiceEnable, dnsmasqService)
 }
 
-// RestartDnsmasq restarts the dnsmasq service.
+// RestartDnsmasq restarts dnsmasq so a newly written config takes effect.
+// Run ValidateDnsmasqConfig first — restarting into a broken config takes
+// cluster DNS down.
 func RestartDnsmasq(ctx context.Context) error {
 	return system.ManageService(ctx, system.ServiceRestart, dnsmasqService)
 }
@@ -179,7 +188,7 @@ func ConfigureSystemResolver(ctx context.Context, fallbackDNS []string, logger *
 		return fmt.Errorf("invalid fallback DNS configuration: %w", err)
 	}
 
-	if IsNetworkManagerActive(ctx) {
+	if isNetworkManagerActiveFn(ctx) {
 		conn, err := getActiveConnection(ctx)
 		if err != nil {
 			return err
@@ -202,7 +211,7 @@ func ConfigureSystemResolver(ctx context.Context, fallbackDNS []string, logger *
 		return nil
 	}
 
-	if system.IsServiceActive(ctx, "systemd-resolved") {
+	if isServiceActiveFn(ctx, "systemd-resolved") {
 		logger.Info("resolver: configuring systemd-resolved to use dnsmasq")
 		confPath := resolvedConf
 		confDir := filepath.Dir(resolvedConf)
@@ -242,7 +251,7 @@ func ConfigureSystemResolver(ctx context.Context, fallbackDNS []string, logger *
 // nmcli DNS override or removes the systemd-resolved drop-in. Failures are
 // logged but do not abort cleanup.
 func RestoreSystemResolver(ctx context.Context, logger *slog.Logger) error {
-	if IsNetworkManagerActive(ctx) {
+	if isNetworkManagerActiveFn(ctx) {
 		conn, err := getActiveConnection(ctx)
 		if err != nil {
 			logger.Warn("resolver: could not detect active connection for restore", "err", err)
@@ -251,15 +260,19 @@ func RestoreSystemResolver(ctx context.Context, logger *slog.Logger) error {
 
 		logger.Info("resolver: restoring DHCP DNS", "conn", conn)
 
-		if err := executor.RunCaptured(ctx, "nmcli", "connection", "modify", conn, "ipv4.dns", "", "ipv4.ignore-auto-dns", "no"); err != nil {
-			logger.Warn("resolver: failed to clear DNS settings", "err", err)
+		modifyErr := executor.RunCaptured(ctx, "nmcli", "connection", "modify", conn, "ipv4.dns", "", "ipv4.ignore-auto-dns", "no")
+		if modifyErr != nil {
+			logger.Warn("resolver: failed to clear DNS settings", "err", modifyErr)
 		}
 
-		if err := executor.RunCaptured(ctx, "nmcli", "connection", "up", conn); err != nil {
-			logger.Warn("resolver: failed to apply DNS configuration", "err", err)
+		upErr := executor.RunCaptured(ctx, "nmcli", "connection", "up", conn)
+		if upErr != nil {
+			logger.Warn("resolver: failed to apply DNS configuration", "err", upErr)
 		}
 
-		logger.Info("resolver: system DNS restored to DHCP")
+		if modifyErr == nil && upErr == nil {
+			logger.Info("resolver: system DNS restored to DHCP")
+		}
 		return nil
 	}
 
@@ -267,8 +280,9 @@ func RestoreSystemResolver(ctx context.Context, logger *slog.Logger) error {
 		logger.Info("resolver: removing systemd-resolved dnsmasq configuration")
 		if err := removeAllFn(resolvedConf); err != nil {
 			logger.Warn("resolver: failed to remove", "path", resolvedConf, "err", err)
+			return nil
 		}
-		if system.IsServiceActive(ctx, "systemd-resolved") {
+		if isServiceActiveFn(ctx, "systemd-resolved") {
 			_ = system.ManageService(ctx, system.ServiceRestart, "systemd-resolved")
 		}
 		logger.Info("resolver: systemd-resolved configuration restored")

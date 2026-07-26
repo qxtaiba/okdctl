@@ -39,3 +39,30 @@ func TestClusterStopStartRegisteredWithExpectedFlags(t *testing.T) {
 		})
 	}
 }
+
+// TestClusterCompactMasterMemoryFlagAlias locks the compact memory flag
+// rename: --master-memory-mb is the primary spelling, and the deprecated
+// --grow-master-memory-mb keeps working against the same variable.
+func TestClusterCompactMasterMemoryFlagAlias(t *testing.T) {
+	cmd := findSubcommand(t, clusterCmd, "compact")
+
+	primary := cmd.Flags().Lookup("master-memory-mb")
+	if primary == nil {
+		t.Fatal("compact must register --master-memory-mb")
+	}
+	old := cmd.Flags().Lookup("grow-master-memory-mb")
+	if old == nil {
+		t.Fatal("compact must keep --grow-master-memory-mb as a deprecated alias")
+	}
+	if old.Deprecated == "" {
+		t.Error("--grow-master-memory-mb must be marked deprecated")
+	}
+
+	if err := cmd.Flags().Set("grow-master-memory-mb", "24576"); err != nil {
+		t.Fatalf("deprecated alias must still parse: %v", err)
+	}
+	t.Cleanup(func() { compactGrowMasterMB = 0 })
+	if compactGrowMasterMB != 24576 {
+		t.Fatalf("alias must write compactGrowMasterMB, got %d", compactGrowMasterMB)
+	}
+}

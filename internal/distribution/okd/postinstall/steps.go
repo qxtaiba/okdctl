@@ -52,24 +52,6 @@ func (p *Phase) postinstallSteps(cfg *config.Config, opts *Options, pctx *distri
 				return nil
 			},
 		},
-		// Recurring risk: if StepVerifyKubeVIP fails after this step succeeds,
-		// StepDeployProductionDNS is skipped and DNS remains pointed at the
-		// (now-gone) bootstrap VM with no rollback. Preferred fix: extend
-		// update-ingress to detect bootstrap-DNS + bootstrap-VM-gone and re-issue.
-		{
-			ID: StepCleanupBootstrap, Name: StepNames[StepCleanupBootstrap],
-			ReRunSafe: distribution.ReRunSafeYes,
-			Desc:      "destroying bootstrap vm via terraform",
-			Exec: func(ctx context.Context) error {
-				if err := p.CleanupBootstrap(ctx, cfg, opts); err != nil {
-					return &errtypes.ClusterError{Msg: "bootstrap cleanup failed", Err: err}
-				}
-				pctx.Update(func(c *postInstallContext) {
-					c.BootstrapCleaned = true
-				})
-				return nil
-			},
-		},
 		{
 			ID: StepVerifyKubeVIP, Name: StepNames[StepVerifyKubeVIP],
 			ReRunSafe: distribution.ReRunSafeYes,
@@ -89,6 +71,28 @@ func (p *Phase) postinstallSteps(cfg *config.Config, opts *Options, pctx *distri
 				return nil
 			},
 			OnError: phase.WarnOnError(p.Log, "kubevip: verification failed"),
+		},
+		// Verify-before-destroy: the bootstrap VM is the API fallback while
+		// DNS is bootstrap-pointed, so it is only destroyed once kube-vip is
+		// confirmed serving the VIP — unless the operator explicitly skipped
+		// verification, which is honored as consent to proceed.
+		{
+			ID: StepCleanupBootstrap, Name: StepNames[StepCleanupBootstrap],
+			ReRunSafe: distribution.ReRunSafeYes,
+			Desc:      "destroying bootstrap vm via terraform",
+			SkipWhen: func() bool {
+				return !pctx.Get().KubeVIPVerified && !opts.SkipKubeVIP
+			},
+			SkipReason: "kube-vip not verified — keeping bootstrap vm as fallback",
+			Exec: func(ctx context.Context) error {
+				if err := p.CleanupBootstrap(ctx, cfg, opts); err != nil {
+					return &errtypes.ClusterError{Msg: "bootstrap cleanup failed", Err: err}
+				}
+				pctx.Update(func(c *postInstallContext) {
+					c.BootstrapCleaned = true
+				})
+				return nil
+			},
 		},
 		{
 			ID: StepDeployProductionDNS, Name: StepNames[StepDeployProductionDNS],

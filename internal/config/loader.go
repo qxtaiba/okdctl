@@ -72,7 +72,8 @@ func checkSchemaVersion(data []byte, path string) error {
 	case SchemaVersionV1:
 		return &errtypes.ConfigError{Msg: fmt.Sprintf(
 			"config file %s uses schemaVersion %q; current is %q — rename provider.proxmox.master_nodes to control_plane_nodes, disks.master_data_size_gb to control_plane_data_size_gb, topology.*.memory to memory_mb, topology.*.disk to disk_gb, then set schemaVersion: %q",
-			path, SchemaVersionV1, SchemaVersionCurrent, SchemaVersionCurrent)}
+			path, SchemaVersionV1, SchemaVersionCurrent, SchemaVersionCurrent,
+		)}
 	default:
 		return &errtypes.ConfigError{Msg: fmt.Sprintf("config file %s has unsupported schemaVersion %q (expected %q)", path, probe.SchemaVersion, SchemaVersionCurrent)}
 	}
@@ -95,10 +96,10 @@ func (l *Loader) Save(cfg *Config, path string) error {
 	}
 	data, err := yaml.Marshal(cfg)
 	if err != nil {
-		return &errtypes.ConfigError{Msg: "failed to marshal config", Err: err}
+		return &errtypes.ConfigError{Msg: "marshal config", Err: err}
 	}
 	if err := system.AtomicWrite(path, data, 0o600); err != nil {
-		return &errtypes.ConfigError{Msg: fmt.Sprintf("failed to write config to %s", path), Err: err}
+		return &errtypes.ConfigError{Msg: fmt.Sprintf("write config to %s", path), Err: err}
 	}
 	return nil
 }

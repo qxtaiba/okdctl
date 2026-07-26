@@ -469,3 +469,58 @@ func TestDryRunPreviewsPastForeignMarker(t *testing.T) {
 		}
 	})
 }
+
+// TestResizeResumesMidPowerCycleWithMemberDown covers the crash window inside
+// PowerCycleVM itself: the stop landed but the start did not, so the marked
+// master sits powered off and etcd cannot report healthy until it is powered
+// back on. The resumed run must skip the pre-node etcd gate for that master —
+// running it would deadlock behind the very power-on it blocks — while the
+// post-cycle gate still verifies quorum before the node returns to service.
+func TestResizeResumesMidPowerCycleWithMemberDown(t *testing.T) {
+	fc := &fakeCluster{
+		nodes: []cluster.NodeDetail{
+			{Name: "master0", Role: nodetypes.RoleMaster, Ready: true},
+			{Name: "master1", Role: nodetypes.RoleMaster, Ready: true},
+			{Name: "master2", Role: nodetypes.RoleMaster, Ready: true},
+		},
+		// The marked master is down: etcd is degraded until the resumed
+		// power-cycle brings it back.
+		etcdHealthy: false,
+	}
+	ftf := &fakeTF{
+		action:          terraform.PlanActionUpdate,
+		emptyForAddress: map[string]bool{masterAddress(0): true},
+	}
+	fp := &fakePower{}
+	fp.onCycle = func() { fc.etcdHealthy = true }
+	cfg := config.DefaultConfig()
+	cfg.Topology.ControlPlane.MemoryMB = 12288
+	cfg.Topology.VMIDBase = 6000
+	cfg.Provider.Proxmox.Node = testProxmoxNode
+
+	r, _, _ := seedRunner(t, fc, ftf, cfg)
+	r.DryRun = false
+	r.Power = fp
+	// Keep the failure mode fast: if the pre-gate wrongly runs against the
+	// down member, it times out here instead of burning the default gate.
+	r.EtcdGateTimeout = 1 * time.Second
+	seedMarker(t, r, OpResize, "master1", StepPowerCycle)
+
+	if err := r.Resize(context.Background(), ResizeScope{Role: nodetypes.RoleMaster}, ResizeOptions{MemoryMB: 24576}); err != nil {
+		t.Fatalf("resume with the marked master powered off must not deadlock on the pre-etcd gate: %v", err)
+	}
+
+	master1VMID := cfg.Topology.VMIDBase + vmidMasterOffset + 1
+	if !slices.Contains(fp.cycledVMIDs, master1VMID) {
+		t.Errorf("master1 must be power-cycled on resume: vmids=%v want %d", fp.cycledVMIDs, master1VMID)
+	}
+	if !slices.Contains(fc.uncordonedNodes, "master1") {
+		t.Errorf("master1 must return to service once healthy: uncordoned=%v", fc.uncordonedNodes)
+	}
+	// master2 ran fresh AFTER the cycle restored quorum, so its own pre-gate
+	// passed — proving the skip is scoped to the resumed node, not a blanket
+	// gate removal.
+	if !slices.Contains(fc.cordonedNodes, "master2") {
+		t.Errorf("master2 must run fresh after the resume: cordoned=%v", fc.cordonedNodes)
+	}
+}

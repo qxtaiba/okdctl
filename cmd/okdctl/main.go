@@ -33,11 +33,11 @@ func preflight() {
 	if v := os.Getenv("OKDCTL_BIN_DIR"); v != "" {
 		expanded := system.ExpandPath(v)
 		if err := config.ValidateBinDir(expanded); err != nil {
-			detail := err.Error()
+			fields := []tui.LogField{tui.LF("value", v), tui.LF("err", err)}
 			if strings.HasPrefix(v, "~") && expanded == v {
-				detail = "tilde expansion failed (home dir unresolved); " + detail
+				fields = append(fields, tui.LF("note", "tilde expansion failed (home dir unresolved)"))
 			}
-			cli.DeferWarn(func() { tui.Warn("OKDCTL_BIN_DIR ignored", tui.LF("value", v), tui.LF("err", detail)) })
+			cli.DeferWarn(func() { tui.Warn("OKDCTL_BIN_DIR ignored", fields...) })
 		}
 	}
 	binDir := config.PreflightBinDir()

@@ -21,7 +21,7 @@ import (
 func (p *Phase) BuildHAProxyConfigData(cfg *config.Config) (templates.HAProxyConfigData, error) {
 	nodes, err := p.BuildNodeList(cfg)
 	if err != nil {
-		return templates.HAProxyConfigData{}, &errtypes.ConfigError{Msg: "failed to build node list", Err: err}
+		return templates.HAProxyConfigData{}, &errtypes.ConfigError{Msg: "build node list", Err: err}
 	}
 
 	var masterServers, workerServers []templates.HAProxyServer
@@ -67,10 +67,10 @@ var (
 func (p *Phase) installHAProxyConfig(ctx context.Context, tmpPath string) error {
 	data, err := os.ReadFile(tmpPath)
 	if err != nil {
-		return &errtypes.ClusterError{Msg: "failed to read temp haproxy config", Err: err}
+		return &errtypes.ClusterError{Msg: "read temp haproxy config", Err: err}
 	}
 	if err := system.AtomicWriteString(haproxyConfigPath, string(data), 0o644); err != nil {
-		return &errtypes.ClusterError{Msg: "failed to install haproxy config", Err: err}
+		return &errtypes.ClusterError{Msg: "install haproxy config", Err: err}
 	}
 
 	if _, err := p.Exec.RunChecked(ctx, "haproxy", "-c", "-f", haproxyConfigPath); err != nil {
@@ -96,12 +96,12 @@ func enableAndRestartHAProxy(ctx context.Context) error {
 func (p *Phase) ConfigureHAProxy(ctx context.Context, cfg *config.Config, _ *Options) error {
 	data, err := p.BuildHAProxyConfigData(cfg)
 	if err != nil {
-		return &errtypes.ConfigError{Msg: "failed to build HAProxy config data", Err: err}
+		return &errtypes.ConfigError{Msg: "build HAProxy config data", Err: err}
 	}
 
 	content, err := templates.RenderHAProxyConfig(&data)
 	if err != nil {
-		return &errtypes.ConfigError{Msg: "failed to render haproxy.cfg template", Err: err}
+		return &errtypes.ConfigError{Msg: "render haproxy.cfg template", Err: err}
 	}
 
 	// A user-writable temp file is required because the final install step
@@ -111,16 +111,19 @@ func (p *Phase) ConfigureHAProxy(ctx context.Context, cfg *config.Config, _ *Opt
 		return werr
 	})
 	if err != nil {
-		return &errtypes.ConfigError{Msg: "failed to write temp haproxy config", Err: err}
+		return &errtypes.ConfigError{Msg: "write temp haproxy config", Err: err}
 	}
 	defer func() { _ = os.Remove(tmpPath) }()
 
 	// Back up the live config so we can roll back if validation or restart
-	// fails after the new config is already in place.
-	hasBackup := false
-	if system.FileExists(haproxyConfigPath) {
+	// fails after the new config is already in place. The fixed backup path
+	// is the single pristine pre-okdctl snapshot: from the second run onward
+	// the live file is okdctl's own render, so an existing backup is never
+	// overwritten — postinstall's timestamped backups cover later snapshots.
+	hasBackup := system.FileExists(haproxyBackupPath)
+	if !hasBackup && system.FileExists(haproxyConfigPath) {
 		if err := system.CopyFile(haproxyConfigPath, haproxyBackupPath); err != nil {
-			return &errtypes.ConfigError{Msg: "failed to back up existing haproxy.cfg", Err: err}
+			return &errtypes.ConfigError{Msg: "back up existing haproxy.cfg", Err: err}
 		}
 		hasBackup = true
 	}
@@ -196,7 +199,7 @@ func (p *Phase) VerifyHAProxyPorts(ctx context.Context) error {
 	for _, portInfo := range ports {
 		pattern := fmt.Sprintf(":%s ", portInfo.port)
 		if strings.Contains(result.Stdout, pattern) {
-			p.Log.Info("haproxy: listening", "port", portInfo.port, "desc", portInfo.description)
+			p.Log.Debug("haproxy: listening", "port", portInfo.port, "desc", portInfo.description)
 		} else {
 			p.Log.Warn("haproxy: may not be listening", "port", portInfo.port, "desc", portInfo.description)
 		}

@@ -196,6 +196,10 @@ func installFakeTerraformArgv(t *testing.T) string {
 	logPath := filepath.Join(dir, "argv.log")
 	script := `#!/bin/sh
 echo "$@" >> "$TF_ARGV_LOG"
+if [ "$1" = "state" ]; then
+  # state list <addr> with no match: exit 1, empty stdout/stderr.
+  exit 1
+fi
 if [ "$1" = "plan" ]; then
   if [ "${TF_FAKE_MODE:-ok}" = "plan-fail" ]; then
     echo "fake: plan error" >&2
@@ -206,6 +210,10 @@ if [ "$1" = "plan" ]; then
       -out=*) : > "${a#-out=}" ;;
     esac
   done
+fi
+if [ "$1" = "apply" ]; then
+  # destroy-apply leaves an empty state, as real terraform destroy does.
+  printf '{"version":4,"resources":[]}' > terraform.tfstate
 fi
 exit 0
 `
@@ -284,20 +292,25 @@ func TestDestroyExecute_RunsTerraformDestroy(t *testing.T) {
 	}
 
 	lines := readArgvLines(t, argvLog)
-	if len(lines) != 2 {
-		t.Fatalf("terraform invocations = %d (%q); want 2 (plan, apply)", len(lines), lines)
+	if len(lines) != 4 {
+		t.Fatalf("terraform invocations = %d (%q); want 4 (drift probes, plan, apply)", len(lines), lines)
 	}
-	planFile := filepath.Join(envDir, "destroy.tfplan")
-	if !strings.HasPrefix(lines[0], "plan -lock-timeout=120s") {
-		t.Errorf("plan argv = %q; want prefix %q", lines[0], "plan -lock-timeout=120s")
-	}
-	for _, arg := range []string{"-destroy", "-var-file=" + filepath.Join(envDir, "terraform.tfvars"), "-out=" + planFile} {
-		if !strings.Contains(lines[0], arg) {
-			t.Errorf("plan argv = %q; missing %q", lines[0], arg)
+	for _, i := range []int{0, 1} {
+		if !strings.HasPrefix(lines[i], "state list module.okd_cluster.proxmox_virtual_environment_vm.") {
+			t.Errorf("argv[%d] = %q; want a topology drift probe (state list)", i, lines[i])
 		}
 	}
-	if want := "apply -lock-timeout=120s " + planFile; lines[1] != want {
-		t.Errorf("apply argv = %q; want %q", lines[1], want)
+	planFile := filepath.Join(envDir, "destroy.tfplan")
+	if !strings.HasPrefix(lines[2], "plan -lock-timeout=120s") {
+		t.Errorf("plan argv = %q; want prefix %q", lines[2], "plan -lock-timeout=120s")
+	}
+	for _, arg := range []string{"-destroy", "-var-file=" + filepath.Join(envDir, "terraform.tfvars"), "-out=" + planFile} {
+		if !strings.Contains(lines[2], arg) {
+			t.Errorf("plan argv = %q; missing %q", lines[2], arg)
+		}
+	}
+	if want := "apply -lock-timeout=120s " + planFile; lines[3] != want {
+		t.Errorf("apply argv = %q; want %q", lines[3], want)
 	}
 
 	if _, statErr := os.Stat(workDir); !os.IsNotExist(statErr) {
@@ -345,7 +358,7 @@ func TestDestroyExecute_TerraformFailureStillReachesSummary(t *testing.T) {
 		t.Error("summary step reported success despite failed teardown")
 	}
 
-	if lines := readArgvLines(t, argvLog); len(lines) != 1 || !strings.HasPrefix(lines[0], "plan ") {
-		t.Errorf("terraform argv = %q; want a single failed plan invocation", lines)
+	if lines := readArgvLines(t, argvLog); len(lines) != 3 || !strings.HasPrefix(lines[2], "plan ") {
+		t.Errorf("terraform argv = %q; want two drift probes then a single failed plan", lines)
 	}
 }

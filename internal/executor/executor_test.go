@@ -1,13 +1,19 @@
 package executor
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
+	"log/slog"
 	"os"
 	"runtime"
 	"strings"
 	"syscall"
 	"testing"
+
+	"github.com/qxtaiba/okdctl/internal/logutil"
 )
 
 func TestWithCancelSignal(t *testing.T) {
@@ -68,12 +74,13 @@ func TestBuildEnv_AllowlistFilters(t *testing.T) {
 	t.Setenv("PATH", "/usr/bin:/bin")
 	t.Setenv("HOME", "/tmp/home")
 	t.Setenv("KUBECONFIG", "/tmp/kube")
-	t.Setenv("KUBE_PS1", "on")                // prefix match
-	t.Setenv("TF_VAR_region", "us-east-1")    // prefix match
-	t.Setenv("PROXMOX_VE_PASSWORD", "hunter") // prefix match
-	t.Setenv("AWS_SECRET_ACCESS_KEY", "nope") // not in allowlist
-	t.Setenv("SECRET_API_KEY", "nope")        // not in allowlist
-	t.Setenv("OKDCTL_INTERNAL_TOKEN", "nope") // not in allowlist
+	t.Setenv("KUBE_PS1", "on")                  // prefix match
+	t.Setenv("TF_VAR_region", "us-east-1")      // prefix match
+	t.Setenv("PROXMOX_VE_ENDPOINT", "pve:8006") // prefix match, non-secret
+	t.Setenv("PROXMOX_VE_PASSWORD", "hunter")   // prefix match, secret-keyed
+	t.Setenv("AWS_SECRET_ACCESS_KEY", "nope")   // not in allowlist
+	t.Setenv("SECRET_API_KEY", "nope")          // not in allowlist
+	t.Setenv("OKDCTL_INTERNAL_TOKEN", "nope")   // not in allowlist
 
 	e := New()
 	env := e.buildEnv()
@@ -85,7 +92,7 @@ func TestBuildEnv_AllowlistFilters(t *testing.T) {
 		"KUBECONFIG=/tmp/kube",
 		"KUBE_PS1=on",
 		"TF_VAR_region=us-east-1",
-		"PROXMOX_VE_PASSWORD=hunter",
+		"PROXMOX_VE_ENDPOINT=pve:8006",
 	}
 	for _, want := range mustContain {
 		if !strings.Contains(joined, "\x00"+want+"\x00") {
@@ -97,11 +104,34 @@ func TestBuildEnv_AllowlistFilters(t *testing.T) {
 		"AWS_SECRET_ACCESS_KEY=",
 		"SECRET_API_KEY=",
 		"OKDCTL_INTERNAL_TOKEN=",
+		"PROXMOX_VE_PASSWORD=",
 	}
 	for _, forbid := range mustNotContain {
 		if strings.Contains(joined, "\x00"+forbid) {
 			t.Errorf("%q leaked through allowlist; env:\n%v", forbid, env)
 		}
+	}
+}
+
+func TestBuildEnv_SecretKeyedDroppedFromParentButNotWithEnv(t *testing.T) {
+	t.Setenv("PROXMOX_VE_PASSWORD", "from-parent")
+	t.Setenv("PROXMOX_VE_API_TOKEN", "from-parent")
+	t.Setenv("TF_VAR_db_password", "from-parent")
+
+	e := New(WithEnv([]string{"PROXMOX_VE_PASSWORD=from-caller"}))
+	joined := "\n" + strings.Join(e.buildEnv(), "\n") + "\n"
+
+	for _, forbid := range []string{
+		"\nPROXMOX_VE_PASSWORD=from-parent\n",
+		"\nPROXMOX_VE_API_TOKEN=from-parent\n",
+		"\nTF_VAR_db_password=from-parent\n",
+	} {
+		if strings.Contains(joined, forbid) {
+			t.Errorf("parent secret %q leaked into subprocess env:\n%s", strings.TrimSpace(forbid), joined)
+		}
+	}
+	if !strings.Contains(joined, "\nPROXMOX_VE_PASSWORD=from-caller\n") {
+		t.Errorf("WithEnv-supplied credential missing from env:\n%s", joined)
 	}
 }
 
@@ -273,6 +303,212 @@ func TestSnapshotEnv(t *testing.T) {
 		}
 		if len(s) != 0 {
 			t.Errorf("len(snapshot)=%d; want 0", len(s))
+		}
+	})
+}
+
+func TestRunWithStdin_RoundTrip(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("needs POSIX cat")
+	}
+	t.Parallel()
+
+	// 100 lines x ~2 KiB = ~200 KiB, well past the 64 KiB kernel pipe
+	// buffer: the call only returns if stdin is fully drained by the child.
+	line := strings.Repeat("x", 2000)
+	var b strings.Builder
+	for range 100 {
+		b.WriteString(line)
+		b.WriteByte('\n')
+	}
+	input := b.String()
+
+	e := New(WithInheritedEnv())
+	result, err := e.RunWithStdin(context.Background(), input, "cat")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Errorf("ExitCode = %d; want 0", result.ExitCode)
+	}
+	if got, want := result.Stdout, strings.TrimSuffix(input, "\n"); got != want {
+		t.Errorf("stdout != stdin round-trip: len(got)=%d len(want)=%d", len(got), len(want))
+	}
+}
+
+func TestRunChecked(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("needs POSIX sh")
+	}
+
+	t.Run("zero exit returns nil error", func(t *testing.T) {
+		t.Parallel()
+		e := New(WithInheritedEnv())
+		result, err := e.RunChecked(context.Background(), "sh", "-c", "printf ok")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if result.Stdout != "ok" {
+			t.Errorf("Stdout = %q; want %q", result.Stdout, "ok")
+		}
+	})
+
+	t.Run("non-zero exit returns typed ExitError with stderr", func(t *testing.T) {
+		t.Parallel()
+		e := New(WithInheritedEnv())
+		result, err := e.RunChecked(context.Background(), "sh", "-c", "echo broken >&2; exit 7")
+		if err == nil {
+			t.Fatal("expected error for exit 7")
+		}
+		var exitErr *ExitError
+		if !errors.As(err, &exitErr) {
+			t.Fatalf("err type = %T; want *ExitError", err)
+		}
+		if exitErr.Command != "sh" {
+			t.Errorf("Command = %q; want %q", exitErr.Command, "sh")
+		}
+		if exitErr.ExitCode != 7 {
+			t.Errorf("ExitCode = %d; want 7", exitErr.ExitCode)
+		}
+		if !strings.Contains(exitErr.Stderr, "broken") {
+			t.Errorf("Stderr = %q; want it to contain 'broken'", exitErr.Stderr)
+		}
+		if result == nil {
+			t.Fatal("result must be non-nil on error")
+		}
+	})
+
+	t.Run("ctx cancel returns context error not ExitError", func(t *testing.T) {
+		t.Parallel()
+		e := New(WithInheritedEnv())
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		_, err := e.RunChecked(ctx, "sh", "-c", "sleep 10")
+		if err == nil {
+			t.Fatal("expected error after ctx cancel")
+		}
+		var exitErr *ExitError
+		if errors.As(err, &exitErr) {
+			t.Errorf("got *ExitError on ctx cancel; want context error, got: %v", err)
+		}
+	})
+}
+
+func TestRunWithStdinChecked(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("needs POSIX sh")
+	}
+
+	t.Run("stdin reaches child on success", func(t *testing.T) {
+		t.Parallel()
+		e := New(WithInheritedEnv())
+		result, err := e.RunWithStdinChecked(context.Background(), "payload", "sh", "-c", "cat")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if result.Stdout != "payload" {
+			t.Errorf("Stdout = %q; want %q", result.Stdout, "payload")
+		}
+	})
+
+	t.Run("non-zero exit returns typed ExitError", func(t *testing.T) {
+		t.Parallel()
+		e := New(WithInheritedEnv())
+		_, err := e.RunWithStdinChecked(context.Background(), "ignored", "sh", "-c",
+			"cat >/dev/null; echo apply-failed >&2; exit 1")
+		if err == nil {
+			t.Fatal("expected error for exit 1")
+		}
+		var exitErr *ExitError
+		if !errors.As(err, &exitErr) {
+			t.Fatalf("err type = %T; want *ExitError", err)
+		}
+		if exitErr.ExitCode != 1 {
+			t.Errorf("ExitCode = %d; want 1", exitErr.ExitCode)
+		}
+	})
+}
+
+func TestAppendEnv(t *testing.T) {
+	t.Run("appended entry reaches the child", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("needs POSIX env")
+		}
+		e := New()
+		e.AppendEnv("KUBECONFIG=/appended/kube", "CUSTOM_APPENDED_VAR=yes")
+		result, err := e.Run(context.Background(), "env")
+		if err != nil {
+			t.Fatalf("env: %v", err)
+		}
+		// Non-allowlisted keys appended explicitly must still pass through:
+		// the allowlist filters the parent env, not caller-supplied entries.
+		for _, want := range []string{"KUBECONFIG=/appended/kube", "CUSTOM_APPENDED_VAR=yes"} {
+			if !strings.Contains(result.Stdout, want) {
+				t.Errorf("appended entry %q missing from child env:\n%s", want, result.Stdout)
+			}
+		}
+	})
+
+	t.Run("visible via SnapshotEnv", func(t *testing.T) {
+		e := New(WithEnv([]string{"A=1"}))
+		e.AppendEnv("B=2")
+		snap := e.SnapshotEnv()
+		if len(snap) != 2 || snap[0] != "A=1" || snap[1] != "B=2" {
+			t.Errorf("SnapshotEnv = %v; want [A=1 B=2]", snap)
+		}
+	})
+
+	t.Run("ZeroizeEnv blanks secret-keyed appended entry", func(t *testing.T) {
+		e := New()
+		e.AppendEnv("PROXMOX_VE_PASSWORD=hunter2", "KUBECONFIG=/etc/kube")
+		snap := e.env
+		e.ZeroizeEnv()
+		if e.env != nil {
+			t.Errorf("env not nil after ZeroizeEnv; got %v", e.env)
+		}
+		for i, entry := range snap {
+			if entry != "" {
+				t.Errorf("backing entry %d not blanked after ZeroizeEnv; got %q", i, entry)
+			}
+		}
+	})
+}
+
+func TestExitError_Redacted(t *testing.T) {
+	e := &ExitError{
+		Command:  "terraform apply",
+		ExitCode: 1,
+		Stderr:   "provider auth: password=hunter2",
+	}
+
+	t.Run("omits Stderr from the redacted shape", func(t *testing.T) {
+		red := e.Redacted()
+		data, err := json.Marshal(red)
+		if err != nil {
+			t.Fatalf("marshal redacted value: %v", err)
+		}
+		if strings.Contains(string(data), "hunter2") {
+			t.Errorf("Redacted() leaks stderr credential: %s", data)
+		}
+		if strings.Contains(string(data), "Stderr") {
+			t.Errorf("Redacted() must omit the Stderr field entirely: %s", data)
+		}
+		rendered := fmt.Sprintf("%+v", red)
+		if !strings.Contains(rendered, "terraform apply") || !strings.Contains(rendered, "1") {
+			t.Errorf("Redacted() dropped command identity: %q", rendered)
+		}
+	})
+
+	t.Run("slog sink through RedactHandler never sees stderr", func(t *testing.T) {
+		var buf bytes.Buffer
+		logger := slog.New(logutil.NewRedactHandler(slog.NewJSONHandler(&buf, nil)))
+		logger.Warn("subprocess failed", "err", e)
+		out := buf.String()
+		if strings.Contains(out, "hunter2") {
+			t.Errorf("credential-bearing stderr reached the slog sink: %s", out)
+		}
+		if !strings.Contains(out, "terraform apply") {
+			t.Errorf("redacted log record lost the command name: %s", out)
 		}
 	})
 }

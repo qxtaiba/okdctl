@@ -251,3 +251,21 @@ func TestExecutor_ZeroizeEnv_NilSafe(t *testing.T) {
 	e := New(t.TempDir(), WithEnv([]string{"PROXMOX_VE_PASSWORD=secret"}))
 	e.ZeroizeEnv()
 }
+
+// TestExecutor_ZeroizeEnv_BlanksInnerEnv pins the WithEnv -> AppendEnv ->
+// ZeroizeEnv delegation that every cli `defer tf.ZeroizeEnv()` relies on.
+// The byte-level blanking itself is locked in executor's own tests; this
+// guards the outer wiring against regressing to a no-op.
+func TestExecutor_ZeroizeEnv_BlanksInnerEnv(t *testing.T) {
+	e := New(t.TempDir(), WithEnv([]string{
+		"PROXMOX_VE_PASSWORD=hunter2",
+		"PROXMOX_VE_API_TOKEN=tok",
+	}))
+	if snap := e.exec.SnapshotEnv(); len(snap) != 2 {
+		t.Fatalf("WithEnv did not reach the inner executor: env len = %d, want 2", len(snap))
+	}
+	e.ZeroizeEnv()
+	if snap := e.exec.SnapshotEnv(); len(snap) != 0 {
+		t.Errorf("ZeroizeEnv left %d env entries reachable: %q", len(snap), snap)
+	}
+}

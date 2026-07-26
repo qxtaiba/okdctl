@@ -5,7 +5,6 @@ import (
 	"errors"
 	"log/slog"
 	"slices"
-	"sync"
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/distribution"
@@ -32,10 +31,6 @@ const (
 // propagate NonFatal errors, and the summary's joined error is what makes a
 // failed teardown exit non-zero instead of reporting misleading success.
 type destroyTracker struct {
-	// Forward-looking: Orchestrator.Run is serial today so onError/skipWhen
-	// have no concurrent callers, but a parallel-step mode would need this
-	// lock without a retrofit — same rationale as distribution.PhaseContext.
-	mu       sync.RWMutex
 	log      *slog.Logger
 	errs     []error
 	failures []string
@@ -44,10 +39,8 @@ type destroyTracker struct {
 
 func (t *destroyTracker) onError(label string) func(error) {
 	return func(err error) {
-		t.mu.Lock()
 		t.errs = append(t.errs, err)
 		t.failures = append(t.failures, label)
-		t.mu.Unlock()
 		phase.WarnOnError(t.log, label)(err)
 	}
 }
@@ -55,9 +48,7 @@ func (t *destroyTracker) onError(label string) func(error) {
 func (t *destroyTracker) skipWhen(label string, fn func() bool) func() bool {
 	return func() bool {
 		if fn() {
-			t.mu.Lock()
 			t.skipped = append(t.skipped, label)
-			t.mu.Unlock()
 			return true
 		}
 		return false
@@ -69,8 +60,6 @@ func (t *destroyTracker) skipWhen(label string, fn func() bool) func() bool {
 const labelTerraformDestroy = "terraform destroy"
 
 func (t *destroyTracker) terraformFailed() bool {
-	t.mu.RLock()
-	defer t.mu.RUnlock()
 	return slices.Contains(t.failures, labelTerraformDestroy)
 }
 
@@ -89,7 +78,7 @@ func (p *Phase) destroySteps(ctx context.Context, cfg *config.Config, opts *Opti
 			SkipWhen:   trackSkip("terraform", func() bool { return opts.SkipTerraform }),
 			SkipReason: "terraform destroy disabled",
 			Exec: func(ctx context.Context) error {
-				if err := p.destroyInfrastructure(ctx, opts); err != nil {
+				if err := p.destroyInfrastructure(ctx, cfg, opts); err != nil {
 					return err
 				}
 				p.Log.Info("terraform: infrastructure destruction completed")
@@ -162,7 +151,7 @@ func (p *Phase) destroySteps(ctx context.Context, cfg *config.Config, opts *Opti
 				if err := fw.RemoveOKDRules(ctx, true); err != nil {
 					return &errtypes.ClusterError{Msg: "firewall cleanup failed", Err: err}
 				}
-				p.Log.Info("firewall: okd rules removed from firewalld")
+				p.Log.Info("firewall: okd rules removed")
 				return nil
 			},
 			OnError: track("firewall cleanup"),
@@ -171,9 +160,7 @@ func (p *Phase) destroySteps(ctx context.Context, cfg *config.Config, opts *Opti
 			ID: StepPrintSummary, Name: "print summary", ReRunSafe: distribution.ReRunSafeYes,
 			Desc: "printing destruction summary", NonFatal: false,
 			Exec: func(_ context.Context) error {
-				t.mu.RLock()
 				errs, failures, skipped := t.errs, t.failures, t.skipped
-				t.mu.RUnlock()
 				switch {
 				case len(failures) > 0:
 					p.Log.Warn("destroy: teardown finished with non-fatal failures",

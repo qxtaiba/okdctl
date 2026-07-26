@@ -5,8 +5,9 @@
 // (see errDoctorWarn), plan drift detected=7 (see errPlanDrift), config file
 // not found=66 (EX_NOINPUT), invalid pull secret JSON=65 (EX_DATAERR), sudo
 // not found=71 (EX_OSERR), unknown-flag error=64 (EX_USAGE, via
-// SetFlagErrorFunc), other error=1 (includes unknown subcommands,
-// arg-count violations, and mutually-exclusive-flag conflicts which cobra
+// SetFlagErrorFunc; arg-count violations via wrapArgValidators), internal
+// panic=70 (EX_SOFTWARE, via execute's recover), other error=1 (includes
+// unknown subcommands and mutually-exclusive-flag conflicts which cobra
 // surfaces outside the flag-parser), SIGINT=130, SIGTERM=143, success=0.
 // See docs/cli/exit-codes.md for the full taxonomy table.
 package cli
@@ -19,6 +20,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"runtime/debug"
 	"strings"
 	"sync/atomic"
 	"syscall"
@@ -47,6 +49,10 @@ var (
 	logQuiet   bool
 	logVerbose bool
 )
+
+// startLogged records that PersistentPreRunE emitted the "okdctl: started"
+// bookend, keeping the deferred "okdctl: finished" line symmetric.
+var startLogged bool
 
 // preflightWarns holds warning closures registered before cli.Execute
 // runs. PersistentPreRunE drains the slice after configureLogging so every
@@ -77,6 +83,11 @@ per 24h, cached locally); set OKDCTL_NO_UPDATE_CHECK=1 to disable.`,
 		if err := configureLogging(cmd); err != nil {
 			return err
 		}
+		// Logged here rather than in execute() so the line honors --quiet,
+		// --log-format, and the piped-stderr auto-switch, symmetric with the
+		// post-configuration "okdctl: finished" bookend.
+		tui.Info("okdctl: started", tui.LF("argv", logutil.RedactableArgv(os.Args[1:])))
+		startLogged = true
 		for _, fn := range preflightWarns {
 			fn()
 		}
@@ -90,6 +101,7 @@ per 24h, cached locally); set OKDCTL_NO_UPDATE_CHECK=1 to disable.`,
 // computed by execute().
 func Execute() {
 	slog.SetDefault(tui.SimpleLogger())
+	wrapArgValidators(rootCmd)
 	code := execute()
 	if logFileCloser != nil {
 		_ = logFileCloser.Close()
@@ -97,15 +109,64 @@ func Execute() {
 	os.Exit(code)
 }
 
+// wrapArgValidators wraps every command's positional-arg validator so a
+// violation surfaces as UsageError (exit 64, EX_USAGE) instead of cobra's
+// bare error (exit 1), keeping arg-count failures consistent with the
+// unknown-flag path installed by SetFlagErrorFunc. Hand-rolled validators
+// that already return UsageError pass through unchanged. Runs once from
+// Execute, after every init() has registered its commands.
+func wrapArgValidators(cmd *cobra.Command) {
+	if fn := cmd.Args; fn != nil {
+		cmd.Args = func(c *cobra.Command, args []string) error {
+			err := fn(c, args)
+			if err == nil {
+				return nil
+			}
+			var usageErr *errtypes.UsageError
+			if errors.As(err, &usageErr) {
+				return err
+			}
+			return &errtypes.UsageError{Msg: err.Error(), Err: err}
+		}
+	}
+	for _, c := range cmd.Commands() {
+		wrapArgValidators(c)
+	}
+}
+
 func execute() (code int) {
 	tui.SetRunID(rand.Text())
 	start := time.Now()
-	tui.Info("okdctl: started", tui.LF("argv", logutil.RedactableArgv(os.Args[1:])))
 	defer func() {
-		tui.Info("okdctl: finished",
+		// Gated on startLogged so help/version paths that never reach
+		// PersistentPreRunE do not log a "finished" without a "started".
+		if !startLogged {
+			return
+		}
+		tui.Info(
+			"okdctl: finished",
 			tui.LF("duration", time.Since(start).Round(time.Millisecond).String()),
 			tui.LF("exit_code", code),
 		)
+	}()
+
+	// Recover panics into exit 70 (EX_SOFTWARE): the Go runtime's own panic
+	// exit code is 2, which the published taxonomy reserves for ConfigError,
+	// and an unrecovered panic would also skip Execute's logFileCloser flush.
+	// Registered after the bookend defer so it runs first on unwind and the
+	// bookend logs the real exit code.
+	defer func() {
+		r := recover()
+		if r == nil {
+			return
+		}
+		code = 70
+		tui.Error("internal error: panic recovered", tui.LF("panic", fmt.Sprint(r)))
+		stack := debug.Stack()
+		fmt.Fprintf(os.Stderr, "panic: %v\n\n%s", r, stack)
+		if runLogSink != nil {
+			fmt.Fprintf(runLogSink, "panic: %v\n\n%s", r, stack)
+		}
 	}()
 
 	// Roll our own signal handling so we can tell SIGINT (→130) apart from

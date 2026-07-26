@@ -79,7 +79,8 @@ func New(opts ...phase.BasePhaseOption) *Phase {
 func (p *Phase) Execute(ctx context.Context, cfg *config.Config, opts *Options) (*Result, []distribution.StepResult, error) {
 	p.Log.Info("postinstall: starting cluster verification and configuration")
 
-	addonMgr := addon.NewManager(cfg,
+	addonMgr := addon.NewManager(
+		cfg,
 		addon.WithExecutor(p.Exec),
 		addon.WithLogger(p.Log),
 		addon.WithProjectRoot(opts.ProjectRoot),
@@ -91,10 +92,12 @@ func (p *Phase) Execute(ctx context.Context, cfg *config.Config, opts *Options) 
 	orchestrator.SetMetricsRecorder(p.Recorder)
 
 	if err := orchestrator.Run(ctx); err != nil {
+		p.warnIfDNSStranded(pctx.Get())
 		return nil, orchestrator.Results(), err
 	}
 
 	state := pctx.Get()
+	p.warnIfDNSStranded(state)
 	result := &Result{
 		KubeVipIP:        state.KubeVipIP,
 		BastionIP:        cfg.Networking.Bastion.IP,
@@ -110,6 +113,15 @@ func (p *Phase) Execute(ctx context.Context, cfg *config.Config, opts *Options) 
 	return result, orchestrator.Results(), nil
 }
 
+// warnIfDNSStranded names the manual recovery when the bootstrap VM is gone
+// but production DNS was never deployed: without this warning the phase can
+// report success while api.* still resolves via the bootstrap-era config.
+func (p *Phase) warnIfDNSStranded(state postInstallContext) {
+	if state.BootstrapCleaned && (!state.KubeVIPVerified || !state.DNSDeployed) {
+		p.Log.Warn("postinstall: bootstrap vm destroyed but production dns not deployed — api dns may still be bootstrap-pointed; run 'okdctl update-ingress' to re-point it at the vip")
+	}
+}
+
 // deployProductionDNSFn and deployBootstrapDNSFn are package-level vars so
 // tests can exercise update-ingress flows without mutating /etc/dnsmasq.d,
 // mirroring the fn-var seams in internal/distribution/okd/dns.
@@ -123,7 +135,8 @@ var (
 // the deploy --dry-run listing; the addon.Manager and PhaseContext it builds
 // are throwaway since nothing here invokes Exec.
 func (p *Phase) StepDefs(cfg *config.Config, opts *Options) []distribution.StepDef {
-	addonMgr := addon.NewManager(cfg,
+	addonMgr := addon.NewManager(
+		cfg,
 		addon.WithExecutor(p.Exec),
 		addon.WithLogger(p.Log),
 		addon.WithProjectRoot(opts.ProjectRoot),
@@ -134,7 +147,7 @@ func (p *Phase) StepDefs(cfg *config.Config, opts *Options) []distribution.StepD
 
 func (p *Phase) deployProductionDNS(ctx context.Context, cfg *config.Config, appsIP, kubeVipIP string, customDomains []templates.DNSCustomDomain) error {
 	if err := deployProductionDNSFn(ctx, cfg, appsIP, kubeVipIP, customDomains); err != nil {
-		return &errtypes.ClusterError{Msg: "failed to deploy production dns config", Err: err}
+		return &errtypes.ClusterError{Msg: "deploy production dns config", Err: err}
 	}
 	return nil
 }

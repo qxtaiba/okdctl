@@ -200,8 +200,11 @@ func TestBuildRollbackJSON_StripsServerFields(t *testing.T) {
 // overrides (all OC_-prefixed so the executor allowlist passes them through):
 //   - OC_ARGV_LOG           → path; every call appends all args as one line
 //   - OC_DELETE_FAIL=1      → delete exits 1
+//   - OC_BACKUP_EXPECT      → path; delete records its existence to OC_BACKUP_SEEN
+//   - OC_BACKUP_SEEN        → path; delete writes yes/no per OC_BACKUP_EXPECT
 //   - OC_CALL_FILE          → path; incremented on each create invocation
 //   - OC_CREATE_FAIL=1      → first create (n=1) exits 1
+//   - OC_CREATE_SLEEP=1     → first create (n=1) execs sleep 5 (killed by ctx cancel)
 //   - OC_ROLLBACK_FAIL=1    → second create (n>=2) exits 1
 //   - OC_ROLLBACK_STDIN_LOG → path; second create writes its stdin there
 //   - OC_IC_LIST_FAIL=1     → get ingresscontroller exits 1
@@ -223,6 +226,9 @@ func installFakeOCForIngress(t *testing.T) {
 if [ -n "${OC_ARGV_LOG:-}" ]; then echo "$*" >> "$OC_ARGV_LOG"; fi
 case "$1" in
   delete)
+    if [ -n "${OC_BACKUP_EXPECT:-}" ] && [ -n "${OC_BACKUP_SEEN:-}" ]; then
+      if [ -f "$OC_BACKUP_EXPECT" ]; then echo yes > "$OC_BACKUP_SEEN"; else echo no > "$OC_BACKUP_SEEN"; fi
+    fi
     if [ "${OC_DELETE_FAIL:-0}" = "1" ]; then echo "fake: delete failed" >&2; exit 1; fi
     exit 0
     ;;
@@ -278,6 +284,7 @@ case "$1" in
     n=$(cat "$f" 2>/dev/null || echo 0)
     n=$((n + 1))
     echo "$n" > "$f"
+    if [ "$n" -eq 1 ] && [ "${OC_CREATE_SLEEP:-0}" = "1" ]; then exec sleep 5; fi
     if [ "$n" -ge 2 ] && [ -n "${OC_ROLLBACK_STDIN_LOG:-}" ]; then cat > "$OC_ROLLBACK_STDIN_LOG"; fi
     if [ "$n" -eq 1 ] && [ "${OC_CREATE_FAIL:-0}" = "1" ]; then echo "fake: create failed" >&2; exit 1; fi
     if [ "$n" -ge 2 ] && [ "${OC_ROLLBACK_FAIL:-0}" = "1" ]; then echo "fake: rollback failed" >&2; exit 1; fi
@@ -322,7 +329,7 @@ func TestConvertToLoadBalancer_DeleteArgvTargetsICName(t *testing.T) {
 	p := newIngressTestPhase(t)
 	ic := minimalIC("custom")
 
-	if err := p.convertToLoadBalancer(context.Background(), ic, 5*time.Second); err != nil {
+	if err := p.convertToLoadBalancer(context.Background(), ic, 5*time.Second, ""); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
@@ -364,7 +371,7 @@ func TestConvertToLoadBalancer_CreateFailure_RollbackIssued(t *testing.T) {
 	p := newIngressTestPhase(t)
 	ic := minimalIC("default")
 
-	if err := p.convertToLoadBalancer(context.Background(), ic, 5*time.Second); err == nil {
+	if err := p.convertToLoadBalancer(context.Background(), ic, 5*time.Second, ""); err == nil {
 		t.Fatal("expected error on create failure")
 	}
 
@@ -405,7 +412,7 @@ func TestConvertToLoadBalancer_BothCreateAndRollbackFail_ErrorNamesBoth(t *testi
 	p := newIngressTestPhase(t)
 	ic := minimalIC("default")
 
-	err := p.convertToLoadBalancer(context.Background(), ic, 5*time.Second)
+	err := p.convertToLoadBalancer(context.Background(), ic, 5*time.Second, "")
 	if err == nil {
 		t.Fatal("expected error when both create and rollback fail")
 	}
@@ -846,7 +853,8 @@ func TestDiscoverIngressControllers(t *testing.T) {
 	installFakeOCForIngress(t)
 
 	t.Run("classifies strategies and skips unknown or unnamed", func(t *testing.T) {
-		writeICList(t, "OC_IC_LIST_FILE",
+		writeICList(
+			t, "OC_IC_LIST_FILE",
 			`{"metadata":{"name":"default"},"spec":{},"status":{"domain":"apps.a.test"}}`,
 			`{"metadata":{"name":"lb"},"spec":{"endpointPublishingStrategy":{"type":"LoadBalancerService"}},"status":{"domain":"apps.b.test"}}`,
 			`{"metadata":{"name":"nodeport"},"spec":{"endpointPublishingStrategy":{"type":"NodePortService"}},"status":{}}`,
@@ -1132,4 +1140,212 @@ func TestUpdateIngress_ConvertsAndCollects(t *testing.T) {
 	if len(*appsIPs) != 1 || (*appsIPs)[0] != "10.0.0.40" {
 		t.Errorf("production dns deployed with apps IPs %v; want the collected LB IP [10.0.0.40]", *appsIPs)
 	}
+}
+
+// TestConvertToLoadBalancer_RollbackRunsAfterCtxCancel asserts the rollback
+// create still executes when the replacement create failed because ctx was
+// cancelled: the rollback derives a detached bounded context, so the second
+// oc create runs (counter reaches 2) instead of dying before start.
+func TestConvertToLoadBalancer_RollbackRunsAfterCtxCancel(t *testing.T) {
+	installFakeOCForIngress(t)
+
+	dir := t.TempDir()
+	counter := filepath.Join(dir, "counter")
+	t.Setenv("OC_CALL_FILE", counter)
+	t.Setenv("OC_CREATE_SLEEP", "1")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Cancel only once the first create has started (counter written), so the
+	// delete + router-gone probes before it run under a live ctx.
+	go func() {
+		deadline := time.Now().Add(5 * time.Second)
+		for time.Now().Before(deadline) {
+			if data, err := os.ReadFile(counter); err == nil && strings.TrimSpace(string(data)) == "1" {
+				break
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+		cancel()
+	}()
+
+	p := newIngressTestPhase(t)
+	ic := minimalIC("default")
+
+	err := p.convertToLoadBalancer(ctx, ic, 5*time.Second, "")
+	if err == nil {
+		t.Fatal("expected error when create is killed by ctx cancel")
+	}
+	if strings.Contains(err.Error(), "rollback also failed") {
+		t.Fatalf("rollback must succeed under the detached ctx; got: %v", err)
+	}
+
+	raw, readErr := os.ReadFile(counter)
+	if readErr != nil {
+		t.Fatalf("counter file not written: %v", readErr)
+	}
+	if strings.TrimSpace(string(raw)) != "2" {
+		t.Errorf("oc create call count = %q; want 2 (cancelled replacement + detached rollback)", strings.TrimSpace(string(raw)))
+	}
+}
+
+// TestConvertToLoadBalancer_BackupLifecycle covers the on-disk backup that
+// guards the delete-to-create window: written before the delete, removed on
+// success and on successful in-process rollback, retained when the rollback
+// also fails.
+func TestConvertToLoadBalancer_BackupLifecycle(t *testing.T) {
+	newBackupEnv := func(t *testing.T) (backupPath, seen string) {
+		t.Helper()
+		installFakeOCForIngress(t)
+		backupPath = ingressBackupPath(t.TempDir(), "default")
+		seen = filepath.Join(t.TempDir(), "backup-seen")
+		t.Setenv("OC_CALL_FILE", filepath.Join(t.TempDir(), "counter"))
+		t.Setenv("OC_BACKUP_EXPECT", backupPath)
+		t.Setenv("OC_BACKUP_SEEN", seen)
+		return backupPath, seen
+	}
+
+	assertSeenAtDelete := func(t *testing.T, seen string) {
+		t.Helper()
+		data, err := os.ReadFile(seen)
+		if err != nil {
+			t.Fatalf("delete never probed for the backup: %v", err)
+		}
+		if strings.TrimSpace(string(data)) != "yes" {
+			t.Error("backup file must exist on disk before the delete is issued")
+		}
+	}
+
+	t.Run("success removes backup", func(t *testing.T) {
+		backupPath, seen := newBackupEnv(t)
+		p := newIngressTestPhase(t)
+		if err := p.convertToLoadBalancer(context.Background(), minimalIC("default"), 5*time.Second, backupPath); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		assertSeenAtDelete(t, seen)
+		if _, err := os.Stat(backupPath); !os.IsNotExist(err) {
+			t.Errorf("backup must be removed after successful conversion, stat err = %v", err)
+		}
+	})
+
+	t.Run("successful rollback removes backup", func(t *testing.T) {
+		backupPath, seen := newBackupEnv(t)
+		t.Setenv("OC_CREATE_FAIL", "1")
+		p := newIngressTestPhase(t)
+		if err := p.convertToLoadBalancer(context.Background(), minimalIC("default"), 5*time.Second, backupPath); err == nil {
+			t.Fatal("expected error on create failure")
+		}
+		assertSeenAtDelete(t, seen)
+		if _, err := os.Stat(backupPath); !os.IsNotExist(err) {
+			t.Errorf("backup must be removed after successful rollback, stat err = %v", err)
+		}
+	})
+
+	t.Run("failed rollback retains backup", func(t *testing.T) {
+		backupPath, _ := newBackupEnv(t)
+		t.Setenv("OC_CREATE_FAIL", "1")
+		t.Setenv("OC_ROLLBACK_FAIL", "1")
+		p := newIngressTestPhase(t)
+		if err := p.convertToLoadBalancer(context.Background(), minimalIC("default"), 5*time.Second, backupPath); err == nil {
+			t.Fatal("expected error when create and rollback both fail")
+		}
+		data, err := os.ReadFile(backupPath)
+		if err != nil {
+			t.Fatalf("backup must survive a failed rollback: %v", err)
+		}
+		want, buildErr := buildRollbackJSON(minimalIC("default"))
+		if buildErr != nil {
+			t.Fatalf("buildRollbackJSON: %v", buildErr)
+		}
+		if strings.TrimSpace(string(data)) != strings.TrimSpace(want) {
+			t.Errorf("backup content mismatch:\ngot:  %s\nwant: %s", data, want)
+		}
+	})
+}
+
+// TestRestoreOrphanedIngressBackups covers crash recovery: a leftover backup
+// whose controller is missing is re-created via oc create and removed; a
+// backup whose controller exists again is stale and deleted without a create.
+func TestRestoreOrphanedIngressBackups(t *testing.T) {
+	seedBackup := func(t *testing.T, workDir, name string) string {
+		t.Helper()
+		path := ingressBackupPath(workDir, name)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatalf("mkdir cluster-config: %v", err)
+		}
+		payload, err := buildRollbackJSON(minimalIC(name))
+		if err != nil {
+			t.Fatalf("buildRollbackJSON: %v", err)
+		}
+		if err := os.WriteFile(path, []byte(payload), 0o600); err != nil {
+			t.Fatalf("seed backup: %v", err)
+		}
+		return path
+	}
+
+	t.Run("missing controller restored and backup removed", func(t *testing.T) {
+		installFakeOCForIngress(t)
+		dir := t.TempDir()
+		workDir := filepath.Join(dir, "okd-install")
+		path := seedBackup(t, workDir, "default")
+		argvLog := filepath.Join(dir, "argv.log")
+		t.Setenv("OC_ARGV_LOG", argvLog)
+
+		p := newIngressTestPhase(t)
+		restored := p.restoreOrphanedIngressBackups(context.Background(), workDir, nil)
+		if restored != 1 {
+			t.Fatalf("restored = %d; want 1", restored)
+		}
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			t.Errorf("backup must be removed after restore, stat err = %v", err)
+		}
+		argv, err := os.ReadFile(argvLog)
+		if err != nil {
+			t.Fatalf("argv log not written: %v", err)
+		}
+		if !strings.Contains(string(argv), "create -f -") {
+			t.Errorf("expected an oc create -f - restore call; argv log:\n%s", argv)
+		}
+	})
+
+	t.Run("present controller drops stale backup without create", func(t *testing.T) {
+		installFakeOCForIngress(t)
+		dir := t.TempDir()
+		workDir := filepath.Join(dir, "okd-install")
+		path := seedBackup(t, workDir, "default")
+		argvLog := filepath.Join(dir, "argv.log")
+		t.Setenv("OC_ARGV_LOG", argvLog)
+
+		p := newIngressTestPhase(t)
+		restored := p.restoreOrphanedIngressBackups(context.Background(), workDir,
+			[]ingressControllerInfo{{Name: "default"}})
+		if restored != 0 {
+			t.Fatalf("restored = %d; want 0", restored)
+		}
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			t.Errorf("stale backup must be removed, stat err = %v", err)
+		}
+		if argv, err := os.ReadFile(argvLog); err == nil && strings.Contains(string(argv), "create") {
+			t.Errorf("no oc create expected for a stale backup; argv log:\n%s", argv)
+		}
+	})
+
+	t.Run("restore failure keeps backup", func(t *testing.T) {
+		installFakeOCForIngress(t)
+		dir := t.TempDir()
+		workDir := filepath.Join(dir, "okd-install")
+		path := seedBackup(t, workDir, "default")
+		t.Setenv("OC_CALL_FILE", filepath.Join(dir, "counter"))
+		t.Setenv("OC_CREATE_FAIL", "1")
+
+		p := newIngressTestPhase(t)
+		restored := p.restoreOrphanedIngressBackups(context.Background(), workDir, nil)
+		if restored != 0 {
+			t.Fatalf("restored = %d; want 0", restored)
+		}
+		if _, err := os.Stat(path); err != nil {
+			t.Errorf("backup must survive a failed restore: %v", err)
+		}
+	})
 }

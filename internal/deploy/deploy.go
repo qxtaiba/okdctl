@@ -211,7 +211,7 @@ func checklistRecorder(cfg *config.Config, projectRoot string, resumeFrom deploy
 		if !phaseRuns(resumeFrom, s.Phase) {
 			continue
 		}
-		plan = append(plan, tui.StepMeta{ID: s.ID, Name: s.Name, Phase: s.Phase})
+		plan = append(plan, tui.StepMeta{ID: s.ID, Name: s.Name, Phase: string(s.Phase)})
 	}
 	if len(plan) == 0 {
 		return nil
@@ -221,9 +221,9 @@ func checklistRecorder(cfg *config.Config, projectRoot string, resumeFrom deploy
 
 // phaseRuns reports whether a step in stepPhase executes given resumeFrom as
 // the entry point: a resume runs its entry phase and every later phase.
-func phaseRuns(resumeFrom deployPhase, stepPhase string) bool {
-	order := map[string]int{okd.PhaseSetup: 0, okd.PhaseInstall: 1, okd.PhasePostInstall: 2}
-	return order[stepPhase] >= order[string(resumeFrom)]
+func phaseRuns(resumeFrom deployPhase, stepPhase okd.DeployPhase) bool {
+	order := map[okd.DeployPhase]int{okd.PhaseSetup: 0, okd.PhaseInstall: 1, okd.PhasePostInstall: 2}
+	return order[stepPhase] >= order[okd.DeployPhase(resumeFrom)]
 }
 
 // runDeployPhases executes setup, install, and postinstall, starting from
@@ -276,6 +276,30 @@ func runDeployPhases(ctx context.Context, p provisioner, cfg *config.Config, pro
 
 // Execute runs the full deployment — setup, install, postinstall — under the
 // project run lock, with resume routing and the post-deploy summary.
+// announceEmbeddedDrift warns when the write-once terraform workspace has
+// fallen behind this binary's embedded sources (an okdctl upgrade whose
+// module changed), so an operator learns their deploy runs old HCL instead
+// of discovering it via a mid-apply variable mismatch. Warn-only: refreshing
+// operator-editable HCL without consent would break the write-once contract.
+func announceEmbeddedDrift(root string) {
+	drift, err := DetectEmbeddedDrift(root)
+	if err != nil {
+		tui.Warn("could not compare terraform workspace against embedded sources", tui.LF("err", err))
+		return
+	}
+	for _, f := range drift.Stale {
+		tui.Warn("terraform file was written by an older okdctl and differs from this binary's embedded copy; the workspace copy is kept (write-once) — back it up and delete it, then re-run deploy to refresh it",
+			tui.LF("path", f))
+	}
+	for _, f := range drift.Unverified {
+		tui.Warn("terraform file differs from this binary's embedded copy; if you did not edit it, back it up and delete it, then re-run deploy to refresh it",
+			tui.LF("path", f))
+	}
+}
+
+// Execute runs the full deploy pipeline under the project run lock: it
+// resolves the resume phase from the on-disk marker, drives the OKD
+// provisioner through every phase, and writes the post-deploy summary to w.
 func Execute(ctx context.Context, cfg *config.Config, opts Options, w io.Writer) error {
 	projectRoot := opts.ProjectRoot
 
@@ -299,6 +323,8 @@ func Execute(ctx context.Context, cfg *config.Config, opts Options, w io.Writer)
 
 	runID := tui.RunID()
 
+	announceEmbeddedDrift(projectRoot)
+
 	markerPath := filepath.Join(workDir, StateFileName)
 	resumeFrom, marker := resolveResumePhase(markerPath, cfg.Cluster.Name, opts.FreshDeploy)
 
@@ -320,7 +346,8 @@ func Execute(ctx context.Context, cfg *config.Config, opts Options, w io.Writer)
 	}
 
 	if opts.ShowStartMessage {
-		tui.Info("starting deployment...", tui.LF("cluster", cfg.Cluster.Name+"."+cfg.Cluster.Domain))
+		tui.Info("starting deployment...",
+			tui.LF("cluster", cfg.Cluster.Name), tui.LF("domain", cfg.Cluster.Domain))
 	}
 
 	startTime := time.Now()
@@ -330,7 +357,7 @@ func Execute(ctx context.Context, cfg *config.Config, opts Options, w io.Writer)
 		return err
 	}
 
-	clearDeployMarker(markerPath)
+	clearDeployMarker(markerPath, runID, cfg.Cluster.Name)
 
 	duration := time.Since(startTime).Round(time.Second)
 

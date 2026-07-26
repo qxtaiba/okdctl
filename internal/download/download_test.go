@@ -6,10 +6,12 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -32,7 +34,8 @@ func TestDownload_HappyPath(t *testing.T) {
 	dir := t.TempDir()
 	out := filepath.Join(dir, "artifact.bin")
 
-	if err := Fetch(context.Background(), srv.URL+"/artifact.bin", out,
+	if err := Fetch(
+		context.Background(), srv.URL+"/artifact.bin", out,
 		WithFetchChecksum(sha256Hex(body)),
 		WithLogger(logutil.NopLogger),
 	); err != nil {
@@ -88,7 +91,8 @@ func TestDownload_NonOKStatusReturnsHTTPStatusError(t *testing.T) {
 	defer srv.Close()
 
 	dir := t.TempDir()
-	err := Fetch(context.Background(), srv.URL+"/missing", filepath.Join(dir, "out.bin"),
+	err := Fetch(
+		context.Background(), srv.URL+"/missing", filepath.Join(dir, "out.bin"),
 		WithLogger(logutil.NopLogger),
 	)
 	if err == nil {
@@ -101,6 +105,25 @@ func TestDownload_NonOKStatusReturnsHTTPStatusError(t *testing.T) {
 	}
 	if httpErr.Status != http.StatusNotFound {
 		t.Errorf("HTTPStatusError.Status = %d; want %d", httpErr.Status, http.StatusNotFound)
+	}
+}
+
+// TestHTTPStatusError_RedactedOmitsURLAndBody locks the slog-sink contract:
+// the Redacted projection carries status and method only, so a tokenized URL
+// or credential-echoing response body cannot reach a structured log sink.
+func TestHTTPStatusError_RedactedOmitsURLAndBody(t *testing.T) {
+	e := &HTTPStatusError{
+		Status: http.StatusForbidden,
+		Method: http.MethodGet,
+		URL:    "https://mirror.invalid/f?token=hunter2",
+		Body:   "token hunter2 rejected",
+	}
+	got := fmt.Sprint(e.Redacted())
+	if strings.Contains(got, "hunter2") {
+		t.Fatalf("Redacted() = %q; must not carry URL or body content", got)
+	}
+	if !strings.Contains(got, "403") || !strings.Contains(got, http.MethodGet) {
+		t.Errorf("Redacted() = %q; want status and method preserved", got)
 	}
 }
 
@@ -127,7 +150,8 @@ func TestDownload_CtxCancelCleansPartialFile(t *testing.T) {
 
 	done := make(chan error, 1)
 	go func() {
-		done <- Fetch(ctx, srv.URL+"/big", out,
+		done <- Fetch(
+			ctx, srv.URL+"/big", out,
 			WithTimeout(30*time.Second),
 			WithLogger(logutil.NopLogger),
 		)
@@ -173,7 +197,8 @@ func TestDownload_SymlinkAtOutputPath(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := Fetch(context.Background(), srv.URL+"/artifact.bin", link,
+	if err := Fetch(
+		context.Background(), srv.URL+"/artifact.bin", link,
 		// WithOverwrite bypasses canSkipDownload, which would otherwise stat
 		// through the symlink, see size>0, and short-circuit (no ExpectedChecksum).
 		WithOverwrite(true),

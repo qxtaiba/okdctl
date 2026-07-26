@@ -6,12 +6,25 @@ import (
 	"fmt"
 	"log/slog"
 	"slices"
+	"time"
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/executor"
 	"github.com/qxtaiba/okdctl/internal/logutil"
 )
+
+// rollbackTimeout bounds one addon's rollback Uninstall when the install it
+// compensates for failed.
+const rollbackTimeout = 2 * time.Minute
+
+// rollbackCtx derives a detached bounded context for a rollback Uninstall:
+// the install may have failed because ctx was cancelled, and an Uninstall
+// under a cancelled ctx dies before it starts, stranding a half-installed
+// addon (see internal/node/add.go ignition teardown for the pattern).
+func rollbackCtx(ctx context.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.WithoutCancel(ctx), rollbackTimeout)
+}
 
 // Manager drives the addon lifecycle: resolving dependencies, installing in
 // order, verifying, and rolling back on failure. Construct via NewManager
@@ -105,10 +118,12 @@ func (m *Manager) InstallAll(ctx context.Context) error {
 			errs = append(errs, err)
 
 			m.logger.Info("addons: rolling back", "addon", info.DisplayName)
-			if unErr := a.Uninstall(ctx, env); unErr != nil {
+			rbCtx, cancel := rollbackCtx(ctx)
+			if unErr := a.Uninstall(rbCtx, env); unErr != nil {
 				m.logger.Warn("addons: rollback failed", "addon", info.DisplayName, "err", unErr)
 				errs = append(errs, fmt.Errorf("addon %s rollback: %w", info.Name, unErr))
 			}
+			cancel()
 			continue
 		}
 	}
@@ -188,10 +203,12 @@ func (m *Manager) InstallOne(ctx context.Context, name string) error {
 			// All-or-nothing: roll back previously-installed addons in reverse order.
 			for _, inst := range slices.Backward(installed) {
 				m.logger.Info("addons: rolling back", "addon", inst.a.Info().DisplayName)
-				if unErr := inst.a.Uninstall(ctx, inst.env); unErr != nil {
+				rbCtx, cancel := rollbackCtx(ctx)
+				if unErr := inst.a.Uninstall(rbCtx, inst.env); unErr != nil {
 					m.logger.Warn("addons: rollback failed", "addon", inst.a.Info().DisplayName, "err", unErr)
 					err = errors.Join(err, fmt.Errorf("addon %s rollback: %w", inst.a.Info().Name, unErr))
 				}
+				cancel()
 			}
 			return err
 		}

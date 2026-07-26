@@ -4,7 +4,10 @@ pre-commit:
   commands:
     gofumpt:
       glob: "*.go"
-      run: gofumpt -l -w {staged_files}
+      # Pinned to the gofumpt embedded in golangci-lint v2.12.2 (CI's
+      # formatter check) so hook and CI can't dispute formatting; bump in
+      # lockstep with the golangci-lint pin, hence no renovate annotation.
+      run: go run mvdan.cc/gofumpt@v0.9.2 -l -w {staged_files}
       stage_fixed: true
     govet:
       run: go vet ./...
@@ -23,3 +26,5 @@ pre-push:
       run: go build ./...
     test:
       run: go test ./...
+    docs-check:
+      run: make docs-check

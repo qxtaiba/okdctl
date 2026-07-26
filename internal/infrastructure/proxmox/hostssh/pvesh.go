@@ -30,10 +30,12 @@ func pveshRun(ctx context.Context, p *RemoteISOParams, subcommand, path string, 
 }
 
 // PveshRun is the exported entry point for callers outside package hostssh.
-// It inherits pveshRun's validateProxmoxName guard, so callers must not
-// validate p.Node themselves. Returns the raw JSON stdout on success.
-func PveshRun(ctx context.Context, p *RemoteISOParams, subcommand, path string, extra ...string) (string, error) {
-	return pveshRun(ctx, p, subcommand, path, extra...)
+// resource is a node-relative path suffix (e.g. "qemu"); PveshRun composes
+// /nodes/<node>/<resource> itself so the node atom can never bypass
+// pveshRun's validateProxmoxName chokepoint, and callers must not validate
+// p.Node themselves. Returns the raw JSON stdout on success.
+func PveshRun(ctx context.Context, p *RemoteISOParams, subcommand, resource string, extra ...string) (string, error) {
+	return pveshRun(ctx, p, subcommand, "/nodes/"+p.Node+"/"+resource, extra...)
 }
 
 func pveshQEMUPath(node string) string {

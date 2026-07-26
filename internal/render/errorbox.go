@@ -115,9 +115,7 @@ func splitHint(msg string) (headline, hint string) {
 // (a long path or terraform address) that exceeds width so the box never
 // overflows its budget. Returns at least one line.
 func wrapText(s string, width int) []string {
-	if width < 1 {
-		width = 1
-	}
+	width = max(width, 1)
 	var lines []string
 	var cur strings.Builder
 	for _, word := range strings.Fields(s) {

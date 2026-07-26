@@ -1,0 +1,8 @@
+---
+version: 2
+# Test fixtures deliberately embed obviously-fake credentials to exercise
+# redaction (same rationale as .golangci.yml's G101 test exclusion). Real
+# credentials live in gitignored .env files, never in the tree.
+secret:
+  ignored_paths:
+    - "**/*_test.go"

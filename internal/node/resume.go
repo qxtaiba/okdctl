@@ -8,11 +8,11 @@ import (
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 )
 
-// OpMatch reports whether an on-disk marker belongs to the op the caller is
-// about to run. beginOp resumes only when the marker's Op matches and OpMatch
+// opMatch reports whether an on-disk marker belongs to the op the caller is
+// about to run. beginOp resumes only when the marker's Op matches and opMatch
 // returns true, so each op supplies a predicate keyed on its own target
 // (node name, role, …). Pure: it must not touch the cluster or terraform.
-type OpMatch func(m *OpMarker) bool
+type opMatch func(m *OpMarker) bool
 
 // stepOrder totally orders the mutating-step vocabulary so shouldRunStep can
 // decide which steps a resume replays. A resumed op re-enters the sequence at
@@ -56,9 +56,10 @@ func shouldRunStep(step, from Step) bool {
 }
 
 // beginOp is the first call in every mutating op, ahead of guards, validation,
-// and the confirm gate. It classifies the on-disk marker into one of four
-// outcomes and is strictly READ-ONLY (only ReadOpMarker's file read) so it
-// cannot break the dry-run zero-mutation contract:
+// and the confirm gate. Every caller gates it on !DryRun, so its only
+// mutation — sweeping a completed add batch's leftover marker — never runs
+// under the dry-run zero-mutation contract. It classifies the on-disk marker
+// into one of four outcomes:
 //
 //   - no marker: (nil, nil) — run normally.
 //   - marker's Op matches and match() is true: (marker, nil) — resume; the
@@ -68,12 +69,15 @@ func shouldRunStep(step, from Step) bool {
 //     pointing at --acknowledge-interrupted-op.
 //   - a foreign marker with ack true: warn and (nil, nil) — the op proceeds
 //     fresh and its first markStep overwrites the stale marker.
-func (r *Runner) beginOp(op Op, match OpMatch, ack bool) (*OpMarker, error) {
+func (r *Runner) beginOp(op Op, match opMatch, ack bool) (*OpMarker, error) {
 	marker, err := ReadOpMarker(r.WorkDir, r.Cfg.Cluster.Name)
 	if err != nil {
 		return nil, err
 	}
 	if marker == nil {
+		return nil, nil
+	}
+	if r.sweepCompletedAddMarker(marker) {
 		return nil, nil
 	}
 	if marker.Op == op && match(marker) {
@@ -82,13 +86,55 @@ func (r *Runner) beginOp(op Op, match OpMatch, ack bool) (*OpMarker, error) {
 		return marker, nil
 	}
 	if !ack {
-		return nil, &errtypes.ConfigError{Msg: fmt.Sprintf(
-			"an interrupted %s op on node %q is recorded (stopped before step %q); re-run with --acknowledge-interrupted-op to override it, or finish it first",
-			marker.Op, marker.Target, marker.Step)}
+		return nil, &errtypes.ConfigError{Msg: strandedMarkerMsg(marker)}
 	}
 	r.Log.Warn("node: overwriting stranded op marker",
 		"op", string(marker.Op), "node", marker.Target, "step", string(marker.Step))
 	return nil, nil
+}
+
+// sweepCompletedAddMarker clears (and reports true for) a marker that is the
+// residue of a fully-completed add batch: AddWorkers persists the widened
+// worker count only after every node in the batch has joined, so a marker
+// whose worker index precedes the persisted count can only mean the batch
+// finished and the process died between persistTopology and clearOpMarker.
+// Without this sweep every subsequent op refuses on a batch that actually
+// completed, with a misleading "stopped before step wait-join" message. A
+// genuinely in-flight add always carries an index at or above the persisted
+// count (its batch starts there), so it is never swept.
+func (r *Runner) sweepCompletedAddMarker(m *OpMarker) bool {
+	if m.Op != OpAdd {
+		return false
+	}
+	idx, ok := cluster.NodeIndex(m.Target)
+	if !ok || idx >= r.Cfg.Topology.Workers.Count {
+		return false
+	}
+	r.Log.Info("node: clearing marker left by a completed add batch",
+		"node", m.Target, "step", string(m.Step))
+	if err := clearOpMarker(r.marker()); err != nil {
+		r.Log.Warn("node: op marker cleanup failed", "err", err)
+	}
+	return true
+}
+
+// strandedMarkerMsg renders the refusal for a stranded op marker. An add's
+// marker gets an extra warning: the interrupted add may have left the ignition
+// server (which serves the cluster pull secret) running, and nothing else
+// surfaces that exposure to the operator.
+func strandedMarkerMsg(m *OpMarker) string {
+	scope := fmt.Sprintf("an interrupted %s op on node %q", m.Op, m.Target)
+	if m.Op == OpStart {
+		// start's marker is cluster-scoped: its Target records the cluster
+		// name, not a node.
+		scope = fmt.Sprintf("an interrupted cluster start op for cluster %q", m.Target)
+	}
+	msg := fmt.Sprintf("%s is recorded (stopped before step %q); re-run with --acknowledge-interrupted-op to override it, or finish it first",
+		scope, m.Step)
+	if m.Op == OpAdd {
+		msg += "; the interrupted add may have left the ignition server running — check 'systemctl status httpd' and stop it if no add is in progress"
+	}
+	return msg
 }
 
 // refuseForeignMarker refuses (unless ack) when an on-disk marker records an
@@ -101,27 +147,49 @@ func (r *Runner) beginOp(op Op, match OpMatch, ack bool) (*OpMarker, error) {
 // workdir) and refusing it would break compact's resume — see
 // refuseForeignMarkerBeforeCompact. Unlike beginOp this never returns a
 // marker to resume from: every caller of this guard is non-resumable itself.
+// With ack, a foreign marker is warned about and deleted here rather than
+// left for a later markStep overwrite — callers may finish without writing
+// any marker of their own. Callers gate on !DryRun, keeping that delete out
+// of the dry-run zero-mutation contract.
 func (r *Runner) refuseForeignMarker(ack bool, allowResumable ...Op) error {
-	if ack {
-		return nil
-	}
 	marker, err := ReadOpMarker(r.WorkDir, r.Cfg.Cluster.Name)
 	if err != nil {
-		return err
+		if !ack {
+			return err
+		}
+		r.Log.Warn("node: discarding unreadable op marker", "err", err)
+		if cerr := clearOpMarker(r.marker()); cerr != nil {
+			r.Log.Warn("node: op marker cleanup failed", "err", cerr)
+		}
+		return nil
 	}
 	if marker == nil || slices.Contains(allowResumable, marker.Op) {
 		return nil
 	}
-	return &errtypes.ConfigError{Msg: fmt.Sprintf(
-		"an interrupted %s op on node %q is recorded (stopped before step %q); re-run with --acknowledge-interrupted-op to override it, or finish it first",
-		marker.Op, marker.Target, marker.Step)}
+	if r.sweepCompletedAddMarker(marker) {
+		return nil
+	}
+	if !ack {
+		return &errtypes.ConfigError{Msg: strandedMarkerMsg(marker)}
+	}
+	// Consume the acknowledged marker instead of leaving it for the op's own
+	// markStep to overwrite: stop/start/snapshot can finish without ever
+	// writing a marker of their own (--skip-drain, a NotReady target), and a
+	// marker the operator already acknowledged must not resurface on the
+	// next op.
+	r.Log.Warn("node: discarding stranded op marker",
+		"op", string(marker.Op), "node", marker.Target, "step", string(marker.Step))
+	if cerr := clearOpMarker(r.marker()); cerr != nil {
+		r.Log.Warn("node: op marker cleanup failed", "err", cerr)
+	}
+	return nil
 }
 
-// resizeScopeMatch builds the OpMatch for a resize resume. A single-node scope
+// resizeScopeMatch builds the opMatch for a resize resume. A single-node scope
 // matches the marker naming that node; a role scope matches when the marker's
 // recorded node resolves to the scoped role in the current node list, so an
 // interrupted role roll resumes on the same role it started.
-func resizeScopeMatch(scope ResizeScope, nodes []cluster.NodeDetail) OpMatch {
+func resizeScopeMatch(scope ResizeScope, nodes []cluster.NodeDetail) opMatch {
 	return func(m *OpMarker) bool {
 		if scope.Node != "" {
 			return m.Target == scope.Node

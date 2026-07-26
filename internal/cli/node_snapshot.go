@@ -5,20 +5,22 @@ import (
 	"fmt"
 	"io"
 	"path/filepath"
+	"strings"
 	"text/tabwriter"
 	"time"
+	"unicode"
 
 	"github.com/spf13/cobra"
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/clusterstatus"
-	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/executor"
 	"github.com/qxtaiba/okdctl/internal/infrastructure/proxmox/hostssh"
 	"github.com/qxtaiba/okdctl/internal/node"
 	"github.com/qxtaiba/okdctl/internal/runlock"
 	"github.com/qxtaiba/okdctl/internal/sshpin"
+	"github.com/qxtaiba/okdctl/internal/system"
 	"github.com/qxtaiba/okdctl/internal/tui"
 )
 
@@ -120,7 +122,7 @@ var nodeSnapshotDeleteCmd = &cobra.Command{
 
 func init() {
 	nodeSnapshotCreateCmd.Flags().StringVar(&nodeSnapshotCreateName, "name", "", "snapshot name (default okdctl-<UTC timestamp>)")
-	nodeSnapshotCreateCmd.Flags().StringVar(&nodeSnapshotCreateDescription, "description", "", "optional snapshot description (single token: no spaces; use dashes or underscores)")
+	nodeSnapshotCreateCmd.Flags().StringVar(&nodeSnapshotCreateDescription, "description", "", "optional snapshot description (single token starting with a letter or digit: no spaces; use dashes or underscores)")
 	nodeSnapshotCreateCmd.Flags().BoolVar(&nodeSnapshotCreateSkipDrain, "skip-drain", false, "skip cordon/drain before snapshotting a Ready node")
 	nodeSnapshotCreateCmd.Flags().StringVar(&nodeSnapshotCreateDrainTimeout, "drain-timeout", "10m", "drain timeout when the node is cordoned first")
 	nodeSnapshotCreateCmd.Flags().BoolVarP(&nodeSnapshotCreateYes, "yes", "y", false, "skip confirmation prompt")
@@ -182,14 +184,14 @@ func buildSnapshotRunner(ctx context.Context, cfg *config.Config, dryRun bool) (
 		return nil, err
 	}
 
-	tfEnv := phase.GetTerraformEnv(cfg)
+	tfEnv := cfg.TerraformEnvName()
 	runner := &node.Runner{
 		Cluster:     cl,
 		Cfg:         cfg,
 		ConfigPath:  cfgFile,
 		ProjectRoot: projectRoot,
-		WorkDir:     filepath.Join(projectRoot, "okd-install"),
-		EnvDir:      filepath.Join(projectRoot, "infrastructure", "terraform", "environments", tfEnv),
+		WorkDir:     filepath.Join(projectRoot, system.WorkDirName),
+		EnvDir:      system.TerraformEnvDir(projectRoot, tfEnv),
 		RunID:       tui.RunID(),
 		DryRun:      dryRun,
 		Log:         log,
@@ -238,6 +240,18 @@ func nodeSnapshotGate(ctx context.Context, verb string, twoStage, yes, dryRun bo
 }
 
 func runNodeSnapshotCreate(cmd *cobra.Command, args []string) error {
+	// Validated here as well as in hostssh so a --dry-run previews only
+	// values a real run would accept, instead of echoing a name/description
+	// the create itself would reject.
+	if nodeSnapshotCreateName != "" {
+		if err := hostssh.ValidateSnapshotName(nodeSnapshotCreateName); err != nil {
+			return &errtypes.ConfigError{Msg: fmt.Sprintf("invalid --name %q", nodeSnapshotCreateName), Err: err}
+		}
+	}
+	if err := hostssh.ValidateSnapshotDescription(nodeSnapshotCreateDescription); err != nil {
+		return &errtypes.ConfigError{Msg: fmt.Sprintf("invalid --description %q", nodeSnapshotCreateDescription), Err: err}
+	}
+
 	cfg, err := loadConfig(cfgFile)
 	if err != nil {
 		return err
@@ -284,6 +298,12 @@ func runNodeSnapshotCreate(cmd *cobra.Command, args []string) error {
 // RunE since it must thread the (possibly auto-generated) snapshot name back
 // to stdout on success.
 func runNodeSnapshotMutate(cmd *cobra.Command, verb string, twoStage, yes, dryRun bool, confirmCluster, warnMsg, target, snapname string, op func(rc *nodeRunnerCtx) error) error {
+	// Validated here as well as in hostssh so a --dry-run previews only names
+	// a real run would accept.
+	if err := hostssh.ValidateSnapshotName(snapname); err != nil {
+		return &errtypes.ConfigError{Msg: fmt.Sprintf("invalid snapshot name %q", snapname), Err: err}
+	}
+
 	cfg, err := loadConfig(cfgFile)
 	if err != nil {
 		return err
@@ -394,7 +414,21 @@ func printNodeSnapshotList(w io.Writer, entries []nodeSnapshotEntry) error {
 		if parent == "" {
 			parent = "-"
 		}
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", e.Name, snapTime, parent, e.Description)
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", stripControl(e.Name), snapTime, stripControl(parent), stripControl(e.Description))
 	}
 	return tw.Flush()
+}
+
+// stripControl drops control characters from a value before it reaches the
+// operator's terminal. okdctl-created snapshot fields are charset-safe, but a
+// snapshot created in the Proxmox UI carries free-text — a hostile description
+// could otherwise inject terminal escapes or fabricate extra listing rows.
+// JSON output needs no equivalent: encoding/json escapes control characters.
+func stripControl(s string) string {
+	return strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) {
+			return -1
+		}
+		return r
+	}, s)
 }

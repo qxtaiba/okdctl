@@ -14,8 +14,8 @@ func TestBoxRespectsNoColorProfile(t *testing.T) {
 	SetColorProfileFor(&bytes.Buffer{}) // a plain buffer is never a TTY -> NoTTY
 	t.Cleanup(func() { SetColorProfileFor(&bytes.Buffer{}) })
 
-	if ColorEnabled() {
-		t.Fatal("ColorEnabled should be false for a non-TTY writer")
+	if colorEnabled() {
+		t.Fatal("colorEnabled should be false for a non-TTY writer")
 	}
 
 	out := BoxedSectionCompact("  phase ......... Running\n", "cluster status", DefaultBoxWidth)
@@ -32,7 +32,7 @@ func TestDownsampleStripsUnderNoColor(t *testing.T) {
 	t.Cleanup(func() { SetColorProfileFor(&bytes.Buffer{}) })
 
 	styled := SuccessStyle.Render("ok")
-	if got := Downsample(styled); strings.Contains(got, "\x1b[") {
-		t.Errorf("Downsample left ANSI under no-color profile: %q", got)
+	if got := downsample(styled); strings.Contains(got, "\x1b[") {
+		t.Errorf("downsample left ANSI under no-color profile: %q", got)
 	}
 }

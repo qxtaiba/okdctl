@@ -117,6 +117,74 @@ func TestSSHRunArgv_strictMode(t *testing.T) {
 	}
 }
 
+// TestSSHRunArgv_RejectsUnsafeAtoms covers the fail-closed backstop: an
+// unvalidated future caller must get an error before ssh runs, not a
+// space-joined command string the remote login shell can reinterpret. The
+// error must name the index and rune but never echo the atom, which could
+// carry credential material.
+func TestSSHRunArgv_RejectsUnsafeAtoms(t *testing.T) {
+	installFakeSSHEcho(t)
+	exec := executor.New()
+
+	payloads := []string{
+		"a;reboot",
+		"a`id`",
+		"a$(reboot)",
+		"a|pipe",
+		"a&bg",
+		"a b",
+		"a\tb",
+		"a\nb",
+		"a'b",
+		`a"b`,
+		"a\\b",
+		"a>o",
+		"a<i",
+		"a*",
+		"a?",
+		"a#c",
+		"a~c",
+		"",
+	}
+	for _, atom := range payloads {
+		for name, run := range map[string]func() (*executor.Result, error){
+			"SSHRunArgv": func() (*executor.Result, error) {
+				return SSHRunArgv(context.Background(), exec, "10.0.0.2", "", "pvesh", "get", atom)
+			},
+			"SSHRunArgvOutput": func() (*executor.Result, error) {
+				return SSHRunArgvOutput(context.Background(), exec, "10.0.0.2", "", "pvesh", "get", atom)
+			},
+		} {
+			_, err := run()
+			if err == nil {
+				t.Errorf("%s accepted unsafe atom %q; want error", name, atom)
+				continue
+			}
+			if atom != "" && len(atom) > 2 && strings.Contains(err.Error(), atom) {
+				t.Errorf("%s error %q echoes the unsafe atom %q", name, err.Error(), atom)
+			}
+		}
+	}
+}
+
+// TestSSHRunArgv_AcceptsShlexSafeCharset pins the full allowed charset so a
+// future tightening cannot silently break pvesh paths, UPIDs (: @ .), or
+// option atoms.
+func TestSSHRunArgv_AcceptsShlexSafeCharset(t *testing.T) {
+	installFakeSSHEcho(t)
+	exec := executor.New()
+
+	result, err := SSHRunArgv(context.Background(), exec, "10.0.0.2", "",
+		"pvesh", "get", "/nodes/pve-01/tasks/UPID:pve:0A:root@pam:/status",
+		"--output-format", "a%b+c=d,e._f-g")
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if !strings.Contains(result.Stdout, "a%b+c=d,e._f-g") {
+		t.Errorf("argv = %q; safe atom did not pass through", result.Stdout)
+	}
+}
+
 func TestProxmoxBareHost(t *testing.T) {
 	cases := map[string]string{
 		"pve.example":             "pve.example",

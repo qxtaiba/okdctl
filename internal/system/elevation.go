@@ -216,5 +216,14 @@ func HasPasswordlessSudo(ctx context.Context) error {
 	cmd.Stdin = nil
 	cmd.Stdout = nil
 	cmd.Stderr = nil
-	return cmd.Run()
+	err := cmd.Run()
+	// Mirror executor.run: a ctx-killed sudo surfaces ctx.Err() so
+	// errors.Is(err, context.Canceled/DeadlineExceeded) matchers see the
+	// cancellation, not an opaque "signal: killed" *exec.ExitError.
+	if err != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return ctxErr
+		}
+	}
+	return err
 }

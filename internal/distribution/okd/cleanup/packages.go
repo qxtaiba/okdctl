@@ -34,12 +34,7 @@ func InstalledPackages() []string {
 // remove from BinDir. Exported so a future cleanup preview/plan CLI verb
 // can render this list without executing the removal.
 func InstalledBinaries() []string {
-	okdBinaries := []string{
-		"openshift-install",
-		"oc",
-		"kubectl",
-	}
-	return append(okdBinaries, phase.ExternalToolBinaries()...)
+	return append(phase.OKDToolBinaries(), phase.ExternalToolBinaries()...)
 }
 
 // Packages removes dnf packages and tool binaries installed during setup.
@@ -58,7 +53,7 @@ func Packages(ctx context.Context, binDir string, logger *slog.Logger) error {
 
 	pkgList := InstalledPackages()
 	if err := pm.Remove(ctx, pkgList); err != nil {
-		logger.Warn("cleanup: some packages could not be removed (may require manual cleanup)")
+		logger.Warn("cleanup: some packages could not be removed (may require manual cleanup)", "err", err)
 		hasErrors = true
 	}
 

@@ -5,8 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
-	"path/filepath"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -26,6 +24,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/nodetypes"
 	"github.com/qxtaiba/okdctl/internal/render"
 	"github.com/qxtaiba/okdctl/internal/runlock"
+	"github.com/qxtaiba/okdctl/internal/system"
 	"github.com/qxtaiba/okdctl/internal/tui"
 )
 
@@ -39,7 +38,6 @@ var (
 	nodeResizeMemoryMB         int
 	nodeResizeCPU              int
 	nodeAcknowledgeInterrupted bool
-	nodeAddRole                string
 	nodeAddCount               int
 )
 
@@ -108,7 +106,7 @@ different op or node instead of refusing.`,
 }
 
 var nodeAddCmd = &cobra.Command{
-	Use:   "add --role worker [--count N]",
+	Use:   "add [--count N]",
 	Short: "Add worker node(s) to the cluster",
 	Long: `Build and upload a per-node CoreOS ISO, revive the ignition HTTPS server for
 the join window, apply a plan-gated targeted terraform create, and wait for
@@ -126,8 +124,8 @@ node instead of refusing. If a batch is interrupted, finish it with another
 'okdctl node add' before running 'okdctl deploy' — deploy does not consult
 the op marker and a partial batch's config/tfvars undercount the workers
 terraform already created, so it would destroy the in-flight node(s).`,
-	Example: `  okdctl node add --role worker --yes --confirm-cluster grappleberry
-  okdctl node add --role worker --count 2 --dry-run`,
+	Example: `  okdctl node add --yes --confirm-cluster grappleberry
+  okdctl node add --count 2 --dry-run`,
 	Args: cobra.NoArgs,
 	RunE: runNodeAdd,
 }
@@ -152,7 +150,6 @@ func init() {
 	nodeAddCmd.Flags().BoolVarP(&nodeYes, "yes", "y", false, "skip confirmation prompt")
 	nodeAddCmd.Flags().StringVar(&nodeConfirmCluster, "confirm-cluster", "", "required with --yes; must equal the config cluster name")
 	nodeAddCmd.Flags().BoolVar(&nodeDryRun, flagDryRun, false, "run guards and the plan gate without mutating anything")
-	nodeAddCmd.Flags().StringVar(&nodeAddRole, "role", "worker", "node role to add (only worker is supported)")
 	nodeAddCmd.Flags().IntVar(&nodeAddCount, "count", 1, "number of nodes to add in this batch")
 	nodeAddCmd.Flags().BoolVar(&nodeAcknowledgeInterrupted, "acknowledge-interrupted-op", false, "override a stranded marker left by a different op or node and proceed fresh")
 
@@ -205,7 +202,8 @@ func (n *nodeRunnerCtx) complete(w io.Writer, elapsed time.Duration) {
 // under the project run lock. It installs the informed-confirmation hook (or the
 // dry-run preview) from consent. The returned cleanup zeroizes credentials and
 // releases the lock.
-func buildNodeRunner(ctx context.Context, cfg *config.Config, verb string, consent nodeConsent, probeHost bool) (*nodeRunnerCtx, error) {
+func buildNodeRunner(cmd *cobra.Command, cfg *config.Config, verb string, consent nodeConsent, probeHost bool) (*nodeRunnerCtx, error) {
+	ctx := cmd.Context()
 	projectRoot, err := resolveProjectRootOrDie()
 	if err != nil {
 		return nil, err
@@ -224,8 +222,8 @@ func buildNodeRunner(ctx context.Context, cfg *config.Config, verb string, conse
 		hostTotalMiB, hostAllocatedMiB = runHostBudgetProbe(ctx, cfg, creds)
 	}
 
-	tfEnv := phase.GetTerraformEnv(cfg)
-	terraformDir := filepath.Join(projectRoot, "infrastructure", "terraform", "environments", tfEnv)
+	tfEnv := cfg.TerraformEnvName()
+	terraformDir := system.TerraformEnvDir(projectRoot, tfEnv)
 	tfOpts := []terraform.Option{terraform.WithLogger(tui.SimpleLogger())}
 	if creds.IsValid() {
 		tfOpts = append(tfOpts, terraform.WithEnv(creds.Env()))
@@ -246,7 +244,12 @@ func buildNodeRunner(ctx context.Context, cfg *config.Config, verb string, conse
 		return nil, err
 	}
 
-	runner := node.NewRunner(cl, tf, cfg, projectRoot, cfgFile, tfEnv, tui.RunID(), tui.SimpleLogger())
+	runner := node.NewRunner(cl, tf, cfg,
+		node.WithProjectRoot(projectRoot),
+		node.WithConfigPath(cfgFile),
+		node.WithTerraformEnv(tfEnv),
+		node.WithRunID(tui.RunID()),
+		node.WithLogger(tui.SimpleLogger()))
 	runner.DryRun = consent.dryRun
 	runner.Reporter = func(desc string) func() { return tui.StartSpinner(ctx, desc) }
 
@@ -284,12 +287,13 @@ func buildNodeRunner(ctx context.Context, cfg *config.Config, verb string, conse
 		},
 	}
 	if consent.dryRun {
+		out := cmd.OutOrStdout()
 		runner.Preview = func(plan *node.OpPlan) {
 			rc.captured = plan
-			fmt.Fprint(os.Stdout, render.NodeOpDryRun(plan))
+			fmt.Fprint(out, render.NodeOpDryRun(plan))
 		}
 	} else {
-		runner.Confirm = nodeConfirmHook(rc, consent, cfg.Cluster.Name)
+		runner.Confirm = nodeConfirmHook(rc, consent, cfg.Cluster.Name, cmd.ErrOrStderr())
 	}
 	return rc, nil
 }
@@ -297,12 +301,12 @@ func buildNodeRunner(ctx context.Context, cfg *config.Config, verb string, conse
 // nodeConfirmHook builds the guards-before-prompt callback: it always prints the
 // informed box (so --yes still surfaces the blast radius), then runs the gate
 // unless --yes was passed. It records the plan for the completion box. The box
-// and prompt share stderr so they never interleave with piped stdout data, and
-// the hook is invoked with no spinner span open.
-func nodeConfirmHook(rc *nodeRunnerCtx, consent nodeConsent, clusterName string) node.ConfirmFunc {
+// and prompt share the stderr stream (errW) so they never interleave with piped
+// stdout data, and the hook is invoked with no spinner span open.
+func nodeConfirmHook(rc *nodeRunnerCtx, consent nodeConsent, clusterName string, errW io.Writer) node.ConfirmFunc {
 	return func(ctx context.Context, plan *node.OpPlan) (bool, error) {
 		rc.captured = plan
-		fmt.Fprint(os.Stderr, render.NodeOpConfirm(plan))
+		fmt.Fprint(errW, render.NodeOpConfirm(plan))
 		if consent.yes {
 			return true, nil
 		}
@@ -348,7 +352,7 @@ func runHostBudgetProbe(ctx context.Context, cfg *config.Config, creds *credenti
 		return 0, 0
 	}
 	tui.Info("host memory budget",
-		tui.LF("node", probe.Node),
+		tui.LF("host_node", probe.Node),
 		tui.LF("total_mib", probe.HostMemTotalMiB()),
 		tui.LF("allocated_mib", probe.GuestAllocatedMiB()))
 	for _, d := range probe.Datastores {
@@ -427,7 +431,7 @@ func runNodeRemove(cmd *cobra.Command, args []string) error {
 	}
 
 	consent := nodeConsent{yes: nodeYes, dryRun: nodeDryRun, twoStage: true}
-	rc, err := buildNodeRunner(cmd.Context(), cfg, "remove", consent, false)
+	rc, err := buildNodeRunner(cmd, cfg, "remove", consent, false)
 	if err != nil {
 		return err
 	}
@@ -467,7 +471,7 @@ func runNodeResize(cmd *cobra.Command, args []string) error {
 	}
 
 	consent := nodeConsent{yes: nodeYes, dryRun: nodeDryRun, twoStage: false}
-	rc, err := buildNodeRunner(cmd.Context(), cfg, "resize", consent, true)
+	rc, err := buildNodeRunner(cmd, cfg, "resize", consent, true)
 	if err != nil {
 		return err
 	}
@@ -496,7 +500,7 @@ func runNodeAdd(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
-	if err := validateAddFlags(nodeAddRole, nodeAddCount); err != nil {
+	if err := validateAddFlags(nodeAddCount); err != nil {
 		return err
 	}
 
@@ -505,7 +509,7 @@ func runNodeAdd(cmd *cobra.Command, _ []string) error {
 	}
 
 	consent := nodeConsent{yes: nodeYes, dryRun: nodeDryRun, twoStage: false}
-	rc, err := buildNodeRunner(cmd.Context(), cfg, "add", consent, true)
+	rc, err := buildNodeRunner(cmd, cfg, "add", consent, true)
 	if err != nil {
 		return err
 	}
@@ -527,12 +531,8 @@ func runNodeAdd(cmd *cobra.Command, _ []string) error {
 	return nil
 }
 
-// validateAddFlags requires --role worker (master add/remove is not
-// supported, mirroring remove's guard) and a positive --count.
-func validateAddFlags(role string, count int) error {
-	if role != nodetypes.RoleWorker.String() {
-		return &errtypes.UsageError{Msg: fmt.Sprintf("--role %q is not supported; only worker nodes can be added (master add/remove is not supported)", role)}
-	}
+// validateAddFlags requires a positive --count.
+func validateAddFlags(count int) error {
 	if count < 1 {
 		return &errtypes.UsageError{Msg: "--count must be >= 1"}
 	}

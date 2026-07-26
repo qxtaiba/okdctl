@@ -3,13 +3,20 @@ package hostssh
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/qxtaiba/okdctl/internal/executor"
 	"github.com/qxtaiba/okdctl/internal/system"
 )
+
+// ErrSnapshotExists reports a CreateSnapshot call against a name the VM
+// already has. Callers detect it with errors.Is instead of parsing the raw
+// pvesh task exitstatus string.
+var ErrSnapshotExists = errors.New("snapshot already exists")
 
 // SnapshotInfo describes one QEMU snapshot as returned by
 // pvesh get /nodes/<node>/qemu/<vmid>/snapshot. ListSnapshots filters out
@@ -52,11 +59,11 @@ func validateVMID(vmid int) error {
 	return nil
 }
 
-// validateSnapshotName enforces the pve-configid grammar Proxmox itself
-// requires for a snapshot name. This doubles as the shell-injection guard
-// for every path built with the name (SSHRunArgv does not sanitize argv
-// atoms against the remote login shell — see ssh.go).
-func validateSnapshotName(name string) error {
+// ValidateSnapshotName enforces the pve-configid grammar Proxmox itself
+// requires for a snapshot name. This is the authoritative shell-injection
+// guard for every path built with the name; SSHRunArgv's shell-safe-atom
+// check (ssh.go) is only a fail-closed backstop.
+func ValidateSnapshotName(name string) error {
 	if name == "" {
 		return fmt.Errorf("must not be empty")
 	}
@@ -78,16 +85,25 @@ func validateSnapshotName(name string) error {
 	return nil
 }
 
-// validateSnapshotDescription allowlist-checks an optional free-text
+// ValidateSnapshotDescription allowlist-checks an optional free-text
 // description before it reaches the remote shell as an SSHRunArgv atom.
 // Whitespace is rejected, not just control characters: SSHRunArgv joins argv
 // with spaces before handing it to the remote login shell, so a multi-word
 // value would word-split there instead of surviving as the single token
 // pvesh expects. An empty description is valid — CreateSnapshot omits
 // -description entirely when desc is "".
-func validateSnapshotDescription(desc string) error {
+func ValidateSnapshotDescription(desc string) error {
 	if len(desc) > 200 {
 		return fmt.Errorf("must be 200 characters or fewer, got %d", len(desc))
+	}
+	// Letter/digit-first keeps a description from ever reading as a pvesh
+	// option token (`-vmstate`) on the remote command line.
+	if desc != "" {
+		first := rune(desc[0])
+		ok := (first >= 'a' && first <= 'z') || (first >= 'A' && first <= 'Z') || (first >= '0' && first <= '9')
+		if !ok {
+			return fmt.Errorf("must start with a letter or digit, got %q", string(first))
+		}
 	}
 	for i, r := range desc {
 		ok := (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') ||
@@ -101,7 +117,7 @@ func validateSnapshotDescription(desc string) error {
 
 // validateUPID rejects UPID values outside the Proxmox task-id charset,
 // guarding pveshWaitTask's status-path interpolation the same way
-// validateSnapshotName guards create/rollback/delete.
+// ValidateSnapshotName guards create/rollback/delete.
 func validateUPID(upid string) error {
 	if upid == "" {
 		return fmt.Errorf("must not be empty")
@@ -121,7 +137,11 @@ func validateUPID(upid string) error {
 // tolerates a non-zero exit because its callers are read paths; a task
 // launch must fail loudly on rejection instead of returning whatever ended
 // up on stdout, so this checks result.ExitCode itself rather than going
-// through pveshRun.
+// through pveshRun. The failure routes through executor.NewExitError so
+// remote stderr is scrubbed and truncated before it can reach a log sink,
+// and a cancelled ctx keeps its context.Canceled identity. The path stays
+// out of the ExitError Command label (see TestExitErrorCommandNoArgvLeak)
+// and is carried by the wrapping message instead.
 func pveshTaskCall(ctx context.Context, p *RemoteISOParams, subcommand, path string, extra ...string) (string, error) {
 	if err := validateProxmoxName(p.Node); err != nil {
 		return "", fmt.Errorf("proxmox node %q invalid: %w", p.Node, err)
@@ -133,7 +153,8 @@ func pveshTaskCall(ctx context.Context, p *RemoteISOParams, subcommand, path str
 		return "", err
 	}
 	if result.ExitCode != 0 {
-		return "", fmt.Errorf("pvesh %s %s: exit %d: %s", subcommand, path, result.ExitCode, strings.TrimSpace(result.Stderr))
+		return "", fmt.Errorf("pvesh %s %s: %w", subcommand, path,
+			executor.NewExitError(ctx, "pvesh "+subcommand, result.ExitCode, result.Stderr))
 	}
 	if result.Truncated {
 		return "", fmt.Errorf("pvesh %s %s output truncated after %d bytes", subcommand, path, len(result.Stdout))
@@ -214,16 +235,29 @@ func pveshWaitTask(ctx context.Context, p *RemoteISOParams, upid string, timeout
 // attaches it to the snapshot. It never passes -vmstate: the qemu-guest-agent
 // is disabled fleet-wide, so no in-VM freeze is available and a memory-state
 // snapshot would not be crash-consistent with it. Blocks until the async
-// pvesh task completes or timeout elapses.
+// pvesh task completes or timeout elapses. Returns an error matching
+// ErrSnapshotExists (errors.Is) when vmid already has a snapshot named name.
 func CreateSnapshot(ctx context.Context, p *RemoteISOParams, vmid int, name, description string, timeout time.Duration) error {
 	if err := validateVMID(vmid); err != nil {
 		return fmt.Errorf("vmid %d invalid: %w", vmid, err)
 	}
-	if err := validateSnapshotName(name); err != nil {
+	if err := ValidateSnapshotName(name); err != nil {
 		return fmt.Errorf("snapshot name %q invalid: %w", name, err)
 	}
-	if err := validateSnapshotDescription(description); err != nil {
+	if err := ValidateSnapshotDescription(description); err != nil {
 		return fmt.Errorf("snapshot description invalid: %w", err)
+	}
+
+	// Best-effort duplicate pre-check: a definite name collision surfaces as
+	// ErrSnapshotExists instead of a raw pvesh task exitstatus. A failed
+	// listing is ignored rather than blocking the create — pvesh itself still
+	// rejects duplicates, and this pre-check is racy by nature anyway.
+	if existing, listErr := ListSnapshots(ctx, p, vmid); listErr == nil {
+		for _, s := range existing {
+			if s.Name == name {
+				return fmt.Errorf("snapshot %q for vmid %d: %w", name, vmid, ErrSnapshotExists)
+			}
+		}
 	}
 
 	extra := []string{"-snapname", name}
@@ -286,7 +320,7 @@ func RollbackSnapshot(ctx context.Context, p *RemoteISOParams, vmid int, name st
 	if err := validateVMID(vmid); err != nil {
 		return fmt.Errorf("vmid %d invalid: %w", vmid, err)
 	}
-	if err := validateSnapshotName(name); err != nil {
+	if err := ValidateSnapshotName(name); err != nil {
 		return fmt.Errorf("snapshot name %q invalid: %w", name, err)
 	}
 
@@ -307,7 +341,7 @@ func DeleteSnapshot(ctx context.Context, p *RemoteISOParams, vmid int, name stri
 	if err := validateVMID(vmid); err != nil {
 		return fmt.Errorf("vmid %d invalid: %w", vmid, err)
 	}
-	if err := validateSnapshotName(name); err != nil {
+	if err := ValidateSnapshotName(name); err != nil {
 		return fmt.Errorf("snapshot name %q invalid: %w", name, err)
 	}
 

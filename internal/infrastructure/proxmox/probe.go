@@ -4,15 +4,19 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/luthermonson/go-proxmox"
+
+	"github.com/qxtaiba/okdctl/internal/httputil"
 )
 
-// DefaultProbeTimeout bounds every read in a single ProbeHost call.
-const DefaultProbeTimeout = 15 * time.Second
+// defaultProbeTimeout bounds every read in a single ProbeHost call.
+const defaultProbeTimeout = 15 * time.Second
 
 // ProbeOptions carries the read-only Proxmox API probe inputs. Password /
 // APIToken are the caller's credential bytes; the caller owns Zeroize. Node is
@@ -65,7 +69,7 @@ func bytesToMiB(b uint64) int { return int(b / (1024 * 1024)) } //nolint:gosec /
 func ProbeHost(ctx context.Context, opts *ProbeOptions) (*HostProbe, error) {
 	timeout := opts.Timeout
 	if timeout <= 0 {
-		timeout = DefaultProbeTimeout
+		timeout = defaultProbeTimeout
 	}
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
@@ -137,17 +141,16 @@ func newProxmoxClient(endpoint, username string, password, apiToken []byte, inse
 	if endpoint == "" {
 		return nil, fmt.Errorf("proxmox client: endpoint is required")
 	}
-	httpClient := &http.Client{
-		Timeout: timeout,
-		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: insecure}, //nolint:gosec // operator opts in via Insecure
-		},
+	if insecure {
+		warnInsecureTLS(endpoint)
 	}
+	httpClient := newAPIHTTPClient(insecure, timeout)
 	base := normalizeEndpoint(endpoint) + "/api2/json"
 
 	switch {
 	case len(password) > 0:
-		return proxmox.NewClient(base,
+		return proxmox.NewClient(
+			base,
 			proxmox.WithHTTPClient(httpClient),
 			proxmox.WithCredentials(&proxmox.Credentials{Username: username, Password: string(password)}),
 		), nil
@@ -156,13 +159,39 @@ func newProxmoxClient(endpoint, username string, password, apiToken []byte, inse
 		if !ok {
 			return nil, fmt.Errorf("proxmox client: PROXMOX_VE_API_TOKEN must be in id=secret form")
 		}
-		return proxmox.NewClient(base,
+		return proxmox.NewClient(
+			base,
 			proxmox.WithHTTPClient(httpClient),
 			proxmox.WithAPIToken(id, secret),
 		), nil
 	default:
 		return nil, fmt.Errorf("proxmox client: no credentials (need password or api token)")
 	}
+}
+
+// newAPIHTTPClient builds the transport for the hand-rolled go-proxmox
+// client: request timeout, operator-opt-in TLS verification skip, and the
+// same redirect policy every httputil-built client gets. The redirect cap
+// is load-bearing here — go-proxmox attaches auth per request, so a
+// compromised or misconfigured endpoint could otherwise walk the token
+// cross-host.
+func newAPIHTTPClient(insecure bool, timeout time.Duration) *http.Client {
+	return httputil.NewWithTransport(&http.Transport{
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: insecure}, //nolint:gosec // operator opts in via Insecure
+	}, timeout)
+}
+
+var insecureTLSWarnOnce sync.Once
+
+// warnInsecureTLS surfaces a long-forgotten insecure:true once per process —
+// PowerCycler builds a client per operation, so per-call warnings would be
+// noise. It logs via slog.Default, which tui.SimpleLogger rebinds to the
+// RedactHandler-backed logger; no logger threads through the credential
+// options structs, and widening them for one warning is not worth it.
+func warnInsecureTLS(endpoint string) {
+	insecureTLSWarnOnce.Do(func() {
+		slog.Warn("proxmox tls verification disabled (insecure: true)", "endpoint", endpoint)
+	})
 }
 
 // selectNodeMem returns the physical and live-used memory of the named node.

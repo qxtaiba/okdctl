@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/templates"
+	"github.com/qxtaiba/okdctl/internal/nodetypes"
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
@@ -12,7 +13,7 @@ import (
 // must target — the MCO applies pool-scoped configs only to matching nodes,
 // so shipping only "master" would leave workers on FCOS's broken stock
 // fstrim.timer (coreos/fedora-coreos-tracker#468).
-var fstrimMachineConfigRoles = []string{"master", "worker"}
+var fstrimMachineConfigRoles = []string{string(nodetypes.RoleMaster), string(nodetypes.RoleWorker)}
 
 // generateFstrimManifests writes an fstrim MachineConfig for each node pool.
 // FCOS ships no /etc/fstab, so the stock fstrim.timer's `fstrim --fstab`

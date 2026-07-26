@@ -3,7 +3,6 @@ package releases
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"time"
 
@@ -40,38 +39,4 @@ func (f *OKDVersionFetcher) FetchVersions(ctx context.Context) ([]OKDReleaseSeri
 
 	f.saveToDiskCache(series)
 	return series, nil
-}
-
-// GetLatestStable returns the newest OKDVersion flagged as stable across
-// all release series.
-func (f *OKDVersionFetcher) GetLatestStable(ctx context.Context) (OKDVersion, error) {
-	series, err := f.FetchVersions(ctx)
-	if err != nil {
-		return OKDVersion{}, err
-	}
-
-	for _, s := range series {
-		if s.Latest.Stable {
-			return s.Latest, nil
-		}
-	}
-
-	return OKDVersion{}, fmt.Errorf("no stable version found")
-}
-
-// GetLatestForMinor returns the latest version in the given major.minor
-// series, or an error if no series matches.
-func (f *OKDVersionFetcher) GetLatestForMinor(ctx context.Context, major, minor int) (OKDVersion, error) {
-	series, err := f.FetchVersions(ctx)
-	if err != nil {
-		return OKDVersion{}, err
-	}
-
-	for _, s := range series {
-		if s.Major == major && s.Minor == minor {
-			return s.Latest, nil
-		}
-	}
-
-	return OKDVersion{}, fmt.Errorf("no version found for %d.%d", major, minor)
 }

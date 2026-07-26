@@ -7,15 +7,16 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/credentials"
-	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/infrastructure/proxmox"
 	"github.com/qxtaiba/okdctl/internal/infrastructure/terraform"
 	"github.com/qxtaiba/okdctl/internal/render"
 	"github.com/qxtaiba/okdctl/internal/runlock"
+	"github.com/qxtaiba/okdctl/internal/system"
 	"github.com/qxtaiba/okdctl/internal/tui"
 )
 
@@ -24,7 +25,6 @@ func loadConfig(configFile string) (*config.Config, error) {
 	cfg, err := loader.LoadFile(configFile)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			tui.Error("configuration file not found", tui.LF("file", configFile))
 			if configFile == "okdctl.yaml" {
 				tui.Info("run 'okdctl deploy' to create a configuration file")
 			} else {
@@ -49,9 +49,9 @@ func handleCredentials(cfg *config.Config) (*credentials.ProxmoxCredentials, err
 	creds := credentials.GetProxmoxCredentials(cfg)
 	if !creds.IsValid() {
 		tui.Warn("no proxmox credentials found")
-		tui.Info("set credentials via environment variables or env file", tui.LF("path", envPath))
-		tui.Info("  PROXMOX_VE_USERNAME + PROXMOX_VE_PASSWORD")
-		tui.Info("  or PROXMOX_VE_API_TOKEN")
+		tui.Info("set credentials via environment variables or env file",
+			tui.LF("path", envPath),
+			tui.LF("vars", "PROXMOX_VE_USERNAME+PROXMOX_VE_PASSWORD or PROXMOX_VE_API_TOKEN"))
 	} else {
 		reportCredentialProvenance(creds)
 	}
@@ -119,7 +119,7 @@ func runTerraformPlanPreview(ctx context.Context, cfg *config.Config, opts planP
 
 	return prov.PlanPreview(ctx, cfg, proxmox.ProvisionOptions{
 		ProjectRoot:  opts.ProjectRoot,
-		TerraformEnv: phase.GetTerraformEnv(cfg),
+		TerraformEnv: cfg.TerraformEnvName(),
 	})
 }
 
@@ -202,16 +202,14 @@ func resolveProjectRootOrDie() (string, error) {
 // markers: the configured config-file name or okdctl.env. Both are
 // exclusively written by okdctl inside a project root.
 func hasPrimaryMarker(root string) bool {
-	for _, name := range []string{filepath.Base(cfgFile), "okdctl.env"} {
-		if _, err := os.Stat(filepath.Join(root, name)); err == nil {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc([]string{filepath.Base(cfgFile), "okdctl.env"}, func(name string) bool {
+		_, err := os.Stat(filepath.Join(root, name))
+		return err == nil
+	})
 }
 
 func terraformStateMatches(root string) []string {
-	matches, _ := filepath.Glob(filepath.Join(phase.TerraformEnvDir(root, "*"), "terraform.tfstate"))
+	matches, _ := filepath.Glob(filepath.Join(system.TerraformEnvDir(root, "*"), "terraform.tfstate"))
 	return matches
 }
 
@@ -234,7 +232,8 @@ func warnIfTfStateOnly(root string) {
 	if len(matches) == 0 {
 		return
 	}
-	tui.Warn("okdctl.yaml and okdctl.env not found; accepting terraform.tfstate as a recovery hint",
+	tui.Warn(
+		"okdctl.yaml and okdctl.env not found; accepting terraform.tfstate as a recovery hint",
 		tui.LF("tfstate", matches[0]),
 		tui.LF("root", root),
 	)

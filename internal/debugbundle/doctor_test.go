@@ -9,36 +9,48 @@ import (
 )
 
 // TestMain implements the subprocess-hijack used to fake the re-exec inside
-// collectDoctorOutput. When TEST_DOCTOR_SUBPROCESS is set, this process IS
-// the fake doctor command: it writes the env value to stdout and exits 1 to
-// simulate a failing preflight. Normal test invocations skip this branch.
+// collectDoctorOutput. The re-exec always passes "doctor" as the first arg,
+// so when this test binary is started that way it IS the fake doctor
+// command: it writes fixed markers to stdout and stderr (plus any canary
+// env var, to prove env filtering) and exits 1 to simulate a failing
+// preflight. Normal `go test` invocations never have "doctor" as argv[1].
 func TestMain(m *testing.M) {
-	if val, ok := os.LookupEnv("TEST_DOCTOR_SUBPROCESS"); ok {
-		fmt.Print(val)
+	if len(os.Args) > 1 && os.Args[1] == "doctor" {
+		fmt.Print("fake-doctor-stdout")
+		if v := os.Getenv("TEST_DOCTOR_CANARY"); v != "" {
+			fmt.Print(v)
+		}
+		fmt.Fprint(os.Stderr, "fake-doctor-stderr")
 		os.Exit(1)
 	}
 	os.Exit(m.Run())
 }
 
-func TestCollectDoctorOutputBuffersOnFail(t *testing.T) {
-	const want = "doctor: preflight failed\n"
-	t.Setenv("TEST_DOCTOR_SUBPROCESS", want)
-	buf, err := collectDoctorOutput(context.Background())
+func TestCollectDoctorOutputSeparatesStreamsAndToleratesFailure(t *testing.T) {
+	stdout, stderr, err := collectDoctorOutput(context.Background())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !strings.Contains(string(buf), want) {
-		t.Errorf("buffer = %q, want it to contain %q", buf, want)
+	if string(stdout) != "fake-doctor-stdout" {
+		t.Errorf("stdout = %q, want %q with no stderr interleaved", stdout, "fake-doctor-stdout")
+	}
+	// Prefix, not equality: under `go test -cover` the re-exec'd test binary
+	// appends a GOCOVERDIR warning to stderr after the marker.
+	if !strings.HasPrefix(string(stderr), "fake-doctor-stderr") {
+		t.Errorf("stderr = %q, want %q prefix", stderr, "fake-doctor-stderr")
+	}
+	if strings.Contains(string(stderr), "fake-doctor-stdout") {
+		t.Errorf("stdout marker leaked into stderr: %q", stderr)
 	}
 }
 
-func TestCollectDoctorOutputEmptyIsNonNil(t *testing.T) {
-	t.Setenv("TEST_DOCTOR_SUBPROCESS", "")
-	buf, err := collectDoctorOutput(context.Background())
+func TestCollectDoctorOutputFiltersParentEnv(t *testing.T) {
+	t.Setenv("TEST_DOCTOR_CANARY", "canary-leaked")
+	stdout, _, err := collectDoctorOutput(context.Background())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if buf == nil {
-		t.Error("non-nil buffer expected even when subprocess emits no output")
+	if string(stdout) != "fake-doctor-stdout" {
+		t.Errorf("non-allowlisted env var reached the re-exec: stdout = %q", stdout)
 	}
 }

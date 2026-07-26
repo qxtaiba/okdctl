@@ -7,53 +7,87 @@ import (
 	"github.com/qxtaiba/okdctl/internal/logutil"
 )
 
-// Redacted returns a deep copy of cfg with every string field whose JSON
-// tag name matches the secret-key denylist replaced by "***". Fields tagged
-// json:"-" (Password, APIToken, Username) are skipped — they never marshal
-// into operator-facing output.
+// Redacted returns a deep copy of cfg with every string whose JSON tag name
+// or map key matches the secret-key denylist replaced by "***". Fields
+// tagged json:"-" (Password, APIToken, Username) are skipped — they never
+// marshal into operator-facing output. Maps and slices are cloned before
+// masking so the source config is never mutated through shared backing.
 func Redacted(cfg *Config) Config {
 	out := *cfg
 	redactValue(reflect.ValueOf(&out))
 	return out
 }
 
-// redactValue walks v (must be addressable) masking secret-keyed string fields.
+// redactValue walks v masking secret-keyed strings, cloning any pointer,
+// map, or slice it descends into so mutations never alias the source.
 func redactValue(v reflect.Value) {
 	switch v.Kind() {
 	case reflect.Pointer:
 		if v.IsNil() {
 			return
 		}
+		if v.CanSet() {
+			clone := reflect.New(v.Type().Elem())
+			clone.Elem().Set(v.Elem())
+			v.Set(clone)
+		}
 		redactValue(v.Elem())
 	case reflect.Struct:
-		t := v.Type()
-		for i := range t.NumField() {
-			f := t.Field(i)
-			jsonTag := f.Tag.Get("json")
-			if jsonTag == "-" {
-				continue
+		redactStructFields(v)
+	case reflect.Map:
+		if !v.IsNil() && v.CanSet() {
+			v.Set(redactedMapCopy(v))
+		}
+	case reflect.Slice:
+		if !v.IsNil() && v.CanSet() {
+			clone := reflect.MakeSlice(v.Type(), v.Len(), v.Len())
+			reflect.Copy(clone, v)
+			for i := range clone.Len() {
+				redactValue(clone.Index(i))
 			}
-			name := strings.SplitN(jsonTag, ",", 2)[0]
-			fv := v.Field(i)
-			if !fv.CanSet() {
-				continue
-			}
-			switch fv.Kind() {
-			case reflect.String:
-				if logutil.KeyIsSecret(name) && fv.String() != "" {
-					fv.SetString("***")
-				}
-			case reflect.Pointer:
-				if fv.IsNil() {
-					continue
-				}
-				clone := reflect.New(fv.Type().Elem())
-				clone.Elem().Set(fv.Elem())
-				fv.Set(clone)
-				redactValue(fv)
-			case reflect.Struct:
-				redactValue(fv)
-			}
+			v.Set(clone)
 		}
 	}
+}
+
+func redactStructFields(v reflect.Value) {
+	t := v.Type()
+	for i := range t.NumField() {
+		jsonTag := t.Field(i).Tag.Get("json")
+		if jsonTag == "-" {
+			continue
+		}
+		fv := v.Field(i)
+		if !fv.CanSet() {
+			continue
+		}
+		if fv.Kind() == reflect.String {
+			name := strings.SplitN(jsonTag, ",", 2)[0]
+			if logutil.KeyIsSecret(name) && fv.String() != "" {
+				fv.SetString("***")
+			}
+			continue
+		}
+		redactValue(fv)
+	}
+}
+
+// redactedMapCopy returns a masked copy of m. String values under a
+// secret-matching string key become "***"; other values recurse.
+func redactedMapCopy(m reflect.Value) reflect.Value {
+	out := reflect.MakeMapWithSize(m.Type(), m.Len())
+	for iter := m.MapRange(); iter.Next(); {
+		k := iter.Key()
+		elem := reflect.New(m.Type().Elem()).Elem()
+		elem.Set(iter.Value())
+		if elem.Kind() == reflect.String {
+			if k.Kind() == reflect.String && logutil.KeyIsSecret(k.String()) && elem.String() != "" {
+				elem.SetString("***")
+			}
+		} else {
+			redactValue(elem)
+		}
+		out.SetMapIndex(k, elem)
+	}
+	return out
 }

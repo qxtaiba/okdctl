@@ -35,22 +35,25 @@ type AddOptions struct {
 }
 
 // preflightIgnitionArtifacts verifies the setup phase's ignition assets —
-// worker.ign and the ignition TLS cert — are still on disk. Node add reuses
-// both as-is rather than regenerating them, so `okdctl cleanup --kind
-// web-only` removing them must be caught here before any mutation runs; a
-// `cleanup full` run is already caught by node ops' upstream missing-
-// kubeconfig guard.
+// worker.ign and the ignition TLS cert — are still on disk. These are the
+// SOURCE copies the revive re-deploys into the web root, so this guards
+// against their loss (e.g. a manual wipe of cluster-config); the served
+// web-root copies that `okdctl cleanup --kind web-only` removes are healed
+// by ReviveIgnitionServer's re-deploy, not checked here. A `cleanup full`
+// run is already caught by node ops' upstream missing-kubeconfig guard.
 func (r *Runner) preflightIgnitionArtifacts() error {
 	ignPath := filepath.Join(phase.ClusterConfigDir(r.WorkDir), "worker.ign")
 	if !system.FileExists(ignPath) {
 		return &errtypes.ConfigError{Msg: fmt.Sprintf(
-			"worker.ign not found at %s; re-run setup (e.g. 'okdctl deploy') to regenerate it before adding a node", ignPath)}
+			"worker.ign not found at %s; re-run setup (e.g. 'okdctl deploy') to regenerate it before adding a node", ignPath,
+		)}
 	}
 
 	certPath, _ := setup.IgnitionCertPaths(r.ProjectRoot)
 	if !system.FileExists(certPath) {
 		return &errtypes.ConfigError{Msg: fmt.Sprintf(
-			"ignition tls cert not found at %s; re-run setup (e.g. 'okdctl deploy') to regenerate it before adding a node", certPath)}
+			"ignition tls cert not found at %s; re-run setup (e.g. 'okdctl deploy') to regenerate it before adding a node", certPath,
+		)}
 	}
 	return nil
 }
@@ -142,13 +145,13 @@ func (r *Runner) AddWorkers(ctx context.Context, opts AddOptions) error {
 			return &errtypes.ClusterError{Msg: msgListNodes, Err: err}
 		}
 		if err := validateWorkerCountMatchesCluster(nodes, startIdx); err != nil {
-			return &errtypes.ConfigError{Msg: err.Error()}
+			return &errtypes.ConfigError{Msg: err.Error(), Err: err}
 		}
 
 		delta := r.Cfg.Topology.Workers.MemoryMB * opts.Count
 		if opts.HostTotalMiB > 0 {
 			if err := validateMemoryBudget(opts.HostTotalMiB, opts.HostAllocatedMiB, delta); err != nil {
-				return &errtypes.ConfigError{Msg: err.Error()}
+				return &errtypes.ConfigError{Msg: err.Error(), Err: err}
 			}
 		} else if delta > 0 {
 			r.Log.Warn("node: could not verify host memory budget (no proxmox probe); ensure the host has headroom before adding nodes",
@@ -187,6 +190,8 @@ func (r *Runner) AddWorkers(ctx context.Context, opts AddOptions) error {
 		}
 	}
 
+	r.Log.Info("node: adding workers", "count", opts.Count)
+
 	// One batch-scoped join window: revive the ignition server once, and defer
 	// its teardown NOW — before any VM exists — so it fires on success,
 	// failure, timeout, or panic and the window is never left open. Teardown is
@@ -198,18 +203,21 @@ func (r *Runner) AddWorkers(ctx context.Context, opts AddOptions) error {
 		return err
 	}
 	// Detached from ctx's cancellation: on SIGINT during the join wait, ctx is
-	// already cancelled by the time this runs, and system.IsServiceActive's
-	// exec.CommandContext would fail to even start under a cancelled ctx —
-	// reporting "not active" and making StopAndDisableService skip the
-	// stop+disable entirely, leaving httpd serving worker.ign (which embeds the
-	// pull secret) indefinitely. context.WithoutCancel keeps the deadline chain
-	// but drops the cancellation signal; the timeout bounds a wedged systemctl.
+	// already cancelled by the time this runs, and every systemctl call under
+	// a cancelled ctx fails before it even starts — leaving httpd serving
+	// worker.ign (which embeds the pull secret) indefinitely.
+	// context.WithoutCancel drops BOTH the cancellation signal and any
+	// deadline; the explicit WithTimeout is the only bound on a wedged
+	// systemctl — do not remove it as redundant.
 	defer func() {
 		tctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), ignitionTeardownTimeout)
 		defer cancel()
-		r.Ignition.TeardownIgnitionServer(tctx)
+		if terr := r.Ignition.TeardownIgnitionServer(tctx); terr != nil {
+			r.Log.Warn("node: ignition server teardown failed — the cluster pull secret may still be served on port 443; stop it manually ('systemctl stop httpd') and verify with 'systemctl status httpd'",
+				"err", terr)
+		}
 	}()
-	if err := r.Ignition.ConfigureApache(ctx, r.Cfg, r.ProjectRoot); err != nil {
+	if err := r.Ignition.ReviveIgnitionServer(ctx, r.Cfg, r.ProjectRoot, phase.ClusterConfigDir(r.WorkDir)); err != nil {
 		return &errtypes.ClusterError{Msg: "revive ignition server", Err: err}
 	}
 
@@ -243,7 +251,7 @@ func (r *Runner) AddWorkers(ctx context.Context, opts AddOptions) error {
 // batch's [startIdx, endIdx] range, so a resumed --count N batch reattaches to
 // a marker recorded against ANY node in the batch, not only its first — the
 // marker roams across the batch as each node is worked.
-func addBatchMatch(startIdx, endIdx int) OpMatch {
+func addBatchMatch(startIdx, endIdx int) opMatch {
 	return func(m *OpMarker) bool {
 		i, ok := cluster.NodeIndex(m.Target)
 		return ok && i >= startIdx && i <= endIdx

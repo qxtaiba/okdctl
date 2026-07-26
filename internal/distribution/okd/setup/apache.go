@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/x509"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -33,7 +34,7 @@ func (p *Phase) ensureIgnitionDir(ctx context.Context, webRoot string) (string, 
 	// 0o750: apache user owns and reads; local non-apache users cannot read
 	// ignition files which embed the cluster pull-secret.
 	if err := os.MkdirAll(ignitionDir, 0o750); err != nil {
-		return "", &errtypes.ConfigError{Msg: "failed to create ignition directory", Err: err}
+		return "", &errtypes.ConfigError{Msg: "create ignition directory", Err: err}
 	}
 
 	apacheUser := p.OS.ApacheUser()
@@ -51,6 +52,10 @@ func enableAndStartApache(ctx context.Context, serviceName string) error {
 	if err := system.ManageService(ctx, system.ServiceEnable, serviceName); err != nil {
 		return fmt.Errorf("enable %s: %w", serviceName, err)
 	}
+	return startApache(ctx, serviceName)
+}
+
+func startApache(ctx context.Context, serviceName string) error {
 	if err := system.ManageService(ctx, system.ServiceStart, serviceName); err != nil {
 		return fmt.Errorf("start %s: %w", serviceName, err)
 	}
@@ -68,7 +73,7 @@ func (p *Phase) verifyApacheListening(ctx context.Context, bindIP string) {
 	dialer := &net.Dialer{Timeout: 1 * time.Second}
 	conn, err := dialer.DialContext(ctx, "tcp", addr)
 	if err != nil {
-		p.Log.Warn("apache: httpd may not be listening on port 443 - check configuration")
+		p.Log.Warn("apache: httpd may not be listening on port 443 - check configuration", "addr", addr, "err", err)
 		return
 	}
 	_ = conn.Close()
@@ -105,7 +110,7 @@ func (p *Phase) configureApacheHTTPS(ctx context.Context, certPath, keyPath, web
 		}
 	}
 
-	p.Log.Info("apache: HTTPS vhost configured", "conf", confPath)
+	p.Log.Info("apache: HTTPS vhost configured", "path", confPath)
 	return nil
 }
 
@@ -123,7 +128,7 @@ func (p *Phase) ConfigureApache(ctx context.Context, cfg *config.Config, project
 	// Listen :443 is provided by the platform's mod_ssl default conf
 	// (RHEL: /etc/httpd/conf.d/ssl.conf, Debian: ports.conf after a2enmod ssl).
 	// 443 is already labeled https_port_t in the default RHEL SELinux policy,
-	// so configureSELinuxForApache is intentionally not called here.
+	// so no SELinux port relabeling is needed here.
 
 	webRoot := cfg.HTTPServer.Root
 	if webRoot == "" {
@@ -132,11 +137,11 @@ func (p *Phase) ConfigureApache(ctx context.Context, cfg *config.Config, project
 
 	certPath, keyPath := IgnitionCertPaths(projectRoot)
 	if err := p.configureApacheHTTPS(ctx, certPath, keyPath, webRoot, bindIP); err != nil {
-		return &errtypes.ClusterError{Msg: "failed to configure apache HTTPS vhost", Err: err}
+		return &errtypes.ClusterError{Msg: "configure apache HTTPS vhost", Err: err}
 	}
 
 	if err := enableAndStartApache(ctx, p.OS.ApacheServiceName()); err != nil {
-		return &errtypes.ClusterError{Msg: "failed to enable and start apache", Err: err}
+		return &errtypes.ClusterError{Msg: "enable and start apache", Err: err}
 	}
 
 	p.verifyApacheListening(ctx, bindIP)
@@ -150,12 +155,54 @@ func (p *Phase) ConfigureApache(ctx context.Context, cfg *config.Config, project
 	return nil
 }
 
+// ReviveIgnitionServer reopens the ignition join window for node add: the
+// same vhost/dir configuration as ConfigureApache plus a re-deploy of the
+// ignition payloads from clusterDir into the web root (healing a prior
+// 'okdctl cleanup --kind web-only', which removes only the served copies),
+// but the service is started WITHOUT being enabled — a hard crash mid-add
+// must not leave the pull-secret server resurrecting across host reboots.
+func (p *Phase) ReviveIgnitionServer(ctx context.Context, cfg *config.Config, projectRoot, clusterDir string) error {
+	p.Log.Info("apache: reviving httpd for the node-add join window")
+
+	bindIP := cfg.HTTPServer.IgnitionServerIP
+	webRoot := cfg.HTTPServer.Root
+	if webRoot == "" {
+		webRoot = phase.DefaultHTTPServerRoot
+	}
+
+	certPath, keyPath := IgnitionCertPaths(projectRoot)
+	if err := p.configureApacheHTTPS(ctx, certPath, keyPath, webRoot, bindIP); err != nil {
+		return &errtypes.ClusterError{Msg: "configure apache https vhost", Err: err}
+	}
+	if err := startApache(ctx, p.OS.ApacheServiceName()); err != nil {
+		return &errtypes.ClusterError{Msg: "start apache", Err: err}
+	}
+	p.verifyApacheListening(ctx, bindIP)
+
+	return p.DeployToWebServer(ctx, cfg, clusterDir)
+}
+
 // TeardownIgnitionServer stops and disables httpd once a node add's join
-// window closes. Unlike cleanup.Apache it does not uninstall the httpd
-// package or remove the vhost conf and TLS cert, so a later ConfigureApache
-// call revives the ignition server cheaply instead of regenerating them.
-func (p *Phase) TeardownIgnitionServer(ctx context.Context) {
-	phase.StopAndDisableService(ctx, p.OS.ApacheServiceName(), p.Log)
+// window closes, then verifies the stop took. The stop is attempted
+// unconditionally rather than gated on an is-active probe: teardown runs
+// under a detached post-cancel context where a failing probe would silently
+// skip the stop and leave the pull-secret window open. Unlike cleanup.Apache
+// it does not uninstall the httpd package or remove the vhost conf and TLS
+// cert, so a later revive is cheap. A non-nil return means httpd may still
+// be serving ignition payloads — the caller must surface that loudly.
+func (p *Phase) TeardownIgnitionServer(ctx context.Context) error {
+	svc := p.OS.ApacheServiceName()
+	var errs []error
+	if err := system.ManageService(ctx, system.ServiceStop, svc); err != nil {
+		errs = append(errs, fmt.Errorf("stop %s: %w", svc, err))
+	}
+	if err := system.ManageService(ctx, system.ServiceDisable, svc); err != nil {
+		p.Log.Warn("apache: disable after ignition teardown failed", "svc", svc, "err", err)
+	}
+	if system.IsServiceActive(ctx, svc) {
+		errs = append(errs, fmt.Errorf("%s still active after stop", svc))
+	}
+	return errors.Join(errs...)
 }
 
 // DeployToWebServer copies the generated ignition files from clusterDir
@@ -180,10 +227,18 @@ func (p *Phase) DeployToWebServer(ctx context.Context, cfg *config.Config, clust
 			continue
 		}
 
+		data, err := os.ReadFile(srcPath)
+		if err != nil {
+			return &errtypes.ConfigError{Msg: fmt.Sprintf("read %s", file), Err: err}
+		}
+
 		destPath := filepath.Join(ignitionDir, file)
 		// 0o640: apache group readable only; ignition files carry pullSecret.
-		if err := system.CopyFileMode(srcPath, destPath, 0o640); err != nil {
-			return &errtypes.ConfigError{Msg: fmt.Sprintf("failed to copy %s", file), Err: err}
+		// AtomicWrite (temp+fsync+rename) because deploy-ignition's AlreadyDone
+		// is existence-only — a torn copy would be skipped on resume and served
+		// to booting nodes.
+		if err := system.AtomicWrite(destPath, data, 0o640); err != nil {
+			return &errtypes.ConfigError{Msg: fmt.Sprintf("copy %s", file), Err: err}
 		}
 	}
 
@@ -203,7 +258,7 @@ func (p *Phase) VerifyWebServer(ctx context.Context, baseURL string, caCertPEM [
 	}
 	cert, parseErr := x509.ParseCertificate(block.Bytes)
 	if parseErr != nil {
-		return &errtypes.ConfigError{Msg: "failed to parse ignition ca cert", Err: parseErr}
+		return &errtypes.ConfigError{Msg: "parse ignition ca cert", Err: parseErr}
 	}
 	pool := x509.NewCertPool()
 	pool.AddCert(cert)
@@ -213,12 +268,12 @@ func (p *Phase) VerifyWebServer(ctx context.Context, baseURL string, caCertPEM [
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, testURL, http.NoBody)
 	if err != nil {
-		return &errtypes.NetworkError{Msg: "failed to create request", Err: err}
+		return &errtypes.NetworkError{Msg: "create request", Err: err}
 	}
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return &errtypes.NetworkError{Msg: "failed to connect to web server", Err: err}
+		return &errtypes.NetworkError{Msg: "connect to web server", Err: err}
 	}
 	defer func() { _ = resp.Body.Close() }()
 

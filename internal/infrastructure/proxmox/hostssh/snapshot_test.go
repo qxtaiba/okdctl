@@ -3,6 +3,7 @@ package hostssh
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -32,7 +33,7 @@ func TestValidateVMID(t *testing.T) {
 
 // TestValidateSnapshotName_RejectsInjectionPayloads exercises the exact
 // shell-metacharacter payloads TestValidateProxmoxName_RejectsBadNode uses
-// in pvesh_test.go: validateSnapshotName is the injection guard for the
+// in pvesh_test.go: ValidateSnapshotName is the injection guard for the
 // snapshot-create/rollback/delete argv path the same way validateProxmoxName
 // guards the node atom.
 func TestValidateSnapshotName_RejectsInjectionPayloads(t *testing.T) {
@@ -46,8 +47,8 @@ func TestValidateSnapshotName_RejectsInjectionPayloads(t *testing.T) {
 		"snap\tname",
 	}
 	for _, name := range payloads {
-		if err := validateSnapshotName(name); err == nil {
-			t.Errorf("validateSnapshotName(%q) accepted; want error", name)
+		if err := ValidateSnapshotName(name); err == nil {
+			t.Errorf("ValidateSnapshotName(%q) accepted; want error", name)
 		}
 	}
 }
@@ -55,8 +56,8 @@ func TestValidateSnapshotName_RejectsInjectionPayloads(t *testing.T) {
 func TestValidateSnapshotName(t *testing.T) {
 	accept := []string{"a", "A", "snap-1", "snap_1", "okdctl-20260713-101500"}
 	for _, name := range accept {
-		if err := validateSnapshotName(name); err != nil {
-			t.Errorf("validateSnapshotName(%q) rejected; want nil: %v", name, err)
+		if err := ValidateSnapshotName(name); err != nil {
+			t.Errorf("ValidateSnapshotName(%q) rejected; want nil: %v", name, err)
 		}
 	}
 
@@ -70,8 +71,8 @@ func TestValidateSnapshotName(t *testing.T) {
 		"A" + strings.Repeat("a", 40), // 41 chars, over the 40-char cap
 	}
 	for _, name := range reject {
-		if err := validateSnapshotName(name); err == nil {
-			t.Errorf("validateSnapshotName(%q) accepted; want error", name)
+		if err := ValidateSnapshotName(name); err == nil {
+			t.Errorf("ValidateSnapshotName(%q) accepted; want error", name)
 		}
 	}
 }
@@ -88,8 +89,8 @@ func TestValidateSnapshotDescription_RejectsInjectionPayloads(t *testing.T) {
 		"desc&bg",
 	}
 	for _, desc := range payloads {
-		if err := validateSnapshotDescription(desc); err == nil {
-			t.Errorf("validateSnapshotDescription(%q) accepted; want error", desc)
+		if err := ValidateSnapshotDescription(desc); err == nil {
+			t.Errorf("ValidateSnapshotDescription(%q) accepted; want error", desc)
 		}
 	}
 }
@@ -97,16 +98,18 @@ func TestValidateSnapshotDescription_RejectsInjectionPayloads(t *testing.T) {
 func TestValidateSnapshotDescription(t *testing.T) {
 	accept := []string{"", "pre-upgrade_snapshot", "before-ceph-rebuild,2026-07-13"}
 	for _, desc := range accept {
-		if err := validateSnapshotDescription(desc); err != nil {
-			t.Errorf("validateSnapshotDescription(%q) rejected; want nil: %v", desc, err)
+		if err := ValidateSnapshotDescription(desc); err != nil {
+			t.Errorf("ValidateSnapshotDescription(%q) rejected; want nil: %v", desc, err)
 		}
 	}
 
 	longDesc := strings.Repeat("a", 201)
-	reject := []string{"desc\nname", "desc\x00", longDesc}
+	// "-vmstate"/"--description": a dash-led description could otherwise read
+	// as a pvesh option token on the remote command line.
+	reject := []string{"desc\nname", "desc\x00", longDesc, "-vmstate", "--description", "_leading", ".leading"}
 	for _, desc := range reject {
-		if err := validateSnapshotDescription(desc); err == nil {
-			t.Errorf("validateSnapshotDescription(%q) accepted; want error", desc)
+		if err := ValidateSnapshotDescription(desc); err == nil {
+			t.Errorf("ValidateSnapshotDescription(%q) accepted; want error", desc)
 		}
 	}
 }
@@ -119,8 +122,8 @@ func TestValidateSnapshotDescription(t *testing.T) {
 func TestValidateSnapshotDescription_RejectsWhitespace(t *testing.T) {
 	reject := []string{"before upgrade", "before\tupgrade", "before\nupgrade", " leading", "trailing "}
 	for _, desc := range reject {
-		if err := validateSnapshotDescription(desc); err == nil {
-			t.Errorf("validateSnapshotDescription(%q) accepted; want error (whitespace must be rejected)", desc)
+		if err := ValidateSnapshotDescription(desc); err == nil {
+			t.Errorf("ValidateSnapshotDescription(%q) accepted; want error (whitespace must be rejected)", desc)
 		}
 	}
 }
@@ -436,6 +439,75 @@ func TestCreateSnapshot_rejectedByPvesh(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "no such storage") {
 		t.Errorf("err = %q; want it to surface pvesh stderr", err.Error())
+	}
+}
+
+// TestCreateSnapshot_rejectedByPveshScrubsStderr pins the executor.ExitError
+// routing in pveshTaskCall: remote stderr must be scrubbed before it can
+// reach a log sink, the path must stay out of the Command label, and the
+// path context must survive in the wrapping message.
+func TestCreateSnapshot_rejectedByPveshScrubsStderr(t *testing.T) {
+	installFakeSnapshotSSH(t)
+	p := newTestSnapshotParams(t)
+	t.Setenv("SNAP_TASK_EXIT_CODE", "1")
+	t.Setenv("SNAP_TASK_STDERR", "401 authentication failure PROXMOX_VE_PASSWORD=hunter2")
+
+	err := CreateSnapshot(context.Background(), p, 100, "pre-upgrade", "", 5*time.Second)
+	if err == nil {
+		t.Fatal("expected error for rejected create call; got nil")
+	}
+	var exitErr *executor.ExitError
+	if !errors.As(err, &exitErr) {
+		t.Fatalf("err = %v (%T); want executor.ExitError in the chain", err, err)
+	}
+	if exitErr.Command != "pvesh create" {
+		t.Errorf("ExitError.Command = %q; the path must stay out of the Command label", exitErr.Command)
+	}
+	if strings.Contains(err.Error(), "hunter2") {
+		t.Errorf("err = %q; remote stderr credential leaked unscrubbed", err.Error())
+	}
+	if !strings.Contains(err.Error(), "/nodes/pve-01/qemu/100/snapshot") {
+		t.Errorf("err = %q; want the pvesh path context in the message", err.Error())
+	}
+}
+
+// TestCreateSnapshot_duplicateName covers the ListSnapshots pre-check: a
+// name the VM already has must surface as ErrSnapshotExists instead of a
+// raw pvesh task exitstatus string.
+func TestCreateSnapshot_duplicateName(t *testing.T) {
+	installFakeSnapshotSSH(t)
+	p := newTestSnapshotParams(t)
+
+	listFile := filepath.Join(t.TempDir(), "list.json")
+	if err := os.WriteFile(listFile, []byte(`[{"name":"pre-upgrade","snaptime":1690000000}]`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("SNAP_LIST_FILE", listFile)
+
+	err := CreateSnapshot(context.Background(), p, 100, "pre-upgrade", "", 5*time.Second)
+	if !errors.Is(err, ErrSnapshotExists) {
+		t.Fatalf("err = %v; want errors.Is(err, ErrSnapshotExists)", err)
+	}
+	if !strings.Contains(err.Error(), "pre-upgrade") {
+		t.Errorf("err = %q; want it to name the colliding snapshot", err.Error())
+	}
+}
+
+// TestCreateSnapshot_otherSnapshotsDoNotCollide proves the pre-check only
+// refuses an exact name match; unrelated existing snapshots must not block
+// the create.
+func TestCreateSnapshot_otherSnapshotsDoNotCollide(t *testing.T) {
+	installFakeSnapshotSSH(t)
+	p := newTestSnapshotParams(t)
+
+	listFile := filepath.Join(t.TempDir(), "list.json")
+	if err := os.WriteFile(listFile, []byte(`[{"name":"post-upgrade","snaptime":1690000000}]`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("SNAP_LIST_FILE", listFile)
+
+	if err := CreateSnapshot(context.Background(), p, 100, "pre-upgrade", "", 5*time.Second); err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 

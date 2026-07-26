@@ -29,7 +29,7 @@ okdctl cleanup [flags]
 ### Options
 
 ```
-      --confirm-cluster string   required with --yes; must equal cfg.Cluster.Name (typo guard for scripted cleanups)
+      --confirm-cluster string   required with --yes; must equal the config cluster name
       --dry-run                  preview what would be removed without making changes
   -h, --help                     help for cleanup
       --kind string              cleanup scope: full, work-only, web-only, haproxy-only, terraform-only (default "full")

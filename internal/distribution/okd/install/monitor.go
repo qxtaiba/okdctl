@@ -116,7 +116,7 @@ func (p *Phase) MonitorInstallation(ctx context.Context, clusterDir string, opts
 
 	installDone, _, err := startCmd(ctx, clusterDir)
 	if err != nil {
-		return &errtypes.ClusterError{Msg: "failed to start installation monitor", Err: err}
+		return &errtypes.ClusterError{Msg: "start installation monitor", Err: err}
 	}
 
 	// time.NewTicker panics on a non-positive duration; fall back to the default.
@@ -177,7 +177,7 @@ func (p *Phase) MonitorInstallation(ctx context.Context, clusterDir string, opts
 			}
 			if approved > 0 {
 				totalApproved += approved
-				p.Log.Info("csr: approved pending requests", "approved", approved, "total", totalApproved)
+				p.Log.Info("csr: approved pending requests", "approved", approved, "csrs_approved", totalApproved)
 			}
 			setStatus(operatorStatusDetail(ctx, counter, totalApproved))
 

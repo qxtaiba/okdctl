@@ -25,6 +25,15 @@ func TerraformEnvDir(projectRoot, env string) string {
 	return filepath.Join(projectRoot, "infrastructure", "terraform", "environments", env)
 }
 
+// ClusterConfigDir returns the openshift-install output directory
+// (<workDir>/cluster-config) holding install-config.yaml and the generated
+// kubeconfig/auth bundle. It lives here with the other layout helpers so
+// non-phase packages (cli, debugbundle) resolve cluster paths without
+// importing phase.
+func ClusterConfigDir(workDir string) string {
+	return filepath.Join(workDir, "cluster-config")
+}
+
 // FileExists reports whether path refers to an existing regular file
 // (returns false for directories).
 func FileExists(path string) bool {
@@ -151,7 +160,7 @@ func CopyFileMode(src, dst string, mode os.FileMode) error {
 		}
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return &errtypes.AuthError{
-			Msg: fmt.Sprintf("failed to lstat write target %q before write", dst),
+			Msg: fmt.Sprintf("lstat write target %q before write", dst),
 			Err: err,
 		}
 	}
@@ -235,7 +244,7 @@ func AtomicWrite(path string, data []byte, perm os.FileMode) error {
 		}
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return &errtypes.AuthError{
-			Msg: fmt.Sprintf("failed to lstat write target %q before write", path),
+			Msg: fmt.Sprintf("lstat write target %q before write", path),
 			Err: err,
 		}
 	}

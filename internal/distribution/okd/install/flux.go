@@ -26,7 +26,7 @@ func (p *Phase) ValidateClusterAccess(ctx context.Context) error {
 
 	user, err := p.OcOutput(ctx, "whoami")
 	if err != nil {
-		return &errtypes.ClusterError{Msg: "failed to run oc whoami", Err: err}
+		return &errtypes.ClusterError{Msg: "run oc whoami", Err: err}
 	}
 	if user == "" {
 		return &errtypes.ClusterError{Msg: "cluster authentication returned empty user"}
@@ -38,7 +38,8 @@ func (p *Phase) ValidateClusterAccess(ctx context.Context) error {
 	if err == nil {
 		for line := range strings.Lines(versionOut) {
 			if strings.HasPrefix(line, "Server Version:") {
-				p.Log.Info("cluster: server version", "version", strings.ToLower(strings.TrimSpace(line)))
+				version := strings.TrimSpace(strings.TrimPrefix(line, "Server Version:"))
+				p.Log.Info("cluster: server version", "version", version)
 				break
 			}
 		}
@@ -58,12 +59,12 @@ func (p *Phase) SetupClusterAccess(ctx context.Context, clusterDir string) error
 	// the user will look for them after the re-exec'd deploy returns.
 	homeDir, err := invokingUserHomeDirFn()
 	if err != nil {
-		return &errtypes.ConfigError{Msg: "failed to resolve invoking user home", Err: err}
+		return &errtypes.ConfigError{Msg: "resolve invoking user home", Err: err}
 	}
 
 	kubeDir := filepath.Join(homeDir, ".kube")
 	if err := system.EnsureDir(kubeDir); err != nil {
-		return &errtypes.ConfigError{Msg: "failed to create .kube directory", Err: err}
+		return &errtypes.ConfigError{Msg: "create .kube directory", Err: err}
 	}
 	if err := system.ChownToInvokingUser(kubeDir); err != nil {
 		p.Log.Warn("kubeconfig: could not chown .kube dir", "err", err)
@@ -89,7 +90,7 @@ func (p *Phase) SetupClusterAccess(ctx context.Context, clusterDir string) error
 		return fmt.Errorf("setup cluster access: %w", err)
 	}
 	if err := system.CopyFileMode(srcKubeconfig, destKubeconfig, 0o600); err != nil {
-		return &errtypes.ConfigError{Msg: "failed to copy kubeconfig", Err: err}
+		return &errtypes.ConfigError{Msg: "copy kubeconfig", Err: err}
 	}
 	if err := system.ChownToInvokingUser(destKubeconfig); err != nil {
 		p.Log.Warn("kubeconfig: could not chown config", "err", err)

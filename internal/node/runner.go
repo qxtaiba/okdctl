@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"maps"
 	"path/filepath"
 	"time"
 
@@ -71,7 +72,6 @@ type vmPowerCycler interface {
 	PowerCycleVM(ctx context.Context, node string, vmid int) error
 	ShutdownVM(ctx context.Context, node string, vmid int) error
 	StartVM(ctx context.Context, node string, vmid int) error
-	VMRunning(ctx context.Context, node string, vmid int) (bool, error)
 }
 
 // snapshotClient mirrors package hostssh's pvesh-backed snapshot primitives
@@ -139,10 +139,12 @@ type isoProvisioner interface {
 
 // ignitionServer is the slice of setup.Phase node add drives to expose
 // worker.ign over HTTPS for the join window. An interface so a test can
-// substitute a call-recording fake without touching httpd.
+// substitute a call-recording fake without touching httpd. A teardown error
+// means httpd may still be serving the pull secret; the caller must surface
+// it loudly rather than swallow it.
 type ignitionServer interface {
-	ConfigureApache(ctx context.Context, cfg *config.Config, projectRoot string) error
-	TeardownIgnitionServer(ctx context.Context)
+	ReviveIgnitionServer(ctx context.Context, cfg *config.Config, projectRoot, clusterDir string) error
+	TeardownIgnitionServer(ctx context.Context) error
 }
 
 // Runner drives node-lifecycle ops against one cluster. TF mutates VMs;
@@ -201,22 +203,52 @@ type Runner struct {
 	EtcdGateTimeout     time.Duration
 	CephGateTimeout     time.Duration
 	ClusterReadyTimeout time.Duration
+
+	// tfEnv is the terraform environment name captured by WithTerraformEnv;
+	// NewRunner resolves it against ProjectRoot into EnvDir after all
+	// options have applied, so option ordering does not matter.
+	tfEnv string
+}
+
+// RunnerOption configures optional Runner wiring in NewRunner, mirroring the
+// okd.New / addon.NewManager option style.
+type RunnerOption func(*Runner)
+
+// WithProjectRoot sets the project root the work and terraform env
+// directories derive from.
+func WithProjectRoot(root string) RunnerOption {
+	return func(r *Runner) { r.ProjectRoot = root }
+}
+
+// WithConfigPath sets the okdctl.yaml path each op persists topology to.
+func WithConfigPath(path string) RunnerOption {
+	return func(r *Runner) { r.ConfigPath = path }
+}
+
+// WithTerraformEnv selects the terraform environment whose directory node
+// ops plan and apply in.
+func WithTerraformEnv(env string) RunnerOption {
+	return func(r *Runner) { r.tfEnv = env }
+}
+
+// WithRunID tags the runner's op markers and logs with the CLI run id.
+func WithRunID(id string) RunnerOption {
+	return func(r *Runner) { r.RunID = id }
+}
+
+// WithLogger sets the runner's logger; nil is normalized to a no-op logger.
+func WithLogger(log *slog.Logger) RunnerOption {
+	return func(r *Runner) { r.Log = log }
 }
 
 // NewRunner wires a Runner with derived work/env directories and default
-// timeouts. cfg's terraform environment resolves the env directory.
-func NewRunner(cl *cluster.Client, tf *terraform.Executor, cfg *config.Config, projectRoot, configPath, tfEnv, runID string, log *slog.Logger) *Runner {
-	workDir := filepath.Join(projectRoot, "okd-install")
-	return &Runner{
+// timeouts. Required collaborators (cluster client, terraform executor,
+// config) are positional; everything else arrives via options.
+func NewRunner(cl *cluster.Client, tf *terraform.Executor, cfg *config.Config, opts ...RunnerOption) *Runner {
+	r := &Runner{
 		Cluster:             cl,
 		TF:                  tf,
 		Cfg:                 cfg,
-		ConfigPath:          configPath,
-		ProjectRoot:         projectRoot,
-		WorkDir:             workDir,
-		EnvDir:              filepath.Join(projectRoot, "infrastructure", "terraform", "environments", tfEnv),
-		RunID:               runID,
-		Log:                 logutil.OrNop(log),
 		Reporter:            logutil.NopProgressReporter,
 		Snapshot:            HostsshSnapshotClient{},
 		NodeReadyTimeout:    DefaultNodeReadyTimeout,
@@ -225,6 +257,13 @@ func NewRunner(cl *cluster.Client, tf *terraform.Executor, cfg *config.Config, p
 		ClusterReadyTimeout: DefaultClusterReadyTimeout,
 		SnapshotTaskTimeout: DefaultSnapshotTaskTimeout,
 	}
+	for _, opt := range opts {
+		opt(r)
+	}
+	r.Log = logutil.OrNop(r.Log)
+	r.WorkDir = filepath.Join(r.ProjectRoot, system.WorkDirName)
+	r.EnvDir = system.TerraformEnvDir(r.ProjectRoot, r.tfEnv)
+	return r
 }
 
 func (r *Runner) marker() string { return markerPath(r.WorkDir) }
@@ -271,9 +310,7 @@ func nodeOpPlanVars(planVars map[string]string) map[string]string {
 		"bootstrap_enabled":         "false",
 		"start_workers_immediately": "true",
 	}
-	for k, v := range planVars {
-		vars[k] = v
-	}
+	maps.Copy(vars, planVars)
 	return vars
 }
 
@@ -359,7 +396,17 @@ func (r *Runner) targetedApply(ctx context.Context, address string, want terrafo
 	defer cleanup()
 
 	if alreadyAtTarget {
-		r.Log.Info("node: already at target — skipping apply", "address", address, "action", string(want))
+		if want == terraform.PlanActionDelete && !resuming {
+			// A fresh delete landing here means terraform state has no record
+			// of the resource. That is the expected shape after an
+			// acknowledged partial remove, but it is also exactly what a
+			// lost/mismatched state file produces — in which case the VM still
+			// exists and reporting a quiet success would strand it unmanaged.
+			r.Log.Warn("node: terraform state has no record of this resource — treating it as already destroyed; if the vm still exists in proxmox, the workspace state is wrong and this result must not be trusted",
+				"address", address)
+		} else {
+			r.Log.Info("node: already at target — skipping apply", "address", address, "action", string(want))
+		}
 		return nil
 	}
 

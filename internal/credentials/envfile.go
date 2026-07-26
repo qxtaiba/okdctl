@@ -64,7 +64,7 @@ func WriteEnvFile(path string, creds *ProxmoxCredentials) error {
 		}
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return &errtypes.AuthError{
-			Msg: fmt.Sprintf("failed to lstat env file path %q before write", path),
+			Msg: fmt.Sprintf("lstat env file path %q before write", path),
 			Err: err,
 		}
 	}
@@ -151,7 +151,7 @@ func loadEnvFileOnce(path string) error {
 		if errors.Is(err, os.ErrNotExist) {
 			return nil // missing .env is not an error
 		}
-		return &errtypes.ConfigError{Msg: fmt.Sprintf("failed to stat env file %s", path), Err: err}
+		return &errtypes.ConfigError{Msg: fmt.Sprintf("stat env file %s", path), Err: err}
 	}
 	if perm := fi.Mode().Perm(); perm&0o077 != 0 {
 		return &errtypes.AuthError{
@@ -163,13 +163,13 @@ func loadEnvFileOnce(path string) error {
 
 	f, err := os.Open(path)
 	if err != nil {
-		return &errtypes.ConfigError{Msg: fmt.Sprintf("failed to open env file %s", path), Err: err}
+		return &errtypes.ConfigError{Msg: fmt.Sprintf("open env file %s", path), Err: err}
 	}
 	defer f.Close()
 
 	pairs, err := parseDotEnv(f)
 	if err != nil {
-		return &errtypes.ConfigError{Msg: fmt.Sprintf("failed to parse env file %s", path), Err: err}
+		return &errtypes.ConfigError{Msg: fmt.Sprintf("parse env file %s", path), Err: err}
 	}
 
 	// Shell environment takes precedence: set only keys that are absent.

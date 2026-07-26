@@ -37,6 +37,7 @@ func (r *Runner) Start(ctx context.Context, opts StartOptions) error {
 			return err
 		}
 	}
+	r.warnIfHAManaged("start")
 
 	cpCount := r.Cfg.Topology.ControlPlane.Count
 	workerCount := r.Cfg.Topology.Workers.Count
@@ -58,6 +59,8 @@ func (r *Runner) Start(ctx context.Context, opts StartOptions) error {
 		r.Log.Info("node: cluster start cancelled", "cluster", r.Cfg.Cluster.Name)
 		return ErrDeclined
 	}
+
+	r.Log.Info("node: starting cluster", "masters", cpCount, "workers", workerCount)
 
 	if err := markStep(r.marker(), OpStart, r.Cfg.Cluster.Name, StepPowerOn, r.RunID, r.Cfg.Cluster.Name); err != nil {
 		return err

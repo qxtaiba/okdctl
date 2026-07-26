@@ -36,9 +36,9 @@ const planJSON = `{
 }`
 
 func TestParsePlanChangesDropsNoop(t *testing.T) {
-	changes, err := ParsePlanChanges([]byte(planJSON))
+	changes, err := parsePlanChanges([]byte(planJSON))
 	if err != nil {
-		t.Fatalf("ParsePlanChanges: %v", err)
+		t.Fatalf("parsePlanChanges: %v", err)
 	}
 	if len(changes) != 2 {
 		t.Fatalf("expected 2 non-noop changes, got %d: %+v", len(changes), changes)
@@ -46,7 +46,7 @@ func TestParsePlanChangesDropsNoop(t *testing.T) {
 }
 
 func TestParsePlanChangesInvalidJSON(t *testing.T) {
-	if _, err := ParsePlanChanges([]byte("{not json")); err == nil {
+	if _, err := parsePlanChanges([]byte("{not json")); err == nil {
 		t.Fatal("expected error on invalid json")
 	}
 }

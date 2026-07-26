@@ -3,6 +3,8 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 
 	"github.com/qxtaiba/okdctl/internal/system"
 )
@@ -12,8 +14,8 @@ const DefaultBinDir = "/usr/local/bin"
 
 // ResolveBinDir returns the tool-install directory: OKDCTL_BIN_DIR env >
 // cfg.Deployment.BinDir > DefaultBinDir. cfg may be nil; non-absolute values
-// fall through. Paths are cleaned but `..` traversal is not rejected. See
-// BinDirOrDefault for the full three-function surface rationale.
+// and values containing a `..` element fall through. See BinDirOrDefault
+// for the full three-function surface rationale.
 func ResolveBinDir(cfg *Config) string {
 	if v := envBinDir(); v != "" {
 		return v
@@ -65,6 +67,11 @@ func envBinDir() string {
 func validateAndClean(raw string) (string, bool) {
 	expanded := system.ExpandPath(raw)
 	if err := ValidateBinDir(expanded); err != nil {
+		return "", false
+	}
+	// Reject `..` before Clean resolves it: /usr/local/bin/../../etc would
+	// otherwise pass the absolute-path check yet land tool installs in /etc.
+	if slices.Contains(strings.Split(expanded, string(filepath.Separator)), "..") {
 		return "", false
 	}
 	return filepath.Clean(expanded), true

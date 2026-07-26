@@ -1,10 +1,11 @@
 package node
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"log/slog"
-	"sort"
+	"slices"
 	"strconv"
 
 	"github.com/qxtaiba/okdctl/internal/cluster"
@@ -129,6 +130,8 @@ func (r *Runner) Compact(ctx context.Context, opts CompactOptions) error {
 	// sequence and no inner decline can be conflated with success.
 	r.preConsented = true
 	defer func() { r.preConsented = false }()
+
+	r.Log.Info("node: compacting cluster", "workers", len(workers), "masters", len(masters))
 
 	// Preflight passed and confirmed: only now mutate the control plane.
 	if err := r.enableSchedulableAndIngress(ctx, opts.IngressReplicas); err != nil {
@@ -267,7 +270,7 @@ func (r *Runner) projectCompactMemory(numWorkers, numMasters int, opts CompactOp
 		numWorkers, numMasters,
 	)
 	if err := validateMemoryBudget(opts.HostTotalMiB, opts.HostAllocatedMiB, peak-opts.HostAllocatedMiB); err != nil {
-		return &errtypes.ConfigError{Msg: err.Error()}
+		return &errtypes.ConfigError{Msg: err.Error(), Err: err}
 	}
 	return nil
 }
@@ -294,7 +297,8 @@ func (r *Runner) growMaster(ctx context.Context, master string, allocatedMiB int
 func (r *Runner) compactHybridError(removed, total int, failedNode string, cause error) error {
 	return fmt.Errorf(
 		"compact: remove worker %s (%d of %d workers already removed; the control plane is already schedulable with the compact IngressController applied — resolve the cause and re-run 'okdctl cluster compact' to remove the remaining %d worker(s), already-removed workers stay gone): %w",
-		failedNode, removed, total, total-removed, cause)
+		failedNode, removed, total, total-removed, cause,
+	)
 }
 
 // compactPlan builds the informed-confirmation summary from the preflight
@@ -370,13 +374,15 @@ func (r *Runner) reportEtcdDryRunVerdict(ctx context.Context) {
 	h, err := r.Cluster.EtcdHealthy(ctx)
 	switch {
 	case err != nil:
-		r.Log.Warn("node: dry-run — etcd: UNHEALTHY — real compact will wait up to 10m", "reason", err.Error())
+		r.Log.Warn("node: dry-run — etcd: UNHEALTHY — real compact will wait for quorum health",
+			"wait_up_to", r.EtcdGateTimeout, "err", err)
 	case !h.Healthy:
 		reason := h.Reason
 		if reason == "" {
 			reason = "not healthy"
 		}
-		r.Log.Warn("node: dry-run — etcd: UNHEALTHY — real compact will wait up to 10m", "reason", reason)
+		r.Log.Warn("node: dry-run — etcd: UNHEALTHY — real compact will wait for quorum health",
+			"wait_up_to", r.EtcdGateTimeout, "reason", reason)
 	default:
 		r.Log.Info("node: dry-run — etcd: healthy")
 	}
@@ -424,16 +430,16 @@ func namesByIndex(nodes []cluster.NodeDetail, role nodetypes.NodeRole, ascending
 		}
 		idx, ok := cluster.NodeIndex(n.Name)
 		if !ok {
-			log.Warn("node: skipping node with no numeric suffix from compact plan", "node", n.Name, "role", role)
+			log.Warn("node: skipping node with no numeric suffix from compact plan", "node", n.Name, "role", string(role))
 			continue
 		}
 		items = append(items, ni{name: n.Name, idx: idx})
 	}
-	sort.Slice(items, func(i, j int) bool {
+	slices.SortFunc(items, func(a, b ni) int {
 		if ascending {
-			return items[i].idx < items[j].idx
+			return cmp.Compare(a.idx, b.idx)
 		}
-		return items[i].idx > items[j].idx
+		return cmp.Compare(b.idx, a.idx)
 	})
 	names := make([]string, len(items))
 	for i, it := range items {

@@ -34,8 +34,15 @@ object suitable for piping to jq.`,
 }
 
 var configValidateCmd = &cobra.Command{
-	Use:     "validate",
-	Short:   "Validate the configuration file and report errors",
+	Use:   "validate",
+	Short: "Validate the configuration file and report errors",
+	Long: `Validate the configuration file against the schema (required fields,
+enum values, provider settings, topology constraints) and print every
+error and warning found.
+
+Read-only: nothing is written or deployed. Exits 0 when the config is
+valid (warnings alone do not fail), 2 when validation reports errors,
+and 66 when the file does not exist.`,
 	Example: "  okdctl config validate",
 	RunE:    runConfigValidate,
 }

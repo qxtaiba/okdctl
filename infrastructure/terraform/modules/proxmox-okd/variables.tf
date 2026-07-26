@@ -1,15 +1,11 @@
-# =============================================================================
-# PROXMOX CONNECTION (set via environment variables)
+# proxmox connection (set via environment variables)
 # - PROXMOX_VE_ENDPOINT    (api url, e.g., https://pve.example.com:8006/)
 # - PROXMOX_VE_USERNAME    (username, e.g., root@pam)
 # - PROXMOX_VE_PASSWORD    (password)
 # - PROXMOX_VE_INSECURE  (DEV ONLY: disables TLS verification — never set in prod; use a CA-signed cert or add the proxmox CA to your trust store)
-# =============================================================================
 
 
-# =============================================================================
-# PROXMOX INFRASTRUCTURE VARIABLES
-# =============================================================================
+# proxmox infrastructure variables
 
 variable "target_node" {
   description = "proxmox node name where vms will be created"
@@ -69,7 +65,7 @@ variable "data_storage" {
 }
 
 variable "minimum_data_disk_size_gb" {
-  description = "floor for data-disk activation; setting to 1 prevents a re-apply that zeros master_data_disk_size_gb or worker_data_disk_size_gb from silently destroying existing disks"
+  description = "plan-time floor for nonzero data/mon-disk sizes: a plan that sets master_data_disk_size_gb, master_mon_disk_size_gb, or worker_data_disk_size_gb to a nonzero value below this fails instead of shrinking (destroying) the disk; zeroing a size still removes the disk — no variable can prevent that"
   type        = number
   default     = 0
   validation {
@@ -79,13 +75,19 @@ variable "minimum_data_disk_size_gb" {
 }
 
 variable "worker_data_disk_size_gb" {
-  description = "size of data disk for worker nodes in gb; 0 (or any value below minimum_data_disk_size_gb) omits the disk — lowering this after initial apply destroys the ceph data disk"
+  description = "size of data disk for worker nodes in gb; 0 omits the disk — zeroing this after initial apply destroys the ceph data disk, and nonzero values below minimum_data_disk_size_gb fail at plan time"
   type        = number
   default     = 500
 }
 
 variable "master_data_disk_size_gb" {
-  description = "size of data disk for master nodes in gb; 0 (or any value below minimum_data_disk_size_gb) omits the disk — lowering this after initial apply destroys the ceph data disk"
+  description = "size of data disk for master nodes in gb; 0 omits the disk — zeroing this after initial apply destroys the ceph data disk, and nonzero values below minimum_data_disk_size_gb fail at plan time"
+  type        = number
+  default     = 0
+}
+
+variable "master_mon_disk_size_gb" {
+  description = "size of dedicated ceph mon-store disk for master nodes in gb; 0 omits the disk — zeroing this after initial apply destroys the mon disk, and nonzero values below minimum_data_disk_size_gb fail at plan time"
   type        = number
   default     = 0
 }
@@ -114,9 +116,7 @@ variable "worker_isos" {
 }
 
 
-# =============================================================================
-# CLUSTER CONFIGURATION VARIABLES
-# =============================================================================
+# cluster configuration variables
 
 variable "cluster_name" {
   description = "name of the okd cluster"
@@ -173,9 +173,7 @@ variable "worker_count" {
 }
 
 
-# =============================================================================
-# VM RESOURCE CONFIGURATION
-# =============================================================================
+# vm resource configuration
 
 variable "cpu_cores" {
   description = "number of cpu cores per vm"
@@ -235,9 +233,7 @@ variable "worker_memory_mb" {
 }
 
 
-# =============================================================================
-# NODE NAMES
-# =============================================================================
+# node names
 
 variable "master_names" {
   description = "list of master node names"
@@ -252,9 +248,7 @@ variable "worker_names" {
 }
 
 
-# =============================================================================
-# OPTIONAL CONFIGURATION
-# =============================================================================
+# optional configuration
 
 variable "vm_tags" {
   description = "tags to apply to all vms"
@@ -282,10 +276,18 @@ variable "numa_enabled" {
   default     = false
 }
 
+# Any qemu cpu model is legal, not just the common four — okdctl's config
+# validator admits models like Skylake-Server-noTSX-IBRS or x86-64-v2,flags=+pge
+# and passes them through verbatim, so this must not narrow the set. The regex
+# mirrors internal/config/validators.go's proxmoxCPUTypePattern.
 variable "cpu_type" {
-  description = "cpu type for vms (host, x86-64-v2, x86-64-v3, kvm64)"
+  description = "qemu cpu model for vms (commonly host, x86-64-v2, x86-64-v3, or kvm64; any model plus flags accepted)"
   type        = string
   default     = "host"
+  validation {
+    condition     = can(regex("^[A-Za-z0-9][A-Za-z0-9_+.,=-]*$", var.cpu_type))
+    error_message = "cpu_type must be a qemu cpu model name (alphanumerics plus _ + . , = -)."
+  }
 }
 
 variable "master_target_nodes" {

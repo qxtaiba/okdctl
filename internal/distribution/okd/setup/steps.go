@@ -145,8 +145,8 @@ func (p *Phase) setupManifestSteps(cfg *config.Config, opts *Options, clusterDir
 				return system.FileExists(filepath.Join(clusterDir, "install-config.yaml.backup")), nil
 			},
 			Exec: func(ctx context.Context) error {
-				if err := p.GenerateInstallConfig(ctx, cfg, clusterDir); err != nil {
-					return &errtypes.ConfigError{Msg: "failed to generate install-config", Err: err}
+				if err := p.generateInstallConfig(ctx, cfg, clusterDir); err != nil {
+					return &errtypes.ConfigError{Msg: "generate install-config", Err: err}
 				}
 				p.Log.Info("config: install-config.yaml generated",
 					"masters", cfg.Topology.ControlPlane.Count, "workers", cfg.Topology.Workers.Count)
@@ -159,14 +159,14 @@ func (p *Phase) setupManifestSteps(cfg *config.Config, opts *Options, clusterDir
 			Desc:      "generating kubernetes manifests",
 			// manifests/ directory alone is unsafe: openshift-install can exit
 			// non-zero mid-write, leaving a partial directory the next run sees
-			// as "already done". Require both directory + .complete sentinel.
+			// as "already done". Require directory + .complete sentinel, or the
+			// ignition sentinel once create ignition-configs consumed manifests/.
 			AlreadyDone: func(_ context.Context) (bool, error) {
-				return system.DirExists(filepath.Join(clusterDir, "manifests")) &&
-					system.FileExists(ManifestsSentinel(clusterDir)), nil
+				return manifestsGenerated(clusterDir), nil
 			},
 			Exec: func(ctx context.Context) error {
 				if err := p.GenerateManifests(ctx, clusterDir); err != nil {
-					return &errtypes.ClusterError{Msg: "failed to generate manifests", Err: err}
+					return &errtypes.ClusterError{Msg: "generate manifests", Err: err}
 				}
 				p.Log.Info("manifests: kubernetes manifests generated")
 				return nil
@@ -178,7 +178,7 @@ func (p *Phase) setupManifestSteps(cfg *config.Config, opts *Options, clusterDir
 			Desc:      "generating kube-vip RBAC and DaemonSet manifests for VIP management",
 			Exec: func(_ context.Context) error {
 				if err := p.generateKubeVIPManifests(cfg, clusterDir); err != nil {
-					return &errtypes.ConfigError{Msg: "failed to generate kube-vip manifests", Err: err}
+					return &errtypes.ConfigError{Msg: "generate kube-vip manifests", Err: err}
 				}
 				return nil
 			},
@@ -189,7 +189,7 @@ func (p *Phase) setupManifestSteps(cfg *config.Config, opts *Options, clusterDir
 			Desc:      "generating chrony machineconfigs for vm clock drift",
 			Exec: func(_ context.Context) error {
 				if err := p.generateChronyManifests(cfg, clusterDir); err != nil {
-					return &errtypes.ConfigError{Msg: "failed to generate chrony machineconfigs", Err: err}
+					return &errtypes.ConfigError{Msg: "generate chrony machineconfigs", Err: err}
 				}
 				return nil
 			},
@@ -200,7 +200,7 @@ func (p *Phase) setupManifestSteps(cfg *config.Config, opts *Options, clusterDir
 			Desc:      "generating fstrim machineconfigs for thin-storage reclaim",
 			Exec: func(_ context.Context) error {
 				if err := p.generateFstrimManifests(clusterDir); err != nil {
-					return &errtypes.ConfigError{Msg: "failed to generate fstrim machineconfigs", Err: err}
+					return &errtypes.ConfigError{Msg: "generate fstrim machineconfigs", Err: err}
 				}
 				return nil
 			},
@@ -212,7 +212,7 @@ func (p *Phase) setupManifestSteps(cfg *config.Config, opts *Options, clusterDir
 			Exec: func(ctx context.Context) error {
 				count, err := p.InjectCustomManifests(ctx, opts.ProjectRoot, clusterDir)
 				if err != nil {
-					return &errtypes.ConfigError{Msg: "failed to inject custom manifests", Err: err}
+					return &errtypes.ConfigError{Msg: "inject custom manifests", Err: err}
 				}
 				if count > 0 {
 					p.Log.Info("manifests: injected custom manifests", "count", count)
@@ -228,7 +228,7 @@ func (p *Phase) setupManifestSteps(cfg *config.Config, opts *Options, clusterDir
 			SkipReason: "cluster has workers",
 			Exec: func(ctx context.Context) error {
 				if err := p.InjectCompactClusterManifests(ctx, clusterDir, cfg.Topology.Workers.Count, cfg.Topology.ControlPlane.Count); err != nil {
-					return &errtypes.ConfigError{Msg: "failed to inject compact cluster manifests", Err: err}
+					return &errtypes.ConfigError{Msg: "inject compact cluster manifests", Err: err}
 				}
 				p.Log.Info("manifests: injected ingress controller master placement for compact cluster")
 				return nil
@@ -243,7 +243,7 @@ func (p *Phase) setupManifestSteps(cfg *config.Config, opts *Options, clusterDir
 			},
 			Exec: func(ctx context.Context) error {
 				if err := p.GenerateIgnitionConfigs(ctx, clusterDir); err != nil {
-					return &errtypes.ClusterError{Msg: "failed to generate ignition configs", Err: err}
+					return &errtypes.ClusterError{Msg: "generate ignition configs", Err: err}
 				}
 				p.Log.Info("ignition: configurations generated and validated")
 				return nil
@@ -282,7 +282,7 @@ func (p *Phase) setupWebSteps(cfg *config.Config, opts *Options, clusterDir stri
 			},
 			Exec: func(ctx context.Context) error {
 				if err := p.DeployToWebServer(ctx, cfg, clusterDir); err != nil {
-					return &errtypes.ConfigError{Msg: "failed to deploy to web server", Err: err}
+					return &errtypes.ConfigError{Msg: "deploy to web server", Err: err}
 				}
 				webURL := BuildIgnitionURL(cfg.HTTPServer.IgnitionServerIP, cfg.HTTPServer.Port)
 				p.Log.Info("ignition: deployed to web server", "url", webURL)
@@ -296,7 +296,7 @@ func (p *Phase) setupWebSteps(cfg *config.Config, opts *Options, clusterDir stri
 			Exec: func(ctx context.Context) error {
 				certPEM, _, err := EnsureIgnitionCert(opts.ProjectRoot, cfg.HTTPServer.IgnitionServerIP)
 				if err != nil {
-					return &errtypes.ConfigError{Msg: "failed to load ignition cert for verification", Err: err}
+					return &errtypes.ConfigError{Msg: "load ignition cert for verification", Err: err}
 				}
 				return p.VerifyWebServer(ctx, BuildIgnitionURL(cfg.HTTPServer.IgnitionServerIP, cfg.HTTPServer.Port), certPEM)
 			},
@@ -345,7 +345,7 @@ func (p *Phase) setupInfraSteps(cfg *config.Config, opts *Options) []distributio
 			Desc:      "generating terraform variables",
 			Exec: func(ctx context.Context) error {
 				if err := p.GenerateTerraformVars(ctx, cfg, opts); err != nil {
-					return &errtypes.ConfigError{Msg: "failed to generate Terraform variables", Err: err}
+					return &errtypes.ConfigError{Msg: "generate Terraform variables", Err: err}
 				}
 				tfvarsPath := filepath.Join(phase.TerraformEnvDir(opts.ProjectRoot, phase.GetTerraformEnv(cfg)), "terraform.tfvars")
 				p.Log.Info("terraform: configuration written", "path", tfvarsPath)
@@ -360,7 +360,7 @@ func (p *Phase) setupInfraSteps(cfg *config.Config, opts *Options) []distributio
 			SkipReason: "haproxy configuration disabled",
 			Exec: func(ctx context.Context) error {
 				if err := p.ConfigureHAProxy(ctx, cfg, opts); err != nil {
-					return &errtypes.ClusterError{Msg: "failed to configure HAProxy", Err: err}
+					return &errtypes.ClusterError{Msg: "configure HAProxy", Err: err}
 				}
 				_ = p.VerifyHAProxyPorts(ctx)
 				return nil

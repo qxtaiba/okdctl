@@ -1,6 +1,4 @@
-# =============================================================================
-# CLUSTER INFORMATION
-# =============================================================================
+# cluster information
 
 output "cluster_name" {
   description = "name of the okd cluster"
@@ -12,9 +10,7 @@ output "cluster_nodes_total" {
   value       = var.master_count + var.worker_count + (var.bootstrap_enabled ? 1 : 0)
 }
 
-# =============================================================================
-# BOOTSTRAP NODE OUTPUTS
-# =============================================================================
+# bootstrap node outputs
 
 output "bootstrap_vm_id" {
   description = "vm id of the bootstrap node"
@@ -36,9 +32,7 @@ output "bootstrap_node_info" {
   } : null
 }
 
-# =============================================================================
-# MASTER NODE OUTPUTS
-# =============================================================================
+# master node outputs
 
 output "master_vm_ids" {
   description = "list of vm ids for master nodes"
@@ -62,9 +56,7 @@ output "master_nodes_info" {
   ]
 }
 
-# =============================================================================
-# WORKER NODE OUTPUTS
-# =============================================================================
+# worker node outputs
 
 output "worker_vm_ids" {
   description = "list of vm ids for worker nodes"
@@ -88,9 +80,7 @@ output "worker_nodes_info" {
   ]
 }
 
-# =============================================================================
-# ALL NODES SUMMARY
-# =============================================================================
+# all nodes summary
 
 output "all_vm_ids" {
   description = "list of all vm ids in the cluster"
@@ -138,9 +128,7 @@ output "all_nodes_info" {
   }
 }
 
-# =============================================================================
-# RESOURCE SUMMARY
-# =============================================================================
+# resource summary
 
 output "cluster_resources" {
   description = "summary of cluster resources"
@@ -160,14 +148,12 @@ output "cluster_resources" {
       (var.worker_data_disk_size_gb * var.worker_count) +
       (local.master_os_disk * length(local.masters)) +
       (var.master_data_disk_size_gb * length(local.masters)) +
-      var.os_disk_size_gb
+      (var.bootstrap_enabled ? var.os_disk_size_gb : 0)
     )
   }
 }
 
-# =============================================================================
-# VM ID RANGES (USEFUL FOR NETWORKING/FIREWALL RULES)
-# =============================================================================
+# vm id ranges (useful for networking/firewall rules)
 
 output "vm_id_ranges" {
   description = "vm id ranges for different node types"

@@ -15,6 +15,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/distribution/okd"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/render"
+	"github.com/qxtaiba/okdctl/internal/runlock"
 	"github.com/qxtaiba/okdctl/internal/tui"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard/steps"
@@ -24,6 +25,7 @@ var (
 	deployOutputFile         string
 	deployMinimal            bool
 	deployYes                bool
+	deployWriteConfig        bool
 	deployDryRun             bool
 	deployFresh              bool
 	deployKeepRedHatCatalogs bool
@@ -34,11 +36,15 @@ var deployCmd = &cobra.Command{
 	Short: "Deploy a Kubernetes cluster",
 	Long: `Deploy an OKD/OpenShift cluster through an interactive wizard.
 
-Use --yes to write the configuration file non-interactively without
-deploying; run the command again without --yes to deploy from it.`,
+Use --yes to skip the wizard and deploy non-interactively from an existing
+configuration file. Use --write-config to write the configuration file
+non-interactively without deploying.
+
+Note: before v0.2.0, --yes meant what --write-config means now.`,
 	Example: `  okdctl deploy
   okdctl deploy --config my-cluster.yaml
-  okdctl deploy --yes --output-file my-cluster.yaml  # writes config only; does not deploy
+  okdctl deploy --yes                                # deploys from okdctl.yaml, no wizard
+  okdctl deploy --write-config --output-file my-cluster.yaml  # writes config only; does not deploy
   okdctl deploy --dry-run
   okdctl deploy --keep-redhat-catalogs`,
 	RunE: runDeploy,
@@ -47,7 +53,9 @@ deploying; run the command again without --yes to deploy from it.`,
 func init() {
 	deployCmd.Flags().StringVar(&deployOutputFile, flagOutputFile, "okdctl.yaml", "config file to write wizard output to; reuses and reads back an existing file at this path, otherwise creates one; overrides --config when both are set")
 	deployCmd.Flags().BoolVar(&deployMinimal, "minimal", false, "use minimal defaults (single-node cluster)")
-	deployCmd.Flags().BoolVarP(&deployYes, "yes", "y", false, "write configuration non-interactively; does not deploy")
+	deployCmd.Flags().BoolVarP(&deployYes, "yes", "y", false, "skip the wizard and deploy from the existing configuration file")
+	deployCmd.Flags().BoolVar(&deployWriteConfig, "write-config", false, "write configuration non-interactively; does not deploy")
+	deployCmd.MarkFlagsMutuallyExclusive("yes", "write-config")
 	deployCmd.Flags().BoolVar(&deployDryRun, flagDryRun, false, "preview terraform plan and step listing without deploying")
 	deployCmd.Flags().BoolVar(&deployFresh, "fresh", false, "wipe the work directory even when live cluster state is detected (credentials will be lost)")
 	deployCmd.Flags().BoolVar(&deployKeepRedHatCatalogs, "keep-redhat-catalogs", false, "keep the redhat-operators, certified-operators, and redhat-marketplace OperatorHub catalogsources and the InsightsDisabled alert enabled (both require a Red Hat subscription OKD clusters don't have)")
@@ -65,14 +73,19 @@ func runDeploy(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
-	created, err := deploy.MaterializeTerraform(projectRoot)
-	if err != nil {
+	if err := withProjectLock(projectRoot, "deploy", func() error {
+		created, err := deploy.MaterializeTerraform(projectRoot)
+		if err != nil {
+			return err
+		}
+		if len(created) > 0 {
+			tui.Info("initialized terraform sources",
+				tui.LF("dir", filepath.Join(projectRoot, "infrastructure", "terraform")),
+				tui.LF("count", len(created)))
+		}
+		return nil
+	}); err != nil {
 		return err
-	}
-	if len(created) > 0 {
-		tui.Info("initialized terraform sources",
-			tui.LF("dir", filepath.Join(projectRoot, "infrastructure", "terraform")),
-			tui.LF("files", len(created)))
 	}
 
 	// Resolve the config file path: --output-file wins when explicitly set;
@@ -91,7 +104,7 @@ func runDeploy(cmd *cobra.Command, _ []string) error {
 		loadedCfg, loadErr := loader.LoadFile(deployOutputFile)
 		if loadErr != nil {
 			tui.Warn("existing config could not be loaded", tui.LF("err", loadErr))
-			if deployYes {
+			if deployYes || deployWriteConfig {
 				return &errtypes.ConfigError{Msg: "cannot proceed in non-interactive mode with invalid config", Err: loadErr}
 			}
 			tui.Info("starting fresh with defaults")
@@ -113,8 +126,24 @@ func runDeploy(cmd *cobra.Command, _ []string) error {
 		return runDeployDryRun(ctx, cfg, out)
 	}
 
+	if deployWriteConfig {
+		return withProjectLock(projectRoot, "deploy --write-config", func() error {
+			return saveConfig(cfg, deployOutputFile, out)
+		})
+	}
+
+	// --yes carries the same assume-yes meaning as every sibling command:
+	// perform the operation without interaction. It requires a config that
+	// already exists on disk — deploying compiled-in defaults unattended
+	// would be a footgun, and 66 (config missing) tells scripts exactly why.
 	if deployYes {
-		return saveConfig(cfg, deployOutputFile, out)
+		if !configExists {
+			return &errtypes.ConfigError{
+				Msg: fmt.Sprintf("--yes deploys non-interactively and requires an existing configuration file at %s; run 'okdctl deploy' for the wizard or 'okdctl deploy --write-config' first", deployOutputFile),
+				Err: errtypes.ErrConfigMissing,
+			}
+		}
+		return runFullDeployment(ctx, cfg, out)
 	}
 
 	result, welcomeMode, err := runWizardWithMode(ctx, cfg, configExists)
@@ -136,16 +165,18 @@ func runDeploy(cmd *cobra.Command, _ []string) error {
 	// Guarantee secrets are cleared from the config struct, even on panic.
 	defer clearConfigCredentials(cfg)
 
-	if err := writeCredentialsEnv(cfg, deployOutputFile); err != nil {
-		return fmt.Errorf("save credentials: %w", err)
-	}
+	if err := withProjectLock(projectRoot, "deploy", func() error {
+		if err := writeCredentialsEnv(cfg, deployOutputFile); err != nil {
+			return fmt.Errorf("save credentials: %w", err)
+		}
 
-	// Clear secrets before saving so they never appear in YAML.
-	// The defer above is a safety net; this is the primary clear.
-	clearConfigCredentials(cfg)
+		// Clear secrets before saving so they never appear in YAML.
+		// The defer above is a safety net; this is the primary clear.
+		clearConfigCredentials(cfg)
 
-	if err := saveConfig(cfg, deployOutputFile, out); err != nil {
-		return fmt.Errorf("save configuration: %w", err)
+		return saveConfig(cfg, deployOutputFile, out)
+	}); err != nil {
+		return err
 	}
 
 	switch result.Action {
@@ -199,6 +230,20 @@ func deployDryRunSteps(cfg *config.Config, projectRoot string) []render.DryRunSt
 		out[i] = render.DryRunStep{ID: string(s.ID), Name: s.Name}
 	}
 	return out
+}
+
+// withProjectLock runs fn while holding the project runlock. runDeploy uses
+// it to serialize its shared-file write windows (terraform materialization,
+// okdctl.yaml, okdctl.env) against concurrent okdctl invocations while
+// keeping the interactive wizard outside the lock; deploy.Execute takes the
+// lock again for the deployment itself.
+func withProjectLock(projectRoot, verb string, fn func() error) error {
+	lock, err := runlock.Acquire(projectRoot, verb)
+	if err != nil {
+		return err
+	}
+	defer lock.Release()
+	return fn()
 }
 
 func saveConfig(cfg *config.Config, path string, w io.Writer) error {

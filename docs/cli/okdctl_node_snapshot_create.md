@@ -32,7 +32,7 @@ okdctl node snapshot create <node> [flags]
 ```
       --acknowledge-interrupted-op   override a stranded marker left by an unrelated op and proceed fresh
       --confirm-cluster string       required with --yes; must equal the config cluster name
-      --description string           optional snapshot description (single token: no spaces; use dashes or underscores)
+      --description string           optional snapshot description (single token starting with a letter or digit: no spaces; use dashes or underscores)
       --drain-timeout string         drain timeout when the node is cordoned first (default "10m")
       --dry-run                      report what would happen without creating a snapshot
   -h, --help                         help for create

@@ -296,7 +296,10 @@ type fakePower struct {
 	// assert masters-before-workers sequencing.
 	startOrder []int
 
-	running bool
+	// onCycle fires inside every PowerCycleVM call, so a test can model
+	// cluster state that only converges once the power-on lands (e.g. etcd
+	// health returning after a mid-cycle crash left the member powered off).
+	onCycle func()
 }
 
 func (f *fakePower) PowerCycleVM(_ context.Context, node string, vmid int) error {
@@ -304,6 +307,9 @@ func (f *fakePower) PowerCycleVM(_ context.Context, node string, vmid int) error
 	f.lastNode = node
 	f.lastVMID = vmid
 	f.cycledVMIDs = append(f.cycledVMIDs, vmid)
+	if f.onCycle != nil {
+		f.onCycle()
+	}
 	return f.err
 }
 
@@ -324,10 +330,6 @@ func (f *fakePower) StartVM(_ context.Context, node string, vmid int) error {
 	f.lastVMID = vmid
 	f.startOrder = append(f.startOrder, vmid)
 	return f.startErr
-}
-
-func (f *fakePower) VMRunning(context.Context, string, int) (bool, error) {
-	return f.running, nil
 }
 
 func seedRunner(t *testing.T, fc *fakeCluster, ftf *fakeTF, cfg *config.Config) (r *Runner, tfvarsPath, cfgPath string) {
@@ -741,15 +743,16 @@ func TestCompactDryRunAgainstDegradedEtcdStillPreviews(t *testing.T) {
 	dir := t.TempDir()
 	var buf bytes.Buffer
 	r := &Runner{
-		Cluster:    fc,
-		TF:         ftf,
-		Cfg:        cfg,
-		ConfigPath: filepath.Join(dir, "okdctl.yaml"),
-		WorkDir:    dir,
-		EnvDir:     dir,
-		RunID:      "test-run",
-		DryRun:     true,
-		Log:        slog.New(slog.NewTextHandler(&buf, nil)),
+		Cluster:         fc,
+		TF:              ftf,
+		Cfg:             cfg,
+		ConfigPath:      filepath.Join(dir, "okdctl.yaml"),
+		WorkDir:         dir,
+		EnvDir:          dir,
+		RunID:           "test-run",
+		DryRun:          true,
+		EtcdGateTimeout: DefaultEtcdGateTimeout,
+		Log:             slog.New(slog.NewTextHandler(&buf, nil)),
 	}
 
 	if err := r.Compact(context.Background(), CompactOptions{IngressReplicas: 2}); err != nil {
@@ -760,7 +763,7 @@ func TestCompactDryRunAgainstDegradedEtcdStillPreviews(t *testing.T) {
 	if !strings.Contains(out, "compact plan") {
 		t.Errorf("preview did not print against degraded etcd:\n%s", out)
 	}
-	if !strings.Contains(out, "etcd: UNHEALTHY") || !strings.Contains(out, "wait up to 10m") {
+	if !strings.Contains(out, "etcd: UNHEALTHY") || !strings.Contains(out, "wait_up_to=10m0s") {
 		t.Errorf("preview missing the etcd verdict line:\n%s", out)
 	}
 

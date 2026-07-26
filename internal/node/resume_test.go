@@ -53,7 +53,7 @@ func seedMarker(t *testing.T, r *Runner, op Op, target string, step Step) {
 	}
 }
 
-func matchTarget(name string) OpMatch {
+func matchTarget(name string) opMatch {
 	return func(m *OpMarker) bool { return m.Target == name }
 }
 
@@ -185,5 +185,32 @@ func TestResizeScopeMatch(t *testing.T) {
 	}
 	if nodeScope(&OpMarker{Target: testMasterNode}) {
 		t.Error("single-node scope must not match another node")
+	}
+}
+
+// TestSweepCompletedAddMarker pins the completed-batch residue sweep: a crash
+// between AddWorkers' persistTopology and clearOpMarker leaves an OpAdd marker
+// whose index precedes the persisted worker count. Every op must sweep that
+// residue and proceed, while a genuinely in-flight add marker (index at the
+// persisted count) still refuses foreign ops.
+func TestSweepCompletedAddMarker(t *testing.T) {
+	r, _, _ := seedRunner(t, &fakeCluster{}, &fakeTF{}, config.DefaultConfig())
+	r.Cfg.Topology.Workers.Count = 3
+
+	seedMarker(t, r, OpAdd, r.Cfg.Cluster.Name+"-worker2", StepWaitJoin)
+	marker, err := r.beginOp(OpRemove, matchTarget("worker0"), false)
+	if err != nil || marker != nil {
+		t.Fatalf("completed-add residue must be swept, not refused: marker=%v err=%v", marker, err)
+	}
+	if m, rerr := ReadOpMarker(r.WorkDir, r.Cfg.Cluster.Name); rerr != nil || m != nil {
+		t.Fatalf("residue marker must be cleared from disk: marker=%+v err=%v", m, rerr)
+	}
+
+	seedMarker(t, r, OpAdd, r.Cfg.Cluster.Name+"-worker3", StepWaitJoin)
+	if _, err := r.beginOp(OpRemove, matchTarget("worker0"), false); err == nil {
+		t.Fatal("in-flight add marker must still refuse a foreign op")
+	}
+	if err := r.refuseForeignMarker(false); err == nil {
+		t.Fatal("in-flight add marker must still refuse non-resumable ops")
 	}
 }

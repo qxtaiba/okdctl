@@ -74,7 +74,7 @@ func validateEnums(cfg *Config, result *ValidationResult) {
 	// CWD) never trip this; a genuinely custom environment must have a
 	// matching directory or terraform fails deep in the install phase
 	// instead of here.
-	if env := cfg.Deployment.TerraformEnv; env != "" && env != "production" {
+	if env := cfg.Deployment.TerraformEnv; env != "" && env != defaultTerraformEnv {
 		dir := filepath.Join("infrastructure", "terraform", "environments", env)
 		if !system.DirExists(dir) {
 			result.AddError(FieldDeploymentTerraformEnv, fmt.Sprintf("no environment directory at %s", dir))
@@ -302,6 +302,26 @@ func validateProvider(cfg *Config, result *ValidationResult) {
 	if cfg.Provider.Type == ProviderProxmox {
 		validateProxmoxConfig(cfg.Provider.Proxmox, result)
 		validatePlacementCounts(cfg, result)
+		validateVMIDBase(cfg, result)
+	}
+}
+
+// validateVMIDBase bounds topology.vm_id_base at config load (same bounds
+// as ValidateVMID, which is wired only to the wizard): terraform computes
+// each vmid as base + index, so an out-of-range base otherwise fails deep
+// inside the apply instead of here. The overflow check keeps the highest
+// computed vmid (bootstrap + masters + workers) under the Proxmox ceiling.
+func validateVMIDBase(cfg *Config, result *ValidationResult) {
+	const minVMID, maxVMID = 100, 999999999
+	base := cfg.Topology.VMIDBase
+	if base < minVMID || base > maxVMID {
+		result.AddError("topology.vm_id_base", fmt.Sprintf("must be between %d and %d", minVMID, maxVMID))
+		return
+	}
+	nodes := 1 + cfg.Topology.ControlPlane.Count + cfg.Topology.Workers.Count
+	if base > maxVMID-nodes {
+		result.AddError("topology.vm_id_base",
+			fmt.Sprintf("plus %d node vmids exceeds the maximum vmid %d", nodes, maxVMID))
 	}
 }
 
@@ -392,6 +412,34 @@ func validateProxmoxConfig(proxmox *ProxmoxConfig, result *ValidationResult) {
 
 	if err := ValidateSSHFingerprint(proxmox.SSHHostFingerprint); err != nil {
 		result.AddError("provider.proxmox.ssh_host_fingerprint", err.Error())
+	}
+
+	validateAdditionalNetworks(proxmox.AdditionalNetworks, result)
+}
+
+// additionalNetworkModels is the qemu NIC model allowlist for
+// provider.proxmox.additional_networks[].model (empty selects the virtio
+// default at render time).
+var additionalNetworkModels = []string{"virtio", "e1000", "rtl8139", "vmxnet3"}
+
+// validateAdditionalNetworks mirrors the primary Bridge validation for each
+// extra NIC. Bridge and Model render into terraform.tfvars HCL where %q
+// escaping does not neutralize ${…} interpolation, so the charset gates
+// here are the injection boundary for the root-privileged terraform apply.
+func validateAdditionalNetworks(networks []AdditionalNetwork, result *ValidationResult) {
+	for i, n := range networks {
+		field := fmt.Sprintf("provider.proxmox.additional_networks[%d]", i)
+		if n.Bridge == "" {
+			result.AddError(field+".bridge", "bridge is required for each additional network")
+		} else if !interfaceNamePattern.MatchString(n.Bridge) {
+			result.AddError(field+".bridge", "must be a valid network interface name (e.g., vmbr0, vmbr1)")
+		}
+		if n.Model != "" && !slices.Contains(additionalNetworkModels, n.Model) {
+			result.AddError(field+".model", "must be one of virtio, e1000, rtl8139, vmxnet3")
+		}
+		if n.VLANTag < 0 || n.VLANTag > 4094 {
+			result.AddError(field+".vlan_tag", "must be between 1 and 4094 (or omitted)")
+		}
 	}
 }
 
@@ -543,11 +591,11 @@ func isValidNetmask(s string) bool {
 }
 
 func isValidDistribution(d DistributionType) bool {
-	return slices.Contains(SupportedDistributions(), d)
+	return slices.Contains(supportedDistributions(), d)
 }
 
 func isValidProvider(p ProviderType) bool {
-	return slices.Contains(SupportedProviders(), p)
+	return slices.Contains(supportedProviders(), p)
 }
 
 func getMinMemoryForDistribution(d DistributionType) int {

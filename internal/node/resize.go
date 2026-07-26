@@ -1,9 +1,10 @@
 package node
 
 import (
+	"cmp"
 	"context"
 	"fmt"
-	"sort"
+	"slices"
 	"strconv"
 
 	"github.com/qxtaiba/okdctl/internal/cluster"
@@ -82,21 +83,27 @@ func (r *Runner) Resize(ctx context.Context, scope ResizeScope, opts ResizeOptio
 
 	targets, role, err := resolveResizeTargets(nodes, scope)
 	if err != nil {
-		return &errtypes.ConfigError{Msg: err.Error()}
+		return &errtypes.ConfigError{Msg: err.Error(), Err: err}
 	}
 
 	current := r.roleMemoryMB(role)
 	if opts.MemoryMB <= 0 {
 		opts.MemoryMB = current // omitted --memory-mb keeps memory unchanged
 	}
+	// The budget guard runs only on a fresh roll: on a resume the live
+	// HostAllocatedMiB probe already counts every target that grew before the
+	// crash, so projecting delta*len(targets) on top of it double-counts the
+	// finished nodes and can refuse a legitimate resume on a tight host.
 	delta := opts.MemoryMB - current
-	if opts.HostTotalMiB > 0 {
-		if err := validateMemoryBudget(opts.HostTotalMiB, opts.HostAllocatedMiB, delta*len(targets)); err != nil {
-			return &errtypes.ConfigError{Msg: err.Error()}
+	if !resuming {
+		if opts.HostTotalMiB > 0 {
+			if err := validateMemoryBudget(opts.HostTotalMiB, opts.HostAllocatedMiB, delta*len(targets)); err != nil {
+				return &errtypes.ConfigError{Msg: err.Error(), Err: err}
+			}
+		} else if delta > 0 {
+			r.Log.Warn("node: could not verify host memory budget (no proxmox probe); ensure the host has headroom before growing nodes",
+				"delta_mib_per_node", delta, "nodes", len(targets))
 		}
-	} else if delta > 0 {
-		r.Log.Warn("node: could not verify host memory budget (no Proxmox probe); ensure the host has headroom before growing nodes",
-			"delta_mib_per_node", delta, "nodes", len(targets))
 	}
 
 	plan := resizePlan(role, targets, r.Cfg.Cluster.Name, opts)
@@ -116,6 +123,10 @@ func (r *Runner) Resize(ctx context.Context, scope ResizeScope, opts ResizeOptio
 			r.Log.Info("node: resize cancelled", "role", string(role))
 			return ErrDeclined
 		}
+	}
+
+	if !r.DryRun {
+		r.Log.Info("node: resizing nodes", "role", string(role), "nodes", len(targets), "memory_mb", opts.MemoryMB)
 	}
 
 	for _, t := range targets {
@@ -218,7 +229,7 @@ func resolveResizeTargets(nodes []cluster.NodeDetail, scope ResizeScope) ([]resi
 	if len(targets) == 0 {
 		return nil, "", fmt.Errorf("no %s nodes found to resize", scope.Role)
 	}
-	sort.Slice(targets, func(i, j int) bool { return targets[i].index < targets[j].index })
+	slices.SortFunc(targets, func(a, b resizeTarget) int { return cmp.Compare(a.index, b.index) })
 	return targets, scope.Role, nil
 }
 
@@ -281,7 +292,14 @@ func (r *Runner) resizeOneNode(ctx context.Context, t resizeTarget, role nodetyp
 		}
 	}
 
-	if isMaster {
+	// The pre-gate is skipped when the resume point is at or past the
+	// power-cycle: PowerCycleVM is stop-then-start, so a crash (or a transient
+	// start failure) between the two leaves this master powered OFF — etcd
+	// cannot report healthy until the very power-on this gate would forever
+	// wait ahead of. The post-cycle gate below still verifies quorum before
+	// the node returns to service.
+	preGate := resumeStep == "" || stepOrder[resumeStep] < stepOrder[StepPowerCycle]
+	if isMaster && preGate {
 		if err := r.waitEtcdHealthy(ctx, "pre-"+t.name); err != nil {
 			return err
 		}
@@ -331,7 +349,7 @@ func (r *Runner) resizeOneNode(ctx context.Context, t resizeTarget, role nodetyp
 	if err := r.waitNodeReady(ctx, t.name); err != nil {
 		return err
 	}
-	if isMaster {
+	if isMaster && preGate {
 		if err := r.waitEtcdHealthy(ctx, "post-"+t.name); err != nil {
 			return err
 		}

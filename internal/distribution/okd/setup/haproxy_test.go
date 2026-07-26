@@ -28,16 +28,10 @@ func minimalCfg() *config.Config {
 	}
 }
 
-func writeFakeHAProxy(t *testing.T, dir string, exitCode int) {
+func writeFakeHAProxy(t *testing.T, dir string) {
 	t.Helper()
 	script := filepath.Join(dir, "haproxy")
-	body := "#!/bin/sh\nexit "
-	if exitCode == 0 {
-		body += "0\n"
-	} else {
-		body += "1\n"
-	}
-	if err := os.WriteFile(script, []byte(body), 0o755); err != nil {
+	if err := os.WriteFile(script, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
 		t.Fatalf("write fake haproxy: %v", err)
 	}
 }
@@ -67,7 +61,7 @@ func newPhase(t *testing.T, binDir string) *Phase {
 func TestConfigureHAProxy_HappyPath(t *testing.T) {
 	tmpDir := t.TempDir()
 	binDir := t.TempDir()
-	writeFakeHAProxy(t, binDir, 0)
+	writeFakeHAProxy(t, binDir)
 
 	setupSeams(t, tmpDir, func(_ context.Context) error { return nil })
 
@@ -92,7 +86,7 @@ func TestConfigureHAProxy_HappyPath(t *testing.T) {
 func TestConfigureHAProxy_HappyPath_BackupCreated(t *testing.T) {
 	tmpDir := t.TempDir()
 	binDir := t.TempDir()
-	writeFakeHAProxy(t, binDir, 0)
+	writeFakeHAProxy(t, binDir)
 
 	setupSeams(t, tmpDir, func(_ context.Context) error { return nil })
 
@@ -120,7 +114,7 @@ func TestConfigureHAProxy_HappyPath_BackupCreated(t *testing.T) {
 func TestConfigureHAProxy_NoBackup_SkipsRollback(t *testing.T) {
 	tmpDir := t.TempDir()
 	binDir := t.TempDir()
-	writeFakeHAProxy(t, binDir, 0)
+	writeFakeHAProxy(t, binDir)
 
 	errRestart := errors.New("restart failed")
 	setupSeams(t, tmpDir, func(_ context.Context) error { return errRestart })
@@ -136,5 +130,33 @@ func TestConfigureHAProxy_NoBackup_SkipsRollback(t *testing.T) {
 
 	if _, statErr := os.Stat(haproxyBackupPath); statErr == nil {
 		t.Error("backup must not be created when no prior config exists")
+	}
+}
+
+func TestConfigureHAProxy_RerunPreservesPristineBackup(t *testing.T) {
+	tmpDir := t.TempDir()
+	binDir := t.TempDir()
+	writeFakeHAProxy(t, binDir)
+
+	setupSeams(t, tmpDir, func(_ context.Context) error { return nil })
+
+	const pristine = "# operator config"
+	if err := os.WriteFile(haproxyConfigPath, []byte(pristine), 0o644); err != nil {
+		t.Fatalf("pre-seed config: %v", err)
+	}
+
+	p := newPhase(t, binDir)
+	for run := 1; run <= 2; run++ {
+		if err := p.ConfigureHAProxy(context.Background(), minimalCfg(), &Options{}); err != nil {
+			t.Fatalf("run %d: unexpected error: %v", run, err)
+		}
+	}
+
+	data, err := os.ReadFile(haproxyBackupPath)
+	if err != nil {
+		t.Fatalf("read backup: %v", err)
+	}
+	if string(data) != pristine {
+		t.Errorf("pristine backup clobbered on re-run: got %q, want %q", data, pristine)
 	}
 }

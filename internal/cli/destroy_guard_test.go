@@ -4,11 +4,14 @@ import (
 	"context"
 	"errors"
 	"io"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
+	"github.com/qxtaiba/okdctl/internal/testutil"
 )
 
 // resetDestroyFlags zeroes the destroy command's package-level flag variables
@@ -212,4 +215,94 @@ func TestConfirmDestroyInteractive(t *testing.T) {
 			}
 		})
 	}
+}
+
+// seedDestroyWorkspace writes a loadable okdctl.yaml (cluster "prod") into a
+// temp project root, chdirs into it, and plants a fake terraform on PATH
+// that records a marker file if it is ever executed — the refusal paths
+// under test must never reach terraform.
+func seedDestroyWorkspace(t *testing.T) (markerPath string) {
+	t.Helper()
+	root := t.TempDir()
+	t.Chdir(root)
+	cfg := destroyGuardConfig()
+	if err := config.NewLoader().Save(cfg, filepath.Join(root, "okdctl.yaml")); err != nil {
+		t.Fatalf("seed config: %v", err)
+	}
+	markerPath = filepath.Join(t.TempDir(), "terraform-ran")
+	testutil.InstallFakeBin(t, "terraform", "#!/bin/sh\ntouch "+markerPath+"\nexit 0\n")
+	return markerPath
+}
+
+func mustNotRunTerraform(t *testing.T, markerPath string) {
+	t.Helper()
+	if _, err := os.Stat(markerPath); !os.IsNotExist(err) {
+		t.Fatal("terraform was executed on a path that must refuse before any infra action")
+	}
+}
+
+// TestRunDestroy_ConfirmGateWiring locks the confirm gate INTO runDestroy:
+// the guards are unit-tested elsewhere, but deleting the
+// confirmClusterMatches call from runDestroy would previously have passed
+// the entire suite.
+func TestRunDestroy_ConfirmGateWiring(t *testing.T) {
+	t.Run("--yes without --confirm-cluster refuses", func(t *testing.T) {
+		resetDestroyFlags(t)
+		marker := seedDestroyWorkspace(t)
+		destroyYes = true
+		destroyCmd.SetContext(context.Background())
+
+		err := runDestroy(destroyCmd, nil)
+		if err == nil {
+			t.Fatal("scripted destroy without --confirm-cluster must be refused")
+		}
+		var cfgErr *errtypes.ConfigError
+		if !errors.As(err, &cfgErr) {
+			t.Errorf("want *errtypes.ConfigError, got %T: %v", err, err)
+		}
+		if !strings.Contains(err.Error(), "--confirm-cluster") {
+			t.Errorf("refusal must point at --confirm-cluster: %v", err)
+		}
+		mustNotRunTerraform(t, marker)
+	})
+
+	t.Run("--yes with wrong --confirm-cluster refuses", func(t *testing.T) {
+		resetDestroyFlags(t)
+		marker := seedDestroyWorkspace(t)
+		destroyYes = true
+		destroyConfirmCluster = "staging"
+		destroyCmd.SetContext(context.Background())
+
+		err := runDestroy(destroyCmd, nil)
+		if err == nil || !strings.Contains(err.Error(), "does not match") {
+			t.Fatalf("mismatched --confirm-cluster must refuse, got: %v", err)
+		}
+		mustNotRunTerraform(t, marker)
+	})
+
+	t.Run("interactive decline at y/N cancels cleanly", func(t *testing.T) {
+		resetDestroyFlags(t)
+		marker := seedDestroyWorkspace(t)
+		testStdinReader = &lineReader{lines: []string{guardTestCluster + "\n", "n\n"}}
+		t.Cleanup(func() { testStdinReader = nil })
+		destroyCmd.SetContext(context.Background())
+
+		if err := runDestroy(destroyCmd, nil); err != nil {
+			t.Fatalf("declined destroy must exit 0, got: %v", err)
+		}
+		mustNotRunTerraform(t, marker)
+	})
+
+	t.Run("interactive wrong cluster name cancels cleanly", func(t *testing.T) {
+		resetDestroyFlags(t)
+		marker := seedDestroyWorkspace(t)
+		testStdinReader = &lineReader{lines: []string{"prod-oops\n"}}
+		t.Cleanup(func() { testStdinReader = nil })
+		destroyCmd.SetContext(context.Background())
+
+		if err := runDestroy(destroyCmd, nil); err != nil {
+			t.Fatalf("typo at the name gate must cancel, not destroy: %v", err)
+		}
+		mustNotRunTerraform(t, marker)
+	})
 }

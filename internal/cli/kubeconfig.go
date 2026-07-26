@@ -10,7 +10,6 @@ import (
 	"github.com/spf13/cobra"
 	"sigs.k8s.io/yaml"
 
-	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/system"
 	"github.com/qxtaiba/okdctl/internal/tui"
@@ -44,8 +43,8 @@ func runKubeconfig(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
-	workDir := filepath.Join(projectRoot, phase.WorkDirName)
-	clusterDir := phase.ClusterConfigDir(workDir)
+	workDir := filepath.Join(projectRoot, system.WorkDirName)
+	clusterDir := system.ClusterConfigDir(workDir)
 	src := filepath.Join(clusterDir, "auth", "kubeconfig")
 
 	if !system.FileExists(src) {

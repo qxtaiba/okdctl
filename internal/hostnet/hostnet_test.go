@@ -42,6 +42,48 @@ exit 0
 	testutil.InstallFakeBin(t, "nmcli", nmcliScript)
 }
 
+// installReapplyFailNmcli wires a fake ip reporting the IP present plus an
+// nmcli where `device reapply` always fails; restoreExit controls whether the
+// compensating `+ipv4.addresses` modify succeeds (0) or fails too (non-zero).
+func installReapplyFailNmcli(t *testing.T, nmcliLog string, restoreExit int) {
+	t.Helper()
+	ipScript := "#!/bin/sh\nprintf 'inet 192.168.1.10/24 brd 192.168.1.255\\n'\nexit 0\n"
+
+	nmcliScript := fmt.Sprintf(`#!/bin/sh
+printf '%%s\n' "$*" >> '%s'
+case "$1" in
+  -t)
+    printf 'myconn:eth0\n'
+    exit 0
+    ;;
+  device)
+    exit 1
+    ;;
+  connection)
+    case "$4" in
+      +ipv4.addresses)
+        exit %d
+        ;;
+    esac
+    exit 0
+    ;;
+esac
+exit 0
+`, nmcliLog, restoreExit)
+
+	testutil.InstallFakeBin(t, "ip", ipScript)
+	testutil.InstallFakeBin(t, "nmcli", nmcliScript)
+}
+
+func readLog(t *testing.T, logFile string) string {
+	t.Helper()
+	data, err := os.ReadFile(logFile)
+	if err != nil && !os.IsNotExist(err) {
+		t.Fatalf("reading nmcli log: %v", err)
+	}
+	return string(data)
+}
+
 func nmcliCallCount(t *testing.T, logFile string) int {
 	t.Helper()
 	data, err := os.ReadFile(logFile)
@@ -119,6 +161,36 @@ func TestRemoveSecondaryIP(t *testing.T) {
 		}
 		if !strings.Contains(err.Error(), "check IP presence") {
 			t.Errorf("err = %q; want 'check IP presence' substring", err.Error())
+		}
+	})
+
+	t.Run("reapply failure rolls the profile back", func(t *testing.T) {
+		logFile := filepath.Join(t.TempDir(), "nmcli.log")
+		installReapplyFailNmcli(t, logFile, 0)
+
+		err := RemoveSecondaryIP(context.Background(), "192.168.1.10", "eth0")
+		if err == nil {
+			t.Fatal("expected error from failed device reapply; got nil")
+		}
+		if !strings.Contains(err.Error(), "rolled back") {
+			t.Errorf("err = %q; want 'rolled back' substring", err.Error())
+		}
+		log := readLog(t, logFile)
+		if !strings.Contains(log, "connection modify myconn +ipv4.addresses 192.168.1.10/32") {
+			t.Errorf("no compensating +ipv4.addresses call recorded; log:\n%s", log)
+		}
+	})
+
+	t.Run("reapply and rollback both failing names the divergence", func(t *testing.T) {
+		logFile := filepath.Join(t.TempDir(), "nmcli.log")
+		installReapplyFailNmcli(t, logFile, 1)
+
+		err := RemoveSecondaryIP(context.Background(), "192.168.1.10", "eth0")
+		if err == nil {
+			t.Fatal("expected error; got nil")
+		}
+		if !strings.Contains(err.Error(), "no longer lists") {
+			t.Errorf("err = %q; want profile/runtime divergence named", err.Error())
 		}
 	})
 

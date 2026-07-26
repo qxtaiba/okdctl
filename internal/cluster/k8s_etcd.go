@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/qxtaiba/okdctl/internal/errtypes"
@@ -167,10 +168,7 @@ func parseEtcdRolloutInFlight(data []byte) (bool, error) {
 	if err := json.Unmarshal(data, &e); err != nil {
 		return false, fmt.Errorf("parse etcd json: %w", err)
 	}
-	for _, cond := range e.Status.Conditions {
-		if cond.Type == "NodeInstallerProgressing" && cond.Status == string(nodetypes.ConditionStatusTrue) {
-			return true, nil
-		}
-	}
-	return false, nil
+	return slices.ContainsFunc(e.Status.Conditions, func(cond k8sCondition) bool {
+		return cond.Type == "NodeInstallerProgressing" && cond.Status == string(nodetypes.ConditionStatusTrue)
+	}), nil
 }

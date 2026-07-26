@@ -1,16 +1,11 @@
 package distribution
 
-import "sync"
-
-// PhaseContext provides type-safe, concurrency-safe data sharing between
-// steps within a phase. Today postinstall is the only consumer; the type
-// is scaffolded for symmetric use as resume-checkpoint work lands in other
-// phases. The RWMutex is forward-looking: Orchestrator.Run is serial today,
-// but a parallel-step mode would need concurrent Get/Update without a
-// retrofit here.
+// PhaseContext provides type-safe data sharing between steps within a
+// phase. Today postinstall is the only consumer; the type is scaffolded
+// for symmetric use as resume-checkpoint work lands in other phases.
+// Orchestrator.Run executes steps serially, so access is single-threaded.
 // Must be created via NewPhaseContext; the zero value panics on use.
 type PhaseContext[T any] struct {
-	mu          sync.RWMutex
 	data        T
 	initialized bool
 }
@@ -20,24 +15,18 @@ func NewPhaseContext[T any](initial T) *PhaseContext[T] {
 	return &PhaseContext[T]{data: initial, initialized: true}
 }
 
-// Get returns a copy of the stored value under the read lock.
+// Get returns a copy of the stored value.
 func (c *PhaseContext[T]) Get() T {
 	if !c.initialized {
 		panic("PhaseContext: must be created via NewPhaseContext")
 	}
-	c.mu.RLock()
-	defer c.mu.RUnlock()
 	return c.data
 }
 
-// Update calls fn with a pointer to the stored data while holding the write
-// lock. fn must not call Get or Update on the same PhaseContext —
-// sync.RWMutex is not reentrant and doing so deadlocks.
+// Update calls fn with a pointer to the stored data.
 func (c *PhaseContext[T]) Update(fn func(*T)) {
 	if !c.initialized {
 		panic("PhaseContext: must be created via NewPhaseContext")
 	}
-	c.mu.Lock()
-	defer c.mu.Unlock()
 	fn(&c.data)
 }

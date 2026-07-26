@@ -39,12 +39,6 @@
 
 set -euo pipefail
 
-REPO="qxtaiba/okdctl"
-BINARY="okdctl"
-VERSION="${VERSION:-}"
-INSTALL_DIR="${INSTALL_DIR:-/usr/local/bin}"
-INSECURE="${INSECURE:-}"
-
 red()   { printf '\033[31m%s\033[0m\n' "$*" >&2; }
 green() { printf '\033[32m%s\033[0m\n' "$*"; }
 info()  { printf '  %s\n' "$*"; }
@@ -58,147 +52,165 @@ require() {
     command -v "$1" >/dev/null 2>&1 || die "$1 is required but not installed"
 }
 
-require curl
-require tar
+main() {
+    REPO="qxtaiba/okdctl"
+    BINARY="okdctl"
+    VERSION="${VERSION:-}"
+    INSTALL_DIR="${INSTALL_DIR:-/usr/local/bin}"
+    INSECURE="${INSECURE:-}"
 
-# sha256sum ships with coreutils on every supported Linux distro; refuse
-# early rather than offering an env-var bypass when it is absent.
-if command -v sha256sum >/dev/null 2>&1; then
-    SHA_CMD="sha256sum"
-else
-    die "sha256sum is required but not installed; install coreutils (e.g. apt-get install coreutils, dnf install coreutils)"
-fi
+    require curl
+    require tar
 
-COSIGN_CMD=""
-if command -v cosign >/dev/null 2>&1; then
-    COSIGN_CMD="cosign"
-fi
-
-if [ -z "$COSIGN_CMD" ]; then
-    if [ -z "$INSECURE" ]; then
-        die "cosign is required but not installed; install cosign (https://docs.sigstore.dev/cosign/installation/) or set INSECURE=1 to accept sha256-only verification"
+    # sha256sum ships with coreutils on every supported Linux distro; refuse
+    # early rather than offering an env-var bypass when it is absent.
+    if command -v sha256sum >/dev/null 2>&1; then
+        SHA_CMD="sha256sum"
+    else
+        die "sha256sum is required but not installed; install coreutils (e.g. apt-get install coreutils, dnf install coreutils)"
     fi
-    red "WARNING: cosign not installed — falling back to sha256-only verification (INSECURE=1 set)."
-    red "         Install cosign: https://docs.sigstore.dev/cosign/installation/"
-elif [ -n "$INSECURE" ]; then
-    red "WARNING: INSECURE=1 is set — cosign signature verification SKIPPED."
-    red "         SHA256 verification still runs; unset INSECURE to re-enable cosign."
-fi
 
-# okdctl is Linux-only. Refuse to install on anything else.
-OS=$(uname -s | tr '[:upper:]' '[:lower:]')
-case "$OS" in
-    linux) OS="Linux" ;;
-    *) die "unsupported OS: $OS — okdctl runs on Linux only (the deploy phase needs dnf/apt, systemd, firewall-cmd, nmcli)" ;;
-esac
-
-ARCH=$(uname -m)
-case "$ARCH" in
-    x86_64 | amd64) ARCH="x86_64" ;;
-    aarch64 | arm64) ARCH="arm64" ;;
-    *) die "unsupported arch: $ARCH (supported: x86_64, arm64)" ;;
-esac
-
-# Resolve latest version if not pinned. Pattern adapted from get.helm.sh
-# (sed -n + capture group), more robust than grep | head | cut against
-# JSON key reordering or whitespace variation in the API response.
-if [ -z "$VERSION" ]; then
-    info "resolving latest release..."
-    # Bearer token travels via curl --config on stdin, not -H argv, so it
-    # never shows up in ps / /proc/PID/cmdline on shared hosts. Lifts the
-    # GitHub API rate limit from 60 to 5 000 req/hr per IP when set.
-    _gh_config_line=""
-    if [ -n "${GITHUB_TOKEN:-}" ]; then
-        _gh_config_line=$(printf 'header = "Authorization: Bearer %s"' "$GITHUB_TOKEN")
+    COSIGN_CMD=""
+    if command -v cosign >/dev/null 2>&1; then
+        COSIGN_CMD="cosign"
     fi
-    VERSION=$(printf '%s\n' "$_gh_config_line" |
-        curl_safe -sSfL --max-time 30 --config - \
-        "https://api.github.com/repos/$REPO/releases/latest" |
-        sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' |
-        head -1)
-    [ -n "$VERSION" ] || die "failed to resolve latest release from GitHub API; pin VERSION=vX.Y.Z or set GITHUB_TOKEN to avoid rate-limiting"
-    info "latest: $VERSION"
-fi
 
-[[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.-]+)?$ ]] ||
-    die "unexpected version tag: $VERSION"
+    if [ -z "$COSIGN_CMD" ]; then
+        if [ -z "$INSECURE" ]; then
+            die "cosign is required but not installed; install cosign (https://docs.sigstore.dev/cosign/installation/) or set INSECURE=1 to accept sha256-only verification"
+        fi
+        red "WARNING: cosign not installed — falling back to sha256-only verification (INSECURE=1 set)."
+        red "         Install cosign: https://docs.sigstore.dev/cosign/installation/"
+    elif [ -n "$INSECURE" ]; then
+        red "WARNING: INSECURE=1 is set — cosign signature verification SKIPPED."
+        red "         SHA256 verification still runs; unset INSECURE to re-enable cosign."
+    fi
 
-VERSION_NOPREFIX="${VERSION#v}"
-ARCHIVE_NAME="${BINARY}_${VERSION_NOPREFIX}_${OS}_${ARCH}.tar.gz"
-BASE_URL="https://github.com/$REPO/releases/download/$VERSION"
-ARCHIVE_URL="$BASE_URL/$ARCHIVE_NAME"
-SHA_URL="$BASE_URL/SHA256SUMS"
+    # okdctl is Linux-only. Refuse to install on anything else. OS/ARCH must
+    # match .goreleaser.yaml's name_template ({{ .Os }}_{{ .Arch }} — GOOS/GOARCH
+    # spellings), which produces okdctl_<v>_linux_{amd64,arm64}.tar.gz.
+    OS=$(uname -s | tr '[:upper:]' '[:lower:]')
+    case "$OS" in
+        linux) ;;
+        *) die "unsupported OS: $OS — okdctl runs on Linux only (the deploy phase needs dnf/apt, systemd, firewall-cmd, nmcli)" ;;
+    esac
 
-# Download into a temporary directory that gets cleaned up on exit.
-TMP=$(mktemp -d 2>/dev/null || mktemp -d -t "$BINARY")
-trap 'rm -rf "$TMP"' EXIT INT TERM
+    ARCH=$(uname -m)
+    case "$ARCH" in
+        x86_64 | amd64) ARCH="amd64" ;;
+        aarch64 | arm64) ARCH="arm64" ;;
+        *) die "unsupported arch: $ARCH (supported: x86_64, arm64)" ;;
+    esac
 
-info "downloading $ARCHIVE_NAME"
-curl_safe -sSfL -o "$TMP/$ARCHIVE_NAME" "$ARCHIVE_URL" ||
-    die "failed to download $ARCHIVE_URL"
+    # Resolve latest version if not pinned. Pattern adapted from get.helm.sh
+    # (sed -n + capture group), more robust than grep | head | cut against
+    # JSON key reordering or whitespace variation in the API response.
+    if [ -z "$VERSION" ]; then
+        info "resolving latest release..."
+        # Bearer token travels via curl --config on stdin, not -H argv, so it
+        # never shows up in ps / /proc/PID/cmdline on shared hosts. Lifts the
+        # GitHub API rate limit from 60 to 5 000 req/hr per IP when set.
+        _gh_config_line=""
+        if [ -n "${GITHUB_TOKEN:-}" ]; then
+            _gh_config_line=$(printf 'header = "Authorization: Bearer %s"' "$GITHUB_TOKEN")
+        fi
+        VERSION=$(printf '%s\n' "$_gh_config_line" |
+            curl_safe -sSfL --max-time 30 --config - \
+            "https://api.github.com/repos/$REPO/releases/latest" |
+            sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' |
+            head -1)
+        [ -n "$VERSION" ] || die "failed to resolve latest release from GitHub API; pin VERSION=vX.Y.Z or set GITHUB_TOKEN to avoid rate-limiting"
+        info "latest: $VERSION"
+    fi
 
-# sha256sum is now required, so SHA256SUMS is always consumed.
-info "downloading SHA256SUMS"
-curl_safe -sSfL -o "$TMP/SHA256SUMS" "$SHA_URL" ||
-    die "failed to download SHA256SUMS from $SHA_URL"
+    [[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.-]+)?$ ]] ||
+        die "unexpected version tag: $VERSION"
 
-# Cosign verify-blob against the sigstore-published signature. Runs when
-# cosign is present and INSECURE is unset. INSECURE=1 is only reachable here
-# when cosign is installed (enforced above), so the shed layer is a user choice.
-if [ -n "$COSIGN_CMD" ] && [ -z "$INSECURE" ]; then
-    info "verifying cosign signature on SHA256SUMS"
-    curl_safe -sSfL -o "$TMP/SHA256SUMS.sig" "$BASE_URL/SHA256SUMS.sig" ||
-        die "failed to download SHA256SUMS.sig (release missing signature? uninstall cosign if you accept the risk)"
-    curl_safe -sSfL -o "$TMP/SHA256SUMS.pem" "$BASE_URL/SHA256SUMS.pem" ||
-        die "failed to download SHA256SUMS.pem"
-    # stderr is intentionally passed through — on verification failure the
-    # user needs to see cosign's diagnostic (cert identity, OIDC issuer,
-    # signature mismatch) rather than a bare "verification failed".
-    COSIGN_EXPERIMENTAL=1 cosign verify-blob \
-        --certificate="$TMP/SHA256SUMS.pem" \
-        --signature="$TMP/SHA256SUMS.sig" \
-        --certificate-identity-regexp='^https://github\.com/qxtaiba/okdctl/\.github/workflows/release\.yml@refs/tags/v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$' \
-        --certificate-oidc-issuer='https://token.actions.githubusercontent.com' \
-        "$TMP/SHA256SUMS" >/dev/null ||
-        die "cosign signature verification failed on SHA256SUMS"
-    info "cosign signature verified"
-elif [ -n "$INSECURE" ]; then
-    info "cosign signature verification skipped (INSECURE=1)"
-fi
+    VERSION_NOPREFIX="${VERSION#v}"
+    ARCHIVE_NAME="${BINARY}_${VERSION_NOPREFIX}_${OS}_${ARCH}.tar.gz"
+    BASE_URL="https://github.com/$REPO/releases/download/$VERSION"
+    ARCHIVE_URL="$BASE_URL/$ARCHIVE_NAME"
+    SHA_URL="$BASE_URL/SHA256SUMS"
 
-# SHA256 verification is mandatory; sha256sum was required at startup.
-# awk field-equality (not grep) avoids treating '.' in the filename as a
-# regex wildcard.
-info "verifying SHA256"
-EXPECTED=$(awk -v name="$ARCHIVE_NAME" '$2 == name || $2 == "*"name {print $1}' "$TMP/SHA256SUMS")
-[ -n "$EXPECTED" ] || die "no checksum found for $ARCHIVE_NAME in SHA256SUMS"
-ACTUAL=$($SHA_CMD "$TMP/$ARCHIVE_NAME" | awk '{print $1}')
-[ "$EXPECTED" = "$ACTUAL" ] ||
-    die "checksum mismatch: expected $EXPECTED, got $ACTUAL"
-info "checksum verified"
+    # Download into a temporary directory that gets cleaned up on exit.
+    TMP=$(mktemp -d 2>/dev/null || mktemp -d -t "$BINARY")
+    trap 'rm -rf "$TMP"' EXIT INT TERM
 
-# Extract the archive. --no-same-owner and --no-same-permissions harden
-# against a release tarball that encodes unexpected ownership. The cosign
-# + sha256 verification above is the primary guard; these are defense-in-depth.
-info "extracting"
-cd "$TMP"
-# Defense-in-depth: reject archives containing absolute paths or parent-traversal
-# entries before any bytes hit the filesystem. Goreleaser tarballs are flat, so
-# a match here means a tampered or malformed archive slipped past the sha256 check.
-tar -tzf "$ARCHIVE_NAME" | grep -qE '(^|/)\.\.(/|$)|^/' && die "archive contains absolute or parent-traversal paths"
-tar --no-same-owner --no-same-permissions --no-overwrite-dir -xzf "$ARCHIVE_NAME"
+    info "downloading $ARCHIVE_NAME"
+    curl_safe -sSfL -o "$TMP/$ARCHIVE_NAME" "$ARCHIVE_URL" ||
+        die "failed to download $ARCHIVE_URL"
 
-[ -f "$BINARY" ] || die "$BINARY not found in archive"
+    # sha256sum is now required, so SHA256SUMS is always consumed.
+    info "downloading SHA256SUMS"
+    curl_safe -sSfL -o "$TMP/SHA256SUMS" "$SHA_URL" ||
+        die "failed to download SHA256SUMS from $SHA_URL"
 
-# Install. If the install dir is not writable by the current user, try sudo.
-info "installing to $INSTALL_DIR/$BINARY"
-if [ -w "$INSTALL_DIR" ]; then
-    install -m 0755 "$BINARY" "$INSTALL_DIR/$BINARY"
-elif command -v sudo >/dev/null 2>&1; then
-    sudo install -m 0755 "$BINARY" "$INSTALL_DIR/$BINARY"
-else
-    die "$INSTALL_DIR is not writable and sudo is not available"
-fi
+    # Cosign verify-blob against the sigstore-published signature. Runs when
+    # cosign is present and INSECURE is unset. INSECURE=1 is only reachable here
+    # when cosign is installed (enforced above), so the shed layer is a user choice.
+    if [ -n "$COSIGN_CMD" ] && [ -z "$INSECURE" ]; then
+        info "verifying cosign signature on SHA256SUMS"
+        curl_safe -sSfL -o "$TMP/SHA256SUMS.sig" "$BASE_URL/SHA256SUMS.sig" ||
+            die "failed to download SHA256SUMS.sig (release missing signature? uninstall cosign if you accept the risk)"
+        curl_safe -sSfL -o "$TMP/SHA256SUMS.pem" "$BASE_URL/SHA256SUMS.pem" ||
+            die "failed to download SHA256SUMS.pem"
+        # stderr is intentionally passed through — on verification failure the
+        # user needs to see cosign's diagnostic (cert identity, OIDC issuer,
+        # signature mismatch) rather than a bare "verification failed".
+        COSIGN_EXPERIMENTAL=1 cosign verify-blob \
+            --certificate="$TMP/SHA256SUMS.pem" \
+            --signature="$TMP/SHA256SUMS.sig" \
+            --certificate-identity-regexp='^https://github\.com/qxtaiba/okdctl/\.github/workflows/release\.yml@refs/tags/v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$' \
+            --certificate-oidc-issuer='https://token.actions.githubusercontent.com' \
+            "$TMP/SHA256SUMS" >/dev/null ||
+            die "cosign signature verification failed on SHA256SUMS"
+        info "cosign signature verified"
+    elif [ -n "$INSECURE" ]; then
+        info "cosign signature verification skipped (INSECURE=1)"
+    fi
 
-green "okdctl $VERSION installed to $INSTALL_DIR/$BINARY"
-info "run 'okdctl doctor' to verify your environment"
+    # SHA256 verification is mandatory; sha256sum was required at startup.
+    # awk field-equality (not grep) avoids treating '.' in the filename as a
+    # regex wildcard.
+    info "verifying SHA256"
+    EXPECTED=$(awk -v name="$ARCHIVE_NAME" '$2 == name || $2 == "*"name {print $1}' "$TMP/SHA256SUMS")
+    [ -n "$EXPECTED" ] || die "no checksum found for $ARCHIVE_NAME in SHA256SUMS"
+    ACTUAL=$($SHA_CMD "$TMP/$ARCHIVE_NAME" | awk '{print $1}')
+    [ "$EXPECTED" = "$ACTUAL" ] ||
+        die "checksum mismatch: expected $EXPECTED, got $ACTUAL"
+    info "checksum verified"
+
+    # Extract the archive. --no-same-owner and --no-same-permissions harden
+    # against a release tarball that encodes unexpected ownership. The cosign
+    # + sha256 verification above is the primary guard; these are defense-in-depth.
+    info "extracting"
+    cd "$TMP"
+    # Defense-in-depth: reject archives containing absolute paths or parent-traversal
+    # entries before any bytes hit the filesystem. Goreleaser tarballs are flat, so
+    # a match here means a tampered or malformed archive slipped past the sha256 check.
+    tar -tzf "$ARCHIVE_NAME" | grep -qE '(^|/)\.\.(/|$)|^/' && die "archive contains absolute or parent-traversal paths"
+    tar --no-same-owner --no-same-permissions --no-overwrite-dir -xzf "$ARCHIVE_NAME"
+
+    [ -f "$BINARY" ] || die "$BINARY not found in archive"
+
+    # Install. If the install dir is not writable by the current user, try sudo.
+    # A nonexistent dir fails -w too and would silently route into the sudo
+    # branch, dying with a raw coreutils error instead of this diagnostic.
+    [ -d "$INSTALL_DIR" ] || die "INSTALL_DIR does not exist: $INSTALL_DIR"
+    info "installing to $INSTALL_DIR/$BINARY"
+    if [ -w "$INSTALL_DIR" ]; then
+        install -m 0755 "$BINARY" "$INSTALL_DIR/$BINARY"
+    elif command -v sudo >/dev/null 2>&1; then
+        sudo install -m 0755 "$BINARY" "$INSTALL_DIR/$BINARY"
+    else
+        die "$INSTALL_DIR is not writable and sudo is not available"
+    fi
+
+    green "okdctl $VERSION installed to $INSTALL_DIR/$BINARY"
+    info "run 'okdctl doctor' to verify your environment"
+}
+
+# The wrapper makes bash parse the whole script before executing anything:
+# a curl|bash transfer truncated mid-stream would otherwise run a prefix
+# of the script (rustup / get.helm.sh installer pattern).
+main "$@"

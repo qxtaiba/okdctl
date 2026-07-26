@@ -9,6 +9,9 @@ const (
 	// this address and must not ARP-fight the hypervisor.
 	defaultStaticIPStart = "192.168.1.140"
 	defaultFluxAddon     = "flux"
+	// defaultTerraformEnv names the embedded environment that ships in the
+	// repo; validators trust it without a disk check.
+	defaultTerraformEnv = "production"
 )
 
 // DefaultConfig returns a Config with defaults for a typical homelab environment.
@@ -99,7 +102,7 @@ func DefaultConfig() *Config {
 			IgnitionServerIP: defaultBastionIP,
 		},
 		Deployment: DeploymentConfig{
-			TerraformEnv:     "production",
+			TerraformEnv:     defaultTerraformEnv,
 			AutoApprove:      false,
 			BootstrapTimeout: 3600,
 			InstallTimeout:   7200,
@@ -118,6 +121,7 @@ func MinimalConfig() *Config {
 	cfg.Topology = TopologyConfig{
 		ControlPlane: NodeConfig{Count: 1, CPU: 4, MemoryMB: 8192, DiskGB: 50},
 		Workers:      NodeConfig{Count: 0, CPU: 0, MemoryMB: 0, DiskGB: 0},
+		VMIDBase:     DefaultVMIDBase,
 	}
 	cfg.Addons = map[string]AddonConfig{
 		defaultFluxAddon: {Enabled: false},

@@ -2,6 +2,7 @@ package postinstall
 
 import (
 	"context"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -17,8 +18,8 @@ import (
 
 var postinstallStepOrder = []distribution.StepID{
 	StepVerifyHealth,
-	StepCleanupBootstrap,
 	StepVerifyKubeVIP,
+	StepCleanupBootstrap,
 	StepDeployProductionDNS,
 	StepInstallAddons,
 	StepDisableRHDefaults,
@@ -32,10 +33,11 @@ func TestPostinstallSteps_StepListAndSkipWiring(t *testing.T) {
 		wantSkip        map[distribution.StepID]bool
 	}{
 		{
-			name: "defaults: dns gated on unverified kube-vip",
+			name: "defaults: cleanup and dns gated on unverified kube-vip",
 			wantSkip: map[distribution.StepID]bool{
 				StepVerifyHealth:        false,
 				StepVerifyKubeVIP:       false,
+				StepCleanupBootstrap:    true,
 				StepDeployProductionDNS: true,
 			},
 		},
@@ -47,17 +49,19 @@ func TestPostinstallSteps_StepListAndSkipWiring(t *testing.T) {
 			},
 		},
 		{
-			name: "skip-kubevip",
+			name: "skip-kubevip: bootstrap cleanup still runs",
 			opts: Options{SkipKubeVIP: true},
 			wantSkip: map[distribution.StepID]bool{
 				StepVerifyKubeVIP:       true,
+				StepCleanupBootstrap:    false,
 				StepDeployProductionDNS: true,
 			},
 		},
 		{
-			name:            "verified kube-vip unlocks production dns",
+			name:            "verified kube-vip unlocks bootstrap cleanup and production dns",
 			kubeVIPVerified: true,
 			wantSkip: map[distribution.StepID]bool{
+				StepCleanupBootstrap:    false,
 				StepDeployProductionDNS: false,
 			},
 		},
@@ -216,4 +220,31 @@ func readBootstrapArgvLines(t *testing.T) []string {
 		t.Fatalf("read argv log: %v", err)
 	}
 	return strings.Split(strings.TrimSpace(string(data)), "\n")
+}
+
+// TestWarnIfDNSStranded asserts the update-ingress recovery hint fires exactly
+// when the bootstrap VM is gone but production DNS never made it out.
+func TestWarnIfDNSStranded(t *testing.T) {
+	cases := []struct {
+		name     string
+		state    postInstallContext
+		wantWarn bool
+	}{
+		{"bootstrap gone, dns deployed", postInstallContext{BootstrapCleaned: true, KubeVIPVerified: true, DNSDeployed: true}, false},
+		{"bootstrap gone, kubevip skipped, no dns", postInstallContext{BootstrapCleaned: true}, true},
+		{"bootstrap gone, verified but dns failed", postInstallContext{BootstrapCleaned: true, KubeVIPVerified: true}, true},
+		{"bootstrap kept", postInstallContext{}, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var buf strings.Builder
+			p := New(phase.WithExecutor(executor.New()),
+				phase.WithLogger(slog.New(slog.NewTextHandler(&buf, nil))))
+			p.warnIfDNSStranded(tc.state)
+			got := strings.Contains(buf.String(), "okdctl update-ingress")
+			if got != tc.wantWarn {
+				t.Errorf("warn emitted = %v; want %v (log: %s)", got, tc.wantWarn, buf.String())
+			}
+		})
+	}
 }

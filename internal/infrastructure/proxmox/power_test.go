@@ -5,22 +5,22 @@ import (
 	"time"
 )
 
-// ShutdownVM/StartVM/VMRunning/PowerCycleVM all require a live Proxmox API
+// ShutdownVM/StartVM/PowerCycleVM all require a live Proxmox API
 // (no go-proxmox HTTP mock exists in this repo); their behavior is covered
 // at the node.Runner layer via fakePower. timeout() is the only pure logic
 // here and gets direct coverage.
 func TestPowerCycler_timeout(t *testing.T) {
 	t.Run("default when unset", func(t *testing.T) {
 		pc := NewPowerCycler(&PowerCycleOptions{})
-		if got := pc.timeout(); got != DefaultPowerCycleTimeout {
-			t.Errorf("timeout() = %v; want %v", got, DefaultPowerCycleTimeout)
+		if got := pc.timeout(); got != defaultPowerCycleTimeout {
+			t.Errorf("timeout() = %v; want %v", got, defaultPowerCycleTimeout)
 		}
 	})
 
 	t.Run("default when negative", func(t *testing.T) {
 		pc := NewPowerCycler(&PowerCycleOptions{Timeout: -time.Second})
-		if got := pc.timeout(); got != DefaultPowerCycleTimeout {
-			t.Errorf("timeout() = %v; want %v", got, DefaultPowerCycleTimeout)
+		if got := pc.timeout(); got != defaultPowerCycleTimeout {
+			t.Errorf("timeout() = %v; want %v", got, defaultPowerCycleTimeout)
 		}
 	})
 

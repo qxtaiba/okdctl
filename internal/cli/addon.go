@@ -13,6 +13,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/distribution/okd"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/executor"
+	"github.com/qxtaiba/okdctl/internal/runlock"
 	"github.com/qxtaiba/okdctl/internal/tui"
 )
 
@@ -114,7 +115,7 @@ func init() {
 	addonInstallCmd.Flags().BoolVar(&addonInstallAll, "all", false, "install all enabled addons (per-addon continuation on failure)")
 	addonUninstallCmd.Flags().BoolVarP(&addonUninstallYes, "yes", "y", false, "skip confirmation prompt")
 	addonUninstallCmd.Flags().StringVar(&addonUninstallConfirmCluster, "confirm-cluster", "",
-		"required with --yes; must equal cfg.Cluster.Name (typo guard for scripted uninstalls)")
+		"required with --yes; must equal the config cluster name")
 
 	addonCmd.AddCommand(addonListCmd)
 	addonCmd.AddCommand(addonInstallCmd)
@@ -170,6 +171,14 @@ func runAddonInstall(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+	// Addon installs mutate the live cluster; hold the project runlock like
+	// every other mutating verb (deploy, node ops, update-ingress) so
+	// concurrent invocations serialize.
+	lock, err := runlock.Acquire(projectRoot, "addon install")
+	if err != nil {
+		return err
+	}
+	defer lock.Release()
 	mgr := newAddonManager(cfg, projectRoot)
 	if addonInstallAll {
 		return mgr.InstallAll(cmd.Context())
@@ -203,6 +212,13 @@ func runAddonUninstall(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+	// Acquired after the interactive confirmation so a prompt left waiting
+	// never holds the lock against another invocation.
+	lock, err := runlock.Acquire(projectRoot, "addon uninstall")
+	if err != nil {
+		return err
+	}
+	defer lock.Release()
 	mgr := newAddonManager(cfg, projectRoot)
 	if err := mgr.Uninstall(cmd.Context(), args[0]); err != nil {
 		return err
@@ -269,7 +285,8 @@ func runAddonVerify(cmd *cobra.Command, _ []string) error {
 
 func newAddonManager(cfg *config.Config, projectRoot string) *addon.Manager {
 	exec := executor.New(executor.WithWorkDir(projectRoot))
-	return addon.NewManager(cfg,
+	return addon.NewManager(
+		cfg,
 		addon.WithExecutor(exec),
 		addon.WithLogger(tui.SimpleLogger()),
 		addon.WithProjectRoot(projectRoot),

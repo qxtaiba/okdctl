@@ -8,9 +8,9 @@ import (
 	"net/netip"
 )
 
-// DefaultVIPLastOctet is the final IPv4 octet used when deriving a VIP from
+// defaultVIPLastOctet is the final IPv4 octet used when deriving a VIP from
 // a static-IP range without an explicit override.
-const DefaultVIPLastOctet = 10
+const defaultVIPLastOctet = 10
 
 // DefaultNetmask is the /24 subnet mask applied when no explicit netmask is
 // configured — matches the typical homelab /24 and the Proxmox default bridge.
@@ -122,7 +122,7 @@ func ResolveVIP(explicitVIP, staticIPStart string) (string, error) {
 }
 
 // DeriveVIPFromStaticIP replaces the last octet of staticIPStart with
-// DefaultVIPLastOctet to yield a conventional VIP in the same /24.
+// defaultVIPLastOctet to yield a conventional VIP in the same /24.
 func DeriveVIPFromStaticIP(staticIPStart string) (string, error) {
 	addr, err := netip.ParseAddr(staticIPStart)
 	if err != nil {
@@ -132,7 +132,7 @@ func DeriveVIPFromStaticIP(staticIPStart string) (string, error) {
 		return "", fmt.Errorf("IPv6 not supported: %q", staticIPStart)
 	}
 	octets := addr.As4()
-	return fmt.Sprintf("%d.%d.%d.%d", octets[0], octets[1], octets[2], DefaultVIPLastOctet), nil
+	return fmt.Sprintf("%d.%d.%d.%d", octets[0], octets[1], octets[2], defaultVIPLastOctet), nil
 }
 
 // IPInCIDR reports whether ip is contained within cidr.

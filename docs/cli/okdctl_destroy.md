@@ -48,7 +48,7 @@ okdctl destroy [flags]
 ### Options
 
 ```
-      --confirm-cluster string   required with --yes; must equal cfg.Cluster.Name (typo guard for scripted destroys)
+      --confirm-cluster string   required with --yes; must equal the config cluster name
       --dry-run                  preview terraform destroy plan without running destroy
   -h, --help                     help for destroy
       --keep-isos                do not remove the FCOS ISO from the Proxmox host (always true for a scoped --target/--only destroy)

@@ -7,8 +7,8 @@ package config
 // SchemaVersionCurrent; bump it (and teach LoadFile a targeted migration
 // message) only when the schema makes a breaking change.
 const (
-	// SchemaVersionV1 predates the v2 key renames (see CHANGELOG.md
-	// "Unreleased"); kept so the loader can emit a migration diagnostic.
+	// SchemaVersionV1 predates the v2 key renames (listed on
+	// SchemaVersionV2); kept so the loader can emit a migration diagnostic.
 	SchemaVersionV1 = "v1"
 	// SchemaVersionV2 renamed provider.proxmox.master_nodes →
 	// control_plane_nodes, disks.master_data_size_gb →
@@ -254,6 +254,15 @@ type DeploymentConfig struct {
 	BootstrapTimeout int    `json:"bootstrap_timeout,omitempty"`
 	InstallTimeout   int    `json:"install_timeout,omitempty"`
 	BinDir           string `json:"bin_dir,omitempty"`
+}
+
+// TerraformEnvName returns the active Terraform environment name from
+// deployment.terraform_env, defaulting to "production" when unset.
+func (c *Config) TerraformEnvName() string {
+	if c.Deployment.TerraformEnv != "" {
+		return c.Deployment.TerraformEnv
+	}
+	return defaultTerraformEnv
 }
 
 // DisksConfig sizes the optional extra data disk (Ceph/storage) attached to

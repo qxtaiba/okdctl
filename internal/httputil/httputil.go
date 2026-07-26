@@ -57,6 +57,19 @@ func NewInsecure(timeout time.Duration) *http.Client {
 	}
 }
 
+// NewWithTransport returns a client using the caller-supplied transport,
+// with the standard redirect policy installed. It exists for callers that
+// must carry a transport the other factories cannot express (e.g. the
+// Proxmox probe's operator-opt-in TLS skip) without losing the 5-hop cap
+// and cross-host Authorization refusal every httputil client gets.
+func NewWithTransport(transport http.RoundTripper, timeout time.Duration) *http.Client {
+	return &http.Client{
+		Timeout:       timeout,
+		CheckRedirect: capRedirects,
+		Transport:     transport,
+	}
+}
+
 // NewWithCA returns a client whose TLS transport trusts only the certificates
 // in pool. MinVersion is TLS 1.2; the server must present a cert whose chain
 // roots in pool or the request fails.

@@ -167,7 +167,7 @@ func derivePhase(apiOK bool, nodes []okd.NodeStatus, degraded int, projectRoot s
 
 func hasTerraformState(projectRoot string) bool {
 	matches, _ := filepath.Glob(
-		filepath.Join(projectRoot, "infrastructure", "terraform", "environments", "*", "terraform.tfstate"),
+		filepath.Join(system.TerraformEnvDir(projectRoot, "*"), "terraform.tfstate"),
 	)
 	return len(matches) > 0
 }

@@ -20,8 +20,14 @@ const Redacted = "[redacted]"
 //
 // Add new fragments here when a new credential domain appears (e.g.
 // "private_key", "access_key"). Substring match: "token" already covers
-// "auth_token", "bearer_token", "refresh_token", etc.
-var secretKeyFragments = []string{"password", "token", "secret", "api_key", "apikey"}
+// "auth_token", "bearer_token", "refresh_token", etc. "key" and "auth"
+// stay out deliberately — they would over-redact public_key, oauth_flow,
+// and similar non-secret names. stderrScrubRe is built from this slice, so
+// additions extend both the attr sweep and the stderr scrub.
+var secretKeyFragments = []string{
+	"password", "token", "secret", "api_key", "apikey",
+	"credential", "passphrase", "authorization",
+}
 
 // RedactHandler wraps an inner slog.Handler and rewrites attr values that
 // look like credentials — *url.URL values carrying userinfo, or any type
@@ -174,30 +180,42 @@ func bareSecretFlag(tok string) bool {
 // the log sink verbatim.
 type RedactableStderr string
 
-// stderrScrubRe matches credential key–value pairs in three shapes:
+// stderrScrubRe matches credential key–value pairs in these shapes:
 //
 //	key=value            (shell env / provider diagnostics)
 //	key: value           (YAML / HTTP-style headers)
 //	"key": "value"       (JSON diagnostics; quoted values may contain spaces)
 //	Authorization: Bearer <token>
 //
-// Covers secretKeyFragments plus "authorization". Over-redaction is
-// acceptable; under-redaction is not.
+// Built from secretKeyFragments so the stderr scrub and the attr key-sweep
+// share one denylist. Over-redaction is acceptable; under-redaction is not.
 var stderrScrubRe = regexp.MustCompile(
-	`(?i)((?:password|token|secret|api_key|apikey|authorization)` +
+	`(?i)((?:` + strings.Join(secretKeyFragments, "|") + `)` +
 		`(?:["']?\s*[:=]\s*(?:Bearer\s+)?))("[^"]*"|'[^']*'|\S+)`,
 )
 
-// scrubStderrText masks credential values in s using stderrScrubRe.
+// jwtScrubRe matches bare JWTs — three dot-joined base64url segments whose
+// header starts with eyJ (base64 of `{"`). These carry no adjacent key for
+// stderrScrubRe to anchor on, so they get their own pass.
+var jwtScrubRe = regexp.MustCompile(`\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+`)
+
+// scrubStderrText masks credential values in s. Coverage is shape-based:
+// key-adjacent values (stderrScrubRe) and bare JWTs (jwtScrubRe). A secret
+// with neither shape — a bare base64 blob, prose-embedded value — is NOT
+// detected; the head/tail truncation window in RedactableStderr.Redacted is
+// the only bound on such text.
 func scrubStderrText(s string) string {
-	return stderrScrubRe.ReplaceAllString(s, "${1}"+Redacted)
+	s = stderrScrubRe.ReplaceAllString(s, "${1}"+Redacted)
+	return jwtScrubRe.ReplaceAllString(s, Redacted)
 }
 
-// Redacted masks credential values matching key=value, key: value, or
-// Authorization: Bearer <token> shapes, then returns at most the first 200
-// and last 200 bytes joined by a truncation marker when the scrubbed text
-// exceeds 400 characters. Scrubbing runs before truncation so a window cut
-// can never split a key and leave its value exposed in the retained tail.
+// Redacted masks credential values matching key=value, key: value,
+// Authorization: Bearer <token>, or bare-JWT shapes, then returns at most
+// the first 200 and last 200 bytes joined by a truncation marker when the
+// scrubbed text exceeds 400 characters. Scrubbing runs before truncation so
+// a window cut can never split a key and leave its value exposed in the
+// retained tail. The guarantee is "key-shaped secrets and JWTs masked,
+// output bounded" — not "all secret-looking tokens detected".
 func (s RedactableStderr) Redacted() any {
 	const half = 200
 	r := scrubStderrText(string(s))

@@ -1,15 +1,11 @@
-# =============================================================================
-# CLUSTER INFORMATION
-# =============================================================================
+# cluster information
 
 output "cluster_name" {
   description = "name of the deployed okd cluster"
   value       = module.okd_cluster.cluster_name
 }
 
-# =============================================================================
-# CLUSTER SUMMARY
-# =============================================================================
+# cluster summary
 
 output "cluster_summary" {
   description = "summary of the deployed cluster"
@@ -22,9 +18,7 @@ output "cluster_summary" {
   }
 }
 
-# =============================================================================
-# VM IDS
-# =============================================================================
+# vm ids
 
 output "vm_ids" {
   description = "all vm ids for reference"
@@ -35,9 +29,7 @@ output "vm_ids" {
   }
 }
 
-# =============================================================================
-# CLUSTER RESOURCES
-# =============================================================================
+# cluster resources
 
 output "cluster_resources" {
   description = "total cluster resources"

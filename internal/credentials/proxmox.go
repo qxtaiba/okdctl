@@ -157,9 +157,14 @@ func (c *ProxmoxCredentials) GoString() string {
 //
 // Known call sites (review when adding a new one):
 //
-//	cli/deploy.go       — proxmox.WithEnv(creds.Env()); defer prov.ZeroizeEnv()
+//	cli/helpers.go      — proxmox.WithEnv(creds.Env()); defer prov.ZeroizeEnv()
+//	                      (runTerraformPlanPreview, shared by deploy --dry-run
+//	                      and okdctl plan)
 //	cli/destroy.go      — terraform.WithEnv(creds.Env()); defer tf.ZeroizeEnv()
-//	cli/node.go         — terraform.WithEnv(creds.Env()); defer tf.ZeroizeEnv()
+//	cli/node.go         — terraform.WithEnv(creds.Env()); manual ZeroizeEnv on
+//	                      the early-error returns + all buildNodeRunner callers
+//	                      defer rc.cleanup() (tf escapes into the runner, so a
+//	                      literal defer is impossible there)
 //	deploy/deploy.go    — okd.WithEnv(creds.Env()); callers defer p.ZeroizeEnv()
 func (c *ProxmoxCredentials) Env() []string {
 	if !c.IsValid() {
@@ -229,6 +234,13 @@ func GetProxmoxCredentials(cfg *config.Config) *ProxmoxCredentials {
 
 	host := px.Host
 	if host == "" {
+		return creds
+	}
+
+	// Validators reject http:// without the insecure_http opt-in at config
+	// load; enforce it here too so an http endpoint never receives plaintext
+	// credentials via a caller that skipped validation.
+	if strings.HasPrefix(host, "http://") && !px.InsecureHTTP {
 		return creds
 	}
 

@@ -112,6 +112,7 @@ func (r *Runner) CreateSnapshot(ctx context.Context, target string, opts Snapsho
 		}()
 	}
 
+	r.Log.Info("node: creating snapshot", "node", target, "name", name)
 	stop := r.startProgress(fmt.Sprintf("snapshotting %s", target))
 	cerr := r.Snapshot.CreateSnapshot(ctx, r.Proxmox, vmid, name, opts.Description, r.snapshotTimeout())
 	stop()
@@ -180,6 +181,8 @@ func (r *Runner) RollbackSnapshot(ctx context.Context, target, snapname string, 
 		return nil
 	}
 
+	r.Log.Info("node: rolling back to snapshot", "node", target, "name", snapname)
+
 	if err := r.cordonAndDrain(ctx, OpSnapshot, target, "", isMaster, Step("")); err != nil {
 		return err
 	}
@@ -189,7 +192,7 @@ func (r *Runner) RollbackSnapshot(ctx context.Context, target, snapname string, 
 	stop()
 	if rerr != nil {
 		return &errtypes.ClusterError{
-			Msg: fmt.Sprintf("roll back %s to snapshot %s (node left cordoned; re-run after resolving the cause)", target, snapname),
+			Msg: fmt.Sprintf("roll back %s to snapshot %s (node left cordoned; re-run with --acknowledge-interrupted-op after resolving the cause)", target, snapname),
 			Err: rerr,
 		}
 	}

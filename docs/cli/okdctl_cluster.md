@@ -1,6 +1,6 @@
 ## okdctl cluster
 
-Cluster-wide lifecycle operations
+Manage cluster-wide lifecycle operations
 
 ### Synopsis
 

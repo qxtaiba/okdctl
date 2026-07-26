@@ -293,6 +293,40 @@ func TestGetProxmoxCredentials(t *testing.T) {
 			t.Errorf("Endpoint = %q, want https://pve.example:8006", creds.Endpoint)
 		}
 	})
+
+	t.Run("http host without insecure_http yields no credentials", func(t *testing.T) {
+		clearProxmoxEnv(t)
+		t.Setenv("PROXMOX_VE_API_TOKEN", "EXAMPLE-ENV-TOKEN")
+		cfg := cfgWithHost()
+		cfg.Provider.Proxmox.Host = "http://pve.example"
+
+		creds := GetProxmoxCredentials(cfg)
+
+		if creds.Source != SourceNone {
+			t.Errorf("Source = %v, want SourceNone (http gate)", creds.Source)
+		}
+		if creds.Endpoint != "" || len(creds.APIToken) != 0 {
+			t.Errorf("http endpoint without opt-in must not carry credentials; got endpoint=%q token=%q",
+				creds.Endpoint, creds.APIToken)
+		}
+	})
+
+	t.Run("http host with insecure_http opt-in resolves credentials", func(t *testing.T) {
+		clearProxmoxEnv(t)
+		t.Setenv("PROXMOX_VE_API_TOKEN", "EXAMPLE-ENV-TOKEN")
+		cfg := cfgWithHost()
+		cfg.Provider.Proxmox.Host = "http://pve.example"
+		cfg.Provider.Proxmox.InsecureHTTP = true
+
+		creds := GetProxmoxCredentials(cfg)
+
+		if creds.Source != SourceEnv {
+			t.Errorf("Source = %v, want SourceEnv", creds.Source)
+		}
+		if creds.Endpoint != "http://pve.example:8006" {
+			t.Errorf("Endpoint = %q, want http://pve.example:8006", creds.Endpoint)
+		}
+	})
 }
 
 func TestProxmoxCredentials_Redacted(t *testing.T) {

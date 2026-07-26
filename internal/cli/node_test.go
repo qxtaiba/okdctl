@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -20,20 +21,17 @@ import (
 func TestValidateAddFlags(t *testing.T) {
 	cases := []struct {
 		name    string
-		role    string
 		count   int
 		wantErr bool
 	}{
-		{"worker role, default count", "worker", 1, false},
-		{"worker role, batch count", "worker", 3, false},
-		{"master role rejected", "master", 1, true},
-		{"unknown role rejected", "bootstrap", 1, true},
-		{"zero count rejected", "worker", 0, true},
-		{"negative count rejected", "worker", -1, true},
+		{"default count", 1, false},
+		{"batch count", 3, false},
+		{"zero count rejected", 0, true},
+		{"negative count rejected", -1, true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			err := validateAddFlags(tc.role, tc.count)
+			err := validateAddFlags(tc.count)
 			if tc.wantErr {
 				var usageErr *errtypes.UsageError
 				if !errors.As(err, &usageErr) {
@@ -186,36 +184,12 @@ func TestDryRunDoesNotPromptForMigration(t *testing.T) {
 	}
 }
 
-// captureStderr redirects os.Stderr around fn and returns what was written, so
-// a test can assert the informed box printed without polluting test output.
-func captureStderr(t *testing.T, fn func()) string {
-	t.Helper()
-	old := os.Stderr
-	r, w, err := os.Pipe()
-	if err != nil {
-		t.Fatal(err)
-	}
-	os.Stderr = w
-	done := make(chan string, 1)
-	go func() {
-		b, _ := io.ReadAll(r)
-		done <- string(b)
-	}()
-	fn()
-	_ = w.Close()
-	os.Stderr = old
-	return <-done
-}
-
 func TestNodeConfirmHookYesPrintsBoxSkipsGate(t *testing.T) {
 	rc := &nodeRunnerCtx{}
-	hook := nodeConfirmHook(rc, nodeConsent{yes: true, twoStage: true}, "prod")
+	var errW bytes.Buffer
+	hook := nodeConfirmHook(rc, nodeConsent{yes: true, twoStage: true}, "prod", &errW)
 
-	var ok bool
-	var hookErr error
-	out := captureStderr(t, func() {
-		ok, hookErr = hook(context.Background(), &node.OpPlan{Op: node.OpRemove, Cluster: "prod"})
-	})
+	ok, hookErr := hook(context.Background(), &node.OpPlan{Op: node.OpRemove, Cluster: "prod"})
 
 	if hookErr != nil || !ok {
 		t.Fatalf("--yes must proceed without prompting: ok=%v err=%v", ok, hookErr)
@@ -223,7 +197,7 @@ func TestNodeConfirmHookYesPrintsBoxSkipsGate(t *testing.T) {
 	if rc.captured == nil {
 		t.Error("confirm hook must capture the plan for the completion box")
 	}
-	if !strings.Contains(out, "confirm worker removal") || !strings.Contains(out, "prod") {
+	if out := errW.String(); !strings.Contains(out, "confirm worker removal") || !strings.Contains(out, "prod") {
 		t.Errorf("--yes still prints the informed box; got:\n%s", out)
 	}
 }

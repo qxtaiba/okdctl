@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/distribution"
@@ -26,8 +27,16 @@ import (
 )
 
 // Provisioner orchestrates the OKD distribution's phase packages (setup,
-// install, postinstall, destroy). Construct via New with functional options;
-// the zero value is not usable.
+// install, postinstall, destroy, cleanup). Construct via New with
+// functional options; the zero value is not usable.
+//
+// Options convention: Setup takes the facade-owned SetupOpts because it
+// encodes wipe-guard consent rather than phase tuning; Install, Destroy,
+// UpdateIngress, and Cleanup pass their phase package's Options through
+// unchanged so there is no CLI-facing mirror type to keep in sync.
+// PostInstall's bare keepRedHatCatalogs bool is grandfathered — fold it
+// into an options struct when a second knob lands rather than adding a
+// second positional flag.
 type Provisioner struct {
 	projectRoot string
 	executor    *executor.Executor
@@ -172,6 +181,9 @@ func (p *Provisioner) Setup(ctx context.Context, cfg *config.Config, opts SetupO
 		}
 		p.logger.Info("setup: cleaning up previous artifacts")
 		cleanupOpts := cleanup.NewOptions(cfg, p.projectRoot, cleanup.WorkOnly)
+		// guardLiveCluster already obtained the credential-loss consent that
+		// --fresh implies; without it the wipe must still honor live state.
+		cleanupOpts.ForceCredentialWipe = opts.FreshDeploy
 		if err := cleanup.New(phase.WithExecutor(p.executor), phase.WithLogger(p.logger)).Execute(ctx, &cleanupOpts); err != nil {
 			return nil, &errtypes.ClusterError{Msg: "pre-deploy cleanup incomplete; stale sentinels may skip regeneration — remove the work directory manually or run 'okdctl cleanup'", Err: err}
 		}
@@ -285,16 +297,19 @@ func (p *Provisioner) ResumePostInstall(ctx context.Context, cfg *config.Config,
 type DeployStep struct {
 	ID    distribution.StepID
 	Name  string
-	Phase string
+	Phase DeployPhase
 }
 
-// Deploy phase labels carried on DeployStep.Phase. They match the deploy
+// DeployPhase labels the deploy phase that owns a DeployStep.
+type DeployPhase string
+
+// Deploy phase labels carried on DeployStep.Phase. The values match the deploy
 // package's on-disk marker phase names so a resume can filter the plan to the
 // phases it will actually run.
 const (
-	PhaseSetup       = "setup"
-	PhaseInstall     = "install"
-	PhasePostInstall = "postinstall"
+	PhaseSetup       DeployPhase = "setup"
+	PhaseInstall     DeployPhase = "install"
+	PhasePostInstall DeployPhase = "postinstall"
 )
 
 // DeploySteps returns the ordered ID+Name for every step the setup, install,
@@ -313,7 +328,7 @@ func (p *Provisioner) DeploySteps(cfg *config.Config) []DeployStep {
 	postOpts := postinstall.NewOptions(cfg, p.projectRoot)
 
 	var out []DeployStep
-	appendPhase := func(phaseName string, defs []distribution.StepDef) {
+	appendPhase := func(phaseName DeployPhase, defs []distribution.StepDef) {
 		for _, d := range defs {
 			out = append(out, DeployStep{ID: d.ID, Name: d.Name, Phase: phaseName})
 		}
@@ -347,11 +362,19 @@ func resolveIngressWorkDir(projectRoot, workDir string) string {
 	return workDir
 }
 
-// ZeroizeEnv delegates to the underlying executor's ZeroizeEnv, bounding
-// the lifetime of plaintext credential strings. Call via defer after all
-// phases complete. Kept as credential-lifecycle scaffolding; field owner
-// is executor.Executor.ZeroizeEnv.
+// ZeroizeEnv blanks secret-keyed entries in pendingEnv, clears and nils the
+// slice, then delegates to the underlying executor's ZeroizeEnv, bounding
+// the lifetime of plaintext credential strings on both copies. Call via
+// defer after all phases complete.
 func (p *Provisioner) ZeroizeEnv() {
+	for i, kv := range p.pendingEnv {
+		key, _, _ := strings.Cut(kv, "=")
+		if logutil.KeyIsSecret(key) {
+			p.pendingEnv[i] = ""
+		}
+	}
+	clear(p.pendingEnv)
+	p.pendingEnv = nil
 	if p.executor == nil {
 		return
 	}
@@ -364,4 +387,14 @@ func (p *Provisioner) ZeroizeEnv() {
 func (p *Provisioner) Destroy(ctx context.Context, cfg *config.Config, opts *destroy.Options) ([]distribution.StepResult, error) {
 	destroyPhase := destroy.New(phase.WithExecutor(p.executor), phase.WithLogger(p.logger))
 	return destroyPhase.Execute(ctx, cfg, opts)
+}
+
+// Cleanup removes local cluster artifacts without touching infrastructure.
+// Callers build opts via cleanup.NewOptions(cfg, projectRoot, kind) and
+// override the fields they need — the same pass-through contract as
+// Destroy. Setup's internal pre-deploy cleanup does not route through here;
+// it wires its own WorkOnly run with the FreshDeploy consent applied.
+func (p *Provisioner) Cleanup(ctx context.Context, opts *cleanup.Options) error {
+	cleanupPhase := cleanup.New(phase.WithExecutor(p.executor), phase.WithLogger(p.logger))
+	return cleanupPhase.Execute(ctx, opts)
 }

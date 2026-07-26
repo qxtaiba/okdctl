@@ -9,6 +9,8 @@ import (
 	"syscall"
 	"testing"
 
+	"github.com/spf13/cobra"
+
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 )
 
@@ -198,5 +200,64 @@ func TestSignalExitCode(t *testing.T) {
 				t.Fatalf("code=%d, want %d", code, tc.wantCode)
 			}
 		})
+	}
+}
+
+// TestExecutePanicExitsSoftware locks the crash contract: a panic anywhere
+// under the cobra tree must exit 70 (EX_SOFTWARE), not the Go runtime's own
+// exit 2, which the published taxonomy reserves for ConfigError.
+func TestExecutePanicExitsSoftware(t *testing.T) {
+	t.Setenv("OKDCTL_NO_UPDATE_CHECK", "1")
+	t.Setenv(wizardDemoEnv, "1")
+
+	panicCmd := &cobra.Command{
+		Use:    "panic-test",
+		Hidden: true,
+		RunE:   func(*cobra.Command, []string) error { panic("boom") },
+	}
+	rootCmd.AddCommand(panicCmd)
+	rootCmd.SetArgs([]string{"panic-test"})
+	t.Cleanup(func() {
+		rootCmd.RemoveCommand(panicCmd)
+		rootCmd.SetArgs(nil)
+	})
+
+	if got := execute(); got != 70 {
+		t.Fatalf("execute() after panic = %d, want 70 (EX_SOFTWARE)", got)
+	}
+}
+
+// TestWrapArgValidators locks the arg-count exit-code policy: cobra's bare
+// validator errors become UsageError (exit 64), hand-rolled UsageError
+// validators pass through unwrapped, and valid invocations are untouched.
+func TestWrapArgValidators(t *testing.T) {
+	root := &cobra.Command{Use: "root"}
+	exact := &cobra.Command{Use: "exact", Args: cobra.ExactArgs(1), RunE: func(*cobra.Command, []string) error { return nil }}
+	handRolled := &cobra.Command{Use: "hand", Args: func(_ *cobra.Command, args []string) error {
+		if len(args) != 1 {
+			return &errtypes.UsageError{Msg: "expected exactly one name"}
+		}
+		return nil
+	}}
+	root.AddCommand(exact)
+	root.AddCommand(handRolled)
+	wrapArgValidators(root)
+
+	if err := exact.Args(exact, []string{"one"}); err != nil {
+		t.Fatalf("valid arg count must pass: %v", err)
+	}
+
+	err := exact.Args(exact, nil)
+	var usageErr *errtypes.UsageError
+	if !errors.As(err, &usageErr) {
+		t.Fatalf("cobra arg-count violation must map to UsageError (exit 64), got %T: %v", err, err)
+	}
+	if exitCodeFor(err) != 64 {
+		t.Fatalf("exitCodeFor(wrapped arg-count error) = %d, want 64", exitCodeFor(err))
+	}
+
+	err = handRolled.Args(handRolled, nil)
+	if !errors.As(err, &usageErr) || usageErr.Msg != "expected exactly one name" {
+		t.Fatalf("hand-rolled UsageError must pass through unwrapped, got %v", err)
 	}
 }

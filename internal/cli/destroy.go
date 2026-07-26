@@ -15,7 +15,6 @@ import (
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/deploy"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/destroy"
-	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/infrastructure/terraform"
 	"github.com/qxtaiba/okdctl/internal/nodetypes"
@@ -181,7 +180,7 @@ func init() {
 	destroyCmd.Flags().BoolVar(&destroyKeepISOs, "keep-isos", false, "do not remove the FCOS ISO from the Proxmox host (always true for a scoped --target/--only destroy)")
 	destroyCmd.Flags().BoolVar(&destroyDryRun, flagDryRun, false, "preview terraform destroy plan without running destroy")
 	destroyCmd.Flags().StringVar(&destroyConfirmCluster, "confirm-cluster", "",
-		"required with --yes; must equal cfg.Cluster.Name (typo guard for scripted destroys)")
+		"required with --yes; must equal the config cluster name")
 	destroyCmd.Flags().BoolVar(&destroySkipTerraform, "skip-terraform", false, "skip terraform destroy — intended for resuming after a successful terraform-destroy phase (no-op with --dry-run)")
 	destroyCmd.Flags().BoolVar(&destroySkipCleanup, "skip-cleanup", false, "skip host file cleanup — leaves haproxy/dnsmasq config in place (no-op with --dry-run; always true for a scoped --target/--only destroy)")
 	destroyCmd.Flags().BoolVar(&destroySkipFirewall, "skip-firewall", false, "skip firewall rule cleanup (no-op with --dry-run; always true for a scoped --target/--only destroy)")
@@ -330,7 +329,7 @@ func runDestroy(cmd *cobra.Command, _ []string) error {
 	// tearing down. On partial/cancelled runs the workdir may survive
 	// root-owned; restore invoking-user ownership at exit so the user can
 	// inspect or retry.
-	workDir := filepath.Join(projectRoot, phase.WorkDirName)
+	workDir := filepath.Join(projectRoot, system.WorkDirName)
 	defer func() {
 		if chownErr := system.ChownTreeToInvokingUser(workDir); chownErr != nil {
 			tui.Warn("workdir chown back to user incomplete", tui.LF("err", chownErr))
@@ -383,8 +382,8 @@ func runDestroyDryRun(ctx context.Context, cfg *config.Config) error {
 	}
 	defer lock.Release()
 
-	tfEnv := phase.GetTerraformEnv(cfg)
-	terraformDir := phase.TerraformEnvDir(projectRoot, tfEnv)
+	tfEnv := cfg.TerraformEnvName()
+	terraformDir := system.TerraformEnvDir(projectRoot, tfEnv)
 
 	tfOpts := []terraform.Option{terraform.WithLogger(tui.SimpleLogger())}
 	if creds.IsValid() {

@@ -58,20 +58,20 @@ func renderAndWrite(render func() (string, error), path string, mode os.FileMode
 	return nil
 }
 
-// GenerateInstallConfig renders install-config.yaml into outputDir using
+// generateInstallConfig renders install-config.yaml into outputDir using
 // pull-secret and SSH key paths from cfg, then keeps a .backup copy before
 // openshift-install consumes the original during manifest generation.
-func (p *Phase) GenerateInstallConfig(ctx context.Context, cfg *config.Config, outputDir string) error {
+func (p *Phase) generateInstallConfig(ctx context.Context, cfg *config.Config, outputDir string) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
 	if err := system.EnsureDir(outputDir); err != nil {
-		return &errtypes.ConfigError{Msg: "failed to create output directory", Err: err}
+		return &errtypes.ConfigError{Msg: "create output directory", Err: err}
 	}
 
 	pullSecret, err := readNoFollow(cfg.Files.PullSecret)
 	if err != nil {
-		return &errtypes.AuthError{Msg: "failed to read pull secret", Err: err}
+		return &errtypes.AuthError{Msg: "read pull secret", Err: err}
 	}
 	defer zeroBytesFn(pullSecret)
 	if !json.Valid(pullSecret) {
@@ -80,7 +80,7 @@ func (p *Phase) GenerateInstallConfig(ctx context.Context, cfg *config.Config, o
 
 	sshKey, err := readNoFollow(cfg.Files.SSHPublicKey)
 	if err != nil {
-		return &errtypes.ConfigError{Msg: "failed to read SSH key", Err: err}
+		return &errtypes.ConfigError{Msg: "read SSH key", Err: err}
 	}
 
 	hostPrefix := cfg.Networking.HostPrefix
@@ -107,16 +107,24 @@ func (p *Phase) GenerateInstallConfig(ctx context.Context, cfg *config.Config, o
 		func() (string, error) { return templates.RenderInstallConfig(&data) },
 		outputPath, 0o600, "install-config.yaml",
 	); err != nil {
-		return &errtypes.ConfigError{Msg: "failed to render install-config.yaml", Err: err}
+		return &errtypes.ConfigError{Msg: "render install-config.yaml", Err: err}
 	}
 
 	// openshift-install consumes install-config.yaml during manifest generation;
-	// .backup is the rollback artifact and inherits the 0o600 on-disk gate. The
-	// in-memory pull-secret buffer is wiped via the defer above on every return
-	// path; deleting .backup once manifests succeed is tracked separately.
+	// .backup is the rollback artifact and inherits the 0o600 on-disk gate. It
+	// also doubles as generate-config's AlreadyDone sentinel, so it is written
+	// atomically — a torn copy would pass the existence guard and poison both
+	// resume and rollback. The in-memory pull-secret buffers are wiped via the
+	// defers on every return path; deleting .backup once manifests succeed is
+	// tracked separately.
+	rendered, err := os.ReadFile(outputPath)
+	if err != nil {
+		return &errtypes.ConfigError{Msg: "read install-config.yaml for backup", Err: err}
+	}
+	defer zeroBytesFn(rendered)
 	backupPath := outputPath + ".backup"
-	if err := system.CopyFileMode(outputPath, backupPath, 0o600); err != nil {
-		return &errtypes.ConfigError{Msg: "failed to backup install-config.yaml", Err: err}
+	if err := system.AtomicWrite(backupPath, rendered, 0o600); err != nil {
+		return &errtypes.ConfigError{Msg: "backup install-config.yaml", Err: err}
 	}
 
 	return nil
@@ -138,17 +146,47 @@ func IgnitionSentinel(clusterDir string) string {
 	return filepath.Join(clusterDir, ".ignition.complete")
 }
 
+// manifestsGenerated reports whether create manifests completed for
+// clusterDir. The ignition sentinel alone is proof: create ignition-configs
+// consumes manifests/ (taking ManifestsSentinel with it), so a resume after
+// a completed generate-ignition must not re-run create manifests.
+func manifestsGenerated(clusterDir string) bool {
+	if system.FileExists(IgnitionSentinel(clusterDir)) {
+		return true
+	}
+	return system.DirExists(filepath.Join(clusterDir, "manifests")) &&
+		system.FileExists(ManifestsSentinel(clusterDir))
+}
+
+// restoreInstallConfigFromBackup re-materializes install-config.yaml from
+// its .backup when a prior run consumed it: openshift-install deletes the
+// file during create manifests, so a resume that re-runs the step would
+// otherwise hard-fail with no install-config. No-op when the original is
+// present or no backup exists.
+func restoreInstallConfigFromBackup(clusterDir string) error {
+	outputPath := filepath.Join(clusterDir, "install-config.yaml")
+	backupPath := outputPath + ".backup"
+	if system.FileExists(outputPath) || !system.FileExists(backupPath) {
+		return nil
+	}
+	return system.CopyFileMode(backupPath, outputPath, 0o600)
+}
+
 // GenerateManifests invokes "openshift-install create manifests" to expand
 // install-config.yaml into the full manifest set under clusterDir, then
 // writes ManifestsSentinel to mark a clean completion.
 func (p *Phase) GenerateManifests(ctx context.Context, clusterDir string) error {
+	if err := restoreInstallConfigFromBackup(clusterDir); err != nil {
+		return &errtypes.ConfigError{Msg: "restore install-config.yaml from backup", Err: err}
+	}
+
 	_, err := p.Exec.RunChecked(ctx, openshiftInstallBin, "create", "manifests", "--dir", clusterDir)
 	if err != nil {
 		return &errtypes.ClusterError{Msg: "openshift-install create manifests failed", Err: err}
 	}
 
 	if err := system.AtomicWrite(ManifestsSentinel(clusterDir), nil, 0o644); err != nil {
-		return &errtypes.ClusterError{Msg: "failed to write manifests sentinel", Err: err}
+		return &errtypes.ClusterError{Msg: "write manifests sentinel", Err: err}
 	}
 	return nil
 }
@@ -165,12 +203,12 @@ func (p *Phase) InjectCustomManifests(ctx context.Context, projectRoot, clusterD
 
 	entries, err := os.ReadDir(customDir)
 	if err != nil {
-		return 0, &errtypes.ConfigError{Msg: "failed to read custom manifests directory", Err: err}
+		return 0, &errtypes.ConfigError{Msg: "read custom manifests directory", Err: err}
 	}
 
 	openshiftDir := filepath.Join(clusterDir, openshiftSubdir)
 	if err := system.EnsureDir(openshiftDir); err != nil {
-		return 0, &errtypes.ConfigError{Msg: "failed to ensure openshift manifests directory", Err: err}
+		return 0, &errtypes.ConfigError{Msg: "ensure openshift manifests directory", Err: err}
 	}
 
 	count := 0
@@ -191,7 +229,7 @@ func (p *Phase) InjectCustomManifests(ctx context.Context, projectRoot, clusterD
 		destPath := filepath.Join(openshiftDir, name)
 
 		if err := system.CopyFile(srcPath, destPath); err != nil {
-			return count, &errtypes.ConfigError{Msg: fmt.Sprintf("failed to inject %s", name), Err: err}
+			return count, &errtypes.ConfigError{Msg: fmt.Sprintf("inject %s", name), Err: err}
 		}
 		count++
 	}
@@ -212,7 +250,7 @@ func (p *Phase) InjectCompactClusterManifests(ctx context.Context, clusterDir st
 
 	openshiftDir := filepath.Join(clusterDir, openshiftSubdir)
 	if err := system.EnsureDir(openshiftDir); err != nil {
-		return &errtypes.ConfigError{Msg: "failed to ensure openshift manifests directory", Err: err}
+		return &errtypes.ConfigError{Msg: "ensure openshift manifests directory", Err: err}
 	}
 
 	destPath := filepath.Join(openshiftDir, "99-ingress-controller-master-placement.yaml")
@@ -222,7 +260,7 @@ func (p *Phase) InjectCompactClusterManifests(ctx context.Context, clusterDir st
 		},
 		destPath, 0o644, "compact cluster ingress manifest",
 	); err != nil {
-		return &errtypes.ConfigError{Msg: "failed to render compact cluster ingress manifest", Err: err}
+		return &errtypes.ConfigError{Msg: "render compact cluster ingress manifest", Err: err}
 	}
 	return nil
 }
@@ -241,7 +279,7 @@ func (p *Phase) GenerateIgnitionConfigs(ctx context.Context, clusterDir string) 
 	}
 
 	if err := system.AtomicWrite(IgnitionSentinel(clusterDir), nil, 0o644); err != nil {
-		return &errtypes.ClusterError{Msg: "failed to write ignition sentinel", Err: err}
+		return &errtypes.ClusterError{Msg: "write ignition sentinel", Err: err}
 	}
 	return nil
 }
@@ -265,7 +303,7 @@ func (p *Phase) ValidateIgnitionFiles(ctx context.Context, clusterDir string) er
 			if errors.Is(err, os.ErrNotExist) {
 				return &errtypes.ConfigError{Msg: fmt.Sprintf("%s was not generated", file)}
 			}
-			return &errtypes.ConfigError{Msg: fmt.Sprintf("failed to stat %s", file), Err: err}
+			return &errtypes.ConfigError{Msg: fmt.Sprintf("stat %s", file), Err: err}
 		}
 
 		if info.Size() < minSize {
@@ -274,7 +312,7 @@ func (p *Phase) ValidateIgnitionFiles(ctx context.Context, clusterDir string) er
 
 		content, err := os.ReadFile(path)
 		if err != nil {
-			return &errtypes.ConfigError{Msg: fmt.Sprintf("failed to read %s", file), Err: err}
+			return &errtypes.ConfigError{Msg: fmt.Sprintf("read %s", file), Err: err}
 		}
 
 		var js json.RawMessage

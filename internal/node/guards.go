@@ -3,7 +3,7 @@ package node
 import (
 	"fmt"
 	"log/slog"
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/qxtaiba/okdctl/internal/cluster"
@@ -75,7 +75,7 @@ func podNamesOnNode(pods []cluster.PodPlacement, node string) []string {
 			names = append(names, p.Namespace+"/"+p.Name)
 		}
 	}
-	sort.Strings(names)
+	slices.Sort(names)
 	return names
 }
 
@@ -93,7 +93,8 @@ func storageGuardVerdict(node string, osds []string, force bool, log *slog.Logge
 	}
 	return &errtypes.ConfigError{Msg: fmt.Sprintf(
 		"%s holds %d rook-ceph OSD(s) (%v); removing it destroys its CEPH-DATA disk and loses that data. Migrate OSDs off it first, or re-run with --force-storage.",
-		node, len(osds), osds)}
+		node, len(osds), osds,
+	)}
 }
 
 // projectCompactPeakMiB simulates compact's interleaved sequence (remove a
@@ -108,21 +109,17 @@ func projectCompactPeakMiB(allocatedMiB, workerMiB, masterCurMiB, growTargetMiB,
 	}
 	peak := allocatedMiB
 	grows := 0
-	for i := 0; i < numWorkers; i++ {
+	for range numWorkers {
 		allocatedMiB -= workerMiB
 		if growTargetMiB > 0 && grows < numMasters {
 			allocatedMiB += masterDelta
 			grows++
 		}
-		if allocatedMiB > peak {
-			peak = allocatedMiB
-		}
+		peak = max(peak, allocatedMiB)
 	}
 	for ; growTargetMiB > 0 && grows < numMasters; grows++ {
 		allocatedMiB += masterDelta
-		if allocatedMiB > peak {
-			peak = allocatedMiB
-		}
+		peak = max(peak, allocatedMiB)
 	}
 	return peak
 }

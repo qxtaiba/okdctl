@@ -42,7 +42,7 @@ func dottedKV(key, value string, keyColWidth int, opts dottedKVOpts) string {
 		}
 	}
 
-	return Downsample(result)
+	return downsample(result)
 }
 
 // DottedKeyValueFull renders "key ....... value" padded to totalWidth.

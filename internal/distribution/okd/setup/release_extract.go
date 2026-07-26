@@ -62,21 +62,23 @@ func (p *Phase) bootstrapOC(ctx context.Context, downloadDir string) (string, er
 	archivePath := filepath.Join(downloadDir, assetName)
 	p.Log.Info("tools: fetching bootstrap oc", "url", tarballURL)
 
-	if err := download.Fetch(ctx, tarballURL, archivePath,
+	if err := download.Fetch(
+		ctx, tarballURL, archivePath,
 		download.WithFetchChecksum(bootstrapOCChecksum),
 		download.WithDescription("bootstrap-oc"),
 		download.WithTimeout(3*time.Minute),
 		download.WithLogger(p.Log),
 		download.WithProgress(tui.ProgressBarsEnabled()),
 	); err != nil {
-		return "", &errtypes.NetworkError{Msg: "failed to download bootstrap oc", Err: err}
+		return "", &errtypes.NetworkError{Msg: "download bootstrap oc", Err: err}
 	}
 
-	if err := download.ExtractTarGz(ctx, archivePath, downloadDir,
+	if err := download.ExtractTarGz(
+		ctx, archivePath, downloadDir,
 		download.WithExtractCleanupArchive(true),
 		download.WithExtractLogger(p.Log),
 	); err != nil {
-		return "", &errtypes.NetworkError{Msg: "failed to extract bootstrap oc", Err: err}
+		return "", &errtypes.NetworkError{Msg: "extract bootstrap oc", Err: err}
 	}
 
 	fi, statErr := os.Stat(ocPath)
@@ -115,7 +117,8 @@ func (p *Phase) extractReleaseImage(ctx context.Context, ocPath, ref, destDir st
 	extractCtx, cancel := context.WithTimeout(ctx, ocExtractTimeout)
 	defer cancel()
 
-	result, err := p.Exec.RunStreamed(extractCtx, ocPath,
+	result, err := p.Exec.RunStreamed(
+		extractCtx, ocPath,
 		"adm", "release", "extract",
 		"--tools", ref,
 		"--to", destDir,
@@ -140,6 +143,8 @@ func (p *Phase) extractReleaseImage(ctx context.Context, ocPath, ref, destDir st
 		return &errtypes.ClusterError{Msg: fmt.Sprintf("release extract failed for %s", ref), Err: execErr}
 	}
 
+	p.Log.Info("tools: release extract completed", "ref", ref, "duration", result.Duration)
+
 	return extractReleaseTarballs(ctx, destDir, p.Log)
 }
 
@@ -157,7 +162,8 @@ func extractReleaseTarballs(ctx context.Context, destDir string, logger *slog.Lo
 		return fmt.Errorf("glob release tarballs: %w", err)
 	}
 	for _, archivePath := range matches {
-		if err := download.ExtractTarGz(ctx, archivePath, destDir,
+		if err := download.ExtractTarGz(
+			ctx, archivePath, destDir,
 			download.WithExtractCleanupArchive(true),
 		); err != nil {
 			return fmt.Errorf("extract %s: %w", filepath.Base(archivePath), err)
