@@ -30,6 +30,14 @@ const (
 	DefaultIngressLBTimeout  = 10 * time.Minute
 	defaultConversionTimeout = 5 * time.Minute
 	routerGonePollInterval   = 5 * time.Second
+	ingressRollbackTimeout   = 2 * time.Minute
+)
+
+// On-disk backup artifact for the delete-to-create window of
+// convertToLoadBalancer: <cluster-config>/ingresscontroller-<name>.backup.json.
+const (
+	ingressBackupPrefix = "ingresscontroller-"
+	ingressBackupSuffix = ".backup.json"
 )
 
 // UpdateIngressOptions configures the update-ingress flow. ConfirmConversion
@@ -95,6 +103,13 @@ func (p *Phase) UpdateIngress(ctx context.Context, cfg *config.Config, opts Upda
 		p.Log.Warn("update-ingress: cluster unreachable — reconciling bootstrap dns to kube-vip only",
 			"err", err)
 		return p.reconcileBootstrapDNSOnly(ctx, cfg, vip)
+	}
+
+	if restored := p.restoreOrphanedIngressBackups(ctx, opts.WorkDir, controllers); restored > 0 {
+		controllers, err = p.discoverIngressControllers(ctx)
+		if err != nil {
+			return nil, &errtypes.ClusterError{Msg: "re-discover IngressControllers after backup restore", Err: err}
+		}
 	}
 
 	if len(controllers) == 0 {
@@ -274,8 +289,12 @@ func (p *Phase) finalizeIngress(
 		p.Log.Info("update-ingress: removing haproxy from bastion")
 		if err := p.RemoveHAProxy(ctx, vip, phase.ClusterConfigDir(opts.WorkDir)); err != nil {
 			p.Log.Warn("update-ingress: haproxy removal failed — rolling back dns to bootstrap", "err", err)
+			// Detached from ctx: a Ctrl-C during haproxy removal would
+			// otherwise doom the dns rollback before it starts.
+			rbCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), ingressRollbackTimeout)
+			defer cancel()
 			dnsRolledBack := false
-			if rbErr := deployBootstrapDNSFn(ctx, cfg); rbErr != nil {
+			if rbErr := deployBootstrapDNSFn(rbCtx, cfg); rbErr != nil {
 				p.Log.Warn("update-ingress: dns rollback to bootstrap failed", "err", rbErr)
 			} else {
 				dnsRolledBack = true
@@ -344,7 +363,7 @@ func (p *Phase) handleHostNetworkConversion(
 	for i := range hostNetworkICs {
 		ic := &hostNetworkICs[i]
 		p.Log.Info("update-ingress: converting from hostnetwork to loadbalancerservice", "name", ic.Name)
-		if err := p.convertToLoadBalancer(ctx, ic, timeout); err != nil {
+		if err := p.convertToLoadBalancer(ctx, ic, timeout, ingressBackupPath(opts.WorkDir, ic.Name)); err != nil {
 			return convertedCount, names, &errtypes.ClusterError{Msg: fmt.Sprintf("failed to convert IngressController %q", ic.Name), Err: err}
 		}
 		names[ic.Name] = true
@@ -459,15 +478,28 @@ func (p *Phase) checkMetalLBAvailable(ctx context.Context) (bool, error) {
 	return true, nil
 }
 
-func (p *Phase) convertToLoadBalancer(ctx context.Context, ic *ingressControllerInfo, timeout time.Duration) error {
+func (p *Phase) convertToLoadBalancer(ctx context.Context, ic *ingressControllerInfo, timeout time.Duration, backupPath string) error {
 	replacementJSON, err := buildLBIngressController(ic)
 	if err != nil {
 		return &errtypes.ClusterError{Msg: "failed to build replacement IngressController", Err: err}
 	}
 
+	// The delete below removes the only live copy of the controller spec, so
+	// a create-ready original is persisted on disk first: a crash in the
+	// delete-to-create window leaves a restorable artifact that the next
+	// UpdateIngress run re-creates via restoreOrphanedIngressBackups.
+	rollbackJSON, err := buildRollbackJSON(ic)
+	if err != nil {
+		return &errtypes.ClusterError{Msg: fmt.Sprintf("build rollback payload for IngressController %q; refusing to delete without a recovery copy", ic.Name), Err: err}
+	}
+	if err := p.writeIngressBackup(backupPath, rollbackJSON); err != nil {
+		return &errtypes.ClusterError{Msg: fmt.Sprintf("write on-disk backup for IngressController %q; refusing to delete without a recovery copy", ic.Name), Err: err}
+	}
+
 	_, err = p.OcOutput(ctx, "delete", "ingresscontroller", ic.Name,
 		"-n", "openshift-ingress-operator")
 	if err != nil {
+		p.removeIngressBackup(backupPath)
 		return &errtypes.ClusterError{Msg: fmt.Sprintf("failed to delete IngressController %q", ic.Name), Err: err}
 	}
 
@@ -480,13 +512,111 @@ func (p *Phase) convertToLoadBalancer(ctx context.Context, ic *ingressController
 	_, err = p.Exec.RunWithStdinChecked(ctx, replacementJSON, "oc", "create", "-f", "-")
 	if err != nil {
 		p.Log.Warn("update-ingress: failed to create replacement, attempting rollback", "err", err)
-		if rbErr := p.attemptRollback(ctx, ic); rbErr != nil {
+		// Detached from ctx: cancellation may be exactly why the create
+		// failed, and a rollback under a cancelled ctx dies before it starts,
+		// leaving no IngressController (see internal/node/add.go ignition
+		// teardown for the pattern).
+		rbCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), ingressRollbackTimeout)
+		defer cancel()
+		if rbErr := p.attemptRollback(rbCtx, ic); rbErr != nil {
 			return &errtypes.ClusterError{Msg: "failed to create replacement IngressController; rollback also failed", Err: errors.Join(err, rbErr)}
 		}
+		p.removeIngressBackup(backupPath)
 		return &errtypes.ClusterError{Msg: "failed to create replacement IngressController", Err: err}
 	}
 
+	p.removeIngressBackup(backupPath)
 	return nil
+}
+
+// ingressBackupPath returns the on-disk backup path for controller name, or
+// "" when workDir is unknown (direct test callers), in which case the
+// backup is skipped.
+func ingressBackupPath(workDir, name string) string {
+	if workDir == "" {
+		return ""
+	}
+	return filepath.Join(phase.ClusterConfigDir(workDir), ingressBackupPrefix+name+ingressBackupSuffix)
+}
+
+// ingressBackupControllerName extracts the controller name from a backup
+// path, or "" when the path does not match the backup naming scheme.
+func ingressBackupControllerName(path string) string {
+	base := filepath.Base(path)
+	if !strings.HasPrefix(base, ingressBackupPrefix) || !strings.HasSuffix(base, ingressBackupSuffix) {
+		return ""
+	}
+	return strings.TrimSuffix(strings.TrimPrefix(base, ingressBackupPrefix), ingressBackupSuffix)
+}
+
+func (p *Phase) writeIngressBackup(path, payload string) error {
+	if path == "" {
+		p.Log.Warn("update-ingress: no workdir configured — proceeding without an on-disk IngressController backup")
+		return nil
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	if err := system.AtomicWriteString(path, payload, 0o600); err != nil {
+		return err
+	}
+	p.Log.Info("update-ingress: original IngressController backed up", "path", path)
+	return nil
+}
+
+func (p *Phase) removeIngressBackup(path string) {
+	if path == "" {
+		return
+	}
+	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+		p.Log.Warn("update-ingress: could not remove IngressController backup", "path", path, "err", err)
+	}
+}
+
+// restoreOrphanedIngressBackups re-creates IngressControllers from on-disk
+// backups left by a convertToLoadBalancer run that died in its
+// delete-to-create window. A backup whose controller exists again is stale
+// and removed; a restore failure keeps the backup file and logs a warning.
+// Returns the number of controllers restored.
+func (p *Phase) restoreOrphanedIngressBackups(ctx context.Context, workDir string, controllers []ingressControllerInfo) int {
+	if workDir == "" {
+		return 0
+	}
+	matches, err := filepath.Glob(filepath.Join(phase.ClusterConfigDir(workDir), ingressBackupPrefix+"*"+ingressBackupSuffix))
+	if err != nil || len(matches) == 0 {
+		return 0
+	}
+	present := make(map[string]bool, len(controllers))
+	for _, ic := range controllers {
+		present[ic.Name] = true
+	}
+	restored := 0
+	for _, path := range matches {
+		name := ingressBackupControllerName(path)
+		if name == "" {
+			continue
+		}
+		if present[name] {
+			p.removeIngressBackup(path)
+			continue
+		}
+		data, readErr := os.ReadFile(path)
+		if readErr != nil {
+			p.Log.Warn("update-ingress: could not read IngressController backup", "path", path, "err", readErr)
+			continue
+		}
+		p.Log.Warn("update-ingress: found on-disk backup for missing controller — restoring", "name", name)
+		result, runErr := p.Exec.RunWithStdin(ctx, string(data), "oc", "create", "-f", "-")
+		if runErr != nil || result.ExitCode != 0 {
+			p.Log.Warn("update-ingress: restore from backup failed — keeping backup file",
+				"name", name, "path", path, "err", runErr, "stderr", logutil.RedactableStderr(result.Stderr))
+			continue
+		}
+		p.Log.Info("update-ingress: controller restored from backup", "name", name)
+		p.removeIngressBackup(path)
+		restored++
+	}
+	return restored
 }
 
 func buildLBIngressController(ic *ingressControllerInfo) (string, error) {
