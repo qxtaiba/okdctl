@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
@@ -239,8 +240,14 @@ func DeployProduction(ctx context.Context, cfg *config.Config, appsIP, kubeVipIP
 	return nil
 }
 
+// recoveryRestartTimeout bounds the best-effort dnsmasq restart issued after
+// a failed restart forced a config restore.
+const recoveryRestartTimeout = 30 * time.Second
+
 // validateAndRestartDnsmasq validates the dnsmasq config, then restarts the service.
-// On validation or restart failure, it restores the previous config from the .backup file.
+// On validation or restart failure, it restores the previous config from the .backup
+// file; a restart failure additionally re-restarts dnsmasq so the running service
+// converges to the restored config.
 func validateAndRestartDnsmasq(ctx context.Context, configName string) error {
 	configPath, err := DnsmasqConfigPath(configName)
 	if err != nil {
@@ -264,7 +271,16 @@ func validateAndRestartDnsmasq(ctx context.Context, configName string) error {
 
 	if err := restartDnsmasqFn(ctx); err != nil {
 		restore()
-		return fmt.Errorf("restart dnsmasq — previous config restored: %w", err)
+		// Restart once more so the running service converges to the restored
+		// config instead of staying down (or up on the rejected one). Detached
+		// from ctx: a Ctrl-C that killed the first restart would otherwise
+		// doom the recovery restart before it starts.
+		rCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), recoveryRestartTimeout)
+		defer cancel()
+		if rErr := restartDnsmasqFn(rCtx); rErr != nil {
+			return fmt.Errorf("restart dnsmasq — previous config restored on disk but dnsmasq restart with it also failed: %w", errors.Join(err, rErr))
+		}
+		return fmt.Errorf("restart dnsmasq — previous config restored and service restarted with it: %w", err)
 	}
 
 	// Successful restart — clean up backup.

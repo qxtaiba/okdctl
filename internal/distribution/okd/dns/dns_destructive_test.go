@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -138,6 +139,91 @@ func TestValidateAndRestartDnsmasq(t *testing.T) {
 
 		if _, statErr := os.Stat(backupPath); !os.IsNotExist(statErr) {
 			t.Errorf("expected backup to remain absent, stat err = %v", statErr)
+		}
+	})
+}
+
+// TestValidateAndRestartDnsmasq_RecoveryRestart covers the restart-failure
+// branch: after restoring the backup the service is restarted once more so
+// the running dnsmasq converges to the restored config, even when the caller
+// ctx is already cancelled.
+func TestValidateAndRestartDnsmasq_RecoveryRestart(t *testing.T) {
+	errRestart := errors.New("restart failed")
+
+	const clusterName = "okd-test"
+
+	setup := func(t *testing.T) {
+		t.Helper()
+		dir := t.TempDir()
+		origDir := dnsmasqConfigDir
+		dnsmasqConfigDir = dir
+		t.Cleanup(func() { dnsmasqConfigDir = origDir })
+		confPath := filepath.Join(dir, clusterName+".conf")
+		if err := os.WriteFile(confPath, []byte("live\n"), 0o644); err != nil {
+			t.Fatalf("seed live config: %v", err)
+		}
+		if err := os.WriteFile(confPath+".backup", []byte("backup\n"), 0o644); err != nil {
+			t.Fatalf("seed backup: %v", err)
+		}
+	}
+
+	t.Run("recovery_restart_attempted_and_succeeds", func(t *testing.T) {
+		setup(t)
+		origV := validateDnsmasqConfigFn
+		origR := restartDnsmasqFn
+		t.Cleanup(func() {
+			validateDnsmasqConfigFn = origV
+			restartDnsmasqFn = origR
+		})
+		validateDnsmasqConfigFn = func(context.Context) error { return nil }
+
+		calls := 0
+		var recoveryCtxErr error
+		restartDnsmasqFn = func(ctx context.Context) error {
+			calls++
+			if calls == 1 {
+				return errRestart
+			}
+			recoveryCtxErr = ctx.Err()
+			return nil
+		}
+
+		// Cancelled parent ctx: the recovery restart must still run.
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+
+		err := validateAndRestartDnsmasq(ctx, clusterName)
+		if err == nil {
+			t.Fatal("expected non-nil error, got nil")
+		}
+		if !errors.Is(err, errRestart) {
+			t.Errorf("errors.Is(err, errRestart) = false; got: %v", err)
+		}
+		if calls != 2 {
+			t.Errorf("restart calls = %d; want 2 (failed restart + recovery restart)", calls)
+		}
+		if recoveryCtxErr != nil {
+			t.Errorf("recovery restart ran under a cancelled ctx: %v", recoveryCtxErr)
+		}
+	})
+
+	t.Run("recovery_restart_failure_reported", func(t *testing.T) {
+		setup(t)
+		origV := validateDnsmasqConfigFn
+		origR := restartDnsmasqFn
+		t.Cleanup(func() {
+			validateDnsmasqConfigFn = origV
+			restartDnsmasqFn = origR
+		})
+		validateDnsmasqConfigFn = func(context.Context) error { return nil }
+		restartDnsmasqFn = func(context.Context) error { return errRestart }
+
+		err := validateAndRestartDnsmasq(context.Background(), clusterName)
+		if err == nil {
+			t.Fatal("expected non-nil error, got nil")
+		}
+		if !strings.Contains(err.Error(), "also failed") {
+			t.Errorf("error %q must report the failed recovery restart", err)
 		}
 	})
 }
