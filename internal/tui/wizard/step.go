@@ -72,6 +72,14 @@ type HelpProvider interface {
 	ShortHelp() []KeyBinding
 }
 
+// QuitGuard is implemented by steps that must intercept ctrl+c — e.g. a
+// live-execution step that turns the first press into a graceful cancel.
+// InterceptQuit returning true consumes the keypress; false lets the
+// wizard quit normally.
+type QuitGuard interface {
+	InterceptQuit() bool
+}
+
 // DescribedStep is implemented by steps that supply descriptive header text.
 type DescribedStep interface {
 	Description() string
