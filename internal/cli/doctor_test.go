@@ -2,6 +2,7 @@ package cli
 
 import (
 	"errors"
+	"runtime"
 	"testing"
 
 	"github.com/qxtaiba/okdctl/internal/errtypes"
@@ -55,5 +56,19 @@ func TestDoctorExitErr_ExitCodeMapping(t *testing.T) {
 				t.Errorf("exit code = %d; want %d", got, tc.want)
 			}
 		})
+	}
+}
+
+// TestRunDoctorNonLinuxGateIsUsageError verifies the dev-host-only OS gate
+// maps to UsageError (exit 64) like the other invalid-invocation gates.
+// Meaningful only off the shipped linux targets, so it skips there.
+func TestRunDoctorNonLinuxGateIsUsageError(t *testing.T) {
+	if runtime.GOOS == "linux" {
+		t.Skip("gate is unreachable on linux")
+	}
+	err := runDoctor(doctorCmd, nil)
+	var usageErr *errtypes.UsageError
+	if !errors.As(err, &usageErr) {
+		t.Fatalf("want *errtypes.UsageError (exit 64), got %T: %v", err, err)
 	}
 }

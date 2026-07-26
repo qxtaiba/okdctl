@@ -56,8 +56,10 @@ type doctorJSONOutput struct {
 func runDoctor(cmd *cobra.Command, _ []string) error {
 	// Runtime gate rather than a build tag so the check pipeline compiles,
 	// lints, and tests on darwin dev hosts; doctor still refuses to run there.
+	// UsageError (64) matches the other invalid-invocation gates; the branch
+	// is dead on the shipped linux targets.
 	if runtime.GOOS != "linux" {
-		return fmt.Errorf("okdctl doctor is only supported on linux (current: %s)", runtime.GOOS)
+		return &errtypes.UsageError{Msg: fmt.Sprintf("okdctl doctor is only supported on linux (current: %s)", runtime.GOOS)}
 	}
 	if err := validateFormat(doctorOutput); err != nil {
 		return err
