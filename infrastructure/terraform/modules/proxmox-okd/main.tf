@@ -205,6 +205,24 @@ resource "proxmox_virtual_environment_vm" "master" {
     }
   }
 
+  # Dedicated ceph mon-store disk, terraform-managed (intentionally NOT in
+  # ignore_changes, same as the OSD disk above) so it can be attached to a
+  # running master post-creation; a machineconfig mounts it at /var/lib/rook.
+  # INVARIANT: only ever add or grow master_mon_disk_size_gb — decreasing it
+  # makes terraform destroy the disk and lose the mon store on it.
+  dynamic "disk" {
+    for_each = var.master_mon_disk_size_gb >= var.minimum_data_disk_size_gb && var.master_mon_disk_size_gb > 0 ? [1] : []
+    content {
+      datastore_id = var.data_storage
+      size         = var.master_mon_disk_size_gb
+      interface    = "scsi2"
+      iothread     = true
+      ssd          = false
+      discard      = "on"
+      serial       = "MON-DATA"
+    }
+  }
+
   cdrom {
     file_id   = var.master_isos[count.index]
     interface = "ide2"

@@ -121,6 +121,15 @@ variable "master_data_disk_size_gb" {
   default     = 0
 }
 
+# master_mon_disk_size_gb is exposed so the mon-disk runbook can give the
+# masters a dedicated /var/lib/rook disk (scsi2). Default 0 keeps the disk
+# absent; the module omits it entirely when this is 0.
+variable "master_mon_disk_size_gb" {
+  description = "size of dedicated mon-store disk for master nodes in gb (0 = no mon disk)"
+  type        = number
+  default     = 0
+}
+
 
 # =============================================================================
 # NODE NAMES
