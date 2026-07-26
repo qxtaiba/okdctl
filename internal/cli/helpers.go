@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/credentials"
@@ -202,12 +203,10 @@ func resolveProjectRootOrDie() (string, error) {
 // markers: the configured config-file name or okdctl.env. Both are
 // exclusively written by okdctl inside a project root.
 func hasPrimaryMarker(root string) bool {
-	for _, name := range []string{filepath.Base(cfgFile), "okdctl.env"} {
-		if _, err := os.Stat(filepath.Join(root, name)); err == nil {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc([]string{filepath.Base(cfgFile), "okdctl.env"}, func(name string) bool {
+		_, err := os.Stat(filepath.Join(root, name))
+		return err == nil
+	})
 }
 
 func terraformStateMatches(root string) []string {

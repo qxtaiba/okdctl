@@ -219,13 +219,10 @@ func checkBinaries(_ context.Context) Result {
 
 	// Apache binary name varies by distro: httpd on rhel-family, apache2
 	// on debian-family. If either is on PATH, treat apache as installed.
-	apacheFound := false
-	for _, bin := range []string{"httpd", "apache2"} {
-		if _, err := exec.LookPath(bin); err == nil {
-			apacheFound = true
-			break
-		}
-	}
+	apacheFound := slices.ContainsFunc([]string{"httpd", "apache2"}, func(bin string) bool {
+		_, err := exec.LookPath(bin)
+		return err == nil
+	})
 	if apacheFound {
 		items = append(items, Item{Sev: Pass, Name: "apache"})
 	} else {

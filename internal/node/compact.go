@@ -1,10 +1,11 @@
 package node
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"log/slog"
-	"sort"
+	"slices"
 	"strconv"
 
 	"github.com/qxtaiba/okdctl/internal/cluster"
@@ -430,11 +431,11 @@ func namesByIndex(nodes []cluster.NodeDetail, role nodetypes.NodeRole, ascending
 		}
 		items = append(items, ni{name: n.Name, idx: idx})
 	}
-	sort.Slice(items, func(i, j int) bool {
+	slices.SortFunc(items, func(a, b ni) int {
 		if ascending {
-			return items[i].idx < items[j].idx
+			return cmp.Compare(a.idx, b.idx)
 		}
-		return items[i].idx > items[j].idx
+		return cmp.Compare(b.idx, a.idx)
 	})
 	names := make([]string, len(items))
 	for i, it := range items {

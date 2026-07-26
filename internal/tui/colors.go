@@ -2,6 +2,7 @@ package tui
 
 import (
 	"os"
+	"slices"
 
 	"charm.land/lipgloss/v2"
 )
@@ -91,12 +92,10 @@ func setTheme(theme ColorTheme) {
 // highContrastRequested checks OKDCTL_HIGH_CONTRAST and the legacy
 // HOMELAB_HIGH_CONTRAST (kept working for existing scripts/dotfiles).
 func highContrastRequested() bool {
-	for _, name := range []string{"OKDCTL_HIGH_CONTRAST", "HOMELAB_HIGH_CONTRAST"} {
-		if v := os.Getenv(name); v == "1" || v == "true" {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc([]string{"OKDCTL_HIGH_CONTRAST", "HOMELAB_HIGH_CONTRAST"}, func(name string) bool {
+		v := os.Getenv(name)
+		return v == "1" || v == "true"
+	})
 }
 
 func init() {

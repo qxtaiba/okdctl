@@ -3,7 +3,7 @@ package node
 import (
 	"fmt"
 	"log/slog"
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/qxtaiba/okdctl/internal/cluster"
@@ -75,7 +75,7 @@ func podNamesOnNode(pods []cluster.PodPlacement, node string) []string {
 			names = append(names, p.Namespace+"/"+p.Name)
 		}
 	}
-	sort.Strings(names)
+	slices.Sort(names)
 	return names
 }
 

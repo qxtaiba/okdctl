@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"maps"
 	"path/filepath"
 	"time"
 
@@ -310,9 +311,7 @@ func nodeOpPlanVars(planVars map[string]string) map[string]string {
 		"bootstrap_enabled":         "false",
 		"start_workers_immediately": "true",
 	}
-	for k, v := range planVars {
-		vars[k] = v
-	}
+	maps.Copy(vars, planVars)
 	return vars
 }
 

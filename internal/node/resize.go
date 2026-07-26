@@ -1,9 +1,10 @@
 package node
 
 import (
+	"cmp"
 	"context"
 	"fmt"
-	"sort"
+	"slices"
 	"strconv"
 
 	"github.com/qxtaiba/okdctl/internal/cluster"
@@ -224,7 +225,7 @@ func resolveResizeTargets(nodes []cluster.NodeDetail, scope ResizeScope) ([]resi
 	if len(targets) == 0 {
 		return nil, "", fmt.Errorf("no %s nodes found to resize", scope.Role)
 	}
-	sort.Slice(targets, func(i, j int) bool { return targets[i].index < targets[j].index })
+	slices.SortFunc(targets, func(a, b resizeTarget) int { return cmp.Compare(a.index, b.index) })
 	return targets, scope.Role, nil
 }
 

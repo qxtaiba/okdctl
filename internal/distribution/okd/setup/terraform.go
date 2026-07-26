@@ -7,7 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -258,7 +258,7 @@ func ReadTerraformVarsSizing(envDir string) (sizing TerraformVarsSizing, found b
 		*dst = v
 	}
 	if len(missing) > 0 {
-		sort.Strings(missing)
+		slices.Sort(missing)
 		return TerraformVarsSizing{}, false, fmt.Errorf("parse terraform.tfvars: missing sizing key(s) %s", strings.Join(missing, ", "))
 	}
 	return sizing, true, nil
