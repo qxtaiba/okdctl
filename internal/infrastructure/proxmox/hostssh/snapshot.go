@@ -60,9 +60,9 @@ func validateVMID(vmid int) error {
 }
 
 // ValidateSnapshotName enforces the pve-configid grammar Proxmox itself
-// requires for a snapshot name. This doubles as the shell-injection guard
-// for every path built with the name (SSHRunArgv does not sanitize argv
-// atoms against the remote login shell — see ssh.go).
+// requires for a snapshot name. This is the authoritative shell-injection
+// guard for every path built with the name; SSHRunArgv's shell-safe-atom
+// check (ssh.go) is only a fail-closed backstop.
 func ValidateSnapshotName(name string) error {
 	if name == "" {
 		return fmt.Errorf("must not be empty")

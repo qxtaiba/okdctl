@@ -47,12 +47,18 @@ func SSHRun(ctx context.Context, exec *executor.Executor, host, knownHostsPath, 
 // SSHRunArgv passes each argv element to ssh as a separate non-option
 // argument. ssh(1) joins the trailing args with spaces and sends one
 // command string to the remote login shell — argv mode does NOT bypass
-// the shell. Callers MUST validate every atom for shell metacharacters
-// before calling; pveshRun is the canonical example.
+// the shell. Callers MUST still validate every atom semantically before
+// calling (pveshRun is the canonical example); as a fail-closed backstop,
+// any atom containing a character outside [A-Za-z0-9@%+=:,./_-] is
+// rejected here before ssh runs, so an unvalidated future caller cannot
+// reintroduce remote injection.
 //
 // When knownHostsPath is non-empty the connection enforces strict host-key
 // checking. When empty, accept-new TOFU applies.
 func SSHRunArgv(ctx context.Context, exec *executor.Executor, host, knownHostsPath string, argv ...string) (*executor.Result, error) {
+	if err := validateArgvAtoms(argv); err != nil {
+		return nil, fmt.Errorf("ssh %s: %w", host, err)
+	}
 	args := sshBaseArgs(host, knownHostsPath)
 	args = append(args, argv...)
 	result, err := exec.Run(ctx, "ssh", args...)
@@ -78,8 +84,11 @@ func SSHRunOutput(ctx context.Context, exec *executor.Executor, host, knownHosts
 
 // SSHRunArgvOutput is SSHRunArgv with full stdout capture (Executor.RunOutput)
 // instead of the ring-truncated tail, for callers that parse stdout as JSON.
-// Same non-zero-exit and argv-mode shell-injection semantics as SSHRunArgv.
+// Same non-zero-exit, argv-mode, and shell-safe-atom semantics as SSHRunArgv.
 func SSHRunArgvOutput(ctx context.Context, exec *executor.Executor, host, knownHostsPath string, argv ...string) (*executor.Result, error) {
+	if err := validateArgvAtoms(argv); err != nil {
+		return nil, fmt.Errorf("ssh %s: %w", host, err)
+	}
 	args := sshBaseArgs(host, knownHostsPath)
 	args = append(args, argv...)
 	result, err := exec.RunOutput(ctx, 0, "ssh", args...)
@@ -87,6 +96,38 @@ func SSHRunArgvOutput(ctx context.Context, exec *executor.Executor, host, knownH
 		return result, fmt.Errorf("ssh %s: %w", host, err)
 	}
 	return result, nil
+}
+
+// validateArgvAtoms fails closed on any atom the remote login shell could
+// reinterpret after ssh's space-join: only alphanumerics plus @%+=:,./_-
+// (the shlex-safe set) are allowed, and empty atoms are rejected because
+// they vanish in the join. Errors name the atom index and offending rune
+// but never the atom itself, in case a future caller passes
+// credential-bearing material.
+func validateArgvAtoms(argv []string) error {
+	for i, atom := range argv {
+		if atom == "" {
+			return fmt.Errorf("argv atom %d is empty and would vanish in ssh's space-join", i)
+		}
+		for _, r := range atom {
+			if !argvAtomSafeRune(r) {
+				return fmt.Errorf("argv atom %d contains shell-unsafe character %q", i, r)
+			}
+		}
+	}
+	return nil
+}
+
+func argvAtomSafeRune(r rune) bool {
+	switch {
+	case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
+		return true
+	}
+	switch r {
+	case '@', '%', '+', '=', ':', ',', '.', '/', '_', '-':
+		return true
+	}
+	return false
 }
 
 // sshBaseArgs builds the ssh option flags and remote user@host token.
