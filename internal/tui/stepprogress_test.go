@@ -178,6 +178,10 @@ func TestStepProgress_ConcurrentInterleave(t *testing.T) {
 	for i, id := range ids {
 		sp.StepStarted(id)
 		stopSpinners = append(stopSpinners, startSpinner(context.Background(), "step working", &buf))
+		// Real sleep on purpose — not a synctest candidate. In a bubble the
+		// fake clock advances only when every goroutine is durably blocked,
+		// so the busy Info() producers would defer this sleep until they
+		// finish, collapsing the mid-step interleave window -race needs.
 		time.Sleep(2 * time.Millisecond)
 		results[i] = &distribution.StepResult{
 			StepID:   id,
