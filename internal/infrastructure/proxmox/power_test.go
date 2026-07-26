@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-// ShutdownVM/StartVM/VMRunning/PowerCycleVM all require a live Proxmox API
+// ShutdownVM/StartVM/PowerCycleVM all require a live Proxmox API
 // (no go-proxmox HTTP mock exists in this repo); their behavior is covered
 // at the node.Runner layer via fakePower. timeout() is the only pure logic
 // here and gets direct coverage.

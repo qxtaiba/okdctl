@@ -72,7 +72,6 @@ type vmPowerCycler interface {
 	PowerCycleVM(ctx context.Context, node string, vmid int) error
 	ShutdownVM(ctx context.Context, node string, vmid int) error
 	StartVM(ctx context.Context, node string, vmid int) error
-	VMRunning(ctx context.Context, node string, vmid int) (bool, error)
 }
 
 // snapshotClient mirrors package hostssh's pvesh-backed snapshot primitives
