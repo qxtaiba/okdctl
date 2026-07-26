@@ -64,6 +64,7 @@ type Model struct {
 	returnToReview bool
 
 	config *config.Config
+	chrome FlowChrome
 
 	quitting bool
 	result   Result
@@ -132,9 +133,17 @@ func defaultKeyMap() KeyMap {
 	}
 }
 
-// NewModel constructs a wizard Model bound to cfg. steps must be
-// non-empty; the first step is focused and sized to the terminal.
+// NewModel constructs a wizard Model bound to cfg with the configure
+// wizard's default chrome. steps must be non-empty; the first step is
+// focused and sized to the terminal.
 func NewModel(steps []WizardStep, cfg *config.Config) *Model {
+	return NewFlowModel(steps, cfg, DefaultChrome())
+}
+
+// NewFlowModel constructs a wizard Model with flow-specific chrome, so a
+// second top-level flow can rebrand the tagline and context badge without
+// forking the header rendering.
+func NewFlowModel(steps []WizardStep, cfg *config.Config, chrome FlowChrome) *Model {
 	w, h := getTerminalSize()
 
 	m := &Model{
@@ -143,6 +152,7 @@ func NewModel(steps []WizardStep, cfg *config.Config) *Model {
 		steps:       steps,
 		currentStep: 0,
 		config:      cfg,
+		chrome:      chrome,
 		keyMap:      defaultKeyMap(),
 	}
 
