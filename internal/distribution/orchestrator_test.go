@@ -93,6 +93,34 @@ func TestOrchestratorRun_SkipWhen(t *testing.T) {
 	}
 }
 
+// TestOrchestratorRun_SkipReasonFuncResolvesFiredCause pins that a
+// SkipReasonFunc set alongside a static SkipReason wins, and that the
+// recorded reason is the one resolved after SkipWhen fired.
+func TestOrchestratorRun_SkipReasonFuncResolvesFiredCause(t *testing.T) {
+	t.Parallel()
+	reason := "unresolved"
+	defs := []distribution.StepDef{
+		{
+			ID: "a", Name: "a", ReRunSafe: distribution.ReRunSafeYes,
+			SkipWhen:       func() bool { reason = "cause that fired"; return true },
+			SkipReason:     "static or-list",
+			SkipReasonFunc: func() string { return reason },
+			Exec:           func(_ context.Context) error { return nil },
+		},
+	}
+	o := buildOrchestrator(defs)
+	if err := o.Run(context.Background()); err != nil {
+		t.Fatalf("Run() = %v, want nil", err)
+	}
+	results := o.Results()
+	if len(results) != 1 || !results[0].Skipped {
+		t.Fatalf("results = %+v, want single skipped result", results)
+	}
+	if results[0].SkipReason != "cause that fired" {
+		t.Errorf("SkipReason = %q, want the resolved cause, not the static string", results[0].SkipReason)
+	}
+}
+
 func TestOrchestratorRun_AlreadyDoneSkipsExecute(t *testing.T) {
 	t.Parallel()
 	var ran bool

@@ -45,14 +45,61 @@ func (t *destroyTracker) onError(label string) func(error) {
 	}
 }
 
-func (t *destroyTracker) skipWhen(label string, fn func() bool) func() bool {
-	return func() bool {
-		if fn() {
-			t.skipped = append(t.skipped, label)
-			return true
+// skipWhen adapts cause — which returns the single skip condition that
+// fired, or "" to run the step — into a StepDef SkipWhen/SkipReasonFunc
+// pair, recording "label: reason" for the final summary.
+func (t *destroyTracker) skipWhen(label string, cause func() string) (when func() bool, reason func() string) {
+	var fired string
+	when = func() bool {
+		fired = cause()
+		if fired == "" {
+			return false
 		}
-		return false
+		t.skipped = append(t.skipped, label+": "+fired)
+		return true
 	}
+	return when, func() string { return fired }
+}
+
+// destroySkips holds the resolved SkipWhen/SkipReasonFunc pair per skippable
+// destroy step.
+type destroySkips struct {
+	tf, iso, cleanup, firewall                   func() bool
+	tfReason, isoReason, cleanupReason, fwReason func() string
+}
+
+func (t *destroyTracker) buildSkips(ctx context.Context, cfg *config.Config, opts *Options, fw *firewall.Firewall) *destroySkips {
+	s := &destroySkips{}
+	s.tf, s.tfReason = t.skipWhen("terraform", func() string {
+		if opts.SkipTerraform {
+			return "terraform destroy disabled via --skip-terraform"
+		}
+		return ""
+	})
+	s.iso, s.isoReason = t.skipWhen("iso removal", func() string {
+		switch {
+		case opts.KeepISOs:
+			return "iso removal disabled via --keep-isos"
+		case cfg.Provider.Proxmox == nil:
+			return "no proxmox provider configured"
+		case t.terraformFailed():
+			return "terraform destroy failed — live vms may still reference these isos"
+		}
+		return ""
+	})
+	s.cleanup, s.cleanupReason = t.skipWhen("file cleanup", func() string { return cleanupFilesSkipReason(opts) })
+	s.firewall, s.fwReason = t.skipWhen("firewall", func() string {
+		switch {
+		case opts.SkipFirewall:
+			return "firewall cleanup disabled via --skip-firewall"
+		case t.terraformFailed():
+			return "terraform destroy failed — live vms may still depend on these rules"
+		case fw.DetectBackend(ctx) == firewall.None:
+			return "no active firewall backend"
+		}
+		return ""
+	})
+	return s
 }
 
 // labelTerraformDestroy must match the label passed to track() at the
@@ -65,8 +112,9 @@ func (t *destroyTracker) terraformFailed() bool {
 
 func (p *Phase) destroySteps(ctx context.Context, cfg *config.Config, opts *Options) []distribution.StepDef {
 	t := &destroyTracker{log: p.Log}
-	track, trackSkip := t.onError, t.skipWhen
+	track := t.onError
 	fw := firewall.New(firewall.WithLogger(p.Log))
+	sk := t.buildSkips(ctx, cfg, opts, fw)
 	return []distribution.StepDef{
 		{
 			ID: StepDestroyInfra, Name: "destroy infrastructure", ReRunSafe: distribution.ReRunSafeYes,
@@ -74,9 +122,9 @@ func (p *Phase) destroySteps(ctx context.Context, cfg *config.Config, opts *Opti
 			// terraform destroy on already-destroyed infra exits cleanly (no
 			// resources to remove), so re-runs are safe. NonFatal further limits
 			// blast radius if the second run encounters a transient TF error.
-			NonFatal:   true, // orchestrator continues through cleanup steps on TF failure
-			SkipWhen:   trackSkip("terraform", func() bool { return opts.SkipTerraform }),
-			SkipReason: "terraform destroy disabled",
+			NonFatal:       true, // orchestrator continues through cleanup steps on TF failure
+			SkipWhen:       sk.tf,
+			SkipReasonFunc: sk.tfReason,
 			Exec: func(ctx context.Context) error {
 				if err := p.destroyInfrastructure(ctx, cfg, opts); err != nil {
 					return err
@@ -88,12 +136,10 @@ func (p *Phase) destroySteps(ctx context.Context, cfg *config.Config, opts *Opti
 		},
 		{
 			ID: StepRemoveRemoteISO, Name: "remove remote ISO", ReRunSafe: distribution.ReRunSafeYes,
-			Desc:     "removing coreos iso from proxmox host",
-			NonFatal: true,
-			SkipWhen: trackSkip("iso removal", func() bool {
-				return opts.KeepISOs || cfg.Provider.Proxmox == nil || t.terraformFailed()
-			}),
-			SkipReason: "iso removal disabled via --keep-isos, no proxmox provider, or terraform owns live vms that may still reference these isos",
+			Desc:           "removing coreos iso from proxmox host",
+			NonFatal:       true,
+			SkipWhen:       sk.iso,
+			SkipReasonFunc: sk.isoReason,
 			Exec: func(ctx context.Context) error {
 				host := hostssh.ProxmoxBareHost(cfg.Provider.Proxmox.Host)
 				knownHostsPath, verifyErr := sshpin.Verify(ctx, host, cfg.Provider.Proxmox.SSHHostFingerprint, cfg.Provider.Proxmox.RequirePinnedFingerprint, p.Log)
@@ -117,8 +163,8 @@ func (p *Phase) destroySteps(ctx context.Context, cfg *config.Config, opts *Opti
 		{
 			ID: StepCleanupFiles, Name: "cleanup files", ReRunSafe: distribution.ReRunSafeYes,
 			Desc: "performing comprehensive cleanup", NonFatal: true,
-			SkipWhen:   trackSkip("file cleanup", func() bool { return opts.SkipCleanup || opts.CleanupKind == "" || !system.DirExists(opts.WorkDir) }),
-			SkipReason: cleanupFilesSkipReason(opts),
+			SkipWhen:       sk.cleanup,
+			SkipReasonFunc: sk.cleanupReason,
 			Exec: func(ctx context.Context) error {
 				vip, err := phase.ResolveClusterVIP(cfg)
 				if err != nil {
@@ -143,10 +189,8 @@ func (p *Phase) destroySteps(ctx context.Context, cfg *config.Config, opts *Opti
 		{
 			ID: StepCleanupFirewall, Name: "cleanup firewall", ReRunSafe: distribution.ReRunSafeYes,
 			Desc: "removing firewall rules", NonFatal: true,
-			SkipWhen: trackSkip("firewall", func() bool {
-				return opts.SkipFirewall || t.terraformFailed() || fw.DetectBackend(ctx) == firewall.None
-			}),
-			SkipReason: "firewall cleanup disabled, terraform owns live vms, or no active backend",
+			SkipWhen:       sk.firewall,
+			SkipReasonFunc: sk.fwReason,
 			Exec: func(ctx context.Context) error {
 				if err := fw.RemoveOKDRules(ctx, true); err != nil {
 					return &errtypes.ClusterError{Msg: "firewall cleanup failed", Err: err}
@@ -163,8 +207,11 @@ func (p *Phase) destroySteps(ctx context.Context, cfg *config.Config, opts *Opti
 				errs, failures, skipped := t.errs, t.failures, t.skipped
 				switch {
 				case len(failures) > 0:
-					p.Log.Warn("destroy: teardown finished with non-fatal failures",
-						"failed_steps", failures)
+					args := []any{"failed_steps", failures}
+					if len(skipped) > 0 {
+						args = append(args, "skipped_steps", skipped)
+					}
+					p.Log.Warn("destroy: teardown finished with non-fatal failures", args...)
 					return &errtypes.ClusterError{Msg: "destroy finished with failed steps", Err: errors.Join(errs...)}
 				case len(skipped) > 0:
 					p.Log.Info("destroy: cluster teardown completed",
@@ -180,7 +227,7 @@ func (p *Phase) destroySteps(ctx context.Context, cfg *config.Config, opts *Opti
 
 func cleanupFilesSkipReason(opts *Options) string {
 	if opts.SkipCleanup {
-		return "cleanup disabled"
+		return "cleanup disabled via --skip-cleanup"
 	}
 	if opts.CleanupKind == "" {
 		return "no cleanup type specified"
