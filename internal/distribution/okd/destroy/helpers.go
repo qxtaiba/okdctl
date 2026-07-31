@@ -51,6 +51,23 @@ func (p *Phase) destroyInfrastructure(ctx context.Context, cfg *config.Config, o
 
 	p.warnTopologyDrift(ctx, tf, cfg, len(opts.TerraformTargets) > 0)
 
+	// The CLI's strongest confirmation gate has already passed by the time
+	// this phase runs, so the master resource's prevent_destroy backstop is
+	// disabled for exactly this destroy via a transient module override,
+	// written here and removed on every exit path below.
+	moduleDir := workspace.TerraformModuleDir(opts.ProjectRoot)
+	overridePath, ovrErr := terraform.WriteDestroyOverride(moduleDir)
+	if ovrErr != nil {
+		p.Log.Warn("destroy: could not write the transient prevent_destroy override; terraform will refuse to destroy master vms", "err", ovrErr)
+	} else {
+		defer func() {
+			if rmErr := terraform.RemoveDestroyOverride(moduleDir); rmErr != nil {
+				p.Log.Warn("destroy: could not remove the transient prevent_destroy override — delete it by hand or every non-destroy terraform run will refuse",
+					"path", overridePath, "err", rmErr)
+			}
+		}()
+	}
+
 	p.Log.Info("terraform: destroying infrastructure", "env", opts.TerraformEnv)
 	p.Log.Warn("terraform: this operation cannot be undone")
 
@@ -64,7 +81,7 @@ func (p *Phase) destroyInfrastructure(ctx context.Context, cfg *config.Config, o
 		if snapPath != "" {
 			msg = fmt.Sprintf("terraform destroy failed (state backup: %s)", snapPath)
 		}
-		return tf.WithLockHint(&errtypes.ClusterError{Msg: msg, Err: err})
+		return tf.WithLockHint(terraform.WithPreventDestroyHint(&errtypes.ClusterError{Msg: msg, Err: err}, moduleDir))
 	}
 
 	if err := tf.CleanupPlans(); err != nil {

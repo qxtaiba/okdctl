@@ -247,7 +247,9 @@ sudo rm /usr/local/bin/okdctl                                        # or: apt/d
 drop-in, the HAProxy config and its backups, and the firewall rules okdctl
 added, then uninstalls what setup installed: the `haproxy`, `dnsmasq`,
 `httpd`, `coreos-installer`, and `terraform` packages, and the `oc`,
-`openshift-install`, and `kubectl` binaries in the bin dir.
+`openshift-install`, and `kubectl` binaries in the bin dir. The master
+VMs' `prevent_destroy` guard is lifted automatically for the confirmed
+run via a transient override that is removed when the destroy finishes.
 
 ## Verifying a release
 

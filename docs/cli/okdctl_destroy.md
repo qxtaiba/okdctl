@@ -19,19 +19,17 @@ a scoped run — that bastion-wide teardown runs only on an unscoped destroy,
 so it never touches a still-running control plane.
 
 Master nodes ship with prevent_destroy = true in the Terraform module to
-guard against accidental etcd-quorum loss. To run a full or targeted
-destroy, place an override.tf in
-infrastructure/terraform/modules/proxmox-okd/ disabling prevent_destroy on
-the master resource:
-
-  resource "proxmox_virtual_environment_vm" "master" {
-    lifecycle {
-      prevent_destroy = false
-    }
-  }
-
-Remove the override.tf after destroy completes. Alternatively, pass
---skip-terraform to bypass Terraform entirely and remove VMs by hand.
+guard against accidental etcd-quorum loss. A fully-confirmed destroy
+handles this automatically: after the confirmation gate passes, okdctl
+writes a transient prevent_destroy_override.tf into
+infrastructure/terraform/modules/proxmox-okd/ and removes it when the
+destroy finishes (success or failure). Every non-destroy command refuses
+to plan or apply while that file exists, so a stale copy from a crashed
+run must be deleted by hand — the refusal names the path. If you must
+override manually, an override file only merges within its own module, so
+it belongs in the modules/proxmox-okd/ directory (never under
+environments/). Alternatively, pass --skip-terraform to bypass Terraform
+entirely and remove VMs by hand.
 
 ```
 okdctl destroy [flags]
