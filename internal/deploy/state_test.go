@@ -1,7 +1,7 @@
 package deploy
 
 import (
-	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -60,18 +60,15 @@ func TestReadDeployState_V2RoundTrip(t *testing.T) {
 	}
 }
 
+// seedRawState writes the literal JSON older binaries produced, so the
+// migration tests exercise real on-disk bytes rather than the current
+// struct's marshal output.
 func seedRawState(t *testing.T, path, schema string, phase deployPhase) {
 	t.Helper()
-	data, err := json.Marshal(deployState{
-		SchemaVersion: schema,
-		Phase:         phase,
-		RunID:         "run-xyz",
-		ClusterName:   "prod",
-	})
-	if err != nil {
-		t.Fatalf("marshal: %v", err)
-	}
-	if err := os.WriteFile(path, data, 0o600); err != nil {
+	raw := fmt.Sprintf(
+		`{"schema_version":%q,"phase":%q,"run_id":"run-xyz","timestamp":"2026-05-01T10:00:00Z","cluster_name":"prod"}`,
+		schema, phase)
+	if err := os.WriteFile(path, []byte(raw), 0o600); err != nil {
 		t.Fatalf("seed file: %v", err)
 	}
 }

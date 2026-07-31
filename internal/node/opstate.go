@@ -6,14 +6,12 @@
 package node
 
 import (
-	"encoding/json"
-	"errors"
 	"fmt"
-	"os"
 	"path/filepath"
 	"time"
 
-	"github.com/qxtaiba/okdctl/internal/system"
+	"github.com/qxtaiba/okdctl/internal/logutil"
+	"github.com/qxtaiba/okdctl/internal/marker"
 )
 
 // OpMarkerFileName is the per-op state marker written under the work directory,
@@ -77,66 +75,53 @@ const (
 	StepWaitJoin   Step = "wait-join"
 )
 
-// opState is the marker payload. ClusterName guards against a marker left in a
-// directory later reused for a different cluster (mirrors deployState).
+// opState is the marker payload. The envelope's ClusterName guards against a
+// marker left in a directory later reused for a different cluster (mirrors
+// deployState).
 type opState struct {
-	SchemaVersion string    `json:"schema_version"`
-	Op            Op        `json:"op"`
-	Target        string    `json:"target"`
-	Step          Step      `json:"step"`
-	RunID         string    `json:"run_id"`
-	ClusterName   string    `json:"cluster_name"`
-	Timestamp     time.Time `json:"timestamp"`
+	marker.Envelope
+
+	Op     Op     `json:"op"`
+	Target string `json:"target"`
+	Step   Step   `json:"step"`
 }
+
+var opMarkerFile = marker.File{Label: "node op", Version: opStateSchemaV1}
 
 // markStep writes the op marker before a mutating step runs. A write failure is
 // fatal to the op: without the marker an interrupted run loses its resume
 // context and the leave-cordoned guarantee.
 func markStep(path string, op Op, target string, step Step, runID, clusterName string) error {
-	data, err := json.Marshal(opState{
-		SchemaVersion: opStateSchemaV1,
-		Op:            op,
-		Target:        target,
-		Step:          step,
-		RunID:         runID,
-		ClusterName:   clusterName,
-		Timestamp:     time.Now().UTC(),
-	})
-	if err != nil {
-		return fmt.Errorf("marshal op state: %w", err)
-	}
-	if err := system.AtomicWrite(path, data, 0o600); err != nil {
+	s := &opState{Op: op, Target: target, Step: step}
+	if err := opMarkerFile.Write(path, s, runID, clusterName); err != nil {
 		return fmt.Errorf("write op state marker: %w", err)
 	}
 	return nil
 }
 
-// readOpState reads the marker, returning nil when absent or when it names a
-// different cluster (treated as absent, matching deploy's marker guard).
+// readOpState reads the marker, returning nil when absent or when it fails
+// the cluster-name guard (empty or mismatching names are treated as absent —
+// the same reject posture as deploy's resume marker).
 func readOpState(path, clusterName string) (*opState, error) {
-	raw, err := os.ReadFile(path)
-	if errors.Is(err, os.ErrNotExist) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, fmt.Errorf("read op state: %w", err)
-	}
 	var s opState
-	if err := json.Unmarshal(raw, &s); err != nil {
-		return nil, fmt.Errorf("parse op state: %w", err)
+	found, err := opMarkerFile.Read(path, &s)
+	if err != nil || !found {
+		return nil, err
 	}
-	if s.ClusterName != "" && s.ClusterName != clusterName {
+	if !opMarkerFile.Trusted(&s, clusterName) {
 		return nil, nil
+	}
+	if s.Stale() {
+		logutil.Warn("node op marker is likely stale",
+			logutil.LF("op", string(s.Op)),
+			logutil.LF("marker_age", s.Age().Round(time.Hour).String()))
 	}
 	return &s, nil
 }
 
 // clearOpMarker removes the marker on clean completion; a missing file is fine.
 func clearOpMarker(path string) error {
-	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("remove op state marker: %w", err)
-	}
-	return nil
+	return opMarkerFile.Clear(path)
 }
 
 func markerPath(workDir string) string {
