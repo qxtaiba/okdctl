@@ -22,6 +22,8 @@ const (
 	FieldTopologyWorkersMemory      = "topology.workers.memory_mb"
 	FieldTopologyWorkersDisk        = "topology.workers.disk_gb"
 	FieldTopologyVMIDBase           = "topology.vm_id_base"
+	FieldTopologyBootstrapCount     = "topology.bootstrap.count"
+	FieldTopologyBootstrapDisk      = "topology.bootstrap.disk_gb"
 
 	FieldNetworkingMachineCIDR     = "networking.machine_cidr"
 	FieldNetworkingPodCIDR         = "networking.pod_cidr"

@@ -44,8 +44,12 @@ type DistributionConfig struct {
 type TopologyConfig struct {
 	ControlPlane NodeConfig `json:"control_plane"`
 	Workers      NodeConfig `json:"workers"`
-	Bootstrap    NodeConfig `json:"bootstrap,omitzero"`
-	VMIDBase     int        `json:"vm_id_base,omitempty"`
+	// Bootstrap sizes the single ephemeral pivot VM of the OKD install:
+	// Count must be 1 (or omitted), omitted CPU/MemoryMB inherit the
+	// control-plane values, and DiskGB is not independently settable —
+	// the VM always uses the control-plane OS disk size.
+	Bootstrap NodeConfig `json:"bootstrap,omitzero"`
+	VMIDBase  int        `json:"vm_id_base,omitempty"`
 }
 
 // NodeConfig configures the count and per-node resources for a node group.

@@ -65,7 +65,7 @@ func getDiskSizes(cfg *config.Config) diskSizes {
 		cpData:     cfg.Disks.ControlPlaneDataSizeGB,
 	}
 	if d.cpOS == 0 {
-		d.cpOS = 50
+		d.cpOS = config.DefaultOSDiskGB
 	}
 	d.workerOS = cfg.Topology.Workers.DiskGB
 	if d.workerOS == 0 {
