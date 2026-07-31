@@ -21,6 +21,7 @@ const (
 	FieldTopologyWorkersCPU         = "topology.workers.cpu"
 	FieldTopologyWorkersMemory      = "topology.workers.memory_mb"
 	FieldTopologyWorkersDisk        = "topology.workers.disk_gb"
+	FieldTopologyVMIDBase           = "topology.vm_id_base"
 
 	FieldNetworkingMachineCIDR     = "networking.machine_cidr"
 	FieldNetworkingPodCIDR         = "networking.pod_cidr"
@@ -53,7 +54,12 @@ const (
 	FieldHTTPServerIP   = "http_server.ip"
 	FieldHTTPServerRoot = "http_server.root"
 
-	FieldDeploymentAutoApprove  = "deployment.auto_approve"
-	FieldDeploymentTerraformEnv = "deployment.terraform_env"
-	FieldDeploymentBinDir       = "deployment.bin_dir"
+	FieldDeploymentAutoApprove      = "deployment.auto_approve"
+	FieldDeploymentTerraformEnv     = "deployment.terraform_env"
+	FieldDeploymentBinDir           = "deployment.bin_dir"
+	FieldDeploymentBootstrapTimeout = "deployment.bootstrap_timeout"
+	FieldDeploymentInstallTimeout   = "deployment.install_timeout"
+
+	FieldDisksWorkerDataSize       = "disks.worker_data_size_gb"
+	FieldDisksControlPlaneDataSize = "disks.control_plane_data_size_gb"
 )

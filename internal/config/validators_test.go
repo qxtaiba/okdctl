@@ -778,6 +778,44 @@ func TestValidateVMIDBase(t *testing.T) {
 	}
 }
 
+func TestValidateDeploymentFields(t *testing.T) {
+	cases := []struct {
+		name      string
+		mutate    func(*DeploymentConfig)
+		wantField string
+	}{
+		{"zero timeouts use install defaults", func(_ *DeploymentConfig) {}, ""},
+		{"short bootstrap timeout rejected", func(d *DeploymentConfig) { d.BootstrapTimeout = 10 }, FieldDeploymentBootstrapTimeout},
+		{"oversized install timeout rejected", func(d *DeploymentConfig) { d.InstallTimeout = 90000 }, FieldDeploymentInstallTimeout},
+		{"relative bin dir rejected", func(d *DeploymentConfig) { d.BinDir = "relative/bin" }, FieldDeploymentBinDir},
+		{"tilde bin dir accepted after expansion", func(d *DeploymentConfig) { d.BinDir = "~/bin" }, ""},
+		{"dotdot bin dir rejected", func(d *DeploymentConfig) { d.BinDir = "/usr/local/bin/../../etc" }, FieldDeploymentBinDir},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := DefaultConfig()
+			tc.mutate(&cfg.Deployment)
+			r := &ValidationResult{}
+			validateDeployment(cfg, r)
+			if tc.wantField == "" {
+				if !r.IsValid() {
+					t.Errorf("unexpected errors: %v", r.Errors)
+				}
+				return
+			}
+			found := false
+			for _, e := range r.Errors {
+				if e.Field == tc.wantField {
+					found = true
+				}
+			}
+			if !found {
+				t.Errorf("expected error on %q; got %v", tc.wantField, r.Errors)
+			}
+		})
+	}
+}
+
 // TestWizardWrapperValidators sweeps the exported wizard-facing wrappers
 // with accept/reject vectors. The primitives underneath carry their own
 // tests; this locks the wrappers' delegation so an inverted condition or a
