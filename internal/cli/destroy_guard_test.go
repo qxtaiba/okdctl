@@ -12,8 +12,10 @@ import (
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
+	"github.com/qxtaiba/okdctl/internal/infrastructure/terraform"
 	"github.com/qxtaiba/okdctl/internal/testutil"
 	"github.com/qxtaiba/okdctl/internal/tui"
+	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
 // resetDestroyFlags zeroes the destroy command's package-level flag variables
@@ -422,5 +424,34 @@ func TestAnnounceInFlightNodeOp_PlanPreamble(t *testing.T) {
 				t.Errorf("warned = %v, want %v; log:\n%s", got, tc.wantWarn, buf.String())
 			}
 		})
+	}
+}
+
+// TestRunDestroy_DeclinedRunWritesNoOverride pins that the transient
+// prevent_destroy override is written only after the full confirmation gate:
+// a declined destroy leaves no override behind even though the module
+// directory exists and is writable.
+func TestRunDestroy_DeclinedRunWritesNoOverride(t *testing.T) {
+	resetDestroyFlags(t)
+	marker := seedDestroyWorkspace(t)
+	root, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	moduleDir := workspace.TerraformModuleDir(root)
+	if err := os.MkdirAll(moduleDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	testStdinReader = &lineReader{lines: []string{guardTestCluster + "\n", "n\n"}}
+	t.Cleanup(func() { testStdinReader = nil })
+	destroyCmd.SetContext(context.Background())
+
+	if err := runDestroy(destroyCmd, nil); err != nil {
+		t.Fatalf("declined destroy must exit 0, got: %v", err)
+	}
+	mustNotRunTerraform(t, marker)
+	if _, err := os.Stat(terraform.DestroyOverridePath(moduleDir)); !os.IsNotExist(err) {
+		t.Error("declined destroy must not write the prevent_destroy override")
 	}
 }

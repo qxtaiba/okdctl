@@ -42,6 +42,14 @@ func TerraformEnvDir(projectRoot, env string) string {
 	return filepath.Join(projectRoot, "infrastructure", "terraform", "environments", env)
 }
 
+// TerraformModuleDir returns the materialized proxmox-okd module directory
+// (<projectRoot>/infrastructure/terraform/modules/proxmox-okd). The
+// terraform.Executor's stale-override guard derives the same path relative
+// to TerraformEnvDir; the two must stay in lockstep.
+func TerraformModuleDir(projectRoot string) string {
+	return filepath.Join(projectRoot, "infrastructure", "terraform", "modules", "proxmox-okd")
+}
+
 // KubeconfigPath returns the admin kubeconfig path
 // (<clusterDir>/auth/kubeconfig) openshift-install writes.
 func KubeconfigPath(clusterDir string) string {

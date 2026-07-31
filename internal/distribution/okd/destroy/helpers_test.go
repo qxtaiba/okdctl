@@ -428,3 +428,125 @@ func TestWarnTopologyDrift_ProbeFailureNeverBlocks(t *testing.T) {
 		t.Errorf("message = %q; want probe-failure diagnostic", rec.Message)
 	}
 }
+
+// installProbingTerraform installs a fake terraform that records, per
+// subcommand, whether the transient prevent_destroy override exists in the
+// module directory at invocation time (cwd is the env dir; the module dir is
+// its ../../modules/proxmox-okd sibling). failSubcommand, when non-empty,
+// makes that subcommand exit 1.
+func installProbingTerraform(t *testing.T, failSubcommand string) {
+	t.Helper()
+	testutil.InstallFakeBin(t, "terraform", `#!/bin/sh
+if [ -f ../../modules/proxmox-okd/prevent_destroy_override.tf ]; then
+  echo "$1 override-present" >> probe.log
+else
+  echo "$1 override-absent" >> probe.log
+fi
+if [ -n "${TF_FAKE_FAIL:-}" ] && [ "$1" = "$TF_FAKE_FAIL" ]; then
+  echo 'Error: simulated failure' >&2
+  exit 1
+fi
+exit 0
+`)
+	t.Setenv("TF_FAKE_FAIL", failSubcommand)
+}
+
+func seedModuleDir(t *testing.T, projectRoot string) string {
+	t.Helper()
+	moduleDir := filepath.Join(projectRoot, "infrastructure", "terraform", "modules", "proxmox-okd")
+	if err := os.MkdirAll(moduleDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return moduleDir
+}
+
+func destroyPhaseFor(projectRoot string) (*Phase, *Options) {
+	p := &Phase{
+		BasePhase: phase.NewBasePhase(
+			phase.WithExecutor(executor.New()),
+			phase.WithLogger(logutil.NopLogger),
+		),
+	}
+	opts := &Options{
+		BaseOptions: phase.BaseOptions{
+			ProjectRoot:  projectRoot,
+			TerraformEnv: "production",
+		},
+		AutoApprove: true,
+	}
+	return p, opts
+}
+
+// TestDestroyInfrastructure_TransientOverrideLifecycle locks the blessed
+// destroy path through the master prevent_destroy guard: the transient
+// override exists while terraform's destroy plan and apply run, and is
+// removed once the destroy returns — on success and on terraform failure
+// alike — so it can never weaken a later non-destroy run.
+func TestDestroyInfrastructure_TransientOverrideLifecycle(t *testing.T) {
+	cases := []struct {
+		name    string
+		failSub string
+		wantErr bool
+	}{
+		{"success removes override", "", false},
+		{"terraform failure still removes override", "apply", true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			installProbingTerraform(t, tc.failSub)
+			projectRoot := t.TempDir()
+			seedTerraformEnvDir(t, projectRoot, "production")
+			moduleDir := seedModuleDir(t, projectRoot)
+			p, opts := destroyPhaseFor(projectRoot)
+
+			err := p.destroyInfrastructure(context.Background(), config.DefaultConfig(), opts)
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("destroyInfrastructure err = %v, wantErr = %v", err, tc.wantErr)
+			}
+
+			overridePath := filepath.Join(moduleDir, terraform.DestroyOverrideFileName)
+			if _, statErr := os.Stat(overridePath); !os.IsNotExist(statErr) {
+				t.Errorf("override must be removed after the destroy returns, stat err = %v", statErr)
+			}
+
+			probe, readErr := os.ReadFile(filepath.Join(projectRoot, "infrastructure", "terraform", "environments", "production", "probe.log"))
+			if readErr != nil {
+				t.Fatalf("fake terraform never ran: %v", readErr)
+			}
+			// The fake logs the probe before honoring TF_FAKE_FAIL, so both
+			// subcommands record the override as present in every case.
+			for _, want := range []string{"plan override-present", "apply override-present"} {
+				if !strings.Contains(string(probe), want) {
+					t.Errorf("probe log missing %q:\n%s", want, probe)
+				}
+			}
+		})
+	}
+}
+
+// TestDestroyInfrastructure_PreventDestroyHint locks the error translation:
+// when terraform still refuses on prevent_destroy (a resource okdctl's
+// master override does not cover), the failure carries a hint naming the
+// override path and recipe.
+func TestDestroyInfrastructure_PreventDestroyHint(t *testing.T) {
+	testutil.InstallFakeBin(t, "terraform", `#!/bin/sh
+if [ "$1" = "plan" ]; then
+  echo 'Error: Instance cannot be destroyed' >&2
+  echo 'Resource module.okd_cluster.proxmox_virtual_environment_vm.extra has lifecycle.prevent_destroy set' >&2
+  exit 1
+fi
+exit 0
+`)
+	projectRoot := t.TempDir()
+	seedTerraformEnvDir(t, projectRoot, "production")
+	seedModuleDir(t, projectRoot)
+	p, opts := destroyPhaseFor(projectRoot)
+
+	err := p.destroyInfrastructure(context.Background(), config.DefaultConfig(), opts)
+	if err == nil {
+		t.Fatal("expected terraform failure")
+	}
+	if !strings.Contains(err.Error(), terraform.DestroyOverrideFileName) {
+		t.Errorf("prevent_destroy failure must hint at the override recipe: %v", err)
+	}
+}

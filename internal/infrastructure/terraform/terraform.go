@@ -285,8 +285,14 @@ func (t *Executor) planArgs(opts PlanOptions) []string {
 }
 
 // Plan runs "terraform plan" with the options in opts. When Destroy is true
-// the plan is a destruction plan.
+// the plan is a destruction plan; non-destroy plans fail closed on a stale
+// destroy override (see refuseStaleDestroyOverride).
 func (t *Executor) Plan(ctx context.Context, opts PlanOptions) error {
+	if !opts.Destroy {
+		if err := t.refuseStaleDestroyOverride(); err != nil {
+			return err
+		}
+	}
 	return t.run(ctx, t.planArgs(opts)...)
 }
 
@@ -297,6 +303,11 @@ func (t *Executor) Plan(ctx context.Context, opts PlanOptions) error {
 // nil) rather than an error. Exit 0 means no changes (false, nil); any
 // other exit code is a genuine plan failure.
 func (t *Executor) PlanDetailed(ctx context.Context, opts PlanOptions) (bool, error) {
+	if !opts.Destroy {
+		if err := t.refuseStaleDestroyOverride(); err != nil {
+			return false, err
+		}
+	}
 	args := append(t.planArgs(opts), "-detailed-exitcode")
 	t.logger.Info("terraform: running", "cmd", args[0])
 
@@ -318,6 +329,11 @@ func (t *Executor) PlanDetailed(ctx context.Context, opts PlanOptions) (bool, er
 // terminal. Use instead of Plan when the operator must see the plan output —
 // Plan captures into internal buffers and only surfaces stderr on failure.
 func (t *Executor) PlanStreamed(ctx context.Context, opts PlanOptions) error {
+	if !opts.Destroy {
+		if err := t.refuseStaleDestroyOverride(); err != nil {
+			return err
+		}
+	}
 	args := t.planArgs(opts)
 	t.logger.Info("terraform: running plan (streaming to terminal)")
 	return t.exec.RunInteractive(ctx, "terraform", args...)
@@ -325,7 +341,16 @@ func (t *Executor) PlanStreamed(ctx context.Context, opts PlanOptions) error {
 
 // Apply runs "terraform apply". When opts.PlanFile is set, Vars, VarFile,
 // and AutoApprove are ignored — the plan file encodes the full change set.
+// Fails closed on a stale destroy override; only Destroy's internal apply
+// (of a destroy plan) bypasses the guard.
 func (t *Executor) Apply(ctx context.Context, opts ApplyOptions) error {
+	if err := t.refuseStaleDestroyOverride(); err != nil {
+		return err
+	}
+	return t.apply(ctx, opts)
+}
+
+func (t *Executor) apply(ctx context.Context, opts ApplyOptions) error {
 	args := []string{"apply", "-lock-timeout=" + defaultLockTimeout}
 
 	if opts.PlanFile != "" {
@@ -372,7 +397,9 @@ func (t *Executor) destroyWithPlan(ctx context.Context, opts DestroyOptions) err
 		return fmt.Errorf("terraform destroy plan failed: %w (re-run with an explicit fix or pass UsePlan=false to skip the plan step)", planErr)
 	}
 
-	return t.Apply(ctx, ApplyOptions{PlanFile: planFile})
+	// t.apply, not t.Apply: the destroy session legitimately runs with the
+	// transient override in place.
+	return t.apply(ctx, ApplyOptions{PlanFile: planFile})
 }
 
 // destroyDirect runs terraform destroy without an intermediate plan file.

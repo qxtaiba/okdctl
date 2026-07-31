@@ -25,6 +25,9 @@ func TestLayoutContract(t *testing.T) {
 	if got, want := workspace.TerraformEnvDir(root, ""), "/proj/infrastructure/terraform/environments"; got != want {
 		t.Errorf("TerraformEnvDir empty env = %q, want %q", got, want)
 	}
+	if got, want := workspace.TerraformModuleDir(root), "/proj/infrastructure/terraform/modules/proxmox-okd"; got != want {
+		t.Errorf("TerraformModuleDir = %q, want %q", got, want)
+	}
 	if workspace.DefaultTerraformEnv != "production" {
 		t.Errorf("DefaultTerraformEnv = %q, want %q", workspace.DefaultTerraformEnv, "production")
 	}
