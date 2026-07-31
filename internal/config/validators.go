@@ -340,6 +340,31 @@ func validateResources(cfg *Config, result *ValidationResult) {
 	if err := dataDiskBounds.check(cfg.Disks.ControlPlaneDataSizeGB); err != nil {
 		result.AddError(FieldDisksControlPlaneDataSize, err.Error())
 	}
+
+	validateBootstrap(cfg, result)
+}
+
+// validateBootstrap pins topology.bootstrap to the single ephemeral pivot
+// VM it models. Count has no consumer — terraform always creates exactly
+// one bootstrap VM — so any value other than 1 (or 0, field omitted) is an
+// operator error. DiskGB is only accepted when it matches the control-plane
+// OS disk size the VM actually gets (terraform's os_disk_size_gb): the
+// wizard keeps the two in lockstep, and a hand-edited divergent value would
+// otherwise be silently ignored.
+func validateBootstrap(cfg *Config, result *ValidationResult) {
+	b := cfg.Topology.Bootstrap
+	if b.Count != 0 && b.Count != 1 {
+		result.AddError(FieldTopologyBootstrapCount,
+			"the bootstrap node is a single ephemeral pivot vm; count must be 1 (or omit the field)")
+	}
+	effectiveOSDisk := cfg.Topology.ControlPlane.DiskGB
+	if effectiveOSDisk == 0 {
+		effectiveOSDisk = DefaultOSDiskGB
+	}
+	if b.DiskGB != 0 && b.DiskGB != effectiveOSDisk {
+		result.AddError(FieldTopologyBootstrapDisk,
+			fmt.Sprintf("has no effect: the bootstrap vm always uses the control-plane os disk size (%d gb); remove the field or match %s", effectiveOSDisk, FieldTopologyControlPlaneDisk))
+	}
 }
 
 // checkNodeResourceCaps applies the wizard's upper bounds; floors are

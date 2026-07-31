@@ -29,6 +29,11 @@ const (
 // inverting if the default ever changes.
 const DefaultVMIDBase = 6000
 
+// DefaultOSDiskGB is the OS-disk size applied when topology.control_plane.
+// disk_gb is 0. Terraform var rendering (provision.getDiskSizes) and the
+// bootstrap disk validator both derive from it.
+const DefaultOSDiskGB = 50
+
 // ValidationError describes a single config validation failure.
 type ValidationError struct {
 	Field   string

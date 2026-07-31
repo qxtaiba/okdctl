@@ -778,6 +778,55 @@ func TestValidateVMIDBase(t *testing.T) {
 	}
 }
 
+func TestValidateBootstrap(t *testing.T) {
+	cases := []struct {
+		name      string
+		mutate    func(*TopologyConfig)
+		wantField string
+	}{
+		{"count 1 accepted", func(_ *TopologyConfig) {}, ""},
+		{"omitted block accepted", func(tp *TopologyConfig) { tp.Bootstrap = NodeConfig{} }, ""},
+		{"count above 1 rejected", func(tp *TopologyConfig) { tp.Bootstrap.Count = 3 }, FieldTopologyBootstrapCount},
+		{"negative count rejected", func(tp *TopologyConfig) { tp.Bootstrap.Count = -1 }, FieldTopologyBootstrapCount},
+		{"disk matching control plane accepted", func(tp *TopologyConfig) {
+			tp.ControlPlane.DiskGB = 100
+			tp.Bootstrap.DiskGB = 100
+		}, ""},
+		{"divergent disk rejected", func(tp *TopologyConfig) { tp.Bootstrap.DiskGB = 60 }, FieldTopologyBootstrapDisk},
+		{"disk matching default fallback accepted", func(tp *TopologyConfig) {
+			tp.ControlPlane.DiskGB = 0
+			tp.Bootstrap.DiskGB = DefaultOSDiskGB
+		}, ""},
+		{"divergent disk with zero control plane rejected", func(tp *TopologyConfig) {
+			tp.ControlPlane.DiskGB = 0
+			tp.Bootstrap.DiskGB = 60
+		}, FieldTopologyBootstrapDisk},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := DefaultConfig()
+			tc.mutate(&cfg.Topology)
+			r := &ValidationResult{}
+			validateBootstrap(cfg, r)
+			if tc.wantField == "" {
+				if !r.IsValid() {
+					t.Errorf("unexpected errors: %v", r.Errors)
+				}
+				return
+			}
+			found := false
+			for _, e := range r.Errors {
+				if e.Field == tc.wantField {
+					found = true
+				}
+			}
+			if !found {
+				t.Errorf("expected error on %q; got %v", tc.wantField, r.Errors)
+			}
+		})
+	}
+}
+
 func TestValidateDeploymentFields(t *testing.T) {
 	cases := []struct {
 		name      string
