@@ -25,6 +25,10 @@ const (
 	minIgnitionFileSize = 1000 // bytes
 )
 
+// apacheVhostConfDirFn resolves the vhost drop-in dir for the detected OS.
+// Tests override this var to redirect writes to a t.TempDir().
+var apacheVhostConfDirFn = platform.OS.ApacheVhostConfDir
+
 func (p *Provisioner) ensureIgnitionDir(ctx context.Context, webRoot string) (string, error) {
 	if err := ctx.Err(); err != nil {
 		return "", err
@@ -83,7 +87,7 @@ func (p *Provisioner) verifyApacheListening(ctx context.Context, bindIP string) 
 // configureApacheHTTPS writes the HTTPS vhost drop-in conf and, on Debian,
 // enables mod_ssl and the conf. On RHEL conf.d is auto-included by httpd.conf.
 func (p *Provisioner) configureApacheHTTPS(ctx context.Context, certPath, keyPath, webRoot, bindIP string) error {
-	vhostDir := p.OS.ApacheVhostConfDir()
+	vhostDir := apacheVhostConfDirFn(p.OS)
 	if err := system.EnsureDir(vhostDir); err != nil {
 		return fmt.Errorf("apache: ensure vhost conf dir: %w", err)
 	}
