@@ -15,6 +15,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/infrastructure/proxmox"
 	"github.com/qxtaiba/okdctl/internal/infrastructure/terraform"
 	"github.com/qxtaiba/okdctl/internal/logutil"
+	"github.com/qxtaiba/okdctl/internal/node"
 	"github.com/qxtaiba/okdctl/internal/render"
 	"github.com/qxtaiba/okdctl/internal/runlock"
 	"github.com/qxtaiba/okdctl/internal/workspace"
@@ -238,4 +239,49 @@ func warnIfTfStateOnly(root string) {
 		logutil.LF("root", root),
 	)
 	logutil.Info("if this directory belongs to a different cluster, stop and run 'okdctl deploy' in the correct directory")
+}
+
+// refuseInFlightNodeOp is deploy's counterpart to the node verbs' foreign-
+// marker guard: an interrupted node op leaves config/tfvars that undercount
+// the in-flight node(s), so a full reconcile would destroy them. Completed
+// add-batch residue (see node.OpMarker.CompletedAddResidue) is ignored — the
+// persisted topology already covers it. ack mirrors the sibling ops'
+// --acknowledge-interrupted-op override.
+func refuseInFlightNodeOp(projectRoot string, cfg *config.Config, ack bool) error {
+	m, err := node.ReadOpMarker(workspace.WorkDir(projectRoot), cfg.Cluster.Name)
+	if err != nil {
+		return err
+	}
+	if m == nil || m.CompletedAddResidue(cfg.Topology.Workers.Count) {
+		return nil
+	}
+	if ack {
+		logutil.Warn("deploy: overriding in-flight node op marker",
+			logutil.LF("op", string(m.Op)),
+			logutil.LF("target", m.Target),
+			logutil.LF("step", string(m.Step)))
+		return nil
+	}
+	return &errtypes.ConfigError{Msg: fmt.Sprintf(
+		"an interrupted node %s for %q is in flight (stopped before step %q); deploy would reconcile a topology that undercounts it and destroy the in-flight node(s) — finish the %s first, or re-run deploy with --acknowledge-interrupted-op to override",
+		m.Op, m.Target, m.Step, m.Op)}
+}
+
+// announceInFlightNodeOp surfaces an in-flight node-op marker in a
+// preamble/preview (destroy, plan) so the operator's model of what terraform
+// state contains is correct before confirming or reading the plan.
+// Best-effort: the command proceeds regardless.
+func announceInFlightNodeOp(projectRoot string, cfg *config.Config) {
+	m, err := node.ReadOpMarker(workspace.WorkDir(projectRoot), cfg.Cluster.Name)
+	if err != nil {
+		logutil.Warn("could not read the node op marker", logutil.LF("err", err))
+		return
+	}
+	if m == nil || m.CompletedAddResidue(cfg.Topology.Workers.Count) {
+		return
+	}
+	logutil.Warn("an interrupted node op is in flight; terraform state includes its partial work",
+		logutil.LF("op", string(m.Op)),
+		logutil.LF("target", m.Target),
+		logutil.LF("step", string(m.Step)))
 }

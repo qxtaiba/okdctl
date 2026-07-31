@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -12,6 +13,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/testutil"
+	"github.com/qxtaiba/okdctl/internal/tui"
 )
 
 // resetDestroyFlags zeroes the destroy command's package-level flag variables
@@ -341,4 +343,84 @@ func TestRunDestroy_ConfirmGateWiring(t *testing.T) {
 		}
 		mustNotRunTerraform(t, marker)
 	})
+}
+
+// captureStderrLog redirects the tui stderr logger into a buffer via the
+// same ConfigureLoggers seam resetLoggingState uses, so logutil.Warn/Info
+// output can be asserted without swapping the global facade handler.
+func captureStderrLog(t *testing.T) *bytes.Buffer {
+	t.Helper()
+	var buf bytes.Buffer
+	if err := tui.ConfigureLoggers("info", "text", io.Discard, &buf, false); err != nil {
+		t.Fatalf("capture loggers: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := tui.ConfigureLoggers("info", "text", os.Stdout, os.Stderr, false); err != nil {
+			t.Errorf("restore loggers: %v", err)
+		}
+	})
+	return &buf
+}
+
+// TestRunDestroy_PreambleSurfacesInFlightNodeOp pins that an in-flight
+// node-op marker is warned about BEFORE the confirmation gate (the operator
+// declines at the typed-name stage and the warning has already fired), and
+// that the warning names the op and its target. The same call sits ahead of
+// confirmClusterMatches, so a --yes run gets the identical warning in its
+// log.
+func TestRunDestroy_PreambleSurfacesInFlightNodeOp(t *testing.T) {
+	resetDestroyFlags(t)
+	marker := seedDestroyWorkspace(t)
+	root, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeNodeOpMarker(t, root, guardTestCluster, "add", "worker9", "wait-join")
+
+	buf := captureStderrLog(t)
+
+	testStdinReader = &lineReader{lines: []string{"prod-oops\n"}}
+	t.Cleanup(func() { testStdinReader = nil })
+	destroyCmd.SetContext(context.Background())
+
+	if err := runDestroy(destroyCmd, nil); err != nil {
+		t.Fatalf("declined destroy must exit 0, got: %v", err)
+	}
+	mustNotRunTerraform(t, marker)
+
+	out := buf.String()
+	for _, want := range []string{"node op is in flight", "op=add", "target=worker9"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("destroy preamble log missing %q:\n%s", want, out)
+		}
+	}
+}
+
+// TestAnnounceInFlightNodeOp_PlanPreamble covers the shared preview helper
+// okdctl plan wires in: a marker for this cluster warns with op/target; a
+// foreign-cluster marker stays silent.
+func TestAnnounceInFlightNodeOp_PlanPreamble(t *testing.T) {
+	cases := []struct {
+		name          string
+		markerCluster string
+		wantWarn      bool
+	}{
+		{"same cluster warns", guardTestCluster, true},
+		{"different cluster stays silent", "someone-else", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			root := t.TempDir()
+			writeNodeOpMarker(t, root, tc.markerCluster, "remove", "worker2", "drain")
+
+			buf := captureStderrLog(t)
+
+			announceInFlightNodeOp(root, destroyGuardConfig())
+
+			got := strings.Contains(buf.String(), "node op is in flight")
+			if got != tc.wantWarn {
+				t.Errorf("warned = %v, want %v; log:\n%s", got, tc.wantWarn, buf.String())
+			}
+		})
+	}
 }

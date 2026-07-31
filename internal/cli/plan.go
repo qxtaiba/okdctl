@@ -86,6 +86,8 @@ func runPlan(cmd *cobra.Command, _ []string) error {
 			"terraform workspace not found at %s; run 'okdctl deploy' to create it before previewing drift", envDir)}
 	}
 
+	announceInFlightNodeOp(projectRoot, cfg)
+
 	logutil.Info("plan: running terraform plan (no changes will be made)")
 
 	changes, err := runTerraformPlanPreview(cmd.Context(), cfg, planPreviewOptions{

@@ -22,14 +22,15 @@ import (
 )
 
 var (
-	deployOutputFile         string
-	deployMinimal            bool
-	deployYes                bool
-	deployConfirmCluster     string
-	deployWriteConfig        bool
-	deployDryRun             bool
-	deployFresh              bool
-	deployKeepRedHatCatalogs bool
+	deployOutputFile             string
+	deployMinimal                bool
+	deployYes                    bool
+	deployConfirmCluster         string
+	deployWriteConfig            bool
+	deployDryRun                 bool
+	deployFresh                  bool
+	deployKeepRedHatCatalogs     bool
+	deployAcknowledgeInterrupted bool
 )
 
 // Seams for TTY-free tests of the runDeploy glue; production never
@@ -73,6 +74,7 @@ func init() {
 	deployCmd.Flags().BoolVar(&deployDryRun, flagDryRun, false, "preview terraform plan and step listing without deploying")
 	deployCmd.Flags().BoolVar(&deployFresh, "fresh", false, "wipe the work directory even when live cluster state is detected (credentials will be lost)")
 	deployCmd.Flags().BoolVar(&deployKeepRedHatCatalogs, "keep-redhat-catalogs", false, "keep the redhat-operators, certified-operators, and redhat-marketplace OperatorHub catalogsources and the InsightsDisabled alert enabled (both require a Red Hat subscription OKD clusters don't have)")
+	deployCmd.Flags().BoolVar(&deployAcknowledgeInterrupted, "acknowledge-interrupted-op", false, "deploy despite an in-flight node op marker (deploy would otherwise refuse: reconciling mid-op destroys the in-flight node)")
 }
 
 func runDeploy(cmd *cobra.Command, _ []string) error {
@@ -303,6 +305,10 @@ func runFullDeployment(ctx context.Context, cfg *config.Config, w io.Writer) err
 	// terraform-env directory check sees the same path materialization uses.
 	projectRoot, err := resolveWorkspaceRoot()
 	if err != nil {
+		return err
+	}
+
+	if err := refuseInFlightNodeOp(projectRoot, cfg, deployAcknowledgeInterrupted); err != nil {
 		return err
 	}
 

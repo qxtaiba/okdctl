@@ -4,16 +4,19 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/credentials"
 	"github.com/qxtaiba/okdctl/internal/deploy"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
+	"github.com/qxtaiba/okdctl/internal/node"
 	"github.com/qxtaiba/okdctl/internal/testutil"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard/steps"
@@ -32,10 +35,12 @@ func resetDeployState(t *testing.T) {
 	savedOutputFile, savedConfirm := deployOutputFile, deployConfirmCluster
 	savedMinimal, savedYes, savedWriteConfig := deployMinimal, deployYes, deployWriteConfig
 	savedDryRun, savedFresh, savedKeep := deployDryRun, deployFresh, deployKeepRedHatCatalogs
+	savedAck := deployAcknowledgeInterrupted
 	t.Cleanup(func() {
 		deployOutputFile, deployConfirmCluster = savedOutputFile, savedConfirm
 		deployMinimal, deployYes, deployWriteConfig = savedMinimal, savedYes, savedWriteConfig
 		deployDryRun, deployFresh, deployKeepRedHatCatalogs = savedDryRun, savedFresh, savedKeep
+		deployAcknowledgeInterrupted = savedAck
 		runWizardFn = runWizardWithMode
 		deployExecuteFn = deploy.Execute
 		deployCmd.SetOut(nil)
@@ -43,6 +48,7 @@ func resetDeployState(t *testing.T) {
 	deployOutputFile, deployConfirmCluster = "okdctl.yaml", ""
 	deployMinimal, deployYes, deployWriteConfig = false, false, false
 	deployDryRun, deployFresh, deployKeepRedHatCatalogs = false, false, false
+	deployAcknowledgeInterrupted = false
 	deployCmd.SetContext(context.Background())
 	deployCmd.SetOut(io.Discard)
 }
@@ -98,7 +104,7 @@ type executeCapture struct {
 	credsValid bool
 }
 
-func stubExecute(t *testing.T, ret error) *executeCapture {
+func stubExecute(t *testing.T) *executeCapture {
 	t.Helper()
 	rec := &executeCapture{}
 	deployExecuteFn = func(_ context.Context, cfg *config.Config, opts deploy.Options, _ io.Writer) error {
@@ -106,7 +112,7 @@ func stubExecute(t *testing.T, ret error) *executeCapture {
 		rec.cfg = cfg
 		rec.opts = opts
 		rec.credsValid = opts.Credentials != nil && opts.Credentials.IsValid()
-		return ret
+		return nil
 	}
 	return rec
 }
@@ -346,7 +352,7 @@ func TestRunDeploy_WizardDeployActionExecutes(t *testing.T) {
 	resetDeployState(t)
 	isolateProxmoxEnv(t)
 	t.Chdir(t.TempDir())
-	exec := stubExecute(t, nil)
+	exec := stubExecute(t)
 
 	wizardCfg := config.DefaultConfig()
 	wizardCfg.Cluster.Name = "deployme"
@@ -377,7 +383,7 @@ func TestRunDeploy_WelcomeModeDeploySkipsSave(t *testing.T) {
 	isolateProxmoxEnv(t)
 	t.Chdir(t.TempDir())
 	seedDeployConfig(t)
-	exec := stubExecute(t, nil)
+	exec := stubExecute(t)
 	stubWizard(t, wizard.Result{Completed: true}, steps.WelcomeModeDeploy, nil)
 
 	if err := runDeploy(deployCmd, nil); err != nil {
@@ -469,7 +475,7 @@ func TestRunDeploy_HeadlessGuard(t *testing.T) {
 		t.Chdir(t.TempDir())
 		seedDeployConfig(t)
 		forbidWizard(t)
-		exec := stubExecute(t, nil)
+		exec := stubExecute(t)
 		deployYes = true
 		deployConfirmCluster = "prod"
 
@@ -501,4 +507,101 @@ func TestDeployConfirmClusterFlagContract(t *testing.T) {
 	if f.Shorthand != "" {
 		t.Error("--confirm-cluster must stay long-form only (not in the shorthand allowlist)")
 	}
+}
+
+// writeNodeOpMarker plants a node-op marker under <root>/okd-install using
+// the on-disk v1 wire shape, mirroring the node package's own raw-marker
+// fixtures.
+func writeNodeOpMarker(t *testing.T, root, clusterName, op, target, step string) {
+	t.Helper()
+	workDir := filepath.Join(root, "okd-install")
+	if err := os.MkdirAll(workDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	payload := fmt.Sprintf(
+		`{"schema_version":"v1","run_id":"r1","timestamp":%q,"cluster_name":%q,"op":%q,"target":%q,"step":%q}`,
+		time.Now().UTC().Format(time.RFC3339), clusterName, op, target, step)
+	if err := os.WriteFile(filepath.Join(workDir, node.OpMarkerFileName), []byte(payload), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestRunDeploy_InFlightNodeOpGuard pins deploy's counterpart to the node
+// verbs' foreign-marker guard: an in-flight node op for this cluster refuses
+// the deploy (naming op, target, and the override flag), the sibling-named
+// --acknowledge-interrupted-op overrides it, and a marker from a different
+// cluster never triggers it (the marker primitive's Trusted guard scopes by
+// cluster name).
+func TestRunDeploy_InFlightNodeOpGuard(t *testing.T) {
+	headless := func(t *testing.T) string {
+		t.Helper()
+		resetDeployState(t)
+		isolateProxmoxEnv(t)
+		root := t.TempDir()
+		t.Chdir(root)
+		seedDeployConfig(t)
+		forbidWizard(t)
+		deployYes = true
+		deployConfirmCluster = "prod"
+		return root
+	}
+
+	t.Run("in-flight op refuses and names op, target, and flag", func(t *testing.T) {
+		root := headless(t)
+		forbidExecute(t)
+		writeNodeOpMarker(t, root, "prod", "add", "worker9", "wait-join")
+
+		err := runDeploy(deployCmd, nil)
+		var ce *errtypes.ConfigError
+		if !errors.As(err, &ce) {
+			t.Fatalf("want *errtypes.ConfigError, got %T: %v", err, err)
+		}
+		for _, want := range []string{"node add", `"worker9"`, "--acknowledge-interrupted-op"} {
+			if !strings.Contains(err.Error(), want) {
+				t.Errorf("refusal %q must contain %q", err.Error(), want)
+			}
+		}
+	})
+
+	t.Run("--acknowledge-interrupted-op overrides the guard", func(t *testing.T) {
+		root := headless(t)
+		exec := stubExecute(t)
+		writeNodeOpMarker(t, root, "prod", "add", "worker9", "wait-join")
+		deployAcknowledgeInterrupted = true
+
+		if err := runDeploy(deployCmd, nil); err != nil {
+			t.Fatalf("acknowledged deploy must proceed: %v", err)
+		}
+		if !exec.called {
+			t.Fatal("acknowledged deploy must invoke the deployment engine")
+		}
+	})
+
+	t.Run("marker from a different cluster does not trigger the guard", func(t *testing.T) {
+		root := headless(t)
+		exec := stubExecute(t)
+		writeNodeOpMarker(t, root, "some-other-cluster", "add", "worker9", "wait-join")
+
+		if err := runDeploy(deployCmd, nil); err != nil {
+			t.Fatalf("foreign-cluster marker must be treated as absent: %v", err)
+		}
+		if !exec.called {
+			t.Fatal("deploy must proceed when the marker belongs to a different cluster")
+		}
+	})
+
+	t.Run("completed add-batch residue does not trigger the guard", func(t *testing.T) {
+		root := headless(t)
+		exec := stubExecute(t)
+		// worker0 sits below the persisted worker count (3), so the batch it
+		// belonged to completed; only marker cleanup was interrupted.
+		writeNodeOpMarker(t, root, "prod", "add", "worker0", "wait-join")
+
+		if err := runDeploy(deployCmd, nil); err != nil {
+			t.Fatalf("completed-batch residue must not refuse the deploy: %v", err)
+		}
+		if !exec.called {
+			t.Fatal("deploy must proceed past completed-batch residue")
+		}
+	})
 }

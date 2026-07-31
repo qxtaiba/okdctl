@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/qxtaiba/okdctl/internal/cluster"
 	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/marker"
 )
@@ -138,6 +139,19 @@ type OpMarker struct {
 	RunID       string
 	ClusterName string
 	Timestamp   time.Time
+}
+
+// CompletedAddResidue reports whether the marker is the residue of a
+// fully-completed add batch rather than an in-flight op: AddWorkers persists
+// the widened worker count only after every node joined, so a marker whose
+// target index precedes workerCount can only mean the batch finished and the
+// process died before the marker was cleared.
+func (m *OpMarker) CompletedAddResidue(workerCount int) bool {
+	if m.Op != OpAdd {
+		return false
+	}
+	idx, ok := cluster.NodeIndex(m.Target)
+	return ok && idx < workerCount
 }
 
 // ReadOpMarker reads the op marker under workDir, returning nil when no op is
