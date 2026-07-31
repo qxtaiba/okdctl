@@ -11,6 +11,7 @@ import (
 	"github.com/luthermonson/go-proxmox"
 
 	"github.com/qxtaiba/okdctl/internal/httputil"
+	"github.com/qxtaiba/okdctl/internal/nodetypes"
 )
 
 // defaultProbeTimeout bounds every read in a single ProbeHost call.
@@ -120,6 +121,57 @@ func ProbeHost(ctx context.Context, opts *ProbeOptions) (*HostProbe, error) {
 	}
 
 	return probe, nil
+}
+
+// VMPowerStates reads the power state of the given QEMU vmids from the
+// cluster resources listing — one read call over the same client path
+// ProbeHost uses. VMs absent from the listing (destroyed out of band) are
+// omitted from the result. opts.Node is not required: the listing is
+// cluster-wide.
+func VMPowerStates(ctx context.Context, opts *ProbeOptions, vmids []int) (map[int]nodetypes.VMState, error) {
+	timeout := opts.Timeout
+	if timeout <= 0 {
+		timeout = defaultProbeTimeout
+	}
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	client, err := newProxmoxClient(opts.Endpoint, opts.Username, opts.Password, opts.APIToken, opts.Insecure, timeout)
+	if err != nil {
+		return nil, err
+	}
+	cluster, err := client.Cluster(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("get proxmox cluster: %w", err)
+	}
+	resources, err := cluster.Resources(ctx, "vm")
+	if err != nil {
+		return nil, fmt.Errorf("list cluster vm resources: %w", err)
+	}
+	return mapVMStates(resources, vmids), nil
+}
+
+// mapVMStates folds the qemu entries matching vmids onto the VMState wire
+// vocabulary; status strings outside it map to StateUnknown.
+func mapVMStates(resources proxmox.ClusterResources, vmids []int) map[int]nodetypes.VMState {
+	want := make(map[uint64]bool, len(vmids))
+	for _, id := range vmids {
+		if id > 0 {
+			want[uint64(id)] = true
+		}
+	}
+	states := make(map[int]nodetypes.VMState, len(vmids))
+	for _, r := range resources {
+		if r.Type != "qemu" || !want[r.VMID] {
+			continue
+		}
+		state := nodetypes.VMState(r.Status)
+		if state != nodetypes.StateRunning && state != nodetypes.StateStopped {
+			state = nodetypes.StateUnknown
+		}
+		states[int(r.VMID)] = state //nolint:gosec // G115: qemu vmids are small positive integers
+	}
+	return states
 }
 
 func newProbeClient(opts *ProbeOptions, timeout time.Duration) (*proxmox.Client, error) {
