@@ -229,7 +229,7 @@ func TestResizeResumesMidMasterRoll(t *testing.T) {
 		t.Errorf("master0 (already at target) must not be touched: cordoned=%v drained=%v uncordoned=%v",
 			fc.cordonedNodes, fc.drainedNodes, fc.uncordonedNodes)
 	}
-	master0VMID := cfg.Topology.VMIDBase + vmidMasterOffset
+	master0VMID := nodetypes.VMID(cfg, nodetypes.RoleMaster, 0)
 	if slices.Contains(fp.cycledVMIDs, master0VMID) {
 		t.Errorf("master0 must not be power-cycled: vmids=%v", fp.cycledVMIDs)
 	}
@@ -241,7 +241,7 @@ func TestResizeResumesMidMasterRoll(t *testing.T) {
 	if !slices.Contains(fc.uncordonedNodes, "master1") {
 		t.Errorf("master1 must be uncordoned after resuming past power-cycle: uncordoned=%v", fc.uncordonedNodes)
 	}
-	master1VMID := cfg.Topology.VMIDBase + vmidMasterOffset + 1
+	master1VMID := nodetypes.VMID(cfg, nodetypes.RoleMaster, 1)
 	if !slices.Contains(fp.cycledVMIDs, master1VMID) {
 		t.Errorf("master1 must be power-cycled on resume: vmids=%v want %d", fp.cycledVMIDs, master1VMID)
 	}
@@ -252,7 +252,7 @@ func TestResizeResumesMidMasterRoll(t *testing.T) {
 		t.Errorf("master2 must run the full cordon/drain/uncordon sequence: cordoned=%v drained=%v uncordoned=%v",
 			fc.cordonedNodes, fc.drainedNodes, fc.uncordonedNodes)
 	}
-	master2VMID := cfg.Topology.VMIDBase + vmidMasterOffset + 2
+	master2VMID := nodetypes.VMID(cfg, nodetypes.RoleMaster, 2)
 	if !slices.Contains(fp.cycledVMIDs, master2VMID) {
 		t.Errorf("master2 must be power-cycled: vmids=%v want %d", fp.cycledVMIDs, master2VMID)
 	}
@@ -510,7 +510,7 @@ func TestResizeResumesMidPowerCycleWithMemberDown(t *testing.T) {
 		t.Fatalf("resume with the marked master powered off must not deadlock on the pre-etcd gate: %v", err)
 	}
 
-	master1VMID := cfg.Topology.VMIDBase + vmidMasterOffset + 1
+	master1VMID := nodetypes.VMID(cfg, nodetypes.RoleMaster, 1)
 	if !slices.Contains(fp.cycledVMIDs, master1VMID) {
 		t.Errorf("master1 must be power-cycled on resume: vmids=%v want %d", fp.cycledVMIDs, master1VMID)
 	}

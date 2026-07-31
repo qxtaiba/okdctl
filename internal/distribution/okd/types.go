@@ -47,8 +47,11 @@ const (
 	// PhaseRunning means the cluster is up and all operators report healthy.
 	PhaseRunning ClusterPhase = "Running"
 	// PhaseDegraded means the cluster serves API traffic but one or more
-	// operators report a non-healthy condition.
+	// operators report a non-healthy condition or a node is not ready.
 	PhaseDegraded ClusterPhase = "Degraded"
+	// PhaseStopped means provisioned VMs exist but every one reports powered
+	// off — the state 'okdctl cluster stop' leaves behind.
+	PhaseStopped ClusterPhase = "Stopped"
 	// PhaseUnknown is the default when status cannot be determined.
 	PhaseUnknown ClusterPhase = "Unknown"
 )

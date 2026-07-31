@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/luthermonson/go-proxmox"
+
+	"github.com/qxtaiba/okdctl/internal/nodetypes"
 )
 
 func TestSelectNodeMem(t *testing.T) {
@@ -38,6 +40,29 @@ func TestSumRunningGuestMem(t *testing.T) {
 	got := sumRunningGuestMem(resources, "pve1")
 	if got != 3000 {
 		t.Fatalf("want 3000 (only running qemu on pve1), got %d", got)
+	}
+}
+
+func TestMapVMStates(t *testing.T) {
+	resources := proxmox.ClusterResources{
+		{Type: "qemu", VMID: 110, Status: "running"},
+		{Type: "qemu", VMID: 111, Status: "stopped"},
+		{Type: "qemu", VMID: 200, Status: "suspended"}, // outside the wire vocabulary
+		{Type: "qemu", VMID: 999, Status: "running"},   // not one of ours
+		{Type: "lxc", VMID: 112, Status: "running"},    // not qemu
+	}
+	got := mapVMStates(resources, []int{110, 111, 112, 200, 300})
+	if len(got) != 3 {
+		t.Fatalf("mapVMStates = %v; want 3 entries", got)
+	}
+	if got[110] != nodetypes.StateRunning || got[111] != nodetypes.StateStopped {
+		t.Errorf("wire states = %v/%v; want running/stopped", got[110], got[111])
+	}
+	if got[200] != nodetypes.StateUnknown {
+		t.Errorf("unrecognized status = %v; want %v", got[200], nodetypes.StateUnknown)
+	}
+	if _, ok := got[300]; ok {
+		t.Error("vm absent from the listing must be omitted, not defaulted")
 	}
 }
 

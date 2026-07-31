@@ -202,6 +202,33 @@ func TestResolveResumePhase(t *testing.T) {
 	}
 }
 
+func TestInstallInProgress(t *testing.T) {
+	seed := func(t *testing.T, phase deployPhase, cluster string) string {
+		t.Helper()
+		dir := t.TempDir()
+		if err := writeDeployState(filepath.Join(dir, StateFileName), phase, "run-1", cluster); err != nil {
+			t.Fatalf("writeDeployState: %v", err)
+		}
+		return dir
+	}
+
+	if InstallInProgress(t.TempDir(), "prod") {
+		t.Error("no marker: want false")
+	}
+	if !InstallInProgress(seed(t, phaseInstall, "prod"), "prod") {
+		t.Error("install marker: want true")
+	}
+	if !InstallInProgress(seed(t, phaseSetup, "prod"), "prod") {
+		t.Error("setup marker: want true")
+	}
+	if InstallInProgress(seed(t, phaseCompleted, "prod"), "prod") {
+		t.Error("completed marker: want false")
+	}
+	if InstallInProgress(seed(t, phaseInstall, "other"), "prod") {
+		t.Error("foreign-cluster marker: want false")
+	}
+}
+
 func TestAnnounceDeployState_ClusterMismatch(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "deploy.state")

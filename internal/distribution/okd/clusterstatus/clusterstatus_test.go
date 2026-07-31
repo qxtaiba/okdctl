@@ -46,6 +46,17 @@ func (f *fakeVerifier) VerifyAll(context.Context) ([]addon.VerifyResult, error) 
 	return f.results, nil
 }
 
+type fakePower struct {
+	states map[int]nodetypes.VMState
+	err    error
+}
+
+func (f *fakePower) VMStates(context.Context) (map[int]nodetypes.VMState, error) {
+	return f.states, f.err
+}
+
+func boolSource(v bool) func() bool { return func() bool { return v } }
+
 func TestParseNode(t *testing.T) {
 	n, err := ParseNode([]byte(readyMasterJSON))
 	if err != nil {
@@ -76,7 +87,7 @@ func TestCollect_RunningCluster(t *testing.T) {
 		{Name: "metallb", Err: errors.New("pods not ready")},
 	}}
 
-	cs := Collect(context.Background(), cl, v, t.TempDir())
+	cs := Collect(context.Background(), cl, v, LifecycleSources{})
 
 	if cs.Phase != okd.PhaseRunning {
 		t.Errorf("Phase = %q; want %q", cs.Phase, okd.PhaseRunning)
@@ -106,7 +117,7 @@ func TestCollect_DegradedCluster(t *testing.T) {
 			{"status":{"conditions":[{"type":"Degraded","status":"False"}]}}]}`,
 	}
 
-	cs := Collect(context.Background(), cl, &fakeVerifier{}, t.TempDir())
+	cs := Collect(context.Background(), cl, &fakeVerifier{}, LifecycleSources{})
 
 	if cs.Phase != okd.PhaseDegraded {
 		t.Errorf("Phase = %q; want %q", cs.Phase, okd.PhaseDegraded)
@@ -129,9 +140,9 @@ func TestCollect_APIUnreachable(t *testing.T) {
 		operatorsErr: errors.New("connection refused"),
 	}
 
-	// No terraform state under this root, so an unreachable API reads as
-	// Pending (pre-install) rather than Installing (infra up, no cluster yet).
-	cs := Collect(context.Background(), cl, &fakeVerifier{}, t.TempDir())
+	// No lifecycle sources at all, so an unreachable API reads as Pending
+	// (pre-install) rather than Installing (deploy in flight).
+	cs := Collect(context.Background(), cl, &fakeVerifier{}, LifecycleSources{})
 
 	if cs.Phase != okd.PhasePending {
 		t.Errorf("Phase = %q; want %q", cs.Phase, okd.PhasePending)
@@ -147,7 +158,7 @@ func TestCollect_APIUnreachable(t *testing.T) {
 func TestCollect_CorruptPayloadsDegradeToEmpty(t *testing.T) {
 	cl := &fakeClient{nodesJSON: "{broken", operatorsJSON: "{broken"}
 
-	cs := Collect(context.Background(), cl, &fakeVerifier{}, t.TempDir())
+	cs := Collect(context.Background(), cl, &fakeVerifier{}, LifecycleSources{})
 
 	if cs.Phase != okd.PhaseUnknown {
 		t.Errorf("Phase = %q; want %q", cs.Phase, okd.PhaseUnknown)
@@ -157,27 +168,18 @@ func TestCollect_CorruptPayloadsDegradeToEmpty(t *testing.T) {
 	}
 }
 
-func TestCollect_NilClientDerivesFromInfra(t *testing.T) {
-	withState := t.TempDir()
-	stateDir := filepath.Join(withState, "infrastructure", "terraform", "environments", "production")
-	if err := os.MkdirAll(stateDir, 0o755); err != nil {
-		t.Fatalf("mkdir: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(stateDir, "terraform.tfstate"), []byte("{}"), 0o600); err != nil {
-		t.Fatalf("write tfstate: %v", err)
-	}
-
+func TestCollect_NilClientDerivesFromLifecycleSources(t *testing.T) {
 	cases := []struct {
-		name        string
-		projectRoot string
-		want        okd.ClusterPhase
+		name string
+		src  LifecycleSources
+		want okd.ClusterPhase
 	}{
-		{"no-kubeconfig-no-infra", t.TempDir(), okd.PhasePending},
-		{"no-kubeconfig-infra-present", withState, okd.PhaseInstalling},
+		{"no-kubeconfig-no-infra", LifecycleSources{}, okd.PhasePending},
+		{"no-kubeconfig-deploy-in-flight", LifecycleSources{DeployInProgress: boolSource(true)}, okd.PhaseInstalling},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			cs := Collect(context.Background(), nil, &fakeVerifier{}, tc.projectRoot)
+			cs := Collect(context.Background(), nil, &fakeVerifier{}, tc.src)
 			if cs.Phase != tc.want {
 				t.Errorf("Phase = %q; want %q", cs.Phase, tc.want)
 			}
@@ -191,6 +193,35 @@ func TestCollect_NilClientDerivesFromInfra(t *testing.T) {
 	}
 }
 
+// TestCollect_StoppedCluster locks the 'okdctl cluster stop' → 'okdctl
+// status' contract: API down, no deploy in flight, infra present, every VM
+// powered off reads as Stopped.
+func TestCollect_StoppedCluster(t *testing.T) {
+	cl := &fakeClient{
+		healthzErr:   errors.New("connection refused"),
+		nodesErr:     errors.New("connection refused"),
+		operatorsErr: errors.New("connection refused"),
+	}
+	src := LifecycleSources{
+		DeployInProgress: boolSource(false),
+		InfraPresent:     boolSource(true),
+		Power: &fakePower{states: map[int]nodetypes.VMState{
+			110: nodetypes.StateStopped,
+			111: nodetypes.StateStopped,
+			200: nodetypes.StateStopped,
+		}},
+	}
+
+	cs := Collect(context.Background(), cl, &fakeVerifier{}, src)
+
+	if cs.Phase != okd.PhaseStopped {
+		t.Errorf("Phase = %q; want %q", cs.Phase, okd.PhaseStopped)
+	}
+	if cs.APIReachable {
+		t.Error("APIReachable = true; want false")
+	}
+}
+
 func TestNewClient_MissingKubeconfig(t *testing.T) {
 	if _, err := NewClient(t.TempDir()); err == nil {
 		t.Error("want error for missing kubeconfig, got nil")
@@ -198,40 +229,90 @@ func TestNewClient_MissingKubeconfig(t *testing.T) {
 }
 
 func TestDerivePhase(t *testing.T) {
-	withState := t.TempDir()
-	stateDir := filepath.Join(withState, "infrastructure", "terraform", "environments", "production")
-	if err := os.MkdirAll(stateDir, 0o755); err != nil {
-		t.Fatalf("mkdir: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(stateDir, "terraform.tfstate"), []byte("{}"), 0o600); err != nil {
-		t.Fatalf("write tfstate: %v", err)
-	}
-	withoutState := t.TempDir()
-
 	ready := okd.NodeStatus{Ready: true}
 	notReady := okd.NodeStatus{Ready: false}
+	allStopped := &fakePower{states: map[int]nodetypes.VMState{110: nodetypes.StateStopped, 200: nodetypes.StateStopped}}
+	someRunning := &fakePower{states: map[int]nodetypes.VMState{110: nodetypes.StateRunning, 200: nodetypes.StateStopped}}
 
 	cases := []struct {
-		name        string
-		apiOK       bool
-		nodes       []okd.NodeStatus
-		degraded    int
-		projectRoot string
-		want        okd.ClusterPhase
+		name     string
+		apiOK    bool
+		nodes    []okd.NodeStatus
+		degraded int
+		src      LifecycleSources
+		want     okd.ClusterPhase
 	}{
-		{"running", true, []okd.NodeStatus{ready}, 0, withoutState, okd.PhaseRunning},
-		{"degraded", true, []okd.NodeStatus{ready}, 1, withoutState, okd.PhaseDegraded},
-		{"pending-no-infra", false, nil, 0, withoutState, okd.PhasePending},
-		{"installing-infra-present", false, nil, 0, withState, okd.PhaseInstalling},
-		{"unknown-partial-ready", true, []okd.NodeStatus{ready, notReady}, 0, withoutState, okd.PhaseUnknown},
+		{"running", true, []okd.NodeStatus{ready}, 0, LifecycleSources{}, okd.PhaseRunning},
+		{"degraded-operators", true, []okd.NodeStatus{ready}, 1, LifecycleSources{}, okd.PhaseDegraded},
+		{"degraded-notready-node-zero-degraded", true, []okd.NodeStatus{ready, notReady}, 0, LifecycleSources{}, okd.PhaseDegraded},
+		{"unknown-api-up-no-node-listing", true, nil, 0, LifecycleSources{}, okd.PhaseUnknown},
+		{"pending-no-marker-no-infra", false, nil, 0, LifecycleSources{
+			DeployInProgress: boolSource(false), InfraPresent: boolSource(false),
+		}, okd.PhasePending},
+		{"installing-marker-mid-install-api-down", false, nil, 0, LifecycleSources{
+			DeployInProgress: boolSource(true),
+		}, okd.PhaseInstalling},
+		{"stopped-marker-done-vms-off", false, nil, 0, LifecycleSources{
+			DeployInProgress: boolSource(false), InfraPresent: boolSource(true), Power: allStopped,
+		}, okd.PhaseStopped},
+		{"unknown-api-down-vms-running", false, nil, 0, LifecycleSources{
+			DeployInProgress: boolSource(false), InfraPresent: boolSource(true), Power: someRunning,
+		}, okd.PhaseUnknown},
+		{"unknown-infra-present-no-prober", false, nil, 0, LifecycleSources{
+			DeployInProgress: boolSource(false), InfraPresent: boolSource(true),
+		}, okd.PhaseUnknown},
+		{"unknown-power-probe-fails", false, nil, 0, LifecycleSources{
+			DeployInProgress: boolSource(false), InfraPresent: boolSource(true),
+			Power: &fakePower{err: errors.New("api unreachable")},
+		}, okd.PhaseUnknown},
+		{"unknown-power-probe-finds-no-vms", false, nil, 0, LifecycleSources{
+			DeployInProgress: boolSource(false), InfraPresent: boolSource(true),
+			Power: &fakePower{states: map[int]nodetypes.VMState{}},
+		}, okd.PhaseUnknown},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := derivePhase(tc.apiOK, tc.nodes, tc.degraded, tc.projectRoot)
+			got := derivePhase(context.Background(), tc.apiOK, tc.nodes, tc.degraded, tc.src)
 			if got != tc.want {
 				t.Fatalf("derivePhase() = %q, want %q", got, tc.want)
 			}
 		})
+	}
+}
+
+func TestTerraformStateHasResources(t *testing.T) {
+	seed := func(t *testing.T, tfEnv, content string) string {
+		t.Helper()
+		root := t.TempDir()
+		dir := filepath.Join(root, "infrastructure", "terraform", "environments", tfEnv)
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatalf("mkdir: %v", err)
+		}
+		if content != "" {
+			if err := os.WriteFile(filepath.Join(dir, "terraform.tfstate"), []byte(content), 0o600); err != nil {
+				t.Fatalf("write tfstate: %v", err)
+			}
+		}
+		return root
+	}
+
+	if TerraformStateHasResources(t.TempDir(), "production") {
+		t.Error("missing state file must not count as infra")
+	}
+	if TerraformStateHasResources(seed(t, "production", `{"resources":[]}`), "production") {
+		t.Error("empty post-destroy state must not count as infra")
+	}
+	if TerraformStateHasResources(seed(t, "production", "{broken"), "production") {
+		t.Error("unparseable state must not count as infra")
+	}
+	root := seed(t, "production", `{"resources":[{"type":"proxmox_virtual_environment_vm"}]}`)
+	if !TerraformStateHasResources(root, "production") {
+		t.Error("state with resources must count as infra")
+	}
+	// A populated state in a different environment than the configured one
+	// must not count — the pre-M12 glob would have matched it.
+	if TerraformStateHasResources(root, "staging") {
+		t.Error("state under another environment must not count for the configured env")
 	}
 }
 

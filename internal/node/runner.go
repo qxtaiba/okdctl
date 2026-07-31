@@ -39,11 +39,6 @@ const (
 	// hostMemoryReserveMiB is the hypervisor headroom the memory-budget guard
 	// keeps free when projecting a resize (ZFS ARC, host services).
 	hostMemoryReserveMiB = 2048
-	// vmidMasterOffset / vmidWorkerOffset mirror the module's numbering
-	// (bootstrap=base, masters=base+10+n, workers=base+100+n) so a resize can
-	// address the right QEMU id for the Proxmox power-cycle.
-	vmidMasterOffset = 10
-	vmidWorkerOffset = 100
 )
 
 // clusterClient is the slice of cluster.Client the node ops drive. Defined as
@@ -469,23 +464,13 @@ func (r *Runner) waitEtcdHealthy(ctx context.Context, phase string) error {
 	return nil
 }
 
-// vmTarget resolves the Proxmox node name and QEMU vmid for a role/index pair,
-// mirroring the module's numbering (bootstrap=base, masters=base+10+n,
-// workers=base+100+n) so power-cycle/shutdown/start calls address the right VM.
+// vmTarget resolves the Proxmox node name and QEMU vmid for a role/index
+// pair so power-cycle/shutdown/start calls address the right VM.
 func (r *Runner) vmTarget(role nodetypes.NodeRole, index int) (node string, vmid int) {
-	base := r.Cfg.Topology.VMIDBase
-	if base == 0 {
-		base = config.DefaultVMIDBase
-	}
-	offset := vmidWorkerOffset
-	if role == nodetypes.RoleMaster {
-		offset = vmidMasterOffset
-	}
-	vmid = base + offset + index
 	if r.Cfg.Provider.Proxmox != nil {
 		node = r.Cfg.Provider.Proxmox.Node
 	}
-	return node, vmid
+	return node, nodetypes.VMID(r.Cfg, role, index)
 }
 
 // resolveVMID resolves target's cluster node name to its Proxmox vmid, role,

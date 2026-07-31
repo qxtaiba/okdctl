@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"path/filepath"
 	"slices"
 
@@ -24,6 +25,27 @@ import (
 type Client interface {
 	RawGet(ctx context.Context, path string) (string, error)
 	GetJSON(ctx context.Context, args ...string) (stdout string, truncated bool, err error)
+}
+
+// PowerProber is the seam over the Proxmox VM power probe
+// (proxmox.VMPowerStates): it reports the power state of the cluster's VMs
+// keyed by vmid.
+type PowerProber interface {
+	VMStates(ctx context.Context) (map[int]nodetypes.VMState, error)
+}
+
+// LifecycleSources carries the non-API lifecycle signals phase derivation
+// consults when the kube-apiserver is unreachable. A nil field means that
+// signal is unavailable and derivation degrades to a less specific phase.
+type LifecycleSources struct {
+	// DeployInProgress reports whether a trusted deploy-state marker records
+	// an unfinished deploy for this cluster (deploy.InstallInProgress).
+	DeployInProgress func() bool
+	// InfraPresent reports whether the configured terraform environment's
+	// state records provisioned resources (TerraformStateHasResources).
+	InfraPresent func() bool
+	// Power probes VM power states; nil when no Proxmox credentials resolve.
+	Power PowerProber
 }
 
 // AddonVerifier is the slice of addon.Manager used for addon health probes.
@@ -113,8 +135,8 @@ func ParseNode(data []byte) (okd.NodeStatus, error) {
 // queries degrade to empty sections rather than aborting so status renders
 // whatever it can reach. cl may be nil when no kubeconfig exists yet (e.g.
 // before the first deploy); Collect then skips the live queries and derives
-// Pending/Installing from terraform-state presence under projectRoot instead.
-func Collect(ctx context.Context, cl Client, verifier AddonVerifier, projectRoot string) okd.ClusterStatus {
+// the phase from the lifecycle sources alone.
+func Collect(ctx context.Context, cl Client, verifier AddonVerifier, src LifecycleSources) okd.ClusterStatus {
 	apiOK := false
 	var nodes []okd.NodeStatus
 	degraded := 0
@@ -137,7 +159,7 @@ func Collect(ctx context.Context, cl Client, verifier AddonVerifier, projectRoot
 	}
 
 	return okd.ClusterStatus{
-		Phase:             derivePhase(apiOK, nodes, degraded, projectRoot),
+		Phase:             derivePhase(ctx, apiOK, nodes, degraded, src),
 		APIReachable:      apiOK,
 		Nodes:             nodes,
 		DegradedOperators: degraded,
@@ -145,31 +167,81 @@ func Collect(ctx context.Context, cl Client, verifier AddonVerifier, projectRoot
 	}
 }
 
-// derivePhase maps API reachability, node readiness, operator health, and
-// terraform-state presence onto ClusterPhase. Pending and Installing are
-// inferred from infrastructure state because neither has a reachable
-// kube-apiserver to query directly.
-func derivePhase(apiOK bool, nodes []okd.NodeStatus, degraded int, projectRoot string) okd.ClusterPhase {
-	allReady := len(nodes) > 0 && !slices.ContainsFunc(nodes, func(n okd.NodeStatus) bool { return !n.Ready })
-	switch {
-	case apiOK && allReady && degraded == 0:
-		return okd.PhaseRunning
-	case apiOK && degraded > 0:
-		return okd.PhaseDegraded
-	case !apiOK && !hasTerraformState(projectRoot):
-		return okd.PhasePending
-	case !apiOK:
-		return okd.PhaseInstalling
-	default:
-		return okd.PhaseUnknown
+// derivePhase maps lifecycle signals onto ClusterPhase, consulting sources
+// cheapest-first:
+//
+//  1. Live API answers (already collected): Degraded when an operator
+//     degrades or a node is NotReady, Running when everything is ready,
+//     Unknown when the API responds but the node listing failed.
+//  2. Local files: a trusted deploy-state marker recording an unfinished
+//     deploy means Installing; no marker and no terraform resources means
+//     Pending.
+//  3. Proxmox power probe (network; reached only when the API is down, no
+//     deploy is in flight, and infra exists): every VM stopped means
+//     Stopped. Anything else — VMs still running (booting after 'cluster
+//     start', a network fault, an API outage) or an unavailable probe —
+//     stays Unknown: a powered-on cluster with an unreachable API cannot be
+//     classified further from here.
+func derivePhase(ctx context.Context, apiOK bool, nodes []okd.NodeStatus, degraded int, src LifecycleSources) okd.ClusterPhase {
+	if apiOK {
+		switch {
+		case degraded > 0:
+			return okd.PhaseDegraded
+		case len(nodes) == 0:
+			return okd.PhaseUnknown
+		case slices.ContainsFunc(nodes, func(n okd.NodeStatus) bool { return !n.Ready }):
+			return okd.PhaseDegraded
+		default:
+			return okd.PhaseRunning
+		}
 	}
+	if src.DeployInProgress != nil && src.DeployInProgress() {
+		return okd.PhaseInstalling
+	}
+	if src.InfraPresent == nil || !src.InfraPresent() {
+		return okd.PhasePending
+	}
+	return powerPhase(ctx, src.Power)
 }
 
-func hasTerraformState(projectRoot string) bool {
-	matches, _ := filepath.Glob(
-		filepath.Join(workspace.TerraformEnvDir(projectRoot, "*"), "terraform.tfstate"),
-	)
-	return len(matches) > 0
+// powerPhase classifies infra-present-but-API-down via the VM power probe.
+func powerPhase(ctx context.Context, prober PowerProber) okd.ClusterPhase {
+	if prober == nil {
+		return okd.PhaseUnknown
+	}
+	states, err := prober.VMStates(ctx)
+	if err != nil {
+		logutil.Warn("proxmox power probe failed; phase stays unknown", logutil.LF("err", err))
+		return okd.PhaseUnknown
+	}
+	if len(states) == 0 {
+		return okd.PhaseUnknown
+	}
+	for _, s := range states {
+		if s != nodetypes.StateStopped {
+			return okd.PhaseUnknown
+		}
+	}
+	return okd.PhaseStopped
+}
+
+// TerraformStateHasResources reports whether tfEnv's terraform state under
+// projectRoot records at least one resource. Only the configured environment
+// is consulted (not a glob across environments), and an empty post-destroy
+// state file does not count as live infrastructure.
+func TerraformStateHasResources(projectRoot, tfEnv string) bool {
+	data, err := os.ReadFile(
+		filepath.Join(workspace.TerraformEnvDir(projectRoot, tfEnv), "terraform.tfstate"))
+	if err != nil {
+		return false
+	}
+	var st struct {
+		Resources []json.RawMessage `json:"resources"`
+	}
+	if err := json.Unmarshal(data, &st); err != nil {
+		return false
+	}
+	return len(st.Resources) > 0
 }
 
 func collectNodes(ctx context.Context, cl Client) []okd.NodeStatus {

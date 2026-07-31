@@ -5,6 +5,7 @@ package deploy
 
 import (
 	"fmt"
+	"path/filepath"
 	"time"
 
 	"github.com/qxtaiba/okdctl/internal/logutil"
@@ -149,6 +150,15 @@ func warnIfStaleResume(m *deployState) {
 			logutil.LF("marker_age", m.Age().Round(time.Hour).String()))
 		logutil.Info("re-run with --fresh to restart from scratch instead (credentials will be lost)")
 	}
+}
+
+// InstallInProgress reports whether the deploy-state marker under workDir
+// records an unfinished deploy for clusterName. Status phase derivation uses
+// it to distinguish Installing from Pending/Stopped without trusting
+// terraform-state presence.
+func InstallInProgress(workDir, clusterName string) bool {
+	m := loadResumeMarker(filepath.Join(workDir, StateFileName), clusterName)
+	return m != nil && m.Phase != phaseCompleted
 }
 
 // AnnounceState emits a partial-deploy diagnostic on destroy entry.
