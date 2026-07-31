@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/distribution"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/executor"
@@ -100,6 +101,119 @@ func TestDestroySteps_SkipPath(t *testing.T) {
 		if !strings.Contains(skippedVal, label) {
 			t.Errorf("skipped_steps attr %q missing label %q", skippedVal, label)
 		}
+	}
+}
+
+// TestDestroySteps_ISOSkipReasonNamesCause locks that each distinct ISO-skip
+// cause resolves to its own reason — not the historical or-list — and that
+// the summary's skipped_steps entry carries the same resolved reason.
+func TestDestroySteps_ISOSkipReasonNamesCause(t *testing.T) {
+	proxmoxCfg := func() *config.Config {
+		return &config.Config{Provider: config.ProviderConfig{Proxmox: &config.ProxmoxConfig{}}}
+	}
+	baseOpts := func() *Options {
+		return &Options{SkipTerraform: true, SkipCleanup: true, SkipFirewall: true}
+	}
+	cases := []struct {
+		name     string
+		cfg      *config.Config
+		opts     *Options
+		tfFailed bool
+		want     string
+	}{
+		{
+			"keep-isos", proxmoxCfg(), func() *Options { o := baseOpts(); o.KeepISOs = true; return o }(), false,
+			"iso removal disabled via --keep-isos",
+		},
+		{
+			"no provider", minimalConfig(), baseOpts(), false,
+			"no proxmox provider configured",
+		},
+		{
+			"terraform failed", proxmoxCfg(), baseOpts(), true,
+			"terraform destroy failed — live vms may still reference these isos",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			h := &testutil.CaptureHandler{}
+			defs := newPhaseWithCapture(h).destroySteps(context.Background(), tc.cfg, tc.opts)
+			if tc.tfFailed {
+				defs[0].OnError(errors.New("tf-fail"))
+			}
+
+			if !defs[1].SkipWhen() {
+				t.Fatal("iso step must skip for this cause")
+			}
+			got := defs[1].SkipReasonFunc()
+			if got != tc.want {
+				t.Fatalf("resolved reason = %q, want %q", got, tc.want)
+			}
+			if strings.Contains(got, " or ") || strings.Contains(got, ",") {
+				t.Errorf("reason %q reads as a disjunction; it must name only the fired cause", got)
+			}
+
+			if err := defs[4].Exec(context.Background()); (err != nil) != tc.tfFailed {
+				t.Fatalf("summary err = %v, want error only when terraform failed", err)
+			}
+			rec, ok := h.Last()
+			if !ok {
+				t.Fatal("no log records captured")
+			}
+			var val string
+			rec.Attrs(func(a slog.Attr) bool {
+				if a.Key == "skipped_steps" {
+					val = a.Value.String()
+					return false
+				}
+				return true
+			})
+			if !strings.Contains(val, "iso removal: "+tc.want) {
+				t.Errorf("summary skipped_steps = %q; want entry %q", val, "iso removal: "+tc.want)
+			}
+		})
+	}
+}
+
+// TestDestroySteps_SkipReasonReachesStepLogAndSummary drives the real
+// orchestrator over the built steps and pins that the per-step skip log line
+// and the final summary both carry the resolved single-cause reason.
+func TestDestroySteps_SkipReasonReachesStepLogAndSummary(t *testing.T) {
+	h := &testutil.CaptureHandler{}
+	p := newPhaseWithCapture(h)
+	opts := &Options{SkipTerraform: true, SkipCleanup: true, SkipFirewall: true}
+	defs := p.destroySteps(context.Background(), minimalConfig(), opts)
+
+	orch := distribution.NewOrchestrator(distribution.BuildSteps(defs)...)
+	orch.SetLogger(slog.New(h))
+	if err := orch.Run(context.Background()); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	const wantReason = "no proxmox provider configured"
+	var stepLogReason, summarySkipped string
+	for _, rec := range h.Records {
+		var step, reason string
+		rec.Attrs(func(a slog.Attr) bool {
+			switch a.Key {
+			case "step":
+				step = a.Value.String()
+			case "reason":
+				reason = a.Value.String()
+			case "skipped_steps":
+				summarySkipped = a.Value.String()
+			}
+			return true
+		})
+		if step == string(StepRemoveRemoteISO) && reason != "" {
+			stepLogReason = reason
+		}
+	}
+	if stepLogReason != wantReason {
+		t.Errorf("step log reason = %q, want %q", stepLogReason, wantReason)
+	}
+	if !strings.Contains(summarySkipped, "iso removal: "+wantReason) {
+		t.Errorf("summary skipped_steps = %q; want entry %q", summarySkipped, "iso removal: "+wantReason)
 	}
 }
 

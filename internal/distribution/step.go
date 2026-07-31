@@ -56,9 +56,13 @@ type StepDef struct {
 	AlreadyDone func(ctx context.Context) (bool, error)
 	SkipWhen    func() bool
 	SkipReason  string
-	OnStart     func()
-	Exec        func(ctx context.Context) error
-	OnError     func(error)
+	// SkipReasonFunc resolves the skip reason after SkipWhen fires and wins
+	// over SkipReason when set. Use it when SkipWhen folds several causes and
+	// the logged reason must name the one that actually fired.
+	SkipReasonFunc func() string
+	OnStart        func()
+	Exec           func(ctx context.Context) error
+	OnError        func(error)
 }
 
 // builtStep is the runtime representation of a single provisioning step.
@@ -67,18 +71,19 @@ type StepDef struct {
 // StepCallbacks role-interface split added indirection without an extension
 // point anyone used.
 type builtStep struct {
-	id          StepID
-	name        string
-	description string
-	fatal       bool
-	reRunSafe   ReRunSafety
-	alreadyDone func(context.Context) (bool, error)
-	skipWhen    func() bool
-	skipReason  string
-	onStart     func()
-	onComplete  func()
-	onError     func(error)
-	exec        func(context.Context) error
+	id           StepID
+	name         string
+	description  string
+	fatal        bool
+	reRunSafe    ReRunSafety
+	alreadyDone  func(context.Context) (bool, error)
+	skipWhen     func() bool
+	skipReason   string
+	skipReasonFn func() string
+	onStart      func()
+	onComplete   func()
+	onError      func(error)
+	exec         func(context.Context) error
 }
 
 // BuildSteps converts a slice of StepDef into steps ready for
@@ -101,17 +106,18 @@ func BuildSteps(defs []StepDef) []*builtStep {
 			panic("BuildSteps: step " + string(d.ID) + " has empty Name")
 		}
 		steps = append(steps, &builtStep{
-			id:          d.ID,
-			name:        d.Name,
-			description: d.Desc,
-			fatal:       !d.NonFatal,
-			reRunSafe:   d.ReRunSafe,
-			alreadyDone: d.AlreadyDone,
-			skipWhen:    d.SkipWhen,
-			skipReason:  d.SkipReason,
-			onStart:     d.OnStart,
-			exec:        d.Exec,
-			onError:     d.OnError,
+			id:           d.ID,
+			name:         d.Name,
+			description:  d.Desc,
+			fatal:        !d.NonFatal,
+			reRunSafe:    d.ReRunSafe,
+			alreadyDone:  d.AlreadyDone,
+			skipWhen:     d.SkipWhen,
+			skipReason:   d.SkipReason,
+			skipReasonFn: d.SkipReasonFunc,
+			onStart:      d.OnStart,
+			exec:         d.Exec,
+			onError:      d.OnError,
 		})
 	}
 	return steps
@@ -144,7 +150,12 @@ func (s *builtStep) ShouldSkip() bool {
 	return s.skipWhen()
 }
 
-func (s *builtStep) SkipReason() string { return s.skipReason }
+func (s *builtStep) SkipReason() string {
+	if s.skipReasonFn != nil {
+		return s.skipReasonFn()
+	}
+	return s.skipReason
+}
 
 func (s *builtStep) Execute(ctx context.Context) error {
 	if s.exec == nil {
