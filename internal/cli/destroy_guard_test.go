@@ -241,6 +241,42 @@ func mustNotRunTerraform(t *testing.T, markerPath string) {
 	}
 }
 
+// TestRunDestroy_DryRunPreviewsWithoutConfirmation drives the real dry-run
+// path end to end against a fake terraform: no prompt, no confirm flags, and
+// the preview runs init plus a -destroy plan.
+func TestRunDestroy_DryRunPreviewsWithoutConfirmation(t *testing.T) {
+	resetDestroyFlags(t)
+	root := t.TempDir()
+	t.Chdir(root)
+	if err := config.NewLoader().Save(destroyGuardConfig(), filepath.Join(root, "okdctl.yaml")); err != nil {
+		t.Fatalf("seed config: %v", err)
+	}
+	tfDir := filepath.Join(root, "infrastructure", "terraform", "environments", "production")
+	if err := os.MkdirAll(tfDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	argvLog := filepath.Join(t.TempDir(), "tf-argv.log")
+	t.Setenv("TF_ARGV_LOG", argvLog)
+	testutil.InstallFakeBin(t, "terraform",
+		"#!/bin/sh\n[ -n \"$TF_ARGV_LOG\" ] && echo \"$@\" >> \"$TF_ARGV_LOG\"\nexit 0\n")
+	destroyDryRun = true
+	destroyCmd.SetContext(context.Background())
+
+	if err := runDestroy(destroyCmd, nil); err != nil {
+		t.Fatalf("destroy --dry-run: %v", err)
+	}
+	argv, err := os.ReadFile(argvLog)
+	if err != nil {
+		t.Fatalf("fake terraform never ran: %v", err)
+	}
+	if !strings.Contains(string(argv), "init") {
+		t.Errorf("dry-run must run terraform init, got argv:\n%s", argv)
+	}
+	if !strings.Contains(string(argv), "-destroy") {
+		t.Errorf("dry-run must run a -destroy plan, got argv:\n%s", argv)
+	}
+}
+
 // TestRunDestroy_ConfirmGateWiring locks the confirm gate INTO runDestroy:
 // the guards are unit-tested elsewhere, but deleting the
 // confirmClusterMatches call from runDestroy would previously have passed
