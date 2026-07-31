@@ -295,6 +295,16 @@ func runDestroy(cmd *cobra.Command, _ []string) error {
 
 	logutil.Warn("this will destroy cluster and all associated resources", logutil.LF("cluster", cfg.Cluster.Name))
 
+	// Resolved ahead of the confirmation gates so an in-flight node-op marker
+	// is surfaced before the operator confirms (with --yes it still lands in
+	// the log as a warning). Destroy proceeds either way — the teardown covers
+	// whatever partial work the interrupted op left in terraform state.
+	projectRoot, err := resolveProjectRootOrDie()
+	if err != nil {
+		return err
+	}
+	announceInFlightNodeOp(projectRoot, cfg)
+
 	if err := confirmClusterMatches(destroyYes, destroyConfirmCluster, cfg.Cluster.Name, "destroy"); err != nil {
 		return err
 	}
@@ -315,10 +325,6 @@ func runDestroy(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 	defer creds.Zeroize()
-	projectRoot, err := resolveProjectRootOrDie()
-	if err != nil {
-		return err
-	}
 
 	lock, err := runlock.Acquire(projectRoot, "destroy")
 	if err != nil {

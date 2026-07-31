@@ -103,11 +103,7 @@ func (r *Runner) beginOp(op Op, match opMatch, ack bool) (*OpMarker, error) {
 // genuinely in-flight add always carries an index at or above the persisted
 // count (its batch starts there), so it is never swept.
 func (r *Runner) sweepCompletedAddMarker(m *OpMarker) bool {
-	if m.Op != OpAdd {
-		return false
-	}
-	idx, ok := cluster.NodeIndex(m.Target)
-	if !ok || idx >= r.Cfg.Topology.Workers.Count {
+	if !m.CompletedAddResidue(r.Cfg.Topology.Workers.Count) {
 		return false
 	}
 	r.Log.Info("node: clearing marker left by a completed add batch",
