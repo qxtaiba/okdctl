@@ -32,7 +32,7 @@ func TestDownsampleStripsUnderNoColor(t *testing.T) {
 	t.Cleanup(func() { SetColorProfileFor(&bytes.Buffer{}) })
 
 	styled := SuccessStyle.Render("ok")
-	if got := downsample(styled); strings.Contains(got, "\x1b[") {
+	if got := Downsample(styled); strings.Contains(got, "\x1b[") {
 		t.Errorf("downsample left ANSI under no-color profile: %q", got)
 	}
 }

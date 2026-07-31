@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"io"
 	"strconv"
-	"text/tabwriter"
 
+	"charm.land/lipgloss/v2"
 	"github.com/spf13/cobra"
 
 	"github.com/qxtaiba/okdctl/internal/cluster"
@@ -15,6 +15,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/node"
 	"github.com/qxtaiba/okdctl/internal/nodetypes"
+	"github.com/qxtaiba/okdctl/internal/tui"
 	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
@@ -184,19 +185,17 @@ func roleSizingDrift(cfg *config.Config, role nodetypes.NodeRole, sizing provisi
 	return driftPending, fmt.Sprintf("config %dMiB/%dcpu vs tfvars %dMiB/%dcpu", cfgMem, cfgCPU, tfMem, tfCPU)
 }
 
-// printNodeList renders the text table, plus a trailing note when
-// unattachedOp is non-empty (the unattached-op text note). Plain
-// tabwriter, no color: tabwriter measures column width in bytes, so ANSI
-// styling here would misalign columns the way it would not inside a
-// lipgloss-padded box.
+// printNodeList renders the text table through the shared tui.Table look
+// (dim header, red not-ready rows), plus a trailing note when unattachedOp
+// is non-empty (the unattached-op text note). This surface prints outside a
+// box, so each line goes through tui.Downsample to honor pipes and NO_COLOR.
 func printNodeList(w io.Writer, entries []nodeListEntry, unattachedOp string) error {
 	if len(entries) == 0 {
 		if _, err := fmt.Fprintln(w, "no nodes found"); err != nil {
 			return err
 		}
 	} else {
-		tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
-		fmt.Fprintln(tw, "NAME\tROLE\tREADY\tTF-INDEX\tDRIFT\tOP")
+		rows := make([][]string, 0, len(entries))
 		for _, e := range entries {
 			idx := "-"
 			if e.TFIndex != nil {
@@ -206,10 +205,20 @@ func printNodeList(w io.Writer, entries []nodeListEntry, unattachedOp string) er
 			if op == "" {
 				op = "-"
 			}
-			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\n", e.Name, e.Role, yesNo(e.Ready), idx, e.Drift, op)
+			rows = append(rows, []string{e.Name, e.Role.String(), yesNo(e.Ready), idx, e.Drift, op})
 		}
-		if err := tw.Flush(); err != nil {
-			return err
+		lines := tui.Table([]string{"NAME", "ROLE", "READY", "TF-INDEX", "DRIFT", "OP"}, rows, tui.TableOptions{
+			RowStyle: func(i int) (lipgloss.Style, bool) {
+				if !entries[i].Ready {
+					return tui.ErrorStyle, true
+				}
+				return lipgloss.Style{}, false
+			},
+		})
+		for _, line := range lines {
+			if _, err := fmt.Fprintln(w, tui.Downsample(line)); err != nil {
+				return err
+			}
 		}
 		if _, err := fmt.Fprintln(w, "\nDRIFT compares config sizing to terraform.tfvars on disk, not live VM state."); err != nil {
 			return err

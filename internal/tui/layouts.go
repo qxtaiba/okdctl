@@ -125,7 +125,7 @@ func boxedSectionCore(content, title string, width int, cfg boxConfig) string {
 	result = append(result, contentRows...)
 	result = append(result, bottomBorder)
 
-	return downsample(strings.Join(result, "\n"))
+	return Downsample(strings.Join(result, "\n"))
 }
 
 // BoxedSectionCompact renders content inside a single-line-titled box. The

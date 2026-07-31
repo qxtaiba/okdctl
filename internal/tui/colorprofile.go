@@ -42,11 +42,13 @@ func colorEnabled() bool {
 	return colorProfile() > colorprofile.Ascii
 }
 
-// downsample rewrites s so its ANSI color escapes match the active output
+// Downsample rewrites s so its ANSI color escapes match the active output
 // profile: returned unchanged under TrueColor, downgraded for ANSI/ANSI256,
 // and stripped entirely when stdout is not a TTY or NO_COLOR is set. This is
-// the single gate that makes lipgloss box output honor NO_COLOR and pipes.
-func downsample(s string) string {
+// the single gate that makes lipgloss output honor NO_COLOR and pipes; the
+// Boxed* helpers apply it internally, callers printing styled lines outside
+// a box (the node-list table) must apply it themselves.
+func Downsample(s string) string {
 	p := colorProfile()
 	if p == colorprofile.TrueColor {
 		return s

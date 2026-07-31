@@ -1,7 +1,11 @@
 # okdctl CLI Visual & Interaction Overhaul
 
 **Date:** 2026-07-25
-**Status:** Proposal / design doc (no code committed)
+**Status:** Partially implemented — the quick wins and medium increments of §4
+(color-profile gating, brand box chrome, unified glyphs, error summary box,
+empty states, the shared table primitive) have landed on `develop`; the deeper
+refactors (branded help template, atomic per-run log format, full theme
+wiring) remain open. See `git log` for the implementing commits.
 **Method:** Screenshot-driven. Every surface below was run live against the
 `grappleberry` cluster from the bastion (`okdadmin@192.168.227.20`,
 `~/okd-proxmox-cli`, proxmox env sourced), captured verbatim with ANSI
