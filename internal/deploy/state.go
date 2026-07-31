@@ -4,14 +4,11 @@
 package deploy
 
 import (
-	"encoding/json"
-	"errors"
 	"fmt"
-	"os"
 	"time"
 
 	"github.com/qxtaiba/okdctl/internal/logutil"
-	"github.com/qxtaiba/okdctl/internal/system"
+	"github.com/qxtaiba/okdctl/internal/marker"
 )
 
 // deployPhase identifies which phase of the deploy sequence was active when
@@ -31,19 +28,22 @@ const (
 )
 
 // deployStateSchemaV2 is the current deploy-state JSON schema marker. Bump
-// this value (and update readDeployState) only when the schema makes a
+// this value (and update deployMarkerFile) only when the schema makes a
 // breaking change.
 const deployStateSchemaV2 = "v2"
 
 // deployState records which deploy phase was active when the process last
 // wrote the marker. Resume routing (resolveResumePhase) and destroy
-// diagnostics (announceDeployState) read it back.
+// diagnostics (AnnounceState) read it back.
 type deployState struct {
-	SchemaVersion string      `json:"schema_version"`
-	Phase         deployPhase `json:"phase"`
-	RunID         string      `json:"run_id"`
-	Timestamp     time.Time   `json:"timestamp"`
-	ClusterName   string      `json:"cluster_name,omitempty"`
+	marker.Envelope
+
+	Phase deployPhase `json:"phase"`
+}
+
+var deployMarkerFile = marker.File{
+	Label:   "deploy state",
+	Version: deployStateSchemaV2,
 }
 
 // markDeployPhaseFatal writes the marker for the given phase and returns any
@@ -58,15 +58,15 @@ func markDeployPhaseFatal(path string, phase deployPhase, runID, clusterName str
 	return nil
 }
 
-// clearDeployMarker removes the marker on clean completion. ErrNotExist is
+// clearDeployMarker removes the marker on clean completion. A missing file is
 // expected (write may have failed silently) and is not warned. When the
 // remove itself fails, the marker is overwritten with a terminal completed
 // state instead: leaving the stale phase in place would route the next
 // deploy through a postinstall-only resume of a deploy that already
 // finished.
 func clearDeployMarker(path, runID, clusterName string) {
-	err := os.Remove(path)
-	if err == nil || errors.Is(err, os.ErrNotExist) {
+	err := deployMarkerFile.Clear(path)
+	if err == nil {
 		return
 	}
 	if writeErr := writeDeployState(path, phaseCompleted, runID, clusterName); writeErr != nil {
@@ -76,64 +76,32 @@ func clearDeployMarker(path, runID, clusterName string) {
 }
 
 func writeDeployState(path string, phase deployPhase, runID, clusterName string) error {
-	data, err := json.Marshal(deployState{
-		SchemaVersion: deployStateSchemaV2,
-		Phase:         phase,
-		RunID:         runID,
-		Timestamp:     time.Now().UTC(),
-		ClusterName:   clusterName,
-	})
-	if err != nil {
-		return fmt.Errorf("marshal deploy state: %w", err)
-	}
-	return system.AtomicWrite(path, data, 0o600)
+	return deployMarkerFile.Write(path, &deployState{Phase: phase}, runID, clusterName)
 }
 
 func readDeployState(path string) (*deployState, error) {
-	data, err := os.ReadFile(path)
-	if errors.Is(err, os.ErrNotExist) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, fmt.Errorf("read deploy state: %w", err)
-	}
 	var s deployState
-	if err := json.Unmarshal(data, &s); err != nil {
-		return nil, fmt.Errorf("parse deploy state: %w", err)
-	}
-	if s.SchemaVersion != deployStateSchemaV2 {
-		logutil.Warn("ignoring deploy-state with unknown schema_version",
-			logutil.LF("schema_version", s.SchemaVersion), logutil.LF("expected", deployStateSchemaV2))
-		return nil, nil
+	found, err := deployMarkerFile.Read(path, &s)
+	if err != nil || !found {
+		return nil, err
 	}
 	return &s, nil
 }
 
 // loadResumeMarker reads the deploy-state marker for the resume decision.
-// Unreadable markers, markers naming a different cluster, and markers with
-// no cluster name at all are treated as absent: resume grants
-// skip-wipe/skip-install power, so a marker must positively identify this
-// cluster before it is trusted.
+// Unreadable markers and markers failing the cluster-name guard (resume
+// grants skip-wipe/skip-install power, so a marker must positively identify
+// this cluster) are treated as absent.
 func loadResumeMarker(path, clusterName string) *deployState {
-	marker, err := readDeployState(path)
+	m, err := readDeployState(path)
 	if err != nil {
 		logutil.Warn("could not read deploy state marker; treating as absent", logutil.LF("err", err))
 		return nil
 	}
-	if marker == nil {
+	if m == nil || !deployMarkerFile.Trusted(m, clusterName) {
 		return nil
 	}
-	if marker.ClusterName == "" {
-		logutil.Warn("deploy state marker has no cluster name; treating as absent",
-			logutil.LF("current_cluster", clusterName))
-		return nil
-	}
-	if marker.ClusterName != clusterName {
-		logutil.Warn("deploy state marker is from a different cluster, ignoring",
-			logutil.LF("marker_cluster", marker.ClusterName), logutil.LF("current_cluster", clusterName))
-		return nil
-	}
-	return marker
+	return m
 }
 
 // resolveResumePhase decides where an interrupted deploy resumes. An install
@@ -147,21 +115,21 @@ func loadResumeMarker(path, clusterName string) *deployState {
 // credential loss by passing --fresh. A marker with an unrecognized phase is
 // treated as absent — it must not vouch for a guard bypass.
 func resolveResumePhase(markerPath, clusterName string, freshDeploy bool) (deployPhase, *deployState) {
-	marker := loadResumeMarker(markerPath, clusterName)
-	if freshDeploy || marker == nil {
-		return phaseSetup, marker
+	m := loadResumeMarker(markerPath, clusterName)
+	if freshDeploy || m == nil {
+		return phaseSetup, m
 	}
-	switch marker.Phase {
+	switch m.Phase {
 	case phaseInstall, phasePostInstall:
-		warnIfStaleResume(marker)
-		return marker.Phase, marker
+		warnIfStaleResume(m)
+		return m.Phase, m
 	case phaseSetup:
-		return phaseSetup, marker
+		return phaseSetup, m
 	case phaseCompleted:
 		return phaseSetup, nil
 	}
 	logutil.Warn("deploy state marker has unknown phase; treating as absent",
-		logutil.LF("phase", string(marker.Phase)))
+		logutil.LF("phase", string(m.Phase)))
 	return phaseSetup, nil
 }
 
@@ -170,46 +138,36 @@ func resolveResumePhase(markerPath, clusterName string, freshDeploy bool) (deplo
 // valid for 24 h, so an install-phase resume past that window will hang at
 // the bootstrap wait unless bootstrap already completed; anything a week
 // old is probably abandoned debris.
-func warnIfStaleResume(marker *deployState) {
-	age := time.Since(marker.Timestamp)
+func warnIfStaleResume(m *deployState) {
 	switch {
-	case marker.Phase == phaseInstall && age >= 24*time.Hour:
+	case m.Phase == phaseInstall && m.Age() >= 24*time.Hour:
 		logutil.Warn("deploy state marker is older than the 24h bootstrap ignition cert validity; resume may fail at bootstrap wait",
-			logutil.LF("marker_age", age.Round(time.Hour).String()))
+			logutil.LF("marker_age", m.Age().Round(time.Hour).String()))
 		logutil.Info("if bootstrap never completed, run 'okdctl destroy' then re-deploy with --fresh")
-	case age >= 7*24*time.Hour:
+	case m.Stale():
 		logutil.Warn("deploy state marker is likely stale",
-			logutil.LF("marker_age", age.Round(time.Hour).String()))
+			logutil.LF("marker_age", m.Age().Round(time.Hour).String()))
 		logutil.Info("re-run with --fresh to restart from scratch instead (credentials will be lost)")
 	}
 }
 
 // AnnounceState emits a partial-deploy diagnostic on destroy entry.
-// No-op when no marker exists. clusterName is cfg.Cluster.Name from the
-// caller; a non-empty ClusterName mismatch means the marker belongs to a
-// different cluster and is ignored.
+// No-op when no marker exists or the marker fails the cluster-name guard.
+// clusterName is cfg.Cluster.Name from the caller.
 func AnnounceState(path, clusterName string) {
-	info, statErr := os.Stat(path)
 	ds, err := readDeployState(path)
 	if err != nil {
 		logutil.Warn("could not read deploy state marker", logutil.LF("err", err))
 		return
 	}
-	if ds == nil {
-		return
-	}
-	if ds.ClusterName != "" && ds.ClusterName != clusterName {
-		logutil.Warn("deploy state marker is from a different cluster, ignoring",
-			logutil.LF("marker_cluster", ds.ClusterName), logutil.LF("current_cluster", clusterName))
+	if ds == nil || !deployMarkerFile.Trusted(ds, clusterName) {
 		return
 	}
 	var extra []logutil.LogField
-	if statErr == nil {
-		if modAge := time.Since(info.ModTime()); modAge >= 7*24*time.Hour {
-			extra = append(extra,
-				logutil.LF("marker_age", modAge.Round(time.Hour).String()),
-				logutil.LF("stale", true))
-		}
+	if ds.Stale() {
+		extra = append(extra,
+			logutil.LF("marker_age", ds.Age().Round(time.Hour).String()),
+			logutil.LF("stale", true))
 	}
 	switch ds.Phase {
 	case phaseCompleted:
