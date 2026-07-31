@@ -3,8 +3,6 @@ package config
 import (
 	"os"
 	"path/filepath"
-	"slices"
-	"strings"
 
 	"github.com/qxtaiba/okdctl/internal/system"
 )
@@ -67,11 +65,6 @@ func envBinDir() string {
 func validateAndClean(raw string) (string, bool) {
 	expanded := system.ExpandPath(raw)
 	if err := ValidateBinDir(expanded); err != nil {
-		return "", false
-	}
-	// Reject `..` before Clean resolves it: /usr/local/bin/../../etc would
-	// otherwise pass the absolute-path check yet land tool installs in /etc.
-	if slices.Contains(strings.Split(expanded, string(filepath.Separator)), "..") {
 		return "", false
 	}
 	return filepath.Clean(expanded), true

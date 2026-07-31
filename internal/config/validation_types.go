@@ -83,6 +83,7 @@ const (
 	ScopeAdvancedNetworking
 	ScopeHTTPServer
 	ScopeEnums
+	ScopeDeployment
 
 	ScopeAll = 0xFFFFFFFFFFFFFFFF
 )
@@ -118,6 +119,7 @@ var validators = []validatorEntry{
 	{ScopeHTTPServer, validateHTTPServer},
 	{ScopeDistribution, validateDistribution},
 	{ScopeFiles, validateFiles},
+	{ScopeDeployment, validateDeployment},
 }
 
 func runValidators(cfg *Config, opts ValidationOptions) *ValidationResult {

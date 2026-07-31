@@ -54,12 +54,16 @@ func validateRequired(cfg *Config, result *ValidationResult) {
 }
 
 func validateEnums(cfg *Config, result *ValidationResult) {
-	if cfg.Cluster.Name != "" && !IsValidDNSLabel(cfg.Cluster.Name) {
-		result.AddError(FieldClusterName, "must be a valid DNS label (lowercase, alphanumeric, hyphens)")
+	if cfg.Cluster.Name != "" {
+		if err := ValidateClusterName(cfg.Cluster.Name); err != nil {
+			result.AddError(FieldClusterName, err.Error())
+		}
 	}
 
-	if cfg.Cluster.Domain != "" && !isValidDomain(cfg.Cluster.Domain) {
-		result.AddError(FieldClusterDomain, "must be a valid domain name")
+	if cfg.Cluster.Domain != "" {
+		if err := ValidateDomain(cfg.Cluster.Domain); err != nil {
+			result.AddError(FieldClusterDomain, err.Error())
+		}
 	}
 
 	if cfg.Distribution.Type != "" && !isValidDistribution(cfg.Distribution.Type) {
@@ -68,6 +72,12 @@ func validateEnums(cfg *Config, result *ValidationResult) {
 
 	if cfg.Provider.Type != "" && !isValidProvider(cfg.Provider.Type) {
 		result.AddError(FieldProviderType, fmt.Sprintf("unsupported provider: %s", cfg.Provider.Type))
+	}
+
+	if env := cfg.Deployment.TerraformEnv; env != "" {
+		if err := ValidateTerraformEnv(env); err != nil {
+			result.AddError(FieldDeploymentTerraformEnv, err.Error())
+		}
 	}
 }
 
@@ -81,7 +91,9 @@ func validateEnums(cfg *Config, result *ValidationResult) {
 // root — deploy's gate passes its resolved root explicitly.
 func validateTerraformEnvDir(cfg *Config, projectRoot string, result *ValidationResult) {
 	env := cfg.Deployment.TerraformEnv
-	if env == "" || env == defaultTerraformEnv {
+	// A pattern-invalid env already fails validateEnums; joining it into a
+	// path here would only add a second, noisier error.
+	if env == "" || env == defaultTerraformEnv || ValidateTerraformEnv(env) != nil {
 		return
 	}
 	dir := workspace.TerraformEnvDir(projectRoot, env)
@@ -167,6 +179,13 @@ func validateAdvancedNetworking(cfg *Config, result *ValidationResult) {
 	gateway := cfg.Networking.Gateway
 	bastionIP := cfg.Networking.Bastion.IP
 	staticIPStart := cfg.Networking.StaticIP.Start
+
+	if bastionIP != "" && !IsValidIP(bastionIP) {
+		result.AddError(FieldNetworkingBastionIP, "must be a valid IP address")
+	}
+	if staticIPStart != "" && !IsValidIP(staticIPStart) {
+		result.AddError(FieldNetworkingStaticIPStart, "must be a valid IP address")
+	}
 
 	if machineCIDR == "" || !IsValidCIDR(machineCIDR) {
 		return
@@ -298,11 +317,65 @@ func validateResources(cfg *Config, result *ValidationResult) {
 	checkNodeResources(cfg.Topology.ControlPlane, MinCPUGeneric, minMemory, MinDiskGBGeneric,
 		FieldTopologyControlPlaneCPU, FieldTopologyControlPlaneMemory, FieldTopologyControlPlaneDisk,
 		string(cfg.Distribution.Type), result)
+	checkNodeResourceCaps(cfg.Topology.ControlPlane,
+		FieldTopologyControlPlaneCPU, FieldTopologyControlPlaneMemory, FieldTopologyControlPlaneDisk, result)
 
 	if cfg.Topology.Workers.Count > 0 {
 		checkNodeResources(cfg.Topology.Workers, MinCPUGeneric, MinMemoryMBGeneric, MinDiskGBGeneric,
 			FieldTopologyWorkersCPU, FieldTopologyWorkersMemory, FieldTopologyWorkersDisk,
 			"workers", result)
+		checkNodeResourceCaps(cfg.Topology.Workers,
+			FieldTopologyWorkersCPU, FieldTopologyWorkersMemory, FieldTopologyWorkersDisk, result)
+	}
+
+	if err := nodeCountBounds.check(cfg.Topology.ControlPlane.Count); err != nil {
+		result.AddError(FieldTopologyControlPlaneCount, err.Error())
+	}
+	if err := nodeCountBounds.check(cfg.Topology.Workers.Count); err != nil {
+		result.AddError(FieldTopologyWorkersCount, err.Error())
+	}
+	if err := dataDiskBounds.check(cfg.Disks.WorkerDataSizeGB); err != nil {
+		result.AddError(FieldDisksWorkerDataSize, err.Error())
+	}
+	if err := dataDiskBounds.check(cfg.Disks.ControlPlaneDataSizeGB); err != nil {
+		result.AddError(FieldDisksControlPlaneDataSize, err.Error())
+	}
+}
+
+// checkNodeResourceCaps applies the wizard's upper bounds; floors are
+// distribution-specific and belong to checkNodeResources.
+func checkNodeResourceCaps(node NodeConfig, cpuField, memField, diskField string, result *ValidationResult) {
+	if node.CPU > cpuBounds.hi {
+		result.AddError(cpuField, fmt.Sprintf("maximum %d%s", cpuBounds.hi, cpuBounds.unit))
+	}
+	if node.MemoryMB > memoryBounds.hi {
+		result.AddError(memField, fmt.Sprintf("maximum %d%s", memoryBounds.hi, memoryBounds.unit))
+	}
+	if node.DiskGB > osDiskBounds.hi {
+		result.AddError(diskField, fmt.Sprintf("maximum %d%s", osDiskBounds.hi, osDiskBounds.unit))
+	}
+}
+
+// validateDeployment mirrors the wizard's advanced-step constraints for
+// hand-edited configs. Zero timeouts are valid — install falls back to its
+// compiled defaults. BinDir is checked after ~-expansion because that is
+// the form ResolveBinDir consumes; a value it would silently discard fails
+// here instead.
+func validateDeployment(cfg *Config, result *ValidationResult) {
+	if v := cfg.Deployment.BootstrapTimeout; v != 0 {
+		if err := timeoutBounds.check(v); err != nil {
+			result.AddError(FieldDeploymentBootstrapTimeout, err.Error())
+		}
+	}
+	if v := cfg.Deployment.InstallTimeout; v != 0 {
+		if err := timeoutBounds.check(v); err != nil {
+			result.AddError(FieldDeploymentInstallTimeout, err.Error())
+		}
+	}
+	if v := cfg.Deployment.BinDir; v != "" {
+		if err := ValidateBinDir(system.ExpandPath(v)); err != nil {
+			result.AddError(FieldDeploymentBinDir, err.Error())
+		}
 	}
 }
 
@@ -314,22 +387,21 @@ func validateProvider(cfg *Config, result *ValidationResult) {
 	}
 }
 
-// validateVMIDBase bounds topology.vm_id_base at config load (same bounds
-// as ValidateVMID, which is wired only to the wizard): terraform computes
+// validateVMIDBase bounds topology.vm_id_base at config load (vmidBounds,
+// the same range ValidateVMID enforces in the wizard): terraform computes
 // each vmid as base + index, so an out-of-range base otherwise fails deep
 // inside the apply instead of here. The overflow check keeps the highest
 // computed vmid (bootstrap + masters + workers) under the Proxmox ceiling.
 func validateVMIDBase(cfg *Config, result *ValidationResult) {
-	const minVMID, maxVMID = 100, 999999999
 	base := cfg.Topology.VMIDBase
-	if base < minVMID || base > maxVMID {
-		result.AddError("topology.vm_id_base", fmt.Sprintf("must be between %d and %d", minVMID, maxVMID))
+	if err := vmidBounds.check(base); err != nil {
+		result.AddError(FieldTopologyVMIDBase, err.Error())
 		return
 	}
 	nodes := 1 + cfg.Topology.ControlPlane.Count + cfg.Topology.Workers.Count
-	if base > maxVMID-nodes {
-		result.AddError("topology.vm_id_base",
-			fmt.Sprintf("plus %d node vmids exceeds the maximum vmid %d", nodes, maxVMID))
+	if base > vmidBounds.hi-nodes {
+		result.AddError(FieldTopologyVMIDBase,
+			fmt.Sprintf("plus %d node vmids exceeds the maximum vmid %d", nodes, vmidBounds.hi))
 	}
 }
 
@@ -608,14 +680,14 @@ func getMinMemoryForDistribution(d DistributionType) int {
 }
 
 // ValidateClusterName returns a descriptive error if value violates the
-// DNS-1123 cluster-name grammar (2-63 chars, lowercase a-z/0-9/-, must
-// start with a letter).
+// DNS-1123 cluster-name grammar (2-63 chars, lowercase a-z/0-9/-, no
+// leading or trailing hyphen; a leading digit is allowed).
 func ValidateClusterName(value string) error {
 	if len(value) < 2 {
 		return errors.New("must be at least 2 characters")
 	}
 	if !IsValidDNSLabel(value) {
-		return errors.New("must start with letter, contain only lowercase letters, numbers, hyphens, max 63 chars")
+		return errors.New("must contain only lowercase letters, numbers, and hyphens, not start or end with a hyphen, max 63 chars")
 	}
 	return nil
 }
@@ -706,33 +778,52 @@ func ValidateCIDR(value string) error {
 	return nil
 }
 
-// ValidateIntRange returns a validator that requires value to parse as an
-// integer in [lo, hi]. unit is appended to error messages for context.
-func ValidateIntRange(unit string, lo, hi int) func(string) error {
-	return func(value string) error {
-		n, err := strconv.Atoi(value)
-		if err != nil {
-			return fmt.Errorf("must be a number%s", unit)
-		}
-		if n < lo {
-			return fmt.Errorf("minimum %d%s", lo, unit)
-		}
-		if n > hi {
-			return fmt.Errorf("maximum %d%s", hi, unit)
-		}
-		return nil
-	}
+// intBounds is the single encoding of an integer field's [lo, hi] range,
+// shared by the wizard string validators and the file-load validators so
+// the two surfaces cannot drift.
+type intBounds struct {
+	lo, hi int
+	unit   string
 }
 
-// Preset field validators used by wizard input fields. Each wraps
-// ValidateIntRange with the appropriate unit label and bounds.
+func (b intBounds) check(n int) error {
+	if n < b.lo {
+		return fmt.Errorf("minimum %d%s", b.lo, b.unit)
+	}
+	if n > b.hi {
+		return fmt.Errorf("maximum %d%s", b.hi, b.unit)
+	}
+	return nil
+}
+
+func (b intBounds) validate(value string) error {
+	n, err := strconv.Atoi(value)
+	if err != nil {
+		return fmt.Errorf("must be a number%s", b.unit)
+	}
+	return b.check(n)
+}
+
 var (
-	ValidateCPU       = ValidateIntRange(" (vcpus)", 1, 128)
-	ValidateMemory    = ValidateIntRange(" (in mb)", 1024, 1048576)
-	ValidateOSDisk    = ValidateIntRange(" (in gb)", 20, 1000)
-	ValidateNodeCount = ValidateIntRange(" (nodes)", 0, 100)
-	ValidateVMID      = ValidateIntRange("", 100, 999999999)
-	ValidateTimeout   = ValidateIntRange(" (seconds)", 60, 86400)
+	cpuBounds       = intBounds{1, 128, " (vcpus)"}
+	memoryBounds    = intBounds{1024, 1048576, " (in mb)"}
+	osDiskBounds    = intBounds{20, 1000, " (in gb)"}
+	dataDiskBounds  = intBounds{0, 5000, " (in gb)"}
+	nodeCountBounds = intBounds{0, 100, " (nodes)"}
+	vmidBounds      = intBounds{100, 999999999, ""}
+	timeoutBounds   = intBounds{60, 86400, " (seconds)"}
+)
+
+// Preset field validators used by wizard input fields. Each wraps an
+// intBounds range that the file-load validators also enforce.
+var (
+	ValidateCPU       = cpuBounds.validate
+	ValidateMemory    = memoryBounds.validate
+	ValidateOSDisk    = osDiskBounds.validate
+	ValidateDataDisk  = dataDiskBounds.validate
+	ValidateNodeCount = nodeCountBounds.validate
+	ValidateVMID      = vmidBounds.validate
+	ValidateTimeout   = timeoutBounds.validate
 )
 
 var terraformEnvPattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_-]*$`)
@@ -763,14 +854,20 @@ func ValidateSSHFingerprint(value string) error {
 	return nil
 }
 
-// ValidateBinDir accepts empty (default applies) or an absolute path.
-// Relative paths resolve against an unpredictable cwd at install time.
+// ValidateBinDir accepts empty (default applies) or an absolute path
+// without `..` elements. Relative paths resolve against an unpredictable
+// cwd at install time; `..` is rejected before Clean resolves it because
+// /usr/local/bin/../../etc would pass the absolute-path check yet land
+// tool installs in /etc.
 func ValidateBinDir(value string) error {
 	if value == "" {
 		return nil
 	}
 	if !filepath.IsAbs(value) {
 		return errors.New("must be an absolute path (e.g. /usr/local/bin or /home/user/bin)")
+	}
+	if slices.Contains(strings.Split(value, string(filepath.Separator)), "..") {
+		return errors.New("must not contain '..' path elements")
 	}
 	return nil
 }
