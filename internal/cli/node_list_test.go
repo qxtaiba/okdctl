@@ -13,6 +13,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/provision"
 	"github.com/qxtaiba/okdctl/internal/node"
 	"github.com/qxtaiba/okdctl/internal/nodetypes"
+	"github.com/qxtaiba/okdctl/internal/tui"
 )
 
 func intPtr(i int) *int { return &i }
@@ -135,8 +136,12 @@ func TestNodeListEntryJSONShape(t *testing.T) {
 
 // TestPrintNodeListAlignsColumnsWithLongNames is the table-alignment
 // regression: a long node name must not shift later columns out of alignment
-// between the header and every data row.
+// between the header and every data row. The profile is pinned to no-color so
+// byte-offset column math stays valid on the styled header and not-ready row.
 func TestPrintNodeListAlignsColumnsWithLongNames(t *testing.T) {
+	tui.SetColorProfileFor(&bytes.Buffer{})
+	t.Cleanup(func() { tui.SetColorProfileFor(&bytes.Buffer{}) })
+
 	entries := []nodeListEntry{
 		{Name: "m0", Role: nodetypes.RoleMaster, Ready: true, TFIndex: intPtr(0), Drift: driftNone},
 		{
@@ -192,6 +197,9 @@ func TestPrintNodeListAlignsColumnsWithLongNames(t *testing.T) {
 	}
 	if got := col(row1, opCol); got != "resize (tf-apply)" {
 		t.Errorf("row1 OP column = %q, want %q", got, "resize (tf-apply)")
+	}
+	if strings.Contains(buf.String(), "\x1b[") {
+		t.Errorf("node list output must carry no ANSI under a no-color profile:\n%q", buf.String())
 	}
 }
 

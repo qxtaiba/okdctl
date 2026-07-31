@@ -27,8 +27,11 @@ type TableOptions struct {
 
 // Table renders an aligned column table as a slice of lines: a header row
 // followed by one line per data row. Column widths come from the widest plain
-// cell (header included). It is the single table look shared by status, node
-// list, and the resize node section.
+// cell (header included). It is the single table look shared by status and
+// node list; the node-op boxes keep their dotted key/value node lines, whose
+// nested annotations and full terraform addresses don't fit flat columns.
+// Lines come back un-downsampled — the Boxed* helpers gate embedded tables,
+// callers printing outside a box must Downsample each line.
 func Table(headers []string, rows [][]string, opts TableOptions) []string {
 	gap := opts.Gap
 	if gap == 0 {
