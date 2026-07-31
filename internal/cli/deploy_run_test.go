@@ -29,18 +29,18 @@ const (
 // resetDestroyFlags.
 func resetDeployState(t *testing.T) {
 	t.Helper()
-	savedOutputFile := deployOutputFile
+	savedOutputFile, savedConfirm := deployOutputFile, deployConfirmCluster
 	savedMinimal, savedYes, savedWriteConfig := deployMinimal, deployYes, deployWriteConfig
 	savedDryRun, savedFresh, savedKeep := deployDryRun, deployFresh, deployKeepRedHatCatalogs
 	t.Cleanup(func() {
-		deployOutputFile = savedOutputFile
+		deployOutputFile, deployConfirmCluster = savedOutputFile, savedConfirm
 		deployMinimal, deployYes, deployWriteConfig = savedMinimal, savedYes, savedWriteConfig
 		deployDryRun, deployFresh, deployKeepRedHatCatalogs = savedDryRun, savedFresh, savedKeep
 		runWizardFn = runWizardWithMode
 		deployExecuteFn = deploy.Execute
 		deployCmd.SetOut(nil)
 	})
-	deployOutputFile = "okdctl.yaml"
+	deployOutputFile, deployConfirmCluster = "okdctl.yaml", ""
 	deployMinimal, deployYes, deployWriteConfig = false, false, false
 	deployDryRun, deployFresh, deployKeepRedHatCatalogs = false, false, false
 	deployCmd.SetContext(context.Background())
@@ -88,11 +88,14 @@ func forbidWizard(t *testing.T) {
 	}
 }
 
-// executeCapture records the deployExecuteFn seam's invocation.
+// executeCapture records the deployExecuteFn seam's invocation. credsValid
+// snapshots opts.Credentials.IsValid() at call time, because the caller's
+// deferred Zeroize wipes the credential bytes before the test can assert.
 type executeCapture struct {
-	called bool
-	cfg    *config.Config
-	opts   deploy.Options
+	called     bool
+	cfg        *config.Config
+	opts       deploy.Options
+	credsValid bool
 }
 
 func stubExecute(t *testing.T, ret error) *executeCapture {
@@ -102,6 +105,7 @@ func stubExecute(t *testing.T, ret error) *executeCapture {
 		rec.called = true
 		rec.cfg = cfg
 		rec.opts = opts
+		rec.credsValid = opts.Credentials != nil && opts.Credentials.IsValid()
 		return ret
 	}
 	return rec
@@ -115,14 +119,13 @@ func forbidExecute(t *testing.T) {
 	}
 }
 
-func seedDeployConfig(t *testing.T, name string) *config.Config {
+func seedDeployConfig(t *testing.T) {
 	t.Helper()
 	cfg := config.DefaultConfig()
-	cfg.Cluster.Name = name
+	cfg.Cluster.Name = "prod"
 	if err := config.NewLoader().Save(cfg, "okdctl.yaml"); err != nil {
 		t.Fatalf("seed config: %v", err)
 	}
-	return cfg
 }
 
 // TestPersistWizardConfig_SecretHygiene pins the save-pipeline ordering:
@@ -208,7 +211,7 @@ func TestRunDeploy_WizardCancelMakesNoChanges(t *testing.T) {
 func TestRunDeploy_ExistingConfigSeedsWizard(t *testing.T) {
 	resetDeployState(t)
 	t.Chdir(t.TempDir())
-	seedDeployConfig(t, "prod")
+	seedDeployConfig(t)
 	forbidExecute(t)
 	rec := stubWizard(t, wizard.Result{Cancelled: true}, steps.WelcomeModeEdit, nil)
 
@@ -373,7 +376,7 @@ func TestRunDeploy_WelcomeModeDeploySkipsSave(t *testing.T) {
 	resetDeployState(t)
 	isolateProxmoxEnv(t)
 	t.Chdir(t.TempDir())
-	seedDeployConfig(t, "prod")
+	seedDeployConfig(t)
 	exec := stubExecute(t, nil)
 	stubWizard(t, wizard.Result{Completed: true}, steps.WelcomeModeDeploy, nil)
 
@@ -414,5 +417,88 @@ func TestRunDeploy_DryRunShortCircuitsBeforeWizard(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "DEPLOY STEP LISTING") {
 		t.Errorf("step listing missing from output:\n%s", out.String())
+	}
+}
+
+// TestRunDeploy_HeadlessGuard pins the non-interactive contract:
+// 'deploy --yes --confirm-cluster <name>' executes the deployment engine
+// without constructing the wizard; --yes alone, or with a mismatched name,
+// refuses before any deploy work.
+func TestRunDeploy_HeadlessGuard(t *testing.T) {
+	t.Run("--yes without --confirm-cluster names the required flag", func(t *testing.T) {
+		resetDeployState(t)
+		t.Chdir(t.TempDir())
+		seedDeployConfig(t)
+		forbidWizard(t)
+		forbidExecute(t)
+		deployYes = true
+
+		err := runDeploy(deployCmd, nil)
+		var ce *errtypes.ConfigError
+		if !errors.As(err, &ce) {
+			t.Fatalf("want *errtypes.ConfigError, got %T: %v", err, err)
+		}
+		if !strings.Contains(err.Error(), "--confirm-cluster") {
+			t.Errorf("refusal must point at --confirm-cluster: %v", err)
+		}
+	})
+
+	t.Run("--yes with mismatched --confirm-cluster refuses", func(t *testing.T) {
+		resetDeployState(t)
+		t.Chdir(t.TempDir())
+		seedDeployConfig(t)
+		forbidWizard(t)
+		forbidExecute(t)
+		deployYes = true
+		deployConfirmCluster = "staging"
+
+		err := runDeploy(deployCmd, nil)
+		var ce *errtypes.ConfigError
+		if !errors.As(err, &ce) {
+			t.Fatalf("want *errtypes.ConfigError, got %T: %v", err, err)
+		}
+		if !strings.Contains(err.Error(), "does not match") {
+			t.Errorf("refusal must state the mismatch: %v", err)
+		}
+	})
+
+	t.Run("--yes --confirm-cluster deploys headless with env credentials", func(t *testing.T) {
+		resetDeployState(t)
+		isolateProxmoxEnv(t)
+		t.Setenv("PROXMOX_VE_API_TOKEN", fixtureAPIToken)
+		t.Chdir(t.TempDir())
+		seedDeployConfig(t)
+		forbidWizard(t)
+		exec := stubExecute(t, nil)
+		deployYes = true
+		deployConfirmCluster = "prod"
+
+		if err := runDeploy(deployCmd, nil); err != nil {
+			t.Fatalf("headless deploy: %v", err)
+		}
+		if !exec.called {
+			t.Fatal("headless deploy must invoke the deployment engine")
+		}
+		if exec.cfg.Cluster.Name != "prod" {
+			t.Errorf("engine received cluster %q; want the on-disk config", exec.cfg.Cluster.Name)
+		}
+		if !exec.credsValid {
+			t.Error("engine must receive the resolved env credentials")
+		}
+		if !exec.opts.ShowStartMessage {
+			t.Error("headless deploy must keep the start message")
+		}
+	})
+}
+
+// TestDeployConfirmClusterFlagContract mirrors the sibling-command checks:
+// --confirm-cluster is registered and stays long-form only.
+func TestDeployConfirmClusterFlagContract(t *testing.T) {
+	f := deployCmd.Flags().Lookup("confirm-cluster")
+	if f == nil {
+		t.Fatal("deploy must register --confirm-cluster")
+	}
+	if f.Shorthand != "" {
+		t.Error("--confirm-cluster must stay long-form only (not in the shorthand allowlist)")
 	}
 }

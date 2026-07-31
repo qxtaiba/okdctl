@@ -97,16 +97,21 @@ line", it's UsageError.
 
 ## Examples
 
+Scripted (headless) deploys use `--yes --confirm-cluster=<name>`: no wizard,
+no TTY, deploying from an existing `okdctl.yaml` + `okdctl.env`. The
+`--confirm-cluster` value must equal the configured cluster name — the same
+guard `destroy` and `cleanup` carry.
+
 Run the next step only on success:
 
 ```sh
-okdctl deploy && kubectl apply -f manifests/
+okdctl deploy --yes --confirm-cluster=prod && kubectl apply -f manifests/
 ```
 
 Branch on specific failure categories:
 
 ```sh
-okdctl deploy
+okdctl deploy --yes --confirm-cluster=prod
 rc=$?
 case $rc in
   0)   echo "deploy succeeded" ;;
@@ -124,7 +129,7 @@ esac
 Detect and skip on interruption in CI:
 
 ```sh
-okdctl deploy || { [ $? -eq 130 ] && exit 0 || exit 1; }
+okdctl deploy --yes --confirm-cluster=prod || { [ $? -eq 130 ] && exit 0 || exit 1; }
 ```
 
 Alert on drift without failing a cron job:
