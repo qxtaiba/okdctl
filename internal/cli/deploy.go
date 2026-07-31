@@ -25,6 +25,7 @@ var (
 	deployOutputFile         string
 	deployMinimal            bool
 	deployYes                bool
+	deployConfirmCluster     string
 	deployWriteConfig        bool
 	deployDryRun             bool
 	deployFresh              bool
@@ -43,14 +44,18 @@ var deployCmd = &cobra.Command{
 	Short: "Deploy a Kubernetes cluster",
 	Long: `Deploy an OKD/OpenShift cluster through an interactive wizard.
 
-Use --yes to skip the wizard and deploy non-interactively from an existing
-configuration file. Use --write-config to write the configuration file
-non-interactively without deploying.
+Use --yes with --confirm-cluster to skip the wizard and deploy
+non-interactively from an existing configuration file (and its okdctl.env
+credential sidecar) — no TTY required, so a failed deploy can be resumed
+over SSH or from CI. --confirm-cluster must equal the configured cluster
+name, the same guard every other scripted lifecycle command carries.
+Use --write-config to write the configuration file non-interactively
+without deploying.
 
 Note: before v0.2.0, --yes meant what --write-config means now.`,
 	Example: `  okdctl deploy
   okdctl deploy --config my-cluster.yaml
-  okdctl deploy --yes                                # deploys from okdctl.yaml, no wizard
+  okdctl deploy --yes --confirm-cluster=prod         # scripted deploy from okdctl.yaml, no wizard
   okdctl deploy --write-config --output-file my-cluster.yaml  # writes config only; does not deploy
   okdctl deploy --dry-run
   okdctl deploy --keep-redhat-catalogs`,
@@ -60,7 +65,9 @@ Note: before v0.2.0, --yes meant what --write-config means now.`,
 func init() {
 	deployCmd.Flags().StringVar(&deployOutputFile, flagOutputFile, "okdctl.yaml", "config file to write wizard output to; reuses and reads back an existing file at this path, otherwise creates one; overrides --config when both are set")
 	deployCmd.Flags().BoolVar(&deployMinimal, "minimal", false, "use minimal defaults (single-node cluster)")
-	deployCmd.Flags().BoolVarP(&deployYes, "yes", "y", false, "skip the wizard and deploy from the existing configuration file")
+	deployCmd.Flags().BoolVarP(&deployYes, "yes", "y", false, "skip the wizard and deploy from the existing configuration file (requires --confirm-cluster)")
+	deployCmd.Flags().StringVar(&deployConfirmCluster, "confirm-cluster", "",
+		"required with --yes; must equal the config cluster name")
 	deployCmd.Flags().BoolVar(&deployWriteConfig, "write-config", false, "write configuration non-interactively; does not deploy")
 	deployCmd.MarkFlagsMutuallyExclusive("yes", "write-config")
 	deployCmd.Flags().BoolVar(&deployDryRun, flagDryRun, false, "preview terraform plan and step listing without deploying")
@@ -142,13 +149,18 @@ func runDeploy(cmd *cobra.Command, _ []string) error {
 	// --yes carries the same assume-yes meaning as every sibling command:
 	// perform the operation without interaction. It requires a config that
 	// already exists on disk — deploying compiled-in defaults unattended
-	// would be a footgun, and 66 (config missing) tells scripts exactly why.
+	// would be a footgun, and 66 (config missing) tells scripts exactly why —
+	// plus the destroy-grade --confirm-cluster guard so a scripted deploy in
+	// the wrong directory cannot target the wrong cluster.
 	if deployYes {
 		if !configExists {
 			return &errtypes.ConfigError{
 				Msg: fmt.Sprintf("--yes deploys non-interactively and requires an existing configuration file at %s; run 'okdctl deploy' for the wizard or 'okdctl deploy --write-config' first", deployOutputFile),
 				Err: errtypes.ErrConfigMissing,
 			}
+		}
+		if err := confirmClusterMatches(true, deployConfirmCluster, cfg.Cluster.Name, "deploy"); err != nil {
+			return err
 		}
 		return runFullDeployment(ctx, cfg, out)
 	}
