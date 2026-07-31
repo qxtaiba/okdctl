@@ -10,50 +10,77 @@ import (
 	"testing"
 )
 
-// envCallSite is one creds.Env() call: the file (repo-relative, in the
-// registry's internal/-relative spelling) and the enclosing function.
-type envCallSite struct {
-	registryPath string
-	funcName     string
-	zeroizeOK    bool
+type zeroizeDiscipline int
+
+const (
+	// deferredZeroize: the function body must defer a Zeroize/ZeroizeEnv
+	// call, bounding the plaintext lifetime to the enclosing frame.
+	deferredZeroize zeroizeDiscipline = iota
+	// manualZeroize: the env-bearing object escapes into a longer-lived
+	// owner so a literal defer is impossible; the body must still call
+	// ZeroizeEnv on its early-error paths.
+	manualZeroize
+	// callerOwnedZeroize: a constructor whose return value carries the env;
+	// every caller owns the defer, so the body itself carries no Zeroize.
+	callerOwnedZeroize
+)
+
+// allowedEnvCallSites is the registry of ProxmoxCredentials.Env() call
+// sites, keyed "repo/relative/path.go:FuncName". Adding a call site means
+// verifying its ZeroizeEnv hygiene per the Env doc comment and recording
+// the discipline here.
+var allowedEnvCallSites = map[string]zeroizeDiscipline{
+	"internal/cli/destroy.go:runDestroyDryRun":        deferredZeroize,
+	"internal/cli/helpers.go:runTerraformPlanPreview": deferredZeroize,
+	"internal/cli/node.go:newRunner":                  manualZeroize,
+	"internal/deploy/deploy.go:NewProvisioner":        callerOwnedZeroize,
 }
 
-// TestEnvCallSiteRegistry enforces the CLAUDE.md reviewer checklist as an
-// invariant: every creds.Env() call site must (1) appear in the
-// known-call-sites registry in the ProxmoxCredentials.Env doc comment and
-// (2) pair with a ZeroizeEnv — either called in the enclosing function or
-// explicitly delegated to callers via that function's doc comment. The
-// inverse direction fails on stale registry entries whose call site moved.
+type envCallSite struct {
+	key      string
+	position string
+	fn       *ast.FuncDecl
+}
+
+// TestEnvCallSiteRegistry enforces the bounded-credential-lifetime
+// convention statically: every non-test call of a zero-argument .Env()
+// method must appear in allowedEnvCallSites, and each allowed site must
+// honor its recorded Zeroize discipline. Matching is syntactic (no type
+// resolution), which over-approximates — an unrelated Env() method would
+// also trip the registry and force a human look, the fail-closed direction
+// for a credential tripwire.
 func TestEnvCallSiteRegistry(t *testing.T) {
-	root := findRepoRoot(t)
-	sites := collectEnvCallSites(t, root)
+	sites := collectEnvCallSites(t, findRepoRoot(t))
 	if len(sites) == 0 {
 		t.Fatal("no creds.Env() call sites found; the sweep is broken")
 	}
 
-	registry := registryEntries(t)
-	if len(registry) == 0 {
-		t.Fatal("no .go entries parsed from the known-call-sites registry in proxmox.go")
-	}
-
-	for _, s := range sites {
-		if !registry[s.registryPath] {
-			t.Errorf("%s: creds.Env() call in %s is missing from the known-call-sites registry in ProxmoxCredentials.Env's doc comment (internal/credentials/proxmox.go)",
-				s.registryPath, s.funcName)
-		}
-		if !s.zeroizeOK {
-			t.Errorf("%s: function %s calls creds.Env() but neither calls ZeroizeEnv nor documents the caller-side ZeroizeEnv contract in its doc comment",
-				s.registryPath, s.funcName)
-		}
-	}
-
 	found := make(map[string]bool, len(sites))
 	for _, s := range sites {
-		found[s.registryPath] = true
+		found[s.key] = true
+
+		discipline, ok := allowedEnvCallSites[s.key]
+		if !ok {
+			t.Errorf("unregistered .Env() call site at %s: verify its ZeroizeEnv hygiene per the ProxmoxCredentials.Env doc comment, then record %q in allowedEnvCallSites",
+				s.position, s.key)
+			continue
+		}
+		switch discipline {
+		case deferredZeroize:
+			if !containsZeroizeCall(s.fn.Body, true) {
+				t.Errorf("%s must defer a Zeroize/ZeroizeEnv call in the same function body", s.key)
+			}
+		case manualZeroize:
+			if !containsZeroizeCall(s.fn.Body, false) {
+				t.Errorf("%s must call ZeroizeEnv on its early-error paths", s.key)
+			}
+		case callerOwnedZeroize:
+		}
 	}
-	for entry := range registry {
-		if !found[entry] {
-			t.Errorf("registry entry %q is stale: no creds.Env() call site exists there anymore", entry)
+
+	for key := range allowedEnvCallSites {
+		if !found[key] {
+			t.Errorf("allowlist entry %q no longer matches a .Env() call site: remove or update it", key)
 		}
 	}
 }
@@ -63,129 +90,94 @@ func collectEnvCallSites(t *testing.T, root string) []envCallSite {
 	fset := token.NewFileSet()
 	var sites []envCallSite
 
-	for _, top := range []string{"internal", "cmd"} {
-		dir := filepath.Join(root, top)
-		walkErr := filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
-			if err != nil {
-				return err
-			}
-			if d.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
-				return nil
-			}
-			f, parseErr := parser.ParseFile(fset, path, nil, parser.ParseComments)
-			if parseErr != nil {
-				return nil //nolint:nilerr // unparseable files are the compiler's problem; the sweep asserts only on parseable sources
-			}
-			sites = append(sites, fileEnvCallSites(f, registryRelPath(root, path))...)
-			return nil
-		})
-		if walkErr != nil {
-			t.Fatalf("walk %s: %v", dir, walkErr)
+	walkErr := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
 		}
+		if d.IsDir() {
+			name := d.Name()
+			if path != root && (strings.HasPrefix(name, ".") || name == "testdata" || name == "vendor" || name == "node_modules") {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+			return nil
+		}
+		f, parseErr := parser.ParseFile(fset, path, nil, parser.SkipObjectResolution)
+		if parseErr != nil {
+			return nil //nolint:nilerr // unparseable files are the compiler's problem; the sweep asserts only on parseable sources
+		}
+		rel, relErr := filepath.Rel(root, path)
+		if relErr != nil {
+			return relErr
+		}
+		sites = append(sites, fileEnvCallSites(fset, f, filepath.ToSlash(rel))...)
+		return nil
+	})
+	if walkErr != nil {
+		t.Fatalf("walk %s: %v", root, walkErr)
 	}
 	return sites
 }
 
-// registryRelPath converts an absolute path to the registry's spelling:
-// relative to internal/ for internal packages (e.g. "cli/helpers.go"),
-// repo-relative otherwise (e.g. "cmd/okdctl/main.go").
-func registryRelPath(root, path string) string {
-	if rel, err := filepath.Rel(filepath.Join(root, "internal"), path); err == nil && !strings.HasPrefix(rel, "..") {
-		return filepath.ToSlash(rel)
-	}
-	rel, err := filepath.Rel(root, path)
-	if err != nil {
-		return filepath.ToSlash(path)
-	}
-	return filepath.ToSlash(rel)
-}
-
-// fileEnvCallSites finds functions calling <cred-named-ident>.Env() with no
-// args. Files aren't gated on a credentials import — the receiver's type
-// usually arrives via a helper return value, so the import is often absent.
-func fileEnvCallSites(f *ast.File, relPath string) []envCallSite {
+func fileEnvCallSites(fset *token.FileSet, f *ast.File, relPath string) []envCallSite {
 	var sites []envCallSite
 	for _, decl := range f.Decls {
 		fn, ok := decl.(*ast.FuncDecl)
 		if !ok || fn.Body == nil {
 			continue
 		}
-		if !containsCredsEnvCall(fn.Body) {
-			continue
+		if pos, ok := findEnvCall(fset, fn.Body); ok {
+			sites = append(sites, envCallSite{
+				key:      relPath + ":" + fn.Name.Name,
+				position: pos,
+				fn:       fn,
+			})
 		}
-		zeroizeOK := containsZeroizeCall(fn.Body) ||
-			(fn.Doc != nil && strings.Contains(fn.Doc.Text(), "ZeroizeEnv"))
-		sites = append(sites, envCallSite{
-			registryPath: relPath,
-			funcName:     fn.Name.Name,
-			zeroizeOK:    zeroizeOK,
-		})
 	}
 	return sites
 }
 
-func containsCredsEnvCall(body *ast.BlockStmt) bool {
-	found := false
+func findEnvCall(fset *token.FileSet, body *ast.BlockStmt) (position string, found bool) {
 	ast.Inspect(body, func(n ast.Node) bool {
 		call, ok := n.(*ast.CallExpr)
-		if !ok {
+		if !ok || len(call.Args) != 0 {
 			return true
 		}
-		sel, ok := call.Fun.(*ast.SelectorExpr)
-		if !ok || sel.Sel.Name != "Env" || len(call.Args) != 0 {
-			return true
-		}
-		recv, ok := sel.X.(*ast.Ident)
-		if ok && strings.Contains(strings.ToLower(recv.Name), "cred") {
+		if sel, ok := call.Fun.(*ast.SelectorExpr); ok && sel.Sel.Name == "Env" {
+			position = fset.Position(call.Pos()).String()
 			found = true
 			return false
 		}
 		return true
 	})
-	return found
+	return position, found
 }
 
-func containsZeroizeCall(body *ast.BlockStmt) bool {
+func containsZeroizeCall(body *ast.BlockStmt, deferredOnly bool) bool {
 	found := false
 	ast.Inspect(body, func(n ast.Node) bool {
-		sel, ok := n.(*ast.SelectorExpr)
-		if ok && sel.Sel.Name == "ZeroizeEnv" {
-			found = true
-			return false
+		var call *ast.CallExpr
+		switch node := n.(type) {
+		case *ast.DeferStmt:
+			call = node.Call
+		case *ast.CallExpr:
+			if deferredOnly {
+				return true
+			}
+			call = node
+		default:
+			return true
+		}
+		if sel, ok := call.Fun.(*ast.SelectorExpr); ok {
+			if sel.Sel.Name == "Zeroize" || sel.Sel.Name == "ZeroizeEnv" {
+				found = true
+			}
 		}
 		return true
 	})
 	return found
-}
-
-// registryEntries parses the .go paths out of the known-call-sites block in
-// ProxmoxCredentials.Env's doc comment. Entry lines are tab-indented comment
-// lines whose first token ends in ".go"; continuation lines don't match.
-func registryEntries(t *testing.T) map[string]bool {
-	t.Helper()
-	data, err := os.ReadFile("proxmox.go")
-	if err != nil {
-		t.Fatalf("read proxmox.go: %v", err)
-	}
-	src := string(data)
-
-	start := strings.Index(src, "Known call sites")
-	if start < 0 {
-		t.Fatal("proxmox.go: 'Known call sites' block not found in ProxmoxCredentials.Env doc comment")
-	}
-	end := strings.Index(src[start:], "func (c *ProxmoxCredentials) Env")
-	if end < 0 {
-		t.Fatal("proxmox.go: registry block is not directly above ProxmoxCredentials.Env")
-	}
-
-	entries := make(map[string]bool)
-	for line := range strings.SplitSeq(src[start:start+end], "\n") {
-		fields := strings.Fields(strings.TrimPrefix(strings.TrimSpace(line), "//"))
-		if len(fields) > 0 && strings.HasSuffix(fields[0], ".go") {
-			entries[fields[0]] = true
-		}
-	}
-	return entries
 }
 
 func findRepoRoot(t *testing.T) string {
