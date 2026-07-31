@@ -12,8 +12,8 @@ import (
 	"path/filepath"
 
 	"github.com/qxtaiba/okdctl/infrastructure"
-	"github.com/qxtaiba/okdctl/internal/system"
 	"github.com/qxtaiba/okdctl/internal/logutil"
+	"github.com/qxtaiba/okdctl/internal/system"
 )
 
 const (
