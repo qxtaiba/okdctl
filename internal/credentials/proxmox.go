@@ -155,21 +155,9 @@ func (c *ProxmoxCredentials) GoString() string {
 // the slice to anything that outlives the current call stack (goroutine,
 // cache, persistent config). The source []byte fields remain wipeable.
 //
-// Known call sites (review when adding a new one):
-//
-//	cli/helpers.go      — proxmox.WithEnv(creds.Env()); defer prov.ZeroizeEnv()
-//	                      (runTerraformPlanPreview, shared by deploy --dry-run
-//	                      and okdctl plan)
-//	cli/destroy.go      — terraform.WithEnv(creds.Env()); defer tf.ZeroizeEnv()
-//	cli/node.go         — terraform.WithEnv(creds.Env()) inside
-//	                      (*nodeOpsEnv).newRunner; manual ZeroizeEnv on the
-//	                      early-error returns, rc.release zeroizes the tf env
-//	                      per invocation, and the creds themselves are owned
-//	                      by nodeOpsEnv (env.close() → creds.Zeroize()) — the
-//	                      flag verbs defer rc.cleanup() via buildNodeRunner,
-//	                      node manage defers env.close() and builds runners
-//	                      per dry-run/execute invocation
-//	deploy/deploy.go    — okd.WithEnv(creds.Env()); callers defer p.ZeroizeEnv()
+// Call sites are enforced statically by TestEnvCallSiteRegistry
+// (env_registry_test.go): every non-test call must appear in its
+// allowedEnvCallSites map with the site's Zeroize discipline recorded.
 func (c *ProxmoxCredentials) Env() []string {
 	if !c.IsValid() {
 		return nil
