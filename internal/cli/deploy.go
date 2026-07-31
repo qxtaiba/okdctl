@@ -31,6 +31,13 @@ var (
 	deployKeepRedHatCatalogs bool
 )
 
+// Seams for TTY-free tests of the runDeploy glue; production never
+// reassigns them.
+var (
+	runWizardFn     = runWizardWithMode
+	deployExecuteFn = deploy.Execute
+)
+
 var deployCmd = &cobra.Command{
 	Use:   cmdNameDeploy,
 	Short: "Deploy a Kubernetes cluster",
@@ -146,7 +153,7 @@ func runDeploy(cmd *cobra.Command, _ []string) error {
 		return runFullDeployment(ctx, cfg, out)
 	}
 
-	result, welcomeMode, err := runWizardWithMode(ctx, cfg, configExists)
+	result, welcomeMode, err := runWizardFn(ctx, cfg, configExists)
 	if err != nil {
 		return &errtypes.ConfigError{Msg: "wizard failed", Err: err}
 	}
@@ -166,15 +173,7 @@ func runDeploy(cmd *cobra.Command, _ []string) error {
 	defer clearConfigCredentials(cfg)
 
 	if err := withProjectLock(projectRoot, "deploy", func() error {
-		if err := writeCredentialsEnv(cfg, deployOutputFile); err != nil {
-			return fmt.Errorf("save credentials: %w", err)
-		}
-
-		// Clear secrets before saving so they never appear in YAML.
-		// The defer above is a safety net; this is the primary clear.
-		clearConfigCredentials(cfg)
-
-		return saveConfig(cfg, deployOutputFile, out)
+		return persistWizardConfig(cfg, deployOutputFile, out)
 	}); err != nil {
 		return err
 	}
@@ -246,6 +245,18 @@ func withProjectLock(projectRoot, verb string, fn func() error) error {
 	return fn()
 }
 
+// persistWizardConfig persists wizard output in a fixed order: credentials
+// go to the .env sidecar first, then the in-memory secrets are cleared, and
+// only then is the YAML saved — so credential bytes can never reach
+// okdctl.yaml. TestPersistWizardConfig_SecretHygiene pins this ordering.
+func persistWizardConfig(cfg *config.Config, path string, w io.Writer) error {
+	if err := writeCredentialsEnv(cfg, path); err != nil {
+		return fmt.Errorf("save credentials: %w", err)
+	}
+	clearConfigCredentials(cfg)
+	return saveConfig(cfg, path, w)
+}
+
 func saveConfig(cfg *config.Config, path string, w io.Writer) error {
 	if result := validateConfig(cfg, w); !result.IsValid() {
 		logutil.Warn("configuration has validation warnings but will still be saved")
@@ -304,7 +315,7 @@ func runFullDeployment(ctx context.Context, cfg *config.Config, w io.Writer) err
 		reportCredentialProvenance(creds)
 	}
 
-	return deploy.Execute(ctx, cfg, deploy.Options{
+	return deployExecuteFn(ctx, cfg, deploy.Options{
 		ShowStartMessage:   true,
 		Credentials:        creds,
 		FreshDeploy:        deployFresh,
