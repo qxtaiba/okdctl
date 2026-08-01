@@ -40,11 +40,18 @@ it. Set `OKDCTL_NO_UPDATE_CHECK=1` to turn it off.
 
 ## Install
 
-**curl | bash** (verifies SHA256):
+**curl | bash** (cosign signature + SHA256):
 
 ```bash
 curl -sSfL https://raw.githubusercontent.com/qxtaiba/okdctl/develop/scripts/install.sh | bash
 ```
+
+The installer verifies the sigstore cosign signature on `SHA256SUMS`, then
+byte-compares the downloaded archive against that checksum before installing.
+That verification requires [cosign](https://docs.sigstore.dev/cosign/installation/)
+on your `PATH` — it ships in no base distro, so install it first. To accept
+sha256-only trust when cosign is unavailable, set `INSECURE=1`; the SHA256 check
+still runs and the skipped signature step is logged loudly.
 
 **`.deb` / `.rpm`** from the [releases page](https://github.com/qxtaiba/okdctl/releases)
 for apt/dnf users.

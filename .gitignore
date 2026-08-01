@@ -26,11 +26,14 @@ kubeadmin-password
 # Terraform files
 *.tfstate
 *.tfstate.backup
+terraform.tfstate.*.bak
 *.tfvars
-tfplan
-destroy.tfplan
+*.tfplan
 .terraform/
 infrastructure/terraform/modules/**/.terraform.lock.hcl
+# Temporary destroy-override files (see modules/proxmox-okd/main.tf lifecycle comment)
+override.tf
+*_override.tf
 
 # SSH keys and secrets
 *.pem
