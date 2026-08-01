@@ -182,16 +182,13 @@ Sleep 2s
 Enter
 Sleep 4.5s
 
-# step 9/11 files — type pull secret, ssh key, ignition server
+# step 9/11 files — type pull secret, ssh key, web root
 Sleep 1.5s
 Type "~/pull-secret.json"
 Sleep 1.3s
 Tab
 Type "~/.ssh/id_ed25519.pub"
 Sleep 1.4s
-Tab
-Type "443"
-Sleep 1.2s
 Tab
 Type "/var/www/html"
 Sleep 2s
@@ -207,6 +204,11 @@ Sleep 1.2s
 Tab
 Sleep 1.2s
 Tab
+Sleep 1.2s
+Tab
+Sleep 1.2s
+Tab
+Sleep 1.2s
 Type "3600"
 Sleep 1.2s
 Tab
