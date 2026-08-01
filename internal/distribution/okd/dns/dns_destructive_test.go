@@ -125,8 +125,8 @@ func TestValidateAndRestartDnsmasq(t *testing.T) {
 		}
 	})
 
-	t.Run("missing_backup_not_precondition", func(t *testing.T) {
-		_, backupPath := setup(t, false)
+	t.Run("missing_backup_removes_rejected_config", func(t *testing.T) {
+		confPath, backupPath := setup(t, false)
 		injectFns(t, errValidate, nil)
 
 		err := validateAndRestartDnsmasq(context.Background(), clusterName)
@@ -136,7 +136,15 @@ func TestValidateAndRestartDnsmasq(t *testing.T) {
 		if !errors.Is(err, errValidate) {
 			t.Errorf("errors.Is(err, errValidate) = false; got: %v", err)
 		}
+		if !strings.Contains(err.Error(), "rejected config removed") {
+			t.Errorf("first-deploy rejection must report removal, got: %v", err)
+		}
 
+		// No backup ever existed, so the true previous state is absence: the
+		// rejected drop-in this call wrote must not be left behind.
+		if _, statErr := os.Stat(confPath); !os.IsNotExist(statErr) {
+			t.Errorf("expected rejected config to be removed, stat err = %v", statErr)
+		}
 		if _, statErr := os.Stat(backupPath); !os.IsNotExist(statErr) {
 			t.Errorf("expected backup to remain absent, stat err = %v", statErr)
 		}

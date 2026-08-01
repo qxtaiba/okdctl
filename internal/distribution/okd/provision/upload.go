@@ -33,7 +33,7 @@ func remoteISO256(ctx context.Context, exec *executor.Executor, host, knownHosts
 		return "", err
 	}
 	if result.ExitCode != 0 {
-		return "", fmt.Errorf("sha256sum %s exited %d", target, result.ExitCode)
+		return "", executor.NewExitError(ctx, "sha256sum "+target, result.ExitCode, result.Stderr)
 	}
 	fields := strings.Fields(result.Stdout)
 	if len(fields) == 0 {
@@ -87,8 +87,9 @@ func calculateTotalSize(files []string) int64 {
 // by root on a stock Proxmox VE install.
 const proxmoxSCPUser = "root"
 
-// uploadISOsViaSCP scps ISOs to the Proxmox host one file at a time.
-// Per-file invocations mean a SIGINT or network drop mid-batch leaves
+// uploadISOsViaSCP scps the given ISOs to the Proxmox host one file at a time.
+// Callers pass a pre-filtered list, so no per-file freshness re-check happens
+// here. Per-file invocations mean a SIGINT or network drop mid-batch leaves
 // already-uploaded files intact; the next run resumes only the corrupt tail.
 // When knownHostsPath is non-empty the scp call enforces strict host-key
 // checking against that file, matching sshBaseArgs policy in hostssh/ssh.go.
@@ -113,9 +114,6 @@ func uploadISOsViaSCP(ctx context.Context, cmdRunner *executor.Executor, isoFile
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		if !isoUploadNeeded(ctx, cmdRunner, host, knownHostsPath, remotePath, f) {
-			continue
-		}
 		args := append(slices.Clone(baseArgs), f, dest)
 		if err := cmdRunner.RunInteractive(ctx, "scp", args...); err != nil {
 			return fmt.Errorf("scp %s failed: %w", filepath.Base(f), err)
@@ -124,8 +122,11 @@ func uploadISOsViaSCP(ctx context.Context, cmdRunner *executor.Executor, isoFile
 	return nil
 }
 
-// UploadCustomISOsToProxmox uploads all custom ISOs to Proxmox storage via a
-// single scp command (avoids multiple password prompts).
+// UploadCustomISOsToProxmox uploads the custom ISOs that differ from the
+// remote copies (sha256-compared over SSH) to Proxmox storage, batched into
+// scp calls; unchanged ISOs are skipped and an all-current set uploads
+// nothing. It verifies the pinned SSH host key first (sshpin.Verify) and hard-
+// fails on mismatch when a fingerprint is required.
 func (p *Provisioner) UploadCustomISOsToProxmox(ctx context.Context, cfg *config.Config, opts Options) error {
 	if cfg.Provider.Proxmox == nil {
 		return &errtypes.ConfigError{Msg: msgProxmoxProviderRequired}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -86,6 +87,8 @@ func TestConfigureSystemResolver_NetworkManagerPath(t *testing.T) {
 	calls := recordedCalls(t, nmcliLog)
 	want := []string{
 		"-t -f NAME connection show --active",
+		"-g ipv4.dns connection show eth-conn",
+		"-g ipv4.ignore-auto-dns connection show eth-conn",
 		"connection modify eth-conn ipv4.dns 127.0.0.1,8.8.8.8 ipv4.ignore-auto-dns yes",
 		"connection up eth-conn",
 	}
@@ -129,6 +132,48 @@ func TestConfigureSystemResolver_SystemdResolvedPath(t *testing.T) {
 	calls := recordedCalls(t, systemctlLog)
 	if len(calls) != 1 || calls[0] != "restart systemd-resolved" {
 		t.Errorf("systemctl calls = %q, want exactly [restart systemd-resolved]", calls)
+	}
+}
+
+// TestConfigureSystemResolver_NetworkManagerUpFailureReverts asserts that a
+// failed `connection up` reverts the profile to the captured DNS rather than
+// leaving the host pinned at a possibly-dead 127.0.0.1, and names the revert.
+func TestConfigureSystemResolver_NetworkManagerUpFailureReverts(t *testing.T) {
+	setResolverProbes(t, true, nil)
+	nmcliLog := installRecordingBin(t, "nmcli",
+		"case \"$*\" in "+
+			"*'connection show --active'*) echo 'eth-conn' ;; "+
+			"*'-g ipv4.dns'*) echo '9.9.9.9' ;; "+
+			"*'-g ipv4.ignore-auto-dns'*) echo 'no' ;; "+
+			"*'connection up'*) exit 1 ;; "+
+			"esac\n")
+
+	err := ConfigureSystemResolver(context.Background(), []string{"8.8.8.8"}, logutil.NopLogger)
+	if err == nil || !strings.Contains(err.Error(), "reverted to previous DNS") {
+		t.Fatalf("up failure must revert the profile and say so, got: %v", err)
+	}
+
+	calls := recordedCalls(t, nmcliLog)
+	revert := "connection modify eth-conn ipv4.dns 9.9.9.9 ipv4.ignore-auto-dns no"
+	if !slices.Contains(calls, revert) {
+		t.Errorf("expected revert call %q in %q", revert, calls)
+	}
+}
+
+// TestConfigureSystemResolver_SystemdRestartFailureRemovesDropIn asserts that a
+// failed systemd-resolved restart removes the drop-in so the host falls back to
+// its prior resolver instead of a dead one.
+func TestConfigureSystemResolver_SystemdRestartFailureRemovesDropIn(t *testing.T) {
+	setResolverProbes(t, false, map[string]bool{"systemd-resolved": true})
+	confPath := redirectResolvedConf(t)
+	installRecordingBin(t, "systemctl", "case \"$*\" in *restart*) exit 1 ;; esac\n")
+
+	err := ConfigureSystemResolver(context.Background(), []string{"8.8.8.8"}, logutil.NopLogger)
+	if err == nil || !strings.Contains(err.Error(), "drop-in") {
+		t.Fatalf("restart failure must report the drop-in outcome, got: %v", err)
+	}
+	if _, statErr := os.Stat(confPath); !os.IsNotExist(statErr) {
+		t.Errorf("expected drop-in removed after restart failure, stat err = %v", statErr)
 	}
 }
 

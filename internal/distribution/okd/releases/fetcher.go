@@ -218,11 +218,10 @@ func sortAndClassifySeries(seriesMap map[string]*OKDReleaseSeries) []OKDReleaseS
 			}
 		}
 		// Sync series.Latest with the (possibly updated) version entry.
-		for versionIdx := range result[seriesIdx].Versions {
-			if result[seriesIdx].Versions[versionIdx].Version == result[seriesIdx].Latest.Version {
-				result[seriesIdx].Latest = result[seriesIdx].Versions[versionIdx]
-				break
-			}
+		if idx := slices.IndexFunc(result[seriesIdx].Versions, func(v OKDVersion) bool {
+			return v.Version == result[seriesIdx].Latest.Version
+		}); idx >= 0 {
+			result[seriesIdx].Latest = result[seriesIdx].Versions[idx]
 		}
 	}
 

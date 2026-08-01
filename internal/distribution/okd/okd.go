@@ -62,10 +62,10 @@ func WithProjectRoot(projectRoot string) ProvisionerOption {
 }
 
 // WithLogger attaches a structured logger. A nil logger is tolerated and
-// normalized to logutil.NopLogger inside New.
+// normalized to logutil.NopLogger.
 func WithLogger(l *slog.Logger) ProvisionerOption {
 	return func(p *Provisioner) {
-		p.logger = l
+		p.logger = logutil.OrNop(l)
 	}
 }
 
@@ -352,9 +352,7 @@ func (p *Provisioner) UpdateIngress(ctx context.Context, cfg *config.Config, opt
 
 // resolveIngressWorkDir defaults an empty WorkDir to the okd-install
 // directory under projectRoot. UpdateIngressOptions.WorkDir is the parent
-// of cluster-config/, NOT the project root — passing projectRoot here is
-// the regression that pointed RemoveHAProxy's kubeconfig-CA pre-flight at
-// a path that never exists.
+// of cluster-config/, NOT the project root.
 func resolveIngressWorkDir(projectRoot, workDir string) string {
 	if workDir == "" {
 		return workspace.WorkDir(projectRoot)

@@ -2,7 +2,9 @@ package provision
 
 import (
 	"context"
+	"crypto/sha256"
 	"crypto/x509"
+	"encoding/hex"
 	"encoding/pem"
 	"errors"
 	"fmt"
@@ -39,6 +41,17 @@ func (p *Provisioner) ensureIgnitionDir(ctx context.Context, webRoot string) (st
 	// ignition files which embed the cluster pull-secret.
 	if err := os.MkdirAll(ignitionDir, 0o750); err != nil {
 		return "", &errtypes.ConfigError{Msg: "create ignition directory", Err: err}
+	}
+
+	// This runs as root and webRoot lives under paths a non-root user can
+	// influence; MkdirAll, ChownByName (os.Chown) and os.Chmod all follow a
+	// symlink planted at ignitionDir, so a link here would get its target
+	// chowned to apache and chmod'd 0750 by root. Refuse a symlink first,
+	// matching the refusals in system/fs.go.
+	if info, err := os.Lstat(ignitionDir); err != nil {
+		return "", &errtypes.AuthError{Msg: fmt.Sprintf("lstat ignition dir %q", ignitionDir), Err: err}
+	} else if info.Mode()&os.ModeSymlink != 0 {
+		return "", &errtypes.AuthError{Msg: fmt.Sprintf("ignition dir %q is a symlink; refusing to chown/chmod", ignitionDir), Err: os.ErrPermission}
 	}
 
 	apacheUser := p.OS.ApacheUser()
@@ -238,15 +251,50 @@ func (p *Provisioner) DeployToWebServer(ctx context.Context, cfg *config.Config,
 
 		destPath := filepath.Join(ignitionDir, file)
 		// 0o640: apache group readable only; ignition files carry pullSecret.
-		// AtomicWrite (temp+fsync+rename) because deploy-ignition's AlreadyDone
-		// is existence-only — a torn copy would be skipped on resume and served
-		// to booting nodes.
+		// AtomicWrite (temp+fsync+rename) so a node booting mid-deploy can
+		// never fetch a torn copy from the live webroot.
 		if err := system.AtomicWrite(destPath, data, 0o640); err != nil {
 			return &errtypes.ConfigError{Msg: fmt.Sprintf("copy %s", file), Err: err}
 		}
 	}
 
 	return nil
+}
+
+// IgnitionDeployAlreadyDone reports whether every generated ignition file in
+// clusterDir has a byte-identical copy under webRoot/ignition. Mere existence
+// is not enough: ignition regenerated after an aborted deploy embeds a fresh
+// cluster CA, and serving the stale prior copy wedges the install. Any read
+// failure conservatively returns false so Exec re-deploys and surfaces the
+// real failure.
+func IgnitionDeployAlreadyDone(clusterDir, webRoot string) bool {
+	ignitionDir := filepath.Join(webRoot, "ignition")
+	for _, name := range IgnitionFilenames {
+		srcSum, err := fileSHA256(filepath.Join(clusterDir, name))
+		if err != nil {
+			return false
+		}
+		deployedSum, err := fileSHA256(filepath.Join(ignitionDir, name))
+		if err != nil || deployedSum != srcSum {
+			return false
+		}
+	}
+	return true
+}
+
+// fileSHA256 streams path through sha256 rather than reading it whole —
+// ignition payloads carry the pull-secret, so no full copy is held in memory.
+func fileSHA256(path string) (string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = f.Close() }()
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
 // VerifyWebServer fetches bootstrap.ign over HTTPS from baseURL and verifies

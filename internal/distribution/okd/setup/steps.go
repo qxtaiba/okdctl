@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
-	"slices"
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/distribution"
@@ -114,13 +113,11 @@ func (p *Phase) setupBaseSteps(cfg *config.Config, opts *Options) []distribution
 			Desc:       fmt.Sprintf("downloading OKD tools version %s", cfg.Distribution.Version),
 			SkipWhen:   func() bool { return opts.SkipDownloads },
 			SkipReason: "downloads disabled",
+			// Presence alone is version-blind: a resume after a version change
+			// would reuse the prior release's binaries. The sentinel written by
+			// DownloadOKDTools carries the extracted version.
 			AlreadyDone: func(_ context.Context) (bool, error) {
-				binDir := config.BinDirOrDefault(p.BinDir)
-				bins := []string{openshiftInstallBin, ocBin, kubectlBin}
-				missing := slices.ContainsFunc(bins, func(b string) bool {
-					return !system.FileExists(filepath.Join(binDir, b))
-				})
-				return !missing, nil
+				return downloadToolsAlreadyDone(config.BinDirOrDefault(p.BinDir), cfg.Distribution.Version), nil
 			},
 			Exec: func(ctx context.Context) error {
 				if err := p.DownloadOKDTools(ctx, cfg.Distribution.Version, opts); err != nil {
@@ -269,18 +266,15 @@ func (p *Phase) setupWebSteps(cfg *config.Config, opts *Options, clusterDir stri
 			ID: StepDeployIgnition, Name: StepNames[StepDeployIgnition],
 			ReRunSafe: distribution.ReRunSafeNo,
 			Desc:      "deploying ignition files to apache web server",
+			// Content identity, not existence: a crash-resume regenerates
+			// ignition with a fresh cluster CA, and serving the stale webroot
+			// copy from the aborted run wedges the install.
 			AlreadyDone: func(_ context.Context) (bool, error) {
 				webRoot := cfg.HTTPServer.Root
 				if webRoot == "" {
 					webRoot = phase.DefaultHTTPServerRoot
 				}
-				// All files must exist: a partial-write resumes the full deploy.
-				for _, name := range provision.IgnitionFilenames {
-					if !system.FileExists(filepath.Join(webRoot, "ignition", name)) {
-						return false, nil
-					}
-				}
-				return true, nil
+				return provision.IgnitionDeployAlreadyDone(clusterDir, webRoot), nil
 			},
 			Exec: func(ctx context.Context) error {
 				if err := p.DeployToWebServer(ctx, cfg, clusterDir); err != nil {
@@ -330,8 +324,7 @@ func (p *Phase) setupWebSteps(cfg *config.Config, opts *Options, clusterDir stri
 				return nil
 			},
 			OnError: func(err error) {
-				p.Log.Warn("iso: upload failed", "err", err)
-				p.Log.Warn("iso: you may need to upload isos manually before deploying")
+				p.Log.Warn("iso: upload failed", "err", err, "hint", "upload isos manually before deploying")
 			},
 		},
 	}
@@ -372,6 +365,7 @@ func (p *Phase) setupInfraSteps(cfg *config.Config, opts *Options) []distributio
 			ID: StepConfigureFirewall, Name: StepNames[StepConfigureFirewall],
 			ReRunSafe:  distribution.ReRunSafeYes,
 			Desc:       "configuring firewall rules for OKD",
+			NonFatal:   true,
 			SkipWhen:   func() bool { return opts.SkipFirewall },
 			SkipReason: "firewall configuration disabled",
 			Exec: func(ctx context.Context) error {
@@ -394,8 +388,7 @@ func (p *Phase) setupInfraSteps(cfg *config.Config, opts *Options) []distributio
 				return nil
 			},
 			OnError: func(err error) {
-				p.Log.Warn("dns: configuration failed", "err", err)
-				p.Log.Warn("dns: you may need to configure dns manually")
+				p.Log.Warn("dns: configuration failed", "err", err, "hint", "configure dns manually")
 			},
 		},
 	}

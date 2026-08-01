@@ -2,10 +2,11 @@
 // Cleanup is best-effort: a mid-run crash leaves workDir in a partially-removed
 // state with no resume capability. Terraform state is removed last so destroy
 // stays re-runnable as long as earlier steps have not corrupted it.
-// Exported subsystem funcs (WorkDirectory, WebServer, Dnsmasq, Packages,
+package cleanup
+
+// The exported subsystem funcs (WorkDirectory, WebServer, Dnsmasq, Packages,
 // IgnitionCerts, GenerateSummary, ValidKinds) are the package's public API
 // surface even though today's only callers are intra-package.
-package cleanup
 
 import (
 	"context"
@@ -232,6 +233,43 @@ func ignitionCertsCleanupStep(opts *Options, t *cleanupTracker, logger *slog.Log
 	}
 }
 
+// terraformCleanupStep removes generated terraform artifacts and, on a
+// post-destroy sweep, the state file — but only when the state is provably
+// resource-free. Corrupt state fails closed the same way retainClusterCredentials
+// does: it cannot vouch that the tracked VMs are gone, so the file is preserved.
+func terraformCleanupStep(opts *Options, t *cleanupTracker, logger *slog.Logger) distribution.StepDef {
+	return distribution.StepDef{
+		ID: StepCleanupTerraform, Name: "cleanup terraform",
+		Desc: "removing generated terraform artifacts", NonFatal: true,
+		ReRunSafe:   distribution.ReRunSafeNo,
+		AlreadyDone: func(_ context.Context) (bool, error) { return terraformCleanupDone(opts) },
+		Exec: func(ctx context.Context) error {
+			if err := Terraform(ctx, opts.ProjectRoot, opts.TerraformEnv, logger); err != nil {
+				return err
+			}
+			if !opts.PostDestroy || opts.TerraformEnv == "" {
+				return nil
+			}
+			envDir := workspace.TerraformEnvDir(opts.ProjectRoot, opts.TerraformEnv)
+			tf := terraform.New(envDir, terraform.WithLogger(logger))
+			switch tf.StateStatus() {
+			case terraform.StateStatusEmpty, terraform.StateStatusMissing:
+				_ = SafeRemoveWithLogger(ctx, filepath.Join(envDir, "terraform.tfstate"), "terraform state file", logger)
+				if kept, pruneErr := tf.PruneBakSnapshotsExceptNewest(); pruneErr != nil {
+					logger.Warn("cleanup: terraform state backup prune failed", "err", pruneErr)
+				} else if kept != "" {
+					logger.Info("cleanup: kept newest terraform state backup as rollback artefact", "path", kept)
+				}
+			case terraform.StateStatusCorrupt:
+				logger.Warn("cleanup: terraform state is corrupt; preserving terraform.tfstate — the VMs it tracked may still be live; restore from a backup and run 'okdctl destroy'",
+					"path", filepath.Join(envDir, "terraform.tfstate"), "backup", tf.NewestBakSnapshot())
+			}
+			return nil
+		},
+		OnError: t.onError("terraform"),
+	}
+}
+
 func cleanupSteps(opts *Options, logger *slog.Logger) []distribution.StepDef {
 	t := &cleanupTracker{}
 
@@ -297,32 +335,7 @@ func cleanupSteps(opts *Options, logger *slog.Logger) []distribution.StepDef {
 		OnError: t.onError("dnsmasq"),
 	}
 
-	terraformStep := distribution.StepDef{
-		ID: StepCleanupTerraform, Name: "cleanup terraform",
-		Desc: "removing generated terraform artifacts", NonFatal: true,
-		ReRunSafe:   distribution.ReRunSafeNo,
-		AlreadyDone: func(_ context.Context) (bool, error) { return terraformCleanupDone(opts) },
-		Exec: func(ctx context.Context) error {
-			if err := Terraform(ctx, opts.ProjectRoot, opts.TerraformEnv, logger); err != nil {
-				return err
-			}
-			if !opts.PostDestroy || opts.TerraformEnv == "" {
-				return nil
-			}
-			envDir := workspace.TerraformEnvDir(opts.ProjectRoot, opts.TerraformEnv)
-			tf := terraform.New(envDir, terraform.WithLogger(logger))
-			if !tf.HasState() {
-				_ = SafeRemoveWithLogger(ctx, filepath.Join(envDir, "terraform.tfstate"), "terraform state file", logger)
-				if kept, pruneErr := tf.PruneBakSnapshotsExceptNewest(); pruneErr != nil {
-					logger.Warn("cleanup: terraform state backup prune failed", "err", pruneErr)
-				} else if kept != "" {
-					logger.Info("cleanup: kept newest terraform state backup as rollback artefact", "path", kept)
-				}
-			}
-			return nil
-		},
-		OnError: t.onError("terraform"),
-	}
+	terraformStep := terraformCleanupStep(opts, t, logger)
 
 	packagesStep := distribution.StepDef{
 		ID: StepCleanupPackages, Name: "cleanup packages",

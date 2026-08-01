@@ -10,6 +10,8 @@ import (
 	"regexp"
 	"runtime"
 	"slices"
+	"strings"
+	"time"
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
@@ -154,6 +156,15 @@ func ConfigureSystemResolver(ctx context.Context, fallbackDNS []string, logger *
 			return err
 		}
 
+		// Capture the pre-change profile before any mutation so a failed
+		// connection-up can revert it. Fail before touching the profile if the
+		// capture itself fails — a half-applied override with no way back is
+		// worse than not starting.
+		prevDNS, prevIgnore, err := captureConnDNS(ctx, conn)
+		if err != nil {
+			return fmt.Errorf("capture current DNS settings: %w", err)
+		}
+
 		dnsList := slices.Concat([]string{"127.0.0.1"}, fallbackDNS)
 
 		logger.Info("resolver: configuring connection to use local dnsmasq", "conn", conn)
@@ -163,7 +174,16 @@ func ConfigureSystemResolver(ctx context.Context, fallbackDNS []string, logger *
 		}
 
 		if err := hostnet.ActivateConnection(ctx, conn); err != nil {
-			return fmt.Errorf("apply DNS configuration: %w", err)
+			// The persistent profile now forces 127.0.0.1; connection-up failed
+			// so dnsmasq may not be reachable. Revert the profile so the host
+			// does not resurrect a dead resolver on the next reconnect/reboot.
+			// Detached ctx: a Ctrl-C that killed the up must not doom the revert.
+			rCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), resolverRestoreTimeout)
+			defer cancel()
+			if restoreErr := restoreConnDNS(rCtx, conn, prevDNS, prevIgnore); restoreErr != nil {
+				return fmt.Errorf("apply DNS configuration: %w (profile %s was rewritten to 127.0.0.1 and reverting it also failed: %w)", err, conn, restoreErr)
+			}
+			return fmt.Errorf("apply DNS configuration: %w (profile %s reverted to previous DNS)", err, conn)
 		}
 
 		logger.Info("resolver: system configured to use local dnsmasq")
@@ -199,11 +219,53 @@ func ConfigureSystemResolver(ctx context.Context, fallbackDNS []string, logger *
 		if err := system.CopyFile(tmpPath, confPath); err != nil {
 			return fmt.Errorf("install dnsmasq.conf: %w", err)
 		}
-		return executor.RunCaptured(ctx, "systemctl", "restart", "systemd-resolved")
+		if err := executor.RunCaptured(ctx, "systemctl", "restart", "systemd-resolved"); err != nil {
+			// The drop-in now forces DNS=127.0.0.1; resolved failed to restart,
+			// so remove it to let the host fall back to its prior resolver
+			// rather than a dead one, then re-restart to converge. Detached ctx
+			// for the compensating restart, matching the revert above.
+			if rmErr := removeAllFn(confPath); rmErr != nil {
+				return fmt.Errorf("restart systemd-resolved: %w (drop-in %s left in place; removing it also failed: %w)", err, confPath, rmErr)
+			}
+			rCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), resolverRestoreTimeout)
+			defer cancel()
+			_ = executor.RunCaptured(rCtx, "systemctl", "restart", "systemd-resolved")
+			return fmt.Errorf("restart systemd-resolved: %w (drop-in %s removed)", err, confPath)
+		}
+		return nil
 	}
 
 	logger.Warn("resolver: neither NetworkManager nor systemd-resolved found, skipping system resolver configuration")
 	return nil
+}
+
+// resolverRestoreTimeout bounds the detached compensating call issued when a
+// resolver mutation partially applied and must be rolled back.
+const resolverRestoreTimeout = 30 * time.Second
+
+// captureConnDNS reads the current ipv4.dns and ipv4.ignore-auto-dns of an
+// nmcli connection so ConfigureSystemResolver can revert them if the follow-up
+// connection-up fails.
+func captureConnDNS(ctx context.Context, conn string) (dns, ignoreAutoDNS string, err error) {
+	dnsOut, err := executor.OutputCaptured(ctx, "nmcli", "-g", "ipv4.dns", "connection", "show", conn)
+	if err != nil {
+		return "", "", fmt.Errorf("read ipv4.dns for %s: %w", conn, err)
+	}
+	ignoreOut, err := executor.OutputCaptured(ctx, "nmcli", "-g", "ipv4.ignore-auto-dns", "connection", "show", conn)
+	if err != nil {
+		return "", "", fmt.Errorf("read ipv4.ignore-auto-dns for %s: %w", conn, err)
+	}
+	return strings.TrimSpace(string(dnsOut)), strings.TrimSpace(string(ignoreOut)), nil
+}
+
+// restoreConnDNS rewrites conn's DNS settings back to the captured values. An
+// empty ignoreAutoDNS is normalised to "no" (the NetworkManager default) so the
+// revert never leaves the field blank.
+func restoreConnDNS(ctx context.Context, conn, dns, ignoreAutoDNS string) error {
+	if ignoreAutoDNS == "" {
+		ignoreAutoDNS = "no"
+	}
+	return executor.RunCaptured(ctx, "nmcli", "connection", "modify", conn, "ipv4.dns", dns, "ipv4.ignore-auto-dns", ignoreAutoDNS)
 }
 
 // RestoreSystemResolver undoes ConfigureSystemResolver: it clears the

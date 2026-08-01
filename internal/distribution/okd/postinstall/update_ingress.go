@@ -783,7 +783,7 @@ func (p *Phase) restoreHAProxyBackup() bool {
 func (p *Phase) waitForRouterGone(ctx context.Context, icName string, timeout time.Duration) error {
 	deployName := fmt.Sprintf("router-%s", icName)
 
-	return system.WaitFor(ctx, "ingress", deployName+" termination", func(context.Context) bool {
+	return system.WaitFor(ctx, "ingress", deployName+" termination", func(ctx context.Context) bool {
 		exists, err := p.OcResourceExists(ctx, "router termination probe",
 			"deployment", deployName, "-n", "openshift-ingress")
 		return err == nil && !exists

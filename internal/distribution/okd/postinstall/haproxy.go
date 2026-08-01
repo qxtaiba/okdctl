@@ -41,7 +41,7 @@ func (p *Phase) RemoveHAProxy(ctx context.Context, vip, clusterDir string) error
 		healthURL := fmt.Sprintf("https://%s:%d/healthz", vip, haproxyHealthPort)
 
 		p.Log.Info("haproxy: pre-flight — verifying api reachable via vip before teardown")
-		if waitErr := system.WaitForWithTimeout(ctx, "haproxy", "api-via-vip", func(context.Context) bool {
+		if waitErr := system.WaitForWithTimeout(ctx, "haproxy", "api-via-vip", func(ctx context.Context) bool {
 			req, rErr := http.NewRequestWithContext(ctx, http.MethodGet, healthURL, http.NoBody)
 			if rErr != nil {
 				return false
@@ -61,7 +61,7 @@ func (p *Phase) RemoveHAProxy(ctx context.Context, vip, clusterDir string) error
 		// Verify hostname resolution before stopping haproxy so the bastion's
 		// dnsmasq is confirmed to route api.* to the VIP rather than localhost.
 		p.Log.Info("haproxy: pre-flight — verifying api reachable via hostname before teardown")
-		if waitErr := system.WaitForWithTimeout(ctx, "haproxy", "api-via-hostname", func(context.Context) bool {
+		if waitErr := system.WaitForWithTimeout(ctx, "haproxy", "api-via-hostname", func(ctx context.Context) bool {
 			out, err := p.OcOutput(ctx, "get", "--raw", "/healthz")
 			return err == nil && out == healthzOKBody
 		}, haproxyVIPTimeout, p.Log); waitErr != nil {

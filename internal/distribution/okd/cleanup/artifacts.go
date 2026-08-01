@@ -30,6 +30,10 @@ func refuseCriticalPath(path string) error {
 // failures via the provided logger. Returns nil if the path didn't exist or
 // was removed successfully. Runs as root under the re-exec model so there
 // is no fallback path to worry about.
+//
+// Refuses critical system paths and symlinks, returning a ConfigError with the
+// path left untouched; callers must not read a non-nil return as an OS-level
+// failure — it can mean the removal was declined by policy.
 func SafeRemoveWithLogger(ctx context.Context, path, description string, logger *slog.Logger) error {
 	logger = logutil.OrNop(logger)
 	if err := refuseCriticalPath(path); err != nil {
@@ -49,16 +53,16 @@ func SafeRemoveWithLogger(ctx context.Context, path, description string, logger 
 		return err
 	}
 	if err := os.RemoveAll(path); err != nil {
-		logger.Warn("cleanup: could not remove", "target", description, "err", err)
+		logger.Warn("cleanup: could not remove", "target", description, "path", path, "err", err)
 		return &errtypes.ConfigError{Msg: fmt.Sprintf("could not remove %s", description), Err: err}
 	}
 
 	if _, err := os.Stat(path); err == nil {
-		logger.Warn("cleanup: still exists after removal", "target", description)
+		logger.Warn("cleanup: still exists after removal", "target", description, "path", path)
 		return &errtypes.ConfigError{Msg: fmt.Sprintf("%s still exists after removal", description)}
 	} else if !errors.Is(err, os.ErrNotExist) {
 		// Cannot verify removal (e.g. permission denied on parent); assume success.
-		logger.Warn("cleanup: could not verify removal", "target", description, "err", err)
+		logger.Warn("cleanup: could not verify removal", "target", description, "path", path, "err", err)
 	}
 
 	return nil

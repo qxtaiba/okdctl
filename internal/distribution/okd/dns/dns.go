@@ -237,22 +237,29 @@ func validateAndRestartDnsmasq(ctx context.Context, configName string) error {
 	}
 	backupPath := configPath + ".backup"
 
-	restore := func() {
-		if !system.FileExists(backupPath) {
-			return
+	// restore rolls the drop-in back to its pre-write state and reports which
+	// branch it took. When a backup exists it is copied back; on a first
+	// deploy no backup was ever made, so the true previous state is the file's
+	// absence and we remove the rejected drop-in this call wrote rather than
+	// leaving invalid root-owned config in /etc/dnsmasq.d.
+	restore := func() string {
+		if system.FileExists(backupPath) {
+			// No follow-up os.Chmod: system.CopyFile preserves the source mode
+			// at open time, and os.Chmod follows symlinks at the destination.
+			_ = system.CopyFile(backupPath, configPath)
+			return "previous config restored"
 		}
-		// No follow-up os.Chmod: system.CopyFile preserves the source mode
-		// at open time, and os.Chmod follows symlinks at the destination.
-		_ = system.CopyFile(backupPath, configPath)
+		_ = os.Remove(configPath)
+		return "rejected config removed"
 	}
 
 	if err := validateDnsmasqConfigFn(ctx); err != nil {
-		restore()
-		return fmt.Errorf("dnsmasq config validation failed — previous config restored: %w", err)
+		outcome := restore()
+		return fmt.Errorf("dnsmasq config validation failed — %s: %w", outcome, err)
 	}
 
 	if err := restartDnsmasqFn(ctx); err != nil {
-		restore()
+		outcome := restore()
 		// Restart once more so the running service converges to the restored
 		// config instead of staying down (or up on the rejected one). Detached
 		// from ctx: a Ctrl-C that killed the first restart would otherwise
@@ -260,9 +267,9 @@ func validateAndRestartDnsmasq(ctx context.Context, configName string) error {
 		rCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), recoveryRestartTimeout)
 		defer cancel()
 		if rErr := restartDnsmasqFn(rCtx); rErr != nil {
-			return fmt.Errorf("restart dnsmasq — previous config restored on disk but dnsmasq restart with it also failed: %w", errors.Join(err, rErr))
+			return fmt.Errorf("restart dnsmasq — %s on disk but dnsmasq restart with it also failed: %w", outcome, errors.Join(err, rErr))
 		}
-		return fmt.Errorf("restart dnsmasq — previous config restored and service restarted with it: %w", err)
+		return fmt.Errorf("restart dnsmasq — %s and service restarted with it: %w", outcome, err)
 	}
 
 	// Successful restart — clean up backup.

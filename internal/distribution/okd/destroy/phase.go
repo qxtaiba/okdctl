@@ -69,7 +69,7 @@ func New(opts ...phase.BasePhaseOption) *Phase {
 // for consistency here.
 func (p *Phase) Execute(ctx context.Context, cfg *config.Config, opts *Options) ([]distribution.StepResult, error) {
 	p.Log.Info("destroy: starting cluster teardown")
-	p.Log.Warn("destroy: this will permanently remove all vms and generated files")
+	p.Log.Info("destroy: this will permanently remove all vms and generated files")
 
 	orchestrator := distribution.NewOrchestrator(distribution.BuildSteps(p.destroySteps(ctx, cfg, opts))...)
 	orchestrator.SetLogger(p.Log)

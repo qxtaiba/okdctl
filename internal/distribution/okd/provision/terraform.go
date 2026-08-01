@@ -59,7 +59,7 @@ func buildNodeNames(clusterName string, role nodetypes.NodeRole, count int) []st
 }
 
 type diskSizes struct {
-	cpOS, workerOS, workerData, cpData int
+	cpOS, workerOS, workerData, cpData, cpMon int
 }
 
 func getDiskSizes(cfg *config.Config) diskSizes {
@@ -67,6 +67,7 @@ func getDiskSizes(cfg *config.Config) diskSizes {
 		cpOS:       cfg.Topology.ControlPlane.DiskGB,
 		workerData: cfg.Disks.WorkerDataSizeGB,
 		cpData:     cfg.Disks.ControlPlaneDataSizeGB,
+		cpMon:      cfg.Disks.ControlPlaneMonSizeGB,
 	}
 	if d.cpOS == 0 {
 		d.cpOS = config.DefaultOSDiskGB
@@ -122,6 +123,7 @@ func buildTerraformVarsData(cfg *config.Config) templates.TerraformVarsData {
 		WorkerOSDiskSizeGB:   disks.workerOS,
 		WorkerDataDiskSizeGB: disks.workerData,
 		MasterDataDiskSizeGB: disks.cpData,
+		MasterMonDiskSizeGB:  disks.cpMon,
 		BootstrapCPUCores:    bootstrapCPU,
 		BootstrapMemoryMB:    bootstrapMem,
 		MasterCPUCores:       cfg.Topology.ControlPlane.CPU,

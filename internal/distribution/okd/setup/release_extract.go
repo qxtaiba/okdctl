@@ -2,10 +2,12 @@ package setup
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"time"
@@ -96,17 +98,20 @@ func (p *Phase) bootstrapOC(ctx context.Context, downloadDir string) (string, er
 	return ocPath, nil
 }
 
-// authMarkers names HTTP-status-aligned substrings that registries and oc
-// emit for credential failures. Best-effort — a registry whose error
-// envelope drifts from these patterns will fall through to
-// *errtypes.ClusterError instead of AuthError.
-var authMarkers = []string{
+// authTextMarkers names word substrings that registries and oc emit for
+// credential failures. Best-effort — a registry whose error envelope drifts
+// from these patterns will fall through to *errtypes.ClusterError instead of
+// AuthError.
+var authTextMarkers = []string{
 	"unauthorized",
 	"forbidden",
 	"no basic auth",
-	"401",
-	"403",
 }
+
+// authStatusRegex matches 401/403 only as standalone tokens so a digest or
+// byte count that merely contains "401" cannot misclassify a network failure
+// as an auth failure.
+var authStatusRegex = regexp.MustCompile(`\b(401|403)\b`)
 
 // extractReleaseImage runs `oc adm release extract --tools <ref> --to <destDir>`
 // through the canonical Executor so DefaultEnvAllowlist filters the child env.
@@ -122,13 +127,21 @@ func (p *Phase) extractReleaseImage(ctx context.Context, ocPath, ref, destDir st
 		"--tools", ref,
 		"--to", destDir,
 	)
+	// Distinguish a user Ctrl-C (bare-wrap so signalExitCode maps it to 130)
+	// from our own 10m budget expiring (a ClusterError with an accurate
+	// message). Checked before err != nil: RunStreamed returns ctx.Err() on a
+	// ctx-killed process, so this classifies what would otherwise land in the
+	// generic ClusterError branch below.
+	if cerr := extractCtx.Err(); cerr != nil {
+		if errors.Is(cerr, context.Canceled) {
+			return fmt.Errorf("release extract cancelled: %w", cerr)
+		}
+		return &errtypes.ClusterError{Msg: fmt.Sprintf("release extract timed out after %s", ocExtractTimeout), Err: cerr}
+	}
 	if err != nil {
 		return &errtypes.ClusterError{Msg: fmt.Sprintf("release extract failed for %s", ref), Err: err}
 	}
 	if result.ExitCode != 0 {
-		if err := extractCtx.Err(); err != nil {
-			return fmt.Errorf("release extract cancelled: %w", err)
-		}
 		msg := strings.TrimSpace(result.Stderr)
 		p.Log.Warn("tools: oc adm release extract failed", "ref", ref, "stderr", logutil.RedactableStderr(msg))
 		// Exit code is the primary signal; stderr-text is a secondary lift.
@@ -149,7 +162,10 @@ func (p *Phase) extractReleaseImage(ctx context.Context, ocPath, ref, destDir st
 
 func isAuthError(msg string) bool {
 	lower := strings.ToLower(msg)
-	return slices.ContainsFunc(authMarkers, func(m string) bool { return strings.Contains(lower, m) })
+	if slices.ContainsFunc(authTextMarkers, func(m string) bool { return strings.Contains(lower, m) }) {
+		return true
+	}
+	return authStatusRegex.MatchString(lower)
 }
 
 // extractReleaseTarballs extracts the versioned tarballs that

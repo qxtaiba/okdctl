@@ -66,22 +66,25 @@ type diskCache struct {
 	Series   []OKDReleaseSeries `json:"series"`
 }
 
+// releaseTypeLabels maps each ReleaseType to its exact wire label. These
+// labels are part of the `releases list --output=json` contract and the
+// on-disk cache schema, so String and UnmarshalJSON both resolve against this
+// single table — a label spelled once cannot drift between the two directions
+// and silently break cache round-trip.
+var releaseTypeLabels = map[ReleaseType]string{
+	ReleaseTypeStable:        "stable",
+	ReleaseTypeLatestStable:  "latest-stable",
+	ReleaseTypePreview:       "preview",
+	ReleaseTypeLatestPreview: "latest-preview",
+	ReleaseTypeLTS:           "lts",
+}
+
 // String returns the canonical human-readable label for the release type.
 func (t ReleaseType) String() string {
-	switch t {
-	case ReleaseTypeStable:
-		return "stable"
-	case ReleaseTypeLatestStable:
-		return "latest-stable"
-	case ReleaseTypePreview:
-		return "preview"
-	case ReleaseTypeLatestPreview:
-		return "latest-preview"
-	case ReleaseTypeLTS:
-		return "lts"
-	default:
-		return "unknown"
+	if label, ok := releaseTypeLabels[t]; ok {
+		return label
 	}
+	return "unknown"
 }
 
 // MarshalJSON encodes ReleaseType as its string label so OKDVersion serialises
@@ -97,21 +100,13 @@ func (t *ReleaseType) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &s); err != nil {
 		return err
 	}
-	switch s {
-	case "stable":
-		*t = ReleaseTypeStable
-	case "latest-stable":
-		*t = ReleaseTypeLatestStable
-	case "preview":
-		*t = ReleaseTypePreview
-	case "latest-preview":
-		*t = ReleaseTypeLatestPreview
-	case "lts":
-		*t = ReleaseTypeLTS
-	default:
-		return fmt.Errorf("unknown release type %q", s)
+	for rt, label := range releaseTypeLabels {
+		if label == s {
+			*t = rt
+			return nil
+		}
 	}
-	return nil
+	return fmt.Errorf("unknown release type %q", s)
 }
 
 // Major returns the major version component, or 0 for unparsable input.

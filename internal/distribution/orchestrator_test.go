@@ -224,6 +224,38 @@ func TestOrchestratorRun_ClassifiesBareErrorAsClusterError(t *testing.T) {
 	}
 }
 
+// TestOrchestratorRun_ScrubsCredentialInClassifiedMsg locks the redaction
+// fix: classifyStepErr launders an arbitrary step error's text through
+// RedactableStderr before it lands in the pre-rendered ClusterError.Msg (which
+// bypasses RedactHandler at every sink), while leaving Err intact so
+// errors.Is still reaches the root cause.
+func TestOrchestratorRun_ScrubsCredentialInClassifiedMsg(t *testing.T) {
+	t.Parallel()
+	root := errors.New("provider auth failed: password=hunter2")
+	defs := []distribution.StepDef{
+		{
+			ID: "a", Name: "a", ReRunSafe: distribution.ReRunSafeYes,
+			Exec: func(_ context.Context) error { return root },
+		},
+	}
+	o := buildOrchestrator(defs)
+	err := o.Run(context.Background())
+
+	var ce *errtypes.ClusterError
+	if !errors.As(err, &ce) {
+		t.Fatalf("Run() err = %T, want *errtypes.ClusterError", err)
+	}
+	if strings.Contains(ce.Msg, "hunter2") {
+		t.Errorf("Msg leaked credential past RedactHandler: %q", ce.Msg)
+	}
+	if !strings.Contains(ce.Msg, "step failed") {
+		t.Errorf("Msg = %q; want it to keep the laundered root cause", ce.Msg)
+	}
+	if !errors.Is(err, root) {
+		t.Error("Err chain broken; errors.Is must still reach the root cause")
+	}
+}
+
 func TestOrchestratorRun_PreservesTypedErrtypesError(t *testing.T) {
 	t.Parallel()
 	want := &errtypes.ConfigError{Msg: "bad config"}
