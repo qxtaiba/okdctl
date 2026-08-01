@@ -67,7 +67,7 @@ func buildConfigData(cfg *config.Config) (templates.DNSConfigData, error) {
 
 	for _, n := range enum {
 		node := templates.DNSNode{
-			Name: fmt.Sprintf("%s-%s", cfg.Cluster.Name, n.Name()),
+			Name: n.PrefixedName(cfg.Cluster.Name),
 			IP:   n.IP,
 		}
 		switch n.Role {

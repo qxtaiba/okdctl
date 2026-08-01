@@ -89,13 +89,13 @@ func (r *Runner) Start(ctx context.Context, opts StartOptions) error {
 	return nil
 }
 
-// syntheticNodeNames reproduces the provisioner's role0..count-1 naming
-// (internal/infrastructure/proxmox.planProvisionedNodes) so cluster start can
-// enumerate nodes from config before the API that would list them is up.
+// syntheticNodeNames enumerates the role0..count-1 names owned by
+// nodetypes.ClusterNode.Name so cluster start can enumerate nodes from
+// config before the API that would list them is up.
 func syntheticNodeNames(role nodetypes.NodeRole, count int) []string {
 	names := make([]string, count)
 	for i := range count {
-		names[i] = fmt.Sprintf("%s%d", role, i)
+		names[i] = nodetypes.ClusterNode{Role: role, Index: i}.Name()
 	}
 	return names
 }

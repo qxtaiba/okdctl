@@ -25,6 +25,13 @@ func (n ClusterNode) Name() string {
 	return fmt.Sprintf("%s%d", n.Role, n.Index)
 }
 
+// PrefixedName returns the cluster-scoped VM name ("<cluster>-master0"),
+// the single encoding of the <cluster>-<node> contract shared by the
+// Terraform vm names and the DNS host entries.
+func (n ClusterNode) PrefixedName(clusterName string) string {
+	return clusterName + "-" + n.Name()
+}
+
 // ClusterNodes enumerates cfg's topology in provisioning order — bootstrap,
 // masters, then workers — with IPs offset sequentially from the static-IP
 // start (bootstrap = start, master i = start+1+i, workers follow the

@@ -51,7 +51,11 @@ func WorkerISOsPlanVar(isoStorage string, workerCount int) string {
 }
 
 func buildNodeNames(clusterName string, role nodetypes.NodeRole, count int) []string {
-	return buildQuotedRoleList(`"%s-%s%d"`, clusterName, role, count)
+	names := make([]string, count)
+	for i := range count {
+		names[i] = strconv.Quote(nodetypes.ClusterNode{Role: role, Index: i}.PrefixedName(clusterName))
+	}
+	return names
 }
 
 type diskSizes struct {
