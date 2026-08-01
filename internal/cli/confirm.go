@@ -32,7 +32,7 @@ func promptForLine(ctx context.Context, prompt string) (string, error) {
 	r := testStdinReader
 	if r == nil {
 		if !term.IsTerminal(int(os.Stdin.Fd())) {
-			return "", &errtypes.ConfigError{Msg: "no TTY and --yes not set; refusing destructive op"}
+			return "", &errtypes.UsageError{Msg: "no TTY and --yes not set; refusing destructive op"}
 		}
 		r = os.Stdin
 	}
@@ -86,18 +86,19 @@ func promptForClusterNameConfirmation(ctx context.Context, name, prompt string) 
 // confirmClusterMatches enforces the --yes / --confirm-cluster pairing used
 // by destructive commands. When force is false the check is skipped (the
 // interactive promptForConfirmation path handles that case). Returns
-// *errtypes.ConfigError when the guard is violated; nil otherwise.
+// *errtypes.UsageError when the guard is violated (the fix is to change the
+// command line, so it maps to exit 64); nil otherwise.
 func confirmClusterMatches(force bool, confirm, name, verb string) error {
 	if !force {
 		return nil
 	}
 	if confirm == "" {
-		return &errtypes.ConfigError{
+		return &errtypes.UsageError{
 			Msg: fmt.Sprintf("--yes requires --confirm-cluster=%q to guard against scripted %ss against the wrong cluster", name, verb),
 		}
 	}
 	if confirm != name {
-		return &errtypes.ConfigError{
+		return &errtypes.UsageError{
 			Msg: fmt.Sprintf("--confirm-cluster %q does not match config cluster %q; refusing %s",
 				confirm, name, verb),
 		}

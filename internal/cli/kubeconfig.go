@@ -29,6 +29,7 @@ or merge it into an existing kubeconfig.`,
 	Example: `  okdctl kubeconfig                       # print to stdout
   okdctl kubeconfig --output-file ~/.kube/okd.cfg    # write to file
   okdctl kubeconfig --merge               # merge into $KUBECONFIG`,
+	Args: cobra.NoArgs,
 	RunE: runKubeconfig,
 }
 

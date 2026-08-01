@@ -440,9 +440,9 @@ func TestRunDeploy_HeadlessGuard(t *testing.T) {
 		deployYes = true
 
 		err := runDeploy(deployCmd, nil)
-		var ce *errtypes.ConfigError
-		if !errors.As(err, &ce) {
-			t.Fatalf("want *errtypes.ConfigError, got %T: %v", err, err)
+		var ue *errtypes.UsageError
+		if !errors.As(err, &ue) {
+			t.Fatalf("want *errtypes.UsageError, got %T: %v", err, err)
 		}
 		if !strings.Contains(err.Error(), "--confirm-cluster") {
 			t.Errorf("refusal must point at --confirm-cluster: %v", err)
@@ -459,9 +459,9 @@ func TestRunDeploy_HeadlessGuard(t *testing.T) {
 		deployConfirmCluster = "staging"
 
 		err := runDeploy(deployCmd, nil)
-		var ce *errtypes.ConfigError
-		if !errors.As(err, &ce) {
-			t.Fatalf("want *errtypes.ConfigError, got %T: %v", err, err)
+		var ue *errtypes.UsageError
+		if !errors.As(err, &ue) {
+			t.Fatalf("want *errtypes.UsageError, got %T: %v", err, err)
 		}
 		if !strings.Contains(err.Error(), "does not match") {
 			t.Errorf("refusal must state the mismatch: %v", err)

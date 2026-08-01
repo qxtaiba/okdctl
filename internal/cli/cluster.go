@@ -52,6 +52,7 @@ picks up at the node/step that was in flight.
 instead of refusing.`,
 	Example: `  okdctl cluster compact --yes --confirm-cluster grappleberry
   okdctl cluster compact --master-memory-mb 24576 --dry-run`,
+	Args: cobra.NoArgs,
 	RunE: runClusterCompact,
 }
 
@@ -76,6 +77,7 @@ started). Stop warns and proceeds; verify the power state afterwards, or set
 the HA request-state to stopped via pvesh first.`,
 	Example: `  okdctl cluster stop --yes --confirm-cluster grappleberry
   okdctl cluster stop --dry-run`,
+	Args: cobra.NoArgs,
 	RunE: runClusterStop,
 }
 
@@ -97,6 +99,7 @@ op's resume trail. --acknowledge-interrupted-op overrides the marker and
 proceeds.`,
 	Example: `  okdctl cluster start --yes --confirm-cluster grappleberry
   okdctl cluster start --dry-run`,
+	Args: cobra.NoArgs,
 	RunE: runClusterStart,
 }
 
@@ -135,7 +138,7 @@ func runClusterCompact(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
-	consent := nodeConsent{yes: compactYes, dryRun: compactDryRun, twoStage: true}
+	consent := nodeConsent{yes: compactYes, dryRun: compactDryRun, twoStage: destroyGradeVerb("compact")}
 	rc, err := buildNodeRunner(cmd, cfg, "compact", consent, true)
 	if err != nil {
 		return err
@@ -175,8 +178,9 @@ func runClusterStart(cmd *cobra.Command, _ []string) error {
 }
 
 // runClusterPower is the shared shape behind cluster stop and cluster start:
-// both are single-stage (twoStage:false — neither op destroys a VM) whole-
-// cluster power ops that differ only in which Runner method they call.
+// both are whole-cluster power ops (neither destroys a VM, so both stay off
+// the destroy-grade gate via destroyGradeVerb) that differ only in which
+// Runner method they call.
 func runClusterPower(cmd *cobra.Command, verb string, yes bool, confirmCluster string, dryRun bool, op func(*nodeRunnerCtx) error) error {
 	cfg, err := loadConfig(cfgFile)
 	if err != nil {
@@ -187,7 +191,7 @@ func runClusterPower(cmd *cobra.Command, verb string, yes bool, confirmCluster s
 		return err
 	}
 
-	consent := nodeConsent{yes: yes, dryRun: dryRun, twoStage: false}
+	consent := nodeConsent{yes: yes, dryRun: dryRun, twoStage: destroyGradeVerb(verb)}
 	rc, err := buildNodeRunner(cmd, cfg, verb, consent, true)
 	if err != nil {
 		return err

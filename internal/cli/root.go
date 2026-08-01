@@ -215,6 +215,16 @@ func execute() (code int) {
 // close(sigCh) ordering after signal.Stop is load-bearing for the
 // bounded-leak contract; do not move or remove without re-deriving it.
 func signalLoop(sigCh <-chan os.Signal, cancel context.CancelFunc, caughtSig *atomic.Value, exit func(int)) {
+	// A panic in this okdctl-owned goroutine would otherwise crash the runtime
+	// with Go's fixed exit status 2, which the taxonomy reserves for
+	// ConfigError. Convert it to 70 (EX_SOFTWARE) like execute()'s main-goroutine
+	// recover.
+	defer func() {
+		if r := recover(); r != nil {
+			logutil.Error("internal error: panic in signal handler", logutil.LF("panic", fmt.Sprint(r)))
+			exit(70)
+		}
+	}()
 	sig, ok := <-sigCh
 	if !ok {
 		return
@@ -293,7 +303,10 @@ func signalExitCode(caughtSig *atomic.Value, err error) (int, bool) {
 	if caughtSig.Load() == nil {
 		return 0, false
 	}
-	if !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
+	// Only context.Canceled: the root ctx is WithCancel (no deadline), so a
+	// signal-driven cancel() can never surface as DeadlineExceeded. Accepting
+	// it here would misattribute a self-imposed poll timeout to the signal.
+	if !errors.Is(err, context.Canceled) {
 		return 0, false
 	}
 	if sig, _ := caughtSig.Load().(os.Signal); sig == syscall.SIGTERM {
@@ -385,6 +398,7 @@ Pass --output=json for machine-readable output suitable for CI version
 pinning or scripted comparisons (see docs/cli/json-schema.md).`,
 	Example: `  okdctl version
   okdctl version --output json | jq .version`,
+	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		if err := validateFormat(versionOutputFlag); err != nil {
 			return err

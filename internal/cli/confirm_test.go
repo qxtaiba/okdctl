@@ -104,9 +104,9 @@ func TestConfirmClusterMatches(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			err := confirmClusterMatches(tc.force, tc.confirm, tc.cluster, tc.verb)
 			if tc.wantErr {
-				var cfgErr *errtypes.ConfigError
-				if !errors.As(err, &cfgErr) {
-					t.Fatalf("want *errtypes.ConfigError, got %v", err)
+				var usageErr *errtypes.UsageError
+				if !errors.As(err, &usageErr) {
+					t.Fatalf("want *errtypes.UsageError, got %v", err)
 				}
 				return
 			}
