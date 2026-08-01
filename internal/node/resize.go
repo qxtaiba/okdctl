@@ -115,13 +115,8 @@ func (r *Runner) Resize(ctx context.Context, scope ResizeScope, opts ResizeOptio
 	if r.DryRun {
 		r.preview(&plan)
 	} else if !resuming {
-		proceed, err := r.confirm(ctx, &plan)
-		if err != nil {
+		if err := r.confirmOrDecline(ctx, &plan, "node: resize cancelled", "role", string(role)); err != nil {
 			return err
-		}
-		if !proceed {
-			r.Log.Info("node: resize cancelled", "role", string(role))
-			return ErrDeclined
 		}
 	}
 
@@ -319,46 +314,41 @@ func (r *Runner) resizeOneNode(ctx context.Context, t resizeTarget, role nodetyp
 		}
 	}
 
-	if shouldRunStep(StepTFApply, resumeStep) {
-		if err := r.mark(OpResize, t.name, StepTFApply); err != nil {
-			return err
-		}
+	if err := r.runStep(OpResize, t.name, StepTFApply, resumeStep, func() error {
 		// A memory change must be an in-place update, never a replace — a
 		// replace would destroy the VM and, for a master, break quorum.
 		// prevent_destroy on the master resource backstops this, but the gate
 		// refuses it up front with a clear message instead of a terraform
 		// apply error.
-		if err := r.targetedApply(ctx, address, terraform.PlanActionUpdate, sizingVars, resuming); err != nil {
-			return err
-		}
+		return r.targetedApply(ctx, address, terraform.PlanActionUpdate, sizingVars, resuming)
+	}); err != nil {
+		return err
 	}
 
 	// The apply only rewrites the VM's *config*; bpg/proxmox does not restart it,
 	// so the guest keeps its old memory until a hypervisor stop→start. Power-cycle
 	// now, then wait for the node to rejoin. A failure here leaves the node
 	// cordoned and returns an error — never report success on an unrealized resize.
-	if shouldRunStep(StepPowerCycle, resumeStep) {
-		if err := r.mark(OpResize, t.name, StepPowerCycle); err != nil {
-			return err
-		}
-		if err := r.powerCycleVM(ctx, role, t.index); err != nil {
-			return err
-		}
+	if err := r.runStep(OpResize, t.name, StepPowerCycle, resumeStep, func() error {
+		return r.powerCycleVM(ctx, role, t.index)
+	}); err != nil {
+		return err
 	}
 
 	if err := r.waitNodeReady(ctx, t.name); err != nil {
 		return err
 	}
-	if isMaster && preGate {
+	// The post-cycle gate always runs for masters, including on a resume at or
+	// past the power-cycle: the pre-gate skip above only avoids deadlocking
+	// behind a power-on, but once the node is Ready again quorum must be
+	// verified before it returns to service.
+	if isMaster {
 		if err := r.waitEtcdHealthy(ctx, "post-"+t.name); err != nil {
 			return err
 		}
 	}
 
-	if shouldRunStep(StepUncordon, resumeStep) {
-		if err := r.mark(OpResize, t.name, StepUncordon); err != nil {
-			return err
-		}
+	if err := r.runStep(OpResize, t.name, StepUncordon, resumeStep, func() error {
 		if err := r.Cluster.Uncordon(ctx, t.name); err != nil {
 			return err
 		}
@@ -367,9 +357,9 @@ func (r *Runner) resizeOneNode(ctx context.Context, t resizeTarget, role nodetyp
 		// them down and triggered a rebalance. Wait for structural Ceph health
 		// before the op returns so a compact loop never drains the next node
 		// mid-recovery.
-		if err := r.waitCephHealthy(ctx, "post-"+t.name); err != nil {
-			return err
-		}
+		return r.waitCephHealthy(ctx, "post-"+t.name)
+	}); err != nil {
+		return err
 	}
 
 	r.Log.Info("node: resized", "node", t.name, "role", string(role))

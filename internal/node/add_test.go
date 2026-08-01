@@ -114,9 +114,9 @@ func seedAddRunner(t *testing.T, fc *fakeCluster, ftf *fakeTF, fiso *fakeISO, fi
 		Ignition:    fign,
 		Cfg:         cfg,
 		ConfigPath:  cfgPath,
-		ProjectRoot: dir,
-		WorkDir:     filepath.Join(dir, "okd-install"),
-		EnvDir:      dir,
+		projectRoot: dir,
+		workDir:     filepath.Join(dir, "okd-install"),
+		envDir:      dir,
 		RunID:       "test-run",
 		DryRun:      true,
 		Log:         logutil.NopLogger,
@@ -125,17 +125,17 @@ func seedAddRunner(t *testing.T, fc *fakeCluster, ftf *fakeTF, fiso *fakeISO, fi
 }
 
 // writeIgnitionArtifacts creates worker.ign and the ignition TLS cert under
-// r's WorkDir/ProjectRoot so preflightIgnitionArtifacts passes.
+// r's workDir/projectRoot so preflightIgnitionArtifacts passes.
 func writeIgnitionArtifacts(t *testing.T, r *Runner) {
 	t.Helper()
-	clusterDir := workspace.ClusterConfigDir(r.WorkDir)
+	clusterDir := workspace.ClusterConfigDir(r.workDir)
 	if err := os.MkdirAll(clusterDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(clusterDir, "worker.ign"), []byte("{}"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	certPath, _ := provision.IgnitionCertPaths(r.ProjectRoot)
+	certPath, _ := provision.IgnitionCertPaths(r.projectRoot)
 	if err := os.MkdirAll(filepath.Dir(certPath), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -193,7 +193,7 @@ func TestAddWorkersDryRunMakesNoMutation(t *testing.T) {
 	}
 	assertUnchanged(t, tfvars, "SENTINEL_TFVARS\n")
 	assertUnchanged(t, cfgPath, "SENTINEL_CONFIG\n")
-	if _, err := os.Stat(filepath.Join(r.WorkDir, OpMarkerFileName)); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(r.workDir, OpMarkerFileName)); !os.IsNotExist(err) {
 		t.Error("dry-run add wrote an op marker")
 	}
 }

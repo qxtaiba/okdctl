@@ -58,13 +58,8 @@ func (r *Runner) Stop(ctx context.Context, opts StopOptions) error {
 		return nil
 	}
 
-	proceed, err := r.confirm(ctx, &plan)
-	if err != nil {
+	if err := r.confirmOrDecline(ctx, &plan, "node: cluster stop cancelled", "cluster", r.Cfg.Cluster.Name); err != nil {
 		return err
-	}
-	if !proceed {
-		r.Log.Info("node: cluster stop cancelled", "cluster", r.Cfg.Cluster.Name)
-		return ErrDeclined
 	}
 
 	r.Log.Info("node: stopping cluster", "workers", len(workers), "masters", len(masters))

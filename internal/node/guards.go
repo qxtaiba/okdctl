@@ -51,8 +51,8 @@ func validateWorkerRemovable(nodes []cluster.NodeDetail, target string, workerCo
 	}
 	maxIdx := -1
 	for _, w := range workers {
-		if i, ok := cluster.NodeIndex(w.Name); ok && i > maxIdx {
-			maxIdx = i
+		if i, ok := cluster.NodeIndex(w.Name); ok {
+			maxIdx = max(maxIdx, i)
 		}
 	}
 	if idx != maxIdx {

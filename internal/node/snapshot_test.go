@@ -296,7 +296,7 @@ func TestCreateSnapshot_successClearsOpMarker(t *testing.T) {
 		t.Fatalf("CreateSnapshot: %v", err)
 	}
 
-	marker, err := ReadOpMarker(r.WorkDir, cfg.Cluster.Name)
+	marker, err := ReadOpMarker(r.workDir, cfg.Cluster.Name)
 	if err != nil {
 		t.Fatalf("ReadOpMarker: %v", err)
 	}
@@ -326,7 +326,7 @@ func TestCreateSnapshot_failureLeavesOpSnapshotMarkerNotOpRemove(t *testing.T) {
 		t.Fatal("expected error when the pvesh create call fails")
 	}
 
-	marker, err := ReadOpMarker(r.WorkDir, cfg.Cluster.Name)
+	marker, err := ReadOpMarker(r.workDir, cfg.Cluster.Name)
 	if err != nil {
 		t.Fatalf("ReadOpMarker: %v", err)
 	}
@@ -613,7 +613,7 @@ func TestRollbackSnapshot_successClearsOpMarker(t *testing.T) {
 		t.Fatalf("RollbackSnapshot: %v", err)
 	}
 
-	marker, err := ReadOpMarker(r.WorkDir, cfg.Cluster.Name)
+	marker, err := ReadOpMarker(r.workDir, cfg.Cluster.Name)
 	if err != nil {
 		t.Fatalf("ReadOpMarker: %v", err)
 	}
@@ -651,7 +651,7 @@ func TestRollbackSnapshot_finalUncordonFailureSurfacesAsError(t *testing.T) {
 		t.Errorf("uncordon calls = %d; want 1 (attempted, even though it failed)", fc.uncordon)
 	}
 
-	marker, merr := ReadOpMarker(r.WorkDir, cfg.Cluster.Name)
+	marker, merr := ReadOpMarker(r.workDir, cfg.Cluster.Name)
 	if merr != nil {
 		t.Fatalf("ReadOpMarker: %v", merr)
 	}
@@ -723,7 +723,7 @@ func TestCreateSnapshot_acknowledgeConsumesForeignMarker(t *testing.T) {
 		t.Fatalf("acknowledged --skip-drain create must proceed: %v", err)
 	}
 
-	marker, err := ReadOpMarker(r.WorkDir, cfg.Cluster.Name)
+	marker, err := ReadOpMarker(r.workDir, cfg.Cluster.Name)
 	if err != nil {
 		t.Fatalf("re-read marker: %v", err)
 	}

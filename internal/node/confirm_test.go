@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/qxtaiba/okdctl/internal/cluster"
 	"github.com/qxtaiba/okdctl/internal/config"
@@ -152,6 +153,101 @@ func TestResizeConfirmYesProceeds(t *testing.T) {
 	}
 	if ftf.applyCalls != 1 {
 		t.Errorf("approved resize should apply once; applyCalls=%d", ftf.applyCalls)
+	}
+}
+
+// TestClusterPowerConfirmGate locks the confirm gate on the whole-cluster power
+// ops (stop, start), which power off / on every VM: the gate must fire after
+// read-only enumeration and before any cordon/shutdown/power-on, a decline must
+// return ErrDeclined with zero mutation, and an approval must run the full
+// sequence. The plan handed to the hook carries the op and its power ordering
+// (stop takes workers first, start takes masters first).
+func TestClusterPowerConfirmGate(t *testing.T) {
+	tests := []struct {
+		name      string
+		op        Op
+		approve   bool
+		wantFirst nodetypes.NodeRole
+	}{
+		{"stop/approve", OpStop, true, nodetypes.RoleWorker},
+		{"stop/decline", OpStop, false, nodetypes.RoleWorker},
+		{"start/approve", OpStart, true, nodetypes.RoleMaster},
+		{"start/decline", OpStart, false, nodetypes.RoleMaster},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			fc := &fakeCluster{
+				nodes:          stopTestNodes(),
+				signerNotAfter: time.Now().Add(60 * 24 * time.Hour),
+			}
+			fp := &fakePower{}
+			r, _, _ := seedRunner(t, fc, &fakeTF{}, startTestConfig())
+			r.DryRun = false
+			r.Power = fp
+			r.ClusterReadyTimeout = 5 * time.Second
+
+			var (
+				fired      bool
+				plan       OpPlan
+				cordonAt   int
+				shutdownAt int
+				startAt    int
+			)
+			r.Confirm = func(_ context.Context, p *OpPlan) (bool, error) {
+				fired = true
+				plan = *p
+				cordonAt, shutdownAt, startAt = fc.cordon, fp.shutdownCalls, fp.startCalls
+				return tc.approve, nil
+			}
+
+			var err error
+			switch tc.op {
+			case OpStop:
+				err = r.Stop(context.Background(), StopOptions{})
+			case OpStart:
+				err = r.Start(context.Background(), StartOptions{})
+			}
+
+			if !fired {
+				t.Fatal("confirm hook never fired")
+			}
+			if cordonAt != 0 || shutdownAt != 0 || startAt != 0 {
+				t.Errorf("mutation happened before confirm: cordon=%d shutdown=%d start=%d", cordonAt, shutdownAt, startAt)
+			}
+			if plan.Op != tc.op {
+				t.Errorf("plan.Op = %q, want %q", plan.Op, tc.op)
+			}
+			if len(plan.Nodes) != 4 {
+				t.Fatalf("plan should carry all 4 nodes; got %d", len(plan.Nodes))
+			}
+			if plan.Nodes[0].Role != tc.wantFirst {
+				t.Errorf("plan ordering: first node role = %q, want %q", plan.Nodes[0].Role, tc.wantFirst)
+			}
+
+			if !tc.approve {
+				if !errors.Is(err, ErrDeclined) {
+					t.Fatalf("declined %s should return ErrDeclined: %v", tc.op, err)
+				}
+				if fc.cordon != 0 || fp.shutdownCalls != 0 || fp.startCalls != 0 {
+					t.Errorf("declined %s mutated: cordon=%d shutdown=%d start=%d", tc.op, fc.cordon, fp.shutdownCalls, fp.startCalls)
+				}
+				return
+			}
+
+			if err != nil {
+				t.Fatalf("approved %s: %v", tc.op, err)
+			}
+			switch tc.op {
+			case OpStop:
+				if fc.cordon != 4 || fp.shutdownCalls != 4 {
+					t.Errorf("approved stop should run the full sequence: cordon=%d shutdown=%d", fc.cordon, fp.shutdownCalls)
+				}
+			case OpStart:
+				if fp.startCalls != 4 {
+					t.Errorf("approved start should power on every vm: start=%d", fp.startCalls)
+				}
+			}
+		})
 	}
 }
 
