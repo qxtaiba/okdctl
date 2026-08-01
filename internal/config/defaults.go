@@ -112,6 +112,7 @@ func DefaultConfig() *Config {
 		Disks: DisksConfig{
 			WorkerDataSizeGB:       500,
 			ControlPlaneDataSizeGB: 0,
+			ControlPlaneMonSizeGB:  0,
 		},
 	}
 }

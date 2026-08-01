@@ -74,6 +74,11 @@ func validateEnums(cfg *Config, result *ValidationResult) {
 		result.AddError(FieldProviderType, fmt.Sprintf("unsupported provider: %s", cfg.Provider.Type))
 	}
 
+	// The charset gate must run on every load path: env is filepath.Join'd into
+	// the workspace path and becomes the cwd for the root-privileged terraform
+	// init/apply/destroy, so a "../" value must fail closed here. The directory
+	// existence check lives in validateTerraformEnvDir (ScopeFiles), which is
+	// projectRoot-aware.
 	if env := cfg.Deployment.TerraformEnv; env != "" {
 		if err := ValidateTerraformEnv(env); err != nil {
 			result.AddError(FieldDeploymentTerraformEnv, err.Error())
@@ -159,6 +164,17 @@ func validateNetworking(cfg *Config, result *ValidationResult) {
 		if !IsValidIP(dns) {
 			result.AddError(fmt.Sprintf("%s[%d]", FieldNetworkingDNS, i), "must be a valid IP address")
 		}
+	}
+
+	// bastion.ip and static_ip.dns flow verbatim into every node's kernel
+	// command line (nameserver=%s via --live-karg-append); a non-IP value
+	// injects extra kargs, so reject anything that is not a bare IP literal.
+	// Empty is tolerated for non-static-IP deployments.
+	if cfg.Networking.Bastion.IP != "" && !IsValidIP(cfg.Networking.Bastion.IP) {
+		result.AddError(FieldNetworkingBastionIP, "must be a valid IP address")
+	}
+	if cfg.Networking.StaticIP.DNS != "" && !IsValidIP(cfg.Networking.StaticIP.DNS) {
+		result.AddError(FieldNetworkingStaticIPDNS, "must be a valid IP address")
 	}
 
 	if cfg.Networking.NTPServer != "" && !isValidHostOrIP(cfg.Networking.NTPServer) {
@@ -295,13 +311,46 @@ func proxmoxHostAddr(proxmox *ProxmoxConfig) string {
 	if proxmox == nil {
 		return ""
 	}
-	host := strings.TrimPrefix(proxmox.Host, "http://")
+	host := stripProxmoxScheme(proxmox.Host)
 	if strings.Contains(host, ":") {
 		if h, _, err := net.SplitHostPort(host); err == nil {
 			host = h
 		}
 	}
 	return host
+}
+
+// stripProxmoxScheme drops a leading http:// or https:// from a Proxmox host
+// value. Trimming only http:// left https://host:port to reach SplitHostPort,
+// which mis-split it (two colons) and returned the whole URL, silently
+// no-oping the collision and host validators downstream.
+func stripProxmoxScheme(host string) string {
+	host = strings.TrimPrefix(host, "http://")
+	host = strings.TrimPrefix(host, "https://")
+	return host
+}
+
+// validateHostPort reports whether value is a bare hostname, IP, or host:port
+// (optionally a bracketed IPv6:port). A legal host[:port] never contains '/'
+// or '@', so rejecting them fails closed on scheme- and userinfo-prefixed
+// input that net.SplitHostPort would otherwise mis-split into a bogus
+// left-of-colon token (e.g. "https://h" → host "https").
+func validateHostPort(value string) error {
+	if value == "" || strings.ContainsAny(value, "/@") {
+		return errors.New("must be a valid hostname or IP address")
+	}
+	host := value
+	if strings.Contains(value, ":") {
+		h, _, err := net.SplitHostPort(value)
+		if err != nil {
+			return errors.New("must be a valid host or host:port")
+		}
+		host = h
+	}
+	if host == "" || !isValidHostOrIP(host) {
+		return errors.New("must be a valid hostname or IP address")
+	}
+	return nil
 }
 
 func netmaskMatches(netmask, dotted string) bool {
@@ -462,17 +511,8 @@ func validateProxmoxConfig(proxmox *ProxmoxConfig, result *ValidationResult) {
 		result.AddError(FieldProxmoxHost,
 			"http:// endpoint transmits credentials in plaintext; set provider.proxmox.insecure_http: true to opt in")
 	default:
-		host := strings.TrimPrefix(proxmox.Host, "http://")
-		if strings.Contains(host, ":") {
-			h, _, err := net.SplitHostPort(host)
-			if err != nil {
-				result.AddError(FieldProxmoxHost, "must be a valid host or host:port")
-			} else {
-				host = h
-			}
-		}
-		if host != "" && !isValidHostOrIP(host) {
-			result.AddError(FieldProxmoxHost, "must be a valid hostname or IP address")
+		if err := validateHostPort(stripProxmoxScheme(proxmox.Host)); err != nil {
+			result.AddError(FieldProxmoxHost, err.Error())
 		}
 	}
 
@@ -548,10 +588,12 @@ func validateAdditionalNetworks(networks []AdditionalNetwork, result *Validation
 	}
 }
 
-// httpRootUnsafe holds characters that carry meaning in Apache config
-// directives or a POSIX shell; any of them in a DocumentRoot value would
-// allow the operator to inject directives or break out of quoted contexts.
-const httpRootUnsafe = "\n\r\t \"'`$;<>\\"
+// httpRootPattern is the allowlist of legal DocumentRoot characters. The value
+// is interpolated raw into a root-owned Apache vhost (DocumentRoot plus a
+// Directory block), so an allowlist fails closed on any unknown metacharacter
+// where the earlier denylist ("\n\r\t \"'`$;<>\\") would pass a character it
+// had not enumerated. Every previously denied character is excluded here.
+var httpRootPattern = regexp.MustCompile(`^/[A-Za-z0-9._/-]*$`)
 
 func validateHTTPServer(cfg *Config, result *ValidationResult) {
 	if cfg.HTTPServer.IgnitionServerIP != "" && !IsValidIP(cfg.HTTPServer.IgnitionServerIP) {
@@ -559,10 +601,15 @@ func validateHTTPServer(cfg *Config, result *ValidationResult) {
 	}
 
 	if cfg.HTTPServer.Root != "" {
-		if !filepath.IsAbs(cfg.HTTPServer.Root) {
+		switch {
+		case !filepath.IsAbs(cfg.HTTPServer.Root):
 			result.AddError(FieldHTTPServerRoot, "must be an absolute path")
-		} else if strings.ContainsAny(cfg.HTTPServer.Root, httpRootUnsafe) {
-			result.AddError(FieldHTTPServerRoot, "must not contain shell or Apache directive metacharacters")
+		case !httpRootPattern.MatchString(cfg.HTTPServer.Root):
+			result.AddError(FieldHTTPServerRoot, "must contain only letters, digits, and ._-/ (no shell or Apache directive metacharacters)")
+		case slices.Contains(strings.Split(cfg.HTTPServer.Root, "/"), ".."):
+			// The allowlist admits '.' and '/', so a ".." segment slips past
+			// it; reject traversal before the path reaches the vhost.
+			result.AddError(FieldHTTPServerRoot, "must not contain a '..' path segment")
 		}
 	}
 }
@@ -739,20 +786,11 @@ func ValidateProxmoxNodeName(value string) error {
 	return nil
 }
 
-// ValidateProxmoxHost accepts a hostname, IP, or host:port.
+// ValidateProxmoxHost accepts a bare hostname, IP, or host:port. Scheme- and
+// userinfo-prefixed values (https://host, user:pass@host) are rejected — this
+// validator guards the wizard field, which carries no scheme.
 func ValidateProxmoxHost(value string) error {
-	host := value
-	if strings.Contains(value, ":") {
-		h, _, err := net.SplitHostPort(value)
-		if err != nil {
-			return errors.New("invalid host:port format")
-		}
-		host = h
-	}
-	if host == "" || !isValidHostOrIP(host) {
-		return errors.New("must be a valid hostname or IP address")
-	}
-	return nil
+	return validateHostPort(value)
 }
 
 // ValidateNTPServer accepts an empty string (the bastion default applies)
