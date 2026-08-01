@@ -32,9 +32,9 @@ per 24h, cached locally); set OKDCTL_NO_UPDATE_CHECK=1 to disable.
 * [okdctl completion](okdctl_completion.md)	 - Generate shell completion script
 * [okdctl config](okdctl_config.md)	 - Inspect okdctl configuration
 * [okdctl debug-bundle](okdctl_debug-bundle.md)	 - Collect a support bundle for troubleshooting
-* [okdctl deploy](okdctl_deploy.md)	 - Deploy a Kubernetes cluster
+* [okdctl deploy](okdctl_deploy.md)	 - Deploy an OKD cluster
 * [okdctl describe](okdctl_describe.md)	 - Show details for a cluster node or addon
-* [okdctl destroy](okdctl_destroy.md)	 - Destroy a Kubernetes cluster
+* [okdctl destroy](okdctl_destroy.md)	 - Destroy an OKD cluster
 * [okdctl doctor](okdctl_doctor.md)	 - Check that your environment is ready to deploy a cluster
 * [okdctl kubeconfig](okdctl_kubeconfig.md)	 - Print or export the cluster kubeconfig
 * [okdctl node](okdctl_node.md)	 - Manage cluster node lifecycle

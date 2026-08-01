@@ -42,20 +42,6 @@ var setupStepOrder = []distribution.StepID{
 	StepConfigureDNS,
 }
 
-// stepDefByID returns the StepDef with the given ID from defs, failing the
-// test when absent. Guard tests use it to exercise AlreadyDone closures
-// through the real step wiring rather than the helpers alone.
-func stepDefByID(t *testing.T, defs []distribution.StepDef, id distribution.StepID) distribution.StepDef {
-	t.Helper()
-	for _, d := range defs {
-		if d.ID == id {
-			return d
-		}
-	}
-	t.Fatalf("step %s not found in defs", id)
-	return distribution.StepDef{}
-}
-
 func TestNewOptions_PathsRootedAtProject(t *testing.T) {
 	opts := NewOptions(config.DefaultConfig(), "/proj")
 	if opts.WorkDir != "/proj/okd-install" {

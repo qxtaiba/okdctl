@@ -30,7 +30,7 @@ nodes and steps. --acknowledge-interrupted-op overrides a marker left by a
 different op or node instead of refusing.
 
 ```
-okdctl node resize (masters|workers|<name>) [--memory-mb N] [--cpu N] [flags]
+okdctl node resize (masters|workers|<name>) [flags]
 ```
 
 ### Examples

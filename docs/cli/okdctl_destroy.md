@@ -1,10 +1,10 @@
 ## okdctl destroy
 
-Destroy a Kubernetes cluster
+Destroy an OKD cluster
 
 ### Synopsis
 
-Destroy a Kubernetes cluster and all associated infrastructure.
+Destroy an OKD cluster and all associated infrastructure.
 This operation is idempotent and safe to re-run if a previous destroy was interrupted.
 
 Use --dry-run to preview the terraform destroy plan without modifying infra.
