@@ -11,7 +11,10 @@ command -v vhs >/dev/null || { echo "vhs not found — brew install vhs" >&2; ex
 
 ROOT="$(git rev-parse --show-toplevel)"
 WORK="$(mktemp -d -t okdctl-demo)"
-trap 'kill "${PVE_PID:-}" 2>/dev/null; rm -rf "$WORK"' EXIT
+# Guard the kill: an unset PVE_PID (die before fakepve starts) must not let
+# errexit abort the handler before rm removes $WORK (holds a throwaway ed25519
+# key + dummy pull secret). || true keeps the handler's exit status clean.
+trap '[ -n "${PVE_PID:-}" ] && kill "$PVE_PID" 2>/dev/null || true; rm -rf "$WORK"' EXIT
 
 # Demo home: dummy pull secret + throwaway ssh key so the files step
 # validates without touching the operator's real credentials.

@@ -4,21 +4,24 @@
 # - PROXMOX_VE_ENDPOINT    (api url, e.g., https://pve.example.com:8006/)
 # - PROXMOX_VE_USERNAME    (username, e.g., root@pam)
 # - PROXMOX_VE_PASSWORD    (password)
-# - PROXMOX_VE_INSECURE  (DEV ONLY: disables TLS verification — never set in prod; use a CA-signed cert or add the proxmox CA to your trust store)
+# TLS verification is pinned on: the production environment sets insecure = false
+# (environments/production/versions.tf), which overrides PROXMOX_VE_INSECURE. A
+# self-signed PVE cert needs its CA in the host trust store, not an env-var bypass.
 # Provider configuration is handled by the parent module
 
 locals {
   masters = slice(var.master_names, 0, var.master_count)
   workers = slice(var.worker_names, 0, var.worker_count)
 
-  bootstrap_cpu    = coalesce(var.bootstrap_cpu_cores, var.cpu_cores)
-  bootstrap_memory = coalesce(var.bootstrap_memory_mb, var.memory_mb)
-  master_cpu       = coalesce(var.master_cpu_cores, var.cpu_cores)
-  master_memory    = coalesce(var.master_memory_mb, var.memory_mb)
-  master_os_disk   = coalesce(var.master_os_disk_size_gb, var.os_disk_size_gb)
-  worker_cpu       = coalesce(var.worker_cpu_cores, var.cpu_cores)
-  worker_memory    = coalesce(var.worker_memory_mb, var.memory_mb)
-  worker_os_disk   = coalesce(var.worker_os_disk_size_gb, var.os_disk_size_gb)
+  bootstrap_cpu     = coalesce(var.bootstrap_cpu_cores, var.cpu_cores)
+  bootstrap_memory  = coalesce(var.bootstrap_memory_mb, var.memory_mb)
+  bootstrap_os_disk = var.os_disk_size_gb
+  master_cpu        = coalesce(var.master_cpu_cores, var.cpu_cores)
+  master_memory     = coalesce(var.master_memory_mb, var.memory_mb)
+  master_os_disk    = coalesce(var.master_os_disk_size_gb, var.os_disk_size_gb)
+  worker_cpu        = coalesce(var.worker_cpu_cores, var.cpu_cores)
+  worker_memory     = coalesce(var.worker_memory_mb, var.memory_mb)
+  worker_os_disk    = coalesce(var.worker_os_disk_size_gb, var.os_disk_size_gb)
 }
 
 # bootstrap node
@@ -62,7 +65,7 @@ resource "proxmox_virtual_environment_vm" "bootstrap" {
 
   disk {
     datastore_id = var.os_storage
-    size         = var.os_disk_size_gb
+    size         = local.bootstrap_os_disk
     interface    = "scsi0"
     iothread     = true
     ssd          = false
@@ -114,16 +117,29 @@ resource "proxmox_virtual_environment_vm" "bootstrap" {
       condition     = var.bootstrap_iso != ""
       error_message = "bootstrap_iso must be provided when bootstrap is enabled."
     }
+    precondition {
+      condition     = local.bootstrap_os_disk >= var.minimum_os_disk_size_gb
+      error_message = "os_disk_size_gb (${local.bootstrap_os_disk}) is below minimum_os_disk_size_gb (${var.minimum_os_disk_size_gb}); raise the size or lower the floor deliberately."
+    }
     ignore_changes = [
       # bpg/terraform-provider-proxmox dynamic + static network_device coexist;
       # the provider produces spurious diffs unless the static block is ignored.
       network_device,
+      # startup ordering is owned at runtime, not terraform: HA supersedes
+      # startup{} on failover (see ha.tf) and okdctl drives power/boot order
+      # out-of-band, so the create-time values are write-once.
       startup,
+      # cdrom.file_id is the per-node ignition ISO; okdctl detaches/deletes it
+      # after first boot, so terraform must not re-attach a now-absent ISO.
       cdrom,
+      # boot_order follows the same post-ignition reality: once the ISO is
+      # detached the effective boot device set changes; don't revert it.
       boot_order,
       # efi_disk holds nvram/boot-order state across reboots; replacing the
-      # disk on a force-new attribute change would reset bootloader picks.
-      efi_disk,
+      # disk on a force-new attribute change would reset bootloader picks. Only
+      # type is ignored — datastore_id stays tracked so an os_storage move
+      # relocates the efi disk with the OS disk instead of stranding it.
+      efi_disk[0].type,
     ]
   }
 }
@@ -276,16 +292,29 @@ resource "proxmox_virtual_environment_vm" "master" {
       condition     = var.master_mon_disk_size_gb == 0 || var.master_mon_disk_size_gb >= var.minimum_data_disk_size_gb
       error_message = "master_mon_disk_size_gb (${var.master_mon_disk_size_gb}) is below minimum_data_disk_size_gb (${var.minimum_data_disk_size_gb}); a below-floor value must fail the plan, not silently omit (destroy) the mon disk — raise the size or lower the floor deliberately."
     }
+    precondition {
+      condition     = local.master_os_disk >= var.minimum_os_disk_size_gb
+      error_message = "master os disk size (${local.master_os_disk}) is below minimum_os_disk_size_gb (${var.minimum_os_disk_size_gb}); master os disks hold /var/lib/etcd — raise the size or lower the floor deliberately."
+    }
     ignore_changes = [
       # bpg/terraform-provider-proxmox dynamic + static network_device coexist;
       # the provider produces spurious diffs unless the static block is ignored.
       network_device,
+      # startup ordering is owned at runtime, not terraform: HA supersedes
+      # startup{} on failover (see ha.tf) and okdctl drives power/boot order
+      # out-of-band, so the create-time values are write-once.
       startup,
+      # cdrom.file_id is the per-node ignition ISO; okdctl detaches/deletes it
+      # after first boot, so terraform must not re-attach a now-absent ISO.
       cdrom,
+      # boot_order follows the same post-ignition reality: once the ISO is
+      # detached the effective boot device set changes; don't revert it.
       boot_order,
       # efi_disk holds nvram/boot-order state across reboots; replacing the
-      # disk on a force-new attribute change would reset bootloader picks.
-      efi_disk,
+      # disk on a force-new attribute change would reset bootloader picks. Only
+      # type is ignored — datastore_id stays tracked so an os_storage move
+      # relocates the efi disk with the OS disk instead of stranding it.
+      efi_disk[0].type,
     ]
   }
 }
@@ -407,16 +436,29 @@ resource "proxmox_virtual_environment_vm" "worker" {
       condition     = var.worker_data_disk_size_gb == 0 || var.worker_data_disk_size_gb >= var.minimum_data_disk_size_gb
       error_message = "worker_data_disk_size_gb (${var.worker_data_disk_size_gb}) is below minimum_data_disk_size_gb (${var.minimum_data_disk_size_gb}); shrinking a data disk destroys its ceph osd data — raise the size or lower the floor deliberately."
     }
+    precondition {
+      condition     = local.worker_os_disk >= var.minimum_os_disk_size_gb
+      error_message = "worker os disk size (${local.worker_os_disk}) is below minimum_os_disk_size_gb (${var.minimum_os_disk_size_gb}); raise the size or lower the floor deliberately."
+    }
     ignore_changes = [
       # bpg/terraform-provider-proxmox dynamic + static network_device coexist;
       # the provider produces spurious diffs unless the static block is ignored.
       network_device,
+      # startup ordering is owned at runtime, not terraform: HA supersedes
+      # startup{} on failover (see ha.tf) and okdctl drives power/boot order
+      # out-of-band, so the create-time values are write-once.
       startup,
+      # cdrom.file_id is the per-node ignition ISO; okdctl detaches/deletes it
+      # after first boot, so terraform must not re-attach a now-absent ISO.
       cdrom,
+      # boot_order follows the same post-ignition reality: once the ISO is
+      # detached the effective boot device set changes; don't revert it.
       boot_order,
       # efi_disk holds nvram/boot-order state across reboots; replacing the
-      # disk on a force-new attribute change would reset bootloader picks.
-      efi_disk,
+      # disk on a force-new attribute change would reset bootloader picks. Only
+      # type is ignored — datastore_id stays tracked so an os_storage move
+      # relocates the efi disk with the OS disk instead of stranding it.
+      efi_disk[0].type,
     ]
   }
 }

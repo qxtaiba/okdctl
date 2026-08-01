@@ -36,12 +36,22 @@ for minor in "${SUPPORTED_MINORS[@]}"; do
     # The fcos/scos split at minor 19 is specific to MAJOR=4; a second
     # major/minor loop (see header) must define its own boundary, not reuse 19.
     [ "$minor" -ge 19 ] && flavor=scos
-    sha=$(git ls-remote https://github.com/openshift/installer "release-$MAJOR.$minor" | awk '{print $1}')
+    # --heads + an anchored refs/heads/ pattern so a like-named tag cannot also
+    # match; NR==1 takes a single sha even if the pattern ever widens.
+    sha=$(git ls-remote --heads https://github.com/openshift/installer "refs/heads/release-$MAJOR.$minor" | awk 'NR==1{print $1}')
     if [ -z "$sha" ]; then
         echo "warn: no tip for release-$MAJOR.$minor — skipping" >&2
         continue
     fi
-    json_sha=$(curl -sSfL --proto '=https' --tlsv1.2 --connect-timeout 10 --max-time 60 "https://raw.githubusercontent.com/openshift/installer/${sha}/data/data/coreos/${flavor}.json" | sha256sum | awk '{print $1}')
+    # Capture the body and reject empty/non-JSON before hashing: a 200 with a
+    # truncated or empty payload would otherwise hash to a plausible pin (the
+    # empty-input sha256 e3b0c442...) and make a degenerate stream verify.
+    json_body=$(curl -sSfL --proto '=https' --proto-redir '=https' --tlsv1.2 --connect-timeout 10 --max-time 60 "https://raw.githubusercontent.com/openshift/installer/${sha}/data/data/coreos/${flavor}.json")
+    if [ -z "$json_body" ] || ! printf '%s' "$json_body" | python3 -c 'import json,sys; json.load(sys.stdin)' 2>/dev/null; then
+        echo "warn: empty or non-JSON ${flavor}.json for release-$MAJOR.$minor — skipping" >&2
+        continue
+    fi
+    json_sha=$(printf '%s' "$json_body" | sha256sum | awk '{print $1}')
     env_args+=("PIN_SHA_${minor}=${sha}" "PIN_JSON_${minor}=${json_sha}")
 done
 
@@ -56,31 +66,45 @@ major = int(sys.argv[2])
 minors = [int(m) for m in sys.argv[3:]]
 text = path.read_text()
 
-pin_map = {}
+block_re = re.compile(
+    r"^var streamPins = map\[okdVersionKey\]coreOSStreamPin\{$.*?^\}$",
+    re.DOTALL | re.MULTILINE,
+)
+block = block_re.search(text)
+if block is None:
+    raise SystemExit("streamPins block not found in coreos.go")
+
+# Seed from the committed map, then overlay freshly-resolved pins. Merging (not
+# rebuilding) means a minor that failed to resolve this run — branch retired
+# upstream, transient network — keeps its committed pin instead of being
+# silently dropped, and a minor hand-added to coreos.go but absent from
+# SUPPORTED_MINORS is preserved rather than deleted by the whole-map rewrite.
+entry_re = re.compile(
+    r'\{(\d+),\s*(\d+)\}:\s*\{CommitSHA:\s*"([0-9a-f]+)",\s*JSONSHA256:\s*"([0-9a-f]+)"\}'
+)
+pin_map = {
+    (int(maj), int(minr)): (sha, json_sha)
+    for maj, minr, sha, json_sha in entry_re.findall(block.group(0))
+}
+
+resolved = 0
 for minor in minors:
     sha = os.environ.get(f"PIN_SHA_{minor}", "")
     json_sha = os.environ.get(f"PIN_JSON_{minor}", "")
     if sha and json_sha:
-        pin_map[minor] = (sha, json_sha)
+        pin_map[(major, minor)] = (sha, json_sha)
+        resolved += 1
 
-if not pin_map:
+if resolved == 0:
     raise SystemExit("no pins resolved — check network access to github.com")
 
 lines = []
-for minor in sorted(pin_map):
-    sha, json_sha = pin_map[minor]
-    lines.append(f'\t{{{major}, {minor}}}: {{CommitSHA: "{sha}", JSONSHA256: "{json_sha}"}},')
+for maj, minr in sorted(pin_map):
+    sha, json_sha = pin_map[(maj, minr)]
+    lines.append(f'\t{{{maj}, {minr}}}: {{CommitSHA: "{sha}", JSONSHA256: "{json_sha}"}},')
 new_block = "var streamPins = map[okdVersionKey]coreOSStreamPin{\n" + "\n".join(lines) + "\n}"
 
-new_text, n = re.subn(
-    r"^var streamPins = map\[okdVersionKey\]coreOSStreamPin\{$.*?^\}$",
-    new_block,
-    text,
-    count=1,
-    flags=re.DOTALL | re.MULTILINE,
-)
-if n != 1:
-    raise SystemExit("streamPins block not found in coreos.go")
+new_text = text[: block.start()] + new_block + text[block.end() :]
 
 if new_text == text:
     print("coreos pins: no drift")
