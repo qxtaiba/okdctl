@@ -11,11 +11,13 @@ import (
 const osLinux = "linux"
 
 // ServiceAction names a systemctl verb. Values are passed to systemctl
-// verbatim so they must stay lowercase and syntactically valid.
+// verbatim so they must stay lowercase and syntactically valid, with one
+// exception: ManageService maps ServiceStatus to `is-active` (see there).
 type ServiceAction string
 
 // ServiceActions passable to ManageService. Each maps to a systemctl
-// subcommand.
+// subcommand verbatim except ServiceStatus, which ManageService rewrites to
+// `is-active`.
 const (
 	ServiceEnable  ServiceAction = "enable"
 	ServiceDisable ServiceAction = "disable"
@@ -28,7 +30,10 @@ const (
 
 // ManageService invokes systemctl for the given service on Linux. Non-Linux
 // hosts get an error rather than a silent no-op so callers don't assume the
-// action took effect.
+// action took effect. ServiceStatus is rewritten to `is-active` — an
+// exit-code probe suitable for programmatic gating — rather than the
+// human-readable `status` report, which pages and returns non-zero for
+// inactive-but-healthy units.
 func ManageService(ctx context.Context, action ServiceAction, serviceName string) error {
 	if runtime.GOOS != osLinux {
 		return fmt.Errorf("systemd services are only supported on Linux")

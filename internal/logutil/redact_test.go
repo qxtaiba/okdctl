@@ -272,6 +272,34 @@ func TestRedactHandler_NilURLPassesThrough(t *testing.T) {
 	}
 }
 
+// TestRedactHandler_URLStringUserinfoStripped covers the plain-string path:
+// an endpoint logged as a string (not *url.URL) under a url/endpoint-class key
+// must still have its userinfo password stripped, since no key-based rule fires
+// on "endpoint" and the string never reaches redactAny's *url.URL case.
+func TestRedactHandler_URLStringUserinfoStripped(t *testing.T) {
+	cases := []struct {
+		name string
+		key  string
+		in   string
+		want string
+	}{
+		{"endpoint key strips password", "endpoint", "https://root:hunter2@pve:8006", "https://root@pve:8006"},
+		{"url key strips password", "url", "https://alice:s3cret@host/path", "https://alice@host/path"},
+		{"uri key strips password", "proxmox_uri", "https://u:p@h", "https://u@h"},
+		{"userinfo-free endpoint unchanged", "endpoint", "https://pve:8006", "https://pve:8006"},
+		{"non-url key unchanged", "message", "https://u:p@h", "https://u:p@h"},
+		{"non-url value unchanged", "endpoint", "just some text", "just some text"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			out := redactAttr(slog.String(tc.key, tc.in))
+			if got := out.Value.String(); got != tc.want {
+				t.Errorf("redactAttr(%q=%q) = %q; want %q", tc.key, tc.in, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestRedactableArgv_PlainTokensPassThrough(t *testing.T) {
 	argv := RedactableArgv([]string{"install", "--verbose", "--output=json"})
 	got, ok := argv.Redacted().(string)

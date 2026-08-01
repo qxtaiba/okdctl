@@ -95,9 +95,45 @@ func redactAttr(a slog.Attr) slog.Attr {
 			safe = append(safe, ra.Key, ra.Value)
 		}
 		return slog.Group(a.Key, safe...)
+	case slog.KindString:
+		if keyIsURLLike(a.Key) {
+			return slog.String(a.Key, stripURLUserinfo(a.Value.String()))
+		}
+		return a
 	default:
 		return a
 	}
+}
+
+// urlKeyFragments name attrs whose string value is a URL that may embed
+// userinfo. Every URL in this tree is logged as a plain string under keys like
+// url/endpoint (none of which match KeyIsSecret), so a Proxmox endpoint
+// carrying user:password@ would otherwise reach the log verbatim.
+var urlKeyFragments = []string{"url", "uri", "endpoint"}
+
+// keyIsURLLike reports whether key names a URL-valued attr, using the same
+// case-insensitive substring match as KeyIsSecret.
+func keyIsURLLike(key string) bool {
+	lower := strings.ToLower(key)
+	return slices.ContainsFunc(urlKeyFragments, func(f string) bool {
+		return strings.Contains(lower, f)
+	})
+}
+
+// stripURLUserinfo parses s as a URL and drops the userinfo password, mirroring
+// redactAny's *url.URL handling: the username is kept, the password removed.
+// Non-URL strings and userinfo-free URLs are returned unchanged so ordinary
+// endpoints still log in full.
+func stripURLUserinfo(s string) string {
+	u, err := url.Parse(s)
+	if err != nil || u.User == nil {
+		return s
+	}
+	if _, hasPassword := u.User.Password(); !hasPassword {
+		return s
+	}
+	u.User = url.User(u.User.Username())
+	return u.String()
 }
 
 // redactAny handles concrete types whose zero-knowledge string form would
@@ -208,6 +244,16 @@ var jwtScrubRe = regexp.MustCompile(`\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-
 func scrubStderrText(s string) string {
 	s = stderrScrubRe.ReplaceAllString(s, "${1}"+Redacted)
 	return jwtScrubRe.ReplaceAllString(s, Redacted)
+}
+
+// ScrubSecrets masks credential-shaped values in s — key-adjacent pairs
+// (key=value, key: value, quoted JSON pairs, Authorization: Bearer <token>)
+// and bare JWTs — with the same shape-based coverage bound as
+// scrubStderrText. Exported for writer-side scrubbing of streamed
+// subprocess output headed to persistent sinks (the install log that
+// debug-bundle archives), where RedactHandler never sees the bytes.
+func ScrubSecrets(s string) string {
+	return scrubStderrText(s)
 }
 
 // Redacted masks credential values matching key=value, key: value,

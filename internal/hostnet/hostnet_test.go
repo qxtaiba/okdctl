@@ -11,9 +11,13 @@ import (
 	"github.com/qxtaiba/okdctl/internal/testutil"
 )
 
-func installFakeIPNmcli(t *testing.T, ipOutput string, ipExit int, nmcliLog string) {
+func installFakeIPNmcli(t *testing.T, assignedIP string, ipExit int, nmcliLog string) {
 	t.Helper()
-	ipScript := fmt.Sprintf("#!/bin/sh\nprintf '%%s\\n' '%s'\nexit %d\n", ipOutput, ipExit)
+	ipJSON := "[]"
+	if assignedIP != "" {
+		ipJSON = fmt.Sprintf(`[{"ifname":"eth0","addr_info":[{"family":"inet","local":%q,"prefixlen":24}]}]`, assignedIP)
+	}
+	ipScript := fmt.Sprintf("#!/bin/sh\nprintf '%%s\\n' '%s'\nexit %d\n", ipJSON, ipExit)
 
 	nmcliScript := fmt.Sprintf(`#!/bin/sh
 printf '%%s %%s\n' "$1" "$2" >> '%s'
@@ -47,7 +51,10 @@ exit 0
 // compensating `+ipv4.addresses` modify succeeds (0) or fails too (non-zero).
 func installReapplyFailNmcli(t *testing.T, nmcliLog string, restoreExit int) {
 	t.Helper()
-	ipScript := "#!/bin/sh\nprintf 'inet 192.168.1.10/24 brd 192.168.1.255\\n'\nexit 0\n"
+	ipScript := `#!/bin/sh
+printf '%s\n' '[{"ifname":"eth0","addr_info":[{"family":"inet","local":"192.168.1.10","prefixlen":24}]}]'
+exit 0
+`
 
 	nmcliScript := fmt.Sprintf(`#!/bin/sh
 printf '%%s\n' "$*" >> '%s'
@@ -138,6 +145,51 @@ func TestValidateConnectionName(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestValidateInterfaceName(t *testing.T) {
+	cases := []struct {
+		name    string
+		in      string
+		wantErr bool
+	}{
+		{"plain", "eth0", false},
+		{"proxmox default", "ens18", false},
+		{"vlan alias", "eth0.100", false},
+		{"empty rejected", "", true},
+		{"leading dash rejected", "-ipv4.method", true},
+		{"too long rejected", strings.Repeat("a", 16), true},
+		{"space rejected", "eth 0", true},
+		{"semicolon rejected", "eth0;id", true},
+		{"slash rejected", "eth/0", true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := validateInterfaceName(tc.in); (err != nil) != tc.wantErr {
+				t.Errorf("validateInterfaceName(%q) err=%v, wantErr=%v", tc.in, err, tc.wantErr)
+			}
+		})
+	}
+}
+
+func TestGetDefaultInterface(t *testing.T) {
+	t.Run("returns dev from route", func(t *testing.T) {
+		testutil.InstallFakeBin(t, "ip", "#!/bin/sh\nprintf 'default via 10.0.0.1 dev eth0 proto dhcp\\n'\n")
+		iface, err := GetDefaultInterface(context.Background())
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if iface != "eth0" {
+			t.Errorf("iface = %q, want eth0", iface)
+		}
+	})
+
+	t.Run("rejects hostile interface name in route line", func(t *testing.T) {
+		testutil.InstallFakeBin(t, "ip", "#!/bin/sh\nprintf 'default via 10.0.0.1 dev -ipv4.method\\n'\n")
+		if _, err := GetDefaultInterface(context.Background()); err == nil {
+			t.Fatal("expected hostile interface name to be rejected")
+		}
+	})
 }
 
 func TestActiveConnection(t *testing.T) {
@@ -241,7 +293,7 @@ func TestOverrideAndClearConnectionDNSArgv(t *testing.T) {
 func TestRemoveSecondaryIP(t *testing.T) {
 	t.Run("ip absent fast-paths nil with no nmcli call", func(t *testing.T) {
 		logFile := filepath.Join(t.TempDir(), "nmcli.log")
-		installFakeIPNmcli(t, "inet 10.0.0.1/24", 0, logFile)
+		installFakeIPNmcli(t, "10.0.0.1", 0, logFile)
 
 		err := RemoveSecondaryIP(context.Background(), "192.168.1.10", "eth0")
 		if err != nil {
@@ -254,7 +306,7 @@ func TestRemoveSecondaryIP(t *testing.T) {
 
 	t.Run("ip present invokes connection modify and device reapply", func(t *testing.T) {
 		logFile := filepath.Join(t.TempDir(), "nmcli.log")
-		installFakeIPNmcli(t, "inet 192.168.1.10/24 brd 192.168.1.255", 0, logFile)
+		installFakeIPNmcli(t, "192.168.1.10", 0, logFile)
 
 		err := RemoveSecondaryIP(context.Background(), "192.168.1.10", "eth0")
 		if err != nil {

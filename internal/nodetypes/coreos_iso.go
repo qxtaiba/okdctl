@@ -1,6 +1,9 @@
 package nodetypes
 
-import "path/filepath"
+import (
+	"path/filepath"
+	"slices"
+)
 
 // CoreOSISONamePatterns are the filepath.Match glob shapes of a known-safe
 // base CoreOS installer ISO filename. OKD publishes fedora-coreos-*.iso
@@ -16,10 +19,8 @@ var CoreOSISONamePatterns = []string{
 // IsCoreOSISOName reports whether base (a bare filename, no directory
 // component) matches one of CoreOSISONamePatterns.
 func IsCoreOSISOName(base string) bool {
-	for _, pat := range CoreOSISONamePatterns {
-		if ok, _ := filepath.Match(pat, base); ok {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(CoreOSISONamePatterns, func(pat string) bool {
+		ok, _ := filepath.Match(pat, base)
+		return ok
+	})
 }

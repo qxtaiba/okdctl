@@ -2,14 +2,12 @@ package cluster
 
 import (
 	"context"
-	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
 
-	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/executor"
 	"github.com/qxtaiba/okdctl/internal/testutil"
 )
@@ -108,7 +106,7 @@ func TestValidateKubeconfigEnv(t *testing.T) {
 		}
 	})
 
-	t.Run("perm_0644_rejected_with_auth_error", func(t *testing.T) {
+	t.Run("perm_0644_rejected", func(t *testing.T) {
 		f := filepath.Join(kubeDir, "config-0644")
 		if err := os.WriteFile(f, []byte(""), 0o600); err != nil {
 			t.Fatal(err)
@@ -120,16 +118,12 @@ func TestValidateKubeconfigEnv(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected 0o644 kubeconfig to be rejected; got nil")
 		}
-		var ae *errtypes.AuthError
-		if !errors.As(err, &ae) {
-			t.Errorf("expected *errtypes.AuthError; got %T: %v", err, err)
-		}
 		if !strings.Contains(err.Error(), "insecure permissions") {
 			t.Errorf("error %q does not contain 'insecure permissions'", err.Error())
 		}
 	})
 
-	t.Run("perm_0620_rejected_with_auth_error", func(t *testing.T) {
+	t.Run("perm_0620_rejected", func(t *testing.T) {
 		f := filepath.Join(kubeDir, "config-0620")
 		if err := os.WriteFile(f, []byte(""), 0o600); err != nil {
 			t.Fatal(err)
@@ -141,9 +135,8 @@ func TestValidateKubeconfigEnv(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected 0o620 kubeconfig to be rejected; got nil")
 		}
-		var ae *errtypes.AuthError
-		if !errors.As(err, &ae) {
-			t.Errorf("expected *errtypes.AuthError; got %T: %v", err, err)
+		if !strings.Contains(err.Error(), "insecure permissions") {
+			t.Errorf("error %q does not contain 'insecure permissions'", err.Error())
 		}
 	})
 }

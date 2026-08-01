@@ -4,11 +4,7 @@ package nodetypes
 // shape (Type / Status).
 type ConditionType string
 
-// Scaffolding: the three const groups below form the complete Kubernetes
-// condition matrix (Ready/Available/Progressing/Degraded × True/False/Unknown)
-// and are kept symmetric for the future status verb that surfaces non-Ready
-// operator conditions. Removing the currently-unreferenced constants would
-// lopside the enum and force a second PR when that caller lands.
+// Condition type values mirroring standard Kubernetes conditions.
 const (
 	ConditionTypeReady       ConditionType = "Ready"
 	ConditionTypeAvailable   ConditionType = "Available"

@@ -36,15 +36,18 @@ func IsPresented(err error) bool {
 }
 
 // ErrorSummary renders a command error inside the same boxed chrome the deploy
-// summaries use, skinned red. It reads the errtypes kind for the headline,
-// wraps the message, promotes the trailing "; <hint>" clause to a next-step
-// line, and footers the exit code and run_id for bug reports. This gives an
-// ordinary node/status failure the same designed treatment a deploy failure
-// already gets, instead of a raw "[ERROR] command failed err=…" log line.
+// summaries use, skinned red. It reads the errtypes Kind for the headline
+// chip, wraps the structured message, promotes the structured hint to a
+// next-step line, and footers the exit code and run_id for bug reports. This
+// gives an ordinary node/status failure the same designed treatment a deploy
+// failure already gets, instead of a raw "[ERROR] command failed err=…" line.
+//
+// Both the chip and the hint come from errtypes.Describe, never from
+// re-parsing Error(): an untyped error renders under a plain "error" chip with
+// its whole message as the headline, and a message that naturally contains
+// "; " is no longer mis-split into a spurious hint.
 func ErrorSummary(err error, exitCode int, runID string) string {
-	kind := errKindLabel(err)
-	body := strings.TrimSpace(strings.TrimPrefix(err.Error(), kind+": "))
-	headline, hint := splitHint(body)
+	kind, headline, hint := describeError(err)
 
 	contentWidth := tui.DefaultBoxWidth - 4
 
@@ -74,41 +77,14 @@ func ErrorSummary(err error, exitCode int, runID string) string {
 	return "\n" + tui.BoxedSectionAccent(sb.String(), "error", tui.DefaultBoxWidth, tui.ColorError) + "\n"
 }
 
-// errKindLabel maps err to the errtypes headline used as the box's kind chip,
-// falling back to a plain "error" for untyped failures (exit 1).
-func errKindLabel(err error) string {
-	var cfgErr *errtypes.ConfigError
-	if errors.As(err, &cfgErr) {
-		return "config error"
+// describeError decomposes err into the box's kind chip, headline, and
+// optional next-step hint via errtypes.Describe. Untyped errors fall back to a
+// plain "error" chip with the whole message as the headline and no hint.
+func describeError(err error) (kind, headline, hint string) {
+	if d, ok := errtypes.Describe(err); ok {
+		return d.Kind.Label(), strings.TrimSpace(d.Message), strings.TrimSpace(d.Hint)
 	}
-	var netErr *errtypes.NetworkError
-	if errors.As(err, &netErr) {
-		return "network error"
-	}
-	var clusterErr *errtypes.ClusterError
-	if errors.As(err, &clusterErr) {
-		return "cluster error"
-	}
-	var authErr *errtypes.AuthError
-	if errors.As(err, &authErr) {
-		return "auth error"
-	}
-	var usageErr *errtypes.UsageError
-	if errors.As(err, &usageErr) {
-		return "usage error"
-	}
-	return "error"
-}
-
-// splitHint separates the trailing "; <actionable hint>" clause the errtypes
-// messages carry from the headline. When no "; " is present the whole message
-// is the headline and hint is empty.
-func splitHint(msg string) (headline, hint string) {
-	i := strings.LastIndex(msg, "; ")
-	if i < 0 {
-		return msg, ""
-	}
-	return strings.TrimSpace(msg[:i]), strings.TrimSpace(msg[i+2:])
+	return "error", strings.TrimSpace(err.Error()), ""
 }
 
 // wrapText greedy-wraps s to width columns, hard-splitting any single token
