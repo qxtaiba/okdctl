@@ -261,10 +261,15 @@ func (c *Config) TerraformEnvName() string {
 	return defaultTerraformEnv
 }
 
-// DisksConfig sizes the optional extra data disk (Ceph/storage) attached to
-// each node in a group. The root/OS disk is sized by topology.<group>.disk_gb
-// (NodeConfig.DiskGB); per-VM placement lives in provider.proxmox.
+// DisksConfig sizes the optional extra disks attached to each node in a
+// group: the Ceph/storage data disk per role, and the dedicated ceph
+// mon-store disk on control-plane nodes. The root/OS disk is sized by
+// topology.<group>.disk_gb (NodeConfig.DiskGB); per-VM placement lives in
+// provider.proxmox. A size of 0 omits the disk — and because every render
+// of terraform.tfvars emits these values, zeroing one after initial apply
+// makes terraform destroy that disk.
 type DisksConfig struct {
 	WorkerDataSizeGB       int `json:"worker_data_size_gb"`
 	ControlPlaneDataSizeGB int `json:"control_plane_data_size_gb"`
+	ControlPlaneMonSizeGB  int `json:"control_plane_mon_size_gb"`
 }

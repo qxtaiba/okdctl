@@ -58,6 +58,12 @@ func TestValidateProxmoxHost(t *testing.T) {
 		":8006", // empty host
 		"!bad!.example",
 		"space in host",
+		"https://pve.example.com",   // scheme prefix (validated left half was "https")
+		"gopher://pve.example.com",  // arbitrary scheme
+		"file:///etc/passwd",        // scheme + path
+		"user:pass@pve.example.com", // userinfo
+		strings.Repeat("a", 254),    // over the 253-char domain cap
+		"h\x00st",                   // embedded NUL
 	}
 	for _, s := range bad {
 		if err := ValidateProxmoxHost(s); err == nil {
@@ -542,6 +548,22 @@ func TestValidateStaticIPCollisions(t *testing.T) {
 			wantErr: true,
 		},
 		{
+			name: "start equals https-scheme proxmox host ip with port",
+			mutate: func(c *Config) {
+				c.Provider.Proxmox.Host = "https://192.168.1.100:8006"
+				c.Networking.StaticIP.Start = "192.168.1.100"
+			},
+			wantErr: true,
+		},
+		{
+			name: "start equals https-scheme proxmox host ip no port",
+			mutate: func(c *Config) {
+				c.Provider.Proxmox.Host = "https://192.168.1.100"
+				c.Networking.StaticIP.Start = "192.168.1.100"
+			},
+			wantErr: true,
+		},
+		{
 			name:    "start equals ignition server ip",
 			mutate:  func(c *Config) { c.Networking.StaticIP.Start = "192.168.1.20" },
 			wantErr: true,
@@ -579,6 +601,79 @@ func TestValidateStaticIPCollisions(t *testing.T) {
 			}
 			if gotErr != tc.wantErr {
 				t.Errorf("gotErr = %v, want %v; errors: %v", gotErr, tc.wantErr, result.Errors)
+			}
+		})
+	}
+}
+
+func TestValidateBastionAndStaticIPDNS(t *testing.T) {
+	hasField := func(r *ValidationResult, field string) bool {
+		for _, e := range r.Errors {
+			if e.Field == field {
+				return true
+			}
+		}
+		return false
+	}
+	cases := []struct {
+		name    string
+		bastion string
+		dns     string
+		field   string
+		wantErr bool
+	}{
+		{"bastion ip with trailing karg", "192.168.1.20 rd.break", "192.168.1.20", FieldNetworkingBastionIP, true},
+		{"static dns with trailing karg empty bastion", "", "192.168.1.20 coreos.inst.insecure", FieldNetworkingStaticIPDNS, true},
+		{"non-ip dns", "192.168.1.20", "not-an-ip", FieldNetworkingStaticIPDNS, true},
+		{"empty pair tolerated", "", "", "", false},
+		{"valid pair accepted", "192.168.1.20", "192.168.1.20", "", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := DefaultConfig()
+			cfg.Networking.Bastion.IP = tc.bastion
+			cfg.Networking.StaticIP.DNS = tc.dns
+			result := &ValidationResult{}
+			validateNetworking(cfg, result)
+			if tc.wantErr {
+				if !hasField(result, tc.field) {
+					t.Errorf("expected error on %s; errors: %v", tc.field, result.Errors)
+				}
+			} else if hasField(result, FieldNetworkingBastionIP) || hasField(result, FieldNetworkingStaticIPDNS) {
+				t.Errorf("unexpected bastion/dns error; errors: %v", result.Errors)
+			}
+		})
+	}
+}
+
+func TestValidateHTTPServer(t *testing.T) {
+	cases := []struct {
+		name    string
+		root    string
+		ip      string
+		wantErr bool
+	}{
+		{"absolute html root", "/var/www/html", "192.168.1.20", false},
+		{"srv ignition root", "/srv/ignition", "192.168.1.20", false},
+		{"empty root", "", "192.168.1.20", false},
+		{"relative path", "relative/path", "192.168.1.20", true},
+		{"quote breakout", `/var/www"html`, "192.168.1.20", true},
+		{"command substitution", "/var/www/$(id)", "192.168.1.20", true},
+		{"embedded space", "/var/www html", "192.168.1.20", true},
+		{"embedded newline", "/var/www\nhtml", "192.168.1.20", true},
+		{"dotdot traversal", "/var/www/html/../../etc", "192.168.1.20", true},
+		{"non-ip ignition ip", "/var/www/html", "not-an-ip", true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := &Config{}
+			cfg.HTTPServer.Root = tc.root
+			cfg.HTTPServer.IgnitionServerIP = tc.ip
+			result := &ValidationResult{}
+			validateHTTPServer(cfg, result)
+			if got := !result.IsValid(); got != tc.wantErr {
+				t.Errorf("validateHTTPServer(root=%q, ip=%q) gotErr=%v, want %v; errors: %v",
+					tc.root, tc.ip, got, tc.wantErr, result.Errors)
 			}
 		})
 	}
