@@ -213,7 +213,7 @@ func TestConfigureApacheHTTPS_RendersVhost(t *testing.T) {
 		{
 			name:   "no bind IP listens on all interfaces",
 			bindIP: "",
-			want: `<VirtualHost 443>
+			want: `<VirtualHost *:443>
   SSLEngine on
   SSLCertificateFile    /root/okd/certs/ignition/server.crt
   SSLCertificateKeyFile /root/okd/certs/ignition/server.key

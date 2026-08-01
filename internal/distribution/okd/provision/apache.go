@@ -92,7 +92,7 @@ func (p *Provisioner) configureApacheHTTPS(ctx context.Context, certPath, keyPat
 		return fmt.Errorf("apache: ensure vhost conf dir: %w", err)
 	}
 
-	listen := "443"
+	listen := "*:443"
 	if bindIP != "" {
 		listen = net.JoinHostPort(bindIP, "443")
 	}
