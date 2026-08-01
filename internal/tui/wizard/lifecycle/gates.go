@@ -16,7 +16,7 @@ func GateRows(op node.Op, role nodetypes.NodeRole, skipDrain bool) []string {
 			rows = append(rows, "etcd health gate (pre)")
 		}
 		if !skipDrain {
-			rows = append(rows, "cordon + drain")
+			rows = append(rows, rowCordonDrain)
 		}
 		rows = append(rows, "terraform apply (in-place update)", "power-cycle vm", "wait for node ready")
 		if role == nodetypes.RoleMaster {
@@ -26,7 +26,7 @@ func GateRows(op node.Op, role nodetypes.NodeRole, skipDrain bool) []string {
 	case node.OpRemove:
 		var rows []string
 		if !skipDrain {
-			rows = append(rows, "cordon + drain")
+			rows = append(rows, rowCordonDrain)
 		}
 		return append(rows, "terraform apply (destroy)", "delete kubernetes node", "ceph health gate")
 	case node.OpAdd:

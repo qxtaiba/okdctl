@@ -24,6 +24,10 @@ const (
 	drainModeDefault = "cordon + drain (default)"
 	drainModeSkip    = "skip drain — restart pods in place"
 
+	// sectionDisruption titles the drain/timeout form section and labels
+	// the matching preview entry.
+	sectionDisruption = "disruption"
+
 	defaultDrainTimeout = "10m"
 	// okdMinMemoryMB mirrors the resources step's OKD minimum for node memory.
 	okdMinMemoryMB = 8192
@@ -87,7 +91,7 @@ func (s *ParamsStep) buildForm() {
 		s.forceStorageField.Help = "allow removal when the worker holds rook-ceph osds — destroys their data disk"
 		s.forceStorageField.SetDefault("no")
 		sections = append(sections, wizard.FormSection{
-			Title: "disruption",
+			Title: sectionDisruption,
 			Group: components.NewInputGroup(s.drainModeField, s.timeoutField, s.forceStorageField),
 		})
 	default: // resize
@@ -108,7 +112,7 @@ func (s *ParamsStep) buildForm() {
 		})
 		s.buildDisruptionFields()
 		sections = append(sections, wizard.FormSection{
-			Title: "disruption",
+			Title: sectionDisruption,
 			Group: components.NewInputGroup(s.drainModeField, s.timeoutField),
 		})
 	}

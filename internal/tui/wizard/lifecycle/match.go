@@ -6,11 +6,15 @@ import (
 	"github.com/qxtaiba/okdctl/internal/node"
 )
 
+// rowCordonDrain is the gate-row label shared by the cordon and drain
+// steps; they render as one row.
+const rowCordonDrain = "cordon + drain"
+
 // stepRowHints maps a structured OnStep transition to the substring of the
 // gate row it belongs to.
 var stepRowHints = map[node.Step]string{
-	node.StepCordon:     "cordon + drain",
-	node.StepDrain:      "cordon + drain",
+	node.StepCordon:     rowCordonDrain,
+	node.StepDrain:      rowCordonDrain,
 	node.StepTFApply:    "terraform apply",
 	node.StepPowerCycle: "power-cycle",
 	node.StepUncordon:   "uncordon",
@@ -30,7 +34,7 @@ var descRowHints = []struct{ prefix, row string }{
 	{"waiting for etcd health (post-", "etcd health gate (post)"},
 	{"waiting for node ", "wait for node ready"},
 	{"waiting for ceph health", "ceph health gate"},
-	{"cordoning and draining", "cordon + drain"},
+	{"cordoning and draining", rowCordonDrain},
 	{"applying terraform change", "terraform apply"},
 	{"power-cycling vm", "power-cycle"},
 	{"waiting for ", "wait for join"},

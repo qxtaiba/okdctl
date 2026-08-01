@@ -203,7 +203,7 @@ func (s *PreviewStep) operationEntries() []wizard.KVEntry {
 		if s.st.SkipDrain {
 			disruption = "power-cycle without drain (pods restart in place)"
 		}
-		entries = append(entries, wizard.KVEntry{Label: "disruption", Value: disruption})
+		entries = append(entries, wizard.KVEntry{Label: sectionDisruption, Value: disruption})
 	}
 	if s.st.DrainTimeout != "" && !s.st.SkipDrain && s.st.Op != node.OpAdd {
 		entries = append(entries, wizard.KVEntry{Label: "drain timeout", Value: s.st.DrainTimeout})
