@@ -9,19 +9,36 @@ import (
 )
 
 func TestErrorSummaryKindHeadlineAndHint(t *testing.T) {
-	err := &errtypes.ConfigError{Msg: "ignition tls cert not found at /path/server.crt; re-run setup to regenerate it"}
+	err := (&errtypes.ConfigError{Msg: "ignition tls cert not found at /path/server.crt"}).
+		WithHint("re-run setup to regenerate it")
 	got := ErrorSummary(err, 2, "RUN123")
 	for _, want := range []string{
 		"ERROR",                         // box title
 		"config error",                  // kind chip
 		"ignition tls cert not found",   // headline
 		"re-run setup to regenerate it", // promoted hint
+		"→",                             // next-step pointer proves promotion
 		"exit 2",
 		"RUN123",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("error box missing %q:\n%s", want, got)
 		}
+	}
+}
+
+// TestErrorSummaryNoMisSplitOnSemicolon locks the string-sniffing fix: a
+// message that naturally contains "; " (e.g. a parenthetical) carries no
+// structured hint, so the whole message stays the headline and no spurious
+// next-step pointer is fabricated by splitting on the semicolon.
+func TestErrorSummaryNoMisSplitOnSemicolon(t *testing.T) {
+	err := &errtypes.ClusterError{Msg: "node drained (2 pods evicted; 1 pending) before removal"}
+	got := ErrorSummary(err, 4, "R")
+	if !strings.Contains(got, "node drained (2 pods evicted; 1 pending) before removal") {
+		t.Errorf("headline was mis-split on an in-message semicolon:\n%s", got)
+	}
+	if strings.Contains(got, "→") {
+		t.Errorf("no next-step pointer expected; message carries no structured hint:\n%s", got)
 	}
 }
 

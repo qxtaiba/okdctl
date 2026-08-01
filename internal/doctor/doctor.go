@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"os/exec"
@@ -18,6 +19,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/qxtaiba/okdctl/internal/config"
@@ -300,13 +302,14 @@ func checkPullSecret(cfgFile string) Result {
 
 	path := system.ExpandPath(cfg.Files.PullSecret)
 
-	data, err := os.ReadFile(path)
+	data, err := readNoFollow(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return Result{Sev: Fail, Detail: "not found at " + path + " (download from https://console.redhat.com/openshift/install/pull-secret)"}
 		}
 		return Result{Sev: Fail, Detail: err.Error()}
 	}
+	defer system.ZeroBytes(data)
 
 	var parsed struct {
 		Auths map[string]json.RawMessage `json:"auths"`
@@ -314,6 +317,11 @@ func checkPullSecret(cfgFile string) Result {
 	if err := json.Unmarshal(data, &parsed); err != nil {
 		return Result{Sev: Fail, Detail: fmt.Sprintf("invalid json: %v", err)}
 	}
+	defer func() {
+		for k := range parsed.Auths {
+			system.ZeroBytes(parsed.Auths[k])
+		}
+	}()
 	if parsed.Auths == nil {
 		return Result{Sev: Fail, Detail: "missing or malformed 'auths' field: not a valid okd pull secret"}
 	}
@@ -321,6 +329,25 @@ func checkPullSecret(cfgFile string) Result {
 		return Result{Sev: Fail, Detail: "'auths' is empty: pull secret has no registry entries"}
 	}
 	return Result{Sev: Pass, Detail: path}
+}
+
+// readNoFollow reads path while refusing to follow a symlink at the final
+// component, matching how setup's ignition renderer reads the same pull
+// secret so a planted symlink cannot redirect the read.
+func readNoFollow(path string) ([]byte, error) {
+	info, err := os.Lstat(path)
+	if err != nil {
+		return nil, err
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		return nil, fmt.Errorf("path %q is a symlink; refusing to follow", path)
+	}
+	f, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NOFOLLOW, 0)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	return io.ReadAll(f)
 }
 
 // checkDiskSpace checks that the home directory has at least 20 GB free.

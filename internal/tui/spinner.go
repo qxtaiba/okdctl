@@ -14,18 +14,16 @@ import (
 var spinnerFrames = []string{"⣾", "⣽", "⣻", "⢿", "⡿", "⣟", "⣯", "⣷"}
 
 // StartSpinner renders a live spinner line to stderr during a long-running
-// operation. Returns a no-op stop function when ProgressBarsEnabled is false
-// (non-TTY stderr or JSON log format). The returned stop function clears the
-// spinner line and blocks until the rendering goroutine has exited — call it
-// before printing any output that must appear below the spinner position.
+// operation. Returns a no-op stop function when logutil.ProgressBarsEnabled is
+// false — see that predicate for the full gate. The returned stop function
+// clears the spinner line and blocks until the rendering goroutine has exited
+// — call it before printing any output that must appear below the spinner
+// position.
 //
 // While the spinner is active it registers as the line owner (see
 // lineowner.go): the stderr log handler erases the spinner line before every
 // record, so log lines never land on a half-painted frame; the spinner
 // repaints on its next tick.
-//
-// Dual-stop-signal pattern: stopCh (sync.OnceFunc) plus ctx.Done() with a
-// done channel for ordered teardown; preserve as-is.
 func StartSpinner(ctx context.Context, desc string) func() {
 	if !logutil.ProgressBarsEnabled() {
 		return func() {}
@@ -37,7 +35,7 @@ func StartSpinner(ctx context.Context, desc string) func() {
 // while it runs — the install monitor uses it to surface live cluster-operator
 // and CSR counts on one owned line. Returns a set func to update the detail
 // and a stop func with StartSpinner's teardown semantics. Both are no-ops when
-// ProgressBarsEnabled is false (non-TTY or JSON), so callers invoke them
+// logutil.ProgressBarsEnabled is false, so callers invoke them
 // unconditionally.
 func StartStatusLine(ctx context.Context, desc string) (set func(string), stop func()) {
 	if !logutil.ProgressBarsEnabled() {

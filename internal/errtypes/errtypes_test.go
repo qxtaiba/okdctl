@@ -111,10 +111,11 @@ func TestUnwrapNilWhenNoInner(t *testing.T) {
 	}
 }
 
-// TestWithHintAppendsMsgAndPreservesErr locks WithHint's copy semantics: the
-// receiver is left unmodified, the returned error keeps the same concrete
-// type and Unwrap chain, and hint is appended to Msg.
-func TestWithHintAppendsMsgAndPreservesErr(t *testing.T) {
+// TestWithHintCarriesStructuredHint locks WithHint's contract: the hint rides
+// in a separate field, never mutating Msg; the receiver is unchanged; the
+// returned error keeps the same concrete type and Unwrap chain; and the hint
+// surfaces only through Error() (as a "; <hint>" suffix) and Describe.
+func TestWithHintCarriesStructuredHint(t *testing.T) {
 	inner := errors.New("boom")
 	cfg := &errtypes.ConfigError{Msg: "config broke", Err: inner}
 	got := cfg.WithHint("try force-unlock")
@@ -123,8 +124,16 @@ func TestWithHintAppendsMsgAndPreservesErr(t *testing.T) {
 	if !errors.As(got, &gotCfg) {
 		t.Fatalf("WithHint() = %v; want *errtypes.ConfigError", got)
 	}
-	if gotCfg.Msg != "config broke; try force-unlock" {
-		t.Errorf("Msg = %q; want %q", gotCfg.Msg, "config broke; try force-unlock")
+	if gotCfg.Msg != "config broke" {
+		t.Errorf("Msg mutated by WithHint = %q; want unchanged %q", gotCfg.Msg, "config broke")
+	}
+	if got.Error() != "config error: config broke; try force-unlock" {
+		t.Errorf("Error() = %q; want hint appended for the log surface", got.Error())
+	}
+	d, ok := errtypes.Describe(got)
+	if !ok || d.Message != "config broke" || d.Hint != "try force-unlock" {
+		t.Errorf("Describe() = %+v (ok=%v); want Message %q Hint %q",
+			d, ok, "config broke", "try force-unlock")
 	}
 	if !errors.Is(got, inner) {
 		t.Error("WithHint() broke the Unwrap chain to the inner error")
@@ -136,7 +145,41 @@ func TestWithHintAppendsMsgAndPreservesErr(t *testing.T) {
 	cluster := &errtypes.ClusterError{Msg: "cluster broke"}
 	gotCluster := cluster.WithHint("try Y")
 	var gotClusterErr *errtypes.ClusterError
-	if !errors.As(gotCluster, &gotClusterErr) || gotClusterErr.Msg != "cluster broke; try Y" {
-		t.Errorf("ClusterError.WithHint() = %v; want Msg %q", gotCluster, "cluster broke; try Y")
+	if !errors.As(gotCluster, &gotClusterErr) || gotClusterErr.Msg != "cluster broke" {
+		t.Errorf("ClusterError.WithHint() mutated Msg = %v; want %q", gotCluster, "cluster broke")
+	}
+	if gotCluster.Error() != "cluster error: cluster broke; try Y" {
+		t.Errorf("ClusterError.WithHint().Error() = %q; want hint suffix", gotCluster.Error())
+	}
+}
+
+// TestWithHintUniformAcrossCategories locks that every category implements
+// HintAppender and preserves its concrete type — the invariant WithLockHint's
+// non-ConfigError callers depend on to keep their exit code.
+func TestWithHintUniformAcrossCategories(t *testing.T) {
+	cases := []struct {
+		name string
+		base errtypes.HintAppender
+		want errtypes.Kind
+	}{
+		{"config", &errtypes.ConfigError{Msg: "m"}, errtypes.KindConfig},
+		{"network", &errtypes.NetworkError{Msg: "m"}, errtypes.KindNetwork},
+		{"cluster", &errtypes.ClusterError{Msg: "m"}, errtypes.KindCluster},
+		{"auth", &errtypes.AuthError{Msg: "m"}, errtypes.KindAuth},
+		{"usage", &errtypes.UsageError{Msg: "m"}, errtypes.KindUsage},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := tc.base.WithHint("do X")
+			kind, ok := errtypes.Classify(got)
+			if !ok || kind != tc.want {
+				t.Fatalf("Classify(WithHint) = %v (ok=%v); want %v — type reclassified",
+					kind, ok, tc.want)
+			}
+			d, _ := errtypes.Describe(got)
+			if d.Hint != "do X" {
+				t.Errorf("Describe().Hint = %q; want %q", d.Hint, "do X")
+			}
+		})
 	}
 }

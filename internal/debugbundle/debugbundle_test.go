@@ -3,6 +3,7 @@ package debugbundle
 import (
 	"archive/tar"
 	"bytes"
+	"compress/gzip"
 	"context"
 	"errors"
 	"io"
@@ -13,6 +14,8 @@ import (
 	"time"
 
 	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/distribution/okd/install"
+	"github.com/qxtaiba/okdctl/internal/logutil"
 )
 
 // stubAddFile writes addFile callbacks as plain tar entries into tw.
@@ -156,6 +159,156 @@ func TestBundleLogFileSkipsWhenNoLogExists(t *testing.T) {
 	}
 }
 
+// TestBundledLogScrubsInstallerCredentials locks the package promise that
+// credentials are redacted from the bundled log. The log is produced the way
+// deploy produces it — openshift-install output streamed through
+// install.NewMilestoneWriter — then archived via bundleLogFile, so the test
+// covers the full writer-to-tarball chain.
+func TestBundledLogScrubsInstallerCredentials(t *testing.T) {
+	tests := []struct {
+		name   string
+		line   string
+		secret string
+		keep   string
+	}{
+		{
+			name:   "kubeadmin console password at install-complete",
+			line:   `level=info msg="Login to the console with user: \"kubeadmin\", and password: \"AbCdE-FgHiJ-KlMnO-PqRsT\""`,
+			secret: "AbCdE-FgHiJ-KlMnO-PqRsT",
+			keep:   "kubeadmin",
+		},
+		{
+			name:   "token key-value pair",
+			line:   `level=debug msg="registry auth" token=sha256~sUpErSeCrEtToKeNvAlUe`,
+			secret: "sha256~sUpErSeCrEtToKeNvAlUe",
+			keep:   "registry auth",
+		},
+		{
+			name:   "bearer jwt",
+			line:   `level=debug msg="Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJrdWJlYWRtaW4ifQ.c2lnbmF0dXJl"`,
+			secret: "eyJhbGciOiJIUzI1NiJ9",
+			keep:   "Authorization",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			logPath := filepath.Join(t.TempDir(), "okdctl.log")
+			logF, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY, 0o600)
+			if err != nil {
+				t.Fatal(err)
+			}
+			w := install.NewMilestoneWriter(logF, func(install.Milestone) {})
+			stream := "level=info msg=\"Waiting for the cluster to initialize...\"\n" + tt.line + "\n"
+			if _, err := io.WriteString(w, stream); err != nil {
+				t.Fatalf("write stream: %v", err)
+			}
+			if err := logF.Close(); err != nil {
+				t.Fatal(err)
+			}
+
+			var buf bytes.Buffer
+			tw := tar.NewWriter(&buf)
+			entry := bundleLogFile(stubAddFile(tw), logPath, "", nil)
+			if entry.Status != "ok" {
+				t.Fatalf("bundleLogFile status = %q; message: %s", entry.Status, entry.Message)
+			}
+			bundled := string(readTarEntries(t, tw, &buf)["okdctl.log"])
+			if strings.Contains(bundled, tt.secret) {
+				t.Errorf("credential %q leaked into bundled log:\n%s", tt.secret, bundled)
+			}
+			if !strings.Contains(bundled, logutil.Redacted) {
+				t.Errorf("expected %q sentinel in bundled log:\n%s", logutil.Redacted, bundled)
+			}
+			if !strings.Contains(bundled, tt.keep) {
+				t.Errorf("non-secret context %q missing from bundled log:\n%s", tt.keep, bundled)
+			}
+			if !strings.Contains(bundled, "Waiting for the cluster to initialize") {
+				t.Errorf("ordinary progress line missing from bundled log:\n%s", bundled)
+			}
+		})
+	}
+}
+
+// unavailableOptions stubs the config/project-root loaders so Write exercises
+// only tarball-level behavior; every section skips.
+func unavailableOptions(outPath string) Options {
+	return Options{
+		OutPath:        outPath,
+		LoadConfig:     func() (*config.Config, error) { return nil, errors.New("no config in test") },
+		ProjectRoot:    func() (string, error) { return "", errors.New("no project root in test") },
+		SkipMustGather: true,
+	}
+}
+
+func TestWriteRefusesSymlinkOutPath(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "target.tgz")
+	if err := os.WriteFile(target, []byte("pre-existing"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(dir, "bundle.tgz")
+	if err := os.Symlink(target, link); err != nil {
+		t.Fatal(err)
+	}
+
+	err := Write(context.Background(), unavailableOptions(link))
+	if err == nil {
+		t.Fatal("Write accepted a symlink output path")
+	}
+	if !strings.Contains(err.Error(), "symlink") {
+		t.Errorf("error does not name the symlink refusal: %v", err)
+	}
+	data, readErr := os.ReadFile(target)
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if string(data) != "pre-existing" {
+		t.Errorf("symlink target was modified: %q", string(data))
+	}
+}
+
+func TestWriteBundleFileMode0600(t *testing.T) {
+	outPath := filepath.Join(t.TempDir(), "bundle.tgz")
+	if err := Write(context.Background(), unavailableOptions(outPath)); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+
+	info, err := os.Stat(outPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := info.Mode().Perm(); got != 0o600 {
+		t.Errorf("bundle file mode = %o, want 0600", got)
+	}
+
+	f, err := os.Open(outPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = f.Close() }()
+	gz, err := gzip.NewReader(f)
+	if err != nil {
+		t.Fatalf("bundle is not valid gzip: %v", err)
+	}
+	tr := tar.NewReader(gz)
+	found := false
+	for {
+		hdr, nextErr := tr.Next()
+		if errors.Is(nextErr, io.EOF) {
+			break
+		}
+		if nextErr != nil {
+			t.Fatalf("tar.Next: %v", nextErr)
+		}
+		if hdr.Name == "manifest.yaml" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("manifest.yaml missing from bundle")
+	}
+}
+
 func TestTarDirIntoRejectsSymlinkEscape(t *testing.T) {
 	srcDir := t.TempDir()
 	outside := t.TempDir()
@@ -172,7 +325,7 @@ func TestTarDirIntoRejectsSymlinkEscape(t *testing.T) {
 
 	var buf bytes.Buffer
 	tw := tar.NewWriter(&buf)
-	_, err := tarDirInto(stubAddStream(tw), srcDir, "test/")
+	_, err := tarDirInto(context.Background(), stubAddStream(tw), srcDir, "test/")
 	_ = tw.Close()
 
 	if err != nil {
@@ -219,7 +372,7 @@ func TestTarDirIntoTruncatesOversizedFile(t *testing.T) {
 
 	var buf bytes.Buffer
 	tw := tar.NewWriter(&buf)
-	truncated, tarErr := tarDirInto(stubAddStream(tw), srcDir, "mg/")
+	truncated, tarErr := tarDirInto(context.Background(), stubAddStream(tw), srcDir, "mg/")
 	if cerr := tw.Close(); cerr != nil {
 		t.Fatalf("tw.Close: %v", cerr)
 	}
@@ -244,6 +397,25 @@ func TestTarDirIntoTruncatesOversizedFile(t *testing.T) {
 	}
 	if int64(len(content)) != maxBundleFileBytes {
 		t.Errorf("tar entry content length = %d, want %d", len(content), maxBundleFileBytes)
+	}
+}
+
+func TestTarDirIntoCancelledContext(t *testing.T) {
+	srcDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(srcDir, "a.log"), []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	var buf bytes.Buffer
+	tw := tar.NewWriter(&buf)
+	_, err := tarDirInto(ctx, stubAddStream(tw), srcDir, "mg/")
+	_ = tw.Close()
+
+	if !errors.Is(err, context.Canceled) {
+		t.Errorf("err = %v, want context.Canceled", err)
 	}
 }
 

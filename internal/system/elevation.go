@@ -13,11 +13,10 @@ import (
 	"strings"
 
 	"github.com/qxtaiba/okdctl/internal/errtypes"
-	"github.com/qxtaiba/okdctl/internal/executor"
 	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
-// InvokingUser returns the user who invoked the command. When the process
+// invokingUser returns the user who invoked the command. When the process
 // was re-exec'd under sudo (as okdctl deploy / destroy / cleanup /
 // update-ingress do), SUDO_USER identifies the original user. Without it,
 // the current user is returned. If SUDO_USER names a user that no longer
@@ -27,7 +26,7 @@ import (
 // Under direct root invocation (SUDO_USER unset) this returns the root
 // user. Callers that require the original-not-root identity MUST guard
 // with os.Geteuid() == 0 before relying on the result.
-func InvokingUser() (*user.User, error) {
+func invokingUser() (*user.User, error) {
 	if name := os.Getenv("SUDO_USER"); name != "" {
 		if u, err := user.Lookup(name); err == nil {
 			return u, nil
@@ -46,7 +45,7 @@ func InvokingUser() (*user.User, error) {
 // Callers that must not write artifacts to /root MUST check
 // os.Geteuid() == 0 and gate accordingly.
 func InvokingUserHomeDir() (string, error) {
-	u, err := InvokingUser()
+	u, err := invokingUser()
 	if err != nil {
 		return "", err
 	}
@@ -79,12 +78,26 @@ func invokingUserIDs() (*sudoIDs, error) {
 // ChownToInvokingUser chowns path to SUDO_UID:SUDO_GID. Silently no-ops when
 // the process was not re-exec'd under sudo — in that case the caller is
 // already the invoking user and the file is already owned correctly.
+// Uses Lchown so a symlink planted at path between write and chown is
+// chowned itself rather than redirecting the root-run chown to its target.
 func ChownToInvokingUser(path string) error {
 	ids, err := invokingUserIDs()
 	if err != nil || ids == nil {
 		return err
 	}
-	return os.Chown(path, ids.uid, ids.gid)
+	return os.Lchown(path, ids.uid, ids.gid)
+}
+
+// ChownFileToInvokingUser chowns the already-open file to SUDO_UID:SUDO_GID
+// through its descriptor, so a path swapped for a symlink after open cannot
+// redirect the chown. Silently no-ops when the process was not re-exec'd
+// under sudo.
+func ChownFileToInvokingUser(f *os.File) error {
+	ids, err := invokingUserIDs()
+	if err != nil || ids == nil {
+		return err
+	}
+	return f.Chown(ids.uid, ids.gid)
 }
 
 // statFn is the os.Stat seam used by WriteAsInvokingUser; tests override it
@@ -206,7 +219,12 @@ func ChownTreeToInvokingUser(root string) error {
 // only called by doctor; operational paths never call it.
 func HasPasswordlessSudo(ctx context.Context) error {
 	cmd := exec.CommandContext(ctx, "sudo", "-n", "true")
-	cmd.Env = executor.FilterParentEnv(executor.DefaultEnvAllowlist)
+	// `sudo -n true` needs nothing beyond PATH. Handing it the allowlisted
+	// parent env (which deliberately keeps secret-keyed entries so okdctl can
+	// re-exec itself under sudo) would forward those credentials to a child
+	// that has no use for them; only okdctl handing the environment to itself
+	// may carry them.
+	cmd.Env = []string{"PATH=" + os.Getenv("PATH")}
 	cmd.Stdin = nil
 	cmd.Stdout = nil
 	cmd.Stderr = nil

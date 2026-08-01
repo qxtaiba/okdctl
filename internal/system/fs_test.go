@@ -131,6 +131,51 @@ func TestCopyFileMode(t *testing.T) {
 	})
 }
 
+func TestCopyFile(t *testing.T) {
+	t.Run("preserves source permission bits", func(t *testing.T) {
+		for _, mode := range []os.FileMode{0o640, 0o600, 0o644} {
+			t.Run(mode.String(), func(t *testing.T) {
+				dir := t.TempDir()
+				src := filepath.Join(dir, "src")
+				if err := os.WriteFile(src, []byte("payload"), mode); err != nil {
+					t.Fatal(err)
+				}
+				// WriteFile's mode is masked by umask; Chmod pins it exactly so
+				// the preservation assertion is not silently loosened.
+				if err := os.Chmod(src, mode); err != nil {
+					t.Fatal(err)
+				}
+				dst := filepath.Join(dir, "dst")
+				if err := CopyFile(src, dst); err != nil {
+					t.Fatalf("CopyFile: %v", err)
+				}
+				fi, err := os.Stat(dst)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if perm := fi.Mode().Perm(); perm != mode {
+					t.Errorf("dst perm = %#o, want %#o", perm, mode)
+				}
+				body, _ := os.ReadFile(dst)
+				if string(body) != "payload" {
+					t.Errorf("body = %q, want payload", body)
+				}
+			})
+		}
+	})
+
+	t.Run("missing source errors without creating dst", func(t *testing.T) {
+		dir := t.TempDir()
+		dst := filepath.Join(dir, "dst")
+		if err := CopyFile(filepath.Join(dir, "missing.src"), dst); err == nil {
+			t.Fatal("expected error for missing source")
+		}
+		if _, err := os.Stat(dst); !os.IsNotExist(err) {
+			t.Errorf("dst created despite missing src: %v", err)
+		}
+	})
+}
+
 func TestAtomicWrite(t *testing.T) {
 	dir := t.TempDir()
 
@@ -303,6 +348,33 @@ func TestChownByName(t *testing.T) {
 				t.Errorf("unexpected error for spec %q: %v", tc.spec, err)
 			}
 		})
+	}
+}
+
+// TestChownByName_DoesNotFollowSymlink pins Lchown semantics via a dangling
+// symlink: Lchown on the link itself succeeds, while a rewrite back to
+// symlink-following os.Chown resolves the missing target and hits ENOENT.
+func TestChownByName_DoesNotFollowSymlink(t *testing.T) {
+	u, err := user.Current()
+	if err != nil {
+		t.Fatal(err)
+	}
+	g, err := user.LookupGroupId(u.Gid)
+	if err != nil {
+		t.Skipf("lookup group %s: %v", u.Gid, err)
+	}
+	dir := t.TempDir()
+	link := filepath.Join(dir, "dangling")
+	if err := os.Symlink(filepath.Join(dir, "gone"), link); err != nil {
+		t.Skip("cannot create symlink:", err)
+	}
+
+	// Chown-to-self is always permitted, so this runs unprivileged.
+	if err := ChownByName(link, u.Username+":"+g.Name); err != nil {
+		t.Fatalf("ChownByName on dangling symlink: %v (a symlink-following rewrite fails here)", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "gone")); !os.IsNotExist(err) {
+		t.Fatalf("dangling target materialized: %v", err)
 	}
 }
 

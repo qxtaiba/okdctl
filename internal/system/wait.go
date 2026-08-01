@@ -56,7 +56,7 @@ func WaitFor(ctx context.Context, prefix, description string, check func(context
 		logger = logutil.NopLogger
 	}
 
-	logger.Info(prefix+": waiting", "target", description)
+	logger.Info("waiting", "component", prefix, "target", description)
 
 	startTime := time.Now()
 	polls := 0
@@ -83,7 +83,7 @@ func WaitFor(ctx context.Context, prefix, description string, check func(context
 			first = false
 			ready := check(probeCtx)
 			if ready {
-				logger.Info(prefix+": ready", "target", description, "polls", polls, "elapsed", time.Since(startTime).Round(time.Second))
+				logger.Info("ready", "component", prefix, "target", description, "polls", polls, "duration", time.Since(startTime).Round(time.Second))
 			}
 			return ready, nil
 		}
@@ -91,10 +91,10 @@ func WaitFor(ctx context.Context, prefix, description string, check func(context
 		polls++
 		elapsed := time.Since(startTime)
 		if check(probeCtx) {
-			logger.Info(prefix+": ready", "target", description, "polls", polls, "elapsed", elapsed.Round(time.Second))
+			logger.Info("ready", "component", prefix, "target", description, "polls", polls, "duration", elapsed.Round(time.Second))
 			return true, nil
 		}
-		logger.Debug(prefix+": waiting", "target", description, "elapsed", elapsed.Round(time.Second))
+		logger.Debug("waiting", "component", prefix, "target", description, "duration", elapsed.Round(time.Second))
 		return false, nil
 	}
 

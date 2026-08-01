@@ -5,10 +5,12 @@ package testutil
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 	"testing"
 )
@@ -58,6 +60,60 @@ func fakeBinDir(name, script string) (string, error) {
 	}
 	fakeBinDirs[key] = dir
 	return dir, nil
+}
+
+// ArgvLogEnv is the environment variable naming the file that fake binaries
+// installed by InstallArgvLoggingBin append their argv to, and ArgvExitCodeEnv
+// overrides their exit status (default 0). Tests that need per-invocation
+// behavior beyond argv capture (state machines, per-arg failure) keep their
+// own local scriptlet rather than parameterizing these.
+const (
+	ArgvLogEnv      = "TESTUTIL_ARGV_LOG"
+	ArgvExitCodeEnv = "TESTUTIL_EXIT_CODE"
+)
+
+const argvLoggingScript = "#!/bin/sh\n" +
+	`printf '%s\n' "$(basename "$0") $*" >> "$` + "TESTUTIL_ARGV_LOG" + `"` + "\n" +
+	`exit "${` + "TESTUTIL_EXIT_CODE" + `:-0}"` + "\n"
+
+// InstallArgvLoggingBin installs a fake binary named name that appends one line
+// per invocation — "<basename> <space-joined args>" — to a shared per-test log
+// file, then exits with $TESTUTIL_EXIT_CODE (default 0). It returns the log
+// path; read it back with ReadArgvLog. Calling it more than once in a test
+// (e.g. to fake both helm and oc) installs each binary against the same log
+// file, so multi-binary tests get one ordered trail keyed by basename. Set
+// ArgvExitCodeEnv via t.Setenv to make every fake exit non-zero.
+func InstallArgvLoggingBin(t *testing.T, name string) string {
+	t.Helper()
+	logPath := os.Getenv(ArgvLogEnv)
+	if logPath == "" {
+		logPath = filepath.Join(t.TempDir(), "argv.log")
+		t.Setenv(ArgvLogEnv, logPath)
+	}
+	InstallFakeBin(t, name, argvLoggingScript)
+	return logPath
+}
+
+// ReadArgvLog returns the non-empty lines an InstallArgvLoggingBin fake wrote
+// to path, one per invocation in call order. A missing file yields nil (the
+// binary was never invoked) rather than a fatal, so callers can assert "no
+// calls" without a stat dance.
+func ReadArgvLog(t *testing.T, path string) []string {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		t.Fatalf("read argv log: %v", err)
+	}
+	var lines []string
+	for _, l := range strings.Split(strings.TrimRight(string(data), "\n"), "\n") {
+		if l != "" {
+			lines = append(lines, l)
+		}
+	}
+	return lines
 }
 
 // CaptureHandler is an slog.Handler that records every emitted Record so

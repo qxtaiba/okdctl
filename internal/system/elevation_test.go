@@ -49,10 +49,58 @@ func TestChownTreeToInvokingUser_SymlinkEscape(t *testing.T) {
 	}
 }
 
+// TestChownToInvokingUser_DoesNotFollowSymlink pins Lchown semantics via a
+// dangling symlink: Lchown on the link itself succeeds, while a rewrite back
+// to symlink-following os.Chown resolves the missing target and hits ENOENT.
+func TestChownToInvokingUser_DoesNotFollowSymlink(t *testing.T) {
+	dir := t.TempDir()
+	link := filepath.Join(dir, "dangling")
+	if err := os.Symlink(filepath.Join(dir, "gone"), link); err != nil {
+		t.Skip("cannot create symlink:", err)
+	}
+
+	// Chown-to-self is always permitted, so the real function can run
+	// unprivileged with the invoking user pinned to the current user.
+	t.Setenv("SUDO_UID", strconv.Itoa(os.Getuid()))
+	t.Setenv("SUDO_GID", strconv.Itoa(os.Getgid()))
+
+	if err := ChownToInvokingUser(link); err != nil {
+		t.Fatalf("ChownToInvokingUser on dangling symlink: %v (a symlink-following rewrite fails here)", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "gone")); !os.IsNotExist(err) {
+		t.Fatalf("dangling target materialized: %v", err)
+	}
+}
+
+func TestChownFileToInvokingUser(t *testing.T) {
+	dir := t.TempDir()
+	f, err := os.Create(filepath.Join(dir, "sink.log"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = f.Close() }()
+
+	t.Run("no-op without sudo env", func(t *testing.T) {
+		t.Setenv("SUDO_UID", "")
+		t.Setenv("SUDO_GID", "")
+		if err := ChownFileToInvokingUser(f); err != nil {
+			t.Errorf("expected no-op without SUDO_UID/GID; got %v", err)
+		}
+	})
+
+	t.Run("chowns through the descriptor", func(t *testing.T) {
+		t.Setenv("SUDO_UID", strconv.Itoa(os.Getuid()))
+		t.Setenv("SUDO_GID", strconv.Itoa(os.Getgid()))
+		if err := ChownFileToInvokingUser(f); err != nil {
+			t.Errorf("fd chown to self: %v", err)
+		}
+	})
+}
+
 func TestInvokingUser(t *testing.T) {
 	t.Run("SUDO_USER unset falls back to current user", func(t *testing.T) {
 		t.Setenv("SUDO_USER", "")
-		u, err := InvokingUser()
+		u, err := invokingUser()
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -63,7 +111,7 @@ func TestInvokingUser(t *testing.T) {
 
 	t.Run("SUDO_USER naming unknown user falls back", func(t *testing.T) {
 		t.Setenv("SUDO_USER", "this-user-certainly-does-not-exist-42")
-		u, err := InvokingUser()
+		u, err := invokingUser()
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}

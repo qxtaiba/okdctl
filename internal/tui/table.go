@@ -45,7 +45,7 @@ func Table(headers []string, rows [][]string, opts TableOptions) []string {
 
 	widths := make([]int, cols)
 	for _, row := range cells {
-		for c := 0; c < cols && c < len(row); c++ {
+		for c := range min(cols, len(row)) {
 			cell := truncateMiddle(row[c], opts.MaxColWidth)
 			widths[c] = max(widths[c], lipgloss.Width(cell))
 		}

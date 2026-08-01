@@ -186,7 +186,11 @@ func CopyFileMode(src, dst string, mode os.FileMode) error {
 	return nil
 }
 
-// SafeRemove removes path recursively; nil if path does not exist.
+// SafeRemove removes path recursively; nil if path does not exist. Unlike
+// cleanup.SafeRemoveWithLogger it applies no critical-path or symlink guard,
+// and its os.Stat existence probe follows symlinks (a dangling symlink
+// returns nil with the link left on disk); callers must pass trusted,
+// internally-constructed paths.
 func SafeRemove(path string) error {
 	if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
 		return nil
@@ -309,18 +313,27 @@ func IsDirWritable(dir string) bool {
 }
 
 // MakeExecutable adds the owner/group/other execute bits to path's existing
-// mode. Equivalent to `chmod +x` but without a subprocess.
+// mode. Equivalent to `chmod +x` but without a subprocess. The mode read and
+// the mode write both go through one O_NOFOLLOW descriptor so they provably
+// address a single inode — no stat/chmod TOCTOU window, and a symlink at
+// path is refused rather than followed.
 func MakeExecutable(path string) error {
-	info, err := os.Stat(path)
+	f, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NOFOLLOW, 0)
+	if err != nil {
+		return fmt.Errorf("open %s: %w", path, err)
+	}
+	defer func() { _ = f.Close() }()
+	info, err := f.Stat()
 	if err != nil {
 		return fmt.Errorf("stat %s: %w", path, err)
 	}
-	return os.Chmod(path, info.Mode().Perm()|0o111)
+	return f.Chmod(info.Mode().Perm() | 0o111)
 }
 
 // ChownByName chowns path to the given user:group string. Both parts must
 // be present; numeric-only forms are rejected so config typos surface as
-// errors rather than silently chowning to UID 0.
+// errors rather than silently chowning to UID 0. Uses Lchown so a symlink
+// planted at path is chowned itself, not its target.
 func ChownByName(path, ownerSpec string) error {
 	userName, groupName, ok := strings.Cut(ownerSpec, ":")
 	if !ok || userName == "" || groupName == "" {
@@ -342,5 +355,5 @@ func ChownByName(path, ownerSpec string) error {
 	if err != nil {
 		return fmt.Errorf("parse gid %q: %w", g.Gid, err)
 	}
-	return os.Chown(path, uid, gid)
+	return os.Lchown(path, uid, gid)
 }

@@ -5,9 +5,12 @@ package hostnet
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"net/netip"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/qxtaiba/okdctl/internal/executor"
 )
@@ -33,21 +36,42 @@ func validateConnectionName(name string) error {
 	return nil
 }
 
+// validInterfaceNameRegex allowlists Linux network-device names, which the
+// kernel caps at 15 characters (IFNAMSIZ-1) and forbids whitespace and '/'
+// in. Combined with validateInterfaceName's leading-dash refusal it closes
+// CWE-88 for the argv positions iface reaches (ip addr show dev, nmcli
+// device reapply), mirroring the connection-name posture.
+var validInterfaceNameRegex = regexp.MustCompile(`^[A-Za-z0-9._:@-]{1,15}$`)
+
+func validateInterfaceName(name string) error {
+	if name == "" {
+		return fmt.Errorf("interface name must not be empty")
+	}
+	if name[0] == '-' {
+		return fmt.Errorf("interface name %q must not start with a dash", name)
+	}
+	if !validInterfaceNameRegex.MatchString(name) {
+		return fmt.Errorf("interface name %q does not match allowed character set", name)
+	}
+	return nil
+}
+
 // RemoveSecondaryIP strips ip from the active NetworkManager connection bound
 // to iface and reapplies the device. No-ops when ip is not currently assigned.
 func RemoveSecondaryIP(ctx context.Context, ip, iface string) error {
-	if ip == "" {
-		return fmt.Errorf("ip address is required")
+	addr, err := netip.ParseAddr(ip)
+	if err != nil {
+		return fmt.Errorf("parse IP address %q: %w", ip, err)
 	}
-	if iface == "" {
-		return fmt.Errorf("interface name is required")
+	if err := validateInterfaceName(iface); err != nil {
+		return fmt.Errorf("interface name rejected: %w", err)
 	}
 
-	output, err := executor.OutputCaptured(ctx, "ip", "addr", "show", "dev", iface)
+	present, err := ipAssignedToDevice(ctx, addr, iface)
 	if err != nil {
-		return fmt.Errorf("check IP presence on device %s: %w", iface, err)
+		return err
 	}
-	if !strings.Contains(string(output), ip+"/") {
+	if !present {
 		return nil
 	}
 
@@ -65,14 +89,46 @@ func RemoveSecondaryIP(ctx context.Context, ip, iface string) error {
 		// persistent config and the running device silently diverge until the
 		// next reconnect. Restore the profile, and if even that fails name the
 		// divergence so the operator knows the profile no longer matches the
-		// runtime state.
-		if restoreErr := executor.RunCaptured(ctx, "nmcli", "connection", "modify", conn, "+ipv4.addresses", ip+"/32"); restoreErr != nil {
+		// runtime state. A ctx cancellation is the likeliest cause of the
+		// reapply failure, so the restore runs on a detached, bounded context:
+		// reusing the (probably dead) ctx would make exec refuse to start the
+		// compensating command exactly when the rollback matters most.
+		restoreCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+		defer cancel()
+		if restoreErr := executor.RunCaptured(restoreCtx, "nmcli", "connection", "modify", conn, "+ipv4.addresses", ip+"/32"); restoreErr != nil {
 			return fmt.Errorf("apply IP change on %s: %w (profile %s no longer lists %s but the device was not reapplied; restoring the profile also failed: %w)", iface, err, conn, ip, restoreErr)
 		}
 		return fmt.Errorf("apply IP change on %s: %w (profile change on %s was rolled back)", iface, err, conn)
 	}
 
 	return nil
+}
+
+// ipAssignedToDevice reports whether addr is currently assigned to iface,
+// decoding `ip -j addr show` rather than substring-matching human output.
+// Structured decode avoids the prefix/suffix false positives a raw
+// strings.Contains(ip+"/") match invites (10.0.0.1 vs 110.0.0.1/24).
+func ipAssignedToDevice(ctx context.Context, addr netip.Addr, iface string) (bool, error) {
+	output, err := executor.OutputCaptured(ctx, "ip", "-j", "addr", "show", "dev", iface)
+	if err != nil {
+		return false, fmt.Errorf("check IP presence on device %s: %w", iface, err)
+	}
+	var links []struct {
+		AddrInfo []struct {
+			Local string `json:"local"`
+		} `json:"addr_info"`
+	}
+	if err := json.Unmarshal(output, &links); err != nil {
+		return false, fmt.Errorf("parse ip addr output for %s: %w", iface, err)
+	}
+	for _, link := range links {
+		for _, info := range link.AddrInfo {
+			if parsed, perr := netip.ParseAddr(info.Local); perr == nil && parsed == addr {
+				return true, nil
+			}
+		}
+	}
+	return false, nil
 }
 
 // ActiveConnection returns the name of the first active non-loopback
@@ -139,7 +195,11 @@ func GetDefaultInterface(ctx context.Context) (string, error) {
 	fields := strings.Fields(string(output))
 	for i, field := range fields {
 		if field == "dev" && i+1 < len(fields) {
-			return fields[i+1], nil
+			iface := fields[i+1]
+			if err := validateInterfaceName(iface); err != nil {
+				return "", fmt.Errorf("default interface name rejected: %w", err)
+			}
+			return iface, nil
 		}
 	}
 

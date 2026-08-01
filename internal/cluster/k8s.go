@@ -14,7 +14,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/executor"
 	"github.com/qxtaiba/okdctl/internal/logutil"
 )
@@ -97,6 +96,11 @@ func WithEnvFallback() Option {
 // eliminating the TOCTOU window that stat+open would leave) and paths
 // outside the $HOME or /etc prefix allowlist, preventing a hostile env var
 // from pointing the client at /dev/zero, /proc/self/environ, or similar.
+//
+// Every branch returns a plain error: the sole caller (WithEnvFallback) only
+// Debug-logs the result and then ignores the env value, so a rejected
+// $KUBECONFIG is advisory rather than fatal — a typed *errtypes.AuthError
+// exit classification could never be observed here and would only mislead.
 func validateKubeconfigEnv(path string) error {
 	clean := filepath.Clean(path)
 
@@ -108,11 +112,7 @@ func validateKubeconfigEnv(path string) error {
 		return fmt.Errorf("kubeconfig path is a symlink")
 	}
 	if perm := fi.Mode().Perm(); perm&0o077 != 0 {
-		return &errtypes.AuthError{
-			Msg:  fmt.Sprintf("kubeconfig has insecure permissions %#o; run 'chmod 600 <path>' to fix", perm),
-			Path: clean,
-			Err:  os.ErrPermission,
-		}
+		return fmt.Errorf("kubeconfig %q has insecure permissions %#o; run 'chmod 600 <path>' to fix", clean, perm)
 	}
 
 	home, _ := os.UserHomeDir()

@@ -36,7 +36,7 @@ func CIDRToNetmask(cidr string) (string, error) {
 	if bits > 0 {
 		mask = ^uint32(0) << (32 - bits)
 	}
-	return fmt.Sprintf("%d.%d.%d.%d", byte(mask>>24), byte(mask>>16), byte(mask>>8), byte(mask)), nil
+	return netip.AddrFrom4([4]byte{byte(mask >> 24), byte(mask >> 16), byte(mask >> 8), byte(mask)}).String(), nil
 }
 
 // ValidateIPRangeInCIDR checks that startIP and the next count-1 addresses
@@ -132,7 +132,7 @@ func DeriveVIPFromStaticIP(staticIPStart string) (string, error) {
 		return "", fmt.Errorf("IPv6 not supported: %q", staticIPStart)
 	}
 	octets := addr.As4()
-	return fmt.Sprintf("%d.%d.%d.%d", octets[0], octets[1], octets[2], defaultVIPLastOctet), nil
+	return netip.AddrFrom4([4]byte{octets[0], octets[1], octets[2], defaultVIPLastOctet}).String(), nil
 }
 
 // IPInCIDR reports whether ip is contained within cidr.

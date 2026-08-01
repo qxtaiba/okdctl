@@ -5,7 +5,6 @@ import (
 	"io"
 	"os"
 	"strconv"
-	"sync"
 	"time"
 
 	"github.com/qxtaiba/okdctl/internal/distribution"
@@ -41,8 +40,6 @@ type StepProgress struct {
 	logSink io.Writer
 	total   int
 	index   map[distribution.StepID]stepPos
-
-	mu sync.Mutex
 }
 
 type stepPos struct {
@@ -83,8 +80,6 @@ func (s *StepProgress) StepStarted(id distribution.StepID) {
 	lineReg.register(s)
 	line := MutedStyle.Render(s.label(pos))
 	lineReg.paint(s, func() {
-		s.mu.Lock()
-		defer s.mu.Unlock()
 		_, _ = fmt.Fprint(s.w, "\r\x1b[2K"+line)
 	})
 }
@@ -103,8 +98,6 @@ func (s *StepProgress) StepFinished(r *distribution.StepResult) {
 	// checklist's own in-progress line) before the commit, so the final line
 	// never lands on a half-painted frame.
 	lineReg.withLine(func() {
-		s.mu.Lock()
-		defer s.mu.Unlock()
 		_, _ = fmt.Fprint(s.w, "\r\x1b[2K"+final+"\n")
 	})
 	lineReg.deregister(s)
@@ -116,8 +109,6 @@ func (s *StepProgress) DeployFinished(time.Duration) { lineReg.release(s) }
 
 // clearLine implements lineOwner. The caller holds the line lock.
 func (s *StepProgress) clearLine() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
 	_, _ = fmt.Fprint(s.w, "\r\x1b[2K")
 }
 

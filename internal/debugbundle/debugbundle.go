@@ -317,7 +317,7 @@ func bundleMustGather(ctx context.Context, addStream func(*tar.Header, io.Reader
 		}
 		return manifestEntry{Name: categoryMustGather, Status: bundleStatusFailed, Message: msg}
 	}
-	truncated, archErr := tarDirInto(addStream, mgDir, "must-gather/")
+	truncated, archErr := tarDirInto(ctx, addStream, mgDir, "must-gather/")
 	if archErr != nil {
 		return manifestEntry{Name: categoryMustGather, Status: bundleStatusFailed, Message: "archive must-gather: " + safeMessage(archErr)}
 	}
@@ -332,8 +332,10 @@ func bundleMustGather(ctx context.Context, addStream func(*tar.Header, io.Reader
 // prefixing entry names with bundlePrefix. Reads go through os.Root so
 // symlinks cannot redirect reads outside srcDir (TOCTOU-safe). Files larger
 // than maxBundleFileBytes are capped; their relative paths are returned in
-// the truncated slice so callers can record the truncation.
-func tarDirInto(addStream func(*tar.Header, io.Reader) error, srcDir, bundlePrefix string) (truncated []string, err error) {
+// the truncated slice so callers can record the truncation. A cancelled ctx
+// aborts the walk between entries; the caller's deferred tar/gzip Close still
+// finalizes a readable partial archive.
+func tarDirInto(ctx context.Context, addStream func(*tar.Header, io.Reader) error, srcDir, bundlePrefix string) (truncated []string, err error) {
 	root, openErr := os.OpenRoot(srcDir)
 	if openErr != nil {
 		return nil, fmt.Errorf("open root %s: %w", srcDir, openErr)
@@ -342,6 +344,9 @@ func tarDirInto(addStream func(*tar.Header, io.Reader) error, srcDir, bundlePref
 	walkErr := filepath.WalkDir(srcDir, func(path string, d os.DirEntry, wErr error) error {
 		if wErr != nil {
 			return wErr
+		}
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return ctxErr
 		}
 		if !d.Type().IsRegular() {
 			return nil

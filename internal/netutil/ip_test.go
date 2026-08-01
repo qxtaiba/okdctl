@@ -138,16 +138,28 @@ func TestResolveVIP(t *testing.T) {
 
 func TestIPInCIDR(t *testing.T) {
 	cases := []struct {
-		ip   string
-		cidr string
-		want bool
+		ip      string
+		cidr    string
+		want    bool
+		wantErr bool
 	}{
-		{"192.168.1.5", "192.168.1.0/24", true},
-		{"192.168.2.5", "192.168.1.0/24", false},
-		{"10.0.0.1", "10.0.0.0/8", true},
+		{"192.168.1.5", "192.168.1.0/24", true, false},
+		{"192.168.2.5", "192.168.1.0/24", false, false},
+		{"10.0.0.1", "10.0.0.0/8", true, false},
+		{"not-an-ip", "10.0.0.0/8", false, true},
+		{"10.0.0.1", "", false, true},
+		{"10.0.0.1", "10.0.0.0/40", false, true},        // prefix overflow
+		{"::ffff:10.0.0.1", "10.0.0.0/8", false, false}, // 4-in-6 family differs from v4 prefix: not contained, no error
+		{"fe80::1", "10.0.0.0/8", false, false},         // family mismatch: not contained, not an error
 	}
 	for _, tc := range cases {
 		got, err := IPInCIDR(tc.ip, tc.cidr)
+		if tc.wantErr {
+			if err == nil {
+				t.Errorf("IPInCIDR(%q,%q) = %v; want error", tc.ip, tc.cidr, got)
+			}
+			continue
+		}
 		if err != nil {
 			t.Errorf("IPInCIDR(%q,%q) error: %v", tc.ip, tc.cidr, err)
 			continue
@@ -160,15 +172,26 @@ func TestIPInCIDR(t *testing.T) {
 
 func TestCIDRsOverlap(t *testing.T) {
 	cases := []struct {
-		a, b string
-		want bool
+		a, b    string
+		want    bool
+		wantErr bool
 	}{
-		{"192.168.1.0/24", "192.168.1.128/25", true},
-		{"192.168.1.0/24", "192.168.2.0/24", false},
-		{"10.0.0.0/8", "10.0.0.0/16", true},
+		{"192.168.1.0/24", "192.168.1.128/25", true, false},
+		{"192.168.1.0/24", "192.168.2.0/24", false, false},
+		{"10.0.0.0/8", "10.0.0.0/16", true, false},
+		{"bogus", "10.0.0.0/8", false, true},
+		{"10.0.0.0/8", "", false, true},
+		{"10.0.0.0/40", "10.0.0.0/8", false, true}, // prefix overflow
+		{"10.0.0.0/8", "fe80::/16", false, false},  // mixed family: no overlap, not an error
 	}
 	for _, tc := range cases {
 		got, err := CIDRsOverlap(tc.a, tc.b)
+		if tc.wantErr {
+			if err == nil {
+				t.Errorf("CIDRsOverlap(%q,%q) = %v; want error", tc.a, tc.b, got)
+			}
+			continue
+		}
 		if err != nil {
 			t.Errorf("CIDRsOverlap(%q,%q) error: %v", tc.a, tc.b, err)
 			continue

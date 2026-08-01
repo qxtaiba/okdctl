@@ -75,10 +75,18 @@ func (h *stderrHandler) WithGroup(name string) slog.Handler {
 	return &stderrHandler{h: h.h.WithGroup(name)}
 }
 
+// FormatText and FormatJSON are the two log/output encodings ConfigureLoggers
+// accepts. They are the single home for this vocabulary; the cli package's
+// --output values alias onto these rather than re-spelling the literals.
+const (
+	FormatText = "text"
+	FormatJSON = "json"
+)
+
 // ConfigureLoggers applies level, formatter, and writer settings to the
 // package-level loggers. stdoutW and stderrW replace the current outputs;
 // level must be a charmlog level string (debug/info/warn/error).
-// format must be "text" or "json". progressBars controls whether
+// format must be FormatText or FormatJSON. progressBars controls whether
 // logutil.ProgressBarsEnabled returns true. Not safe for concurrent calls —
 // call once during cobra PersistentPreRunE before any subcommand runs.
 func ConfigureLoggers(level, format string, stdoutW, stderrW io.Writer, progressBars bool) error {
@@ -89,9 +97,9 @@ func ConfigureLoggers(level, format string, stdoutW, stderrW io.Writer, progress
 
 	var formatter charmlog.Formatter
 	switch format {
-	case "text":
+	case FormatText:
 		formatter = charmlog.TextFormatter
-	case "json":
+	case FormatJSON:
 		formatter = charmlog.JSONFormatter
 	default:
 		return fmt.Errorf("unknown log format %q: must be text or json", format)
