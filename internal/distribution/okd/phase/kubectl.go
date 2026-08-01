@@ -93,9 +93,11 @@ func (p *BasePhase) OcPollOutputInterval(ctx context.Context, prefix, desc strin
 		opts.Interval = interval
 	}
 	opts.Logger = p.Log
-	err := system.WaitFor(ctx, prefix, desc, func(context.Context) bool {
+	err := system.WaitFor(ctx, prefix, desc, func(ctx context.Context) bool {
 		// Client.Run returns a nil Result on transport failure, unlike
-		// executor.Run's always-non-nil contract.
+		// executor.Run's always-non-nil contract. Run under WaitFor's probe
+		// ctx (deadline = Timeout+probeGrace) so a hung oc dies at the poll
+		// deadline instead of the unbounded outer ctx.
 		result, runErr := p.oc().Run(ctx, args...)
 		if runErr != nil || result.ExitCode != 0 {
 			return false

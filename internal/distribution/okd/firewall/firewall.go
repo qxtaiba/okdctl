@@ -207,7 +207,12 @@ func (f *Firewall) RemoveRules(ctx context.Context, ports []Port, permanent bool
 	}
 
 	if backend == Firewalld && permanent {
-		_ = executor.RunCaptured(ctx, "firewall-cmd", "--reload")
+		// A failed reload leaves the just-removed permanent rules live in the
+		// runtime set; surface it so the operator does not read "removing
+		// rules" as "ports closed". Stay best-effort — teardown must not fail.
+		if err := executor.RunCaptured(ctx, "firewall-cmd", "--reload"); err != nil {
+			f.logger.Warn("firewall: reload after rule removal failed", "err", err)
+		}
 	}
 
 	return nil
@@ -242,19 +247,35 @@ func modifyPort(ctx context.Context, backend Backend, port Port, permanent bool,
 		return executor.RunCaptured(ctx, "ufw", "allow", portStr)
 
 	case IPTables:
-		chainAction := "-I"
-		if action == actionRemove {
-			chainAction = "-D"
-		}
-		args := []string{
-			"iptables", chainAction, "INPUT", "-p", port.Protocol,
-			"--dport", strconv.Itoa(port.Number), "-j", "ACCEPT",
-		}
-		// Port/protocol validated by validatePort above; argv slice (no shell).
-		return executor.RunCaptured(ctx, args[0], args[1:]...)
+		return modifyIptablesRule(ctx, port, action)
 	}
 
 	return nil
+}
+
+// modifyIptablesRule makes the iptables backend idempotent. Plain -I inserts a
+// duplicate on every re-run and -D removes only one instance, so StepConfigure
+// ReRunSafeYes would otherwise leave N-1 ACCEPT rules after N setups that a
+// single destroy pass cannot clear. A -C probe gates the add; a -D loop drains
+// every duplicate on remove. Port/protocol already validated by validatePort;
+// argv slice (no shell).
+func modifyIptablesRule(ctx context.Context, port Port, action string) error {
+	rule := []string{"INPUT", "-p", port.Protocol, "--dport", strconv.Itoa(port.Number), "-j", "ACCEPT"}
+	exists := func() bool {
+		return executor.RunCaptured(ctx, "iptables", append([]string{"-C"}, rule...)...) == nil
+	}
+	if action == actionRemove {
+		for exists() {
+			if err := executor.RunCaptured(ctx, "iptables", append([]string{"-D"}, rule...)...); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	if exists() {
+		return nil
+	}
+	return executor.RunCaptured(ctx, "iptables", append([]string{"-I"}, rule...)...)
 }
 
 // ConfigureOKD opens all ports in OKDRequiredPorts.

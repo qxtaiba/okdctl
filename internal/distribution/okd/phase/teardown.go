@@ -21,7 +21,7 @@ func StopAndDisableService(ctx context.Context, serviceName string, logger *slog
 			logger.Warn("failed to stop service", "svc", serviceName, "err", err)
 		}
 	} else {
-		logger.Info("service not running", "svc", serviceName)
+		logger.Debug("service not running", "svc", serviceName)
 	}
 
 	if system.IsServiceEnabled(ctx, serviceName) {
@@ -29,7 +29,7 @@ func StopAndDisableService(ctx context.Context, serviceName string, logger *slog
 			logger.Warn("failed to disable service", "svc", serviceName, "err", err)
 		}
 	} else {
-		logger.Info("service not enabled", "svc", serviceName)
+		logger.Debug("service not enabled", "svc", serviceName)
 	}
 }
 

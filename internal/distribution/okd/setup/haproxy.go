@@ -4,9 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"strconv"
-	"strings"
+	"time"
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
@@ -175,8 +176,9 @@ func attemptHAProxyRollback(
 }
 
 // VerifyHAProxyPorts checks that haproxy is listening on the API, machine
-// config, HTTP, and HTTPS ports. Missing ports are logged as warnings but do
-// not return an error — listeners can come up shortly after service start.
+// config, HTTP, and HTTPS ports by dialing each on 127.0.0.1. Missing ports
+// are logged as warnings but do not return an error — listeners can come up
+// shortly after service start.
 func (p *Phase) VerifyHAProxyPorts(ctx context.Context) error {
 	ports := []struct {
 		port        string
@@ -188,22 +190,15 @@ func (p *Phase) VerifyHAProxyPorts(ctx context.Context) error {
 		{"443", "HTTPS ingress"},
 	}
 
-	result, err := p.Exec.RunOutput(ctx, 0, "ss", "-tlnp")
-	if err != nil {
-		p.Log.Warn("haproxy: failed to check listening ports", "err", err)
-		return nil
-	}
-	if result.Truncated {
-		p.Log.Warn("haproxy: ss output truncated; port checks may be unreliable")
-	}
-
+	dialer := net.Dialer{Timeout: 2 * time.Second}
 	for _, portInfo := range ports {
-		pattern := fmt.Sprintf(":%s ", portInfo.port)
-		if strings.Contains(result.Stdout, pattern) {
-			p.Log.Debug("haproxy: listening", "port", portInfo.port, "desc", portInfo.description)
-		} else {
+		conn, err := dialer.DialContext(ctx, "tcp", net.JoinHostPort("127.0.0.1", portInfo.port))
+		if err != nil {
 			p.Log.Warn("haproxy: may not be listening", "port", portInfo.port, "desc", portInfo.description)
+			continue
 		}
+		_ = conn.Close()
+		p.Log.Debug("haproxy: listening", "port", portInfo.port, "desc", portInfo.description)
 	}
 
 	return nil

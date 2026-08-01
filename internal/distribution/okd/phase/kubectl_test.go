@@ -53,10 +53,46 @@ case "${OC_FAKE_MODE:-empty}" in
     if [ -n "${OC_STDIN_LOG:-}" ]; then cat > "$OC_STDIN_LOG"; fi
     exit "${OC_EXIT_CODE:-0}"
     ;;
+  hugeout)
+    # Emits more than the executor's 4 MiB capture cap to force truncation.
+    head -c 5000000 /dev/zero | tr '\0' '{'
+    exit 0
+    ;;
+  smalljson)
+    printf '  {"ok":true}  \n'
+    exit 0
+    ;;
 esac
 exit 0
 `
 	testutil.InstallFakeBin(t, "oc", script)
+}
+
+func TestOcOutputFull(t *testing.T) {
+	installFakeOC(t)
+	p := newTestPhase(t)
+
+	t.Run("truncated output → error mentions truncated", func(t *testing.T) {
+		t.Setenv("OC_FAKE_MODE", "hugeout")
+		_, err := p.OcOutputFull(context.Background(), "get", "pods", "-o", "json")
+		if err == nil {
+			t.Fatal("expected error for truncated output; got nil")
+		}
+		if !strings.Contains(err.Error(), "truncated") {
+			t.Fatalf("err = %v; want mention of 'truncated'", err)
+		}
+	})
+
+	t.Run("small output → trimmed stdout round-trips", func(t *testing.T) {
+		t.Setenv("OC_FAKE_MODE", "smalljson")
+		out, err := p.OcOutputFull(context.Background(), "get", "pods", "-o", "json")
+		if err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+		if out != `{"ok":true}` {
+			t.Fatalf("out = %q; want trimmed %q", out, `{"ok":true}`)
+		}
+	})
 }
 
 func newTestPhase(t *testing.T) *BasePhase {

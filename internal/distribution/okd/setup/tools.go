@@ -270,7 +270,7 @@ func (p *Phase) installBinaryToPath(ctx context.Context, srcPath, name string) e
 	}
 	binDir := config.BinDirOrDefault(p.BinDir)
 
-	if err := atomicInstallFile(srcPath, binDir, name); err != nil {
+	if err := atomicInstallFile(ctx, srcPath, binDir, name); err != nil {
 		return fmt.Errorf("install %s to %s: %w", name, binDir, err)
 	}
 

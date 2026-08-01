@@ -26,8 +26,6 @@ import (
 const (
 	openshiftSubdir     = "openshift"
 	openshiftInstallBin = "openshift-install"
-	ocBin               = "oc"
-	kubectlBin          = "kubectl"
 )
 
 // Options configures a setup run: download and upload toggles.

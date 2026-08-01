@@ -3,6 +3,7 @@ package distribution
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"slices"
 	"sync"
@@ -155,11 +156,13 @@ func classifyStepErr(err error) error {
 		return err
 	}
 	// errtypes Error() surfaces only Msg, so a generic Msg would drop the
-	// root cause from every sink (failure box, structured log, run log).
-	// Embedding err.Error() is as safe as the pre-classification exit-1 path
-	// was: stderr-bearing layers (executor.ExitError) already scrub and
-	// truncate their own output.
-	return &errtypes.ClusterError{Msg: "step failed: " + err.Error(), Err: err}
+	// root cause from every sink (failure box, structured log, run log). But
+	// Msg is pre-rendered text that bypasses logutil.RedactHandler, so the
+	// arbitrary step error's .Error() is laundered through RedactableStderr —
+	// key-shaped secrets and JWTs masked, output bounded — before it lands in
+	// Msg. Err stays untouched so errors.Is/As and exitCodeFor keep walking.
+	scrubbed := fmt.Sprint(logutil.RedactableStderr(err.Error()).Redacted())
+	return &errtypes.ClusterError{Msg: "step failed: " + scrubbed, Err: err}
 }
 
 func (o *Orchestrator) executeStep(ctx context.Context, step *builtStep) StepResult {

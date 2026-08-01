@@ -68,7 +68,7 @@ type NodeStatus struct {
 }
 
 // Condition mirrors the k8s condition shape but carries project-local
-// ConditionType/Status values from internal/distribution/okd/phase.
+// ConditionType/Status values from internal/nodetypes.
 type Condition struct {
 	Type    nodetypes.ConditionType   `json:"type"`
 	Status  nodetypes.ConditionStatus `json:"status"`

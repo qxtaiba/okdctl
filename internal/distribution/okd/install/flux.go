@@ -1,6 +1,7 @@
 package install
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -23,7 +24,7 @@ var invokingUserHomeDirFn = system.InvokingUserHomeDir
 // ValidateClusterAccess runs "oc whoami" to confirm the kubeconfig points at
 // a live cluster and logs the server version when available.
 func (p *Phase) ValidateClusterAccess(ctx context.Context) error {
-	p.Log.Info("cluster: validating access with oc whoami")
+	p.Log.Debug("cluster: validating access with oc whoami")
 
 	user, err := p.OcOutput(ctx, "whoami")
 	if err != nil {
@@ -53,8 +54,12 @@ func (p *Phase) ValidateClusterAccess(ctx context.Context) error {
 // user's ~/.kube/config, chowning paths so the file is usable after any
 // sudo re-exec returns.
 func (p *Phase) SetupClusterAccess(ctx context.Context, clusterDir string) error {
+	// One entry-point check suffices: every step below is a microsecond-scale
+	// local filesystem call, so interior ctx.Err() repeats would add no
+	// cancellation responsiveness. Bare return preserves context.Canceled
+	// identity for cli/root.go::signalExitCode.
 	if err := ctx.Err(); err != nil {
-		return fmt.Errorf("setup cluster access: %w", err)
+		return err
 	}
 	// Resolve the invoking user's home (not root's) so files land where
 	// the user will look for them after the re-exec'd deploy returns.
@@ -71,13 +76,13 @@ func (p *Phase) SetupClusterAccess(ctx context.Context, clusterDir string) error
 		p.Log.Warn("kubeconfig: could not chown .kube dir", "err", err)
 	}
 
-	if err := ctx.Err(); err != nil {
-		return fmt.Errorf("setup cluster access: %w", err)
-	}
 	srcKubeconfig := workspace.KubeconfigPath(clusterDir)
 	destKubeconfig := filepath.Join(kubeDir, "config")
 
-	if system.FileExists(destKubeconfig) {
+	// Skip the backup when the existing config already matches the source, so
+	// idempotent deploy re-runs don't drop an unbounded pile of identical
+	// ~/.kube/config.backup.<ts> files.
+	if system.FileExists(destKubeconfig) && !sameFileContent(srcKubeconfig, destKubeconfig) {
 		backupPath := destKubeconfig + ".backup." + time.Now().Format("20060102-150405")
 		if err := system.CopyFileMode(destKubeconfig, backupPath, 0o600); err != nil {
 			p.Log.Warn("kubeconfig: could not backup existing file", "err", err)
@@ -87,9 +92,6 @@ func (p *Phase) SetupClusterAccess(ctx context.Context, clusterDir string) error
 		}
 	}
 
-	if err := ctx.Err(); err != nil {
-		return fmt.Errorf("setup cluster access: %w", err)
-	}
 	if err := system.CopyFileMode(srcKubeconfig, destKubeconfig, 0o600); err != nil {
 		return &errtypes.ConfigError{Msg: "copy kubeconfig", Err: err}
 	}
@@ -97,14 +99,26 @@ func (p *Phase) SetupClusterAccess(ctx context.Context, clusterDir string) error
 		p.Log.Warn("kubeconfig: could not chown config", "err", err)
 	}
 
-	if err := ctx.Err(); err != nil {
-		return fmt.Errorf("setup cluster access: %w", err)
-	}
 	if err := p.addKubeconfigToBashrc(homeDir, destKubeconfig); err != nil {
 		p.Log.Warn("kubeconfig: could not update .bashrc", "err", err)
 	}
 
 	return nil
+}
+
+// sameFileContent reports whether a and b both exist and hold identical bytes.
+// A read error on either returns false so the caller errs toward taking a
+// backup rather than silently skipping one.
+func sameFileContent(a, b string) bool {
+	da, err := os.ReadFile(a)
+	if err != nil {
+		return false
+	}
+	db, err := os.ReadFile(b)
+	if err != nil {
+		return false
+	}
+	return bytes.Equal(da, db)
 }
 
 func (p *Phase) addKubeconfigToBashrc(homeDir, kubeconfigPath string) error {

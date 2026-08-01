@@ -34,6 +34,10 @@ func removePackage(ctx context.Context, pkg string, logger *slog.Logger) {
 // releases the VIP (when set), and uninstalls the haproxy package.
 // Firewall rule removal is delegated to StepCleanupFirewall so destroy
 // summary doesn't double-count the same operation.
+//
+// Assumes an okdctl-dedicated bastion: it deletes the live config plus every
+// backup the glob matches, including setup's pristine pre-okdctl snapshot, so
+// a pre-existing haproxy config is not restored.
 func HAProxy(ctx context.Context, haproxyConfig, vip string, logger *slog.Logger) error {
 	logger = logutil.OrNop(logger)
 	logger.Info("cleanup: haproxy service and configuration")
@@ -78,6 +82,11 @@ func Apache(ctx context.Context, logger *slog.Logger) error {
 }
 
 // WebServer removes generated *.ign files from the httpd ignition directory.
+// Best-effort: per-file removal errors (including policy refusals from
+// SafeRemoveWithLogger) are logged and swallowed, so a nil return does not
+// guarantee the web root is clean — ignition payloads embedding the pull
+// secret may still be served. It also returns nil early when the directory or
+// glob is empty. Callers needing a hard guarantee must inspect the directory.
 func WebServer(ctx context.Context, httpServerRoot string, logger *slog.Logger) error {
 	logger = logutil.OrNop(logger)
 	ignitionDir := filepath.Join(httpServerRoot, "ignition")
@@ -106,6 +115,11 @@ func WebServer(ctx context.Context, httpServerRoot string, logger *slog.Logger) 
 
 // Dnsmasq restores the system resolver, stops dnsmasq, removes the
 // cluster-specific config, and uninstalls the dnsmasq package.
+//
+// Assumes an okdctl-dedicated bastion: after the cluster's own okd-<name>.conf
+// is removed it also purges every /etc/dnsmasq.d/okd-*.conf and every
+// *.backup regardless of origin, so a second cluster's DNS config or a foreign
+// backup on a shared bastion would be destroyed too.
 func Dnsmasq(ctx context.Context, clusterName string, logger *slog.Logger) error {
 	logger = logutil.OrNop(logger)
 	logger.Info("cleanup: dnsmasq service and configuration")

@@ -131,6 +131,15 @@ func generateSelfSignedCert(certPath, keyPath, ip string) (certPEM, keyPEM []byt
 	if err := system.EnsureDir(dir); err != nil {
 		return nil, nil, fmt.Errorf("ensure cert dir: %w", err)
 	}
+	// The project root is owned by the unprivileged invoking user while this
+	// runs as root post-re-exec; os.Chmod follows a symlink pre-planted at the
+	// cert dir and would tighten an attacker-chosen target instead. Refuse a
+	// symlink first, matching the refusals in system/fs.go.
+	if info, err := os.Lstat(dir); err != nil {
+		return nil, nil, fmt.Errorf("lstat cert dir: %w", err)
+	} else if info.Mode()&os.ModeSymlink != 0 {
+		return nil, nil, fmt.Errorf("cert dir %q is a symlink; refusing to chmod: %w", dir, os.ErrPermission)
+	}
 	// 0o700: keep the private key non-enumerable by other users on the bastion.
 	if err := os.Chmod(dir, 0o700); err != nil {
 		return nil, nil, fmt.Errorf("tighten cert dir perms: %w", err)

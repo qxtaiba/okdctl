@@ -366,8 +366,11 @@ func (p *Provisioner) DownloadCoreOSISO(ctx context.Context, info *CoreOSInfo, d
 	return nil
 }
 
-// EnsureCoreOSISO ensures the CoreOS ISO is available, downloading to the work
-// directory (avoids permission issues with /var/lib/vz).
+// EnsureCoreOSISO ensures the CoreOS ISO is available, downloading it to the
+// work directory (avoids permission issues with /var/lib/vz) when absent. An
+// ISO already present at the download path is reused on filename existence
+// alone: unlike DownloadCoreOSISO, no checksum is re-verified on that reuse
+// path, so a corrupt cached ISO must be deleted to force a fresh download.
 func (p *Provisioner) EnsureCoreOSISO(ctx context.Context, cfg *config.Config, opts Options) (string, error) {
 	p.Log.Info("coreos: resolving iso from pinned installer stream metadata")
 

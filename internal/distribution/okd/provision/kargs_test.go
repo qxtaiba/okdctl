@@ -52,18 +52,6 @@ func TestBuildIgnitionURLForNode_accept(t *testing.T) {
 			role:    nodetypes.RoleMaster,
 			wantURL: "https://169.254.0.1/ignition/master.ign",
 		},
-		{
-			name:    "ipv6 ula fd00::1",
-			ip:      "fd00::1",
-			role:    nodetypes.RoleMaster,
-			wantURL: "https://fd00::1/ignition/master.ign",
-		},
-		{
-			name:    "ipv6 link-local fe80::1",
-			ip:      "fe80::1",
-			role:    nodetypes.RoleMaster,
-			wantURL: "https://fe80::1/ignition/master.ign",
-		},
 	}
 	for _, tt := range cases {
 		t.Run(tt.name, func(t *testing.T) {
@@ -87,6 +75,8 @@ func TestBuildIgnitionURLForNode_reject(t *testing.T) {
 		{"public ipv4 8.8.8.8", "8.8.8.8"},
 		{"public ipv4 1.1.1.1", "1.1.1.1"},
 		{"documentation ipv6 2001:db8::1", "2001:db8::1"},
+		{"ipv6 ula fd00::1 unsupported", "fd00::1"},
+		{"ipv6 link-local fe80::1 unsupported", "fe80::1"},
 		{"empty string", ""},
 		{"hostname not ip", "bastion.local"},
 	}

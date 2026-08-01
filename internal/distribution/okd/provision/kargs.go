@@ -82,6 +82,12 @@ func BuildIgnitionURLForNode(cfg *config.Config, role nodetypes.NodeRole) (strin
 	if err != nil {
 		return "", &errtypes.ConfigError{Msg: fmt.Sprintf("ignition server IP %q is not a valid IP address", ignitionIP), Err: err}
 	}
+	// Fail closed on IPv6: BuildIgnitionURL renders the host unbracketed, so an
+	// IPv6 literal would produce an invalid URL, and netutil rejects IPv6
+	// everywhere else this field is consumed. Keep the two consumers coherent.
+	if !addr.Is4() {
+		return "", &errtypes.ConfigError{Msg: fmt.Sprintf("ignition server IP %q must be IPv4 — IPv6 is not supported", ignitionIP)}
+	}
 	if !addr.IsPrivate() && !addr.IsLoopback() && !addr.IsLinkLocalUnicast() {
 		return "", &errtypes.ConfigError{Msg: fmt.Sprintf("ignition server IP %q must be RFC1918, loopback, or link-local — HTTPS ignition on a public address exposes cluster credentials", ignitionIP)}
 	}
