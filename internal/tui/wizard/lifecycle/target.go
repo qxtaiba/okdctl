@@ -62,17 +62,22 @@ func NewTargetStep(st *State, hooks Hooks) *TargetStep {
 	sp.Spinner = spinner.Dot
 	sp.Style = lipgloss.NewStyle().Foreground(tui.ColorPrimary)
 
-	title := "which nodes should be resized?"
-	if st.Op == node.OpRemove {
-		title = "which worker should be removed?"
-	}
 	return &TargetStep{
-		BaseStep:       wizard.NewBaseStepWithDisplayTitle(StepIDTarget, "target", title, ""),
+		BaseStep:       wizard.NewBaseStepWithDisplayTitle(StepIDTarget, "target", "", ""),
 		st:             st,
 		hooks:          hooks,
 		phase:          targetLoading,
 		loadingSpinner: sp,
 	}
+}
+
+// DisplayTitle names the screen for the chosen op; computed at render
+// time because the step is constructed before the op screen runs.
+func (s *TargetStep) DisplayTitle() string {
+	if s.st.Op == node.OpRemove {
+		return "which worker should be removed?"
+	}
+	return "which nodes should be resized?"
 }
 
 // ShouldShow hides the step for add (workers only) and on resume.

@@ -117,3 +117,15 @@ func TestTargetStepShouldShow(t *testing.T) {
 		}
 	}
 }
+
+func TestTargetStepTitleFollowsOp(t *testing.T) {
+	st := &State{Cfg: config.DefaultConfig(), Op: node.OpResize}
+	s := NewTargetStep(st, Hooks{})
+	if got := s.DisplayTitle(); !strings.Contains(got, "resized") {
+		t.Errorf("resize title = %q", got)
+	}
+	st.Op = node.OpRemove
+	if got := s.DisplayTitle(); !strings.Contains(got, "removed") {
+		t.Errorf("remove title = %q", got)
+	}
+}

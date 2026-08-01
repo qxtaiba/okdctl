@@ -25,14 +25,14 @@ func TestParamsStepResizeApplyAndValidation(t *testing.T) {
 	if err := s.Validate(); err == nil {
 		t.Error("unparseable drain timeout must fail validation")
 	}
-	s.timeoutField.SetValue("10m")
+	s.timeoutField.SetValue(defaultDrainTimeout)
 	if err := s.Validate(); err != nil {
 		t.Fatalf("Validate: %v", err)
 	}
 	if err := s.Apply(nil); err != nil {
 		t.Fatal(err)
 	}
-	if st.MemoryMB != 24576 || st.CPU != 0 || st.SkipDrain || st.DrainTimeout != "10m" {
+	if st.MemoryMB != 24576 || st.CPU != 0 || st.SkipDrain || st.DrainTimeout != defaultDrainTimeout {
 		t.Errorf("state = mem %d cpu %d skip %v timeout %q", st.MemoryMB, st.CPU, st.SkipDrain, st.DrainTimeout)
 	}
 }
@@ -88,7 +88,7 @@ func TestParamsStepRemoveForceStorage(t *testing.T) {
 	if !st.ForceStorage {
 		t.Error("force storage selection must set state")
 	}
-	if st.DrainTimeout != "10m" {
+	if st.DrainTimeout != defaultDrainTimeout {
 		t.Errorf("DrainTimeout default = %q, want 10m", st.DrainTimeout)
 	}
 }
@@ -109,5 +109,31 @@ func TestParamsStepShownOnResume(t *testing.T) {
 	_ = s.Init()
 	if s.resizeRole() != nodetypes.RoleMaster {
 		t.Error("resume must infer the role from the marker target name")
+	}
+}
+
+func TestParamsStepRebuildsFormWhenOpChanges(t *testing.T) {
+	// The step instance survives esc-back-and-repick; a cached form for a
+	// different op used to Apply through nil field pointers and panic.
+	st := &State{Cfg: config.DefaultConfig(), Op: node.OpAdd}
+	s := NewParamsStep(st)
+	_ = s.Init()
+	if s.countField == nil {
+		t.Fatal("add form must have a count field")
+	}
+
+	st.Op = node.OpRemove
+	_ = s.Init()
+	if s.drainModeField == nil || s.forceStorageField == nil {
+		t.Fatal("op change must rebuild the form for the new op")
+	}
+	if s.countField != nil {
+		t.Error("stale add fields must be cleared on rebuild")
+	}
+	if err := s.Apply(nil); err != nil { // used to nil-pointer panic
+		t.Fatalf("Apply after op change: %v", err)
+	}
+	if st.DrainTimeout != defaultDrainTimeout {
+		t.Errorf("DrainTimeout = %q, want the remove default", st.DrainTimeout)
 	}
 }
