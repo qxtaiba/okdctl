@@ -2,7 +2,9 @@
 # - PROXMOX_VE_ENDPOINT    (api url, e.g., https://pve.example.com:8006/)
 # - PROXMOX_VE_USERNAME    (username, e.g., root@pam)
 # - PROXMOX_VE_PASSWORD    (password)
-# - PROXMOX_VE_INSECURE  (DEV ONLY: disables TLS verification — never set in prod; use a CA-signed cert or add the proxmox CA to your trust store)
+# TLS verification is pinned on: the production environment sets insecure = false
+# (environments/production/versions.tf), which overrides PROXMOX_VE_INSECURE. A
+# self-signed PVE cert needs its CA in the host trust store, not an env-var bypass.
 
 
 # proxmox infrastructure variables
@@ -71,6 +73,16 @@ variable "minimum_data_disk_size_gb" {
   validation {
     condition     = var.minimum_data_disk_size_gb >= 0
     error_message = "minimum_data_disk_size_gb must be >= 0."
+  }
+}
+
+variable "minimum_os_disk_size_gb" {
+  description = "plan-time floor for os disk sizes: a plan that sets os_disk_size_gb, master_os_disk_size_gb, or worker_os_disk_size_gb below this fails at plan time instead of provisioning an undersized root disk (master os disks hold /var/lib/etcd); the per-resource 20..1000 range validation still applies independently"
+  type        = number
+  default     = 0
+  validation {
+    condition     = var.minimum_os_disk_size_gb >= 0
+    error_message = "minimum_os_disk_size_gb must be >= 0."
   }
 }
 
@@ -306,18 +318,6 @@ variable "start_workers_immediately" {
   description = "Start worker nodes immediately on creation (false to start after bootstrap)"
   type        = bool
   default     = false # Default to delayed start for reliability
-}
-
-# protect_masters is a documentation-only signal. Terraform requires
-# prevent_destroy to be a literal boolean, so it cannot be toggled via a
-# variable. The guard is hard-pinned to true in main.tf. To override for
-# an intentional destroy, see the comment above the master lifecycle block
-# in main.tf for the terraform state rm and override.tf procedures.
-# tflint-ignore: terraform_unused_declarations
-variable "protect_masters" {
-  description = "operator intent flag: production clusters should set true and apply prevent_destroy via an override module"
-  type        = bool
-  default     = false
 }
 
 variable "ha_enabled" {

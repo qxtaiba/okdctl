@@ -21,8 +21,10 @@
 # Requires: bash, curl, tar, sha256sum. Optionally: cosign (highly recommended).
 #
 # Supply-chain trust layers (in order):
-#   1. TLS to GitHub Releases — curl_safe enforces --proto =https and
-#      --tlsv1.2; a downgrade or MITM is rejected at the transport layer.
+#   1. TLS to GitHub Releases — curl_safe enforces --proto =https,
+#      --proto-redir =https, and --tlsv1.2; a downgrade or MITM is rejected
+#      at the transport layer on both the initial request and every redirect
+#      hop (GitHub releases always redirect to objects.githubusercontent.com).
 #   2. Cosign on SHA256SUMS — sigstore keyless signature ties SHA256SUMS to
 #      a specific GitHub Actions workflow run; a forged or substituted
 #      SHA256SUMS file fails certificate-identity verification.
@@ -44,9 +46,10 @@ green() { printf '\033[32m%s\033[0m\n' "$*"; }
 info()  { printf '  %s\n' "$*"; }
 die()   { red "error: $*"; exit 1; }
 
-# curl_safe wraps curl with hardened defaults: HTTPS-only, TLS 1.2 floor,
+# curl_safe wraps curl with hardened defaults: HTTPS-only (including on
+# redirects, which every GitHub release download follows), TLS 1.2 floor,
 # connect + transfer timeouts, and two retries on connection refusal.
-curl_safe() { curl --proto '=https' --tlsv1.2 --connect-timeout 10 --max-time 120 --retry 2 --retry-connrefused "$@"; }
+curl_safe() { curl --proto '=https' --proto-redir '=https' --tlsv1.2 --connect-timeout 10 --max-time 120 --retry 2 --retry-connrefused "$@"; }
 
 require() {
     command -v "$1" >/dev/null 2>&1 || die "$1 is required but not installed"
@@ -134,7 +137,11 @@ main() {
 
     # Download into a temporary directory that gets cleaned up on exit.
     TMP=$(mktemp -d 2>/dev/null || mktemp -d -t "$BINARY")
-    trap 'rm -rf "$TMP"' EXIT INT TERM
+    # EXIT does the single cleanup; INT/TERM exit deliberately with 130 (which
+    # re-triggers EXIT) rather than resuming past the interrupted command and
+    # relying on set -e to trip later with a misleading status.
+    trap 'rm -rf "$TMP"' EXIT
+    trap 'exit 130' INT TERM
 
     info "downloading $ARCHIVE_NAME"
     curl_safe -sSfL -o "$TMP/$ARCHIVE_NAME" "$ARCHIVE_URL" ||
@@ -188,9 +195,19 @@ main() {
     # Defense-in-depth: reject archives containing absolute paths or parent-traversal
     # entries before any bytes hit the filesystem. Goreleaser tarballs are flat, so
     # a match here means a tampered or malformed archive slipped past the sha256 check.
-    tar -tzf "$ARCHIVE_NAME" | grep -qE '(^|/)\.\.(/|$)|^/' && die "archive contains absolute or parent-traversal paths"
+    # Capture the listing first, then grep it as a here-string: piping tar | grep -q
+    # lets grep exit on the first match and SIGPIPE-kill tar (141), which under
+    # pipefail + set -e would skip die and fail open on exactly a malicious archive.
+    entries=$(tar -tzf "$ARCHIVE_NAME")
+    if grep -qE '(^|/)\.\.(/|$)|^/' <<<"$entries"; then
+        die "archive contains absolute or parent-traversal paths"
+    fi
     tar --no-same-owner --no-same-permissions --no-overwrite-dir -xzf "$ARCHIVE_NAME"
 
+    # -f follows symlinks, so a symlinked okdctl member (e.g. pointing at an
+    # absolute path) would pass the -f test and be copied through by install.
+    # The traversal grep above inspects member names only, never link targets.
+    [ ! -L "$BINARY" ] || die "$BINARY in archive is a symlink; refusing"
     [ -f "$BINARY" ] || die "$BINARY not found in archive"
 
     # Install. If the install dir is not writable by the current user, try sudo.
@@ -198,10 +215,17 @@ main() {
     # branch, dying with a raw coreutils error instead of this diagnostic.
     [ -d "$INSTALL_DIR" ] || die "INSTALL_DIR does not exist: $INSTALL_DIR"
     info "installing to $INSTALL_DIR/$BINARY"
+    # Stage to a temp name on the target filesystem, then atomically rename over
+    # the final path (mv -f is a same-filesystem rename). An interrupt or ENOSPC
+    # mid-write leaves the temp file, never a truncated okdctl on PATH; clean the
+    # temp on rename failure so a botched install does not litter $INSTALL_DIR.
+    TMP_BIN="$INSTALL_DIR/.$BINARY.tmp.$$"
     if [ -w "$INSTALL_DIR" ]; then
-        install -m 0755 "$BINARY" "$INSTALL_DIR/$BINARY"
+        install -m 0755 "$BINARY" "$TMP_BIN" || die "stage $TMP_BIN"
+        mv -f "$TMP_BIN" "$INSTALL_DIR/$BINARY" || { rm -f "$TMP_BIN"; die "install $INSTALL_DIR/$BINARY"; }
     elif command -v sudo >/dev/null 2>&1; then
-        sudo install -m 0755 "$BINARY" "$INSTALL_DIR/$BINARY"
+        sudo install -m 0755 "$BINARY" "$TMP_BIN" || die "stage $TMP_BIN"
+        sudo mv -f "$TMP_BIN" "$INSTALL_DIR/$BINARY" || { sudo rm -f "$TMP_BIN"; die "install $INSTALL_DIR/$BINARY"; }
     else
         die "$INSTALL_DIR is not writable and sudo is not available"
     fi

@@ -32,6 +32,15 @@ data "proxmox_version" "current" {
   }
 }
 
+# The for_each value dereferences the master VM resource, so every haresource
+# instance records a whole-resource dependency on every master (masters use
+# count, not for_each — no per-instance edge exists). A master-scoped
+# terraform destroy therefore cannot cleanly drop one master's HA membership:
+# it either fans the removal across all masters or orphans the vm:<id> CRM
+# entry, and neither shows in a scoped plan. prevent_destroy on the master
+# resource blocks that path until an operator applies the override escape
+# hatch (see main.tf). A clean per-instance edge needs masters migrated from
+# count to for_each — a state-address change tracked for audit-state-and-recovery.
 resource "proxmox_haresource" "master" {
   for_each = var.ha_enabled ? { for idx, name in local.masters : name => proxmox_virtual_environment_vm.master[idx].vm_id } : {}
 
