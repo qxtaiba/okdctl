@@ -256,7 +256,7 @@ func buildNodeRunner(cmd *cobra.Command, cfg *config.Config, verb string, consen
 	if err != nil {
 		return nil, err
 	}
-	rc, err := env.newRunner(cmd, cfg, verb, consent, tui.SimpleLogger())
+	rc, err := env.newRunner(cmd, cfg, verb, consent, tui.SimpleLogger(), nil)
 	if err != nil {
 		env.close()
 		return nil, err
@@ -270,9 +270,12 @@ func buildNodeRunner(cmd *cobra.Command, cfg *config.Config, verb string, consen
 // informed-confirmation hook (or the dry-run preview) from consent. log is
 // the sink for the runner AND its terraform/setup collaborators — the
 // manage flow passes a file-only logger because stderr belongs to the
-// AltScreen TUI while it runs. The returned cleanup releases the lock and
+// AltScreen TUI while it runs. subprocOut, when non-nil, additionally
+// redirects the setup executor's subprocess streams (node add's scp/ISO
+// tooling) away from the terminal for the same reason; nil keeps the
+// process streams (flag verbs). The returned cleanup releases the lock and
 // zeroizes the terraform env; the credentials stay owned by the nodeOpsEnv.
-func (e *nodeOpsEnv) newRunner(cmd *cobra.Command, cfg *config.Config, verb string, consent nodeConsent, log *slog.Logger) (*nodeRunnerCtx, error) {
+func (e *nodeOpsEnv) newRunner(cmd *cobra.Command, cfg *config.Config, verb string, consent nodeConsent, log *slog.Logger, subprocOut io.Writer) (*nodeRunnerCtx, error) {
 	ctx := cmd.Context()
 	creds := e.creds
 
@@ -306,7 +309,11 @@ func (e *nodeOpsEnv) newRunner(cmd *cobra.Command, cfg *config.Config, verb stri
 
 	// Wired unconditionally: construction is cheap (no I/O) and only node add
 	// dereferences ISO/Ignition/SetupOpts, so every other verb simply ignores them.
-	setupExec := executor.New(executor.WithWorkDir(e.projectRoot))
+	setupExecOpts := []executor.Option{executor.WithWorkDir(e.projectRoot)}
+	if subprocOut != nil {
+		setupExecOpts = append(setupExecOpts, executor.WithStdout(subprocOut), executor.WithStderr(subprocOut))
+	}
+	setupExec := executor.New(setupExecOpts...)
 	setupPhase := setup.New(phase.WithExecutor(setupExec), phase.WithLogger(log))
 	setupOpts := setup.NewOptions(cfg, e.projectRoot)
 	runner.ISO = setupPhase

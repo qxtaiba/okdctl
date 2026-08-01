@@ -162,6 +162,13 @@ func ConfigureLoggers(level, format string, stdoutW, stderrW io.Writer, progress
 	return nil
 }
 
+// DisableProgressBars turns off spinner/progress rendering for the rest
+// of the process — called before an AltScreen TUI takes the terminal, so
+// no line-owner render can corrupt the screen beneath it.
+func DisableProgressBars() {
+	progressBarsActive.Store(false)
+}
+
 // ProgressBarsEnabled reports whether progress bars should be rendered.
 // False when stdout is not a TTY or when JSON log format is active.
 func ProgressBarsEnabled() bool {

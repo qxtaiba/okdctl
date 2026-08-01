@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -50,6 +51,10 @@ func runNodeManage(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
+	// The wizard owns the terminal from here on; no line-owner spinner or
+	// download progress bar may render beneath the AltScreen.
+	tui.DisableProgressBars()
+
 	env, err := prepareNodeOpsEnv(ctx, cfg, true)
 	if err != nil {
 		return err
@@ -75,7 +80,7 @@ func runNodeManage(cmd *cobra.Command, _ []string) error {
 	hooks := lifecycle.Hooks{
 		ListNodes: func() ([]cluster.NodeDetail, error) { return cl.ListNodes(ctx) },
 		DryRun: func(s *lifecycle.State) (*node.OpPlan, error) {
-			rc, err := env.newRunner(cmd, cfg, "manage", nodeConsent{dryRun: true}, fileOnlySlog())
+			rc, err := env.newRunner(cmd, cfg, "manage", nodeConsent{dryRun: true}, fileOnlySlog(), subprocSink())
 			if err != nil {
 				return nil, err
 			}
@@ -95,6 +100,11 @@ func runNodeManage(cmd *cobra.Command, _ []string) error {
 
 	result, err := wizard.RunFlow(ctx, lifecycle.NewSteps(st, hooks), cfg, lifecycleChrome())
 	if err != nil {
+		// A tea failure mid-execution must still surface the resume marker,
+		// not read as a configuration problem.
+		if st.Started && !st.Executed {
+			return &errtypes.ClusterError{Msg: "execution was interrupted mid-operation; the op marker records the in-flight step — re-run 'okdctl node manage' (or the matching node verb) to resume", Err: err}
+		}
 		return &errtypes.ConfigError{Msg: "lifecycle wizard", Err: err}
 	}
 	return reportLifecycleOutcome(cmd, result, st)
@@ -127,7 +137,7 @@ func reportLifecycleOutcome(cmd *cobra.Command, result wizard.Result, st *lifecy
 // was granted on the preview/confirm screens, so the runner's ConfirmFunc
 // only cross-checks that the world still matches the approved plan.
 func executeLifecycleOp(opCtx context.Context, cmd *cobra.Command, cfg *config.Config, env *nodeOpsEnv, st *lifecycle.State, events chan<- lifecycle.ExecEvent) error {
-	rc, err := env.newRunner(cmd, cfg, "manage", nodeConsent{}, fileOnlySlog())
+	rc, err := env.newRunner(cmd, cfg, "manage", nodeConsent{}, fileOnlySlog(), subprocSink())
 	if err != nil {
 		return err
 	}
@@ -152,6 +162,16 @@ func executeLifecycleOp(opCtx context.Context, cmd *cobra.Command, cfg *config.C
 		return err
 	}
 	return nil
+}
+
+// subprocSink is where the setup executor's subprocess streams (scp, ISO
+// tooling) go while the wizard owns the terminal: the okdctl.log sink, or
+// discard when no sink opened.
+func subprocSink() io.Writer {
+	if runLogSink == nil {
+		return io.Discard
+	}
+	return runLogSink
 }
 
 // fileOnlySlog returns a redact-wrapped slog writing only to the okdctl.log
