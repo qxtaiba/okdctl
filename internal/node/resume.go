@@ -55,6 +55,21 @@ func shouldRunStep(step, from Step) bool {
 	return stepOrder[step] >= stepOrder[from]
 }
 
+// runStep gates one mutating step on the resume point, writes the step's marker
+// BEFORE running fn (the marker names the step ABOUT to run — resume semantics
+// depend on that ordering), then runs fn. A skipped step returns nil. fn owns
+// its own error wrapping and any work that must land inside the same gated slot
+// (e.g. a post-apply persist).
+func (r *Runner) runStep(op Op, target string, step, resumeStep Step, fn func() error) error {
+	if !shouldRunStep(step, resumeStep) {
+		return nil
+	}
+	if err := r.mark(op, target, step); err != nil {
+		return err
+	}
+	return fn()
+}
+
 // beginOp is the first call in every mutating op, ahead of guards, validation,
 // and the confirm gate. Every caller gates it on !DryRun, so its only
 // mutation — sweeping a completed add batch's leftover marker — never runs
@@ -70,7 +85,7 @@ func shouldRunStep(step, from Step) bool {
 //   - a foreign marker with ack true: warn and (nil, nil) — the op proceeds
 //     fresh and its first markStep overwrites the stale marker.
 func (r *Runner) beginOp(op Op, match opMatch, ack bool) (*OpMarker, error) {
-	marker, err := ReadOpMarker(r.WorkDir, r.Cfg.Cluster.Name)
+	marker, err := ReadOpMarker(r.workDir, r.Cfg.Cluster.Name)
 	if err != nil {
 		return nil, err
 	}
@@ -148,7 +163,7 @@ func strandedMarkerMsg(m *OpMarker) string {
 // any marker of their own. Callers gate on !DryRun, keeping that delete out
 // of the dry-run zero-mutation contract.
 func (r *Runner) refuseForeignMarker(ack bool, allowResumable ...Op) error {
-	marker, err := ReadOpMarker(r.WorkDir, r.Cfg.Cluster.Name)
+	marker, err := ReadOpMarker(r.workDir, r.Cfg.Cluster.Name)
 	if err != nil {
 		if !ack {
 			return err

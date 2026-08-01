@@ -94,7 +94,7 @@ func TestResizeMasterReplacePlanRefusedBeforeApply(t *testing.T) {
 	}
 	assertUnchanged(t, tfvars, "SENTINEL_TFVARS\n")
 	assertUnchanged(t, cfgPath, "SENTINEL_CONFIG\n")
-	if _, statErr := os.Stat(filepath.Join(r.WorkDir, OpMarkerFileName)); statErr != nil {
+	if _, statErr := os.Stat(filepath.Join(r.workDir, OpMarkerFileName)); statErr != nil {
 		t.Errorf("op marker must survive the refusal for resume: %v", statErr)
 	}
 }

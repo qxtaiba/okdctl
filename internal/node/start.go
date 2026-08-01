@@ -52,13 +52,8 @@ func (r *Runner) Start(ctx context.Context, opts StartOptions) error {
 		return nil
 	}
 
-	proceed, err := r.confirm(ctx, &plan)
-	if err != nil {
+	if err := r.confirmOrDecline(ctx, &plan, "node: cluster start cancelled", "cluster", r.Cfg.Cluster.Name); err != nil {
 		return err
-	}
-	if !proceed {
-		r.Log.Info("node: cluster start cancelled", "cluster", r.Cfg.Cluster.Name)
-		return ErrDeclined
 	}
 
 	r.Log.Info("node: starting cluster", "masters", cpCount, "workers", workerCount)

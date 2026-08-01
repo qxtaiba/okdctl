@@ -348,8 +348,8 @@ func seedRunner(t *testing.T, fc *fakeCluster, ftf *fakeTF, cfg *config.Config) 
 		TF:               ftf,
 		Cfg:              cfg,
 		ConfigPath:       cfgPath,
-		WorkDir:          dir,
-		EnvDir:           dir,
+		workDir:          dir,
+		envDir:           dir,
 		RunID:            "test-run",
 		DryRun:           true,
 		Log:              logutil.NopLogger,
@@ -403,7 +403,7 @@ func TestResizeDryRunMakesNoMutation(t *testing.T) {
 	}
 	assertUnchanged(t, tfvars, "SENTINEL_TFVARS\n")
 	assertUnchanged(t, cfgPath, "SENTINEL_CONFIG\n")
-	if _, err := os.Stat(filepath.Join(r.WorkDir, OpMarkerFileName)); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(r.workDir, OpMarkerFileName)); !os.IsNotExist(err) {
 		t.Error("dry-run resize wrote an op marker")
 	}
 }
@@ -717,7 +717,7 @@ func TestCompactDryRunPreviewsEveryWorkerAndMakesNoMutation(t *testing.T) {
 	}
 	assertUnchanged(t, tfvars, "SENTINEL_TFVARS\n")
 	assertUnchanged(t, cfgPath, "SENTINEL_CONFIG\n")
-	if _, err := os.Stat(filepath.Join(r.WorkDir, OpMarkerFileName)); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(r.workDir, OpMarkerFileName)); !os.IsNotExist(err) {
 		t.Error("dry-run compact wrote an op marker")
 	}
 }
@@ -747,8 +747,8 @@ func TestCompactDryRunAgainstDegradedEtcdStillPreviews(t *testing.T) {
 		TF:              ftf,
 		Cfg:             cfg,
 		ConfigPath:      filepath.Join(dir, "okdctl.yaml"),
-		WorkDir:         dir,
-		EnvDir:          dir,
+		workDir:         dir,
+		envDir:          dir,
 		RunID:           "test-run",
 		DryRun:          true,
 		EtcdGateTimeout: DefaultEtcdGateTimeout,

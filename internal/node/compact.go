@@ -116,13 +116,8 @@ func (r *Runner) Compact(ctx context.Context, opts CompactOptions) error {
 		return pf.blockErr
 	}
 
-	proceed, err := r.confirm(ctx, &plan)
-	if err != nil {
+	if err := r.confirmOrDecline(ctx, &plan, "node: compact cancelled", "cluster", r.Cfg.Cluster.Name); err != nil {
 		return err
-	}
-	if !proceed {
-		r.Log.Info("node: compact cancelled", "cluster", r.Cfg.Cluster.Name)
-		return ErrDeclined
 	}
 
 	// The inner RemoveWorker/Resize calls run under the consent granted above;

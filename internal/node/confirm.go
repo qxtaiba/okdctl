@@ -85,3 +85,20 @@ func (r *Runner) preview(plan *OpPlan) {
 		r.Preview(plan)
 	}
 }
+
+// confirmOrDecline runs the consent gate and, on a decline, logs cancelMsg with
+// kv and returns ErrDeclined so a composing caller can never mistake a decline
+// for success. A confirm error propagates; consent (or a suppressed gate)
+// returns nil. Callers keep their own dry-run/resume guards around this call —
+// those differ per op and are part of each op's resume contract.
+func (r *Runner) confirmOrDecline(ctx context.Context, plan *OpPlan, cancelMsg string, kv ...any) error {
+	proceed, err := r.confirm(ctx, plan)
+	if err != nil {
+		return err
+	}
+	if !proceed {
+		r.Log.Info(cancelMsg, kv...)
+		return ErrDeclined
+	}
+	return nil
+}

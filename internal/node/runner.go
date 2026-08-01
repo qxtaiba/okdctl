@@ -2,6 +2,7 @@ package node
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"maps"
@@ -85,27 +86,27 @@ type snapshotClient interface {
 // call straight through to package hostssh's pvesh primitives.
 type HostsshSnapshotClient struct{}
 
-// CreateSnapshot forwards to hostssh.CreateSnapshot.
+// CreateSnapshot implements snapshotClient via hostssh.CreateSnapshot.
 func (HostsshSnapshotClient) CreateSnapshot(ctx context.Context, p *hostssh.RemoteISOParams, vmid int, name, description string, timeout time.Duration) error {
 	return hostssh.CreateSnapshot(ctx, p, vmid, name, description, timeout)
 }
 
-// ListSnapshots forwards to hostssh.ListSnapshots.
+// ListSnapshots implements snapshotClient via hostssh.ListSnapshots.
 func (HostsshSnapshotClient) ListSnapshots(ctx context.Context, p *hostssh.RemoteISOParams, vmid int) ([]hostssh.SnapshotInfo, error) {
 	return hostssh.ListSnapshots(ctx, p, vmid)
 }
 
-// RollbackSnapshot forwards to hostssh.RollbackSnapshot.
+// RollbackSnapshot implements snapshotClient via hostssh.RollbackSnapshot.
 func (HostsshSnapshotClient) RollbackSnapshot(ctx context.Context, p *hostssh.RemoteISOParams, vmid int, name string, timeout time.Duration) error {
 	return hostssh.RollbackSnapshot(ctx, p, vmid, name, timeout)
 }
 
-// DeleteSnapshot forwards to hostssh.DeleteSnapshot.
+// DeleteSnapshot implements snapshotClient via hostssh.DeleteSnapshot.
 func (HostsshSnapshotClient) DeleteSnapshot(ctx context.Context, p *hostssh.RemoteISOParams, vmid int, name string, timeout time.Duration) error {
 	return hostssh.DeleteSnapshot(ctx, p, vmid, name, timeout)
 }
 
-// VMAgentEnabled forwards to hostssh.VMAgentEnabled.
+// VMAgentEnabled implements snapshotClient via hostssh.VMAgentEnabled.
 func (HostsshSnapshotClient) VMAgentEnabled(ctx context.Context, p *hostssh.RemoteISOParams, vmid int) (bool, error) {
 	return hostssh.VMAgentEnabled(ctx, p, vmid)
 }
@@ -144,16 +145,19 @@ type ignitionServer interface {
 }
 
 // Runner drives node-lifecycle ops against one cluster. TF mutates VMs;
-// Cluster runs the Kubernetes lifecycle. ConfigPath and EnvDir are persisted
-// on each op so a later full deploy reconciles to the same topology.
+// Cluster runs the Kubernetes lifecycle. ConfigPath and the derived env
+// directory are persisted on each op so a later full deploy reconciles to the
+// same topology. projectRoot/workDir/envDir are unexported so the derived-path
+// invariant NewRunner establishes (workDir/envDir derive from projectRoot)
+// cannot be skewed by a post-construction field assignment.
 type Runner struct {
 	Cluster     clusterClient
 	TF          terraformExec
 	Cfg         *config.Config
 	ConfigPath  string
-	ProjectRoot string
-	WorkDir     string
-	EnvDir      string
+	projectRoot string
+	workDir     string
+	envDir      string
 	RunID       string
 	DryRun      bool
 	Log         *slog.Logger
@@ -178,7 +182,7 @@ type Runner struct {
 
 	// ISO and Ignition drive node add's ISO build/upload and ignition-server
 	// revive (node add only; zero/nil for every other op). Provision carries
-	// the WorkDir/ProjectRoot roots those calls resolve artifacts from.
+	// the workDir/projectRoot roots those calls resolve artifacts from.
 	ISO       isoProvisioner
 	Ignition  ignitionServer
 	Provision provision.Options
@@ -206,7 +210,7 @@ type Runner struct {
 	ClusterReadyTimeout time.Duration
 
 	// tfEnv is the terraform environment name captured by WithTerraformEnv;
-	// NewRunner resolves it against ProjectRoot into EnvDir after all
+	// NewRunner resolves it against projectRoot into envDir after all
 	// options have applied, so option ordering does not matter.
 	tfEnv string
 }
@@ -218,7 +222,7 @@ type RunnerOption func(*Runner)
 // WithProjectRoot sets the project root the work and terraform env
 // directories derive from.
 func WithProjectRoot(root string) RunnerOption {
-	return func(r *Runner) { r.ProjectRoot = root }
+	return func(r *Runner) { r.projectRoot = root }
 }
 
 // WithConfigPath sets the okdctl.yaml path each op persists topology to.
@@ -262,12 +266,12 @@ func NewRunner(cl *cluster.Client, tf *terraform.Executor, cfg *config.Config, o
 		opt(r)
 	}
 	r.Log = logutil.OrNop(r.Log)
-	r.WorkDir = workspace.WorkDir(r.ProjectRoot)
-	r.EnvDir = workspace.TerraformEnvDir(r.ProjectRoot, r.tfEnv)
+	r.workDir = workspace.WorkDir(r.projectRoot)
+	r.envDir = workspace.TerraformEnvDir(r.projectRoot, r.tfEnv)
 	return r
 }
 
-func (r *Runner) marker() string { return markerPath(r.WorkDir) }
+func (r *Runner) marker() string { return markerPath(r.workDir) }
 
 // mark notifies OnStep and writes the op marker for a mutating step.
 func (r *Runner) mark(op Op, target string, step Step) error {
@@ -292,16 +296,22 @@ func (r *Runner) startProgress(desc string) (stop func()) {
 	return r.Reporter(desc)
 }
 
-// persistTopology re-renders terraform.tfvars from the mutated config and saves
-// okdctl.yaml, so the reduced/resized topology survives into the next full
-// deploy. WriteTerraformVars preserves the bootstrap sentinel (unlike deploy's
-// GenerateTerraformVars) so a re-render cannot resurrect the bootstrap VM.
+// persistTopology saves okdctl.yaml (the authoritative topology) BEFORE
+// re-rendering terraform.tfvars (the derived artifact). The order is an
+// invariant, not an accident: a crash between the two writes must leave config
+// ahead of tfvars, because the next deploy or node op re-renders tfvars from
+// config and converges. The reverse order would leave tfvars at the new
+// topology over a stale config, and the next unscoped auto-approved apply would
+// revert the just-persisted change (deleting an added worker, undoing a resize)
+// with no gate. WriteTerraformVars preserves the bootstrap sentinel (unlike
+// deploy's GenerateTerraformVars) so a re-render cannot resurrect the bootstrap
+// VM.
 func (r *Runner) persistTopology() error {
-	if err := provision.WriteTerraformVars(r.Cfg, r.EnvDir); err != nil {
-		return fmt.Errorf("render terraform vars: %w", err)
-	}
 	if err := config.NewLoader().Save(r.Cfg, r.ConfigPath); err != nil {
 		return fmt.Errorf("save config: %w", err)
+	}
+	if err := provision.WriteTerraformVars(r.Cfg, r.envDir); err != nil {
+		return fmt.Errorf("render terraform vars: %w", err)
 	}
 	return nil
 }
@@ -349,7 +359,7 @@ func (r *Runner) planTargeted(ctx context.Context, address string, want terrafor
 	}
 
 	planFile := "node-op.tfplan"
-	planPath = filepath.Join(r.EnvDir, planFile)
+	planPath = filepath.Join(r.envDir, planFile)
 	cleanup = func() {
 		if rmErr := system.SafeRemove(planPath); rmErr != nil {
 			r.Log.Warn("node: plan file cleanup failed", "err", rmErr)
@@ -412,15 +422,15 @@ func (r *Runner) targetedApply(ctx context.Context, address string, want terrafo
 			// lost/mismatched state file produces — in which case the VM still
 			// exists and reporting a quiet success would strand it unmanaged.
 			r.Log.Warn("node: terraform state has no record of this resource — treating it as already destroyed; if the vm still exists in proxmox, the workspace state is wrong and this result must not be trusted",
-				"address", address)
+				"tf_address", address)
 		} else {
-			r.Log.Info("node: already at target — skipping apply", "address", address, "action", string(want))
+			r.Log.Info("node: already at target — skipping apply", "tf_address", address, "action", string(want))
 		}
 		return nil
 	}
 
 	if r.DryRun {
-		r.Log.Info("node: dry-run — plan gate passed, skipping apply", "address", address, "action", string(want))
+		r.Log.Info("node: dry-run — plan gate passed, skipping apply", "tf_address", address, "action", string(want))
 		return nil
 	}
 
@@ -445,23 +455,40 @@ func (r *Runner) waitEtcdHealthy(ctx context.Context, phase string) error {
 	stop := r.startProgress(fmt.Sprintf("waiting for etcd health (%s)", phase))
 	defer stop()
 
-	var lastReason string
+	// lastReason holds the structural h.Reason (okdctl-authored, safe for Msg);
+	// lastErr holds the probe error itself so its identity stays in the Unwrap
+	// chain rather than being stringified into Msg.
+	var (
+		lastReason string
+		lastErr    error
+	)
 	ok := func(ctx context.Context) bool {
 		h, err := r.Cluster.EtcdHealthy(ctx)
 		if err != nil {
-			lastReason = err.Error()
+			lastErr = err
 			return false
 		}
 		if !h.Healthy {
-			lastReason = h.Reason
+			lastReason, lastErr = h.Reason, nil
 			return false
 		}
 		return true
 	}
 	if err := system.WaitForWithTimeout(ctx, "etcd", phase, ok, r.EtcdGateTimeout, r.Log); err != nil {
-		return &errtypes.ClusterError{Msg: fmt.Sprintf("etcd health gate (%s) failed: %s", phase, lastReason), Err: err}
+		return &errtypes.ClusterError{Msg: healthGateMsg("etcd", phase, lastReason), Err: errors.Join(err, lastErr)}
 	}
 	return nil
+}
+
+// healthGateMsg renders a health-gate failure message from okdctl-authored
+// text only: the structural reason is appended when present, and the probe
+// error (if any) rides the ClusterError.Err chain rather than the message.
+func healthGateMsg(subsystem, phase, reason string) string {
+	msg := fmt.Sprintf("%s health gate (%s) failed", subsystem, phase)
+	if reason != "" {
+		msg += ": " + reason
+	}
+	return msg
 }
 
 // vmTarget resolves the Proxmox node name and QEMU vmid for a role/index
@@ -521,12 +548,15 @@ func (r *Runner) powerCycleVM(ctx context.Context, role nodetypes.NodeRole, inde
 func (r *Runner) waitCephHealthy(ctx context.Context, phase string) error {
 	stop := r.startProgress("waiting for ceph health (" + phase + ")")
 	defer stop()
-	var lastReason string
+	var (
+		lastReason string
+		lastErr    error
+	)
 	notApplicable := false
 	ok := func(ctx context.Context) bool {
 		h, err := r.Cluster.CephHealthy(ctx)
 		if err != nil {
-			lastReason = err.Error()
+			lastErr = err
 			return false
 		}
 		if !h.Applicable {
@@ -534,13 +564,13 @@ func (r *Runner) waitCephHealthy(ctx context.Context, phase string) error {
 			return true
 		}
 		if !h.Healthy {
-			lastReason = h.Reason
+			lastReason, lastErr = h.Reason, nil
 			return false
 		}
 		return true
 	}
 	if err := system.WaitForWithTimeout(ctx, "ceph", phase, ok, r.CephGateTimeout, r.Log); err != nil {
-		return &errtypes.ClusterError{Msg: fmt.Sprintf("ceph health gate (%s) failed: %s", phase, lastReason), Err: err}
+		return &errtypes.ClusterError{Msg: healthGateMsg("ceph", phase, lastReason), Err: errors.Join(err, lastErr)}
 	}
 	if notApplicable {
 		r.Log.Debug("node: rook-ceph not present; ceph gate skipped", "phase", phase)

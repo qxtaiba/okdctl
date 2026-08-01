@@ -43,14 +43,14 @@ type AddOptions struct {
 // by ReviveIgnitionServer's re-deploy, not checked here. A `cleanup full`
 // run is already caught by node ops' upstream missing-kubeconfig guard.
 func (r *Runner) preflightIgnitionArtifacts() error {
-	ignPath := filepath.Join(workspace.ClusterConfigDir(r.WorkDir), "worker.ign")
+	ignPath := filepath.Join(workspace.ClusterConfigDir(r.workDir), "worker.ign")
 	if !system.FileExists(ignPath) {
 		return &errtypes.ConfigError{Msg: fmt.Sprintf(
 			"worker.ign not found at %s; re-run setup (e.g. 'okdctl deploy') to regenerate it before adding a node", ignPath,
 		)}
 	}
 
-	certPath, _ := provision.IgnitionCertPaths(r.ProjectRoot)
+	certPath, _ := provision.IgnitionCertPaths(r.projectRoot)
 	if !system.FileExists(certPath) {
 		return &errtypes.ConfigError{Msg: fmt.Sprintf(
 			"ignition tls cert not found at %s; re-run setup (e.g. 'okdctl deploy') to regenerate it before adding a node", certPath,
@@ -181,13 +181,8 @@ func (r *Runner) AddWorkers(ctx context.Context, opts AddOptions) error {
 	}
 
 	if !resuming {
-		proceed, err := r.confirm(ctx, &plan)
-		if err != nil {
+		if err := r.confirmOrDecline(ctx, &plan, "node: add cancelled", "count", opts.Count); err != nil {
 			return err
-		}
-		if !proceed {
-			r.Log.Info("node: add cancelled", "count", opts.Count)
-			return ErrDeclined
 		}
 	}
 
@@ -218,7 +213,7 @@ func (r *Runner) AddWorkers(ctx context.Context, opts AddOptions) error {
 				"err", terr)
 		}
 	}()
-	if err := r.Ignition.ReviveIgnitionServer(ctx, r.Cfg, r.ProjectRoot, workspace.ClusterConfigDir(r.WorkDir)); err != nil {
+	if err := r.Ignition.ReviveIgnitionServer(ctx, r.Cfg, r.projectRoot, workspace.ClusterConfigDir(r.workDir)); err != nil {
 		return &errtypes.ClusterError{Msg: "revive ignition server", Err: err}
 	}
 
@@ -294,37 +289,31 @@ func (r *Runner) addOneWorker(ctx context.Context, idx int, marker *OpMarker) er
 	}
 	resuming := marker != nil
 
-	if shouldRunStep(StepBuildISO, resumeStep) {
-		if err := r.mark(OpAdd, name, StepBuildISO); err != nil {
-			return err
-		}
+	if err := r.runStep(OpAdd, name, StepBuildISO, resumeStep, func() error {
 		if err := r.ISO.BuildCustomISOs(ctx, r.Cfg, r.Provision); err != nil {
 			return &errtypes.ClusterError{Msg: fmt.Sprintf("build iso for %s", name), Err: err}
 		}
+		return nil
+	}); err != nil {
+		return err
 	}
-	if shouldRunStep(StepUploadISO, resumeStep) {
-		if err := r.mark(OpAdd, name, StepUploadISO); err != nil {
-			return err
-		}
+	if err := r.runStep(OpAdd, name, StepUploadISO, resumeStep, func() error {
 		if err := r.ISO.UploadCustomISOsToProxmox(ctx, r.Cfg, r.Provision); err != nil {
 			return &errtypes.ClusterError{Msg: fmt.Sprintf("upload iso for %s", name), Err: err}
 		}
+		return nil
+	}); err != nil {
+		return err
 	}
-	if shouldRunStep(StepTFApply, resumeStep) {
-		if err := r.mark(OpAdd, name, StepTFApply); err != nil {
-			return err
-		}
-		if err := r.targetedApply(ctx, workerAddress(idx), terraform.PlanActionCreate, planVars, resuming); err != nil {
-			return err
-		}
+	if err := r.runStep(OpAdd, name, StepTFApply, resumeStep, func() error {
+		return r.targetedApply(ctx, workerAddress(idx), terraform.PlanActionCreate, planVars, resuming)
+	}); err != nil {
+		return err
 	}
-	if shouldRunStep(StepWaitJoin, resumeStep) {
-		if err := r.mark(OpAdd, name, StepWaitJoin); err != nil {
-			return err
-		}
-		if err := r.waitWorkerJoined(ctx, name); err != nil {
-			return err
-		}
+	if err := r.runStep(OpAdd, name, StepWaitJoin, resumeStep, func() error {
+		return r.waitWorkerJoined(ctx, name)
+	}); err != nil {
+		return err
 	}
 	r.Log.Info("node: worker added", "node", name)
 	return nil

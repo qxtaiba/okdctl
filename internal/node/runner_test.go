@@ -82,11 +82,11 @@ func TestNewRunner_OptionsDeriveDirsAndDefaults(t *testing.T) {
 		WithRunID("run-42"),
 	)
 
-	if r.WorkDir != workspace.WorkDir(projRoot) {
-		t.Errorf("WorkDir = %q; want derived from project root", r.WorkDir)
+	if r.workDir != workspace.WorkDir(projRoot) {
+		t.Errorf("workDir = %q; want derived from project root", r.workDir)
 	}
-	if r.EnvDir != workspace.TerraformEnvDir(projRoot, "production") {
-		t.Errorf("EnvDir = %q; want derived from project root + tf env", r.EnvDir)
+	if r.envDir != workspace.TerraformEnvDir(projRoot, "production") {
+		t.Errorf("envDir = %q; want derived from project root + tf env", r.envDir)
 	}
 	if r.ConfigPath != configPath || r.RunID != "run-42" {
 		t.Errorf("ConfigPath/RunID = %q/%q; want option values", r.ConfigPath, r.RunID)

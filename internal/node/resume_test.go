@@ -45,7 +45,7 @@ func TestShouldRunStepResumesAtAndAfter(t *testing.T) {
 	}
 }
 
-// seedMarker writes an op marker under r.WorkDir so beginOp reads it.
+// seedMarker writes an op marker under r.workDir so beginOp reads it.
 func seedMarker(t *testing.T, r *Runner, op Op, target string, step Step) {
 	t.Helper()
 	if err := markStep(r.marker(), op, target, step, r.RunID, r.Cfg.Cluster.Name); err != nil {
@@ -202,7 +202,7 @@ func TestSweepCompletedAddMarker(t *testing.T) {
 	if err != nil || marker != nil {
 		t.Fatalf("completed-add residue must be swept, not refused: marker=%v err=%v", marker, err)
 	}
-	if m, rerr := ReadOpMarker(r.WorkDir, r.Cfg.Cluster.Name); rerr != nil || m != nil {
+	if m, rerr := ReadOpMarker(r.workDir, r.Cfg.Cluster.Name); rerr != nil || m != nil {
 		t.Fatalf("residue marker must be cleared from disk: marker=%+v err=%v", m, rerr)
 	}
 

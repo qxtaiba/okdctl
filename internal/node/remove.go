@@ -102,13 +102,8 @@ func (r *Runner) RemoveWorker(ctx context.Context, target string, opts RemoveOpt
 	}
 
 	if !resuming {
-		proceed, err := r.confirm(ctx, &plan)
-		if err != nil {
+		if err := r.confirmOrDecline(ctx, &plan, "node: remove cancelled", "node", target); err != nil {
 			return err
-		}
-		if !proceed {
-			r.Log.Info("node: remove cancelled", "node", target)
-			return ErrDeclined
 		}
 	}
 
@@ -120,10 +115,7 @@ func (r *Runner) RemoveWorker(ctx context.Context, target string, opts RemoveOpt
 		}
 	}
 
-	if shouldRunStep(StepTFApply, resumeStep) {
-		if err := r.mark(OpRemove, target, StepTFApply); err != nil {
-			return err
-		}
+	if err := r.runStep(OpRemove, target, StepTFApply, resumeStep, func() error {
 		if err := r.targetedApply(ctx, workerAddress(idx), terraform.PlanActionDelete, countVars, resuming); err != nil {
 			return err
 		}
@@ -139,15 +131,15 @@ func (r *Runner) RemoveWorker(ctx context.Context, target string, opts RemoveOpt
 		if err := r.persistTopology(); err != nil {
 			return &errtypes.ClusterError{Msg: msgPersistTopology, Err: err}
 		}
+		return nil
+	}); err != nil {
+		return err
 	}
 
-	if shouldRunStep(StepDeleteK8s, resumeStep) {
-		if err := r.mark(OpRemove, target, StepDeleteK8s); err != nil {
-			return err
-		}
-		if err := r.Cluster.DeleteNode(ctx, target); err != nil {
-			return err
-		}
+	if err := r.runStep(OpRemove, target, StepDeleteK8s, resumeStep, func() error {
+		return r.Cluster.DeleteNode(ctx, target)
+	}); err != nil {
+		return err
 	}
 
 	// If the removed worker held OSDs (--force-storage / compaction), destroying
@@ -176,18 +168,12 @@ func (r *Runner) cordonAndDrain(ctx context.Context, op Op, node, timeout string
 	stop := r.startProgress(fmt.Sprintf("cordoning and draining %s", node))
 	defer stop()
 
-	if shouldRunStep(StepCordon, resumeStep) {
-		if err := r.mark(op, node, StepCordon); err != nil {
-			return err
-		}
-		if err := r.Cluster.Cordon(ctx, node); err != nil {
-			return err
-		}
+	if err := r.runStep(op, node, StepCordon, resumeStep, func() error {
+		return r.Cluster.Cordon(ctx, node)
+	}); err != nil {
+		return err
 	}
-	if shouldRunStep(StepDrain, resumeStep) {
-		if err := r.mark(op, node, StepDrain); err != nil {
-			return err
-		}
+	return r.runStep(op, node, StepDrain, resumeStep, func() error {
 		if err := r.Cluster.Drain(ctx, node, cluster.DrainOptions{
 			IgnoreDaemonsets: true,
 			DeleteEmptyDir:   true,
@@ -204,8 +190,8 @@ func (r *Runner) cordonAndDrain(ctx context.Context, op Op, node, timeout string
 			}
 			return &errtypes.ClusterError{Msg: fmt.Sprintf("drain %s (node left cordoned; %s)", node, retry), Err: err}
 		}
-	}
-	return nil
+		return nil
+	})
 }
 
 // removeGuards runs the read-only storage and ingress guards for a worker
