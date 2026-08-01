@@ -9,6 +9,9 @@ on:
       - .goreleaser.yaml
       - .github/workflows/release.yml
       - .github/workflows/release-prep.yml
+      # install.sh reconstructs the archive name by hand from
+      # archives.name_template — dry-run the snapshot when it changes.
+      - scripts/install.sh
 # Cancel redundant runs when a PR is force-pushed or amended.
 concurrency:
   group: release-prep-${{ github.ref }}
@@ -35,3 +38,16 @@ jobs:
           args: release --snapshot --clean --skip=publish,sign
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # Assert dist/ contains the exact archive-name shape install.sh
+      # reconstructs (okdctl_<version>_linux_<arch>.tar.gz), converting the
+      # comment-enforced coupling into a gate.
+      - name: assert archive names match install.sh
+        run: |
+          set -euo pipefail
+          for arch in amd64 arm64; do
+            match=$(find dist -maxdepth 1 -name "okdctl_*_linux_${arch}.tar.gz" | head -1)
+            if [ -z "$match" ]; then
+              echo "no okdctl_*_linux_${arch}.tar.gz in dist/ — install.sh reconstructs this name from archives.name_template" >&2
+              exit 1
+            fi
+          done

@@ -8,6 +8,11 @@ on:
   schedule:
     - cron: '0 13 * * 1' # Monday 13:00 UTC
   workflow_dispatch:
+# Serialise the cron run against a same-day workflow_dispatch. Never cancel a
+# run mid-push — that could leave a pushed branch without its PR.
+concurrency:
+  group: update-coreos-pins
+  cancel-in-progress: false
 permissions:
   contents: write
   pull-requests: write
@@ -16,8 +21,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
       - name: Refresh coreos pins
         run: scripts/update-coreos-pins.sh
+      # GITHUB_TOKEN-authored PRs do not trigger ci.yml, so gate the regex
+      # rewrite here before the PR is opened.
+      - name: Validate regenerated source
+        run: |
+          if [ -n "$(gofmt -l internal/distribution/okd/provision/coreos.go)" ]; then
+            echo "coreos.go is not gofmt-clean after refresh" >&2
+            exit 1
+          fi
+          go build ./...
+          go vet ./...
       - name: Open PR if pins drifted
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -26,7 +44,7 @@ jobs:
             echo "no pin drift; nothing to open"
             exit 0
           fi
-          BRANCH="bot/coreos-pins-$(date -u +%Y%m%d)"
+          BRANCH="bot/coreos-pins-$(date -u +%Y%m%d)-${GITHUB_RUN_ID}"
           git config user.name "okdctl-bot"
           git config user.email "okdctl-bot@users.noreply.github.com"
           git checkout -b "$BRANCH"

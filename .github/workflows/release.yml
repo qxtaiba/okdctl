@@ -36,7 +36,7 @@ jobs:
           subject-path: |
             dist/okdctl_*.tar.gz
             dist/okdctl_*.deb
-            dist/okdctl_*.rpm
+            dist/*.rpm
             dist/SHA256SUMS
       # Compute base64-encoded subject hashes for SLSA provenance from
       # goreleaser's artifacts.json. Pattern adapted from anchore/syft and
@@ -66,4 +66,7 @@ jobs:
     uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@f7dd8c54c2067bafc12ca7a55595d5ee9b75204a # v2.1.0
     with:
       base64-subjects: "${{ needs.release.outputs.hashes }}"
+      # Pin the asset name so it matches the README-documented provenance file;
+      # the generator's default (multiple.intoto.jsonl) would drift from it.
+      provenance-name: okdctl.intoto.jsonl
       upload-assets: true

@@ -43,6 +43,8 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
+      - name: verify go.mod/go.sum are tidy
+        run: go mod tidy -diff
       - run: go test -coverprofile=coverage.out ./...
       - run: go tool cover -func=coverage.out | tail -1
       - run: chmod +x .github/scripts/coverage-check.sh
@@ -100,8 +102,10 @@ jobs:
           # renovate: datasource=github-releases depName=hashicorp/terraform
           terraform_version: "1.15.8"
       - run: terraform fmt -check -recursive infrastructure/terraform
-      - working-directory: infrastructure/terraform/modules/proxmox-okd
-        run: terraform init -backend=false && terraform validate
+      # The production env validates the module transitively via
+      # source = ../../modules/proxmox-okd, exercising the committed lock file.
+      # A standalone module init would resolve bpg/proxmox unpinned (module
+      # dirs carry no lock), so it is deliberately omitted.
       - working-directory: infrastructure/terraform/environments/production
         run: terraform init -backend=false && terraform validate
   lint-terraform:
@@ -137,6 +141,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: ludeeus/action-shellcheck@00cae500b08a931fb5698e11e79bfbd38e612a38 # 2.0.0
-        with:
-          severity: warning
+      - name: install shellcheck
+        env:
+          # renovate: datasource=github-releases depName=koalaman/shellcheck
+          SHELLCHECK_VERSION: v0.11.0
+        run: |
+          set -euo pipefail
+          curl -sSfL "https://github.com/koalaman/shellcheck/releases/download/${SHELLCHECK_VERSION}/shellcheck-${SHELLCHECK_VERSION}.linux.x86_64.tar.xz" | tar -xJ
+          sudo install "shellcheck-${SHELLCHECK_VERSION}/shellcheck" /usr/local/bin/shellcheck
+          shellcheck --version
+      - run: git ls-files '*.sh' | xargs shellcheck --severity=warning
