@@ -77,9 +77,10 @@ func resolveProvider(settings map[string]string) (impl provider, kind providerKi
 // ESO SecretStore manifest field keys, repeated across the provider builders.
 // Kept as constants so goconst stays quiet; they are k8s manifest field names.
 const (
-	mfName = "name"
-	mfAuth = "auth"
-	mfKey  = "key"
+	mfName     = "name"
+	mfAuth     = "auth"
+	mfKey      = "key"
+	mfTokenVal = "token"
 )
 
 const (
@@ -231,7 +232,7 @@ func buildOPSecretStoreCRD(connectHost string, vaults map[string]int) (string, e
 				"secretRef": map[string]any{
 					"connectTokenSecretRef": map[string]any{
 						mfName: opTokenSecretName,
-						mfKey:  "token",
+						mfKey:  mfTokenVal,
 					},
 				},
 			},
@@ -280,7 +281,7 @@ func buildVaultSecretStoreCRD(server, path, version string) (string, error) {
 			mfAuth: map[string]any{
 				"tokenSecretRef": map[string]any{
 					mfName: vaultTokenSecretName,
-					mfKey:  "token",
+					mfKey:  mfTokenVal,
 				},
 			},
 		},
@@ -348,7 +349,7 @@ func buildBitwardenSecretStoreCRD(apiURL, identityURL, sdkServerURL, orgID, proj
 				"secretRef": map[string]any{
 					"credentials": map[string]any{
 						mfName: bitwardenTokenSecretName,
-						mfKey:  "token",
+						mfKey:  mfTokenVal,
 					},
 				},
 			},

@@ -183,3 +183,62 @@ func TestWithHintUniformAcrossCategories(t *testing.T) {
 		})
 	}
 }
+
+func TestKindLabelAndExitCode(t *testing.T) {
+	cases := []struct {
+		kind     errtypes.Kind
+		label    string
+		exitCode int
+	}{
+		{errtypes.KindUnknown, "error", 1},
+		{errtypes.KindConfig, "config error", 2},
+		{errtypes.KindNetwork, "network error", 3},
+		{errtypes.KindCluster, "cluster error", 4},
+		{errtypes.KindAuth, "auth error", 5},
+		{errtypes.KindUsage, "usage error", 64},
+	}
+	for _, tc := range cases {
+		if got := tc.kind.Label(); got != tc.label {
+			t.Errorf("Kind(%d).Label() = %q, want %q", tc.kind, got, tc.label)
+		}
+		if got := tc.kind.ExitCode(); got != tc.exitCode {
+			t.Errorf("Kind(%d).ExitCode() = %d, want %d", tc.kind, got, tc.exitCode)
+		}
+	}
+}
+
+func TestClassifyAndDescribe(t *testing.T) {
+	cases := []struct {
+		name string
+		err  error
+		kind errtypes.Kind
+		ok   bool
+	}{
+		{"config", &errtypes.ConfigError{Msg: "bad config"}, errtypes.KindConfig, true},
+		{"network", &errtypes.NetworkError{Msg: "unreachable"}, errtypes.KindNetwork, true},
+		{"cluster", &errtypes.ClusterError{Msg: "degraded"}, errtypes.KindCluster, true},
+		{"auth", &errtypes.AuthError{Msg: "denied"}, errtypes.KindAuth, true},
+		{"usage", &errtypes.UsageError{Msg: "bad flag"}, errtypes.KindUsage, true},
+		{"unknown", errors.New("plain"), errtypes.KindUnknown, false},
+		{"nil", nil, errtypes.KindUnknown, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			k, ok := errtypes.Classify(tc.err)
+			if k != tc.kind || ok != tc.ok {
+				t.Errorf("Classify() = (%d, %v), want (%d, %v)", k, ok, tc.kind, tc.ok)
+			}
+			d, dok := errtypes.Describe(tc.err)
+			if dok != tc.ok || d.Kind != tc.kind {
+				t.Errorf("Describe() = (%+v, %v), want kind %d ok %v", d, dok, tc.kind, tc.ok)
+			}
+		})
+	}
+}
+
+func TestAuthErrorDescribeIncludesPath(t *testing.T) {
+	d, ok := errtypes.Describe(&errtypes.AuthError{Msg: "refused", Path: "/etc/x"})
+	if !ok || !strings.Contains(d.Message, "/etc/x") {
+		t.Errorf("Describe(AuthError with Path) message = %q, want it to include the path", d.Message)
+	}
+}
