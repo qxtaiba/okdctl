@@ -9,8 +9,7 @@ import "path/filepath"
 
 // WorkDirName is the per-project workdir okdctl creates under the project
 // root for run artifacts (install-config, manifests, ignition, downloaded
-// tools). system.isAllowedChownRoot's Base match must stay in lockstep with
-// this name, or a rename silently disables the chown-back allowlist.
+// tools). system.isAllowedChownRoot reads it for the chown-back allowlist.
 const WorkDirName = "okd-install"
 
 // DefaultTerraformEnv names the embedded Terraform environment that ships in

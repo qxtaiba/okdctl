@@ -136,9 +136,9 @@ func seedDeployConfig(t *testing.T) {
 
 // TestPersistWizardConfig_SecretHygiene pins the save-pipeline ordering:
 // credentials reach the .env sidecar (0600), the in-memory secrets are
-// cleared, and the YAML written afterwards carries zero credential bytes.
-// Reordering the save before the clear, or the clear before the sidecar
-// write, fails this test.
+// cleared, and the saved YAML carries zero credential bytes (the json:"-"
+// tags on the credential fields are the primary YAML guard). Reordering
+// the clear before the sidecar write fails this test.
 func TestPersistWizardConfig_SecretHygiene(t *testing.T) {
 	root := t.TempDir()
 	path := filepath.Join(root, "okdctl.yaml")

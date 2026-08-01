@@ -231,9 +231,9 @@ func validateAdvancedNetworking(cfg *Config, result *ValidationResult) {
 	}
 
 	// One physical bastion host runs dnsmasq (the DNS server baked into
-	// every node's static-ip kernel args, see setup/kargs.go) and the
+	// every node's static-ip kernel args, see provision/kargs.go) and the
 	// ignition HTTPS server (apache binds HTTPServer.IgnitionServerIP
-	// directly, see setup/apache.go). A hand-edited config that points
+	// directly, see provision/apache.go). A hand-edited config that points
 	// either at a different host than networking.bastion.ip fails deep in
 	// setup with no config-time diagnostic otherwise.
 	if bastionIP != "" {

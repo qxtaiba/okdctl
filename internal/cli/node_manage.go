@@ -7,7 +7,6 @@ import (
 	"io"
 	"log/slog"
 	"os"
-	"path/filepath"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -22,6 +21,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/render"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard/lifecycle"
+	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
 var nodeManageCmd = &cobra.Command{
@@ -65,7 +65,7 @@ func runNodeManage(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
-	marker, err := node.ReadOpMarker(filepath.Join(env.projectRoot, "okd-install"), cfg.Cluster.Name)
+	marker, err := node.ReadOpMarker(workspace.WorkDir(env.projectRoot), cfg.Cluster.Name)
 	if err != nil {
 		return err
 	}
