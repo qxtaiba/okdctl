@@ -54,9 +54,9 @@ func TestExpandOnlyFlagInvalid(t *testing.T) {
 	if err == nil {
 		t.Fatal("--only=nodes: want error, got nil")
 	}
-	var cfgErr *errtypes.ConfigError
-	if !errors.As(err, &cfgErr) {
-		t.Errorf("--only=nodes: want *errtypes.ConfigError, got %T", err)
+	var usageErr *errtypes.UsageError
+	if !errors.As(err, &usageErr) {
+		t.Errorf("--only=nodes: want *errtypes.UsageError, got %T", err)
 	}
 }
 
@@ -107,9 +107,9 @@ func TestValidateDestroyTargets_Invalid(t *testing.T) {
 			t.Errorf("addr %q: want error, got nil", addr)
 			continue
 		}
-		var cfgErr *errtypes.ConfigError
-		if !errors.As(err, &cfgErr) {
-			t.Errorf("addr %q: want *errtypes.ConfigError, got %T: %v", addr, err, err)
+		var usageErr *errtypes.UsageError
+		if !errors.As(err, &usageErr) {
+			t.Errorf("addr %q: want *errtypes.UsageError, got %T: %v", addr, err, err)
 		}
 	}
 }

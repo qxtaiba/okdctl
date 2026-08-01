@@ -34,6 +34,7 @@ health, and addon status for the deployed cluster.`,
 	Example: `  okdctl status
   okdctl status --output json | jq '.nodes'
   okdctl status --output json | jq '[.nodes[] | select(.ready)] | length'`,
+	Args: cobra.NoArgs,
 	RunE: runStatus,
 }
 
@@ -335,27 +336,35 @@ func runDescribeAddon(cmd *cobra.Command, args []string) error {
 			break
 		}
 	}
-	health := as.Label()
-	if !as.Healthy && as.Error != "" {
-		health += ": " + as.Error
-	}
-
-	lines := []struct{ k, jsonKey, v string }{
-		{colName, colName, info.Name},
-		{"display-name", "display_name", info.DisplayName},
-		{"description", "description", info.Description},
-		{"category", "category", info.Category},
-		{"health", "health", health},
-	}
-
+	// JSON emits the structured healthy bool + optional error (matching
+	// okd.AddonStatus and `addon verify`) rather than the flattened display
+	// string, so the "not enabled"/"degraded: <err>" concept is discoverable
+	// (see docs/cli/json-schema.md).
 	if describeAddonOutput == outputJSON {
-		payload := map[string]string{}
-		for _, ln := range lines {
-			payload[ln.jsonKey] = ln.v
+		payload := map[string]any{
+			colName:        info.Name,
+			"display_name": info.DisplayName,
+			"description":  info.Description,
+			"category":     info.Category,
+			"healthy":      as.Healthy,
+		}
+		if as.Error != "" {
+			payload["error"] = as.Error
 		}
 		return writeJSON(cmd.OutOrStdout(), payload)
 	}
 
+	health := as.Label()
+	if !as.Healthy && as.Error != "" {
+		health += ": " + as.Error
+	}
+	lines := []struct{ k, v string }{
+		{colName, info.Name},
+		{"display-name", info.DisplayName},
+		{"description", info.Description},
+		{"category", info.Category},
+		{"health", health},
+	}
 	for _, ln := range lines {
 		fmt.Fprintln(cmd.OutOrStdout(), tui.DottedKeyValueFull(ln.k, ln.v, tui.DefaultKeyColWidth, 0))
 	}

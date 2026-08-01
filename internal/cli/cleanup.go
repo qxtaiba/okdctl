@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -41,6 +42,7 @@ to a clean state.
   okdctl cleanup --yes
   okdctl cleanup --kind work-only
   okdctl cleanup --dry-run`,
+	Args: cobra.NoArgs,
 	RunE: runCleanup,
 }
 
@@ -57,14 +59,46 @@ func init() {
 	rootCmd.AddCommand(cleanupCmd)
 }
 
-func runCleanupDryRun(projectRoot string) {
-	workDir := workspace.WorkDir(projectRoot)
-	logutil.Info("dry-run: would remove work directory", logutil.LF("path", workDir))
-	logutil.Info("dry-run: would remove haproxy config block", logutil.LF("path", phase.DefaultHAProxyConfigPath))
-	logutil.Info("dry-run: would remove dnsmasq drop-in", logutil.LF("dir", phase.DefaultDNSMasqConfigDir))
-	logutil.Info("dry-run: would remove packages", logutil.LF("packages", cleanup.InstalledPackages()))
-	logutil.Info("dry-run: would remove binaries", logutil.LF("binaries", cleanup.InstalledBinaries()))
+type cleanupDryRunTarget struct {
+	msg    string
+	fields []logutil.LogField
+}
+
+// runCleanupDryRun previews exactly the targets the given kind removes. The
+// per-kind selection mirrors cleanup.cleanupSteps' switch so the preview
+// cannot drift from execution — the cleanup Phase deliberately exposes no
+// StepDefs to the CLI (see cleanup.Phase), so the switch is reproduced here.
+func runCleanupDryRun(cfg *config.Config, projectRoot string, kind cleanup.Kind) {
+	for _, t := range cleanupDryRunTargets(cfg, projectRoot, kind) {
+		logutil.Info(t.msg, t.fields...)
+	}
 	logutil.Info("dry-run: re-run without --dry-run to execute cleanup")
+}
+
+func cleanupDryRunTargets(cfg *config.Config, projectRoot string, kind cleanup.Kind) []cleanupDryRunTarget {
+	workDir := cleanupDryRunTarget{"dry-run: would remove work directory", []logutil.LogField{logutil.LF("path", workspace.WorkDir(projectRoot))}}
+	webServer := cleanupDryRunTarget{"dry-run: would remove ignition files from web server", []logutil.LogField{logutil.LF("dir", cfg.HTTPServer.Root)}}
+	haproxy := cleanupDryRunTarget{"dry-run: would stop haproxy and remove its config block", []logutil.LogField{logutil.LF("path", phase.DefaultHAProxyConfigPath)}}
+	apache := cleanupDryRunTarget{msg: "dry-run: would stop apache httpd service"}
+	dnsmasq := cleanupDryRunTarget{"dry-run: would stop dnsmasq and remove its drop-in", []logutil.LogField{logutil.LF("dir", phase.DefaultDNSMasqConfigDir)}}
+	terraform := cleanupDryRunTarget{"dry-run: would remove generated terraform artifacts and the post-destroy tfstate", []logutil.LogField{logutil.LF("env", cfg.TerraformEnvName())}}
+	packages := cleanupDryRunTarget{"dry-run: would remove packages and tool binaries", []logutil.LogField{logutil.LF("packages", cleanup.InstalledPackages()), logutil.LF("binaries", cleanup.InstalledBinaries())}}
+	ignitionCerts := cleanupDryRunTarget{"dry-run: would remove generated ignition TLS certs", []logutil.LogField{logutil.LF("path", filepath.Join(projectRoot, "certs", "ignition"))}}
+
+	switch kind {
+	case cleanup.Full:
+		return []cleanupDryRunTarget{workDir, webServer, haproxy, apache, dnsmasq, terraform, packages, ignitionCerts}
+	case cleanup.WorkOnly:
+		return []cleanupDryRunTarget{workDir}
+	case cleanup.WebOnly:
+		return []cleanupDryRunTarget{webServer}
+	case cleanup.HAProxyOnly:
+		return []cleanupDryRunTarget{haproxy}
+	case cleanup.TerraformOnly:
+		return []cleanupDryRunTarget{terraform}
+	default:
+		return nil
+	}
 }
 
 // cleanupKindRemovesCredentials reports whether kind wipes cluster-config
@@ -108,7 +142,7 @@ func runCleanup(cmd *cobra.Command, _ []string) error {
 		if err != nil {
 			return err
 		}
-		runCleanupDryRun(projectRoot)
+		runCleanupDryRun(cfg, projectRoot, kind)
 		return nil
 	}
 

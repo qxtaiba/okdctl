@@ -38,9 +38,9 @@ func captureTuiStderr(t *testing.T, fn func()) string {
 func TestNodeSnapshotGate_YesSkipsPromptButStillPairsConfirmCluster(t *testing.T) {
 	// --yes with no --confirm-cluster must fail closed regardless of twoStage.
 	_, err := nodeSnapshotGate(context.Background(), "node snapshot create", false, true, false, "", "prod", "")
-	var cfgErr *errtypes.ConfigError
-	if !errors.As(err, &cfgErr) {
-		t.Fatalf("want *errtypes.ConfigError, got %v", err)
+	var usageErr *errtypes.UsageError
+	if !errors.As(err, &usageErr) {
+		t.Fatalf("want *errtypes.UsageError, got %v", err)
 	}
 }
 

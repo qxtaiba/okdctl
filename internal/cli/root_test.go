@@ -10,9 +10,40 @@ import (
 	"testing"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 
 	"github.com/qxtaiba/okdctl/internal/errtypes"
+	"github.com/qxtaiba/okdctl/internal/logutil"
 )
+
+// TestNoRegisteredFlagNameLooksLikeCredential guards the pflag→UsageError text
+// path: SetFlagErrorFunc and wrapArgValidators copy pflag's error string —
+// which can embed the offending flag VALUE — verbatim into UsageError.Msg, a
+// pre-rendered string RedactHandler cannot inspect. That is safe only while no
+// registered flag is credential-named. This fails loudly the day one is added,
+// signalling that the flag-error text must be scrubbed before it becomes Msg.
+func TestNoRegisteredFlagNameLooksLikeCredential(t *testing.T) {
+	var offenders []string
+	var walk func(c *cobra.Command)
+	walk = func(c *cobra.Command) {
+		check := func(f *pflag.Flag) {
+			if logutil.KeyIsSecret(f.Name) {
+				offenders = append(offenders, c.CommandPath()+" --"+f.Name)
+			}
+		}
+		c.Flags().VisitAll(check)
+		c.PersistentFlags().VisitAll(check)
+		for _, sub := range c.Commands() {
+			walk(sub)
+		}
+	}
+	walk(rootCmd)
+	if len(offenders) > 0 {
+		t.Errorf("credential-named flag(s) registered; pflag embeds flag values in "+
+			"error text that becomes UsageError.Msg unscrubbed — scrub before Msg "+
+			"or rename: %v", offenders)
+	}
+}
 
 // TestSignalLoopFirstSignalCancels verifies that a single signal cancels the
 // context and stores caughtSig without calling exit.
@@ -183,11 +214,15 @@ func TestSignalExitCode(t *testing.T) {
 			wantHandled: true,
 		},
 		{
-			name:        "SIGINT ClusterError wrapping DeadlineExceeded returns 130",
+			// A poll timeout that races a caught signal must keep its own exit
+			// code (ClusterError→4), not be misattributed to the signal: the
+			// root ctx is WithCancel, so a signal only ever surfaces as
+			// context.Canceled, never DeadlineExceeded.
+			name:        "SIGINT ClusterError wrapping DeadlineExceeded falls through",
 			caughtSig:   storeSignal(syscall.SIGINT),
 			err:         &errtypes.ClusterError{Msg: "budget", Err: context.DeadlineExceeded},
-			wantCode:    130,
-			wantHandled: true,
+			wantCode:    0,
+			wantHandled: false,
 		},
 	}
 	for _, tc := range cases {

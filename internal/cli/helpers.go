@@ -235,8 +235,8 @@ func warnIfTfStateOnly(root string) {
 	}
 	logutil.Warn(
 		"okdctl.yaml and okdctl.env not found; accepting terraform.tfstate as a recovery hint",
-		logutil.LF("tfstate", matches[0]),
-		logutil.LF("root", root),
+		logutil.LF("path", matches[0]),
+		logutil.LF("dir", root),
 	)
 	logutil.Info("if this directory belongs to a different cluster, stop and run 'okdctl deploy' in the correct directory")
 }

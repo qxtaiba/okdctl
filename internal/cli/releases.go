@@ -49,6 +49,7 @@ non-draft release. Results are served from a 1-hour on-disk cache
 	Example: `  okdctl releases list
   okdctl releases list --channel all
   okdctl releases list --output json`,
+	Args: cobra.NoArgs,
 	RunE: runReleasesList,
 }
 

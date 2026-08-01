@@ -296,9 +296,9 @@ func TestRunDestroy_ConfirmGateWiring(t *testing.T) {
 		if err == nil {
 			t.Fatal("scripted destroy without --confirm-cluster must be refused")
 		}
-		var cfgErr *errtypes.ConfigError
-		if !errors.As(err, &cfgErr) {
-			t.Errorf("want *errtypes.ConfigError, got %T: %v", err, err)
+		var usageErr *errtypes.UsageError
+		if !errors.As(err, &usageErr) {
+			t.Errorf("want *errtypes.UsageError, got %T: %v", err, err)
 		}
 		if !strings.Contains(err.Error(), "--confirm-cluster") {
 			t.Errorf("refusal must point at --confirm-cluster: %v", err)

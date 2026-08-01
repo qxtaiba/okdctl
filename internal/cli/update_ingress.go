@@ -41,6 +41,7 @@ Run this after deploying a LoadBalancer provider (e.g., MetalLB).`,
 	Example: `  okdctl update-ingress
   okdctl update-ingress --yes --keep-haproxy
   okdctl update-ingress --dry-run`,
+	Args: cobra.NoArgs,
 	RunE: runUpdateIngress,
 }
 

@@ -75,8 +75,10 @@ func openLogFile(path string) (*os.File, error) {
 // to the invoking user. Under the sudo re-exec model the pre-sudo pass
 // creates the file as the invoking user and the root pass only appends;
 // the chown covers direct `sudo okdctl deploy` invocations where root
-// creates it. A chown failure closes the sink — a root-owned 0600 log the
-// operator cannot read afterwards is worse than no file sink.
+// creates it. The chown goes through the open descriptor so a path swapped
+// for a symlink after open cannot redirect it. A chown failure closes the
+// sink — a root-owned 0600 log the operator cannot read afterwards is
+// worse than no file sink.
 func openDefaultLogSink() (string, *os.File, error) {
 	root, err := resolveWorkspaceRoot()
 	if err != nil {
@@ -87,7 +89,7 @@ func openDefaultLogSink() (string, *os.File, error) {
 	if err != nil {
 		return "", nil, err
 	}
-	if err := system.ChownToInvokingUser(path); err != nil {
+	if err := system.ChownFileToInvokingUser(f); err != nil {
 		_ = f.Close()
 		return "", nil, fmt.Errorf("chown log file to invoking user: %w", err)
 	}
@@ -133,8 +135,9 @@ func configureLogging(cmd *cobra.Command) error {
 
 	stderrIsTTY := term.IsTerminal(int(os.Stderr.Fd()))
 	stdoutIsTTY := term.IsTerminal(int(os.Stdout.Fd()))
-	// Honor https://no-color.org and FORCE_COLOR; either disables progress
-	// bars regardless of TTY detection.
+	// Honor https://no-color.org: NO_COLOR disables progress bars regardless of
+	// TTY detection. FORCE_COLOR is consumed by colorprofile for styling only,
+	// never at this gate.
 	noColor := os.Getenv("NO_COLOR") != ""
 
 	// Auto-switch to json when stderr is piped and the user has not

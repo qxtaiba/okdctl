@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"io"
+	"slices"
 	"strconv"
 
 	"charm.land/lipgloss/v2"
@@ -44,6 +45,7 @@ sizing change is staged in the workspace, not that a specific node's guest
 has actually been resized yet. "unknown" means terraform.tfvars has not been
 rendered at all.`,
 	Example: "  okdctl node list\n  okdctl node list --output json",
+	Args:    cobra.NoArgs,
 	RunE:    runNodeList,
 }
 
@@ -150,13 +152,8 @@ func buildNodeListEntries(nodes []cluster.NodeDetail, cfg *config.Config, side n
 // see the unattached-op text note. Empty when there is no marker or it is
 // already attached to a listed node via in_flight_op.
 func unattachedOpNote(marker *node.OpMarker, nodes []cluster.NodeDetail) string {
-	if marker == nil {
+	if marker == nil || slices.ContainsFunc(nodes, func(n cluster.NodeDetail) bool { return n.Name == marker.Target }) {
 		return ""
-	}
-	for _, n := range nodes {
-		if n.Name == marker.Target {
-			return ""
-		}
 	}
 	return fmt.Sprintf("%s (%s) on %s", marker.Op, marker.Step, marker.Target)
 }

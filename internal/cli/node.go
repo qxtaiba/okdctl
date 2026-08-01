@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -27,6 +28,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/nodetypes"
 	"github.com/qxtaiba/okdctl/internal/render"
 	"github.com/qxtaiba/okdctl/internal/runlock"
+	"github.com/qxtaiba/okdctl/internal/system"
 	"github.com/qxtaiba/okdctl/internal/tui"
 	"github.com/qxtaiba/okdctl/internal/workspace"
 )
@@ -75,7 +77,7 @@ or node instead of refusing.`,
 }
 
 var nodeResizeCmd = &cobra.Command{
-	Use:   "resize (masters|workers|<name>) [--memory-mb N] [--cpu N]",
+	Use:   "resize (masters|workers|<name>)",
 	Short: "Resize node CPU/memory per role, rolled out one node at a time",
 	Long: `Change per-role node resources and roll the change out one node at a
 time. Masters are etcd-health-gated before and after every node and applied
@@ -129,8 +131,15 @@ terraform already created) unless it too is passed
 --acknowledge-interrupted-op.`,
 	Example: `  okdctl node add --yes --confirm-cluster grappleberry
   okdctl node add --count 2 --dry-run`,
-	Args: cobra.NoArgs,
-	RunE: runNodeAdd,
+	// node add revives the ignition HTTPS server (httpd on :443, writes under
+	// /etc and serves /var/www/html) for the join window, so its body must run
+	// as root. Unlike remove/resize/list, it needs local privilege; the gate
+	// re-execs under sudo at euid!=0 instead of failing mid-op, and accepts an
+	// explicit `sudo okdctl node add`. --dry-run escapes the gate (requiresRoot
+	// short-circuits on the flag) so a preview stays promptless.
+	Annotations: map[string]string{annotationKeyRequiresRoot: annotationValueTrue},
+	Args:        cobra.NoArgs,
+	RunE:        runNodeAdd,
 }
 
 func init() {
@@ -174,6 +183,22 @@ type nodeConsent struct {
 	twoStage bool
 }
 
+// destroyGradeVerbs is the single source of truth for which lifecycle verbs
+// escalate to the destroy-grade gate (typed cluster name + y/N). A verb
+// belongs here when it destroys a VM (or its data disk): a downgrade to the
+// bare y/N gate must not be possible by editing an inline literal at one of
+// the several RunE call sites. Verbs absent from the set use the single y/N
+// gate.
+var destroyGradeVerbs = map[string]bool{
+	"remove":  true,
+	"compact": true,
+}
+
+// destroyGradeVerb reports whether verb escalates to the destroy-grade gate.
+func destroyGradeVerb(verb string) bool {
+	return destroyGradeVerbs[verb]
+}
+
 // nodeRunnerCtx bundles the disposable resources a node op holds so RunE
 // bodies can defer a single cleanup. HostTotalMiB/HostAllocatedMiB are the
 // read-only Proxmox memory-budget probe results (zero when the probe was
@@ -203,9 +228,10 @@ func (n *nodeRunnerCtx) complete(w io.Writer, elapsed time.Duration) {
 
 // nodeOpsEnv is the pre-TUI environment for node ops: project root,
 // credentials, and the read-only host probe results. It owns the
-// credentials; close zeroizes them. Split from runner construction so the
-// lifecycle wizard can hold one env across screens while building a fresh
-// runner (and taking the run lock) per dry-run/execute invocation.
+// credentials; close zeroizes them and chowns the workdir back. Split from
+// runner construction so the lifecycle wizard can hold one env across
+// screens while building a fresh runner (and taking the run lock) per
+// dry-run/execute invocation.
 type nodeOpsEnv struct {
 	projectRoot      string
 	creds            *credentials.ProxmoxCredentials
@@ -214,7 +240,20 @@ type nodeOpsEnv struct {
 	hostAllocatedMiB int
 }
 
-func (e *nodeOpsEnv) close() { e.creds.Zeroize() }
+// close zeroizes the owned credentials and restores invoking-user ownership
+// of the workdir. node add re-execs under sudo (requiresRoot annotation), so
+// the ISOs, markers, and terraform state it writes under
+// <projectRoot>/okd-install land root-owned; chown them back at exit so the
+// operator can inspect or retry. ChownTreeToInvokingUser no-ops when SUDO_UID
+// is unset, so the non-root verbs (remove/resize/list, and any dry-run) pass
+// through it harmlessly.
+func (e *nodeOpsEnv) close() {
+	defer e.creds.Zeroize()
+	workDir := filepath.Join(e.projectRoot, workspace.WorkDirName)
+	if err := system.ChownTreeToInvokingUser(workDir); err != nil {
+		logutil.Warn("workdir chown back to user incomplete", logutil.LF("err", err))
+	}
+}
 
 // prepareNodeOpsEnv resolves the workspace, loads credentials, and runs
 // the read-only host memory probe — everything that must happen ahead of
@@ -446,7 +485,7 @@ func runNodeRemove(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	consent := nodeConsent{yes: nodeYes, dryRun: nodeDryRun, twoStage: true}
+	consent := nodeConsent{yes: nodeYes, dryRun: nodeDryRun, twoStage: destroyGradeVerb("remove")}
 	rc, err := buildNodeRunner(cmd, cfg, "remove", consent, false)
 	if err != nil {
 		return err
@@ -486,7 +525,7 @@ func runNodeResize(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	consent := nodeConsent{yes: nodeYes, dryRun: nodeDryRun, twoStage: false}
+	consent := nodeConsent{yes: nodeYes, dryRun: nodeDryRun, twoStage: destroyGradeVerb("resize")}
 	rc, err := buildNodeRunner(cmd, cfg, "resize", consent, true)
 	if err != nil {
 		return err
@@ -524,7 +563,7 @@ func runNodeAdd(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
-	consent := nodeConsent{yes: nodeYes, dryRun: nodeDryRun, twoStage: false}
+	consent := nodeConsent{yes: nodeYes, dryRun: nodeDryRun, twoStage: destroyGradeVerb("add")}
 	rc, err := buildNodeRunner(cmd, cfg, "add", consent, true)
 	if err != nil {
 		return err

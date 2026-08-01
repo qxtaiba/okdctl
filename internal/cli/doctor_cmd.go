@@ -32,6 +32,7 @@ Pass --output=json for machine-readable output (see docs/cli/json-schema.md).
 See docs/doctor-checks.md for per-check fail messages and fix guidance.`,
 	Example: `  okdctl doctor
   okdctl doctor --output json | jq '.failed'`,
+	Args: cobra.NoArgs,
 	RunE: runDoctor,
 }
 

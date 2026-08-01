@@ -82,7 +82,7 @@ func expandOnlyFlag(only string, cfg *config.Config) ([]string, error) {
 			targets = append(targets, fmt.Sprintf("%sworker[%d]", prefix, i))
 		}
 	default:
-		return nil, &errtypes.ConfigError{
+		return nil, &errtypes.UsageError{
 			Msg: fmt.Sprintf("--only %q is not valid; choose one of: %s", only, strings.Join(validDestroyScopes(), ", ")),
 		}
 	}
@@ -98,7 +98,7 @@ func validateDestroyTargets(targets []string, cfg *config.Config) error {
 	for _, t := range targets {
 		m := destroyTargetRE.FindStringSubmatch(t)
 		if m == nil {
-			return &errtypes.ConfigError{
+			return &errtypes.UsageError{
 				Msg: fmt.Sprintf("--target %q is not an allowed resource address; "+
 					"must match module.okd_cluster.proxmox_virtual_environment_vm.{bootstrap|master|worker}[<n>]", t),
 			}
@@ -141,8 +141,8 @@ func validateDestroyTargets(targets []string, cfg *config.Config) error {
 
 var destroyCmd = &cobra.Command{
 	Use:   cmdNameDestroy,
-	Short: "Destroy a Kubernetes cluster",
-	Long: `Destroy a Kubernetes cluster and all associated infrastructure.
+	Short: "Destroy an OKD cluster",
+	Long: `Destroy an OKD cluster and all associated infrastructure.
 This operation is idempotent and safe to re-run if a previous destroy was interrupted.
 
 Use --dry-run to preview the terraform destroy plan without modifying infra.
@@ -171,6 +171,7 @@ entirely and remove VMs by hand.`,
 	Example: `  okdctl destroy                              # interactive prompt
   okdctl destroy --yes --confirm-cluster=prod # scripted destroy
   okdctl destroy --dry-run`,
+	Args: cobra.NoArgs,
 	RunE: runDestroy,
 }
 
@@ -201,6 +202,17 @@ func validateDestroyFlagCombos(cfg *config.Config) error {
 	if len(destroyTargets) > 0 && destroyConfirmCluster == "" {
 		return &errtypes.UsageError{
 			Msg: fmt.Sprintf("--target/--only requires --confirm-cluster=%q to guard against targeted destroys on the wrong cluster", cfg.Cluster.Name),
+		}
+	}
+	// A provided --confirm-cluster must match regardless of --yes. Without
+	// this, an interactive scoped destroy skips the typed-name prompt (it
+	// assumes --confirm-cluster already acknowledged the cluster) and would
+	// proceed on a bare 'y' even when the flag names the wrong cluster —
+	// confirmClusterMatches only validates the value on the --yes path.
+	if destroyConfirmCluster != "" && destroyConfirmCluster != cfg.Cluster.Name {
+		return &errtypes.UsageError{
+			Msg: fmt.Sprintf("--confirm-cluster %q does not match config cluster %q; refusing destroy",
+				destroyConfirmCluster, cfg.Cluster.Name),
 		}
 	}
 	if !destroyDryRun {
@@ -354,7 +366,7 @@ func runDestroy(cmd *cobra.Command, _ []string) error {
 	steps, err := p.Destroy(ctx, cfg, &destroyOpts)
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
-			fmt.Fprintln(cmd.OutOrStdout(), render.InterruptSummary(steps, "okdctl destroy", logutil.RunID()))
+			fmt.Fprintln(cmd.ErrOrStderr(), render.InterruptSummary(steps, "okdctl destroy", logutil.RunID()))
 			return render.Presented(err)
 		}
 		return err
@@ -407,6 +419,22 @@ func runDestroyDryRun(ctx context.Context, cfg *config.Config) error {
 		return tf.WithLockHint(&errtypes.ConfigError{Msg: "terraform destroy plan failed", Err: err})
 	}
 
+	announceDestroyNonTerraformActions()
+
 	logutil.Info("dry-run: re-run without --dry-run to execute destroy")
 	return nil
+}
+
+// announceDestroyNonTerraformActions lists the irreversible non-terraform
+// actions an unscoped destroy also performs, which the terraform-only plan
+// above cannot show. Gated on the same scoped-run logic buildDestroyOptions
+// applies: a scoped --target/--only run skips all of them, so it lists nothing.
+func announceDestroyNonTerraformActions() {
+	if len(destroyTargets) > 0 {
+		logutil.Info("dry-run: scoped destroy skips iso removal, host cleanup, and firewall rules (unscoped destroy only)")
+		return
+	}
+	logutil.Info("dry-run: unscoped destroy would also remove the FCOS ISO from the Proxmox host")
+	logutil.Info("dry-run: unscoped destroy would also run host cleanup (kind=full: work directory incl. kubeconfig and kubeadmin-password, haproxy/dnsmasq config, terraform state files, packages)")
+	logutil.Info("dry-run: unscoped destroy would also remove firewall rules")
 }

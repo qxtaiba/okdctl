@@ -32,6 +32,7 @@ file is needed (e.g. in scripts or CI).`,
 	Example: `  okdctl debug-bundle
   okdctl debug-bundle --output-file my-cluster.tgz
   okdctl debug-bundle --skip-must-gather`,
+	Args: cobra.NoArgs,
 	RunE: runDebugBundle,
 }
 

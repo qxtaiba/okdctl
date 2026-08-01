@@ -42,8 +42,8 @@ var (
 
 var deployCmd = &cobra.Command{
 	Use:   cmdNameDeploy,
-	Short: "Deploy a Kubernetes cluster",
-	Long: `Deploy an OKD/OpenShift cluster through an interactive wizard.
+	Short: "Deploy an OKD cluster",
+	Long: `Deploy an OKD cluster through an interactive wizard.
 
 Use --yes with --confirm-cluster to skip the wizard and deploy
 non-interactively from an existing configuration file (and its okdctl.env
@@ -51,15 +51,14 @@ credential sidecar) — no TTY required, so a failed deploy can be resumed
 over SSH or from CI. --confirm-cluster must equal the configured cluster
 name, the same guard every other scripted lifecycle command carries.
 Use --write-config to write the configuration file non-interactively
-without deploying.
-
-Note: before v0.2.0, --yes meant what --write-config means now.`,
+without deploying.`,
 	Example: `  okdctl deploy
   okdctl deploy --config my-cluster.yaml
   okdctl deploy --yes --confirm-cluster=prod         # scripted deploy from okdctl.yaml, no wizard
   okdctl deploy --write-config --output-file my-cluster.yaml  # writes config only; does not deploy
   okdctl deploy --dry-run
   okdctl deploy --keep-redhat-catalogs`,
+	Args: cobra.NoArgs,
 	RunE: runDeploy,
 }
 

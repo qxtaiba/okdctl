@@ -90,6 +90,32 @@ func TestEnsureTerraformWorkspace(t *testing.T) {
 	})
 }
 
+// TestNodeAddRequiresRootScoped locks the privilege scoping: only node add
+// (which revives the ignition httpd server on the local host) requires root
+// and elevates under sudo. The non-host-mutating verbs stay unprivileged so
+// `sudo okdctl node <verb>` keeps hitting the reject-root branch.
+func TestNodeAddRequiresRootScoped(t *testing.T) {
+	// Guard against dry-run flag pollution from a sibling test: requiresRoot
+	// short-circuits to false under --dry-run.
+	_ = nodeAddCmd.Flags().Set(flagDryRun, "false")
+
+	if nodeAddCmd.Annotations[annotationKeyRequiresRoot] != annotationValueTrue {
+		t.Error("node add must carry the requiresRoot annotation")
+	}
+	if !requiresRoot(nodeAddCmd) {
+		t.Error("node add must require root (revives the ignition httpd server)")
+	}
+	if requiresRoot(nodeRemoveCmd) {
+		t.Error("node remove must not require root")
+	}
+	if requiresRoot(nodeResizeCmd) {
+		t.Error("node resize must not require root")
+	}
+	if requiresRoot(nodeListCmd) {
+		t.Error("node list must not require root")
+	}
+}
+
 func TestNodeConfirmHookYesPrintsBoxSkipsGate(t *testing.T) {
 	rc := &nodeRunnerCtx{}
 	var errW bytes.Buffer
@@ -105,6 +131,54 @@ func TestNodeConfirmHookYesPrintsBoxSkipsGate(t *testing.T) {
 	}
 	if out := errW.String(); !strings.Contains(out, "confirm worker removal") || !strings.Contains(out, "prod") {
 		t.Errorf("--yes still prints the informed box; got:\n%s", out)
+	}
+}
+
+// TestDestroyGradeVerbPolicy locks the single source of truth for the
+// destroy-grade gate: only VM-destroying verbs escalate to the typed-name
+// stage. Flipping a literal at a RunE call site can no longer silently
+// downgrade the gate because every site consults this map.
+func TestDestroyGradeVerbPolicy(t *testing.T) {
+	want := map[string]bool{
+		"remove":  true,
+		"compact": true,
+		"resize":  false,
+		"add":     false,
+		"stop":    false,
+		"start":   false,
+	}
+	for verb, exp := range want {
+		if got := destroyGradeVerb(verb); got != exp {
+			t.Errorf("destroyGradeVerb(%q) = %v, want %v", verb, got, exp)
+		}
+	}
+}
+
+// TestDestroyGradeVerbsDenyBareYes drives the real confirm hook for each
+// destroy-grade verb with only "y\n" on stdin and asserts denial: a bare
+// "y" cannot satisfy the typed-cluster-name stage the destroy-grade gate
+// puts ahead of the y/N prompt.
+func TestDestroyGradeVerbsDenyBareYes(t *testing.T) {
+	for _, verb := range []string{"remove", "compact"} {
+		t.Run(verb, func(t *testing.T) {
+			if !destroyGradeVerb(verb) {
+				t.Fatalf("%s must be a destroy-grade verb for this test to be meaningful", verb)
+			}
+			testStdinReader = strings.NewReader("y\n")
+			t.Cleanup(func() { testStdinReader = nil })
+
+			rc := &nodeRunnerCtx{}
+			var errW bytes.Buffer
+			hook := nodeConfirmHook(rc, nodeConsent{twoStage: destroyGradeVerb(verb)}, "prod", &errW)
+
+			ok, err := hook(context.Background(), &node.OpPlan{Op: node.OpRemove, Cluster: "prod"})
+			if err != nil {
+				t.Fatalf("gate error: %v", err)
+			}
+			if ok {
+				t.Fatalf("%s: bare 'y' must not satisfy the destroy-grade typed-name gate", verb)
+			}
+		})
 	}
 }
 

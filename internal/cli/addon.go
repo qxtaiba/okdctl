@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"io"
+	"path/filepath"
 	"strings"
 	"text/tabwriter"
 
@@ -15,6 +16,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/executor"
 	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/runlock"
+	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
 var (
@@ -40,6 +42,7 @@ whether they are enabled in the configuration file.
 
 See also: addon verify`,
 	Example: "  okdctl addon list",
+	Args:    cobra.NoArgs,
 	RunE:    runAddonList,
 }
 
@@ -104,6 +107,7 @@ configuration cannot be loaded.
 
 See also: addon list`,
 	Example: "  okdctl addon verify",
+	Args:    cobra.NoArgs,
 	RunE:    runAddonVerify,
 }
 
@@ -284,7 +288,14 @@ func runAddonVerify(cmd *cobra.Command, _ []string) error {
 }
 
 func newAddonManager(cfg *config.Config, projectRoot string) *addon.Manager {
-	exec := executor.New(executor.WithWorkDir(projectRoot))
+	// Pin KUBECONFIG to the workspace admin kubeconfig: addon install/uninstall
+	// re-exec under sudo, where an unpinned oc would fall back to the invoking
+	// user's ambient kubeconfig and could mutate the wrong cluster.
+	kcPath := workspace.KubeconfigPath(workspace.ClusterConfigDir(filepath.Join(projectRoot, workspace.WorkDirName)))
+	exec := executor.New(
+		executor.WithWorkDir(projectRoot),
+		executor.WithEnv([]string{"KUBECONFIG=" + kcPath}),
+	)
 	return addon.NewManager(
 		cfg,
 		addon.WithExecutor(exec),

@@ -29,6 +29,7 @@ replaced by "***". Text mode emits YAML; pass --output=json to get a JSON
 object suitable for piping to jq.`,
 	Example: `  okdctl config show
   okdctl config show --output json | jq '.provider'`,
+	Args: cobra.NoArgs,
 	RunE: runConfigShow,
 }
 
@@ -43,6 +44,7 @@ Read-only: nothing is written or deployed. Exits 0 when the config is
 valid (warnings alone do not fail), 2 when validation reports errors,
 and 66 when the file does not exist.`,
 	Example: "  okdctl config validate",
+	Args:    cobra.NoArgs,
 	RunE:    runConfigValidate,
 }
 
@@ -65,7 +67,10 @@ func runConfigValidate(cmd *cobra.Command, _ []string) error {
 	if result == nil || result.IsValid() {
 		return nil
 	}
-	return &errtypes.ConfigError{Msg: result.Error()}
+	// Same shape as runFullDeployment's hard gate: name the failing scope in
+	// Msg and keep result in the Unwrap chain; render.ValidationSummary above
+	// is the field-level presenter.
+	return &errtypes.ConfigError{Msg: "config validation failed", Err: result}
 }
 
 func runConfigShow(cmd *cobra.Command, _ []string) error {

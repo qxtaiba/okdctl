@@ -38,6 +38,7 @@ is pending. Run 'okdctl deploy' to reconcile drift.
 Pass --output=json for machine-readable output (see docs/cli/json-schema.md).`,
 	Example: `  okdctl plan
   okdctl plan --output json | jq '.drift'`,
+	Args: cobra.NoArgs,
 	RunE: runPlan,
 }
 
