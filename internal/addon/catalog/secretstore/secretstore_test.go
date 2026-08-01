@@ -134,6 +134,61 @@ func TestReadSecret_RejectsSymlink(t *testing.T) {
 	}
 }
 
+func TestReadSecret_PermRefusal(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root bypasses the 0o077 permission gate")
+	}
+	const contents = "s.plaintext-provider-token"
+	tests := []struct {
+		name       string
+		perm       os.FileMode
+		wantReject bool
+	}{
+		{"0600 accepted", 0o600, false},
+		{"0400 accepted", 0o400, false},
+		{"0640 group-readable rejected", 0o640, true},
+		{"0604 other-readable rejected", 0o604, true},
+		{"0644 rejected", 0o644, true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			tmp := t.TempDir()
+			path := filepath.Join(tmp, "vault-token.txt")
+			if err := os.WriteFile(path, []byte(contents), tc.perm); err != nil {
+				t.Fatal(err)
+			}
+			// Explicit chmod in case umask narrowed the create mode.
+			if err := os.Chmod(path, tc.perm); err != nil {
+				t.Fatal(err)
+			}
+
+			env := makeEnv(tmp, tmp)
+			got, err := readSecret(context.Background(), env, path)
+			if tc.wantReject {
+				if err == nil {
+					t.Fatalf("perm %#o: expected refusal, got nil error", tc.perm)
+				}
+				if !strings.Contains(err.Error(), "insecure permissions") {
+					t.Errorf("perm %#o: error %q does not name the permission failure", tc.perm, err)
+				}
+				if strings.Contains(err.Error(), contents) {
+					t.Errorf("perm %#o: error leaks file contents: %q", tc.perm, err)
+				}
+				if !strings.Contains(err.Error(), "vault-token.txt") {
+					t.Errorf("perm %#o: error should name the basename; got %q", tc.perm, err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("perm %#o: unexpected error: %v", tc.perm, err)
+			}
+			if got != contents {
+				t.Errorf("perm %#o: readSecret = %q; want %q", tc.perm, got, contents)
+			}
+		})
+	}
+}
+
 func TestSecretManifestFromFile_NamespaceAndName(t *testing.T) {
 	tmp := t.TempDir()
 	credFile := filepath.Join(tmp, "creds.json")

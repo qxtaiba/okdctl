@@ -55,6 +55,89 @@ func (s *stubAddon) Uninstall(ctx context.Context, _ *Environment) error {
 	return s.uninstallEr
 }
 
+// configurableStub is a stubAddon that also satisfies ConfigurableAddon so
+// installAndVerify's pre-install ValidateSettings gate is exercised.
+type configurableStub struct {
+	*stubAddon
+	validateErrs []string
+}
+
+func (c *configurableStub) DefaultSettings() map[string]string          { return nil }
+func (c *configurableStub) ValidateSettings(map[string]string) []string { return c.validateErrs }
+func (c *configurableStub) DecodeSettings(map[string]string) (any, error) {
+	return nil, nil
+}
+
+func TestInstallOne_InvalidSettingsBlocksInstall(t *testing.T) {
+	installFakeOC(t)
+	stub := &stubAddon{meta: Metadata{Name: "cfg", DisplayName: "Cfg"}}
+	cs := &configurableStub{stubAddon: stub, validateErrs: []string{"repository is required"}}
+
+	registry.mu.Lock()
+	registry.addons[cs.Info().Name] = cs
+	registry.order = append(registry.order, cs.Info().Name)
+	registry.mu.Unlock()
+	t.Cleanup(func() {
+		registry.mu.Lock()
+		delete(registry.addons, cs.Info().Name)
+		newOrder := registry.order[:0]
+		for _, n := range registry.order {
+			if _, ok := registry.addons[n]; ok {
+				newOrder = append(newOrder, n)
+			}
+		}
+		registry.order = newOrder
+		registry.mu.Unlock()
+	})
+
+	mgr := NewManager(enabledCfg("cfg"), WithExecutor(executor.New()))
+	err := mgr.InstallOne(context.Background(), "cfg")
+	if err == nil {
+		t.Fatal("expected InstallOne to fail on invalid settings; got nil")
+	}
+	var cfgErr *errtypes.ConfigError
+	if !errors.As(err, &cfgErr) {
+		t.Errorf("err = %v; want *errtypes.ConfigError", err)
+	}
+	if !strings.Contains(err.Error(), "repository is required") {
+		t.Errorf("err = %v; want it to surface the validation message", err)
+	}
+	if stub.installN.Load() != 0 {
+		t.Errorf("Install ran %d times; want 0 (settings gate should block it)", stub.installN.Load())
+	}
+}
+
+func TestInstallOne_ValidSettingsProceeds(t *testing.T) {
+	installFakeOC(t)
+	stub := &stubAddon{meta: Metadata{Name: "cfgok", DisplayName: "CfgOK"}}
+	cs := &configurableStub{stubAddon: stub, validateErrs: nil}
+
+	registry.mu.Lock()
+	registry.addons[cs.Info().Name] = cs
+	registry.order = append(registry.order, cs.Info().Name)
+	registry.mu.Unlock()
+	t.Cleanup(func() {
+		registry.mu.Lock()
+		delete(registry.addons, cs.Info().Name)
+		newOrder := registry.order[:0]
+		for _, n := range registry.order {
+			if _, ok := registry.addons[n]; ok {
+				newOrder = append(newOrder, n)
+			}
+		}
+		registry.order = newOrder
+		registry.mu.Unlock()
+	})
+
+	mgr := NewManager(enabledCfg("cfgok"), WithExecutor(executor.New()))
+	if err := mgr.InstallOne(context.Background(), "cfgok"); err != nil {
+		t.Fatalf("InstallOne with valid settings: %v", err)
+	}
+	if stub.installN.Load() != 1 {
+		t.Errorf("Install ran %d times; want 1", stub.installN.Load())
+	}
+}
+
 func registerStubs(t *testing.T, stubs ...*stubAddon) {
 	t.Helper()
 	registry.mu.Lock()

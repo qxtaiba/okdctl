@@ -97,7 +97,7 @@ func TestUninstall_HappyPath(t *testing.T) {
 	h := &captureHandler{}
 	env := makeUninstallEnv(argvLog, "", slog.New(h))
 
-	s := &SecretStore{}
+	s := &secretStore{}
 	if err := s.Uninstall(context.Background(), env); err != nil {
 		t.Fatalf("Uninstall returned error: %v", err)
 	}
@@ -131,7 +131,7 @@ func TestUninstall_PartialSecretFailureContinues(t *testing.T) {
 	h := &captureHandler{}
 	env := makeUninstallEnv(argvLog, opCredentialsSecretName, slog.New(h))
 
-	s := &SecretStore{}
+	s := &secretStore{}
 	if err := s.Uninstall(context.Background(), env); err != nil {
 		t.Fatalf("Uninstall must return nil even when a secret delete fails; got: %v", err)
 	}

@@ -24,7 +24,7 @@ type Settings struct {
 // DecodeSettings so neither needs an unchecked type assertion on any. It
 // errors only when controller_timeout or git_sync_timeout is set to a
 // non-positive-integer string.
-func (f *Flux) decodeSettings(settings map[string]string) (Settings, error) {
+func (f *fluxAddon) decodeSettings(settings map[string]string) (Settings, error) {
 	controllerTimeout, err := parseTimeoutSetting(settings, SettingControllerTimeout, defaultControllerTimeout)
 	if err != nil {
 		return Settings{}, err
@@ -46,7 +46,7 @@ func (f *Flux) decodeSettings(settings map[string]string) (Settings, error) {
 
 // DecodeSettings satisfies addon.ConfigurableAddon; see decodeSettings for
 // the typed path used internally by this package.
-func (f *Flux) DecodeSettings(settings map[string]string) (any, error) {
+func (f *fluxAddon) DecodeSettings(settings map[string]string) (any, error) {
 	return f.decodeSettings(settings)
 }
 

@@ -24,6 +24,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/addon"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/executor"
+	"github.com/qxtaiba/okdctl/internal/nodetypes"
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
@@ -58,25 +59,25 @@ const (
 	SettingAcceptHostKey = "accept_host_key"
 )
 
-// k8sBoolTrue is the literal Kubernetes returns for boolean-valued status
-// fields (e.g. status.conditions[?(@.type=="Ready")].status). External API
-// contract — do not change.
-const k8sBoolTrue = "True"
+// k8sBoolTrue is the Kubernetes condition-status literal ("True") that
+// jsonpath status queries return. Aliased from nodetypes so the value is not
+// respelled here as a second copy of the enum the repo already owns.
+const k8sBoolTrue = string(nodetypes.ConditionStatusTrue)
 
 // validSyncPath matches safe sync paths: alphanumeric, slashes, underscores, dots, and hyphens.
 var validSyncPath = regexp.MustCompile(`^[a-zA-Z0-9/_.\-]+$`)
 
 func init() {
-	if err := addon.Register(&Flux{}); err != nil {
+	if err := addon.Register(&fluxAddon{}); err != nil {
 		panic(err)
 	}
 }
 
-// Flux is the addon.Addon implementation for Flux GitOps.
-type Flux struct{}
+// fluxAddon is the addon.Addon implementation for Flux GitOps.
+type fluxAddon struct{}
 
 // Info returns the addon metadata.
-func (f *Flux) Info() addon.Metadata {
+func (f *fluxAddon) Info() addon.Metadata {
 	return addon.Metadata{
 		Name:           "flux",
 		DisplayName:    "Flux GitOps",
@@ -90,7 +91,7 @@ func (f *Flux) Info() addon.Metadata {
 
 // Install provisions flux-operator and flux-instance via Helm and waits for
 // controllers and the initial git sync.
-func (f *Flux) Install(ctx context.Context, env *addon.Environment) error {
+func (f *fluxAddon) Install(ctx context.Context, env *addon.Environment) error {
 	if !executor.CommandExists("helm") {
 		return &errtypes.ConfigError{Msg: "helm is required to install Flux"}
 	}
@@ -118,7 +119,6 @@ func (f *Flux) Install(ctx context.Context, env *addon.Environment) error {
 		return err
 	}
 
-	// Wait for Flux controllers to become available (fatal if they don't start)
 	if err := f.waitForControllers(ctx, env, &fs); err != nil {
 		return err
 	}
@@ -138,7 +138,7 @@ func (f *Flux) Install(ctx context.Context, env *addon.Environment) error {
 // invocation used for both flux-operator and flux-instance. extraArgs is
 // appended after the common --namespace flag (so callers can pass -f
 // <values-file> or --create-namespace).
-func (f *Flux) helmUpgradeInstall(ctx context.Context, env *addon.Environment, release, chart, errLabel string, extraArgs ...string) error {
+func (f *fluxAddon) helmUpgradeInstall(ctx context.Context, env *addon.Environment, release, chart, errLabel string, extraArgs ...string) error {
 	return addon.RetryDefault(ctx, func() error {
 		args := []string{"upgrade", "--install", release, chart, "--namespace", "flux-system"}
 		args = append(args, extraArgs...)
@@ -150,7 +150,7 @@ func (f *Flux) helmUpgradeInstall(ctx context.Context, env *addon.Environment, r
 	})
 }
 
-func (f *Flux) installOperator(ctx context.Context, env *addon.Environment) error {
+func (f *fluxAddon) installOperator(ctx context.Context, env *addon.Environment) error {
 	env.Logger.Info("flux: installing operator via helm")
 	if err := f.helmUpgradeInstall(ctx, env, "flux-operator",
 		"oci://ghcr.io/controlplaneio-fluxcd/charts/flux-operator",
@@ -164,7 +164,7 @@ func (f *Flux) installOperator(ctx context.Context, env *addon.Environment) erro
 	return nil
 }
 
-func (f *Flux) installInstance(ctx context.Context, env *addon.Environment, fs *Settings) error {
+func (f *fluxAddon) installInstance(ctx context.Context, env *addon.Environment, fs *Settings) error {
 	env.Logger.Info("flux: installing instance for gitops sync")
 	if fs.Repository == "" {
 		return &errtypes.ConfigError{Msg: "flux repository not configured - set addons.flux.settings.repository in config"}
@@ -212,7 +212,7 @@ func buildInstanceValues(fs *Settings) ([]byte, error) {
 
 // Verify reports whether the flux-operator and source-controller deployments
 // have ready replicas. GitRepository sync status is logged but non-fatal.
-func (f *Flux) Verify(ctx context.Context, env *addon.Environment) error {
+func (f *fluxAddon) Verify(ctx context.Context, env *addon.Environment) error {
 	result, err := env.Exec.RunChecked(ctx, "oc", "get", "deployment", "flux-operator",
 		"-n", "flux-system", "-o", "jsonpath={.status.readyReplicas}")
 	if err != nil {
@@ -236,7 +236,6 @@ func (f *Flux) Verify(ctx context.Context, env *addon.Environment) error {
 		env.Logger.Info("flux: source-controller ready", "replicas", scReady)
 	}
 
-	// Check GitRepository sync status (informational, not fatal for verify)
 	result, err = env.Exec.Run(ctx, "oc", "get", "gitrepository", "-n", "flux-system",
 		"-o", "jsonpath={.items[0].status.conditions[?(@.type==\"Ready\")].status}")
 	if err == nil && result.ExitCode == 0 {
@@ -254,7 +253,7 @@ func (f *Flux) Verify(ctx context.Context, env *addon.Environment) error {
 // Uninstall removes the flux-operator and flux-instance Helm releases and
 // deletes the flux-system namespace. Individual failures are logged but do
 // not abort the sequence.
-func (f *Flux) Uninstall(ctx context.Context, env *addon.Environment) error {
+func (f *fluxAddon) Uninstall(ctx context.Context, env *addon.Environment) error {
 	env.Logger.Info("flux: removing flux components")
 	// Run returns a nil error for non-zero exits (only start/ctx failures
 	// error), so the exit code must be checked or failures pass silently.
@@ -273,14 +272,14 @@ func (f *Flux) Uninstall(ctx context.Context, env *addon.Environment) error {
 }
 
 // RequiredTools lists the external binaries flux needs on the host (helm).
-func (f *Flux) RequiredTools() []addon.ToolSpec {
+func (f *fluxAddon) RequiredTools() []addon.ToolSpec {
 	return []addon.ToolSpec{
 		{Name: "helm", Description: "Helm package manager for installing Flux charts"},
 	}
 }
 
 // DefaultSettings returns the built-in defaults for flux's settings map.
-func (f *Flux) DefaultSettings() map[string]string {
+func (f *fluxAddon) DefaultSettings() map[string]string {
 	return map[string]string{
 		SettingProvider:          ProviderID,
 		SettingBranch:            defaultBranch,
@@ -295,7 +294,7 @@ func (f *Flux) DefaultSettings() map[string]string {
 // userinfo (https://user:token@host) — helm --set arguments end up in
 // /proc/<pid>/cmdline, so SSH-key auth via a deploy-key Secret is the only
 // supported credential channel.
-func (f *Flux) ValidateSettings(settings map[string]string) []string {
+func (f *fluxAddon) ValidateSettings(settings map[string]string) []string {
 	fs, err := f.decodeSettings(settings)
 	if err != nil {
 		return []string{err.Error()}
@@ -324,15 +323,17 @@ func (f *Flux) ValidateSettings(settings map[string]string) []string {
 	return errs
 }
 
-func (f *Flux) waitForControllers(ctx context.Context, env *addon.Environment, fs *Settings) error {
+func (f *fluxAddon) waitForControllers(ctx context.Context, env *addon.Environment, fs *Settings) error {
 	env.Logger.Info("flux: waiting for controllers to become ready")
 
 	timeout := fs.ControllerTimeout
 
-	if err := system.WaitForWithTimeout(ctx, "flux", "controllers", func(context.Context) bool {
+	if err := system.WaitForWithTimeout(ctx, "flux", "controllers", func(pctx context.Context) bool {
 		// RunOutput + Truncated guard, not the ring-truncated Run: this
-		// output is machine-parsed line by line.
-		result, err := env.Exec.RunOutput(ctx, 0, "oc", "get", "deployments",
+		// output is machine-parsed line by line. pctx is WaitFor's
+		// deadline-bounded probe ctx, so a hung oc probe dies at the poll
+		// deadline instead of running unbounded under the outer install ctx.
+		result, err := env.Exec.RunOutput(pctx, 0, "oc", "get", "deployments",
 			"-n", "flux-system",
 			"-l", "app.kubernetes.io/part-of=flux",
 			"-o", "jsonpath={range .items[*]}{.metadata.name}={.status.availableReplicas}{\"\\n\"}{end}")
@@ -362,15 +363,29 @@ func (f *Flux) waitForControllers(ctx context.Context, env *addon.Environment, f
 	return nil
 }
 
-func (f *Flux) waitForGitSync(ctx context.Context, env *addon.Environment, fs *Settings) error {
+func (f *fluxAddon) waitForGitSync(ctx context.Context, env *addon.Environment, fs *Settings) error {
 	env.Logger.Info("flux: waiting for git repository sync")
 
 	timeout := fs.GitSyncTimeout
 
-	if err := system.WaitForWithTimeout(ctx, "flux", "git sync", func(context.Context) bool {
-		result, _ := env.Exec.Run(ctx, "oc", "get", "gitrepository",
+	var lastProbeErr string
+	if err := system.WaitForWithTimeout(ctx, "flux", "git sync", func(pctx context.Context) bool {
+		result, err := env.Exec.Run(pctx, "oc", "get", "gitrepository",
 			"-n", "flux-system",
 			"-o", "jsonpath={.items[0].status.conditions[?(@.type==\"Ready\")].status}")
+		if err != nil {
+			// A transport failure (oc gone from PATH, exec start failure) yields
+			// err with ExitCode 0, so without this arm the loop spins silently
+			// for the full timeout. Log once, then treat as a not-ready tick.
+			if msg := err.Error(); msg != lastProbeErr {
+				env.Logger.Warn("flux: git sync probe failed", "err", err)
+				lastProbeErr = msg
+			} else {
+				env.Logger.Debug("flux: git sync probe failed", "err", err)
+			}
+			return false
+		}
+		lastProbeErr = ""
 		if result.ExitCode != 0 {
 			return false
 		}
@@ -383,7 +398,7 @@ func (f *Flux) waitForGitSync(ctx context.Context, env *addon.Environment, fs *S
 	return nil
 }
 
-func (f *Flux) createDeployKeySecret(ctx context.Context, env *addon.Environment, fs *Settings) error {
+func (f *fluxAddon) createDeployKeySecret(ctx context.Context, env *addon.Environment, fs *Settings) error {
 	repoURL := fs.Repository
 	if repoURL == "" {
 		return &errtypes.ConfigError{Msg: "flux repository not configured - set addons.flux.settings.repository in config"}
@@ -523,15 +538,18 @@ func gitHost(repoURL string) (string, error) {
 	if repoURL == "" {
 		return "", &errtypes.ConfigError{Msg: "empty repository URL"}
 	}
-	// scp-style: user@host:path (no scheme, has @ and : before any /)
+	// scp-style: user@host:path (no scheme, has @ and : before any /). Format
+	// only the substring after the last @ in errors: the userinfo before it may
+	// carry a token, and scp URLs are not masked by url.Redacted.
 	if !strings.Contains(repoURL, "://") {
-		_, rest, ok := strings.Cut(repoURL, "@")
-		if !ok {
-			return "", fmt.Errorf("cannot parse host from %q", repoURL)
+		at := strings.LastIndex(repoURL, "@")
+		if at < 0 {
+			return "", fmt.Errorf("cannot parse host from repository URL")
 		}
+		rest := repoURL[at+1:]
 		host, _, ok := strings.Cut(rest, ":")
 		if !ok {
-			return "", fmt.Errorf("cannot parse host from %q", repoURL)
+			return "", fmt.Errorf("cannot parse host from %q", rest)
 		}
 		if host == "" || strings.HasPrefix(host, "-") {
 			return "", fmt.Errorf("repository host %q is invalid", host)
@@ -540,11 +558,13 @@ func gitHost(repoURL string) (string, error) {
 	}
 	u, err := url.Parse(repoURL)
 	if err != nil {
-		return "", fmt.Errorf("cannot parse %q: %w", repoURL, err)
+		// *url.Error carries the raw URL verbatim (password included); never
+		// wrap it. url.Redacted needs a parsed URL we do not have here.
+		return "", fmt.Errorf("cannot parse repository URL")
 	}
 	host := u.Hostname()
 	if host == "" {
-		return "", fmt.Errorf("%q has no host component", repoURL)
+		return "", fmt.Errorf("%q has no host component", u.Redacted())
 	}
 	if strings.HasPrefix(host, "-") {
 		return "", fmt.Errorf("repository host %q is invalid", host)

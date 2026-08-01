@@ -3,15 +3,34 @@ package secretstore
 import (
 	"context"
 	"fmt"
-	"maps"
+	"net/url"
 	"path/filepath"
-	"slices"
+	"regexp"
 	"strconv"
 	"strings"
+
+	"sigs.k8s.io/yaml"
 
 	"github.com/qxtaiba/okdctl/internal/addon"
 	"github.com/qxtaiba/okdctl/internal/system"
 )
+
+// validVaultName anchors 1Password vault names to a safe charset so a name
+// can never break out of the marshalled SecretStore document or smuggle YAML
+// structure. Marshalling already escapes values; this rejects garbage early
+// on both the validate and install paths.
+var validVaultName = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
+
+// validateHTTPURL returns a human-readable error string when raw is not a
+// well-formed http/https URL, or "" when it is valid. Used to gate every
+// operator-supplied endpoint before it reaches the SecretStore manifest.
+func validateHTTPURL(field, raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+		return fmt.Sprintf("%s must be a valid http:// or https:// URL, got %q", field, raw)
+	}
+	return ""
+}
 
 // provider is the internal contract each ESO backend must satisfy.
 // buildResources returns ordered YAML manifests (auth Secrets first, then
@@ -23,30 +42,30 @@ type provider interface {
 	secretNames() []string
 }
 
-// ProviderKind is the enumeration of ESO backends the secretstore addon
+// providerKind is the enumeration of ESO backends the secretstore addon
 // supports. Wire values are lowercase strings matching the YAML settings map.
-type ProviderKind string
+type providerKind string
 
 // Provider values accepted by the secretstore addon.
 const (
-	ProviderOnepassword ProviderKind = "onepassword"
-	ProviderVault       ProviderKind = "vault"
-	ProviderBitwarden   ProviderKind = "bitwarden"
+	providerOnepassword providerKind = "onepassword"
+	providerVault       providerKind = "vault"
+	providerBitwarden   providerKind = "bitwarden"
 )
 
-var providers = map[ProviderKind]provider{
-	ProviderOnepassword: &onepasswordProvider{},
-	ProviderVault:       &vaultProvider{},
-	ProviderBitwarden:   &bitwardenProvider{},
+var providers = map[providerKind]provider{
+	providerOnepassword: &onepasswordProvider{},
+	providerVault:       &vaultProvider{},
+	providerBitwarden:   &bitwardenProvider{},
 }
 
 // resolveProvider returns the provider implementation for the `provider`
 // setting, defaulting to "onepassword" when unset. The second return value
-// is the resolved ProviderKind (useful for error messages on miss).
-func resolveProvider(settings map[string]string) (impl provider, kind ProviderKind) {
-	kind = ProviderKind(settings[SettingProvider])
+// is the resolved providerKind (useful for error messages on miss).
+func resolveProvider(settings map[string]string) (impl provider, kind providerKind) {
+	kind = providerKind(settings[SettingProvider])
 	if kind == "" {
-		kind = ProviderOnepassword
+		kind = providerOnepassword
 	}
 	p, ok := providers[kind]
 	if !ok {
@@ -78,8 +97,23 @@ const (
 
 type onepasswordProvider struct{}
 
-func (p *onepasswordProvider) validate(_ Settings) []string {
-	return nil
+func (p *onepasswordProvider) validate(s Settings) []string {
+	if s.OnePassword == nil {
+		return nil
+	}
+	var errs []string
+	if e := validateHTTPURL("onepassword_connect_host", s.OnePassword.ConnectHost); e != "" {
+		errs = append(errs, e)
+	}
+	// Vault-name charset is enforced at decode time (parseOnepasswordVaults),
+	// so a decoded Settings here is already clean; re-check defensively in
+	// case a Settings value is constructed without going through decode.
+	for name := range s.OnePassword.Vaults {
+		if !validVaultName.MatchString(name) {
+			errs = append(errs, fmt.Sprintf("onepassword vault name %q is invalid (allowed: alphanumeric, ., _, -)", name))
+		}
+	}
+	return errs
 }
 
 func (p *onepasswordProvider) secretNames() []string {
@@ -111,7 +145,11 @@ func (p *onepasswordProvider) buildResources(ctx context.Context, env *addon.Env
 		env.Logger.Info("secretstore: onepassword token secret prepared")
 	}
 
-	manifests = append(manifests, buildOPSecretStoreCRD(s.OnePassword.ConnectHost, s.OnePassword.Vaults))
+	crd, err := buildOPSecretStoreCRD(s.OnePassword.ConnectHost, s.OnePassword.Vaults)
+	if err != nil {
+		return nil, err
+	}
+	manifests = append(manifests, crd)
 	return manifests, nil
 }
 
@@ -138,6 +176,9 @@ func parseOnepasswordVaults(input string) (map[string]int, error) {
 		if name == "" {
 			return nil, fmt.Errorf("invalid onepassword_vaults entry %q: empty vault name", pair)
 		}
+		if !validVaultName.MatchString(name) {
+			return nil, fmt.Errorf("invalid onepassword_vaults vault name %q: allowed characters are alphanumeric, ., _, -", name)
+		}
 		pri, err := strconv.Atoi(priStr)
 		if err != nil {
 			return nil, fmt.Errorf("invalid onepassword_vaults priority %q in entry %q: %w", priStr, pair, err)
@@ -150,27 +191,44 @@ func parseOnepasswordVaults(input string) (map[string]int, error) {
 	return out, nil
 }
 
-func buildOPSecretStoreCRD(connectHost string, vaults map[string]int) string {
-	var vaultLines strings.Builder
-	for _, name := range slices.Sorted(maps.Keys(vaults)) {
-		fmt.Fprintf(&vaultLines, "        %s: %d\n", name, vaults[name])
+// secretStoreManifest marshals an ESO SecretStore CRD from a provider block.
+// Emitting via sigs.k8s.io/yaml (JSON round-trip) escapes every interpolated
+// value, so operator-supplied settings can never inject YAML structure into
+// the document piped to `oc apply` under the cluster-admin kubeconfig.
+func secretStoreManifest(providerBlock map[string]any) (string, error) {
+	doc := map[string]any{
+		"apiVersion": "external-secrets.io/v1beta1",
+		"kind":       "SecretStore",
+		"metadata": map[string]any{
+			"name":      esoSecretStoreName,
+			"namespace": defaultNamespace,
+		},
+		"spec": map[string]any{
+			"provider": providerBlock,
+		},
 	}
-	return fmt.Sprintf(`apiVersion: external-secrets.io/v1beta1
-kind: SecretStore
-metadata:
-  name: %s
-  namespace: %s
-spec:
-  provider:
-    onepassword:
-      connectHost: %s
-      vaults:
-%s      auth:
-        secretRef:
-          connectTokenSecretRef:
-            name: %s
-            key: token
-`, esoSecretStoreName, defaultNamespace, connectHost, vaultLines.String(), opTokenSecretName)
+	out, err := yaml.Marshal(doc)
+	if err != nil {
+		return "", fmt.Errorf("marshal secretstore manifest: %w", err)
+	}
+	return string(out), nil
+}
+
+func buildOPSecretStoreCRD(connectHost string, vaults map[string]int) (string, error) {
+	return secretStoreManifest(map[string]any{
+		"onepassword": map[string]any{
+			"connectHost": connectHost,
+			"vaults":      vaults,
+			"auth": map[string]any{
+				"secretRef": map[string]any{
+					"connectTokenSecretRef": map[string]any{
+						"name": opTokenSecretName,
+						"key":  "token",
+					},
+				},
+			},
+		},
+	})
 }
 
 type vaultProvider struct{}
@@ -180,8 +238,8 @@ func (p *vaultProvider) validate(s Settings) []string {
 	srv := s.Vault.Server
 	if srv == "" {
 		errs = append(errs, "vault_server is required for the vault provider (e.g. https://vault.example.com)")
-	} else if !strings.HasPrefix(srv, "http://") && !strings.HasPrefix(srv, "https://") {
-		errs = append(errs, "vault_server must start with http:// or https://")
+	} else if e := validateHTTPURL("vault_server", srv); e != "" {
+		errs = append(errs, e)
 	}
 	return errs
 }
@@ -198,26 +256,27 @@ func (p *vaultProvider) buildResources(ctx context.Context, env *addon.Environme
 	}
 	env.Logger.Info("secretstore: vault token secret prepared")
 
-	return []string{tokenManifest, buildVaultSecretStoreCRD(s.Vault.Server, s.Vault.Path, s.Vault.Version)}, nil
+	crd, err := buildVaultSecretStoreCRD(s.Vault.Server, s.Vault.Path, s.Vault.Version)
+	if err != nil {
+		return nil, err
+	}
+	return []string{tokenManifest, crd}, nil
 }
 
-func buildVaultSecretStoreCRD(server, path, version string) string {
-	return fmt.Sprintf(`apiVersion: external-secrets.io/v1beta1
-kind: SecretStore
-metadata:
-  name: %s
-  namespace: %s
-spec:
-  provider:
-    vault:
-      server: %s
-      path: %s
-      version: %s
-      auth:
-        tokenSecretRef:
-          name: %s
-          key: token
-`, esoSecretStoreName, defaultNamespace, server, path, version, vaultTokenSecretName)
+func buildVaultSecretStoreCRD(server, path, version string) (string, error) {
+	return secretStoreManifest(map[string]any{
+		"vault": map[string]any{
+			"server":  server,
+			"path":    path,
+			"version": version,
+			"auth": map[string]any{
+				"tokenSecretRef": map[string]any{
+					"name": vaultTokenSecretName,
+					"key":  "token",
+				},
+			},
+		},
+	})
 }
 
 // bitwardenProvider backs ESO's bitwardensecretsmanager provider. It works
@@ -235,6 +294,15 @@ func (p *bitwardenProvider) validate(s Settings) []string {
 	if s.Bitwarden.ProjectID == "" {
 		errs = append(errs, "bitwarden_project_id is required for the bitwarden provider")
 	}
+	for _, u := range []struct{ field, val string }{
+		{"bitwarden_api_url", s.Bitwarden.APIURL},
+		{"bitwarden_identity_url", s.Bitwarden.IdentityURL},
+		{"bitwarden_sdk_server_url", s.Bitwarden.SDKServerURL},
+	} {
+		if e := validateHTTPURL(u.field, u.val); e != "" {
+			errs = append(errs, e)
+		}
+	}
 	return errs
 }
 
@@ -250,32 +318,34 @@ func (p *bitwardenProvider) buildResources(ctx context.Context, env *addon.Envir
 	}
 	env.Logger.Info("secretstore: bitwarden access-token secret prepared")
 
-	return []string{tokenManifest, buildBitwardenSecretStoreCRD(
+	crd, err := buildBitwardenSecretStoreCRD(
 		s.Bitwarden.APIURL, s.Bitwarden.IdentityURL, s.Bitwarden.SDKServerURL,
 		s.Bitwarden.OrganizationID, s.Bitwarden.ProjectID,
-	)}, nil
+	)
+	if err != nil {
+		return nil, err
+	}
+	return []string{tokenManifest, crd}, nil
 }
 
-func buildBitwardenSecretStoreCRD(apiURL, identityURL, sdkServerURL, orgID, projectID string) string {
-	return fmt.Sprintf(`apiVersion: external-secrets.io/v1beta1
-kind: SecretStore
-metadata:
-  name: %s
-  namespace: %s
-spec:
-  provider:
-    bitwardensecretsmanager:
-      apiURL: %s
-      identityURL: %s
-      bitwardenServerSDKURL: %s
-      organizationID: %s
-      projectID: %s
-      auth:
-        secretRef:
-          credentials:
-            name: %s
-            key: token
-`, esoSecretStoreName, defaultNamespace, apiURL, identityURL, sdkServerURL, orgID, projectID, bitwardenTokenSecretName)
+func buildBitwardenSecretStoreCRD(apiURL, identityURL, sdkServerURL, orgID, projectID string) (string, error) {
+	return secretStoreManifest(map[string]any{
+		"bitwardensecretsmanager": map[string]any{
+			"apiURL":                apiURL,
+			"identityURL":           identityURL,
+			"bitwardenServerSDKURL": sdkServerURL,
+			"organizationID":        orgID,
+			"projectID":             projectID,
+			"auth": map[string]any{
+				"secretRef": map[string]any{
+					"credentials": map[string]any{
+						"name": bitwardenTokenSecretName,
+						"key":  "token",
+					},
+				},
+			},
+		},
+	})
 }
 
 func settingOrDefault(settings map[string]string, key, fallback string) string {
