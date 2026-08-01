@@ -123,3 +123,16 @@ func TestPreviewDryRunErrorRendered(t *testing.T) {
 		t.Error("enter must be inert after a failed dry-run")
 	}
 }
+
+func TestPreviewBlocksEscWhileDryRunInFlight(t *testing.T) {
+	st := &State{Cfg: config.DefaultConfig(), Op: node.OpResize}
+	s := NewPreviewStep(st, Hooks{})
+	_ = s.Init() // running phase
+	if !s.InterceptBack() {
+		t.Error("esc must be blocked while the dry-run holds the run lock")
+	}
+	updated, _ := s.Update(dryRunDoneMsg{plan: masterResizePlan()})
+	if updated.(*PreviewStep).InterceptBack() {
+		t.Error("esc must work again once the dry-run finished")
+	}
+}

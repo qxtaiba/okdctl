@@ -132,6 +132,13 @@ func (s *PreviewStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 	return s, nil
 }
 
+// InterceptBack blocks esc while the dry-run is in flight: navigating
+// away would orphan a runlock-holding runner and make the next dry-run
+// fail on the lock until it finishes.
+func (s *PreviewStep) InterceptBack() bool {
+	return s.phase == previewRunning
+}
+
 // ShouldExitEarly quits the wizard when the operator chose exit-without-
 // changes; execute advances to the confirm/exec steps instead.
 func (s *PreviewStep) ShouldExitEarly() bool {

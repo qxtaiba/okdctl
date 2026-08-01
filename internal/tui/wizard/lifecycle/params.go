@@ -35,6 +35,10 @@ type ParamsStep struct {
 	wizard.BaseStep
 	st    *State
 	inner *wizard.MultiSectionForm
+	// builtFor records which op the form was built for: the step instance
+	// survives esc-back-and-repick, so a cached form for a different op
+	// would validate the wrong fields and Apply through nil pointers.
+	builtFor node.Op
 
 	memField          *components.InputField
 	cpuField          *components.InputField
@@ -61,15 +65,24 @@ func (s *ParamsStep) ShouldShow(_ *config.Config) bool {
 	return true
 }
 
-// Init builds the per-op form on first focus and focuses it.
+// Init builds the per-op form on first focus — rebuilding whenever the
+// operation changed since the last visit — and focuses it.
 func (s *ParamsStep) Init() tea.Cmd {
-	if s.inner == nil {
-		s.buildForm()
-	}
+	s.ensureForm()
 	return s.inner.Init()
 }
 
+func (s *ParamsStep) ensureForm() {
+	if s.inner == nil || s.builtFor != s.st.Op {
+		s.buildForm()
+	}
+}
+
 func (s *ParamsStep) buildForm() {
+	s.builtFor = s.st.Op
+	s.memField, s.cpuField, s.countField, s.timeoutField = nil, nil, nil, nil
+	s.drainModeField, s.forceStorageField = nil, nil
+
 	var sections []wizard.FormSection
 	switch s.st.Op {
 	case node.OpAdd:
@@ -196,9 +209,7 @@ func (s *ParamsStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 // View renders the form plus the amber skip-drain note when selected.
 func (s *ParamsStep) View(width, height int) string {
 	s.SetSize(width, height)
-	if s.inner == nil {
-		s.buildForm()
-	}
+	s.ensureForm()
 	out := s.inner.View(width)
 	if s.drainModeField != nil && s.drainModeField.Value() == drainModeSkip {
 		warn := lipgloss.NewStyle().Foreground(tui.ColorWarning).PaddingLeft(2)
