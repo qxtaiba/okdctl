@@ -20,7 +20,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-COREOS_GO="$ROOT/internal/distribution/okd/setup/coreos.go"
+COREOS_GO="$ROOT/internal/distribution/okd/provision/coreos.go"
 MAJOR=4
 SUPPORTED_MINORS=(10 11 12 13 14 15 16 17 18 19 20 21 22 23)
 
