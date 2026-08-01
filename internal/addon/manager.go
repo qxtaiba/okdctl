@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/qxtaiba/okdctl/internal/config"
@@ -106,7 +107,7 @@ func (m *Manager) InstallAll(ctx context.Context) error {
 		}
 
 		if dep := m.firstFailedDep(info.Dependencies, failed); dep != "" {
-			m.logger.Warn("addons: skipping — dependency failed", "addon", info.DisplayName, "dep", dep)
+			m.logger.Warn("addons: skipping — dependency failed", "addon", info.Name, "dep", dep)
 			failed[info.Name] = true
 			continue
 		}
@@ -114,13 +115,13 @@ func (m *Manager) InstallAll(ctx context.Context) error {
 		env, err := m.installAndVerify(ctx, a)
 		if err != nil {
 			failed[info.Name] = true
-			m.logger.Warn("addons: install and verify failed", "addon", info.DisplayName, "err", err)
+			m.logger.Warn("addons: install and verify failed", "addon", info.Name, "err", err)
 			errs = append(errs, err)
 
-			m.logger.Info("addons: rolling back", "addon", info.DisplayName)
+			m.logger.Info("addons: rolling back", "addon", info.Name)
 			rbCtx, cancel := rollbackCtx(ctx)
 			if unErr := a.Uninstall(rbCtx, env); unErr != nil {
-				m.logger.Warn("addons: rollback failed", "addon", info.DisplayName, "err", unErr)
+				m.logger.Warn("addons: rollback failed", "addon", info.Name, "err", unErr)
 				errs = append(errs, fmt.Errorf("addon %s rollback: %w", info.Name, unErr))
 			}
 			cancel()
@@ -138,15 +139,22 @@ func (m *Manager) InstallAll(ctx context.Context) error {
 // Verify failure fails the install — the addon is rolled back by the caller.
 func (m *Manager) installAndVerify(ctx context.Context, a Addon) (*Environment, error) {
 	info := a.Info()
-	m.logger.Info("addons: installing addon", "addon", info.DisplayName)
+	m.logger.Info("addons: installing addon", "addon", info.Name)
 	env := m.buildEnv(a)
+	if c, ok := a.(ConfigurableAddon); ok {
+		if verrs := c.ValidateSettings(env.AddonConfig.Settings); len(verrs) > 0 {
+			return env, &errtypes.ConfigError{
+				Msg: fmt.Sprintf("addon %s has invalid settings: %s", info.Name, strings.Join(verrs, "; ")),
+			}
+		}
+	}
 	if err := a.Install(ctx, env); err != nil {
 		return env, &errtypes.ClusterError{Msg: fmt.Sprintf("addon %s install failed", info.Name), Err: err}
 	}
 	if vErr := a.Verify(ctx, env); vErr != nil {
 		return env, &errtypes.ClusterError{Msg: fmt.Sprintf("addon %s installed but verify failed", info.Name), Err: vErr}
 	}
-	m.logger.Info("addons: installed and verified", "addon", info.DisplayName)
+	m.logger.Info("addons: installed and verified", "addon", info.Name)
 	return env, nil
 }
 
@@ -202,10 +210,10 @@ func (m *Manager) InstallOne(ctx context.Context, name string) error {
 		if err != nil {
 			// All-or-nothing: roll back previously-installed addons in reverse order.
 			for _, inst := range slices.Backward(installed) {
-				m.logger.Info("addons: rolling back", "addon", inst.a.Info().DisplayName)
+				m.logger.Info("addons: rolling back", "addon", inst.a.Info().Name)
 				rbCtx, cancel := rollbackCtx(ctx)
 				if unErr := inst.a.Uninstall(rbCtx, inst.env); unErr != nil {
-					m.logger.Warn("addons: rollback failed", "addon", inst.a.Info().DisplayName, "err", unErr)
+					m.logger.Warn("addons: rollback failed", "addon", inst.a.Info().Name, "err", unErr)
 					err = errors.Join(err, fmt.Errorf("addon %s rollback: %w", inst.a.Info().Name, unErr))
 				}
 				cancel()

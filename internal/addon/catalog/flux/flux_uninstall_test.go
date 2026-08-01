@@ -60,7 +60,7 @@ func TestUninstall_HappyPath(t *testing.T) {
 	h := &testutil.CaptureHandler{}
 	env := makeEnv(t, argvLog, "", slog.New(h))
 
-	f := &Flux{}
+	f := &fluxAddon{}
 	if err := f.Uninstall(context.Background(), env); err != nil {
 		t.Fatalf("Uninstall returned error: %v", err)
 	}
@@ -103,7 +103,7 @@ func TestUninstall_FailuresDoNotAbort(t *testing.T) {
 		Logger:      slog.New(h),
 	}
 
-	f := &Flux{}
+	f := &fluxAddon{}
 	if err := f.Uninstall(context.Background(), env); err != nil {
 		t.Fatalf("Uninstall must return nil even when all commands fail; got: %v", err)
 	}
@@ -125,7 +125,7 @@ func TestUninstall_NonZeroExitWarns(t *testing.T) {
 	h := &testutil.CaptureHandler{}
 	env := makeEnv(t, argvLog, "1", slog.New(h))
 
-	f := &Flux{}
+	f := &fluxAddon{}
 	if err := f.Uninstall(context.Background(), env); err != nil {
 		t.Fatalf("Uninstall must return nil on non-zero tool exits; got %v", err)
 	}

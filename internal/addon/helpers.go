@@ -31,6 +31,12 @@ func addonIsRetryable(err error) bool {
 	if err == nil {
 		return false
 	}
+	// A system.WaitFor poll timeout wraps DeadlineExceeded but is transient,
+	// not caller cancellation; classify it retryable before the ctx arm below
+	// so a poll timeout inside a retry closure does not abort the budget.
+	if errors.Is(err, errtypes.ErrWaitTimeout) {
+		return true
+	}
 	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		return false
 	}
@@ -71,6 +77,10 @@ func BuildOpaqueSecret(namespace, name string, data map[string][]byte) (string, 
 // EnsureNamespace checks whether a Kubernetes namespace exists and creates it
 // if missing, using the default addon retry policy.
 func EnsureNamespace(ctx context.Context, env *Environment, namespace string) error {
+	// Announce the create once: a transient create failure replays the closure,
+	// so log at Info on the first attempt and demote identical retries to Debug
+	// per the monitor.go poll-loop log-once convention.
+	logged := false
 	return RetryDefault(ctx, func() error {
 		result, err := env.Exec.Run(ctx, "oc", "get", "namespace", namespace)
 		if err != nil {
@@ -82,7 +92,12 @@ func EnsureNamespace(ctx context.Context, env *Environment, namespace string) er
 			return nil
 		}
 
-		env.Logger.Info("creating namespace", "namespace", namespace)
+		if logged {
+			env.Logger.Debug("creating namespace", "namespace", namespace)
+		} else {
+			env.Logger.Info("creating namespace", "namespace", namespace)
+			logged = true
+		}
 		if _, err := env.Exec.RunChecked(ctx, "oc", "create", "namespace", namespace); err != nil {
 			return fmt.Errorf("create %s namespace: %w", namespace, err)
 		}

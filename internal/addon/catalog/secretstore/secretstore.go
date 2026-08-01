@@ -42,16 +42,16 @@ const (
 )
 
 func init() {
-	if err := addon.Register(&SecretStore{}); err != nil {
+	if err := addon.Register(&secretStore{}); err != nil {
 		panic(err)
 	}
 }
 
-// SecretStore is the multi-provider ESO secret-bootstrap addon.
-type SecretStore struct{}
+// secretStore is the multi-provider ESO secret-bootstrap addon.
+type secretStore struct{}
 
 // Info returns the addon metadata block used by the registry.
-func (s *SecretStore) Info() addon.Metadata {
+func (s *secretStore) Info() addon.Metadata {
 	return addon.Metadata{
 		Name:           "secretstore",
 		DisplayName:    "External Secrets Operator Secret Store",
@@ -66,7 +66,7 @@ func (s *SecretStore) Info() addon.Metadata {
 // Install creates the auth Secrets and the ESO SecretStore CRD for the
 // configured provider. When provider prerequisites (e.g., credential files)
 // are absent it logs setup instructions and returns nil.
-func (s *SecretStore) Install(ctx context.Context, env *addon.Environment) error {
+func (s *secretStore) Install(ctx context.Context, env *addon.Environment) error {
 	ts, err := s.decodeSettings(env.AddonConfig.Settings)
 	if err != nil {
 		return &errtypes.ConfigError{Msg: "secretstore: invalid settings", Err: err}
@@ -98,7 +98,7 @@ func (s *SecretStore) Install(ctx context.Context, env *addon.Environment) error
 		m := manifest
 		if err := addon.RetryDefault(ctx, func() error {
 			if _, err := env.Exec.RunWithStdinChecked(ctx, m, "oc", "apply", "-f", "-"); err != nil {
-				return fmt.Errorf("secretstore: apply failed: %w", err)
+				return fmt.Errorf("apply %s manifest: %w", ts.Provider, err)
 			}
 			return nil
 		}); err != nil {
@@ -114,10 +114,10 @@ func (s *SecretStore) Install(ctx context.Context, env *addon.Environment) error
 // returns (true, nil) to signal a non-fatal skip when required files are
 // absent — install warns and points at docs/addons/secretstore.md so the
 // caller can rerun after placing the files.
-func (s *SecretStore) installPrereqCheck(env *addon.Environment, providerName string) (skip bool, err error) {
+func (s *secretStore) installPrereqCheck(env *addon.Environment, providerName string) (skip bool, err error) {
 	dir := resolveSecretsDir(env)
-	switch ProviderKind(providerName) {
-	case ProviderOnepassword:
+	switch providerKind(providerName) {
+	case providerOnepassword:
 		credPath := filepath.Join(dir, opCredentialsFile)
 		tokenPath := filepath.Join(dir, opTokenFile)
 		if !system.FileExists(credPath) && !system.FileExists(tokenPath) {
@@ -129,7 +129,7 @@ func (s *SecretStore) installPrereqCheck(env *addon.Environment, providerName st
 		if (isSopsEncrypted(credPath) || isSopsEncrypted(tokenPath)) && !executor.CommandExists("sops") {
 			return false, fmt.Errorf("sops-encrypted secret files detected but sops is not installed: install with 'brew install sops'")
 		}
-	case ProviderVault:
+	case providerVault:
 		tokenPath := filepath.Join(dir, vaultTokenFile)
 		if !system.FileExists(tokenPath) {
 			env.Logger.Warn("secretstore: vault-token.txt not found, skipping",
@@ -140,7 +140,7 @@ func (s *SecretStore) installPrereqCheck(env *addon.Environment, providerName st
 		if isSopsEncrypted(tokenPath) && !executor.CommandExists("sops") {
 			return false, fmt.Errorf("sops-encrypted vault token detected but sops is not installed: install with 'brew install sops'")
 		}
-	case ProviderBitwarden:
+	case providerBitwarden:
 		tokenPath := filepath.Join(dir, bitwardenTokenFile)
 		if !system.FileExists(tokenPath) {
 			env.Logger.Warn("secretstore: bitwarden-token.txt not found, skipping",
@@ -156,7 +156,7 @@ func (s *SecretStore) installPrereqCheck(env *addon.Environment, providerName st
 }
 
 // Verify checks that each auth Secret created by Install exists in the cluster.
-func (s *SecretStore) Verify(ctx context.Context, env *addon.Environment) error {
+func (s *secretStore) Verify(ctx context.Context, env *addon.Environment) error {
 	p, kind := resolveProvider(env.AddonConfig.Settings)
 	if p == nil {
 		return &errtypes.ConfigError{Msg: fmt.Sprintf("secretstore: unknown provider %q", kind)}
@@ -173,7 +173,7 @@ func (s *SecretStore) Verify(ctx context.Context, env *addon.Environment) error 
 
 // Uninstall deletes the provider's auth Secrets and the ESO SecretStore CRD.
 // Deletion failures are logged but do not abort the sequence.
-func (s *SecretStore) Uninstall(ctx context.Context, env *addon.Environment) error {
+func (s *secretStore) Uninstall(ctx context.Context, env *addon.Environment) error {
 	p, kind := resolveProvider(env.AddonConfig.Settings)
 	ns := defaultNamespace
 	env.Logger.Info("secretstore: removing provider resources", "provider", string(kind))
@@ -183,7 +183,7 @@ func (s *SecretStore) Uninstall(ctx context.Context, env *addon.Environment) err
 			// failures error), so the exit code must be checked or a failed
 			// delete passes silently.
 			if res, err := env.Exec.Run(ctx, "oc", "delete", "secret", name, "-n", ns); err != nil || res.ExitCode != 0 {
-				env.Logger.Warn("secretstore: delete secret failed", "secret", name, "exit", res.ExitCode, "err", err)
+				env.Logger.Warn("secretstore: delete secret failed", "name", name, "exit", res.ExitCode, "err", err)
 			}
 		}
 	}
@@ -194,17 +194,17 @@ func (s *SecretStore) Uninstall(ctx context.Context, env *addon.Environment) err
 }
 
 // RequiredTools lists the external binaries needed to decrypt source files.
-func (s *SecretStore) RequiredTools() []addon.ToolSpec {
+func (s *secretStore) RequiredTools() []addon.ToolSpec {
 	return []addon.ToolSpec{
 		{Name: "sops", Description: "Mozilla SOPS for decrypting secret files (used if files are sops-encrypted)"},
 	}
 }
 
 // DefaultSettings returns the built-in defaults for secretstore's settings.
-func (s *SecretStore) DefaultSettings() map[string]string {
+func (s *secretStore) DefaultSettings() map[string]string {
 	return map[string]string{
 		SettingSecretsDir:            defaultSecretsDir,
-		SettingProvider:              string(ProviderOnepassword),
+		SettingProvider:              string(providerOnepassword),
 		SettingOnepasswordVaults:     defaultOPVaults,
 		SettingVaultPath:             "secret",
 		SettingVaultVersion:          "v2",
@@ -216,7 +216,7 @@ func (s *SecretStore) DefaultSettings() map[string]string {
 
 // ValidateSettings dispatches to the selected provider's validator and
 // returns human-readable error strings for any invalid settings.
-func (s *SecretStore) ValidateSettings(settings map[string]string) []string {
+func (s *secretStore) ValidateSettings(settings map[string]string) []string {
 	ts, err := s.decodeSettings(settings)
 	if err != nil {
 		return []string{err.Error()}
@@ -233,48 +233,57 @@ func isSopsEncrypted(path string) bool {
 	if err != nil {
 		return false
 	}
+	return isSopsEncryptedBytes(data)
+}
+
+func isSopsEncryptedBytes(data []byte) bool {
 	content := string(data)
 	return strings.Contains(content, `"sops"`) || strings.Contains(content, "sops_version=")
 }
 
+// readSecret reads and returns the secret at path, decrypting via sops when
+// the file is sops-encrypted. The symlink refusal and O_NOFOLLOW open guard
+// both branches: the sops-vs-plaintext classification reads through the same
+// guarded descriptor rather than re-reading by path, so it cannot follow a
+// symlink planted during a sudo re-exec. The 0o077 permission floor applies
+// only to plaintext secrets (a sops ciphertext is safe at looser modes).
 func readSecret(ctx context.Context, env *addon.Environment, path string) (string, error) {
-	if !isSopsEncrypted(path) {
-		// lstat (not stat) so the perm gate and the open see the same inode;
-		// O_NOFOLLOW refuses a symlink planted in the secrets dir during a
-		// sudo re-exec from redirecting the read into a root-readable target.
-		fi, err := os.Lstat(path)
-		if err != nil {
-			return "", err
-		}
-		if fi.Mode()&os.ModeSymlink != 0 {
-			return "", fmt.Errorf("secret file %q is a symlink; refusing to follow", path)
-		}
-		if perm := fi.Mode().Perm(); perm&0o077 != 0 {
-			return "", fmt.Errorf("secret file %s has insecure permissions %#o; run 'chmod 600 %s' to fix",
-				filepath.Base(path), perm, path)
-		}
-		env.Logger.Info("secretstore: reading plaintext file", "file", filepath.Base(path))
-		f, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NOFOLLOW, 0)
-		if err != nil {
-			return "", err
-		}
-		defer f.Close()
-		data, err := io.ReadAll(f)
-		if err != nil {
-			return "", err
-		}
-		return string(data), nil
+	// lstat (not stat) so the perm gate and the open see the same inode.
+	fi, err := os.Lstat(path)
+	if err != nil {
+		return "", err
+	}
+	if fi.Mode()&os.ModeSymlink != 0 {
+		return "", fmt.Errorf("secret file %q is a symlink; refusing to follow", path)
+	}
+	f, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NOFOLLOW, 0)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	data, err := io.ReadAll(f)
+	if err != nil {
+		return "", err
 	}
 
-	env.Logger.Info("secretstore: decrypting with sops", "file", filepath.Base(path))
-	result, err := env.Exec.RunOutputChecked(ctx, 0, "sops", "-d", path)
-	if err != nil {
-		return "", fmt.Errorf("sops decryption failed (is the age key at ~/.config/sops/age/keys.txt?): %w", err)
+	if isSopsEncryptedBytes(data) {
+		env.Logger.Info("secretstore: decrypting with sops", "file", filepath.Base(path))
+		result, err := env.Exec.RunOutputChecked(ctx, 0, "sops", "-d", path)
+		if err != nil {
+			return "", fmt.Errorf("sops decryption failed (is the age key at ~/.config/sops/age/keys.txt?): %w", err)
+		}
+		if result.Truncated {
+			return "", fmt.Errorf("sops decryption output truncated after %d bytes; secret may be corrupted", len(result.Stdout))
+		}
+		return result.Stdout, nil
 	}
-	if result.Truncated {
-		return "", fmt.Errorf("sops decryption output truncated after %d bytes; secret may be corrupted", len(result.Stdout))
+
+	if perm := fi.Mode().Perm(); perm&0o077 != 0 {
+		return "", fmt.Errorf("secret file %s has insecure permissions %#o; run 'chmod 600 %s' to fix",
+			filepath.Base(path), perm, path)
 	}
-	return result.Stdout, nil
+	env.Logger.Info("secretstore: reading plaintext file", "file", filepath.Base(path))
+	return string(data), nil
 }
 
 func resolveSecretsDir(env *addon.Environment) string {

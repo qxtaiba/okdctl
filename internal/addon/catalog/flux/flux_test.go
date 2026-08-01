@@ -145,7 +145,7 @@ func TestBuildFluxDeployKeySecret(t *testing.T) {
 }
 
 func TestValidateSettingsUserinfo(t *testing.T) {
-	f := &Flux{}
+	f := &fluxAddon{}
 	cases := []struct {
 		name    string
 		repo    string
@@ -283,7 +283,7 @@ func TestGitHost(t *testing.T) {
 }
 
 func TestValidateSettings_MalformedTimeout(t *testing.T) {
-	f := &Flux{}
+	f := &fluxAddon{}
 	settings := map[string]string{
 		SettingRepository:        "ssh://git@github.com/org/repo.git",
 		SettingControllerTimeout: "not-a-number",
