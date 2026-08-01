@@ -7,17 +7,37 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"slices"
 	"strings"
 	"sync"
+	"syscall"
 
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
-// ErrEnvFileAlreadyLoaded is wrapped inside the ConfigError LoadEnvFile
+// errEnvFileAlreadyLoaded is wrapped inside the ConfigError LoadEnvFile
 // returns when called a second time with a path different from the
 // first call, so callers can errors.Is it instead of string-matching Msg.
-var ErrEnvFileAlreadyLoaded = errors.New("env file already loaded with different path")
+var errEnvFileAlreadyLoaded = errors.New("env file already loaded with different path")
+
+// ErrEnvFileUnknownKey is wrapped inside the ConfigError LoadEnvFile returns
+// when the .env carries a key outside the PROXMOX_VE_* allowlist, so a typo or
+// an attempt to smuggle TF_/KUBE/OC_ variables into every subprocess is a
+// visible failure rather than a silent promotion into the process environment.
+var ErrEnvFileUnknownKey = errors.New("env file contains an unrecognized key")
+
+// envFileAllowedKeys is the exact set of keys promoted from the .env file into
+// the process environment. It is an allowlist by design: keys under TF_, KUBE,
+// PROXMOX_, HELM_, or OC_ prefixes would otherwise pass DefaultEnvAllowlist and
+// reach every subprocess, including terraform under the sudo re-exec.
+var envFileAllowedKeys = map[string]bool{
+	envProxmoxEndpoint: true,
+	envProxmoxUsername: true,
+	envProxmoxPassword: true,
+	envProxmoxAPIToken: true,
+	envProxmoxInsecure: true,
+}
 
 // loadOnce guards against concurrent or repeated calls to LoadEnvFile.
 // The global process environment is shared mutable state: without this
@@ -79,10 +99,34 @@ func WriteEnvFile(path string, creds *ProxmoxCredentials) error {
 
 // buildEnvFileBody serialises creds into KEY=VALUE format. The caller owns
 // the returned slice and must clear it after use.
+//
+// The buffer is preallocated to the exact final size so it never reallocates
+// after the first secret byte is written: a mid-write grow would orphan an
+// un-zeroed copy of the password/token in the old backing array, which
+// WriteEnvFile's clear() can no longer reach.
 func buildEnvFileBody(creds *ProxmoxCredentials) []byte {
-	var buf bytes.Buffer
-	buf.WriteString("# Proxmox credentials (managed by okdctl)\n")
-	buf.WriteString("# This file has restricted permissions (0600). Do not commit to git.\n")
+	const header = "# Proxmox credentials (managed by okdctl)\n" +
+		"# This file has restricted permissions (0600). Do not commit to git.\n"
+
+	n := len(header)
+	if creds.Endpoint != "" {
+		n += len(envProxmoxEndpoint) + 1 + len(creds.Endpoint) + 1
+	}
+	if creds.Username != "" {
+		n += len(envProxmoxUsername) + 1 + len(creds.Username) + 1
+	}
+	if len(creds.Password) > 0 {
+		n += len(envProxmoxPassword) + 1 + len(creds.Password) + 1
+	}
+	if len(creds.APIToken) > 0 {
+		n += len(envProxmoxAPIToken) + 1 + len(creds.APIToken) + 1
+	}
+	if creds.Insecure {
+		n += len(envProxmoxInsecure) + len("=true\n")
+	}
+
+	buf := bytes.NewBuffer(make([]byte, 0, n))
+	buf.WriteString(header)
 
 	if creds.Endpoint != "" {
 		buf.WriteString(envProxmoxEndpoint + "=")
@@ -131,7 +175,7 @@ func LoadEnvFile(path string) error {
 	if loadedPath != path {
 		return &errtypes.ConfigError{
 			Msg: fmt.Sprintf("LoadEnvFile already called with %q; cannot reload from %q", loadedPath, path),
-			Err: ErrEnvFileAlreadyLoaded,
+			Err: errEnvFileAlreadyLoaded,
 		}
 	}
 	return loadErr
@@ -142,15 +186,22 @@ func LoadEnvFile(path string) error {
 func loadEnvFileOnce(path string) error {
 	// Refuse to load a .env that any other user can read. Proxmox tokens
 	// end up in here — a world-readable file defeats the whole point of
-	// moving secrets out of YAML. The permission check MUST happen before
-	// the file is opened: once its contents are in our address space,
-	// the whole point of this check is to detect a file that other
-	// processes may already have been able to read.
-	fi, err := os.Stat(path)
+	// moving secrets out of YAML. Open with O_NOFOLLOW first, then derive the
+	// permission decision from f.Stat() and read the contents from that same
+	// descriptor: binding the check and the read to one inode closes the
+	// TOCTOU window an os.Stat-then-os.Open pair leaves open, and O_NOFOLLOW
+	// refuses a symlinked path just as WriteEnvFile's Lstat does.
+	f, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NOFOLLOW, 0)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return nil // missing .env is not an error
 		}
+		return &errtypes.ConfigError{Msg: fmt.Sprintf("open env file %s", path), Err: err}
+	}
+	defer f.Close()
+
+	fi, err := f.Stat()
+	if err != nil {
 		return &errtypes.ConfigError{Msg: fmt.Sprintf("stat env file %s", path), Err: err}
 	}
 	if perm := fi.Mode().Perm(); perm&0o077 != 0 {
@@ -161,15 +212,13 @@ func loadEnvFileOnce(path string) error {
 		}
 	}
 
-	f, err := os.Open(path)
-	if err != nil {
-		return &errtypes.ConfigError{Msg: fmt.Sprintf("open env file %s", path), Err: err}
-	}
-	defer f.Close()
-
 	pairs, err := parseDotEnv(f)
 	if err != nil {
 		return &errtypes.ConfigError{Msg: fmt.Sprintf("parse env file %s", path), Err: err}
+	}
+
+	if err := rejectUnknownEnvKeys(path, pairs); err != nil {
+		return err
 	}
 
 	// Shell environment takes precedence: set only keys that are absent.
@@ -179,6 +228,28 @@ func loadEnvFileOnce(path string) error {
 		}
 	}
 	return nil
+}
+
+// rejectUnknownEnvKeys fails when pairs carries any key outside
+// envFileAllowedKeys, naming the offenders so a typo surfaces instead of being
+// silently dropped. It sets nothing — a non-nil return leaves the environment
+// untouched, matching LoadEnvFile's "error means nothing loaded" contract.
+func rejectUnknownEnvKeys(path string, pairs map[string]string) error {
+	var rejected []string
+	for k := range pairs {
+		if !envFileAllowedKeys[k] {
+			rejected = append(rejected, k)
+		}
+	}
+	if len(rejected) == 0 {
+		return nil
+	}
+	slices.Sort(rejected)
+	return &errtypes.ConfigError{
+		Msg: fmt.Sprintf("env file %s contains unrecognized keys %v; only PROXMOX_VE_* credential keys are permitted",
+			path, rejected),
+		Err: ErrEnvFileUnknownKey,
+	}
 }
 
 // parseDotEnv reads key=value pairs from r. Blank lines and lines whose first

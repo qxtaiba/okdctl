@@ -24,6 +24,40 @@ type PowerCycleOptions struct {
 	Timeout  time.Duration
 }
 
+// redactedPowerCycleOptions is the safe projection of PowerCycleOptions
+// returned by Redacted(). It omits Password and APIToken so any code path
+// that formats the options — including slog's redactAny switch — cannot
+// reach the secret bytes.
+type redactedPowerCycleOptions struct {
+	Endpoint string
+	Username string
+	Insecure bool
+	Timeout  time.Duration
+}
+
+// Redacted returns a struct containing only the non-secret fields of o,
+// satisfying the interface{ Redacted() any } that logutil.redactAny detects.
+func (o *PowerCycleOptions) Redacted() any {
+	if o == nil {
+		return nil
+	}
+	return redactedPowerCycleOptions{
+		Endpoint: o.Endpoint,
+		Username: o.Username,
+		Insecure: o.Insecure,
+		Timeout:  o.Timeout,
+	}
+}
+
+// String masks secret fields so accidental %v / %s / log calls can't leak
+// the password or token.
+func (o *PowerCycleOptions) String() string {
+	if o == nil {
+		return "PowerCycleOptions(nil)"
+	}
+	return fmt.Sprintf("%+v", o.Redacted())
+}
+
 // PowerCycler stops then starts a VM through the Proxmox API. A resize changes a
 // VM's *configured* memory but bpg/proxmox does not restart it, so the guest
 // keeps its old RAM until a hypervisor stop→start spawns a fresh QEMU process

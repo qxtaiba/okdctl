@@ -13,10 +13,11 @@ import (
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
-// ErrSnapshotExists reports a CreateSnapshot call against a name the VM
-// already has. Callers detect it with errors.Is instead of parsing the raw
-// pvesh task exitstatus string.
-var ErrSnapshotExists = errors.New("snapshot already exists")
+// errSnapshotExists reports a CreateSnapshot call against a name the VM
+// already has. CreateSnapshot wraps it (errors.Is) instead of surfacing the
+// raw pvesh task exitstatus string; unexported as no cross-package caller
+// branches on it today.
+var errSnapshotExists = errors.New("snapshot already exists")
 
 // SnapshotInfo describes one QEMU snapshot as returned by
 // pvesh get /nodes/<node>/qemu/<vmid>/snapshot. ListSnapshots filters out
@@ -205,7 +206,7 @@ func pveshWaitTask(ctx context.Context, p *RemoteISOParams, upid string, timeout
 	var status taskStatus
 	var parseErr error
 	check := func(ctx context.Context) bool {
-		stdout, err := pveshRun(ctx, p, "get", pveshTaskStatusPath(p.Node, upid))
+		stdout, err := pveshRunChecked(ctx, p, "get", pveshTaskStatusPath(p.Node, upid))
 		if err != nil {
 			parseErr = err
 			return false
@@ -236,7 +237,7 @@ func pveshWaitTask(ctx context.Context, p *RemoteISOParams, upid string, timeout
 // is disabled fleet-wide, so no in-VM freeze is available and a memory-state
 // snapshot would not be crash-consistent with it. Blocks until the async
 // pvesh task completes or timeout elapses. Returns an error matching
-// ErrSnapshotExists (errors.Is) when vmid already has a snapshot named name.
+// errSnapshotExists (errors.Is) when vmid already has a snapshot named name.
 func CreateSnapshot(ctx context.Context, p *RemoteISOParams, vmid int, name, description string, timeout time.Duration) error {
 	if err := validateVMID(vmid); err != nil {
 		return fmt.Errorf("vmid %d invalid: %w", vmid, err)
@@ -249,13 +250,13 @@ func CreateSnapshot(ctx context.Context, p *RemoteISOParams, vmid int, name, des
 	}
 
 	// Best-effort duplicate pre-check: a definite name collision surfaces as
-	// ErrSnapshotExists instead of a raw pvesh task exitstatus. A failed
+	// errSnapshotExists instead of a raw pvesh task exitstatus. A failed
 	// listing is ignored rather than blocking the create — pvesh itself still
 	// rejects duplicates, and this pre-check is racy by nature anyway.
 	if existing, listErr := ListSnapshots(ctx, p, vmid); listErr == nil {
 		for _, s := range existing {
 			if s.Name == name {
-				return fmt.Errorf("snapshot %q for vmid %d: %w", name, vmid, ErrSnapshotExists)
+				return fmt.Errorf("snapshot %q for vmid %d: %w", name, vmid, errSnapshotExists)
 			}
 		}
 	}

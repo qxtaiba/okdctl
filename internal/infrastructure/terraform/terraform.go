@@ -239,14 +239,16 @@ func parseLockID(lockFile string) string {
 	return info.ID
 }
 
-// WithLockHint appends the terraform state-lock diagnostic (see LockHint) to
-// err's message when a stale local-backend lock is present, preserving err's
-// concrete type so a terraform failure exits with the same code whether or
-// not a stale lock is involved — a bare errors.Join would let exitCodeFor
-// match the hint's *errtypes.ConfigError before err's own type (see
-// errtypes.HintAppender). Returns err unchanged when err is nil or no lock
-// file is present, and falls back to errors.Join when err's type does not
-// implement HintAppender.
+// WithLockHint attaches the terraform state-lock diagnostic (see LockHint) to
+// err as structured next-step text when a stale local-backend lock is present,
+// preserving err's concrete type so a terraform failure exits with the same
+// code whether or not a stale lock is involved. Every errtypes category
+// implements HintAppender, so the hint rides along without introducing the
+// hint's own *errtypes.ConfigError into the chain — a bare errors.Join would
+// let exitCodeFor match ConfigError before err's own type. Returns err
+// unchanged when err is nil or no lock file is present. For a non-errtypes err
+// the hint is wrapped as plain text via %w, keeping err outermost so no
+// ConfigError enters the chain and the exit code stays put.
 func (t *Executor) WithLockHint(err error) error {
 	if err == nil {
 		return nil
@@ -256,15 +258,15 @@ func (t *Executor) WithLockHint(err error) error {
 		return err
 	}
 
-	var appender errtypes.HintAppender
-	if !errors.As(err, &appender) {
-		return errors.Join(hint, err)
-	}
-
 	hintMsg := hint.Error()
 	var cfgHint *errtypes.ConfigError
 	if errors.As(hint, &cfgHint) {
 		hintMsg = cfgHint.Msg
+	}
+
+	var appender errtypes.HintAppender
+	if !errors.As(err, &appender) {
+		return fmt.Errorf("%w; %s", err, hintMsg)
 	}
 	return appender.WithHint(hintMsg)
 }

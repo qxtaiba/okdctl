@@ -178,6 +178,40 @@ func TestProvider_Disconnect(t *testing.T) {
 	}
 }
 
+// TestProvider_Disconnect_ZeroizesExecutorEnv exercises the delegation that
+// keeps credential strings handed to the terraform executor from outliving the
+// Provider: Disconnect must wipe the executor env before dropping the
+// reference, since the install phase defers ZeroizeEnv and Disconnect together
+// and LIFO runs Disconnect first. The byte-level wipe is pinned by terraform's
+// TestExecutor_ZeroizeEnv_BlanksInnerEnv; here we assert the path runs without
+// panic and the reference is cleared.
+func TestProvider_Disconnect_ZeroizesExecutorEnv(t *testing.T) {
+	p := New(WithEnv([]string{"PROXMOX_VE_API_TOKEN=tok-fake"}))
+	p.connected = true
+	p.setupTerraform(t.TempDir(), "production")
+	if p.terraformExec == nil {
+		t.Fatal("setupTerraform did not build a terraform executor")
+	}
+	if err := p.Disconnect(context.Background()); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if p.terraformExec != nil {
+		t.Error("expected p.terraformExec = nil after Disconnect")
+	}
+}
+
+// TestProvider_ZeroizeEnv_DelegatesToExecutor covers the path where Disconnect
+// is not called but a terraform executor holds a credential-env copy: the
+// deferred ZeroizeEnv must reach it too.
+func TestProvider_ZeroizeEnv_DelegatesToExecutor(t *testing.T) {
+	p := New(WithEnv([]string{"PROXMOX_VE_PASSWORD=hunter2"}))
+	p.setupTerraform(t.TempDir(), "production")
+	p.ZeroizeEnv()
+	if p.env != nil {
+		t.Errorf("env not nil after ZeroizeEnv; got %v", p.env)
+	}
+}
+
 func TestProvider_setupTerraform_idempotent(t *testing.T) {
 	p := New()
 	root := t.TempDir()

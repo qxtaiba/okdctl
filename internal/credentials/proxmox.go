@@ -192,17 +192,45 @@ func configHasCredentials(px *config.ProxmoxConfig) bool {
 	return px.Username != "" && !px.Password.IsEmpty()
 }
 
-func applyEnvSource(creds *ProxmoxCredentials, configHadCreds bool) {
+// normalizeEndpoint applies the scheme guard and defaults shared by a config
+// host and PROXMOX_VE_ENDPOINT: an http:// endpoint is refused unless allowHTTP
+// (the insecure_http opt-in), a schemeless host gains an https:// prefix, and a
+// portless host defaults to :8006. ok is false only when an http:// endpoint is
+// refused, in which case the caller must not attach plaintext credentials.
+func normalizeEndpoint(host string, allowHTTP bool) (endpoint string, ok bool) {
+	if strings.HasPrefix(host, "http://") && !allowHTTP {
+		return "", false
+	}
+	if !strings.HasPrefix(host, "https://") && !strings.HasPrefix(host, "http://") {
+		host = "https://" + host
+	}
+	if u, err := url.Parse(host); err == nil && u.Port() == "" {
+		u.Host = u.Hostname() + ":8006"
+		host = u.String()
+	}
+	return host, true
+}
+
+// applyEnvSource records env provenance and, when PROXMOX_VE_ENDPOINT is set,
+// re-resolves the endpoint through the same scheme guard as the config host.
+// It returns false when the env endpoint is http:// without the insecure_http
+// opt-in — the config-file gate would otherwise be bypassed by an env override.
+func applyEnvSource(creds *ProxmoxCredentials, configHadCreds, allowHTTP bool) bool {
 	creds.Source = SourceEnv
 	creds.ConfigCredentialsOverridden = configHadCreds
 	if endpoint := os.Getenv(envProxmoxEndpoint); endpoint != "" {
-		creds.Endpoint = endpoint
+		normalized, ok := normalizeEndpoint(endpoint, allowHTTP)
+		if !ok {
+			return false
+		}
+		creds.Endpoint = normalized
 	} else {
 		creds.EndpointFromConfig = true
 	}
 	if v, ok := os.LookupEnv(envProxmoxInsecure); ok {
 		creds.Insecure = v == "true"
 	}
+	return true
 }
 
 // GetProxmoxCredentials resolves credentials with priority:
@@ -232,32 +260,31 @@ func GetProxmoxCredentials(cfg *config.Config) *ProxmoxCredentials {
 	// Validators reject http:// without the insecure_http opt-in at config
 	// load; enforce it here too so an http endpoint never receives plaintext
 	// credentials via a caller that skipped validation.
-	if strings.HasPrefix(host, "http://") && !px.InsecureHTTP {
+	endpoint, ok := normalizeEndpoint(host, px.InsecureHTTP)
+	if !ok {
 		return creds
 	}
-
-	if !strings.HasPrefix(host, "https://") && !strings.HasPrefix(host, "http://") {
-		host = "https://" + host
-	}
-	if u, err := url.Parse(host); err == nil && u.Port() == "" {
-		u.Host = u.Hostname() + ":8006"
-		host = u.String()
-	}
-	creds.Endpoint = host
+	creds.Endpoint = endpoint
 	creds.Insecure = px.Insecure
 
 	configHadCreds := configHasCredentials(px)
 
 	if token := os.Getenv(envProxmoxAPIToken); token != "" {
 		creds.APIToken = []byte(token)
-		applyEnvSource(creds, configHadCreds)
+		if !applyEnvSource(creds, configHadCreds, px.InsecureHTTP) {
+			creds.Zeroize()
+			return &ProxmoxCredentials{Source: SourceNone}
+		}
 		return creds
 	}
 
 	if username, password := os.Getenv(envProxmoxUsername), os.Getenv(envProxmoxPassword); username != "" && password != "" {
 		creds.Username = username
 		creds.Password = []byte(password)
-		applyEnvSource(creds, configHadCreds)
+		if !applyEnvSource(creds, configHadCreds, px.InsecureHTTP) {
+			creds.Zeroize()
+			return &ProxmoxCredentials{Source: SourceNone}
+		}
 		return creds
 	}
 

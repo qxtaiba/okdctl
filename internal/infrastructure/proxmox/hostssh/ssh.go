@@ -28,13 +28,16 @@ func ProxmoxBareHost(host string) string {
 	return host
 }
 
-// SSHRun runs a single command on root@host over SSH.
+// sshRun runs a single command on root@host over SSH. It is unexported: the
+// only sanctioned string-mode (sh -c) call site is RemoveFCOSISOFromProxmox
+// in this package, so the shell-injection policy is compiler-enforced rather
+// than prose-enforced. New cross-package SSH operations use SSHRunArgv.
 //
 // When knownHostsPath is non-empty the connection enforces strict host-key
 // checking against that file. When empty, accept-new TOFU applies —
 // preserving current behaviour. Non-zero exit codes do not produce an error;
 // only transport failures do.
-func SSHRun(ctx context.Context, exec *executor.Executor, host, knownHostsPath, cmd string) (*executor.Result, error) {
+func sshRun(ctx context.Context, exec *executor.Executor, host, knownHostsPath, cmd string) (*executor.Result, error) {
 	args := sshBaseArgs(host, knownHostsPath)
 	args = append(args, cmd)
 	result, err := exec.Run(ctx, "ssh", args...)
@@ -68,11 +71,11 @@ func SSHRunArgv(ctx context.Context, exec *executor.Executor, host, knownHostsPa
 	return result, nil
 }
 
-// SSHRunOutput is SSHRun with full stdout capture (Executor.RunOutput)
+// sshRunOutput is sshRun with full stdout capture (Executor.RunOutput)
 // instead of the ring-truncated tail, for callers that parse stdout as
 // JSON or another format sensitive to truncation. Same non-zero-exit and
-// shell-injection semantics as SSHRun.
-func SSHRunOutput(ctx context.Context, exec *executor.Executor, host, knownHostsPath, cmd string) (*executor.Result, error) {
+// shell-injection semantics as sshRun; likewise unexported.
+func sshRunOutput(ctx context.Context, exec *executor.Executor, host, knownHostsPath, cmd string) (*executor.Result, error) {
 	args := sshBaseArgs(host, knownHostsPath)
 	args = append(args, cmd)
 	result, err := exec.RunOutput(ctx, 0, "ssh", args...)
@@ -132,18 +135,24 @@ func argvAtomSafeRune(r rune) bool {
 
 // sshBaseArgs builds the ssh option flags and remote user@host token.
 // Strict mode is used when knownHostsPath is set; accept-new otherwise.
+// ConnectTimeout bounds connection establishment so a blackholed Proxmox
+// host fails in seconds rather than stalling for the kernel TCP timeout on
+// every one-shot pvesh/iso-cleanup call; ctx cancel remains the interactive
+// escape hatch for the connected phase.
 func sshBaseArgs(host, knownHostsPath string) []string {
 	if knownHostsPath != "" {
 		return []string{
 			"-o", "UserKnownHostsFile=" + knownHostsPath,
 			"-o", "StrictHostKeyChecking=yes",
 			"-o", "BatchMode=yes",
+			"-o", "ConnectTimeout=10",
 			"root@" + host,
 		}
 	}
 	return []string{
 		"-o", "StrictHostKeyChecking=accept-new",
 		"-o", "BatchMode=yes",
+		"-o", "ConnectTimeout=10",
 		"root@" + host,
 	}
 }

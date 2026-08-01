@@ -60,8 +60,12 @@ func TestWithLockHint_PreservesConcreteType(t *testing.T) {
 	if errors.As(got, &cfgErr) {
 		t.Errorf("err also matches *errtypes.ConfigError (%v); exitCodeFor would misclassify it", cfgErr)
 	}
-	if !strings.Contains(clusterErr.Msg, "force-unlock") {
-		t.Errorf("Msg = %q; want lock hint text embedded", clusterErr.Msg)
+	// The hint rides in a structured field, not Msg, and surfaces via Error().
+	if clusterErr.Msg != "terraform init failed" {
+		t.Errorf("Msg mutated = %q; want the original message unchanged", clusterErr.Msg)
+	}
+	if !strings.Contains(got.Error(), "force-unlock") {
+		t.Errorf("Error() = %q; want lock hint text surfaced", got.Error())
 	}
 }
 
@@ -79,7 +83,69 @@ func TestWithLockHint_ConfigErrorType(t *testing.T) {
 	if !errors.As(got, &cfgErr) {
 		t.Fatalf("err = %v; want *errtypes.ConfigError", got)
 	}
-	if !strings.Contains(cfgErr.Msg, "force-unlock") {
-		t.Errorf("Msg = %q; want lock hint text embedded", cfgErr.Msg)
+	if !strings.Contains(got.Error(), "force-unlock") {
+		t.Errorf("Error() = %q; want lock hint text surfaced", got.Error())
+	}
+}
+
+// TestWithLockHint_NonConfigTypesKeepExitCode locks the fix for the
+// HintAppender coverage gap: a NetworkError/AuthError/UsageError used to fall
+// through to errors.Join and silently reclassify to the hint's ConfigError
+// (exit 2). Every category now implements WithHint, so the concrete type — and
+// therefore exitCodeFor's classification — survives, while the hint still
+// lands via Error().
+func TestWithLockHint_NonConfigTypesKeepExitCode(t *testing.T) {
+	dir := t.TempDir()
+	writeLockFile(t, dir)
+	tf := New(dir)
+
+	cases := []struct {
+		name string
+		in   error
+		want errtypes.Kind
+	}{
+		{"network", &errtypes.NetworkError{Msg: "registry unreachable"}, errtypes.KindNetwork},
+		{"auth", &errtypes.AuthError{Msg: "token rejected"}, errtypes.KindAuth},
+		{"usage", &errtypes.UsageError{Msg: "bad flag"}, errtypes.KindUsage},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := tf.WithLockHint(tc.in)
+			kind, ok := errtypes.Classify(got)
+			if !ok || kind != tc.want {
+				t.Fatalf("Classify = %v (ok=%v); want %v — type reclassified by lock hint",
+					kind, ok, tc.want)
+			}
+			var cfgErr *errtypes.ConfigError
+			if errors.As(got, &cfgErr) {
+				t.Errorf("err also matches *errtypes.ConfigError (%v); exit code would flip to 2", cfgErr)
+			}
+			if !strings.Contains(got.Error(), "force-unlock") {
+				t.Errorf("Error() = %q; want lock hint text surfaced", got.Error())
+			}
+		})
+	}
+}
+
+// TestWithLockHint_NonErrtypesFallback locks the plain-text fallback: a raw
+// (non-errtypes) error keeps its identity through %w so errors.Is still
+// matches it, and no *errtypes.ConfigError is introduced into the chain.
+func TestWithLockHint_NonErrtypesFallback(t *testing.T) {
+	dir := t.TempDir()
+	writeLockFile(t, dir)
+	tf := New(dir)
+
+	raw := errors.New("terraform apply exited 1")
+	got := tf.WithLockHint(raw)
+
+	if !errors.Is(got, raw) {
+		t.Errorf("errors.Is(got, raw) = false; %%w must preserve the raw error identity")
+	}
+	var cfgErr *errtypes.ConfigError
+	if errors.As(got, &cfgErr) {
+		t.Errorf("fallback introduced *errtypes.ConfigError (%v); exit code would flip to 2", cfgErr)
+	}
+	if !strings.Contains(got.Error(), "force-unlock") {
+		t.Errorf("Error() = %q; want lock hint text surfaced", got.Error())
 	}
 }
