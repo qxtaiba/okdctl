@@ -74,6 +74,14 @@ func resolveProvider(settings map[string]string) (impl provider, kind providerKi
 	return p, kind
 }
 
+// ESO SecretStore manifest field keys, repeated across the provider builders.
+// Kept as constants so goconst stays quiet; they are k8s manifest field names.
+const (
+	mfName = "name"
+	mfAuth = "auth"
+	mfKey  = "key"
+)
+
 const (
 	opCredentialsFile = "1password-credentials.json"
 	opTokenFile       = "1password-token.txt"
@@ -200,7 +208,7 @@ func secretStoreManifest(providerBlock map[string]any) (string, error) {
 		"apiVersion": "external-secrets.io/v1beta1",
 		"kind":       "SecretStore",
 		"metadata": map[string]any{
-			"name":      esoSecretStoreName,
+			mfName:      esoSecretStoreName,
 			"namespace": defaultNamespace,
 		},
 		"spec": map[string]any{
@@ -219,11 +227,11 @@ func buildOPSecretStoreCRD(connectHost string, vaults map[string]int) (string, e
 		"onepassword": map[string]any{
 			"connectHost": connectHost,
 			"vaults":      vaults,
-			"auth": map[string]any{
+			mfAuth: map[string]any{
 				"secretRef": map[string]any{
 					"connectTokenSecretRef": map[string]any{
-						"name": opTokenSecretName,
-						"key":  "token",
+						mfName: opTokenSecretName,
+						mfKey:  "token",
 					},
 				},
 			},
@@ -269,10 +277,10 @@ func buildVaultSecretStoreCRD(server, path, version string) (string, error) {
 			"server":  server,
 			"path":    path,
 			"version": version,
-			"auth": map[string]any{
+			mfAuth: map[string]any{
 				"tokenSecretRef": map[string]any{
-					"name": vaultTokenSecretName,
-					"key":  "token",
+					mfName: vaultTokenSecretName,
+					mfKey:  "token",
 				},
 			},
 		},
@@ -336,11 +344,11 @@ func buildBitwardenSecretStoreCRD(apiURL, identityURL, sdkServerURL, orgID, proj
 			"bitwardenServerSDKURL": sdkServerURL,
 			"organizationID":        orgID,
 			"projectID":             projectID,
-			"auth": map[string]any{
+			mfAuth: map[string]any{
 				"secretRef": map[string]any{
 					"credentials": map[string]any{
-						"name": bitwardenTokenSecretName,
-						"key":  "token",
+						mfName: bitwardenTokenSecretName,
+						mfKey:  "token",
 					},
 				},
 			},

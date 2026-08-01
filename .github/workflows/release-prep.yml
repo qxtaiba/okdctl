@@ -42,7 +42,7 @@ jobs:
       # reconstructs (okdctl_<version>_linux_<arch>.tar.gz), converting the
       # comment-enforced coupling into a gate.
       - name: assert archive names match install.sh
-        run: |
+        run: |-
           set -euo pipefail
           for arch in amd64 arm64; do
             match=$(find dist -maxdepth 1 -name "okdctl_*_linux_${arch}.tar.gz" | head -1)

@@ -19,7 +19,10 @@ require (
 	sigs.k8s.io/yaml v1.6.0
 )
 
-require github.com/charmbracelet/colorprofile v0.4.3
+require (
+	github.com/charmbracelet/colorprofile v0.4.3
+	github.com/spf13/pflag v1.0.10
+)
 
 require (
 	github.com/atotto/clipboard v0.1.4 // indirect
@@ -50,7 +53,6 @@ require (
 	github.com/muesli/cancelreader v0.2.2 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
-	github.com/spf13/pflag v1.0.10 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
 	go.yaml.in/yaml/v2 v2.4.3 // indirect

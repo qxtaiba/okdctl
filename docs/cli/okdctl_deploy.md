@@ -1,10 +1,10 @@
 ## okdctl deploy
 
-Deploy a Kubernetes cluster
+Deploy an OKD cluster
 
 ### Synopsis
 
-Deploy an OKD/OpenShift cluster through an interactive wizard.
+Deploy an OKD cluster through an interactive wizard.
 
 Use --yes with --confirm-cluster to skip the wizard and deploy
 non-interactively from an existing configuration file (and its okdctl.env
@@ -13,8 +13,6 @@ over SSH or from CI. --confirm-cluster must equal the configured cluster
 name, the same guard every other scripted lifecycle command carries.
 Use --write-config to write the configuration file non-interactively
 without deploying.
-
-Note: before v0.2.0, --yes meant what --write-config means now.
 
 ```
 okdctl deploy [flags]
