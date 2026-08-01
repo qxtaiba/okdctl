@@ -306,14 +306,15 @@ func TestParseUPID_RejectsInjection(t *testing.T) {
 // whose argv matching only covers the ISO-cleanup call shapes.
 //
 // SSHRunArgvOutput layout for accept-new mode: $1=-o $2=... $3=-o $4=...
-// $5=root@host $6=pvesh $7=<subcommand> $8=<path> [extra...].
+// $5=-o $6=ConnectTimeout=10 $7=root@host $8=pvesh $9=<subcommand>
+// $10=<path> [extra...].
 func installFakeSnapshotSSH(t *testing.T) {
 	t.Helper()
 	script := `#!/bin/sh
 if [ -n "${SNAP_ARGV_LOG:-}" ]; then
   echo "$@" >> "$SNAP_ARGV_LOG"
 fi
-case "$7" in
+case "$9" in
   create|delete)
     if [ -n "${SNAP_TASK_EXIT_CODE:-}" ] && [ "${SNAP_TASK_EXIT_CODE}" != "0" ]; then
       echo "${SNAP_TASK_STDERR:-pvesh rejected the request}" >&2
@@ -323,7 +324,7 @@ case "$7" in
     exit 0
     ;;
   get)
-    case "$8" in
+    case "${10}" in
       */status)
         f="${SNAP_POLL_COUNTER:-}"
         if [ -n "$f" ]; then
@@ -472,7 +473,7 @@ func TestCreateSnapshot_rejectedByPveshScrubsStderr(t *testing.T) {
 }
 
 // TestCreateSnapshot_duplicateName covers the ListSnapshots pre-check: a
-// name the VM already has must surface as ErrSnapshotExists instead of a
+// name the VM already has must surface as errSnapshotExists instead of a
 // raw pvesh task exitstatus string.
 func TestCreateSnapshot_duplicateName(t *testing.T) {
 	installFakeSnapshotSSH(t)
@@ -485,8 +486,8 @@ func TestCreateSnapshot_duplicateName(t *testing.T) {
 	t.Setenv("SNAP_LIST_FILE", listFile)
 
 	err := CreateSnapshot(context.Background(), p, 100, "pre-upgrade", "", 5*time.Second)
-	if !errors.Is(err, ErrSnapshotExists) {
-		t.Fatalf("err = %v; want errors.Is(err, ErrSnapshotExists)", err)
+	if !errors.Is(err, errSnapshotExists) {
+		t.Fatalf("err = %v; want errors.Is(err, errSnapshotExists)", err)
 	}
 	if !strings.Contains(err.Error(), "pre-upgrade") {
 		t.Errorf("err = %q; want it to name the colliding snapshot", err.Error())

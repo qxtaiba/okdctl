@@ -32,6 +32,44 @@ type ProbeOptions struct {
 	Timeout    time.Duration
 }
 
+// redactedProbeOptions is the safe projection of ProbeOptions returned by
+// Redacted(). It omits Password and APIToken so any code path that formats
+// the options — including slog's redactAny switch — cannot reach the secret
+// bytes.
+type redactedProbeOptions struct {
+	Endpoint   string
+	Username   string
+	Insecure   bool
+	Node       string
+	Datastores []string
+	Timeout    time.Duration
+}
+
+// Redacted returns a struct containing only the non-secret fields of o,
+// satisfying the interface{ Redacted() any } that logutil.redactAny detects.
+func (o *ProbeOptions) Redacted() any {
+	if o == nil {
+		return nil
+	}
+	return redactedProbeOptions{
+		Endpoint:   o.Endpoint,
+		Username:   o.Username,
+		Insecure:   o.Insecure,
+		Node:       o.Node,
+		Datastores: o.Datastores,
+		Timeout:    o.Timeout,
+	}
+}
+
+// String masks secret fields so accidental %v / %s / log calls can't leak
+// the password or token.
+func (o *ProbeOptions) String() string {
+	if o == nil {
+		return "ProbeOptions(nil)"
+	}
+	return fmt.Sprintf("%+v", o.Redacted())
+}
+
 // DatastoreInfo is one datastore's capacity, used to judge headroom for
 // double-provisioning during a Ceph migration.
 type DatastoreInfo struct {
@@ -247,7 +285,7 @@ func selectNodeMem(nodes proxmox.NodeStatuses, name string) (total, used uint64,
 func sumRunningGuestMem(resources proxmox.ClusterResources, node string) uint64 {
 	var total uint64
 	for _, r := range resources {
-		if r.Type == "qemu" && r.Node == node && r.Status == "running" {
+		if r.Type == "qemu" && r.Node == node && r.Status == string(nodetypes.StateRunning) {
 			total += r.MaxMem
 		}
 	}

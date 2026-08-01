@@ -27,7 +27,7 @@ func TestSSHRun_acceptNew(t *testing.T) {
 	installFakeSSHEcho(t)
 	exec := executor.New()
 
-	result, err := SSHRun(context.Background(), exec, "10.0.0.1", "", "uptime")
+	result, err := sshRun(context.Background(), exec, "10.0.0.1", "", "uptime")
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -49,7 +49,7 @@ func TestSSHRun_strictMode(t *testing.T) {
 	installFakeSSHEcho(t)
 	exec := executor.New()
 
-	result, err := SSHRun(context.Background(), exec, "10.0.0.1", "/tmp/known_hosts", "uptime")
+	result, err := sshRun(context.Background(), exec, "10.0.0.1", "/tmp/known_hosts", "uptime")
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}

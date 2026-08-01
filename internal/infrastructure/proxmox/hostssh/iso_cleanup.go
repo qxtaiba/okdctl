@@ -246,8 +246,9 @@ func findCoreOSISONameClause() string {
 // VM are skipped with a warning. The path safety check runs before every rm.
 //
 // Shell-injection policy of record: this function is the only place in the
-// repo that passes a constructed string to a remote shell via SSHRun (sh -c).
-// All other SSH operations MUST use SSHRunArgv. Any new sh -c usage MUST
+// repo that passes a constructed string to a remote shell via sshRun (sh -c).
+// sshRun/sshRunOutput are unexported so no other package can reach them; all
+// other SSH operations MUST use SSHRunArgv. Any new sh -c usage MUST
 // layer its own validateXxx guard (see ValidateISODir, refuseUnsafeISOPath)
 // and wrap every variable token with shellSingleQuote before interpolation.
 func RemoveFCOSISOFromProxmox(ctx context.Context, p *RemoteISOParams, isoDir string) error {
@@ -259,7 +260,7 @@ func RemoveFCOSISOFromProxmox(ctx context.Context, p *RemoteISOParams, isoDir st
 		"find %s -maxdepth 1 %s -type f -print0 2>/dev/null || true",
 		shellSingleQuote(isoDir), findCoreOSISONameClause(),
 	)
-	result, err := SSHRunOutput(ctx, p.Exec, p.Host, p.KnownHostsPath, findCmd)
+	result, err := sshRunOutput(ctx, p.Exec, p.Host, p.KnownHostsPath, findCmd)
 	if err != nil {
 		return fmt.Errorf("ssh find failed: %w", err)
 	}
@@ -275,7 +276,7 @@ func RemoveFCOSISOFromProxmox(ctx context.Context, p *RemoteISOParams, isoDir st
 
 	for _, f := range files {
 		if err := refuseUnsafeISOPath(isoDir, f); err != nil {
-			p.Log.Warn("iso: skipping file", "file", f, "err", err)
+			p.Log.Warn("iso: skipping file", "path", f, "err", err)
 			continue
 		}
 
@@ -284,21 +285,21 @@ func RemoveFCOSISOFromProxmox(ctx context.Context, p *RemoteISOParams, isoDir st
 		// non-default storage layout cannot alias two ISOs with the same basename.
 		inUse, err := anyVMReferencesISO(ctx, p, "iso/"+isoBase)
 		if err != nil {
-			p.Log.Warn("iso: could not check vm references — skipping", "iso", isoBase, "err", err)
+			p.Log.Warn("iso: could not check vm references — skipping", "file", isoBase, "err", err)
 			continue
 		}
 		if inUse {
-			p.Log.Warn("iso: still referenced by a running vm — skipping removal", "iso", isoBase)
+			p.Log.Warn("iso: still referenced by a running vm — skipping removal", "file", isoBase)
 			continue
 		}
 
 		// Shell-single-quote the path so filenames with spaces or metacharacters
 		// reach rm as a single literal argument.
-		if _, rmErr := SSHRun(ctx, p.Exec, p.Host, p.KnownHostsPath, "rm -f "+shellSingleQuote(f)); rmErr != nil {
-			p.Log.Warn("iso: failed to remove", "iso", isoBase, "err", rmErr)
+		if _, rmErr := sshRun(ctx, p.Exec, p.Host, p.KnownHostsPath, "rm -f "+shellSingleQuote(f)); rmErr != nil {
+			p.Log.Warn("iso: failed to remove", "file", isoBase, "err", rmErr)
 			continue
 		}
-		p.Log.Info("iso: removed from proxmox host", "iso", isoBase)
+		p.Log.Info("iso: removed from proxmox host", "file", isoBase)
 	}
 
 	return nil
@@ -323,20 +324,20 @@ func RemoveCustomISOsFromProxmox(ctx context.Context, p *RemoteISOParams, isoDir
 
 		inUse, err := anyVMReferencesISO(ctx, p, "iso/"+name)
 		if err != nil {
-			p.Log.Warn("iso: could not check vm references — skipping", "iso", name, "err", err)
+			p.Log.Warn("iso: could not check vm references — skipping", "file", name, "err", err)
 			continue
 		}
 		if inUse {
-			p.Log.Warn("iso: still referenced by a running vm — skipping removal", "iso", name)
+			p.Log.Warn("iso: still referenced by a running vm — skipping removal", "file", name)
 			continue
 		}
 
 		target := isoDir + "/" + name
 		if _, rmErr := SSHRunArgv(ctx, p.Exec, p.Host, p.KnownHostsPath, "rm", "-f", "--", target); rmErr != nil {
-			p.Log.Warn("iso: failed to remove", "iso", name, "err", rmErr)
+			p.Log.Warn("iso: failed to remove", "file", name, "err", rmErr)
 			continue
 		}
-		p.Log.Info("iso: removed custom node iso from proxmox host", "iso", name)
+		p.Log.Info("iso: removed custom node iso from proxmox host", "file", name)
 	}
 
 	return nil

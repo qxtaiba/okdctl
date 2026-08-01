@@ -327,6 +327,54 @@ func TestGetProxmoxCredentials(t *testing.T) {
 			t.Errorf("Endpoint = %q, want http://pve.example:8006", creds.Endpoint)
 		}
 	})
+
+	// The config host is https-safe, but an http:// PROXMOX_VE_ENDPOINT would
+	// slip plaintext credentials past the config-file gate. applyEnvSource must
+	// apply the same scheme guard to the env endpoint.
+	t.Run("env http endpoint without insecure_http yields no credentials", func(t *testing.T) {
+		clearProxmoxEnv(t)
+		t.Setenv("PROXMOX_VE_API_TOKEN", "EXAMPLE-ENV-TOKEN")
+		t.Setenv("PROXMOX_VE_ENDPOINT", "http://evil.example:8006")
+
+		creds := GetProxmoxCredentials(cfgWithHost())
+
+		if creds.Source != SourceNone {
+			t.Errorf("Source = %v, want SourceNone (env http gate)", creds.Source)
+		}
+		if creds.Endpoint != "" || len(creds.APIToken) != 0 {
+			t.Errorf("env http endpoint without opt-in must not carry credentials; got endpoint=%q token=%q",
+				creds.Endpoint, creds.APIToken)
+		}
+	})
+
+	t.Run("env http endpoint with insecure_http resolves and normalizes port", func(t *testing.T) {
+		clearProxmoxEnv(t)
+		t.Setenv("PROXMOX_VE_API_TOKEN", "EXAMPLE-ENV-TOKEN")
+		t.Setenv("PROXMOX_VE_ENDPOINT", "http://pve.example")
+		cfg := cfgWithHost()
+		cfg.Provider.Proxmox.InsecureHTTP = true
+
+		creds := GetProxmoxCredentials(cfg)
+
+		if creds.Source != SourceEnv {
+			t.Errorf("Source = %v, want SourceEnv", creds.Source)
+		}
+		if creds.Endpoint != "http://pve.example:8006" {
+			t.Errorf("Endpoint = %q, want http://pve.example:8006 (env endpoint normalized)", creds.Endpoint)
+		}
+	})
+
+	t.Run("env schemeless endpoint gets https prefix and :8006 port", func(t *testing.T) {
+		clearProxmoxEnv(t)
+		t.Setenv("PROXMOX_VE_API_TOKEN", "EXAMPLE-ENV-TOKEN")
+		t.Setenv("PROXMOX_VE_ENDPOINT", "pve.example")
+
+		creds := GetProxmoxCredentials(cfgWithHost())
+
+		if creds.Endpoint != "https://pve.example:8006" {
+			t.Errorf("Endpoint = %q, want https://pve.example:8006 (env endpoint normalized)", creds.Endpoint)
+		}
+	})
 }
 
 func TestProxmoxCredentials_Redacted(t *testing.T) {

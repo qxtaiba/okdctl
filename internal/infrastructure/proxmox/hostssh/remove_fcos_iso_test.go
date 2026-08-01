@@ -20,11 +20,12 @@ func installFakeSSH(t *testing.T) {
 	script := `#!/bin/sh
 # Fake ssh for testing — behaviour keyed off SSH_FAKE_MODE.
 # SSHRun layout:     $1=-o $2=StrictHostKeyChecking=accept-new $3=-o
-#                    $4=BatchMode=yes $5=root@host $6=<command-string>
-# SSHRunArgv layout: ... $5=root@host $6=pvesh $7=get $8=<path> ...
-case "$6" in
+#                    $4=BatchMode=yes $5=-o $6=ConnectTimeout=10
+#                    $7=root@host $8=<command-string>
+# SSHRunArgv layout: ... $7=root@host $8=pvesh $9=get $10=<path> ...
+case "$8" in
   pvesh)
-    case "$8" in
+    case "${10}" in
       */config)
         case "${SSH_FAKE_MODE:-no-ref}" in
           in-use)

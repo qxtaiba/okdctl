@@ -230,7 +230,7 @@ func TestLoadEnvFile_PermRefusal(t *testing.T) {
 func TestLoadEnvFile_SecondCallDifferentPath(t *testing.T) {
 	dir := t.TempDir()
 	first := filepath.Join(dir, "first.env")
-	if err := os.WriteFile(first, []byte("X=1\n"), 0o600); err != nil {
+	if err := os.WriteFile(first, []byte("PROXMOX_VE_INSECURE=true\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if err := LoadEnvFile(first); err != nil {
@@ -242,7 +242,62 @@ func TestLoadEnvFile_SecondCallDifferentPath(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for second LoadEnvFile call with a different path")
 	}
-	if !errors.Is(err, ErrEnvFileAlreadyLoaded) {
-		t.Errorf("err = %v; want errors.Is(ErrEnvFileAlreadyLoaded)", err)
+	if !errors.Is(err, errEnvFileAlreadyLoaded) {
+		t.Errorf("err = %v; want errors.Is(errEnvFileAlreadyLoaded)", err)
+	}
+}
+
+// TestLoadEnvFile_RejectsUnknownKeys pins the allowlist: a key outside the
+// PROXMOX_VE_* set must fail the whole load (naming the offender) and must not
+// be promoted into the process environment, where it would reach every
+// subprocess including terraform under the sudo re-exec.
+func TestLoadEnvFile_RejectsUnknownKeys(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "stray.env")
+	body := "PROXMOX_VE_API_TOKEN=tok\nTF_LOG=DEBUG\n"
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, present := os.LookupEnv("TF_LOG"); present {
+		t.Skip("TF_LOG already set in the environment; cannot assert non-promotion")
+	}
+
+	err := loadEnvFileOnce(path)
+	if !errors.Is(err, ErrEnvFileUnknownKey) {
+		t.Fatalf("err = %v; want errors.Is(ErrEnvFileUnknownKey)", err)
+	}
+	if !strings.Contains(err.Error(), "TF_LOG") {
+		t.Errorf("error should name the rejected key; got %v", err)
+	}
+	if _, present := os.LookupEnv("TF_LOG"); present {
+		t.Errorf("rejected key TF_LOG was promoted into the environment despite the error")
+	}
+}
+
+// TestLoadEnvFile_SymlinkRefused pins the O_NOFOLLOW gate: the permission
+// decision and the read must bind to one inode, so a symlinked .env path is
+// refused before its contents are read.
+func TestLoadEnvFile_SymlinkRefused(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root bypasses O_NOFOLLOW semantics differently")
+	}
+	dir := t.TempDir()
+	target := filepath.Join(dir, "real.env")
+	link := filepath.Join(dir, "link.env")
+	if err := os.WriteFile(target, []byte("PROXMOX_VE_API_TOKEN=tok\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, link); err != nil {
+		t.Fatal(err)
+	}
+
+	err := loadEnvFileOnce(link)
+	if err == nil {
+		t.Fatal("loadEnvFileOnce should refuse a symlinked .env path")
+	}
+	var cfgErr *errtypes.ConfigError
+	if !errors.As(err, &cfgErr) {
+		t.Errorf("err = %v; want *errtypes.ConfigError from the O_NOFOLLOW open", err)
 	}
 }
